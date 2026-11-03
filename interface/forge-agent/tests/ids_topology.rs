@@ -54,3 +54,37 @@ fn a_fillet_naming_one_edge_twice_rounds_it_once() {
     let single = part.regenerate_solids().expect("rounds").remove(0).body;
     assert_eq!(once.face_ids().count(), single.face_ids().count());
 }
+
+/// A cylinder notched below and whole above: its pieces join into one face, and the seam it keeps
+/// is a ruling, under any ids; never an arc left across the face (a slit a fillet along the notch
+/// would run into).
+#[test]
+fn a_rejoined_cylinder_keeps_a_ruling_as_its_seam() {
+    let src = "extrude 3 z 0 0 1 x 1 0 0 at 0 0 0 circle 0 0 6\n\
+               extrude add 5 z 0 0 1 x 1 0 0 at 0 0 3 circle 0 0 6\n\
+               extrude cut 3 z 0 0 1 x 1 0 0 at 0 0 0 rect -2 -7 4 3\n";
+    let part = text::parse(src).expect("parses");
+    let mut seen = vec![];
+    for k in 0..6u64 {
+        let ids: Vec<u64> = (0..part.features.len() as u64)
+            .map(|i| 1 + i * (k + 1) + 7 * k)
+            .collect();
+        let b = part
+            .regenerate_solids_ids(Some(&ids))
+            .expect("builds")
+            .remove(0)
+            .body;
+        for e in b.edge_ids() {
+            let x = b.edge(e);
+            let faces: Vec<_> = x.coedges.iter().map(|&c| b.coedge_face(c)).collect();
+            if faces.len() == 2 && faces[0] == faces[1] {
+                assert!(
+                    matches!(x.curve, forge_geom::Curve::Line(_)),
+                    "ids {ids:?}: a seam that is no ruling"
+                );
+            }
+        }
+        seen.push((b.face_ids().count(), b.edge_ids().count()));
+    }
+    assert!(seen.iter().all(|s| *s == seen[0]), "{seen:?}");
+}
