@@ -14,6 +14,7 @@
 use crate::error::{
     End, FeatureId, JointKindName, SheetError, SheetWarning, Side, Strip, TrimCurveKind, TrimRef, WallId,
 };
+use crate::form::{Curve3, FormGeo, Prof};
 use crate::graph::{CornerKind, Gauge, JointKind, Sheet, straight};
 use crate::pattern::{BendLine, Curve2, Pattern};
 use crate::region::{Bound, Piece, Region, RegionError, pieces, subtract};
@@ -226,6 +227,7 @@ impl Ctx<'_> {
                 .with(a.0 as u64)
                 .with(b.0 as u64)
                 .with(segment),
+            TrimRef::Form { form, segment } => r.with_str("form").with(form as u64).with(segment),
             TrimRef::Relief { joint, end, segment } => r
                 .with_str("relief")
                 .with(joint.0 as u64)
@@ -408,6 +410,7 @@ pub struct CornerMade {
 enum CutSrc {
     Cut(crate::error::CutId),
     Corner(crate::error::JointId, crate::error::JointId),
+    Form(u32),
 }
 
 impl CutSrc {
@@ -415,6 +418,7 @@ impl CutSrc {
         match self {
             CutSrc::Cut(cut) => TrimRef::Cut { cut, segment },
             CutSrc::Corner(a, b) => TrimRef::Corner { a, b, segment },
+            CutSrc::Form(form) => TrimRef::Form { form, segment },
         }
     }
 }
@@ -1175,6 +1179,88 @@ fn build_once(
         corners_made.push(done);
         all.push((src, wall, lp));
     }
+    // forms: folded, the rim (the form's faces take the hole's place); flat, the pierce if any
+    let mut forms: Vec<FormGeo> = Vec::with_capacity(sheet.forms.len());
+    for (i, f) in sheet.forms.iter().enumerate() {
+        let p = crate::form::Profile::of(&f.tool.shape, t).map_err(|why| SheetError::Form {
+            feature,
+            form: i,
+            why,
+        })?;
+        let wi = wall_index(f.wall).ok_or(SheetError::NoSuchWall {
+            feature,
+            wall: f.wall,
+        })?;
+        let r = match map {
+            Map::Folded => Some(p.r1),
+            Map::Flat => p.pierce,
+        };
+        if let Some(r) = r {
+            let arc = |k: f64, id: u64| {
+                (
+                    Segment::Arc {
+                        center: f.at,
+                        radius: r,
+                        start: f.angle + k * dmath::PI,
+                        sweep: dmath::PI,
+                    },
+                    id,
+                )
+            };
+            all.push((
+                CutSrc::Form(i as u32),
+                f.wall,
+                ProfileLoop::new(vec![arc(0.0, 200), arc(1.0, 201)]),
+            ));
+        }
+        let fr = frames[wi].expect("placed");
+        forms.push(FormGeo {
+            index: i,
+            strip: wi,
+            folded: fr[0],
+            frame: fr[mi],
+            c: f.at,
+            up: f.up,
+            p,
+        });
+    }
+    // a form's rim lies inside its wall clear of everything else: other cuts (inside it too),
+    // bends' zones, the outline, other forms
+    for (gi, g) in forms.iter().enumerate() {
+        if let Some(h) = forms[..gi]
+            .iter()
+            .find(|h| h.strip == g.strip && h.c.distance(g.c) < h.p.r1 + g.p.r1 + TOL)
+        {
+            return Err(SheetError::Form {
+                feature,
+                form: g.index,
+                why: crate::form::FormError::NotClear {
+                    form: g.index,
+                    trim: TrimRef::Form {
+                        form: h.index as u32,
+                        segment: 0,
+                    },
+                },
+            });
+        }
+        let near = |q: &crate::region::Piece| q.at(q.nearest(g.c)).distance(g.c) < g.p.r1 + TOL;
+        for (src, wall, lp) in &all {
+            if *wall != sheet.walls[g.strip].id || matches!(src, CutSrc::Form(k) if *k as usize == g.index) {
+                continue;
+            }
+            if let Some((q, segment)) = pieces(lp).into_iter().find(|q| near(&q.0)) {
+                let _ = q;
+                return Err(SheetError::Form {
+                    feature,
+                    form: g.index,
+                    why: crate::form::FormError::NotClear {
+                        form: g.index,
+                        trim: src.trim(segment),
+                    },
+                });
+            }
+        }
+    }
     for (src, cwall, clp) in &all {
         let c = CutRef {
             wall: *cwall,
@@ -1381,6 +1467,44 @@ fn build_once(
                 SheetError::from_region(feature, Strip::Wall(w.id), e, |i| cx.sources[i as usize])
             })?
         };
+        for g in forms.iter().filter(|g| g.strip == wi) {
+            let own = |id: u64| matches!(cx.sources[id as usize], TrimRef::Form { form, .. } if form as usize == g.index);
+            let mut found = false;
+            for b in region
+                .parts
+                .iter()
+                .flat_map(|c| std::iter::once(&c.outer).chain(&c.holes))
+                .flatten()
+            {
+                if own(b.id) {
+                    found = true;
+                } else if b.piece.at(b.piece.nearest(g.c)).distance(g.c) < g.p.r1 + TOL {
+                    return Err(SheetError::Form {
+                        feature,
+                        form: g.index,
+                        why: crate::form::FormError::NotClear {
+                            form: g.index,
+                            trim: cx.sources[b.id as usize],
+                        },
+                    });
+                }
+            }
+            // no cut of its own (a dimple's flat): its centre in the material
+            let cut = map == Map::Folded || g.p.pierce.is_some();
+            if !(found || (!cut && region.parts.iter().any(|c| crate::region::holds(c, g.c)))) {
+                return Err(SheetError::Form {
+                    feature,
+                    form: g.index,
+                    why: crate::form::FormError::NotClear {
+                        form: g.index,
+                        trim: TrimRef::Form {
+                            form: g.index as u32,
+                            segment: 0,
+                        },
+                    },
+                });
+            }
+        }
         let f = frames[wi].expect("placed");
         strips.push(StripData {
             strip: Strip::Wall(w.id),
@@ -1459,9 +1583,11 @@ fn build_once(
             })
             .collect(),
     };
-    let built = Strips::new(cx, strips, &bends, nw, t)?;
+    let mut built = Strips::new(cx, strips, &bends, nw, t)?;
+    built.formed = map == Map::Folded;
+    built.forms = forms;
     // both checks, whatever the map: each refuses its own body and warns on the other
-    let clash = built.clash().err();
+    let clash = built.clash().and_then(|_| built.form_clash()).err();
     let overlap = built.flat_overlap(&strip_dev);
     let mut warnings = Vec::new();
     match map {
@@ -1491,6 +1617,14 @@ fn build_once(
     })
 }
 
+/// One rim piece of a form: its side index, its start and end vertex slots, its angles.
+struct FormSpan {
+    k: usize,
+    s: usize,
+    t0: f64,
+    t1: f64,
+}
+
 /// A wall's stretch of tangent line: its ends' y in the joint frame, its loop and index.
 type Stretch = (f64, f64, usize, usize);
 
@@ -1511,6 +1645,10 @@ struct Strips<'a> {
     /// Strips joined at a tangent line that may still meet elsewhere: a hem's zone turning past
     /// half a turn, against its walls.
     loose: Vec<(usize, usize)>,
+    /// The forms, for the clash check and (folded) their faces.
+    forms: Vec<FormGeo>,
+    /// Folded: each form's faces take its rim hole's side faces' place.
+    formed: bool,
 }
 
 impl<'a> Strips<'a> {
@@ -1799,6 +1937,8 @@ impl<'a> Strips<'a> {
             twin,
             quiet,
             loose,
+            forms: Vec::new(),
+            formed: false,
         })
     }
 
@@ -2307,6 +2447,158 @@ impl<'a> Strips<'a> {
         reach: &dyn Fn(&forge_math::Box3) -> bool,
         may: &dyn Fn(Interval) -> bool,
     ) -> Option<(Point3, f64)> {
+        hunt_by(limit, box_of, point, reach, may, &|p| self.inside(b, p, margin))
+    }
+
+    /// Clashes of the forms' material, folded: each other strip's boundary (both skins, the
+    /// rails) in a form, each form's own edges in each other strip and in each other form. A form
+    /// is refused, never its own wall's (it is stitched to it).
+    fn form_clash(&self) -> Result<(), SheetError> {
+        if self.forms.is_empty() {
+            return Ok(());
+        }
+        let t = self.t;
+        let limit = 10.0 * TOL;
+        let ns = self.strips.len();
+        let (boxes, flat) = self.strip_boxes();
+        let clash = |g: &FormGeo, with, (at, depth): (Point3, f64)| SheetError::FormClash {
+            feature: self.cx.feature,
+            form: g.index,
+            with,
+            at,
+            depth,
+            limit,
+        };
+        let curves: Vec<Vec<Curve3>> = self.forms.iter().map(|g| g.curves(t)).collect();
+        for (gi, g) in self.forms.iter().enumerate() {
+            let gb = g.bbox(t);
+            let depth = |p: Point3| g.depth(p, t);
+            let reach = |bx: &forge_math::Box3| g.may_reach(bx, limit, t);
+            for (a, ab) in boxes.iter().enumerate() {
+                if a == g.strip || !ab.overlaps(&gb) {
+                    continue;
+                }
+                let geo = self.strips[a].folded;
+                for ld in self.loops.iter().filter(|l| l.strip == a) {
+                    for bd in &ld.bounds {
+                        for w in [0.0, t] {
+                            if let Some(x) = hunt_by(
+                                limit,
+                                &|u| piece_box(geo, &bd.piece, w, u),
+                                &|u| Some(geo.point(bd.piece.at(u), w)),
+                                &reach,
+                                &|_| true,
+                                &depth,
+                            ) {
+                                return Err(clash(
+                                    g,
+                                    crate::error::FormAgainst::Strip(self.strips[a].strip),
+                                    x,
+                                ));
+                            }
+                        }
+                        let q = bd.piece.at(0.0);
+                        let rail = Curve3::Seg(geo.point(q, 0.0), geo.point(q, t));
+                        if let Some(x) = hunt_by(
+                            limit,
+                            &|u| rail.bbox(u),
+                            &|u| Some(rail.at(u)),
+                            &reach,
+                            &|_| true,
+                            &depth,
+                        ) {
+                            return Err(clash(
+                                g,
+                                crate::error::FormAgainst::Strip(self.strips[a].strip),
+                                x,
+                            ));
+                        }
+                    }
+                }
+            }
+            for b in 0..ns {
+                if b == g.strip || !boxes[b].overlaps(&gb) {
+                    continue;
+                }
+                for c in &curves[gi] {
+                    if let Some(x) = hunt_by(
+                        limit,
+                        &|u| c.bbox(u),
+                        &|u| Some(c.at(u)),
+                        &|bx| self.may_reach(b, bx, flat[b], limit),
+                        &|_| true,
+                        &|p| self.inside(b, p, 0.0),
+                    ) {
+                        return Err(clash(
+                            g,
+                            crate::error::FormAgainst::Strip(self.strips[b].strip),
+                            x,
+                        ));
+                    }
+                }
+            }
+            for (hi, h) in self.forms.iter().enumerate() {
+                if hi == gi || !h.bbox(t).overlaps(&gb) {
+                    continue;
+                }
+                for c in &curves[hi] {
+                    if let Some(x) = hunt_by(
+                        limit,
+                        &|u| c.bbox(u),
+                        &|u| Some(c.at(u)),
+                        &reach,
+                        &|_| true,
+                        &depth,
+                    ) {
+                        return Err(clash(g, crate::error::FormAgainst::Form(h.index), x));
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Every strip's box (folded), and its region's box in its own coordinates.
+    fn strip_boxes(&self) -> (Vec<forge_math::Box3>, Vec<(Point2, Point2)>) {
+        let t = self.t;
+        let ns = self.strips.len();
+        let mut boxes = vec![forge_math::Box3::EMPTY; ns];
+        let mut flat = vec![
+            (
+                Point2::new(f64::INFINITY, f64::INFINITY),
+                Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY)
+            );
+            ns
+        ];
+        for ld in &self.loops {
+            let (si, geo) = (ld.strip, self.strips[ld.strip].folded);
+            for b in &ld.bounds {
+                let bx = b.piece.bbox();
+                let f = &mut flat[si];
+                *f = (
+                    Point2::new(f.0.x.min(bx.x0), f.0.y.min(bx.y0)),
+                    Point2::new(f.1.x.max(bx.x1), f.1.y.max(bx.y1)),
+                );
+                for w in [0.0, t] {
+                    boxes[si] = boxes[si].hull(&piece_box(geo, &b.piece, w, Interval::new(0.0, 1.0)));
+                }
+            }
+        }
+        (boxes, flat)
+    }
+}
+
+/// The deepest point found along a curve over fractions 0..1 by `depth`, by halving while
+/// `reach` says a half's box may get deeper than `limit`: a point and its depth, if one is.
+fn hunt_by(
+    limit: f64,
+    box_of: &dyn Fn(Interval) -> forge_math::Box3,
+    point: &dyn Fn(f64) -> Option<Point3>,
+    reach: &dyn Fn(&forge_math::Box3) -> bool,
+    may: &dyn Fn(Interval) -> bool,
+    depth: &dyn Fn(Point3) -> Option<f64>,
+) -> Option<(Point3, f64)> {
+    {
         let mut stack = vec![(Interval::new(0.0, 1.0), 0u32)];
         while let Some((u, level)) = stack.pop() {
             let bx = box_of(u);
@@ -2321,7 +2613,7 @@ impl<'a> Strips<'a> {
             }
             if size <= 0.5 * limit || level >= 48 {
                 let Some(p) = point(u.mid()) else { continue };
-                if let Some(d) = self.inside(b, p, margin)
+                if let Some(d) = depth(p)
                     && d > limit
                 {
                     return Some((p, d));
@@ -2334,7 +2626,9 @@ impl<'a> Strips<'a> {
         }
         None
     }
+}
 
+impl Strips<'_> {
     /// Whether a box may hold a point deeper than `limit` in strip `s`'s thickness, over its region's
     /// box `flat`: rigorous, from the box's corners in the strip's own terms.
     fn may_reach(&self, s: usize, bx: &forge_math::Box3, flat: (Point2, Point2), limit: f64) -> bool {
@@ -2703,6 +2997,7 @@ impl<'a> Strips<'a> {
             contours,
             bends,
             hits: crate::punch::hits(self.cx.sheet, layout),
+            forms: crate::form::marks(self.cx.sheet, layout),
         }
     }
 
@@ -2749,6 +3044,18 @@ impl<'a> Strips<'a> {
             .collect::<Result<_, _>>()?;
         let merged: Vec<bool> = (0..sides.len())
             .map(|k| next[k].1 && coplanar(&surfaces[k], &surfaces[next[k].0]))
+            .collect();
+        // folded, a form's rim pieces get the form's faces, not side faces
+        let formed: Vec<Option<usize>> = (0..sides.len())
+            .map(|k| {
+                let (l, i) = sides[k];
+                match self.cx.sources[self.loops[l].bounds[i].id as usize] {
+                    TrimRef::Form { form, .. } if self.formed => {
+                        self.forms.iter().position(|g| g.index == form as usize)
+                    }
+                    _ => None,
+                }
+            })
             .collect();
         // names: vertices from the side pieces meeting there, ties by where they lie
         let src = |k: usize| {
@@ -2851,7 +3158,7 @@ impl<'a> Strips<'a> {
         // rails where side faces part
         let mut rails: HashMap<usize, EdgeId> = HashMap::new();
         for k in 0..sides.len() {
-            if merged[prev[k]] {
+            if merged[prev[k]] || formed[k].is_some() {
                 continue;
             }
             let (l, i) = sides[k];
@@ -2870,7 +3177,7 @@ impl<'a> Strips<'a> {
         // side faces: runs of merged pieces
         let mut done = vec![false; sides.len()];
         for k0 in 0..sides.len() {
-            if done[k0] || merged[prev[k0]] {
+            if done[k0] || merged[prev[k0]] || formed[k0].is_some() {
                 continue;
             }
             let mut run = vec![k0];
@@ -2951,7 +3258,242 @@ impl<'a> Strips<'a> {
                 }
             }
         }
+        for (gi, g) in self.forms.iter().enumerate() {
+            // its rim's pieces, in their hole's order
+            let mut rim: Vec<usize> = (0..sides.len()).filter(|&k| formed[k] == Some(gi)).collect();
+            if rim.is_empty() {
+                continue;
+            }
+            rim.sort_by_key(|&k| sides[k]);
+            let spans: Vec<FormSpan> = rim
+                .iter()
+                .map(|&k| {
+                    let (l, i) = sides[k];
+                    let Piece::Arc { t0, t1, .. } = self.loops[l].bounds[i].piece else {
+                        unreachable!("a form's rim is arcs")
+                    };
+                    FormSpan {
+                        k,
+                        s: self.slot[l][i],
+                        t0,
+                        t1,
+                    }
+                })
+                .collect();
+            self.form_faces(
+                &mut body, &mut roles, shell, g, &spans, &verts, &edges, &vname, &names,
+            )?;
+        }
         Ok((body, roles))
+    }
+
+    /// A form's faces, folded: each profile piece of each chain swept span by span between
+    /// meridians at the rim's vertices, then the crowns or the lip; the rim's edges are the
+    /// skins' (the wall's hole), used the other way.
+    #[allow(clippy::too_many_arguments)]
+    fn form_faces(
+        &self,
+        body: &mut Body,
+        roles: &mut Roles,
+        shell: forge_topo::ShellId,
+        g: &FormGeo,
+        spans: &[FormSpan],
+        verts: &[[VertexId; 2]],
+        edges: &[[(EdgeId, bool); 2]],
+        vname: &[Name],
+        names: &[Name],
+    ) -> Result<(), SheetError> {
+        let t = self.t;
+        let f = g.frame;
+        let fail = || SheetError::Form {
+            feature: self.cx.feature,
+            form: g.index,
+            why: crate::form::FormError::Size {
+                which: "surface",
+                value: f64::NAN,
+                limit: tol::LINEAR,
+            },
+        };
+        // the near skin: the reference one pressed down, the back one up
+        let lev_near = if g.up { 0 } else { 1 };
+        let chains: [(&[Prof], usize); 2] = [(&g.p.near, lev_near), (&g.p.far, 1 - lev_near)];
+        let down = g.down(&f);
+        let nslots = spans.len();
+        // per chain, per span start, per piece: the meridian edge and whether it runs inwards
+        let mut medges: Vec<Vec<Vec<(EdgeId, bool)>>> = Vec::new();
+        // per chain, per span, per node: the arc and whether it runs from the span's start
+        let mut arcs: Vec<Vec<Vec<(EdgeId, bool)>>> = Vec::new();
+        for (ci, (chain, lev)) in chains.iter().enumerate() {
+            let nodes: Vec<Point2> = std::iter::once(chain[0].at(0.0))
+                .chain(chain.iter().map(|q| q.at(1.0)))
+                .collect();
+            let mut vs = Vec::with_capacity(nslots);
+            let mut es = Vec::with_capacity(nslots);
+            for sp in spans {
+                let phi = sp.t0;
+                let mut row = vec![verts[sp.s][*lev]];
+                for (j, q) in nodes.iter().enumerate().skip(1) {
+                    row.push(body.add_vertex(
+                        g.point(&f, phi, *q, t),
+                        vname[sp.s].with_str("form").with((ci * 16 + j) as u64),
+                    ));
+                }
+                let radial = g.radial(&f, phi);
+                let mut erow = Vec::with_capacity(chain.len());
+                for (i, q) in chain.iter().enumerate() {
+                    let name = vname[sp.s].with_str("form meridian").with((ci * 16 + i) as u64);
+                    let (va, vb) = (row[i], row[i + 1]);
+                    erow.push(match *q {
+                        Prof::Line { a, b } => {
+                            let (pa, pb) = (g.point(&f, phi, a, t), g.point(&f, phi, b, t));
+                            let line = Line::through(pa, pb).ok_or_else(fail)?;
+                            (
+                                body.add_edge(
+                                    Curve::Line(line),
+                                    Interval::new(0.0, pa.distance(pb)),
+                                    va,
+                                    vb,
+                                    name,
+                                ),
+                                true,
+                            )
+                        }
+                        Prof::Arc { c, rho, a0, a1 } => {
+                            let frame =
+                                Frame::from_axes(g.point(&f, phi, c, t), radial, down, radial.cross(down))
+                                    .ok_or_else(fail)?;
+                            let curve = Curve::Circle(Circle { frame, radius: rho });
+                            let range = Interval::new(a0.min(a1), a0.max(a1));
+                            if a1 > a0 {
+                                (body.add_edge(curve, range, va, vb, name), true)
+                            } else {
+                                (body.add_edge(curve, range, vb, va, name), false)
+                            }
+                        }
+                    });
+                }
+                vs.push(row);
+                es.push(erow);
+            }
+            // arcs along each node but the rim's (the skins' edges), span by span
+            let mut arow = Vec::with_capacity(nslots);
+            for (si, sp) in spans.iter().enumerate() {
+                let next = (si + 1) % nslots;
+                let mut per = vec![edges[sp.k][*lev]];
+                for (j, q) in nodes.iter().enumerate().skip(1) {
+                    let curve = Curve::Circle(Circle {
+                        frame: g.axis_frame(&f, q.y, t),
+                        radius: q.x,
+                    });
+                    let range = Interval::new(sp.t0.min(sp.t1), sp.t0.max(sp.t1));
+                    let (vs0, ve0) = (vs[si][j], vs[next][j]);
+                    let fw = sp.t1 > sp.t0;
+                    let (a, b) = if fw { (vs0, ve0) } else { (ve0, vs0) };
+                    let name = names[sp.k].with_str("form arc").with((ci * 16 + j) as u64);
+                    per.push((body.add_edge(curve, range, a, b, name), fw));
+                }
+                arow.push(per);
+            }
+            medges.push(es);
+            arcs.push(arow);
+        }
+        // a face's sense: its surface's normal against the material's outside at a sample
+        let sense =
+            |s: &Surface, at: Point3, out: Vec3| s.normal(s.project(at)).is_none_or(|n| n.dot(out) > 0.0);
+        let span_mid = |sp: &FormSpan| 0.5 * (sp.t0 + sp.t1);
+        for (ci, (chain, lev)) in chains.iter().enumerate() {
+            // the skin runs its hole's pieces with the loop on top, against it below: the form's
+            // faces run them the other way
+            let s_to_e = *lev == 0;
+            let other = if ci == 0 { &g.p.far } else { &g.p.near };
+            for (i, q) in chain.iter().enumerate() {
+                let surface = g.surface(&f, q, t).ok_or_else(fail)?;
+                for (si, sp) in spans.iter().enumerate() {
+                    let next = (si + 1) % nslots;
+                    let (outer, inner) = (arcs[ci][si][i], arcs[ci][si][i + 1]);
+                    let (ms, me) = (medges[ci][si][i], medges[ci][next][i]);
+                    let uses = if s_to_e {
+                        [
+                            (outer.0, outer.1),
+                            (me.0, me.1),
+                            (inner.0, !inner.1),
+                            (ms.0, !ms.1),
+                        ]
+                    } else {
+                        [
+                            (outer.0, !outer.1),
+                            (ms.0, ms.1),
+                            (inner.0, inner.1),
+                            (me.0, !me.1),
+                        ]
+                    };
+                    let phi = span_mid(sp);
+                    let at = g.point(&f, phi, q.at(0.5), t);
+                    let o2 = q.at(0.5) - other[i].at(0.5);
+                    let out = g.radial(&f, phi) * o2.x + down * o2.y;
+                    let trim = TrimRef::Form {
+                        form: g.index as u32,
+                        segment: (ci * 16 + i) as u64,
+                    };
+                    let name = names[sp.k].with_str("form face").with((ci * 16 + i) as u64);
+                    let face = body.add_face(shell, surface.clone(), sense(&surface, at, out), name);
+                    body.add_loop(face, &uses);
+                    if !roles.sides.contains(&(trim, name)) {
+                        roles.sides.push((trim, name));
+                    }
+                }
+            }
+        }
+        // the closing faces: a crown disc on each chain, or the lip joining them
+        let last = |ci: usize| chains[ci].0.len();
+        let ring = |ci: usize| -> Vec<(EdgeId, bool)> {
+            let s_to_e = chains[ci].1 == 0;
+            let m = last(ci);
+            if s_to_e {
+                (0..nslots).map(|si| arcs[ci][si][m]).collect()
+            } else {
+                (0..nslots)
+                    .rev()
+                    .map(|si| (arcs[ci][si][m].0, !arcs[ci][si][m].1))
+                    .collect()
+            }
+        };
+        let end = |ci: usize| chains[ci].0.last().expect("a chain").at(1.0);
+        let phi = span_mid(&spans[0]);
+        let mut close = |loops: Vec<Vec<(EdgeId, bool)>>, d: f64, r: f64, out: Vec3, segment: u64| {
+            let surface = Surface::Plane(Plane::new(g.axis_frame(&f, d, t)));
+            let at = g.point(&f, phi, Point2::new(r, d), t);
+            let name = names[spans[0].k].with_str("form face").with(segment);
+            let face = body.add_face(shell, surface.clone(), sense(&surface, at, out), name);
+            for l in &loops {
+                body.add_loop(face, l);
+            }
+            let trim = TrimRef::Form {
+                form: g.index as u32,
+                segment,
+            };
+            roles.sides.push((trim, name));
+        };
+        match g.p.close {
+            crate::form::Close::Crown => {
+                for ci in 0..2 {
+                    let e = end(ci);
+                    let out = if ci == 0 { -down } else { down };
+                    close(vec![ring(ci)], e.y, 0.5 * e.x, out, 100 + ci as u64);
+                }
+            }
+            crate::form::Close::Lip => {
+                let (n, m) = (end(0), end(1));
+                // the outer circle's loop first
+                let loops = if m.x > n.x {
+                    vec![ring(1), ring(0)]
+                } else {
+                    vec![ring(0), ring(1)]
+                };
+                close(loops, n.y, 0.5 * (n.x + m.x), down, 100);
+            }
+        }
+        Ok(())
     }
 
     fn too_short(&self, l: usize, i: usize) -> SheetError {

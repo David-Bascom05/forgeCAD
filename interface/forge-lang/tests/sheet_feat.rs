@@ -236,3 +236,107 @@ fn punch_refusals_and_violations() {
         forge_lang::report::text(&r, &s)
     );
 }
+
+#[test]
+fn forms_shape_their_walls() {
+    let r = clean("formed");
+    let plain = {
+        let s: String = src("formed")
+            .lines()
+            .filter(|l| !l.starts_with("f") || l.starts_with("flat"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        run(&s)
+    };
+    let t = 1.5;
+    let dimple = forge_sheet::FormShape::Dimple {
+        d: 20.0,
+        depth: 4.0,
+        angle: PI / 3.0,
+        die_r: 1.0,
+        punch_r: 2.0,
+    };
+    let hole = forge_sheet::FormShape::ExtrudedHole {
+        d: 8.0,
+        height: 5.0,
+        die_r: 1.0,
+        pierce: 5.0,
+    };
+    let folded = 2.0 * dimple.volume_change(t).unwrap() + hole.volume_change(t).unwrap();
+    let (a, b) = (
+        mass(r.sheets[0].folded.as_ref().expect("built")),
+        mass(plain.sheets[0].folded.as_ref().expect("built")),
+    );
+    near("folded", (a.0 - b.0, a.1 + b.1), folded);
+    let (a, b) = (
+        mass(r.sheets[0].unfolds[0].1.as_ref().expect("built")),
+        mass(plain.sheets[0].unfolds[0].1.as_ref().expect("built")),
+    );
+    near("flat", (b.0 - a.0, a.1 + b.1), PI * 2.5 * 2.5 * t);
+    let dxf = r.sheets[0].dxf().expect("a dxf");
+    assert!(
+        dxf.contains("\nFORM\n")
+            && dxf.contains("DM20 DOWN")
+            && dxf.contains("DM20 UP")
+            && dxf.contains("EH8 DOWN")
+    );
+}
+
+#[test]
+fn form_refusals_and_violations() {
+    let s = src("formed").replace("form(\"DM20\", at: holes.a", "form(\"DM9\", at: holes.a");
+    assert_eq!(first_error(&s).kind(), "NoSuchTool");
+    let s = src("formed").replace(
+        "form(\"DM20\", at: holes.a",
+        "form((\"L\", \"louvre\", 20, 5, 3), at: holes.a",
+    );
+    assert_eq!(first_error(&s).kind(), "FormUnbuilt");
+    let s = src("formed").replace(
+        "form(\"DM20\", at: holes.a",
+        "form((\"D\", \"dimple\", 20, 1, 60deg, 1, 2), at: holes.a",
+    );
+    assert_eq!(first_error(&s).kind(), "FormTooShallow");
+    // over the edge of the base: refused when built
+    let s = src("formed").replace("param holes.y = 25", "param holes.y = 5");
+    assert_eq!(first_error(&s).kind(), "FormNotClear");
+    // a tool the shop does not have: built, a typed violation
+    let s = src("formed").replace(
+        "form(\"DM20\", at: holes.a",
+        "form((\"D22\", \"dimple\", 22, 4, 60deg, 1, 2), at: holes.a",
+    );
+    let r = run(&s);
+    assert!(r.errors.is_empty(), "{}", forge_lang::report::text(&r, &s));
+    let kinds: Vec<String> = r
+        .warnings
+        .iter()
+        .filter_map(|w| match w {
+            forge_lang::error::Warning::Sheet(n) => Some(n.kind().to_string()),
+            _ => None,
+        })
+        .collect();
+    assert!(kinds.contains(&"FormToolNotInShop".to_string()), "{kinds:?}");
+    // the shop's tool the wrong way, and near its bend
+    let s = src("formed")
+        .replace(
+            "f2 = form(\"EH8\", at: holes.b, wall: base)",
+            "f2 = form(\"EH8\", at: holes.b, wall: base, up: true)",
+        )
+        .replace("param holes.x2 = 58", "param holes.x2 = 70");
+    let s = s.replace(
+        "(\"EH8\", \"extruded_hole\", 8, 5, 1, 5)",
+        "(\"EH8\", \"extruded_hole\", 8, 5, 1, 5, \"down\")",
+    );
+    let r = run(&s);
+    let kinds: Vec<String> = r
+        .warnings
+        .iter()
+        .filter_map(|w| match w {
+            forge_lang::error::Warning::Sheet(n) => Some(n.kind().to_string()),
+            _ => None,
+        })
+        .collect();
+    assert!(
+        kinds.contains(&"FormDirection".to_string()) && kinds.contains(&"FormNearBend".to_string()),
+        "{kinds:?}"
+    );
+}

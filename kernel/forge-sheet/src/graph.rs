@@ -120,6 +120,8 @@ pub struct Sheet {
     pub coated: bool,
     /// Turret hits, each with its cuts among `cuts` (`crate::punch`).
     pub punches: Vec<crate::punch::Punch>,
+    /// Forming tools' strokes (`crate::form`).
+    pub forms: Vec<crate::form::Form>,
     pub(crate) next_wall: u32,
     pub(crate) next_joint: u32,
     pub(crate) next_cut: u32,
@@ -174,6 +176,7 @@ impl Sheet {
             corner_default: None,
             coated: false,
             punches: Vec::new(),
+            forms: Vec::new(),
             next_wall: 1,
             next_joint: 0,
             next_cut: 0,

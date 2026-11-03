@@ -188,6 +188,9 @@ pub struct ShopProfile {
     /// The turret's tool library.
     pub tools: Vec<crate::punch::Tool>,
     pub punch_rules: crate::punch::PunchRules,
+    /// The press's forming tools.
+    pub forms: Vec<crate::form::FormTool>,
+    pub form_rules: crate::form::FormRules,
 }
 
 /// What a fabricator's machines take, each limit optional. Sizes are of the flat blank, either way

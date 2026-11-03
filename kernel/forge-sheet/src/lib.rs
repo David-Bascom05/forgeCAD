@@ -6,6 +6,7 @@ pub mod checks;
 pub mod contour;
 pub mod corner;
 pub mod error;
+pub mod form;
 pub mod graph;
 pub mod hardware;
 pub mod hem;
@@ -23,9 +24,10 @@ pub use checks::check;
 pub use contour::{ContourError, ContourMade, Hand};
 pub use corner::{Seam, SeamError};
 pub use error::{
-    CutId, End, FeatureId, JointId, JointKindName, Pinch, Seam, SheetError, SheetWarning, Side, Strip,
+    CutId, End, FeatureId, FormAgainst, JointId, JointKindName, Pinch, Seam, SheetError, SheetWarning, Side, Strip,
     TrimCurveKind, TrimRef, Violation, WallId,
 };
+pub use form::{Form, FormError, FormMark, FormName, FormRules, FormShape, FormTool, FormViolation};
 pub use graph::{Corner, CornerKind, Cut, Gauge, Joint, JointKind, Position, Sheet, Wall};
 pub use hardware::{Hardware, HardwareKind, Mount, Source, placeholder_catalogue};
 pub use hem::{GAP_FLOOR, HemError, HemJoint, HemKind, HemName, HemRow, HemSpec, HemTable};

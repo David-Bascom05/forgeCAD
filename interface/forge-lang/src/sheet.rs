@@ -48,6 +48,7 @@ pub const BUILTINS: &[&str] = &[
     "constant_width_corner",
     "seam",
     "punch",
+    "form",
     "hardware",
     "pem",
     "relief_rule",
@@ -147,6 +148,10 @@ pub enum OpKind {
     Contour {
         first: WallId,
         last: WallId,
+    },
+    /// A forming tool's stroke: `Sheet::forms[form]`.
+    Form {
+        form: u32,
     },
 }
 
@@ -331,6 +336,8 @@ pub struct SheetState {
     pub cut_srcs: Vec<CutSrc>,
     /// Corner treatments by the features that asked.
     pub corners: Vec<(JointId, JointId, String, Span)>,
+    /// The features that made each of `sheet.forms`, in order.
+    pub forms: Vec<(String, Span)>,
     fix: FixCtx,
     pub folded: Option<fs::Built>,
     pub unfolds: Vec<UnfoldState>,
@@ -366,6 +373,7 @@ impl SheetState {
             walls: self.walls.iter().map(|x| (x.0, x.1.clone())).collect(),
             joints: self.joints.iter().map(|x| (x.0, x.1.clone())).collect(),
             cuts: self.cuts.iter().map(|x| (x.0, x.1.clone())).collect(),
+            forms: self.forms.iter().map(|x| x.0.clone()).collect(),
         }
     }
 }
@@ -418,9 +426,13 @@ pub struct Names {
     walls: Vec<(WallId, String)>,
     joints: Vec<(JointId, String)>,
     cuts: Vec<(CutId, String)>,
+    forms: Vec<String>,
 }
 
 impl Names {
+    pub(super) fn form(&self, k: usize) -> String {
+        self.forms.get(k).cloned().unwrap_or_else(|| format!("form {k}"))
+    }
     fn wall(&self, w: WallId) -> String {
         self.walls
             .iter()
@@ -484,6 +496,10 @@ impl Names {
                     "corner",
                     Json::Arr(vec![self.joint(a).into(), self.joint(b).into()]),
                 ),
+                ("segment", (segment as f64).into()),
+            ]),
+            TrimRef::Form { form, segment } => Json::obj(vec![
+                ("form", self.form(form as usize).into()),
                 ("segment", (segment as f64).into()),
             ]),
         }
@@ -598,7 +614,10 @@ impl SheetErr {
     pub fn text(&self) -> String {
         use SheetErr::*;
         match self {
-            Kernel { id, error, .. } => format!("{id}: the sheet is refused: {}", kernel_text(error)),
+            Kernel { id, error, names, .. } => format!(
+                "{id}: the sheet is refused: {}",
+                feat::form_error_text(error, names).unwrap_or_else(|| kernel_text(error))
+            ),
             OrdinaryOnSheet { id, sheet, .. } => format!(
                 "{id} is not sheet metal, and the part has the sheet {sheet}: ordinary features on a sheet are refused"
             ),
@@ -702,6 +721,7 @@ impl SheetNote {
                 W::FoldedClash { .. } => "FoldedClash",
                 W::FlatTouch { .. } => "FlatTouch",
                 W::FoldedTouch { .. } => "FoldedTouch",
+                W::FormClash { .. } => "FormClash",
             },
             Note::Violation(v) => match v {
                 V::HoleNearBend { .. } => "HoleNearBend",
@@ -726,6 +746,7 @@ impl SheetNote {
                 V::CutCrossesBend { .. } => "CutCrossesBend",
                 V::LipTooShort { .. } => "LipTooShort",
                 V::Punch { why, .. } => feat::punch_kind(why),
+                V::Form { why, .. } => feat::form_kind(why),
             },
         }
     }
@@ -804,13 +825,37 @@ impl SheetNote {
                     ("limit", f(limit)),
                 ]),
                 W::UnverifiedHardware { cut, .. } => v.push(("cut", n.cut(cut).into())),
+                W::FormClash {
+                    form,
+                    with,
+                    at,
+                    depth,
+                    limit,
+                    ..
+                } => v.extend([
+                    ("form", n.form(form).into()),
+                    (
+                        "with",
+                        match with {
+                            fs::FormAgainst::Strip(s) => n.strip(s),
+                            fs::FormAgainst::Form(k) => Json::obj(vec![("form", n.form(k).into())]),
+                        },
+                    ),
+                    ("at", p3(at)),
+                    ("depth", f(depth)),
+                    ("limit", f(limit)),
+                ]),
             },
+            Note::Violation(V::Form { form, why, .. }) => {
+                v.push(("form", n.form(*form).into()));
+                v.extend(feat::form_data(why, n));
+            }
             Note::Violation(V::Punch { punch, why, .. }) => {
                 v.push(("punch", (*punch as f64).into()));
                 v.extend(feat::punch_data(why, n));
             }
             Note::Violation(x) => match *x {
-                V::Punch { .. } => unreachable!("above"),
+                V::Punch { .. } | V::Form { .. } => unreachable!("above"),
                 V::HoleNearBend {
                     trim,
                     joint,
@@ -1260,6 +1305,18 @@ impl SheetNote {
                 fm(*need)
             ),
             Note::Violation(V::Punch { why, .. }) => feat::punch_text(why, n),
+            Note::Violation(V::Form { why, .. }) => feat::form_text(why, n),
+            Note::Warning(W::FormClash {
+                form, with, depth, ..
+            }) => format!(
+                "{} passes {} deep through {} folded; the flat builds",
+                n.form(*form),
+                fm(*depth),
+                match with {
+                    fs::FormAgainst::Strip(s) => n.strip_name(*s),
+                    fs::FormAgainst::Form(k) => n.form(*k),
+                }
+            ),
         }
     }
 
@@ -1293,7 +1350,7 @@ fn p3(p: Point3) -> Json {
 
 fn kernel_kind(e: &SheetError) -> &'static str {
     use SheetError::*;
-    if let Some(k) = feat::kernel_kind(e) {
+    if let Some(k) = feat::kernel_kind(e).or_else(|| feat::form_error_kind(e)) {
         return k;
     }
     match e {
@@ -1420,7 +1477,7 @@ fn kernel_text(e: &SheetError) -> String {
 fn kernel_data(e: &SheetError, n: &Names) -> Vec<(&'static str, Json)> {
     use SheetError::*;
     let f = |x: f64| Json::Num(x);
-    if let Some(d) = feat::kernel_data(e) {
+    if let Some(d) = feat::kernel_data(e).or_else(|| feat::form_error_data(e, n)) {
         return d;
     }
     match e {
@@ -2200,6 +2257,11 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
                     "min_part",
                     "tools",
                     "punch_web",
+                    "forms",
+                    "form_bend",
+                    "form_edge",
+                    "form_web",
+                    "form_depth",
                 ],
                 args,
                 span,
@@ -2267,6 +2329,8 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
                     process,
                     tools: feat::tools_of(&a)?,
                     punch_rules: feat::punch_rules_of(&a)?,
+                    forms: feat::form_tools_of(&a)?,
+                    form_rules: feat::form_rules_of(&a)?,
                 },
                 stocks,
                 hems,
@@ -2328,6 +2392,7 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
         }
         "seam" => feat::seam(ev, args, span),
         "punch" => feat::punch(ev, args, span),
+        "form" => feat::form(ev, args, span),
         "hardware" => {
             let a = Args::bind(
                 ev,
@@ -2754,6 +2819,7 @@ fn base(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         joints: vec![],
         cuts: vec![],
         corners: vec![],
+        forms: vec![],
         cut_srcs: vec![],
         fix,
         folded: None,
@@ -3609,6 +3675,12 @@ fn op_trims(st: &SheetState, op: &OpRef) -> Vec<TrimRef> {
                 })
             })
             .collect(),
+        // its rim (folded: its faces, by profile piece; flat: its pierce)
+        OpKind::Form { form } => (0..2u64)
+            .flat_map(|c| (0..16).map(move |i| c * 16 + i))
+            .chain([100, 101])
+            .map(|segment| TrimRef::Form { form, segment })
+            .collect(),
     }
 }
 
@@ -3624,7 +3696,7 @@ fn op_strips(st: &SheetState, op: &OpRef) -> Vec<Strip> {
                 .chain(joints.into_iter().map(Strip::Bend))
                 .collect()
         }
-        OpKind::Cut { .. } | OpKind::Corner { .. } => vec![],
+        OpKind::Cut { .. } | OpKind::Corner { .. } | OpKind::Form { .. } => vec![],
     }
 }
 
@@ -3766,7 +3838,7 @@ fn op_member(ev: &mut Eval, op: &Rc<OpRef>, name: &str, span: Span) -> Option<R<
         OpKind::Base { wall } | OpKind::Flange { wall, .. } => Some(wall),
         // the contour's first wall's plane; its faces, every wall's
         OpKind::Contour { first, .. } => Some(first),
-        OpKind::Cut { .. } | OpKind::Corner { .. } => None,
+        OpKind::Cut { .. } | OpKind::Corner { .. } | OpKind::Form { .. } => None,
     };
     let walls = match op.kind {
         OpKind::Contour { .. } => feat::parts(st, op).0,
@@ -3961,6 +4033,20 @@ pub fn finish(ev: &mut Eval) {
         });
         for (warnings, on) in folded.chain(flat) {
             for w in warnings {
+                if let fs::SheetWarning::FormClash { form, .. } = *w {
+                    let (id, span) = on
+                        .clone()
+                        .or_else(|| st.forms.get(form).cloned())
+                        .unwrap_or((st.id.clone(), st.walls[0].2));
+                    notes.push(Warning::Sheet(Box::new(SheetNote {
+                        span,
+                        id,
+                        note: Note::Warning(w.clone()),
+                        names: st.names(),
+                        fixes: vec![],
+                    })));
+                    continue;
+                }
                 let (a, b) = match *w {
                     fs::SheetWarning::FlatOverlap { a, b, .. }
                     | fs::SheetWarning::FlatOverlapUndecided { a, b, .. }
@@ -4058,6 +4144,7 @@ pub fn finish(ev: &mut Eval) {
                     .iter()
                     .find(|j| j.0 == joint)
                     .map(|j| (j.1.clone(), j.2)),
+                fs::Violation::Form { form, .. } => st.forms.get(form).map(|f| (f.0.clone(), f.1)),
                 fs::Violation::Punch { punch, .. } => st
                     .sheet
                     .punches

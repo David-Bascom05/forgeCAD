@@ -38,6 +38,11 @@ pub fn check(sheet: &Sheet, shop: &ShopProfile) -> Vec<Violation> {
             .into_iter()
             .map(|(punch, why)| Violation::Punch { feature, punch, why }),
     );
+    out.extend(
+        crate::form::check(sheet, &shop.forms, &shop.form_rules)
+            .into_iter()
+            .map(|(form, why)| Violation::Form { feature, form, why }),
+    );
     let Some(stock) = shop.stock(t) else {
         out.push(Violation::ThicknessNotStocked {
             feature,

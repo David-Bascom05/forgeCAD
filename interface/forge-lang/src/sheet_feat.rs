@@ -460,6 +460,7 @@ fn contour_base(ev: &mut Eval, a: &Args, id: String, span: Span) -> R<Value> {
         joints,
         cuts: vec![],
         corners: vec![],
+        forms: vec![],
         cut_srcs: vec![],
         fix,
         folded: None,
@@ -1012,4 +1013,390 @@ pub(super) fn punch_data(e: &fs::PunchViolation, n: &Names) -> Vec<(&'static str
             ("limit", (*limit).into()),
         ],
     }
+}
+
+// ---- forms ------------------------------------------------------------------------------------
+
+/// A forming tool written as a tuple: ("ID", "dimple", D, DEPTH, ANGLE, DIE_R, PUNCH_R) |
+/// ("ID", "extruded_hole", D, HEIGHT, DIE_R, PIERCE) | ("ID", "louvre"|"lance", L, W, H), then
+/// optionally the directions the press forms it: "up", "down" or "both" (the default).
+fn form_tool_of(v: &Value, span: Span) -> R<fs::FormTool> {
+    let bad = || Error::WrongType {
+        span,
+        what: "a forming tool: (\"ID\", \"dimple\"|\"extruded_hole\"|\"louvre\"|\"lance\", sizes.., \"up\"|\"down\"|\"both\")",
+        want: Ty::Tuple,
+        found: v.ty(),
+    };
+    let Value::Tuple(xs) = v else { return Err(bad()) };
+    let (Some(Value::Str(id)), Some(Value::Str(kind))) = (xs.first(), xs.get(1)) else {
+        return Err(bad());
+    };
+    let n = |i: usize| -> R<f64> {
+        let x = xs.get(i).cloned().ok_or_else(bad)?;
+        Ok(num_of(
+            x,
+            &[Dim::Length, Dim::Angle, Dim::Ratio],
+            span,
+            "a forming tool size",
+        )?
+        .v)
+    };
+    let (shape, sizes) = match &**kind {
+        "dimple" => (
+            fs::FormShape::Dimple {
+                d: n(2)?,
+                depth: n(3)?,
+                angle: n(4)?,
+                die_r: n(5)?,
+                punch_r: n(6)?,
+            },
+            5,
+        ),
+        "extruded_hole" => (
+            fs::FormShape::ExtrudedHole {
+                d: n(2)?,
+                height: n(3)?,
+                die_r: n(4)?,
+                pierce: n(5)?,
+            },
+            4,
+        ),
+        "louvre" => (
+            fs::FormShape::Louvre {
+                length: n(2)?,
+                width: n(3)?,
+                height: n(4)?,
+            },
+            3,
+        ),
+        "lance" => (
+            fs::FormShape::Lance {
+                length: n(2)?,
+                width: n(3)?,
+                height: n(4)?,
+            },
+            3,
+        ),
+        _ => return Err(bad()),
+    };
+    let (up, down) = match xs.get(2 + sizes) {
+        None => (true, true),
+        Some(Value::Str(w)) if &**w == "both" => (true, true),
+        Some(Value::Str(w)) if &**w == "up" => (true, false),
+        Some(Value::Str(w)) if &**w == "down" => (false, true),
+        Some(_) => return Err(bad()),
+    };
+    if xs.len() > 3 + sizes {
+        return Err(bad());
+    }
+    Ok(fs::FormTool {
+        id: id.to_string(),
+        shape,
+        up,
+        down,
+    })
+}
+
+/// `shop(forms: [TOOL, ..])`.
+pub(super) fn form_tools_of(a: &Args) -> R<Vec<fs::FormTool>> {
+    match a.opt("forms") {
+        None => Ok(vec![]),
+        Some(Value::List(xs)) => xs.iter().map(|x| form_tool_of(x, a.span("forms"))).collect(),
+        Some(o) => Err(wrong(a.span("forms"), "forms", Ty::List, &o)),
+    }
+}
+
+/// `shop(form_bend: .., form_edge: .., form_web: .., form_depth: ..)`, each per_t(..); any not
+/// given keeps its rule of thumb (`FormRules::default`).
+pub(super) fn form_rules_of(a: &Args) -> R<fs::FormRules> {
+    let d = fs::FormRules::default();
+    let get = |k: &'static str, or: fs::Scaled| -> R<fs::Scaled> {
+        match a.opt(k) {
+            None => Ok(or),
+            Some(_) => scaled_of(a, k),
+        }
+    };
+    Ok(fs::FormRules {
+        bend: get("form_bend", d.bend)?,
+        edge: get("form_edge", d.edge)?,
+        spacing: get("form_web", d.spacing)?,
+        depth: get("form_depth", d.depth)?,
+    })
+}
+
+/// `form(TOOL_ID | TOOL, at: POINT | (x, y), wall: W, angle: A = 0, up: false)`: a forming tool
+/// pressed into wall W (towards its top with up: true), the tool from the shop's library by id
+/// (or written out), at a point sketched on W or (x, y) in W's own coordinates.
+pub(super) fn form(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
+    let id = ev.take_id("form", span)?;
+    let a = Args::bind(ev, "form", &["tool", "at", "wall", "angle", "up"], args, span)?;
+    let up = a.flag("up")?;
+    if a.poisoned() {
+        return Ok(Value::Unresolved);
+    }
+    let wv = a.req("wall")?;
+    let op = op_of(&wv, a.span("wall"), "the wall the form goes on")?;
+    let wall = match op.kind {
+        OpKind::Base { wall } | OpKind::Flange { wall, .. } if op.on == On::Folded => wall,
+        _ => {
+            return Err(wrong(
+                a.span("wall"),
+                "a base or flange of the folded sheet",
+                Ty::Sheet,
+                &wv,
+            ));
+        }
+    };
+    let si = op.sheet;
+    not_unfolded(ev, si, &id, span)?;
+    let tool = match a.req("tool")? {
+        Value::Str(name) => {
+            let st = &ev.sheets.list[si];
+            let found = st
+                .shop
+                .as_ref()
+                .and_then(|s| s.shop.forms.iter().find(|t| *t.id == *name).cloned());
+            match found {
+                Some(t) => t,
+                None => {
+                    return Err(feat_err(FeatErr::NoSuchTool {
+                        span: a.span("tool"),
+                        tool: name.to_string(),
+                    }));
+                }
+            }
+        }
+        v => form_tool_of(&v, a.span("tool"))?,
+    };
+    let angle = a.num("angle", ANG)?;
+    let mut dims = vec![];
+    if let Some(n) = &angle {
+        dims.push(dim("angle", n));
+    }
+    let at = match a.req("at")? {
+        Value::Tuple(xs) if xs.len() == 2 => {
+            let x = num_of(xs[0].clone(), LEN, a.span("at"), "x")?;
+            let y = num_of(xs[1].clone(), LEN, a.span("at"), "y")?;
+            dims.push(dim("x", &x));
+            dims.push(dim("y", &y));
+            Point2::new(x.v, y.v)
+        }
+        Value::Ent(e) => {
+            let st = &ev.sheets.list[si];
+            let Some(frame) = wall_frame(st, wall, None) else {
+                push_sheet_step(ev, si, &id, "form", span, vec![])?;
+                return Ok(op_value(si, &id, OpKind::Form { form: u32::MAX }));
+            };
+            let sk = e.sk.borrow();
+            let p = frame.point_to_local(sk.world(sk.pos(e.id)));
+            Point2::new(p.x, p.y)
+        }
+        o => return Err(wrong(a.span("at"), "a point or (x, y)", Ty::Tuple, &o)),
+    };
+    let st = &mut ev.sheets.list[si];
+    let k = match st.sheet.form(wall, &tool, at, angle.map_or(0.0, |n| n.v), up) {
+        Ok(k) => k,
+        Err(e) => return Err(kernel_err(st, span, &id, e)),
+    };
+    st.forms.push((id.clone(), span));
+    push_sheet_step(ev, si, &id, "form", span, dims)?;
+    Ok(op_value(si, &id, OpKind::Form { form: k as u32 }))
+}
+
+pub(super) fn form_kind(e: &fs::FormViolation) -> &'static str {
+    match e {
+        fs::FormViolation::NotInShop { .. } => "FormToolNotInShop",
+        fs::FormViolation::Direction { .. } => "FormDirection",
+        fs::FormViolation::TooDeep { .. } => "FormTooDeep",
+        fs::FormViolation::NearBend { .. } => "FormNearBend",
+        fs::FormViolation::NearEdge { .. } => "FormNearEdge",
+        fs::FormViolation::Spacing { .. } => "FormSpacing",
+    }
+}
+
+pub(super) fn form_text(e: &fs::FormViolation, n: &Names) -> String {
+    let fm = crate::values::fmt;
+    match e {
+        fs::FormViolation::NotInShop { tool } => format!("forming tool {tool} is not in the shop's library"),
+        fs::FormViolation::Direction { tool, up } => format!(
+            "the shop's {tool} does not form {}: press it the other way or use another tool",
+            if *up { "up" } else { "down" }
+        ),
+        fs::FormViolation::TooDeep { depth, limit } => {
+            format!("the form is {} deep, past the shop's {}", fm(*depth), fm(*limit))
+        }
+        fs::FormViolation::NearBend {
+            joint,
+            distance,
+            limit,
+            ..
+        } => format!(
+            "the form's rim is {} from the bend of {}, under the shop's {}",
+            fm(*distance),
+            n.joint(*joint),
+            fm(*limit)
+        ),
+        fs::FormViolation::NearEdge { distance, limit, .. } => format!(
+            "the form's rim is {} from the edge, under the shop's {}",
+            fm(*distance),
+            fm(*limit)
+        ),
+        fs::FormViolation::Spacing { other, web, limit } => format!(
+            "the web to {} is {}, under the shop's {}",
+            n.form(*other),
+            fm(*web),
+            fm(*limit)
+        ),
+    }
+}
+
+pub(super) fn form_data(e: &fs::FormViolation, n: &Names) -> Vec<(&'static str, Json)> {
+    let v2 = |v: forge_math::Vec2| Json::Arr(vec![v.x.into(), v.y.into()]);
+    match e {
+        fs::FormViolation::NotInShop { tool } => vec![("tool", tool.as_str().into())],
+        fs::FormViolation::Direction { tool, up } => {
+            vec![("tool", tool.as_str().into()), ("up", Json::Bool(*up))]
+        }
+        fs::FormViolation::TooDeep { depth, limit } => {
+            vec![("depth", (*depth).into()), ("limit", (*limit).into())]
+        }
+        fs::FormViolation::NearBend {
+            joint,
+            distance,
+            limit,
+            away,
+        } => vec![
+            ("joint", n.joint(*joint).into()),
+            ("distance", (*distance).into()),
+            ("limit", (*limit).into()),
+            ("away", v2(*away)),
+        ],
+        fs::FormViolation::NearEdge {
+            segment,
+            distance,
+            limit,
+            away,
+        } => vec![
+            ("segment", (*segment as f64).into()),
+            ("distance", (*distance).into()),
+            ("limit", (*limit).into()),
+            ("away", v2(*away)),
+        ],
+        fs::FormViolation::Spacing { other, web, limit } => vec![
+            ("other", n.form(*other).into()),
+            ("web", (*web).into()),
+            ("limit", (*limit).into()),
+        ],
+    }
+}
+
+/// A form's refusals and clashes (named, so here and not in `kernel_kind`).
+pub(super) fn form_error_kind(e: &SheetError) -> Option<&'static str> {
+    use fs::FormError::*;
+    Some(match e {
+        SheetError::Form { why, .. } => match why {
+            Size { .. } => "FormSize",
+            Unbuilt { .. } => "FormUnbuilt",
+            TooShallow { .. } => "FormTooShallow",
+            CrownTooSmall { .. } => "FormCrownTooSmall",
+            NotClear { .. } => "FormNotClear",
+        },
+        SheetError::FormClash { .. } => "FormClash",
+        _ => return None,
+    })
+}
+
+pub(super) fn form_error_text(e: &SheetError, n: &Names) -> Option<String> {
+    use fs::FormError::*;
+    let fm = crate::values::fmt;
+    Some(match e {
+        SheetError::Form { why, .. } => match *why {
+            Size { which, value, limit } => {
+                format!("form size {which} = {} (limit {})", fm(value), fm(limit))
+            }
+            Unbuilt { kind } => format!("a {} is not built yet", kind.name()),
+            TooShallow { depth, limit } => format!(
+                "a depth of {} leaves no straight wall between the die and punch radii (needs past {})",
+                fm(depth),
+                fm(limit)
+            ),
+            CrownTooSmall { crown, limit } => format!(
+                "the crown is {} across the axis, inside the punch radius's turn (needs past {}): a wider tool, a shallower or steeper form",
+                fm(crown),
+                fm(limit)
+            ),
+            NotClear { trim, .. } => format!(
+                "the form's rim is not clear inside its wall: it meets {}",
+                trim_words(trim, n)
+            ),
+        },
+        SheetError::FormClash {
+            form, with, depth, ..
+        } => format!(
+            "folded, {} passes {} deep through {}",
+            n.form(*form),
+            fm(*depth),
+            match with {
+                fs::FormAgainst::Strip(s) => n.strip_name(*s),
+                fs::FormAgainst::Form(k) => n.form(*k),
+            }
+        ),
+        _ => return None,
+    })
+}
+
+fn trim_words(t: TrimRef, n: &Names) -> String {
+    match t {
+        TrimRef::Outline { wall, .. } => format!("the edge of {}", n.wall(wall)),
+        TrimRef::Cut { cut, .. } => n.cut(cut),
+        TrimRef::TangentLine { joint, .. }
+        | TrimRef::BendEnd { joint, .. }
+        | TrimRef::MoldLine { joint, .. } => {
+            format!("the bend of {}", n.joint(joint))
+        }
+        TrimRef::Relief { joint, .. } => format!("a relief of {}", n.joint(joint)),
+        TrimRef::Corner { a, b, .. } => format!("the corner relief of {} and {}", n.joint(a), n.joint(b)),
+        TrimRef::Form { form, .. } => n.form(form as usize),
+    }
+}
+
+pub(super) fn form_error_data(e: &SheetError, n: &Names) -> Option<Vec<(&'static str, Json)>> {
+    use fs::FormError::*;
+    let f = |x: f64| Json::Num(x);
+    Some(match e {
+        SheetError::Form { form, why, .. } => {
+            let mut v = vec![("form", (*form as f64).into())];
+            v.extend(match *why {
+                Size { which, value, limit } => {
+                    vec![("size", which.into()), ("value", f(value)), ("limit", f(limit))]
+                }
+                Unbuilt { kind } => vec![("form_kind", kind.name().into())],
+                TooShallow { depth, limit } => vec![("depth", f(depth)), ("limit", f(limit))],
+                CrownTooSmall { crown, limit } => vec![("crown", f(crown)), ("limit", f(limit))],
+                NotClear { trim, .. } => vec![("trim", n.trim(trim))],
+            });
+            v
+        }
+        SheetError::FormClash {
+            form,
+            with,
+            at,
+            depth,
+            limit,
+            ..
+        } => vec![
+            ("form", n.form(*form).into()),
+            (
+                "with",
+                match with {
+                    fs::FormAgainst::Strip(s) => n.strip(*s),
+                    fs::FormAgainst::Form(k) => Json::obj(vec![("form", n.form(*k).into())]),
+                },
+            ),
+            ("at", Json::Arr(vec![at.x.into(), at.y.into(), at.z.into()])),
+            ("depth", f(*depth)),
+            ("limit", f(*limit)),
+        ],
+        _ => return None,
+    })
 }

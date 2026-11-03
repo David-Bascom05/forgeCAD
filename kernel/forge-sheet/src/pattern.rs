@@ -62,6 +62,8 @@ pub struct Pattern {
     pub bends: Vec<BendLine>,
     /// Turret hits: tool, centre and angle on the flat.
     pub hits: Vec<crate::punch::Hit>,
+    /// Forms: tool, centre, angle and direction on the flat.
+    pub forms: Vec<crate::form::FormMark>,
 }
 
 /// Layers the DXF puts things on.
@@ -72,6 +74,8 @@ pub const BEND_LAYER: &str = "BEND";
 pub const NOTES_LAYER: &str = "BEND_NOTES";
 /// Turret hits: a point at each hit's centre and the tool id as text, turned to the hit.
 pub const PUNCH_LAYER: &str = "PUNCH";
+/// Forms: a point at each form's centre and "TOOL UP" or "TOOL DOWN" as text, turned to it.
+pub const FORM_LAYER: &str = "FORM";
 
 /// The pattern as an AutoCAD R2000 (AC1015) DXF in millimetres: contours on `CUT_LAYER`, bend
 /// lines on `BEND_LAYER`. Lines, arcs, circles (a whole-turn arc) and NURBS splines, exactly.
@@ -188,6 +192,10 @@ fn write_dxf(p: &Pattern, notes: Option<&str>) -> String {
     });
     w.table("LAYER", 0x2, |w| {
         let mut layers = vec![("0", "7"), (CUT_LAYER, "7"), (BEND_LAYER, "1"), (PUNCH_LAYER, "5")];
+        // the FORM layer only where there are forms: other parts' files stay as they were
+        if !p.forms.is_empty() {
+            layers.push((FORM_LAYER, "6"));
+        }
         if notes.is_some() {
             layers.push((NOTES_LAYER, "3"));
         }
@@ -322,13 +330,27 @@ fn write_dxf(p: &Pattern, notes: Option<&str>) -> String {
             ms_rec,
         );
     }
-    for h in &p.hits {
-        w.head("POINT", PUNCH_LAYER, ms_rec);
+    let marks = p
+        .hits
+        .iter()
+        .map(|h| (h.at, h.angle, h.tool.clone(), PUNCH_LAYER));
+    let forms = p.forms.iter().map(|f| {
+        let way = if f.up { "UP" } else { "DOWN" };
+        (f.at, f.angle, format!("{} {way}", f.tool), FORM_LAYER)
+    });
+    for (at, angle, text, layer) in marks.chain(forms) {
+        let h = crate::punch::Hit {
+            tool: text,
+            at,
+            angle,
+        };
+        let layer: &str = layer;
+        w.head("POINT", layer, ms_rec);
         w.pair(100, "AcDbPoint");
         for (k, v) in [(10, h.at.x), (20, h.at.y), (30, 0.0)] {
             w.num(k, v);
         }
-        w.head("TEXT", PUNCH_LAYER, ms_rec);
+        w.head("TEXT", layer, ms_rec);
         w.pair(100, "AcDbText");
         for (k, v) in [
             (10, h.at.x),

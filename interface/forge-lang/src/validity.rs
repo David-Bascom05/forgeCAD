@@ -180,6 +180,10 @@ fn trim_text(ev: &Eval, si: usize, t: TrimRef) -> String {
         TrimRef::MoldLine { joint: j, .. } => format!("mold line of bend {}", joint(j)),
         TrimRef::Relief { joint: j, .. } => format!("relief of bend {}", joint(j)),
         TrimRef::Corner { a, b, .. } => format!("corner relief of bends {} and {}", joint(a), joint(b)),
+        TrimRef::Form { form, .. } => {
+            let n = st.forms.get(form as usize).map_or("?", |x| x.0.as_str());
+            format!("form {n}")
+        }
     }
 }
 

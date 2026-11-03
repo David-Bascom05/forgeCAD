@@ -51,6 +51,9 @@ pub enum TrimRef {
     Relief { joint: JointId, end: End, segment: u64 },
     /// Segment `segment` of the corner relief where joints a and b meet.
     Corner { a: JointId, b: JointId, segment: u64 },
+    /// Form `form`'s rim (folded) or pierce (flat), piece `segment`; folded, its form's own
+    /// faces by profile piece.
+    Form { form: u32, segment: u64 },
 }
 
 /// A wall or a bend zone: a piece of the sheet with its own developed coordinates.
@@ -376,6 +379,22 @@ pub enum SheetError {
         joints: [JointId; 2],
         why: crate::corner::SeamError,
     },
+    /// A form, refused (`crate::form`); `form` indexes `Sheet::forms` (the one it would have been).
+    Form {
+        feature: FeatureId,
+        form: usize,
+        why: crate::form::FormError,
+    },
+    /// A form's material and another strip's (or form's) pass through each other folded,
+    /// `depth` deep (the deepest found of either's edges in the other).
+    FormClash {
+        feature: FeatureId,
+        form: usize,
+        with: FormAgainst,
+        at: Point3,
+        depth: f64,
+        limit: f64,
+    },
     /// A hem, refused (`crate::hem`); `joint` is the id it would have had.
     Hem {
         feature: FeatureId,
@@ -400,6 +419,13 @@ pub struct Seam {
     pub from: Point2,
     pub to: Point2,
     pub into: Vec2,
+}
+
+/// What a form clashes with.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FormAgainst {
+    Strip(Strip),
+    Form(usize),
 }
 
 /// Built anyway, but worth a look.
@@ -460,11 +486,26 @@ pub enum SheetWarning {
     },
     /// Hardware whose catalogue numbers are placeholders, not a maker's published table.
     UnverifiedHardware { feature: FeatureId, cut: CutId },
+    /// A form clashes folded (see `SheetError::FormClash`): the flat builds.
+    FormClash {
+        feature: FeatureId,
+        form: usize,
+        with: FormAgainst,
+        at: Point3,
+        depth: f64,
+        limit: f64,
+    },
 }
 
 /// A part against the shop's abilities (`ShopProfile`). Violations never change geometry.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Violation {
+    /// A form against the shop (`crate::form`); `form` indexes `Sheet::forms`.
+    Form {
+        feature: FeatureId,
+        form: usize,
+        why: crate::form::FormViolation,
+    },
     /// A turret hit against the shop (`crate::punch`); `punch` indexes `Sheet::punches`.
     Punch {
         feature: FeatureId,
@@ -693,6 +734,21 @@ impl SheetError {
                 b,
                 at,
                 seam,
+            }),
+            SheetError::FormClash {
+                feature,
+                form,
+                with,
+                at,
+                depth,
+                limit,
+            } => Some(SheetWarning::FormClash {
+                feature,
+                form,
+                with,
+                at,
+                depth,
+                limit,
             }),
             SheetError::FoldedTouch { feature, a, b, at } => {
                 Some(SheetWarning::FoldedTouch { feature, a, b, at })

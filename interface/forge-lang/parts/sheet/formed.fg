@@ -1,0 +1,30 @@
+# A formed L: a dimple pressed down and an extruded hole on the base, a dimple pressed up on the
+# flange, each from the shop's press tools and marked on the flat for the press.
+shared t = 1.5
+shared r = 2
+shared k = ratio(0.4)
+param plan.L = 80
+param plan.W = 50
+param up.h = 40
+param holes.x = 30
+param holes.y = 25
+param holes.x2 = 58
+param f3.x = 22
+param f3.y = 25
+shared steel = stock(t: t, bend: kfactor(k), radii: [r])
+shared acme = shop([steel], forms: [("DM20", "dimple", 20, 4, 60deg, 1, 2), ("EH8", "extruded_hole", 8, 5, 1, 5)])
+
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (L, W))
+}
+base = sheet(plan, t: t, r: r, bend: kfactor(k), shop: acme)
+up = flange(base.edge(plan.outline[1]), height: h, measure: "inner", position: "outside")
+sketch holes(on: base.top) {
+  a = pt(x, y)
+  b = pt(x2, y)
+}
+f1 = form("DM20", at: holes.a, wall: base)
+f2 = form("EH8", at: holes.b, wall: base)
+f3 = form("DM20", at: (x, y), wall: up, up: true)
+flat = unfold(base)
+expect valid
