@@ -168,6 +168,8 @@ pub enum Diagnostic {
         /// Exact shared volume (mm³), where kernel solids confirmed it.
         volume: Option<f64>,
         confirmed: bool,
+        /// When unconfirmed because the kernel's intersection failed: its reason.
+        boolean_failed: Option<String>,
     },
     /// Threads a fit rule covers that engage less than its minimum (or the shop's).
     ShallowEngagement {

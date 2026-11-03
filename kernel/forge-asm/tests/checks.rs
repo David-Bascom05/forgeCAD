@@ -391,7 +391,7 @@ fn the_mesh_phase_never_misses_a_real_overlap() {
         let mut ck = Checker::new(&c, &e);
         let rep = ck.interference(&sol, &[], &[]);
         let exact = e.overlap_volume(&PartRef::new(na, 0), &PartRef::new(nb, 0), &pose);
-        let Some(vol) = exact else { continue };
+        let Ok(vol) = exact else { continue };
         if vol > 0.01 {
             overlaps += 1;
             assert!(
@@ -515,4 +515,35 @@ fn subassemblies_place_their_insides_and_joints_reach_into_them() {
     assert!((hinge.x().get() - v(cs, sn, 0.0)).length() < 1e-12);
     // the hashes used: every part, once
     assert_eq!(sol.hashes.len(), 3);
+}
+
+#[test]
+fn a_failed_exact_intersection_is_reported_with_its_reason() {
+    struct Failing;
+    impl Exact for Failing {
+        fn overlap_volume(&self, _: &PartRef, _: &PartRef, _: &Frame) -> Result<f64, ExactFail> {
+            Err(ExactFail::Boolean("ZeroThickness".into()))
+        }
+    }
+    let (c, _) = shop();
+    let asm = placed(vec![
+        of(1, "block", Frame::WORLD),
+        of(2, "block", at(8.0, 0.0, 0.0)),
+    ]);
+    let sol = solve(&asm, &c, &Options::default());
+    let rep = Checker::new(&c, Failing).interference(&sol, &[], &[]);
+    assert_eq!(rep.interferences.len(), 1);
+    let h = &rep.interferences[0];
+    assert!(!h.confirmed && h.volume.is_none());
+    assert_eq!(h.boolean_failed.as_deref(), Some("ZeroThickness"));
+    match &rep.diagnostics()[0] {
+        Diagnostic::Interference { boolean_failed, .. } => {
+            assert_eq!(boolean_failed.as_deref(), Some("ZeroThickness"))
+        }
+        d => panic!("{d:?}"),
+    }
+    // no exact solids at all: unconfirmed, with no boolean reason
+    let rep = Checker::new(&c, NoExact).interference(&sol, &[], &[]);
+    assert_eq!(rep.interferences[0].boolean_failed, None);
+    assert!(!rep.interferences[0].confirmed);
 }
