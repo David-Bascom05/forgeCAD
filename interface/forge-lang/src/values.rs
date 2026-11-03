@@ -168,9 +168,12 @@ pub fn div(a: &Num, b: &Num, span: Span) -> R<Num> {
         (Dim::Count, Dim::Any | Dim::Count) if (v - v.round()).abs() < 1e-9 && b.dim == Dim::Any => {
             Dim::Count
         }
-        (Dim::Count, _) => Dim::Ratio,
+        (Dim::Count, y) if y.scalar() || y == Dim::Any => Dim::Ratio,
+        (Dim::Count, _) => return Err(mismatch("/", a, b, span)),
         (d, Dim::Any) => d,
         (d, y) if y.scalar() => d,
+        // a bare number over a count or ratio is a ratio; over a size, nothing this language has
+        (Dim::Any, y) if y.scalar() => Dim::Ratio,
         (Dim::Any, _) => return Err(mismatch("/", a, b, span)),
         (x, y) if x == y => Dim::Ratio,
         (x, y) => match (x.pow(), y.pow()) {

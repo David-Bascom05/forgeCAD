@@ -944,7 +944,7 @@ impl<'s> Eval<'s> {
         let r = self.expr(e);
         self.ctx.owner = saved.0;
         self.ctx.in_param = saved.1;
-        let v = r?;
+        let v = settle(r?);
         let mut links = BTreeSet::new();
         collect_params(&v, &mut links);
         Ok((v, links))
@@ -1080,7 +1080,8 @@ impl<'s> Eval<'s> {
             ExprKind::Num(v, u) => Ok(Value::Num(match u {
                 Unit::Deg => Num::konst(v.to_radians(), Dim::Angle),
                 Unit::Mm => Num::konst(*v, Dim::Length),
-                Unit::None if self.ctx.in_param => Num::konst(*v, Dim::Length),
+                // in a param too: a bare number takes the other operand's dimension, so `W / 2`
+                // is a Length; what is still bare when the param is made settles to Length
                 Unit::None => Num::konst(*v, Dim::Any),
             })),
             ExprKind::Str(s) => Ok(Value::Str(s.as_str().into())),
@@ -1872,6 +1873,17 @@ fn expr_path(e: &Expr) -> Option<Vec<Seg>> {
             Some(p)
         }
         _ => None,
+    }
+}
+
+/// A param's value with every bare number in it made a Length.
+fn settle(v: Value) -> Value {
+    match v {
+        Value::Num(n) if n.dim == Dim::Any => Value::Num(Num { dim: Dim::Length, ..n }),
+        Value::List(xs) => Value::List(Rc::new(xs.iter().cloned().map(settle).collect())),
+        Value::Tuple(xs) => Value::Tuple(Rc::new(xs.iter().cloned().map(settle).collect())),
+        Value::Map(m) => Value::Map(Rc::new(m.iter().map(|(k, x)| (k.clone(), settle(x.clone()))).collect())),
+        o => o,
     }
 }
 
