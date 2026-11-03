@@ -251,6 +251,86 @@ fn boxes_with_corner_reliefs_match_closed_forms() {
     }
 }
 
+/// A box on a w x d rectangle turned `rot` about its centre, its outline starting at corner
+/// `from`, flanges added in `order` (by outline edge): which edges' walls are trimmed at each
+/// corner (by edge, sorted), the folded and flat volumes.
+fn trims_of(w: f64, d: f64, rot: f64, from: usize, order: &[usize]) -> (Vec<usize>, f64, f64) {
+    let (sn, cs) = dmath::sin_cos(rot);
+    let c = [(0.0, 0.0), (w, 0.0), (w, d), (0.0, d)];
+    let p = |k: usize| {
+        let (x, y) = c[(k + from) % 4];
+        let (x, y) = (x - 0.5 * w, y - 0.5 * d);
+        Point2::new(cs * x - sn * y, sn * x + cs * y)
+    };
+    let lp = ProfileLoop::new(
+        (0..4)
+            .map(|i| (Segment::Line { a: p(i), b: p(i + 1) }, i as u64))
+            .collect(),
+    );
+    let g = Gauge {
+        thickness: 3.02,
+        radius: 1.6,
+        rule: BendRule::K(0.38),
+    };
+    let (mut s, base) = Sheet::face(FeatureId(9), g, Frame::WORLD, &[lp]).unwrap();
+    for &e in order {
+        s.flange_at(
+            base,
+            e as u64,
+            dmath::PI / 2.0,
+            30.0,
+            1.6,
+            forge_sheet::Position::Inside,
+        )
+        .unwrap();
+    }
+    let fold = build_with(&s, Map::Folded).unwrap();
+    let flat = build_with(&s, Map::Flat).unwrap();
+    assert_eq!(fold.corners, flat.corners);
+    // a trim's first joint is the trimmed wall's; its edge, counted from the box's own first corner
+    let mut cut: Vec<usize> = fold
+        .corners
+        .iter()
+        .filter(|c| matches!(c.kind, CornerKind::Open { .. }))
+        .map(|c| (s.joint(c.joints[0]).unwrap().on_a as usize + from) % 4)
+        .collect();
+    cut.sort();
+    (cut, vol(&fold.body).0, vol(&flat.body).0)
+}
+
+#[test]
+fn corner_trims_go_by_the_part_not_the_flange_order() {
+    // a rectangle: both short walls are trimmed at both ends, mirror symmetric, whatever the
+    // order the flanges came in, however the box is turned, wherever its outline starts
+    let orders: [&[usize]; 3] = [&[0, 1, 2, 3], &[3, 2, 1, 0], &[2, 0, 3, 1]];
+    let want = trims_of(200.0, 150.0, 0.0, 0, orders[0]);
+    assert_eq!(want.0, vec![1, 1, 3, 3]);
+    for (rot, from) in [(0.0, 0), (0.0, 1), (0.6, 2), (-2.1, 3)] {
+        for order in orders {
+            let got = trims_of(200.0, 150.0, rot, from, order);
+            assert_eq!(got.0, want.0, "{rot} {from} {order:?}");
+            assert!(
+                (got.1 - want.1).abs() < 1e-6 && (got.2 - want.2).abs() < 1e-6,
+                "{got:?} {want:?}"
+            );
+        }
+    }
+    // a square: each wall trimmed once, at the end where its edge starts (counter-clockwise):
+    // four identical trims, the part alike at a quarter turn, again whatever the order
+    let want = trims_of(150.0, 150.0, 0.0, 0, orders[0]);
+    assert_eq!(want.0, vec![0, 1, 2, 3]);
+    for (rot, from) in [(0.0, 1), (0.6, 2), (-2.1, 3)] {
+        for order in orders {
+            let got = trims_of(150.0, 150.0, rot, from, order);
+            assert_eq!(got.0, want.0, "{rot} {from} {order:?}");
+            assert!(
+                (got.1 - want.1).abs() < 1e-6 && (got.2 - want.2).abs() < 1e-6,
+                "{got:?} {want:?}"
+            );
+        }
+    }
+}
+
 #[test]
 fn upright_walls_meeting_at_corners_are_trimmed_a_gap_apart() {
     // upright on a square corner, two walls would meet along the corner's upright: the later
