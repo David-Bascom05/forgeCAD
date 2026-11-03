@@ -290,6 +290,8 @@ pub enum Ty {
     Scaled,
     Stock,
     Shop,
+    Relief,
+    CornerKind,
 }
 
 pub fn fmt(x: f64) -> String {

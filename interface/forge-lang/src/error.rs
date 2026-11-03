@@ -153,6 +153,11 @@ pub enum Op {
     MoveFeature { id: String, before: Option<String> },
     /// A loose number replaced by a new param's name, the param defined above.
     LiftLiteral { span: Span, name: String, scope: Scope },
+    /// The keyword argument `arg` of the call making feature `id` becomes `text` (put in if the
+    /// call has none).
+    SetArg { id: String, arg: String, text: String },
+    /// A top-level name and every use of it renamed to `to`.
+    Rename { from: String, to: String },
 }
 
 impl Op {
@@ -193,6 +198,17 @@ impl Op {
                 ("op", "MoveFeature".into()),
                 ("id", id.as_str().into()),
                 ("before", opt(before)),
+            ]),
+            Op::SetArg { id, arg, text } => Json::obj(vec![
+                ("op", "SetArg".into()),
+                ("id", id.as_str().into()),
+                ("arg", arg.as_str().into()),
+                ("text", text.as_str().into()),
+            ]),
+            Op::Rename { from, to } => Json::obj(vec![
+                ("op", "Rename".into()),
+                ("from", from.as_str().into()),
+                ("to", to.as_str().into()),
             ]),
             Op::LiftLiteral { span, name, scope } => Json::obj(vec![
                 ("op", "LiftLiteral".into()),
@@ -241,6 +257,15 @@ impl Op {
                 text: s("text")?,
             },
             "DeleteFeature" => Op::DeleteFeature { id: s("id")? },
+            "SetArg" => Op::SetArg {
+                id: s("id")?,
+                arg: s("arg")?,
+                text: s("text")?,
+            },
+            "Rename" => Op::Rename {
+                from: s("from")?,
+                to: s("to")?,
+            },
             "MoveFeature" => Op::MoveFeature {
                 id: s("id")?,
                 before: s("before"),
@@ -870,6 +895,10 @@ impl Error {
                 },
                 Op::MakeShared { param: param.clone() },
             ],
+            ShadowsBuiltin { name, .. } => vec![Op::Rename {
+                from: name.clone(),
+                to: format!("{name}_1"),
+            }],
             Sheet(e) => e.fixes(),
             Feat(e) => e.fixes(),
             _ => vec![],

@@ -196,8 +196,11 @@ the part. The history holds a marker for each (a `Param` equal exactly when the 
 features that make nothing pass a sheet part's bodies on (forge-model cannot step them). Anchors
 read the kernel's roles (`forge_sheet::Roles`): wall and bend skins, each trim's side faces and
 edges, the same on the folded body and on an unfold's (its names salted by the unfold's id).
-Ordinary features on a sheet part are refused, typed, both ways round; reliefs are refused until
-decided (sheet-metal/sheet-crate/reliefs.md). `fg run --dxf` writes the flat pattern.
+Ordinary features on a sheet part are refused, typed, both ways round. Bend reliefs (rect,
+obround, tear, or none) are data on each flange, the shop's default added where a wall needs one;
+flanges stand outside, inside or bend-outside their edge; corners where two flanges meet get a
+circular or square relief (default just clear of both bends). The reliefs and corners cut are
+listed in the report as typed data. `fg run --dxf` writes the flat pattern.
 
 Hand-written parts (`parts/sheet/`), each clean (no errors, warnings or lints) and matching
 forge-sheet's closed forms: L, U (up 90 and down 60, unfolded), Z (a lip off a flange's tip),
@@ -245,9 +248,7 @@ valid, the fold/flat identity, a height edit renaming no face).
 - Holes, threads, patterns, work features, bodies, direct edits, text, imports and sketch
   projections are wired (reference.md); the holes lane's bench parts are ported in parts/bench
   (tests/bench_ports.rs).
-- Sheet metal not built in the kernel, so not in Forge: reliefs (waiting on a decision), rip and
-  tangent joints, corner treatments (corners stay open), closing bend cycles, hole and slot
-  checks against bends and edges, PEM hardware, ordinary features on a sheet. A flange's
-  "material inside/outside" position is not an option: the flange turns on the edge itself.
+- Sheet metal not built in the kernel, so not in Forge: rip and tangent joints, closed and
+  overlapping corners (typed refusals), closing bend cycles, ordinary features on a sheet.
 - The LL(1) check is a FIRST/FOLLOW checker in the test, not lalrpop or grmtools (no new
   dependencies in the workspace).

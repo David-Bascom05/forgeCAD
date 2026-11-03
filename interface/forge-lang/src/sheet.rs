@@ -37,7 +37,33 @@ pub const BUILTINS: &[&str] = &[
     "per_t",
     "stock",
     "shop",
+    "obround",
+    "circular_relief",
+    "square_relief",
+    "open_corner",
+    "overlap_corner",
+    "corner_relief",
 ];
+
+/// Sheet constants: the relief kinds and corner treatments that take no size.
+pub fn constant(name: &str) -> Option<Value> {
+    Some(match name {
+        "tear" => sv(SheetVal::Relief(Rc::new(ReliefV {
+            kind: Some(fs::ReliefKind::Tear),
+            width: None,
+            depth: None,
+        }))),
+        "no_relief" => sv(SheetVal::Relief(Rc::new(ReliefV {
+            kind: None,
+            width: None,
+            depth: None,
+        }))),
+        "closed_corner" => sv(SheetVal::Corner(Rc::new(CornerV {
+            kind: fs::CornerKind::Closed,
+        }))),
+        _ => return None,
+    })
+}
 
 /// Methods sheet values answer: `S.edge(entity)`, `U.of(op)`.
 pub const METHODS: &[&str] = &["edge", "of"];
@@ -58,6 +84,25 @@ pub enum SheetVal {
     Scaled(Rc<ScaledV>),
     Stock(Rc<StockV>),
     Shop(Rc<ShopV>),
+    /// A bend relief: `rect(w, d)`, `obround(w, d)`, `tear`, `no_relief` (sizes left out: the
+    /// sheet's default).
+    Relief(Rc<ReliefV>),
+    /// A corner treatment: `circular_relief(r)`, `square_relief(h)`, `open_corner(gap)`,
+    /// `closed_corner`, `overlap_corner(gap)`.
+    Corner(Rc<CornerV>),
+}
+
+#[derive(Clone, Debug)]
+pub struct ReliefV {
+    /// None: no relief.
+    pub kind: Option<fs::ReliefKind>,
+    pub width: Option<Num>,
+    pub depth: Option<Num>,
+}
+
+#[derive(Clone, Debug)]
+pub struct CornerV {
+    pub kind: fs::CornerKind,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -65,6 +110,7 @@ pub enum OpKind {
     Base { wall: WallId },
     Flange { wall: WallId, joint: JointId },
     Cut { cut: CutId },
+    Corner { a: JointId, b: JointId },
 }
 
 /// Which body an anchor reads: the folded one, or unfold `k`'s.
@@ -134,6 +180,8 @@ impl SheetVal {
             SheetVal::Scaled(_) => Ty::Scaled,
             SheetVal::Stock(_) => Ty::Stock,
             SheetVal::Shop(_) => Ty::Shop,
+            SheetVal::Relief(_) => Ty::Relief,
+            SheetVal::Corner(_) => Ty::CornerKind,
         }
     }
 
@@ -201,8 +249,14 @@ impl SheetVal {
 /// A flange's numbers as written, for fixes.
 #[derive(Clone, Debug)]
 struct FlangeDims {
+    /// The feature that made it.
+    id: String,
     joint: JointId,
     wall: WallId,
+    /// Mold line to tangent line.
+    setback: f64,
+    /// The bend's inside radius.
+    r: f64,
     height: Num,
     angle: Num,
     /// Its own radius, if it has one.
@@ -231,6 +285,8 @@ pub struct SheetState {
     pub walls: Vec<(WallId, String, Span)>,
     pub joints: Vec<(JointId, String, Span)>,
     pub cuts: Vec<(CutId, String, Span)>,
+    /// Corner treatments by the features that asked.
+    pub corners: Vec<(JointId, JointId, String, Span)>,
     fix: FixCtx,
     pub folded: Option<fs::Built>,
     pub unfolds: Vec<UnfoldState>,
@@ -252,6 +308,9 @@ pub struct SheetOut {
     /// The folded body as the part holds it, and each unfold's (its names salted by the unfold).
     pub folded: Option<Body>,
     pub unfolds: Vec<(String, Option<Body>)>,
+    /// The reliefs and corner reliefs the builder cut, as typed data.
+    pub reliefs: Vec<fs::ReliefMade>,
+    pub corners: Vec<fs::build::CornerMade>,
 }
 
 impl SheetState {
@@ -271,6 +330,27 @@ struct FixCtx {
     t: Num,
     r: Num,
     k: Option<Num>,
+    /// What an automatic relief would be.
+    relief: fs::ReliefDefault,
+}
+
+impl FixCtx {
+    /// The relief texts a flange needing one could ask for, sized from the default and past
+    /// its tangent line.
+    fn relief_texts(&self, f: &FlangeDims) -> Vec<String> {
+        let t = self.t.v;
+        let fm = crate::values::fmt;
+        let w = self.relief.width.at(t, f.r);
+        let d = |w: f64, round: bool| {
+            let need = f.setback + if round { 0.5 * w } else { 0.0 };
+            self.relief.depth.at(t, f.r).max(need + t)
+        };
+        vec![
+            format!("rect({}, {})", fm(w), fm(d(w, false))),
+            format!("obround({}, {})", fm(w), fm(d(w, true))),
+            "tear".into(),
+        ]
+    }
 }
 
 /// Kernel ids by Forge feature id, for rendering kernel errors.
@@ -329,6 +409,18 @@ impl Names {
                 ("mold_line", self.joint(joint).into()),
                 ("side", side(s).into()),
             ]),
+            TrimRef::Relief { joint, end, segment } => Json::obj(vec![
+                ("relief", self.joint(joint).into()),
+                ("end", end_name(end).into()),
+                ("segment", (segment as f64).into()),
+            ]),
+            TrimRef::Corner { a, b, segment } => Json::obj(vec![
+                (
+                    "corner",
+                    Json::Arr(vec![self.joint(a).into(), self.joint(b).into()]),
+                ),
+                ("segment", (segment as f64).into()),
+            ]),
         }
     }
 }
@@ -351,8 +443,6 @@ pub enum SheetErr {
     SheetOnSolid { span: Span, id: String, solid: String },
     /// A sheet feature after its sheet was unfolded: the unfold would be stale.
     AfterUnfold { span: Span, id: String, unfold: String },
-    /// Reliefs are not built yet (the design waits on a decision); a flange asking for one.
-    ReliefUndecided { span: Span },
     /// `S.edge(entity)`: the entity is no straight segment of the wall's outline.
     NotAnEdge { span: Span, wall: String },
     /// A cutout whose sketch does not lie on the wall it names (`distance` off its skins).
@@ -361,6 +451,8 @@ pub enum SheetErr {
     OtherSheet { span: Span, op: String, unfold: String },
     /// A member only some sheet features have (`bend` of a base wall, ..).
     NoSuchRole { span: Span, op: String, role: String },
+    /// `corner_relief(a, b, ..)` with flanges that do not meet at a corner of one wall.
+    NotACorner { span: Span, id: String },
     /// A rule table row of the wrong shape.
     TableRow { span: Span, row: usize, want: usize },
 }
@@ -373,12 +465,12 @@ impl SheetErr {
             | OrdinaryOnSheet { span, .. }
             | SheetOnSolid { span, .. }
             | AfterUnfold { span, .. }
-            | ReliefUndecided { span }
             | NotAnEdge { span, .. }
             | CutOffWall { span, .. }
             | OtherSheet { span, .. }
             | NoSuchRole { span, .. }
-            | TableRow { span, .. } => Some(*span),
+            | TableRow { span, .. }
+            | NotACorner { span, .. } => Some(*span),
         }
     }
 
@@ -389,12 +481,12 @@ impl SheetErr {
             OrdinaryOnSheet { .. } => "OrdinaryOnSheet",
             SheetOnSolid { .. } => "SheetOnSolid",
             AfterUnfold { .. } => "AfterUnfold",
-            ReliefUndecided { .. } => "ReliefUndecided",
             NotAnEdge { .. } => "NotAnEdge",
             CutOffWall { .. } => "CutOffWall",
             OtherSheet { .. } => "OtherSheet",
             NoSuchRole { .. } => "NoSuchRole",
             TableRow { .. } => "TableRow",
+            NotACorner { .. } => "NotACorner",
         }
     }
 
@@ -421,12 +513,11 @@ impl SheetErr {
                 "{id} is not sheet metal, and the part has the sheet {sheet}: ordinary features on a sheet are refused"
             ),
             SheetOnSolid { id, solid, .. } => {
-                format!("sheet {id} in a part that already has the solid {solid}: sheet parts hold sheets only")
+                format!(
+                    "sheet {id} in a part that already has the solid {solid}: sheet parts hold sheets only"
+                )
             }
             AfterUnfold { id, unfold, .. } => format!("{id} changes a sheet already unfolded by {unfold}"),
-            ReliefUndecided { .. } => {
-                "bend reliefs are not built yet (the choice of kind waits on a decision); cut one with cutout past the tangent line".into()
-            }
             NotAnEdge { wall, .. } => format!("not a straight edge of {wall}'s outline"),
             CutOffWall { wall, distance, .. } => format!(
                 "the cutout's sketch lies {} off {wall}'s skins: sketch it on {wall}.top or {wall}.bottom",
@@ -435,6 +526,7 @@ impl SheetErr {
             OtherSheet { op, unfold, .. } => format!("{op} is not of the sheet {unfold} unfolds"),
             NoSuchRole { op, role, .. } => format!("{op} has no {role}"),
             TableRow { row, want, .. } => format!("table row {row} needs {want} values"),
+            NotACorner { id, .. } => format!("{id}: the two flanges do not meet at a corner of one wall"),
         }
     }
 
@@ -450,7 +542,6 @@ impl SheetErr {
             OrdinaryOnSheet { id, sheet, .. } => vec![("id", s(id)), ("sheet", s(sheet))],
             SheetOnSolid { id, solid, .. } => vec![("id", s(id)), ("solid", s(solid))],
             AfterUnfold { id, unfold, .. } => vec![("id", s(id)), ("unfold", s(unfold))],
-            ReliefUndecided { .. } => vec![],
             NotAnEdge { wall, .. } => vec![("wall", s(wall))],
             CutOffWall { wall, distance, .. } => vec![("wall", s(wall)), ("distance", (*distance).into())],
             OtherSheet { op, unfold, .. } => vec![("op", s(op)), ("unfold", s(unfold))],
@@ -458,6 +549,7 @@ impl SheetErr {
             TableRow { row, want, .. } => {
                 vec![("row", (*row as f64).into()), ("want", (*want as f64).into())]
             }
+            NotACorner { id, .. } => vec![("id", s(id))],
         }
     }
 }
@@ -784,6 +876,10 @@ impl SheetNote {
 /// A 2D vector, for JSON.
 struct Vec3Ish(f64, f64);
 
+fn end_name(e: fs::End) -> &'static str {
+    if e == fs::End::Start { "start" } else { "end" }
+}
+
 fn p2(p: Point2) -> Json {
     Json::Arr(vec![p.x.into(), p.y.into()])
 }
@@ -822,6 +918,11 @@ fn kernel_kind(e: &SheetError) -> &'static str {
         TrimCurveUnsupported { .. } => "TrimCurveUnsupported",
         WallFolds { .. } => "WallFolds",
         EdgeTooShort { .. } => "EdgeTooShort",
+        ReliefTooShallow { .. } => "ReliefTooShallow",
+        ReliefWidth { .. } => "ReliefWidth",
+        EdgeMoveBlocked { .. } => "EdgeMoveBlocked",
+        EdgeMoveCurve { .. } => "EdgeMoveCurve",
+        CornerUnbuilt { .. } => "CornerUnbuilt",
     }
 }
 
@@ -866,6 +967,22 @@ fn kernel_text(e: &SheetError) -> String {
         TrimCurveUnsupported { curve, .. } => format!("a {curve:?} trim this strip cannot carry"),
         WallFolds { .. } => "a side wall in a bend folds over".into(),
         EdgeTooShort { length, .. } => format!("a trim edge {} long", fm(*length)),
+        ReliefTooShallow { depth, limit, .. } => format!(
+            "a relief {} deep from the mold line; past the tangent line it needs more than {}",
+            fm(*depth),
+            fm(*limit)
+        ),
+        ReliefWidth { width, limit, .. } => format!("a relief {} wide; it needs {}", fm(*width), fm(*limit)),
+        EdgeMoveBlocked { .. } => {
+            "the flange's position moves its edge, and the edge beside it carries a bend".into()
+        }
+        EdgeMoveCurve { curve, .. } => {
+            format!("the flange's position moves its edge, and the edge beside it is a {curve:?}")
+        }
+        CornerUnbuilt { size, .. } if size.is_nan() => {
+            "closed and overlapping corners are not built yet; give the corner a relief".into()
+        }
+        CornerUnbuilt { size, .. } => format!("a corner relief of size {}", fm(*size)),
     }
 }
 
@@ -1100,6 +1217,43 @@ fn kernel_data(e: &SheetError, n: &Names) -> Vec<(&'static str, Json)> {
             ("length", f(*length)),
             ("limit", f(*limit)),
         ],
+        ReliefTooShallow {
+            joint,
+            end,
+            depth,
+            limit,
+            ..
+        } => vec![
+            ("joint", n.joint(*joint).into()),
+            ("end", end_name(*end).into()),
+            ("depth", f(*depth)),
+            ("limit", f(*limit)),
+        ],
+        ReliefWidth {
+            joint,
+            end,
+            width,
+            limit,
+            ..
+        } => vec![
+            ("joint", n.joint(*joint).into()),
+            ("end", end_name(*end).into()),
+            ("width", f(*width)),
+            ("limit", f(*limit)),
+        ],
+        EdgeMoveBlocked { trim, joint, .. } => {
+            vec![("trim", n.trim(*trim)), ("joint", n.joint(*joint).into())]
+        }
+        EdgeMoveCurve { trim, curve, .. } => {
+            vec![("trim", n.trim(*trim)), ("curve", format!("{curve:?}").into())]
+        }
+        CornerUnbuilt { joints, size, .. } => vec![
+            (
+                "joints",
+                Json::Arr(vec![n.joint(joints[0]).into(), n.joint(joints[1]).into()]),
+            ),
+            ("size", f(*size)),
+        ],
     }
 }
 
@@ -1121,6 +1275,33 @@ fn kernel_fixes(st: &FixCtx, e: &SheetError) -> Vec<Op> {
     use SheetError::*;
     let flange = |j: JointId| st.flanges.iter().find(|f| f.joint == j);
     let flange_of = |w: WallId| st.flanges.iter().find(|f| f.wall == w);
+    let set_arg = |f: &FlangeDims, arg: &str, text: String| Op::SetArg {
+        id: f.id.clone(),
+        arg: arg.into(),
+        text,
+    };
+    // the ones with more than one fix
+    match e {
+        NeedsRelief { joint, .. } | ReliefTooShallow { joint, .. } | ReliefWidth { joint, .. } => {
+            return flange(*joint)
+                .map(|f| {
+                    st.relief_texts(f)
+                        .into_iter()
+                        .map(|t| set_arg(f, "relief", t))
+                        .collect()
+                })
+                .unwrap_or_default();
+        }
+        EdgeMoveBlocked { .. } | EdgeMoveCurve { .. } => {
+            // the flange being made is the last
+            return st
+                .flanges
+                .last()
+                .map(|f| vec![set_arg(f, "position", "\"outside\"".into())])
+                .unwrap_or_default();
+        }
+        _ => {}
+    }
     let out = match e {
         // a flange left a thickness past its setback
         WallTooShort { wall, length, .. } => {
@@ -1281,7 +1462,8 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
         }
         "stock" => stock(ev, args, span),
         "shop" => {
-            let a = Args::bind(ev, name, &["stock"], args, span)?;
+            let a = Args::bind(ev, name, &["stock", "kerf", "hardware"], args, span)?;
+            let kerf = a.num("kerf", LEN)?;
             let Value::List(xs) = a.req("stock")? else {
                 return Err(wrong(a.span("stock"), "shop's stock", Ty::List, &a.req("stock")?));
             };
@@ -1301,6 +1483,7 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
                 shop: fs::ShopProfile {
                     stock: stocks.iter().map(|s| s.stock.clone()).collect(),
                     hardware: vec![],
+                    kerf: kerf.map_or(0.2, |k| k.v),
                 },
                 stocks,
             }))))
@@ -1309,6 +1492,42 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
         "flange" => flange(ev, args, span),
         "cutout" => cutout(ev, args, span),
         "unfold" => unfold(ev, args, span),
+        "rect" | "obround" => {
+            let a = Args::bind(ev, name, &["width", "depth"], args, span)?;
+            let width = a.num("width", LEN)?;
+            let depth = a.num("depth", LEN)?;
+            let kind = if name == "rect" {
+                fs::ReliefKind::Rect
+            } else {
+                fs::ReliefKind::Obround
+            };
+            Ok(sv(SheetVal::Relief(Rc::new(ReliefV {
+                kind: Some(kind),
+                width,
+                depth,
+            }))))
+        }
+        "circular_relief" | "square_relief" => {
+            let a = Args::bind(ev, name, &["size"], args, span)?;
+            let size = a.num("size", LEN)?.map(|n| n.v);
+            let kind = if name == "circular_relief" {
+                fs::CornerKind::Circular { size }
+            } else {
+                fs::CornerKind::Square { size }
+            };
+            Ok(sv(SheetVal::Corner(Rc::new(CornerV { kind }))))
+        }
+        "open_corner" | "overlap_corner" => {
+            let a = Args::bind(ev, name, &["gap"], args, span)?;
+            let gap = a.req_num("gap", LEN)?.v;
+            let kind = if name == "open_corner" {
+                fs::CornerKind::Open { gap }
+            } else {
+                fs::CornerKind::Overlap { gap }
+            };
+            Ok(sv(SheetVal::Corner(Rc::new(CornerV { kind }))))
+        }
+        "corner_relief" => corner(ev, args, span),
         _ => unreachable!("only sheet built-ins"),
     }
 }
@@ -1384,6 +1603,7 @@ fn stock(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
             "hole_to_edge",
             "min_slot",
             "min_hole",
+            "relief",
             "relief_width",
             "relief_depth",
         ],
@@ -1422,6 +1642,11 @@ fn stock(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         relief_width: scaled_of(&a, "relief_width")?,
         relief_depth: scaled_of(&a, "relief_depth")?,
         min_hole: scaled_of(&a, "min_hole")?,
+        relief: match word(&a, "relief", &["rect", "obround", "tear"])?.unwrap_or("rect") {
+            "obround" => fs::ReliefKind::Obround,
+            "tear" => fs::ReliefKind::Tear,
+            _ => fs::ReliefKind::Rect,
+        },
         hardness: None,
     };
     Ok(sv(SheetVal::Stock(Rc::new(StockV {
@@ -1504,7 +1729,13 @@ fn op_value(si: usize, id: &str, kind: OpKind) -> Value {
 
 fn base(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     let id = ev.take_id("sheet", span)?;
-    let a = Args::bind(ev, "sheet", &["profile", "t", "r", "bend", "shop"], args, span)?;
+    let a = Args::bind(
+        ev,
+        "sheet",
+        &["profile", "t", "r", "bend", "shop", "corner"],
+        args,
+        span,
+    )?;
     if a.poisoned() {
         return Ok(Value::Unresolved);
     }
@@ -1574,16 +1805,38 @@ fn base(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     };
     let frame = sk.borrow().frame;
     let si = ev.sheets.list.len();
+    // reliefs from the shop's stock of this thickness, else the stand-in default
+    let relief = shop
+        .as_ref()
+        .and_then(|s| s.shop.relief_default(t.v))
+        .unwrap_or_default();
+    let corner = match a.opt("corner") {
+        None => None,
+        Some(Value::Sheet(v)) if matches!(*v, SheetVal::Corner(_)) => {
+            let SheetVal::Corner(c) = &*v else {
+                unreachable!("matched")
+            };
+            Some(c.kind)
+        }
+        Some(o) => return Err(wrong(a.span("corner"), "corner", Ty::CornerKind, &o)),
+    };
+    let fix = FixCtx {
+        flanges: vec![],
+        t: t.clone(),
+        r: r.clone(),
+        k: rule.k.clone(),
+        relief,
+    };
     let sheet = match fs::Sheet::face(fs::FeatureId(hid), gauge, frame, &profile.loops) {
-        Ok((s, _)) => s,
+        Ok((mut s, _)) => {
+            s.relief_default = relief;
+            if let Some(c) = corner {
+                s.corner_default = c;
+            }
+            s
+        }
         Err(error) => {
             // reported on the feature; the sheet stays out of the part
-            let fix = FixCtx {
-                flanges: vec![],
-                t: t.clone(),
-                r: r.clone(),
-                k: rule.k.clone(),
-            };
             let names = Names {
                 walls: vec![(WallId(0), id.clone())],
                 ..Names::default()
@@ -1601,18 +1854,67 @@ fn base(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         walls: vec![(WallId(0), id.clone(), span)],
         joints: vec![],
         cuts: vec![],
-        fix: FixCtx {
-            flanges: vec![],
-            t: t.clone(),
-            r: r.clone(),
-            k: rule.k.clone(),
-        },
+        corners: vec![],
+        fix,
         folded: None,
         unfolds: vec![],
     };
     ev.sheets.list.push(st);
     push_sheet_step(ev, si, &id, "sheet", span, dims)?;
     Ok(op_value(si, &id, OpKind::Base { wall: WallId(0) }))
+}
+
+/// `corner_relief(a, b, kind)`: the treatment where flanges a and b, off one wall, meet.
+fn corner(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
+    let id = ev.take_id("corner_relief", span)?;
+    let a = Args::bind(ev, "corner_relief", &["a", "b", "kind"], args, span)?;
+    if a.poisoned() {
+        return Ok(Value::Unresolved);
+    }
+    let joint = |k: &'static str| -> R<(usize, JointId)> {
+        let v = a.req(k)?;
+        let op = op_of(&v, a.span(k), "a flange")?;
+        match op.kind {
+            OpKind::Flange { joint, .. } if op.on == On::Folded => Ok((op.sheet, joint)),
+            _ => Err(wrong(a.span(k), "a flange", Ty::Sheet, &v)),
+        }
+    };
+    let ((si, ja), (sb, jb)) = (joint("a")?, joint("b")?);
+    if si != sb {
+        return Err(sheet_err(SheetErr::NotACorner { span, id }));
+    }
+    let kv = a.req("kind")?;
+    let kind = match &kv {
+        Value::Sheet(v) if matches!(**v, SheetVal::Corner(_)) => {
+            let SheetVal::Corner(c) = &**v else {
+                unreachable!("matched")
+            };
+            c.kind
+        }
+        o => return Err(wrong(a.span("kind"), "kind", Ty::CornerKind, o)),
+    };
+    not_unfolded(ev, si, &id, span)?;
+    let st = &mut ev.sheets.list[si];
+    st.sheet.set_corner(ja, jb, kind);
+    st.corners.push((ja, jb, id.clone(), span));
+    let mut dims = vec![];
+    if let fs::CornerKind::Circular { size: Some(_) } | fs::CornerKind::Square { size: Some(_) } = kind
+        && let Some(n) = a.num("kind", LEN).ok().flatten()
+    {
+        dims.push(dim("size", &n));
+    }
+    push_sheet_step(ev, si, &id, "corner_relief", span, dims)?;
+    // the two must meet at a corner of their wall
+    let st = &ev.sheets.list[si];
+    if let Some(b) = &st.folded
+        && !b
+            .corners
+            .iter()
+            .any(|c| c.joints == [ja, jb] || c.joints == [jb, ja])
+    {
+        return Err(sheet_err(SheetErr::NotACorner { span, id }));
+    }
+    Ok(op_value(si, &id, OpKind::Corner { a: ja, b: jb }))
 }
 
 fn dim(what: &'static str, n: &Num) -> Dimension {
@@ -1646,18 +1948,30 @@ fn flange(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     let a = Args::bind(
         ev,
         "flange",
-        &["edge", "height", "angle", "side", "measure", "r", "relief"],
+        &[
+            "edge", "height", "angle", "side", "measure", "r", "relief", "position",
+        ],
         args,
         span,
     )?;
     if a.poisoned() {
         return Ok(Value::Unresolved);
     }
-    if a.opt("relief").is_some() {
-        return Err(sheet_err(SheetErr::ReliefUndecided {
-            span: a.span("relief"),
-        }));
-    }
+    let relief = match a.opt("relief") {
+        None => None,
+        Some(Value::Sheet(v)) if matches!(*v, SheetVal::Relief(_)) => {
+            let SheetVal::Relief(r) = &*v else {
+                unreachable!("matched")
+            };
+            Some(r.clone())
+        }
+        Some(o) => return Err(wrong(a.span("relief"), "relief", Ty::Relief, &o)),
+    };
+    let position = match word(&a, "position", &["outside", "inside", "bend_outside"])?.unwrap_or("outside") {
+        "inside" => fs::Position::Inside,
+        "bend_outside" => fs::Position::BendOutside,
+        _ => fs::Position::Outside,
+    };
     let ev_edge = a.req("edge")?;
     let edge = match &ev_edge {
         Value::Sheet(s) => match &**s {
@@ -1692,25 +2006,29 @@ fn flange(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     }
     let st = &mut ev.sheets.list[si];
     let rv = radius.as_ref().map_or(st.sheet.gauge.radius, |r| r.v);
+    let setback = fs::build::setback_of(&st.sheet.gauge, rv, signed);
+    let dims_of = |joint, wall| FlangeDims {
+        id: id.clone(),
+        joint,
+        wall,
+        setback,
+        r: rv,
+        height: height.clone(),
+        angle: angle.clone(),
+        radius: radius.clone(),
+    };
     let r = st
         .sheet
-        .flange_r(edge.wall, edge.segment, signed, height.v - offset, rv);
+        .flange_at(edge.wall, edge.segment, signed, height.v - offset, rv, position);
     let (wall, joint) = match r {
         Ok(x) => x,
         Err(e) => {
             let mut snap = st.clone();
-            snap.fix.flanges.push(FlangeDims {
-                joint: JointId(u32::MAX),
-                wall: WallId(u32::MAX),
-                height: height.clone(),
-                angle: angle.clone(),
-                radius: radius.clone(),
-            });
             // the refused flange's wall and joint are the next ids
-            if let Some(f) = snap.fix.flanges.last_mut() {
-                f.joint = JointId(snap.joints.len() as u32);
-                f.wall = WallId(snap.walls.len() as u32);
-            }
+            snap.fix.flanges.push(dims_of(
+                JointId(snap.joints.len() as u32),
+                WallId(snap.walls.len() as u32),
+            ));
             snap.walls
                 .push((WallId(snap.walls.len() as u32), id.clone(), span));
             snap.joints
@@ -1718,15 +2036,34 @@ fn flange(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
             return Err(kernel_err(&snap, span, &id, e));
         }
     };
+    let fd = dims_of(joint, wall);
     st.walls.push((wall, id.clone(), span));
     st.joints.push((joint, id.clone(), span));
-    st.fix.flanges.push(FlangeDims {
-        joint,
-        wall,
-        height,
-        angle,
-        radius,
-    });
+    if let Some(r) = &relief {
+        let t = st.sheet.gauge.thickness;
+        let d = st.sheet.relief_default;
+        let resolved = match r.kind {
+            None => fs::Relief::None,
+            Some(kind) => {
+                let width = r.width.as_ref().map_or(d.width.at(t, rv), |n| n.v);
+                let need = setback
+                    + if kind == fs::ReliefKind::Obround {
+                        0.5 * width
+                    } else {
+                        0.0
+                    };
+                let depth = r.depth.as_ref().map_or(d.depth.at(t, rv).max(need + t), |n| n.v);
+                fs::Relief::Cut { kind, width, depth }
+            }
+        };
+        for e in [fs::End::Start, fs::End::End] {
+            st.sheet.set_relief(joint, e, resolved);
+        }
+        for n in [&r.width, &r.depth].into_iter().flatten() {
+            dims.push(dim("relief", n));
+        }
+    }
+    st.fix.flanges.push(fd);
     push_sheet_step(ev, si, &id, "flange", span, dims)?;
     Ok(op_value(si, &id, OpKind::Flange { wall, joint }))
 }
@@ -2002,9 +2339,21 @@ fn op_trims(st: &SheetState, op: &OpRef) -> Vec<TrimRef> {
         OpKind::Base { wall } => outline(wall),
         OpKind::Flange { wall, joint } => {
             let mut v = outline(wall);
-            v.extend([fs::End::Start, fs::End::End].map(|end| TrimRef::BendEnd { joint, end }));
+            for end in [fs::End::Start, fs::End::End] {
+                v.push(TrimRef::BendEnd { joint, end });
+                // its reliefs: five segments at most
+                v.extend((0..5).map(|segment| TrimRef::Relief { joint, end, segment }));
+            }
             v
         }
+        OpKind::Corner { a, b } => (0..4)
+            .flat_map(|segment| {
+                [
+                    TrimRef::Corner { a, b, segment },
+                    TrimRef::Corner { a: b, b: a, segment },
+                ]
+            })
+            .collect(),
         OpKind::Cut { .. } => st
             .cuts
             .iter()
@@ -2025,7 +2374,7 @@ fn op_strips(op: &OpRef) -> Vec<Strip> {
     match op.kind {
         OpKind::Base { wall } => vec![Strip::Wall(wall)],
         OpKind::Flange { wall, joint } => vec![Strip::Wall(wall), Strip::Bend(joint)],
-        OpKind::Cut { .. } => vec![],
+        OpKind::Cut { .. } | OpKind::Corner { .. } => vec![],
     }
 }
 
@@ -2162,7 +2511,7 @@ fn op_member(ev: &mut Eval, op: &Rc<OpRef>, name: &str, span: Span) -> Option<R<
     let built = built_on(st, op.on);
     let wall = match op.kind {
         OpKind::Base { wall } | OpKind::Flange { wall, .. } => Some(wall),
-        OpKind::Cut { .. } => None,
+        OpKind::Cut { .. } | OpKind::Corner { .. } => None,
     };
     match name {
         "top" | "bottom" => {
@@ -2367,6 +2716,8 @@ pub fn outputs(ev: &Eval) -> Vec<SheetOut> {
             joints: st.joints.iter().map(|j| (j.0, j.1.clone())).collect(),
             layout: st.folded.as_ref().map(|b| b.layout.clone()),
             folded: st.folded.as_ref().map(|b| b.body.clone()),
+            reliefs: st.folded.as_ref().map_or(vec![], |b| b.reliefs.clone()),
+            corners: st.folded.as_ref().map_or(vec![], |b| b.corners.clone()),
             unfolds: st
                 .unfolds
                 .iter()
@@ -2423,6 +2774,50 @@ impl SheetOut {
             ("rule", rule),
             ("walls", self.walls.len().into()),
             ("bends", Json::Arr(bends)),
+            (
+                "reliefs",
+                Json::Arr(
+                    self.reliefs
+                        .iter()
+                        .map(|r| {
+                            Json::obj(vec![
+                                ("flange", name(r.joint).into()),
+                                ("end", end_name(r.end).into()),
+                                ("kind", r.kind.name().into()),
+                                ("width", r.width.into()),
+                                ("depth", r.depth.into()),
+                                ("automatic", r.automatic.into()),
+                            ])
+                        })
+                        .collect(),
+                ),
+            ),
+            (
+                "corners",
+                Json::Arr(
+                    self.corners
+                        .iter()
+                        .map(|c| {
+                            let kind = match c.kind {
+                                fs::CornerKind::Circular { .. } => "circular",
+                                fs::CornerKind::Square { .. } => "square",
+                                fs::CornerKind::Open { .. } => "open",
+                                fs::CornerKind::Closed => "closed",
+                                fs::CornerKind::Overlap { .. } => "overlap",
+                            };
+                            Json::obj(vec![
+                                (
+                                    "flanges",
+                                    Json::Arr(vec![name(c.joints[0]).into(), name(c.joints[1]).into()]),
+                                ),
+                                ("kind", kind.into()),
+                                ("size", c.size.into()),
+                                ("automatic", c.automatic.into()),
+                            ])
+                        })
+                        .collect(),
+                ),
+            ),
         ])
     }
 }

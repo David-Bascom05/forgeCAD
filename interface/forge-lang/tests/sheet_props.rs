@@ -4,7 +4,8 @@
 //! changes one span, ids of features the op did not add or delete are unchanged, and a document
 //! that checked still checks (the one order rule of sheets aside: nothing after an unfold).
 //! Built: every part builds valid, its folded and flat volumes differ by the closed form, and a
-//! SetParam renames no face.
+//! SetParam renames no face. Flanges take random reliefs (each kind, none, the default) and
+//! positions (inside, outside, bend outside).
 
 use forge_lang::edit::{apply, apply_ast, strip};
 use forge_lang::error::{Literal, Op, ParamKey, parse_path};
@@ -53,8 +54,29 @@ fn document(rng: &mut Rng) -> (String, Vec<(f64, f64)>, f64, f64) {
         let h = rng.range(15.0, 40.0);
         let a = rng.range(30.0, 90.0);
         let side = if rng.below(2) == 0 { "up" } else { "down" };
+        // a relief asked for (or not) and a position, at random
+        let relief = match rng.below(5) {
+            0 => ", relief: rect(rw, rd)",
+            1 => ", relief: obround(rw, rd)",
+            2 => ", relief: tear",
+            3 => ", relief: no_relief",
+            _ => "",
+        };
+        let position = [
+            ", position: \"inside\"",
+            ", position: \"bend_outside\"",
+            ", position: \"outside\"",
+            "",
+        ][rng.below(4)];
+        if relief.contains("rw") {
+            s += &format!(
+                "param {name}.rw = {}\nparam {name}.rd = {}\n",
+                rng.range(1.0, 3.0),
+                rng.range(9.0, 12.0)
+            );
+        }
         s += &format!(
-            "param {name}.h = {h}\nparam {name}.a = {a}deg\n{name} = flange(base.edge(plan.outline[{e}]), height: h, angle: a, side: \"{side}\")\n"
+            "param {name}.h = {h}\nparam {name}.a = {a}deg\n{name} = flange(base.edge(plan.outline[{e}]), height: h, angle: a, side: \"{side}\"{relief}{position})\n"
         );
         bends.push((a.to_radians(), w));
         if name == "east" && rng.below(2) == 0 {

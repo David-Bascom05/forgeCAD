@@ -8,6 +8,7 @@ pub mod bodies;
 pub mod build;
 pub mod builtins;
 pub mod edit;
+pub mod edit_ops;
 pub mod error;
 pub mod eval;
 pub mod feat_error;
