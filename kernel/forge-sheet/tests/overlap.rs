@@ -6,7 +6,7 @@ use forge_math::rng::Rng;
 use forge_math::{Frame, Point2, dmath};
 use forge_ops::{ProfileLoop, Segment};
 use forge_sheet::{
-    BendRule, CornerKind, FeatureId, Gauge, Map, Sheet, SheetError, SheetWarning, Strip, WallId, build_with,
+    BendRule, FeatureId, Gauge, Map, Position, Sheet, SheetError, SheetWarning, Strip, WallId, build_with,
     setback_of,
 };
 
@@ -255,33 +255,65 @@ fn fuzz_against_the_exact_overlap() {
 
 #[test]
 fn the_checks_cost_microseconds() {
+    // both checks run on every build: an L, a U, a box whose walls meet at the corners (the
+    // builder trims them apart), the same tray standing inside its edges as Forge makes it, and
+    // flanges leaning over a notch's bottom edge (straight edges near a wall's boundary: decided
+    // exactly, not halved down to the tolerance). Each well under a millisecond a build: the
+    // least of five batches, so a busy machine does not fail it
     let g = Gauge {
         thickness: 2.0,
         radius: 2.0,
         rule: BendRule::K(0.4),
     };
-    let rect = poly(&[(0.0, 0.0), (40.0, 0.0), (40.0, 30.0), (0.0, 30.0)]);
-    let mk = |edges: &[u64]| {
-        let (mut s, base) =
-            Sheet::face(FeatureId(1), g.clone(), Frame::WORLD, std::slice::from_ref(&rect)).unwrap();
+    let rect = |l: f64, w: f64| poly(&[(0.0, 0.0), (l, 0.0), (l, w), (0.0, w)]);
+    let mk = |edges: &[u64], position: Option<Position>| {
+        let base_loop = rect(60.0, 40.0);
+        let (mut s, base) = Sheet::face(
+            FeatureId(1),
+            g.clone(),
+            Frame::WORLD,
+            std::slice::from_ref(&base_loop),
+        )
+        .unwrap();
         for &e in edges {
-            s.flange(base, e, dmath::PI / 2.0, 20.0).unwrap();
+            match position {
+                None => s.flange(base, e, dmath::PI / 2.0, 20.0).map(|_| ()).unwrap(),
+                Some(p) => s
+                    .flange_at(base, e, dmath::PI / 2.0, 20.0, 2.0, p)
+                    .map(|_| ())
+                    .unwrap(),
+            }
         }
-        // whole walls on adjacent edges touch at the corners: opened
-        s.corner_default = Some(CornerKind::Open { gap: 0.4 });
         s
     };
-    for (name, s) in [("L", mk(&[1])), ("U", mk(&[1, 3])), ("box", mk(&[0, 1, 2, 3]))] {
+    let leaning = notched(1.42, 0.92, 0.40, 21.9, 23.95, 12.1, 55.76f64.to_radians(), 1);
+    let cases = [
+        ("L", mk(&[1], None)),
+        ("U", mk(&[1, 3], None)),
+        ("box", mk(&[0, 1, 2, 3], None)),
+        ("tray", mk(&[0, 1, 2, 3], Some(Position::Inside))),
+        ("leaning", leaning),
+    ];
+    for (name, s) in &cases {
         for map in [Map::Folded, Map::Flat] {
-            let n = 200;
-            let t0 = std::time::Instant::now();
-            for _ in 0..n {
-                std::hint::black_box(build_with(&s, map).unwrap());
-            }
-            println!(
-                "{name} {map:?}: {:.1} us a build",
-                t0.elapsed().as_secs_f64() * 1e6 / n as f64
+            let built = build_with(s, map);
+            assert!(
+                built.is_ok() || *name == "leaning",
+                "{name} {map:?}: {:?}",
+                built.err()
             );
+            let n = 20;
+            let us = (0..5)
+                .map(|_| {
+                    let t0 = std::time::Instant::now();
+                    for _ in 0..n {
+                        let _ = std::hint::black_box(build_with(s, map));
+                    }
+                    t0.elapsed().as_secs_f64() * 1e6 / n as f64
+                })
+                .fold(f64::INFINITY, f64::min);
+            println!("{name} {map:?}: {us:.1} us a build");
+            assert!(us < 1000.0, "{name} {map:?}: {us:.1} us a build");
         }
     }
     let _ = WallId(0);

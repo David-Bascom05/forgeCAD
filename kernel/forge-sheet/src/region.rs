@@ -8,6 +8,30 @@ use forge_geom::spline::meet::{cross_sections, same_curve};
 use forge_math::{Interval, Point2, Point3, Vec2, Vec3, dmath, predicates, tol};
 use forge_ops::{ProfileLoop, Segment};
 use std::collections::HashMap;
+
+/// A quick hash for small integer keys (grid cells, vertex pairs): no keys from outside.
+#[derive(Default)]
+struct Mix(u64);
+impl std::hash::Hasher for Mix {
+    fn write(&mut self, bytes: &[u8]) {
+        for &b in bytes {
+            self.write_u64(b as u64);
+        }
+    }
+    fn write_u64(&mut self, x: u64) {
+        self.0 = (self.0.rotate_left(5) ^ x).wrapping_mul(0x517c_c1b7_2722_0a95);
+    }
+    fn write_u32(&mut self, x: u32) {
+        self.write_u64(x as u64);
+    }
+    fn write_i64(&mut self, x: i64) {
+        self.write_u64(x as u64);
+    }
+    fn finish(&self) -> u64 {
+        self.0
+    }
+}
+type Map<K, V> = HashMap<K, V, std::hash::BuildHasherDefault<Mix>>;
 use std::sync::Arc;
 
 const TOL: f64 = tol::LINEAR;
@@ -148,7 +172,7 @@ impl Piece {
         }
     }
     /// The fraction of p's angle along an arc, its own turn nearest the arc's middle.
-    fn arc_param(&self, p: Point2) -> f64 {
+    pub(crate) fn arc_param(&self, p: Point2) -> f64 {
         let Piece::Arc { c, t0, t1, .. } = *self else {
             return 0.0;
         };
@@ -657,7 +681,7 @@ enum Side {
 /// Vertices by position: the first point within tolerance names them all.
 #[derive(Default)]
 struct Verts {
-    grid: HashMap<(i64, i64), Vec<u32>>,
+    grid: Map<(i64, i64), Vec<u32>>,
     pts: Vec<Point2>,
 }
 
@@ -826,7 +850,7 @@ pub fn subtract(wall: &[ProfileLoop], cuts: &[ProfileLoop]) -> Result<Region, Re
     let mut kept: Vec<Kept> = Vec::new();
     let mut near: Vec<u32> = Vec::new();
     let mut seen = vec![usize::MAX; group_count];
-    let mut key: HashMap<(u32, u32), Vec<Point2>> = HashMap::new();
+    let mut key: Map<(u32, u32), Vec<Point2>> = Map::default();
     let mut sub_id = 0;
     for (idx, &(m, k, _)) in all.iter().enumerate() {
         let (source, sid) = (&members[m].pieces[k].0, members[m].pieces[k].1);

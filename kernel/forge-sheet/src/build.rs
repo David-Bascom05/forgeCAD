@@ -604,8 +604,14 @@ fn corners(
                 },
             ));
             // an open corner also trims the later flange's wall back a thickness and the gap
-            // from the corner, its whole height, so two walls standing inside their edges miss
-            if let CornerKind::Open { gap } = kind {
+            // from the corner, its whole height, so two walls standing inside their edges miss;
+            // so does any corner whose walls would meet (the rule's gap), unless asked open
+            let seam = match kind {
+                CornerKind::Open { gap } => Some((gap, false)),
+                _ if walls_meet(v, (p0, p1), (q0, q1), (j1, j2)) => Some((rule.gap.at(t, rmax), true)),
+                _ => None,
+            };
+            if let Some((gap, automatic)) = seam {
                 let start = q0.distance(v) <= TOL;
                 let (y0, y1) = if start {
                     (-t, t + gap)
@@ -629,9 +635,9 @@ fn corners(
                     CornerMade {
                         joints: [j2.id, j1.id],
                         wall: sheet.walls[b2.b].id,
-                        kind,
+                        kind: CornerKind::Open { gap },
                         size: t + gap,
-                        automatic: false,
+                        automatic,
                     },
                 ));
             }
@@ -694,6 +700,51 @@ fn map_index(map: Map) -> usize {
 
 /// A relief narrower than this is no cut.
 const RELIEF_MIN: f64 = 1e-3;
+
+/// Whether the walls of two bends off one wall, meeting at vertex `v` of its outline, would meet
+/// beyond it: each wall near the corner is the cone of its edge's direction away from `v` and its
+/// own rise (the bend's angle about the edge); they meet where the line the two planes share
+/// runs inside both cones (two upright walls on a square corner: along the corner's upright).
+fn walls_meet(
+    v: Point2,
+    e1: (Point2, Point2),
+    e2: (Point2, Point2),
+    (j1, j2): (&crate::graph::Joint, &crate::graph::Joint),
+) -> bool {
+    let angle = |j: &crate::graph::Joint| match j.kind {
+        JointKind::Bend { angle, .. } => Some(angle),
+        _ => None,
+    };
+    let (Some(a1), Some(a2)) = (angle(j1), angle(j2)) else {
+        return false;
+    };
+    let cone = |(p, q): (Point2, Point2), a: f64| {
+        let along = if p.distance(v) <= TOL { q - p } else { p - q };
+        let along = along * (1.0 / along.length());
+        let d = (q - p) * (1.0 / p.distance(q));
+        let out = Vec2::new(d.y, -d.x);
+        let u = Vec3::new(along.x, along.y, 0.0);
+        let (sn, cs) = dmath::sin_cos(a);
+        let rise = Vec3::new(out.x * cs, out.y * cs, sn);
+        (u, rise)
+    };
+    let (c1, c2) = (cone(e1, a1), cone(e2, a2));
+    let (m1, m2) = (c1.0.cross(c1.1), c2.0.cross(c2.1));
+    let l = m1.cross(m2);
+    if l.length() <= 1e-9 {
+        return false;
+    }
+    let l = l * (1.0 / l.length());
+    let inside = |(u, r): (Vec3, Vec3), s: Vec3| {
+        let (uu, ur, rr) = (u.dot(u), u.dot(r), r.dot(r));
+        let (su, sr) = (s.dot(u), s.dot(r));
+        let det = uu * rr - ur * ur;
+        let a = (su * rr - sr * ur) / det;
+        let b = (sr * uu - su * ur) / det;
+        a >= -1e-9 && b >= -1e-9
+    };
+    [l, -l].into_iter().any(|s| inside(c1, s) && inside(c2, s))
+}
 
 fn joint_radius(sheet: &Sheet, b: &Bend) -> f64 {
     match sheet.joints[b.joint].kind {
@@ -1685,8 +1736,29 @@ impl<'a> Strips<'a> {
                             let d = bd.piece.tangent(u);
                             bd.piece.at(u) + Vec2::new(-d.y, d.x) * (10.0 * TOL / d.length().max(1e-300))
                         };
+                        // straight against a plane wall, decided exactly over each chord (a
+                        // curve's widened by how far it bows): only what may enter is halved
+                        let sag = |u: Interval| match (geo, &bd.piece) {
+                            (Geo::Plane(_), Piece::Line { .. }) => Some(0.0),
+                            (Geo::Plane(_), Piece::Arc { r, t0, t1, .. }) => {
+                                let half = (0.5 * (t1 - t0).abs() * u.width()).min(dmath::PI);
+                                Some((r + 10.0 * TOL) * (1.0 - dmath::cos(half)))
+                            }
+                            _ => None,
+                        };
                         let mut found = None;
                         for w in [0.0, t] {
+                            let may = |u: Interval| {
+                                sag(u).is_none_or(|s| {
+                                    self.may_enter(
+                                        b,
+                                        geo.point(inset(u.lo), w),
+                                        geo.point(inset(u.hi), w),
+                                        limit,
+                                        s,
+                                    )
+                                })
+                            };
                             found = found.or_else(|| {
                                 self.hunt(
                                     b,
@@ -1694,6 +1766,7 @@ impl<'a> Strips<'a> {
                                     &|u| piece_box(geo, &bd.piece, w, u),
                                     &|u| geo.point(inset(u), w),
                                     &reach,
+                                    &may,
                                 )
                             });
                         }
@@ -1712,6 +1785,15 @@ impl<'a> Strips<'a> {
                                 },
                                 &|u| geo.point(q, t * u),
                                 &reach,
+                                &|u| {
+                                    self.may_enter(
+                                        b,
+                                        geo.point(q, t * u.lo),
+                                        geo.point(q, t * u.hi),
+                                        limit,
+                                        0.0,
+                                    )
+                                },
                             )
                         });
                         if let Some(first) = found {
@@ -1805,7 +1887,7 @@ impl<'a> Strips<'a> {
                     Piece::Line { .. } => 0.0,
                     Piece::Arc { r, t0, t1, .. } => {
                         let half = 0.5 * (t1 - t0).abs() * u.width();
-                        r * (1.0 - half.min(dmath::PI).cos())
+                        r * (1.0 - dmath::cos(half.min(dmath::PI)))
                     }
                     Piece::Spline { .. } => f64::INFINITY,
                 };
@@ -1825,6 +1907,51 @@ impl<'a> Strips<'a> {
             }
         }
         None
+    }
+
+    /// Whether segment p0..p1 may hold a point deeper than `limit` in plane strip `s` (within
+    /// `slack` of the segment): false only when none can be, exactly. The part of it inside the
+    /// thickness less the limit, then that part in the plane: an end inside the region, or the
+    /// region's boundary within slack of it. Strips not plane, and splines, may.
+    fn may_enter(&self, s: usize, p0: Point3, p1: Point3, limit: f64, slack: f64) -> bool {
+        let Geo::Plane(f) = self.strips[s].folded else {
+            return true;
+        };
+        let (l0, l1) = (f.point_to_local(p0), f.point_to_local(p1));
+        let (w0, w1) = (-l0.z, -l1.z);
+        let (wlo, whi) = (limit - slack, self.t - limit + slack);
+        let (mut lo, mut hi) = (0.0f64, 1.0f64);
+        let dw = w1 - w0;
+        if dw.abs() <= 1e-300 {
+            if w0 < wlo || w0 > whi {
+                return false;
+            }
+        } else {
+            let (ua, ub) = ((wlo - w0) / dw, (whi - w0) / dw);
+            lo = lo.max(ua.min(ub));
+            hi = hi.min(ua.max(ub));
+            if lo > hi {
+                return false;
+            }
+        }
+        let at = |u: f64| Point2::new(l0.x + (l1.x - l0.x) * u, l0.y + (l1.y - l0.y) * u);
+        let (q0, q1) = (at(lo), at(hi));
+        let parts = &self.strips[s].region.parts;
+        if [q0, q1]
+            .iter()
+            .any(|&q| parts.iter().any(|c| crate::region::holds(c, q)))
+        {
+            return true;
+        }
+        parts
+            .iter()
+            .flat_map(|c| std::iter::once(&c.outer).chain(&c.holes))
+            .flatten()
+            .any(|bd| match bd.piece {
+                Piece::Line { a, b } => seg_seg(q0, q1, a, b).is_some_and(|(d, _)| d <= slack),
+                Piece::Arc { .. } => seg_arc(q0, q1, &bd.piece) <= slack,
+                Piece::Spline { .. } => true,
+            })
     }
 
     /// A point of segment p0..p1 within `tol` of plane strip `s`'s material, if one is, exactly:
@@ -1984,11 +2111,12 @@ impl<'a> Strips<'a> {
         box_of: &dyn Fn(Interval) -> forge_math::Box3,
         point: &dyn Fn(f64) -> Point3,
         reach: &dyn Fn(&forge_math::Box3) -> bool,
+        may: &dyn Fn(Interval) -> bool,
     ) -> Option<(Point3, f64)> {
         let mut stack = vec![(Interval::new(0.0, 1.0), 0u32)];
         while let Some((u, level)) = stack.pop() {
             let bx = box_of(u);
-            if !reach(&bx) {
+            if !reach(&bx) || !may(u) {
                 continue;
             }
             let size = (bx.x.width().powi(2) + bx.y.width().powi(2) + bx.z.width().powi(2)).sqrt();
@@ -2802,6 +2930,52 @@ fn seg_seg(a0: Point2, a1: Point2, b0: Point2, b1: Point2) -> Option<(f64, Point
     .into_iter()
     .min_by(|x, y| x.1.total_cmp(&y.1))
     .map(|(p, d)| (d, p))
+}
+
+/// The distance between segment q0..q1 and an arc piece, exactly: 0 where they cross, else the
+/// least of the ends to the other and the segment's foot from the centre to the arc.
+fn seg_arc(q0: Point2, q1: Point2, arc: &Piece) -> f64 {
+    let Piece::Arc { c, r, .. } = *arc else {
+        return f64::INFINITY;
+    };
+    let on = |p: Point2| (0.0..=1.0).contains(&arc.arc_param(p));
+    let d = q1 - q0;
+    let len2 = d.dot(d);
+    let foot_u = if len2 <= 1e-300 {
+        0.0
+    } else {
+        ((c - q0).dot(d) / len2).clamp(0.0, 1.0)
+    };
+    let foot = q0 + d * foot_u;
+    // crossings: |q0 + d s - c| = r
+    if len2 > 1e-300 {
+        let (b, cc) = ((q0 - c).dot(d), (q0 - c).dot(q0 - c) - r * r);
+        let disc = b * b - len2 * cc;
+        if disc >= 0.0 {
+            let sq = disc.sqrt();
+            for s in [(-b - sq) / len2, (-b + sq) / len2] {
+                if (0.0..=1.0).contains(&s) && on(q0 + d * s) {
+                    return 0.0;
+                }
+            }
+        }
+    }
+    let to_seg = |p: Point2| {
+        let u = if len2 <= 1e-300 {
+            0.0
+        } else {
+            ((p - q0).dot(d) / len2).clamp(0.0, 1.0)
+        };
+        (q0 + d * u).distance(p)
+    };
+    let mut best = to_seg(arc.at(0.0)).min(to_seg(arc.at(1.0)));
+    for p in [q0, q1] {
+        best = best.min(arc.at(arc.nearest(p)).distance(p));
+    }
+    if on(foot) {
+        best = best.min((foot.distance(c) - r).abs());
+    }
+    best
 }
 
 /// A piece carried by a rigid motion.
