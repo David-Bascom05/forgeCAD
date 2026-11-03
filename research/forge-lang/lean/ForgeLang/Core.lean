@@ -13,6 +13,10 @@ editable when its trace is one bare site. Wherever a number is *observed* (a bra
 index, a comparison) the sites it came from go into the run's control log. That log is what makes
 the edit theorems true; `Counter/ControlUntracked.lean` shows what goes wrong without it.
 
+Function and procedure bodies see their parameter and the names bound where they are called
+(they read top-level params and lets, as FastCAD functions do). Under single assignment with no
+shadowing of top-level names this is the same as lexical scope.
+
 Every call consumes one unit of fuel, so evaluation is a total function (P2 by construction); running
 out is the typed error `fuel`, and `Fuel.lean` proves more fuel never changes a result.
 -/
@@ -185,7 +189,7 @@ def evalE : Nat → Defs → (Site → Int) → Env → Expr → R (Tr × Log)
       let (ta, la) ← evalE n D σ ρ a
       match D.fns.lookup f with
       | some (x, body) => do
-        let (t, l) ← evalE n D σ [(x, .num ta)] body
+        let (t, l) ← evalE n D σ ((x, .num ta) :: ρ) body
         .ok (t, la ++ l)
       | none => .error (.noFn f)
     | .ref x rel => do let t ← lookupRef ρ x rel; .ok (t, [])
@@ -226,7 +230,7 @@ def execOne : Nat → Defs → (Site → Int) → Env → Stmt → R (Env × Mod
       let (ta, la) ← evalE n D σ ρ a
       match D.procs.lookup p with
       | some (y, body) => do
-        let (_, m, l) ← execS n D σ [(y, .num ta)] body
+        let (_, m, l) ← execS n D σ ((y, .num ta) :: ρ) body
         .ok ([(x, .frag m)], pre [.nm x] m, la ++ l)
       | none => .error (.noFn p)
 

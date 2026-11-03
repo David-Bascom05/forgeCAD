@@ -12,8 +12,7 @@ The only assumption is single assignment for the names involved: the moved, adde
 statement does not bind a name an earlier statement of the block binds. No dependency analysis is
 needed for soundness. `Counter/Rebind.lean` shows each theorem false without it.
 
-Open: the complete half (the edit *does* evaluate when no later statement reads the binding) needs
-a free-name lemma over the syntax; not mechanised.
+The complete half (the edit *does* evaluate when nothing reads the binding) is `Complete.lean`.
 -/
 
 namespace ForgeLang

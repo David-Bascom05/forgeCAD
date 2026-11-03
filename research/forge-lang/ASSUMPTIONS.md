@@ -34,6 +34,8 @@ calculus and the theorems hold with them. A deterministic *evaluation order* is 
 - Statements: `let`, `set` (mutable reassignment), `feat`, range loop `x = for i in 0..n {..}`,
   keyed loop `x = for i in {a: e, b: e} {..}`, `if`, procedure call `x = proc(arg)` (recursive,
   makes features).
+- Function and procedure bodies see their parameter and the names bound where they are called, so
+  they can read top-level params and lets as FastCAD functions do.
 - Ids: `Seg.nm name | Seg.ix index | Seg.key label`. A feature's id is the path to it.
 - Numbers are traces (`Tr`: site, const, add, mul). Observation points log their sites.
 - Evaluation consumes one unit of fuel per call. `run : Nat → Doc → Except Err (Model × Log)` is a
@@ -45,7 +47,12 @@ calculus and the theorems hold with them. A deterministic *evaluation order* is 
 
 `Sim.lean` holds the one induction that carries most of the rest. A run that finished is repeated
 exactly (same traces, ids and log) under more fuel, and under any literal table that agrees on the
-logged sites. `Weak.lean` adds the other: more bindings never change a run that finished.
+logged sites. Four more inductions of the same shape:
+- `Weak.lean`: more bindings never change a run that finished.
+- `Fv.lean`: a run depends only on the names its code mentions, plus the names that function and
+  procedure bodies mention (`Defs.reads`).
+- `Ren.lean`: renaming sites commutes with evaluation when no code mentions the renamed sites.
+- `Sites.lean`: a trace's sites come only from the code, the definitions or the environment.
 
 ## P1: one meaning
 
@@ -103,11 +110,28 @@ The handle is the site, and editing it changes every value it drives.
   traces, ids and log; the new numbers are the old traces re-read with the new table, without a
   re-run. Text side: `setLit_text`. Exactly one token changes and the rest is byte-identical,
   given that the site occurs once in the text (free when a site is the literal's path).
-- AddFeature and DeleteFeature: `delete_sound`, which reads in both directions. If the edited block
-  evaluates, its model is the old model with that statement's fragment added or removed. Text side:
-  `body_text_insert`.
-- MoveFeature (swap two neighbours): `move_sound`. The model has the two fragments swapped.
-  Text side: `body_text_swap`.
+- AddFeature and DeleteFeature, both halves.
+  - Sound: `delete_sound`, which reads in both directions. If the edited block evaluates, its model
+    is the old model with that statement's fragment added or removed.
+  - Complete: `delete_complete` and `add_complete`. If no later statement and no function body
+    mentions the name the statement binds (`NotRead`), the edited block does evaluate. For Add, the
+    new statement must also evaluate where it is inserted.
+  - Text side: `body_text_insert`.
+- MoveFeature (swap two neighbours), both halves.
+  - Sound: `move_sound`. The model has the two fragments swapped.
+  - Complete: `move_complete`. If neither statement mentions what the other binds, and they bind
+    different names, the swap evaluates.
+  - Text side: `body_text_swap`.
+- SplitInstance, in general (`Split.lean`, `Sites.lean`).
+  - The op: in `x = for i in 0..n { let w = p; rest }`, replace `p` with fresh literals
+    `[q0, q1, ...][i]`, each set to `p`'s number.
+  - `split_doc`: for any surrounding document, any `rest`, any count expression and any
+    definitions, the split document evaluates, to the same ids and numbers. Its traces are the old
+    ones with `q j` in place of `p` in instance `j`.
+  - Hypotheses: no code mentions the `q j`, and the count fits the list (`CountFits`); otherwise
+    the result is the typed error `range`.
+  - `split_independent`: no feature of instance `k` carries another instance's literal.
+  - `split_edit_one`: editing `q j` leaves every other instance's numbers unchanged.
 - A structural edit, such as a loop count, is still one meaning: evaluation is a function. The
   model op is a re-run, and P5 says what stays stable.
 - If the edited document does not evaluate, the edit is refused with that run's typed error.
@@ -115,16 +139,19 @@ The handle is the site, and editing it changes every value it drives.
 | Assumption | Counterexample without it |
 |---|---|
 | Edits are addressed to sites, not model values | `Counter/ValueEdit`. `fan_no_site_edit`: "make instance 1 differ" has no site edit at all. `two_meanings`: `a = p + q`, "make `a` 12" has two site edits with different models. `dbl_unreachable`: `a = 2 * p`, "make `a` 3" has none |
-| Single assignment of the names the op touches (`FreshAfter`) | `Counter/Rebind.move_silent`: `let a = 1; a = 2; feat f = a`. Moving `f` above the reassignment evaluates fine and silently changes `f`. `delete_silent`: deleting a shadowing `let` changes `f` though the deleted statement made no feature. In single assignment the same deletion is the typed error `unbound` (`delete_refused`) |
+| Soundness: single assignment of the names the op touches (`FreshAfter`) | `Counter/Rebind.move_silent`: `let a = 1; a = 2; feat f = a`. Moving `f` above the reassignment evaluates fine and silently changes `f`. `delete_silent`: deleting a shadowing `let` changes `f` though the deleted statement made no feature. In single assignment the same deletion is the typed error `unbound` (`delete_refused`) |
+| Completeness: nothing mentions the binding the op removes or moves (`NotRead`) | Not needed for soundness. Without it the op is refused (`delete_refused`: `unbound`), never silently wrong |
 | Edited literal not observed (for the re-read form) | `Counter/ControlUntracked`, and every loop count. Those edits are re-runs, not re-reads |
 
-SplitInstance is the op that turns a fan-out value edit into a site edit. `split_same_numbers`:
-rewriting `w` to `[w0, w1, w2][i]` changes no number. `split_edit_one`: after the split, editing
-one site changes one instance.
+SplitInstance is the op that turns a fan-out value edit into a site edit. `Counter/ValueEdit` has
+the concrete instance; `Split.lean` has the general theorem.
 
-**Found:** single assignment makes Add, Delete and Move sound *with no dependency analysis*. The
-proofs use only that the edit removes bindings from what later statements see. With rebinding,
-removing a binding can uncover an older one.
+**Found:** neither half of Add, Delete and Move needs a dependency graph.
+- Soundness uses only single assignment: the edit removes bindings from what later statements
+  see. With rebinding, removing a binding can uncover an older one.
+- Completeness uses only a name lookup in the source (`NotRead`).
+- So the editor's whole pre-check is: is the name mentioned after this point, or in a function
+  body?
 
 ## P5: stable ids
 
@@ -268,17 +295,21 @@ parses back to the edited document is a grammar property.
    - A lossless CST, so that SetParam replaces exactly the literal's span (sign and unit included).
    - Shortest round-trip float printing.
    - Check with an LR(1) generator (zero conflicts) and a property test `parse(print(t)) = t`.
-9. **Functions** stay FastCAD-like: pure, closed or lexically scoped over a single-assignment top
-   level.
+9. **Functions** stay FastCAD-like: pure, and they may read top-level names. The core proves this
+   with bodies that see the names bound where they are called. The Forge rule that makes this the
+   same as lexical scope:
+   - a function body mentions only its parameters and top-level names;
+   - no local name shadows a top-level name.
 
 ## Open (not mechanised)
 
-- The *complete* half of Add, Delete and Move: the edit does evaluate when no later statement reads
-  the binding. It needs a free-name lemma over the syntax. Only soundness is proven.
-- SplitInstance in general (only a concrete instance is proven), InlineExpr, MakeShared.
+- InlineExpr and MakeShared.
+- SplitInstance on other shapes (a literal deep inside an expression, splits across nested loops).
+  The proven form is the canonical `let w = p` at the head of the loop body. Other shapes rewrite to
+  it.
 - P6: no parser in Lean, so `parse ∘ print = id` is not proven for the core printer either.
-- Functions that capture top-level names. Core functions are closed; lexical capture under single
-  assignment is expected to be fine.
+- Function scope: the core uses the names bound at the call. That this equals lexical scope under
+  the rule in recommendation 9 is argued, not proven.
 - Features inside an `if` block are not referenceable after it (block scope in the core).
 - SetParam on a structural param is stable only at loop level (`count_prefix`), not as a statement
   about whole documents.
@@ -293,7 +324,12 @@ parses back to the edited document is a grammar property.
 | `Weak.lean` | `weak`: more bindings repeat a run |
 | `Edits.lean` | P1 `run_unique`, `run_ids_unique`; P2 `run_mono`; P3 `handle_honest`, `sole_driver`; P4 `setParam_roundtrip`; P5 `setParam_ids` |
 | `Errors.lean` | P2 `run_error_stable` |
-| `Struct.lean` | P4/P5 `delete_sound` (Add and Delete), `move_sound` |
+| `Struct.lean` | P4/P5 soundness: `delete_sound` (Add and Delete), `move_sound` |
+| `Fv.lean` | `indep`: the free-name lemma |
+| `Complete.lean` | P4/P5 completeness: `delete_complete`, `add_complete`, `move_complete` |
+| `Ren.lean` | `ren`: site renaming commutes with evaluation |
+| `Split.lean` | SplitInstance: `split_doc` |
+| `Sites.lean` | `sitesIn`; `split_independent`, `split_edit_one` |
 | `Loops.lean` | P5 `count_prefix`, `keyed_insert` |
 | `Print.lean` | P4 text: `setLit_text`, `body_text_insert`, `body_text_swap` |
 | `Counter/*.lean` | every counterexample named above, proven by evaluation (`rfl`/`decide`) or induction |
