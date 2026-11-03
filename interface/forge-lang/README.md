@@ -200,7 +200,9 @@ Ordinary features on a sheet part are refused, typed, both ways round. Bend reli
 obround, tear, or none) are data on each flange, the shop's default added where a wall needs one;
 flanges stand outside, inside or bend-outside their edge; corners where two flanges meet get a
 circular or square relief (default just clear of both bends). The reliefs and corners cut are
-listed in the report as typed data. `fg run --dxf` writes the flat pattern.
+listed in the report as typed data. Every build checks the folded clash and the flat overlap; each
+refuses its own output and warns on the other, a flat overlap with height fixes. `fg run --dxf`
+writes the flat pattern.
 
 Hand-written parts (`parts/sheet/`), each clean (no errors, warnings or lints) and matching
 forge-sheet's closed forms: L, U (up 90 and down 60, unfolded), Z (a lip off a flange's tip),
