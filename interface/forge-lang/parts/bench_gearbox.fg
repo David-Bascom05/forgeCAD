@@ -47,7 +47,7 @@ sketch flange_sk(on: offset(down, 0 - h)) {
                disc((L / 2 - t - ri, W / 2 - t - ri), ri),
                disc((0 - L / 2 + t + ri, W / 2 - t - ri), ri))
 }
-flange = extrude(flange_sk, fl)
+split_flange = extrude(flange_sk, fl)
 
 # bearing bosses: half rounds under the split, as long as the flange is wide, both sides
 shared boss_d = fw + t + 6

@@ -328,16 +328,14 @@ csb_m = stay(-1, c0x, c0y, 0, cd, cu, cn, rcs - wall, csb_from, csu, csv, ccu, c
 param slots_sk.w = 5
 param slots_sk.dep = 40
 sketch slots_sk(on: side.plane) {
-  a = pt(ax - w, az - dep)
-  b = pt(ax + w, az - dep)
-  c = pt(ax + w, az)
-  e = pt(ax - w, az)
-  l1 = line(a, b)
-  l2 = line(b, c)
-  top = arc(center: (ax, az), from: c, to: e)
-  l3 = line(e, a)
+  path o(start: (ax - w, az - dep)) {
+    line(to: (ax + w, az - dep))
+    line(to: (ax + w, az))
+    tarc(to: (ax - w, az))
+    close()
+  }
 }
-slots = cut(slots_sk, thru_all)
+slots = cut(slots_sk.o, thru_all)
 param hhole.d = 9
 param hhole.depth = 6
 param hhole_sk.dx = 22
