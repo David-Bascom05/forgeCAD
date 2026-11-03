@@ -91,4 +91,4 @@ such refusal in both options. `SHEET_FIXED_CROSS=1` runs Option A with that chan
   `k_moves_nothing_folded_to_the_bit`). Its closed forms (setback, BA, the volume identity) are `prior-art.md`'s,
   checked by `check_fold.py` here (SymPy and mpmath: `python3 check_fold.py`).
 
-`proto/` builds against `forge_geom::wrap::Flat::Arc`, which lands with the sheet-arc branch; until then it is a record.
+`proto/` builds against `forge_geom::wrap::Flat::Arc` (on main since 3776cb18); it stays outside the workspace.

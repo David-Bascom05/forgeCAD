@@ -635,6 +635,7 @@ impl<'a> Built<'a> {
             for (ci, c) in s.region.parts.iter().enumerate() {
                 for l in std::iter::once(&c.outer).chain(&c.holes) {
                     let mut kinds = Vec::with_capacity(l.len());
+                    let mut bounds = Vec::with_capacity(l.len());
                     for b in l {
                         let src = cx.sources[b.id as usize];
                         let k = match (src, s.strip) {
@@ -668,9 +669,7 @@ impl<'a> Built<'a> {
                         };
                         if k == Kind::Side {
                             let curve = kind_of(&b.piece);
-                            let bad = curve == TrimCurveKind::Spline
-                                || (matches!(s.geo, Geo::Round { .. }) && curve != TrimCurveKind::Line);
-                            if bad {
+                            if curve == TrimCurveKind::Spline {
                                 return Err(SheetError::TrimCurveUnsupported {
                                     feature,
                                     strip: s.strip,
@@ -679,12 +678,35 @@ impl<'a> Built<'a> {
                                 });
                             }
                         }
-                        kinds.push(k);
+                        // an arc in a bend turning past half way goes in pieces, so the ruled side wall
+                        // along each is regular to its ends
+                        let turn = match b.piece {
+                            Piece::Arc { t0, t1, .. } if matches!(s.geo, Geo::Round { .. }) => {
+                                (t1 - t0).abs()
+                            }
+                            _ => 0.0,
+                        };
+                        let parts = (turn / (0.99 * dmath::PI)).ceil().max(1.0) as usize;
+                        // sweeps are checked when cuts are made: at most a whole turn
+                        debug_assert!(parts <= 3, "an arc of {turn} rad in a bend");
+                        for q in 0..parts {
+                            let (u0, u1) = (q as f64 / parts as f64, (q + 1) as f64 / parts as f64);
+                            bounds.push(Bound {
+                                piece: if parts == 1 {
+                                    b.piece.clone()
+                                } else {
+                                    b.piece.sub(u0, u1)
+                                },
+                                id: b.id,
+                                start: if q == 0 { b.start } else { b.piece.at(u0) },
+                            });
+                            kinds.push(k);
+                        }
                     }
                     loops.push(LoopData {
                         strip: si,
                         comp: ci,
-                        bounds: l.clone(),
+                        bounds,
                         kinds,
                     });
                 }
@@ -1118,22 +1140,19 @@ impl<'a> Built<'a> {
                         p1 > p0,
                     ))
                 } else {
-                    Some((
-                        Wrap {
-                            axis,
-                            radius: rho0 + sigma * w,
-                            unroll: rn,
-                            flat: Flat::Line {
-                                a: Point2::new(a.x, -sigma * a.y),
-                                b: Point2::new(b.x, -sigma * b.y),
-                            },
-                        }
-                        .curve(),
-                        Interval::new(0.0, 1.0),
-                        true,
-                    ))
+                    wrapped(axis, rho0 + sigma * w, rn, &ld.bounds[i].piece, a, b, sigma)
                 }
             }
+            (
+                Geo::Round {
+                    axis,
+                    rho0,
+                    sigma,
+                    rn,
+                    ..
+                },
+                Piece::Arc { .. },
+            ) => wrapped(axis, rho0 + sigma * w, rn, &ld.bounds[i].piece, a, b, sigma),
             _ => None,
         }
     }
@@ -1178,17 +1197,15 @@ impl<'a> Built<'a> {
                     rn,
                     ..
                 },
-                Piece::Line { .. },
-            ) if a.x != b.x => {
+                Piece::Line { .. } | Piece::Arc { .. },
+            ) if a.x != b.x || matches!(piece, Piece::Arc { .. }) => {
+                let flat = flat_in_bend(piece, a, b, sigma);
                 let wrap = |w: f64| {
                     Rail::Wrap(Wrap {
                         axis,
                         radius: rho0 + sigma * w,
                         unroll: rn,
-                        flat: Flat::Line {
-                            a: Point2::new(a.x, -sigma * a.y),
-                            b: Point2::new(b.x, -sigma * b.y),
-                        },
+                        flat,
                     })
                 };
                 Ruled::new(wrap(self.t), wrap(0.0)).map(Ruled::surface)
@@ -1216,6 +1233,46 @@ impl<'a> Built<'a> {
         s.normal(s.project(mid.p))
             .is_none_or(|nat| nat.dot(along.cross(up)) > 0.0)
     }
+}
+
+/// A bend's oblique line or arc as a flat curve in its wrap's (s, h) = (u, -sigma y): a reflection
+/// when sigma is 1, so the arc's angles turn the other way.
+fn flat_in_bend(p: &Piece, a: Point2, b: Point2, sigma: f64) -> Flat {
+    match *p {
+        Piece::Arc { c, r, t0, t1 } => Flat::Arc {
+            center: Point2::new(c.x, -sigma * c.y),
+            radius: r,
+            start: -sigma * t0,
+            sweep: -sigma * (t1 - t0),
+        },
+        _ => Flat::Line {
+            a: Point2::new(a.x, -sigma * a.y),
+            b: Point2::new(b.x, -sigma * b.y),
+        },
+    }
+}
+
+fn wrapped(
+    axis: Frame,
+    radius: f64,
+    rn: f64,
+    p: &Piece,
+    a: Point2,
+    b: Point2,
+    sigma: f64,
+) -> Option<(Curve, Interval, bool)> {
+    let flat = flat_in_bend(p, a, b, sigma);
+    Some((
+        Wrap {
+            axis,
+            radius,
+            unroll: rn,
+            flat,
+        }
+        .curve(),
+        Interval::new(0.0, 1.0),
+        true,
+    ))
 }
 
 /// Two side surfaces in one plane, facing one way.

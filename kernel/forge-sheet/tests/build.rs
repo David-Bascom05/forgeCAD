@@ -4,9 +4,7 @@
 use forge_math::rng::Rng;
 use forge_math::{Frame, Point2, Point3, dmath};
 use forge_ops::{ProfileLoop, Segment};
-use forge_sheet::{
-    BendRule, End, FeatureId, Gauge, Map, Sheet, SheetError, TrimCurveKind, TrimRef, WallId, build,
-};
+use forge_sheet::{BendRule, End, FeatureId, Gauge, Map, Sheet, SheetError, WallId, build};
 use forge_topo::{Body, Name};
 use std::collections::BTreeSet;
 
@@ -371,30 +369,18 @@ fn refusals_are_typed() {
         build(&s, Map::Folded),
         Err(SheetError::NeedsRelief { end: End::Start, .. })
     ));
-    // a hole across the bend waits for wrap::Flat::Arc
-    let mut s = part(g.clone(), 40.0, 30.0, &[(1, ang(90.0), 30.0)]);
-    s.cut(
-        WallId(0),
-        ProfileLoop::new(vec![(
-            Segment::Circle {
-                center: Point2::new(39.0, 15.0),
-                radius: 4.0,
-                ccw: true,
-            },
-            9,
-        )]),
-    )
-    .unwrap();
+    // a hole touching a tangent line from one side
+    let mut s = part(g.clone(), 40.0, 30.0, &[(1, ang(-90.0), 30.0)]);
+    let touch = Segment::Circle {
+        center: Point2::new(38.5, 15.0),
+        radius: 2.5,
+        ccw: true,
+    };
+    s.cut(WallId(0), ProfileLoop::new(vec![(touch, 0)])).unwrap();
     assert!(matches!(
         build(&s, Map::Folded),
-        Err(SheetError::TrimCurveUnsupported {
-            curve: TrimCurveKind::Arc,
-            trim: TrimRef::Cut { segment: 9, .. },
-            ..
-        })
+        Err(SheetError::TrimTouchesBendLine { .. })
     ));
-    // ... but builds flat
-    checked(&build(&s, Map::Flat).unwrap());
     // a relief edge on the tangent line: designed (reliefs.md), refused until decided
     let mut s = part(g.clone(), 40.0, 30.0, &[(1, ang(90.0), 30.0)]);
     s.cut(WallId(0), rect(30.0, 10.0, 8.0, 5.0, 0)).unwrap();
@@ -475,7 +461,14 @@ fn fuzz_random_brackets() {
             let (y0, y1) = (w * i as f64 / bands as f64, w * (i + 1) as f64 / bands as f64);
             let (lo, hi) = (y0 + 0.15 * (y1 - y0), y1 - 0.15 * (y1 - y0));
             if rng.below(2) == 0 {
-                let c = Point2::new(rng.range(0.3, 0.6) * len, 0.5 * (lo + hi));
+                // in the base, or across the right bend (wrapped arcs)
+                let across = rng.below(2) == 0;
+                let x = if across {
+                    len + rng.range(-6.0, 2.0)
+                } else {
+                    rng.range(0.3, 0.6) * len
+                };
+                let c = Point2::new(x, 0.5 * (lo + hi));
                 let rad = 0.4 * (hi - lo).min(0.2 * len);
                 s.cut(
                     WallId(0),
@@ -511,16 +504,10 @@ fn fuzz_random_brackets() {
                     assert!(mesh.open_edges().is_empty(), "seed {seed} {map:?}: open mesh");
                     built += 1;
                 }
-                // a window corner within the tolerance of a tangent line; a hole reaching a bend
-                // (circles across bends wait for wrap::Flat::Arc)
-                Err(
-                    SheetError::TrimTouchesBendLine { .. }
-                    | SheetError::TrimAlongBendLine { .. }
-                    | SheetError::TrimCurveUnsupported {
-                        curve: TrimCurveKind::Arc,
-                        ..
-                    },
-                ) if map == Map::Folded => refused += 1,
+                // a window corner or a circle within the tolerance of a tangent line
+                Err(SheetError::TrimTouchesBendLine { .. } | SheetError::TrimAlongBendLine { .. }) => {
+                    refused += 1
+                }
                 Err(e) => panic!("seed {seed} {map:?}: {e:?}"),
             }
         }
@@ -543,6 +530,12 @@ fn bits_are_the_same_everywhere() {
         lines(&[(30.0, 4.0), (48.0, 8.0), (47.0, 12.0), (29.0, 9.0)], 0),
     )
     .unwrap();
+    let hole = Segment::Circle {
+        center: Point2::new(40.0, 20.0),
+        radius: 3.0,
+        ccw: true,
+    };
+    s.cut(WallId(0), ProfileLoop::new(vec![(hole, 0)])).unwrap();
     let mut h = Name::NONE;
     for map in [Map::Folded, Map::Flat] {
         let b = build(&s, map).unwrap();
@@ -553,5 +546,83 @@ fn bits_are_the_same_everywhere() {
         h = h.with(volume(&b).0.to_bits());
     }
     println!("digest {:#x}", h.0);
-    assert_eq!(h.0, 0xecad_f06b_920e_37a3);
+    assert_eq!(h.0, 0xed65_7fc5_bc2e_5c0e);
+}
+
+/// The area of the band x0..x1 of the circle (cx, a), by the chord's antiderivative.
+fn circle_band(cx: f64, a: f64, x0: f64, x1: f64) -> f64 {
+    let f = |x: f64| {
+        let u = (x - cx).clamp(-a, a);
+        u * (a * a - u * u).max(0.0).sqrt() + a * a * dmath::asin(u / a)
+    };
+    (f(x1) - f(x0)).max(0.0)
+}
+
+#[test]
+fn holes_across_a_bend() {
+    let (t, r, k, w) = (2.0, 2.0, 0.4, 30.0);
+    let ba = dmath::PI / 2.0 * (r + k * t);
+    let rn = ba / (dmath::PI / 2.0);
+    // across both tangent lines, on one, wholly in the zone, both bend ways
+    for (cx, a, angle) in [
+        (38.0 + 0.5 * ba, 3.5, 90.0),
+        (37.0, 3.0, 90.0),
+        (38.0 + 0.5 * ba, 1.0, 90.0),
+        (37.0, 2.5, -90.0),
+    ] {
+        let mut s = part(gauge(t, r, k), 40.0, w, &[(1, ang(angle), 30.0)]);
+        let hole = Segment::Circle {
+            center: Point2::new(cx, 15.0),
+            radius: a,
+            ccw: true,
+        };
+        s.cut(WallId(0), ProfileLoop::new(vec![(hole, 0)])).unwrap();
+        let (fold, flat) = (build(&s, Map::Folded).unwrap(), build(&s, Map::Flat).unwrap());
+        checked(&fold);
+        checked(&flat);
+        // the reference skin's setback, and the zone's inside radius on it, by the bend's way
+        let (sb, inner) = if angle > 0.0 { (r, r) } else { (r + t, r) };
+        let z0 = 40.0 - sb;
+        let total = (40.0 - sb + ba + 30.0 - sb) * w - dmath::PI * a * a;
+        let zone = ba * w - circle_band(cx, a, z0, z0 + ba);
+        let v_flat = t * total;
+        let v_fold = t * (total - zone) + t * zone * (inner + 0.5 * t) / rn;
+        let ((vf, ef), (vl, el)) = (volume(&fold), volume(&flat));
+        assert!(
+            (vl - v_flat).abs() <= el + 1e-9,
+            "{cx} {a} {angle}: {vl} against {v_flat}"
+        );
+        assert!(
+            (vf - v_fold).abs() <= ef + 1e-9,
+            "{cx} {a} {angle}: {vf} against {v_fold}"
+        );
+    }
+}
+
+#[test]
+fn bad_arc_sweeps_are_refused_by_name() {
+    let mut s = part(gauge(2.0, 2.0, 0.4), 40.0, 30.0, &[(1, ang(90.0), 30.0)]);
+    let tau = 2.0 * dmath::PI;
+    for sweep in [f64::NAN, f64::INFINITY, 0.0, tau * (1.0 + 1e-9)] {
+        let arc = Segment::Arc {
+            center: Point2::new(20.0, 15.0),
+            radius: 3.0,
+            start: 0.0,
+            sweep,
+        };
+        let close = Segment::Line {
+            a: Point2::new(23.0, 15.0),
+            b: Point2::new(23.0, 15.0),
+        };
+        let got = s.cut(WallId(0), ProfileLoop::new(vec![(arc, 4), (close, 5)]));
+        match got {
+            Err(SheetError::ArcSweep {
+                trim: forge_sheet::TrimRef::Cut { segment: 4, .. },
+                sweep: e,
+                ..
+            }) => assert!(e.to_bits() == sweep.to_bits()),
+            other => panic!("{sweep}: {other:?}"),
+        }
+    }
+    assert!(s.cuts.is_empty());
 }

@@ -233,6 +233,13 @@ pub enum SheetError {
         gap: f64,
         limit: f64,
     },
+    /// An arc whose sweep is not finite, is zero, or turns more than once (`limit` is the bound).
+    ArcSweep {
+        feature: FeatureId,
+        trim: TrimRef,
+        sweep: f64,
+        limit: f64,
+    },
     /// A trim curve of a kind this strip cannot carry yet (arcs and splines in a bend zone).
     TrimCurveUnsupported {
         feature: FeatureId,

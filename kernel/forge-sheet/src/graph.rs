@@ -239,9 +239,26 @@ impl Sheet {
     pub fn cut(&mut self, wall: WallId, lp: ProfileLoop) -> Result<CutId, SheetError> {
         let feature = self.feature;
         self.wall(wall).ok_or(SheetError::NoSuchWall { feature, wall })?;
+        let id = CutId(self.next_cut);
+        // forge-geom's own rule for an arc (Spline::ellipse)
+        let limit = dmath::TAU * (1.0 + 1e-12);
+        for (s, segment) in &lp.segments {
+            if let Segment::Arc { sweep, .. } = *s
+                && (!sweep.is_finite() || sweep == 0.0 || sweep.abs() > limit)
+            {
+                return Err(SheetError::ArcSweep {
+                    feature,
+                    trim: TrimRef::Cut {
+                        cut: id,
+                        segment: *segment,
+                    },
+                    sweep,
+                    limit,
+                });
+            }
+        }
         let area: f64 = pieces(&lp).iter().map(|p| p.0.area_term()).sum();
         let lp = if area < 0.0 { reversed(&lp) } else { lp };
-        let id = CutId(self.next_cut);
         self.cuts.push(Cut { id, wall, lp });
         self.next_cut += 1;
         Ok(id)
