@@ -79,6 +79,15 @@ pub const BUILTINS: &[&str] = &[
     "plane",
 ];
 
+/// A built-in function's name, this module's or another's (shapes).
+pub fn builtin(name: &str) -> Option<&'static str> {
+    BUILTINS
+        .iter()
+        .chain(crate::shapes::NAMES)
+        .find(|b| **b == name)
+        .copied()
+}
+
 const MORE: [&str; 5] = ["axis", "sym", "two", "upto", "intersect"];
 
 pub fn constant(name: &str) -> Option<Value> {
@@ -179,7 +188,7 @@ impl Args {
     pub(crate) fn req_num(&self, k: &'static str, dims: &[Dim]) -> R<Num> {
         num_of(self.req(k)?, dims, self.span(k), k)
     }
-    fn flag(&self, k: &'static str) -> R<bool> {
+    pub(crate) fn flag(&self, k: &'static str) -> R<bool> {
         match self.opt(k) {
             None => Ok(false),
             Some(Value::Bool(b)) => Ok(b),
@@ -227,7 +236,7 @@ pub fn num_of(v: Value, dims: &[Dim], span: Span, what: &'static str) -> R<Num> 
     Ok(n)
 }
 
-fn positive(n: &Num, span: Span, what: &'static str) -> R<f64> {
+pub(crate) fn positive(n: &Num, span: Span, what: &'static str) -> R<f64> {
     if n.v <= 0.0 || !n.v.is_finite() {
         return Err(Error::BadValue {
             span,
@@ -238,15 +247,15 @@ fn positive(n: &Num, span: Span, what: &'static str) -> R<f64> {
     Ok(n.v)
 }
 
-fn dim(what: &'static str, n: &Num) -> Dimension {
+pub(crate) fn dim(what: &'static str, n: &Num) -> Dimension {
     Dimension { what, num: n.clone() }
 }
 
 pub(crate) const LEN: &[Dim] = &[Dim::Length];
-const ANG: &[Dim] = &[Dim::Angle];
+pub(crate) const ANG: &[Dim] = &[Dim::Angle];
 
 /// The sketch the call is inside, or a WrongPlace error.
-fn in_sketch(ev: &Eval, func: &'static str, span: Span) -> R<Rc<RefCell<Sk>>> {
+pub(crate) fn in_sketch(ev: &Eval, func: &'static str, span: Span) -> R<Rc<RefCell<Sk>>> {
     ev.sketch_ref().ok_or(Error::WrongPlace {
         span,
         func,
@@ -254,7 +263,7 @@ fn in_sketch(ev: &Eval, func: &'static str, span: Span) -> R<Rc<RefCell<Sk>>> {
     })
 }
 
-fn not_in_sketch(ev: &Eval, func: &'static str, span: Span) -> R<()> {
+pub(crate) fn not_in_sketch(ev: &Eval, func: &'static str, span: Span) -> R<()> {
     if ev.sketch_ref().is_some() {
         return Err(Error::WrongPlace {
             span,
@@ -297,7 +306,7 @@ pub fn p2_of(ev: &Eval, v: Value, span: Span) -> R<P2> {
 }
 
 /// The point an entity stands for: a point itself, a circle's or arc's centre.
-fn point_ent(e: &Ent, span: Span) -> R<EntityId> {
+pub(crate) fn point_ent(e: &Ent, span: Span) -> R<EntityId> {
     let sk = e.sk.borrow();
     match (e.kind, sk.s.entity(e.id)) {
         (EntKind::Point, _) => Ok(e.id),
@@ -372,7 +381,7 @@ pub fn plane_of(ev: &mut Eval, v: Value, span: Span, _what: &'static str) -> R<F
     }
 }
 
-fn axis_of(_ev: &Eval, v: Value, span: Span) -> R<(Point3, UnitVec3)> {
+pub(crate) fn axis_of(_ev: &Eval, v: Value, span: Span) -> R<(Point3, UnitVec3)> {
     match v {
         Value::Axis(o, d) => Ok((o, d)),
         Value::Ent(e) if e.kind == EntKind::Line => {
@@ -393,7 +402,7 @@ fn axis_of(_ev: &Eval, v: Value, span: Span) -> R<(Point3, UnitVec3)> {
     }
 }
 
-fn dir_of(v: Value, span: Span) -> R<Vec3> {
+pub(crate) fn dir_of(v: Value, span: Span) -> R<Vec3> {
     match v {
         Value::Dir(d) | Value::WorldDir(d) => Ok(d),
         Value::Axis(_, d) => Ok(d.get()),
@@ -408,7 +417,7 @@ fn dir_of(v: Value, span: Span) -> R<Vec3> {
     }
 }
 
-fn ent_of(v: Value, span: Span, want: EntKind) -> R<Ent> {
+pub(crate) fn ent_of(v: Value, span: Span, want: EntKind) -> R<Ent> {
     match v {
         Value::Ent(e) => Ok(e),
         o => Err(Error::WrongType {
@@ -423,7 +432,7 @@ fn ent_of(v: Value, span: Span, want: EntKind) -> R<Ent> {
     }
 }
 
-fn mk_ent(sk: &Rc<RefCell<Sk>>, id: EntityId) -> Value {
+pub(crate) fn mk_ent(sk: &Rc<RefCell<Sk>>, id: EntityId) -> Value {
     let kind = sk.borrow().kind(id);
     Value::Ent(Ent {
         sk: sk.clone(),
@@ -793,7 +802,7 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
         "hole" => hole(ev, args, span),
         "fillet" | "chamfer" => finish(ev, name, args, span),
         "shell" => shell(ev, args, span),
-        "loft" => loft(ev, args, span),
+        "loft" => crate::shapes::loft(ev, args, span),
         "offset" => {
             not_in_sketch(ev, name, span)?;
             let a = Args::bind(ev, name, &["plane", "d"], args, span)?;
@@ -873,6 +882,7 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
             })?;
             Ok(Value::Plane(Rc::new(Plane { frame, world: None })))
         }
+        n if crate::shapes::NAMES.contains(&n) => crate::shapes::call(ev, n, args, span),
         _ => Err(Error::UnknownName {
             span,
             name: name.into(),
@@ -1132,10 +1142,11 @@ pub(crate) fn profile_of(
     }
 }
 
-fn has_solid(ev: &Eval) -> bool {
-    ev.feats
-        .iter()
-        .any(|f| matches!(f.kind, "extrude" | "revolve" | "loft") && f.status != crate::eval::Status::Failed)
+pub(crate) fn has_solid(ev: &Eval) -> bool {
+    ev.feats.iter().any(|f| {
+        (matches!(f.kind, "extrude" | "revolve" | "loft") || crate::shapes::SOLID.contains(&f.kind))
+            && f.status != crate::eval::Status::Failed
+    })
 }
 
 fn extrude(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Value> {
@@ -1146,6 +1157,27 @@ fn extrude(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Val
         return Ok(Value::Unresolved);
     }
     let (sk, profile, segs) = profile_of(ev, a.req("profile")?, a.span("profile"))?;
+    if a.opt("taper").is_some() {
+        if !matches!(a.req("d")?, Value::Num(_)) {
+            return Err(Error::NotWith {
+                span: a.span("taper"),
+                func: name,
+                arg: "taper",
+                with: "an extent other than a depth (a taper runs a set distance)",
+            });
+        }
+        let curved = profile.loops.iter().any(|l| {
+            l.segments
+                .iter()
+                .any(|g| matches!(g.0, forge_ops::Segment::Spline(_)))
+        });
+        if curved {
+            return Err(Error::TaperOnCurve {
+                span: a.span("taper"),
+                sketch: sk.borrow().id.clone(),
+            });
+        }
+    }
     let cut = name == "cut";
     let mut dims = vec![];
     let sign = if cut { -1.0 } else { 1.0 };
@@ -1492,7 +1524,7 @@ fn hole(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     })))
 }
 
-fn edges_value(v: Value, span: Span) -> R<Option<Vec<Name>>> {
+pub(crate) fn edges_value(v: Value, span: Span) -> R<Option<Vec<Name>>> {
     match v {
         Value::Map(m) => edges_value(
             Value::List(Rc::new(m.iter().map(|x| x.1.clone()).collect())),
@@ -1609,7 +1641,7 @@ fn finish(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Valu
 fn shell(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     not_in_sketch(ev, "shell", span)?;
     let id = ev.take_id("shell", span)?;
-    let a = Args::bind(ev, "shell", &["t", "open"], args, span)?;
+    let a = Args::bind(ev, "shell", &["t", "open", "out"], args, span)?;
     let t = a.req_num("t", LEN)?;
     positive(&t, a.span("t"), "a wall")?;
     let open = match a.opt("open") {
@@ -1627,7 +1659,7 @@ fn shell(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     };
     let f = Feature::Shell {
         thickness: t.v,
-        outward: false,
+        outward: a.flag("out")?,
         open,
     };
     let (idx, hid) = ev.push_feature(&id, "shell", f, span, vec![dim("wall", &t)])?;
@@ -1642,54 +1674,9 @@ fn shell(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     })))
 }
 
-fn loft(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
-    not_in_sketch(ev, "loft", span)?;
-    let id = ev.take_id("loft", span)?;
-    let a = Args::bind(ev, "loft", &["profiles", "cut"], args, span)?;
-    if a.poisoned() {
-        return Ok(Value::Unresolved);
-    }
-    let Value::List(xs) = a.req("profiles")? else {
-        return Err(Error::WrongType {
-            span: a.span("profiles"),
-            what: "profiles",
-            want: Ty::List,
-            found: a.req("profiles")?.ty(),
-        });
-    };
-    let mut profiles = vec![];
-    for x in xs.iter() {
-        profiles.push(profile_of(ev, x.clone(), a.span("profiles"))?.1);
-    }
-    let op = if a.flag("cut")? {
-        Combine::Cut
-    } else if has_solid(ev) {
-        Combine::Add
-    } else {
-        Combine::New
-    };
-    let f = Feature::Loft(Box::new(forge_model::Loft {
-        profiles,
-        kind: forge_ops::LoftKind::Ruled,
-        guides: forge_ops::LoftGuides::None,
-        options: Default::default(),
-        op,
-    }));
-    let (idx, hid) = ev.push_feature(&id, "loft", f, span, vec![])?;
-    Ok(Value::Feature(Rc::new(Feat {
-        id,
-        kind: "loft",
-        idx,
-        hid,
-        shape: None,
-        axis: None,
-        prof: None,
-    })))
-}
-
 // ---- anchors ----------------------------------------------------------------------------
 
-fn face_plane(body: &Body, f: FaceId) -> Option<Frame> {
+pub(crate) fn face_plane(body: &Body, f: FaceId) -> Option<Frame> {
     let face = body.face(f);
     match &face.surface {
         Surface::Plane(p) if face.same_sense => Some(p.frame),
@@ -1700,7 +1687,7 @@ fn face_plane(body: &Body, f: FaceId) -> Option<Frame> {
 
 /// A frame on face plane `fp`: z its outward normal, x the reference's x laid in the plane,
 /// origin the reference origin dropped onto it.
-fn carried(fp: Frame, reference: Frame) -> Frame {
+pub(crate) fn carried(fp: Frame, reference: Frame) -> Frame {
     let z = fp.z();
     let o = reference.origin - z.get() * (reference.origin - fp.origin).dot(z.get());
     let x = reference.x().get();
@@ -1712,7 +1699,7 @@ fn carried(fp: Frame, reference: Frame) -> Frame {
     Frame::from_zx(o, z, x).unwrap_or(fp)
 }
 
-fn role_set(ev: &mut Eval, f: &Feat, role: Role, names: &[Name], frame: Option<Frame>) -> Value {
+pub(crate) fn role_set(ev: &mut Eval, f: &Feat, role: Role, names: &[Name], frame: Option<Frame>) -> Value {
     if !ev.b.building || ev.b.built() <= f.idx {
         return Value::Faces(Rc::new(Faces {
             names: vec![],
@@ -1820,6 +1807,9 @@ pub fn member(ev: &mut Eval, v: Value, name: &str, span: Span) -> R<Value> {
         Value::Feature(f) => {
             if let Some(v) = feature_local(ev, &f.id, name, span) {
                 return v;
+            }
+            if let Some(v) = crate::shapes::member(ev, f, name) {
+                return Ok(v);
             }
             match name {
                 "start" | "end" | "floor" | "mouth" if f.shape.is_some() => {
@@ -1969,21 +1959,25 @@ pub fn side(ev: &mut Eval, f: &Feat, e: &Ent, span: Span) -> R<Value> {
         e.loop_segs.to_vec()
     };
     let root = Name::feature(f.hid);
-    let names: Vec<Name> = ids
-        .iter()
-        .flat_map(|&i| {
-            let seg = sk.borrow().seg_id(i);
-            // a revolve's faces are named per part of the turn as well
-            if f.kind == "revolve" {
-                vec![
-                    forge_ops::roles::revolve_side(root, seg, 0),
-                    forge_ops::roles::revolve_side(root, seg, 1),
-                ]
-            } else {
-                vec![forge_ops::roles::side(root, seg)]
-            }
-        })
-        .collect();
+    let segs: Vec<u64> = ids.iter().map(|&i| sk.borrow().seg_id(i)).collect();
+    let names: Vec<Name> = match crate::shapes::side_names(ev, f, &segs) {
+        Some(n) => n,
+        None => ids
+            .iter()
+            .flat_map(|&i| {
+                let seg = sk.borrow().seg_id(i);
+                // a revolve's faces are named per part of the turn as well
+                if f.kind == "revolve" {
+                    vec![
+                        forge_ops::roles::revolve_side(root, seg, 0),
+                        forge_ops::roles::revolve_side(root, seg, 1),
+                    ]
+                } else {
+                    vec![forge_ops::roles::side(root, seg)]
+                }
+            })
+            .collect(),
+    };
     // the frame: origin at the entity's start, x along it
     let reference = {
         let s = sk.borrow();
@@ -2039,7 +2033,7 @@ fn feature_faces(ev: &mut Eval, f: &Feat) -> Value {
     }))
 }
 
-fn feature_edges(ev: &mut Eval, idx: &[usize]) -> Value {
+pub(crate) fn feature_edges(ev: &mut Eval, idx: &[usize]) -> Value {
     if !ev.b.building || idx.iter().any(|&i| ev.b.built() <= i) {
         return Value::Unresolved;
     }

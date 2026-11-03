@@ -54,6 +54,31 @@ fn document(rng: &mut Rng) -> String {
             s += &format!("f{j} = extrude(k{j}, s2)\n");
         }
     }
+    // shape features (sweep, coil, loft, ball, shell), a few at random
+    if rng.below(2) == 0 {
+        s += "sketch lk(on: f0.start) {\n  c = circle((s0, s1), s2)\n}\n";
+        s += "sketch lk2(on: offset(lk.plane, s2)) {\n  q = rect(center: (s0, s1), size: (s2, s2))\n}\n";
+        s += "lo = loft([lk.c, lk2.q], smooth: true)\n";
+    }
+    if rng.below(2) == 0 {
+        s += &format!(
+            "param co.pp = {}\nsketch ck(on: rotate(k0.plane, about: k0.o[0], by: 90deg)) {{\n  c = circle((s0, s1), s2)\n  ax = line((0, 0), (0, s1), construction: true)\n}}\nco = coil(ck.c, axis: ck.ax, pitch: pp, turns: count(3))\n",
+            rng.len()
+        );
+    }
+    if rng.below(2) == 0 {
+        s += "sketch sk(on: rotate(k0.plane, about: k0.o[0], by: 90deg)) {\n  path rail(start: (0, 0)) {\n    line(to: (0, s1))\n    tarc(to: (s2, s1 + s2))\n  }\n}\n";
+        s += "sketch sp(on: k0.plane) {\n  c = circle((0, 0), s0)\n}\nsw = sweep(sp.c, along: sk.rail, extend: (s0, s1))\n";
+    }
+    if rng.below(2) == 0 {
+        s += &format!(
+            "param bb.r = {}\nfor i in 0..2 {{\n  sketch bk(on: f0.end) {{\n    p = pt(s0 * i, s1)\n  }}\n  bb = ball(bk.p, r)\n}}\n",
+            rng.len()
+        );
+    }
+    if rng.below(3) == 0 {
+        s += "sh = shell(s2, open: f0.start, out: true)\n";
+    }
     if rng.below(2) == 0 {
         let m = 2 + rng.below(3);
         s += &format!(
@@ -115,6 +140,10 @@ fn op(rng: &mut Rng, src: &str, r: &Run, k: usize) -> Op {
         3 => match ps.iter().filter(|p| !p.is_shared()).collect::<Vec<_>>() {
             locals if !locals.is_empty() && rng.below(2) == 0 => Op::MakeShared {
                 param: locals[rng.below(locals.len())].clone(),
+            },
+            _ if ps.iter().any(|p| p.to_string() == "bb.r") && rng.below(2) == 0 => Op::SplitInstance {
+                id: parse_path(&format!("bb[{}]", rng.below(2))).expect("a path"),
+                param: ParamKey::parse("bb.r").expect("a param"),
             },
             _ if ps.iter().any(|p| p.to_string() == "g.dd") => Op::SplitInstance {
                 id: parse_path(&format!("g[{}]", rng.below(2))).expect("a path"),

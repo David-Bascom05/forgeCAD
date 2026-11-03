@@ -10,6 +10,7 @@ pub mod edit;
 pub mod error;
 pub mod eval;
 pub mod report;
+pub mod shapes;
 pub mod sheet;
 pub mod sketch;
 pub mod syntax;
