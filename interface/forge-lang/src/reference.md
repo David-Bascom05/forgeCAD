@@ -242,6 +242,9 @@ neck = loft([sec.c, top.sq])               # a circle to a square: matched corne
 draft(FACES, angle: A, neutral: PLANE)    faces tilted A about where they cross the neutral
                                           plane, the pull along its normal
 offset_faces(FACES, d)                    faces moved d along their outward normals
+move_faces(FACES, along: DIR, d: D | about: AXIS, by: A)   faces moved or turned, neighbours re-met
+delete_faces(FACES)                       a pocket, boss or blend taken away, the gap closed
+replace_face(FACE, with: FACES)           a face put on another face's surface
 thicken(FACES, t, side: "out"|"in"|"both", cut|keep|new: true)   a slab on the faces
 rib(PATH, t, side: "both"|"pos"|"neg", web: false, flip: false, draft: A)
 facefillet(FACES, FACES, r)               round between two face sets
@@ -261,6 +264,8 @@ cup = shell(t, open: box.end)
 lip = fillet(edges(between: (cup.inner, cup.rim)), t / 4)
 tilt = draft(box.side(base.r[2]), angle: a, neutral: base.plane)
 grow = offset_faces(box.side(base.r[1]), g)
+turn = move_faces(box.side(base.r[1]), about: base.r[1], by: a)
+fill = delete_faces(pit.faces)
 wall = rib(web.l, t, flip: true)
 round = facefillet(box.side(base.r[0]), box.end, r)
 knob = ball(top.c, r)

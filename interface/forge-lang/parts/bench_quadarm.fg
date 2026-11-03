@@ -1,0 +1,82 @@
+# Quadcopter arm, injection-moulded (tools/bench-parts/quadarm.fc, hand port): a tapered channel
+# open below with 1.6 walls and cross webs inside, a round pad for a 2306 motor at the tip and a
+# two-screw clamp at the root. The .fc's cosmetic `thread 3 0.5` on the clamp holes (no geometry)
+# waits on lane fg-holes; its patterns are loops here.
+
+shared L = 170
+shared wr = 15
+shared rp = 16
+shared h = 14
+shared t = 1.6
+param round.r = 3
+param round.long = 100
+# cross webs: 1.2 thick at 40, 80, 120, drawn across the arm from -20 to 20
+shared tw = 1.2
+shared webs = {a: 40, b: 80, c: 120}
+shared wy = 20
+# motor pad: four M3 bosses on a 16 square (8 off centre), countersunk, a 9 shaft clearance
+shared mr = 8
+shared n4 = count(4)
+shared mboss_r = 3.2
+shared mfloor = 3
+shared mhole_d = 3.2
+shared mcs_d = 6
+shared mcs_a = 90deg
+shared shaft_d = 9
+# the wire slot through the arm: 12 by 6, corners r 2.5, 30 back from the tip centre
+shared wx = 30
+shared wl = 12
+shared ww = 6
+shared wrr = 2.5
+# root clamp: two M3 tapped into bosses at x 12, y +-6, 1 short of the top
+shared cx = 12
+shared cy = {l: 6, r: -6}
+shared cb_r = 3.5
+shared ch_d = 2.5
+shared ch_short = 1
+shared cfil = 0.8
+
+sketch plan(on: xy) {
+  outline = hull((0, 0 - wr), disc((L, 0), rp), (0, wr))
+}
+arm = extrude(plan, h)
+round = fillet(edges(of: arm.end, shape: "circle") + edges(of: arm.end, shape: "line", longer: long), r)
+cup = shell(t, open: arm.start)
+for k, x in webs {
+  sketch websk(on: plan.plane) {
+    l = line((x, 0 - wy), (x, wy))
+  }
+  web = rib(websk.l, tw, web: true, flip: true)
+}
+# under the skin: the plane t below the top, its sketch facing up
+under = offset(arm.end, 0 - t)
+for i in 0..n4 {
+  sketch mbsk(on: under) {
+    c = circle((L + mr * cos(i * (360deg / n4)), mr * sin(i * (360deg / n4))), mboss_r)
+  }
+  mboss = extrude(mbsk, mfloor + t - h)
+}
+sketch mhsk(on: arm.end) {
+  for i in 0..n4 {
+    p = pt(L + mr * cos(i * (360deg / n4)), mr * sin(i * (360deg / n4)))
+  }
+  c = pt(L, 0)
+}
+mhole = hole(at: [mhsk.p[0], mhsk.p[1], mhsk.p[2], mhsk.p[3]], d: mhole_d, depth: thru, csink: (mcs_d, mcs_a))
+shaft = hole(at: mhsk.c, d: shaft_d, depth: thru)
+sketch wiresk(on: plan.plane) {
+  o = hull(disc((L - wx + wrr, wrr - ww / 2), wrr), disc((L - wx + wl - wrr, wrr - ww / 2), wrr),
+           disc((L - wx + wl - wrr, ww / 2 - wrr), wrr), disc((L - wx + wrr, ww / 2 - wrr), wrr))
+}
+wire = cut(wiresk, thru_all)
+for k, y in cy {
+  sketch rbsk(on: under) {
+    c = circle((cx, y), cb_r)
+  }
+  rboss = extrude(rbsk, t - h)
+  sketch rhsk(on: arm.end) {
+    p = pt(cx, y)
+  }
+  rhole = hole(at: rhsk.p, d: ch_d, depth: h - ch_short)
+}
+rfil = fillet(edges(of: [rboss.l, rboss.r], crease: "concave"), cfil)

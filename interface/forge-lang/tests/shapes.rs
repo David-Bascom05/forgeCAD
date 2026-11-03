@@ -407,3 +407,39 @@ fn a_rim_a_later_fillet_rounded_is_a_typed_error() {
     );
     assert_eq!(errors(&src), ["MouthRounded"]);
 }
+
+#[test]
+fn faces_deleted_replaced_and_moved() {
+    // a pocket taken away again: the block as it was
+    let pocket = format!(
+        "{BOX}sketch pk(on: box.end) {{\n  o = rect(center: (0, 0), size: (W / 2, W / 2))\n}}\npit = cut(pk, H / 2)\n"
+    );
+    let r = ok(&format!("{pocket}fill = delete_faces(pit.faces)\n"));
+    close(volume(&r), 72000.0, 1e-9);
+    // a side moved out along its normal, then turned about the base's x line
+    let r = ok(&format!(
+        "{BOX}push = move_faces(box.side(base.r[1]), along: box.side(base.r[1]).normal, d: g)\n"
+    ));
+    close(volume(&r), 61.5 * 40.0 * 30.0, 1e-9);
+    let r = ok(&format!(
+        "{BOX}turn = move_faces(box.side(base.r[1]), about: base.r[1], by: a)\n"
+    ));
+    let (s, c) = forge_math::dmath::sin_cos(3.0f64.to_radians());
+    close(
+        (volume(&r) - 72000.0).abs(),
+        40.0 * 30.0 * 30.0 * (s / c) / 2.0,
+        1e-9,
+    );
+    // the top put on a taller block's top
+    let r = ok(&format!(
+        "{BOX}sketch tk(on: box.end) {{\n  o = rect(center: (L, 0), size: (W, W))\n}}\ntall = extrude(tk, H, new: true)\nlevel = replace_face(box.end, with: tall.end)\n"
+    ));
+    // the block grown to the tall one's top, and the tall one itself
+    close(volume(&r), 60.0 * 40.0 * 60.0 + 40.0 * 40.0 * 30.0, 1e-9);
+    assert_eq!(
+        errors(&format!(
+            "{BOX}push = move_faces(box.side(base.r[1]), along: box.side(base.r[1]).normal, d: g, about: base.x, by: a)\n"
+        )),
+        ["NotWith"]
+    );
+}
