@@ -187,6 +187,18 @@ pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
     (run, ev.b.into_cache())
 }
 
+/// The validity problems of the part: of each body on its own (bodies may touch or overlap; the
+/// joined view's skins then overlap without anything being wrong).
+fn problems(ev: &Eval, joined: &forge_topo::Body) -> usize {
+    match ev.b.stages.last().map(|s| &s.solids[..]) {
+        Some(many) if many.len() > 1 => many
+            .iter()
+            .map(|s| forge_topo::check::check(&forge_model::finish(s.body.clone())).len())
+            .sum(),
+        _ => forge_topo::check::check(joined).len(),
+    }
+}
+
 fn measure(ev: &Eval) -> Option<Measure> {
     let body = ev.b.body()?;
     let solids = ev.b.stages.last().map_or(0, |s| s.solids.len());
@@ -201,7 +213,7 @@ fn measure(ev: &Eval) -> Option<Measure> {
         faces: body.face_ids().count(),
         edges: body.edge_ids().count(),
         bodies: solids,
-        problems: forge_topo::check::check(body).len(),
+        problems: problems(ev, body),
         bbox: [bb.x.lo, bb.y.lo, bb.z.lo, bb.x.hi, bb.y.hi, bb.z.hi],
     })
 }

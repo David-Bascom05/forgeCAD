@@ -14,6 +14,10 @@ fn build(name: &str) -> (Run, String) {
 }
 
 fn parity(name: &str, volume: f64, faces: usize, edges: usize) {
+    parity_bodies(name, volume, faces, edges, 1);
+}
+
+fn parity_bodies(name: &str, volume: f64, faces: usize, edges: usize, bodies: usize) {
     let (r, src) = build(name);
     assert!(
         r.errors.is_empty(),
@@ -34,7 +38,7 @@ fn parity(name: &str, volume: f64, faces: usize, edges: usize) {
     );
     assert_eq!(
         (m.faces, m.edges, m.bodies, m.problems),
-        (faces, edges, 1, 0),
+        (faces, edges, bodies, 0),
         "{name}"
     );
     assert!(r.expects.iter().all(|e| e.ok));
@@ -79,4 +83,12 @@ fn bench_volute_matches_its_fc_version() {
 #[test]
 fn bench_manifold_matches_its_fc_version() {
     parity("bench_manifold", 884334.5, 78, 192);
+}
+
+// guard without the lines that work `in guard` (louvre, sight hole, tabs, their holes: bodies, lane
+// fg-holes): the envelope and the sheet as a body of its own, each valid.
+
+#[test]
+fn bench_guard_matches_its_fc_version_less_its_body_targeted_cuts() {
+    parity_bodies("bench_guard", 2442097.7, 29, 60, 2);
 }
