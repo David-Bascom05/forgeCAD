@@ -12,7 +12,9 @@ pub mod relief;
 pub mod roles;
 pub mod shop;
 
-pub use build::{BendPlace, Built, Layout, Map, Place2, WallPlace, build, build_with};
+pub use build::{
+    BendPlace, Built, CornerMade, Layout, Map, Place2, WallPlace, build, build_with, setback_of,
+};
 pub use checks::check;
 pub use error::{
     CutId, End, FeatureId, JointId, JointKindName, Pinch, SheetError, SheetWarning, Side, Strip,

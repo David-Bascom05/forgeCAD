@@ -254,6 +254,27 @@ pub enum SheetError {
         depth: f64,
         limit: f64,
     },
+    /// Two strips overlap in the flat pattern: no flat body or blank can be made of it. The
+    /// pair overlapping most, `area` theirs, `total` over every pair.
+    FlatOverlap {
+        feature: FeatureId,
+        a: Strip,
+        b: Strip,
+        at: Point2,
+        area: f64,
+        total: f64,
+        limit: f64,
+    },
+    /// Two strips' flats come so close to touching (an edge `gap` from another, under `limit`)
+    /// that the exact overlap check cannot tell overlapping from touching.
+    FlatOverlapUndecided {
+        feature: FeatureId,
+        a: Strip,
+        b: Strip,
+        at: Point2,
+        gap: f64,
+        limit: f64,
+    },
     /// A trim curve of a kind this strip cannot carry yet (arcs and splines in a bend zone).
     TrimCurveUnsupported {
         feature: FeatureId,
@@ -315,12 +336,34 @@ pub enum SheetError {
 /// Built anyway, but worth a look.
 #[derive(Clone, Debug, PartialEq)]
 pub enum SheetWarning {
-    /// Two walls overlap in the flat pattern.
+    /// Two strips overlap in the flat pattern (the folded part may be fine): a single blank
+    /// cannot. `at` (developed coordinates) is on the overlap's edge; `area` is exact.
     FlatOverlap {
         feature: FeatureId,
-        walls: (WallId, WallId),
+        a: Strip,
+        b: Strip,
         at: Point2,
         area: f64,
+        /// Over every overlapping pair.
+        total: f64,
+        limit: f64,
+    },
+    /// The flat overlap check could not decide one pair (see `SheetError`).
+    FlatOverlapUndecided {
+        feature: FeatureId,
+        a: Strip,
+        b: Strip,
+        at: Point2,
+        gap: f64,
+        limit: f64,
+    },
+    /// Two strips of the folded part pass through each other (the flat may be fine).
+    FoldedClash {
+        feature: FeatureId,
+        a: Strip,
+        b: Strip,
+        at: Point3,
+        depth: f64,
         limit: f64,
     },
     /// A relief leaves a sliver of material beside the bend.
@@ -422,6 +465,60 @@ pub enum Violation {
 }
 
 impl SheetError {
+    /// The refusal of one map, as a warning on the other: a flat overlap, a folded clash.
+    pub fn as_warning(&self) -> Option<SheetWarning> {
+        match *self {
+            SheetError::FlatOverlap {
+                feature,
+                a,
+                b,
+                at,
+                area,
+                total,
+                limit,
+            } => Some(SheetWarning::FlatOverlap {
+                feature,
+                a,
+                b,
+                at,
+                area,
+                total,
+                limit,
+            }),
+            SheetError::FoldedClash {
+                feature,
+                a,
+                b,
+                at,
+                depth,
+                limit,
+            } => Some(SheetWarning::FoldedClash {
+                feature,
+                a,
+                b,
+                at,
+                depth,
+                limit,
+            }),
+            SheetError::FlatOverlapUndecided {
+                feature,
+                a,
+                b,
+                at,
+                gap,
+                limit,
+            } => Some(SheetWarning::FlatOverlapUndecided {
+                feature,
+                a,
+                b,
+                at,
+                gap,
+                limit,
+            }),
+            _ => None,
+        }
+    }
+
     /// A region boolean's refusal in one strip, its edges named through `trim_of`.
     pub fn from_region(
         feature: FeatureId,
