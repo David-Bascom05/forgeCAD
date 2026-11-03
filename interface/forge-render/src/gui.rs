@@ -33,7 +33,10 @@ struct Loaded {
     /// Its file, if it has one.
     file: Option<String>,
     name: String,
-    part: Part,
+    /// The .fc part its worker acts on; none for a Forge part, which `fg` builds.
+    part: Option<Part>,
+    /// Nothing in it yet: the view holds the origin's planes whole.
+    empty: bool,
     scene: Scene,
     /// Its pipelines take tens of milliseconds to make: on the loader's thread, never in a frame.
     renderer: Renderer,
@@ -51,7 +54,8 @@ pub struct View {
     size: (u32, u32),
     /// Its picture is out of date.
     dirty: bool,
-    pub live: Live<Out>,
+    /// The .fc worker; none for a Forge (.fg) part, which `fg` builds.
+    pub live: Option<Live<Out>>,
     pub motion: Option<Motion>,
     pub facts: Facts,
     /// What the view's click had selected, to see a new click by.
@@ -120,6 +124,9 @@ pub struct Gui {
     sketch_for: Option<(String, SketchFor, Vec<String>)>,
     /// What the `project` rows of the sketch being opened come to.
     sketch_sources: std::collections::HashMap<String, Result<Vec<forge_doc::sketch::Refd>, String>>,
+    /// A Forge (.fg) part, and its first view waiting for the layout.
+    pub fg: Option<crate::fg::Session>,
+    fg_view: Option<Loaded>,
     /// The GPU refused something: said once, and no more views are drawn.
     gpu_failed: Arc<std::sync::Mutex<Option<String>>>,
 }
@@ -135,7 +142,7 @@ fn view_camera(center: [f32; 3], radius: f32, parallel: bool, size: (u32, u32)) 
 
 fn name_of(path: &str) -> String {
     let n = path.rsplit('/').next().unwrap_or(path);
-    if n.ends_with(".fc") {
+    if n.ends_with(".fc") || n.ends_with(".fg") {
         n.to_string()
     } else {
         format!("{n}.fc")
@@ -218,6 +225,8 @@ impl Gui {
             sketch_sources: Default::default(),
             after_sketch: None,
             mark_held: None,
+            fg: None,
+            fg_view: None,
             gpu_failed,
         }
     }
@@ -248,6 +257,13 @@ impl Gui {
 
     /// Opens a part in the background: the window never waits on the kernel.
     pub fn open(&mut self, path: &str) {
+        if path.ends_with(".fg") {
+            self.open_fg(path);
+            return;
+        }
+        self.fg = None;
+        self.fg_view = None;
+        self.shell.fg = None;
         let (send, recv) = channel();
         self.loading = Some(recv);
         let (path, waker) = (path.to_string(), self.waker.clone());
@@ -273,7 +289,8 @@ impl Gui {
                 Ok(Loaded {
                     file: path.ends_with(".fc").then(|| path.clone()),
                     name: name_of(&path),
-                    part,
+                    empty: part.model.lines.is_empty(),
+                    part: Some(part),
                     scene,
                     renderer,
                     unshown,
@@ -299,6 +316,11 @@ impl Gui {
                 return;
             }
         };
+        self.show_loaded(l);
+    }
+
+    /// A part's view, its worker (for .fc) and its saved orientation.
+    fn show_loaded(&mut self, l: Loaded) {
         self.shell.unshown = l.unshown.is_some();
         let (scene, mut renderer) = (l.scene, l.renderer);
         let (center, radius) = scene.bounds();
@@ -308,7 +330,7 @@ impl Gui {
             l.name, size.0, size.1
         );
         // an empty part's view holds its planes whole
-        let fit = if l.part.model.lines.is_empty() {
+        let fit = if l.empty {
             radius * 1.6
         } else {
             radius
@@ -321,9 +343,12 @@ impl Gui {
         let tex = self
             .egui
             .register_native_texture(&self.device, &raw, wgpu::FilterMode::Nearest);
-        let mut live = live::start(l.part);
-        let w = self.waker.clone();
-        live.on_ready(move || w());
+        let live = l.part.map(|p| {
+            let mut live = live::start(p);
+            let w = self.waker.clone();
+            live.on_ready(move || w());
+            live
+        });
         let mut nav = Nav::new(camera, size, self.pixels_per_point);
         nav.tool = self.shell.view.tool;
         if let Some(f) = &l.file {
@@ -385,7 +410,8 @@ impl Gui {
     /// What the worker has finished.
     fn take_live(&mut self) {
         let Some(v) = &mut self.view else { return };
-        let events = v.live.poll();
+        let Some(l) = &mut v.live else { return };
+        let events = l.poll();
         let part = v.scene.placements[0].part;
         for e in events {
             match e {
@@ -633,7 +659,9 @@ impl Gui {
                 v.nav.selected.clear();
                 v.clicked.clear();
                 if !refs.is_empty() {
-                    v.live.sketch_sources(at, refs, true);
+                    if let Some(l) = &mut v.live {
+                        l.sketch_sources(at, refs, true);
+                    }
                 }
                 v.dirty = true;
             }
@@ -1229,12 +1257,31 @@ impl Gui {
     fn apply(&mut self) -> Vec<Action> {
         let mut host = Vec::new();
         for a in std::mem::take(&mut self.shell.out) {
+            if let Some(s) = &mut self.fg {
+                // a Forge part's document changes only by typed ops, from its own panel
+                match a {
+                    Action::Undo => {
+                        s.undo();
+                        self.fg_text();
+                        continue;
+                    }
+                    Action::Redo => {
+                        s.redo();
+                        self.fg_text();
+                        continue;
+                    }
+                    a if fc_only(a) => continue,
+                    _ => {}
+                }
+            }
             match a {
                 Action::Undo | Action::Redo => {
                     let call = if a == Action::Undo { Call::Undo } else { Call::Redo };
                     if let Some(v) = &mut self.view {
                         self.calls.push(call.clone());
-                        v.live.call(vec![call]);
+                        if let Some(l) = &mut v.live {
+                            l.call(vec![call]);
+                        }
                     }
                 }
                 Action::LookAt => {
@@ -1371,7 +1418,9 @@ impl Gui {
                 Action::EndAt(to) => {
                     self.shell.end_at = to;
                     if let Some(v) = &mut self.view {
-                        v.live.roll(to);
+                        if let Some(l) = &mut v.live {
+                            l.roll(to);
+                        }
                     }
                 }
                 Action::DimDrag(value) => self.dim_drag(value),
@@ -1433,9 +1482,13 @@ impl Gui {
         self.sketch_for = Some((head.clone(), edit, rows));
         if let Some(v) = &mut self.view {
             if !refs.is_empty() {
-                v.live.sketch_sources(at, refs, false);
+                if let Some(l) = &mut v.live {
+                    l.sketch_sources(at, refs, false);
+                }
             }
-            v.live.sketch_plane(head);
+            if let Some(l) = &mut v.live {
+                l.sketch_plane(head);
+            }
         }
     }
 
@@ -1521,7 +1574,9 @@ impl Gui {
         };
         if let Some(v) = &mut self.view {
             self.calls.extend(calls.iter().cloned());
-            v.live.call(calls);
+            if let Some(l) = &mut v.live {
+                l.call(calls);
+            }
         }
         self.shell.tab = 0;
         self.after_sketch = self.shell.then_feature.take();
@@ -1569,13 +1624,15 @@ impl Gui {
         d.error = None;
         match call {
             Some(call) => {
-                d.seq = v.live.preview(vec![call]);
+                d.seq = v.live.as_mut().map_or(0, |l| l.preview(vec![call]));
                 v.previewing = true;
             }
             // nothing to show yet: what was shown goes
             None if v.previewing => {
                 v.previewing = false;
-                v.live.preview_end();
+                if let Some(l) = &mut v.live {
+                    l.preview_end();
+                }
             }
             None => {}
         }
@@ -1586,7 +1643,9 @@ impl Gui {
             && v.previewing
         {
             v.previewing = false;
-            v.live.preview_end();
+            if let Some(l) = &mut v.live {
+                l.preview_end();
+            }
         }
     }
 
@@ -1598,7 +1657,9 @@ impl Gui {
         d.awaiting = true;
         v.previewing = false;
         self.calls.push(call.clone());
-        v.live.call(vec![call]);
+        if let Some(l) = &mut v.live {
+            l.call(vec![call]);
+        }
     }
 
     fn param_names(&self) -> Vec<String> {
@@ -1646,7 +1707,9 @@ impl Gui {
     fn tool(&mut self, call: Call) {
         if let Some(v) = &mut self.view {
             self.calls.push(call.clone());
-            v.live.call(vec![call]);
+            if let Some(l) = &mut v.live {
+                l.call(vec![call]);
+            }
         }
     }
 
@@ -1656,7 +1719,9 @@ impl Gui {
         };
         e.value = value;
         v.live_drag = true;
-        v.live.drag(e.handle.at.op(short(value)));
+        if let Some(l) = &mut v.live {
+            l.drag(e.handle.at.op(short(value)));
+        }
     }
 
     /// The tool call that sets this number: the same one an agent would send.
@@ -1677,7 +1742,9 @@ impl Gui {
             return;
         };
         e.dragging = false;
-        v.live.commit(e.handle.at.op(short(value)));
+        if let Some(l) = &mut v.live {
+            l.commit(e.handle.at.op(short(value)));
+        }
         self.calls.push(Self::call_of(e.handle.at, short(value)));
     }
 
@@ -1688,7 +1755,9 @@ impl Gui {
         e.dragging = false;
         e.value = e.handle.value;
         e.error = None;
-        v.live.cancel();
+        if let Some(l) = &mut v.live {
+            l.cancel();
+        }
     }
 
     fn dim_type(&mut self, text: String) {
@@ -1697,7 +1766,9 @@ impl Gui {
         };
         let call = Self::call_of(e.handle.at, text);
         self.calls.push(call.clone());
-        v.live.call(vec![call]);
+        if let Some(l) = &mut v.live {
+            l.call(vec![call]);
+        }
     }
 
     /// Home and the cube's names, beside the part in `PART.fc.view`: they're no part of what builds.
@@ -1822,6 +1893,7 @@ impl Gui {
         }
         self.take_loaded();
         self.take_live();
+        self.take_fg();
         times.events = now_ms() - t0;
         let mut animating = false;
         if let Some(v) = &mut self.view {
@@ -1856,6 +1928,7 @@ impl Gui {
         self.sync_selection();
         self.pixels_per_point = output.pixels_per_point;
         let host = self.apply();
+        self.apply_fg();
         times.ui = now_ms() - t0;
 
         if self.shell.tree_hover != self.tree_hover_was {
@@ -2491,5 +2564,191 @@ impl Headless {
             }
         }
         out
+    }
+}
+
+/// What only an .fc part's worker can do: a Forge part's edits are its panel's typed ops.
+fn fc_only(a: Action) -> bool {
+    matches!(
+        a,
+        Action::SetUnits(_)
+            | Action::StartSketch
+            | Action::SketchTool(_)
+            | Action::EditInline(_)
+            | Action::FinishSketch
+            | Action::CancelSketch
+            | Action::NewFeature(_)
+            | Action::DialogOk
+            | Action::DialogCancel
+            | Action::Edit(_)
+            | Action::Delete(_)
+            | Action::Suppress(_)
+            | Action::Unsuppress(_)
+            | Action::Reorder(..)
+            | Action::EndAt(_)
+            | Action::StartRename(_)
+            | Action::DimDrag(_)
+            | Action::DimCommit(_)
+            | Action::DimCancel
+    )
+}
+
+impl Gui {
+    /// Opens a Forge (.fg) part: its worker builds it at once, and keeps its stages warm after.
+    fn open_fg(&mut self, path: &str) {
+        let gpu = (self.device.clone(), self.queue.clone(), self.adapter.clone());
+        let waker = self.waker.clone();
+        let waker: Arc<dyn Fn() + Send + Sync> = Arc::new(move || waker());
+        match crate::fg::Session::open(path, Some(gpu), waker) {
+            Ok(s) => {
+                let name = name_of(path);
+                self.shell.fg = Some(crate::shell::fg::FgPanel {
+                    file: name.clone(),
+                    source: s.src.clone(),
+                    ..Default::default()
+                });
+                self.fg = Some(s);
+                self.fg_view = None;
+                self.loading = None;
+                self.view = None;
+                self.shell.view_tex = None;
+                self.shell.doc = None;
+                self.shell.rows.clear();
+                self.shell.selected = None;
+                self.shell.dialog = None;
+                self.shell.dim = None;
+                self.shell.sketch = None;
+                self.shell.sketch_shapes.clear();
+                self.shell.flags.clear();
+                self.shell.name = name.clone();
+                self.shell.status = format!("Opening {name}");
+            }
+            Err(why) => self.shell.status = why,
+        }
+    }
+
+    /// The panel's text and dirty mark, after the session's text changed.
+    fn fg_text(&mut self) {
+        if let (Some(s), Some(p)) = (&self.fg, &mut self.shell.fg) {
+            p.source = s.src.clone();
+            p.dirty = s.dirty();
+        }
+    }
+
+    /// What the Forge worker has built: the panel's rows, the part's mesh.
+    fn take_fg(&mut self) {
+        let Some(s) = &mut self.fg else { return };
+        for b in s.poll() {
+            if let Some(p) = &mut self.shell.fg {
+                p.summary = b.summary();
+                p.feats = b.feats;
+                p.params = b.params;
+                p.issues = b.issues;
+                if p.selected.as_ref().is_some_and(|k| {
+                    !p.feats.iter().any(|f| f.id == *k || f.id.starts_with(&format!("{k}.")) || f.id.starts_with(&format!("{k}[")))
+                }) {
+                    p.selected = None;
+                }
+                self.shell.status = p.summary.clone();
+            }
+            if let Some((renderer, scene)) = b.view {
+                self.fg_view = Some(Loaded {
+                    file: s.path.clone(),
+                    name: name_of(s.path.as_deref().unwrap_or("part.fg")),
+                    part: None,
+                    empty: b.measure.is_none(),
+                    scene,
+                    renderer,
+                    unshown: None,
+                });
+            }
+            if let Some(m) = b.mesh {
+                if let Some(l) = &mut self.fg_view {
+                    l.renderer.set_parts(std::slice::from_ref(&m));
+                    let chords = m.lods.iter().map(|x| x.chord).collect();
+                    l.scene.set_part(0, m.center, m.radius, chords);
+                } else if let Some(v) = &mut self.view {
+                    let part = v.scene.placements[0].part;
+                    v.renderer.set_parts(std::slice::from_ref(&m));
+                    let chords = m.lods.iter().map(|x| x.chord).collect();
+                    v.scene.set_part(part, m.center, m.radius, chords);
+                    v.dirty = true;
+                }
+            }
+        }
+        self.fg_text();
+        // the view takes its size from the layout
+        if self.shell.view_rect.area() > 0.0
+            && let Some(l) = self.fg_view.take()
+        {
+            let status = std::mem::take(&mut self.shell.status);
+            self.show_loaded(l);
+            self.shell.status = status;
+        }
+    }
+
+    /// The Forge panel's asks: typed ops, through forge-lang; saving.
+    fn apply_fg(&mut self) {
+        let acts = self
+            .shell
+            .fg
+            .as_mut()
+            .map(|p| std::mem::take(&mut p.out))
+            .unwrap_or_default();
+        for a in acts {
+            match a {
+                crate::shell::fg::FgAct::Apply(op) => {
+                    let _ = self.fg_apply(op);
+                }
+                crate::shell::fg::FgAct::Save => self.fg_save(),
+            }
+        }
+    }
+
+    /// Applies a typed op to the Forge part, as the panel does: refused with its typed error, or
+    /// applied and rebuilt.
+    pub fn fg_apply(&mut self, op: forge_lang::error::Op) -> Result<(), String> {
+        let Some(s) = &mut self.fg else {
+            return Err("no Forge part open".into());
+        };
+        let label = crate::shell::fg::op_label(&op);
+        let got = s.apply(op);
+        let p = self.shell.fg.as_mut();
+        match got {
+            Ok(reach) => {
+                self.shell.status = match reach {
+                    Some(r) => format!(
+                        "{label}: {} values in {}{}",
+                        r.values,
+                        r.features.join(", "),
+                        if r.structural { " (structural: re-runs)" } else { "" }
+                    ),
+                    None => label,
+                };
+                if let Some(p) = p {
+                    p.refused = None;
+                }
+                self.fg_text();
+                Ok(())
+            }
+            Err(e) => {
+                let why = format!("{}: {}", e.kind(), e.text());
+                if let Some(p) = p {
+                    p.refused = Some(why.clone());
+                }
+                self.shell.status = format!("{label} refused: {why}");
+                Err(why)
+            }
+        }
+    }
+
+    /// Writes the Forge part's text to its file.
+    pub fn fg_save(&mut self) {
+        let Some(s) = &mut self.fg else { return };
+        self.shell.status = match s.save() {
+            Ok(()) => format!("Saved {}", s.path.as_deref().unwrap_or("")),
+            Err(why) => why,
+        };
+        self.fg_text();
     }
 }
