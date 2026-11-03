@@ -19,6 +19,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 pub const BUILTINS: &[&str] = &[
+    "use",
     "sqrt",
     "div",
     "mod",
@@ -863,6 +864,7 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
         "tangent" | "coincident" | "horizontal" | "vertical" | "parallel" | "perpendicular" | "equal"
         | "midpoint" | "distance" | "radius" | "angle" | "fix" => constraint(ev, name, args, span),
         "extrude" | "cut" | "intersect" => extrude(ev, name, args, span),
+        "use" => crate::uses::call(ev, args, span),
         n if crate::sheet::BUILTINS.contains(&n) => crate::sheet::call(ev, name, args, span),
         "revolve" => revolve(ev, args, span),
         "fillet" => crate::fillets::fillet(ev, args, span),

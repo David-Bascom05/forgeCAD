@@ -178,6 +178,12 @@ fn precheck(src: &str, prog: &[Stmt], op: &Op) -> R<()> {
     };
     match op {
         Op::SetParam { param, value } => {
+            // a used file's param is edited in that file, never in this one
+            if param_stmt(prog, param).is_none()
+                && let Some(e) = crate::uses::edit_target(prog, param)
+            {
+                return Err(e);
+            }
             known(param)?;
             if !value.value.is_finite() {
                 return Err(Error::NotFinite {

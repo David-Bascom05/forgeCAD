@@ -24,6 +24,7 @@ pub mod shapes;
 pub mod sheet;
 pub mod sketch;
 pub mod syntax;
+pub mod uses;
 pub mod validity;
 pub mod values;
 pub mod wired;

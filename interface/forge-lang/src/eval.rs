@@ -128,6 +128,8 @@ pub struct FnDef {
     pub params: Vec<syntax::FnParam>,
     pub body: Rc<Vec<Stmt>>,
     pub span: Span,
+    /// A function of a used file (`uses.rs`): its body sees that file's names, not the caller's.
+    pub lib: Option<std::rc::Weak<crate::uses::Lib>>,
 }
 
 #[derive(Clone, Debug)]
@@ -304,6 +306,14 @@ pub struct Eval<'s> {
     pub asm: Option<crate::asm::Doc>,
     /// The session's root, canonical: no file outside it is read (fonts, imports, parts).
     pub root: Option<std::path::PathBuf>,
+    /// The files `use` read (`uses.rs`), kept while their functions may be called.
+    pub libs: Vec<Rc<crate::uses::Lib>>,
+    /// The files being used, outermost first: a file already here is a `use` cycle.
+    pub use_chain: Vec<std::path::PathBuf>,
+    /// Inside a used file's function: that file's names.
+    lib: Option<Rc<crate::uses::Lib>>,
+    /// Inside a used file's function: the call in this document, where what it makes is shown.
+    lib_call: Option<Span>,
 }
 
 #[derive(Clone)]
@@ -362,6 +372,10 @@ impl<'s> Eval<'s> {
             dir: None,
             asm: None,
             root: None,
+            libs: vec![],
+            use_chain: vec![],
+            lib: None,
+            lib_call: None,
         }
     }
 
@@ -378,6 +392,29 @@ impl<'s> Eval<'s> {
         self.scopes.truncate(mark.max(1));
     }
 
+    /// One top-level statement, as `run` takes it (a used file's).
+    pub(crate) fn run_one(&mut self, s: &Stmt) -> R<()> {
+        self.ctx.top_stmt = Some(s.full);
+        self.calls = 0;
+        self.stmt(s)
+    }
+
+    /// The name an assignment gives the call at `span`, if the call is that assignment's.
+    pub(crate) fn binding(&mut self, span: Span) -> Option<String> {
+        match self.ctx.pending.take() {
+            Some((n, sp)) if sp == span => Some(n),
+            other => {
+                self.ctx.pending = other;
+                None
+            }
+        }
+    }
+
+    /// At a document's top level: not in a function, loop, sketch or path.
+    pub(crate) fn at_top(&self) -> bool {
+        self.ctx.in_fn == 0 && self.ctx.loops.is_empty() && self.sketch.is_none() && self.path.is_none()
+    }
+
     /// The top-level names and their values, by name.
     pub fn globals(&self) -> Vec<(String, Value)> {
         let mut out: Vec<(String, Value)> = self.scopes[0]
@@ -390,6 +427,8 @@ impl<'s> Eval<'s> {
 
     /// The feature path being made (the call path and loop indices), for a record of its own.
     pub fn record(&mut self, id: &str, kind: &'static str, span: Span, dims: Vec<Dimension>) {
+        // made by a used file's function: shown at the call in this document
+        let span = self.lib_call.unwrap_or(span);
         self.feats.push(FeatInfo {
             id: id.into(),
             kind,
@@ -865,6 +904,7 @@ impl<'s> Eval<'s> {
                         params: params.clone(),
                         body: Rc::new(body.clone()),
                         span: s.span,
+                        lib: None,
                     }),
                 );
                 Ok(())
@@ -1112,6 +1152,22 @@ impl<'s> Eval<'s> {
             if let Some((v, _)) = scope.get(name) {
                 return Ok(v.clone());
             }
+        }
+        // a used file's function sees that file's names and the built-ins, nothing of the caller
+        if let Some(lib) = self.lib.clone() {
+            if let Some(v) = lib.names.borrow().get(name) {
+                return Ok(v.clone());
+            }
+            if let Some(v) = crate::builtins::constant(name) {
+                return Ok(v);
+            }
+            if let Some(b) = crate::builtins::builtin(name) {
+                return Ok(Value::Builtin(b));
+            }
+            return Err(Error::UnknownName {
+                span,
+                name: name.into(),
+            });
         }
         let here = self.ctx.owner.clone();
         let best = self
@@ -1553,6 +1609,29 @@ impl<'s> Eval<'s> {
     }
 
     fn call_fn(&mut self, def: &Rc<FnDef>, args: &[Arg], span: Span) -> R<Value> {
+        let Some(lib) = def.lib.as_ref().and_then(|w| w.upgrade()) else {
+            let here = self.lib.clone();
+            return self.call_fn_here(def, args, span, here);
+        };
+        // a used file's function: its defaults and body see that file's names; what goes wrong
+        // inside is shown at this call, naming the file
+        let outer = (self.lib.replace(lib.clone()), self.lib_call);
+        if self.lib_call.is_none() {
+            self.lib_call = Some(span);
+        }
+        let r = self.call_fn_here(def, args, span, outer.0.clone());
+        (self.lib, self.lib_call) = outer;
+        r.map_err(|e| crate::uses::in_file(&lib, span, e))
+    }
+
+    /// `caller`: the names the arguments are read in (the caller's used file, or none).
+    fn call_fn_here(
+        &mut self,
+        def: &Rc<FnDef>,
+        args: &[Arg],
+        span: Span,
+        caller: Option<Rc<crate::uses::Lib>>,
+    ) -> R<Value> {
         // recursion is allowed; each top-level statement has a budget of calls
         self.calls += 1;
         if self.calls > CALL_BUDGET || self.ctx.in_fn >= DEPTH_BUDGET {
@@ -1584,8 +1663,11 @@ impl<'s> Eval<'s> {
                 }
                 None => def.params[k].name.clone(),
             };
-            let v = self.expr(&a.value)?;
-            scope.insert(pname, (v, a.value.span));
+            // arguments are the caller's: read in the caller's names
+            let inner = std::mem::replace(&mut self.lib, caller.clone());
+            let v = self.expr(&a.value);
+            self.lib = inner;
+            scope.insert(pname, (v?, a.value.span));
         }
         for p in &def.params {
             if !scope.contains_key(&p.name) {
@@ -1944,7 +2026,7 @@ fn skb_p2(sk: &Rc<RefCell<Sk>>, p: crate::sketch::P2, span: Span) -> R<EntityId>
 
 /// A param's value as read by name: the param drives it; the items of a list or tuple param are
 /// driven by it (one param, many values: no single handle).
-fn driving(v: &Value, key: &ParamKey, span: Span) -> Value {
+pub(crate) fn driving(v: &Value, key: &ParamKey, span: Span) -> Value {
     let _ = span;
     fn inner(v: &Value, key: &ParamKey) -> Value {
         match v {
