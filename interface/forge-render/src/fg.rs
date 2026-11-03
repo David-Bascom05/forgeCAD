@@ -365,20 +365,6 @@ pub fn rows(run: &Run, src: &str) -> (Vec<FeatRow>, Vec<ParamRow>, Vec<Issue>) {
                 });
                 continue;
             }
-            // an assembly's note: an interference, a redundant mate, a shallow engagement, ..
-            Warning::Asm(n) => {
-                let (line, col, ..) = n.span.lines(src);
-                issues.push(Issue {
-                    severity: Severity::Warning,
-                    kind: n.kind().into(),
-                    text: n.text(),
-                    line,
-                    col,
-                    fixes: n.fixes(),
-                    feature: None,
-                });
-                continue;
-            }
             Warning::UnderConstrained { span, sketch, dof } => (
                 "UnderConstrained",
                 *span,
