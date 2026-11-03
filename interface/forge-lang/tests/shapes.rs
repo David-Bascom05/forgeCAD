@@ -443,3 +443,35 @@ fn faces_deleted_replaced_and_moved() {
         ["NotWith"]
     );
 }
+
+#[test]
+fn a_cap_moved_by_a_later_edit_is_still_its_cap() {
+    let base = "shared L = 40\nshared g = 2\nshared r = 3\nsketch s(on: xy) {\n  o = rect(center: (0, 0), size: (L, L))\n}\nb = extrude(s, L)\ngrow = offset_faces(b.faces, g)\n";
+    let plain = volume(&ok(base));
+    let r = ok(&format!(
+        "{base}round = fillet(edges(of: b.end), r)\nsketch top(on: b.end) {{\n  c = circle((0, 0), r)\n}}\nstub = extrude(top.c, r)\n"
+    ));
+    // the top's four edges rounded, a stub stood on the moved top
+    let stub = PI * 27.0;
+    let rounds = 4.0 * 44.0 * 9.0 * (1.0 - PI / 4.0);
+    assert!(
+        (volume(&r) - (plain + stub - rounds)).abs() < 0.5 * rounds,
+        "{} vs {}",
+        volume(&r),
+        plain + stub - rounds
+    );
+}
+
+#[test]
+fn face_sets_add_and_an_empty_one_is_no_silent_drop() {
+    // the top and the blends round it, as one smooth sheet
+    let base = format!("{BOX}round = fillet(edges(between: (box.end, box.side(base.r[0]))), t + t)\n");
+    let plain = volume(&ok(&base));
+    let r = ok(&format!("{base}slab = thicken(box.end + round.faces, t)\n"));
+    assert!(volume(&r) - plain > 56.0 * 36.0 * 2.0, "{} {plain}", volume(&r));
+    // a cut's start is gone from the part: rounding its edges is an empty selection, not nothing
+    let src = format!(
+        "{BOX}sketch k(on: box.end) {{\n  o = rect(center: (0, 0), size: (t, t))\n}}\npit = cut(k, t)\nround = fillet(edges(of: pit.start), t)\n"
+    );
+    assert_eq!(errors(&src), ["EmptySelection"]);
+}

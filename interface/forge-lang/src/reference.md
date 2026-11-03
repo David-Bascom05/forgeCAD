@@ -76,7 +76,8 @@ Dimensions: `Length` (a bare number in a param, or `mm`), `Angle` (`deg`), `Coun
 takes Angles and gives Ratios. Mixing them otherwise is the error `DimMismatch` or `WrongDim`; a
 size is never a count, and a count over a size is nothing. A bare number takes the other side's
 dimension, in a param too: `W / 2` and `W * 0.25` are Lengths, `1 / n` a Ratio; a param whose
-value is still bare is a Length (`shared t = 6`).
+value is still bare is a Length (`shared t = 6`). A bare number times a Ratio is a Ratio:
+`shared k = 38 * sin(60deg)` is a Ratio; write `shared pcd = 38` and use `pcd * sin(60deg)`.
 
 A param's right side may be any expression of earlier params: shared ones, the same feature's own,
 and another feature's by its full name (`param bore.r = hub.r - 1`): an explicit link, shown as a
@@ -301,8 +302,12 @@ edges(of: F | [F..] | FACES, between: (A, B), crease: "concave"|"convex"|"smooth
       shape: "line"|"circle"|"curve", along: DIR, r: R, longer: L, shorter: L)
 faces(of: F | [F..], shape: "plane"|"cyl"|"cone"|"sphere"|"torus"|"blend", normal: DIR, r: R)
 EDGES + EDGES
+FACES + FACES                       one face set (a slab, an offset over several features' faces)
 ```
 
+An empty face set on a part built without an earlier failure is an empty selection
+(`EmptySelection` at a fillet or chamfer), never silently nothing. A cap (`E.start`, `E.end`) a
+later edit moved is still found by its name, its plane where it is now.
 `of` means made by (lineage through later booleans); `between: (A, B)` the edges where A's faces
 meet B's, A and B features or face sets. Directions may be world axes `X Y Z` here (orientation,
 not placement). Selecting by where things lie (`extreme:`) is the error `PositionalSelection`:

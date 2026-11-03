@@ -157,7 +157,10 @@ impl Args {
                 crate::eval::collect_params(&v, &mut sk.borrow_mut().params);
             }
             crate::eval::collect_params(&v, &mut ev.reads);
-            ev.poisoned |= unknown_in(&v);
+            // an empty face set is unknown only after an earlier failure (or in `check`); on a
+            // part built so far without one, it is a selection that found nothing
+            let known_empty = ev.b.building && ev.errors.is_empty() && !unresolved_in(&v);
+            ev.poisoned |= unknown_in(&v) && !known_empty;
             vals.insert(key, (v, a.value.span));
         }
         Ok(Args { func, call, vals })
@@ -199,6 +202,16 @@ impl Args {
                 found: o.ty(),
             }),
         }
+    }
+}
+
+/// Whether a value is, or holds, `Unresolved`.
+fn unresolved_in(v: &Value) -> bool {
+    match v {
+        Value::Unresolved => true,
+        Value::List(xs) | Value::Tuple(xs) => xs.iter().any(unresolved_in),
+        Value::Map(m) => m.iter().any(|x| unresolved_in(&x.1)),
+        _ => false,
     }
 }
 
@@ -1605,7 +1618,9 @@ fn finish(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Valu
                 }
                 edges.extend(es.into_iter().map(|e| (e, r.v)));
             }
-            // what an earlier error left unknown: nothing to build
+            // what an earlier error left unknown: nothing to build; with no error before, the
+            // selection found nothing on the part
+            None if ev.b.building && ev.errors.is_empty() => return Err(Error::EmptySelection { span: *sp }),
             None if ev.b.building => return Ok(Value::Unresolved),
             None => {}
         }
@@ -1745,33 +1760,44 @@ fn cap(ev: &mut Eval, f: &Feat, end: bool) -> Value {
     });
     let root = Name::feature(f.hid);
     // which of the tool's caps lies where: the one the kernel names "start" sits at the sketch
-    // unless the extrude ran backwards
+    // unless the extrude ran backwards. Asked of the part as the feature left it, so a cap a
+    // later edit moved (an offset, a draft, a slab) is still found by its name.
     let names = [forge_ops::roles::start(root), forge_ops::roles::end(root)];
-    let mut v = role_set(ev, f, if end { Role::End } else { Role::Start }, &names, frame);
-    if let (Value::Faces(fs), Some(fr)) = (&v, frame)
-        && let Some(body) = ev.b.body()
-    {
-        let on: Vec<Name> = fs
-            .names
+    let at_height = |body: &Body, fr: Frame, nm: Name| {
+        crate::build::role_faces(body, nm).into_iter().any(|x| {
+            face_plane(body, x).is_some_and(|fp| (fp.origin - fr.origin).dot(fr.z().get()).abs() < 1e-6)
+        })
+    };
+    let own = ev.b.stages.get(f.idx).cloned();
+    let picked: Vec<Name> = match (frame, own.as_ref().and_then(|s| s.view())) {
+        (Some(fr), Some(body)) => names
             .iter()
             .copied()
-            .filter(|nm| {
-                body.face_ids()
-                    .find(|&x| body.face(x).name == *nm)
-                    .is_some_and(|x| {
-                        face_plane(body, x)
-                            .is_some_and(|fp| (fp.origin - fr.origin).dot(fr.z().get()).abs() < 1e-6)
-                    })
-            })
-            .collect();
-        v = Value::Faces(Rc::new(Faces {
-            names: on,
-            owner: fs.owner.clone(),
-            role: fs.role,
-            plane: fs.plane,
-        }));
+            .filter(|&nm| at_height(body, fr, nm))
+            .collect(),
+        _ => names.to_vec(),
+    };
+    let v = role_set(ev, f, if end { Role::End } else { Role::Start }, &picked, frame);
+    // its plane where the face is now
+    match (&v, frame, ev.b.body()) {
+        (Value::Faces(fs), Some(fr), Some(body)) => {
+            let now = fs
+                .names
+                .first()
+                .and_then(|n| body.face_ids().find(|&x| body.face(x).name == *n))
+                .and_then(|x| face_plane(body, x));
+            match now {
+                Some(fp) if (fp.origin - fr.origin).dot(fr.z().get()).abs() >= 1e-6 => {
+                    Value::Faces(Rc::new(Faces {
+                        plane: Some(carried(fp, fr)),
+                        ..(**fs).clone()
+                    }))
+                }
+                _ => v,
+            }
+        }
+        _ => v,
     }
-    v
 }
 
 /// A local param of feature `id` read from outside it.
@@ -1906,7 +1932,7 @@ pub fn member(ev: &mut Eval, v: Value, name: &str, span: Span) -> R<Value> {
             }))),
             "normal" => Ok(Value::Dir(plane_of(ev, v.clone(), span, "normal")?.z().get())),
             "edges" => {
-                if !ev.b.building || fs.names.is_empty() {
+                if !ev.b.building || (fs.names.is_empty() && !ev.errors.is_empty()) {
                     return Ok(Value::Unresolved);
                 }
                 let body = ev.b.body().expect("built");

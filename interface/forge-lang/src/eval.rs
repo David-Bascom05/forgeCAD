@@ -1960,6 +1960,20 @@ pub fn arith(op: BinOp, x: &Value, y: &Value, span: Span, sa: Span, sb: Span) ->
             v.extend(b.iter().cloned());
             Ok(Value::List(Rc::new(v)))
         }
+        (Value::Faces(a), Value::Faces(b)) if op == BinOp::Add => {
+            let mut names = a.names.clone();
+            for n in &b.names {
+                if !names.contains(n) {
+                    names.push(*n);
+                }
+            }
+            Ok(Value::Faces(Rc::new(Faces {
+                names,
+                owner: format!("{} + {}", a.owner, b.owner),
+                role: crate::error::Role::Faces,
+                plane: None,
+            })))
+        }
         (Value::Edges(a), Value::Edges(b)) if op == BinOp::Add => {
             let mut v = (**a).clone();
             for n in b.iter() {
