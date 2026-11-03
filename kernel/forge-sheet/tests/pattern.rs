@@ -408,7 +408,11 @@ fn layout_places_each_wall_on_its_reference_skin() {
 
 #[test]
 fn shop_checks() {
-    let scaled = |per_t: f64| Scaled { per_t, plus: 0.0 };
+    let scaled = |per_t: f64| Scaled {
+        per_t,
+        per_r: 0.0,
+        plus: 0.0,
+    };
     let stock = Stock {
         thickness: 2.0,
         rule: BendRule::K(0.4),
@@ -419,11 +423,28 @@ fn shop_checks() {
         min_slot: scaled(1.0),
         relief_width: scaled(1.0),
         relief_depth: scaled(1.0),
+        min_hole: scaled(0.0),
+        hardness: None,
     };
-    let shop = ShopProfile { stock: vec![stock] };
+    let shop = ShopProfile {
+        stock: vec![stock],
+        hardware: vec![],
+    };
     // flanges 25 and 20 long; the die needs 22
     let s = u_part(0.4);
-    let v = check(&s, &shop);
+    // (the holes' own checks are tested on their own)
+    let v: Vec<Violation> = check(&s, &shop)
+        .into_iter()
+        .filter(|v| {
+            !matches!(
+                v,
+                Violation::HoleNearBend { .. }
+                    | Violation::HoleNearEdge { .. }
+                    | Violation::SlotTooNarrow { .. }
+                    | Violation::HoleTooSmall { .. }
+            )
+        })
+        .collect();
     assert_eq!(v.len(), 1, "{v:?}");
     assert!(
         matches!(v[0], Violation::FlangeTooShort { wall: WallId(2), length, limit, .. }

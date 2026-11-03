@@ -106,6 +106,7 @@ pub struct RuleV {
 #[derive(Clone, Debug)]
 pub struct ScaledV {
     pub per_t: Num,
+    pub per_r: Num,
     pub plus: Num,
 }
 
@@ -157,6 +158,7 @@ impl SheetVal {
             SheetVal::Rule(r) => SheetVal::Rule(Rc::new(rule(r))),
             SheetVal::Scaled(s) => SheetVal::Scaled(Rc::new(ScaledV {
                 per_t: d(&s.per_t),
+                per_r: d(&s.per_r),
                 plus: d(&s.plus),
             })),
             SheetVal::Stock(s) => SheetVal::Stock(Rc::new(stock(s))),
@@ -184,6 +186,7 @@ impl SheetVal {
             }
             SheetVal::Scaled(s) => {
                 out.extend(s.per_t.src.params());
+                out.extend(s.per_r.src.params());
                 out.extend(s.plus.src.params());
             }
             SheetVal::Stock(s) => stock(s, out),
@@ -477,18 +480,26 @@ pub struct SheetNote {
 
 impl SheetNote {
     pub fn kind(&self) -> &'static str {
+        use fs::SheetWarning as W;
+        use fs::Violation as V;
         match &self.note {
             Note::Warning(w) => match w {
-                fs::SheetWarning::FlatOverlap { .. } => "FlatOverlap",
-                fs::SheetWarning::ReliefRemnant { .. } => "ReliefRemnant",
+                W::FlatOverlap { .. } => "FlatOverlap",
+                W::ReliefRemnant { .. } => "ReliefRemnant",
+                W::UnverifiedHardware { .. } => "UnverifiedHardware",
             },
             Note::Violation(v) => match v {
-                fs::Violation::HoleNearBend { .. } => "HoleNearBend",
-                fs::Violation::HoleNearEdge { .. } => "HoleNearEdge",
-                fs::Violation::FlangeTooShort { .. } => "FlangeTooShort",
-                fs::Violation::RadiusNotTooled { .. } => "RadiusNotTooled",
-                fs::Violation::ThicknessNotStocked { .. } => "ThicknessNotStocked",
-                fs::Violation::SlotTooNarrow { .. } => "SlotTooNarrow",
+                V::HoleNearBend { .. } => "HoleNearBend",
+                V::HoleNearEdge { .. } => "HoleNearEdge",
+                V::FlangeTooShort { .. } => "FlangeTooShort",
+                V::RadiusNotTooled { .. } => "RadiusNotTooled",
+                V::ThicknessNotStocked { .. } => "ThicknessNotStocked",
+                V::SlotTooNarrow { .. } => "SlotTooNarrow",
+                V::HoleTooSmall { .. } => "HoleTooSmall",
+                V::HardwareThickness { .. } => "HardwareThickness",
+                V::HardwareNearEdge { .. } => "HardwareNearEdge",
+                V::SheetTooHard { .. } => "SheetTooHard",
+                V::HardnessUnknown { .. } => "HardnessUnknown",
             },
         }
     }
@@ -501,12 +512,15 @@ impl SheetNote {
     }
 
     pub fn data(&self) -> Vec<(&'static str, Json)> {
+        use fs::SheetWarning as W;
+        use fs::Violation as V;
         let n = &self.names;
         let f = |x: f64| Json::Num(x);
+        let v2 = |v: Vec3Ish| Json::Arr(vec![v.0.into(), v.1.into()]);
         let mut v: Vec<(&'static str, Json)> = vec![("id", self.id.as_str().into())];
         match &self.note {
             Note::Warning(w) => match *w {
-                fs::SheetWarning::FlatOverlap {
+                W::FlatOverlap {
                     walls,
                     at,
                     area,
@@ -521,7 +535,7 @@ impl SheetNote {
                     ("area", f(area)),
                     ("limit", f(limit)),
                 ]),
-                fs::SheetWarning::ReliefRemnant {
+                W::ReliefRemnant {
                     joint,
                     remnant,
                     limit,
@@ -531,14 +545,16 @@ impl SheetNote {
                     ("remnant", f(remnant)),
                     ("limit", f(limit)),
                 ]),
+                W::UnverifiedHardware { cut, .. } => v.push(("cut", n.cut(cut).into())),
             },
             Note::Violation(x) => match *x {
-                fs::Violation::HoleNearBend {
+                V::HoleNearBend {
                     trim,
                     joint,
                     distance,
                     limit,
                     thickness,
+                    away,
                     ..
                 } => v.extend([
                     ("trim", n.trim(trim)),
@@ -546,18 +562,21 @@ impl SheetNote {
                     ("distance", f(distance)),
                     ("limit", f(limit)),
                     ("thickness", f(thickness)),
+                    ("away", v2(Vec3Ish(away.x, away.y))),
                 ]),
-                fs::Violation::HoleNearEdge {
+                V::HoleNearEdge {
                     trim,
                     distance,
                     limit,
+                    away,
                     ..
                 } => v.extend([
                     ("trim", n.trim(trim)),
                     ("distance", f(distance)),
                     ("limit", f(limit)),
+                    ("away", v2(Vec3Ish(away.x, away.y))),
                 ]),
-                fs::Violation::FlangeTooShort {
+                V::FlangeTooShort {
                     wall,
                     joint,
                     length,
@@ -569,7 +588,7 @@ impl SheetNote {
                     ("length", f(length)),
                     ("limit", f(limit)),
                 ]),
-                fs::Violation::RadiusNotTooled {
+                V::RadiusNotTooled {
                     joint,
                     radius,
                     nearest,
@@ -579,10 +598,10 @@ impl SheetNote {
                     ("radius", f(radius)),
                     ("nearest", f(nearest)),
                 ]),
-                fs::Violation::ThicknessNotStocked {
+                V::ThicknessNotStocked {
                     thickness, nearest, ..
                 } => v.extend([("thickness", f(thickness)), ("nearest", f(nearest))]),
-                fs::Violation::SlotTooNarrow {
+                V::SlotTooNarrow {
                     trim,
                     width,
                     limit,
@@ -594,29 +613,81 @@ impl SheetNote {
                     ("limit", f(limit)),
                     ("thickness", f(thickness)),
                 ]),
+                V::HoleTooSmall {
+                    trim,
+                    diameter,
+                    limit,
+                    thickness,
+                    ..
+                } => v.extend([
+                    ("trim", n.trim(trim)),
+                    ("diameter", f(diameter)),
+                    ("limit", f(limit)),
+                    ("thickness", f(thickness)),
+                ]),
+                V::HardwareThickness {
+                    cut,
+                    thickness,
+                    min,
+                    max,
+                    ..
+                } => v.extend([
+                    ("cut", n.cut(cut).into()),
+                    ("thickness", f(thickness)),
+                    ("min", f(min)),
+                    ("max", f(max)),
+                ]),
+                V::HardwareNearEdge {
+                    cut,
+                    distance,
+                    limit,
+                    away,
+                    ..
+                } => v.extend([
+                    ("cut", n.cut(cut).into()),
+                    ("distance", f(distance)),
+                    ("limit", f(limit)),
+                    ("away", v2(Vec3Ish(away.x, away.y))),
+                ]),
+                V::SheetTooHard {
+                    cut, hardness, limit, ..
+                } => v.extend([
+                    ("cut", n.cut(cut).into()),
+                    ("hardness", f(hardness)),
+                    ("limit", f(limit)),
+                ]),
+                V::HardnessUnknown { cut, limit, .. } => {
+                    v.extend([("cut", n.cut(cut).into()), ("limit", f(limit))])
+                }
             },
         }
         v
     }
 
     pub fn text(&self) -> String {
+        use fs::SheetWarning as W;
+        use fs::Violation as V;
         let fm = crate::values::fmt;
         let n = &self.names;
         match &self.note {
-            Note::Warning(fs::SheetWarning::FlatOverlap { walls, area, .. }) => format!(
+            Note::Warning(W::FlatOverlap { walls, area, .. }) => format!(
                 "{} and {} overlap in the flat pattern ({} mm2)",
                 n.wall(walls.0),
                 n.wall(walls.1),
                 fm(*area)
             ),
-            Note::Warning(fs::SheetWarning::ReliefRemnant { joint, remnant, .. }) => {
+            Note::Warning(W::ReliefRemnant { joint, remnant, .. }) => {
                 format!(
                     "a sliver {} wide beside the bend of {}",
                     fm(*remnant),
                     n.joint(*joint)
                 )
             }
-            Note::Violation(fs::Violation::FlangeTooShort {
+            Note::Warning(W::UnverifiedHardware { cut, .. }) => format!(
+                "{}: the hardware's numbers are placeholders, not a maker's table",
+                n.cut(*cut)
+            ),
+            Note::Violation(V::FlangeTooShort {
                 wall, length, limit, ..
             }) => format!(
                 "{} reaches {} from its bend; the die needs {}",
@@ -624,7 +695,7 @@ impl SheetNote {
                 fm(*length),
                 fm(*limit)
             ),
-            Note::Violation(fs::Violation::RadiusNotTooled {
+            Note::Violation(V::RadiusNotTooled {
                 joint,
                 radius,
                 nearest,
@@ -635,7 +706,7 @@ impl SheetNote {
                 fm(*radius),
                 fm(*nearest)
             ),
-            Note::Violation(fs::Violation::ThicknessNotStocked {
+            Note::Violation(V::ThicknessNotStocked {
                 thickness, nearest, ..
             }) => {
                 format!(
@@ -644,23 +715,56 @@ impl SheetNote {
                     fm(*nearest)
                 )
             }
-            Note::Violation(fs::Violation::HoleNearBend { distance, limit, .. }) => {
+            Note::Violation(V::HoleNearBend {
+                joint,
+                distance,
+                limit,
+                ..
+            }) => format!(
+                "a hole {} from the bend of {}; the shop needs {}",
+                fm(*distance),
+                n.joint(*joint),
+                fm(*limit)
+            ),
+            Note::Violation(V::HoleNearEdge { distance, limit, .. }) => {
                 format!(
-                    "a hole {} from a bend; the shop needs {}",
+                    "a hole {} from the edge; the shop needs {}",
                     fm(*distance),
                     fm(*limit)
                 )
             }
-            Note::Violation(fs::Violation::HoleNearEdge { distance, limit, .. }) => {
+            Note::Violation(V::SlotTooNarrow { width, limit, .. }) => {
+                format!("a cut {} wide; the shop needs {}", fm(*width), fm(*limit))
+            }
+            Note::Violation(V::HoleTooSmall { diameter, limit, .. }) => {
                 format!(
-                    "a hole {} from an edge; the shop needs {}",
-                    fm(*distance),
+                    "a hole {} across; the shop pierces {} at least",
+                    fm(*diameter),
                     fm(*limit)
                 )
             }
-            Note::Violation(fs::Violation::SlotTooNarrow { width, limit, .. }) => {
-                format!("a slot {} wide; the shop needs {}", fm(*width), fm(*limit))
-            }
+            Note::Violation(V::HardwareThickness {
+                thickness, min, max, ..
+            }) => format!(
+                "the hardware takes sheet {} to {}; this is {}",
+                fm(*min),
+                fm(*max),
+                fm(*thickness)
+            ),
+            Note::Violation(V::HardwareNearEdge { distance, limit, .. }) => format!(
+                "the hardware's hole centre is {} from an edge or bend; it needs {}",
+                fm(*distance),
+                fm(*limit)
+            ),
+            Note::Violation(V::SheetTooHard { hardness, limit, .. }) => format!(
+                "the sheet is HRB {}; the hardware clinches into HRB {} at most",
+                fm(*hardness),
+                fm(*limit)
+            ),
+            Note::Violation(V::HardnessUnknown { limit, .. }) => format!(
+                "the hardware needs sheet no harder than HRB {}; the stock states no hardness",
+                fm(*limit)
+            ),
         }
     }
 
@@ -676,6 +780,9 @@ impl SheetNote {
         Json::obj(f)
     }
 }
+
+/// A 2D vector, for JSON.
+struct Vec3Ish(f64, f64);
 
 fn p2(p: Point2) -> Json {
     Json::Arr(vec![p.x.into(), p.y.into()])
@@ -1166,10 +1273,11 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
             }))))
         }
         "per_t" => {
-            let a = Args::bind(ev, name, &["f", "plus"], args, span)?;
+            let a = Args::bind(ev, name, &["f", "per_r", "plus"], args, span)?;
             let per_t = a.req_num("f", RATIO)?;
+            let per_r = a.num("per_r", RATIO)?.unwrap_or(Num::konst(0.0, Dim::Ratio));
             let plus = a.num("plus", LEN)?.unwrap_or(Num::konst(0.0, Dim::Length));
-            Ok(sv(SheetVal::Scaled(Rc::new(ScaledV { per_t, plus }))))
+            Ok(sv(SheetVal::Scaled(Rc::new(ScaledV { per_t, per_r, plus }))))
         }
         "stock" => stock(ev, args, span),
         "shop" => {
@@ -1192,6 +1300,7 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
             Ok(sv(SheetVal::Shop(Rc::new(ShopV {
                 shop: fs::ShopProfile {
                     stock: stocks.iter().map(|s| s.stock.clone()).collect(),
+                    hardware: vec![],
                 },
                 stocks,
             }))))
@@ -1234,16 +1343,14 @@ fn table(a: &Args, k: &'static str, dims: &[&[Dim]]) -> R<Vec<Vec<f64>>> {
 
 fn scaled_of(a: &Args, k: &'static str) -> R<fs::Scaled> {
     match a.opt(k) {
-        None => Ok(fs::Scaled {
-            per_t: 0.0,
-            plus: 0.0,
-        }),
+        None => Ok(fs::Scaled::NONE),
         Some(Value::Sheet(s)) if matches!(*s, SheetVal::Scaled(_)) => {
             let SheetVal::Scaled(x) = &*s else {
                 unreachable!("matched")
             };
             Ok(fs::Scaled {
                 per_t: x.per_t.v,
+                per_r: x.per_r.v,
                 plus: x.plus.v,
             })
         }
@@ -1276,6 +1383,7 @@ fn stock(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
             "hole_to_bend",
             "hole_to_edge",
             "min_slot",
+            "min_hole",
             "relief_width",
             "relief_depth",
         ],
@@ -1313,6 +1421,8 @@ fn stock(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         min_slot: scaled_of(&a, "min_slot")?,
         relief_width: scaled_of(&a, "relief_width")?,
         relief_depth: scaled_of(&a, "relief_depth")?,
+        min_hole: scaled_of(&a, "min_hole")?,
+        hardness: None,
     };
     Ok(sv(SheetVal::Stock(Rc::new(StockV {
         stock,

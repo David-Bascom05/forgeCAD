@@ -135,16 +135,24 @@ fn interpolate(rows: impl Iterator<Item = (f64, f64)>, x: f64) -> Result<f64, In
     }
 }
 
-/// A relief's size as multiples of thickness plus a constant, the way shops state them.
+/// A length as multiples of thickness and of the bend's radius plus a constant, the way shops
+/// state them (hole to bend 2.5 t + R, say).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Scaled {
     pub per_t: f64,
+    pub per_r: f64,
     pub plus: f64,
 }
 
 impl Scaled {
-    pub fn at(self, t: f64) -> f64 {
-        self.per_t * t + self.plus
+    pub const NONE: Scaled = Scaled {
+        per_t: 0.0,
+        per_r: 0.0,
+        plus: 0.0,
+    };
+    /// For thickness t at a bend of inside radius r (0 where no bend is involved).
+    pub fn at(self, t: f64, r: f64) -> f64 {
+        self.per_t * t + self.per_r * r + self.plus
     }
 }
 
@@ -160,13 +168,19 @@ pub struct Stock {
     pub hole_to_bend: Scaled,
     pub hole_to_edge: Scaled,
     pub min_slot: Scaled,
+    /// The smallest round hole across.
+    pub min_hole: Scaled,
     pub relief_width: Scaled,
     pub relief_depth: Scaled,
+    /// The sheet's hardness, Rockwell B, where the shop states it (hardware needs it).
+    pub hardness: Option<f64>,
 }
 
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct ShopProfile {
     pub stock: Vec<Stock>,
+    /// The hardware the shop fits.
+    pub hardware: Vec<crate::hardware::Hardware>,
 }
 
 impl ShopProfile {

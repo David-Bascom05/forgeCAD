@@ -5,6 +5,7 @@ pub mod build;
 pub mod checks;
 pub mod error;
 pub mod graph;
+pub mod hardware;
 pub mod pattern;
 pub mod region;
 pub mod roles;
@@ -17,6 +18,7 @@ pub use error::{
     TrimCurveKind, TrimRef, Violation, WallId,
 };
 pub use graph::{Corner, CornerKind, Cut, Gauge, Joint, JointKind, Sheet, Wall};
+pub use hardware::{Hardware, HardwareKind, Mount, Source, placeholder_catalogue};
 pub use pattern::{BendLine, Curve2, Pattern, dxf};
 pub use roles::{Roles, Skin};
 pub use shop::{AllowanceRow, BendRule, KRow, RuleError, Scaled, ShopProfile, Stock};
