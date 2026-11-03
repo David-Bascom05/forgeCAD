@@ -403,7 +403,7 @@ fn refusals_are_typed() {
 #[test]
 fn fuzz_random_brackets() {
     let mut rng = Rng::new(0x5ee7);
-    let (mut built, mut refused, mut chains) = (0, 0, 0);
+    let (mut built, mut refused, mut chains, mut clashes) = (0, 0, 0, 0);
     for seed in 0..300u64 {
         let t = rng.range(0.5, 3.0);
         let r = rng.range(0.3, 3.0) * t;
@@ -412,13 +412,13 @@ fn fuzz_random_brackets() {
         let mut flanges = vec![(
             1u64,
             rng.range(0.2, 2.9) * if rng.below(2) == 0 { 1.0 } else { -1.0 },
-            rng.range(15.0, 40.0),
+            rng.range(15.0, 70.0),
         )];
         if rng.below(2) == 0 {
             flanges.push((
                 3,
                 rng.range(0.2, 2.9) * if rng.below(2) == 0 { 1.0 } else { -1.0 },
-                rng.range(15.0, 40.0),
+                rng.range(15.0, 70.0),
             ));
         }
         let g = gauge(t, r, k);
@@ -433,20 +433,11 @@ fn fuzz_random_brackets() {
         {
             continue;
         }
-        // flanges turned back past square must not reach each other (folded clashes are not
-        // detected yet: SheetWarning::FoldedClash is planned, and check() finds them as LoopsCross)
-        let back: f64 = flanges
-            .iter()
-            .map(|f| f.2 * (-dmath::cos(f.1.abs())).max(0.0))
-            .sum();
-        if back > 0.8 * len {
-            continue;
-        }
         let mut s = part(g.clone(), len, w, &flanges);
-        // a chain: a flange on the first flange's far edge, kept short of curling back into the base
-        if flanges[0].1.abs() < 1.75 && rng.below(2) == 0 {
-            let a = rng.range(0.2, 1.75) * if rng.below(2) == 0 { 1.0 } else { -1.0 };
-            let h = rng.range(10.0, 30.0);
+        // a chain: a flange on the first flange's far edge, free to curl back into the base
+        if rng.below(2) == 0 {
+            let a = rng.range(0.2, 2.9) * if rng.below(2) == 0 { 1.0 } else { -1.0 };
+            let h = rng.range(10.0, 50.0);
             if forge_sheet::build::setback_of(&g, r, a) + forge_sheet::build::setback_of(&g, r, flanges[0].1)
                 < 0.6 * flanges[0].2
                 && forge_sheet::build::setback_of(&g, r, a) < 0.6 * h
@@ -508,12 +499,19 @@ fn fuzz_random_brackets() {
                 Err(SheetError::TrimTouchesBendLine { .. } | SheetError::TrimAlongBendLine { .. }) => {
                     refused += 1
                 }
+                // flanges that reach each other once folded: refused, never built
+                Err(SheetError::FoldedClash {
+                    a, b, depth, limit, ..
+                }) if map == Map::Folded => {
+                    assert!(a != b && depth > limit);
+                    clashes += 1;
+                }
                 Err(e) => panic!("seed {seed} {map:?}: {e:?}"),
             }
         }
     }
-    println!("{built} built, {refused} refused, {chains} chains of three walls");
-    assert!(chains > 30);
+    println!("{built} built, {refused} refused, {clashes} clashes, {chains} chains of three walls");
+    assert!(chains > 30 && clashes > 0);
     assert!(
         built >= 400 && refused <= built / 4,
         "{built} built, {refused} refused"
@@ -625,4 +623,120 @@ fn bad_arc_sweeps_are_refused_by_name() {
         }
     }
     assert!(s.cuts.is_empty());
+}
+
+#[test]
+fn flanges_that_meet_once_folded_are_refused() {
+    // a U whose flanges, turned back past square, cross over the base
+    let s = part(
+        gauge(2.0, 2.0, 0.4),
+        40.0,
+        30.0,
+        &[(1, ang(150.0), 35.0), (3, ang(150.0), 35.0)],
+    );
+    match build(&s, Map::Folded) {
+        Err(SheetError::FoldedClash {
+            a,
+            b,
+            at,
+            depth,
+            limit,
+            ..
+        }) => {
+            let walls = [
+                forge_sheet::Strip::Wall(WallId(1)),
+                forge_sheet::Strip::Wall(WallId(2)),
+            ];
+            assert!(walls.contains(&a) && walls.contains(&b), "{a:?} {b:?}");
+            assert!(depth > limit && (at.x - 20.0).abs() < 10.0, "{at:?}");
+        }
+        other => panic!("{:?}", other.map(|b| b.face_ids().count())),
+    }
+    // the same flanges a little shorter clear each other and build clean
+    let s = part(
+        gauge(2.0, 2.0, 0.4),
+        40.0,
+        30.0,
+        &[(1, ang(150.0), 18.0), (3, ang(150.0), 18.0)],
+    );
+    checked(&build(&s, Map::Folded).unwrap());
+    // the flat pattern of a clashing part is fine
+    let s = part(
+        gauge(2.0, 2.0, 0.4),
+        40.0,
+        30.0,
+        &[(1, ang(150.0), 35.0), (3, ang(150.0), 35.0)],
+    );
+    checked(&build(&s, Map::Flat).unwrap());
+}
+
+/// The least distance between segments pq and rs in the plane, 0 if they cross.
+fn segment_gap(p: (f64, f64), q: (f64, f64), r: (f64, f64), s: (f64, f64)) -> f64 {
+    let cross =
+        |o: (f64, f64), a: (f64, f64), b: (f64, f64)| (a.0 - o.0) * (b.1 - o.1) - (a.1 - o.1) * (b.0 - o.0);
+    let (d1, d2, d3, d4) = (cross(r, s, p), cross(r, s, q), cross(p, q, r), cross(p, q, s));
+    if d1 * d2 < 0.0 && d3 * d4 < 0.0 {
+        return 0.0;
+    }
+    let point_seg = |x: (f64, f64), a: (f64, f64), b: (f64, f64)| {
+        let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+        let f = (((x.0 - a.0) * dx + (x.1 - a.1) * dy) / (dx * dx + dy * dy)).clamp(0.0, 1.0);
+        ((x.0 - a.0 - f * dx).powi(2) + (x.1 - a.1 - f * dy).powi(2)).sqrt()
+    };
+    point_seg(p, r, s)
+        .min(point_seg(q, r, s))
+        .min(point_seg(r, p, q))
+        .min(point_seg(s, p, q))
+}
+
+#[test]
+fn fuzz_u_clashes_against_the_cross_section() {
+    // a U of up bends past square: in the xz cross-section each flange's mid-surface is a segment
+    // from its bend's end, so whether they meet is plain 2D geometry
+    let mut rng = Rng::new(0xc1a5);
+    let (mut clash, mut clear) = (0, 0);
+    for seed in 0..120u64 {
+        let (t, r, len, w) = (
+            rng.range(0.8, 2.5),
+            rng.range(0.5, 3.0),
+            rng.range(30.0, 60.0),
+            rng.range(10.0, 40.0),
+        );
+        let (a1, a2) = (rng.range(1.8, 2.9), rng.range(1.8, 2.9));
+        let (h1, h2) = (rng.range(0.4, 1.2) * len, rng.range(0.4, 1.2) * len);
+        let mid = |angle: f64, h: f64, right: bool| {
+            let s = r * dmath::sin(angle) / (1.0 + dmath::cos(angle));
+            let rho = r + 0.5 * t;
+            let x0 = len - s + rho * dmath::sin(angle);
+            let z0 = r - rho * dmath::cos(angle);
+            let (x1, z1) = (x0 + (h - s) * dmath::cos(angle), z0 + (h - s) * dmath::sin(angle));
+            if right {
+                ((x0, z0), (x1, z1))
+            } else {
+                ((len - x0, z0), (len - x1, z1))
+            }
+        };
+        let sb = |a: f64| r * dmath::sin(a) / (1.0 + dmath::cos(a));
+        if h1 < 1.2 * sb(a1) || h2 < 1.2 * sb(a2) || len < sb(a1) + sb(a2) + 5.0 {
+            continue;
+        }
+        let (f1, f2) = (mid(a1, h1, true), mid(a2, h2, false));
+        let gap = segment_gap(f1.0, f1.1, f2.0, f2.1);
+        let s = part(gauge(t, r, 0.4), len, w, &[(1, a1, h1), (3, a2, h2)]);
+        match build(&s, Map::Folded) {
+            Ok(b) => {
+                assert!(gap > 0.0, "seed {seed}: mid-surfaces cross, built anyway");
+                println!("seed {seed} gap {gap} t {t}");
+                checked(&b);
+                clear += 1;
+            }
+            Err(SheetError::FoldedClash { .. }) => {
+                assert!(gap < 1.01 * t, "seed {seed}: refused {gap} apart, t {t}");
+                clash += 1;
+            }
+            Err(e) => panic!("seed {seed}: {e:?}"),
+        }
+    }
+    println!("{clash} clashes, {clear} clear");
+    assert!(clash > 20 && clear > 20, "{clash} {clear}");
 }

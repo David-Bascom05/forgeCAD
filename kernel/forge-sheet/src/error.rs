@@ -240,6 +240,16 @@ pub enum SheetError {
         sweep: f64,
         limit: f64,
     },
+    /// Two strips of the folded part pass through each other: a point of `a`'s boundary lies `depth`
+    /// inside `b`'s material at `at` (deeper than `limit`, so not a touch).
+    FoldedClash {
+        feature: FeatureId,
+        a: Strip,
+        b: Strip,
+        at: Point3,
+        depth: f64,
+        limit: f64,
+    },
     /// A trim curve of a kind this strip cannot carry yet (arcs and splines in a bend zone).
     TrimCurveUnsupported {
         feature: FeatureId,
@@ -272,14 +282,6 @@ pub enum SheetWarning {
         walls: (WallId, WallId),
         at: Point2,
         area: f64,
-        limit: f64,
-    },
-    /// Two walls of the folded part pass through each other.
-    FoldedClash {
-        feature: FeatureId,
-        walls: (WallId, WallId),
-        at: Point3,
-        depth: f64,
         limit: f64,
     },
     /// A relief leaves a sliver of material beside the bend.

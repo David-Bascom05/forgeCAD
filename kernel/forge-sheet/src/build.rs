@@ -601,6 +601,9 @@ pub fn build(sheet: &Sheet, map: Map) -> Result<Body, SheetError> {
         });
     }
     let built = Built::new(cx, strips, &bends, nw, t)?;
+    if map == Map::Folded {
+        built.clash()?;
+    }
     built.body()
 }
 
@@ -841,6 +844,118 @@ impl<'a> Built<'a> {
             slots,
             twin,
         })
+    }
+
+    /// Refuses a folded part whose strips pass through each other. Each strip's boundary, stepped
+    /// ten tolerances into its own material, is walked at both skins and halfway from every vertex
+    /// in steps of a quarter thickness, and each point is tested against the material of the strips
+    /// it does not join directly (boxes first). A corner poking into another wall is a vertex, so it
+    /// is caught once deeper than the limit (1e-4); sheets crossing each other leave a point at
+    /// least 3t/8 deep. A curved edge skimming another wall by less than its sag between steps is
+    /// not seen.
+    fn clash(&self) -> Result<(), SheetError> {
+        let t = self.t;
+        let limit = 10.0 * TOL;
+        let step = t / 4.0;
+        let ns = self.strips.len();
+        let mut joined = vec![false; ns * ns];
+        for (&(l, _), &(m, _)) in &self.twin {
+            let (a, b) = (self.loops[l].strip, self.loops[m].strip);
+            joined[a * ns + b] = true;
+            joined[b * ns + a] = true;
+        }
+        let mut points: Vec<Vec<Point3>> = vec![Vec::new(); ns];
+        for ld in &self.loops {
+            let geo = self.strips[ld.strip].geo;
+            let stretch = match geo {
+                Geo::Round { rho0, rn, .. } => ((rho0 + t) / rn).max(1.0),
+                Geo::Plane(_) => 1.0,
+            };
+            for b in &ld.bounds {
+                let len = match b.piece {
+                    Piece::Line { a, b: e } => a.distance(e),
+                    Piece::Arc { r, t0, t1, .. } => r * (t1 - t0).abs(),
+                    Piece::Spline { .. } => b.piece.at(0.0).distance(b.piece.at(1.0)),
+                } * stretch;
+                let n = ((len / step).ceil() as usize).clamp(1, 1 << 16);
+                for k in 0..n {
+                    // a step into the strip's own material, so walls ending flush along one line
+                    // (two flanges as long as each other, crossing) still find each other inside
+                    let u = k as f64 / n as f64;
+                    let d = b.piece.tangent(u);
+                    let q = b.piece.at(u) + Vec2::new(-d.y, d.x) * (10.0 * TOL / d.length().max(1e-300));
+                    for w in [0.0, 0.5 * t, t] {
+                        points[ld.strip].push(geo.point(q, w));
+                    }
+                }
+            }
+        }
+        let boxes: Vec<forge_math::Box3> = points
+            .iter()
+            .map(|ps| forge_math::Box3::from_points(ps.iter().copied()).grow(t))
+            .collect();
+        for a in 0..ns {
+            for b in 0..ns {
+                if a == b || joined[a * ns + b] || !boxes[a].overlaps(&boxes[b]) {
+                    continue;
+                }
+                for &p in &points[a] {
+                    if !boxes[b].contains(p) {
+                        continue;
+                    }
+                    if let Some(depth) = self.inside(b, p)
+                        && depth > limit
+                    {
+                        return Err(SheetError::FoldedClash {
+                            feature: self.cx.feature,
+                            a: self.strips[a].strip,
+                            b: self.strips[b].strip,
+                            at: p,
+                            depth,
+                            limit,
+                        });
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// How deep `p` lies in strip `s`'s material, through its thickness; None outside.
+    fn inside(&self, s: usize, p: Point3) -> Option<f64> {
+        let t = self.t;
+        let (q, w) = match self.strips[s].geo {
+            Geo::Plane(f) => {
+                let l = f.point_to_local(p);
+                (Point2::new(l.x, l.y), -l.z)
+            }
+            Geo::Round {
+                axis,
+                rho0,
+                sigma,
+                rn,
+                theta,
+                ..
+            } => {
+                let l = axis.point_to_local(p);
+                let phi = dmath::atan2(l.y, l.x);
+                if !(phi > 0.0 && phi < theta) {
+                    return None;
+                }
+                let rho = (l.x * l.x + l.y * l.y).sqrt();
+                (Point2::new(phi * rn, -sigma * l.z), (rho - rho0) * sigma)
+            }
+        };
+        let skin = w.min(t - w);
+        if skin <= 0.0 {
+            return None;
+        }
+        self.strips[s]
+            .region
+            .parts
+            .iter()
+            .any(|c| crate::region::holds(c, q))
+            .then_some(skin)
     }
 
     /// The side piece after (l, i) along the developed boundary, and whether it crossed a tangent line.
