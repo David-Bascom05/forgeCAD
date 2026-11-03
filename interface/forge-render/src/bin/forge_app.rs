@@ -322,8 +322,10 @@ fn wait(h: &mut Headless) {
         }
         std::thread::sleep(std::time::Duration::from_millis(20));
     }
-    for _ in 0..5 {
+    // and what animates (the exploded view) the time it takes
+    for _ in 0..40 {
         h.step();
+        std::thread::sleep(std::time::Duration::from_millis(20));
     }
 }
 
