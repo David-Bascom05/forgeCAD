@@ -782,3 +782,98 @@ fn an_assembly_reads_nothing_outside_its_root() {
     let r = forge_lang::run(ok, opts, Default::default()).0;
     assert!(r.ok(), "{:?}", errors(&r));
 }
+
+/// The root reaches the parts an assembly loads: a part under it cannot import a STEP file or
+/// read a font outside it, refused with the same typed Missing as any file not found.
+#[test]
+fn a_part_loaded_by_an_assembly_reads_nothing_outside_the_root() {
+    let top = dir("security-nested");
+    let root = top.join("root");
+    let sub = root.join("sub");
+    let _ = std::fs::create_dir_all(&sub);
+    // real files outside: a STEP block and a font, which a part with no root reads cleanly
+    let block = forge_ops::extrude(
+        &forge_ops::Profile {
+            plane: forge_math::Frame::WORLD,
+            loops: vec![forge_ops::Profile::rectangle(
+                forge_math::Point2::new(0.0, 0.0),
+                10.0,
+                10.0,
+                1,
+            )],
+        },
+        10.0,
+        1,
+    )
+    .unwrap();
+    let step = forge_step::export(&block, &forge_step::Options::default())
+        .unwrap()
+        .text;
+    write(&top, "outside.step", &step);
+    std::fs::copy(
+        concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../forge-render/fonts/PublicSans-Regular.ttf"
+        ),
+        top.join("outside.ttf"),
+    )
+    .unwrap();
+    write(&root, "base.fg", &base(D));
+    write(
+        &sub,
+        "marked.fg",
+        "shared t = 4
+shared size = 5
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (t * 10, t * 5))
+  o = pt(t, t)
+}
+body = extrude(plan, t)
+other = import(\"../../outside.step\")
+mark = text(\"A\", font: \"../../outside.ttf\", size: size, depth: t, on: body.end, at: plan.o)
+",
+    );
+    let part_src = std::fs::read_to_string(sub.join("marked.fg")).unwrap();
+    let file_errors = |root: Option<PathBuf>| -> Vec<String> {
+        let opts = Options {
+            dir: Some(sub.clone()),
+            root,
+            ..Options::default()
+        };
+        forge_lang::run(&part_src, opts, Default::default())
+            .0
+            .errors
+            .iter()
+            .filter(|e| e.kind() == "File")
+            .map(|e| e.text())
+            .collect()
+    };
+    // under the root: both refused, the same way as a file that is not there
+    assert_eq!(
+        file_errors(Some(root.clone())),
+        vec![
+            "../../outside.step: not found beside the part file".to_string(),
+            "../../outside.ttf: not found beside the part file".to_string(),
+        ]
+    );
+    // with no root both are read: the fence is what refuses
+    assert_eq!(file_errors(None), Vec::<String>::new());
+    // through an assembly under the root, the part's own reads are fenced the same way
+    let opts = Options {
+        dir: Some(root.clone()),
+        root: Some(root.clone()),
+        ..Options::default()
+    };
+    let src = "assembly\n\nbase = part(\"base.fg\", ground: true)\nm = part(\"sub/marked.fg\")\n";
+    let r = forge_lang::run(src, opts.clone(), Default::default()).0;
+    let texts: Vec<String> = r.errors.iter().map(|e| e.text()).collect();
+    assert_eq!(
+        texts,
+        vec!["sub/marked.fg: 2 errors, the first File".to_string()],
+        "{texts:?}"
+    );
+    // and the same assembly with no root loads the part cleanly
+    let open = Options { root: None, ..opts };
+    let r = forge_lang::run(src, open, Default::default()).0;
+    assert!(r.ok(), "{:?}", errors(&r));
+}

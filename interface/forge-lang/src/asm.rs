@@ -1383,7 +1383,7 @@ pub struct PartLoad {
 }
 
 /// A part file's text hash and the references and bodies asked of it.
-type PartKey = (String, u64, Vec<String>, Vec<String>);
+type PartKey = (String, u64, Vec<String>, Vec<String>, Option<std::path::PathBuf>);
 /// A subassembly document evaluated, and its errors.
 type SubLoad = (Doc, Vec<Error>);
 
@@ -1391,7 +1391,7 @@ type SubLoad = (Doc, Vec<Error>);
 #[derive(Default)]
 pub struct AsmCache {
     parts: BTreeMap<PartKey, Arc<PartLoad>>,
-    subs: BTreeMap<(String, u64), Arc<SubLoad>>,
+    subs: BTreeMap<(String, u64, Option<std::path::PathBuf>), Arc<SubLoad>>,
     last: Option<Live>,
 }
 
@@ -1532,7 +1532,13 @@ fn as_reference(ev: &mut Eval, v: Value) -> Option<fa::Reference> {
     }
 }
 
-fn load_part(text: &str, dir: Option<std::path::PathBuf>, refs: &[String], bodies: &[String]) -> PartLoad {
+fn load_part(
+    text: &str,
+    dir: Option<std::path::PathBuf>,
+    fence: Option<std::path::PathBuf>,
+    refs: &[String],
+    bodies: &[String],
+) -> PartLoad {
     let hash = content_hash(text);
     let mut out = PartLoad {
         hash,
@@ -1556,6 +1562,7 @@ fn load_part(text: &str, dir: Option<std::path::PathBuf>, refs: &[String], bodie
     }
     let mut ev = Eval::new(text, crate::eval::Rules::default(), true, Default::default());
     ev.dir = dir;
+    ev.root = fence;
     ev.check_static(&prog);
     if !ev.errors.is_empty() {
         ev.b.building = false;
@@ -1640,13 +1647,18 @@ fn load_part(text: &str, dir: Option<std::path::PathBuf>, refs: &[String], bodie
 /// go unseen, and the report says so per pair.
 pub const MESH_CHORD: f64 = 0.01;
 
-fn load_sub(text: &str, dir: Option<std::path::PathBuf>) -> (Doc, Vec<Error>) {
+fn load_sub(
+    text: &str,
+    dir: Option<std::path::PathBuf>,
+    fence: Option<std::path::PathBuf>,
+) -> (Doc, Vec<Error>) {
     let prog = match crate::syntax::parse(text) {
         Ok(p) => p,
         Err(e) => return (Doc::default(), vec![e]),
     };
     let mut ev = Eval::new(text, crate::eval::Rules::default(), false, Default::default());
     ev.dir = dir;
+    ev.root = fence;
     ev.asm = Some(Doc::default());
     ev.check_static(&prog);
     ev.run(&prog);
@@ -1954,7 +1966,7 @@ pub fn finish(
                 continue;
             };
             let parent = p.parent().map(|x| x.to_path_buf());
-            let ck = (key.clone(), text_hash(&text));
+            let ck = (key.clone(), text_hash(&text), fence.clone());
             let loaded = match cache.subs.get(&ck) {
                 Some(x) => x.clone(),
                 None => {
@@ -1969,7 +1981,7 @@ pub fn finish(
                         ));
                         continue;
                     }
-                    let x = Arc::new(load_sub(&text, parent.clone()));
+                    let x = Arc::new(load_sub(&text, parent.clone(), fence.clone()));
                     cache.subs.insert(ck, x.clone());
                     x
                 }
@@ -2040,12 +2052,18 @@ pub fn finish(
         };
         let refs: Vec<String> = refs.iter().cloned().collect();
         let bodies: Vec<String> = bodies.iter().cloned().collect();
-        let ck = (file.clone(), text_hash(&text), refs.clone(), bodies.clone());
+        let ck = (
+            file.clone(),
+            text_hash(&text),
+            refs.clone(),
+            bodies.clone(),
+            fence.clone(),
+        );
         let load = match cache.parts.get(&ck) {
             Some(l) => l.clone(),
             None => {
                 let parent = std::path::Path::new(file).parent().map(|p| p.to_path_buf());
-                let l = Arc::new(load_part(&text, parent, &refs, &bodies));
+                let l = Arc::new(load_part(&text, parent, fence.clone(), &refs, &bodies));
                 cache.parts.insert(ck, l.clone());
                 l
             }

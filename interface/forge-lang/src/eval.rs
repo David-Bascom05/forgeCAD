@@ -300,6 +300,8 @@ pub struct Eval<'s> {
     pub dir: Option<std::path::PathBuf>,
     /// An assembly document's instances, joints and checks (`asm.rs`); None in a part.
     pub asm: Option<crate::asm::Doc>,
+    /// The session's root, canonical: no file outside it is read (fonts, imports, parts).
+    pub root: Option<std::path::PathBuf>,
 }
 
 #[derive(Clone)]
@@ -348,6 +350,7 @@ impl<'s> Eval<'s> {
             sheets: Default::default(),
             dir: None,
             asm: None,
+            root: None,
         }
     }
 
