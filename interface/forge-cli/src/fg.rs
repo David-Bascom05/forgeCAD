@@ -369,6 +369,11 @@ impl Session {
             });
         }
         let mut opt = forge_step::Options::default();
+        // sheet metal's bends with cuts across them are fitted: tight enough that a reader which
+        // sets each edge's tolerance from a few samples finds no edge over it
+        if !run.sheets.is_empty() {
+            opt.tol = forge_step::SHEET_TOL;
+        }
         let mut words = a.words.iter();
         while let Some(w) = words.next() {
             match w.as_str() {
