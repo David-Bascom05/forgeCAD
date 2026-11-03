@@ -130,7 +130,7 @@ pub fn mounts(sheet: &Sheet, stock: Option<&Stock>) -> Vec<Violation> {
             }
         }
         for z in &flat.zones {
-            let (d, away) = z.from_point(c);
+            let (d, away) = z.to_point(c);
             if d < best.0 {
                 best = (d, away);
             }
@@ -224,7 +224,7 @@ fn holes(sheet: &Sheet, stock: &Stock) -> Vec<Violation> {
         }
         for z in &flat.zones {
             let limit = stock.hole_to_bend.at(t, z.radius);
-            let (d, segment) = z.from_loop(&dev);
+            let (d, segment) = z.to_loop(&dev);
             if d < limit {
                 let centre = dev
                     .iter()
@@ -312,7 +312,7 @@ impl Zone {
             self.place.x
         }
     }
-    fn from_point(&self, p: Point2) -> (f64, Vec2) {
+    fn to_point(&self, p: Point2) -> (f64, Vec2) {
         if self.inside(p) {
             return (0.0, self.away(p));
         }
@@ -326,7 +326,7 @@ impl Zone {
         best
     }
     /// A loop's distance from the zone (0 reaching in), and its nearest segment.
-    fn from_loop(&self, l: &[(Piece, u64)]) -> (f64, u64) {
+    fn to_loop(&self, l: &[(Piece, u64)]) -> (f64, u64) {
         for (p, id) in l {
             if (0..=8).any(|k| self.inside(p.at(k as f64 / 8.0))) {
                 return (0.0, *id);

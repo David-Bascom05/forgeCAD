@@ -4,7 +4,7 @@
 use crate::error::{CutId, FeatureId, JointId, SheetError, TrimCurveKind, TrimRef, WallId};
 use crate::region::pieces;
 use crate::shop::BendRule;
-use forge_math::{Frame, Point2, dmath, tol};
+use forge_math::{Frame, Point2, Vec2, dmath, tol};
 use forge_ops::{Profile, ProfileLoop, Segment};
 
 /// Thickness, the default inside radius, and how bends develop.
@@ -46,11 +46,17 @@ pub struct Joint {
     pub kind: JointKind,
 }
 
+/// Where two bends off one wall meet at a corner of its outline. Circular and square reliefs are
+/// cuts centred on the corner, `size` its radius or half side (None: just clear of both bends);
+/// open is a square relief `gap` larger than that. Closed and overlapping corners (flanges
+/// extended to meet) are typed but not built.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum CornerKind {
     Open { gap: f64 },
     Closed,
     Overlap { gap: f64 },
+    Circular { size: Option<f64> },
+    Square { size: Option<f64> },
 }
 
 /// Where two joints' ends meet.
@@ -81,6 +87,12 @@ pub struct Sheet {
     pub cuts: Vec<Cut>,
     /// Hardware pressed in, each with its mounting hole among `cuts`.
     pub mounts: Vec<crate::hardware::Mount>,
+    /// Reliefs asked for at joint ends; any end not listed is `Relief::Auto`.
+    pub reliefs: Vec<(JointId, crate::error::End, crate::relief::Relief)>,
+    /// What `Auto` cuts where a relief is needed.
+    pub relief_default: crate::relief::ReliefDefault,
+    /// What a corner not listed in `corners` gets.
+    pub corner_default: CornerKind,
     next_wall: u32,
     next_joint: u32,
     next_cut: u32,
@@ -130,6 +142,9 @@ impl Sheet {
             corners: Vec::new(),
             cuts: Vec::new(),
             mounts: Vec::new(),
+            reliefs: Vec::new(),
+            relief_default: crate::relief::ReliefDefault::default(),
+            corner_default: CornerKind::Circular { size: None },
             next_wall: 1,
             next_joint: 0,
             next_cut: 0,
@@ -284,7 +299,175 @@ impl Sheet {
     }
 }
 
+/// Where a flange stands against the edge it is put on.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Position {
+    /// Its material outside the edge: the inner virtual sharp on it.
+    Outside,
+    /// Its material inside the edge: the outer virtual sharp on it (the edge moves in).
+    Inside,
+    /// The bend starting at the edge: the tangent line on it (the edge moves out).
+    BendOutside,
+}
+
 impl Sheet {
+    /// The corner treatment where joints a and b meet.
+    pub fn corner(&self, a: JointId, b: JointId) -> CornerKind {
+        self.corners
+            .iter()
+            .rev()
+            .find(|c| c.joints == [a, b] || c.joints == [b, a])
+            .map_or(self.corner_default, |c| c.kind)
+    }
+
+    pub fn set_corner(&mut self, a: JointId, b: JointId, kind: CornerKind) {
+        self.corners
+            .retain(|c| !(c.joints == [a, b] || c.joints == [b, a]));
+        self.corners.push(Corner { joints: [a, b], kind });
+    }
+
+    /// The relief joint end `end` asks for.
+    pub fn relief(&self, joint: JointId, end: crate::error::End) -> crate::relief::Relief {
+        self.reliefs
+            .iter()
+            .rev()
+            .find(|r| r.0 == joint && r.1 == end)
+            .map_or(crate::relief::Relief::Auto, |r| r.2)
+    }
+
+    pub fn set_relief(&mut self, joint: JointId, end: crate::error::End, relief: crate::relief::Relief) {
+        self.reliefs.retain(|r| !(r.0 == joint && r.1 == end));
+        self.reliefs.push((joint, end, relief));
+    }
+
+    /// `flange_r` with the flange stood `position` against the edge: the edge moved along its
+    /// normal first (its neighbours, lines, follow it).
+    pub fn flange_at(
+        &mut self,
+        wall: WallId,
+        segment: u64,
+        angle: f64,
+        height: f64,
+        radius: f64,
+        position: Position,
+    ) -> Result<(WallId, JointId), SheetError> {
+        let t = self.gauge.thickness;
+        let theta = angle.abs();
+        let sharp = t * dmath::sin(theta) / (1.0 + dmath::cos(theta));
+        let s = crate::build::setback_of(&self.gauge, radius, angle);
+        // outward, from where the kernel's mold line (the reference skin's sharp) would be
+        let d = match (position, angle > 0.0) {
+            (Position::Outside, true) | (Position::Inside, false) => 0.0,
+            (Position::Inside, true) => -sharp,
+            (Position::Outside, false) => sharp,
+            (Position::BendOutside, _) => s,
+        };
+        if d != 0.0 {
+            self.move_edge(wall, segment, d)?;
+        }
+        self.flange_r(wall, segment, angle, height, radius)
+    }
+
+    /// Moves straight outline segment `segment` of `wall` by `d` along its outward normal; the
+    /// segments either side, lines, are cut or stretched to meet it.
+    pub fn move_edge(&mut self, wall: WallId, segment: u64, d: f64) -> Result<(), SheetError> {
+        let feature = self.feature;
+        let trim = |segment| TrimRef::Outline { wall, segment };
+        let w = self.wall(wall).ok_or(SheetError::NoSuchWall { feature, wall })?;
+        let (li, k) = w
+            .outline
+            .iter()
+            .enumerate()
+            .find_map(|(li, l)| l.segments.iter().position(|s| s.1 == segment).map(|k| (li, k)))
+            .ok_or(SheetError::NoSuchSegment {
+                feature,
+                wall,
+                segment,
+            })?;
+        let segs = &w.outline[li].segments;
+        let n = segs.len();
+        let line = |i: usize| match &segs[i].0 {
+            Segment::Line { a, b } => Ok((*a, *b)),
+            Segment::Arc { .. } | Segment::Circle { .. } => Err(TrimCurveKind::Arc),
+            Segment::Spline(_) => Err(TrimCurveKind::Spline),
+        };
+        let (a, b) = line(k).map_err(|curve| SheetError::NotStraight {
+            feature,
+            trim: trim(segment),
+            curve,
+        })?;
+        let (pi, ni) = ((k + n - 1) % n, (k + 1) % n);
+        for i in [pi, ni] {
+            let id = segs[i].1;
+            if let Some(j) = self
+                .joints
+                .iter()
+                .find(|j| (j.a == wall && j.on_a == id) || (j.b == wall && j.on_b == id))
+            {
+                return Err(SheetError::EdgeMoveBlocked {
+                    feature,
+                    trim: trim(id),
+                    joint: j.id,
+                });
+            }
+        }
+        let curve_err = |i: usize, curve| SheetError::EdgeMoveCurve {
+            feature,
+            trim: trim(segs[i].1),
+            curve,
+        };
+        let (p0, _) = line(pi).map_err(|c| curve_err(pi, c))?;
+        let (_, n1) = line(ni).map_err(|c| curve_err(ni, c))?;
+        let dir = (b - a) * (1.0 / a.distance(b));
+        let out = Vec2::new(dir.y, -dir.x) * d;
+        let a2 = a + out;
+        // where the moved line meets each neighbour's line
+        let meet = |p: Point2, q: Point2| {
+            let e = q - p;
+            let den = e.cross(dir);
+            if den.abs() <= 1e-15 {
+                return None;
+            }
+            let u = (a2 - p).cross(dir) / den;
+            Some(p + e * u)
+        };
+        let a3 = meet(p0, a).ok_or(SheetError::EdgeMoveCurve {
+            feature,
+            trim: trim(segs[pi].1),
+            curve: TrimCurveKind::Line,
+        })?;
+        let b3 = meet(n1, b).ok_or(SheetError::EdgeMoveCurve {
+            feature,
+            trim: trim(segs[ni].1),
+            curve: TrimCurveKind::Line,
+        })?;
+        let mut outline = w.outline.clone();
+        let l = &mut outline[li].segments;
+        l[pi].0 = Segment::Line { a: p0, b: a3 };
+        l[k].0 = Segment::Line { a: a3, b: b3 };
+        l[ni].0 = Segment::Line { a: b3, b: n1 };
+        for i in [pi, k, ni] {
+            if let Segment::Line { a, b } = l[i].0
+                && a.distance(b) <= tol::LINEAR
+            {
+                return Err(SheetError::Profile {
+                    feature,
+                    wall,
+                    why: forge_ops::ProfileError::Empty,
+                });
+            }
+        }
+        let checked = Profile {
+            plane: self.frame,
+            loops: outline,
+        }
+        .normalized()
+        .map_err(|why| SheetError::Profile { feature, wall, why })?;
+        let w = self.walls.iter_mut().find(|w| w.id == wall).expect("found above");
+        w.outline = checked.loops;
+        Ok(())
+    }
+
     /// Presses `part` into `wall` at `at` (the wall's coordinates): its mounting hole, cut like
     /// any other, and the part recorded for the checks.
     pub fn mount(
