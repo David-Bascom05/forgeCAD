@@ -1,0 +1,124 @@
+# Cast iron 4-cylinder log exhaust manifold (tools/bench-parts/manifold.fc), hand port: a head
+# flange with a raised gasket face, four runners swept from it and bent down into a collector
+# log, bored through to the ports, an outlet flange with a sealing land, stud holes.
+
+shared pitch = 90
+shared pr = 19
+shared wall = 3.5
+shared bend = 60
+shared rise = 30
+shared cz = -130
+shared cr = 30
+shared y0 = -1.5 * pitch
+shared tick = 10
+shared n = count(4)
+# head flange: 350 x 60 with corners of 8, 12 thick, behind the head face x = 0
+shared fl_t = 12
+shared fl_hw = 175
+shared fl_hh = 30
+shared fl_r = 8
+shared gasket = 1.5
+# collector and outlet flange
+shared col_y = -170
+shared col_l = 370
+shared of_y = 188
+shared of_t = 12
+shared of_h = 50
+shared of_r = 12
+shared land = 1
+shared bore_y = -160
+shared bore_l = 360
+# studs
+shared stud_d = 10.5
+shared stud_y = [-165, -90, 0, 90, 165]
+shared nstud = count(5)
+shared ostud_pcd = 38
+shared ostud_off = ostud_pcd * sin(60deg)
+shared ostud_depth = 16
+param flange_blend.r = 5
+param col_blend.r = 6
+param of_blend.r = 4
+
+# the head face (x = 0), with lines up it where the runners run, the collector and outlet stand
+sketch datum(on: yz) {
+  for k in 0..n {
+    run = line((y0 + pitch * k, 0), (y0 + pitch * k, tick), construction: true)
+  }
+  along = line((0, 0), (tick, 0), construction: true)
+  col_at = line((col_y, 0), (col_y, tick), construction: true)
+  of_at = line((of_y, 0), (of_y, tick), construction: true)
+  bore_at = line((bore_y, 0), (bore_y, tick), construction: true)
+  land_at = line((col_y + col_l + land, 0), (col_y + col_l + land, tick), construction: true)
+  for j in 0..nstud {
+    sp = pt(stud_y[j], 0)
+  }
+}
+
+sketch fsk(on: offset(datum.plane, 0 - fl_t)) {
+  outline = hull(disc((fl_r - fl_hw, fl_r - fl_hh), fl_r), disc((fl_hw - fl_r, fl_r - fl_hh), fl_r),
+                 disc((fl_hw - fl_r, fl_hh - fl_r), fl_r), disc((fl_r - fl_hw, fl_hh - fl_r), fl_r))
+}
+flange = extrude(fsk, fl_t)
+gasket_face = thicken(flange.start, gasket)
+
+# each runner: out of the flange, bent down into the collector; its bore the same way, wall thinner
+sketch rprof(on: fsk.plane) {
+  for k in 0..n {
+    c = circle((y0 + pitch * k, 0), pr)
+  }
+}
+sketch bprof(on: offset(fsk.plane, 0 - gasket)) {
+  for k in 0..n {
+    c = circle((y0 + pitch * k, 0), pr - wall)
+  }
+}
+for k in 0..n {
+  sketch rail(on: rotate(datum.plane, about: datum.run[k], by: 90deg)) {
+    path route(start: (0, 0 - fl_t)) {
+      line(to: (0, rise))
+      tarc(to: (0 - bend, rise + bend))
+      line(to: (cz + cr / 2, rise + bend))
+    }
+    path broute(start: (0, 0 - fl_t - gasket)) {
+      line(to: (0, rise))
+      tarc(to: (0 - bend, rise + bend))
+      line(to: (cz, rise + bend))
+    }
+  }
+}
+for k in 0..n {
+  runner = sweep(rprof.c[k], along: rail[k].route)
+}
+
+# the collector's sketches square to the row, x out from the head face (where its seam lies)
+sketch csk(on: plane(at: datum.col_at.a, normal: datum.along.dir, x: datum.plane.normal)) {
+  c = circle((rise + bend, 0 - cz), cr)
+}
+col = extrude(csk.c, col_l)
+sketch osk(on: plane(at: datum.of_at.a, normal: datum.along.dir, x: datum.plane.normal)) {
+  outline = hull(disc((rise + bend + of_r - of_h, of_r - of_h - cz), of_r),
+                 disc((rise + bend + of_h - of_r, of_r - of_h - cz), of_r),
+                 disc((rise + bend + of_h - of_r, of_h - of_r - cz), of_r),
+                 disc((rise + bend + of_r - of_h, of_h - of_r - cz), of_r))
+}
+oflange = extrude(osk, of_t)
+seal_land = thicken(oflange.end, land)
+flange_blend = fillet(edges(between: (runner, flange), crease: "concave"), r)
+col_blend = fillet(edges(between: (runner, col), crease: "concave"), r)
+of_blend = fillet(edges(between: (col, oflange), crease: "concave"), r)
+
+for k in 0..n {
+  bore = sweep(bprof.c[k], along: rail[k].broute, cut: true)
+}
+sketch cbs(on: plane(at: datum.bore_at.a, normal: datum.along.dir, x: datum.plane.normal)) {
+  c = circle((rise + bend, 0 - cz), cr - wall - land)
+}
+col_bore = cut(cbs.c, 0 - bore_l)
+
+stud = hole(at: datum.points, d: stud_d, depth: thru)
+sketch ostuds(on: plane(at: datum.land_at.a, normal: datum.along.dir, x: datum.plane.normal)) {
+  a = pt(rise + bend + ostud_pcd, 0 - cz)
+  b = pt(rise + bend - ostud_pcd / 2, ostud_off - cz)
+  c = pt(rise + bend - ostud_pcd / 2, 0 - ostud_off - cz)
+}
+ostud = hole(at: ostuds.points, screw: "M8", fit: "tap", depth: ostud_depth)

@@ -1,0 +1,136 @@
+# Centrifugal pump volute casing (tools/bench-parts/volute.fc), hand port: a spiral passage
+# lofted through sections that grow round the impeller and on into the diffuser, its core lofted
+# out 5 mm smaller; a discharge flange, a seal housing behind and a foot below, holes through.
+# The gland and vent holes' M10x1.5 thread is a record only in the .fc (lane fg-holes): left out.
+
+# the spiral's stations: angle round the shaft, radius to the section's centre, section radii
+shared ang = [60deg, 110deg, 160deg, 210deg, 260deg, 310deg, 360deg]
+shared rc = [87.17, 89.81, 92.44, 95.08, 97.72, 100.4, 103]
+shared ro = [16.67, 18.89, 21.11, 23.33, 25.56, 27.78, 30]
+shared ri = [11.67, 13.89, 16.11, 18.33, 20.56, 22.78, 25]
+shared n = count(7)
+# the diffuser: its axis at x = dx, sections at y = dy[k], outer and core radii
+shared dx = 103
+shared dy = [55, 110]
+shared dro = [33.5, 37]
+shared dri = [28.5, 32]
+shared dyc = 125
+shared drc = 33
+shared tick = 10
+shared casing_r = 84
+shared casing_w = 44
+shared fl = 14
+shared fl_r = 55
+shared seal_z = 22
+shared seal_l = 40
+shared seal_r = 34
+shared ch_z = 16
+shared ch_d = 38
+shared ch_r = 76
+shared bolt_d = 14
+shared bolt_pcd_r = 45
+shared bolts = count(8)
+shared shaft_d = 36
+shared gland_d = 8.5
+shared gland_y = 26
+shared gland_depth = 15
+shared vent_y = 112
+shared vent_depth = 10
+shared foot_y = 134
+shared foot_w = 160
+shared foot_l = 50
+shared foot_t = 12
+shared fhole_x = 65
+shared fhole_d = 14
+param seal_blend.r = 3
+param shaft_break.c = 1
+
+# where everything stands: the shaft along z through the origin, the stations' centres and
+# radial lines, and lines along x at the flange, the vent and the foot
+sketch datum(on: xy) {
+  for i in 0..n {
+    c = pt(rc[i] * cos(ang[i]), rc[i] * sin(ang[i]))
+    radial = line(c, ((rc[i] + tick) * cos(ang[i]), (rc[i] + tick) * sin(ang[i])), construction: true)
+  }
+  for k in 0..2 {
+    diff = line((dx, dy[k]), (dx + tick, dy[k]), construction: true)
+  }
+  core_end = line((dx, dyc), (dx + tick, dyc), construction: true)
+  flange_face = line((dx, dy[1] - fl), (dx + tick, dy[1] - fl), construction: true)
+  vent_at = line((0, vent_y), (tick, vent_y), construction: true)
+  foot_at = line((0, 0 - foot_y), (tick, 0 - foot_y), construction: true)
+}
+
+# the sections: square to the spiral at each station, x out from the shaft
+for i in 0..n {
+  sketch vo(on: rotate(datum.plane, about: datum.radial[i], by: -90deg)) {
+    c = circle((0, 0), ro[i])
+  }
+  sketch vi(on: rotate(datum.plane, about: datum.radial[i], by: -90deg)) {
+    c = circle((0, 0), ri[i])
+  }
+}
+for k in 0..2 {
+  sketch dob(on: rotate(datum.plane, about: datum.diff[k], by: -90deg)) {
+    c = circle((0, 0), dro[k])
+  }
+  sketch dib(on: rotate(datum.plane, about: datum.diff[k], by: -90deg)) {
+    c = circle((0, 0), dri[k])
+  }
+}
+sketch dic(on: rotate(datum.plane, about: datum.core_end, by: -90deg)) {
+  c = circle((0, 0), drc)
+}
+
+volute = loft([vo[i].c for i in 0..n] + [dob[k].c for k in 0..2], smooth: true)
+sketch cs(on: datum.plane) {
+  c = circle((0, 0), casing_r)
+}
+casing = extrude(cs.c, sym(casing_w))
+sketch dfs(on: rotate(datum.plane, about: datum.diff[1], by: 90deg)) {
+  c = circle((0, 0), fl_r)
+}
+dflange = extrude(dfs.c, fl)
+sketch ss(on: offset(datum.plane, 0 - seal_z)) {
+  c = circle((0, 0), seal_r)
+}
+seal = extrude(ss.c, 0 - seal_l)
+core = loft([vi[i].c for i in 0..n] + [dib[k].c for k in 0..2] + [dic.c], smooth: true, cut: true)
+sketch chs(on: offset(datum.plane, 0 - ch_z)) {
+  c = circle((0, 0), ch_r)
+}
+chamber = cut(chs.c, 0 - ch_d)
+
+# discharge flange: eight bolts on a 90 PCD
+sketch bolt_pcd(on: rotate(datum.plane, about: datum.flange_face, by: 90deg)) {
+  for j in 0..bolts {
+    p = pt(polar(bolts, bolt_pcd_r)[j].x, polar(bolts, bolt_pcd_r)[j].y)
+  }
+}
+dbolt = hole(at: bolt_pcd.points, d: bolt_d, depth: thru)
+
+# seal housing: the shaft bore and two gland studs
+sketch seal_end(on: seal.end) {
+  o = pt(0, 0)
+  g1 = pt(0, gland_y)
+  g2 = pt(0, 0 - gland_y)
+}
+shaft = hole(at: seal_end.o, d: shaft_d, depth: thru)
+gland = hole(at: [seal_end.g1, seal_end.g2], d: gland_d, depth: gland_depth)
+sketch vent_sk(on: rotate(datum.plane, about: datum.vent_at, by: -90deg)) {
+  p = pt(0, 0)
+}
+vent = hole(at: vent_sk.p, d: gland_d, depth: vent_depth)
+
+# foot: a pad cast under the volute, two holes
+sketch foot_sk(on: rotate(datum.plane, about: datum.foot_at, by: -90deg)) {
+  pad = rect(center: (0, 0), size: (foot_w, foot_l))
+}
+foot = extrude(foot_sk.pad, foot_t)
+sketch fh(on: rotate(datum.plane, about: datum.foot_at, by: 90deg)) {
+  a = pt(0 - fhole_x, 0)
+  b = pt(fhole_x, 0)
+}
+fhole = hole(at: [fh.a, fh.b], d: fhole_d, depth: foot_t)
+seal_blend = fillet(edges(between: (seal, casing), crease: "concave"), r)
+shaft_break = chamfer(edges(of: shaft, shape: "circle"), c)
