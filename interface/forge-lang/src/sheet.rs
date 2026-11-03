@@ -2025,7 +2025,8 @@ fn push_sheet_step(
     dims: Vec<Dimension>,
 ) -> R<usize> {
     let st = &ev.sheets.list[si];
-    let marker = marker(id, format!("{:?}", st.sheet));
+    let text = format!("{:?}", st.sheet);
+    let marker = marker(id, text.clone());
     let sheet = st.sheet.clone();
     let solid = st.idx;
     let snapshot = st.clone();
@@ -2042,12 +2043,13 @@ fn push_sheet_step(
     });
     let (idx, _) = r?;
     let built = ev.b.building && ev.feats.last().is_some_and(|f| f.status == Status::Ok);
+    let key = format!("folded {text}");
     ev.sheets.list[si].folded = match (made, built) {
-        (Some(b), _) => Some(b),
-        // the stage came from the cache: the roles from the graph again
+        (Some(b), _) => ev.b.memo(key, || Some(b)),
+        // the stage came from the cache: the build that made it, or the roles from the graph again
         (None, true) => {
             let t = Instant::now();
-            let b = fs::build_with(&ev.sheets.list[si].sheet, Map::Folded).ok();
+            let b = ev.b.memo(key, || fs::build_with(&sheet, Map::Folded).ok());
             ev.b.kernel_ms += t.elapsed().as_secs_f64() * 1e3;
             b
         }
@@ -2771,7 +2773,8 @@ fn unfold(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     let mut flat = st.sheet.clone();
     flat.frame = frame;
     let hid = history_id(&id);
-    let marker = marker(&id, format!("{flat:?}"));
+    let text = format!("{flat:?}");
+    let marker = marker(&id, text.clone());
     let solid = ev.b.features.len();
     let snapshot = st.clone();
     let salt = Name::feature(hid);
@@ -2786,9 +2789,10 @@ fn unfold(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     });
     r?;
     let ok = ev.feats.last().is_some_and(|f| f.status == Status::Ok);
+    let key = format!("flat {text}");
     let built = match (made, ok) {
-        (Some(b), _) => Some(b),
-        (None, true) => fs::build_with(&flat, Map::Flat).ok(),
+        (Some(b), _) => ev.b.memo(key, || Some(b)),
+        (None, true) => ev.b.memo(key, || fs::build_with(&flat, Map::Flat).ok()),
         (None, false) => None,
     };
     let index = ev.sheets.list[si].unfolds.len();
@@ -3269,12 +3273,18 @@ pub fn finish(ev: &mut Eval) {
     }
     for st in &ev.sheets.list {
         // the shop's rules where there is a shop; hardware's own rows always
-        let violations = match &st.shop {
-            Some(shop) => fs::check(&st.sheet, &shop.shop),
-            None => fs::checks::mounts(&st.sheet, None),
+        let (violations, warnings) = {
+            let key = format!("checks {:?} {:?}", st.sheet, st.shop.as_ref().map(|s| &s.shop));
+            ev.b.memo(key, || {
+                let violations = match &st.shop {
+                    Some(shop) => fs::check(&st.sheet, &shop.shop),
+                    None => fs::checks::mounts(&st.sheet, None),
+                };
+                (violations, fs::checks::warnings(&st.sheet))
+            })
         };
         let cut_owner = |c: CutId| st.cuts.iter().find(|x| x.0 == c).map(|x| (x.1.clone(), x.2));
-        for w in fs::checks::warnings(&st.sheet) {
+        for w in warnings {
             let fs::SheetWarning::UnverifiedHardware { cut, .. } = w else {
                 continue;
             };
