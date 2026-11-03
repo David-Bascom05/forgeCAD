@@ -483,7 +483,7 @@ impl Revolver<'_> {
             for k in 0..self.spans() {
                 let k1 = self.next_copy(k);
                 let (same_sense, flip) = self.orientation(&s.seg, &surface, self.angles[k], self.span_end(k));
-                let name = self.root.with_str("side").with(s.id).with(k as u64);
+                let name = crate::roles::revolve_side(self.root, s.id, k as u64);
                 let face = self.body.add_face(shell, surface.clone(), same_sense, name);
                 let Some(first) = eid[k][si] else {
                     // a whole-turn disc or ring: each circle a loop of its own, the outer first
@@ -522,7 +522,7 @@ impl Revolver<'_> {
             // what the second half-turn was named finds the whole
             let root = self.root;
             for s in &segs {
-                let side = root.with_str("side").with(s.id);
+                let side = crate::roles::side(root, s.id);
                 let copy = |k: u64| root.with_str("copy").with(k).with(s.id);
                 let sweep = |k: u64| root.with_str("sweep").with(k).with(s.id);
                 self.body.joins.aliases.extend([

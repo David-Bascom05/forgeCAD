@@ -149,8 +149,8 @@ impl<'a, B: Sink> Builder<'a, B> {
             profile,
             d,
             body,
-            start_name: root.with_str("start"),
-            end_name: root.with_str("end"),
+            start_name: crate::roles::start(root),
+            end_name: crate::roles::end(root),
             root,
         }
     }
@@ -165,7 +165,7 @@ impl<'a, B: Sink> Builder<'a, B> {
         self.frame().plane_point(p) + self.up() * level
     }
     fn side_name(&self, id: u64) -> Name {
-        self.root.with_str("side").with(id)
+        crate::roles::side(self.root, id)
     }
 
     fn build(mut self) -> B {
