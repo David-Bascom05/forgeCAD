@@ -264,6 +264,8 @@ pub fn op_label(op: &Op) -> String {
             Scope::Shared => format!("Lift to shared {name}"),
             Scope::Local(p) => format!("Lift to {}.{name}", path_text(p)),
         },
+        Op::SetArg { id, arg, text } => format!("Set {id}'s {arg}: {text}"),
+        Op::Rename { from, to } => format!("Rename {from} to {to}"),
     }
 }
 
