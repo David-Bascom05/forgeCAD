@@ -1,0 +1,30 @@
+assembly
+
+# fan + guard (SPEC 5.9 rev B): ISO 7045 M4x40 up through guard and fan (stand-in block) into the tray's S-M4-0 (t2); the top pan's floor 9.6 above the tray (spacer 8.0 + washer 1.6). z = Z - 861.10
+
+shared z_fan = 0
+shared off_pan = 9.6
+shared size_m4 = 4
+shared min_m4 = 2.77   # the nut's whole thread
+shared zx_nut = 30.4
+shared zx_scr = 0
+shared zx_pan = 41.88
+shared c_scr_pan = 1.879
+
+fan = part("plates/fan_stack.fg", ground: true, at: pose(at: (0, 0, z_fan)))
+tray = part("plates/tray_fan_t2.fg")
+nut = part("../pem_s_m4_0_t2.fg")
+pan = part("plates/pan_under_t3.fg")
+scr = part("../iso7045_m4x40.fg")
+at_tray = fastened(tray.a, fan.b)
+at_nut = fastened(nut.flush, tray.a)
+at_pan = slider(pan.a, tray.b, along: off_pan)
+at_scr = fastened(scr.head, fan.a)
+m4 = fit_rule(external_thread, internal_thread, size: size_m4, min_engagement: min_m4)
+
+expect interferences = 0
+expect mobility = 0
+expect z(nut) = zx_nut +- 0.001
+expect z(scr) = zx_scr +- 0.001
+expect z(pan) = zx_pan +- 0.001
+expect clearance(scr, pan) >= c_scr_pan

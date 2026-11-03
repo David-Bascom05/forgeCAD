@@ -1,0 +1,66 @@
+{
+ "part": "door",
+ "lints": [],
+ "ok": true,
+ "errors": [],
+ "violations": [],
+ "warnings": [],
+ "expects": [
+  {
+   "metric": "volume",
+   "measured": 1386302.6,
+   "ok": true
+  },
+  {
+   "metric": "bodies",
+   "measured": 2,
+   "ok": true
+  },
+  {
+   "metric": "valid",
+   "measured": 1,
+   "ok": true
+  }
+ ],
+ "bends": [
+  {
+   "flange": "top_r",
+   "angle": 90,
+   "radius": 1.6,
+   "allowance": 3.468
+  },
+  {
+   "flange": "latch_r",
+   "angle": 90,
+   "radius": 1.6,
+   "allowance": 3.468
+  },
+  {
+   "flange": "bot_r",
+   "angle": 90,
+   "radius": 1.6,
+   "allowance": 3.468
+  },
+  {
+   "flange": "hinge_r",
+   "angle": 90,
+   "radius": 1.6,
+   "allowance": 3.468
+  }
+ ],
+ "shop_limits": {
+  "flat_bbox": [
+   630.917,
+   872.457
+  ],
+  "flat_fits_762x914.4": true,
+  "max_bend_line": 824.96,
+  "bend_lines_ok": true,
+  "bend_angles_ok": true,
+  "open_loops": 0,
+  "flat_area_x_t": 692649.1683562045,
+  "flat_body_volume": 692647.6000000001,
+  "rel_err": 2.2642916894950762e-06
+ },
+ "volume": 1386302.6
+}

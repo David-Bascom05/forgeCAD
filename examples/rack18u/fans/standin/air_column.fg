@@ -1,0 +1,15 @@
+# REFERENCE (not a part): the air leaving one fan, a 114 disc (the fan's bore) from the outlet face up
+# to the top pan's outer face, for the airflow checks in fans/test.fg.
+# frame: origin at the centre of the fan's outlet face; +z along the airflow.
+shared d_bore = 114             # fan_120x25.fg's bore
+shared h = 14.5                 # outlet face Z 891.50 to the top pan's outer face Z 906.00 (SPEC 5.9 rev B)
+shared xl = 10
+sketch plan(on: xy) {
+  c = circle((0, 0), d_bore / 2)
+  o = pt(0, 0)
+  xax = line((0, 0), (xl, 0), construction: true)
+}
+air = extrude(plan.c, h)
+base = anchor(plane(at: plan.o, normal: plan.plane.normal, x: plan.xax.dir))
+expect volume = pi / 4 * d_bore ^ 2 * h +- 0.01%
+expect valid

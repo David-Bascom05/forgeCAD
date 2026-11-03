@@ -1,0 +1,38 @@
+# caster lock pin 5.0 with a domed foot: the lever's cam lifts it into a race notch
+# source: SPEC 6.2 (5.0 pin, 4.0 travel); placed at brake 0
+# frame: the caster frame (SPEC 5.10): origin on the kingpin axis in the plate's top face, z up, y along the plate's long side, the wheel towards -y; drawn at brake 0
+
+shared xp = 14.001513
+shared yp = 18.247127
+shared rp = 2.5
+shared zt = 19.2   # top at brake 0
+shared zd = 27.5   # dome centre at brake 0
+shared zg = 19.5   # the guide's top face (the anchor)
+shared lref = 10
+
+sketch ref(on: xy) {
+  o = pt(0, 0)
+  xl = line((0, 0), (lref, 0), construction: true)
+  yl = line((0, 0), (0, lref), construction: true)
+  xn = line((lref, 0), (0, 0), construction: true)
+}
+sketch top(on: offset(ref.plane, -zt)) {
+  c = circle((xp, yp), rp)
+  g = pt(xp, yp)
+}
+body = extrude(top.c, -(zd - zt))
+sketch dm(on: offset(ref.plane, -zd)) {
+  c = pt(xp, yp)
+}
+foot = ball(dm.c, rp)
+sketch ga(on: offset(ref.plane, -zg)) {
+  a = pt(xp, yp)
+}
+
+cf = anchor(plane(at: ref.o, normal: ref.plane.normal, x: ref.xl.dir))
+ax = anchor(plane(at: ga.a, normal: ref.plane.normal, x: ref.xl.dir))
+tip = anchor(plane(at: top.g, normal: ref.plane.normal, x: ref.xl.dir))
+
+expect valid
+expect bodies = 1
+expect volume = 195.695 +- 0.05%

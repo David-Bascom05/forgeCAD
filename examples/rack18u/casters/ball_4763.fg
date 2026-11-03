@@ -1,0 +1,25 @@
+# steel ball 4.763 (3/16"), ISO 3290 G100: the caster's swivel ball rows
+# source: SPEC 6.2 (upper 24 on a 50.0 pitch circle, lower 20 on 36.0)
+# frame: origin at the ball's centre; uorb / lorb are the row's orbit centres, the ball out along their x
+
+shared dw = 4.763   # ball diameter
+shared rw = dw / 2
+shared ru = 25   # upper row pitch radius
+shared rl = 18   # lower row pitch radius
+
+sketch prof(on: xz) {
+  c0 = pt(0, 0)
+  pu = pt(-ru, 0)
+  pl = pt(-rl, 0)
+  zax = line((0, 0), (0, rw), construction: true)
+  xax = line((0, 0), (rw, 0), construction: true)
+}
+shot = ball(prof.c0, rw)
+
+c = anchor(plane(at: prof.c0, normal: prof.zax.dir, x: prof.xax.dir))
+uorb = anchor(plane(at: prof.pu, normal: prof.zax.dir, x: prof.xax.dir))
+lorb = anchor(plane(at: prof.pl, normal: prof.zax.dir, x: prof.xax.dir))
+
+expect valid
+expect bodies = 1
+expect volume = 56.577 +- 0.05%

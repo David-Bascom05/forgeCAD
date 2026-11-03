@@ -1,0 +1,715 @@
+{
+ "ok": true,
+ "timings_ms": {
+  "parse": 0.5663,
+  "check": 0.0261,
+  "eval_and_build": 11.197,
+  "kernel": 4.855,
+  "measure": 1.377,
+  "total": 13.176
+ },
+ "rebuilt": 20,
+ "reused": 0,
+ "remade": 20,
+ "features": [
+  {
+   "id": "plan",
+   "kind": "sketch",
+   "line": 62,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "tray",
+   "kind": "sheet",
+   "line": 75,
+   "status": "ok",
+   "dims": [
+    {
+     "what": "thickness",
+     "value": 1.88,
+     "dim": "Length",
+     "from": {
+      "driving": "t2"
+     }
+    },
+    {
+     "what": "radius",
+     "value": 1.6,
+     "dim": "Length",
+     "from": {
+      "driven": [
+       "scs"
+      ]
+     }
+    },
+    {
+     "what": "k",
+     "value": 0.4,
+     "dim": "Ratio",
+     "from": {
+      "driven": [
+       "scs"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "right",
+   "kind": "flange",
+   "line": 76,
+   "status": "ok",
+   "dims": [
+    {
+     "what": "height",
+     "value": 20,
+     "dim": "Length",
+     "from": {
+      "driving": "hf"
+     }
+    },
+    {
+     "what": "angle",
+     "value": 90,
+     "dim": "Angle",
+     "from": {
+      "const": true
+     }
+    }
+   ]
+  },
+  {
+   "id": "left",
+   "kind": "flange",
+   "line": 77,
+   "status": "ok",
+   "dims": [
+    {
+     "what": "height",
+     "value": 20,
+     "dim": "Length",
+     "from": {
+      "driving": "hf"
+     }
+    },
+    {
+     "what": "angle",
+     "value": 90,
+     "dim": "Angle",
+     "from": {
+      "const": true
+     }
+    }
+   ]
+  },
+  {
+   "id": "nut[0]",
+   "kind": "pem",
+   "line": 79,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "nut[1]",
+   "kind": "pem",
+   "line": 79,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "nut[2]",
+   "kind": "pem",
+   "line": 79,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "nut[3]",
+   "kind": "pem",
+   "line": 79,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "nut[4]",
+   "kind": "pem",
+   "line": 79,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "nut[5]",
+   "kind": "pem",
+   "line": 79,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "nut[6]",
+   "kind": "pem",
+   "line": 79,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "nut[7]",
+   "kind": "pem",
+   "line": 79,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "nut[8]",
+   "kind": "pem",
+   "line": 79,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "nut[9]",
+   "kind": "pem",
+   "line": 79,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "nut[10]",
+   "kind": "pem",
+   "line": 79,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "nut[11]",
+   "kind": "pem",
+   "line": 79,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "nut[12]",
+   "kind": "pem",
+   "line": 79,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "nut[13]",
+   "kind": "pem",
+   "line": 79,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "nut[14]",
+   "kind": "pem",
+   "line": 79,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "nut[15]",
+   "kind": "pem",
+   "line": 79,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "bot",
+   "kind": "sketch",
+   "line": 83,
+   "status": "ok",
+   "dims": []
+  }
+ ],
+ "params": [
+  {
+   "param": "t3",
+   "shared": true,
+   "structural": false,
+   "line": 10,
+   "value": {
+    "value": 3.02,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "t2",
+   "shared": true,
+   "structural": false,
+   "line": 11,
+   "value": {
+    "value": 1.88,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": [
+    "tray"
+   ]
+  },
+  {
+   "param": "t1",
+   "shared": true,
+   "structural": false,
+   "line": 12,
+   "value": {
+    "value": 1.52,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "r_scs",
+   "shared": true,
+   "structural": false,
+   "line": 13,
+   "value": {
+    "value": 1.6,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "kerf_scs",
+   "shared": true,
+   "structural": false,
+   "line": 14,
+   "value": {
+    "value": 0.2,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "hw_scs",
+   "shared": true,
+   "structural": false,
+   "line": 15,
+   "value": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "scs",
+   "shared": true,
+   "structural": false,
+   "line": 29,
+   "value": null,
+   "links": [
+    "r_scs",
+    "t1",
+    "t2",
+    "t3"
+   ],
+   "used_by": [
+    "tray"
+   ]
+  },
+  {
+   "param": "W",
+   "shared": true,
+   "structural": false,
+   "line": 44,
+   "value": {
+    "value": 300,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "hf",
+   "shared": true,
+   "structural": false,
+   "line": 45,
+   "value": {
+    "value": 20,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": [
+    "right",
+    "left"
+   ]
+  },
+  {
+   "param": "fc",
+   "shared": true,
+   "structural": false,
+   "line": 46,
+   "value": {
+    "value": 70,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "d_open",
+   "shared": true,
+   "structural": false,
+   "line": 47,
+   "value": {
+    "value": 116,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "hs",
+   "shared": true,
+   "structural": false,
+   "line": 48,
+   "value": {
+    "value": 52.5,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "hx",
+   "shared": true,
+   "structural": false,
+   "line": 49,
+   "value": {
+    "value": 130,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "hy",
+   "shared": true,
+   "structural": false,
+   "line": 50,
+   "value": {
+    "value": 140,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "d_hang",
+   "shared": true,
+   "structural": false,
+   "line": 51,
+   "value": {
+    "value": 8.6,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "xl",
+   "shared": true,
+   "structural": false,
+   "line": 52,
+   "value": {
+    "value": 10,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "fx",
+   "shared": true,
+   "structural": false,
+   "line": 54,
+   "value": [
+    -70,
+    70,
+    -70,
+    70
+   ],
+   "links": [
+    "fc"
+   ],
+   "used_by": []
+  },
+  {
+   "param": "fy",
+   "shared": true,
+   "structural": false,
+   "line": 55,
+   "value": [
+    -70,
+    -70,
+    70,
+    70
+   ],
+   "links": [
+    "fc"
+   ],
+   "used_by": []
+  },
+  {
+   "param": "nx",
+   "shared": true,
+   "structural": false,
+   "line": 57,
+   "value": [
+    -122.5,
+    -17.5,
+    -122.5,
+    -17.5,
+    17.5,
+    122.5,
+    17.5,
+    122.5,
+    -122.5,
+    -17.5,
+    -122.5,
+    -17.5,
+    17.5,
+    122.5,
+    17.5,
+    122.5
+   ],
+   "links": [
+    "fc",
+    "hs"
+   ],
+   "used_by": []
+  },
+  {
+   "param": "ny",
+   "shared": true,
+   "structural": false,
+   "line": 58,
+   "value": [
+    -122.5,
+    -122.5,
+    -17.5,
+    -17.5,
+    -122.5,
+    -122.5,
+    -17.5,
+    -17.5,
+    17.5,
+    17.5,
+    122.5,
+    122.5,
+    17.5,
+    17.5,
+    122.5,
+    122.5
+   ],
+   "links": [
+    "fc",
+    "hs"
+   ],
+   "used_by": []
+  },
+  {
+   "param": "gx",
+   "shared": true,
+   "structural": false,
+   "line": 59,
+   "value": [
+    -130,
+    130,
+    -130,
+    130
+   ],
+   "links": [
+    "hx"
+   ],
+   "used_by": []
+  },
+  {
+   "param": "gy",
+   "shared": true,
+   "structural": false,
+   "line": 60,
+   "value": [
+    -140,
+    -140,
+    140,
+    140
+   ],
+   "links": [
+    "hy"
+   ],
+   "used_by": []
+  },
+  {
+   "param": "k_t2",
+   "shared": true,
+   "structural": false,
+   "line": 103,
+   "value": {
+    "value": 0.4,
+    "dim": "Ratio"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "d_nut",
+   "shared": true,
+   "structural": false,
+   "line": 104,
+   "value": {
+    "value": 5.41,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "bd",
+   "shared": true,
+   "structural": false,
+   "line": 105,
+   "value": {
+    "value": 3.265,
+    "dim": "Length"
+   },
+   "links": [
+    "k_t2",
+    "r_scs",
+    "t2"
+   ],
+   "used_by": []
+  },
+  {
+   "param": "blank",
+   "shared": true,
+   "structural": false,
+   "line": 106,
+   "value": {
+    "value": 100040.7,
+    "dim": "Area"
+   },
+   "links": [
+    "W",
+    "bd",
+    "hf"
+   ],
+   "used_by": []
+  },
+  {
+   "param": "holes",
+   "shared": true,
+   "structural": false,
+   "line": 107,
+   "value": {
+    "value": 42873.4,
+    "dim": "Area"
+   },
+   "links": [
+    "d_hang",
+    "d_nut",
+    "d_open"
+   ],
+   "used_by": []
+  },
+  {
+   "param": "arc_extra",
+   "shared": true,
+   "structural": false,
+   "line": 108,
+   "value": {
+    "value": 177.186,
+    "dim": "Area"
+   },
+   "links": [
+    "W",
+    "k_t2",
+    "t2"
+   ],
+   "used_by": []
+  }
+ ],
+ "errors": [],
+ "warnings": [],
+ "expects": [
+  {
+   "metric": "volume",
+   "measured": 107807.6,
+   "ok": true
+  },
+  {
+   "metric": "bodies",
+   "measured": 1,
+   "ok": true
+  },
+  {
+   "metric": "valid",
+   "measured": 1,
+   "ok": true
+  }
+ ],
+ "sheets": [
+  {
+   "id": "tray",
+   "thickness": 1.88,
+   "radius": 1.6,
+   "rule": {
+    "k": 0.4
+   },
+   "walls": 3,
+   "bends": [
+    {
+     "flange": "right",
+     "angle": -90,
+     "radius": 1.6,
+     "allowance": 3.695,
+     "setback": 3.48,
+     "length": 300
+    },
+    {
+     "flange": "left",
+     "angle": -90,
+     "radius": 1.6,
+     "allowance": 3.695,
+     "setback": 3.48,
+     "length": 300
+    }
+   ],
+   "reliefs": [],
+   "corners": []
+  }
+ ],
+ "part": {
+  "volume": 107807.6,
+  "area": 120527.9,
+  "centroid": [
+   0,
+   0,
+   -2.842
+  ],
+  "faces": 38,
+  "edges": 108,
+  "bodies": 1,
+  "valid": true,
+  "problems": [],
+  "bbox": [
+   -150,
+   -150,
+   -20,
+   150,
+   150,
+   0
+  ]
+ }
+}

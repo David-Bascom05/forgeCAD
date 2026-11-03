@@ -1,0 +1,24 @@
+assembly
+
+# latch base <-> door (SPEC 5.8), z = rack y: FH-M4-12 in the door, base, ISO 7089-4, ISO 10511-M4
+
+shared z_door = 0
+shared size_m4 = 4
+shared min_m4 = 5   # the nut's whole thread
+shared zx_nut = 5.34
+
+door = part("plates/door_stud_t1.fg", ground: true, at: pose(at: (0, 0, z_door)))
+stud = part("../pem_fh_m4_12.fg")
+base = part("plates/base_stud_t3.fg")
+wsh = part("../iso7089_4.fg")
+nut = part("../iso10511_m4.fg")
+at_stud = fastened(stud.flush, door.a)
+at_base = fastened(base.a, door.b)
+at_wsh = fastened(wsh.a, base.b)
+at_nut = fastened(nut.seat, wsh.b)
+m4 = fit_rule(external_thread, internal_thread, size: size_m4, min_engagement: min_m4)
+press = fit_rule("../pem_fh_m4_12.fg", "plates/door_stud_t1.fg")
+
+expect interferences = 0
+expect mobility = 0
+expect z(nut) = zx_nut +- 0.001

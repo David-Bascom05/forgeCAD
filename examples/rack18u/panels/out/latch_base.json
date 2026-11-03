@@ -1,0 +1,48 @@
+{
+ "part": "latch_base",
+ "lints": [],
+ "ok": true,
+ "errors": [],
+ "violations": [],
+ "warnings": [],
+ "expects": [
+  {
+   "metric": "volume",
+   "measured": 27706.2,
+   "ok": true
+  },
+  {
+   "metric": "bodies",
+   "measured": 2,
+   "ok": true
+  },
+  {
+   "metric": "valid",
+   "measured": 1,
+   "ok": true
+  }
+ ],
+ "bends": [
+  {
+   "flange": "tab_f",
+   "angle": 90,
+   "radius": 1.6,
+   "allowance": 4.316
+  }
+ ],
+ "shop_limits": {
+  "flat_bbox": [
+   53.4,
+   94.616
+  ],
+  "flat_fits_762x914.4": true,
+  "max_bend_line": 53.4,
+  "bend_lines_ok": true,
+  "bend_angles_ok": true,
+  "open_loops": 0,
+  "flat_area_x_t": 13807.241141100856,
+  "flat_body_volume": 13807.2,
+  "rel_err": 2.9796845743803332e-06
+ },
+ "volume": 27706.2
+}

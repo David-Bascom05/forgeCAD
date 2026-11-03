@@ -1,0 +1,48 @@
+{
+ "part": "hinge_bracket",
+ "lints": [],
+ "ok": true,
+ "errors": [],
+ "violations": [],
+ "warnings": [],
+ "expects": [
+  {
+   "metric": "volume",
+   "measured": 9217.8,
+   "ok": true
+  },
+  {
+   "metric": "bodies",
+   "measured": 2,
+   "ok": true
+  },
+  {
+   "metric": "valid",
+   "measured": 1,
+   "ok": true
+  }
+ ],
+ "bends": [
+  {
+   "flange": "vert",
+   "angle": 90,
+   "radius": 1.6,
+   "allowance": 3.695
+  }
+ ],
+ "shop_limits": {
+  "flat_bbox": [
+   34.0,
+   77.535
+  ],
+  "flat_fits_762x914.4": true,
+  "max_bend_line": 34.0,
+  "bend_lines_ok": true,
+  "bend_angles_ok": true,
+  "open_loops": 0,
+  "flat_area_x_t": 4599.449125268166,
+  "flat_body_volume": 4599.499999999999,
+  "rel_err": -1.1060926586077643e-05
+ },
+ "volume": 9217.8
+}

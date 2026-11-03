@@ -1,0 +1,183 @@
+assembly
+
+# Subsystem A test: 4 posts, 2 pans, 4 carriers, 4 rails, every PEM body, the post studs with washers and
+# nylocs, the carrier-to-pan and rail-to-carrier screws. Every part placed by its SPEC 5.1-5.4 pose (rack
+# coordinates); hardware fastened to the parts' anchors (SPEC rev B R1, R4). Rails move by one SetParam:
+# rail_front, rail_rear (multiples of 25; SPEC 6.3). The checks run at (100, 725), (50, 750), (100, 400).
+
+shared rail_front = 100
+shared rail_rear = 725
+shared t2 = 1.88
+shared t3 = 3.02
+shared m6 = 6
+shared m6_min = 4.78            # SPEC 8 rev B: the shortest whole M6 nut
+shared y_post_f = 35
+shared y_post_r = 765
+shared x_post = 298.48
+shared y_pan = 400
+shared z_top = 906
+shared x_car = 251.88
+shared y_car_f = 43
+shared y_car_r = 757
+shared z_car_b = 3.02
+shared z_car_t = 902.98
+shared x_rail = 251.88
+shared z_rail_b = 8
+shared z_rail_t = 898
+shared n_stud = count(2)
+shared n_pnl = count(6)
+shared n_hng = count(4)
+shared n_stk = count(2)
+shared n_rail_nut = count(28)
+shared n_pan_nut = count(3)
+shared n_web = count(2)
+
+# posts (SPEC 5.1): origin, u, v; w is +Z at every corner
+shared posts = {fl: ((-x_post, y_post_f, 0), (1, 0, 0)), fr: ((x_post, y_post_f, 0), (0, 1, 0)),
+                rr: ((x_post, y_post_r, 0), (-1, 0, 0)), rl: ((-x_post, y_post_r, 0), (0, -1, 0))}
+for c, p in posts {
+  post = part("post.fg", body: "leg_a", ground: true, at: pose(at: p[0], z: (0, 0, 1), x: p[1]))
+  for i in 0..n_stud {
+    stud_a = part("../hw/pem_fh_m6_20.fg")
+    at_stud_a = fastened(stud_a.flush, post.stud_a[i])
+    stud_b = part("../hw/pem_fh_m6_20.fg")
+    at_stud_b = fastened(stud_b.flush, post.stud_b[i])
+    # inside the pan flange: post 3.02 + flange 3.02 from the post's outer face
+    wsh_a = part("../hw/iso7089_6.fg")
+    at_wsh_a = slider(wsh_a.a, post.stud_a[i], along: t3 + t3)
+    nut_a = part("../hw/iso10511_m6.fg")
+    at_nut_a = fastened(nut_a.seat, wsh_a.b)
+    wsh_b = part("../hw/iso7089_6.fg")
+    at_wsh_b = slider(wsh_b.a, post.stud_b[i], along: t3 + t3)
+    nut_b = part("../hw/iso10511_m6.fg")
+    at_nut_b = fastened(nut_b.seat, wsh_b.b)
+  }
+  for i in 0..n_pnl {
+    pnl_a = part("../hw/pem_ss_m5_0_t3.fg")
+    at_pnl_a = fastened(pnl_a.flush, post.pnl_a[i])
+    pnl_b = part("../hw/pem_ss_m5_0_t3.fg")
+    at_pnl_b = fastened(pnl_b.flush, post.pnl_b[i])
+  }
+  for i in 0..n_hng {
+    hng_a = part("../hw/pem_s_m6_0_t3.fg")
+    at_hng_a = fastened(hng_a.flush, post.hng_a[i])
+    hng_b = part("../hw/pem_s_m6_0_t3.fg")
+    at_hng_b = fastened(hng_b.flush, post.hng_b[i])
+  }
+  for i in 0..n_stk {
+    stk_a = part("../hw/pem_s_m6_0_t3.fg")
+    at_stk_a = fastened(stk_a.flush, post.stk_a[i])
+    stk_b = part("../hw/pem_s_m6_0_t3.fg")
+    at_stk_b = fastened(stk_b.flush, post.stk_b[i])
+  }
+}
+
+# pans (SPEC 5.2)
+base_pan = part("base_pan.fg", body: "floor", ground: true, at: pose(at: (0, y_pan, 0), z: (0, 0, 1), x: (1, 0, 0)))
+top_pan = part("top_pan.fg", body: "floor", ground: true, at: pose(at: (0, y_pan, z_top), z: (0, 0, -1), x: (-1, 0, 0)))
+
+# carriers (SPEC 5.3): origin, a, c
+shared carriers = {bl: ((-x_car, y_car_f, z_car_b), (0, 1, 0), (0, 0, 1)), br: ((x_car, y_car_r, z_car_b), (0, -1, 0), (0, 0, 1)),
+                   tl: ((-x_car, y_car_r, z_car_t), (0, -1, 0), (0, 0, -1)), tr: ((x_car, y_car_f, z_car_t), (0, 1, 0), (0, 0, -1))}
+for c, p in carriers {
+  carrier = part("carrier.fg", body: "horiz", ground: true, at: pose(at: p[0], z: p[2], x: p[1]))
+  for k in 0..n_rail_nut {
+    rail_nut = part("../hw/pem_s_m6_0_t2.fg")
+    at_rail_nut = fastened(rail_nut.flush, carrier.rail[k])
+  }
+  for i in 0..n_pan_nut {
+    pan_nut = part("../hw/pem_s_m6_0_t2.fg")
+    at_pan_nut = fastened(pan_nut.flush, carrier.pan[i])
+  }
+}
+# carrier screws, M6 x 12 (rev B R2), from outside each pan into the carriers' pan nuts
+for i in 0..n_pan_nut {
+  scr_bl = part("../hw/iso7380_m6x12.fg")
+  at_scr_bl = fastened(scr_bl.head, base_pan.car_l[i])
+  scr_br = part("../hw/iso7380_m6x12.fg")
+  at_scr_br = fastened(scr_br.head, base_pan.car_r[i])
+  scr_tr = part("../hw/iso7380_m6x12.fg")
+  at_scr_tr = fastened(scr_tr.head, top_pan.car_l[i])
+  scr_tl = part("../hw/iso7380_m6x12.fg")
+  at_scr_tl = fastened(scr_tl.head, top_pan.car_r[i])
+}
+
+# rails (SPEC 5.4): origin, p, r
+shared rails = {lf: ((-x_rail, rail_front, z_rail_b), (1, 0, 0), (0, 0, 1)), rf: ((x_rail, rail_front, z_rail_t), (-1, 0, 0), (0, 0, -1)),
+                rr: ((x_rail, rail_rear, z_rail_b), (-1, 0, 0), (0, 0, 1)), lr: ((-x_rail, rail_rear, z_rail_t), (1, 0, 0), (0, 0, -1))}
+for c, p in rails {
+  rail = part("rail.fg", body: "mount", ground: true, at: pose(at: p[0], z: p[2], x: p[1]))
+  # M6 x 10 from inside the web: the head on the web's inner face, t2 behind the web anchors
+  for i in 0..n_web {
+    rs_bot = part("../hw/iso7380_m6x10.fg")
+    at_rs_bot = slider(rs_bot.head, rail.web_bot[i], along: -t2)
+    rs_top = part("../hw/iso7380_m6x10.fg")
+    at_rs_top = slider(rs_top.head, rail.web_top[i], along: -t2)
+  }
+}
+
+m6_thread = fit_rule(external_thread, internal_thread, size: m6, min_engagement: m6_min)
+fh_press = fit_rule("../hw/pem_fh_m6_20.fg", "post.fg")
+
+# the two other rail positions SPEC 8 runs (the default is the first)
+shared front_a = 50
+shared rear_a = 750
+shared front_b = 100
+shared rear_b = 400
+
+expect interferences = 0
+expect interferences = 0 at rail_front = front_a, rail_rear = rear_a
+expect interferences = 0 at rail_front = front_b, rail_rear = rear_b
+expect mobility = 0
+
+# EIA alignment (SPEC 8), at each rail position. A Forge expect compares one metric to a value, so each
+# SPEC difference is written as both ends' absolute positions: front to rear y, the flipped right rail's
+# and the rear rail's z against the left front rail's (k = 0, 26, 53), and the 465.10 pitch.
+shared z_k0 = 59.30             # U1 bottom 52.95 + 6.35
+shared z_k26 = 446.65           # U9 bottom 408.55 + 38.10
+shared z_k53 = 846.70           # U18 bottom 808.60 + 38.10
+shared x_eia = 232.55
+shared tol = 0.01
+shared tol_x = 0.025            # SPEC: the difference within 0.05, so each side within half
+
+expect y(rail.lf.eia[0]) = rail_front +- tol
+expect y(rail.lr.eia[53]) = rail_rear +- tol
+expect z(rail.lf.eia[0]) = z_k0 +- tol
+expect z(rail.rf.eia[53]) = z_k0 +- tol
+expect z(rail.lr.eia[53]) = z_k0 +- tol
+expect z(rail.lf.eia[26]) = z_k26 +- tol
+expect z(rail.rf.eia[27]) = z_k26 +- tol
+expect z(rail.lr.eia[27]) = z_k26 +- tol
+expect z(rail.lf.eia[53]) = z_k53 +- tol
+expect z(rail.rf.eia[0]) = z_k53 +- tol
+expect z(rail.lr.eia[0]) = z_k53 +- tol
+expect x(rail.lf.eia[0]) = -x_eia +- tol_x
+expect x(rail.rf.eia[0]) = x_eia +- tol_x
+
+expect y(rail.lf.eia[0]) = front_a +- tol at rail_front = front_a, rail_rear = rear_a
+expect y(rail.lr.eia[53]) = rear_a +- tol at rail_front = front_a, rail_rear = rear_a
+expect z(rail.lf.eia[0]) = z_k0 +- tol at rail_front = front_a, rail_rear = rear_a
+expect z(rail.rf.eia[53]) = z_k0 +- tol at rail_front = front_a, rail_rear = rear_a
+expect z(rail.lr.eia[53]) = z_k0 +- tol at rail_front = front_a, rail_rear = rear_a
+expect z(rail.lf.eia[26]) = z_k26 +- tol at rail_front = front_a, rail_rear = rear_a
+expect z(rail.rf.eia[27]) = z_k26 +- tol at rail_front = front_a, rail_rear = rear_a
+expect z(rail.lr.eia[27]) = z_k26 +- tol at rail_front = front_a, rail_rear = rear_a
+expect z(rail.lf.eia[53]) = z_k53 +- tol at rail_front = front_a, rail_rear = rear_a
+expect z(rail.rf.eia[0]) = z_k53 +- tol at rail_front = front_a, rail_rear = rear_a
+expect z(rail.lr.eia[0]) = z_k53 +- tol at rail_front = front_a, rail_rear = rear_a
+expect x(rail.lf.eia[0]) = -x_eia +- tol_x at rail_front = front_a, rail_rear = rear_a
+expect x(rail.rf.eia[0]) = x_eia +- tol_x at rail_front = front_a, rail_rear = rear_a
+
+expect y(rail.lf.eia[0]) = front_b +- tol at rail_front = front_b, rail_rear = rear_b
+expect y(rail.lr.eia[53]) = rear_b +- tol at rail_front = front_b, rail_rear = rear_b
+expect z(rail.lf.eia[0]) = z_k0 +- tol at rail_front = front_b, rail_rear = rear_b
+expect z(rail.rf.eia[53]) = z_k0 +- tol at rail_front = front_b, rail_rear = rear_b
+expect z(rail.lr.eia[53]) = z_k0 +- tol at rail_front = front_b, rail_rear = rear_b
+expect z(rail.lf.eia[26]) = z_k26 +- tol at rail_front = front_b, rail_rear = rear_b
+expect z(rail.rf.eia[27]) = z_k26 +- tol at rail_front = front_b, rail_rear = rear_b
+expect z(rail.lr.eia[27]) = z_k26 +- tol at rail_front = front_b, rail_rear = rear_b
+expect z(rail.lf.eia[53]) = z_k53 +- tol at rail_front = front_b, rail_rear = rear_b
+expect z(rail.rf.eia[0]) = z_k53 +- tol at rail_front = front_b, rail_rear = rear_b
+expect z(rail.lr.eia[0]) = z_k53 +- tol at rail_front = front_b, rail_rear = rear_b
+expect x(rail.lf.eia[0]) = -x_eia +- tol_x at rail_front = front_b, rail_rear = rear_b
+expect x(rail.rf.eia[0]) = x_eia +- tol_x at rail_front = front_b, rail_rear = rear_b

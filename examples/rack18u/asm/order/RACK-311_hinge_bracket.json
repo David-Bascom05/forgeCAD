@@ -1,0 +1,492 @@
+{
+ "ok": true,
+ "timings_ms": {
+  "parse": 0.355,
+  "check": 0.019,
+  "eval_and_build": 1.922,
+  "kernel": 0.3776,
+  "measure": 0.577,
+  "total": 2.882
+ },
+ "rebuilt": 6,
+ "reused": 0,
+ "remade": 6,
+ "features": [
+  {
+   "id": "plan",
+   "kind": "sketch",
+   "line": 52,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "leg",
+   "kind": "sheet",
+   "line": 57,
+   "status": "ok",
+   "dims": [
+    {
+     "what": "thickness",
+     "value": 1.88,
+     "dim": "Length",
+     "from": {
+      "driving": "t2"
+     }
+    },
+    {
+     "what": "radius",
+     "value": 1.6,
+     "dim": "Length",
+     "from": {
+      "driven": [
+       "scs"
+      ]
+     }
+    },
+    {
+     "what": "k",
+     "value": 0.4,
+     "dim": "Ratio",
+     "from": {
+      "driven": [
+       "scs"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "vert",
+   "kind": "flange",
+   "line": 58,
+   "status": "ok",
+   "dims": [
+    {
+     "what": "height",
+     "value": 46.8,
+     "dim": "Length",
+     "from": {
+      "driving": "hv"
+     }
+    },
+    {
+     "what": "angle",
+     "value": 90,
+     "dim": "Angle",
+     "from": {
+      "const": true
+     }
+    }
+   ]
+  },
+  {
+   "id": "bore_s",
+   "kind": "sketch",
+   "line": 61,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "bore_cut",
+   "kind": "cutout",
+   "line": 64,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "holes",
+   "kind": "sketch",
+   "line": 66,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "screws",
+   "kind": "cutout",
+   "line": 71,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "outer",
+   "kind": "sketch",
+   "line": 73,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "flat",
+   "kind": "unfold",
+   "line": 88,
+   "status": "ok",
+   "dims": []
+  }
+ ],
+ "params": [
+  {
+   "param": "t3",
+   "shared": true,
+   "structural": false,
+   "line": 6,
+   "value": {
+    "value": 3.02,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "t2",
+   "shared": true,
+   "structural": false,
+   "line": 7,
+   "value": {
+    "value": 1.88,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": [
+    "leg"
+   ]
+  },
+  {
+   "param": "t1",
+   "shared": true,
+   "structural": false,
+   "line": 8,
+   "value": {
+    "value": 1.52,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "r_scs",
+   "shared": true,
+   "structural": false,
+   "line": 9,
+   "value": {
+    "value": 1.6,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "kerf_scs",
+   "shared": true,
+   "structural": false,
+   "line": 10,
+   "value": {
+    "value": 0.2,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "hw_scs",
+   "shared": true,
+   "structural": false,
+   "line": 11,
+   "value": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "scs",
+   "shared": true,
+   "structural": false,
+   "line": 24,
+   "value": null,
+   "links": [
+    "r_scs",
+    "t1",
+    "t2",
+    "t3"
+   ],
+   "used_by": [
+    "leg"
+   ]
+  },
+  {
+   "param": "w",
+   "shared": true,
+   "structural": false,
+   "line": 39,
+   "value": {
+    "value": 34,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "j0",
+   "shared": true,
+   "structural": false,
+   "line": 40,
+   "value": {
+    "value": -13,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "jl",
+   "shared": true,
+   "structural": false,
+   "line": 41,
+   "value": {
+    "value": 34,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "hv",
+   "shared": true,
+   "structural": false,
+   "line": 42,
+   "value": {
+    "value": 46.8,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": [
+    "vert"
+   ]
+  },
+  {
+   "param": "d_pin",
+   "shared": true,
+   "structural": false,
+   "line": 43,
+   "value": {
+    "value": 8.2,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "size_pin",
+   "shared": true,
+   "structural": false,
+   "line": 44,
+   "value": {
+    "value": 8,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "d_scr",
+   "shared": true,
+   "structural": false,
+   "line": 45,
+   "value": {
+    "value": 6.6,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "zb_scr0",
+   "shared": true,
+   "structural": false,
+   "line": 46,
+   "value": {
+    "value": 20.92,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "zb_scr1",
+   "shared": true,
+   "structural": false,
+   "line": 47,
+   "value": {
+    "value": 36.92,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "i_scr",
+   "shared": true,
+   "structural": false,
+   "line": 48,
+   "value": {
+    "value": 12,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "n_side",
+   "shared": true,
+   "structural": true,
+   "line": 49,
+   "value": {
+    "value": 2,
+    "dim": "Count"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "xl",
+   "shared": true,
+   "structural": false,
+   "line": 50,
+   "value": {
+    "value": 10,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "fold_len",
+   "shared": true,
+   "structural": false,
+   "line": 92,
+   "value": {
+    "value": 77.83,
+    "dim": "Length"
+   },
+   "links": [
+    "hv",
+    "jl",
+    "r_scs",
+    "t2"
+   ],
+   "used_by": []
+  },
+  {
+   "param": "flat_len",
+   "shared": true,
+   "structural": false,
+   "line": 93,
+   "value": {
+    "value": 77.535,
+    "dim": "Length"
+   },
+   "links": [
+    "hv",
+    "jl",
+    "r_scs",
+    "t2"
+   ],
+   "used_by": []
+  },
+  {
+   "param": "holes_a",
+   "shared": true,
+   "structural": false,
+   "line": 94,
+   "value": {
+    "value": 189.658,
+    "dim": "Area"
+   },
+   "links": [
+    "d_pin",
+    "d_scr"
+   ],
+   "used_by": []
+  },
+  {
+   "param": "flat.gap",
+   "shared": false,
+   "structural": false,
+   "line": 87,
+   "value": {
+    "value": 60,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  }
+ ],
+ "errors": [],
+ "warnings": [],
+ "expects": [
+  {
+   "metric": "volume",
+   "measured": 9217.8,
+   "ok": true
+  },
+  {
+   "metric": "bodies",
+   "measured": 2,
+   "ok": true
+  },
+  {
+   "metric": "valid",
+   "measured": 1,
+   "ok": true
+  }
+ ],
+ "sheets": [
+  {
+   "id": "leg",
+   "thickness": 1.88,
+   "radius": 1.6,
+   "rule": {
+    "k": 0.4
+   },
+   "walls": 2,
+   "bends": [
+    {
+     "flange": "vert",
+     "angle": 90,
+     "radius": 1.6,
+     "allowance": 3.695,
+     "setback": 1.6,
+     "length": 34
+    }
+   ],
+   "reliefs": [],
+   "corners": []
+  }
+ ],
+ "part": {
+  "volume": 9217.8,
+  "area": 11054.7,
+  "centroid": [
+   0,
+   -6.023,
+   -24.419
+  ],
+  "faces": 26,
+  "edges": 66,
+  "bodies": 2,
+  "valid": true,
+  "problems": [],
+  "bbox": [
+   -17,
+   -64.535,
+   -61.88,
+   17,
+   21,
+   44.92
+  ]
+ }
+}

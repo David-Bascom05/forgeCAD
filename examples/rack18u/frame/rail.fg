@@ -1,0 +1,119 @@
+# RACK-201 EIA rail: L 26.88 (mount face) x 45 (web) outer, t2, 890 long (SPEC 5.4). x4.
+# Part frame: origin on the outer corner line at the bottom end; p = x across the mount face, q = y along
+# the web, r = z along the length. Mount face: front face q = 0 (equipment ears bear on it); web: outer
+# face p = 0 (bears on the carrier). Inner edge p = 26.88. Every pattern is symmetric about r = 445.
+# Shop: hw/shop.fg, copied verbatim (SPEC 10 gap 12).
+
+shared t3 = 3.02
+shared t2 = 1.88
+shared t1 = 1.52
+shared r_scs = 1.6
+shared kerf_scs = 0.2                       # not published by SendCutSend; Forge's stand-in
+shared hw_scs = [
+  hardware(kind: "nut",  size: "M4", sheet: (0.8, 12.7), hole: 5.41, edge: 6.9, max_hardness: ratio(80),
+           code: "S-M4-0",   source: "PEM CL bulletin; sendcutsend.com hardware catalog"),
+  hardware(kind: "nut",  size: "M5", sheet: (0.8, 12.7), hole: 6.35, edge: 7.1, max_hardness: ratio(80),
+           code: "SS-M5-0",  source: "PEM CL bulletin; sendcutsend.com hardware catalog"),
+  hardware(kind: "nut",  size: "M6", sheet: (1.22, 12.7), hole: 8.75, edge: 8.6, max_hardness: ratio(80),
+           code: "S-M6-0",   source: "PEM CL bulletin; sendcutsend.com hardware catalog"),
+  hardware(kind: "stud", size: "M4", sheet: (1.0, 12.7), hole: 4.0, edge: 7.2, max_hardness: ratio(80),
+           code: "FH-M4-12", source: "PEM FH bulletin; sendcutsend.com hardware catalog"),
+  hardware(kind: "stud", size: "M6", sheet: (1.6, 12.7), hole: 6.0, edge: 7.9, max_hardness: ratio(80),
+           code: "FH-M6-20", source: "PEM FH bulletin; sendcutsend.com hardware catalog"),
+  hardware(kind: "stud", size: "M8", sheet: (2.4, 12.7), hole: 8.0, edge: 9.6, max_hardness: ratio(80),
+           code: "FH-M8-25", source: "PEM FH bulletin; sendcutsend.com hardware catalog")]
+# [R5] stock() limits are per_t(..) values (a plain number is WrongType), as in hw/shop.fg
+shared scs = shop([
+  stock(t: t3, bend: kfactor(ratio(0.38)), radii: [r_scs], min_flange: per_t(ratio(0), plus: 11.84),
+        hole_to_bend: per_t(ratio(0), plus: 5.84), hole_to_edge: per_t(ratio(0), plus: 0.91), min_hole: per_t(ratio(0), plus: 1.02), min_slot: per_t(ratio(0), plus: 1.02), hardness: ratio(57),
+        relief: relief_rule(shape: "rect", width: per_t(ratio(1)), depth: 5.13, from: "bend_line",
+                            corner: "round", corner_placement: "intersection")),
+  stock(t: t2, bend: kfactor(ratio(0.40)), radii: [r_scs], min_flange: per_t(ratio(0), plus: 8.13),
+        hole_to_bend: per_t(ratio(0), plus: 4.15), hole_to_edge: per_t(ratio(0), plus: 0.56), min_hole: per_t(ratio(0), plus: 0.71), min_slot: per_t(ratio(0), plus: 0.71), hardness: ratio(57),
+        relief: relief_rule(shape: "rect", width: per_t(ratio(1)), depth: 3.99, from: "bend_line",
+                            corner: "round", corner_placement: "intersection")),
+  stock(t: t1, bend: kfactor(ratio(0.40)), radii: [r_scs], min_flange: per_t(ratio(0), plus: 7.85),
+        hole_to_bend: per_t(ratio(0), plus: 4.27), hole_to_edge: per_t(ratio(0), plus: 0.56), min_hole: per_t(ratio(0), plus: 0.71), min_slot: per_t(ratio(0), plus: 0.71), hardness: ratio(57),
+        relief: relief_rule(shape: "rect", width: per_t(ratio(1)), depth: 3.61, from: "bend_line",
+                            corner: "round", corner_placement: "intersection"))],
+  kerf: kerf_scs, hardware: hw_scs)
+
+shared L = 890                  # length
+shared pm = 26.88               # mount face, outer
+shared qw = 45                  # web, outer
+shared sq = 9.5                 # EIA square hole
+shared p_eia = 19.33            # hole centre across the mount face (rack x = +-232.55)
+shared r_u = 44.95              # U1's bottom boundary along r
+shared u = 44.45                # 1U
+shared n_u = count(18)
+shared o_eia = [6.35, 22.225, 38.1]   # the three holes of a U, above its bottom boundary
+shared n_o = count(3)
+shared q_web = [12.5, 37.5]     # web holes, 6.6
+shared n_web = count(2)
+shared r_web = 15.02            # from each end
+shared d_web = 6.6
+
+# the mount face is the base wall: sketch plane xz (normal -y) is the front face q = 0, sheet behind it;
+# the web turns "down" (+y) off the edge p = 0, its outer sharp on that edge
+sketch plan(on: xz) {
+  outline = rect(corner: (0, 0), size: (pm, L))
+}
+mount = sheet(plan, t: t2, shop: scs)
+web = flange(mount.edge(plan.outline[3]), height: qw, side: "down")
+
+# EIA holes: one sketch per U (SPEC 10 gaps 2, 3). The front face's coordinates are (p, r).
+for n in 0..n_u {
+  sketch eu(on: mount.top) {
+    for j in 0..n_o {
+      h = rect(center: (p_eia, r_u + u * n + o_eia[j]), size: (sq, sq))
+    }
+  }
+  eia_holes = cutout(eu, wall: mount)
+}
+# web holes, on the web's outer face: (q, L - r)
+sketch wh(on: web.top) {
+  for i in 0..n_web {
+    bot = circle((q_web[i], L - r_web), d_web / 2)
+    top = circle((q_web[i], r_web), d_web / 2)
+  }
+  dq = line((0, 0), (1, 0), construction: true)
+}
+web_holes = cutout(wh, wall: web)
+
+sketch dirs(on: mount.top) {
+  dr = line((0, 0), (0, 1), construction: true)
+  dmp = line((0, 0), (-1, 0), construction: true)
+  dmr = line((0, 0), (0, -1), construction: true)
+}
+# eia[k], k = 3 (n - 1) + j: origin on the front face at the hole centre, normal +q, x along +r
+fn u_of(k) {                     # the U (0-based) of hole k
+  return 0 if k < n_o else 1 + u_of(k - n_o)
+}
+sketch ec(on: mount.top) {
+  for k in 0..n_u * n_o {
+    c = pt(p_eia, r_u + u * u_of(k) + o_eia[k - n_o * u_of(k)])
+  }
+}
+for k in 0..n_u * n_o {
+  eia = anchor(plane(at: ec.c[k], normal: wh.dq.dir, x: dirs.dr.dir))
+}
+# web holes: origin on the web's outer face p = 0, normal -p, x towards the rail's middle (+r at the
+# bottom, -r at the top), so it meets the carrier's rail anchor x (+c) at both carriers
+for i in 0..n_web {
+  web_bot = anchor(plane(at: wh.bot[i].center, normal: dirs.dmp.dir, x: dirs.dr.dir))
+  web_top = anchor(plane(at: wh.top[i].center, normal: dirs.dmp.dir, x: dirs.dmr.dir))
+}
+
+param flat.drop = 80
+flat = unfold(mount, on: offset(mount.bottom, drop))
+
+# design intent, folded: two straight legs, the 90deg bend's quarter annulus, less 54 squares and 4
+# round holes; the flat: the blank less one bend deduction (K 0.40), less the same holes
+shared hole_area = n_u * n_o * sq * sq + 2 * n_web * pi / 4 * d_web * d_web
+shared folded_area = (pm + qw - 2 * (r_scs + t2)) * L + pi / 4 * ((r_scs + t2) * (r_scs + t2) - r_scs * r_scs) / t2 * L
+shared bd = 2 * (r_scs + t2) - pi / 2 * (r_scs + ratio(0.40) * t2)
+shared flat_area = (pm + qw - bd) * L
+shared vol = t2 * (folded_area - hole_area + flat_area - hole_area)
+expect volume = vol +- 0.1%
+expect bodies = 2
+expect valid

@@ -1,0 +1,29 @@
+# 608-2RS inner ring: d 8, B 7, raceway groove
+# source: ISO 15 / SPEC 6.2, 7 (GMN, MinebeaMitsumi 608); groove radius 0.52 Dw and depth 0.75 representative
+# frame: origin at the bearing's centre, z along its axis
+
+shared rb = 4   # bore
+shared rl = 6.2655   # land (shoulder) radius
+shared hb = 3.5   # half the width
+shared ch = 0.3   # bore chamfer r 0.3
+shared rg = 2.06388   # groove radius
+shared rgc = 7.57938   # groove centre: the ball touches the groove bottom on the 15.0 pitch circle
+
+sketch prof(on: xz) {
+  o = poly([(rb + ch, -hb), (rl, -hb), (rl, hb), (rb + ch, hb), (rb, hb - ch), (rb, -hb + ch)])
+  pz0 = pt(0, 0)
+  zax = line((0, 0), (0, hb), construction: true)
+  xax = line((0, 0), (rl, 0), construction: true)
+}
+ring = revolve(prof.o, axis: prof.zax)
+sketch gs(on: prof) {
+  g = circle((rgc, 0), rg)
+  zax = line((0, 0), (0, hb), construction: true)
+}
+groove = revolve(gs.g, axis: gs.zax, cut: true)
+
+ax = anchor(plane(at: prof.pz0, normal: prof.zax.dir, x: prof.xax.dir))
+
+expect valid
+expect bodies = 1
+expect volume = 446.940 +- 0.1%

@@ -1,0 +1,1712 @@
+{
+ "ok": true,
+ "timings_ms": {
+  "parse": 0.4856,
+  "check": 0.038,
+  "eval_and_build": 240.144,
+  "kernel": 86.784,
+  "measure": 41.255,
+  "total": 281.929
+ },
+ "rebuilt": 54,
+ "reused": 0,
+ "remade": 53,
+ "features": [
+  {
+   "id": "ref",
+   "kind": "sketch",
+   "line": 84,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "plan",
+   "kind": "sketch",
+   "line": 87,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "field",
+   "kind": "sheet",
+   "line": 90,
+   "status": "ok",
+   "dims": [
+    {
+     "what": "thickness",
+     "value": 1.52,
+     "dim": "Length",
+     "from": {
+      "driving": "t1"
+     }
+    },
+    {
+     "what": "radius",
+     "value": 1.6,
+     "dim": "Length",
+     "from": {
+      "driven": [
+       "scs"
+      ]
+     }
+    },
+    {
+     "what": "k",
+     "value": 0.4,
+     "dim": "Ratio",
+     "from": {
+      "driven": [
+       "scs"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "top_r",
+   "kind": "flange",
+   "line": 91,
+   "status": "ok",
+   "dims": [
+    {
+     "what": "height",
+     "value": 25,
+     "dim": "Length",
+     "from": {
+      "driving": "ret"
+     }
+    },
+    {
+     "what": "angle",
+     "value": 90,
+     "dim": "Angle",
+     "from": {
+      "const": true
+     }
+    }
+   ]
+  },
+  {
+   "id": "latch_r",
+   "kind": "flange",
+   "line": 92,
+   "status": "ok",
+   "dims": [
+    {
+     "what": "height",
+     "value": 25,
+     "dim": "Length",
+     "from": {
+      "driving": "ret"
+     }
+    },
+    {
+     "what": "angle",
+     "value": 90,
+     "dim": "Angle",
+     "from": {
+      "const": true
+     }
+    }
+   ]
+  },
+  {
+   "id": "bot_r",
+   "kind": "flange",
+   "line": 93,
+   "status": "ok",
+   "dims": [
+    {
+     "what": "height",
+     "value": 25,
+     "dim": "Length",
+     "from": {
+      "driving": "ret"
+     }
+    },
+    {
+     "what": "angle",
+     "value": 90,
+     "dim": "Angle",
+     "from": {
+      "const": true
+     }
+    }
+   ]
+  },
+  {
+   "id": "hinge_r",
+   "kind": "flange",
+   "line": 94,
+   "status": "ok",
+   "dims": [
+    {
+     "what": "height",
+     "value": 25,
+     "dim": "Length",
+     "from": {
+      "driving": "ret"
+     }
+    },
+    {
+     "what": "angle",
+     "value": 90,
+     "dim": "Angle",
+     "from": {
+      "const": true
+     }
+    }
+   ]
+  },
+  {
+   "id": "pin_b",
+   "kind": "sketch",
+   "line": 99,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "pin_t",
+   "kind": "sketch",
+   "line": 103,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "pin_nut_bot",
+   "kind": "pem",
+   "line": 107,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "pin_nut_top",
+   "kind": "pem",
+   "line": 108,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "latch_s",
+   "kind": "sketch",
+   "line": 111,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "latch_cuts",
+   "kind": "cutout",
+   "line": 123,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "studs_s",
+   "kind": "sketch",
+   "line": 124,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "lb_pem[0]",
+   "kind": "pem",
+   "line": 130,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "lb_pem[1]",
+   "kind": "pem",
+   "line": 130,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "lb_pem[2]",
+   "kind": "pem",
+   "line": 130,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "row[0]",
+   "kind": "sketch",
+   "line": 135,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "vents[0]",
+   "kind": "cutout",
+   "line": 143,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "row[1]",
+   "kind": "sketch",
+   "line": 135,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "vents[1]",
+   "kind": "cutout",
+   "line": 143,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "row[2]",
+   "kind": "sketch",
+   "line": 135,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "vents[2]",
+   "kind": "cutout",
+   "line": 143,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "row[3]",
+   "kind": "sketch",
+   "line": 135,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "vents[3]",
+   "kind": "cutout",
+   "line": 143,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "row[4]",
+   "kind": "sketch",
+   "line": 135,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "vents[4]",
+   "kind": "cutout",
+   "line": 143,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "row[5]",
+   "kind": "sketch",
+   "line": 135,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "vents[5]",
+   "kind": "cutout",
+   "line": 143,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "row[6]",
+   "kind": "sketch",
+   "line": 135,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "vents[6]",
+   "kind": "cutout",
+   "line": 143,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "row[7]",
+   "kind": "sketch",
+   "line": 135,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "vents[7]",
+   "kind": "cutout",
+   "line": 143,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "row[8]",
+   "kind": "sketch",
+   "line": 135,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "vents[8]",
+   "kind": "cutout",
+   "line": 143,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "row[9]",
+   "kind": "sketch",
+   "line": 135,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "vents[9]",
+   "kind": "cutout",
+   "line": 143,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "row[10]",
+   "kind": "sketch",
+   "line": 135,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "vents[10]",
+   "kind": "cutout",
+   "line": 143,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "row[11]",
+   "kind": "sketch",
+   "line": 135,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "vents[11]",
+   "kind": "cutout",
+   "line": 143,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "row[12]",
+   "kind": "sketch",
+   "line": 135,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "vents[12]",
+   "kind": "cutout",
+   "line": 143,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "row[13]",
+   "kind": "sketch",
+   "line": 135,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "vents[13]",
+   "kind": "cutout",
+   "line": 143,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "row[14]",
+   "kind": "sketch",
+   "line": 135,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "vents[14]",
+   "kind": "cutout",
+   "line": 143,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "row[15]",
+   "kind": "sketch",
+   "line": 135,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "vents[15]",
+   "kind": "cutout",
+   "line": 143,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "row[16]",
+   "kind": "sketch",
+   "line": 135,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "vents[16]",
+   "kind": "cutout",
+   "line": 143,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "row[17]",
+   "kind": "sketch",
+   "line": 135,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "vents[17]",
+   "kind": "cutout",
+   "line": 143,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "row[18]",
+   "kind": "sketch",
+   "line": 135,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "vents[18]",
+   "kind": "cutout",
+   "line": 143,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "row[19]",
+   "kind": "sketch",
+   "line": 135,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "vents[19]",
+   "kind": "cutout",
+   "line": 143,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "row[20]",
+   "kind": "sketch",
+   "line": 135,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "vents[20]",
+   "kind": "cutout",
+   "line": 143,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "row[21]",
+   "kind": "sketch",
+   "line": 135,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "vents[21]",
+   "kind": "cutout",
+   "line": 143,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "row[22]",
+   "kind": "sketch",
+   "line": 135,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "vents[22]",
+   "kind": "cutout",
+   "line": 143,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "row[23]",
+   "kind": "sketch",
+   "line": 135,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "vents[23]",
+   "kind": "cutout",
+   "line": 143,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "row[24]",
+   "kind": "sketch",
+   "line": 135,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "vents[24]",
+   "kind": "cutout",
+   "line": 143,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "row[25]",
+   "kind": "sketch",
+   "line": 135,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "vents[25]",
+   "kind": "cutout",
+   "line": 143,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "row[26]",
+   "kind": "sketch",
+   "line": 135,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "vents[26]",
+   "kind": "cutout",
+   "line": 143,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "row[27]",
+   "kind": "sketch",
+   "line": 135,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "vents[27]",
+   "kind": "cutout",
+   "line": 143,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "row[28]",
+   "kind": "sketch",
+   "line": 135,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "vents[28]",
+   "kind": "cutout",
+   "line": 143,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "row[29]",
+   "kind": "sketch",
+   "line": 135,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "vents[29]",
+   "kind": "cutout",
+   "line": 143,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "row[30]",
+   "kind": "sketch",
+   "line": 135,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "vents[30]",
+   "kind": "cutout",
+   "line": 143,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "row[31]",
+   "kind": "sketch",
+   "line": 135,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "vents[31]",
+   "kind": "cutout",
+   "line": 143,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "row[32]",
+   "kind": "sketch",
+   "line": 135,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "vents[32]",
+   "kind": "cutout",
+   "line": 143,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "row[33]",
+   "kind": "sketch",
+   "line": 135,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "vents[33]",
+   "kind": "cutout",
+   "line": 143,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "row[34]",
+   "kind": "sketch",
+   "line": 135,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "vents[34]",
+   "kind": "cutout",
+   "line": 143,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "row[35]",
+   "kind": "sketch",
+   "line": 135,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "vents[35]",
+   "kind": "cutout",
+   "line": 143,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "row[36]",
+   "kind": "sketch",
+   "line": 135,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "vents[36]",
+   "kind": "cutout",
+   "line": 143,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "row[37]",
+   "kind": "sketch",
+   "line": 135,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "vents[37]",
+   "kind": "cutout",
+   "line": 143,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "row[38]",
+   "kind": "sketch",
+   "line": 135,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "vents[38]",
+   "kind": "cutout",
+   "line": 143,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "row[39]",
+   "kind": "sketch",
+   "line": 135,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "vents[39]",
+   "kind": "cutout",
+   "line": 143,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "outer",
+   "kind": "sketch",
+   "line": 147,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "flat",
+   "kind": "unfold",
+   "line": 165,
+   "status": "ok",
+   "dims": []
+  }
+ ],
+ "params": [
+  {
+   "param": "t3",
+   "shared": true,
+   "structural": false,
+   "line": 9,
+   "value": {
+    "value": 3.02,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "t2",
+   "shared": true,
+   "structural": false,
+   "line": 10,
+   "value": {
+    "value": 1.88,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "t1",
+   "shared": true,
+   "structural": false,
+   "line": 11,
+   "value": {
+    "value": 1.52,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": [
+    "field"
+   ]
+  },
+  {
+   "param": "r_scs",
+   "shared": true,
+   "structural": false,
+   "line": 12,
+   "value": {
+    "value": 1.6,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "kerf_scs",
+   "shared": true,
+   "structural": false,
+   "line": 13,
+   "value": {
+    "value": 0.2,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "hw_scs",
+   "shared": true,
+   "structural": false,
+   "line": 14,
+   "value": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "scs",
+   "shared": true,
+   "structural": false,
+   "line": 27,
+   "value": null,
+   "links": [
+    "r_scs",
+    "t1",
+    "t2",
+    "t3"
+   ],
+   "used_by": [
+    "field"
+   ]
+  },
+  {
+   "param": "dw",
+   "shared": true,
+   "structural": false,
+   "line": 42,
+   "value": {
+    "value": 586.46,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "dh",
+   "shared": true,
+   "structural": false,
+   "line": 43,
+   "value": {
+    "value": 828,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "ret",
+   "shared": true,
+   "structural": false,
+   "line": 44,
+   "value": {
+    "value": 25,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": [
+    "top_r",
+    "latch_r",
+    "bot_r",
+    "hinge_r"
+   ]
+  },
+  {
+   "param": "xl",
+   "shared": true,
+   "structural": false,
+   "line": 45,
+   "value": {
+    "value": 10,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "h_pin",
+   "shared": true,
+   "structural": false,
+   "line": 47,
+   "value": {
+    "value": 13,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "n_pin",
+   "shared": true,
+   "structural": false,
+   "line": 48,
+   "value": {
+    "value": 14,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "h_l",
+   "shared": true,
+   "structural": false,
+   "line": 50,
+   "value": {
+    "value": 555.98,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "k_l",
+   "shared": true,
+   "structural": true,
+   "line": 51,
+   "value": {
+    "value": 414,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "d_piv",
+   "shared": true,
+   "structural": false,
+   "line": 52,
+   "value": {
+    "value": 8.6,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "r_sl",
+   "shared": true,
+   "structural": false,
+   "line": 53,
+   "value": {
+    "value": 14.8,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "w_sl",
+   "shared": true,
+   "structural": false,
+   "line": 54,
+   "value": {
+    "value": 6.4,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "a_sl0",
+   "shared": true,
+   "structural": false,
+   "line": 55,
+   "value": {
+    "value": 45,
+    "dim": "Angle"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "a_sl1",
+   "shared": true,
+   "structural": false,
+   "line": 56,
+   "value": {
+    "value": 225,
+    "dim": "Angle"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "r_st",
+   "shared": true,
+   "structural": false,
+   "line": 57,
+   "value": {
+    "value": 28,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "a_st0",
+   "shared": true,
+   "structural": false,
+   "line": 58,
+   "value": {
+    "value": 140,
+    "dim": "Angle"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "a_st1",
+   "shared": true,
+   "structural": false,
+   "line": 59,
+   "value": {
+    "value": 182.5,
+    "dim": "Angle"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "a_st2",
+   "shared": true,
+   "structural": false,
+   "line": 60,
+   "value": {
+    "value": 225,
+    "dim": "Angle"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "a_st",
+   "shared": true,
+   "structural": false,
+   "line": 61,
+   "value": [
+    140,
+    182.5,
+    225
+   ],
+   "links": [
+    "a_st0",
+    "a_st1",
+    "a_st2"
+   ],
+   "used_by": []
+  },
+  {
+   "param": "tab_h0",
+   "shared": true,
+   "structural": false,
+   "line": 62,
+   "value": {
+    "value": 523.58,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "tab_w",
+   "shared": true,
+   "structural": false,
+   "line": 63,
+   "value": {
+    "value": 54.2,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "tab_k0",
+   "shared": true,
+   "structural": false,
+   "line": 64,
+   "value": {
+    "value": 439.5,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "tab_kh",
+   "shared": true,
+   "structural": false,
+   "line": 65,
+   "value": {
+    "value": 7,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "v_w",
+   "shared": true,
+   "structural": true,
+   "line": 67,
+   "value": {
+    "value": 6,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "v_l",
+   "shared": true,
+   "structural": true,
+   "line": 68,
+   "value": {
+    "value": 100,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "v_h0",
+   "shared": true,
+   "structural": true,
+   "line": 69,
+   "value": {
+    "value": 113.23,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "v_hp",
+   "shared": true,
+   "structural": true,
+   "line": 70,
+   "value": {
+    "value": 120,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "v_kp",
+   "shared": true,
+   "structural": true,
+   "line": 71,
+   "value": {
+    "value": 16,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "v_i0",
+   "shared": true,
+   "structural": true,
+   "line": 72,
+   "value": {
+    "value": 19.5,
+    "dim": "Ratio"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "ncol",
+   "shared": true,
+   "structural": true,
+   "line": 73,
+   "value": {
+    "value": 4,
+    "dim": "Count"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "nrow",
+   "shared": true,
+   "structural": true,
+   "line": 74,
+   "value": {
+    "value": 40,
+    "dim": "Count"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "skip_col",
+   "shared": true,
+   "structural": true,
+   "line": 75,
+   "value": {
+    "value": 3,
+    "dim": "Count"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "skip_lo",
+   "shared": true,
+   "structural": true,
+   "line": 76,
+   "value": {
+    "value": 17,
+    "dim": "Count"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "skip_hi",
+   "shared": true,
+   "structural": true,
+   "line": 77,
+   "value": {
+    "value": 22,
+    "dim": "Count"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "nvent",
+   "shared": true,
+   "structural": false,
+   "line": 78,
+   "value": {
+    "value": 154,
+    "dim": "Count"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "d_nut",
+   "shared": true,
+   "structural": false,
+   "line": 79,
+   "value": {
+    "value": 8.75,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "d_stud",
+   "shared": true,
+   "structural": false,
+   "line": 80,
+   "value": {
+    "value": 4,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "ro",
+   "shared": true,
+   "structural": false,
+   "line": 81,
+   "value": {
+    "value": 18,
+    "dim": "Length"
+   },
+   "links": [
+    "r_sl",
+    "w_sl"
+   ],
+   "used_by": []
+  },
+  {
+   "param": "ri",
+   "shared": true,
+   "structural": false,
+   "line": 82,
+   "value": {
+    "value": 11.6,
+    "dim": "Length"
+   },
+   "links": [
+    "r_sl",
+    "w_sl"
+   ],
+   "used_by": []
+  },
+  {
+   "param": "h_bend",
+   "shared": true,
+   "structural": false,
+   "line": 98,
+   "value": {
+    "value": 584.94,
+    "dim": "Length"
+   },
+   "links": [
+    "dw",
+    "t1"
+   ],
+   "used_by": []
+  },
+  {
+   "param": "rt",
+   "shared": true,
+   "structural": false,
+   "line": 173,
+   "value": {
+    "value": 3.12,
+    "dim": "Length"
+   },
+   "links": [
+    "r_scs",
+    "t1"
+   ],
+   "used_by": []
+  },
+  {
+   "param": "edge_len",
+   "shared": true,
+   "structural": false,
+   "line": 174,
+   "value": {
+    "value": 2804,
+    "dim": "Length"
+   },
+   "links": [
+    "dh",
+    "dw",
+    "rt"
+   ],
+   "used_by": []
+  },
+  {
+   "param": "field_a",
+   "shared": true,
+   "structural": false,
+   "line": 175,
+   "value": {
+    "value": 476801.6,
+    "dim": "Area"
+   },
+   "links": [
+    "dh",
+    "dw",
+    "rt"
+   ],
+   "used_by": []
+  },
+  {
+   "param": "ret_a",
+   "shared": true,
+   "structural": false,
+   "line": 176,
+   "value": {
+    "value": 61350.6,
+    "dim": "Area"
+   },
+   "links": [
+    "edge_len",
+    "ret",
+    "rt"
+   ],
+   "used_by": []
+  },
+  {
+   "param": "slot_a",
+   "shared": true,
+   "structural": false,
+   "line": 177,
+   "value": {
+    "value": 329.742,
+    "dim": "Area"
+   },
+   "links": [
+    "r_sl",
+    "w_sl"
+   ],
+   "used_by": []
+  },
+  {
+   "param": "vent_a",
+   "shared": true,
+   "structural": false,
+   "line": 178,
+   "value": {
+    "value": 91210.2,
+    "dim": "Area"
+   },
+   "links": [
+    "nvent",
+    "v_l",
+    "v_w"
+   ],
+   "used_by": []
+  },
+  {
+   "param": "holes_a",
+   "shared": true,
+   "structural": false,
+   "line": 179,
+   "value": {
+    "value": 92135.4,
+    "dim": "Area"
+   },
+   "links": [
+    "d_nut",
+    "d_piv",
+    "d_stud",
+    "slot_a",
+    "tab_kh",
+    "tab_w",
+    "vent_a"
+   ],
+   "used_by": []
+  },
+  {
+   "param": "fold_a",
+   "shared": true,
+   "structural": false,
+   "line": 180,
+   "value": {
+    "value": 548546.7,
+    "dim": "Area"
+   },
+   "links": [
+    "edge_len",
+    "field_a",
+    "r_scs",
+    "ret_a",
+    "t1"
+   ],
+   "used_by": []
+  },
+  {
+   "param": "flat_a",
+   "shared": true,
+   "structural": false,
+   "line": 181,
+   "value": {
+    "value": 547877.3,
+    "dim": "Area"
+   },
+   "links": [
+    "edge_len",
+    "field_a",
+    "r_scs",
+    "ret_a",
+    "t1"
+   ],
+   "used_by": []
+  },
+  {
+   "param": "flat.gap",
+   "shared": false,
+   "structural": false,
+   "line": 164,
+   "value": {
+    "value": 100,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  }
+ ],
+ "errors": [],
+ "warnings": [],
+ "expects": [
+  {
+   "metric": "volume",
+   "measured": 1386302.6,
+   "ok": true
+  },
+  {
+   "metric": "bodies",
+   "measured": 2,
+   "ok": true
+  },
+  {
+   "metric": "valid",
+   "measured": 1,
+   "ok": true
+  }
+ ],
+ "sheets": [
+  {
+   "id": "field",
+   "thickness": 1.52,
+   "radius": 1.6,
+   "rule": {
+    "k": 0.4
+   },
+   "walls": 5,
+   "bends": [
+    {
+     "flange": "top_r",
+     "angle": 90,
+     "radius": 1.6,
+     "allowance": 3.468,
+     "setback": 1.6,
+     "length": 583.42
+    },
+    {
+     "flange": "latch_r",
+     "angle": 90,
+     "radius": 1.6,
+     "allowance": 3.468,
+     "setback": 1.6,
+     "length": 824.96
+    },
+    {
+     "flange": "bot_r",
+     "angle": 90,
+     "radius": 1.6,
+     "allowance": 3.468,
+     "setback": 1.6,
+     "length": 583.42
+    },
+    {
+     "flange": "hinge_r",
+     "angle": 90,
+     "radius": 1.6,
+     "allowance": 3.468,
+     "setback": 1.6,
+     "length": 824.96
+    }
+   ],
+   "reliefs": [],
+   "corners": [
+    {
+     "flanges": [
+      "top_r",
+      "latch_r"
+     ],
+     "kind": "circular",
+     "size": 4.602,
+     "automatic": true
+    },
+    {
+     "flanges": [
+      "top_r",
+      "latch_r"
+     ],
+     "kind": "open",
+     "size": 1.92,
+     "automatic": true
+    },
+    {
+     "flanges": [
+      "top_r",
+      "hinge_r"
+     ],
+     "kind": "circular",
+     "size": 4.602,
+     "automatic": true
+    },
+    {
+     "flanges": [
+      "top_r",
+      "hinge_r"
+     ],
+     "kind": "open",
+     "size": 1.92,
+     "automatic": true
+    },
+    {
+     "flanges": [
+      "latch_r",
+      "bot_r"
+     ],
+     "kind": "circular",
+     "size": 4.602,
+     "automatic": true
+    },
+    {
+     "flanges": [
+      "bot_r",
+      "latch_r"
+     ],
+     "kind": "open",
+     "size": 1.92,
+     "automatic": true
+    },
+    {
+     "flanges": [
+      "bot_r",
+      "hinge_r"
+     ],
+     "kind": "circular",
+     "size": 4.602,
+     "automatic": true
+    },
+    {
+     "flanges": [
+      "bot_r",
+      "hinge_r"
+     ],
+     "kind": "open",
+     "size": 1.92,
+     "automatic": true
+    }
+   ]
+  }
+ ],
+ "part": {
+  "volume": 1386302.6,
+  "area": 1931296.1,
+  "centroid": [
+   294.253,
+   0.3008,
+   48.3
+  ],
+  "faces": 1358,
+  "edges": 4034,
+  "bodies": 2,
+  "valid": true,
+  "problems": [],
+  "bbox": [
+   -22.228,
+   -850.228,
+   -25,
+   608.688,
+   828,
+   100
+  ]
+ }
+}

@@ -1,0 +1,25 @@
+assembly
+
+# latch link (SPEC 5.8), z = rack y, detented: ISO 7380 M4x25 through the handle and a 6x15 spacer into the cam's S-M4-0 (t2)
+
+shared z_hdl = -10.05
+shared size_m4 = 4
+shared min_m4 = 2.77   # the nut's whole thread
+shared zx_cam = 6.83
+shared zx_scr = -10.05
+
+hdl = part("plates/handle_link_t2.fg", ground: true, at: pose(at: (0, 0, z_hdl)))
+spc = part("../latch_spacer_6x15.fg")
+cam = part("plates/cam_link_t2.fg")
+nut = part("../pem_s_m4_0_t2.fg")
+scr = part("../iso7380_m4x25.fg")
+at_spc = fastened(spc.a, hdl.b)
+at_cam = fastened(cam.a, spc.b)
+at_nut = fastened(nut.flush, cam.a)
+at_scr = fastened(scr.head, hdl.a)
+m4 = fit_rule(external_thread, internal_thread, size: size_m4, min_engagement: min_m4)
+
+expect interferences = 0
+expect mobility = 0
+expect z(cam) = zx_cam +- 0.001
+expect z(scr) = zx_scr +- 0.001

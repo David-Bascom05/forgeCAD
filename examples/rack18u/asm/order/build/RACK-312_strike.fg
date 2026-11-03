@@ -1,0 +1,96 @@
+# RACK-312 strike, t2 (SPEC 5.8 rev, base as 5.8 rev A). x2: front on post FR, rear on post RL.
+# Part frame: origin on the base's rear face (the face on the post), midway between its screws;
+# x, y, z = rack X, Y, Z on the front instance (pose origin (273.48, 35, 453)).
+# base x -14.00..16.40, y -1.88..0, z -20..20; web on the +x edge, x 14.52..16.40, y -33.48..0;
+# notch in the web, open at its bottom edge: y -27.77..-25.00, z -20..+10.
+
+shared t3 = 3.02
+shared t2 = 1.88
+shared t1 = 1.52
+shared r_scs = 1.6
+shared kerf_scs = 0.2                       # not published by SendCutSend; Forge's stand-in
+shared hw_scs = [
+  hardware(kind: "nut",  size: "M4", sheet: (0.8, 12.7), hole: 5.41, edge: 6.9, max_hardness: ratio(80),
+           code: "S-M4-0",   source: "PEM CL bulletin; sendcutsend.com hardware catalog"),
+  hardware(kind: "nut",  size: "M5", sheet: (0.8, 12.7), hole: 6.35, edge: 7.1, max_hardness: ratio(80),
+           code: "SS-M5-0",  source: "PEM CL bulletin; sendcutsend.com hardware catalog"),
+  hardware(kind: "nut",  size: "M6", sheet: (1.22, 12.7), hole: 8.75, edge: 8.6, max_hardness: ratio(80),
+           code: "S-M6-0",   source: "PEM CL bulletin; sendcutsend.com hardware catalog"),
+  hardware(kind: "stud", size: "M4", sheet: (1.0, 12.7), hole: 4.0, edge: 7.2, max_hardness: ratio(80),
+           code: "FH-M4-12", source: "PEM FH bulletin; sendcutsend.com hardware catalog"),
+  hardware(kind: "stud", size: "M6", sheet: (1.6, 12.7), hole: 6.0, edge: 7.9, max_hardness: ratio(80),
+           code: "FH-M6-20", source: "PEM FH bulletin; sendcutsend.com hardware catalog"),
+  hardware(kind: "stud", size: "M8", sheet: (2.4, 12.7), hole: 8.0, edge: 9.6, max_hardness: ratio(80),
+           code: "FH-M8-25", source: "PEM FH bulletin; sendcutsend.com hardware catalog")]
+shared scs = shop([
+  stock(t: t3, bend: kfactor(ratio(0.38)), radii: [r_scs], min_flange: per_t(ratio(0), plus: 11.84),
+        hole_to_bend: per_t(ratio(0), plus: 5.84), hole_to_edge: per_t(ratio(0), plus: 0.91), min_hole: per_t(ratio(0), plus: 1.02), min_slot: per_t(ratio(0), plus: 1.02), hardness: ratio(57),
+        relief: relief_rule(shape: "rect", width: per_t(ratio(1)), depth: 5.13, from: "bend_line",
+                            corner: "round", corner_placement: "intersection")),
+  stock(t: t2, bend: kfactor(ratio(0.40)), radii: [r_scs], min_flange: per_t(ratio(0), plus: 8.13),
+        hole_to_bend: per_t(ratio(0), plus: 4.15), hole_to_edge: per_t(ratio(0), plus: 0.56), min_hole: per_t(ratio(0), plus: 0.71), min_slot: per_t(ratio(0), plus: 0.71), hardness: ratio(57),
+        relief: relief_rule(shape: "rect", width: per_t(ratio(1)), depth: 3.99, from: "bend_line",
+                            corner: "round", corner_placement: "intersection")),
+  stock(t: t1, bend: kfactor(ratio(0.40)), radii: [r_scs], min_flange: per_t(ratio(0), plus: 7.85),
+        hole_to_bend: per_t(ratio(0), plus: 4.27), hole_to_edge: per_t(ratio(0), plus: 0.56), min_hole: per_t(ratio(0), plus: 0.71), min_slot: per_t(ratio(0), plus: 0.71), hardness: ratio(57),
+        relief: relief_rule(shape: "rect", width: per_t(ratio(1)), depth: 3.61, from: "bend_line",
+                            corner: "round", corner_placement: "intersection"))],
+  kerf: kerf_scs, hardware: hw_scs)
+
+shared x0 = -14          # base, x from ..
+shared bw = 30.4         # .. to the web's outer face x = 16.40
+shared bh = 40           # z -20..20
+shared web = 33.48       # web, outer: its front end (y = -33.48, rack 1.52) is the door stop
+shared d_scr = 6.6
+shared z_scr = 10        # screws at z = -10, +10 (post stk_b, rack Z 443, 463)
+shared y_seat = 27.77    # notch front edge (the cam's seat), behind the base's rear face
+shared y_nb = 25         # notch back edge
+shared z_ntop = 10       # notch top; it is open at the web's bottom edge
+shared over = 1          # cutter run past the open edge
+shared xl = 10
+
+# first sheet: its reference skin is the base's front face y = -1.88, normal -y (xz's normal), so
+# the material lies at y -1.88..0 and the web turns up, to -y
+sketch plan(on: offset(xz, t2)) {
+  outline = rect(corner: (x0, -bh / 2), size: (bw, bh))
+}
+base = sheet(plan, t: t2, shop: scs)
+web_f = flange(base.edge(plan.outline[1]), height: web)
+# holes are cutouts (the shop checks skip a sheet profile's own holes)
+sketch scr_s(on: base.top) {
+  s0 = circle((0, -z_scr), d_scr / 2)
+  s1 = circle((0, z_scr), d_scr / 2)
+}
+scr_holes = cutout(scr_s, wall: base)
+# web_f.top is the web's inner face x = 14.52: its x runs out from the base's front face (rack -y),
+# its y up the web from z = -20
+sketch notch_s(on: web_f.top) {
+  n = rect(corner: (y_nb - t2, -over), size: (y_seat - y_nb, bh / 2 + z_ntop + over))
+}
+notch = cutout(notch_s, wall: web_f)
+# anchor sketches: the base's rear face (x = rack x, y = -z) and the web's mid-plane x = 15.46
+sketch rear(on: base.bottom) {
+  for i in 0..2 {
+    p = pt(0, z_scr - i * 2 * z_scr)
+  }
+  up = line((0, 0), (0, -xl), construction: true)
+}
+sketch webmid(on: offset(web_f.top, -t2 / 2)) {
+  seat_p = pt(y_seat - t2, bh / 2)
+  stop_p = pt(web - t2, bh / 2)
+  fwd = line((0, 0), (xl, 0), construction: true)
+  up = line((0, 0), (0, xl), construction: true)
+}
+
+# scr[0] at z = -10, scr[1] at z = +10; x = +z (SPEC R9)
+for i in 0..2 {
+  scr = anchor(plane(at: rear.p[i], normal: rear.plane.normal, x: rear.up.dir))
+}
+seat = anchor(plane(at: webmid.seat_p, normal: -webmid.fwd.dir, x: webmid.up.dir))
+stop = anchor(plane(at: webmid.stop_p, normal: webmid.fwd.dir, x: webmid.up.dir))
+
+
+# drawing math: an L of outer legs bw and web, one 90deg bend, less two screw holes and the notch
+shared fold_len = bw + web - 2 * (r_scs + t2) + (r_scs + t2 / 2) * pi / 2
+shared flat_len = bw + web - 2 * (r_scs + t2) + (r_scs + ratio(0.4) * t2) * pi / 2
+shared cut_a = 2 * pi * (d_scr / 2) ^ 2 + (y_seat - y_nb) * (bh / 2 + z_ntop)

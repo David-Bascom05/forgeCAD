@@ -1,0 +1,115 @@
+assembly
+
+# Blickle LKPA-PATH 80KF-FI (ID 755344): swivel caster, total lock
+# SPEC 5.10, 6.2, 7. Frame: the caster frame (plate top at z 0, kingpin on z, wheel towards -y).
+# Drives: swivel_turn (free), roll (free), brake (lock only, 0..20deg); the cage and the ball
+# orbits follow by relations. Written by casters/gen.py.
+
+shared ru = 25   # upper ball row pitch radius (written poses)
+shared zu = 5.38
+shared au = 15deg
+shared rl = 18   # lower ball row
+shared zl = 12.64
+shared al = 18deg
+shared pr = 7.5   # 608 pitch radius
+shared ab = 51.428571deg
+shared k_race = ratio(-0.5)   # ball rows: orbit at half the swivel, the same way (Forge's gear turns the follower by -ratio)
+shared k_cage = ratio(-0.632300)   # 608 cage: (1 + Dw/dm)/2 = 0.6323 of the outer ring, inner ring fixed
+shared brake_lo = 0deg
+shared brake_hi = 20deg   # pedal down: shoe on the tread, pin in a notch
+shared lift_lo = 0
+shared lift_hi = 4   # lock pin travel
+shared r_cam = 11.459156   # lock pin lift per radian of pedal: 4.0 at 20deg
+shared swivel_turn = 0deg
+shared roll = 0deg
+shared brake = 0deg
+shared m8 = 8
+shared m8_min = 8   # the nyloc's whole thread
+
+plate = part("plate.fg", at: pose(at: (0, 0, 0)), ground: true)
+kpin = part("kingpin.fg", at: pose(at: (0, 0, 0)))
+race = part("lower_race.fg", at: pose(at: (0, 0, 0)))
+yoke = part("yoke.fg", at: pose(at: (0, 0, 0)))
+fix_kpin = fastened(kpin.cf, plate.top)
+fix_race = fastened(race.cf, plate.top)
+swivel = revolute(yoke.kingpin, plate.kingpin, turn: swivel_turn)
+f_kpin = fit(kpin, plate)
+f_race = fit(kpin, race)
+for i in 0..24 {
+  ub = part("ball_4763.fg", at: pose(at: (0 + ru * cos(au * i), 0 + ru * sin(au * i), -zu), rz: au * i))
+  up = revolute(ub.uorb, plate.uorb[i])
+  up_rel = gear(swivel, up, ratio: k_race)
+  f_ub = fit(ub, yoke)
+}
+for i in 0..20 {
+  lb = part("ball_4763.fg", at: pose(at: (0 + rl * cos(al * i), 0 + rl * sin(al * i), -zl), rz: al * i))
+  lo = revolute(lb.lorb, plate.lorb[i])
+  lo_rel = gear(swivel, lo, ratio: k_race)
+  f_lb = fit(lb, yoke)
+}
+axle = part("../hw/iso4014_m8x55.fg", at: pose(at: (-20.7, -40, -71), z: (1, 0, 0), x: (0, 1, 0)))
+nut = part("../hw/iso10511_m8.fg", at: pose(at: (20.7, -40, -71), z: (1, 0, 0), x: (0, 1, 0)))
+fix_axle = fastened(axle.head, yoke.axle_head)
+fix_nut = fastened(nut.seat, yoke.axle_nut)
+f_axle = fit(axle, yoke)
+f_nut = fit(nut, yoke)
+sp_l = part("spacer.fg", at: pose(at: (-18.2, -40, -71), z: (1, 0, 0), x: (0, 1, 0)))
+sp_r = part("spacer.fg", at: pose(at: (3.5, -40, -71), z: (1, 0, 0), x: (0, 1, 0)))
+fix_sp_l = fastened(sp_l.a, yoke.sp_l)
+fix_sp_r = fastened(sp_r.a, yoke.sp_r)
+f_sp_l = fit(sp_l, yoke)
+f_sp_r = fit(sp_r, yoke)
+bi = part("bearing_inner.fg", at: pose(at: (0, -40, -71), z: (1, 0, 0), x: (0, 1, 0)))
+ring_in = fastened(bi.ax, yoke.axle)
+f_bi_axle = fit(bi, axle)
+f_bi_sp_l = fit(bi, sp_l)
+f_bi_sp_r = fit(bi, sp_r)
+hub = part("hub.fg", at: pose(at: (0, -40, -71), z: (1, 0, 0), x: (0, 1, 0)))
+wheel = revolute(hub.ax, yoke.axle, turn: roll)
+tread = part("tread.fg", at: pose(at: (0, -40, -71), z: (1, 0, 0), x: (0, 1, 0)))
+fix_tread = fastened(tread.ax, hub.ax)
+f_tread = fit(tread, hub)
+bo = part("bearing_outer.fg", at: pose(at: (0, -40, -71), z: (1, 0, 0), x: (0, 1, 0)))
+ring_out = fastened(bo.ax, hub.ax)
+f_bo = fit(bo, hub)
+cage_a = part("cage_half.fg", at: pose(at: (0, -40, -71), z: (1, 0, 0), x: (0, 1, 0)))
+cage = revolute(cage_a.ax, yoke.axle)
+cage_rel = gear(wheel, cage, ratio: k_cage)
+cage_b = part("cage_half.fg", at: pose(at: (0, -40, -71), z: (-1, 0, 0), x: (0, 1, 0)))
+fix_cage_b = fastened(cage_b.ax, cage_a.ax, flip: true)
+f_cage = fit(cage_a, cage_b)
+for i in 0..7 {
+  bb = part("ball_3969.fg", at: pose(at: (0, -40 + pr * cos(ab * i), -71 + pr * sin(ab * i)), z: (1, 0, 0), x: (0, 1, 0)))
+  ball_fix = fastened(bb.c, cage_a.pocket_at[i])
+  f_bb_in = fit(bb, bi)
+  f_bb_out = fit(bb, bo)
+}
+seal_a = part("seal.fg", at: pose(at: (0, -40, -71), z: (1, 0, 0), x: (0, 1, 0)))
+seal_b = part("seal.fg", at: pose(at: (0, -40, -71), z: (-1, 0, 0), x: (0, 1, 0)))
+fix_seal_a = fastened(seal_a.ax, bo.ax)
+fix_seal_b = fastened(seal_b.back, bo.ax)
+f_seal_a_out = fit(seal_a, bo)
+f_seal_a_in = fit(seal_a, bi)
+f_seal_b_out = fit(seal_b, bo)
+f_seal_b_in = fit(seal_b, bi)
+lever = part("pedal.fg", at: pose(at: (0, 0, 0)))
+pedal = revolute(lever.pivot, yoke.pedal_pin, turn: brake, limit: (brake_lo, brake_hi))
+ppin = part("pedal_pin.fg", at: pose(at: (0, 0, 0)))
+fix_ppin = fastened(ppin.cf, yoke.kingpin)
+f_ppin = fit(ppin, yoke)
+lpin = part("lock_pin.fg", at: pose(at: (0, 0, 0)))
+lockpin = slider(lpin.ax, yoke.lock_guide, limit: (lift_lo, lift_hi))
+pin_rel = rack_pinion(pedal, lockpin, radius: r_cam)
+f_cam = fit(lever, lpin)
+f_shoe = fit(lever, tread)
+m8_rule = fit_rule(external_thread, internal_thread, size: m8, min_engagement: m8_min)
+
+expect interferences = 0
+expect mobility = 0
+expect z(yoke.wheel_bottom) = -111 +- 0.01
+expect y(hub) = -40 +- 0.01
+expect z(hub) = -71 +- 0.01
+expect interferences = 0 at brake = 20deg
+expect clearance(lever, tread) >= 1.0
+expect clearance(lever, tread) <= 0.01 at brake = 20deg
+expect clearance(lpin, race) >= 1.0

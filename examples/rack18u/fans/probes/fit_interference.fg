@@ -1,0 +1,11 @@
+assembly
+# Forge gap: interference(a, b) of a pair that a fit() declares. Two 114 x 14.5 columns overlapping
+# by half their height; with the fit, interference(a, b) reads 0, so the overlap a fit allows can't be
+# measured in the file that declares it. Expected: the volume (pi/4 114^2 x 7.25), or a typed error.
+shared d = 114
+shared h = 7.25
+a = part("../standin/air_column.fg", ground: true)
+b = part("../standin/air_column.fg", ground: true, at: pose(at: (0, 0, h)))
+f = fit(a, b)
+expect interferences = 0
+expect interference(a, b) = pi / 4 * d ^ 2 * h +- 0.1%

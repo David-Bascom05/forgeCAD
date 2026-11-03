@@ -1,0 +1,44 @@
+# M6 cage nut for 9.5 square holes (Rittal DK 2094.200), envelope
+# source: Rittal DK 2094.200 (M6, 0.8-2.5 metal); envelope from Panduit CNWSM6-C drawing 10119-20
+# frame: origin on the axis in the rail's rear face (the cage's front face); +z behind the rail, the direction a screw from the front advances; x across the rack (the 11.81 side)
+
+shared d = 6   # thread
+shared P = 1   # pitch
+shared wx = 11.81   # cage width, across the rack (Panduit CNWSM6-C .465)
+shared wy = 10.11   # cage height, along the rail (Panduit .398)
+shared dp = 8.03   # cage depth behind the rail (Panduit .316, read as depth per SPEC 5.11)
+shared tn = 4.78   # threaded length of the nut (Panduit .188), at the back of the cage
+shared dc = 6.6   # clearance bore in front of the nut
+shared rm = (d - 1.082532 * P) / 2   # thread bore: half the ISO 965 minor diameter D1 = d - 1.0825 P
+shared zn = dp - tn   # where the thread starts
+shared hx = wx / 2
+shared rcl = dc / 2
+shared zref = dp
+shared xref = hx
+
+sketch prof(on: xz) {
+  o = poly([(-hx, 0), (hx, 0), (hx, dp), (-hx, dp)])
+  c0 = pt(0, 0)
+  pz0 = pt(0, 0)
+  pz1 = pt(0, zn)
+  pz2 = pt(0, dp)
+  zax = line((0, 0), (0, zref), construction: true)
+  xax = line((0, 0), (xref, 0), construction: true)
+}
+block = extrude(prof.o, sym(wy))
+sketch fb(on: block.side(prof.o[0]), at: prof.c0) {
+  c = circle((0, 0), rcl)
+}
+front = cut(fb, zn)
+sketch tb(on: block.side(prof.o[2]), at: prof.c0) {
+  c = circle((0, 0), rm)
+}
+tcut = cut(tb, tn)
+
+seat = anchor(plane(at: prof.pz0, normal: prof.zax.dir, x: prof.xax.dir))
+thd = anchor(plane(at: prof.pz1, normal: prof.zax.dir, x: prof.xax.dir), kind: internal_thread, size: d, depth: tn)
+end = anchor(plane(at: prof.pz2, normal: prof.zax.dir, x: prof.xax.dir))
+
+expect valid
+expect bodies = 1
+expect volume = 756.804 +- 0.05%

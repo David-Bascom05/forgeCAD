@@ -1,0 +1,23 @@
+assembly
+
+# rail <-> carrier: ISO 7380 M6x10 through the rail web into the carrier's S-M6-0 (t2)
+
+shared z_web = 0
+shared size_m6 = 6
+shared min_m6 = 5.23   # the nut's whole thread
+shared zx_nut = 1.88
+shared zx_scr = 0
+
+web = part("plates/rail_web_t2.fg", ground: true, at: pose(at: (0, 0, z_web)))
+car = part("plates/carrier_t2.fg")
+nut = part("../pem_s_m6_0_t2.fg")
+scr = part("../iso7380_m6x10.fg")
+at_car = fastened(car.a, web.b)
+at_nut = fastened(nut.flush, car.a)
+at_scr = fastened(scr.head, web.a)
+m6 = fit_rule(external_thread, internal_thread, size: size_m6, min_engagement: min_m6)
+
+expect interferences = 0
+expect mobility = 0
+expect z(nut) = zx_nut +- 0.001
+expect z(scr) = zx_scr +- 0.001

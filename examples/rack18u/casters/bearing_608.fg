@@ -1,0 +1,41 @@
+assembly
+
+# 608-2RS deep groove ball bearing, d 8 x D 22 x B 7 (ISO 15), as modelled for the caster wheel.
+# SPEC 6.2, 7. Frame: the inner ring's (origin at the centre, z on the axis). The inner ring is the
+# reference, as on the caster's axle; the outer ring turns (outer_turn) and the cage follows at
+# (1 + Dw/dm)/2 of it. Written by casters/gen.py.
+
+shared k_cage = ratio(-0.632300)   # (1 + 3.969/15)/2 = 0.6323, the way the outer ring turns
+shared outer_turn = 0deg
+shared pr = 7.5
+shared ab = 51.428571deg
+
+inner = part("bearing_inner.fg", ground: true)
+outer = part("bearing_outer.fg")
+ring = revolute(outer.ax, inner.ax, turn: outer_turn)
+cage_a = part("cage_half.fg")
+cage = revolute(cage_a.ax, inner.ax)
+cage_rel = gear(ring, cage, ratio: k_cage)
+cage_b = part("cage_half.fg", at: pose(z: (0, 0, -1), x: (1, 0, 0)))
+fix_cage_b = fastened(cage_b.ax, cage_a.ax, flip: true)
+f_cage = fit(cage_a, cage_b)
+for i in 0..7 {
+  bb = part("ball_3969.fg", at: pose(at: (pr * cos(ab * i), pr * sin(ab * i), 0)))
+  ball_fix = fastened(bb.c, cage_a.pocket_at[i])
+  f_in = fit(bb, inner)
+  f_out = fit(bb, outer)
+}
+seal_a = part("seal.fg")
+seal_b = part("seal.fg", at: pose(z: (0, 0, -1), x: (1, 0, 0)))
+fix_seal_a = fastened(seal_a.ax, outer.ax)
+fix_seal_b = fastened(seal_b.back, outer.ax)
+f_sa_out = fit(seal_a, outer)
+f_sa_in = fit(seal_a, inner)
+f_sb_out = fit(seal_b, outer)
+f_sb_in = fit(seal_b, inner)
+
+expect interferences = 0
+expect mobility = 0
+expect interferences = 0 at outer_turn = 40deg
+expect value(cage.turn) = 56.9070deg +- 0.001deg at outer_turn = 90deg
+expect distance(bb[0].c, inner.ax) = 7.5 +- 0.001

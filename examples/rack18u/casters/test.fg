@@ -1,0 +1,319 @@
+assembly
+
+# casters/test.fg: SPEC 9C. The front-left caster (lock) and rear-left caster (plain) are written out part by
+# part (prefixes fl_, rl_) so the test can drive their swivels and brake; the right-hand two are the
+# caster_lock.fg / caster_plain.fg subassemblies, rigid at their own drives (README). All on a stand-in
+# base pan floor with the SPEC 5.10 bolt stacks. Written by casters/gen.py.
+
+shared ru = 25   # upper ball row pitch radius (written poses)
+shared zu = 5.38
+shared au = 15deg
+shared rl = 18   # lower ball row
+shared zl = 12.64
+shared al = 18deg
+shared pr = 7.5   # 608 pitch radius
+shared ab = 51.428571deg
+shared k_race = ratio(-0.5)   # ball rows: orbit at half the swivel, the same way (Forge's gear turns the follower by -ratio)
+shared k_cage = ratio(-0.632300)   # 608 cage: (1 + Dw/dm)/2 = 0.6323 of the outer ring, inner ring fixed
+shared brake_lo = 0deg
+shared brake_hi = 20deg   # pedal down: shoe on the tread, pin in a notch
+shared lift_lo = 0
+shared lift_hi = 4   # lock pin travel
+shared r_cam = 11.459156   # lock pin lift per radian of pedal: 4.0 at 20deg
+shared fl_swivel_turn = 0deg
+shared fl_roll = 0deg
+shared fl_brake = 0deg
+shared rl_swivel_turn = 0deg
+shared rl_roll = 0deg
+shared m8 = 8
+shared m8_min = 8
+shared hx = [-22.5, 22.5, -22.5, 22.5]   # the plate's bolt[0..3]
+shared hy = [-37.5, -37.5, 37.5, 37.5]
+
+pan = part("pan_standin.fg", ground: true)
+floor = part("floor_ref.fg", reference: true, ground: true)
+env_fl = part("envelope_ref.fg", at: pose(at: (-185, 100, 0)), reference: true, ground: true)
+env_fr = part("envelope_ref.fg", at: pose(at: (185, 100, 0)), reference: true, ground: true)
+env_rl = part("envelope_ref.fg", at: pose(at: (-185, 700, 0)), reference: true, ground: true)
+env_rr = part("envelope_ref.fg", at: pose(at: (185, 700, 0)), reference: true, ground: true)
+
+fl_plate = part("plate.fg", at: pose(at: (-185, 100, 0)))
+fl_kpin = part("kingpin.fg", at: pose(at: (-185, 100, 0)))
+fl_race = part("lower_race.fg", at: pose(at: (-185, 100, 0)))
+fl_yoke = part("yoke.fg", at: pose(at: (-185, 100, 0)))
+fl_fix_kpin = fastened(fl_kpin.cf, fl_plate.top)
+fl_fix_race = fastened(fl_race.cf, fl_plate.top)
+fl_swivel = revolute(fl_yoke.kingpin, fl_plate.kingpin, turn: fl_swivel_turn)
+fl_f_kpin = fit(fl_kpin, fl_plate)
+fl_f_race = fit(fl_kpin, fl_race)
+for i in 0..24 {
+  fl_ub = part("ball_4763.fg", at: pose(at: (-185 + ru * cos(au * i), 100 + ru * sin(au * i), -zu), rz: au * i))
+  fl_up = revolute(fl_ub.uorb, fl_plate.uorb[i])
+  fl_up_rel = gear(fl_swivel, fl_up, ratio: k_race)
+  fl_f_ub = fit(fl_ub, fl_yoke)
+}
+for i in 0..20 {
+  fl_lb = part("ball_4763.fg", at: pose(at: (-185 + rl * cos(al * i), 100 + rl * sin(al * i), -zl), rz: al * i))
+  fl_lo = revolute(fl_lb.lorb, fl_plate.lorb[i])
+  fl_lo_rel = gear(fl_swivel, fl_lo, ratio: k_race)
+  fl_f_lb = fit(fl_lb, fl_yoke)
+}
+fl_axle = part("../hw/iso4014_m8x55.fg", at: pose(at: (-205.7, 60, -71), z: (1, 0, 0), x: (0, 1, 0)))
+fl_nut = part("../hw/iso10511_m8.fg", at: pose(at: (-164.3, 60, -71), z: (1, 0, 0), x: (0, 1, 0)))
+fl_fix_axle = fastened(fl_axle.head, fl_yoke.axle_head)
+fl_fix_nut = fastened(fl_nut.seat, fl_yoke.axle_nut)
+fl_f_axle = fit(fl_axle, fl_yoke)
+fl_f_nut = fit(fl_nut, fl_yoke)
+fl_sp_l = part("spacer.fg", at: pose(at: (-203.2, 60, -71), z: (1, 0, 0), x: (0, 1, 0)))
+fl_sp_r = part("spacer.fg", at: pose(at: (-181.5, 60, -71), z: (1, 0, 0), x: (0, 1, 0)))
+fl_fix_sp_l = fastened(fl_sp_l.a, fl_yoke.sp_l)
+fl_fix_sp_r = fastened(fl_sp_r.a, fl_yoke.sp_r)
+fl_f_sp_l = fit(fl_sp_l, fl_yoke)
+fl_f_sp_r = fit(fl_sp_r, fl_yoke)
+fl_bi = part("bearing_inner.fg", at: pose(at: (-185, 60, -71), z: (1, 0, 0), x: (0, 1, 0)))
+fl_ring_in = fastened(fl_bi.ax, fl_yoke.axle)
+fl_f_bi_axle = fit(fl_bi, fl_axle)
+fl_f_bi_sp_l = fit(fl_bi, fl_sp_l)
+fl_f_bi_sp_r = fit(fl_bi, fl_sp_r)
+fl_hub = part("hub.fg", at: pose(at: (-185, 60, -71), z: (1, 0, 0), x: (0, 1, 0)))
+fl_wheel = revolute(fl_hub.ax, fl_yoke.axle, turn: fl_roll)
+fl_tread = part("tread.fg", at: pose(at: (-185, 60, -71), z: (1, 0, 0), x: (0, 1, 0)))
+fl_fix_tread = fastened(fl_tread.ax, fl_hub.ax)
+fl_f_tread = fit(fl_tread, fl_hub)
+fl_bo = part("bearing_outer.fg", at: pose(at: (-185, 60, -71), z: (1, 0, 0), x: (0, 1, 0)))
+fl_ring_out = fastened(fl_bo.ax, fl_hub.ax)
+fl_f_bo = fit(fl_bo, fl_hub)
+fl_cage_a = part("cage_half.fg", at: pose(at: (-185, 60, -71), z: (1, 0, 0), x: (0, 1, 0)))
+fl_cage = revolute(fl_cage_a.ax, fl_yoke.axle)
+fl_cage_rel = gear(fl_wheel, fl_cage, ratio: k_cage)
+fl_cage_b = part("cage_half.fg", at: pose(at: (-185, 60, -71), z: (-1, 0, 0), x: (0, 1, 0)))
+fl_fix_cage_b = fastened(fl_cage_b.ax, fl_cage_a.ax, flip: true)
+fl_f_cage = fit(fl_cage_a, fl_cage_b)
+for i in 0..7 {
+  fl_bb = part("ball_3969.fg", at: pose(at: (-185, 60 + pr * cos(ab * i), -71 + pr * sin(ab * i)), z: (1, 0, 0), x: (0, 1, 0)))
+  fl_ball_fix = fastened(fl_bb.c, fl_cage_a.pocket_at[i])
+  fl_f_bb_in = fit(fl_bb, fl_bi)
+  fl_f_bb_out = fit(fl_bb, fl_bo)
+}
+fl_seal_a = part("seal.fg", at: pose(at: (-185, 60, -71), z: (1, 0, 0), x: (0, 1, 0)))
+fl_seal_b = part("seal.fg", at: pose(at: (-185, 60, -71), z: (-1, 0, 0), x: (0, 1, 0)))
+fl_fix_seal_a = fastened(fl_seal_a.ax, fl_bo.ax)
+fl_fix_seal_b = fastened(fl_seal_b.back, fl_bo.ax)
+fl_f_seal_a_out = fit(fl_seal_a, fl_bo)
+fl_f_seal_a_in = fit(fl_seal_a, fl_bi)
+fl_f_seal_b_out = fit(fl_seal_b, fl_bo)
+fl_f_seal_b_in = fit(fl_seal_b, fl_bi)
+fl_lever = part("pedal.fg", at: pose(at: (-185, 100, 0)))
+fl_pedal = revolute(fl_lever.pivot, fl_yoke.pedal_pin, turn: fl_brake, limit: (brake_lo, brake_hi))
+fl_ppin = part("pedal_pin.fg", at: pose(at: (-185, 100, 0)))
+fl_fix_ppin = fastened(fl_ppin.cf, fl_yoke.kingpin)
+fl_f_ppin = fit(fl_ppin, fl_yoke)
+fl_lpin = part("lock_pin.fg", at: pose(at: (-185, 100, 0)))
+fl_lockpin = slider(fl_lpin.ax, fl_yoke.lock_guide, limit: (lift_lo, lift_hi))
+fl_pin_rel = rack_pinion(fl_pedal, fl_lockpin, radius: r_cam)
+fl_f_cam = fit(fl_lever, fl_lpin)
+fl_f_shoe = fit(fl_lever, fl_tread)
+fl_on_pan = fastened(fl_plate.top, pan.caster_fl)
+fl_f_pan = fit(fl_plate, pan)
+fl_f_floor = fit(fl_tread, floor)
+
+rl_plate = part("plate.fg", at: pose(at: (-185, 700, 0)))
+rl_kpin = part("kingpin.fg", at: pose(at: (-185, 700, 0)))
+rl_race = part("lower_race.fg", at: pose(at: (-185, 700, 0)))
+rl_yoke = part("yoke.fg", at: pose(at: (-185, 700, 0)))
+rl_fix_kpin = fastened(rl_kpin.cf, rl_plate.top)
+rl_fix_race = fastened(rl_race.cf, rl_plate.top)
+rl_swivel = revolute(rl_yoke.kingpin, rl_plate.kingpin, turn: rl_swivel_turn)
+rl_f_kpin = fit(rl_kpin, rl_plate)
+rl_f_race = fit(rl_kpin, rl_race)
+for i in 0..24 {
+  rl_ub = part("ball_4763.fg", at: pose(at: (-185 + ru * cos(au * i), 700 + ru * sin(au * i), -zu), rz: au * i))
+  rl_up = revolute(rl_ub.uorb, rl_plate.uorb[i])
+  rl_up_rel = gear(rl_swivel, rl_up, ratio: k_race)
+  rl_f_ub = fit(rl_ub, rl_yoke)
+}
+for i in 0..20 {
+  rl_lb = part("ball_4763.fg", at: pose(at: (-185 + rl * cos(al * i), 700 + rl * sin(al * i), -zl), rz: al * i))
+  rl_lo = revolute(rl_lb.lorb, rl_plate.lorb[i])
+  rl_lo_rel = gear(rl_swivel, rl_lo, ratio: k_race)
+  rl_f_lb = fit(rl_lb, rl_yoke)
+}
+rl_axle = part("../hw/iso4014_m8x55.fg", at: pose(at: (-205.7, 660, -71), z: (1, 0, 0), x: (0, 1, 0)))
+rl_nut = part("../hw/iso10511_m8.fg", at: pose(at: (-164.3, 660, -71), z: (1, 0, 0), x: (0, 1, 0)))
+rl_fix_axle = fastened(rl_axle.head, rl_yoke.axle_head)
+rl_fix_nut = fastened(rl_nut.seat, rl_yoke.axle_nut)
+rl_f_axle = fit(rl_axle, rl_yoke)
+rl_f_nut = fit(rl_nut, rl_yoke)
+rl_sp_l = part("spacer.fg", at: pose(at: (-203.2, 660, -71), z: (1, 0, 0), x: (0, 1, 0)))
+rl_sp_r = part("spacer.fg", at: pose(at: (-181.5, 660, -71), z: (1, 0, 0), x: (0, 1, 0)))
+rl_fix_sp_l = fastened(rl_sp_l.a, rl_yoke.sp_l)
+rl_fix_sp_r = fastened(rl_sp_r.a, rl_yoke.sp_r)
+rl_f_sp_l = fit(rl_sp_l, rl_yoke)
+rl_f_sp_r = fit(rl_sp_r, rl_yoke)
+rl_bi = part("bearing_inner.fg", at: pose(at: (-185, 660, -71), z: (1, 0, 0), x: (0, 1, 0)))
+rl_ring_in = fastened(rl_bi.ax, rl_yoke.axle)
+rl_f_bi_axle = fit(rl_bi, rl_axle)
+rl_f_bi_sp_l = fit(rl_bi, rl_sp_l)
+rl_f_bi_sp_r = fit(rl_bi, rl_sp_r)
+rl_hub = part("hub.fg", at: pose(at: (-185, 660, -71), z: (1, 0, 0), x: (0, 1, 0)))
+rl_wheel = revolute(rl_hub.ax, rl_yoke.axle, turn: rl_roll)
+rl_tread = part("tread.fg", at: pose(at: (-185, 660, -71), z: (1, 0, 0), x: (0, 1, 0)))
+rl_fix_tread = fastened(rl_tread.ax, rl_hub.ax)
+rl_f_tread = fit(rl_tread, rl_hub)
+rl_bo = part("bearing_outer.fg", at: pose(at: (-185, 660, -71), z: (1, 0, 0), x: (0, 1, 0)))
+rl_ring_out = fastened(rl_bo.ax, rl_hub.ax)
+rl_f_bo = fit(rl_bo, rl_hub)
+rl_cage_a = part("cage_half.fg", at: pose(at: (-185, 660, -71), z: (1, 0, 0), x: (0, 1, 0)))
+rl_cage = revolute(rl_cage_a.ax, rl_yoke.axle)
+rl_cage_rel = gear(rl_wheel, rl_cage, ratio: k_cage)
+rl_cage_b = part("cage_half.fg", at: pose(at: (-185, 660, -71), z: (-1, 0, 0), x: (0, 1, 0)))
+rl_fix_cage_b = fastened(rl_cage_b.ax, rl_cage_a.ax, flip: true)
+rl_f_cage = fit(rl_cage_a, rl_cage_b)
+for i in 0..7 {
+  rl_bb = part("ball_3969.fg", at: pose(at: (-185, 660 + pr * cos(ab * i), -71 + pr * sin(ab * i)), z: (1, 0, 0), x: (0, 1, 0)))
+  rl_ball_fix = fastened(rl_bb.c, rl_cage_a.pocket_at[i])
+  rl_f_bb_in = fit(rl_bb, rl_bi)
+  rl_f_bb_out = fit(rl_bb, rl_bo)
+}
+rl_seal_a = part("seal.fg", at: pose(at: (-185, 660, -71), z: (1, 0, 0), x: (0, 1, 0)))
+rl_seal_b = part("seal.fg", at: pose(at: (-185, 660, -71), z: (-1, 0, 0), x: (0, 1, 0)))
+rl_fix_seal_a = fastened(rl_seal_a.ax, rl_bo.ax)
+rl_fix_seal_b = fastened(rl_seal_b.back, rl_bo.ax)
+rl_f_seal_a_out = fit(rl_seal_a, rl_bo)
+rl_f_seal_a_in = fit(rl_seal_a, rl_bi)
+rl_f_seal_b_out = fit(rl_seal_b, rl_bo)
+rl_f_seal_b_in = fit(rl_seal_b, rl_bi)
+rl_on_pan = fastened(rl_plate.top, pan.caster_rl)
+rl_f_pan = fit(rl_plate, pan)
+rl_f_floor = fit(rl_tread, floor)
+
+fr = subassembly("caster_lock.fg", at: pose(at: (185, 100, 0)))
+fr_on_pan = fastened(fr.plate.top, pan.caster_fr)
+fr_f_pan = fit(fr, pan)
+fr_f_floor = fit(fr, floor)
+rr = subassembly("caster_plain.fg", at: pose(at: (185, 700, 0)))
+rr_on_pan = fastened(rr.plate.top, pan.caster_rr)
+rr_f_pan = fit(rr, pan)
+rr_f_floor = fit(rr, floor)
+
+for k in 0..4 {
+  fl_bolt = part("../hw/iso4017_m8x20.fg", at: pose(at: (-185 + hx[k], 100 + hy[k], -3)))
+  fl_wsh = part("../hw/iso7089_8.fg", at: pose(at: (-185 + hx[k], 100 + hy[k], 3.02)))
+  fl_bnut = part("../hw/iso10511_m8.fg", at: pose(at: (-185 + hx[k], 100 + hy[k], 4.62)))
+  fl_fix_bolt = fastened(fl_bolt.head, fl_plate.bolt[k])
+  fl_fix_wsh = fastened(fl_wsh.a, pan.seat_fl[k])
+  fl_fix_bnut = fastened(fl_bnut.seat, fl_wsh.b)
+  fl_f_head = fit(fl_bolt, fl_plate)
+  fl_f_wsh = fit(fl_wsh, pan)
+  fl_f_bnut = fit(fl_bnut, fl_wsh)
+}
+for k in 0..4 {
+  fr_bolt = part("../hw/iso4017_m8x20.fg", at: pose(at: (185 + hx[k], 100 + hy[k], -3)))
+  fr_wsh = part("../hw/iso7089_8.fg", at: pose(at: (185 + hx[k], 100 + hy[k], 3.02)))
+  fr_bnut = part("../hw/iso10511_m8.fg", at: pose(at: (185 + hx[k], 100 + hy[k], 4.62)))
+  fr_fix_bolt = fastened(fr_bolt.head, fr.plate.bolt[k])
+  fr_fix_wsh = fastened(fr_wsh.a, pan.seat_fr[k])
+  fr_fix_bnut = fastened(fr_bnut.seat, fr_wsh.b)
+  fr_f_head = fit(fr_bolt, fr)
+  fr_f_wsh = fit(fr_wsh, pan)
+  fr_f_bnut = fit(fr_bnut, fr_wsh)
+}
+for k in 0..4 {
+  rl_bolt = part("../hw/iso4017_m8x20.fg", at: pose(at: (-185 + hx[k], 700 + hy[k], -3)))
+  rl_wsh = part("../hw/iso7089_8.fg", at: pose(at: (-185 + hx[k], 700 + hy[k], 3.02)))
+  rl_bnut = part("../hw/iso10511_m8.fg", at: pose(at: (-185 + hx[k], 700 + hy[k], 4.62)))
+  rl_fix_bolt = fastened(rl_bolt.head, rl_plate.bolt[k])
+  rl_fix_wsh = fastened(rl_wsh.a, pan.seat_rl[k])
+  rl_fix_bnut = fastened(rl_bnut.seat, rl_wsh.b)
+  rl_f_head = fit(rl_bolt, rl_plate)
+  rl_f_wsh = fit(rl_wsh, pan)
+  rl_f_bnut = fit(rl_bnut, rl_wsh)
+}
+for k in 0..4 {
+  rr_bolt = part("../hw/iso4017_m8x20.fg", at: pose(at: (185 + hx[k], 700 + hy[k], -3)))
+  rr_wsh = part("../hw/iso7089_8.fg", at: pose(at: (185 + hx[k], 700 + hy[k], 3.02)))
+  rr_bnut = part("../hw/iso10511_m8.fg", at: pose(at: (185 + hx[k], 700 + hy[k], 4.62)))
+  rr_fix_bolt = fastened(rr_bolt.head, rr.plate.bolt[k])
+  rr_fix_wsh = fastened(rr_wsh.a, pan.seat_rr[k])
+  rr_fix_bnut = fastened(rr_bnut.seat, rr_wsh.b)
+  rr_f_head = fit(rr_bolt, rr)
+  rr_f_wsh = fit(rr_wsh, pan)
+  rr_f_bnut = fit(rr_bnut, rr_wsh)
+}
+
+m8_rule = fit_rule(external_thread, internal_thread, size: m8, min_engagement: m8_min)
+
+# caster contacts: a subassembly's own fits don't reach this file (README, gap G3), so the
+# right-hand casters' intended contacts are declared again here, by part file
+c_rule0 = fit_rule("ball_4763.fg", "yoke.fg")
+c_rule1 = fit_rule("kingpin.fg", "plate.fg")
+c_rule2 = fit_rule("kingpin.fg", "lower_race.fg")
+c_rule3 = fit_rule("../hw/iso4014_m8x55.fg", "yoke.fg")
+c_rule4 = fit_rule("../hw/iso10511_m8.fg", "yoke.fg")
+c_rule5 = fit_rule("spacer.fg", "yoke.fg")
+c_rule6 = fit_rule("spacer.fg", "bearing_inner.fg")
+c_rule7 = fit_rule("bearing_inner.fg", "../hw/iso4014_m8x55.fg")
+c_rule8 = fit_rule("tread.fg", "hub.fg")
+c_rule9 = fit_rule("bearing_outer.fg", "hub.fg")
+c_rule10 = fit_rule("cage_half.fg", "cage_half.fg")
+c_rule11 = fit_rule("ball_3969.fg", "bearing_inner.fg")
+c_rule12 = fit_rule("ball_3969.fg", "bearing_outer.fg")
+c_rule13 = fit_rule("seal.fg", "bearing_outer.fg")
+c_rule14 = fit_rule("seal.fg", "bearing_inner.fg")
+c_rule15 = fit_rule("pedal_pin.fg", "yoke.fg")
+c_rule16 = fit_rule("pedal.fg", "lock_pin.fg")
+c_rule17 = fit_rule("pedal.fg", "tread.fg")
+c_rule18 = fit_rule("../hw/iso4017_m8x20.fg", "plate.fg")
+c_rule19 = fit_rule("plate.fg", "pan_standin.fg")
+c_rule20 = fit_rule("tread.fg", "floor_ref.fg")
+
+# as placed: every drive at 0
+expect interferences = 0
+expect mobility = 0
+# Blickle LKPA-PATH 80KF: height 111, wheel 80 x 32, plate 90 x 66, offset 40
+expect z(fl_plate.top) = 0 +- 0.01
+expect z(fl_yoke.wheel_bottom) = -111 +- 0.01
+expect clearance(fl_tread, floor) <= 0.01                   # the tread stands on the floor: 111 overall
+expect interference(fl_tread, floor) <= 0.01
+expect z(fl_hub) = -71 +- 0.01                       # axle 71 up: the 80 wheel's centre
+expect clearance(fl_tread, fl_yoke) = 2.2 +- 0.02        # 32 wide between legs 36.40 apart
+expect x(fl_plate.edge_x) = -152 +- 0.01              # plate 66 across
+expect y(fl_plate.edge_y) = 145 +- 0.01              # plate 90 along Y
+expect y(fl_hub) = 60 +- 0.01                         # offset 40 behind the kingpin
+expect x(fl_hub) = -145 +- 0.01 at fl_swivel_turn = 90deg
+expect distance(fl_hub, fl_plate.top) = 81.4923 +- 0.01
+expect z(fr.yoke.wheel_bottom) = -111 +- 0.01
+expect y(fr.hub) = 60 +- 0.01
+expect z(rr.yoke.wheel_bottom) = -111 +- 0.01
+expect y(rr.hub) = 660 +- 0.01
+expect z(rl_yoke.wheel_bottom) = -111 +- 0.01
+expect y(rl_hub) = 660 +- 0.01
+
+# swivel sweep: brake off at 0, 90, 180, 270deg, on at 45, 135, 225, 315deg; rolled a little at 135deg
+expect interferences = 0 at fl_swivel_turn = 0deg, rl_swivel_turn = 0deg
+expect interferences = 0 at fl_swivel_turn = 45deg, rl_swivel_turn = 45deg, fl_brake = 20deg
+expect interferences = 0 at fl_swivel_turn = 90deg, rl_swivel_turn = 90deg
+expect interferences = 0 at fl_swivel_turn = 135deg, rl_swivel_turn = 135deg, fl_brake = 20deg, fl_roll = 33deg, rl_roll = 33deg
+expect interferences = 0 at fl_swivel_turn = 180deg, rl_swivel_turn = 180deg
+expect interferences = 0 at fl_swivel_turn = 225deg, rl_swivel_turn = 225deg, fl_brake = 20deg
+expect interferences = 0 at fl_swivel_turn = 270deg, rl_swivel_turn = 270deg
+expect interferences = 0 at fl_swivel_turn = 315deg, rl_swivel_turn = 315deg, fl_brake = 20deg
+
+# clearances that a rotation about the kingpin can't change: checked once, brake off and on
+expect clearance(fl_yoke, pan) >= 0.5
+expect clearance(fl_ub[0], pan) >= 0.5
+expect clearance(fl_lever, pan) >= 0.5 at fl_brake = 20deg
+expect clearance(fl_lever, env_fl) >= 0.2
+
+# brake states
+expect clearance(fl_lever, fl_tread) >= 1.0                       # off: shoe clear of the tread
+expect clearance(fl_lpin, fl_race) >= 1.0                         # off: pin under the race
+expect clearance(fl_lever, fl_tread) <= 0.01 at fl_brake = 20deg   # on: shoe on the tread (fit f_shoe)
+expect z(fl_lpin.tip) = -15.2 +- 0.01 at fl_brake = 20deg     # pin top inside the race (-15.03..-17.53)
+expect clearance(fl_lpin, fl_race) >= 0.1 at fl_brake = 20deg     # in a notch, 0.15 a side
+expect interference(fl_lpin, fl_race) > 0 at fl_brake = 20deg, fl_swivel_turn = 7.5deg   # between notches it strikes the race
+
+# rolling elements follow their drives
+expect value(fl_up[0].turn) = 22.5deg +- 0.001deg at fl_swivel_turn = 45deg
+expect value(fl_cage.turn) = 56.9070deg +- 0.001deg at fl_roll = 90deg
+expect value(rl_lo[7].turn) = 0deg +- 0.001deg

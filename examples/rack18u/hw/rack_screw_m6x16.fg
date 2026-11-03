@@ -1,0 +1,38 @@
+# rack screw M6 x 16, slotted cheese head (Rittal DK 7094.110; head per ISO 1207)
+# source: Rittal DK 7094.110 (M6, 16 thread length, cheese head); head per ISO 1207 M6 (dk 10, k 3.9, n 1.6, t 1.6)
+# frame: origin on the axis at the head underside; +z along the shank to the tip; head at z < 0
+
+shared d = 6   # thread major diameter
+shared P = 1   # pitch
+shared l = 16   # nominal length, under the head to the tip
+shared ch = 0.6 * P   # tip chamfer (ISO 4753 chamfered end, to about the minor diameter)
+shared rs = d / 2
+shared zref = l
+shared xref = rs
+shared dk = 10   # head diameter
+shared k = 3.9   # head height
+shared n = 1.6   # slot width
+shared t = 1.6   # slot depth, minimum
+shared rk = dk / 2
+
+sketch prof(on: xz) {
+  o = poly([(0, -k), (rk, -k), (rk, 0), (rs, 0), (rs, l - ch), (rs - ch, l), (0, l)])
+  c0 = pt(0, 0)
+  pz0 = pt(0, 0)
+  pz1 = pt(0, l)
+  zax = line((0, 0), (0, zref), construction: true)
+  xax = line((0, 0), (xref, 0), construction: true)
+}
+body = revolve(prof.o, axis: prof.zax)
+sketch sl(on: body.side(prof.o[0]), at: prof.c0) {
+  r = rect(center: (0, 0), size: (dk, n))
+}
+slotcut = cut(sl, t)
+
+head = anchor(plane(at: prof.pz0, normal: prof.zax.dir, x: prof.xax.dir))
+thd = anchor(plane(at: prof.pz0, normal: prof.zax.dir, x: prof.xax.dir), kind: external_thread, size: d, depth: l)
+tip = anchor(plane(at: prof.pz1, normal: prof.zax.dir, x: prof.xax.dir))
+
+expect valid
+expect bodies = 1
+expect volume = 730.038 +- 0.05%

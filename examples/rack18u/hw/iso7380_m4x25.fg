@@ -1,0 +1,57 @@
+# ISO 7380-1 hexagon socket button head screw M4 x 25
+# source: https://www.fasteners.eu/standards/ISO/7380/ (ISO 7380-1 table)
+# frame: origin on the axis at the head underside; +z along the shank to the tip; head at z < 0
+
+shared d = 4   # thread major diameter
+shared P = 0.7   # pitch
+shared l = 25   # nominal length, under the head to the tip
+shared ch = 0.6 * P   # tip chamfer (ISO 4753 chamfered end, to about the minor diameter)
+shared rs = d / 2
+shared zref = l
+shared xref = rs
+shared dk = 7.6   # head diameter
+shared k = 2.2   # head height
+shared R = 4.4   # dome radius r1, the middle of the standard's range
+shared s = 2.5   # hexagon socket across flats
+shared t = 1.3   # socket depth, minimum
+shared rk = dk / 2
+shared yc = R - k   # the dome centre, on the axis
+shared ye = yc - sqrt(R * R - rk * rk)   # where the dome meets the head's rim
+shared rc = s / sqrt(3)   # socket hexagon corner radius
+shared n6 = count(6)
+
+sketch prof(on: xz) {
+  a = pt(0, -k)
+  b = pt(rk, ye)
+  c = pt(rk, 0)
+  e = pt(rs, 0)
+  f = pt(rs, l - ch)
+  g = pt(rs - ch, l)
+  h = pt(0, l)
+  o = pt(0, yc)
+  cap = arc(center: o, from: b, to: a, cw: true)
+  rim = line(b, c)
+  under = line(c, e)
+  shank = line(e, f)
+  tipc = line(f, g)
+  tipf = line(g, h)
+  axl = line(h, a)
+  c0 = pt(0, 0)
+  pz0 = pt(0, 0)
+  pz1 = pt(0, l)
+  zax = line((0, 0), (0, zref), construction: true)
+  xax = line((0, 0), (xref, 0), construction: true)
+}
+body = revolve(prof, axis: prof.zax)
+sketch hx(on: offset(body.side(prof.under), -k), at: prof.c0) {
+  hexo = poly(polar(n: n6, r: rc, start: 0deg))
+}
+socket = cut(hx, -t)
+
+head = anchor(plane(at: prof.pz0, normal: prof.zax.dir, x: prof.xax.dir))
+thd = anchor(plane(at: prof.pz0, normal: prof.zax.dir, x: prof.xax.dir), kind: external_thread, size: d, depth: l)
+tip = anchor(plane(at: prof.pz1, normal: prof.zax.dir, x: prof.xax.dir))
+
+expect valid
+expect bodies = 1
+expect volume = 362.382 +- 0.05%

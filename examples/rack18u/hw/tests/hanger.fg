@@ -1,0 +1,30 @@
+assembly
+
+# fan tray hanger (SPEC 5.9 rev B): FH-M8-25 in the top pan, spacer, ISO 7089-8, tray, ISO 10511-M8 on the tray's underside (z measured down from the top pan's outer face, Z = 906 - z)
+
+shared z_pan = 0
+shared size_m8 = 8
+shared min_m8 = 8   # the nut's whole thread
+shared zx_wsh = 11.02
+shared zx_tray = 12.62
+shared zx_nut = 14.5
+
+pan = part("plates/top_pan_t3.fg", ground: true, at: pose(at: (0, 0, z_pan)))
+stud = part("../pem_fh_m8_25.fg")
+spc = part("../nylon_spacer_8x14x8.fg")
+wsh = part("../iso7089_8.fg")
+tray = part("plates/tray_hanger_t2.fg")
+nut = part("../iso10511_m8.fg")
+at_stud = fastened(stud.flush, pan.a)
+at_spc = fastened(spc.a, pan.b)
+at_wsh = fastened(wsh.a, spc.b)
+at_tray = fastened(tray.a, wsh.b)
+at_nut = fastened(nut.seat, tray.b)
+m8 = fit_rule(external_thread, internal_thread, size: size_m8, min_engagement: min_m8)
+press = fit_rule("../pem_fh_m8_25.fg", "plates/top_pan_t3.fg")
+
+expect interferences = 0
+expect mobility = 0
+expect z(wsh) = zx_wsh +- 0.001
+expect z(tray) = zx_tray +- 0.001
+expect z(nut) = zx_nut +- 0.001

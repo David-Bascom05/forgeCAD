@@ -1,0 +1,83 @@
+  base           o=[265, 1.52, 453] x=[1, 0, 0] z=[0, 0, 1]
+  brk_b          o=[-277.98, 14, 29.08] x=[1, 0, 0] z=[0, 0, 1]
+  brk_t          o=[-277.98, 14, 876.92] x=[-1, 0, 0] z=[0, 0, -1]
+  cam            o=[265, 6.83, 453] x=[0, 0, -1] z=[0, -1, 0]
+  door           o=[-290.98, 0, 39] x=[1, 0, 0] z=[0, -1, 0]
+  hdl            o=[265, -8.17, 453] x=[0, 0, -1] z=[0, -1, 0]
+  lball[0]       o=[274, 5.862, 453] x=[0, 0, -1] z=[0, -1, 0]
+  lball[1]       o=[256, 5.862, 453] x=[0, 0, -1] z=[0, -1, 0]
+  lnut[0]        o=[275.465, 6.83, 463.465] x=[0, 0, -1] z=[0, 1, 0]
+  lnut[1]        o=[254.535, 6.83, 463.465] x=[0, 0, -1] z=[0, 1, 0]
+  lscr[0]        o=[275.465, -10.05, 463.465] x=[0, 0, -1] z=[0, 1, 0]
+  lscr[1]        o=[254.535, -10.05, 463.465] x=[0, 0, -1] z=[0, 1, 0]
+  lspc[0]        o=[275.465, -8.17, 463.465] x=[0, 0, -1] z=[0, 1, 0]
+  lspc[1]        o=[254.535, -8.17, 463.465] x=[0, 0, -1] z=[0, 1, 0]
+  n4[0]          o=[243.551, 5.34, 470.998] x=[0, 0, 1] z=[0, 1, 0]
+  n4[1]          o=[237.027, 5.34, 451.779] x=[0, 0, 1] z=[0, 1, 0]
+  n4[2]          o=[245.201, 5.34, 433.201] x=[0, 0, 1] z=[0, 1, 0]
+  nut_lp         o=[265, 4.54, 453] x=[0, 0, 1] z=[0, 1, 0]
+  nut_pb         o=[-277.98, 14, 39] x=[0, 1, 0] z=[0, 0, 1]
+  nut_pt         o=[-277.98, 14, 867] x=[0, 1, 0] z=[0, 0, -1]
+  pin_b          o=[-277.98, 14, 27] x=[0, 1, 0] z=[0, 0, 1]
+  pin_t          o=[-277.98, 14, 879] x=[0, 1, 0] z=[0, 0, -1]
+  piv            o=[265, -14.48, 453] x=[0, 0, 1] z=[0, 1, 0]
+  spc_b          o=[-277.98, 14, 29.08] x=[0, 1, 0] z=[0, 0, 1]
+  spc_t          o=[-277.98, 14, 876.92] x=[0, 1, 0] z=[0, 0, -1]
+  spr            o=[265, -8.17, 453] x=[0, 0, -1] z=[0, 1, 0]
+  st[0]          o=[243.551, 0, 470.998] x=[0, 0, 1] z=[0, 1, 0]
+  st[1]          o=[237.027, 0, 451.779] x=[0, 0, 1] z=[0, 1, 0]
+  st[2]          o=[245.201, 0, 433.201] x=[0, 0, 1] z=[0, 1, 0]
+  w4[0]          o=[243.551, 4.54, 470.998] x=[0, 0, 1] z=[0, 1, 0]
+  w4[1]          o=[237.027, 4.54, 451.779] x=[0, 0, 1] z=[0, 1, 0]
+  w4[2]          o=[245.201, 4.54, 433.201] x=[0, 0, 1] z=[0, 1, 0]
+  wsh_b          o=[-277.98, 14, 37.08] x=[0, 1, 0] z=[0, 0, 1]
+  wsh_t          o=[-277.98, 14, 868.92] x=[0, 1, 0] z=[0, 0, -1]
+engage pin_t/nut_pt m6: 5.23 (min 4.78)
+engage pin_b/nut_pb m6: 5.23 (min 4.78)
+engage lnut[1]/lscr[1] m4: 2.77 (min 2.77)
+engage lnut[0]/lscr[0] m4: 2.77 (min 2.77)
+engage nut_lp/piv m6: 6 (min 4.78)
+engage n4[0]/st[0] m4: 5 (min 2.77)
+engage n4[1]/st[1] m4: 5 (min 2.77)
+engage n4[2]/st[2] m4: 5 (min 2.77)
+mobility 0 interferences 0 intended 15
+ok   L142  mobility      measured 0  | expect mobility = 0
+ok   L143  interferences measured 0  | expect interferences = 0
+ok   L144  interferences measured 0  | expect interferences = 0 at latch_f.turn = 90deg, latch_lift = shut
+ok   L145  interferences measured 0  | expect interferences = 0 at latch_f.turn = t45, latch_lift = lift_lo
+ok   L146  interferences measured 0  | expect interferences = 0 at door_f.turn = door_open
+ok   L147  y             measured 5.862  | expect y(lball[0]) = yb_seat +- yb_tol
+ok   L148  y             measured 6.542  | expect y(lball[1]) = yb_ride +- yb_tol at latch_f.turn = t45, latch_lift = lift_lo
+ok   L149  y             measured 6.262  | expect y(lball[0]) = yb_shut +- yb_tol at latch_f.turn = 90deg, latch_lift = shut
+ok   L151  x             measured -277.98  | expect x(door.pin_top) = ax +- co
+ok   L152  y             measured 14  | expect y(door.pin_top) = ay +- co
+ok   L153  x             measured -277.98  | expect x(door.pin_top) = ax +- co at door_f.turn = door_open
+ok   L154  y             measured 14  | expect y(door.pin_top) = ay +- co at door_f.turn = door_open
+ok   L156  clearance     measured 0.0924  | expect clearance(pin_b, brk_b) >= c_pin_bore
+ok   L157  clearance     measured 0.0924  | expect clearance(pin_t, brk_t) >= c_pin_bore
+ok   L158  clearance     measured 0.32  | expect clearance(wsh_b, door) >= c_wsh_door
+ok   L159  clearance     measured 0.32  | expect clearance(wsh_t, door) >= c_wsh_door
+ok   L161  clearance     measured 8.17  | expect clearance(hdl, door) >= c_u_door
+ok   L162  clearance     measured 8.17  | expect clearance(hdl, door) >= c_u_door at latch_f.turn = t30
+ok   L163  clearance     measured 8.17  | expect clearance(hdl, door) >= c_u_door at latch_f.turn = t60
+ok   L164  clearance     measured 7.77  | expect clearance(hdl, door) >= c_u_door at latch_f.turn = 90deg, latch_lift = shut
+ok   L165  clearance     measured 5.31  | expect clearance(cam, door) >= c_u_door
+ok   L166  clearance     measured 1.96  | expect clearance(cam, door) >= c_u_door at latch_f.turn = 90deg, latch_lift = shut
+ok   L167  clearance     measured 0.1909  | expect clearance(lspc[0], door) >= c_spc_slot
+ok   L168  clearance     measured 0.1909  | expect clearance(lspc[1], door) >= c_spc_slot at latch_f.turn = 90deg, latch_lift = shut
+ok   L169  clearance     measured 0.1909  | expect clearance(lspc[0], base) >= c_spc_slot
+ok   L170  clearance     measured 0.1909  | expect clearance(lspc[1], base) >= c_spc_slot at latch_f.turn = 90deg, latch_lift = shut
+ok   L171  clearance     measured 2.29  | expect clearance(cam, base) >= c_base_cam
+ok   L172  clearance     measured 0.4677  | expect clearance(nut_lp, cam) >= c_nut_cam
+ok   L173  clearance     measured 0.4677  | expect clearance(nut_lp, cam) >= c_nut_cam at latch_f.turn = t45, latch_lift = lift_lo
+ok   L174  clearance     measured 0.4677  | expect clearance(nut_lp, cam) >= c_nut_cam at latch_f.turn = 90deg, latch_lift = shut
+ok   L175  clearance     measured 2.009  | expect clearance(nut_lp, lball[0]) >= c_nut_ball
+ok   L176  clearance     measured 1.701  | expect clearance(nut_lp, lball[1]) >= c_nut_ball at latch_f.turn = t45, latch_lift = lift_lo
+ok   L178  clearance     measured 5.481  | expect clearance(hdl, base) >= c_hdl_tab
+ok   L179  clearance     measured 4.322  | expect clearance(hdl, base) >= c_hdl_tab at latch_f.turn = t45, latch_lift = lift_lo
+ok   L180  clearance     measured 8.6  | expect clearance(hdl, base) >= c_hdl_tab at latch_f.turn = 90deg, latch_lift = shut
+ok   L186  x             measured 265  | expect x(base.padlock) = lock_x +- lock_tol
+ok   L187  y             measured -25.65  | expect y(base.padlock) = lock_y +- lock_tol
+ok   L188  x             measured 265  | expect x(hdl.padlock) = lock_x +- lock_tol at latch_f.turn = 90deg, latch_lift = shut
+ok   L189  y             measured -25.65  | expect y(hdl.padlock) = lock_y +- lock_tol at latch_f.turn = 90deg, latch_lift = shut
+ok 1322.9

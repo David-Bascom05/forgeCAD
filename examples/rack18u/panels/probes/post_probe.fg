@@ -1,0 +1,5 @@
+assembly
+
+prt = part("../test_parts/_probe.fg", ground: true)
+b1 = part("../../hw/ball_4.fg")
+j1 = fastened(b1.c, prt.p1)

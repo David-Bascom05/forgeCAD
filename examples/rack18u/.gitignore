@@ -1,0 +1,12 @@
+transcripts/
+__pycache__/
+panels/out/d_*.fg
+panels/out/v_t*.fg
+panels/out/test-*.fg
+panels/test_parts/_probe.fg
+fans/standin/grille_gauge.fg
+fans/renders/grille_gauge.png
+asm/out/quick.json
+asm/ui-shots/explode_frames/
+asm/out/rack.json
+frame/out/test.json

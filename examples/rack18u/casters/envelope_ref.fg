@@ -1,0 +1,18 @@
+# TEST REFERENCE: the swivel envelope gauge, a ring of inner radius 89.5 (90 less 0.5) about the kingpin
+# source: SPEC 1 and 6.2 (swivel envelope radius 90: wheel 81.6, pedal 88)
+# frame: the caster frame (SPEC 5.10): origin on the kingpin axis in the plate's top face, z up, y along the plate's long side, the wheel towards -y
+
+shared ri = 89.5   # the envelope less the 0.5 the sweep must keep
+shared ro = 95
+shared z0 = 1   # clear of the plate's top
+shared z1 = 110   # clear of the floor
+
+sketch plan(on: offset(xy, -z0)) {
+  o = circle((0, 0), ro)
+  i = circle((0, 0), ri)
+}
+ring = extrude(plan, -(z1 - z0))
+
+expect valid
+expect bodies = 1
+expect volume = 347484.495 +- 0.05%

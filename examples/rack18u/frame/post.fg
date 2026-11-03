@@ -1,0 +1,153 @@
+# RACK-101 post: 50 x 50 L, t3, 906 long (SPEC 5.1). x4, one part number at every corner.
+# Part frame: origin at the bottom end of the outer corner line; u = x along leg A's outer face,
+# v = y along leg B's outer face, w = z along the length. Leg A: outer face v = 0; leg B: outer face u = 0.
+# Both legs carry the same pattern, symmetric about w = 453 (the post turned end over end is the same part).
+# Shop: hw/shop.fg, copied verbatim (SPEC 10 gap 12).
+
+shared t3 = 3.02
+shared t2 = 1.88
+shared t1 = 1.52
+shared r_scs = 1.6
+shared kerf_scs = 0.2                       # not published by SendCutSend; Forge's stand-in
+shared hw_scs = [
+  hardware(kind: "nut",  size: "M4", sheet: (0.8, 12.7), hole: 5.41, edge: 6.9, max_hardness: ratio(80),
+           code: "S-M4-0",   source: "PEM CL bulletin; sendcutsend.com hardware catalog"),
+  hardware(kind: "nut",  size: "M5", sheet: (0.8, 12.7), hole: 6.35, edge: 7.1, max_hardness: ratio(80),
+           code: "SS-M5-0",  source: "PEM CL bulletin; sendcutsend.com hardware catalog"),
+  hardware(kind: "nut",  size: "M6", sheet: (1.22, 12.7), hole: 8.75, edge: 8.6, max_hardness: ratio(80),
+           code: "S-M6-0",   source: "PEM CL bulletin; sendcutsend.com hardware catalog"),
+  hardware(kind: "stud", size: "M4", sheet: (1.0, 12.7), hole: 4.0, edge: 7.2, max_hardness: ratio(80),
+           code: "FH-M4-12", source: "PEM FH bulletin; sendcutsend.com hardware catalog"),
+  hardware(kind: "stud", size: "M6", sheet: (1.6, 12.7), hole: 6.0, edge: 7.9, max_hardness: ratio(80),
+           code: "FH-M6-20", source: "PEM FH bulletin; sendcutsend.com hardware catalog"),
+  hardware(kind: "stud", size: "M8", sheet: (2.4, 12.7), hole: 8.0, edge: 9.6, max_hardness: ratio(80),
+           code: "FH-M8-25", source: "PEM FH bulletin; sendcutsend.com hardware catalog")]
+# [R5] stock() limits are per_t(..) values (a plain number is WrongType), as in hw/shop.fg
+shared scs = shop([
+  stock(t: t3, bend: kfactor(ratio(0.38)), radii: [r_scs], min_flange: per_t(ratio(0), plus: 11.84),
+        hole_to_bend: per_t(ratio(0), plus: 5.84), hole_to_edge: per_t(ratio(0), plus: 0.91), min_hole: per_t(ratio(0), plus: 1.02), min_slot: per_t(ratio(0), plus: 1.02), hardness: ratio(57),
+        relief: relief_rule(shape: "rect", width: per_t(ratio(1)), depth: 5.13, from: "bend_line",
+                            corner: "round", corner_placement: "intersection")),
+  stock(t: t2, bend: kfactor(ratio(0.40)), radii: [r_scs], min_flange: per_t(ratio(0), plus: 8.13),
+        hole_to_bend: per_t(ratio(0), plus: 4.15), hole_to_edge: per_t(ratio(0), plus: 0.56), min_hole: per_t(ratio(0), plus: 0.71), min_slot: per_t(ratio(0), plus: 0.71), hardness: ratio(57),
+        relief: relief_rule(shape: "rect", width: per_t(ratio(1)), depth: 3.99, from: "bend_line",
+                            corner: "round", corner_placement: "intersection")),
+  stock(t: t1, bend: kfactor(ratio(0.40)), radii: [r_scs], min_flange: per_t(ratio(0), plus: 7.85),
+        hole_to_bend: per_t(ratio(0), plus: 4.27), hole_to_edge: per_t(ratio(0), plus: 0.56), min_hole: per_t(ratio(0), plus: 0.71), min_slot: per_t(ratio(0), plus: 0.71), hardness: ratio(57),
+        relief: relief_rule(shape: "rect", width: per_t(ratio(1)), depth: 3.61, from: "bend_line",
+                            corner: "round", corner_placement: "intersection"))],
+  kerf: kerf_scs, hardware: hw_scs)
+
+shared L = 906                  # length
+shared leg = 50                 # each leg, outer
+shared s_stud = 25              # FH-M6-20 from the corner
+shared s_pnl = 25               # SS-M5-0
+shared s_hng = 32.5             # S-M6-0, hinge brackets (SPEC R11: was 20.5)
+shared s_stk = 25               # S-M6-0, strike
+shared w_stud = [15, 891]
+shared w_pnl = [100, 260, 420, 486, 646, 806]
+shared w_hng = [50, 66, 840, 856]
+shared w_stk = [443, 463]
+shared n_stud = count(2)
+shared n_pnl = count(6)
+shared n_hng = count(4)
+shared n_stk = count(2)
+shared n_pnl_lo = count(3)       # pnl[0..2] below w 453 (x +w), pnl[3..5] above (x -w)
+shared n_hng_lo = count(2)       # hng[0..1] at the bottom (x +w), hng[2..3] at the top (x -w)
+
+# leg A is the base wall: its sketch plane (xz, normal -y) is the outer face v = 0, sheet behind it;
+# leg B turns "down" (+y) off the edge u = 0, its outer sharp on that edge
+sketch plan(on: xz) {
+  outline = rect(corner: (0, 0), size: (leg, L))
+}
+leg_a = sheet(plan, t: t3, shop: scs)
+leg_b = flange(leg_a.edge(plan.outline[3]), height: leg, side: "down")
+
+# hole points on the outer faces. leg A's top: (u, w); leg B's top: (v, L - w) (its y runs down from w = L)
+sketch fa(on: leg_a.top) {
+  for i in 0..n_stud {
+    stud = pt(s_stud, w_stud[i])
+  }
+  for i in 0..n_pnl {
+    pnl = pt(s_pnl, w_pnl[i])
+  }
+  for i in 0..n_hng {
+    hng = pt(s_hng, w_hng[i])
+  }
+  for i in 0..n_stk {
+    stk = pt(s_stk, w_stk[i])
+  }
+  ax = line((0, 0), (1, 0), construction: true)
+  aw = line((0, 0), (0, 1), construction: true)
+  awm = line((0, 0), (0, -1), construction: true)
+}
+sketch fb(on: leg_b.top) {
+  for i in 0..n_stud {
+    stud = pt(s_stud, L - w_stud[i])
+  }
+  for i in 0..n_pnl {
+    pnl = pt(s_pnl, L - w_pnl[i])
+  }
+  for i in 0..n_hng {
+    hng = pt(s_hng, L - w_hng[i])
+  }
+  for i in 0..n_stk {
+    stk = pt(s_stk, L - w_stk[i])
+  }
+  ax = line((0, 0), (1, 0), construction: true)
+}
+
+for i in 0..n_stud {
+  pa_stud = pem("stud", "M6", at: fa.stud[i], wall: leg_a)
+  pb_stud = pem("stud", "M6", at: fb.stud[i], wall: leg_b)
+}
+for i in 0..n_pnl {
+  pa_pnl = pem("nut", "M5", at: fa.pnl[i], wall: leg_a)
+  pb_pnl = pem("nut", "M5", at: fb.pnl[i], wall: leg_b)
+}
+for i in 0..n_hng {
+  pa_hng = pem("nut", "M6", at: fa.hng[i], wall: leg_a)
+  pb_hng = pem("nut", "M6", at: fb.hng[i], wall: leg_b)
+}
+for i in 0..n_stk {
+  pa_stk = pem("nut", "M6", at: fa.stk[i], wall: leg_a)
+  pb_stk = pem("nut", "M6", at: fb.stk[i], wall: leg_b)
+}
+
+# placement anchors (SPEC rev B R1: the hw PEM part carries the thread): origin on the outer face, normal
+# into the post (leg A +v = fb.ax, leg B +u = fa.ax); x points towards the post's middle, w = 453 (SPEC R9):
+# +w below it (stud[0], pnl[0..2], hng[0..1], stk[0..1]), -w above it (stud[1], pnl[3..5], hng[2..3]).
+# stk[1] at w 463 keeps +w: both strike screws join one strike, whose scr x is +z.
+for i in 0..n_stud {
+  stud_a = anchor(plane(at: fa.stud[i], normal: fb.ax.dir, x: fa.aw.dir if i == 0 else fa.awm.dir))
+  stud_b = anchor(plane(at: fb.stud[i], normal: fa.ax.dir, x: fa.aw.dir if i == 0 else fa.awm.dir))
+}
+for i in 0..n_pnl {
+  pnl_a = anchor(plane(at: fa.pnl[i], normal: fb.ax.dir, x: fa.aw.dir if i < n_pnl_lo else fa.awm.dir))
+  pnl_b = anchor(plane(at: fb.pnl[i], normal: fa.ax.dir, x: fa.aw.dir if i < n_pnl_lo else fa.awm.dir))
+}
+for i in 0..n_hng {
+  hng_a = anchor(plane(at: fa.hng[i], normal: fb.ax.dir, x: fa.aw.dir if i < n_hng_lo else fa.awm.dir))
+  hng_b = anchor(plane(at: fb.hng[i], normal: fa.ax.dir, x: fa.aw.dir if i < n_hng_lo else fa.awm.dir))
+}
+for i in 0..n_stk {
+  stk_a = anchor(plane(at: fa.stk[i], normal: fb.ax.dir, x: fa.aw.dir))
+  stk_b = anchor(plane(at: fb.stk[i], normal: fa.ax.dir, x: fa.aw.dir))
+}
+
+param flat.drop = 120
+flat = unfold(leg_a, on: offset(leg_a.bottom, drop))
+
+# design intent, folded: two straight legs (leg - r - t) wide, the 90deg bend's quarter annulus,
+# less the holes (per leg: 2 x 6.0, 6 x 6.35, 6 x 8.75); the flat: the blank less one bend deduction
+shared h_fh6 = 6.0              # PEM hole sizes (SPEC 3)
+shared h_m5 = 6.35
+shared h_m6 = 8.75
+shared hole_area = 2 * pi / 4 * (2 * h_fh6 * h_fh6 + 6 * h_m5 * h_m5 + 6 * h_m6 * h_m6)
+shared folded_area = 2 * (leg - r_scs - t3) * L + pi / 4 * ((r_scs + t3) * (r_scs + t3) - r_scs * r_scs) / t3 * L
+shared bd = 2 * (r_scs + t3) - pi / 2 * (r_scs + ratio(0.38) * t3)
+shared flat_area = (2 * leg - bd) * L
+shared vol = t3 * (folded_area - hole_area + flat_area - hole_area)
+expect volume = vol +- 0.1%
+expect bodies = 2
+expect valid

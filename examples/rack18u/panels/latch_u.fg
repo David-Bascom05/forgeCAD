@@ -1,0 +1,41 @@
+assembly
+
+# latch_u (SPEC 5.8, 6.1): the latch's turning unit U, rigid: handle, 2 link posts (spacers), 2 link
+# screws, cam with its 2 S-M4-0, 2 balls.
+# Frame = the handle's frame: the latch frame at the handle's inner face; u = x (the arm), v = y,
+# w = z (out of the door). The cam sits 15.0 (the spacer) behind the handle's inner face.
+
+shared size_m4 = 4
+shared min_m4 = 2.77     # S-M4-0's whole thread (SPEC 8 rev B)
+shared zx_cam = -15      # cam front face, from the handle's inner face (the 15.0 spacers)
+shared zx_ball = -14.032 # ball centres: 0.968 in front of the cam (a 4.0 ball in a 3.5 hole)
+
+hdl = part("latch_handle.fg", ground: true)
+cam = part("cam.fg")
+spc0 = part("../hw/latch_spacer_6x15.fg")
+spc1 = part("../hw/latch_spacer_6x15.fg")
+nut0 = part("../hw/pem_s_m4_0_t2.fg")
+nut1 = part("../hw/pem_s_m4_0_t2.fg")
+scr0 = part("../hw/iso7380_m4x25.fg")
+scr1 = part("../hw/iso7380_m4x25.fg")
+ball0 = part("../hw/ball_4.fg")
+ball1 = part("../hw/ball_4.fg")
+
+at_spc0 = fastened(spc0.a, hdl.link_in[0])
+at_spc1 = fastened(spc1.a, hdl.link_in[1])
+at_cam = fastened(cam.link[0], spc0.b)
+at_nut0 = fastened(nut0.flush, cam.link[0])
+at_nut1 = fastened(nut1.flush, cam.link[1])
+at_scr0 = fastened(scr0.head, hdl.link[0])
+at_scr1 = fastened(scr1.head, hdl.link[1])
+at_ball0 = fastened(ball0.c, cam.ball_seat[0])
+at_ball1 = fastened(ball1.c, cam.ball_seat[1])
+m4 = fit_rule(external_thread, internal_thread, size: size_m4, min_engagement: min_m4)
+seat0 = fit(ball0, cam)
+seat1 = fit(ball1, cam)
+
+expect interferences = 0
+expect mobility = 0
+expect z(cam) = zx_cam +- 0.001
+expect z(ball0) = zx_ball +- 0.001
+expect distance(spc1.b, cam.link[1]) = 0 +- 0.001

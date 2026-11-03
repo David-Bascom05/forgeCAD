@@ -1,0 +1,58 @@
+# ISO 7045 cross recessed pan head screw M4 x 40 (fan screw)
+# source: https://www.fasteners.eu/standards/ISO/7045/ (dk 8, k 3.1, rf 8, m 4.6)
+# frame: origin on the axis at the head underside; +z along the shank to the tip; head at z < 0
+
+shared d = 4   # thread major diameter
+shared P = 0.7   # pitch
+shared l = 40   # nominal length, under the head to the tip
+shared ch = 0.6 * P   # tip chamfer (ISO 4753 chamfered end, to about the minor diameter)
+shared rs = d / 2
+shared zref = l
+shared xref = rs
+shared dk = 8   # head diameter
+shared k = 3.1   # head height
+shared rf = 8   # head top radius
+shared m = 4.6   # recess diameter at the top (type H, No. 2)
+shared w = 1   # recess wing width (modelled: a plain cross, not the Phillips form)
+shared tr = 1.9   # recess depth (modelled)
+shared rk = dk / 2
+shared yc = rf - k
+shared ye = yc - sqrt(rf * rf - rk * rk)
+shared hm = m / 2
+shared hw = w / 2
+
+sketch prof(on: xz) {
+  a = pt(0, -k)
+  b = pt(rk, ye)
+  c = pt(rk, 0)
+  e = pt(rs, 0)
+  f = pt(rs, l - ch)
+  g = pt(rs - ch, l)
+  h = pt(0, l)
+  o = pt(0, yc)
+  cap = arc(center: o, from: b, to: a, cw: true)
+  rim = line(b, c)
+  under = line(c, e)
+  shank = line(e, f)
+  tipc = line(f, g)
+  tipf = line(g, h)
+  axl = line(h, a)
+  c0 = pt(0, 0)
+  pz0 = pt(0, 0)
+  pz1 = pt(0, l)
+  zax = line((0, 0), (0, zref), construction: true)
+  xax = line((0, 0), (xref, 0), construction: true)
+}
+body = revolve(prof, axis: prof.zax)
+sketch cr(on: offset(body.side(prof.under), -k), at: prof.c0) {
+  x = poly([(hm, -hw), (hm, hw), (hw, hw), (hw, hm), (-hw, hm), (-hw, hw), (-hm, hw), (-hm, -hw), (-hw, -hw), (-hw, -hm), (hw, -hm), (hw, -hw)])
+}
+recess = cut(cr, -tr)
+
+head = anchor(plane(at: prof.pz0, normal: prof.zax.dir, x: prof.xax.dir))
+thd = anchor(plane(at: prof.pz0, normal: prof.zax.dir, x: prof.xax.dir), kind: external_thread, size: d, depth: l)
+tip = anchor(plane(at: prof.pz1, normal: prof.zax.dir, x: prof.xax.dir))
+
+expect valid
+expect bodies = 1
+expect volume = 616.681 +- 0.05%

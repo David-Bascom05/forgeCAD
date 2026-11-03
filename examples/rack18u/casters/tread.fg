@@ -1,0 +1,21 @@
+# caster tread: TPU 94 Sh A, 80 dia x 32
+# source: SPEC 6.2, 7 (Blickle: 80 x 32 TPU on nylon)
+# frame: origin at the wheel's centre, z along the axle (towards the nut side in the caster)
+
+shared ro = 40
+shared ri = 32
+shared hw = 16
+
+sketch prof(on: xz) {
+  o = poly([(ri, -hw), (ro, -hw), (ro, hw), (ri, hw)])
+  pz0 = pt(0, 0)
+  zax = line((0, 0), (0, hw), construction: true)
+  xax = line((0, 0), (ro, 0), construction: true)
+}
+body = revolve(prof.o, axis: prof.zax)
+
+ax = anchor(plane(at: prof.pz0, normal: prof.zax.dir, x: prof.xax.dir))
+
+expect valid
+expect bodies = 1
+expect volume = 57905.836 +- 0.05%

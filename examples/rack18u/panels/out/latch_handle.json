@@ -1,0 +1,48 @@
+{
+ "part": "latch_handle",
+ "lints": [],
+ "ok": true,
+ "errors": [],
+ "violations": [],
+ "warnings": [],
+ "expects": [
+  {
+   "metric": "volume",
+   "measured": 8328.9,
+   "ok": true
+  },
+  {
+   "metric": "bodies",
+   "measured": 2,
+   "ok": true
+  },
+  {
+   "metric": "valid",
+   "measured": 1,
+   "ok": true
+  }
+ ],
+ "bends": [
+  {
+   "flange": "fin_f",
+   "angle": 90,
+   "radius": 1.6,
+   "allowance": 3.695
+  }
+ ],
+ "shop_limits": {
+  "flat_bbox": [
+   46.999,
+   66.495
+  ],
+  "flat_fits_762x914.4": true,
+  "max_bend_line": 28.983,
+  "bend_lines_ok": true,
+  "bend_angles_ok": true,
+  "open_loops": 0,
+  "flat_area_x_t": 4156.347513006171,
+  "flat_body_volume": 4156.4,
+  "rel_err": -1.2627993895921154e-05
+ },
+ "volume": 8328.9
+}

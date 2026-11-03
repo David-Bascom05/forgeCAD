@@ -1,0 +1,108 @@
+# RACK-401 fan tray, t2 (SPEC 4, 5.9). Hangs under the top pan on 4 FH-M8-25 studs; carries 4 120 mm
+# fans (outlet up against the plate) on 16 S-M4-0 nuts.
+# frame: origin at the top face's centre, axes as rack X, Y, Z; plate z -1.88..0, flanges on the
+# x = +-150 edges turned to -z. Pose in the rack: origin (0, 400, 893.38), no turn (SPEC rev B, R2).
+# Anchors: fscr[0..15] (placement for the hw S-M4-0, R1: no thread here; flush face z = -1.88, +z),
+# fan[0..3] (z = -1.88, -z), hang[0..3] (top face z = 0, -z: 12.62 below the top pan's hang[k], R4;
+# x along -x, so the frame matches the top pan's hang anchor frame, which its 180deg turn about Y gives).
+
+# shop text from hw/shop.fg, verbatim (SPEC 10 gap 12)
+shared t3 = 3.02
+shared t2 = 1.88
+shared t1 = 1.52
+shared r_scs = 1.6
+shared kerf_scs = 0.2                       # not published by SendCutSend; Forge's stand-in
+shared hw_scs = [
+  hardware(kind: "nut",  size: "M4", sheet: (0.8, 12.7), hole: 5.41, edge: 6.9, max_hardness: ratio(80),
+           code: "S-M4-0",   source: "PEM CL bulletin; sendcutsend.com hardware catalog"),
+  hardware(kind: "nut",  size: "M5", sheet: (0.8, 12.7), hole: 6.35, edge: 7.1, max_hardness: ratio(80),
+           code: "SS-M5-0",  source: "PEM CL bulletin; sendcutsend.com hardware catalog"),
+  hardware(kind: "nut",  size: "M6", sheet: (1.22, 12.7), hole: 8.75, edge: 8.6, max_hardness: ratio(80),
+           code: "S-M6-0",   source: "PEM CL bulletin; sendcutsend.com hardware catalog"),
+  hardware(kind: "stud", size: "M4", sheet: (1.0, 12.7), hole: 4.0, edge: 7.2, max_hardness: ratio(80),
+           code: "FH-M4-12", source: "PEM FH bulletin; sendcutsend.com hardware catalog"),
+  hardware(kind: "stud", size: "M6", sheet: (1.6, 12.7), hole: 6.0, edge: 7.9, max_hardness: ratio(80),
+           code: "FH-M6-20", source: "PEM FH bulletin; sendcutsend.com hardware catalog"),
+  hardware(kind: "stud", size: "M8", sheet: (2.4, 12.7), hole: 8.0, edge: 9.6, max_hardness: ratio(80),
+           code: "FH-M8-25", source: "PEM FH bulletin; sendcutsend.com hardware catalog")]
+# [R5] stock() limits are per_t(..) values (a plain number is WrongType), as in hw/shop.fg
+shared scs = shop([
+  stock(t: t3, bend: kfactor(ratio(0.38)), radii: [r_scs], min_flange: per_t(ratio(0), plus: 11.84),
+        hole_to_bend: per_t(ratio(0), plus: 5.84), hole_to_edge: per_t(ratio(0), plus: 0.91), min_hole: per_t(ratio(0), plus: 1.02), min_slot: per_t(ratio(0), plus: 1.02), hardness: ratio(57),
+        relief: relief_rule(shape: "rect", width: per_t(ratio(1)), depth: 5.13, from: "bend_line",
+                            corner: "round", corner_placement: "intersection")),
+  stock(t: t2, bend: kfactor(ratio(0.40)), radii: [r_scs], min_flange: per_t(ratio(0), plus: 8.13),
+        hole_to_bend: per_t(ratio(0), plus: 4.15), hole_to_edge: per_t(ratio(0), plus: 0.56), min_hole: per_t(ratio(0), plus: 0.71), min_slot: per_t(ratio(0), plus: 0.71), hardness: ratio(57),
+        relief: relief_rule(shape: "rect", width: per_t(ratio(1)), depth: 3.99, from: "bend_line",
+                            corner: "round", corner_placement: "intersection")),
+  stock(t: t1, bend: kfactor(ratio(0.40)), radii: [r_scs], min_flange: per_t(ratio(0), plus: 7.85),
+        hole_to_bend: per_t(ratio(0), plus: 4.27), hole_to_edge: per_t(ratio(0), plus: 0.56), min_hole: per_t(ratio(0), plus: 0.71), min_slot: per_t(ratio(0), plus: 0.71), hardness: ratio(57),
+        relief: relief_rule(shape: "rect", width: per_t(ratio(1)), depth: 3.61, from: "bend_line",
+                            corner: "round", corner_placement: "intersection"))],
+  kerf: kerf_scs, hardware: hw_scs)
+
+shared W = 300                  # plate, square
+shared hf = 20                  # flange height, outer
+shared fc = 70                  # fan centres at (+-fc, +-fc)
+shared d_open = 116             # fan openings
+shared hs = 52.5                # half the fan's 105 hole square
+shared hx = 130                 # hangers at (+-hx, +-hy)
+shared hy = 140
+shared d_hang = 8.6
+shared xl = 10                  # anchor x-axis helper length
+# fan k at (fx[k], fy[k]); its screws j at fan + (sx[j], sy[j]); order as SPEC 5.9
+shared fx = [-fc, fc, -fc, fc]
+shared fy = [-fc, -fc, fc, fc]
+# nut i = 4 k + j: fan k, corner j in the same order
+shared nx = [-fc - hs, -fc + hs, -fc - hs, -fc + hs, fc - hs, fc + hs, fc - hs, fc + hs, -fc - hs, -fc + hs, -fc - hs, -fc + hs, fc - hs, fc + hs, fc - hs, fc + hs]
+shared ny = [-fc - hs, -fc - hs, -fc + hs, -fc + hs, -fc - hs, -fc - hs, -fc + hs, -fc + hs, fc - hs, fc - hs, fc + hs, fc + hs, fc - hs, fc - hs, fc + hs, fc + hs]
+shared gx = [-hx, hx, -hx, hx]
+shared gy = [-hy, -hy, hy, hy]
+
+sketch plan(on: xy) {
+  outline = rect(center: (0, 0), size: (W, W))
+  for k in 0..4 {
+    open = circle((fx[k], fy[k]), d_open / 2)
+    hanger = circle((gx[k], gy[k]), d_hang / 2)
+    hp = pt(gx[k], gy[k])
+  }
+  for i in 0..16 {
+    n = pt(nx[i], ny[i])
+  }
+  xax = line((0, 0), (xl, 0), construction: true)
+  xneg = line((xl, 0), (0, 0), construction: true)
+}
+tray = sheet(plan, t: t2, shop: scs)
+right = flange(tray.edge(plan.outline[1]), height: hf, side: "down")
+left = flange(tray.edge(plan.outline[3]), height: hf, side: "down")
+for i in 0..16 {
+  nut = pem("nut", "M4", at: plan.n[i], wall: tray)
+}
+
+# anchors (SPEC 5.9)
+sketch bot(on: offset(plan.plane, -t2)) {
+  for i in 0..16 {
+    n = pt(nx[i], ny[i])
+  }
+  for k in 0..4 {
+    f = pt(fx[k], fy[k])
+  }
+  xax = line((0, 0), (xl, 0), construction: true)
+}
+for i in 0..16 {
+  fscr = anchor(plane(at: bot.n[i], normal: plan.plane.normal, x: bot.xax.dir))
+}
+for k in 0..4 {
+  fan = anchor(plane(at: bot.f[k], normal: tray.bottom.normal, x: bot.xax.dir))
+  hang = anchor(plane(at: plan.hp[k], normal: tray.bottom.normal, x: plan.xneg.dir))
+}
+
+# design intent, from the drawing: the blank is 300 long and 300 + 2 x 20 outer less two 90deg bend
+# deductions wide, less the 4 openings, 4 hanger holes and 16 nut holes, times t. The folded body is
+# the mid-surface times t, so each bend adds (1/2 - K) t of arc over the allowance's K t.
+shared k_t2 = ratio(0.4)        # SPEC 3: K for t2
+shared d_nut = 5.41             # S-M4-0 mounting hole (shop row)
+shared bd = 2 * (r_scs + t2) - (r_scs + k_t2 * t2) * pi / 2
+shared blank = W * (W + 2 * hf - 2 * bd)
+shared holes = pi / 4 * (4 * d_open ^ 2 + 4 * d_hang ^ 2 + 16 * d_nut ^ 2)
+shared arc_extra = 2 * W * (1 / 2 - k_t2) * t2 * pi / 2

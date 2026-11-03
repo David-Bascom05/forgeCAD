@@ -1,0 +1,10 @@
+assembly
+# Forge gap: clearance() with a subassembly instance. Two identical pins 10 apart (centres), so 8 apart
+# (surfaces); one is inside a subassembly. Expected: clearance 8 (or a typed error if a subassembly
+# can't be measured). Seen: inf, and the expect passes.
+shared gap = 10
+shared c = 8
+a = part("../standin/grille_gauge.fg", ground: true)
+s = subassembly("sub_one_pin.fg", at: pose(at: (gap, 0, 0)))
+expect clearance(s, a) = c +- 0.01
+expect clearance(s.pin, a) = c +- 0.01

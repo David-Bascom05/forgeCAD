@@ -1,0 +1,111 @@
+# STAND-IN top pan RACK-131 for the fan test only (not the frame subsystem's part): built from SPEC
+# 5.2 numbers alone. Floor, 4 flanges up, the 4 hanger FH-M8-25 holes, the 4 fan grilles and the
+# cable cut-out; carrier and post-stud holes are left out (nothing of the fan tray comes near them).
+# frame: pan frame (SPEC 5.2): origin at the centre of the floor's outer face, z into the pan.
+# Anchors: hang[0..3] (SPEC 5.2 order, outer face z = 0, +z, placement for hw FH-M8-25), and two this
+# test adds, from the same numbers: hang_in[0..3] (the floor's inner face z = 3.02, +z: the spacers'
+# seat) and grille[0..3] (grille centres on the outer face, +z), in the order (-,-), (+,-), (-,+), (+,+).
+
+shared t3 = 3.02
+shared t2 = 1.88
+shared t1 = 1.52
+shared r_scs = 1.6
+shared kerf_scs = 0.2                       # not published by SendCutSend; Forge's stand-in
+shared hw_scs = [
+  hardware(kind: "nut",  size: "M4", sheet: (0.8, 12.7), hole: 5.41, edge: 6.9, max_hardness: ratio(80),
+           code: "S-M4-0",   source: "PEM CL bulletin; sendcutsend.com hardware catalog"),
+  hardware(kind: "nut",  size: "M5", sheet: (0.8, 12.7), hole: 6.35, edge: 7.1, max_hardness: ratio(80),
+           code: "SS-M5-0",  source: "PEM CL bulletin; sendcutsend.com hardware catalog"),
+  hardware(kind: "nut",  size: "M6", sheet: (1.22, 12.7), hole: 8.75, edge: 8.6, max_hardness: ratio(80),
+           code: "S-M6-0",   source: "PEM CL bulletin; sendcutsend.com hardware catalog"),
+  hardware(kind: "stud", size: "M4", sheet: (1.0, 12.7), hole: 4.0, edge: 7.2, max_hardness: ratio(80),
+           code: "FH-M4-12", source: "PEM FH bulletin; sendcutsend.com hardware catalog"),
+  hardware(kind: "stud", size: "M6", sheet: (1.6, 12.7), hole: 6.0, edge: 7.9, max_hardness: ratio(80),
+           code: "FH-M6-20", source: "PEM FH bulletin; sendcutsend.com hardware catalog"),
+  hardware(kind: "stud", size: "M8", sheet: (2.4, 12.7), hole: 8.0, edge: 9.6, max_hardness: ratio(80),
+           code: "FH-M8-25", source: "PEM FH bulletin; sendcutsend.com hardware catalog")]
+# [R5] stock() limits are per_t(..) values (a plain number is WrongType), as in hw/shop.fg
+shared scs = shop([
+  stock(t: t3, bend: kfactor(ratio(0.38)), radii: [r_scs], min_flange: per_t(ratio(0), plus: 11.84),
+        hole_to_bend: per_t(ratio(0), plus: 5.84), hole_to_edge: per_t(ratio(0), plus: 0.91), min_hole: per_t(ratio(0), plus: 1.02), min_slot: per_t(ratio(0), plus: 1.02), hardness: ratio(57),
+        relief: relief_rule(shape: "rect", width: per_t(ratio(1)), depth: 5.13, from: "bend_line",
+                            corner: "round", corner_placement: "intersection")),
+  stock(t: t2, bend: kfactor(ratio(0.40)), radii: [r_scs], min_flange: per_t(ratio(0), plus: 8.13),
+        hole_to_bend: per_t(ratio(0), plus: 4.15), hole_to_edge: per_t(ratio(0), plus: 0.56), min_hole: per_t(ratio(0), plus: 0.71), min_slot: per_t(ratio(0), plus: 0.71), hardness: ratio(57),
+        relief: relief_rule(shape: "rect", width: per_t(ratio(1)), depth: 3.99, from: "bend_line",
+                            corner: "round", corner_placement: "intersection")),
+  stock(t: t1, bend: kfactor(ratio(0.40)), radii: [r_scs], min_flange: per_t(ratio(0), plus: 7.85),
+        hole_to_bend: per_t(ratio(0), plus: 4.27), hole_to_edge: per_t(ratio(0), plus: 0.56), min_hole: per_t(ratio(0), plus: 0.71), min_slot: per_t(ratio(0), plus: 0.71), hardness: ratio(57),
+        relief: relief_rule(shape: "rect", width: per_t(ratio(1)), depth: 3.61, from: "bend_line",
+                            corner: "round", corner_placement: "intersection"))],
+  kerf: kerf_scs, hardware: hw_scs)
+
+shared W = 590.92               # outer box x
+shared D = 723.96               # outer box y
+shared H = 30                   # flange height, outer
+shared gx = [-130, 130, -130, 130]
+shared gy = [-140, -140, 140, 140]
+shared fc = 70                  # grille centres (+-fc, +-fc)
+shared cx = [-fc, fc, -fc, fc]
+shared cy = [-fc, -fc, fc, fc]
+shared ns = count(11)           # slots per grille
+shared i_mid = count(5)
+shared sp = 9.5                 # slot pitch
+shared ws = 6                   # slot width
+shared rg = 56                  # slot ends on a circle of 112
+shared cut_x = 125              # cable cut-out x -125..125, y 250..310, r 10
+shared cut_y0 = 250
+shared cut_y1 = 310
+shared cut_r = 10
+shared xl = 10
+
+sketch plan(on: offset(xy, t3)) {
+  outline = rect(center: (0, 0), size: (W, D))
+  cable = hull(disc((-cut_x + cut_r, cut_y0 + cut_r), cut_r), disc((cut_x - cut_r, cut_y0 + cut_r), cut_r),
+               disc((cut_x - cut_r, cut_y1 - cut_r), cut_r), disc((-cut_x + cut_r, cut_y1 - cut_r), cut_r))
+  for k in 0..4 {
+    h = pt(gx[k], gy[k])
+  }
+}
+pan = sheet(plan, t: t3, shop: scs)
+front = flange(pan.edge(plan.outline[0]), height: H)
+right = flange(pan.edge(plan.outline[1]), height: H)
+rear = flange(pan.edge(plan.outline[2]), height: H)
+left = flange(pan.edge(plan.outline[3]), height: H)
+for k in 0..4 {
+  stud = pem("stud", "M8", at: plan.h[k], wall: pan)
+}
+for k in 0..4 {
+  sketch grl(on: plan.plane) {
+    for i in 0..ns {
+      s = slot((cx[k] - sqrt(rg ^ 2 - (abs((i - i_mid) * sp) + ws / 2) ^ 2) + ws / 2, cy[k] + (i - i_mid) * sp),
+               (cx[k] + sqrt(rg ^ 2 - (abs((i - i_mid) * sp) + ws / 2) ^ 2) - ws / 2, cy[k] + (i - i_mid) * sp), ws / 2)
+    }
+  }
+  grille_cut = cutout(grl, wall: pan)
+}
+
+sketch outer(on: offset(plan.plane, -t3)) {
+  for k in 0..4 {
+    h = pt(gx[k], gy[k])
+    g = pt(cx[k], cy[k])
+  }
+  xax = line((0, 0), (xl, 0), construction: true)
+}
+for k in 0..4 {
+  hang = anchor(plane(at: outer.h[k], normal: plan.plane.normal, x: outer.xax.dir))
+  hang_in = anchor(plane(at: plan.h[k], normal: plan.plane.normal, x: outer.xax.dir))
+  grille = anchor(plane(at: outer.g[k], normal: plan.plane.normal, x: outer.xax.dir))
+}
+
+# rough intent only (a stand-in): floor and four flanges at t3, less the grilles, stud holes, cut-out.
+# Slot n off the centre line: overall length 2 q_n, q_n = sqrt(rg^2 - (n sp + ws/2)^2).
+shared q0 = sqrt(rg ^ 2 - (ws / 2) ^ 2)
+shared q1 = sqrt(rg ^ 2 - (sp + ws / 2) ^ 2)
+shared q2 = sqrt(rg ^ 2 - (2 * sp + ws / 2) ^ 2)
+shared q3 = sqrt(rg ^ 2 - (3 * sp + ws / 2) ^ 2)
+shared q4 = sqrt(rg ^ 2 - (4 * sp + ws / 2) ^ 2)
+shared q5 = sqrt(rg ^ 2 - (5 * sp + ws / 2) ^ 2)
+shared grille_a = ns * pi * (ws / 2) ^ 2 + ws * (2 * q0 + 4 * (q1 + q2 + q3 + q4 + q5) - ns * ws)
+expect volume = t3 * (W * D + 2 * (W + D) * (H - t3) - 4 * grille_a - 2 * cut_x * (cut_y1 - cut_y0)) +- 2%
+expect valid

@@ -1,0 +1,31 @@
+# latch compression spring at height 7.77 (representative: wire 1.2, mean diameter 10.8, 4 turns)
+# source: SPEC 5.8 (ID >= 8.4, OD <= 13, free ~12, solid <= 5.0, ~8 N/mm); no supplier row yet: wire 1.2, mean 10.8 (ID 9.6, OD 12.0), 4 turns, solid 4.8, rate G d^4 / (8 D^3 na) = 8.1 N/mm with 2 active
+# frame: origin on the axis in the seat plane z = 0; the coil runs to z = H
+
+shared H = 7.77   # working height
+shared dw = 1.2   # wire diameter
+shared D = 10.8   # mean coil diameter
+shared nt = count(4)   # turns, modelled as a plain helix over the height (no closed ends)
+shared pitch = (H - dw) / nt
+shared rm = D / 2
+shared rw = dw / 2
+shared zref = H
+shared xref = rm
+
+sketch prof(on: xz) {
+  w = circle((rm, rw), rw)
+  cax = line((0, 0), (0, H), construction: true)
+  c0 = pt(0, 0)
+  pz0 = pt(0, 0)
+  pz1 = pt(0, H)
+  zax = line((0, 0), (0, zref), construction: true)
+  xax = line((0, 0), (xref, 0), construction: true)
+}
+coilbody = coil(prof.w, axis: prof.cax, pitch: pitch, turns: nt)
+
+a = anchor(plane(at: prof.pz0, normal: prof.zax.dir, x: prof.xax.dir))
+b = anchor(plane(at: prof.pz1, normal: prof.zax.dir, x: prof.xax.dir))
+
+expect valid
+expect bodies = 1
+expect volume = 153.492 +- 0.05%

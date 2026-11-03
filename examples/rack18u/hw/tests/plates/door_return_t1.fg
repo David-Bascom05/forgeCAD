@@ -1,0 +1,21 @@
+# stand-in: door return with the pin S-M6-0, 1.52, hole 8.75
+# frame: origin at the hole centre on the face z = 0; the slab runs z 0..t
+shared t = 1.52
+shared dh = 8.75   # hole diameter
+shared w = 30
+shared xl = 10
+
+sketch plan(on: xy) {
+  outline = rect(center: (0, 0), size: (w, w))
+  bore = circle((0, 0), dh / 2)
+  c0 = pt(0, 0)
+  xax = line((0, 0), (xl, 0), construction: true)
+}
+slab = extrude(plan, t)
+sketch top(on: slab.end, at: plan.c0) {
+  c = pt(0, 0)
+}
+a = anchor(plane(at: plan.c0, normal: plan.plane.normal, x: plan.xax.dir))
+b = anchor(plane(at: top.c, normal: plan.plane.normal, x: plan.xax.dir))
+
+expect valid

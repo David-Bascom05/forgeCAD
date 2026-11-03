@@ -1,0 +1,48 @@
+# 608 pressed steel ribbon cage, one half: flat web between 7 spherical pocket cups
+# source: SPEC 6.2 (pressed steel 2-piece ribbon cage, modelled, not a catalogue drawing)
+# frame: origin at the bearing's centre, z along its axis; the half on +z; `back` turns it over for the other half
+
+shared rci = 6.5
+shared rco = 8.5
+shared tw = 0.45   # web (ribbon) thickness
+shared hc = 2.45   # cup height
+shared rpo = 2.45   # cup outer radius
+shared rpi = 2.05   # pocket: the 3.969 ball + 0.065
+shared rm = 7.5   # pitch radius
+shared nb = count(7)
+shared lref = 10
+
+sketch pk(on: xy) {
+  for i in 0..7 {
+    p = pt(rm * cos(360deg * i / nb), rm * sin(360deg * i / nb))
+  }
+  band = circle((0, 0), rco)
+  bore = circle((0, 0), rci)
+  o = pt(0, 0)
+  xl = line((0, 0), (lref, 0), construction: true)
+  zn = line((0, 0), (0, lref), construction: true)
+}
+sketch prof(on: rotate(pk.plane, about: pk.xl, by: 90deg)) {
+  o = rect(corner: (rci, 0), size: (rco - rci, tw))
+  zax = line((0, 0), (0, hc), construction: true)
+}
+web = revolve(prof.o, axis: prof.zax)
+for i in 0..7 {
+  cup = ball(pk.p[i], rpo)
+}
+trim = intersect(pk, hc)
+for i in 0..7 {
+  pocket = ball(pk.p[i], rpi, cut: true)
+}
+sketch bk(on: offset(pk.plane, hc)) {
+  o = pt(0, 0)
+}
+
+ax = anchor(plane(at: pk.o, normal: pk.plane.normal, x: pk.xl.dir))
+for i in 0..7 {
+  pocket_at = anchor(plane(at: pk.p[i], normal: pk.plane.normal, x: pk.xl.dir))
+}
+
+expect valid
+expect bodies = 1
+expect volume = 52.322 +- 0.3%

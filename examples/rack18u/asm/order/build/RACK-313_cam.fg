@@ -1,0 +1,97 @@
+# RACK-313 latch cam, t2, flat (SPEC 5.8). x2.
+# Part frame = the latch frame at the cam: origin on the cam's front face (the face towards the
+# door) at the latch axis; x = u (the arm), y = v, z = w (towards the door). Material z -1.88..0.
+# Outline: a disc R 21.9 about the axis joined to the arm's R 8 end, centred on u = 19 (tip r 27).
+
+shared t3 = 3.02
+shared t2 = 1.88
+shared t1 = 1.52
+shared r_scs = 1.6
+shared kerf_scs = 0.2                       # not published by SendCutSend; Forge's stand-in
+shared hw_scs = [
+  hardware(kind: "nut",  size: "M4", sheet: (0.8, 12.7), hole: 5.41, edge: 6.9, max_hardness: ratio(80),
+           code: "S-M4-0",   source: "PEM CL bulletin; sendcutsend.com hardware catalog"),
+  hardware(kind: "nut",  size: "M5", sheet: (0.8, 12.7), hole: 6.35, edge: 7.1, max_hardness: ratio(80),
+           code: "SS-M5-0",  source: "PEM CL bulletin; sendcutsend.com hardware catalog"),
+  hardware(kind: "nut",  size: "M6", sheet: (1.22, 12.7), hole: 8.75, edge: 8.6, max_hardness: ratio(80),
+           code: "S-M6-0",   source: "PEM CL bulletin; sendcutsend.com hardware catalog"),
+  hardware(kind: "stud", size: "M4", sheet: (1.0, 12.7), hole: 4.0, edge: 7.2, max_hardness: ratio(80),
+           code: "FH-M4-12", source: "PEM FH bulletin; sendcutsend.com hardware catalog"),
+  hardware(kind: "stud", size: "M6", sheet: (1.6, 12.7), hole: 6.0, edge: 7.9, max_hardness: ratio(80),
+           code: "FH-M6-20", source: "PEM FH bulletin; sendcutsend.com hardware catalog"),
+  hardware(kind: "stud", size: "M8", sheet: (2.4, 12.7), hole: 8.0, edge: 9.6, max_hardness: ratio(80),
+           code: "FH-M8-25", source: "PEM FH bulletin; sendcutsend.com hardware catalog")]
+shared scs = shop([
+  stock(t: t3, bend: kfactor(ratio(0.38)), radii: [r_scs], min_flange: per_t(ratio(0), plus: 11.84),
+        hole_to_bend: per_t(ratio(0), plus: 5.84), hole_to_edge: per_t(ratio(0), plus: 0.91), min_hole: per_t(ratio(0), plus: 1.02), min_slot: per_t(ratio(0), plus: 1.02), hardness: ratio(57),
+        relief: relief_rule(shape: "rect", width: per_t(ratio(1)), depth: 5.13, from: "bend_line",
+                            corner: "round", corner_placement: "intersection")),
+  stock(t: t2, bend: kfactor(ratio(0.40)), radii: [r_scs], min_flange: per_t(ratio(0), plus: 8.13),
+        hole_to_bend: per_t(ratio(0), plus: 4.15), hole_to_edge: per_t(ratio(0), plus: 0.56), min_hole: per_t(ratio(0), plus: 0.71), min_slot: per_t(ratio(0), plus: 0.71), hardness: ratio(57),
+        relief: relief_rule(shape: "rect", width: per_t(ratio(1)), depth: 3.99, from: "bend_line",
+                            corner: "round", corner_placement: "intersection")),
+  stock(t: t1, bend: kfactor(ratio(0.40)), radii: [r_scs], min_flange: per_t(ratio(0), plus: 7.85),
+        hole_to_bend: per_t(ratio(0), plus: 4.27), hole_to_edge: per_t(ratio(0), plus: 0.56), min_hole: per_t(ratio(0), plus: 0.71), min_slot: per_t(ratio(0), plus: 0.71), hardness: ratio(57),
+        relief: relief_rule(shape: "rect", width: per_t(ratio(1)), depth: 3.61, from: "bend_line",
+                            corner: "round", corner_placement: "intersection"))],
+  kerf: kerf_scs, hardware: hw_scs)
+
+shared R = 21.9          # hub disc
+shared r_end = 8         # arm end (arm 16 wide)
+shared tip = 27          # arm tip radius
+shared u_end = tip - r_end
+shared d_bore = 12.5     # clears the pivot nut's body (11.18) and thread end
+shared d_ball = 3.5      # ball holes, at (u, v) = (0, +-9)
+shared v_ball = 9
+shared r_ballc = 2       # the 4.0 ball's radius: its centre sits sqrt(2^2 - 1.75^2) in front of the face
+shared r_lk = 14.8       # link nuts S-M4-0 at (u, v) = (-10.465, +-10.465): r 14.8 at 135, 225deg [R11]
+shared lk = r_lk * cos(45deg)
+shared g_u = 20.4        # starting guesses for the outline's two corners
+shared g_v = 7.9
+shared xl = 10
+
+sketch plan(on: xy) {
+  c0 = pt(0, 0)
+  c1 = pt(u_end, 0)
+  p1 = near(g_u, g_v)
+  p2 = near(g_u, -g_v)
+  hub = arc(center: c0, from: p1, to: p2)
+  arm = arc(center: c1, from: p2, to: p1)
+  radius(hub, R)
+  radius(arm, r_end)
+  n0 = pt(-lk, lk)
+  n1 = pt(-lk, -lk)
+  xax = line((0, 0), (xl, 0), construction: true)
+}
+cam = sheet(plan, t: t2, shop: scs)
+# holes are cutouts (the shop checks skip a sheet profile's own holes)
+sketch holes_s(on: cam.top) {
+  bore = circle((0, 0), d_bore / 2)
+  b0 = circle((0, v_ball), d_ball / 2)
+  b1 = circle((0, -v_ball), d_ball / 2)
+}
+holes = cutout(holes_s, wall: cam)
+nut0 = pem("nut", "M4", at: plan.n0, wall: cam)
+nut1 = pem("nut", "M4", at: plan.n1, wall: cam)
+shared z_ball = sqrt(r_ballc ^ 2 - (d_ball / 2) ^ 2)
+sketch balls(on: offset(plan.plane, z_ball)) {
+  q0 = pt(0, v_ball)
+  q1 = pt(0, -v_ball)
+}
+
+latch_axis = anchor(plane(at: plan.c0, normal: plan.plane.normal, x: plan.xax.dir))
+for i in 0..2 {
+  link = anchor(plane(at: plan.n0 if i == 0 else plan.n1, normal: -plan.plane.normal, x: plan.xax.dir))
+  ball_seat = anchor(plane(at: balls.q0 if i == 0 else balls.q1, normal: plan.plane.normal, x: plan.xax.dir))
+}
+
+
+# drawing math: the union of the two discs (circle-circle lens), less the bore, the ball holes and
+# the two S-M4-0 mounting holes (5.41); folded and flat bodies, each t thick
+shared d_nut = 5.41
+shared ca = (u_end ^ 2 + r_end ^ 2 - R ^ 2) / (2 * u_end * r_end)
+shared cb = (u_end ^ 2 + R ^ 2 - r_end ^ 2) / (2 * u_end * R)
+shared xa = (u_end ^ 2 + R ^ 2 - r_end ^ 2) / (2 * u_end)
+shared half_chord = sqrt(R ^ 2 - xa ^ 2)
+shared lens = r_end ^ 2 * (acos(ca) / 180deg) * pi + R ^ 2 * (acos(cb) / 180deg) * pi - u_end * half_chord
+shared area = pi * (R ^ 2 + r_end ^ 2) - lens - pi * ((d_bore / 2) ^ 2 + 2 * (d_ball / 2) ^ 2 + 2 * (d_nut / 2) ^ 2)

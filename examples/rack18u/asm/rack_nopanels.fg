@@ -1,0 +1,643 @@
+assembly
+
+# RACK-18U top assembly (SPEC section 9F). Every part hangs off the base pan by its joints: the SPEC 5
+# poses are where the solve starts, and the R8 pairs and R9 turns/offsets are what put each part there.
+# One joint per part (a tree); every other anchor pair of a joined part is a distance expect.
+# Rails move by one SetParam on a Count param (SPEC 6.3 fallback: an anchor index from a Length param is
+# not a Count): k_front, k_rear are the carrier rail-nut indices counted from the front.
+
+# rails (SPEC 6.3): rail_front = 50 + 25 k_front (50..450), rail_rear = 75 + 25 k_rear (350..750)
+shared k_front = count(2)
+shared k_rear = count(26)
+shared k_last = count(27)
+shared pitch = 25
+shared y0_front = 50
+shared y0_rear = 75
+shared rail_front = y0_front + pitch * k_front
+shared rail_rear = y0_rear + pitch * k_rear
+
+# dummies (SPEC 5.11): the lowest U of each
+shared u_d01 = count(1)
+shared u_d02 = count(10)
+shared u_d04 = count(15)
+shared n_d01 = count(1)
+shared n_d02 = count(2)
+shared n_d04 = count(4)
+shared u_h = 44.45
+shared z_u1 = 52.95
+
+shared t1 = 1.52
+shared t2 = 1.88
+shared t3 = 3.02
+shared t_ear = 3
+shared t_pw = 1
+shared drop = 12.62             # tray top face to the top pan's outer face (R4)
+
+# ---------------------------------------------------------------------------------------------------
+# frame (SPEC 5.1-5.4)
+
+base_pan = part("../frame/base_pan.fg", body: "floor", ground: true, at: pose(at: (0, 400, 0), z: (0, 0, 1), x: (1, 0, 0)))
+top_pan = part("../frame/top_pan.fg", body: "floor", at: pose(at: (0, 400, 906), z: (0, 0, -1), x: (-1, 0, 0)))
+
+post_fl = subassembly("post_kit.fg", at: pose(at: (-298.48, 35, 0), z: (0, 0, 1), x: (1, 0, 0)))
+post_fr = subassembly("post_kit.fg", at: pose(at: (298.48, 35, 0), z: (0, 0, 1), x: (0, 1, 0)))
+post_rr = subassembly("post_kit.fg", at: pose(at: (298.48, 765, 0), z: (0, 0, 1), x: (-1, 0, 0)))
+post_rl = subassembly("post_kit.fg", at: pose(at: (-298.48, 765, 0), z: (0, 0, 1), x: (0, -1, 0)))
+# R9: post stud[0] -> base pan stud, turn 0, along -3.02; R8 pairs at the base
+j_post_fl = slider(post_fl.post.stud_a[0], base_pan.stud_fl_f, along: -t3)
+j_post_fr = slider(post_fr.post.stud_a[0], base_pan.stud_fr_s, along: -t3)
+j_post_rr = slider(post_rr.post.stud_a[0], base_pan.stud_rr_r, along: -t3)
+j_post_rl = slider(post_rl.post.stud_a[0], base_pan.stud_rl_s, along: -t3)
+# the top pan on post FL's upper front stud (R8: the turned pan's stud_fr_f lands at FL)
+j_top = slider(top_pan.stud_fr_f, post_fl.post.stud_a[1], along: t3)
+
+car_bl = subassembly("carrier_kit.fg", at: pose(at: (-251.88, 43, 3.02), z: (0, 0, 1), x: (0, 1, 0)))
+car_br = subassembly("carrier_kit.fg", at: pose(at: (251.88, 757, 3.02), z: (0, 0, 1), x: (0, -1, 0)))
+car_tl = subassembly("carrier_kit.fg", at: pose(at: (-251.88, 757, 902.98), z: (0, 0, -1), x: (0, -1, 0)))
+car_tr = subassembly("carrier_kit.fg", at: pose(at: (251.88, 43, 902.98), z: (0, 0, -1), x: (0, 1, 0)))
+# R9: carrier pan[i] -> pan car_*, along +3.02; R8: BR and TL run -Y, so pan[0] meets car_*[2]
+j_car_bl = slider(car_bl.carrier.pan[0], base_pan.car_l[0], along: t3)
+j_car_br = slider(car_br.carrier.pan[0], base_pan.car_r[2], along: t3)
+j_car_tr = slider(car_tr.carrier.pan[0], top_pan.car_l[0], along: t3)
+j_car_tl = slider(car_tl.carrier.pan[0], top_pan.car_r[2], along: t3)
+# carrier screws, ISO 7380 M6 x 12 from outside each pan (R2)
+for i in 0..3 {
+  scr_bl = part("../hw/iso7380_m6x12.fg")
+  at_scr_bl = fastened(scr_bl.head, base_pan.car_l[i])
+  scr_br = part("../hw/iso7380_m6x12.fg")
+  at_scr_br = fastened(scr_br.head, base_pan.car_r[i])
+  scr_tr = part("../hw/iso7380_m6x12.fg")
+  at_scr_tr = fastened(scr_tr.head, top_pan.car_l[i])
+  scr_tl = part("../hw/iso7380_m6x12.fg")
+  at_scr_tl = fastened(scr_tl.head, top_pan.car_r[i])
+}
+
+rail_lf = part("../frame/rail.fg", body: "mount", at: pose(at: (-251.88, 100, 8), z: (0, 0, 1), x: (1, 0, 0)))
+rail_rf = part("../frame/rail.fg", body: "mount", at: pose(at: (251.88, 100, 898), z: (0, 0, -1), x: (-1, 0, 0)))
+rail_rr = part("../frame/rail.fg", body: "mount", at: pose(at: (251.88, 725, 8), z: (0, 0, 1), x: (-1, 0, 0)))
+rail_lr = part("../frame/rail.fg", body: "mount", at: pose(at: (-251.88, 725, 898), z: (0, 0, -1), x: (1, 0, 0)))
+# R8: web_bot[0] of each rail on its lower-index carrier nut (the r -Z rails have web_bot at the top)
+j_rail_lf = fastened(rail_lf.web_bot[0], car_bl.carrier.rail[k_front])
+j_rail_rf = fastened(rail_rf.web_bot[0], car_tr.carrier.rail[k_front])
+j_rail_rr = fastened(rail_rr.web_bot[0], car_br.carrier.rail[k_last - k_rear])
+j_rail_lr = fastened(rail_lr.web_bot[0], car_tl.carrier.rail[k_last - k_rear])
+# rail screws, ISO 7380 M6 x 10 from inside the web: head t2 behind the web anchor
+for i in 0..2 {
+  rs_bot_lf = part("../hw/iso7380_m6x10.fg")
+  at_rs_bot_lf = slider(rs_bot_lf.head, rail_lf.web_bot[i], along: -t2)
+  rs_top_lf = part("../hw/iso7380_m6x10.fg")
+  at_rs_top_lf = slider(rs_top_lf.head, rail_lf.web_top[i], along: -t2)
+}
+for i in 0..2 {
+  rs_bot_rf = part("../hw/iso7380_m6x10.fg")
+  at_rs_bot_rf = slider(rs_bot_rf.head, rail_rf.web_bot[i], along: -t2)
+  rs_top_rf = part("../hw/iso7380_m6x10.fg")
+  at_rs_top_rf = slider(rs_top_rf.head, rail_rf.web_top[i], along: -t2)
+}
+for i in 0..2 {
+  rs_bot_rr = part("../hw/iso7380_m6x10.fg")
+  at_rs_bot_rr = slider(rs_bot_rr.head, rail_rr.web_bot[i], along: -t2)
+  rs_top_rr = part("../hw/iso7380_m6x10.fg")
+  at_rs_top_rr = slider(rs_top_rr.head, rail_rr.web_top[i], along: -t2)
+}
+for i in 0..2 {
+  rs_bot_lr = part("../hw/iso7380_m6x10.fg")
+  at_rs_bot_lr = slider(rs_bot_lr.head, rail_lr.web_bot[i], along: -t2)
+  rs_top_lr = part("../hw/iso7380_m6x10.fg")
+  at_rs_top_lr = slider(rs_top_lr.head, rail_lr.web_top[i], along: -t2)
+}
+
+# ---------------------------------------------------------------------------------------------------
+# fan tray (SPEC 5.9 rev B): hanger stacks in the top pan, the fan subassembly on them
+
+for k in 0..4 {
+  hang_stud = part("../hw/pem_fh_m8_25.fg")
+  at_hang_stud = fastened(hang_stud.flush, top_pan.hang[k])
+  hang_spacer = part("../hw/nylon_spacer_8x14x8.fg")
+  at_hang_spacer = slider(hang_spacer.a, top_pan.hang[k], along: t3)
+  hang_washer = part("../hw/iso7089_8.fg")
+  at_hang_washer = fastened(hang_washer.a, hang_spacer.b)
+}
+fans = subassembly("../fans/fan_assy.fg", at: pose(at: (0, 400, 893.38)))
+# R8: tray.hang[k] meets pan.hang[k xor 1]
+j_fans = slider(fans.tray.hang[1], top_pan.hang[0], along: drop)
+for k in 0..4 {
+  hang_nut = part("../hw/iso10511_m8.fg")
+  at_hang_nut = slider(hang_nut.seat, fans.tray.hang[k], along: t2)
+  # reference: each fan's air column up to the pan's outer face (fans/standin), to measure the grille bars
+  air = part("../fans/standin/air_column.fg", reference: true)
+  at_air = fastened(air.base, fans.fan[k].out)
+  vent = fit(air, top_pan)
+}
+
+# ---------------------------------------------------------------------------------------------------
+# equipment (SPEC 5.11): dummies on the front rails, 4 cage nuts and 4 rack screws each. Ear holes:
+# ear[0] left bottom, ear[1] left top, ear[2] right bottom, ear[3] right top. Left front rail hole
+# k = 3 (U - 1) + j; the flipped right rail's is 53 - k (R9: its eia x runs down).
+
+d01 = part("dummy_d01.fg", reference: true, at: pose(at: (0, 100, z_u1)))
+d02 = part("dummy_d02.fg", reference: true, at: pose(at: (0, 100, z_u1 + u_h * 9)))
+d04 = part("dummy_d04.fg", reference: true, at: pose(at: (0, 100, z_u1 + u_h * 14)))
+j_d01 = fastened(d01.ear[0], rail_lf.eia[3 * (u_d01 - 1)])
+j_d02 = fastened(d02.ear[0], rail_lf.eia[3 * (u_d02 - 1)])
+j_d04 = fastened(d04.ear[0], rail_lf.eia[3 * (u_d04 - 1)])
+# d01: left rail holes 3 (U - 1) and 3 (U + n) - 4; right rail 53 - those
+cage_d01_0 = part("../hw/cage_nut_m6.fg")
+at_cage_d01_0 = slider(cage_d01_0.seat, rail_lf.eia[3 * (u_d01 - 1)], along: t2)
+cage_d01_1 = part("../hw/cage_nut_m6.fg")
+at_cage_d01_1 = slider(cage_d01_1.seat, rail_lf.eia[3 * (u_d01 + n_d01) - 4], along: t2)
+cage_d01_2 = part("../hw/cage_nut_m6.fg")
+at_cage_d01_2 = slider(cage_d01_2.seat, rail_rf.eia[53 - 3 * (u_d01 - 1)], along: t2)
+cage_d01_3 = part("../hw/cage_nut_m6.fg")
+at_cage_d01_3 = slider(cage_d01_3.seat, rail_rf.eia[53 - (3 * (u_d01 + n_d01) - 4)], along: t2)
+for j in 0..4 {
+  pw_d01 = part("../hw/plastic_washer_m6.fg")
+  at_pw_d01 = slider(pw_d01.a, d01.ear[j], along: -(t_ear + t_pw))
+  rs_d01 = part("../hw/rack_screw_m6x16.fg")
+  at_rs_d01 = fastened(rs_d01.head, pw_d01.a)
+}
+# d02: left rail holes 3 (U - 1) and 3 (U + n) - 4; right rail 53 - those
+cage_d02_0 = part("../hw/cage_nut_m6.fg")
+at_cage_d02_0 = slider(cage_d02_0.seat, rail_lf.eia[3 * (u_d02 - 1)], along: t2)
+cage_d02_1 = part("../hw/cage_nut_m6.fg")
+at_cage_d02_1 = slider(cage_d02_1.seat, rail_lf.eia[3 * (u_d02 + n_d02) - 4], along: t2)
+cage_d02_2 = part("../hw/cage_nut_m6.fg")
+at_cage_d02_2 = slider(cage_d02_2.seat, rail_rf.eia[53 - 3 * (u_d02 - 1)], along: t2)
+cage_d02_3 = part("../hw/cage_nut_m6.fg")
+at_cage_d02_3 = slider(cage_d02_3.seat, rail_rf.eia[53 - (3 * (u_d02 + n_d02) - 4)], along: t2)
+for j in 0..4 {
+  pw_d02 = part("../hw/plastic_washer_m6.fg")
+  at_pw_d02 = slider(pw_d02.a, d02.ear[j], along: -(t_ear + t_pw))
+  rs_d02 = part("../hw/rack_screw_m6x16.fg")
+  at_rs_d02 = fastened(rs_d02.head, pw_d02.a)
+}
+# d04: left rail holes 3 (U - 1) and 3 (U + n) - 4; right rail 53 - those
+cage_d04_0 = part("../hw/cage_nut_m6.fg")
+at_cage_d04_0 = slider(cage_d04_0.seat, rail_lf.eia[3 * (u_d04 - 1)], along: t2)
+cage_d04_1 = part("../hw/cage_nut_m6.fg")
+at_cage_d04_1 = slider(cage_d04_1.seat, rail_lf.eia[3 * (u_d04 + n_d04) - 4], along: t2)
+cage_d04_2 = part("../hw/cage_nut_m6.fg")
+at_cage_d04_2 = slider(cage_d04_2.seat, rail_rf.eia[53 - 3 * (u_d04 - 1)], along: t2)
+cage_d04_3 = part("../hw/cage_nut_m6.fg")
+at_cage_d04_3 = slider(cage_d04_3.seat, rail_rf.eia[53 - (3 * (u_d04 + n_d04) - 4)], along: t2)
+for j in 0..4 {
+  pw_d04 = part("../hw/plastic_washer_m6.fg")
+  at_pw_d04 = slider(pw_d04.a, d04.ear[j], along: -(t_ear + t_pw))
+  rs_d04 = part("../hw/rack_screw_m6x16.fg")
+  at_rs_d04 = fastened(rs_d04.head, pw_d04.a)
+}
+
+# ---------------------------------------------------------------------------------------------------
+# panels, doors (SPEC 5.5-5.8, 6.1) and casters (5.10, 6.2): written by gen_rack.py from panels/ and
+# casters/ (Forge cannot drive a subassembly's joints from its parent, so the door and caster blocks are
+# flattened here, one copy per door and per corner)
+# BEGIN GENERATED panels
+# END GENERATED panels
+# BEGIN GENERATED casters
+# casters (SPEC 5.10, 6.2): casters/caster_lock.fg at the front, caster_plain.fg at the rear, flattened
+# (prefix fl_, fr_, rl_, rr_) so each corner's swivel, roll and brake are this file's drives. The
+# plate is fastened to the base pan's caster_* anchor [R9]; 4 ISO 4017 M8 x 20 up through plate and
+# pan, ISO 7089-8 and ISO 10511 M8 inside the pan.
+shared cs_ru = 25   # upper ball row pitch radius (written poses)
+shared cs_zu = 5.38
+shared cs_au = 15deg
+shared cs_rl = 18   # lower ball row
+shared cs_zl = 12.64
+shared cs_al = 18deg
+shared cs_pr = 7.5   # 608 pitch radius
+shared cs_ab = 51.428571deg
+shared cs_k_race = ratio(-0.5)   # ball rows: orbit at half the swivel, the same way (Forge's gear turns the follower by -ratio)
+shared cs_k_cage = ratio(-0.632300)   # 608 cage: (1 + Dw/dm)/2 = 0.6323 of the outer ring, inner ring fixed
+shared cs_brake_lo = 0deg
+shared cs_brake_hi = 20deg   # pedal down: shoe on the tread, pin in a notch
+shared cs_lift_lo = 0
+shared cs_lift_hi = 4   # lock pin travel
+shared cs_r_cam = 11.459156   # lock pin lift per radian of pedal: 4.0 at 20deg
+shared t_plate = 3
+shared t_pan = 3.02
+
+# ---- caster FL (caster_lock) ----
+shared fl_swivel_turn = 0deg
+shared fl_roll = 0deg
+shared fl_brake = 0deg
+fl_plate = part("../casters/plate.fg", at: pose(at: (0, 0, 0)))
+fl_kpin = part("../casters/kingpin.fg", at: pose(at: (0, 0, 0)))
+fl_race = part("../casters/lower_race.fg", at: pose(at: (0, 0, 0)))
+fl_yoke = part("../casters/yoke.fg", at: pose(at: (0, 0, 0)))
+fl_fix_kpin = fastened(fl_kpin.cf, fl_plate.top)
+fl_fix_race = fastened(fl_race.cf, fl_plate.top)
+fl_swivel = revolute(fl_yoke.kingpin, fl_plate.kingpin, turn: fl_swivel_turn)
+fl_f_kpin = fit(fl_kpin, fl_plate)
+fl_f_race = fit(fl_kpin, fl_race)
+for i in 0..24 {
+  fl_ub = part("../casters/ball_4763.fg", at: pose(at: (0 + cs_ru * cos(cs_au * i), 0 + cs_ru * sin(cs_au * i), -cs_zu), rz: cs_au * i))
+  fl_up = revolute(fl_ub.uorb, fl_plate.uorb[i])
+  fl_up_rel = gear(fl_swivel, fl_up, ratio: cs_k_race)
+  fl_f_ub = fit(fl_ub, fl_yoke)
+}
+for i in 0..20 {
+  fl_lb = part("../casters/ball_4763.fg", at: pose(at: (0 + cs_rl * cos(cs_al * i), 0 + cs_rl * sin(cs_al * i), -cs_zl), rz: cs_al * i))
+  fl_lo = revolute(fl_lb.lorb, fl_plate.lorb[i])
+  fl_lo_rel = gear(fl_swivel, fl_lo, ratio: cs_k_race)
+  fl_f_lb = fit(fl_lb, fl_yoke)
+}
+fl_axle = part("../hw/iso4014_m8x55.fg", at: pose(at: (-20.7, -40, -71), z: (1, 0, 0), x: (0, 1, 0)))
+fl_nut = part("../hw/iso10511_m8.fg", at: pose(at: (20.7, -40, -71), z: (1, 0, 0), x: (0, 1, 0)))
+fl_fix_axle = fastened(fl_axle.head, fl_yoke.axle_head)
+fl_fix_nut = fastened(fl_nut.seat, fl_yoke.axle_nut)
+fl_f_axle = fit(fl_axle, fl_yoke)
+fl_f_nut = fit(fl_nut, fl_yoke)
+fl_sp_l = part("../casters/spacer.fg", at: pose(at: (-18.2, -40, -71), z: (1, 0, 0), x: (0, 1, 0)))
+fl_sp_r = part("../casters/spacer.fg", at: pose(at: (3.5, -40, -71), z: (1, 0, 0), x: (0, 1, 0)))
+fl_fix_sp_l = fastened(fl_sp_l.a, fl_yoke.sp_l)
+fl_fix_sp_r = fastened(fl_sp_r.a, fl_yoke.sp_r)
+fl_f_sp_l = fit(fl_sp_l, fl_yoke)
+fl_f_sp_r = fit(fl_sp_r, fl_yoke)
+fl_bi = part("../casters/bearing_inner.fg", at: pose(at: (0, -40, -71), z: (1, 0, 0), x: (0, 1, 0)))
+fl_ring_in = fastened(fl_bi.ax, fl_yoke.axle)
+fl_f_bi_axle = fit(fl_bi, fl_axle)
+fl_f_bi_sp_l = fit(fl_bi, fl_sp_l)
+fl_f_bi_sp_r = fit(fl_bi, fl_sp_r)
+fl_hub = part("../casters/hub.fg", at: pose(at: (0, -40, -71), z: (1, 0, 0), x: (0, 1, 0)))
+fl_wheel = revolute(fl_hub.ax, fl_yoke.axle, turn: fl_roll)
+fl_tread = part("../casters/tread.fg", at: pose(at: (0, -40, -71), z: (1, 0, 0), x: (0, 1, 0)))
+fl_fix_tread = fastened(fl_tread.ax, fl_hub.ax)
+fl_f_tread = fit(fl_tread, fl_hub)
+fl_bo = part("../casters/bearing_outer.fg", at: pose(at: (0, -40, -71), z: (1, 0, 0), x: (0, 1, 0)))
+fl_ring_out = fastened(fl_bo.ax, fl_hub.ax)
+fl_f_bo = fit(fl_bo, fl_hub)
+fl_cage_a = part("../casters/cage_half.fg", at: pose(at: (0, -40, -71), z: (1, 0, 0), x: (0, 1, 0)))
+fl_cage = revolute(fl_cage_a.ax, fl_yoke.axle)
+fl_cage_rel = gear(fl_wheel, fl_cage, ratio: cs_k_cage)
+fl_cage_b = part("../casters/cage_half.fg", at: pose(at: (0, -40, -71), z: (-1, 0, 0), x: (0, 1, 0)))
+fl_fix_cage_b = fastened(fl_cage_b.ax, fl_cage_a.ax, flip: true)
+fl_f_cage = fit(fl_cage_a, fl_cage_b)
+for i in 0..7 {
+  fl_bb = part("../casters/ball_3969.fg", at: pose(at: (0, -40 + cs_pr * cos(cs_ab * i), -71 + cs_pr * sin(cs_ab * i)), z: (1, 0, 0), x: (0, 1, 0)))
+  fl_ball_fix = fastened(fl_bb.c, fl_cage_a.pocket_at[i])
+  fl_f_bb_in = fit(fl_bb, fl_bi)
+  fl_f_bb_out = fit(fl_bb, fl_bo)
+}
+fl_seal_a = part("../casters/seal.fg", at: pose(at: (0, -40, -71), z: (1, 0, 0), x: (0, 1, 0)))
+fl_seal_b = part("../casters/seal.fg", at: pose(at: (0, -40, -71), z: (-1, 0, 0), x: (0, 1, 0)))
+fl_fix_seal_a = fastened(fl_seal_a.ax, fl_bo.ax)
+fl_fix_seal_b = fastened(fl_seal_b.back, fl_bo.ax)
+fl_f_seal_a_out = fit(fl_seal_a, fl_bo)
+fl_f_seal_a_in = fit(fl_seal_a, fl_bi)
+fl_f_seal_b_out = fit(fl_seal_b, fl_bo)
+fl_f_seal_b_in = fit(fl_seal_b, fl_bi)
+fl_lever = part("../casters/pedal.fg", at: pose(at: (0, 0, 0)))
+fl_pedal = revolute(fl_lever.pivot, fl_yoke.pedal_pin, turn: fl_brake, limit: (cs_brake_lo, cs_brake_hi))
+fl_ppin = part("../casters/pedal_pin.fg", at: pose(at: (0, 0, 0)))
+fl_fix_ppin = fastened(fl_ppin.cf, fl_yoke.kingpin)
+fl_f_ppin = fit(fl_ppin, fl_yoke)
+fl_lpin = part("../casters/lock_pin.fg", at: pose(at: (0, 0, 0)))
+fl_lockpin = slider(fl_lpin.ax, fl_yoke.lock_guide, limit: (cs_lift_lo, cs_lift_hi))
+fl_pin_rel = rack_pinion(fl_pedal, fl_lockpin, radius: cs_r_cam)
+fl_f_cam = fit(fl_lever, fl_lpin)
+fl_f_shoe = fit(fl_lever, fl_tread)
+at_fl_caster = fastened(fl_plate.top, base_pan.caster_fl)
+fl_on_pan = fit(fl_plate, base_pan)
+for k in 0..4 {
+  fl_cbolt = part("../hw/iso4017_m8x20.fg")
+  at_fl_cbolt = fastened(fl_cbolt.head, fl_plate.bolt[k])
+  fl_cwsh = part("../hw/iso7089_8.fg")
+  at_fl_cwsh = slider(fl_cwsh.a, fl_plate.bolt[k], along: t_plate + t_pan)
+  fl_cnut = part("../hw/iso10511_m8.fg")
+  at_fl_cnut = fastened(fl_cnut.seat, fl_cwsh.b)
+}
+
+# ---- caster FR (caster_lock) ----
+shared fr_swivel_turn = 0deg
+shared fr_roll = 0deg
+shared fr_brake = 0deg
+fr_plate = part("../casters/plate.fg", at: pose(at: (0, 0, 0)))
+fr_kpin = part("../casters/kingpin.fg", at: pose(at: (0, 0, 0)))
+fr_race = part("../casters/lower_race.fg", at: pose(at: (0, 0, 0)))
+fr_yoke = part("../casters/yoke.fg", at: pose(at: (0, 0, 0)))
+fr_fix_kpin = fastened(fr_kpin.cf, fr_plate.top)
+fr_fix_race = fastened(fr_race.cf, fr_plate.top)
+fr_swivel = revolute(fr_yoke.kingpin, fr_plate.kingpin, turn: fr_swivel_turn)
+fr_f_kpin = fit(fr_kpin, fr_plate)
+fr_f_race = fit(fr_kpin, fr_race)
+for i in 0..24 {
+  fr_ub = part("../casters/ball_4763.fg", at: pose(at: (0 + cs_ru * cos(cs_au * i), 0 + cs_ru * sin(cs_au * i), -cs_zu), rz: cs_au * i))
+  fr_up = revolute(fr_ub.uorb, fr_plate.uorb[i])
+  fr_up_rel = gear(fr_swivel, fr_up, ratio: cs_k_race)
+  fr_f_ub = fit(fr_ub, fr_yoke)
+}
+for i in 0..20 {
+  fr_lb = part("../casters/ball_4763.fg", at: pose(at: (0 + cs_rl * cos(cs_al * i), 0 + cs_rl * sin(cs_al * i), -cs_zl), rz: cs_al * i))
+  fr_lo = revolute(fr_lb.lorb, fr_plate.lorb[i])
+  fr_lo_rel = gear(fr_swivel, fr_lo, ratio: cs_k_race)
+  fr_f_lb = fit(fr_lb, fr_yoke)
+}
+fr_axle = part("../hw/iso4014_m8x55.fg", at: pose(at: (-20.7, -40, -71), z: (1, 0, 0), x: (0, 1, 0)))
+fr_nut = part("../hw/iso10511_m8.fg", at: pose(at: (20.7, -40, -71), z: (1, 0, 0), x: (0, 1, 0)))
+fr_fix_axle = fastened(fr_axle.head, fr_yoke.axle_head)
+fr_fix_nut = fastened(fr_nut.seat, fr_yoke.axle_nut)
+fr_f_axle = fit(fr_axle, fr_yoke)
+fr_f_nut = fit(fr_nut, fr_yoke)
+fr_sp_l = part("../casters/spacer.fg", at: pose(at: (-18.2, -40, -71), z: (1, 0, 0), x: (0, 1, 0)))
+fr_sp_r = part("../casters/spacer.fg", at: pose(at: (3.5, -40, -71), z: (1, 0, 0), x: (0, 1, 0)))
+fr_fix_sp_l = fastened(fr_sp_l.a, fr_yoke.sp_l)
+fr_fix_sp_r = fastened(fr_sp_r.a, fr_yoke.sp_r)
+fr_f_sp_l = fit(fr_sp_l, fr_yoke)
+fr_f_sp_r = fit(fr_sp_r, fr_yoke)
+fr_bi = part("../casters/bearing_inner.fg", at: pose(at: (0, -40, -71), z: (1, 0, 0), x: (0, 1, 0)))
+fr_ring_in = fastened(fr_bi.ax, fr_yoke.axle)
+fr_f_bi_axle = fit(fr_bi, fr_axle)
+fr_f_bi_sp_l = fit(fr_bi, fr_sp_l)
+fr_f_bi_sp_r = fit(fr_bi, fr_sp_r)
+fr_hub = part("../casters/hub.fg", at: pose(at: (0, -40, -71), z: (1, 0, 0), x: (0, 1, 0)))
+fr_wheel = revolute(fr_hub.ax, fr_yoke.axle, turn: fr_roll)
+fr_tread = part("../casters/tread.fg", at: pose(at: (0, -40, -71), z: (1, 0, 0), x: (0, 1, 0)))
+fr_fix_tread = fastened(fr_tread.ax, fr_hub.ax)
+fr_f_tread = fit(fr_tread, fr_hub)
+fr_bo = part("../casters/bearing_outer.fg", at: pose(at: (0, -40, -71), z: (1, 0, 0), x: (0, 1, 0)))
+fr_ring_out = fastened(fr_bo.ax, fr_hub.ax)
+fr_f_bo = fit(fr_bo, fr_hub)
+fr_cage_a = part("../casters/cage_half.fg", at: pose(at: (0, -40, -71), z: (1, 0, 0), x: (0, 1, 0)))
+fr_cage = revolute(fr_cage_a.ax, fr_yoke.axle)
+fr_cage_rel = gear(fr_wheel, fr_cage, ratio: cs_k_cage)
+fr_cage_b = part("../casters/cage_half.fg", at: pose(at: (0, -40, -71), z: (-1, 0, 0), x: (0, 1, 0)))
+fr_fix_cage_b = fastened(fr_cage_b.ax, fr_cage_a.ax, flip: true)
+fr_f_cage = fit(fr_cage_a, fr_cage_b)
+for i in 0..7 {
+  fr_bb = part("../casters/ball_3969.fg", at: pose(at: (0, -40 + cs_pr * cos(cs_ab * i), -71 + cs_pr * sin(cs_ab * i)), z: (1, 0, 0), x: (0, 1, 0)))
+  fr_ball_fix = fastened(fr_bb.c, fr_cage_a.pocket_at[i])
+  fr_f_bb_in = fit(fr_bb, fr_bi)
+  fr_f_bb_out = fit(fr_bb, fr_bo)
+}
+fr_seal_a = part("../casters/seal.fg", at: pose(at: (0, -40, -71), z: (1, 0, 0), x: (0, 1, 0)))
+fr_seal_b = part("../casters/seal.fg", at: pose(at: (0, -40, -71), z: (-1, 0, 0), x: (0, 1, 0)))
+fr_fix_seal_a = fastened(fr_seal_a.ax, fr_bo.ax)
+fr_fix_seal_b = fastened(fr_seal_b.back, fr_bo.ax)
+fr_f_seal_a_out = fit(fr_seal_a, fr_bo)
+fr_f_seal_a_in = fit(fr_seal_a, fr_bi)
+fr_f_seal_b_out = fit(fr_seal_b, fr_bo)
+fr_f_seal_b_in = fit(fr_seal_b, fr_bi)
+fr_lever = part("../casters/pedal.fg", at: pose(at: (0, 0, 0)))
+fr_pedal = revolute(fr_lever.pivot, fr_yoke.pedal_pin, turn: fr_brake, limit: (cs_brake_lo, cs_brake_hi))
+fr_ppin = part("../casters/pedal_pin.fg", at: pose(at: (0, 0, 0)))
+fr_fix_ppin = fastened(fr_ppin.cf, fr_yoke.kingpin)
+fr_f_ppin = fit(fr_ppin, fr_yoke)
+fr_lpin = part("../casters/lock_pin.fg", at: pose(at: (0, 0, 0)))
+fr_lockpin = slider(fr_lpin.ax, fr_yoke.lock_guide, limit: (cs_lift_lo, cs_lift_hi))
+fr_pin_rel = rack_pinion(fr_pedal, fr_lockpin, radius: cs_r_cam)
+fr_f_cam = fit(fr_lever, fr_lpin)
+fr_f_shoe = fit(fr_lever, fr_tread)
+at_fr_caster = fastened(fr_plate.top, base_pan.caster_fr)
+fr_on_pan = fit(fr_plate, base_pan)
+for k in 0..4 {
+  fr_cbolt = part("../hw/iso4017_m8x20.fg")
+  at_fr_cbolt = fastened(fr_cbolt.head, fr_plate.bolt[k])
+  fr_cwsh = part("../hw/iso7089_8.fg")
+  at_fr_cwsh = slider(fr_cwsh.a, fr_plate.bolt[k], along: t_plate + t_pan)
+  fr_cnut = part("../hw/iso10511_m8.fg")
+  at_fr_cnut = fastened(fr_cnut.seat, fr_cwsh.b)
+}
+
+# ---- caster RL (caster_plain) ----
+shared rl_swivel_turn = 0deg
+shared rl_roll = 0deg
+rl_plate = part("../casters/plate.fg", at: pose(at: (0, 0, 0)))
+rl_kpin = part("../casters/kingpin.fg", at: pose(at: (0, 0, 0)))
+rl_race = part("../casters/lower_race.fg", at: pose(at: (0, 0, 0)))
+rl_yoke = part("../casters/yoke.fg", at: pose(at: (0, 0, 0)))
+rl_fix_kpin = fastened(rl_kpin.cf, rl_plate.top)
+rl_fix_race = fastened(rl_race.cf, rl_plate.top)
+rl_swivel = revolute(rl_yoke.kingpin, rl_plate.kingpin, turn: rl_swivel_turn)
+rl_f_kpin = fit(rl_kpin, rl_plate)
+rl_f_race = fit(rl_kpin, rl_race)
+for i in 0..24 {
+  rl_ub = part("../casters/ball_4763.fg", at: pose(at: (0 + cs_ru * cos(cs_au * i), 0 + cs_ru * sin(cs_au * i), -cs_zu), rz: cs_au * i))
+  rl_up = revolute(rl_ub.uorb, rl_plate.uorb[i])
+  rl_up_rel = gear(rl_swivel, rl_up, ratio: cs_k_race)
+  rl_f_ub = fit(rl_ub, rl_yoke)
+}
+for i in 0..20 {
+  rl_lb = part("../casters/ball_4763.fg", at: pose(at: (0 + cs_rl * cos(cs_al * i), 0 + cs_rl * sin(cs_al * i), -cs_zl), rz: cs_al * i))
+  rl_lo = revolute(rl_lb.lorb, rl_plate.lorb[i])
+  rl_lo_rel = gear(rl_swivel, rl_lo, ratio: cs_k_race)
+  rl_f_lb = fit(rl_lb, rl_yoke)
+}
+rl_axle = part("../hw/iso4014_m8x55.fg", at: pose(at: (-20.7, -40, -71), z: (1, 0, 0), x: (0, 1, 0)))
+rl_nut = part("../hw/iso10511_m8.fg", at: pose(at: (20.7, -40, -71), z: (1, 0, 0), x: (0, 1, 0)))
+rl_fix_axle = fastened(rl_axle.head, rl_yoke.axle_head)
+rl_fix_nut = fastened(rl_nut.seat, rl_yoke.axle_nut)
+rl_f_axle = fit(rl_axle, rl_yoke)
+rl_f_nut = fit(rl_nut, rl_yoke)
+rl_sp_l = part("../casters/spacer.fg", at: pose(at: (-18.2, -40, -71), z: (1, 0, 0), x: (0, 1, 0)))
+rl_sp_r = part("../casters/spacer.fg", at: pose(at: (3.5, -40, -71), z: (1, 0, 0), x: (0, 1, 0)))
+rl_fix_sp_l = fastened(rl_sp_l.a, rl_yoke.sp_l)
+rl_fix_sp_r = fastened(rl_sp_r.a, rl_yoke.sp_r)
+rl_f_sp_l = fit(rl_sp_l, rl_yoke)
+rl_f_sp_r = fit(rl_sp_r, rl_yoke)
+rl_bi = part("../casters/bearing_inner.fg", at: pose(at: (0, -40, -71), z: (1, 0, 0), x: (0, 1, 0)))
+rl_ring_in = fastened(rl_bi.ax, rl_yoke.axle)
+rl_f_bi_axle = fit(rl_bi, rl_axle)
+rl_f_bi_sp_l = fit(rl_bi, rl_sp_l)
+rl_f_bi_sp_r = fit(rl_bi, rl_sp_r)
+rl_hub = part("../casters/hub.fg", at: pose(at: (0, -40, -71), z: (1, 0, 0), x: (0, 1, 0)))
+rl_wheel = revolute(rl_hub.ax, rl_yoke.axle, turn: rl_roll)
+rl_tread = part("../casters/tread.fg", at: pose(at: (0, -40, -71), z: (1, 0, 0), x: (0, 1, 0)))
+rl_fix_tread = fastened(rl_tread.ax, rl_hub.ax)
+rl_f_tread = fit(rl_tread, rl_hub)
+rl_bo = part("../casters/bearing_outer.fg", at: pose(at: (0, -40, -71), z: (1, 0, 0), x: (0, 1, 0)))
+rl_ring_out = fastened(rl_bo.ax, rl_hub.ax)
+rl_f_bo = fit(rl_bo, rl_hub)
+rl_cage_a = part("../casters/cage_half.fg", at: pose(at: (0, -40, -71), z: (1, 0, 0), x: (0, 1, 0)))
+rl_cage = revolute(rl_cage_a.ax, rl_yoke.axle)
+rl_cage_rel = gear(rl_wheel, rl_cage, ratio: cs_k_cage)
+rl_cage_b = part("../casters/cage_half.fg", at: pose(at: (0, -40, -71), z: (-1, 0, 0), x: (0, 1, 0)))
+rl_fix_cage_b = fastened(rl_cage_b.ax, rl_cage_a.ax, flip: true)
+rl_f_cage = fit(rl_cage_a, rl_cage_b)
+for i in 0..7 {
+  rl_bb = part("../casters/ball_3969.fg", at: pose(at: (0, -40 + cs_pr * cos(cs_ab * i), -71 + cs_pr * sin(cs_ab * i)), z: (1, 0, 0), x: (0, 1, 0)))
+  rl_ball_fix = fastened(rl_bb.c, rl_cage_a.pocket_at[i])
+  rl_f_bb_in = fit(rl_bb, rl_bi)
+  rl_f_bb_out = fit(rl_bb, rl_bo)
+}
+rl_seal_a = part("../casters/seal.fg", at: pose(at: (0, -40, -71), z: (1, 0, 0), x: (0, 1, 0)))
+rl_seal_b = part("../casters/seal.fg", at: pose(at: (0, -40, -71), z: (-1, 0, 0), x: (0, 1, 0)))
+rl_fix_seal_a = fastened(rl_seal_a.ax, rl_bo.ax)
+rl_fix_seal_b = fastened(rl_seal_b.back, rl_bo.ax)
+rl_f_seal_a_out = fit(rl_seal_a, rl_bo)
+rl_f_seal_a_in = fit(rl_seal_a, rl_bi)
+rl_f_seal_b_out = fit(rl_seal_b, rl_bo)
+rl_f_seal_b_in = fit(rl_seal_b, rl_bi)
+at_rl_caster = fastened(rl_plate.top, base_pan.caster_rl)
+rl_on_pan = fit(rl_plate, base_pan)
+for k in 0..4 {
+  rl_cbolt = part("../hw/iso4017_m8x20.fg")
+  at_rl_cbolt = fastened(rl_cbolt.head, rl_plate.bolt[k])
+  rl_cwsh = part("../hw/iso7089_8.fg")
+  at_rl_cwsh = slider(rl_cwsh.a, rl_plate.bolt[k], along: t_plate + t_pan)
+  rl_cnut = part("../hw/iso10511_m8.fg")
+  at_rl_cnut = fastened(rl_cnut.seat, rl_cwsh.b)
+}
+
+# ---- caster RR (caster_plain) ----
+shared rr_swivel_turn = 0deg
+shared rr_roll = 0deg
+rr_plate = part("../casters/plate.fg", at: pose(at: (0, 0, 0)))
+rr_kpin = part("../casters/kingpin.fg", at: pose(at: (0, 0, 0)))
+rr_race = part("../casters/lower_race.fg", at: pose(at: (0, 0, 0)))
+rr_yoke = part("../casters/yoke.fg", at: pose(at: (0, 0, 0)))
+rr_fix_kpin = fastened(rr_kpin.cf, rr_plate.top)
+rr_fix_race = fastened(rr_race.cf, rr_plate.top)
+rr_swivel = revolute(rr_yoke.kingpin, rr_plate.kingpin, turn: rr_swivel_turn)
+rr_f_kpin = fit(rr_kpin, rr_plate)
+rr_f_race = fit(rr_kpin, rr_race)
+for i in 0..24 {
+  rr_ub = part("../casters/ball_4763.fg", at: pose(at: (0 + cs_ru * cos(cs_au * i), 0 + cs_ru * sin(cs_au * i), -cs_zu), rz: cs_au * i))
+  rr_up = revolute(rr_ub.uorb, rr_plate.uorb[i])
+  rr_up_rel = gear(rr_swivel, rr_up, ratio: cs_k_race)
+  rr_f_ub = fit(rr_ub, rr_yoke)
+}
+for i in 0..20 {
+  rr_lb = part("../casters/ball_4763.fg", at: pose(at: (0 + cs_rl * cos(cs_al * i), 0 + cs_rl * sin(cs_al * i), -cs_zl), rz: cs_al * i))
+  rr_lo = revolute(rr_lb.lorb, rr_plate.lorb[i])
+  rr_lo_rel = gear(rr_swivel, rr_lo, ratio: cs_k_race)
+  rr_f_lb = fit(rr_lb, rr_yoke)
+}
+rr_axle = part("../hw/iso4014_m8x55.fg", at: pose(at: (-20.7, -40, -71), z: (1, 0, 0), x: (0, 1, 0)))
+rr_nut = part("../hw/iso10511_m8.fg", at: pose(at: (20.7, -40, -71), z: (1, 0, 0), x: (0, 1, 0)))
+rr_fix_axle = fastened(rr_axle.head, rr_yoke.axle_head)
+rr_fix_nut = fastened(rr_nut.seat, rr_yoke.axle_nut)
+rr_f_axle = fit(rr_axle, rr_yoke)
+rr_f_nut = fit(rr_nut, rr_yoke)
+rr_sp_l = part("../casters/spacer.fg", at: pose(at: (-18.2, -40, -71), z: (1, 0, 0), x: (0, 1, 0)))
+rr_sp_r = part("../casters/spacer.fg", at: pose(at: (3.5, -40, -71), z: (1, 0, 0), x: (0, 1, 0)))
+rr_fix_sp_l = fastened(rr_sp_l.a, rr_yoke.sp_l)
+rr_fix_sp_r = fastened(rr_sp_r.a, rr_yoke.sp_r)
+rr_f_sp_l = fit(rr_sp_l, rr_yoke)
+rr_f_sp_r = fit(rr_sp_r, rr_yoke)
+rr_bi = part("../casters/bearing_inner.fg", at: pose(at: (0, -40, -71), z: (1, 0, 0), x: (0, 1, 0)))
+rr_ring_in = fastened(rr_bi.ax, rr_yoke.axle)
+rr_f_bi_axle = fit(rr_bi, rr_axle)
+rr_f_bi_sp_l = fit(rr_bi, rr_sp_l)
+rr_f_bi_sp_r = fit(rr_bi, rr_sp_r)
+rr_hub = part("../casters/hub.fg", at: pose(at: (0, -40, -71), z: (1, 0, 0), x: (0, 1, 0)))
+rr_wheel = revolute(rr_hub.ax, rr_yoke.axle, turn: rr_roll)
+rr_tread = part("../casters/tread.fg", at: pose(at: (0, -40, -71), z: (1, 0, 0), x: (0, 1, 0)))
+rr_fix_tread = fastened(rr_tread.ax, rr_hub.ax)
+rr_f_tread = fit(rr_tread, rr_hub)
+rr_bo = part("../casters/bearing_outer.fg", at: pose(at: (0, -40, -71), z: (1, 0, 0), x: (0, 1, 0)))
+rr_ring_out = fastened(rr_bo.ax, rr_hub.ax)
+rr_f_bo = fit(rr_bo, rr_hub)
+rr_cage_a = part("../casters/cage_half.fg", at: pose(at: (0, -40, -71), z: (1, 0, 0), x: (0, 1, 0)))
+rr_cage = revolute(rr_cage_a.ax, rr_yoke.axle)
+rr_cage_rel = gear(rr_wheel, rr_cage, ratio: cs_k_cage)
+rr_cage_b = part("../casters/cage_half.fg", at: pose(at: (0, -40, -71), z: (-1, 0, 0), x: (0, 1, 0)))
+rr_fix_cage_b = fastened(rr_cage_b.ax, rr_cage_a.ax, flip: true)
+rr_f_cage = fit(rr_cage_a, rr_cage_b)
+for i in 0..7 {
+  rr_bb = part("../casters/ball_3969.fg", at: pose(at: (0, -40 + cs_pr * cos(cs_ab * i), -71 + cs_pr * sin(cs_ab * i)), z: (1, 0, 0), x: (0, 1, 0)))
+  rr_ball_fix = fastened(rr_bb.c, rr_cage_a.pocket_at[i])
+  rr_f_bb_in = fit(rr_bb, rr_bi)
+  rr_f_bb_out = fit(rr_bb, rr_bo)
+}
+rr_seal_a = part("../casters/seal.fg", at: pose(at: (0, -40, -71), z: (1, 0, 0), x: (0, 1, 0)))
+rr_seal_b = part("../casters/seal.fg", at: pose(at: (0, -40, -71), z: (-1, 0, 0), x: (0, 1, 0)))
+rr_fix_seal_a = fastened(rr_seal_a.ax, rr_bo.ax)
+rr_fix_seal_b = fastened(rr_seal_b.back, rr_bo.ax)
+rr_f_seal_a_out = fit(rr_seal_a, rr_bo)
+rr_f_seal_a_in = fit(rr_seal_a, rr_bi)
+rr_f_seal_b_out = fit(rr_seal_b, rr_bo)
+rr_f_seal_b_in = fit(rr_seal_b, rr_bi)
+at_rr_caster = fastened(rr_plate.top, base_pan.caster_rr)
+rr_on_pan = fit(rr_plate, base_pan)
+for k in 0..4 {
+  rr_cbolt = part("../hw/iso4017_m8x20.fg")
+  at_rr_cbolt = fastened(rr_cbolt.head, rr_plate.bolt[k])
+  rr_cwsh = part("../hw/iso7089_8.fg")
+  at_rr_cwsh = slider(rr_cwsh.a, rr_plate.bolt[k], along: t_plate + t_pan)
+  rr_cnut = part("../hw/iso10511_m8.fg")
+  at_rr_cnut = fastened(rr_cnut.seat, rr_cwsh.b)
+}
+# END GENERATED casters
+
+# ---------------------------------------------------------------------------------------------------
+# fit rules (SPEC 8): the shortest whole nut per size; PEM heads pressed into their sheets
+
+shared s_m4 = 4
+shared s_m5 = 5
+shared s_m6 = 6
+shared s_m8 = 8
+shared min_m4 = 2.77
+shared min_m5 = 2.77
+shared min_m6 = 4.78
+shared min_m8 = 8
+m4 = fit_rule(external_thread, internal_thread, size: s_m4, min_engagement: min_m4)
+m5 = fit_rule(external_thread, internal_thread, size: s_m5, min_engagement: min_m5)
+m6 = fit_rule(external_thread, internal_thread, size: s_m6, min_engagement: min_m6)
+m8 = fit_rule(external_thread, internal_thread, size: s_m8, min_engagement: min_m8)
+press_fh6 = fit_rule("../hw/pem_fh_m6_20.fg", "../frame/post.fg")
+press_fh8 = fit_rule("../hw/pem_fh_m8_25.fg", "../frame/top_pan.fg")
+
+# ---------------------------------------------------------------------------------------------------
+# expects (SPEC 8)
+
+# the two other rail positions SPEC 8 runs: (50, 750) and (100, 400)
+shared kf_a = count(0)
+shared kr_a = count(27)
+shared kf_b = count(2)
+shared kr_b = count(13)
+shared y_f_a = 50
+shared y_r_a = 750
+shared y_f_b = 100
+shared y_r_b = 400
+# other dummy positions: D04 at the bottom, D01 just under D02; D01 at the top, D02 under it
+shared ud01_a = count(9)
+shared ud02_a = count(13)
+shared ud04_a = count(1)
+shared ud01_b = count(18)
+shared ud02_b = count(16)
+shared ud04_b = count(5)
+shared tol = 0.01
+shared tol_x = 0.025            # SPEC: x(RF) - x(LF) = 465.10 +- 0.05, so each side within half
+shared tol_j = 0.001
+shared x_eia = 232.55
+shared z_k0 = 59.30             # U1 bottom 52.95 + 6.35
+shared z_k26 = 446.65           # U9 bottom 408.55 + 38.10
+shared z_k53 = 846.70           # U18 bottom 808.60 + 38.10
+shared c_fan_rail = 20
+shared c_tray_car = 5
+shared c_tip = 1.5
+shared c_dummy_fan = 5
+shared conc = 0.1
+shared x_fan = 70               # fan centres (SPEC 1): x +-70, y 330 and 470
+shared y_fan_f = 330
+shared y_fan_r = 470
+shared d_bore = 114             # grille bars in each air column (fans/test_air.fg): the 114 disc of floor
+shared rg = 56                  # less the 11 slots (6 wide on 9.5, ends on a 112 circle)
+shared sp = 9.5
+shared ws = 6
+shared ns = count(11)
+shared q0 = sqrt(rg ^ 2 - (ws / 2) ^ 2)
+shared q1 = sqrt(rg ^ 2 - (sp + ws / 2) ^ 2)
+shared q2 = sqrt(rg ^ 2 - (2 * sp + ws / 2) ^ 2)
+shared q3 = sqrt(rg ^ 2 - (3 * sp + ws / 2) ^ 2)
+shared q4 = sqrt(rg ^ 2 - (4 * sp + ws / 2) ^ 2)
+shared q5 = sqrt(rg ^ 2 - (5 * sp + ws / 2) ^ 2)
+shared grille_a = ns * pi * (ws / 2) ^ 2 + ws * (2 * q0 + 4 * (q1 + q2 + q3 + q4 + q5) - ns * ws)
+shared blocked = t3 * (pi / 4 * d_bore ^ 2 - grille_a)
+
+
+# frame: every solved origin on its SPEC 5 pose
+# orientation: a second point of each turned part
+
+# the R8 pairs not used as joints: coincident (rail on carrier) or 3.02 apart (post on pan, carrier on pan)
+
+# EIA alignment (SPEC 8), at each rail position; each SPEC difference as both ends' absolute positions
+
+# equipment (SPEC 8): each dummy's other three ear holes on their rail holes, the 4U clear of the fan
+# subassembly's lowest points (guards 861.10, screw heads 858.00)
+
+# fans (SPEC 8)
+# grille bars: exactly the 114 disc of floor less the 11 slots in each air column; fan centres
+
+# BEGIN GENERATED checks
+# END GENERATED checks

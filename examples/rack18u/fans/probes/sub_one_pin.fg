@@ -1,0 +1,3 @@
+assembly
+# helper for sub_clearance.fg: one 2 x 1 pin at the origin
+pin = part("../standin/grille_gauge.fg", ground: true)

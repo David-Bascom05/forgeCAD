@@ -1,0 +1,137 @@
+# RACK-322 latch base, t3 (SPEC 5.8). x2.
+# Part frame: origin on the base's front face (the face on the door) at the latch axis; x, y, z =
+# rack X, Y, Z on the front door (rack origin (265, 1.52, 453)). Plate x -32.0..21.4, y 0..3.02,
+# z -27..32; the padlock tab turns off the top edge to -y (out through the door), 40.54 outer from
+# the back face, so its tip is at y -37.52 (rack -36.0).
+# R12: no PEM; the pivot (ISO 7379 8 x 16) passes a 6.6 hole and takes an ISO 10511 M6 nyloc on the back
+# face (anchor pivot_back): an S-M6-0 here sat 7.5 from the detent holes (PEM 8.6).
+# Rack angle: in the xz plane from +x towards +z, seen from the front.
+
+shared t3 = 3.02
+shared t2 = 1.88
+shared t1 = 1.52
+shared r_scs = 1.6
+shared kerf_scs = 0.2                       # not published by SendCutSend; Forge's stand-in
+shared hw_scs = [
+  hardware(kind: "nut",  size: "M4", sheet: (0.8, 12.7), hole: 5.41, edge: 6.9, max_hardness: ratio(80),
+           code: "S-M4-0",   source: "PEM CL bulletin; sendcutsend.com hardware catalog"),
+  hardware(kind: "nut",  size: "M5", sheet: (0.8, 12.7), hole: 6.35, edge: 7.1, max_hardness: ratio(80),
+           code: "SS-M5-0",  source: "PEM CL bulletin; sendcutsend.com hardware catalog"),
+  hardware(kind: "nut",  size: "M6", sheet: (1.22, 12.7), hole: 8.75, edge: 8.6, max_hardness: ratio(80),
+           code: "S-M6-0",   source: "PEM CL bulletin; sendcutsend.com hardware catalog"),
+  hardware(kind: "stud", size: "M4", sheet: (1.0, 12.7), hole: 4.0, edge: 7.2, max_hardness: ratio(80),
+           code: "FH-M4-12", source: "PEM FH bulletin; sendcutsend.com hardware catalog"),
+  hardware(kind: "stud", size: "M6", sheet: (1.6, 12.7), hole: 6.0, edge: 7.9, max_hardness: ratio(80),
+           code: "FH-M6-20", source: "PEM FH bulletin; sendcutsend.com hardware catalog"),
+  hardware(kind: "stud", size: "M8", sheet: (2.4, 12.7), hole: 8.0, edge: 9.6, max_hardness: ratio(80),
+           code: "FH-M8-25", source: "PEM FH bulletin; sendcutsend.com hardware catalog")]
+shared scs = shop([
+  stock(t: t3, bend: kfactor(ratio(0.38)), radii: [r_scs], min_flange: per_t(ratio(0), plus: 11.84),
+        hole_to_bend: per_t(ratio(0), plus: 5.84), hole_to_edge: per_t(ratio(0), plus: 0.91), min_hole: per_t(ratio(0), plus: 1.02), min_slot: per_t(ratio(0), plus: 1.02), hardness: ratio(57),
+        relief: relief_rule(shape: "rect", width: per_t(ratio(1)), depth: 5.13, from: "bend_line",
+                            corner: "round", corner_placement: "intersection")),
+  stock(t: t2, bend: kfactor(ratio(0.40)), radii: [r_scs], min_flange: per_t(ratio(0), plus: 8.13),
+        hole_to_bend: per_t(ratio(0), plus: 4.15), hole_to_edge: per_t(ratio(0), plus: 0.56), min_hole: per_t(ratio(0), plus: 0.71), min_slot: per_t(ratio(0), plus: 0.71), hardness: ratio(57),
+        relief: relief_rule(shape: "rect", width: per_t(ratio(1)), depth: 3.99, from: "bend_line",
+                            corner: "round", corner_placement: "intersection")),
+  stock(t: t1, bend: kfactor(ratio(0.40)), radii: [r_scs], min_flange: per_t(ratio(0), plus: 7.85),
+        hole_to_bend: per_t(ratio(0), plus: 4.27), hole_to_edge: per_t(ratio(0), plus: 0.56), min_hole: per_t(ratio(0), plus: 0.71), min_slot: per_t(ratio(0), plus: 0.71), hardness: ratio(57),
+        relief: relief_rule(shape: "rect", width: per_t(ratio(1)), depth: 3.61, from: "bend_line",
+                            corner: "round", corner_placement: "intersection"))],
+  kerf: kerf_scs, hardware: hw_scs)
+
+shared x0 = -32
+shared bw = 53.4
+shared z0 = -27
+shared bh = 59
+shared tab = 40.54       # outer, from the back face
+shared r_st = 28         # door FH-M4-12 studs: holes 4.6 at r 28, rack angle 140, 182.5, 225deg [R11]
+shared d_st = 4.6
+shared a_st0 = 140deg
+shared a_st1 = 182.5deg
+shared a_st2 = 225deg
+shared a_st = [a_st0, a_st1, a_st2]
+shared r_sl = 14.8       # arc slot r 14.8 [R11], 6.4 wide, rack angle 45..225deg, round ends
+shared w_sl = 6.4
+shared a_sl0 = 45deg
+shared a_sl1 = 225deg
+shared d_piv = 6.6       # pivot clearance (M6, ISO 273 medium) [R12: was the S-M6-0's 8.75]
+shared r_det = 9         # 4 detent holes 3.0 at r 9, rack angle 0, 90, 180, 270deg
+shared d_det = 3
+shared d_lock = 7        # padlock hole in the tab
+shared y_lock = 27.17    # out from the front face (rack y -25.65)
+shared xl = 10
+shared ro = r_sl + w_sl / 2
+shared ri = r_sl - w_sl / 2
+shared hw_sl = w_sl / 2
+
+# reference skin: the front face y = 0, normal -y (xz's normal, sketch coords (x, z)); the material
+# lies at y 0..3.02 and the tab turns up, to -y
+sketch plan(on: xz) {
+  outline = rect(corner: (x0, z0), size: (bw, bh))
+  o = pt(0, 0)
+  xa = line((0, 0), (xl, 0), construction: true)
+  za = line((0, 0), (0, xl), construction: true)
+}
+plate = sheet(plan, t: t3, shop: scs)
+# holes are cutouts (the shop checks skip a sheet profile's own holes)
+sketch holes_s(on: plate.top) {
+  piv = circle((0, 0), d_piv / 2)
+  for i in 0..3 {
+    st = circle((r_st * cos(a_st[i]), r_st * sin(a_st[i])), d_st / 2)
+  }
+  for k, a in {a: 0deg, b: 90deg, c: 180deg, d: 180deg + 90deg} {
+    det = circle((r_det * cos(a), r_det * sin(a)), d_det / 2)
+  }
+  o0 = pt(ro * cos(a_sl0), ro * sin(a_sl0))
+  o1 = pt(ro * cos(a_sl1), ro * sin(a_sl1))
+  i0 = pt(ri * cos(a_sl0), ri * sin(a_sl0))
+  i1 = pt(ri * cos(a_sl1), ri * sin(a_sl1))
+  slo = arc(center: (0, 0), from: o0, to: o1)
+  sle1 = arc(center: (r_sl * cos(a_sl1), r_sl * sin(a_sl1)), from: o1, to: i1)
+  sli = arc(center: (0, 0), from: i1, to: i0, cw: true)
+  sle0 = arc(center: (r_sl * cos(a_sl0), r_sl * sin(a_sl0)), from: i0, to: o0)
+}
+holes = cutout(holes_s, wall: plate)
+tab_f = flange(plate.edge(plan.outline[2]), height: tab)
+# tab_f.top is the tab's inner face z = 28.98: x out from the front face (to -y), y = 21.4 - x_rack
+sketch lock_s(on: tab_f.top) {
+  c = circle((y_lock, x0 + bw), d_lock / 2)
+}
+lock = cutout(lock_s, wall: tab_f)
+# anchor sketches: the back face y = 3.02 (coords as plan) and the tab's outer face z = 32
+# (tab_f.bottom: y = x_rack - 21.4)
+sketch back(on: offset(plan.plane, -t3)) {
+  o = pt(0, 0)
+  for i in 0..3 {
+    st = pt(r_st * cos(a_st[i]), r_st * sin(a_st[i]))
+  }
+}
+sketch tab_out(on: tab_f.bottom) {
+  p = pt(y_lock, -(x0 + bw))
+}
+
+# x per SPEC R9: stud, stud_back, pivot rack +Z (up); pivot_back: the pivot's nyloc nut seat [R12]
+pivot = anchor(plane(at: plan.o, normal: -plan.plane.normal, x: plan.za.dir))
+pivot_back = anchor(plane(at: back.o, normal: -plan.plane.normal, x: plan.za.dir))
+for i in 0..3 {
+  stud = anchor(plane(at: holes_s.st[i].center, normal: -plan.plane.normal, x: plan.za.dir))
+  stud_back = anchor(plane(at: back.st[i], normal: -plan.plane.normal, x: plan.za.dir))
+}
+padlock = anchor(plane(at: tab_out.p, normal: tab_out.plane.normal, x: plan.xa.dir))
+
+param flat.gap = 30
+flat = unfold(plate, on: offset(plate.bottom, gap))
+
+# drawing math: the plate to the bend (its straight ends r + t short of the tab's outer face), the
+# tab's straight (tab - r - t), the bend at mid-thickness (folded) or r + K t (flat); less the
+# pivot's clearance hole 6.6, 3 stud holes, 4 detents, the arc slot (a half annulus plus two round ends)
+# and the padlock hole
+shared slot_a = pi * r_sl * w_sl + pi * hw_sl ^ 2
+shared holes_a = pi * ((d_piv / 2) ^ 2 + 3 * (d_st / 2) ^ 2 + 4 * (d_det / 2) ^ 2 + (d_lock / 2) ^ 2) + slot_a
+shared str_a = bw * (bh - (r_scs + t3) + tab - (r_scs + t3))
+shared fold_a = str_a + bw * (r_scs + t3 / 2) * pi / 2
+shared flat_a = str_a + bw * (r_scs + ratio(0.38) * t3) * pi / 2
+expect volume = t3 * (fold_a + flat_a - 2 * holes_a) +- 0.3%
+expect bodies = 2
+expect valid

@@ -1,0 +1,29 @@
+assembly
+
+# caster <-> base pan at rack Z: ISO 4017 M8x20 up through plate and floor, ISO 7089-8, ISO 10511-M8
+
+shared z_plate = -3
+shared size_m8 = 8
+shared min_m8 = 8   # the nut's whole thread
+shared zx_pan = 0
+shared zx_wsh = 3.02
+shared zx_nut = 4.62
+shared zx_bolt = -3
+
+plate = part("plates/caster_plate.fg", ground: true, at: pose(at: (0, 0, z_plate)))
+pan = part("plates/pan_caster_t3.fg")
+wsh = part("../iso7089_8.fg")
+nut = part("../iso10511_m8.fg")
+bolt = part("../iso4017_m8x20.fg")
+at_pan = fastened(pan.a, plate.b)
+at_wsh = fastened(wsh.a, pan.b)
+at_nut = fastened(nut.seat, wsh.b)
+at_bolt = fastened(bolt.head, plate.a)
+m8 = fit_rule(external_thread, internal_thread, size: size_m8, min_engagement: min_m8)
+
+expect interferences = 0
+expect mobility = 0
+expect z(pan) = zx_pan +- 0.001
+expect z(wsh) = zx_wsh +- 0.001
+expect z(nut) = zx_nut +- 0.001
+expect z(bolt) = zx_bolt +- 0.001

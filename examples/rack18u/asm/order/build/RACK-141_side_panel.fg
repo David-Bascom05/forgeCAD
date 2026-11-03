@@ -1,0 +1,116 @@
+# RACK-141 side half-panel, t1 (SPEC 5.5). x4, two per side, placed by rigid poses only.
+# Part frame: origin at the outer face's corner (front bottom on LL); e, f, g = x, y, z:
+# e along the depth, f up, g inward through the thickness. Field e 0..800, f 0..453, g 0..1.52
+# (outer face g = 0); return on the f = 453 edge, turned to +g, 20 outer, kept on e 90..710 only.
+# Gap 1 workaround (no flange end offsets): a full-length return, cut back at each end through its
+# bend into the field (two small field notches; SPEC 8 accepts their HoleNearBend at 0, bug N4).
+
+shared t3 = 3.02
+shared t2 = 1.88
+shared t1 = 1.52
+shared r_scs = 1.6
+shared kerf_scs = 0.2                       # not published by SendCutSend; Forge's stand-in
+shared hw_scs = [
+  hardware(kind: "nut",  size: "M4", sheet: (0.8, 12.7), hole: 5.41, edge: 6.9, max_hardness: ratio(80),
+           code: "S-M4-0",   source: "PEM CL bulletin; sendcutsend.com hardware catalog"),
+  hardware(kind: "nut",  size: "M5", sheet: (0.8, 12.7), hole: 6.35, edge: 7.1, max_hardness: ratio(80),
+           code: "SS-M5-0",  source: "PEM CL bulletin; sendcutsend.com hardware catalog"),
+  hardware(kind: "nut",  size: "M6", sheet: (1.22, 12.7), hole: 8.75, edge: 8.6, max_hardness: ratio(80),
+           code: "S-M6-0",   source: "PEM CL bulletin; sendcutsend.com hardware catalog"),
+  hardware(kind: "stud", size: "M4", sheet: (1.0, 12.7), hole: 4.0, edge: 7.2, max_hardness: ratio(80),
+           code: "FH-M4-12", source: "PEM FH bulletin; sendcutsend.com hardware catalog"),
+  hardware(kind: "stud", size: "M6", sheet: (1.6, 12.7), hole: 6.0, edge: 7.9, max_hardness: ratio(80),
+           code: "FH-M6-20", source: "PEM FH bulletin; sendcutsend.com hardware catalog"),
+  hardware(kind: "stud", size: "M8", sheet: (2.4, 12.7), hole: 8.0, edge: 9.6, max_hardness: ratio(80),
+           code: "FH-M8-25", source: "PEM FH bulletin; sendcutsend.com hardware catalog")]
+shared scs = shop([
+  stock(t: t3, bend: kfactor(ratio(0.38)), radii: [r_scs], min_flange: per_t(ratio(0), plus: 11.84),
+        hole_to_bend: per_t(ratio(0), plus: 5.84), hole_to_edge: per_t(ratio(0), plus: 0.91), min_hole: per_t(ratio(0), plus: 1.02), min_slot: per_t(ratio(0), plus: 1.02), hardness: ratio(57),
+        relief: relief_rule(shape: "rect", width: per_t(ratio(1)), depth: 5.13, from: "bend_line",
+                            corner: "round", corner_placement: "intersection")),
+  stock(t: t2, bend: kfactor(ratio(0.40)), radii: [r_scs], min_flange: per_t(ratio(0), plus: 8.13),
+        hole_to_bend: per_t(ratio(0), plus: 4.15), hole_to_edge: per_t(ratio(0), plus: 0.56), min_hole: per_t(ratio(0), plus: 0.71), min_slot: per_t(ratio(0), plus: 0.71), hardness: ratio(57),
+        relief: relief_rule(shape: "rect", width: per_t(ratio(1)), depth: 3.99, from: "bend_line",
+                            corner: "round", corner_placement: "intersection")),
+  stock(t: t1, bend: kfactor(ratio(0.40)), radii: [r_scs], min_flange: per_t(ratio(0), plus: 7.85),
+        hole_to_bend: per_t(ratio(0), plus: 4.27), hole_to_edge: per_t(ratio(0), plus: 0.56), min_hole: per_t(ratio(0), plus: 0.71), min_slot: per_t(ratio(0), plus: 0.71), hardness: ratio(57),
+        relief: relief_rule(shape: "rect", width: per_t(ratio(1)), depth: 3.61, from: "bend_line",
+                            corner: "round", corner_placement: "intersection"))],
+  kerf: kerf_scs, hardware: hw_scs)
+
+shared pl = 800          # e
+shared ph = 453          # f, to the return's outer face
+shared ret = 20          # return, outer
+shared e_ret0 = 90       # the return is kept on e 90..710
+shared dip = 5           # the cut-back runs this far into the field, developed past the mold line
+shared over = 1
+shared d_scr = 5.5
+shared e_s0 = 60         # post screws, e in {60, 740} x f in {100, 260, 420}
+shared nrow_s = count(3)  # screws per column
+shared f_s0 = 100
+shared f_s1 = 260
+shared f_s2 = 420
+shared e_j0 = 250        # joint holes in the return, e = 250, 400, 550, g = 14
+shared e_jp = 150
+shared g_j = 14
+shared xl = 10
+
+# reference skin: the inner face g = 1.52, normal +g; the material lies at g 0..1.52
+sketch plan(on: offset(xy, t1)) {
+  outline = rect(corner: (0, 0), size: (pl, ph))
+}
+field = sheet(plan, t: t1, shop: scs)
+# holes are cutouts (the shop checks skip a sheet profile's own holes)
+sketch scr_s(on: field.top) {
+  for k, p in {a: (e_s0, f_s0), b: (e_s0, f_s1), c: (e_s0, f_s2), d: (pl - e_s0, f_s0), e: (pl - e_s0, f_s1), f: (pl - e_s0, f_s2)} {
+    s = circle(p, d_scr / 2)
+  }
+}
+scr_holes = cutout(scr_s, wall: field)
+rtn = flange(field.edge(plan.outline[2]), height: ret)
+# rtn.top: x out from the field's inner face (g - t1), y along the edge from e = 800 towards 0
+sketch cut_s(on: rtn.top) {
+  a = rect(corner: (-dip, -over), size: (dip + ret + over, e_ret0 + over))
+  b = rect(corner: (-dip, pl - e_ret0), size: (dip + ret + over, e_ret0 + over))
+}
+cutback = cutout(cut_s, wall: rtn)
+sketch jnt_s(on: rtn.top) {
+  for k in 0..3 {
+    j = circle((g_j - t1, pl - e_j0 - k * e_jp), d_scr / 2)
+  }
+}
+jholes = cutout(jnt_s, wall: rtn)
+# anchor sketches: field.bottom is the outer face g = 0 (x = e, y = -f); rtn.bottom is the return's
+# outer face f = 453 (x = g - t1, y = e - 800)
+sketch outer(on: field.bottom) {
+  for i in 0..6 {
+    s = pt(e_s0 if i < nrow_s else pl - e_s0, -(f_s0 + (i if i < nrow_s else i - nrow_s) * (f_s1 - f_s0)))
+  }
+  fa = line((0, 0), (0, -xl), construction: true)
+}
+sketch rtn_out(on: rtn.bottom) {
+  for k in 0..3 {
+    j = pt(g_j - t1, e_j0 + k * e_jp - pl)
+  }
+  ea = line((0, 0), (0, xl), construction: true)
+}
+
+# scr[0..5]: e = 60 first, f ascending; x = +f (towards the return and the rack's mid-height)
+for i in 0..6 {
+  scr = anchor(plane(at: outer.s[i], normal: plan.plane.normal, x: outer.fa.dir))
+}
+for i in 0..3 {
+  jnt = anchor(plane(at: rtn_out.j[i], normal: -rtn_out.plane.normal, x: rtn_out.ea.dir))
+}
+
+
+# drawing math: the field to the bend, the 620 return (straight, plus its bend at mid-thickness for
+# the folded body or at r + K t for the flat), less 9 holes and the two field notches (the cut-back
+# runs dip past the mold line, of which the bend zone takes r + t)
+shared rl = pl - 2 * e_ret0
+shared str_f = ph - (r_scs + t1)
+shared str_r = ret - (r_scs + t1)
+shared notch_a = 2 * e_ret0 * (dip - (r_scs + t1))
+shared holes_a = 9 * pi * (d_scr / 2) ^ 2
+shared fold_a = pl * str_f + rl * (str_r + (r_scs + t1 / 2) * pi / 2)
+shared flat_a = pl * str_f + rl * (str_r + (r_scs + ratio(0.4) * t1) * pi / 2)

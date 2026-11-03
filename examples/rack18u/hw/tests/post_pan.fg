@@ -1,0 +1,24 @@
+assembly
+
+# post <-> pan: FH-M6-20 in the post, pan flange, ISO 7089-6, ISO 10511-M6
+
+shared z_post = 0
+shared size_m6 = 6
+shared min_m6 = 6   # the nut's whole thread
+shared zx_nut = 7.64
+
+post = part("plates/post_stud_t3.fg", ground: true, at: pose(at: (0, 0, z_post)))
+stud = part("../pem_fh_m6_20.fg")
+pan = part("plates/pan_flange_t3.fg")
+wsh = part("../iso7089_6.fg")
+nut = part("../iso10511_m6.fg")
+at_stud = fastened(stud.flush, post.a)
+at_pan = fastened(pan.a, post.b)
+at_wsh = fastened(wsh.a, pan.b)
+at_nut = fastened(nut.seat, wsh.b)
+m6 = fit_rule(external_thread, internal_thread, size: size_m6, min_engagement: min_m6)
+press = fit_rule("../pem_fh_m6_20.fg", "plates/post_stud_t3.fg")
+
+expect interferences = 0
+expect mobility = 0
+expect z(nut) = zx_nut +- 0.001

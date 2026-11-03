@@ -1,0 +1,25 @@
+# caster wheel centre: nylon 6, hub 36 long (bosses 2.0 a side), bearing bore 22 with a shoulder
+# source: SPEC 6.2; Blickle (hub 36, axle bore 8); section representative
+# frame: origin at the wheel's centre, z along the axle (towards the nut side in the caster)
+
+shared ro = 32   # tread seat
+shared hw = 16   # half the wheel width
+shared hl = 18   # half the hub length
+shared rbo = 15   # boss radius
+shared rb = 11   # bearing bore
+shared rb2 = 8   # bore past the shoulder
+shared zs = 3.5   # shoulder: the bearing's +z face
+
+sketch prof(on: xz) {
+  o = poly([(rb, -hl), (rbo, -hl), (rbo, -hw), (ro, -hw), (ro, hw), (rbo, hw), (rbo, hl), (rb2, hl), (rb2, zs), (rb, zs)])
+  pz0 = pt(0, 0)
+  zax = line((0, 0), (0, hl), construction: true)
+  xax = line((0, 0), (ro, 0), construction: true)
+}
+body = revolve(prof.o, axis: prof.zax)
+
+ax = anchor(plane(at: prof.pz0, normal: prof.zax.dir, x: prof.xax.dir))
+
+expect valid
+expect bodies = 1
+expect volume = 94682.890 +- 0.05%

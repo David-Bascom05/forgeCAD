@@ -1,0 +1,31 @@
+# 608-2RS outer ring: D 22, B 7, raceway groove, seal recesses
+# source: ISO 15 / SPEC 6.2, 7; groove radius 0.53 Dw, depth 0.75 and the recess representative
+# frame: origin at the bearing's centre, z along its axis
+
+shared ro = 11   # outside
+shared rl = 8.7345   # land (shoulder) radius
+shared rs = 9.7   # seal recess
+shared zs = 2.55   # recess floor: the seal's inner face
+shared hb = 3.5
+shared ch = 0.3   # outside chamfer r 0.3
+shared rg = 2.10357
+shared rgc = 7.38093
+
+sketch prof(on: xz) {
+  o = poly([(rl, -zs), (rs, -zs), (rs, -hb), (ro - ch, -hb), (ro, -hb + ch), (ro, hb - ch), (ro - ch, hb), (rs, hb), (rs, zs), (rl, zs)])
+  pz0 = pt(0, 0)
+  zax = line((0, 0), (0, hb), construction: true)
+  xax = line((0, 0), (ro, 0), construction: true)
+}
+ring = revolve(prof.o, axis: prof.zax)
+sketch gs(on: prof) {
+  g = circle((rgc, 0), rg)
+  zax = line((0, 0), (0, hb), construction: true)
+}
+groove = revolve(gs.g, axis: gs.zax, cut: true)
+
+ax = anchor(plane(at: prof.pz0, normal: prof.zax.dir, x: prof.xax.dir))
+
+expect valid
+expect bodies = 1
+expect volume = 775.479 +- 0.1%

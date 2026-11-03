@@ -1,0 +1,14 @@
+assembly
+
+# A subassembly is rigid inside its parent (forge-asm model.rs: "rigid as a whole in v1"), so the
+# 608 cannot be placed as bearing_608.fg with its inner ring on the axle and its outer ring in a
+# turning wheel: the two fastenings fight. Expected: the outer ring follows `wheel`. Measured below.
+
+shared roll = 30deg
+
+axle = part("rod.fg", ground: true)
+wheel_part = part("rod.fg")
+wheel = revolute(wheel_part.a, axle.a, turn: roll)
+brg = subassembly("../bearing_608.fg")
+ring_in = fastened(brg.inner.ax, axle.a)
+ring_out = fastened(brg.outer.ax, wheel_part.a)

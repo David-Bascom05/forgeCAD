@@ -1,0 +1,3 @@
+.quick_*
+.render_*
+__pycache__/

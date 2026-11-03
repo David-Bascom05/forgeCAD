@@ -1,0 +1,184 @@
+# RACK-301 door, t1 (SPEC 5.6, latch additions 5.8). x2: front and rear (rear = front turned 180deg
+# about Z through (0, 400)).
+# Part frame: origin at the outer face's bottom corner on the hinge side; h, k, n = x, y, z: h across
+# towards the latch, k up, n out of the outer face. Field h 0..586.46, k 0..828, n -1.52..0; four
+# returns turned to -n, 25 outer; automatic circular corner reliefs.
+# The returns are modelled UP in the sheet's own terms (SPEC gap 6): the reference skin is the field's
+# inner face n = -1.52 with its normal -n, so sketches on the field read (h, -k).
+
+shared t3 = 3.02
+shared t2 = 1.88
+shared t1 = 1.52
+shared r_scs = 1.6
+shared kerf_scs = 0.2                       # not published by SendCutSend; Forge's stand-in
+shared hw_scs = [
+  hardware(kind: "nut",  size: "M4", sheet: (0.8, 12.7), hole: 5.41, edge: 6.9, max_hardness: ratio(80),
+           code: "S-M4-0",   source: "PEM CL bulletin; sendcutsend.com hardware catalog"),
+  hardware(kind: "nut",  size: "M5", sheet: (0.8, 12.7), hole: 6.35, edge: 7.1, max_hardness: ratio(80),
+           code: "SS-M5-0",  source: "PEM CL bulletin; sendcutsend.com hardware catalog"),
+  hardware(kind: "nut",  size: "M6", sheet: (1.22, 12.7), hole: 8.75, edge: 8.6, max_hardness: ratio(80),
+           code: "S-M6-0",   source: "PEM CL bulletin; sendcutsend.com hardware catalog"),
+  hardware(kind: "stud", size: "M4", sheet: (1.0, 12.7), hole: 4.0, edge: 7.2, max_hardness: ratio(80),
+           code: "FH-M4-12", source: "PEM FH bulletin; sendcutsend.com hardware catalog"),
+  hardware(kind: "stud", size: "M6", sheet: (1.6, 12.7), hole: 6.0, edge: 7.9, max_hardness: ratio(80),
+           code: "FH-M6-20", source: "PEM FH bulletin; sendcutsend.com hardware catalog"),
+  hardware(kind: "stud", size: "M8", sheet: (2.4, 12.7), hole: 8.0, edge: 9.6, max_hardness: ratio(80),
+           code: "FH-M8-25", source: "PEM FH bulletin; sendcutsend.com hardware catalog")]
+shared scs = shop([
+  stock(t: t3, bend: kfactor(ratio(0.38)), radii: [r_scs], min_flange: per_t(ratio(0), plus: 11.84),
+        hole_to_bend: per_t(ratio(0), plus: 5.84), hole_to_edge: per_t(ratio(0), plus: 0.91), min_hole: per_t(ratio(0), plus: 1.02), min_slot: per_t(ratio(0), plus: 1.02), hardness: ratio(57),
+        relief: relief_rule(shape: "rect", width: per_t(ratio(1)), depth: 5.13, from: "bend_line",
+                            corner: "round", corner_placement: "intersection")),
+  stock(t: t2, bend: kfactor(ratio(0.40)), radii: [r_scs], min_flange: per_t(ratio(0), plus: 8.13),
+        hole_to_bend: per_t(ratio(0), plus: 4.15), hole_to_edge: per_t(ratio(0), plus: 0.56), min_hole: per_t(ratio(0), plus: 0.71), min_slot: per_t(ratio(0), plus: 0.71), hardness: ratio(57),
+        relief: relief_rule(shape: "rect", width: per_t(ratio(1)), depth: 3.99, from: "bend_line",
+                            corner: "round", corner_placement: "intersection")),
+  stock(t: t1, bend: kfactor(ratio(0.40)), radii: [r_scs], min_flange: per_t(ratio(0), plus: 7.85),
+        hole_to_bend: per_t(ratio(0), plus: 4.27), hole_to_edge: per_t(ratio(0), plus: 0.56), min_hole: per_t(ratio(0), plus: 0.71), min_slot: per_t(ratio(0), plus: 0.71), hardness: ratio(57),
+        relief: relief_rule(shape: "rect", width: per_t(ratio(1)), depth: 3.61, from: "bend_line",
+                            corner: "round", corner_placement: "intersection"))],
+  kerf: kerf_scs, hardware: hw_scs)
+
+shared dw = 586.46
+shared dh = 828
+shared ret = 25
+shared xl = 10
+# hinge pins: S-M6-0 in the bottom and top returns at (h 13.0, n -14.0)
+shared h_pin = 13
+shared n_pin = 14
+# latch (5.8): centre (h 555.98, k 414.00)
+shared h_l = 555.98
+shared k_l = 414
+shared d_piv = 8.6       # pivot clearance
+shared r_sl = 14.8       # arc slot r 14.8 [R11], 6.4 wide, rack angle 45..225deg (as the base)
+shared w_sl = 6.4
+shared a_sl0 = 45deg
+shared a_sl1 = 225deg
+shared r_st = 28         # FH-M4-12 studs (heads flush on the outer face), rack angle 140, 182.5, 225deg [R11]
+shared a_st0 = 140deg
+shared a_st1 = 182.5deg
+shared a_st2 = 225deg
+shared a_st = [a_st0, a_st1, a_st2]
+shared tab_h0 = 523.58   # padlock tab slot: rack x 232.6..286.8, Z 478.5..485.5
+shared tab_w = 54.2
+shared tab_k0 = 439.5
+shared tab_kh = 7
+# vents: 6.0 x 100.0 slots parallel to h, 4 columns, 40 rows; column 3's rows 17..22 left out
+shared v_w = 6
+shared v_l = 100
+shared v_h0 = 113.23
+shared v_hp = 120
+shared v_kp = 16
+shared v_i0 = ratio(19.5)
+shared ncol = count(4)
+shared nrow = count(40)
+shared skip_col = count(3)
+shared skip_lo = count(17)
+shared skip_hi = count(22)
+shared nvent = count(154)
+shared d_nut = 8.75     # S-M6-0 mounting hole
+shared d_stud = 4       # FH-M4-12 mounting hole
+shared ro = r_sl + w_sl / 2
+shared ri = r_sl - w_sl / 2
+
+sketch ref(on: offset(xy, -t1)) {
+  ax = line((0, 0), (xl, 0), construction: true)
+}
+sketch plan(on: rotate(ref.plane, about: ref.ax, by: 180deg)) {
+  outline = rect(corner: (0, -dh), size: (dw, dh))
+}
+field = sheet(plan, t: t1, shop: scs)
+top_r = flange(field.edge(plan.outline[0]), height: ret)
+latch_r = flange(field.edge(plan.outline[1]), height: ret)
+bot_r = flange(field.edge(plan.outline[2]), height: ret)
+hinge_r = flange(field.edge(plan.outline[3]), height: ret)
+
+# pin nuts. bot_r.bottom is the bottom return's outer face k = 0 (x = -n - t1, y = h - 584.94);
+# top_r.bottom is the top return's outer face k = 828 (x = -n - t1, y = -h)
+shared h_bend = dw - t1
+sketch pin_b(on: bot_r.bottom) {
+  p = pt(n_pin - t1, h_pin - h_bend)
+  nx = line((0, 0), (xl, 0), construction: true)
+}
+sketch pin_t(on: top_r.bottom) {
+  p = pt(n_pin - t1, -h_pin)
+  nx = line((0, 0), (xl, 0), construction: true)
+}
+pin_nut_bot = pem("nut", "M6", at: pin_b.p, wall: bot_r)
+pin_nut_top = pem("nut", "M6", at: pin_t.p, wall: top_r)
+
+# latch features, on the field (h, -k)
+sketch latch_s(on: field.top) {
+  piv = circle((h_l, -k_l), d_piv / 2)
+  o0 = pt(h_l + ro * cos(a_sl0), -(k_l + ro * sin(a_sl0)))
+  o1 = pt(h_l + ro * cos(a_sl1), -(k_l + ro * sin(a_sl1)))
+  i0 = pt(h_l + ri * cos(a_sl0), -(k_l + ri * sin(a_sl0)))
+  i1 = pt(h_l + ri * cos(a_sl1), -(k_l + ri * sin(a_sl1)))
+  slo = arc(center: (h_l, -k_l), from: o1, to: o0)
+  sle0 = arc(center: (h_l + r_sl * cos(a_sl0), -(k_l + r_sl * sin(a_sl0))), from: o0, to: i0)
+  sli = arc(center: (h_l, -k_l), from: i0, to: i1, cw: true)
+  sle1 = arc(center: (h_l + r_sl * cos(a_sl1), -(k_l + r_sl * sin(a_sl1))), from: i1, to: o1)
+  tab = rect(corner: (tab_h0, -(tab_k0 + tab_kh)), size: (tab_w, tab_kh))
+}
+latch_cuts = cutout(latch_s, wall: field)
+sketch studs_s(on: field.top) {
+  for i in 0..3 {
+    st = pt(h_l + r_st * cos(a_st[i]), -(k_l + r_st * sin(a_st[i])))
+  }
+}
+for i in 0..3 {
+  lb_pem = pem("stud", "M4", at: studs_s.st[i], wall: field)
+}
+
+# vents: one sketch per row (SPEC gap 2, 3)
+for i in 0..nrow {
+  sketch row(on: field.top) {
+    for j in 0..ncol {
+      if not (j == skip_col and i >= skip_lo and i <= skip_hi) {
+        s = slot((v_h0 + j * v_hp - (v_l - v_w) / 2, -(k_l + i * v_kp - v_i0 * v_kp)),
+                 (v_h0 + j * v_hp + (v_l - v_w) / 2, -(k_l + i * v_kp - v_i0 * v_kp)), v_w / 2)
+      }
+    }
+  }
+  vents = cutout(row, wall: field)
+}
+
+# anchors. The outer face n = 0 (coords (h, -k), normal +n opposite the sheet's)
+sketch outer(on: offset(plan.plane, -t1)) {
+  lc = pt(h_l, -k_l)
+  for i in 0..3 {
+    st = pt(h_l + r_st * cos(a_st[i]), -(k_l + r_st * sin(a_st[i])))
+  }
+  up = line((0, 0), (0, -xl), construction: true)
+  down = line((0, 0), (0, xl), construction: true)
+}
+# x per SPEC R9: pin_bot, pin_top -n (towards the returns' tips), latch -k, lb_stud +k
+pin_bot = anchor(plane(at: pin_b.p, normal: -pin_b.plane.normal, x: pin_b.nx.dir))
+pin_top = anchor(plane(at: pin_t.p, normal: -pin_t.plane.normal, x: pin_t.nx.dir))
+hinge = anchor(plane(at: pin_b.p, normal: -pin_b.plane.normal, x: pin_b.nx.dir))
+latch = anchor(plane(at: outer.lc, normal: -plan.plane.normal, x: outer.down.dir))
+for i in 0..3 {
+  lb_stud = anchor(plane(at: outer.st[i], normal: plan.plane.normal, x: outer.up.dir))
+}
+
+param flat.gap = 100
+flat = unfold(field, on: offset(field.bottom, gap))
+
+# drawing math: the field less r + t at each of its four edges, four returns each (ret - r - t)
+# straight plus a bend (mid-thickness folded, r + K t flat), along the field's edges less the
+# corners (each return runs its edge less 2 (r + t)); less the four corner reliefs (circles of
+# 4.602 about the bend lines' crossings, the part outside the field and returns' straights taken as
+# a quarter disc each in the flat), the pin nut holes 8.75, the stud holes 4.0, pivot 8.6, the
+# arc slot, the tab slot and 154 vent slots
+shared rt = r_scs + t1
+shared edge_len = 2 * (dw - 2 * rt) + 2 * (dh - 2 * rt)
+shared field_a = (dw - 2 * rt) * (dh - 2 * rt)
+shared ret_a = edge_len * (ret - rt)
+shared slot_a = pi * r_sl * w_sl + pi * (w_sl / 2) ^ 2
+shared vent_a = nvent * ((v_l - v_w) * v_w + pi * (v_w / 2) ^ 2)
+shared holes_a = 2 * pi * (d_nut / 2) ^ 2 + 3 * pi * (d_stud / 2) ^ 2 + pi * (d_piv / 2) ^ 2 + slot_a + tab_w * tab_kh + vent_a
+shared fold_a = field_a + ret_a + edge_len * (r_scs + t1 / 2) * pi / 2
+shared flat_a = field_a + ret_a + edge_len * (r_scs + ratio(0.4) * t1) * pi / 2
+expect volume = t1 * (fold_a + flat_a - 2 * holes_a) +- 0.5%
+expect bodies = 2
+expect valid

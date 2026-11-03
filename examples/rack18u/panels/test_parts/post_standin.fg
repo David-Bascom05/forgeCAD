@@ -1,0 +1,77 @@
+# Stand-in post for panels/test.fg (not subsystem A's part): a plain L 50 x 50 x 3.02, 906 long, with
+# the SPEC 5.1 nut holes and anchors on both legs. Part frame as 5.1: u along leg A's outer face, v
+# along leg B's outer face, w up; leg A's outer face v = 0, leg B's u = 0. No bend radius, no studs.
+# Anchor x per SPEC R9: along w, towards the post's middle (w = 453), except stk_* x = +w.
+
+shared L = 50
+shared t = 3.02
+shared H = 906
+shared s_hng = 32.5      # R11 (was 20.5)
+shared s_mid = 25
+shared w_mid = 453
+shared d_m6 = 8.75       # S-M6-0 mounting hole
+shared d_m5 = 6.35       # SS-M5-0 mounting hole
+shared w_hng = [50, 66, 840, 856]
+shared w_stk = [443, 463]
+shared w_pnl = [100, 260, 420, 486, 646, 806]
+shared n_hng = count(4)
+shared n_stk = count(2)
+shared n_pnl = count(6)
+shared xl = 10
+
+sketch prof(on: xy) {
+  o = poly([(0, 0), (L, 0), (L, t), (t, t), (t, L), (0, L)])
+}
+body = extrude(prof, H)
+# leg A's outer face (v = 0): body.side(prof.o[0]); leg B's (u = 0): body.side(prof.o[5])
+sketch fa(on: body.side(prof.o[0])) {
+  for i in 0..n_hng {
+    hng = pt(s_hng, w_hng[i])
+  }
+  for i in 0..n_stk {
+    stk = pt(s_mid, w_stk[i])
+  }
+  for i in 0..n_pnl {
+    pnl = pt(s_mid, w_pnl[i])
+  }
+  up = line((0, 0), (0, xl), construction: true)
+  dn = line((0, 0), (0, -xl), construction: true)
+  ax = line((0, 0), (xl, 0), construction: true)
+}
+# leg B's outer face: x = 50 - v, y = w
+sketch fb(on: body.side(prof.o[5])) {
+  for i in 0..n_hng {
+    hng = pt(L - s_hng, w_hng[i])
+  }
+  for i in 0..n_stk {
+    stk = pt(L - s_mid, w_stk[i])
+  }
+  for i in 0..n_pnl {
+    pnl = pt(L - s_mid, w_pnl[i])
+  }
+}
+h_hng = hole(at: [fa.hng[i] for i in 0..n_hng], d: d_m6, depth: thru)
+h_stk = hole(at: [fa.stk[i] for i in 0..n_stk], d: d_m6, depth: thru)
+h_pnl = hole(at: [fa.pnl[i] for i in 0..n_pnl], d: d_m5, depth: thru)
+hb_hng = hole(at: [fb.hng[i] for i in 0..n_hng], d: d_m6, depth: thru)
+hb_stk = hole(at: [fb.stk[i] for i in 0..n_stk], d: d_m6, depth: thru)
+hb_pnl = hole(at: [fb.pnl[i] for i in 0..n_pnl], d: d_m5, depth: thru)
+
+# anchors (5.1): origin on the outer face, normal into the post (+v on leg A, +u on leg B)
+for i in 0..n_hng {
+  hng_a = anchor(plane(at: fa.hng[i], normal: -fa.plane.normal, x: fa.up.dir if w_hng[i] < w_mid else fa.dn.dir))
+  hng_b = anchor(plane(at: fb.hng[i], normal: -fb.plane.normal, x: fa.up.dir if w_hng[i] < w_mid else fa.dn.dir))
+}
+for i in 0..n_stk {
+  stk_a = anchor(plane(at: fa.stk[i], normal: -fa.plane.normal, x: fa.up.dir))
+  stk_b = anchor(plane(at: fb.stk[i], normal: -fb.plane.normal, x: fa.up.dir))
+}
+for i in 0..n_pnl {
+  pnl_a = anchor(plane(at: fa.pnl[i], normal: -fa.plane.normal, x: fa.up.dir if w_pnl[i] < w_mid else fa.dn.dir))
+  pnl_b = anchor(plane(at: fb.pnl[i], normal: -fb.plane.normal, x: fa.up.dir if w_pnl[i] < w_mid else fa.dn.dir))
+}
+
+shared n_m6 = count(12)
+shared n_m5 = count(12)
+expect volume = (2 * L - t) * t * H - (n_m6 * (d_m6 / 2) ^ 2 + n_m5 * (d_m5 / 2) ^ 2) * pi * t +- 0.1%
+expect valid

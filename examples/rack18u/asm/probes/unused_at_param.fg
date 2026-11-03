@@ -1,0 +1,9 @@
+assembly
+
+# Probe: a param read only by an expect's `at` clause is reported UnusedParam (it is used).
+shared w = 30deg
+param j.turn = 0deg
+a = part("../../frame/probes/cube.fg", ground: true)
+b = part("../../frame/probes/cube.fg")
+j = revolute(b, a, turn: turn)
+expect mobility = 0 at j.turn = w

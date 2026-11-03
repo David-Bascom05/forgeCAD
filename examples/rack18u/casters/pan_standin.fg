@@ -1,0 +1,55 @@
+# TEST STAND-IN: the base pan's floor (RACK-121) with the 16 caster bolt holes
+# source: SPEC 5.2 (outer box x +-295.46, y 38.02..761.98, floor 3.02, caster holes 9.0 at kingpin + (+-22.5, +-37.5), anchors caster_* normal +z, x +x [R9]); flanges, other holes and the cut-out left out
+# frame: rack coordinates: origin at rack O, the floor's underside at Z 0
+
+shared x0 = 295.46
+shared y0 = 38.02
+shared y1 = 761.98
+shared t = 3.02
+shared dh = 9   # ISO 273 medium M8
+shared kx = [-185, 185, -185, 185]   # kingpins fl, fr, rl, rr
+shared ky = [100, 100, 700, 700]
+shared hx = [-22.5, 22.5, -22.5, 22.5]   # the plate's bolt[0..3] order
+shared hy = [-37.5, -37.5, 37.5, 37.5]
+shared lref = 10
+
+sketch plan(on: xy) {
+  outline = rect(corner: (-x0, y0), size: (2 * x0, y1 - y0))
+  for c in 0..4 {
+    for k in 0..4 {
+      h = circle((kx[c] + hx[k], ky[c] + hy[k]), dh / 2)
+    }
+  }
+  for c in 0..4 {
+    kp = pt(kx[c], ky[c])
+  }
+  xl = line((0, 0), (lref, 0), construction: true)
+}
+floor = extrude(plan, t)
+sketch tops(on: floor.end) {
+  for c in 0..4 {
+    for k in 0..4 {
+      s = pt(kx[c] + hx[k], ky[c] + hy[k])
+    }
+  }
+}
+caster_fl = anchor(plane(at: plan.kp[0], normal: plan.plane.normal, x: plan.xl.dir))
+caster_fr = anchor(plane(at: plan.kp[1], normal: plan.plane.normal, x: plan.xl.dir))
+caster_rl = anchor(plane(at: plan.kp[2], normal: plan.plane.normal, x: plan.xl.dir))
+caster_rr = anchor(plane(at: plan.kp[3], normal: plan.plane.normal, x: plan.xl.dir))
+for k in 0..4 {
+  seat_fl = anchor(plane(at: tops.s[0][k], normal: plan.plane.normal, x: plan.xl.dir))
+}
+for k in 0..4 {
+  seat_fr = anchor(plane(at: tops.s[1][k], normal: plan.plane.normal, x: plan.xl.dir))
+}
+for k in 0..4 {
+  seat_rl = anchor(plane(at: tops.s[2][k], normal: plan.plane.normal, x: plan.xl.dir))
+}
+for k in 0..4 {
+  seat_rr = anchor(plane(at: tops.s[3][k], normal: plan.plane.normal, x: plan.xl.dir))
+}
+
+expect valid
+expect bodies = 1
+expect volume = 1288889.393 +- 0.05%

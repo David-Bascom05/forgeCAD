@@ -1,0 +1,80 @@
+# 120 x 120 x 25.4 axial fan, envelope (Delta AFB1212M-F00; any 120 x 25 frame with holes on 105 fits)
+# source: Delta spec AFB1212M-F00 page 6 dimension drawing
+#   (https://www.delta-fan.com/Download/Spec/AFB1212M-F00.pdf): 120.0 square, 25.4 deep, 8 x 4.5 holes on
+#   105.0, flanges 5.0 at each face. Not dimensioned there and read off the drawing to +-1: bore 114,
+#   hub 46, frame corner radius 4.5. Blades are not modelled; struts are 4 straight bars.
+# frame: origin at the centre of the outlet face; +z along the airflow, out of the fan; body z -25.4..0.
+# Anchors: out (outlet face, +z), inlet (inlet face, +z), fhole[0..3] (outlet face, +z), order
+# (-,-), (+,-), (-,+), (+,+) as RACK-401's fan screws.
+
+shared A = 120                  # frame square
+shared H = 25.4                 # depth
+shared tf = 5                   # each corner flange
+shared rc = 4.5                 # frame corner radius
+shared hs = 52.5                # half the 105 hole square
+shared dh = 4.5                 # mounting holes
+shared d_bore = 114             # venturi bore at the faces
+shared d_wall = 119.6           # venturi tube outside, between the flanges (just inside the square)
+shared d_hub = 46
+shared hub_gap = 1              # hub stops this short of the inlet face
+shared w_strut = 4
+shared t_strut = 3
+shared r_strut = 58             # struts run into the frame past the bore
+shared xl = 10
+shared a2 = A / 2 - rc
+shared hx = [-hs, hs, -hs, hs]
+shared hy = [-hs, -hs, hs, hs]
+
+sketch top(on: xy) {
+  frame = hull(disc((-a2, -a2), rc), disc((a2, -a2), rc), disc((a2, a2), rc), disc((-a2, a2), rc))
+  bore = circle((0, 0), d_bore / 2)
+  for j in 0..4 {
+    h = circle((hx[j], hy[j]), dh / 2)
+    p = pt(hx[j], hy[j])
+  }
+  o = pt(0, 0)
+  xax = line((0, 0), (xl, 0), construction: true)
+}
+outlet = extrude(top, -tf)
+sketch bot(on: offset(top.plane, -H)) {
+  frame = hull(disc((-a2, -a2), rc), disc((a2, -a2), rc), disc((a2, a2), rc), disc((-a2, a2), rc))
+  bore = circle((0, 0), d_bore / 2)
+  for j in 0..4 {
+    h = circle((hx[j], hy[j]), dh / 2)
+  }
+  o = pt(0, 0)
+}
+inflange = extrude(bot, tf)
+sketch tube(on: offset(top.plane, -tf)) {
+  outer = circle((0, 0), d_wall / 2)
+  inner = circle((0, 0), d_bore / 2)
+}
+venturi = extrude(tube, -(H - 2 * tf))
+sketch hubs(on: top.plane) {
+  c = circle((0, 0), d_hub / 2)
+}
+hub = extrude(hubs.c, -(H - hub_gap))
+shared ws = w_strut / 2
+sketch spokes(on: top.plane) {
+  cross = poly([(-r_strut, -ws), (-ws, -ws), (-ws, -r_strut), (ws, -r_strut), (ws, -ws), (r_strut, -ws),
+                (r_strut, ws), (ws, ws), (ws, r_strut), (-ws, r_strut), (-ws, ws), (-r_strut, ws)])
+}
+struts = extrude(spokes, -t_strut)
+
+out = anchor(plane(at: top.o, normal: top.plane.normal, x: top.xax.dir))
+inlet = anchor(plane(at: bot.o, normal: top.plane.normal, x: top.xax.dir))
+for j in 0..4 {
+  fhole = anchor(plane(at: top.p[j], normal: top.plane.normal, x: top.xax.dir), kind: bore, size: dh, depth: H)
+}
+
+# design intent: two flanges (rounded square less bore and holes), the tube between them, the hub and
+# the cross of struts, less the overlaps (struts in the hub and the flange; hub under the struts)
+shared sq = A * A - (4 - pi) * rc * rc
+shared flange_a = sq - pi / 4 * (d_bore ^ 2 + 4 * dh ^ 2)
+shared tube_v = pi / 4 * (d_wall ^ 2 - d_bore ^ 2) * (H - 2 * tf)
+shared hub_v = pi / 4 * d_hub ^ 2 * (H - hub_gap)
+shared cross_a = 2 * (2 * r_strut) * w_strut - w_strut * w_strut
+shared strut_v = (cross_a - 4 * (d_hub / 2) * w_strut) * t_strut
+expect volume = 2 * tf * flange_a + tube_v + hub_v + strut_v +- 0.5%
+expect bodies = 1
+expect valid

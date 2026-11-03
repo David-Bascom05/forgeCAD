@@ -1,0 +1,29 @@
+assembly
+
+# equipment: M6x16 rack screw, plastic washer, 3.0 ear, rail (square hole), cage nut
+
+shared z_rail = 4
+shared off_ear = -3
+shared off_pw = -1
+shared size_m6 = 6
+shared min_m6 = 4.78   # the nut's whole thread
+shared zx_cage = 5.88
+shared zx_scr = 0
+shared zx_ear = 1
+
+rail = part("plates/rail_sq_t2.fg", ground: true, at: pose(at: (0, 0, z_rail)))
+ear = part("plates/ear_3.fg")
+pw = part("../plastic_washer_m6.fg")
+cage = part("../cage_nut_m6.fg")
+scr = part("../rack_screw_m6x16.fg")
+at_ear = slider(ear.a, rail.a, along: off_ear)
+at_pw = slider(pw.a, ear.a, along: off_pw)
+at_cage = fastened(cage.seat, rail.b)
+at_scr = fastened(scr.head, pw.a)
+m6 = fit_rule(external_thread, internal_thread, size: size_m6, min_engagement: min_m6)
+
+expect interferences = 0
+expect mobility = 0
+expect z(cage) = zx_cage +- 0.001
+expect z(scr) = zx_scr +- 0.001
+expect z(ear) = zx_ear +- 0.001

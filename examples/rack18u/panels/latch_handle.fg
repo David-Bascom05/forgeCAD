@@ -1,0 +1,115 @@
+# RACK-321 latch handle, t2 (SPEC 5.8). x2.
+# Part frame = the latch frame at the handle: origin on the handle's inner face (the face towards
+# the door) at the latch axis; x = u, y = v, z = w (out, away from the door). Material z 0..1.88.
+# A disc R 23.5 cut by the chord v = 18.5; the fin turns out (+w) off the chord, its tip 24.0 past the
+# handle's outer face (SPEC's y table: fin tip = outer face - 24.0, so 24.0 is measured inner).
+
+shared t3 = 3.02
+shared t2 = 1.88
+shared t1 = 1.52
+shared r_scs = 1.6
+shared kerf_scs = 0.2                       # not published by SendCutSend; Forge's stand-in
+shared hw_scs = [
+  hardware(kind: "nut",  size: "M4", sheet: (0.8, 12.7), hole: 5.41, edge: 6.9, max_hardness: ratio(80),
+           code: "S-M4-0",   source: "PEM CL bulletin; sendcutsend.com hardware catalog"),
+  hardware(kind: "nut",  size: "M5", sheet: (0.8, 12.7), hole: 6.35, edge: 7.1, max_hardness: ratio(80),
+           code: "SS-M5-0",  source: "PEM CL bulletin; sendcutsend.com hardware catalog"),
+  hardware(kind: "nut",  size: "M6", sheet: (1.22, 12.7), hole: 8.75, edge: 8.6, max_hardness: ratio(80),
+           code: "S-M6-0",   source: "PEM CL bulletin; sendcutsend.com hardware catalog"),
+  hardware(kind: "stud", size: "M4", sheet: (1.0, 12.7), hole: 4.0, edge: 7.2, max_hardness: ratio(80),
+           code: "FH-M4-12", source: "PEM FH bulletin; sendcutsend.com hardware catalog"),
+  hardware(kind: "stud", size: "M6", sheet: (1.6, 12.7), hole: 6.0, edge: 7.9, max_hardness: ratio(80),
+           code: "FH-M6-20", source: "PEM FH bulletin; sendcutsend.com hardware catalog"),
+  hardware(kind: "stud", size: "M8", sheet: (2.4, 12.7), hole: 8.0, edge: 9.6, max_hardness: ratio(80),
+           code: "FH-M8-25", source: "PEM FH bulletin; sendcutsend.com hardware catalog")]
+shared scs = shop([
+  stock(t: t3, bend: kfactor(ratio(0.38)), radii: [r_scs], min_flange: per_t(ratio(0), plus: 11.84),
+        hole_to_bend: per_t(ratio(0), plus: 5.84), hole_to_edge: per_t(ratio(0), plus: 0.91), min_hole: per_t(ratio(0), plus: 1.02), min_slot: per_t(ratio(0), plus: 1.02), hardness: ratio(57),
+        relief: relief_rule(shape: "rect", width: per_t(ratio(1)), depth: 5.13, from: "bend_line",
+                            corner: "round", corner_placement: "intersection")),
+  stock(t: t2, bend: kfactor(ratio(0.40)), radii: [r_scs], min_flange: per_t(ratio(0), plus: 8.13),
+        hole_to_bend: per_t(ratio(0), plus: 4.15), hole_to_edge: per_t(ratio(0), plus: 0.56), min_hole: per_t(ratio(0), plus: 0.71), min_slot: per_t(ratio(0), plus: 0.71), hardness: ratio(57),
+        relief: relief_rule(shape: "rect", width: per_t(ratio(1)), depth: 3.99, from: "bend_line",
+                            corner: "round", corner_placement: "intersection")),
+  stock(t: t1, bend: kfactor(ratio(0.40)), radii: [r_scs], min_flange: per_t(ratio(0), plus: 7.85),
+        hole_to_bend: per_t(ratio(0), plus: 4.27), hole_to_edge: per_t(ratio(0), plus: 0.56), min_hole: per_t(ratio(0), plus: 0.71), min_slot: per_t(ratio(0), plus: 0.71), hardness: ratio(57),
+        relief: relief_rule(shape: "rect", width: per_t(ratio(1)), depth: 3.61, from: "bend_line",
+                            corner: "round", corner_placement: "intersection"))],
+  kerf: kerf_scs, hardware: hw_scs)
+
+shared R = 23.5
+shared vc = 18.5         # the chord
+shared xc = sqrt(R ^ 2 - vc ^ 2)
+shared fin = 24          # fin, past the handle's outer face (measured from the inner skins)
+shared d_bore = 8.2      # rides on the pivot's 8.0 shoulder
+shared d_link = 4.5      # M4 link screws at r 14.8, 135 and 225deg [R11]
+shared r_lk = 14.8
+shared lk = r_lk * cos(45deg)
+shared d_lock = 7        # padlock hole in the fin, at u = 0
+shared w_lock = 16       # out from the handle's outer face
+shared xl = 10
+
+# reference skin: the outer face z = 1.88, normal +z: the material lies at z 0..1.88, the fin turns up
+sketch plan(on: offset(xy, t2)) {
+  pl = pt(-xc, vc)
+  pr = pt(xc, vc)
+  rim = arc(center: (0, 0), from: pl, to: pr)
+  chord = line(pr, pl)
+}
+plate = sheet(plan, t: t2, shop: scs)
+# holes are cutouts (the shop checks skip a sheet profile's own holes)
+sketch holes_s(on: plate.top) {
+  bore = circle((0, 0), d_bore / 2)
+  h0 = circle((-lk, lk), d_link / 2)
+  h1 = circle((-lk, -lk), d_link / 2)
+}
+holes = cutout(holes_s, wall: plate)
+fin_f = flange(plate.edge(plan.chord), height: fin, measure: "inner", position: "outside")
+# fin_f.top is the fin's inner face v = 18.5: x out from the handle's outer face, y = xc - u
+sketch lock_s(on: fin_f.top) {
+  c = circle((w_lock, xc), d_lock / 2)
+}
+lock = cutout(lock_s, wall: fin_f)
+# anchor sketches: the inner face (z = 0), the outer face (z = 1.88), the fin's outer face v = 20.38
+# (fin_f.bottom: x as the top, y = u - xc)
+sketch inner(on: offset(plan.plane, -t2)) {
+  o = pt(0, 0)
+  l0 = pt(-lk, lk)
+  l1 = pt(-lk, -lk)
+  ua = line((0, 0), (xl, 0), construction: true)
+}
+sketch outer(on: plan.plane) {
+  l0 = pt(-lk, lk)
+  l1 = pt(-lk, -lk)
+}
+sketch fin_out(on: fin_f.bottom) {
+  p = pt(w_lock, -xc)
+}
+
+# latch_axis: normal +w (out of the door, as door.latch: SPEC R9), x = +u; spring_seat: the spring's
+# seat on the inner face, normal towards the door
+latch_axis = anchor(plane(at: inner.o, normal: plan.plane.normal, x: inner.ua.dir))
+spring_seat = anchor(plane(at: inner.o, normal: -plan.plane.normal, x: inner.ua.dir))
+for i in 0..2 {
+  link = anchor(plane(at: outer.l0 if i == 0 else outer.l1, normal: -plan.plane.normal, x: inner.ua.dir))
+  link_in = anchor(plane(at: inner.l0 if i == 0 else inner.l1, normal: -plan.plane.normal, x: inner.ua.dir))
+}
+padlock = anchor(plane(at: fin_out.p, normal: fin_out.plane.normal, x: inner.ua.dir))
+
+param flat.gap = 30
+flat = unfold(plate, on: offset(plate.bottom, gap))
+
+# drawing math: the disc less the segment above the chord; the plate's straight ends r short of the
+# chord (the fin's inner sharp is on it), the fin's straight is fin - r, the bend between; less the
+# two automatic reliefs (t wide, the t2 rule's depth), the bore, two link holes and the padlock hole;
+# folded and flat bodies, each t thick
+shared seg = R ^ 2 * (acos(vc / R) / 180deg) * pi - vc * xc
+shared lc = 2 * xc
+shared fin_str = fin - r_scs
+shared relief_d = 3.99
+shared holes_a = pi * ((d_bore / 2) ^ 2 + 2 * (d_link / 2) ^ 2 + (d_lock / 2) ^ 2) + 2 * t2 * relief_d
+shared fold_a = pi * R ^ 2 - seg - lc * r_scs + lc * (fin_str + (r_scs + t2 / 2) * pi / 2)
+shared flat_a = pi * R ^ 2 - seg - lc * r_scs + lc * (fin_str + (r_scs + ratio(0.4) * t2) * pi / 2)
+expect volume = t2 * (fold_a + flat_a - 2 * holes_a) +- 0.5%
+expect bodies = 2
+expect valid

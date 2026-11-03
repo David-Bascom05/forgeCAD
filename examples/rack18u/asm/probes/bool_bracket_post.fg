@@ -1,0 +1,23 @@
+assembly
+
+# Probe (Forge bug): the exact intersection of the rear-top hinge bracket and its post fails, so the
+# flush, face-to-face contact is reported as an unconfirmed Interference ("no exact solids") and
+# interference() is unevaluable. The front-top pair is the same geometry turned 180deg about Z
+# through (0, 400) and is confirmed a touch (0 mm3). Placed as in asm/rack.fg: posts as post_kit
+# subassemblies on the base pan, brackets fastened to hng_a[3].
+post_f = subassembly("../post_kit.fg", at: pose(at: (-298.48, 35, 0), z: (0, 0, 1), x: (1, 0, 0)))
+brk_f = part("../../panels/hinge_bracket.fg", body: "leg", at: pose(at: (-277.98, 14, 876.92), z: (0, 0, -1), x: (-1, 0, 0)))
+post_r = subassembly("../post_kit.fg", at: pose(at: (298.48, 765, 0), z: (0, 0, 1), x: (-1, 0, 0)))
+brk_r = part("../../panels/hinge_bracket.fg", body: "leg", at: pose(at: (277.98, 786, 876.92), z: (0, 0, -1), x: (1, 0, 0)))
+
+base = part("../../frame/base_pan.fg", body: "floor", ground: true, at: pose(at: (0, 400, 0)))
+j_pf = slider(post_f.post.stud_a[0], base.stud_fl_f, along: -3.02)
+j_pr = slider(post_r.post.stud_a[0], base.stud_rr_r, along: -3.02)
+j_bf = fastened(brk_f.scr[0], post_f.post.hng_a[3])
+j_br = fastened(brk_r.scr[0], post_r.post.hng_a[3])
+m6 = fit_rule(external_thread, internal_thread, size: 6, min_engagement: 4.78)
+press = fit_rule("../../hw/pem_fh_m6_20.fg", "../../frame/post.fg")
+
+expect interference(brk_f, post_f.post) = 0
+expect interference(brk_r, post_r.post) = 0
+expect interferences = 0

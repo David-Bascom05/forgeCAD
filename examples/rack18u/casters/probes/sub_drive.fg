@@ -1,0 +1,12 @@
+assembly
+
+# A subassembly's drives are its own file's params: the parent cannot set them per instance, and an
+# expect's `at` cannot reach them. Four casters in rack.fg therefore all sit at caster_*.fg's own
+# swivel_turn, roll and brake, and the rack's mobility expect (4 swivels, 4 wheels, 2 brakes) cannot be met.
+# Expected: the subassembly's swivel set from here. Measured below (UnknownParam or no effect).
+
+base = part("rod.fg", ground: true)
+c = subassembly("../caster_plain.fg")
+on = fastened(c.plate.top, base.a)
+expect z(c.yoke.wheel_bottom) = -111 +- 0.01
+expect x(c.hub) = 40 +- 0.01 at swivel_turn = 90deg

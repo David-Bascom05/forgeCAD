@@ -1,0 +1,28 @@
+# plastic washer for the M6 rack screw (supplied with Rittal DK 7094.110)
+# source: SPEC 5.11 (1.0 thick, modelled); 6.4 x 12 assumed: Rittal publishes no size
+# frame: origin on the axis in the bottom face; +z through the part
+
+shared di = 6.4   # inner diameter
+shared do = 12   # outer diameter
+shared h = 1   # thickness
+shared ri = di / 2
+shared ro = do / 2
+shared zref = h
+shared xref = ro
+
+sketch prof(on: xz) {
+  o = poly([(ri, 0), (ro, 0), (ro, h), (ri, h)])
+  c0 = pt(0, 0)
+  pz0 = pt(0, 0)
+  pz1 = pt(0, h)
+  zax = line((0, 0), (0, zref), construction: true)
+  xax = line((0, 0), (xref, 0), construction: true)
+}
+body = revolve(prof.o, axis: prof.zax)
+
+a = anchor(plane(at: prof.pz0, normal: prof.zax.dir, x: prof.xax.dir))
+b = anchor(plane(at: prof.pz1, normal: prof.zax.dir, x: prof.xax.dir))
+
+expect valid
+expect bodies = 1
+expect volume = 80.927 +- 0.05%

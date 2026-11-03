@@ -1,0 +1,17 @@
+assembly
+
+# RACK-111 rail carrier with its 31 S-M6-0 bodies (28 rail nuts, 3 pan nuts; SPEC 4). Carrier frame
+# (SPEC 5.3).
+
+carrier = part("../frame/carrier.fg", body: "horiz", ground: true)
+for k in 0..28 {
+  rail_nut = part("../hw/pem_s_m6_0_t2.fg")
+  at_rail_nut = fastened(rail_nut.flush, carrier.rail[k])
+}
+for i in 0..3 {
+  pan_nut = part("../hw/pem_s_m6_0_t2.fg")
+  at_pan_nut = fastened(pan_nut.flush, carrier.pan[i])
+}
+
+expect interferences = 0
+expect mobility = 0

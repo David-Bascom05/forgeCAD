@@ -1,0 +1,91 @@
+# caster yoke: pressed 2.5 swivel head with skirt and web, fork legs, axle and pedal pin holes, lock pin guide
+# source: SPEC 6.2 (legs x +-18.20 inner, axle 8.4 at (y -40, z -71), pedal pin at (y 30, z -40)); the skirt and web are representative (README)
+# frame: the caster frame (SPEC 5.10): origin on the kingpin axis in the plate's top face, z up, y along the plate's long side, the wheel towards -y
+
+shared rk = 5.2   # kingpin clearance in the head
+shared rh = 29   # head and skirt outer radius
+shared rsi = 26.5   # skirt inner radius
+shared rwi = 11   # web inner radius
+shared zh0 = 7.76   # head top face
+shared zh1 = 10.26   # head underside
+shared zw0 = 19.5   # web top
+shared zw1 = 22   # web underside
+shared xi = 18.2   # leg inner faces
+shared tl = 2.5   # leg thickness
+shared ya = 40   # axle behind the kingpin
+shared za = 71   # axle below the plate top
+shared da = 8.4
+shared yq = 30   # pedal pivot
+shared zq = 40
+shared dq = 6   # pedal pin, pressed
+shared rba = 8   # leg round the axle
+shared rbq = 7   # leg round the pedal pin
+shared ylt = 20   # leg top edge, under the web
+shared xp = 14.001513   # lock pin guide
+shared yp = 18.247127
+shared dg = 5.2
+shared zb = 111   # wheel bottom
+shared xsp = 3.5   # right spacer's inner end
+shared lref = 10
+
+sketch ref(on: xy) {
+  o = pt(0, 0)
+  xl = line((0, 0), (lref, 0), construction: true)
+  yl = line((0, 0), (0, lref), construction: true)
+  xn = line((lref, 0), (0, 0), construction: true)
+}
+sketch prof(on: rotate(ref.plane, about: ref.xl, by: 90deg)) {
+  o = poly([(rk, -zh0), (rh, -zh0), (rh, -zw1), (rwi, -zw1), (rwi, -zw0), (rsi, -zw0), (rsi, -zh1), (rk, -zh1)])
+  zax = line((0, 0), (0, -zw1), construction: true)
+}
+cup = revolve(prof.o, axis: prof.zax)
+sketch legr(on: offset(rotate(ref.plane, about: ref.yl, by: 90deg), xi)) {
+  outline = hull(disc((-ya, -za), rba), disc((yq, -zq), rbq), (ylt, -zw0), (-ylt, -zw0))
+  ah = circle((-ya, -za), da / 2)
+  ph = circle((yq, -zq), dq / 2)
+}
+leg_r = extrude(legr, tl)
+sketch legl(on: offset(rotate(ref.plane, about: ref.yl, by: 90deg), -xi)) {
+  outline = hull(disc((-ya, -za), rba), disc((yq, -zq), rbq), (ylt, -zw0), (-ylt, -zw0))
+  ah = circle((-ya, -za), da / 2)
+  ph = circle((yq, -zq), dq / 2)
+}
+leg_l = extrude(legl, -tl)
+sketch gd(on: offset(ref.plane, -zw0)) {
+  c = circle((xp, yp), dg / 2)
+  g = pt(xp, yp)
+}
+guide = cut(gd.c, thru)
+sketch side(on: rotate(ref.plane, about: ref.yl, by: 90deg)) {
+  a = pt(-ya, -za)
+  q = pt(yq, -zq)
+  wb = pt(-ya, -zb)
+  dn = line((-ya, -za), (-ya, -zb), construction: true)
+}
+sketch sh(on: offset(rotate(ref.plane, about: ref.yl, by: 90deg), -xi - tl)) {
+  a = pt(-ya, -za)
+}
+sketch sn(on: offset(rotate(ref.plane, about: ref.yl, by: 90deg), xi + tl)) {
+  a = pt(-ya, -za)
+}
+sketch sl(on: offset(rotate(ref.plane, about: ref.yl, by: 90deg), -xi)) {
+  a = pt(-ya, -za)
+}
+sketch sr(on: offset(rotate(ref.plane, about: ref.yl, by: 90deg), xsp)) {
+  a = pt(-ya, -za)
+}
+
+cf = anchor(plane(at: ref.o, normal: ref.plane.normal, x: ref.xl.dir))
+kingpin = anchor(plane(at: ref.o, normal: ref.plane.normal, x: ref.xl.dir))
+axle = anchor(plane(at: side.a, normal: side.plane.normal, x: ref.yl.dir))
+axle_head = anchor(plane(at: sh.a, normal: side.plane.normal, x: ref.yl.dir))
+axle_nut = anchor(plane(at: sn.a, normal: side.plane.normal, x: ref.yl.dir))
+sp_l = anchor(plane(at: sl.a, normal: side.plane.normal, x: ref.yl.dir))
+sp_r = anchor(plane(at: sr.a, normal: side.plane.normal, x: ref.yl.dir))
+pedal_pin = anchor(plane(at: side.q, normal: ref.xn.dir, x: ref.yl.dir))
+lock_guide = anchor(plane(at: gd.g, normal: ref.plane.normal, x: ref.xl.dir))
+wheel_bottom = anchor(plane(at: side.wb, normal: side.dn.dir, x: ref.yl.dir))
+
+expect valid
+expect bodies = 1
+expect volume = 29576.571 +- 0.1%

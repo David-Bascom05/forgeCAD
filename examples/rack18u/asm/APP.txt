@@ -1,0 +1,12 @@
+forge-app with rack.fg, relaunched 2026-11-03T15:31Z on David's screen (Wayland, NVIDIA).
+PID: 563951
+Unit: forge-app-rack.service (systemd --user, MemoryMax=8G, no swap)
+Binary: ~/.cache/forgecad/forge-app (ForgeCAD branch ui-asm2 at 8b0d0f44, on forge-lang df066b37)
+Stop: systemctl --user stop forge-app-rack
+Again: systemd-run --user --unit=forge-app-rack -p MemoryMax=8G -p MemorySwapMax=0 --setenv=DISPLAY=:0 --setenv=WAYLAND_DISPLAY=wayland-0 ~/.cache/forgecad/forge-app ~/projects/forgecad-gate/rack18u/asm/rack.fg
+Opens in ~2 s (860 occurrences, 68 meshes), 0 errors · 0 warnings. "Run checks" (top of the right panel) runs the
+overlap check and all 537 expects: about 50 s headless; last run 537 pass, 0 interferences.
+This build: view cube top right of the view; Axes / Grid / Planes / Anchors switches top left (off for assemblies);
+browser grouped Frame, Panels & doors, Casters, Fan tray, Hardware & fasteners, Dummies, Subassemblies, with eyes and
+a filter; Explode slider and Trails in the right panel. Screenshots and explode renders: ui-shots/.
+Renders: ~/.cache/forgecad/forge-render rack.fg --shot OUT.ppm --explode 0..1 --view iso|front|.. [--trails] [--anim N] --size 2000x2000

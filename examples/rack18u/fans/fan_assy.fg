@@ -1,0 +1,31 @@
+assembly
+
+# Fan subassembly (SPEC 5.9 rev B): RACK-401 tray, 4 fans (outlet up against the tray), 4 finger
+# guards, 16 ISO 7045 M4 x 40 up through guard loop and both fan flanges into the tray's 16 S-M4-0.
+# The PEM nut bodies (hw) sit on the tray's fscr anchors (R1: their thread is the hw part's).
+# frame: the tray's part frame (top face centre, rack axes); in the rack at (0, 400, 893.38).
+
+shared m4 = 4
+shared min_m4 = 2.77            # SPEC 8 rev B: the shortest whole M4 nut (S-M4-0)
+
+tray = part("rack401_tray.fg", ground: true)
+for i in 0..16 {
+  nut = part("../hw/pem_s_m4_0_t2.fg")
+  at_nut = fastened(nut.flush, tray.fscr[i])
+}
+for k in 0..4 {
+  fan = part("fan_120x25.fg")
+  at_fan = fastened(fan.out, tray.fan[k], flip: true)
+  guard = part("guard_120.fg")
+  at_guard = fastened(guard.fan, fan.inlet)
+}
+for k in 0..4 {
+  for j in 0..4 {
+    screw = part("../hw/iso7045_m4x40.fg")
+    at_screw = fastened(screw.head, guard[k].loop[j])
+  }
+}
+thread_m4 = fit_rule(external_thread, internal_thread, size: m4, min_engagement: min_m4)
+
+expect interferences = 0
+expect mobility = 0

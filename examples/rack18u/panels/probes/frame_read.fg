@@ -1,0 +1,9 @@
+assembly
+
+prt = part("flange_frame.fg", ground: true)
+b1 = part("../../hw/ball_4.fg")
+b2 = part("../../hw/ball_4.fg")
+j1 = fastened(b1.c, prt.a1)
+j2 = fastened(b2.c, prt.a2)
+b3 = part("../../hw/ball_4.fg")
+j3 = fastened(b3.c, prt.a3)

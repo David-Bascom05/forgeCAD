@@ -1,0 +1,20 @@
+assembly
+
+param g.turn = 40deg
+param s.along = 0
+
+base = part("rod.fg", ground: true)
+w1 = part("rod.fg")
+w2 = part("rod.fg")
+w3 = part("rod.fg")
+w4 = part("rod.fg")
+g = revolute(w1.a, base.a, turn: turn)
+h = revolute(w2.a, base.a)
+k = revolute(w3.a, base.a)
+s = slider(w4.a, base.a)
+m1 = gear(g, h, ratio: 0.5)
+m2 = linear(g.turn, k.turn, ratio: 0.5)
+m3 = linear(g.turn, s.along, ratio: 0.2)
+expect value(h.turn) = 20deg +- 0.001deg
+expect value(k.turn) = 20deg +- 0.001deg
+expect value(s.along) = 8 +- 0.001

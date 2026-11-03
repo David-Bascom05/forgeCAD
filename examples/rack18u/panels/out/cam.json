@@ -1,0 +1,41 @@
+{
+ "part": "cam",
+ "lints": [],
+ "ok": true,
+ "errors": [],
+ "violations": [],
+ "warnings": [],
+ "expects": [
+  {
+   "metric": "volume",
+   "measured": 5192.6,
+   "ok": true
+  },
+  {
+   "metric": "bodies",
+   "measured": 2,
+   "ok": true
+  },
+  {
+   "metric": "valid",
+   "measured": 1,
+   "ok": true
+  }
+ ],
+ "bends": [],
+ "shop_limits": {
+  "flat_bbox": [
+   43.8,
+   48.899
+  ],
+  "flat_fits_762x914.4": true,
+  "max_bend_line": 0,
+  "bend_lines_ok": true,
+  "bend_angles_ok": true,
+  "open_loops": 0,
+  "flat_area_x_t": 2596.208909133983,
+  "flat_body_volume": 2596.3,
+  "rel_err": -3.508487694685194e-05
+ },
+ "volume": 5192.6
+}

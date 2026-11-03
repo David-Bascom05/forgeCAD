@@ -1,0 +1,19 @@
+# FIXED in forge-lang 8d1bb528 (all four corners now trim alike). Repro (forge-lang a4149718): a 4-flange box, all flanges up and inside, auto corner trim. Three
+# corners trim alike; the corner between `right` (outline[1]) and `rear` (outline[2]) does not. In the
+# flat, at (+x, +y), the rear flange stops 3.42 shorter (93.56 vs 96.98 from the centre) and the right
+# flange runs 3.42 longer (71.98 vs 68.56). The relief arc there is also placed differently. Expected:
+# all four corners alike (the part is symmetric).
+# Run: fg run box_corner.fg --dxf box.dxf, then compare the CUT line ends near each corner.
+shared t = 3.02
+shared W = 200
+shared D = 150
+shared H = 30
+sketch plan(on: offset(xy, t)) {
+  outline = rect(center: (0, 0), size: (W, D))
+}
+floor = sheet(plan, t: t, r: 1.6, bend: kfactor(ratio(0.38)))
+front = flange(floor.edge(plan.outline[0]), height: H)
+right = flange(floor.edge(plan.outline[1]), height: H)
+rear = flange(floor.edge(plan.outline[2]), height: H)
+left = flange(floor.edge(plan.outline[3]), height: H)
+flat = unfold(floor)

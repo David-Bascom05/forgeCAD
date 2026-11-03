@@ -1,0 +1,17 @@
+# TEST REFERENCE: the floor plane at Z -111 (RACK-FLOOR), as a 10 thick slab
+# source: SPEC 1 (floor Z = -111.00), 4 (RACK-FLOOR)
+# frame: rack coordinates
+
+shared hx = 300
+shared ly = 800
+shared zf = 111   # floor below the pan's underside
+shared t = 10
+
+sketch plan(on: offset(xy, -zf)) {
+  outline = rect(corner: (-hx, 0), size: (2 * hx, ly))
+}
+slab = extrude(plan, -t)
+
+expect valid
+expect bodies = 1
+expect volume = 4800000.000 +- 0.05%

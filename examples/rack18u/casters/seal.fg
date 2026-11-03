@@ -1,0 +1,24 @@
+# 608-2RS rubber seal 0.8 (one of two): in the outer ring's recess, lip on the inner ring's land
+# source: SPEC 6.2 (2 rubber seals 0.8 thick in the outer ring); section representative
+# frame: origin at the bearing's centre, z along its axis; drawn on the +z side; `back` turns it over for the -z side
+
+shared ri = 6.2655   # lip: on the inner ring's land
+shared ro = 9.7
+shared z0 = 2.55
+shared ts = 0.8
+
+sketch prof(on: xz) {
+  o = poly([(ri, z0), (ro, z0), (ro, z0 + ts), (ri, z0 + ts)])
+  pz0 = pt(0, 0)
+  zax = line((0, 0), (0, z0), construction: true)
+  zn = line((0, z0), (0, 0), construction: true)
+  xax = line((0, 0), (ro, 0), construction: true)
+}
+body = revolve(prof.o, axis: prof.zax)
+
+ax = anchor(plane(at: prof.pz0, normal: prof.zax.dir, x: prof.xax.dir))
+back = anchor(plane(at: prof.pz0, normal: prof.zn.dir, x: prof.xax.dir))
+
+expect valid
+expect bodies = 1
+expect volume = 137.812 +- 0.05%

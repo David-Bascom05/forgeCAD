@@ -1,0 +1,67 @@
+# caster top plate 90 x 66 x 3.0 with the upper raceway and the kingpin's countersink
+# source: SPEC 5.10, 6.2; Blickle LKPA-PATH 80KF (plate 90 x 66, holes 8.5 on 75 x 45)
+# frame: the caster frame (SPEC 5.10): origin on the kingpin axis in the plate's top face, z up, y along the plate's long side, the wheel towards -y
+
+shared w = 66   # plate width (x)
+shared l = 90   # plate length (y)
+shared t = 3   # thickness, not published: modelled 3.0
+shared dh = 8.5   # bolt holes
+shared hx = [-22.5, 22.5, -22.5, 22.5]   # bolt holes, order bolt[0..3]
+shared hy = [-37.5, -37.5, 37.5, 37.5]
+shared dk = 10.4   # kingpin hole
+shared dc = 16   # countersink top diameter: the rivet head
+shared ack = 90deg
+shared zu = 5.38   # upper ball centres below the top face
+shared zl = 12.64   # lower ball centres
+shared ru = 25
+shared nu = count(24)
+shared nl = count(20)
+shared lref = 10
+
+sketch plan(on: xy) {
+  outline = rect(center: (0, 0), size: (w, l))
+  for k in 0..4 {
+    bh = circle((hx[k], hy[k]), dh / 2)
+  }
+  o = pt(0, 0)
+  xl = line((0, 0), (lref, 0), construction: true)
+  ex = pt(w / 2, 0)
+  ey = pt(0, l / 2)
+  for i in 0..24 {
+    u = line((0, 0), (ru * cos(360deg * i / nu), ru * sin(360deg * i / nu)), construction: true)
+  }
+  for i in 0..20 {
+    v = line((0, 0), (ru * cos(360deg * i / nl), ru * sin(360deg * i / nl)), construction: true)
+  }
+}
+slab = extrude(plan, -t)
+kp = hole(at: plan.o, d: dk, csink: (dc, ack), depth: thru)
+sketch bot(on: offset(plan.plane, -t)) {
+  for k in 0..4 {
+    c = pt(hx[k], hy[k])
+  }
+}
+sketch orbu(on: offset(plan.plane, -zu)) {
+  o = pt(0, 0)
+}
+sketch orbl(on: offset(plan.plane, -zl)) {
+  o = pt(0, 0)
+}
+
+top = anchor(plane(at: plan.o, normal: plan.plane.normal, x: plan.xl.dir))
+kingpin = anchor(plane(at: plan.o, normal: plan.plane.normal, x: plan.xl.dir))
+edge_x = anchor(plane(at: plan.ex, normal: plan.plane.normal, x: plan.xl.dir))
+edge_y = anchor(plane(at: plan.ey, normal: plan.plane.normal, x: plan.xl.dir))
+for k in 0..4 {
+  bolt = anchor(plane(at: bot.c[k], normal: plan.plane.normal, x: plan.xl.dir))
+}
+for i in 0..24 {
+  uorb = anchor(plane(at: orbu.o, normal: plan.plane.normal, x: plan.u[i].dir))
+}
+for i in 0..20 {
+  lorb = anchor(plane(at: orbl.o, normal: plan.plane.normal, x: plan.v[i].dir))
+}
+
+expect valid
+expect bodies = 1
+expect volume = 16733.149 +- 0.05%

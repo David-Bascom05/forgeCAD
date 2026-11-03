@@ -1,0 +1,19 @@
+# steel ball 3.969 (5/32"), ISO 3290 G100: the 608's balls
+# source: SPEC 6.2 / 7 (608-2RS: 7 x 3.969)
+# frame: origin at the ball's centre
+
+shared dw = 3.969   # ball diameter
+shared rw = dw / 2
+
+sketch prof(on: xz) {
+  c0 = pt(0, 0)
+  zax = line((0, 0), (0, rw), construction: true)
+  xax = line((0, 0), (rw, 0), construction: true)
+}
+shot = ball(prof.c0, rw)
+
+c = anchor(plane(at: prof.c0, normal: prof.zax.dir, x: prof.xax.dir))
+
+expect valid
+expect bodies = 1
+expect volume = 32.737 +- 0.05%

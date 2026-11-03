@@ -1,0 +1,36 @@
+# caster pedal pivot pin 6.0, riveted heads 9.0 x 1.5 outside the yoke legs
+# source: SPEC 6.2 (pivot pin 6.0 through the yoke legs at (y 30, z -40)); heads representative
+# frame: the caster frame (SPEC 5.10): origin on the kingpin axis in the plate's top face, z up, y along the plate's long side, the wheel towards -y
+
+shared yq = 30
+shared zq = 40
+shared rs = 3
+shared rh = 4.5
+shared th = 1.5
+shared xo = 20.7   # leg outer faces
+shared lref = 10
+
+sketch ref(on: xy) {
+  o = pt(0, 0)
+  xl = line((0, 0), (lref, 0), construction: true)
+  yl = line((0, 0), (0, lref), construction: true)
+  xn = line((lref, 0), (0, 0), construction: true)
+}
+sketch h1(on: offset(rotate(ref.plane, about: ref.yl, by: 90deg), -xo - th)) {
+  c = circle((yq, -zq), rh)
+}
+head1 = extrude(h1.c, th)
+sketch sh(on: head1.end) {
+  c = circle((yq, -zq), rs)
+}
+shank = extrude(sh.c, 2 * xo)
+sketch h2(on: shank.end) {
+  c = circle((yq, -zq), rh)
+}
+head2 = extrude(h2.c, th)
+
+cf = anchor(plane(at: ref.o, normal: ref.plane.normal, x: ref.xl.dir))
+
+expect valid
+expect bodies = 1
+expect volume = 1361.409 +- 0.05%

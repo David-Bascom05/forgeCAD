@@ -1,0 +1,39 @@
+assembly
+
+# latch pivot (SPEC 5.8), z = rack y on the front door, detented: ISO 7379 8x16 through the handle, spring and door into the latch base's S-M6-0 (t3)
+
+shared z_base = 1.52
+shared off_door = -1.52
+shared off_hdl = -8.17
+shared size_m6 = 6
+shared min_m6 = 5.23   # the nut's whole thread
+shared zx_pin = -14.48
+shared zx_hdl = -10.05
+shared zx_spr = -8.17
+shared zx_door = 0
+shared c_pin_hdl = 0.099
+shared c_pin_spr = 0.79
+shared c_pin_door = 0.29
+
+base = part("plates/base_pivot_t3.fg", ground: true, at: pose(at: (0, 0, z_base)))
+nut = part("../pem_s_m6_0_t3.fg")
+door = part("plates/door_latch_t1.fg")
+pin = part("../iso7379_8x16_m6.fg")
+hdl = part("plates/handle_bore_t2.fg")
+spr = part("../latch_spring_h8_17.fg")
+at_nut = fastened(nut.flush, base.a)
+at_door = slider(door.a, base.a, along: off_door)
+at_pin = fastened(pin.clamp, base.a)
+at_hdl = slider(hdl.b, door.a, along: off_hdl)
+at_spr = fastened(spr.a, hdl.b)
+m6 = fit_rule(external_thread, internal_thread, size: size_m6, min_engagement: min_m6)
+
+expect interferences = 0
+expect mobility = 0
+expect z(pin) = zx_pin +- 0.001
+expect z(hdl) = zx_hdl +- 0.001
+expect z(spr) = zx_spr +- 0.001
+expect z(door) = zx_door +- 0.001
+expect clearance(pin, hdl) >= c_pin_hdl
+expect clearance(pin, spr) >= c_pin_spr
+expect clearance(pin, door) >= c_pin_door

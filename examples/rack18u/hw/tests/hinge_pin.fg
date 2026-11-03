@@ -1,0 +1,42 @@
+assembly
+
+# hinge pivot stack (SPEC 5.7) at rack Z: ISO 7379 8x12 M6 up through bracket, spacer and washer into the door return's S-M6-0 (t1)
+
+shared z_door = 39
+shared off_brk = -9.92
+shared size_m6 = 6
+shared min_m6 = 5.23   # the nut's whole thread
+shared size_pin8 = 8
+shared zx_pin = 27
+shared zx_brk = 27.2
+shared zx_spc = 29.08
+shared zx_wsh = 37.08
+shared zx_nut = 39
+shared c_pin_brk = 0.099
+shared c_wsh_door = 0.319
+shared c_pin_spc = 0.099
+
+door = part("plates/door_return_t1.fg", ground: true, at: pose(at: (0, 0, z_door)))
+nut = part("../pem_s_m6_0_t1.fg")
+pin = part("../iso7379_8x12_m6.fg")
+brk = part("plates/bracket_pin_t2.fg")
+spc = part("../nylon_spacer_8x14x8.fg")
+wsh = part("../iso7089_8.fg")
+at_nut = fastened(nut.flush, door.a)
+at_pin = fastened(pin.clamp, door.a)
+at_brk = slider(brk.b, door.a, along: off_brk)
+at_spc = fastened(spc.a, brk.b)
+at_wsh = fastened(wsh.a, spc.b)
+m6 = fit_rule(external_thread, internal_thread, size: size_m6, min_engagement: min_m6)
+pin8 = fit_rule(shaft, bore, size: size_pin8)
+
+expect interferences = 0
+expect mobility = 0
+expect z(pin) = zx_pin +- 0.001
+expect z(brk) = zx_brk +- 0.001
+expect z(spc) = zx_spc +- 0.001
+expect z(wsh) = zx_wsh +- 0.001
+expect z(nut) = zx_nut +- 0.001
+expect clearance(pin, brk) >= c_pin_brk
+expect clearance(wsh, door) >= c_wsh_door
+expect clearance(pin, spc) >= c_pin_spc

@@ -1,0 +1,34 @@
+# PEM FH-M6-20 flush-head self-clinching stud
+# source: PEM bulletin FH (https://damlite.pemnet.com/FH-M5-12ZC_pdf_1.pdf), FH metric table
+# frame: origin on the axis in the head's top face, which is flush with the sheet's outer face; +z along the stud
+
+shared d = 6   # thread
+shared P = 1   # pitch
+shared l = 20   # length from the flush face
+shared H = 8.2   # head diameter
+shared hh = 1   # head thickness (modelled; the bulletin gives no value)
+shared S = 3   # clinch zone: threads gaugeable from 2 pitches past S max
+shared ch = 0.6 * P
+shared rs = d / 2
+shared rh = H / 2
+shared zref = l
+shared xref = rh
+
+sketch prof(on: xz) {
+  o = poly([(0, 0), (rh, 0), (rh, hh), (rs, hh), (rs, l - ch), (rs - ch, l), (0, l)])
+  c0 = pt(0, 0)
+  pz0 = pt(0, 0)
+  pz1 = pt(0, S + 2 * P)
+  pz2 = pt(0, l)
+  zax = line((0, 0), (0, zref), construction: true)
+  xax = line((0, 0), (xref, 0), construction: true)
+}
+body = revolve(prof.o, axis: prof.zax)
+
+flush = anchor(plane(at: prof.pz0, normal: prof.zax.dir, x: prof.xax.dir))
+thd = anchor(plane(at: prof.pz1, normal: prof.zax.dir, x: prof.xax.dir), kind: external_thread, size: d, depth: l - S - 2 * P)
+tip = anchor(plane(at: prof.pz2, normal: prof.zax.dir, x: prof.xax.dir))
+
+expect valid
+expect bodies = 1
+expect volume = 586.856 +- 0.05%

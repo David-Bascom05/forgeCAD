@@ -1,0 +1,48 @@
+{
+ "part": "strike",
+ "lints": [],
+ "ok": true,
+ "errors": [],
+ "violations": [],
+ "warnings": [],
+ "expects": [
+  {
+   "metric": "volume",
+   "measured": 8568.9,
+   "ok": true
+  },
+  {
+   "metric": "bodies",
+   "measured": 2,
+   "ok": true
+  },
+  {
+   "metric": "valid",
+   "measured": 1,
+   "ok": true
+  }
+ ],
+ "bends": [
+  {
+   "flange": "web_f",
+   "angle": 90,
+   "radius": 1.6,
+   "allowance": 3.695
+  }
+ ],
+ "shop_limits": {
+  "flat_bbox": [
+   40.0,
+   60.615
+  ],
+  "flat_fits_762x914.4": true,
+  "max_bend_line": 40.0,
+  "bend_lines_ok": true,
+  "bend_angles_ok": true,
+  "open_loops": 0,
+  "flat_area_x_t": 4273.346465207795,
+  "flat_body_volume": 4273.299999999999,
+  "rel_err": 1.0873378371594795e-05
+ },
+ "volume": 8568.9
+}

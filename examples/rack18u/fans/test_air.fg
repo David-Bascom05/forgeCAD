@@ -1,0 +1,44 @@
+assembly
+
+# Airflow through the roof (SPEC 5.2 grilles, 5.9 rev B): how much top pan metal stands in each fan's
+# air column. Same placement as test.fg, without the hanger hardware, and with no fit declared for
+# the air columns, so each one's overlap with the pan is measured: it must be exactly the 114 disc of
+# floor less the 11 slots (the grille bars the SPEC draws), and nothing else may be in the way.
+
+shared pan_z = 906
+shared tray_z = 893.38
+shared rack_y = 400
+shared drop = 12.62
+shared t3 = 3.02
+shared d_bore = 114
+shared rg = 56                  # grille: 11 slots 6 wide on 9.5, ends on a 112 circle (SPEC 5.2)
+shared sp = 9.5
+shared ws = 6
+shared ns = count(11)
+shared q0 = sqrt(rg ^ 2 - (ws / 2) ^ 2)
+shared q1 = sqrt(rg ^ 2 - (sp + ws / 2) ^ 2)
+shared q2 = sqrt(rg ^ 2 - (2 * sp + ws / 2) ^ 2)
+shared q3 = sqrt(rg ^ 2 - (3 * sp + ws / 2) ^ 2)
+shared q4 = sqrt(rg ^ 2 - (4 * sp + ws / 2) ^ 2)
+shared q5 = sqrt(rg ^ 2 - (5 * sp + ws / 2) ^ 2)
+shared grille_a = ns * pi * (ws / 2) ^ 2 + ws * (2 * q0 + 4 * (q1 + q2 + q3 + q4 + q5) - ns * ws)
+shared blocked = t3 * (pi / 4 * d_bore ^ 2 - grille_a)
+shared n_air = count(4)         # the four air columns are the only overlaps
+shared m4 = 4
+shared min_m4 = 2.77
+
+pan = part("standin/top_pan_standin.fg", ground: true, at: pose(at: (0, rack_y, pan_z), z: (0, 0, -1), x: (-1, 0, 0)))
+fans = subassembly("fan_assy.fg", at: pose(at: (0, rack_y, tray_z)))
+at_tray = slider(fans.tray.hang[1], pan.hang[0], along: drop)
+for k in 0..4 {
+  air = part("standin/air_column.fg", reference: true)
+  at_air = fastened(air.base, fans.fan[k].out)
+}
+thread_m4 = fit_rule(external_thread, internal_thread, size: m4, min_engagement: min_m4)
+
+expect interferences = n_air
+expect mobility = 0
+expect interference(air[0], pan) = blocked +- 0.1%
+expect interference(air[1], pan) = blocked +- 0.1%
+expect interference(air[2], pan) = blocked +- 0.1%
+expect interference(air[3], pan) = blocked +- 0.1%

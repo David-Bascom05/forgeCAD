@@ -1,0 +1,39 @@
+# ISO 4014 hexagon head bolt M8 x 55
+# source: https://www.fasteners.eu/standards/ISO/4017/ (head) and ISO 4014 b = 2d + 6
+# frame: origin on the axis at the head underside; +z along the shank to the tip; head at z < 0
+
+shared d = 8   # thread major diameter
+shared P = 1.25   # pitch
+shared l = 55   # nominal length, under the head to the tip
+shared ch = 0.6 * P   # tip chamfer (ISO 4753 chamfered end, to about the minor diameter)
+shared rs = d / 2
+shared zref = l
+shared xref = rs
+shared s = 13   # across flats
+shared k = 5.3   # head height
+shared rc = s / sqrt(3)   # hexagon corner radius
+shared n6 = count(6)
+shared b = 22   # thread length (ISO 4014: 2d + 6 for l <= 125)
+
+sketch prof(on: xz) {
+  o = poly([(0, 0), (rs, 0), (rs, l - ch), (rs - ch, l), (0, l)])
+  c0 = pt(0, 0)
+  pz0 = pt(0, 0)
+  pz1 = pt(0, l - b)
+  pz2 = pt(0, l)
+  zax = line((0, 0), (0, zref), construction: true)
+  xax = line((0, 0), (xref, 0), construction: true)
+}
+shank = revolve(prof.o, axis: prof.zax)
+sketch hx(on: shank.side(prof.o[0]), at: prof.c0) {
+  hexo = poly(polar(n: n6, r: rc, start: 0deg))
+}
+hexhead = extrude(hx, k)
+
+head = anchor(plane(at: prof.pz0, normal: prof.zax.dir, x: prof.xax.dir))
+thd = anchor(plane(at: prof.pz1, normal: prof.zax.dir, x: prof.xax.dir), kind: external_thread, size: d, depth: b)
+tip = anchor(plane(at: prof.pz2, normal: prof.zax.dir, x: prof.xax.dir))
+
+expect valid
+expect bodies = 1
+expect volume = 3533.674 +- 0.05%

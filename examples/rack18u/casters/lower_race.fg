@@ -1,0 +1,40 @@
+# caster lower race: 2.5 steel washer, 36.0 ball track, 24 lock notches
+# source: SPEC 6.2 (OD and notch form representative)
+# frame: the caster frame (SPEC 5.10): origin on the kingpin axis in the plate's top face, z up, y along the plate's long side, the wheel towards -y
+
+shared zt = 15.03   # top face below the plate's top
+shared tr = 2.5   # thickness
+shared ro = 25.5   # outer radius, inside the yoke skirt (26.5)
+shared ri = 5.2   # kingpin hole
+shared rp = 23   # lock pin radius
+shared rx = 28   # notch slot's outer centre, past the rim
+shared wn = 5.3   # notch width: the 5.0 pin + 0.15 a side
+shared a0 = 7.5deg   # first notch: the pin sits at 52.5deg = 7.5 + 3 x 15
+shared nn = count(24)
+shared lref = 10
+
+sketch ref(on: xy) {
+  o = pt(0, 0)
+  xl = line((0, 0), (lref, 0), construction: true)
+  yl = line((0, 0), (0, lref), construction: true)
+  xn = line((lref, 0), (0, 0), construction: true)
+}
+sketch plan(on: offset(ref.plane, -zt)) {
+  outer = circle((0, 0), ro)
+  inner = circle((0, 0), ri)
+}
+ring = extrude(plan, -tr)
+sketch nt(on: plan) {
+  for k in 0..24 {
+    s = slot((rp * cos(a0 + 360deg * k / nn), rp * sin(a0 + 360deg * k / nn)), (rx * cos(a0 + 360deg * k / nn), rx * sin(a0 + 360deg * k / nn)), wn / 2)
+  }
+}
+for k in 0..24 {
+  notch = cut(nt.s[k], thru)
+}
+
+cf = anchor(plane(at: ref.o, normal: ref.plane.normal, x: ref.xl.dir))
+
+expect valid
+expect bodies = 1
+expect volume = 3452.441 +- 0.1%

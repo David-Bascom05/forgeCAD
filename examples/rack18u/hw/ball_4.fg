@@ -1,0 +1,22 @@
+# steel ball 4 (ISO 3290 G100)
+# source: SPEC 5.8 / section 7: 4.0 steel ball, ISO 3290 G100
+# frame: origin at the ball's centre
+
+shared db = 4   # ball diameter
+shared rb = db / 2
+shared zref = rb
+shared xref = rb
+
+sketch prof(on: xz) {
+  c0 = pt(0, 0)
+  pz0 = pt(0, 0)
+  zax = line((0, 0), (0, zref), construction: true)
+  xax = line((0, 0), (xref, 0), construction: true)
+}
+shot = ball(prof.c0, rb)
+
+c = anchor(plane(at: prof.pz0, normal: prof.zax.dir, x: prof.xax.dir))
+
+expect valid
+expect bodies = 1
+expect volume = 33.51 +- 0.05%

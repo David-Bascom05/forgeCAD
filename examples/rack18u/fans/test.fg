@@ -1,0 +1,150 @@
+assembly
+
+# Fan subsystem test (SPEC 5.9 rev B, 8 "Fans"): the fan subassembly hung from a STAND-IN top pan
+# (standin/top_pan_standin.fg, SPEC 5.2 numbers only) on the 4 hanger stacks: FH-M8-25 in the pan,
+# 8.0 nylon spacer, ISO 7089-8 above the tray, tray, ISO 10511-M8 under it. Rack coordinates.
+# Reference parts: an air column on each fan outlet (the 114 bore up to the pan's outer face). How much
+# of it the pan's grille bars take is measured in test_air.fg (a declared fit reads 0 in
+# interference(a, b), so it cannot be measured here).
+# Pan and tray anchors are in their own frames; the pan is turned 180deg about Y, so pan hang[k] and
+# grille[k] sit over tray hang[pair[k]] and fan[pair[k]] (see README, SPEC issues).
+
+shared pan_z = 906
+shared tray_z = 893.38
+shared rack_y = 400             # rack Y of both part frames
+shared drop = 12.62             # SPEC R4: tray top face to the pan's outer face along the stud
+shared t2 = 1.88
+shared m4 = 4
+shared min_m4 = 2.77            # SPEC 8 rev B minima
+shared m8 = 8
+shared min_m8 = 8
+# expected heights (SPEC 5.9 rev B)
+shared z_washer = 894.98
+shared z_nut = 891.50
+shared z_fan = 891.50
+shared z_guard = 866.10
+shared z_screw = 861.10         # head underside = guard's outer plane, the lowest point
+# expected airflow numbers
+shared c_open = 1               # (116 opening - 114 bore) / 2: tray metal clear of the air column
+shared c_tip = 1.88             # screw tips under the top pan (SPEC: >= 1.5, rev B 1.88)
+shared conc = 0.1               # grille / fan concentricity (SPEC 8)
+shared x_lo = -70               # fan centres (SPEC 1): x +-70, y 330 and 470
+shared x_hi = 70
+shared y_fr = 330
+shared y_rr = 470
+shared h_loop = 30.4            # guard loop seat to the tray's nut face: fan 25.4 + guard 5.0
+shared z_tip = 901.10           # screw tips (SPEC 5.9 rev B)
+shared c_hang = 0.01            # hanger anchors coaxial
+
+pan = part("standin/top_pan_standin.fg", ground: true, at: pose(at: (0, rack_y, pan_z), z: (0, 0, -1), x: (-1, 0, 0)))
+for k in 0..4 {
+  stud = part("../hw/pem_fh_m8_25.fg")
+  at_stud = fastened(stud.flush, pan.hang[k])
+  spacer = part("../hw/nylon_spacer_8x14x8.fg")
+  at_spacer = fastened(spacer.a, pan.hang_in[k])
+  washer = part("../hw/iso7089_8.fg")
+  at_washer = fastened(washer.a, spacer.b)
+}
+fans = subassembly("fan_assy.fg", at: pose(at: (0, rack_y, tray_z)))
+at_tray = slider(fans.tray.hang[1], pan.hang[0], along: drop)
+for k in 0..4 {
+  nut = part("../hw/iso10511_m8.fg")
+  at_nut = slider(nut.seat, fans.tray.hang[k], along: t2)
+  air = part("standin/air_column.fg", reference: true)
+  at_air = fastened(air.base, fans.fan[k].out)
+  vent = fit(air, pan)
+}
+thread_m4 = fit_rule(external_thread, internal_thread, size: m4, min_engagement: min_m4)
+thread_m8 = fit_rule(external_thread, internal_thread, size: m8, min_engagement: min_m8)
+press = fit_rule("../hw/pem_fh_m8_25.fg", "standin/top_pan_standin.fg")
+
+expect interferences = 0
+expect mobility = 0
+# heights of the stack (instance origins)
+expect z(fans) = tray_z +- 0.001
+expect z(washer[0]) = z_washer +- 0.001
+expect z(nut[0]) = z_nut +- 0.001
+expect z(nut[3]) = z_nut +- 0.001
+expect z(fans.fan[0]) = z_fan +- 0.001
+expect z(fans.guard[0]) = z_guard +- 0.001
+expect z(fans.screw[0][0]) = z_screw +- 0.001
+# hole alignment, hangers: every tray hang anchor 12.62 straight below its pan anchor (pair 1, 0, 3, 2;
+# only the first is a joint)
+expect distance(fans.tray.hang[1], pan.hang[0]) = drop +- c_hang
+expect distance(fans.tray.hang[0], pan.hang[1]) = drop +- c_hang
+expect distance(fans.tray.hang[3], pan.hang[2]) = drop +- c_hang
+expect distance(fans.tray.hang[2], pan.hang[3]) = drop +- c_hang
+# hole alignment, fans: each fan hole on its nut's anchor, each guard loop 30.4 below it
+expect distance(fans.fan[0].fhole[0], fans.tray.fscr[0]) <= c_hang
+expect distance(fans.fan[0].fhole[1], fans.tray.fscr[1]) <= c_hang
+expect distance(fans.fan[0].fhole[2], fans.tray.fscr[2]) <= c_hang
+expect distance(fans.fan[0].fhole[3], fans.tray.fscr[3]) <= c_hang
+expect distance(fans.fan[1].fhole[0], fans.tray.fscr[4]) <= c_hang
+expect distance(fans.fan[1].fhole[1], fans.tray.fscr[5]) <= c_hang
+expect distance(fans.fan[1].fhole[2], fans.tray.fscr[6]) <= c_hang
+expect distance(fans.fan[1].fhole[3], fans.tray.fscr[7]) <= c_hang
+expect distance(fans.fan[2].fhole[0], fans.tray.fscr[8]) <= c_hang
+expect distance(fans.fan[2].fhole[1], fans.tray.fscr[9]) <= c_hang
+expect distance(fans.fan[2].fhole[2], fans.tray.fscr[10]) <= c_hang
+expect distance(fans.fan[2].fhole[3], fans.tray.fscr[11]) <= c_hang
+expect distance(fans.fan[3].fhole[0], fans.tray.fscr[12]) <= c_hang
+expect distance(fans.fan[3].fhole[1], fans.tray.fscr[13]) <= c_hang
+expect distance(fans.fan[3].fhole[2], fans.tray.fscr[14]) <= c_hang
+expect distance(fans.fan[3].fhole[3], fans.tray.fscr[15]) <= c_hang
+expect distance(fans.guard[0].loop[0], fans.tray.fscr[0]) = h_loop +- c_hang
+expect distance(fans.guard[0].loop[1], fans.tray.fscr[1]) = h_loop +- c_hang
+expect distance(fans.guard[0].loop[2], fans.tray.fscr[2]) = h_loop +- c_hang
+expect distance(fans.guard[0].loop[3], fans.tray.fscr[3]) = h_loop +- c_hang
+expect distance(fans.guard[1].loop[0], fans.tray.fscr[4]) = h_loop +- c_hang
+expect distance(fans.guard[1].loop[1], fans.tray.fscr[5]) = h_loop +- c_hang
+expect distance(fans.guard[1].loop[2], fans.tray.fscr[6]) = h_loop +- c_hang
+expect distance(fans.guard[1].loop[3], fans.tray.fscr[7]) = h_loop +- c_hang
+expect distance(fans.guard[2].loop[0], fans.tray.fscr[8]) = h_loop +- c_hang
+expect distance(fans.guard[2].loop[1], fans.tray.fscr[9]) = h_loop +- c_hang
+expect distance(fans.guard[2].loop[2], fans.tray.fscr[10]) = h_loop +- c_hang
+expect distance(fans.guard[2].loop[3], fans.tray.fscr[11]) = h_loop +- c_hang
+expect distance(fans.guard[3].loop[0], fans.tray.fscr[12]) = h_loop +- c_hang
+expect distance(fans.guard[3].loop[1], fans.tray.fscr[13]) = h_loop +- c_hang
+expect distance(fans.guard[3].loop[2], fans.tray.fscr[14]) = h_loop +- c_hang
+expect distance(fans.guard[3].loop[3], fans.tray.fscr[15]) = h_loop +- c_hang
+# fan clearance: screw tips (the highest points of the subassembly) under the pan
+expect clearance(fans.screw[0][0], pan) >= c_tip - 0.01
+expect clearance(fans.screw[0][1], pan) >= c_tip - 0.01
+expect clearance(fans.screw[0][2], pan) >= c_tip - 0.01
+expect clearance(fans.screw[0][3], pan) >= c_tip - 0.01
+expect clearance(fans.screw[1][0], pan) >= c_tip - 0.01
+expect clearance(fans.screw[1][1], pan) >= c_tip - 0.01
+expect clearance(fans.screw[1][2], pan) >= c_tip - 0.01
+expect clearance(fans.screw[1][3], pan) >= c_tip - 0.01
+expect clearance(fans.screw[2][0], pan) >= c_tip - 0.01
+expect clearance(fans.screw[2][1], pan) >= c_tip - 0.01
+expect clearance(fans.screw[2][2], pan) >= c_tip - 0.01
+expect clearance(fans.screw[2][3], pan) >= c_tip - 0.01
+expect clearance(fans.screw[3][0], pan) >= c_tip - 0.01
+expect clearance(fans.screw[3][1], pan) >= c_tip - 0.01
+expect clearance(fans.screw[3][2], pan) >= c_tip - 0.01
+expect clearance(fans.screw[3][3], pan) >= c_tip - 0.01
+expect z(fans.screw[0][0].tip) = z_tip +- 0.001
+expect z(fans.screw[3][3].tip) = z_tip +- 0.001
+# airflow: the tray's openings clear every fan's bore
+expect clearance(air[0], fans.tray) >= c_open - 0.01
+expect clearance(air[1], fans.tray) >= c_open - 0.01
+expect clearance(air[2], fans.tray) >= c_open - 0.01
+expect clearance(air[3], fans.tray) >= c_open - 0.01
+# grille centres on fan centres (SPEC 8: +- 0.1), each read in rack X, Y: pan grille[k] is over fan[pair[k]]
+expect x(pan.grille[0]) = x_hi +- conc
+expect y(pan.grille[0]) = y_fr +- conc
+expect x(fans.fan[1].out) = x_hi +- conc
+expect y(fans.fan[1].out) = y_fr +- conc
+expect x(pan.grille[1]) = x_lo +- conc
+expect y(pan.grille[1]) = y_fr +- conc
+expect x(fans.fan[0].out) = x_lo +- conc
+expect y(fans.fan[0].out) = y_fr +- conc
+expect x(pan.grille[2]) = x_hi +- conc
+expect y(pan.grille[2]) = y_rr +- conc
+expect x(fans.fan[3].out) = x_hi +- conc
+expect y(fans.fan[3].out) = y_rr +- conc
+expect x(pan.grille[3]) = x_lo +- conc
+expect y(pan.grille[3]) = y_rr +- conc
+expect x(fans.fan[2].out) = x_lo +- conc
+expect y(fans.fan[2].out) = y_rr +- conc

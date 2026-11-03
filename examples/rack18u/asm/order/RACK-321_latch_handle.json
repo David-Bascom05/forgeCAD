@@ -1,0 +1,580 @@
+{
+ "ok": true,
+ "timings_ms": {
+  "parse": 0.3586,
+  "check": 0.0178,
+  "eval_and_build": 2.009,
+  "kernel": 0.6352,
+  "measure": 0.7207,
+  "total": 3.111
+ },
+ "rebuilt": 6,
+ "reused": 0,
+ "remade": 6,
+ "features": [
+  {
+   "id": "plan",
+   "kind": "sketch",
+   "line": 53,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "plate",
+   "kind": "sheet",
+   "line": 59,
+   "status": "ok",
+   "dims": [
+    {
+     "what": "thickness",
+     "value": 1.88,
+     "dim": "Length",
+     "from": {
+      "driving": "t2"
+     }
+    },
+    {
+     "what": "radius",
+     "value": 1.6,
+     "dim": "Length",
+     "from": {
+      "driven": [
+       "scs"
+      ]
+     }
+    },
+    {
+     "what": "k",
+     "value": 0.4,
+     "dim": "Ratio",
+     "from": {
+      "driven": [
+       "scs"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "holes_s",
+   "kind": "sketch",
+   "line": 61,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "holes",
+   "kind": "cutout",
+   "line": 66,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "fin_f",
+   "kind": "flange",
+   "line": 67,
+   "status": "ok",
+   "dims": [
+    {
+     "what": "height",
+     "value": 24,
+     "dim": "Length",
+     "from": {
+      "driving": "fin"
+     }
+    },
+    {
+     "what": "angle",
+     "value": 90,
+     "dim": "Angle",
+     "from": {
+      "const": true
+     }
+    }
+   ]
+  },
+  {
+   "id": "lock_s",
+   "kind": "sketch",
+   "line": 69,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "lock",
+   "kind": "cutout",
+   "line": 72,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "inner",
+   "kind": "sketch",
+   "line": 75,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "outer",
+   "kind": "sketch",
+   "line": 81,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "fin_out",
+   "kind": "sketch",
+   "line": 85,
+   "status": "ok",
+   "dims": []
+  },
+  {
+   "id": "flat",
+   "kind": "unfold",
+   "line": 100,
+   "status": "ok",
+   "dims": []
+  }
+ ],
+ "params": [
+  {
+   "param": "t3",
+   "shared": true,
+   "structural": false,
+   "line": 7,
+   "value": {
+    "value": 3.02,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "t2",
+   "shared": true,
+   "structural": false,
+   "line": 8,
+   "value": {
+    "value": 1.88,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": [
+    "plate"
+   ]
+  },
+  {
+   "param": "t1",
+   "shared": true,
+   "structural": false,
+   "line": 9,
+   "value": {
+    "value": 1.52,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "r_scs",
+   "shared": true,
+   "structural": false,
+   "line": 10,
+   "value": {
+    "value": 1.6,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "kerf_scs",
+   "shared": true,
+   "structural": false,
+   "line": 11,
+   "value": {
+    "value": 0.2,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "hw_scs",
+   "shared": true,
+   "structural": false,
+   "line": 12,
+   "value": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "scs",
+   "shared": true,
+   "structural": false,
+   "line": 25,
+   "value": null,
+   "links": [
+    "r_scs",
+    "t1",
+    "t2",
+    "t3"
+   ],
+   "used_by": [
+    "plate"
+   ]
+  },
+  {
+   "param": "R",
+   "shared": true,
+   "structural": false,
+   "line": 40,
+   "value": {
+    "value": 23.5,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "vc",
+   "shared": true,
+   "structural": false,
+   "line": 41,
+   "value": {
+    "value": 18.5,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "xc",
+   "shared": true,
+   "structural": false,
+   "line": 42,
+   "value": {
+    "value": 14.491,
+    "dim": "Length"
+   },
+   "links": [
+    "R",
+    "vc"
+   ],
+   "used_by": []
+  },
+  {
+   "param": "fin",
+   "shared": true,
+   "structural": false,
+   "line": 43,
+   "value": {
+    "value": 24,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": [
+    "fin_f"
+   ]
+  },
+  {
+   "param": "d_bore",
+   "shared": true,
+   "structural": false,
+   "line": 44,
+   "value": {
+    "value": 8.2,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "d_link",
+   "shared": true,
+   "structural": false,
+   "line": 45,
+   "value": {
+    "value": 4.5,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "r_lk",
+   "shared": true,
+   "structural": false,
+   "line": 46,
+   "value": {
+    "value": 14.8,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "lk",
+   "shared": true,
+   "structural": false,
+   "line": 47,
+   "value": {
+    "value": 10.465,
+    "dim": "Length"
+   },
+   "links": [
+    "r_lk"
+   ],
+   "used_by": []
+  },
+  {
+   "param": "d_lock",
+   "shared": true,
+   "structural": false,
+   "line": 48,
+   "value": {
+    "value": 7,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "w_lock",
+   "shared": true,
+   "structural": false,
+   "line": 49,
+   "value": {
+    "value": 16,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "xl",
+   "shared": true,
+   "structural": false,
+   "line": 50,
+   "value": {
+    "value": 10,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "seg",
+   "shared": true,
+   "structural": false,
+   "line": 106,
+   "value": {
+    "value": 98.872,
+    "dim": "Area"
+   },
+   "links": [
+    "R",
+    "vc",
+    "xc"
+   ],
+   "used_by": []
+  },
+  {
+   "param": "lc",
+   "shared": true,
+   "structural": false,
+   "line": 107,
+   "value": {
+    "value": 28.983,
+    "dim": "Length"
+   },
+   "links": [
+    "xc"
+   ],
+   "used_by": []
+  },
+  {
+   "param": "fin_str",
+   "shared": true,
+   "structural": false,
+   "line": 108,
+   "value": {
+    "value": 22.4,
+    "dim": "Length"
+   },
+   "links": [
+    "fin",
+    "r_scs"
+   ],
+   "used_by": []
+  },
+  {
+   "param": "relief_d",
+   "shared": true,
+   "structural": false,
+   "line": 109,
+   "value": {
+    "value": 3.99,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  },
+  {
+   "param": "holes_a",
+   "shared": true,
+   "structural": false,
+   "line": 110,
+   "value": {
+    "value": 138.106,
+    "dim": "Area"
+   },
+   "links": [
+    "d_bore",
+    "d_link",
+    "d_lock",
+    "relief_d",
+    "t2"
+   ],
+   "used_by": []
+  },
+  {
+   "param": "fold_a",
+   "shared": true,
+   "structural": false,
+   "line": 111,
+   "value": {
+    "value": 2354.6,
+    "dim": "Area"
+   },
+   "links": [
+    "R",
+    "fin_str",
+    "lc",
+    "r_scs",
+    "seg",
+    "t2"
+   ],
+   "used_by": []
+  },
+  {
+   "param": "flat_a",
+   "shared": true,
+   "structural": false,
+   "line": 112,
+   "value": {
+    "value": 2346,
+    "dim": "Area"
+   },
+   "links": [
+    "R",
+    "fin_str",
+    "lc",
+    "r_scs",
+    "seg",
+    "t2"
+   ],
+   "used_by": []
+  },
+  {
+   "param": "flat.gap",
+   "shared": false,
+   "structural": false,
+   "line": 99,
+   "value": {
+    "value": 30,
+    "dim": "Length"
+   },
+   "links": [],
+   "used_by": []
+  }
+ ],
+ "errors": [],
+ "warnings": [],
+ "expects": [
+  {
+   "metric": "volume",
+   "measured": 8328.9,
+   "ok": true
+  },
+  {
+   "metric": "bodies",
+   "measured": 2,
+   "ok": true
+  },
+  {
+   "metric": "valid",
+   "measured": 1,
+   "ok": true
+  }
+ ],
+ "sheets": [
+  {
+   "id": "plate",
+   "thickness": 1.88,
+   "radius": 1.6,
+   "rule": {
+    "k": 0.4
+   },
+   "walls": 2,
+   "bends": [
+    {
+     "flange": "fin_f",
+     "angle": 90,
+     "radius": 1.6,
+     "allowance": 3.695,
+     "setback": 1.6,
+     "length": 28.983
+    }
+   ],
+   "reliefs": [
+    {
+     "flange": "fin_f",
+     "end": "start",
+     "kind": "rect",
+     "width": 1.88,
+     "depth": 3.99,
+     "automatic": true
+    },
+    {
+     "flange": "fin_f",
+     "end": "end",
+     "kind": "rect",
+     "width": 1.88,
+     "depth": 3.99,
+     "automatic": true
+    }
+   ],
+   "corners": []
+  }
+ ],
+ "part": {
+  "volume": 8328.9,
+  "area": 9921.5,
+  "centroid": [
+   0.1503,
+   -1.643,
+   -12.143
+  ],
+  "faces": 32,
+  "edges": 84,
+  "bodies": 2,
+  "valid": true,
+  "problems": [],
+  "bbox": [
+   -23.5,
+   -42.995,
+   -30,
+   23.5,
+   23.5,
+   25.88
+  ]
+ }
+}

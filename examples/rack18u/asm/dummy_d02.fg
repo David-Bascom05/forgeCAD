@@ -1,0 +1,45 @@
+# RACK-D02 dummy 2U server (REFERENCE, not ordered; SPEC 5.11). Ears 482.6 x 3.0 with 4 holes 7.0 on
+# x +-232.55, z 6.35 and nU 44.45 - 6.35; body 430 wide x 450 deep behind the ears.
+# frame: rack axes; origin on the ears' back face (against the rail, y = 0) at x = 0, at the bottom
+# boundary of the lowest U. Anchors ear[0..3]: (-x, bottom), (-x, top), (+x, bottom), (+x, top),
+# on y = 0, normal +y (into the rack), x = +z (as the left front rail's eia x).
+shared nU = count(2)
+shared u = 44.45
+shared h = u * nU
+shared ear_x = 241.3
+shared ear_gap = 0.4            # half the 0.79 vertical clearance
+shared t_ear = 3
+shared hole_x = 232.55
+shared hole_z = 6.35
+shared d_hole = 7
+shared body_x = 215
+shared body_gap = 0.8
+shared depth = 450
+shared xl = 10
+shared hz = [hole_z, h - hole_z, hole_z, h - hole_z]
+shared hx = [-hole_x, -hole_x, hole_x, hole_x]
+
+sketch ears(on: xz) {
+  plate = rect(corner: (-ear_x, ear_gap), size: (2 * ear_x, h - 2 * ear_gap))
+  for j in 0..4 {
+    eh = circle((hx[j], hz[j]), d_hole / 2)
+    p = pt(hx[j], hz[j])
+  }
+  o = pt(0, 0)
+  zax = line((0, 0), (0, xl), construction: true)
+}
+ear_plate = extrude(ears, t_ear)
+sketch box(on: ears.plane) {
+  b = rect(corner: (-body_x, body_gap), size: (2 * body_x, h - 2 * body_gap))
+}
+body = extrude(box, -depth)
+for j in 0..4 {
+  ear = anchor(plane(at: ears.p[j], normal: body.end.normal, x: ears.zax.dir))
+}
+
+# design intent: the ear plate less 4 holes, and the body box
+shared ear_v = (2 * ear_x * (h - 2 * ear_gap) - pi * d_hole * d_hole) * t_ear
+shared body_v = 2 * body_x * (h - 2 * body_gap) * depth
+expect volume = ear_v + body_v +- 0.01%
+expect bodies = 1
+expect valid

@@ -1,0 +1,23 @@
+assembly
+
+# hinge bracket (or strike) <-> post: ISO 7380 M6x12 through the 1.88 leg into the post's S-M6-0 (t3)
+
+shared z_brk = 0
+shared size_m6 = 6
+shared min_m6 = 5.23   # the nut's whole thread
+shared zx_nut = 1.88
+shared zx_scr = 0
+
+brk = part("plates/bracket_leg_t2.fg", ground: true, at: pose(at: (0, 0, z_brk)))
+post = part("plates/post_m6_t3.fg")
+nut = part("../pem_s_m6_0_t3.fg")
+scr = part("../iso7380_m6x12.fg")
+at_post = fastened(post.a, brk.b)
+at_nut = fastened(nut.flush, post.a)
+at_scr = fastened(scr.head, brk.a)
+m6 = fit_rule(external_thread, internal_thread, size: size_m6, min_engagement: min_m6)
+
+expect interferences = 0
+expect mobility = 0
+expect z(nut) = zx_nut +- 0.001
+expect z(scr) = zx_scr +- 0.001

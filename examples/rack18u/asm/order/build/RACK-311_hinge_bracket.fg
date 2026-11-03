@@ -1,0 +1,92 @@
+# RACK-311 hinge bracket, t2 (SPEC 5.7). x4: front/rear, bottom/top, placed by rigid poses only.
+# Part frame: origin on the pin axis, on the horizontal leg's top face; i, j, zb = x, y, z
+# (rack X, Y, Z on the front-bottom instance). Material of the horizontal leg is zb -1.88..0.
+# Shop text below is SPEC section 3 verbatim (no imports in Forge yet, gap 12).
+
+shared t3 = 3.02
+shared t2 = 1.88
+shared t1 = 1.52
+shared r_scs = 1.6
+shared kerf_scs = 0.2                       # not published by SendCutSend; Forge's stand-in
+shared hw_scs = [
+  hardware(kind: "nut",  size: "M4", sheet: (0.8, 12.7), hole: 5.41, edge: 6.9, max_hardness: ratio(80),
+           code: "S-M4-0",   source: "PEM CL bulletin; sendcutsend.com hardware catalog"),
+  hardware(kind: "nut",  size: "M5", sheet: (0.8, 12.7), hole: 6.35, edge: 7.1, max_hardness: ratio(80),
+           code: "SS-M5-0",  source: "PEM CL bulletin; sendcutsend.com hardware catalog"),
+  hardware(kind: "nut",  size: "M6", sheet: (1.22, 12.7), hole: 8.75, edge: 8.6, max_hardness: ratio(80),
+           code: "S-M6-0",   source: "PEM CL bulletin; sendcutsend.com hardware catalog"),
+  hardware(kind: "stud", size: "M4", sheet: (1.0, 12.7), hole: 4.0, edge: 7.2, max_hardness: ratio(80),
+           code: "FH-M4-12", source: "PEM FH bulletin; sendcutsend.com hardware catalog"),
+  hardware(kind: "stud", size: "M6", sheet: (1.6, 12.7), hole: 6.0, edge: 7.9, max_hardness: ratio(80),
+           code: "FH-M6-20", source: "PEM FH bulletin; sendcutsend.com hardware catalog"),
+  hardware(kind: "stud", size: "M8", sheet: (2.4, 12.7), hole: 8.0, edge: 9.6, max_hardness: ratio(80),
+           code: "FH-M8-25", source: "PEM FH bulletin; sendcutsend.com hardware catalog")]
+shared scs = shop([
+  stock(t: t3, bend: kfactor(ratio(0.38)), radii: [r_scs], min_flange: per_t(ratio(0), plus: 11.84),
+        hole_to_bend: per_t(ratio(0), plus: 5.84), hole_to_edge: per_t(ratio(0), plus: 0.91), min_hole: per_t(ratio(0), plus: 1.02), min_slot: per_t(ratio(0), plus: 1.02), hardness: ratio(57),
+        relief: relief_rule(shape: "rect", width: per_t(ratio(1)), depth: 5.13, from: "bend_line",
+                            corner: "round", corner_placement: "intersection")),
+  stock(t: t2, bend: kfactor(ratio(0.40)), radii: [r_scs], min_flange: per_t(ratio(0), plus: 8.13),
+        hole_to_bend: per_t(ratio(0), plus: 4.15), hole_to_edge: per_t(ratio(0), plus: 0.56), min_hole: per_t(ratio(0), plus: 0.71), min_slot: per_t(ratio(0), plus: 0.71), hardness: ratio(57),
+        relief: relief_rule(shape: "rect", width: per_t(ratio(1)), depth: 3.99, from: "bend_line",
+                            corner: "round", corner_placement: "intersection")),
+  stock(t: t1, bend: kfactor(ratio(0.40)), radii: [r_scs], min_flange: per_t(ratio(0), plus: 7.85),
+        hole_to_bend: per_t(ratio(0), plus: 4.27), hole_to_edge: per_t(ratio(0), plus: 0.56), min_hole: per_t(ratio(0), plus: 0.71), min_slot: per_t(ratio(0), plus: 0.71), hardness: ratio(57),
+        relief: relief_rule(shape: "rect", width: per_t(ratio(1)), depth: 3.61, from: "bend_line",
+                            corner: "round", corner_placement: "intersection"))],
+  kerf: kerf_scs, hardware: hw_scs)
+
+shared w = 34            # i -17..17
+shared j0 = -13          # horizontal leg from j = -13 ..
+shared jl = 34           # .. to the outer (rear) face j = 21
+shared hv = 46.8         # vertical leg, outer: zb -1.88 .. 44.92
+shared d_pin = 8.2       # pin bore
+shared size_pin = 8
+shared d_scr = 6.6       # M6 clearance
+shared zb_scr0 = 20.92   # screw holes, up from the leg's top face (rack Z 50, 66 on front-bottom)
+shared zb_scr1 = 36.92
+shared i_scr = 12        # screws at i = +12 (bottom brackets: scr[0,1]) and -12 (top: scr[2,3]) [R11]
+shared n_side = count(2)
+shared xl = 10
+
+sketch plan(on: xy) {
+  outline = rect(corner: (-w / 2, j0), size: (w, jl))
+  c0 = pt(0, 0)
+  jax = line((0, 0), (0, xl), construction: true)
+}
+leg = sheet(plan, t: t2, shop: scs)
+vert = flange(leg.edge(plan.outline[2]), height: hv)
+# holes are cutouts, not profile holes: the shop checks skip a sheet profile's own holes (probe
+# hole_near_bend_profile_only)
+sketch bore_s(on: leg.top) {
+  bore = circle((0, 0), d_pin / 2)
+}
+bore_cut = cutout(bore_s, wall: leg)
+# vert.top: x up from the leg's top face (zb), y = 17 - i
+sketch holes(on: vert.top) {
+  for i in 0..4 {
+    s = circle((zb_scr0 + (i if i < n_side else i - n_side) * (zb_scr1 - zb_scr0), w / 2 - (i_scr if i < n_side else -i_scr)), d_scr / 2)
+  }
+}
+screws = cutout(holes, wall: vert)
+# vert.bottom is the outer face j = 21: x up (zb), y = i - 17
+sketch outer(on: vert.bottom) {
+  for i in 0..4 {
+    p = pt(zb_scr0 + (i if i < n_side else i - n_side) * (zb_scr1 - zb_scr0), (i_scr if i < n_side else -i_scr) - w / 2)
+  }
+  up = line((0, 0), (xl, 0), construction: true)
+}
+
+# pin x = +j, towards the vertical leg (SPEC R9)
+pin = anchor(plane(at: plan.c0, normal: plan.plane.normal, x: plan.jax.dir), kind: bore, size: size_pin, depth: t2)
+# scr x: towards the vertical leg's tip (+zb), the rack's mid-height on every instance (SPEC R8/R9 rule)
+for i in 0..4 {
+  scr = anchor(plane(at: outer.p[i], normal: outer.plane.normal, x: outer.up.dir))
+}
+
+
+# drawing math: an L of outer legs jl and hv, one 90deg bend (straights less r + t each, the bend
+# at mid-thickness), less the bore and four screw holes; folded and flat bodies, each t thick
+shared fold_len = jl + hv - 2 * (r_scs + t2) + (r_scs + t2 / 2) * pi / 2
+shared flat_len = jl + hv - 2 * (r_scs + t2) + (r_scs + ratio(0.4) * t2) * pi / 2
+shared holes_a = pi * (d_pin / 2) ^ 2 + 4 * pi * (d_scr / 2) ^ 2

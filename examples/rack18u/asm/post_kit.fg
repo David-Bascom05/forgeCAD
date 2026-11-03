@@ -1,0 +1,47 @@
+assembly
+
+# RACK-101 post with its pressed hardware (28 PEM bodies, SPEC 4) and the 4 stud nuts that hold it to
+# the pans (ISO 7089-6 + ISO 10511-M6 inside the pan flange, SPEC 5.12). Post frame (SPEC 5.1).
+
+shared t3 = 3.02
+shared m6 = 6
+shared m6_min = 4.78
+
+post = part("../frame/post.fg", body: "leg_a", ground: true)
+for i in 0..2 {
+  stud_a = part("../hw/pem_fh_m6_20.fg")
+  at_stud_a = fastened(stud_a.flush, post.stud_a[i])
+  stud_b = part("../hw/pem_fh_m6_20.fg")
+  at_stud_b = fastened(stud_b.flush, post.stud_b[i])
+  # the washer on the pan flange's inner face: post 3.02 + flange 3.02 from the post's outer face
+  wsh_a = part("../hw/iso7089_6.fg")
+  at_wsh_a = slider(wsh_a.a, post.stud_a[i], along: t3 + t3)
+  nut_a = part("../hw/iso10511_m6.fg")
+  at_nut_a = fastened(nut_a.seat, wsh_a.b)
+  wsh_b = part("../hw/iso7089_6.fg")
+  at_wsh_b = slider(wsh_b.a, post.stud_b[i], along: t3 + t3)
+  nut_b = part("../hw/iso10511_m6.fg")
+  at_nut_b = fastened(nut_b.seat, wsh_b.b)
+  stk_a = part("../hw/pem_s_m6_0_t3.fg")
+  at_stk_a = fastened(stk_a.flush, post.stk_a[i])
+  stk_b = part("../hw/pem_s_m6_0_t3.fg")
+  at_stk_b = fastened(stk_b.flush, post.stk_b[i])
+}
+for i in 0..6 {
+  pnl_a = part("../hw/pem_ss_m5_0_t3.fg")
+  at_pnl_a = fastened(pnl_a.flush, post.pnl_a[i])
+  pnl_b = part("../hw/pem_ss_m5_0_t3.fg")
+  at_pnl_b = fastened(pnl_b.flush, post.pnl_b[i])
+}
+for i in 0..4 {
+  hng_a = part("../hw/pem_s_m6_0_t3.fg")
+  at_hng_a = fastened(hng_a.flush, post.hng_a[i])
+  hng_b = part("../hw/pem_s_m6_0_t3.fg")
+  at_hng_b = fastened(hng_b.flush, post.hng_b[i])
+}
+
+m6_thread = fit_rule(external_thread, internal_thread, size: m6, min_engagement: m6_min)
+fh_press = fit_rule("../hw/pem_fh_m6_20.fg", "../frame/post.fg")
+
+expect interferences = 0
+expect mobility = 0

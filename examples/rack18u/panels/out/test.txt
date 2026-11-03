@@ -1,0 +1,166 @@
+  base           o=[265, 1.52, 453] x=[1, 0, 0] z=[0, 0, 1]
+  brk_b          o=[-277.98, 14, 29.08] x=[1, 0, 0] z=[0, 0, 1]
+  brk_t          o=[-277.98, 14, 876.92] x=[-1, 0, 0] z=[0, 0, -1]
+  cam            o=[265, 6.83, 453] x=[0, 0, -1] z=[0, -1, 0]
+  door           o=[-290.98, 0, 39] x=[1, 0, 0] z=[0, -1, 0]
+  hdl            o=[265, -8.17, 453] x=[0, 0, -1] z=[0, -1, 0]
+  hnut[0]        o=[-265.98, 35, 50] x=[0, 0, 1] z=[0, 1, 0]
+  hnut[1]        o=[-265.98, 35, 66] x=[0, 0, 1] z=[0, 1, 0]
+  hnut[2]        o=[-265.98, 35, 840] x=[0, 0, -1] z=[0, 1, 0]
+  hnut[3]        o=[-265.98, 35, 856] x=[0, 0, -1] z=[0, 1, 0]
+  hscr_b[0]      o=[-265.98, 33.12, 50] x=[0, 0, 1] z=[0, 1, 0]
+  hscr_b[1]      o=[-265.98, 33.12, 66] x=[0, 0, 1] z=[0, 1, 0]
+  hscr_t[0]      o=[-265.98, 33.12, 856] x=[0, 0, -1] z=[0, 1, 0]
+  hscr_t[1]      o=[-265.98, 33.12, 840] x=[0, 0, -1] z=[0, 1, 0]
+  jn_l[0]        o=[-286, 250, 450.48] x=[0, 1, 0] z=[0, 0, -1]
+  jn_l[1]        o=[-286, 400, 450.48] x=[0, 1, 0] z=[0, 0, -1]
+  jn_l[2]        o=[-286, 550, 450.48] x=[0, 1, 0] z=[0, 0, -1]
+  jn_r[0]        o=[286, 550, 450.48] x=[0, -1, 0] z=[0, 0, -1]
+  jn_r[1]        o=[286, 400, 450.48] x=[0, -1, 0] z=[0, 0, -1]
+  jn_r[2]        o=[286, 250, 450.48] x=[0, -1, 0] z=[0, 0, -1]
+  js_l[0]        o=[-286, 250, 454.52] x=[0, 1, 0] z=[0, 0, -1]
+  js_l[1]        o=[-286, 400, 454.52] x=[0, 1, 0] z=[0, 0, -1]
+  js_l[2]        o=[-286, 550, 454.52] x=[0, 1, 0] z=[0, 0, -1]
+  js_r[0]        o=[286, 550, 454.52] x=[0, -1, 0] z=[0, 0, -1]
+  js_r[1]        o=[286, 400, 454.52] x=[0, -1, 0] z=[0, 0, -1]
+  js_r[2]        o=[286, 250, 454.52] x=[0, -1, 0] z=[0, 0, -1]
+  jw_l[0]        o=[-286, 250, 451.48] x=[0, 1, 0] z=[0, 0, -1]
+  jw_l[1]        o=[-286, 400, 451.48] x=[0, 1, 0] z=[0, 0, -1]
+  jw_l[2]        o=[-286, 550, 451.48] x=[0, 1, 0] z=[0, 0, -1]
+  jw_r[0]        o=[286, 550, 451.48] x=[0, -1, 0] z=[0, 0, -1]
+  jw_r[1]        o=[286, 400, 451.48] x=[0, -1, 0] z=[0, 0, -1]
+  jw_r[2]        o=[286, 250, 451.48] x=[0, -1, 0] z=[0, 0, -1]
+  lball[0]       o=[274, 5.862, 453] x=[0, 0, -1] z=[0, -1, 0]
+  lball[1]       o=[256, 5.862, 453] x=[0, 0, -1] z=[0, -1, 0]
+  lnut[0]        o=[275.465, 6.83, 463.465] x=[0, 0, -1] z=[0, 1, 0]
+  lnut[1]        o=[254.535, 6.83, 463.465] x=[0, 0, -1] z=[0, 1, 0]
+  lscr[0]        o=[275.465, -10.05, 463.465] x=[0, 0, -1] z=[0, 1, 0]
+  lscr[1]        o=[254.535, -10.05, 463.465] x=[0, 0, -1] z=[0, 1, 0]
+  lspc[0]        o=[275.465, -8.17, 463.465] x=[0, 0, -1] z=[0, 1, 0]
+  lspc[1]        o=[254.535, -8.17, 463.465] x=[0, 0, -1] z=[0, 1, 0]
+  n4[0]          o=[243.551, 5.34, 470.998] x=[0, 0, 1] z=[0, 1, 0]
+  n4[1]          o=[237.027, 5.34, 451.779] x=[0, 0, 1] z=[0, 1, 0]
+  n4[2]          o=[245.201, 5.34, 433.201] x=[0, 0, 1] z=[0, 1, 0]
+  nut_lp         o=[265, 4.54, 453] x=[0, 0, 1] z=[0, 1, 0]
+  nut_pb         o=[-277.98, 14, 39] x=[0, 1, 0] z=[0, 0, 1]
+  nut_pt         o=[-277.98, 14, 867] x=[0, 1, 0] z=[0, 0, -1]
+  panel_ll       o=[-300, 0, 0] x=[0, 1, 0] z=[1, 0, 0]
+  panel_lr       o=[300, 800, 0] x=[0, -1, 0] z=[-1, 0, 0]
+  panel_ul       o=[-300, 800, 906] x=[0, -1, 0] z=[1, 0, 0]
+  panel_ur       o=[300, 0, 906] x=[0, 1, 0] z=[-1, 0, 0]
+  pin_b          o=[-277.98, 14, 27] x=[0, 1, 0] z=[0, 0, 1]
+  pin_t          o=[-277.98, 14, 879] x=[0, 1, 0] z=[0, 0, -1]
+  piv            o=[265, -14.48, 453] x=[0, 0, 1] z=[0, 1, 0]
+  pn_l[0]        o=[-298.48, 60, 100] x=[0, 0, 1] z=[1, 0, 0]
+  pn_l[1]        o=[-298.48, 60, 260] x=[0, 0, 1] z=[1, 0, 0]
+  pn_l[2]        o=[-298.48, 60, 420] x=[0, 0, 1] z=[1, 0, 0]
+  pn_r[0]        o=[298.48, 60, 100] x=[0, 0, 1] z=[-1, 0, 0]
+  pn_r[1]        o=[298.48, 60, 260] x=[0, 0, 1] z=[-1, 0, 0]
+  pn_r[2]        o=[298.48, 60, 420] x=[0, 0, 1] z=[-1, 0, 0]
+  pn_ul[0]       o=[-298.48, 60, 486] x=[0, 0, -1] z=[1, 0, 0]
+  pn_ul[1]       o=[-298.48, 60, 646] x=[0, 0, -1] z=[1, 0, 0]
+  pn_ul[2]       o=[-298.48, 60, 806] x=[0, 0, -1] z=[1, 0, 0]
+  pn_ur[0]       o=[298.48, 60, 486] x=[0, 0, -1] z=[-1, 0, 0]
+  pn_ur[1]       o=[298.48, 60, 646] x=[0, 0, -1] z=[-1, 0, 0]
+  pn_ur[2]       o=[298.48, 60, 806] x=[0, 0, -1] z=[-1, 0, 0]
+  post_fl        o=[-298.48, 35, 0] x=[1, 0, 0] z=[0, 0, 1]
+  post_fr        o=[298.48, 35, 0] x=[0, 1, 0] z=[0, 0, 1]
+  ps_l[0]        o=[-300, 60, 100] x=[0, 0, 1] z=[1, 0, 0]
+  ps_l[1]        o=[-300, 60, 260] x=[0, 0, 1] z=[1, 0, 0]
+  ps_l[2]        o=[-300, 60, 420] x=[0, 0, 1] z=[1, 0, 0]
+  ps_r[0]        o=[300, 60, 100] x=[0, 0, 1] z=[-1, 0, 0]
+  ps_r[1]        o=[300, 60, 260] x=[0, 0, 1] z=[-1, 0, 0]
+  ps_r[2]        o=[300, 60, 420] x=[0, 0, 1] z=[-1, 0, 0]
+  ps_ul[0]       o=[-300, 60, 806] x=[0, 0, -1] z=[1, 0, 0]
+  ps_ul[1]       o=[-300, 60, 646] x=[0, 0, -1] z=[1, 0, 0]
+  ps_ul[2]       o=[-300, 60, 486] x=[0, 0, -1] z=[1, 0, 0]
+  ps_ur[0]       o=[300, 60, 806] x=[0, 0, -1] z=[-1, 0, 0]
+  ps_ur[1]       o=[300, 60, 646] x=[0, 0, -1] z=[-1, 0, 0]
+  ps_ur[2]       o=[300, 60, 486] x=[0, 0, -1] z=[-1, 0, 0]
+  snut[0]        o=[273.48, 35, 443] x=[0, 0, 1] z=[0, 1, 0]
+  snut[1]        o=[273.48, 35, 463] x=[0, 0, 1] z=[0, 1, 0]
+  spc_b          o=[-277.98, 14, 29.08] x=[0, 1, 0] z=[0, 0, 1]
+  spc_t          o=[-277.98, 14, 876.92] x=[0, 1, 0] z=[0, 0, -1]
+  spr            o=[265, -8.17, 453] x=[0, 0, -1] z=[0, 1, 0]
+  sscr[0]        o=[273.48, 33.12, 443] x=[0, 0, 1] z=[0, 1, 0]
+  sscr[1]        o=[273.48, 33.12, 463] x=[0, 0, 1] z=[0, 1, 0]
+  st[0]          o=[243.551, 0, 470.998] x=[0, 0, 1] z=[0, 1, 0]
+  st[1]          o=[237.027, 0, 451.779] x=[0, 0, 1] z=[0, 1, 0]
+  st[2]          o=[245.201, 0, 433.201] x=[0, 0, 1] z=[0, 1, 0]
+  strike         o=[273.48, 35, 453] x=[1, 0, 0] z=[0, 0, 1]
+  w4[0]          o=[243.551, 4.54, 470.998] x=[0, 0, 1] z=[0, 1, 0]
+  w4[1]          o=[237.027, 4.54, 451.779] x=[0, 0, 1] z=[0, 1, 0]
+  w4[2]          o=[245.201, 4.54, 433.201] x=[0, 0, 1] z=[0, 1, 0]
+  wsh_b          o=[-277.98, 14, 37.08] x=[0, 1, 0] z=[0, 0, 1]
+  wsh_t          o=[-277.98, 14, 868.92] x=[0, 1, 0] z=[0, 0, -1]
+engage jn_r[1]/js_r[1] m5: 5 (min 2.77)
+engage jn_r[0]/js_r[0] m5: 5 (min 2.77)
+engage jn_r[2]/js_r[2] m5: 5 (min 2.77)
+engage hscr_b[1]/hnut[1] m6: 5.23 (min 4.78)
+engage hscr_b[0]/hnut[0] m6: 5.23 (min 4.78)
+engage hnut[3]/hscr_t[0] m6: 5.23 (min 4.78)
+engage hnut[2]/hscr_t[1] m6: 5.23 (min 4.78)
+engage pn_ul[2]/ps_ul[0] m5: 2.77 (min 2.77)
+engage pin_t/nut_pt m6: 5.23 (min 4.78)
+engage pin_b/nut_pb m6: 5.23 (min 4.78)
+engage pn_ul[0]/ps_ul[2] m5: 2.77 (min 2.77)
+engage pn_ul[1]/ps_ul[1] m5: 2.77 (min 2.77)
+engage js_l[2]/jn_l[2] m5: 5 (min 2.77)
+engage js_l[0]/jn_l[0] m5: 5 (min 2.77)
+engage js_l[1]/jn_l[1] m5: 5 (min 2.77)
+engage lnut[1]/lscr[1] m4: 2.77 (min 2.77)
+engage lnut[0]/lscr[0] m4: 2.77 (min 2.77)
+engage ps_r[2]/pn_r[2] m5: 2.77 (min 2.77)
+engage ps_r[0]/pn_r[0] m5: 2.77 (min 2.77)
+engage ps_r[1]/pn_r[1] m5: 2.77 (min 2.77)
+engage nut_lp/piv m6: 6 (min 4.78)
+engage pn_l[1]/ps_l[1] m5: 2.77 (min 2.77)
+engage pn_l[0]/ps_l[0] m5: 2.77 (min 2.77)
+engage pn_l[2]/ps_l[2] m5: 2.77 (min 2.77)
+engage n4[0]/st[0] m4: 5 (min 2.77)
+engage n4[1]/st[1] m4: 5 (min 2.77)
+engage n4[2]/st[2] m4: 5 (min 2.77)
+engage ps_ur[2]/pn_ur[0] m5: 2.77 (min 2.77)
+engage ps_ur[1]/pn_ur[1] m5: 2.77 (min 2.77)
+engage ps_ur[0]/pn_ur[2] m5: 2.77 (min 2.77)
+engage snut[0]/sscr[0] m6: 5.23 (min 4.78)
+engage snut[1]/sscr[1] m6: 5.23 (min 4.78)
+mobility 0 interferences 0 intended 39
+ok   L217  mobility      measured 0  | expect mobility = 0
+ok   L218  interferences measured 0  | expect interferences = 0
+ok   L219  interferences measured 0  | expect interferences = 0 at latch_f.turn = 90deg, latch_lift = shut
+ok   L221  distance      measured 0  | expect distance(brk_b.scr[1], post_fl.hng_a[1]) = z0 +- co
+ok   L222  distance      measured 0  | expect distance(brk_t.scr[3], post_fl.hng_a[2]) = z0 +- co
+ok   L223  distance      measured 0  | expect distance(strike.scr[1], post_fr.stk_b[1]) = z0 +- co
+ok   L224  distance      measured 0  | expect distance(panel_ll.jnt[0], panel_ul.jnt[2]) = z0 +- co
+ok   L225  distance      measured 0  | expect distance(panel_lr.jnt[1], panel_ur.jnt[1]) = z0 +- co
+ok   L226  x             measured -277.98  | expect x(door.pin_top) = ax +- co
+ok   L227  y             measured 14  | expect y(door.pin_top) = ay +- co
+ok   L228  x             measured -277.98  | expect x(door.pin_top) = ax +- co at door_f.turn = door_open
+ok   L229  y             measured 14  | expect y(door.pin_top) = ay +- co at door_f.turn = door_open
+ok   L231  clearance     measured 2.702  | expect clearance(door, panel_ll) >= c1 at door_f.turn = t50
+ok   L232  clearance     measured 2.178  | expect clearance(door, panel_ll) >= c1 at door_f.turn = door_open
+ok   L233  clearance     measured 2.091  | expect clearance(door, brk_t) >= c1 at door_f.turn = t50
+ok   L234  clearance     measured 3.971  | expect clearance(door, post_fl) >= c2 at door_f.turn = t50
+ok   L236  interferences measured 0  | expect interferences = 0 at door_f.turn = t50
+ok   L237  clearance     measured 6.521  | expect clearance(door, hscr_b[0]) >= c1 at door_f.turn = t50
+ok   L238  clearance     measured 6.521  | expect clearance(door, hscr_t[0]) >= c1 at door_f.turn = t50
+ok   L239  interferences measured 0  | expect interferences = 0 at door_f.turn = door_open
+ok   L242  interference  measured 948.118  | expect interference(door, panel_ll) > z0 at door_f.turn = t115, door_open = t120
+ok   L244  clearance     measured 1.1  | expect clearance(cam, strike) >= c_lu
+ok   L245  clearance     measured 11.034  | expect clearance(hdl, strike) >= c_lu
+ok   L246  clearance     measured 1.135  | expect clearance(cam, strike) >= c_lu at latch_f.turn = t45, latch_lift = lift_lo
+ok   L247  clearance     measured 0.28  | expect clearance(cam, strike) >= c_lu at latch_f.turn = t80, latch_lift = lift_lo
+ok   L248  clearance     measured 21.73  | expect clearance(lnut[0], strike) >= c_lu at latch_f.turn = t80, latch_lift = lift_lo
+ok   L250  interference  measured 43.797  | expect interference(cam, strike) > z0 at door_f.turn = t05, latch_f.turn = 90deg, latch_lift = shut
+ok   L254  clearance     measured 8.17  | expect clearance(hdl, door) >= c_u_door at latch_f.turn = t30
+ok   L255  clearance     measured 4.508  | expect clearance(cam, door) >= c_u_door at latch_f.turn = t60
+ok   L256  clearance     measured 4.322  | expect clearance(hdl, base) >= c_hdl_tab at latch_f.turn = t45, latch_lift = lift_lo
+ok   L257  clearance     measured 8.6  | expect clearance(hdl, base) >= c_hdl_tab at latch_f.turn = 90deg, latch_lift = shut
+ok   L263  x             measured 265  | expect x(base.padlock) = lock_x +- lock_tol
+ok   L264  y             measured -25.65  | expect y(base.padlock) = lock_y +- lock_tol
+ok   L265  x             measured 265  | expect x(hdl.padlock) = lock_x +- lock_tol at latch_f.turn = 90deg, latch_lift = shut
+ok   L266  y             measured -25.65  | expect y(hdl.padlock) = lock_y +- lock_tol at latch_f.turn = 90deg, latch_lift = shut
+ok   L271  clearance     measured 1.96  | expect clearance(cam, door) >= c_tip at latch_f.turn = 90deg, latch_lift = shut
+ok   L272  clearance     measured 1.6  | expect clearance(base, strike) >= c_web
+ok 3397.2

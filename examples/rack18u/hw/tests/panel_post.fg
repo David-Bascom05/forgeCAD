@@ -1,0 +1,23 @@
+assembly
+
+# side panel <-> post: ISO 7380 M5x10 through the panel into the post's SS-M5-0 (t3)
+
+shared z_pnl = 0
+shared size_m5 = 5
+shared min_m5 = 2.77   # the nut's whole thread
+shared zx_nut = 1.52
+shared zx_scr = 0
+
+pnl = part("plates/panel_t1.fg", ground: true, at: pose(at: (0, 0, z_pnl)))
+post = part("plates/post_m5_t3.fg")
+nut = part("../pem_ss_m5_0_t3.fg")
+scr = part("../iso7380_m5x10.fg")
+at_post = fastened(post.a, pnl.b)
+at_nut = fastened(nut.flush, post.a)
+at_scr = fastened(scr.head, pnl.a)
+m5 = fit_rule(external_thread, internal_thread, size: size_m5, min_engagement: min_m5)
+
+expect interferences = 0
+expect mobility = 0
+expect z(nut) = zx_nut +- 0.001
+expect z(scr) = zx_scr +- 0.001

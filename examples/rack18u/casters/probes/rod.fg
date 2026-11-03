@@ -1,0 +1,9 @@
+shared L = 20
+shared r = 2
+sketch plan(on: xy) {
+  c = circle((L, 0), r)
+  o = pt(0, 0)
+  ax = line((0, 0), (L, 0), construction: true)
+}
+rod = extrude(plan.c, L)
+a = anchor(plane(at: plan.o, normal: plan.plane.normal, x: plan.ax.dir))

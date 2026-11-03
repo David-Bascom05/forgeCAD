@@ -1,0 +1,26 @@
+assembly
+
+# A subassembly's own fits do not reach its parent's interference check: caster_plain.fg alone has
+# 0 interferences, but placed here its declared contacts come back as Interference (11, 0.0000 mm3).
+# Workaround tried: the same contacts as part-file fit rules in the parent.
+
+base = part("rod.fg", ground: true)
+c = subassembly("../caster_plain.fg")
+on = fastened(c.plate.top, base.a)
+r1 = fit_rule("../ball_4763.fg", "../yoke.fg")
+r2 = fit_rule("../kingpin.fg", "../plate.fg")
+r3 = fit_rule("../kingpin.fg", "../lower_race.fg")
+r4 = fit_rule("../../hw/iso4014_m8x55.fg", "../yoke.fg")
+r5 = fit_rule("../../hw/iso10511_m8.fg", "../yoke.fg")
+r6 = fit_rule("../../hw/iso10511_m8.fg", "../../hw/iso4014_m8x55.fg")
+r7 = fit_rule("../spacer.fg", "../yoke.fg")
+r8 = fit_rule("../spacer.fg", "../bearing_inner.fg")
+r9 = fit_rule("../bearing_inner.fg", "../../hw/iso4014_m8x55.fg")
+r10 = fit_rule("../tread.fg", "../hub.fg")
+r11 = fit_rule("../bearing_outer.fg", "../hub.fg")
+r12 = fit_rule("../cage_half.fg", "../cage_half.fg")
+r13 = fit_rule("../ball_3969.fg", "../bearing_inner.fg")
+r14 = fit_rule("../ball_3969.fg", "../bearing_outer.fg")
+r15 = fit_rule("../seal.fg", "../bearing_outer.fg")
+r16 = fit_rule("../seal.fg", "../bearing_inner.fg")
+expect interferences = 0

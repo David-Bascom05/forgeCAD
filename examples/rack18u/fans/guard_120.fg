@@ -1,0 +1,101 @@
+# 120 mm wire finger guard (spec only, SPEC 7: holes on 105, loops 4.6, height ~5, ring wire 1.6,
+# ribs 2.0; shape after the Qualtek 08141 drawing the SPEC cites). Every wire is a circle swept along
+# its centreline: the rings and loops round their axes, the two ribs along a bent path.
+# Shape: six rings (1.6) lie on the fan face; two diagonal ribs (2.0) run under them, welded to them
+# (0.2 overlap at each crossing), and bend down 1.6 at each end into a mounting loop (2.0 wire, 4.6 ID)
+# in the outer plane, so the screw head bears 5.0 from the fan face (SPEC 5.9 rev B: guard 5 deep).
+# frame: origin at the centre of the face against the fan; +z towards the fan (the airflow); the guard
+# is z -5..0. Anchors: fan (z = 0, +z), loop[0..3] (screw seat, z = -5, +z) in the order
+# (-,-), (+,-), (-,+), (+,+) of RACK-401's fan screws.
+
+shared gh = 5                   # guard depth
+shared hs = 52.5                # half the 105 hole square
+shared d_ring = 1.6
+shared d_rib = 2
+shared id_loop = 4.6
+shared r_ring = [10.5, 20.5, 30.5, 40.5, 50.5, 58.5]   # ring centrelines, 8.4 gaps (a 12 mm finger stays out);
+                                                # the outer one sits on the fan's flange, outside its 114 bore
+shared weld = 0.2               # rib into ring at each crossing
+shared th = 20deg               # rib slope down to the loops
+shared rb = 5                   # rib bend radius (centreline)
+shared xl = 10
+
+shared r_loop = (id_loop + d_rib) / 2          # loop centreline radius
+shared s_loop = hs * sqrt(2)                   # loop axis from the centre, along the diagonal
+shared z_ring = -d_ring / 2
+shared z_rib = -d_ring - d_rib / 2 + weld      # rib centreline under the rings
+shared z_loop = -gh + d_rib / 2
+shared s_end = s_loop - r_loop                 # rib ends on the loop's centreline
+shared arc_run = rb * sin(th)
+shared arc_rise = rb * (1 - cos(th))
+shared line_rise = z_rib - z_loop - arc_rise
+shared line_run = line_rise / tan(th)
+shared s_knee = s_end - line_run - arc_run     # where the flat part ends
+
+sketch base(on: xy) {
+  d1 = line((0, 0), (hs, hs), construction: true)
+  d2 = line((0, 0), (-hs, hs), construction: true)
+  o = pt(0, 0)
+  xax = line((0, 0), (xl, 0), construction: true)
+}
+
+# ribs: in the vertical plane of each diagonal, x along it, y = z
+for k, dg in {a: base.d1, b: base.d2} {
+  sketch v(on: rotate(base.plane, about: dg, by: 90deg)) {
+    path rk(start: (-s_end, z_loop)) {
+      line(to: (-s_knee - arc_run, z_rib - arc_rise))
+      tarc(to: (-s_knee, z_rib))
+      line(to: (s_knee, z_rib))
+      tarc(to: (s_knee + arc_run, z_rib - arc_rise))
+      line(to: (s_end, z_loop))
+    }
+  }
+  sketch lp(on: rotate(base.plane, about: dg, by: 90deg)) {
+    c = circle((s_loop - r_loop, z_loop), d_rib / 2)
+    ax = line((s_loop, z_loop), (s_loop, 0), construction: true)
+  }
+  sketch ln(on: rotate(base.plane, about: dg, by: 90deg)) {
+    c = circle((-s_loop + r_loop, z_loop), d_rib / 2)
+    ax = line((-s_loop, z_loop), (-s_loop, 0), construction: true)
+  }
+  sketch sec(on: plane(at: v.rk[0].a, normal: v.rk[0].dir, x: v.plane.normal)) {
+    c = circle((0, 0), d_rib / 2)
+  }
+  wire = sweep(sec.c, along: v.rk)
+  loop_p = revolve(lp.c, axis: lp.ax)
+  loop_n = revolve(ln.c, axis: ln.ax)
+}
+
+# rings: a 1.6 circle swept round the axis
+sketch rs(on: rotate(base.plane, about: base.d1, by: 90deg)) {
+  for i in 0..6 {
+    c = circle((r_ring[i], z_ring), d_ring / 2)
+  }
+  ax = line((0, z_rib), (0, 0), construction: true)
+}
+for i in 0..6 {
+  ring = revolve(rs.c[i], axis: rs.ax)
+}
+
+shared hx = [-hs, hs, -hs, hs]
+shared hy = [-hs, -hs, hs, hs]
+sketch seat(on: offset(base.plane, -gh)) {
+  for j in 0..4 {
+    p = pt(hx[j], hy[j])
+  }
+}
+fan = anchor(plane(at: base.o, normal: base.plane.normal, x: base.xax.dir))
+for j in 0..4 {
+  loop = anchor(plane(at: seat.p[j], normal: base.plane.normal, x: base.xax.dir), kind: bore, size: id_loop, depth: d_rib)
+}
+
+# design intent: wire volumes, round sections times centreline lengths (tori 2 pi R x area), less
+# little for the welds; the ribs' centreline is 2 (flat + 2 arcs + 2 slopes)
+shared a_rib = pi / 4 * d_rib ^ 2
+shared a_ring = pi / 4 * d_ring ^ 2
+shared rib_len = 2 * s_knee + 2 * (rb * pi * (th / 180deg) + line_rise / sin(th))
+shared ring_len = 2 * pi * (r_ring[0] + r_ring[1] + r_ring[2] + r_ring[3] + r_ring[4] + r_ring[5])
+shared loop_len = 4 * 2 * pi * r_loop
+expect volume = 2 * a_rib * rib_len + a_ring * ring_len + a_rib * loop_len +- 3%
+expect bodies = 1
+expect valid

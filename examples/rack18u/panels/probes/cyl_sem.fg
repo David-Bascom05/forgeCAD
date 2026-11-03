@@ -1,0 +1,9 @@
+assembly
+
+shared tr = 30deg
+shared al = 5
+base = part("../../hw/iso7089_8.fg", ground: true)
+mov = part("../../hw/iso7089_8.fg")
+fl = part("../../hw/iso7089_8.fg")
+j = cylindrical(mov.a, base.a, turn: tr, along: al)
+k = cylindrical(fl.a, base.a, turn: tr, along: al, flip: true)

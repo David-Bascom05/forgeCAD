@@ -1,0 +1,16 @@
+assembly
+
+# Forge takes a relation's offset from the written poses (forge-asm solve.rs relation_offset):
+# h is written 30deg round, so gear(g, h) holds h = -k g + 30deg, not h = -k g.
+# Expected by SPEC 6 ("written poses are where the solve starts"): value(h.turn) = 0 at g = 0. Measured: 30deg.
+
+shared k = ratio(0.5)
+shared g_turn = 0deg
+
+base = part("rod.fg", ground: true)
+w1 = part("rod.fg")
+w2 = part("rod.fg", at: pose(rz: 30deg))
+g = revolute(w1.a, base.a, turn: g_turn)
+h = revolute(w2.a, base.a)
+mesh = gear(g, h, ratio: k)
+expect value(h.turn) = 0deg +- 0.001deg

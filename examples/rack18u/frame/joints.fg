@@ -1,0 +1,114 @@
+assembly
+
+# Subsystem A joint check: the frame built by its joints, not by poses. Only the base pan is placed;
+# every other part hangs off an anchor pair (fastened, or slider at the R4 offset). Each part's solved
+# origin must land on its SPEC 5 pose. This tests the anchors' origins, normals, x axes (fastened and
+# slider align x too) and the index pairs across the 180deg turns. Remaining pairs: distance expects.
+# Rails at the default position (rail_front 100, rail_rear 725): carrier holes k_front = 2, k_rear = 26.
+
+shared t3 = 3.02
+shared kf = count(2)            # (rail_front + 12.5 - 62.5) / 25
+shared kr = count(26)           # (rail_rear - 12.5 - 62.5) / 25
+shared k_last = count(27)
+shared tol = 0.001
+
+base_pan = part("base_pan.fg", body: "floor", ground: true, at: pose(at: (0, 400, 0), z: (0, 0, 1), x: (1, 0, 0)))
+top_pan = part("top_pan.fg", body: "floor")
+post_fl = part("post.fg", body: "leg_a")
+post_fr = part("post.fg", body: "leg_a")
+post_rr = part("post.fg", body: "leg_a")
+post_rl = part("post.fg", body: "leg_a")
+car_bl = part("carrier.fg", body: "horiz")
+car_br = part("carrier.fg", body: "horiz")
+car_tl = part("carrier.fg", body: "horiz")
+car_tr = part("carrier.fg", body: "horiz")
+rail_lf = part("rail.fg", body: "mount")
+rail_rf = part("rail.fg", body: "mount")
+rail_rr = part("rail.fg", body: "mount")
+rail_lr = part("rail.fg", body: "mount")
+
+# posts on the base pan: post outer face t3 outside the pan flange's outer face (R4)
+j_fl = slider(post_fl.stud_a[0], base_pan.stud_fl_f, along: -t3)
+j_fr = slider(post_fr.stud_a[0], base_pan.stud_fr_s, along: -t3)
+j_rr = slider(post_rr.stud_a[0], base_pan.stud_rr_r, along: -t3)
+j_rl = slider(post_rl.stud_a[0], base_pan.stud_rl_s, along: -t3)
+# the top pan on post FL's upper front stud: the turned pan's stud_fr_f lands at FL
+j_top = slider(top_pan.stud_fr_f, post_fl.stud_a[1], along: t3)
+# carriers: the carrier's underside t3 above the pan anchor (R4); BR and TL run -Y, so pan[0] meets car_*[2]
+j_bl = slider(car_bl.pan[0], base_pan.car_l[0], along: t3)
+j_br = slider(car_br.pan[0], base_pan.car_r[2], along: t3)
+j_tr = slider(car_tr.pan[0], top_pan.car_l[0], along: t3)
+j_tl = slider(car_tl.pan[0], top_pan.car_r[2], along: t3)
+# rails: web anchor on the carrier's rail nut; the r -Z rails (RF, LR) have web_bot at the top
+j_lf = fastened(rail_lf.web_bot[0], car_bl.rail[kf])
+j_rf = fastened(rail_rf.web_bot[0], car_tr.rail[kf])
+j_rr2 = fastened(rail_rr.web_bot[0], car_br.rail[k_last - kr])
+j_lr = fastened(rail_lr.web_bot[0], car_tl.rail[k_last - kr])
+
+expect mobility = 0
+
+# solved origins = SPEC 5 poses
+expect x(post_fl) = -298.48 +- tol
+expect y(post_fl) = 35 +- tol
+expect z(post_fl) = 0 +- tol
+expect x(post_fr) = 298.48 +- tol
+expect y(post_fr) = 35 +- tol
+expect z(post_fr) = 0 +- tol
+expect x(post_rr) = 298.48 +- tol
+expect y(post_rr) = 765 +- tol
+expect z(post_rr) = 0 +- tol
+expect x(post_rl) = -298.48 +- tol
+expect y(post_rl) = 765 +- tol
+expect z(post_rl) = 0 +- tol
+expect x(top_pan) = 0 +- tol
+expect y(top_pan) = 400 +- tol
+expect z(top_pan) = 906 +- tol
+expect x(car_bl) = -251.88 +- tol
+expect y(car_bl) = 43 +- tol
+expect z(car_bl) = 3.02 +- tol
+expect x(car_br) = 251.88 +- tol
+expect y(car_br) = 757 +- tol
+expect z(car_br) = 3.02 +- tol
+expect x(car_tl) = -251.88 +- tol
+expect y(car_tl) = 757 +- tol
+expect z(car_tl) = 902.98 +- tol
+expect x(car_tr) = 251.88 +- tol
+expect y(car_tr) = 43 +- tol
+expect z(car_tr) = 902.98 +- tol
+expect x(rail_lf) = -251.88 +- tol
+expect y(rail_lf) = 100 +- tol
+expect z(rail_lf) = 8 +- tol
+expect x(rail_rf) = 251.88 +- tol
+expect y(rail_rf) = 100 +- tol
+expect z(rail_rf) = 898 +- tol
+expect x(rail_rr) = 251.88 +- tol
+expect y(rail_rr) = 725 +- tol
+expect z(rail_rr) = 8 +- tol
+expect x(rail_lr) = -251.88 +- tol
+expect y(rail_lr) = 725 +- tol
+expect z(rail_lr) = 898 +- tol
+# orientation: a second point of each turned part (a spin about the joined anchor would move it)
+expect z(rail_lf.eia[53]) = 846.70 +- tol
+expect z(rail_rf.eia[0]) = 846.70 +- tol
+expect x(post_fr.stud_b[0]) = 273.48 +- tol
+expect y(top_pan.hang[0]) = 260 +- tol
+expect x(top_pan.hang[0]) = 130 +- tol
+
+# the pairs not used as joints: coincident (rail on carrier) or 3.02 apart (post on pan, carrier on pan)
+expect distance(rail_lf.web_bot[1], car_bl.rail[kf + 1]) = 0 +- tol
+expect distance(rail_lf.web_top[0], car_tl.rail[k_last - kf]) = 0 +- tol
+expect distance(rail_lf.web_top[1], car_tl.rail[k_last - kf - 1]) = 0 +- tol
+expect distance(rail_rf.web_top[0], car_br.rail[k_last - kf]) = 0 +- tol
+expect distance(rail_rr.web_top[0], car_tr.rail[kr]) = 0 +- tol
+expect distance(rail_rr.web_bot[1], car_br.rail[k_last - kr + 1]) = 0 +- tol
+expect distance(rail_lr.web_top[0], car_bl.rail[kr]) = 0 +- tol
+expect distance(post_fl.stud_b[0], base_pan.stud_fl_s) = t3 +- tol
+expect distance(post_fl.stud_b[1], top_pan.stud_fr_s) = t3 +- tol
+expect distance(post_fr.stud_b[0], base_pan.stud_fr_f) = t3 +- tol
+expect distance(post_fr.stud_a[1], top_pan.stud_fl_s) = t3 +- tol
+expect distance(post_rr.stud_a[1], top_pan.stud_rl_r) = t3 +- tol
+expect distance(post_rl.stud_b[1], top_pan.stud_rr_r) = t3 +- tol
+expect distance(car_bl.pan[2], base_pan.car_l[2]) = t3 +- tol
+expect distance(car_br.pan[2], base_pan.car_r[0]) = t3 +- tol
+expect distance(car_tr.pan[1], top_pan.car_l[1]) = t3 +- tol
+expect distance(car_tl.pan[0], top_pan.car_r[2]) = t3 +- tol

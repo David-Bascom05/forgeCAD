@@ -1,0 +1,46 @@
+# caster total-lock pedal: 2.0 steel lever, pad, brake shoe and the lock pin's cam edge
+# source: SPEC 6.2 (2.0 lever, pivot (y 30, z -40), pad to y 88); shape representative, worked out in gen.py
+# frame: the caster frame (SPEC 5.10): origin on the kingpin axis in the plate's top face, z up, y along the plate's long side, the wheel towards -y; drawn at brake 0
+
+shared xc = 13   # cheek inner faces
+shared tc = 2   # lever sheet
+shared yq = 30
+shared zq = 40
+shared dh = 6.2   # pivot hole, running on the 6.0 pin
+shared cheek = [(6.465157, -67.875729), (12.465157, -78.268034), (88, -40), (88, -36), (20.709718, -29.545885), (11.857163, -31.366416)]   # cheek outline at brake 0 (gen.py: shoe, cam edge, pad end)
+shared shoe = [(12.465157, -78.268034), (6.465157, -67.875729), (8.197208, -66.875729), (14.197208, -77.268034)]   # shoe section: tangent to the tread at brake 20
+shared pad = [(62, -38), (88, -38), (88, -36), (62, -36)]   # pad section
+shared lref = 10
+
+sketch ref(on: xy) {
+  o = pt(0, 0)
+  xl = line((0, 0), (lref, 0), construction: true)
+  yl = line((0, 0), (0, lref), construction: true)
+  xn = line((lref, 0), (0, 0), construction: true)
+}
+sketch chr(on: offset(rotate(ref.plane, about: ref.yl, by: 90deg), xc)) {
+  outline = poly(cheek)
+  ph = circle((yq, -zq), dh / 2)
+}
+cheek_r = extrude(chr, tc)
+sketch chl(on: offset(rotate(ref.plane, about: ref.yl, by: 90deg), -xc)) {
+  outline = poly(cheek)
+  ph = circle((yq, -zq), dh / 2)
+}
+cheek_l = extrude(chl, -tc)
+sketch cross(on: offset(rotate(ref.plane, about: ref.yl, by: 90deg), -xc - tc)) {
+  s = poly(shoe)
+  p = poly(pad)
+}
+shoe_plate = extrude(cross.s, 2 * (xc + tc))
+pad_plate = extrude(cross.p, 2 * (xc + tc))
+sketch side(on: rotate(ref.plane, about: ref.yl, by: 90deg)) {
+  q = pt(yq, -zq)
+}
+
+cf = anchor(plane(at: ref.o, normal: ref.plane.normal, x: ref.xl.dir))
+pivot = anchor(plane(at: side.q, normal: ref.xn.dir, x: ref.yl.dir))
+
+expect valid
+expect bodies = 1
+expect volume = 10505.787 +- 0.05%

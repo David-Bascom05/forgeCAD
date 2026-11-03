@@ -1,0 +1,39 @@
+# ISO 10511 prevailing torque type hexagon thin nut with non-metallic insert M4
+# source: https://www.fasteners.eu/standards/ISO/10511/ (table per DIN 985: s 7, h 5, m 2.9, dw 5.9)
+# frame: origin on the axis in the bearing face; +z through the nut towards the insert crown
+
+shared d = 4   # thread
+shared P = 0.7   # pitch
+shared s = 7   # across flats
+shared h = 5   # overall height
+shared m = 2.9   # hexagon height (modelled at the table's m min: the metal thread)
+shared dw = 5.9   # insert crown diameter (modelled at dw min)
+shared rm = (d - 1.082532 * P) / 2   # bore: half the ISO 965 minor diameter D1 = d - 1.0825 P
+shared rw = dw / 2
+shared rc = s / sqrt(3)
+shared n6 = count(6)
+shared zref = h
+shared xref = rw
+
+sketch prof(on: xz) {
+  o = poly([(rm, m), (rw, m), (rw, h), (rm, h)])
+  c0 = pt(0, 0)
+  pz0 = pt(0, 0)
+  pz1 = pt(0, h)
+  zax = line((0, 0), (0, zref), construction: true)
+  xax = line((0, 0), (xref, 0), construction: true)
+}
+crown = revolve(prof.o, axis: prof.zax)
+sketch hx(on: crown.side(prof.o[0]), at: prof.c0) {
+  hexo = poly(polar(n: n6, r: rc, start: 0deg))
+  bo = circle((0, 0), rm)
+}
+hexa = extrude(hx, m)
+
+seat = anchor(plane(at: prof.pz0, normal: prof.zax.dir, x: prof.xax.dir))
+thd = anchor(plane(at: prof.pz0, normal: prof.zax.dir, x: prof.xax.dir), kind: internal_thread, size: d, depth: h)
+end = anchor(plane(at: prof.pz1, normal: prof.zax.dir, x: prof.xax.dir))
+
+expect valid
+expect bodies = 1
+expect volume = 139.195 +- 0.05%

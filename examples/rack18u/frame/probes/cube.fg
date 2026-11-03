@@ -1,0 +1,5 @@
+shared s = 0.2
+sketch plan(on: xy) {
+  o = rect(center: (0, 0), size: (s, s))
+}
+b = extrude(plan, sym(s))
