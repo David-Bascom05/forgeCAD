@@ -485,6 +485,43 @@ pub enum Violation {
         limit: f64,
         away: Vec2,
     },
+    /// The flat blank is larger than the fabricator takes (the coated limit for a coated part):
+    /// `size` its smallest bounding rectangle, (shorter, longer), against `limit`.
+    FlatTooLarge {
+        feature: FeatureId,
+        size: (f64, f64),
+        limit: (f64, f64),
+        coated: bool,
+    },
+    /// The part is smaller than the fabricator handles: `size` (shorter, longer) under `limit`.
+    PartTooSmall {
+        feature: FeatureId,
+        size: (f64, f64),
+        limit: (f64, f64),
+    },
+    /// A bend line longer than the brake.
+    BendTooLong {
+        feature: FeatureId,
+        joint: JointId,
+        length: f64,
+        limit: f64,
+    },
+    /// A flange round a closed box taller than the tooling lets the box close over.
+    BoxFlangeTooTall {
+        feature: FeatureId,
+        wall: crate::error::WallId,
+        joint: JointId,
+        height: f64,
+        limit: f64,
+    },
+    /// A bend angle (unsigned, radians) outside what the brake makes.
+    BendAngleOutOfRange {
+        feature: FeatureId,
+        joint: JointId,
+        angle: f64,
+        min: f64,
+        max: f64,
+    },
     /// Hardware whose mounting hole runs into another hole (or sits inside one): the other's
     /// edge `distance` from its centre, under the hole's radius (0: the centre inside it).
     HardwareOverlapsHole {

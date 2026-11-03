@@ -28,4 +28,4 @@ pub use relief::{
     ReliefKind, ReliefMade, ReliefRule,
 };
 pub use roles::{Roles, Skin};
-pub use shop::{AllowanceRow, BendRule, KRow, RuleError, Scaled, ShopProfile, Stock};
+pub use shop::{AllowanceRow, BendRule, KRow, Process, RuleError, Scaled, ShopProfile, Stock};

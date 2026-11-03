@@ -110,6 +110,8 @@ pub struct Sheet {
     pub rule: crate::relief::ReliefRule,
     /// What a corner not listed in `corners` gets, overriding the rule's for this sheet.
     pub corner_default: Option<CornerKind>,
+    /// Powder coated: the shop's coated size limit applies, not the raw one.
+    pub coated: bool,
     next_wall: u32,
     next_joint: u32,
     next_cut: u32,
@@ -162,6 +164,7 @@ impl Sheet {
             reliefs: Vec::new(),
             rule: crate::relief::ReliefRule::default(),
             corner_default: None,
+            coated: false,
             next_wall: 1,
             next_joint: 0,
             next_cut: 0,
