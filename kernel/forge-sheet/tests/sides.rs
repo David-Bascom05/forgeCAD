@@ -3,7 +3,7 @@
 //! against closed forms folded and flat, both ways and both ends, and valid.
 use forge_math::{Frame, Point2, dmath};
 use forge_ops::{ProfileLoop, Segment};
-use forge_sheet::{BendRule, FeatureId, Gauge, Map, Sheet, build_with, setback_of};
+use forge_sheet::{BendRule, FeatureId, Gauge, Map, Position, Sheet, build_with, setback_of};
 use forge_topo::Body;
 
 fn rect(l: f64, w: f64) -> ProfileLoop {
@@ -70,5 +70,29 @@ fn ears_off_end_edges() {
         let ((f, ef), (fl, el)) = (vol(&fold.body), vol(&flat.body));
         assert!((f - vf).abs() <= ef + 1e-9, "{side} {angle}: {f} against {vf}");
         assert!((fl - vl).abs() <= el + 1e-9, "{side} {angle}: {fl} against {vl}");
+    }
+}
+
+#[test]
+fn ears_stood_inside_and_bend_outside_their_end_edges() {
+    let (t, r, k, l, w, h, e) = (1.5, 1.5, 0.42, 120.0, 80.0, 30.0, 25.0);
+    let g = Gauge {
+        thickness: t,
+        radius: r,
+        rule: BendRule::K(k),
+    };
+    let th = dmath::PI / 2.0;
+    for pos in [Position::Inside, Position::Outside, Position::BendOutside] {
+        for side in [0u64, 2] {
+            let (mut s, base) = Sheet::face(FeatureId(3), g.clone(), Frame::WORLD, &[rect(l, w)]).unwrap();
+            let (wall, _) = s.flange(base, 1, th, h).unwrap();
+            s.flange_at(wall, side, th, e, r, pos)
+                .unwrap_or_else(|x| panic!("{pos:?} {side}: {x:?}"));
+            for map in [Map::Folded, Map::Flat] {
+                let b = build_with(&s, map).unwrap_or_else(|x| panic!("{pos:?} {side} {map:?}: {x:?}"));
+                let p = forge_topo::check::check(&b.body);
+                assert!(p.is_empty(), "{pos:?} {side} {map:?}: {p:?}");
+            }
+        }
     }
 }
