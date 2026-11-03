@@ -5,8 +5,7 @@ use forge_math::rng::Rng;
 use forge_math::{Frame, Point2, dmath};
 use forge_ops::{ProfileLoop, Segment};
 use forge_sheet::{
-    BendRule, CornerKind, FeatureId, Gauge, JointId, Map, Placement, Sheet, SheetError, SheetWarning,
-    build_with,
+    BendRule, CornerKind, FeatureId, Gauge, JointId, Map, Placement, Sheet, SheetError, build_with,
 };
 use forge_topo::Body;
 
@@ -75,6 +74,11 @@ const W: f64 = 40.0;
 const H: f64 = 20.0;
 
 fn boxed(kind: Option<CornerKind>) -> Sheet {
+    boxed_at(kind, dmath::PI / 2.0)
+}
+
+/// The box with its walls turned `th` (under 90 degrees they splay out and never meet).
+fn boxed_at(kind: Option<CornerKind>, th: f64) -> Sheet {
     let g = Gauge {
         thickness: T,
         radius: R,
@@ -82,7 +86,7 @@ fn boxed(kind: Option<CornerKind>) -> Sheet {
     };
     let (mut s, base) = Sheet::face(FeatureId(9), g, Frame::WORLD, &[rect_loop(L, W)]).unwrap();
     for e in 0..4 {
-        s.flange(base, e, dmath::PI / 2.0, H).unwrap();
+        s.flange(base, e, th, H).unwrap();
     }
     if let Some(k) = kind {
         s.corner_default = Some(k);
@@ -91,9 +95,13 @@ fn boxed(kind: Option<CornerKind>) -> Sheet {
 }
 
 /// Folded and flat volumes of the box with corner shapes of size `h` taken out, on the flat.
-fn closed(h: f64, square: bool, off: f64) -> (f64, f64) {
-    let th = dmath::PI / 2.0;
-    let s = R;
+fn closed(h: f64, square: bool, off: f64, th: f64) -> (f64, f64) {
+    let g = Gauge {
+        thickness: T,
+        radius: R,
+        rule: BendRule::K(K),
+    };
+    let s = forge_sheet::setback_of(&g, R, th);
     let ba = th * (R + K * T);
     let rn = ba / th;
     // centred `off` out of each corner along both edges' outward normals
@@ -204,53 +212,96 @@ fn boxes_with_corner_reliefs_match_closed_forms() {
             false,
         ),
     ] {
-        let s = boxed(Some(kind));
+        // splayed 10 degrees out, the walls never meet: the reliefs alone, against the closed form
+        let th = 80f64.to_radians();
+        let s = boxed_at(Some(kind), th);
+        let fold = build_with(&s, Map::Folded).unwrap_or_else(|e| panic!("{kind:?}: {e:?}"));
         let flat = build_with(&s, Map::Flat).unwrap();
-        // whole walls on all four edges: folded, each pair meets edge to edge along the
-        // corner's vertical line above the relief, a touch, no valid solid. The flat builds,
-        // warned. (Volumes below hold for the folded part all the same: nothing overlaps.)
-        let fold = match build_with(&s, Map::Folded) {
-            Err(SheetError::FoldedTouch { at, .. }) => {
-                let on_line = [(0.0, 0.0), (L, 0.0), (L, W), (0.0, W)]
-                    .iter()
-                    .any(|&(x, y)| (at.x - x).abs() < 1e-4 && (at.y - y).abs() < 1e-4);
-                assert!(on_line && at.z > R && at.z < H + 1e-4, "{at:?}");
-                assert!(
-                    flat.warnings
-                        .iter()
-                        .any(|w| matches!(w, SheetWarning::FoldedTouch { .. })),
-                    "{:?}",
-                    flat.warnings
-                );
-                None
-            }
-            r => Some(r.unwrap_or_else(|e| panic!("{kind:?}: {e:?}"))),
-        };
-        for b in fold.iter().map(|f| &f.body).chain([&flat.body]) {
+        for b in [&fold.body, &flat.body] {
             let p = forge_topo::check::check(b);
             assert!(p.is_empty(), "{kind:?}: {p:?}");
         }
-        assert_eq!(flat.corners.len(), 4, "{kind:?}");
-        let h = flat.corners[0].size;
-        assert!(flat.corners.iter().all(|c| c.size == h));
+        assert_eq!(fold.corners.len(), 4, "{kind:?}");
+        let h = fold.corners[0].size;
+        assert!(
+            fold.corners.iter().all(|c| (c.size - h).abs() < 1e-12),
+            "{kind:?}: {:?}",
+            fold.corners
+        );
+        let g = Gauge {
+            thickness: T,
+            radius: R,
+            rule: BendRule::K(K),
+        };
+        let sb = forge_sheet::setback_of(&g, R, th);
         let off = match kind {
             CornerKind::Square { placement, .. } | CornerKind::Circular { placement, .. } => {
                 match placement {
-                    Placement::Tangent => -R,
-                    Placement::Intersection => 0.5 * dmath::PI / 2.0 * (R + K * T) - R,
+                    Placement::Tangent => -sb,
+                    Placement::Intersection => 0.5 * th * (R + K * T) - sb,
                 }
             }
             _ => 0.0,
         };
-        let (vf, vl) = closed(h, square, off);
-        let (l, el) = vol(&flat.body);
+        let (vf, vl) = closed(h, square, off, th);
+        let ((f, ef), (l, el)) = (vol(&fold.body), vol(&flat.body));
         let tol = if square { 1e-9 } else { 1e-6 };
-        if let Some(fold) = &fold {
-            let (f, ef) = vol(&fold.body);
-            assert!((f - vf).abs() <= ef + tol, "{kind:?}: folded {f} against {vf}");
-        }
+        assert!((f - vf).abs() <= ef + tol, "{kind:?}: folded {f} against {vf}");
         assert!((l - vl).abs() <= el + tol, "{kind:?}: flat {l} against {vl}");
     }
+}
+
+#[test]
+fn upright_walls_meeting_at_corners_are_trimmed_a_gap_apart() {
+    // upright on a square corner, two walls would meet along the corner's upright: the later
+    // is trimmed back t and the rule's gap from the corner, reported as an automatic open trim
+    for kind in [
+        None,
+        Some(CornerKind::Square {
+            size: Some(4.0),
+            placement: Placement::Tangent,
+        }),
+    ] {
+        let s = boxed(kind);
+        let gap = s.rule.corner.gap.at(T, R);
+        for map in [Map::Folded, Map::Flat] {
+            let b = build_with(&s, map).unwrap_or_else(|e| panic!("{kind:?} {map:?}: {e:?}"));
+            let p = forge_topo::check::check(&b.body);
+            assert!(p.is_empty(), "{p:?}");
+            assert!(b.warnings.is_empty(), "{:?}", b.warnings);
+            let trims: Vec<_> = b
+                .corners
+                .iter()
+                .filter(|c| matches!(c.kind, CornerKind::Open { .. }))
+                .collect();
+            assert_eq!(trims.len(), 4, "{:?}", b.corners);
+            assert!(
+                trims
+                    .iter()
+                    .all(|c| c.automatic && (c.size - (T + gap)).abs() < 1e-12)
+            );
+        }
+        // folded, the trimmed wall's end stands the gap clear of its neighbour's face
+        let fold = build_with(&s, Map::Folded).unwrap();
+        let near = fold
+            .body
+            .vertex_ids()
+            .map(|v| fold.body.vertex(v).point)
+            .filter(|p| p.z > H - 1e-9 && p.x > L - 1e-9)
+            .map(|p| p.y)
+            .filter(|y| *y > 1e-9)
+            .fold(f64::INFINITY, f64::min);
+        assert!((near - (T + gap)).abs() < 1e-9, "{near}");
+    }
+    // an explicit open corner keeps its own gap
+    let s = boxed(Some(CornerKind::Open { gap: 1.0 }));
+    let b = build_with(&s, Map::Folded).unwrap();
+    let trims = b
+        .corners
+        .iter()
+        .filter(|c| !c.automatic && (c.size - (T + 1.0)).abs() < 1e-12)
+        .count();
+    assert_eq!(trims, 4, "{:?}", b.corners);
 }
 
 #[test]
@@ -333,10 +384,13 @@ fn down_flanges_at_a_corner_with_an_open_corner() {
     let (mut s, base) = Sheet::face(FeatureId(9), g, Frame::WORLD, &[rect_loop(40.0, 100.0)]).unwrap();
     s.flange(base, 1, -th, 35.0).unwrap();
     s.flange(base, 0, -th, 25.0).unwrap();
-    assert!(matches!(
-        build_with(&s, Map::Folded),
-        Err(SheetError::FoldedClash { .. })
-    ));
+    // left to the builder, the walls would meet: trimmed apart by the rule's gap
+    let b = build_with(&s, Map::Folded).unwrap();
+    assert!(
+        b.corners
+            .iter()
+            .any(|c| matches!(c.kind, CornerKind::Open { .. }) && c.automatic)
+    );
     s.corner_default = Some(CornerKind::Open { gap: 0.4 });
     for map in [Map::Folded, Map::Flat] {
         let b = build_with(&s, map).unwrap_or_else(|e| panic!("{map:?}: {e:?}"));

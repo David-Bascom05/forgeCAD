@@ -270,16 +270,18 @@ fn positions_move_the_edge() {
             .unwrap()
     };
     assert!((len(&s, back) - (L - T)).abs() < 1e-12);
-    // the back's end butts on the side's inner face: a touch, until the corner is opened
-    assert!(matches!(
-        build_with(&s, Map::Folded),
-        Err(SheetError::FoldedTouch { .. })
-    ));
-    s.corner_default = Some(CornerKind::Open { gap: 0.4 });
-    let fold = build_with(&s, Map::Folded).unwrap();
-    checked(&fold.body);
-    // the corner's square, and the later wall's trim
-    assert_eq!(fold.corners.len(), 2);
+    // the back's end would butt on the side's inner face: the builder trims them a gap apart,
+    // as an asked-for open corner does
+    for open in [false, true] {
+        if open {
+            s.corner_default = Some(CornerKind::Open { gap: 0.4 });
+        }
+        let fold = build_with(&s, Map::Folded).unwrap();
+        checked(&fold.body);
+        // the corner's relief, and the later wall's trim
+        assert_eq!(fold.corners.len(), 2);
+        assert_eq!(fold.corners[1].automatic, !open);
+    }
     // an edge beside the wall's own mold line (an ear off a flange's side): the part in the
     // bend's band stays, the rest moves
     let base = poly(&[(0.0, 0.0), (L, 0.0), (L, W), (0.0, W)]);
