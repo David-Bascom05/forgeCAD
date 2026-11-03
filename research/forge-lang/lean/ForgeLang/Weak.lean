@@ -113,7 +113,7 @@ theorem weak : ∀ n, Weak n := by
           rw [bind_ok] at h
           obtain ⟨⟨t, l⟩, hb, h⟩ := h
           cases h
-          simp [evalE, ih.e ha hs, hf, hb]
+          simp [evalE, ih.e ha hs, hf, ih.e hb (hs.cons _)]
         · cases h
       | refIx x k rel =>
         simp only [evalE, bind_ok] at h
@@ -161,7 +161,7 @@ theorem weak : ∀ n, Weak n := by
           rw [bind_ok] at h
           obtain ⟨⟨ρ1, mm, l⟩, hb, h⟩ := h
           cases h
-          simp [execOne, ih.e ha hs, hp, hb]
+          simp [execOne, ih.e ha hs, hp, ih.s hb (hs.cons _)]
         · cases h
     · intro D σ ρ' ρ x r h hs
       cases x with
