@@ -68,6 +68,11 @@ impl Sk {
         }
     }
 
+    /// Records an entity made directly on the solver sketch, under its name (or anonymous).
+    pub fn name(&mut self, e: EntityId, name: Option<&str>, span: Span) {
+        self.named(e, name, span)
+    }
+
     fn named(&mut self, e: EntityId, name: Option<&str>, span: Span) {
         let n = match name {
             Some(n) => n.to_string(),

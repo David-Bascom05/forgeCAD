@@ -280,6 +280,8 @@ pub enum Ty {
     Faces,
     Edges,
     Extent,
+    Layout,
+    Motion,
     Unresolved,
     Sheet,
     SheetEdge,

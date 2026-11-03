@@ -1,0 +1,73 @@
+# Extruded aluminium heat sink, cross-cut, for a 40 W module: a fin field on a 6 mm base,
+# a plain land at the back carrying the part mark, a pad pocket and four M3 screws below.
+# Hand port of tools/bench-parts/heatsink.fc (its text in the bench block font).
+
+shared L = 100
+shared W = 80
+shared tb = 6                  # base thickness
+shared hf = 32                 # fin height
+shared tf = 1.8                # fin thickness
+shared n = count(12)
+shared p = 7.6                 # fin pitch
+shared land = 16
+shared mx = 44                 # the mark's start, in from the left
+shared my = 2.1                # and down from the land's middle
+
+sketch plate(on: xy) {
+  outline = rect(center: (0, 0), size: (L, W))
+  mark_at = pt(0 - mx, W / 2 - land / 2 - my)
+}
+base = extrude(plate, tb)
+param corners.r = 4
+corners = fillet(edges(of: base, along: Z), r)
+param topedge.size = 0.8
+topedge = chamfer(edges(of: base.end), size)
+
+# one fin, its tip a full round, drawn on the land's front face and run out the front
+param finsk.foot = 1           # the fin starts below the base's top
+sketch finsk(on: offset(base.side(plate.outline[0]), land - W)) {
+  path fin(start: (L / 2 - (n - 1) * p / 2 - tf / 2, tb - foot)) {
+    line(to: (L / 2 - (n - 1) * p / 2 - tf / 2, tb + hf - tf / 2))
+    tarc(to: (L / 2 - (n - 1) * p / 2 + tf / 2, tb + hf - tf / 2))
+    line(to: (L / 2 - (n - 1) * p / 2 + tf / 2, tb - foot))
+    close()
+  }
+}
+param blade.short = 3
+blade = extrude(finsk, W - land - short)
+fins = pattern(of: blade, layout: lin(along: plate.outline[0].dir, n: n, step: p))
+param root.r = 1.2
+root = fillet(edges(between: ([blade, fins], base), crease: "concave"), r)
+
+# cross cuts turn the plate fins into short blades
+param cutsk.y0 = 18
+param cutsk.w = 3
+param cutsk.over = 5
+sketch cutsk(on: offset(base.start, 0 - tb - over)) {
+  s = rect(corner: (0 - L / 2, W / 2 - y0 - w), size: (L, w))
+}
+cross = cut(cutsk, hf)
+param crosses.step = 20
+param crosses.n = count(3)
+crosses = pattern(of: cross, layout: lin(along: plate.outline[1].dir, n: n, step: step))
+param padsk.a = 22
+param padsk.r = 3
+sketch padsk(on: base.start) {
+  outline = hull(disc((a - r, a - r), r), disc((r - a, a - r), r), disc((r - a, r - a), r), disc((a - r, r - a), r))
+}
+param pad.depth = 1
+pad = cut(padsk, depth)
+param padedge.size = 0.6
+padedge = chamfer(edges(of: pad, crease: "concave"), size)
+shared inset = 9               # the screws in from the front and back
+sketch screwsk(on: base.start) {
+  s = pt(0 - p / 2, W / 2 - inset)
+}
+param screw.d = 3.4
+param screw.cs = 6.6
+param screw.cone = 90deg
+screw = hole(at: screwsk.s, d: d, csink: (cs, cone), depth: thru)
+screws = pattern(of: screw, layout: lin(along: plate.outline[0].dir, n: count(2), step: p + p, along2: plate.outline[1].dir, n2: count(2), step2: W - inset - inset))
+param mark.size = 6
+param mark.depth = 0.5
+mark = text("FORGE-40W", font: "block.ttf", size: size, depth: depth, on: base.end, at: plate.mark_at, cut: true)

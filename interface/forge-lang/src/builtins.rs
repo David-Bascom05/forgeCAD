@@ -62,7 +62,6 @@ pub const BUILTINS: &[&str] = &[
     "extrude",
     "cut",
     "revolve",
-    "hole",
     "fillet",
     "chamfer",
     "shell",
@@ -119,7 +118,7 @@ pub fn constant(name: &str) -> Option<Value> {
             .iter()
             .find(|m| **m == n)
             .map(|m| Value::Builtin(m)),
-        _ => None,
+        n => crate::wired::constant(n),
     }
 }
 
@@ -334,7 +333,7 @@ pub(crate) fn point_ent(e: &Ent, span: Span) -> R<EntityId> {
     }
 }
 
-fn pos2(ev: &Eval, p: P2) -> Point2 {
+pub(crate) fn pos2(ev: &Eval, p: P2) -> Point2 {
     match p {
         P2::At(x) => x,
         P2::Ent(e) => ev
@@ -347,6 +346,7 @@ fn pos2(ev: &Eval, p: P2) -> Point2 {
 pub fn point_of(_ev: &Eval, v: Value, span: Span) -> R<Point3> {
     match v {
         Value::Point(p) => Ok(p),
+        Value::Wired(ref w) if w.point().is_some() => Ok(w.point().expect("checked")),
         Value::Ent(e) => {
             let id = point_ent(&e, span)?;
             let sk = e.sk.borrow();
@@ -371,6 +371,7 @@ pub fn plane_of(ev: &mut Eval, v: Value, span: Span, _what: &'static str) -> R<F
             Ok(p.frame)
         }
         Value::Sketch(s) => Ok(s.borrow().frame),
+        Value::Wired(ref w) if w.plane().is_some() => Ok(w.plane().expect("checked")),
         Value::Faces(f) => match f.plane {
             Some(fr) => Ok(fr),
             None if f.names.is_empty() => Err(Error::NoFace {
@@ -394,9 +395,10 @@ pub fn plane_of(ev: &mut Eval, v: Value, span: Span, _what: &'static str) -> R<F
     }
 }
 
-pub(crate) fn axis_of(_ev: &Eval, v: Value, span: Span) -> R<(Point3, UnitVec3)> {
+pub fn axis_of(_ev: &Eval, v: Value, span: Span) -> R<(Point3, UnitVec3)> {
     match v {
         Value::Axis(o, d) => Ok((o, d)),
+        Value::Wired(ref w) if w.axis().is_some() => Ok(w.axis().expect("checked")),
         Value::Ent(e) if e.kind == EntKind::Line => {
             let sk = e.sk.borrow();
             let Some(forge_sketch::Entity::Line { a, b }) = sk.s.entity(e.id) else {
@@ -415,9 +417,10 @@ pub(crate) fn axis_of(_ev: &Eval, v: Value, span: Span) -> R<(Point3, UnitVec3)>
     }
 }
 
-pub(crate) fn dir_of(v: Value, span: Span) -> R<Vec3> {
+pub fn dir_of(v: Value, span: Span) -> R<Vec3> {
     match v {
         Value::Dir(d) | Value::WorldDir(d) => Ok(d),
+        Value::Wired(ref w) if w.axis().is_some() => Ok(w.axis().expect("checked").1.get()),
         Value::Axis(_, d) => Ok(d.get()),
         Value::Line(_, d, _) => Ok(d.get()),
         Value::Faces(f) if f.plane.is_some() => Ok(f.plane.expect("checked").z().get()),
@@ -465,7 +468,7 @@ fn mk_loop(sk: &Rc<RefCell<Sk>>, segs: Vec<EntityId>) -> Value {
 }
 
 /// The name the entity being made takes, if the call is an assignment's whole right side.
-fn pending_name(ev: &Eval, span: Span) -> Option<String> {
+pub(crate) fn pending_name(ev: &Eval, span: Span) -> Option<String> {
     ev.ent_name
         .as_ref()
         .filter(|(_, sp)| *sp == span)
@@ -540,6 +543,9 @@ fn math1(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Value
 }
 
 pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Value> {
+    if let Some(r) = crate::wired::pre_call(ev, name, args, span) {
+        return r;
+    }
     match name {
         "sqrt" | "abs" | "sin" | "cos" | "tan" | "asin" | "acos" | "atan" | "count" | "ratio" => {
             math1(ev, name, args, span)
@@ -625,6 +631,9 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
             let off = a.num("offset", LEN)?.map_or(0.0, |n| n.v);
             match a.req("face")? {
                 Value::Faces(f) => Ok(Value::Extent(ExtentV::UpTo(f, off))),
+                Value::Wired(w) if w.plane().is_some() && w.work_ref().is_some() => Ok(Value::Extent(
+                    ExtentV::UpToPlane(w.work_ref().expect("checked").feature, off),
+                )),
                 Value::Unresolved => Ok(Value::Unresolved),
                 o => Err(Error::WrongType {
                     span: a.span("face"),
@@ -812,7 +821,6 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
         "extrude" | "cut" | "intersect" => extrude(ev, name, args, span),
         n if crate::sheet::BUILTINS.contains(&n) => crate::sheet::call(ev, name, args, span),
         "revolve" => revolve(ev, args, span),
-        "hole" => hole(ev, args, span),
         "fillet" | "chamfer" => finish(ev, name, args, span),
         "shell" => shell(ev, args, span),
         "loft" => crate::shapes::loft(ev, args, span),
@@ -896,10 +904,7 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
             Ok(Value::Plane(Rc::new(Plane { frame, world: None })))
         }
         n if crate::shapes::NAMES.contains(&n) => crate::shapes::call(ev, n, args, span),
-        _ => Err(Error::UnknownName {
-            span,
-            name: name.into(),
-        }),
+        _ => crate::wired::call(ev, name, args, span),
     }
 }
 
@@ -1157,7 +1162,8 @@ pub(crate) fn profile_of(
 
 pub(crate) fn has_solid(ev: &Eval) -> bool {
     ev.feats.iter().any(|f| {
-        (matches!(f.kind, "extrude" | "revolve" | "loft") || crate::shapes::SOLID.contains(&f.kind))
+        (matches!(f.kind, "extrude" | "revolve" | "loft" | "import")
+            || crate::shapes::SOLID.contains(&f.kind))
             && f.status != crate::eval::Status::Failed
     })
 }
@@ -1250,6 +1256,14 @@ fn extrude(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Val
                     None,
                 )
             }
+            ExtentV::UpToPlane(k, off) => (
+                Extent::To {
+                    target: Target::Plane(k),
+                    offset: off,
+                },
+                0.0,
+                None,
+            ),
         },
         Value::Unresolved => (Extent::Distance(1.0), 0.0, None),
         o => {
@@ -1368,172 +1382,6 @@ fn revolve(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         shape: None,
         axis: Some((wa, crate::eval::unit_or_z(wb - wa))),
         prof: Some(sk.clone()),
-    })))
-}
-
-fn hole(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
-    not_in_sketch(ev, "hole", span)?;
-    let id = ev.take_id("hole", span)?;
-    let a = Args::bind(
-        ev,
-        "hole",
-        &[
-            "at", "d", "depth", "cbore", "csink", "flip", "screw", "fit", "seat",
-        ],
-        args,
-        span,
-    )?;
-    if a.poisoned() {
-        return Ok(Value::Unresolved);
-    }
-    let pts: Vec<Ent> = match a.req("at")? {
-        Value::List(xs) => xs
-            .iter()
-            .map(|x| ent_of(x.clone(), a.span("at"), EntKind::Point))
-            .collect::<R<_>>()?,
-        v => vec![ent_of(v, a.span("at"), EntKind::Point)?],
-    };
-    let sk = pts
-        .first()
-        .ok_or(Error::BadValue {
-            span: a.span("at"),
-            what: "the number of hole places",
-            value: 0.0,
-        })?
-        .sk
-        .clone();
-    let mut at = vec![];
-    for p in &pts {
-        if !Rc::ptr_eq(&p.sk, &sk) {
-            return Err(Error::OtherSketch {
-                span: a.span("at"),
-                sketch: p.sk.borrow().id.clone(),
-                here: sk.borrow().id.clone(),
-            });
-        }
-        let e = point_ent(p, a.span("at"))?;
-        let s = sk.borrow();
-        at.push(s.world(s.pos(e)));
-    }
-    let standard = match a.opt("screw") {
-        Some(Value::Str(sz)) => {
-            let screw = forge_model::standard::screw(&sz).ok_or(Error::BadValue {
-                span: a.span("screw"),
-                what: "a screw size (M3, M6, M8x1, 1/4-20 ..)",
-                value: f64::NAN,
-            })?;
-            let fit = match word(&a, "fit", &["close", "normal", "loose", "tap"])?.unwrap_or("normal") {
-                "close" => forge_model::Fit::Close,
-                "loose" => forge_model::Fit::Loose,
-                "tap" => forge_model::Fit::Tap,
-                _ => forge_model::Fit::Normal,
-            };
-            Some(forge_model::Standard {
-                screw,
-                convention: screw.default_convention(),
-                fit,
-            })
-        }
-        Some(o) => {
-            return Err(Error::WrongType {
-                span: a.span("screw"),
-                what: "a screw size",
-                want: Ty::Str,
-                found: o.ty(),
-            });
-        }
-        None => None,
-    };
-    let d = match &standard {
-        Some(st) => Num::konst(st.diameter(), Dim::Length),
-        None => a.req_num("d", LEN)?,
-    };
-    positive(&d, a.span("d"), "a hole's diameter")?;
-    let mut dims = if standard.is_some() {
-        vec![]
-    } else {
-        vec![dim("diameter", &d)]
-    };
-    let end = match a.req("depth")? {
-        Value::Extent(ExtentV::Thru | ExtentV::ThruAll) => forge_model::End::Through,
-        Value::Extent(ExtentV::Next) => forge_model::End::ToNext,
-        v => {
-            let n = num_of(v, LEN, a.span("depth"), "a hole's depth")?;
-            positive(&n, a.span("depth"), "a hole's depth")?;
-            dims.push(dim("depth", &n));
-            forge_model::End::Depth(n.v)
-        }
-    };
-    let pair = |k: &'static str, second: &[Dim]| -> R<Option<(Num, Num)>> {
-        match a.opt(k) {
-            None => Ok(None),
-            Some(Value::Tuple(t)) if t.len() == 2 => Ok(Some((
-                num_of(t[0].clone(), LEN, a.span(k), k)?,
-                num_of(t[1].clone(), second, a.span(k), k)?,
-            ))),
-            Some(o) => Err(Error::WrongType {
-                span: a.span(k),
-                what: k,
-                want: Ty::Tuple,
-                found: o.ty(),
-            }),
-        }
-    };
-    let head = match (pair("cbore", LEN)?, pair("csink", ANG)?) {
-        (Some((dd, dp)), _) => {
-            dims.push(dim("cbore diameter", &dd));
-            dims.push(dim("cbore depth", &dp));
-            forge_model::Head::Counterbore {
-                diameter: dd.v,
-                depth: dp.v,
-            }
-        }
-        (None, Some((dd, an))) => {
-            dims.push(dim("csink diameter", &dd));
-            dims.push(dim("csink angle", &an));
-            forge_model::Head::Countersink {
-                diameter: dd.v,
-                angle: an.v,
-            }
-        }
-        _ => match (&standard, word(&a, "seat", &["cbore", "csink"])?) {
-            (Some(st), Some("cbore")) => st.counterbore(),
-            (Some(st), Some("csink")) => st.countersink().ok_or(Error::BadValue {
-                span: a.span("seat"),
-                what: "a countersink for this screw (none is standard)",
-                value: f64::NAN,
-            })?,
-            _ => forge_model::Head::Plain,
-        },
-    };
-    let frame = sk.borrow().frame;
-    let z = if a.flag("flip")? { frame.z() } else { -frame.z() };
-    let hf = Frame::from_zx(at[0], z, frame.x().get()).expect("x not along z");
-    let places = (at.len() > 1).then(|| forge_model::At::Sketch {
-        feature: sk.borrow().idx,
-        points: vec![],
-        centers: false,
-        at: at.clone(),
-    });
-    let h = forge_model::Hole {
-        at: hf,
-        diameter: d.v,
-        head,
-        end,
-        point: None,
-        thread: standard.and_then(|s| s.thread()),
-        standard,
-        places,
-    };
-    let (idx, hid) = ev.push_feature(&id, "hole", Feature::Hole(Box::new(h)), span, dims)?;
-    Ok(Value::Feature(Rc::new(Feat {
-        id,
-        kind: "hole",
-        idx,
-        hid,
-        shape: None,
-        axis: Some((at[0], z)),
-        prof: None,
     })))
 }
 
@@ -1847,11 +1695,11 @@ pub fn member(ev: &mut Eval, v: Value, name: &str, span: Span) -> R<Value> {
                 }
                 "faces" => Ok(feature_faces(ev, f)),
                 "edges" => Ok(feature_edges(ev, &[f.idx])),
-                "rim" if f.axis.is_some() => {
+                "rim" if f.axis.is_some() && f.kind != "hole" => {
                     let (o, d) = f.axis.expect("checked");
                     rim(ev, f, o, d, span)
                 }
-                _ => Err(unknown(&v)),
+                _ => crate::wired::feature_member(ev, f, name, span).unwrap_or_else(|| Err(unknown(&v))),
             }
         }
         Value::Sketch(s) => {
@@ -1964,6 +1812,7 @@ pub fn member(ev: &mut Eval, v: Value, name: &str, span: Span) -> R<Value> {
             .find(|(k, _)| *k == crate::syntax::Key::Label(name.into()))
             .map(|x| x.1.clone())
             .ok_or_else(|| unknown(&v)),
+        Value::Wired(w) => crate::wired::member(ev, w, name, span).unwrap_or_else(|| Err(unknown(&v))),
         Value::Unresolved => Ok(Value::Unresolved),
         _ => Err(unknown(&v)),
     }
@@ -2039,7 +1888,7 @@ pub fn side(ev: &mut Eval, f: &Feat, e: &Ent, span: Span) -> R<Value> {
     })
 }
 
-fn feature_faces(ev: &mut Eval, f: &Feat) -> Value {
+pub(crate) fn feature_faces(ev: &mut Eval, f: &Feat) -> Value {
     if !ev.b.building || ev.b.built() <= f.idx {
         return Value::Unresolved;
     }
@@ -2154,7 +2003,7 @@ pub(crate) fn word(a: &Args, k: &'static str, allowed: &[&'static str]) -> R<Opt
     }
 }
 
-fn feats_of(v: Value, span: Span) -> R<Vec<Rc<Feat>>> {
+pub(crate) fn feats_of(v: Value, span: Span) -> R<Vec<Rc<Feat>>> {
     match v {
         Value::Feature(f) => Ok(vec![f]),
         Value::Map(m) => {

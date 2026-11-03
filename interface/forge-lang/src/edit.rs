@@ -821,7 +821,7 @@ pub fn apply_checked(src: &str, op: &Op) -> R<(String, Option<Reach>)> {
         build: false,
         ..crate::Options::default()
     };
-    let (before, _) = crate::run(src, opts, Default::default());
+    let (before, _) = crate::run(src, opts.clone(), Default::default());
     let (after, _) = crate::run(&text, opts, Default::default());
     let old: Vec<&str> = before.errors.iter().map(Error::kind).collect();
     if let Some(e) = after.errors.iter().find(|e| !old.contains(&e.kind())) {

@@ -1,0 +1,57 @@
+# Split pipe clamp as a small assembly: the lower jaw machined, the upper jaw a turned copy of
+# it with a gap, a welded foot combined in, two cap screws as bodies of their own, copied, that
+# cut their own seats in both jaws and stay. Hand port of tools/bench-parts/clamp.fc.
+
+shared bore = 40
+shared gap = 1
+shared jl = 100                # jaw length, height, width
+shared jh = 28
+shared jw = 30
+shared bx = 37                 # the screws off the centre
+
+sketch jaw(on: xz) {
+  outline = rect(corner: (0 - jl / 2, 0 - jh), size: (jl, jh))
+  o = pt(0, 0)
+  bc = pt(0 - bx, gap + jh)
+}
+lower = extrude(jaw.outline, sym(jw))
+sketch seatsk(on: jaw.plane) {
+  c = circle((0, 0), bore / 2)
+}
+seat = cut(seatsk, sym(jw))
+param ends.r = 4
+ends = fillet(edges(of: lower, along: Z), r)
+param seatedge.size = 1
+seatedge = chamfer(edges(of: seat), size)
+upper = copybody(of: lower, moves: [turn(about: jaw.outline[2], by: 180deg), slide(along: jaw.outline[1].dir, by: gap)])
+
+param fsk.fl = 140
+param fsk.fw = 50
+shared hx = 60                 # the foot's holes
+shared hy = 15
+sketch fsk(on: lower.side(jaw.outline[0]), at: jaw.o) {
+  outline = rect(center: (0, 0), size: (fl, fw))
+  h = pt(0 - hx, hy)
+}
+param foot.t = 8
+foot = extrude(fsk.outline, t, new: true)
+param fhole.d = 9
+fhole = hole(at: fsk.h, d: d, depth: thru, flip: true, bodies: foot)
+fholes = pattern(of: fhole, layout: lin(along: jaw.outline[0].dir, n: count(2), step: hx + hx, along2: fsk.outline[3].dir, n2: count(2), step2: hy + hy))
+welded = union(lower, tools: foot)
+param weld.r = 3
+weld = fillet(edges(between: (lower, foot), crease: "concave"), r)
+
+# the screw turned in one: shank, then head on its shoulder
+param bsk.shank = 50
+param bsk.rs = 5
+param bsk.rh = 8
+param bsk.hh = 10
+sketch bsk(on: jaw.plane, at: jaw.bc) {
+  outline = poly([(0, 0 - shank), (rs, 0 - shank), (rs, 0), (rh, 0), (rh, hh), (0, hh)])
+  ax = line((0, 0), (0, hh), construction: true)
+}
+bolt = revolve(bsk.outline, axis: bsk.ax, new: true)
+bolt2 = copybody(of: bolt, moves: [slide(along: jaw.outline[0].dir, by: bx + bx)])
+upperseats = subtract(upper, tools: [bolt, bolt2], keep: true)
+lowerseats = subtract(lower, tools: [bolt, bolt2], keep: true)

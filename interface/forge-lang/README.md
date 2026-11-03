@@ -127,6 +127,24 @@ Timings (release, niced, the machine shared with other agents; median of 5 for c
 | bracket | 17 ms | 17 ms (kernel 9) | 1.7 ms | 5 ms (1 rebuilt) | 14 ms (31 rebuilt) |
 | manifold | 97 ms | 97 ms (kernel 26) | 7.6 ms | 69 ms (1 rebuilt) | 94 ms (45 rebuilt) |
 
+The holes lane's bench parts (tools/bench-parts, ported in parts/bench), against their .fc
+parts built and measured the same way (`tests/bench_ports.rs`), and their timings (release, niced,
+shared machine; cold the median of 5 `fg run` processes, warm from `fg serve`):
+
+| part | volume | faces | edges | bodies | cold | serve unchanged | last param edited |
+|---|---|---|---|---|---|---|---|
+| valve | 302785.44 | 204 | 524 | 1 | 58 ms | 1.1 ms | 36 ms (3 rebuilt) |
+| hub | 233035.40 | 46 | 114 | 1 | 7 ms | 0.6 ms | 2.1 ms (1) |
+| clamp | 187986.77 | 65 | 140 | 4 | 7 ms | 0.5 ms | 3.0 ms (5) |
+| conrod | 81458.13 | 113 | 284 | 2 | 28 ms | 0.5 ms | 22 ms (2) |
+| heatsink | 82389.83 | 438 | 1168 | 1 | 22 ms | 1.1 ms | 8.5 ms (1) |
+| bracket* | 231371.62 | | | 1 | 4 ms | 0.4 ms | 1.1 ms (1) |
+| insert* | 295621.96 | 42 | 112 | 1 | 6 ms | 0.6 ms | |
+| crank* | 116887.05 | | | 1 | 25 ms | 1.7 ms | 8.5 ms (1) |
+
+\* less the .fc lines that wait on other lanes: bracket's `fullround` and `facefillet`, insert's
+`offset`, crank's variable-radius fillet (Forge's fillet takes one radius per group).
+
 Parse, static checks and evaluation take under 2 ms on every part. On the crank, measuring the
 finished part (exact mass properties of its blends and the validity check) takes 220 ms, which
 is all of a warm rebuild after a late edit.
@@ -188,10 +206,10 @@ valid, the fold/flat identity, a height edit renaming no face).
   properties per face, cached by face name and invalidated per stage, would make it proportional
   to what changed.
 - **Role names**: extrudes, revolves, and (fg-shapes) the skinned walls and caps of sweeps, coils
-  and lofts (`roles::skin_side`), a shell's offset skin and rims (`roles::offset`, `rim`). Holes'
-  walls and floors (`hole::MOUTH`, `BORE`, `BOTTOM` are private; lane fg-holes) and fillets' faces
-  have names but no public role API; `H.rim` is the loop nearest the mouth where the hole's faces
-  (by lineage) meet the part's.
+  and lofts (`roles::skin_side`), a shell's offset skin and rims (`roles::offset`, `rim`); holes,
+  threads and text (fg-holes: `forge_model::hole::roles`, `thread::roles`, `text::roles`).
+  Fillets' faces have names but no public role API. A hole's `H.rim` is its mouth-most role
+  face's edges with faces it did not make, on its mouth plane (along its own axis).
 - **Lineage ("made by") is forge-agent's** (`select::lineage`, by name and by overlap on one
   surface). The kernel could carry it, as it carries names.
 - **One chamfer size per feature** (`ChamferSize` is per feature): groups with two sizes need two
@@ -203,6 +221,9 @@ valid, the fold/flat identity, a height edit renaming no face).
 - Shapes (branch fg-shapes, `src/shapes.rs`): sweep, coil, loft, shell out, draft, offset_faces,
   thicken, rib, facefillet, fullround, ball/sphere; see the reference. Not wired by this lane:
   thread, text, patterns, holes' options, bodies (lane fg-holes).
+- Holes, threads, patterns, work features, bodies, direct edits, text, imports and sketch
+  projections are wired (reference.md); the holes lane's bench parts are ported in parts/bench
+  (tests/bench_ports.rs).
 - Sheet metal not built in the kernel, so not in Forge: reliefs (waiting on a decision), rip and
   tangent joints, corner treatments (corners stay open), closing bend cycles, hole and slot
   checks against bends and edges, PEM hardware, ordinary features on a sheet. A flange's

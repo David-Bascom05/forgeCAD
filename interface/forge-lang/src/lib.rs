@@ -4,17 +4,26 @@
 //! read the part as it stands. Errors, warnings and fixes are typed data (`error`), and edits
 //! are typed operations on the source (`edit`).
 
+pub mod bodies;
 pub mod build;
 pub mod builtins;
+pub mod direct;
 pub mod edit;
 pub mod error;
 pub mod eval;
+pub mod feat_error;
+pub mod holes;
+pub mod media;
+pub mod patterns;
+pub mod project;
 pub mod report;
 pub mod shapes;
 pub mod sheet;
 pub mod sketch;
 pub mod syntax;
 pub mod values;
+pub mod wired;
+pub mod work;
 
 use build::Cache;
 use error::{Error, Metric, Warning};
@@ -24,13 +33,15 @@ use syntax::{Cmp, ExprKind, StmtKind};
 
 pub const REFERENCE: &str = include_str!("reference.md");
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct Options {
     /// Build with the kernel (`run`), or stop after evaluation (`check`).
     pub build: bool,
     pub rules: Rules,
     /// Measure the volume after every feature (for tests of what an edit moved).
     pub volumes: bool,
+    /// The part file's directory: where fonts and imported files are found.
+    pub dir: Option<std::path::PathBuf>,
 }
 
 impl Default for Options {
@@ -39,6 +50,7 @@ impl Default for Options {
             build: true,
             rules: Rules::default(),
             volumes: false,
+            dir: None,
         }
     }
 }
@@ -132,6 +144,7 @@ pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
     };
     let mut ev = Eval::new(src, opts.rules, opts.build, cache);
     ev.volumes = opts.volumes;
+    ev.dir = opts.dir.clone();
     let t1 = Instant::now();
     ev.check_static(&prog);
     timings.check_ms = t1.elapsed().as_secs_f64() * 1e3;

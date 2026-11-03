@@ -150,6 +150,12 @@ Constraints (bare statements): `tangent(a, b)` (lines, arcs, circles, a spline's
 `radius(c, r)`, `angle(l, m, A)`, `fix(p)`. A conflict is `SketchConflict` naming the rows;
 freedom left is the warning `UnderConstrained` with the count.
 
+`project(EDGES | FACES | POINT | AXIS, approx: TOL)` lays 3D geometry of the part as it stands on
+the sketch's plane, fixed there (read afresh every run): lines, circles, arcs, ellipses exactly; a
+general curve only with `approx` (a fitted cubic within TOL, else `NeedsApprox`); an axis only
+seen end-on (else `NoImage`). One curve gives an entity, several a loop; a face gives its
+boundary. Bind the edges outside the sketch (`pe = edges(of: peg.end)`, then `c = project(pe)`).
+
 Lines for constructing points: `shift(LINE, d)` (moved d to the line's left, into a
 counter-clockwise loop), `hline(y)`, `vline(x)` (in this sketch), `meet(LINE, LINE)` (where they
 cross, as `(x, y)` in this sketch). LINE: a sketch line of any sketch, or one of these.
@@ -160,14 +166,12 @@ asin acos atan atan2(y, x) abs min max len pi`.
 ## Features
 
 ```
-extrude(PROFILE, d | sym(d) | two(f, b) | thru | thru_all | next | upto(FACES, offset),
+extrude(PROFILE, d | sym(d) | two(f, b) | thru | thru_all | next | upto(FACES | WORKPLANE, offset),
         taper: A, new: false)       adds (a new body for the first solid, or with new: true)
 cut(PROFILE, d | ...)               into the material: against the sketch normal
 intersect(PROFILE, extent)          keeps what lies inside
 revolve(PROFILE, axis: LINE, angle: A, cut: false, new: false)   LINE: a line of the same sketch
-hole(at: POINT | [POINTS], d: D, depth: d | thru | next, cbore: (D, depth), csink: (D, A),
-     flip: false)                   drilled against the sketch normal (flip: with it)
-hole(at: .., screw: "M6", fit: "close"|"normal"|"loose"|"tap", seat: "cbore"|"csink", depth: ..)
+hole(..), thread(..)                see Holes and threads
 fillet(EDGES, r) | fillet(groups: [(EDGES, r), ..])
 chamfer(EDGES, d)
 shell(t, open: FACES, out: false) hollow to walls t thick (out: outside the skin), FACES open
@@ -272,6 +276,150 @@ round = facefillet(box.side(base.r[0]), box.end, r)
 knob = ball(top.c, r)
 ```
 
+## Holes and threads
+
+```
+hole(at: POINT | [POINTS], d: D, depth: DEPTH, cbore: (D, depth), csink: (D, A), point: A,
+     thread: "M36x2" | (size, pitch), flip: false, on: PLANE, bodies: BODIES)
+hole(at: .., screw: SIZE, convention: "iso"|"ansi", fit: "close"|"normal"|"loose"|"tap",
+     seat: "cbore"|"csink", depth: DEPTH, point: A, ..)
+DEPTH: d | thru | next | upto(FACES | WORKPLANE, offset)
+```
+
+Drilled against the plane's normal (`flip: true`: with it), the mouth at each point, x along the
+plane's x. The points are a sketch's (one sketch; the plane is its own unless `on:` gives one)
+or points worked out here (work points, `mid(..)`), then `on:` is required; each is dropped onto
+the plane. Several points make one hole feature, the rest copies of the first. `point:` is a
+blind hole's drill point (the cone's included angle; none on `thru`). `thread:` records a thread
+(modeled by `thread(hole: ..)`). SIZE: `M6`, `M8x1`, `1/4-20`, `#10-24` from the tables: its fit's
+diameter, its seat's head; `fit: "tap"` the tap drill, its thread recorded. Options that cannot
+apply are errors, never dropped: `cbore` with `csink` or `seat`, `d` or `thread` with `screw`
+(`Conflict`); `fit`, `seat`, `convention` without `screw`, `point` on `thru` (`NotApplicable`);
+an unknown size (`UnknownSize`) or word (`UnknownWord`).
+
+```
+thread(hole: HOLE, length: L)                   the hole's recorded thread, at every place and copy
+thread(face: FACES, spec: SPEC, length: L, flip: false)   round a cylinder face (outside or in)
+thread(on: PLANE, at: POINT, spec: SPEC, internal: false, length: L, flip: false)   about an axis
+       square to the plane through POINT (default its origin), into the material
+length: d | full | upto(FACES | WORKPLANE, offset);  left: false, chamfer: false, runout: false
+SPEC: "M6" | "M6x0.75" | "1/4-20" | (major, pitch)
+```
+
+Exactly one of `hole`, `face`, `on` (`Forms`); `spec` with `hole`, `at`/`internal` without `on`
+are `NotApplicable`. Modeled ISO/UTS 60 degree form; `chamfer` a 45 degree start, `runout` the
+groove drawn out over a turn.
+
+```
+param tap.d = 5
+param tap.depth = 12
+tap = hole(at: top.s, screw: "M6", fit: "tap", depth: depth, point: 118deg)
+tapped = thread(hole: tap, length: full, chamfer: true)
+```
+
+## Patterns
+
+A pattern is one feature: copies of earlier features (`of:`) or of the whole part
+(`whole: true`), laid out by a layout value. The copies are named from the pattern's id and each
+copy's index, so changing a count keeps every surviving copy's names.
+
+```
+pattern(of: F | [F..], layout: LAYOUT, bodies: BODIES) | pattern(whole: true, layout: LAYOUT)
+lin(along: DIR, n: N, step: d, along2: DIR, n2: N, step2: d)     one or two rows (N counts the original)
+circ(about: AXIS, n: N, over: A | each: A)      N over A (default a whole turn), or A apart
+mirror(on: PLANE)
+along(curve: EDGES | WORKAXIS, n: N, step: d, fixed: false, reverse: false)
+                                    N spaced d (no step: spread over the whole curve); turned
+                                    with the curve unless fixed
+places(at: [POINTS] | MAP)         the original at the first point, a copy at each other
+```
+
+DIR from anchors (`S.l.dir`, `E.side(..).normal`, a work axis); a world direction is the
+`WorldAfterFirst` lint. `over` with `each` is a `Conflict`. A loop (`for i in 0..n`) makes
+features one by one; a pattern records and edits them as one.
+
+```
+param bolts.n = count(4)
+bolts = pattern(of: bolt, layout: circ(about: hub.axis, n: n))
+```
+
+## Work features
+
+Named features that make no solid, followed by the kernel through every edit above them. Each
+takes exactly one form (`Forms`), and only that form's arguments (`NotApplicable`).
+
+```
+workplane(on: PLANE) | workplane(offset: FACE, d: d) | workplane(turn: PLANE, about: AXIS, by: A)
+  | workplane(tangent: CYL, parallel: PLANE) | workplane(through: (P, P, P))
+  | workplane(mid: (PLANE, PLANE)) | workplane(normal_to: CURVE, at: P)
+workaxis(along: EDGE | CYL | CONE) | workaxis(through: (P, P)) | workaxis(meet: (PLANE, PLANE))
+  | workaxis(normal_to: PLANE, at: P)
+workpoint(at: VERTEX | P) | workpoint(mid: EDGE) | workpoint(meet: (EDGE | AXIS, FACE | PLANE))
+ucs(on: PLANE) | ucs(through: (ORIGIN, ON_X, IN_XY))
+```
+
+References (P, FACE, EDGE, AXIS, PLANE above) are what the kernel can follow: work features, a
+sketch (its plane), a named sketch point (or a named line's end `l.a`, a circle's centre), one
+face (or the pieces of one surface) or one edge. A value worked out here (`mid(..)`, `plane(..)`)
+is `NotARef`; `workplane(on:)` takes any plane. A work plane is a PLANE (a sketch's, an `upto`
+end, a split); a work axis an AXIS; a work point a POINT. Members: `.plane .normal .origin`,
+`.axis .dir`, `.point`.
+
+```
+bax = workaxis(along: faces(of: boss, shape: "cyl"))
+bp = workpoint(meet: (bax, l.side(lsk.outline[5])))
+```
+
+## Bodies
+
+`new: true` on an extrude or revolve makes a body; a body is named by the feature that made it.
+`bodies: F | [F..] | all` on a hole, thread, pattern, text, import, split or direct edit makes it
+act on those bodies, not the last made.
+
+```
+union(TARGET, tools: BODIES, keep: false)   subtract(..)   intersect(TARGET, tools: BODIES, ..)
+combine(TARGET, tools: BODIES, op: "add"|"cut"|"keep", keep: false)
+split(by: WORKPLANE | FACE | PLANE | LINE | ARC | CIRCLE, keep: "both"|"plus"|"minus")
+splitface(faces: FACES, by: ..)       faces split where the cutter crosses them
+copybody(of: BODY, moves: [MOTION..])    movebody(of: BODIES, moves: [MOTION..])
+MOTION: slide(along: DIR, by: d) | turn(about: AXIS, by: A) | place(on: PLANE)
+```
+
+`keep: true` leaves the tools. A split keeping both makes the cutter's normal side a new body; a
+sketch line, arc or circle cuts swept along its plane's normal. `intersect` with `tools:` joins
+bodies; without, it is the extrude.
+
+```
+bolt2 = copybody(of: bolt, moves: [slide(along: jaw.outline[0].dir, by: pitch)])
+seats = subtract(lower, tools: [bolt, bolt2], keep: true)
+```
+
+## Direct edits
+
+```
+delete(faces: FACES)                  a boss, pocket or blend removed, the gap closed
+replace(face: FACE, with: WORKPLANE | FACES)   the face put on that plane or surface
+moveface(faces: FACES, by: slide(..) | turn(..))   faces moved, neighbours re-met
+```
+
+## Text and imports
+
+```
+text(STRING, font: FILE, size: d, depth: d, on: PLANE, at: POINT, cut: false, wrap: R)
+import(FILE, op: "new"|"add"|"cut")
+entity(of: IMPORT, solid: N, id: N)   the face (or edges) a STEP file's entity #id of solid #solid became
+```
+
+Files (.ttf/.otf fonts; .step/.stp/.brep/.igs/.iges solids) are found beside the part file;
+a missing, wrong-kind or unreadable one is `File`. Text: the baseline from the point along the
+plane's x, the letters up its y, `depth` along its normal (cut: into the part); `wrap: R` sets
+it round a cylinder about the plane's normal. Members: `T.top` (embossed letter tops),
+`T.floor` (engraved floors).
+
+```
+mark = text("FORGE-40W", font: "block.ttf", size: size, depth: depth, on: base.end, at: plate.mark_at, cut: true)
+```
+
 ## Anchors
 
 Every feature exports anchors by role; they resolve to the kernel's role names
@@ -284,9 +432,11 @@ E.side(ENTITY)          the wall a profile entity made (a line: plane with origi
                         x along it); revolves too: R.side(ENTITY)
 E.axis                  a single-circle extrude's axis; a revolve's, coil's or hole's axis
 E.faces  E.edges        everything the feature made, as the part stands
-H.rim                   a hole's (or bore's) mouth: the loop nearest it where its faces meet
-                        the part's (any curve: on a blend too); rounded by a later fillet, it is
-                        `MouthRounded`
+H.rim                   a hole's edges at its mouth (each place's); a bore's (an extrude's circle):
+                        the loop nearest its mouth; rounded by a later fillet, `MouthRounded`
+H.wall H.floor H.bore H.seat H.sink     a hole's faces by role (forge_model::hole::roles), at
+                        every place; a role it has no face for is `NoFace`
+T.flanks T.root T.chamfer   a thread's faces (forge_model::thread::roles)
 W.start  W.end          a sweep's, coil's or loft's end caps (planes carried from the profile's
                         sketch); W.side(ENTITY) the walls a profile entity made over the whole
                         path (a loft: an entity of its first profile)

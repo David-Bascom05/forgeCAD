@@ -20,6 +20,9 @@ forge-model = { path = "../../kernel/forge-model" }
 forge-sketch = { path = "../../kernel/forge-sketch" }
 forge-sheet = { path = "../../kernel/forge-sheet" }
 forge-agent = { path = "../forge-agent" }
+forge-font = { path = "../../kernel/forge-font" }
+forge-step = { path = "../../kernel/forge-step" }
+forge-doc = { path = "../forge-doc" }
 
 [lints]
 workspace = true

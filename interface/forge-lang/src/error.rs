@@ -369,6 +369,16 @@ pub enum Role {
     Edges,
     Floor,
     Wall,
+    /// A counterbore's wall and floor, a countersink's cone.
+    Bore,
+    Seat,
+    Sink,
+    /// A thread's flanks, root flat and chamfer.
+    Flanks,
+    RootFlat,
+    Chamfer,
+    /// A text's letter tops (embossed).
+    Top,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -668,6 +678,9 @@ pub enum Error {
         what: &'static str,
         count: usize,
     },
+    /// An error of a wired feature (holes, threads, patterns, work features, bodies, text,
+    /// imports, projections): feat_error.rs.
+    Feat(crate::feat_error::FeatError),
 }
 
 impl Error {
@@ -735,6 +748,7 @@ impl Error {
             | NotAVertex { span }
             | MouthRounded { span, .. }
             | OneFace { span, .. } => Some(*span),
+            Feat(e) => Some(e.span()),
             UnknownParam { .. }
             | UnknownFeature { .. }
             | NotAStatement { .. }
@@ -805,6 +819,7 @@ impl Error {
             NotAVertex { .. } => "NotAVertex",
             OneFace { .. } => "OneFace",
             MouthRounded { .. } => "MouthRounded",
+            Feat(e) => e.kind(),
         }
     }
 
@@ -845,6 +860,7 @@ impl Error {
                 Op::MakeShared { param: param.clone() },
             ],
             Sheet(e) => e.fixes(),
+            Feat(e) => e.fixes(),
             _ => vec![],
         }
     }
@@ -998,6 +1014,7 @@ impl Error {
             MouthRounded { id, .. } => format!(
                 "{id}'s mouth was rounded by a later fillet: its rim is smooth (leave the mouth's edge out of that fillet's selection)"
             ),
+            Feat(e) => e.text(),
         }
     }
 
@@ -1107,6 +1124,7 @@ impl Error {
             LoftCurves { profile, .. } => vec![("profile", (*profile as f64).into())],
             OneFace { what, count, .. } => vec![("what", s(what)), ("count", (*count as f64).into())],
             MouthRounded { id, .. } => vec![("id", s(id))],
+            Feat(e) => e.data(),
             _ => vec![],
         }
     }
