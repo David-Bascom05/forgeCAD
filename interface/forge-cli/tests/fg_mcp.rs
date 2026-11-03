@@ -1,5 +1,7 @@
 //! Forge (.fg) parts over `forgecad mcp` and `forgecad serve`: typed JSON both ways, the round
 //! trip an agent makes (read the errors and lints, send a fix back as it came, see it built).
+//! Native only: they start `forgecad` as a process, which WASI cannot.
+#![cfg(not(target_os = "wasi"))]
 
 use forge_agent::json::Json;
 use forge_lang::error::Op;

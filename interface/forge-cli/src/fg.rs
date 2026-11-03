@@ -474,3 +474,72 @@ fn ops_of(a: &Args, params: &Json) -> Result<Vec<Op>, String> {
     }
     list.iter().map(one).collect()
 }
+
+/// In process, so they run in the wasm suite too (the browser's arithmetic).
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const PART: &str = "shared t = 6\nsketch plan(on: xy) {\n  outline = rect(corner: (0, 0), size: (40, 40))\n}\nbase = extrude(plan, t)\n";
+
+    fn dir() -> PathBuf {
+        // wasi has no temp_dir or pid; its runner opens the whole filesystem
+        let (base, id) = if cfg!(target_os = "wasi") {
+            let t = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("clock");
+            (PathBuf::from("/tmp"), t.as_nanos() as u64)
+        } else {
+            (std::env::temp_dir(), std::process::id() as u64)
+        };
+        let d = base.join(format!("forgecad-fg-unit-{id}"));
+        std::fs::create_dir_all(&d).expect("temp dir");
+        std::fs::canonicalize(d).expect("real path")
+    }
+
+    #[test]
+    fn a_fix_from_the_report_goes_back_through_edit_and_the_stages_are_kept() {
+        let d = dir();
+        let f = d.join("p.fg");
+        std::fs::write(&f, PART).unwrap();
+        let file = f.to_string_lossy().into_owned();
+        let mut s = Session::new(Some(d.clone()), true);
+        let a = Args {
+            file: file.clone(),
+            ..Args::default()
+        };
+        let r = s.run("build", &a, &Json::Null);
+        assert!(r.ok, "{}", r.text);
+        let Some(Json::Arr(ws)) = r.json.get("warnings") else {
+            panic!("{}", r.json)
+        };
+        let lint = ws
+            .iter()
+            .find(|w| w.get("kind").and_then(Json::str) == Some("LooseLiteral"))
+            .unwrap();
+        let Some(Json::Arr(fixes)) = lint.get("fixes") else {
+            panic!("{lint}")
+        };
+        let fix = fixes[0].clone();
+        let e = s.run("edit", &a, &Json::obj(vec![("op", fix.clone())]));
+        assert!(e.ok, "{}", e.text);
+        let want = edit::apply(PART, &Op::from_json(&fix).unwrap()).unwrap();
+        assert_eq!(std::fs::read_to_string(&f).unwrap(), want);
+        // unchanged: every stage reused
+        let again = s.run("build", &a, &Json::Null);
+        assert_eq!(again.json.get("rebuilt").and_then(Json::num), Some(0.0));
+        // a wrong dimension is refused, typed, and nothing is written
+        let bad = Json::parse(r#"{"op":"SetParam","param":"t","value":{"value":3,"dim":"Angle"}}"#).unwrap();
+        let e = s.run("edit", &a, &Json::obj(vec![("op", bad)]));
+        assert!(!e.ok);
+        assert_eq!(
+            e.json
+                .get("error")
+                .and_then(|x| x.get("kind"))
+                .and_then(Json::str),
+            Some("EditDim")
+        );
+        assert_eq!(std::fs::read_to_string(&f).unwrap(), want);
+        let _ = std::fs::remove_dir_all(&d);
+    }
+}

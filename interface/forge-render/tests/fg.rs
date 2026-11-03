@@ -406,3 +406,25 @@ fn a_sheet_part_shows_flat_and_exports_its_dxf() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// The browser opens parts as mesh files the native build exports (web/build.sh); a .fg part
+/// exports as an .fc one does, and reads back as the browser reads it. No GPU needed.
+#[test]
+fn a_forge_part_exports_the_mesh_the_browser_opens() {
+    let part = concat!(env!("CARGO_MANIFEST_DIR"), "/../forge-lang/parts/bracket.fg");
+    let (mesh, cached) = forge_render::load::open(part, false).unwrap();
+    assert!(!cached);
+    assert!(mesh.radius > 50.0 && !mesh.lods.is_empty());
+    let back = forge_render::mesh::PartMesh::from_bytes(&mesh.to_bytes()).unwrap();
+    assert_eq!(back, mesh);
+    // what the kernel built: the bracket's 137 faces, as `fg run` reports them
+    let body = forge_render::load::body(part).unwrap();
+    assert_eq!(body.face_ids().count(), 137);
+    // a part that doesn't build says why, with its typed error's kind
+    let dir = scratch("export");
+    let bad = dir.join("bad.fg");
+    std::fs::write(&bad, "shared a = 10\nshared b = 30deg\nx = a + b\n").unwrap();
+    let e = forge_render::load::open(bad.to_str().unwrap(), false).unwrap_err();
+    assert!(e.contains("DimMismatch"), "{e}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
