@@ -1,0 +1,21 @@
+# An open box: a base notched at its corners, four flanges up off its inner edges; the corners
+# stay open (the notch is deeper than the setback, so no relief is needed and the bends clear).
+shared t = 1
+shared r = 1
+shared k = ratio(0.44)
+shared H = 20
+param plan.L = 80
+param plan.W = 50
+param plan.n = 4
+
+sketch plan(on: xy) {
+  outline = poly([(n, 0), (L - n, 0), (L - n, n), (L, n), (L, W - n), (L - n, W - n),
+                  (L - n, W), (n, W), (n, W - n), (0, W - n), (0, n), (n, n)])
+}
+base = sheet(plan, t: t, r: r, bend: kfactor(k))
+front = flange(base.edge(plan.outline[0]), height: H, measure: "outer")
+east = flange(base.edge(plan.outline[3]), height: H, measure: "outer")
+back = flange(base.edge(plan.outline[6]), height: H, measure: "outer")
+west = flange(base.edge(plan.outline[9]), height: H, measure: "outer")
+blank = unfold(base, on: offset(base.bottom, H))
+expect valid

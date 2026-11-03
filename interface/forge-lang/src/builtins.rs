@@ -106,6 +106,10 @@ pub fn constant(name: &str) -> Option<Value> {
         "thru_all" => Some(Value::Extent(ExtentV::ThruAll)),
         "next" => Some(Value::Extent(ExtentV::Next)),
         n if MORE.contains(&n) => MORE.iter().find(|m| **m == n).map(|m| Value::Builtin(m)),
+        n if crate::sheet::BUILTINS.contains(&n) => crate::sheet::BUILTINS
+            .iter()
+            .find(|m| **m == n)
+            .map(|m| Value::Builtin(m)),
         _ => None,
     }
 }
@@ -166,13 +170,13 @@ impl Args {
     pub fn span(&self, k: &str) -> Span {
         self.vals.get(k).map_or(self.call, |v| v.1)
     }
-    fn num(&self, k: &'static str, dims: &[Dim]) -> R<Option<Num>> {
+    pub(crate) fn num(&self, k: &'static str, dims: &[Dim]) -> R<Option<Num>> {
         match self.opt(k) {
             None => Ok(None),
             Some(v) => num_of(v, dims, self.span(k), k).map(Some),
         }
     }
-    fn req_num(&self, k: &'static str, dims: &[Dim]) -> R<Num> {
+    pub(crate) fn req_num(&self, k: &'static str, dims: &[Dim]) -> R<Num> {
         num_of(self.req(k)?, dims, self.span(k), k)
     }
     fn flag(&self, k: &'static str) -> R<bool> {
@@ -238,7 +242,7 @@ fn dim(what: &'static str, n: &Num) -> Dimension {
     Dimension { what, num: n.clone() }
 }
 
-const LEN: &[Dim] = &[Dim::Length];
+pub(crate) const LEN: &[Dim] = &[Dim::Length];
 const ANG: &[Dim] = &[Dim::Angle];
 
 /// The sketch the call is inside, or a WrongPlace error.
@@ -784,6 +788,7 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
         "tangent" | "coincident" | "horizontal" | "vertical" | "parallel" | "perpendicular" | "equal"
         | "midpoint" | "distance" | "radius" | "angle" | "fix" => constraint(ev, name, args, span),
         "extrude" | "cut" | "intersect" => extrude(ev, name, args, span),
+        n if crate::sheet::BUILTINS.contains(&n) => crate::sheet::call(ev, name, args, span),
         "revolve" => revolve(ev, args, span),
         "hole" => hole(ev, args, span),
         "fillet" | "chamfer" => finish(ev, name, args, span),
@@ -1097,7 +1102,11 @@ fn constraint(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<
 
 // ---- features ---------------------------------------------------------------------------
 
-fn profile_of(ev: &Eval, v: Value, span: Span) -> R<(Rc<RefCell<Sk>>, forge_ops::Profile, Vec<EntityId>)> {
+pub(crate) fn profile_of(
+    ev: &Eval,
+    v: Value,
+    span: Span,
+) -> R<(Rc<RefCell<Sk>>, forge_ops::Profile, Vec<EntityId>)> {
     let _ = ev;
     match v {
         Value::Sketch(s) => {
@@ -1778,6 +1787,28 @@ fn cap(ev: &mut Eval, f: &Feat, end: bool) -> Value {
     v
 }
 
+/// A local param of feature `id` read from outside it.
+pub(crate) fn feature_local(ev: &mut Eval, id: &str, name: &str, span: Span) -> Option<R<Value>> {
+    let p = ev
+        .locals
+        .iter()
+        .find(|p| p.key.name == name && crate::error::path_text(&p.key.owner) == id)?;
+    let key = p.key.clone();
+    let k = ev.locals.iter().position(|q| q.key == key).expect("found");
+    if let Err(e) = ev.out_of_scope_rule(key, span) {
+        return Some(Err(e));
+    }
+    ev.locals[k].used = true;
+    Some(Ok(match &ev.locals[k].value {
+        Value::Num(n) => Value::Num(Num {
+            v: n.v,
+            dim: n.dim,
+            src: Src::Driving(ev.locals[k].key.clone()),
+        }),
+        o => o.clone(),
+    }))
+}
+
 pub fn member(ev: &mut Eval, v: Value, name: &str, span: Span) -> R<Value> {
     let unknown = |v: &Value| Error::UnknownMember {
         span,
@@ -1785,25 +1816,10 @@ pub fn member(ev: &mut Eval, v: Value, name: &str, span: Span) -> R<Value> {
         member: name.into(),
     };
     match &v {
+        Value::Sheet(s) => crate::sheet::member(ev, &s.clone(), name, span),
         Value::Feature(f) => {
-            // a local param of the feature read from outside it
-            if let Some(p) = ev
-                .locals
-                .iter()
-                .find(|p| p.key.name == name && crate::error::path_text(&p.key.owner) == f.id)
-            {
-                let key = p.key.clone();
-                let k = ev.locals.iter().position(|q| q.key == key).expect("found");
-                ev.out_of_scope_rule(key, span)?;
-                ev.locals[k].used = true;
-                return Ok(match &ev.locals[k].value {
-                    Value::Num(n) => Value::Num(Num {
-                        v: n.v,
-                        dim: n.dim,
-                        src: Src::Driving(ev.locals[k].key.clone()),
-                    }),
-                    o => o.clone(),
-                });
+            if let Some(v) = feature_local(ev, &f.id, name, span) {
+                return v;
             }
             match name {
                 "start" | "end" | "floor" | "mouth" if f.shape.is_some() => {
@@ -2072,7 +2088,7 @@ fn rim(ev: &mut Eval, f: &Feat, o: Point3, d: UnitVec3) -> Value {
 
 // ---- selections -------------------------------------------------------------------------
 
-fn word(a: &Args, k: &'static str, allowed: &[&'static str]) -> R<Option<&'static str>> {
+pub(crate) fn word(a: &Args, k: &'static str, allowed: &[&'static str]) -> R<Option<&'static str>> {
     match a.opt(k) {
         None => Ok(None),
         Some(Value::Str(s)) => {

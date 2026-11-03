@@ -77,6 +77,9 @@ pub struct Builder {
     cache: Cache,
     /// The cached stages still matching this run's prefix.
     reuse: bool,
+    /// Whether a step built here (a sheet) holds bodies the kernel's history cannot step: then
+    /// features that make nothing pass the bodies on as they are.
+    hosted: bool,
     pub kernel_ms: f64,
     pub rebuilt: usize,
     pub reused: usize,
@@ -92,6 +95,7 @@ impl Builder {
             origins: vec![],
             cache,
             reuse: true,
+            hosted: false,
             kernel_ms: 0.0,
             rebuilt: 0,
             reused: 0,
@@ -137,9 +141,61 @@ impl Builder {
             return Ok(i);
         }
         self.reuse = false;
+        if self.hosted
+            && matches!(
+                self.features[i],
+                Feature::Sketch(_) | Feature::Param(_) | Feature::Plane(_) | Feature::Work(_)
+            )
+            && let Some(last) = self.stages.last()
+        {
+            self.stages.push(last.clone());
+            return Ok(i);
+        }
         let before = self.stages.last().map(|s| s.solids.clone()).unwrap_or_default();
         let t = Instant::now();
         let r = step_solids(History::new(&self.features, Some(&self.ids)), i, before);
+        self.kernel_ms += t.elapsed().as_secs_f64() * 1e3;
+        self.rebuilt += 1;
+        match r {
+            Ok(solids) => {
+                self.stages.push(Rc::new(Stage::new(solids)));
+                Ok(i)
+            }
+            Err(e) => {
+                self.building = false;
+                Err(e)
+            }
+        }
+    }
+
+    /// Adds a step built here, not by the kernel's history (a sheet): `f` stands for it in the
+    /// history (equal exactly when the step is), `make` gives the bodies after it.
+    pub fn push_with<E>(
+        &mut self,
+        f: Feature,
+        id: u64,
+        make: impl FnOnce(&[Solid]) -> Result<Vec<Solid>, E>,
+    ) -> Result<usize, E> {
+        let i = self.features.len();
+        self.features.push(f);
+        self.ids.push(id);
+        self.hosted = true;
+        if !self.building {
+            return Ok(i);
+        }
+        if self.reuse
+            && self.cache.features.get(i) == Some(&self.features[i])
+            && self.cache.ids.get(i) == Some(&id)
+            && let Some(st) = self.cache.stages.get(i)
+        {
+            self.stages.push(st.clone());
+            self.reused += 1;
+            return Ok(i);
+        }
+        self.reuse = false;
+        let before = self.stages.last().map(|s| s.solids.clone()).unwrap_or_default();
+        let t = Instant::now();
+        let r = make(&before);
         self.kernel_ms += t.elapsed().as_secs_f64() * 1e3;
         self.rebuilt += 1;
         match r {

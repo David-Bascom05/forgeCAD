@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::io::{BufRead, Write};
 use std::process::ExitCode;
 
-const USAGE: &str = "fg run FILE [--json] [--render OUT.png] [--view iso|front|top|right|..] [--px N]
+const USAGE: &str = "fg run FILE [--json] [--render OUT.png] [--view iso|front|top|right|..] [--px N] [--dxf OUT.dxf]
 fg check FILE [--json]          parse, static rules, types and dimensions; no kernel
 fg edit FILE 'OP' [--json]      apply a typed op (JSON, as errors' fixes give them), then check
 fg handles FILE                 the editable handles: every param, its value and dimension
@@ -36,6 +36,33 @@ fn print_json(j: &Json) {
     println!("{s}");
 }
 
+/// Each sheet's flat pattern as DXF: OUT itself for one sheet, OUT with `-<id>` before its
+/// extension for each of several.
+fn write_dxf(run: &forge_lang::Run, out: &str) {
+    let many = run.sheets.len() > 1;
+    if run.sheets.is_empty() {
+        eprintln!("--dxf: the part has no sheet");
+    }
+    for s in &run.sheets {
+        let path = if many {
+            match out.rsplit_once('.') {
+                Some((stem, ext)) => format!("{stem}-{}.{ext}", s.id),
+                None => format!("{out}-{}", s.id),
+            }
+        } else {
+            out.to_string()
+        };
+        match s.dxf() {
+            Ok(text) => {
+                if let Err(e) = std::fs::write(&path, text) {
+                    eprintln!("{path}: {e}");
+                }
+            }
+            Err(e) => eprintln!("--dxf {}: the sheet is refused: {e:?}", s.id),
+        }
+    }
+}
+
 fn run_file(file: &str, args: &[String], build: bool) -> ExitCode {
     let src = match read(file) {
         Ok(s) => s,
@@ -60,6 +87,9 @@ fn run_file(file: &str, args: &[String], build: bool) -> ExitCode {
             }
             Err(e) => eprintln!("render: {e}"),
         }
+    }
+    if let Some(out) = opt(args, "--dxf") {
+        write_dxf(&run, out);
     }
     if flag(args, "--json") {
         print_json(&report::json(&run, &src));

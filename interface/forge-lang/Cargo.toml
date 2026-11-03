@@ -18,6 +18,7 @@ forge-ops = { path = "../../kernel/forge-ops" }
 forge-mesh = { path = "../../kernel/forge-mesh" }
 forge-model = { path = "../../kernel/forge-model" }
 forge-sketch = { path = "../../kernel/forge-sketch" }
+forge-sheet = { path = "../../kernel/forge-sheet" }
 forge-agent = { path = "../forge-agent" }
 
 [lints]

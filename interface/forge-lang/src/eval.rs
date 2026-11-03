@@ -156,6 +156,8 @@ pub enum Value {
     Faces(Rc<Faces>),
     Edges(Rc<Vec<Name>>),
     Extent(ExtentV),
+    /// Sheet metal: features, edges, unfolds, and shop data (`sheet.rs`).
+    Sheet(Rc<crate::sheet::SheetVal>),
     /// What `check` cannot know without building (a selection, a face's plane).
     Unresolved,
 }
@@ -183,6 +185,7 @@ impl Value {
             Value::Faces(_) => Ty::Faces,
             Value::Edges(_) => Ty::Edges,
             Value::Extent(_) => Ty::Extent,
+            Value::Sheet(s) => s.ty(),
             Value::Unresolved => Ty::Unresolved,
         }
     }
@@ -283,6 +286,8 @@ pub struct Eval<'s> {
     pub volumes: bool,
     /// Whether the built-in being called was given something unknown.
     pub poisoned: bool,
+    /// The part's sheets (`sheet.rs`).
+    pub sheets: crate::sheet::Sheets,
 }
 
 #[derive(Clone)]
@@ -328,6 +333,7 @@ impl<'s> Eval<'s> {
             reads: BTreeSet::new(),
             volumes: false,
             poisoned: false,
+            sheets: Default::default(),
         }
     }
 
@@ -1368,6 +1374,13 @@ impl<'s> Eval<'s> {
     }
 
     fn call(&mut self, f: &Expr, args: &[Arg], span: Span) -> R<Value> {
+        // methods of sheet values: `S.edge(entity)`, `U.of(op)`
+        if let ExprKind::Attr(o, m) = &f.kind
+            && crate::sheet::METHODS.contains(&m.as_str())
+            && let Value::Sheet(s) = self.expr(o)?
+        {
+            return crate::sheet::method(self, &s, m, args, span);
+        }
         // `E.side(entity)`: the face one entity of E's profile made
         if let ExprKind::Attr(o, m) = &f.kind
             && m == "side"
@@ -1565,9 +1578,29 @@ impl<'s> Eval<'s> {
         span: Span,
         dims: Vec<Dimension>,
     ) -> R<(usize, u64)> {
+        crate::sheet::guard(self, &f, id, span)?;
         let hid = history_id(id);
+        self.push_made(id, kind, span, dims, hid, |b| {
+            b.push(f, hid).map_err(|error| Error::Build {
+                span,
+                id: id.into(),
+                error,
+            })
+        })
+    }
+
+    /// Adds a feature to the history and builds it by `push`, keeping its record.
+    pub fn push_made(
+        &mut self,
+        id: &str,
+        kind: &'static str,
+        span: Span,
+        dims: Vec<Dimension>,
+        hid: u64,
+        push: impl FnOnce(&mut crate::build::Builder) -> R<usize>,
+    ) -> R<(usize, u64)> {
         let was_building = self.b.building;
-        let r = self.b.push(f, hid);
+        let r = push(&mut self.b);
         let idx = self.b.features.len() - 1;
         let status = match (&r, was_building) {
             (Ok(_), true) => Status::Ok,
@@ -1601,13 +1634,7 @@ impl<'s> Eval<'s> {
             last.mass = v;
             last.fingerprint = Some(h.finish());
         }
-        if let Err(error) = r {
-            return Err(Error::Build {
-                span,
-                id: id.into(),
-                error,
-            });
-        }
+        r?;
         if status == Status::Ok && idx > 0 && self.no_effect(idx) {
             self.warnings.push(Warning::NoEffect { span, id: id.into() });
         }
@@ -1797,6 +1824,7 @@ fn driving(v: &Value, key: &ParamKey, span: Span) -> Value {
             }),
             Value::List(xs) => Value::List(Rc::new(xs.iter().map(|x| inner(x, key)).collect())),
             Value::Tuple(xs) => Value::Tuple(Rc::new(xs.iter().map(|x| inner(x, key)).collect())),
+            Value::Sheet(s) => Value::Sheet(Rc::new(s.driven(key))),
             o => o.clone(),
         }
     }
@@ -1815,6 +1843,7 @@ pub fn collect_params(v: &Value, out: &mut BTreeSet<ParamKey>) {
         Value::Num(n) => out.extend(n.src.params()),
         Value::List(xs) | Value::Tuple(xs) => xs.iter().for_each(|x| collect_params(x, out)),
         Value::Map(m) => m.iter().for_each(|x| collect_params(&x.1, out)),
+        Value::Sheet(s) => s.params(out),
         _ => {}
     }
 }

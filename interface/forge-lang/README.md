@@ -130,6 +130,40 @@ Tests (`cargo test -p forge-lang`):
 - `grammar`: zero LL(1) conflicts.
 - forge-ops `roles`: the builders name caps and walls by role.
 
+## Sheet metal (`src/sheet.rs`)
+
+`sheet`, `flange`, `cutout` and `unfold` on forge-sheet's wall-and-joint graph; the shop as data
+(`kfactor`, `ktable`, `bend_table`, `per_t`, `stock`, `shop`). Each sheet feature is a feature with
+its own id; the sheet is rebuilt whole after each (tens of microseconds) and its body replaced in
+the part. The history holds a marker for each (a `Param` equal exactly when the step is), and
+features that make nothing pass a sheet part's bodies on (forge-model cannot step them). Anchors
+read the kernel's roles (`forge_sheet::Roles`): wall and bend skins, each trim's side faces and
+edges, the same on the folded body and on an unfold's (its names salted by the unfold's id).
+Ordinary features on a sheet part are refused, typed, both ways round; reliefs are refused until
+decided (sheet-metal/sheet-crate/reliefs.md). `fg run --dxf` writes the flat pattern.
+
+Hand-written parts (`parts/sheet/`), each clean (no errors, warnings or lints) and matching
+forge-sheet's closed forms: L, U (up 90 and down 60, unfolded), Z (a lip off a flange's tip),
+an open box (four flanges off a notched base, open corners), an L with three holes across its
+bend, an L with a spline window in its flange. Folded volume within the mass error of the closed
+form; flat volume likewise; V_fold - V_flat = sum theta len t^2 (1/2 - K); the DXF read back gives
+the flat body's volume (area times t); K leaves the folded body the same to the bit.
+
+| part | cold `fg run` | serve: first | unchanged | last param edited | first param (t) edited |
+|---|---|---|---|---|---|
+| l | 1.6 ms | 0.44 ms | 0.18 ms | 0.25 ms (1 rebuilt) | 0.26 ms (2 rebuilt) |
+| u | 2.0 ms | 0.86 ms | 0.36 ms | 0.59 ms (1) | 0.63 ms (4) |
+| z | 1.8 ms | 0.62 ms | 0.31 ms | 0.44 ms (1) | 0.45 ms (3) |
+| box | 3.6 ms | 2.44 ms | 1.60 ms | 2.13 ms (7) | 1.97 ms (7) |
+| holes | 5.3 ms | 4.01 ms | 0.61 ms | 3.82 ms (2) | 3.67 ms (4) |
+| spline | 3.1 ms | 1.94 ms | 0.39 ms | 1.73 ms (2) | 1.67 ms (4) |
+
+Tests: `sheet` (the parts against closed forms, the DXF, K, anchors folded and flat, names under
+edits, every refusal typed and its fix applied), `sheet_props` (300 random sheet parts with four
+random typed edits each: text and tree agree, ids hold, a checked document still checks unless the
+edit put a feature after the unfold or gave a size the sheet cannot take; 120 random parts built
+valid, the fold/flat identity, a height edit renaming no face).
+
 ## Gaps, and kernel changes it would want
 
 - **Measuring is the warm path's cost** (220 ms of the crank's 224 ms after a late edit). Mass
@@ -149,5 +183,9 @@ Tests (`cargo test -p forge-lang`):
 - **`check` cannot resolve geometric anchors**: without building, `E.side(..)` planes and
   selections are unknown, and what depends on them is checked for types only.
 - Not wired yet: sweep, coil, thread, text, draft, patterns (loops replace them), multi-body ops.
+- Sheet metal not built in the kernel, so not in Forge: reliefs (waiting on a decision), rip and
+  tangent joints, corner treatments (corners stay open), closing bend cycles, hole and slot
+  checks against bends and edges, PEM hardware, ordinary features on a sheet. A flange's
+  "material inside/outside" position is not an option: the flange turns on the edge itself.
 - The LL(1) check is a FIRST/FOLLOW checker in the test, not lalrpop or grmtools (no new
   dependencies in the workspace).

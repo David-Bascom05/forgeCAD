@@ -206,6 +206,103 @@ not placement). Selecting by where things lie (`extreme:`) is the error `Positio
 an unrelated edit can retarget it. A selection that picks nothing at a fillet or chamfer is
 `EmptySelection`.
 
+## Sheet metal
+
+A sheet part is a graph of walls joined by bends (forge-sheet), built whole after each sheet
+feature, folded and, on request, flat. The sketch plane of the base is the sheet's reference
+skin (`top`); the material lies a thickness behind it, against the sketch normal.
+
+```
+shared t = 2
+shared r = 2
+shared k = ratio(0.4)
+param plan.L = 40
+param plan.W = 30
+param up.h = 30
+param hs.x = 15
+param hs.y = 15
+param hs.d = 6
+param blank.gap = 20
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (L, W))
+}
+base = sheet(plan, t: t, r: r, bend: kfactor(k))
+up = flange(base.edge(plan.outline[1]), height: h, measure: "inner")
+sketch hs(on: up.top) {
+  c = circle((x, y), d)                    # in the flange's own coordinates
+}
+vent = cutout(hs.c, wall: up)
+blank = unfold(base, on: offset(base.bottom, gap))
+```
+
+```
+sheet(PROFILE, t: T, r: R, bend: RULE, shop: SHOP)
+    the base wall: PROFILE's outline and holes. r and bend may come from the shop's stock of
+    thickness t instead. Its own dims: thickness, radius, k.
+flange(EDGE, height: H, angle: A = 90deg, side: "up"|"down" = "up",
+       measure: "inner"|"outer" = "outer", r: R, relief: ..)
+    a wall turned A (0 < A < 180deg) off a straight wall edge, as long as the edge. up turns
+    towards the wall's top. H runs along the flange from the virtual sharp of the inner or the
+    outer skins. r: this bend's own inside radius (default the sheet's). relief: refused,
+    ReliefUndecided (reliefs wait on a decision; cut one with cutout past the tangent line).
+cutout(PROFILE, wall: W)
+    PROFILE taken out of the sheet. Its sketch lies on W's top or bottom; the profile is placed
+    in W's developed coordinates, so it cuts across bends into the walls beyond as they unfold.
+    A whole sketch cuts all its regions; lines, arcs, circles and splines.
+unfold(S, on: PLANE)
+    the flat body of S's sheet as a new body, its first wall on PLANE (default where it is
+    folded). Sheet features after an unfold of their sheet are AfterUnfold.
+```
+
+EDGE: `B.edge(ENTITY)` for the base B (a straight line of its profile), `F.tip`, `F.start_side`,
+`F.end_side` for a flange F (the far edge; the sides at the start and the end of the edge it
+turned off).
+
+Anchors, the same on the folded body and on an unfold's (`U.of(F)`):
+
+```
+W.top  W.bottom          a wall's skins (base or flange): planes in the wall's own coordinates
+                         (x, y as its sketch or, for a flange, x from the mold line to the tip,
+                         y along it), z out of the material
+F.bend  F.bend_top  F.bend_bottom   a flange's bend zone skins
+EDGE.face  EDGE.edges  EDGE.top  EDGE.bottom   an edge's side face (a plane: origin at the edge's
+                         start on the top skin, x along it, z out of the wall) and its edges
+X.faces  X.edges         what a sheet feature made; U.faces, U.edges: the whole flat
+U.of(X)                  feature X of the unfolded sheet, on the flat body
+```
+
+The shop is data, held by params:
+
+```
+kfactor(K)                        K a Ratio in [0, 1]: BA = angle (r + K t)
+ktable([(R_OVER_T, K), ..])       K by r/t, linear between rows (Ratios, increasing)
+bend_table([(R, A, BA), ..])      measured allowances for each radius, linear in angle
+per_t(F, plus: L = 0)             a length F t + L (F a Ratio)
+stock(t: T, bend: RULE, radii: [R, ..], min_flange: S, hole_to_bend: S, hole_to_edge: S,
+      min_slot: S, relief_width: S, relief_depth: S)   S: per_t(..); left out: no limit
+shop([STOCK, ..])
+```
+
+A sheet given `shop:` is checked against it at the end of the run: thickness stocked, each
+bend's radius tooled, each wall reaching the die's minimum flange from its bend. Each is a typed
+warning (`ThicknessNotStocked`, `RadiusNotTooled`, `FlangeTooShort`; severity `violation`) with a
+SetParam fix. Holes and slots against bends and edges are not checked yet.
+
+Rules: features that are not sheet metal are refused in a part with a sheet
+(`OrdinaryOnSheet`, fix DeleteFeature), and a sheet in a part with a solid is `SheetOnSolid`.
+Every kernel refusal is a typed error named as the kernel names it (`WallTooShort`,
+`BendAngle`, `BendRule`, `EdgeTaken`, `NeedsRelief`, `FoldedClash`, `Pinched`, `NearCoincident`,
+`TrimTouchesBendLine`, `TrimAlongBendLine`, `TangentMismatch`, ...), its walls, joints, cuts and
+trims named by the Forge features that made them, with a SetParam fix where a param cures it
+(a flange's height, its angle, K, the radius). Others: `NotAnEdge`, `CutOffWall`, `OtherSheet`,
+`NoSuchRole`, `TableRow`, `ReliefUndecided`. K moves only the flat: the folded body is the same
+to the bit for any K.
+
+`fg run F.fg --dxf OUT.dxf` writes each sheet's flat pattern (R2000 DXF, mm): cut contours on
+layer CUT (lines, arcs, circles, NURBS), bend lines down each zone's middle on layer BEND. `fg run
+--json` lists each sheet: thickness, radius, rule, and each bend's flange, angle, radius,
+allowance and setback.
+
 ## Functions and recursion
 
 Functions are pure: they see their arguments, shared params, other functions and built-ins. A
@@ -264,6 +361,7 @@ value's dimension is not the param's), or the edited document's own errors.
 
 ```
 fg run FILE [--json] [--render OUT.png] [--view iso|front|top|right|back|left|bottom] [--px N]
+           [--dxf OUT.dxf]
 fg check FILE [--json]
 fg edit FILE 'OP' [--json]
 fg handles FILE

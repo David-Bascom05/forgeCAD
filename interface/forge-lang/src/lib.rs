@@ -10,6 +10,7 @@ pub mod edit;
 pub mod error;
 pub mod eval;
 pub mod report;
+pub mod sheet;
 pub mod sketch;
 pub mod syntax;
 pub mod values;
@@ -87,6 +88,8 @@ pub struct Run {
     pub body: Option<forge_topo::Body>,
     /// Params whose values evaluation observed: editing one re-runs, any other re-reads.
     pub observed: std::collections::BTreeSet<error::ParamKey>,
+    /// The part's sheets as they ended, for the report and the flat pattern.
+    pub sheets: Vec<sheet::SheetOut>,
 }
 
 impl Run {
@@ -120,6 +123,7 @@ pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
                     reused: 0,
                     body: None,
                     observed: Default::default(),
+                    sheets: vec![],
                 },
                 cache,
             );
@@ -136,6 +140,7 @@ pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
     }
     let t2 = Instant::now();
     ev.run(&prog);
+    sheet::finish(&mut ev);
     timings.eval_ms = t2.elapsed().as_secs_f64() * 1e3;
     timings.kernel_ms = ev.b.kernel_ms;
     let t3 = Instant::now();
@@ -176,6 +181,7 @@ pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
         reused,
         body,
         observed: std::mem::take(&mut ev.observed),
+        sheets: sheet::outputs(&ev),
     };
     (run, ev.b.into_cache())
 }

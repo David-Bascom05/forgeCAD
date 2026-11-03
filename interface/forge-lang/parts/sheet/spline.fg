@@ -1,0 +1,25 @@
+# An L with a spline window in its flange, sketched on the flange's top.
+shared t = 2
+shared r = 2
+shared k = ratio(0.4)
+param plan.L = 40
+param plan.W = 30
+param up.h = 30
+param blank.gap = 30
+param win.x0 = 8
+param win.x1 = 22
+param win.y0 = 6
+param win.y1 = 24
+param win.bulge = 3
+
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (L, W))
+}
+base = sheet(plan, t: t, r: r, bend: kfactor(k))
+up = flange(base.edge(plan.outline[1]), height: h, measure: "inner")
+sketch win(on: up.top) {
+  blob = spline([(x0, y0), (x1 - bulge, y0 + bulge), (x1, y1), (x0 + bulge, y1 - bulge)], closed: true)
+}
+window = cutout(win, wall: up)
+blank = unfold(base, on: offset(base.bottom, gap))
+expect valid

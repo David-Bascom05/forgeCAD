@@ -619,6 +619,8 @@ pub enum Error {
         want: Dim,
         found: Dim,
     },
+    /// Sheet metal: the kernel's refusals and the language's own (`sheet.rs`).
+    Sheet(Box<crate::sheet::SheetErr>),
 }
 
 impl Error {
@@ -683,6 +685,7 @@ impl Error {
             | NotAStatement { .. }
             | NameTaken { .. }
             | EditDim { .. } => None,
+            Sheet(e) => e.span(),
         }
     }
 
@@ -738,6 +741,7 @@ impl Error {
             StillRead { .. } => "StillRead",
             ShadowsTopLevel { .. } => "ShadowsTopLevel",
             EditDim { .. } => "EditDim",
+            Sheet(e) => e.kind(),
         }
     }
 
@@ -777,6 +781,7 @@ impl Error {
                 },
                 Op::MakeShared { param: param.clone() },
             ],
+            Sheet(e) => e.fixes(),
             _ => vec![],
         }
     }
@@ -913,6 +918,7 @@ impl Error {
             }
             ShadowsTopLevel { name, .. } => format!("{name} is a top-level name; a local may not hide it"),
             EditDim { param, want, found } => format!("{param} is a {want:?}; the value is a {found:?}"),
+            Sheet(e) => e.text(),
         }
     }
 
@@ -1008,6 +1014,7 @@ impl Error {
             UnknownFeature { id } | NotAStatement { id } => vec![("id", s(id))],
             StillRead { name, reader, .. } => vec![("name", s(name)), ("reader", s(reader))],
             ShadowsTopLevel { name, .. } => vec![("name", s(name))],
+            Sheet(e) => e.data(),
             _ => vec![],
         }
     }
@@ -1024,6 +1031,8 @@ pub enum Warning {
     UnusedParam { span: Span, param: ParamKey },
     /// A feature that changed nothing (a cut that misses, an add inside the part).
     NoEffect { span: Span, id: String },
+    /// A sheet's kernel warning or shop violation, with fixes (`sheet.rs`).
+    Sheet(Box<crate::sheet::SheetNote>),
 }
 
 impl Warning {
@@ -1035,8 +1044,11 @@ impl Warning {
             }
             return j;
         }
+        if let Warning::Sheet(n) = self {
+            return n.json(src);
+        }
         let (kind, span, mut data): (&str, Span, Vec<(&str, Json)>) = match self {
-            Warning::Lint(_) => unreachable!("above"),
+            Warning::Lint(_) | Warning::Sheet(_) => unreachable!("above"),
             Warning::UnderConstrained { span, sketch, dof } => (
                 "UnderConstrained",
                 *span,

@@ -125,6 +125,7 @@ dependencies = [
  "forge-mesh",
  "forge-model",
  "forge-ops",
+ "forge-sheet",
  "forge-sketch",
  "forge-topo",
 ]
