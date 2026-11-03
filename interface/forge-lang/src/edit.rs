@@ -102,11 +102,12 @@ pub fn mentions(s: &Stmt) -> BTreeSet<String> {
         StmtKind::For { iter, .. } => mentions_expr(iter, &mut out),
         StmtKind::If { cond, .. } => mentions_expr(cond, &mut out),
         StmtKind::Block { args, .. } => args.iter().for_each(|a| mentions_expr(&a.value, &mut out)),
-        StmtKind::Expect { args, cmp, .. } => {
+        StmtKind::Expect { args, cmp, at, .. } => {
             args.iter().for_each(|a| mentions_expr(a, &mut out));
             if let Some((_, v, _)) = cmp {
                 mentions_expr(v, &mut out);
             }
+            at.iter().for_each(|(_, v)| mentions_expr(v, &mut out));
         }
         StmtKind::Fn { .. } => {}
     });
@@ -751,12 +752,18 @@ pub fn strip(prog: &[Stmt]) -> Vec<Stmt> {
                 other: other.as_ref().map(|o| strip(o)),
             },
             StmtKind::Return(e) => StmtKind::Return(ex(e)),
-            StmtKind::Expect { metric, args, cmp } => StmtKind::Expect {
+            StmtKind::Expect {
+                metric,
+                args,
+                cmp,
+                at,
+            } => StmtKind::Expect {
                 metric: metric.clone(),
                 args: args.iter().map(ex).collect(),
                 cmp: cmp
                     .as_ref()
                     .map(|(c, v, t)| (*c, ex(v), t.as_ref().map(|(x, p)| (ex(x), *p)))),
+                at: at.iter().map(|(p, v)| (p.clone(), ex(v))).collect(),
             },
             StmtKind::Block {
                 kind,

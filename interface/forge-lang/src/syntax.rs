@@ -65,9 +65,9 @@ pub struct Tok {
     pub span: Span,
 }
 
-pub const KEYWORDS: [&str; 16] = [
+pub const KEYWORDS: [&str; 17] = [
     "shared", "param", "fn", "for", "in", "if", "else", "return", "expect", "and", "or", "not", "true",
-    "false", "sketch", "path",
+    "false", "sketch", "path", "at",
 ];
 
 pub const OPS: [&str; 26] = [
@@ -511,6 +511,8 @@ pub enum StmtKind {
         metric: String,
         args: Vec<Expr>,
         cmp: Option<ExpectCmp>,
+        /// `at P = v, ..`: params held at these values for this check (an assembly's pose).
+        at: Vec<(Vec<Seg>, Expr)>,
     },
     /// `sketch NAME(args) { rows }` or `path NAME(args) { segments }`.
     Block {
@@ -604,6 +606,7 @@ enum V {
     Args(Vec<Arg>),
     Cmp(Cmp),
     ExpCmp(Box<ExpectCmp>),
+    Ats(Vec<(Vec<Seg>, Expr)>),
     Tol(Expr, bool),
     Pct(bool),
     IfPart(Box<(Expr, Expr)>),
@@ -1023,7 +1026,32 @@ impl Parser {
                     V::None => None,
                     _ => unreachable!("rule action and grammar.ll1 disagree"),
                 },
+                at: {
+                    let mut at = list!(self, b + 4, V::Ats);
+                    at.reverse();
+                    at
+                },
             }),
+            P::ExpatAt => {
+                let mut rest = list!(self, b + 4, V::Ats);
+                rest.push((get!(self, b + 1, V::Segs(s) => s), self.expr(b + 3)));
+                V::Ats(rest)
+            }
+            P::ExpmoreComma => {
+                let mut rest = list!(self, b + 4, V::Ats);
+                rest.push((get!(self, b + 1, V::Segs(s) => s), self.expr(b + 3)));
+                V::Ats(rest)
+            }
+            P::AtpathId => {
+                let mut segs = list!(self, b + 2, V::Segs);
+                let index = list!(self, b + 1, V::Keys);
+                segs.push(Seg {
+                    name: self.text(b),
+                    index,
+                });
+                segs.reverse();
+                V::Segs(segs)
+            }
             P::StmtSketch | P::StmtPath => {
                 let mut args = list!(self, b + 3, V::Args);
                 args.reverse();
@@ -1171,6 +1199,11 @@ impl Parser {
                 rest.push(get!(self, b, V::Arg(a) => a));
                 V::Args(rest)
             }
+            // `at:` is a keyword argument as any other; `at` is a word only after an expect line
+            P::ArgAt => V::Arg(Arg {
+                name: Some(("at".into(), self.tok(b).span)),
+                value: self.expr(b + 2),
+            }),
             P::ArgExpr => {
                 let e = self.expr(b);
                 V::Arg(match self.take(b + 1) {
@@ -1398,6 +1431,8 @@ impl Parser {
             | P::ExprsEmpty
             | P::ExprsrestEmpty
             | P::ExptolEmpty
+            | P::ExpatEmpty
+            | P::ExpmoreEmpty
             | P::ForvarsEmpty
             | P::FparamrestEmpty
             | P::FparamsEmpty

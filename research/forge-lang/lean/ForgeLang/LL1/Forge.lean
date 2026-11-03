@@ -5,8 +5,8 @@ change, then `lake build` re-runs the kernel check. -/
 
 namespace ForgeLang.LL1.Forge
 
-def ntNames : List String := ["program", "block", "stmts", "stmtsrest", "seps", "sep", "stmt", "assigntail", "path", "pathrest", "keys", "key", "keyrest", "fparams", "fparamrest", "fparam", "fptype", "fpdefault", "forvars", "elsepart", "elsebody", "expargs", "exprs", "exprsrest", "expcmp", "cmpop", "exptol", "pct", "args", "argsrest", "arg", "argkw", "expr", "ifpart", "or", "orrest", "and", "andrest", "not", "cmp", "cmprest", "relop", "range", "rangetail", "add", "addrest", "mul", "mulrest", "unary", "power", "powtail", "postfix", "postrest", "atom", "tuple", "tuplerest", "listbody", "listtail", "listmore", "listrest", "compif", "mapbody", "maprest"]
-def tNames : List String := ["EOF", "'{'", "'}'", "NL", "';'", "'shared'", "ID", "'='", "'param'", "'fn'", "'('", "')'", "'for'", "'in'", "'if'", "'return'", "'expect'", "'sketch'", "'path'", "'.'", "'['", "']'", "NUM", "','", "':'", "'else'", "'<'", "'<='", "'>'", "'>='", "'+-'", "'%'", "'or'", "'and'", "'not'", "'=='", "'!='", "'..'", "'..='", "'+'", "'-'", "'*'", "'/'", "'^'", "STR", "'true'", "'false'"]
+def ntNames : List String := ["program", "block", "stmts", "stmtsrest", "seps", "sep", "stmt", "assigntail", "path", "pathrest", "keys", "key", "keyrest", "fparams", "fparamrest", "fparam", "fptype", "fpdefault", "forvars", "elsepart", "elsebody", "expargs", "exprs", "exprsrest", "expcmp", "cmpop", "exptol", "pct", "expat", "expmore", "atpath", "args", "argsrest", "arg", "argkw", "expr", "ifpart", "or", "orrest", "and", "andrest", "not", "cmp", "cmprest", "relop", "range", "rangetail", "add", "addrest", "mul", "mulrest", "unary", "power", "powtail", "postfix", "postrest", "atom", "tuple", "tuplerest", "listbody", "listtail", "listmore", "listrest", "compif", "mapbody", "maprest"]
+def tNames : List String := ["EOF", "'{'", "'}'", "NL", "';'", "'shared'", "ID", "'='", "'param'", "'fn'", "'('", "')'", "'for'", "'in'", "'if'", "'return'", "'expect'", "'sketch'", "'path'", "'.'", "'['", "']'", "NUM", "','", "':'", "'else'", "'<'", "'<='", "'>'", "'>='", "'+-'", "'%'", "'at'", "'or'", "'and'", "'not'", "'=='", "'!='", "'..'", "'..='", "'+'", "'-'", "'*'", "'/'", "'^'", "STR", "'true'", "'false'"]
 
 def grammar : Grammar where
   start := 0
@@ -21,17 +21,17 @@ def grammar : Grammar where
     (4, []),  -- seps := %empty
     (5, [.t 3]),  -- sep := NL
     (5, [.t 4]),  -- sep := ';'
-    (6, [.t 5, .t 6, .t 7, .n 32]),  -- stmt := 'shared' ID '=' expr
-    (6, [.t 8, .n 8, .t 7, .n 32]),  -- stmt := 'param' path '=' expr
+    (6, [.t 5, .t 6, .t 7, .n 35]),  -- stmt := 'shared' ID '=' expr
+    (6, [.t 8, .n 8, .t 7, .n 35]),  -- stmt := 'param' path '=' expr
     (6, [.t 9, .t 6, .t 10, .n 13, .t 11, .n 1]),  -- stmt := 'fn' ID '(' fparams ')' block
-    (6, [.t 12, .t 6, .n 18, .t 13, .n 32, .n 1]),  -- stmt := 'for' ID forvars 'in' expr block
-    (6, [.t 14, .n 32, .n 1, .n 19]),  -- stmt := 'if' expr block elsepart
-    (6, [.t 15, .n 32]),  -- stmt := 'return' expr
-    (6, [.t 16, .t 6, .n 21, .n 24]),  -- stmt := 'expect' ID expargs expcmp
-    (6, [.t 17, .t 6, .t 10, .n 28, .t 11, .n 1]),  -- stmt := 'sketch' ID '(' args ')' block
-    (6, [.t 18, .t 6, .t 10, .n 28, .t 11, .n 1]),  -- stmt := 'path' ID '(' args ')' block
-    (6, [.n 32, .n 7]),  -- stmt := expr assigntail
-    (7, [.t 7, .n 32]),  -- assigntail := '=' expr
+    (6, [.t 12, .t 6, .n 18, .t 13, .n 35, .n 1]),  -- stmt := 'for' ID forvars 'in' expr block
+    (6, [.t 14, .n 35, .n 1, .n 19]),  -- stmt := 'if' expr block elsepart
+    (6, [.t 15, .n 35]),  -- stmt := 'return' expr
+    (6, [.t 16, .t 6, .n 21, .n 24, .n 28]),  -- stmt := 'expect' ID expargs expcmp expat
+    (6, [.t 17, .t 6, .t 10, .n 31, .t 11, .n 1]),  -- stmt := 'sketch' ID '(' args ')' block
+    (6, [.t 18, .t 6, .t 10, .n 31, .t 11, .n 1]),  -- stmt := 'path' ID '(' args ')' block
+    (6, [.n 35, .n 7]),  -- stmt := expr assigntail
+    (7, [.t 7, .n 35]),  -- assigntail := '=' expr
     (7, []),  -- assigntail := %empty
     (8, [.t 6, .n 10, .n 9]),  -- path := ID keys pathrest
     (9, [.t 19, .t 6, .n 10, .n 9]),  -- pathrest := '.' ID keys pathrest
@@ -49,114 +49,120 @@ def grammar : Grammar where
     (15, [.t 6, .n 16, .n 17]),  -- fparam := ID fptype fpdefault
     (16, [.t 24, .t 6]),  -- fptype := ':' ID
     (16, []),  -- fptype := %empty
-    (17, [.t 7, .n 32]),  -- fpdefault := '=' expr
+    (17, [.t 7, .n 35]),  -- fpdefault := '=' expr
     (17, []),  -- fpdefault := %empty
     (18, [.t 23, .t 6, .n 18]),  -- forvars := ',' ID forvars
     (18, []),  -- forvars := %empty
     (19, [.t 25, .n 20]),  -- elsepart := 'else' elsebody
     (19, []),  -- elsepart := %empty
     (20, [.n 1]),  -- elsebody := block
-    (20, [.t 14, .n 32, .n 1, .n 19]),  -- elsebody := 'if' expr block elsepart
+    (20, [.t 14, .n 35, .n 1, .n 19]),  -- elsebody := 'if' expr block elsepart
     (21, [.t 10, .n 22, .t 11]),  -- expargs := '(' exprs ')'
     (21, []),  -- expargs := %empty
-    (22, [.n 32, .n 23]),  -- exprs := expr exprsrest
+    (22, [.n 35, .n 23]),  -- exprs := expr exprsrest
     (22, []),  -- exprs := %empty
     (23, [.t 23, .n 22]),  -- exprsrest := ',' exprs
     (23, []),  -- exprsrest := %empty
-    (24, [.n 25, .n 32, .n 26]),  -- expcmp := cmpop expr exptol
+    (24, [.n 25, .n 35, .n 26]),  -- expcmp := cmpop expr exptol
     (24, []),  -- expcmp := %empty
     (25, [.t 7]),  -- cmpop := '='
     (25, [.t 26]),  -- cmpop := '<'
     (25, [.t 27]),  -- cmpop := '<='
     (25, [.t 28]),  -- cmpop := '>'
     (25, [.t 29]),  -- cmpop := '>='
-    (26, [.t 30, .n 48, .n 27]),  -- exptol := '+-' unary pct
+    (26, [.t 30, .n 51, .n 27]),  -- exptol := '+-' unary pct
     (26, []),  -- exptol := %empty
     (27, [.t 31]),  -- pct := '%'
     (27, []),  -- pct := %empty
-    (28, [.n 30, .n 29]),  -- args := arg argsrest
-    (28, []),  -- args := %empty
-    (29, [.t 23, .n 28]),  -- argsrest := ',' args
-    (29, []),  -- argsrest := %empty
-    (30, [.n 32, .n 31]),  -- arg := expr argkw
-    (31, [.t 24, .n 32]),  -- argkw := ':' expr
-    (31, []),  -- argkw := %empty
-    (32, [.n 34, .n 33]),  -- expr := or ifpart
-    (33, [.t 14, .n 34, .t 25, .n 32]),  -- ifpart := 'if' or 'else' expr
-    (33, []),  -- ifpart := %empty
-    (34, [.n 36, .n 35]),  -- or := and orrest
-    (35, [.t 32, .n 36, .n 35]),  -- orrest := 'or' and orrest
-    (35, []),  -- orrest := %empty
-    (36, [.n 38, .n 37]),  -- and := not andrest
-    (37, [.t 33, .n 38, .n 37]),  -- andrest := 'and' not andrest
-    (37, []),  -- andrest := %empty
-    (38, [.t 34, .n 38]),  -- not := 'not' not
-    (38, [.n 39]),  -- not := cmp
-    (39, [.n 42, .n 40]),  -- cmp := range cmprest
-    (40, [.n 41, .n 42, .n 40]),  -- cmprest := relop range cmprest
-    (40, []),  -- cmprest := %empty
-    (41, [.t 35]),  -- relop := '=='
-    (41, [.t 36]),  -- relop := '!='
-    (41, [.t 26]),  -- relop := '<'
-    (41, [.t 27]),  -- relop := '<='
-    (41, [.t 28]),  -- relop := '>'
-    (41, [.t 29]),  -- relop := '>='
-    (42, [.n 44, .n 43]),  -- range := add rangetail
-    (43, [.t 37, .n 44]),  -- rangetail := '..' add
-    (43, [.t 38, .n 44]),  -- rangetail := '..=' add
-    (43, []),  -- rangetail := %empty
-    (44, [.n 46, .n 45]),  -- add := mul addrest
-    (45, [.t 39, .n 46, .n 45]),  -- addrest := '+' mul addrest
-    (45, [.t 40, .n 46, .n 45]),  -- addrest := '-' mul addrest
-    (45, []),  -- addrest := %empty
-    (46, [.n 48, .n 47]),  -- mul := unary mulrest
-    (47, [.t 41, .n 48, .n 47]),  -- mulrest := '*' unary mulrest
-    (47, [.t 42, .n 48, .n 47]),  -- mulrest := '/' unary mulrest
-    (47, []),  -- mulrest := %empty
-    (48, [.t 40, .n 48]),  -- unary := '-' unary
-    (48, [.n 49]),  -- unary := power
-    (49, [.n 51, .n 50]),  -- power := postfix powtail
-    (50, [.t 43, .n 48]),  -- powtail := '^' unary
-    (50, []),  -- powtail := %empty
-    (51, [.n 53, .n 52]),  -- postfix := atom postrest
-    (52, [.t 10, .n 28, .t 11, .n 52]),  -- postrest := '(' args ')' postrest
-    (52, [.t 19, .t 6, .n 52]),  -- postrest := '.' ID postrest
-    (52, [.t 20, .n 32, .t 21, .n 52]),  -- postrest := '[' expr ']' postrest
-    (52, []),  -- postrest := %empty
-    (53, [.t 22]),  -- atom := NUM
-    (53, [.t 44]),  -- atom := STR
-    (53, [.t 6]),  -- atom := ID
-    (53, [.t 45]),  -- atom := 'true'
-    (53, [.t 46]),  -- atom := 'false'
-    (53, [.t 10, .n 54, .t 11]),  -- atom := '(' tuple ')'
-    (53, [.t 20, .n 56, .t 21]),  -- atom := '[' listbody ']'
-    (53, [.t 1, .n 4, .n 61, .t 2]),  -- atom := '{' seps mapbody '}'
-    (54, [.n 32, .n 55]),  -- tuple := expr tuplerest
-    (54, []),  -- tuple := %empty
-    (55, [.t 23, .n 54]),  -- tuplerest := ',' tuple
-    (55, []),  -- tuplerest := %empty
-    (56, [.n 32, .n 57]),  -- listbody := expr listtail
-    (56, []),  -- listbody := %empty
-    (57, [.t 12, .t 6, .n 18, .t 13, .n 34, .n 60]),  -- listtail := 'for' ID forvars 'in' or compif
-    (57, [.t 23, .n 58]),  -- listtail := ',' listmore
-    (57, []),  -- listtail := %empty
-    (58, [.n 32, .n 59]),  -- listmore := expr listrest
-    (58, []),  -- listmore := %empty
-    (59, [.t 23, .n 58]),  -- listrest := ',' listmore
-    (59, []),  -- listrest := %empty
-    (60, [.t 14, .n 34]),  -- compif := 'if' or
-    (60, []),  -- compif := %empty
-    (61, [.t 6, .t 24, .n 32, .n 4, .n 62]),  -- mapbody := ID ':' expr seps maprest
-    (61, []),  -- mapbody := %empty
-    (62, [.t 23, .n 4, .n 61]),  -- maprest := ',' seps mapbody
-    (62, [])  -- maprest := %empty
+    (28, [.t 32, .n 30, .t 7, .n 35, .n 29]),  -- expat := 'at' atpath '=' expr expmore
+    (28, []),  -- expat := %empty
+    (29, [.t 23, .n 30, .t 7, .n 35, .n 29]),  -- expmore := ',' atpath '=' expr expmore
+    (29, []),  -- expmore := %empty
+    (30, [.t 6, .n 10, .n 9]),  -- atpath := ID keys pathrest
+    (31, [.n 33, .n 32]),  -- args := arg argsrest
+    (31, []),  -- args := %empty
+    (32, [.t 23, .n 31]),  -- argsrest := ',' args
+    (32, []),  -- argsrest := %empty
+    (33, [.n 35, .n 34]),  -- arg := expr argkw
+    (33, [.t 32, .t 24, .n 35]),  -- arg := 'at' ':' expr
+    (34, [.t 24, .n 35]),  -- argkw := ':' expr
+    (34, []),  -- argkw := %empty
+    (35, [.n 37, .n 36]),  -- expr := or ifpart
+    (36, [.t 14, .n 37, .t 25, .n 35]),  -- ifpart := 'if' or 'else' expr
+    (36, []),  -- ifpart := %empty
+    (37, [.n 39, .n 38]),  -- or := and orrest
+    (38, [.t 33, .n 39, .n 38]),  -- orrest := 'or' and orrest
+    (38, []),  -- orrest := %empty
+    (39, [.n 41, .n 40]),  -- and := not andrest
+    (40, [.t 34, .n 41, .n 40]),  -- andrest := 'and' not andrest
+    (40, []),  -- andrest := %empty
+    (41, [.t 35, .n 41]),  -- not := 'not' not
+    (41, [.n 42]),  -- not := cmp
+    (42, [.n 45, .n 43]),  -- cmp := range cmprest
+    (43, [.n 44, .n 45, .n 43]),  -- cmprest := relop range cmprest
+    (43, []),  -- cmprest := %empty
+    (44, [.t 36]),  -- relop := '=='
+    (44, [.t 37]),  -- relop := '!='
+    (44, [.t 26]),  -- relop := '<'
+    (44, [.t 27]),  -- relop := '<='
+    (44, [.t 28]),  -- relop := '>'
+    (44, [.t 29]),  -- relop := '>='
+    (45, [.n 47, .n 46]),  -- range := add rangetail
+    (46, [.t 38, .n 47]),  -- rangetail := '..' add
+    (46, [.t 39, .n 47]),  -- rangetail := '..=' add
+    (46, []),  -- rangetail := %empty
+    (47, [.n 49, .n 48]),  -- add := mul addrest
+    (48, [.t 40, .n 49, .n 48]),  -- addrest := '+' mul addrest
+    (48, [.t 41, .n 49, .n 48]),  -- addrest := '-' mul addrest
+    (48, []),  -- addrest := %empty
+    (49, [.n 51, .n 50]),  -- mul := unary mulrest
+    (50, [.t 42, .n 51, .n 50]),  -- mulrest := '*' unary mulrest
+    (50, [.t 43, .n 51, .n 50]),  -- mulrest := '/' unary mulrest
+    (50, []),  -- mulrest := %empty
+    (51, [.t 41, .n 51]),  -- unary := '-' unary
+    (51, [.n 52]),  -- unary := power
+    (52, [.n 54, .n 53]),  -- power := postfix powtail
+    (53, [.t 44, .n 51]),  -- powtail := '^' unary
+    (53, []),  -- powtail := %empty
+    (54, [.n 56, .n 55]),  -- postfix := atom postrest
+    (55, [.t 10, .n 31, .t 11, .n 55]),  -- postrest := '(' args ')' postrest
+    (55, [.t 19, .t 6, .n 55]),  -- postrest := '.' ID postrest
+    (55, [.t 20, .n 35, .t 21, .n 55]),  -- postrest := '[' expr ']' postrest
+    (55, []),  -- postrest := %empty
+    (56, [.t 22]),  -- atom := NUM
+    (56, [.t 45]),  -- atom := STR
+    (56, [.t 6]),  -- atom := ID
+    (56, [.t 46]),  -- atom := 'true'
+    (56, [.t 47]),  -- atom := 'false'
+    (56, [.t 10, .n 57, .t 11]),  -- atom := '(' tuple ')'
+    (56, [.t 20, .n 59, .t 21]),  -- atom := '[' listbody ']'
+    (56, [.t 1, .n 4, .n 64, .t 2]),  -- atom := '{' seps mapbody '}'
+    (57, [.n 35, .n 58]),  -- tuple := expr tuplerest
+    (57, []),  -- tuple := %empty
+    (58, [.t 23, .n 57]),  -- tuplerest := ',' tuple
+    (58, []),  -- tuplerest := %empty
+    (59, [.n 35, .n 60]),  -- listbody := expr listtail
+    (59, []),  -- listbody := %empty
+    (60, [.t 12, .t 6, .n 18, .t 13, .n 37, .n 63]),  -- listtail := 'for' ID forvars 'in' or compif
+    (60, [.t 23, .n 61]),  -- listtail := ',' listmore
+    (60, []),  -- listtail := %empty
+    (61, [.n 35, .n 62]),  -- listmore := expr listrest
+    (61, []),  -- listmore := %empty
+    (62, [.t 23, .n 61]),  -- listrest := ',' listmore
+    (62, []),  -- listrest := %empty
+    (63, [.t 14, .n 37]),  -- compif := 'if' or
+    (63, []),  -- compif := %empty
+    (64, [.t 6, .t 24, .n 35, .n 4, .n 65]),  -- mapbody := ID ':' expr seps maprest
+    (64, []),  -- mapbody := %empty
+    (65, [.t 23, .n 4, .n 64]),  -- maprest := ',' seps mapbody
+    (65, [])  -- maprest := %empty
   ]
 
 /-- Certificate tables (untrusted; `check` verifies them). -/
 def certT : Tables :=
-  ⟨[2, 3, 4, 7, 9, 10, 12, 13, 14, 16, 17, 18, 19, 21, 22, 23, 24, 26, 27, 28, 29, 31, 33, 35, 37, 40, 43, 45, 47, 50, 52, 54, 55, 56, 57, 58, 59, 60, 61, 62],
-   tblOf [(0, [0, 1, 3, 4, 5, 6, 8, 9, 10, 12, 14, 15, 16, 17, 18, 20, 22, 34, 40, 44, 45, 46]), (1, [1]), (2, [1, 5, 6, 8, 9, 10, 12, 14, 15, 16, 17, 18, 20, 22, 34, 40, 44, 45, 46]), (3, [3, 4]), (4, [3, 4]), (5, [3, 4]), (6, [1, 5, 6, 8, 9, 10, 12, 14, 15, 16, 17, 18, 20, 22, 34, 40, 44, 45, 46]), (7, [7]), (8, [6]), (9, [19]), (10, [20]), (11, [6, 22]), (12, [23]), (13, [6]), (14, [23]), (15, [6]), (16, [24]), (17, [7]), (18, [23]), (19, [25]), (20, [1, 14]), (21, [10]), (22, [1, 6, 10, 20, 22, 34, 40, 44, 45, 46]), (23, [23]), (24, [7, 26, 27, 28, 29]), (25, [7, 26, 27, 28, 29]), (26, [30]), (27, [31]), (28, [1, 6, 10, 20, 22, 34, 40, 44, 45, 46]), (29, [23]), (30, [1, 6, 10, 20, 22, 34, 40, 44, 45, 46]), (31, [24]), (32, [1, 6, 10, 20, 22, 34, 40, 44, 45, 46]), (33, [14]), (34, [1, 6, 10, 20, 22, 34, 40, 44, 45, 46]), (35, [32]), (36, [1, 6, 10, 20, 22, 34, 40, 44, 45, 46]), (37, [33]), (38, [1, 6, 10, 20, 22, 34, 40, 44, 45, 46]), (39, [1, 6, 10, 20, 22, 40, 44, 45, 46]), (40, [26, 27, 28, 29, 35, 36]), (41, [26, 27, 28, 29, 35, 36]), (42, [1, 6, 10, 20, 22, 40, 44, 45, 46]), (43, [37, 38]), (44, [1, 6, 10, 20, 22, 40, 44, 45, 46]), (45, [39, 40]), (46, [1, 6, 10, 20, 22, 40, 44, 45, 46]), (47, [41, 42]), (48, [1, 6, 10, 20, 22, 40, 44, 45, 46]), (49, [1, 6, 10, 20, 22, 44, 45, 46]), (50, [43]), (51, [1, 6, 10, 20, 22, 44, 45, 46]), (52, [10, 19, 20]), (53, [1, 6, 10, 20, 22, 44, 45, 46]), (54, [1, 6, 10, 20, 22, 34, 40, 44, 45, 46]), (55, [23]), (56, [1, 6, 10, 20, 22, 34, 40, 44, 45, 46]), (57, [12, 23]), (58, [1, 6, 10, 20, 22, 34, 40, 44, 45, 46]), (59, [23]), (60, [14]), (61, [6]), (62, [23])],
-   tblOf [(0, [none]), (1, [some 0, some 2, some 3, some 4, some 25]), (2, [some 0, some 2]), (3, [some 0, some 2]), (4, [some 0, some 1, some 2, some 5, some 6, some 8, some 9, some 10, some 12, some 14, some 15, some 16, some 17, some 18, some 20, some 22, some 23, some 34, some 40, some 44, some 45, some 46]), (5, [some 0, some 1, some 2, some 3, some 4, some 5, some 6, some 8, some 9, some 10, some 12, some 14, some 15, some 16, some 17, some 18, some 20, some 22, some 23, some 34, some 40, some 44, some 45, some 46]), (6, [some 0, some 2, some 3, some 4]), (7, [some 0, some 2, some 3, some 4]), (8, [some 7]), (9, [some 7]), (10, [some 7, some 19]), (11, [some 21, some 23]), (12, [some 21]), (13, [some 11]), (14, [some 11]), (15, [some 11, some 23]), (16, [some 7, some 11, some 23]), (17, [some 11, some 23]), (18, [some 13]), (19, [some 0, some 2, some 3, some 4]), (20, [some 0, some 2, some 3, some 4]), (21, [some 0, some 2, some 3, some 4, some 7, some 26, some 27, some 28, some 29]), (22, [some 11]), (23, [some 11]), (24, [some 0, some 2, some 3, some 4]), (25, [some 1, some 6, some 10, some 20, some 22, some 34, some 40, some 44, some 45, some 46]), (26, [some 0, some 2, some 3, some 4]), (27, [some 0, some 2, some 3, some 4]), (28, [some 11]), (29, [some 11]), (30, [some 11, some 23]), (31, [some 11, some 23]), (32, [some 0, some 1, some 2, some 3, some 4, some 7, some 11, some 12, some 21, some 23, some 24, some 30]), (33, [some 0, some 1, some 2, some 3, some 4, some 7, some 11, some 12, some 21, some 23, some 24, some 30]), (34, [some 0, some 1, some 2, some 3, some 4, some 7, some 11, some 12, some 14, some 21, some 23, some 24, some 25, some 30]), (35, [some 0, some 1, some 2, some 3, some 4, some 7, some 11, some 12, some 14, some 21, some 23, some 24, some 25, some 30]), (36, [some 0, some 1, some 2, some 3, some 4, some 7, some 11, some 12, some 14, some 21, some 23, some 24, some 25, some 30, some 32]), (37, [some 0, some 1, some 2, some 3, some 4, some 7, some 11, some 12, some 14, some 21, some 23, some 24, some 25, some 30, some 32]), (38, [some 0, some 1, some 2, some 3, some 4, some 7, some 11, some 12, some 14, some 21, some 23, some 24, some 25, some 30, some 32, some 33]), (39, [some 0, some 1, some 2, some 3, some 4, some 7, some 11, some 12, some 14, some 21, some 23, some 24, some 25, some 30, some 32, some 33]), (40, [some 0, some 1, some 2, some 3, some 4, some 7, some 11, some 12, some 14, some 21, some 23, some 24, some 25, some 30, some 32, some 33]), (41, [some 1, some 6, some 10, some 20, some 22, some 40, some 44, some 45, some 46]), (42, [some 0, some 1, some 2, some 3, some 4, some 7, some 11, some 12, some 14, some 21, some 23, some 24, some 25, some 26, some 27, some 28, some 29, some 30, some 32, some 33, some 35, some 36]), (43, [some 0, some 1, some 2, some 3, some 4, some 7, some 11, some 12, some 14, some 21, some 23, some 24, some 25, some 26, some 27, some 28, some 29, some 30, some 32, some 33, some 35, some 36]), (44, [some 0, some 1, some 2, some 3, some 4, some 7, some 11, some 12, some 14, some 21, some 23, some 24, some 25, some 26, some 27, some 28, some 29, some 30, some 32, some 33, some 35, some 36, some 37, some 38]), (45, [some 0, some 1, some 2, some 3, some 4, some 7, some 11, some 12, some 14, some 21, some 23, some 24, some 25, some 26, some 27, some 28, some 29, some 30, some 32, some 33, some 35, some 36, some 37, some 38]), (46, [some 0, some 1, some 2, some 3, some 4, some 7, some 11, some 12, some 14, some 21, some 23, some 24, some 25, some 26, some 27, some 28, some 29, some 30, some 32, some 33, some 35, some 36, some 37, some 38, some 39, some 40]), (47, [some 0, some 1, some 2, some 3, some 4, some 7, some 11, some 12, some 14, some 21, some 23, some 24, some 25, some 26, some 27, some 28, some 29, some 30, some 32, some 33, some 35, some 36, some 37, some 38, some 39, some 40]), (48, [some 0, some 1, some 2, some 3, some 4, some 7, some 11, some 12, some 14, some 21, some 23, some 24, some 25, some 26, some 27, some 28, some 29, some 30, some 31, some 32, some 33, some 35, some 36, some 37, some 38, some 39, some 40, some 41, some 42]), (49, [some 0, some 1, some 2, some 3, some 4, some 7, some 11, some 12, some 14, some 21, some 23, some 24, some 25, some 26, some 27, some 28, some 29, some 30, some 31, some 32, some 33, some 35, some 36, some 37, some 38, some 39, some 40, some 41, some 42]), (50, [some 0, some 1, some 2, some 3, some 4, some 7, some 11, some 12, some 14, some 21, some 23, some 24, some 25, some 26, some 27, some 28, some 29, some 30, some 31, some 32, some 33, some 35, some 36, some 37, some 38, some 39, some 40, some 41, some 42]), (51, [some 0, some 1, some 2, some 3, some 4, some 7, some 11, some 12, some 14, some 21, some 23, some 24, some 25, some 26, some 27, some 28, some 29, some 30, some 31, some 32, some 33, some 35, some 36, some 37, some 38, some 39, some 40, some 41, some 42, some 43]), (52, [some 0, some 1, some 2, some 3, some 4, some 7, some 11, some 12, some 14, some 21, some 23, some 24, some 25, some 26, some 27, some 28, some 29, some 30, some 31, some 32, some 33, some 35, some 36, some 37, some 38, some 39, some 40, some 41, some 42, some 43]), (53, [some 0, some 1, some 2, some 3, some 4, some 7, some 10, some 11, some 12, some 14, some 19, some 20, some 21, some 23, some 24, some 25, some 26, some 27, some 28, some 29, some 30, some 31, some 32, some 33, some 35, some 36, some 37, some 38, some 39, some 40, some 41, some 42, some 43]), (54, [some 11]), (55, [some 11]), (56, [some 21]), (57, [some 21]), (58, [some 21]), (59, [some 21]), (60, [some 21]), (61, [some 2]), (62, [some 2])]⟩
+  ⟨[2, 3, 4, 7, 9, 10, 12, 13, 14, 16, 17, 18, 19, 21, 22, 23, 24, 26, 27, 28, 29, 31, 32, 34, 36, 38, 40, 43, 46, 48, 50, 53, 55, 57, 58, 59, 60, 61, 62, 63, 64, 65],
+   tblOf [(0, [0, 1, 3, 4, 5, 6, 8, 9, 10, 12, 14, 15, 16, 17, 18, 20, 22, 35, 41, 45, 46, 47]), (1, [1]), (2, [1, 5, 6, 8, 9, 10, 12, 14, 15, 16, 17, 18, 20, 22, 35, 41, 45, 46, 47]), (3, [3, 4]), (4, [3, 4]), (5, [3, 4]), (6, [1, 5, 6, 8, 9, 10, 12, 14, 15, 16, 17, 18, 20, 22, 35, 41, 45, 46, 47]), (7, [7]), (8, [6]), (9, [19]), (10, [20]), (11, [6, 22]), (12, [23]), (13, [6]), (14, [23]), (15, [6]), (16, [24]), (17, [7]), (18, [23]), (19, [25]), (20, [1, 14]), (21, [10]), (22, [1, 6, 10, 20, 22, 35, 41, 45, 46, 47]), (23, [23]), (24, [7, 26, 27, 28, 29]), (25, [7, 26, 27, 28, 29]), (26, [30]), (27, [31]), (28, [32]), (29, [23]), (30, [6]), (31, [1, 6, 10, 20, 22, 32, 35, 41, 45, 46, 47]), (32, [23]), (33, [1, 6, 10, 20, 22, 32, 35, 41, 45, 46, 47]), (34, [24]), (35, [1, 6, 10, 20, 22, 35, 41, 45, 46, 47]), (36, [14]), (37, [1, 6, 10, 20, 22, 35, 41, 45, 46, 47]), (38, [33]), (39, [1, 6, 10, 20, 22, 35, 41, 45, 46, 47]), (40, [34]), (41, [1, 6, 10, 20, 22, 35, 41, 45, 46, 47]), (42, [1, 6, 10, 20, 22, 41, 45, 46, 47]), (43, [26, 27, 28, 29, 36, 37]), (44, [26, 27, 28, 29, 36, 37]), (45, [1, 6, 10, 20, 22, 41, 45, 46, 47]), (46, [38, 39]), (47, [1, 6, 10, 20, 22, 41, 45, 46, 47]), (48, [40, 41]), (49, [1, 6, 10, 20, 22, 41, 45, 46, 47]), (50, [42, 43]), (51, [1, 6, 10, 20, 22, 41, 45, 46, 47]), (52, [1, 6, 10, 20, 22, 45, 46, 47]), (53, [44]), (54, [1, 6, 10, 20, 22, 45, 46, 47]), (55, [10, 19, 20]), (56, [1, 6, 10, 20, 22, 45, 46, 47]), (57, [1, 6, 10, 20, 22, 35, 41, 45, 46, 47]), (58, [23]), (59, [1, 6, 10, 20, 22, 35, 41, 45, 46, 47]), (60, [12, 23]), (61, [1, 6, 10, 20, 22, 35, 41, 45, 46, 47]), (62, [23]), (63, [14]), (64, [6]), (65, [23])],
+   tblOf [(0, [none]), (1, [some 0, some 2, some 3, some 4, some 25]), (2, [some 0, some 2]), (3, [some 0, some 2]), (4, [some 0, some 1, some 2, some 5, some 6, some 8, some 9, some 10, some 12, some 14, some 15, some 16, some 17, some 18, some 20, some 22, some 23, some 35, some 41, some 45, some 46, some 47]), (5, [some 0, some 1, some 2, some 3, some 4, some 5, some 6, some 8, some 9, some 10, some 12, some 14, some 15, some 16, some 17, some 18, some 20, some 22, some 23, some 35, some 41, some 45, some 46, some 47]), (6, [some 0, some 2, some 3, some 4]), (7, [some 0, some 2, some 3, some 4]), (8, [some 7]), (9, [some 7]), (10, [some 7, some 19]), (11, [some 21, some 23]), (12, [some 21]), (13, [some 11]), (14, [some 11]), (15, [some 11, some 23]), (16, [some 7, some 11, some 23]), (17, [some 11, some 23]), (18, [some 13]), (19, [some 0, some 2, some 3, some 4]), (20, [some 0, some 2, some 3, some 4]), (21, [some 0, some 2, some 3, some 4, some 7, some 26, some 27, some 28, some 29, some 32]), (22, [some 11]), (23, [some 11]), (24, [some 0, some 2, some 3, some 4, some 32]), (25, [some 1, some 6, some 10, some 20, some 22, some 35, some 41, some 45, some 46, some 47]), (26, [some 0, some 2, some 3, some 4, some 32]), (27, [some 0, some 2, some 3, some 4, some 32]), (28, [some 0, some 2, some 3, some 4]), (29, [some 0, some 2, some 3, some 4]), (30, [some 7]), (31, [some 11]), (32, [some 11]), (33, [some 11, some 23]), (34, [some 11, some 23]), (35, [some 0, some 1, some 2, some 3, some 4, some 7, some 11, some 12, some 21, some 23, some 24, some 30, some 32]), (36, [some 0, some 1, some 2, some 3, some 4, some 7, some 11, some 12, some 21, some 23, some 24, some 30, some 32]), (37, [some 0, some 1, some 2, some 3, some 4, some 7, some 11, some 12, some 14, some 21, some 23, some 24, some 25, some 30, some 32]), (38, [some 0, some 1, some 2, some 3, some 4, some 7, some 11, some 12, some 14, some 21, some 23, some 24, some 25, some 30, some 32]), (39, [some 0, some 1, some 2, some 3, some 4, some 7, some 11, some 12, some 14, some 21, some 23, some 24, some 25, some 30, some 32, some 33]), (40, [some 0, some 1, some 2, some 3, some 4, some 7, some 11, some 12, some 14, some 21, some 23, some 24, some 25, some 30, some 32, some 33]), (41, [some 0, some 1, some 2, some 3, some 4, some 7, some 11, some 12, some 14, some 21, some 23, some 24, some 25, some 30, some 32, some 33, some 34]), (42, [some 0, some 1, some 2, some 3, some 4, some 7, some 11, some 12, some 14, some 21, some 23, some 24, some 25, some 30, some 32, some 33, some 34]), (43, [some 0, some 1, some 2, some 3, some 4, some 7, some 11, some 12, some 14, some 21, some 23, some 24, some 25, some 30, some 32, some 33, some 34]), (44, [some 1, some 6, some 10, some 20, some 22, some 41, some 45, some 46, some 47]), (45, [some 0, some 1, some 2, some 3, some 4, some 7, some 11, some 12, some 14, some 21, some 23, some 24, some 25, some 26, some 27, some 28, some 29, some 30, some 32, some 33, some 34, some 36, some 37]), (46, [some 0, some 1, some 2, some 3, some 4, some 7, some 11, some 12, some 14, some 21, some 23, some 24, some 25, some 26, some 27, some 28, some 29, some 30, some 32, some 33, some 34, some 36, some 37]), (47, [some 0, some 1, some 2, some 3, some 4, some 7, some 11, some 12, some 14, some 21, some 23, some 24, some 25, some 26, some 27, some 28, some 29, some 30, some 32, some 33, some 34, some 36, some 37, some 38, some 39]), (48, [some 0, some 1, some 2, some 3, some 4, some 7, some 11, some 12, some 14, some 21, some 23, some 24, some 25, some 26, some 27, some 28, some 29, some 30, some 32, some 33, some 34, some 36, some 37, some 38, some 39]), (49, [some 0, some 1, some 2, some 3, some 4, some 7, some 11, some 12, some 14, some 21, some 23, some 24, some 25, some 26, some 27, some 28, some 29, some 30, some 32, some 33, some 34, some 36, some 37, some 38, some 39, some 40, some 41]), (50, [some 0, some 1, some 2, some 3, some 4, some 7, some 11, some 12, some 14, some 21, some 23, some 24, some 25, some 26, some 27, some 28, some 29, some 30, some 32, some 33, some 34, some 36, some 37, some 38, some 39, some 40, some 41]), (51, [some 0, some 1, some 2, some 3, some 4, some 7, some 11, some 12, some 14, some 21, some 23, some 24, some 25, some 26, some 27, some 28, some 29, some 30, some 31, some 32, some 33, some 34, some 36, some 37, some 38, some 39, some 40, some 41, some 42, some 43]), (52, [some 0, some 1, some 2, some 3, some 4, some 7, some 11, some 12, some 14, some 21, some 23, some 24, some 25, some 26, some 27, some 28, some 29, some 30, some 31, some 32, some 33, some 34, some 36, some 37, some 38, some 39, some 40, some 41, some 42, some 43]), (53, [some 0, some 1, some 2, some 3, some 4, some 7, some 11, some 12, some 14, some 21, some 23, some 24, some 25, some 26, some 27, some 28, some 29, some 30, some 31, some 32, some 33, some 34, some 36, some 37, some 38, some 39, some 40, some 41, some 42, some 43]), (54, [some 0, some 1, some 2, some 3, some 4, some 7, some 11, some 12, some 14, some 21, some 23, some 24, some 25, some 26, some 27, some 28, some 29, some 30, some 31, some 32, some 33, some 34, some 36, some 37, some 38, some 39, some 40, some 41, some 42, some 43, some 44]), (55, [some 0, some 1, some 2, some 3, some 4, some 7, some 11, some 12, some 14, some 21, some 23, some 24, some 25, some 26, some 27, some 28, some 29, some 30, some 31, some 32, some 33, some 34, some 36, some 37, some 38, some 39, some 40, some 41, some 42, some 43, some 44]), (56, [some 0, some 1, some 2, some 3, some 4, some 7, some 10, some 11, some 12, some 14, some 19, some 20, some 21, some 23, some 24, some 25, some 26, some 27, some 28, some 29, some 30, some 31, some 32, some 33, some 34, some 36, some 37, some 38, some 39, some 40, some 41, some 42, some 43, some 44]), (57, [some 11]), (58, [some 11]), (59, [some 21]), (60, [some 21]), (61, [some 21]), (62, [some 21]), (63, [some 21]), (64, [some 2]), (65, [some 2])]⟩
 
 set_option maxRecDepth 100000 in
 /-- The check, run by the Lean kernel (no compiler trusted): the Forge grammar is LL(1). -/
