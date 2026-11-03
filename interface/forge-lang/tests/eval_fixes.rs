@@ -170,11 +170,11 @@ expect volume = box_volume +- 0.1%
     );
 }
 
-/// An invalid body says what is wrong and where: here (a flat whose ear strip touches the
-/// unfolded side wall along an edge, which forge-sheet builds as an invalid flat today) the
-/// flat's skin, by its wall.
+/// A flat whose ear strip touches the unfolded side wall along an edge: once built as an
+/// invalid flat (and the case this file used for invalid-body reports), now refused typed by
+/// forge-sheet before it is made, the touch named on the folded part too.
 #[test]
-fn an_invalid_body_names_its_problems() {
+fn a_flat_touching_itself_is_refused_before_it_is_built() {
     let src = "shared t = 1.5
 shared r = 1.5
 shared k = ratio(0.42)
@@ -203,29 +203,11 @@ front_lip = flange(front.tip, height: lip)
 flat = unfold(base, on: offset(base.bottom, gap))
 ";
     let r = run(src);
-    let m = r.measure.as_ref().expect("measured");
     assert!(
-        m.problems > 0,
-        "this flat now builds valid: give the test another invalid body\n{}",
+        r.errors.iter().any(|e| e.kind() == "FlatTouch"),
+        "{}",
         report::text(&r, src)
     );
-    assert_eq!(m.invalid.len(), m.problems);
-    for p in &m.invalid {
-        assert_eq!(p.body, "flat", "{p:?}");
-        assert!(!p.at.is_empty(), "{p:?}");
-    }
-    assert!(
-        m.invalid
-            .iter()
-            .any(|p| p.kind == "LoopsCross" && p.at.iter().any(|a| a.contains("skin of wall base"))),
-        "{:?}",
-        m.invalid
-    );
     let text = report::text(&r, src);
-    assert!(text.contains("invalid flat LoopsCross"), "{text}");
-    let json = report::json(&r, src).to_string();
-    assert!(
-        json.contains("\"problems\"") && json.contains("LoopsCross"),
-        "{json}"
-    );
+    assert!(text.contains("touch"), "{text}");
 }
