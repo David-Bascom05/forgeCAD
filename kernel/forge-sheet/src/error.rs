@@ -303,6 +303,18 @@ pub enum SheetError {
         joints: [JointId; 2],
         size: f64,
     },
+    /// The rule asks reliefs to be lengthened for flat collisions: not built yet.
+    ReliefExtendUnbuilt {
+        feature: FeatureId,
+        joint: JointId,
+        end: End,
+    },
+    /// Cuts part the sheet: strip `b` (a piece of it) is no longer joined to `a`'s.
+    SheetSplit {
+        feature: FeatureId,
+        a: Strip,
+        b: Strip,
+    },
     /// A relief with no width.
     ReliefWidth {
         feature: FeatureId,
@@ -406,6 +418,16 @@ pub enum Violation {
         diameter: f64,
         limit: f64,
         thickness: f64,
+    },
+    /// A relief asked for smaller than the shop's rule makes them (both from the mold line).
+    ReliefUndersized {
+        feature: FeatureId,
+        joint: JointId,
+        end: End,
+        width: f64,
+        depth: f64,
+        min_width: f64,
+        min_depth: f64,
     },
     /// Hardware in a sheet outside its thickness range.
     HardwareThickness {

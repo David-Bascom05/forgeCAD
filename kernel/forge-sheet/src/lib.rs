@@ -23,6 +23,9 @@ pub use error::{
 pub use graph::{Corner, CornerKind, Cut, Gauge, Joint, JointKind, Position, Sheet, Wall};
 pub use hardware::{Hardware, HardwareKind, Mount, Source, placeholder_catalogue};
 pub use pattern::{BendLine, Curve2, Pattern, dxf};
-pub use relief::{Relief, ReliefDefault, ReliefKind, ReliefMade};
+pub use relief::{
+    BendReliefRule, Corner3Rule, Corner3Shape, CornerRule, CornerShape, DepthRef, Placement, Relief,
+    ReliefKind, ReliefMade, ReliefRule,
+};
 pub use roles::{Roles, Skin};
 pub use shop::{AllowanceRow, BendRule, KRow, RuleError, Scaled, ShopProfile, Stock};

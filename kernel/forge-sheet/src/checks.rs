@@ -15,6 +15,7 @@ use crate::graph::{JointKind, Sheet, Wall, straight};
 use crate::hardware::Source;
 use crate::pattern::Curve2;
 use crate::region::{Piece, pieces};
+use crate::relief::{DepthRef, ReliefKind};
 use crate::shop::{ShopProfile, Stock};
 use forge_geom::spline::Spline;
 use forge_math::{Point2, Point3, Vec2, dmath};
@@ -81,6 +82,50 @@ pub fn check(sheet: &Sheet, shop: &ShopProfile) -> Vec<Violation> {
     }
     out.extend(holes(sheet, stock));
     out.extend(mounts(sheet, Some(stock)));
+    out.extend(reliefs(sheet, &shop.relief_rule(t).unwrap_or(stock.relief)));
+    out
+}
+
+/// Reliefs asked for that are smaller than the shop's rule makes them: narrower, or not as deep
+/// (both from the mold line).
+pub fn reliefs(sheet: &Sheet, rule: &crate::relief::ReliefRule) -> Vec<Violation> {
+    let Ok(b) = build_with(sheet, Map::Folded) else {
+        return vec![];
+    };
+    let t = sheet.gauge.thickness;
+    let mut out = vec![];
+    for r in b.reliefs.iter().filter(|r| !r.automatic) {
+        let Some(bend) = b.layout.bends.iter().find(|x| x.joint == r.joint) else {
+            continue;
+        };
+        let rad = bend.radius;
+        let width = if r.kind == ReliefKind::Tear {
+            r.width
+        } else {
+            rule.bend.width.at(t, rad)
+        };
+        let round = if r.kind == ReliefKind::Obround {
+            0.5 * width
+        } else {
+            0.0
+        };
+        let depth = match rule.bend.reference {
+            DepthRef::BendLine => rule.bend.depth.at(t, rad).max(bend.setback + round),
+            DepthRef::UpToBend => bend.setback + round,
+            DepthRef::TangentToBend => bend.setback,
+        };
+        if r.width < width - 1e-12 || r.depth < depth - 1e-12 {
+            out.push(Violation::ReliefUndersized {
+                feature: sheet.feature,
+                joint: r.joint,
+                end: r.end,
+                width: r.width,
+                depth: r.depth,
+                min_width: width,
+                min_depth: depth,
+            });
+        }
+    }
     out
 }
 

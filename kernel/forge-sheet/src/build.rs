@@ -17,7 +17,7 @@ use crate::error::{
 use crate::graph::{CornerKind, Gauge, JointKind, Sheet, straight};
 use crate::pattern::{BendLine, Curve2, Pattern};
 use crate::region::{Bound, Piece, Region, RegionError, subtract};
-use crate::relief::{Relief, ReliefKind, ReliefMade};
+use crate::relief::{CornerShape, DepthRef, Placement, Relief, ReliefKind, ReliefMade};
 use crate::roles::{Roles, Skin};
 use crate::shop::setback;
 use forge_geom::ruled::{Rail, Ruled};
@@ -445,61 +445,152 @@ fn corners(
             } else {
                 continue;
             };
-            let kind = sheet.corner(j1.id, j2.id);
-            // just clear of both bends: past each tangent line and across each zone, with a
-            // thickness to spare, on the diagonal
-            let clear = [b1, b2]
-                .iter()
-                .map(|b| ((b.s + t) * std::f64::consts::SQRT_2).max(b.ba - b.s + t))
-                .fold(0.0, f64::max);
             let joints = [j1.id, j2.id];
-            let (size, automatic, square) = match kind {
-                CornerKind::Circular { size } => (size.unwrap_or(clear), size.is_none(), false),
-                CornerKind::Square { size } => (size.unwrap_or(clear), size.is_none(), true),
-                CornerKind::Open { gap } => (clear + gap, false, true),
-                CornerKind::Closed | CornerKind::Overlap { .. } => {
-                    return Err(SheetError::CornerUnbuilt {
-                        feature: sheet.feature,
-                        joints,
-                        size: f64::NAN,
-                    });
+            let rmax = [b1, b2]
+                .iter()
+                .map(|b| joint_radius(sheet, b))
+                .fold(0.0, f64::max);
+            let rule = sheet.rule.corner;
+            let (kind, from_rule) = match sheet.corner(j1.id, j2.id) {
+                Some(k) => (k, false),
+                None => {
+                    let size = rule.size.map(|x| x.at(t, rmax));
+                    let placement = rule.placement;
+                    let k = match rule.shape {
+                        CornerShape::Round => CornerKind::Circular { size, placement },
+                        CornerShape::Square => CornerKind::Square { size, placement },
+                        CornerShape::Tear => CornerKind::Tear,
+                        CornerShape::TrimToBend => CornerKind::TrimToBend,
+                        CornerShape::Closed => CornerKind::Closed,
+                    };
+                    (k, true)
                 }
             };
-            if size.is_nan() || size <= RELIEF_MIN {
-                return Err(SheetError::CornerUnbuilt {
-                    feature: sheet.feature,
-                    joints,
-                    size,
-                });
-            }
-            let lp = if square {
-                let d = (p1 - p0) * (1.0 / p0.distance(p1));
-                let n = Vec2::new(-d.y, d.x);
-                let c = [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)]
-                    .map(|(a, b)| v + d * (a * size) + n * (b * size));
+            // the edges' outward normals, and each bend's reach either side of its mold line
+            let out_of = |a: Point2, b: Point2| {
+                let d = (b - a) * (1.0 / a.distance(b));
+                Vec2::new(d.y, -d.x)
+            };
+            let (n1, n2) = (out_of(p0, p1), out_of(q0, q1));
+            let at = |x: f64, y: f64| v + n1 * x + n2 * y;
+            // the square of both zones' ends near the corner, a thickness to spare
+            let lo = |b: &Bend| -b.s - t;
+            let hi = |b: &Bend| (b.ba - b.s).max(0.0) + t;
+            let q = [
+                at(lo(b1), lo(b2)),
+                at(hi(b1), lo(b2)),
+                at(hi(b1), hi(b2)),
+                at(lo(b1), hi(b2)),
+            ];
+            let centre = |p: Placement| match p {
+                Placement::Intersection => at(0.5 * b1.ba - b1.s, 0.5 * b2.ba - b2.s),
+                Placement::Tangent => at(-b1.s, -b2.s),
+            };
+            let reach = |c: Point2, square: bool| {
+                q.iter()
+                    .map(|p| {
+                        let d = *p - c;
+                        if square {
+                            d.dot(n1).abs().max(d.dot(n2).abs())
+                        } else {
+                            d.length()
+                        }
+                    })
+                    .fold(0.0, f64::max)
+            };
+            let polygon = |pts: &[Point2]| {
+                let n = pts.len();
+                // counter-clockwise
+                let area: f64 = (0..n)
+                    .map(|k| pts[k].to_vec().cross(pts[(k + 1) % n].to_vec()))
+                    .sum();
+                let pts: Vec<Point2> = if area < 0.0 {
+                    pts.iter().rev().copied().collect()
+                } else {
+                    pts.to_vec()
+                };
                 ProfileLoop::new(
-                    (0..4)
+                    (0..n)
                         .map(|k| {
                             (
                                 Segment::Line {
-                                    a: c[k],
-                                    b: c[(k + 1) % 4],
+                                    a: pts[k],
+                                    b: pts[(k + 1) % n],
                                 },
                                 k as u64,
                             )
                         })
                         .collect(),
                 )
-            } else {
-                ProfileLoop::new(vec![(
-                    Segment::Circle {
-                        center: v,
-                        radius: size,
-                        ccw: true,
-                    },
-                    0,
-                )])
             };
+            let unbuilt = |size: f64| SheetError::CornerUnbuilt {
+                feature: sheet.feature,
+                joints,
+                size,
+            };
+            let square_at = |c: Point2, h: f64| {
+                polygon(&[
+                    c + (n1 + n2) * -h,
+                    c + (n1 - n2) * h,
+                    c + (n1 + n2) * h,
+                    c + (n2 - n1) * h,
+                ])
+            };
+            let (lp, size, automatic) = match kind {
+                CornerKind::Circular { size, placement } | CornerKind::Square { size, placement } => {
+                    let square = matches!(kind, CornerKind::Square { .. });
+                    let c = centre(placement);
+                    let h = size.unwrap_or_else(|| reach(c, square));
+                    if h.is_nan() || h <= RELIEF_MIN {
+                        return Err(unbuilt(h));
+                    }
+                    let lp = if square {
+                        square_at(c, h)
+                    } else {
+                        ProfileLoop::new(vec![(
+                            Segment::Circle {
+                                center: c,
+                                radius: h,
+                                ccw: true,
+                            },
+                            0,
+                        )])
+                    };
+                    (lp, h, size.is_none())
+                }
+                CornerKind::Open { gap } => {
+                    let h = reach(v, true) + gap;
+                    if h.is_nan() || h <= RELIEF_MIN {
+                        return Err(unbuilt(h));
+                    }
+                    (square_at(v, h), h, false)
+                }
+                CornerKind::TrimToBend => {
+                    let (a, b) = (-b1.s, -b2.s);
+                    let (c, d) = (hi(b1), hi(b2));
+                    (polygon(&[at(a, b), at(c, b), at(c, d), at(a, d)]), 0.0, true)
+                }
+                CornerKind::Tear => {
+                    // along the diagonal, from past the edge to past both tangent lines' crossing
+                    let m = (n1 + n2) * (1.0 / (n1 + n2).length());
+                    let across = Vec2::new(-m.y, m.x) * (0.5 * sheet.rule.kerf);
+                    let inner = at(-b1.s, -b2.s) - v;
+                    let (from, to) = (v - m * (inner.length() + t), v + m * (t + b1.ba.max(b2.ba)));
+                    (
+                        polygon(&[from - across, to - across, to + across, from + across]),
+                        sheet.rule.kerf,
+                        true,
+                    )
+                }
+                CornerKind::Closed | CornerKind::Overlap { .. } => return Err(unbuilt(f64::NAN)),
+            };
+            // sized by the builder: from the rule, or a relief left unsized
+            let automatic = automatic
+                && (from_rule
+                    || matches!(
+                        kind,
+                        CornerKind::Circular { size: None, .. } | CornerKind::Square { size: None, .. }
+                    ));
             out.push((
                 CutSrc::Corner(j1.id, j2.id),
                 w.id,
@@ -532,6 +623,48 @@ fn joint_radius(sheet: &Sheet, b: &Bend) -> f64 {
         JointKind::Bend { radius, .. } => radius,
         _ => sheet.gauge.radius,
     }
+}
+
+/// The wall's material beyond a relief, along the mold line: how far rays from the relief's far
+/// side, across the relief's depth, run through the wall before leaving it (outline lines
+/// exactly, curves by their sampled chords).
+#[allow(clippy::too_many_arguments)]
+fn remnant(w: &crate::graph::Wall, b: &Bend, side: Side, end: End, width: f64, depth: f64, j: &Rigid) -> f64 {
+    let into = if side == Side::A { -1.0 } else { 1.0 };
+    let (y, dy) = match end {
+        End::Start => (-width, -1.0),
+        End::End => (b.len + width, 1.0),
+    };
+    let dir = j.vec(Vec2::new(0.0, dy));
+    let chords: Vec<(Point2, Point2)> = w
+        .outline
+        .iter()
+        .flat_map(|l| &l.segments)
+        .flat_map(|(g, _)| {
+            let pts = match g {
+                Segment::Line { a, b } => vec![*a, *b],
+                _ => g.samples(64),
+            };
+            pts.windows(2).map(|p| (p[0], p[1])).collect::<Vec<_>>()
+        })
+        .collect();
+    let mut best = f64::INFINITY;
+    for f in [0.1, 0.3, 0.5, 0.7, 0.9] {
+        let o = j.apply(Point2::new(into * f * depth, y));
+        for &(a, c) in &chords {
+            let e = c - a;
+            let den = dir.cross(e);
+            if den.abs() <= 1e-15 {
+                continue;
+            }
+            let u = (a - o).cross(e) / den;
+            let v = (a - o).cross(dir) / den;
+            if u > TOL && (0.0..=1.0).contains(&v) {
+                best = best.min(u);
+            }
+        }
+    }
+    best
 }
 
 /// A relief at one end of a bend, in the wall's coordinates: from past the edge (beyond the mold
@@ -929,18 +1062,24 @@ fn build_once(
             // reliefs: asked for (on the joint's first wall), or added where this wall needs one
             for e in [End::Start, End::End] {
                 let asked = sheet.relief(joint, e);
-                let (kind, width, depth, automatic) = match asked {
+                let rule = sheet.rule.bend;
+                let r = joint_radius(sheet, b);
+                let (kind, width, given, automatic) = match asked {
                     Relief::Cut { kind, width, depth } if side == Side::A => (kind, width, depth, false),
                     Relief::Auto if auto.contains(&(joint, e, w.id)) => {
-                        let d = sheet.relief_default;
-                        let r = joint_radius(sheet, b);
-                        let width = d.width.at(t, r);
-                        (d.kind, width, d.depth.at(t, r), true)
+                        (rule.kind, rule.width.at(t, r), rule.depth.at(t, r), true)
                     }
                     _ => continue,
                 };
-                let width = if kind == ReliefKind::Tear {
-                    sheet.relief_default.kerf
+                if rule.extend {
+                    return Err(SheetError::ReliefExtendUnbuilt {
+                        feature,
+                        joint,
+                        end: e,
+                    });
+                }
+                let mut width = if kind == ReliefKind::Tear {
+                    sheet.rule.kerf
                 } else {
                     width
                 };
@@ -953,15 +1092,23 @@ fn build_once(
                         limit: RELIEF_MIN,
                     });
                 }
-                // past the tangent line: a round bottom's straight sides too
-                let need = b.s
-                    + if kind == ReliefKind::Obround {
-                        0.5 * width
-                    } else {
-                        0.0
-                    };
-                let depth = if automatic { depth.max(need + t) } else { depth };
-                if depth.is_nan() || depth <= need + RELIEF_MIN {
+                // to the tangent line at least: a round bottom's straight sides too
+                let round = if kind == ReliefKind::Obround {
+                    0.5 * width
+                } else {
+                    0.0
+                };
+                let need = b.s + round;
+                // from the mold line, by the rule's reference
+                let depth = match rule.reference {
+                    // the bend line in folded terms: the mold line (so K moves nothing folded)
+                    DepthRef::BendLine => given,
+                    DepthRef::UpToBend => need,
+                    DepthRef::TangentToBend => b.s,
+                };
+                let depth = if automatic { depth.max(need) } else { depth };
+                let touching = rule.reference == DepthRef::TangentToBend;
+                if depth.is_nan() || (!touching && depth < need - 1e-12) {
                     return Err(SheetError::ReliefTooShallow {
                         feature,
                         joint,
@@ -979,6 +1126,17 @@ fn build_once(
                         })
                     })
                     .collect();
+                // material left between the relief and the wall's edge under the rule's minimum
+                // goes too: the relief widened past the edge
+                let min_remnant = rule.min_remnant.at(t, r);
+                let mut remnant_taken = false;
+                if min_remnant > 0.0 {
+                    let left = remnant(w, b, side, e, width, depth, j);
+                    if left > TOL && left < min_remnant {
+                        width += left + t;
+                        remnant_taken = true;
+                    }
+                }
                 cuts.push(relief_loop(kind, width, depth, b, side, e, t, j, &ids));
                 made.push(ReliefMade {
                     joint,
@@ -988,6 +1146,7 @@ fn build_once(
                     width,
                     depth,
                     automatic,
+                    remnant_taken,
                 });
             }
         }
@@ -1225,7 +1384,8 @@ impl<'a> Strips<'a> {
                 }
             }
         }
-        // a side piece lying along a tangent line is a relief edge on it: designed, not built yet
+        // a side piece lying along a tangent line within the joint's span cannot be told from the
+        // shared edge it runs on: refused
         for l in &loops {
             if l.strip >= nw {
                 continue;
@@ -1246,7 +1406,11 @@ impl<'a> Strips<'a> {
                         continue;
                     };
                     let (la, le) = (j.local(a), j.local(e));
-                    if (la.x - x).abs() <= TOL && (le.x - x).abs() <= TOL {
+                    // beside the zone, on the line's extension, it is a free edge of the wall
+                    // (a relief to the tangent line): only pieces along the zone itself are refused
+                    let (y0, y1) = (la.y.min(le.y), la.y.max(le.y));
+                    let beside = y1 <= TOL || y0 >= q.len - TOL;
+                    if !beside && (la.x - x).abs() <= TOL && (le.x - x).abs() <= TOL {
                         return Err(SheetError::TrimAlongBendLine {
                             feature,
                             joint: cx.sheet.joints[q.joint].id,
@@ -1343,6 +1507,40 @@ impl<'a> Strips<'a> {
                     slot[li][i] = slots.len();
                     slots.push((l.strip, b.start));
                 }
+            }
+        }
+        // one piece of sheet: every strip component reached from the first across tangent lines
+        let pieces: Vec<(usize, usize)> = {
+            let mut v: Vec<(usize, usize)> = loops.iter().map(|l| (l.strip, l.comp)).collect();
+            v.sort_unstable();
+            v.dedup();
+            v
+        };
+        if pieces.len() > 1 {
+            let at = |p: (usize, usize)| pieces.iter().position(|x| *x == p).expect("listed");
+            let mut reached = vec![false; pieces.len()];
+            reached[0] = true;
+            let mut todo = vec![0usize];
+            while let Some(k) = todo.pop() {
+                for (&(l, _), &(m, _)) in &twin {
+                    let (a, b) = (
+                        at((loops[l].strip, loops[l].comp)),
+                        at((loops[m].strip, loops[m].comp)),
+                    );
+                    for (x, y) in [(a, b), (b, a)] {
+                        if x == k && !reached[y] {
+                            reached[y] = true;
+                            todo.push(y);
+                        }
+                    }
+                }
+            }
+            if let Some(k) = reached.iter().position(|r| !r) {
+                return Err(SheetError::SheetSplit {
+                    feature,
+                    a: strips[pieces[0].0].strip,
+                    b: strips[pieces[k].0].strip,
+                });
             }
         }
         Ok(Strips {
