@@ -152,7 +152,26 @@ impl Sheet {
         angle: f64,
         height: f64,
     ) -> Result<(WallId, JointId), SheetError> {
+        self.flange_r(wall, segment, angle, height, self.gauge.radius)
+    }
+
+    /// `flange` with its own inside radius.
+    pub fn flange_r(
+        &mut self,
+        wall: WallId,
+        segment: u64,
+        angle: f64,
+        height: f64,
+        radius: f64,
+    ) -> Result<(WallId, JointId), SheetError> {
         let feature = self.feature;
+        if radius.is_nan() || radius <= tol::LINEAR {
+            return Err(SheetError::Radius {
+                feature,
+                radius,
+                limit: tol::LINEAR,
+            });
+        }
         let w = self.wall(wall).ok_or(SheetError::NoSuchWall { feature, wall })?;
         let trim = TrimRef::Outline { wall, segment };
         let (a, b) = straight(w, segment).map_err(|e| match e {
@@ -190,7 +209,7 @@ impl Sheet {
         }
         let id = WallId(self.next_wall);
         let len = a.distance(b);
-        let s = crate::build::setback_of(&self.gauge, self.gauge.radius, angle);
+        let s = crate::build::setback_of(&self.gauge, radius, angle);
         if (height - s).is_nan() || height - s <= tol::LINEAR {
             return Err(SheetError::WallTooShort {
                 feature,
@@ -225,10 +244,7 @@ impl Sheet {
             b: id,
             on_a: segment,
             on_b: 3,
-            kind: JointKind::Bend {
-                angle,
-                radius: self.gauge.radius,
-            },
+            kind: JointKind::Bend { angle, radius },
         });
         self.next_wall += 1;
         self.next_joint += 1;
