@@ -88,6 +88,9 @@ pub struct Issue {
     pub fixes: Vec<Op>,
     /// The feature it's in, when one is.
     pub feature: Option<String>,
+    /// An assembly's result as forge-lang types it: what to highlight (a conflict's set, the
+    /// two parts that interfere).
+    pub asm: Option<forge_lang::asm::Issue>,
 }
 
 /// What the panel asks of the host.
@@ -103,6 +106,12 @@ pub enum FgAct {
     Tool(Op),
     /// What only an .fc part can do, asked of a Forge part: said, typed.
     Refuse(super::fgtool::ToolError),
+    /// An assembly's view changed (selection, hidden, isolated, highlighted): redraw its parts.
+    AsmShow,
+    /// Run the assembly's overlap check.
+    AsmCheck,
+    /// A part file's anchors, for the instance chosen.
+    AsmAnchors(String),
 }
 
 /// A sheet metal part: its id, its bends, and why it has no flat pattern if it hasn't.
@@ -159,6 +168,8 @@ pub struct FgPanel {
     pub tool: Option<super::fgtool::FgTool>,
     /// The part's sketches and their entities, for picks a view click can't make.
     pub sketches: Vec<forge_lang::anchors::SketchRefs>,
+    /// An assembly's instances, joints, checks and BOM, when the document is one.
+    pub asm: Option<super::fgasm::AsmPanel>,
     /// The last thing picked in the view, as Forge names it (or why nothing does).
     pub picked: Option<Result<String, super::fgtool::ToolError>>,
 }
@@ -577,10 +588,17 @@ impl Shell {
                             ui.spacing_mut().item_spacing.y = 4.0;
                             Self::fg_head(ui, &t, &mut fg, &mut out, &mut places);
                             Self::fg_tool(ui, &t, &mut fg, &mut out, &mut places);
+                            // an assembly's typed results first: they're what to look at
+                            if fg.asm.is_some() {
+                                Self::fg_issues(ui, &t, &mut fg, &mut out, &mut places);
+                            }
+                            Self::asm_panel(ui, &t, &mut fg, &mut out, &mut places);
                             Self::fg_sheets(ui, &t, &fg, &mut out, &mut places);
                             Self::fg_selection(ui, &t, &mut fg, &mut out, &mut places);
                             Self::fg_params(ui, &t, &mut fg, &mut out, &mut places);
-                            Self::fg_issues(ui, &t, &fg, &mut out, &mut places);
+                            if fg.asm.is_none() {
+                                Self::fg_issues(ui, &t, &mut fg, &mut out, &mut places);
+                            }
                             Self::fg_source(ui, &t, &mut fg);
                         });
                     });
@@ -738,13 +756,13 @@ impl Shell {
         }
     }
 
-    fn fg_button(ui: &mut Ui, label: &str, name: String, places: &mut Vec<(String, Rect)>) -> bool {
+    pub(super) fn fg_button(ui: &mut Ui, label: &str, name: String, places: &mut Vec<(String, Rect)>) -> bool {
         let r = ui.add(egui::Button::new(egui::RichText::new(label).font(sans(12.0))));
         places.push((name, r.rect));
         r.clicked()
     }
 
-    fn fg_heading(ui: &mut Ui, t: &super::theme::Theme, text: &str) {
+    pub(super) fn fg_heading(ui: &mut Ui, t: &super::theme::Theme, text: &str) {
         ui.add_space(6.0);
         ui.label(egui::RichText::new(text).font(semi(12.0)).color(t.ink));
         let r = ui.available_rect_before_wrap();
@@ -1077,15 +1095,16 @@ impl Shell {
     fn fg_issues(
         ui: &mut Ui,
         t: &super::theme::Theme,
-        fg: &FgPanel,
+        fg: &mut FgPanel,
         out: &mut Vec<FgAct>,
         places: &mut Vec<(String, Rect)>,
     ) {
         if fg.issues.is_empty() {
             return;
         }
-        Self::fg_heading(ui, t, "Issues");
-        for (i, is) in fg.issues.iter().enumerate() {
+        Self::fg_heading(ui, t, &format!("Issues ({})", fg.issues.len()));
+        let issues = std::mem::take(&mut fg.issues);
+        for (i, is) in issues.iter().enumerate().take(300) {
             let colour = match is.severity {
                 Severity::Error => t.error,
                 _ => Color32::from_rgb(0xE0, 0xA0, 0x30),
@@ -1109,8 +1128,12 @@ impl Shell {
                         out.push(FgAct::Apply(op.clone()));
                     }
                 }
+                if let Some(ai) = &is.asm {
+                    Self::asm_show_button(ui, &mut fg.asm, ai, i, out, places);
+                }
             });
         }
+        fg.issues = issues;
     }
 
     fn fg_source(ui: &mut Ui, t: &super::theme::Theme, fg: &mut FgPanel) {

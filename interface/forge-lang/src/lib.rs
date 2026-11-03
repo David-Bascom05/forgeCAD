@@ -52,6 +52,8 @@ pub struct Options {
     pub root: Option<std::path::PathBuf>,
     /// An assembly: measure only these expects (by position), ignoring their `at` (`asm.rs`).
     pub probe: Option<Vec<usize>>,
+    /// An assembly: run the overlap (interference) check; off, a UI shows the solve first.
+    pub overlap: bool,
     /// Find what anchor text names each face and edge of the finished part (`anchors`), for a UI
     /// turning picks into source.
     pub anchors: bool,
@@ -67,6 +69,7 @@ impl Default for Options {
             render: false,
             root: None,
             probe: None,
+            overlap: true,
             anchors: false,
         }
     }

@@ -699,6 +699,18 @@ name = "forge-alloc"
 version = "0.1.0"
 
 [[package]]
+name = "forge-asm"
+version = "0.1.0"
+dependencies = [
+ "forge-bool",
+ "forge-geom",
+ "forge-math",
+ "forge-mesh",
+ "forge-step",
+ "forge-topo",
+]
+
+[[package]]
 name = "forge-bool"
 version = "0.1.0"
 dependencies = [
@@ -747,6 +759,7 @@ name = "forge-lang"
 version = "0.1.0"
 dependencies = [
  "forge-agent",
+ "forge-asm",
  "forge-doc",
  "forge-font",
  "forge-geom",

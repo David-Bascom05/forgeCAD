@@ -128,6 +128,11 @@ impl Scene {
         }
     }
 
+    /// A placement's pose as it stands.
+    pub fn rows_of(&self, i: usize) -> Rows {
+        self.pose[i]
+    }
+
     /// Moves a placement to a new pose: its rows, its sphere, and what the next frame uploads.
     pub fn set_rows(&mut self, i: usize, rows: &Rows) {
         self.pose[i] = *rows;

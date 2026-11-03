@@ -22,6 +22,53 @@ use std::time::Instant;
 
 pub type Gpu = (wgpu::Device, wgpu::Queue, wgpu::AdapterInfo);
 
+/// A text to build: its sequence number, the text, and whether an assembly runs its overlap check.
+pub type Job = (u64, String, bool);
+
+/// A placement's rows from a pose: the frame's axes as columns, its origin last.
+pub fn rows_of(f: &forge_math::Frame) -> crate::scene::Rows {
+    let (x, y, z, o) = (f.x().get(), f.y().get(), f.z().get(), f.origin);
+    [
+        [x.x as f32, y.x as f32, z.x as f32, o.x as f32],
+        [x.y as f32, y.y as f32, z.y as f32, o.y as f32],
+        [x.z as f32, y.z as f32, z.z as f32, o.z as f32],
+    ]
+}
+
+/// One part occurrence of an assembly: its path, part file, and its placement (none when the
+/// part has no solid to draw).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Occ {
+    pub path: String,
+    pub file: String,
+    pub placement: Option<usize>,
+}
+
+/// An assembly's solve for the screen and the panel. Each distinct part is meshed once (by its
+/// content) and drawn at every occurrence.
+#[derive(Clone, Debug, Default)]
+pub struct AsmView {
+    pub occ: Vec<Occ>,
+    /// Each placement's mesh (an index into the meshes so far) and pose.
+    pub placed: Vec<(usize, crate::scene::Rows)>,
+    /// Meshes new since the last build, by index.
+    pub meshes: Vec<(usize, PartMesh)>,
+    /// Which meshes are placed where changed: every mesh so far, for the host to make the view
+    /// again (the worker holds no GPU after the first: a device kept on a thread outlives the
+    /// driver at exit).
+    pub restage: Option<Vec<PartMesh>>,
+    pub joints: Vec<forge_lang::asm::JointOut>,
+    pub mobility: usize,
+    pub bom: Vec<(String, usize)>,
+    pub expects: Vec<forge_lang::asm::ExpectOut>,
+    /// The overlap check's counts, when it ran: interferences, intended contacts.
+    pub overlap: Option<(usize, usize)>,
+    pub timings: forge_lang::asm::AsmTimings,
+    /// Distinct parts and how many were meshed this time.
+    pub parts: usize,
+    pub meshed: usize,
+}
+
 /// What one build gave: the panel's data, and the mesh when the part's shape changed.
 pub struct Built {
     pub seq: u64,
@@ -45,6 +92,8 @@ pub struct Built {
     pub view: Option<(Renderer, Scene)>,
     /// What Forge names each face and edge, when the text changed since the last.
     pub anchors: Option<Arc<AnchorView>>,
+    /// An assembly's solve: occurrences, poses, joints, BOM, checks.
+    pub asm: Option<AsmView>,
     /// The worker's time for it: the build, and the mesh.
     pub build_ms: f64,
     pub mesh_ms: f64,
@@ -262,6 +311,10 @@ pub fn rows(run: &Run, src: &str) -> (Vec<FeatRow>, Vec<ParamRow>, Vec<Issue>) {
             col,
             fixes: e.fixes(),
             feature,
+            asm: match e {
+                Error::Asm(n) => Some(n.issue.clone()),
+                _ => None,
+            },
         }
     };
     let mut issues: Vec<Issue> = run.errors.iter().map(|e| issue(e, Severity::Error)).collect();
@@ -285,6 +338,21 @@ pub fn rows(run: &Run, src: &str) -> (Vec<FeatRow>, Vec<ParamRow>, Vec<Issue>) {
                     col,
                     fixes: n.fixes.clone(),
                     feature: Some(n.id.clone()),
+                    asm: None,
+                });
+                continue;
+            }
+            Warning::Asm(n) => {
+                let (line, col, ..) = n.span.lines(src);
+                issues.push(Issue {
+                    severity: Severity::Warning,
+                    kind: n.kind().into(),
+                    text: n.text(),
+                    line,
+                    col,
+                    fixes: n.fixes(),
+                    feature: feature_at(Some(n.span)),
+                    asm: Some(n.issue.clone()),
                 });
                 continue;
             }
@@ -305,6 +373,7 @@ pub fn rows(run: &Run, src: &str) -> (Vec<FeatRow>, Vec<ParamRow>, Vec<Issue>) {
             col,
             fixes: vec![],
             feature: feature_at(Some(span)),
+            asm: None,
         });
     }
     (feats, params, issues)
@@ -363,13 +432,16 @@ fn mesh_whole(bodies: Receiver<Whole>, out: Sender<Msg>, waker: Arc<dyn Fn() + S
 /// (meshed once per face, as a drag's), then whole.
 fn work(
     dir: Option<std::path::PathBuf>,
-    jobs: Receiver<(u64, String)>,
+    jobs: Receiver<Job>,
     out: Sender<Msg>,
     mut gpu: Option<Gpu>,
     waker: Arc<dyn Fn() + Send + Sync>,
 ) {
     let mut cache = Cache::default();
     let mut mesher = Mesher::default();
+    // an assembly's meshes by part content, and the placements' meshes last shown
+    let mut asm_meshes = AsmMeshes::default();
+    let mut asm_shape: Option<Vec<usize>> = None;
     let mut shown_ids: Option<Vec<String>> = None;
     // the text the last anchors were found for: unchanged text, unchanged anchors
     let mut anchored: Option<String> = None;
@@ -393,6 +465,45 @@ fn work(
             job = j;
         }
         let t = Instant::now();
+        if is_assembly(&job.1) {
+            let opts = Options {
+                dir: dir.clone(),
+                render: true,
+                overlap: job.2,
+                ..Options::default()
+            };
+            let (run, c) = forge_lang::run(&job.1, opts, std::mem::take(&mut cache));
+            cache = c;
+            let build_ms = t.elapsed().as_secs_f64() * 1e3;
+            let t = Instant::now();
+            let (asm, view) = asm_view(&run, &mut asm_meshes, &mut gpu, &mut asm_shape);
+            let mesh_ms = t.elapsed().as_secs_f64() * 1e3;
+            let (feats, params, issues) = rows(&run, &job.1);
+            let built = Built {
+                seq: job.0,
+                ok: run.ok(),
+                feats,
+                params,
+                issues,
+                measure: run.measure.clone(),
+                timings: run.timings.clone(),
+                rebuilt: run.rebuilt,
+                reused: run.reused,
+                mesh: None,
+                flat: None,
+                delta: None,
+                sheets: vec![],
+                view,
+                anchors: None,
+                asm,
+                build_ms,
+                mesh_ms,
+            };
+            if !send(Msg::Built(Box::new(built))) {
+                return;
+            }
+            continue;
+        }
         let want = anchored.as_deref() != Some(job.1.as_str());
         let opts = Options {
             anchors: want,
@@ -474,6 +585,7 @@ fn work(
             sheets,
             view,
             anchors,
+            asm: None,
             build_ms,
             mesh_ms,
         };
@@ -494,6 +606,156 @@ fn work(
     }
 }
 
+/// Whether a text is an assembly document: its first statement is `assembly`.
+pub fn is_assembly(src: &str) -> bool {
+    src.lines()
+        .map(str::trim)
+        .find(|l| !l.is_empty() && !l.starts_with('#'))
+        .is_some_and(|l| l == "assembly")
+}
+
+/// An assembly's part meshes so far: one per distinct body (by content), in the order made.
+#[derive(Default)]
+pub struct AsmMeshes {
+    by_key: HashMap<u64, usize>,
+    pub all: Vec<PartMesh>,
+}
+
+/// A body's content, cheaply: every vertex's place and every face's name.
+fn body_key(b: &forge_topo::Body) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    for f in b.face_ids() {
+        b.face(f).name.hash(&mut h);
+    }
+    for v in &b.vertices {
+        v.point.x.to_bits().hash(&mut h);
+        v.point.y.to_bits().hash(&mut h);
+        v.point.z.to_bits().hash(&mut h);
+    }
+    h.finish()
+}
+
+/// The assembly's view: each distinct part meshed once (new ones on threads), each occurrence
+/// a placement of its part's mesh. A new renderer and scene when which meshes are placed where
+/// changed; else only poses move.
+fn asm_view(
+    run: &Run,
+    meshes: &mut AsmMeshes,
+    gpu: &mut Option<Gpu>,
+    shape: &mut Option<Vec<usize>>,
+) -> (Option<AsmView>, Option<(Renderer, Scene)>) {
+    let Some(out) = &run.asm else {
+        // a failed assembly: the view stays as it was, its errors in the panel
+        return (None, None);
+    };
+    // each distinct body: an index into the meshes, meshing the new ones
+    let keys: Vec<u64> = out.parts.iter().map(|b| body_key(b)).collect();
+    let mut fresh: Vec<(u64, usize)> = vec![];
+    for (k, key) in keys.iter().enumerate() {
+        if !meshes.by_key.contains_key(key) && !fresh.iter().any(|f| f.0 == *key) {
+            fresh.push((*key, k));
+        }
+    }
+    let made: Vec<PartMesh> = {
+        let at = std::sync::atomic::AtomicUsize::new(0);
+        let mut got: Vec<(usize, PartMesh)> = std::thread::scope(|s| {
+            let workers: Vec<_> = (0..4)
+                .map(|_| {
+                    s.spawn(|| {
+                        let mut got = vec![];
+                        loop {
+                            let i = at.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                            let Some(&(_, k)) = fresh.get(i) else { return got };
+                            let m = tess::build_part(&out.parts[k]).unwrap_or_else(|_| PartMesh::empty());
+                            got.push((i, m));
+                        }
+                    })
+                })
+                .collect();
+            workers
+                .into_iter()
+                .flat_map(|w| w.join().expect("a mesher panicked"))
+                .collect()
+        });
+        got.sort_by_key(|x| x.0);
+        got.into_iter().map(|x| x.1).collect()
+    };
+    let mut new_meshes = vec![];
+    for ((key, _), m) in fresh.iter().zip(made) {
+        meshes.by_key.insert(*key, meshes.all.len());
+        new_meshes.push((meshes.all.len(), m.clone()));
+        meshes.all.push(m);
+    }
+    let mut occ = vec![];
+    let mut placed = vec![];
+    for ((path, file, pose), part) in out.occurrences.iter().zip(&out.occ_part) {
+        let placement = part.map(|k| {
+            placed.push((meshes.by_key[&keys[k]], rows_of(pose)));
+            placed.len() - 1
+        });
+        occ.push(Occ {
+            path: path.clone(),
+            file: file.clone(),
+            placement,
+        });
+    }
+    let now: Vec<usize> = placed.iter().map(|p| p.0).collect();
+    let restage = shape.as_ref() != Some(&now) || gpu.is_some();
+    let all = (restage && gpu.is_none()).then(|| meshes.all.clone());
+    let view = if restage && let Some((device, queue, adapter)) = gpu.take() {
+        *shape = Some(now);
+        let parts: Vec<PartMesh> = if meshes.all.is_empty() {
+            vec![PartMesh::empty()]
+        } else {
+            meshes.all.clone()
+        };
+        let placements: Vec<Placement> = if placed.is_empty() {
+            vec![Placement::at(0, [0.0; 3])]
+        } else {
+            placed
+                .iter()
+                .map(|(m, rows)| Placement {
+                    part: *m as u32,
+                    rows: *rows,
+                    tint: PART_TINT,
+                })
+                .collect()
+        };
+        let mut scene = Scene::new(&part_info(&parts), placements);
+        scene.set_explode(0.0);
+        let r = Renderer::new(device, queue, adapter, render::OFFSCREEN, (16, 16), &parts, &scene);
+        Some((r, scene))
+    } else {
+        if restage {
+            *shape = Some(now);
+        }
+        None
+    };
+    let parts = meshes.all.len();
+    let meshed = new_meshes.len();
+    let asm = AsmView {
+        occ,
+        placed,
+        meshes: new_meshes,
+        restage: all,
+        joints: out.joints.clone(),
+        mobility: out.mobility,
+        bom: out.bom.clone(),
+        expects: out.expects.clone(),
+        overlap: out.overlap.as_ref().map(|_| (out.interferences, out.intended)),
+        timings: out.timings.clone(),
+        parts,
+        meshed,
+    };
+    (Some(asm), view)
+}
+
+/// A part's colour in an assembly, and a selected one's.
+pub const PART_TINT: [f32; 4] = [0.60, 0.62, 0.66, 0.0];
+pub const PICKED_TINT: [f32; 4] = [0.95, 0.55, 0.15, 0.0];
+pub const CLASH_TINT: [f32; 4] = [0.90, 0.20, 0.20, 0.0];
+
 /// A .fg part open in the app.
 pub struct Session {
     pub path: Option<String>,
@@ -502,7 +764,7 @@ pub struct Session {
     pub saved: String,
     undo: Vec<String>,
     redo: Vec<String>,
-    jobs: Sender<(u64, String)>,
+    jobs: Sender<Job>,
     built: Receiver<Msg>,
     /// The last text sent to the worker, and the last one back.
     pub seq: u64,
@@ -512,6 +774,9 @@ pub struct Session {
     pub round_ms: f64,
     /// The ops applied, in order.
     pub ops: Vec<Op>,
+    /// An assembly runs its overlap check (asked for once, kept: after a drag it re-tests only
+    /// what moved).
+    pub overlap: bool,
     /// The last build's times: forge-lang's (its stages), and meshing for the screen.
     pub timings: Timings,
     pub build_ms: f64,
@@ -554,6 +819,7 @@ impl Session {
             sent_at: vec![],
             round_ms: 0.0,
             ops: vec![],
+            overlap: false,
             timings: Timings::default(),
             build_ms: 0.0,
             mesh_ms: 0.0,
@@ -570,11 +836,17 @@ impl Session {
         Ok(Session::new(Some(path.to_string()), src, gpu, waker))
     }
 
+    /// An assembly's overlap check, from now on.
+    pub fn check_overlap(&mut self) -> u64 {
+        self.overlap = true;
+        self.rebuild()
+    }
+
     /// Builds the text as it stands (through the warm stages).
     pub fn rebuild(&mut self) -> u64 {
         self.seq += 1;
         self.sent_at.push((self.seq, Instant::now()));
-        let _ = self.jobs.send((self.seq, self.src.clone()));
+        let _ = self.jobs.send((self.seq, self.src.clone(), self.overlap));
         self.seq
     }
 
