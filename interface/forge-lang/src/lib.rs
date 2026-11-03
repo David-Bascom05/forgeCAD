@@ -159,6 +159,7 @@ pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
     let mut ev = Eval::new(src, opts.rules, opts.build, cache);
     ev.volumes = opts.volumes;
     ev.dir = opts.dir.clone();
+    ev.root = opts.root.as_ref().and_then(|r| std::fs::canonicalize(r).ok());
     if asm::declared(&prog) {
         ev.asm = Some(asm::Doc::default());
     }

@@ -28,7 +28,15 @@ const SOLID_KINDS: &[&str] = &["step", "stp", "brep", "igs", "iges"];
 /// The most a file may be: larger ones are refused unread.
 const LIMIT: u64 = 64 << 20;
 
-fn find(dir: Option<&Path>, file: &str, kinds: &[&str], span: Span) -> R<(PathBuf, Stamp)> {
+/// A file beside the part file. Under a session root (`root`, canonical), nothing outside it is
+/// found: every such refusal is the same `Missing`.
+fn find(
+    dir: Option<&Path>,
+    root: Option<&Path>,
+    file: &str,
+    kinds: &[&str],
+    span: Span,
+) -> R<(PathBuf, Stamp)> {
     let err = |problem| -> Error {
         FeatError::File {
             span,
@@ -47,6 +55,9 @@ fn find(dir: Option<&Path>, file: &str, kinds: &[&str], span: Span) -> R<(PathBu
     }
     let dir = dir.ok_or_else(|| err(FileProblem::Missing))?;
     let p = std::fs::canonicalize(dir.join(file)).map_err(|_| err(FileProblem::Missing))?;
+    if root.is_some_and(|r| !p.starts_with(r)) {
+        return Err(err(FileProblem::Missing));
+    }
     let meta = std::fs::metadata(&p).map_err(|_| err(FileProblem::Missing))?;
     if !meta.is_file() {
         return Err(err(FileProblem::Missing));
@@ -80,8 +91,8 @@ fn cached<T>(
     Ok(v)
 }
 
-pub fn font(dir: Option<&Path>, file: &str, span: Span) -> R<Arc<forge_font::Font>> {
-    let (p, stamp) = find(dir, file, FONT_KINDS, span)?;
+pub fn font(dir: Option<&Path>, root: Option<&Path>, file: &str, span: Span) -> R<Arc<forge_font::Font>> {
+    let (p, stamp) = find(dir, root, file, FONT_KINDS, span)?;
     cached(&FONTS, p, stamp, |p| {
         let data = std::fs::read(p).map_err(|e| e.to_string())?;
         forge_font::Font::parse(data).map_err(|e| format!("{e:?}"))
@@ -96,8 +107,8 @@ pub fn font(dir: Option<&Path>, file: &str, span: Span) -> R<Arc<forge_font::Fon
     })
 }
 
-pub fn solid(dir: Option<&Path>, file: &str, span: Span) -> R<Arc<Body>> {
-    let (p, stamp) = find(dir, file, SOLID_KINDS, span)?;
+pub fn solid(dir: Option<&Path>, root: Option<&Path>, file: &str, span: Span) -> R<Arc<Body>> {
+    let (p, stamp) = find(dir, root, file, SOLID_KINDS, span)?;
     cached(&SOLIDS, p, stamp, |p| {
         let data = std::fs::read(p).map_err(|e| e.to_string())?;
         let imp = forge_step::import(&data, &forge_step::Limits::default()).map_err(|e| format!("{e}"))?;
@@ -152,11 +163,12 @@ pub fn text(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     let text = string(&a, "text")?;
     let file = string(&a, "font")?;
     // `check` with no part file to look beside reads nothing
-    let font =
-        match (ev.dir.is_some() || ev.b.building).then(|| font(ev.dir.as_deref(), &file, a.span("font"))) {
-            Some(f) => Some(f?),
-            None => None,
-        };
+    let font = match (ev.dir.is_some() || ev.b.building)
+        .then(|| font(ev.dir.as_deref(), ev.root.as_deref(), &file, a.span("font")))
+    {
+        Some(f) => Some(f?),
+        None => None,
+    };
     let size = a.req_num("size", LEN)?;
     let depth = a.req_num("depth", LEN)?;
     positive(&size, a.span("size"), "a text's size")?;
@@ -259,11 +271,12 @@ pub fn import(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         return Ok(Value::Unresolved);
     }
     let file = string(&a, "file")?;
-    let body =
-        match (ev.dir.is_some() || ev.b.building).then(|| solid(ev.dir.as_deref(), &file, a.span("file"))) {
-            Some(b) => Some(b?),
-            None => None,
-        };
+    let body = match (ev.dir.is_some() || ev.b.building)
+        .then(|| solid(ev.dir.as_deref(), ev.root.as_deref(), &file, a.span("file")))
+    {
+        Some(b) => Some(b?),
+        None => None,
+    };
     let op = match word(&a, "op", &["new", "add", "cut"])? {
         Some("add") => Combine::Add,
         Some("cut") => Combine::Cut,
