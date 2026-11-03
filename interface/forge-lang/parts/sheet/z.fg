@@ -1,0 +1,17 @@
+# A Z: a base, a flange up off its right edge, and a lip off that flange's tip turned the other
+# way.
+shared t = 1.5
+shared r = 1
+shared k = ratio(0.33)
+param plan.L = 50
+param plan.W = 20
+param web.h = 25
+param lip.h = 15
+
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (L, W))
+}
+base = sheet(plan, t: t, r: r, bend: kfactor(k))
+web = flange(base.edge(plan.outline[1]), height: h, measure: "outer")
+lip = flange(web.tip, height: h, side: "down", measure: "outer")
+expect valid

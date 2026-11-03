@@ -450,6 +450,28 @@ impl Sk {
         Ok(p)
     }
 
+    /// Every region of the sketch, its segments named as `profile` names them.
+    pub fn profiles(&self, span: Span) -> R<Vec<Profile>> {
+        let ps = forge_sketch::profiles(&self.s).map_err(|error| Error::SketchProfile {
+            span,
+            sketch: self.id.clone(),
+            error,
+        })?;
+        const PIECE: u64 = 0xffff << 48;
+        Ok(ps
+            .into_iter()
+            .map(|mut p| {
+                for l in &mut p.loops {
+                    for g in &mut l.segments {
+                        let (piece, e) = (g.1 & PIECE, EntityId(g.1 & !PIECE));
+                        g.1 = piece | self.seg_id(e);
+                    }
+                }
+                p
+            })
+            .collect())
+    }
+
     /// What the solved sketch is as forge-model keeps it.
     pub fn model(&self) -> forge_model::Sketch {
         forge_model::Sketch {

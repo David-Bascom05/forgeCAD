@@ -1,0 +1,30 @@
+# An L with holes across its bend: one across both tangent lines, one across one, and one in
+# the bend zone alone, each sketched on the base's top and cut through the sheet as it folds.
+shared t = 2
+shared r = 2
+shared k = ratio(0.4)
+param plan.L = 40
+param plan.W = 60
+param up.h = 30
+param blank.gap = 30
+param holes.y0 = 10
+param holes.dy = 20
+param holes.big = 3.5
+param holes.middle = 3
+param holes.small = 1
+param holes.across = 40.2
+param holes.inside = 37
+
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (L, W))
+}
+base = sheet(plan, t: t, r: r, bend: kfactor(k))
+up = flange(base.edge(plan.outline[1]), height: h, measure: "inner")
+sketch holes(on: base.top) {
+  both = circle((across, y0), big)
+  one = circle((inside, y0 + dy), middle)
+  zone = circle((across, y0 + 2 * dy), small)
+}
+through = cutout(holes, wall: base)
+blank = unfold(base, on: offset(base.bottom, gap))
+expect valid

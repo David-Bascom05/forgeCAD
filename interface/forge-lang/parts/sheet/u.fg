@@ -1,0 +1,21 @@
+# A U channel: a 40 x 30 base, flanges up 90 on the right and down 60 on the left, an unfold
+# beside it.
+shared t = 2
+shared r = 2
+shared k = ratio(0.4)
+param plan.L = 40
+param plan.W = 30
+param right.h = 30
+param left.h = 25
+param left.a = 60deg
+param blank.gap = 20
+
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (L, W))
+}
+base = sheet(plan, t: t, r: r, bend: kfactor(k))
+right = flange(base.edge(plan.outline[1]), height: h, measure: "inner")
+left = flange(base.edge(plan.outline[3]), height: h, angle: a, side: "down", measure: "outer")
+blank = unfold(base, on: offset(base.bottom, gap))
+expect valid
+expect bodies = 2

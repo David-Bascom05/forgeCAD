@@ -278,6 +278,13 @@ pub enum Ty {
     Edges,
     Extent,
     Unresolved,
+    Sheet,
+    SheetEdge,
+    Unfold,
+    BendRule,
+    Scaled,
+    Stock,
+    Shop,
 }
 
 pub fn fmt(x: f64) -> String {

@@ -164,6 +164,9 @@ pub fn json(run: &Run, src: &str) -> Json {
             ),
         ),
     ];
+    if !run.sheets.is_empty() {
+        f.push(("sheets", Json::Arr(run.sheets.iter().map(|s| s.json()).collect())));
+    }
     if let Some(m) = &run.measure {
         f.push((
             "part",

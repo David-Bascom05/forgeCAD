@@ -1,0 +1,14 @@
+# An L bracket: a 40 x 30 base, a 30 high flange up off its right edge.
+shared t = 2
+shared r = 2
+shared k = ratio(0.4)
+param plan.L = 40
+param plan.W = 30
+param up.h = 30
+
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (L, W))
+}
+base = sheet(plan, t: t, r: r, bend: kfactor(k))
+up = flange(base.edge(plan.outline[1]), height: h, measure: "inner")
+expect valid
