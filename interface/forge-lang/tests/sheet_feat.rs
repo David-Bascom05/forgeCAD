@@ -196,3 +196,52 @@ fn seam_refusals_are_typed() {
     let s = src("seams").replace("shared g = 2", "shared g = 0.001");
     assert_eq!(first_error(&s).kind(), "SeamGap");
 }
+
+#[test]
+fn punches_take_out_their_tools() {
+    let r = clean("punched");
+    let plain = {
+        let s: String = src("punched")
+            .lines()
+            .filter(|l| !l.starts_with('p') || l.starts_with("param"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        run(&s)
+    };
+    let t = 1.5;
+    let area = PI * 9.0 + (7.0 * 5.0 + PI * 6.25) + 0.5 * 3.0f64.sqrt() * 100.0;
+    for (what, a, b) in [
+        (
+            "folded",
+            r.sheets[0].folded.as_ref(),
+            plain.sheets[0].folded.as_ref(),
+        ),
+        (
+            "flat",
+            r.sheets[0].unfolds[0].1.as_ref(),
+            plain.sheets[0].unfolds[0].1.as_ref(),
+        ),
+    ] {
+        let (a, b) = (mass(a.expect("built")), mass(b.expect("built")));
+        near(what, (b.0 - a.0, a.1 + b.1), t * area);
+    }
+    let dxf = r.sheets[0].dxf().expect("a dxf");
+    assert!(dxf.contains("\nPUNCH\n") && dxf.contains("\nHX10\n"));
+}
+
+#[test]
+fn punch_refusals_and_violations() {
+    let s = src("punched").replace("punch(\"R6\"", "punch(\"R9\"");
+    assert_eq!(first_error(&s).kind(), "NoSuchTool");
+    // a tool written out that the shop does not stock: built, a typed violation
+    let s = src("punched").replace("punch(\"R6\"", "punch((\"R7\", \"round\", 7)");
+    let r = run(&s);
+    assert!(r.errors.is_empty());
+    assert!(
+        r.warnings
+            .iter()
+            .any(|w| matches!(w, forge_lang::error::Warning::Sheet(n) if n.kind() == "ToolNotInShop")),
+        "{}",
+        forge_lang::report::text(&r, &s)
+    );
+}

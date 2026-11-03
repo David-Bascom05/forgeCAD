@@ -118,6 +118,8 @@ pub struct Sheet {
     pub corner_default: Option<CornerKind>,
     /// Powder coated: the shop's coated size limit applies, not the raw one.
     pub coated: bool,
+    /// Turret hits, each with its cuts among `cuts` (`crate::punch`).
+    pub punches: Vec<crate::punch::Punch>,
     pub(crate) next_wall: u32,
     pub(crate) next_joint: u32,
     pub(crate) next_cut: u32,
@@ -171,6 +173,7 @@ impl Sheet {
             rule: crate::relief::ReliefRule::default(),
             corner_default: None,
             coated: false,
+            punches: Vec::new(),
             next_wall: 1,
             next_joint: 0,
             next_cut: 0,

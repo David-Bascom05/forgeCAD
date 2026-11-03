@@ -83,7 +83,7 @@ fn shop(hardness: Option<f64>) -> ShopProfile {
         }],
         hardware: placeholder_catalogue(),
         kerf: 0.2,
-        process: Default::default(),
+        ..Default::default()
     }
 }
 

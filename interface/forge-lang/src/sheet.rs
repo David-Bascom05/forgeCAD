@@ -47,6 +47,7 @@ pub const BUILTINS: &[&str] = &[
     "corner_relief",
     "constant_width_corner",
     "seam",
+    "punch",
     "hardware",
     "pem",
     "relief_rule",
@@ -724,6 +725,7 @@ impl SheetNote {
                 V::ReliefUndersized { .. } => "ReliefUndersized",
                 V::CutCrossesBend { .. } => "CutCrossesBend",
                 V::LipTooShort { .. } => "LipTooShort",
+                V::Punch { why, .. } => feat::punch_kind(why),
             },
         }
     }
@@ -803,7 +805,12 @@ impl SheetNote {
                 ]),
                 W::UnverifiedHardware { cut, .. } => v.push(("cut", n.cut(cut).into())),
             },
+            Note::Violation(V::Punch { punch, why, .. }) => {
+                v.push(("punch", (*punch as f64).into()));
+                v.extend(feat::punch_data(why, n));
+            }
             Note::Violation(x) => match *x {
+                V::Punch { .. } => unreachable!("above"),
                 V::HoleNearBend {
                     trim,
                     joint,
@@ -1252,6 +1259,7 @@ impl SheetNote {
                 fm(*width),
                 fm(*need)
             ),
+            Note::Violation(V::Punch { why, .. }) => feat::punch_text(why, n),
         }
     }
 
@@ -2190,6 +2198,8 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
                     "box_flange_when",
                     "bend_angles",
                     "min_part",
+                    "tools",
+                    "punch_web",
                 ],
                 args,
                 span,
@@ -2255,6 +2265,8 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
                     },
                     kerf: kerf.map_or(0.2, |k| k.v),
                     process,
+                    tools: feat::tools_of(&a)?,
+                    punch_rules: feat::punch_rules_of(&a)?,
                 },
                 stocks,
                 hems,
@@ -2315,6 +2327,7 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
             }))))
         }
         "seam" => feat::seam(ev, args, span),
+        "punch" => feat::punch(ev, args, span),
         "hardware" => {
             let a = Args::bind(
                 ev,
@@ -4045,6 +4058,12 @@ pub fn finish(ev: &mut Eval) {
                     .iter()
                     .find(|j| j.0 == joint)
                     .map(|j| (j.1.clone(), j.2)),
+                fs::Violation::Punch { punch, .. } => st
+                    .sheet
+                    .punches
+                    .get(punch)
+                    .and_then(|p| p.cuts.first())
+                    .and_then(|c| cut_owner(*c)),
                 fs::Violation::ReliefUndersized { joint, .. } => st
                     .joints
                     .iter()

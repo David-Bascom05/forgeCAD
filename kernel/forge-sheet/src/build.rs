@@ -2236,6 +2236,12 @@ impl<'a> Strips<'a> {
         let t = self.t;
         let geo = self.strips[a].folded;
         let eps = 1e-3 * t;
+        // a hem zone against its own walls: their shared line is met by design
+        let margin = if self.loose.contains(&(a, b)) || self.loose.contains(&(b, a)) {
+            100.0 * TOL
+        } else {
+            0.0
+        };
         let mut best = first;
         let run = |best: &mut (Point3, f64),
                    box_of: &dyn Fn(Interval) -> forge_math::Box3,
@@ -2247,7 +2253,7 @@ impl<'a> Strips<'a> {
                     continue;
                 }
                 let p = point(u.mid());
-                if let Some(d) = self.inside(b, p)
+                if let Some(d) = self.inside(b, p, margin)
                     && d > best.1
                 {
                     *best = (p, d);
@@ -2690,7 +2696,11 @@ impl<'a> Strips<'a> {
                 allowance: b.allowance,
             })
             .collect();
-        Pattern { contours, bends }
+        Pattern {
+            contours,
+            bends,
+            hits: crate::punch::hits(self.cx.sheet, layout),
+        }
     }
 
     /// The side piece after (l, i) along the developed boundary, and whether it crossed a tangent line.

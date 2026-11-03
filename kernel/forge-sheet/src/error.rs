@@ -365,6 +365,11 @@ pub enum SheetError {
         feature: FeatureId,
         why: crate::contour::ContourError,
     },
+    /// A punch, refused (`crate::punch`).
+    Punch {
+        feature: FeatureId,
+        why: crate::punch::PunchError,
+    },
     /// A corner seam, refused (`crate::corner`).
     Seam {
         feature: FeatureId,
@@ -460,6 +465,12 @@ pub enum SheetWarning {
 /// A part against the shop's abilities (`ShopProfile`). Violations never change geometry.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Violation {
+    /// A turret hit against the shop (`crate::punch`); `punch` indexes `Sheet::punches`.
+    Punch {
+        feature: FeatureId,
+        punch: usize,
+        why: crate::punch::PunchViolation,
+    },
     /// A hole or slot `distance` from a bend zone (its tangent line), in developed terms;
     /// `away` (unit, in the cut's wall coordinates) is the way it would have to move.
     HoleNearBend {

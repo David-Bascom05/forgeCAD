@@ -33,6 +33,11 @@ pub fn check(sheet: &Sheet, shop: &ShopProfile) -> Vec<Violation> {
     let feature = sheet.feature;
     let t = sheet.gauge.thickness;
     let mut out = process(sheet, &shop.process);
+    out.extend(
+        crate::punch::check(sheet, &shop.tools, &shop.punch_rules)
+            .into_iter()
+            .map(|(punch, why)| Violation::Punch { feature, punch, why }),
+    );
     let Some(stock) = shop.stock(t) else {
         out.push(Violation::ThicknessNotStocked {
             feature,

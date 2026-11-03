@@ -10,6 +10,7 @@ pub mod graph;
 pub mod hardware;
 pub mod hem;
 pub mod pattern;
+pub mod punch;
 pub mod region;
 pub mod relief;
 pub mod roles;
@@ -29,6 +30,7 @@ pub use graph::{Corner, CornerKind, Cut, Gauge, Joint, JointKind, Position, Shee
 pub use hardware::{Hardware, HardwareKind, Mount, Source, placeholder_catalogue};
 pub use hem::{GAP_FLOOR, HemError, HemJoint, HemKind, HemName, HemRow, HemSpec, HemTable};
 pub use pattern::{BendLine, Curve2, NOTES_LAYER, Pattern, bend_note, dxf, dxf_noted};
+pub use punch::{Hit, Punch, PunchError, PunchRules, PunchViolation, Tool, ToolShape};
 pub use relief::{
     BendReliefRule, Corner3Rule, Corner3Shape, CornerRule, CornerShape, DepthRef, Placement, Relief,
     ReliefKind, ReliefMade, ReliefRule,

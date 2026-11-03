@@ -60,6 +60,8 @@ pub struct BendLine {
 pub struct Pattern {
     pub contours: Vec<Vec<Curve2>>,
     pub bends: Vec<BendLine>,
+    /// Turret hits: tool, centre and angle on the flat.
+    pub hits: Vec<crate::punch::Hit>,
 }
 
 /// Layers the DXF puts things on.
@@ -68,6 +70,8 @@ pub const BEND_LAYER: &str = "BEND";
 /// What a shop reads off the drawing: each bend's direction, angle and inside radius, and the
 /// part's material, thickness and bend rule.
 pub const NOTES_LAYER: &str = "BEND_NOTES";
+/// Turret hits: a point at each hit's centre and the tool id as text, turned to the hit.
+pub const PUNCH_LAYER: &str = "PUNCH";
 
 /// The pattern as an AutoCAD R2000 (AC1015) DXF in millimetres: contours on `CUT_LAYER`, bend
 /// lines on `BEND_LAYER`. Lines, arcs, circles (a whole-turn arc) and NURBS splines, exactly.
@@ -183,7 +187,7 @@ fn write_dxf(p: &Pattern, notes: Option<&str>) -> String {
         }
     });
     w.table("LAYER", 0x2, |w| {
-        let mut layers = vec![("0", "7"), (CUT_LAYER, "7"), (BEND_LAYER, "1")];
+        let mut layers = vec![("0", "7"), (CUT_LAYER, "7"), (BEND_LAYER, "1"), (PUNCH_LAYER, "5")];
         if notes.is_some() {
             layers.push((NOTES_LAYER, "3"));
         }
@@ -317,6 +321,26 @@ fn write_dxf(p: &Pattern, notes: Option<&str>) -> String {
             NOTES_LAYER,
             ms_rec,
         );
+    }
+    for h in &p.hits {
+        w.head("POINT", PUNCH_LAYER, ms_rec);
+        w.pair(100, "AcDbPoint");
+        for (k, v) in [(10, h.at.x), (20, h.at.y), (30, 0.0)] {
+            w.num(k, v);
+        }
+        w.head("TEXT", PUNCH_LAYER, ms_rec);
+        w.pair(100, "AcDbText");
+        for (k, v) in [
+            (10, h.at.x),
+            (20, h.at.y),
+            (30, 0.0),
+            (40, 1.0),
+            (50, h.angle.to_degrees()),
+        ] {
+            w.num(k, v);
+        }
+        w.pair(1, &h.tool);
+        w.pair(100, "AcDbText");
     }
     w.pair(0, "ENDSEC");
 

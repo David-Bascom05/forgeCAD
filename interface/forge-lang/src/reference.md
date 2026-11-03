@@ -561,6 +561,15 @@ seam(A, B, kind: "overlap"|"underlap"|"closed" = "overlap", gap: G)
     SeamTipTaken (seam before putting hems on the tips), SeamGap, SeamParallel, SeamNoRoom.
     constant_width_corner(width: W) is a corner relief: a W-wide slot (default t) along the
     corner's diagonal; relief_rule(corner: "constant_width") makes it the default.
+punch(TOOL, at: POINT | (x, y), wall: W, angle: A = 0)
+    a turret hit on wall W: TOOL is a tool id from the shop's library (NoSuchTool if absent) or
+    a tool written out. The tool's shape is cut (exact lines and arcs), so the hole checks read
+    it; the flat's DXF carries each hit (a POINT and the tool id as TEXT, turned to the hit) on
+    layer PUNCH. Shop checks (warnings): ToolNotInShop, PunchAcrossBend (the hit past a tangent
+    line), PunchSpacing (the web between hits under shop(punch_web: S), default t).
+    A tool: ("ID", "round", D) | ("ID", "obround", L, W) | ("ID", "square", S) |
+    ("ID", "rect", L, W) | ("ID", "d", D, FLAT) | ("ID", "keyhole", D, W, L) | ("ID", "hex", AF) |
+    ("ID", "cluster", D, PX, PY, NX, NY); shop(tools: [TOOL, ..]) is the library.
 unfold(S, on: PLANE)
     the flat body of S's sheet as a new body, its first wall on PLANE (default where it is
     folded). Sheet features after an unfold of their sheet are AfterUnfold.

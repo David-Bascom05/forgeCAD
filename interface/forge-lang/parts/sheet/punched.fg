@@ -1,0 +1,31 @@
+# A punched L: a round and an obround from the shop's turret library on the base, a hex on the
+# flange, each hit recorded for the punch program.
+shared t = 1.5
+shared r = 2
+shared k = ratio(0.4)
+param plan.L = 80
+param plan.W = 50
+param up.h = 30
+param holes.x = 30
+param holes.y = 25
+param holes.x2 = 55
+param p2.a = 30deg
+param p3.x = 15
+param p3.y = 20
+shared steel = stock(t: t, bend: kfactor(k), radii: [r])
+shared acme = shop([steel], tools: [("R6", "round", 6), ("OB12", "obround", 12, 5), ("HX10", "hex", 10)])
+
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (L, W))
+}
+base = sheet(plan, t: t, r: r, bend: kfactor(k), shop: acme)
+up = flange(base.edge(plan.outline[1]), height: h, measure: "inner", position: "outside")
+sketch holes(on: base.top) {
+  a = pt(x, y)
+  b = pt(x2, y)
+}
+p1 = punch("R6", at: holes.a, wall: base)
+p2 = punch("OB12", at: holes.b, wall: base, angle: a)
+p3 = punch("HX10", at: (x, y), wall: up)
+flat = unfold(base)
+expect valid

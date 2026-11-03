@@ -185,6 +185,9 @@ pub struct ShopProfile {
     pub kerf: f64,
     /// The fabricator's process limits (none: unchecked).
     pub process: Process,
+    /// The turret's tool library.
+    pub tools: Vec<crate::punch::Tool>,
+    pub punch_rules: crate::punch::PunchRules,
 }
 
 /// What a fabricator's machines take, each limit optional. Sizes are of the flat blank, either way
