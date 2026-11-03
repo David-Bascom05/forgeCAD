@@ -1892,6 +1892,45 @@ pub struct AsmOut {
     pub expects: Vec<ExpectOut>,
     /// Every rule-covered thread pair's engagement, short or not.
     pub engagements: Vec<EngagementOut>,
+    /// Every part and subassembly occurrence, in the order the documents make them.
+    pub insts: Vec<InstOut>,
+    /// Every joint, constraint, relation, fit and fit rule, through subassemblies.
+    pub links: Vec<LinkOut>,
+}
+
+/// A part or subassembly occurrence, as a browser lists it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct InstOut {
+    /// Its path through subassemblies (`post_fl.stud_a[0]`).
+    pub path: String,
+    /// The file as its document wrote it.
+    pub file: String,
+    pub sub: bool,
+    /// Grounded in its own document.
+    pub ground: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum LinkFamily {
+    Joint,
+    Constraint,
+    Relation,
+    Fit,
+    FitRule,
+}
+
+/// A joint, loose constraint, relation, fit or fit rule, and what it ties.
+#[derive(Clone, Debug, PartialEq)]
+pub struct LinkOut {
+    /// The subassembly occurrence whose document writes it; empty for the top document.
+    pub owner: String,
+    pub id: String,
+    pub family: LinkFamily,
+    pub kind: String,
+    /// Its two sides: an occurrence path and its anchor (a joint end or constraint), a joint and
+    /// its value (a relation), an occurrence (a fit), or what a fit rule matches.
+    pub a: (String, String),
+    pub b: (String, String),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -2111,6 +2150,130 @@ fn build_doc(
         });
     }
     out
+}
+
+/// A document's occurrences and links, and its subassemblies' under their occurrences' paths.
+#[allow(clippy::too_many_arguments)]
+fn structure(
+    d: &Doc,
+    owner: &str,
+    dir: &Option<std::path::PathBuf>,
+    fence: &Option<std::path::PathBuf>,
+    subs: &BTreeMap<String, Arc<SubLoad>>,
+    depth: usize,
+    insts: &mut Vec<InstOut>,
+    links: &mut Vec<LinkOut>,
+) {
+    let join = |id: &str| {
+        if owner.is_empty() {
+            id.to_string()
+        } else {
+            format!("{owner}.{id}")
+        }
+    };
+    let sub_of = |dir: &Option<std::path::PathBuf>, file: &str| {
+        let p = locate(dir, fence, file)?;
+        let s = subs.get(&p.to_string_lossy().to_string())?;
+        Some((s, p.parent().map(|x| x.to_path_buf())))
+    };
+    for i in &d.insts {
+        let path = join(&i.id);
+        insts.push(InstOut {
+            path: path.clone(),
+            file: i.file.clone(),
+            sub: i.sub,
+            ground: i.ground,
+        });
+        // a cycle is refused elsewhere; a bound keeps this from following one
+        if i.sub
+            && depth < 16
+            && let Some((s, sdir)) = sub_of(dir, &i.file)
+        {
+            structure(&s.0, &path, &sdir, fence, subs, depth + 1, insts, links);
+        }
+    }
+    // an end's occurrence path through subassemblies, and the anchor left on it
+    let end = |r: &RefDef| -> (String, String) {
+        let mut names = vec![r.inst.clone()];
+        let mut cur = d.insts.iter().find(|x| x.id == r.inst);
+        let mut cur_dir = dir.clone();
+        let mut segs: &[Seg] = &r.segs;
+        while let Some(c) = cur.filter(|c| c.sub) {
+            let Some((s, sdir)) = sub_of(&cur_dir, &c.file) else {
+                break;
+            };
+            let Some(first) = segs.first() else { break };
+            let text = path_text(std::slice::from_ref(first));
+            let Some(x) = s.0.insts.iter().find(|x| x.id == text) else {
+                break;
+            };
+            names.push(x.id.clone());
+            cur = Some(x);
+            cur_dir = sdir;
+            segs = &segs[1..];
+        }
+        (join(&names.join(".")), path_text(segs))
+    };
+    for l in &d.links {
+        let (family, kind) = match l.kind {
+            LinkKind::Joint(k) => (LinkFamily::Joint, k.name()),
+            LinkKind::Constraint(k) => (LinkFamily::Constraint, k.name()),
+        };
+        links.push(LinkOut {
+            owner: owner.to_string(),
+            id: l.id.clone(),
+            family,
+            kind: kind.to_string(),
+            a: end(&l.a),
+            b: end(&l.b),
+        });
+    }
+    let value = |(joint, f): &(String, Freedom)| {
+        let word = d
+            .links
+            .iter()
+            .find(|l| l.id == *joint)
+            .and_then(|l| match l.kind {
+                LinkKind::Joint(k) => Some(freedom_word(k, *f)),
+                LinkKind::Constraint(_) => None,
+            })
+            .unwrap_or(f.name());
+        (join(joint), word.to_string())
+    };
+    for r in &d.relations {
+        links.push(LinkOut {
+            owner: owner.to_string(),
+            id: r.id.clone(),
+            family: LinkFamily::Relation,
+            kind: r.kind.name().to_string(),
+            a: value(&r.leader),
+            b: value(&r.follower),
+        });
+    }
+    for f in &d.fits {
+        links.push(LinkOut {
+            owner: owner.to_string(),
+            id: f.id.clone(),
+            family: LinkFamily::Fit,
+            kind: "fit".into(),
+            a: (join(&f.a), String::new()),
+            b: (join(&f.b), String::new()),
+        });
+    }
+    let matcher = |m: &Matcher| match m {
+        Matcher::Kind(k) => k.name().to_string(),
+        Matcher::File(f) => f.clone(),
+    };
+    for r in &d.rules {
+        links.push(LinkOut {
+            owner: owner.to_string(),
+            id: r.id.clone(),
+            family: LinkFamily::FitRule,
+            kind: "fit_rule".into(),
+            a: (matcher(&r.a), String::new()),
+            b: (matcher(&r.b), String::new()),
+        });
+    }
 }
 
 /// Solves an evaluated assembly document: loads its parts and subassemblies (reusing `cache`),
@@ -2555,6 +2718,7 @@ pub fn finish(
         step,
         ..AsmOut::default()
     };
+    structure(&d, "", &dir, &fence, &subs, 0, &mut out.insts, &mut out.links);
     for e in &rep.engagements {
         out.engagements.push(EngagementOut {
             a: path_name(&names, &e.a),

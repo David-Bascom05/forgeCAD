@@ -1266,3 +1266,64 @@ fn an_expect_at_on_an_unknown_param_is_named() {
     assert_eq!(e.len(), 1, "{:?}", errors(&r));
     assert!(e[0].text().contains("no param swivel_turn"), "{}", e[0].text());
 }
+
+/// What a browser lists: every occurrence in the order the documents make them, and every
+/// relationship with what it ties, through a subassembly, by the paths the occurrences have.
+#[test]
+fn the_structure_lists_occurrences_and_what_each_relationship_ties() {
+    use forge_lang::asm::LinkFamily;
+    let d = mech_dir("structure");
+    write(
+        &d,
+        "arm.fg",
+        "assembly\n\nhub = part(\"rod.fg\", ground: true)\ntip = part(\"crank.fg\")\nj = revolute(tip.a, hub.b)\n",
+    );
+    let src = "assembly
+
+base = part(\"base.fg\", ground: true)
+arm = subassembly(\"arm.fg\")
+mount = fastened(arm.hub.a, base.o2)
+f = fit(base, arm)
+";
+    let r = run_in(&d, src);
+    assert!(r.ok(), "{:?}", errors(&r));
+    let a = r.asm.as_ref().expect("an assembly");
+    let insts: Vec<(&str, bool, bool)> = a
+        .insts
+        .iter()
+        .map(|i| (i.path.as_str(), i.sub, i.ground))
+        .collect();
+    assert_eq!(
+        insts,
+        [
+            ("base", false, true),
+            ("arm", true, false),
+            ("arm.hub", false, true),
+            ("arm.tip", false, false)
+        ]
+    );
+    let links: Vec<(&str, &str, LinkFamily, &str, &str, &str)> = a
+        .links
+        .iter()
+        .map(|l| {
+            (
+                l.owner.as_str(),
+                l.id.as_str(),
+                l.family,
+                l.kind.as_str(),
+                l.a.0.as_str(),
+                l.b.0.as_str(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        links,
+        [
+            ("arm", "j", LinkFamily::Joint, "revolute", "arm.tip", "arm.hub"),
+            ("", "mount", LinkFamily::Joint, "fastened", "arm.hub", "base"),
+            ("", "f", LinkFamily::Fit, "fit", "base", "arm"),
+        ]
+    );
+    // an end's anchor is what's left on the part it reaches
+    assert_eq!(a.links[1].a.1, "a");
+}
