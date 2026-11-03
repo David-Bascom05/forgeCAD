@@ -77,11 +77,11 @@ pub(crate) fn prepare(profile: &Profile, forward: Vec3) -> Result<Prepared, Prof
                             },
                             id,
                         ));
-                        keys.push(Name::NONE.with(id).with(half));
+                        keys.push(crate::roles::skin_key(id, half));
                     }
                 } else {
                     segs.push((s.clone(), id));
-                    keys.push(Name::NONE.with(id).with(0));
+                    keys.push(crate::roles::skin_key(id, 0));
                 }
             }
             ProfileLoop::new(segs)
@@ -238,7 +238,7 @@ impl Skin {
                 let same = surface
                     .normal(surface.project(mid.p))
                     .is_none_or(|nat| nat.dot(outward) > 0.0);
-                let name = root.with_str("side").with_name(self.keys[j]).with(k as u64);
+                let name = crate::roles::skin_side_of(root, self.keys[j], k as u64);
                 let face = body.add_face(shell, surface.clone(), same, name);
                 let mut uses = Vec::with_capacity(4);
                 if !is_apex(k) {
@@ -252,16 +252,14 @@ impl Skin {
                 body.add_loop(face, &uses);
             }
         }
-        for (s, same, name) in [(0, false, "start"), (n - 1, true, "end")] {
+        for (s, same, name) in [
+            (0, false, crate::roles::start(root)),
+            (n - 1, true, crate::roles::end(root)),
+        ] {
             if is_apex(s) {
                 continue;
             }
-            let face = body.add_face(
-                shell,
-                Surface::Plane(Plane::new(self.planes[s])),
-                same,
-                root.with_str(name),
-            );
+            let face = body.add_face(shell, Surface::Plane(Plane::new(self.planes[s])), same, name);
             let mut first = 0;
             for &len in &self.loops {
                 let ring = first..first + len;

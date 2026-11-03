@@ -49,7 +49,7 @@ pub fn shell(
         moved,
     } = offset_all(body, thickness, outward, open)?;
     let root = Name::feature(feature);
-    let rename = |n: Name| n.with_name(root).with_str("offset");
+    let rename = |n: Name| crate::roles::offset(root, n);
     let (outer, inner, outer_new, inner_new) = if outward {
         (&moved, &base, true, false)
     } else {
@@ -123,7 +123,7 @@ pub fn shell(
                 emap_in: &emap_in,
                 outer,
                 inner,
-                name: face.name.with_name(root).with_str("rim").with(k as u64),
+                name: crate::roles::rim(root, face.name, k as u64),
             };
             // edges the rim stops at: the other side of them is open too
             let free: Vec<bool> = base
@@ -275,7 +275,7 @@ pub fn offset_solid(
         return Err(ShellError::Invalid(problems));
     }
     let root = Name::feature(feature);
-    let rename = |n: Name| n.with_name(root).with_str("offset");
+    let rename = |n: Name| crate::roles::offset(root, n);
     moved.joins = moved.joins.renamed(rename);
     for v in &mut moved.vertices {
         v.name = rename(v.name);
