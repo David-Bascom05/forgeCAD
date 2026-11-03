@@ -59,7 +59,8 @@ pub(crate) fn motion(kind: JointKind, v: &[f64], ball: &Frame) -> Frame {
 /// An angle moved by whole turns to lie within half a turn of `near`.
 pub(crate) fn unwrap_near(a: f64, near: f64) -> f64 {
     let d = a - near;
-    near + (d - dmath::TAU * (d / dmath::TAU).round())
+    let turns = (d / dmath::TAU).round();
+    if turns == 0.0 { a } else { a - dmath::TAU * turns }
 }
 
 /// One row: its residual and its derivative with respect to each end's cluster increment
