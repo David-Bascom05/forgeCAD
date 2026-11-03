@@ -3,7 +3,7 @@
 use forge_render::gui::Headless;
 
 const USAGE: &str = "forge-app [PART | file.fc] [--size WxH] [--times]
-  [--shot FILE.ppm [--scale S] [--light] [--tab N] [--select NAME] [--click NAME].. [--at X Y] [--sketch ROW;ROW..] [--edit NAME] [--draw TOOL X Y] [--view YAW PITCH] [--marking]]
+  [--shot FILE.ppm [--scale S] [--light] [--tab N] [--select NAME] [--click NAME].. [--rclick NAME].. [--wait] [--at X Y] [--sketch ROW;ROW..] [--edit NAME] [--draw TOOL X Y] [--view YAW PITCH] [--marking]]
   [--present fifo|mailbox|immediate] [--run-for SECONDS] [--spin]
   [--bench]
 PART: a bench part or a .fc file. --times: input-to-present on exit. --shot: one frame, no window.
@@ -17,7 +17,10 @@ struct Args {
     shot: Option<String>,
     tab: usize,
     select: Option<String>,
-    clicks: Vec<String>,
+    /// Clicks by name, in order; true for a right click.
+    clicks: Vec<(bool, String)>,
+    /// After the clicks, wait for the Forge file's builds and checks to finish.
+    wait: bool,
     at: Option<(f32, f32)>,
     sketch: Option<String>,
     view: Option<(f32, f32)>,
@@ -42,6 +45,7 @@ fn args() -> Result<Args, String> {
         tab: 0,
         select: None,
         clicks: Vec::new(),
+        wait: false,
         at: None,
         sketch: None,
         view: None,
@@ -68,7 +72,9 @@ fn args() -> Result<Args, String> {
             "--shot" => a.shot = Some(v()?),
             "--tab" => a.tab = v()?.parse().map_err(|_| USAGE)?,
             "--select" => a.select = Some(v()?),
-            "--click" => a.clicks.push(v()?),
+            "--click" => a.clicks.push((false, v()?)),
+            "--rclick" => a.clicks.push((true, v()?)),
+            "--wait" => a.wait = true,
             "--at" => {
                 let x = v()?.parse().map_err(|_| USAGE)?;
                 let mut v = || it.next().ok_or(format!("{k} takes X Y\n{USAGE}"));
@@ -326,12 +332,50 @@ fn run() -> Result<(), String> {
     for _ in 0..5 {
         h.step();
     }
-    for c in &a.clicks {
-        if !h.click(c) {
+    for (right, c) in &a.clicks {
+        // by its name, or the first whose name starts so
+        let found = h.gui.shell.place(c).or_else(|| {
+            h.gui
+                .shell
+                .places
+                .iter()
+                .find(|p| p.0.starts_with(c.as_str()))
+                .map(|p| p.1)
+        });
+        let Some(r) = found else {
             return Err(format!("nothing called {c}"));
+        };
+        h.move_to(r.center().x, r.center().y);
+        h.step();
+        if *right {
+            h.right_click_here();
+        } else {
+            h.button(true);
+            h.step();
+            h.button(false);
         }
         h.step();
         h.step();
+    }
+    if a.wait {
+        let t = std::time::Instant::now();
+        while t.elapsed().as_secs() < 900 {
+            h.step();
+            let busy = h.gui.fg.as_ref().is_some_and(|s| s.done != s.seq)
+                || h.gui
+                    .shell
+                    .fg
+                    .as_ref()
+                    .and_then(|p| p.asm.as_ref())
+                    .is_some_and(|a| a.checking);
+            if !busy {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        for _ in 0..5 {
+            h.step();
+        }
     }
     if let Some(s) = &a.select
         && !h.click(&format!("tree:{s}"))
