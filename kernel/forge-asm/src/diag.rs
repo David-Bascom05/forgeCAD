@@ -8,8 +8,19 @@ use crate::model::{
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Severity {
+    /// Reported, nothing wrong (intended contact).
+    Info,
     Warning,
     Error,
+}
+
+/// Why a contact is intended.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Intent {
+    /// The assembly's declared fit, by its index in `fits`.
+    Fit { index: usize },
+    /// A part-level fit rule, by id.
+    Rule { rule: u32 },
 }
 
 /// Why a joint end gives no frame.
@@ -149,6 +160,21 @@ pub enum Diagnostic {
         pinned: ContentHash,
         found: Option<ContentHash>,
     },
+    /// Two occurrences share volume (or their meshes cross, unconfirmed): a warning, since contact
+    /// is sometimes meant. A fit or fit rule moves the pair to `IntendedContact`.
+    Interference {
+        a: Path,
+        b: Path,
+        /// Exact shared volume (mm³), where kernel solids confirmed it.
+        volume: Option<f64>,
+        confirmed: bool,
+    },
+    /// Contact a fit or fit rule says is meant.
+    IntendedContact {
+        a: Path,
+        b: Path,
+        by: Intent,
+    },
     /// A diagnostic from inside a subassembly occurrence.
     Inside {
         path: Path,
@@ -159,7 +185,10 @@ pub enum Diagnostic {
 impl Diagnostic {
     pub fn severity(&self) -> Severity {
         match self {
-            Diagnostic::Redundant { .. } | Diagnostic::PartChanged { .. } => Severity::Warning,
+            Diagnostic::Redundant { .. }
+            | Diagnostic::PartChanged { .. }
+            | Diagnostic::Interference { .. } => Severity::Warning,
+            Diagnostic::IntendedContact { .. } => Severity::Info,
             Diagnostic::Inside { diagnostic, .. } => diagnostic.severity(),
             _ => Severity::Error,
         }
@@ -182,6 +211,8 @@ impl Diagnostic {
             Diagnostic::CyclicAssembly { .. } => "CyclicAssembly",
             Diagnostic::PartChanged { .. } => "PartChanged",
             Diagnostic::Inside { .. } => "Inside",
+            Diagnostic::Interference { .. } => "Interference",
+            Diagnostic::IntendedContact { .. } => "IntendedContact",
         }
     }
 }

@@ -20,7 +20,7 @@ mod plan;
 mod qr;
 mod solve;
 
-pub use diag::{AnchorReason, Diagnostic, Fix, Item, Severity};
+pub use diag::{AnchorReason, Diagnostic, Fix, Intent, Item, Severity};
 pub use model::*;
 pub use solve::{BlockReport, ConstraintReport, JointReport, Occurrence, Options, Solution, Stats};
 

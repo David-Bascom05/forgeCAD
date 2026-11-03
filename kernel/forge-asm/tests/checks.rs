@@ -103,26 +103,127 @@ fn overlaps_touches_containment_and_fits() {
     });
     let sol = solve(&asm, &c, &Options::default());
     let mut ck = Checker::new(&c, &e);
-    let rep = ck.interference(&sol, &asm.fits);
+    let rep = ck.interference(&sol, &asm.fits, &[]);
+    let pair = |a: u32, b: u32| (vec![InstanceId(a)], vec![InstanceId(b)]);
     let find = |a: u32, b: u32| {
-        rep.hits
+        rep.interferences
             .iter()
-            .find(|h| h.a == vec![InstanceId(a)] && h.b == vec![InstanceId(b)])
+            .find(|h| (h.a.clone(), h.b.clone()) == pair(a, b))
     };
     let h12 = find(1, 2).expect("an overlap");
-    assert_eq!(h12.contact, Contact::Overlap);
+    assert!(h12.confirmed);
     assert!((h12.volume.unwrap() - 200.0).abs() < 1e-6, "{:?}", h12.volume);
-    assert!(
-        find(1, 3).is_none_or(|h| h.contact == Contact::Touch),
-        "{:?}",
-        find(1, 3)
-    );
+    assert!(find(1, 3).is_none());
     let h45 = find(4, 5).expect("containment");
-    assert_eq!(h45.contact, Contact::Overlap);
     assert!((h45.volume.unwrap() - 1000.0).abs() < 1e-6);
-    assert_eq!(find(1, 6).unwrap().contact, Contact::Fit);
-    assert_eq!(rep.overlaps().count(), 2);
-    assert!(rep.hits.iter().all(|h| h.tolerance < 0.03));
+    // the rod is a declared fit: intended contact, reported, not interference
+    assert!(find(1, 6).is_none());
+    assert_eq!(
+        rep.intended,
+        vec![IntendedContact {
+            a: vec![InstanceId(1)],
+            b: vec![InstanceId(6)],
+            by: Intent::Fit { index: 0 },
+        }]
+    );
+    assert_eq!(rep.interferences.len(), 2);
+    assert!(rep.interferences.iter().all(|h| h.tolerance < 0.03));
+    // as diagnostics: warnings and information, never errors
+    let d = rep.diagnostics();
+    assert_eq!(d.len(), 3);
+    assert!(d.iter().all(|x| x.severity() != Severity::Error));
+    assert_eq!(d.iter().filter(|x| x.severity() == Severity::Warning).count(), 2);
+}
+
+/// A plate with M4 tapped holes at (5, 5) and (5, 15), and rods that are M4 bolts.
+fn tapped() -> (Catalog, BrepExact) {
+    let (mut c, e) = shop();
+    let axis = |x: f64, y: f64| Ok(Reference::axis(p(x, y, 0.0), forge_math::UnitVec3::Z));
+    let plate = c.parts.get_mut(&(DocId("big".into()), 0)).unwrap();
+    plate.refs.insert("tap1".into(), axis(5.0, 5.0));
+    plate.refs.insert("tap2".into(), axis(5.0, 15.0));
+    let m4_hole = Feature {
+        kind: FeatureKind::InternalThread,
+        size: 4.0,
+    };
+    plate.features = vec![("tap1".into(), m4_hole), ("tap2".into(), m4_hole)];
+    let rod = c.parts.get_mut(&(DocId("rod".into()), 0)).unwrap();
+    rod.refs.insert("shank".into(), axis(0.0, 0.0));
+    rod.features = vec![(
+        "shank".into(),
+        Feature {
+            kind: FeatureKind::ExternalThread,
+            size: 4.0,
+        },
+    )];
+    (c, e)
+}
+
+#[test]
+fn fit_rules_cover_bolts_in_matching_holes_and_say_which() {
+    let (c, e) = tapped();
+    let mut asm = placed(vec![
+        of(1, "big", Frame::WORLD),
+        of(2, "rod", at(5.0, 5.0, -5.0)),   // in tap1
+        of(3, "rod", at(5.0, 15.0, -5.0)),  // in tap2
+        of(4, "rod", at(20.0, 20.0, -5.0)), // not in a hole: still interference
+    ]);
+    let rule = FitRule {
+        id: 7,
+        a: FitMatch::Feature {
+            kind: FeatureKind::ExternalThread,
+            size: Some(4.0),
+        },
+        b: FitMatch::Feature {
+            kind: FeatureKind::InternalThread,
+            size: Some(4.0),
+        },
+    };
+    asm.fit_rules.push(rule.clone());
+    let sol = solve(&asm, &c, &Options::default());
+    let mut ck = Checker::new(&c, &e);
+    let rep = ck.interference(&sol, &[], &asm.fit_rules);
+    let p = |i: u32| vec![InstanceId(i)];
+    assert_eq!(
+        rep.rules,
+        vec![RuleUse {
+            rule: 7,
+            pairs: vec![(p(1), p(2)), (p(1), p(3))],
+        }]
+    );
+    assert_eq!(rep.interferences.len(), 1);
+    assert_eq!(
+        (rep.interferences[0].a.clone(), rep.interferences[0].b.clone()),
+        (p(1), p(4))
+    );
+    // a size that does not match covers nothing
+    let m5 = FitRule {
+        id: 8,
+        a: FitMatch::Feature {
+            kind: FeatureKind::ExternalThread,
+            size: Some(5.0),
+        },
+        ..rule.clone()
+    };
+    let rep = Checker::new(&c, &e).interference(&sol, &[], &[m5]);
+    assert_eq!(rep.interferences.len(), 3);
+    assert!(rep.rules.is_empty());
+    // a part rule covers every rod against the plate, wherever it stands
+    let parts = FitRule {
+        id: 9,
+        a: FitMatch::Part {
+            doc: DocId("rod".into()),
+            body: None,
+        },
+        b: FitMatch::Part {
+            doc: DocId("big".into()),
+            body: None,
+        },
+    };
+    let rep = Checker::new(&c, &e).interference(&sol, &[], &[parts]);
+    assert!(rep.interferences.is_empty());
+    assert_eq!(rep.rules[0].pairs.len(), 3);
+    assert_eq!(rep.exact_runs, 0, "intended contact needs no exact confirmation");
 }
 
 #[test]
@@ -168,16 +269,17 @@ fn a_drag_retests_only_what_moved() {
     );
     let mut s = Solver::new(asm, &c, Options::default());
     let mut ck = Checker::new(&c, &e);
-    let cold = ck.interference(s.solution(), &[]);
+    let cold = ck.interference(s.solution(), &[], &[]);
     assert!(cold.candidates > 10, "{cold:?}");
     let sol = s.set_drive(JointId(40), Freedom::Rz, 0.3).clone();
-    let warm = ck.interference(&sol, &[]);
+    let warm = ck.interference(&sol, &[], &[]);
     assert!(
         warm.candidates <= 2,
         "only the arm moved: {} candidates",
         warm.candidates
     );
-    assert_eq!(warm.hits, cold.hits);
+    assert_eq!(warm.interferences, cold.interferences);
+    assert_eq!(warm.touching, cold.touching);
 }
 
 #[test]
@@ -246,17 +348,17 @@ fn the_mesh_phase_never_misses_a_real_overlap() {
         let asm = placed(vec![of(1, na, Frame::WORLD), of(2, nb, pose)]);
         let sol = solve(&asm, &c, &Options { threads: 1 });
         let mut ck = Checker::new(&c, &e);
-        let rep = ck.interference(&sol, &[]);
+        let rep = ck.interference(&sol, &[], &[]);
         let exact = e.overlap_volume(&PartRef::new(na, 0), &PartRef::new(nb, 0), &pose);
         let Some(vol) = exact else { continue };
         if vol > 0.01 {
             overlaps += 1;
             assert!(
-                !rep.hits.is_empty(),
+                !rep.interferences.is_empty(),
                 "case {case}: {na} vs {nb} share {vol} mm³, mesh missed it"
             );
         }
-        if let Some(h) = rep.hits.first() {
+        if let Some(h) = rep.interferences.first() {
             hits += 1;
             assert!(
                 (h.volume.unwrap() - vol).abs() <= 1e-9 * vol.max(1.0),
