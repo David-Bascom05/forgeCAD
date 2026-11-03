@@ -497,6 +497,19 @@ impl Shell {
 
     /// What of the origin's drawn, each and how strongly.
     pub fn origin_drawn(&self) -> Vec<(Item, bool)> {
+        // a Forge file's origin is the view's switches' (Axes, Planes), and what's picked of it
+        if self.fg.is_some() {
+            let o = self.overlays();
+            return origin::ITEMS
+                .into_iter()
+                .enumerate()
+                .filter_map(|(k, i)| {
+                    let strong = self.origin_hover == Some(i) || self.origin_selected == Some(i);
+                    let on = if k < 3 { o.planes } else { o.axes };
+                    (on || strong).then_some((i, strong))
+                })
+                .collect();
+        }
         origin::ITEMS
             .into_iter()
             .enumerate()

@@ -68,6 +68,10 @@ pub struct AsmView {
     /// Distinct parts and how many were meshed this time.
     pub parts: usize,
     pub meshed: usize,
+    /// Each mesh's box in its own space, by index.
+    pub boxes: Vec<crate::explode::Aabb>,
+    /// The grounded top-level instances.
+    pub grounded: Vec<String>,
 }
 
 /// What one build gave: the panel's data, and the mesh when the part's shape changed.
@@ -266,6 +270,7 @@ pub fn rows(run: &Run, src: &str) -> (Vec<FeatRow>, Vec<ParamRow>, Vec<Issue>) {
                 })
                 .collect(),
             reads: f.reads.iter().cloned().collect(),
+            frame: f.frame,
         })
         .collect();
     let params = run
@@ -625,6 +630,8 @@ pub fn is_assembly(src: &str) -> bool {
 pub struct AsmMeshes {
     by_key: HashMap<u64, usize>,
     pub all: Vec<PartMesh>,
+    /// Each mesh's box in its part's space: what the exploded view keeps apart.
+    pub boxes: Vec<crate::explode::Aabb>,
 }
 
 /// A body's content, cheaply: every vertex's place and every face's name.
@@ -692,6 +699,7 @@ fn asm_view(
     for ((key, _), m) in fresh.iter().zip(made) {
         meshes.by_key.insert(*key, meshes.all.len());
         new_meshes.push((meshes.all.len(), m.clone()));
+        meshes.boxes.push(crate::explode::mesh_box(&m));
         meshes.all.push(m);
     }
     let mut occ = vec![];
@@ -731,6 +739,7 @@ fn asm_view(
         };
         let mut scene = Scene::new(&part_info(&parts), placements);
         scene.set_explode(0.0);
+        scene.set_part_boxes(meshes.boxes.clone());
         let r = Renderer::new(
             device,
             queue,
@@ -762,6 +771,8 @@ fn asm_view(
         timings: out.timings.clone(),
         parts,
         meshed,
+        boxes: meshes.boxes.clone(),
+        grounded: out.grounded.clone(),
     };
     (Some(asm), view)
 }

@@ -1677,12 +1677,33 @@ fn placed_body(ev: &Eval) -> Option<forge_topo::Body> {
     }
 }
 
+/// A part file's declared anchors (loops' too: `stud[2]`) as frames in the part's own space: a
+/// plane's frame, an axis's along its z, a point's at its origin. What the app draws them by.
+pub fn part_anchors(text: &str, dir: Option<std::path::PathBuf>) -> Vec<(String, Frame)> {
+    let p = load_part_with(text, dir, None, &[], &[], false);
+    p.refs
+        .into_iter()
+        .filter_map(|(n, r)| r.ok().map(|r| (n, r.frame)))
+        .collect()
+}
+
 fn load_part(
     text: &str,
     dir: Option<std::path::PathBuf>,
     fence: Option<std::path::PathBuf>,
     refs: &[String],
     bodies: &[String],
+) -> PartLoad {
+    load_part_with(text, dir, fence, refs, bodies, true)
+}
+
+fn load_part_with(
+    text: &str,
+    dir: Option<std::path::PathBuf>,
+    fence: Option<std::path::PathBuf>,
+    refs: &[String],
+    bodies: &[String],
+    mesh: bool,
 ) -> PartLoad {
     let hash = content_hash(text);
     let mut out = PartLoad {
@@ -1776,7 +1797,7 @@ fn load_part(
         }
     }
     out.errors = std::mem::take(&mut ev.errors);
-    if let Some(b) = &out.body {
+    if mesh && let Some(b) = &out.body {
         let q = forge_mesh::Quality {
             chord: MESH_CHORD,
             max_angle: forge_math::dmath::PI / 12.0,
@@ -1842,6 +1863,8 @@ pub struct JointOut {
 pub struct AsmOut {
     /// Each top-level instance's solved pose, by id.
     pub poses: Vec<(String, Frame)>,
+    /// The top-level instances that are grounded (`ground: true`), by id.
+    pub grounded: Vec<String>,
     /// Each part occurrence (through subassemblies), its file and pose.
     pub occurrences: Vec<(String, String, Frame)>,
     pub joints: Vec<JointOut>,
@@ -2545,6 +2568,12 @@ pub fn finish(
             short: e.short,
         });
     }
+    out.grounded = d
+        .insts
+        .iter()
+        .filter(|i| i.ground)
+        .map(|i| i.id.clone())
+        .collect();
     for (id, f) in &sol.poses {
         if let Some((n, _)) = names.inst.get(&id.0) {
             out.poses.push((n.clone(), *f));

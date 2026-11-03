@@ -15,6 +15,7 @@ use winit::window::{Window, WindowId};
 const USAGE: &str =
     "forge-render [PART | file.fc | file.fg] [--stress N] [--moving N] [--bench] [--hover] [--window] [--frames N]
   [--size WxH] [--lod-px T] [--lines near|far|none] [--no-ao] [--section x|y|z] [--explode T] [--no-cache] [--shot FILE.ppm [--select X Y]..] [--yaw R --pitch R --dist X]
+  An assembly .fg with --shot: [--explode T] [--view iso|front|back|left|right|top|bottom] [--trails] [--anim N]
   [--export FILE] [--levels] [--dims] [--drag-bench [--drag-parts A,B] [--ticks N]]
 PART: a bench part (default crank). --stress: all 15 bench parts placed N times. --moving N: N of
 them swing on joints every frame. --hover: --bench also picks under a wandering pixel each frame. --bench: a fixed
@@ -50,6 +51,10 @@ struct Args {
     pitch: Option<f32>,
     dist: Option<f32>,
     dims: bool,
+    /// An assembly shot: the cube's side to look from, trails, and frames of the explode.
+    view: Option<[i8; 3]>,
+    trails: bool,
+    anim: usize,
     drag_bench: bool,
     drag_parts: Vec<String>,
     ticks: usize,
@@ -79,6 +84,9 @@ fn args() -> Result<Args, String> {
         pitch: None,
         dist: None,
         dims: false,
+        view: None,
+        trails: false,
+        anim: 0,
         drag_bench: false,
         drag_parts: Vec::new(),
         ticks: 180,
@@ -112,6 +120,16 @@ fn args() -> Result<Args, String> {
             }
             "--no-cache" => a.cache = false,
             "--dims" => a.dims = true,
+            "--view" => {
+                a.view = Some(
+                    it.next()
+                        .as_deref()
+                        .and_then(forge_render::asmshot::region)
+                        .ok_or(USAGE)?,
+                )
+            }
+            "--trails" => a.trails = true,
+            "--anim" => a.anim = num(it.next(), &k)?,
             "--drag-bench" => a.drag_bench = true,
             "--drag-parts" => {
                 a.drag_parts = it
@@ -432,6 +450,12 @@ fn run() -> Result<(), String> {
     if a.drag_bench {
         return forge_render::dragbench::run(&a.drag_parts, a.ticks, a.size);
     }
+    if a.shot.is_some()
+        && a.part.ends_with(".fg")
+        && std::fs::read_to_string(&a.part).is_ok_and(|t| forge_render::fg::is_assembly(&t))
+    {
+        return asm_shot(&a);
+    }
     let s = stage(&a)?;
     if a.levels {
         for p in &s.parts {
@@ -458,4 +482,101 @@ fn run() -> Result<(), String> {
         viewer: None,
     };
     on_loop.run_app(&mut app).map_err(|e| e.to_string())
+}
+
+/// An assembly's picture: solved, exploded `--explode` of the way (or every step of it with
+/// `--anim N`, one file each), from a side of the cube, with trails if asked.
+fn asm_shot(a: &Args) -> Result<(), String> {
+    let t = now_ms();
+    let mut st = forge_render::asmshot::stage(&a.part)?;
+    println!(
+        "staged {} placements of {} meshes in {:.0} ms",
+        st.scene.placements.len(),
+        st.parts.len(),
+        now_ms() - t
+    );
+    let instance = render::native_instance();
+    let (device, queue, adapter) = render::block_on(render::open_device(&instance, None))?;
+    let mut r = Renderer::new(
+        device,
+        queue,
+        adapter.get_info(),
+        render::OFFSCREEN,
+        a.size,
+        &st.parts,
+        &st.scene,
+    );
+    r.lod_px = a.lod_px;
+    r.line_mode = a.lines;
+    r.ao = a.ao;
+    let target = Offscreen::new(&r.device, a.size);
+    // the camera holds the most apart it gets, so an animation's frames share it
+    let most = if a.anim > 0 { a.explode.max(1.0) } else { a.explode };
+    st.explode(most);
+    let (c, radius) = st.scene.bounds();
+    let mut camera = forge_render::nav::region_view(
+        Camera::fit(c, radius),
+        a.view.unwrap_or(forge_render::nav::HOME_CORNER),
+    );
+    camera.set_parallel(true, radius);
+    // fitted to the box as it shows from this side, not to a sphere round it
+    if let Some((lo, hi)) = st.scene.shown_box() {
+        let (_, right, up) = camera.axes();
+        let (mut r0, mut r1, mut u0, mut u1) = (f32::MAX, f32::MIN, f32::MAX, f32::MIN);
+        for k in 0..8 {
+            let p = [
+                if k & 1 == 0 { lo[0] } else { hi[0] },
+                if k & 2 == 0 { lo[1] } else { hi[1] },
+                if k & 4 == 0 { lo[2] } else { hi[2] },
+            ];
+            let d = [p[0] - c[0], p[1] - c[1], p[2] - c[2]];
+            let (r, u) = (
+                forge_render::camera::dot(d, right),
+                forge_render::camera::dot(d, up),
+            );
+            (r0, r1, u0, u1) = (r0.min(r), r1.max(r), u0.min(u), u1.max(u));
+        }
+        let (mr, mu) = ((r0 + r1) * 0.5, (u0 + u1) * 0.5);
+        camera.target = [0, 1, 2].map(|k| c[k] + right[k] * mr + up[k] * mu);
+        let (w, h) = (a.size.0 as f32, a.size.1 as f32);
+        let half_h = ((u1 - u0) * 0.5).max((r1 - r0) * 0.5 * h / w);
+        camera.fit_to(half_h * (w / h).min(1.0) * 1.06, a.size.0, a.size.1);
+    } else {
+        camera.fit_to(radius * 1.04, a.size.0, a.size.1);
+    }
+    camera.yaw = a.yaw.unwrap_or(camera.yaw);
+    camera.pitch = a.pitch.unwrap_or(camera.pitch);
+    camera.dist = a.dist.unwrap_or(camera.dist);
+    let path = a.shot.clone().unwrap_or_default();
+    let steps: Vec<(f32, String)> = if a.anim > 0 {
+        let stem = path.trim_end_matches(".ppm");
+        (0..a.anim)
+            .map(|k| {
+                let u = k as f32 / (a.anim - 1).max(1) as f32;
+                (u * most, format!("{stem}-{k:03}.ppm"))
+            })
+            .collect()
+    } else {
+        vec![(a.explode, path)]
+    };
+    for (amount, file) in steps {
+        st.explode(amount);
+        let mut world = Vec::new();
+        if a.trails {
+            st.trails(&camera, a.size, a.size.1 as f32 / 1000.0, &mut world);
+        }
+        for _ in 0..2 {
+            let overlay = Overlay {
+                world: &world,
+                ..Overlay::default()
+            };
+            r.frame(&target.view, &mut st.scene, &camera, overlay);
+            r.wait();
+        }
+        let mut out = format!("P6\n{} {}\n255\n", a.size.0, a.size.1).into_bytes();
+        out.extend(target.read_rgb(&r));
+        std::fs::write(&file, out).map_err(|e| e.to_string())?;
+        println!("{file}: explode {amount:.2}");
+    }
+    Ok(())
 }

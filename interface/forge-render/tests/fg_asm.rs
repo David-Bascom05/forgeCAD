@@ -168,8 +168,12 @@ fn a_four_bar_opens_posed_with_its_tree_joints_dof_bom_and_expects() {
     meshes.sort();
     meshes.dedup();
     assert_eq!(meshes.len(), 5);
-    // the tree: a loop's occurrences under its name
-    assert!(h.gui.shell.place("asm:row:rod").is_some());
+    // the browser: one part type's occurrences under it, shut until opened
+    assert!(h.gui.shell.place("asm:row:t:rod.fg").is_some());
+    assert!(h.gui.shell.place("asm:row:rod[1]").is_none());
+    assert!(h.click("asm:open:t:rod.fg"));
+    h.step();
+    h.step();
     assert!(h.gui.shell.place("asm:row:rod[1]").is_some());
     assert!(h.gui.shell.place("asm:drive:j1:turn").is_some());
     assert!(h.gui.shell.place("asm:bom:rod").is_some());
@@ -215,8 +219,8 @@ fn choosing_hiding_isolating_and_a_parts_anchors() {
     assert_eq!(v.scene.rows_of(placement_of(&h, "rocker")), [[0.0; 4]; 3]);
     assert!(h.click("asm:isolate"));
     h.step();
-    // a subassembly-like group: the loop's three rods at once
-    assert!(h.click("asm:row:rod"));
+    // a part type's row: its three rods at once
+    assert!(h.click("asm:row:t:rod.fg"));
     h.step();
     let v = h.gui.view.as_ref().unwrap();
     for k in 0..3 {

@@ -10,7 +10,88 @@ use forge_lang::syntax::Seg;
 use forge_lang::values::Dim;
 use std::collections::HashSet;
 
-const PANEL_W: f32 = 340.0;
+pub(super) const PANEL_W: f32 = 340.0;
+pub(super) const WARN: Color32 = Color32::from_rgb(0xE0, 0xA0, 0x30);
+
+/// Errors, and everything else (warnings, lints, a shop's rules).
+pub fn issue_counts(issues: &[Issue]) -> (usize, usize) {
+    let e = issues.iter().filter(|i| i.severity == Severity::Error).count();
+    (e, issues.len() - e)
+}
+
+pub fn plural(n: usize, word: &str) -> String {
+    format!("{n} {word}{}", if n == 1 { "" } else { "s" })
+}
+
+pub(super) fn eye_rect(row: Rect) -> Rect {
+    Rect::from_center_size(pos2(row.right() - 16.0, row.center().y), vec2(20.0, 20.0))
+}
+
+/// An eye at a row's right, apart from the row's own click: true when it's clicked.
+pub(super) fn row_eye(ui: &mut Ui, t: &super::theme::Theme, row: Rect, id: &str, shown: bool) -> bool {
+    let r = eye_rect(row);
+    let resp = ui
+        .interact(r, ui.scope_id().with(id), Sense::click())
+        .on_hover_text(if shown { "Hide" } else { "Show" });
+    let ink = if resp.hovered() {
+        t.ink
+    } else if shown {
+        t.ink2
+    } else {
+        t.ink2.gamma_multiply(0.5)
+    };
+    icons::draw(
+        ui.painter(),
+        pos2(r.left() + 2.0, r.top() + 2.0),
+        16.0,
+        if shown { "eye" } else { "hide" },
+        1.25,
+        ink,
+    );
+    resp.clicked()
+}
+
+/// A disclosure triangle, drawn (the fonts have no arrows): pointing right shut, down open.
+pub(super) fn disclosure(p: &egui::Painter, c: egui::Pos2, open: bool, ink: Color32) {
+    let pts = if open {
+        vec![
+            pos2(c.x - 4.0, c.y - 2.0),
+            pos2(c.x + 4.0, c.y - 2.0),
+            pos2(c.x, c.y + 3.0),
+        ]
+    } else {
+        vec![
+            pos2(c.x - 2.0, c.y - 4.0),
+            pos2(c.x + 3.0, c.y),
+            pos2(c.x - 2.0, c.y + 4.0),
+        ]
+    };
+    p.add(egui::Shape::convex_polygon(pts, ink, Stroke::NONE));
+}
+
+/// A section's heading that opens and shuts it: a triangle and the words, the whole line a button.
+pub(super) fn fold_head(
+    ui: &mut Ui,
+    t: &super::theme::Theme,
+    head: &str,
+    open: bool,
+    ink: Color32,
+) -> egui::Response {
+    let w = ui.available_width();
+    let (r, resp) = ui.allocate_exact_size(vec2(w, 22.0), Sense::click());
+    if resp.hovered() {
+        ui.painter().rect_filled(r, 3.0, t.hover);
+    }
+    disclosure(ui.painter(), pos2(r.left() + 7.0, r.center().y), open, t.ink2);
+    ui.painter().text(
+        pos2(r.left() + 18.0, r.center().y),
+        Align2::LEFT_CENTER,
+        head,
+        semi(12.0),
+        ink,
+    );
+    resp
+}
 const INDENT: f32 = 16.0;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -45,6 +126,8 @@ pub struct FeatRow {
     pub status: Status,
     pub dims: Vec<DimRow>,
     pub reads: Vec<ParamKey>,
+    /// A sketch's or a work plane's plane, as built.
+    pub frame: Option<forge_math::Frame>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -140,6 +223,8 @@ pub struct TreeRow {
 #[derive(Default)]
 pub struct FgPanel {
     pub file: String,
+    /// Its text declares an assembly.
+    pub assembly: bool,
     pub source: String,
     /// What's on screen differs from the file.
     pub dirty: bool,
@@ -156,6 +241,8 @@ pub struct FgPanel {
     pub add_text: String,
     /// Every issue listed, not the first few.
     pub all_issues: bool,
+    /// The issues list opened or shut by a click; unset, it's open while there are errors.
+    pub issues_shown: Option<bool>,
     /// The selected statement's new name, being typed.
     pub rename: String,
     /// The last op the host refused, and why.
@@ -170,6 +257,10 @@ pub struct FgPanel {
     pub tool: Option<super::fgtool::FgTool>,
     /// The part's sketches and their entities, for picks a view click can't make.
     pub sketches: Vec<forge_lang::anchors::SketchRefs>,
+    /// Sketch and work plane rows shown or hidden by their eye; unset, they follow Planes.
+    pub eyes: std::collections::HashMap<String, bool>,
+    /// The part's solid hidden by the Solid row's eye.
+    pub body_hidden: bool,
     /// An assembly's instances, joints, checks and BOM, when the document is one.
     pub asm: Option<super::fgasm::AsmPanel>,
     /// The last thing picked in the view, as Forge names it (or why nothing does).
@@ -344,6 +435,10 @@ impl FgPanel {
         tree_rows(&self.feats)
     }
 
+    pub fn issues_open(&self, errors: usize) -> bool {
+        self.issues_shown.unwrap_or(errors > 0)
+    }
+
     fn feat(&self, id: &str) -> Option<&FeatRow> {
         self.feats.iter().find(|f| f.id == id)
     }
@@ -427,10 +522,40 @@ impl Shell {
         let mut chosen = None;
         let mut toggle = None;
         let mut child = ui.new_child(egui::UiBuilder::new().max_rect(area));
+        let planes = self.overlays().planes;
+        let mut eye_flip: Option<Option<String>> = None;
         egui::ScrollArea::vertical()
             .id_salt("fg-tree")
             .auto_shrink([false, false])
             .show(&mut child, |ui| {
+                // the part's solid: hidden by its eye, the rest of the tree as it is
+                if !fg.feats.is_empty() {
+                    let (r, _) = ui.allocate_exact_size(vec2(area.width(), super::ROW_H), Sense::hover());
+                    let ink = if fg.body_hidden {
+                        t.ink2.gamma_multiply(0.55)
+                    } else {
+                        t.ink
+                    };
+                    icons::draw(
+                        ui.painter(),
+                        pos2(r.left() + 20.0, r.top() + 5.0),
+                        16.0,
+                        "newsolid",
+                        1.5,
+                        ink,
+                    );
+                    ui.painter().text(
+                        pos2(r.left() + 42.0, r.center().y),
+                        Align2::LEFT_CENTER,
+                        "Solid",
+                        medium(13.0),
+                        ink,
+                    );
+                    if row_eye(ui, &t, r, "fg-eye-solid", !fg.body_hidden) {
+                        eye_flip = Some(None);
+                    }
+                    places.push(("fg:eye:solid".into(), eye_rect(r)));
+                }
                 let mut hidden: Option<String> = None;
                 for row in &rows {
                     if let Some(h) = &hidden {
@@ -444,7 +569,7 @@ impl Shell {
                     resp.widget_info(|| {
                         egui::WidgetInfo::selected(egui::Role::TreeItem, true, on, &row.label)
                     });
-                    let p = ui.painter();
+                    let p = &ui.painter().clone();
                     if on {
                         p.rect_filled(r, 0.0, t.on);
                         p.rect_filled(Rect::from_min_size(r.min, vec2(2.0, super::ROW_H)), 0.0, t.focus);
@@ -457,13 +582,7 @@ impl Shell {
                     if row.group {
                         let arrow = Rect::from_min_size(pos2(x - 2.0, r.top() + 5.0), vec2(14.0, 16.0));
                         let a = ui.interact(arrow, ui.scope_id().with(("fg-open", &row.key)), Sense::click());
-                        p.text(
-                            arrow.center(),
-                            Align2::CENTER_CENTER,
-                            if open { "▾" } else { "▸" },
-                            sans(12.0),
-                            t.ink2,
-                        );
+                        disclosure(p, arrow.center(), open, t.ink2);
                         if a.clicked() {
                             toggle = Some(row.key.clone());
                         }
@@ -503,14 +622,23 @@ impl Shell {
                         font,
                         ink,
                     );
+                    // a sketch's or a work plane's plane: its eye
+                    let plane = row.feat.is_some_and(|i| fg.feats[i].frame.is_some());
                     if let Some(k) = kind {
                         p.text(
-                            pos2(r.right() - 10.0, r.center().y),
+                            pos2(r.right() - if plane { 36.0 } else { 10.0 }, r.center().y),
                             Align2::RIGHT_CENTER,
                             k,
                             sans(11.0),
                             t.ink2,
                         );
+                    }
+                    if plane {
+                        let on = fg.eyes.get(&row.key).copied().unwrap_or(planes);
+                        if row_eye(ui, &t, r, &format!("fg-eye-{}", row.key), on) {
+                            eye_flip = Some(Some(row.key.clone()));
+                        }
+                        places.push((format!("fg:eye:{}", row.key), eye_rect(r)));
                     }
                     if let Some(c) = tint {
                         p.circle_filled(pos2(r.right() - 4.0, r.top() + 6.0), 3.0, c);
@@ -528,6 +656,14 @@ impl Shell {
             && !fg.collapsed.remove(&k)
         {
             fg.collapsed.insert(k);
+        }
+        match eye_flip {
+            Some(None) => fg.body_hidden = !fg.body_hidden,
+            Some(Some(k)) => {
+                let on = fg.eyes.get(&k).copied().unwrap_or(planes);
+                fg.eyes.insert(k, !on);
+            }
+            None => {}
         }
         // a tool waiting for a feature or a sketch takes the row
         if let Some(k) = chosen.clone()
@@ -568,15 +704,20 @@ impl Shell {
         let Some(mut fg) = self.fg.take() else { return };
         let t = self.theme;
         let v = self.view_rect;
-        let rect = Rect::from_min_max(pos2(v.right() - PANEL_W, v.top()), v.max);
+        let rect = Rect::from_min_max(pos2(v.right(), v.top()), pos2(v.right() + PANEL_W, v.bottom()));
         let mut places: Vec<(String, Rect)> = Vec::new();
         let mut out: Vec<FgAct> = Vec::new();
         egui::Area::new(egui::Id::unique("fg-panel"))
             .fixed_pos(rect.min)
+            .constrain(false)
             .order(egui::Order::Middle)
             .show(ctx, |ui| {
                 ui.set_min_size(rect.size());
                 ui.set_max_size(rect.size());
+                // a long value (a list param, a sheet's report) is cut at the panel's edge, never
+                // widening the panel over the view
+                ui.set_clip_rect(rect);
+                ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Truncate);
                 ui.painter().rect_filled(rect, 0.0, t.surface);
                 ui.painter()
                     .vline(rect.left(), rect.y_range(), Stroke::new(1.0, t.line));
@@ -788,7 +929,7 @@ impl Shell {
     ) {
         ui.horizontal(|ui| {
             let name = if fg.dirty {
-                format!("{} ●", fg.file)
+                format!("{} (unsaved)", fg.file)
             } else {
                 fg.file.clone()
             };
@@ -799,7 +940,9 @@ impl Shell {
                 }
             });
         });
-        ui.label(egui::RichText::new(&fg.summary).font(sans(11.0)).color(t.ink2));
+        if !fg.summary.is_empty() {
+            ui.label(egui::RichText::new(&fg.summary).font(sans(11.0)).color(t.ink2));
+        }
         if let Some(why) = &fg.refused {
             ui.label(
                 egui::RichText::new(format!("Refused: {why}"))
@@ -977,6 +1120,9 @@ impl Shell {
                 }
             }
         }
+        if fg.asm.is_some() {
+            return;
+        }
         Self::fg_heading(ui, t, "Add feature");
         let r = ui.add(
             egui::TextEdit::singleline(&mut fg.add_text)
@@ -1012,13 +1158,17 @@ impl Shell {
             ui.horizontal(|ui| {
                 let (mark, r) = ui.allocate_exact_size(vec2(10.0, 18.0), Sense::hover());
                 if p.structural {
-                    ui.painter().text(
-                        mark.center(),
-                        Align2::CENTER_CENTER,
-                        "◆",
-                        sans(9.0),
+                    let c = mark.center();
+                    ui.painter().add(egui::Shape::convex_polygon(
+                        vec![
+                            pos2(c.x, c.y - 4.0),
+                            pos2(c.x + 4.0, c.y),
+                            pos2(c.x, c.y + 4.0),
+                            pos2(c.x - 4.0, c.y),
+                        ],
                         Color32::from_rgb(0x9A, 0x7B, 0xE0),
-                    );
+                        Stroke::NONE,
+                    ));
                     r.on_hover_text("structural: evaluation reads it; editing re-runs");
                 }
                 let name = ui.label(egui::RichText::new(&key).font(mono(12.0)).color(t.ink));
@@ -1100,6 +1250,8 @@ impl Shell {
         }
     }
 
+    /// The issues: one line of counts, opened by a click; open by itself only while there are
+    /// errors, until a click says otherwise.
     fn fg_issues(
         ui: &mut Ui,
         t: &super::theme::Theme,
@@ -1107,23 +1259,32 @@ impl Shell {
         out: &mut Vec<FgAct>,
         places: &mut Vec<(String, Rect)>,
     ) {
-        if fg.issues.is_empty() {
+        let (errors, warnings) = issue_counts(&fg.issues);
+        let open = fg.issues_open(errors) && !fg.issues.is_empty();
+        let head = format!("{} · {}", plural(errors, "error"), plural(warnings, "warning"));
+        ui.add_space(6.0);
+        let ink = if errors > 0 {
+            t.error
+        } else if warnings > 0 {
+            WARN
+        } else {
+            t.ink2
+        };
+        let r = fold_head(ui, t, &head, open, ink);
+        places.push(("fg:issues".into(), r.rect));
+        if r.clicked() && !fg.issues.is_empty() {
+            fg.issues_shown = Some(!open);
+        }
+        if !open {
             return;
         }
-        Self::fg_heading(ui, t, &format!("Issues ({})", fg.issues.len()));
         let issues = std::mem::take(&mut fg.issues);
         // a long list shows its first few until asked
         let cap = if fg.all_issues { 300 } else { 8 };
-        if issues.len() > 8 {
-            let label = if fg.all_issues { "Show fewer" } else { "Show all" };
-            if Self::fg_button(ui, label, "fg:issues:all".into(), places) {
-                fg.all_issues = !fg.all_issues;
-            }
-        }
         for (i, is) in issues.iter().enumerate().take(cap) {
             let colour = match is.severity {
                 Severity::Error => t.error,
-                _ => Color32::from_rgb(0xE0, 0xA0, 0x30),
+                _ => WARN,
             };
             let word = match is.severity {
                 Severity::Error => "error",
@@ -1149,23 +1310,22 @@ impl Shell {
                 }
             });
         }
+        if issues.len() > 8 {
+            let label = if fg.all_issues {
+                "Show fewer".to_string()
+            } else {
+                format!("Show all {}", issues.len())
+            };
+            if Self::fg_button(ui, &label, "fg:issues:all".into(), places) {
+                fg.all_issues = !fg.all_issues;
+            }
+        }
         fg.issues = issues;
     }
 
     fn fg_source(ui: &mut Ui, t: &super::theme::Theme, fg: &mut FgPanel) {
         ui.add_space(6.0);
-        let label = if fg.show_source {
-            "▾ Source"
-        } else {
-            "▸ Source"
-        };
-        if ui
-            .add(
-                egui::Label::new(egui::RichText::new(label).font(semi(12.0)).color(t.ink))
-                    .sense(Sense::click()),
-            )
-            .clicked()
-        {
+        if fold_head(ui, t, "Source", fg.show_source, t.ink).clicked() {
             fg.show_source = !fg.show_source;
         }
         if !fg.show_source {
@@ -1205,6 +1365,7 @@ mod tests {
             status: Status::Ok,
             dims: vec![],
             reads: vec![],
+            frame: None,
         }
     }
 

@@ -763,6 +763,15 @@ impl<'s> Eval<'s> {
 
     /// Binds a name once: rebinding, or shadowing a name, a param or a built-in, is an error.
     fn bind(&mut self, name: &str, v: Value, span: Span) -> R<()> {
+        // a work plane's plane, for the app to draw
+        if let Value::Wired(w) = &v
+            && let Some(f) = w.plane()
+            && let Some(last) = self.feats.last_mut()
+            && last.kind == "workplane"
+            && last.frame.is_none()
+        {
+            last.frame = Some(f);
+        }
         if crate::builtins::builtin(name).is_some() || crate::builtins::constant(name).is_some() {
             return Err(Error::ShadowsBuiltin {
                 span,

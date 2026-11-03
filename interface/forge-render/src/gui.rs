@@ -23,6 +23,11 @@ use std::sync::mpsc::{Receiver, channel};
 use winit::dpi::PhysicalPosition;
 use winit::event::{ElementState, MouseButton, WindowEvent};
 
+#[path = "gui_explode.rs"]
+mod gui_explode;
+#[path = "gui_overlay.rs"]
+mod gui_overlay;
+
 pub type Waker = Arc<dyn Fn() + Send + Sync>;
 
 /// The formats a target can be: blending in sRGB, as a browser's. The viewport's picture is sampled
@@ -146,6 +151,14 @@ pub struct Gui {
     fg_keep_camera: Option<Camera>,
     /// The GPU refused something: said once, and no more views are drawn.
     gpu_failed: Arc<std::sync::Mutex<Option<String>>>,
+    /// The view's switches' anchors, and what they were last drawn for.
+    extras: gui_overlay::Extras,
+    /// An assembly's meshes' boxes, each in its part's space.
+    pub fg_asm_boxes: Vec<crate::explode::Aabb>,
+    /// The exploded view: its plan, and how far apart it is now.
+    pub explode: gui_explode::Explode,
+    /// A Forge part's solid as it was before its eye hid it.
+    body_rows: Option<crate::scene::Rows>,
 }
 
 fn view_camera(center: [f32; 3], radius: f32, parallel: bool, size: (u32, u32)) -> Camera {
@@ -252,6 +265,10 @@ impl Gui {
             fg_asm_anchors: None,
             fg_keep_camera: None,
             gpu_failed,
+            extras: Default::default(),
+            fg_asm_boxes: Vec::new(),
+            explode: Default::default(),
+            body_rows: None,
         }
     }
 
@@ -1938,6 +1955,7 @@ impl Gui {
         self.take_loaded();
         self.take_live();
         self.take_fg();
+        self.take_extras(false);
         times.events = now_ms() - t0;
         let mut animating = false;
         if let Some(v) = &mut self.view {
@@ -1973,6 +1991,10 @@ impl Gui {
         self.pixels_per_point = output.pixels_per_point;
         let host = self.apply();
         self.apply_fg();
+        if self.explode_tick() {
+            animating = true;
+        }
+        self.body_eye();
         times.ui = now_ms() - t0;
 
         if self.shell.tree_hover != self.tree_hover_was {
@@ -1980,6 +2002,12 @@ impl Gui {
             if let Some(v) = &mut self.view {
                 v.dirty = true;
             }
+        }
+        self.ask_extras();
+        if self.extras_changed()
+            && let Some(v) = &mut self.view
+        {
+            v.dirty = true;
         }
         let drawn = self.shell.origin_drawn();
         if let Some(v) = &mut self.view
@@ -2039,11 +2067,16 @@ impl Gui {
             self.view = Some(v);
         }
         let t1 = now_ms();
+        let (extra, extra_behind) = if self.view.as_ref().is_some_and(|v| v.dirty) {
+            self.overlay_world()
+        } else {
+            (Vec::new(), Vec::new())
+        };
         if let Some(v) = &mut self.view
             && v.dirty
         {
             v.renderer.section = v.nav.section_plane();
-            let mut world = Vec::new();
+            let mut world = extra;
             let (c, r) = v.scene.bounds();
             for (item, strong) in &v.origin_was {
                 crate::origin::tris(
@@ -2055,7 +2088,7 @@ impl Gui {
                     &mut world,
                 );
             }
-            let mut behind = Vec::new();
+            let mut behind = extra_behind;
             {
                 let (t, px) = (self.shell.theme, self.pixels_per_point);
                 let rgba = |c: egui::Color32, a: f32| {
@@ -2643,6 +2676,7 @@ impl Gui {
                 let name = name_of(path);
                 self.shell.fg = Some(crate::shell::fg::FgPanel {
                     file: name.clone(),
+                    assembly: crate::fg::is_assembly(&s.src),
                     source: s.src.clone(),
                     ..Default::default()
                 });
@@ -2652,6 +2686,7 @@ impl Gui {
                 self.fg_flat = None;
                 self.fg_sheets.clear();
                 self.fg_asm = None;
+                self.explode = Default::default();
                 self.fg_keep_camera = None;
                 self.loading = None;
                 self.view = None;
@@ -2722,6 +2757,10 @@ impl Gui {
                     continue;
                 }
             };
+            if b.asm.is_none() {
+                self.extras.frames.remove(gui_overlay::SELF);
+                self.extras.asked.remove(gui_overlay::SELF);
+            }
             if let Some(p) = &mut self.shell.fg {
                 p.summary = b.summary();
                 p.feats = b.feats;
@@ -2740,15 +2779,23 @@ impl Gui {
                 && let Some(p) = &mut self.shell.fg
             {
                 let ap = p.asm.get_or_insert_with(Default::default);
-                ap.occ = a
-                    .occ
-                    .iter()
-                    .map(|o| crate::shell::fgasm::OccRow {
-                        path: o.path.clone(),
-                        file: o.file.clone(),
-                        drawn: o.placement.is_some(),
-                    })
-                    .collect();
+                let dir = s
+                    .path
+                    .as_deref()
+                    .and_then(|f| std::fs::canonicalize(f).ok())
+                    .and_then(|f| f.parent().map(|d| d.to_path_buf()));
+                ap.set_occ(
+                    a.occ
+                        .iter()
+                        .map(|o| crate::shell::fgasm::OccRow {
+                            path: o.path.clone(),
+                            file: o.file.clone(),
+                            drawn: o.placement.is_some(),
+                        })
+                        .collect(),
+                    dir,
+                );
+                ap.grounded = a.grounded.clone();
                 ap.joints = a.joints.clone();
                 ap.mobility = a.mobility;
                 ap.bom = a.bom.clone();
@@ -2771,9 +2818,12 @@ impl Gui {
                     a.meshed,
                     b.mesh_ms
                 );
-                p.summary = format!("{} · {}", p.summary, ap.timings);
-                self.shell.status = p.summary.clone();
+                // an assembly's own line says it all: no part summary ("nothing built") above it
+                p.summary.clear();
+                self.shell.status = format!("{} occurrences · {}", ap.occ.len(), ap.timings);
                 self.fg_asm = Some((a.occ.clone(), a.placed.clone()));
+                self.fg_asm_boxes = a.boxes.clone();
+                self.explode.stale();
                 asm_moved = true;
                 // which part is placed where changed: the view made again, the camera kept
                 if let Some(all) = &a.restage {
@@ -2796,6 +2846,7 @@ impl Gui {
                     };
                     let mut scene = Scene::new(&part_info(&parts), placements);
                     scene.set_explode(0.0);
+                    scene.set_part_boxes(a.boxes.clone());
                     let renderer = Renderer::new(
                         self.device.clone(),
                         self.queue.clone(),
@@ -2995,15 +3046,21 @@ impl Gui {
         if scene.placements.len() != placed.len() {
             return;
         }
-        for o in occ {
+        let (shown, picked) = (a.shown_mask(), a.picked_mask());
+        let flagged = !a.highlight.is_empty();
+        for (i, o) in occ.iter().enumerate() {
             let Some(k) = o.placement else { continue };
-            let rows = if a.shown(&o.path) { placed[k].1 } else { NOWHERE };
+            let rows = if shown.get(i).copied().unwrap_or(true) {
+                placed[k].1
+            } else {
+                NOWHERE
+            };
             if scene.rows_of(k) != rows {
                 scene.set_rows(k, &rows);
             }
-            scene.placements[k].tint = if a.picked(&o.path) {
+            scene.placements[k].tint = if picked.get(i).copied().unwrap_or(false) {
                 crate::fg::PICKED_TINT
-            } else if a.flagged(&o.path) {
+            } else if flagged && a.flagged(&o.path) {
                 crate::fg::CLASH_TINT
             } else {
                 crate::fg::PART_TINT
@@ -3101,15 +3158,11 @@ impl Gui {
         // an assembly: a click chooses the occurrence under it
         if let Some((occ, _)) = &self.fg_asm {
             let at = v.nav.selected.last().map(|x| x.0 as usize);
-            let path = at.and_then(|p| {
-                occ.iter()
-                    .find(|o| o.placement == Some(p))
-                    .map(|o| o.path.clone())
-            });
+            let k = at.and_then(|p| occ.iter().position(|o| o.placement == Some(p)));
             v.nav.selected.clear();
             v.clicked.clear();
             if let Some(a) = self.shell.fg.as_mut().and_then(|p| p.asm.as_mut()) {
-                a.selected = path;
+                a.reveal_occ(k);
                 a.anchors = None;
             }
             self.asm_show();
