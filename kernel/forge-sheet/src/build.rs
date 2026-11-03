@@ -605,6 +605,52 @@ fn corners(
             ));
         }
     }
+    // a bend off a wall's end edge (an ear off a flange's side): that edge bends only from the
+    // first bend's tangent line on. Where the two bends meet, a square relief a thickness clear
+    // of both: through the first bend's zone and past the far wall's tangent line, and over the
+    // new bend's start, so no trim ends on a tangent line
+    for b1 in bends {
+        for b2 in bends.iter().filter(|b| b.a == b1.b && b.joint != b1.joint) {
+            let w = &sheet.walls[b1.b];
+            let (j1, j2) = (&sheet.joints[b1.joint], &sheet.joints[b2.joint]);
+            let Ok((p, q)) = straight(w, j2.on_a) else {
+                continue;
+            };
+            for pt in [p, q] {
+                let l = b1.jb.local(pt);
+                if (l.x - b1.s).abs() > TOL {
+                    continue;
+                }
+                let (v0, v1) = if l.y >= b1.len - TOL {
+                    (b1.len - b2.s - t, b1.len + t)
+                } else if l.y <= TOL {
+                    (-t, b2.s + t)
+                } else {
+                    continue;
+                };
+                // across the zone (at its widest, K = 1, so K moves nothing folded) and a
+                // thickness past the far wall's tangent line
+                let reach = b1.theta * (joint_radius(sheet, b1) + t) + t;
+                let (u0, u1) = (-reach, b1.s + b2.s + t);
+                let lp = rect(u0, v0, u1, v1, [0, 1, 2, 3], &b1.jb);
+                out.push((
+                    CutSrc::Corner(j1.id, j2.id),
+                    w.id,
+                    lp,
+                    CornerMade {
+                        joints: [j1.id, j2.id],
+                        wall: w.id,
+                        kind: CornerKind::Square {
+                            size: Some(b2.s + t),
+                            placement: crate::relief::Placement::Tangent,
+                        },
+                        size: b2.s + t,
+                        automatic: true,
+                    },
+                ));
+            }
+        }
+    }
     Ok(out)
 }
 
