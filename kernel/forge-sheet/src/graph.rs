@@ -472,21 +472,39 @@ impl Sheet {
             let u = (a2 - p).cross(dir) / den;
             Some(p + e * u)
         };
-        let a3 = meet(p0, a).ok_or(SheetError::EdgeMoveCurve {
-            feature,
-            trim: trim(segs[pi].1),
-            curve: TrimCurveKind::Line,
-        })?;
-        let b3 = meet(n1, b).ok_or(SheetError::EdgeMoveCurve {
-            feature,
-            trim: trim(segs[ni].1),
-            curve: TrimCurveKind::Line,
-        })?;
+        // a neighbour running on in line with the edge keeps its place; a jog joins them
+        let (a3, jog_a) = match meet(p0, a) {
+            Some(x) => (x, false),
+            None => (a2, true),
+        };
+        let b2 = b + out;
+        let (b3, jog_b) = match meet(n1, b) {
+            Some(x) => (x, false),
+            None => (b2, true),
+        };
         let mut outline = w.outline.clone();
         let l = &mut outline[li].segments;
-        l[pi].0 = Segment::Line { a: p0, b: a3 };
+        if !jog_a {
+            l[pi].0 = Segment::Line { a: p0, b: a3 };
+        }
         l[k].0 = Segment::Line { a: a3, b: b3 };
-        l[ni].0 = Segment::Line { a: b3, b: n1 };
+        if !jog_b {
+            l[ni].0 = Segment::Line { a: b3, b: n1 };
+        }
+        // jogs take ids from the edge's own, so they name the same each build
+        if jog_b {
+            l.insert(k + 1, (Segment::Line { a: b3, b }, segment ^ (1 << 45)));
+        }
+        if jog_a {
+            l.insert(k, (Segment::Line { a, b: a3 }, segment ^ (1 << 44)));
+        }
+        let n = l.len();
+        let (pi, k, ni) = if jog_a {
+            (k, k + 1, (k + 2) % n)
+        } else {
+            (pi, k, ni)
+        };
+        let ni = if jog_b { (k + 1) % n } else { ni };
         for i in [pi, k, ni] {
             if let Segment::Line { a, b } = l[i].0
                 && a.distance(b) <= tol::LINEAR

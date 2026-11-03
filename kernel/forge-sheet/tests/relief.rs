@@ -406,3 +406,21 @@ fn reliefs_to_the_tangent_line_and_the_remnant() {
         Err(SheetError::ReliefExtendUnbuilt { .. })
     ));
 }
+
+#[test]
+fn inside_on_part_of_a_straight_edge_jogs_and_relieves() {
+    // the flange off the lower part of the split right edge, stood inside it: the edge steps in
+    // by t, a jog joins it to the rest of the line, and the default relief is cut beside it
+    let base = poly(&[(0.0, 0.0), (L, 0.0), (L, M), (L, W), (0.0, W)]);
+    let (mut s, w) = Sheet::face(FeatureId(5), gauge(K), Frame::WORLD, &[base]).unwrap();
+    s.flange_at(w, 1, dmath::PI / 2.0, H, R, Position::Inside)
+        .unwrap();
+    let fold = build_with(&s, Map::Folded).unwrap();
+    checked(&fold.body);
+    assert_eq!(fold.reliefs.len(), 1);
+    let r = fold.reliefs[0];
+    // the base lost t x M beside the flange, and the relief: its depth in from the mold line,
+    // and the t between the mold line and the old edge beyond the jog
+    let removed = T * M + r.width * (r.depth + T);
+    near("jog", vol(&fold.body), closed(removed, K).0);
+}
