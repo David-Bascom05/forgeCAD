@@ -345,3 +345,32 @@ impl Sheet {
         Ok((id, joint))
     }
 }
+
+impl Sheet {
+    /// `hem` with the fold stood outside the edge (`outside`): the edge moved out by the hem's
+    /// setback first, so the tangent line falls on where the edge was (its neighbours, lines,
+    /// follow it). Otherwise the edge is the fold's outside.
+    pub fn hem_at(
+        &mut self,
+        wall: WallId,
+        segment: u64,
+        spec: HemSpec,
+        table: Option<&HemTable>,
+        outside: bool,
+    ) -> Result<(WallId, JointId), SheetError> {
+        if !outside {
+            return self.hem(wall, segment, spec, table);
+        }
+        let mut probe = self.clone();
+        let (_, j) = probe.hem(wall, segment, spec, table)?;
+        let s = match probe.joint(j).map(|j| j.kind) {
+            Some(JointKind::Hem(h)) => h.setback(self.gauge.thickness),
+            _ => unreachable!("a hem just made"),
+        };
+        let mut work = self.clone();
+        work.move_edge(wall, segment, s)?;
+        let made = work.hem(wall, segment, spec, table)?;
+        *self = work;
+        Ok(made)
+    }
+}

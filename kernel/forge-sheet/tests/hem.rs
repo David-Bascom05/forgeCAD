@@ -115,6 +115,7 @@ fn table(t: f64, rows: &[(HemName, f64, f64, f64)]) -> HemTable {
 }
 
 /// A base `len` x `w`, a hem on its right edge: (folded, flat) volumes and the flat length.
+#[allow(clippy::too_many_arguments)]
 fn closed_form(
     t: f64,
     k: f64,
@@ -281,6 +282,31 @@ fn a_hem_on_a_flange_tip() {
 }
 
 #[test]
+fn a_hem_stood_outside_its_edge() {
+    let (t, k) = (1.5, 0.4);
+    let g = gauge(t, 2.0, k);
+    let spec = HemSpec {
+        kind: HemKind::Open { gap: 1.0 },
+        leg: 8.0,
+        up: true,
+    };
+    let mut inside = base(&g, 50.0, 30.0);
+    inside.hem_at(WallId(0), 1, spec, None, false).unwrap();
+    let mut outside = base(&g, 50.0, 30.0);
+    outside.hem_at(WallId(0), 1, spec, None, true).unwrap();
+    let (fi, li) = both(&inside);
+    let (fo, lo) = both(&outside);
+    // the tangent line on the old edge: the fold's outside R + t past it
+    let s = 0.5 + t;
+    assert!((reach(&fo.body, forge_math::Vec3::X) - (50.0 + s)).abs() <= 1e-12 * 60.0);
+    assert!((reach(&fi.body, forge_math::Vec3::X) - 50.0).abs() <= 1e-12 * 60.0);
+    // the same hem, s more wall
+    let dv = volume(&lo.body).0 - volume(&li.body).0;
+    assert!((dv - s * 30.0 * t).abs() <= 1e-9, "{dv}");
+    round_trip(&outside, &fo, &lo, t);
+}
+
+#[test]
 fn refusals_are_typed() {
     let g = gauge(1.0, 1.0, 0.4);
     let hem = |kind, leg, tab: Option<&HemTable>| {
@@ -401,7 +427,7 @@ fn round_trip(sheet: &Sheet, fold: &Built, flat: &Built, t: f64) {
 
 #[test]
 fn fuzz_hems() {
-    let mut rng = Rng::new(0x4e_3);
+    let mut rng = Rng::new(0x04e3);
     let (mut built, mut refused, mut clashes) = (0, 0, 0);
     let mut slowest = 0.0f64;
     for seed in 0..200 {

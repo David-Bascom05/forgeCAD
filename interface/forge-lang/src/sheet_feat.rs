@@ -565,3 +565,115 @@ fn hem_data(e: &fs::HemError) -> Vec<(&'static str, Json)> {
         NotTabled { kind, thickness } => vec![("hem", kind.name().into()), ("thickness", f(thickness))],
     }
 }
+
+// ---- hems -------------------------------------------------------------------------------------
+
+/// A shop's hems: `closed_hems: [(t, allowance), ..]` (no radius formula holds for a crushed
+/// hem), `hem_gap: G` the gap a closed hem is modelled with.
+pub(super) fn hem_table(a: &Args) -> R<fs::HemTable> {
+    let rows = match a.opt("closed_hems") {
+        None => vec![],
+        Some(_) => table(a, "closed_hems", &[LEN, LEN])?,
+    };
+    Ok(fs::HemTable {
+        closed_gap: a.num("hem_gap", LEN)?.map_or(fs::GAP_FLOOR, |g| g.v),
+        rows: rows
+            .iter()
+            .map(|r| fs::HemRow {
+                kind: fs::HemName::Closed,
+                thickness: r[0],
+                radius: 0.0,
+                angle: dmath::PI,
+                allowance: r[1],
+            })
+            .collect(),
+    })
+}
+
+/// `hem(EDGE, kind, length, gap, r, angle, side, position)`.
+pub(super) fn hem(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
+    let id = ev.take_id("hem", span)?;
+    let a = Args::bind(
+        ev,
+        "hem",
+        &["edge", "kind", "length", "gap", "r", "angle", "side", "position"],
+        args,
+        span,
+    )?;
+    if a.poisoned() {
+        return Ok(Value::Unresolved);
+    }
+    let ev_edge = a.req("edge")?;
+    let edge = match &ev_edge {
+        Value::Sheet(s) => match &**s {
+            SheetVal::Edge(e) => e.clone(),
+            _ => return Err(wrong(a.span("edge"), "a sheet edge", Ty::SheetEdge, &ev_edge)),
+        },
+        o => return Err(wrong(a.span("edge"), "a sheet edge", Ty::SheetEdge, o)),
+    };
+    let si = edge.op.sheet;
+    not_unfolded(ev, si, &id, span)?;
+    let kind = word(&a, "kind", &["closed", "open", "teardrop", "rolled"])?.unwrap_or("closed");
+    let mut dims = vec![];
+    let num = |k: &'static str, dims_: &[Dim], dims: &mut Vec<Dimension>| -> R<Option<Num>> {
+        let n = a.num(k, dims_)?;
+        if let Some(n) = &n {
+            dims.push(dim(k, n));
+        }
+        Ok(n)
+    };
+    let length = num("length", LEN, &mut dims)?;
+    let gap = num("gap", LEN, &mut dims)?;
+    let r = num("r", LEN, &mut dims)?;
+    let angle = num("angle", ANG, &mut dims)?;
+    let need = |n: Option<Num>, arg: &'static str| {
+        n.map(|n| n.v).ok_or(Error::MissingArg {
+            span,
+            func: "hem",
+            arg,
+        })
+    };
+    let st = &ev.sheets.list[si];
+    let radius = r.as_ref().map_or(st.sheet.gauge.radius, |n| n.v);
+    let hk = match kind {
+        "closed" => fs::HemKind::Closed,
+        "open" => fs::HemKind::Open {
+            gap: need(gap, "gap")?,
+        },
+        "teardrop" => fs::HemKind::Teardrop {
+            radius,
+            angle: need(angle, "angle")?,
+        },
+        _ => fs::HemKind::Rolled {
+            radius,
+            angle: need(angle, "angle")?,
+        },
+    };
+    let leg = match (kind, length) {
+        ("rolled", None) => 0.0,
+        (_, l) => need(l, "length")?,
+    };
+    let up = word(&a, "side", &["up", "down"])?.unwrap_or("up") == "up";
+    let outside = word(&a, "position", &["inside", "outside"])?.unwrap_or("inside") == "outside";
+    let table = st.shop.as_ref().map(|s| s.hems.clone()).unwrap_or_default();
+    let st = &mut ev.sheets.list[si];
+    let spec = fs::HemSpec { kind: hk, leg, up };
+    let (wall, joint) = match st
+        .sheet
+        .hem_at(edge.wall, edge.segment, spec, Some(&table), outside)
+    {
+        Ok(x) => x,
+        Err(e) => {
+            let mut snap = st.clone();
+            snap.walls
+                .push((WallId(snap.walls.len() as u32), id.clone(), span));
+            snap.joints
+                .push((JointId(snap.joints.len() as u32), id.clone(), span));
+            return Err(kernel_err(&snap, span, &id, e));
+        }
+    };
+    st.walls.push((wall, id.clone(), span));
+    st.joints.push((joint, id.clone(), span));
+    push_sheet_step(ev, si, &id, "hem", span, dims)?;
+    Ok(op_value(si, &id, OpKind::Flange { wall, joint }))
+}

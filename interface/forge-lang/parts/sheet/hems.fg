@@ -1,0 +1,24 @@
+# A tray edge: a base, a flange up off its right edge with an open hem folded out at its top, and
+# a closed hem on the left edge (its allowance from the shop's hem table).
+shared t = 1.5
+shared r = 2
+shared k = ratio(0.4)
+param plan.L = 50
+param plan.W = 30
+param up.h = 25
+param lip.leg = 8
+param lip.g = 1
+param edge.leg = 10
+shared hem_ba = 2.1
+shared steel = stock(t: t, bend: kfactor(k), radii: [r])
+shared acme = shop([steel], closed_hems: [(t, hem_ba)])
+
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (L, W))
+}
+base = sheet(plan, t: t, r: r, bend: kfactor(k), shop: acme)
+up = flange(base.edge(plan.outline[1]), height: h, position: "outside")
+lip = hem(up.tip, kind: "open", length: leg, gap: g, side: "down")
+edge = hem(base.edge(plan.outline[3]), kind: "closed", length: leg)
+flat = unfold(base)
+expect valid

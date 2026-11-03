@@ -32,6 +32,7 @@ pub const BUILTINS: &[&str] = &[
     "cutout",
     "unfold",
     "contour",
+    "hem",
     "kfactor",
     "ktable",
     "bend_table",
@@ -201,6 +202,8 @@ pub struct StockV {
 pub struct ShopV {
     pub shop: fs::ShopProfile,
     pub stocks: Vec<Rc<StockV>>,
+    /// Its hems: closed hems' allowances and gap (`shop(closed_hems:, hem_gap:)`).
+    pub hems: fs::HemTable,
 }
 
 impl SheetVal {
@@ -248,6 +251,7 @@ impl SheetVal {
             SheetVal::Shop(s) => SheetVal::Shop(Rc::new(ShopV {
                 shop: s.shop.clone(),
                 stocks: s.stocks.iter().map(|x| Rc::new(stock(x))).collect(),
+                hems: s.hems.clone(),
             })),
             o => o.clone(),
         }
@@ -2175,6 +2179,8 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
                     "stock",
                     "kerf",
                     "hardware",
+                    "closed_hems",
+                    "hem_gap",
                     "max_flat",
                     "max_flat_coated",
                     "max_bend_length",
@@ -2186,6 +2192,7 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
                 args,
                 span,
             )?;
+            let hems = feat::hem_table(&a)?;
             let kerf = a.num("kerf", LEN)?;
             // a (shorter, longer) or (least, greatest) pair, either way round
             let pair = |k: &'static str, dims: &'static [Dim], what: &'static str| -> R<Option<(f64, f64)>> {
@@ -2248,6 +2255,7 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
                     process,
                 },
                 stocks,
+                hems,
             }))))
         }
         "sheet" => base(ev, args, span),
@@ -2255,6 +2263,7 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
         "cutout" => cutout(ev, args, span),
         "unfold" => unfold(ev, args, span),
         "contour" => feat::contour(ev, args, span),
+        "hem" => feat::hem(ev, args, span),
         "rect" | "obround" => {
             let a = Args::bind(ev, name, &["width", "depth"], args, span)?;
             let width = a.num("width", LEN)?;

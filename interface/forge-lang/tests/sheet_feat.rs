@@ -112,3 +112,45 @@ fn contour_refusals_are_typed() {
     );
     assert_eq!(first_error(&s).kind(), "NotWith");
 }
+
+#[test]
+fn hems_match_the_closed_form() {
+    let r = clean("hems");
+    let (t, k, w, rr) = (1.5, 0.4, 30.0, 2.0);
+    let q = PI / 2.0;
+    // base 50 less the flange's setback (2) and the closed hem's fold (gap floor / 2 + t); the
+    // flange 25 to the outer sharp (t less on the reference skin) less its setback and the open
+    // hem's fold (0.5 + t); the legs
+    let floor = forge_sheet::GAP_FLOOR;
+    let straights = (50.0 - rr - (0.5 * floor + t)) + (25.0 - t - rr - (0.5 + t)) + 8.0 + 10.0;
+    let zones =
+        q * (rr * t + 0.5 * t * t) + PI * (0.5 * t + 0.5 * t * t) + PI * (0.5 * floor * t + 0.5 * t * t);
+    let ba = q * (rr + k * t) + PI * (0.5 + k * t) + 2.1;
+    let s = &r.sheets[0];
+    near(
+        "hems folded",
+        mass(s.folded.as_ref().expect("built")),
+        t * w * straights + w * zones,
+    );
+    near(
+        "hems flat",
+        mass(s.unfolds[0].1.as_ref().expect("unfolded")),
+        t * w * (straights + ba),
+    );
+}
+
+#[test]
+fn hem_refusals_are_typed() {
+    // a closed hem with no row in the shop's table
+    let s = src("hems")
+        .replace(", closed_hems: [(t, hem_ba)]", "")
+        .replace("shared hem_ba = 2.1\n", "");
+    assert_eq!(first_error(&s).kind(), "HemNotTabled");
+    let s = src("hems").replace("param lip.g = 1", "param lip.g = 0.01");
+    assert_eq!(first_error(&s).kind(), "HemGap");
+    let s = src("hems").replace(
+        "kind: \"open\", length: leg, gap: g",
+        "kind: \"open\", length: leg",
+    );
+    assert_eq!(first_error(&s).kind(), "MissingArg");
+}

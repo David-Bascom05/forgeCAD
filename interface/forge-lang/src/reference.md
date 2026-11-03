@@ -541,6 +541,15 @@ contour(PATH, width: W, t: T, r: R, bend: RULE, side: "left"|"right" = "right", 
 contour(PATH, edge: EDGE)
     the same run off a straight edge, as long as it: PATH lies in a plane square to the edge and
     starts on it, its material continuing the wall's. C.tip is its last wall's far edge.
+hem(EDGE, kind: "closed"|"open"|"teardrop"|"rolled" = "closed", length: L, gap: G, r: R,
+    angle: A, side: "up"|"down" = "up", position: "inside"|"outside" = "inside")
+    a fold of half a turn or more off a straight edge, as long as it. inside: the edge is the
+    fold's outside (the wall keeps its size); outside: the fold starts at the edge. L is the leg
+    from the fold's far tangent line (rolled: optional, none ends the roll free). open takes G
+    between the layers; teardrop (A past 180deg) and rolled take R (default the sheet's) and A.
+    A closed hem is modelled with the shop's hem_gap (never under 0.02, a solid has no touching
+    skins) and needs its allowance in shop(closed_hems: [(t, BA), ..]); others use the bend rule.
+    HemGap, HemAngle, HemRadius, HemLeg, HemNoRoom, HemNotTabled. C.tip is the leg's far edge.
 unfold(S, on: PLANE)
     the flat body of S's sheet as a new body, its first wall on PLANE (default where it is
     folded). Sheet features after an unfold of their sheet are AfterUnfold.
