@@ -265,6 +265,22 @@ pub enum SheetError {
         total: f64,
         limit: f64,
     },
+    /// Two strips touch in the flat pattern without overlapping (an edge on an edge, a corner on
+    /// an edge): the blank has zero width there.
+    FlatTouch {
+        feature: FeatureId,
+        a: Strip,
+        b: Strip,
+        at: Point2,
+    },
+    /// Two strips of the folded part touch without passing into each other (walls meeting along
+    /// a line at a corner): faces of one solid meeting, no valid solid.
+    FoldedTouch {
+        feature: FeatureId,
+        a: Strip,
+        b: Strip,
+        at: Point3,
+    },
     /// Two strips' flats come so close to touching (an edge `gap` from another, under `limit`)
     /// that the exact overlap check cannot tell overlapping from touching.
     FlatOverlapUndecided {
@@ -359,6 +375,20 @@ pub enum SheetWarning {
         /// Over every overlapping pair.
         total: f64,
         limit: f64,
+    },
+    /// The flat touches itself (see `SheetError::FlatTouch`): the folded part builds.
+    FlatTouch {
+        feature: FeatureId,
+        a: Strip,
+        b: Strip,
+        at: Point2,
+    },
+    /// The folded part touches itself (see `SheetError::FoldedTouch`): the flat builds.
+    FoldedTouch {
+        feature: FeatureId,
+        a: Strip,
+        b: Strip,
+        at: Point3,
     },
     /// The flat overlap check could not decide one pair (see `SheetError`).
     FlatOverlapUndecided {
@@ -540,6 +570,12 @@ impl SheetError {
                 depth,
                 limit,
             }),
+            SheetError::FlatTouch { feature, a, b, at } => {
+                Some(SheetWarning::FlatTouch { feature, a, b, at })
+            }
+            SheetError::FoldedTouch { feature, a, b, at } => {
+                Some(SheetWarning::FoldedTouch { feature, a, b, at })
+            }
             SheetError::FlatOverlapUndecided {
                 feature,
                 a,

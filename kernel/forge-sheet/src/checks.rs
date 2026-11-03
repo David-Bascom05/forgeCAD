@@ -299,7 +299,10 @@ fn holes(sheet: &Sheet, stock: &Stock) -> Vec<Violation> {
             let (d, segment) = z.to_loop(&dev);
             if d == 0.0 {
                 // into the zone: a cut across the bend, not a hole beside it
-                let centre = dev.iter().map(|p| p.0.at(0.5).to_vec()).fold(Vec2::new(0.0, 0.0), |a, b| a + b)
+                let centre = dev
+                    .iter()
+                    .map(|p| p.0.at(0.5).to_vec())
+                    .fold(Vec2::new(0.0, 0.0), |a, b| a + b)
                     * (1.0 / dev.len() as f64);
                 out.push(Violation::CutCrossesBend {
                     feature,

@@ -174,9 +174,48 @@ fn holes_in_a_flange_and_in_a_bend() {
             _ => None,
         })
         .collect();
-    assert_eq!(d.len(), 2, "{v:?}");
-    assert!(d.iter().any(|x| (x - 4.0).abs() < 1e-9), "{d:?}");
-    assert!(d.contains(&0.0), "{d:?}");
+    assert_eq!(d, [4.0], "{v:?}");
+    // the one in the bend zone crosses it: its own kind, a violation until marked as meant
+    assert!(
+        v.iter()
+            .any(|x| matches!(x, Violation::CutCrossesBend { intended: false, .. }))
+    );
+    s.cuts[1].crosses_bend = true;
+    let v = check(&s, &shop(Some(70.0)));
+    assert!(
+        v.iter()
+            .any(|x| matches!(x, Violation::CutCrossesBend { intended: true, .. }))
+    );
+}
+
+#[test]
+fn a_lip_too_short_for_its_hardware() {
+    // an M4 nut (edge 6.9 each way) on a 12 high flange: 12 - R = 10 of wall past the tangent
+    // line, under 13.8: no place fits, so it is the lip's length, not the nut's place
+    let nut = placeholder_catalogue()
+        .into_iter()
+        .find(|h| h.kind == forge_sheet::HardwareKind::Nut && h.size == "M4")
+        .unwrap();
+    let g = Gauge {
+        thickness: T,
+        radius: R,
+        rule: BendRule::K(0.4),
+    };
+    let (mut s, base) = Sheet::face(
+        FeatureId(2),
+        g,
+        Frame::WORLD,
+        &[poly(&[(0.0, 0.0), (60.0, 0.0), (60.0, 40.0), (0.0, 40.0)])],
+    )
+    .unwrap();
+    let (lip, _) = s.flange(base, 1, dmath::PI / 2.0, 12.0).unwrap();
+    s.mount(lip, Point2::new(7.0, 20.0), nut).unwrap();
+    let v = checks::mounts(&s, shop(Some(70.0)).stock.first());
+    assert!(
+        matches!(v.as_slice(), [Violation::LipTooShort { width, need, .. }]
+            if (width - (12.0 - R)).abs() < 1e-9 && (*need - 13.8).abs() < 1e-12),
+        "{v:?}"
+    );
 }
 
 #[test]

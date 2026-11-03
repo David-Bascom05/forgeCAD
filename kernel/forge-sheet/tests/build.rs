@@ -948,6 +948,11 @@ fn fuzz_curved_edges_skimming_a_wall() {
                         between += 1;
                     }
                 }
+                // within tolerance of the base, neither in nor clear: an edge on a face
+                Err(SheetError::FoldedTouch { .. }) => {
+                    assert!(depth.abs() <= 2.0 * limit, "seed {seed}: touch at {depth}");
+                    between += 1;
+                }
                 Err(e) => panic!("seed {seed} depth {depth}: {e:?}"),
             }
         }

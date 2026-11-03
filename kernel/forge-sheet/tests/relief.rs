@@ -4,8 +4,8 @@
 use forge_math::{Frame, Point2, dmath};
 use forge_ops::{ProfileLoop, Segment};
 use forge_sheet::{
-    BendRule, End, FeatureId, Gauge, JointId, Map, Position, Relief, ReliefKind, Sheet, SheetError, WallId,
-    build_with, dxf,
+    BendRule, CornerKind, End, FeatureId, Gauge, JointId, Map, Position, Relief, ReliefKind, Sheet,
+    SheetError, WallId, build_with, dxf,
 };
 use forge_topo::Body;
 
@@ -270,17 +270,25 @@ fn positions_move_the_edge() {
             .unwrap()
     };
     assert!((len(&s, back) - (L - T)).abs() < 1e-12);
+    // the back's end butts on the side's inner face: a touch, until the corner is opened
+    assert!(matches!(
+        build_with(&s, Map::Folded),
+        Err(SheetError::FoldedTouch { .. })
+    ));
+    s.corner_default = Some(CornerKind::Open { gap: 0.4 });
     let fold = build_with(&s, Map::Folded).unwrap();
     checked(&fold.body);
-    assert_eq!(fold.corners.len(), 1);
-    // a flange whose own mold line is beside the edge is refused
+    // the corner's square, and the later wall's trim
+    assert_eq!(fold.corners.len(), 2);
+    // an edge beside the wall's own mold line (an ear off a flange's side): the part in the
+    // bend's band stays, the rest moves
     let base = poly(&[(0.0, 0.0), (L, 0.0), (L, W), (0.0, W)]);
     let (mut s, w) = Sheet::face(FeatureId(5), gauge(K), Frame::WORLD, &[base]).unwrap();
     let (f, _) = s.flange(w, 1, th, H).unwrap();
-    assert!(matches!(
-        s.flange_at(f, 0, th, H, R, Position::Inside),
-        Err(SheetError::EdgeMoveBlocked { .. })
-    ));
+    s.flange_at(f, 0, th, H, R, Position::Inside).unwrap();
+    let r = build_with(&s, Map::Folded);
+    assert!(r.is_ok(), "{:?}", r.err());
+    checked(&r.unwrap().body);
 }
 
 #[test]
@@ -447,6 +455,7 @@ fn moving_an_edge_carries_chained_flanges() {
     };
     assert!((mold(&s, back) - (L - T)).abs() < 1e-12);
     assert!((mold(&s, lip) - (L - T)).abs() < 1e-12);
+    s.corner_default = Some(CornerKind::Open { gap: 0.4 });
     let fold = build_with(&s, Map::Folded).unwrap();
     checked(&fold.body);
 }
