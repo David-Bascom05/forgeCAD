@@ -310,6 +310,8 @@ pub struct Eval<'s> {
     pub libs: Vec<Rc<crate::uses::Lib>>,
     /// The files being used, outermost first: a file already here is a `use` cycle.
     pub use_chain: Vec<std::path::PathBuf>,
+    /// The same files as the documents name them, for what errors say (never a real path).
+    pub use_files: Vec<String>,
     /// Inside a used file's function: that file's names.
     lib: Option<Rc<crate::uses::Lib>>,
     /// Inside a used file's function: the call in this document, where what it makes is shown.
@@ -374,6 +376,7 @@ impl<'s> Eval<'s> {
             root: None,
             libs: vec![],
             use_chain: vec![],
+            use_files: vec![],
             lib: None,
             lib_call: None,
         }
@@ -721,14 +724,31 @@ impl<'s> Eval<'s> {
         let observed = self.observed.clone();
         let saved = self.ctx.owner.clone();
         self.ctx.owner = vec![];
-        for s in self.expects.clone() {
-            if let StmtKind::Expect { args, cmp, .. } = &s.kind {
+        for (k, s) in self.expects.clone().iter().enumerate() {
+            if let StmtKind::Expect { args, cmp, at, .. } = &s.kind {
+                let mark = self.enter_expect(k);
                 let tol = cmp
                     .iter()
                     .flat_map(|(_, v, t)| std::iter::once(v).chain(t.iter().map(|t| &t.0)));
-                for e in args.iter().chain(tol) {
+                // `at P = v`: v is read, and P is set for the check (the param is the check's)
+                let values = at.iter().map(|(_, v)| v);
+                for e in args.iter().chain(tol).chain(values) {
                     let _ = self.expr(e);
                 }
+                for (path, _) in at {
+                    if let Some((last, owner)) = path.split_last() {
+                        let key = ParamKey {
+                            owner: owner.to_vec(),
+                            name: last.name.clone(),
+                        };
+                        for p in self.shared.iter_mut().chain(self.locals.iter_mut()) {
+                            if p.key == key {
+                                p.used = true;
+                            }
+                        }
+                    }
+                }
+                self.leave_expect(mark);
             }
         }
         self.ctx.owner = saved;

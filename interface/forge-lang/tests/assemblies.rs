@@ -1153,3 +1153,29 @@ flat = unfold(base, on: offset(base.bottom, gap))
     let v = placed("assembly\n\nl = part(\"l.fg\", body: \"flat\", ground: true)\n");
     assert!((v - flat).abs() < 1e-6 * flat, "{v} vs flat {flat}");
 }
+
+/// A param an `expect .. at` reads (its value) or sets (its param) is used: no UnusedParam,
+/// in a loop too.
+#[test]
+fn params_of_expect_at_lines_are_used() {
+    let d = mech_dir("at-used");
+    let src = format!(
+        "{}shared slow = 45deg\nshared fast = 90deg\nexpect value(j1.turn) = 45deg +- 0.000001deg at j1.turn = slow\nexpect value(j1.turn) = 90deg +- 0.000001deg at j1.turn = fast\n",
+        four_bar_doc(30.0)
+    );
+    let opts = Options {
+        dir: Some(d.clone()),
+        build: false,
+        ..Options::default()
+    };
+    let r = forge_lang::run(&src, opts, Default::default()).0;
+    let unused: Vec<String> = r
+        .warnings
+        .iter()
+        .filter_map(|w| match w {
+            Warning::UnusedParam { param, .. } => Some(param.to_string()),
+            _ => None,
+        })
+        .collect();
+    assert!(unused.is_empty(), "{unused:?}");
+}

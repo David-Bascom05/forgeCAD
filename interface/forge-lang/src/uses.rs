@@ -31,16 +31,30 @@ pub struct Lib {
 pub enum UseErr {
     /// The file is not there, not a `.fg`, too big, or outside the session's root.
     Missing { span: Span, file: String },
-    /// The file uses, directly or through others, a file already being used.
-    Cycle { span: Span, file: String, chain: Vec<String> },
+    /// The file uses, directly or through others, a file already being used. `chain`: the
+    /// files being used, as each document named them.
+    Cycle {
+        span: Span,
+        file: String,
+        chain: Vec<String>,
+    },
     /// `use(..)` not bound by an assignment (`name = use(..)`).
     NotBound { span: Span },
     /// `use` inside a function, loop, sketch or path.
     NotTopLevel { span: Span },
     /// Reading the used file failed: its own error, at its own place in that file.
-    InFile { span: Span, file: String, error: Box<Error>, line: usize },
+    InFile {
+        span: Span,
+        file: String,
+        error: Box<Error>,
+        line: usize,
+    },
     /// A SetParam names a used file's param: the edit is to that file, not this one.
-    ParamInUsedFile { param: ParamKey, file: String, name: String },
+    ParamInUsedFile {
+        param: ParamKey,
+        file: String,
+        name: String,
+    },
 }
 
 impl UseErr {
@@ -72,11 +86,16 @@ impl UseErr {
                 format!("use: no file {file} (a .fg beside this one, under the session's root)")
             }
             UseErr::Cycle { file, chain, .. } => {
-                format!("use: {file} is already being used ({} -> {file})", chain.join(" -> "))
+                format!(
+                    "use: {file} is already being used ({} -> {file})",
+                    chain.join(" -> ")
+                )
             }
             UseErr::NotBound { .. } => "use(..) is bound by a name: `shop = use(\"shop.fg\")`".into(),
             UseErr::NotTopLevel { .. } => "use(..) is a top-level statement".into(),
-            UseErr::InFile { file, error, line, .. } => {
+            UseErr::InFile {
+                file, error, line, ..
+            } => {
                 format!("in {file}, line {line}: {} ({})", error.text(), error.kind())
             }
             UseErr::ParamInUsedFile { param, file, name } => {
@@ -94,7 +113,9 @@ impl UseErr {
                 ("chain", Json::Arr(chain.iter().map(|c| s(c)).collect())),
             ],
             UseErr::NotBound { .. } | UseErr::NotTopLevel { .. } => vec![],
-            UseErr::InFile { file, error, line, .. } => vec![
+            UseErr::InFile {
+                file, error, line, ..
+            } => vec![
                 ("file", s(file)),
                 ("line", (*line).into()),
                 ("error", s(error.kind())),
@@ -116,7 +137,9 @@ fn err(e: UseErr) -> Error {
 pub fn in_file(lib: &Lib, span: Span, error: Error) -> Error {
     // already shown in the file it happened in: here at this document's `use` or call
     if let Error::Use(u) = &error
-        && let UseErr::InFile { file, error, line, .. } = &**u
+        && let UseErr::InFile {
+            file, error, line, ..
+        } = &**u
     {
         return err(UseErr::InFile {
             span,
@@ -127,7 +150,7 @@ pub fn in_file(lib: &Lib, span: Span, error: Error) -> Error {
     }
     let line = error
         .span()
-        .and_then(|sp| std::fs::read_to_string(&lib.path).ok().map(|t| sp.lines(&t).0))
+        .and_then(|sp| crate::asm::read_capped(&lib.path).map(|t| sp.lines(&t).0))
         .unwrap_or(0);
     err(UseErr::InFile {
         span,
@@ -160,7 +183,8 @@ pub fn call(ev: &mut Eval, args: &[crate::syntax::Arg], span: Span) -> R<Value> 
         return Err(err(UseErr::Missing { span, file }));
     };
     if ev.use_chain.contains(&path) {
-        let chain = ev.use_chain.iter().map(|p| p.to_string_lossy().to_string()).collect();
+        // the files as the documents wrote them: no path of this machine leaves in an error
+        let chain = ev.use_files.clone();
         return Err(err(UseErr::Cycle { span, file, chain }));
     }
     let Some(text) = crate::asm::read_capped(&path) else {
@@ -179,6 +203,8 @@ pub fn call(ev: &mut Eval, args: &[crate::syntax::Arg], span: Span) -> R<Value> 
     sub.root = ev.root.clone();
     sub.use_chain = ev.use_chain.clone();
     sub.use_chain.push(path.clone());
+    sub.use_files = ev.use_files.clone();
+    sub.use_files.push(file.clone());
     // only what a used file gives: its shared values, its functions and the files it uses
     for s in &prog {
         let keep = match &s.kind {
@@ -257,7 +283,9 @@ fn rekey(v: &Value, binding: &str) -> Value {
         }),
         Value::List(xs) => Value::List(Rc::new(xs.iter().map(|x| rekey(x, binding)).collect())),
         Value::Tuple(xs) => Value::Tuple(Rc::new(xs.iter().map(|x| rekey(x, binding)).collect())),
-        Value::Map(m) => Value::Map(Rc::new(m.iter().map(|(k, x)| (k.clone(), rekey(x, binding))).collect())),
+        Value::Map(m) => Value::Map(Rc::new(
+            m.iter().map(|(k, x)| (k.clone(), rekey(x, binding))).collect(),
+        )),
         o => o.clone(),
     }
 }

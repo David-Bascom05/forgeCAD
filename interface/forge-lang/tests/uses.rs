@@ -10,9 +10,9 @@ use forge_lang::values::Dim;
 use forge_lang::{Options, Run, report};
 use std::path::{Path, PathBuf};
 
-/// A fresh directory of its own under the system's temp dir, with these files in it.
+/// A directory of this test's own under cargo's test temp dir, with these files in it.
 fn dir(tag: &str, files: &[(&str, &str)]) -> PathBuf {
-    let d = std::env::temp_dir().join(format!("fg-uses-{tag}-{}", std::process::id()));
+    let d = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("uses-{tag}"));
     std::fs::create_dir_all(&d).expect("temp dir");
     for (name, text) in files {
         std::fs::write(d.join(name), text).expect("write");
@@ -99,7 +99,9 @@ fn a_used_function_sees_only_its_own_file() {
     let src = "steel = use(\"shop.fg\")\nshared w = hole_d * 2\n";
     let r = run_in(&d, src);
     assert!(
-        r.errors.iter().any(|e| matches!(e, Error::UnknownName { name, .. } if name == "hole_d")),
+        r.errors
+            .iter()
+            .any(|e| matches!(e, Error::UnknownName { name, .. } if name == "hole_d")),
         "{:?}",
         r.errors
     );
@@ -109,7 +111,10 @@ fn a_used_function_sees_only_its_own_file() {
     assert!(r.errors.is_empty(), "{:?}", r.errors);
     let s = r.shared.iter().find(|p| p.key.name == "s").expect("s");
     let links: Vec<String> = s.links.iter().map(|k| k.to_string()).collect();
-    assert!(links.contains(&"steel.t".to_string()) && links.contains(&"steel.mat.k".to_string()), "{links:?}");
+    assert!(
+        links.contains(&"steel.t".to_string()) && links.contains(&"steel.mat.k".to_string()),
+        "{links:?}"
+    );
 }
 
 #[test]
@@ -156,7 +161,11 @@ fn a_setparam_on_a_used_value_is_an_edit_of_that_file() {
             dim: Dim::Length,
         },
     };
-    assert!(apply(PART, &own).expect("the part's own").contains("shared pitch = 3"));
+    assert!(
+        apply(PART, &own)
+            .expect("the part's own")
+            .contains("shared pitch = 3")
+    );
 }
 
 #[test]
@@ -172,30 +181,54 @@ fn use_errors_are_typed() {
             ("a.txt", "shared x = 1\n"),
         ],
     );
-    let outside = d.parent().expect("temp").join(format!("fg-uses-outside-{}.fg", std::process::id()));
+    let outside = d.parent().expect("temp").join("uses-outside.fg");
     std::fs::write(&outside, "shared x = 1\n").expect("write");
     let first = |src: &str| -> UseErr {
         let r = run_in(&d, src);
         use_err(r.errors.first().unwrap_or_else(|| panic!("no error for {src}"))).clone()
     };
-    assert!(matches!(first("s = use(\"missing.fg\")\n"), UseErr::Missing { .. }));
+    assert!(matches!(
+        first("s = use(\"missing.fg\")\n"),
+        UseErr::Missing { .. }
+    ));
     // nothing outside the session's root, and only .fg files
-    let up = format!("s = use(\"../{}\")\n", outside.file_name().expect("name").to_string_lossy());
+    let up = format!(
+        "s = use(\"../{}\")\n",
+        outside.file_name().expect("name").to_string_lossy()
+    );
     assert!(matches!(first(&up), UseErr::Missing { .. }));
     assert!(matches!(first("s = use(\"a.txt\")\n"), UseErr::Missing { .. }));
     // a cycle, reported where it closes, inside the files
     match first("s = use(\"a.fg\")\n") {
         UseErr::InFile { file, error, .. } => {
             assert_eq!(file, "b.fg");
-            assert_eq!(use_err(&error).kind(), "UseCycle");
+            // the chain is the files as the documents named them, never a path of this machine
+            match use_err(&error) {
+                UseErr::Cycle { file, chain, .. } => {
+                    assert_eq!(file, "a.fg");
+                    assert_eq!(chain, &vec!["a.fg".to_string(), "b.fg".to_string()]);
+                }
+                o => panic!("{o:?}"),
+            }
+            let text = use_err(&error).text() + &format!("{:?}", use_err(&error).data());
+            let home = d.to_string_lossy().to_string();
+            assert!(!text.contains(&home) && !text.contains('/'), "{text}");
         }
         o => panic!("{o:?}"),
     }
-    assert!(matches!(first("shared q = use(\"shop.fg\").t\n"), UseErr::NotBound { .. }));
-    assert!(matches!(first("fn g() {\n  s = use(\"shop.fg\")\n  return s\n}\nshared q = g()\n"), UseErr::NotTopLevel { .. }));
+    assert!(matches!(
+        first("shared q = use(\"shop.fg\").t\n"),
+        UseErr::NotBound { .. }
+    ));
+    assert!(matches!(
+        first("fn g() {\n  s = use(\"shop.fg\")\n  return s\n}\nshared q = g()\n"),
+        UseErr::NotTopLevel { .. }
+    ));
     // an error in a used function: at the call here, with the file and its line there
     match first("bad = use(\"bad.fg\")\nshared q = bad.f()\n") {
-        UseErr::InFile { file, error, line, .. } => {
+        UseErr::InFile {
+            file, error, line, ..
+        } => {
             assert_eq!((file.as_str(), line), ("bad.fg", 3));
             assert!(matches!(*error, Error::UnknownName { ref name, .. } if name == "nowhere"));
         }
