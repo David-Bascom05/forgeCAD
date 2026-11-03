@@ -74,7 +74,9 @@ Dimensions: `Length` (a bare number in a param, or `mm`), `Angle` (`deg`), `Coun
 `Ratio` (`ratio(0.5)`). Lengths add to lengths; `Length * Count` and `Length * Ratio` are lengths;
 `Length / Length` is a Ratio; `Length * Length` is an Area (`sqrt` of an Area is a Length); trig
 takes Angles and gives Ratios. Mixing them otherwise is the error `DimMismatch` or `WrongDim`; a
-size is never a count. The constants `0 1 2` (and `-1 -2`) take the other side's dimension.
+size is never a count, and a count over a size is nothing. A bare number takes the other side's
+dimension, in a param too: `W / 2` and `W * 0.25` are Lengths, `1 / n` a Ratio; a param whose
+value is still bare is a Length (`shared t = 6`).
 
 A param's right side may be any expression of earlier params: shared ones, the same feature's own,
 and another feature's by its full name (`param bore.r = hub.r - 1`): an explicit link, shown as a
@@ -167,12 +169,102 @@ hole(at: POINT | [POINTS], d: D, depth: d | thru | next, cbore: (D, depth), csin
 hole(at: .., screw: "M6", fit: "close"|"normal"|"loose"|"tap", seat: "cbore"|"csink", depth: ..)
 fillet(EDGES, r) | fillet(groups: [(EDGES, r), ..])
 chamfer(EDGES, d)
-shell(t, open: FACES)
-loft([PROFILE, PROFILE, ..])
+shell(t, open: FACES, out: false) hollow to walls t thick (out: outside the skin), FACES open
 ```
 
 PROFILE: a sketch with one region, or one of its loops or closed entities (`S.outline`, `S.c`).
-A negative depth runs the other way.
+A negative depth runs the other way. `taper:` takes a depth only: with `sym`, `two`, `thru`,
+`thru_all`, `next` or `upto` it is `NotWith`; on an outline with a spline side it is
+`TaperOnCurve` (the kernel's draft has no exact leaning form for a free curve).
+
+### Swept, wound and lofted shapes
+
+```
+sweep(PROFILE, along: PATH, extend: (s, e) | upto: FACES, offset: d, cut|keep|new: true)
+coil(PROFILE, axis: LINE, pitch: p, turns: n, height: h, upto: FACES, offset: d, taper: A,
+     left: false, cut|keep|new: true)
+loft([PROFILE | POINT | dome(POINT, DIR, w), ..], smooth: false, start: w, end: w,
+     align: false, seams: [POINT, ..], rails: [(CORNER, PATH), ..] | centre: PATH,
+     cut|keep|new: true)
+```
+
+- PATH: a sketch line, arc or spline, a loop or `path` block, or a list of them in order (from
+  any sketches: a path in 3D). Pieces are turned to run end to end; one that does not start
+  where the one before ends is `PathGap`. A sweep's path starts on the profile's plane, square
+  to it, and is tangent-continuous (the kernel's `Kink`, `NotSquare` otherwise); the profile is
+  carried square to it without twist (the kernel has no twist or frame option). `extend` runs it
+  straight on before the start and after the end; `upto` cuts it off at a face's surface,
+  `offset` on past it (one or the other: `NotWith`).
+- coil: winds PROFILE about LINE (a line of the same sketch); any two of `pitch`, `turns`,
+  `height` (all three, or `upto` with more than a pitch, is `NotWith`; fewer, `MissingArg`), or
+  `pitch` with `upto` (wound on to a face). `taper` widens it as it rises; `left` winds it
+  left-handed.
+- loft: through the profiles in order, ruled, or `smooth` (a curvature-continuous blend, `start`
+  and `end` the weights its walls leave the end profiles with, square to them). Profiles with
+  different segment counts are matched by the tool: a whole circle is cut at the angles of the
+  other profile's corners (so a square to a circle runs corner to arc end), and otherwise the
+  longest lines and arcs are halved until the counts agree; a profile of splines alone that
+  would need splitting is `LoftCurves`; a different number of loops (outline and holes) is
+  `LoftLoops`. A point first or last closes the loft on it; `dome(P, DIR, w)` rounds it, the
+  walls arriving square to DIR. `align` starts each section nearest the one before's start;
+  `seams` puts a profile's start at a point of its sketch. `rails`: (a corner of the first
+  profile, a path of lines and arcs through the same corner of every profile); `centre`: a path
+  crossing each profile's plane (one or the other: `NotWith`).
+- Ops: added (a new body for the first solid), or `cut`, `keep` (intersect), `new` (a body of its
+  own); two of them is `NotWith`.
+
+```
+sketch sec(on: xy) {
+  c = circle((0, 0), r)
+  base = line((0, 0), (w, 0), construction: true)
+}
+sketch rail(on: rotate(sec.plane, about: sec.base, by: 90deg)) {
+  path route(start: (0, 0)) {
+    line(to: (0, h))
+    tarc(to: (R, h + R))
+  }
+}
+tube = sweep(sec.c, along: rail.route, extend: (0, w))
+sketch spr(on: rotate(sec.plane, about: sec.base, by: 90deg)) {
+  c = circle((R, 0), r / 4)
+  ax = line((0, 0), (0, h), construction: true)
+}
+spring = coil(spr.c, axis: spr.ax, pitch: p, turns: n, new: true)
+sketch top(on: offset(sec.plane, h)) {
+  sq = rect(center: (0, 0), size: (w, w))
+}
+neck = loft([sec.c, top.sq], new: true)     # a circle to a square: matched corner to arc end
+```
+
+### Faces moved, slabs, ribs, rounds, balls
+
+```
+draft(FACES, angle: A, neutral: PLANE)    faces tilted A about where they cross the neutral
+                                          plane, the pull along its normal
+offset_faces(FACES, d)                    faces moved d along their outward normals
+thicken(FACES, t, side: "out"|"in"|"both", cut|keep|new: true)   a slab on the faces
+rib(PATH, t, side: "both"|"pos"|"neg", web: false, flip: false, draft: A)
+facefillet(FACES, FACES, r)               round between two face sets
+fullround(side: FACES, middle: FACES, other: FACES)   each one face (`OneFace`)
+ball(POINT, r, cut|keep|new: true)        a ball (sphere: the same)
+```
+
+- `offset(PLANE, d)` is a plane; `offset_faces` moves faces of the part.
+- rib: a wall t thick along PATH (lines and arcs of one sketch, end to end), its ends run on to
+  the part, filling from the path to the part on its left (`flip`: right) in the sketch plane, t
+  along the sketch normal (`side` one way or both); a `web` reaches along the normal instead,
+  t across the path; `draft` thickens it toward the part.
+- ball: the centre a sketch point (the ball's frame is the sketch's), a point, or an axis.
+
+```
+cup = shell(t, open: box.end)
+lip = fillet(edges(between: (cup.inner, cup.rim)), t / 4)
+tilt = draft(box.side(base.r[2]), angle: a, neutral: base.plane)
+grow = offset_faces(box.side(base.r[1]), g)
+wall = rib(web.l, t, flip: true)
+round = facefillet(box.side(base.r[0]), box.end, r)
+knob = ball(top.c, r)
+```
 
 ## Anchors
 
@@ -184,9 +276,15 @@ E.start  E.end          extrude caps (cut: E.end is the floor), with planes whos
                         sketch's x and origin the sketch origin dropped onto them
 E.side(ENTITY)          the wall a profile entity made (a line: plane with origin at its start,
                         x along it); revolves too: R.side(ENTITY)
-E.axis                  a single-circle extrude's axis; a revolve's or hole's axis
+E.axis                  a single-circle extrude's axis; a revolve's, coil's or hole's axis
 E.faces  E.edges        everything the feature made, as the part stands
-H.rim                   a hole's edges at its mouth
+H.rim                   a hole's (or bore's) mouth: the loop nearest it where its faces meet
+                        the part's (any curve: on a blend too); rounded by a later fillet, it is
+                        `MouthRounded`
+W.start  W.end          a sweep's, coil's or loft's end caps (planes carried from the profile's
+                        sketch); W.side(ENTITY) the walls a profile entity made over the whole
+                        path (a loft: an entity of its first profile)
+S.inner  S.rim          a shell's inner (outward: outer) skin, and the rims round its open faces
 S.plane  S.origin  S.points  S.NAME   a sketch's plane, origin, points, named entities
 FACES.plane  FACES.normal  FACES.edges  FACES.axis (cylindrical)
 ```

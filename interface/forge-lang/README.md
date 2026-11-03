@@ -169,11 +169,11 @@ valid, the fold/flat identity, a height edit renaming no face).
 - **Measuring is the warm path's cost** (220 ms of the crank's 224 ms after a late edit). Mass
   properties per face, cached by face name and invalidated per stage, would make it proportional
   to what changed.
-- **Role names exist for extrudes and revolves only.** Holes' walls and floors (`hole::MOUTH`,
-  `BORE`, `BOTTOM` are private), fillets' faces, shells' rims and lofts' walls have names but no
-  public role API; `H.rim` picks the hole's circular edges nearest its mouth along its axis
-  (geometry, though along the feature's own axis). A `roles` entry per feature kind would let
-  every anchor be a name.
+- **Role names**: extrudes, revolves, and (fg-shapes) the skinned walls and caps of sweeps, coils
+  and lofts (`roles::skin_side`), a shell's offset skin and rims (`roles::offset`, `rim`). Holes'
+  walls and floors (`hole::MOUTH`, `BORE`, `BOTTOM` are private; lane fg-holes) and fillets' faces
+  have names but no public role API; `H.rim` is the loop nearest the mouth where the hole's faces
+  (by lineage) meet the part's.
 - **Lineage ("made by") is forge-agent's** (`select::lineage`, by name and by overlap on one
   surface). The kernel could carry it, as it carries names.
 - **One chamfer size per feature** (`ChamferSize` is per feature): groups with two sizes need two
@@ -182,7 +182,9 @@ valid, the fold/flat identity, a height edit renaming no face).
   origin when sketched on; only role anchors carry the sketch's. Use role anchors.
 - **`check` cannot resolve geometric anchors**: without building, `E.side(..)` planes and
   selections are unknown, and what depends on them is checked for types only.
-- Not wired yet: sweep, coil, thread, text, draft, patterns (loops replace them), multi-body ops.
+- Shapes (branch fg-shapes, `src/shapes.rs`): sweep, coil, loft, shell out, draft, offset_faces,
+  thicken, rib, facefillet, fullround, ball/sphere; see the reference. Not wired by this lane:
+  thread, text, patterns, holes' options, bodies (lane fg-holes).
 - Sheet metal not built in the kernel, so not in Forge: reliefs (waiting on a decision), rip and
   tangent joints, corner treatments (corners stay open), closing bend cycles, hole and slot
   checks against bends and edges, PEM hardware, ordinary features on a sheet. A flange's
