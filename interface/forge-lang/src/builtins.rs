@@ -655,6 +655,7 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
                 span,
             )?;
             sk.borrow_mut().points.push(id);
+            sk.borrow_mut().nums.extend([(id, "x", x), (id, "y", y)]);
             Ok(mk_ent(&sk, id))
         }
         "disc" => {
@@ -682,13 +683,20 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
         "circle" => {
             let sk = in_sketch(ev, name, span)?;
             let a = Args::bind(ev, name, &["center", "r"], args, span)?;
-            let c = p2_of(ev, a.req("center")?, a.span("center"))?;
+            let cv = a.req("center")?;
+            let c = p2_of(ev, cv.clone(), a.span("center"))?;
             let r = a.req_num("r", LEN)?;
             positive(&r, a.span("r"), "a radius")?;
             let mut s = sk.borrow_mut();
             let c = s.p2(c, span)?;
             let nm = pending_name(ev, span);
             let id = s.circle(c, r.v, nm.as_deref(), span)?;
+            s.nums.push((id, "r", r.clone()));
+            if let Value::Tuple(xy) = &cv
+                && let [Value::Num(x), Value::Num(y)] = &xy[..]
+            {
+                s.nums.extend([(id, "x", x.clone()), (id, "y", y.clone())]);
+            }
             drop(s);
             Ok(mk_ent(&sk, id))
         }

@@ -902,3 +902,113 @@ fn a_flat_overlap_warns_on_the_part_and_refuses_the_blank() {
         r.warnings
     );
 }
+
+/// An L with a shop: holes 2.5 t + R from a bend, 2 t from the edge, t across.
+const SHOPPED: &str = "shared t = 2
+shared r = 2
+shared k = ratio(0.4)
+shared steel = stock(t: 2, bend: kfactor(ratio(0.4)), radii: [2], hole_to_bend: per_t(ratio(2.5), per_r: ratio(1)), hole_to_edge: per_t(ratio(2)), min_hole: per_t(ratio(1)), hardness: ratio(70))
+shared acme = shop([steel])
+param plan.L = 60
+param plan.W = 40
+param up.h = 30
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (L, W))
+}
+base = sheet(plan, t: t, r: r, bend: kfactor(k), shop: acme)
+up = flange(base.edge(plan.outline[1]), height: h, measure: \"inner\")
+";
+
+fn notes<'a>(r: &'a Run, kind: &str) -> Vec<&'a forge_lang::sheet::SheetNote> {
+    r.warnings
+        .iter()
+        .filter_map(|w| match w {
+            Warning::Sheet(n) if n.kind() == kind => Some(&**n),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn holes_against_the_shop_with_fixes_that_move_or_resize() {
+    let s = format!(
+        "{SHOPPED}param hs.x = 50
+param hs.y = 20
+param hs.d = 3
+param hs.ex = 20
+param hs.ey = 5
+param hs.er = 2
+param hs.tiny = 0.8
+param hs.ty = 25
+sketch hs(on: base.top) {{
+  near_bend = circle((x, y), d)
+  near_edge = circle((ex, ey), er)
+  small = circle((ex, ty), tiny)
+}}
+holes = cutout(hs, wall: base)
+"
+    );
+    let r = run(&s);
+    assert!(r.ok(), "{}", forge_lang::report::text(&r, &s));
+    for (kind, want) in [("HoleNearBend", 1), ("HoleNearEdge", 1), ("HoleTooSmall", 1)] {
+        let n = notes(&r, kind);
+        assert_eq!(n.len(), want, "{kind}: {:?}", r.warnings);
+        assert_eq!(n[0].id, "holes");
+        assert!(!n[0].fixes.is_empty(), "{kind}");
+        // every fix cures its own
+        for f in &n[0].fixes {
+            let fixed = apply(&s, f).expect("applies");
+            let r2 = run(&fixed);
+            assert!(r2.ok());
+            let left = notes(&r2, kind).len();
+            assert!(left < want, "{kind}: {f:?} leaves {left}");
+        }
+    }
+    // the move along the way out: x 50 -> 48 (5 from the tangent line, 7 wanted)
+    let n = notes(&r, "HoleNearBend");
+    assert!(
+        n[0].fixes
+            .iter()
+            .any(|f| matches!(f, Op::SetParam { param, value }
+        if param.to_string() == "hs.x" && (value.value - 48.0).abs() < 1e-9)),
+        "{:?}",
+        n[0].fixes
+    );
+}
+
+#[test]
+fn pem_hardware() {
+    let s = format!(
+        "{SHOPPED}param ps.x = 20
+param ps.y = 4
+sketch ps(on: base.top) {{
+  c = pt(x, y)
+}}
+nut = pem(\"nut\", \"M3\", at: ps.c, wall: base)
+"
+    );
+    let r = run(&s);
+    assert!(r.ok(), "{}", forge_lang::report::text(&r, &s));
+    // its mounting hole, from the (placeholder) catalogue
+    let plain = run(SHOPPED);
+    let hole = PI * 0.25 * 4.22 * 4.22 * 2.0;
+    assert!(((folded(&plain).0 - folded(&r).0) - hole).abs() < 1e-7);
+    assert_eq!(notes(&r, "UnverifiedHardware").len(), 1);
+    let n = notes(&r, "HardwareNearEdge");
+    assert_eq!(n.len(), 1, "{:?}", r.warnings);
+    let fixed = apply(&s, &n[0].fixes[0]).expect("a move");
+    assert!(notes(&run(&fixed), "HardwareNearEdge").is_empty(), "{fixed}");
+    // a cited row in the shop: no placeholder warning; a size it lacks is refused
+    let cited = s.replace(
+        "shared acme = shop([steel])",
+        "shared m3 = hardware(kind: \"nut\", size: \"M3\", sheet: (1, 6), hole: 4.22, edge: 4.8, max_hardness: ratio(80), code: \"CLS-M3-1\", source: \"(cited in the test only)\")\nshared acme = shop([steel], hardware: [m3])",
+    );
+    let r = run(&cited);
+    assert!(r.ok(), "{:?}", r.errors);
+    assert!(notes(&r, "UnverifiedHardware").is_empty());
+    let e = first_error(&cited.replace("\"M3\", at:", "\"M4\", at:"));
+    assert_eq!(e.kind(), "NoSuchHardware");
+    // too hard a sheet
+    let hard = s.replace("hardness: ratio(70)", "hardness: ratio(90)");
+    assert_eq!(notes(&run(&hard), "SheetTooHard").len(), 1);
+}
