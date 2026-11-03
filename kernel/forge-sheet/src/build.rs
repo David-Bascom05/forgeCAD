@@ -2447,7 +2447,15 @@ impl<'a> Strips<'a> {
         reach: &dyn Fn(&forge_math::Box3) -> bool,
         may: &dyn Fn(Interval) -> bool,
     ) -> Option<(Point3, f64)> {
-        hunt_by(limit, box_of, point, reach, may, &|p| self.inside(b, p, margin))
+        hunt_by(
+            limit,
+            box_of,
+            point,
+            reach,
+            may,
+            &|p| self.distance_below(b, p) - margin.abs(),
+            &|p| self.inside(b, p, margin),
+        )
     }
 
     /// Clashes of the forms' material, folded: each other strip's boundary (both skins, the
@@ -2488,6 +2496,7 @@ impl<'a> Strips<'a> {
                                 &|u| Some(geo.point(bd.piece.at(u), w)),
                                 &reach,
                                 &|_| true,
+                                &|_| 0.0,
                                 &depth,
                             ) {
                                 return Err(clash(
@@ -2505,6 +2514,7 @@ impl<'a> Strips<'a> {
                             &|u| Some(rail.at(u)),
                             &reach,
                             &|_| true,
+                            &|_| 0.0,
                             &depth,
                         ) {
                             return Err(clash(
@@ -2527,6 +2537,7 @@ impl<'a> Strips<'a> {
                         &|u| Some(c.at(u)),
                         &|bx| self.may_reach(b, bx, flat[b], limit),
                         &|_| true,
+                        &|p| self.distance_below(b, p),
                         &|p| self.inside(b, p, 0.0),
                     ) {
                         return Err(clash(
@@ -2548,6 +2559,7 @@ impl<'a> Strips<'a> {
                         &|u| Some(c.at(u)),
                         &reach,
                         &|_| true,
+                        &|_| 0.0,
                         &depth,
                     ) {
                         return Err(clash(g, crate::error::FormAgainst::Form(h.index), x));
@@ -2596,6 +2608,7 @@ fn hunt_by(
     point: &dyn Fn(f64) -> Option<Point3>,
     reach: &dyn Fn(&forge_math::Box3) -> bool,
     may: &dyn Fn(Interval) -> bool,
+    far: &dyn Fn(Point3) -> f64,
     depth: &dyn Fn(Point3) -> Option<f64>,
 ) -> Option<(Point3, f64)> {
     {
@@ -2606,9 +2619,11 @@ fn hunt_by(
                 continue;
             }
             let size = (bx.x.width().powi(2) + bx.y.width().powi(2) + bx.z.width().powi(2)).sqrt();
-            // every point of the box within `size` of its middle: none in b's material when the
+            // every point of the box within `size` of its middle: none in the material when the
             // middle is further from it than that
-            if self.distance_below(b, point(u.mid())) > size {
+            if let Some(p) = point(u.mid())
+                && far(p) > size
+            {
                 continue;
             }
             if size <= 0.5 * limit || level >= 48 {
@@ -2883,7 +2898,7 @@ impl Strips<'_> {
                             _ => None,
                         })
                         .unwrap_or((p, q));
-                    Some(crate::error::Seam {
+                    Some(crate::error::FlatSeam {
                         wall,
                         from: p,
                         to: q,

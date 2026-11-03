@@ -191,7 +191,12 @@ fn write_dxf(p: &Pattern, notes: Option<&str>) -> String {
         }
     });
     w.table("LAYER", 0x2, |w| {
-        let mut layers = vec![("0", "7"), (CUT_LAYER, "7"), (BEND_LAYER, "1"), (PUNCH_LAYER, "5")];
+        let mut layers = vec![
+            ("0", "7"),
+            (CUT_LAYER, "7"),
+            (BEND_LAYER, "1"),
+            (PUNCH_LAYER, "5"),
+        ];
         // the FORM layer only where there are forms: other parts' files stay as they were
         if !p.forms.is_empty() {
             layers.push((FORM_LAYER, "6"));

@@ -468,6 +468,7 @@ fn contour_base(ev: &mut Eval, a: &Args, id: String, span: Span) -> R<Value> {
         fix,
         folded: None,
         unfolds: vec![],
+        material: None,
     });
     push_sheet_step(ev, si, &id, "contour", span, dims)?;
     Ok(op_value(si, &id, OpKind::Contour { first, last }))

@@ -26,8 +26,8 @@ pub use checks::check;
 pub use contour::{ContourError, ContourMade, Hand};
 pub use corner::{Seam, SeamError};
 pub use error::{
-    CutId, End, FeatureId, FormAgainst, JointId, JointKindName, Pinch, Seam, SheetError, SheetWarning, Side, Strip,
-    TrimCurveKind, TrimRef, Violation, WallId,
+    CutId, End, FeatureId, FlatSeam, FormAgainst, JointId, JointKindName, Pinch, SheetError, SheetWarning,
+    Side, Strip, TrimCurveKind, TrimRef, Violation, WallId,
 };
 pub use form::{Form, FormError, FormMark, FormName, FormRules, FormShape, FormTool, FormViolation};
 pub use graph::{Corner, CornerKind, Cut, Gauge, Joint, JointKind, Position, Sheet, Wall};

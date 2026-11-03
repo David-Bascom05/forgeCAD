@@ -179,6 +179,7 @@ fn the_shop_check_runs_them() {
         hardware: vec![],
         kerf: 0.2,
         process: scs(),
+        ..Default::default()
     };
     let v = forge_sheet::check(&plate(800.0, 900.0, 0.0), &shop);
     assert_eq!(kinds(&v), ["FlatTooLarge"], "{v:?}");

@@ -2005,7 +2005,7 @@ fn touch_fixes(st: &SheetState, a: Strip, b: Strip, map: Map) -> Vec<Op> {
 /// A slot along a flat touch's run, cut into the base (a relief along the edge the bend's
 /// strip lies on), as wide as the rule's bend relief and a width past each end: offered when
 /// the kernel builds the flat with it.
-fn seam_fixes(st: &SheetState, seam: Option<fs::Seam>, before: Option<String>) -> Vec<Op> {
+fn seam_fixes(st: &SheetState, seam: Option<fs::FlatSeam>, before: Option<String>) -> Vec<Op> {
     let Some(seam) = seam else { return vec![] };
     // the base's coordinates are its sketch's; other walls' are not a sketch's as written
     if seam.wall != WallId(0) {
@@ -2061,9 +2061,9 @@ fn seam_fixes(st: &SheetState, seam: Option<fs::Seam>, before: Option<String>) -
     let name = (1..)
         .map(|k| {
             if k == 1 {
-                "seam".to_string()
+                "touch_slot".to_string()
             } else {
-                format!("seam{k}")
+                format!("touch_slot{k}")
             }
         })
         .find(|n| !used(n) && !used(&format!("{n}_cut")) && !used(&format!("{n}_loop")))
