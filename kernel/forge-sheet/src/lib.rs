@@ -2,15 +2,21 @@
 //! developed coordinates, and both the folded and the flat solid built from it directly as
 //! ordinary bodies, with no booleans and nothing recognised. Design: research/sheet-metal/.
 pub mod build;
+pub mod checks;
 pub mod error;
 pub mod graph;
+pub mod pattern;
 pub mod region;
+pub mod roles;
 pub mod shop;
 
-pub use build::{Map, build};
+pub use build::{BendPlace, Built, Layout, Map, Place2, WallPlace, build, build_with};
+pub use checks::check;
 pub use error::{
     CutId, End, FeatureId, JointId, JointKindName, Pinch, SheetError, SheetWarning, Side, Strip,
     TrimCurveKind, TrimRef, Violation, WallId,
 };
 pub use graph::{Corner, CornerKind, Cut, Gauge, Joint, JointKind, Sheet, Wall};
+pub use pattern::{BendLine, Curve2, Pattern, dxf};
+pub use roles::{Roles, Skin};
 pub use shop::{AllowanceRow, BendRule, KRow, RuleError, Scaled, ShopProfile, Stock};

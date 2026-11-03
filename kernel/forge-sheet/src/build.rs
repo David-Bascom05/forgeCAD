@@ -13,7 +13,9 @@
 //! the outline's segment ids (docs/naming.md), never from storage order.
 use crate::error::{End, FeatureId, JointKindName, SheetError, Side, Strip, TrimCurveKind, TrimRef, WallId};
 use crate::graph::{Gauge, JointKind, Sheet, straight};
+use crate::pattern::{BendLine, Curve2, Pattern};
 use crate::region::{Bound, Piece, Region, subtract};
+use crate::roles::{Roles, Skin};
 use crate::shop::setback;
 use forge_geom::ruled::{Rail, Ruled};
 use forge_geom::spline::{Extruded, PlaneSpline, Spline, SplineCurve};
@@ -296,8 +298,79 @@ fn bbox(l: &ProfileLoop) -> (Point2, Point2) {
     (lo, hi)
 }
 
+/// Where a strip's own 2D coordinates lie in the developed plane (the first wall's coordinates):
+/// p -> origin + x p.x + perp(x) p.y.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Place2 {
+    pub origin: Point2,
+    pub x: Vec2,
+}
+
+impl Place2 {
+    pub fn apply(&self, p: Point2) -> Point2 {
+        Rigid {
+            o: self.origin,
+            x: self.x,
+        }
+        .apply(p)
+    }
+}
+
+impl From<Rigid> for Place2 {
+    fn from(r: Rigid) -> Place2 {
+        Place2 { origin: r.o, x: r.x }
+    }
+}
+
+/// A wall's place: its coordinates (reference skin z = 0, material on -z) in the world under the
+/// map, and in the developed plane.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct WallPlace {
+    pub wall: WallId,
+    pub frame: Frame,
+    pub developed: Place2,
+}
+
+/// A bend's numbers, and its zone's coordinates (u across from wall a's tangent line, 0 to
+/// `allowance`; y along the mold line, 0 to `length`) in the developed plane.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct BendPlace {
+    pub joint: crate::error::JointId,
+    pub a: WallId,
+    pub b: WallId,
+    /// Signed as `JointKind::Bend`.
+    pub angle: f64,
+    pub radius: f64,
+    pub allowance: f64,
+    /// Mold line to tangent line on the reference skin.
+    pub setback: f64,
+    pub length: f64,
+    pub developed: Place2,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Layout {
+    pub walls: Vec<WallPlace>,
+    pub bends: Vec<BendPlace>,
+}
+
+/// A built sheet: the body, what each face and edge is, where the walls and bends lie, and (flat
+/// only) the pattern for cutting.
+#[derive(Clone, Debug)]
+pub struct Built {
+    pub body: Body,
+    pub roles: Roles,
+    pub layout: Layout,
+    pub pattern: Option<Pattern>,
+}
+
 /// Builds the sheet's folded or flat solid.
 pub fn build(sheet: &Sheet, map: Map) -> Result<Body, SheetError> {
+    build_with(sheet, map).map(|b| b.body)
+}
+
+/// `build`, with the roles, the layout and (flat) the pattern.
+pub fn build_with(sheet: &Sheet, map: Map) -> Result<Built, SheetError> {
     let feature = sheet.feature;
     let t = sheet.gauge.thickness;
     let mut cx = Ctx {
@@ -606,18 +679,52 @@ pub fn build(sheet: &Sheet, map: Map) -> Result<Body, SheetError> {
             region,
         });
     }
-    let built = Built::new(cx, strips, &bends, nw, t)?;
+    let layout = Layout {
+        walls: (0..nw)
+            .map(|wi| WallPlace {
+                wall: sheet.walls[wi].id,
+                frame: frames[wi].expect("placed"),
+                developed: dev[wi].into(),
+            })
+            .collect(),
+        bends: bends
+            .iter()
+            .enumerate()
+            .map(|(bi, b)| BendPlace {
+                joint: jid(b),
+                a: sheet.walls[b.a].id,
+                b: sheet.walls[b.b].id,
+                angle: b.sigma * b.theta,
+                radius: match sheet.joints[b.joint].kind {
+                    JointKind::Bend { radius, .. } => radius,
+                    _ => unreachable!("only bends are placed"),
+                },
+                allowance: b.ba,
+                setback: b.s,
+                length: b.len,
+                developed: strip_dev[nw + bi].into(),
+            })
+            .collect(),
+    };
+    let built = Strips::new(cx, strips, &bends, nw, t)?;
     if map == Map::Folded {
         built.clash()?;
     }
-    built.body()
+    let pattern = (map == Map::Flat).then(|| built.pattern(&strip_dev, &layout));
+    let (body, roles) = built.body()?;
+    Ok(Built {
+        body,
+        roles,
+        layout,
+        pattern,
+    })
 }
 
 /// A wall's stretch of tangent line: its ends' y in the joint frame, its loop and index.
 type Stretch = (f64, f64, usize, usize);
 
 /// The strips' loops, classified and tied together, ready to lay out.
-struct Built<'a> {
+struct Strips<'a> {
     cx: Ctx<'a>,
     strips: Vec<StripData>,
     loops: Vec<LoopData>,
@@ -630,14 +737,14 @@ struct Built<'a> {
     twin: HashMap<(usize, usize), (usize, usize)>,
 }
 
-impl<'a> Built<'a> {
+impl<'a> Strips<'a> {
     fn new(
         cx: Ctx<'a>,
         strips: Vec<StripData>,
         bends: &[Bend],
         nw: usize,
         t: f64,
-    ) -> Result<Built<'a>, SheetError> {
+    ) -> Result<Strips<'a>, SheetError> {
         let feature = cx.feature;
         let mut loops = Vec::new();
         for (si, s) in strips.iter().enumerate() {
@@ -855,7 +962,7 @@ impl<'a> Built<'a> {
                 }
             }
         }
-        Ok(Built {
+        Ok(Strips {
             cx,
             strips,
             loops,
@@ -1091,6 +1198,52 @@ impl<'a> Built<'a> {
             .then_some(skin)
     }
 
+    /// The flat pattern: each boundary followed piece by piece across the strips, in the
+    /// developed plane, runs of one line or one circle joined; and the bends' middle lines.
+    fn pattern(&self, strip_dev: &[Rigid], layout: &Layout) -> Pattern {
+        let mut seen: Vec<Vec<bool>> = self.loops.iter().map(|l| vec![false; l.bounds.len()]).collect();
+        let mut contours = Vec::new();
+        for l0 in 0..self.loops.len() {
+            for i0 in 0..self.loops[l0].bounds.len() {
+                if seen[l0][i0] || self.loops[l0].kinds[i0] != Kind::Side {
+                    continue;
+                }
+                let mut out: Vec<Curve2> = Vec::new();
+                let (mut l, mut i) = (l0, i0);
+                while !seen[l][i] {
+                    seen[l][i] = true;
+                    let ld = &self.loops[l];
+                    let by = &strip_dev[ld.strip];
+                    let (a, b) = (ld.bounds[i].start, ld.bounds[(i + 1) % ld.bounds.len()].start);
+                    if let Some(c) = developed(&ld.bounds[i].piece, a, b, by) {
+                        push_joined(&mut out, c);
+                    }
+                    (l, i) = self.next(l, i).0;
+                }
+                if out.len() > 1
+                    && let Some(c) = joined(&out[out.len() - 1], &out[0])
+                {
+                    out[0] = c;
+                    out.pop();
+                }
+                contours.push(out);
+            }
+        }
+        let bends = layout
+            .bends
+            .iter()
+            .map(|b| BendLine {
+                joint: b.joint,
+                a: b.developed.apply(Point2::new(0.5 * b.allowance, 0.0)),
+                b: b.developed.apply(Point2::new(0.5 * b.allowance, b.length)),
+                angle: b.angle,
+                radius: b.radius,
+                allowance: b.allowance,
+            })
+            .collect();
+        Pattern { contours, bends }
+    }
+
     /// The side piece after (l, i) along the developed boundary, and whether it crossed a tangent line.
     fn next(&self, l: usize, i: usize) -> ((usize, usize), bool) {
         let (mut l, mut i) = (l, (i + 1) % self.loops[l].bounds.len());
@@ -1104,8 +1257,11 @@ impl<'a> Built<'a> {
         ((l, i), crossed)
     }
 
-    fn body(self) -> Result<Body, SheetError> {
+    fn body(self) -> Result<(Body, Roles), SheetError> {
         let depth = [self.t, 0.0];
+        // levels: the back skin at depth t, the reference skin at 0
+        let level = [Skin::Back, Skin::Reference];
+        let mut roles = Roles::default();
         let mut body = Body::new();
         let shell = body.add_shell();
         // the side pieces, their successors, and which successors share a face
@@ -1196,6 +1352,7 @@ impl<'a> Built<'a> {
                     (verts[b][lev], verts[a][lev])
                 };
                 let name = names[k].with_str("edge").with(lev as u64);
+                roles.edges.push((src(k), level[lev], name));
                 pair.push((body.add_edge(curve, range, s, e, name), fw));
             }
             edges.push([pair[0], pair[1]]);
@@ -1276,6 +1433,11 @@ impl<'a> Built<'a> {
                 .expect("one piece at least")
                 .with_str("side");
             let face = body.add_face(shell, surface, same, name);
+            for &q in &run {
+                if !roles.sides.contains(&(src(q), name)) {
+                    roles.sides.push((src(q), name));
+                }
+            }
             let mut uses: Vec<(EdgeId, bool)> = run.iter().map(|&q| edges[q][0]).collect();
             uses.push((rails[&vk], true));
             uses.extend(run.iter().rev().map(|&q| (edges[q][1].0, !edges[q][1].1)));
@@ -1304,6 +1466,7 @@ impl<'a> Built<'a> {
                     let top = lev == 1;
                     let (surface, same) = skin(&s.geo, w, top);
                     let face = body.add_face(shell, surface, same, name.with(lev as u64));
+                    roles.skins.push((s.strip, level[lev], name.with(lev as u64)));
                     for &l in &mine {
                         let ld = &self.loops[l];
                         let mut uses: Vec<(EdgeId, bool)> = (0..ld.bounds.len())
@@ -1326,7 +1489,7 @@ impl<'a> Built<'a> {
                 }
             }
         }
-        Ok(body)
+        Ok((body, roles))
     }
 
     fn too_short(&self, l: usize, i: usize) -> SheetError {
@@ -1509,6 +1672,81 @@ impl<'a> Built<'a> {
 /// when sigma is 1, so the arc's angles turn the other way.
 /// A piece's own stretch of its spline, in the spline's parameter: a wall built on the whole of a
 /// closed spline is carried past its ends onto itself at the seam, where points project to either.
+/// A boundary piece from a to b in a strip, carried into the developed plane.
+fn developed(p: &Piece, a: Point2, b: Point2, by: &Rigid) -> Option<Curve2> {
+    Some(match *p {
+        Piece::Line { .. } => Curve2::Line {
+            a: by.apply(a),
+            b: by.apply(b),
+        },
+        Piece::Arc { c, r, t0, t1 } => Curve2::Arc {
+            c: by.apply(c),
+            r,
+            start: t0 + by.angle(),
+            sweep: t1 - t0,
+        },
+        Piece::Spline { ref s, t0, t1 } => {
+            let st = own_stretch(s, Interval::new(t0.min(t1), t0.max(t1)))?;
+            let (degree, mut knots, pts, mut weights) = st.control_form();
+            let mut points: Vec<Point2> = pts.iter().map(|q| by.apply(Point2::new(q.x, q.y))).collect();
+            if t1 < t0 {
+                let (lo, hi) = (knots[0], knots[knots.len() - 1]);
+                knots = knots.iter().rev().map(|k| lo + hi - k).collect();
+                points.reverse();
+                if let Some(w) = &mut weights {
+                    w.reverse();
+                }
+            }
+            Curve2::Spline {
+                degree,
+                knots,
+                points,
+                weights,
+            }
+        }
+    })
+}
+
+/// Two pieces that continue one line or one circle, as one.
+fn joined(x: &Curve2, y: &Curve2) -> Option<Curve2> {
+    match (x, y) {
+        (Curve2::Line { a, b }, Curve2::Line { a: b2, b: c }) => {
+            let (u, v) = (*b - *a, *c - *b2);
+            let same = u.cross(v).abs() <= 1e-12 * u.length() * v.length() && u.dot(v) > 0.0;
+            (same && b.distance(*b2) <= TOL).then_some(Curve2::Line { a: *a, b: *c })
+        }
+        (
+            Curve2::Arc { c, r, start, sweep },
+            Curve2::Arc {
+                c: c2,
+                r: r2,
+                start: s2,
+                sweep: w2,
+            },
+        ) => {
+            let gap = dmath::sin(0.5 * (start + sweep - s2)).abs();
+            let same = c.distance(*c2) <= TOL && (r - r2).abs() <= TOL && sweep * w2 > 0.0 && gap <= 1e-12;
+            (same && (sweep + w2).abs() <= dmath::TAU * (1.0 + 1e-12)).then_some(Curve2::Arc {
+                c: *c,
+                r: *r,
+                start: *start,
+                sweep: sweep + w2,
+            })
+        }
+        _ => None,
+    }
+}
+
+fn push_joined(out: &mut Vec<Curve2>, c: Curve2) {
+    if let Some(last) = out.last()
+        && let Some(j) = joined(last, &c)
+    {
+        *out.last_mut().expect("a last") = j;
+        return;
+    }
+    out.push(c);
+}
+
 fn own_stretch(s: &Spline, range: Interval) -> Option<Spline> {
     s.stretch(range)
 }
