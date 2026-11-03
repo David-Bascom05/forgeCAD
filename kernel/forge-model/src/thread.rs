@@ -442,6 +442,51 @@ fn polygon(pts: &[Point2], first_id: u64) -> ProfileLoop {
 const GROOVE: u64 = 0;
 const CHAMFER: u64 = 10;
 const RUNOUT: u64 = 20;
+/// The run-out's coil is named from the thread's id moved on by this.
+const RUNOUT_ID: u64 = 5_000_000;
+
+/// The names of a thread's faces by role, from its history id. The groove (and the run-out) is
+/// a coil: its walls are named as `forge_ops`'s skins name them, one per profile segment; the
+/// chamfer is a revolve, a whole turn in two halves. Of the groove's section, segment 0 is the
+/// thread's root flat (at the major diameter in a nut, the minor on a bolt), 1 and 5 its flanks.
+/// A hole's thread at the hole's other places, or in a pattern's copies, is salted as
+/// `instance_name` salts.
+pub mod roles {
+    use forge_topo::Name;
+
+    fn coil_wall(id: u64, segment: u64) -> Name {
+        Name::feature(id)
+            .with_str("side")
+            .with_name(Name::NONE.with(segment).with(0))
+            .with(0)
+    }
+
+    /// The root flat between the flanks.
+    pub fn root_flat(id: u64) -> Name {
+        coil_wall(id, super::GROOVE)
+    }
+
+    /// The two flanks of the groove, then the two of its run-out (if it has one).
+    pub fn flanks(id: u64) -> [Name; 4] {
+        let r = id + super::RUNOUT_ID;
+        [
+            coil_wall(id, super::GROOVE + 1),
+            coil_wall(id, super::GROOVE + 5),
+            coil_wall(r, super::RUNOUT + 1),
+            coil_wall(r, super::RUNOUT + 5),
+        ]
+    }
+
+    /// The run-out's root flat.
+    pub fn runout_flat(id: u64) -> Name {
+        coil_wall(id + super::RUNOUT_ID, super::RUNOUT)
+    }
+
+    /// The 45 degree chamfer cone at the start.
+    pub fn chamfer(id: u64) -> [Name; 2] {
+        [0, 1].map(|s| forge_ops::roles::revolve_side(Name::feature(id), super::CHAMFER + 2, s))
+    }
+}
 
 fn cut(i: usize, id: u64, p: &Placed, t: &ScrewThread, build: bool) -> Result<Vec<Tool>, RegenError> {
     let e = err(i);
@@ -512,7 +557,7 @@ fn cut(i: usize, id: u64, p: &Placed, t: &ScrewThread, build: bool) -> Result<Ve
         let turns = 1.0 + back / dmath::TAU;
         let a = drift / (turns * pitch);
         out.push(main);
-        out.push(coil_tool(&tail, &winding(turns, dmath::atan(a)), id + 5_000_000)?);
+        out.push(coil_tool(&tail, &winding(turns, dmath::atan(a)), id + RUNOUT_ID)?);
     } else {
         out.push(main);
     }

@@ -322,8 +322,13 @@ pub fn glyph(
             );
         }
     }
-    for (j, same, name) in [(0, false, "start"), (1, true, "end")] {
-        let face = body.add_face(shell, levels[j].cap(), same, root.with_str(name));
+    for (j, same) in [(0, false), (1, true)] {
+        let cap = if j == 0 {
+            crate::roles::start(root)
+        } else {
+            crate::roles::end(root)
+        };
+        let face = body.add_face(shell, levels[j].cap(), same, cap);
         for row in &edges[j] {
             let uses: Vec<(EdgeId, bool)> = if same {
                 row.clone()

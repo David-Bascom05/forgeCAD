@@ -92,8 +92,45 @@ const BORE: u64 = 1;
 const SEAT: u64 = 2;
 const SINK: u64 = 3;
 const WALL: u64 = 4;
-pub(crate) const BOTTOM: u64 = 5;
+const BOTTOM: u64 = 5;
 const AXIS: u64 = 6;
+
+/// The names of a hole's faces by role, from its root (`Name::feature(id)`): each is the revolve
+/// wall of one profile segment, a whole turn built as two halves (`forge_ops::roles::revolve_side`).
+/// At a hole's other places, and in a pattern's copies, each is salted as `instance_name` salts.
+pub mod roles {
+    use forge_ops::roles::revolve_side;
+    use forge_topo::Name;
+
+    fn halves(root: Name, segment: u64) -> [Name; 2] {
+        [0, 1].map(|s| revolve_side(root, segment, s))
+    }
+
+    /// A counterbore's wall.
+    pub fn bore(root: Name) -> [Name; 2] {
+        halves(root, super::BORE)
+    }
+
+    /// A counterbore's floor, the ring the head sits on.
+    pub fn seat(root: Name) -> [Name; 2] {
+        halves(root, super::SEAT)
+    }
+
+    /// A countersink's cone.
+    pub fn sink(root: Name) -> [Name; 2] {
+        halves(root, super::SINK)
+    }
+
+    /// The drilled wall.
+    pub fn wall(root: Name) -> [Name; 2] {
+        halves(root, super::WALL)
+    }
+
+    /// The flat bottom or the drill point's cone.
+    pub fn bottom(root: Name) -> [Name; 2] {
+        halves(root, super::BOTTOM)
+    }
+}
 
 fn tan_half(angle: f64) -> f64 {
     let (s, c) = dmath::sin_cos(angle / 2.0);

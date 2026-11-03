@@ -1904,15 +1904,8 @@ fn tools(features: History<'_>, i: usize, build: bool) -> Result<Vec<Tool>, Rege
             };
             if let (true, Some(m)) = (build, next) {
                 // the flat bottom (or drill point) is the end
-                let bottom = Name::feature(features.id(i)).with_str("side").with(hole::BOTTOM);
-                upto::verify_next(
-                    features,
-                    i,
-                    (&t.0, &t.2),
-                    &names,
-                    &[bottom.with(0), bottom.with(1)],
-                    &m,
-                )?;
+                let bottom = hole::roles::bottom(Name::feature(features.id(i)));
+                upto::verify_next(features, i, (&t.0, &t.2), &names, &bottom, &m)?;
             }
             let pe = |error| RegenError::Pattern { feature: i, error };
             let mut out = Vec::new();
