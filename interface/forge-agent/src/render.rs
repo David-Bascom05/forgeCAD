@@ -6,7 +6,7 @@ use forge_mesh::TriMesh;
 use forge_topo::Body;
 
 const BG: u8 = 0;
-const INK: u8 = 1;
+pub const INK: u8 = 1;
 const LABEL: u8 = 2;
 const SHADES: u8 = 240;
 const FIRST_SHADE: u8 = 3;
@@ -61,11 +61,51 @@ pub fn render(
     size: usize,
     labels: &[(String, Point3)],
 ) -> Result<Vec<u8>, String> {
+    let p = picture(body, mesh, view, size, labels)?;
+    Ok(crate::png::encode(p.w, p.h, &p.palette, &p.px))
+}
+
+/// A drawn picture: palette indices, row by row.
+pub struct Picture {
+    pub w: usize,
+    pub h: usize,
+    pub px: Vec<u8>,
+    pub palette: Vec<[u8; 3]>,
+    /// Where a point lands on the picture, and its depth (larger is nearer).
+    pub to_px: Box<dyn Fn(Point3) -> (f64, f64, f64)>,
+}
+
+impl Picture {
+    /// Whether this pixel is an edge or outline.
+    pub fn ink(&self, x: usize, y: usize) -> bool {
+        self.px[y * self.w + x] == INK
+    }
+}
+
+/// What the z-buffer keeps per pixel: the nearest surface's depth there, its face, and how its
+/// depth changes per pixel across and down, so its plane can be followed off the pixel centre.
+#[derive(Clone, Copy)]
+struct Near {
+    z: f64,
+    face: u32,
+    dz: (f64, f64),
+}
+
+const NO_FACE: u32 = u32::MAX;
+
+/// The picture `render` encodes.
+pub fn picture(
+    body: &Body,
+    mesh: &TriMesh,
+    view: &str,
+    size: usize,
+    labels: &[(String, Point3)],
+) -> Result<Picture, String> {
     let (eye, up) = camera(view).ok_or_else(|| format!("view is one of {}", VIEWS.join(" ")))?;
     let e = eye.normalize().ok_or("eye")?.get();
     let u = up.cross(e).normalize().ok_or("up")?.get();
     let v = e.cross(u);
-    let proj = |p: Point3| {
+    let proj = move |p: Point3| {
         let d = p - Point3::ORIGIN;
         (d.dot(u), d.dot(v), d.dot(e))
     };
@@ -74,9 +114,12 @@ pub fn render(
         return Err("nothing to draw".into());
     }
     let (mut lo, mut hi) = ((f64::MAX, f64::MAX), (f64::MIN, f64::MIN));
+    let (mut zlo, mut zhi) = (f64::MAX, f64::MIN);
     for p in &pts {
         lo = (lo.0.min(p.0), lo.1.min(p.1));
         hi = (hi.0.max(p.0), hi.1.max(p.1));
+        zlo = zlo.min(p.2);
+        zhi = zhi.max(p.2);
     }
     let size = size.clamp(32, 4096);
     let margin = (size / 20) as f64;
@@ -84,9 +127,19 @@ pub fn render(
     let s = (size as f64 - 2.0 * margin) / span;
     let w = ((hi.0 - lo.0) * s + 2.0 * margin).ceil() as usize;
     let h = ((hi.1 - lo.1) * s + 2.0 * margin).ceil() as usize;
-    let screen = |p: (f64, f64, f64)| ((p.0 - lo.0) * s + margin, (hi.1 - p.1) * s + margin, p.2);
+    let screen = move |p: (f64, f64, f64)| ((p.0 - lo.0) * s + margin, (hi.1 - p.1) * s + margin, p.2);
+    // depths that differ by less than rounding in the scene's own size are the same depth: a
+    // face flush with another (a PEM head in its sheet) keeps whichever was drawn first
+    let same = 1e-9 * (span + (zhi - zlo).abs() + zhi.abs().max(zlo.abs()));
     let mut px = vec![BG; w * h];
-    let mut depth = vec![f64::NEG_INFINITY; w * h];
+    let mut near = vec![
+        Near {
+            z: f64::NEG_INFINITY,
+            face: NO_FACE,
+            dz: (0.0, 0.0),
+        };
+        w * h
+    ];
     let light = (e + v * 0.6 + u * 0.3).normalize().ok_or("light")?.get();
     // vertex normals averaged over one face's triangles only, so curved faces shade smoothly and edges stay sharp
     let mut smooth: std::collections::HashMap<(u32, u32), Vec3> = std::collections::HashMap::new();
@@ -104,12 +157,17 @@ pub fn render(
         if n.dot(e) <= 0.0 {
             continue;
         }
-        let ns = t.map(|i| smooth[&(i, mesh.face_of[k])].normalize().map_or(n, |m| m.get()));
+        let face = mesh.face_of[k];
+        let ns = t.map(|i| smooth[&(i, face)].normalize().map_or(n, |m| m.get()));
         let [a, b, c] = t.map(|i| screen(pts[i as usize]));
         let area = (b.0 - a.0) * (c.1 - a.1) - (b.1 - a.1) * (c.0 - a.0);
         if area.abs() < 1e-12 {
             continue;
         }
+        let dz = (
+            ((b.2 - a.2) * (c.1 - a.1) - (c.2 - a.2) * (b.1 - a.1)) / area,
+            ((c.2 - a.2) * (b.0 - a.0) - (b.2 - a.2) * (c.0 - a.0)) / area,
+        );
         let x0 = a.0.min(b.0).min(c.0).floor().max(0.0) as usize;
         let x1 = (a.0.max(b.0).max(c.0).ceil() as usize).min(w - 1);
         let y0 = a.1.min(b.1).min(c.1).floor().max(0.0) as usize;
@@ -125,8 +183,8 @@ pub fn render(
                 }
                 let z = w0 * a.2 + w1 * b.2 + w2 * c.2;
                 let k = y * w + x;
-                if z > depth[k] {
-                    depth[k] = z;
+                if z > near[k].z + same {
+                    near[k] = Near { z, face, dz };
                     let m = ns[0] * w0 + ns[1] * w1 + ns[2] * w2;
                     let l = m.normalize().map_or(n, |m| m.get()).dot(light).max(0.0);
                     px[k] = FIRST_SHADE + ((0.15 + 0.85 * l) * (SHADES - 1) as f64).round() as u8;
@@ -134,17 +192,35 @@ pub fn render(
             }
         }
     }
-    let eps = span * 2e-3;
-    let visible = |x: f64, y: f64, z: f64| {
+    // A point at (x, y, z) on screen shows if nothing nearer covers the pixel it lands on: the
+    // surface there, its plane followed to the point, is not in front of it. The surface is
+    // exact (an f64 z-buffer, no bias), so a sheet 0.1 mm thick hides what is behind it at any
+    // scale. A point of an edge also shows where one of its own faces is the surface on a pixel
+    // next to it, within a pixel of depth: an edge lies on the boundary of its faces, where pixel
+    // centres fall either side of it, and a curved face's facets stray from the edge.
+    let pixel = 1.0 / s;
+    let plane_at = |k: usize, x: f64, y: f64| {
+        let n = &near[k];
+        let (cx, cy) = ((k % w) as f64 + 0.5, (k / w) as f64 + 0.5);
+        n.z + n.dz.0 * (x - cx) + n.dz.1 * (y - cy)
+    };
+    let shows = |x: f64, y: f64, z: f64, own: &[u32], reach: f64| {
+        if x < 0.0 || y < 0.0 || x >= w as f64 || y >= h as f64 {
+            return false;
+        }
         let (xi, yi) = (x as isize, y as isize);
+        let k = yi as usize * w + xi as usize;
+        if near[k].face == NO_FACE || z >= plane_at(k, x, y) - same {
+            return true;
+        }
         (-1..=1).any(|dy| {
             (-1..=1).any(|dx| {
                 let (xx, yy) = (xi + dx, yi + dy);
-                xx >= 0
-                    && yy >= 0
-                    && (xx as usize) < w
-                    && (yy as usize) < h
-                    && z >= depth[yy as usize * w + xx as usize] - eps
+                if xx < 0 || yy < 0 || xx as usize >= w || yy as usize >= h {
+                    return false;
+                }
+                let k = yy as usize * w + xx as usize;
+                own.contains(&near[k].face) && z >= plane_at(k, x, y) - reach
             })
         })
     };
@@ -168,6 +244,12 @@ pub fn render(
         }
     }
     for ed in body.edge_ids() {
+        let own: Vec<u32> = body
+            .edge(ed)
+            .coedges
+            .iter()
+            .map(|&c| body.coedge_face(c).0)
+            .collect();
         let p: Vec<_> = body
             // a helix or blend edge can wind round many times
             .edge_points(
@@ -194,7 +276,7 @@ pub fn render(
                     a.1 + (b.1 - a.1) * t,
                     a.2 + (b.2 - a.2) * t,
                 );
-                if x >= 0.0 && y >= 0.0 && (x as usize) < w && (y as usize) < h && visible(x, y, z) {
+                if shows(x, y, z, &own, pixel) {
                     px[y as usize * w + x as usize] = INK;
                 }
             }
@@ -203,7 +285,7 @@ pub fn render(
     let mut boxes: Vec<(usize, usize, usize, usize)> = Vec::new();
     for (text, p) in labels {
         let (x, y, z) = screen(proj(*p));
-        if !visible(x, y, z) {
+        if !shows(x, y, z, &[], 0.0) && !shows(x, y, z + 2.0 * pixel, &[], 0.0) {
             continue;
         }
         let colour = LABEL;
@@ -261,5 +343,11 @@ pub fn render(
         let c = |lo: f64, hi: f64| (lo + (hi - lo) * t).round() as u8;
         palette.push([c(40.0, 205.0), c(60.0, 220.0), c(90.0, 240.0)]);
     }
-    Ok(crate::png::encode(w, h, &palette, &px))
+    Ok(Picture {
+        w,
+        h,
+        px,
+        palette,
+        to_px: Box::new(move |p| screen(proj(p))),
+    })
 }
