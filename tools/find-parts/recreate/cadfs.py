@@ -57,16 +57,19 @@ CARRY_COS = 0.9999619230641713
 
 
 def carries_on(e, k, g, j, others=()):
-    """Whether edge g at its end j carries on from edge e at its end k (the same vertex) within half a degree,
-    every other edge there, (edge, its end) in `others`, having its faces meet within half a degree as well.
+    """Whether edge g at its end j carries on from edge e at its end k (the same vertex): their tangents parallel
+    (within 1e-4, either way, as the importer always took them), or g within half a degree of straight on where
+    every other edge there, (edge, its end) in `others`, has its faces meet within half a degree as well.
     An edge's tangents run along the edge; out of its end they are reversed."""
     a, b = e["t"][k], g["t"][j]
     if not a or not b:
         return False
-    if any(o["h"] not in (e["h"], g["h"]) and (o.get("d") or [None, None])[i] is not None and o["d"][i] < CARRY_COS for o, i in others):
-        return False
+    if math.sqrt(dot(cross(a, b), cross(a, b))) < 1e-4:  # parallel either way, as before: what CATIA chains
+        return True
     s = (1.0 if k == 0 else -1.0) * (1.0 if j == 0 else -1.0)
-    return -s * dot(a, b) >= CARRY_COS * math.sqrt(dot(a, a) * dot(b, b))
+    c = -s * dot(a, b) / math.sqrt(dot(a, a) * dot(b, b))
+    level = all(o["h"] in (e["h"], g["h"]) or (o.get("d") or [None, None])[i] is None or o["d"][i] >= CARRY_COS for o, i in others)
+    return c >= CARRY_COS and level
 
 
 def cross(a, b):
