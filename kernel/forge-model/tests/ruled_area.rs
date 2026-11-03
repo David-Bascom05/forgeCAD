@@ -1,5 +1,5 @@
-//! A ruled loft between two circles, one turned: a hyperboloid, whose wall's area is a one-dimensional
-//! integral. The reported error has to cover what the rule along the rulings leaves out.
+//! A ruled loft between two circles, one turned: a hyperboloid, whose wall's area along its rulings is
+//! no polynomial. The area is right to rounding, and the reported error covers it closely.
 use forge_math::{Frame, Point2, Point3, Vec3, dmath};
 use forge_ops::{LoftGuides, LoftKind, Profile, ProfileLoop, Segment, loft};
 use forge_topo::mass::mass;
@@ -40,18 +40,34 @@ fn a_hyperboloids_area_is_inside_its_reported_error() {
     )
     .unwrap();
     let m = mass(&body).unwrap();
-    let (s, c) = dmath::sin_cos(turn);
-    let rho = |t: f64| (((1.0 - t) * a + t * b * c).powi(2) + (t * b * s).powi(2)).sqrt();
-    let n = 200_000;
-    let d = 1.0 / n as f64;
-    let wall: f64 = (0..n)
-        .map(|i| {
-            let t = (i as f64 + 0.5) * d;
-            let slope = (rho(t + 1e-6) - rho(t - 1e-6)) / 2e-6;
-            dmath::TAU * rho(t) * (slope * slope + h * h).sqrt() * d
-        })
-        .sum();
-    let want = wall + dmath::PI * (a * a + b * b);
-    let (got, err) = (m.area, m.err[1]);
-    assert!((got - want).abs() <= err.max(1e-6), "{got} {want}, {err}");
+    // 40-digit quadrature of the wall plus the caps: research/mass-props/ruled-area/reference.py
+    let want = 11368.879628378854;
+    let (miss, err) = ((m.area - want).abs(), m.err[1]);
+    assert!(
+        miss <= 1e-14 * want && miss <= err && err <= 1e-12 * want,
+        "{miss} {err}"
+    );
+}
+
+/// A square lofted to a smaller turned square: four hyperbolic paraboloids.
+#[test]
+fn a_twisted_squares_area_is_inside_its_reported_error() {
+    let square = |z: f64, w: f64, turn: f64| Profile {
+        loops: vec![Profile::rectangle(Point2::new(-w / 2.0, -w / 2.0), w, w, 0)],
+        ..ring(z, 1.0, turn)
+    };
+    let body = loft(
+        &[square(0.0, 20.0, 0.0), square(15.0, 12.0, 0.6)],
+        LoftKind::Ruled,
+        &LoftGuides::None,
+        1,
+    )
+    .unwrap();
+    let m = mass(&body).unwrap();
+    let want = 1524.6209890747455;
+    let (miss, err) = ((m.area - want).abs(), m.err[1]);
+    assert!(
+        miss <= 1e-14 * want && miss <= err && err <= 1e-12 * want,
+        "{miss} {err}"
+    );
 }

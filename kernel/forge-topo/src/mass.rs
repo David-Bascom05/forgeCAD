@@ -7,7 +7,8 @@
 //!
 //! G is exact for the analytic surfaces: F is a polynomial (Gauss-Legendre) or a trigonometric
 //! polynomial of known degree along a, fitted once per face; so it is along v on a surface
-//! straight in v (ruled, a screw's straight section). A swept surface (pipe, variable blend)
+//! straight in v (ruled, a screw's straight section), where the area's integrand is the root of a
+//! quadratic the rule's points give, integrated to a bound. A swept surface (pipe, variable blend)
 //! works out its section once per node and integrates the column along v by Clenshaw-Curtis.
 //! Other procedural surfaces fit F by Chebyshev tiles, laid out by lines across the face first,
 //! where it is smooth enough, else integrate by adaptive Gauss-Kronrod. A corner patch's face
@@ -1841,6 +1842,64 @@ const GL3: [(f64, f64); 3] = [
     (0.774_596_669_241_483_4, 5.0 / 9.0),
 ];
 
+/// The integral over [-1, 1] of the root of the quadratic through `q` at Gauss's 3 nodes, and a
+/// bound on its error; None where it has no singularity off the line (|n| constant or linear along
+/// it), so the 3 nodes' rule is exact.
+fn root_line(q: [f64; 3]) -> Option<(f64, f64)> {
+    let s = GL3[2].0;
+    let (c0, c1, c2) = (
+        q[1],
+        (q[2] - q[0]) / (2.0 * s),
+        (q[2] + q[0] - 2.0 * q[1]) / (2.0 * s * s),
+    );
+    if !(c2 > 1e-14 * (c0 + c1.abs()) && c2.is_finite()) {
+        return None;
+    }
+    // c2 ((z - re)^2 + im^2)
+    let (re, im) = (
+        -c1 / (2.0 * c2),
+        (4.0 * c0 * c2 - c1 * c1).max(0.0).sqrt() / (2.0 * c2),
+    );
+    if im == 0.0 && re.abs() >= 1.0 {
+        return None;
+    }
+    Some(root_piece(re, im, c2, (-1.0, 1.0), 24))
+}
+
+/// The integral of sqrt(c2 ((z - re)^2 + im^2)) over [l, r] and a bound on its error: Gauss on 7
+/// points, halved until the bound is below rounding. The integrand is analytic inside the Bernstein
+/// ellipse through re +- i im, where it is at most M, so the error is at most
+/// 64 M / (15 (rho^2 - 1) rho^12) of the half width (Trefethen, SIAM Review 50, 2008, Theorem 4.5),
+/// and never more than the integral and the sum can be apart. research/mass-props/ruled-area/.
+fn root_piece(re: f64, im: f64, c2: f64, (l, r): (f64, f64), depth: u32) -> (f64, f64) {
+    let (m, h) = (0.5 * (l + r), 0.5 * (r - l));
+    let f = |z: f64| (c2 * ((z - re) * (z - re) + im * im)).sqrt();
+    let mut v = WG[3] * f(m);
+    for k in 0..3 {
+        let x = h * XGK[2 * k + 1];
+        v += WG[k] * (f(m - x) + f(m + x));
+    }
+    v *= h;
+    // the singularity seen from [-1, 1], and the ellipse through it
+    let (x, y) = ((re - m) / h, im / h);
+    let a = 0.5 * (((x - 1.0) * (x - 1.0) + y * y).sqrt() + ((x + 1.0) * (x + 1.0) + y * y).sqrt());
+    let rho = a + (a * a - 1.0).max(0.0).sqrt();
+    let (r2, k) = (rho * rho, c2.sqrt() * h);
+    let most = 4.0 * h * k * (x.abs() + 1.0 + y);
+    let bound = if r2 - 1.0 <= 1e-12 {
+        most
+    } else {
+        let r6 = r2 * r2 * r2;
+        (h * 64.0 * k * (a + (x * x + y * y).sqrt()) / (15.0 * (r2 - 1.0) * r6 * r6)).min(most)
+    };
+    if bound <= 1e-15 * v || depth == 0 {
+        return (v, bound);
+    }
+    let (v0, e0) = root_piece(re, im, c2, (l, m), depth - 1);
+    let (v1, e1) = root_piece(re, im, c2, (m, r), depth - 1);
+    (v0 + v1, e0 + e1)
+}
+
 const XGK: [f64; 8] = [
     0.991_455_371_120_812_6,
     0.949_107_912_342_758_5,
@@ -1931,16 +1990,21 @@ impl Ctx<'_> {
         let x = a - self.a0;
         match self.inner {
             Inner::Poly(rule) => {
-                for &(t, w) in rule {
-                    axpy(&mut g, 0.5 * x * w, &self.f(self.a0 + 0.5 * x * (1.0 + t), b));
+                let mut q = [0.0; 3];
+                for (k, &(t, w)) in rule.iter().enumerate() {
+                    let f = self.f(self.a0 + 0.5 * x * (1.0 + t), b);
+                    axpy(&mut g, 0.5 * x * w, &f);
+                    q[k.min(2)] = f[10] * f[10];
                 }
                 let mut e = [0.0; NF];
-                // a rule's degree holds for the moments; on a twisted ruled wall the area's square root
-                // is no polynomial, and the rule below this one says how far off it may be
-                if matches!(self.s, Surface::Procedural(_)) {
-                    let at = |t: f64| self.f(self.a0 + 0.5 * x * (1.0 + t), b)[10];
-                    let (t, _) = GL2[1];
-                    e[10] = (g[10] - 0.5 * x * (at(-t) + at(t))).abs();
+                // a rule's degree holds for the moments; along a straight line of a twisted wall the
+                // area's |n| is the root of a quadratic, no polynomial, which its 3 values give
+                if matches!(self.s, Surface::Procedural(_))
+                    && rule.len() == 3
+                    && let Some((v, err)) = root_line(q)
+                {
+                    g[10] = 0.5 * x * v;
+                    e[10] = 0.5 * x.abs() * err + 1e-15 * g[10].abs();
                 }
                 (g, [0.0; NF], e)
             }

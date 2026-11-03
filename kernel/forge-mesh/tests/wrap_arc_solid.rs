@@ -104,26 +104,14 @@ fn a_wrapped_disc_is_valid_and_its_mass_exact() {
     let problems = check(&body);
     assert!(problems.is_empty(), "{problems:?}");
     let m = mass(&body).expect("mass");
-    println!(
-        "volume {:e} area {:e} err {:?}",
-        m.volume - VOLUME,
-        m.area - AREA,
+    let (dv, da) = ((m.volume - VOLUME).abs(), (m.area - AREA).abs());
+    assert!(dv <= 1e-12 * VOLUME && dv <= m.err[0], "{dv} {:?}", m.err);
+    // the area right to rounding, and its bound honest and close (research/mass-props/ruled-area/)
+    assert!(
+        da <= 1e-14 * AREA && da <= m.err[1] && m.err[1] <= 1e-12 * AREA,
+        "{da} {:?}",
         m.err
     );
-    assert!(
-        (m.volume - VOLUME).abs() <= 1e-12 * VOLUME,
-        "{} {}",
-        m.volume,
-        VOLUME
-    );
-    assert!(
-        (m.volume - VOLUME).abs() <= m.err[0],
-        "{} {:?}",
-        m.volume - VOLUME,
-        m.err
-    );
-    assert!((m.area - AREA).abs() <= 1e-10 * AREA, "{} {}", m.area, AREA);
-    assert!((m.area - AREA).abs() <= m.err[1], "{} {:?}", m.area - AREA, m.err);
 }
 
 #[test]
