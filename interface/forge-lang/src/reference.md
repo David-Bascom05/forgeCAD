@@ -527,15 +527,18 @@ unfold(S, on: PLANE)
 RELIEF: `rect(W, D)`, `obround(W, D)` (W wide, D deep from the mold line, past the tangent line:
 else ReliefTooShallow), `tear` (a slit the shop's kerf wide), `no_relief` (where one is needed,
 NeedsRelief, with a SetArg fix for each kind). Sizes left out (`rect()`) are the default's. The
-default: the shop stock's `relief`, `relief_width`, `relief_depth` and the shop's `kerf`; with no
-shop, a rect t wide and t + R + 0.5 deep, kerf 0.2. An automatic relief is deepened past the
-tangent line where the formula falls short. A relief is a notch beside the bend's end, open past
-the edge.
+default: the shop stock's relief rule and the shop's `kerf`; with no shop, the rules of thumb
+below. An automatic relief is deepened to the tangent line where the formula falls short. A
+relief is a notch beside the bend's end, open past the edge; one ending on the tangent line is
+built. Its depth is from the rule's reference (`from`).
 
-CORNER: `circular_relief(R)`, `square_relief(H)` (a circle of radius R or a square of half side H
-centred on the corner, cut through base, bends and flanges; size left out: just clear of both
-bends), `open_corner(GAP)` (a square that much larger), `closed_corner`, `overlap_corner(GAP)`
-(refused: CornerUnbuilt).
+CORNER: `circular_relief(R, placement: "intersection"|"tangent")`, `square_relief(H, placement:)`
+(a circle of radius R or a square of half side H centred on the bend lines' crossing or the
+tangent lines' crossing, cut through base, bends and flanges; size left out: just clear of both
+bends' zones), `open_corner(GAP)` (a square at the corner that much larger), `trim_to_bend` (the
+corner cut back to both tangent lines across both zones), `tear_corner` (a kerf-wide slit along
+the diagonal), `closed_corner`, `overlap_corner(GAP)` (refused: CornerUnbuilt). Cuts that part the
+sheet are SheetSplit.
 
 EDGE: `B.edge(ENTITY)` for the base B (a straight line of its profile), `F.tip`, `F.start_side`,
 `F.end_side` for a flange F (the far edge; the sides at the start and the end of the edge it
@@ -562,8 +565,21 @@ ktable([(R_OVER_T, K), ..])       K by r/t, linear between rows (Ratios, increas
 bend_table([(R, A, BA), ..])      measured allowances for each radius, linear in angle
 per_t(F, plus: L = 0)             a length F t + L (F a Ratio)
 stock(t: T, bend: RULE, radii: [R, ..], min_flange: S, hole_to_bend: S, hole_to_edge: S,
-      min_slot: S, min_hole: S, relief: "rect"|"obround"|"tear", relief_width: S, relief_depth: S)
+      min_slot: S, min_hole: S, relief: RELIEF_RULE)
       S: per_t(F, per_r: G, plus: L) = F t + G R + L; left out: no limit
+relief_rule(shape: "rect"|"obround"|"tear", width: Z, depth: Z,
+            from: "bend_line"|"up_to_bend"|"tangent_to_bend", min_remnant: Z, extend: false,
+            corner: "round"|"square"|"tear"|"trim_to_bend"|"closed",
+            corner_placement: "intersection"|"tangent", corner_size: Z,
+            corner3: "none"|"intersection"|"full_round"|"round", corner3_radius: Z)
+      Z: a Length (sized) or per_t(..) (scaled). Left out, the rules of thumb (not standards; no
+      ISO or DIN standard fixes relief geometry): rect, width t, depth t + R + 0.5 from the bend
+      line (SendCutSend's guide; Xometry and Protocase at least t + R and t), round corners at the
+      bend lines' crossing just clear of both bends, no minimum remnant, no three-bend corner;
+      kerf 0.2 (a stand-in). The bend line is taken as the mold line, so K moves only the flat.
+      extend: true is refused (ReliefExtendUnbuilt). min_remnant: wall left beyond a relief under
+      it is taken (the relief widened past the edge). A relief asked for smaller than the rule's
+      is the violation ReliefUndersized, with SetArg fixes to the rule's size.
 shop([STOCK, ..], kerf: K)
 ```
 

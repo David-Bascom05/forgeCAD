@@ -45,6 +45,7 @@ pub const BUILTINS: &[&str] = &[
     "corner_relief",
     "hardware",
     "pem",
+    "relief_rule",
 ];
 
 /// Sheet constants: the relief kinds and corner treatments that take no size.
@@ -62,6 +63,12 @@ pub fn constant(name: &str) -> Option<Value> {
         }))),
         "closed_corner" => sv(SheetVal::Corner(Rc::new(CornerV {
             kind: fs::CornerKind::Closed,
+        }))),
+        "tear_corner" => sv(SheetVal::Corner(Rc::new(CornerV {
+            kind: fs::CornerKind::Tear,
+        }))),
+        "trim_to_bend" => sv(SheetVal::Corner(Rc::new(CornerV {
+            kind: fs::CornerKind::TrimToBend,
         }))),
         _ => return None,
     })
@@ -91,6 +98,8 @@ pub enum SheetVal {
     Relief(Rc<ReliefV>),
     /// A hardware catalogue row.
     Hardware(Rc<fs::Hardware>),
+    /// A shop's relief rule (bend reliefs, corners).
+    Rule2(Rc<fs::ReliefRule>),
     /// A corner treatment: `circular_relief(r)`, `square_relief(h)`, `open_corner(gap)`,
     /// `closed_corner`, `overlap_corner(gap)`.
     Corner(Rc<CornerV>),
@@ -187,6 +196,7 @@ impl SheetVal {
             SheetVal::Relief(_) => Ty::Relief,
             SheetVal::Corner(_) => Ty::CornerKind,
             SheetVal::Hardware(_) => Ty::Hardware,
+            SheetVal::Rule2(_) => Ty::ReliefRule,
         }
     }
 
@@ -349,7 +359,7 @@ struct FixCtx {
     r: Num,
     k: Option<Num>,
     /// What an automatic relief would be.
-    relief: fs::ReliefDefault,
+    relief: fs::ReliefRule,
 }
 
 impl FixCtx {
@@ -358,10 +368,11 @@ impl FixCtx {
     fn relief_texts(&self, f: &FlangeDims) -> Vec<String> {
         let t = self.t.v;
         let fm = crate::values::fmt;
-        let w = self.relief.width.at(t, f.r);
+        let w = self.relief.bend.width.at(t, f.r);
+        // the rule's depth (from the mold line), at least to the tangent line
         let d = |w: f64, round: bool| {
             let need = f.setback + if round { 0.5 * w } else { 0.0 };
-            self.relief.depth.at(t, f.r).max(need + t)
+            self.relief.bend.depth.at(t, f.r).max(need)
         };
         vec![
             format!("rect({}, {})", fm(w), fm(d(w, false))),
@@ -639,6 +650,7 @@ impl SheetNote {
                 V::HardwareNearEdge { .. } => "HardwareNearEdge",
                 V::SheetTooHard { .. } => "SheetTooHard",
                 V::HardnessUnknown { .. } => "HardnessUnknown",
+                V::ReliefUndersized { .. } => "ReliefUndersized",
             },
         }
     }
@@ -822,6 +834,22 @@ impl SheetNote {
                 V::HardnessUnknown { cut, limit, .. } => {
                     v.extend([("cut", n.cut(cut).into()), ("limit", f(limit))])
                 }
+                V::ReliefUndersized {
+                    joint,
+                    end,
+                    width,
+                    depth,
+                    min_width,
+                    min_depth,
+                    ..
+                } => v.extend([
+                    ("joint", n.joint(joint).into()),
+                    ("end", end_name(end).into()),
+                    ("width", f(width)),
+                    ("depth", f(depth)),
+                    ("min_width", f(min_width)),
+                    ("min_depth", f(min_depth)),
+                ]),
             },
         }
         v
@@ -940,6 +968,21 @@ impl SheetNote {
                 "the hardware needs sheet no harder than HRB {}; the stock states no hardness",
                 fm(*limit)
             ),
+            Note::Violation(V::ReliefUndersized {
+                joint,
+                width,
+                depth,
+                min_width,
+                min_depth,
+                ..
+            }) => format!(
+                "the relief at {} is {} wide and {} deep; the shop's rule makes them {} by {}",
+                n.joint(*joint),
+                fm(*width),
+                fm(*depth),
+                fm(*min_width),
+                fm(*min_depth)
+            ),
         }
     }
 
@@ -1008,6 +1051,8 @@ fn kernel_kind(e: &SheetError) -> &'static str {
         CornerUnbuilt { .. } => "CornerUnbuilt",
         FlatOverlap { .. } => "FlatOverlap",
         FlatOverlapUndecided { .. } => "FlatOverlapUndecided",
+        ReliefExtendUnbuilt { .. } => "ReliefExtendUnbuilt",
+        SheetSplit { .. } => "SheetSplit",
     }
 }
 
@@ -1076,6 +1121,8 @@ fn kernel_text(e: &SheetError) -> String {
             "two strips of the flat come within {}: overlap or touch cannot be told",
             fm(*gap)
         ),
+        ReliefExtendUnbuilt { .. } => "the relief rule asks reliefs to extend for flat collisions: not built yet".into(),
+        SheetSplit { .. } => "the cuts part the sheet in two".into(),
     }
 }
 
@@ -1372,6 +1419,10 @@ fn kernel_data(e: &SheetError, n: &Names) -> Vec<(&'static str, Json)> {
             ("gap", f(*gap)),
             ("limit", f(*limit)),
         ],
+        ReliefExtendUnbuilt { joint, end, .. } => {
+            vec![("joint", n.joint(*joint).into()), ("end", end_name(*end).into())]
+        }
+        SheetSplit { a, b, .. } => vec![("a", n.strip(*a)), ("b", n.strip(*b))],
     }
 }
 
@@ -1454,6 +1505,24 @@ fn joint_of(e: &SheetError) -> Option<JointId> {
 }
 
 fn violation_fixes(st: &FixCtx, v: &fs::Violation) -> Vec<Op> {
+    // a relief smaller than the rule's: the rule's own size, of each kind
+    if let fs::Violation::ReliefUndersized { joint, .. } = *v {
+        return st
+            .flanges
+            .iter()
+            .find(|f| f.joint == joint)
+            .map(|f| {
+                st.relief_texts(f)
+                    .into_iter()
+                    .map(|text| Op::SetArg {
+                        id: f.id.clone(),
+                        arg: "relief".into(),
+                        text,
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+    }
     let out = match *v {
         fs::Violation::ThicknessNotStocked { nearest, .. } if nearest.is_finite() => set(&st.t, nearest),
         fs::Violation::RadiusNotTooled { joint, nearest, .. } if nearest.is_finite() => {
@@ -1706,12 +1775,17 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
             }))))
         }
         "circular_relief" | "square_relief" => {
-            let a = Args::bind(ev, name, &["size"], args, span)?;
+            let a = Args::bind(ev, name, &["size", "placement"], args, span)?;
             let size = a.num("size", LEN)?.map(|n| n.v);
+            let placement =
+                match word(&a, "placement", &["intersection", "tangent"])?.unwrap_or("intersection") {
+                    "tangent" => fs::Placement::Tangent,
+                    _ => fs::Placement::Intersection,
+                };
             let kind = if name == "circular_relief" {
-                fs::CornerKind::Circular { size }
+                fs::CornerKind::Circular { size, placement }
             } else {
-                fs::CornerKind::Square { size }
+                fs::CornerKind::Square { size, placement }
             };
             Ok(sv(SheetVal::Corner(Rc::new(CornerV { kind }))))
         }
@@ -1782,6 +1856,7 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
             }))))
         }
         "pem" => pem(ev, args, span),
+        "relief_rule" => relief_rule(ev, args, span),
         _ => unreachable!("only sheet built-ins"),
     }
 }
@@ -1859,8 +1934,6 @@ fn stock(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
             "min_hole",
             "hardness",
             "relief",
-            "relief_width",
-            "relief_depth",
         ],
         args,
         span,
@@ -1894,13 +1967,23 @@ fn stock(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         hole_to_bend: scaled_of(&a, "hole_to_bend")?,
         hole_to_edge: scaled_of(&a, "hole_to_edge")?,
         min_slot: scaled_of(&a, "min_slot")?,
-        relief_width: scaled_of(&a, "relief_width")?,
-        relief_depth: scaled_of(&a, "relief_depth")?,
         min_hole: scaled_of(&a, "min_hole")?,
-        relief: match word(&a, "relief", &["rect", "obround", "tear"])?.unwrap_or("rect") {
-            "obround" => fs::ReliefKind::Obround,
-            "tear" => fs::ReliefKind::Tear,
-            _ => fs::ReliefKind::Rect,
+        relief: match a.opt("relief") {
+            None => fs::ReliefRule::default(),
+            Some(Value::Sheet(v)) if matches!(*v, SheetVal::Rule2(_)) => {
+                let SheetVal::Rule2(r) = &*v else {
+                    unreachable!("matched")
+                };
+                **r
+            }
+            Some(o) => {
+                return Err(wrong(
+                    a.span("relief"),
+                    "relief: a relief_rule(..)",
+                    Ty::ReliefRule,
+                    &o,
+                ));
+            }
         },
         hardness: a.num("hardness", RATIO)?.map(|n| n.v),
     };
@@ -2063,7 +2146,7 @@ fn base(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     // reliefs from the shop's stock of this thickness, else the stand-in default
     let relief = shop
         .as_ref()
-        .and_then(|s| s.shop.relief_default(t.v))
+        .and_then(|s| s.shop.relief_rule(t.v))
         .unwrap_or_default();
     let corner = match a.opt("corner") {
         None => None,
@@ -2084,10 +2167,8 @@ fn base(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     };
     let sheet = match fs::Sheet::face(fs::FeatureId(hid), gauge, frame, &profile.loops) {
         Ok((mut s, _)) => {
-            s.relief_default = relief;
-            if let Some(c) = corner {
-                s.corner_default = c;
-            }
+            s.rule = relief;
+            s.corner_default = corner;
             s
         }
         Err(error) => {
@@ -2154,7 +2235,8 @@ fn corner(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     st.sheet.set_corner(ja, jb, kind);
     st.corners.push((ja, jb, id.clone(), span));
     let mut dims = vec![];
-    if let fs::CornerKind::Circular { size: Some(_) } | fs::CornerKind::Square { size: Some(_) } = kind
+    if let fs::CornerKind::Circular { size: Some(_), .. } | fs::CornerKind::Square { size: Some(_), .. } =
+        kind
         && let Some(n) = a.num("kind", LEN).ok().flatten()
     {
         dims.push(dim("size", &n));
@@ -2278,6 +2360,103 @@ fn pem(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     });
     push_sheet_step(ev, si, &id, "pem", span, vec![])?;
     Ok(op_value(si, &id, OpKind::Cut { cut }))
+}
+
+/// A size: a Length (sized, mm) or per_t(..) (scaled).
+fn size_of(a: &Args, k: &'static str) -> R<Option<fs::Scaled>> {
+    match a.opt(k) {
+        None => Ok(None),
+        Some(Value::Num(n)) => {
+            let n = num_of(Value::Num(n), LEN, a.span(k), k)?;
+            Ok(Some(fs::Scaled {
+                per_t: 0.0,
+                per_r: 0.0,
+                plus: n.v,
+            }))
+        }
+        Some(_) => scaled_of(a, k).map(Some),
+    }
+}
+
+/// `relief_rule(..)`: a shop's relief rule, every part as data, the rest the rules of thumb.
+fn relief_rule(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
+    let a = Args::bind(
+        ev,
+        "relief_rule",
+        &[
+            "shape",
+            "width",
+            "depth",
+            "from",
+            "min_remnant",
+            "extend",
+            "corner",
+            "corner_placement",
+            "corner_size",
+            "corner3",
+            "corner3_radius",
+        ],
+        args,
+        span,
+    )?;
+    let mut r = fs::ReliefRule::default();
+    if let Some(w) = word(&a, "shape", &["rect", "obround", "tear"])? {
+        r.bend.kind = match w {
+            "obround" => fs::ReliefKind::Obround,
+            "tear" => fs::ReliefKind::Tear,
+            _ => fs::ReliefKind::Rect,
+        };
+    }
+    if let Some(x) = size_of(&a, "width")? {
+        r.bend.width = x;
+    }
+    if let Some(x) = size_of(&a, "depth")? {
+        r.bend.depth = x;
+    }
+    if let Some(w) = word(&a, "from", &["bend_line", "up_to_bend", "tangent_to_bend"])? {
+        r.bend.reference = match w {
+            "up_to_bend" => fs::DepthRef::UpToBend,
+            "tangent_to_bend" => fs::DepthRef::TangentToBend,
+            _ => fs::DepthRef::BendLine,
+        };
+    }
+    if let Some(x) = size_of(&a, "min_remnant")? {
+        r.bend.min_remnant = x;
+    }
+    r.bend.extend = a.flag("extend")?;
+    if let Some(w) = word(
+        &a,
+        "corner",
+        &["round", "square", "tear", "trim_to_bend", "closed"],
+    )? {
+        r.corner.shape = match w {
+            "square" => fs::CornerShape::Square,
+            "tear" => fs::CornerShape::Tear,
+            "trim_to_bend" => fs::CornerShape::TrimToBend,
+            "closed" => fs::CornerShape::Closed,
+            _ => fs::CornerShape::Round,
+        };
+    }
+    if let Some(w) = word(&a, "corner_placement", &["intersection", "tangent"])? {
+        r.corner.placement = if w == "tangent" {
+            fs::Placement::Tangent
+        } else {
+            fs::Placement::Intersection
+        };
+    }
+    r.corner.size = size_of(&a, "corner_size")?;
+    if let Some(w) = word(&a, "corner3", &["none", "intersection", "full_round", "round"])? {
+        r.corner3.shape = match w {
+            "intersection" => fs::Corner3Shape::Intersection,
+            "full_round" => fs::Corner3Shape::FullRound,
+            "round" => fs::Corner3Shape::Round,
+            _ => fs::Corner3Shape::None,
+        };
+    }
+    if let Some(x) = size_of(&a, "corner3_radius")? {
+        r.corner3.radius = x;
+    }
+    Ok(sv(SheetVal::Rule2(Rc::new(r))))
 }
 
 fn dim(what: &'static str, n: &Num) -> Dimension {
@@ -2404,7 +2583,7 @@ fn flange(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     st.joints.push((joint, id.clone(), span));
     if let Some(r) = &relief {
         let t = st.sheet.gauge.thickness;
-        let d = st.sheet.relief_default;
+        let d = st.sheet.rule.bend;
         let resolved = match r.kind {
             None => fs::Relief::None,
             Some(kind) => {
@@ -2415,7 +2594,7 @@ fn flange(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
                     } else {
                         0.0
                     };
-                let depth = r.depth.as_ref().map_or(d.depth.at(t, rv).max(need + t), |n| n.v);
+                let depth = r.depth.as_ref().map_or(d.depth.at(t, rv).max(need), |n| n.v);
                 fs::Relief::Cut { kind, width, depth }
             }
         };
@@ -3128,6 +3307,11 @@ pub fn finish(ev: &mut Eval) {
                 | fs::Violation::SheetTooHard { cut, .. }
                 | fs::Violation::HardnessUnknown { cut, .. } => cut_owner(cut),
                 fs::Violation::ThicknessNotStocked { .. } => None,
+                fs::Violation::ReliefUndersized { joint, .. } => st
+                    .joints
+                    .iter()
+                    .find(|j| j.0 == joint)
+                    .map(|j| (j.1.clone(), j.2)),
             }
             .unwrap_or((st.id.clone(), st.walls[0].2));
             let mut fixes = violation_fixes(&st.fix, &v);
@@ -3339,6 +3523,8 @@ impl SheetOut {
                                 fs::CornerKind::Open { .. } => "open",
                                 fs::CornerKind::Closed => "closed",
                                 fs::CornerKind::Overlap { .. } => "overlap",
+                                fs::CornerKind::Tear => "tear",
+                                fs::CornerKind::TrimToBend => "trim_to_bend",
                             };
                             Json::obj(vec![
                                 (

@@ -293,6 +293,7 @@ pub enum Ty {
     Relief,
     CornerKind,
     Hardware,
+    ReliefRule,
 }
 
 pub fn fmt(x: f64) -> String {
