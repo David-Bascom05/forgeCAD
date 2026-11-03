@@ -15,6 +15,7 @@ use forge_lang::error::{Error, Op, Warning};
 use forge_lang::eval::Value;
 use forge_lang::values::{Dim, Src};
 use forge_lang::{Measure, Options, Run, Timings};
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::time::Instant;
@@ -42,6 +43,8 @@ pub struct Built {
     pub sheets: Vec<SheetInfo>,
     /// The first build's renderer and scene: pipelines are dear, made here and never in a frame.
     pub view: Option<(Renderer, Scene)>,
+    /// What Forge names each face and edge, when the text changed since the last.
+    pub anchors: Option<Arc<AnchorView>>,
     /// The worker's time for it: the build, and the mesh.
     pub build_ms: f64,
     pub mesh_ms: f64,
@@ -66,6 +69,53 @@ impl Built {
             self.build_ms + self.mesh_ms
         ));
         s
+    }
+}
+
+/// Each face and edge of the part (in the mesh's entity order, which is the body's) as Forge
+/// names it, if anything does; the planes a sketch on one is drawn in; the sketches.
+#[derive(Clone, Debug, Default)]
+pub struct AnchorView {
+    pub faces: Vec<Option<String>>,
+    pub edges: Vec<Option<String>>,
+    /// How many faces each face anchor names.
+    pub sizes: HashMap<String, usize>,
+    pub planes: HashMap<String, forge_math::Frame>,
+    pub sketches: Vec<forge_lang::anchors::SketchRefs>,
+    /// Sheet edges a flange can stand on, with the part's edges (by index) each is.
+    pub sheet_edges: Vec<(String, Vec<usize>)>,
+}
+
+impl AnchorView {
+    fn of(a: &forge_lang::anchors::Anchors, body: Option<&forge_topo::Body>) -> AnchorView {
+        let Some(b) = body else {
+            return AnchorView {
+                sketches: a.sketches.clone(),
+                planes: a.planes.clone(),
+                ..AnchorView::default()
+            };
+        };
+        let edge_names: Vec<forge_topo::Name> = b.edge_ids().map(|e| b.edge(e).name).collect();
+        AnchorView {
+            faces: b.face_ids().map(|f| a.faces.get(&b.face(f).name).cloned()).collect(),
+            edges: edge_names.iter().map(|n| a.edges.get(n).cloned()).collect(),
+            sizes: a.sizes.clone(),
+            planes: a.planes.clone(),
+            sketches: a.sketches.clone(),
+            sheet_edges: a
+                .sheet_edges
+                .iter()
+                .map(|s| {
+                    let idx = edge_names
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, n)| s.names.contains(n))
+                        .map(|(k, _)| k)
+                        .collect();
+                    (s.text.clone(), idx)
+                })
+                .collect(),
+        }
     }
 }
 
@@ -266,6 +316,7 @@ fn mesh_whole(bodies: Receiver<Whole>, out: Sender<Msg>, waker: Arc<dyn Fn() + S
 /// the latest text it was given. A changed part goes to the screen first as the faces that changed
 /// (meshed once per face, as a drag's), then whole.
 fn work(
+    dir: Option<std::path::PathBuf>,
     jobs: Receiver<(u64, String)>,
     out: Sender<Msg>,
     mut gpu: Option<Gpu>,
@@ -274,6 +325,8 @@ fn work(
     let mut cache = Cache::default();
     let mut mesher = Mesher::default();
     let mut shown_ids: Option<Vec<String>> = None;
+    // the text the last anchors were found for: unchanged text, unchanged anchors
+    let mut anchored: Option<String> = None;
     let (to_mesh, bodies) = channel::<Whole>();
     {
         let (out, waker) = (out.clone(), waker.clone());
@@ -294,7 +347,17 @@ fn work(
             job = j;
         }
         let t = Instant::now();
-        let (run, c) = forge_lang::run(&job.1, Options::default(), std::mem::take(&mut cache));
+        let want = anchored.as_deref() != Some(job.1.as_str());
+        let opts = Options {
+            anchors: want,
+            dir: dir.clone(),
+            ..Options::default()
+        };
+        let (run, c) = forge_lang::run(&job.1, opts, std::mem::take(&mut cache));
+        let anchors = run.anchors.as_ref().map(|a| Arc::new(AnchorView::of(a, run.body.as_ref())));
+        if anchors.is_some() {
+            anchored = Some(job.1.clone());
+        }
         cache = c;
         let build_ms = t.elapsed().as_secs_f64() * 1e3;
         let t = Instant::now();
@@ -356,6 +419,7 @@ fn work(
             delta,
             sheets,
             view,
+            anchors,
             build_ms,
             mesh_ms,
         };
@@ -415,9 +479,13 @@ impl Session {
     ) -> Session {
         let (jobs, rx) = channel();
         let (tx, built) = channel();
+        // fonts and imported files are found beside the part
+        let dir = path
+            .as_deref()
+            .and_then(|p| std::path::Path::new(p).parent().map(|d| d.to_path_buf()));
         std::thread::Builder::new()
             .name("forge-fg".into())
-            .spawn(move || work(rx, tx, gpu, waker))
+            .spawn(move || work(dir, rx, tx, gpu, waker))
             .expect("a thread");
         let mut s = Session {
             path,
@@ -465,6 +533,10 @@ impl Session {
                     self.done = b.seq;
                     if b.delta.is_some() || b.mesh.is_some() {
                         self.changed = b.seq;
+                    }
+                    // the first build comes whole
+                    if b.mesh.is_some() {
+                        self.whole = b.seq;
                     }
                     self.timings = b.timings.clone();
                     (self.build_ms, self.mesh_ms) = (b.build_ms, b.mesh_ms);

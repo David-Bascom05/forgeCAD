@@ -97,6 +97,10 @@ pub enum FgAct {
     ExportDxf(String),
     /// Show the flat pattern, or the folded part.
     Flat(bool),
+    /// A tool's statement: applied, and the tool closed if it was.
+    Tool(Op),
+    /// What only an .fc part can do, asked of a Forge part: said, typed.
+    Refuse(super::fgtool::ToolError),
 }
 
 /// A sheet metal part: its id, its bends, and why it has no flat pattern if it hasn't.
@@ -144,6 +148,12 @@ pub struct FgPanel {
     /// The flat pattern is what's shown.
     pub flat: bool,
     pub out: Vec<FgAct>,
+    /// A ribbon tool's form, taking picks.
+    pub tool: Option<super::fgtool::FgTool>,
+    /// The part's sketches and their entities, for picks a view click can't make.
+    pub sketches: Vec<forge_lang::anchors::SketchRefs>,
+    /// The last thing picked in the view, as Forge names it (or why nothing does).
+    pub picked: Option<Result<String, super::fgtool::ToolError>>,
 }
 
 /// The tree of ids: `bolt[2]` under `bolt`, `lug.hub` under `lug`, in the order they were made.
@@ -497,6 +507,27 @@ impl Shell {
         {
             fg.collapsed.insert(k);
         }
+        // a tool waiting for a feature or a sketch takes the row
+        if let Some(k) = chosen.clone()
+            && let Some(tool) = &mut fg.tool
+            && tool.slots.get(tool.active).is_some_and(|s| s.kind.from_tree())
+        {
+            let kind = tool.slots[tool.active].kind;
+            let is_sketch = fg.feats.iter().any(|f| f.id == k && f.kind == "sketch");
+            use super::fgtool::{SlotKind, ToolError};
+            let pick = match kind {
+                SlotKind::Profile | SlotKind::Profiles | SlotKind::Plane if is_sketch => Ok(k.clone()),
+                SlotKind::Feature | SlotKind::Features if !is_sketch => Ok(k.clone()),
+                _ => Err(ToolError::WrongPick {
+                    slot: tool.slots[tool.active].label,
+                    what: if is_sketch { "sketch" } else { "feature" },
+                }),
+            };
+            tool.take(pick);
+            self.places.extend(places);
+            self.fg = Some(fg);
+            return;
+        }
         if let Some(k) = chosen {
             fg.selected = if fg.selected.as_deref() == Some(k.as_str()) {
                 None
@@ -536,6 +567,7 @@ impl Shell {
                             ui.set_width(PANEL_W - 20.0);
                             ui.spacing_mut().item_spacing.y = 4.0;
                             Self::fg_head(ui, &t, &mut fg, &mut out, &mut places);
+                            Self::fg_tool(ui, &t, &mut fg, &mut out, &mut places);
                             Self::fg_sheets(ui, &t, &fg, &mut out, &mut places);
                             Self::fg_selection(ui, &t, &mut fg, &mut out, &mut places);
                             Self::fg_params(ui, &t, &mut fg, &mut out, &mut places);
@@ -548,6 +580,139 @@ impl Shell {
         self.places.extend(places);
         fg.out.extend(out);
         self.fg = Some(fg);
+    }
+
+    /// The tool's form: its name, a row per slot with what's picked and what can be chosen, its
+    /// params, OK and Cancel.
+    fn fg_tool(
+        ui: &mut Ui,
+        t: &super::theme::Theme,
+        fg: &mut FgPanel,
+        out: &mut Vec<FgAct>,
+        places: &mut Vec<(String, Rect)>,
+    ) {
+        use super::fgtool::SlotKind as K;
+        let stmts = statements(&fg.feats);
+        let Some(tool) = &mut fg.tool else {
+            if let Some(p) = &fg.picked {
+                let text = match p {
+                    Ok(a) => format!("Picked: {a}"),
+                    Err(e) => format!("Picked: {}", e.text()),
+                };
+                let r = ui.label(egui::RichText::new(text).font(mono(11.0)).color(t.ink2));
+                places.push(("fg:picked".into(), r.rect));
+            }
+            return;
+        };
+        Self::fg_heading(ui, t, &panel::kind_word(tool.kind));
+        ui.horizontal(|ui| {
+            ui.label(egui::RichText::new("Name").font(sans(12.0)).color(t.ink2));
+            let r = ui.add(egui::TextEdit::singleline(&mut tool.name).font(mono(12.0)).desired_width(140.0));
+            places.push(("fg:tool:name".into(), r.rect));
+        });
+        for k in 0..tool.slots.len() {
+            let (label, kind) = (tool.slots[k].label, tool.slots[k].kind);
+            ui.horizontal_wrapped(|ui| {
+                let on = tool.active == k;
+                let r = ui.add(egui::Button::new(egui::RichText::new(label).font(medium(12.0))).selected(on));
+                places.push((format!("fg:tool:slot:{label}"), r.rect));
+                if r.clicked() {
+                    tool.active = k;
+                }
+                let mut gone = None;
+                for (i, p) in tool.slots[k].picks.iter().enumerate() {
+                    let r = ui.add(egui::Button::new(egui::RichText::new(format!("{p} ×")).font(mono(11.0))));
+                    places.push((format!("fg:tool:pick:{label}:{i}"), r.rect));
+                    if r.clicked() {
+                        gone = Some(i);
+                    }
+                }
+                if let Some(i) = gone {
+                    tool.slots[k].picks.remove(i);
+                }
+            });
+            // what the view can't give: sketch entities, features, origin planes
+            let mut choices: Vec<String> = Vec::new();
+            for sk in &fg.sketches {
+                match kind {
+                    K::Profile | K::Profiles => {
+                        choices.push(sk.id.clone());
+                        choices.extend(sk.closed.iter().cloned());
+                    }
+                    K::Line => choices.extend(sk.lines.iter().cloned()),
+                    K::Path => {
+                        choices.extend(sk.lines.iter().cloned());
+                        choices.extend(sk.curves.iter().cloned());
+                        choices.extend(sk.closed.iter().cloned());
+                    }
+                    K::Points => choices.extend(sk.points.iter().cloned()),
+                    K::Dir => choices.extend(sk.lines.iter().map(|l| format!("{l}.dir"))),
+                    K::Plane => choices.push(sk.id.clone()),
+                    _ => {}
+                }
+            }
+            match kind {
+                K::Plane => choices.extend(["xy", "xz", "yz"].map(String::from)),
+                K::Feature | K::Features => {
+                    let sketches: Vec<&str> = fg.sketches.iter().map(|s| s.id.as_str()).collect();
+                    choices.extend(stmts.iter().filter(|s| !sketches.contains(&s.as_str())).cloned());
+                }
+                _ => {}
+            }
+            if !choices.is_empty() {
+                ui.horizontal_wrapped(|ui| {
+                    for c in choices {
+                        let r = ui.add(egui::Button::new(egui::RichText::new(&c).font(mono(10.0))).small());
+                        places.push((format!("fg:choice:{label}:{c}"), r.rect));
+                        if r.clicked() {
+                            tool.active = k;
+                            tool.take(Ok(c));
+                        }
+                    }
+                });
+            }
+        }
+        for p in &mut tool.params {
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new(p.name).font(mono(12.0)).color(t.ink));
+                let r = ui.add(egui::TextEdit::singleline(&mut p.text).font(mono(12.0)).desired_width(70.0));
+                places.push((format!("fg:tool:param:{}", p.name), r.rect));
+                ui.label(egui::RichText::new(unit(p.dim)).font(sans(11.0)).color(t.ink2));
+            });
+        }
+        for (w, text) in &mut tool.words {
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new(*w).font(mono(12.0)).color(t.ink));
+                let r = ui.add(egui::TextEdit::singleline(text).font(mono(12.0)).desired_width(90.0));
+                places.push((format!("fg:tool:word:{w}"), r.rect));
+            });
+        }
+        for (f, on) in &mut tool.flags {
+            let r = ui.checkbox(on, *f);
+            places.push((format!("fg:tool:flag:{f}"), r.rect));
+        }
+        if let Some(e) = &tool.error {
+            ui.label(
+                egui::RichText::new(format!("{}: {}", e.kind(), e.text()))
+                    .font(sans(12.0))
+                    .color(t.error),
+            );
+        }
+        let mut close = false;
+        ui.horizontal(|ui| {
+            if Self::fg_button(ui, "OK", "fg:tool:ok".into(), places) {
+                match tool.text() {
+                    Ok(text) => out.push(FgAct::Tool(Op::AddFeature { before: None, text })),
+                    Err(e) => tool.error = Some(e),
+                }
+            }
+            if Self::fg_button(ui, "Cancel", "fg:tool:cancel".into(), places) {
+                close = true;
+            }
+        });
+        if close {
+            fg.tool = None;
+        }
     }
 
     fn fg_button(ui: &mut Ui, label: &str, name: String, places: &mut Vec<(String, Rect)>) -> bool {

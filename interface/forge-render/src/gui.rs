@@ -131,6 +131,8 @@ pub struct Gui {
     fg_folded: Option<crate::mesh::PartMesh>,
     fg_flat: Option<crate::mesh::PartMesh>,
     pub fg_sheets: Vec<crate::fg::SheetInfo>,
+    /// What Forge names each face and edge of the part: what a pick becomes.
+    pub fg_anchors: Option<Arc<crate::fg::AnchorView>>,
     /// The GPU refused something: said once, and no more views are drawn.
     gpu_failed: Arc<std::sync::Mutex<Option<String>>>,
 }
@@ -234,6 +236,7 @@ impl Gui {
             fg_folded: None,
             fg_flat: None,
             fg_sheets: Vec::new(),
+            fg_anchors: None,
             gpu_failed,
         }
     }
@@ -597,6 +600,10 @@ impl Gui {
         }
         let under = self.origin_under();
         self.shell.origin_hover = under;
+        if self.fg.is_some() {
+            self.fg_picks(under);
+            return;
+        }
         if self.shell.sketch_pick {
             let Some(v) = &mut self.view else { return };
             let clicked = v.nav.clicks != v.clicks;
@@ -1271,6 +1278,26 @@ impl Gui {
                     Action::Redo => {
                         s.redo();
                         self.fg_text();
+                        continue;
+                    }
+                    Action::NewFeature(kind) => {
+                        self.fg_open_tool(kind);
+                        continue;
+                    }
+                    Action::StartSketch => {
+                        self.shell.sketch_pick = true;
+                        self.shell.status = "Pick a planar face or an origin plane to sketch on".into();
+                        continue;
+                    }
+                    Action::FinishSketch => {
+                        self.fg_finish_sketch();
+                        continue;
+                    }
+                    Action::SetUnits(_) => {
+                        self.fg_refuse(crate::shell::fgtool::ToolError::NoForgeForm {
+                            tool: "units",
+                            why: "a Forge part reads in mm and degrees; give a value a unit (`2in` is not one)".into(),
+                        });
                         continue;
                     }
                     a if fc_only(a) => continue,
@@ -2568,17 +2595,12 @@ impl Headless {
     }
 }
 
-/// What only an .fc part's worker can do: a Forge part's edits are its panel's typed ops.
+/// What only an .fc part's worker can do (its dialogs, its tree's items, its dimensions on the
+/// model): a Forge part's edits are its panel's typed ops, its tools' forms, its sketches.
 fn fc_only(a: Action) -> bool {
     matches!(
         a,
-        Action::SetUnits(_)
-            | Action::StartSketch
-            | Action::SketchTool(_)
-            | Action::EditInline(_)
-            | Action::FinishSketch
-            | Action::CancelSketch
-            | Action::NewFeature(_)
+        Action::EditInline(_)
             | Action::DialogOk
             | Action::DialogCancel
             | Action::Edit(_)
@@ -2709,6 +2731,12 @@ impl Gui {
                     .collect();
             }
             self.fg_sheets = b.sheets;
+            if let Some(a) = b.anchors {
+                if let Some(p) = &mut self.shell.fg {
+                    p.sketches = a.sketches.clone();
+                }
+                self.fg_anchors = Some(a);
+            }
             if let Some(d) = &b.delta
                 && let Some(v) = &mut self.view
             {
@@ -2757,6 +2785,14 @@ impl Gui {
                 crate::shell::fg::FgAct::ExportDxf(id) => {
                     let _ = self.fg_export_dxf(&id);
                 }
+                crate::shell::fg::FgAct::Tool(op) => {
+                    if self.fg_apply(op).is_ok()
+                        && let Some(p) = &mut self.shell.fg
+                    {
+                        p.tool = None;
+                    }
+                }
+                crate::shell::fg::FgAct::Refuse(e) => self.fg_refuse(e),
                 crate::shell::fg::FgAct::Flat(on) => {
                     if let Some(p) = &mut self.shell.fg {
                         p.flat = on && self.fg_flat.is_some();
@@ -2804,6 +2840,149 @@ impl Gui {
                 }
                 self.shell.status = format!("{label} refused: {why}");
                 Err(why)
+            }
+        }
+    }
+
+    /// A tool's form for a ribbon kind; one with no Forge form is refused, typed.
+    pub fn fg_open_tool(&mut self, kind: &'static str) {
+        let Some(p) = &mut self.shell.fg else { return };
+        let mut taken = crate::shell::fg::statements(&p.feats);
+        taken.extend(p.params.iter().filter_map(|x| x.key.owner.first().map(|s| s.name.clone())));
+        match crate::shell::fgtool::FgTool::new(kind, &taken) {
+            Some(t) => {
+                p.tool = Some(t);
+                p.refused = None;
+                self.shell.status = format!("{}: pick what it takes", crate::shell::panel::kind_word(kind));
+            }
+            None => self.fg_refuse(crate::shell::fgtool::ToolError::NoForgeForm {
+                tool: kind,
+                why: "no Forge form in the app yet".into(),
+            }),
+        }
+    }
+
+    /// Something asked of a Forge part that can't be: said in the panel and the status bar.
+    pub fn fg_refuse(&mut self, e: crate::shell::fgtool::ToolError) {
+        let why = format!("{}: {}", e.kind(), e.text());
+        if let Some(p) = &mut self.shell.fg {
+            p.refused = Some(why.clone());
+        }
+        self.shell.status = why;
+    }
+
+    /// A click in the view on a Forge part: what Forge names it, for the tool waiting, the sketch
+    /// being started, or just shown.
+    fn fg_picks(&mut self, under: Option<crate::origin::Item>) {
+        use crate::origin::Item;
+        use crate::shell::fgtool::{SlotKind as K, ToolError};
+        let Some(v) = &mut self.view else { return };
+        if v.nav.clicks == v.clicks {
+            return;
+        }
+        v.clicks = v.nav.clicks;
+        let ent = v.nav.selected.last().map(|x| x.1);
+        let a = self.fg_anchors.clone();
+        let named = |list: Option<&Vec<Option<String>>>, k: u32, what: &'static str| {
+            list.and_then(|l| l.get(k as usize).cloned().flatten())
+                .ok_or(ToolError::NoStableName { what })
+        };
+        let origin = under.and_then(|i| match i {
+            Item::XyPlane => Some("xy"),
+            Item::XzPlane => Some("xz"),
+            Item::YzPlane => Some("yz"),
+            _ => None,
+        });
+        let (what, text, edge): (&'static str, Result<String, ToolError>, Option<u32>) = match ent {
+            Some(Entity::Face(f)) => ("face", named(a.as_ref().map(|a| &a.faces), f, "face"), None),
+            Some(Entity::Edge(e)) => ("edge", named(a.as_ref().map(|a| &a.edges), e, "edge"), Some(e)),
+            Some(Entity::Vertex(_)) => ("vertex", Err(ToolError::NoStableName { what: "vertex" }), None),
+            None => match origin {
+                Some(o) => ("origin plane", Ok(o.to_string()), None),
+                None => return,
+            },
+        };
+        if self.shell.sketch_pick {
+            match (what, &text) {
+                ("face" | "origin plane", Ok(t)) => {
+                    let frame = if what == "origin plane" {
+                        match forge_lang::builtins::constant(t) {
+                            Some(forge_lang::eval::Value::Plane(p)) => Some(p.frame),
+                            _ => None,
+                        }
+                    } else {
+                        a.as_ref().and_then(|a| a.planes.get(&format!("{t}.plane")).copied())
+                    };
+                    match frame {
+                        Some(plane) => {
+                            let mut m = SketchMode::new(SketchFor::New, t.clone(), plane, Vec::new(), None);
+                            m.units = "mm";
+                            self.shell.sketch = Some(m);
+                            self.shell.sketch_pick = false;
+                            self.shell.tab = 1;
+                            self.shell.status.clear();
+                            v.nav.selected.clear();
+                            v.clicked.clear();
+                            look_at(v, plane);
+                        }
+                        None => self.shell.status = format!("{t} is not a plane to sketch on"),
+                    }
+                }
+                (_, Err(e)) => self.shell.status = format!("{}: {}", e.kind(), e.text()),
+                _ => self.shell.status = format!("a sketch goes on a planar face or an origin plane, not a {what}"),
+            }
+            return;
+        }
+        let Some(p) = &mut self.shell.fg else { return };
+        let Some(tool) = &mut p.tool else {
+            p.picked = Some(text);
+            return;
+        };
+        let Some(slot) = tool.slots.get(tool.active) else { return };
+        let (label, kind) = (slot.label, slot.kind);
+        let got = match (kind, what) {
+            (K::Edges | K::Edge, "edge") | (K::Faces | K::Face, "face") | (K::Plane, "face" | "origin plane") => text,
+            (K::Dir, "face") => text.map(|t| format!("{t}.normal")),
+            (K::SheetEdge, "edge") => {
+                let k = edge.expect("an edge") as usize;
+                a.as_ref()
+                    .and_then(|a| a.sheet_edges.iter().find(|s| s.1.contains(&k)).map(|s| s.0.clone()))
+                    .ok_or(ToolError::NoStableName { what: "sheet edge" })
+            }
+            _ => Err(ToolError::WrongPick { slot: label, what }),
+        };
+        tool.take(got);
+        v.nav.selected.clear();
+        v.clicked.clear();
+        v.dirty = true;
+    }
+
+    /// The sketch drawn on a Forge part, written as a Forge sketch block and added.
+    fn fg_finish_sketch(&mut self) {
+        let Some(m) = self.shell.sketch.take() else { return };
+        self.shell.tab = 0;
+        if m.rows.is_empty() {
+            return;
+        }
+        let taken = self
+            .shell
+            .fg
+            .as_ref()
+            .map(|p| crate::shell::fg::statements(&p.feats))
+            .unwrap_or_default();
+        let name = (1..)
+            .map(|k| format!("sk{k}"))
+            .find(|n| !taken.contains(n))
+            .expect("a free name");
+        match crate::shell::fgsketch::block(&name, &m.head, &m.rows) {
+            Ok(text) => {
+                let _ = self.fg_apply(forge_lang::error::Op::AddFeature { before: None, text });
+            }
+            Err(e) => {
+                self.fg_refuse(e);
+                // the drawing stays, to be changed
+                self.shell.sketch = Some(m);
+                self.shell.tab = 1;
             }
         }
     }

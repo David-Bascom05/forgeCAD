@@ -325,6 +325,11 @@ pub const DEPTH_BUDGET: usize = 128;
 pub const WORDS: [&str; 6] = ["thru", "thru_all", "next", "X", "Y", "Z"];
 
 impl<'s> Eval<'s> {
+    /// What the top level bound, by name (for `anchors`).
+    pub(crate) fn top_level(&self) -> Vec<(String, Value)> {
+        self.scopes[0].iter().map(|(k, v)| (k.clone(), v.0.clone())).collect()
+    }
+
     pub fn new(src: &'s str, rules: Rules, building: bool, cache: Cache) -> Eval<'s> {
         Eval {
             src,

@@ -6,6 +6,8 @@
 pub mod dialog;
 pub mod dim;
 pub mod fg;
+pub mod fgsketch;
+pub mod fgtool;
 pub mod icons;
 pub mod panel;
 mod ribbon;
