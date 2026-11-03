@@ -43,6 +43,8 @@ pub struct AsmPanel {
     /// The chosen part's file and its anchors (or why not), when asked.
     pub anchors: Option<(String, Result<Vec<String>, String>)>,
     pub collapsed: HashSet<String>,
+    /// Which lists are open (joints, expects, BOM), once chosen.
+    pub open: std::collections::HashMap<&'static str, bool>,
     /// A drive's slider value while it's moved, before it's let go.
     pub dragging: Option<(String, f64)>,
 }
@@ -223,6 +225,58 @@ impl Shell {
         self.fg = Some(fg);
     }
 
+    /// The assembly's summary and its checks (run on request): first, as what matters most.
+    pub(super) fn asm_checks(
+        ui: &mut Ui,
+        t: &super::theme::Theme,
+        fg: &mut FgPanel,
+        out: &mut Vec<FgAct>,
+        places: &mut Vec<(String, Rect)>,
+    ) {
+        let Some(a) = &mut fg.asm else { return };
+        let summary = format!(
+            "{} occurrences · {} parts · DOF {} · {}",
+            a.occ.len(),
+            a.bom.len(),
+            a.mobility,
+            a.timings
+        );
+        ui.label(egui::RichText::new(summary).font(sans(11.0)).color(t.ink2));
+        // the overlap check and the expects, on request (slow on a big assembly)
+        Self::fg_heading(ui, t, "Interference and expects");
+        match (a.overlap, a.checking) {
+            (_, true) => {
+                ui.label(egui::RichText::new("checking…").font(sans(11.0)).color(t.ink2));
+            }
+            (Some((n, c)), false) => {
+                ui.label(
+                    egui::RichText::new(format!("{n} interferences, {c} intended contacts"))
+                        .font(sans(11.0))
+                        .color(if n > 0 { t.error } else { t.ink }),
+                );
+            }
+            (None, false) => {
+                if Self::fg_button(ui, "Run checks", "asm:check".into(), places) {
+                    a.checking = true;
+                    out.push(FgAct::AsmCheck);
+                }
+            }
+        }
+        if !a.expects.is_empty() {
+            let fails = a.expects.iter().filter(|e| !e.ok).count();
+            let r = ui.label(
+                egui::RichText::new(format!(
+                    "expects: {} of {} pass",
+                    a.expects.len() - fails,
+                    a.expects.len()
+                ))
+                .font(sans(11.0))
+                .color(if fails > 0 { t.error } else { t.ink }),
+            );
+            places.push(("asm:expects".into(), r.rect));
+        }
+    }
+
     /// The assembly's sections of the panel: the instance chosen, joints and drives, DOF, expects,
     /// the BOM, the overlap check.
     pub(super) fn asm_panel(
@@ -234,14 +288,6 @@ impl Shell {
     ) {
         let feats = fg.feats.clone();
         let Some(a) = &mut fg.asm else { return };
-        let summary = format!(
-            "{} occurrences · {} parts · DOF {} · {}",
-            a.occ.len(),
-            a.bom.len(),
-            a.mobility,
-            a.timings
-        );
-        ui.label(egui::RichText::new(summary).font(sans(11.0)).color(t.ink2));
         // the instance chosen
         if let Some(sel) = a.selected.clone() {
             Self::fg_heading(ui, t, &sel);
@@ -312,12 +358,16 @@ impl Shell {
             out.push(FgAct::AsmShow);
         }
         // joints, each drive a slider
-        Self::fg_heading(
+        let open = Self::asm_fold(
             ui,
             t,
+            a,
+            "joints",
             &format!("Joints ({}), mobility {}", a.joints.len(), a.mobility),
+            a.joints.len(),
+            places,
         );
-        for j in &a.joints {
+        for j in a.joints.iter().filter(|_| open) {
             let flagged = a.highlight_items.contains(&j.id);
             let vals: Vec<String> = j
                 .values
@@ -410,12 +460,9 @@ impl Shell {
         }
         if !a.expects.is_empty() {
             let fails = a.expects.iter().filter(|e| !e.ok).count();
-            Self::fg_heading(
-                ui,
-                t,
-                &format!("Expects: {} of {} pass", a.expects.len() - fails, a.expects.len()),
-            );
-            for (k, e) in a.expects.iter().enumerate() {
+            let head = format!("Expects: {} of {} pass", a.expects.len() - fails, a.expects.len());
+            let open = Self::asm_fold(ui, t, a, "expects", &head, a.expects.len(), places);
+            for (k, e) in a.expects.iter().enumerate().filter(|_| open) {
                 let m = e.measured.map_or("-".to_string(), short);
                 let l = e.limit.map_or("-".to_string(), short);
                 let r = ui.label(
@@ -431,33 +478,10 @@ impl Shell {
                 places.push((format!("asm:expect:{k}"), r.rect));
             }
         }
-        // the overlap check and the expects, on request (slow on a big assembly)
-        Self::fg_heading(ui, t, "Interference and expects");
-        match (a.overlap, a.checking) {
-            (_, true) => {
-                ui.label(egui::RichText::new("checking…").font(sans(11.0)).color(t.ink2));
-            }
-            (Some((n, c)), false) => {
-                ui.label(
-                    egui::RichText::new(format!("{n} interferences, {c} intended contacts"))
-                        .font(sans(11.0))
-                        .color(if n > 0 { t.error } else { t.ink }),
-                );
-            }
-            (None, false) => {
-                if Self::fg_button(ui, "Run checks", "asm:check".into(), places) {
-                    a.checking = true;
-                    out.push(FgAct::AsmCheck);
-                }
-            }
-        }
         // the BOM
-        Self::fg_heading(
-            ui,
-            t,
-            &format!("BOM ({} parts)", a.bom.iter().map(|b| b.1).sum::<usize>()),
-        );
-        for (file, n) in &a.bom {
+        let head = format!("BOM ({} parts)", a.bom.iter().map(|b| b.1).sum::<usize>());
+        let open = Self::asm_fold(ui, t, a, "bom", &head, a.bom.len(), places);
+        for (file, n) in a.bom.iter().filter(|_| open) {
             let r = ui.label(
                 egui::RichText::new(format!("{n:>4} × {}", part_word(file)))
                     .font(mono(11.0))
@@ -465,6 +489,33 @@ impl Shell {
             );
             places.push((format!("asm:bom:{}", part_word(file)), r.rect));
         }
+    }
+
+    /// A list's heading that opens and shuts it; a long one starts shut.
+    fn asm_fold(
+        ui: &mut Ui,
+        t: &super::theme::Theme,
+        a: &mut AsmPanel,
+        key: &'static str,
+        head: &str,
+        len: usize,
+        places: &mut Vec<(String, Rect)>,
+    ) -> bool {
+        let open = *a.open.entry(key).or_insert(len <= 20);
+        ui.add_space(6.0);
+        let r = ui.add(
+            egui::Label::new(
+                egui::RichText::new(format!("{} {head}", if open { "▾" } else { "▸" }))
+                    .font(super::theme::semi(12.0))
+                    .color(t.ink),
+            )
+            .sense(Sense::click()),
+        );
+        places.push((format!("asm:open:{key}"), r.rect));
+        if r.clicked() {
+            a.open.insert(key, !open);
+        }
+        open
     }
 
     /// An assembly issue's Show: highlights what it names.
