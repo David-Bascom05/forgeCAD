@@ -272,6 +272,8 @@ pub enum SheetError {
         a: Strip,
         b: Strip,
         at: Point2,
+        /// Where a cut along a wall's side would part them, when they lie along each other.
+        seam: Option<Seam>,
     },
     /// Two strips of the folded part touch without passing into each other (walls meeting along
     /// a line at a corner): faces of one solid meeting, no valid solid.
@@ -361,6 +363,16 @@ pub enum SheetError {
     },
 }
 
+/// A run along which two strips touch in the flat, on one wall's side: from `from` to `to` in
+/// that wall's own coordinates, `into` the unit way into its material.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Seam {
+    pub wall: WallId,
+    pub from: Point2,
+    pub to: Point2,
+    pub into: Vec2,
+}
+
 /// Built anyway, but worth a look.
 #[derive(Clone, Debug, PartialEq)]
 pub enum SheetWarning {
@@ -382,6 +394,8 @@ pub enum SheetWarning {
         a: Strip,
         b: Strip,
         at: Point2,
+        /// Where a cut along a wall's side would part them, when they lie along each other.
+        seam: Option<Seam>,
     },
     /// The folded part touches itself (see `SheetError::FoldedTouch`): the flat builds.
     FoldedTouch {
@@ -632,9 +646,19 @@ impl SheetError {
                 depth,
                 limit,
             }),
-            SheetError::FlatTouch { feature, a, b, at } => {
-                Some(SheetWarning::FlatTouch { feature, a, b, at })
-            }
+            SheetError::FlatTouch {
+                feature,
+                a,
+                b,
+                at,
+                seam,
+            } => Some(SheetWarning::FlatTouch {
+                feature,
+                a,
+                b,
+                at,
+                seam,
+            }),
             SheetError::FoldedTouch { feature, a, b, at } => {
                 Some(SheetWarning::FoldedTouch { feature, a, b, at })
             }

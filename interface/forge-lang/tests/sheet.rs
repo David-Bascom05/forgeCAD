@@ -1257,3 +1257,42 @@ up = flange(base.edge(plan.outline[1]), height: 20, angle: a)
     let fixed = apply(&s, &n[0].fixes[0]).expect("applies");
     assert!(notes(&run(&fixed), "BendAngleOutOfRange").is_empty(), "{fixed}");
 }
+
+#[test]
+fn a_flat_touching_itself_gets_a_slot_along_the_touch() {
+    // a rack strip under an ear: the side wall's flat lies on the ear's top edge. The fix cuts a
+    // slot along that edge into the base (a relief along it), before the unfold, and the part
+    // then builds
+    let s = "shared t = 1.5
+shared r = 1.5
+shared k = ratio(0.42)
+shared W = 440
+shared D = 300
+shared E = 21.3
+shared a = 20
+shared H = 42
+sketch plan(on: xy) {
+  outline = poly([(-E, 0), (W + E, 0), (W + E, a), (W, a), (W, D), (0, D), (0, a), (-E, a)])
+}
+base = sheet(plan, t: t, r: r, bend: kfactor(k))
+front = flange(base.edge(plan.outline[0]), height: H)
+right = flange(base.edge(plan.outline[3]), height: H)
+param flat.gap = 80
+flat = unfold(base, on: offset(base.bottom, gap))
+";
+    let e = first_error(s);
+    assert_eq!(e.kind(), "FlatTouch", "{e:?}");
+    let add = e
+        .fixes()
+        .into_iter()
+        .find(|f| matches!(f, Op::AddFeature { .. }))
+        .expect("a slot along the touch");
+    let fixed = apply(s, &add).expect("applies");
+    let r = run(&fixed);
+    assert!(r.ok(), "{fixed}\n{}", forge_lang::report::text(&r, &fixed));
+    assert!(
+        !r.warnings
+            .iter()
+            .any(|w| matches!(w, Warning::Sheet(n) if n.kind().ends_with("Touch")))
+    );
+}
