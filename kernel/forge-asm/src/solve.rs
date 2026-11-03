@@ -167,8 +167,80 @@ struct Unit {
     vars: Vec<usize>,
     /// Relations solved inside (both values unknown before).
     rels: Vec<usize>,
-    bridge: bool,
+    /// A tree edge placed in closed form.
+    closed: Option<Closed>,
     block: usize,
+}
+
+/// A tree edge placed in closed form: a joint, or loose constraints that together are one.
+#[derive(Clone, Debug)]
+struct Closed {
+    kind: JointKind,
+    body: [usize; 2],
+    /// A's and B's frames in their clusters' frames, as the joint kind takes them.
+    local: [Frame; 2],
+    /// The joint's link, when it is a joint.
+    joint: Option<usize>,
+}
+
+fn same_frame(p: &Frame, q: &Frame) -> bool {
+    let mut a = Vec::new();
+    let mut b = Vec::new();
+    bits(p, &mut a);
+    bits(q, &mut b);
+    a == b
+}
+
+/// Loose constraints between the same two bodies that are exactly a joint's bundle (same frames,
+/// offsets moved into B's frame) are placed as that joint.
+fn recognise(plan: &Plan, links: &[usize]) -> Option<Closed> {
+    let first = &plan.links[*links.first()?];
+    let cl = |b: usize| plan.bodies[b].cluster;
+    let mut prims: Vec<(ConstraintKind, Frame, Frame)> = Vec::new();
+    for &k in links {
+        let l = &plan.links[k];
+        if l.joint.is_some() || cl(l.body[0]) != cl(first.body[0]) || cl(l.body[1]) != cl(first.body[1]) {
+            return None;
+        }
+        for p in &l.prims {
+            let up =
+                |o: f64| p.local[1].compose(&Frame::WORLD.with_origin(forge_math::Point3::new(0.0, 0.0, o)));
+            let (kind, b) = match p.kind {
+                ConstraintKind::PointOnPlane { offset } => {
+                    (ConstraintKind::PointOnPlane { offset: 0.0 }, up(offset))
+                }
+                ConstraintKind::PlanePlane { offset } => {
+                    (ConstraintKind::PlanePlane { offset: 0.0 }, up(offset))
+                }
+                ConstraintKind::Insert { offset } => (ConstraintKind::Insert { offset: 0.0 }, up(offset)),
+                k => (k, p.local[1]),
+            };
+            prims.push((kind, p.local[0], b));
+        }
+    }
+    let (a, b) = (prims[0].1, prims[0].2);
+    if !prims.iter().all(|p| same_frame(&p.1, &a) && same_frame(&p.2, &b)) {
+        return None;
+    }
+    let mut names: Vec<&str> = prims.iter().map(|p| p.0.name()).collect();
+    names.sort_unstable();
+    let twist0 = prims
+        .iter()
+        .all(|p| !matches!(p.0, ConstraintKind::Twist { angle } if angle != 0.0));
+    let kind = match names[..] {
+        ["coincident"] => JointKind::Ball,
+        ["coincident", "parallel"] | ["insert"] => JointKind::Revolute,
+        ["concentric"] | ["parallel", "point_on_line"] => JointKind::Cylindrical,
+        ["concentric", "twist"] | ["parallel", "point_on_line", "twist"] if twist0 => JointKind::Slider,
+        ["plane_plane"] | ["parallel", "point_on_plane"] => JointKind::Planar,
+        _ => return None,
+    };
+    Some(Closed {
+        kind,
+        body: first.body,
+        local: [a, b],
+        joint: None,
+    })
 }
 
 /// The local graph of a partition: vertex i < clusters.len() is cluster `clusters[i]`; the last
@@ -520,7 +592,21 @@ fn solve_partition(plan: &Plan, p: usize, memo: Option<&PartMemo>) -> (PartOut, 
             .flat_map(|&x| bl[x].iter().map(|&e| part.edges[e]))
             .collect();
         joints.sort_by_key(|&k| plan.links[k].id);
-        let single = joints.len() == 1 && plan.links[joints[0]].joint.is_some();
+        let closed = if members.len() != 1 {
+            None
+        } else if joints.len() == 1 && plan.links[joints[0]].joint.is_some() {
+            let l = &plan.links[joints[0]];
+            Some(Closed {
+                kind: l.kind(),
+                body: l.body,
+                local: l.local,
+                joint: Some(joints[0]),
+            })
+        } else if bverts[b].len() == 2 {
+            recognise(plan, &joints)
+        } else {
+            None
+        };
         let mut vs: Vec<usize> = members.iter().flat_map(|&x| bverts[x].iter().copied()).collect();
         vs.sort_unstable();
         vs.dedup();
@@ -530,7 +616,6 @@ fn solve_partition(plan: &Plan, p: usize, memo: Option<&PartMemo>) -> (PartOut, 
             .filter(|&v| placed_by[v] != usize::MAX && members.contains(&placed_by[v]))
             .collect();
         let fixed: Vec<usize> = vs.iter().copied().filter(|v| !inner.contains(v)).collect();
-        let bridge = members.len() == 1 && bl[b].len() == 1 && single;
         let urels: Vec<usize> = (0..rels.len())
             .filter(|&i| {
                 !known.contains_key(&rels[i].follower)
@@ -544,7 +629,7 @@ fn solve_partition(plan: &Plan, p: usize, memo: Option<&PartMemo>) -> (PartOut, 
             fixed,
             vars: inner,
             rels: urels,
-            bridge,
+            closed,
             block: b,
         });
     }
@@ -583,7 +668,7 @@ fn solve_partition(plan: &Plan, p: usize, memo: Option<&PartMemo>) -> (PartOut, 
             .cloned();
         let res = match reuse {
             Some(r) => {
-                if u.bridge {
+                if u.closed.is_some() {
                     out.stats.bridges_placed += 0;
                 } else {
                     out.stats.blocks_reused += 1;
@@ -591,9 +676,9 @@ fn solve_partition(plan: &Plan, p: usize, memo: Option<&PartMemo>) -> (PartOut, 
                 r
             }
             None => {
-                let mut r = if u.bridge {
+                let mut r = if u.closed.is_some() {
                     out.stats.bridges_placed += 1;
-                    place_bridge(plan, &local, &poses, u, &known)
+                    place_bridge(plan, &poses, u, &known)
                 } else {
                     out.stats.blocks_solved += 1;
                     solve_group(plan, &local, &poses, u, &known, &rels)
@@ -636,13 +721,22 @@ fn directions(kind: JointKind, b: &Frame) -> Vec<(Freedom, Vec3)> {
         .collect()
 }
 
-fn place_bridge(plan: &Plan, local: &Local, poses: &Poses, u: &Unit, known: &Known) -> UnitOut {
-    let k = u.joints[0];
-    let j = &plan.links[k];
+fn place_bridge(plan: &Plan, poses: &Poses, u: &Unit, known: &Known) -> UnitOut {
+    let c = u.closed.as_ref().expect("a closed-form edge");
+    let link = c.joint.map(|k| (k, &plan.links[k]));
+    let cl = |s: usize| plan.bodies[c.body[s]].cluster;
+    let written = |s: usize| plan.clusters[cl(s)].written.compose(&c.local[s]);
+    let rel_w = joint::relative(&written(0), &written(1));
     let mut diagnostics = Vec::new();
     let mut values = Vec::new();
     let mut free = 0;
-    for &f in j.kind().freedoms() {
+    for &f in c.kind.freedoms() {
+        let Some((k, j)) = link else {
+            // loose constraints: the written values
+            free += 1;
+            values.push(joint::measure(f, &rel_w));
+            continue;
+        };
         let mut v = match known.get(&(k, f)) {
             Some(&(v, by)) => {
                 let driven = j.drive.iter().any(|d| d.0 == f) || by.is_some();
@@ -674,49 +768,48 @@ fn place_bridge(plan: &Plan, local: &Local, poses: &Poses, u: &Unit, known: &Kno
         }
         values.push(v);
     }
-    let rel_w = written_rel(plan, k);
-    let m = joint::motion(j.kind(), &values, &rel_w);
-    let [va, vb] = local.ends(k);
+    let m = joint::motion(c.kind, &values, &rel_w);
+    let va = poses.local.vertex(cl(0));
     let exit = u.vars[0];
-    let ca = plan.bodies[j.body[0]].cluster;
-    let cb = plan.bodies[j.body[1]].cluster;
     // World(A) = World(B) ∘ M, with World(end) = P(cluster) ∘ local
     let pose = if exit == va {
         poses
-            .cluster(cb)
-            .compose(&j.local[1])
+            .cluster(cl(1))
+            .compose(&c.local[1])
             .compose(&m)
-            .compose(&j.local[0].inverse())
+            .compose(&c.local[0].inverse())
     } else {
-        debug_assert_eq!(exit, vb);
         poses
-            .cluster(ca)
-            .compose(&j.local[0])
+            .cluster(cl(0))
+            .compose(&c.local[0])
             .compose(&m.inverse())
-            .compose(&j.local[1].inverse())
+            .compose(&c.local[1].inverse())
     };
-    let b_world = if exit == vb {
-        pose.compose(&j.local[1])
+    let b_world = if exit == va {
+        poses.cluster(cl(1)).compose(&c.local[1])
     } else {
-        poses.cluster(cb).compose(&j.local[1])
+        pose.compose(&c.local[1])
     };
-    if j.kind() == JointKind::Ball {
+    if c.kind == JointKind::Ball {
         values.clear();
     }
-    let report = JointReport {
-        joint: j.joint_id().expect("a joint"),
-        kind: j.kind(),
-        values: j.kind().freedoms().iter().copied().zip(values).collect(),
-        free,
-        directions: directions(j.kind(), &b_world),
-        in_loop: false,
-        failed: false,
-    };
+    let joints = link
+        .map(|(_, j)| JointReport {
+            joint: j.joint_id().expect("a joint"),
+            kind: c.kind,
+            values: c.kind.freedoms().iter().copied().zip(values).collect(),
+            free,
+            directions: directions(c.kind, &b_world),
+            in_loop: false,
+            failed: false,
+        })
+        .into_iter()
+        .collect();
     UnitOut {
         key: Vec::new(),
         poses: vec![(exit, pose)],
         diagnostics,
-        joints: vec![report],
+        joints,
         block: None,
         mobility: free,
         iterations: 0,

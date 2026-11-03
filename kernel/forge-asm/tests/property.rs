@@ -211,3 +211,88 @@ fn loops_close_from_perturbed_starts() {
     }
     assert!(loops > 200, "{loops} loop blocks");
 }
+
+/// Each joint written as its bundle of loose constraints (pin-slot kept a joint: its line is not
+/// its anchor's frame). `rotate_parallel` turns the Parallel's A frame about its z, which leaves the
+/// rows' meaning alone but no longer reads as a joint: the numeric path.
+fn loosen(asm: &Assembly, r: &mut Rng, rotate_parallel: bool) -> Assembly {
+    let mut out = asm.clone();
+    out.joints.clear();
+    for j in &asm.joints {
+        if j.kind == JointKind::PinSlot {
+            out.joints.push(j.clone());
+            continue;
+        }
+        let kinds: Vec<ConstraintKind> = match (j.kind, r.bool()) {
+            (JointKind::Revolute, true) => vec![ConstraintKind::Insert { offset: 0.0 }],
+            (JointKind::Cylindrical, true) => vec![ConstraintKind::Concentric],
+            (JointKind::Planar, true) => vec![ConstraintKind::PlanePlane { offset: 0.0 }],
+            _ => j.kind.bundle().to_vec(),
+        };
+        for k in kinds {
+            let mut a = j.a.clone();
+            if rotate_parallel && k == ConstraintKind::Parallel {
+                let AnchorRef::Local(rf) = &a.anchor else {
+                    unreachable!()
+                };
+                a.anchor = AnchorRef::Local(Reference::frame(rf.frame.rotated_about_z(0.3)));
+            }
+            let id = out.constraints.len() as u32 + 1;
+            let mut c = Constraint::new(id, k, a, j.b.clone());
+            c.flip = j.flip;
+            out.constraints.push(c);
+        }
+    }
+    out
+}
+
+#[test]
+fn loose_bundles_in_trees_place_as_their_joints() {
+    let mut r = Rng::new(0xb0d1e);
+    for case in 0..200 {
+        let n = 2 + r.below(10);
+        let (mut asm, _) = build(&mut r, n, 0, false, true);
+        for i in asm.instances.iter_mut().skip(1) {
+            i.pose = nudge(&mut r, &i.pose, 2.0);
+        }
+        let loose = loosen(&asm, &mut r, false);
+        let (a, b) = (
+            solve(&asm, &catalog(), &Options { threads: 1 }),
+            solve(&loose, &catalog(), &Options { threads: 1 }),
+        );
+        assert_eq!(b.errors().count(), 0, "case {case}: {:?}", b.diagnostics);
+        assert_eq!(
+            b.stats.blocks_solved, 0,
+            "case {case}: every bundle read as its joint"
+        );
+        assert_eq!(a.mobility, b.mobility);
+        for (x, y) in a.poses.iter().zip(&b.poses) {
+            assert!(close(&x.1, &y.1, 1e-12), "case {case} instance {:?}", x.0);
+        }
+    }
+}
+
+#[test]
+fn recognised_bundles_match_the_numeric_path() {
+    let mut r = Rng::new(0x5a3e);
+    let mut numeric_blocks = 0;
+    for case in 0..200 {
+        let n = 2 + r.below(10);
+        let (asm, truth) = build(&mut r, n, 0, false, true);
+        let mut r2 = r.clone();
+        let closed = solve(&loosen(&asm, &mut r, false), &catalog(), &Options { threads: 1 });
+        let numeric = solve(&loosen(&asm, &mut r2, true), &catalog(), &Options { threads: 1 });
+        assert_eq!(numeric.errors().count(), 0, "case {case}");
+        numeric_blocks += numeric.stats.blocks_solved;
+        assert_eq!(closed.stats.blocks_solved, 0);
+        assert_eq!(closed.mobility, numeric.mobility, "case {case}");
+        for ((x, y), t) in closed.poses.iter().zip(&numeric.poses).zip(&truth) {
+            assert!(close(&x.1, &y.1, 1e-12), "case {case} instance {:?}", x.0);
+            assert!(close(&x.1, t, 1e-12));
+        }
+    }
+    assert!(
+        numeric_blocks > 300,
+        "{numeric_blocks} bundles went the numeric way"
+    );
+}
