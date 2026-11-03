@@ -431,7 +431,32 @@ impl<'a> Parser<'a> {
                     }
                     None => None,
                 };
-                Ok(StmtKind::Expect { metric, args, cmp })
+                let mut at = Vec::new();
+                if self.is_kw("at") {
+                    self.bump();
+                    loop {
+                        let mut segs = Vec::new();
+                        loop {
+                            let (name, _) = self.ident()?;
+                            let index = self.index_list()?;
+                            segs.push(Seg { name, index });
+                            if !self.eat_op(".") {
+                                break;
+                            }
+                        }
+                        self.want_op("=")?;
+                        at.push((segs, self.expr()?));
+                        if !self.eat_op(",") {
+                            break;
+                        }
+                    }
+                }
+                Ok(StmtKind::Expect {
+                    metric,
+                    args,
+                    cmp,
+                    at,
+                })
             }
             TokKind::Kw(w @ ("sketch" | "path")) => {
                 self.bump();
@@ -499,6 +524,19 @@ impl<'a> Parser<'a> {
         let mut out = Vec::new();
         let mut kw = false;
         while !self.is_op(")") {
+            if self.is_kw("at") {
+                let span = self.bump().span;
+                self.want_op(":")?;
+                kw = true;
+                out.push(Arg {
+                    name: Some(("at".into(), span)),
+                    value: self.expr()?,
+                });
+                if !self.eat_op(",") {
+                    break;
+                }
+                continue;
+            }
             let e = self.expr()?;
             if self.eat_op(":") {
                 let ExprKind::Name(n) = e.kind else {

@@ -18,7 +18,7 @@ stmt        := 'shared' ID '=' expr
              | 'for' ID forvars 'in' expr block
              | 'if' expr block elsepart
              | 'return' expr
-             | 'expect' ID expargs expcmp
+             | 'expect' ID expargs expcmp expat
              | 'sketch' ID '(' args ')' block
              | 'path' ID '(' args ')' block
              | expr assigntail ;
@@ -46,10 +46,13 @@ expcmp      := cmpop expr exptol | %empty ;
 cmpop       := '=' | '<' | '<=' | '>' | '>=' ;
 exptol      := '+-' unary pct | %empty ;
 pct         := '%' | %empty ;
+expat       := 'at' atpath '=' expr expmore | %empty ;
+expmore     := ',' atpath '=' expr expmore | %empty ;
+atpath      := ID keys pathrest ;
 
 args        := arg argsrest | %empty ;
 argsrest    := ',' args | %empty ;
-arg         := expr argkw ;
+arg         := expr argkw | 'at' ':' expr ;
 argkw       := ':' expr | %empty ;
 
 expr        := or ifpart ;
