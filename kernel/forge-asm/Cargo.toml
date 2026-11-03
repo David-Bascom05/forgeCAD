@@ -1,0 +1,20 @@
+[package]
+name = "forge-asm"
+description = "Assemblies for ForgeCAD: instances, joints between anchor frames, the solver, checks and BOM"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+forge-math = { path = "../forge-math" }
+forge-geom = { path = "../forge-geom" }
+forge-topo = { path = "../forge-topo" }
+forge-bool = { path = "../forge-bool" }
+forge-mesh = { path = "../forge-mesh" }
+
+[dev-dependencies]
+forge-ops = { path = "../forge-ops" }
+
+[lints]
+workspace = true
