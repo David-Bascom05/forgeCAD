@@ -13,6 +13,7 @@ pub mod edit;
 pub mod edit_ops;
 pub mod error;
 pub mod eval;
+pub mod export;
 pub mod feat_error;
 pub mod fillets;
 pub mod holes;
@@ -60,6 +61,8 @@ pub struct Options {
     /// Find what anchor text names each face and edge of the finished part (`anchors`), for a UI
     /// turning picks into source.
     pub anchors: bool,
+    /// An assembly: write its structure as STEP under this product name (`fg run --step`).
+    pub step: Option<String>,
 }
 
 impl Default for Options {
@@ -75,6 +78,7 @@ impl Default for Options {
             overlap: true,
             expects: true,
             anchors: false,
+            step: None,
         }
     }
 }
