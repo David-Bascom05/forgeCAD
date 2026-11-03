@@ -4,7 +4,8 @@
 //! Narrow results are cached by (part, part, relative pose); after a drag only moved occurrences
 //! are tested again.
 
-use crate::model::{DocId, Fit, PartRef, Parts, Path};
+use crate::diag::{Diagnostic, Intent};
+use crate::model::{DocId, Fit, FitMatch, FitRule, PartRef, Parts, Path};
 use crate::solve::Solution;
 use forge_math::{Box3, Frame, Point3, Vec3, tol};
 use std::collections::BTreeMap;
@@ -653,33 +654,52 @@ pub fn rigid_copy(b: &forge_topo::Body, f: &Frame) -> forge_topo::Body {
 
 // ---- the check ----
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Contact {
-    /// Confirmed: the solids share volume.
-    Overlap,
-    /// The meshes crossed, but the exact solids only touch.
-    Touch,
-    /// A declared fit: intended contact, not an error.
-    Fit,
-    /// The meshes cross and no exact geometry was there to confirm it.
-    Unconfirmed,
-}
-
+/// Two occurrences that share volume: a warning, never an error (contact is sometimes meant).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Interference {
     pub a: Path,
     pub b: Path,
-    pub contact: Contact,
-    /// Exact shared volume, where confirmed.
+    /// Exact shared volume (mm³), where kernel solids confirmed it.
     pub volume: Option<f64>,
+    /// False when no exact geometry was there: the meshes cross, deeper than `tolerance`.
+    pub confirmed: bool,
     /// The narrow phase's tolerance for this pair: overlaps shallower than this may be missed.
     pub tolerance: f64,
 }
 
+/// Contact that a declared fit or a fit rule says is meant.
+#[derive(Clone, Debug, PartialEq)]
+pub struct IntendedContact {
+    pub a: Path,
+    pub b: Path,
+    pub by: Intent,
+}
+
+/// The pairs one fit rule covered.
+#[derive(Clone, Debug, PartialEq)]
+pub struct RuleUse {
+    pub rule: u32,
+    pub pairs: Vec<(Path, Path)>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+enum PairHit {
+    Interference(Interference),
+    Intended(IntendedContact),
+    /// The meshes crossed but the exact solids only touch.
+    Touch(Path, Path),
+}
+
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct InterferenceReport {
-    /// Every pair whose solids meet (overlaps, touches, fits), by path.
-    pub hits: Vec<Interference>,
+    /// Unintended shared volume, by path: warnings.
+    pub interferences: Vec<Interference>,
+    /// Contact covered by a fit or a fit rule, by path.
+    pub intended: Vec<IntendedContact>,
+    /// Pairs whose solids only touch.
+    pub touching: Vec<(Path, Path)>,
+    /// Each fit rule that covered something, and what.
+    pub rules: Vec<RuleUse>,
     /// Occurrences with no mesh, not checked.
     pub unchecked: Vec<Path>,
     pub candidates: usize,
@@ -690,15 +710,66 @@ pub struct InterferenceReport {
 }
 
 impl InterferenceReport {
-    pub fn overlaps(&self) -> impl Iterator<Item = &Interference> {
-        self.hits
+    /// As typed diagnostics: interference a warning, intended contact for information.
+    pub fn diagnostics(&self) -> Vec<Diagnostic> {
+        let mut out: Vec<Diagnostic> = self
+            .interferences
             .iter()
-            .filter(|h| matches!(h.contact, Contact::Overlap | Contact::Unconfirmed))
+            .map(|i| Diagnostic::Interference {
+                a: i.a.clone(),
+                b: i.b.clone(),
+                volume: i.volume,
+                confirmed: i.confirmed,
+            })
+            .collect();
+        out.extend(self.intended.iter().map(|i| Diagnostic::IntendedContact {
+            a: i.a.clone(),
+            b: i.b.clone(),
+            by: i.by,
+        }));
+        out
     }
 }
 
+/// Whether an occurrence matches one side of a fit rule; for a feature, its anchors' world frames.
+fn feature_axes<P: Parts>(parts: &P, o: &Occ, m: &FitMatch) -> Option<Vec<Frame>> {
+    match m {
+        FitMatch::Part { doc, body } => {
+            (o.part.doc == *doc && body.is_none_or(|b| b == o.part.body)).then(Vec::new)
+        }
+        FitMatch::Feature { kind, size } => {
+            let info = parts.part(&o.part)?;
+            let axes: Vec<Frame> = info
+                .features
+                .iter()
+                .filter(|(_, f)| f.kind == *kind && size.is_none_or(|s| (s - f.size).abs() <= 1e-9))
+                .filter_map(|(n, _)| info.refs.get(n).and_then(|r| r.as_ref().ok()))
+                .map(|r| o.pose.compose(&r.frame))
+                .collect();
+            (!axes.is_empty()).then_some(axes)
+        }
+    }
+}
+
+/// Two anchors on one axis (either way round), within the narrow phase's tolerance.
+fn coaxial(p: &Frame, q: &Frame, tol: f64) -> bool {
+    let (zp, zq) = (p.z().get(), q.z().get());
+    zp.cross(zq).length() <= 1e-9 && (p.origin - q.origin).cross(zq).length() <= tol
+}
+
+fn rule_covers<P: Parts>(parts: &P, r: &FitRule, x: &Occ, y: &Occ, tol: f64) -> bool {
+    let one = |x: &Occ, y: &Occ| {
+        let (Some(ax), Some(ay)) = (feature_axes(parts, x, &r.a), feature_axes(parts, y, &r.b)) else {
+            return false;
+        };
+        // features on both sides: they must meet on one axis
+        ax.is_empty() || ay.is_empty() || ax.iter().any(|p| ay.iter().any(|q| coaxial(p, q, tol)))
+    };
+    one(x, y) || one(y, x)
+}
+
 type Key = (PartKey, PartKey, [u64; 9]);
-type PairResults = BTreeMap<(usize, usize), Option<Interference>>;
+type PairResults = BTreeMap<(usize, usize), Option<PairHit>>;
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum PartKey {
@@ -784,9 +855,10 @@ impl<'p, P: Parts, E: Exact> Checker<'p, P, E> {
             .collect()
     }
 
-    /// Every pair of occurrences whose solids meet. Occurrences that did not move since the last
-    /// call keep their pair results; only pairs with a moved occurrence are tested.
-    pub fn interference(&mut self, sol: &Solution, fits: &[Fit]) -> InterferenceReport {
+    /// Every pair of occurrences whose solids meet: unintended ones as interference (warnings),
+    /// the rest as intended contact by a declared fit or a fit rule. Occurrences that did not move
+    /// since the last call keep their pair results; only pairs with a moved occurrence are tested.
+    pub fn interference(&mut self, sol: &Solution, fits: &[Fit], rules: &[FitRule]) -> InterferenceReport {
         let occ = self.occurrences(sol);
         let mut rep = InterferenceReport::default();
         let n = occ.len();
@@ -866,18 +938,31 @@ impl<'p, P: Parts, E: Exact> Checker<'p, P, E> {
             let depth = ma.tolerance + mb.tolerance + tol::LINEAR;
             narrow(ma, mb, &keyed[k].1, depth)
         });
-        let fit_set: std::collections::BTreeSet<(&Path, &Path)> = fits
+        let fit_at: BTreeMap<(&Path, &Path), usize> = fits
             .iter()
-            .map(|f| if f.a <= f.b { (&f.a, &f.b) } else { (&f.b, &f.a) })
+            .enumerate()
+            .map(|(i, f)| (if f.a <= f.b { (&f.a, &f.b) } else { (&f.b, &f.a) }, i))
             .collect();
-        let fitted = |a: &Path, b: &Path| fit_set.contains(&if a <= b { (a, b) } else { (b, a) });
-        // exact confirmation for hits that are not declared fits
+        let mut rules_sorted: Vec<&FitRule> = rules.iter().collect();
+        rules_sorted.sort_by_key(|r| r.id);
+        let intent = |i: usize, j: usize| -> Option<Intent> {
+            let (a, b) = (&occ[i].path, &occ[j].path);
+            if let Some(&index) = fit_at.get(&if a <= b { (a, b) } else { (b, a) }) {
+                return Some(Intent::Fit { index });
+            }
+            let tol = occ[i].mesh.as_ref().map_or(0.0, |m| m.tolerance)
+                + occ[j].mesh.as_ref().map_or(0.0, |m| m.tolerance)
+                + tol::LINEAR;
+            rules_sorted
+                .iter()
+                .find(|r| rule_covers(self.parts, r, &occ[i], &occ[j], tol))
+                .map(|r| Intent::Rule { rule: r.id })
+        };
+        // exact confirmation for hits that are not intended
         let confirm: Vec<usize> = todo
             .iter()
             .zip(&narrowed)
-            .filter(|(k, r)| {
-                **r != Narrow::Clear && !fitted(&occ[pairs[**k].0].path, &occ[pairs[**k].1].path)
-            })
+            .filter(|(k, r)| **r != Narrow::Clear && intent(pairs[**k].0, pairs[**k].1).is_none())
             .map(|(k, _)| *k)
             .collect();
         rep.exact_runs = confirm.len();
@@ -892,7 +977,7 @@ impl<'p, P: Parts, E: Exact> Checker<'p, P, E> {
             self.cache.insert(keyed[*k].0.clone(), (*r, vol));
         }
 
-        let mut results: BTreeMap<(usize, usize), Option<Interference>> = BTreeMap::new();
+        let mut results: PairResults = BTreeMap::new();
         if let (Some((_, old)), true) = (&prev, same_set) {
             for (&(i, j), r) in old {
                 if !moved[i] && !moved[j] {
@@ -910,27 +995,46 @@ impl<'p, P: Parts, E: Exact> Checker<'p, P, E> {
                     occ[i].mesh.as_ref().expect("boxed"),
                     occ[j].mesh.as_ref().expect("boxed"),
                 );
-                let contact = if fitted(&occ[i].path, &occ[j].path) {
-                    Contact::Fit
-                } else {
-                    match vol {
-                        Some(v) if v > TOUCH_VOLUME => Contact::Overlap,
-                        Some(_) => Contact::Touch,
-                        None => Contact::Unconfirmed,
-                    }
-                };
-                Some(Interference {
-                    a: occ[i].path.clone(),
-                    b: occ[j].path.clone(),
-                    contact,
-                    volume: vol,
-                    tolerance: ma.tolerance + mb.tolerance + tol::LINEAR,
+                let (a, b) = (occ[i].path.clone(), occ[j].path.clone());
+                Some(match intent(i, j) {
+                    Some(by) => PairHit::Intended(IntendedContact { a, b, by }),
+                    None => match vol {
+                        Some(v) if v <= TOUCH_VOLUME => PairHit::Touch(a, b),
+                        _ => PairHit::Interference(Interference {
+                            a,
+                            b,
+                            volume: vol,
+                            confirmed: vol.is_some(),
+                            tolerance: ma.tolerance + mb.tolerance + tol::LINEAR,
+                        }),
+                    },
                 })
             };
             results.insert((i, j), hit);
         }
-        rep.hits = results.values().flatten().cloned().collect();
-        rep.hits.sort_by(|x, y| (&x.a, &x.b).cmp(&(&y.a, &y.b)));
+        let mut by_rule: BTreeMap<u32, Vec<(Path, Path)>> = BTreeMap::new();
+        for h in results.values().flatten() {
+            match h {
+                PairHit::Interference(x) => rep.interferences.push(x.clone()),
+                PairHit::Intended(x) => {
+                    if let Intent::Rule { rule } = x.by {
+                        by_rule.entry(rule).or_default().push((x.a.clone(), x.b.clone()));
+                    }
+                    rep.intended.push(x.clone());
+                }
+                PairHit::Touch(a, b) => rep.touching.push((a.clone(), b.clone())),
+            }
+        }
+        rep.interferences.sort_by(|x, y| (&x.a, &x.b).cmp(&(&y.a, &y.b)));
+        rep.intended.sort_by(|x, y| (&x.a, &x.b).cmp(&(&y.a, &y.b)));
+        rep.touching.sort();
+        rep.rules = by_rule
+            .into_iter()
+            .map(|(rule, mut pairs)| {
+                pairs.sort();
+                RuleUse { rule, pairs }
+            })
+            .collect();
         // forget clear pairs: only hits need carrying over
         results.retain(|_, r| r.is_some());
         self.last = Some((occ, results));
@@ -994,7 +1098,7 @@ pub struct Clearance {
 #[derive(Clone, Debug, PartialEq)]
 pub struct SweepStep {
     pub value: f64,
-    /// Overlaps (not touches or fits) at this pose.
+    /// Interference at this pose (not touches, fits or rules).
     pub overlaps: Vec<Interference>,
     /// The watched pairs' clearances (None: farther than the limit).
     pub clearances: Vec<Option<f64>>,
@@ -1022,14 +1126,15 @@ pub fn sweep<P: Parts, E: Exact>(
         .find(|j| j.id == joint)
         .and_then(|j| j.drive.iter().find(|d| d.0 == freedom).map(|d| d.1));
     let fits = solver.assembly().fits.clone();
+    let rules = solver.assembly().fit_rules.clone();
     let mut out = Vec::new();
     for i in 0..=steps {
         let v = range.0 + (range.1 - range.0) * i as f64 / steps.max(1) as f64;
         let sol = solver.set_drive(joint, freedom, v).clone();
-        let rep = checker.interference(&sol, &fits);
+        let rep = checker.interference(&sol, &fits, &rules);
         out.push(SweepStep {
             value: v,
-            overlaps: rep.overlaps().cloned().collect(),
+            overlaps: rep.interferences.clone(),
             clearances: watch
                 .iter()
                 .map(|(a, b)| checker.clearance(&sol, a, b, limit).map(|c| c.distance))

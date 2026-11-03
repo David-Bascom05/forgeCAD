@@ -338,6 +338,41 @@ pub struct Relation {
     pub suppressed: bool,
 }
 
+/// What an anchor is for, so fit rules can match it by kind and size.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum FeatureKind {
+    ExternalThread,
+    InternalThread,
+    Shaft,
+    Bore,
+}
+
+/// A feature on a part's anchor: kind and nominal size (mm; M5 is 5).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Feature {
+    pub kind: FeatureKind,
+    pub size: f64,
+}
+
+/// One side of a fit rule.
+#[derive(Clone, Debug, PartialEq)]
+pub enum FitMatch {
+    /// Any occurrence of this part (any body when `body` is None).
+    Part { doc: DocId, body: Option<u64> },
+    /// An occurrence with an anchor carrying this feature (any size when `size` is None). When
+    /// both sides match by feature, the two anchors must also share an axis there.
+    Feature { kind: FeatureKind, size: Option<f64> },
+}
+
+/// Part-level intended contact, as SolidWorks groups fasteners: every pair it matches overlaps on
+/// purpose (a bolt M5 in a tapped M5 hole), with no pair declarations.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FitRule {
+    pub id: u32,
+    pub a: FitMatch,
+    pub b: FitMatch,
+}
+
 /// Declared intended contact between two occurrences (FastCAD's `fit`): a press fit, a bolt in a
 /// tapped hole. Reported, never an error.
 #[derive(Clone, Debug, PartialEq)]
@@ -514,6 +549,7 @@ pub struct Assembly {
     pub constraints: Vec<Constraint>,
     pub relations: Vec<Relation>,
     pub fits: Vec<Fit>,
+    pub fit_rules: Vec<FitRule>,
 }
 
 /// Why a part could not give an anchor it declares; decided when the part was built.
@@ -531,6 +567,8 @@ pub struct PartInfo {
     pub hash: Option<ContentHash>,
     /// Anchors (frames) and role-named faces, edges and axes, by name.
     pub refs: BTreeMap<String, Result<Reference, AnchorFault>>,
+    /// Features on named anchors (a thread, a bore), for fit rules.
+    pub features: Vec<(String, Feature)>,
     pub mesh: Option<std::sync::Arc<crate::check::PartMesh>>,
 }
 

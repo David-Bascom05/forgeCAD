@@ -89,9 +89,16 @@ fn project() -> (Catalog, BrepExact) {
         &mut c,
         &mut e,
         "bolt",
-        body(Profile::circle(Point2::new(0.0, 0.0), 3.0, 1), 0.0, 12.0),
+        // an M6 bolt: its shank goes 5 down into the plate's tapped seat
+        body(Profile::circle(Point2::new(0.0, 0.0), 3.0, 1), -5.0, 17.0),
         vec![("base".into(), Reference::frame(Frame::WORLD))],
     );
+    let m6 = |kind| Feature { kind, size: 6.0 };
+    c.parts.get_mut(&(DocId("bolt".into()), 0)).unwrap().features =
+        vec![("base".into(), m6(FeatureKind::ExternalThread))];
+    c.parts.get_mut(&(DocId("plate".into()), 0)).unwrap().features = (0..BOLTS)
+        .map(|k| (format!("seat{k}"), m6(FeatureKind::InternalThread)))
+        .collect();
     for (i, z) in [0.0, 5.0, 10.0].into_iter().enumerate() {
         add(
             &mut c,
@@ -107,6 +114,18 @@ fn project() -> (Catalog, BrepExact) {
 /// The assembly, and the joint ids of each four-bar's crank.
 fn assembly() -> (Assembly, Vec<JointId>) {
     let mut asm = Assembly::default();
+    // one rule instead of 4,600 fit declarations
+    asm.fit_rules.push(FitRule {
+        id: 1,
+        a: FitMatch::Feature {
+            kind: FeatureKind::ExternalThread,
+            size: Some(6.0),
+        },
+        b: FitMatch::Feature {
+            kind: FeatureKind::InternalThread,
+            size: Some(6.0),
+        },
+    });
     asm.instances
         .push(Instance::part(1, PartRef::new("base", 0), at(-50.0, -50.0, 0.0)).grounded());
     let mut next = 2u32;
@@ -284,30 +303,34 @@ fn five_thousand_instances_meet_the_targets() {
     let mut ck = Checker::new(&c, &e);
     let (t_overlap, rep) = best(3, || {
         let mut fresh = Checker::new(&c, &e);
-        fresh.interference(s.solution(), &[])
+        fresh.interference(s.solution(), &[], &asm.fit_rules)
     });
     assert_eq!(
-        rep.overlaps().count(),
+        rep.interferences.len(),
         0,
         "{:?}",
-        rep.overlaps().take(3).collect::<Vec<_>>()
+        rep.interferences.iter().take(3).collect::<Vec<_>>()
     );
-    ck.interference(s.solution(), &[]);
+    ck.interference(s.solution(), &[], &asm.fit_rules);
     // drag the table (21 instances among neighbours), solve and re-check overlap
     let mut x = 0.0;
     let (t_drag, drag) = best(3, || {
         x += 1.0;
         let sol = s.set_drive(JointId(1), Freedom::Tz, x).clone();
         assert_eq!(sol.stats.partitions_solved, 1);
-        ck.interference(&sol, &[])
+        ck.interference(&sol, &[], &asm.fit_rules)
     });
     assert!(
         drag.candidates >= 20 && drag.candidates < 40,
         "{} candidates after a drag",
         drag.candidates
     );
-    assert!(drag.reused > 0 || drag.hits.is_empty());
-    assert_eq!(drag.overlaps().count(), 0);
+    assert!(drag.interferences.is_empty());
+    // every bolt is intended contact, by the one rule, and none needed an exact boolean
+    assert_eq!(rep.rules.len(), 1);
+    assert_eq!(rep.rules[0].pairs.len(), (PLATES * BOLTS) as usize);
+    assert_eq!(rep.exact_runs, 0);
+    assert_eq!(drag.rules[0].pairs.len(), (PLATES * BOLTS) as usize);
 
     println!(
         "instances {} joints {}: anchors {:?}, cold solve {:?}, edit re-check {:?}, limit edit {:?}, overlap cold {:?} ({} candidates, {} exact), overlap after drag {:?} ({} candidates, {} cached)",
