@@ -378,10 +378,25 @@ impl Sheet {
             (Position::Outside, false) => sharp,
             (Position::BendOutside, _) => s,
         };
-        if d != 0.0 {
-            self.move_edge(wall, segment, d)?;
+        // all or nothing: a refused flange leaves the sheet as it was
+        if let Some(j) = self
+            .joints
+            .iter()
+            .find(|j| (j.a == wall && j.on_a == segment) || (j.b == wall && j.on_b == segment))
+        {
+            return Err(SheetError::EdgeTaken {
+                feature: self.feature,
+                trim: TrimRef::Outline { wall, segment },
+                joint: j.id,
+            });
         }
-        self.flange_r(wall, segment, angle, height, radius)
+        let mut next = self.clone();
+        if d != 0.0 {
+            next.move_edge(wall, segment, d)?;
+        }
+        let made = next.flange_r(wall, segment, angle, height, radius)?;
+        *self = next;
+        Ok(made)
     }
 
     /// Moves straight outline segment `segment` of `wall` by `d` along its outward normal; the
