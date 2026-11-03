@@ -1030,11 +1030,6 @@ impl Shell {
                     }
                 }
             }
-        } else if (a.isolated.is_some() || !a.hidden.is_empty())
-            && Self::fg_button(ui, "Show all", "asm:showall".into(), places)
-        {
-            a.show_all();
-            out.push(FgAct::AsmShow);
         }
         // the exploded view
         Self::fg_heading(ui, t, "Explode");
