@@ -86,7 +86,10 @@ fn ready(g: &Gui) -> bool {
     g.view.is_some()
         && g.fg_asm.is_some()
         && g.fg.as_ref().is_some_and(|s| s.done == s.seq)
-        && g.shell.fg.as_ref().is_some_and(|p| p.asm.as_ref().is_some_and(|a| !a.checking))
+        && g.shell
+            .fg
+            .as_ref()
+            .is_some_and(|p| p.asm.as_ref().is_some_and(|a| !a.checking))
 }
 
 fn open(file: &Path) -> Option<Headless> {
@@ -116,7 +119,11 @@ fn open_within(file: &Path, secs: f64) -> Option<Headless> {
         got,
         "never ready: {}\n{:?}",
         h.gui.shell.status,
-        h.gui.shell.fg.as_ref().map(|p| p.issues.iter().map(|i| format!("{} {}", i.kind, i.text)).collect::<Vec<_>>())
+        h.gui.shell.fg.as_ref().map(|p| p
+            .issues
+            .iter()
+            .map(|i| format!("{} {}", i.kind, i.text))
+            .collect::<Vec<_>>())
     );
     for _ in 0..3 {
         h.step();
@@ -148,9 +155,12 @@ fn a_four_bar_opens_posed_with_its_tree_joints_dof_bom_and_expects() {
     assert_eq!(a.joints.len(), 4);
     // driven: the crank's turn is given, so nothing is left free
     assert_eq!(a.mobility, 0);
-    assert_eq!(a.bom.iter().find(|b| b.0.ends_with("rod.fg")).map(|b| b.1), Some(3));
-    assert_eq!(a.expects.len(), 1);
-    assert!(a.expects[0].ok);
+    assert_eq!(
+        a.bom.iter().find(|b| b.0.ends_with("rod.fg")).map(|b| b.1),
+        Some(3)
+    );
+    // the expects wait for the checks, as the overlap check does
+    assert!(a.expects.is_empty() && a.overlap.is_none());
     // one mesh per part, placed at every occurrence: 7 placements of 5 meshes
     let v = h.gui.view.as_ref().unwrap();
     assert_eq!(v.scene.placements.len(), 7);
@@ -163,6 +173,14 @@ fn a_four_bar_opens_posed_with_its_tree_joints_dof_bom_and_expects() {
     assert!(h.gui.shell.place("asm:row:rod[1]").is_some());
     assert!(h.gui.shell.place("asm:drive:j1:turn").is_some());
     assert!(h.gui.shell.place("asm:bom:rod").is_some());
+    // run on request: the expect measured and passed
+    assert!(h.click("asm:check"));
+    h.step();
+    assert!(h.until(ready));
+    let a = asm(&h);
+    assert_eq!(a.expects.len(), 1);
+    assert!(a.expects[0].ok, "{:?}", a.expects);
+    assert!(a.overlap.is_some());
 }
 
 #[test]
@@ -178,7 +196,10 @@ fn choosing_hiding_isolating_and_a_parts_anchors() {
     assert_eq!(asm(&h).selected.as_deref(), Some("crank"));
     let v = h.gui.view.as_ref().unwrap();
     assert_eq!(v.scene.placements[crank].tint, forge_render::fg::PICKED_TINT);
-    assert_ne!(v.scene.placements[placement_of(&h, "rocker")].tint, forge_render::fg::PICKED_TINT);
+    assert_ne!(
+        v.scene.placements[placement_of(&h, "rocker")].tint,
+        forge_render::fg::PICKED_TINT
+    );
     // hidden: out of sight; shown again
     assert!(h.click("asm:hide"));
     h.step();
@@ -199,14 +220,27 @@ fn choosing_hiding_isolating_and_a_parts_anchors() {
     h.step();
     let v = h.gui.view.as_ref().unwrap();
     for k in 0..3 {
-        assert_eq!(v.scene.placements[placement_of(&h, &format!("rod[{k}]"))].tint, forge_render::fg::PICKED_TINT);
+        assert_eq!(
+            v.scene.placements[placement_of(&h, &format!("rod[{k}]"))].tint,
+            forge_render::fg::PICKED_TINT
+        );
     }
     // the part file and its anchors
     assert!(h.click("asm:row:crank"));
     h.step();
     assert!(h.gui.shell.place("asm:file").is_some());
     assert!(h.click("asm:anchors"));
-    assert!(h.until(|g| g.shell.fg.as_ref().unwrap().asm.as_ref().unwrap().anchors.is_some()));
+    assert!(h.until(|g| {
+        g.shell
+            .fg
+            .as_ref()
+            .unwrap()
+            .asm
+            .as_ref()
+            .unwrap()
+            .anchors
+            .is_some()
+    }));
     let (file, got) = asm(&h).anchors.clone().unwrap();
     assert!(file.ends_with("crank.fg"), "{file}");
     let got = got.unwrap();
@@ -232,7 +266,9 @@ fn a_drive_slider_is_a_set_param_and_the_crank_turns() {
     h.step();
     let ops = h.gui.fg.as_ref().unwrap().ops.clone();
     assert_eq!(ops.len(), 1, "{ops:?}");
-    let Op::SetParam { param, value } = &ops[0] else { panic!("{ops:?}") };
+    let Op::SetParam { param, value } = &ops[0] else {
+        panic!("{ops:?}")
+    };
     assert_eq!(param.to_string(), "j1.turn");
     assert_ne!(value.value, 30.0);
     assert!(h.until(ready));
@@ -252,12 +288,24 @@ fn a_conflict_shows_its_set_and_the_overlap_check_runs_on_request() {
     std::fs::write(&file, format!("{FOUR_BAR}j5 = revolute(crank.b, base.o4)\n")).unwrap();
     let Some(mut h) = open(&file) else { return };
     let p = h.gui.shell.fg.as_ref().unwrap();
-    let k = p.issues.iter().position(|i| i.kind == "Conflict").unwrap_or_else(|| panic!("{:?}", p.issues));
-    assert!(p.issues[k].fixes.iter().any(|f| matches!(f, Op::DeleteFeature { .. })));
+    let k = p
+        .issues
+        .iter()
+        .position(|i| i.kind == "Conflict")
+        .unwrap_or_else(|| panic!("{:?}", p.issues));
+    assert!(
+        p.issues[k]
+            .fixes
+            .iter()
+            .any(|f| matches!(f, Op::DeleteFeature { .. }))
+    );
     assert!(h.click(&format!("asm:show:{k}")));
     h.step();
     let items = asm(&h).highlight_items.clone();
-    assert!(items.len() >= 2 && items.iter().all(|i| i.starts_with('j')), "{items:?}");
+    assert!(
+        items.len() >= 2 && items.iter().all(|i| i.starts_with('j')),
+        "{items:?}"
+    );
     // interference: none until asked, then counted
     assert!(asm(&h).overlap.is_none());
     assert!(h.click("asm:check"));
@@ -279,13 +327,25 @@ fn a_conflict_shows_its_set_and_the_overlap_check_runs_on_request() {
         .collect();
     assert_eq!(warns.len(), n);
     if let Some(w) = warns.first() {
-        let k = h.gui.shell.fg.as_ref().unwrap().issues.iter().position(|i| *i == *w).unwrap();
+        let k = h
+            .gui
+            .shell
+            .fg
+            .as_ref()
+            .unwrap()
+            .issues
+            .iter()
+            .position(|i| *i == *w)
+            .unwrap();
         assert!(h.click(&format!("asm:show:{k}")));
         h.step();
         let hl = asm(&h).highlight.clone();
         assert_eq!(hl.len(), 2);
         let v = h.gui.view.as_ref().unwrap();
-        assert_eq!(v.scene.placements[placement_of(&h, &hl[0])].tint, forge_render::fg::CLASH_TINT);
+        assert_eq!(
+            v.scene.placements[placement_of(&h, &hl[0])].tint,
+            forge_render::fg::CLASH_TINT
+        );
     }
 }
 
@@ -299,7 +359,9 @@ fn the_18u_rack_opens_and_orbits() {
         return;
     }
     let t = std::time::Instant::now();
-    let Some(h) = open_within(&rack, 600.0) else { return };
+    let Some(h) = open_within(&rack, 600.0) else {
+        return;
+    };
     let mut h = h;
     let open_ms = t.elapsed().as_secs_f64() * 1e3;
     let a = asm(&h);
@@ -317,7 +379,11 @@ fn the_18u_rack_opens_and_orbits() {
     );
     assert!(n > 100, "{n}");
     assert_eq!(v.scene.placements.len(), drawn.max(1));
-    assert!(meshes.len() * 4 < drawn, "instancing: {} meshes for {drawn}", meshes.len());
+    assert!(
+        meshes.len() * 4 < drawn,
+        "instancing: {} meshes for {drawn}",
+        meshes.len()
+    );
     // orbit: frames while the view turns
     let mut times = vec![];
     for _ in 0..30 {
@@ -327,6 +393,9 @@ fn the_18u_rack_opens_and_orbits() {
         times.push(t.elapsed().as_secs_f64() * 1e3);
     }
     times.sort_by(f64::total_cmp);
-    eprintln!("rack.fg orbit: frame median {:.1} ms, worst {:.1} ms", times[15], times[29]);
+    eprintln!(
+        "rack.fg orbit: frame median {:.1} ms, worst {:.1} ms",
+        times[15], times[29]
+    );
     assert!(times[15] < 50.0, "median frame {:.1} ms", times[15]);
 }

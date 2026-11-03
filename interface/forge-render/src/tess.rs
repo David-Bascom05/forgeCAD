@@ -370,15 +370,35 @@ pub fn cluster(src: &Lod, center: [f32; 3], chord: f32) -> Lod {
 
 /// All of a part's levels: those the kernel can't mesh at that coarseness are left out.
 pub fn build_part(body: &Body) -> Result<PartMesh, TessError> {
+    build_part_from(body, 0)
+}
+
+/// A part among many (an assembly's): its finest level no finer than a 500th of its size, so a
+/// big part with fine detail (threads, small holes) meshes in a moment and still looks whole at
+/// any distance it's seen from with the rest.
+pub fn build_part_coarse(body: &Body) -> Result<PartMesh, TessError> {
+    let bb = body
+        .face_ids()
+        .fold(forge_math::Box3::EMPTY, |b, f| b.hull(&body.face_box(f)));
+    let size = (bb.x.hi - bb.x.lo).max(bb.y.hi - bb.y.lo).max(bb.z.hi - bb.z.lo);
+    let first = CHORDS
+        .iter()
+        .position(|c| c.0 >= size / 500.0)
+        .unwrap_or(CHORDS.len() - 1);
+    build_part_from(body, first)
+}
+
+/// The levels from `CHORDS[first]` down, then clustered ones.
+fn build_part_from(body: &Body, first: usize) -> Result<PartMesh, TessError> {
     let mut lods: Vec<Lod> = Vec::new();
-    for (i, &(chord, turn)) in CHORDS.iter().enumerate() {
+    for (i, &(chord, turn)) in CHORDS.iter().enumerate().skip(first) {
         let q = Quality {
             chord,
             max_angle: turn * core::f64::consts::PI / 180.0,
         };
         match build_lod(body, &q) {
             Ok(l) => lods.push(l),
-            Err(e) if i == 0 => return Err(e),
+            Err(e) if i == first => return Err(e),
             Err(_) => {}
         }
     }

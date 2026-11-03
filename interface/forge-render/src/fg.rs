@@ -22,7 +22,8 @@ use std::time::Instant;
 
 pub type Gpu = (wgpu::Device, wgpu::Queue, wgpu::AdapterInfo);
 
-/// A text to build: its sequence number, the text, and whether an assembly runs its overlap check.
+/// A text to build: its sequence number, the text, and whether an assembly runs its checks (the
+/// overlap check and its expects).
 pub type Job = (u64, String, bool);
 
 /// A placement's rows from a pose: the frame's axes as columns, its origin last.
@@ -200,7 +201,10 @@ pub fn json_line(j: &forge_agent::json::Json) -> String {
 }
 
 /// A sheet's report as facts and lists, by its shape alone: new fields show without code here.
-fn sheet_report(j: &forge_agent::json::Json) -> (Vec<(String, String)>, Vec<(String, Vec<String>)>) {
+/// A report's scalar facts, and its lists of one-line records.
+type Report = (Vec<(String, String)>, Vec<(String, Vec<String>)>);
+
+fn sheet_report(j: &forge_agent::json::Json) -> Report {
     use forge_agent::json::Json;
     let (mut facts, mut lists) = (vec![], vec![]);
     if let Json::Obj(fs) = j {
@@ -469,7 +473,9 @@ fn work(
             let opts = Options {
                 dir: dir.clone(),
                 render: true,
+                // the overlap check and the expects are the slow part of a big assembly: on request
                 overlap: job.2,
+                expects: job.2,
                 ..Options::default()
             };
             let (run, c) = forge_lang::run(&job.1, opts, std::mem::take(&mut cache));
@@ -667,7 +673,8 @@ fn asm_view(
                         loop {
                             let i = at.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                             let Some(&(_, k)) = fresh.get(i) else { return got };
-                            let m = tess::build_part(&out.parts[k]).unwrap_or_else(|_| PartMesh::empty());
+                            let m =
+                                tess::build_part_coarse(&out.parts[k]).unwrap_or_else(|_| PartMesh::empty());
                             got.push((i, m));
                         }
                     })
@@ -724,7 +731,15 @@ fn asm_view(
         };
         let mut scene = Scene::new(&part_info(&parts), placements);
         scene.set_explode(0.0);
-        let r = Renderer::new(device, queue, adapter, render::OFFSCREEN, (16, 16), &parts, &scene);
+        let r = Renderer::new(
+            device,
+            queue,
+            adapter,
+            render::OFFSCREEN,
+            (16, 16),
+            &parts,
+            &scene,
+        );
         Some((r, scene))
     } else {
         if restage {

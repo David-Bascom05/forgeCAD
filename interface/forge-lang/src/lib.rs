@@ -4,8 +4,8 @@
 //! read the part as it stands. Errors, warnings and fixes are typed data (`error`), and edits
 //! are typed operations on the source (`edit`).
 
-pub mod asm;
 pub mod anchors;
+pub mod asm;
 pub mod bodies;
 pub mod build;
 pub mod builtins;
@@ -54,6 +54,8 @@ pub struct Options {
     pub probe: Option<Vec<usize>>,
     /// An assembly: run the overlap (interference) check; off, a UI shows the solve first.
     pub overlap: bool,
+    /// An assembly: measure its expects (an `at` one runs the document again with its params).
+    pub expects: bool,
     /// Find what anchor text names each face and edge of the finished part (`anchors`), for a UI
     /// turning picks into source.
     pub anchors: bool,
@@ -70,6 +72,7 @@ impl Default for Options {
             root: None,
             probe: None,
             overlap: true,
+            expects: true,
             anchors: false,
         }
     }

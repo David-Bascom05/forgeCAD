@@ -174,6 +174,14 @@ fn param(name: &'static str, text: &str, dim: Dim) -> ToolParam {
     }
 }
 
+/// A tool's form: its slots, params, words and flags.
+type Form = (
+    Vec<Slot>,
+    Vec<ToolParam>,
+    Vec<(&'static str, String)>,
+    Vec<(&'static str, bool)>,
+);
+
 /// The tools there are a Forge form for, by the ribbon's kind.
 pub const KINDS: [&str; 21] = [
     "extrude", "revolve", "hole", "fillet", "chamfer", "shell", "draft", "thread", "combine", "plane",
@@ -184,12 +192,7 @@ impl FgTool {
     /// The form for a ribbon kind, named the kind and the first free count (`fillet1`).
     pub fn new(kind: &'static str, taken: &[String]) -> Option<FgTool> {
         use SlotKind as K;
-        let (slots, params, words, flags): (
-            Vec<Slot>,
-            Vec<ToolParam>,
-            Vec<(&str, String)>,
-            Vec<(&str, bool)>,
-        ) = match kind {
+        let (slots, params, words, flags): Form = match kind {
             "extrude" => (
                 vec![slot("Profile", K::Profile)],
                 vec![param("d", "10", Dim::Length)],
@@ -320,7 +323,7 @@ impl FgTool {
             name,
             slots,
             params,
-            words: words.into_iter().map(|(k, v)| (k, v)).collect(),
+            words,
             flags,
             active: 0,
             error: None,

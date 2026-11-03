@@ -756,7 +756,12 @@ impl Shell {
         }
     }
 
-    pub(super) fn fg_button(ui: &mut Ui, label: &str, name: String, places: &mut Vec<(String, Rect)>) -> bool {
+    pub(super) fn fg_button(
+        ui: &mut Ui,
+        label: &str,
+        name: String,
+        places: &mut Vec<(String, Rect)>,
+    ) -> bool {
         let r = ui.add(egui::Button::new(egui::RichText::new(label).font(sans(12.0))));
         places.push((name, r.rect));
         r.clicked()

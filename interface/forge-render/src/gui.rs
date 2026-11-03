@@ -91,6 +91,11 @@ pub struct FrameOut {
     pub times: Times,
 }
 
+/// An assembly's occurrences, and each placement's mesh and solved pose.
+pub type AsmPlaced = (Vec<crate::fg::Occ>, Vec<(usize, crate::scene::Rows)>);
+/// A part file, and its anchors or why not.
+type PartAnchors = (String, Result<Vec<String>, String>);
+
 pub struct Gui {
     pub ctx: egui::Context,
     egui: egui_wgpu::Renderer,
@@ -134,9 +139,9 @@ pub struct Gui {
     /// What Forge names each face and edge of the part: what a pick becomes.
     pub fg_anchors: Option<Arc<crate::fg::AnchorView>>,
     /// An assembly's occurrences and their placements' poses as solved.
-    pub fg_asm: Option<(Vec<crate::fg::Occ>, Vec<(usize, crate::scene::Rows)>)>,
+    pub fg_asm: Option<AsmPlaced>,
     /// A part's anchors being found, for the instance chosen.
-    fg_asm_anchors: Option<Receiver<(String, Result<Vec<String>, String>)>>,
+    fg_asm_anchors: Option<Receiver<PartAnchors>>,
     /// The camera to keep when an assembly's view is made again.
     fg_keep_camera: Option<Camera>,
     /// The GPU refused something: said once, and no more views are drawn.
@@ -2772,8 +2777,11 @@ impl Gui {
                 asm_moved = true;
                 // which part is placed where changed: the view made again, the camera kept
                 if let Some(all) = &a.restage {
-                    let parts: Vec<crate::mesh::PartMesh> =
-                        if all.is_empty() { vec![crate::mesh::PartMesh::empty()] } else { all.clone() };
+                    let parts: Vec<crate::mesh::PartMesh> = if all.is_empty() {
+                        vec![crate::mesh::PartMesh::empty()]
+                    } else {
+                        all.clone()
+                    };
                     let placements: Vec<Placement> = if a.placed.is_empty() {
                         vec![Placement::at(0, [0.0; 3])]
                     } else {
@@ -2971,7 +2979,8 @@ impl Gui {
     /// An assembly's placements as the panel wants them: hidden ones out of sight, the chosen
     /// and the highlighted tinted.
     pub fn asm_show(&mut self) {
-        let (Some((occ, placed)), Some(a)) = (&self.fg_asm, self.shell.fg.as_ref().and_then(|p| p.asm.as_ref()))
+        let (Some((occ, placed)), Some(a)) =
+            (&self.fg_asm, self.shell.fg.as_ref().and_then(|p| p.asm.as_ref()))
         else {
             return;
         };
@@ -2980,7 +2989,9 @@ impl Gui {
             Some(v) => Some((&mut v.scene, &mut v.renderer, &mut v.dirty)),
             None => None,
         };
-        let Some((scene, renderer, dirty)) = target else { return };
+        let Some((scene, renderer, dirty)) = target else {
+            return;
+        };
         if scene.placements.len() != placed.len() {
             return;
         }
@@ -3090,7 +3101,11 @@ impl Gui {
         // an assembly: a click chooses the occurrence under it
         if let Some((occ, _)) = &self.fg_asm {
             let at = v.nav.selected.last().map(|x| x.0 as usize);
-            let path = at.and_then(|p| occ.iter().find(|o| o.placement == Some(p)).map(|o| o.path.clone()));
+            let path = at.and_then(|p| {
+                occ.iter()
+                    .find(|o| o.placement == Some(p))
+                    .map(|o| o.path.clone())
+            });
             v.nav.selected.clear();
             v.clicked.clear();
             if let Some(a) = self.shell.fg.as_mut().and_then(|p| p.asm.as_mut()) {

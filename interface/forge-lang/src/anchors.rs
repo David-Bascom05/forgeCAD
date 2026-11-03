@@ -53,8 +53,8 @@ pub struct Anchors {
 
 /// The members a feature's faces are found by (each tried; one a kind lacks is skipped).
 const FACE_ROLES: [&str; 18] = [
-    "faces", "start", "end", "floor", "mouth", "wall", "bore", "seat", "sink", "inner", "rim", "top", "bottom", "flanks",
-    "root", "chamfer", "bend", "bend_top",
+    "faces", "start", "end", "floor", "mouth", "wall", "bore", "seat", "sink", "inner", "rim", "top",
+    "bottom", "flanks", "root", "chamfer", "bend", "bend_top",
 ];
 
 fn eval_text(ev: &mut Eval, text: &str) -> Option<Value> {
@@ -142,7 +142,10 @@ pub fn find(ev: &mut Eval, body: Option<&Body>) -> Anchors {
         out.features.push(base.clone());
         let mut texts: Vec<String> = FACE_ROLES.iter().map(|m| format!("{base}.{m}")).collect();
         if let Value::Feature(f) = v {
-            let sk = f.prof.clone().or_else(|| f.shape.as_ref().map(|s| s.sketch.clone()));
+            let sk = f
+                .prof
+                .clone()
+                .or_else(|| f.shape.as_ref().map(|s| s.sketch.clone()));
             if let Some(sk) = sk {
                 let sk = sk.borrow();
                 if let Some(refs) = sketches.iter().find(|r| r.id == sk.id) {
@@ -200,7 +203,7 @@ pub fn find(ev: &mut Eval, body: Option<&Body>) -> Anchors {
             }
         }
     }
-    for (_, (k, t)) in &best {
+    for (k, t) in best.values() {
         out.sizes.insert(t.clone(), *k);
     }
     out.faces = best.into_iter().map(|(n, (_, t))| (n, t)).collect();

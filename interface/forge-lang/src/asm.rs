@@ -2460,7 +2460,7 @@ pub fn finish(
             })
             .collect(),
         stats: sol.stats,
-        overlap: opts.overlap.then(|| OverlapStats {
+        overlap: opts.overlap.then_some(OverlapStats {
             candidates: rep.candidates,
             narrow_tests: rep.narrow_tests,
             cache_hits: rep.cache_hits,
@@ -2537,7 +2537,12 @@ pub fn finish(
             .links
             .iter()
             .find(|l| l.id == *n)
-            .map(|l| l.limits.iter().map(|(f, lo, hi)| (freedom_word(*kind, *f), *lo, *hi)).collect())
+            .map(|l| {
+                l.limits
+                    .iter()
+                    .map(|(f, lo, hi)| (freedom_word(*kind, *f), *lo, *hi))
+                    .collect()
+            })
             .unwrap_or_default();
         out.joints.push(JointOut {
             limits,
@@ -2555,7 +2560,12 @@ pub fn finish(
     // expects
     let t4 = Instant::now();
     let catalog = checker.parts().clone();
-    let expects = ev.expects.clone();
+    // a UI may leave them for later (`Options::expects`): the `at` ones run the document again
+    let expects = if opts.expects || opts.probe.is_some() {
+        ev.expects.clone()
+    } else {
+        vec![]
+    };
     // the expects measured on this solve (all of them when probing for an `at` run)
     let mut direct: BTreeMap<usize, Result<f64, Issue>> = BTreeMap::new();
     for (k, s) in expects.iter().enumerate() {
