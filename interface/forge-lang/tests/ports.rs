@@ -68,3 +68,15 @@ fn bench_jack_matches_its_fc_version_less_thread_and_text() {
 fn bench_quadarm_matches_its_fc_version() {
     parity("bench_quadarm", 19376.0, 73, 167);
 }
+
+// volute whole (its two holes' cosmetic threads change nothing measured), manifold whole.
+
+#[test]
+fn bench_volute_matches_its_fc_version() {
+    parity("bench_volute", 802514.1, 70, 165);
+}
+
+#[test]
+fn bench_manifold_matches_its_fc_version() {
+    parity("bench_manifold", 884334.5, 78, 192);
+}
