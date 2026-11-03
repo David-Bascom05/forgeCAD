@@ -664,6 +664,8 @@ impl SheetNote {
                 W::UnverifiedHardware { .. } => "UnverifiedHardware",
                 W::FlatOverlapUndecided { .. } => "FlatOverlapUndecided",
                 W::FoldedClash { .. } => "FoldedClash",
+                W::FlatTouch { .. } => "FlatTouch",
+                W::FoldedTouch { .. } => "FoldedTouch",
             },
             Note::Violation(v) => match v {
                 V::HoleNearBend { .. } => "HoleNearBend",
@@ -741,6 +743,12 @@ impl SheetNote {
                     ("depth", f(depth)),
                     ("limit", f(limit)),
                 ]),
+                W::FlatTouch { a, b, at, .. } => {
+                    v.extend([("a", n.strip(a)), ("b", n.strip(b)), ("at", p2(at))])
+                }
+                W::FoldedTouch { a, b, at, .. } => {
+                    v.extend([("a", n.strip(a)), ("b", n.strip(b)), ("at", p3(at))])
+                }
                 W::ReliefRemnant {
                     joint,
                     remnant,
@@ -894,7 +902,11 @@ impl SheetNote {
                     ("away", v2(Vec3Ish(away.x, away.y))),
                 ]),
                 V::LipTooShort {
-                    cut, wall, width, need, ..
+                    cut,
+                    wall,
+                    width,
+                    need,
+                    ..
                 } => v.extend([
                     ("cut", n.cut(cut).into()),
                     ("wall", n.wall(wall).into()),
@@ -929,6 +941,16 @@ impl SheetNote {
                 n.strip_name(*a),
                 n.strip_name(*b),
                 fm(*depth)
+            ),
+            Note::Warning(W::FlatTouch { a, b, .. }) => format!(
+                "{} and {} touch in the flat pattern, no gap between: the folded part builds, the blank cannot be cut there",
+                n.strip_name(*a),
+                n.strip_name(*b)
+            ),
+            Note::Warning(W::FoldedTouch { a, b, .. }) => format!(
+                "{} and {} touch folded, an edge on a face with no gap: the flat builds, the folded solid is not valid",
+                n.strip_name(*a),
+                n.strip_name(*b)
             ),
             Note::Warning(W::ReliefRemnant { joint, remnant, .. }) => {
                 format!(
@@ -1044,7 +1066,9 @@ impl SheetNote {
                     )
                 }
             }
-            Note::Violation(V::LipTooShort { wall, width, need, .. }) => format!(
+            Note::Violation(V::LipTooShort {
+                wall, width, need, ..
+            }) => format!(
                 "{} is {} across where the hardware sits; it needs {} (its edge distance both ways)",
                 n.wall(*wall),
                 fm(*width),
@@ -1118,6 +1142,8 @@ fn kernel_kind(e: &SheetError) -> &'static str {
         CornerUnbuilt { .. } => "CornerUnbuilt",
         FlatOverlap { .. } => "FlatOverlap",
         FlatOverlapUndecided { .. } => "FlatOverlapUndecided",
+        FlatTouch { .. } => "FlatTouch",
+        FoldedTouch { .. } => "FoldedTouch",
         ReliefExtendUnbuilt { .. } => "ReliefExtendUnbuilt",
         SheetSplit { .. } => "SheetSplit",
     }
@@ -1188,6 +1214,8 @@ fn kernel_text(e: &SheetError) -> String {
             "two strips of the flat come within {}: overlap or touch cannot be told",
             fm(*gap)
         ),
+        FlatTouch { .. } => "two strips of the flat pattern touch with no gap: the blank has no width there".into(),
+        FoldedTouch { .. } => "folded, two walls touch with no gap (an edge on a face): no valid solid".into(),
         ReliefExtendUnbuilt { .. } => "the relief rule asks reliefs to extend for flat collisions: not built yet".into(),
         SheetSplit { .. } => "the cuts part the sheet in two".into(),
     }
@@ -1489,6 +1517,8 @@ fn kernel_data(e: &SheetError, n: &Names) -> Vec<(&'static str, Json)> {
         ReliefExtendUnbuilt { joint, end, .. } => {
             vec![("joint", n.joint(*joint).into()), ("end", end_name(*end).into())]
         }
+        FlatTouch { a, b, at, .. } => vec![("a", n.strip(*a)), ("b", n.strip(*b)), ("at", p2(*at))],
+        FoldedTouch { a, b, at, .. } => vec![("a", n.strip(*a)), ("b", n.strip(*b)), ("at", p3(*at))],
         SheetSplit { a, b, .. } => vec![("a", n.strip(*a)), ("b", n.strip(*b))],
     }
 }
@@ -1626,6 +1656,8 @@ fn kernel_err(st: &SheetState, span: Span, id: &str, error: SheetError) -> Error
     let extra = match error {
         SheetError::FlatOverlap { a, b, .. } => overlap_fixes(st, a, b),
         SheetError::FoldedClash { a, b, .. } => clash_fixes(st, a, b),
+        SheetError::FlatTouch { a, b, .. } => touch_fixes(st, a, b, Map::Flat),
+        SheetError::FoldedTouch { a, b, .. } => touch_fixes(st, a, b, Map::Folded),
         _ => vec![],
     };
     match kernel_error(&st.fix, st.names(), span, id, error) {
@@ -1649,17 +1681,12 @@ fn clash_fixes(st: &SheetState, a: Strip, b: Strip) -> Vec<Op> {
             Strip::Bend(j) => f.joint == j,
         })
     };
-    let mut out = vec![];
-    let later = owner(a).max(owner(b)).map(|k| &st.fix.flanges[k]);
-    if let Some(f) = later {
-        out.push(Op::SetArg {
-            id: f.id.clone(),
-            arg: "position".into(),
-            text: "\"outside\"".into(),
-        });
-    }
-    if owner(a).is_some() && owner(b).is_some() {
-        let gap = st.fix.relief.corner.gap.at(st.fix.t.v, st.fix.r.v);
+    // each tried on the kernel first: the flanges shorter, the corner opened
+    let mut out = height_fixes(st, a, b, Map::Folded, &|r| r.is_ok());
+    let gap = st.fix.relief.corner.gap.at(st.fix.t.v, st.fix.r.v);
+    let mut opened = st.sheet.clone();
+    opened.corner_default = Some(fs::CornerKind::Open { gap });
+    if owner(a).is_some() && owner(b).is_some() && fs::build_with(&opened, Map::Folded).is_ok() {
         out.push(Op::SetArg {
             id: st.id.clone(),
             arg: "corner".into(),
@@ -1669,10 +1696,44 @@ fn clash_fixes(st: &SheetState, a: Strip, b: Strip) -> Vec<Op> {
     out
 }
 
-/// SetParam fixes that clear a flat overlap: for each flange owning strip a or b, the tallest
-/// height (to a thousandth, rounded down) at which the flat no longer overlaps, found by halving
-/// on the kernel's own check.
+/// Fixes that part two strips touching in `map`, each tried on the kernel first: the corner
+/// opened (the later wall trimmed back a thickness and the shop's gap), and the flange heights
+/// that clear a flat.
+fn touch_fixes(st: &SheetState, a: Strip, b: Strip, map: Map) -> Vec<Op> {
+    let mut out = vec![];
+    let gap = st.fix.relief.corner.gap.at(st.fix.t.v, st.fix.r.v);
+    let mut s = st.sheet.clone();
+    s.corner_default = Some(fs::CornerKind::Open { gap });
+    if fs::build_with(&s, map).is_ok() {
+        out.push(Op::SetArg {
+            id: st.id.clone(),
+            arg: "corner".into(),
+            text: format!("open_corner({})", crate::values::fmt(gap)),
+        });
+    }
+    if map == Map::Flat {
+        out.extend(height_fixes(st, a, b, Map::Flat, &|r| r.is_ok()));
+    }
+    out
+}
+
+/// Shorter flanges that clear a flat overlap: an overlap cleared to a touch is cleared (the
+/// touch is its own note, with its own fixes).
 fn overlap_fixes(st: &SheetState, a: Strip, b: Strip) -> Vec<Op> {
+    height_fixes(st, a, b, Map::Flat, &|r| {
+        matches!(r, Ok(_) | Err(SheetError::FlatTouch { .. }))
+    })
+}
+
+/// SetParam fixes: for each flange owning strip a or b, the tallest height (to a thousandth,
+/// rounded down) at which the kernel's build in `map` passes `cleared`, found by halving.
+fn height_fixes(
+    st: &SheetState,
+    a: Strip,
+    b: Strip,
+    map: Map,
+    cleared: &dyn Fn(&Result<fs::Built, SheetError>) -> bool,
+) -> Vec<Op> {
     let owner = |s: Strip| {
         st.fix.flanges.iter().find(|f| match s {
             Strip::Wall(w) => f.wall == w,
@@ -1697,7 +1758,7 @@ fn overlap_fixes(st: &SheetState, a: Strip, b: Strip) -> Vec<Op> {
         };
         let clear = |delta: f64| {
             let mut s = st.sheet.clone();
-            s.move_edge(f.wall, 1, -delta).is_ok() && fs::build_with(&s, Map::Flat).is_ok()
+            s.move_edge(f.wall, 1, -delta).is_ok() && cleared(&fs::build_with(&s, map))
         };
         let most = tip - f.setback - 1e-3;
         if most <= 0.0 || !clear(most) {
@@ -2609,13 +2670,14 @@ pub fn pattern(
     };
     let si = op.sheet;
     not_unfolded(ev, si, &id, span)?;
-    let places = forge_model::pattern::placements(ev.b.history(), ev.b.features.len(), layout).map_err(|error| {
-        Error::Build {
-            span,
-            id: id.clone(),
-            error,
-        }
-    })?;
+    let places =
+        forge_model::pattern::placements(ev.b.history(), ev.b.features.len(), layout).map_err(|error| {
+            Error::Build {
+                span,
+                id: id.clone(),
+                error,
+            }
+        })?;
     let st = &ev.sheets.list[si];
     // the source's cuts, each with its wall's frame
     let sources: Vec<(WallId, ProfileLoop)> = st
@@ -3468,12 +3530,16 @@ pub fn finish(ev: &mut Eval) {
                 let (a, b) = match *w {
                     fs::SheetWarning::FlatOverlap { a, b, .. }
                     | fs::SheetWarning::FlatOverlapUndecided { a, b, .. }
-                    | fs::SheetWarning::FoldedClash { a, b, .. } => (a, b),
+                    | fs::SheetWarning::FoldedClash { a, b, .. }
+                    | fs::SheetWarning::FlatTouch { a, b, .. }
+                    | fs::SheetWarning::FoldedTouch { a, b, .. } => (a, b),
                     _ => continue,
                 };
                 let (id, span) = on.clone().unwrap_or_else(|| owner(a));
                 let fixes = match w {
                     fs::SheetWarning::FlatOverlap { .. } => overlap_fixes(st, a, b),
+                    fs::SheetWarning::FlatTouch { .. } => touch_fixes(st, a, b, Map::Flat),
+                    fs::SheetWarning::FoldedTouch { .. } => touch_fixes(st, a, b, Map::Folded),
                     _ => vec![],
                 };
                 notes.push(Warning::Sheet(Box::new(SheetNote {
@@ -3663,7 +3729,9 @@ fn cut_fixes(st: &SheetState, v: &fs::Violation) -> Vec<Op> {
             })
             .into_iter()
             .collect(),
-        fs::Violation::LipTooShort { wall, width, need, .. } => st
+        fs::Violation::LipTooShort {
+            wall, width, need, ..
+        } => st
             .fix
             .flanges
             .iter()
