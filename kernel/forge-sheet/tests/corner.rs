@@ -296,3 +296,26 @@ fn random_boxes_with_automatic_corners() {
     println!("built {built}, refused {refused} (clashes and splits)");
     assert!(built > 150, "built {built}, refused {refused}");
 }
+
+#[test]
+fn down_flanges_at_a_corner_with_an_open_corner() {
+    // two flanges turned down off adjacent edges stand inside them (no edge move going down):
+    // their walls share a t x t column, a real clash; an open corner trims the later wall back
+    let g = Gauge {
+        thickness: T,
+        radius: R,
+        rule: BendRule::K(K),
+    };
+    let th = dmath::PI / 2.0;
+    let (mut s, base) = Sheet::face(FeatureId(9), g, Frame::WORLD, &[rect_loop(40.0, 100.0)]).unwrap();
+    s.flange(base, 1, -th, 35.0).unwrap();
+    s.flange(base, 0, -th, 25.0).unwrap();
+    assert!(matches!(build_with(&s, Map::Folded), Err(SheetError::FoldedClash { .. })));
+    s.corner_default = Some(CornerKind::Open { gap: 0.4 });
+    for map in [Map::Folded, Map::Flat] {
+        let b = build_with(&s, map).unwrap_or_else(|e| panic!("{map:?}: {e:?}"));
+        let p = forge_topo::check::check(&b.body);
+        assert!(p.is_empty(), "{p:?}");
+        assert_eq!(b.corners.len(), 2, "the relief and the trim");
+    }
+}

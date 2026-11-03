@@ -603,6 +603,38 @@ fn corners(
                     automatic,
                 },
             ));
+            // an open corner also trims the later flange's wall back a thickness and the gap
+            // from the corner, its whole height, so two walls standing inside their edges miss
+            if let CornerKind::Open { gap } = kind {
+                let start = q0.distance(v) <= TOL;
+                let (y0, y1) = if start {
+                    (-t, t + gap)
+                } else {
+                    (b2.len - t - gap, b2.len + t)
+                };
+                let far = sheet.walls[b2.b]
+                    .outline
+                    .iter()
+                    .flat_map(|l| &l.segments)
+                    .flat_map(|(g, _)| g.samples(8))
+                    .map(|p| b2.jb.local(p).x)
+                    .fold(0.0, f64::max)
+                    + t;
+                let reach = b2.theta * (joint_radius(sheet, b2) + t) + t;
+                let lp = rect(-reach, y0, far, y1, [0, 1, 2, 3], &b2.jb);
+                out.push((
+                    CutSrc::Corner(j2.id, j1.id),
+                    sheet.walls[b2.b].id,
+                    lp,
+                    CornerMade {
+                        joints: [j2.id, j1.id],
+                        wall: sheet.walls[b2.b].id,
+                        kind,
+                        size: t + gap,
+                        automatic: false,
+                    },
+                ));
+            }
         }
     }
     // a bend off a wall's end edge (an ear off a flange's side): that edge bends only from the

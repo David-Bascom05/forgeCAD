@@ -424,3 +424,29 @@ fn inside_on_part_of_a_straight_edge_jogs_and_relieves() {
     let removed = T * M + r.width * (r.depth + T);
     near("jog", vol(&fold.body), closed(removed, K).0);
 }
+
+#[test]
+fn moving_an_edge_carries_chained_flanges() {
+    // a flange with a lip off its tip beside the edge: both follow
+    let th = dmath::PI / 2.0;
+    let base = poly(&[(0.0, 0.0), (L, 0.0), (L, W), (0.0, W)]);
+    let (mut s, w) = Sheet::face(FeatureId(5), gauge(K), Frame::WORLD, &[base]).unwrap();
+    let (back, _) = s.flange(w, 2, th, H).unwrap();
+    let (lip, _) = s.flange(back, 1, th, 10.0).unwrap();
+    // (lower than the back, so its top stays clear of the lip's bend)
+    s.flange_at(w, 1, th, 15.0, R, Position::Inside).unwrap();
+    let mold = |s: &Sheet, wall: WallId| {
+        s.wall(wall).unwrap().outline[0]
+            .segments
+            .iter()
+            .find_map(|g| match g {
+                (Segment::Line { a, b }, 3) => Some(a.distance(*b)),
+                _ => None,
+            })
+            .unwrap()
+    };
+    assert!((mold(&s, back) - (L - T)).abs() < 1e-12);
+    assert!((mold(&s, lip) - (L - T)).abs() < 1e-12);
+    let fold = build_with(&s, Map::Folded).unwrap();
+    checked(&fold.body);
+}

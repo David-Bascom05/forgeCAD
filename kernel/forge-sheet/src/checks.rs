@@ -180,6 +180,33 @@ pub fn mounts(sheet: &Sheet, stock: Option<&Stock>) -> Vec<Violation> {
                 best = (d, away);
             }
         }
+        // both ways along the nearest's line: room for the part's edge distance on each side?
+        let dir = best.1;
+        let room = |d: Vec2| {
+            let mut hit = f64::INFINITY;
+            let mut pieces: Vec<&Piece> = flat.outer.iter().collect();
+            pieces.extend(flat.zones.iter().flat_map(|z| z.sides.iter()));
+            for q in pieces {
+                hit = hit.min(ray(c, d, q));
+            }
+            for z in &flat.zones {
+                if z.inside(c) {
+                    hit = 0.0;
+                }
+            }
+            hit
+        };
+        let width = room(dir) + room(-dir);
+        if best.0 < p.edge && width < 2.0 * p.edge {
+            out.push(Violation::LipTooShort {
+                feature,
+                cut: m.cut,
+                wall: m.wall,
+                width,
+                need: 2.0 * p.edge,
+            });
+            continue;
+        }
         if best.0 < p.edge {
             out.push(Violation::HardwareNearEdge {
                 feature,
@@ -270,6 +297,19 @@ fn holes(sheet: &Sheet, stock: &Stock) -> Vec<Violation> {
         for z in &flat.zones {
             let limit = stock.hole_to_bend.at(t, z.radius);
             let (d, segment) = z.to_loop(&dev);
+            if d == 0.0 {
+                // into the zone: a cut across the bend, not a hole beside it
+                let centre = dev.iter().map(|p| p.0.at(0.5).to_vec()).fold(Vec2::new(0.0, 0.0), |a, b| a + b)
+                    * (1.0 / dev.len() as f64);
+                out.push(Violation::CutCrossesBend {
+                    feature,
+                    trim: trim(segment),
+                    joint: z.joint,
+                    intended: c.crosses_bend,
+                    away: place.local_vec(z.away(Point2::ORIGIN + centre)),
+                });
+                continue;
+            }
             if d < limit {
                 let centre = dev
                     .iter()
@@ -496,6 +536,29 @@ fn moved(p: &Piece, by: &Place) -> Piece {
             t1: *t1,
         },
     }
+}
+
+/// How far a ray from `o` along `d` runs before it meets the piece (infinite if it misses):
+/// lines exactly, curves by 64 chords.
+fn ray(o: Point2, d: Vec2, p: &Piece) -> f64 {
+    let pts: Vec<Point2> = match p {
+        Piece::Line { a, b } => vec![*a, *b],
+        _ => (0..=64).map(|k| p.at(k as f64 / 64.0)).collect(),
+    };
+    let mut best = f64::INFINITY;
+    for w in pts.windows(2) {
+        let e = w[1] - w[0];
+        let den = d.cross(e);
+        if den.abs() <= 1e-15 {
+            continue;
+        }
+        let u = (w[0] - o).cross(e) / den;
+        let v = (w[0] - o).cross(d) / den;
+        if u > TOUCH && (-1e-12..=1.0 + 1e-12).contains(&v) {
+            best = best.min(u);
+        }
+    }
+    best
 }
 
 fn unit(v: Vec2) -> Vec2 {

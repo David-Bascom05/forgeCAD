@@ -128,6 +128,9 @@ pub struct CornerRule {
     pub placement: Placement,
     /// The radius or half side; None: just clear of both bends.
     pub size: Option<Scaled>,
+    /// The gap an open corner leaves between two walls (fabricators: at least 0.4 mm for a
+    /// corner closed by welding; a rule of thumb).
+    pub gap: Scaled,
 }
 
 /// Where three bends meet. No current feature makes such a corner; the rule is held as data.
@@ -179,6 +182,11 @@ impl Default for ReliefRule {
                 shape: CornerShape::Round,
                 placement: Placement::Intersection,
                 size: None,
+                gap: Scaled {
+                    per_t: 0.0,
+                    per_r: 0.0,
+                    plus: 0.4,
+                },
             },
             corner3: Corner3Rule {
                 shape: Corner3Shape::None,

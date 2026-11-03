@@ -495,6 +495,12 @@ pub enum SheetErr {
     },
     /// `corner_relief(a, b, ..)` with flanges that do not meet at a corner of one wall.
     NotACorner { span: Span, id: String },
+    /// A table row not after the one before it in its group (`after`), as the kernel reads them.
+    TableOrder { span: Span, row: usize, after: usize },
+    /// `pattern(of: ..)` of a sheet feature that is not a cutout.
+    PatternOfSheet { span: Span, op: String },
+    /// A pattern copy whose plane leaves its cutout's wall (`distance` off it, or tilted).
+    PatternOffWall { span: Span, distance: f64 },
     /// A rule table row of the wrong shape.
     TableRow { span: Span, row: usize, want: usize },
 }
@@ -512,6 +518,9 @@ impl SheetErr {
             | OtherSheet { span, .. }
             | NoSuchRole { span, .. }
             | TableRow { span, .. }
+            | TableOrder { span, .. }
+            | PatternOfSheet { span, .. }
+            | PatternOffWall { span, .. }
             | NotACorner { span, .. }
             | NoSuchHardware { span, .. } => Some(*span),
         }
@@ -529,6 +538,9 @@ impl SheetErr {
             OtherSheet { .. } => "OtherSheet",
             NoSuchRole { .. } => "NoSuchRole",
             TableRow { .. } => "TableRow",
+            TableOrder { .. } => "TableOrder",
+            PatternOfSheet { .. } => "PatternOfSheet",
+            PatternOffWall { .. } => "PatternOffWall",
             NotACorner { .. } => "NotACorner",
             NoSuchHardware { .. } => "NoSuchHardware",
         }
@@ -570,6 +582,16 @@ impl SheetErr {
             OtherSheet { op, unfold, .. } => format!("{op} is not of the sheet {unfold} unfolds"),
             NoSuchRole { op, role, .. } => format!("{op} has no {role}"),
             TableRow { row, want, .. } => format!("table row {row} needs {want} values"),
+            PatternOfSheet { op, .. } => {
+                format!("{op} is a sheet feature but not a cutout: only cutouts are patterned on a sheet")
+            }
+            PatternOffWall { distance, .. } => format!(
+                "a pattern copy leaves its cutout's wall ({} off, or turned out of its plane)",
+                crate::values::fmt(*distance)
+            ),
+            TableOrder { row, after, .. } => {
+                format!("table row {row} does not come after row {after}: rows run in increasing order")
+            }
             NotACorner { id, .. } => format!("{id}: the two flanges do not meet at a corner of one wall"),
             NoSuchHardware {
                 kind, size, sizes, ..
@@ -598,6 +620,11 @@ impl SheetErr {
             TableRow { row, want, .. } => {
                 vec![("row", (*row as f64).into()), ("want", (*want as f64).into())]
             }
+            TableOrder { row, after, .. } => {
+                vec![("row", (*row as f64).into()), ("after", (*after as f64).into())]
+            }
+            PatternOfSheet { op, .. } => vec![("op", s(op))],
+            PatternOffWall { distance, .. } => vec![("distance", (*distance).into())],
             NotACorner { id, .. } => vec![("id", s(id))],
             NoSuchHardware {
                 kind, size, sizes, ..
@@ -651,6 +678,8 @@ impl SheetNote {
                 V::SheetTooHard { .. } => "SheetTooHard",
                 V::HardnessUnknown { .. } => "HardnessUnknown",
                 V::ReliefUndersized { .. } => "ReliefUndersized",
+                V::CutCrossesBend { .. } => "CutCrossesBend",
+                V::LipTooShort { .. } => "LipTooShort",
             },
         }
     }
@@ -658,6 +687,8 @@ impl SheetNote {
     pub fn severity(&self) -> &'static str {
         match self.note {
             Note::Warning(_) => "warning",
+            // a cut marked as meant to cross its bend is only information
+            Note::Violation(fs::Violation::CutCrossesBend { intended: true, .. }) => "info",
             Note::Violation(_) => "violation",
         }
     }
@@ -850,6 +881,26 @@ impl SheetNote {
                     ("min_width", f(min_width)),
                     ("min_depth", f(min_depth)),
                 ]),
+                V::CutCrossesBend {
+                    trim,
+                    joint,
+                    intended,
+                    away,
+                    ..
+                } => v.extend([
+                    ("trim", n.trim(trim)),
+                    ("joint", n.joint(joint).into()),
+                    ("intended", intended.into()),
+                    ("away", v2(Vec3Ish(away.x, away.y))),
+                ]),
+                V::LipTooShort {
+                    cut, wall, width, need, ..
+                } => v.extend([
+                    ("cut", n.cut(cut).into()),
+                    ("wall", n.wall(wall).into()),
+                    ("width", f(width)),
+                    ("need", f(need)),
+                ]),
             },
         }
         v
@@ -982,6 +1033,22 @@ impl SheetNote {
                 fm(*depth),
                 fm(*min_width),
                 fm(*min_depth)
+            ),
+            Note::Violation(V::CutCrossesBend { joint, intended, .. }) => {
+                if *intended {
+                    format!("a cut runs across the bend of {}, as meant", n.joint(*joint))
+                } else {
+                    format!(
+                        "a cut runs across the bend of {}: if meant, say crosses_bend: true",
+                        n.joint(*joint)
+                    )
+                }
+            }
+            Note::Violation(V::LipTooShort { wall, width, need, .. }) => format!(
+                "{} is {} across where the hardware sits; it needs {} (its edge distance both ways)",
+                n.wall(*wall),
+                fm(*width),
+                fm(*need)
             ),
         }
     }
@@ -1558,6 +1625,7 @@ fn kernel_error(fix: &FixCtx, names: Names, span: Span, id: &str, error: SheetEr
 fn kernel_err(st: &SheetState, span: Span, id: &str, error: SheetError) -> Error {
     let extra = match error {
         SheetError::FlatOverlap { a, b, .. } => overlap_fixes(st, a, b),
+        SheetError::FoldedClash { a, b, .. } => clash_fixes(st, a, b),
         _ => vec![],
     };
     match kernel_error(&st.fix, st.names(), span, id, error) {
@@ -1569,6 +1637,36 @@ fn kernel_err(st: &SheetState, span: Span, id: &str, error: SheetError) -> Error
         }
         o => o,
     }
+}
+
+/// Fixes for two strips passing through each other folded: the later flange stood outside its
+/// edge, or the sheet's corners opened (the later wall trimmed back a thickness and the rule's
+/// gap). Closed, overlapping and underlapping seams are another lane's.
+fn clash_fixes(st: &SheetState, a: Strip, b: Strip) -> Vec<Op> {
+    let owner = |s: Strip| {
+        st.fix.flanges.iter().position(|f| match s {
+            Strip::Wall(w) => f.wall == w,
+            Strip::Bend(j) => f.joint == j,
+        })
+    };
+    let mut out = vec![];
+    let later = owner(a).max(owner(b)).map(|k| &st.fix.flanges[k]);
+    if let Some(f) = later {
+        out.push(Op::SetArg {
+            id: f.id.clone(),
+            arg: "position".into(),
+            text: "\"outside\"".into(),
+        });
+    }
+    if owner(a).is_some() && owner(b).is_some() {
+        let gap = st.fix.relief.corner.gap.at(st.fix.t.v, st.fix.r.v);
+        out.push(Op::SetArg {
+            id: st.id.clone(),
+            arg: "corner".into(),
+            text: format!("open_corner({})", crate::values::fmt(gap)),
+        });
+    }
+    out
 }
 
 /// SetParam fixes that clear a flat overlap: for each flange owning strip a or b, the tallest
@@ -1677,6 +1775,7 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
         "ktable" => {
             let a = Args::bind(ev, name, &["rows"], args, span)?;
             let rows = table(&a, "rows", &[RATIO, RATIO])?;
+            in_order(&rows, a.span("rows"), |r| (0.0, r[0]))?;
             Ok(sv(SheetVal::Rule(Rc::new(RuleV {
                 rule: fs::BendRule::KTable(
                     rows.iter()
@@ -1692,6 +1791,7 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
         "bend_table" => {
             let a = Args::bind(ev, name, &["rows"], args, span)?;
             let rows = table(&a, "rows", &[LEN, ANG, LEN])?;
+            in_order(&rows, a.span("rows"), |r| (r[0], r[1]))?;
             Ok(sv(SheetVal::Rule(Rc::new(RuleV {
                 rule: fs::BendRule::Allowance(
                     rows.iter()
@@ -1859,6 +1959,29 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
         "relief_rule" => relief_rule(ev, args, span),
         _ => unreachable!("only sheet built-ins"),
     }
+}
+
+/// A table's rows in increasing order of their key within each group (a radius's angles; the
+/// r/t of a K table), as the kernel interpolates them: refused at the table, not at the first
+/// bend that reads it.
+fn in_order(rows: &[Vec<f64>], span: Span, key: impl Fn(&[f64]) -> (f64, f64)) -> R<()> {
+    for (i, r) in rows.iter().enumerate() {
+        let (g, x) = key(r);
+        if let Some((j, _)) = rows[..i]
+            .iter()
+            .enumerate()
+            .rev()
+            .find(|(_, q)| (key(q).0 - g).abs() <= 1e-9)
+            && key(&rows[j]).1 >= x
+        {
+            return Err(sheet_err(SheetErr::TableOrder {
+                span,
+                row: i,
+                after: j,
+            }));
+        }
+    }
+    Ok(())
 }
 
 /// A list of tuples, each `dims.len()` numbers of those dimensions.
@@ -2395,6 +2518,7 @@ fn relief_rule(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
             "corner",
             "corner_placement",
             "corner_size",
+            "corner_gap",
             "corner3",
             "corner3_radius",
         ],
@@ -2447,6 +2571,9 @@ fn relief_rule(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         };
     }
     r.corner.size = size_of(&a, "corner_size")?;
+    if let Some(x) = size_of(&a, "corner_gap")? {
+        r.corner.gap = x;
+    }
     if let Some(w) = word(&a, "corner3", &["none", "intersection", "full_round", "round"])? {
         r.corner3.shape = match w {
             "intersection" => fs::Corner3Shape::Intersection,
@@ -2459,6 +2586,90 @@ fn relief_rule(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         r.corner3.radius = x;
     }
     Ok(sv(SheetVal::Rule2(Rc::new(r))))
+}
+
+/// `pattern(of: CUTOUT, layout: ..)` on a sheet: each copy a cut in the cutout's wall, the
+/// layout's motions carried into the wall's own plane (a copy off that plane is
+/// `PatternOffWall`). Path and point layouts are read the same way, from the part as it stands.
+pub fn pattern(
+    ev: &mut Eval,
+    id: String,
+    of: Value,
+    of_span: Span,
+    layout: &forge_model::Layout,
+    dims: Vec<Dimension>,
+    span: Span,
+) -> R<Value> {
+    let op = op_of(&of, of_span, "a sheet cutout")?;
+    let OpKind::Cut { .. } = op.kind else {
+        return Err(sheet_err(SheetErr::PatternOfSheet {
+            span: of_span,
+            op: op.id.clone(),
+        }));
+    };
+    let si = op.sheet;
+    not_unfolded(ev, si, &id, span)?;
+    let places = forge_model::pattern::placements(ev.b.history(), ev.b.features.len(), layout).map_err(|error| {
+        Error::Build {
+            span,
+            id: id.clone(),
+            error,
+        }
+    })?;
+    let st = &ev.sheets.list[si];
+    // the source's cuts, each with its wall's frame
+    let sources: Vec<(WallId, ProfileLoop)> = st
+        .cuts
+        .iter()
+        .filter(|c| c.1 == op.id)
+        .filter_map(|c| st.sheet.cuts.iter().find(|x| x.id == c.0))
+        .map(|x| (x.wall, x.lp.clone()))
+        .collect();
+    let mut made = vec![];
+    for (wall, lp) in sources {
+        let Some(frame) = wall_frame(&ev.sheets.list[si], wall, None) else {
+            continue;
+        };
+        for [cx, cy, cz, at] in &places {
+            let m = |p: Point3| *at + cx.to_vec() * p.x + cy.to_vec() * p.y + cz.to_vec() * p.z;
+            let mv = |v: Vec3| cx.to_vec() * v.x + cy.to_vec() * v.y + cz.to_vec() * v.z;
+            // the copy's plane: the wall's, moved
+            let o = m(frame.origin);
+            let (x, y) = (mv(frame.x().get()), mv(frame.y().get()));
+            let off = frame.point_to_local(o).z.abs();
+            let tilt = frame.vec_to_local(x).z.abs().max(frame.vec_to_local(y).z.abs());
+            if off > 1e-7 || tilt > 1e-9 {
+                return Err(sheet_err(SheetErr::PatternOffWall { span, distance: off }));
+            }
+            let z = x.cross(y);
+            let moved = Frame::from_axes(o, x, y, z).ok_or(Error::BadValue {
+                span,
+                what: "a pattern's motion",
+                value: f64::NAN,
+            })?;
+            let lp2 = carried(&lp, &moved, &frame).ok_or(Error::BadValue {
+                span,
+                what: "a spline carried by the pattern",
+                value: f64::NAN,
+            })?;
+            let st = &mut ev.sheets.list[si];
+            match st.sheet.cut(wall, lp2) {
+                Ok(c) => made.push(c),
+                Err(e) => {
+                    let mut snap = st.clone();
+                    snap.cuts.push((CutId(snap.cuts.len() as u32), id.clone(), span));
+                    return Err(kernel_err(&snap, span, &id, e));
+                }
+            }
+        }
+    }
+    let st = &mut ev.sheets.list[si];
+    for &c in &made {
+        st.cuts.push((c, id.clone(), span));
+    }
+    push_sheet_step(ev, si, &id, "pattern", span, dims)?;
+    let first = made.first().copied().unwrap_or(CutId(u32::MAX));
+    Ok(op_value(si, &id, OpKind::Cut { cut: first }))
 }
 
 fn dim(what: &'static str, n: &Num) -> Dimension {
@@ -2669,7 +2880,8 @@ fn carried(l: &ProfileLoop, from: &Frame, to: &Frame) -> Option<ProfileLoop> {
 
 fn cutout(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     let id = ev.take_id("cutout", span)?;
-    let a = Args::bind(ev, "cutout", &["profile", "wall"], args, span)?;
+    let a = Args::bind(ev, "cutout", &["profile", "wall", "crosses_bend"], args, span)?;
+    let crosses = a.flag("crosses_bend")?;
     if a.poisoned() {
         return Ok(Value::Unresolved);
     }
@@ -2749,6 +2961,9 @@ fn cutout(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
             to: on_skin,
             at: None,
         });
+        if let Some(x) = st.sheet.cuts.iter_mut().find(|x| x.id == c) {
+            x.crosses_bend = crosses;
+        }
     }
     push_sheet_step(ev, si, &id, "cutout", span, vec![])?;
     let first = cut_ids.first().copied().unwrap_or(CutId(u32::MAX));
@@ -3314,7 +3529,12 @@ pub fn finish(ev: &mut Eval) {
                     TrimRef::Cut { cut, .. } => cut_owner(cut),
                     _ => None,
                 },
+                fs::Violation::CutCrossesBend { trim, .. } => match trim {
+                    TrimRef::Cut { cut, .. } => cut_owner(cut),
+                    _ => None,
+                },
                 fs::Violation::HardwareThickness { cut, .. }
+                | fs::Violation::LipTooShort { cut, .. }
                 | fs::Violation::HardwareNearEdge { cut, .. }
                 | fs::Violation::SheetTooHard { cut, .. }
                 | fs::Violation::HardnessUnknown { cut, .. } => cut_owner(cut),
@@ -3426,6 +3646,29 @@ fn cut_fixes(st: &SheetState, v: &fs::Violation) -> Vec<Op> {
         } => src(cut)
             .and_then(|s| cut_nums(s, Some(segment)).2)
             .and_then(|r| set(&r, round_up(0.5 * limit)))
+            .into_iter()
+            .collect(),
+        fs::Violation::CutCrossesBend {
+            trim: TrimRef::Cut { cut, .. },
+            intended: false,
+            ..
+        } => st
+            .cuts
+            .iter()
+            .find(|x| x.0 == cut)
+            .map(|x| Op::SetArg {
+                id: x.1.clone(),
+                arg: "crosses_bend".into(),
+                text: "true".into(),
+            })
+            .into_iter()
+            .collect(),
+        fs::Violation::LipTooShort { wall, width, need, .. } => st
+            .fix
+            .flanges
+            .iter()
+            .find(|f| f.wall == wall)
+            .and_then(|f| set(&f.height, round_up(f.height.v + (need - width))))
             .into_iter()
             .collect(),
         fs::Violation::HardwareThickness { min, max, .. } => {

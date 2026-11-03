@@ -29,8 +29,14 @@ pub fn pattern(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         }
         Source::Body
     } else {
-        let fs = crate::builtins::feats_of(a.req("of")?, a.span("of"))?;
-        Source::Features(fs.iter().map(|f| f.idx).collect())
+        match a.req("of")? {
+            // sheet cutouts: copied below, once the layout is read
+            Value::Sheet(_) => Source::Body,
+            v => {
+                let fs = crate::builtins::feats_of(v, a.span("of"))?;
+                Source::Features(fs.iter().map(|f| f.idx).collect())
+            }
+        }
     };
     let (layout, dims) = match a.req("layout")? {
         Value::Wired(w) => match &*w {
@@ -53,6 +59,10 @@ pub fn pattern(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
             });
         }
     };
+    // copies of sheet cutouts are cuts in their walls (sheet.rs)
+    if let Some(v @ Value::Sheet(_)) = a.opt("of") {
+        return crate::sheet::pattern(ev, id, v, a.span("of"), &layout, dims, span);
+    }
     let f = crate::bodies::wrap_in(ev, &a, Feature::Pattern { of, layout })?;
     let (idx, hid) = ev.push_feature(&id, "pattern", f, span, dims)?;
     Ok(feat(id, "pattern", idx, hid, None))

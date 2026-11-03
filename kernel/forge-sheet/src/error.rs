@@ -411,6 +411,15 @@ pub enum Violation {
         limit: f64,
         away: Vec2,
     },
+    /// A cut reaching into a bend zone. `intended` when the cut was marked as meant to cross it
+    /// (then it is information, not a violation).
+    CutCrossesBend {
+        feature: FeatureId,
+        trim: TrimRef,
+        joint: JointId,
+        intended: bool,
+        away: Vec2,
+    },
     /// A round hole smaller across than the shop can pierce in this thickness.
     HoleTooSmall {
         feature: FeatureId,
@@ -445,6 +454,15 @@ pub enum Violation {
         distance: f64,
         limit: f64,
         away: Vec2,
+    },
+    /// The wall is too narrow for the hardware: across its centre, from edge or bend to edge or
+    /// bend, `width` where the part needs `need` (its edge distance both ways). No move fixes it.
+    LipTooShort {
+        feature: FeatureId,
+        cut: CutId,
+        wall: crate::error::WallId,
+        width: f64,
+        need: f64,
     },
     /// The sheet is harder than the hardware can clinch into (Rockwell B).
     SheetTooHard {
