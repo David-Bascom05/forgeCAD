@@ -571,7 +571,7 @@ fn reliefs_asked_for_and_refused() {
         assert!(r.ok(), "{fixed}\n{}", forge_lang::report::text(&r, &fixed));
     }
     // too shallow to pass the tangent line
-    let s = SPLIT.replace("measure: \"inner\")", "measure: \"inner\", relief: rect(3, t))");
+    let s = SPLIT.replace("measure: \"inner\")", "measure: \"inner\", relief: rect(3, 1))");
     let e = first_error(&s);
     assert_eq!(e.kind(), "ReliefTooShallow");
     cured_by_fix(&s, &e);
@@ -1011,4 +1011,60 @@ nut = pem(\"nut\", \"M3\", at: ps.c, wall: base)
     // too hard a sheet
     let hard = s.replace("hardness: ratio(70)", "hardness: ratio(90)");
     assert_eq!(notes(&run(&hard), "SheetTooHard").len(), 1);
+}
+
+#[test]
+fn the_shops_relief_rule() {
+    let shop = |rule: &str| {
+        SPLIT.replace(
+            "base = sheet(plan, t: t, r: r, bend: kfactor(ratio(0.4)))",
+            &format!(
+                "shared steel = stock(t: 2, bend: kfactor(ratio(0.4)), radii: [2], relief: relief_rule({rule}))\nshared acme = shop([steel])\nbase = sheet(plan, t: t, r: r, bend: kfactor(ratio(0.4)), shop: acme)"
+            ),
+        )
+    };
+    // the rule's own relief: obround, 3 wide, up to the bend
+    let s = shop("shape: \"obround\", width: 3, from: \"up_to_bend\"");
+    let r = split_run(&s);
+    let rel = &r.sheets[0].reliefs;
+    assert_eq!(rel.len(), 1);
+    assert!(rel[0].automatic && rel[0].kind == forge_sheet::ReliefKind::Obround);
+    // its straight sides end on the tangent line: depth s + w/2 from the mold line
+    assert!((rel[0].depth - (2.0 + 1.5)).abs() < 1e-12, "{}", rel[0].depth);
+    let (vf, _) = split_closed(3.0 * 2.0 + 0.5 * PI * 1.5 * 1.5);
+    near("up to bend", folded(&r), vf);
+    // an override smaller than the rule: a violation, its fixes the rule's sizes
+    let s = shop("width: per_t(ratio(1.5))")
+        .replace("measure: \"inner\")", "measure: \"inner\", relief: rect(2, 4.5))");
+    let r = run(&s);
+    assert!(r.ok(), "{:?}", r.errors);
+    // (both ends of the bend ask for it)
+    let n = notes(&r, "ReliefUndersized");
+    assert_eq!(n.len(), 2, "{:?}", r.warnings);
+    let fixed = apply(&s, &n[0].fixes[0]).expect("applies");
+    assert!(notes(&run(&fixed), "ReliefUndersized").is_empty(), "{fixed}");
+    // extend is held as data and refused typed
+    assert_eq!(first_error(&shop("extend: true")).kind(), "ReliefExtendUnbuilt");
+    // corners: the rule's trim to bend, an override tear
+    let b = BOX.replace(
+        "base = sheet(plan, t: t, r: r, bend: kfactor(ratio(0.4)))",
+        "shared steel = stock(t: 1.5, bend: kfactor(ratio(0.4)), radii: [1], relief: relief_rule(corner: \"trim_to_bend\"))\nshared acme = shop([steel])\nbase = sheet(plan, t: t, r: r, bend: kfactor(ratio(0.4)), shop: acme)",
+    );
+    let r = run(&b);
+    assert!(r.ok(), "{:?}", r.errors);
+    assert!(
+        r.sheets[0]
+            .corners
+            .iter()
+            .all(|c| c.kind == forge_sheet::CornerKind::TrimToBend)
+    );
+    let r = run(&format!("{b}fe = corner_relief(front, east, tear_corner)\n"));
+    let kinds: Vec<_> = r.sheets[0].corners.iter().map(|c| c.kind).collect();
+    // a tear only slits the corner: where the bends' zones meet there it is refused, typed
+    // (a clash, or the slit crossing a tangent line at a slant)
+    assert!(
+        r.ok() || r.errors.iter().all(|e| matches!(e, Error::Sheet(_))),
+        "{:?} {kinds:?}",
+        r.errors
+    );
 }
