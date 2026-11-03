@@ -383,6 +383,15 @@ impl Feature {
     }
 }
 
+/// How much two threads a fit rule covers must engage.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum MinEngagement {
+    /// At least this length (mm).
+    Length(f64),
+    /// The screw fills the internal thread's whole depth (the nut's, the tapped hole's).
+    Full,
+}
+
 /// A thread engaged less than this many times its size, where a rule gives no minimum, is too
 /// shallow (the shop's rule: one diameter).
 pub const SHOP_THREAD_ENGAGEMENT: f64 = 1.0;
@@ -405,7 +414,7 @@ pub struct FitRule {
     pub a: FitMatch,
     pub b: FitMatch,
     /// Least thread engagement; None: the shop's (`SHOP_THREAD_ENGAGEMENT` sizes) for threads.
-    pub min_engagement: Option<f64>,
+    pub min_engagement: Option<MinEngagement>,
 }
 
 /// Declared intended contact between two occurrences (FastCAD's `fit`): a press fit, a bolt in a

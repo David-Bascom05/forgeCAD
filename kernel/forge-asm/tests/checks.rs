@@ -208,6 +208,29 @@ fn fit_rules_cover_bolts_in_matching_holes_and_say_which() {
         }]
     );
     assert!(rep.diagnostics().iter().any(|d| d.name() == "ShallowEngagement"));
+    // every threaded fit's engagement is reported, short or not
+    let got: Vec<(Path, f64, Option<f64>, bool)> = rep
+        .engagements
+        .iter()
+        .map(|e| (e.b.clone(), e.engaged, e.min, e.short))
+        .collect();
+    assert_eq!(
+        got,
+        vec![(p(2), 3.0, Some(4.0), true), (p(3), 8.0, Some(4.0), false)]
+    );
+    // a rule that wants the screw to fill the internal thread: both fall short of its 10
+    let full = FitRule {
+        min_engagement: Some(MinEngagement::Full),
+        ..rule.clone()
+    };
+    let rep = Checker::new(&c, &e).interference(&sol, &[], &[full]);
+    let got: Vec<(f64, Option<f64>, bool)> = rep
+        .engagements
+        .iter()
+        .map(|e| (e.engaged, e.min, e.short))
+        .collect();
+    assert_eq!(got, vec![(3.0, Some(10.0), true), (8.0, Some(10.0), true)]);
+    assert_eq!(rep.shallow.len(), 2);
     assert_eq!(
         (rep.interferences[0].a.clone(), rep.interferences[0].b.clone()),
         (p(1), p(4))
