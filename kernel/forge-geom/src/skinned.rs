@@ -260,9 +260,10 @@ impl GuidePath {
                         [base + off, base - off]
                             .into_iter()
                             .map(|a| {
-                                // the turn of the angle that falls on the arc, if any
+                                // the turn of the angle that falls on the arc, if any (one
+                                // a rounding short of an end is at that end, not a turn on)
                                 let t = (a - start) / sweep;
-                                t - per * (t / per).floor()
+                                t - per * ((t + 1e-9) / per).floor()
                             })
                             .collect()
                     }
@@ -1720,6 +1721,29 @@ mod tests {
     use super::*;
     use crate::{Circle, SurfaceGeom};
     use forge_math::rng::Rng;
+
+    #[test]
+    fn an_arc_guide_crosses_the_plane_it_starts_on() {
+        // an arc starting a rounding off the plane, at an angle off its frame's x: the crossing
+        // at its start is found, not taken for one a whole turn on
+        let frame =
+            Frame::from_axes(Point3::new(-30.0, -10.0, 20.0), Vec3::X, Vec3::Z, -Vec3::Y).expect("frame");
+        let (start, sweep) = (
+            forge_math::dmath::atan2(-20.0, 40.0),
+            2.0 * forge_math::dmath::atan2(20.0, 40.0),
+        );
+        let g = GuidePath::new(&[Rail::Arc {
+            circle: Circle {
+                frame,
+                radius: (40.0f64 * 40.0 + 20.0 * 20.0).sqrt(),
+            },
+            start,
+            sweep,
+        }]);
+        let at = g.crossings(Point3::ORIGIN, Vec3::Z);
+        assert_eq!(at.len(), 1, "{at:?}");
+        assert!(at[0].abs() < 1e-9 && g.at(at[0]).0.distance(Point3::new(10.0, -10.0, 0.0)) < 1e-9);
+    }
 
     fn random(r: &mut Rng) -> (Vec<Rail>, Arc<Spline>, Vec<Vec3>) {
         let n = 3 + r.below(3);
