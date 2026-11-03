@@ -377,6 +377,11 @@ fn the_18u_rack_opens_and_orbits() {
         a.timings,
         h.gui.shell.fg.as_ref().unwrap().issues.len()
     );
+    let mut kinds: std::collections::BTreeMap<String, usize> = Default::default();
+    for i in &h.gui.shell.fg.as_ref().unwrap().issues {
+        *kinds.entry(i.kind.clone()).or_default() += 1;
+    }
+    eprintln!("rack.fg issues by kind: {kinds:?}");
     assert!(n > 100, "{n}");
     assert_eq!(v.scene.placements.len(), drawn.max(1));
     assert!(
