@@ -1678,30 +1678,25 @@ pub const RESERVED: &[&str] = &["at"];
 /// expect line's `at` clause (outside its brackets).
 pub fn name_uses(toks: &[Tok], word: &str) -> Vec<Span> {
     let mut out = vec![];
-    // in an expect line, the first `at` outside brackets is the clause's keyword
-    let (mut expect, mut depth) = (false, 0i32);
+    // in an expect line, the first `at` at the line's own depth is the clause's keyword; a
+    // line ends at a break or `;` at that depth, or a `}` closing its block
+    let mut expect: Option<i32> = None;
+    let mut depth = 0i32;
     for (k, t) in toks.iter().enumerate() {
+        let before_colon = matches!(toks.get(k + 1).map(|x| &x.kind), Some(TokKind::Op(":")));
         match &t.kind {
-            TokKind::Nl | TokKind::Op(";") | TokKind::Op("{") | TokKind::Op("}") => {
-                expect = false;
-                depth = 0;
-            }
-            TokKind::Kw("expect") => expect = true,
-            TokKind::Op("(") | TokKind::Op("[") => depth += 1,
-            TokKind::Op(")") | TokKind::Op("]") => depth -= 1,
-            TokKind::Kw(w) if *w == word => {
-                let keyword_arg = matches!(toks.get(k + 1).map(|x| &x.kind), Some(TokKind::Op(":")));
-                if expect && depth == 0 && *w == "at" {
-                    expect = false;
-                } else if !keyword_arg {
-                    out.push(t.span);
+            TokKind::Nl | TokKind::Op(";") if expect == Some(depth) => expect = None,
+            TokKind::Op("(" | "[" | "{") => depth += 1,
+            TokKind::Op(")" | "]" | "}") => {
+                depth -= 1;
+                if expect.is_some_and(|e| depth < e) {
+                    expect = None;
                 }
             }
-            TokKind::Id(w) if w == word => {
-                if !matches!(toks.get(k + 1).map(|x| &x.kind), Some(TokKind::Op(":"))) {
-                    out.push(t.span);
-                }
-            }
+            TokKind::Kw("expect") => expect = Some(depth),
+            TokKind::Kw(w) if *w == word && *w == "at" && expect == Some(depth) => expect = None,
+            TokKind::Kw(w) if *w == word && !before_colon => out.push(t.span),
+            TokKind::Id(w) if w == word && !before_colon => out.push(t.span),
             _ => {}
         }
     }
