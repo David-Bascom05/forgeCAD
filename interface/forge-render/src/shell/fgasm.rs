@@ -1,18 +1,18 @@
-//! An assembly (.fg) in the app: its browser (occurrences grouped by subsystem, then by part type,
-//! real subassemblies under their names, an eye on every row), the instance chosen (hide, isolate,
-//! its part file and anchors), the joints with a slider for each drive (a SetParam), the mobility,
-//! the expects, the BOM, and the overlap check on request. Typed results (redundant, conflicts,
-//! interferences, intended contacts) are the panel's issues, each with a Show that highlights what
-//! it names.
+//! An assembly (.fg) in the app, as Inventor's Model browser has it: the Origin and the
+//! Relationships at the top, then the components in the order the file makes them, subassemblies
+//! nested with their own Origin and Relationships, each occurrence holding the relationships that
+//! hold it. An eye on every component and origin row; problems flagged on the rows that have them.
+//! What Inventor puts in dialogs is in dialogs here: Parameters, Drive, iProperties, Analyze
+//! Interference, the bill of materials, the explode controls.
 
 use super::Shell;
-use super::fg::{FgAct, FgPanel, From, disclosure, fold_head, short};
+use super::fg::{FgAct, From, Severity, short};
 use super::icons;
-use super::theme::{medium, mono, sans};
-use egui::{Align2, Rect, Sense, Stroke, Ui, pos2, vec2};
-use forge_lang::asm::{ExpectOut, Issue as AsmIssue, JointOut};
+use super::theme::{medium, mono, sans, semi};
+use egui::{Align2, Color32, Rect, Sense, Stroke, Ui, pos2, vec2};
+use forge_lang::asm::{ExpectOut, InstOut, Issue as AsmIssue, JointOut, LinkFamily, LinkOut};
 use forge_lang::error::{Literal, Op};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -23,44 +23,71 @@ pub struct OccRow {
     pub drawn: bool,
 }
 
+/// A problem on a row: Inventor's yellow and red.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Flag {
+    Warning,
+    Error,
+}
+
+/// What the issues flag: relationships by (owner, id), occurrences by path.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Flags {
+    pub links: HashMap<(String, String), Flag>,
+    pub occ: HashMap<String, Flag>,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NodeKind {
-    /// A subsystem: the part files' folder (Frame, Hardware & fasteners), or Subassemblies.
-    Group,
-    /// A real subassembly's instance.
+    /// An Origin folder, the assembly's or a subassembly's.
+    Origin,
+    /// One of its planes, axes or the centre point, by its index in `origin::ITEMS`.
+    OriginItem(usize),
+    Relationships,
+    /// One kind of relationship, under Relationships.
+    LinkKind,
+    /// A relationship, by its index into the panel's links: under Relationships, or under an
+    /// occurrence it holds.
+    Link(usize),
     Sub,
-    /// Every occurrence of one part file in its group.
-    Type,
+    /// One statement's occurrences in a loop: `stud_a ×4`.
+    Pattern,
     Occ,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Node {
-    /// What it's chosen and named by: an occurrence's path, `g:<group>`, `t:<file>`, `s:<instance>`.
+    /// What it's chosen and named by: an occurrence's path, `s:<sub>`, `p:<pattern>`, `o:<sub>`,
+    /// `r:<sub>`, `l:<link>`, `<occurrence>>l:<link>`.
     pub key: String,
     pub label: String,
-    /// Words at its right: an occurrence alone in its type shows the type.
+    /// Words at its right: the part type, what a relationship ties.
     pub detail: String,
     pub kind: NodeKind,
+    pub icon: &'static str,
     pub depth: usize,
     pub parent: Option<usize>,
     pub kids: Vec<usize>,
-    /// The occurrences under it, by index into the panel's.
+    /// The occurrences it stands for, by index into the panel's: a relationship's are its two.
     pub occ: Vec<usize>,
+    pub flag: Option<Flag>,
+    pub ground: bool,
+    /// The subassembly occurrence it's in; empty for the top.
+    pub at: String,
 }
 
-/// The browser's rows, made once per solve: occurrences by subsystem then part type, and real
-/// subassemblies again under their names (the same occurrences, as they're built).
+/// The browser's rows, made again when the solve or its problems change; and each occurrence's
+/// subsystem, subassembly and way out, for the exploded view.
 #[derive(Clone, Debug, Default)]
 pub struct AsmTree {
     pub nodes: Vec<Node>,
     pub roots: Vec<usize>,
     by_key: HashMap<String, usize>,
-    /// Each occurrence's own row in the grouped tree.
+    /// Each occurrence's own row.
     pub home: Vec<usize>,
-    /// Each occurrence's browser group, in the browser's order (each its own when there's one).
+    /// Each occurrence's subsystem (its part file's folder), in the order they're listed.
     pub group: Vec<usize>,
-    /// The real subassembly each is in, if any.
+    /// The top-level subassembly each is in, if any.
     pub sub: Vec<Option<usize>>,
     /// A fastener's way out along its own z: -1 a screw or stud (head at z < 0), +1 the rest.
     pub axis: Vec<Option<f32>>,
@@ -94,7 +121,6 @@ const GROUPS: [(&str, &str); 7] = [
     ("dummy", "Dummies"),
 ];
 const PARTS: &str = "Parts";
-const SUBS: &str = "Subassemblies";
 
 /// What a folder word is called, and where it sorts.
 fn group_label(word: &str) -> (usize, String) {
@@ -206,44 +232,212 @@ pub fn type_label(file: &str) -> String {
     s
 }
 
-/// Text in the order a person counts: `pin[2]` before `pin[10]`.
-fn natural(a: &str, b: &str) -> std::cmp::Ordering {
-    fn chunks(s: &str) -> Vec<(bool, &str)> {
-        let mut out = vec![];
-        let mut start = 0;
-        let bytes = s.as_bytes();
-        for k in 1..=bytes.len() {
-            if k == bytes.len() || bytes[k].is_ascii_digit() != bytes[k - 1].is_ascii_digit() {
-                out.push((bytes[start].is_ascii_digit(), &s[start..k]));
-                start = k;
+/// A relationship kind as the browser heads it: `Revolute joints`, `Gear relations`.
+pub fn kind_label(family: LinkFamily, kind: &str) -> String {
+    let word = match kind {
+        "pin_slot" => "Pin-slot".to_string(),
+        "plane_plane" => "Mate".to_string(),
+        "rack_pinion" => "Rack and pinion".to_string(),
+        k => {
+            let mut c = k.replace('_', " ").chars().collect::<Vec<char>>();
+            if let Some(f) = c.first_mut() {
+                *f = f.to_ascii_uppercase();
+            }
+            c.into_iter().collect()
+        }
+    };
+    match family {
+        LinkFamily::Joint => format!("{word} joints"),
+        LinkFamily::Constraint => format!("{word} constraints"),
+        LinkFamily::Relation => format!("{word} relations"),
+        LinkFamily::Fit => "Fits".into(),
+        LinkFamily::FitRule => "Fit rules".into(),
+    }
+}
+
+/// Each kind its icon.
+pub fn kind_icon(family: LinkFamily, kind: &str) -> &'static str {
+    match (family, kind) {
+        (LinkFamily::Joint, "fastened") => "jfastened",
+        (LinkFamily::Joint, "revolute") => "jrevolute",
+        (LinkFamily::Joint, "slider") => "jslider",
+        (LinkFamily::Joint, "cylindrical") => "jcylindrical",
+        (LinkFamily::Joint, "pin_slot") => "jpinslot",
+        (LinkFamily::Joint, "planar") => "plane",
+        (LinkFamily::Joint, "ball") => "ball",
+        (LinkFamily::Joint, _) => "jrevolute",
+        (LinkFamily::Constraint, "insert") => "jinsert",
+        (LinkFamily::Constraint, "angle") => "jangle",
+        (LinkFamily::Constraint, _) => "jmate",
+        (LinkFamily::Relation, "rack_pinion") => "rackpinion",
+        (LinkFamily::Relation, _) => "gear",
+        (LinkFamily::Fit, _) => "fit",
+        (LinkFamily::FitRule, _) => "rule",
+    }
+}
+
+/// A path as seen from inside `owner`: `post_fl.post` from `post_fl` is `post`.
+fn seen_from<'a>(path: &'a str, owner: &str) -> &'a str {
+    if owner.is_empty() {
+        return path;
+    }
+    path.strip_prefix(owner)
+        .and_then(|r| r.strip_prefix('.'))
+        .unwrap_or(path)
+}
+
+/// The id an occurrence path ends in, and the path it's in: `post_fl.stud_a[0]` is
+/// (`post_fl`, `stud_a[0]`).
+fn split_path(path: &str) -> (&str, &str) {
+    match path.rfind('.') {
+        Some(k) => (&path[..k], &path[k + 1..]),
+        None => ("", path),
+    }
+}
+
+/// One statement's name in a loop: `stud_a[0]` is `stud_a`.
+fn stem(id: &str) -> &str {
+    id.split('[').next().unwrap_or(id)
+}
+
+/// What the occurrences say when the solve gave no structure: each a top-level part, a
+/// subassembly by its paths' first word.
+fn insts_of(occ: &[OccRow]) -> Vec<InstOut> {
+    let mut out: Vec<InstOut> = vec![];
+    let mut seen: HashSet<String> = HashSet::new();
+    for o in occ {
+        let parts: Vec<&str> = o.path.split('.').collect();
+        for d in 1..parts.len() {
+            let p = parts[..d].join(".");
+            if seen.insert(p.clone()) {
+                out.push(InstOut {
+                    path: p,
+                    file: String::new(),
+                    sub: true,
+                    ground: false,
+                });
             }
         }
-        out
-    }
-    let (x, y) = (chunks(a), chunks(b));
-    for (p, q) in x.iter().zip(&y) {
-        let o = match (p.0, q.0) {
-            (true, true) => {
-                p.1.parse::<u64>()
-                    .unwrap_or(0)
-                    .cmp(&q.1.parse::<u64>().unwrap_or(0))
-                    .then(p.1.cmp(q.1))
-            }
-            _ => p.1.cmp(q.1),
-        };
-        if o.is_ne() {
-            return o;
+        if seen.insert(o.path.clone()) {
+            out.push(InstOut {
+                path: o.path.clone(),
+                file: o.file.clone(),
+                sub: false,
+                ground: false,
+            });
         }
     }
-    x.len().cmp(&y.len())
+    out
 }
 
 impl AsmTree {
+    /// The occurrences alone: the browser as their paths give it.
     pub fn build(occ: &[OccRow], dir: Option<&Path>) -> AsmTree {
+        AsmTree::build_with(occ, dir, &[], &[], &Flags::default())
+    }
+
+    pub fn build_with(
+        occ: &[OccRow],
+        dir: Option<&Path>,
+        insts: &[InstOut],
+        links: &[LinkOut],
+        flags: &Flags,
+    ) -> AsmTree {
         let mut t = AsmTree {
             home: vec![usize::MAX; occ.len()],
             ..AsmTree::default()
         };
+        t.explode_groups(occ, dir);
+        let made;
+        let insts = if insts.is_empty() {
+            made = insts_of(occ);
+            &made[..]
+        } else {
+            insts
+        };
+        let index: HashMap<&str, usize> = occ
+            .iter()
+            .enumerate()
+            .map(|(k, o)| (o.path.as_str(), k))
+            .collect();
+        let occ_under = |p: &str| -> Vec<usize> {
+            match index.get(p) {
+                Some(&k) => vec![k],
+                None => (0..occ.len()).filter(|&k| under(&occ[k].path, p)).collect(),
+            }
+        };
+        // each relationship's occurrences: a relation's are its two joints'
+        let mut ends: Vec<Vec<usize>> = links
+            .iter()
+            .map(|l| match l.family {
+                LinkFamily::Joint | LinkFamily::Constraint | LinkFamily::Fit => {
+                    let mut v = occ_under(&l.a.0);
+                    v.extend(occ_under(&l.b.0));
+                    v
+                }
+                _ => vec![],
+            })
+            .collect();
+        let by_id: HashMap<String, usize> = links
+            .iter()
+            .enumerate()
+            .map(|(k, l)| (join(&l.owner, &l.id), k))
+            .collect();
+        for (k, l) in links.iter().enumerate() {
+            if l.family == LinkFamily::Relation {
+                let mut v = vec![];
+                for j in [&l.a.0, &l.b.0] {
+                    if let Some(&i) = by_id.get(j) {
+                        v.extend(ends[i].clone());
+                    }
+                }
+                ends[k] = v;
+            }
+        }
+        let link_flag: Vec<Option<Flag>> = links
+            .iter()
+            .map(|l| flags.links.get(&(l.owner.clone(), l.id.clone())).copied())
+            .collect();
+        // what holds each occurrence and subassembly: relationships written beside it
+        let mut holds: HashMap<String, Vec<usize>> = HashMap::new();
+        for (k, l) in links.iter().enumerate() {
+            if !matches!(
+                l.family,
+                LinkFamily::Joint | LinkFamily::Constraint | LinkFamily::Fit
+            ) {
+                continue;
+            }
+            for p in [&l.a.0, &l.b.0] {
+                // the occurrence, and the subassembly beside the link it's inside
+                holds.entry(p.clone()).or_default().push(k);
+                if let Some((first, _)) = seen_from(p, &l.owner).split_once('.') {
+                    holds.entry(join(&l.owner, first)).or_default().push(k);
+                }
+            }
+        }
+        let cx = Cx {
+            occ,
+            insts,
+            links,
+            ends: &ends,
+            link_flag: &link_flag,
+            holds: &holds,
+            index: &index,
+            flags,
+        };
+        t.doc(&cx, None, "");
+        // a problem shows on everything above it, so a shut row still says it
+        for k in (0..t.nodes.len()).rev() {
+            if let (Some(f), Some(p)) = (t.nodes[k].flag, t.nodes[k].parent) {
+                t.nodes[p].flag = t.nodes[p].flag.max(Some(f));
+            }
+        }
+        t
+    }
+
+    /// Subsystems by the part files' folders, the subassemblies, and the fasteners' ways out:
+    /// what the exploded view moves together and how.
+    fn explode_groups(&mut self, occ: &[OccRow], dir: Option<&Path>) {
         // files beside the assembly: by a stem's first word when others share it (dummy_d01)
         let mut words: Vec<String> = occ.iter().map(|o| folder_word(&o.file, dir)).collect();
         let mut first_words: HashMap<String, HashSet<&str>> = HashMap::new();
@@ -263,7 +457,6 @@ impl AsmTree {
                 *w = f.to_string();
             }
         }
-        // groups in their order, each its files' occurrences
         let mut groups: Vec<((usize, String), Vec<usize>)> = vec![];
         for (k, w) in words.iter().enumerate() {
             let g = group_label(w);
@@ -274,7 +467,7 @@ impl AsmTree {
         }
         groups.sort_by(|a, b| a.0.cmp(&b.0));
         let flat = groups.len() == 1;
-        t.axis = occ
+        self.axis = occ
             .iter()
             .zip(&words)
             .map(|(o, w)| {
@@ -283,73 +476,29 @@ impl AsmTree {
                     .then(|| if screw_like(&o.file) { -1.0 } else { 1.0 })
             })
             .collect();
-        t.group = vec![0; occ.len()];
+        self.group = vec![0; occ.len()];
         for (g, (_, ks)) in groups.iter().enumerate() {
             for &k in ks {
-                t.group[k] = if flat { k } else { g };
+                self.group[k] = if flat { k } else { g };
             }
         }
-        for ((_, label), ks) in &groups {
-            let parent = (!flat).then(|| {
-                t.push(
-                    None,
-                    format!("g:{label}"),
-                    label.clone(),
-                    String::new(),
-                    NodeKind::Group,
-                )
-            });
-            t.types(parent, "", occ, ks, true);
-        }
-        // real subassemblies, by the instance their paths start with
-        let mut subs: Vec<(String, Vec<usize>)> = vec![];
-        for (k, o) in occ.iter().enumerate() {
-            let Some((inst, _)) = o.path.split_once('.') else {
-                continue;
-            };
-            match subs.iter_mut().find(|s| s.0 == inst) {
-                Some(s) => s.1.push(k),
-                None => subs.push((inst.to_string(), vec![k])),
-            }
-        }
-        t.sub = vec![None; occ.len()];
-        for (u, (_, ks)) in subs.iter().enumerate() {
-            for &k in ks {
-                t.sub[k] = Some(u);
-            }
-        }
-        if !subs.is_empty() {
-            subs.sort_by(|a, b| natural(&a.0, &b.0));
-            let g = t.push(
-                None,
-                format!("g:{SUBS}"),
-                SUBS.into(),
-                String::new(),
-                NodeKind::Group,
-            );
-            for (inst, ks) in &subs {
-                let s = t.push(
-                    Some(g),
-                    format!("s:{inst}"),
-                    inst.clone(),
-                    String::new(),
-                    NodeKind::Sub,
-                );
-                t.types(Some(s), &format!("s:{inst}/"), occ, ks, false);
-            }
-        }
-        // each node's occurrences, from its leaves up
-        for k in (0..t.nodes.len()).rev() {
-            let kids = t.nodes[k].kids.clone();
-            let mut all: Vec<usize> = t.nodes[k].occ.clone();
-            for c in kids {
-                all.extend(t.nodes[c].occ.iter().copied());
-            }
-            t.nodes[k].occ = all;
-        }
-        t
+        let mut subs: Vec<&str> = vec![];
+        self.sub = occ
+            .iter()
+            .map(|o| {
+                let (inst, _) = o.path.split_once('.')?;
+                Some(match subs.iter().position(|s| *s == inst) {
+                    Some(u) => u,
+                    None => {
+                        subs.push(inst);
+                        subs.len() - 1
+                    }
+                })
+            })
+            .collect();
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn push(
         &mut self,
         parent: Option<usize>,
@@ -357,6 +506,8 @@ impl AsmTree {
         label: String,
         detail: String,
         kind: NodeKind,
+        icon: &'static str,
+        at: &str,
     ) -> usize {
         let depth = parent.map_or(0, |p| self.nodes[p].depth + 1);
         let k = self.nodes.len();
@@ -366,10 +517,14 @@ impl AsmTree {
             label,
             detail,
             kind,
+            icon,
             depth,
             parent,
             kids: vec![],
             occ: vec![],
+            flag: None,
+            ground: false,
+            at: at.to_string(),
         });
         match parent {
             Some(p) => self.nodes[p].kids.push(k),
@@ -378,53 +533,208 @@ impl AsmTree {
         k
     }
 
-    /// Under `parent`: a row per part type (an occurrence alone in its type stands for it), its
-    /// occurrences under it.
-    fn types(&mut self, parent: Option<usize>, prefix: &str, occ: &[OccRow], ks: &[usize], home: bool) {
-        let mut by_file: Vec<(String, Vec<usize>)> = vec![];
-        for &k in ks {
-            match by_file.iter_mut().find(|f| f.0 == occ[k].file) {
-                Some(f) => f.1.push(k),
-                None => by_file.push((occ[k].file.clone(), vec![k])),
-            }
+    /// One document's rows under `parent`: its Origin, its Relationships, what holds it in the
+    /// document above, its components.
+    fn doc(&mut self, cx: &Cx, parent: Option<usize>, owner: &str) {
+        let o = self.push(
+            parent,
+            format!("o:{owner}"),
+            "Origin".into(),
+            String::new(),
+            NodeKind::Origin,
+            "ucs",
+            owner,
+        );
+        for (k, item) in crate::origin::ITEMS.into_iter().enumerate() {
+            self.push(
+                Some(o),
+                format!("o:{owner}:{k}"),
+                item.name().into(),
+                String::new(),
+                NodeKind::OriginItem(k),
+                item.icon(),
+                owner,
+            );
         }
-        let mut by_file: Vec<(String, String, Vec<usize>)> = by_file
-            .into_iter()
-            .map(|(f, ks)| (type_label(&f), f, ks))
+        // Relationships: by kind, problems first
+        let mine: Vec<usize> = (0..cx.links.len())
+            .filter(|&k| cx.links[k].owner == owner)
             .collect();
-        by_file.sort_by(|a, b| natural(&a.0, &b.0));
-        for (label, file, mut ks) in by_file {
-            ks.sort_by(|a, b| natural(&occ[*a].path, &occ[*b].path));
-            let under = if ks.len() == 1 {
-                parent
-            } else {
-                Some(self.push(
-                    parent,
-                    format!("{prefix}t:{file}"),
-                    label.clone(),
+        if !mine.is_empty() {
+            let r = self.push(
+                parent,
+                format!("r:{owner}"),
+                "Relationships".into(),
+                String::new(),
+                NodeKind::Relationships,
+                "relfolder",
+                owner,
+            );
+            let mut kinds: Vec<((LinkFamily, &str), Vec<usize>)> = vec![];
+            for &k in &mine {
+                let l = &cx.links[k];
+                let key = (l.family, l.kind.as_str());
+                match kinds.iter_mut().find(|x| x.0 == key) {
+                    Some(x) => x.1.push(k),
+                    None => kinds.push((key, vec![k])),
+                }
+            }
+            for x in &mut kinds {
+                x.1.sort_by_key(|&k| std::cmp::Reverse(cx.link_flag[k]));
+            }
+            kinds.sort_by_key(|x| {
+                (
+                    std::cmp::Reverse(x.1.iter().map(|&k| cx.link_flag[k]).max().flatten()),
+                    x.0.0,
+                    std::cmp::Reverse(x.1.len()),
+                )
+            });
+            for ((family, kind), ks) in kinds {
+                let g = self.push(
+                    Some(r),
+                    format!("r:{owner}:{family:?}:{kind}"),
+                    kind_label(family, kind),
                     String::new(),
-                    NodeKind::Type,
-                ))
-            };
-            for k in ks {
-                let detail = if under == parent {
-                    label.clone()
-                } else {
-                    String::new()
-                };
-                let n = self.push(
-                    under,
-                    format!("{prefix}{}", occ[k].path),
-                    occ[k].path.clone(),
-                    detail,
-                    NodeKind::Occ,
+                    NodeKind::LinkKind,
+                    kind_icon(family, kind),
+                    owner,
                 );
-                self.nodes[n].occ = vec![k];
-                if home {
-                    self.home[k] = n;
+                for k in ks {
+                    self.link_row(cx, g, format!("l:{k}"), k, None);
                 }
             }
         }
+        if let Some(p) = parent {
+            self.held(cx, p, owner);
+        }
+        // components, in the order the file makes them; one statement's in a loop together
+        let kids: Vec<&InstOut> = cx
+            .insts
+            .iter()
+            .filter(|i| split_path(&i.path).0 == owner)
+            .collect();
+        let mut done: HashSet<usize> = HashSet::new();
+        for (n, i) in kids.iter().enumerate() {
+            if done.contains(&n) {
+                continue;
+            }
+            let id = split_path(&i.path).1;
+            let same: Vec<usize> = if i.sub || !id.contains('[') {
+                vec![n]
+            } else {
+                (n..kids.len())
+                    .filter(|&m| {
+                        !kids[m].sub
+                            && kids[m].file == i.file
+                            && stem(split_path(&kids[m].path).1) == stem(id)
+                    })
+                    .collect()
+            };
+            done.extend(same.iter().copied());
+            if same.len() > 1 {
+                let p = self.push(
+                    parent,
+                    format!("p:{}", join(owner, stem(id))),
+                    stem(id).into(),
+                    type_label(&i.file),
+                    NodeKind::Pattern,
+                    "rect",
+                    owner,
+                );
+                let mut all = vec![];
+                for m in same {
+                    let o = self.occ_row(cx, p, kids[m]);
+                    all.extend(self.nodes[o].occ.clone());
+                }
+                self.nodes[p].occ = all;
+            } else if i.sub {
+                let s = self.push(
+                    parent,
+                    format!("s:{}", i.path),
+                    id.into(),
+                    part_word(&i.file),
+                    NodeKind::Sub,
+                    "subasm",
+                    owner,
+                );
+                self.nodes[s].ground = i.ground;
+                self.nodes[s].occ = (0..cx.occ.len())
+                    .filter(|&k| under(&cx.occ[k].path, &i.path))
+                    .collect();
+                self.doc(cx, Some(s), &i.path);
+            } else {
+                self.occ_row(cx, parent.unwrap_or(usize::MAX), i);
+            }
+        }
+    }
+
+    /// A part occurrence's row, the relationships that hold it under it.
+    fn occ_row(&mut self, cx: &Cx, parent: usize, i: &InstOut) -> usize {
+        let parent = (parent != usize::MAX).then_some(parent);
+        let (owner, id) = split_path(&i.path);
+        let n = self.push(
+            parent,
+            i.path.clone(),
+            id.into(),
+            type_label(&i.file),
+            NodeKind::Occ,
+            "part",
+            owner,
+        );
+        self.nodes[n].ground = i.ground;
+        if let Some(&k) = cx.index.get(i.path.as_str()) {
+            self.nodes[n].occ = vec![k];
+            self.home[k] = n;
+        }
+        self.nodes[n].flag = cx.flags.occ.get(&i.path).copied();
+        self.held(cx, n, &i.path);
+        n
+    }
+
+    /// Under a component: the relationships that hold it, problems first.
+    fn held(&mut self, cx: &Cx, n: usize, path: &str) {
+        let mut ks: Vec<usize> = cx.holds.get(path).cloned().unwrap_or_default();
+        ks.dedup();
+        ks.sort_by_key(|&k| std::cmp::Reverse(cx.link_flag[k]));
+        for k in ks {
+            self.link_row(cx, n, format!("{path}>l:{k}"), k, Some(path));
+        }
+    }
+
+    /// A relationship's row: its name, and what it ties (from a component, the other side).
+    fn link_row(&mut self, cx: &Cx, parent: usize, key: String, k: usize, from: Option<&str>) -> usize {
+        let l = &cx.links[k];
+        let at = &self.nodes[parent].at.clone();
+        let side = |s: &(String, String)| -> String {
+            let p = seen_from(&s.0, at);
+            match l.family {
+                LinkFamily::Relation => format!("{p}.{}", s.1),
+                _ => p.to_string(),
+            }
+        };
+        let detail = match from {
+            Some(me) => {
+                let me_a = under(&l.a.0, me);
+                let other = if me_a { &l.b } else { &l.a };
+                format!("{} ({})", l.kind.replace('_', " "), side(other))
+            }
+            None if l.family == LinkFamily::FitRule => {
+                format!("({}, {})", part_word(&l.a.0), part_word(&l.b.0))
+            }
+            None => format!("({}, {})", side(&l.a), side(&l.b)),
+        };
+        let n = self.push(
+            Some(parent),
+            key,
+            l.id.clone(),
+            detail,
+            NodeKind::Link(k),
+            kind_icon(l.family, &l.kind),
+            &l.owner,
+        );
+        self.nodes[n].occ = cx.ends[k].clone();
+        self.nodes[n].flag = cx.link_flag[k];
+        n
     }
 
     pub fn find(&self, key: &str) -> Option<usize> {
@@ -432,13 +742,39 @@ impl AsmTree {
     }
 }
 
+/// What the browser is made from, once per build.
+struct Cx<'a> {
+    occ: &'a [OccRow],
+    insts: &'a [InstOut],
+    links: &'a [LinkOut],
+    ends: &'a [Vec<usize>],
+    link_flag: &'a [Option<Flag>],
+    holds: &'a HashMap<String, Vec<usize>>,
+    index: &'a HashMap<&'a str, usize>,
+    flags: &'a Flags,
+}
+
+fn join(owner: &str, id: &str) -> String {
+    if owner.is_empty() {
+        id.to_string()
+    } else {
+        format!("{owner}.{id}")
+    }
+}
+
 #[derive(Default)]
 pub struct AsmPanel {
     pub occ: Vec<OccRow>,
-    /// The browser's rows, made again when the occurrences change.
+    /// The browser's rows, made again when the solve or its problems change.
     pub tree: AsmTree,
     /// The assembly's folder: where its part files' folders are seen from.
     pub dir: Option<PathBuf>,
+    /// Every occurrence and relationship through subassemblies, and what the issues flag.
+    pub insts: Vec<InstOut>,
+    pub links: Vec<LinkOut>,
+    pub flags: Flags,
+    /// Each top-level instance's pose: where a subassembly's origin is drawn.
+    pub poses: Vec<(String, forge_math::Frame)>,
     pub joints: Vec<JointOut>,
     pub mobility: usize,
     pub bom: Vec<(String, usize)>,
@@ -448,7 +784,7 @@ pub struct AsmPanel {
     /// The overlap check is running.
     pub checking: bool,
     pub timings: String,
-    /// The browser row chosen, by its key: an occurrence's path, or a group's (all under it).
+    /// The browser row chosen, by its key: an occurrence's path, or a row standing for several.
     pub selected: Option<String>,
     /// Hidden occurrences, by path: kept through a solve.
     pub hidden: HashSet<String>,
@@ -468,7 +804,7 @@ pub struct AsmPanel {
     kept: Option<(String, Vec<bool>)>,
     /// A row to scroll the browser to, once.
     pub reveal: Option<String>,
-    /// Which lists are open (joints, expects, BOM), once chosen.
+    /// Which lists are open in the dialogs (expects), once chosen.
     pub open: std::collections::HashMap<&'static str, bool>,
     /// A drive's slider value while it's moved, before it's let go.
     pub dragging: Option<(String, f64)>,
@@ -478,6 +814,15 @@ pub struct AsmPanel {
     pub trails: bool,
     /// The grounded top-level instances: their group stays when exploding.
     pub grounded: Vec<String>,
+    /// Subassemblies' origin items shown, by (subassembly, item).
+    pub sub_origins: BTreeSet<(String, usize)>,
+    /// The dialogs up: Drive (a relationship, by index), iProperties (an occurrence's path),
+    /// Analyze Interference, the bill of materials, the explode controls.
+    pub drive: Option<usize>,
+    pub props: Option<String>,
+    pub interference: bool,
+    pub bom_open: bool,
+    pub explode_open: bool,
 }
 
 /// Whether `path` is the row `key` or under it.
@@ -499,12 +844,35 @@ impl AsmPanel {
         self.grounded.iter().any(|g| under(&self.occ[k].path, g))
     }
 
-    /// The solve's occurrences: the browser made again if they changed, what was hidden kept.
+    /// The solve's occurrences alone.
     pub fn set_occ(&mut self, occ: Vec<OccRow>, dir: Option<PathBuf>) {
-        if occ != self.occ || dir != self.dir || self.tree.home.len() != occ.len() {
-            self.tree = AsmTree::build(&occ, dir.as_deref());
+        let (insts, links, flags) = (self.insts.clone(), self.links.clone(), self.flags.clone());
+        self.set_structure(occ, dir, insts, links, flags);
+    }
+
+    /// The solve's occurrences, relationships and problems: the browser made again if they
+    /// changed, what was hidden kept.
+    pub fn set_structure(
+        &mut self,
+        occ: Vec<OccRow>,
+        dir: Option<PathBuf>,
+        insts: Vec<InstOut>,
+        links: Vec<LinkOut>,
+        flags: Flags,
+    ) {
+        if occ != self.occ
+            || dir != self.dir
+            || insts != self.insts
+            || links != self.links
+            || flags != self.flags
+            || self.tree.home.len() != occ.len()
+        {
+            self.tree = AsmTree::build_with(&occ, dir.as_deref(), &insts, &links, &flags);
             self.occ = occ;
             self.dir = dir;
+            self.insts = insts;
+            self.links = links;
+            self.flags = flags;
             self.kept = None;
             if self
                 .selected
@@ -519,6 +887,9 @@ impl AsmPanel {
                 .is_some_and(|k| self.tree.find(k).is_none())
             {
                 self.isolated = None;
+            }
+            if self.drive.is_some_and(|k| k >= self.links.len()) {
+                self.drive = None;
             }
         }
         self.sync();
@@ -688,6 +1059,95 @@ impl AsmPanel {
         }
         out
     }
+
+    /// An origin row's state: an item's on or off; a folder's all, some or none.
+    pub fn origin_eye(&self, n: usize, top: &[bool; 7]) -> Eye {
+        let node = &self.tree.nodes[n];
+        let on = |k: usize| {
+            if node.at.is_empty() {
+                top[k]
+            } else {
+                self.sub_origins.contains(&(node.at.clone(), k))
+            }
+        };
+        let ks: Vec<usize> = match node.kind {
+            NodeKind::OriginItem(k) => vec![k],
+            _ => (0..7).collect(),
+        };
+        match ks.iter().filter(|&&k| on(k)).count() {
+            0 => Eye::Hidden,
+            c if c == ks.len() => Eye::Shown,
+            _ => Eye::Some,
+        }
+    }
+
+    /// The pose of a subassembly occurrence, when it's a top-level one.
+    pub fn pose_of(&self, sub: &str) -> Option<forge_math::Frame> {
+        self.poses.iter().find(|p| p.0 == sub).map(|p| p.1)
+    }
+
+    /// A relationship's id as issues name it: inside its subassembly, by its path.
+    pub fn link_name(&self, k: usize) -> String {
+        let l = &self.links[k];
+        join(&l.owner, &l.id)
+    }
+
+    /// The joint as solved, when the top document writes it.
+    pub fn joint_of(&self, k: usize) -> Option<&JointOut> {
+        let l = &self.links[k];
+        if !l.owner.is_empty() {
+            return None;
+        }
+        self.joints.iter().find(|j| j.id == l.id)
+    }
+}
+
+/// What the issues flag, Inventor's way: a sick relationship red or yellow, two parts that
+/// interfere yellow.
+pub fn issue_flags(issues: &[super::fg::Issue]) -> Flags {
+    fn marks(issue: &AsmIssue, owner: &str, occ: &mut Vec<String>, items: &mut Vec<(String, String)>) {
+        let mut item = |id: &str| items.push((owner.to_string(), id.to_string()));
+        match issue {
+            AsmIssue::Interference { a, b, .. } | AsmIssue::ShallowEngagement { a, b, .. } => {
+                occ.push(join(owner, a));
+                occ.push(join(owner, b));
+            }
+            AsmIssue::Conflict { items: is, .. } | AsmIssue::NotConverged { items: is, .. } => {
+                for i in is {
+                    item(&i.id);
+                }
+            }
+            AsmIssue::Redundant { item: i, .. } => item(&i.id),
+            AsmIssue::BrokenAnchor { item: i, .. }
+            | AsmIssue::WrongReference { item: i, .. }
+            | AsmIssue::SelfLink { item: i } => item(i),
+            AsmIssue::LimitViolated { joint, .. } | AsmIssue::BadFreedom { joint, .. } => item(joint),
+            AsmIssue::BadRelation { relation } => item(relation),
+            AsmIssue::Inside { path, issue } => marks(issue, &join(owner, path), occ, items),
+            AsmIssue::AtPastLimit { limit } => marks(limit, owner, occ, items),
+            _ => {}
+        }
+    }
+    let mut f = Flags::default();
+    for is in issues {
+        let Some(ai) = &is.asm else { continue };
+        let flag = if is.severity == Severity::Error {
+            Flag::Error
+        } else {
+            Flag::Warning
+        };
+        let (mut occ, mut items) = (vec![], vec![]);
+        marks(ai, "", &mut occ, &mut items);
+        for o in occ {
+            let e = f.occ.entry(o).or_insert(flag);
+            *e = (*e).max(flag);
+        }
+        for i in items {
+            let e = f.links.entry(i).or_insert(flag);
+            *e = (*e).max(flag);
+        }
+    }
+    f
 }
 
 /// What an assembly issue names, to highlight: occurrences and items.
@@ -719,11 +1179,76 @@ pub fn named(issue: &AsmIssue) -> (Vec<String>, Vec<String>) {
     }
 }
 
+/// What a browser row's right-click menu asks.
+enum MenuAct {
+    Visibility(String),
+    Isolate(String),
+    Props(String),
+    Drive(usize),
+    Expand(String),
+}
+
 const TOOLBAR_H: f32 = 34.0;
 const INDENT: f32 = 14.0;
+const WARN: Color32 = Color32::from_rgb(0xE0, 0xA0, 0x30);
+
+/// A dialog's frame, as the feature dialogs have it.
+pub(super) fn dialog_frame(t: &super::theme::Theme) -> egui::Frame {
+    egui::Frame::new()
+        .fill(t.surface)
+        .stroke(Stroke::new(1.0, t.line))
+        .corner_radius(6)
+        .shadow(egui::Shadow {
+            offset: [0, 4],
+            blur: 16,
+            spread: 0,
+            color: Color32::from_black_alpha(90),
+        })
+        .inner_margin(12)
+}
+
+/// A dialog's title row with its close box: true when closed.
+pub(super) fn dialog_head(
+    ui: &mut Ui,
+    t: &super::theme::Theme,
+    icon: &str,
+    title: &str,
+    name: &str,
+    places: &mut Vec<(String, Rect)>,
+) -> bool {
+    let w = ui.available_width();
+    let (head, _) = ui.allocate_exact_size(vec2(w, 26.0), Sense::hover());
+    icons::draw(
+        ui.painter(),
+        head.left_top() + vec2(0.0, 2.0),
+        20.0,
+        icon,
+        1.5,
+        t.ink,
+    );
+    ui.painter().text(
+        pos2(head.left() + 28.0, head.center().y),
+        Align2::LEFT_CENTER,
+        title,
+        semi(14.0),
+        t.ink,
+    );
+    let x = Rect::from_center_size(pos2(head.right() - 10.0, head.center().y), vec2(20.0, 20.0));
+    let r = ui.interact(x, ui.scope_id().with(("close", name)), Sense::click());
+    icons::draw(
+        ui.painter(),
+        x.left_top() + vec2(2.0, 2.0),
+        16.0,
+        "close",
+        1.5,
+        if r.hovered() { t.ink } else { t.ink2 },
+    );
+    places.push((format!("{name}:close"), x));
+    r.clicked()
+}
 
 impl Shell {
-    /// The assembly's browser, in the side panel's place: a filter and Show all above its rows.
+    /// The assembly's Model browser, in the side panel's place: a filter and Show all above its rows.
     pub(super) fn asm_tree(&mut self, ui: &mut Ui, area: Rect) {
         let Some(mut fg) = self.fg.take() else { return };
         let Some(a) = &mut fg.asm else {
@@ -759,6 +1284,7 @@ impl Shell {
         let mut chosen = None;
         let mut toggle = None;
         let mut eye = None;
+        let mut menu: Option<MenuAct> = None;
         let mut child = ui.new_child(egui::UiBuilder::new().max_rect(list));
         let mut scroll = egui::ScrollArea::vertical()
             .id_salt("fg-asm-tree")
@@ -770,6 +1296,7 @@ impl Shell {
             scroll = scroll.vertical_scroll_offset(y);
         }
         let shown_mask = a.isolated.as_ref().map(|_| a.shown_mask());
+        let top_origin = self.origin_shown;
         scroll.show_rows(&mut child, super::ROW_H, rows.len(), |ui, range| {
             for &(k, open) in &rows[range] {
                 let n = &a.tree.nodes[k];
@@ -787,7 +1314,7 @@ impl Shell {
                 if !n.kids.is_empty() {
                     let arrow = Rect::from_center_size(pos2(x, r.center().y), vec2(16.0, super::ROW_H));
                     let ar = ui.interact(arrow, ui.scope_id().with(("asm-open", &n.key)), Sense::click());
-                    disclosure(
+                    super::fg::disclosure(
                         ui.painter(),
                         arrow.center(),
                         open,
@@ -798,76 +1325,196 @@ impl Shell {
                     }
                     places.push((format!("asm:open:{}", n.key), arrow));
                 }
-                let state = a.eye(k);
-                let isolated_out = shown_mask.as_ref().is_some_and(|m| n.occ.iter().all(|&o| !m[o]));
-                let dim = state == Eye::Hidden || isolated_out;
+                let origin = matches!(n.kind, NodeKind::Origin | NodeKind::OriginItem(_));
+                let has_eye = origin || matches!(n.kind, NodeKind::Occ | NodeKind::Pattern | NodeKind::Sub);
+                let state = if origin {
+                    a.origin_eye(k, &top_origin)
+                } else if has_eye {
+                    a.eye(k)
+                } else {
+                    Eye::Shown
+                };
+                let isolated_out =
+                    !origin && has_eye && shown_mask.as_ref().is_some_and(|m| n.occ.iter().all(|&o| !m[o]));
+                let dim = (has_eye && !origin && state == Eye::Hidden) || isolated_out;
+                let flag_ink = match n.flag {
+                    Some(Flag::Error) => Some(t.error),
+                    Some(Flag::Warning) => Some(WARN),
+                    None => None,
+                };
                 let ink = if dim {
                     t.ink2.gamma_multiply(0.55)
                 } else if on {
                     t.on_ink
-                } else if n.occ.iter().any(|&o| a.flagged(&a.occ[o].path)) {
+                } else if n.flag == Some(Flag::Error) {
                     t.error
                 } else {
                     t.ink
                 };
+                // the row's icon: its kind's, an origin item in its own colour, red or yellow if sick
+                let ix = x + 9.0;
+                let icon_ink = match n.kind {
+                    NodeKind::OriginItem(i) => {
+                        let c = crate::origin::ITEMS[i].colour();
+                        Color32::from_rgb((c >> 16) as u8, (c >> 8) as u8, c as u8)
+                    }
+                    _ => flag_ink.unwrap_or(if dim { t.ink2.gamma_multiply(0.55) } else { t.ink2 }),
+                };
+                icons::draw(
+                    ui.painter(),
+                    pos2(ix, r.center().y - 8.0),
+                    16.0,
+                    n.icon,
+                    1.25,
+                    icon_ink,
+                );
+                if let Some(c) = flag_ink {
+                    let at = pos2(ix + 14.0, r.center().y + 5.0);
+                    ui.painter().circle_filled(at, 4.5, c);
+                    ui.painter()
+                        .text(at, Align2::CENTER_CENTER, "!", medium(8.0), Color32::BLACK);
+                }
+                if n.ground {
+                    icons::draw(
+                        ui.painter(),
+                        pos2(ix - 2.0, r.center().y - 1.0),
+                        11.0,
+                        "pin",
+                        1.5,
+                        t.focus,
+                    );
+                }
                 let font = match n.kind {
-                    NodeKind::Group => medium(13.0),
+                    NodeKind::Origin | NodeKind::Relationships => medium(13.0),
                     _ if on => medium(13.0),
                     _ => sans(13.0),
                 };
+                let lx = ix + 22.0;
                 let g = ui.fonts_mut(|f| f.layout_no_wrap(n.label.clone(), font, ink));
-                let lx = x + 10.0;
                 let gw = g.size().x;
                 ui.painter()
                     .galley(pos2(lx, r.center().y - g.size().y * 0.5), g, ink);
-                // a count after a group's name; a lone occurrence's type at the right
+                // a count after a folder's, a kind's or a pattern's name
                 let count = match n.kind {
-                    NodeKind::Type => format!("×{}", n.occ.len()),
-                    NodeKind::Group | NodeKind::Sub => n.occ.len().to_string(),
-                    NodeKind::Occ => String::new(),
+                    NodeKind::Pattern => format!("×{}", n.kids.len()),
+                    NodeKind::LinkKind => n.kids.len().to_string(),
+                    NodeKind::Relationships => n
+                        .kids
+                        .iter()
+                        .map(|&c| a.tree.nodes[c].kids.len())
+                        .sum::<usize>()
+                        .to_string(),
+                    _ => String::new(),
                 };
                 let eye_r = Rect::from_center_size(pos2(r.right() - 16.0, r.center().y), vec2(20.0, 20.0));
+                let mut used = lx + gw;
                 if !count.is_empty() {
-                    ui.painter().text(
-                        pos2(lx + gw + 6.0, r.center().y),
+                    let c = ui.painter().text(
+                        pos2(used + 6.0, r.center().y),
                         Align2::LEFT_CENTER,
                         count,
                         sans(11.0),
                         t.ink2,
                     );
+                    used = c.right();
                 }
-                if !n.detail.is_empty() {
+                // the detail where it fits, cut at its start if it doesn't
+                let room = (if has_eye { eye_r.left() } else { r.right() - 8.0 }) - 6.0 - (used + 10.0);
+                if !n.detail.is_empty() && room > 30.0 {
+                    let mut d = n.detail.clone();
+                    let wide = |s: &str, ui: &mut Ui| {
+                        ui.fonts_mut(|f| f.layout_no_wrap(s.to_string(), sans(10.0), t.ink2))
+                            .size()
+                            .x
+                    };
+                    while wide(&d, ui) > room && d.chars().count() > 2 {
+                        d = format!("…{}", d.chars().skip(2).collect::<String>());
+                    }
                     ui.painter().text(
-                        pos2(eye_r.left() - 6.0, r.center().y),
+                        pos2(used + 10.0 + room, r.center().y),
                         Align2::RIGHT_CENTER,
-                        &n.detail,
+                        d,
                         sans(10.0),
                         t.ink2,
                     );
                 }
-                let er = ui.interact(eye_r, ui.scope_id().with(("asm-eye", &n.key)), Sense::click());
-                let tip = if state == Eye::Hidden { "Show" } else { "Hide" };
-                let er = er.on_hover_text(tip);
-                let eink = match state {
-                    _ if er.hovered() => t.ink,
-                    Eye::Shown => t.ink2,
-                    Eye::Some => t.ink2.gamma_multiply(0.7),
-                    Eye::Hidden => t.ink2.gamma_multiply(0.5),
-                };
-                icons::draw(
-                    ui.painter(),
-                    pos2(eye_r.left() + 2.0, eye_r.top() + 2.0),
-                    16.0,
-                    if state == Eye::Hidden { "hide" } else { "eye" },
-                    1.25,
-                    eink,
-                );
-                places.push((format!("asm:eye:{}", n.key), eye_r));
-                if er.clicked() {
-                    eye = Some(n.key.clone());
-                } else if resp.double_clicked() && !n.kids.is_empty() {
-                    let open = a.expanded.contains(&n.key);
-                    toggle = Some((n.key.clone(), open));
+                let mut eye_hit = false;
+                if has_eye {
+                    let er = ui.interact(eye_r, ui.scope_id().with(("asm-eye", &n.key)), Sense::click());
+                    let tip = if state == Eye::Hidden { "Show" } else { "Hide" };
+                    let er = er.on_hover_text(tip);
+                    let eink = match state {
+                        _ if er.hovered() => t.ink,
+                        Eye::Shown => t.ink2,
+                        Eye::Some => t.ink2.gamma_multiply(0.7),
+                        Eye::Hidden => t.ink2.gamma_multiply(0.5),
+                    };
+                    icons::draw(
+                        ui.painter(),
+                        pos2(eye_r.left() + 2.0, eye_r.top() + 2.0),
+                        16.0,
+                        if state == Eye::Hidden { "hide" } else { "eye" },
+                        1.25,
+                        eink,
+                    );
+                    places.push((format!("asm:eye:{}", n.key), eye_r));
+                    eye_hit = er.clicked();
+                }
+                // what Inventor shows on hover: the file, what a relationship ties
+                let resp = resp.on_hover_ui_at_pointer(|ui| {
+                    ui.set_max_width(360.0);
+                    Self::asm_row_tip(ui, &t, a, k);
+                });
+                resp.context_menu(|ui| {
+                    ui.set_min_width(150.0);
+                    let mut item = |ui: &mut Ui, label: &str, name: &str| {
+                        let b = ui.button(egui::RichText::new(label).font(sans(12.0)));
+                        places.push((format!("asm:menu:{name}"), b.rect));
+                        b.clicked()
+                    };
+                    match n.kind {
+                        NodeKind::Occ | NodeKind::Pattern | NodeKind::Sub => {
+                            let vis = if state == Eye::Hidden {
+                                "Show"
+                            } else {
+                                "Visibility off"
+                            };
+                            if item(ui, vis, "hide") {
+                                menu = Some(MenuAct::Visibility(n.key.clone()));
+                                ui.close();
+                            }
+                            let iso = a.isolated.as_deref() == Some(n.key.as_str());
+                            if item(ui, if iso { "Undo Isolate" } else { "Isolate" }, "isolate") {
+                                menu = Some(MenuAct::Isolate(n.key.clone()));
+                                ui.close();
+                            }
+                            if n.kind == NodeKind::Occ && item(ui, "iProperties…", "props") {
+                                menu = Some(MenuAct::Props(n.key.clone()));
+                                ui.close();
+                            }
+                        }
+                        NodeKind::Link(l) if item(ui, "Drive…", "drive") => {
+                            menu = Some(MenuAct::Drive(l));
+                            ui.close();
+                        }
+                        _ => {}
+                    }
+                    if !n.kids.is_empty() && item(ui, if open { "Collapse" } else { "Expand" }, "expand") {
+                        menu = Some(MenuAct::Expand(n.key.clone()));
+                        ui.close();
+                    }
+                });
+                if eye_hit {
+                    eye = Some(k);
+                } else if resp.double_clicked() {
+                    match n.kind {
+                        NodeKind::Link(l) => menu = Some(MenuAct::Drive(l)),
+                        NodeKind::Occ => menu = Some(MenuAct::Props(n.key.clone())),
+                        _ if !n.kids.is_empty() => {
+                            toggle = Some((n.key.clone(), a.expanded.contains(&n.key)));
+                        }
+                        _ => {}
+                    }
                 } else if resp.clicked() {
                     chosen = Some(n.key.clone());
                 }
@@ -882,8 +1529,57 @@ impl Shell {
             }
         }
         if let Some(k) = eye {
-            a.flip_eye(&k);
+            let n = &a.tree.nodes[k];
+            match n.kind {
+                NodeKind::Origin | NodeKind::OriginItem(_) => {
+                    let ks: Vec<usize> = match n.kind {
+                        NodeKind::OriginItem(i) => vec![i],
+                        _ => (0..7).collect(),
+                    };
+                    let turn_on = a.origin_eye(k, &self.origin_shown) == Eye::Hidden;
+                    let at = n.at.clone();
+                    for i in ks {
+                        if at.is_empty() {
+                            self.origin_shown[i] = turn_on;
+                        } else if turn_on {
+                            a.sub_origins.insert((at.clone(), i));
+                        } else {
+                            a.sub_origins.remove(&(at.clone(), i));
+                        }
+                    }
+                }
+                _ => {
+                    let key = n.key.clone();
+                    a.flip_eye(&key);
+                }
+            }
             changed = true;
+        }
+        match menu {
+            Some(MenuAct::Visibility(k)) => {
+                a.flip_eye(&k);
+                changed = true;
+            }
+            Some(MenuAct::Isolate(k)) => {
+                a.isolated = if a.isolated.as_deref() == Some(k.as_str()) {
+                    None
+                } else {
+                    Some(k)
+                };
+                changed = true;
+            }
+            Some(MenuAct::Props(k)) => {
+                a.props = Some(k.clone());
+                a.anchors = None;
+                a.selected = Some(k);
+                changed = true;
+            }
+            Some(MenuAct::Drive(l)) => a.drive = Some(l),
+            Some(MenuAct::Expand(k)) if !a.expanded.remove(&k) => {
+                a.expanded.insert(k);
+            }
+            Some(MenuAct::Expand(_)) => {}
+            None => {}
         }
         if let Some(k) = chosen {
             a.selected = if a.selected.as_deref() == Some(k.as_str()) {
@@ -901,297 +1597,542 @@ impl Shell {
         self.fg = Some(fg);
     }
 
-    /// The assembly's summary and its checks (run on request): first, as what matters most.
-    pub(super) fn asm_checks(
-        ui: &mut Ui,
-        t: &super::theme::Theme,
-        fg: &mut FgPanel,
-        out: &mut Vec<FgAct>,
-        places: &mut Vec<(String, Rect)>,
-    ) {
-        let Some(a) = &mut fg.asm else { return };
-        let summary = format!(
-            "{} occurrences · {} parts · DOF {} · {}",
-            a.occ.len(),
-            a.bom.len(),
-            a.mobility,
-            a.timings
-        );
-        ui.label(egui::RichText::new(summary).font(sans(11.0)).color(t.ink2));
-        // the overlap check and the expects, on request (slow on a big assembly)
-        Self::fg_heading(ui, t, "Interference and expects");
-        match (a.overlap, a.checking) {
-            (_, true) => {
-                ui.label(egui::RichText::new("checking…").font(sans(11.0)).color(t.ink2));
+    /// A row's hover: an occurrence's file and how it's held, what a relationship ties.
+    fn asm_row_tip(ui: &mut Ui, t: &super::theme::Theme, a: &AsmPanel, k: usize) {
+        let n = &a.tree.nodes[k];
+        let line = |ui: &mut Ui, s: String, c: Color32| {
+            ui.label(egui::RichText::new(s).font(sans(12.0)).color(c));
+        };
+        match n.kind {
+            NodeKind::Occ | NodeKind::Sub => {
+                let file = a
+                    .insts
+                    .iter()
+                    .find(|i| i.path == n.key || format!("s:{}", i.path) == n.key)
+                    .map(|i| i.file.clone())
+                    .or_else(|| n.occ.first().map(|&o| a.occ[o].file.clone()))
+                    .unwrap_or_default();
+                line(ui, n.key.trim_start_matches("s:").to_string(), t.ink);
+                line(ui, file, t.ink2);
+                let held = n
+                    .kids
+                    .iter()
+                    .filter(|&&c| matches!(a.tree.nodes[c].kind, NodeKind::Link(_)))
+                    .count();
+                let mut s = format!("held by {held} relationship{}", if held == 1 { "" } else { "s" });
+                if n.ground {
+                    s.push_str(" · grounded");
+                }
+                line(ui, s, t.ink2);
             }
-            (Some((n, c)), false) => {
-                ui.label(
-                    egui::RichText::new(format!("{n} interferences, {c} intended contacts"))
-                        .font(sans(11.0))
-                        .color(if n > 0 { t.error } else { t.ink }),
+            NodeKind::Link(l) => {
+                let lk = &a.links[l];
+                line(
+                    ui,
+                    format!("{} · {}", a.link_name(l), lk.kind.replace('_', " ")),
+                    t.ink,
                 );
-            }
-            (None, false) => {
-                if Self::fg_button(ui, "Run checks", "asm:check".into(), places) {
-                    a.checking = true;
-                    out.push(FgAct::AsmCheck);
+                for s in [&lk.a, &lk.b] {
+                    let text = if s.1.is_empty() {
+                        s.0.clone()
+                    } else {
+                        format!("{} · {}", s.0, s.1)
+                    };
+                    ui.label(egui::RichText::new(text).font(mono(11.0)).color(t.ink2));
+                }
+                if let Some(j) = a.joint_of(l) {
+                    line(ui, joint_values(j), t.ink2);
                 }
             }
-        }
-        if !a.expects.is_empty() {
-            let fails = a.expects.iter().filter(|e| !e.ok).count();
-            let r = ui.label(
-                egui::RichText::new(format!(
-                    "expects: {} of {} pass",
-                    a.expects.len() - fails,
-                    a.expects.len()
-                ))
-                .font(sans(11.0))
-                .color(if fails > 0 { t.error } else { t.ink }),
-            );
-            places.push(("asm:expects".into(), r.rect));
+            NodeKind::Pattern => line(ui, format!("{} × {}", n.kids.len(), n.detail), t.ink2),
+            _ => {
+                ui.label(egui::RichText::new(&n.label).font(sans(12.0)).color(t.ink));
+            }
         }
     }
 
-    /// The assembly's sections of the panel: the instance chosen, joints and drives, DOF, expects,
-    /// the BOM, the overlap check.
-    pub(super) fn asm_panel(
-        ui: &mut Ui,
+    /// The assembly's dialogs: Drive, iProperties, Analyze Interference, the bill of materials,
+    /// the explode controls.
+    pub(super) fn asm_windows(&mut self, ctx: &egui::Context) {
+        let Some(mut fg) = self.fg.take() else { return };
+        let t = self.theme;
+        let v = self.view_rect;
+        let mut places: Vec<(String, Rect)> = Vec::new();
+        let mut out: Vec<FgAct> = Vec::new();
+        let mut blocks: Vec<Rect> = Vec::new();
+        let feats = fg.feats.clone();
+        let issues = fg.issues.clone();
+        if let Some(a) = &mut fg.asm {
+            if a.drive.is_some() {
+                blocks.extend(Self::drive_window(ctx, &t, v, a, &feats, &mut out, &mut places));
+            }
+            if a.props.is_some() {
+                blocks.extend(Self::props_window(ctx, &t, v, a, &mut out, &mut places));
+            }
+            if a.interference {
+                blocks.extend(Self::interference_window(
+                    ctx,
+                    &t,
+                    v,
+                    a,
+                    &issues,
+                    &mut out,
+                    &mut places,
+                ));
+            }
+            if a.bom_open {
+                blocks.extend(Self::bom_window(ctx, &t, v, a, &mut places));
+            }
+            if a.explode_open {
+                blocks.extend(Self::explode_window(ctx, &t, v, a, &mut places));
+            }
+        }
+        self.view_blocks.extend(blocks);
+        self.places.extend(places);
+        fg.out.extend(out);
+        self.fg = Some(fg);
+    }
+
+    fn window<'a>(
+        title: &'a str,
+        id: &str,
         t: &super::theme::Theme,
-        fg: &mut FgPanel,
+        at: egui::Pos2,
+        w: f32,
+    ) -> egui::Window<'a> {
+        egui::Window::new(title)
+            .id(egui::Id::unique(("asm-window", id)))
+            .title_bar(false)
+            .collapsible(false)
+            .resizable(false)
+            .movable(true)
+            .fade_in(false)
+            .default_pos(at)
+            .min_width(w)
+            .max_width(w)
+            .frame(dialog_frame(t))
+    }
+
+    fn drive_window(
+        ctx: &egui::Context,
+        t: &super::theme::Theme,
+        v: Rect,
+        a: &mut AsmPanel,
+        feats: &[super::fg::FeatRow],
         out: &mut Vec<FgAct>,
         places: &mut Vec<(String, Rect)>,
-    ) {
-        let feats = fg.feats.clone();
-        let Some(a) = &mut fg.asm else { return };
-        // the instance chosen
-        if let Some(sel) = a.selected.clone() {
-            let label = a
-                .tree
-                .find(&sel)
-                .map_or(sel.clone(), |n| a.tree.nodes[n].label.clone());
-            Self::fg_heading(ui, t, &label);
-            let files: Vec<usize> = a.occ_of(&sel);
-            let one = files.len() == 1;
-            if one {
-                let r = ui.label(
-                    egui::RichText::new(&a.occ[files[0]].file)
-                        .font(mono(11.0))
+    ) -> Option<Rect> {
+        let l = a.drive?;
+        let link = a.links.get(l)?.clone();
+        let mut close = false;
+        let r =
+            Self::window("Drive", "drive", t, pos2(v.left() + 16.0, v.top() + 56.0), 340.0).show(ctx, |ui| {
+                close = dialog_head(
+                    ui,
+                    t,
+                    kind_icon(link.family, &link.kind),
+                    "Drive",
+                    "asm:drive",
+                    places,
+                );
+                ui.label(
+                    egui::RichText::new(format!("{} · {}", a.link_name(l), link.kind.replace('_', " ")))
+                        .font(medium(12.0))
                         .color(t.ink),
                 );
-                places.push(("asm:file".into(), r.rect));
-            } else {
                 ui.label(
-                    egui::RichText::new(format!("{} occurrences", files.len()))
-                        .font(sans(11.0))
+                    egui::RichText::new(format!("{}  ·  {}", link.a.0, link.b.0))
+                        .font(mono(11.0))
                         .color(t.ink2),
                 );
-            }
-            ui.horizontal_wrapped(|ui| {
-                let hidden = !files.is_empty() && files.iter().all(|&k| a.hidden.contains(&a.occ[k].path));
-                if Self::fg_button(
-                    ui,
-                    if hidden { "Show" } else { "Hide" },
-                    "asm:hide".into(),
-                    places,
-                ) {
-                    a.set_hidden(&sel, !hidden);
-                    out.push(FgAct::AsmShow);
+                let joint = a.joint_of(l).cloned();
+                if let Some(j) = &joint {
+                    ui.label(
+                        egui::RichText::new(joint_values(j))
+                            .font(sans(11.0))
+                            .color(t.ink2),
+                    );
                 }
-                let iso = a.isolated.as_deref() == Some(sel.as_str());
-                if Self::fg_button(
-                    ui,
-                    if iso { "Show all" } else { "Isolate" },
-                    "asm:isolate".into(),
-                    places,
-                ) {
-                    a.isolated = if iso { None } else { Some(sel.clone()) };
-                    out.push(FgAct::AsmShow);
+                // the joint's dimensions a param drives, each a slider
+                let drives: Vec<(String, forge_lang::error::ParamKey, f64, forge_lang::values::Dim)> = feats
+                    .iter()
+                    .filter(|f| link.owner.is_empty() && f.id == link.id)
+                    .flat_map(|f| &f.dims)
+                    .filter_map(|d| match &d.from {
+                        From::Driving(k) => Some((d.what.clone(), k.clone(), d.value, d.dim)),
+                        _ => None,
+                    })
+                    .collect();
+                if drives.is_empty() {
+                    ui.add_space(4.0);
+                    ui.label(
+                        egui::RichText::new(if link.family == LinkFamily::Joint && link.owner.is_empty() {
+                            "No param drives this joint: give it one (turn: a) to drive it here."
+                        } else if link.family == LinkFamily::Joint {
+                            "Driven from inside its subassembly: open that file to drive it."
+                        } else {
+                            "Only a joint's values can be driven."
+                        })
+                        .font(sans(12.0))
+                        .color(t.ink2),
+                    );
                 }
-                if one && Self::fg_button(ui, "Anchors", "asm:anchors".into(), places) {
-                    out.push(FgAct::AsmAnchors(a.occ[files[0]].file.clone()));
+                for (what, key, value, dim) in drives {
+                    let angle = dim == forge_lang::values::Dim::Angle;
+                    let (lo, hi) = joint
+                        .as_ref()
+                        .and_then(|j| j.limits.iter().find(|x| x.0 == what))
+                        .map(|x| {
+                            if angle {
+                                (x.1.to_degrees(), x.2.to_degrees())
+                            } else {
+                                (x.1, x.2)
+                            }
+                        })
+                        .unwrap_or(if angle {
+                            (-180.0, 180.0)
+                        } else {
+                            (
+                                value - 100.0f64.max(value.abs()),
+                                value + 100.0f64.max(value.abs()),
+                            )
+                        });
+                    let name = format!("{}:{what}", link.id);
+                    let mut x = match &a.dragging {
+                        Some((n, x)) if *n == name => *x,
+                        _ => value,
+                    };
+                    ui.add_space(4.0);
+                    ui.spacing_mut().slider_width = 190.0;
+                    let resp = ui.add(
+                        egui::Slider::new(&mut x, lo.min(value)..=hi.max(value))
+                            .trailing_fill(true)
+                            .text(format!("{key}"))
+                            .suffix(if angle { "°" } else { " mm" }),
+                    );
+                    places.push((format!("asm:drive:{name}"), resp.rect));
+                    if resp.dragged() {
+                        a.dragging = Some((name.clone(), x));
+                    }
+                    let let_go = resp.drag_stopped() || (resp.changed() && !resp.dragged());
+                    if let_go {
+                        a.dragging = None;
+                        if x != value {
+                            out.push(FgAct::Apply(Op::SetParam {
+                                param: key.clone(),
+                                value: Literal { value: x, dim },
+                            }));
+                        }
+                    }
                 }
             });
-            if let Some((file, got)) = &a.anchors {
+        if close {
+            a.drive = None;
+        }
+        r.map(|r| r.response.rect)
+    }
+
+    fn props_window(
+        ctx: &egui::Context,
+        t: &super::theme::Theme,
+        v: Rect,
+        a: &mut AsmPanel,
+        out: &mut Vec<FgAct>,
+        places: &mut Vec<(String, Rect)>,
+    ) -> Option<Rect> {
+        let key = a.props.clone()?;
+        let inst = a.insts.iter().find(|i| i.path == key).cloned();
+        let file = inst
+            .as_ref()
+            .map(|i| i.file.clone())
+            .or_else(|| a.occ.iter().find(|o| o.path == key).map(|o| o.file.clone()))
+            .unwrap_or_default();
+        let mut close = false;
+        let r = Self::window(
+            "iProperties",
+            "props",
+            t,
+            pos2(v.left() + 16.0, v.top() + 56.0),
+            360.0,
+        )
+        .show(ctx, |ui| {
+            close = dialog_head(ui, t, "part", &format!("{key} iProperties"), "asm:props", places);
+            egui::Grid::new("asm-props")
+                .num_columns(2)
+                .spacing(vec2(12.0, 4.0))
+                .show(ui, |ui| {
+                    let row = |ui: &mut Ui, k: &str, val: String| {
+                        ui.label(egui::RichText::new(k).font(sans(12.0)).color(t.ink2));
+                        let r = ui.label(egui::RichText::new(val).font(mono(11.0)).color(t.ink));
+                        ui.end_row();
+                        r.rect
+                    };
+                    row(ui, "Occurrence", key.clone());
+                    let r = row(ui, "File", file.clone());
+                    places.push(("asm:file".into(), r));
+                    row(ui, "Part", type_label(&file));
+                    row(
+                        ui,
+                        "Grounded",
+                        if inst.as_ref().is_some_and(|i| i.ground) {
+                            "yes"
+                        } else {
+                            "no"
+                        }
+                        .into(),
+                    );
+                    let held = a.links.iter().filter(|l| l.a.0 == key || l.b.0 == key).count();
+                    row(ui, "Relationships", held.to_string());
+                });
+            ui.add_space(6.0);
+            if a.anchors.as_ref().is_none_or(|x| x.0 != file)
+                && Self::fg_button(ui, "Anchors", "asm:anchors".into(), places)
+            {
+                out.push(FgAct::AsmAnchors(file.clone()));
+            }
+            if let Some((f, got)) = &a.anchors
+                && *f == file
+            {
                 match got {
                     Ok(list) => {
                         let r = ui.label(
-                            egui::RichText::new(format!("{} anchors of {}", list.len(), part_word(file)))
+                            egui::RichText::new(format!("{} anchors", list.len()))
                                 .font(medium(11.0))
                                 .color(t.ink),
                         );
                         places.push(("asm:anchorlist".into(), r.rect));
-                        for x in list.iter().take(200) {
-                            ui.label(egui::RichText::new(x).font(mono(10.0)).color(t.ink2));
-                        }
+                        egui::ScrollArea::vertical()
+                            .auto_shrink([false, true])
+                            .max_height(220.0)
+                            .show(ui, |ui| {
+                                for x in list.iter().take(400) {
+                                    ui.label(egui::RichText::new(x).font(mono(10.0)).color(t.ink2));
+                                }
+                            });
                     }
                     Err(why) => {
                         ui.label(egui::RichText::new(why).font(sans(11.0)).color(t.error));
                     }
                 }
             }
-        }
-        // the exploded view
-        Self::fg_heading(ui, t, "Explode");
-        ui.horizontal(|ui| {
-            let apart = a.explode >= 0.5;
-            if Self::fg_button(
-                ui,
-                if apart { "Collapse" } else { "Explode" },
-                "asm:explodeplay".into(),
-                places,
-            ) {
-                a.explode = if apart { 0.0 } else { 1.0 };
-            }
-            let r = ui.add(egui::Slider::new(&mut a.explode, 0.0..=1.0).show_value(false));
-            places.push(("asm:explode".into(), r.rect));
-            let r = ui.toggle_value(&mut a.trails, "Trails");
-            places.push(("asm:trails".into(), r.rect));
         });
-        // joints, each drive a slider
-        let open = Self::asm_fold(
-            ui,
-            t,
-            a,
-            "joints",
-            &format!("Joints ({}), mobility {}", a.joints.len(), a.mobility),
-            a.joints.len(),
-            places,
-        );
-        for j in a.joints.iter().filter(|_| open) {
-            let flagged = a.highlight_items.contains(&j.id);
-            let vals: Vec<String> = j
-                .values
-                .iter()
-                .map(|(w, v, ang)| {
-                    if *ang {
-                        format!("{w} {}°", short(v.to_degrees()))
-                    } else {
-                        format!("{w} {}", short(*v))
-                    }
-                })
-                .collect();
-            let r = ui.label(
-                egui::RichText::new(format!(
-                    "{} {} · {} · free {}",
-                    j.id,
-                    j.kind,
-                    vals.join(", "),
-                    j.free
-                ))
-                .font(mono(11.0))
-                .color(if flagged { t.error } else { t.ink }),
-            );
-            places.push((format!("asm:joint:{}", j.id), r.rect));
-            // a drive: the joint's dimension a param drives
-            let drives: Vec<(String, forge_lang::error::ParamKey, f64, forge_lang::values::Dim)> = feats
-                .iter()
-                .filter(|f| f.id == j.id)
-                .flat_map(|f| &f.dims)
-                .filter_map(|d| match &d.from {
-                    From::Driving(k) => Some((d.what.clone(), k.clone(), d.value, d.dim)),
-                    _ => None,
-                })
-                .collect();
-            for (what, key, value, dim) in drives {
-                let angle = dim == forge_lang::values::Dim::Angle;
-                let (lo, hi) = j
-                    .limits
-                    .iter()
-                    .find(|l| l.0 == what)
-                    .map(|l| {
-                        if angle {
-                            (l.1.to_degrees(), l.2.to_degrees())
-                        } else {
-                            (l.1, l.2)
-                        }
-                    })
-                    .unwrap_or(if angle {
-                        (-180.0, 180.0)
-                    } else {
-                        (
-                            value - 100.0f64.max(value.abs()),
-                            value + 100.0f64.max(value.abs()),
-                        )
-                    });
-                let name = format!("{}:{what}", j.id);
-                let mut v = match &a.dragging {
-                    Some((n, x)) if *n == name => *x,
-                    _ => value,
-                };
-                let resp = ui.add(
-                    egui::Slider::new(&mut v, lo.min(value)..=hi.max(value))
-                        .text(format!("{key}"))
-                        .suffix(if angle { "°" } else { " mm" }),
-                );
-                places.push((format!("asm:drive:{name}"), resp.rect));
-                if resp.dragged() {
-                    a.dragging = Some((name.clone(), v));
-                }
-                let let_go = resp.drag_stopped() || (resp.changed() && !resp.dragged());
-                if let_go {
-                    a.dragging = None;
-                    if v != value {
-                        out.push(FgAct::Apply(Op::SetParam {
-                            param: key.clone(),
-                            value: Literal { value: v, dim },
-                        }));
-                    }
-                }
-            }
+        if close {
+            a.props = None;
         }
-        // expects
-        if !a.expects.is_empty() {
-            let fails = a.expects.iter().filter(|e| !e.ok).count();
-            let head = format!("Expects: {} of {} pass", a.expects.len() - fails, a.expects.len());
-            let open = Self::asm_fold(ui, t, a, "expects", &head, a.expects.len(), places);
-            for (k, e) in a.expects.iter().enumerate().filter(|_| open) {
-                let m = e.measured.map_or("-".to_string(), short);
-                let l = e.limit.map_or("-".to_string(), short);
-                let r = ui.label(
-                    egui::RichText::new(format!(
-                        "{} line {}: {} {m} (limit {l})",
-                        if e.ok { "pass" } else { "FAIL" },
-                        e.line,
-                        e.metric
-                    ))
-                    .font(mono(10.0))
-                    .color(if e.ok { t.ink2 } else { t.error }),
-                );
-                places.push((format!("asm:expect:{k}"), r.rect));
-            }
-        }
-        // the BOM
-        let head = format!("BOM ({} parts)", a.bom.iter().map(|b| b.1).sum::<usize>());
-        let open = Self::asm_fold(ui, t, a, "bom", &head, a.bom.len(), places);
-        for (file, n) in a.bom.iter().filter(|_| open) {
-            let r = ui.label(
-                egui::RichText::new(format!("{n:>4} × {}", part_word(file)))
-                    .font(mono(11.0))
-                    .color(t.ink),
-            );
-            places.push((format!("asm:bom:{}", part_word(file)), r.rect));
-        }
+        r.map(|r| r.response.rect)
     }
 
-    /// A list's heading that opens and shuts it; a long one starts shut.
-    fn asm_fold(
-        ui: &mut Ui,
+    #[allow(clippy::too_many_arguments)]
+    fn interference_window(
+        ctx: &egui::Context,
         t: &super::theme::Theme,
+        v: Rect,
         a: &mut AsmPanel,
-        key: &'static str,
-        head: &str,
-        len: usize,
+        issues: &[super::fg::Issue],
+        out: &mut Vec<FgAct>,
         places: &mut Vec<(String, Rect)>,
-    ) -> bool {
-        let open = *a.open.entry(key).or_insert(len <= 20);
-        ui.add_space(6.0);
-        let r = fold_head(ui, t, head, open, t.ink);
-        places.push((format!("asm:open:{key}"), r.rect));
-        if r.clicked() {
-            a.open.insert(key, !open);
+    ) -> Option<Rect> {
+        let mut close = false;
+        let at = pos2(v.right() - 476.0, v.top() + 56.0);
+        let r = Self::window("Analyze Interference", "interference", t, at, 440.0).show(ctx, |ui| {
+            close = dialog_head(ui, t, "check", "Analyze Interference", "asm:interference", places);
+            ui.label(
+                egui::RichText::new("Every pair of parts, and every expect in the file.")
+                    .font(sans(12.0))
+                    .color(t.ink2),
+            );
+            ui.add_space(4.0);
+            match (a.overlap, a.checking) {
+                (_, true) => {
+                    ui.label(egui::RichText::new("Analyzing…").font(sans(12.0)).color(t.ink2));
+                }
+                (Some((n, c)), false) => {
+                    ui.horizontal(|ui| {
+                        ui.label(
+                            egui::RichText::new(format!(
+                                "{} · {}",
+                                super::fg::plural(n, "interference"),
+                                super::fg::plural(c, "intended contact")
+                            ))
+                            .font(medium(12.0))
+                            .color(if n > 0 { t.error } else { t.ink }),
+                        );
+                    });
+                }
+                (None, false) => {
+                    if Self::fg_button(ui, "Analyze", "asm:check".into(), places) {
+                        a.checking = true;
+                        out.push(FgAct::AsmCheck);
+                    }
+                }
+            }
+            let found: Vec<(usize, &super::fg::Issue)> = issues
+                .iter()
+                .enumerate()
+                .filter(|(_, i)| {
+                    matches!(
+                        i.asm.as_ref().map(innermost),
+                        Some(AsmIssue::Interference { .. } | AsmIssue::ShallowEngagement { .. })
+                    )
+                })
+                .collect();
+            if !found.is_empty() {
+                egui::ScrollArea::vertical()
+                    .id_salt("asm-interf")
+                    .auto_shrink([false, true])
+                    .max_height(220.0)
+                    .show(ui, |ui| {
+                        for (k, is) in found {
+                            ui.horizontal(|ui| {
+                                let r = ui.label(egui::RichText::new(&is.text).font(sans(11.0)).color(WARN));
+                                places.push((format!("asm:interf:{k}"), r.rect));
+                                if let Some(ai) = &is.asm {
+                                    Self::asm_show_on(ui, a, ai, k, out, places);
+                                }
+                            });
+                        }
+                    });
+            }
+            if !a.expects.is_empty() {
+                let fails = a.expects.iter().filter(|e| !e.ok).count();
+                let head = format!("Expects: {} of {} pass", a.expects.len() - fails, a.expects.len());
+                let open = *a.open.entry("expects").or_insert(fails > 0);
+                ui.add_space(4.0);
+                let r = super::fg::fold_head(ui, t, &head, open, if fails > 0 { t.error } else { t.ink });
+                places.push(("asm:expects".into(), r.rect));
+                if r.clicked() {
+                    a.open.insert("expects", !open);
+                }
+                if open {
+                    egui::ScrollArea::vertical()
+                        .id_salt("asm-expects")
+                        .auto_shrink([false, true])
+                        .max_height(220.0)
+                        .show(ui, |ui| {
+                            for (k, e) in a.expects.iter().enumerate() {
+                                let m = e.measured.map_or("-".to_string(), short);
+                                let l = e.limit.map_or("-".to_string(), short);
+                                let r = ui.label(
+                                    egui::RichText::new(format!(
+                                        "{} line {}: {} {m} (limit {l})",
+                                        if e.ok { "pass" } else { "FAIL" },
+                                        e.line,
+                                        e.metric
+                                    ))
+                                    .font(mono(10.0))
+                                    .color(if e.ok {
+                                        t.ink2
+                                    } else {
+                                        t.error
+                                    }),
+                                );
+                                places.push((format!("asm:expect:{k}"), r.rect));
+                            }
+                        });
+                }
+            }
+        });
+        if close {
+            a.interference = false;
         }
-        open
+        r.map(|r| r.response.rect)
+    }
+
+    fn bom_window(
+        ctx: &egui::Context,
+        t: &super::theme::Theme,
+        v: Rect,
+        a: &mut AsmPanel,
+        places: &mut Vec<(String, Rect)>,
+    ) -> Option<Rect> {
+        let mut close = false;
+        let at = pos2(v.center().x - 200.0, v.top() + 56.0);
+        let r = Self::window("Bill of Materials", "bom", t, at, 400.0).show(ctx, |ui| {
+            close = dialog_head(ui, t, "rule", "Bill of Materials", "asm:bomwin", places);
+            let total: usize = a.bom.iter().map(|b| b.1).sum();
+            ui.label(
+                egui::RichText::new(format!("{} parts, {total} in all", a.bom.len()))
+                    .font(sans(12.0))
+                    .color(t.ink2),
+            );
+            ui.add_space(4.0);
+            egui::ScrollArea::vertical()
+                .auto_shrink([false, true])
+                .max_height(v.height() * 0.6)
+                .show(ui, |ui| {
+                    egui::Grid::new("asm-bom")
+                        .num_columns(3)
+                        .striped(true)
+                        .spacing(vec2(14.0, 3.0))
+                        .show(ui, |ui| {
+                            for h in ["Qty", "Part", "File"] {
+                                ui.label(egui::RichText::new(h).font(medium(11.0)).color(t.ink2));
+                            }
+                            ui.end_row();
+                            for (k, (file, n)) in a.bom.iter().enumerate() {
+                                ui.label(egui::RichText::new(n.to_string()).font(mono(11.0)).color(t.ink));
+                                let r = ui.label(
+                                    egui::RichText::new(type_label(file))
+                                        .font(sans(12.0))
+                                        .color(t.ink),
+                                );
+                                ui.label(
+                                    egui::RichText::new(part_word(file))
+                                        .font(mono(10.0))
+                                        .color(t.ink2),
+                                );
+                                ui.end_row();
+                                places.push((format!("asm:bom:{}", part_word(file)), r.rect));
+                                let _ = k;
+                            }
+                        });
+                });
+        });
+        if close {
+            a.bom_open = false;
+        }
+        r.map(|r| r.response.rect)
+    }
+
+    fn explode_window(
+        ctx: &egui::Context,
+        t: &super::theme::Theme,
+        v: Rect,
+        a: &mut AsmPanel,
+        places: &mut Vec<(String, Rect)>,
+    ) -> Option<Rect> {
+        let mut close = false;
+        let at = pos2(v.center().x - 170.0, v.bottom() - 16.0);
+        let r = Self::window("Explode", "explode", t, at, 340.0)
+            .pivot(Align2::LEFT_BOTTOM)
+            .show(ctx, |ui| {
+                close = dialog_head(ui, t, "combine", "Explode", "asm:explodewin", places);
+                ui.horizontal(|ui| {
+                    let apart = a.explode >= 0.5;
+                    if Self::fg_button(
+                        ui,
+                        if apart { "Collapse" } else { "Explode" },
+                        "asm:explodeplay".into(),
+                        places,
+                    ) {
+                        a.explode = if apart { 0.0 } else { 1.0 };
+                    }
+                    ui.spacing_mut().slider_width = 150.0;
+                    let r = ui.add(
+                        egui::Slider::new(&mut a.explode, 0.0..=1.0)
+                            .show_value(false)
+                            .trailing_fill(true),
+                    );
+                    places.push(("asm:explode".into(), r.rect));
+                    let r = ui.toggle_value(&mut a.trails, "Trails");
+                    places.push(("asm:trails".into(), r.rect));
+                });
+            });
+        if close {
+            a.explode_open = false;
+            a.explode = 0.0;
+        }
+        r.map(|r| r.response.rect)
     }
 
     /// An assembly issue's Show: highlights what it names.
@@ -1203,7 +2144,19 @@ impl Shell {
         out: &mut Vec<FgAct>,
         places: &mut Vec<(String, Rect)>,
     ) {
-        let Some(a) = fg_asm else { return };
+        if let Some(a) = fg_asm {
+            Self::asm_show_on(ui, a, issue, k, out, places);
+        }
+    }
+
+    fn asm_show_on(
+        ui: &mut Ui,
+        a: &mut AsmPanel,
+        issue: &AsmIssue,
+        k: usize,
+        out: &mut Vec<FgAct>,
+        places: &mut Vec<(String, Rect)>,
+    ) {
         let (occ, items) = named(issue);
         if occ.is_empty() && items.is_empty() {
             return;
@@ -1225,6 +2178,31 @@ impl Shell {
             out.push(FgAct::AsmShow);
         }
     }
+}
+
+/// An issue inside subassemblies, as it is where it happens.
+fn innermost(i: &AsmIssue) -> &AsmIssue {
+    match i {
+        AsmIssue::Inside { issue, .. } => innermost(issue),
+        i => i,
+    }
+}
+
+/// A joint's values as solved: `turn 30°, free 1`.
+pub fn joint_values(j: &JointOut) -> String {
+    let mut vals: Vec<String> = j
+        .values
+        .iter()
+        .map(|(w, v, ang)| {
+            if *ang {
+                format!("{w} {}°", short(v.to_degrees()))
+            } else {
+                format!("{w} {} mm", short(*v))
+            }
+        })
+        .collect();
+    vals.push(format!("free {}", j.free));
+    vals.join(", ")
 }
 
 #[cfg(test)]
@@ -1253,13 +2231,6 @@ mod tests {
     }
 
     #[test]
-    fn counted_names_sort_by_their_numbers() {
-        let mut v = vec!["pin[10]", "pin[2]", "pin[1]", "nut"];
-        v.sort_by(|a, b| natural(a, b));
-        assert_eq!(v, ["nut", "pin[1]", "pin[2]", "pin[10]"]);
-    }
-
-    #[test]
     fn screws_back_out_towards_their_heads() {
         assert!(
             screw_like("hw/iso7380_m6x12.fg")
@@ -1271,53 +2242,94 @@ mod tests {
         );
     }
 
-    #[test]
-    fn the_tree_groups_types_and_subassemblies() {
-        let occ = |p: &str, f: &str| OccRow {
+    fn occ(p: &str, f: &str) -> OccRow {
+        OccRow {
             path: p.into(),
             file: f.into(),
             drawn: true,
-        };
+        }
+    }
+
+    fn inst(p: &str, f: &str, sub: bool, ground: bool) -> InstOut {
+        InstOut {
+            path: p.into(),
+            file: f.into(),
+            sub,
+            ground,
+        }
+    }
+
+    fn link(owner: &str, id: &str, kind: &str, a: &str, b: &str) -> LinkOut {
+        LinkOut {
+            owner: owner.into(),
+            id: id.into(),
+            family: LinkFamily::Joint,
+            kind: kind.into(),
+            a: (a.into(), "x".into()),
+            b: (b.into(), "y".into()),
+        }
+    }
+
+    #[test]
+    fn the_browser_is_inventors_origin_relationships_then_components() {
         let rows = vec![
             occ("base", "/a/frame/base.fg"),
-            occ("bolt[1]", "/a/hw/iso4017_m8x20.fg"),
             occ("bolt[0]", "/a/hw/iso4017_m8x20.fg"),
+            occ("bolt[1]", "/a/hw/iso4017_m8x20.fg"),
             occ("kit.post", "/a/frame/post.fg"),
             occ("kit.nut", "/a/hw/iso10511_m8.fg"),
-            occ("d01", "/a/asm/dummy_d01.fg"),
-            occ("d02", "/a/asm/dummy_d02.fg"),
         ];
-        let t = AsmTree::build(&rows, Some(Path::new("/a/asm")));
-        let roots: Vec<(&str, usize)> = t
-            .roots
+        let insts = vec![
+            inst("base", "../frame/base.fg", false, true),
+            inst("bolt[0]", "../hw/iso4017_m8x20.fg", false, false),
+            inst("bolt[1]", "../hw/iso4017_m8x20.fg", false, false),
+            inst("kit", "kit.fg", true, false),
+            inst("kit.post", "../frame/post.fg", false, true),
+            inst("kit.nut", "../hw/iso10511_m8.fg", false, false),
+        ];
+        let links = vec![
+            link("", "j1", "revolute", "bolt[0]", "base"),
+            link("", "j2", "fastened", "bolt[1]", "base"),
+            link("", "j3", "fastened", "kit.post", "base"),
+            link("kit", "at_nut", "fastened", "kit.nut", "kit.post"),
+        ];
+        let mut flags = Flags::default();
+        flags.links.insert(("kit".into(), "at_nut".into()), Flag::Error);
+        let t = AsmTree::build_with(&rows, Some(Path::new("/a/asm")), &insts, &links, &flags);
+        let label = |n: usize| t.nodes[n].label.as_str();
+        let roots: Vec<&str> = t.roots.iter().map(|&n| label(n)).collect();
+        assert_eq!(roots, ["Origin", "Relationships", "base", "bolt", "kit"]);
+        // the origin's seven, the relationships by kind with the most first
+        assert_eq!(t.nodes[t.roots[0]].kids.len(), 7);
+        let rel = &t.nodes[t.roots[1]];
+        let kinds: Vec<(&str, usize)> = rel
+            .kids
             .iter()
-            .map(|&n| (t.nodes[n].label.as_str(), t.nodes[n].occ.len()))
+            .map(|&k| (label(k), t.nodes[k].kids.len()))
             .collect();
+        assert_eq!(kinds, [("Fastened joints", 2), ("Revolute joints", 1)]);
+        // a grounded part holds its relationships under it; one statement's loop is a pattern
+        let base = &t.nodes[t.roots[2]];
+        assert!(base.ground && base.kind == NodeKind::Occ);
+        let held: Vec<&str> = base.kids.iter().map(|&k| label(k)).collect();
+        assert_eq!(held, ["j1", "j2", "j3"]);
+        let bolts = &t.nodes[t.roots[3]];
         assert_eq!(
-            roots,
-            [
-                ("Frame", 2),
-                ("Hardware & fasteners", 3),
-                ("Dummies", 2),
-                ("Subassemblies", 2)
-            ]
+            (bolts.kind, bolts.kids.len(), bolts.occ.len()),
+            (NodeKind::Pattern, 2, 2)
         );
-        let hw = &t.nodes[t.roots[1]];
-        let bolts = &t.nodes[hw.kids[0]];
-        assert_eq!(
-            (bolts.label.as_str(), bolts.kind, bolts.occ.len()),
-            ("ISO 4017 M8×20", NodeKind::Type, 2)
-        );
-        // counted occurrences in order; a lone one stands for its type
-        let kids: Vec<&str> = bolts.kids.iter().map(|&k| t.nodes[k].key.as_str()).collect();
-        assert_eq!(kids, ["bolt[0]", "bolt[1]"]);
-        let nut = &t.nodes[hw.kids[1]];
-        assert_eq!(
-            (nut.key.as_str(), nut.detail.as_str()),
-            ("kit.nut", "ISO 10511 M8")
-        );
-        // every occurrence's own row, and the fasteners' ways out
+        // the subassembly: its own origin and relationships, what holds it, its parts; its sick
+        // relationship flags it
+        let kit = &t.nodes[t.roots[4]];
+        let kids: Vec<&str> = kit.kids.iter().map(|&k| label(k)).collect();
+        assert_eq!(kids, ["Origin", "Relationships", "j3", "post", "nut"]);
+        assert_eq!(kit.flag, Some(Flag::Error));
+        assert_eq!(t.nodes[t.find("kit.nut").unwrap()].flag, Some(Flag::Error));
+        // a relationship stands for its two occurrences
+        let j1 = t.find("l:0").unwrap();
+        assert_eq!(t.nodes[j1].occ, [1, 0]);
         assert!(t.home.iter().all(|&h| h != usize::MAX));
+        // the exploded view's subsystems, subassemblies and fasteners as before
         assert_eq!(t.axis[1], Some(-1.0));
         assert_eq!(t.axis[4], Some(1.0));
         assert_eq!(t.axis[0], None);
@@ -1326,12 +2338,7 @@ mod tests {
     }
 
     #[test]
-    fn hiding_a_group_and_the_filter() {
-        let occ = |p: &str, f: &str| OccRow {
-            path: p.into(),
-            file: f.into(),
-            drawn: true,
-        };
+    fn hiding_a_pattern_and_the_filter() {
         let mut a = AsmPanel::default();
         a.set_occ(
             vec![
@@ -1341,22 +2348,63 @@ mod tests {
             ],
             Some(PathBuf::from("/a/asm")),
         );
-        a.flip_eye("g:Hardware & fasteners");
+        a.flip_eye("p:bolt");
         assert_eq!(a.shown_mask(), [true, false, false]);
-        assert_eq!(a.eye(a.tree.roots[1]), Eye::Hidden);
+        let bolts = a.tree.find("p:bolt").unwrap();
+        assert_eq!(a.eye(bolts), Eye::Hidden);
         a.set_hidden("bolt[0]", false);
-        assert_eq!(a.eye(a.tree.roots[1]), Eye::Some);
+        assert_eq!(a.eye(bolts), Eye::Some);
         a.isolated = Some("base".into());
         assert_eq!(a.shown_mask(), [true, false, false]);
         a.show_all();
         assert_eq!(a.shown_mask(), [true, true, true]);
-        // shut by default; the filter opens what holds what it finds
-        assert_eq!(a.rows().len(), 2);
+        // shut by default: Origin, base, the bolts; the filter opens what holds what it finds
+        assert_eq!(a.rows().len(), 3);
         a.filter = "BOLT[1".into();
         let rows: Vec<String> = a.rows().iter().map(|r| a.tree.nodes[r.0].key.clone()).collect();
-        assert_eq!(
-            rows,
-            ["g:Hardware & fasteners", "t:/a/hw/iso4017_m8x20.fg", "bolt[1]"]
-        );
+        assert_eq!(rows, ["p:bolt", "bolt[1]"]);
+    }
+
+    #[test]
+    fn issues_flag_relationships_and_parts_inside_subassemblies() {
+        use forge_lang::asm::ItemName;
+        let issue = |sev, i| super::super::fg::Issue {
+            severity: sev,
+            kind: String::new(),
+            text: String::new(),
+            line: 0,
+            col: 0,
+            fixes: vec![],
+            feature: None,
+            asm: Some(i),
+        };
+        let f = issue_flags(&[
+            issue(
+                Severity::Error,
+                AsmIssue::Inside {
+                    path: "kit".into(),
+                    issue: Box::new(AsmIssue::Redundant {
+                        item: ItemName {
+                            id: "at_nut".into(),
+                            part: None,
+                        },
+                        rows: 1,
+                        implied_by: vec![],
+                    }),
+                },
+            ),
+            issue(
+                Severity::Warning,
+                AsmIssue::Interference {
+                    a: "base".into(),
+                    b: "bolt[0]".into(),
+                    volume: None,
+                    confirmed: true,
+                    boolean_failed: None,
+                },
+            ),
+        ]);
+        assert_eq!(f.links.get(&("kit".into(), "at_nut".into())), Some(&Flag::Error));
+        assert_eq!(f.occ.get("bolt[0]"), Some(&Flag::Warning));
     }
 }

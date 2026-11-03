@@ -141,8 +141,12 @@ fn open_edit_a_param_rebuild_fix_and_save() {
     assert_eq!(fg.issues[lint].feature.as_deref(), Some("mark"));
     assert_eq!(fg.issues[lint].fixes.len(), 2);
 
-    // a param edited in its field: a SetParam, rebuilt
+    // a param edited in its field in the Parameters dialog: a SetParam, rebuilt
     let before = h.gui.fg.as_ref().unwrap().seq;
+    assert!(h.gui.shell.place("fg:param:t").is_none());
+    h.gui.shell.fg_command(forge_render::shell::FgCmd::Parameters);
+    h.step();
+    h.step();
     assert!(h.click("fg:param:t"));
     h.step();
     h.step();

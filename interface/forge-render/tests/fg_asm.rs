@@ -131,6 +131,47 @@ fn open_within(file: &Path, secs: f64) -> Option<Headless> {
     Some(h)
 }
 
+/// A browser row's right-click menu, and one of its items.
+fn menu(h: &mut Headless, row: &str, item: &str) {
+    let r = h
+        .gui
+        .shell
+        .place(&format!("asm:row:{row}"))
+        .unwrap_or_else(|| panic!("no row {row}"));
+    h.move_to(r.center().x, r.center().y);
+    h.step();
+    h.right_click_here();
+    h.step();
+    assert!(h.click(&format!("asm:menu:{item}")), "no {item} in {row}'s menu");
+    h.step();
+    h.step();
+}
+
+/// The Drive dialog for the top document's `k`th relationship, from its row's menu.
+fn drive(h: &mut Headless, k: usize) {
+    assert!(h.click("asm:open:r:"));
+    h.step();
+    h.step();
+    let kind = h
+        .gui
+        .shell
+        .places
+        .iter()
+        .find(|p| p.0.starts_with("asm:open:r::"))
+        .map(|p| p.0.clone())
+        .unwrap();
+    assert!(h.click(&kind));
+    h.step();
+    h.step();
+    menu(h, &format!("l:{k}"), "drive");
+}
+
+fn command(h: &mut Headless, c: forge_render::shell::FgCmd) {
+    h.gui.shell.fg_command(c);
+    h.step();
+    h.step();
+}
+
 fn asm(h: &Headless) -> &forge_render::shell::fgasm::AsmPanel {
     h.gui.shell.fg.as_ref().unwrap().asm.as_ref().unwrap()
 }
@@ -168,16 +209,24 @@ fn a_four_bar_opens_posed_with_its_tree_joints_dof_bom_and_expects() {
     meshes.sort();
     meshes.dedup();
     assert_eq!(meshes.len(), 5);
-    // the browser: one part type's occurrences under it, shut until opened
-    assert!(h.gui.shell.place("asm:row:t:rod.fg").is_some());
+    // the browser: Origin and Relationships first, then the parts as the file makes them, one
+    // statement's loop under one row, shut until opened
+    assert!(h.gui.shell.place("asm:row:o:").is_some());
+    assert!(h.gui.shell.place("asm:row:r:").is_some());
+    assert!(h.gui.shell.place("asm:row:p:rod").is_some());
     assert!(h.gui.shell.place("asm:row:rod[1]").is_none());
-    assert!(h.click("asm:open:t:rod.fg"));
+    assert!(h.click("asm:open:p:rod"));
     h.step();
     h.step();
     assert!(h.gui.shell.place("asm:row:rod[1]").is_some());
+    // no side panel: drives in their dialog, the BOM in its own
+    assert!(h.gui.shell.place("asm:drive:j1:turn").is_none());
+    drive(&mut h, 0);
     assert!(h.gui.shell.place("asm:drive:j1:turn").is_some());
+    command(&mut h, forge_render::shell::FgCmd::Bom);
     assert!(h.gui.shell.place("asm:bom:rod").is_some());
-    // run on request: the expect measured and passed
+    // run on request, from Analyze Interference: the expect measured and passed
+    command(&mut h, forge_render::shell::FgCmd::Interference);
     assert!(h.click("asm:check"));
     h.step();
     assert!(h.until(ready));
@@ -204,23 +253,19 @@ fn choosing_hiding_isolating_and_a_parts_anchors() {
         v.scene.placements[placement_of(&h, "rocker")].tint,
         forge_render::fg::PICKED_TINT
     );
-    // hidden: out of sight; shown again
-    assert!(h.click("asm:hide"));
-    h.step();
+    // hidden from its menu: out of sight; shown again
+    menu(&mut h, "crank", "hide");
     assert_eq!(h.gui.view.as_ref().unwrap().scene.rows_of(crank), [[0.0; 4]; 3]);
-    assert!(h.click("asm:hide"));
-    h.step();
+    menu(&mut h, "crank", "hide");
     assert_ne!(h.gui.view.as_ref().unwrap().scene.rows_of(crank), [[0.0; 4]; 3]);
     // isolated: only it
-    assert!(h.click("asm:isolate"));
-    h.step();
+    menu(&mut h, "crank", "isolate");
     let v = h.gui.view.as_ref().unwrap();
     assert_ne!(v.scene.rows_of(crank), [[0.0; 4]; 3]);
     assert_eq!(v.scene.rows_of(placement_of(&h, "rocker")), [[0.0; 4]; 3]);
-    assert!(h.click("asm:isolate"));
-    h.step();
-    // a part type's row: its three rods at once
-    assert!(h.click("asm:row:t:rod.fg"));
+    menu(&mut h, "crank", "isolate");
+    // a loop's row: its three rods at once
+    assert!(h.click("asm:row:p:rod"));
     h.step();
     let v = h.gui.view.as_ref().unwrap();
     for k in 0..3 {
@@ -229,9 +274,28 @@ fn choosing_hiding_isolating_and_a_parts_anchors() {
             forge_render::fg::PICKED_TINT
         );
     }
-    // the part file and its anchors
-    assert!(h.click("asm:row:crank"));
+    // a relationship's row: its two parts
+    assert!(h.click("asm:open:crank"));
     h.step();
+    h.step();
+    let j1 = h
+        .gui
+        .shell
+        .places
+        .iter()
+        .find(|p| p.0.starts_with("asm:row:crank>l:"))
+        .map(|p| p.0.clone())
+        .unwrap();
+    assert!(h.click(&j1));
+    h.step();
+    let v = h.gui.view.as_ref().unwrap();
+    assert_eq!(v.scene.placements[crank].tint, forge_render::fg::PICKED_TINT);
+    assert_eq!(
+        v.scene.placements[placement_of(&h, "base")].tint,
+        forge_render::fg::PICKED_TINT
+    );
+    // the part file and its anchors, in its iProperties
+    menu(&mut h, "crank", "props");
     assert!(h.gui.shell.place("asm:file").is_some());
     assert!(h.click("asm:anchors"));
     assert!(h.until(|g| {
@@ -260,6 +324,7 @@ fn a_drive_slider_is_a_set_param_and_the_crank_turns() {
     let Some(mut h) = open(&file) else { return };
     let crank = placement_of(&h, "crank");
     let before = h.gui.view.as_ref().unwrap().scene.rows_of(crank);
+    drive(&mut h, 0);
     // a click on the slider's track sets it there
     let r = h.gui.shell.place("asm:drive:j1:turn").unwrap();
     h.move_to(r.left() + r.width() * 0.3, r.center().y);
@@ -291,6 +356,22 @@ fn a_conflict_shows_its_set_and_the_overlap_check_runs_on_request() {
     let file = d.join("mech.fg");
     std::fs::write(&file, format!("{FOUR_BAR}j5 = revolute(crank.b, base.o4)\n")).unwrap();
     let Some(mut h) = open(&file) else { return };
+    // the issues, a click on the status bar away; the sick joints red in the browser
+    assert!(h.click("asm:issues"));
+    h.step();
+    h.step();
+    let a = asm(&h);
+    let sick: Vec<&str> = a
+        .tree
+        .nodes
+        .iter()
+        .filter(|n| n.flag == Some(forge_render::shell::fgasm::Flag::Error))
+        .map(|n| n.label.as_str())
+        .collect();
+    assert!(
+        sick.contains(&"Relationships") && sick.contains(&"j5"),
+        "{sick:?}"
+    );
     let p = h.gui.shell.fg.as_ref().unwrap();
     let k = p
         .issues
@@ -312,6 +393,7 @@ fn a_conflict_shows_its_set_and_the_overlap_check_runs_on_request() {
     );
     // interference: none until asked, then counted
     assert!(asm(&h).overlap.is_none());
+    command(&mut h, forge_render::shell::FgCmd::Interference);
     assert!(h.click("asm:check"));
     h.step();
     assert!(asm(&h).checking);
@@ -421,6 +503,7 @@ fn the_18u_racks_checks_all_pass() {
         return;
     };
     let t = std::time::Instant::now();
+    command(&mut h, forge_render::shell::FgCmd::Interference);
     assert!(h.click("asm:check"));
     h.step();
     assert!(asm(&h).checking, "Run checks was not pressed");

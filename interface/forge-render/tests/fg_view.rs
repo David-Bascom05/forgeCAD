@@ -1,8 +1,9 @@
 //! A Forge file's view, headless: the view cube in sight beside the panel and snapping to every
 //! face, edge and corner it's clicked on, dragged to orbit, Home; the view's switches (Axes, Grid,
 //! Planes, Anchors) off for assemblies and remembered per kind; the issues as one line of counts;
-//! a part's tree eyes; and the 18U rack's browser: grouped, counted, shut, filtered, a group's eye
-//! taking its occurrences out of the draws, a click in the view revealing its row, all quickly.
+//! a part's tree eyes; and the 18U rack's browser, Inventor's: Origin and Relationships first,
+//! the components in the file's order, subassemblies with their own, shut, filtered, an eye taking
+//! its occurrences out of the draws, a click in the view revealing its row, all quickly.
 
 use forge_render::camera::{Camera, dot};
 use forge_render::gui::{Gui, Headless};
@@ -431,7 +432,7 @@ fn a_view_click_chooses_and_reveals_its_row() {
     let Some(mut h) = headless() else { return };
     let f = small_asm(&scratch("reveal"));
     open_in(&mut h, &f, 60);
-    // shut: three groups, nothing open
+    // shut: nothing open
     assert!(asm(&h).expanded.is_empty());
     let (occ, _) = h.gui.fg_asm.clone().unwrap();
     // the second screw, where it's drawn
@@ -447,7 +448,7 @@ fn a_view_click_chooses_and_reveals_its_row() {
     }
     let a = asm(&h);
     assert_eq!(a.selected.as_deref(), Some("screw[1]"));
-    assert!(a.expanded.contains("g:Hardware & fasteners"), "{:?}", a.expanded);
+    assert!(a.expanded.contains("p:screw"), "{:?}", a.expanded);
     assert!(
         h.gui.shell.place("asm:row:screw[1]").is_some(),
         "its row isn't shown"
@@ -467,125 +468,113 @@ fn rack() -> Option<PathBuf> {
 }
 
 #[test]
-fn the_racks_browser_is_grouped_counted_and_quick() {
+fn the_racks_browser_is_inventors_and_quick() {
     let Some(r) = rack() else { return };
     let Some(mut h) = headless() else { return };
     open_in(&mut h, &r, 600);
     let a = asm(&h);
     let t = &a.tree;
-    let roots: Vec<(String, usize)> = t
-        .roots
-        .iter()
-        .map(|&n| (t.nodes[n].label.clone(), t.nodes[n].occ.len()))
-        .collect();
-    eprintln!("rack groups: {roots:?}");
-    let labels: Vec<&str> = roots.iter().map(|r| r.0.as_str()).collect();
-    assert_eq!(
-        labels,
-        [
-            "Frame",
-            "Panels & doors",
-            "Casters",
-            "Fan tray",
-            "Hardware & fasteners",
-            "Dummies",
-            "Subassemblies"
-        ]
-    );
-    // every occurrence once in the groups; the subassemblies again under their names
-    let grouped: usize = roots[..6].iter().map(|r| r.1).sum();
-    assert_eq!(grouped, a.occ.len());
+    let roots: Vec<&str> = t.roots.iter().map(|&n| t.nodes[n].key.as_str()).collect();
+    eprintln!("rack roots: {} rows, first {:?}", roots.len(), &roots[..6]);
+    // Origin, Relationships, then the components as the file makes them
+    assert_eq!(&roots[..4], ["o:", "r:", "base_pan", "top_pan"]);
     assert_eq!(a.occ.len(), 860);
-    assert_eq!(roots[5].1, 3);
-    let subs = &t.nodes[t.roots[6]];
-    let names: Vec<&str> = subs.kids.iter().map(|&k| t.nodes[k].label.as_str()).collect();
     assert!(
-        names.contains(&"post_fl") && names.contains(&"car_tr") && names.contains(&"fans"),
-        "{names:?}"
+        t.home.iter().all(|&n| n != usize::MAX),
+        "an occurrence with no row"
     );
-    // a part type with its count
-    let hw = &t.nodes[t.roots[4]];
-    let m6x12 = hw
-        .kids
-        .iter()
-        .map(|&k| &t.nodes[k])
-        .find(|n| n.label == "ISO 7380 M6×12")
-        .expect("ISO 7380 M6×12 in Hardware");
-    assert_eq!(m6x12.occ.len(), 24);
-    // all shut: the seven groups only
-    assert_eq!(asm_mut(&mut h).rows().len(), 7);
+    // every relationship the file writes, by kind
+    let rel = &t.nodes[t.roots[1]];
+    let mine = a.links.iter().filter(|l| l.owner.is_empty()).count();
+    let listed: usize = rel.kids.iter().map(|&k| t.nodes[k].kids.len()).sum();
+    assert_eq!(listed, mine);
+    let kinds: Vec<&str> = rel.kids.iter().map(|&k| t.nodes[k].label.as_str()).collect();
+    for k in [
+        "Fastened joints",
+        "Revolute joints",
+        "Slider joints",
+        "Gear relations",
+        "Fits",
+    ] {
+        assert!(kinds.contains(&k), "{kinds:?}");
+    }
+    // a subassembly with its own origin and relationships; a loop's screws as one row
+    for s in ["post_fl", "car_tr", "fans"] {
+        let n = t.find(&format!("s:{s}")).unwrap_or_else(|| panic!("no {s}"));
+        let kids: Vec<&str> = t.nodes[n]
+            .kids
+            .iter()
+            .map(|&k| t.nodes[k].label.as_str())
+            .collect();
+        assert_eq!(&kids[..2], ["Origin", "Relationships"], "{s}: {kids:?}");
+    }
+    let scr = &t.nodes[t.find("p:scr_bl").unwrap()];
+    assert_eq!((scr.kids.len(), scr.detail.as_str()), (3, "ISO 7380 M6×12"));
+    // a part holds the relationships that hold it
+    let base = &t.nodes[t.find("base_pan").unwrap()];
+    assert!(base.ground && base.kids.len() > 10, "{}", base.kids.len());
+    // all shut: the top rows only
+    let n_roots = t.roots.len();
+    assert_eq!(asm_mut(&mut h).rows().len(), n_roots);
     // the filter: what matches, and the rows above it
     asm_mut(&mut h).filter = "7380".into();
     let rows = asm_mut(&mut h).rows();
-    let shown: Vec<String> = rows
-        .iter()
-        .map(|&(n, _)| asm(&h).tree.nodes[n].label.clone())
-        .collect();
-    assert_eq!(shown[0], "Hardware & fasteners");
-    assert!(shown[1..].iter().all(|s| s.starts_with("ISO 7380")), "{shown:?}");
-    assert_eq!(shown.len(), 1 + 5, "{shown:?}");
+    let t = &asm(&h).tree;
+    assert!(rows.len() > 5);
+    assert!(
+        rows.iter().all(|&(n, open)| open
+            || t.nodes[n].detail.contains("7380")
+            || t.nodes[n].label.contains("7380")),
+        "a row the filter doesn't find, shut"
+    );
     asm_mut(&mut h).filter.clear();
     h.step();
 
-    // hiding every fastener: one click, out of the draws, at once
+    // hiding a subassembly: one click, out of the draws, at once
     let (occ, _) = h.gui.fg_asm.clone().unwrap();
-    let hw_occ: Vec<usize> = asm(&h).tree.nodes[asm(&h).tree.roots[4]].occ.clone();
+    let post = asm(&h).tree.find("s:post_fl").unwrap();
+    let post_occ: Vec<usize> = asm(&h).tree.nodes[post].occ.clone();
+    assert!(post_occ.len() > 20, "{}", post_occ.len());
     let mut times = vec![];
     for _ in 0..5 {
-        assert!(h.click("asm:eye:g:Hardware & fasteners"));
+        assert!(h.click("asm:eye:s:post_fl"));
         // the frame the click lands in: the toggle, the scene, the draw
         let t = std::time::Instant::now();
         h.step();
         times.push(t.elapsed().as_secs_f64() * 1e3);
         let v = h.gui.view.as_ref().unwrap();
-        let hidden = asm(&h).eye(asm(&h).tree.roots[4]) == Eye::Hidden;
-        for &k in &hw_occ {
+        let hidden = asm(&h).eye(post) == Eye::Hidden;
+        for &k in &post_occ {
             let pl = occ[k].placement.unwrap();
             assert_eq!(v.scene.is_gone(pl), hidden, "{}", occ[k].path);
         }
     }
-    // five clicks leave them hidden: what's drawn leaves them out
-    assert_eq!(asm(&h).eye(asm(&h).tree.roots[4]), Eye::Hidden);
+    assert_eq!(asm(&h).eye(post), Eye::Hidden);
     h.step();
-    let drawn: u32 = h
-        .gui
-        .view
-        .as_ref()
-        .unwrap()
-        .scene
-        .draws
-        .iter()
-        .map(|d| d.count)
-        .sum();
-    assert!(
-        drawn as usize <= 860 - hw_occ.len(),
-        "{drawn} drawn with {} hidden",
-        hw_occ.len()
-    );
-    assert!(h.gui.shell.place("asm:treeshowall").is_some());
     assert!(h.click("asm:treeshowall"));
     h.step();
     h.step();
     assert!(asm(&h).hidden.is_empty());
-    // opening the biggest type (176 balls), and a frame with it open
-    let casters = asm(&h).tree.roots[2];
+    // opening the Relationships and their biggest kind, and a frame with it open
     let mut open_ms = vec![];
     for _ in 0..3 {
         for _ in 0..2 {
-            assert!(h.click("asm:open:g:Casters"));
+            assert!(h.click("asm:open:r:"));
             let t = std::time::Instant::now();
             h.step();
             open_ms.push(t.elapsed().as_secs_f64() * 1e3);
         }
     }
-    let balls = asm(&h).tree.nodes[casters]
+    let rel = asm(&h).tree.roots[1];
+    let big = asm(&h).tree.nodes[rel]
         .kids
         .iter()
         .copied()
-        .max_by_key(|&k| asm(&h).tree.nodes[k].occ.len())
+        .max_by_key(|&k| asm(&h).tree.nodes[k].kids.len())
         .unwrap();
-    let key = asm(&h).tree.nodes[balls].key.clone();
-    asm_mut(&mut h).expanded.insert("g:Casters".into());
+    let key = asm(&h).tree.nodes[big].key.clone();
+    let n_big = asm(&h).tree.nodes[big].kids.len();
+    asm_mut(&mut h).expanded.insert("r:".into());
     asm_mut(&mut h).expanded.insert(key);
     let t = std::time::Instant::now();
     h.step();
@@ -593,8 +582,11 @@ fn the_racks_browser_is_grouped_counted_and_quick() {
     times.sort_by(f64::total_cmp);
     open_ms.sort_by(f64::total_cmp);
     eprintln!(
-        "rack browser: frame with an eye on 546 fasteners {:.1} ms median ({:.1} worst); with a group opened or shut {:.1} ms median; with 176 rows open {frame_ms:.1} ms",
-        times[2], times[4], open_ms[3]
+        "rack browser: frame with an eye on {} occurrences {:.1} ms median ({:.1} worst); with Relationships opened or shut {:.1} ms median; with {n_big} rows open {frame_ms:.1} ms",
+        post_occ.len(),
+        times[2],
+        times[4],
+        open_ms[3]
     );
     // the whole frame the click lands in, drawing included
     assert!(times[2] < 60.0, "eye {:.1} ms", times[2]);

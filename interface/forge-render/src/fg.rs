@@ -72,6 +72,11 @@ pub struct AsmView {
     pub boxes: Vec<crate::explode::Aabb>,
     /// The grounded top-level instances.
     pub grounded: Vec<String>,
+    /// Every occurrence and link through subassemblies, as the documents write them.
+    pub insts: Vec<forge_lang::asm::InstOut>,
+    pub links: Vec<forge_lang::asm::LinkOut>,
+    /// Each top-level instance's pose: where a subassembly's origin is.
+    pub poses: Vec<(String, forge_math::Frame)>,
 }
 
 /// What one build gave: the panel's data, and the mesh when the part's shape changed.
@@ -773,6 +778,9 @@ fn asm_view(
         meshed,
         boxes: meshes.boxes.clone(),
         grounded: out.grounded.clone(),
+        insts: out.insts.clone(),
+        links: out.links.clone(),
+        poses: out.poses.clone(),
     };
     (Some(asm), view)
 }

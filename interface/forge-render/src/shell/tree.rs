@@ -505,7 +505,8 @@ impl Shell {
                 .enumerate()
                 .filter_map(|(k, i)| {
                     let strong = self.origin_hover == Some(i) || self.origin_selected == Some(i);
-                    let on = if k < 3 { o.planes } else { o.axes };
+                    // an assembly's Origin rows have their own eyes
+                    let on = if k < 3 { o.planes } else { o.axes } || (self.is_asm() && self.origin_shown[k]);
                     (on || strong).then_some((i, strong))
                 })
                 .collect();

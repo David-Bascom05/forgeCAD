@@ -1324,6 +1324,11 @@ impl Gui {
                         self.fg_finish_sketch();
                         continue;
                     }
+                    Action::Fg(c) => {
+                        self.shell.fg_command(c);
+                        self.apply_fg();
+                        continue;
+                    }
                     Action::SetUnits(_) => {
                         self.fg_refuse(crate::shell::fgtool::ToolError::NoForgeForm {
                             tool: "units",
@@ -1487,6 +1492,7 @@ impl Gui {
                 Action::DimDrag(value) => self.dim_drag(value),
                 Action::DimCommit(value) => self.dim_commit(value),
                 Action::DimCancel => self.dim_cancel(),
+                Action::Fg(_) => {}
                 other => host.push(other),
             }
         }
@@ -2087,6 +2093,38 @@ impl Gui {
                     *strong,
                     &mut world,
                 );
+            }
+            // a subassembly's origin, at its pose, as far as its parts reach
+            if let Some(a) = self.shell.fg.as_ref().and_then(|p| p.asm.as_ref()) {
+                for (sub, k) in &a.sub_origins {
+                    let Some(pose) = a.pose_of(sub) else { continue };
+                    let rows = crate::fg::rows_of(&pose);
+                    let at = [rows[0][3], rows[1][3], rows[2][3]];
+                    let far = (0..a.occ.len())
+                        .filter(|&o| crate::shell::fgasm::under(&a.occ[o].path, sub))
+                        .filter_map(|o| self.fg_asm.as_ref()?.0.get(o)?.placement)
+                        .filter_map(|pl| self.fg_asm.as_ref()?.1.get(pl))
+                        .map(|(_, q)| {
+                            let d = [q[0][3] - at[0], q[1][3] - at[1], q[2][3] - at[2]];
+                            (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt()
+                        })
+                        .fold(20.0f32, f32::max);
+                    let mut local = vec![];
+                    crate::origin::tris(
+                        crate::origin::ITEMS[*k],
+                        far * 0.6,
+                        &v.nav.camera,
+                        v.size,
+                        false,
+                        &mut local,
+                    );
+                    for w in &mut local {
+                        let p = w.at;
+                        w.at = [0, 1, 2]
+                            .map(|i| rows[i][0] * p[0] + rows[i][1] * p[1] + rows[i][2] * p[2] + rows[i][3]);
+                    }
+                    world.extend(local);
+                }
             }
             let mut behind = extra_behind;
             {
@@ -2784,7 +2822,8 @@ impl Gui {
                     .as_deref()
                     .and_then(|f| std::fs::canonicalize(f).ok())
                     .and_then(|f| f.parent().map(|d| d.to_path_buf()));
-                ap.set_occ(
+                let flags = crate::shell::fgasm::issue_flags(&p.issues);
+                ap.set_structure(
                     a.occ
                         .iter()
                         .map(|o| crate::shell::fgasm::OccRow {
@@ -2794,7 +2833,11 @@ impl Gui {
                         })
                         .collect(),
                     dir,
+                    a.insts.clone(),
+                    a.links.clone(),
+                    flags,
                 );
+                ap.poses = a.poses.clone();
                 ap.grounded = a.grounded.clone();
                 ap.joints = a.joints.clone();
                 ap.mobility = a.mobility;
@@ -2820,7 +2863,12 @@ impl Gui {
                 );
                 // an assembly's own line says it all: no part summary ("nothing built") above it
                 p.summary.clear();
-                self.shell.status = format!("{} occurrences · {}", ap.occ.len(), ap.timings);
+                self.shell.status = format!(
+                    "{} occurrences · {} parts · DOF {}",
+                    ap.occ.len(),
+                    ap.bom.len(),
+                    ap.mobility
+                );
                 self.fg_asm = Some((a.occ.clone(), a.placed.clone()));
                 self.fg_asm_boxes = a.boxes.clone();
                 self.explode.stale();

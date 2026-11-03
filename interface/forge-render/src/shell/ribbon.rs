@@ -3,7 +3,7 @@
 
 use super::sketching::SkTool;
 use super::theme::sans;
-use super::{Action, RIBBON_H, Shell, TABS_H, TITLE_H, icons};
+use super::{Action, FgCmd, RIBBON_H, Shell, TABS_H, TITLE_H, icons};
 use crate::render::LineMode;
 use egui::{Align2, Rect, Sense, Stroke, Ui, pos2, vec2};
 
@@ -42,9 +42,74 @@ const fn new(name: &'static str, icon: &'static str, kind: &'static str) -> Tool
     go(name, icon, Action::NewFeature(kind), false)
 }
 
+/// An assembly's Assemble and Inspect tabs, Inventor's: the commands this app has.
+fn asm_groups(s: &Shell) -> Option<Vec<Group>> {
+    let g = |name, big, small| Group { name, big, small };
+    let a = s.fg.as_ref()?.asm.as_ref();
+    let fg = |name, icon, c: FgCmd, on: bool| Tool {
+        name,
+        icon,
+        action: a.map(|_| Action::Fg(c)),
+        on,
+    };
+    let params = s.fg.as_ref().is_some_and(|f| f.params_open);
+    match s.tab {
+        0 => Some(vec![
+            g(
+                "Manage",
+                vec![
+                    fg(
+                        "Bill\u{a0}of Materials",
+                        "rule",
+                        FgCmd::Bom,
+                        a.is_some_and(|a| a.bom_open),
+                    ),
+                    go("Parameters", "params", Action::Fg(FgCmd::Parameters), params),
+                ],
+                vec![],
+            ),
+            g(
+                "Productivity",
+                vec![fg(
+                    "Explode",
+                    "combine",
+                    FgCmd::Explode,
+                    a.is_some_and(|a| a.explode_open),
+                )],
+                vec![],
+            ),
+        ]),
+        2 => Some(vec![
+            g(
+                "Interference",
+                vec![fg(
+                    "Analyze Interference",
+                    "check",
+                    FgCmd::Interference,
+                    a.is_some_and(|a| a.interference),
+                )],
+                vec![],
+            ),
+            g(
+                "Measure",
+                vec![off("Distance", "measure")],
+                vec![off("Wall", "measure"), off("Mass", "mass")],
+            ),
+        ]),
+        _ => None,
+    }
+}
+
 fn groups(s: &Shell) -> Vec<Group> {
     let g = |name, big, small| Group { name, big, small };
     let v = s.view;
+    if s.is_asm()
+        && let Some(gs) = asm_groups(s)
+    {
+        return gs;
+    }
+    let asm_explode = s.fg.as_ref().and_then(|f| f.asm.as_ref()).map(|a| a.explode_open);
+    let fg_open = s.fg.is_some();
     match s.tab {
         0 => vec![
             g(
@@ -211,7 +276,12 @@ fn groups(s: &Shell) -> Vec<Group> {
                 "Appearance",
                 vec![
                     go("Section", "section", Action::Section, v.section),
-                    off("Explode", "combine"),
+                    Tool {
+                        name: "Explode",
+                        icon: "combine",
+                        action: asm_explode.map(|_| Action::Fg(FgCmd::Explode)),
+                        on: asm_explode == Some(true),
+                    },
                 ],
                 vec![],
             ),
@@ -241,10 +311,27 @@ fn groups(s: &Shell) -> Vec<Group> {
             ),
         ],
         _ => vec![
-            g("Parameters", vec![off("Parameters", "params")], vec![]),
+            g(
+                "Parameters",
+                vec![Tool {
+                    name: "Parameters",
+                    icon: "params",
+                    action: fg_open.then_some(Action::Fg(FgCmd::Parameters)),
+                    on: s.fg.as_ref().is_some_and(|f| f.params_open),
+                }],
+                vec![],
+            ),
             g(
                 "Document",
-                vec![off("Save", "save"), go("Open", "open", Action::Open, false)],
+                vec![
+                    Tool {
+                        name: "Save",
+                        icon: "save",
+                        action: fg_open.then_some(Action::Fg(FgCmd::Save)),
+                        on: false,
+                    },
+                    go("Open", "open", Action::Open, false),
+                ],
                 vec![],
             ),
             g(

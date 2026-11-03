@@ -40,6 +40,8 @@ pub type Mark = (&'static str, &'static str, Option<Action>);
 pub type Marks = [Mark; 8];
 const RIBBON_H: f32 = 104.0;
 const SIDE_W: f32 = 270.0;
+/// An assembly's browser: wider, for what each relationship ties.
+const ASM_SIDE_W: f32 = 340.0;
 const HEAD_H: f32 = 30.0;
 const ROW_H: f32 = 26.0;
 const DOCS_H: f32 = 28.0;
@@ -121,6 +123,18 @@ pub enum Action {
     DimDrag(f64),
     DimCommit(f64),
     DimCancel,
+    /// A Forge file's ribbon command.
+    Fg(FgCmd),
+}
+
+/// What the ribbon asks of a Forge file: Inventor's dialogs and commands.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FgCmd {
+    Parameters,
+    Interference,
+    Bom,
+    Explode,
+    Save,
 }
 
 /// One row of the tree.
@@ -487,6 +501,35 @@ impl Shell {
         self.fg.as_ref().is_some_and(|f| f.assembly || f.asm.is_some())
     }
 
+    pub fn side_w(&self) -> f32 {
+        if self.is_asm() { ASM_SIDE_W } else { SIDE_W }
+    }
+
+    /// A ribbon command for a Forge file: its dialog up or down.
+    pub fn fg_command(&mut self, c: FgCmd) {
+        let Some(fg) = &mut self.fg else { return };
+        match c {
+            FgCmd::Parameters => fg.params_open = !fg.params_open,
+            FgCmd::Interference => {
+                if let Some(a) = &mut fg.asm {
+                    a.interference = !a.interference;
+                }
+            }
+            FgCmd::Bom => {
+                if let Some(a) = &mut fg.asm {
+                    a.bom_open = !a.bom_open;
+                }
+            }
+            FgCmd::Explode => {
+                if let Some(a) = &mut fg.asm {
+                    a.explode_open = !a.explode_open;
+                    a.explode = if a.explode_open { 1.0 } else { 0.0 };
+                }
+            }
+            FgCmd::Save => fg.out.push(fg::FgAct::Save),
+        }
+    }
+
     /// The switches for what's open.
     pub fn overlays(&self) -> Overlays {
         self.overlays[usize::from(self.is_asm())]
@@ -690,13 +733,18 @@ impl Shell {
 
         let top = TITLE_H + TABS_H + RIBBON_H;
         let bottom = s.height() - DOCS_H - STATUS_H;
-        let side = Rect::from_min_max(pos2(0.0, top), pos2(SIDE_W, bottom));
+        let side_w = self.side_w();
+        let side = Rect::from_min_max(pos2(0.0, top), pos2(side_w, bottom));
         let ppp = ctx.pixels_per_point();
         let snap = |v: f32| (v * ppp).round() / ppp;
         // a Forge file's panel stands beside the view, not over it: the cube stays in sight
-        let panel = if self.fg.is_some() { fg::PANEL_W } else { 0.0 };
+        let panel = if self.fg.is_some() && !self.is_asm() {
+            fg::PANEL_W
+        } else {
+            0.0
+        };
         self.view_rect = Rect::from_min_max(
-            pos2(snap(SIDE_W + 1.0), snap(top)),
+            pos2(snap(side_w + 1.0), snap(top)),
             pos2(snap(s.width() - panel), snap(bottom)),
         );
 
@@ -722,6 +770,9 @@ impl Shell {
         self.dim_ui(&ctx);
         self.dialog_ui(&ctx);
         self.fg_panel(&ctx);
+        self.asm_windows(&ctx);
+        self.fg_params_window(&ctx);
+        self.fg_issues_window(&ctx);
         self.view_toolbar(&ctx);
         self.sketch_ui(&ctx);
         self.mode_bar(&ctx);
@@ -914,7 +965,16 @@ impl Shell {
             self.file_menu = !self.file_menu;
         }
         let mut x = 66.0;
+        // an assembly's first tab is Assemble, and it has no sketches
+        let asm = self.is_asm();
+        if asm && self.tab == 1 {
+            self.tab = 0;
+        }
         for (k, name) in TABS.iter().enumerate() {
+            if asm && k == 1 {
+                continue;
+            }
+            let name = if asm && k == 0 { &"Assemble" } else { name };
             let on = k == self.tab;
             let w = ui
                 .fonts_mut(|f| f.layout_no_wrap(name.to_string(), sans(13.0), t.ink))
@@ -956,7 +1016,7 @@ impl Shell {
             .trim_end_matches(".fg")
             .to_string();
         self.head(&p, side.top(), "Model", &name);
-        let tree = Rect::from_min_max(pos2(0.0, side.top() + HEAD_H), pos2(SIDE_W, side.bottom()));
+        let tree = Rect::from_min_max(pos2(0.0, side.top() + HEAD_H), pos2(side.right(), side.bottom()));
         if self.fg.as_ref().is_some_and(|f| f.asm.is_some()) {
             self.asm_tree(ui, tree);
         } else if self.fg.is_some() {
@@ -968,9 +1028,10 @@ impl Shell {
 
     fn head(&self, p: &egui::Painter, y: f32, left: &str, right: &str) {
         let t = self.theme;
-        let h = Rect::from_min_size(pos2(0.0, y), vec2(SIDE_W, HEAD_H));
+        let w = self.side_w();
+        let h = Rect::from_min_size(pos2(0.0, y), vec2(w, HEAD_H));
         p.rect_filled(h, 0.0, t.raised);
-        p.hline(0.0..=SIDE_W, y + HEAD_H - 0.5, Stroke::new(1.0, t.line));
+        p.hline(0.0..=w, y + HEAD_H - 0.5, Stroke::new(1.0, t.line));
         p.text(
             pos2(10.0, y + HEAD_H * 0.5),
             Align2::LEFT_CENTER,
@@ -979,7 +1040,7 @@ impl Shell {
             t.ink,
         );
         p.text(
-            pos2(SIDE_W - 10.0, y + HEAD_H * 0.5),
+            pos2(w - 10.0, y + HEAD_H * 0.5),
             Align2::RIGHT_CENTER,
             right,
             sans(12.0),
@@ -1028,7 +1089,7 @@ impl Shell {
         }
         let st = Rect::from_min_size(pos2(0.0, bottom + DOCS_H), vec2(s.width(), STATUS_H));
         p.rect_filled(st, 0.0, t.bar);
-        p.text(
+        let said = p.text(
             pos2(10.0, st.center().y),
             Align2::LEFT_CENTER,
             if self.status.is_empty() && self.unshown {
@@ -1039,6 +1100,70 @@ impl Shell {
             sans(12.0),
             Color32::WHITE,
         );
+        // an assembly's: its timings on hover, its issues a click away
+        if self.is_asm()
+            && let Some(fg) = &mut self.fg
+        {
+            if let Some(a) = &fg.asm
+                && !a.timings.is_empty()
+            {
+                ui.interact(said, ui.scope_id().with("status-times"), Sense::hover())
+                    .on_hover_text(&a.timings);
+            }
+            let (errors, warnings) = fg::issue_counts(&fg.issues);
+            let text = format!(
+                "{} · {}",
+                fg::plural(errors, "error"),
+                fg::plural(warnings, "warning")
+            );
+            let g = ui.fonts_mut(|f| f.layout_no_wrap(text.clone(), sans(12.0), Color32::WHITE));
+            let right = s.width()
+                - 10.0
+                - ui.fonts_mut(|f| f.layout_no_wrap(format!("| {}", self.units), mono(12.0), Color32::WHITE))
+                    .size()
+                    .x
+                - 12.0;
+            let r = Rect::from_min_max(
+                pos2(right - g.size().x - 22.0, st.top() + 2.0),
+                pos2(right, st.bottom() - 2.0),
+            );
+            let resp = ui.interact(r, ui.scope_id().with("status-issues"), Sense::click());
+            if resp.hovered() || fg.issues_list {
+                p.rect_filled(r, 3.0, Color32::from_white_alpha(28));
+            }
+            let ink = if errors > 0 {
+                t.error
+            } else if warnings > 0 {
+                fg::WARN
+            } else {
+                Color32::WHITE
+            };
+            icons::draw(
+                &p,
+                pos2(r.left() + 3.0, r.center().y - 7.0),
+                14.0,
+                "warning",
+                1.5,
+                ink,
+            );
+            p.galley(
+                pos2(r.left() + 20.0, r.center().y - g.size().y * 0.5),
+                g,
+                Color32::WHITE,
+            );
+            self.places.push(("asm:issues".into(), r));
+            if resp.clicked() {
+                fg.issues_list = !fg.issues_list;
+            }
+            p.text(
+                pos2(s.width() - 10.0, st.center().y),
+                Align2::RIGHT_CENTER,
+                format!("| {}", self.units),
+                mono(12.0),
+                Color32::WHITE,
+            );
+            return;
+        }
         // the check's word only if it's taking long: a quick one shouldn't flicker
         let slow = self
             .checking_since

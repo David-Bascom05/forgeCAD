@@ -13,10 +13,17 @@ use std::collections::HashSet;
 pub(super) const PANEL_W: f32 = 340.0;
 pub(super) const WARN: Color32 = Color32::from_rgb(0xE0, 0xA0, 0x30);
 
-/// Errors, and everything else (warnings, lints, a shop's rules).
+/// Errors, and everything else (warnings, lints, a shop's rules); an assembly's notes (intended
+/// contacts) are neither.
 pub fn issue_counts(issues: &[Issue]) -> (usize, usize) {
     let e = issues.iter().filter(|i| i.severity == Severity::Error).count();
-    (e, issues.len() - e)
+    (e, issues.iter().filter(|i| !is_note(i)).count() - e)
+}
+
+pub fn is_note(i: &Issue) -> bool {
+    i.asm
+        .as_ref()
+        .is_some_and(|a| a.level() == forge_lang::asm::Level::Info)
 }
 
 pub fn plural(n: usize, word: &str) -> String {
@@ -265,6 +272,10 @@ pub struct FgPanel {
     pub asm: Option<super::fgasm::AsmPanel>,
     /// The last thing picked in the view, as Forge names it (or why nothing does).
     pub picked: Option<Result<String, super::fgtool::ToolError>>,
+    /// The Parameters dialog is up.
+    pub params_open: bool,
+    /// The issues list is up, over the status bar (an assembly's, which has no panel).
+    pub issues_list: bool,
 }
 
 /// The tree of ids: `bolt[2]` under `bolt`, `lug.hub` under `lug`, in the order they were made.
@@ -701,6 +712,11 @@ impl Shell {
     /// The params, the selected feature's dimensions and actions, and the issues: a panel on the
     /// view's right.
     pub(super) fn fg_panel(&mut self, ctx: &egui::Context) {
+        // an assembly has no panel: what it held is in the browser, the ribbon's dialogs and the
+        // status bar, as Inventor has it
+        if self.is_asm() {
+            return;
+        }
         let Some(mut fg) = self.fg.take() else { return };
         let t = self.theme;
         let v = self.view_rect;
@@ -731,18 +747,9 @@ impl Shell {
                             ui.spacing_mut().item_spacing.y = 4.0;
                             Self::fg_head(ui, &t, &mut fg, &mut out, &mut places);
                             Self::fg_tool(ui, &t, &mut fg, &mut out, &mut places);
-                            // an assembly's typed results first: they're what to look at
-                            if fg.asm.is_some() {
-                                Self::asm_checks(ui, &t, &mut fg, &mut out, &mut places);
-                                Self::fg_issues(ui, &t, &mut fg, &mut out, &mut places);
-                            }
-                            Self::asm_panel(ui, &t, &mut fg, &mut out, &mut places);
                             Self::fg_sheets(ui, &t, &fg, &mut out, &mut places);
                             Self::fg_selection(ui, &t, &mut fg, &mut out, &mut places);
-                            Self::fg_params(ui, &t, &mut fg, &mut out, &mut places);
-                            if fg.asm.is_none() {
-                                Self::fg_issues(ui, &t, &mut fg, &mut out, &mut places);
-                            }
+                            Self::fg_issues(ui, &t, &mut fg, &mut out, &mut places);
                             Self::fg_source(ui, &t, &mut fg);
                         });
                     });
@@ -1144,110 +1151,239 @@ impl Shell {
         }
     }
 
-    fn fg_params(
+    /// The Parameters dialog, as Inventor's fx: every param with its unit, its equation (a
+    /// driving one's typed in place: a SetParam), its value, and what reads it.
+    pub(super) fn fg_params_window(&mut self, ctx: &egui::Context) {
+        let Some(mut fg) = self.fg.take() else { return };
+        if !fg.params_open {
+            self.fg = Some(fg);
+            return;
+        }
+        let t = self.theme;
+        let v = self.view_rect;
+        let mut places: Vec<(String, Rect)> = Vec::new();
+        let mut out: Vec<FgAct> = Vec::new();
+        let mut close = false;
+        let w = (v.width() - 200.0).clamp(420.0, 760.0);
+        let shown = egui::Window::new("Parameters")
+            .id(egui::Id::unique("fg-params"))
+            .title_bar(false)
+            .collapsible(false)
+            .resizable(false)
+            .movable(true)
+            .fade_in(false)
+            .default_pos(pos2(v.left() + 24.0, v.top() + 48.0))
+            .min_width(w)
+            .max_width(w)
+            .frame(super::fgasm::dialog_frame(&t))
+            .show(ctx, |ui| {
+                close = super::fgasm::dialog_head(ui, &t, "params", "Parameters", "fg:params", &mut places);
+                ui.label(
+                    egui::RichText::new(format!(
+                        "{} · a driving value is edited in place; a driven one by what it reads",
+                        plural(fg.params.len(), "parameter")
+                    ))
+                    .font(sans(11.0))
+                    .color(t.ink2),
+                );
+                ui.add_space(4.0);
+                let params = fg.params.clone();
+                egui::ScrollArea::vertical()
+                    .auto_shrink([false, true])
+                    .max_height((v.height() - 140.0).max(200.0))
+                    .show(ui, |ui| {
+                        egui::Grid::new("fg-params-grid")
+                            .num_columns(5)
+                            .striped(true)
+                            .spacing(vec2(14.0, 4.0))
+                            .min_col_width(40.0)
+                            .show(ui, |ui| {
+                                for h in [
+                                    "Parameter Name",
+                                    "Unit",
+                                    "Equation",
+                                    "Nominal Value",
+                                    "Consumed by",
+                                ] {
+                                    ui.label(egui::RichText::new(h).font(medium(11.0)).color(t.ink2));
+                                }
+                                ui.end_row();
+                                for p in &params {
+                                    Self::param_row(ui, &t, &mut fg, p, &mut out, &mut places);
+                                    ui.end_row();
+                                }
+                            });
+                    });
+            });
+        if let Some(r) = shown {
+            self.view_blocks.push(r.response.rect);
+        }
+        if close {
+            fg.params_open = false;
+            fg.editing = None;
+        }
+        self.places.extend(places);
+        fg.out.extend(out);
+        self.fg = Some(fg);
+    }
+
+    fn param_row(
         ui: &mut Ui,
         t: &super::theme::Theme,
         fg: &mut FgPanel,
+        p: &ParamRow,
         out: &mut Vec<FgAct>,
         places: &mut Vec<(String, Rect)>,
     ) {
-        Self::fg_heading(ui, t, "Parameters");
-        let shown: Vec<ParamRow> = fg.shown_params().into_iter().cloned().collect();
-        for p in shown {
-            let key = p.key.to_string();
-            ui.horizontal(|ui| {
-                let (mark, r) = ui.allocate_exact_size(vec2(10.0, 18.0), Sense::hover());
-                if p.structural {
-                    let c = mark.center();
-                    ui.painter().add(egui::Shape::convex_polygon(
-                        vec![
-                            pos2(c.x, c.y - 4.0),
-                            pos2(c.x + 4.0, c.y),
-                            pos2(c.x, c.y + 4.0),
-                            pos2(c.x - 4.0, c.y),
-                        ],
-                        Color32::from_rgb(0x9A, 0x7B, 0xE0),
-                        Stroke::NONE,
-                    ));
-                    r.on_hover_text("structural: evaluation reads it; editing re-runs");
-                }
-                let name = ui.label(egui::RichText::new(&key).font(mono(12.0)).color(t.ink));
-                if !p.used_by.is_empty() {
-                    name.on_hover_text(format!("drives {}", p.used_by.join(", ")));
-                }
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if p.driving() {
-                        let (value, dim) = p.value.expect("driving is a number");
-                        let id = egui::Id::unique(("fg-param", &key));
-                        let editing = fg.editing.as_ref().is_some_and(|e| e.0 == p.key);
-                        ui.label(egui::RichText::new(unit(dim)).font(sans(11.0)).color(t.ink2));
-                        if editing {
-                            let text = &mut fg.editing.as_mut().expect("editing").1;
-                            let resp = ui.add(
-                                egui::TextEdit::singleline(text)
-                                    .id(id)
-                                    .font(mono(12.0))
-                                    .desired_width(80.0),
-                            );
-                            if fg.edit_fresh {
-                                fg.edit_fresh = false;
-                                resp.request_focus();
-                                if let Some(mut s) = egui::TextEdit::load_state(ui.ctx(), id) {
-                                    let n = text.chars().count();
-                                    s.cursor.set_char_range(Some(egui::text::CCursorRange::two(
-                                        egui::text::CCursor::new(0),
-                                        egui::text::CCursor::new(n),
-                                    )));
-                                    s.store(ui.ctx(), id);
-                                }
-                            }
-                            places.push((format!("fg:param:{key}"), resp.rect));
-                            let enter = ui.input(|i| i.key_pressed(egui::Key::Enter));
-                            let esc = ui.input(|i| i.key_pressed(egui::Key::Escape));
-                            if esc {
-                                fg.editing = None;
-                            } else if enter || (resp.lost_focus() && !resp.has_focus()) {
-                                let typed = text.clone();
-                                fg.editing = None;
-                                match parse_value(&typed, dim) {
-                                    Some(v) if v.value == value && v.dim == dim => {}
-                                    Some(v) => out.push(FgAct::Apply(Op::SetParam {
-                                        param: p.key.clone(),
-                                        value: v,
-                                    })),
-                                    None => fg.refused = Some(format!("{typed:?} is not a number for {key}")),
-                                }
-                            }
-                        } else {
-                            let resp = ui.add(
-                                egui::Button::new(egui::RichText::new(short(value)).font(mono(12.0)))
-                                    .min_size(vec2(80.0, 18.0)),
-                            );
-                            places.push((format!("fg:param:{key}"), resp.rect));
-                            if resp.clicked() {
-                                fg.editing = Some((p.key.clone(), short(value)));
-                                fg.edit_fresh = true;
-                            }
-                        }
-                    } else {
-                        // driven: no handle of its own; what drives it says what to edit
-                        let shown = match p.value {
-                            Some((v, d)) => format!("{} {}", short(v), unit(d)),
-                            None => p.text.clone(),
-                        };
-                        let r = ui.label(egui::RichText::new(shown).font(mono(12.0)).color(t.ink2));
-                        places.push((format!("fg:param:{key}"), r.rect));
-                    }
-                });
-            });
-            if !p.links.is_empty() {
-                ui.label(
-                    egui::RichText::new(format!("    driven by {}", keys(&p.links)))
-                        .font(sans(11.0))
-                        .color(t.ink2),
+        let key = p.key.to_string();
+        let cut = |s: &str, n: usize| {
+            let mut c: String = s.chars().take(n).collect();
+            if c.len() < s.len() {
+                c.push('…');
+            }
+            c
+        };
+        // on one line, however it's written
+        let eq = cut(&p.text.split_whitespace().collect::<Vec<_>>().join(" "), 40);
+        ui.horizontal(|ui| {
+            let (mark, r) = ui.allocate_exact_size(vec2(10.0, 18.0), Sense::hover());
+            if p.structural {
+                let c = mark.center();
+                ui.painter().add(egui::Shape::convex_polygon(
+                    vec![
+                        pos2(c.x, c.y - 4.0),
+                        pos2(c.x + 4.0, c.y),
+                        pos2(c.x, c.y + 4.0),
+                        pos2(c.x - 4.0, c.y),
+                    ],
+                    Color32::from_rgb(0x9A, 0x7B, 0xE0),
+                    Stroke::NONE,
+                ));
+                r.on_hover_text("structural: evaluation reads it; editing re-runs");
+            }
+            let r = ui.label(egui::RichText::new(&key).font(mono(12.0)).color(t.ink));
+            places.push((format!("fg:paramname:{key}"), r.rect));
+        });
+        let u = p.value.map_or("", |(_, d)| unit(d));
+        ui.label(
+            egui::RichText::new(if u.is_empty() { "ul" } else { u })
+                .font(sans(11.0))
+                .color(t.ink2),
+        );
+        if p.driving() {
+            let (value, dim) = p.value.expect("driving is a number");
+            let id = egui::Id::unique(("fg-param", &key));
+            let editing = fg.editing.as_ref().is_some_and(|e| e.0 == p.key);
+            if editing {
+                let text = &mut fg.editing.as_mut().expect("editing").1;
+                let resp = ui.add(
+                    egui::TextEdit::singleline(text)
+                        .id(id)
+                        .font(mono(12.0))
+                        .desired_width(120.0),
                 );
+                if fg.edit_fresh {
+                    fg.edit_fresh = false;
+                    resp.request_focus();
+                    if let Some(mut s) = egui::TextEdit::load_state(ui.ctx(), id) {
+                        let n = text.chars().count();
+                        s.cursor.set_char_range(Some(egui::text::CCursorRange::two(
+                            egui::text::CCursor::new(0),
+                            egui::text::CCursor::new(n),
+                        )));
+                        s.store(ui.ctx(), id);
+                    }
+                }
+                places.push((format!("fg:param:{key}"), resp.rect));
+                let enter = ui.input(|i| i.key_pressed(egui::Key::Enter));
+                let esc = ui.input(|i| i.key_pressed(egui::Key::Escape));
+                if esc {
+                    fg.editing = None;
+                } else if enter || (resp.lost_focus() && !resp.has_focus()) {
+                    let typed = text.clone();
+                    fg.editing = None;
+                    match parse_value(&typed, dim) {
+                        Some(v) if v.value == value && v.dim == dim => {}
+                        Some(v) => out.push(FgAct::Apply(Op::SetParam {
+                            param: p.key.clone(),
+                            value: v,
+                        })),
+                        None => fg.refused = Some(format!("{typed:?} is not a number for {key}")),
+                    }
+                }
+            } else {
+                let resp = ui.add(
+                    egui::Button::new(egui::RichText::new(&eq).font(mono(12.0))).min_size(vec2(120.0, 18.0)),
+                );
+                places.push((format!("fg:param:{key}"), resp.rect));
+                if resp.clicked() {
+                    fg.editing = Some((p.key.clone(), short(value)));
+                    fg.edit_fresh = true;
+                }
+            }
+        } else {
+            // driven: its equation as written, edited through what it reads
+            let r = ui.label(egui::RichText::new(&eq).font(mono(12.0)).color(t.ink2));
+            places.push((format!("fg:param:{key}"), r.rect));
+            if !p.links.is_empty() {
+                r.on_hover_text(format!("{}\ndriven by {}", p.text, keys(&p.links)));
             }
         }
+        let shown = match p.value {
+            Some((v, _)) => short(v),
+            None => String::new(),
+        };
+        ui.label(egui::RichText::new(shown).font(mono(12.0)).color(t.ink));
+        let used = p.used_by.join(", ");
+        let r = ui.label(egui::RichText::new(cut(&used, 40)).font(sans(11.0)).color(t.ink2));
+        if !used.is_empty() {
+            r.on_hover_text(used);
+        }
+    }
+
+    /// An assembly's issues, over the status bar: each with its fixes and a Show.
+    pub(super) fn fg_issues_window(&mut self, ctx: &egui::Context) {
+        let Some(mut fg) = self.fg.take() else { return };
+        if !fg.issues_list || !(fg.assembly || fg.asm.is_some()) {
+            self.fg = Some(fg);
+            return;
+        }
+        let t = self.theme;
+        let v = self.view_rect;
+        let mut places: Vec<(String, Rect)> = Vec::new();
+        let mut out: Vec<FgAct> = Vec::new();
+        let mut close = false;
+        let w = (v.width() - 32.0).min(900.0);
+        let shown = egui::Window::new("Issues")
+            .id(egui::Id::unique("fg-issues"))
+            .title_bar(false)
+            .collapsible(false)
+            .resizable(false)
+            .movable(true)
+            .pivot(Align2::LEFT_BOTTOM)
+            .default_pos(pos2(v.left() + 16.0, v.bottom() - 12.0))
+            .min_width(w)
+            .max_width(w)
+            .frame(super::fgasm::dialog_frame(&t))
+            .show(ctx, |ui| {
+                close = super::fgasm::dialog_head(ui, &t, "warning", "Issues", "fg:issueswin", &mut places);
+                fg.issues_shown = Some(true);
+                egui::ScrollArea::vertical()
+                    .auto_shrink([false, true])
+                    .max_height((v.height() * 0.45).max(160.0))
+                    .show(ui, |ui| {
+                        Self::fg_issues(ui, &t, &mut fg, &mut out, &mut places);
+                    });
+            });
+        if let Some(r) = shown {
+            self.view_blocks.push(r.response.rect);
+        }
+        if close {
+            fg.issues_list = false;
+        }
+        self.places.extend(places);
+        fg.out.extend(out);
+        self.fg = Some(fg);
     }
 
     /// The issues: one line of counts, opened by a click; open by itself only while there are
@@ -1281,7 +1417,9 @@ impl Shell {
         let issues = std::mem::take(&mut fg.issues);
         // a long list shows its first few until asked
         let cap = if fg.all_issues { 300 } else { 8 };
-        for (i, is) in issues.iter().enumerate().take(cap) {
+        // an assembly's notes (intended contacts) are counted in Analyze Interference, not here
+        let note = is_note;
+        for (i, is) in issues.iter().enumerate().filter(|x| !note(x.1)).take(cap) {
             let colour = match is.severity {
                 Severity::Error => t.error,
                 _ => WARN,
@@ -1310,11 +1448,12 @@ impl Shell {
                 }
             });
         }
-        if issues.len() > 8 {
+        let listed = issues.iter().filter(|i| !note(i)).count();
+        if listed > 8 {
             let label = if fg.all_issues {
                 "Show fewer".to_string()
             } else {
-                format!("Show all {}", issues.len())
+                format!("Show all {listed}")
             };
             if Self::fg_button(ui, &label, "fg:issues:all".into(), places) {
                 fg.all_issues = !fg.all_issues;
