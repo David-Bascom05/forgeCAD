@@ -639,6 +639,7 @@ impl<'s> Eval<'s> {
         // an error inside a loop is one error, however many times the loop ran into it
         let mut seen = std::collections::HashSet::new();
         self.errors.retain(|e| seen.insert((e.kind(), e.span())));
+        self.expect_reads();
         for p in self.shared.iter().chain(&self.locals) {
             if !p.used {
                 self.warnings.push(Warning::UnusedParam {
@@ -647,6 +648,30 @@ impl<'s> Eval<'s> {
                 });
             }
         }
+    }
+
+    /// Marks the params `expect` lines read as used: they are evaluated after the build (and
+    /// only when it finished), but a param that states the design's intent is not unused. They
+    /// are read here as the expect line will read them, and what that reading says is dropped.
+    fn expect_reads(&mut self) {
+        let (errors, warnings) = (self.errors.len(), self.warnings.len());
+        let observed = self.observed.clone();
+        let saved = self.ctx.owner.clone();
+        self.ctx.owner = vec![];
+        for s in self.expects.clone() {
+            if let StmtKind::Expect { args, cmp, .. } = &s.kind {
+                let tol = cmp
+                    .iter()
+                    .flat_map(|(_, v, t)| std::iter::once(v).chain(t.iter().map(|t| &t.0)));
+                for e in args.iter().chain(tol) {
+                    let _ = self.expr(e);
+                }
+            }
+        }
+        self.ctx.owner = saved;
+        self.errors.truncate(errors);
+        self.warnings.truncate(warnings);
+        self.observed = observed;
     }
 
     fn bind_loop(&mut self, name: &str, v: Value, span: Span) -> R<()> {
@@ -722,7 +747,11 @@ impl<'s> Eval<'s> {
         match level {
             Level::Off => Ok(()),
             Level::Lint => {
-                self.warnings.push(Warning::Lint(e));
+                // the same lint at the same place once, not once per loop instance
+                let w = Warning::Lint(e);
+                if !self.warnings.contains(&w) {
+                    self.warnings.push(w);
+                }
                 Ok(())
             }
             Level::Error => Err(e),
@@ -817,8 +846,12 @@ impl<'s> Eval<'s> {
                 Ok(())
             }
             StmtKind::For { vars, iter, body } => {
+                // a loop's header reads what its statement would: the sketch's own names inside
+                // a sketch, else the enclosing scope's
                 let saved_owner = self.ctx.owner.clone();
-                self.ctx.owner = self.ctx.prefix.clone();
+                if self.sketch.is_none() {
+                    self.ctx.owner = self.ctx.prefix.clone();
+                }
                 let it = self.expr(iter);
                 self.ctx.owner = saved_owner;
                 let it = it?;
