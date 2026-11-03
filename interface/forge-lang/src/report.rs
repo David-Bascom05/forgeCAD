@@ -316,6 +316,29 @@ pub fn text(run: &Run, src: &str) -> String {
                 vals.join("  ")
             ));
         }
+        for e in &a.engagements {
+            out.push_str(&format!(
+                "engagement {} in {} ({}): {}{}\n",
+                e.a,
+                e.b,
+                e.rule,
+                fmt(e.engaged),
+                match (e.min, e.short) {
+                    (Some(m), true) => format!(", SHORT of {}", fmt(m)),
+                    (Some(m), false) => format!(", min {}", fmt(m)),
+                    (None, _) => String::new(),
+                }
+            ));
+        }
+        for e in &a.expects {
+            out.push_str(&format!(
+                "expect {} line {} {} ({})\n",
+                e.metric,
+                e.line,
+                if e.ok { "ok" } else { "FAILED" },
+                e.measured.map_or_else(|| "not measured".into(), fmt)
+            ));
+        }
     }
     let t = &run.timings;
     out.push_str(&format!(

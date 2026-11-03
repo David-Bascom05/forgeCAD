@@ -694,12 +694,18 @@ expect clearance(arm, post) >= 2 at crank.turn = 90deg
   min_engagement:)` covers every pair it matches: by anchor kind (`external_thread`,
   `internal_thread`, `shaft`, `bore`, or a part's own `kind("dowel")`) and size, the two anchors on
   one axis, or by part file (`fit_rule("bolt.fg", "plate.fg")`). Threads engaged less than the
-  rule's minimum, or the shop's (one diameter), are `ShallowEngagement`.
+  rule's minimum, or the shop's (one diameter), are `ShallowEngagement`; `min_engagement: full`
+  asks the screw to fill the internal thread's whole depth. Every threaded fit's engagement is
+  reported (`assembly.engagements`: measured, minimum, short or not).
 - **In a part file:** `tap = anchor(REF, kind: internal_thread, size: m, depth: t)` declares an
   anchor with a fit feature (a thread runs `depth` along the anchor's z); `dowel = anchor_kind()`
   declares a kind of the part's own.
 - **Expect:** `interferences`, `interference(a, b)` (volume), `clearance(a, b)`, `distance(a, b)`
   (origins), `x|y|z(a)`, `value(j.turn)`, `mobility`; `at P = V, ..` holds params for that line.
+  Wherever an instance goes, a reference does too (`x(rail.eia[0])`, `z(crank.bar.end)`): its
+  frame in the world. An expect that cannot be measured is the error `ExpectUnevaluable` (why:
+  a missing argument, no such reference, not a place, no joint value), never skipped; `fg run
+  --json` lists every expect with its measured value, limit and verdict.
 - **Results**, typed: errors `BrokenAnchor`, `WrongReference`, `Conflict` (the minimal set,
   per constraint with its joint; fix: delete the statement left out), `LimitViolated` (fix:
   SetParam the drive to the nearer limit), `NotConverged`, `NoGround`, `UnknownKind`,
