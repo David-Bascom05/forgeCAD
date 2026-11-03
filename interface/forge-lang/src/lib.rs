@@ -5,6 +5,7 @@
 //! are typed operations on the source (`edit`).
 
 pub mod asm;
+pub mod anchors;
 pub mod bodies;
 pub mod build;
 pub mod builtins;
@@ -51,6 +52,9 @@ pub struct Options {
     pub root: Option<std::path::PathBuf>,
     /// An assembly: measure only these expects (by position), ignoring their `at` (`asm.rs`).
     pub probe: Option<Vec<usize>>,
+    /// Find what anchor text names each face and edge of the finished part (`anchors`), for a UI
+    /// turning picks into source.
+    pub anchors: bool,
 }
 
 impl Default for Options {
@@ -63,6 +67,7 @@ impl Default for Options {
             render: false,
             root: None,
             probe: None,
+            anchors: false,
         }
     }
 }
@@ -122,6 +127,8 @@ pub struct Run {
     pub sheets: Vec<sheet::SheetOut>,
     /// An assembly's solve, checks and timings (`asm.rs`).
     pub asm: Option<asm::AsmOut>,
+    /// With `Options::anchors`: the anchor text of each face and edge of the finished part.
+    pub anchors: Option<anchors::Anchors>,
 }
 
 impl Run {
@@ -158,6 +165,7 @@ pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
                     observed: Default::default(),
                     sheets: vec![],
                     asm: None,
+                    anchors: None,
                 },
                 cache,
             );
@@ -226,7 +234,13 @@ pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
         observed: std::mem::take(&mut ev.observed),
         sheets: sheet::outputs(&ev),
         asm: asm_out,
+        anchors: None,
     };
+    let mut run = run;
+    if opts.anchors {
+        let body = run.body.clone();
+        run.anchors = Some(anchors::find(&mut ev, body.as_ref()));
+    }
     (run, ev.b.into_cache())
 }
 

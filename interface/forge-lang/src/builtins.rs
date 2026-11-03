@@ -376,6 +376,9 @@ pub fn plane_of(ev: &mut Eval, v: Value, span: Span, _what: &'static str) -> R<F
         Value::Wired(ref w) if w.plane().is_some() => Ok(w.plane().expect("checked")),
         Value::Faces(f) => match f.plane {
             Some(fr) => Ok(fr),
+            // not building (a check, or after a failure): a face's plane is not known, as with
+            // any other geometric anchor
+            None if f.names.is_empty() && !ev.b.building => Ok(Frame::WORLD),
             None if f.names.is_empty() => Err(Error::NoFace {
                 span,
                 id: f.owner.clone(),
