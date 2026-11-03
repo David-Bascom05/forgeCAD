@@ -1,0 +1,111 @@
+# Forged aluminium crank arm, 170 mm: square-taper spindle boss, 9/16" pedal boss.
+# Hand port of fastcad-lab/k/fair/fc/crank/model.fc.
+
+shared L = 170                 # spindle to pedal axis
+shared rs = 18                 # arm end radius round the spindle
+shared rp = 13                 # and round the pedal
+shared t = 20                  # blank, trimmed by the side profile
+
+sketch plan(on: xy) {
+  spindle_c = pt(0, 0)
+  pedal_c = pt(L, 0)
+  outline = hull(disc(spindle_c, rs), disc(pedal_c, rp))
+}
+arm = extrude(plan, t)
+
+# the side profile: a vertical plane through the centre line, its top a long arc
+midplane = rotate(plan.plane, about: axis(plan.spindle_c, plan.pedal_c), by: 90deg)
+param side.h0 = 16             # outer face height at the spindle end
+param side.h1 = 14             # and past the pedal end
+param side.crown = 2500        # the outer face's radius
+param side.before = 30         # how far the profile runs past each boss
+param side.after = 200
+sketch side(on: midplane) {
+  s = pt(0 - before, h0)
+  e = pt(after, h1)
+  top = arc(center: near((after - before) / 2, crown), from: s, to: e)
+  radius(top, crown)
+  b1 = pt(after, 0)
+  b0 = pt(0 - before, 0)
+  line(e, b1)
+  line(b1, b0)
+  line(b0, s)
+}
+shape = intersect(side, thru_all)
+param round.r = 4
+round = fillet(edges(crease: "convex"), r)
+
+# spindle boss: a section turned about the spindle axis
+param bsec.r = 24              # boss radius
+param bsec.below = 7           # below the arm's inner face
+param bsec.top = 24            # above it
+param bsec.step = 3            # the shoulder's height
+param bsec.inset = 5           # and width
+sketch bsec(on: midplane) {
+  body = poly([(0, 0 - below), (r, 0 - below), (r, top - step), (r - inset, top), (0, top)])
+}
+spindle = revolve(bsec, axis: bsec.body[4])
+
+param psec.w = 15              # pedal boss radius
+param psec.below = 6
+param psec.h = 25
+sketch psec(on: midplane) {
+  body = rect(corner: (L, 0 - below), size: (w, h))
+}
+pedal = revolve(psec, axis: psec.body[3])
+
+# boss rims before the blends, so each blend runs out on the plain cylinder
+param rims.rs = 2
+param rims.rp = 1.5
+rims = fillet(groups: [(edges(of: spindle, crease: "convex", shape: "circle"), rs),
+                       (edges(of: pedal, crease: "convex", shape: "circle"), rp)])
+param blend.rs = 4
+param blend.rp = 3
+blend = fillet(groups: [(edges(of: spindle, crease: "concave"), rs),
+                        (edges(of: pedal, crease: "concave"), rp)])
+
+# lightening pocket in the inner face, its ends round the two bosses
+param pk.a = 40
+param pk.b = 138
+param pk.ra = 8
+param pk.rb = 5.5
+sketch pk(on: arm.start, at: plan.spindle_c) {
+  outline = hull(disc((a, 0), ra), disc((b, 0), rb))
+}
+param pocket.depth = 4
+pocket = cut(pk, depth)
+param pocket_in.r = 2
+pocket_in = fillet(edges(of: pocket, crease: "concave"), r)
+param pocket_out.r = 1
+pocket_out = fillet(edges(of: pocket, crease: "convex"), r)
+
+# JIS square taper, 2 deg included, cut up from the boss's underside
+param tsk.sq = 12.65
+sketch tsk(on: spindle.side(bsec.body[0]), at: bsec.body[0].a) {
+  square = rect(center: (0, 0), size: (sq, sq))
+}
+param taper.depth = 21
+param taper.lean = 1deg
+taper = cut(tsk, depth, taper: lean)
+
+param csk.d = 22.2             # M22x1 extractor thread, minor
+sketch csk(on: spindle.side(bsec.body[3]), at: bsec.body[4].a) {
+  bore = circle((0, 0), d / 2)
+}
+param extractor.depth = 10.5
+extractor = cut(csk, depth)
+
+param psk.d = 13.1             # 9/16-20 pedal thread, tap drill
+sketch psk(on: pedal.side(psec.body[2]), at: psec.body[2].b) {
+  bore = circle((0, 0), d / 2)
+}
+pedalbore = cut(psk, thru)
+
+param breaks.size = 1
+breaks = chamfer(edges(between: (extractor, spindle)) + edges(of: pedalbore, shape: "circle"), size)
+param taper_break.size = 0.8
+taper_break = chamfer(edges(between: (taper, spindle)), size)
+
+expect volume = 107177 +- 0.1%
+expect bodies = 1
+expect valid

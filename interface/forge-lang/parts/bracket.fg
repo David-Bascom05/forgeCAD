@@ -1,0 +1,132 @@
+# Machined aluminium clevis bracket: a pocketed base flange with four counterbored M6 bolts,
+# an upright web carrying a lug with a revolved hub and pin bore, a lightening pocket in the
+# web, and a curved centre gusset tying web to base. Hand port of fair/fc/bracket/model.fc.
+
+shared L = 140                 # base length (x)
+shared W = 70                  # base depth (y)
+shared T = 10                  # base thickness
+shared tw = 10                 # web thickness
+
+sketch basesk(on: xy) {
+  outline = rect(corner: (0 - L / 2, 0), size: (L, W))
+}
+base = extrude(basesk, T)
+
+# web outline on the base's front face; the lug arc tangent to both slanted sides
+param websk.H = 95             # lug centre above the base underside
+param websk.R = 26             # lug radius
+param websk.side = 25          # straight height of the web's ends
+sketch websk(on: base.side(basesk.outline[0])) {
+  outline = hull((0, 0), (L, 0), (L, side), disc((L / 2, H), R), (0, side))
+}
+web = extrude(websk, tw)
+
+# hub: a section through the lug axis, turned about it
+lugplane = rotate(base.end, about: web.side(websk.outline[3]).axis, by: 0deg)
+param hubsk.r = 18
+param hubsk.front = 12         # hub stands proud of the web front
+param hubsk.back = 6           # and of the web back
+sketch hubsk(on: lugplane) {
+  sec = rect(corner: (0 - back, 0), size: (back + tw + front, r))
+}
+hub = revolve(hubsk, axis: hubsk.sec[0])
+
+# pin bore, a second section on the same plane, longer than the hub each end
+param boresk.r = 8
+param boresk.back = hubsk.back + 2
+param boresk.long = hubsk.back + tw + hubsk.front + 4
+sketch boresk(on: lugplane) {
+  sec = rect(corner: (0 - back, 0), size: (long, r))
+}
+bore = revolve(boresk, axis: boresk.sec[0], cut: true)
+
+# web lightening pocket, sides parallel to the web's slanted sides, a wall in from them
+param wpsk.wall = 14
+param wpsk.low = 20
+param wpsk.h = 44
+sketch wpsk(on: web.end) {
+  right = shift(websk.outline[2], wall)
+  left = shift(websk.outline[4], wall)
+  outline = poly([meet(hline(low), left), meet(hline(low), right),
+                  meet(hline(low + h), right), meet(hline(low + h), left)])
+}
+param wpocket.depth = 6
+wpocket = cut(wpsk, depth)
+
+# base pockets: one per quarter, leaving a centre rib and a cross rib
+param bpsk.x = 6
+param bpsk.y = 8
+param bpsk.w = 38
+param bpsk.h = 25
+param bpsk.dx = 50
+param bpsk.dy = 29
+param bpocket.depth = 6
+for i in 0..2 {
+  for j in 0..2 {
+    sketch bpsk(on: base.end) {
+      r = rect(corner: (x - dx * i, y + dy * j), size: (w, h))
+    }
+    bpocket = cut(bpsk, depth)
+  }
+}
+
+# centre gusset on the mid plane, square to the base's back bottom edge at its middle;
+# sketch x runs down, y runs forward from that edge's midpoint
+gplane = plane(at: mid(basesk.outline[2]), normal: -basesk.outline[0].dir, x: base.start.normal)
+param gsk.run = 50             # along the base top
+param gsk.span = 60            # up the web
+param gsk.r = 75               # the curved edge's radius
+sketch gsk(on: gplane) {
+  a = pt(0 - T, W)
+  b = pt(0 - T, W - run)
+  c = pt(0 - T - span, W)
+  line(a, b)
+  edge = arc(center: near(0 - T - span, W - run), from: b, to: c)
+  radius(edge, r)
+  line(c, a)
+}
+param gusset.t = 5
+gusset = extrude(gsk, sym(t))
+
+param boltsk.x = 57
+param boltsk.y = 15
+param boltsk.dy = 40
+sketch boltsk(on: base.end) {
+  pt(x, y)
+  pt(x, y + dy)
+  pt(0 - x, y)
+  pt(0 - x, y + dy)
+}
+bolts = hole(at: boltsk.points, screw: "M6", fit: "normal", seat: "cbore", depth: thru)
+
+param corners.r = 8
+corners = fillet(edges(between: (base.side(basesk.outline[1]), base.side(basesk.outline[2])))
+                 + edges(between: (base.side(basesk.outline[2]), base.side(basesk.outline[3]))), r)
+param bp_corners.r = 4
+bp_corners = fillet(edges(of: bpocket, along: Z, crease: "concave"), r)
+param wp_corners.r = 5
+wp_corners = fillet(edges(of: wpocket, along: Y, crease: "concave"), r)
+param bp_floor.r = 1.5
+bp_floor = fillet(edges(of: bpocket, crease: "concave"), r)
+param wp_floor.r = 1.5
+wp_floor = fillet(edges(of: wpocket, crease: "concave"), r)
+param roots.r = 3
+param roots.shortest = 10
+roots = fillet(edges(along: X, crease: "concave", longer: shortest)
+               + edges(of: gusset, crease: "concave", along: Y)
+               + edges(of: gusset, crease: "concave", along: Z), r)
+param hub_root.r = 3
+param hub_root.hub = hubsk.r
+hub_root = fillet(edges(crease: "concave", shape: "circle", r: hub), r)
+param lug_edge.r = 2
+param lug_edge.lug = websk.R
+lug_edge = fillet(edges(shape: "circle", r: lug), r)
+param bore_break.size = 1
+bore_break = chamfer(edges(of: bore, shape: "circle"), size)
+param hub_edge.r = 1.5
+param hub_edge.hub = hubsk.r
+hub_edge = fillet(edges(crease: "convex", shape: "circle", r: hub), r)
+
+expect volume = 183449.2 +- 0.1%
+expect bodies = 1
+expect valid

@@ -1,0 +1,24 @@
+[package]
+name = "forge-lang"
+description = "Forge (.fg): a typed, parametric part language for agents, evaluated straight to forge-model features"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "fg"
+path = "src/bin/fg.rs"
+
+[dependencies]
+forge-math = { path = "../../kernel/forge-math" }
+forge-geom = { path = "../../kernel/forge-geom" }
+forge-topo = { path = "../../kernel/forge-topo" }
+forge-ops = { path = "../../kernel/forge-ops" }
+forge-mesh = { path = "../../kernel/forge-mesh" }
+forge-model = { path = "../../kernel/forge-model" }
+forge-sketch = { path = "../../kernel/forge-sketch" }
+forge-agent = { path = "../forge-agent" }
+
+[lints]
+workspace = true

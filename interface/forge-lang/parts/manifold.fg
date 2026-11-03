@@ -1,0 +1,197 @@
+# Hydraulic valve manifold: one ISO 4401-03 (CETOP 3) valve station on top, SAE O-ring boss
+# work ports on the sides, a relief cartridge in a boss on the right, a gauge port on a lofted
+# boss. Hand port of fair/fc/manifold/model.fc.
+
+shared L = 120
+shared W = 80
+shared H = 70
+# valve pattern centre and its ports (ISO 4401-03, from the pattern's centre)
+shared vx = -15
+shared px = vx + 1.25
+shared py = 10.025
+shared ax = vx - 7.55
+shared bx = vx + 9.95
+shared aby = -0.375
+shared ty = -10.775
+shared padT = 4
+# gallery heights, and the relief and gauge bosses
+shared zab = 46
+shared zpt = 18
+shared zr = 38
+shared bossT = 10
+shared gx = 18
+shared gaugeT = 12
+
+# SAE O-ring boss ports as (depth, radius) rows from the mouth: spot face, O-ring seat,
+# thread, then the drill's shoulder
+shared spot_depth = 1
+shared sae6 = [(1, 7.6), (2.6, 6.3), (14, 6.3), (15.4, 4)]
+shared sae6_drill = 4
+shared sae6_tip = 2.4
+shared sae8 = [(0, 15), (1, 15), (1, 9.9), (2.8, 8.75), (17, 8.75), (19.3, 5)]
+shared sae8_drill = 5
+shared sae8_tip = 3
+
+# a port's half section: from the mouth along `along`, radius out along `out`, to the drill's tip
+fn section(mouth, along, out, rows, depth, drill, tip) {
+  return ([mouth] + [mouth + along * row.x + out * row.y for row in rows]
+          + [mouth + along * depth + out * drill, mouth + along * (depth + tip)])
+}
+
+# the four corners of a rectangular extrude: where its sides meet
+fn corners(f, rect) {
+  return (edges(between: (f.side(rect[0]), f.side(rect[1]))) + edges(between: (f.side(rect[1]), f.side(rect[2])))
+          + edges(between: (f.side(rect[2]), f.side(rect[3]))) + edges(between: (f.side(rect[3]), f.side(rect[0]))))
+}
+
+# a port cut by turning its section about its axis (the section's last side)
+fn port(on, pts) {
+  sketch sec(on: on) {
+    outline = poly(pts)
+  }
+  bore = revolve(sec, axis: sec.outline[len(pts) - 1], cut: true)
+  return bore
+}
+
+sketch base(on: xy) {
+  outline = rect(center: (0, 0), size: (L, W))
+}
+block = extrude(base, H)
+param block_corners.r = 6
+block_corners = fillet(edges(of: block, along: Z), r)
+param block_top.r = 3
+block_top = fillet(edges(of: block.end), r)
+
+# levels through the galleries
+abplane = offset(block.end, zab - H)
+ptplane = offset(block.end, zpt - H)
+cplane = offset(block.end, zr - H)
+
+# feet drawn on the underside, each with two slots for M10 bolts
+param feet.ext = 24            # past each end of the block
+param feet.w = 60
+param feet.sy = 18
+param feet.travel = 5          # half the slot's travel
+param feet.r = 4.5
+sketch feet(on: block.start) {
+  plate = rect(center: (0, 0), size: (L + 2 * ext, w))
+  for c in {lb: (-1, 1), lf: (-1, -1), rb: (1, 1), rf: (1, -1)} {
+    s = slot((c.x * (L + ext) / 2 - travel, c.y * sy), (c.x * (L + ext) / 2 + travel, c.y * sy), r)
+  }
+}
+param feetx.h = 12
+feetx = extrude(feet, -h)
+
+# valve mounting pad on the top face
+param pad.w = 66
+param pad.d = 52
+sketch pad(on: block.end) {
+  outline = rect(center: (vx, 0), size: (w, d))
+}
+padx = extrude(pad, padT)
+
+# relief cartridge boss on the right face
+param boss.r = 20
+sketch boss(on: block.side(base.outline[1])) {
+  c = circle((W / 2 + py, zr), r)
+}
+bossx = extrude(boss, bossT)
+
+# gauge boss lofted from a square on the back face to a round face
+param gaugeb.a = 30
+sketch gaugeb(on: block.side(base.outline[2])) {
+  sq = rect(center: (L / 2 - gx, zr), size: (a, a))
+}
+gplane = offset(block.side(base.outline[2]), gaugeT)
+param gauget.r = 13
+sketch gauget(on: gplane) {
+  c = pt(L / 2 - gx, zr)
+  k = r / sqrt(2)
+  q0 = pt(L / 2 - gx - k, zr - k)
+  q1 = pt(L / 2 - gx + k, zr - k)
+  q2 = pt(L / 2 - gx + k, zr + k)
+  q3 = pt(L / 2 - gx - k, zr + k)
+  arc(center: c, from: q0, to: q1)
+  arc(center: c, from: q1, to: q2)
+  arc(center: c, from: q2, to: q3)
+  arc(center: c, from: q3, to: q0)
+}
+gaugex = loft([gaugeb, gauget])
+
+# valve interface on the pad top: ports P A B T, then four M5 tapped holes
+param vports.r = 3.75
+sketch vports(on: padx.end) {
+  p = circle((px, py), r)
+  a = circle((ax, aby), r)
+  b = circle((bx, aby), r)
+  t = circle((px, ty), r)
+}
+portp = cut(vports.p, H + padT - zpt)
+porta = cut(vports.a, H + padT - zab)
+portb = cut(vports.b, H + padT - zab)
+portt = cut(vports.t, H + padT - zpt)
+param vbolts.dx = 20.25
+param vbolts.dy = 15.875
+param vbolts.r = 2.1
+sketch vbolts(on: padx.end) {
+  for c in {lf: (-1, -1), rf: (1, -1), rb: (1, 1), lb: (-1, 1)} {
+    h = circle((vx + c.x * dx, c.y * dy), r)
+  }
+}
+param vtap.depth = 12
+for k, h in vbolts.h {
+  vtap = cut(h, depth)
+}
+
+# work ports A and B, each a half section turned about its own axis, level with the gallery
+param workA.spot = 12.5
+workA = port(abplane, section((-L / 2, aby), (1, 0), (0, 1), [(0, spot), (spot_depth, spot)] + sae6,
+                              ax + L / 2, sae6_drill, sae6_tip))
+param workB.spot = 12.5
+param workB.off = 4            # B's side drill runs off B's axis, clear of the T drill
+workB = port(abplane, section((bx + off, -W / 2), (0, 1), (1, 0), [(0, spot), (spot_depth, spot)] + sae6,
+                              aby + W / 2, sae6_drill, sae6_tip))
+# pressure and tank ports, SAE-8, at the bottom gallery level
+pressP = port(ptplane, section((px, W / 2), (0, -1), (1, 0), sae8, W / 2 - py, sae8_drill, sae8_tip))
+tankT = port(ptplane, section((px, -W / 2), (0, 1), (1, 0), sae8, ty + W / 2, sae8_drill, sae8_tip))
+
+# relief cartridge cavity (3/4-16 two-port) through the boss, its pilot drill running on to P;
+# the gauge port and the relief's own tank port T2 cross it on the same level
+param relief.rows = [(0, 14), (1.5, 14), (1.5, 9.6), (3, 8.75), (16, 8.75), (17, 7.9), (30, 7.9),
+                     (31.5, 6.35), (45, 6.35), (47, 4)]
+param relief.drill = 4
+param relief.tip = 2.4
+relief = port(cplane, section((L / 2 + bossT, py), (-1, 0), (0, 1), rows, L / 2 + bossT - px, drill, tip))
+param gauge.rows = [(0, 9.5), (1, 9.5), (1, 5.75), (14, 5.75), (15.6, 3)]
+param gauge.drill = 3
+param gauge.tip = 1.8
+gauge = port(cplane, section((gx, W / 2 + gaugeT), (0, -1), (1, 0), rows, W / 2 + gaugeT - py, drill, tip))
+param tankT2.spot = 10
+param tankT2.x = 42
+tankT2 = port(cplane, section((x, -W / 2), (0, 1), (1, 0), [(0, spot), (spot_depth, spot)] + sae6,
+                              py + W / 2, sae6_drill, sae6_tip))
+
+# rounds and breaks on the finished block
+param feet_round.r = 8
+feet_round = fillet(corners(feetx, feet.plate), r)
+param feet_root.r = 2
+feet_root = fillet(edges(between: (feetx, block), crease: "concave"), r)
+param pad_corners.r = 5
+pad_corners = fillet(edges(of: padx, along: Z), r)
+param pad_root.r = 1
+pad_root = fillet(edges(between: (padx, block)), r)
+param boss_root.r = 3
+boss_root = fillet(edges(between: (bossx, block)), r)
+param boss_edge.r = 1.5
+param boss_edge.boss = boss.r
+boss_edge = fillet(edges(of: bossx.end, shape: "circle", r: boss), r)
+param gauge_root.r = 2
+gauge_root = fillet(edges(between: (gaugex, block)), r)
+param pad_break.size = 0.5
+pad_break = chamfer(edges(of: padx, shape: "circle"), size)
+param block_break.size = 1
+block_break = chamfer(edges(of: block.start), size)
+
+expect volume = 687248.8 +- 0.1%
+expect bodies = 1
+expect valid
