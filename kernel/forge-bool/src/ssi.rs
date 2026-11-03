@@ -262,6 +262,9 @@ pub fn coincident(a: &Surface, b: &Surface) -> bool {
 fn cylinder_cylinder(c: &Cylinder, d: &Cylinder) -> SurfaceSurface {
     let a = c.frame.z();
     if a.cross(d.frame.z()).length() > tol::ANGULAR {
+        if let Some(t) = crossing_touch(c, d) {
+            return t;
+        }
         return equal_crossing(c, d).unwrap_or(SurfaceSurface::NotAnalytic);
     }
     // work in c's cross-section plane
@@ -294,6 +297,38 @@ fn cylinder_cylinder(c: &Cylinder, d: &Cylinder) -> SurfaceSurface {
         (Curve::Line(Line::new(at(-h), dir)), Contact::Crossing),
         (Curve::Line(Line::new(at(h), dir)), Contact::Crossing),
     ])
+}
+
+/// Cylinders with crossing axes, each outside the other, whose axes stand r1 + r2 apart within
+/// tolerance: they touch at one point on the common perpendicular. Within tolerance of that, any
+/// loop where they overlap lies within tolerance of both throughout (as two spheres a hair
+/// apart), so it is that point, not a curve: a tracer would find only a knot of hair-thin pieces
+/// there (two bent sheets' bends meeting on one flat). Clear of each other: nothing.
+fn crossing_touch(c: &Cylinder, d: &Cylinder) -> Option<SurfaceSurface> {
+    let (a, b) = (c.frame.z().get(), d.frame.z().get());
+    let n = a.cross(b);
+    let m = n.normalize()?;
+    let w = d.frame.origin - c.frame.origin;
+    // the signed gap between the axes along their common perpendicular, from c to d
+    let along = w.dot(m.get());
+    let (r1, r2) = (c.radius, d.radius);
+    let gap = along.abs() - (r1 + r2);
+    if gap > tol::LINEAR {
+        return Some(SurfaceSurface::Empty);
+    }
+    if gap < -tol::LINEAR {
+        return None;
+    }
+    // the feet of the common perpendicular on each axis
+    let len2 = n.dot(n);
+    let s = w.cross(b).dot(n) / len2;
+    let t = w.cross(a).dot(n) / len2;
+    let (p, q) = (c.frame.origin + a * s, d.frame.origin + b * t);
+    let u = (q - p).normalize()?;
+    // on c, r1 out towards d; on d, r2 back towards c: the touch is midway
+    let on_c = p + u * r1;
+    let on_d = q - u * r2;
+    Some(SurfaceSurface::Points(vec![on_c.lerp(on_d, 0.5)]))
 }
 
 /// Equal cylinders whose axes cross (a T or + drilling) meet in two ellipses, in the planes
@@ -392,6 +427,39 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn crossing_cylinders_a_hair_from_touching_touch_at_a_point() {
+        // axes square to each other, r1 + r2 apart give or take less than tolerance
+        let c = Cylinder {
+            frame: Frame::from_z(forge_math::Point3::ORIGIN, forge_math::UnitVec3::Z),
+            radius: 4.62,
+        };
+        for eps in [0.0, -5.7e-14, -1e-9, 1e-9, -0.9 * tol::LINEAR] {
+            let at = forge_math::Point3::new(0.0, 4.62 + 3.48 + eps, 1.6);
+            let d = Cylinder {
+                frame: Frame::from_z(at, forge_math::UnitVec3::X),
+                radius: 3.48,
+            };
+            let SurfaceSurface::Points(ps) = cylinder_cylinder(&c, &d) else {
+                panic!("{eps}: not a touch")
+            };
+            assert!(
+                ps[0].distance(forge_math::Point3::new(0.0, 4.62, 1.6)) < tol::LINEAR,
+                "{ps:?}"
+            );
+        }
+        // apart: nothing; overlapping by more than tolerance: the general curve
+        let d = |gap: f64| Cylinder {
+            frame: Frame::from_z(
+                forge_math::Point3::new(0.0, 8.1 + gap, 1.6),
+                forge_math::UnitVec3::X,
+            ),
+            radius: 3.48,
+        };
+        assert_eq!(cylinder_cylinder(&c, &d(0.01)), SurfaceSurface::Empty);
+        assert_eq!(cylinder_cylinder(&c, &d(-0.01)), SurfaceSurface::NotAnalytic);
     }
 
     #[test]
