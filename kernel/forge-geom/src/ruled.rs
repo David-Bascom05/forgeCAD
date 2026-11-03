@@ -147,7 +147,8 @@ impl Rail {
     /// How far past each end the curve can be carried and stay one turn at most.
     pub(crate) fn reach(&self) -> f64 {
         match *self {
-            Rail::Line { .. } | Rail::Parabola { .. } | Rail::Wrap(_) | Rail::Curve(_) => 0.25,
+            Rail::Line { .. } | Rail::Parabola { .. } | Rail::Curve(_) => 0.25,
+            Rail::Wrap(w) => w.flat.reach(),
             Rail::Arc { sweep, .. } => (0.5 * (forge_math::dmath::TAU / sweep.abs() - 1.0)).clamp(0.0, 0.25),
         }
     }

@@ -1,8 +1,9 @@
-//! Flat curves wrapped round a cylinder, exact by construction: a line or parabola drawn in
-//! (s, h), s the length round and h the height along the axis, laid on a cylinder of radius
-//! `unroll` (so s turns the angle s / unroll) and carried out to radius `radius` along the
+//! Flat curves wrapped round a cylinder, exact by construction: a line, parabola or circle arc
+//! drawn in (s, h), s the length round and h the height along the axis, laid on a cylinder of
+//! radius `unroll` (so s turns the angle s / unroll) and carried out to radius `radius` along the
 //! same rays. Text wrapped round a cylinder has these for its edges and rails, and ruled walls
-//! between two of them.
+//! between two of them; a hole across a sheet metal bend has a wrapped circle (an ellipse in
+//! angle and height, its wall a right conoid; research/sheet-metal/).
 
 use crate::curve::{CurveDeriv, CurveGeom, Domain1, Parabola, ProcCurve, ProceduralCurve};
 use crate::intersect::{Contact, CurveHit, CurveSurface};
@@ -22,6 +23,13 @@ pub enum Flat {
         curve: Parabola,
         range: Interval,
     },
+    /// The circle arc from angle `start` through `sweep` (at most a whole turn).
+    Arc {
+        center: Point2,
+        radius: f64,
+        start: f64,
+        sweep: f64,
+    },
 }
 
 impl Flat {
@@ -38,6 +46,19 @@ impl Flat {
                     Vec2::new(d.d2.x, d.d2.y) * (w * w),
                 )
             }
+            Flat::Arc {
+                center,
+                radius,
+                start,
+                sweep,
+            } => {
+                let (sn, cs) = dmath::sin_cos(start + sweep * t);
+                (
+                    Point2::new(center.x + radius * cs, center.y + radius * sn),
+                    Vec2::new(-sn, cs) * (radius * sweep),
+                    Vec2::new(-cs, -sn) * (radius * sweep * sweep),
+                )
+            }
         }
     }
 
@@ -50,14 +71,28 @@ impl Flat {
                 let b = curve.bbox(Interval::new(range.lo + w * t.lo, range.lo + w * t.hi));
                 (b.x, b.y)
             }
+            Flat::Arc {
+                center,
+                radius,
+                start,
+                sweep,
+            } => {
+                let a = t * sweep + start;
+                (a.cos() * radius + center.x, a.sin() * radius + center.y)
+            }
         }
     }
 
-    /// Coordinate `c` (0: s, 1: h) as a polynomial in t, lowest power first.
-    pub fn poly(&self, c: usize) -> [f64; 3] {
+    /// Coordinates s and h as polynomials in t, lowest power first; None for an arc.
+    pub fn poly(&self) -> Option<[[f64; 3]; 2]> {
+        Some([self.coord(0)?, self.coord(1)?])
+    }
+
+    /// Coordinate `c` (0: s, 1: h) as a polynomial in t.
+    fn coord(&self, c: usize) -> Option<[f64; 3]> {
         let pick = |v: Point2| if c == 0 { v.x } else { v.y };
         match *self {
-            Flat::Line { a, b } => [pick(a), pick(b) - pick(a), 0.0],
+            Flat::Line { a, b } => Some([pick(a), pick(b) - pick(a), 0.0]),
             Flat::Parabola { curve, range } => {
                 // o + x k u^2 + y u, u = lo + w t
                 let f = &curve.frame;
@@ -68,9 +103,53 @@ impl Flat {
                     at(f.y().get()),
                 );
                 let (lo, w) = (range.lo, range.width());
-                [o + y * lo + x * lo * lo, (y + 2.0 * x * lo) * w, x * w * w]
+                Some([o + y * lo + x * lo * lo, (y + 2.0 * x * lo) * w, x * w * w])
             }
+            Flat::Arc { .. } => None,
         }
+    }
+
+    /// The fractions over `range` where coordinate `c` is `v`; on an arc, where the cos (s) or
+    /// sin (h) of its angle has a value: twice a turn, once where it touches.
+    pub(crate) fn level(&self, c: usize, v: f64, range: Interval) -> Vec<forge_math::poly::Root> {
+        let Flat::Arc {
+            center,
+            radius,
+            start,
+            sweep,
+        } = *self
+        else {
+            let Some(mut p) = self.coord(c) else {
+                return vec![];
+            };
+            p[0] -= v;
+            return roots(&p, range);
+        };
+        let q = (v - if c == 0 { center.x } else { center.y }) / radius;
+        let touching = (q.abs() - 1.0).abs() <= 4.0 * f64::EPSILON;
+        if q.abs() > 1.0 && !touching {
+            return vec![];
+        }
+        // s: a = -+acos q; h: a = pi/2 -+ acos q
+        let a = dmath::acos_clamped(q);
+        let (b0, b1) = if c == 0 {
+            (-a, a)
+        } else {
+            (dmath::FRAC_PI_2 - a, dmath::FRAC_PI_2 + a)
+        };
+        let turn = dmath::TAU / sweep.abs();
+        let mut out = Vec::new();
+        for b in if touching { vec![b0] } else { vec![b0, b1] } {
+            let t0 = (b - start) / sweep;
+            let k0 = ((range.lo - t0) / turn).ceil() as i64;
+            let k1 = ((range.hi - t0) / turn).floor() as i64;
+            out.extend((k0..=k1).map(|k| forge_math::poly::Root {
+                x: t0 + turn * k as f64,
+                touching,
+            }));
+        }
+        out.sort_by(|a, b| a.x.total_cmp(&b.x));
+        out
     }
 
     /// The curve's implicit value along the curve whose coordinates are the polynomials `g`
@@ -106,6 +185,18 @@ impl Flat {
                     }
                 }
             }
+            Flat::Arc { center, radius, .. } => {
+                // (s - cx)^2 + (h - cy)^2 - r^2
+                let (mut x, mut y) = (g[0], g[1]);
+                x[0] -= center.x;
+                y[0] -= center.y;
+                for i in 0..3 {
+                    for j in 0..3 {
+                        out[i + j] += x[i] * x[j] + y[i] * y[j];
+                    }
+                }
+                out[0] -= radius * radius;
+            }
         }
         out
     }
@@ -120,10 +211,36 @@ impl Flat {
                 let u = (q.x - f.origin.x) * y.x + (q.y - f.origin.y) * y.y;
                 (u - range.lo) / range.width()
             }
+            // the turn nearest the arc's middle
+            Flat::Arc {
+                center, start, sweep, ..
+            } => {
+                let mid = start + 0.5 * sweep;
+                let a = dmath::atan2(q.y - center.y, q.x - center.x);
+                (a + dmath::TAU * ((mid - a) / dmath::TAU).round() - start) / sweep
+            }
         }
     }
 
-    /// Bounds on |d/dt| and |d2/dt2| over fractions t (the speed is linear in t).
+    /// The fraction of a point on the curve if it lies within `range`: on an arc, at any turn.
+    pub(crate) fn param_in(&self, q: Point2, range: Interval) -> Option<f64> {
+        let t = self.param(q);
+        let turn = match *self {
+            Flat::Arc { sweep, .. } => dmath::TAU / sweep.abs(),
+            _ => return range.contains(t).then_some(t),
+        };
+        [t, t - turn, t + turn].into_iter().find(|&t| range.contains(t))
+    }
+
+    /// How far past each end the curve can be carried and stay one turn at most.
+    pub fn reach(&self) -> f64 {
+        match *self {
+            Flat::Line { .. } | Flat::Parabola { .. } => 0.25,
+            Flat::Arc { sweep, .. } => (0.5 * (dmath::TAU / sweep.abs() - 1.0)).clamp(0.0, 0.25),
+        }
+    }
+
+    /// Bounds on |d/dt| and |d2/dt2| over fractions t (the speed is linear in t, or constant).
     fn bounds(&self, t: Interval) -> (f64, f64) {
         let (_, v0, a) = self.at(t.lo);
         let (_, v1, _) = self.at(t.hi);
@@ -194,13 +311,6 @@ impl Wrap {
             && (a.z().get() - f.z().get()).length() <= tol::ANGULAR
     }
 
-    /// The fractions over `range` where coordinate `c` of the flat curve is `v`.
-    fn level(&self, c: usize, v: f64, range: Interval) -> Vec<forge_math::poly::Root> {
-        let mut p = self.flat.poly(c);
-        p[0] -= v;
-        roots(&p, range)
-    }
-
     fn bounds(&self, t: Interval) -> (f64, f64) {
         let (v, a) = self.flat.bounds(t);
         let k = self.radius / self.unroll;
@@ -260,7 +370,7 @@ pub fn wrap_surface(w: &Wrap, range: Interval, s: &Surface) -> Option<CurveSurfa
             let c0 = p.frame.z().dot(w.axis.origin - p.frame.origin);
             if (n.0 * n.0 + n.1 * n.1).sqrt() <= tol::ANGULAR {
                 // square to the axis: at height -c0 / nz
-                let ts = w.level(1, -c0 / n.2, range);
+                let ts = w.flat.level(1, -c0 / n.2, range);
                 return Some(hits(w, ts.into_iter().map(|r| (r.x, r.touching))));
             }
             if n.2.abs() > tol::ANGULAR {
@@ -287,7 +397,7 @@ pub fn wrap_surface(w: &Wrap, range: Interval, s: &Surface) -> Option<CurveSurfa
                 let k0 = ((sr.lo - s0) / turn).floor() as i64;
                 let k1 = ((sr.hi - s0) / turn).ceil() as i64;
                 for k in k0..=k1 {
-                    for r in w.level(0, s0 + turn * k as f64, range) {
+                    for r in w.flat.level(0, s0 + turn * k as f64, range) {
                         ts.push((r.x, touching || r.touching));
                     }
                 }
@@ -307,10 +417,12 @@ impl ProceduralCurve for Wrap {
         CurveDeriv { p, d1, d2 }
     }
     fn domain(&self) -> Domain1 {
-        // carried on a quarter past each end, so curves cut from walls cross their ends
+        // carried on past each end (a quarter, or less on an arc of most of a turn), so curves
+        // cut from walls cross their ends
+        let e = self.flat.reach();
         Domain1 {
-            lo: -0.25,
-            hi: 1.25,
+            lo: -e,
+            hi: 1.0 + e,
             period: None,
         }
     }

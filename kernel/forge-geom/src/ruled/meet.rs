@@ -7,9 +7,9 @@ use super::{Rail, Ruled};
 use crate::curve::{CurveGeom, Line, Parabola};
 use crate::intersect::{Contact, CurveHit, CurveSurface, SurfaceSurface};
 use crate::surface::Surface;
-use crate::wrap::{Wrap, roots};
+use crate::wrap::{Flat, Wrap, roots};
 use forge_math::tol;
-use forge_math::{Interval, poly};
+use forge_math::{Interval, Vec2, poly};
 
 /// The closed form for such a wall and a plane or cylinder, in either order, or two wrapped
 /// walls about one axis; None otherwise.
@@ -41,41 +41,106 @@ fn vanishes(p: &[f64], size: f64) -> bool {
     p.iter().fold(0.0f64, |m, c| m.max(c.abs())) <= 1e-12 * (size + 1.0)
 }
 
+/// Where flat curve `c` over `range` crosses flat curve `d` over `on`: c's fractions, and whether
+/// the curves touch there; None where the two are one curve (against `size`). A polynomial curve's
+/// coordinates go into the other's implicit, a quartic at most, and an arc's fraction comes from
+/// the point; two circles meet on their radical line (research/sheet-metal/arc/).
+fn crossings(c: &Flat, range: Interval, d: &Flat, on: Interval, size: f64) -> Option<Vec<(f64, bool)>> {
+    if let Some(g) = c.poly() {
+        let p = d.meet_poly(g);
+        if vanishes(&p, size) {
+            return None;
+        }
+        let found = roots(&p, range).into_iter();
+        return Some(
+            found
+                .filter(|r| d.param_in(c.at(r.x).0, on).is_some())
+                .map(|r| (r.x, r.touching))
+                .collect(),
+        );
+    }
+    let mut out = Vec::new();
+    if let Some(g) = d.poly() {
+        let p = c.meet_poly(g);
+        if vanishes(&p, size) {
+            return None;
+        }
+        for r in roots(&p, on) {
+            out.extend(c.param_in(d.at(r.x).0, range).map(|t| (t, r.touching)));
+        }
+    } else if let (
+        Flat::Arc {
+            center: ca,
+            radius: ra,
+            ..
+        },
+        Flat::Arc {
+            center: cb,
+            radius: rb,
+            ..
+        },
+    ) = (*c, *d)
+    {
+        let e = cb - ca;
+        let dist = e.length();
+        if dist <= 1e-12 * (size + 1.0) {
+            return ((ra - rb).abs() > 1e-12 * (size + 1.0)).then_some(out);
+        }
+        // along the centres by x, across by -+y
+        let (e, n) = (e / dist, Vec2::new(-e.y, e.x) / dist);
+        let x = (dist * dist + ra * ra - rb * rb) / (2.0 * dist);
+        let y2 = ra * ra - x * x;
+        let touching = y2.abs() <= 1e-12 * ra * ra;
+        let ys = match (touching, y2 > 0.0) {
+            (true, _) => vec![0.0],
+            (false, true) => vec![-y2.sqrt(), y2.sqrt()],
+            (false, false) => vec![],
+        };
+        for y in ys {
+            let q = ca + e * x + n * y;
+            if d.param_in(q, on).is_some() {
+                out.extend(c.param_in(q, range).map(|t| (t, touching)));
+            }
+        }
+    }
+    out.sort_by(|a, b| a.0.total_cmp(&b.0));
+    Some(out)
+}
+
+fn contact(touching: bool) -> Contact {
+    if touching {
+        Contact::Touching
+    } else {
+        Contact::Crossing
+    }
+}
+
 /// Where a wrapped curve meets a wrapped wall about the same axis: where their flat curves
-/// cross (a quartic at most), if the curve's radius is among the wall's.
+/// cross, if the curve's radius is among the wall's.
 pub fn wrap_wall(w: &Wrap, range: Interval, s: &Surface) -> Option<CurveSurface> {
     let r = ruled(s)?;
     let (wa, radii) = radial(r)?;
     if wa.unroll != w.unroll || !wa.coaxial(&w.axis) {
         return None;
     }
-    let p = wa.flat.meet_poly([w.flat.poly(0), w.flat.poly(1)]);
-    if vanishes(&p, w.radius.abs()) {
+    let Some(found) = crossings(&w.flat, range, &wa.flat, r.ext.u, w.radius.abs()) else {
         return Some(if radii.contains(w.radius) {
             CurveSurface::OnSurface
         } else {
             CurveSurface::Hits(vec![])
         });
-    }
+    };
     if !radii.contains(w.radius) {
         return Some(CurveSurface::Hits(vec![]));
     }
-    let mut hits = Vec::new();
-    for root in roots(&p, range) {
-        let (q, _, _) = w.flat.at(root.x);
-        if !r.ext.u.contains(wa.flat.param(q)) {
-            continue;
-        }
-        hits.push(CurveHit {
-            t: root.x,
-            point: w.at(root.x).0,
-            contact: if root.touching {
-                Contact::Touching
-            } else {
-                Contact::Crossing
-            },
-        });
-    }
+    let hits = found
+        .into_iter()
+        .map(|(t, touching)| CurveHit {
+            t,
+            point: w.at(t).0,
+            contact: contact(touching),
+        })
+        .collect();
     Some(CurveSurface::Hits(hits))
 }
 
@@ -97,20 +162,14 @@ pub fn line_wall(l: &Line, range: Interval, s: &Surface) -> Option<CurveSurface>
     let (sr, _) = wa.flat.bbox(r.ext.u);
     let mut hits = Vec::new();
     for k in ((sr.lo - s0) / turn).floor() as i64..=((sr.hi - s0) / turn).ceil() as i64 {
-        let mut p = wa.flat.poly(0);
-        p[0] -= s0 + turn * k as f64;
-        for root in roots(&p, r.ext.u) {
+        for root in wa.flat.level(0, s0 + turn * k as f64, r.ext.u) {
             let h = wa.flat.at(root.x).0.y;
             let t = (h - o.z) / dz;
             if range.contains(t) {
                 hits.push(CurveHit {
                     t,
                     point: l.eval(t),
-                    contact: if root.touching {
-                        Contact::Touching
-                    } else {
-                        Contact::Crossing
-                    },
+                    contact: contact(root.touching),
                 });
             }
         }
@@ -133,31 +192,20 @@ impl Ruled {
         if wa.unroll != wb.unroll || !wa.coaxial(&wb.axis) {
             return None;
         }
-        let p = wa.flat.meet_poly([wb.flat.poly(0), wb.flat.poly(1)]);
-        if vanishes(&p, wa.radius.abs()) {
+        let Some(found) = crossings(&wb.flat, other.ext.u, &wa.flat, self.ext.u, wa.radius.abs()) else {
             return Some(SurfaceSurface::Coincident);
-        }
+        };
         let f = &wa.axis;
         let mut out = Vec::new();
-        for root in roots(&p, other.ext.u) {
-            let (q, _, _) = wb.flat.at(root.x);
-            if !self.ext.u.contains(wa.flat.param(q)) {
-                continue;
-            }
+        for (t, touching) in found {
+            let (q, _, _) = wb.flat.at(t);
             let (sn, cs) = forge_math::dmath::sin_cos(q.x / wa.unroll);
             let out_dir = f.x() * cs + f.y() * sn;
             let line = crate::Curve::Line(Line {
                 origin: f.origin + f.z() * q.y,
                 dir: out_dir.normalize()?,
             });
-            out.push((
-                line,
-                if root.touching {
-                    Contact::Touching
-                } else {
-                    Contact::Crossing
-                },
-            ));
+            out.push((line, contact(touching)));
         }
         Some(if out.is_empty() {
             SurfaceSurface::Empty

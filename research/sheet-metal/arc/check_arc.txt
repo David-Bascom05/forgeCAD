@@ -1,0 +1,19 @@
+ok  circle in (s, h): ellipse in (phi, h), semi-axes a/U and a
+ok  wall: radial rulings square to the axis; |S_u x S_rho|^2 = rho^2 phi'^2 + h'^2
+ok  circle against a parabola: the code's quartic; against a line: quadratic
+ok  two circles meet at x = (d^2 + ra^2 - rb^2) / 2d, y = +-sqrt(ra^2 - x^2)
+arc C1 x line: (t on line, t on arc)
+    (0.2261951594590688, 0.024691952896568947),
+    (0.747942771575414, 0.5866732002668267),
+arc C1 x parabola: (t on parabola, t on arc)
+    (0.2191702871190343, 0.4470007611115635),
+    (0.8187826533793707, 0.8243074455759417),
+arc C1 x arc C2: (t on C1, t on C2)
+    (0.4365492248538991, 0.22226591043020733),
+    (0.683040998569625, 0.8973243129933167),
+arc C1 levels h = 1, s = -1:
+    [0.5640661290826066, 0.9595326465156924],
+    [0.09685693237060373, 0.9031430676293962],
+plug A=3 at (2, 1), unroll 54/5, radii 10..12:
+    volume 57.5958653158128760384818 = 57.59586531581287
+    area   95.6514024787350813181553 = 95.65140247873508  (wall 38.0555371629222052796735)
