@@ -58,7 +58,7 @@ fn digest(threads: usize) -> u64 {
     for asm in corpus() {
         let sol = solve(&asm, &parts, &Options { threads });
         for (id, f) in &sol.poses {
-            h.u64(id.0 as u64);
+            h.u64(id.0);
             h.p3(f.origin);
             h.v3(f.x().get());
             h.v3(f.z().get());
