@@ -294,6 +294,14 @@ pub enum Ty {
     CornerKind,
     Hardware,
     ReliefRule,
+    Instance,
+    Reference,
+    Joint,
+    JointValue,
+    Check,
+    Anchor,
+    AnchorKind,
+    Pose,
 }
 
 pub fn fmt(x: f64) -> String {

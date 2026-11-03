@@ -167,6 +167,9 @@ pub fn json(run: &Run, src: &str) -> Json {
     if !run.sheets.is_empty() {
         f.push(("sheets", Json::Arr(run.sheets.iter().map(|s| s.json()).collect())));
     }
+    if let Some(a) = &run.asm {
+        f.push(("assembly", crate::asm::json(a)));
+    }
     if let Some(m) = &run.measure {
         f.push((
             "part",
@@ -260,6 +263,35 @@ pub fn text(run: &Run, src: &str) -> String {
             m.edges,
             if m.problems == 0 { "valid" } else { "INVALID" }
         ));
+    }
+    if let Some(a) = &run.asm {
+        let t = &a.timings;
+        out.push_str(&format!(
+            "assembly: {} instances, mobility {}, {} interferences, {} intended contacts; load {:.1} ms, anchors {:.2} ms, solve {:.2} ms{}, overlap {:.1} ms\n",
+            a.poses.len(),
+            a.mobility,
+            a.interferences,
+            a.intended,
+            t.load_ms,
+            t.anchors_ms,
+            t.solve_ms,
+            if t.incremental { " (incremental)" } else { "" },
+            t.overlap_ms
+        ));
+        for j in &a.joints {
+            let vals: Vec<String> = j
+                .values
+                .iter()
+                .map(|(w, v, ang)| format!("{w} {}", fmt(if *ang { v.to_degrees() } else { *v })))
+                .collect();
+            out.push_str(&format!(
+                "joint {:24} {:12} free {} {}\n",
+                j.id,
+                j.kind,
+                j.free,
+                vals.join("  ")
+            ));
+        }
     }
     let t = &run.timings;
     out.push_str(&format!(

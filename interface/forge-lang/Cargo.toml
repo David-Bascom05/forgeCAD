@@ -23,6 +23,7 @@ forge-agent = { path = "../forge-agent" }
 forge-font = { path = "../../kernel/forge-font" }
 forge-step = { path = "../../kernel/forge-step" }
 forge-doc = { path = "../forge-doc" }
+forge-asm = { path = "../../kernel/forge-asm" }
 
 [lints]
 workspace = true

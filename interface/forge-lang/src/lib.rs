@@ -4,6 +4,7 @@
 //! read the part as it stands. Errors, warnings and fixes are typed data (`error`), and edits
 //! are typed operations on the source (`edit`).
 
+pub mod asm;
 pub mod bodies;
 pub mod build;
 pub mod builtins;
@@ -43,6 +44,10 @@ pub struct Options {
     pub volumes: bool,
     /// The part file's directory: where fonts and imported files are found.
     pub dir: Option<std::path::PathBuf>,
+    /// An assembly: keep each placed part for a picture (`asm::compound`).
+    pub render: bool,
+    /// An assembly: measure only this expect (by position), ignoring its `at` (`asm.rs`).
+    pub probe: Option<usize>,
 }
 
 impl Default for Options {
@@ -52,6 +57,8 @@ impl Default for Options {
             rules: Rules::default(),
             volumes: false,
             dir: None,
+            render: false,
+            probe: None,
         }
     }
 }
@@ -104,6 +111,8 @@ pub struct Run {
     pub observed: std::collections::BTreeSet<error::ParamKey>,
     /// The part's sheets as they ended, for the report and the flat pattern.
     pub sheets: Vec<sheet::SheetOut>,
+    /// An assembly's solve, checks and timings (`asm.rs`).
+    pub asm: Option<asm::AsmOut>,
 }
 
 impl Run {
@@ -138,6 +147,7 @@ pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
                     body: None,
                     observed: Default::default(),
                     sheets: vec![],
+                    asm: None,
                 },
                 cache,
             );
@@ -146,6 +156,9 @@ pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
     let mut ev = Eval::new(src, opts.rules, opts.build, cache);
     ev.volumes = opts.volumes;
     ev.dir = opts.dir.clone();
+    if asm::declared(&prog) {
+        ev.asm = Some(asm::Doc::default());
+    }
     let t1 = Instant::now();
     ev.check_static(&prog);
     timings.check_ms = t1.elapsed().as_secs_f64() * 1e3;
@@ -156,6 +169,9 @@ pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
     let t2 = Instant::now();
     ev.run(&prog);
     sheet::finish(&mut ev);
+    let kept = ev.b.cache.asm.take();
+    let (asm_out, kept) = asm::finish(&mut ev, &opts, kept);
+    ev.b.cache.asm = kept;
     timings.eval_ms = t2.elapsed().as_secs_f64() * 1e3;
     timings.kernel_ms = ev.b.kernel_ms;
     let t3 = Instant::now();
@@ -197,6 +213,7 @@ pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
         body,
         observed: std::mem::take(&mut ev.observed),
         sheets: sheet::outputs(&ev),
+        asm: asm_out,
     };
     (run, ev.b.into_cache())
 }

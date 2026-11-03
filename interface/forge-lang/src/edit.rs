@@ -319,7 +319,37 @@ fn param_dim(src: &str, key: &ParamKey) -> Option<Dim> {
         })
 }
 
+/// `Rename` of a reserved word: on the tokens, so it mends a text that no longer parses.
+fn rename(src: &str, from: &str, to: &str) -> R<String> {
+    let toks = syntax::lex(src)?;
+    if !syntax::name_uses(&toks, to).is_empty() || syntax::KEYWORDS.contains(&to) {
+        return Err(Error::NameTaken { name: to.into() });
+    }
+    let uses = syntax::name_uses(&toks, from);
+    if uses.is_empty() {
+        return Err(Error::UnknownName {
+            span: crate::syntax::Span { lo: 0, hi: 0 },
+            name: from.into(),
+        });
+    }
+    let mut out = String::with_capacity(src.len() + uses.len() * to.len());
+    let mut at = 0usize;
+    for sp in uses {
+        out.push_str(&src[at..sp.lo as usize]);
+        out.push_str(to);
+        at = sp.hi as usize;
+    }
+    out.push_str(&src[at..]);
+    Ok(out)
+}
+
 pub fn apply(src: &str, op: &Op) -> R<String> {
+    // a reserved word used as a name: the text does not parse, so the rename is on its tokens
+    if let Op::Rename { from, to } = op
+        && syntax::RESERVED.contains(&from.as_str())
+    {
+        return rename(src, from, to);
+    }
     let prog = syntax::parse(src)?;
     precheck(src, &prog, op)?;
     match op {
@@ -491,6 +521,11 @@ fn lit_expr(l: &Literal) -> Expr {
 
 /// The same op on the syntax tree.
 pub fn apply_ast(src: &str, op: &Op) -> R<Vec<Stmt>> {
+    if let Op::Rename { from, .. } = op
+        && syntax::RESERVED.contains(&from.as_str())
+    {
+        return syntax::parse(&apply(src, op)?);
+    }
     let mut prog = syntax::parse(src)?;
     precheck(src, &prog, op)?;
     let find_param = |prog: &[Stmt], key: &ParamKey| {

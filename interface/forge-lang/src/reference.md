@@ -28,7 +28,8 @@ expect volume = 11966 +- 0.1%
 `#` starts a comment. Numbers: `12`, `0.5`, `1e3`, with a unit `mm` or `deg`. A minus sign
 directly before a digit, where no value precedes it, is part of the number (`-1`, `(-1, 2)`);
 `a -1` and `a - 1` subtract. Strings: `"M6"`. Names: letters, digits, `_`. Keywords: `shared param
-fn for in if else return expect and or not true false sketch path`. A line break ends a statement,
+fn for in if else return expect and or not true false sketch path at` (`at:` is still a keyword
+argument). A line break ends a statement,
 except inside `( )` and `[ ]`; `;` also ends one.
 
 ## Statements
@@ -44,7 +45,7 @@ for VAR in RANGE|MAP|LIST { .. }    for K, VAR in ..: K is the key (index or lab
 if COND { .. } else { .. }          `} else` on the same line
 fn NAME(A, B: Type, C = DEFAULT) { .. return EXPR }
 return EXPR
-expect METRIC [= < <= > >=] VALUE [+- TOL[%]]
+expect METRIC [= < <= > >=] VALUE [+- TOL[%]] [at PARAM = VALUE, ..]
 ```
 
 Expressions: `+ - * / ^`, comparisons `== != < <= > >=`, `and or not`, `a if c else b`, ranges
@@ -644,6 +645,69 @@ allowed; each top-level statement may make at most 100000 calls, nested at most 
 `expect volume|area = V +- T[%]`, `expect faces|edges|bodies = N`, `expect valid`. A failed line is
 `ExpectFailed` with the measured value and the limit. An expect whose limit is the measured value
 to the last digit is the lint `ExpectCopied`.
+
+## Assemblies
+
+A file whose first line is `assembly` is an assembly document. Its statements make instances of
+part files and subassemblies, joints and loose constraints between their references, relations,
+fits and fit rules; it is solved by forge-asm (constraints between frames: trees placed in closed
+form, loops by Newton). Ids follow the rules above: `bolt = part(..)` inside `for k in 0..4` is
+`bolt[0]`..`bolt[3]`. Part features (`extrude`, `sketch`, ..) are refused here (`WrongDocument`).
+
+```
+assembly
+
+shared m = 6
+param crank.turn = 30deg                       # drives are params: motion is a SetParam
+
+base = part("base.fg", ground: true)           # a part file, relative to this file
+arm = part("link.fg", at: pose(at: (0, 50, 0), rz: 30deg))    # the written pose: the solve's start
+post = subassembly("post.fg", at: (100, 0, 0))
+crank = revolute(arm.a, base.o2, turn: turn, limit: (lo, hi))
+slide = slider(block.glide, base.track, along: x)
+nut = cylindrical(n.bore, post.rod.axis)       # through a subassembly: post's instance rod
+seat = mate(cover.face, base.top, offset: 0.5) # loose constraints mix with joints
+pins = gear(crank, idler, ratio: k)            # relations: gear, rack_pinion, screw, linear
+f = fit(bolt, base)                            # this pair's contact is meant
+m6 = fit_rule(external_thread, internal_thread, size: m, min_engagement: 6)
+expect clearance(arm, post) >= 2 at crank.turn = 90deg
+```
+
+- **Instances:** `part(FILE, body:, at:, ground:, reference:, suppressed:)` and
+  `subassembly(FILE, at:, ..)`. `at:` is a pose: `pose(at: (x, y, z), z: DIR, x: DIR, rz: ANGLE)`,
+  a point, or a plane. Written poses are where the solve starts, not design numbers: no
+  literals-in-params lint. A reference instance is checked but not counted in the BOM.
+- **References:** `inst.NAME` is the part's reference by name, evaluated in the part file: an
+  anchor (`a = anchor(plane(..))`), a role name (`shank.axis`, `bar.end`), a sketch point; through
+  subassemblies, `sub.inst.NAME`. `inst` alone is the instance's own frame. A reference that
+  resolves to nothing is `BrokenAnchor`, before any solve.
+- **Joints** (A moving, B the reference; values in B's frame): `fastened`, `revolute` (`turn`),
+  `slider` (`along`), `cylindrical` (`along`, `turn`), `pin_slot` (`along` B's x, `turn`), `planar`
+  (`x`, `y`, `turn`), `ball`. A value given is a drive; `limit: (lo, hi)` (or `turn_limit:` ..)
+  bounds it; `flip: true` turns A's z over. `j.turn` is the value, for relations and expects.
+- **Constraints**, each a known number of freedoms removed: `coincident` (3), `on_plane` (1,
+  `offset:`), `on_line` (2), `mate` / `flush` (3, `offset:`; mate opposes the normals),
+  `concentric` (4), `insert` (5), `parallel` (2), `perpendicular` (1), `angle(a, b, V)` (1),
+  `distance(a, b, V)` (1), `lock` (6). Loose constraints that are exactly a joint's bundle are
+  solved as that joint.
+- **Fits:** `fit(a, b)` declares one pair's contact intended. `fit_rule(A, B, size:,
+  min_engagement:)` covers every pair it matches: by anchor kind (`external_thread`,
+  `internal_thread`, `shaft`, `bore`, or a part's own `kind("dowel")`) and size, the two anchors on
+  one axis, or by part file (`fit_rule("bolt.fg", "plate.fg")`). Threads engaged less than the
+  rule's minimum, or the shop's (one diameter), are `ShallowEngagement`.
+- **In a part file:** `tap = anchor(REF, kind: internal_thread, size: m, depth: t)` declares an
+  anchor with a fit feature (a thread runs `depth` along the anchor's z); `dowel = anchor_kind()`
+  declares a kind of the part's own.
+- **Expect:** `interferences`, `interference(a, b)` (volume), `clearance(a, b)`, `distance(a, b)`
+  (origins), `x|y|z(a)`, `value(j.turn)`, `mobility`; `at P = V, ..` holds params for that line.
+- **Results**, typed: errors `BrokenAnchor`, `WrongReference`, `Conflict` (the minimal set,
+  per constraint with its joint; fix: delete the statement left out), `LimitViolated` (fix:
+  SetParam the drive to the nearer limit), `NotConverged`, `NoGround`, `UnknownKind`,
+  `PartFile`; warnings `Redundant`, `Interference` (fix: add a `fit`), `ShallowEngagement`;
+  information `IntendedContact`. `fg run --json` gives `assembly`: poses, joint values and free
+  motions, mobility, fit rules and the pairs they covered, BOM, part hashes, timings.
+  `fg run --render` draws the posed assembly; `fg serve` keeps the solve, so a drive edit
+  re-solves only its partition and re-tests only what moved.
 
 ## Rules
 

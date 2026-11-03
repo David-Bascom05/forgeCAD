@@ -327,6 +327,11 @@ pub enum SyntaxError {
     PositionalAfterKeyword {
         span: Span,
     },
+    /// A word that became a keyword (`at`) used as a name: fix `Rename`.
+    ReservedWord {
+        span: Span,
+        word: &'static str,
+    },
 }
 
 /// The static rules. Each can be switched off (`Rules`), so loosening one is a small change.
@@ -732,6 +737,8 @@ pub enum Error {
     /// An error of a wired feature (holes, threads, patterns, work features, bodies, text,
     /// imports, projections): feat_error.rs.
     Feat(crate::feat_error::FeatError),
+    /// An assembly's typed error (`asm.rs`).
+    Asm(Box<crate::asm::AsmNote>),
 }
 
 impl Error {
@@ -747,7 +754,8 @@ impl Error {
                 | SyntaxError::ParamWithoutOwner { span, .. }
                 | SyntaxError::AssignToNonName { span }
                 | SyntaxError::KeywordNotName { span }
-                | SyntaxError::PositionalAfterKeyword { span } => *span,
+                | SyntaxError::PositionalAfterKeyword { span }
+                | SyntaxError::ReservedWord { span, .. } => *span,
             }),
             LooseLiteral { span, .. }
             | WorldAfterFirst { span, .. }
@@ -800,6 +808,7 @@ impl Error {
             | MouthRounded { span, .. }
             | OneFace { span, .. } => Some(*span),
             Feat(e) => Some(e.span()),
+            Asm(n) => Some(n.span),
             UnknownParam { .. }
             | UnknownFeature { .. }
             | NotAStatement { .. }
@@ -814,6 +823,7 @@ impl Error {
     pub fn kind(&self) -> &'static str {
         use Error::*;
         match self {
+            Syntax(SyntaxError::ReservedWord { .. }) => "ReservedWord",
             Syntax(_) => "Syntax",
             LooseLiteral { .. } => "LooseLiteral",
             WorldAfterFirst { .. } => "WorldAfterFirst",
@@ -873,6 +883,7 @@ impl Error {
             OneFace { .. } => "OneFace",
             MouthRounded { .. } => "MouthRounded",
             Feat(e) => e.kind(),
+            Asm(n) => n.kind(),
         }
     }
 
@@ -880,6 +891,10 @@ impl Error {
     pub fn fixes(&self) -> Vec<Op> {
         use Error::*;
         match self {
+            Syntax(SyntaxError::ReservedWord { word, .. }) => vec![Op::Rename {
+                from: (*word).into(),
+                to: format!("{word}_1"),
+            }],
             LooseLiteral {
                 span, owner, value, ..
             } => {
@@ -918,6 +933,7 @@ impl Error {
             }],
             Sheet(e) => e.fixes(),
             Feat(e) => e.fixes(),
+            Asm(n) => n.fixes(),
             _ => vec![],
         }
     }
@@ -939,6 +955,9 @@ impl Error {
                 SyntaxError::KeywordNotName { .. } => "a keyword argument is a name".into(),
                 SyntaxError::PositionalAfterKeyword { .. } => {
                     "a positional argument after a keyword one".into()
+                }
+                SyntaxError::ReservedWord { word, .. } => {
+                    format!("`{word}` is a keyword now and cannot be a name: rename it")
                 }
             },
             LooseLiteral { value, rule, .. } => format!(
@@ -1075,6 +1094,7 @@ impl Error {
                 "{id}'s mouth was rounded by a later fillet: its rim is smooth (leave the mouth's edge out of that fillet's selection)"
             ),
             Feat(e) => e.text(),
+            Asm(n) => n.text(),
         }
     }
 
@@ -1188,6 +1208,7 @@ impl Error {
             OneFace { what, count, .. } => vec![("what", s(what)), ("count", (*count as f64).into())],
             MouthRounded { id, .. } => vec![("id", s(id))],
             Feat(e) => e.data(),
+            Asm(n) => n.data(),
             _ => vec![],
         }
     }
@@ -1206,6 +1227,8 @@ pub enum Warning {
     NoEffect { span: Span, id: String },
     /// A sheet's kernel warning or shop violation, with fixes (`sheet.rs`).
     Sheet(Box<crate::sheet::SheetNote>),
+    /// An assembly's warning (redundancy, interference) or information (intended contact).
+    Asm(Box<crate::asm::AsmNote>),
 }
 
 impl Warning {
@@ -1220,8 +1243,11 @@ impl Warning {
         if let Warning::Sheet(n) = self {
             return n.json(src);
         }
+        if let Warning::Asm(n) = self {
+            return n.json(src);
+        }
         let (kind, span, mut data): (&str, Span, Vec<(&str, Json)>) = match self {
-            Warning::Lint(_) | Warning::Sheet(_) => unreachable!("above"),
+            Warning::Lint(_) | Warning::Sheet(_) | Warning::Asm(_) => unreachable!("above"),
             Warning::UnderConstrained { span, sketch, dof } => (
                 "UnderConstrained",
                 *span,
