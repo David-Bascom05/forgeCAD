@@ -292,6 +292,7 @@ pub enum Ty {
     Shop,
     Relief,
     CornerKind,
+    Hardware,
 }
 
 pub fn fmt(x: f64) -> String {

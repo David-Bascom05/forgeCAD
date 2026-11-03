@@ -43,6 +43,8 @@ pub const BUILTINS: &[&str] = &[
     "open_corner",
     "overlap_corner",
     "corner_relief",
+    "hardware",
+    "pem",
 ];
 
 /// Sheet constants: the relief kinds and corner treatments that take no size.
@@ -87,6 +89,8 @@ pub enum SheetVal {
     /// A bend relief: `rect(w, d)`, `obround(w, d)`, `tear`, `no_relief` (sizes left out: the
     /// sheet's default).
     Relief(Rc<ReliefV>),
+    /// A hardware catalogue row.
+    Hardware(Rc<fs::Hardware>),
     /// A corner treatment: `circular_relief(r)`, `square_relief(h)`, `open_corner(gap)`,
     /// `closed_corner`, `overlap_corner(gap)`.
     Corner(Rc<CornerV>),
@@ -182,6 +186,7 @@ impl SheetVal {
             SheetVal::Shop(_) => Ty::Shop,
             SheetVal::Relief(_) => Ty::Relief,
             SheetVal::Corner(_) => Ty::CornerKind,
+            SheetVal::Hardware(_) => Ty::Hardware,
         }
     }
 
@@ -285,6 +290,8 @@ pub struct SheetState {
     pub walls: Vec<(WallId, String, Span)>,
     pub joints: Vec<(JointId, String, Span)>,
     pub cuts: Vec<(CutId, String, Span)>,
+    /// Where each cut was sketched: for fixes that move or resize it.
+    pub cut_srcs: Vec<CutSrc>,
     /// Corner treatments by the features that asked.
     pub corners: Vec<(JointId, JointId, String, Span)>,
     fix: FixCtx,
@@ -321,6 +328,17 @@ impl SheetState {
             cuts: self.cuts.iter().map(|x| (x.0, x.1.clone())).collect(),
         }
     }
+}
+
+/// A cut's sketch, and the frames that carried it onto its wall; for hardware, the entity it is
+/// centred on.
+#[derive(Clone, Debug)]
+pub struct CutSrc {
+    pub cut: CutId,
+    pub sketch: Rc<RefCell<Sk>>,
+    pub from: Frame,
+    pub to: Frame,
+    pub at: Option<forge_sketch::EntityId>,
 }
 
 /// What fixes are made from: the numbers as written, with where they came from.
@@ -457,6 +475,13 @@ pub enum SheetErr {
     OtherSheet { span: Span, op: String, unfold: String },
     /// A member only some sheet features have (`bend` of a base wall, ..).
     NoSuchRole { span: Span, op: String, role: String },
+    /// No catalogue row of this kind and size.
+    NoSuchHardware {
+        span: Span,
+        kind: String,
+        size: String,
+        sizes: Vec<String>,
+    },
     /// `corner_relief(a, b, ..)` with flanges that do not meet at a corner of one wall.
     NotACorner { span: Span, id: String },
     /// A rule table row of the wrong shape.
@@ -476,7 +501,8 @@ impl SheetErr {
             | OtherSheet { span, .. }
             | NoSuchRole { span, .. }
             | TableRow { span, .. }
-            | NotACorner { span, .. } => Some(*span),
+            | NotACorner { span, .. }
+            | NoSuchHardware { span, .. } => Some(*span),
         }
     }
 
@@ -493,6 +519,7 @@ impl SheetErr {
             NoSuchRole { .. } => "NoSuchRole",
             TableRow { .. } => "TableRow",
             NotACorner { .. } => "NotACorner",
+            NoSuchHardware { .. } => "NoSuchHardware",
         }
     }
 
@@ -533,6 +560,11 @@ impl SheetErr {
             NoSuchRole { op, role, .. } => format!("{op} has no {role}"),
             TableRow { row, want, .. } => format!("table row {row} needs {want} values"),
             NotACorner { id, .. } => format!("{id}: the two flanges do not meet at a corner of one wall"),
+            NoSuchHardware {
+                kind, size, sizes, ..
+            } => {
+                format!("no {kind} {size} in the catalogue; it has {}", sizes.join(", "))
+            }
         }
     }
 
@@ -556,6 +588,13 @@ impl SheetErr {
                 vec![("row", (*row as f64).into()), ("want", (*want as f64).into())]
             }
             NotACorner { id, .. } => vec![("id", s(id))],
+            NoSuchHardware {
+                kind, size, sizes, ..
+            } => vec![
+                ("hardware_kind", s(kind)),
+                ("size", s(size)),
+                ("sizes", Json::Arr(sizes.iter().map(|x| s(x)).collect())),
+            ],
         }
     }
 }
@@ -1626,7 +1665,22 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
             Ok(sv(SheetVal::Shop(Rc::new(ShopV {
                 shop: fs::ShopProfile {
                     stock: stocks.iter().map(|s| s.stock.clone()).collect(),
-                    hardware: vec![],
+                    hardware: match a.opt("hardware") {
+                        None => fs::placeholder_catalogue(),
+                        Some(Value::List(rows)) => rows
+                            .iter()
+                            .map(|r| match r {
+                                Value::Sheet(v) if matches!(**v, SheetVal::Hardware(_)) => {
+                                    let SheetVal::Hardware(h) = &**v else {
+                                        unreachable!("matched")
+                                    };
+                                    Ok((**h).clone())
+                                }
+                                o => Err(wrong(a.span("hardware"), "a hardware(..) row", Ty::Hardware, o)),
+                            })
+                            .collect::<R<_>>()?,
+                        Some(o) => return Err(wrong(a.span("hardware"), "hardware", Ty::List, &o)),
+                    },
                     kerf: kerf.map_or(0.2, |k| k.v),
                 },
                 stocks,
@@ -1672,6 +1726,62 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
             Ok(sv(SheetVal::Corner(Rc::new(CornerV { kind }))))
         }
         "corner_relief" => corner(ev, args, span),
+        "hardware" => {
+            let a = Args::bind(
+                ev,
+                name,
+                &[
+                    "kind",
+                    "size",
+                    "sheet",
+                    "hole",
+                    "edge",
+                    "max_hardness",
+                    "code",
+                    "source",
+                ],
+                args,
+                span,
+            )?;
+            let kind = word(&a, "kind", &["nut", "stud", "standoff"])?.ok_or(Error::MissingArg {
+                span,
+                func: "hardware",
+                arg: "kind",
+            })?;
+            let text = |k: &'static str| -> R<Option<String>> {
+                match a.opt(k) {
+                    None => Ok(None),
+                    Some(Value::Str(x)) => Ok(Some(x.to_string())),
+                    Some(o) => Err(wrong(a.span(k), k, Ty::Str, &o)),
+                }
+            };
+            let size = text("size")?.ok_or(Error::MissingArg {
+                span,
+                func: "hardware",
+                arg: "size",
+            })?;
+            let range = a.req("sheet")?;
+            let Value::Tuple(mm) = &range else {
+                return Err(wrong(a.span("sheet"), "sheet (min, max)", Ty::Vec2, &range));
+            };
+            let [lo, hi] = &mm[..] else {
+                return Err(wrong(a.span("sheet"), "sheet (min, max)", Ty::Vec2, &range));
+            };
+            let lo = num_of(lo.clone(), LEN, a.span("sheet"), "the thinnest sheet")?;
+            let hi = num_of(hi.clone(), LEN, a.span("sheet"), "the thickest sheet")?;
+            Ok(sv(SheetVal::Hardware(Rc::new(fs::Hardware {
+                kind: fs::HardwareKind::from_name(kind).expect("a checked word"),
+                size,
+                code: text("code")?.unwrap_or_default(),
+                sheet_min: lo.v,
+                sheet_max: hi.v,
+                hole: a.req_num("hole", LEN)?.v,
+                edge: a.req_num("edge", LEN)?.v,
+                max_hardness: a.req_num("max_hardness", RATIO)?.v,
+                source: text("source")?.map_or(fs::Source::Placeholder, fs::Source::Cited),
+            }))))
+        }
+        "pem" => pem(ev, args, span),
         _ => unreachable!("only sheet built-ins"),
     }
 }
@@ -1747,6 +1857,7 @@ fn stock(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
             "hole_to_edge",
             "min_slot",
             "min_hole",
+            "hardness",
             "relief",
             "relief_width",
             "relief_depth",
@@ -1791,7 +1902,7 @@ fn stock(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
             "tear" => fs::ReliefKind::Tear,
             _ => fs::ReliefKind::Rect,
         },
-        hardness: None,
+        hardness: a.num("hardness", RATIO)?.map(|n| n.v),
     };
     Ok(sv(SheetVal::Stock(Rc::new(StockV {
         stock,
@@ -1999,6 +2110,7 @@ fn base(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         joints: vec![],
         cuts: vec![],
         corners: vec![],
+        cut_srcs: vec![],
         fix,
         folded: None,
         unfolds: vec![],
@@ -2059,6 +2171,113 @@ fn corner(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         return Err(sheet_err(SheetErr::NotACorner { span, id }));
     }
     Ok(op_value(si, &id, OpKind::Corner { a: ja, b: jb }))
+}
+
+/// `pem(kind, size, at: POINT | CIRCLE, wall: W)`: a catalogue part pressed into wall W at a
+/// point sketched on its top or bottom (a circle: its centre). The shop's catalogue, else the
+/// placeholder one.
+fn pem(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
+    let id = ev.take_id("pem", span)?;
+    let a = Args::bind(ev, "pem", &["kind", "size", "at", "wall"], args, span)?;
+    if a.poisoned() {
+        return Ok(Value::Unresolved);
+    }
+    let kind = word(&a, "kind", &["nut", "stud", "standoff"])?.ok_or(Error::MissingArg {
+        span,
+        func: "pem",
+        arg: "kind",
+    })?;
+    let size = match a.req("size")? {
+        Value::Str(x) => x.to_string(),
+        o => return Err(wrong(a.span("size"), "size", Ty::Str, &o)),
+    };
+    let wv = a.req("wall")?;
+    let op = op_of(&wv, a.span("wall"), "the wall the part goes in")?;
+    let wall = match op.kind {
+        OpKind::Base { wall } | OpKind::Flange { wall, .. } if op.on == On::Folded => wall,
+        _ => {
+            return Err(wrong(
+                a.span("wall"),
+                "a base or flange of the folded sheet",
+                Ty::Sheet,
+                &wv,
+            ));
+        }
+    };
+    let si = op.sheet;
+    not_unfolded(ev, si, &id, span)?;
+    let Value::Ent(e) = a.req("at")? else {
+        return Err(wrong(
+            a.span("at"),
+            "at: a sketch point or circle",
+            Ty::Entity,
+            &a.req("at")?,
+        ));
+    };
+    let st = &ev.sheets.list[si];
+    let catalogue = st
+        .shop
+        .as_ref()
+        .map_or_else(fs::placeholder_catalogue, |s| s.shop.hardware.clone());
+    let want = fs::HardwareKind::from_name(kind).expect("a checked word");
+    let Some(part) = catalogue
+        .iter()
+        .find(|h| h.kind == want && h.size == size)
+        .cloned()
+    else {
+        return Err(sheet_err(SheetErr::NoSuchHardware {
+            span,
+            kind: kind.into(),
+            size,
+            sizes: catalogue
+                .iter()
+                .filter(|h| h.kind == want)
+                .map(|h| h.size.clone())
+                .collect(),
+        }));
+    };
+    let Some(frame) = wall_frame(st, wall, None) else {
+        push_sheet_step(ev, si, &id, "pem", span, vec![])?;
+        return Ok(op_value(si, &id, OpKind::Cut { cut: CutId(u32::MAX) }));
+    };
+    let (from, centre) = {
+        let sk = e.sk.borrow();
+        let c = match sk.s.entity(e.id) {
+            Some(forge_sketch::Entity::Circle { center, .. }) => sk.pos(center),
+            _ => sk.pos(e.id),
+        };
+        (sk.frame, c)
+    };
+    let world = from.point_to_world(Point3::new(centre.x, centre.y, 0.0));
+    let local = frame.point_to_local(world);
+    let t = st.sheet.gauge.thickness;
+    if local.z.abs().min((local.z + t).abs()) > 1e-7 {
+        return Err(sheet_err(SheetErr::CutOffWall {
+            span,
+            wall: op.id.clone(),
+            distance: local.z.abs().min((local.z + t).abs()),
+        }));
+    }
+    let on_skin = frame.with_origin(frame.point_to_world(Point3::new(0.0, 0.0, local.z)));
+    let st = &mut ev.sheets.list[si];
+    let cut = match st.sheet.mount(wall, Point2::new(local.x, local.y), part) {
+        Ok(c) => c,
+        Err(err) => {
+            let mut snap = st.clone();
+            snap.cuts.push((CutId(snap.cuts.len() as u32), id.clone(), span));
+            return Err(kernel_err(&snap, span, &id, err));
+        }
+    };
+    st.cuts.push((cut, id.clone(), span));
+    st.cut_srcs.push(CutSrc {
+        cut,
+        sketch: e.sk.clone(),
+        from,
+        to: on_skin,
+        at: Some(e.id),
+    });
+    push_sheet_step(ev, si, &id, "pem", span, vec![])?;
+    Ok(op_value(si, &id, OpKind::Cut { cut }))
 }
 
 fn dim(what: &'static str, n: &Num) -> Dimension {
@@ -2340,6 +2559,13 @@ fn cutout(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     }
     for &c in &cut_ids {
         st.cuts.push((c, id.clone(), span));
+        st.cut_srcs.push(CutSrc {
+            cut: c,
+            sketch: sk.clone(),
+            from,
+            to: on_skin,
+            at: None,
+        });
     }
     push_sheet_step(ev, si, &id, "cutout", span, vec![])?;
     let first = cut_ids.first().copied().unwrap_or(CutId(u32::MAX));
@@ -2861,8 +3087,26 @@ pub fn finish(ev: &mut Eval) {
         }
     }
     for st in &ev.sheets.list {
-        let Some(shop) = &st.shop else { continue };
-        for v in fs::check(&st.sheet, &shop.shop) {
+        // the shop's rules where there is a shop; hardware's own rows always
+        let violations = match &st.shop {
+            Some(shop) => fs::check(&st.sheet, &shop.shop),
+            None => fs::checks::mounts(&st.sheet, None),
+        };
+        let cut_owner = |c: CutId| st.cuts.iter().find(|x| x.0 == c).map(|x| (x.1.clone(), x.2));
+        for w in fs::checks::warnings(&st.sheet) {
+            let fs::SheetWarning::UnverifiedHardware { cut, .. } = w else {
+                continue;
+            };
+            let (id, span) = cut_owner(cut).unwrap_or((st.id.clone(), st.walls[0].2));
+            notes.push(Warning::Sheet(Box::new(SheetNote {
+                span,
+                id,
+                note: Note::Warning(w),
+                names: st.names(),
+                fixes: vec![],
+            })));
+        }
+        for v in violations {
             let (id, span) = match v {
                 fs::Violation::FlangeTooShort { wall, .. } => {
                     st.walls.iter().find(|w| w.0 == wall).map(|w| (w.1.clone(), w.2))
@@ -2872,10 +3116,22 @@ pub fn finish(ev: &mut Eval) {
                     .iter()
                     .find(|j| j.0 == joint)
                     .map(|j| (j.1.clone(), j.2)),
-                _ => None,
+                fs::Violation::HoleNearBend { trim, .. }
+                | fs::Violation::HoleNearEdge { trim, .. }
+                | fs::Violation::HoleTooSmall { trim, .. }
+                | fs::Violation::SlotTooNarrow { trim, .. } => match trim {
+                    TrimRef::Cut { cut, .. } => cut_owner(cut),
+                    _ => None,
+                },
+                fs::Violation::HardwareThickness { cut, .. }
+                | fs::Violation::HardwareNearEdge { cut, .. }
+                | fs::Violation::SheetTooHard { cut, .. }
+                | fs::Violation::HardnessUnknown { cut, .. } => cut_owner(cut),
+                fs::Violation::ThicknessNotStocked { .. } => None,
             }
             .unwrap_or((st.id.clone(), st.walls[0].2));
-            let fixes = violation_fixes(&st.fix, &v);
+            let mut fixes = violation_fixes(&st.fix, &v);
+            fixes.extend(cut_fixes(st, &v));
             notes.push(Warning::Sheet(Box::new(SheetNote {
                 span,
                 id,
@@ -2886,6 +3142,102 @@ pub fn finish(ev: &mut Eval) {
         }
     }
     ev.warnings.extend(notes);
+}
+
+/// The numbers that placed and sized a cut's sketch entity: its centre's x and y, its radius.
+fn cut_nums(src: &CutSrc, segment: Option<u64>) -> (Option<Num>, Option<Num>, Option<Num>) {
+    const PIECE: u64 = 0xffff << 48;
+    let sk = src.sketch.borrow();
+    let ent = src.at.or_else(|| {
+        let seg = segment? & !PIECE;
+        sk.ents.iter().find(|e| sk.seg_id(e.0) == seg).map(|e| e.0)
+    });
+    let Some(e) = ent else {
+        return (None, None, None);
+    };
+    let num = |id: forge_sketch::EntityId, k: &str| {
+        sk.nums
+            .iter()
+            .find(|n| n.0 == id && n.1 == k)
+            .map(|n| n.2.clone())
+    };
+    let r = num(e, "r");
+    // the centre: written on the circle, or its own point
+    let centre = match sk.s.entity(e) {
+        Some(forge_sketch::Entity::Circle { center, .. }) if num(e, "x").is_none() => center,
+        _ => e,
+    };
+    (num(centre, "x"), num(centre, "y"), r)
+}
+
+/// Fixes that move or resize a cut or a part: along `away` (the wall's coordinates, carried into
+/// the sketch's) by what is missing, where the way is along a sketch axis; or a radius.
+fn cut_fixes(st: &SheetState, v: &fs::Violation) -> Vec<Op> {
+    let src = |c: CutId| st.cut_srcs.iter().find(|x| x.cut == c);
+    // to a thousandth, the way that clears (a measured distance's last bits aside)
+    let round_up = |x: f64| ((x * 1000.0 - 1e-6).ceil() / 1000.0).max(0.001);
+    let round_down = |x: f64| (x * 1000.0 + 1e-6).floor() / 1000.0;
+    let moved = |s: &CutSrc, segment: Option<u64>, away: forge_math::Vec2, by: f64, resize: bool| {
+        let (x, y, r) = cut_nums(s, segment);
+        let v = s
+            .from
+            .vec_to_local(s.to.vec_to_world(Vec3::new(away.x, away.y, 0.0)));
+        let by = round_up(by);
+        let mut out = vec![];
+        for (axis, n) in [(v.x, x), (v.y, y)] {
+            if (axis.abs() - 1.0).abs() < 1e-9
+                && let Some(n) = n
+                && let Some(op) = set(&n, n.v + axis.signum() * by)
+            {
+                out.push(op);
+            }
+        }
+        if resize
+            && let Some(r) = r
+            && r.v - by > 0.0
+            && let Some(op) = set(&r, round_down(r.v - by))
+        {
+            out.push(op);
+        }
+        out
+    };
+    match *v {
+        fs::Violation::HoleNearBend {
+            trim: TrimRef::Cut { cut, segment },
+            distance,
+            limit,
+            away,
+            ..
+        }
+        | fs::Violation::HoleNearEdge {
+            trim: TrimRef::Cut { cut, segment },
+            distance,
+            limit,
+            away,
+            ..
+        } => src(cut).map_or(vec![], |s| moved(s, Some(segment), away, limit - distance, true)),
+        fs::Violation::HardwareNearEdge {
+            cut,
+            distance,
+            limit,
+            away,
+            ..
+        } => src(cut).map_or(vec![], |s| moved(s, None, away, limit - distance, false)),
+        fs::Violation::HoleTooSmall {
+            trim: TrimRef::Cut { cut, segment },
+            limit,
+            ..
+        } => src(cut)
+            .and_then(|s| cut_nums(s, Some(segment)).2)
+            .and_then(|r| set(&r, round_up(0.5 * limit)))
+            .into_iter()
+            .collect(),
+        fs::Violation::HardwareThickness { min, max, .. } => {
+            let t = st.fix.t.v.clamp(min, max);
+            set(&st.fix.t, t).into_iter().collect()
+        }
+        _ => vec![],
+    }
 }
 
 pub fn outputs(ev: &Eval) -> Vec<SheetOut> {

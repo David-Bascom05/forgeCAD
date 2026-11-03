@@ -567,10 +567,28 @@ stock(t: T, bend: RULE, radii: [R, ..], min_flange: S, hole_to_bend: S, hole_to_
 shop([STOCK, ..], kerf: K)
 ```
 
-A sheet given `shop:` is checked against it at the end of the run: thickness stocked, each
-bend's radius tooled, each wall reaching the die's minimum flange from its bend. Each is a typed
-warning (`ThicknessNotStocked`, `RadiusNotTooled`, `FlangeTooShort`; severity `violation`) with a
-SetParam fix. Holes and slots against bends and edges are not checked yet.
+```
+stock(.., min_hole: S, hardness: ratio(HRB))   the smallest round hole; the sheet's Rockwell B
+hardware(kind: "nut"|"stud"|"standoff", size: "M3", sheet: (MIN, MAX), hole: D, edge: E,
+         max_hardness: ratio(HRB), code: "..", source: "..")   one catalogue row; no source: a
+                                  placeholder (warned as UnverifiedHardware)
+shop([STOCK, ..], kerf: K, hardware: [HW, ..])  hardware left out: the placeholder catalogue
+pem(KIND, SIZE, at: POINT|CIRCLE, wall: W)      a catalogue part pressed into W at a point
+                                  sketched on its top or bottom: its mounting hole is cut
+```
+
+A sheet given `shop:` is checked against it at the end of the run, on the flat in developed
+terms: thickness stocked, each bend's radius tooled, each wall reaching the die's minimum flange;
+each hole (a cut not meeting the edge) its distance to each bend's tangent line (HoleNearBend,
+hole_to_bend with R the bend's radius) and to the edge (HoleNearEdge), round holes their size
+(HoleTooSmall), other cuts the widest circle they hold (SlotTooNarrow). Hardware against its own
+row, shop or not: the sheet's thickness in range (HardwareThickness), the hole's centre to an edge
+or bend (HardwareNearEdge), the sheet no harder than the part takes (SheetTooHard;
+HardnessUnknown when the stock does not say). Each is a typed warning (severity `violation`)
+with fixes: SetParam on the param that placed a hole or part, moving it the way out by what is
+missing when that way is along a sketch axis, or shrinking its radius; a round hole's radius to
+the minimum; the thickness into a part's range. The placeholder catalogue is not a maker's
+table (forge_sheet::hardware); its parts carry UnverifiedHardware.
 
 Rules: features that are not sheet metal are refused in a part with a sheet
 (`OrdinaryOnSheet`, fix DeleteFeature), and a sheet in a part with a solid is `SheetOnSolid`.
