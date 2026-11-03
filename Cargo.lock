@@ -135,6 +135,7 @@ name = "forge-lang"
 version = "0.1.0"
 dependencies = [
  "forge-agent",
+ "forge-asm",
  "forge-doc",
  "forge-font",
  "forge-geom",

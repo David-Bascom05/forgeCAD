@@ -543,6 +543,9 @@ fn math1(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Value
 }
 
 pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Value> {
+    if let Some(r) = crate::asm::call(ev, name, args, span) {
+        return r;
+    }
     if let Some(r) = crate::wired::pre_call(ev, name, args, span) {
         return r;
     }
@@ -1824,6 +1827,7 @@ pub fn member(ev: &mut Eval, v: Value, name: &str, span: Span) -> R<Value> {
             .map(|x| x.1.clone())
             .ok_or_else(|| unknown(&v)),
         Value::Wired(w) => crate::wired::member(ev, w, name, span).unwrap_or_else(|| Err(unknown(&v))),
+        Value::Asm(a) => crate::asm::member(a, name, span),
         Value::Unresolved => Ok(Value::Unresolved),
         _ => Err(unknown(&v)),
     }

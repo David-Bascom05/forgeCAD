@@ -226,6 +226,37 @@ random typed edits each: text and tree agree, ids hold, a checked document still
 edit put a feature after the unfold or gave a size the sheet cannot take; 120 random parts built
 valid, the fold/flat identity, a height edit renaming no face).
 
+## Assemblies (`src/asm.rs`)
+
+A document whose first line is `assembly` makes instances of part files and subassemblies
+(`part`, `subassembly`), joints and loose constraints between their references, relations, fits
+and fit rules, and is solved by forge-asm (kernel/forge-asm). Ids follow the id rules (name, call
+path, range index, labels), hashed to forge-asm's ids; blame follows document order. A reference
+(`bolt[3].shank.axis`) is evaluated in the part file, so anchors, role names and sketch points all
+work; `anchor(ref, kind:, size:, depth:)` in a part file declares a fit feature, `anchor_kind()` a
+kind of its own. Drives are params, so motion is a `SetParam`; `fg serve` keeps the solve and the
+interference check, so a drive edit re-solves only its partition and re-tests only what moved.
+Every forge-asm result is a typed `Error::Asm` or `Warning::Asm` with fixes (a conflict deletes the
+statement left out, a limit sets its drive, an interference adds a `fit`). `expect` gains the
+assembly measures and `at P = V`. `fg run --render` draws the posed assembly.
+
+Tests (`tests/assemblies.rs`): the four-bar against its closed form through SetParam (and
+incrementally), textbook mobility (four-bar 1, slider-crank 1, gear pair 1 and its ratio), a
+bolted plate under one M6 fit rule with a shallow-engagement warning, a conflict and a limit with
+their fixes applied, ids and poses unchanged by an insert and a move, `expect .. at`, and the
+5,000-instance targets through `run` (5,031 instances: 230 plates of 20 bolts under one rule, 50
+four-bars, a sliding table). Measured, best of three, the machine at load 20 on 16 cores:
+
+| | target | through `run` |
+|---|---|---|
+| anchor check | < 10 ms | 5.7 ms |
+| overconstraint re-check after one joint edit | < 10 ms | 3.8 ms |
+| overlap, cold | < 1 s | 140 ms |
+| overlap after a drag | < 50 ms | 7.2 ms |
+
+The whole run of an edit (parse, evaluating 5,000 statements, the solve, the check) is about
+130 ms; a cold run about 290 ms, of which loading the parts is 60 ms.
+
 ## Gaps, and kernel changes it would want
 
 - **Measuring is the warm path's cost** (220 ms of the crank's 224 ms after a late edit). Mass

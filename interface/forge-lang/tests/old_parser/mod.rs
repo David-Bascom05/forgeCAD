@@ -861,5 +861,8 @@ impl<'a> Parser<'a> {
 
 pub fn parse(src: &str) -> R<Vec<Stmt>> {
     let toks = lex(src)?;
+    if let Some(e) = forge_lang::syntax::reserved(src) {
+        return Err(e);
+    }
     Parser { t: &toks, k: 0 }.program()
 }

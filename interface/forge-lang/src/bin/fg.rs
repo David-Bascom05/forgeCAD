@@ -82,10 +82,12 @@ fn run_file(file: &str, args: &[String], build: bool) -> ExitCode {
     let opts = Options {
         build,
         dir: dir_of(file),
+        render: opt(args, "--render").is_some(),
         ..Options::default()
     };
     let (run, _) = forge_lang::run(&src, opts, Cache::default());
-    if let (Some(out), Some(body)) = (opt(args, "--render"), &run.body) {
+    let posed = run.asm.as_ref().and_then(forge_lang::asm::compound);
+    if let (Some(out), Some(body)) = (opt(args, "--render"), run.body.as_ref().or(posed.as_ref())) {
         let view = opt(args, "--view").unwrap_or("iso");
         let px = opt(args, "--px").and_then(|p| p.parse().ok()).unwrap_or(600);
         match forge_lang::render(body, view, px) {

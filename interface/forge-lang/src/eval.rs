@@ -162,6 +162,8 @@ pub enum Value {
     Sheet(Rc<crate::sheet::SheetVal>),
     /// A work feature's datum, a pattern's layout, a body motion (wired.rs).
     Wired(Rc<crate::wired::W>),
+    /// An assembly's instance, reference, joint or check (`asm.rs`).
+    Asm(Rc<crate::asm::AsmVal>),
     /// What `check` cannot know without building (a selection, a face's plane).
     Unresolved,
 }
@@ -191,6 +193,7 @@ impl Value {
             Value::Extent(_) => Ty::Extent,
             Value::Sheet(s) => s.ty(),
             Value::Wired(w) => w.ty(),
+            Value::Asm(a) => a.ty(),
             Value::Unresolved => Ty::Unresolved,
         }
     }
@@ -295,6 +298,8 @@ pub struct Eval<'s> {
     pub sheets: crate::sheet::Sheets,
     /// Where the files features read (fonts, imports) are found: the part file's directory.
     pub dir: Option<std::path::PathBuf>,
+    /// An assembly document's instances, joints and checks (`asm.rs`); None in a part.
+    pub asm: Option<crate::asm::Doc>,
 }
 
 #[derive(Clone)]
@@ -342,7 +347,36 @@ impl<'s> Eval<'s> {
             poisoned: false,
             sheets: Default::default(),
             dir: None,
+            asm: None,
         }
+    }
+
+    /// The top-level names and their values, by name.
+    pub fn globals(&self) -> Vec<(String, Value)> {
+        let mut out: Vec<(String, Value)> = self.scopes[0]
+            .iter()
+            .map(|(k, v)| (k.clone(), v.0.clone()))
+            .collect();
+        out.sort_by(|a, b| a.0.cmp(&b.0));
+        out
+    }
+
+    /// The feature path being made (the call path and loop indices), for a record of its own.
+    pub fn record(&mut self, id: &str, kind: &'static str, span: Span, dims: Vec<Dimension>) {
+        self.feats.push(FeatInfo {
+            id: id.into(),
+            kind,
+            span,
+            idx: usize::MAX,
+            status: Status::NotBuilt,
+            dims,
+            stmt: self.ctx.top_stmt.unwrap_or(span),
+            top_level: self.ctx.prefix.is_empty() && self.ctx.loops.is_empty(),
+            reads: std::mem::take(&mut self.reads),
+            frame: None,
+            mass: None,
+            fingerprint: None,
+        });
     }
 
     // ---- the static pass ---------------------------------------------------------------------
@@ -479,7 +513,14 @@ impl<'s> Eval<'s> {
             ExprKind::Neg(a) | ExprKind::Not(a) => go(self, a, count),
             ExprKind::Call(f, args) => {
                 go(self, f, false);
+                // an assembly's written poses are where the solve starts, not design numbers
+                if crate::asm::written_pose(f) {
+                    return;
+                }
                 for a in args {
+                    if a.name.as_ref().is_some_and(|(n, _)| n == "at") && crate::asm::places(f) {
+                        continue;
+                    }
                     let c = a.name.as_ref().is_some_and(|(n, _)| n == "n" || n == "count");
                     go(self, &a.value, c);
                 }
@@ -1033,6 +1074,9 @@ impl<'s> Eval<'s> {
         if let Some(v) = crate::builtins::constant(name) {
             return Ok(v);
         }
+        if let Some(v) = crate::asm::constant(name) {
+            return Ok(v);
+        }
         if let Some(b) = crate::builtins::builtin(name) {
             return Ok(Value::Builtin(b));
         }
@@ -1250,6 +1294,9 @@ impl<'s> Eval<'s> {
                         want: Dim::Count,
                         found: iv.dim,
                     });
+                }
+                if let Value::Asm(a) = &ov {
+                    return crate::asm::index(a, iv.v.round() as i64, e.span);
                 }
                 if let Value::Map(m) = &ov {
                     let k = iv.v.round() as i64;
@@ -1607,6 +1654,9 @@ impl<'s> Eval<'s> {
         hid: u64,
         push: impl FnOnce(&mut crate::build::Builder) -> R<usize>,
     ) -> R<(usize, u64)> {
+        if self.asm.is_some() {
+            return Err(crate::asm::not_here(kind, span));
+        }
         let was_building = self.b.building;
         let r = push(&mut self.b);
         let idx = self.b.features.len() - 1;

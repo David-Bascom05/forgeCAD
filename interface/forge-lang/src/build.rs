@@ -64,6 +64,8 @@ pub struct Cache {
     stages: Vec<Rc<Stage>>,
     /// The finished part's measures, with the stage they were taken of.
     pub measured: Option<(Rc<Stage>, crate::Measure)>,
+    /// An assembly's loaded parts, solver and checker, kept between runs (`asm.rs`).
+    pub asm: Option<Box<crate::asm::AsmCache>>,
 }
 
 pub struct Builder {
@@ -74,7 +76,7 @@ pub struct Builder {
     /// Whether to send features to the kernel (false in `check`, and after a failure).
     pub building: bool,
     origins: Vec<Lineage>,
-    cache: Cache,
+    pub(crate) cache: Cache,
     /// The cached stages still matching this run's prefix.
     reuse: bool,
     /// Whether a step built here (a sheet) holds bodies the kernel's history cannot step: then
@@ -108,6 +110,7 @@ impl Builder {
             ids: self.ids,
             stages: self.stages,
             measured: self.cache.measured,
+            asm: self.cache.asm,
         }
     }
 

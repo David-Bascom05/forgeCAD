@@ -1671,9 +1671,64 @@ fn bin(a: Expr, op: BinOp, b: Expr) -> Expr {
     }
 }
 
+/// Words that became keywords after Forge texts were written with them as names.
+pub const RESERVED: &[&str] = &["at"];
+
+/// Where `word` is used as a name: every such token but a keyword argument's (`at:`) and an
+/// expect line's `at` clause (outside its brackets).
+pub fn name_uses(toks: &[Tok], word: &str) -> Vec<Span> {
+    let mut out = vec![];
+    // in an expect line, the first `at` outside brackets is the clause's keyword
+    let (mut expect, mut depth) = (false, 0i32);
+    for (k, t) in toks.iter().enumerate() {
+        match &t.kind {
+            TokKind::Nl | TokKind::Op(";") | TokKind::Op("{") | TokKind::Op("}") => {
+                expect = false;
+                depth = 0;
+            }
+            TokKind::Kw("expect") => expect = true,
+            TokKind::Op("(") | TokKind::Op("[") => depth += 1,
+            TokKind::Op(")") | TokKind::Op("]") => depth -= 1,
+            TokKind::Kw(w) if *w == word => {
+                let keyword_arg = matches!(toks.get(k + 1).map(|x| &x.kind), Some(TokKind::Op(":")));
+                if expect && depth == 0 && *w == "at" {
+                    expect = false;
+                } else if !keyword_arg {
+                    out.push(t.span);
+                }
+            }
+            TokKind::Id(w) if w == word => {
+                if !matches!(toks.get(k + 1).map(|x| &x.kind), Some(TokKind::Op(":"))) {
+                    out.push(t.span);
+                }
+            }
+            _ => {}
+        }
+    }
+    out
+}
+
+/// A reserved word used as a name, typed, with its rename fix; None if there is none or the
+/// text does not lex.
+pub fn reserved(src: &str) -> Option<Error> {
+    let toks = lex(src).ok()?;
+    RESERVED.iter().find_map(|w| {
+        name_uses(&toks, w)
+            .first()
+            .map(|&span| Error::Syntax(crate::error::SyntaxError::ReservedWord { span, word: w }))
+    })
+}
+
 pub fn parse(src: &str) -> R<Vec<Stmt>> {
     let mut la = Vec::new();
     let toks = lex_into::<false>(src, &mut Vec::new(), &mut la)?;
+    if RESERVED
+        .iter()
+        .any(|w| toks.iter().any(|t| t.kind == TokKind::Kw(w)))
+        && let Some(e) = reserved(src)
+    {
+        return Err(e);
+    }
     let mut p = Parser {
         stmts: Vec::with_capacity(64),
         vals: Vec::with_capacity(64),
