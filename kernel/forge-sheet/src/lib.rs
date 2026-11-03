@@ -17,7 +17,7 @@ pub use build::{
 };
 pub use checks::check;
 pub use error::{
-    CutId, End, FeatureId, JointId, JointKindName, Pinch, SheetError, SheetWarning, Side, Strip,
+    CutId, End, FeatureId, JointId, JointKindName, Pinch, Seam, SheetError, SheetWarning, Side, Strip,
     TrimCurveKind, TrimRef, Violation, WallId,
 };
 pub use graph::{Corner, CornerKind, Cut, Gauge, Joint, JointKind, Position, Sheet, Wall};

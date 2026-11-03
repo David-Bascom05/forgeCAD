@@ -2329,7 +2329,9 @@ impl<'a> Strips<'a> {
             Ok((whole - rest.area(), at))
         };
         let mut worst: Option<(usize, usize, Point2, f64)> = None;
-        let mut touch: Option<(usize, usize, Point2)> = None;
+        // the pair, where, and the run they lie along each other, if they do
+        type Touch = (usize, usize, Point2, Option<(Point2, Point2)>);
+        let mut touch: Option<Touch> = None;
         let mut undecided: Option<(usize, usize, RegionError)> = None;
         let mut total = 0.0;
         for a in 0..ns {
@@ -2379,7 +2381,7 @@ impl<'a> Strips<'a> {
                                 .flat_map(|l| pieces(l).into_iter().map(|x| x.0))
                                 .collect();
                             if let Some(at) = contact(&pa, &pb, TOL) {
-                                touch = Some((a, b, at));
+                                touch = Some((a, b, at, along(&pa, &pb, TOL)));
                             }
                         }
                     }
@@ -2409,13 +2411,66 @@ impl<'a> Strips<'a> {
             });
         }
         if worst.is_none()
-            && let Some((a, b, at)) = touch
+            && let Some((a, b, at, run)) = touch
         {
+            // where to part them: the touching run on a wall's side, in its own coordinates
+            let seam = run.and_then(|(p, q)| {
+                [a, b].into_iter().find_map(|s| {
+                    let Strip::Wall(wall) = self.strips[s].strip else {
+                        return None;
+                    };
+                    let by = &strip_dev[s];
+                    let (p, q) = (by.local(p), by.local(q));
+                    let d = (q - p) * (1.0 / p.distance(q).max(1e-300));
+                    let n = Vec2::new(-d.y, d.x);
+                    let mid = p + (q - p) * 0.5;
+                    let holds = |x: Point2| {
+                        self.strips[s]
+                            .region
+                            .parts
+                            .iter()
+                            .any(|c| crate::region::holds(c, x))
+                    };
+                    let into = if holds(mid + n * (10.0 * TOL)) {
+                        n
+                    } else if holds(mid - n * (10.0 * TOL)) {
+                        -n
+                    } else {
+                        return None;
+                    };
+                    // the whole outline edge it runs on: a cut along it all parts the bend's end too
+                    let (p, q) = self
+                        .cx
+                        .sheet
+                        .wall(wall)
+                        .into_iter()
+                        .flat_map(|w| w.outline.iter().flat_map(|l| &l.segments))
+                        .find_map(|(g, _)| match *g {
+                            Segment::Line { a: e0, b: e1 } => {
+                                let off = |x: Point2| (x - p).cross(d).abs();
+                                let inside = |x: Point2| {
+                                    let u = (x - e0).dot(e1 - e0) / (e1 - e0).dot(e1 - e0).max(1e-300);
+                                    (-1e-9..=1.0 + 1e-9).contains(&u)
+                                };
+                                (off(e0) <= TOL && off(e1) <= TOL && inside(mid)).then_some((e0, e1))
+                            }
+                            _ => None,
+                        })
+                        .unwrap_or((p, q));
+                    Some(crate::error::Seam {
+                        wall,
+                        from: p,
+                        to: q,
+                        into,
+                    })
+                })
+            });
             return Some(SheetError::FlatTouch {
                 feature: self.cx.feature,
                 a: self.strips[a].strip,
                 b: self.strips[b].strip,
                 at,
+                seam,
             });
         }
         worst.map(|(a, b, at, area)| SheetError::FlatOverlap {
@@ -3043,6 +3098,37 @@ fn seg_arc(q0: Point2, q1: Point2, arc: &Piece) -> f64 {
         best = best.min((foot.distance(c) - r).abs());
     }
     best
+}
+
+/// The longest run along which two sets of lines lie on each other (within `tol`, parallel):
+/// its ends, if any is longer than `tol`.
+fn along(a: &[Piece], b: &[Piece], tol: f64) -> Option<(Point2, Point2)> {
+    let mut best: Option<(f64, Point2, Point2)> = None;
+    for pa in a {
+        let Piece::Line { a: a0, b: a1 } = *pa else {
+            continue;
+        };
+        let len = a0.distance(a1);
+        if len <= tol {
+            continue;
+        }
+        let d = (a1 - a0) * (1.0 / len);
+        for pb in b {
+            let Piece::Line { a: b0, b: b1 } = *pb else {
+                continue;
+            };
+            let off = |p: Point2| (p - a0).cross(d).abs();
+            if off(b0) > tol || off(b1) > tol {
+                continue;
+            }
+            let (s0, s1) = ((b0 - a0).dot(d), (b1 - a0).dot(d));
+            let (lo, hi) = (s0.min(s1).max(0.0), s0.max(s1).min(len));
+            if hi - lo > tol && best.is_none_or(|x| hi - lo > x.0) {
+                best = Some((hi - lo, a0 + d * lo, a0 + d * hi));
+            }
+        }
+    }
+    best.map(|x| (x.1, x.2))
 }
 
 /// A piece carried by a rigid motion.

@@ -1822,7 +1822,12 @@ fn kernel_err(st: &SheetState, span: Span, id: &str, error: SheetError) -> Error
     let extra = match error {
         SheetError::FlatOverlap { a, b, .. } => overlap_fixes(st, a, b),
         SheetError::FoldedClash { a, b, .. } => clash_fixes(st, a, b),
-        SheetError::FlatTouch { a, b, .. } => touch_fixes(st, a, b, Map::Flat),
+        SheetError::FlatTouch { a, b, seam, .. } => {
+            // before the step that is refused
+            let mut out = seam_fixes(st, seam, Some(id.to_string()));
+            out.extend(touch_fixes(st, a, b, Map::Flat));
+            out
+        }
         SheetError::FoldedTouch { a, b, .. } => touch_fixes(st, a, b, Map::Folded),
         _ => vec![],
     };
@@ -1881,6 +1886,87 @@ fn touch_fixes(st: &SheetState, a: Strip, b: Strip, map: Map) -> Vec<Op> {
         out.extend(height_fixes(st, a, b, Map::Flat, &|r| r.is_ok()));
     }
     out
+}
+
+/// A slot along a flat touch's run, cut into the base (a relief along the edge the bend's
+/// strip lies on), as wide as the rule's bend relief and a width past each end: offered when
+/// the kernel builds the flat with it.
+fn seam_fixes(st: &SheetState, seam: Option<fs::Seam>, before: Option<String>) -> Vec<Op> {
+    let Some(seam) = seam else { return vec![] };
+    // the base's coordinates are its sketch's; other walls' are not a sketch's as written
+    if seam.wall != WallId(0) {
+        return vec![];
+    }
+    let g = st
+        .fix
+        .relief
+        .bend
+        .width
+        .at(st.fix.t.v, st.fix.r.v)
+        .max(st.fix.t.v);
+    let len = seam.from.distance(seam.to);
+    if len <= 0.0 {
+        return vec![];
+    }
+    let d = (seam.to - seam.from) * (1.0 / len);
+    let (p, q) = (seam.from - d * g, seam.to + d * g);
+    let corners = [p, q, q + seam.into * g, p + seam.into * g];
+    let lp = ProfileLoop::new(
+        (0..4)
+            .map(|i| {
+                (
+                    Segment::Line {
+                        a: corners[i],
+                        b: corners[(i + 1) % 4],
+                    },
+                    i as u64,
+                )
+            })
+            .collect(),
+    );
+    let mut s = st.sheet.clone();
+    // counter-clockwise for the kernel
+    let area: f64 = (0..4)
+        .map(|i| corners[i].to_vec().cross(corners[(i + 1) % 4].to_vec()))
+        .sum();
+    let lp = if area < 0.0 { lp.reversed() } else { lp };
+    // it parts this touch: the flat builds, or what stops it is elsewhere
+    let parted = s.cut(WallId(0), lp).is_ok()
+        && match fs::build_with(&s, Map::Flat) {
+            Ok(_) => true,
+            Err(SheetError::FlatTouch { seam: Some(o), .. }) => {
+                o.wall != seam.wall || o.from.distance(seam.from) > g
+            }
+            Err(SheetError::FlatTouch { .. }) => true,
+            Err(_) => false,
+        };
+    if !parted {
+        return vec![];
+    }
+    let used = |n: &str| st.cuts.iter().any(|c| c.1 == n) || st.joints.iter().any(|j| j.1 == n) || st.id == n;
+    let name = (1..)
+        .map(|k| {
+            if k == 1 {
+                "seam".to_string()
+            } else {
+                format!("seam{k}")
+            }
+        })
+        .find(|n| !used(n) && !used(&format!("{n}_cut")) && !used(&format!("{n}_loop")))
+        .expect("a free name");
+    let fm = crate::values::fmt;
+    let pts: Vec<String> = corners
+        .iter()
+        .map(|c| format!("({}, {})", fm(c.x), fm(c.y)))
+        .collect();
+    vec![Op::AddFeature {
+        before: before.or_else(|| st.unfolds.first().map(|u| u.id.clone())),
+        text: format!(
+            "sketch {name}(on: {base}.top) {{\n  {name}_loop = poly([{}])\n}}\n{name}_cut = cutout({name}, wall: {base})",
+            pts.join(", "),
+            base = st.id
+        ),
+    }]
 }
 
 /// Shorter flanges that clear a flat overlap: an overlap cleared to a touch is cleared (the
@@ -3756,7 +3842,11 @@ pub fn finish(ev: &mut Eval) {
                 let (id, span) = on.clone().unwrap_or_else(|| owner(a));
                 let fixes = match w {
                     fs::SheetWarning::FlatOverlap { .. } => overlap_fixes(st, a, b),
-                    fs::SheetWarning::FlatTouch { .. } => touch_fixes(st, a, b, Map::Flat),
+                    fs::SheetWarning::FlatTouch { seam, .. } => {
+                        let mut out = seam_fixes(st, *seam, None);
+                        out.extend(touch_fixes(st, a, b, Map::Flat));
+                        out
+                    }
                     fs::SheetWarning::FoldedTouch { .. } => touch_fixes(st, a, b, Map::Folded),
                     _ => vec![],
                 };
