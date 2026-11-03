@@ -226,14 +226,14 @@ sketch rail(on: rotate(sec.plane, about: sec.base, by: 90deg)) {
 }
 tube = sweep(sec.c, along: rail.route, extend: (0, w))
 sketch spr(on: rotate(sec.plane, about: sec.base, by: 90deg)) {
-  c = circle((R, 0), r / 4)
+  c = circle((2 * R, 0), r / 2)
   ax = line((0, 0), (0, h), construction: true)
 }
-spring = coil(spr.c, axis: spr.ax, pitch: p, turns: n, new: true)
+spring = coil(spr.c, axis: spr.ax, pitch: p, turns: n)
 sketch top(on: offset(sec.plane, h)) {
   sq = rect(center: (0, 0), size: (w, w))
 }
-neck = loft([sec.c, top.sq], new: true)     # a circle to a square: matched corner to arc end
+neck = loft([sec.c, top.sq])               # a circle to a square: matched corner to arc end
 ```
 
 ### Faces moved, slabs, ribs, rounds, balls
