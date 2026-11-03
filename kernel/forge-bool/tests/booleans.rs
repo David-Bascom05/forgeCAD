@@ -511,3 +511,143 @@ fn a_refusal_names_its_faces() {
         "{said}"
     );
 }
+
+/// Two bent sheets flush on one flat, their bends tangent to it where they cross: the post's bend
+/// (round z) dips under the flat by a rounding, so the bends overlap in a loop far under
+/// tolerance. That is a touch at a point, not a knot of hair-thin curves (it was a "face split
+/// crossed itself" refusal, or zero thickness, in the rack's rear hinge bracket on its post).
+#[test]
+fn bends_tangent_on_one_flat_touch() {
+    let p = Point2::new;
+    let h = dmath::FRAC_PI_2;
+    for dip in [0.0, -5.7e-14, -1e-13, -1e-12] {
+        let (r, xr, y0) = (4.62, 20.5, 21.0);
+        let cx = xr - r;
+        let post = vec![
+            (
+                Segment::Line {
+                    a: p(-29.5, y0),
+                    b: p(cx, y0 + dip),
+                },
+                1,
+            ),
+            (
+                Segment::Arc {
+                    center: p(cx, y0 + r + dip),
+                    radius: r,
+                    start: -h,
+                    sweep: h,
+                },
+                2,
+            ),
+            (
+                Segment::Line {
+                    a: p(xr, y0 + r + dip),
+                    b: p(xr, 71.0),
+                },
+                3,
+            ),
+            (
+                Segment::Line {
+                    a: p(xr, 71.0),
+                    b: p(-29.5, 71.0),
+                },
+                4,
+            ),
+            (
+                Segment::Line {
+                    a: p(-29.5, 71.0),
+                    b: p(-29.5, y0),
+                },
+                5,
+            ),
+        ];
+        let post = extrude(
+            &Profile {
+                plane: Frame::WORLD.with_origin(Point3::new(0.0, 0.0, -29.08)),
+                loops: vec![ProfileLoop { segments: post }],
+            },
+            906.0,
+            1,
+        )
+        .expect("post");
+        // an L in (y, z), bent round x at (17.52, 1.6): outer radius 3.48, 1.88 thick, its upright
+        // leg flush on the post's flat y = 21
+        let (cy, cz) = (17.52, 1.6);
+        let leg = vec![
+            (
+                Segment::Line {
+                    a: p(-13.0, -1.88),
+                    b: p(cy, -1.88),
+                },
+                1,
+            ),
+            (
+                Segment::Arc {
+                    center: p(cy, cz),
+                    radius: 3.48,
+                    start: -h,
+                    sweep: h,
+                },
+                2,
+            ),
+            (
+                Segment::Line {
+                    a: p(21.0, cz),
+                    b: p(21.0, 44.92),
+                },
+                3,
+            ),
+            (
+                Segment::Line {
+                    a: p(21.0, 44.92),
+                    b: p(19.12, 44.92),
+                },
+                4,
+            ),
+            (
+                Segment::Line {
+                    a: p(19.12, 44.92),
+                    b: p(19.12, cz),
+                },
+                5,
+            ),
+            (
+                Segment::Arc {
+                    center: p(cy, cz),
+                    radius: 1.6,
+                    start: 0.0,
+                    sweep: -h,
+                },
+                6,
+            ),
+            (
+                Segment::Line {
+                    a: p(cy, 0.0),
+                    b: p(-13.0, 0.0),
+                },
+                7,
+            ),
+            (
+                Segment::Line {
+                    a: p(-13.0, 0.0),
+                    b: p(-13.0, -1.88),
+                },
+                8,
+            ),
+        ];
+        let yz = Frame::from_axes(Point3::new(-17.0, 0.0, 0.0), Vec3::Y, Vec3::Z, Vec3::X).expect("frame");
+        let bracket = extrude(
+            &Profile {
+                plane: yz,
+                loops: vec![ProfileLoop { segments: leg }],
+            },
+            34.0,
+            2,
+        )
+        .expect("bracket");
+        let common =
+            boolean(&bracket, &post, Op::Intersect, 3).unwrap_or_else(|e| panic!("dip {dip}: {e:?}"));
+        assert!(volume(&common).abs() < 1e-6, "dip {dip}: {}", volume(&common));
+    }
+}
