@@ -9,13 +9,18 @@ use forge_agent::cmd::Session;
 pub fn source(part: &str) -> Result<String, String> {
     match bench::src(part) {
         Some(s) => Ok(s.to_string()),
-        None if !part.ends_with(".fc") => Err(format!("{part}: no bench part or .fc part file")),
+        None if !part.ends_with(".fc") && !part.ends_with(".fg") => {
+            Err(format!("{part}: no bench part or .fc or .fg part file"))
+        }
         None => std::fs::read_to_string(part).map_err(|e| format!("{part}: {e}")),
     }
 }
 
 /// The part's body, built by the kernel: the one its mesh's entity numbers mean.
 pub fn body(part: &str) -> Result<forge_topo::Body, String> {
+    if part.ends_with(".fg") {
+        return fg_body(part);
+    }
     let bench_model;
     let mut session;
     let model = match bench::src(part) {
@@ -32,6 +37,17 @@ pub fn body(part: &str) -> Result<forge_topo::Body, String> {
         return Err(format!("{part}: line {}: {}", model.lines[e.at].no, e.msg));
     }
     model.body().cloned().ok_or(format!("{part}: nothing built"))
+}
+
+/// A Forge part's finished body, built by forge-lang; its first error if it doesn't build.
+fn fg_body(part: &str) -> Result<forge_topo::Body, String> {
+    let src = source(part)?;
+    let (run, _) = forge_lang::run(&src, forge_lang::Options::default(), Default::default());
+    if let Some(e) = run.errors.first() {
+        let line = e.span().map_or(0, |s| s.lines(&src).0);
+        return Err(format!("{part}: line {line}: {}: {}", e.kind(), e.text()));
+    }
+    run.body.ok_or(format!("{part}: nothing built"))
 }
 
 /// The part as tools act on it: a bench part in memory, a file with its commits going to the file.
