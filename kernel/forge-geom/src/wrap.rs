@@ -3,7 +3,8 @@
 //! radius `unroll` (so s turns the angle s / unroll) and carried out to radius `radius` along the
 //! same rays. Text wrapped round a cylinder has these for its edges and rails, and ruled walls
 //! between two of them; a hole across a sheet metal bend has a wrapped circle (an ellipse in
-//! angle and height, its wall a right conoid; research/sheet-metal/).
+//! angle and height, its wall a right conoid; research/sheet-metal/), and a spline cut across one
+//! its rational Bezier pieces (Copy, so a wrapped curve stays one).
 
 use crate::curve::{CurveDeriv, CurveGeom, Domain1, Parabola, ProcCurve, ProceduralCurve};
 use crate::intersect::{Contact, CurveHit, CurveSurface};
@@ -30,9 +31,35 @@ pub enum Flat {
         start: f64,
         sweep: f64,
     },
+    /// A rational Bezier piece of degree `degree` (at most 3): points and weights.
+    Bezier {
+        degree: u8,
+        pts: [Point2; 4],
+        w: [f64; 4],
+    },
 }
 
 impl Flat {
+    /// A rational Bezier piece from homogeneous points [s w, h w, _, w] (a spline's, as
+    /// `Spline::bezier_pieces` gives them); None past degree 3 or for a weight that is not positive.
+    pub fn bezier(h: &[[f64; 4]]) -> Option<Flat> {
+        let n = h.len().checked_sub(1)?;
+        if !(1..=3).contains(&n) || h.iter().any(|q| q[3].is_nan() || q[3] <= 0.0) {
+            return None;
+        }
+        let mut pts = [Point2::ORIGIN; 4];
+        let mut w = [0.0; 4];
+        for (i, q) in h.iter().enumerate() {
+            pts[i] = Point2::new(q[0] / q[3], q[1] / q[3]);
+            w[i] = q[3];
+        }
+        Some(Flat::Bezier {
+            degree: n as u8,
+            pts,
+            w,
+        })
+    }
+
     /// Point and first two derivatives at fraction t.
     pub fn at(&self, t: f64) -> (Point2, Vec2, Vec2) {
         match *self {
@@ -59,6 +86,7 @@ impl Flat {
                     Vec2::new(-cs, -sn) * (radius * sweep * sweep),
                 )
             }
+            Flat::Bezier { degree, pts, w } => bezier_at(degree as usize, &pts, &w, t),
         }
     }
 
@@ -80,10 +108,21 @@ impl Flat {
                 let a = t * sweep + start;
                 (a.cos() * radius + center.x, a.sin() * radius + center.y)
             }
+            Flat::Bezier { degree, pts, .. } => {
+                let (mut s, mut h) = (
+                    Interval::new(pts[0].x, pts[0].x),
+                    Interval::new(pts[0].y, pts[0].y),
+                );
+                for p in &pts[1..=degree as usize] {
+                    s = s.hull(&Interval::new(p.x, p.x));
+                    h = h.hull(&Interval::new(p.y, p.y));
+                }
+                (s, h)
+            }
         }
     }
 
-    /// Coordinates s and h as polynomials in t, lowest power first; None for an arc.
+    /// Coordinates s and h as polynomials in t, lowest power first; None for an arc or a Bezier.
     pub fn poly(&self) -> Option<[[f64; 3]; 2]> {
         Some([self.coord(0)?, self.coord(1)?])
     }
@@ -105,13 +144,22 @@ impl Flat {
                 let (lo, w) = (range.lo, range.width());
                 Some([o + y * lo + x * lo * lo, (y + 2.0 * x * lo) * w, x * w * w])
             }
-            Flat::Arc { .. } => None,
+            Flat::Arc { .. } | Flat::Bezier { .. } => None,
         }
     }
 
     /// The fractions over `range` where coordinate `c` is `v`; on an arc, where the cos (s) or
     /// sin (h) of its angle has a value: twice a turn, once where it touches.
     pub(crate) fn level(&self, c: usize, v: f64, range: Interval) -> Vec<forge_math::poly::Root> {
+        if let Flat::Bezier { degree, pts, w } = *self {
+            // sum of w_i (c_i - v) B_i(t), a polynomial of the piece's degree, in powers of t
+            let n = degree as usize;
+            let mut b = [0.0; 4];
+            for i in 0..=n {
+                b[i] = w[i] * (if c == 0 { pts[i].x } else { pts[i].y } - v);
+            }
+            return roots(&bernstein_to_power(n, &b), range);
+        }
         let Flat::Arc {
             center,
             radius,
@@ -153,7 +201,8 @@ impl Flat {
     }
 
     /// The curve's implicit value along the curve whose coordinates are the polynomials `g`
-    /// (as `poly` gives them): zero where the two meet.
+    /// (as `poly` gives them): zero where the two meet. A Bezier piece has none (NaN): the wall
+    /// meets refuse it before asking.
     pub fn meet_poly(&self, g: [[f64; 3]; 2]) -> [f64; 5] {
         let mut out = [0.0; 5];
         match *self {
@@ -197,6 +246,8 @@ impl Flat {
                 }
                 out[0] -= radius * radius;
             }
+            // no implicit: the meets that need one refuse a Bezier before asking (`crossings`)
+            Flat::Bezier { .. } => out = [f64::NAN; 5],
         }
         out
     }
@@ -219,6 +270,7 @@ impl Flat {
                 let a = dmath::atan2(q.y - center.y, q.x - center.x);
                 (a + dmath::TAU * ((mid - a) / dmath::TAU).round() - start) / sweep
             }
+            Flat::Bezier { .. } => bezier_param(self, q),
         }
     }
 
@@ -237,15 +289,124 @@ impl Flat {
         match *self {
             Flat::Line { .. } | Flat::Parabola { .. } => 0.25,
             Flat::Arc { sweep, .. } => (0.5 * (dmath::TAU / sweep.abs() - 1.0)).clamp(0.0, 0.25),
+            // a piece of a spline is not carried past its ends
+            Flat::Bezier { .. } => 0.0,
         }
     }
 
     /// Bounds on |d/dt| and |d2/dt2| over fractions t (the speed is linear in t, or constant).
     fn bounds(&self, t: Interval) -> (f64, f64) {
+        if let Flat::Bezier { degree, pts, w } = *self {
+            return bezier_bounds(degree as usize, &pts, &w);
+        }
         let (_, v0, a) = self.at(t.lo);
         let (_, v1, _) = self.at(t.hi);
         (v0.length().max(v1.length()), a.length())
     }
+}
+
+/// A rational Bezier piece's point and first two derivatives at t: the homogeneous sums and the
+/// quotient rule.
+fn bezier_at(n: usize, pts: &[Point2; 4], w: &[f64; 4], t: f64) -> (Point2, Vec2, Vec2) {
+    // Bernstein values and their first two derivatives
+    let u = 1.0 - t;
+    let (b, d1, d2): ([f64; 4], [f64; 4], [f64; 4]) = match n {
+        1 => ([u, t, 0.0, 0.0], [-1.0, 1.0, 0.0, 0.0], [0.0; 4]),
+        2 => (
+            [u * u, 2.0 * u * t, t * t, 0.0],
+            [-2.0 * u, 2.0 * (u - t), 2.0 * t, 0.0],
+            [2.0, -4.0, 2.0, 0.0],
+        ),
+        _ => (
+            [u * u * u, 3.0 * u * u * t, 3.0 * u * t * t, t * t * t],
+            [
+                -3.0 * u * u,
+                3.0 * u * (u - 2.0 * t),
+                3.0 * t * (2.0 * u - t),
+                3.0 * t * t,
+            ],
+            [6.0 * u, 6.0 * (3.0 * t - 2.0), 6.0 * (1.0 - 3.0 * t), 6.0 * t],
+        ),
+    };
+    let sum = |c: &[f64; 4]| {
+        let (mut p, mut q) = (Vec2::ZERO, 0.0);
+        for i in 0..=n {
+            p += pts[i].to_vec() * (w[i] * c[i]);
+            q += w[i] * c[i];
+        }
+        (p, q)
+    };
+    let ((p0, w0), (p1, w1), (p2, w2)) = (sum(&b), sum(&d1), sum(&d2));
+    let c = p0 * (1.0 / w0);
+    let c1 = (p1 - c * w1) * (1.0 / w0);
+    let c2 = (p2 - c1 * (2.0 * w1) - c * w2) * (1.0 / w0);
+    (Point2::new(c.x, c.y), c1, c2)
+}
+
+/// Bernstein coefficients of degree n as powers of t, lowest first.
+fn bernstein_to_power(n: usize, b: &[f64; 4]) -> [f64; 4] {
+    match n {
+        1 => [b[0], b[1] - b[0], 0.0, 0.0],
+        2 => [b[0], 2.0 * (b[1] - b[0]), b[0] - 2.0 * b[1] + b[2], 0.0],
+        _ => [
+            b[0],
+            3.0 * (b[1] - b[0]),
+            3.0 * (b[0] - 2.0 * b[1] + b[2]),
+            b[3] - b[0] + 3.0 * (b[1] - b[2]),
+        ],
+    }
+}
+
+/// Bounds on |C'| and |C''| over the whole piece. Polynomial: n and n(n - 1) times the largest
+/// first and second differences of the points. Rational: C' = sum B_i' w_i (p_i - C) / W, with
+/// |p_i - C| at most the points' spread D, sum |B_i'| at most 2n and W at least the least weight,
+/// so |C'| <= 2n D r (r the weights' ratio); likewise |C''| <= r (4n(n - 1) D + 4n |C'|).
+fn bezier_bounds(n: usize, pts: &[Point2; 4], w: &[f64; 4]) -> (f64, f64) {
+    let p = &pts[..=n];
+    let (lo, hi) = w[..=n]
+        .iter()
+        .fold((f64::INFINITY, 0.0f64), |(a, b), &x| (a.min(x), b.max(x)));
+    let nf = n as f64;
+    if lo == hi {
+        let d1 = p.windows(2).map(|q| (q[1] - q[0]).length()).fold(0.0, f64::max);
+        let d2 = p
+            .windows(3)
+            .map(|q| (q[2] - q[1] - (q[1] - q[0])).length())
+            .fold(0.0, f64::max);
+        return (nf * d1, nf * (nf - 1.0) * d2);
+    }
+    let spread = p
+        .iter()
+        .flat_map(|a| p.iter().map(move |b| a.distance(*b)))
+        .fold(0.0, f64::max);
+    let r = hi / lo;
+    let v = 2.0 * nf * spread * r;
+    (v, r * (4.0 * nf * (nf - 1.0) * spread + 4.0 * nf * v))
+}
+
+/// The fraction of a point on a Bezier flat: the nearest of 33 samples, then Newton.
+fn bezier_param(f: &Flat, q: Point2) -> f64 {
+    let mut best = (f64::INFINITY, 0.0);
+    for i in 0..=32 {
+        let t = i as f64 / 32.0;
+        let d = f.at(t).0.distance(q);
+        if d < best.0 {
+            best = (d, t);
+        }
+    }
+    let mut t = best.1;
+    for _ in 0..16 {
+        let (p, d1, d2) = f.at(t);
+        let e = p - q;
+        let (g, h) = (e.dot(d1), d1.length_sq() + e.dot(d2));
+        let h = if h > 0.0 { h } else { d1.length_sq() };
+        let next = (t - g / h).clamp(0.0, 1.0);
+        if next == t {
+            break;
+        }
+        t = next;
+    }
+    t
 }
 
 /// A flat curve wrapped round the axis frame's z, its s = 0 on the frame's x.

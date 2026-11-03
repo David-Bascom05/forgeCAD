@@ -28,7 +28,12 @@ fn radial(r: &Ruled) -> Option<(Wrap, Interval)> {
     let (&Rail::Wrap(wa), &Rail::Wrap(wb)) = (&r.a, &r.b) else {
         return None;
     };
-    if wa.flat != wb.flat || wa.unroll != wb.unroll || !wa.coaxial(&wb.axis) {
+    // a spline piece has no implicit for `crossings`: its walls go to the general meet
+    if matches!(wa.flat, Flat::Bezier { .. })
+        || wa.flat != wb.flat
+        || wa.unroll != wb.unroll
+        || !wa.coaxial(&wb.axis)
+    {
         return None;
     }
     let (ra, rb) = (wa.radius, wb.radius);
@@ -118,6 +123,9 @@ fn contact(touching: bool) -> Contact {
 /// Where a wrapped curve meets a wrapped wall about the same axis: where their flat curves
 /// cross, if the curve's radius is among the wall's.
 pub fn wrap_wall(w: &Wrap, range: Interval, s: &Surface) -> Option<CurveSurface> {
+    if matches!(w.flat, Flat::Bezier { .. }) {
+        return None;
+    }
     let r = ruled(s)?;
     let (wa, radii) = radial(r)?;
     if wa.unroll != w.unroll || !wa.coaxial(&w.axis) {

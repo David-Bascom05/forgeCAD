@@ -133,8 +133,8 @@ impl Level {
                 range,
                 true,
             ),
-            // a glyph's outline has no arcs
-            (Place::Flat(_), Flat::Arc { .. }) => return None,
+            // a glyph's outline has no arcs, nor spline pieces
+            (Place::Flat(_), Flat::Arc { .. }) | (_, Flat::Bezier { .. }) => return None,
             // along the axis: a line; round it: a circle
             (Place::Wrapped { .. }, Flat::Line { .. }) if a.x == b.x => line()?,
             (Place::Wrapped { axis, radius }, Flat::Line { .. }) if a.y == b.y => {
@@ -184,7 +184,7 @@ fn wall(lo: &Level, hi: &Level, f: &Flat) -> Option<Surface> {
             };
             Ruled::new(rail(lo)?, rail(hi)?).map(Ruled::surface)
         }
-        (Place::Flat(_), Flat::Arc { .. }) => None,
+        (Place::Flat(_), Flat::Arc { .. }) | (_, Flat::Bezier { .. }) => None,
         (Place::Wrapped { axis, radius }, Flat::Line { .. }) if a.x == b.x => {
             // along the axis: the plane through it
             let (sn, cs) = dmath::sin_cos(a.x / radius);

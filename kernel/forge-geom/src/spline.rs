@@ -655,6 +655,15 @@ impl Spline {
         w
     }
 
+    /// The curve over `range` as rational Bezier pieces of its own degree, in order, each run
+    /// with the curve's parameter: homogeneous points [x w, y w, z w, w].
+    pub fn bezier_pieces(&self, range: Interval) -> Vec<Vec<[f64; 4]>> {
+        self.over(range)
+            .filter(|&(_, s0, s1)| s1 > s0)
+            .map(|(i, s0, s1)| self.part(i, s0, s1)[..=self.degree].to_vec())
+            .collect()
+    }
+
     /// The pieces over `range`: each one's index and its stretch of its own parameter.
     fn over(&self, range: Interval) -> impl Iterator<Item = (usize, f64, f64)> + '_ {
         let n = self.pieces();
