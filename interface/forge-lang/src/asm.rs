@@ -14,7 +14,7 @@ use crate::syntax::{Arg, Cmp, Expr, ExprKind, Key, Seg, Span, StmtKind, Unit};
 use crate::values::{Dim, Num, Src, Ty};
 use forge_agent::json::Json;
 use forge_asm as fa;
-use forge_asm::check::{BrepExact, Checker, PartMesh};
+use forge_asm::check::{BrepExact, Checker, Exact, PartMesh};
 use forge_asm::{ConstraintKind, Freedom, JointKind};
 use forge_math::{Frame, Point3, UnitVec3, Vec3};
 use std::collections::{BTreeMap, BTreeSet};
@@ -1009,6 +1009,8 @@ pub enum Unevaluable {
     NotAJointValue { found: Ty },
     /// A joint value the solve did not report (the joint failed).
     NoJointValue { joint: String },
+    /// No solid to measure there (a reference to nothing built, a part with no body).
+    NoGeometry { reference: String },
     /// The limit is not a number.
     NoLimit,
     /// The document could not be run again with its `at` params.
@@ -1029,6 +1031,7 @@ impl Unevaluable {
             Unevaluable::NoJointValue { joint } => {
                 format!("{joint} has no value: it was left out of the solve")
             }
+            Unevaluable::NoGeometry { reference } => format!("{reference} has no solid to measure"),
             Unevaluable::NoLimit => "the limit is not a number".into(),
             Unevaluable::AtFailed => "the document does not run with its at params".into(),
         }
@@ -2627,6 +2630,15 @@ struct Measure<'a> {
 impl Measure<'_> {
     /// An argument as a place: an instance, or a reference on one (an anchor, a role name),
     /// with the occurrence it is on and its world frame.
+    /// The part occurrences at or under a path: one part, or every part of a subassembly.
+    fn parts_under(&self, p: &fa::Path) -> Vec<&fa::Occurrence> {
+        self.sol
+            .occurrences
+            .iter()
+            .filter(|o| o.path.starts_with(p))
+            .collect()
+    }
+
     fn place(&self, ev: &mut Eval, args: &[Expr], index: usize) -> Result<(fa::Path, Frame), Unevaluable> {
         let e = args.get(index).ok_or(Unevaluable::MissingArg { index })?;
         let v = match ev.expr(e) {
@@ -2709,22 +2721,51 @@ impl Measure<'_> {
             "interference" | "clearance" | "distance" => {
                 let (pa, fa_) = self.place(ev, args, 0).map_err(why)?;
                 let (pb, fb) = self.place(ev, args, 1).map_err(why)?;
-                Ok(match metric {
-                    "distance" => fa_.origin.distance(fb.origin),
-                    "clearance" => self
-                        .checker
-                        .clearance(self.sol, &pa, &pb, 1e9)
-                        .map_or(f64::INFINITY, |c| c.distance),
-                    _ => {
-                        let rep = self
-                            .checker
-                            .interference(self.sol, &self.asm.fits, &self.asm.fit_rules);
-                        rep.interferences
-                            .iter()
-                            .find(|h| (h.a == pa && h.b == pb) || (h.a == pb && h.b == pa))
-                            .map_or(0.0, |h| h.volume.unwrap_or(f64::NAN))
+                if metric == "distance" {
+                    return Ok(fa_.origin.distance(fb.origin));
+                }
+                // the part occurrences each side is (a subassembly is all of its parts)
+                let (oa, ob) = (self.parts_under(&pa), self.parts_under(&pb));
+                let name = |p: &fa::Path| path_name(self.names, p);
+                for (o, p) in [(&oa, &pa), (&ob, &pb)] {
+                    if o.is_empty() {
+                        return Err(why(Unevaluable::NoGeometry { reference: name(p) }));
                     }
-                })
+                }
+                if metric == "clearance" {
+                    let mut best = f64::INFINITY;
+                    for x in &oa {
+                        for y in &ob {
+                            let c = self
+                                .checker
+                                .clearance(self.sol, &x.path, &y.path, 1e9)
+                                .ok_or_else(|| {
+                                    why(Unevaluable::NoGeometry {
+                                        reference: name(&x.path),
+                                    })
+                                })?;
+                            best = best.min(c.distance);
+                        }
+                    }
+                    return Ok(best);
+                }
+                // the solids' shared volume, exactly, whatever a fit says of it
+                let mut vol = 0.0;
+                for x in &oa {
+                    for y in &ob {
+                        let rel = x.pose.inverse().compose(&y.pose);
+                        vol += self
+                            .checker
+                            .exact()
+                            .overlap_volume(&x.part, &y.part, &rel)
+                            .ok_or_else(|| {
+                                why(Unevaluable::NoGeometry {
+                                    reference: name(&x.path),
+                                })
+                            })?;
+                    }
+                }
+                Ok(vol)
             }
             "x" | "y" | "z" => {
                 let (_, f) = self.place(ev, args, 0).map_err(why)?;

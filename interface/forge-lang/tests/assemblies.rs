@@ -992,3 +992,70 @@ m6 = fit_rule(external_thread, internal_thread, size: m)
     };
     assert_eq!(listed.len(), 2);
 }
+
+#[test]
+fn clearance_and_interference_measure_subassemblies_and_fitted_pairs() {
+    let d = mech_dir("sub-measure");
+    write(
+        &d,
+        "one_block.fg",
+        "assembly\n\nblk = part(\"block.fg\", ground: true)\n",
+    );
+    write(&d, "nothing.fg", "assembly\n");
+    // blocks are 12 x 12 x 6 about their origins: 30 apart, 18 clear; 6 apart, 6 x 12 x 6 shared
+    let src = "assembly
+
+shared gap = 30
+shared lap = 6
+
+a = part(\"block.fg\", ground: true)
+s = subassembly(\"one_block.fg\", at: pose(at: (gap, 0, 0)))
+b = part(\"block.fg\", ground: true, at: pose(at: (lap, 0, 0)))
+f = fit(a, b)
+e = subassembly(\"nothing.fg\")
+expect clearance(s, a) = 18 +- 0.000001
+expect clearance(s.blk, a) = 18 +- 0.000001
+expect interference(a, b) = 432 +- 0.000001
+expect interference(s, a) = 0
+expect interferences = 0
+expect clearance(e, a) = 0
+";
+    let r = run_in(&d, src);
+    let a = r.asm.as_ref().unwrap();
+    let got: Vec<(Option<f64>, bool)> = a.expects.iter().map(|e| (e.measured, e.ok)).collect();
+    assert_eq!(got[..5].iter().filter(|x| x.1).count(), 5, "{:?}", a.expects);
+    // a subassembly with nothing in it has no solid: typed, not infinite and passing
+    assert_eq!(got[5], (None, false));
+    let errs: Vec<String> = r.errors.iter().map(|e| e.text()).collect();
+    assert_eq!(errs.len(), 1, "{errs:?}");
+    assert!(errs[0].contains("e has no solid to measure"), "{errs:?}");
+}
+
+#[test]
+fn a_loop_index_divides_into_rows_and_columns() {
+    let d = mech_dir("divmod");
+    let src = "shared xs = [10, 30, 50]
+shared ys = [10, 40]
+shared w = 80
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (w, w))
+  for k in 0..6 {
+    s = pt(xs[mod(k, 3)], ys[div(k, 3)])
+  }
+}
+body = extrude(plan, w)
+";
+    let r = run_in(&d, src);
+    assert!(r.ok(), "{:?}", errors(&r));
+    for bad in ["div(k, 0)", "div(k, w)"] {
+        let r = run_in(&d, &src.replace("div(k, 3)", bad));
+        assert!(!r.ok(), "{bad}");
+        assert!(
+            r.errors
+                .iter()
+                .all(|e| matches!(e.kind(), "BadValue" | "WrongDim")),
+            "{:?}",
+            errors(&r)
+        );
+    }
+}
