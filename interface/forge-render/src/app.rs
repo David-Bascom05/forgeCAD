@@ -282,6 +282,7 @@ impl App {
 fn new_dialog() -> Option<String> {
     let f = rfd::FileDialog::new()
         .add_filter("Parts", &["fc"])
+        .add_filter("Forge parts", &["fg"])
         .set_file_name("Part.fc")
         .save_file()?;
     let f = if f.extension().is_some() {
@@ -295,7 +296,10 @@ fn new_dialog() -> Option<String> {
 
 /// The system's file dialog.
 fn open_dialog() -> Option<String> {
-    let f = rfd::FileDialog::new().add_filter("Parts", &["fc"]).pick_file()?;
+    let f = rfd::FileDialog::new()
+        .add_filter("Parts", &["fc", "fg"])
+        .add_filter("Forge parts", &["fg"])
+        .pick_file()?;
     Some(f.to_string_lossy().into_owned())
 }
 
@@ -421,6 +425,12 @@ impl ApplicationHandler for App {
                         KeyCode::KeyZ if ctrl => Some(Action::Undo),
                         KeyCode::KeyY if ctrl => Some(Action::Redo),
                         KeyCode::KeyO if ctrl => Some(Action::Open),
+                        KeyCode::KeyS if ctrl => {
+                            // a Forge part is written when asked; an .fc part with every act
+                            l.gui.fg_save();
+                            redraw = true;
+                            None
+                        }
                         _ => None,
                     };
                     if let Some(a) = action {

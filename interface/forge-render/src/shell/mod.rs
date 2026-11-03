@@ -12,6 +12,7 @@ mod sketch3d;
 pub mod sketching;
 pub mod theme;
 mod tree;
+pub mod fg;
 
 pub use crate::nav::NavTool;
 use crate::render::LineMode;
@@ -249,6 +250,8 @@ pub struct Shell {
     pub view_blocks: Vec<Rect>,
     /// What was typed for it, committed with Enter.
     pub dim_typed: Option<String>,
+    /// A Forge (.fg) part is open: its tree and panel instead of the .fc ones.
+    pub fg: Option<fg::FgPanel>,
     pub file_menu: bool,
     style_set: Option<bool>,
 }
@@ -304,6 +307,7 @@ impl Default for Shell {
             dim: None,
             view_blocks: Vec::new(),
             dim_typed: None,
+            fg: None,
             file_menu: false,
             style_set: None,
         }
@@ -587,6 +591,7 @@ impl Shell {
         self.window_ui(&ctx);
         self.dim_ui(&ctx);
         self.dialog_ui(&ctx);
+        self.fg_panel(&ctx);
         self.sketch_ui(&ctx);
         self.mode_bar(&ctx);
         self.resize_edges(ui, s);
@@ -814,9 +819,14 @@ impl Shell {
         let p = ui.painter().clone();
         p.rect_filled(side, 0.0, t.surface);
         p.vline(side.right(), side.y_range(), Stroke::new(1.0, t.line));
-        self.head(&p, side.top(), "Model", self.name.trim_end_matches(".fc"));
+        let name = self.name.trim_end_matches(".fc").trim_end_matches(".fg").to_string();
+        self.head(&p, side.top(), "Model", &name);
         let tree = Rect::from_min_max(pos2(0.0, side.top() + HEAD_H), pos2(SIDE_W, side.bottom()));
-        self.tree(ui, tree);
+        if self.fg.is_some() {
+            self.fg_tree(ui, tree);
+        } else {
+            self.tree(ui, tree);
+        }
     }
 
     fn head(&self, p: &egui::Painter, y: f32, left: &str, right: &str) {

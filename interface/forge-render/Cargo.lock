@@ -743,6 +743,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-lang"
+version = "0.1.0"
+dependencies = [
+ "forge-agent",
+ "forge-geom",
+ "forge-math",
+ "forge-mesh",
+ "forge-model",
+ "forge-ops",
+ "forge-sketch",
+ "forge-topo",
+]
+
+[[package]]
 name = "forge-math"
 version = "0.1.0"
 dependencies = [
@@ -791,6 +805,7 @@ dependencies = [
  "forge-agent",
  "forge-doc",
  "forge-geom",
+ "forge-lang",
  "forge-math",
  "forge-mesh",
  "forge-model",

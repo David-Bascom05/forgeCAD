@@ -27,6 +27,7 @@ egui = { version = "=0.37.0", default-features = false }
 egui-wgpu = { version = "=0.37.0", default-features = false }
 forge-doc = { path = "../forge-doc" }
 forge-agent = { path = "../forge-agent" }
+forge-lang = { path = "../forge-lang" }
 forge-math = { path = "../../kernel/forge-math" }
 forge-model = { path = "../../kernel/forge-model" }
 forge-sketch = { path = "../../kernel/forge-sketch" }
