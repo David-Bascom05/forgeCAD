@@ -1517,7 +1517,7 @@ pub const LIMIT: u64 = 64 << 20;
 /// naming document's own directory, its real path a `.fg` file of at most `LIMIT` bytes under
 /// `fence` (the session's root) when there is one. Every refusal is the same None, so a client
 /// learns nothing of what exists outside.
-fn locate(
+pub(crate) fn locate(
     dir: &Option<std::path::PathBuf>,
     fence: &Option<std::path::PathBuf>,
     file: &str,
@@ -1539,7 +1539,7 @@ fn locate(
 }
 
 /// A located file's text, read no further than `LIMIT`.
-fn read_capped(p: &std::path::Path) -> Option<String> {
+pub(crate) fn read_capped(p: &std::path::Path) -> Option<String> {
     use std::io::Read;
     let mut s = String::new();
     std::fs::File::open(p)

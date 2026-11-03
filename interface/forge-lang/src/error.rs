@@ -687,6 +687,8 @@ pub enum Error {
     },
     /// Sheet metal: the kernel's refusals and the language's own (`sheet.rs`).
     Sheet(Box<crate::sheet::SheetErr>),
+    /// A used file (`uses.rs`): missing, cyclic, misplaced, failing, or the target of an edit.
+    Use(Box<crate::uses::UseErr>),
     // ---- shapes (sweep, coil, loft, shell, draft, offset, rib, face fillets, balls) ----
     /// An option that cannot apply with another the call was given (a taper with a through
     /// extent, a sweep both extended and cut off at a face, three of a coil's sizes).
@@ -816,6 +818,7 @@ impl Error {
             | EditDim { .. }
             | NotFinite { .. } => None,
             Sheet(e) => e.span(),
+            Use(e) => e.span(),
         }
     }
 
@@ -874,6 +877,7 @@ impl Error {
             EditDim { .. } => "EditDim",
             NotFinite { .. } => "NotFinite",
             Sheet(e) => e.kind(),
+            Use(e) => e.kind(),
             NotWith { .. } => "NotWith",
             TaperOnCurve { .. } => "TaperOnCurve",
             PathGap { .. } => "PathGap",
@@ -1077,6 +1081,7 @@ impl Error {
                 format!("{param} cannot be set to {value}: only a finite number is written")
             }
             Sheet(e) => e.text(),
+            Use(e) => e.text(),
             NotWith { func, arg, with, .. } => format!("{func}: {arg} does not apply with {with}"),
             TaperOnCurve { sketch, .. } => format!(
                 "sketch {sketch}'s outline has a spline side: a taper has no exact form on it (draw it of lines and arcs, or loft to a smaller outline)"
@@ -1194,6 +1199,7 @@ impl Error {
             StillRead { name, reader, .. } => vec![("name", s(name)), ("reader", s(reader))],
             ShadowsTopLevel { name, .. } => vec![("name", s(name))],
             Sheet(e) => e.data(),
+            Use(e) => e.data(),
             NotWith { func, arg, with, .. } => vec![("func", s(func)), ("arg", s(arg)), ("with", s(with))],
             TaperOnCurve { sketch, .. } => vec![("sketch", s(sketch))],
             PathGap { index, .. } => vec![("index", (*index as f64).into())],
