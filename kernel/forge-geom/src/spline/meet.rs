@@ -219,9 +219,14 @@ pub fn cross_sections(a: &Spline, ra: Interval, b: &Spline, rb: Interval) -> Vec
                 }
                 let ds = (e.x * (-q.d1.y) + q.d1.x * e.y) / det;
                 let dt = (p.d1.x * e.y - p.d1.y * e.x) / det;
+                // settled once the points are apart by their own rounding, which grows with the
+                // coordinates and the parameters; a fixed stop is circled forever far out
+                // (research/spline-cross-stop)
+                let (ls, lt) = (p.d1.length(), q.d1.length());
+                let scale = 1.0 + p.p.to_vec().abs_max() + s.abs() * ls + t.abs() * lt;
                 s += ds;
                 t += dt;
-                if (ds * p.d1.length()).abs() + (dt * q.d1.length()).abs() <= 1e-13 {
+                if e.length() <= 64.0 * f64::EPSILON * scale {
                     good = true;
                     break;
                 }

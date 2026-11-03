@@ -1,0 +1,32 @@
+== old-normal
+dist    crossings  kernel-drops  step/eps.s  step*sin/eps.s  resid/eps.s  never<1e-13  never-resid<64eps.s  least-sin  shallow-resid/eps.s
+0             3174             2         6.0             1.5          0.9            1                    0     2.3e-2      0.0
+30            3174             2        17.0             2.0          1.1            3                    0     2.3e-2      0.0
+300           3174            33        44.2             3.3          2.3          223                    0     2.3e-2      0.0
+1000          3174           274        67.2             3.3          2.1         1026                    0     2.3e-2      0.0
+10000         3174           449        44.0             4.8          2.8         1388                    0     2.3e-2      0.0
+100000        3174           424        35.3             4.5          2.7         1423                    0     2.3e-2      0.0
+== new-normal
+dist    crossings  kernel-drops  step/eps.s  step*sin/eps.s  resid/eps.s  never<1e-13  never-resid<64eps.s  least-sin  shallow-resid/eps.s
+0             3174             2         6.0             1.5          0.9            1                    0     2.3e-2      0.0
+30            3174             2        17.0             2.0          1.1            3                    0     2.3e-2      0.0
+300           3174             2        44.2             3.3          2.3          223                    0     2.3e-2      0.0
+1000          3174             2        67.2             3.3          2.1         1026                    0     2.3e-2      0.0
+10000         3174             2        44.0             4.8          2.8         1388                    0     2.3e-2      0.0
+100000        3174             2        35.3             4.5          2.7         1423                    0     2.3e-2      0.0
+== old-shallow
+dist    crossings  kernel-drops  step/eps.s  step*sin/eps.s  resid/eps.s  never<1e-13  never-resid<64eps.s  least-sin  shallow-resid/eps.s
+0              600             0       777.4             2.3          1.2           44                    0     3.2e-6      0.9
+30             600             1      2154.6             3.4          1.9           61                    0     3.2e-6      1.5
+300            600             0      1739.6             3.7          2.1           80                    0     3.2e-6      2.1
+1000           600             0      1271.0             3.3          1.8           65                    0     3.2e-6      1.5
+10000          600             0      2056.5             3.7          2.2           89                    0     3.2e-6      2.0
+100000         600             0      2735.3             3.0          1.9           88                    0     3.2e-6      2.0
+== new-shallow
+dist    crossings  kernel-drops  step/eps.s  step*sin/eps.s  resid/eps.s  never<1e-13  never-resid<64eps.s  least-sin  shallow-resid/eps.s
+0              600             0       777.4             2.3          1.2           44                    0     3.2e-6      0.9
+30             600             0      2154.6             3.4          1.9           61                    0     3.2e-6      1.5
+300            600             0      1739.6             3.7          2.1           80                    0     3.2e-6      2.1
+1000           600             0      1271.0             3.3          1.8           65                    0     3.2e-6      1.5
+10000          600             0      2056.5             3.7          2.2           89                    0     3.2e-6      2.0
+100000         600             0      2735.3             3.0          1.9           88                    0     3.2e-6      2.0
