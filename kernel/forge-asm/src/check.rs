@@ -698,7 +698,7 @@ pub struct RuleUse {
 enum PairHit {
     Interference(Interference),
     /// With the engagement and its minimum where a rule's threads engage too little.
-    Intended(IntendedContact, Option<(f64, f64)>),
+    Intended(IntendedContact, Option<Measured>),
     /// The meshes crossed but the exact solids only touch.
     Touch(Path, Path),
 }
@@ -715,6 +715,8 @@ pub struct InterferenceReport {
     pub rules: Vec<RuleUse>,
     /// Rule-covered threads that engage too little: warnings.
     pub shallow: Vec<ShallowEngagement>,
+    /// Every rule-covered thread pair's engagement, short or not.
+    pub engagements: Vec<Engagement>,
     /// Occurrences with no mesh, not checked.
     pub unchecked: Vec<Path>,
     pub candidates: usize,
@@ -791,9 +793,18 @@ pub fn engagement(p: &Frame, dp: f64, q: &Frame, dq: f64) -> f64 {
     (hi.min(dq) - lo.max(0.0)).max(0.0)
 }
 
-/// None: the rule does not cover the pair. Some(None): covered. Some(Some((engaged, min))):
-/// covered, but its threads engage less than the rule's or the shop's minimum.
-type Covered = Option<Option<(f64, f64)>>;
+/// Two threads' engagement as measured, with the minimum it was held to (None: no minimum
+/// applies) and whether it fell short.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Measured {
+    pub engaged: f64,
+    pub min: Option<f64>,
+    pub short: bool,
+}
+
+/// None: the rule does not cover the pair. Some(None): covered, nothing to measure (no threads
+/// with depths on one axis). Some(Some(m)): covered, its threads' engagement measured.
+type Covered = Option<Option<Measured>>;
 
 fn rule_covers<P: Parts>(parts: &P, r: &FitRule, x: &Occ, y: &Occ, tol: f64) -> Covered {
     let one = |x: &Occ, y: &Occ| -> Covered {
@@ -801,28 +812,43 @@ fn rule_covers<P: Parts>(parts: &P, r: &FitRule, x: &Occ, y: &Occ, tol: f64) -> 
         if ax.is_empty() || ay.is_empty() {
             return Some(None);
         }
-        // features on both sides: they must meet on one axis
-        let mut covered = None;
+        // features on both sides: they must meet on one axis; the best engagement is reported
+        let mut covered: Covered = None;
         for (p, fp) in &ax {
             for (q, fq) in &ay {
                 if !coaxial(p, q, tol) {
                     continue;
                 }
-                let threads = fp.kind.is_thread() && fq.kind.is_thread();
-                let min = r
-                    .min_engagement
-                    .or_else(|| threads.then(|| crate::model::SHOP_THREAD_ENGAGEMENT * fp.size.min(fq.size)));
-                let short = match (min, fp.depth, fq.depth) {
-                    (Some(m), Some(dp), Some(dq)) => {
-                        let e = engagement(p, dp, q, dq);
-                        (e < m - tol).then_some((e, m))
-                    }
-                    _ => None,
+                let (Some(dp), Some(dq)) = (fp.depth, fq.depth) else {
+                    covered = covered.or(Some(None));
+                    continue;
                 };
-                if short.is_none() {
-                    return Some(None);
+                let threads = fp.kind.is_thread() && fq.kind.is_thread();
+                let engaged = engagement(p, dp, q, dq);
+                let min = match r.min_engagement {
+                    Some(crate::model::MinEngagement::Length(m)) => Some(m),
+                    // the internal thread's whole depth: the nut's, the tapped hole's
+                    Some(crate::model::MinEngagement::Full) => {
+                        Some(if fp.kind == crate::model::FeatureKind::InternalThread {
+                            dp
+                        } else {
+                            dq
+                        })
+                    }
+                    None => threads.then(|| crate::model::SHOP_THREAD_ENGAGEMENT * fp.size.min(fq.size)),
+                };
+                let m = Measured {
+                    engaged,
+                    min,
+                    short: min.is_some_and(|m| engaged < m - tol),
+                };
+                let better = match covered {
+                    Some(Some(c)) => (c.short && !m.short) || (c.short == m.short && m.engaged > c.engaged),
+                    _ => true,
+                };
+                if better {
+                    covered = Some(Some(m));
                 }
-                covered = Some(short);
             }
         }
         covered
@@ -838,6 +864,17 @@ pub struct ShallowEngagement {
     pub rule: u64,
     pub engaged: f64,
     pub min: f64,
+}
+
+/// Every rule-covered thread pair's engagement as measured.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Engagement {
+    pub a: Path,
+    pub b: Path,
+    pub rule: u64,
+    pub engaged: f64,
+    pub min: Option<f64>,
+    pub short: bool,
 }
 
 type Key = (PartKey, PartKey, [u64; 9]);
@@ -1024,7 +1061,7 @@ impl<P: Parts, E: Exact> Checker<P, E> {
             .collect();
         let mut rules_sorted: Vec<&FitRule> = rules.iter().collect();
         rules_sorted.sort_by_key(|r| r.id);
-        let intent_of = |i: usize, j: usize| -> Option<(Intent, Option<(f64, f64)>)> {
+        let intent_of = |i: usize, j: usize| -> Option<(Intent, Option<Measured>)> {
             let (a, b) = (&occ[i].path, &occ[j].path);
             if let Some(&index) = fit_at.get(&if a <= b { (a, b) } else { (b, a) }) {
                 return Some((Intent::Fit { index }, None));
@@ -1098,14 +1135,24 @@ impl<P: Parts, E: Exact> Checker<P, E> {
                 PairHit::Intended(x, short) => {
                     if let Intent::Rule { rule } = x.by {
                         by_rule.entry(rule).or_default().push((x.a.clone(), x.b.clone()));
-                        if let Some((engaged, min)) = *short {
-                            rep.shallow.push(ShallowEngagement {
+                        if let Some(m) = *short {
+                            rep.engagements.push(Engagement {
                                 a: x.a.clone(),
                                 b: x.b.clone(),
                                 rule,
-                                engaged,
-                                min,
+                                engaged: m.engaged,
+                                min: m.min,
+                                short: m.short,
                             });
+                            if let (true, Some(min)) = (m.short, m.min) {
+                                rep.shallow.push(ShallowEngagement {
+                                    a: x.a.clone(),
+                                    b: x.b.clone(),
+                                    rule,
+                                    engaged: m.engaged,
+                                    min,
+                                });
+                            }
                         }
                     }
                     rep.intended.push(x.clone());
