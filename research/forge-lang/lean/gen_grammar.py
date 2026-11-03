@@ -6,6 +6,32 @@ The FIRST/FOLLOW tables it writes are a certificate only: the Lean kernel re-che
 """
 import sys
 
+THEOREMS = """set_option maxRecDepth 100000 in
+/-- The check, run by the Lean kernel (no compiler trusted): the Forge grammar is LL(1). -/
+theorem grammar_ll1 : check grammar certT = true := by decide +kernel
+
+/-- So it is unambiguous: two parse trees of a program with the same tokens are the same tree. -/
+theorem forge_unambiguous {t1 t2 : Tree} (h1 : VT grammar t1 (.n grammar.start))
+    (h2 : VT grammar t2 (.n grammar.start)) (he : t1.yield = t2.yield) : t1 = t2 :=
+  unambiguous grammar_ll1 h1 h2 he
+
+/-- Its LL(1) parser gives every program's tree back from the tree's tokens. -/
+theorem forge_roundtrip {t : Tree} (h : VT grammar t (.n grammar.start)) :
+    parse grammar certT t.size (.n grammar.start) t.yield = some (t, []) :=
+  roundtrip grammar_ll1 h
+
+/-- What the parser returns for a whole input is a tree of exactly that input. -/
+theorem forge_lossless {n : Nat} {w : List Tok} {t : Tree}
+    (h : parse grammar certT n (.n grammar.start) w = some (t, [])) :
+    VT grammar t (.n grammar.start) ∧ t.yield = w :=
+  lossless h
+
+/-- The check is not vacuous: infix minus with no precedence (`e := e '-' e | NUM`) fails it. -/
+def ambiguous : Grammar := { start := 0, rules := [(0, [.n 0, .t 1, .n 0]), (0, [.t 0])] }
+theorem ambiguous_rejected : check ambiguous = false := by decide +kernel
+
+end ForgeLang.LL1.Forge"""
+
 text = open(sys.argv[1]).read()
 toks = "\n".join(l.split('#')[0] for l in text.splitlines()).split()
 raw, cur = [], []
@@ -98,4 +124,6 @@ o.append(f"  ⟨{lst(nul)},")
 o.append("   tblOf [" + ", ".join(f"({A}, {lst(fst[A])})" for A in range(len(nts))) + "],")
 o.append("   tblOf [" + ", ".join(f"({A}, {olst(fol[A])})" for A in range(len(nts))) + "]⟩")
 o.append("")
+# The theorems: without them `lake build` checks nothing, so they are written with the tables.
+o.append(THEOREMS)
 print("\n".join(o))
