@@ -455,3 +455,37 @@ fn shop_checks() {
         }]
     );
 }
+
+#[test]
+fn a_flange_with_its_own_radius() {
+    let g = |r: f64| Gauge {
+        thickness: 2.0,
+        radius: r,
+        rule: BendRule::K(0.4),
+    };
+    // radius 4 by the gauge, and by the flange on a radius-2 gauge: the same part
+    let (mut a, base) =
+        Sheet::face(FeatureId(3), g(4.0), Frame::WORLD, &[rect(0.0, 0.0, 40.0, 30.0)]).unwrap();
+    a.flange(base, 1, ang(90.0), 30.0).unwrap();
+    let (mut b, base) =
+        Sheet::face(FeatureId(3), g(2.0), Frame::WORLD, &[rect(0.0, 0.0, 40.0, 30.0)]).unwrap();
+    b.flange_r(base, 1, ang(90.0), 30.0, 4.0).unwrap();
+    for map in [Map::Folded, Map::Flat] {
+        let (x, y) = (
+            build_with(&a, map).unwrap().body,
+            build_with(&b, map).unwrap().body,
+        );
+        assert_eq!(format!("{:?}", x.vertices), format!("{:?}", y.vertices));
+    }
+    // its setback is checked with its own radius
+    let (mut c, base) =
+        Sheet::face(FeatureId(3), g(2.0), Frame::WORLD, &[rect(0.0, 0.0, 40.0, 30.0)]).unwrap();
+    assert!(matches!(
+        c.flange_r(base, 1, ang(90.0), 3.0, 4.0),
+        Err(forge_sheet::SheetError::WallTooShort { .. })
+    ));
+    assert!(matches!(
+        c.flange_r(base, 1, ang(90.0), 30.0, 0.0),
+        Err(forge_sheet::SheetError::Radius { .. })
+    ));
+}
