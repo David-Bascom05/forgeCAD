@@ -681,6 +681,11 @@ impl SheetNote {
                 V::HardwareThickness { .. } => "HardwareThickness",
                 V::HardwareNearEdge { .. } => "HardwareNearEdge",
                 V::HardwareOverlapsHole { .. } => "HardwareOverlapsHole",
+                V::FlatTooLarge { .. } => "FlatTooLarge",
+                V::PartTooSmall { .. } => "PartTooSmall",
+                V::BendTooLong { .. } => "BendTooLong",
+                V::BoxFlangeTooTall { .. } => "BoxFlangeTooTall",
+                V::BendAngleOutOfRange { .. } => "BendAngleOutOfRange",
                 V::HardwareNearHole { .. } => "HardwareNearHole",
                 V::SheetTooHard { .. } => "SheetTooHard",
                 V::HardnessUnknown { .. } => "HardnessUnknown",
@@ -855,6 +860,48 @@ impl SheetNote {
                     ("thickness", f(thickness)),
                     ("min", f(min)),
                     ("max", f(max)),
+                ]),
+                V::FlatTooLarge {
+                    size, limit, coated, ..
+                } => v.extend([
+                    ("size", Json::Arr(vec![size.0.into(), size.1.into()])),
+                    ("limit", Json::Arr(vec![limit.0.into(), limit.1.into()])),
+                    ("coated", Json::Bool(coated)),
+                ]),
+                V::PartTooSmall { size, limit, .. } => v.extend([
+                    ("size", Json::Arr(vec![size.0.into(), size.1.into()])),
+                    ("limit", Json::Arr(vec![limit.0.into(), limit.1.into()])),
+                ]),
+                V::BendTooLong {
+                    joint, length, limit, ..
+                } => v.extend([
+                    ("joint", n.joint(joint).into()),
+                    ("length", f(length)),
+                    ("limit", f(limit)),
+                ]),
+                V::BoxFlangeTooTall {
+                    wall,
+                    joint,
+                    height,
+                    limit,
+                    ..
+                } => v.extend([
+                    ("wall", n.strip(Strip::Wall(wall))),
+                    ("joint", n.joint(joint).into()),
+                    ("height", f(height)),
+                    ("limit", f(limit)),
+                ]),
+                V::BendAngleOutOfRange {
+                    joint,
+                    angle,
+                    min,
+                    max,
+                    ..
+                } => v.extend([
+                    ("joint", n.joint(joint).into()),
+                    ("angle", f(angle.to_degrees())),
+                    ("min", f(min.to_degrees())),
+                    ("max", f(max.to_degrees())),
                 ]),
                 V::HardwareOverlapsHole {
                     cut,
@@ -1074,6 +1121,52 @@ impl SheetNote {
                 n.cut(*cut),
                 fm(*hole),
                 fm(*distance)
+            ),
+            Note::Violation(V::FlatTooLarge {
+                size, limit, coated, ..
+            }) => format!(
+                "the flat blank is {} x {}; the shop takes {} x {}{}",
+                fm(size.0),
+                fm(size.1),
+                fm(limit.0),
+                fm(limit.1),
+                if *coated { " powder coated" } else { "" }
+            ),
+            Note::Violation(V::PartTooSmall { size, limit, .. }) => format!(
+                "the part is {} x {}; the shop handles {} x {} at least",
+                fm(size.0),
+                fm(size.1),
+                fm(limit.0),
+                fm(limit.1)
+            ),
+            Note::Violation(V::BendTooLong {
+                joint, length, limit, ..
+            }) => format!(
+                "the bend of {} is {} long; the brake bends {}",
+                n.joint(*joint),
+                fm(*length),
+                fm(*limit)
+            ),
+            Note::Violation(V::BoxFlangeTooTall {
+                joint, height, limit, ..
+            }) => format!(
+                "{} is {} tall round a closed box; the tooling allows {}",
+                n.joint(*joint),
+                fm(*height),
+                fm(*limit)
+            ),
+            Note::Violation(V::BendAngleOutOfRange {
+                joint,
+                angle,
+                min,
+                max,
+                ..
+            }) => format!(
+                "the bend of {} turns {} deg; the brake makes {} to {} deg",
+                n.joint(*joint),
+                fm(angle.to_degrees()),
+                fm(min.to_degrees()),
+                fm(max.to_degrees())
             ),
             Note::Violation(V::HardwareNearHole { distance, limit, .. }) => format!(
                 "the hardware's hole centre is {} from another hole's edge; it needs {}",
@@ -1685,6 +1778,26 @@ fn violation_fixes(st: &FixCtx, v: &fs::Violation) -> Vec<Op> {
             .iter()
             .find(|f| f.wall == wall)
             .and_then(|f| set(&f.height, f.height.v + (limit - length))),
+        // the flange lowered to the limit, to a thousandth below
+        fs::Violation::BoxFlangeTooTall {
+            wall, height, limit, ..
+        } => st.flanges.iter().find(|f| f.wall == wall).and_then(|f| {
+            set(
+                &f.height,
+                ((f.height.v - (height - limit)) * 1000.0 + 1e-6).floor() / 1000.0,
+            )
+        }),
+        // the angle into the brake's range
+        fs::Violation::BendAngleOutOfRange {
+            joint,
+            angle,
+            min,
+            max,
+            ..
+        } => st.flanges.iter().find(|f| f.joint == joint).and_then(|f| {
+            let to = angle.clamp(min, max);
+            set(&f.angle, f.angle.v.signum() * to)
+        }),
         _ => None,
     };
     out.into_iter().collect()
@@ -1928,8 +2041,48 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
         }
         "stock" => stock(ev, args, span),
         "shop" => {
-            let a = Args::bind(ev, name, &["stock", "kerf", "hardware"], args, span)?;
+            let a = Args::bind(
+                ev,
+                name,
+                &[
+                    "stock",
+                    "kerf",
+                    "hardware",
+                    "max_flat",
+                    "max_flat_coated",
+                    "max_bend_length",
+                    "max_box_flange",
+                    "box_flange_when",
+                    "bend_angles",
+                    "min_part",
+                ],
+                args,
+                span,
+            )?;
             let kerf = a.num("kerf", LEN)?;
+            // a (shorter, longer) or (least, greatest) pair, either way round
+            let pair = |k: &'static str, dims: &'static [Dim], what: &'static str| -> R<Option<(f64, f64)>> {
+                let Some(v) = a.opt(k) else { return Ok(None) };
+                let Value::Tuple(xs) = &v else {
+                    return Err(wrong(a.span(k), what, Ty::Vec2, &v));
+                };
+                let [x, y] = &xs[..] else {
+                    return Err(wrong(a.span(k), what, Ty::Vec2, &v));
+                };
+                let x = num_of(x.clone(), dims, a.span(k), what)?.v;
+                let y = num_of(y.clone(), dims, a.span(k), what)?.v;
+                Ok(Some((x.min(y), x.max(y))))
+            };
+            let process = fs::Process {
+                flat_max: pair("max_flat", LEN, "max_flat (width, length)")?,
+                coated_max: pair("max_flat_coated", LEN, "max_flat_coated (width, length)")?,
+                bend_length_max: a.num("max_bend_length", LEN)?.map(|n| n.v),
+                box_flange_max: a.num("max_box_flange", LEN)?.map(|n| n.v),
+                box_flange_with_hardware: word(&a, "box_flange_when", &["always", "hardware"])?
+                    == Some("hardware"),
+                angles: pair("bend_angles", ANG, "bend_angles (least, greatest)")?,
+                part_min: pair("min_part", LEN, "min_part (width, length)")?,
+            };
             let Value::List(xs) = a.req("stock")? else {
                 return Err(wrong(a.span("stock"), "shop's stock", Ty::List, &a.req("stock")?));
             };
@@ -1965,6 +2118,7 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
                         Some(o) => return Err(wrong(a.span("hardware"), "hardware", Ty::List, &o)),
                     },
                     kerf: kerf.map_or(0.2, |k| k.v),
+                    process,
                 },
                 stocks,
             }))))
@@ -2309,7 +2463,9 @@ fn base(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     let a = Args::bind(
         ev,
         "sheet",
-        &["profile", "t", "r", "bend", "shop", "corner", "material"],
+        &[
+            "profile", "t", "r", "bend", "shop", "corner", "material", "finish",
+        ],
         args,
         span,
     )?;
@@ -2403,6 +2559,7 @@ fn base(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         }
         Some(o) => return Err(wrong(a.span("corner"), "corner", Ty::CornerKind, &o)),
     };
+    let coated = word(&a, "finish", &["raw", "powder_coat"])? == Some("powder_coat");
     let fix = FixCtx {
         flanges: vec![],
         t: t.clone(),
@@ -2414,6 +2571,7 @@ fn base(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         Ok((mut s, _)) => {
             s.rule = relief;
             s.corner_default = corner;
+            s.coated = coated;
             s
         }
         Err(error) => {
@@ -3670,7 +3828,16 @@ pub fn finish(ev: &mut Eval) {
                 | fs::Violation::HardwareNearHole { cut, .. }
                 | fs::Violation::SheetTooHard { cut, .. }
                 | fs::Violation::HardnessUnknown { cut, .. } => cut_owner(cut),
-                fs::Violation::ThicknessNotStocked { .. } => None,
+                fs::Violation::ThicknessNotStocked { .. }
+                | fs::Violation::FlatTooLarge { .. }
+                | fs::Violation::PartTooSmall { .. } => None,
+                fs::Violation::BendTooLong { joint, .. }
+                | fs::Violation::BoxFlangeTooTall { joint, .. }
+                | fs::Violation::BendAngleOutOfRange { joint, .. } => st
+                    .joints
+                    .iter()
+                    .find(|j| j.0 == joint)
+                    .map(|j| (j.1.clone(), j.2)),
                 fs::Violation::ReliefUndersized { joint, .. } => st
                     .joints
                     .iter()

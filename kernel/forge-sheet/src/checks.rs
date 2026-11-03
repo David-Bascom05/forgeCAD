@@ -32,7 +32,7 @@ const AT_LIMIT: f64 = 1e-6;
 pub fn check(sheet: &Sheet, shop: &ShopProfile) -> Vec<Violation> {
     let feature = sheet.feature;
     let t = sheet.gauge.thickness;
-    let mut out = Vec::new();
+    let mut out = process(sheet, &shop.process);
     let Some(stock) = shop.stock(t) else {
         out.push(Violation::ThicknessNotStocked {
             feature,
@@ -416,6 +416,205 @@ fn holes(sheet: &Sheet, stock: &Stock) -> Vec<Violation> {
         }
     }
     out
+}
+
+/// The fabricator's process limits: the flat blank's size (coated or raw) and the part's least
+/// size, each bend's length and angle, the flanges round a closed box.
+pub fn process(sheet: &Sheet, limits: &crate::shop::Process) -> Vec<Violation> {
+    let feature = sheet.feature;
+    let mut out = vec![];
+    let sized = limits.flat_max.is_some() || limits.coated_max.is_some() || limits.part_min.is_some();
+    let flat = build_with(sheet, Map::Flat).ok();
+    if sized
+        && let Some(rect) = flat
+            .as_ref()
+            .and_then(|b| b.pattern.as_ref())
+            .and_then(blank_sizes)
+    {
+        let max = if sheet.coated {
+            limits.coated_max
+        } else {
+            limits.flat_max
+        };
+        let least = rect
+            .iter()
+            .copied()
+            .min_by(|a, b| (a.0 * a.1).total_cmp(&(b.0 * b.1)))
+            .unwrap_or((0.0, 0.0));
+        if let Some(limit) = max
+            && !rect
+                .iter()
+                .any(|&(a, b)| a <= limit.0 + AT_LIMIT && b <= limit.1 + AT_LIMIT)
+        {
+            out.push(Violation::FlatTooLarge {
+                feature,
+                size: least,
+                limit,
+                coated: sheet.coated,
+            });
+        }
+        if let Some(limit) = limits.part_min
+            && (least.0 < limit.0 - AT_LIMIT || least.1 < limit.1 - AT_LIMIT)
+        {
+            out.push(Violation::PartTooSmall {
+                feature,
+                size: least,
+                limit,
+            });
+        }
+    }
+    for j in &sheet.joints {
+        let JointKind::Bend { angle, .. } = j.kind else {
+            continue;
+        };
+        if let Some((min, max)) = limits.angles
+            && (angle.abs() < min - 1e-9 || angle.abs() > max + 1e-9)
+        {
+            out.push(Violation::BendAngleOutOfRange {
+                feature,
+                joint: j.id,
+                angle: angle.abs(),
+                min,
+                max,
+            });
+        }
+        if let Some(limit) = limits.bend_length_max
+            && let Some(b) = flat
+                .as_ref()
+                .and_then(|b| b.layout.bends.iter().find(|x| x.joint == j.id))
+            && b.length > limit + AT_LIMIT
+        {
+            out.push(Violation::BendTooLong {
+                feature,
+                joint: j.id,
+                length: b.length,
+                limit,
+            });
+        }
+    }
+    if let Some(limit) = limits.box_flange_max
+        && (!limits.box_flange_with_hardware || !sheet.mounts.is_empty())
+    {
+        for w in &sheet.walls {
+            let bends: Vec<_> = sheet
+                .joints
+                .iter()
+                .filter(|j| j.a == w.id)
+                .filter_map(|j| match j.kind {
+                    JointKind::Bend { angle, .. } => Some((j, angle)),
+                    _ => None,
+                })
+                .collect();
+            let one_way = bends.iter().all(|b| b.1 > 0.0) || bends.iter().all(|b| b.1 < 0.0);
+            if bends.len() < 4 || !one_way {
+                continue;
+            }
+            for (j, _) in bends {
+                let Some(fw) = sheet.wall(j.b) else { continue };
+                let Ok((p0, p1)) = straight(fw, j.on_b) else {
+                    continue;
+                };
+                let height = reach(fw, p0, p1);
+                if height > limit + AT_LIMIT {
+                    out.push(Violation::BoxFlangeTooTall {
+                        feature,
+                        wall: j.b,
+                        joint: j.id,
+                        height,
+                        limit,
+                    });
+                }
+            }
+        }
+    }
+    out
+}
+
+/// The flat blank's bounding rectangles, (shorter, longer), at the turns that may be least: the
+/// pattern's axes and each edge of its hull (the least-area rectangle has a side on one). Extents
+/// are exact for lines and arcs; splines by samples.
+fn blank_sizes(pattern: &crate::pattern::Pattern) -> Option<Vec<(f64, f64)>> {
+    let pieces: Vec<Piece> = pattern.contours.iter().flatten().filter_map(piece_of).collect();
+    if pieces.is_empty() {
+        return None;
+    }
+    let pts: Vec<Point2> = pieces
+        .iter()
+        .flat_map(|q| (0..=16).map(move |k| q.at(k as f64 / 16.0)))
+        .collect();
+    let hull = hull(&pts);
+    let extent = |d: Vec2| {
+        let (mut lo, mut hi) = (f64::INFINITY, f64::NEG_INFINITY);
+        for q in &pieces {
+            let mut s = |p: Point2| {
+                let v = p.to_vec().dot(d);
+                lo = lo.min(v);
+                hi = hi.max(v);
+            };
+            match *q {
+                Piece::Line { a, b } => {
+                    s(a);
+                    s(b);
+                }
+                Piece::Arc { c, r, .. } => {
+                    s(q.at(0.0));
+                    s(q.at(1.0));
+                    for e in [d, -d] {
+                        let p = c + e * r;
+                        if (0.0..=1.0).contains(&q.arc_param(p)) {
+                            s(p);
+                        }
+                    }
+                }
+                Piece::Spline { .. } => (0..=64).for_each(|k| s(q.at(k as f64 / 64.0))),
+            }
+        }
+        hi - lo
+    };
+    let mut dirs = vec![Vec2::new(1.0, 0.0)];
+    for k in 0..hull.len() {
+        let e = hull[(k + 1) % hull.len()] - hull[k];
+        if e.length() > 1e-9 {
+            dirs.push(e * (1.0 / e.length()));
+        }
+    }
+    Some(
+        dirs.into_iter()
+            .map(|d| {
+                let (a, b) = (extent(d), extent(Vec2::new(-d.y, d.x)));
+                (a.min(b), a.max(b))
+            })
+            .collect(),
+    )
+}
+
+/// The convex hull, counter-clockwise (monotone chain).
+fn hull(pts: &[Point2]) -> Vec<Point2> {
+    let mut p: Vec<Point2> = pts.to_vec();
+    p.sort_by(|a, b| a.x.total_cmp(&b.x).then(a.y.total_cmp(&b.y)));
+    p.dedup_by(|a, b| a.distance(*b) <= 1e-12);
+    if p.len() < 3 {
+        return p;
+    }
+    let cross = |o: Point2, a: Point2, b: Point2| (a - o).cross(b - o);
+    let mut lower: Vec<Point2> = vec![];
+    for &q in &p {
+        while lower.len() >= 2 && cross(lower[lower.len() - 2], lower[lower.len() - 1], q) <= 0.0 {
+            lower.pop();
+        }
+        lower.push(q);
+    }
+    let mut upper: Vec<Point2> = vec![];
+    for &q in p.iter().rev() {
+        while upper.len() >= 2 && cross(upper[upper.len() - 2], upper[upper.len() - 1], q) <= 0.0 {
+            upper.pop();
+        }
+        upper.push(q);
+    }
+    lower.pop();
+    upper.pop();
+    lower.extend(upper);
+    lower
 }
 
 /// A hole in a wall: a cutout, or a hole of the wall's own outline.

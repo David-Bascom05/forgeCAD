@@ -183,6 +183,29 @@ pub struct ShopProfile {
     pub hardware: Vec<crate::hardware::Hardware>,
     /// The cutting width: a tear relief's.
     pub kerf: f64,
+    /// The fabricator's process limits (none: unchecked).
+    pub process: Process,
+}
+
+/// What a fabricator's machines take, each limit optional. Sizes are of the flat blank, either way
+/// round (its smallest bounding rectangle at any turn); angles are bend angles, unsigned, radians.
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct Process {
+    /// The largest blank the brake takes, raw: (shorter side, longer side).
+    pub flat_max: Option<(f64, f64)>,
+    /// The largest powder-coated part: (shorter side, longer side).
+    pub coated_max: Option<(f64, f64)>,
+    /// The longest bend line.
+    pub bend_length_max: Option<f64>,
+    /// The tallest flange round a closed box (a wall with flanges on four or more edges, all
+    /// turned one way), as the minimum-flange check measures a flange.
+    pub box_flange_max: Option<f64>,
+    /// The box limit holds only for a box carrying hardware (the fabricator's case).
+    pub box_flange_with_hardware: bool,
+    /// The bend angles the brake makes: (least, greatest).
+    pub angles: Option<(f64, f64)>,
+    /// The smallest part handled: (shorter side, longer side) at least.
+    pub part_min: Option<(f64, f64)>,
 }
 
 impl ShopProfile {

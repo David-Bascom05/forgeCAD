@@ -1202,3 +1202,58 @@ nut = pem(\"nut\", \"M6\", at: plan.q, wall: plate)
         );
     }
 }
+
+/// SendCutSend's process limits (rack SPEC section 3) in a shop.
+const SCS_LIMITS: &str = "shared t = 1.88
+shared steel = stock(t: t, bend: kfactor(ratio(0.4)), radii: [1.6], hardness: ratio(57))
+shared scs = shop([steel], hardware: [hardware(kind: \"nut\", size: \"M6\", sheet: (1.22, 12.7), hole: 8.75, edge: 8.6, max_hardness: ratio(80), code: \"S-M6-0\", source: \"PEM CL bulletin\")],
+  max_flat: (762, 1117.6), max_flat_coated: (762, 914.4), max_bend_length: 1117.6,
+  max_box_flange: 76.2, box_flange_when: \"hardware\", bend_angles: (0deg, 130deg))
+";
+
+#[test]
+fn the_shops_process_limits() {
+    // a pan 600 x 950 with flanges 80 round it and a nut: too long to powder coat, flanges too
+    // tall for a box with hardware; each flange's fix lowers it to the limit
+    let s = format!(
+        "{SCS_LIMITS}param plan.L = 950
+param plan.W = 600
+param pan.h = 80
+sketch plan(on: xy) {{
+  outline = rect(corner: (0, 0), size: (W, L))
+  p = pt(300, 400)
+}}
+base = sheet(plan, t: t, r: 1.6, shop: scs, finish: \"powder_coat\")
+front = flange(base.edge(plan.outline[0]), height: h)
+right = flange(base.edge(plan.outline[1]), height: h)
+back = flange(base.edge(plan.outline[2]), height: h)
+left = flange(base.edge(plan.outline[3]), height: h)
+nut = pem(\"nut\", \"M6\", at: plan.p, wall: base)
+"
+    );
+    let r = run(&s);
+    assert!(r.ok(), "{:?}", r.errors);
+    assert_eq!(notes(&r, "FlatTooLarge").len(), 1, "{:?}", r.warnings);
+    let tall = notes(&r, "BoxFlangeTooTall");
+    assert_eq!(tall.len(), 4, "{:?}", r.warnings);
+    let fixed = apply(&s, &tall[0].fixes[0]).expect("applies");
+    assert!(notes(&run(&fixed), "BoxFlangeTooTall").is_empty(), "{fixed}");
+    // raw, the same blank fits the brake; the flanges still too tall
+    let raw = s.replace(", finish: \"powder_coat\"", "");
+    assert!(notes(&run(&raw), "FlatTooLarge").is_empty());
+    // a bend past 130 degrees: typed, the fix brings it to 130
+    let s = format!(
+        "{SCS_LIMITS}sketch plan(on: xy) {{
+  outline = rect(corner: (0, 0), size: (100, 60))
+}}
+base = sheet(plan, t: t, r: 1.6, shop: scs)
+param up.a = 140deg
+up = flange(base.edge(plan.outline[1]), height: 20, angle: a)
+"
+    );
+    let r = run(&s);
+    let n = notes(&r, "BendAngleOutOfRange");
+    assert_eq!(n.len(), 1, "{:?} {:?}", r.errors, r.warnings);
+    let fixed = apply(&s, &n[0].fixes[0]).expect("applies");
+    assert!(notes(&run(&fixed), "BendAngleOutOfRange").is_empty(), "{fixed}");
+}

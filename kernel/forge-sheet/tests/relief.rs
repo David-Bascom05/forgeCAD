@@ -326,6 +326,7 @@ fn reliefs_smaller_than_the_rule_are_violations() {
         stock: vec![stock],
         hardware: vec![],
         kerf: 0.2,
+        process: Default::default(),
     };
     // the rule: t wide, t + R + 0.5 deep; asked: 1.5 wide, 3 deep
     let s = part(

@@ -500,7 +500,8 @@ blank = unfold(base, on: offset(base.bottom, gap))
 ```
 
 ```
-sheet(PROFILE, t: T, r: R, bend: RULE, shop: SHOP, corner: CORNER, material: "NAME")
+sheet(PROFILE, t: T, r: R, bend: RULE, shop: SHOP, corner: CORNER, material: "NAME",
+      finish: "raw"|"powder_coat")
     the base wall: PROFILE's outline and holes. r and bend may come from the shop's stock of
     thickness t instead, and so does the default relief. corner: what corners get (default
     circular_relief(), just clear of both bends). material: the stock's name for the DXF's
@@ -595,6 +596,17 @@ hardware(kind: "nut"|"stud"|"standoff", size: "M3", sheet: (MIN, MAX), hole: D, 
          max_hardness: ratio(HRB), code: "..", source: "..")   one catalogue row; no source: a
                                   placeholder (warned as UnverifiedHardware)
 shop([STOCK, ..], kerf: K, hardware: [HW, ..])  hardware left out: the placeholder catalogue
+shop(.., max_flat: (W, L), max_flat_coated: (W, L), max_bend_length: L, max_box_flange: H,
+     box_flange_when: "always"|"hardware", bend_angles: (A0, A1), min_part: (W, L))
+                                  the fabricator's process limits, each left out unchecked: the
+                                  flat blank's least bounding rectangle at any turn (shorter,
+                                  longer) within max_flat, or max_flat_coated for a sheet with
+                                  finish: "powder_coat" (FlatTooLarge) and at least min_part
+                                  (PartTooSmall); each bend line (BendTooLong) and angle
+                                  (BendAngleOutOfRange, fix: the angle into range); flanges round a
+                                  closed box (four or more off one wall, one way), measured as
+                                  min_flange is (BoxFlangeTooTall, fix: the height to the limit),
+                                  only on a sheet with hardware when box_flange_when: "hardware"
 pem(KIND, SIZE, at: POINT|CIRCLE, wall: W)      a catalogue part pressed into W at a point
                                   sketched on its top or bottom: its mounting hole is cut
 ```

@@ -429,6 +429,7 @@ fn shop_checks() {
         stock: vec![stock],
         hardware: vec![],
         kerf: 0.2,
+        process: Default::default(),
     };
     // flanges 25 and 20 long; the die needs 22
     let s = u_part(0.4);
