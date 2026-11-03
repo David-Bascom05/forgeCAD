@@ -108,6 +108,8 @@ pub enum AsmVal {
     },
     Kind(fa::FeatureKind),
     Pose(Frame),
+    /// The word `full` (`min_engagement: full`).
+    Full,
 }
 
 impl AsmVal {
@@ -121,6 +123,7 @@ impl AsmVal {
             AsmVal::Anchor { .. } => Ty::Anchor,
             AsmVal::Kind(_) => Ty::AnchorKind,
             AsmVal::Pose(_) => Ty::Pose,
+            AsmVal::Full => Ty::Word,
         }
     }
 }
@@ -189,7 +192,7 @@ pub struct RuleDef {
     pub a: Matcher,
     pub b: Matcher,
     pub size: Option<f64>,
-    pub min_engagement: Option<f64>,
+    pub min_engagement: Option<fa::MinEngagement>,
     pub span: Span,
 }
 
@@ -201,6 +204,8 @@ pub struct Doc {
     pub relations: Vec<RelDef>,
     pub fits: Vec<FitDef>,
     pub rules: Vec<RuleDef>,
+    /// References expects measure (`expect x(rail.eia[0])`), resolved as joint ends are.
+    pub probes: Vec<RefDef>,
 }
 
 /// Whether a program declares itself an assembly: its first statement is the word `assembly`.
@@ -211,6 +216,9 @@ pub fn declared(prog: &[crate::syntax::Stmt]) -> bool {
 pub fn constant(name: &str) -> Option<Value> {
     if name == "assembly" {
         return Some(Value::Builtin("assembly"));
+    }
+    if name == "full" {
+        return Some(asm(AsmVal::Full));
     }
     if let Some(k) = KINDS.iter().position(|k| *k == name) {
         let kind = [
@@ -538,7 +546,11 @@ fn asm_call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
             let x = m(a.req("a")?, a.span("a"))?;
             let y = m(a.req("b")?, a.span("b"))?;
             let size = a.num("size", LEN)?;
-            let min = a.num("min_engagement", LEN)?;
+            // a length, or `full`: the screw fills the internal thread's whole depth
+            let (min, full) = match a.opt("min_engagement") {
+                Some(Value::Asm(x)) if matches!(&*x, AsmVal::Full) => (None, true),
+                _ => (a.num("min_engagement", LEN)?, false),
+            };
             let id = ev.take_id(name, span)?;
             let mut dims = vec![];
             if let Some(n) = &size {
@@ -559,7 +571,11 @@ fn asm_call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
                 a: x,
                 b: y,
                 size: size.map(|n| n.v),
-                min_engagement: min.map(|n| n.v),
+                min_engagement: if full {
+                    Some(fa::MinEngagement::Full)
+                } else {
+                    min.map(|n| fa::MinEngagement::Length(n.v))
+                },
                 span,
             });
             Ok(asm(AsmVal::Item(id)))
@@ -968,11 +984,55 @@ pub enum Issue {
     UnknownMetric {
         metric: String,
     },
+    /// An expect that cannot be measured: never skipped.
+    ExpectUnevaluable {
+        metric: String,
+        why: Unevaluable,
+    },
     /// Inside a subassembly occurrence.
     Inside {
         path: String,
         issue: Box<Issue>,
     },
+}
+
+/// Why an expect could not be measured.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Unevaluable {
+    /// Its `index`-th argument is not given.
+    MissingArg { index: usize },
+    /// An argument that is no instance or reference.
+    NotAPlace { found: Ty },
+    /// A reference the part does not give.
+    NoReference { reference: String },
+    /// `value(..)` of something that is no joint value.
+    NotAJointValue { found: Ty },
+    /// A joint value the solve did not report (the joint failed).
+    NoJointValue { joint: String },
+    /// The limit is not a number.
+    NoLimit,
+    /// The document could not be run again with its `at` params.
+    AtFailed,
+}
+
+impl Unevaluable {
+    fn text(&self) -> String {
+        match self {
+            Unevaluable::MissingArg { index } => format!("argument {} is missing", index + 1),
+            Unevaluable::NotAPlace { found } => {
+                format!("an argument is a {found:?}, not an instance or a reference")
+            }
+            Unevaluable::NoReference { reference } => format!("{reference} is not a reference of its part"),
+            Unevaluable::NotAJointValue { found } => {
+                format!("value() takes a joint value (j.turn), not a {found:?}")
+            }
+            Unevaluable::NoJointValue { joint } => {
+                format!("{joint} has no value: it was left out of the solve")
+            }
+            Unevaluable::NoLimit => "the limit is not a number".into(),
+            Unevaluable::AtFailed => "the document does not run with its at params".into(),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1028,6 +1088,7 @@ impl Issue {
             Issue::UnknownKind { .. } => "UnknownKind",
             Issue::ExpectFailed { .. } => "ExpectFailed",
             Issue::UnknownMetric { .. } => "UnknownMetric",
+            Issue::ExpectUnevaluable { .. } => "ExpectUnevaluable",
             Issue::Inside { issue, .. } => issue.kind(),
         }
     }
@@ -1235,6 +1296,9 @@ fn issue_text(i: &Issue) -> String {
             cmp,
             limit,
         } => format!("expect {metric}: {measured} is not {cmp:?} {limit}"),
+        Issue::ExpectUnevaluable { metric, why } => {
+            format!("expect {metric} cannot be measured: {}", why.text())
+        }
         Issue::UnknownMetric { metric } => {
             format!("{metric} is no assembly measure ({})", METRICS.join(", "))
         }
@@ -1359,6 +1423,9 @@ fn issue_data(i: &Issue) -> Vec<(&'static str, Json)> {
             ("limit", (*limit).into()),
         ],
         Issue::UnknownMetric { metric } => vec![("metric", s(metric))],
+        Issue::ExpectUnevaluable { metric, why } => {
+            vec![("metric", s(metric)), ("why", s(&format!("{why:?}")))]
+        }
         Issue::Inside { path, issue } => {
             let mut d = vec![("path", s(path))];
             d.extend(issue_data(issue));
@@ -1514,6 +1581,8 @@ fn as_reference(ev: &mut Eval, v: Value) -> Option<fa::Reference> {
             _ => None,
         },
         Value::Plane(p) => Some(fa::Reference::frame(p.frame)),
+        // a feature's cap or face by role (`bar.end`): its plane
+        Value::Faces(f) => f.plane.map(fa::Reference::frame),
         Value::Axis(..) | Value::Line(..) => {
             let (o, d) = axis_of(ev, v, span).ok()?;
             Some(fa::Reference::axis(o, d))
@@ -1710,6 +1779,30 @@ pub struct AsmOut {
     pub draw: Vec<(Arc<forge_topo::Body>, Frame)>,
     /// A probed expect's value (`Options::probe`).
     pub probe: Option<f64>,
+    /// Every expect line: measured, against its limit, passed or not.
+    pub expects: Vec<ExpectOut>,
+    /// Every rule-covered thread pair's engagement, short or not.
+    pub engagements: Vec<EngagementOut>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ExpectOut {
+    pub line: usize,
+    pub metric: String,
+    /// None when it could not be measured (then an `ExpectUnevaluable` error says why).
+    pub measured: Option<f64>,
+    pub limit: Option<f64>,
+    pub ok: bool,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct EngagementOut {
+    pub a: String,
+    pub b: String,
+    pub rule: String,
+    pub engaged: f64,
+    pub min: Option<f64>,
+    pub short: bool,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -1728,6 +1821,8 @@ struct Names {
     rel: BTreeMap<u64, (String, Span)>,
     rule: BTreeMap<u64, (String, Span)>,
     fits: Vec<(String, Span)>,
+    /// Each probed reference's path and anchor.
+    probe: Vec<(RefDef, fa::End)>,
 }
 
 fn hid(id: &str) -> u64 {
@@ -1820,6 +1915,10 @@ fn build_doc(
         };
         fa::End { path, anchor }
     };
+    for r in &d.probes {
+        let e = end(r, want);
+        names.probe.push((r.clone(), e));
+    }
     for (n, l) in d.links.iter().enumerate() {
         let a = end(&l.a, want);
         let b = end(&l.b, want);
@@ -2007,6 +2106,19 @@ pub fn finish(
 
     // the documents for forge-asm, and what each part file is asked for
     let mut want: BTreeMap<String, (BTreeSet<String>, BTreeSet<String>)> = BTreeMap::new();
+    // the references expects measure, so the parts are asked for them
+    let mut d = d;
+    for s in ev.expects.clone() {
+        if let StmtKind::Expect { args, .. } = &s.kind {
+            for e in args {
+                if let Ok(Value::Asm(a)) = ev.expr(e)
+                    && let AsmVal::Ref(r) = &*a
+                {
+                    d.probes.push(r.clone());
+                }
+            }
+        }
+    }
     let top = build_doc(&d, &dir, &fence, &dir, &subs, &mut want, &mut names);
     let mut catalog = fa::Catalog::default();
     for (key, sub) in &subs {
@@ -2282,6 +2394,19 @@ pub fn finish(
         }),
         ..AsmOut::default()
     };
+    for e in &rep.engagements {
+        out.engagements.push(EngagementOut {
+            a: path_name(&names, &e.a),
+            b: path_name(&names, &e.b),
+            rule: names
+                .rule
+                .get(&e.rule)
+                .map_or_else(|| e.rule.to_string(), |x| x.0.clone()),
+            engaged: e.engaged,
+            min: e.min,
+            short: e.short,
+        });
+    }
     for (id, f) in &sol.poses {
         if let Some((n, _)) = names.inst.get(&id.0) {
             out.poses.push((n.clone(), *f));
@@ -2341,6 +2466,7 @@ pub fn finish(
 
     // expects
     let t4 = Instant::now();
+    let catalog = checker.parts().clone();
     let expects = ev.expects.clone();
     for (k, s) in expects.iter().enumerate() {
         let StmtKind::Expect {
@@ -2352,22 +2478,66 @@ pub fn finish(
         else {
             continue;
         };
+        let mut m = Measure {
+            names: &names,
+            sol,
+            catalog: &catalog,
+            checker,
+            asm: live_asm,
+        };
         if let Some(p) = opts.probe {
             if p == k {
-                out.probe = measure(ev, &names, sol, checker, live_asm, metric, args, s.span);
+                out.probe = m.measure(ev, metric, args).ok();
             }
             continue;
         }
-        let measured = if at.is_empty() {
-            measure(ev, &names, sol, checker, live_asm, metric, args, s.span)
-        } else {
-            probe_at(ev, opts, k, at)
+        let line = s.span.lines(ev.src).0;
+        let unevaluable = |why: Unevaluable| Issue::ExpectUnevaluable {
+            metric: metric.clone(),
+            why,
         };
-        let Some(measured) = measured else { continue };
-        let Some((c, v, tol)) = cmp else { continue };
+        let measured = if at.is_empty() {
+            m.measure(ev, metric, args)
+        } else {
+            probe_at(ev, opts, k, at).ok_or_else(|| unevaluable(Unevaluable::AtFailed))
+        };
+        let measured = match measured {
+            Ok(v) => v,
+            Err(issue) => {
+                ev.errors.push(note(s.span, issue));
+                out.expects.push(ExpectOut {
+                    line,
+                    metric: metric.clone(),
+                    measured: None,
+                    limit: None,
+                    ok: false,
+                });
+                continue;
+            }
+        };
+        let Some((c, v, tol)) = cmp else {
+            out.expects.push(ExpectOut {
+                line,
+                metric: metric.clone(),
+                measured: Some(measured),
+                limit: None,
+                ok: true,
+            });
+            continue;
+        };
         let limit = match ev.expr(v) {
             Ok(Value::Num(n)) => n.v,
-            _ => f64::NAN,
+            _ => {
+                ev.errors.push(note(s.span, unevaluable(Unevaluable::NoLimit)));
+                out.expects.push(ExpectOut {
+                    line,
+                    metric: metric.clone(),
+                    measured: Some(measured),
+                    limit: None,
+                    ok: false,
+                });
+                continue;
+            }
         };
         let tol = match tol {
             Some((x, pct)) => match ev.expr(x) {
@@ -2389,6 +2559,13 @@ pub fn finish(
             Cmp::Gt => measured > limit - tol,
             Cmp::Ge => measured >= limit - tol,
         };
+        out.expects.push(ExpectOut {
+            line,
+            metric: metric.clone(),
+            measured: Some(measured),
+            limit: Some(limit),
+            ok,
+        });
         if !ok {
             ev.errors.push(note(
                 s.span,
@@ -2438,86 +2615,152 @@ fn probe_at(ev: &mut Eval, opts: &crate::Options, k: usize, at: &[(Vec<Seg>, Exp
     run.asm.and_then(|a| a.probe)
 }
 
-fn arg_ref(ev: &mut Eval, names: &Names, e: &Expr) -> Option<(u64, String)> {
-    let v = ev.expr(e).ok()?;
-    match &v {
-        Value::Asm(a) => match &**a {
-            AsmVal::Inst(id) => Some((hid(id), id.clone())),
-            _ => None,
-        },
-        _ => {
-            let _ = names;
-            None
-        }
-    }
+/// What an expect measures with.
+struct Measure<'a> {
+    names: &'a Names,
+    sol: &'a fa::Solution,
+    catalog: &'a fa::Catalog,
+    checker: &'a mut Checker<Arc<fa::Catalog>, Arc<BrepExact>>,
+    asm: &'a fa::Assembly,
 }
 
-#[allow(clippy::too_many_arguments)]
-fn measure(
-    ev: &mut Eval,
-    names: &Names,
-    sol: &fa::Solution,
-    checker: &mut Checker<Arc<fa::Catalog>, Arc<BrepExact>>,
-    live_asm: &fa::Assembly,
-    metric: &str,
-    args: &[Expr],
-    span: Span,
-) -> Option<f64> {
-    let pose = |id: u64| sol.pose(fa::InstanceId(id));
-    match metric {
-        "mobility" => Some(sol.mobility as f64),
-        "interferences" => {
-            let rep = checker.interference(sol, &live_asm.fits, &live_asm.fit_rules);
-            Some(rep.interferences.len() as f64)
+impl Measure<'_> {
+    /// An argument as a place: an instance, or a reference on one (an anchor, a role name),
+    /// with the occurrence it is on and its world frame.
+    fn place(&self, ev: &mut Eval, args: &[Expr], index: usize) -> Result<(fa::Path, Frame), Unevaluable> {
+        let e = args.get(index).ok_or(Unevaluable::MissingArg { index })?;
+        let v = match ev.expr(e) {
+            Ok(v) => v,
+            Err(err) => {
+                ev.errors.push(err);
+                return Err(Unevaluable::NotAPlace {
+                    found: Ty::Unresolved,
+                });
+            }
+        };
+        let Value::Asm(a) = &v else {
+            return Err(Unevaluable::NotAPlace { found: v.ty() });
+        };
+        match &**a {
+            AsmVal::Inst(id) => {
+                let path = vec![fa::InstanceId(hid(id))];
+                let pose = self.sol.pose(path[0]).ok_or(Unevaluable::NoReference {
+                    reference: id.clone(),
+                })?;
+                Ok((path, pose))
+            }
+            AsmVal::Ref(r) => {
+                let text = || {
+                    let mut t = r.inst.clone();
+                    if !r.segs.is_empty() {
+                        t.push('.');
+                        t.push_str(&path_text(&r.segs));
+                    }
+                    t
+                };
+                let missing = || Unevaluable::NoReference { reference: text() };
+                let (_, end) = self
+                    .names
+                    .probe
+                    .iter()
+                    .find(|(p, _)| p.inst == r.inst && p.segs == r.segs)
+                    .ok_or_else(missing)?;
+                let occ = self.sol.occurrences.iter().find(|o| o.path == end.path);
+                let (path, pose, part) = match occ {
+                    Some(o) => (o.path.clone(), o.pose, Some(&o.part)),
+                    // a whole subassembly instance: its own frame
+                    None if end.path.len() == 1 => {
+                        let pose = self.sol.pose(end.path[0]).ok_or_else(missing)?;
+                        (end.path.clone(), pose, None)
+                    }
+                    None => return Err(missing()),
+                };
+                let frame = match &end.anchor {
+                    fa::AnchorRef::Local(l) => pose.compose(&l.frame),
+                    fa::AnchorRef::Named(n) => {
+                        let info = part
+                            .and_then(|p| fa::Parts::part(self.catalog, p))
+                            .ok_or_else(missing)?;
+                        match info.refs.get(n) {
+                            Some(Ok(rf)) => pose.compose(&rf.frame),
+                            _ => return Err(missing()),
+                        }
+                    }
+                };
+                Ok((path, frame))
+            }
+            _ => Err(Unevaluable::NotAPlace { found: v.ty() }),
         }
-        "interference" | "clearance" | "distance" => {
-            let (a, _) = arg_ref(ev, names, args.first()?)?;
-            let (b, _) = arg_ref(ev, names, args.get(1)?)?;
-            let (pa, pb) = (vec![fa::InstanceId(a)], vec![fa::InstanceId(b)]);
-            match metric {
-                "distance" => Some(pose(a)?.origin.distance(pose(b)?.origin)),
-                "clearance" => Some(
-                    checker
-                        .clearance(sol, &pa, &pb, 1e9)
+    }
+
+    fn measure(&mut self, ev: &mut Eval, metric: &str, args: &[Expr]) -> Result<f64, Issue> {
+        let why = |w: Unevaluable| Issue::ExpectUnevaluable {
+            metric: metric.into(),
+            why: w,
+        };
+        match metric {
+            "mobility" => Ok(self.sol.mobility as f64),
+            "interferences" => {
+                let rep = self
+                    .checker
+                    .interference(self.sol, &self.asm.fits, &self.asm.fit_rules);
+                Ok(rep.interferences.len() as f64)
+            }
+            "interference" | "clearance" | "distance" => {
+                let (pa, fa_) = self.place(ev, args, 0).map_err(why)?;
+                let (pb, fb) = self.place(ev, args, 1).map_err(why)?;
+                Ok(match metric {
+                    "distance" => fa_.origin.distance(fb.origin),
+                    "clearance" => self
+                        .checker
+                        .clearance(self.sol, &pa, &pb, 1e9)
                         .map_or(f64::INFINITY, |c| c.distance),
-                ),
-                _ => {
-                    let rep = checker.interference(sol, &live_asm.fits, &live_asm.fit_rules);
-                    Some(
+                    _ => {
+                        let rep = self
+                            .checker
+                            .interference(self.sol, &self.asm.fits, &self.asm.fit_rules);
                         rep.interferences
                             .iter()
                             .find(|h| (h.a == pa && h.b == pb) || (h.a == pb && h.b == pa))
-                            .map_or(0.0, |h| h.volume.unwrap_or(f64::NAN)),
-                    )
-                }
+                            .map_or(0.0, |h| h.volume.unwrap_or(f64::NAN))
+                    }
+                })
             }
-        }
-        "x" | "y" | "z" => {
-            let (a, _) = arg_ref(ev, names, args.first()?)?;
-            let o = pose(a)?.origin;
-            Some(match metric {
-                "x" => o.x,
-                "y" => o.y,
-                _ => o.z,
-            })
-        }
-        "value" => {
-            let v = ev.expr(args.first()?).ok()?;
-            let Value::Asm(a) = &v else { return None };
-            let AsmVal::JointValue { joint, freedom } = &**a else {
-                return None;
-            };
-            let j = sol.joints.iter().find(|j| j.joint.0 == hid(joint))?;
-            j.values.iter().find(|x| x.0 == *freedom).map(|x| x.1)
-        }
-        _ => {
-            ev.errors.push(note(
-                span,
-                Issue::UnknownMetric {
-                    metric: metric.into(),
-                },
-            ));
-            None
+            "x" | "y" | "z" => {
+                let (_, f) = self.place(ev, args, 0).map_err(why)?;
+                Ok(match metric {
+                    "x" => f.origin.x,
+                    "y" => f.origin.y,
+                    _ => f.origin.z,
+                })
+            }
+            "value" => {
+                let e = args.first().ok_or(why(Unevaluable::MissingArg { index: 0 }))?;
+                let v = match ev.expr(e) {
+                    Ok(v) => v,
+                    Err(err) => {
+                        ev.errors.push(err);
+                        return Err(why(Unevaluable::NotAJointValue {
+                            found: Ty::Unresolved,
+                        }));
+                    }
+                };
+                let Value::Asm(a) = &v else {
+                    return Err(why(Unevaluable::NotAJointValue { found: v.ty() }));
+                };
+                let AsmVal::JointValue { joint, freedom } = &**a else {
+                    return Err(why(Unevaluable::NotAJointValue { found: v.ty() }));
+                };
+                self.sol
+                    .joints
+                    .iter()
+                    .find(|j| j.joint.0 == hid(joint))
+                    .and_then(|j| j.values.iter().find(|x| x.0 == *freedom).map(|x| x.1))
+                    .ok_or(why(Unevaluable::NoJointValue { joint: joint.clone() }))
+            }
+            _ => Err(Issue::UnknownMetric {
+                metric: metric.into(),
+            }),
         }
     }
 }
@@ -2972,6 +3215,42 @@ pub fn json(out: &AsmOut) -> Json {
             ]),
         ),
     ];
+    let opt = |x: Option<f64>| x.map_or(Json::Null, Json::Num);
+    f.push((
+        "expects",
+        Json::Arr(
+            out.expects
+                .iter()
+                .map(|e| {
+                    Json::obj(vec![
+                        ("line", e.line.into()),
+                        ("metric", e.metric.as_str().into()),
+                        ("measured", opt(e.measured)),
+                        ("limit", opt(e.limit)),
+                        ("ok", e.ok.into()),
+                    ])
+                })
+                .collect(),
+        ),
+    ));
+    f.push((
+        "engagements",
+        Json::Arr(
+            out.engagements
+                .iter()
+                .map(|e| {
+                    Json::obj(vec![
+                        ("a", e.a.as_str().into()),
+                        ("b", e.b.as_str().into()),
+                        ("rule", e.rule.as_str().into()),
+                        ("engaged", e.engaged.into()),
+                        ("min", opt(e.min)),
+                        ("short", e.short.into()),
+                    ])
+                })
+                .collect(),
+        ),
+    ));
     if let Some(o) = &out.overlap {
         f.push((
             "overlap",

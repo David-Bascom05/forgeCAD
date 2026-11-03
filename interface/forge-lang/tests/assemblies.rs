@@ -362,8 +362,9 @@ fn ids_and_poses_hold_under_edits() {
 }
 
 /// A plate with M6 seats `tap1` and `tap2`, and bolts with 12 or 3 of thread.
-fn bolted_dir() -> PathBuf {
-    let d = dir("bolted");
+/// One directory per test: tests run at once and must not write each other's files.
+fn bolted_dir(name: &str) -> PathBuf {
+    let d = dir(name);
     write(
         &d,
         "plate.fg",
@@ -406,7 +407,7 @@ thd = anchor(plane(at: plan.o, normal: plan.plane.normal, x: plan.ax.dir), kind:
 
 #[test]
 fn a_bolted_plate_under_one_fit_rule() {
-    let d = bolted_dir();
+    let d = bolted_dir("bolted-1");
     let src = "assembly
 
 shared m = 6
@@ -876,4 +877,118 @@ mark = text(\"A\", font: \"../../outside.ttf\", size: size, depth: t, on: body.e
     let open = Options { root: None, ..opts };
     let r = forge_lang::run(src, open, Default::default()).0;
     assert!(r.ok(), "{:?}", errors(&r));
+}
+
+#[test]
+fn expects_measure_anchors_and_role_names_and_none_is_skipped() {
+    let d = mech_dir("expect-anchors");
+    let (_, t4) = open_four_bar(A, B, C, D, 30f64.to_radians());
+    let (bx, by) = (D + C * dmath::cos(t4), C * dmath::sin(t4));
+    let src = format!(
+        "{}expect x(rocker.a) = {D} +- 0.000001
+expect y(rocker.b) = {by} +- 0.000001
+expect x(rocker.b) = {bx} +- 0.000001
+expect distance(crank.b, coupler.a) = 0 +- 0.000001
+expect z(crank.bar.end) = 4 +- 0.000001
+expect distance(base.o2, base.o4) = {D} +- 0.000001
+expect x(rocker.nothing) = 0
+expect x(42) = 0
+expect value(rocker) = 0
+expect x() = 0
+expect x(rocker.a)
+",
+        four_bar_doc(30.0)
+    );
+    let r = run_in(&d, &src);
+    let a = r.asm.as_ref().expect("an assembly");
+    // every expect is listed: six measured and passing, four that cannot be measured, one with
+    // no limit (measured and listed)
+    assert_eq!(a.expects.len(), 11, "{:?}", a.expects);
+    for e in &a.expects[..6] {
+        assert!(e.ok && e.measured.is_some(), "{e:?}");
+    }
+    for e in &a.expects[6..10] {
+        assert!(!e.ok && e.measured.is_none(), "{e:?}");
+    }
+    assert!(a.expects[10].ok && (a.expects[10].measured.unwrap() - D).abs() < 1e-9);
+    // each one that cannot be measured is a typed error on its own line
+    let unevaluable: Vec<(usize, String)> = r
+        .errors
+        .iter()
+        .filter(|e| e.kind() == "ExpectUnevaluable")
+        .map(|e| (e.span().unwrap().lines(&src).0, e.text()))
+        .collect();
+    assert_eq!(unevaluable.len(), 4, "{:?}", errors(&r));
+    assert!(
+        unevaluable[0].1.contains("rocker.nothing is not a reference"),
+        "{unevaluable:?}"
+    );
+    assert!(unevaluable[1].1.contains("not an instance or a reference"));
+    assert!(unevaluable[2].1.contains("takes a joint value"));
+    assert!(unevaluable[3].1.contains("argument 1 is missing"));
+    // and the JSON lists every expect with its value and verdict
+    let json = forge_lang::report::json(&r, &src);
+    let listed = json.get("assembly").and_then(|x| x.get("expects")).unwrap();
+    let forge_agent::json::Json::Arr(items) = listed else {
+        panic!("a list")
+    };
+    assert_eq!(items.len(), 11);
+    assert_eq!(items[0].get("ok"), Some(&forge_agent::json::Json::Bool(true)));
+    assert_eq!(items[6].get("measured"), Some(&forge_agent::json::Json::Null));
+}
+
+#[test]
+fn every_threaded_fit_reports_its_engagement_and_full_means_full() {
+    let d = bolted_dir("bolted-2");
+    let src = "assembly
+
+shared m = 6
+
+base = part(\"plate.fg\", ground: true)
+b1 = part(\"bolt.fg\")
+b2 = part(\"stub.fg\")
+f1 = fastened(b1.thd, base.tap1)
+f2 = fastened(b2.thd, base.tap2)
+m6 = fit_rule(external_thread, internal_thread, size: m)
+";
+    let r = run_in(&d, src);
+    let e: Vec<(String, f64, Option<f64>, bool)> = r
+        .asm
+        .as_ref()
+        .unwrap()
+        .engagements
+        .iter()
+        .map(|x| (x.a.clone() + "/" + &x.b, x.engaged, x.min, x.short))
+        .collect();
+    // the bolt engages the whole 10 of the seat; the stub its 3, short of the shop's 6
+    assert_eq!(
+        e,
+        vec![
+            ("b1/base".to_string(), 10.0, Some(6.0), false),
+            ("b2/base".to_string(), 3.0, Some(6.0), true)
+        ]
+    );
+    // full: the screw must fill the seat's whole thread (10)
+    let full = src.replace("size: m)", "size: m, min_engagement: full)");
+    let r = run_in(&d, &full);
+    let e: Vec<(f64, Option<f64>, bool)> = r
+        .asm
+        .as_ref()
+        .unwrap()
+        .engagements
+        .iter()
+        .map(|x| (x.engaged, x.min, x.short))
+        .collect();
+    assert_eq!(e, vec![(10.0, Some(10.0), false), (3.0, Some(10.0), true)]);
+    assert_eq!(warnings_of(&r, "ShallowEngagement"), 1);
+    let json = forge_lang::report::json(&r, &full);
+    let forge_agent::json::Json::Arr(listed) = json
+        .get("assembly")
+        .and_then(|x| x.get("engagements"))
+        .unwrap()
+        .clone()
+    else {
+        panic!("a list")
+    };
+    assert_eq!(listed.len(), 2);
 }
