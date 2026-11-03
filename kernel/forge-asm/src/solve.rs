@@ -829,11 +829,12 @@ impl Block<'_> {
                     let fv = poses.ends(fk).value(ff, near(fk, ff));
                     let slope = rel.kind.slope();
                     let s = if ff.is_angle() { self.size } else { 1.0 };
-                    let mut g = Vec::new();
-                    g.push((clus(fk, 0), fv.ga.map(|x| x * s)));
-                    g.push((clus(fk, 1), fv.gb.map(|x| x * s)));
-                    g.push((clus(lk, 0), lv.ga.map(|x| -x * slope * s)));
-                    g.push((clus(lk, 1), lv.gb.map(|x| -x * slope * s)));
+                    let g = vec![
+                        (clus(fk, 0), fv.ga.map(|x| x * s)),
+                        (clus(fk, 1), fv.gb.map(|x| x * s)),
+                        (clus(lk, 0), lv.ga.map(|x| -x * slope * s)),
+                        (clus(lk, 1), lv.gb.map(|x| -x * slope * s)),
+                    ];
                     out.push(GRow {
                         src: si,
                         r: (fv.r - slope * lv.r - offset) * s,
@@ -1467,8 +1468,10 @@ pub(crate) fn run(plan: &Plan, opts: &Options, memo: Option<(&mut Memo, &[bool])
         }
     }
     sol.mobility = lone;
-    for r in results.iter().flatten() {
+    for (p, r) in results.iter().enumerate() {
+        let Some(r) = r else { continue };
         let out = &r.0;
+        let fresh = todo.binary_search(&p).is_ok();
         for &(c, f) in &out.poses {
             cpose[c] = f;
         }
@@ -1476,7 +1479,7 @@ pub(crate) fn run(plan: &Plan, opts: &Options, memo: Option<(&mut Memo, &[bool])
         sol.joints.extend(out.joints.iter().cloned());
         sol.blocks.extend(out.blocks.iter().cloned());
         sol.mobility += out.mobility;
-        let s = out.stats;
+        let s = if fresh { out.stats } else { Stats::default() };
         stats.blocks_solved += s.blocks_solved;
         stats.blocks_reused += s.blocks_reused;
         stats.bridges_placed += s.bridges_placed;

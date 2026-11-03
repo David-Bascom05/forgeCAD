@@ -18,6 +18,7 @@ pub struct PartMesh {
     pub triangles: Vec<[u32; 3]>,
     pub tolerance: f64,
     bvh: OnceLock<Bvh>,
+    sharp: OnceLock<Vec<[bool; 3]>>,
 }
 
 impl PartMesh {
@@ -27,6 +28,7 @@ impl PartMesh {
             triangles,
             tolerance,
             bvh: OnceLock::new(),
+            sharp: OnceLock::new(),
         }
     }
     pub fn from_trimesh(m: &forge_mesh::TriMesh, tolerance: f64) -> PartMesh {
@@ -37,6 +39,31 @@ impl PartMesh {
     }
     fn tri(&self, t: usize) -> [Point3; 3] {
         self.triangles[t].map(|i| self.positions[i as usize])
+    }
+    /// Each triangle edge (i to i+1) that is a feature: open, or turning more than 20° to its
+    /// neighbour. Touching along such an edge is contact, not a crossing.
+    fn sharp(&self) -> &[[bool; 3]] {
+        self.sharp.get_or_init(|| {
+            let mut by: BTreeMap<(u32, u32), Vec<(usize, usize)>> = BTreeMap::new();
+            for (t, tri) in self.triangles.iter().enumerate() {
+                for i in 0..3 {
+                    let (a, b) = (tri[i], tri[(i + 1) % 3]);
+                    by.entry((a.min(b), a.max(b))).or_default().push((t, i));
+                }
+            }
+            let mut out = vec![[true; 3]; self.triangles.len()];
+            let cos = forge_math::dmath::cos(20f64.to_radians());
+            for uses in by.values() {
+                if let [(t1, i1), (t2, i2)] = uses[..] {
+                    let (n1, n2) = (normal(&self.tri(t1)), normal(&self.tri(t2)));
+                    let l = n1.length() * n2.length();
+                    let smooth = l > 0.0 && n1.dot(n2) >= cos * l;
+                    out[t1][i1] = !smooth;
+                    out[t2][i2] = !smooth;
+                }
+            }
+            out
+        })
     }
     fn bvh(&self) -> &Bvh {
         self.bvh.get_or_init(|| {
@@ -189,8 +216,8 @@ fn normal(t: &[Point3; 3]) -> Vec3 {
 }
 
 /// Whether segment pq passes through triangle t, reaching more than `depth` behind its face
-/// (inside the solid it bounds).
-fn pierces(p: Point3, q: Point3, t: &[Point3; 3], depth: f64) -> bool {
+/// (inside the solid it bounds), and more than `depth` clear of t's feature edges.
+fn pierces(p: Point3, q: Point3, t: &[Point3; 3], sharp: [bool; 3], depth: f64) -> bool {
     let n = normal(t);
     let len = n.length();
     if len == 0.0 {
@@ -208,12 +235,19 @@ fn pierces(p: Point3, q: Point3, t: &[Point3; 3], depth: f64) -> bool {
     // inside the triangle: same side of each edge
     let e = |a: Point3, b: Point3| (b - a).cross(x - a).dot(n);
     let (u, v, w) = (e(t[0], t[1]), e(t[1], t[2]), e(t[2], t[0]));
-    (u >= 0.0 && v >= 0.0 && w >= 0.0) || (u <= 0.0 && v <= 0.0 && w <= 0.0)
+    let inside = (u >= 0.0 && v >= 0.0 && w >= 0.0) || (u <= 0.0 && v <= 0.0 && w <= 0.0);
+    inside
+        && (0..3).all(|i| {
+            !sharp[i] || {
+                let (_, c) = closest_segments(x, x, t[i], t[(i + 1) % 3]);
+                x.distance(c) > depth
+            }
+        })
 }
 
 /// Two triangles cross deeper than `depth`: an edge of one through the other.
-fn crosses(a: &[Point3; 3], b: &[Point3; 3], depth: f64) -> bool {
-    (0..3).any(|i| pierces(a[i], a[(i + 1) % 3], b, depth) || pierces(b[i], b[(i + 1) % 3], a, depth))
+fn crosses(a: &[Point3; 3], sa: [bool; 3], b: &[Point3; 3], sb: [bool; 3], depth: f64) -> bool {
+    (0..3).any(|i| pierces(a[i], a[(i + 1) % 3], b, sb, depth) || pierces(b[i], b[(i + 1) % 3], a, sa, depth))
 }
 
 /// The point of triangle t nearest p (Ericson, Real-Time Collision Detection 5.1.5).
@@ -292,7 +326,7 @@ fn closest_segments(p1: Point3, q1: Point3, p2: Point3, q2: Point3) -> (Point3, 
 
 /// Distance between two triangles (0 if they cross), with the nearest points.
 fn tri_distance(a: &[Point3; 3], b: &[Point3; 3]) -> (f64, Point3, Point3) {
-    if crosses(a, b, -1.0) {
+    if crosses(a, [false; 3], b, [false; 3], -1.0) {
         return (0.0, a[0], a[0]);
     }
     let mut best = (f64::INFINITY, a[0], b[0]);
@@ -411,7 +445,7 @@ fn inside(m: &PartMesh, p: Point3, depth: f64) -> Option<bool> {
         return None;
     }
     // a ray in a direction no model axis takes
-    let d = Vec3::new(0.577_215_664_9, 0.618_033_988_7, 0.533_012_345_6);
+    let d = Vec3::new(0.571_428_57, 0.618_034, 0.538_461_5);
     let far = p + d * (2.0 * (m.bounds().diagonal() + p.to_vec().length() + 1.0));
     let ray = Box3::from_points([p, far]);
     let mut hits = 0usize;
@@ -444,25 +478,47 @@ fn narrow(a: &PartMesh, b: &PartMesh, rel: &Frame, depth: f64) -> Narrow {
     let pl = Placed::new(a, b, rel);
     let mut hit = false;
     pl.walk(0.0, |ta, tb| {
-        hit = crosses(&a.tri(ta), &pl.tri_b(tb), depth);
+        hit = crosses(&a.tri(ta), a.sharp()[ta], &pl.tri_b(tb), b.sharp()[tb], depth);
         hit
     });
     if hit {
         return Narrow::Cross;
     }
-    // no crossing: either apart, or one inside the other
+    // no clean crossing: a face of one may still lie inside the other (one inside the other, or
+    // surfaces that cross only along coincident feature edges). Test the centres of the
+    // triangles in the shared region.
     let inv = rel.inverse();
-    // B's points in A's frame by `rel`, A's in B's by its inverse
-    for (m, other, map) in [(a, b, rel), (b, a, &inv)] {
-        for &p in other.positions.iter().take(8) {
-            let q = map.point_to_world(p);
-            if !m.bounds().grow(depth).contains(q) {
-                break;
-            }
-            match inside(m, q, depth) {
-                Some(true) => return Narrow::Inside,
-                Some(false) => break,
-                None => continue,
+    let bb = moved_box(&b.bounds(), rel);
+    let ab = a.bounds();
+    let meet = |p: forge_math::Interval, q: forge_math::Interval| {
+        let (lo, hi) = (p.lo.max(q.lo), p.hi.min(q.hi));
+        (lo <= hi).then(|| forge_math::Interval::new(lo, hi))
+    };
+    let (Some(x), Some(y), Some(z)) = (meet(ab.x, bb.x), meet(ab.y, bb.y), meet(ab.z, bb.z)) else {
+        return Narrow::Clear;
+    };
+    let shared = Box3 { x, y, z }.grow(depth);
+    // (mesh tested, mesh sampled, sampled into tested's frame, the shared region in tested's frame,
+    // tested's frame into sampled's)
+    let in_b = moved_box(&shared, &inv);
+    for (m, other, map, region, back) in [(a, b, rel, shared, inv), (b, a, &inv, in_b, *rel)] {
+        let ob = other.bvh();
+        let boxes: Vec<Box3> = (0..other.triangles.len())
+            .map(|t| Box3::from_points(other.tri(t)))
+            .collect();
+        let mut found = Vec::new();
+        ob.query(&boxes, &moved_box(&region, &back), &mut found);
+        found.sort_unstable();
+        for t in found {
+            let tri = other.tri(t);
+            let c = Point3::new(
+                (tri[0].x + tri[1].x + tri[2].x) / 3.0,
+                (tri[0].y + tri[1].y + tri[2].y) / 3.0,
+                (tri[0].z + tri[1].z + tri[2].z) / 3.0,
+            );
+            let q = map.point_to_world(c);
+            if region.contains(q) && inside(m, q, depth) == Some(true) {
+                return Narrow::Inside;
             }
         }
     }
@@ -642,6 +698,7 @@ impl InterferenceReport {
 }
 
 type Key = (PartKey, PartKey, [u64; 9]);
+type PairResults = BTreeMap<(usize, usize), Option<Interference>>;
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum PartKey {
@@ -664,7 +721,7 @@ pub struct Checker<'p, P: Parts, E: Exact> {
     exact: &'p E,
     pub threads: usize,
     cache: BTreeMap<Key, (Narrow, Option<f64>)>,
-    last: Option<(Vec<Occ>, BTreeMap<(usize, usize), Option<Interference>>)>,
+    last: Option<(Vec<Occ>, PairResults)>,
 }
 
 fn pose_bits(f: &Frame) -> [u64; 9] {
@@ -809,10 +866,11 @@ impl<'p, P: Parts, E: Exact> Checker<'p, P, E> {
             let depth = ma.tolerance + mb.tolerance + tol::LINEAR;
             narrow(ma, mb, &keyed[k].1, depth)
         });
-        let fitted = |a: &Path, b: &Path| {
-            fits.iter()
-                .any(|f| (&f.a == a && &f.b == b) || (&f.a == b && &f.b == a))
-        };
+        let fit_set: std::collections::BTreeSet<(&Path, &Path)> = fits
+            .iter()
+            .map(|f| if f.a <= f.b { (&f.a, &f.b) } else { (&f.b, &f.a) })
+            .collect();
+        let fitted = |a: &Path, b: &Path| fit_set.contains(&if a <= b { (a, b) } else { (b, a) });
         // exact confirmation for hits that are not declared fits
         let confirm: Vec<usize> = todo
             .iter()
