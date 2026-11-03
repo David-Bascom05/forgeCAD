@@ -183,6 +183,11 @@ fn open_edit_a_param_rebuild_fix_and_save() {
         .unwrap();
     let fix = h.gui.shell.fg.as_ref().unwrap().issues[lint].fixes[0].clone();
     assert!(matches!(&fix, Op::LiftLiteral { scope: Scope::Local(o), .. } if o[0].name == "mark"));
+    // the issues are a line of counts until opened: a lint alone leaves them shut
+    assert!(h.gui.shell.place(&format!("fg:fix:{lint}:0")).is_none());
+    assert!(h.click("fg:issues"));
+    h.step();
+    h.step();
     assert!(h.click(&format!("fg:fix:{lint}:0")));
     h.step();
     assert_eq!(h.gui.fg.as_ref().unwrap().ops, [set.clone(), fix.clone()]);

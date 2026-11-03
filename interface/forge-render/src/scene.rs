@@ -47,6 +47,12 @@ pub struct Scene {
     /// How far exploding moves each, in full (see `set_explode`).
     outward: Vec<[f32; 3]>,
     explode: f32,
+    /// Each placement's move from its pose besides: an assembly's exploded view.
+    offset: Vec<[f32; 3]>,
+    /// Each part's box in its own space, when known (an assembly's): what bounds measures by.
+    boxes: Vec<crate::explode::Aabb>,
+    /// Squashed to nothing (hidden): left out of every draw.
+    gone: Vec<bool>,
     /// Every placement's rows as the GPU holds them, and the bytes changed since the last upload.
     pub rows_bytes: Vec<u8>,
     dirty: Option<(usize, usize)>,
@@ -68,6 +74,18 @@ pub struct Scene {
 }
 
 const HIDDEN: u8 = u8::MAX;
+
+/// A pose squashed to nothing: how a hidden placement is put out of sight.
+fn squashed(rows: &Rows) -> bool {
+    rows.iter().all(|r| r[0] == 0.0 && r[1] == 0.0 && r[2] == 0.0)
+}
+
+impl Scene {
+    /// Whether a placement is left out of the draws (hidden).
+    pub fn is_gone(&self, i: usize) -> bool {
+        self.gone[i]
+    }
+}
 
 /// A level per part at most (tessellated and clustered).
 pub const LODS: usize = 8;
@@ -110,6 +128,9 @@ impl Scene {
             pose: placements.iter().map(|p| p.rows).collect(),
             outward,
             explode: 0.0,
+            offset: vec![[0.0; 3]; n],
+            boxes: Vec::new(),
+            gone: placements.iter().map(|p| squashed(&p.rows)).collect(),
             placements,
             rows_bytes,
             dirty: None,
@@ -164,11 +185,26 @@ impl Scene {
         }
     }
 
+    /// Moves each placement this far from its pose (an assembly's exploded view); none moved again.
+    pub fn set_offsets(&mut self, offsets: &[[f32; 3]]) {
+        for (i, o) in offsets.iter().enumerate().take(self.pose.len()) {
+            if self.offset[i] != *o {
+                self.offset[i] = *o;
+                self.place(i);
+            }
+        }
+    }
+
+    pub fn offset_of(&self, i: usize) -> [f32; 3] {
+        self.offset[i]
+    }
+
     fn place(&mut self, i: usize) {
         let mut rows = self.pose[i];
         for (k, row) in rows.iter_mut().enumerate() {
-            row[3] += self.outward[i][k] * self.explode;
+            row[3] += self.outward[i][k] * self.explode + self.offset[i][k];
         }
+        self.gone[i] = squashed(&rows);
         let p = &mut self.placements[i];
         p.rows = rows;
         let c = self.centers[p.part as usize];
@@ -200,8 +236,41 @@ impl Scene {
         ([self.x[i], self.y[i], self.z[i]], self.r[i])
     }
 
+    /// Each part's box in its own space: bounds then hold what's shown, tightly.
+    pub fn set_part_boxes(&mut self, boxes: Vec<crate::explode::Aabb>) {
+        self.boxes = boxes;
+    }
+
+    /// The box of what's shown, by the parts' boxes (none without them, or with nothing shown).
+    pub fn shown_box(&self) -> Option<crate::explode::Aabb> {
+        if self.boxes.is_empty() {
+            return None;
+        }
+        let mut all: Option<crate::explode::Aabb> = None;
+        for p in &self.placements {
+            // a hidden placement is squashed to nothing
+            if squashed(&p.rows) {
+                continue;
+            }
+            let local = self.boxes.get(p.part as usize)?;
+            let b = crate::explode::world_box(&p.rows, local);
+            all = Some(all.map_or(b, |a| {
+                (
+                    [0, 1, 2].map(|k| a.0[k].min(b.0[k])),
+                    [0, 1, 2].map(|k| a.1[k].max(b.1[k])),
+                )
+            }));
+        }
+        all
+    }
+
     /// A sphere holding the whole scene.
     pub fn bounds(&self) -> ([f32; 3], f32) {
+        if let Some((lo, hi)) = self.shown_box() {
+            let c = [0, 1, 2].map(|k| (lo[k] + hi[k]) * 0.5);
+            let r = (0..3).map(|k| (hi[k] - lo[k]).powi(2)).sum::<f32>().sqrt() * 0.5;
+            return (c, r.max(1e-3));
+        }
         let n = self.x.len().max(1) as f32;
         let c = [
             self.x.iter().sum::<f32>() / n,
@@ -227,6 +296,9 @@ impl Scene {
         // inside the view's planes, on the side of the cut that's kept
         let kept = section.map_or([0.0, 0.0, 0.0, f32::MAX], |s| [-s[0], -s[1], -s[2], -s[3]]);
         for i in 0..self.x.len() {
+            if self.gone[i] {
+                continue;
+            }
             let (x, y, z, r) = (self.x[i], self.y[i], self.z[i], -self.r[i]);
             let side = |p: [f32; 4]| p[0] * x + p[1] * y + p[2] * z + p[3] < r;
             if side(a) | side(b) | side(c) | side(d) | side(e) | side(kept) {

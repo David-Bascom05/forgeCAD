@@ -3,10 +3,12 @@
 
 pub mod bench;
 pub mod camera;
+pub mod explode;
 pub mod livegpu;
 pub mod mesh;
 pub mod nav;
 pub mod origin;
+pub mod overlay;
 pub mod render;
 pub mod scene;
 pub mod shell;
@@ -15,6 +17,8 @@ pub mod viewer;
 
 #[cfg(not(target_arch = "wasm32"))]
 pub mod app;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod asmshot;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod cache;
 #[cfg(not(target_arch = "wasm32"))]

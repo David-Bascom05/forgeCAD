@@ -172,6 +172,61 @@ impl Default for ViewState {
     }
 }
 
+/// What's drawn over a Forge file's model besides it: each switched in the view's toolbar.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Overlays {
+    /// The origin's axes and centre point.
+    pub axes: bool,
+    /// A grid on the ground (xy).
+    pub grid: bool,
+    /// The origin's planes, sketch planes and work planes.
+    pub planes: bool,
+    /// Declared anchors: a part's own, or the chosen occurrence's in an assembly.
+    pub anchors: bool,
+}
+
+pub const PART_OVERLAYS: Overlays = Overlays {
+    axes: true,
+    grid: true,
+    planes: false,
+    anchors: false,
+};
+pub const ASM_OVERLAYS: Overlays = Overlays {
+    axes: false,
+    grid: false,
+    planes: false,
+    anchors: false,
+};
+
+/// The toolbar's switches: their names (for places and tests) and words.
+pub const OVERLAY_SWITCHES: [(&str, &str); 4] = [
+    ("axes", "Axes"),
+    ("grid", "Grid"),
+    ("planes", "Planes"),
+    ("anchors", "Anchors"),
+];
+
+impl Overlays {
+    pub fn get(&self, name: &str) -> bool {
+        match name {
+            "axes" => self.axes,
+            "grid" => self.grid,
+            "planes" => self.planes,
+            _ => self.anchors,
+        }
+    }
+
+    pub fn flip(&mut self, name: &str) {
+        let v = match name {
+            "axes" => &mut self.axes,
+            "grid" => &mut self.grid,
+            "planes" => &mut self.planes,
+            _ => &mut self.anchors,
+        };
+        *v = !*v;
+    }
+}
+
 pub struct Shell {
     pub theme: Theme,
     pub tab: usize,
@@ -255,6 +310,8 @@ pub struct Shell {
     pub dim_typed: Option<String>,
     /// A Forge (.fg) part is open: its tree and panel instead of the .fc ones.
     pub fg: Option<fg::FgPanel>,
+    /// The view's switches for parts and for assemblies: kept for the session, each kind its own.
+    pub overlays: [Overlays; 2],
     pub file_menu: bool,
     style_set: Option<bool>,
 }
@@ -311,6 +368,7 @@ impl Default for Shell {
             view_blocks: Vec::new(),
             dim_typed: None,
             fg: None,
+            overlays: [PART_OVERLAYS, ASM_OVERLAYS],
             file_menu: false,
             style_set: None,
         }
@@ -422,6 +480,73 @@ impl Shell {
         self.units = forge_doc::units::of_text(src);
         self.doc = Some(doc);
         self.version = version;
+    }
+
+    /// A Forge assembly is open (known from its text, before its first solve).
+    pub fn is_asm(&self) -> bool {
+        self.fg.as_ref().is_some_and(|f| f.assembly || f.asm.is_some())
+    }
+
+    /// The switches for what's open.
+    pub fn overlays(&self) -> Overlays {
+        self.overlays[usize::from(self.is_asm())]
+    }
+
+    pub fn overlays_mut(&mut self) -> &mut Overlays {
+        let k = usize::from(self.is_asm());
+        &mut self.overlays[k]
+    }
+
+    /// The view's switches, top left over a Forge file's view: on ones filled.
+    fn view_toolbar(&mut self, ctx: &egui::Context) {
+        if self.fg.is_none() || self.view_rect.width() < 200.0 {
+            return;
+        }
+        let t = self.theme;
+        let at = self.view_rect.min + vec2(10.0, 10.0);
+        let o = self.overlays();
+        let mut flip = None;
+        let mut places = Vec::new();
+        let r = egui::Area::new(egui::Id::unique("view-toolbar"))
+            .fixed_pos(at)
+            .order(egui::Order::Middle)
+            .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 2.0;
+                    for (name, word) in OVERLAY_SWITCHES {
+                        let on = o.get(name);
+                        let g = ui.fonts_mut(|f| f.layout_no_wrap(word.to_string(), sans(12.0), t.ink));
+                        let (r, resp) = ui.allocate_exact_size(vec2(g.size().x + 18.0, 24.0), Sense::click());
+                        resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::CheckBox, true, on, word));
+                        let p = ui.painter();
+                        let fill = if on {
+                            t.on
+                        } else if resp.hovered() {
+                            t.hover
+                        } else {
+                            t.surface.gamma_multiply(0.85)
+                        };
+                        p.rect_filled(r, 4.0, fill);
+                        p.rect_stroke(r, 4.0, Stroke::new(1.0, t.line), StrokeKind::Inside);
+                        p.text(
+                            r.center(),
+                            Align2::CENTER_CENTER,
+                            word,
+                            sans(12.0),
+                            if on { t.on_ink } else { t.ink2 },
+                        );
+                        places.push((format!("view:{name}"), r));
+                        if resp.clicked() {
+                            flip = Some(name);
+                        }
+                    }
+                });
+            });
+        self.view_blocks.push(r.response.rect);
+        self.places.extend(places);
+        if let Some(name) = flip {
+            self.overlays_mut().flip(name);
+        }
     }
 
     pub fn place(&self, name: &str) -> Option<Rect> {
@@ -568,9 +693,11 @@ impl Shell {
         let side = Rect::from_min_max(pos2(0.0, top), pos2(SIDE_W, bottom));
         let ppp = ctx.pixels_per_point();
         let snap = |v: f32| (v * ppp).round() / ppp;
+        // a Forge file's panel stands beside the view, not over it: the cube stays in sight
+        let panel = if self.fg.is_some() { fg::PANEL_W } else { 0.0 };
         self.view_rect = Rect::from_min_max(
             pos2(snap(SIDE_W + 1.0), snap(top)),
-            pos2(snap(s.width()), snap(bottom)),
+            pos2(snap(s.width() - panel), snap(bottom)),
         );
 
         p.rect_filled(
@@ -595,6 +722,7 @@ impl Shell {
         self.dim_ui(&ctx);
         self.dialog_ui(&ctx);
         self.fg_panel(&ctx);
+        self.view_toolbar(&ctx);
         self.sketch_ui(&ctx);
         self.mode_bar(&ctx);
         self.resize_edges(ui, s);
