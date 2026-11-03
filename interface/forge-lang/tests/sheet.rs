@@ -1129,3 +1129,76 @@ fn the_shops_relief_rule() {
         r.errors
     );
 }
+
+/// A plate with a shop that knows an M4 stud and an M6 nut (PEM's numbers), holes 5.84 from a
+/// bend's tangent line.
+const PEM_SHOP: &str = "shared t = 1.52
+shared hw = [
+  hardware(kind: \"nut\", size: \"M6\", sheet: (1.22, 12.7), hole: 8.75, edge: 8.6, max_hardness: ratio(80), code: \"S-M6-0\", source: \"PEM CL bulletin\"),
+  hardware(kind: \"stud\", size: \"M4\", sheet: (1.0, 12.7), hole: 4.0, edge: 7.2, max_hardness: ratio(80), code: \"FH-M4-12\", source: \"PEM FH bulletin\")]
+shared steel = stock(t: t, bend: kfactor(ratio(0.4)), radii: [1.6], hole_to_bend: per_t(ratio(0), plus: 5.84), hole_to_edge: per_t(ratio(0), plus: 0.56), hardness: ratio(57))
+shared acme = shop([steel], hardware: hw)
+";
+
+#[test]
+fn a_hole_drawn_in_the_base_sketch_is_checked_with_a_fix() {
+    // a hole in the plan itself, 0.58 from the bend's tangent line: checked as a cutout is, and
+    // its fix (moving it in the plan) cures it
+    let s = format!(
+        "{PEM_SHOP}shared hy = 32.5
+sketch plan(on: xy) {{
+  outline = rect(corner: (0, 0), size: (50, 40))
+  a = circle((25, hy), 2.3)
+}}
+plate = sheet(plan, t: t, r: 1.6, shop: acme)
+up = flange(plate.edge(plan.outline[2]), height: 20)
+"
+    );
+    let r = run(&s);
+    assert!(r.ok(), "{:?}", r.errors);
+    let n = notes(&r, "HoleNearBend");
+    assert_eq!(n.len(), 1, "{:?}", r.warnings);
+    assert_eq!(n[0].id, "plate");
+    let fixed = apply(&s, &n[0].fixes[0]).expect("applies");
+    assert!(notes(&run(&fixed), "HoleNearBend").is_empty(), "{fixed}");
+}
+
+#[test]
+fn hardware_into_or_near_another_hole() {
+    // a stud whose hole runs 0.5 into a slot, a nut 6.5 from a hole's edge (it needs 8.6): each
+    // typed on its hardware, each fix moving the hardware clear
+    let s = format!(
+        "{PEM_SHOP}param plan.sy = 30
+param plan.nx = 15
+sketch plan(on: xy) {{
+  outline = rect(corner: (0, 0), size: (80, 60))
+  p = pt(40, sy)
+  q = pt(nx, 45)
+}}
+plate = sheet(plan, t: t, r: 1.6, shop: acme)
+sketch c(on: plate.top) {{
+  slot_r = rect(corner: (25, 31.5), size: (30, 7))
+  hl = circle((23, 45), 1.5)
+}}
+cuts = cutout(c, wall: plate)
+stud = pem(\"stud\", \"M4\", at: plan.p, wall: plate)
+nut = pem(\"nut\", \"M6\", at: plan.q, wall: plate)
+"
+    );
+    let r = run(&s);
+    assert!(r.ok(), "{:?}", r.errors);
+    let over = notes(&r, "HardwareOverlapsHole");
+    assert_eq!(over.len(), 1, "{:?}", r.warnings);
+    assert_eq!(over[0].id, "stud");
+    let near = notes(&r, "HardwareNearHole");
+    assert_eq!(near.len(), 1, "{:?}", r.warnings);
+    assert_eq!(near[0].id, "nut");
+    for (kind, n) in [("HardwareOverlapsHole", over[0]), ("HardwareNearHole", near[0])] {
+        let fixed = apply(&s, &n.fixes[0]).expect("applies");
+        let r = run(&fixed);
+        assert!(
+            notes(&r, kind).is_empty() && notes(&r, "HardwareNearHole").iter().all(|x| x.id != n.id),
+            "{fixed}"
+        );
+    }
+}

@@ -677,6 +677,8 @@ impl SheetNote {
                 V::HoleTooSmall { .. } => "HoleTooSmall",
                 V::HardwareThickness { .. } => "HardwareThickness",
                 V::HardwareNearEdge { .. } => "HardwareNearEdge",
+                V::HardwareOverlapsHole { .. } => "HardwareOverlapsHole",
+                V::HardwareNearHole { .. } => "HardwareNearHole",
                 V::SheetTooHard { .. } => "SheetTooHard",
                 V::HardnessUnknown { .. } => "HardnessUnknown",
                 V::ReliefUndersized { .. } => "ReliefUndersized",
@@ -850,6 +852,34 @@ impl SheetNote {
                     ("thickness", f(thickness)),
                     ("min", f(min)),
                     ("max", f(max)),
+                ]),
+                V::HardwareOverlapsHole {
+                    cut,
+                    other,
+                    distance,
+                    hole,
+                    limit,
+                    ..
+                } => v.extend([
+                    ("cut", n.cut(cut).into()),
+                    ("other", n.trim(other)),
+                    ("distance", f(distance)),
+                    ("hole", f(hole)),
+                    ("limit", f(limit)),
+                ]),
+                V::HardwareNearHole {
+                    cut,
+                    other,
+                    distance,
+                    limit,
+                    away,
+                    ..
+                } => v.extend([
+                    ("cut", n.cut(cut).into()),
+                    ("other", n.trim(other)),
+                    ("distance", f(distance)),
+                    ("limit", f(limit)),
+                    ("away", v2(Vec3Ish(away.x, away.y))),
                 ]),
                 V::HardwareNearEdge {
                     cut,
@@ -1026,6 +1056,26 @@ impl SheetNote {
                 fm(*min),
                 fm(*max),
                 fm(*thickness)
+            ),
+            Note::Violation(V::HardwareOverlapsHole {
+                cut, distance, hole, ..
+            }) if *distance == 0.0 => format!(
+                "{}: the hardware's centre is inside another hole (its own hole is {})",
+                n.cut(*cut),
+                fm(*hole)
+            ),
+            Note::Violation(V::HardwareOverlapsHole {
+                cut, distance, hole, ..
+            }) => format!(
+                "{}: the hardware's {} hole runs into another hole, whose edge is {} from its centre",
+                n.cut(*cut),
+                fm(*hole),
+                fm(*distance)
+            ),
+            Note::Violation(V::HardwareNearHole { distance, limit, .. }) => format!(
+                "the hardware's hole centre is {} from another hole's edge; it needs {}",
+                fm(*distance),
+                fm(*limit)
             ),
             Note::Violation(V::HardwareNearEdge { distance, limit, .. }) => format!(
                 "the hardware's hole centre is {} from an edge or bend; it needs {}",
@@ -3593,6 +3643,10 @@ pub fn finish(ev: &mut Eval) {
                 | fs::Violation::HoleTooSmall { trim, .. }
                 | fs::Violation::SlotTooNarrow { trim, .. } => match trim {
                     TrimRef::Cut { cut, .. } => cut_owner(cut),
+                    // a hole drawn in a wall's own outline: on that wall
+                    TrimRef::Outline { wall, .. } => {
+                        st.walls.iter().find(|w| w.0 == wall).map(|w| (w.1.clone(), w.2))
+                    }
                     _ => None,
                 },
                 fs::Violation::CutCrossesBend { trim, .. } => match trim {
@@ -3602,6 +3656,8 @@ pub fn finish(ev: &mut Eval) {
                 fs::Violation::HardwareThickness { cut, .. }
                 | fs::Violation::LipTooShort { cut, .. }
                 | fs::Violation::HardwareNearEdge { cut, .. }
+                | fs::Violation::HardwareOverlapsHole { cut, .. }
+                | fs::Violation::HardwareNearHole { cut, .. }
                 | fs::Violation::SheetTooHard { cut, .. }
                 | fs::Violation::HardnessUnknown { cut, .. } => cut_owner(cut),
                 fs::Violation::ThicknessNotStocked { .. } => None,
@@ -3656,6 +3712,23 @@ fn cut_nums(src: &CutSrc, segment: Option<u64>) -> (Option<Num>, Option<Num>, Op
 /// the sketch's) by what is missing, where the way is along a sketch axis; or a radius.
 fn cut_fixes(st: &SheetState, v: &fs::Violation) -> Vec<Op> {
     let src = |c: CutId| st.cut_srcs.iter().find(|x| x.cut == c);
+    // a hole drawn in the base sketch: that sketch, in the base wall's own frame
+    let frame = st.sketch.borrow().frame;
+    let base = CutSrc {
+        cut: CutId(u32::MAX),
+        sketch: st.sketch.clone(),
+        from: frame,
+        to: frame,
+        at: None,
+    };
+    let hole = |t: TrimRef| match t {
+        TrimRef::Cut { cut, segment } => src(cut).map(|s| (s, segment)),
+        TrimRef::Outline {
+            wall: WallId(0),
+            segment,
+        } => Some((&base, segment)),
+        _ => None,
+    };
     // to a thousandth, the way that clears (a measured distance's last bits aside)
     let round_up = |x: f64| ((x * 1000.0 - 1e-6).ceil() / 1000.0).max(0.001);
     let round_down = |x: f64| (x * 1000.0 + 1e-6).floor() / 1000.0;
@@ -3685,19 +3758,36 @@ fn cut_fixes(st: &SheetState, v: &fs::Violation) -> Vec<Op> {
     };
     match *v {
         fs::Violation::HoleNearBend {
-            trim: TrimRef::Cut { cut, segment },
+            trim,
             distance,
             limit,
             away,
             ..
         }
         | fs::Violation::HoleNearEdge {
-            trim: TrimRef::Cut { cut, segment },
+            trim,
             distance,
             limit,
             away,
             ..
-        } => src(cut).map_or(vec![], |s| moved(s, Some(segment), away, limit - distance, true)),
+        } => hole(trim).map_or(vec![], |(s, segment)| {
+            moved(s, Some(segment), away, limit - distance, true)
+        }),
+        fs::Violation::HardwareNearHole {
+            cut,
+            distance,
+            limit,
+            away,
+            ..
+        } => src(cut).map_or(vec![], |s| moved(s, None, away, limit - distance, false)),
+        // clear of the other hole by the part's edge distance, which clears the overlap too
+        fs::Violation::HardwareOverlapsHole {
+            cut,
+            distance,
+            limit,
+            away,
+            ..
+        } if distance > 0.0 => src(cut).map_or(vec![], |s| moved(s, None, away, limit - distance, false)),
         fs::Violation::HardwareNearEdge {
             cut,
             distance,
@@ -3705,12 +3795,8 @@ fn cut_fixes(st: &SheetState, v: &fs::Violation) -> Vec<Op> {
             away,
             ..
         } => src(cut).map_or(vec![], |s| moved(s, None, away, limit - distance, false)),
-        fs::Violation::HoleTooSmall {
-            trim: TrimRef::Cut { cut, segment },
-            limit,
-            ..
-        } => src(cut)
-            .and_then(|s| cut_nums(s, Some(segment)).2)
+        fs::Violation::HoleTooSmall { trim, limit, .. } => hole(trim)
+            .and_then(|(s, segment)| cut_nums(s, Some(segment)).2)
             .and_then(|r| set(&r, round_up(0.5 * limit)))
             .into_iter()
             .collect(),

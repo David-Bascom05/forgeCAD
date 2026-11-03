@@ -26,6 +26,8 @@ use std::sync::Arc;
 const RADIUS_MATCH: f64 = 1e-9;
 /// Distances closer than this are a touch.
 const TOUCH: f64 = 1e-9;
+/// A measured distance this close under its limit meets it (a fix moved it there exactly).
+const AT_LIMIT: f64 = 1e-6;
 
 pub fn check(sheet: &Sheet, shop: &ShopProfile) -> Vec<Violation> {
     let feature = sheet.feature;
@@ -207,13 +209,94 @@ pub fn mounts(sheet: &Sheet, stock: Option<&Stock>) -> Vec<Violation> {
             });
             continue;
         }
-        if best.0 < p.edge {
+        if best.0 < p.edge - AT_LIMIT {
             out.push(Violation::HardwareNearEdge {
                 feature,
                 cut: m.cut,
                 distance: best.0,
                 limit: p.edge,
                 away: place.local_vec(best.1),
+            });
+        }
+        out.extend(near_holes(sheet, flat, m, c, &place));
+    }
+    out
+}
+
+/// Hardware against the other holes of the sheet (cutouts, outline holes, other hardware's
+/// holes), in the flat: its hole running into one (or one around its centre) is an overlap;
+/// another hole's edge nearer its centre than the part's edge distance is too near.
+fn near_holes(
+    sheet: &Sheet,
+    flat: &Flat,
+    m: &crate::hardware::Mount,
+    c: Point2,
+    place: &Place,
+) -> Vec<Violation> {
+    let p = &m.part;
+    let mut out = vec![];
+    let mounted = sheet.cuts.iter().filter(|x| x.id != m.cut).filter_map(|x| {
+        sheet.mounts.iter().any(|o| o.cut == x.id).then_some(Hole {
+            wall: x.wall,
+            lp: &x.lp,
+            cut: Some(x.id),
+            crosses_bend: false,
+        })
+    });
+    for h in all_holes(sheet).into_iter().chain(mounted) {
+        if h.cut == Some(m.cut) {
+            continue;
+        }
+        let Some(at) = flat.place(h.wall) else { continue };
+        let dev: Vec<(Piece, u64)> = pieces(h.lp).iter().map(|(q, id)| (moved(q, &at), *id)).collect();
+        let Some((d, e, segment)) = dev
+            .iter()
+            .map(|(q, id)| {
+                let e = q.at(q.nearest(c));
+                (c.distance(e), e, *id)
+            })
+            .min_by(|a, b| a.0.total_cmp(&b.0))
+        else {
+            continue;
+        };
+        // the centre inside the other hole: a winding count over its pieces, sampled finely
+        let around = {
+            let pts: Vec<Point2> = dev
+                .iter()
+                .flat_map(|(q, _)| (0..32).map(move |k| q.at(k as f64 / 32.0)))
+                .collect();
+            let n = pts.len();
+            (0..n).fold(false, |inside, k| {
+                let (a, b) = (pts[k], pts[(k + 1) % n]);
+                if (a.y > c.y) != (b.y > c.y) && c.x < a.x + (c.y - a.y) / (b.y - a.y) * (b.x - a.x) {
+                    !inside
+                } else {
+                    inside
+                }
+            })
+        };
+        if around || d < 0.5 * p.hole {
+            out.push(Violation::HardwareOverlapsHole {
+                feature: sheet.feature,
+                cut: m.cut,
+                other: h.trim(segment),
+                distance: if around { 0.0 } else { d },
+                hole: p.hole,
+                limit: p.edge,
+                away: if around {
+                    Vec2::new(0.0, 0.0)
+                } else {
+                    place.local_vec(unit(c - e))
+                },
+            });
+        } else if d < p.edge - AT_LIMIT {
+            out.push(Violation::HardwareNearHole {
+                feature: sheet.feature,
+                cut: m.cut,
+                other: h.trim(segment),
+                distance: d,
+                limit: p.edge,
+                away: place.local_vec(unit(c - e)),
             });
         }
     }
@@ -238,32 +321,33 @@ fn holes(sheet: &Sheet, stock: &Stock) -> Vec<Violation> {
     let feature = sheet.feature;
     let t = sheet.gauge.thickness;
     let mut out = Vec::new();
-    let mounted: Vec<CutId> = sheet.mounts.iter().map(|m| m.cut).collect();
-    let cuts: Vec<_> = sheet.cuts.iter().filter(|c| !mounted.contains(&c.id)).collect();
-    if cuts.is_empty() {
+    // every hole, wherever it was drawn: cutouts (not hardware's own holes, checked as hardware)
+    // and the holes of the walls' own outlines (drawn in the base sketch)
+    let holes = all_holes(sheet);
+    if holes.is_empty() {
         return out;
     }
     let Some(flat) = Flat::of(sheet) else {
         return out;
     };
-    for c in cuts {
-        let Some(place) = flat.place(c.wall) else { continue };
-        let own = pieces(&c.lp);
+    for h in holes {
+        let Some(place) = flat.place(h.wall) else { continue };
+        let own = pieces(h.lp);
         let dev: Vec<(Piece, u64)> = own.iter().map(|(p, id)| (moved(p, &place), *id)).collect();
-        let trim = |segment: u64| TrimRef::Cut { cut: c.id, segment };
+        let trim = |segment: u64| h.trim(segment);
         // a notch: an edge feature, not a hole
         let edge = gap(&dev, &flat.outer);
         if edge.0 <= TOUCH {
             continue;
         }
         // its width: across a round hole, else the widest circle it holds
-        match round(&c.lp.segments) {
+        match round(&h.lp.segments) {
             Some(r) => {
                 let limit = stock.min_hole.at(t, 0.0);
                 if 2.0 * r < limit {
                     out.push(Violation::HoleTooSmall {
                         feature,
-                        trim: trim(c.lp.segments[0].1),
+                        trim: trim(h.lp.segments[0].1),
                         diameter: 2.0 * r,
                         limit,
                         thickness: t,
@@ -276,7 +360,7 @@ fn holes(sheet: &Sheet, stock: &Stock) -> Vec<Violation> {
                 if width < limit {
                     out.push(Violation::SlotTooNarrow {
                         feature,
-                        trim: trim(c.lp.segments[0].1),
+                        trim: trim(h.lp.segments[0].1),
                         width,
                         limit,
                         thickness: t,
@@ -285,7 +369,7 @@ fn holes(sheet: &Sheet, stock: &Stock) -> Vec<Violation> {
             }
         }
         let limit = stock.hole_to_edge.at(t, 0.0);
-        if edge.0 < limit {
+        if edge.0 < limit - AT_LIMIT {
             out.push(Violation::HoleNearEdge {
                 feature,
                 trim: trim(edge.3),
@@ -308,12 +392,12 @@ fn holes(sheet: &Sheet, stock: &Stock) -> Vec<Violation> {
                     feature,
                     trim: trim(segment),
                     joint: z.joint,
-                    intended: c.crosses_bend,
+                    intended: h.crosses_bend,
                     away: place.local_vec(z.away(Point2::ORIGIN + centre)),
                 });
                 continue;
             }
-            if d < limit {
+            if d < limit - AT_LIMIT {
                 let centre = dev
                     .iter()
                     .map(|p| p.0.at(0.5).to_vec())
@@ -332,6 +416,51 @@ fn holes(sheet: &Sheet, stock: &Stock) -> Vec<Violation> {
         }
     }
     out
+}
+
+/// A hole in a wall: a cutout, or a hole of the wall's own outline.
+struct Hole<'a> {
+    wall: crate::error::WallId,
+    lp: &'a forge_ops::ProfileLoop,
+    cut: Option<CutId>,
+    crosses_bend: bool,
+}
+
+impl Hole<'_> {
+    fn trim(&self, segment: u64) -> TrimRef {
+        match self.cut {
+            Some(cut) => TrimRef::Cut { cut, segment },
+            None => TrimRef::Outline {
+                wall: self.wall,
+                segment,
+            },
+        }
+    }
+}
+
+/// Every hole the shop's hole rules apply to: the cutouts but hardware's mounting holes, and
+/// every wall's outline holes (its loops after the first).
+fn all_holes(sheet: &Sheet) -> Vec<Hole<'_>> {
+    let mounted: Vec<CutId> = sheet.mounts.iter().map(|m| m.cut).collect();
+    let cuts = sheet
+        .cuts
+        .iter()
+        .filter(|c| !mounted.contains(&c.id))
+        .map(|c| Hole {
+            wall: c.wall,
+            lp: &c.lp,
+            cut: Some(c.id),
+            crosses_bend: c.crosses_bend,
+        });
+    let outline = sheet.walls.iter().flat_map(|w| {
+        w.outline.iter().skip(1).map(move |lp| Hole {
+            wall: w.id,
+            lp,
+            cut: None,
+            crosses_bend: false,
+        })
+    });
+    cuts.chain(outline).collect()
 }
 
 /// The radius of a loop that is one circle (or arcs of one).

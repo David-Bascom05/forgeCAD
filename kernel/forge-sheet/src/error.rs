@@ -485,6 +485,31 @@ pub enum Violation {
         limit: f64,
         away: Vec2,
     },
+    /// Hardware whose mounting hole runs into another hole (or sits inside one): the other's
+    /// edge `distance` from its centre, under the hole's radius (0: the centre inside it).
+    HardwareOverlapsHole {
+        feature: FeatureId,
+        cut: CutId,
+        other: TrimRef,
+        distance: f64,
+        /// The mounting hole's diameter.
+        hole: f64,
+        /// The part's edge distance, which a move clears too.
+        limit: f64,
+        /// From the other hole towards the centre (in the wall's coordinates), when the centre is
+        /// outside it.
+        away: Vec2,
+    },
+    /// Hardware whose centre is `distance` from another hole's edge, under the part's minimum
+    /// edge distance (the catalogue's centre to edge, any edge).
+    HardwareNearHole {
+        feature: FeatureId,
+        cut: CutId,
+        other: TrimRef,
+        distance: f64,
+        limit: f64,
+        away: Vec2,
+    },
     /// The wall is too narrow for the hardware: across its centre, from edge or bend to edge or
     /// bend, `width` where the part needs `need` (its edge distance both ways). No move fixes it.
     LipTooShort {
