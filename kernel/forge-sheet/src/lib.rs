@@ -1,6 +1,7 @@
 //! Sheet metal: a wall-and-joint graph in folded design terms, each wall's trim held in its own
 //! developed coordinates, and both the folded and the flat solid built from it directly as
 //! ordinary bodies, with no booleans and nothing recognised. Design: research/sheet-metal/.
+pub mod bendline;
 pub mod build;
 pub mod checks;
 pub mod contour;
@@ -17,6 +18,7 @@ pub mod relief;
 pub mod roles;
 pub mod shop;
 
+pub use bendline::{BendAt, BendLineError};
 pub use build::{
     BendPlace, Built, CornerMade, Layout, Map, Place2, WallPlace, build, build_with, setback_of,
 };

@@ -107,7 +107,8 @@ fn closed_form(shape: FormShape, t: f64) -> (f64, f64) {
             // a ring sector of radii ri..ro through angle b about r = c, bowing towards the axis
             // (-1) or away (+1): its first moment about the axis
             let sector = |c: f64, ri: f64, ro: f64, toward: f64| {
-                0.5 * b * (ro * ro - ri * ri) * c + toward * (ro.powi(3) - ri.powi(3)) * (1.0 - dmath::cos(b)) / 3.0
+                0.5 * b * (ro * ro - ri * ri) * c
+                    + toward * (ro.powi(3) - ri.powi(3)) * (1.0 - dmath::cos(b)) / 3.0
             };
             let rim = sector(r1, ri, ro, -1.0);
             let wall = (h - (ro + pi_) * (1.0 - dmath::cos(b))) / dmath::sin(b);

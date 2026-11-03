@@ -49,6 +49,8 @@ pub const BUILTINS: &[&str] = &[
     "seam",
     "punch",
     "form",
+    "sketched_bend",
+    "jog",
     "hardware",
     "pem",
     "relief_rule",
@@ -2393,6 +2395,8 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
         "seam" => feat::seam(ev, args, span),
         "punch" => feat::punch(ev, args, span),
         "form" => feat::form(ev, args, span),
+        "sketched_bend" => feat::sketched_bend(ev, args, span, false),
+        "jog" => feat::sketched_bend(ev, args, span, true),
         "hardware" => {
             let a = Args::bind(
                 ev,

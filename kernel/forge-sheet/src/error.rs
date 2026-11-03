@@ -395,6 +395,11 @@ pub enum SheetError {
         depth: f64,
         limit: f64,
     },
+    /// A sketched bend or jog, refused (`crate::bendline`).
+    BendLine {
+        feature: FeatureId,
+        why: crate::bendline::BendLineError,
+    },
     /// A hem, refused (`crate::hem`); `joint` is the id it would have had.
     Hem {
         feature: FeatureId,

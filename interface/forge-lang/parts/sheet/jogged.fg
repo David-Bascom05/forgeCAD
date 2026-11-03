@@ -1,0 +1,26 @@
+# A jogged strap: a plate with a jog 10 up at x = 40 (the line as the bends' mold line), and a
+# sketched bend centred at x = 100 on the far wall that keeps the flat as drawn.
+shared t = 1.5
+shared r = 2
+shared k = ratio(0.4)
+param plan.L = 140
+param plan.W = 40
+param j.x = 40
+param j.off = 10
+param b.x = 100
+param b.a = 45deg
+param j.y0 = -5
+param j.y1 = 45
+param b.y0 = -5
+param b.y1 = 45
+shared steel = stock(t: t, bend: kfactor(k), radii: [r])
+shared acme = shop([steel])
+
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (L, W))
+}
+base = sheet(plan, t: t, r: r, bend: kfactor(k), shop: acme)
+j = jog(wall: base, from: (x, y0), to: (x, y1), offset: off, position: "outside")
+b = sketched_bend(wall: j, from: (x, y0), to: (x, y1), angle: a)
+flat = unfold(base)
+expect valid

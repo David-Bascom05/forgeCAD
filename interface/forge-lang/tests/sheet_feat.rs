@@ -340,3 +340,36 @@ fn form_refusals_and_violations() {
         "{kinds:?}"
     );
 }
+
+#[test]
+fn a_jog_and_a_sketched_bend_match_the_closed_form() {
+    let r = clean("jogged");
+    let (t, rr, k, w) = (1.5, 2.0, 0.4, 40.0);
+    let half = PI / 2.0;
+    // the jog: up then back, its line the mold line; the far wall then bent 45deg about x = 100
+    // with the flat as drawn there
+    let (s_up, s_down) = (rr, rr + t);
+    let m = 10.0;
+    let ba = |a: f64| a * (rr + k * t);
+    let zone = |a: f64| a * (rr * t + 0.5 * t * t);
+    // the far wall runs from its mold line (x = 40 + m in its own terms) to 140; the centred bend
+    // at 100 keeps its flat: the far wall's own developed length is 140 - 40 - m
+    let far = 140.0 - 40.0 - m;
+    let straights = (40.0 - s_up) + (m - s_up - s_down) + (far - s_down - ba(PI / 4.0));
+    let folded = t * w * straights + w * (2.0 * zone(half) + zone(PI / 4.0));
+    let flat = t * w * (straights + 2.0 * ba(half) + ba(PI / 4.0));
+    near(
+        "folded",
+        mass(r.sheets[0].folded.as_ref().expect("built")),
+        folded,
+    );
+    near(
+        "flat",
+        mass(r.sheets[0].unfolds[0].1.as_ref().expect("built")),
+        flat,
+    );
+    let s = src("jogged").replace("to: (x, y1), offset", "to: (x + off, y1), offset");
+    assert_eq!(first_error(&s).kind(), "BendLineNotSquare");
+    let s = src("jogged").replace("param j.off = 10", "param j.off = 2");
+    assert_eq!(first_error(&s).kind(), "JogTooShort");
+}

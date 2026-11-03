@@ -98,6 +98,7 @@ pub(super) fn kernel_kind(e: &SheetError) -> Option<&'static str> {
         SheetError::Hem { why, .. } => hem_kind(why),
         SheetError::Seam { why, .. } => seam_kind(why),
         SheetError::Punch { .. } => "PunchSize",
+        SheetError::BendLine { why, .. } => bend_line_kind(why),
         _ => return None,
     })
 }
@@ -151,6 +152,7 @@ pub(super) fn kernel_text(e: &SheetError) -> Option<String> {
             why: fs::PunchError::Size { which, value, limit },
             ..
         } => format!("tool size {which} = {} (needs past {})", fm(*value), fm(*limit)),
+        SheetError::BendLine { why, .. } => bend_line_text(why),
         _ => return None,
     })
 }
@@ -194,6 +196,7 @@ pub(super) fn kernel_data(e: &SheetError) -> Option<Vec<(&'static str, Json)>> {
             ("value", f(*value)),
             ("limit", f(*limit)),
         ],
+        SheetError::BendLine { why, .. } => bend_line_data(why),
         _ => return None,
     })
 }
@@ -1399,4 +1402,196 @@ pub(super) fn form_error_data(e: &SheetError, n: &Names) -> Option<Vec<(&'static
         ],
         _ => return None,
     })
+}
+
+// ---- sketched bends and jogs ------------------------------------------------------------------
+
+/// A point on a wall: a sketch point (on its top or bottom) or (x, y) in its own coordinates.
+/// None while the wall is not yet built (a point cannot be read off it).
+fn wall_point(
+    ev: &Eval,
+    a: &Args,
+    k: &'static str,
+    si: usize,
+    wall: WallId,
+    dims: &mut Vec<Dimension>,
+) -> R<Option<Point2>> {
+    match a.req(k)? {
+        Value::Tuple(xs) if xs.len() == 2 => {
+            let x = num_of(xs[0].clone(), LEN, a.span(k), "x")?;
+            let y = num_of(xs[1].clone(), LEN, a.span(k), "y")?;
+            dims.push(dim("x", &x));
+            dims.push(dim("y", &y));
+            Ok(Some(Point2::new(x.v, y.v)))
+        }
+        Value::Ent(e) => {
+            let st = &ev.sheets.list[si];
+            let Some(frame) = wall_frame(st, wall, None) else {
+                return Ok(None);
+            };
+            let sk = e.sk.borrow();
+            let p = frame.point_to_local(sk.world(sk.pos(e.id)));
+            Ok(Some(Point2::new(p.x, p.y)))
+        }
+        o => Err(wrong(a.span(k), "a point or (x, y)", Ty::Tuple, &o)),
+    }
+}
+
+/// `sketched_bend(wall: W, from: P, to: P, angle: 90deg, r: R, position: "centre")` and
+/// `jog(wall: W, from: P, to: P, offset: D, angle: 90deg, r: R, position: "centre")`: a bend
+/// along the line from -> to drawn on W, the side right of it turning (a jog turns back again
+/// `offset` on). position: "centre" keeps the flat as drawn; "inside", "outside",
+/// "bend_outside" put the bend against the line as a flange's against its edge.
+pub(super) fn sketched_bend(ev: &mut Eval, args: &[Arg], span: Span, jog: bool) -> R<Value> {
+    let name = if jog { "jog" } else { "sketched_bend" };
+    let id = ev.take_id(name, span)?;
+    let params: &[&str] = if jog {
+        &["wall", "from", "to", "offset", "angle", "r", "position"]
+    } else {
+        &["wall", "from", "to", "angle", "r", "position"]
+    };
+    let a = Args::bind(ev, name, params, args, span)?;
+    if a.poisoned() {
+        return Ok(Value::Unresolved);
+    }
+    let wv = a.req("wall")?;
+    let op = op_of(&wv, a.span("wall"), "the wall the bend line is drawn on")?;
+    let wall = match op.kind {
+        OpKind::Base { wall } | OpKind::Flange { wall, .. } if op.on == On::Folded => wall,
+        OpKind::Contour { last, .. } if op.on == On::Folded => last,
+        _ => {
+            return Err(wrong(
+                a.span("wall"),
+                "a base or flange of the folded sheet",
+                Ty::Sheet,
+                &wv,
+            ));
+        }
+    };
+    let si = op.sheet;
+    not_unfolded(ev, si, &id, span)?;
+    let position =
+        match word(&a, "position", &["centre", "outside", "inside", "bend_outside"])?.unwrap_or("centre") {
+            "centre" => fs::BendAt::Centre,
+            "inside" => fs::BendAt::Position(fs::Position::Inside),
+            "bend_outside" => fs::BendAt::Position(fs::Position::BendOutside),
+            _ => fs::BendAt::Position(fs::Position::Outside),
+        };
+    let mut dims = vec![];
+    let angle = a.num("angle", ANG)?;
+    let r = a.num("r", LEN)?;
+    let offset = if jog {
+        Some(a.req_num("offset", LEN)?)
+    } else {
+        None
+    };
+    for (k, n) in [("angle", &angle), ("r", &r), ("offset", &offset)] {
+        if let Some(n) = n {
+            dims.push(dim(k, n));
+        }
+    }
+    let (p0, p1) = (
+        wall_point(ev, &a, "from", si, wall, &mut dims)?,
+        wall_point(ev, &a, "to", si, wall, &mut dims)?,
+    );
+    let (Some(p0), Some(p1)) = (p0, p1) else {
+        push_sheet_step(ev, si, &id, name, span, vec![])?;
+        return Ok(op_value(
+            si,
+            &id,
+            OpKind::Contour {
+                first: wall,
+                last: wall,
+            },
+        ));
+    };
+    let st = &mut ev.sheets.list[si];
+    let angle = angle.map_or(dmath::PI / 2.0, |n| n.v);
+    let r = r.map_or(st.sheet.gauge.radius, |n| n.v);
+    let made = match offset {
+        None => st
+            .sheet
+            .sketched_bend(wall, p0, p1, angle, r, position)
+            .map(|(w, j)| (vec![w], vec![j])),
+        Some(off) => st
+            .sheet
+            .jog(wall, p0, p1, off.v, angle, r, position)
+            .map(|(m, j1, f, j2)| (vec![m, f], vec![j1, j2])),
+    };
+    let (walls, joints) = match made {
+        Ok(x) => x,
+        Err(e) => return Err(kernel_err(st, span, &id, e)),
+    };
+    for &w in &walls {
+        st.walls.push((w, id.clone(), span));
+    }
+    for &j in &joints {
+        st.joints.push((j, id.clone(), span));
+    }
+    push_sheet_step(ev, si, &id, name, span, dims)?;
+    Ok(op_value(
+        si,
+        &id,
+        OpKind::Contour {
+            first: walls[0],
+            last: walls[walls.len() - 1],
+        },
+    ))
+}
+
+pub(super) fn bend_line_kind(e: &fs::BendLineError) -> &'static str {
+    use fs::BendLineError::*;
+    match e {
+        Line { .. } => "BendLineEmpty",
+        Crossings { .. } => "BendLineCrossings",
+        NotSquare { .. } => "BendLineNotSquare",
+        HoleAcross { .. } => "BendLineHoleAcross",
+        EdgeTaken { .. } => "BendLineEdgeTaken",
+        JogTooShort { .. } => "JogTooShort",
+    }
+}
+
+pub(super) fn bend_line_text(e: &fs::BendLineError) -> String {
+    use fs::BendLineError::*;
+    let fm = crate::values::fmt;
+    match *e {
+        Line { .. } => "the bend line's ends are one point".into(),
+        Crossings { count, .. } => {
+            format!("the wall's outline crosses the bend line {count} times; a bend line crosses it twice")
+        }
+        NotSquare { segment, angle } if angle.is_nan() => {
+            format!(
+                "the bend line crosses outline edge {segment}, a curve: it must cross straight edges square to it"
+            )
+        }
+        NotSquare { segment, angle } => format!(
+            "the bend line crosses outline edge {segment} {}deg off square, or too near its end: it must cross straight edges square to it",
+            fm(angle.to_degrees())
+        ),
+        HoleAcross { segment } => {
+            format!("a hole in the wall's outline (edge {segment}) lies across the bend")
+        }
+        EdgeTaken { segment, .. } => {
+            format!("outline edge {segment}, across the bend line, already carries a bend")
+        }
+        JogTooShort { length, .. } => format!(
+            "the jog's middle wall leaves {} between its bends' setbacks: a larger offset or a smaller radius",
+            fm(length)
+        ),
+    }
+}
+
+pub(super) fn bend_line_data(e: &fs::BendLineError) -> Vec<(&'static str, Json)> {
+    use fs::BendLineError::*;
+    let f = |x: f64| Json::Num(x);
+    match *e {
+        Line { length, limit } => vec![("length", f(length)), ("limit", f(limit))],
+        Crossings { count, at } => vec![("count", f(count as f64)), ("at", f(at))],
+        NotSquare { segment, angle } => {
+            vec![("segment", f(segment as f64)), ("angle", f(angle.to_degrees()))]
+        }
+        HoleAcross { segment } => vec![("segment", f(segment as f64))],
+        EdgeTaken { segment, joint } => vec![("segment", f(segment as f64)), ("joint", f(joint.0 as f64))],
+        JogTooShort { length, limit } => vec![("length", f(length)), ("limit", f(limit))],
+    }
 }
