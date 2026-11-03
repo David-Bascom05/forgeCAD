@@ -227,7 +227,8 @@ fn draft_offset_and_thicken_move_faces() {
     let r = ok(&format!(
         "{BOX}tilt = draft(box.side(base.r[2]), angle: a, neutral: base.plane)\n"
     ));
-    let off = 60.0 * 30.0 * 30.0 * (3.0f64.to_radians()).tan() / 2.0;
+    let (s, c) = forge_math::dmath::sin_cos(3.0f64.to_radians());
+    let off = 60.0 * 30.0 * 30.0 * (s / c) / 2.0;
     close(volume(&r), 60.0 * 40.0 * 30.0 - off, 1e-9);
     let r = ok(&format!("{BOX}grow = offset_faces(box.side(base.r[1]), g)\n"));
     close(volume(&r), 61.5 * 40.0 * 30.0, 1e-9);
