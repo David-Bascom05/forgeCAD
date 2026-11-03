@@ -360,6 +360,11 @@ pub enum SheetError {
         trim: TrimRef,
         curve: TrimCurveKind,
     },
+    /// A contour flange's profile, refused (`crate::contour`).
+    Contour {
+        feature: FeatureId,
+        why: crate::contour::ContourError,
+    },
     /// A trim edge too short to carry a curve.
     EdgeTooShort {
         feature: FeatureId,

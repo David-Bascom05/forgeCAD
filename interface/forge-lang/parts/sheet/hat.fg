@@ -1,0 +1,26 @@
+# A hat section from one contour flange: along, up round an r 3 arc, over round an r 4 arc, along,
+# and sharp down (bent at the sheet's radius). The profile is the reference skin; the material lies
+# on its right.
+shared t = 1.5
+shared r = 2
+shared k = ratio(0.4)
+shared w = 25
+param sec.a = 15
+param sec.r1 = 3
+param sec.h = 17
+param sec.r2 = 4
+param sec.b = 40
+
+sketch sec(on: xz) {
+  path p(start: (0, 0)) {
+    line(to: (a, 0))
+    tarc(to: (a + r1, r1))
+    line(to: (a + r1, h))
+    tarc(to: (a + r1 + r2, h + r2))
+    line(to: (b, h + r2))
+    line(to: (b, 0))
+  }
+}
+hat = contour(sec.p, width: w, t: t, r: r, bend: kfactor(k))
+flat = unfold(hat)
+expect valid

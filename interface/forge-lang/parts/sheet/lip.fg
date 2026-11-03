@@ -1,0 +1,24 @@
+# A contour run off a base's right edge: up 20, round an r 3 arc out, along to 15 from the edge.
+shared t = 2
+shared r = 2
+shared k = ratio(0.42)
+shared L = 40
+param plan.W = 30
+param sec.up = 17
+param sec.r1 = 3
+param sec.out = 15
+
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (L, W))
+}
+base = sheet(plan, t: t, r: r, bend: kfactor(k))
+sketch sec(on: rotate(plan.plane, about: plan.outline[0], by: 90deg)) {
+  path p(start: (L, 0)) {
+    line(to: (L, up))
+    tarc(to: (L + r1, up + r1))
+    line(to: (L + out, up + r1))
+  }
+}
+lip = contour(sec.p, edge: base.edge(plan.outline[1]))
+flat = unfold(base)
+expect valid

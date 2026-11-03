@@ -531,6 +531,16 @@ cutout(PROFILE, wall: W, crosses_bend: false)
 pattern(of: CUTOUT, layout: LAYOUT)
     the cutout repeated on its wall; a copy that leaves the wall's plane is PatternOffWall,
     other sheet features PatternOfSheet.
+contour(PATH, width: W, t: T, r: R, bend: RULE, side: "left"|"right" = "right", shop: SHOP)
+    a sheet whose walls are PATH's lines and whose bends are its arcs, run W along its sketch's
+    normal. PATH is the reference skin, the material on its `side`; open, lines and tangent arcs,
+    starting and ending with a line. An arc of radius a bends at inside radius a turning away
+    from the material and a - t turning towards it; a sharp corner bends at r with the corner
+    as its virtual sharp. Splines, circles, two arcs in a row, inside radii below the shop's
+    least (Contour* errors, by profile piece).
+contour(PATH, edge: EDGE)
+    the same run off a straight edge, as long as it: PATH lies in a plane square to the edge and
+    starts on it, its material continuing the wall's. C.tip is its last wall's far edge.
 unfold(S, on: PLANE)
     the flat body of S's sheet as a new body, its first wall on PLANE (default where it is
     folded). Sheet features after an unfold of their sheet are AfterUnfold.

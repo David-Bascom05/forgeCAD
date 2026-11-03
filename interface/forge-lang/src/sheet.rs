@@ -31,6 +31,7 @@ pub const BUILTINS: &[&str] = &[
     "flange",
     "cutout",
     "unfold",
+    "contour",
     "kfactor",
     "ktable",
     "bend_table",
@@ -77,6 +78,10 @@ pub fn constant(name: &str) -> Option<Value> {
 /// Methods sheet values answer: `S.edge(entity)`, `U.of(op)`.
 pub const METHODS: &[&str] = &["edge", "of"];
 
+#[path = "sheet_feat.rs"]
+mod feat;
+pub use feat::FeatErr;
+
 const ANG: &[Dim] = &[Dim::Angle];
 const RATIO: &[Dim] = &[Dim::Ratio];
 
@@ -120,10 +125,25 @@ pub struct CornerV {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OpKind {
-    Base { wall: WallId },
-    Flange { wall: WallId, joint: JointId },
-    Cut { cut: CutId },
-    Corner { a: JointId, b: JointId },
+    Base {
+        wall: WallId,
+    },
+    Flange {
+        wall: WallId,
+        joint: JointId,
+    },
+    Cut {
+        cut: CutId,
+    },
+    Corner {
+        a: JointId,
+        b: JointId,
+    },
+    /// A contour's walls, made in a row (ids `first` to `last`), and the bends before each.
+    Contour {
+        first: WallId,
+        last: WallId,
+    },
 }
 
 /// Which body an anchor reads: the folded one, or unfold `k`'s.
@@ -506,6 +526,8 @@ pub enum SheetErr {
     PatternOffWall { span: Span, distance: f64 },
     /// A rule table row of the wrong shape.
     TableRow { span: Span, row: usize, want: usize },
+    /// The newer features' own refusals (`sheet_feat.rs`).
+    Feat(FeatErr),
 }
 
 impl SheetErr {
@@ -526,6 +548,7 @@ impl SheetErr {
             | PatternOffWall { span, .. }
             | NotACorner { span, .. }
             | NoSuchHardware { span, .. } => Some(*span),
+            Feat(e) => Some(e.span()),
         }
     }
 
@@ -544,6 +567,7 @@ impl SheetErr {
             TableOrder { .. } => "TableOrder",
             PatternOfSheet { .. } => "PatternOfSheet",
             PatternOffWall { .. } => "PatternOffWall",
+            Feat(e) => e.kind(),
             NotACorner { .. } => "NotACorner",
             NoSuchHardware { .. } => "NoSuchHardware",
         }
@@ -595,6 +619,7 @@ impl SheetErr {
             TableOrder { row, after, .. } => {
                 format!("table row {row} does not come after row {after}: rows run in increasing order")
             }
+            Feat(e) => e.text(),
             NotACorner { id, .. } => format!("{id}: the two flanges do not meet at a corner of one wall"),
             NoSuchHardware {
                 kind, size, sizes, ..
@@ -629,6 +654,7 @@ impl SheetErr {
             PatternOfSheet { op, .. } => vec![("op", s(op))],
             PatternOffWall { distance, .. } => vec![("distance", (*distance).into())],
             NotACorner { id, .. } => vec![("id", s(id))],
+            Feat(e) => e.data(),
             NoSuchHardware {
                 kind, size, sizes, ..
             } => vec![
@@ -1253,6 +1279,9 @@ fn p3(p: Point3) -> Json {
 
 fn kernel_kind(e: &SheetError) -> &'static str {
     use SheetError::*;
+    if let Some(k) = feat::kernel_kind(e) {
+        return k;
+    }
     match e {
         Thickness { .. } => "Thickness",
         Radius { .. } => "Radius",
@@ -1293,12 +1322,16 @@ fn kernel_kind(e: &SheetError) -> &'static str {
         HardwareOffWall { .. } => "HardwareOffWall",
         ReliefExtendUnbuilt { .. } => "ReliefExtendUnbuilt",
         SheetSplit { .. } => "SheetSplit",
+        _ => unreachable!("the features' own, above"),
     }
 }
 
 fn kernel_text(e: &SheetError) -> String {
     use SheetError::*;
     let fm = crate::values::fmt;
+    if let Some(t) = feat::kernel_text(e) {
+        return t;
+    }
     match e {
         Thickness { thickness, .. } => format!("thickness {} is not positive", fm(*thickness)),
         Radius { radius, .. } => format!("bend radius {} is not positive", fm(*radius)),
@@ -1366,12 +1399,16 @@ fn kernel_text(e: &SheetError) -> String {
         FoldedTouch { .. } => "folded, two walls touch with no gap (an edge on a face): no valid solid".into(),
         ReliefExtendUnbuilt { .. } => "the relief rule asks reliefs to extend for flat collisions: not built yet".into(),
         SheetSplit { .. } => "the cuts part the sheet in two".into(),
+        _ => unreachable!("the features' own, above"),
     }
 }
 
 fn kernel_data(e: &SheetError, n: &Names) -> Vec<(&'static str, Json)> {
     use SheetError::*;
     let f = |x: f64| Json::Num(x);
+    if let Some(d) = feat::kernel_data(e) {
+        return d;
+    }
     match e {
         Thickness { thickness, limit, .. } => vec![("thickness", f(*thickness)), ("limit", f(*limit))],
         Radius { radius, limit, .. } => vec![("radius", f(*radius)), ("limit", f(*limit))],
@@ -1669,6 +1706,7 @@ fn kernel_data(e: &SheetError, n: &Names) -> Vec<(&'static str, Json)> {
         HardwareOffWall { wall, at, .. } => vec![("wall", n.strip(Strip::Wall(*wall))), ("at", p2(*at))],
         FoldedTouch { a, b, at, .. } => vec![("a", n.strip(*a)), ("b", n.strip(*b)), ("at", p3(*at))],
         SheetSplit { a, b, .. } => vec![("a", n.strip(*a)), ("b", n.strip(*b))],
+        _ => unreachable!("the features' own, above"),
     }
 }
 
@@ -2216,6 +2254,7 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
         "flange" => flange(ev, args, span),
         "cutout" => cutout(ev, args, span),
         "unfold" => unfold(ev, args, span),
+        "contour" => feat::contour(ev, args, span),
         "rect" | "obround" => {
             let a = Args::bind(ev, name, &["width", "depth"], args, span)?;
             let width = a.num("width", LEN)?;
@@ -3493,6 +3532,14 @@ fn op_trims(st: &SheetState, op: &OpRef) -> Vec<TrimRef> {
                 ]
             })
             .collect(),
+        OpKind::Contour { .. } => {
+            let (walls, joints) = feat::parts(st, op);
+            let mut v: Vec<TrimRef> = walls.into_iter().flat_map(outline).collect();
+            for joint in joints {
+                v.extend([fs::End::Start, fs::End::End].map(|end| TrimRef::BendEnd { joint, end }));
+            }
+            v
+        }
         OpKind::Cut { .. } => st
             .cuts
             .iter()
@@ -3509,10 +3556,18 @@ fn op_trims(st: &SheetState, op: &OpRef) -> Vec<TrimRef> {
     }
 }
 
-fn op_strips(op: &OpRef) -> Vec<Strip> {
+fn op_strips(st: &SheetState, op: &OpRef) -> Vec<Strip> {
     match op.kind {
         OpKind::Base { wall } => vec![Strip::Wall(wall)],
         OpKind::Flange { wall, joint } => vec![Strip::Wall(wall), Strip::Bend(joint)],
+        OpKind::Contour { .. } => {
+            let (walls, joints) = feat::parts(st, op);
+            walls
+                .into_iter()
+                .map(Strip::Wall)
+                .chain(joints.into_iter().map(Strip::Bend))
+                .collect()
+        }
         OpKind::Cut { .. } | OpKind::Corner { .. } => vec![],
     }
 }
@@ -3630,8 +3685,11 @@ fn op_member(ev: &mut Eval, op: &Rc<OpRef>, name: &str, span: Span) -> Option<R<
         })))
     };
     let edge = |segment: u64| -> Option<R<Value>> {
-        let OpKind::Flange { wall, .. } = op.kind else {
-            return no_role();
+        let wall = match op.kind {
+            OpKind::Flange { wall, .. } => wall,
+            // a contour's last wall: its tip is the far edge, like a flange's
+            OpKind::Contour { last, .. } if segment == 1 => last,
+            _ => return no_role(),
         };
         Some(Ok(sv(SheetVal::Edge(Rc::new(EdgeRef {
             op: op.clone(),
@@ -3650,7 +3708,13 @@ fn op_member(ev: &mut Eval, op: &Rc<OpRef>, name: &str, span: Span) -> Option<R<
     let built = built_on(st, op.on);
     let wall = match op.kind {
         OpKind::Base { wall } | OpKind::Flange { wall, .. } => Some(wall),
+        // the contour's first wall's plane; its faces, every wall's
+        OpKind::Contour { first, .. } => Some(first),
         OpKind::Cut { .. } | OpKind::Corner { .. } => None,
+    };
+    let walls = match op.kind {
+        OpKind::Contour { .. } => feat::parts(st, op).0,
+        _ => wall.into_iter().collect(),
     };
     match name {
         "top" | "bottom" => {
@@ -3663,7 +3727,10 @@ fn op_member(ev: &mut Eval, op: &Rc<OpRef>, name: &str, span: Span) -> Option<R<
             } else {
                 Skin::Back
             };
-            let names = b.roles.skin(Strip::Wall(wall), skin);
+            let names: Vec<Name> = walls
+                .iter()
+                .flat_map(|w| b.roles.skin(Strip::Wall(*w), skin))
+                .collect();
             let frame = wall_frame(st, wall, flat).map(|f| {
                 if name == "top" {
                     f
@@ -3676,18 +3743,22 @@ fn op_member(ev: &mut Eval, op: &Rc<OpRef>, name: &str, span: Span) -> Option<R<
             Some(Ok(faces_value(found, &op.id, Role::Wall, frame)))
         }
         "bend" | "bend_top" | "bend_bottom" => {
-            let OpKind::Flange { joint, .. } = op.kind else {
-                return no_role();
+            let joints = match op.kind {
+                OpKind::Flange { joint, .. } => vec![joint],
+                OpKind::Contour { .. } => feat::parts(st, op).1,
+                _ => return no_role(),
             };
             let Some((b, salt)) = built else {
                 return Some(Ok(Value::Unresolved));
             };
             let mut names = vec![];
-            if name != "bend_bottom" {
-                names.extend(b.roles.skin(Strip::Bend(joint), Skin::Reference));
-            }
-            if name != "bend_top" {
-                names.extend(b.roles.skin(Strip::Bend(joint), Skin::Back));
+            for joint in joints {
+                if name != "bend_bottom" {
+                    names.extend(b.roles.skin(Strip::Bend(joint), Skin::Reference));
+                }
+                if name != "bend_top" {
+                    names.extend(b.roles.skin(Strip::Bend(joint), Skin::Back));
+                }
             }
             Some(Ok(faces_value(
                 names_in(ev, names, salt),
@@ -3701,7 +3772,7 @@ fn op_member(ev: &mut Eval, op: &Rc<OpRef>, name: &str, span: Span) -> Option<R<
                 return Some(Ok(Value::Unresolved));
             };
             let trims = op_trims(st, op);
-            let strips = op_strips(op);
+            let strips = op_strips(st, op);
             if name == "faces" {
                 let mut names: Vec<Name> = b
                     .roles

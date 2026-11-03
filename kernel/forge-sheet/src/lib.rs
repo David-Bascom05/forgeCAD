@@ -3,6 +3,7 @@
 //! ordinary bodies, with no booleans and nothing recognised. Design: research/sheet-metal/.
 pub mod build;
 pub mod checks;
+pub mod contour;
 pub mod error;
 pub mod graph;
 pub mod hardware;
@@ -16,6 +17,7 @@ pub use build::{
     BendPlace, Built, CornerMade, Layout, Map, Place2, WallPlace, build, build_with, setback_of,
 };
 pub use checks::check;
+pub use contour::{ContourError, ContourMade, Hand};
 pub use error::{
     CutId, End, FeatureId, JointId, JointKindName, Pinch, Seam, SheetError, SheetWarning, Side, Strip,
     TrimCurveKind, TrimRef, Violation, WallId,
