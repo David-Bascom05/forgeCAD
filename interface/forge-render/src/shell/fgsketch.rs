@@ -22,10 +22,13 @@ struct Out {
 }
 
 fn num(t: &str, row: &str) -> Result<f64, ToolError> {
-    t.parse::<f64>().ok().filter(|v| v.is_finite()).ok_or(ToolError::BadNumber {
-        param: "sketch value",
-        text: format!("{t} (in `{row}`)"),
-    })
+    t.parse::<f64>()
+        .ok()
+        .filter(|v| v.is_finite())
+        .ok_or(ToolError::BadNumber {
+            param: "sketch value",
+            text: format!("{t} (in `{row}`)"),
+        })
 }
 
 fn fmt(v: f64) -> String {
@@ -36,7 +39,8 @@ impl Out {
     fn param(&mut self, base: &str, v: f64) -> String {
         let k = self.params.len() + 1;
         let n = format!("{base}{k}");
-        self.params.push(format!("param {}.{n} = {}\n", self.name, fmt(v)));
+        self.params
+            .push(format!("param {}.{n} = {}\n", self.name, fmt(v)));
         n
     }
 
@@ -128,8 +132,11 @@ pub fn block(name: &str, on: &str, rows: &[String]) -> Result<String, ToolError>
             }
             Some(w @ ("hdist" | "vdist")) => {
                 let side = |p: &str| p.split_once('.').map(|x| x.0.to_string());
-                if let (Some(a), Some(b), Some(v)) = (t.get(1).and_then(|x| side(x)), t.get(2).and_then(|x| side(x)), t.get(3))
-                    && a == b
+                if let (Some(a), Some(b), Some(v)) = (
+                    t.get(1).and_then(|x| side(x)),
+                    t.get(2).and_then(|x| side(x)),
+                    t.get(3),
+                ) && a == b
                     && let Some(&(rect, s)) = o.rect_sides.get(&a)
                 {
                     let k = usize::from(w == "vdist" || s % 2 == 1);
@@ -142,7 +149,9 @@ pub fn block(name: &str, on: &str, rows: &[String]) -> Result<String, ToolError>
     let mut rect_no = 0usize;
     for r in rows {
         let t = tokens(r);
-        let Some((w, rest)) = t.split_first() else { continue };
+        let Some((w, rest)) = t.split_first() else {
+            continue;
+        };
         match w.as_str() {
             "pt" => {
                 let (p, _) = o.point(rest, r)?;
@@ -159,17 +168,21 @@ pub fn block(name: &str, on: &str, rows: &[String]) -> Result<String, ToolError>
             }
             "rect" => {
                 let v: Vec<f64> = rest.iter().map(|x| num(x, r)).collect::<Result<_, _>>()?;
-                let [x, y, w0, h0] = v[..] else { return Err(no_form(r)) };
+                let [x, y, w0, h0] = v[..] else {
+                    return Err(no_form(r));
+                };
                 let w = held.get(&(rect_no, 0)).copied().unwrap_or(w0);
                 let h = held.get(&(rect_no, 1)).copied().unwrap_or(h0);
                 let (px, py) = (o.param("x", x), o.param("y", y));
                 let (pw, ph) = (o.param("w", w), o.param("h", h));
                 o.rects[rect_no] = [pw.clone(), ph.clone()];
                 let n = format!("r{}", rect_no + 1);
-                o.rows.push(format!("{n} = rect(corner: ({px}, {py}), size: ({pw}, {ph}))"));
+                o.rows
+                    .push(format!("{n} = rect(corner: ({px}, {py}), size: ({pw}, {ph}))"));
                 let first = o.counts.get(&'l').copied().unwrap_or(0) + 1;
                 for side in 0..4 {
-                    o.names.insert(format!("l{}", first + side), format!("{n}[{side}]"));
+                    o.names
+                        .insert(format!("l{}", first + side), format!("{n}[{side}]"));
                 }
                 *o.counts.entry('l').or_default() += 4;
                 rect_no += 1;
@@ -217,7 +230,10 @@ pub fn block(name: &str, on: &str, rows: &[String]) -> Result<String, ToolError>
             }
             // a fixed rect holds its own corners square and its sides' lengths
             "hdist" | "vdist"
-                if rest.first().and_then(|x| x.split_once('.')).is_some_and(|x| o.rect_sides.contains_key(x.0)) => {}
+                if rest
+                    .first()
+                    .and_then(|x| x.split_once('.'))
+                    .is_some_and(|x| o.rect_sides.contains_key(x.0)) => {}
             "co" | "par" | "perp" | "tan" | "eq" => {
                 let f = match w.as_str() {
                     "co" => "coincident",
@@ -317,7 +333,10 @@ mod tests {
         .to_vec();
         let text = block("sk1", "xy", &rows).unwrap();
         assert!(text.contains("param sk1.w3 = 42\n"), "{text}");
-        assert!(text.contains("r1 = rect(corner: (x1, y2), size: (w3, h4))"), "{text}");
+        assert!(
+            text.contains("r1 = rect(corner: (x1, y2), size: (w3, h4))"),
+            "{text}"
+        );
         assert!(text.contains("c1 = circle(near(x5, y6), r7)"), "{text}");
         assert!(text.contains("param sk1.r7 = 5\n"), "{text}");
         assert!(text.contains("horizontal(l5)"), "{text}");
@@ -337,5 +356,39 @@ mod tests {
         // a row with no Forge form is refused, typed
         let e = block("sk1", "xy", &["project @e12".into()]).unwrap_err();
         assert_eq!(e.kind(), "NoForgeForm");
+    }
+
+    #[test]
+    fn lines_arcs_splines_and_their_constraints_check() {
+        let rows: Vec<String> = [
+            "line 0 0 20 0",
+            "line 20 0 20 15",
+            "co l1.b l2.a",
+            "perp l1 l2",
+            "hor l1",
+            "arc 30 30 35 30 30 35",
+            "spline 40 0 45 5 50 0 open",
+            "pt 5 20",
+            "dist l1 20",
+            "ang l1 l2 90",
+        ]
+        .map(String::from)
+        .to_vec();
+        let text = block("sk2", "xy", &rows).unwrap();
+        assert!(text.contains("coincident(l1.b, l2.a)"), "{text}");
+        assert!(text.contains("perpendicular(l1, l2)"), "{text}");
+        assert!(text.contains("a1 = arc(center: near("), "{text}");
+        assert!(text.contains("closed: false"), "{text}");
+        assert!(text.contains("deg\n"), "{text}");
+        let r = check(&text);
+        let kinds: Vec<&str> = r.errors.iter().map(|e| e.kind()).collect();
+        // the drawing's own conflicts are the solver's to report; the syntax and types hold
+        assert!(
+            kinds
+                .iter()
+                .all(|k| *k == "SketchConflict" || *k == "SketchNotSolved"),
+            "{text}\n{:?}",
+            r.errors
+        );
     }
 }

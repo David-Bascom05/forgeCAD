@@ -255,6 +255,54 @@ four-bars, a sliding table). Measured, best of three, the machine at load 20 on 
 
 The whole run of an edit (parse, evaluating 5,000 statements, the solve, the check) is about
 130 ms; a cold run about 290 ms, of which loading the parts is 60 ms.
+## In the app (fg-ui)
+
+`forge-render` opens `.fg` parts beside `.fc` ones. Every edit is a typed op through
+`edit::apply_checked`; a pick becomes the anchor text Forge names it by (`anchors.rs`: each face
+and edge of the finished part with the anchor the evaluator resolves back to it, e.g. `base.end`,
+`boss.side(top.c)`, `edges(between: (base.end, base.side(plan.outline[0])))`), never a coordinate
+or a hash; a pick no anchor names is the typed refusal `NoStableName`. Tests:
+`forge-render/tests/fg.rs`, `fg_tools.rs`, `fg_sheet.rs`.
+
+Every tool and command the app has for `.fc` parts, and what it does on a `.fg` part:
+
+| tool / command | .fc | .fg | how, on .fg |
+|---|---|---|---|
+| Open, New, Save, Undo, Redo | yes | yes | Save writes the text (Ctrl+S); undo/redo step the text the ops made |
+| Feature tree (select, open/close groups) | yes | yes | Forge ids: loops `bpsk[0,1]`, calls `lug.hub` nested |
+| Tree: delete, reorder | yes | yes | DeleteFeature, MoveFeature (up/down); a loop has no name to move: typed NotAStatement |
+| Tree: rename | yes | yes | Rename |
+| Tree: suppress / unsuppress | yes | no | no Forge op for a feature left out of the build |
+| End-of-part marker (history scrubbing) | yes | no | no Forge op or run option for building part of the history |
+| Edit a feature (its dialog again) | yes | params only | its params in the panel (SetParam); its picks: no op replaces a positional argument (SetArg sets keyword ones) |
+| Params panel | yes (.fc dims) | yes | driving editable (SetParam), driven read-only with what drives them, structural marked |
+| Dimension drag on the model | yes | no | values edit in the panel; no dimension placement on the model yet |
+| Errors, lint, fix buttons | flags only | yes | inline, each fix a typed op |
+| Start Sketch (on a face or an origin plane) | yes | yes | the face's anchor (`base.end`) or `xy`/`xz`/`yz`; its plane from the evaluator |
+| Sketch: line, circle, arc, rectangle, spline, point | yes | yes | written as a Forge block, every number a param of the sketch, drawn points `near(..)` |
+| Sketch: dimension, coincident, parallel, perpendicular, tangent | yes | yes | distance, radius, angle, coincident, parallel, perpendicular, tangent, horizontal, vertical, midpoint, equal, fix |
+| Sketch: hdist / vdist | yes | rect sides only | Forge has no horizontal/vertical distance: a rect's become its size params; others refused, typed |
+| Sketch: project geometry | yes | no | refused, typed (write `project(..)` in the source) |
+| Sketch: trim, offset, mirror | off | off | |
+| Edit an existing sketch | yes | no | no op replaces a sketch block's rows yet |
+| Extrude (add, cut) | yes | yes | `extrude(P, d)` / `cut(P, d)`, P a sketch, loop or closed entity chosen |
+| Revolve | yes | yes | `revolve(P, axis: L, angle: ang)`, L a line of the sketch |
+| Hole | yes | yes | `hole(at: S.points, d: d, depth: thru|depth)`; seats, fastener sizes, to-next: not in the form yet |
+| Fillet, Chamfer | yes | yes | edges picked: `edges(between: (A, B))`, several joined with `+` |
+| Shell | yes | yes | open faces picked |
+| Draft | yes | yes | faces picked, neutral plane a face, a sketch or an origin plane |
+| Thread | yes | yes | `thread(face: F, spec: "M6", length: "full")`, F a cylinder picked |
+| Combine | yes | yes | target and tools from the tree's names |
+| Work plane, axis, point | yes | yes | `workplane(offset: F, d)`, `workaxis(along: F)`, `workpoint(mid: E)` |
+| Linear pattern | yes | yes | `pattern(of: F, layout: lin(along: D, n, step))`, D a face's `.normal` or a line's `.dir` |
+| Circular pattern, mirror | off | off | (Forge has `circ`, `mirror`: no form yet) |
+| Sweep, Loft, Coil, Rib | yes | yes | profiles, paths and axes from the sketches' names |
+| Sheet metal: sheet, flange, cutout, unfold | - | yes | flange on an edge picked (`base.edge(plan.outline[1])`, `F.tip`) |
+| Sheet panel: report, flat/folded, DXF, shop | - | yes | the sheet's report as forge-lang gives it (bends, reliefs, corners, and whatever comes), shop violations with fix buttons |
+| Units | yes | no | a Forge part is mm and degrees: refused, typed |
+| Measure (distance, wall, mass), Check | off | off | the panel shows volume, faces, validity |
+| Section, lines, view cube, orbit/pan/zoom, fit, look at, origin planes | yes | yes | the view's own |
+| Export STEP / DXF | CLI | CLI; DXF also in the panel | `forgecad export F.fg [dxf]` |
 
 ## Gaps, and kernel changes it would want
 

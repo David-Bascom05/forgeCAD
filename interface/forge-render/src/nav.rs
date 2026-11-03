@@ -688,6 +688,11 @@ impl Nav {
         self.go_to(to);
     }
 
+    /// A view change is under way: what's on screen is not where the camera is going.
+    pub fn moving(&self) -> bool {
+        self.transition.is_some()
+    }
+
     /// Advances a view change to this time; true while one is under way.
     pub fn tick(&mut self, now: f64) -> bool {
         let Some(t) = &mut self.transition else {
