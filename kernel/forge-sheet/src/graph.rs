@@ -385,8 +385,20 @@ impl Sheet {
     }
 
     /// Moves straight outline segment `segment` of `wall` by `d` along its outward normal; the
-    /// segments either side, lines, are cut or stretched to meet it.
+    /// segments either side, lines, are cut or stretched to meet it. A neighbour carrying a
+    /// flange (this wall its first) takes the flange along: its wall is lengthened or shortened
+    /// at that end to match. A neighbour that is this wall's own mold line is refused.
     pub fn move_edge(&mut self, wall: WallId, segment: u64, d: f64) -> Result<(), SheetError> {
+        self.move_edge_with(wall, segment, d, None)
+    }
+
+    fn move_edge_with(
+        &mut self,
+        wall: WallId,
+        segment: u64,
+        d: f64,
+        allow: Option<JointId>,
+    ) -> Result<(), SheetError> {
         let feature = self.feature;
         let trim = |segment| TrimRef::Outline { wall, segment };
         let w = self.wall(wall).ok_or(SheetError::NoSuchWall { feature, wall })?;
@@ -413,13 +425,22 @@ impl Sheet {
             curve,
         })?;
         let (pi, ni) = ((k + n - 1) % n, (k + 1) % n);
-        for i in [pi, ni] {
+        // flanges standing on the neighbours, to carry along: (joint, which end of it moves)
+        let mut carried: Vec<(JointId, crate::error::End, u64)> = Vec::new();
+        for (i, end) in [(pi, crate::error::End::End), (ni, crate::error::End::Start)] {
             let id = segs[i].1;
             if let Some(j) = self
                 .joints
                 .iter()
                 .find(|j| (j.a == wall && j.on_a == id) || (j.b == wall && j.on_b == id))
             {
+                if Some(j.id) == allow {
+                    continue;
+                }
+                if j.a == wall && allow.is_none() {
+                    carried.push((j.id, end, id));
+                    continue;
+                }
                 return Err(SheetError::EdgeMoveBlocked {
                     feature,
                     trim: trim(id),
@@ -427,6 +448,10 @@ impl Sheet {
                 });
             }
         }
+        let before: Vec<(u64, f64)> = [pi, ni]
+            .iter()
+            .filter_map(|&i| line(i).ok().map(|(a, b)| (segs[i].1, a.distance(b))))
+            .collect();
         let curve_err = |i: usize, curve| SheetError::EdgeMoveCurve {
             feature,
             trim: trim(segs[i].1),
@@ -481,6 +506,31 @@ impl Sheet {
         .map_err(|why| SheetError::Profile { feature, wall, why })?;
         let w = self.walls.iter_mut().find(|w| w.id == wall).expect("found above");
         w.outline = checked.loops;
+        // the flanges on the neighbours follow their edges' new lengths
+        for (joint, end, id) in carried {
+            let now = self
+                .wall(wall)
+                .and_then(|w| straight(w, id).ok())
+                .map(|(a, b)| a.distance(b))
+                .unwrap_or(f64::NAN);
+            let was = before.iter().find(|x| x.0 == id).map_or(f64::NAN, |x| x.1);
+            let j = *self.joint(joint).expect("listed");
+            let flange = self
+                .wall(j.b)
+                .ok_or(SheetError::NoSuchWall { feature, wall: j.b })?;
+            // the flange's side at that end: beside its mold line, which runs from the end to the
+            // start (q0 at y = len, q1 at y = 0)
+            let side = flange.outline.iter().find_map(|l| {
+                let m = l.segments.iter().position(|g| g.1 == j.on_b)?;
+                let n = l.segments.len();
+                Some(match end {
+                    crate::error::End::End => l.segments[(m + n - 1) % n].1,
+                    crate::error::End::Start => l.segments[(m + 1) % n].1,
+                })
+            });
+            let Some(side) = side else { continue };
+            self.move_edge_with(j.b, side, now - was, Some(joint))?;
+        }
         Ok(())
     }
 
