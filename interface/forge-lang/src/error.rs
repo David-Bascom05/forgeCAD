@@ -657,6 +657,11 @@ pub enum Error {
     NotAVertex {
         span: Span,
     },
+    /// A hole's or bore's mouth a later fillet rounded: its rim is smooth, nothing to chamfer.
+    MouthRounded {
+        span: Span,
+        id: String,
+    },
     /// A face set that must be one face (a full round's sides and middle).
     OneFace {
         span: Span,
@@ -728,6 +733,7 @@ impl Error {
             | LoftLoops { span, .. }
             | LoftCurves { span, .. }
             | NotAVertex { span }
+            | MouthRounded { span, .. }
             | OneFace { span, .. } => Some(*span),
             UnknownParam { .. }
             | UnknownFeature { .. }
@@ -798,6 +804,7 @@ impl Error {
             LoftCurves { .. } => "LoftCurves",
             NotAVertex { .. } => "NotAVertex",
             OneFace { .. } => "OneFace",
+            MouthRounded { .. } => "MouthRounded",
         }
     }
 
@@ -988,6 +995,9 @@ impl Error {
             }
             NotAVertex { .. } => "a rail starts at a corner of the first profile".into(),
             OneFace { what, count, .. } => format!("{what} must be one face, found {count}"),
+            MouthRounded { id, .. } => format!(
+                "{id}'s mouth was rounded by a later fillet: its rim is smooth (leave the mouth's edge out of that fillet's selection)"
+            ),
         }
     }
 
@@ -1096,6 +1106,7 @@ impl Error {
             ],
             LoftCurves { profile, .. } => vec![("profile", (*profile as f64).into())],
             OneFace { what, count, .. } => vec![("what", s(what)), ("count", (*count as f64).into())],
+            MouthRounded { id, .. } => vec![("id", s(id))],
             _ => vec![],
         }
     }

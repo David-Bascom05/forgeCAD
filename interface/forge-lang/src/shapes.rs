@@ -924,7 +924,8 @@ pub fn loft(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
                     .ok_or(Error::NotAVertex {
                         span: a.span("rails"),
                     })?;
-                out.push((i, path_of(path.clone(), a.span("rails"))?));
+                let pp = path_of(path.clone(), a.span("rails"))?;
+                out.push((i, pp));
             }
             LoftGuides::Rails(out)
         }
