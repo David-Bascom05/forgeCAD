@@ -13,6 +13,21 @@ use forge_ops::{GlyphError, GlyphSeg, Place, glyph};
 use forge_topo::Name;
 use std::sync::Arc;
 
+/// The names of a text's faces by role, from its history id: glyph region `k` (in `layout`'s
+/// order) is a solid whose cap at the bottom of its walls is `start` and at the top `end`
+/// (`forge_ops::roles`). Embossed, `end` is the letters' top; engraved, `start` is the floor.
+pub mod roles {
+    use forge_topo::Name;
+
+    pub fn start(id: u64, k: usize) -> Name {
+        forge_ops::roles::start(Name::feature(id).with(k as u64))
+    }
+
+    pub fn end(id: u64, k: usize) -> Name {
+        forge_ops::roles::end(Name::feature(id).with(k as u64))
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct Text {
     pub text: String,
