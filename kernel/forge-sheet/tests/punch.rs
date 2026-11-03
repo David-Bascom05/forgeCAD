@@ -258,6 +258,58 @@ fn refusals_are_typed() {
 }
 
 #[test]
+fn cluster_counts_are_capped() {
+    let mut s = l();
+    let cl = |nx, ny| Tool {
+        id: "C".into(),
+        shape: ToolShape::Cluster {
+            d: 0.5,
+            px: 1.0,
+            py: 1.0,
+            nx,
+            ny,
+        },
+    };
+    let size = |r: Result<usize, SheetError>| match r {
+        Err(SheetError::Punch {
+            why: PunchError::Size { which, value, limit },
+            ..
+        }) => (which, value, limit),
+        o => panic!("{o:?}"),
+    };
+    // each count alone, and the two together, against CLUSTER_MAX; nothing made
+    let cap = forge_sheet::CLUSTER_MAX as f64;
+    for (nx, ny) in [
+        (u32::MAX, 1),
+        (1, u32::MAX),
+        (u32::MAX, u32::MAX),
+        (40, 26),
+        (1001, 1),
+    ] {
+        let (which, value, limit) = size(s.punch(WallId(0), &cl(nx, ny), Point2::new(40.0, 25.0), 0.0));
+        assert_eq!((which, limit), ("count", cap));
+        assert_eq!(value, nx as f64 * ny as f64);
+    }
+    assert!(s.punches.is_empty() && s.cuts.is_empty());
+    // at the cap it builds; the area counts every hit, without overflow
+    let ok = cl(40, 25);
+    s.punch(WallId(0), &ok, Point2::new(40.0, 25.0), 0.0).unwrap();
+    assert_eq!(s.cuts.len(), 1000);
+    assert_eq!(
+        cl(u32::MAX, u32::MAX).shape.area(),
+        0.25 * dmath::PI * 0.25 * (u32::MAX as f64).powi(2)
+    );
+    // sizes that are not finite
+    for d in [f64::INFINITY, f64::NAN] {
+        let t = Tool {
+            id: "R".into(),
+            shape: ToolShape::Round { d },
+        };
+        assert_eq!(size(s.punch(WallId(0), &t, Point2::new(10.0, 10.0), 0.0)).0, "d");
+    }
+}
+
+#[test]
 fn fuzz_hits() {
     let mut rng = Rng::new(0x9c4);
     let lib = tools();

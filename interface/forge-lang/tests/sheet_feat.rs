@@ -237,6 +237,14 @@ fn punch_refusals_and_violations() {
     let s = src("punched").replace("punch(\"R6\"", "punch((\"R7\", \"round\", 7)");
     let r = run(&s);
     assert!(r.errors.is_empty());
+    // a cluster tool's counts: whole, finite, 1 to the cap
+    for counts in ["1e9, 1", "1, 1e400", "2.5, 2", "0, 3", "1001, 1"] {
+        let s = src("punched").replace(
+            "punch(\"R6\"",
+            &format!("punch((\"C\", \"cluster\", 0.5, 1, 1, {counts})"),
+        );
+        assert_eq!(first_error(&s).kind(), "PunchSize", "{counts}");
+    }
     assert!(
         r.warnings
             .iter()

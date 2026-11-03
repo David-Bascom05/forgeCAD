@@ -13,18 +13,29 @@ pub enum FeatErr {
     OffSection { span: Span, distance: f64 },
     /// `punch("ID", ..)` with no such tool in the sheet's shop.
     NoSuchTool { span: Span, tool: String },
+    /// A tool size the shop could not have: a cluster count not whole, not finite, or outside 1
+    /// to `limit`.
+    ToolSize {
+        span: Span,
+        which: &'static str,
+        value: f64,
+        limit: f64,
+    },
 }
 
 impl FeatErr {
     pub fn span(&self) -> Span {
         match self {
-            FeatErr::OffSection { span, .. } | FeatErr::NoSuchTool { span, .. } => *span,
+            FeatErr::OffSection { span, .. }
+            | FeatErr::NoSuchTool { span, .. }
+            | FeatErr::ToolSize { span, .. } => *span,
         }
     }
     pub fn kind(&self) -> &'static str {
         match self {
             FeatErr::OffSection { .. } => "ProfileOffSection",
             FeatErr::NoSuchTool { .. } => "NoSuchTool",
+            FeatErr::ToolSize { .. } => "PunchSize",
         }
     }
     pub fn text(&self) -> String {
@@ -32,6 +43,13 @@ impl FeatErr {
             FeatErr::OffSection { distance, .. } => format!(
                 "the profile does not lie in the section across the edge ({} off): sketch it on a plane square to the edge",
                 crate::values::fmt(*distance)
+            ),
+            FeatErr::ToolSize {
+                which, value, limit, ..
+            } => format!(
+                "tool {which} = {}: a cluster count is a whole number from 1 to {}",
+                crate::values::fmt(*value),
+                crate::values::fmt(*limit)
             ),
             FeatErr::NoSuchTool { tool, .. } => {
                 format!("no tool {tool} in the sheet's shop: add it to shop(tools: ..) or write it out")
@@ -42,6 +60,13 @@ impl FeatErr {
         match self {
             FeatErr::OffSection { distance, .. } => vec![("distance", (*distance).into())],
             FeatErr::NoSuchTool { tool, .. } => vec![("tool", tool.as_str().into())],
+            FeatErr::ToolSize {
+                which, value, limit, ..
+            } => vec![
+                ("size", (*which).into()),
+                ("value", (*value).into()),
+                ("limit", (*limit).into()),
+            ],
         }
     }
 }
@@ -801,6 +826,19 @@ fn tool_of(v: &Value, span: Span) -> R<fs::Tool> {
         let x = xs.get(i).cloned().ok_or_else(bad)?;
         Ok(num_of(x, &[Dim::Length, Dim::Count, Dim::Ratio], span, "a tool size")?.v)
     };
+    // a cluster's counts: whole, finite, 1 to CLUSTER_MAX (the kernel caps their product too)
+    let count = |i: usize, which: &'static str| -> R<u32> {
+        let v = n(i)?;
+        if !v.is_finite() || v < 1.0 || v > fs::CLUSTER_MAX as f64 || v.fract() != 0.0 {
+            return Err(feat_err(FeatErr::ToolSize {
+                span,
+                which,
+                value: v,
+                limit: fs::CLUSTER_MAX as f64,
+            }));
+        }
+        Ok(v as u32)
+    };
     let shape = match &**kind {
         "round" => fs::ToolShape::Round { d: n(2)? },
         "obround" => fs::ToolShape::Obround {
@@ -826,8 +864,8 @@ fn tool_of(v: &Value, span: Span) -> R<fs::Tool> {
             d: n(2)?,
             px: n(3)?,
             py: n(4)?,
-            nx: n(5)?.max(0.0) as u32,
-            ny: n(6)?.max(0.0) as u32,
+            nx: count(5, "nx")?,
+            ny: count(6, "ny")?,
         },
         _ => return Err(bad()),
     };

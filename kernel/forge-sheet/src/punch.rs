@@ -10,6 +10,10 @@ use crate::shop::Scaled;
 use forge_math::{Point2, Vec2, dmath, tol};
 use forge_ops::{ProfileLoop, Segment};
 
+/// The most hits a cluster tool makes (each count, and both together): a cluster is a real tool
+/// head, and this bounds what one punch can ask the builder to make.
+pub const CLUSTER_MAX: u32 = 1000;
+
 /// A turret tool's shape, centred on the hit, x along the tool's angle.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum ToolShape {
@@ -153,7 +157,7 @@ impl ToolShape {
     /// The loops the tool cuts at `at`, turned `angle`, counter-clockwise; exact lines and arcs.
     pub fn loops(&self, at: Point2, angle: f64) -> Result<Vec<ProfileLoop>, PunchError> {
         let pos = |which: &'static str, v: f64| {
-            if v.is_nan() || v <= tol::LINEAR {
+            if !v.is_finite() || v <= tol::LINEAR {
                 Err(PunchError::Size {
                     which,
                     value: v,
@@ -285,8 +289,16 @@ impl ToolShape {
                         limit: 1.0,
                     });
                 }
+                let total = nx as u64 * ny as u64;
+                if nx > CLUSTER_MAX || ny > CLUSTER_MAX || total > CLUSTER_MAX as u64 {
+                    return Err(PunchError::Size {
+                        which: "count",
+                        value: total as f64,
+                        limit: CLUSTER_MAX as f64,
+                    });
+                }
                 for (which, pitch, n) in [("px", px, nx), ("py", py, ny)] {
-                    if n > 1 && (pitch.is_nan() || pitch <= 2.0 * r + tol::LINEAR) {
+                    if n > 1 && (!pitch.is_finite() || pitch <= 2.0 * r + tol::LINEAR) {
                         return Err(PunchError::Size {
                             which,
                             value: pitch,
@@ -330,7 +342,7 @@ impl ToolShape {
                 pi * r * r + (length - x0) * 2.0 * w - segment
             }
             ToolShape::Hex { across_flats } => 0.5 * 3.0f64.sqrt() * across_flats * across_flats,
-            ToolShape::Cluster { d, nx, ny, .. } => 0.25 * pi * d * d * (nx * ny) as f64,
+            ToolShape::Cluster { d, nx, ny, .. } => 0.25 * pi * d * d * (nx as f64 * ny as f64),
         }
     }
 }
