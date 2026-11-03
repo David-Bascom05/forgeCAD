@@ -566,7 +566,10 @@ fn corners(
                     (square_at(v, h), h, false)
                 }
                 CornerKind::TrimToBend => {
-                    let (a, b) = (-b1.s, -b2.s);
+                    // a kerf past both tangent lines: cut exactly to them, the two zones would
+                    // meet at a point where the lines cross (a blank of no width there)
+                    let k = sheet.rule.kerf;
+                    let (a, b) = (-b1.s - k, -b2.s - k);
                     let (c, d) = (hi(b1), hi(b2));
                     (polygon(&[at(a, b), at(c, b), at(c, d), at(a, d)]), 0.0, true)
                 }
@@ -2031,6 +2034,50 @@ impl<'a> Strips<'a> {
         None
     }
 
+    /// A lower bound on how far a point is from strip `s`'s material: exact for a plane strip; for
+    /// a bend, the radial way out of its thickness, or the developed distance to its region
+    /// shrunk by the most the development stretches on the way (arc length at `rn` against half
+    /// the point's radius), no more than half that radius.
+    fn distance_below(&self, s: usize, p: Point3) -> f64 {
+        match self.strips[s].folded {
+            Geo::Plane(_) => self.distance(s, p),
+            Geo::Round {
+                axis,
+                rho0,
+                sigma,
+                rn,
+                ..
+            } => {
+                let l = axis.point_to_local(p);
+                let rho = (l.x * l.x + l.y * l.y).sqrt();
+                let w = (rho - rho0) * sigma;
+                let radial = (-w).max(w - self.t).max(0.0);
+                let phi = dmath::atan2(l.y, l.x);
+                let q = Point2::new(phi * rn, -sigma * l.z);
+                let parts = &self.strips[s].region.parts;
+                let dr = if parts.iter().any(|c| crate::region::holds(c, q)) {
+                    0.0
+                } else {
+                    parts
+                        .iter()
+                        .flat_map(|c| std::iter::once(&c.outer).chain(&c.holes))
+                        .flatten()
+                        .map(|b| b.piece.at(b.piece.nearest(q)).distance(q))
+                        .fold(f64::INFINITY, f64::min)
+                };
+                // the turn's other side (phi near +-pi) is far round: no bound from the region
+                let dr = if phi.abs() > 0.5 * dmath::PI + 1.0 {
+                    0.0
+                } else {
+                    dr
+                };
+                // a way shorter than half the radius keeps to radii over half the point's, where
+                // a step turns the development by at most 2 rn / rho a unit
+                radial.max((dr / (2.0 * rn / rho.max(1e-9)).max(1.0)).min(0.5 * rho))
+            }
+        }
+    }
+
     /// How far a point is from plane strip `s`'s material (0 inside it).
     fn distance(&self, s: usize, p: Point3) -> f64 {
         let Geo::Plane(f) = self.strips[s].folded else {
@@ -2135,6 +2182,11 @@ impl<'a> Strips<'a> {
                 continue;
             }
             let size = (bx.x.width().powi(2) + bx.y.width().powi(2) + bx.z.width().powi(2)).sqrt();
+            // every point of the box within `size` of its middle: none in b's material when the
+            // middle is further from it than that
+            if self.distance_below(b, point(u.mid())) > size {
+                continue;
+            }
             if size <= 0.5 * limit || level >= 48 {
                 let p = point(u.mid());
                 if let Some(d) = self.inside(b, p)

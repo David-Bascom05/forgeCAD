@@ -479,3 +479,22 @@ fn down_flanges_at_a_corner_with_an_open_corner() {
         assert_eq!(b.corners.len(), 2, "the relief and the trim");
     }
 }
+
+#[test]
+fn trim_to_bend_parts_the_zones_by_a_kerf() {
+    // cut exactly to both tangent lines, the zones met at the point the lines cross (a flat
+    // touching itself, and a slow clash hunt there): a kerf past them parts them. Upright or
+    // splayed, both maps build clean and quickly
+    for th in [90f64, 80.0] {
+        let s = boxed_at(Some(CornerKind::TrimToBend), th.to_radians());
+        for map in [Map::Folded, Map::Flat] {
+            let t0 = std::time::Instant::now();
+            let b = build_with(&s, map).unwrap_or_else(|e| panic!("{th} {map:?}: {e:?}"));
+            let took = t0.elapsed().as_secs_f64();
+            assert!(b.warnings.is_empty(), "{th} {map:?}: {:?}", b.warnings);
+            let p = forge_topo::check::check(&b.body);
+            assert!(p.is_empty(), "{p:?}");
+            assert!(took < 0.05, "{th} {map:?}: {took} s");
+        }
+    }
+}
