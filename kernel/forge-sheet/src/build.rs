@@ -16,7 +16,7 @@ use crate::error::{
 };
 use crate::graph::{CornerKind, Gauge, JointKind, Sheet, straight};
 use crate::pattern::{BendLine, Curve2, Pattern};
-use crate::region::{Bound, Piece, Region, RegionError, subtract};
+use crate::region::{Bound, Piece, Region, RegionError, pieces, subtract};
 use crate::relief::{CornerShape, DepthRef, Placement, Relief, ReliefKind, ReliefMade};
 use crate::roles::{Roles, Skin};
 use crate::shop::setback;
@@ -1714,7 +1714,15 @@ impl<'a> Strips<'a> {
                                 &reach,
                             )
                         });
-                        if let Some((at, depth)) = found {
+                        if let Some(first) = found {
+                            // how deep: the deepest of a's boundary in b, by the same rigorous
+                            // boxes, each half kept while it may still beat the deepest so far
+                            // and the other way: how deep b's boundary gets in a. The shallower
+                            // of the two is how far they pass into each other (a wall's top
+                            // 0.3 into a plate: 0.3, though the plate's skin crosses the wall)
+                            let ab = self.deepest_in(a, b, first, flat[b]);
+                            let ba = self.deepest_in(b, a, (first.0, 0.0), flat[a]);
+                            let (at, depth) = if ba.1 < ab.1 { ba } else { ab };
                             return Err(SheetError::FoldedClash {
                                 feature: self.cx.feature,
                                 a: self.strips[a].strip,
@@ -1728,7 +1736,243 @@ impl<'a> Strips<'a> {
                 }
             }
         }
+        // no clash: walls meeting without passing into each other (an edge along a face at a
+        // corner) are faces of one solid touching, which no valid solid has
+        for a in 0..ns {
+            for b in 0..ns {
+                if a == b
+                    || joined[a * ns + b]
+                    || !boxes[a].grow(TOL).overlaps(&boxes[b])
+                    || !matches!(self.strips[a].folded, Geo::Plane(_))
+                    || !matches!(self.strips[b].folded, Geo::Plane(_))
+                {
+                    continue;
+                }
+                if let Some(at) = self.touch(a, b, flat[b]) {
+                    return Err(SheetError::FoldedTouch {
+                        feature: self.cx.feature,
+                        a: self.strips[a].strip,
+                        b: self.strips[b].strip,
+                        at,
+                    });
+                }
+            }
+        }
         Ok(())
+    }
+
+    /// A point of plane strip `a`'s boundary edges (both skins, and the rails through the sheet)
+    /// within `TOL` of plane strip `b`'s material, if one is: halving, a part dropped once its box
+    /// cannot reach `b` or its middle is farther than the box is wide (distance is 1-Lipschitz).
+    fn touch(&self, a: usize, b: usize, flat_b: (Point2, Point2)) -> Option<Point3> {
+        let t = self.t;
+        let geo = self.strips[a].folded;
+        // a curve halved while its box may reach b and its middle is near enough; a piece whose
+        // chord is within TOL / 2 of it is judged by its chord, exactly
+        let search = |box_of: &dyn Fn(Interval) -> forge_math::Box3,
+                      point: &dyn Fn(f64) -> Point3,
+                      sag: &dyn Fn(Interval) -> f64| {
+            let mut stack = vec![(Interval::new(0.0, 1.0), 0u32)];
+            while let Some((u, level)) = stack.pop() {
+                let bx = box_of(u).grow(TOL);
+                if !self.may_reach(b, &bx, flat_b, 0.0) {
+                    continue;
+                }
+                if sag(u) <= 0.5 * TOL {
+                    if let Some(p) = self.segment_touch(b, point(u.lo), point(u.hi), TOL) {
+                        return Some(p);
+                    }
+                    continue;
+                }
+                let p = point(u.mid());
+                let d = self.distance(b, p);
+                if d <= TOL {
+                    return Some(p);
+                }
+                let size = (bx.x.width().powi(2) + bx.y.width().powi(2) + bx.z.width().powi(2)).sqrt();
+                if d > TOL + size || level >= 60 {
+                    continue;
+                }
+                let m = u.mid();
+                stack.push((Interval::new(u.lo, m), level + 1));
+                stack.push((Interval::new(m, u.hi), level + 1));
+            }
+            None
+        };
+        for ld in self.loops.iter().filter(|l| l.strip == a) {
+            for bd in &ld.bounds {
+                let sag = |u: Interval| match bd.piece {
+                    Piece::Line { .. } => 0.0,
+                    Piece::Arc { r, t0, t1, .. } => {
+                        let half = 0.5 * (t1 - t0).abs() * u.width();
+                        r * (1.0 - half.min(dmath::PI).cos())
+                    }
+                    Piece::Spline { .. } => f64::INFINITY,
+                };
+                for w in [0.0, t] {
+                    if let Some(p) = search(
+                        &|u| piece_box(geo, &bd.piece, w, u),
+                        &|u| geo.point(bd.piece.at(u), w),
+                        &sag,
+                    ) {
+                        return Some(p);
+                    }
+                }
+                let q = bd.piece.at(0.0);
+                if let Some(p) = self.segment_touch(b, geo.point(q, 0.0), geo.point(q, t), TOL) {
+                    return Some(p);
+                }
+            }
+        }
+        None
+    }
+
+    /// A point of segment p0..p1 within `tol` of plane strip `s`'s material, if one is, exactly:
+    /// the part of it within the sheet's thickness (grown by tol), then that part in the plane
+    /// against the region: inside it, or within tol of one of its boundary pieces.
+    fn segment_touch(&self, s: usize, p0: Point3, p1: Point3, tol: f64) -> Option<Point3> {
+        let Geo::Plane(f) = self.strips[s].folded else {
+            return None;
+        };
+        let (l0, l1) = (f.point_to_local(p0), f.point_to_local(p1));
+        let (w0, w1) = (-l0.z, -l1.z);
+        // u over which w stays in [-tol, t + tol]
+        let (mut lo, mut hi) = (0.0f64, 1.0f64);
+        let dw = w1 - w0;
+        if dw.abs() <= 1e-300 {
+            if w0 < -tol || w0 > self.t + tol {
+                return None;
+            }
+        } else {
+            let (ua, ub) = ((-tol - w0) / dw, (self.t + tol - w0) / dw);
+            lo = lo.max(ua.min(ub));
+            hi = hi.min(ua.max(ub));
+            if lo > hi {
+                return None;
+            }
+        }
+        let at = |u: f64| Point2::new(l0.x + (l1.x - l0.x) * u, l0.y + (l1.y - l0.y) * u);
+        let (q0, q1) = (at(lo), at(hi));
+        let back = |q: Point2| {
+            let d = q1 - q0;
+            let len2 = d.dot(d);
+            let v = if len2 <= 1e-300 {
+                0.0
+            } else {
+                (q - q0).dot(d) / len2
+            };
+            p0 + (p1 - p0) * (lo + (hi - lo) * v.clamp(0.0, 1.0))
+        };
+        let parts = &self.strips[s].region.parts;
+        for q in [q0, q1] {
+            if parts.iter().any(|c| crate::region::holds(c, q)) {
+                return Some(back(q));
+            }
+        }
+        let seg = Piece::Line { a: q0, b: q1 };
+        for bd in parts
+            .iter()
+            .flat_map(|c| std::iter::once(&c.outer).chain(&c.holes))
+            .flatten()
+        {
+            let near = match bd.piece {
+                Piece::Line { a, b } => seg_seg(q0, q1, a, b),
+                _ => contact(std::slice::from_ref(&seg), std::slice::from_ref(&bd.piece), tol)
+                    .map(|p| (0.0, p)),
+            };
+            if let Some((d, p)) = near
+                && d <= tol
+            {
+                return Some(back(p));
+            }
+        }
+        None
+    }
+
+    /// How far a point is from plane strip `s`'s material (0 inside it).
+    fn distance(&self, s: usize, p: Point3) -> f64 {
+        let Geo::Plane(f) = self.strips[s].folded else {
+            return f64::INFINITY;
+        };
+        let l = f.point_to_local(p);
+        let (q, w) = (Point2::new(l.x, l.y), -l.z);
+        let dw = (-w).max(w - self.t).max(0.0);
+        let parts = &self.strips[s].region.parts;
+        let dr = if parts.iter().any(|c| crate::region::holds(c, q)) {
+            0.0
+        } else {
+            parts
+                .iter()
+                .flat_map(|c| std::iter::once(&c.outer).chain(&c.holes))
+                .flatten()
+                .map(|b| b.piece.at(b.piece.nearest(q)).distance(q))
+                .fold(f64::INFINITY, f64::min)
+        };
+        (dw * dw + dr * dr).sqrt()
+    }
+
+    /// The deepest point of strip `a`'s boundary (both skins and the rails through the sheet) in
+    /// strip `b`'s material, from a first one found (or a depth 0 to beat): branch and bound on the boxes `may_reach`
+    /// judges, a half kept only while it may beat the deepest so far by `eps`: the depth reported
+    /// is within `eps` (t / 1000) of the greatest, rigorously (depth is 1-Lipschitz).
+    fn deepest_in(
+        &self,
+        a: usize,
+        b: usize,
+        first: (Point3, f64),
+        flat_b: (Point2, Point2),
+    ) -> (Point3, f64) {
+        let t = self.t;
+        let geo = self.strips[a].folded;
+        let eps = 1e-3 * t;
+        let mut best = first;
+        let run = |best: &mut (Point3, f64),
+                   box_of: &dyn Fn(Interval) -> forge_math::Box3,
+                   point: &dyn Fn(f64) -> Point3| {
+            let mut stack = vec![(Interval::new(0.0, 1.0), 0u32)];
+            while let Some((u, level)) = stack.pop() {
+                let bx = box_of(u);
+                if !self.may_reach(b, &bx, flat_b, best.1 + eps) {
+                    continue;
+                }
+                let p = point(u.mid());
+                if let Some(d) = self.inside(b, p)
+                    && d > best.1
+                {
+                    *best = (p, d);
+                }
+                let size = (bx.x.width().powi(2) + bx.y.width().powi(2) + bx.z.width().powi(2)).sqrt();
+                if size <= eps || level >= 60 {
+                    continue;
+                }
+                let m = u.mid();
+                stack.push((Interval::new(u.lo, m), level + 1));
+                stack.push((Interval::new(m, u.hi), level + 1));
+            }
+        };
+        for ld in self.loops.iter().filter(|l| l.strip == a) {
+            for bd in &ld.bounds {
+                let inset = |u: f64| {
+                    let d = bd.piece.tangent(u);
+                    bd.piece.at(u) + Vec2::new(-d.y, d.x) * (10.0 * TOL / d.length().max(1e-300))
+                };
+                for w in [0.0, t] {
+                    run(&mut best, &|u| piece_box(geo, &bd.piece, w, u), &|u| {
+                        geo.point(inset(u), w)
+                    });
+                }
+                let q = inset(0.0);
+                run(
+                    &mut best,
+                    &|u| {
+                        forge_math::Box3::from_points([geo.point(q, t * u.lo), geo.point(q, t * u.hi)])
+                            .grow(TOL)
+                    },
+                    &|u| geo.point(q, t * u),
+                );
+            }
+        }
+        best
     }
 
     /// The deepest point found in strip `b` along a curve over fractions 0..1, by halving while
@@ -1890,6 +2134,7 @@ impl<'a> Strips<'a> {
             Ok((whole - rest.area(), at))
         };
         let mut worst: Option<(usize, usize, Point2, f64)> = None;
+        let mut touch: Option<(usize, usize, Point2)> = None;
         let mut undecided: Option<(usize, usize, RegionError)> = None;
         let mut total = 0.0;
         for a in 0..ns {
@@ -1898,10 +2143,10 @@ impl<'a> Strips<'a> {
                 let (lb, hb) = boxes[b];
                 if joined.contains(&(a, b))
                     || joined.contains(&(b, a))
-                    || ha.x <= lb.x + TOL
-                    || hb.x <= la.x + TOL
-                    || ha.y <= lb.y + TOL
-                    || hb.y <= la.y + TOL
+                    || ha.x < lb.x - TOL
+                    || hb.x < la.x - TOL
+                    || ha.y < lb.y - TOL
+                    || hb.y < la.y - TOL
                 {
                     continue;
                 }
@@ -1926,6 +2171,20 @@ impl<'a> Strips<'a> {
                             total += area;
                             if worst.is_none_or(|w| area > w.3) {
                                 worst = Some((a, b, at, area));
+                            }
+                        } else if touch.is_none() {
+                            // no area in common: touching all the same (an edge on an edge, a
+                            // corner on an edge) is a blank of zero width there
+                            let pa: Vec<Piece> = ca
+                                .iter()
+                                .flat_map(|l| pieces(l).into_iter().map(|x| x.0))
+                                .collect();
+                            let pb: Vec<Piece> = cb
+                                .iter()
+                                .flat_map(|l| pieces(l).into_iter().map(|x| x.0))
+                                .collect();
+                            if let Some(at) = contact(&pa, &pb, TOL) {
+                                touch = Some((a, b, at));
                             }
                         }
                     }
@@ -1952,6 +2211,16 @@ impl<'a> Strips<'a> {
                 at,
                 gap,
                 limit,
+            });
+        }
+        if worst.is_none()
+            && let Some((a, b, at)) = touch
+        {
+            return Some(SheetError::FlatTouch {
+                feature: self.cx.feature,
+                a: self.strips[a].strip,
+                b: self.strips[b].strip,
+                at,
             });
         }
         worst.map(|(a, b, at, area)| SheetError::FlatOverlap {
@@ -2476,6 +2745,65 @@ impl<'a> Strips<'a> {
 /// when sigma is 1, so the arc's angles turn the other way.
 /// A piece's own stretch of its spline, in the spline's parameter: a wall built on the whole of a
 /// closed spline is carried past its ends onto itself at the seam, where points project to either.
+/// A point where two sets of pieces come within `tol` of each other, if they do: nearest
+/// points by alternating projection from nine starts on each piece of `a` (exact for lines).
+fn contact(a: &[Piece], b: &[Piece], tol: f64) -> Option<Point2> {
+    for pa in a {
+        for pb in b {
+            for k in 0..=8 {
+                let mut p = pa.at(k as f64 / 8.0);
+                let mut q = pb.at(pb.nearest(p));
+                for _ in 0..40 {
+                    let p2 = pa.at(pa.nearest(q));
+                    let q2 = pb.at(pb.nearest(p2));
+                    let done = p2.distance(p) < 1e-15;
+                    (p, q) = (p2, q2);
+                    if done {
+                        break;
+                    }
+                }
+                if p.distance(q) <= tol {
+                    return Some(p);
+                }
+            }
+        }
+    }
+    None
+}
+
+/// The distance between segments a0..a1 and b0..b1 in the plane, and the point of the first
+/// nearest the second: 0 where they cross, else the least of the four ends to the other segment.
+fn seg_seg(a0: Point2, a1: Point2, b0: Point2, b1: Point2) -> Option<(f64, Point2)> {
+    let near = |p: Point2, s0: Point2, s1: Point2| {
+        let d = s1 - s0;
+        let len2 = d.dot(d);
+        let u = if len2 <= 1e-300 {
+            0.0
+        } else {
+            ((p - s0).dot(d) / len2).clamp(0.0, 1.0)
+        };
+        s0 + d * u
+    };
+    let (da, db) = (a1 - a0, b1 - b0);
+    let den = da.cross(db);
+    if den.abs() > 1e-300 {
+        let u = (b0 - a0).cross(db) / den;
+        let v = (b0 - a0).cross(da) / den;
+        if (0.0..=1.0).contains(&u) && (0.0..=1.0).contains(&v) {
+            return Some((0.0, a0 + da * u));
+        }
+    }
+    [
+        (a0, near(a0, b0, b1).distance(a0)),
+        (a1, near(a1, b0, b1).distance(a1)),
+        (near(b0, a0, a1), near(b0, a0, a1).distance(b0)),
+        (near(b1, a0, a1), near(b1, a0, a1).distance(b1)),
+    ]
+    .into_iter()
+    .min_by(|x, y| x.1.total_cmp(&y.1))
+    .map(|(p, d)| (d, p))
+}
+
 /// A piece carried by a rigid motion.
 fn moved(p: &Piece, by: &Rigid) -> Piece {
     match p {

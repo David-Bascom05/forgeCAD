@@ -442,6 +442,7 @@ fn shop_checks() {
                     | Violation::HoleNearEdge { .. }
                     | Violation::SlotTooNarrow { .. }
                     | Violation::HoleTooSmall { .. }
+                    | Violation::CutCrossesBend { .. }
             )
         })
         .collect();

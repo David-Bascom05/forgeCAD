@@ -6,7 +6,8 @@ use forge_math::rng::Rng;
 use forge_math::{Frame, Point2, dmath};
 use forge_ops::{ProfileLoop, Segment};
 use forge_sheet::{
-    BendRule, FeatureId, Gauge, Map, Sheet, SheetError, SheetWarning, Strip, WallId, build_with, setback_of,
+    BendRule, CornerKind, FeatureId, Gauge, Map, Sheet, SheetError, SheetWarning, Strip, WallId, build_with,
+    setback_of,
 };
 
 fn poly(pts: &[(f64, f64)]) -> ProfileLoop {
@@ -122,9 +123,17 @@ fn facing_flanges_overlap_only_when_flat() {
     let ba = dmath::PI / 2.0 * (2.0 + 0.8);
     let h = (20.0 / 2.0 + 2.0 * s0 - ba) - 1e-3;
     let s = notched(2.0, 2.0, 0.4, 20.0, h, h, dmath::PI / 2.0, 2);
+    // no overlap; the flanges' flats still lie on the notch's bottom edge, a touch, no
+    // valid blank there (a relief, or a deeper notch, would part them)
     let fold = build_with(&s, Map::Folded).unwrap();
-    assert!(fold.warnings.is_empty(), "{:?}", fold.warnings);
-    assert!(build_with(&s, Map::Flat).is_ok());
+    match fold.warnings.as_slice() {
+        [SheetWarning::FlatTouch { at, .. }] => assert!((at.y - 30.0).abs() < 1e-9, "{at:?}"),
+        w => panic!("{w:?}"),
+    }
+    assert!(matches!(
+        build_with(&s, Map::Flat),
+        Err(SheetError::FlatTouch { .. })
+    ));
 }
 
 #[test]
@@ -185,6 +194,11 @@ fn fuzz_against_the_exact_overlap() {
                 0.0
             }
             Err(SheetError::FlatOverlap { total, .. }) => *total,
+            // clear of each other, both on the notch's bottom edge
+            Err(SheetError::FlatTouch { at, .. }) => {
+                assert!((at.y - 30.0).abs() < 1e-9, "{at:?}");
+                0.0
+            }
             Err(SheetError::FlatOverlapUndecided { gap: g, .. }) => {
                 // only where the two sides' lines come within the boolean's tolerance
                 assert!(near_coincident(t, r, k, gap, h1, h2, angle), "undecided at {g}");
@@ -253,6 +267,8 @@ fn the_checks_cost_microseconds() {
         for &e in edges {
             s.flange(base, e, dmath::PI / 2.0, 20.0).unwrap();
         }
+        // whole walls on adjacent edges touch at the corners: opened
+        s.corner_default = Some(CornerKind::Open { gap: 0.4 });
         s
     };
     for (name, s) in [("L", mk(&[1])), ("U", mk(&[1, 3])), ("box", mk(&[0, 1, 2, 3]))] {
@@ -269,4 +285,35 @@ fn the_checks_cost_microseconds() {
         }
     }
     let _ = WallId(0);
+}
+
+#[test]
+fn folded_clash_depth_against_the_exact_reference() {
+    // a wall standing up under a lip that turns back over the base: its top runs p into the
+    // lip. The deepest point of its boundary in the lip's material is min(p, t/2) through the
+    // lip's thickness (its sides cross the lip's middle once p passes t/2)
+    let (t, r, l) = (1.5, 1.5, 40.0);
+    let g = Gauge {
+        thickness: t,
+        radius: r,
+        rule: BendRule::K(0.42),
+    };
+    let th = dmath::PI / 2.0;
+    for p in [0.3, 0.5, 1.0, 1.4] {
+        let rect = poly(&[(0.0, 0.0), (l, 0.0), (l, 30.0), (0.0, 30.0)]);
+        let (mut s, base) = Sheet::face(FeatureId(1), g.clone(), Frame::WORLD, &[rect]).unwrap();
+        let (wall, _) = s.flange(base, 1, th, 30.0).unwrap();
+        s.flange(wall, 1, th, 50.0).unwrap();
+        s.flange(base, 3, th, 30.0 + p).unwrap();
+        match build_with(&s, Map::Folded) {
+            Err(SheetError::FoldedClash { depth, .. }) => {
+                let want = p.min(0.5 * t);
+                assert!(
+                    (depth - want).abs() <= 1e-3 * t + 1e-9,
+                    "{p}: {depth} against {want}"
+                );
+            }
+            r => panic!("{p}: {:?}", r.err()),
+        }
+    }
 }
