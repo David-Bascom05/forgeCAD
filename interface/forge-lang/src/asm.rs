@@ -1604,6 +1604,34 @@ fn as_reference(ev: &mut Eval, v: Value) -> Option<fa::Reference> {
     }
 }
 
+/// The body an assembly places of a part by default: the part as made, less any flat pattern an
+/// `unfold` made of a sheet (that is the drawing's, not the assembly's; `body:` still picks it).
+fn placed_body(ev: &Eval) -> Option<forge_topo::Body> {
+    let flats: Vec<usize> = ev
+        .sheets
+        .list
+        .iter()
+        .flat_map(|st| &st.unfolds)
+        .filter_map(|u| ev.feats.iter().find(|f| f.id == u.id).map(|f| f.idx))
+        .collect();
+    let st = ev.b.stages.last()?;
+    if flats.is_empty() || !st.solids.iter().any(|s| flats.contains(&s.id)) {
+        return ev.b.body().cloned();
+    }
+    let kept: Vec<&forge_model::Solid> = st.solids.iter().filter(|s| !flats.contains(&s.id)).collect();
+    match &kept[..] {
+        [] => None,
+        [one] => Some(forge_model::finish(one.body.clone())),
+        many => {
+            let mut all = forge_topo::Body::new();
+            for s in many {
+                all.append(&forge_model::finish(s.body.clone()));
+            }
+            Some(all)
+        }
+    }
+}
+
 fn load_part(
     text: &str,
     dir: Option<std::path::PathBuf>,
@@ -1641,7 +1669,7 @@ fn load_part(
     }
     ev.run(&prog);
     crate::sheet::finish(&mut ev);
-    out.body = ev.b.body().cloned();
+    out.body = placed_body(&ev);
     if let Some(st) = ev.b.stages.last() {
         for name in bodies {
             if let Some(f) = ev.feats.iter().find(|f| &f.id == name)
@@ -1749,6 +1777,8 @@ pub struct AsmTimings {
     pub expects_ms: f64,
     /// Whether the solve and the overlap check reused the last run's (an edit of drives only).
     pub incremental: bool,
+    /// Runs made for `expect .. at`: one per distinct set of params.
+    pub at_runs: usize,
 }
 
 /// One joint's values after the solve.
@@ -1780,8 +1810,8 @@ pub struct AsmOut {
     pub overlap: Option<OverlapStats>,
     /// The parts to draw: each occurrence's body and pose.
     pub draw: Vec<(Arc<forge_topo::Body>, Frame)>,
-    /// A probed expect's value (`Options::probe`).
-    pub probe: Option<f64>,
+    /// The probed expects' values, by position (`Options::probe`).
+    pub probes: Vec<(usize, Option<f64>)>,
     /// Every expect line: measured, against its limit, passed or not.
     pub expects: Vec<ExpectOut>,
     /// Every rule-covered thread pair's engagement, short or not.
@@ -2471,16 +2501,19 @@ pub fn finish(
     let t4 = Instant::now();
     let catalog = checker.parts().clone();
     let expects = ev.expects.clone();
+    // the expects measured on this solve (all of them when probing for an `at` run)
+    let mut direct: BTreeMap<usize, Result<f64, Issue>> = BTreeMap::new();
     for (k, s) in expects.iter().enumerate() {
-        let StmtKind::Expect {
-            metric,
-            args,
-            cmp,
-            at,
-        } = &s.kind
-        else {
+        let StmtKind::Expect { metric, args, at, .. } = &s.kind else {
             continue;
         };
+        let wanted = match &opts.probe {
+            Some(ps) => ps.contains(&k),
+            None => at.is_empty(),
+        };
+        if !wanted {
+            continue;
+        }
         let mut m = Measure {
             names: &names,
             sol,
@@ -2488,107 +2521,182 @@ pub fn finish(
             checker,
             asm: live_asm,
         };
-        if let Some(p) = opts.probe {
-            if p == k {
-                out.probe = m.measure(ev, metric, args).ok();
+        let mark = ev.enter_expect(k);
+        let v = m.measure(ev, metric, args);
+        ev.leave_expect(mark);
+        match &opts.probe {
+            Some(_) => out.probes.push((k, v.ok())),
+            None => {
+                direct.insert(k, v);
             }
-            continue;
         }
-        let line = s.span.lines(ev.src).0;
-        let unevaluable = |why: Unevaluable| Issue::ExpectUnevaluable {
-            metric: metric.clone(),
-            why,
-        };
-        let measured = if at.is_empty() {
-            m.measure(ev, metric, args)
-        } else {
-            probe_at(ev, opts, k, at).ok_or_else(|| unevaluable(Unevaluable::AtFailed))
-        };
-        let measured = match measured {
-            Ok(v) => v,
-            Err(issue) => {
-                ev.errors.push(note(s.span, issue));
-                out.expects.push(ExpectOut {
-                    line,
-                    metric: metric.clone(),
-                    measured: None,
-                    limit: None,
-                    ok: false,
-                });
+    }
+    // this solve is where the `at` runs start: each re-solves and re-checks only what its
+    // drives move
+    let mut live = Some(live);
+    // expects `at` the same params share one run: the document with those values, the parts
+    // from this run's cache (only the drives differ), every expect of the set measured at once
+    let mut at_values: BTreeMap<usize, Option<f64>> = BTreeMap::new();
+    if opts.probe.is_none() {
+        let mut sets: BTreeMap<String, Vec<usize>> = BTreeMap::new();
+        for (k, s) in expects.iter().enumerate() {
+            let StmtKind::Expect { at, .. } = &s.kind else {
+                continue;
+            };
+            if at.is_empty() {
                 continue;
             }
-        };
-        let Some((c, v, tol)) = cmp else {
-            out.expects.push(ExpectOut {
-                line,
+            let mark = ev.enter_expect(k);
+            let text = at_text(ev, at);
+            ev.leave_expect(mark);
+            match text {
+                Some(text) => sets.entry(text).or_default().push(k),
+                None => {
+                    at_values.insert(k, None);
+                }
+            }
+        }
+        for (text, ks) in sets {
+            let o = crate::Options {
+                probe: Some(ks.clone()),
+                ..opts.clone()
+            };
+            if let Some(l) = live.take() {
+                cache.last = Some(l);
+            }
+            let mut kept = crate::build::Cache::default();
+            kept.asm = Some(std::mem::take(&mut cache));
+            let (run, back) = crate::run(&text, o, kept);
+            cache = back.asm.unwrap_or_default();
+            t.at_runs += 1;
+            let probed = run.asm.map(|a| a.probes).unwrap_or_default();
+            for k in ks {
+                let v = probed.iter().find(|p| p.0 == k).and_then(|p| p.1);
+                at_values.insert(k, v);
+            }
+        }
+    }
+    for (k, s) in expects.iter().enumerate() {
+        let mark = ev.enter_expect(k);
+        'one: {
+            let StmtKind::Expect {
+                metric,
+                args: _,
+                cmp,
+                at,
+            } = &s.kind
+            else {
+                break 'one;
+            };
+            if opts.probe.is_some() {
+                break 'one;
+            }
+            let line = s.span.lines(ev.src).0;
+            let unevaluable = |why: Unevaluable| Issue::ExpectUnevaluable {
                 metric: metric.clone(),
-                measured: Some(measured),
-                limit: None,
-                ok: true,
-            });
-            continue;
-        };
-        let limit = match ev.expr(v) {
-            Ok(Value::Num(n)) => n.v,
-            _ => {
-                ev.errors.push(note(s.span, unevaluable(Unevaluable::NoLimit)));
+                why,
+            };
+            let measured = if at.is_empty() {
+                direct
+                    .remove(&k)
+                    .unwrap_or(Err(unevaluable(Unevaluable::AtFailed)))
+            } else {
+                at_values
+                    .get(&k)
+                    .copied()
+                    .flatten()
+                    .ok_or_else(|| unevaluable(Unevaluable::AtFailed))
+            };
+            let measured = match measured {
+                Ok(v) => v,
+                Err(issue) => {
+                    ev.errors.push(note(s.span, issue));
+                    out.expects.push(ExpectOut {
+                        line,
+                        metric: metric.clone(),
+                        measured: None,
+                        limit: None,
+                        ok: false,
+                    });
+                    break 'one;
+                }
+            };
+            let Some((c, v, tol)) = cmp else {
                 out.expects.push(ExpectOut {
                     line,
                     metric: metric.clone(),
                     measured: Some(measured),
                     limit: None,
-                    ok: false,
+                    ok: true,
                 });
-                continue;
-            }
-        };
-        let tol = match tol {
-            Some((x, pct)) => match ev.expr(x) {
-                Ok(Value::Num(n)) => {
-                    if *pct {
-                        limit.abs() * n.v / 100.0
-                    } else {
-                        n.v
-                    }
+                break 'one;
+            };
+            let limit = match ev.expr(v) {
+                Ok(Value::Num(n)) => n.v,
+                _ => {
+                    ev.errors.push(note(s.span, unevaluable(Unevaluable::NoLimit)));
+                    out.expects.push(ExpectOut {
+                        line,
+                        metric: metric.clone(),
+                        measured: Some(measured),
+                        limit: None,
+                        ok: false,
+                    });
+                    break 'one;
                 }
-                _ => 0.0,
-            },
-            None => 0.0,
-        };
-        let ok = match c {
-            Cmp::Eq => (measured - limit).abs() <= tol.max(1e-9 * limit.abs().max(1.0)),
-            Cmp::Lt => measured < limit + tol,
-            Cmp::Le => measured <= limit + tol,
-            Cmp::Gt => measured > limit - tol,
-            Cmp::Ge => measured >= limit - tol,
-        };
-        out.expects.push(ExpectOut {
-            line,
-            metric: metric.clone(),
-            measured: Some(measured),
-            limit: Some(limit),
-            ok,
-        });
-        if !ok {
-            ev.errors.push(note(
-                s.span,
-                Issue::ExpectFailed {
-                    metric: metric.clone(),
-                    measured,
-                    cmp: *c,
-                    limit,
+            };
+            let tol = match tol {
+                Some((x, pct)) => match ev.expr(x) {
+                    Ok(Value::Num(n)) => {
+                        if *pct {
+                            limit.abs() * n.v / 100.0
+                        } else {
+                            n.v
+                        }
+                    }
+                    _ => 0.0,
                 },
-            ));
+                None => 0.0,
+            };
+            let ok = match c {
+                Cmp::Eq => (measured - limit).abs() <= tol.max(1e-9 * limit.abs().max(1.0)),
+                Cmp::Lt => measured < limit + tol,
+                Cmp::Le => measured <= limit + tol,
+                Cmp::Gt => measured > limit - tol,
+                Cmp::Ge => measured >= limit - tol,
+            };
+            out.expects.push(ExpectOut {
+                line,
+                metric: metric.clone(),
+                measured: Some(measured),
+                limit: Some(limit),
+                ok,
+            });
+            if !ok {
+                ev.errors.push(note(
+                    s.span,
+                    Issue::ExpectFailed {
+                        metric: metric.clone(),
+                        measured,
+                        cmp: *c,
+                        limit,
+                    },
+                ));
+            }
         }
+        ev.leave_expect(mark);
     }
     t.expects_ms = t4.elapsed().as_secs_f64() * 1e3;
     out.timings = t;
-    cache.last = Some(live);
+    if let Some(l) = live {
+        cache.last = Some(l);
+    }
     (Some(out), Some(cache))
 }
 
-/// An `expect` with `at P = v`: the document run again with those params set, its value read.
-fn probe_at(ev: &mut Eval, opts: &crate::Options, k: usize, at: &[(Vec<Seg>, Expr)]) -> Option<f64> {
+/// The document with an `expect`'s `at P = v` params set: what it is measured on. None when a
+/// value is not a number here, or a param is not the document's.
+fn at_text(ev: &mut Eval, at: &[(Vec<Seg>, Expr)]) -> Option<String> {
     let mut text = ev.src.to_string();
     for (path, e) in at {
         let (last, owner) = path.split_last()?;
@@ -2610,12 +2718,7 @@ fn probe_at(ev: &mut Eval, opts: &crate::Options, k: usize, at: &[(Vec<Seg>, Exp
         };
         text = crate::edit::apply(&text, &Op::SetParam { param, value }).ok()?;
     }
-    let o = crate::Options {
-        probe: Some(k),
-        ..opts.clone()
-    };
-    let (run, _) = crate::run(&text, o, Default::default());
-    run.asm.and_then(|a| a.probe)
+    Some(text)
 }
 
 /// What an expect measures with.
@@ -3253,6 +3356,7 @@ pub fn json(out: &AsmOut) -> Json {
                 ("overlap", t.overlap_ms.into()),
                 ("expects", t.expects_ms.into()),
                 ("incremental", t.incremental.into()),
+                ("at_runs", t.at_runs.into()),
             ]),
         ),
     ];
