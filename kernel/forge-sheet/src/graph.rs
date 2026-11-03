@@ -618,6 +618,24 @@ impl Sheet {
                 limit: tol::LINEAR,
             });
         }
+        // its centre on the wall's material: inside the outline, outside its holes
+        let w = self.wall(wall).ok_or(SheetError::NoSuchWall { feature, wall })?;
+        let inside = |l: &ProfileLoop| {
+            let pts: Vec<Point2> = l.segments.iter().flat_map(|(g, _)| g.samples(32)).collect();
+            let n = pts.len();
+            (0..n).fold(false, |inside, k| {
+                let (a, b) = (pts[k], pts[(k + 1) % n]);
+                if (a.y > at.y) != (b.y > at.y) && at.x < a.x + (at.y - a.y) / (b.y - a.y) * (b.x - a.x) {
+                    !inside
+                } else {
+                    inside
+                }
+            })
+        };
+        let on = w.outline.first().is_some_and(inside) && !w.outline.iter().skip(1).any(inside);
+        if !on {
+            return Err(SheetError::HardwareOffWall { feature, wall, at });
+        }
         let hole = Segment::Circle {
             center: at,
             radius: 0.5 * part.hole,

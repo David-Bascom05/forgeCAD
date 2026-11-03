@@ -522,10 +522,15 @@ flange(EDGE, height: H, angle: A = 90deg, side: "up"|"down" = "up",
 corner_relief(F, G, CORNER)
     the treatment where flanges F and G, off one wall at a corner of its outline, meet
     (NotACorner if they do not).
-cutout(PROFILE, wall: W)
+cutout(PROFILE, wall: W, crosses_bend: false)
     PROFILE taken out of the sheet. Its sketch lies on W's top or bottom; the profile is placed
     in W's developed coordinates, so it cuts across bends into the walls beyond as they unfold.
-    A whole sketch cuts all its regions; lines, arcs, circles and splines.
+    A whole sketch cuts all its regions; lines, arcs, circles and splines. With a shop, a cut
+    running across a bend is the violation CutCrossesBend (fix: crosses_bend: true, which makes
+    it information).
+pattern(of: CUTOUT, layout: LAYOUT)
+    the cutout repeated on its wall; a copy that leaves the wall's plane is PatternOffWall,
+    other sheet features PatternOfSheet.
 unfold(S, on: PLANE)
     the flat body of S's sheet as a new body, its first wall on PLANE (default where it is
     folded). Sheet features after an unfold of their sheet are AfterUnfold.
@@ -542,8 +547,9 @@ built. Its depth is from the rule's reference (`from`).
 CORNER: `circular_relief(R, placement: "intersection"|"tangent")`, `square_relief(H, placement:)`
 (a circle of radius R or a square of half side H centred on the bend lines' crossing or the
 tangent lines' crossing, cut through base, bends and flanges; size left out: just clear of both
-bends' zones), `open_corner(GAP)` (a square at the corner that much larger), `trim_to_bend` (the
-corner cut back to both tangent lines across both zones), `tear_corner` (a kerf-wide slit along
+bends' zones), `open_corner(GAP)` (a square at the corner that much larger, and the later wall
+trimmed back t + GAP), `trim_to_bend` (the corner cut back a kerf past both tangent lines across
+both zones), `tear_corner` (a kerf-wide slit along
 the diagonal), `closed_corner`, `overlap_corner(GAP)` (refused: CornerUnbuilt). Cuts that part the
 sheet are SheetSplit.
 
@@ -569,7 +575,8 @@ The shop is data, held by params:
 ```
 kfactor(K)                        K a Ratio in [0, 1]: BA = angle (r + K t)
 ktable([(R_OVER_T, K), ..])       K by r/t, linear between rows (Ratios, increasing)
-bend_table([(R, A, BA), ..])      measured allowances for each radius, linear in angle
+bend_table([(R, A, BA), ..])      measured allowances for each radius, linear in angle (rows by
+                                  radius then angle, increasing: else TableOrder at the row)
 per_t(F, plus: L = 0)             a length F t + L (F a Ratio)
 stock(t: T, bend: RULE, radii: [R, ..], min_flange: S, hole_to_bend: S, hole_to_edge: S,
       min_slot: S, min_hole: S, relief: RELIEF_RULE)
@@ -644,7 +651,15 @@ feature (`FoldedClash`) and is a warning on an unfold; a flat overlap refuses `u
 (`FlatOverlap`: the pair overlapping most, a point, its area and the total, exact) and is a
 warning on the part, with a SetParam fix for each flange involved: the tallest height that clears
 it. Two strips whose flats come within the boolean's tolerance of touching are
-`FlatOverlapUndecided`, never taken as clear.
+`FlatOverlapUndecided`, never taken as clear. Strips that touch without overlapping make no valid
+solid either: `FoldedTouch` (walls meeting edge to face, folded) refuses the sheet feature,
+`FlatTouch` (a flat edge on another) refuses `unfold`; each is a warning on the other, with fixes
+each tried on the kernel first (the corner opened, a slot along the touching edge of the base
+before the refused step, heights). Where two walls off one wall would meet at a corner, the
+builder trims the later back t and the shop's corner gap (on the shorter edge; on edges of one
+length, the one starting at the corner), listed with the corner reliefs as an automatic open
+trim. Hardware off its wall is `HardwareOffWall`; on a lip too narrow for its edge distance both
+ways, `LipTooShort` (fix: the lip raised till it fits).
 
 `fg run F.fg --dxf OUT.dxf` writes each sheet's flat pattern (R2000 DXF, mm): cut contours on
 layer CUT (lines, arcs, circles, NURBS), bend lines down each zone's middle on layer BEND, and on
