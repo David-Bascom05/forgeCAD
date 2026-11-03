@@ -2509,7 +2509,9 @@ fn flange(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         }
         Some(o) => return Err(wrong(a.span("relief"), "relief", Ty::Relief, &o)),
     };
-    let position = match word(&a, "position", &["outside", "inside", "bend_outside"])?.unwrap_or("outside") {
+    // inside by default: Inventor's documented default ("Inside of base face extents"), and
+    // Fusion's dialog's by tutorials; SolidWorks' and Onshape's help state none
+    let position = match word(&a, "position", &["outside", "inside", "bend_outside"])?.unwrap_or("inside") {
         "inside" => fs::Position::Inside,
         "bend_outside" => fs::Position::BendOutside,
         _ => fs::Position::Outside,
