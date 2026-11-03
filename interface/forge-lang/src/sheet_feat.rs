@@ -64,6 +64,7 @@ pub(super) fn kernel_kind(e: &SheetError) -> Option<&'static str> {
             Width { .. } => "ContourWidth",
         },
         SheetError::Hem { why, .. } => hem_kind(why),
+        SheetError::Seam { why, .. } => seam_kind(why),
         _ => return None,
     })
 }
@@ -112,6 +113,7 @@ pub(super) fn kernel_text(e: &SheetError) -> Option<String> {
             Width { width, .. } => format!("width {} is not positive", fm(width)),
         },
         SheetError::Hem { why, .. } => hem_text(why),
+        SheetError::Seam { why, .. } => seam_text(why),
         _ => return None,
     })
 }
@@ -146,6 +148,7 @@ pub(super) fn kernel_data(e: &SheetError) -> Option<Vec<(&'static str, Json)>> {
             Width { width, limit } => vec![("width", f(width)), ("limit", f(limit))],
         },
         SheetError::Hem { why, .. } => hem_data(why),
+        SheetError::Seam { why, .. } => seam_data(why),
         _ => return None,
     })
 }
@@ -676,4 +679,84 @@ pub(super) fn hem(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     st.joints.push((joint, id.clone(), span));
     push_sheet_step(ev, si, &id, "hem", span, dims)?;
     Ok(op_value(si, &id, OpKind::Flange { wall, joint }))
+}
+
+fn seam_kind(e: &fs::SeamError) -> &'static str {
+    use fs::SeamError::*;
+    match e {
+        NotACorner => "SeamNotACorner",
+        NotAFlange { .. } => "SeamNotAFlange",
+        TipTaken { .. } => "SeamTipTaken",
+        Gap { .. } => "SeamGap",
+        Parallel { .. } => "SeamParallel",
+        NoRoom { .. } => "SeamNoRoom",
+    }
+}
+
+fn seam_text(e: &fs::SeamError) -> String {
+    use fs::SeamError::*;
+    let fm = crate::values::fmt;
+    match *e {
+        NotACorner => "the two flanges do not turn off edges of one wall meeting at a corner".into(),
+        NotAFlange { .. } => "a seam joins plain flanges (a wall off its whole edge)".into(),
+        TipTaken { .. } => "the flange already carries a feature on its tip or sides: seam it first".into(),
+        Gap { gap, limit } => format!("a seam gap of {} is under the floor {}", fm(gap), fm(limit)),
+        Parallel { .. } => "the seam plane runs along the flange".into(),
+        NoRoom { length, .. } => format!("the seam leaves the flange {} long", fm(length)),
+    }
+}
+
+fn seam_data(e: &fs::SeamError) -> Vec<(&'static str, Json)> {
+    use fs::SeamError::*;
+    let f = |x: f64| Json::Num(x);
+    match *e {
+        Gap { gap, limit } => vec![("gap", f(gap)), ("limit", f(limit))],
+        NoRoom { length, .. } => vec![("length", f(length))],
+        _ => vec![],
+    }
+}
+
+// ---- seams ------------------------------------------------------------------------------------
+
+/// `seam(a, b, kind: "overlap"|"underlap"|"closed" = "overlap", gap: G)`: flanges a and b, off
+/// adjacent edges of one wall, cut to meet at their corner. overlap: a laps over b's end;
+/// underlap: b over a's. G defaults to the shop's kerf.
+pub(super) fn seam(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
+    let id = ev.take_id("seam", span)?;
+    let a = Args::bind(ev, "seam", &["a", "b", "kind", "gap"], args, span)?;
+    if a.poisoned() {
+        return Ok(Value::Unresolved);
+    }
+    let joint = |k: &'static str| -> R<(usize, JointId)> {
+        let v = a.req(k)?;
+        let op = op_of(&v, a.span(k), "a flange")?;
+        match op.kind {
+            OpKind::Flange { joint, .. } if op.on == On::Folded => Ok((op.sheet, joint)),
+            _ => Err(wrong(a.span(k), "a flange", Ty::Sheet, &v)),
+        }
+    };
+    let ((si, ja), (sb, jb)) = (joint("a")?, joint("b")?);
+    if si != sb {
+        return Err(sheet_err(SheetErr::NotACorner { span, id }));
+    }
+    not_unfolded(ev, si, &id, span)?;
+    let kind = word(&a, "kind", &["overlap", "underlap", "closed"])?.unwrap_or("overlap");
+    let gap = a.num("gap", LEN)?;
+    let mut dims = vec![];
+    if let Some(g) = &gap {
+        dims.push(dim("gap", g));
+    }
+    let st = &mut ev.sheets.list[si];
+    let g = gap.map_or(st.sheet.rule.kerf.max(fs::GAP_FLOOR), |g| g.v);
+    let (x, y, seam) = match kind {
+        "closed" => (ja, jb, fs::Seam::Closed { gap: g }),
+        "underlap" => (jb, ja, fs::Seam::Overlap { gap: g }),
+        _ => (ja, jb, fs::Seam::Overlap { gap: g }),
+    };
+    if let Err(e) = st.sheet.seam(x, y, seam) {
+        return Err(kernel_err(st, span, &id, e));
+    }
+    st.corners.push((ja, jb, id.clone(), span));
+    push_sheet_step(ev, si, &id, "seam", span, dims)?;
+    Ok(op_value(si, &id, OpKind::Corner { a: ja, b: jb }))
 }

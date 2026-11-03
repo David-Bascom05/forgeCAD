@@ -4,6 +4,7 @@
 pub mod build;
 pub mod checks;
 pub mod contour;
+pub mod corner;
 pub mod error;
 pub mod graph;
 pub mod hardware;
@@ -19,6 +20,7 @@ pub use build::{
 };
 pub use checks::check;
 pub use contour::{ContourError, ContourMade, Hand};
+pub use corner::{Seam, SeamError};
 pub use error::{
     CutId, End, FeatureId, JointId, JointKindName, Pinch, Seam, SheetError, SheetWarning, Side, Strip,
     TrimCurveKind, TrimRef, Violation, WallId,

@@ -45,6 +45,8 @@ pub const BUILTINS: &[&str] = &[
     "open_corner",
     "overlap_corner",
     "corner_relief",
+    "constant_width_corner",
+    "seam",
     "hardware",
     "pem",
     "relief_rule",
@@ -1387,7 +1389,7 @@ fn kernel_text(e: &SheetError) -> String {
             format!("the flange's position moves its edge, and the edge beside it is a {curve:?}")
         }
         CornerUnbuilt { size, .. } if size.is_nan() => {
-            "closed and overlapping corners are not built yet; give the corner a relief".into()
+            "a closed or overlapping corner is a seam: cut it with seam(a, b, kind, gap) or corner_relief(a, b, closed_corner), or give the corner a relief".into()
         }
         CornerUnbuilt { size, .. } => format!("a corner relief of size {}", fm(*size)),
         FlatOverlap { total, .. } => format!(
@@ -2305,6 +2307,14 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
             Ok(sv(SheetVal::Corner(Rc::new(CornerV { kind }))))
         }
         "corner_relief" => corner(ev, args, span),
+        "constant_width_corner" => {
+            let a = Args::bind(ev, name, &["width"], args, span)?;
+            let width = a.num("width", LEN)?.map(|n| n.v);
+            Ok(sv(SheetVal::Corner(Rc::new(CornerV {
+                kind: fs::CornerKind::ConstantWidth { width },
+            }))))
+        }
+        "seam" => feat::seam(ev, args, span),
         "hardware" => {
             let a = Args::bind(
                 ev,
@@ -2773,7 +2783,23 @@ fn corner(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     };
     not_unfolded(ev, si, &id, span)?;
     let st = &mut ev.sheets.list[si];
-    st.sheet.set_corner(ja, jb, kind);
+    // closed and overlapping corners are seams: the flanges' ends cut to meet
+    // (`sheet_feat::seam`); a closed one keeps the shop's kerf apart
+    let seam = match kind {
+        fs::CornerKind::Closed => Some(fs::Seam::Closed {
+            gap: st.sheet.rule.kerf.max(fs::GAP_FLOOR),
+        }),
+        fs::CornerKind::Overlap { gap } => Some(fs::Seam::Overlap { gap }),
+        _ => None,
+    };
+    match seam {
+        Some(seam) => {
+            if let Err(e) = st.sheet.seam(ja, jb, seam) {
+                return Err(kernel_err(st, span, &id, e));
+            }
+        }
+        None => st.sheet.set_corner(ja, jb, kind),
+    }
     st.corners.push((ja, jb, id.clone(), span));
     let mut dims = vec![];
     if let fs::CornerKind::Circular { size: Some(_), .. } | fs::CornerKind::Square { size: Some(_), .. } =
@@ -2969,13 +2995,21 @@ fn relief_rule(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     if let Some(w) = word(
         &a,
         "corner",
-        &["round", "square", "tear", "trim_to_bend", "closed"],
+        &[
+            "round",
+            "square",
+            "tear",
+            "trim_to_bend",
+            "closed",
+            "constant_width",
+        ],
     )? {
         r.corner.shape = match w {
             "square" => fs::CornerShape::Square,
             "tear" => fs::CornerShape::Tear,
             "trim_to_bend" => fs::CornerShape::TrimToBend,
             "closed" => fs::CornerShape::Closed,
+            "constant_width" => fs::CornerShape::ConstantWidth,
             _ => fs::CornerShape::Round,
         };
     }
@@ -4336,6 +4370,7 @@ impl SheetOut {
                                 fs::CornerKind::Overlap { .. } => "overlap",
                                 fs::CornerKind::Tear => "tear",
                                 fs::CornerKind::TrimToBend => "trim_to_bend",
+                                fs::CornerKind::ConstantWidth { .. } => "constant_width",
                             };
                             Json::obj(vec![
                                 (

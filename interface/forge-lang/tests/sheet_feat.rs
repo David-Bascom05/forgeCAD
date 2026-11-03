@@ -154,3 +154,45 @@ fn hem_refusals_are_typed() {
     );
     assert_eq!(first_error(&s).kind(), "MissingArg");
 }
+
+#[test]
+fn seams_match_the_closed_form() {
+    let r = clean("seams");
+    let plain = {
+        let s: String = src("seams")
+            .lines()
+            .filter(|l| !l.starts_with('s') || l.starts_with("shared") || l.starts_with("sketch"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let p = run(&s);
+        assert!(p.errors.is_empty(), "{}", forge_lang::report::text(&p, &s));
+        p
+    };
+    let (t, rr, h, g) = (1.5, 2.0, 25.0, 2.0);
+    // per corner the lapping wall gains t, the other loses the gap, over the height above the
+    // seam's start (the setback and the gap)
+    let per = t * (t - g) * (h - (rr + g));
+    for (what, a, b) in [
+        (
+            "folded",
+            r.sheets[0].folded.as_ref(),
+            plain.sheets[0].folded.as_ref(),
+        ),
+        (
+            "flat",
+            r.sheets[0].unfolds[0].1.as_ref(),
+            plain.sheets[0].unfolds[0].1.as_ref(),
+        ),
+    ] {
+        let (a, b) = (mass(a.expect("built")), mass(b.expect("built")));
+        near(what, (a.0 - b.0, a.1 + b.1), 4.0 * per);
+    }
+}
+
+#[test]
+fn seam_refusals_are_typed() {
+    let s = src("seams").replace("s1 = seam(right, back,", "s1 = seam(right, left,");
+    assert_eq!(first_error(&s).kind(), "SeamNotACorner");
+    let s = src("seams").replace("shared g = 2", "shared g = 0.001");
+    assert_eq!(first_error(&s).kind(), "SeamGap");
+}

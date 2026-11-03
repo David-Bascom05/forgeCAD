@@ -550,6 +550,17 @@ hem(EDGE, kind: "closed"|"open"|"teardrop"|"rolled" = "closed", length: L, gap: 
     A closed hem is modelled with the shop's hem_gap (never under 0.02, a solid has no touching
     skins) and needs its allowance in shop(closed_hems: [(t, BA), ..]); others use the bend rule.
     HemGap, HemAngle, HemRadius, HemLeg, HemNoRoom, HemNotTabled. C.tip is the leg's far edge.
+seam(A, B, kind: "overlap"|"underlap"|"closed" = "overlap", gap: G)
+    flanges A and B, off adjacent edges of one wall, cut to meet at their corner (normal cuts,
+    edited in folded terms). overlap: A runs on to B's far skin, B stops G short of A's near
+    skin; underlap the other way; closed: both stop G/2 back from the plane bisecting their
+    mid-surfaces (on a square corner that leaves the t x t corner open: use overlap to close
+    it). Each cut starts G above its flange's tangent line; the base corner takes the shop
+    rule's corner relief. G defaults to the shop's kerf, never under 0.02. corner_relief(A, B,
+    closed_corner | overlap_corner(gap: G)) is the same seam. SeamNotACorner, SeamNotAFlange,
+    SeamTipTaken (seam before putting hems on the tips), SeamGap, SeamParallel, SeamNoRoom.
+    constant_width_corner(width: W) is a corner relief: a W-wide slot (default t) along the
+    corner's diagonal; relief_rule(corner: "constant_width") makes it the default.
 unfold(S, on: PLANE)
     the flat body of S's sheet as a new body, its first wall on PLANE (default where it is
     folded). Sheet features after an unfold of their sheet are AfterUnfold.

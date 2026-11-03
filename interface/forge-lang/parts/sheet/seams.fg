@@ -1,0 +1,26 @@
+# A tray with its four corners seamed: the right and left walls lap over the back's ends, the front
+# laps over the sides' (one written as an underlap), the base corners trimmed to the bends.
+shared t = 1.5
+shared r = 2
+shared k = ratio(0.4)
+shared h = 25
+shared g = 2
+param plan.L = 60
+param plan.W = 40
+shared steel = stock(t: t, bend: kfactor(k), radii: [r], relief: relief_rule(corner: "trim_to_bend"))
+shared acme = shop([steel])
+
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (L, W))
+}
+base = sheet(plan, t: t, r: r, bend: kfactor(k), shop: acme)
+front = flange(base.edge(plan.outline[0]), height: h, measure: "inner", position: "outside")
+right = flange(base.edge(plan.outline[1]), height: h, measure: "inner", position: "outside")
+back = flange(base.edge(plan.outline[2]), height: h, measure: "inner", position: "outside")
+left = flange(base.edge(plan.outline[3]), height: h, measure: "inner", position: "outside")
+s1 = seam(right, back, kind: "overlap", gap: g)
+s2 = seam(left, back, gap: g)
+s3 = seam(front, right, gap: g)
+s4 = seam(left, front, kind: "underlap", gap: g)
+flat = unfold(base)
+expect valid

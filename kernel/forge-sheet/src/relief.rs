@@ -109,6 +109,8 @@ pub enum CornerShape {
     Tear,
     /// The corner cut to both bends' tangent lines, across both zones.
     TrimToBend,
+    /// A slot of the rule's size (default t) along the diagonal, as far as a tear.
+    ConstantWidth,
     /// Flanges extended to meet (closed, weld variants): typed, not built.
     Closed,
 }

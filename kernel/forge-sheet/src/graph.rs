@@ -73,6 +73,10 @@ pub enum CornerKind {
     },
     Tear,
     TrimToBend,
+    /// A slot `width` wide (None: t) along the corner's diagonal, as far as a tear.
+    ConstantWidth {
+        width: Option<f64>,
+    },
 }
 
 /// Where two joints' ends meet.

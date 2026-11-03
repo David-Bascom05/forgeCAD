@@ -365,6 +365,12 @@ pub enum SheetError {
         feature: FeatureId,
         why: crate::contour::ContourError,
     },
+    /// A corner seam, refused (`crate::corner`).
+    Seam {
+        feature: FeatureId,
+        joints: [JointId; 2],
+        why: crate::corner::SeamError,
+    },
     /// A hem, refused (`crate::hem`); `joint` is the id it would have had.
     Hem {
         feature: FeatureId,

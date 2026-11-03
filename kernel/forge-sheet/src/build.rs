@@ -464,6 +464,7 @@ fn corners(
                         CornerShape::Round => CornerKind::Circular { size, placement },
                         CornerShape::Square => CornerKind::Square { size, placement },
                         CornerShape::Tear => CornerKind::Tear,
+                        CornerShape::ConstantWidth => CornerKind::ConstantWidth { width: size },
                         CornerShape::TrimToBend => CornerKind::TrimToBend,
                         CornerShape::Closed => CornerKind::Closed,
                     };
@@ -577,19 +578,71 @@ fn corners(
                     let (c, d) = (hi(b1), hi(b2));
                     (polygon(&[at(a, b), at(c, b), at(c, d), at(a, d)]), 0.0, true)
                 }
-                CornerKind::Tear => {
+                CornerKind::Tear | CornerKind::ConstantWidth { .. } => {
                     // along the diagonal, from past the edge to past both tangent lines' crossing
+                    let width = match kind {
+                        CornerKind::ConstantWidth { width } => width.unwrap_or(t),
+                        _ => sheet.rule.kerf,
+                    };
+                    if width.is_nan() || width <= RELIEF_MIN {
+                        return Err(unbuilt(width));
+                    }
                     let m = (n1 + n2) * (1.0 / (n1 + n2).length());
-                    let across = Vec2::new(-m.y, m.x) * (0.5 * sheet.rule.kerf);
+                    let across = Vec2::new(-m.y, m.x) * (0.5 * width);
                     let inner = at(-b1.s, -b2.s) - v;
                     let (from, to) = (v - m * (inner.length() + t), v + m * (t + b1.ba.max(b2.ba)));
                     (
                         polygon(&[from - across, to - across, to + across, from + across]),
-                        sheet.rule.kerf,
-                        true,
+                        width,
+                        !matches!(kind, CornerKind::ConstantWidth { width: Some(_) }),
                     )
                 }
-                CornerKind::Closed | CornerKind::Overlap { .. } => return Err(unbuilt(f64::NAN)),
+                // a seam (`crate::corner`) leaves the base corner to the rule's relief; asked for
+                // with no seam cut (the flanges' ends as they were), it is not built
+                CornerKind::Closed | CornerKind::Overlap { .. }
+                    if ![b1, b2].iter().all(|b| crate::corner::seamed(&sheet.walls[b.b])) =>
+                {
+                    return Err(unbuilt(f64::NAN));
+                }
+                CornerKind::Closed | CornerKind::Overlap { .. } => {
+                    let placement = rule.placement;
+                    let size = rule.size.map(|x| x.at(t, rmax));
+                    let c = centre(placement);
+                    match rule.shape {
+                        CornerShape::Square => {
+                            let h = size.unwrap_or_else(|| reach(c, true));
+                            (square_at(c, h), h, size.is_none())
+                        }
+                        CornerShape::TrimToBend => {
+                            let (a, b) = (-b1.s, -b2.s);
+                            let (c, d) = (hi(b1), hi(b2));
+                            (polygon(&[at(a, b), at(c, b), at(c, d), at(a, d)]), 0.0, true)
+                        }
+                        // round where the rule asks a tear or itself: a seam's corner is open
+                        // to its gap, so a kerf slit would not clear the zones
+                        CornerShape::Round
+                        | CornerShape::Tear
+                        | CornerShape::ConstantWidth
+                        | CornerShape::Closed => {
+                            let h = size.unwrap_or_else(|| reach(c, false));
+                            if h.is_nan() || h <= RELIEF_MIN {
+                                return Err(unbuilt(h));
+                            }
+                            (
+                                ProfileLoop::new(vec![(
+                                    Segment::Circle {
+                                        center: c,
+                                        radius: h,
+                                        ccw: true,
+                                    },
+                                    0,
+                                )]),
+                                h,
+                                size.is_none(),
+                            )
+                        }
+                    }
+                }
             };
             // sized by the builder: from the rule, or a relief left unsized
             let automatic = automatic
