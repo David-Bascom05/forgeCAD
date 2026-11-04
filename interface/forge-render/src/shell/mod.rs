@@ -711,7 +711,8 @@ impl Shell {
         if let Some(id) = self.marking_row {
             return row(id);
         }
-        if self.dialog.is_some() {
+        // a Forge tool's dialog, as Inventor's: OK and Cancel under the right button too
+        if self.dialog.is_some() || self.fg.as_ref().is_some_and(|p| p.tool.is_some()) {
             return (
                 [
                     ("OK", "finish", Some(Action::DialogOk)),

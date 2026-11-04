@@ -1425,6 +1425,23 @@ impl Gui {
                         self.fg_open_tool(kind);
                         continue;
                     }
+                    Action::DialogOk | Action::DialogCancel
+                        if self.shell.fg.as_ref().is_some_and(|p| p.tool.is_some()) =>
+                    {
+                        let p = self.shell.fg.as_mut().expect("a Forge part");
+                        if a == Action::DialogCancel {
+                            p.tool = None;
+                        } else if let Some(t) = &mut p.tool {
+                            match t.text() {
+                                Ok(text) => p.out.push(crate::shell::fg::FgAct::Tool(
+                                    forge_lang::error::Op::AddFeature { before: None, text },
+                                )),
+                                Err(e) => t.error = Some(e),
+                            }
+                        }
+                        self.apply_fg();
+                        continue;
+                    }
                     Action::StartSketch => {
                         self.shell.sketch_pick = true;
                         self.shell.status = "Pick a planar face or an origin plane to sketch on".into();

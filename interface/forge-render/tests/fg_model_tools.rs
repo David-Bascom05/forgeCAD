@@ -566,3 +566,23 @@ fn a_slot_constrained_and_text_on_a_face_become_forge_then_cut_and_emboss() {
         embossed - volume(&run)
     );
 }
+
+#[test]
+fn the_right_buttons_ok_and_cancel_close_a_dialog_as_its_buttons_do() {
+    use forge_render::shell::Action;
+    let Some(mut h) = open("marking") else { return };
+    button(&mut h, "Chamfer");
+    let (items, _) = h.gui.shell.marking_items();
+    assert_eq!(items[0].0, "OK");
+    assert_eq!(items[4].0, "Cancel");
+    h.gui.shell.out.push(Action::DialogCancel);
+    h.step();
+    assert!(h.gui.shell.fg.as_ref().unwrap().tool.is_none());
+    button(&mut h, "Chamfer");
+    point_at(&mut h, [30.0, 0.0, 20.0]);
+    assert!(h.until(ready));
+    h.gui.shell.out.push(Action::DialogOk);
+    h.step();
+    assert!(h.gui.shell.fg.as_ref().unwrap().tool.is_none());
+    assert!(h.gui.fg.as_ref().unwrap().src.contains("chamfer1 = chamfer("));
+}
