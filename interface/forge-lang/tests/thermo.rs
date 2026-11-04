@@ -47,7 +47,21 @@ fn a_clean_cover_says_only_what_is_a_stand_in() {
     let r = built("cover", &s);
     assert_eq!(kinds(&r), ["StandIn"]);
     let rep = &r.thermos[0].formed.report;
-    assert!((rep.scale - 1.005).abs() < 1e-12, "HIPS's shrink grows the tool");
+    let j = forge_lang::report::json(&r, &s).to_string();
+    let hips = forge_thermo::placeholder().material("HIPS").cloned().unwrap();
+    assert!(
+        (rep.scale - 1.0 - hips.shrink).abs() < 1e-12,
+        "HIPS's shrink grows the tool"
+    );
+    // the thickness model ran on the material's own fit, and says where the wall is thinnest
+    let w = r.thermos[0].walls.as_ref().expect("walls");
+    assert!(!r.thermos[0].law.stand_in, "{:?}", r.thermos[0].law);
+    assert!(
+        w.min.0 > 0.0 && w.min.0 < w.max.0 && w.unformed.is_empty(),
+        "{:?}",
+        (w.min, w.max)
+    );
+    assert!(j.contains("\"walls\"") && j.contains("law_source"), "{j}");
     assert!(rep.adr > 1.5 && rep.adr < 3.0, "{}", rep.adr);
     assert!(!rep.vents.is_empty());
     let j = forge_lang::report::json(&r, &s).to_string();

@@ -1,0 +1,28 @@
+# Erdogan & Eksi, Prediction of wall thickness distribution in simple thermoforming moulds,
+# Strojniski vestnik 60(3):195-202 (2014), Fig. 4, measured (EXP) curve, digitised by eye (+-0.03 mm).
+# HIPS SABIC PS 825E, t0 2.5 mm, 300 x 300 blank, female vacuum forming, no plug, sheet 180 C.
+# Mould: cylinder, opening diameter 200 mm, depth 100 mm; fillets not given (10 mm assumed).
+# s: arc length from the base centre up the wall to the rim (and on to the flange).
+s_mm,t_mm
+0,1.54
+10,1.54
+20,1.50
+30,1.46
+40,1.44
+50,1.34
+60,1.24
+70,1.17
+80,1.03
+90,0.89
+100,0.83
+110,0.88
+120,0.94
+130,0.99
+140,1.01
+150,1.04
+160,1.10
+165,1.38
+170,1.59
+175,1.70
+180,1.78
+185,1.89

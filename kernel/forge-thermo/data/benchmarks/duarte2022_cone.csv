@@ -1,0 +1,25 @@
+# Duarte, Ribeiro, Ferreira, Forte, Covas, Improving the thickness distribution of parts with hybrid
+# thermoforming, Int. Polym. Proc. (2022), DOI 10.1515/ipp-2022-4222, Fig. 5 "Reference" curve,
+# digitised by eye; the text (p. 6) gives 0.045 mm at the bottom edge.
+# Sheet 1.0 mm, 50/50 PS Laquerene 1540 / HIPS Laquerene 7240, 250 x 250 blank, 140 C (IR-checked,
+# uniform), Formech HD750 vacuum only. Mould: female truncated cone, top 130 mm, base 110 mm,
+# depth 100 mm; fillets not given (3 mm assumed).
+# s: arc length from the bottom centre, through the bottom edge (s ~ 55), to the lip (s ~ 150).
+s_mm,t_mm
+0,0.125
+10,0.125
+20,0.11
+30,0.10
+40,0.09
+50,0.065
+55,0.05
+60,0.07
+70,0.12
+80,0.17
+90,0.21
+100,0.26
+110,0.33
+120,0.41
+130,0.50
+140,0.60
+150,0.83

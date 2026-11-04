@@ -22,6 +22,8 @@ pub const BUILTINS: &[&str] = &["thermoform", "thermo_material", "thermo_shop"];
 
 const RATIO: &[Dim] = &[Dim::Ratio];
 const ANG: &[Dim] = &[Dim::Angle];
+/// A temperature, deg C: a bare number.
+const ANY: &[Dim] = &[Dim::Ratio, Dim::Length];
 
 #[derive(Clone, Debug)]
 pub enum ThermoVal {
@@ -48,6 +50,9 @@ pub struct ThermoOut {
     pub formed: Rc<ft::Formed>,
     /// The thickness model's result (None: `walls: false`).
     pub walls: Option<Rc<ft::Stretch>>,
+    /// The sheet's temperature and the law the model read at it.
+    pub temperature: f64,
+    pub law: ft::LawAt,
 }
 
 impl ThermoOut {
@@ -69,6 +74,20 @@ impl ThermoOut {
                         "model",
                         "membrane, sticking contact, isothermal: an estimate".into(),
                     ),
+                    ("temperature_c", self.temperature.into()),
+                    (
+                        "law",
+                        Json::Arr(
+                            self.law
+                                .law
+                                .terms
+                                .iter()
+                                .map(|(m, a)| Json::Arr(vec![(*m).into(), (*a).into()]))
+                                .collect(),
+                        ),
+                    ),
+                    ("law_source", self.law.source.as_str().into()),
+                    ("law_stand_in", self.law.stand_in.into()),
                 ]),
             )
         });
@@ -527,6 +546,8 @@ fn material(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         "max_vent",
         "min_wall",
         "forming",
+        "law",
+        "law_temperature",
     ];
     let a = Args::bind(ev, "thermo_material", &keys, args, span)?;
     let name = match a.req("name")? {
@@ -538,16 +559,18 @@ fn material(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         let mut m = ft::placeholder().materials[0].clone();
         m.name = name.clone();
         m.stand_in = vec![
+            "forming_c",
             "shrink",
-            "draft_male",
-            "draft_female",
+            "draft_male_deg",
+            "draft_female_deg",
             "min_radius",
             "min_inside_radius",
             "max_hd",
             "max_adr",
-            "min_gap",
+            "min_gap_ratio",
             "max_vent",
             "min_wall",
+            "law",
         ];
         m
     });
@@ -556,14 +579,17 @@ fn material(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         m.shrink = n.v;
         given("shrink", &mut m);
     }
-    for (k, slot) in [("draft_male", 0), ("draft_female", 1)] {
+    for (k, field) in [
+        ("draft_male", "draft_male_deg"),
+        ("draft_female", "draft_female_deg"),
+    ] {
         if let Some(n) = a.num(k, ANG)? {
-            if slot == 0 {
+            if k == "draft_male" {
                 m.draft_male = n.v;
             } else {
                 m.draft_female = n.v;
             }
-            given(k, &mut m);
+            given(field, &mut m);
         }
     }
     for k in ["min_radius", "min_inside_radius", "max_vent"] {
@@ -584,12 +610,35 @@ fn material(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
                 "min_gap" => m.min_gap_ratio = n.v,
                 _ => m.min_wall = n.v,
             }
-            given(k, &mut m);
+            given(if k == "min_gap" { "min_gap_ratio" } else { k }, &mut m);
         }
     }
     if let Some(v) = a.opt("forming") {
         let (lo, hi) = pair(v, a.span("forming"), RATIO)?;
         m.forming = (lo, hi);
+        given("forming_c", &mut m);
+    }
+    // the shop's own law, Ogden terms (mu in MPa, alpha), at its temperature
+    if let Some(v) = a.opt("law") {
+        let Value::List(xs) = &v else {
+            return Err(wrong(a.span("law"), "law: [(mu, alpha), ..]", Ty::List, &v));
+        };
+        let terms = xs
+            .iter()
+            .map(|x| pair(x.clone(), a.span("law"), RATIO))
+            .collect::<R<Vec<_>>>()?;
+        let temperature = a
+            .num("law_temperature", ANY)?
+            .map_or(m.forming_temperature(), |n| n.v);
+        m.fits = vec![ft::Fit {
+            law: ft::Law { terms },
+            temperature,
+            test: "the shop's own".into(),
+            source: format!("thermo_material(\"{name}\", law: ..)"),
+            stand_in: false,
+        }];
+        m.curves.clear();
+        given("law", &mut m);
     }
     Ok(Value::Thermo(Rc::new(ThermoVal::Material(Rc::new(m)))))
 }
@@ -704,6 +753,7 @@ const ARGS: &[&str] = &[
     "vent_pitch",
     "walls",
     "pressure",
+    "temperature",
 ];
 
 /// The arguments' numbers as written, for fixes.
@@ -822,10 +872,13 @@ fn thermoform(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         ),
         Some(o) => return Err(wrong(a.span("vents"), "vents: a list of (x, y)", Ty::List, &o)),
     };
+    let temperature = a
+        .num("temperature", ANY)?
+        .map_or(m.forming_temperature(), |n| n.v);
     let walls = match a.opt("walls") {
         Some(Value::Bool(false)) => None,
         None | Some(Value::Bool(true)) => Some(ft::Process {
-            law: m.law.clone(),
+            law: m.law_at(temperature).law,
             pressure: a.num("pressure", RATIO)?.map_or(0.09, |n| n.v),
             ..ft::Process::default()
         }),
@@ -957,6 +1010,8 @@ fn thermoform(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
                 t: t.v,
                 formed: f,
                 walls: st,
+                temperature,
+                law: m.law_at(temperature),
             });
         }
     }

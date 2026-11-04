@@ -433,6 +433,24 @@ pub fn rows(run: &Run, src: &str) -> (Vec<FeatRow>, Vec<ParamRow>, Vec<Issue>) {
                 });
                 continue;
             }
+            Warning::Thermo(n) => {
+                let (line, col, ..) = n.span.lines(src);
+                issues.push(Issue {
+                    severity: if n.severity() == "violation" {
+                        Severity::Violation
+                    } else {
+                        Severity::Warning
+                    },
+                    kind: n.kind().into(),
+                    text: n.text(),
+                    line,
+                    col,
+                    fixes: n.fixes.clone(),
+                    feature: Some(n.id.clone()),
+                    asm: None,
+                });
+                continue;
+            }
             Warning::Asm(n) => {
                 let (line, col, ..) = n.span.lines(src);
                 issues.push(Issue {

@@ -1,0 +1,21 @@
+# Erdogan & Eksi 2014 (see erdogan2014_cylinder.csv), Fig. 7, box cut along its symmetry axis,
+# measured curve digitised by eye (+-0.03 mm). HIPS SABIC PS 825E, t0 2.0 mm, female, 180 C.
+# Mould: square box, opening 150 x 150 mm, depth 75 mm; fillets not given (10 mm assumed).
+s_mm,t_mm
+0,1.17
+10,1.13
+20,1.06
+30,0.93
+40,0.79
+50,0.70
+60,0.62
+65,0.60
+70,0.71
+80,0.82
+90,0.89
+100,0.95
+110,1.09
+115,1.20
+120,1.40
+125,1.60
+130,1.95

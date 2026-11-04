@@ -4,6 +4,7 @@
 //! vented. The shop's checks run on every build. Sources: research/thermoform/.
 pub mod build;
 pub mod checks;
+pub mod data;
 pub mod field;
 pub mod material;
 pub mod scale;
@@ -12,9 +13,11 @@ pub mod stretch;
 pub use build::{FormError, Formed, Report, Side, Spec, analyse, form, plane_frame};
 pub use checks::{Violation, check};
 pub use field::{Field, Region, Valley};
-pub use material::{FormShop, Machine, Material, PerT, placeholder};
+pub use material::{Curve, DataError, Fit, FormShop, LawAt, Machine, Material, PerT, from_data, placeholder};
 pub use scale::{Unscalable, scaled};
 pub use stretch::{Law, Process, Stretch, stretch};
 
+#[cfg(test)]
+mod bench;
 #[cfg(test)]
 mod tests;

@@ -42,7 +42,7 @@ impl Default for Process {
         Process {
             law: Law::neo_hookean(0.5),
             pressure: 0.09,
-            resolution: 56,
+            resolution: 64,
         }
     }
 }
@@ -52,6 +52,8 @@ impl Default for Process {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Stretch {
     pub nodes: Vec<Point3>,
+    /// The nodes are a grid, (nx + 1) by (ny + 1), row by row from the window's corner.
+    pub grid: (usize, usize),
     pub tris: Vec<[u32; 3]>,
     pub ratio: Vec<f64>,
     /// Each node's thickness over the sheet's (its triangles' by area), and whether it touched.
@@ -501,6 +503,7 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
         .collect();
     Stretch {
         nodes: x.iter().map(|&p| world(p)).collect(),
+        grid: (nx, ny),
         tris: idx.iter().map(|v| v.map(|k| k as u32)).collect(),
         ratio,
         node_ratio,

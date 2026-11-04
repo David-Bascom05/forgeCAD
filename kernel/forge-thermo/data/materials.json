@@ -1,0 +1,363 @@
+{
+ "about": "Thermoforming materials: one record per material, every number with its source (a key of sources, or the text itself) or stand_in: true. rules apply to every material unless it gives its own. laws: hyperelastic fits the thickness model reads, each at its temperature; viscoelastic: published fits kept for a viscoelastic model (not read yet). PETG, PC and PMMA have no open fit at forming temperature (Dong 2005 for PMMA and Cheng & Chang 2012 for PC are paywalled); they run on a stand-in law until one is given.",
+ "sources": {
+  "UP13": "Universal Plastics, Thermoforming Design Guidelines v1.21, https://www.universalplastics.com/wp-content/uploads/2014/03/UP-Design-Guide-v1.21.pdf",
+  "FORMECH": "Formech, Vacuum Forming Guide (draft, venting, webbing, shrinkage, materials), https://www.capla.arizona.edu/sites/default/files/fromechvacuumguide_0.pdf",
+  "SPARTECH": "Spartech, Extruded sheet thermoforming information, rev. 7/2024, https://www.spartech.com/media/documents/SPA221015-Thermoforming-Data-Sheet.pdf",
+  "EASTMAN": "Eastman, Tips for thermoforming Eastar 6763 and Tritan MP100, https://www.eastman.com/content/dam/eastman/corporate/en/literature/t/trsmed269.pdf",
+  "RAPIDMADE": "RapidMade, Draw Ratio in Thermoforming (vendor blog), https://rapidmade.com/draw-ratio-in-thermoforming-how-it-controls-wall-thickness-strength-and-part-quality/",
+  "PLASTIGLAS": "Chemcast / Plastiglas de Mexico, Technical Manual - Thermoforming, Table 10 'Forming temperature ranges', p. 24-25, https://chemcast.com.mx/img/pdf/Fabrication_manual_thermoforming.pdf",
+  "ACRYLITE": "CYRO / ACRYLITE Tech Brief, Thermoforming ACRYLITE sheet, forming table, https://www.tapplastics.com/image/pdf/Tech%20Data-Thermo.pdf",
+  "MAKROLON": "Makrolon polycarbonate sheet fabrication guide (Bayer/Covestro), p. 7-9, https://www.emcoplastics.com/assets/pdf/makrolon/Makrolon%20Fabrication%20Guide%20.pdf",
+  "INTERSTATE": "Interstate Plastics, Polycarbonate fabrication guide r2, https://www.interstateplastics.com/docs/polycarbonate-fabrication-guide-r2.pdf",
+  "MORRIS": "Morris, The Science and Technology of Flexible Packaging, Elsevier 2017, Table 11.1 (forming range and maximum areal draw ratio), https://www.sciencedirect.com/topics/engineering/forming-temperature",
+  "ERCHIQUI2004": "Erchiqui & Kandil, Neuronal networks application for characterization of softened polymers, ANTEC 2004, in SPE Thermoforming Quarterly 24(1) 2005 pp. 10-15, Tables 1-3, https://thermoformingdivision.com/quarterly-mags-2005-1st/",
+  "ERCHIQUI2003": "Erchiqui & Gakwaya, Modelisation du comportement viscoelastique d'une membrane thermoplastique, Revue europeenne des elements finis 12(1):43-58 (2003), Tableau 1, https://journals.riverpublishers.com/index.php/EJCM/article/download/2511/1645/8023",
+  "CHA2019": "Cha, Kim, Park, Go, Int J Adv Manuf Technol 103:985-995 (2019), Table 1, DOI 10.1007/s00170-019-03408-8",
+  "ERCHIQUI2010": "Erchiqui, Dynamic finite element analysis of nonlinear isotropic hyperelastic and viscoelastic materials for thermoforming applications, in Finite Element Analysis (InTech 2010), Table 1 p. 325, DOI 10.5772/9794",
+  "ATMANI2020": "Atmani, Abbes, Li, Batkam, Abbes, Mechanics & Industry 21, 610 (2020), Tables 1-2, DOI 10.1051/meca/2020084"
+ },
+ "rules": {
+  "draft_male_deg": {
+   "value": 4,
+   "source": "UP13: min 4 deg male (3-4 general); Formech asks 5"
+  },
+  "draft_female_deg": {
+   "value": 2,
+   "source": "UP13: min 2 deg female (1.5-2 general); Formech asks 3"
+  },
+  "min_radius": {
+   "per_t": 1,
+   "plus": 0.8,
+   "source": "UP13: male outside radius at least t + 1/32 in"
+  },
+  "min_inside_radius": {
+   "per_t": 0,
+   "plus": 0.4,
+   "source": "UP13: female inside corner as tight as 1/64 in"
+  },
+  "max_hd": {
+   "value": 1,
+   "source": "UP13: 1:1 without special techniques"
+  },
+  "min_gap_ratio": {
+   "value": 1,
+   "source": "EASTMAN: 1 in of gap per 1 in of depth"
+  },
+  "max_vent": {
+   "per_t": 0.5,
+   "plus": 0,
+   "source": "FORMECH: under half the sheet's thickness at the tool's surface"
+  },
+  "min_wall": {
+   "value": 0.25,
+   "stand_in": true,
+   "note": "a guess: no guide states a least formed wall"
+  }
+ },
+ "materials": [
+  {
+   "name": "ABS",
+   "grade": "general-purpose extruded sheet",
+   "forming_c": {
+    "min": 125,
+    "normal": 165,
+    "max": 180,
+    "source": "PLASTIGLAS: lower 125, normal 165, upper 180 C; Spartech 171-199 (ideal 188) for its sheet"
+   },
+   "shrink": {
+    "value": 0.006,
+    "range": [
+     0.005,
+     0.007
+    ],
+    "source": "SPARTECH 0.0050-0.0070 in/in (high-impact ABS); Formech 0.3-0.8%"
+   },
+   "max_adr": {
+    "value": 10,
+    "source": "MORRIS: the largest areal draw ratio (a maximum, not a safe figure)"
+   },
+   "laws": [
+    {
+     "model": "ogden",
+     "temperature_c": 150,
+     "mu_mpa": [
+      0.146913,
+      0.3661,
+      0.0293
+     ],
+     "alpha": [
+      0.52668,
+      1.91694,
+      -0.079
+     ],
+     "test": "free bubble inflation, 0.46 mm sheet",
+     "source": "ERCHIQUI2004 Table 3 (the text says 145 C, the caption 150 C)"
+    },
+    {
+     "model": "mooney_rivlin",
+     "temperature_c": 145,
+     "c10_mpa": 0.23,
+     "c01_mpa": 0.0,
+     "test": "free bubble inflation, 0.46 mm sheet",
+     "source": "ERCHIQUI2004 Table 1 (units not printed; MPa implied)"
+    }
+   ],
+   "curves": [],
+   "viscoelastic": [
+    {
+     "model": "kbkz_wagner",
+     "reference_c": 170,
+     "tau_s": [
+      8.52e-05,
+      0.00142,
+      0.013,
+      0.0912,
+      0.574,
+      3.31,
+      17.6,
+      131
+     ],
+     "g_mpa": [
+      1.61,
+      0.28,
+      0.201,
+      0.186,
+      0.162,
+      0.103,
+      0.0423,
+      0.0103
+     ],
+     "wlf": {
+      "c1": 5.8,
+      "c2": 120.8
+     },
+     "damping": {
+      "form": "wagner_demarmels",
+      "alpha": 0.438
+     },
+     "test": "SAOS master curve 140-200 C and step strain, LG Chem extruded sheet",
+     "source": "CHA2019 Table 1, Figs. 5 and 7"
+    },
+    {
+     "model": "lodge",
+     "reference_c": 143,
+     "tau_s": [
+      28.4813
+     ],
+     "g_mpa": [
+      0.23959
+     ],
+     "test": "free bubble inflation, 1.57 mm sheet",
+     "source": "ERCHIQUI2003 Tableau 1"
+    }
+   ]
+  },
+  {
+   "name": "HIPS",
+   "grade": "general-purpose extruded sheet",
+   "forming_c": {
+    "min": 166,
+    "normal": 171,
+    "max": 177,
+    "source": "SPARTECH: 330-350 F (166-177 C), ideal 340 F (171 C)"
+   },
+   "shrink": {
+    "value": 0.0055,
+    "range": [
+     0.0045,
+     0.0065
+    ],
+    "source": "SPARTECH 0.0045-0.0065 in/in; Formech 0.3-0.5%"
+   },
+   "max_adr": {
+    "value": 8,
+    "source": "MORRIS: the largest areal draw ratio (a maximum, not a safe figure)"
+   },
+   "laws": [
+    {
+     "model": "ogden",
+     "temperature_c": 145,
+     "mu_mpa": [
+      0.17435,
+      0.10469,
+      0.52915
+     ],
+     "alpha": [
+      1.85226,
+      0.01498,
+      -0.02208
+     ],
+     "test": "free bubble inflation, 0.97 mm sheet",
+     "source": "ERCHIQUI2004 Table 2"
+    },
+    {
+     "model": "mooney_rivlin",
+     "temperature_c": 150,
+     "c10_mpa": 0.085,
+     "c01_mpa": 0.0,
+     "test": "free bubble inflation, 0.97 mm sheet",
+     "source": "ERCHIQUI2004 Table 1 (the text says 150 C, the caption 145 C)"
+    }
+   ],
+   "curves": [],
+   "viscoelastic": [
+    {
+     "model": "gsell_jonas",
+     "tg_c": 105,
+     "E0_mpa": 254.7,
+     "A_E": 23675,
+     "sigma00_mpa": 2.8,
+     "A_sigma": 20193,
+     "K0_mpa": 1.11,
+     "A_K": 89218,
+     "h0": 0.21,
+     "A_h": -46562,
+     "w": 11.4,
+     "m": 0.38,
+     "friction": {
+      "f0": 0.2,
+      "f1": -1040,
+      "f2": 107
+     },
+     "test": "uniaxial tension 100-140 C, 1.1 mm sheet, plus inverse fits to plug tests",
+     "source": "ATMANI2020 Tables 1-2 (two column headers lost in extraction: sigma00 and A_sigma placed by the order of Eq. 2)"
+    }
+   ]
+  },
+  {
+   "name": "PETG",
+   "grade": "copolyester sheet",
+   "forming_c": {
+    "min": 166,
+    "normal": 177,
+    "max": 193,
+    "source": "SPARTECH: 330-380 F (166-193 C), ideal 350 F (177 C); Eastman's Eastar 6763 forms at 138-149 C"
+   },
+   "shrink": {
+    "value": 0.006,
+    "range": [
+     0.005,
+     0.007
+    ],
+    "source": "SPARTECH 0.0050-0.0070 in/in; EASTMAN Eastar 0.40-0.45%"
+   },
+   "max_adr": {
+    "value": 2.5,
+    "stand_in": true,
+    "source": "RAPIDMADE: a vendor's typical safe upper figure"
+   },
+   "laws": [],
+   "curves": []
+  },
+  {
+   "name": "PC",
+   "grade": "polycarbonate sheet",
+   "forming_c": {
+    "min": 171,
+    "normal": 180,
+    "max": 193,
+    "source": "MAKROLON: vacuum forming 177-182 C, uniform sag at 171-193 C"
+   },
+   "shrink": {
+    "value": 0.0065,
+    "range": [
+     0.006,
+     0.007
+    ],
+    "source": "INTERSTATE 0.6-0.7% at a 120 C mould; Formech 0.6-0.8%"
+   },
+   "max_adr": {
+    "value": 8,
+    "source": "MORRIS: the largest areal draw ratio (a maximum, not a safe figure)"
+   },
+   "laws": [],
+   "curves": []
+  },
+  {
+   "name": "PMMA",
+   "grade": "acrylic sheet",
+   "forming_c": {
+    "min": 145,
+    "normal": 152,
+    "max": 160,
+    "source": "ACRYLITE: FF (extruded) 145-160 C; cast GP 170-195 C"
+   },
+   "shrink": {
+    "value": 0.006,
+    "range": [
+     0.003,
+     0.008
+    ],
+    "source": "FORMECH 0.3-0.8%"
+   },
+   "max_adr": {
+    "value": 2.0,
+    "stand_in": true,
+    "source": "RAPIDMADE: a vendor's typical safe upper figure"
+   },
+   "laws": [],
+   "curves": []
+  },
+  {
+   "name": "HDPE",
+   "grade": "high-density polyethylene sheet",
+   "forming_c": {
+    "min": 166,
+    "normal": 188,
+    "max": 204,
+    "source": "SPARTECH: 330-400 F (166-204 C), ideal 370 F (188 C)"
+   },
+   "shrink": {
+    "value": 0.026,
+    "range": [
+     0.022,
+     0.03
+    ],
+    "source": "SPARTECH 0.0220-0.0300 in/in; Formech 3.0-3.5%"
+   },
+   "max_adr": {
+    "value": 8,
+    "source": "MORRIS: the largest areal draw ratio (a maximum, not a safe figure)"
+   },
+   "laws": [
+    {
+     "model": "neo_hookean",
+     "temperature_c": 150,
+     "mu_mpa": 0.33742,
+     "test": "derived: the instantaneous modulus (sum of g_k) of a 6-mode Lodge spectrum, HDPE-6200",
+     "source": "ERCHIQUI2010 Table 1 (Lodge rubber-like liquid at short times is neo-Hookean with G = sum g_k)"
+    }
+   ],
+   "curves": [],
+   "viscoelastic": [
+    {
+     "model": "lodge",
+     "reference_c": 150,
+     "tau_s": [
+      0.00714,
+      0.04997,
+      0.349854,
+      2.44898,
+      17.14286,
+      120.0
+     ],
+     "g_mpa": [
+      0.21177,
+      0.07837,
+      0.03165,
+      0.01122,
+      0.00324,
+      0.00117
+     ],
+     "wlf": {
+      "c1": 2.915,
+      "c2": 50.0
+     },
+     "test": "not stated; grade HDPE-6200",
+     "source": "ERCHIQUI2010 Table 1"
+    }
+   ]
+  }
+ ]
+}
