@@ -2,7 +2,7 @@ drawing
 # RACK-101 post: detail drawing of frame/post.fg. Every dimension and note is on the model's
 # persistent edge names: they follow the model, and one whose edge is gone turns sick.
 
-post = part("../frame/post.fg", density: 7.85)
+post = part("../frame/post.fg", material: "1008 cold rolled")
 s1 = sheet("B", title: "POST, 50 X 50 L, 906 LONG", number: "RACK-101", rev: "A", drawn: "D. BASCOM",
            material: "CR 1008 STEEL, 3.02 (11 GA)")
 

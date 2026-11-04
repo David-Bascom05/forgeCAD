@@ -381,3 +381,35 @@ fn frames_hang_under_their_dimension() {
     assert!((f.lo.x - (dd.anchor.x - dd.half.x)).abs() < 1.0, "{f:?} {dd:?}");
     assert!(da.lo.y < f.lo.y);
 }
+
+#[test]
+fn mass_comes_from_the_material_library() {
+    let dir = dir("drawing_mass");
+    std::fs::write(dir.join("plate.fg"), PART).unwrap();
+    let d = regen::make(
+        "drawing\nm = part(\"plate.fg\", material: \"6061-T6\")\ns = sheet(\"A3\")\nv = base_view(m, sheet: s, at: (100, 100))\n",
+        &dir,
+    );
+    let m = &d.models[0];
+    let want = (60.0 * 40.0 * 10.0 - std::f64::consts::PI * 16.0 * 10.0) * 1e-9 * 2700.0;
+    assert!((m.mass().unwrap() - want).abs() < 1e-6, "{:?}", m.mass());
+    assert!(
+        d.pages[0]
+            .texts
+            .iter()
+            .any(|t| t.text == format!("{} kg", forge_draw::annot::number(want, 3)))
+    );
+    assert!(d.pages[0].texts.iter().any(|t| t.text == "6061-T6"));
+    // an unknown material is said, with the names near it
+    let d = regen::make(
+        "drawing\nm = part(\"plate.fg\", material: \"6016-T6\")\nv = base_view(m, at: (100, 100))\n",
+        &dir,
+    );
+    assert!(
+        d.errors
+            .iter()
+            .any(|e| e.warning && e.problem.text().contains("6061-T6")),
+        "{:?}",
+        d.errors
+    );
+}

@@ -3,7 +3,7 @@ drawing
 # mounting face, B the bore's axis (its H7 size), C the flat side; the bolt circle is positioned
 # to A|B|C at MMC by basic dimensions.
 
-f = part("flange.fg", density: 2.70)
+f = part("flange.fg", material: "6061-T6")
 s1 = sheet("B", title: "BEARING FLANGE", number: "DWG-901", rev: "A", drawn: "D. BASCOM",
            material: "6061-T6 AL", tolerance: "ISO 2768-m")
 top = base_view(f, sheet: s1, dir: "top", scale: 1.5, at: (110, 185))

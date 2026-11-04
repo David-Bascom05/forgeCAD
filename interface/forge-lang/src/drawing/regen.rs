@@ -32,14 +32,21 @@ pub struct ModelOut {
     pub patterns: Vec<forge_sheet::Pattern>,
     /// Bill of materials: part file, count, part number, description; in item order.
     pub bom: Vec<(String, usize, String, String)>,
-    /// g/cm3, as the drawing gives it.
+    /// g/cm3, as the drawing gives it: an override of the material's.
     pub density: Option<f64>,
+    /// The material by name, and as the library (project's, user's, ForgeCAD's) has it.
+    pub material: Option<String>,
+    pub found: Option<forge_material::Material>,
 }
 
 impl ModelOut {
-    /// The part's mass in kg: its volume times its density, when the density is known.
+    /// The part's mass in kg: its volume times its material's density (or the drawing's own).
     pub fn mass(&self) -> Option<f64> {
-        Some(self.volume? * self.density? * 1e-6)
+        let rho = match self.density {
+            Some(g_cm3) => g_cm3 * 1000.0,
+            None => self.found.as_ref()?.density,
+        };
+        Some(self.volume? * 1e-9 * rho)
     }
 }
 
@@ -202,6 +209,8 @@ fn load(id: &str, file: &str, dir: &Path) -> Result<ModelOut, String> {
         patterns: run.sheets.iter().filter_map(|sh| sh.pattern().ok()).collect(),
         bom,
         density: None,
+        material: None,
+        found: None,
     })
 }
 
@@ -2025,10 +2034,17 @@ fn defaults(ctx: &Ctx, f: &mut forge_draw::sheet::Fields, sheet: usize, n_sheets
             if f.title.is_empty() {
                 f.title = desc.to_uppercase();
             }
-            if f.material.is_empty()
-                && let Some((material, t)) = &mo.sheet
-            {
-                f.material = format!("{} t{}", material.to_uppercase(), number(*t, 2));
+            if f.material.is_empty() {
+                let name = mo
+                    .found
+                    .as_ref()
+                    .map(|m| m.name.clone())
+                    .or(mo.material.clone())
+                    .unwrap_or_default();
+                f.material = match &mo.sheet {
+                    Some((_, t)) => format!("{} t{}", name.to_uppercase(), number(*t, 2)),
+                    None => name.to_uppercase(),
+                };
             }
         } else if f.title.is_empty() {
             f.title = Path::new(&mo.file)
@@ -2062,11 +2078,43 @@ pub fn make(src: &str, dir: &Path) -> Drawing {
     };
     for item in &d.items {
         match &item.kind {
-            ItemKind::Model { path, density, .. } => match load(&item.id, path, &ctx.dir) {
-                Ok(m) => ctx.models.push(ModelOut {
-                    density: *density,
-                    ..m
-                }),
+            ItemKind::Model {
+                path,
+                material,
+                density,
+                ..
+            } => match load(&item.id, path, &ctx.dir) {
+                Ok(m) => {
+                    // the part's material: the drawing's name for it, else its sheet's
+                    let name = material
+                        .clone()
+                        .or_else(|| m.sheet.as_ref().map(|s| s.0.clone()).filter(|n| !n.is_empty()));
+                    let libs = forge_material::Libraries::cached(Some(&ctx.dir));
+                    let found = name
+                        .as_deref()
+                        .and_then(|n| libs.find(n))
+                        .map(|(_, mat)| mat.clone());
+                    if let (Some(n), None, None) = (&name, &found, density) {
+                        ctx.errors.push(warn(
+                            Problem::BadValue {
+                                func: "part",
+                                arg: "material".into(),
+                                why: format!(
+                                    "`{n}` is not in the material libraries: near {}",
+                                    libs.near(n).join(", ")
+                                ),
+                            },
+                            item.span,
+                            vec![],
+                        ));
+                    }
+                    ctx.models.push(ModelOut {
+                        density: *density,
+                        material: name,
+                        found,
+                        ..m
+                    })
+                }
                 Err(why) => ctx.errors.push(fail(
                     Problem::Model {
                         file: path.clone(),

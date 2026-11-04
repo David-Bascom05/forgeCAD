@@ -26,6 +26,7 @@ forge-doc = { path = "../forge-doc" }
 forge-asm = { path = "../../kernel/forge-asm" }
 forge-material = { path = "../../kernel/forge-material" }
 forge-draw = { path = "../../kernel/forge-draw" }
+forge-material = { path = "../../kernel/forge-material" }
 
 [lints]
 workspace = true

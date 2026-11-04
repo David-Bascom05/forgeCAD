@@ -469,7 +469,9 @@ pub enum ItemKind {
     Model {
         path: String,
         asm: bool,
-        /// g/cm3, for the title block's mass (until the part carries its material's density).
+        /// The part's material, by a library name or alias, until the part carries its own.
+        material: Option<String>,
+        /// g/cm3: an explicit override of the material's density.
         density: Option<f64>,
     },
     Sheet(SheetDef),
@@ -994,6 +996,7 @@ impl Reader<'_> {
                 ItemKind::Model {
                     path,
                     asm: func == "assembly",
+                    material: a.string("material", None)?,
                     density,
                 }
             }
