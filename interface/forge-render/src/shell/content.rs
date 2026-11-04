@@ -7,7 +7,7 @@ use super::theme::{Theme, medium, mono, sans, semi};
 use super::{Shell, icons};
 use egui::{Color32, Rect, Sense, Stroke, StrokeKind, Ui, pos2, vec2};
 use forge_lang::error::Op;
-use forge_lang::stdparts::{Family, Spec, families, generate};
+use forge_lang::stdparts::{Family, Spec, families, generate, key};
 use std::collections::HashMap;
 use std::sync::mpsc::{Receiver, Sender, channel};
 
@@ -29,12 +29,13 @@ pub struct ContentCenter {
     grade: usize,
     /// Scroll the size and length lists to their choices on the next frame.
     jump: bool,
-    pictures: HashMap<&'static str, Picture>,
+    /// By the standard part's key: each family's tile, and each choice shown large.
+    pictures: HashMap<String, Picture>,
     made: Option<(Sender<Made>, Receiver<Made>)>,
 }
 
 /// A family's picture as its thread finished it.
-type Made = (&'static str, Option<egui::ColorImage>);
+type Made = (String, Option<egui::ColorImage>);
 
 enum Picture {
     Making,
@@ -42,22 +43,31 @@ enum Picture {
     None,
 }
 
-/// A family's picture: its middle size at a middle length, built and drawn as the CLI draws.
-fn picture(f: &Family) -> Option<egui::ColorImage> {
+/// A family's tile: its middle size at a short length, so the head shows at a tile's size.
+fn tile_spec(f: &Family) -> Spec {
     let row = &f.rows[f.rows.len() / 2];
     let ls = f.lengths_of(row);
-    let spec = Spec {
+    Spec {
         family: f.name.clone(),
         size: row[0].clone(),
-        length: ls.get(ls.len() / 2).copied(),
+        length: ls
+            .iter()
+            .copied()
+            .find(|l| *l >= 2.5 * thread_d(f, row))
+            .or(ls.last().copied()),
         options: Default::default(),
-    };
-    let text = generate(&spec).ok()?.text;
+    }
+}
+
+/// A part's picture, built and drawn as the CLI draws, from below the head (Inventor's tiles
+/// show the head).
+fn picture(spec: &Spec) -> Option<egui::ColorImage> {
+    let text = generate(spec).ok()?.text;
     let run = forge_lang::run(&text, forge_lang::Options::default(), Default::default()).0;
     let body = run.body?;
     let mut cache = forge_agent::facemesh::Cache::default();
     let mesh = forge_agent::facemesh::join(&cache.faces(&body));
-    let p = forge_agent::render::picture(&body, &mesh, "iso", PICTURE_PX, &[]).ok()?;
+    let p = forge_agent::render::picture(&body, &mesh, "under", PICTURE_PX, &[]).ok()?;
     let mut rgba = Vec::with_capacity(p.w * p.h * 4);
     let bg = p.px.first().copied();
     for &i in &p.px {
@@ -66,6 +76,16 @@ fn picture(f: &Family) -> Option<egui::ColorImage> {
         rgba.extend_from_slice(&[r, g, b, if Some(i) == bg { 0 } else { 255 }]);
     }
     Some(egui::ColorImage::from_rgba_unmultiplied([p.w, p.h], &rgba))
+}
+
+/// A size's diameter as its table's unit counts it, for a length in proportion.
+fn thread_d(f: &Family, row: &[String]) -> f64 {
+    let s = f.col("thread").map_or(row[0].as_str(), |c| row[c].as_str());
+    s.trim_start_matches('M')
+        .split(['x', '-'])
+        .next()
+        .and_then(|d| d.parse().ok())
+        .unwrap_or(0.0)
 }
 
 /// The tree's nodes: each category path and every prefix of it, sorted.
@@ -178,7 +198,7 @@ impl ContentCenter {
     }
 
     /// Pictures finished since the last frame, as textures; the next ones started.
-    fn pictures(&mut self, ctx: &egui::Context, shown: &[&'static Family]) {
+    fn pictures(&mut self, ctx: &egui::Context, want: Vec<Spec>) {
         let (tx, rx) = self.made.get_or_insert_with(channel);
         while let Ok((id, img)) = rx.try_recv() {
             let p = match img {
@@ -189,20 +209,21 @@ impl ContentCenter {
             };
             self.pictures.insert(id, p);
         }
-        for f in shown {
-            if self.pictures.contains_key(f.id) {
+        for s in want {
+            let k = key(&s);
+            if self.pictures.contains_key(&k) {
                 continue;
             }
-            self.pictures.insert(f.id, Picture::Making);
-            let (tx, f, ctx) = (tx.clone(), *f, ctx.clone());
+            self.pictures.insert(k.clone(), Picture::Making);
+            let (tx, ctx) = (tx.clone(), ctx.clone());
             #[cfg(not(target_arch = "wasm32"))]
             std::thread::spawn(move || {
-                let _ = tx.send((f.id, picture(f)));
+                let _ = tx.send((k, picture(&s)));
                 ctx.request_repaint();
             });
             #[cfg(target_arch = "wasm32")]
             {
-                let _ = tx.send((f.id, picture(f)));
+                let _ = tx.send((k, picture(&s)));
                 ctx.request_repaint();
             }
         }
@@ -318,7 +339,11 @@ impl Shell {
                     .iter()
                     .filter(|f| f.placeable() && in_cat(f, &cc.cat))
                     .collect();
-                cc.pictures(ctx, &fams);
+                let mut want: Vec<Spec> = fams.iter().map(|f| tile_spec(f)).collect();
+                if let Some(s) = cc.family().and_then(|f| cc.spec(f)) {
+                    want.push(s);
+                }
+                cc.pictures(ctx, want);
                 ui.horizontal_top(|ui| {
                     // category view
                     ui.vertical(|ui| {
@@ -417,7 +442,7 @@ impl Shell {
                                             r.min + vec2(8.0, 6.0),
                                             vec2(TILE - 16.0, TILE - 12.0),
                                         );
-                                        picture_in(ui, &t, cc.pictures.get(f.id), pic);
+                                        picture_in(ui, &t, cc.pictures.get(&key(&tile_spec(f))), pic);
                                         ui.painter().text(
                                             pos2(r.center().x, r.bottom() - 32.0),
                                             egui::Align2::CENTER_CENTER,
@@ -461,7 +486,8 @@ impl Shell {
                                 ui.set_width(150.0);
                                 let (r, _) = ui.allocate_exact_size(vec2(150.0, 130.0), Sense::hover());
                                 ui.painter().rect_filled(r, 4.0, t.raised);
-                                picture_in(ui, &t, cc.pictures.get(f.id), r.shrink(6.0));
+                                let shown = cc.spec(f).map(|s| key(&s)).and_then(|k| cc.pictures.get(&k));
+                                picture_in(ui, &t, shown, r.shrink(6.0));
                                 ui.label(egui::RichText::new(&f.title).font(semi(12.0)).color(t.ink));
                                 ui.label(egui::RichText::new(&f.standard).font(sans(11.0)).color(t.ink2));
                                 ui.label(

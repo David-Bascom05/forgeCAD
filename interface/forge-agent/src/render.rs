@@ -11,13 +11,15 @@ const LABEL: u8 = 2;
 const SHADES: u8 = 240;
 const FIRST_SHADE: u8 = 3;
 
-pub const VIEWS: [&str; 7] = ["iso", "front", "top", "right", "back", "left", "bottom"];
+pub const VIEWS: [&str; 8] = ["iso", "front", "top", "right", "back", "left", "bottom", "under"];
 
 /// The direction toward the camera and the screen's up.
 fn camera(view: &str) -> Option<(Vec3, Vec3)> {
     let z = Vec3::Z;
     Some(match view {
         "iso" => (Vec3::new(1.0, -1.0, 1.0), z),
+        // the iso view from below: a screw's head, which sits at z < 0
+        "under" => (Vec3::new(1.0, -1.0, -1.0), z),
         "front" => (Vec3::new(0.0, -1.0, 0.0), z),
         "back" => (Vec3::Y, z),
         "right" => (Vec3::X, z),
