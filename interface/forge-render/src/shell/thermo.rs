@@ -37,9 +37,133 @@ fn c32(c: [f32; 3]) -> Color32 {
     Color32::from_rgb((c[0] * 255.0) as u8, (c[1] * 255.0) as u8, (c[2] * 255.0) as u8)
 }
 
+/// The Convert to Thermoform form: what the body is, the mould, the sheet.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FormChoice {
+    /// 0: a solid, its outside; 1: a thin wall; 2: a solid, its inside.
+    pub from: usize,
+    pub female: bool,
+    pub t: f64,
+    pub material: String,
+}
+
+impl Default for FormChoice {
+    fn default() -> Self {
+        FormChoice {
+            from: 0,
+            female: false,
+            t: 2.0,
+            material: "ABS".into(),
+        }
+    }
+}
+
+const FROM: [(&str, &str); 3] = [
+    ("outer", "Solid: the part's outside"),
+    ("wall", "Thin wall: the part as shelled"),
+    ("inner", "Solid: the part's inside"),
+];
+const MATERIALS: [&str; 6] = ["ABS", "HIPS", "PETG", "PC", "PMMA", "HDPE"];
+
+/// The statement that converts body `of`, named so as not to take a name the part has.
+pub fn convert_text(fg: &FgPanel, of: &str) -> String {
+    let taken = |n: &str| {
+        fg.feats
+            .iter()
+            .any(|f| f.id == n || f.id.starts_with(&format!("{n}[")))
+    };
+    let name = (1..)
+        .map(|k| {
+            if k == 1 {
+                "vacuum_part".to_string()
+            } else {
+                format!("vacuum_part{k}")
+            }
+        })
+        .find(|n| !taken(n))
+        .expect("a free name");
+    let c = &fg.form;
+    let (from, _) = FROM[c.from.min(2)];
+    let t = if from == "wall" {
+        String::new()
+    } else {
+        format!(", t: {}", c.t)
+    };
+    let tool = if c.female { ", tool: \"female\"" } else { "" };
+    format!(
+        "{name} = thermoform({of}, from: \"{from}\"{tool}{t}, material: \"{}\")\n",
+        c.material
+    )
+}
+
+/// The last feature that made or changed a solid: what Convert to Thermoform takes.
+fn last_solid(fg: &FgPanel) -> Option<String> {
+    fg.feats
+        .iter()
+        .rev()
+        .find(|f| {
+            !matches!(
+                f.kind.as_str(),
+                "sketch" | "plane" | "axis" | "point" | "param" | "thermoform"
+            )
+        })
+        .map(|f| f.id.clone())
+}
+
 impl Shell {
-    pub(super) fn fg_thermos(ui: &mut Ui, t: &Theme, fg: &mut FgPanel, places: &mut Vec<(String, Rect)>) {
+    pub(super) fn fg_thermos(
+        ui: &mut Ui,
+        t: &Theme,
+        fg: &mut FgPanel,
+        out: &mut Vec<super::fg::FgAct>,
+        places: &mut Vec<(String, Rect)>,
+    ) {
         if fg.thermos.is_empty() {
+            if fg.assembly || !fg.sheets.is_empty() {
+                return;
+            }
+            let Some(of) = last_solid(fg) else { return };
+            Self::fg_heading(ui, t, "Thermoform");
+            egui::ComboBox::from_id_salt("thermo-from")
+                .selected_text(FROM[fg.form.from.min(2)].1)
+                .show_ui(ui, |ui| {
+                    for (k, (_, label)) in FROM.iter().enumerate() {
+                        ui.selectable_value(&mut fg.form.from, k, *label);
+                    }
+                });
+            ui.horizontal(|ui| {
+                ui.selectable_value(&mut fg.form.female, false, "Male mould");
+                ui.selectable_value(&mut fg.form.female, true, "Female mould");
+            });
+            ui.horizontal(|ui| {
+                if fg.form.from != 1 {
+                    ui.label(egui::RichText::new("Sheet").font(sans(12.0)).color(t.ink2));
+                    ui.add(
+                        egui::DragValue::new(&mut fg.form.t)
+                            .range(0.1..=20.0)
+                            .speed(0.05)
+                            .suffix(" mm"),
+                    );
+                }
+                egui::ComboBox::from_id_salt("thermo-material")
+                    .selected_text(fg.form.material.clone())
+                    .show_ui(ui, |ui| {
+                        for m in MATERIALS {
+                            ui.selectable_value(&mut fg.form.material, m.to_string(), m);
+                        }
+                    });
+            });
+            ui.label(
+                egui::RichText::new(format!("the part: {of}"))
+                    .font(sans(11.0))
+                    .color(t.ink2),
+            );
+            if Self::fg_button(ui, "Convert to Thermoform", "fg:thermoform".into(), places) {
+                out.push(super::fg::FgAct::Apply(forge_lang::error::Op::AddFeature {
+                    before: None,
+                    text: convert_text(fg, &of),
+                }));
+            }
             return;
         }
         Self::fg_heading(ui, t, "Thermoform");

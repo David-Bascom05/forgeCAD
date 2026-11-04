@@ -292,6 +292,8 @@ pub struct FgPanel {
     /// The part's thermoforms, and whether their wall thickness is mapped on the view.
     pub thermos: Vec<super::thermo::ThermoRow>,
     pub walls: bool,
+    /// The Convert to Thermoform form's choices.
+    pub form: super::thermo::FormChoice,
     /// The flat pattern is what's shown.
     pub flat: bool,
     pub out: Vec<FgAct>,
@@ -833,7 +835,7 @@ impl Shell {
                             Self::fg_head(ui, &t, &mut fg, &mut out, &mut places);
                             Self::fg_tool(ui, &t, &mut fg, &mut out, &mut places);
                             Self::fg_sheets(ui, &t, &fg, &mut out, &mut places);
-                            Self::fg_thermos(ui, &t, &mut fg, &mut places);
+                            Self::fg_thermos(ui, &t, &mut fg, &mut out, &mut places);
                             Self::fg_selection(ui, &t, &mut fg, &mut out, &mut places);
                             Self::fg_issues(ui, &t, &mut fg, &mut out, &mut places);
                             Self::fg_source(ui, &t, &mut fg);
