@@ -128,6 +128,11 @@ pub enum Problem {
         item: String,
         reference: String,
     },
+    /// The reference is drawn only as a hidden line: Inventor dimensions those, drafters don't.
+    HiddenOnly {
+        item: String,
+        reference: String,
+    },
     /// The thing asked for does not apply here (a balloon on a part drawing).
     NotHere {
         item: String,
@@ -166,6 +171,8 @@ pub enum GdtRule {
     PositionNeedsFrame,
     /// Position located by toleranced, not basic, dimensions.
     PositionNotBasic,
+    /// Position with no basic dimension locating it one way (or either).
+    PositionNotLocated,
 }
 
 impl GdtRule {
@@ -182,6 +189,7 @@ impl GdtRule {
             GdtRule::RunoutNeedsAxis => "RunoutNeedsAxis",
             GdtRule::PositionNeedsFrame => "PositionNeedsFrame",
             GdtRule::PositionNotBasic => "PositionNotBasic",
+            GdtRule::PositionNotLocated => "PositionNotLocated",
         }
     }
 }
@@ -202,6 +210,7 @@ impl Problem {
             Problem::Sick { .. } => "Sick",
             Problem::NotInView { .. } => "NotInView",
             Problem::NotHere { .. } => "NotHere",
+            Problem::HiddenOnly { .. } => "HiddenOnly",
             Problem::Gdt { .. } => "Gdt",
         }
     }
@@ -225,6 +234,11 @@ impl Problem {
             }
             Problem::NotInView { item, reference } => format!("{item}: {reference} is not drawn in its view"),
             Problem::NotHere { item, why } => format!("{item}: {why}"),
+            Problem::HiddenOnly { item, reference } => {
+                format!(
+                    "{item}: {reference} is only a hidden line in this view; dimension it where it is seen"
+                )
+            }
             Problem::Gdt { item, rule, detail } => format!("{item}: {} ({detail})", rule.word()),
         }
     }
@@ -455,6 +469,8 @@ pub enum ItemKind {
     Model {
         path: String,
         asm: bool,
+        /// g/cm3, for the title block's mass (until the part carries its material's density).
+        density: Option<f64>,
     },
     Sheet(SheetDef),
     View(ViewDef),
@@ -964,9 +980,21 @@ impl Reader<'_> {
                 let Val::Str(path) = v else {
                     return Err(a.wrong("file", "string", &v, s));
                 };
+                let density = a.num("density", None)?;
+                if density.is_some_and(|d| d <= 0.0) {
+                    return Err(err(
+                        Problem::BadValue {
+                            func,
+                            arg: "density".into(),
+                            why: "a density is more than 0 (g/cm3)".into(),
+                        },
+                        span,
+                    ));
+                }
                 ItemKind::Model {
                     path,
                     asm: func == "assembly",
+                    density,
                 }
             }
             "sheet" => {

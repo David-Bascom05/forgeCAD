@@ -14,6 +14,7 @@ pub mod edit;
 pub mod edit_ops;
 pub mod error;
 pub mod eval;
+pub mod explode;
 pub mod export;
 pub mod feat_error;
 pub mod fillets;

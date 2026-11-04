@@ -309,3 +309,75 @@ fn tolerances_are_written_and_fits_computed() {
     );
     assert!(!bad.ok());
 }
+
+#[test]
+fn position_needs_basic_location_both_ways_and_dims_shun_hidden_lines() {
+    let dir = dir("drawing_located");
+    std::fs::write(dir.join("plate.fg"), PART).unwrap();
+    let base = "drawing\nm = part(\"plate.fg\")\ns = sheet(\"A3\")\ntop = base_view(m, sheet: s, dir: \"top\", at: (150, 150))\n";
+    let d = regen::make(base, &dir);
+    let rs = refs(&d, "top");
+    let circle = rs.iter().find(|r| r.1 == "circle").unwrap().0.clone();
+    let left = rs
+        .iter()
+        .find(|r| r.1 == "line" && r.2[0] == r.2[2] && r.2[0].abs() < 1e-9)
+        .unwrap()
+        .0
+        .clone();
+    let bottom = rs
+        .iter()
+        .find(|r| r.1 == "line" && r.2[1] == r.2[3] && r.2[1].abs() < 1e-9)
+        .unwrap()
+        .0
+        .clone();
+    let one_way = format!(
+        "{base}da = datum(top, {left}, \"A\", at: (-10, 10))\nx = dim(top, {left}, {circle}, basic: true, at: (10, 50))\np = fcf(top, {circle}, \"position\", \"dia 0.1\", [\"A\"], at: (70, 40))\n"
+    );
+    let got = rules(&regen::make(&one_way, &dir));
+    assert!(got.contains(&("p".into(), "PositionNotLocated")), "{got:?}");
+    let both = format!("{one_way}y = dim(top, {bottom}, {circle}, basic: true, at: (-15, 10))\n");
+    let got = rules(&regen::make(&both, &dir));
+    assert!(!got.iter().any(|g| g.0 == "p"), "{got:?}");
+    // a blind hole seen from below is only a hidden circle: dimensioning it there is warned
+    std::fs::write(dir.join("plate.fg"), PART.replace("depth: thru", "depth: 4")).unwrap();
+    let under = "drawing\nm = part(\"plate.fg\")\ns = sheet(\"A3\")\nbot = base_view(m, sheet: s, dir: \"bottom\", at: (150, 150))\n";
+    let d = regen::make(under, &dir);
+    let hidden = refs(&d, "bot")
+        .into_iter()
+        .find(|r| r.1 == "circle")
+        .expect("the hidden rim")
+        .0;
+    let d = regen::make(
+        &format!("{under}q = diameter(bot, {hidden}, at: (30, 30))\n"),
+        &dir,
+    );
+    assert!(
+        d.errors
+            .iter()
+            .any(|e| e.problem.kind() == "HiddenOnly" && e.warning),
+        "{:?}",
+        d.errors
+    );
+}
+
+#[test]
+fn frames_hang_under_their_dimension() {
+    let dir = dir("drawing_hang");
+    std::fs::write(dir.join("plate.fg"), PART).unwrap();
+    let base = "drawing\nm = part(\"plate.fg\")\ns = sheet(\"A3\")\ntop = base_view(m, sheet: s, dir: \"top\", at: (150, 150))\n";
+    let d = regen::make(base, &dir);
+    let circle = refs(&d, "top").into_iter().find(|r| r.1 == "circle").unwrap().0;
+    let src = format!(
+        "{base}dd = diameter(top, {circle}, fit: \"H7\", at: (40, 50))\nf = fcf(top, dd, \"perpendicularity\", \"dia 0.02\", [\"A\"], at: (200, 200))\nda = datum(top, dd, \"A\")\n"
+    );
+    let d = regen::make(&src, &dir);
+    let it = |id: &str| d.items.iter().find(|i| i.id == id).unwrap().clone();
+    let (dd, f, da) = (it("dd"), it("f"), it("da"));
+    // the frame sits right under the callout's text whatever `at` says, the datum under it
+    assert!(
+        f.hi.y <= dd.anchor.y - dd.half.y + 1e-6 && f.hi.y > dd.anchor.y - dd.half.y - 3.0,
+        "{f:?} {dd:?}"
+    );
+    assert!((f.lo.x - (dd.anchor.x - dd.half.x)).abs() < 1.0, "{f:?} {dd:?}");
+    assert!(da.lo.y < f.lo.y);
+}

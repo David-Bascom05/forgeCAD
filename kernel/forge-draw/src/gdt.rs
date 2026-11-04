@@ -300,19 +300,32 @@ pub fn glyph(page: &mut Page, ch: Char, c: Point2, r: f64) {
             poly(page, c, k, &[(-0.6, -0.55), (0.6, -0.55)]);
         }
         Char::CircularRunout => {
-            let (a, b) = (c + Vec2::new(-0.5, -0.9) * k, c + Vec2::new(0.5, 0.9) * k);
-            line(page, a, b);
-            arrow(page, Pen::Thin, b, b - a, 0.6 * k);
+            let (a, b) = (c + Vec2::new(-0.45, -0.95) * k, c + Vec2::new(0.45, 0.95) * k);
+            line(page, a, b - (b - a) * 0.3);
+            head(page, b, b - a, 0.75 * k);
         }
         Char::TotalRunout => {
-            for dx in [-0.75, 0.15] {
-                let (a, b) = (c + Vec2::new(dx, -0.9) * k, c + Vec2::new(dx + 0.6, 0.9) * k);
-                line(page, a, b);
-                arrow(page, Pen::Thin, b, b - a, 0.6 * k);
+            for dx in [-0.85, 0.05] {
+                let (a, b) = (c + Vec2::new(dx, -0.95) * k, c + Vec2::new(dx + 0.8, 0.95) * k);
+                line(page, a, b - (b - a) * 0.3);
+                head(page, b, b - a, 0.75 * k);
             }
-            poly(page, c, k, &[(-0.75, -0.9), (0.15, -0.9)]);
+            poly(page, c, k, &[(-0.85, -0.95), (0.05, -0.95)]);
         }
     }
+}
+
+/// A runout arrow's solid head: tip at `tip`, pointing along `dir`, `len` long and two thirds
+/// as wide, outlined as well as filled so it stands in any output.
+fn head(page: &mut Page, tip: Point2, dir: Vec2, len: f64) {
+    let Some(d) = dir.normalize() else { return };
+    let back = tip - d * len;
+    let n = d.perp() * (len / 3.0);
+    let tri = [tip, back + n, back - n];
+    for k in 0..3 {
+        line(page, tri[k], tri[(k + 1) % 3]);
+    }
+    page.fills.push((Pen::Thin, tri.to_vec()));
 }
 
 /// A capital letter (of the few modifiers use) drawn as strokes in a box `w` x `h` from `o`.
@@ -489,6 +502,12 @@ fn datum_cell(page: &mut Page, d: &DatumRef, left: Point2, h: f64, std: Standard
         x += circled(page, *m, Point2::new(x + 0.7 * h, left.y), h);
     }
     x - left.x
+}
+
+/// How wide a frame of these rows is.
+pub fn frame_width(h: f64, rows: &[Row], std: Standard) -> f64 {
+    let mut scratch = Page::default();
+    frame(&mut scratch, Point2::ORIGIN, h, rows, false, std).x
 }
 
 /// A feature control frame with its lower left corner at `at`, rows top to bottom; a composite

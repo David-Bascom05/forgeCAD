@@ -248,8 +248,8 @@ pub fn leader(page: &mut Page, pen: Pen, st: &Style, tip: Point2, at: Point2, li
         .iter()
         .map(|l| text_size(l, st.text_h).y.max(st.text_h) + 0.6 * st.text_h)
         .collect();
-    let total: f64 = heights.iter().sum();
-    let mut y = at.y + 0.5 * total;
+    // the shoulder meets the first line at its middle (ASME Y14.2), the rest below it
+    let mut y = at.y + 0.5 * heights.first().copied().unwrap_or(0.0);
     for (l, lh) in lines.iter().zip(&heights) {
         y -= lh;
         dim_text(

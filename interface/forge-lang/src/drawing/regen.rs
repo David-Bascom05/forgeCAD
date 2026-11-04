@@ -28,6 +28,16 @@ pub struct ModelOut {
     pub run: crate::Run,
     /// Bill of materials: part file, count, part number, description; in item order.
     pub bom: Vec<(String, usize, String, String)>,
+    /// g/cm3, as the drawing gives it.
+    pub density: Option<f64>,
+}
+
+impl ModelOut {
+    /// The part's mass in kg: its volume times its density, when the density is known.
+    pub fn mass(&self) -> Option<f64> {
+        let v = self.run.measure.as_ref()?.volume;
+        Some(v * self.density? * 1e-6)
+    }
 }
 
 /// A detail's boundary: centre, radius, and a rectangle's half sizes where it is one.
@@ -62,6 +72,8 @@ pub struct ViewOut {
 #[derive(Clone, Debug, PartialEq)]
 pub struct ItemOut {
     pub id: String,
+    /// A linear dimension's direction of measure on the sheet.
+    pub dir: Option<Vec2>,
     /// It sizes, or is attached to, a feature of size.
     pub fos: bool,
     /// Where its text is (a dimension's value): what a frame or datum attached to it hangs from.
@@ -181,6 +193,7 @@ fn load(id: &str, file: &str, dir: &Path) -> Result<ModelOut, String> {
         model,
         run,
         bom,
+        density: None,
     })
 }
 
@@ -774,7 +787,27 @@ fn draw(insts: &[(Arc<Body>, Frame, usize)], view: &View, tangent: bool, hidden:
 enum Feat {
     Point(Point2),
     Line(Point2, Point2),
-    Circle { c: Point2, r: f64, a: Point2, b: Point2 },
+    Circle {
+        c: Point2,
+        r: f64,
+        a: Point2,
+        b: Point2,
+        /// Seen edge-on: the line it is drawn as.
+        edge_on: Option<(Point2, Point2)>,
+    },
+}
+
+/// A circle seen edge-on: the line it is drawn as on the view.
+fn edge_on(c: &forge_geom::Circle, pose: &Frame, view: &View) -> Option<(Point2, Point2)> {
+    let n = pose.vec_to_world(c.frame.z().get());
+    if n.dot(view.toward.get()).abs() > 1e-9 {
+        return None;
+    }
+    let o = view.project(pose.point_to_world(c.frame.origin));
+    let w = view.project_vec(pose.vec_to_world(c.frame.x().get()) * c.radius);
+    let u = view.project_vec(pose.vec_to_world(c.frame.y().get()) * c.radius);
+    let half = if w.length() >= u.length() { w } else { u };
+    Some((o - half, o + half))
 }
 
 impl Feat {
@@ -814,6 +847,8 @@ struct Resolved {
     inst: usize,
     /// A feature of size: a hole or shaft (circle edge, cylinder face), what MMC/LMC can apply to.
     fos: bool,
+    /// Drawn with a seen (not hidden) line.
+    seen: bool,
 }
 
 fn resolve_ref(model: &Model, v: &ViewOut, r: &Ref) -> Option<Resolved> {
@@ -849,6 +884,7 @@ fn resolve_ref(model: &Model, v: &ViewOut, r: &Ref) -> Option<Resolved> {
             shown,
             inst,
             fos,
+            seen: true,
         });
     }
     let es = edges_named(body, r.name);
@@ -873,6 +909,7 @@ fn resolve_ref(model: &Model, v: &ViewOut, r: &Ref) -> Option<Resolved> {
                 r: c.radius,
                 a: pr(a),
                 b: pr(b),
+                edge_on: edge_on(c, pose, &v.view),
             }
         }
         Curve::Line(l) => {
@@ -905,11 +942,18 @@ fn resolve_ref(model: &Model, v: &ViewOut, r: &Ref) -> Option<Resolved> {
         },
     };
     let fos = matches!(edge.curve, Curve::Circle(_));
+    let seen = es.iter().any(|&e| {
+        let n = body.edge(e).name;
+        v.pieces
+            .iter()
+            .any(|p| p.inst == inst && p.visible && p.source == Source::Edge(n))
+    });
     Some(Resolved {
         feat,
         shown,
         inst,
         fos,
+        seen,
     })
 }
 
@@ -963,6 +1007,7 @@ fn annotate(
     page: &mut Page,
     errors: &mut Vec<DrawError>,
     items: &mut Vec<ItemOut>,
+    stack: &mut std::collections::HashMap<String, f64>,
 ) -> Option<()> {
     let v = ctx.views.iter().find(|x| x.id == a.view)?;
     let mo = &ctx.models[v.model];
@@ -984,6 +1029,15 @@ fn annotate(
                 if !x.shown {
                     errors.push(warn(
                         Problem::NotInView {
+                            item: item.id.clone(),
+                            reference: r.text(),
+                        },
+                        r.span,
+                        vec![],
+                    ));
+                } else if !x.seen {
+                    errors.push(warn(
+                        Problem::HiddenOnly {
                             item: item.id.clone(),
                             reference: r.text(),
                         },
@@ -1042,6 +1096,7 @@ fn annotate(
     let pen = Pen::Thin;
     let mut value = None;
     let mut fos = false;
+    let mut measured_dir: Option<Vec2> = None;
     let kind: &'static str = match &a.kind {
         AnnotKind::Linear { a: ra, b: rb, dir } => {
             let fa = get(ra, "1", false, errors);
@@ -1050,7 +1105,16 @@ fn annotate(
                 None => Some(None),
             };
             if let (Some(fa), Some(fb)) = (fa, fb) {
-                let (p, q, d) = match (fa.feat, fb.map(|x| x.feat)) {
+                // a circle seen edge-on is the line it is drawn as
+                let flat = |f: Feat| match f {
+                    Feat::Circle {
+                        edge_on: Some((p, q)),
+                        ..
+                    } => Feat::Line(p, q),
+                    f => f,
+                };
+                let at_view = a.at.unwrap_or(Point2::ORIGIN);
+                let (p, q, d) = match (flat(fa.feat), fb.map(|x| flat(x.feat))) {
                     (Feat::Line(a0, a1), None) => (a0, a1, (a1 - a0).normalize()),
                     (Feat::Circle { c, r, .. }, None) => (c - Vec2::X * (r), c + Vec2::X * r, Some(Vec2::X)),
                     (Feat::Point(p), None) => (p, p, None),
@@ -1061,7 +1125,24 @@ fn annotate(
                             .is_some_and(|(x, y)| x.cross(y).abs() < 1e-6) =>
                     {
                         let u = (a1 - a0).normalize().expect("a line");
-                        let m = a0.lerp(a1, 0.5);
+                        // where the two lines overlap along their length, as near the dimension's
+                        // place as can be: the extension lines land on both
+                        let t = |p: Point2| (p - a0).dot(u);
+                        let (lo, hi) = (
+                            t(a0).min(t(a1)).max(t(b0).min(t(b1))),
+                            t(a0).max(t(a1)).min(t(b0).max(t(b1))),
+                        );
+                        let want = if a.at.is_some() {
+                            t(at_view)
+                        } else {
+                            0.5 * (t(a0) + t(a1))
+                        };
+                        let along = if lo <= hi {
+                            want.clamp(lo, hi)
+                        } else {
+                            0.5 * (lo + hi)
+                        };
+                        let m = a0 + u * along;
                         let foot = b0 + u * (m - b0).dot(u);
                         fos = true;
                         (m, foot, Some(u.perp()))
@@ -1109,6 +1190,7 @@ fn annotate(
                 };
                 let val = ((qs - ps).dot(dir) / s).abs();
                 value = Some(val);
+                measured_dir = Some(dir);
                 let at = a.at.map_or(ps.lerp(qs, 0.5) + dir.perp() * 10.0, sp);
                 let t = text("", val, "", errors);
                 annot::linear(an.page, pen, &an.st, ps, qs, dir, at, &t);
@@ -1250,12 +1332,40 @@ fn annotate(
                                 foot,
                             );
                             let val = (p - o).dot(u) / s;
+                            let out = (foot - p).normalize().unwrap_or(u.perp());
+                            let tat = foot + out * 1.5;
+                            let angle = if dir == "vertical" { 0.0 } else { 90.0 };
+                            let t = fmt_len(val);
+                            if a.tol == Some(doc::TolSpec::Basic) {
+                                // a basic ordinate: its value boxed, the box along the text
+                                let (h, w) = (an.st.text_h, forge_draw::page::text_width(&t, an.st.text_h));
+                                let (along, up) = if angle == 0.0 {
+                                    (Vec2::X, Vec2::Y)
+                                } else {
+                                    (Vec2::Y, Vec2::new(-1.0, 0.0))
+                                };
+                                let c = [
+                                    tat - along * 0.8 - up * 0.8,
+                                    tat + along * (w + 0.8) - up * 0.8,
+                                    tat + along * (w + 0.8) + up * (h + 0.8),
+                                    tat - along * 0.8 + up * (h + 0.8),
+                                ];
+                                for k in 0..4 {
+                                    annot::stroke(an.page, pen, c[k], c[(k + 1) % 4]);
+                                }
+                            }
                             an.page.texts.push(Text {
-                                at: foot + (foot - p).normalize().unwrap_or(u.perp()) * 1.5,
+                                at: tat
+                                    + out
+                                        * if a.tol == Some(doc::TolSpec::Basic) {
+                                            0.8
+                                        } else {
+                                            0.0
+                                        },
                                 h: an.st.text_h,
-                                angle: if dir == "vertical" { 0.0 } else { 90.0 },
+                                angle,
                                 align: Align::Left,
-                                text: fmt_len(val),
+                                text: t,
                                 pen,
                             });
                         }
@@ -1439,29 +1549,27 @@ fn annotate(
                     });
                 }
             }
-            let at = match (a.at.map(sp), hang, tip) {
-                (Some(p), _, _) => p,
-                (None, Some((anchor, half)), _) => anchor - Vec2::new(half.x, half.y + 2.5 * h),
-                (None, None, Some(t)) => t + Vec2::new(12.0, 10.0),
-                _ => at_sheet,
+            // on a dimension: directly under its text (Y14.5 Fig. 3-23), stacked under any frame
+            // already there; on the model: where placed, with a leader
+            let under = |id: &str, anchor: Point2, half: Vec2| {
+                stack.get(id).copied().unwrap_or(anchor.y - half.y - 0.6)
             };
-            let top = forge_draw::gdt::frame(an.page, at, h, rows, *composite, std);
-            // a frame on a dimension placed away from its text: a line from one to the other
-            if let (Some((anchor, half)), None) = (hang, tip) {
-                let corner = Point2::new(
-                    anchor.x.clamp(at.x, top.x),
-                    if anchor.y > top.y { top.y } else { at.y },
-                );
-                // where the line from the frame meets the text's box
-                let d = corner - anchor;
-                let k = [half.x / d.x.abs().max(1e-12), half.y / d.y.abs().max(1e-12)]
-                    .into_iter()
-                    .fold(f64::INFINITY, f64::min);
-                let end = anchor + d * k.min(1.0);
-                if corner.distance(end) > 0.5 * h {
-                    annot::stroke(an.page, pen, corner, end);
-                }
+            let at = match (&to, hang, tip) {
+                (doc::Attach::Item(id), Some((anchor, half)), _) => Point2::new(
+                    anchor.x - half.x,
+                    under(id, anchor, half) - 2.0 * h * rows.len() as f64,
+                ),
+                (_, _, Some(t)) => a.at.map_or(t + Vec2::new(12.0, 10.0), sp),
+                _ => a.at.map_or(at_sheet, sp),
+            };
+            forge_draw::gdt::frame(an.page, at, h, rows, *composite, std);
+            if let doc::Attach::Item(id) = &to {
+                stack.insert(id.clone(), at.y);
             }
+            let top = Point2::new(
+                at.x + forge_draw::gdt::frame_width(h, rows, std),
+                at.y + 2.0 * h * rows.len() as f64,
+            );
             if let Some(tip) = tip {
                 let mid_y = 0.5 * (at.y + top.y);
                 let from = if tip.x < at.x {
@@ -1527,14 +1635,24 @@ fn annotate(
             let h = an.st.text_h;
             let (tip, target_fos, hang) = attach_point(to, &mut get, errors, items, v, a.at.map(sp));
             fos = target_fos;
-            let foot = match (tip, hang) {
-                (Some(t), _) => Some(t),
-                (None, Some((anchor, half))) => Some(anchor - Vec2::new(0.0, half.y + 0.3)),
+            // on a dimension: hung under its text, or under the frames already there
+            let foot = match (&to, tip, hang) {
+                (_, Some(t), _) => Some(t),
+                (doc::Attach::Item(id), None, Some((anchor, half))) => Some(Point2::new(
+                    anchor.x - half.x + 1.5 * h,
+                    stack.get(id).copied().unwrap_or(anchor.y - half.y - 0.3),
+                )),
                 _ => None,
             };
             if let Some(foot) = foot {
-                let at = a.at.map_or(foot - Vec2::new(0.0, 4.5 * h), sp);
+                let at = match (&to, a.at) {
+                    (doc::Attach::Ref(_), Some(p)) => sp(p),
+                    _ => foot - Vec2::new(0.0, 2.6 * h),
+                };
                 forge_draw::gdt::datum_symbol(an.page, letter, at, foot, h);
+                if let doc::Attach::Item(id) = &to {
+                    stack.insert(id.clone(), at.y - h);
+                }
             }
             "datum"
         }
@@ -1615,7 +1733,15 @@ fn annotate(
             pen: Pen::Sick,
         });
     }
-    let (mut lo, mut hi) = (at_sheet, at_sheet);
+    // its box: what it drew, or where it was placed if it drew nothing
+    let (mut lo, mut hi) = if an.page.strokes.len() > before.0 {
+        (
+            Point2::new(f64::INFINITY, f64::INFINITY),
+            Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY),
+        )
+    } else {
+        (at_sheet, at_sheet)
+    };
     for st in &an.page.strokes[before.0..] {
         let (a, b) = st.geom.bounds();
         lo = Point2::new(lo.x.min(a.x), lo.y.min(a.y));
@@ -1649,6 +1775,7 @@ fn annotate(
     };
     items.push(ItemOut {
         id: item.id.clone(),
+        dir: measured_dir,
         fos,
         anchor,
         half,
@@ -1915,6 +2042,11 @@ fn defaults(ctx: &Ctx, f: &mut forge_draw::sheet::Fields, sheet: usize, n_sheets
             f.scale = forge_draw::sheet::scale_text(v.scale);
         }
     }
+    if f.mass.is_empty()
+        && let Some(m) = first_view.and_then(|v| ctx.models[v.model].mass())
+    {
+        f.mass = format!("{} kg", number(m, 3));
+    }
     if f.sheet.is_empty() {
         f.sheet = format!("{} OF {}", sheet + 1, n_sheets);
     }
@@ -1933,8 +2065,11 @@ pub fn make(src: &str, dir: &Path) -> Drawing {
     };
     for item in &d.items {
         match &item.kind {
-            ItemKind::Model { path, .. } => match load(&item.id, path, &ctx.dir) {
-                Ok(m) => ctx.models.push(m),
+            ItemKind::Model { path, density, .. } => match load(&item.id, path, &ctx.dir) {
+                Ok(m) => ctx.models.push(ModelOut {
+                    density: *density,
+                    ..m
+                }),
                 Err(why) => ctx.errors.push(fail(
                     Problem::Model {
                         file: path.clone(),
@@ -2063,6 +2198,7 @@ pub fn make(src: &str, dir: &Path) -> Drawing {
             }
         }
         items.push(ItemOut {
+            dir: None,
             fos: false,
             anchor: Point2::ORIGIN,
             half: Vec2::ZERO,
@@ -2077,11 +2213,41 @@ pub fn make(src: &str, dir: &Path) -> Drawing {
         });
     }
     let mut errors = std::mem::take(&mut ctx.errors);
+    let mut stack = std::collections::HashMap::new();
     for item in &d.items {
         match &item.kind {
             ItemKind::Annot(a) => {
                 let sheet = ctx.views.iter().find(|v| v.id == a.view).map_or(0, |v| v.sheet);
-                annotate(&ctx, item, a, &mut pages[sheet], &mut errors, &mut items);
+                // room under it for the frames and datum symbols that hang from it
+                let hung: f64 = d
+                    .items
+                    .iter()
+                    .filter_map(|x| match &x.kind {
+                        ItemKind::Annot(b) => match &b.kind {
+                            AnnotKind::Fcf {
+                                to: doc::Attach::Item(id),
+                                rows,
+                                ..
+                            } if id == &item.id => Some(7.0 * rows.len() as f64),
+                            AnnotKind::Datum {
+                                to: doc::Attach::Item(id),
+                                ..
+                            } if id == &item.id => Some(10.0),
+                            _ => None,
+                        },
+                        _ => None,
+                    })
+                    .sum();
+                let a = place_clear(&ctx, item, a, &pages[sheet], &errors, &items, &stack, hung);
+                annotate(
+                    &ctx,
+                    item,
+                    &a,
+                    &mut pages[sheet],
+                    &mut errors,
+                    &mut items,
+                    &mut stack,
+                );
             }
             ItemKind::Note { sheet, at, text } => {
                 let k = sheet_of(&ctx, sheet, None);
@@ -2096,6 +2262,7 @@ pub fn make(src: &str, dir: &Path) -> Drawing {
                     });
                 }
                 items.push(ItemOut {
+                    dir: None,
                     fos: false,
                     anchor: Point2::ORIGIN,
                     half: Vec2::ZERO,
@@ -2138,6 +2305,7 @@ pub fn make(src: &str, dir: &Path) -> Drawing {
                     &rows,
                 );
                 items.push(ItemOut {
+                    dir: None,
                     fos: false,
                     anchor: Point2::ORIGIN,
                     half: Vec2::ZERO,
@@ -2564,41 +2732,303 @@ fn gdt_checks(ctx: &Ctx, d: &doc::Doc, items: &[ItemOut], errors: &mut Vec<DrawE
                     }
                 }
             }
-            // the dimensions that locate a positioned feature are basic
+            // a positioned feature (or pattern of like features) is located by basic dimensions,
+            // both ways on the view
             if row.ch == Char::Position && k == 0 {
                 let target = match to {
-                    doc::Attach::Ref(r) => Some(r.name),
+                    doc::Attach::Ref(r) => Some(r.clone()),
                     doc::Attach::Item(id) => d.item(id).and_then(|it| match &it.kind {
                         ItemKind::Annot(x) => match &x.kind {
                             AnnotKind::Diameter { e }
                             | AnnotKind::Radius { e }
-                            | AnnotKind::HoleNote { e } => Some(e.name),
+                            | AnnotKind::HoleNote { e } => Some(e.clone()),
                             _ => None,
                         },
                         _ => None,
                     }),
                 };
                 let Some(target) = target else { continue };
+                let Some(v) = ctx.views.iter().find(|v| v.id == a.view) else {
+                    continue;
+                };
+                let model = &ctx.models[v.model].model;
+                // a reference's circle, whatever point of it the dimension takes
+                let radius = |r: &Ref| match resolve_ref(
+                    model,
+                    v,
+                    &Ref {
+                        at: None,
+                        ..r.clone()
+                    },
+                )
+                .map(|x| x.feat)
+                {
+                    Some(Feat::Circle { r, .. }) => Some(r),
+                    _ => None,
+                };
+                let tr = radius(&target);
+                // its pattern: the circles of its size
+                let of_pattern = |r: &Ref| {
+                    r.name == target.name
+                        || tr.is_some_and(|tr| radius(r).is_some_and(|x| (x - tr).abs() < 1e-9))
+                };
+                let (mut across, mut up) = (false, false);
+                // the view itself, or a detail of it: the same model coordinates
+                let related = |w: &str| {
+                    w == a.view
+                        || ctx.views.iter().any(|x| {
+                            x.id == w && x.kind == "detail" && x.parent.as_deref() == Some(a.view.as_str())
+                        })
+                };
                 for (j, b) in annots() {
+                    if let AnnotKind::Set { refs, dir, .. } = &b.kind
+                        && related(&b.view)
+                        && b.tol == Some(doc::TolSpec::Basic)
+                        && refs.iter().any(of_pattern)
+                    {
+                        if dir == "vertical" {
+                            up = true;
+                        } else {
+                            across = true;
+                        }
+                        continue;
+                    }
                     let AnnotKind::Linear { a: ra, b: rb, .. } = &b.kind else {
                         continue;
                     };
-                    let locates = ra.name == target || rb.as_ref().is_some_and(|r| r.name == target);
-                    if locates && b.view == a.view && b.tol != Some(doc::TolSpec::Basic) {
-                        errors.push(gdt_error(
-                            i,
-                            doc::GdtRule::PositionNotBasic,
-                            format!("{} locates the positioned feature: make it basic", j.id),
-                            true,
-                            vec![DrawOp::SetArg {
-                                item: j.id.clone(),
-                                arg: "basic".into(),
-                                value: "true".into(),
-                            }],
-                        ));
+                    if !related(&b.view) || !(of_pattern(ra) || rb.as_ref().is_some_and(of_pattern)) {
+                        continue;
                     }
+                    if b.tol == Some(doc::TolSpec::Basic) {
+                        if let Some(dir) = items.iter().find(|x| x.id == j.id).and_then(|x| x.dir) {
+                            if dir.x.abs() >= dir.y.abs() {
+                                across = true;
+                            } else {
+                                up = true;
+                            }
+                        }
+                        continue;
+                    }
+                    errors.push(gdt_error(
+                        i,
+                        doc::GdtRule::PositionNotBasic,
+                        format!("{} locates the positioned feature: make it basic", j.id),
+                        true,
+                        vec![DrawOp::SetArg {
+                            item: j.id.clone(),
+                            arg: "basic".into(),
+                            value: "true".into(),
+                        }],
+                    ));
+                }
+                if !(across && up) {
+                    let missing = match (across, up) {
+                        (false, false) => "either way",
+                        (true, false) => "up the view",
+                        _ => "across the view",
+                    };
+                    errors.push(gdt_error(
+                        i,
+                        doc::GdtRule::PositionNotLocated,
+                        format!("no basic dimension locates the positioned feature {missing}"),
+                        true,
+                        vec![],
+                    ));
                 }
             }
         }
     }
+}
+
+/// Boxes of a page's texts (unturned), low and high corners.
+fn text_boxes(p: &Page, pad: f64) -> Vec<(Point2, Point2)> {
+    p.texts
+        .iter()
+        .filter(|t| t.h > 0.0)
+        .map(|t| {
+            let w = forge_draw::page::text_width(&t.text, t.h);
+            let x = match t.align {
+                Align::Left => t.at.x,
+                Align::Centre => t.at.x - 0.5 * w,
+                Align::Right => t.at.x - w,
+            };
+            (
+                Point2::new(x - pad, t.at.y - pad),
+                Point2::new(x + w + pad, t.at.y + t.h + pad),
+            )
+        })
+        .collect()
+}
+
+fn boxes_meet(a: &(Point2, Point2), b: &(Point2, Point2)) -> bool {
+    a.0.x < b.1.x && b.0.x < a.1.x && a.0.y < b.1.y && b.0.y < a.1.y
+}
+
+/// Whether segment `p..q` passes through box `b`.
+fn segment_meets(p: Point2, q: Point2, b: &(Point2, Point2)) -> bool {
+    let (mut lo, mut hi) = (0.0f64, 1.0f64);
+    for (s, d, l, h) in [(p.x, q.x - p.x, b.0.x, b.1.x), (p.y, q.y - p.y, b.0.y, b.1.y)] {
+        if d.abs() < 1e-12 {
+            if s < l || s > h {
+                return false;
+            }
+            continue;
+        }
+        let (t0, t1) = ((l - s) / d, (h - s) / d);
+        lo = lo.max(t0.min(t1));
+        hi = hi.min(t0.max(t1));
+    }
+    lo < hi
+}
+
+fn segments_cross(a: Point2, b: Point2, c: Point2, d: Point2) -> bool {
+    let (r, s) = (b - a, d - c);
+    let den = r.cross(s);
+    if den.abs() < 1e-12 {
+        return false;
+    }
+    let (x, y) = ((c - a).cross(s) / den, (c - a).cross(r) / den);
+    x > 1e-6 && x < 1.0 - 1e-6 && y > 1e-6 && y < 1.0 - 1e-6
+}
+
+/// A leader-placed annotation moved, if it must, to the nearest place where its text sits clear
+/// of the views, the title block and other text, and its leader crosses no other text and no
+/// centreline: the drawing's own auto-layout. Dimensions keep where they were put.
+#[allow(clippy::too_many_arguments)]
+fn place_clear(
+    ctx: &Ctx,
+    item: &Item,
+    a: &AnnotDef,
+    page: &Page,
+    errors: &[DrawError],
+    items: &[ItemOut],
+    stack: &std::collections::HashMap<String, f64>,
+    hung: f64,
+) -> AnnotDef {
+    let movable = match &a.kind {
+        AnnotKind::HoleNote { .. }
+        | AnnotKind::Leader { .. }
+        | AnnotKind::Radius { .. }
+        | AnnotKind::Diameter { .. }
+        | AnnotKind::DatumTarget { .. }
+        | AnnotKind::Surface { .. }
+        | AnnotKind::Weld { .. }
+        | AnnotKind::Edge { .. } => true,
+        AnnotKind::Fcf { to, .. } | AnnotKind::Datum { to, .. } => matches!(to, doc::Attach::Ref(_)),
+        _ => false,
+    };
+    let (Some(at), Some(v)) = (a.at, ctx.views.iter().find(|x| x.id == a.view)) else {
+        return a.clone();
+    };
+    if !movable {
+        return a.clone();
+    }
+    let mut busy: Vec<(Point2, Point2)> = text_boxes(page, 1.0);
+    busy.extend(
+        ctx.views
+            .iter()
+            .filter(|x| x.sheet == v.sheet)
+            .map(|x| (x.lo - Vec2::new(1.0, 1.0), x.hi + Vec2::new(1.0, 1.0))),
+    );
+    let (_, i1) = forge_draw::sheet::inside(page.w, page.h);
+    let title = (
+        Point2::new(i1.x - forge_draw::sheet::TITLE_W, 0.0),
+        Point2::new(
+            page.w,
+            forge_draw::sheet::MARGIN + forge_draw::sheet::BAND + forge_draw::sheet::TITLE_H,
+        ),
+    );
+    busy.push(title);
+    let (lo, hi) = forge_draw::sheet::inside(page.w, page.h);
+    // the sheet's thin lines (dimension, extension and leader lines): text sits off them too
+    let lines: Vec<(Point2, Point2)> = page
+        .strokes
+        .iter()
+        .filter(|s| matches!(s.pen, Pen::Thin | Pen::Center))
+        .filter_map(|s| match s.geom {
+            Geom2::Line { a, b } => Some((a, b)),
+            _ => None,
+        })
+        .collect();
+    let start = v.place.point(at);
+    let mut tries = vec![Vec2::ZERO];
+    for r in [4.0, 8.0, 12.0, 16.0, 22.0, 30.0, 40.0] {
+        for k in 0..12 {
+            let (s, c) = dmath::sin_cos(dmath::TAU * k as f64 / 12.0);
+            tries.push(Vec2::new(c, s) * r);
+        }
+    }
+    let mut best: Option<(usize, AnnotDef)> = None;
+    for off in tries {
+        let mut b = a.clone();
+        b.at = Some(v.place.inverse_point(start + off));
+        let mut scratch = Page {
+            w: page.w,
+            h: page.h,
+            ..Page::default()
+        };
+        let (mut e, mut it, mut st) = (errors.to_vec(), items.to_vec(), stack.clone());
+        annotate(ctx, item, &b, &mut scratch, &mut e, &mut it, &mut st);
+        // the label: its text, and the frame or symbol round it (strokes near the text)
+        let mut labels = text_boxes(&scratch, 0.5);
+        if let Some(first) = labels.first().copied() {
+            let mut b = labels.iter().fold(first, |m, l| {
+                (
+                    Point2::new(m.0.x.min(l.0.x), m.0.y.min(l.0.y)),
+                    Point2::new(m.1.x.max(l.1.x), m.1.y.max(l.1.y)),
+                )
+            });
+            let reach = (
+                Point2::new(b.0.x - 9.0, b.0.y - 9.0),
+                Point2::new(b.1.x + 9.0, b.1.y + 9.0),
+            );
+            let within =
+                |p: Point2| p.x >= reach.0.x && p.x <= reach.1.x && p.y >= reach.0.y && p.y <= reach.1.y;
+            for st in &scratch.strokes {
+                let (lo, hi) = st.geom.bounds();
+                if within(lo) && within(hi) {
+                    b = (
+                        Point2::new(b.0.x.min(lo.x), b.0.y.min(lo.y)),
+                        Point2::new(b.1.x.max(hi.x), b.1.y.max(hi.y)),
+                    );
+                }
+            }
+            b.0.y -= hung;
+            labels = vec![b];
+        }
+        let outside = labels
+            .iter()
+            .filter(|l| !(l.0.x >= lo.x && l.0.y >= lo.y && l.1.x <= hi.x && l.1.y <= hi.y))
+            .count();
+        let on = labels
+            .iter()
+            .map(|l| {
+                busy.iter().filter(|x| boxes_meet(l, x)).count()
+                    + lines.iter().filter(|(p, q)| segment_meets(*p, *q, l)).count()
+            })
+            .sum::<usize>();
+        let texts = text_boxes(page, 0.3);
+        let crossed: usize = scratch
+            .strokes
+            .iter()
+            .filter_map(|s| match s.geom {
+                Geom2::Line { a, b } if a.distance(b) > 5.0 => Some((a, b)),
+                _ => None,
+            })
+            .map(|(p, q)| {
+                texts.iter().filter(|x| segment_meets(p, q, x)).count() * 4
+                    + lines.iter().filter(|(c, d)| segments_cross(p, q, *c, *d)).count()
+            })
+            .sum();
+        // what a drafter minds most: text off the sheet, text on lines or text, then crossings;
+        // and the nearer the place asked for, the better
+        let score = outside * 1000 + on * 20 + crossed;
+        if score == 0 {
+            return b;
+        }
+        if best.as_ref().is_none_or(|x| score < x.0) {
+            best = Some((score, b));
+        }
+    }
+    best.map_or_else(|| a.clone(), |x| x.1)
 }
