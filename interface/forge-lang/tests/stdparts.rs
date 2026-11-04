@@ -516,7 +516,11 @@ fn hole_sizes_agree_or_are_resolved() {
             let c = ["iso", "ansi"][i];
             check(&format!("tap {c}"), k.tap[i], t.tap[i]);
             check(&format!("cbore {c}"), k.counterbore[i].0, t.counterbore[i].0);
-            check(&format!("cbore depth {c}"), k.counterbore[i].1, t.counterbore[i].1);
+            check(
+                &format!("cbore depth {c}"),
+                k.counterbore[i].1,
+                t.counterbore[i].1,
+            );
         }
         if let (Some(a), Some(b)) = (k.countersink, t.countersink) {
             check("csink", a.0, b.0);
