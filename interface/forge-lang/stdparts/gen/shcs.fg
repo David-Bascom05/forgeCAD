@@ -1,0 +1,81 @@
+# generator: hexagon socket head cap screw (ISO 4762, ASME B18.3)
+# frame: origin on the axis at the head underside; +z along the shank to the tip; head at z < 0
+# anchors (normals +z): head (underside), top (head top), thd (external thread, from its start to
+# the tip), tip (shank end)
+
+shared d = 6          # thread major diameter
+shared P = 1          # pitch
+shared l = 20         # nominal length, under the head to the tip
+shared b = 24         # thread length past the longest length threaded to the head
+shared lfull = 30     # the longest length threaded to the head
+shared dk = 10        # head diameter
+shared dw = 9.38      # bearing face diameter: the head's lower edge chamfered to it
+shared k = 6          # head height
+shared s = 5          # socket across flats
+shared t = 3          # socket depth (minimum)
+shared r = 0.25       # under-head fillet radius (minimum)
+shared modelled = 0   # 1: the thread modelled; 0: cosmetic (the shank at the major diameter)
+shared lt = l if l <= lfull else b
+shared zt = max(l - lt, r)
+shared ch = 0.6 * P
+shared rs = d / 2
+shared rk = dk / 2
+shared rw = dw / 2
+shared rc = s / sqrt(3)
+shared rcone = s / 2
+shared hcone = rcone / tan(59deg)
+shared n6 = count(6)
+
+sketch prof(on: xz) {
+  mouth = pt(rcone, -k)
+  rim = pt(rk, -k)
+  edge = pt(rk, rw - rk)
+  seat = pt(rw, 0)
+  f0 = pt(rs + r, 0)
+  f1 = pt(rs, r)
+  th0 = pt(rs, zt)
+  th1 = pt(rs, l - ch)
+  end = pt(rs - ch, l)
+  ax = pt(0, l)
+  fc = pt(rs + r, r)
+  cbase = pt(rcone, t - k)
+  capex = pt(0, t - k + hcone)
+  face = line(mouth, rim)
+  wall = line(rim, edge)
+  bevel = line(edge, seat)
+  under = line(seat, f0)
+  fil = arc(center: fc, from: f0, to: f1, cw: true)
+  if zt > r {
+    plain = line(f1, th0)
+    thr = line(th0, th1)
+  } else {
+    thr = line(f1, th1)
+  }
+  point = line(th1, end)
+  endf = line(end, ax)
+  axl = line(ax, capex)
+  cone = line(capex, cbase)
+  cwall = line(cbase, mouth)
+  o = pt(0, 0)
+  ztop = pt(0, -k)
+  zthd = pt(0, zt)
+  ztip = pt(0, l)
+  zax = line((0, 0), (0, l), construction: true)
+  xax = line((0, 0), (rs, 0), construction: true)
+}
+body = revolve(prof, axis: prof.zax)
+sketch hx(on: body.side(prof.face), at: prof.ztop) {
+  hexo = poly(polar(n: n6, r: rc, start: 0deg))
+}
+socket = cut(hx, t)
+if modelled > 0 {
+  thread_m = thread(face: body.side(prof.thr), spec: (d, P), length: "full")
+}
+
+head = anchor(plane(at: prof.o, normal: prof.zax.dir, x: prof.xax.dir))
+top = anchor(plane(at: prof.ztop, normal: prof.zax.dir, x: prof.xax.dir))
+thd = anchor(plane(at: prof.zthd, normal: prof.zax.dir, x: prof.xax.dir), kind: external_thread, size: d, depth: l - zt)
+tip = anchor(plane(at: prof.ztip, normal: prof.zax.dir, x: prof.xax.dir))
+
+expect valid
+expect bodies = 1

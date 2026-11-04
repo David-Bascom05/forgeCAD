@@ -27,6 +27,7 @@ pub mod report;
 pub mod shapes;
 pub mod sheet;
 pub mod sketch;
+pub mod stdparts;
 pub mod syntax;
 pub mod uses;
 pub mod validity;

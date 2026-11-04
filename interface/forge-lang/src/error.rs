@@ -763,6 +763,8 @@ pub enum Error {
     /// An error of a wired feature (holes, threads, patterns, work features, bodies, text,
     /// imports, projections): feat_error.rs.
     Feat(crate::feat_error::FeatError),
+    /// A standard part asked for that the tables do not hold (`std(..)`).
+    Std(Box<crate::stdparts::Located>),
     /// An assembly's typed error (`asm.rs`).
     Asm(Box<crate::asm::AsmNote>),
     /// iProperties and materials (`props.rs`).
@@ -836,6 +838,7 @@ impl Error {
             | MouthRounded { span, .. }
             | OneFace { span, .. } => Some(*span),
             Feat(e) => Some(e.span()),
+            Std(e) => Some(e.span()),
             Asm(n) => Some(n.span),
             UnknownParam { .. }
             | UnknownFeature { .. }
@@ -915,6 +918,7 @@ impl Error {
             OneFace { .. } => "OneFace",
             MouthRounded { .. } => "MouthRounded",
             Feat(e) => e.kind(),
+            Std(e) => e.kind(),
             Asm(n) => n.kind(),
         }
     }
@@ -965,6 +969,7 @@ impl Error {
             }],
             Sheet(e) => e.fixes(),
             Feat(e) => e.fixes(),
+            Std(e) => e.fixes(),
             Asm(n) => n.fixes(),
             Props(e) => e.fixes(),
             _ => vec![],
@@ -1129,6 +1134,7 @@ impl Error {
                 "{id}'s mouth was rounded by a later fillet: its rim is smooth (leave the mouth's edge out of that fillet's selection)"
             ),
             Feat(e) => e.text(),
+            Std(e) => e.text(),
             Asm(n) => n.text(),
         }
     }
@@ -1245,6 +1251,7 @@ impl Error {
             OneFace { what, count, .. } => vec![("what", s(what)), ("count", (*count as f64).into())],
             MouthRounded { id, .. } => vec![("id", s(id))],
             Feat(e) => e.data(),
+            Std(e) => e.data(),
             Asm(n) => n.data(),
             _ => vec![],
         }

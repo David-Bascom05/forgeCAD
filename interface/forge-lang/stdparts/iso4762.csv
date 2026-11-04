@@ -1,0 +1,39 @@
+# title: Hexagon socket head cap screws
+# standard: ISO 4762:2004
+# kind: screw
+# units: mm
+# lengths: 2.5 3 4 5 6 8 10 12 16 20 25 30 35 40 45 50 55 60 65 70 80 90 100 110 120 130 140 150 160 180 200 220 240 260 280 300
+# src A: ISO 4762:2004 Table 1, printed pages 4-5 of the iTeh preview (https://cdn.standards.iteh.ai/samples/34460/06335046afaf46fb8e84d91a3eda001d/ISO-4762-2004.pdf), M1.6 to M12, keyed 2026-11-04
+# src A97: ISO 4762:1997 Table 1 (continued, concluded), printed pages 4-5 of the iTeh preview (https://cdn.standards.iteh.ai/samples/24643/ff479778e7af4f3eb742ad5ca38881f2/ISO-4762-1997.pdf), M14 to M64 (the 2004 preview stops at M12), keyed 2026-11-04; s_max is the value for all property classes but 12.9
+# src B: bd_warehouse 5a8a439 socket_head_cap_parameters.csv (Apache-2.0), third_party/bd_warehouse/iso4762.csv
+# chk F: FreeCAD FastenersWB 2026-09-10 FsData/iso4762def.csv (GPL-2.0-or-later: consulted, never copied)
+# map B: socket_head_cap_parameters.csv | dk_max_knurl=iso4762:dk| k_max=iso4762:k| s=iso4762:s| t_min=iso4762:t| l_min=iso4762:short | l_max=iso4762:long
+# map F: iso4762def.csv | size=Dia | P=P | b=b | dk_max=dk_max | da_max=da | ds_min=ds_min | e_min=e | lf_max=lf | k_max=k | r_min=r | t_min=t | v_max=v | dw_min=dw | w_min=w
+# map F: iso4762def.csv#ISO4762range | size=Dia | l_min=Min_L | l_max=Max_L
+# gen: shcs | d=@d | P=@P | l=@l | b=b | lfull=l_full | dk=dk_max | dw=dw_min | k=k_max | s=s | t=t_min | r=r_min | modelled=@modelled
+# option thread: cosmetic modelled
+# option grade: 12.9 10.9 8.8 A2-70 A4-70
+# material: Steel
+# model: nominal where the standard gives one, else the max-material limit: dk_max (plain head), k_max, ds_max, s nominal, socket depth t_min, under-head fillet r_min, e from s (e_min = 1.14 s_min is a gauge limit, the hexagon is modelled exact); thread b long above l_full, to the head at or below it
+# note: M14 is bracketed in the standard (avoid if possible)
+size,P,b,dk_max,dk_max_knurl,dk_min,da_max,ds_max,ds_min,e_min,lf_max,k_max,k_min,r_min,s,s_max,s_min,t_min,v_max,dw_min,w_min,l_min,l_max,l_full,src,checked
+M1.6,0.35,15,3,3.14,2.86,2,1.6,1.46,1.733,0.34,1.6,1.46,0.1,1.5,1.58,1.52,0.7,0.16,2.72,0.55,2.5,16,16,A,A B F
+M2,0.4,16,3.8,3.98,3.62,2.6,2,1.86,1.733,0.51,2,1.86,0.1,1.5,1.58,1.52,1,0.2,3.48,0.55,3,20,16,A,A B F
+M2.5,0.45,17,4.5,4.68,4.32,3.1,2.5,2.36,2.303,0.51,2.5,2.36,0.1,2,2.08,2.02,1.1,0.25,4.18,0.85,4,25,20,A,A B F
+M3,0.5,18,5.5,5.68,5.32,3.6,3,2.86,2.873,0.51,3,2.86,0.1,2.5,2.58,2.52,1.3,0.3,5.07,1.15,5,30,20,A,A B F
+M4,0.7,20,7,7.22,6.78,4.7,4,3.82,3.443,0.6,4,3.82,0.2,3,3.08,3.02,2,0.4,6.53,1.4,6,40,25,A,A B F
+M5,0.8,22,8.5,8.72,8.28,5.7,5,4.82,4.583,0.6,5,4.82,0.2,4,4.095,4.02,2.5,0.5,8.03,1.9,8,50,25,A,A B F
+M6,1,24,10,10.22,9.78,6.8,6,5.82,5.723,0.68,6,5.7,0.25,5,5.14,5.02,3,0.6,9.38,2.3,10,60,30,A,A B F
+M8,1.25,28,13,13.27,12.73,9.2,8,7.78,6.863,1.02,8,7.64,0.4,6,6.14,6.02,4,0.8,12.33,3.3,12,80,35,A,A B F
+M10,1.5,32,16,16.27,15.73,11.2,10,9.78,9.149,1.02,10,9.64,0.4,8,8.175,8.025,5,1,15.33,4,16,100,40,A,A B F
+M12,1.75,36,18,18.27,17.73,13.7,12,11.73,11.429,1.45,12,11.57,0.6,10,10.175,10.025,6,1.2,17.23,4.8,20,120,50,A,A B F
+M14,2,40,21,21.33,20.67,15.7,14,13.73,13.72,1.45,14,13.57,0.6,12,12.212,12.032,7,1.4,20.17,5.8,25,140,55,A97,A97 B F
+M16,2,44,24,24.33,23.67,17.7,16,15.73,16,1.45,16,15.57,0.6,14,14.212,14.032,8,1.6,23.17,6.8,25,160,60,A97,A97 B F
+M20,2.5,52,30,30.33,29.67,22.4,20,19.67,19.44,2.04,20,19.48,0.8,17,17.23,17.05,10,2,28.87,8.6,30,200,70,A97,A97 B F
+M24,3,60,36,36.39,35.61,26.4,24,23.67,21.73,2.04,24,23.48,0.8,19,19.275,19.065,12,2.4,34.81,10.4,40,200,80,A97,A97 B F
+M30,3.5,72,45,45.39,44.61,33.4,30,29.67,25.15,2.89,30,29.48,1,22,22.275,22.065,15.5,3,43.61,13.1,45,200,100,A97,A97 B F
+M36,4,84,54,54.46,53.54,39.4,36,35.61,30.85,2.89,36,35.38,1,27,27.275,27.065,19,3.6,52.54,15.3,55,200,110,A97,A97 B F
+M42,4.5,96,63,63.46,62.54,45.6,42,41.61,36.57,3.06,42,41.38,1.2,32,32.33,32.08,24,4.2,61.34,16.3,60,300,130,A97,A97 B F
+M48,5,108,72,72.46,71.54,52.6,48,47.61,41.13,3.91,48,47.38,1.6,36,36.33,36.08,28,4.8,70.34,17.5,70,300,150,A97,A97 B F
+M56,5.5,124,84,84.54,83.46,63,56,55.54,46.83,5.95,56,55.26,2,41,41.33,41.08,34,5.6,82.26,19,80,300,160,A97,A97 B F
+M64,6,140,96,96.54,95.46,71,64,63.54,52.53,5.95,64,63.26,2,46,46.33,46.08,38,6.4,94.26,22,90,300,180,A97,A97 B F

@@ -53,6 +53,7 @@ pub const NAMES: &[&str] = &[
     "fit",
     "fit_rule",
     "kind",
+    "std",
 ];
 
 /// Built-ins of a part file, for assemblies to use.
@@ -256,7 +257,7 @@ pub fn written_pose(f: &Expr) -> bool {
 
 /// `part(.., at: ..)` and `subassembly(.., at: ..)`: their `at:` is a written pose.
 pub fn places(f: &Expr) -> bool {
-    matches!(&f.kind, ExprKind::Name(n) if n == "part" || n == "subassembly")
+    matches!(&f.kind, ExprKind::Name(n) if n == "part" || n == "subassembly" || n == "std")
 }
 
 fn wrong(span: Span, what: &'static str, want: Ty, found: &Value) -> Error {
@@ -493,6 +494,7 @@ fn asm_call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
             });
             Ok(asm(AsmVal::Inst(id)))
         }
+        "std" => std_part(ev, args, span),
         "pose" => {
             let a = Args::bind(ev, name, &["at", "z", "x", "rz"], args, span)?;
             let o = match a.opt("at") {
@@ -759,6 +761,94 @@ fn relation(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
         span,
     });
     Ok(asm(AsmVal::Item(id)))
+}
+
+/// `std(FAMILY, size:, length:, thread:, grade:, sheet:, at:, ..)`: an instance of a standard
+/// part, its file the key the tables generate it from (`stdparts`).
+fn std_part(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
+    use crate::stdparts::{Located, Spans, Spec};
+    let a = Args::bind(
+        ev,
+        "std",
+        &[
+            "family",
+            "size",
+            "length",
+            "thread",
+            "grade",
+            "sheet",
+            "at",
+            "ground",
+            "reference",
+            "suppressed",
+        ],
+        args,
+        span,
+    )?;
+    let text = |k: &'static str| -> R<Option<String>> {
+        match a.opt(k) {
+            None => Ok(None),
+            Some(Value::Str(s)) => Ok(Some(s.to_string())),
+            Some(o) => Err(wrong(a.span(k), k, Ty::Str, &o)),
+        }
+    };
+    let family = match a.req("family")? {
+        Value::Str(s) => s.to_string(),
+        o => return Err(wrong(a.span("family"), "a standard", Ty::Str, &o)),
+    };
+    let size = match a.req("size")? {
+        Value::Str(s) => s.to_string(),
+        o => return Err(wrong(a.span("size"), "a size", Ty::Str, &o)),
+    };
+    let mut options = BTreeMap::new();
+    for k in ["thread", "grade"] {
+        if let Some(v) = text(k)? {
+            options.insert(k.to_string(), v);
+        }
+    }
+    if let Some(n) = a.num("sheet", LEN)? {
+        options.insert("sheet".into(), crate::values::fmt(n.v));
+    }
+    let spec = Spec {
+        family,
+        size,
+        length: a.num("length", LEN)?.map(|n| n.v),
+        options,
+    };
+    let at = Spans {
+        family: a.span("family"),
+        size: a.span("size"),
+        length: a.span("length"),
+        options: a.span(
+            ["thread", "grade", "sheet"]
+                .into_iter()
+                .find(|k| a.opt(k).is_some())
+                .unwrap_or("size"),
+        ),
+    };
+    let pose = match a.opt("at") {
+        None => Frame::WORLD,
+        Some(v) => pose_of(ev, v, a.span("at"))?,
+    };
+    let (ground, reference, suppressed) = (a.flag("ground")?, a.flag("reference")?, a.flag("suppressed")?);
+    let id = ev.take_id("part", span)?;
+    crate::stdparts::check(&spec, at).map_err(|err| Located {
+        err,
+        id: Some(id.clone()),
+    })?;
+    ev.record(&id, "instance", span, vec![]);
+    doc(ev).insts.push(InstDef {
+        id: id.clone(),
+        file: crate::stdparts::key(&spec),
+        body: None,
+        pose,
+        ground,
+        reference,
+        suppressed,
+        sub: false,
+        span,
+    });
+    Ok(asm(AsmVal::Inst(id)))
 }
 
 fn part_call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Value> {
@@ -1585,6 +1675,10 @@ pub(crate) fn locate(
     fence: &Option<std::path::PathBuf>,
     file: &str,
 ) -> Option<std::path::PathBuf> {
+    // a standard part's key stands for its generated text, wherever the document is
+    if file.starts_with(crate::stdparts::KEY) {
+        return crate::stdparts::text_of(file).map(|_| std::path::PathBuf::from(file));
+    }
     let p = std::fs::canonicalize(dir.as_ref()?.join(file)).ok()?;
     if p.extension().is_none_or(|x| x != "fg") {
         return None;
@@ -1604,6 +1698,9 @@ pub(crate) fn locate(
 /// A located file's text, read no further than `LIMIT`.
 pub(crate) fn read_capped(p: &std::path::Path) -> Option<String> {
     use std::io::Read;
+    if let Some(k) = p.to_str().filter(|k| k.starts_with(crate::stdparts::KEY)) {
+        return crate::stdparts::text_of(k);
+    }
     let mut s = String::new();
     std::fs::File::open(p)
         .ok()?

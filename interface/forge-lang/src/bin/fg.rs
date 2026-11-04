@@ -16,9 +16,16 @@ fg handles FILE                 the editable handles: every param, its value and
 fg serve                        JSON lines on stdin: {\"cmd\":\"run\"|\"check\",\"file\":F}; stages kept per file
 fg reference                    the language reference
 fg view FILE [--view front,top,..] [--tangent] [--chord MM] [--pdf OUT] [--svg OUT] [--points]
-                                a part's or assembly's exact hidden-line views: lengths by class (JSON), pages";
+                                a part's or assembly's exact hidden-line views: lengths by class (JSON), pages
+
+fg std [FAMILY [SIZE [LENGTH]]] [--thread modelled] [--grade G] [--sheet T] [-o OUT.fg]
+                                the standard parts: families, a family's sizes and lengths, or a
+                                part's file (FILE may also be its key, `fg run 'std:ISO 4762/M6/20'`)";
 
 fn read(file: &str) -> Result<String, String> {
+    if file.starts_with(forge_lang::stdparts::KEY) {
+        return forge_lang::stdparts::text_of(file).ok_or(format!("{file}: no such standard part"));
+    }
     std::fs::read_to_string(file).map_err(|e| format!("{file}: {e}"))
 }
 
@@ -258,6 +265,7 @@ fn main() -> ExitCode {
         Some("run") if args.len() >= 2 => run_file(&args[1], &args[2..], true),
         Some("check") if args.len() >= 2 => run_file(&args[1], &args[2..], false),
         Some("view") if args.len() >= 2 => view_file(&args[1], &args[2..]),
+        Some("std") => std_cmd(&args[1..]),
         Some("reference") => {
             print!("{}", forge_lang::REFERENCE);
             ExitCode::SUCCESS
@@ -372,6 +380,85 @@ fn main() -> ExitCode {
         _ => {
             eprintln!("{USAGE}");
             ExitCode::from(2)
+        }
+    }
+}
+
+fn std_cmd(args: &[String]) -> ExitCode {
+    use forge_lang::stdparts::{Spans, Spec, check, families, family, generate};
+    let fmt = forge_lang::values::fmt;
+    let mut pos = vec![];
+    let mut k = 0;
+    while k < args.len() {
+        if args[k].starts_with('-') {
+            k += 2;
+        } else {
+            pos.push(args[k].as_str());
+            k += 1;
+        }
+    }
+    match pos[..] {
+        [] => {
+            for f in families() {
+                println!(
+                    "{:<16} {:<5} {:<56} {} sizes",
+                    f.name,
+                    f.kind,
+                    f.title,
+                    f.rows.len()
+                );
+            }
+            ExitCode::SUCCESS
+        }
+        [name] => match family(name) {
+            None => {
+                eprintln!("no family {name:?}");
+                ExitCode::from(1)
+            }
+            Some(f) => {
+                println!(
+                    "{} ({}), {}",
+                    f.title,
+                    f.standard,
+                    if f.inch { "inches" } else { "mm" }
+                );
+                for r in &f.rows {
+                    let ls: Vec<String> = f.lengths_of(r).iter().map(|l| fmt(*l)).collect();
+                    println!("{:<10} {}", r[0], ls.join(" "));
+                }
+                ExitCode::SUCCESS
+            }
+        },
+        [name, size, ..] => {
+            let mut options = std::collections::BTreeMap::new();
+            for o in ["thread", "grade", "sheet"] {
+                if let Some(v) = opt(args, &format!("--{o}")) {
+                    options.insert(o.to_string(), v.to_string());
+                }
+            }
+            let spec = Spec {
+                family: name.into(),
+                size: size.into(),
+                length: pos.get(2).and_then(|l| l.parse().ok()),
+                options,
+            };
+            if let Err(e) = check(&spec, Spans::default()) {
+                let e = forge_lang::stdparts::Located { err: e, id: None };
+                eprintln!("{}: {}", e.kind(), e.text());
+                return ExitCode::from(1);
+            }
+            let g = generate(&spec).expect("checked");
+            match opt(args, "-o") {
+                Some(out) => {
+                    if let Err(e) = std::fs::write(out, &g.text) {
+                        eprintln!("{out}: {e}");
+                        return ExitCode::from(2);
+                    }
+                    println!("{} -> {out} ({})", g.designation, g.key);
+                }
+                None => print!("{}", g.text),
+            }
+            ExitCode::SUCCESS
         }
     }
 }

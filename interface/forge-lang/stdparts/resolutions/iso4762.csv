@@ -1,0 +1,25 @@
+family,size,column,source,theirs,ours,verdict
+iso4762,M6,l_min,B,8,10,"ours: ISO 4762:2004 Table 1, the shaded commercial range starts at 10; FastenersWB agrees"
+iso4762,M8,l_min,B,10,12,"ours: ISO 4762:2004 Table 1, the shaded commercial range starts at 12; FastenersWB agrees"
+iso4762,M20,l_min,B,16,30,ours: ISO 4762:1997 Table 1 stepped lines give 30; FastenersWB agrees; B's row is out of step with its neighbours
+iso4762,M20,l_max,B,100,200,ours: ISO 4762:1997 Table 1 stepped lines give 200; FastenersWB agrees; B's row is out of step with its neighbours
+iso4762,M48,l_min,B,100,70,ours: ISO 4762:1997 Table 1 stepped lines give 70; FastenersWB agrees; B's row is out of step with its neighbours
+iso4762,M56,l_min,B,110,80,ours: ISO 4762:1997 Table 1 stepped lines give 80; FastenersWB agrees; B's row is out of step with its neighbours
+iso4762,M64,l_min,B,120,90,ours: ISO 4762:1997 Table 1 stepped lines give 90; FastenersWB agrees; B's row is out of step with its neighbours
+iso4762,M1.6,e_min,F,1.73,1.733,ours: ISO 4762:2004 prints three decimals; F rounded (e min = 1.14 s min)
+iso4762,M2,e_min,F,1.73,1.733,ours: ISO 4762:2004 prints three decimals; F rounded (e min = 1.14 s min)
+iso4762,M2.5,e_min,F,2.3,2.303,ours: ISO 4762:2004 prints three decimals; F rounded (e min = 1.14 s min)
+iso4762,M3,e_min,F,2.87,2.873,ours: ISO 4762:2004 prints three decimals; F rounded (e min = 1.14 s min)
+iso4762,M4,e_min,F,3.44,3.443,ours: ISO 4762:2004 prints three decimals; F rounded (e min = 1.14 s min)
+iso4762,M5,e_min,F,4.58,4.583,ours: ISO 4762:2004 prints three decimals; F rounded (e min = 1.14 s min)
+iso4762,M6,e_min,F,5.72,5.723,ours: ISO 4762:2004 prints three decimals; F rounded (e min = 1.14 s min)
+iso4762,M8,e_min,F,6.86,6.863,ours: ISO 4762:2004 prints three decimals; F rounded (e min = 1.14 s min)
+iso4762,M10,e_min,F,9.15,9.149,ours: ISO 4762:2004 prints three decimals; F rounded (e min = 1.14 s min)
+iso4762,M12,e_min,F,11.43,11.429,ours: ISO 4762:2004 prints three decimals; F rounded (e min = 1.14 s min)
+iso4762,M42,e_min,F,36.58,36.57,ours: ISO 4762:1997 Table 1 prints this; 1.14 s min rounds to it
+iso4762,M48,e_min,F,41.14,41.13,ours: ISO 4762:1997 Table 1 prints this; 1.14 s min rounds to it
+iso4762,M56,e_min,F,46.84,46.83,ours: ISO 4762:1997 Table 1 prints this; 1.14 s min rounds to it
+iso4762,M64,e_min,F,52.54,52.53,ours: ISO 4762:1997 Table 1 prints this; 1.14 s min rounds to it
+iso4762,M24,v_max,F,2,2.4,ours: ISO 4762:1997 Table 1 prints v max = 0.1 d here; F's column is shifted one size
+iso4762,M30,v_max,F,2.4,3,ours: ISO 4762:1997 Table 1 prints v max = 0.1 d here; F's column is shifted one size
+iso4762,M36,v_max,F,3,3.6,ours: ISO 4762:1997 Table 1 prints v max = 0.1 d here; F's column is shifted one size
