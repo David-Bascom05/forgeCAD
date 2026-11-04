@@ -1534,6 +1534,8 @@ pub struct PartLoad {
     pub mesh: Option<Arc<PartMesh>>,
     /// Bodies by name (`body:`), when the part has several.
     pub bodies: BTreeMap<String, forge_topo::Body>,
+    /// Its iProperties and solids with their materials, for the BOM and the assembly's mass.
+    pub summary: Arc<crate::props::PartSummary>,
 }
 
 /// A part file's text hash and the references and bodies asked of it.
@@ -1754,6 +1756,7 @@ fn load_part_with(
         errors: vec![],
         mesh: None,
         bodies: BTreeMap::new(),
+        summary: Default::default(),
     };
     let prog = match crate::syntax::parse(text) {
         Ok(p) => p,
@@ -1775,6 +1778,7 @@ fn load_part_with(
     ev.run(&prog);
     crate::sheet::finish(&mut ev);
     out.body = placed_body(&ev);
+    out.summary = Arc::new(crate::props::PartSummary::of(&ev));
     if let Some(st) = ev.b.stages.last() {
         for name in bodies {
             if let Some(f) = ev.feats.iter().find(|f| &f.id == name)
@@ -1957,6 +1961,11 @@ pub struct AsmOut {
     pub insts: Vec<InstOut>,
     /// Every joint, constraint, relation, fit and fit rule, through subassemblies.
     pub links: Vec<LinkOut>,
+    /// Each part file's iProperties and solids, by the file as `occurrences` names it.
+    pub part_docs: BTreeMap<String, Arc<crate::props::PartSummary>>,
+    /// Each occurrence's body (0: the part as made, else a `body:` by its name's hash) and
+    /// whether it is a reference (out of the BOM and the mass).
+    pub occ_body: Vec<(u64, bool)>,
 }
 
 /// A part or subassembly occurrence, as a browser lists it.
@@ -2038,7 +2047,7 @@ struct Names {
     sub_inst: BTreeMap<u64, String>,
 }
 
-fn hid(id: &str) -> u64 {
+pub(crate) fn hid(id: &str) -> u64 {
     crate::build::history_id(id)
 }
 
@@ -2493,6 +2502,7 @@ pub fn finish(
     // parts: built once per text and question, by file
     let mut exact = BrepExact::default();
     let mut loads: Vec<usize> = vec![];
+    let mut part_docs: BTreeMap<String, Arc<crate::props::PartSummary>> = BTreeMap::new();
     let mut declared_kinds: BTreeSet<String> = BTreeSet::new();
     for (file, (refs, bodies)) in &want {
         // named as the document wrote it, never by its real path
@@ -2567,6 +2577,7 @@ pub fn finish(
         }
         declared_kinds.extend(load.kinds.iter().cloned());
         let doc = fa::DocId(short(&dir, file).into());
+        part_docs.insert(doc.0.to_string(), load.summary.clone());
         let mut entries: Vec<(u64, Option<forge_topo::Body>)> = vec![(0, load.body.clone())];
         for (name, b) in &load.bodies {
             entries.push((hid(name), Some(b.clone())));
@@ -2785,6 +2796,7 @@ pub fn finish(
             exact_runs: rep.exact_runs,
         }),
         step,
+        part_docs,
         ..AsmOut::default()
     };
     structure(&d, "", &dir, &fence, &subs, 0, &mut out.insts, &mut out.links);
@@ -2822,6 +2834,7 @@ pub fn finish(
     for o in &sol.occurrences {
         out.occurrences
             .push((occ_name(&o.path), o.part.doc.0.to_string(), o.pose));
+        out.occ_body.push((o.part.body, o.reference));
         if !o.reference {
             *bom.entry(o.part.doc.0.to_string()).or_default() += 1;
         }

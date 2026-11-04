@@ -2698,7 +2698,7 @@ fn span(loops: &[LoopTrace], a: usize) -> (f64, f64) {
 
 /// Eigenvalues (ascending) and unit eigenvectors of a symmetric 3x3 matrix, by Jacobi
 /// rotations.
-fn eigen(m: [[f64; 3]; 3]) -> ([f64; 3], [Vec3; 3]) {
+pub fn eigen(m: [[f64; 3]; 3]) -> ([f64; 3], [Vec3; 3]) {
     let mut a = m;
     let mut v = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
     for _ in 0..50 {

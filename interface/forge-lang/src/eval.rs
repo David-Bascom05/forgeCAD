@@ -316,6 +316,8 @@ pub struct Eval<'s> {
     lib: Option<Rc<crate::uses::Lib>>,
     /// Inside a used file's function: the call in this document, where what it makes is shown.
     lib_call: Option<Span>,
+    /// The document's `properties(..)` (`props.rs`).
+    pub props: crate::props::Props,
 }
 
 #[derive(Clone)]
@@ -379,6 +381,7 @@ impl<'s> Eval<'s> {
             use_files: vec![],
             lib: None,
             lib_call: None,
+            props: Default::default(),
         }
     }
 
@@ -452,6 +455,7 @@ impl<'s> Eval<'s> {
 
     /// Rules checked before evaluation: loose numbers, recursion.
     pub fn check_static(&mut self, prog: &[Stmt]) {
+        crate::props::check_placement(prog, &mut self.errors);
         if self.rules.literals_in_params != Level::Off {
             for s in prog {
                 let owner = match &s.kind {
@@ -582,6 +586,10 @@ impl<'s> Eval<'s> {
             ExprKind::Neg(a) | ExprKind::Not(a) => go(self, a, count),
             ExprKind::Call(f, args) => {
                 go(self, f, false);
+                // iProperties are data about the part, not its design numbers
+                if matches!(&f.kind, ExprKind::Name(n) if n == "properties") {
+                    return;
+                }
                 // an assembly's written poses are where the solve starts, not design numbers
                 if crate::asm::written_pose(f) {
                     return;

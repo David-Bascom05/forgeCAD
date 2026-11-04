@@ -714,6 +714,39 @@ OUT-<unfold>.step; for an assembly, its structure (one product per part, one use
 placed by the solve). `fg run --json` lists each sheet: thickness, radius, rule, and each bend's flange, angle, radius,
 allowance and setback.
 
+## iProperties and materials
+
+```
+properties(part_number: "RACK-101", description: "Post", material: "1008 CR", revision: "B",
+           estimated_cost: 12.5, creation_date: "2026-11-04", design_state: "Released",
+           bodies: {knob: "ABS"}, custom: [("Finish", "powder coat")])
+```
+
+One bare top-level statement (bound to a name, or twice: `PropertiesNotTopLevel`,
+`PropertiesTwice`), Inventor's iProperties as keyword arguments, all text: Summary `title subject
+author manager company category keywords comments`; Project `part_number stock_number description
+revision project designer engineer authority cost_center estimated_cost (a number too)
+creation_date vendor web_link`; Status `design_state ("WorkInProgress"|"Pending"|"Released")
+checked_by checked_date eng_approved_by eng_approved_date mfg_approved_by mfg_approved_date`.
+Dates are YYYY-MM-DD (`BadDate`); its numbers are no design numbers (no literals lint).
+
+`material:` is the part's, `bodies: {ID: ..}` a body's own (ID the feature that made it, else
+`NoSuchBody`), `sheet(.., material: ..)` a sheet's: a body takes its own, else its sheet's, else
+the part's. Names are forge-material's library (`kernel/forge-material/data/materials.toml`), by
+name or alias, ignoring case and punctuation; a project's `materials/*.toml` beside the file and
+the user's `~/.config/forgecad/materials/*.toml` are searched first. An unknown name is
+`UnknownMaterial` with the nearest names as fixes (SetProperty, or SetArg on a sheet). An
+assembly has no material (`MaterialInAssembly`): its parts' give its mass.
+
+The part's physical properties (`fg run --json`: `physical`) are exact (the B-rep's mass
+integrals) times each body's density: mass (kg), volume, area, centre of gravity, the inertia
+tensor about it and about the origin (kg mm^2), principal moments; bodies with no material count
+in volume and area only (`missing`). An assembly's sum every occurrence but references, at its
+pose (`physical`, and `bom_parts`: part number, description, material and mass by file).
+
+Edit op: `SetProperty {key, text}` sets the argument (`text` as source, `null` takes it out),
+writing the statement at the top when the document has none.
+
 ## Functions and recursion
 
 Functions are pure: they see their arguments, shared params, other functions and built-ins. A
@@ -841,6 +874,7 @@ ReplaceFeature {id, text}           that statement (and its params just above) b
 MoveFeature {id, before}            that statement moved above `before` (or to the end)
 LiftLiteral {span, name, scope}     a loose number replaced by a new param (shared or local)
 SetArg {id, arg, text}              keyword argument arg of the call making id becomes text
+SetProperty {key, text}             an argument of properties(..) set (null: taken out)
 Rename {from, to}                   a top-level name and every use of it renamed
 ```
 

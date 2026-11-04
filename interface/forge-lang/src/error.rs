@@ -161,6 +161,9 @@ pub enum Op {
     SetArg { id: String, arg: String, text: String },
     /// A top-level name and every use of it renamed to `to`.
     Rename { from: String, to: String },
+    /// The argument `key` of the document's `properties(..)` becomes `text` (put in, and the
+    /// statement made, where missing), or with no text is taken out.
+    SetProperty { key: String, text: Option<String> },
 }
 
 impl Op {
@@ -212,6 +215,11 @@ impl Op {
                 ("id", id.as_str().into()),
                 ("arg", arg.as_str().into()),
                 ("text", text.as_str().into()),
+            ]),
+            Op::SetProperty { key, text } => Json::obj(vec![
+                ("op", "SetProperty".into()),
+                ("key", key.as_str().into()),
+                ("text", opt(text)),
             ]),
             Op::Rename { from, to } => Json::obj(vec![
                 ("op", "Rename".into()),
@@ -273,6 +281,10 @@ impl Op {
                 id: s("id")?,
                 arg: s("arg")?,
                 text: s("text")?,
+            },
+            "SetProperty" => Op::SetProperty {
+                key: s("key")?,
+                text: s("text"),
             },
             "Rename" => Op::Rename {
                 from: s("from")?,
@@ -753,6 +765,8 @@ pub enum Error {
     Feat(crate::feat_error::FeatError),
     /// An assembly's typed error (`asm.rs`).
     Asm(Box<crate::asm::AsmNote>),
+    /// iProperties and materials (`props.rs`).
+    Props(Box<crate::props::PropErr>),
 }
 
 impl Error {
@@ -831,6 +845,7 @@ impl Error {
             | NotFinite { .. } => None,
             Sheet(e) => e.span(),
             Use(e) => e.span(),
+            Props(e) => e.span(),
         }
     }
 
@@ -890,6 +905,7 @@ impl Error {
             NotFinite { .. } => "NotFinite",
             Sheet(e) => e.kind(),
             Use(e) => e.kind(),
+            Props(e) => e.kind(),
             NotWith { .. } => "NotWith",
             TaperOnCurve { .. } => "TaperOnCurve",
             PathGap { .. } => "PathGap",
@@ -950,6 +966,7 @@ impl Error {
             Sheet(e) => e.fixes(),
             Feat(e) => e.fixes(),
             Asm(n) => n.fixes(),
+            Props(e) => e.fixes(),
             _ => vec![],
         }
     }
@@ -1094,6 +1111,7 @@ impl Error {
             }
             Sheet(e) => e.text(),
             Use(e) => e.text(),
+            Props(e) => e.text(),
             NotWith { func, arg, with, .. } => format!("{func}: {arg} does not apply with {with}"),
             TaperOnCurve { sketch, .. } => format!(
                 "sketch {sketch}'s outline has a spline side: a taper has no exact form on it (draw it of lines and arcs, or loft to a smaller outline)"
@@ -1212,6 +1230,7 @@ impl Error {
             ShadowsTopLevel { name, .. } => vec![("name", s(name))],
             Sheet(e) => e.data(),
             Use(e) => e.data(),
+            Props(e) => e.data(),
             NotWith { func, arg, with, .. } => vec![("func", s(func)), ("arg", s(arg)), ("with", s(with))],
             TaperOnCurve { sketch, .. } => vec![("sketch", s(sketch))],
             PathGap { index, .. } => vec![("index", (*index as f64).into())],

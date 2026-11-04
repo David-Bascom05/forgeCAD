@@ -2701,10 +2701,14 @@ fn base(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     if a.poisoned() {
         return Ok(Value::Unresolved);
     }
-    // what the drawing's part note names the stock as
+    // what the drawing's part note names the stock as, and its density: a library material
     let material = match a.opt("material") {
         None => None,
-        Some(Value::Str(m)) => Some(m.to_string()),
+        Some(Value::Str(m)) => {
+            let at = crate::props::MaterialAt::Sheet { id: id.clone() };
+            crate::props::material(ev, &m, a.span("material"), at)?;
+            Some(m.to_string())
+        }
         Some(o) => return Err(wrong(a.span("material"), "material", Ty::Str, &o)),
     };
     // a sheet part holds sheets only

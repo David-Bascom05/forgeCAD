@@ -79,6 +79,7 @@ pub const BUILTINS: &[&str] = &[
     "meet",
     "mid",
     "plane",
+    "properties",
 ];
 
 /// A built-in function's name, this module's or another's (shapes).
@@ -557,6 +558,7 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
         return r;
     }
     match name {
+        "properties" => crate::props::call(ev, args, span),
         "sqrt" | "abs" | "sin" | "cos" | "tan" | "asin" | "acos" | "atan" | "count" | "ratio" => {
             math1(ev, name, args, span)
         }

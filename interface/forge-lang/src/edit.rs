@@ -278,6 +278,7 @@ fn precheck(src: &str, prog: &[Stmt], op: &Op) -> R<()> {
         }
         Op::SetArg { id, text, .. } => crate::edit_ops::precheck_set_arg(prog, id, text),
         Op::Rename { from, to } => crate::edit_ops::precheck_rename(prog, from, to),
+        Op::SetProperty { .. } => Ok(()),
         Op::AddFeature { before, text } => {
             let new = syntax::parse(text)?;
             let names = bound(&new);
@@ -366,6 +367,7 @@ pub fn apply(src: &str, op: &Op) -> R<String> {
     match op {
         Op::SetArg { id, arg, text } => crate::edit_ops::apply_set_arg(src, &prog, id, arg, text),
         Op::Rename { from, to } => crate::edit_ops::apply_rename(src, from, to),
+        Op::SetProperty { key, text } => crate::props::apply_set(src, &prog, key, text.as_deref()),
         Op::SetParam { param, value } => {
             let s = param_stmt(&prog, param).ok_or(Error::UnknownParam { param: param.clone() })?;
             if let Some(d) = param_dim(src, param)
@@ -536,9 +538,8 @@ fn lit_expr(l: &Literal) -> Expr {
 
 /// The same op on the syntax tree.
 pub fn apply_ast(src: &str, op: &Op) -> R<Vec<Stmt>> {
-    if let Op::Rename { from, .. } = op
-        && syntax::RESERVED.contains(&from.as_str())
-    {
+    let reserved = matches!(op, Op::Rename { from, .. } if syntax::RESERVED.contains(&from.as_str()));
+    if reserved || matches!(op, Op::SetProperty { .. }) {
         return syntax::parse(&apply(src, op)?);
     }
     let mut prog = syntax::parse(src)?;
@@ -559,6 +560,7 @@ pub fn apply_ast(src: &str, op: &Op) -> R<Vec<Stmt>> {
     match op {
         Op::SetArg { id, arg, text } => crate::edit_ops::ast_set_arg(&mut prog, id, arg, text)?,
         Op::Rename { from, to } => crate::edit_ops::ast_rename(&mut prog, from, to),
+        Op::SetProperty { .. } => unreachable!("parsed from its text above"),
         Op::SetParam { param, value } => {
             let k = find_param(&prog, param).ok_or(Error::UnknownParam { param: param.clone() })?;
             match &mut prog[k].kind {

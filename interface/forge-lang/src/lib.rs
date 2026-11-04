@@ -20,6 +20,7 @@ pub mod holes;
 pub mod media;
 pub mod patterns;
 pub mod project;
+pub mod props;
 pub mod report;
 pub mod shapes;
 pub mod sheet;
@@ -107,6 +108,8 @@ pub struct Measure {
     /// The check problems, typed, each on its body and the faces and edges it names.
     pub invalid: Vec<validity::Invalid>,
     pub bbox: [f64; 6],
+    /// The finished body's exact mass properties (unit density), when it was measured whole.
+    pub mass: Option<forge_topo::mass::MassProps>,
 }
 
 #[derive(Clone, Debug)]
@@ -140,6 +143,10 @@ pub struct Run {
     pub asm: Option<asm::AsmOut>,
     /// With `Options::anchors`: the anchor text of each face and edge of the finished part.
     pub anchors: Option<anchors::Anchors>,
+    /// The document's iProperties (`props.rs`).
+    pub props: props::Props,
+    /// A part's mass, centre of gravity and inertia from its solids' materials.
+    pub physical: Option<props::Physical>,
 }
 
 impl Run {
@@ -177,6 +184,8 @@ pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
                     sheets: vec![],
                     asm: None,
                     anchors: None,
+                    props: props::Props::default(),
+                    physical: None,
                 },
                 cache,
             );
@@ -227,6 +236,11 @@ pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
     }
     timings.measure_ms = t3.elapsed().as_secs_f64() * 1e3;
     timings.total_ms = t0.elapsed().as_secs_f64() * 1e3;
+    let physical = if built_all && ev.asm.is_none() {
+        props::part_physical(&mut ev, measure.as_ref().and_then(|m| m.mass.as_ref()))
+    } else {
+        None
+    };
     let body = if built_all { ev.b.body().cloned() } else { None };
     let (rebuilt, reused) = (ev.b.rebuilt, ev.b.reused);
     let run = Run {
@@ -246,8 +260,16 @@ pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
         sheets: sheet::outputs(&ev),
         asm: asm_out,
         anchors: None,
+        props: std::mem::take(&mut ev.props),
+        physical,
     };
     let mut run = run;
+    // a sheet that names no stock is the part's material
+    for s in &mut run.sheets {
+        if s.material.is_none() {
+            s.material = run.props.material.clone();
+        }
+    }
     if opts.anchors {
         let body = run.body.clone();
         run.anchors = Some(anchors::find(&mut ev, body.as_ref()));
@@ -273,6 +295,7 @@ fn measure(ev: &mut Eval) -> Option<Measure> {
         problems: invalid.len(),
         invalid,
         bbox: [bb.x.lo, bb.y.lo, bb.z.lo, bb.x.hi, bb.y.hi, bb.z.hi],
+        mass: Some(m),
     })
 }
 

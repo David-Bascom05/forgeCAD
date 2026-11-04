@@ -140,6 +140,7 @@ dependencies = [
  "forge-doc",
  "forge-font",
  "forge-geom",
+ "forge-material",
  "forge-math",
  "forge-mesh",
  "forge-model",

@@ -168,8 +168,19 @@ pub fn json(run: &Run, src: &str) -> Json {
     if !run.sheets.is_empty() {
         f.push(("sheets", Json::Arr(run.sheets.iter().map(|s| s.json()).collect())));
     }
+    if run.props.span.is_some() {
+        f.push(("properties", run.props.json()));
+    }
+    if let Some(p) = &run.physical {
+        f.push(("physical", p.json()));
+    }
     if let Some(a) = &run.asm {
         f.push(("assembly", crate::asm::json(a)));
+        f.push(("bom_parts", crate::props::bom_json(a)));
+        if run.errors.is_empty() {
+            let p = crate::props::asm_physical(a, None);
+            f.push(("physical", p.map_or_else(Json::Str, |p| p.json())));
+        }
     }
     if let Some(m) = &run.measure {
         f.push((
