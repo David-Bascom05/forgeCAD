@@ -13,8 +13,11 @@ use forge_lang::error::Op;
 use forge_lang::values::Dim;
 
 /// What a param is called in the dialog: Inventor's word for it.
-pub fn param_label(name: &str) -> &'static str {
+pub fn param_label(kind: &str, name: &str) -> &'static str {
     match name {
+        "d" if kind == "hole" => "Diameter",
+        "d" if kind == "chamfer" => "Distance",
+        "d" if matches!(kind, "plane" | "direct" | "offsetface" | "moveface") => "Offset",
         "d" => "Distance",
         "r" => "Radius",
         "t" => "Thickness",
@@ -246,7 +249,7 @@ fn choices_for(fg: &super::fg::FgPanel, kind: K) -> Vec<String> {
         K::Axis => {
             out.extend(of_kind(&["workaxis"]));
             out.extend(
-                of_kind(&["revolve", "hole", "coil"])
+                of_kind(&["revolve", "hole", "coil", "extrude"])
                     .into_iter()
                     .map(|f| format!("{f}.axis")),
             );
@@ -264,6 +267,44 @@ fn choices_for(fg: &super::fg::FgPanel, kind: K) -> Vec<String> {
         _ => {}
     }
     out
+}
+
+/// A choice's toggles: big ones with icons for a few items, two rows of words for many.
+fn choice_row(
+    ui: &mut egui::Ui,
+    t: &super::theme::Theme,
+    c: &super::fgtool::Choice,
+    titled: bool,
+    places: &mut Vec<(String, Rect)>,
+) -> Option<usize> {
+    let name = format!("fg:tool:choice:{}", c.name);
+    if titled {
+        heading(ui, c.name, t);
+    }
+    if c.items.len() <= 5 {
+        let items: Vec<(&str, &str, bool)> = c
+            .items
+            .iter()
+            .enumerate()
+            .map(|(k, (w, icon))| (*icon, *w, k == c.on))
+            .collect();
+        return toggle_row(ui, t, &items, &name, places);
+    }
+    let items: Vec<(&str, bool)> = c
+        .items
+        .iter()
+        .enumerate()
+        .map(|(k, (w, _))| (*w, k == c.on))
+        .collect();
+    let (a, b) = items.split_at(items.len().div_ceil(2));
+    let first = text_toggles(ui, t, a, &name, places);
+    // a second row of its own ids, its places under the choice's name
+    let n = places.len();
+    let second = text_toggles(ui, t, b, &format!("{name}+"), places).map(|k| k + a.len());
+    for p in &mut places[n..] {
+        p.0 = p.0.replacen(&format!("{name}+"), &name, 1);
+    }
+    first.or(second)
 }
 
 /// What the dialog was asked to do this frame.
@@ -381,40 +422,15 @@ impl Shell {
 
         // the choice that shapes the form first, as Inventor's big toggles
         let mut chose = None;
-        for (ci, c) in tool.choices.iter().enumerate().take(2) {
-            {
-                let name = format!("fg:tool:choice:{}", c.name);
-                if ci > 0 {
-                    heading(ui, c.name, t);
-                }
-                let k = if c.items.len() <= 5 {
-                    let items: Vec<(&str, &str, bool)> = c
-                        .items
-                        .iter()
-                        .enumerate()
-                        .map(|(k, (w, icon))| (*icon, *w, k == c.on))
-                        .collect();
-                    toggle_row(ui, t, &items, &name, places)
-                } else {
-                    let items: Vec<(&str, bool)> = c
-                        .items
-                        .iter()
-                        .enumerate()
-                        .map(|(k, (w, _))| (*w, k == c.on))
-                        .collect();
-                    let (a, b) = items.split_at(items.len().div_ceil(2));
-                    let first = text_toggles(ui, t, a, &name, places);
-                    // a second row of its own ids, its places under the choice's name
-                    let n = places.len();
-                    let second = text_toggles(ui, t, b, &format!("{name}+"), places).map(|k| k + a.len());
-                    for p in &mut places[n..] {
-                        p.0 = p.0.replacen(&format!("{name}+"), &name, 1);
-                    }
-                    first.or(second)
-                };
-                if let Some(k) = k {
-                    chose = Some((c.name, k));
-                }
+        // what the feature is (a method, a fillet's type) comes first; how it goes, after its picks
+        let kind = tool.kind;
+        let top = move |c: &super::fgtool::Choice| {
+            matches!(c.name, "Method" | "Pattern" | "Action" | "Motion")
+                || (kind == "fillet" && c.name == "Type")
+        };
+        for c in tool.choices.iter().filter(|c| top(c)) {
+            if let Some(k) = choice_row(ui, t, c, false, places) {
+                chose = Some((c.name, k));
             }
         }
 
@@ -476,19 +492,11 @@ impl Shell {
             tool.take(Ok(c));
         }
 
-        let more = tool.choices.len() > 2;
-        if !tool.params.is_empty() || !tool.words.is_empty() || !tool.flags.is_empty() || more {
+        if !tool.params.is_empty() || !tool.words.is_empty() || !tool.flags.is_empty() {
             heading(ui, "Behavior", t);
         }
-        for c in tool.choices.iter().skip(2) {
-            let items: Vec<(&str, bool)> = c
-                .items
-                .iter()
-                .enumerate()
-                .map(|(k, (w, _))| (*w, k == c.on))
-                .collect();
-            ui.label(egui::RichText::new(c.name).font(sans(12.0)).color(t.ink2));
-            if let Some(k) = text_toggles(ui, t, &items, &format!("fg:tool:choice:{}", c.name), places) {
+        for c in tool.choices.iter().filter(|c| !top(c)) {
+            if let Some(k) = choice_row(ui, t, c, true, places) {
                 chose = Some((c.name, k));
             }
         }
@@ -523,7 +531,7 @@ impl Shell {
             value_row(
                 ui,
                 t,
-                param_label(p.name),
+                param_label(tool.kind, p.name),
                 &mut p.text,
                 unit(p.dim),
                 format!("fg:tool:param:{}", p.name),
@@ -610,6 +618,20 @@ impl Shell {
     }
 }
 
+/// The screw sizes a hole or thread is sized from: the one place the tables are read, so the
+/// stdparts tables take over here.
+pub fn hole_sizes() -> Vec<String> {
+    forge_model::standard::SCREWS
+        .iter()
+        .map(|s| s.name.to_string())
+        .collect()
+}
+
+/// The clearance fits a hole may take (ISO 273's close, normal and loose).
+pub fn hole_fits() -> Vec<String> {
+    ["close", "normal", "loose"].map(String::from).to_vec()
+}
+
 /// The lists a tool's words choose from: fonts and solids beside the part, screw sizes and fits.
 pub fn offer_lists(t: &mut FgTool, dir: Option<&std::path::Path>) {
     let beside = |exts: &[&str]| -> Vec<String> {
@@ -626,17 +648,14 @@ pub fn offer_lists(t: &mut FgTool, dir: Option<&std::path::Path>) {
         v.sort();
         v
     };
-    let screws: Vec<String> = forge_model::standard::SCREWS
-        .iter()
-        .map(|s| s.name.to_string())
-        .collect();
+    let screws = hole_sizes();
     let words: Vec<&'static str> = t.words.iter().map(|w| w.0).collect();
     for w in words {
         match w {
             "font" => t.offer(w, beside(&["ttf", "otf"])),
             "file" => t.offer(w, beside(&["step", "stp", "brep", "igs", "iges"])),
             "screw" | "spec" => t.offer(w, screws.clone()),
-            "fit" => t.offer(w, ["close", "normal", "loose"].map(String::from).to_vec()),
+            "fit" => t.offer(w, hole_fits()),
             _ => {}
         }
     }

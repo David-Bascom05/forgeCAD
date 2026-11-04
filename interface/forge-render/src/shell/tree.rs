@@ -507,6 +507,8 @@ impl Shell {
                     let strong = self.origin_hover == Some(i) || self.origin_selected == Some(i);
                     // an assembly's Origin rows have their own eyes
                     let on = if k < 3 { o.planes } else { o.axes } || (self.is_asm() && self.origin_shown[k]);
+                    // a sketch being started shows the planes it can go on, as Inventor does
+                    let on = on || (k < 3 && self.sketch_pick);
                     (on || strong).then_some((i, strong))
                 })
                 .collect();

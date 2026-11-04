@@ -1,0 +1,63 @@
+# ForgeCAD's 3D Model and Sketch tools, used in the app (tests/fg_demo.rs)
+param sk1.x1 = -40
+param sk1.y2 = -30
+param sk1.w3 = 80
+param sk1.h4 = 60
+sketch sk1(on: xy) {
+  r1 = rect(corner: (x1, y2), size: (w3, h4))
+}
+param extrude1.d = 12
+extrude1 = extrude(sk1, d)
+param sk2.x1 = 0
+param sk2.y2 = 0
+param sk2.r3 = 12
+param sk2.x4 = 20
+param sk2.y5 = 0
+sketch sk2(on: extrude1.end) {
+  c1 = circle(near(x1, y2), r3)
+  p1 = near(x4, y5)
+}
+param extrude2.d = 8
+extrude2 = extrude(sk2.c1, d)
+param hole1.d = 5
+param hole1.cbore_d = 9
+param hole1.cbore_depth = 3
+hole1 = hole(at: sk2.p1, d: d, cbore: (cbore_d, cbore_depth), depth: thru)
+param fillet1.r = 2
+fillet1 = fillet(edges(between: (extrude2.end, extrude2.side(sk2.c1))), r)
+param pattern1.n = count(4)
+pattern1 = pattern(of: hole1, layout: circ(about: extrude2.axis, n: n))
+param sk3.x1 = 29
+param sk3.y2 = -10
+param sk3.x3 = 29
+param sk3.y4 = 10
+param sk3.x5 = 35
+param sk3.y6 = 10
+param sk3.x7 = 35
+param sk3.y8 = -10
+param sk3.x9 = 32
+param sk3.y10 = 10
+param sk3.x11 = 32
+param sk3.y12 = -10
+sketch sk3(on: extrude1.end) {
+  l1 = line(near(x1, y2), near(x3, y4))
+  l2 = line(near(x5, y6), near(x7, y8))
+  a1 = arc(center: near(x9, y10), from: l1.b, to: l2.a, cw: true)
+  a2 = arc(center: near(x11, y12), from: l2.b, to: l1.a, cw: true)
+  tangent(l1, a1)
+  tangent(l2, a1)
+  tangent(l2, a2)
+  tangent(l1, a2)
+}
+param extrude3.d = 4
+extrude3 = cut(sk3, d)
+wplane1 = workplane(on: yz)
+pattern2 = pattern(of: extrude3, layout: mirror(on: wplane1))
+param sk4.x1 = -30
+param sk4.y2 = -24
+sketch sk4(on: extrude1.end) {
+  p1 = near(x1, y2)
+}
+param emboss1.size = 6
+param emboss1.depth = 0.6
+emboss1 = text("FORGE", font: "PublicSans-SemiBold.ttf", size: size, depth: depth, on: sk4, at: sk4.p1)

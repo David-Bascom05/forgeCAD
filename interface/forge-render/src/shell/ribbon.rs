@@ -411,8 +411,7 @@ fn groups(s: &Shell) -> Vec<Group> {
                         t("Extend", "extend", SkTool::Extend),
                         t("Split", "split", SkTool::Split),
                         t("Scale", "scale", SkTool::Scale),
-                        // Stretch moves chosen points with what holds them: not written yet
-                        off("Stretch", "stretch"),
+                        t("Stretch", "stretch", SkTool::Stretch),
                         t("Offset", "offset", SkTool::Offset),
                     ],
                 ),

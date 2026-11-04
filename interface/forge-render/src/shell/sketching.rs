@@ -43,6 +43,7 @@ pub enum SkTool {
     SkChamfer,
     Text,
     Move,
+    Stretch,
     Copy,
     Rotate,
     Scale,

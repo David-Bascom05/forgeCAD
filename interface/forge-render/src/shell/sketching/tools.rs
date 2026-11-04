@@ -743,11 +743,16 @@ impl SketchMode {
             self.more.count.max(2)
         };
         Some(match (tool, p.len()) {
+            (SkTool::Stretch, 2) => {
+                // the chosen move; what shares their points stretches to follow
+                let v = sub(p[1], p[0]);
+                return Some(self.moved_rows(&move |q: P| (q.0 + v.0, q.1 + v.1), 1.0, false));
+            }
             (SkTool::Move | SkTool::Copy, 2) => {
                 let v = sub(p[1], p[0]);
                 let mv = move |q: P| (q.0 + v.0, q.1 + v.1);
                 if tool == SkTool::Move {
-                    return Some(self.moved_rows(&mv, 1.0));
+                    return Some(self.moved_rows(&mv, 1.0, true));
                 }
                 self.copy_rows(&mv, false, None)
             }
@@ -759,13 +764,13 @@ impl SketchMode {
                     let (x, y) = (q.0 - c.0, q.1 - c.1);
                     (c.0 + x * cs - y * sn, c.1 + x * sn + y * cs)
                 };
-                return Some(self.moved_rows(&rot, 1.0));
+                return Some(self.moved_rows(&rot, 1.0, true));
             }
             (SkTool::Scale, 3) => {
                 let (c, a, b) = (p[0], p[1], p[2]);
                 let k = dist(c, b) / dist(c, a).max(1e-12);
                 let sc = move |q: P| (c.0 + (q.0 - c.0) * k, c.1 + (q.1 - c.1) * k);
-                return Some(self.moved_rows(&sc, k));
+                return Some(self.moved_rows(&sc, k, true));
             }
             (SkTool::Offset, 1) => {
                 let (dst, side) = self.offset_at(p[0])?;
@@ -809,57 +814,72 @@ impl SketchMode {
 
     /// The rows as they'd be with the chosen geometry's own numbers moved by `f`: what follows
     /// it by name moves with it. Returns the whole new set of rows.
-    fn moved_rows(&self, f: &dyn Fn(P) -> P, scale: f64) -> Vec<String> {
+    fn moved_rows(&self, f: &dyn Fn(P) -> P, scale: f64, detach: bool) -> Vec<String> {
         let mut rows = self.rows.clone();
         let mut done = vec![];
+        let solved = self.solved.as_ref();
         for e in &self.more.sel {
             let Some(k) = self.row_of(e) else { continue };
             if done.contains(&k) {
                 continue;
             }
             done.push(k);
-            let mut t = tokens(&rows[k]);
+            let t = tokens(&rows[k]);
             let num = |s: &str| s.parse::<f64>().ok();
             let kind = t[0].clone();
-            let mut i = 1;
-            // every number pair that is a point is moved; a circle's radius is scaled
-            while i < t.len() {
-                if let (Some(x), Some(y)) = (num(&t[i]), t.get(i + 1).and_then(|s| num(s))) {
-                    if kind == "rect" {
-                        let q = f((x, y));
-                        t[i] = n(q.0);
-                        t[i + 1] = n(q.1);
-                        if let (Some(w), Some(h)) =
-                            (t.get(3).and_then(|s| num(s)), t.get(4).and_then(|s| num(s)))
-                        {
-                            t[3] = n(w * scale);
-                            t[4] = n(h * scale);
-                        }
-                        break;
-                    }
+            if kind == "rect" {
+                // its corner moves, its size scales; it stays square to the sketch
+                let v: Vec<f64> = t[1..5].iter().filter_map(|x| num(x)).collect();
+                if let [x, y, w, h] = v[..] {
                     let q = f((x, y));
-                    t[i] = n(q.0);
-                    t[i + 1] = n(q.1);
-                    i += 2;
-                    if kind == "circle"
-                        && let Some(r) = t.get(i).and_then(|s| num(s))
-                    {
-                        t[i] = n(r * scale);
-                        i += 1;
-                    }
-                } else {
-                    // a named point: one token; the circle's radius after one too
-                    i += 1;
-                    if kind == "circle"
-                        && i == 2
-                        && let Some(r) = t.get(i).and_then(|s| num(s))
-                    {
-                        t[i] = n(r * scale);
-                        i += 1;
-                    }
+                    rows[k] = format!("rect {} {} {} {}", n(q.0), n(q.1), n(w * scale), n(h * scale));
                 }
+                continue;
             }
-            rows[k] = t.join(" ");
+            let mut out = vec![kind.clone()];
+            let mut i = 1;
+            let mut points = 0;
+            // every point is moved (a number pair, or with `detach` a point it shares with what
+            // isn't chosen); a circle's radius is scaled
+            while i < t.len() {
+                if kind == "circle" && points == 1 {
+                    match num(&t[i]) {
+                        Some(r) => out.push(n(r * scale)),
+                        None => out.push(t[i].clone()),
+                    }
+                    i += 1;
+                    points += 1;
+                    continue;
+                }
+                if let (Some(x), Some(y)) = (num(&t[i]), t.get(i + 1).and_then(|s| num(s))) {
+                    let q = f((x, y));
+                    out.extend([n(q.0), n(q.1)]);
+                    i += 2;
+                    points += 1;
+                    continue;
+                }
+                let shared = !matches!(t[i].as_str(), "cw" | "cons" | "open")
+                    && !self
+                        .more
+                        .sel
+                        .iter()
+                        .any(|x| t[i].split('.').next() == Some(x.as_str()));
+                match solved.and_then(|s| sk::point(s, &t[i]).ok()) {
+                    // a shared point that stays (a rotation's centre) stays shared
+                    Some(at) if detach && shared && dist(f((at.x, at.y)), (at.x, at.y)) > 1e-9 => {
+                        let q = f((at.x, at.y));
+                        out.extend([n(q.0), n(q.1)]);
+                        points += 1;
+                    }
+                    Some(_) => {
+                        out.push(t[i].clone());
+                        points += 1;
+                    }
+                    None => out.push(t[i].clone()),
+                }
+                i += 1;
+            }
+            rows[k] = out.join(" ");
         }
         rows
     }
@@ -994,7 +1014,10 @@ impl SketchMode {
         let Some(rows) = self.modify_rows(tool, Some(at), reach) else {
             return;
         };
-        let moved = matches!(tool, SkTool::Move | SkTool::Rotate | SkTool::Scale);
+        let moved = matches!(
+            tool,
+            SkTool::Move | SkTool::Stretch | SkTool::Rotate | SkTool::Scale
+        );
         if moved {
             match self.build(&rows) {
                 Ok(s) => {
@@ -1320,6 +1343,7 @@ impl SkTool {
         matches!(
             self,
             SkTool::Move
+                | SkTool::Stretch
                 | SkTool::Copy
                 | SkTool::Rotate
                 | SkTool::Scale
@@ -1410,8 +1434,8 @@ impl SkTool {
                 } else {
                     match (t, picked) {
                         (SkTool::Mirror, _) => "Click the mirror line",
-                        (SkTool::Move | SkTool::Copy, 0) => "Click the base point",
-                        (SkTool::Move | SkTool::Copy, _) => "Click where it goes",
+                        (SkTool::Move | SkTool::Copy | SkTool::Stretch, 0) => "Click the base point",
+                        (SkTool::Move | SkTool::Copy | SkTool::Stretch, _) => "Click where it goes",
                         (SkTool::Rotate, 0) => "Click the centre of rotation",
                         (SkTool::Rotate, 1) => "Click a point to turn from",
                         (SkTool::Rotate, _) => "Click where that point turns to",
@@ -1609,6 +1633,29 @@ mod tests {
         click_all(&mut m, &[(10.0, 0.0), (20.0, 0.0), (10.0, 10.0)]);
         solves(&m);
         assert_eq!(m.rows[1], "line l1.b 0 0");
+    }
+
+    #[test]
+    fn stretch_moves_a_side_and_its_neighbours_follow_where_move_takes_it_away() {
+        let mut m = mode();
+        m.add("line 0 0 10 0".into());
+        m.add("line l1.b 10 10".into());
+        m.set_tool(Some(SkTool::Stretch));
+        m.click((10.0, 5.0), 0.5);
+        m.more_enter();
+        click_all(&mut m, &[(0.0, 20.0), (5.0, 20.0)]);
+        solves(&m);
+        // the shared end follows by name: the first line stretches
+        assert_eq!(m.rows, ["line 0 0 10 0", "line l1.b 15 10"]);
+        let mut m = mode();
+        m.add("line 0 0 10 0".into());
+        m.add("line l1.b 10 10".into());
+        m.set_tool(Some(SkTool::Move));
+        m.click((10.0, 5.0), 0.5);
+        m.more_enter();
+        click_all(&mut m, &[(0.0, 20.0), (5.0, 20.0)]);
+        solves(&m);
+        assert_eq!(m.rows, ["line 0 0 10 0", "line 15 0 15 10"]);
     }
 
     #[test]
