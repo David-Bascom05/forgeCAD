@@ -285,6 +285,8 @@ pub struct DrawingEnv {
     picks: Vec<Pick>,
     pts: Vec<Point2>,
     dlg: Option<Dlg>,
+    /// A dialog's values after its OK, while its tool picks and places.
+    kept: Option<Dlg>,
     drag: Option<Drag>,
     /// The base view dialog's last choices, and the frame's.
     base_dir: usize,
@@ -335,6 +337,7 @@ impl DrawingEnv {
             picks: vec![],
             pts: vec![],
             dlg: None,
+            kept: None,
             drag: None,
             base_dir: 0,
             base_scale: 0,
@@ -524,6 +527,11 @@ impl DrawingEnv {
                     })
                     .fold(f64::INFINITY, f64::min)
                     * v.scale;
+                // a click inside a hole picks its circle, if no edge is nearer
+                let dist = match p.geom.circle() {
+                    Some((c, r)) if mq.distance(c) < r => dist.min(0.9 * tol),
+                    _ => dist,
+                };
                 if dist > tol || best.as_ref().is_some_and(|b| b.0 <= dist) {
                     continue;
                 }
@@ -717,6 +725,7 @@ impl DrawingEnv {
         self.picks.clear();
         self.pts.clear();
         self.dlg = None;
+        self.kept = None;
     }
 
     fn step(&self) -> usize {
@@ -1124,10 +1133,10 @@ impl DrawingEnv {
 
     fn place_gdt(&mut self, tool: DwgCmd, view: &str, to: &str, at: Option<Point2>) {
         let at_arg = at.map_or(String::new(), |p| format!(", at: {}", pt(p)));
-        match (tool, self.dlg.clone()) {
+        match (tool, self.kept.clone().or(self.dlg.clone())) {
             (DwgCmd::Datum, Some(Dlg::Datum { letter })) => {
                 self.add("datum", format!("datum({view}, {to}, \"{letter}\"{at_arg})"));
-                self.dlg = Some(Dlg::Datum {
+                self.kept = Some(Dlg::Datum {
                     letter: self.free_letter(),
                 });
             }
@@ -2030,6 +2039,7 @@ impl Shell {
         let t = self.theme;
         let Some(env) = &mut self.drawing else { return };
         let Some(dlg) = env.dlg.clone() else { return };
+        let mut ok_rect = None;
         let mut ok = false;
         let mut cancel = false;
         let mut next = dlg.clone();
@@ -2244,10 +2254,9 @@ impl Shell {
                 }
                 ui.separator();
                 ui.horizontal(|ui| {
-                    if ui
-                        .button(egui::RichText::new("   OK   ").font(semi(13.0)))
-                        .clicked()
-                    {
+                    let r = ui.button(egui::RichText::new("   OK   ").font(semi(13.0)));
+                    ok_rect = Some(r.rect);
+                    if r.clicked() {
                         ok = true;
                     }
                     if ui.button("Cancel").clicked() {
@@ -2256,6 +2265,10 @@ impl Shell {
                 });
             });
         env.dlg = Some(next.clone());
+        if let Some(r) = ok_rect {
+            self.places.push(("dwgdlg:OK".into(), r));
+        }
+        let Some(env) = &mut self.drawing else { return };
         if cancel {
             env.cancel();
             return;
@@ -2309,11 +2322,10 @@ impl Shell {
                 env.dlg = None;
                 env.tool = Some(DwgCmd::Fcf);
             }
-            Dlg::Surface { .. } | Dlg::Weld { .. } => {
-                // keep the values; the tool picks and places
-                env.tool = env.tool.or(Some(DwgCmd::Surface));
+            Dlg::Surface { .. } | Dlg::Weld { .. } | Dlg::Datum { .. } => {
+                // the values stay with the tool, which picks and places
+                env.kept = env.dlg.take();
             }
-            Dlg::Datum { .. } => {}
             Dlg::EditDim {
                 id,
                 text,
