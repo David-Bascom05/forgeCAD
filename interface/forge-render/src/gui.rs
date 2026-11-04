@@ -3354,10 +3354,10 @@ impl Gui {
             .and_then(|t| t.text().ok());
         let Some(s) = &mut self.fg else { return };
         let Some(text) = want else {
-            if s.previewing {
+            // only a preview this made is this one's to end: an assembly's dialogs have their own
+            if self.fg_previewed.take().is_some() && s.previewing {
                 s.preview(None);
             }
-            self.fg_previewed = None;
             if let Some(t) = self.shell.fg.as_mut().and_then(|p| p.tool.as_mut()) {
                 t.note = None;
             }
@@ -3365,7 +3365,7 @@ impl Gui {
         };
         if self.fg_previewed.as_deref() == Some(text.as_str()) {
             // what it made fails in the kernel: the part as it was back, to pick on, and why
-            let built = s.previewing() && s.done == s.seq;
+            let built = s.previewing && s.done == s.seq;
             if built
                 && let Some(p) = &mut self.shell.fg
                 && let Some(t) = &mut p.tool
@@ -3375,7 +3375,7 @@ impl Gui {
                 })
             {
                 t.note = Some(format!("{}: {}", i.kind, i.text));
-                s.end_preview();
+                s.preview(None);
             }
             return;
         }

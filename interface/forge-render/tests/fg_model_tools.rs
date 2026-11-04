@@ -128,7 +128,7 @@ fn ok(h: &mut Headless, what: &str) -> (String, forge_lang::Run) {
     let t = h.gui.shell.fg.as_ref().unwrap().tool.as_ref().unwrap();
     assert!(t.note.is_none(), "{what}: the preview says {:?}", t.note);
     assert!(
-        h.gui.fg.as_ref().unwrap().previewing(),
+        h.gui.fg.as_ref().unwrap().previewing,
         "{what}: no preview before OK"
     );
     let ops = h.gui.fg.as_ref().unwrap().ops.len();
