@@ -4408,12 +4408,6 @@ impl SheetOut {
         Ok(fs::dxf_layered(&self.pattern()?, Some(&self.note()), layers))
     }
 
-    /// The flat pattern as 2D drawing data, in the first wall's own coordinates (`sheet.frame`).
-    pub fn pattern(&self) -> Result<fs::Pattern, SheetError> {
-        let b = fs::build_with(&self.sheet, Map::Flat)?;
-        Ok(b.pattern.expect("a flat build's pattern"))
-    }
-
     /// The drawing's part note: the part, its material, its thickness and its bend rule.
     pub fn note(&self) -> String {
         let g = &self.sheet.gauge;
