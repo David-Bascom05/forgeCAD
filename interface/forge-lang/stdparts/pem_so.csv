@@ -12,7 +12,7 @@
 # grade SO: PEM S carbon steel
 # grade SOS: PEM 300 series stainless
 # grade SO4: PEM 400 series stainless hardened
-# lengths: 3 4 6 8 10 12 14 16 18 20 22 25
+# note: length series (one row per length): 3 4 6 8 10 12 14 16 18 20 22 25
 # src P: PEM bulletin SO, page SO-3 (SO) and SO-4 (BSO) metric tables (https://damlite.pemnet.com/SO-M3-6ZI_pdf_1.pdf), keyed 2026-11-04; D and F stepped by length as printed under each length chart
 # chk K: PEM online catalogue: every SO item record (one page per thread and length, all columns incl. B and D, e.g. https://catalog.pemnet.com/item/thru-hole-threaded-standoffs-types-so-soa-sos/ru-hole-threaded-standoffs-types-so-soa-sos-metric/so-m3-6zi) and the BSO list (https://catalog.pemnet.com/viewitems/blind-threaded-standoffs-types-bso-bsoa-bsos/lind-threaded-standoffs-types-bso-bsoa-bsos-metric: hole C F H L per item) plus one BSO item per thread, read 2026-11-04
 # chk F: FreeCAD FastenersWB 2026-09-10 FsData/PEMFasteners.csv PEMStandoffdef/length/range (thru SO only: B C H, D steps, length range; GPL-2.0-or-later: consulted, never copied)
