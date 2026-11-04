@@ -91,7 +91,7 @@ fn work(jobs: Receiver<Job>, out: Sender<Answer>, wake: super::Waker) {
             return Ok(m.clone());
         }
         let m = forge_mesh::tessellate::tessellate_tolerant(b, &forge_mesh::Quality::default())
-            .map_err(|e| format!("{e:?}"))?;
+            .map_err(|e| forge_lang::error::words(&e))?;
         let m = Arc::new(m);
         meshes.insert(key, m.clone());
         Ok(m)

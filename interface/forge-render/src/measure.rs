@@ -65,7 +65,7 @@ impl Measurer {
                 let got = bodies.entry(a.part.clone()).or_insert_with(|| {
                     let body = crate::load::body(&a.part)?;
                     let mesh = forge_mesh::tessellate::tessellate_tolerant(&body, &Quality::default())
-                        .map_err(|e| format!("{e:?}"))?;
+                        .map_err(|e| forge_lang::error::words(&e))?;
                     Ok((body, mesh))
                 });
                 let text = match got {

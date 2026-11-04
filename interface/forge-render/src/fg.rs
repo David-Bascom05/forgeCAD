@@ -671,7 +671,7 @@ fn work(
                     dxf: pattern
                         .as_ref()
                         .map(|p| forge_sheet::dxf_noted(p, &note))
-                        .map_err(|e| format!("{e:?}")),
+                        .map_err(|e| forge_lang::error::words(&e)),
                     view: pattern.as_ref().ok().map(|p| flat_view(s, p)),
                     pattern: pattern.ok(),
                     note,
