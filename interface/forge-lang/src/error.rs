@@ -149,6 +149,9 @@ pub enum Op {
     AddFeature { before: Option<String>, text: String },
     /// The statement making `id` taken out.
     DeleteFeature { id: String },
+    /// The statement making `id` (and its own params just above it) replaced by `text`, in its
+    /// place: a dialog's edit of a statement.
+    ReplaceFeature { id: String, text: String },
     /// The statement making `id` moved above the one making `before` (None: to the end).
     MoveFeature { id: String, before: Option<String> },
     /// A loose number replaced by a new param's name, the param defined above.
@@ -194,6 +197,11 @@ impl Op {
             Op::DeleteFeature { id } => {
                 Json::obj(vec![("op", "DeleteFeature".into()), ("id", id.as_str().into())])
             }
+            Op::ReplaceFeature { id, text } => Json::obj(vec![
+                ("op", "ReplaceFeature".into()),
+                ("id", id.as_str().into()),
+                ("text", text.as_str().into()),
+            ]),
             Op::MoveFeature { id, before } => Json::obj(vec![
                 ("op", "MoveFeature".into()),
                 ("id", id.as_str().into()),
@@ -257,6 +265,10 @@ impl Op {
                 text: s("text")?,
             },
             "DeleteFeature" => Op::DeleteFeature { id: s("id")? },
+            "ReplaceFeature" => Op::ReplaceFeature {
+                id: s("id")?,
+                text: s("text")?,
+            },
             "SetArg" => Op::SetArg {
                 id: s("id")?,
                 arg: s("arg")?,

@@ -22,6 +22,8 @@ pub struct AsmHost {
     drag: Option<(String, Frame, [f32; 3])>,
     /// A component was placed: the view fits the assembly once it's drawn.
     fit: bool,
+    /// The occurrence and world point under the pointer before a press.
+    under: Option<(String, [f32; 3])>,
 }
 
 impl Default for AsmHost {
@@ -31,6 +33,7 @@ impl Default for AsmHost {
             browsed: None,
             drag: None,
             fit: false,
+            under: None,
         }
     }
 }
@@ -331,22 +334,25 @@ impl Gui {
         let Some(a) = self.shell.fg.as_mut().and_then(|p| p.asm.as_mut()) else {
             return;
         };
-        // what's under the pointer, for its DOF
-        let mark = v.nav.marks().into_iter().find(|m| !m.selected);
-        let under = mark.and_then(|m| occ.iter().find(|o| o.placement == Some(m.placement as usize)));
-        a.hover = under.map(|o| Hover {
-            occ: o.path.clone(),
-            ..Hover::default()
-        });
+        // what's under the pointer, for its DOF; a press hides the mark, so the last one is kept
+        if !v.nav.held() {
+            let mark = v.nav.marks().into_iter().find(|m| !m.selected);
+            let under = mark.and_then(|m| occ.iter().find(|o| o.placement == Some(m.placement as usize)));
+            self.asm.under = under.and_then(|o| Some((o.path.clone(), v.nav.hit_point()?)));
+            a.hover = under.map(|o| Hover {
+                occ: o.path.clone(),
+                ..Hover::default()
+            });
+        }
         let Some((from, to)) = v.nav.window_box() else {
             self.asm.drag = None;
             return;
         };
         if self.asm.drag.is_none() {
-            let (Some(o), Some(p)) = (under, v.nav.hit_point()) else {
+            let Some((path, p)) = self.asm.under.clone() else {
                 return;
             };
-            let top = o.path.split('.').next().unwrap_or(&o.path).to_string();
+            let top = path.split('.').next().unwrap_or(&path).to_string();
             let start = a.moved.get(&top).copied().unwrap_or(Frame::WORLD);
             self.asm.drag = Some((top, start, p));
         }
@@ -500,15 +506,16 @@ impl Gui {
         let name = crate::shell::asmtools::free_name(&src, &format!("{inst}_pat"));
         let v = |x: f64| crate::shell::fg::short((x * 1e6).round() / 1e6);
         let (o, z, x) = (pose.origin, pose.z().get(), pose.x().get());
-        let at = |o: f64, s: f64| {
-            if s == 0.0 {
-                v(o)
-            } else {
-                format!("{} + {} * k", v(o), v(s))
-            }
+        // the spacing a shared param (a Length: a count times it stays one), copies after it
+        let gap = (step[0] * step[0] + step[1] * step[1] + step[2] * step[2]).sqrt();
+        let at = |o: f64, s: f64| match s {
+            0.0 => v(o),
+            s if s < 0.0 => format!("{} - {name}_step * k", v(o)),
+            _ => format!("{} + {name}_step * k", v(o)),
         };
         let text = format!(
-            "for k in 1..{count} {{\n  {name} = part(\"{}\", at: pose(at: ({}, {}, {}), z: ({}, {}, {}), x: ({}, {}, {})))\n}}",
+            "shared {name}_step = {}\nfor k in 1..{count} {{\n  {name} = part(\"{}\", at: pose(at: ({}, {}, {}), z: ({}, {}, {}), x: ({}, {}, {})))\n}}",
+            v(gap),
             i.file,
             at(o.x, step[0]),
             at(o.y, step[1]),

@@ -837,6 +837,7 @@ MakeShared {param}                  param F.x = v  becomes  shared x = v
 SplitInstance {id, param}           param ID.x = <param's right side>: that instance's own
 AddFeature {before, text}           statements put in above `before` (or at the end)
 DeleteFeature {id}                  the statement making id taken out
+ReplaceFeature {id, text}           that statement (and its params just above) becomes text, in place
 MoveFeature {id, before}            that statement moved above `before` (or to the end)
 LiftLiteral {span, name, scope}     a loose number replaced by a new param (shared or local)
 SetArg {id, arg, text}              keyword argument arg of the call making id becomes text

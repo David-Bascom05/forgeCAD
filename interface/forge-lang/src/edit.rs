@@ -248,6 +248,11 @@ fn precheck(src: &str, prog: &[Stmt], op: &Op) -> R<()> {
             let (j, k) = block(prog, id)?;
             unread(prog, &bound(&prog[j..=k]), k + 1, prog.len())
         }
+        Op::ReplaceFeature { id, text } => {
+            block(prog, id)?;
+            syntax::parse(&format!("{}\n", text.trim_end()))?;
+            Ok(())
+        }
         Op::MoveFeature { id, before } => {
             let (j, k) = block(prog, id)?;
             let to = match before {
@@ -443,6 +448,10 @@ pub fn apply(src: &str, op: &Op) -> R<String> {
             let (j, k) = block(&prog, id)?;
             Ok(splice(src, prog[j].full.lo, prog[k].full.hi, ""))
         }
+        Op::ReplaceFeature { id, text } => {
+            let (j, k) = block(&prog, id)?;
+            Ok(splice(src, prog[j].span.lo, prog[k].span.hi, text.trim_end()))
+        }
         Op::MoveFeature { id, before } => {
             let (j, k) = block(&prog, id)?;
             let (lo0, hi0) = (prog[j].full.lo, prog[k].full.hi);
@@ -601,6 +610,11 @@ pub fn apply_ast(src: &str, op: &Op) -> R<Vec<Stmt>> {
         Op::DeleteFeature { id } => {
             let (j, k) = block(&prog, id)?;
             prog.drain(j..=k);
+        }
+        Op::ReplaceFeature { id, text } => {
+            let (j, k) = block(&prog, id)?;
+            let new = syntax::parse(&format!("{}\n", text.trim_end()))?;
+            prog.splice(j..=k, new);
         }
         Op::MoveFeature { id, before } => {
             let (j, k) = block(&prog, id)?;

@@ -100,8 +100,9 @@ pub struct LinkForm {
     pub motion: Motion,
     pub name: String,
     pub editing: Option<String>,
-    /// The ops last previewed.
+    /// The ops last previewed, and why forge-lang refuses them if it does.
     pub sent: Option<Vec<Op>>,
+    pub refused: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -166,17 +167,41 @@ fn value_of(s: &str, what: &str, angle: bool) -> Result<Option<String>, String> 
         .ok_or(format!("{what}: not a number"))
 }
 
-/// The top-level statement after `id`'s (its params included), where an edited one goes back.
-pub fn next_statement(src: &str, id: &str) -> Option<String> {
-    let prog = forge_lang::syntax::parse(src).ok()?;
-    let at = prog
-        .iter()
-        .position(|s| matches!(&s.kind, StmtKind::Assign { name, .. } if name == id))?;
-    prog[at + 1..].iter().find_map(|s| match &s.kind {
-        StmtKind::Assign { name, .. } => Some(name.clone()),
-        StmtKind::Param { owner, .. } => owner.first().map(|o| o.name.clone()),
-        _ => None,
-    })
+/// A field's text: a number (written as the statement's own param) or an expression of the
+/// assembly's params (`hinge_off`, `door_open`), written as it is.
+enum Val {
+    Lit(String),
+    Expr(String),
+}
+
+fn val_of(s: &str, what: &str, angle: bool) -> Result<Option<Val>, String> {
+    let t = s.trim();
+    if t.is_empty() {
+        return Ok(None);
+    }
+    if let Some(v) = number(t) {
+        return Ok(Some(Val::Lit(literal(v, angle))));
+    }
+    let ok = t
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || " _.+-*/()".contains(c))
+        && forge_lang::syntax::parse(&format!("probe_ = {t}\n")).is_ok();
+    if ok {
+        Ok(Some(Val::Expr(t.to_string())))
+    } else {
+        Err(format!("{what}: a number or a param"))
+    }
+}
+
+/// A value into the statement: a number as `param NAME.pname = v` read by name, else as written.
+fn put(v: Val, name: &str, pname: &str, params: &mut Vec<String>) -> String {
+    match v {
+        Val::Lit(l) => {
+            params.push(format!("param {name}.{pname} = {l}"));
+            pname.to_string()
+        }
+        Val::Expr(e) => e,
+    }
 }
 
 fn names_taken(src: &str) -> std::collections::BTreeSet<String> {
@@ -301,21 +326,21 @@ impl LinkForm {
                 let kind = self.joint_kind();
                 let fr = freedoms(kind);
                 for (k, &(word, pname, angle)) in fr.iter().enumerate() {
-                    if let Some(v) = value_of(self.values.get(k).map_or("", |s| s.as_str()), word, angle)? {
-                        params.push(format!("param {name}.{pname} = {v}"));
-                        args.push(format!("{word}: {pname}"));
+                    if let Some(v) = val_of(self.values.get(k).map_or("", |s| s.as_str()), word, angle)? {
+                        let v = put(v, name, pname, &mut params);
+                        args.push(format!("{word}: {v}"));
                     }
                     if let Some((true, lo, hi)) = self.limits.get(k) {
-                        let lo = value_of(lo, "Limit start", angle)?.ok_or("Limit start: a number")?;
-                        let hi = value_of(hi, "Limit end", angle)?.ok_or("Limit end: a number")?;
-                        params.push(format!("param {name}.{pname}_lo = {lo}"));
-                        params.push(format!("param {name}.{pname}_hi = {hi}"));
+                        let lo = val_of(lo, "Limit start", angle)?.ok_or("Limit start: a number")?;
+                        let hi = val_of(hi, "Limit end", angle)?.ok_or("Limit end: a number")?;
+                        let lo = put(lo, name, &format!("{pname}_lo"), &mut params);
+                        let hi = put(hi, name, &format!("{pname}_hi"), &mut params);
                         let key = if fr.len() == 1 {
                             "limit".to_string()
                         } else {
                             format!("{word}_limit")
                         };
-                        args.push(format!("{key}: ({pname}_lo, {pname}_hi)"));
+                        args.push(format!("{key}: ({lo}, {hi})"));
                     }
                 }
                 if self.flip {
@@ -327,16 +352,17 @@ impl LinkForm {
                 let v = self.values.first().map_or("", |s| s.as_str());
                 match kind {
                     "angle" => {
-                        let v = value_of(v, "Angle", true)?.unwrap_or_else(|| "0deg".into());
-                        params.push(format!("param {name}.theta = {v}"));
-                        args.push("theta".into());
+                        let v = val_of(v, "Angle", true)?.unwrap_or(Val::Lit("0deg".into()));
+                        args.push(put(v, name, "theta", &mut params));
                     }
-                    "mate" | "flush" | "insert" | "on_plane" => {
-                        if let Some(v) = value_of(v, "Offset", false)?.filter(|v| v != "0") {
-                            params.push(format!("param {name}.gap = {v}"));
-                            args.push("offset: gap".into());
+                    "mate" | "flush" | "insert" | "on_plane" => match val_of(v, "Offset", false)? {
+                        Some(Val::Lit(l)) if l == "0" => {}
+                        Some(v) => {
+                            let v = put(v, name, "gap", &mut params);
+                            args.push(format!("offset: {v}"));
                         }
-                    }
+                        None => {}
+                    },
                     _ => {}
                 }
                 kind
@@ -352,16 +378,67 @@ impl LinkForm {
         if self.editing.as_deref() != Some(self.name.trim()) && names_taken(src).contains(self.name.trim()) {
             return Err(format!("Name: {} is taken", self.name.trim()));
         }
-        Ok(match &self.editing {
-            Some(id) => vec![
-                Op::DeleteFeature { id: id.clone() },
-                Op::AddFeature {
-                    before: next_statement(src, id),
-                    text,
-                },
-            ],
-            None => vec![Op::AddFeature { before: None, text }],
-        })
+        // a param the statement already has (anywhere in the file) is set where it is
+        // (those just above the edited statement go with it: ReplaceFeature takes them)
+        let prog = forge_lang::syntax::parse(src).unwrap_or_default();
+        let (mut with, mut at) = (prog.len(), prog.len());
+        if let Some(id) = &self.editing
+            && let Some(k) = prog
+                .iter()
+                .position(|s| matches!(&s.kind, StmtKind::Assign { name, .. } if name == id))
+        {
+            (with, at) = (k, k);
+            while with > 0
+                && matches!(&prog[with - 1].kind, StmtKind::Param { owner, .. } if owner.first().is_some_and(|o| o.name == *id))
+            {
+                with -= 1;
+            }
+        }
+        let have: Vec<(String, String)> = prog
+            .iter()
+            .enumerate()
+            .filter(|(k, _)| *k < with || *k >= at)
+            .filter_map(|(_, s)| match &s.kind {
+                StmtKind::Param { owner, name, .. } if owner.len() == 1 => {
+                    Some((owner[0].name.clone(), name.clone()))
+                }
+                _ => None,
+            })
+            .collect();
+        let mut ops = vec![];
+        let mut lines = vec![];
+        for l in text.lines() {
+            let set = l.strip_prefix("param ").and_then(|r| {
+                let (key, v) = r.split_once(" = ")?;
+                let (owner, name) = key.split_once('.')?;
+                have.iter().any(|h| h.0 == owner && h.1 == name).then(|| {
+                    let (value, dim) = match v.strip_suffix("deg") {
+                        Some(d) => (number(d).unwrap_or(0.0), forge_lang::values::Dim::Angle),
+                        None => match v.strip_prefix("ratio(").and_then(|x| x.strip_suffix(')')) {
+                            Some(r) => (number(r).unwrap_or(0.0), forge_lang::values::Dim::Ratio),
+                            None => (number(v).unwrap_or(0.0), forge_lang::values::Dim::Length),
+                        },
+                    };
+                    Op::SetParam {
+                        param: forge_lang::error::ParamKey {
+                            owner: vec![forge_lang::edit::seg(owner)],
+                            name: name.to_string(),
+                        },
+                        value: forge_lang::error::Literal { value, dim },
+                    }
+                })
+            });
+            match set {
+                Some(op) => ops.push(op),
+                None => lines.push(l),
+            }
+        }
+        let text = lines.join("\n");
+        match &self.editing {
+            Some(id) => ops.push(Op::ReplaceFeature { id: id.clone(), text }),
+            None => ops.push(Op::AddFeature { before: None, text }),
+        }
+        Ok(ops)
     }
 
     /// The dialog for an existing joint, constraint or relation, from its statement.
@@ -1359,6 +1436,10 @@ impl Shell {
         match &ops {
             Ok(o) if f.sent.as_ref() != Some(o) => {
                 f.sent = Some(o.clone());
+                // what forge-lang would refuse, said here before OK
+                f.refused = forge_lang::edit::apply_all_checked(src, o)
+                    .err()
+                    .map(|e| format!("{}: {}", e.kind(), e.text()));
                 out.push(FgAct::AsmPreview(Some(o.clone())));
             }
             Err(_) if f.sent.is_some() => {
@@ -1370,10 +1451,13 @@ impl Shell {
         if let Err(e) = &ops {
             let r = ui.label(egui::RichText::new(e).font(sans(11.0)).color(t.ink2));
             places.push(("asm:needs".into(), r.rect));
+        } else if let Some(e) = &f.refused {
+            let r = ui.add(egui::Label::new(egui::RichText::new(e).font(sans(11.0)).color(t.error)).wrap());
+            places.push(("asm:refused".into(), r.rect));
         } else {
             problems(ui, t, issues, f.name.trim(), a.mobility, places);
         }
-        let can_ok = ops.is_ok();
+        let can_ok = ops.is_ok() && f.refused.is_none();
         match footer(ui, t, can_ok, f.editing.is_none(), places) {
             Some("cancel") => {
                 out.push(FgAct::AsmPreview(None));

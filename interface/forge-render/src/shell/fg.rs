@@ -409,6 +409,7 @@ pub fn op_label(op: &Op) -> String {
         Op::SplitInstance { id, param } => format!("Own {} for {}", param.name, path_text(id)),
         Op::AddFeature { .. } => "Add feature".into(),
         Op::DeleteFeature { id } => format!("Delete {id}"),
+        Op::ReplaceFeature { id, .. } => format!("Edit {id}"),
         Op::MoveFeature { id, before } => match before {
             Some(b) => format!("Move {id} above {b}"),
             None => format!("Move {id} to the end"),

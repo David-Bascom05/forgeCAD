@@ -1456,3 +1456,30 @@ fn several_ops_are_one_checked_edit() {
     ];
     assert!(forge_lang::edit::apply_all_checked(src, &bad).is_err());
 }
+
+#[test]
+fn a_statement_is_replaced_in_its_place_with_its_params() {
+    let src = "assembly\n\nbase = part(\"base.fg\", ground: true)\narm = part(\"crank.fg\")\n# the pivot\nparam j.turn = 30deg\nj = revolute(arm.a, base.o2, turn: turn)\n\n# after it\nrod = part(\"rod.fg\")\n";
+    let op = Op::ReplaceFeature {
+        id: "j".into(),
+        text: "param j.lo = 0deg\nparam j.hi = 90deg\nj = cylindrical(arm.a, base.o2, turn_limit: (lo, hi))"
+            .into(),
+    };
+    let out = apply(src, &op).unwrap();
+    assert_eq!(
+        out,
+        "assembly\n\nbase = part(\"base.fg\", ground: true)\narm = part(\"crank.fg\")\n# the pivot\nparam j.lo = 0deg\nparam j.hi = 90deg\nj = cylindrical(arm.a, base.o2, turn_limit: (lo, hi))\n\n# after it\nrod = part(\"rod.fg\")\n"
+    );
+    let back = Op::from_json(&op.json()).unwrap();
+    assert_eq!(back, op);
+    assert!(
+        apply(
+            src,
+            &Op::ReplaceFeature {
+                id: "nope".into(),
+                text: "x = 1".into()
+            }
+        )
+        .is_err()
+    );
+}

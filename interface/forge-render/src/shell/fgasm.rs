@@ -849,6 +849,8 @@ pub struct AsmPanel {
     pub snaps: HashMap<String, Result<std::sync::Arc<crate::snaps::PartSnaps>, String>>,
     /// Free Move's and Free Rotate's moves, by top-level instance: a world motion, not in the file.
     pub moved: std::collections::BTreeMap<String, forge_math::Frame>,
+    /// The browser row last clicked, and when: a second click soon on it is a double click.
+    pub last_click: Option<(String, f64)>,
 }
 
 /// Whether `path` is the row `key` or under it.
@@ -1360,6 +1362,19 @@ impl Shell {
             let y = (i as f32 * super::ROW_H - list.height() * 0.4).max(0.0);
             scroll = scroll.vertical_scroll_offset(y);
         }
+        // a second click on the same row soon after the first: a double click, however egui
+        // counted it
+        let last = std::cell::Cell::new(a.last_click.take());
+        let second = |key: &str, now: f64| {
+            let was = last.take();
+            let double = was.as_ref().is_some_and(|(k, t)| k == key && now - t < 0.5);
+            last.set(if double {
+                None
+            } else {
+                Some((key.to_string(), now))
+            });
+            double
+        };
         let shown_mask = a.isolated.as_ref().map(|_| a.shown_mask());
         let top_origin = self.origin_shown;
         let top_name = self.name.clone();
@@ -1653,7 +1668,7 @@ impl Shell {
                 });
                 if eye_hit {
                     eye = Some(k);
-                } else if resp.double_clicked() {
+                } else if resp.double_clicked() || (resp.clicked() && second(&n.key, ui.input(|i| i.time))) {
                     match n.kind {
                         // Inventor's: a relationship's own dialog, filled; one in a subassembly drives
                         NodeKind::Link(l)
@@ -1674,6 +1689,7 @@ impl Shell {
                 places.push((format!("asm:row:{}", n.key), r));
             }
         });
+        a.last_click = last.take();
         // opened or shut: the row's key in or out (the top's means shut)
         if let Some((k, _)) = toggle
             && !a.expanded.remove(&k)
