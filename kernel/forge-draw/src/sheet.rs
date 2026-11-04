@@ -43,6 +43,8 @@ pub struct Fields {
     pub date: String,
     pub mass: String,
     pub company: String,
+    /// The general tolerance (ISO 2768-m, or the shop's own).
+    pub tolerance: String,
 }
 
 pub fn line(a: Point2, b: Point2) -> Geom2 {
@@ -151,9 +153,10 @@ fn title_block(page: &mut Page, f: &Fields, at: Point2, third_angle: bool) {
             ("SHEET", &f.sheet, 35.0),
         ],
         &[
-            ("DRAWN", &f.drawn, 55.0),
-            ("DATE", &f.date, 55.0),
-            ("MASS", &f.mass, 35.0),
+            ("DRAWN", &f.drawn, 40.0),
+            ("DATE", &f.date, 30.0),
+            ("UNLESS NOTED", &f.tolerance, 45.0),
+            ("MASS", &f.mass, 30.0),
             ("", "", 35.0),
         ],
     ];

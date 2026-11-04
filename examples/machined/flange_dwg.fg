@@ -1,0 +1,33 @@
+drawing
+# DWG-901 bearing flange: GD&T on the model's persistent names (ASME Y14.5-2018). Datum A is the
+# mounting face, B the bore's axis (its H7 size), C the flat side; the bolt circle is positioned
+# to A|B|C at MMC by basic dimensions.
+
+f = part("flange.fg")
+s1 = sheet("B", title: "BEARING FLANGE", number: "DWG-901", rev: "A", drawn: "D. BASCOM",
+           material: "6061-T6 AL", tolerance: "ISO 2768-m")
+top = base_view(f, sheet: s1, dir: "top", scale: 1.5, at: (110, 185))
+front = projected(top, at: (110, 75))
+a = section(top, [(0, -44), (0, 44)], at: (265, 185))
+iso = projected(top, at: (335, 100), scale: 0.8)
+marks = center_marks(top)
+
+width = dim(top, e("f1358be8de13ff6a"), e("4e1a1468c7a8f9d5"), tol: 0.1, at: (0, -52))
+bc = dim(top, e("043e5f9466c82d31").center, e("3610ca54d35731a7").center, basic: true, at: (0, -61))
+bore_d = diameter(top, e("bc75f1ba81294971"), fit: "H7", at: (46, 47))
+boss_d = diameter(top, e("bc258180efa07911"), tol: (0, -0.05), at: (-35, 30))
+bolt = hole_note(top, e("3610ca54d35731a7"), at: (52, 22))
+
+thick = dim(front, e("e044e9370ee1b67f"), e("d25442f7db23c03b"), tol: 0.1, at: (-52, 6))
+boss_h = dim(front, e("d25442f7db23c03b"), e("b55f5d5146a47855").center, limits: (0.05, 0), at: (34, 15))
+
+datum_a = datum(front, e("e044e9370ee1b67f"), "A", at: (-20, -14))
+datum_b = datum(top, bore_d, "B")
+datum_c = datum(top, e("4e1a1468c7a8f9d5"), "C", at: (55, -15))
+
+flat_a = fcf(front, e("e044e9370ee1b67f"), "flatness", "0.02", at: (-62, -16))
+perp_b = fcf(top, bore_d, "perpendicularity", "dia 0.02", ["A"], at: (72, 38))
+pos = fcf(top, bolt, "position", "dia 0.2 M", ["A", "B M", "C"], at: (45, 8))
+runout = fcf(front, f("8f0cb22d114db40e"), "circular_runout", "0.03", ["B"], at: (52, 26))
+outline = fcf(top, e("e044e9370ee1b67f"), "profile_surface", "0.3", ["A", "B", "C"], all_around: true, at: (45, -40))
+finish = surface(front, e("e044e9370ee1b67f"), ra: 1.6, process: "required", lay: "=", at: (5, -12))

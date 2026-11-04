@@ -1,0 +1,31 @@
+# DWG-901 bearing flange: a machined part to show drawings' GD&T: a bored boss (datum B), a bolt
+# circle positioned to A|B|C, the mounting face datum A, the flat side datum C.
+# frame: origin at the centre of the mounting face (z = 0), boss up +z.
+
+shared side = 80
+shared t = 12
+shared boss_d = 40
+shared boss_h = 6
+shared bore = 20
+shared bc = 60
+shared bolt = 6.6
+
+sketch plan(on: xy) {
+  outline = rect(center: (0, 0), size: (side, side))
+}
+plate = extrude(plan, t)
+sketch bk(on: plate.end) {
+  outline = circle((0, 0), boss_d / 2)
+}
+boss = extrude(bk.outline, boss_h)
+sketch bs(on: boss.end) {
+  c = pt(0, 0)
+}
+bore_h = hole(at: bs.c, d: bore, depth: thru)
+sketch hs(on: plate.end) {
+  h0 = pt(bc / 2, 0)
+  h1 = pt(0, bc / 2)
+  h2 = pt(-bc / 2, 0)
+  h3 = pt(0, -bc / 2)
+}
+bolts = hole(at: [hs.h0, hs.h1, hs.h2, hs.h3], d: bolt, depth: thru)

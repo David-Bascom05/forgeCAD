@@ -33,22 +33,15 @@ impl Model {
             });
         }
         let a = run.asm.as_ref()?;
-        let n = a.draw.len();
-        let mut paths = Vec::with_capacity(n);
-        let mut files = Vec::with_capacity(n);
-        for k in 0..n {
-            let (p, f) = a
-                .occurrences
-                .get(k)
-                .map_or((String::new(), String::new()), |o| (o.0.clone(), o.1.clone()));
-            paths.push(p);
-            files.push(f);
+        let mut m = Model::default();
+        for (k, (path, file, pose)) in a.occurrences.iter().enumerate() {
+            if let Some(Some(p)) = a.occ_part.get(k) {
+                m.bodies.push((a.parts[*p].clone(), *pose));
+                m.paths.push(path.clone());
+                m.files.push(file.clone());
+            }
         }
-        Some(Model {
-            bodies: a.draw.clone(),
-            paths,
-            files,
-        })
+        Some(m)
     }
 
     pub fn instances(&self) -> Vec<forge_draw::Instance<'_>> {

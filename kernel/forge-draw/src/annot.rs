@@ -56,20 +56,100 @@ pub fn arrow(page: &mut Page, pen: Pen, tip: Point2, dir: Vec2, len: f64) {
     page.fills.push((pen, vec![tip, back + n, back - n]));
 }
 
+/// Marks a dimension text boxed (a basic dimension) when it starts the text.
+pub const BOXED: char = '\u{1}';
+/// Splits a dimension text into its value and a stacked pair: `value STACK upper UNDER lower`.
+/// With no value the pair is the text, full size (limits); with one, small beside it (deviations).
+pub const STACK: char = '\u{2}';
+pub const UNDER: char = '\u{3}';
+
+/// A dimension text's parts: boxed, the value, and the stacked pair.
+fn parts(text: &str) -> (bool, &str, Option<(&str, &str)>) {
+    let boxed = text.starts_with(BOXED);
+    let t = text.trim_start_matches(BOXED);
+    match t.split_once(STACK) {
+        Some((main, pair)) => (boxed, main, Some(pair.split_once(UNDER).unwrap_or((pair, "")))),
+        None => (boxed, t, None),
+    }
+}
+
+/// The stacked pair's text height for a main text height `h`.
+fn stack_h(main: &str, h: f64) -> f64 {
+    if main.is_empty() { h } else { 0.7 * h }
+}
+
+/// How wide and high a dimension text is drawn at height `h`.
+pub fn text_size(text: &str, h: f64) -> Vec2 {
+    let (boxed, main, pair) = parts(text);
+    let mut w = text_width(main, h);
+    let mut ht = h;
+    if let Some((u, l)) = pair {
+        let sh = stack_h(main, h);
+        w += text_width(u, sh).max(text_width(l, sh)) + if main.is_empty() { 0.0 } else { 0.8 };
+        ht = ht.max(if main.is_empty() {
+            2.0 * h + 1.5
+        } else {
+            2.0 * sh + 1.0
+        });
+    }
+    if boxed {
+        w += 2.0;
+        ht += 2.0;
+    }
+    Vec2::new(w, ht)
+}
+
 /// The text's box half-sizes, for breaking lines round it.
 fn half_box(text: &str, h: f64) -> Vec2 {
-    Vec2::new(0.5 * text_width(text, h) + 1.0, 0.5 * h + 1.0)
+    let s = text_size(text, h);
+    Vec2::new(0.5 * s.x + 1.0, 0.5 * s.y + 1.0)
+}
+
+/// A dimension text with its left, middle or right at `at` (on its middle line): its value, its
+/// stacked limits or deviations, its basic box.
+pub fn dim_text(page: &mut Page, pen: Pen, at: Point2, align: Align, h: f64, text: &str) {
+    let size = text_size(text, h);
+    let x0 = match align {
+        Align::Left => at.x,
+        Align::Centre => at.x - 0.5 * size.x,
+        Align::Right => at.x - size.x,
+    };
+    let (boxed, main, pair) = parts(text);
+    let mut x = x0 + if boxed { 1.0 } else { 0.0 };
+    let put = |page: &mut Page, x: f64, y: f64, h: f64, s: &str| {
+        page.texts.push(Text {
+            at: Point2::new(x, y),
+            h,
+            angle: 0.0,
+            align: Align::Left,
+            text: s.to_string(),
+            pen,
+        });
+    };
+    if !main.is_empty() {
+        put(page, x, at.y - 0.5 * h, h, main);
+        x += text_width(main, h) + 0.8;
+    }
+    if let Some((u, l)) = pair {
+        let sh = stack_h(main, h);
+        let gap = if main.is_empty() { 0.75 } else { 0.5 };
+        put(page, x, at.y + gap, sh, u);
+        put(page, x, at.y - gap - sh, sh, l);
+    }
+    if boxed {
+        let (lo, hi) = (
+            Point2::new(x0, at.y - 0.5 * size.y),
+            Point2::new(x0 + size.x, at.y + 0.5 * size.y),
+        );
+        let c = [lo, Point2::new(hi.x, lo.y), hi, Point2::new(lo.x, hi.y)];
+        for k in 0..4 {
+            stroke(page, pen, c[k], c[(k + 1) % 4]);
+        }
+    }
 }
 
 fn label(page: &mut Page, pen: Pen, centre: Point2, h: f64, text: &str) {
-    page.texts.push(Text {
-        at: centre - Vec2::new(0.0, 0.5 * h),
-        h,
-        angle: 0.0,
-        align: Align::Centre,
-        text: text.to_string(),
-        pen,
-    });
+    dim_text(page, pen, centre, Align::Centre, h, text);
 }
 
 /// Draws `a`..`b` less the part inside the box round `c` (half sizes `hb`).
@@ -164,17 +244,22 @@ pub fn leader(page: &mut Page, pen: Pen, st: &Style, tip: Point2, at: Point2, li
     stroke(page, pen, at, shoulder);
     arrow(page, pen, tip, tip - at, st.arrow);
     let x = shoulder.x + s * 1.0;
-    let lh = st.text_h * 1.6;
-    let top = at.y + 0.5 * st.text_h + 0.5 * lh * (lines.len() as f64 - 1.0);
-    for (k, l) in lines.iter().enumerate() {
-        page.texts.push(Text {
-            at: Point2::new(x, top - st.text_h - lh * k as f64),
-            h: st.text_h,
-            angle: 0.0,
-            align: if right { Align::Left } else { Align::Right },
-            text: l.clone(),
+    let heights: Vec<f64> = lines
+        .iter()
+        .map(|l| text_size(l, st.text_h).y.max(st.text_h) + 0.6 * st.text_h)
+        .collect();
+    let total: f64 = heights.iter().sum();
+    let mut y = at.y + 0.5 * total;
+    for (l, lh) in lines.iter().zip(&heights) {
+        y -= lh;
+        dim_text(
+            page,
             pen,
-        });
+            Point2::new(x, y + 0.5 * lh),
+            if right { Align::Left } else { Align::Right },
+            st.text_h,
+            l,
+        );
     }
 }
 

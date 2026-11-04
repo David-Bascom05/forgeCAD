@@ -3,6 +3,8 @@
 
 pub mod annot;
 pub mod dxf;
+pub mod fits;
+pub mod gdt;
 pub mod geom2;
 pub mod grid;
 pub mod hlr;

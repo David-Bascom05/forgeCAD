@@ -133,6 +133,57 @@ pub enum Problem {
         item: String,
         why: String,
     },
+    /// A GD&T rule of the sheet's standard broken.
+    Gdt {
+        item: String,
+        rule: GdtRule,
+        detail: String,
+    },
+}
+
+/// The GD&T rules a drawing is checked against (ASME Y14.5-2018, ISO 1101/5459).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GdtRule {
+    /// A frame cites a datum letter no datum feature symbol or target on the drawing defines.
+    DatumUndefined,
+    /// Two datum feature symbols with one letter.
+    DatumDuplicate,
+    /// I, O and Q are not datum letters (nor anything but capitals).
+    DatumLetter,
+    /// Form tolerances (straightness, flatness, circularity, cylindricity) take no datums.
+    NoDatumsAllowed,
+    /// Orientation and runout tolerances need a datum.
+    DatumsNeeded,
+    /// The standard does not have the characteristic (Y14.5-2018 dropped concentricity, symmetry).
+    NotInStandard,
+    /// A diameter zone on a characteristic that cannot have one.
+    DiameterNotAllowed,
+    /// MMC or LMC on a feature that has no size (a plane, a line).
+    ModifierNeedsSize,
+    /// Runout is measured about a datum axis: its datum should be a feature of size.
+    RunoutNeedsAxis,
+    /// Position with no datum reference frame.
+    PositionNeedsFrame,
+    /// Position located by toleranced, not basic, dimensions.
+    PositionNotBasic,
+}
+
+impl GdtRule {
+    pub fn word(self) -> &'static str {
+        match self {
+            GdtRule::DatumUndefined => "DatumUndefined",
+            GdtRule::DatumDuplicate => "DatumDuplicate",
+            GdtRule::DatumLetter => "DatumLetter",
+            GdtRule::NoDatumsAllowed => "NoDatumsAllowed",
+            GdtRule::DatumsNeeded => "DatumsNeeded",
+            GdtRule::NotInStandard => "NotInStandard",
+            GdtRule::DiameterNotAllowed => "DiameterNotAllowed",
+            GdtRule::ModifierNeedsSize => "ModifierNeedsSize",
+            GdtRule::RunoutNeedsAxis => "RunoutNeedsAxis",
+            GdtRule::PositionNeedsFrame => "PositionNeedsFrame",
+            GdtRule::PositionNotBasic => "PositionNotBasic",
+        }
+    }
 }
 
 impl Problem {
@@ -151,6 +202,7 @@ impl Problem {
             Problem::Sick { .. } => "Sick",
             Problem::NotInView { .. } => "NotInView",
             Problem::NotHere { .. } => "NotHere",
+            Problem::Gdt { .. } => "Gdt",
         }
     }
 
@@ -173,6 +225,7 @@ impl Problem {
             }
             Problem::NotInView { item, reference } => format!("{item}: {reference} is not drawn in its view"),
             Problem::NotHere { item, why } => format!("{item}: {why}"),
+            Problem::Gdt { item, rule, detail } => format!("{item}: {} ({detail})", rule.word()),
         }
     }
 }
@@ -210,6 +263,7 @@ pub fn line_col(src: &str, at: usize) -> (usize, usize) {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct SheetDef {
+    pub standard: forge_draw::gdt::Standard,
     pub size: String,
     pub w: f64,
     pub h: f64,
@@ -310,6 +364,40 @@ pub enum AnnotKind {
         occ: String,
     },
     AutoBalloons,
+    /// A feature control frame: its rows (more than one stacked, or one composite frame).
+    Fcf {
+        to: Attach,
+        rows: Vec<forge_draw::gdt::Row>,
+        composite: bool,
+        all_around: bool,
+        between: Option<(String, String)>,
+    },
+    Datum {
+        to: Attach,
+        letter: String,
+    },
+    DatumTarget {
+        r: Ref,
+        label: String,
+        size: String,
+        kind: forge_draw::gdt::Target,
+        area: f64,
+    },
+    Surface {
+        r: Ref,
+        value: String,
+        process: forge_draw::gdt::Process,
+        lay: String,
+    },
+    Weld {
+        r: Ref,
+        weld: forge_draw::gdt::Weld,
+    },
+    Edge {
+        r: Ref,
+        upper: String,
+        lower: String,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -329,6 +417,37 @@ pub struct AnnotDef {
     pub text: Option<String>,
     pub prefix: String,
     pub suffix: String,
+    /// The dimension's tolerance, as written.
+    pub tol: Option<TolSpec>,
+    /// Decimal places of the value (2 when not given).
+    pub places: Option<usize>,
+}
+
+/// A dimension's tolerance.
+#[derive(Clone, Debug, PartialEq)]
+pub enum TolSpec {
+    /// `25 ±0.1`
+    Symmetric(f64),
+    /// `25` with `+0.1` over `-0.05` beside it
+    Deviation(f64, f64),
+    /// The limits themselves, upper over lower.
+    Limits(f64, f64),
+    Max,
+    Min,
+    /// A theoretically exact value, boxed.
+    Basic,
+    /// For reference only, in parentheses.
+    Reference,
+    /// An ISO 286 class (`H7`, `g6`) and its deviations.
+    Fit(String),
+}
+
+/// What a GD&T symbol is attached to: a model reference by leader, or another annotation (a
+/// dimension, so the feature of size it measures).
+#[derive(Clone, Debug, PartialEq)]
+pub enum Attach {
+    Ref(Ref),
+    Item(String),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -411,6 +530,12 @@ pub const FUNCTIONS: &[&str] = &[
     "note",
     "balloon",
     "auto_balloons",
+    "fcf",
+    "datum",
+    "datum_target",
+    "surface",
+    "weld",
+    "edge",
     "parts_list",
     "e",
     "f",
@@ -683,6 +808,102 @@ impl Reader<'_> {
         })
     }
 
+    /// What a GD&T symbol hangs on: a reference, or an annotation item above it.
+    fn attach(&self, a: &mut Args, func: &'static str) -> R<Attach> {
+        match a.need("to", Some(1))? {
+            (Val::Ref(r), _) => Ok(Attach::Ref(r)),
+            (Val::Item(id), s) => match self.doc.item(&id).map(|i| &i.kind) {
+                Some(ItemKind::Annot(_)) => Ok(Attach::Item(id)),
+                _ => Err(err(
+                    Problem::BadValue {
+                        func,
+                        arg: "to".into(),
+                        why: format!(
+                            "`{id}` is not an annotation: a symbol hangs on a reference or a dimension"
+                        ),
+                    },
+                    s,
+                )),
+            },
+            (v, s) => Err(a.wrong("to", "reference or dimension", &v, s)),
+        }
+    }
+
+    /// A dimension's tolerance from its arguments: tol, limits, fit, basic, reference, bound.
+    fn tolerance(&self, a: &mut Args, func: &'static str, span: Span) -> R<Option<TolSpec>> {
+        let mut found: Vec<TolSpec> = Vec::new();
+        match a.get("tol", None) {
+            None => {}
+            Some((Val::Num(x), _)) => found.push(TolSpec::Symmetric(x.abs())),
+            Some((Val::List(xs), s)) => match xs[..] {
+                [Val::Num(u), Val::Num(l)] if u >= l => found.push(TolSpec::Deviation(u, l)),
+                _ => {
+                    return Err(err(
+                        Problem::BadValue {
+                            func,
+                            arg: "tol".into(),
+                            why: "(upper, lower) deviations, upper first".into(),
+                        },
+                        s,
+                    ));
+                }
+            },
+            Some((v, s)) => return Err(a.wrong("tol", "number or (upper, lower)", &v, s)),
+        }
+        match a.get("limits", None) {
+            None => {}
+            Some((Val::List(xs), s)) => match xs[..] {
+                [Val::Num(u), Val::Num(l)] if u >= l => found.push(TolSpec::Limits(u, l)),
+                _ => {
+                    return Err(err(
+                        Problem::BadValue {
+                            func,
+                            arg: "limits".into(),
+                            why: "(upper, lower) deviations, upper first".into(),
+                        },
+                        s,
+                    ));
+                }
+            },
+            Some((v, s)) => return Err(a.wrong("limits", "(upper, lower)", &v, s)),
+        }
+        if let Some(f) = a.string("fit", None)? {
+            found.push(TolSpec::Fit(f));
+        }
+        if a.boolean("basic")? == Some(true) {
+            found.push(TolSpec::Basic);
+        }
+        if a.boolean("reference")? == Some(true) {
+            found.push(TolSpec::Reference);
+        }
+        match a.string("bound", None)?.as_deref() {
+            None => {}
+            Some("max") => found.push(TolSpec::Max),
+            Some("min") => found.push(TolSpec::Min),
+            Some(o) => {
+                return Err(err(
+                    Problem::BadValue {
+                        func,
+                        arg: "bound".into(),
+                        why: format!("`{o}`: max or min"),
+                    },
+                    span,
+                ));
+            }
+        }
+        if found.len() > 1 {
+            return Err(err(
+                Problem::BadValue {
+                    func,
+                    arg: "tol".into(),
+                    why: "one tolerance a dimension: tol, limits, fit, basic, reference or bound".into(),
+                },
+                span,
+            ));
+        }
+        Ok(found.pop())
+    }
+
     fn view_of(&self, a: &mut Args, k: Option<usize>) -> R<String> {
         let (v, s) = a.need("view", k)?;
         match v {
@@ -795,6 +1016,7 @@ impl Reader<'_> {
                     ("mass", &mut f.mass),
                     ("company", &mut f.company),
                     ("scale", &mut f.scale),
+                    ("tolerance", &mut f.tolerance),
                 ] {
                     if let Some(v) = a.get(k, None) {
                         *slot = match v.0 {
@@ -803,7 +1025,22 @@ impl Reader<'_> {
                         };
                     }
                 }
+                let standard = match a.string("standard", None)?.as_deref() {
+                    None | Some("ASME") => forge_draw::gdt::Standard::Asme,
+                    Some("ISO") => forge_draw::gdt::Standard::Iso,
+                    Some(o) => {
+                        return Err(err(
+                            Problem::BadValue {
+                                func,
+                                arg: "standard".into(),
+                                why: format!("`{o}`: ASME (Y14.5-2018) or ISO (1101)"),
+                            },
+                            span,
+                        ));
+                    }
+                };
                 ItemKind::Sheet(SheetDef {
+                    standard,
                     size,
                     w,
                     h,
@@ -1040,6 +1277,225 @@ impl Reader<'_> {
                             )
                         })?,
                     },
+                    "fcf" => {
+                        let to = self.attach(&mut a, func)?;
+                        let row = |a: &Args,
+                                   ch: &Val,
+                                   tol: &Val,
+                                   datums: Option<&Val>,
+                                   s: Span|
+                         -> R<forge_draw::gdt::Row> {
+                            let bad = |why: String| {
+                                err(
+                                    Problem::BadValue {
+                                        func,
+                                        arg: "rows".into(),
+                                        why,
+                                    },
+                                    s,
+                                )
+                            };
+                            let Val::Str(ch) = ch else {
+                                return Err(a.wrong("characteristic", "string", ch, s));
+                            };
+                            let ch = forge_draw::gdt::Char::from_word(ch).ok_or_else(|| {
+                                bad(format!(
+                                    "`{ch}`: the characteristics are {}",
+                                    forge_draw::gdt::CHARS
+                                        .iter()
+                                        .map(|c| c.0)
+                                        .collect::<Vec<_>>()
+                                        .join(" ")
+                                ))
+                            })?;
+                            let tol = match tol {
+                                Val::Str(t) => forge_draw::gdt::parse_tol(t).map_err(bad)?,
+                                Val::Num(x) => forge_draw::gdt::parse_tol(&x.to_string()).map_err(bad)?,
+                                v => return Err(a.wrong("tolerance", "string", v, s)),
+                            };
+                            let datums = match datums {
+                                None => vec![],
+                                Some(Val::List(xs)) => xs
+                                    .iter()
+                                    .map(|x| match x {
+                                        Val::Str(d) => forge_draw::gdt::parse_datum(d).map_err(bad),
+                                        v => Err(a.wrong("datums", "list of strings", v, s)),
+                                    })
+                                    .collect::<R<_>>()?,
+                                Some(Val::Str(d)) => vec![forge_draw::gdt::parse_datum(d).map_err(bad)?],
+                                Some(v) => return Err(a.wrong("datums", "list of strings", v, s)),
+                            };
+                            if datums.len() > 3 {
+                                return Err(bad("a frame holds at most three datums".into()));
+                            }
+                            Ok(forge_draw::gdt::Row { ch, tol, datums })
+                        };
+                        let rows = match a.get("rows", None) {
+                            Some((Val::List(rs), s)) => rs
+                                .iter()
+                                .map(|r| match r {
+                                    Val::List(cells) if cells.len() >= 2 => {
+                                        row(&a, &cells[0], &cells[1], cells.get(2), s)
+                                    }
+                                    v => Err(a.wrong("rows", "(characteristic, tolerance, [datums])", v, s)),
+                                })
+                                .collect::<R<Vec<_>>>()?,
+                            Some((v, s)) => return Err(a.wrong("rows", "list of rows", &v, s)),
+                            None => {
+                                let (ch, s) = a.need("characteristic", Some(2))?;
+                                let (tol, _) = a.need("tolerance", Some(3))?;
+                                let datums = a.get("datums", Some(4)).map(|d| d.0);
+                                vec![row(&a, &ch, &tol, datums.as_ref(), s)?]
+                            }
+                        };
+                        if rows.is_empty() {
+                            return Err(err(Problem::MissingArg { func, arg: "rows" }, span));
+                        }
+                        let between = match a.get("between", None) {
+                            None => None,
+                            Some((Val::List(xs), s)) => match &xs[..] {
+                                [Val::Str(p), Val::Str(q)] => Some((p.clone(), q.clone())),
+                                _ => {
+                                    return Err(a.wrong(
+                                        "between",
+                                        "two point labels",
+                                        &Val::List(xs.clone()),
+                                        s,
+                                    ));
+                                }
+                            },
+                            Some((v, s)) => return Err(a.wrong("between", "two point labels", &v, s)),
+                        };
+                        AnnotKind::Fcf {
+                            to,
+                            rows,
+                            composite: a.boolean("composite")?.unwrap_or(false),
+                            all_around: a.boolean("all_around")?.unwrap_or(false),
+                            between,
+                        }
+                    }
+                    "datum" => AnnotKind::Datum {
+                        to: self.attach(&mut a, func)?,
+                        letter: a
+                            .string("letter", Some(2))?
+                            .ok_or_else(|| err(Problem::MissingArg { func, arg: "letter" }, span))?,
+                    },
+                    "datum_target" => {
+                        let r = a.need_ref("to", Some(1))?;
+                        let label = a
+                            .string("label", Some(2))?
+                            .ok_or_else(|| err(Problem::MissingArg { func, arg: "label" }, span))?;
+                        let kind = match a.string("kind", None)?.as_deref() {
+                            None | Some("point") => forge_draw::gdt::Target::Point,
+                            Some("line") => forge_draw::gdt::Target::Line,
+                            Some("area") => forge_draw::gdt::Target::Area,
+                            Some(o) => {
+                                return Err(err(
+                                    Problem::BadValue {
+                                        func,
+                                        arg: "kind".into(),
+                                        why: format!("`{o}`: point, line or area"),
+                                    },
+                                    span,
+                                ));
+                            }
+                        };
+                        AnnotKind::DatumTarget {
+                            r,
+                            label,
+                            size: a.string("size", None)?.unwrap_or_default(),
+                            kind,
+                            area: a.num("area", None)?.unwrap_or(0.0),
+                        }
+                    }
+                    "surface" => {
+                        let r = a.need_ref("to", Some(1))?;
+                        let process = match a.string("process", None)?.as_deref() {
+                            None | Some("any") => forge_draw::gdt::Process::Any,
+                            Some("required") => forge_draw::gdt::Process::Required,
+                            Some("forbidden") => forge_draw::gdt::Process::Forbidden,
+                            Some(o) => {
+                                return Err(err(
+                                    Problem::BadValue {
+                                        func,
+                                        arg: "process".into(),
+                                        why: format!("`{o}`: any, required or forbidden"),
+                                    },
+                                    span,
+                                ));
+                            }
+                        };
+                        let value = match (a.num("ra", None)?, a.num("rz", None)?) {
+                            (Some(x), _) => format!("Ra {}", forge_draw::annot::number(x, 3)),
+                            (_, Some(x)) => format!("Rz {}", forge_draw::annot::number(x, 3)),
+                            _ => String::new(),
+                        };
+                        AnnotKind::Surface {
+                            r,
+                            value,
+                            process,
+                            lay: a.string("lay", None)?.unwrap_or_default(),
+                        }
+                    }
+                    "weld" => {
+                        use forge_draw::gdt::{Weld, WeldKind, WeldSide};
+                        let r = a.need_ref("to", Some(1))?;
+                        let kind = match a.string("kind", Some(2))?.as_deref() {
+                            None | Some("fillet") => WeldKind::Fillet,
+                            Some("square") => WeldKind::Square,
+                            Some("v") => WeldKind::V,
+                            Some("bevel") => WeldKind::Bevel,
+                            Some("plug") => WeldKind::Plug,
+                            Some(o) => {
+                                return Err(err(
+                                    Problem::BadValue {
+                                        func,
+                                        arg: "kind".into(),
+                                        why: format!("`{o}`: fillet, square, v, bevel or plug"),
+                                    },
+                                    span,
+                                ));
+                            }
+                        };
+                        let side = match a.string("side", None)?.as_deref() {
+                            None | Some("arrow") => WeldSide::Arrow,
+                            Some("other") => WeldSide::Other,
+                            Some("both") => WeldSide::Both,
+                            Some(o) => {
+                                return Err(err(
+                                    Problem::BadValue {
+                                        func,
+                                        arg: "side".into(),
+                                        why: format!("`{o}`: arrow, other or both"),
+                                    },
+                                    span,
+                                ));
+                            }
+                        };
+                        let size = match a.get("size", None) {
+                            None => String::new(),
+                            Some((Val::Num(x), _)) => forge_draw::annot::number(x, 2),
+                            Some((Val::Str(x), _)) => x,
+                            Some((v, s)) => return Err(a.wrong("size", "number or string", &v, s)),
+                        };
+                        AnnotKind::Weld {
+                            r,
+                            weld: Weld {
+                                kind,
+                                side,
+                                size,
+                                length: a.string("length", None)?.unwrap_or_default(),
+                                all_around: a.boolean("all_around")?.unwrap_or(false),
+                                field: a.boolean("field")?.unwrap_or(false),
+                                tail: a.string("tail", None)?.unwrap_or_default(),
+                            },
+                        }
+                    }
+                    "edge" => AnnotKind::Edge {
+                        r: a.need_ref("to", Some(1))?,
+                        upper: a.string("upper", Some(2))?.unwrap_or_else(|| "+0.3".into()),
+                        lower: a.string("lower", None)?.unwrap_or_default(),
+                    },
                     _ => AnnotKind::AutoBalloons,
                 };
                 let dir_ok = |d: &Option<String>| {
@@ -1058,6 +1514,21 @@ impl Reader<'_> {
                         span,
                     ));
                 }
+                let tol = self.tolerance(&mut a, func, span)?;
+                let places = match a.num("places", None)? {
+                    None => None,
+                    Some(p) if (0.0..=6.0).contains(&p) && p.fract() == 0.0 => Some(p as usize),
+                    Some(_) => {
+                        return Err(err(
+                            Problem::BadValue {
+                                func,
+                                arg: "places".into(),
+                                why: "0 to 6 decimal places".into(),
+                            },
+                            span,
+                        ));
+                    }
+                };
                 ItemKind::Annot(AnnotDef {
                     view,
                     kind,
@@ -1065,6 +1536,8 @@ impl Reader<'_> {
                     text: a.string("text", None)?,
                     prefix: a.string("prefix", None)?.unwrap_or_default(),
                     suffix: a.string("suffix", None)?.unwrap_or_default(),
+                    tol,
+                    places,
                 })
             }
         };

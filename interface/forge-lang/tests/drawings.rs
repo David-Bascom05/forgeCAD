@@ -167,3 +167,145 @@ fn pages_write_as_pdf_dxf_and_svg() {
     let svg = forge_draw::svg::svg(&d.pages[0]);
     assert!(svg.contains("SECTION A-A"));
 }
+
+fn rules(d: &Drawing) -> Vec<(String, &'static str)> {
+    d.errors
+        .iter()
+        .filter_map(|e| match &e.problem {
+            forge_lang::drawing::doc::Problem::Gdt { item, rule, .. } => Some((item.clone(), rule.word())),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn gdt_is_checked_against_the_standard() {
+    let dir = dir("drawing_gdt");
+    std::fs::write(dir.join("plate.fg"), PART).unwrap();
+    let base = "drawing\nm = part(\"plate.fg\")\ns = sheet(\"A3\")\ntop = base_view(m, sheet: s, dir: \"top\", at: (150, 150))\n";
+    let d = regen::make(base, &dir);
+    let rs = refs(&d, "top");
+    let circle = rs.iter().find(|r| r.1 == "circle").unwrap().0.clone();
+    let line_at = |x: f64| {
+        rs.iter()
+            .find(|r| r.1 == "line" && r.2[0] == r.2[2] && (r.2[0] - x).abs() < 1e-9)
+            .unwrap()
+            .0
+            .clone()
+    };
+    let (left, right) = (line_at(0.0), line_at(60.0));
+    let src = format!(
+        "{base}da = datum(top, {left}, \"A\", at: (-10, 10))
+db = datum(top, {right}, \"A\", at: (70, 10))
+dc = datum(top, {right}, \"I\", at: (70, 30))
+f1 = fcf(top, {left}, \"flatness\", \"0.1\", [\"A\"], at: (-30, 0))
+f2 = fcf(top, {left}, \"position\", \"dia 0.2 M\", [\"A\", \"D\"], at: (-30, -10))
+f3 = fcf(top, {circle}, \"circular_runout\", \"0.1\", [], at: (70, 50))
+f4 = fcf(top, {circle}, \"concentricity\", \"dia 0.1\", [\"A\"], at: (70, 60))
+f5 = fcf(top, {left}, \"flatness\", \"dia 0.1\", at: (-30, 20))
+hole_x = dim(top, {left}, {circle}, at: (10, 30))
+f6 = fcf(top, {circle}, \"position\", \"dia 0.1\", [\"A\"], at: (70, 70))
+bore = diameter(top, {circle}, fit: \"H7\", at: (40, 50))
+f7 = fcf(top, bore, \"perpendicularity\", \"dia 0.05 M\", [\"A\"], at: (40, 60))
+"
+    );
+    let d = regen::make(&src, &dir);
+    let got = rules(&d);
+    let want = [
+        ("db", "DatumDuplicate"),
+        ("dc", "DatumLetter"),
+        ("f1", "NoDatumsAllowed"),
+        ("f2", "ModifierNeedsSize"),
+        ("f2", "DatumUndefined"),
+        ("f3", "DatumsNeeded"),
+        ("f4", "NotInStandard"),
+        ("f5", "DiameterNotAllowed"),
+        ("f6", "PositionNotBasic"),
+    ];
+    for w in want {
+        assert!(
+            got.iter().any(|g| g.0 == w.0 && g.1 == w.1),
+            "{w:?} not in {got:?}"
+        );
+    }
+    // f7 is on the bore's size (a feature of size): MMC is allowed there
+    assert!(!got.iter().any(|g| g.0 == "f7"), "{got:?}");
+    assert_eq!(d.items.iter().find(|i| i.id == "bore").unwrap().value, Some(8.0));
+    // every fix offered applies and clears its own problem
+    for e in d.errors.iter().filter(|e| !e.fixes.is_empty()) {
+        let forge_lang::drawing::doc::Problem::Gdt { item, rule, .. } = &e.problem else {
+            continue;
+        };
+        let op = e
+            .fixes
+            .iter()
+            .find(|f| !matches!(f, DrawOp::DeleteItem { .. }))
+            .unwrap_or(&e.fixes[0]);
+        let fixed = forge_lang::drawing::ops::apply(&src, op).unwrap();
+        let again = rules(&regen::make(&fixed, &dir));
+        assert!(
+            !again.iter().any(|g| &g.0 == item && g.1 == rule.word()),
+            "{op:?} left {item} {}",
+            rule.word()
+        );
+    }
+    // ISO keeps concentricity
+    let iso = src.replace("s = sheet(\"A3\")", "s = sheet(\"A3\", standard: \"ISO\")");
+    assert!(
+        !rules(&regen::make(&iso, &dir))
+            .iter()
+            .any(|g| g.1 == "NotInStandard")
+    );
+    // the frame's edge going away makes it sick, like any annotation
+    std::fs::write(
+        dir.join("plate.fg"),
+        PART.replace("bore = hole(at: hs.c, d: d, depth: thru)\n", ""),
+    )
+    .unwrap();
+    let d = regen::make(&src, &dir);
+    assert!(d.items.iter().find(|i| i.id == "f6").unwrap().sick);
+}
+
+#[test]
+fn tolerances_are_written_and_fits_computed() {
+    use forge_draw::fits::deviations;
+    let (hi, lo) = deviations(8.0, "H7").unwrap();
+    assert_eq!(((hi * 1000.0).round(), lo), (15.0, 0.0));
+    let dir = dir("drawing_tol");
+    std::fs::write(dir.join("plate.fg"), PART).unwrap();
+    let base = "drawing\nm = part(\"plate.fg\")\ns = sheet(\"A3\")\ntop = base_view(m, sheet: s, dir: \"top\", at: (150, 150))\n";
+    let d = regen::make(base, &dir);
+    let circle = refs(&d, "top").into_iter().find(|r| r.1 == "circle").unwrap().0;
+    let texts = |extra: &str| {
+        let d = regen::make(
+            &format!("{base}x = diameter(top, {circle}, at: (40, 50){extra})\n"),
+            &dir,
+        );
+        assert!(d.ok(), "{:?}", d.errors);
+        d.pages[0]
+            .texts
+            .iter()
+            .map(|t| t.text.clone())
+            .collect::<Vec<_>>()
+    };
+    assert!(texts(", tol: 0.05").iter().any(|t| t == "\u{2300}8 \u{b1}0.05"));
+    let fit = texts(", fit: \"H7\"");
+    assert!(
+        fit.iter().any(|t| t == "\u{2300}8 H7")
+            && fit.iter().any(|t| t == "+0.015")
+            && fit.iter().any(|t| t == "0"),
+        "{fit:?}"
+    );
+    let lim = texts(", limits: (0.1, -0.1)");
+    assert!(
+        lim.iter().any(|t| t == "\u{2300}8.1") && lim.iter().any(|t| t == "\u{2300}7.9"),
+        "{lim:?}"
+    );
+    assert!(texts(", reference: true").iter().any(|t| t == "(\u{2300}8)"));
+    assert!(texts(", bound: \"max\"").iter().any(|t| t == "\u{2300}8 MAX"));
+    let bad = regen::make(
+        &format!("{base}x = diameter(top, {circle}, fit: \"Q7\", at: (40, 50))\n"),
+        &dir,
+    );
+    assert!(!bad.ok());
+}

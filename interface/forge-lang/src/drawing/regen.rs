@@ -62,6 +62,12 @@ pub struct ViewOut {
 #[derive(Clone, Debug, PartialEq)]
 pub struct ItemOut {
     pub id: String,
+    /// It sizes, or is attached to, a feature of size.
+    pub fos: bool,
+    /// Where its text is (a dimension's value): what a frame or datum attached to it hangs from.
+    pub anchor: Point2,
+    /// The text's half width and height.
+    pub half: Vec2,
     pub sheet: usize,
     pub kind: &'static str,
     pub lo: Point2,
@@ -144,6 +150,7 @@ fn load(id: &str, file: &str, dir: &Path) -> Result<ModelOut, String> {
     let src = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
     let opts = crate::Options {
         build: true,
+        render: true,
         dir: path.parent().map(Path::to_path_buf),
         ..crate::Options::default()
     };
@@ -805,6 +812,8 @@ struct Resolved {
     feat: Feat,
     shown: bool,
     inst: usize,
+    /// A feature of size: a hole or shaft (circle edge, cylinder face), what MMC/LMC can apply to.
+    fos: bool,
 }
 
 fn resolve_ref(model: &Model, v: &ViewOut, r: &Ref) -> Option<Resolved> {
@@ -831,10 +840,15 @@ fn resolve_ref(model: &Model, v: &ViewOut, r: &Ref) -> Option<Resolved> {
                     })
                 })
             });
+        let fos = matches!(
+            body.face(f).surface,
+            Surface::Cylinder(_) | Surface::Sphere(_) | Surface::Cone(_)
+        );
         return Some(Resolved {
             feat: Feat::Point(pr(b.center())),
             shown,
             inst,
+            fos,
         });
     }
     let es = edges_named(body, r.name);
@@ -890,7 +904,13 @@ fn resolve_ref(model: &Model, v: &ViewOut, r: &Ref) -> Option<Resolved> {
             f => Feat::Point(f.anchor()),
         },
     };
-    Some(Resolved { feat, shown, inst })
+    let fos = matches!(edge.curve, Curve::Circle(_));
+    Some(Resolved {
+        feat,
+        shown,
+        inst,
+        fos,
+    })
 }
 
 /// The edges of a view near a sheet point, as reattach suggestions: same kind first.
@@ -997,9 +1017,31 @@ fn annotate(
             }
         }
     };
-    let text = |measured: String| format!("{}{}{}", a.prefix, a.text.clone().unwrap_or(measured), a.suffix);
+    let std = ctx
+        .sheets
+        .get(v.sheet)
+        .map_or(forge_draw::gdt::Standard::Asme, |s| s.1.standard);
+    let places = a.places.unwrap_or(2);
+    // the value as written: symbol, number, unit, then its tolerance
+    let text = |sym: &str, val: f64, unit: &str, errors: &mut Vec<DrawError>| -> String {
+        match tol_text(sym, val, unit, places, a) {
+            Ok(t) => t,
+            Err(why) => {
+                errors.push(fail(
+                    Problem::BadValue {
+                        func: "fit",
+                        arg: "fit".into(),
+                        why,
+                    },
+                    item.span,
+                ));
+                format!("{sym}{}{unit}", number(val, places))
+            }
+        }
+    };
     let pen = Pen::Thin;
     let mut value = None;
+    let mut fos = false;
     let kind: &'static str = match &a.kind {
         AnnotKind::Linear { a: ra, b: rb, dir } => {
             let fa = get(ra, "1", false, errors);
@@ -1021,6 +1063,7 @@ fn annotate(
                         let u = (a1 - a0).normalize().expect("a line");
                         let m = a0.lerp(a1, 0.5);
                         let foot = b0 + u * (m - b0).dot(u);
+                        fos = true;
                         (m, foot, Some(u.perp()))
                     }
                     (fa, Some(fb)) => {
@@ -1067,7 +1110,8 @@ fn annotate(
                 let val = ((qs - ps).dot(dir) / s).abs();
                 value = Some(val);
                 let at = a.at.map_or(ps.lerp(qs, 0.5) + dir.perp() * 10.0, sp);
-                annot::linear(an.page, pen, &an.st, ps, qs, dir, at, &text(fmt_len(val)));
+                let t = text("", val, "", errors);
+                annot::linear(an.page, pen, &an.st, ps, qs, dir, at, &t);
             }
             "dim"
         }
@@ -1098,7 +1142,7 @@ fn annotate(
                         da,
                         db,
                         at,
-                        &text(format!("{}\u{b0}", number(ang, 1))),
+                        &text("", ang, "\u{b0}", errors),
                     );
                 }
             }
@@ -1106,6 +1150,7 @@ fn annotate(
         }
         AnnotKind::Radius { e } | AnnotKind::Diameter { e } => {
             let diameter = matches!(a.kind, AnnotKind::Diameter { .. });
+            fos = true;
             if let Some(f) = get(e, "1", true, errors) {
                 match f.feat {
                     Feat::Circle { c, r, .. } => {
@@ -1113,11 +1158,11 @@ fn annotate(
                         value = Some(val);
                         let at = a.at.map_or(sp(c) + Vec2::new(1.0, 1.0) * (r * s + 8.0), sp);
                         let t = if diameter {
-                            format!("\u{2300}{}", fmt_len(val))
+                            text("\u{2300}", val, "", errors)
                         } else {
-                            format!("R{}", fmt_len(val))
+                            text("R", val, "", errors)
                         };
-                        annot::radial(an.page, pen, &an.st, sp(c), r * s, at, &text(t));
+                        annot::radial(an.page, pen, &an.st, sp(c), r * s, at, &t);
                     }
                     _ => errors.push(fail(
                         Problem::BadValue {
@@ -1132,6 +1177,7 @@ fn annotate(
             if diameter { "diameter" } else { "radius" }
         }
         AnnotKind::HoleNote { e } => {
+            fos = true;
             if let Some(f) = get(e, "1", true, errors)
                 && let Feat::Circle { c, r, .. } = f.feat
             {
@@ -1361,6 +1407,186 @@ fn annotate(
             }
             "balloon"
         }
+        AnnotKind::Fcf {
+            to,
+            rows,
+            composite,
+            all_around,
+            between,
+        } => {
+            let h = an.st.text_h;
+            let (tip, target_fos, hang) = attach_point(to, &mut get, errors, items, v, a.at.map(sp));
+            fos = target_fos;
+            for (k, row) in rows.iter().enumerate() {
+                if !target_fos && row.tol.mods.iter().any(|m| m.needs_size()) {
+                    let kept: Vec<String> = cell_words(&row.tol)
+                        .into_iter()
+                        .filter(|w| w != "M" && w != "L")
+                        .collect();
+                    errors.push(DrawError {
+                        problem: Problem::Gdt {
+                            item: item.id.clone(),
+                            rule: doc::GdtRule::ModifierNeedsSize,
+                            detail: format!("row {}: MMC/LMC applies to a feature of size (a hole, a pin, a width), not this one", k + 1),
+                        },
+                        span: item.span,
+                        warning: false,
+                        fixes: if rows.len() == 1 {
+                            vec![DrawOp::SetArg { item: item.id.clone(), arg: "3".into(), value: format!("\"{}\"", kept.join(" ")) }]
+                        } else {
+                            vec![]
+                        },
+                    });
+                }
+            }
+            let at = match (a.at.map(sp), hang, tip) {
+                (Some(p), _, _) => p,
+                (None, Some((anchor, half)), _) => anchor - Vec2::new(half.x, half.y + 2.5 * h),
+                (None, None, Some(t)) => t + Vec2::new(12.0, 10.0),
+                _ => at_sheet,
+            };
+            let top = forge_draw::gdt::frame(an.page, at, h, rows, *composite, std);
+            // a frame on a dimension placed away from its text: a line from one to the other
+            if let (Some((anchor, half)), None) = (hang, tip) {
+                let corner = Point2::new(
+                    anchor.x.clamp(at.x, top.x),
+                    if anchor.y > top.y { top.y } else { at.y },
+                );
+                // where the line from the frame meets the text's box
+                let d = corner - anchor;
+                let k = [half.x / d.x.abs().max(1e-12), half.y / d.y.abs().max(1e-12)]
+                    .into_iter()
+                    .fold(f64::INFINITY, f64::min);
+                let end = anchor + d * k.min(1.0);
+                if corner.distance(end) > 0.5 * h {
+                    annot::stroke(an.page, pen, corner, end);
+                }
+            }
+            if let Some(tip) = tip {
+                let mid_y = 0.5 * (at.y + top.y);
+                let from = if tip.x < at.x {
+                    Point2::new(at.x, mid_y)
+                } else {
+                    Point2::new(top.x, mid_y)
+                };
+                let elbow = Point2::new(from.x + if tip.x < at.x { -4.0 } else { 4.0 }, mid_y);
+                annot::stroke(an.page, pen, from, elbow);
+                annot::stroke(an.page, pen, elbow, tip);
+                annot::arrow(an.page, pen, tip, tip - elbow, an.st.arrow);
+                if *all_around {
+                    an.page.strokes.push(Stroke {
+                        pen,
+                        geom: Geom2::Conic {
+                            c: elbow,
+                            u: Vec2::new(1.2, 0.0),
+                            v: Vec2::new(0.0, 1.2),
+                            t0: 0.0,
+                            t1: dmath::TAU,
+                        },
+                    });
+                }
+            }
+            if let Some((p, q)) = between {
+                let y = at.y - 1.6 * h;
+                let w = forge_draw::page::text_width(p, h);
+                an.page.texts.push(Text {
+                    at: Point2::new(at.x, y),
+                    h,
+                    angle: 0.0,
+                    align: Align::Left,
+                    text: p.clone(),
+                    pen,
+                });
+                let (x0, x1) = (at.x + w + 1.0, at.x + w + 1.0 + 3.0 * h);
+                annot::stroke(
+                    an.page,
+                    pen,
+                    Point2::new(x0, y + 0.5 * h),
+                    Point2::new(x1, y + 0.5 * h),
+                );
+                annot::arrow(
+                    an.page,
+                    pen,
+                    Point2::new(x0, y + 0.5 * h),
+                    Vec2::new(-1.0, 0.0),
+                    1.5,
+                );
+                annot::arrow(an.page, pen, Point2::new(x1, y + 0.5 * h), Vec2::X, 1.5);
+                an.page.texts.push(Text {
+                    at: Point2::new(x1 + 1.0, y),
+                    h,
+                    angle: 0.0,
+                    align: Align::Left,
+                    text: q.clone(),
+                    pen,
+                });
+            }
+            "fcf"
+        }
+        AnnotKind::Datum { to, letter } => {
+            let h = an.st.text_h;
+            let (tip, target_fos, hang) = attach_point(to, &mut get, errors, items, v, a.at.map(sp));
+            fos = target_fos;
+            let foot = match (tip, hang) {
+                (Some(t), _) => Some(t),
+                (None, Some((anchor, half))) => Some(anchor - Vec2::new(0.0, half.y + 0.3)),
+                _ => None,
+            };
+            if let Some(foot) = foot {
+                let at = a.at.map_or(foot - Vec2::new(0.0, 4.5 * h), sp);
+                forge_draw::gdt::datum_symbol(an.page, letter, at, foot, h);
+            }
+            "datum"
+        }
+        AnnotKind::DatumTarget {
+            r,
+            label,
+            size,
+            kind,
+            area,
+        } => {
+            if let Some(f) = get(r, "1", false, errors) {
+                let on = near_on(&f.feat, v, at_sheet);
+                let at = a.at.map_or(on + Vec2::new(12.0, 12.0), sp);
+                forge_draw::gdt::datum_target(an.page, at, on, label, size, *kind, area * s, an.st.text_h);
+            }
+            "datum_target"
+        }
+        AnnotKind::Surface {
+            r,
+            value: val,
+            process,
+            lay,
+        } => {
+            if let Some(f) = get(r, "1", false, errors) {
+                let on = near_on(&f.feat, v, at_sheet);
+                let up = match f.feat {
+                    Feat::Line(p, q) => {
+                        let n = (sp(q) - sp(p)).perp();
+                        if n.dot(at_sheet - on) >= 0.0 { n } else { n * -1.0 }
+                    }
+                    _ => at_sheet - on,
+                };
+                forge_draw::gdt::surface_texture(an.page, on, up, val, *process, lay, an.st.text_h, std);
+            }
+            "surface"
+        }
+        AnnotKind::Weld { r, weld } => {
+            if let Some(f) = get(r, "1", false, errors) {
+                let tip = near_on(&f.feat, v, at_sheet);
+                let at = a.at.map_or(tip + Vec2::new(-15.0, 10.0), sp);
+                forge_draw::gdt::weld(an.page, tip, at, weld, an.st.text_h, std);
+            }
+            "weld"
+        }
+        AnnotKind::Edge { r, upper, lower } => {
+            if let Some(f) = get(r, "1", false, errors) {
+                let on = near_on(&f.feat, v, at_sheet);
+                let at = a.at.map_or(on + Vec2::new(8.0, 8.0), sp);
+                forge_draw::gdt::edge(an.page, at, on, upper, lower, an.st.text_h);
+            }
+            "edge"
+        }
         AnnotKind::AutoBalloons => {
             if model.paths.len() <= 1 {
                 errors.push(fail(
@@ -1395,8 +1621,37 @@ fn annotate(
         lo = Point2::new(lo.x.min(a.x), lo.y.min(a.y));
         hi = Point2::new(hi.x.max(b.x), hi.y.max(b.y));
     }
+    // a dimension's text: where a frame or datum symbol attached to it hangs
+    let new_texts = &an.page.texts[before.1.min(an.page.texts.len())..];
+    let (anchor, half) = match new_texts.first() {
+        Some(t) => {
+            let (mut x0, mut x1, mut y0, mut y1) =
+                (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY);
+            for t in new_texts {
+                let w = forge_draw::page::text_width(&t.text, t.h);
+                let x = match t.align {
+                    Align::Left => t.at.x,
+                    Align::Centre => t.at.x - 0.5 * w,
+                    Align::Right => t.at.x - w,
+                };
+                x0 = x0.min(x);
+                x1 = x1.max(x + w);
+                y0 = y0.min(t.at.y);
+                y1 = y1.max(t.at.y + t.h);
+            }
+            let _ = t;
+            (
+                Point2::new(0.5 * (x0 + x1), 0.5 * (y0 + y1)),
+                Vec2::new(0.5 * (x1 - x0), 0.5 * (y1 - y0)),
+            )
+        }
+        None => (at_sheet, Vec2::ZERO),
+    };
     items.push(ItemOut {
         id: item.id.clone(),
+        fos,
+        anchor,
+        half,
         sheet: v.sheet,
         kind,
         lo,
@@ -1406,6 +1661,117 @@ fn annotate(
         view: Some(v.id.clone()),
     });
     Some(())
+}
+
+/// The words of a tolerance cell, as `gdt::parse_tol` reads them.
+fn cell_words(t: &forge_draw::gdt::Tol) -> Vec<String> {
+    use forge_draw::gdt::Modifier as M;
+    let mut w = Vec::new();
+    if t.dia {
+        w.push(if t.sphere { "Sdia".into() } else { "dia".into() });
+    }
+    w.push(number(t.value, 4));
+    for m in &t.mods {
+        w.push(match m {
+            M::Mmc => "M".into(),
+            M::Lmc => "L".into(),
+            M::Rfs => "S".into(),
+            M::Projected(None) => "P".into(),
+            M::Projected(Some(x)) => format!("P{}", number(*x, 3)),
+            M::Free => "F".into(),
+            M::Tangent => "T".into(),
+            M::Unequal(x) => format!("U{}", number(*x, 3)),
+            M::Statistical => "ST".into(),
+        });
+    }
+    w
+}
+
+/// The point of a feature on the sheet nearest `q`: on a line, the foot; on a circle, toward q.
+fn near_on(f: &Feat, v: &ViewOut, q: Point2) -> Point2 {
+    let sp = |p: Point2| v.place.point(p);
+    match *f {
+        Feat::Point(p) => sp(p),
+        Feat::Line(a, b) => {
+            let (a, b) = (sp(a), sp(b));
+            let ab = b - a;
+            let t = ((q - a).dot(ab) / ab.dot(ab).max(1e-300)).clamp(0.0, 1.0);
+            a + ab * t
+        }
+        Feat::Circle { c, r, .. } => {
+            let c = sp(c);
+            c + (q - c).normalize().unwrap_or(Vec2::X) * (r * v.scale)
+        }
+    }
+}
+
+/// What resolves an annotation's references (and marks it sick when one is gone).
+type Resolver<'a> = dyn FnMut(&Ref, &str, bool, &mut Vec<DrawError>) -> Option<Resolved> + 'a;
+
+/// Where a GD&T symbol hangs: (a leader's end on the model, whether that is a feature of size,
+/// the attached dimension's text).
+fn attach_point(
+    to: &doc::Attach,
+    get: &mut Resolver,
+    errors: &mut Vec<DrawError>,
+    items: &[ItemOut],
+    v: &ViewOut,
+    at: Option<Point2>,
+) -> (Option<Point2>, bool, Option<(Point2, Vec2)>) {
+    match to {
+        doc::Attach::Ref(r) => match get(r, "1", false, errors) {
+            Some(f) => {
+                let q = at.unwrap_or(v.hi);
+                (Some(near_on(&f.feat, v, q)), f.fos, None)
+            }
+            None => (None, false, None),
+        },
+        doc::Attach::Item(id) => match items.iter().find(|i| &i.id == id) {
+            Some(i) => (None, i.fos, Some((i.anchor, i.half))),
+            None => (None, false, None),
+        },
+    }
+}
+
+/// A signed deviation as written: `+0.021`, `-0.007`, `0`.
+fn signed(x: f64, places: usize) -> String {
+    let t = number(x, places.max(3));
+    if x > 0.0 && t != "0" { format!("+{t}") } else { t }
+}
+
+/// A dimension's text: `prefix SYM value UNIT suffix` with its tolerance (in the markup
+/// `annot::dim_text` draws: stacked deviations or limits, the basic box).
+fn tol_text(sym: &str, v: f64, unit: &str, places: usize, a: &AnnotDef) -> Result<String, String> {
+    let base = match &a.text {
+        Some(t) => t.clone(),
+        None => format!("{sym}{}{unit}", number(v, places)),
+    };
+    let base = format!("{}{base}{}", a.prefix, a.suffix);
+    let (s, u) = (annot::STACK, annot::UNDER);
+    Ok(match &a.tol {
+        None => base,
+        Some(doc::TolSpec::Symmetric(t)) => format!("{base} \u{b1}{}", number(*t, places.max(2))),
+        Some(doc::TolSpec::Deviation(hi, lo)) => {
+            format!("{base}{s}{}{u}{}", signed(*hi, places), signed(*lo, places))
+        }
+        Some(doc::TolSpec::Limits(hi, lo)) => {
+            let p = places.max(3);
+            format!(
+                "{}{s}{sym}{}{unit}{u}{sym}{}{unit}",
+                a.prefix,
+                number(v + hi, p),
+                number(v + lo, p)
+            )
+        }
+        Some(doc::TolSpec::Max) => format!("{base} MAX"),
+        Some(doc::TolSpec::Min) => format!("{base} MIN"),
+        Some(doc::TolSpec::Basic) => format!("{}{base}", annot::BOXED),
+        Some(doc::TolSpec::Reference) => format!("({base})"),
+        Some(doc::TolSpec::Fit(c)) => {
+            let (hi, lo) = forge_draw::fits::deviations(v, c).map_err(|e| e.text())?;
+            format!("{base} {c}{s}{}{u}{}", signed(hi, 3), signed(lo, 3))
+        }
+    })
 }
 
 /// A blind hole's depth: the bore's length when its far end is a floor (a face it alone bounds);
@@ -1586,6 +1952,7 @@ pub fn make(src: &str, dir: &Path) -> Drawing {
         ctx.sheets.push((
             "sheet".into(),
             doc::SheetDef {
+                standard: forge_draw::gdt::Standard::Asme,
                 size: "B".into(),
                 w,
                 h,
@@ -1676,13 +2043,14 @@ pub fn make(src: &str, dir: &Path) -> Drawing {
                     fence(&mut pages[p.sheet], &p.place, c, r, rect);
                     let lp = p
                         .place
-                        .point(c + Vec2::new(r, r) * std::f64::consts::FRAC_1_SQRT_2)
-                        + Vec2::new(2.0, 2.0);
+                        .point(c + Vec2::new(-r, r) * std::f64::consts::FRAC_1_SQRT_2)
+                        + Vec2::new(-2.0, 2.0);
+                    // the fence's letter at its upper left, clear of what it encloses
                     pages[p.sheet].texts.push(Text {
                         at: lp,
                         h: 5.0,
                         angle: 0.0,
-                        align: Align::Left,
+                        align: Align::Right,
                         text: v.label.clone(),
                         pen: Pen::Thin,
                     });
@@ -1695,6 +2063,9 @@ pub fn make(src: &str, dir: &Path) -> Drawing {
             }
         }
         items.push(ItemOut {
+            fos: false,
+            anchor: Point2::ORIGIN,
+            half: Vec2::ZERO,
             id: v.id.clone(),
             sheet: v.sheet,
             kind: v.kind,
@@ -1725,6 +2096,9 @@ pub fn make(src: &str, dir: &Path) -> Drawing {
                     });
                 }
                 items.push(ItemOut {
+                    fos: false,
+                    anchor: Point2::ORIGIN,
+                    half: Vec2::ZERO,
                     id: item.id.clone(),
                     sheet: k,
                     kind: "note",
@@ -1764,6 +2138,9 @@ pub fn make(src: &str, dir: &Path) -> Drawing {
                     &rows,
                 );
                 items.push(ItemOut {
+                    fos: false,
+                    anchor: Point2::ORIGIN,
+                    half: Vec2::ZERO,
                     id: item.id.clone(),
                     sheet: k,
                     kind: "parts_list",
@@ -1777,6 +2154,7 @@ pub fn make(src: &str, dir: &Path) -> Drawing {
             _ => {}
         }
     }
+    gdt_checks(&ctx, &d, &items, &mut errors);
     let sheets = ctx.sheets.iter().map(|s| s.0.clone()).collect();
     Drawing {
         sheets,
@@ -1956,4 +2334,271 @@ pub fn locate(d: &Drawing, view: &str, r: &Ref) -> Option<(Point2, Point2)> {
         Feat::Line(a, b) => (v.place.point(a), v.place.point(b)),
         Feat::Circle { c, .. } => (v.place.point(c), v.place.point(c)),
     })
+}
+
+fn gdt_error(
+    item: &Item,
+    rule: doc::GdtRule,
+    detail: String,
+    warning: bool,
+    fixes: Vec<DrawOp>,
+) -> DrawError {
+    DrawError {
+        problem: Problem::Gdt {
+            item: item.id.clone(),
+            rule,
+            detail,
+        },
+        span: item.span,
+        warning,
+        fixes,
+    }
+}
+
+/// The drawing checked against its standard's GD&T rules: datum letters defined once and legal,
+/// every frame's datums defined, datums where the characteristic needs (or forbids) them, the
+/// standard's own characteristics, diameter zones only where they mean something, runout about
+/// an axis, and position located by basic dimensions.
+fn gdt_checks(ctx: &Ctx, d: &doc::Doc, items: &[ItemOut], errors: &mut Vec<DrawError>) {
+    use forge_draw::gdt::{Char, Datums, datum_letter_ok};
+    let annots = || {
+        d.items.iter().filter_map(|i| match &i.kind {
+            ItemKind::Annot(a) => Some((i, a)),
+            _ => None,
+        })
+    };
+    // datum letters, in order, with whether their feature has a size (an axis)
+    let mut letters: Vec<(String, bool)> = Vec::new();
+    let next_free = |taken: &[(String, bool)]| {
+        ('A'..='Z')
+            .filter(|c| !"IOQ".contains(*c))
+            .map(|c| c.to_string())
+            .find(|c| !taken.iter().any(|t| &t.0 == c))
+            .unwrap_or_else(|| "Z".into())
+    };
+    for (i, a) in annots() {
+        match &a.kind {
+            AnnotKind::Datum { letter, .. } => {
+                let fos = items.iter().find(|x| x.id == i.id).is_some_and(|x| x.fos);
+                if !datum_letter_ok(letter) || letter.len() != 1 {
+                    let free = next_free(&letters);
+                    errors.push(gdt_error(
+                        i,
+                        doc::GdtRule::DatumLetter,
+                        format!("`{letter}`: a datum is one capital letter, not I, O or Q"),
+                        false,
+                        vec![DrawOp::SetArg {
+                            item: i.id.clone(),
+                            arg: "2".into(),
+                            value: format!("\"{free}\""),
+                        }],
+                    ));
+                } else if letters.iter().any(|l| &l.0 == letter) {
+                    let free = next_free(&letters);
+                    errors.push(gdt_error(
+                        i,
+                        doc::GdtRule::DatumDuplicate,
+                        format!("datum {letter} is already on the drawing"),
+                        false,
+                        vec![DrawOp::SetArg {
+                            item: i.id.clone(),
+                            arg: "2".into(),
+                            value: format!("\"{free}\""),
+                        }],
+                    ));
+                }
+                letters.push((letter.clone(), fos));
+            }
+            AnnotKind::DatumTarget { label, .. } => {
+                let l: String = label.chars().take_while(|c| c.is_ascii_uppercase()).collect();
+                if !letters.iter().any(|x| x.0 == l) {
+                    letters.push((l, false));
+                }
+            }
+            _ => {}
+        }
+    }
+    for (i, a) in annots() {
+        let AnnotKind::Fcf { to, rows, .. } = &a.kind else {
+            continue;
+        };
+        let std = ctx
+            .views
+            .iter()
+            .find(|v| v.id == a.view)
+            .and_then(|v| ctx.sheets.get(v.sheet))
+            .map_or(forge_draw::gdt::Standard::Asme, |s| s.1.standard);
+        let single = rows.len() == 1;
+        for (k, row) in rows.iter().enumerate() {
+            let at = if single {
+                String::new()
+            } else {
+                format!("row {}: ", k + 1)
+            };
+            let word = row.ch.word();
+            if !row.ch.in_standard(std) {
+                errors.push(gdt_error(
+                    i,
+                    doc::GdtRule::NotInStandard,
+                    format!("{at}{word} is not in ASME Y14.5-2018; use position or profile"),
+                    false,
+                    if single {
+                        vec![DrawOp::SetArg {
+                            item: i.id.clone(),
+                            arg: "2".into(),
+                            value: "\"position\"".into(),
+                        }]
+                    } else {
+                        vec![]
+                    },
+                ));
+            }
+            match row.ch.datums() {
+                Datums::Never if !row.datums.is_empty() => errors.push(gdt_error(
+                    i,
+                    doc::GdtRule::NoDatumsAllowed,
+                    format!("{at}{word} is a form tolerance: it takes no datums"),
+                    false,
+                    if single {
+                        vec![DrawOp::SetArg {
+                            item: i.id.clone(),
+                            arg: "4".into(),
+                            value: "[]".into(),
+                        }]
+                    } else {
+                        vec![]
+                    },
+                )),
+                Datums::Required if row.datums.is_empty() => errors.push(gdt_error(
+                    i,
+                    doc::GdtRule::DatumsNeeded,
+                    if matches!(row.ch, Char::CircularRunout | Char::TotalRunout) {
+                        format!("{at}{word} is measured about a datum axis: give one")
+                    } else {
+                        format!("{at}{word} is relative to a datum: give one")
+                    },
+                    false,
+                    vec![],
+                )),
+                _ => {}
+            }
+            if row.ch == Char::Position && row.datums.is_empty() && (single || k == 0) {
+                errors.push(gdt_error(
+                    i,
+                    doc::GdtRule::PositionNeedsFrame,
+                    format!("{at}position with no datum reference frame"),
+                    true,
+                    vec![],
+                ));
+            }
+            if row.tol.dia && !row.ch.may_be_diameter() {
+                let kept: Vec<String> = cell_words(&row.tol)
+                    .into_iter()
+                    .filter(|w| w != "dia" && w != "Sdia")
+                    .collect();
+                errors.push(gdt_error(
+                    i,
+                    doc::GdtRule::DiameterNotAllowed,
+                    format!("{at}{word} has no diameter zone"),
+                    false,
+                    if single {
+                        vec![DrawOp::SetArg {
+                            item: i.id.clone(),
+                            arg: "3".into(),
+                            value: format!("\"{}\"", kept.join(" ")),
+                        }]
+                    } else {
+                        vec![]
+                    },
+                ));
+            }
+            for dr in &row.datums {
+                for l in dr.letters.split('-') {
+                    match letters.iter().find(|x| x.0 == l) {
+                        None => {
+                            let rest: Vec<String> = row
+                                .datums
+                                .iter()
+                                .filter(|x| x.letters != dr.letters)
+                                .map(|x| {
+                                    let mut w = vec![x.letters.clone()];
+                                    w.extend(x.mods.iter().map(|m| match m {
+                                        forge_draw::gdt::Modifier::Mmc => "M".to_string(),
+                                        forge_draw::gdt::Modifier::Lmc => "L".to_string(),
+                                        _ => "S".to_string(),
+                                    }));
+                                    format!("\"{}\"", w.join(" "))
+                                })
+                                .collect();
+                            errors.push(gdt_error(
+                                i,
+                                doc::GdtRule::DatumUndefined,
+                                format!("{at}datum {l} is not on the drawing: add its datum feature symbol"),
+                                false,
+                                if single {
+                                    vec![DrawOp::SetArg {
+                                        item: i.id.clone(),
+                                        arg: "4".into(),
+                                        value: format!("[{}]", rest.join(", ")),
+                                    }]
+                                } else {
+                                    vec![]
+                                },
+                            ));
+                        }
+                        Some((_, fos))
+                            if !fos
+                                && matches!(row.ch, Char::CircularRunout | Char::TotalRunout)
+                                && k == 0
+                                && dr == &row.datums[0] =>
+                        {
+                            errors.push(gdt_error(
+                                i,
+                                doc::GdtRule::RunoutNeedsAxis,
+                                format!("{at}runout is about an axis: datum {l} is not on a feature of size"),
+                                true,
+                                vec![],
+                            ));
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            // the dimensions that locate a positioned feature are basic
+            if row.ch == Char::Position && k == 0 {
+                let target = match to {
+                    doc::Attach::Ref(r) => Some(r.name),
+                    doc::Attach::Item(id) => d.item(id).and_then(|it| match &it.kind {
+                        ItemKind::Annot(x) => match &x.kind {
+                            AnnotKind::Diameter { e }
+                            | AnnotKind::Radius { e }
+                            | AnnotKind::HoleNote { e } => Some(e.name),
+                            _ => None,
+                        },
+                        _ => None,
+                    }),
+                };
+                let Some(target) = target else { continue };
+                for (j, b) in annots() {
+                    let AnnotKind::Linear { a: ra, b: rb, .. } = &b.kind else {
+                        continue;
+                    };
+                    let locates = ra.name == target || rb.as_ref().is_some_and(|r| r.name == target);
+                    if locates && b.view == a.view && b.tol != Some(doc::TolSpec::Basic) {
+                        errors.push(gdt_error(
+                            i,
+                            doc::GdtRule::PositionNotBasic,
+                            format!("{} locates the positioned feature: make it basic", j.id),
+                            true,
+                            vec![DrawOp::SetArg {
+                                item: j.id.clone(),
+                                arg: "basic".into(),
+                                value: "true".into(),
+                            }],
+                        ));
+                    }
+                }
+            }
+        }
+    }
 }
