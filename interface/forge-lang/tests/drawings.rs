@@ -413,3 +413,39 @@ fn mass_comes_from_the_material_library() {
         d.errors
     );
 }
+
+#[test]
+fn breaks_close_up_and_crops_clip_but_dimensions_stay_true() {
+    let dir = dir("drawing_break");
+    std::fs::write(dir.join("plate.fg"), PART).unwrap();
+    let base = "drawing\nm = part(\"plate.fg\")\ns = sheet(\"A3\")\ntop = base_view(m, sheet: s, dir: \"top\", at: (150, 150))\n";
+    let d = regen::make(base, &dir);
+    let rs = refs(&d, "top");
+    let line_at = |x: f64| {
+        rs.iter()
+            .find(|r| r.1 == "line" && r.2[0] == r.2[2] && (r.2[0] - x).abs() < 1e-9)
+            .unwrap()
+            .0
+            .clone()
+    };
+    let (left, right) = (line_at(0.0), line_at(60.0));
+    let whole = d.view("top").unwrap().hi.x - d.view("top").unwrap().lo.x;
+    let src = format!("{base}w = dim(top, {left}, {right}, at: (30, 50))\n")
+        .replace("at: (150, 150))", "at: (150, 150), break: (\"x\", 30, 50))");
+    let d = regen::make(&src, &dir);
+    assert!(d.ok(), "{:?}", d.errors);
+    let v = d.view("top").unwrap();
+    // 20 taken out, 6 mm left between the sides
+    assert!(
+        (v.hi.x - v.lo.x - (whole - 20.0 + 6.0)).abs() < 1e-6,
+        "{} vs {whole}",
+        v.hi.x - v.lo.x
+    );
+    assert_eq!(d.items.iter().find(|i| i.id == "w").unwrap().value, Some(60.0));
+    let cropped = regen::make(
+        &base.replace("at: (150, 150))", "at: (150, 150), crop: [(0, 0), (30, 40)])"),
+        &dir,
+    );
+    let v = cropped.view("top").unwrap();
+    assert!((v.hi.x - v.lo.x - 30.0).abs() < 1e-6);
+}

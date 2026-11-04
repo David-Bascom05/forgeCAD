@@ -75,8 +75,49 @@ pub struct ViewOut {
     /// The solids drawn: body, pose and occurrence index in the model.
     pub insts: Vec<(Arc<Body>, Frame, usize)>,
     pub label: String,
+    /// Where the view was put on the sheet.
+    pub at: Point2,
     /// Where the view clips its parent's lines (a detail's circle), in view coordinates.
     pub clip: Option<Fence>,
+    /// Bands taken out (along x or y, from, to, in view coordinates) and how far apart the two
+    /// sides then stand (view mm).
+    pub breaks: Vec<(bool, f64, f64)>,
+    pub gap: f64,
+}
+
+impl ViewOut {
+    /// A point of the view (model mm on its plane) where it is on the sheet, across its breaks.
+    pub fn map(&self, p: Point2) -> Point2 {
+        self.place.point(self.closed(p))
+    }
+
+    /// Where a sheet point is on the view, its breaks opened again.
+    pub fn unmap(&self, q: Point2) -> Point2 {
+        let mut p = self.place.inverse_point(q);
+        for &(x, lo, hi) in self.breaks.iter().rev() {
+            let shift = hi - lo - self.gap;
+            if x && p.x >= lo + self.gap {
+                p.x += shift;
+            } else if !x && p.y >= lo + self.gap {
+                p.y += shift;
+            }
+        }
+        p
+    }
+
+    /// A view point with the bands before it taken out.
+    fn closed(&self, p: Point2) -> Point2 {
+        let mut q = p;
+        for &(x, lo, hi) in &self.breaks {
+            let shift = hi - lo - self.gap;
+            if x && p.x >= hi {
+                q.x -= shift;
+            } else if !x && p.y >= hi {
+                q.y -= shift;
+            }
+        }
+        q
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -405,7 +446,9 @@ impl Ctx {
             ViewKind::Projected { parent } => {
                 let p = self.views.iter().find(|v| &v.id == parent)?.clone();
                 let third = self.sheets.get(p.sheet).is_none_or(|s| s.1.third_angle);
-                let pc = p.lo.lerp(p.hi, 0.5);
+                // where the parent was put, not where its lines happen to end: a break or crop of
+                // it does not turn its children
+                let pc = p.at;
                 let (dx, dy) = (def.at.x - pc.x, def.at.y - pc.y);
                 let diagonal = dx.abs().min(dy.abs()) > 0.3 * dx.abs().max(dy.abs());
                 let view = if diagonal {
@@ -688,7 +731,10 @@ impl Ctx {
             extra_text: vec![],
             insts,
             label: def.label.clone().unwrap_or_default(),
+            at: def.at,
             clip: None,
+            breaks: vec![],
+            gap: 0.0,
         }
     }
 }
@@ -1027,7 +1073,7 @@ fn annotate(
         page,
     };
     let s = v.scale;
-    let sp = |p: Point2| v.place.point(p);
+    let sp = |p: Point2| v.map(p);
     let default_at = v.hi + Vec2::new(5.0, 5.0);
     let at_sheet = a.at.map_or(default_at, sp);
     let before = (an.page.strokes.len(), an.page.texts.len(), an.page.fills.len());
@@ -1198,7 +1244,8 @@ fn annotate(
                         }
                     },
                 };
-                let val = ((qs - ps).dot(dir) / s).abs();
+                // the model distance, whatever breaks the view has
+                let val = (q - p).dot(dir).abs();
                 value = Some(val);
                 measured_dir = Some(dir);
                 let at = a.at.map_or(ps.lerp(qs, 0.5) + dir.perp() * 10.0, sp);
@@ -1328,7 +1375,12 @@ fn annotate(
                 let u = if dir == "vertical" { Vec2::Y } else { Vec2::X };
                 let o = sp(fb.feat.anchor());
                 let at = a.at.map_or(o + u.perp() * -12.0, sp);
-                let mut pts: Vec<Point2> = fs.iter().flatten().map(|f| sp(f.feat.anchor())).collect();
+                let mut pts: Vec<Point2> = fs
+                    .iter()
+                    .flatten()
+                    .filter(|f| f.shown)
+                    .map(|f| sp(f.feat.anchor()))
+                    .collect();
                 pts.sort_by(|p, q| (*p - o).dot(u).total_cmp(&(*q - o).dot(u)));
                 match style {
                     SetStyle::Ordinate => {
@@ -1341,7 +1393,7 @@ fn annotate(
                                 p + (foot - p).normalize().unwrap_or(u.perp()) * an.st.gap,
                                 foot,
                             );
-                            let val = (p - o).dot(u) / s;
+                            let val = (v.unmap(p) - v.unmap(o)).dot(u);
                             let out = (foot - p).normalize().unwrap_or(u.perp());
                             let tat = foot + out * 1.5;
                             let angle = if dir == "vertical" { 0.0 } else { 90.0 };
@@ -1383,14 +1435,14 @@ fn annotate(
                     SetStyle::Baseline => {
                         for (k, p) in pts.iter().enumerate() {
                             let line = at + u.perp() * (-(k as f64) * 7.0 * (at - o).dot(u.perp()).signum());
-                            let val = ((*p - o).dot(u) / s).abs();
+                            let val = (v.unmap(*p) - v.unmap(o)).dot(u).abs();
                             annot::linear(an.page, pen, &an.st, o, *p, u, line, &fmt_len(val));
                         }
                     }
                     SetStyle::Chain => {
                         let mut prev = o;
                         for p in &pts {
-                            let val = ((*p - prev).dot(u) / s).abs();
+                            let val = (v.unmap(*p) - v.unmap(prev)).dot(u).abs();
                             annot::linear(an.page, pen, &an.st, prev, *p, u, at, &fmt_len(val));
                             prev = *p;
                         }
@@ -1488,7 +1540,20 @@ fn annotate(
         }
         AnnotKind::Centerline { a: ra, b: rb } => {
             if let (Some(fa), Some(fb)) = (get(ra, "1", true, errors), get(rb, "2", true, errors)) {
-                annot::centerline(an.page, sp(fa.feat.anchor()), sp(fb.feat.anchor()), 3.0);
+                match (fa.feat, fb.feat) {
+                    // two edges: the line halfway between them (a bisector), as long as they run
+                    (Feat::Line(a0, a1), Feat::Line(b0, b1)) => {
+                        let (b0, b1) = if (b0 - a0).length() + (b1 - a1).length()
+                            <= (b1 - a0).length() + (b0 - a1).length()
+                        {
+                            (b0, b1)
+                        } else {
+                            (b1, b0)
+                        };
+                        annot::centerline(an.page, sp(a0.lerp(b0, 0.5)), sp(a1.lerp(b1, 0.5)), 3.0);
+                    }
+                    _ => annot::centerline(an.page, sp(fa.feat.anchor()), sp(fb.feat.anchor()), 3.0),
+                }
             }
             "centerline"
         }
@@ -1826,7 +1891,7 @@ fn cell_words(t: &forge_draw::gdt::Tol) -> Vec<String> {
 
 /// The point of a feature on the sheet nearest `q`: on a line, the foot; on a circle, toward q.
 fn near_on(f: &Feat, v: &ViewOut, q: Point2) -> Point2 {
-    let sp = |p: Point2| v.place.point(p);
+    let sp = |p: Point2| v.map(p);
     match *f {
         Feat::Point(p) => sp(p),
         Feat::Line(a, b) => {
@@ -1967,7 +2032,7 @@ fn balloon_tip(model: &Model, v: &ViewOut, occ: &str) -> Option<Point2> {
         .filter(|p| p.inst == inst && p.visible)
         .max_by(|a, b| a.geom.length().total_cmp(&b.geom.length()))?;
     let (t0, t1) = p.geom.range();
-    Some(v.place.point(p.geom.at(0.5 * (t0 + t1))))
+    Some(v.map(p.geom.at(0.5 * (t0 + t1))))
 }
 
 /// An occurrence's item number: its part file's place in the BOM.
@@ -2143,8 +2208,9 @@ pub fn make(src: &str, dir: &Path) -> Drawing {
     }
     for item in &d.items {
         if let ItemKind::View(def) = &item.kind
-            && let Some(v) = ctx.view(item, def)
+            && let Some(mut v) = ctx.view(item, def)
         {
+            cut_view(&mut v, def);
             ctx.views.push(v);
         }
     }
@@ -2184,7 +2250,7 @@ pub fn make(src: &str, dir: &Path) -> Drawing {
         }
         for t in v.extra_text.iter().filter(|t| t.pen != Pen::Cut) {
             page.texts.push(Text {
-                at: v.place.point(t.at),
+                at: v.map(t.at),
                 ..t.clone()
             });
         }
@@ -2203,7 +2269,7 @@ pub fn make(src: &str, dir: &Path) -> Drawing {
                     v.extra_text.iter().find(|t| t.pen == Pen::Cut),
                 ) {
                     let (look, pts) = decode_line(&t.text);
-                    let sheet_pts: Vec<Point2> = pts.iter().map(|q| p.place.point(*q)).collect();
+                    let sheet_pts: Vec<Point2> = pts.iter().map(|q| p.map(*q)).collect();
                     annot::cutting_line(&mut pages[p.sheet], &st, &sheet_pts, look, &v.label);
                 }
             }
@@ -2543,9 +2609,9 @@ pub fn locate(d: &Drawing, view: &str, r: &Ref) -> Option<(Point2, Point2)> {
     let v = d.view(view)?;
     let x = resolve_ref(&d.models[v.model].model, v, r)?;
     Some(match x.feat {
-        Feat::Point(p) => (v.place.point(p), v.place.point(p)),
-        Feat::Line(a, b) => (v.place.point(a), v.place.point(b)),
-        Feat::Circle { c, .. } => (v.place.point(c), v.place.point(c)),
+        Feat::Point(p) => (v.map(p), v.map(p)),
+        Feat::Line(a, b) => (v.map(a), v.map(b)),
+        Feat::Circle { c, .. } => (v.map(c), v.map(c)),
     })
 }
 
@@ -2995,7 +3061,7 @@ fn place_clear(
             _ => None,
         })
         .collect();
-    let start = v.place.point(at);
+    let start = v.map(at);
     let mut tries = vec![Vec2::ZERO];
     for r in [4.0, 8.0, 12.0, 16.0, 22.0, 30.0, 40.0] {
         for k in 0..12 {
@@ -3076,4 +3142,76 @@ fn place_clear(
         }
     }
     best.map_or_else(|| a.clone(), |x| x.1)
+}
+
+/// A view cropped to its box and broken at its bands: lines outside the crop and inside a band
+/// go, lines past a band close up to it, and the break is drawn as two zigzag lines.
+fn cut_view(v: &mut ViewOut, def: &ViewDef) {
+    if def.crop.is_none() && def.breaks.is_empty() {
+        return;
+    }
+    let keep = |q: Point2| {
+        def.crop
+            .is_none_or(|(lo, hi)| q.x >= lo.x && q.x <= hi.x && q.y >= lo.y && q.y <= hi.y)
+            && !def.breaks.iter().any(|&(x, lo, hi)| {
+                let c = if x { q.x } else { q.y };
+                c > lo && c < hi
+            })
+    };
+    v.breaks = def.breaks.clone();
+    v.gap = 6.0 / v.scale;
+    let shift_of = |g: &Geom2| {
+        let m = g.at(0.5 * (g.range().0 + g.range().1));
+        v.closed(m) - m
+    };
+    let mut pieces = Vec::new();
+    for p in &v.pieces {
+        for g in p.geom.runs_where(0.01, |t| keep(p.geom.at(t))) {
+            let d = shift_of(&g);
+            pieces.push(Piece {
+                geom: g.placed(&Place::new(Point2::ORIGIN + d, 1.0)),
+                ..p.clone()
+            });
+        }
+    }
+    let mut extra = Vec::new();
+    for st in &v.extra {
+        for g in st.geom.runs_where(0.01, |t| keep(st.geom.at(t))) {
+            let d = shift_of(&g);
+            extra.push(Stroke {
+                pen: st.pen,
+                geom: g.placed(&Place::new(Point2::ORIGIN + d, 1.0)),
+            });
+        }
+    }
+    let (lo, hi) = bounds(&pieces, &extra);
+    // the break lines: a zigzag at each side of the closed-up gap
+    for &(x, a, _) in &def.breaks {
+        let at = v.closed(Point2::new(a, a));
+        for c in [if x { at.x } else { at.y }, if x { at.x } else { at.y } + v.gap] {
+            let (s0, s1) = if x {
+                (lo.y - 2.0 / v.scale, hi.y + 2.0 / v.scale)
+            } else {
+                (lo.x - 2.0 / v.scale, hi.x + 2.0 / v.scale)
+            };
+            let n = 8;
+            let amp = 1.2 / v.scale;
+            let pts: Vec<Point2> = (0..=n)
+                .map(|k| {
+                    let t = s0 + (s1 - s0) * k as f64 / n as f64;
+                    let w = c + if k % 2 == 0 { -amp } else { amp };
+                    if x { Point2::new(w, t) } else { Point2::new(t, w) }
+                })
+                .collect();
+            extra.push(Stroke {
+                pen: Pen::Thin,
+                geom: Geom2::Poly(pts),
+            });
+        }
+    }
+    v.pieces = pieces;
+    v.extra = extra;
+    let (lo, hi) = bounds(&v.pieces, &v.extra);
+    v.lo = v.place.point(lo);
+    v.hi = v.place.point(hi);
 }

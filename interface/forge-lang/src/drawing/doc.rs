@@ -329,6 +329,11 @@ pub struct ViewDef {
     pub label: Option<String>,
     /// Occurrences left out, by path or path prefix.
     pub hide: Vec<String>,
+    /// What of the view is kept: a box in its coordinates (Inventor's Crop).
+    pub crop: Option<(Point2, Point2)>,
+    /// Bands taken out of the view, the rest closed up (Inventor's Break): along x or y, from
+    /// lo to hi in its coordinates.
+    pub breaks: Vec<(bool, f64, f64)>,
 }
 
 /// An annotation's kind and its references.
@@ -1212,6 +1217,46 @@ impl Reader<'_> {
                     tangent: a.boolean("tangent")?,
                     label: a.string("label", None)?,
                     hide,
+                    crop: match a.get("crop", None) {
+                        None => None,
+                        Some((v, s)) => match &v {
+                            Val::List(xs) => {
+                                match (xs.first().and_then(as_point), xs.get(1).and_then(as_point)) {
+                                    (Some(p), Some(q)) => Some((
+                                        Point2::new(p.x.min(q.x), p.y.min(q.y)),
+                                        Point2::new(p.x.max(q.x), p.y.max(q.y)),
+                                    )),
+                                    _ => return Err(a.wrong("crop", "two corners [(x, y), (x, y)]", &v, s)),
+                                }
+                            }
+                            _ => return Err(a.wrong("crop", "two corners [(x, y), (x, y)]", &v, s)),
+                        },
+                    },
+                    breaks: match a.get("break", None) {
+                        None => vec![],
+                        Some((v, s)) => {
+                            let one = |b: &Val| match b {
+                                Val::List(xs) => match &xs[..] {
+                                    [Val::Str(ax), Val::Num(lo), Val::Num(hi)]
+                                        if (ax == "x" || ax == "y") && lo < hi =>
+                                    {
+                                        Some((ax == "x", *lo, *hi))
+                                    }
+                                    _ => None,
+                                },
+                                _ => None,
+                            };
+                            match (&v, one(&v)) {
+                                (_, Some(b)) => vec![b],
+                                (Val::List(xs), None) => {
+                                    xs.iter().map(one).collect::<Option<Vec<_>>>().ok_or_else(|| {
+                                        a.wrong("break", "(\"x\" or \"y\", from, to)", &v, s)
+                                    })?
+                                }
+                                _ => return Err(a.wrong("break", "(\"x\" or \"y\", from, to)", &v, s)),
+                            }
+                        }
+                    },
                 })
             }
             "note" => {

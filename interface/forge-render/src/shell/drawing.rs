@@ -593,7 +593,7 @@ impl DrawingEnv {
         self.made
             .as_ref()
             .and_then(|d| d.view(view))
-            .map_or(q, |v| v.place.inverse_point(q))
+            .map_or(q, |v| v.unmap(q))
     }
 
     /// The next datum letter no datum symbol on the drawing has.
