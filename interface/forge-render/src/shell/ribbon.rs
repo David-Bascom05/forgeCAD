@@ -168,6 +168,7 @@ fn inspect_groups(s: &Shell) -> Vec<Group> {
                 t("Mass", "mass", C::Mass, props == Some(5)),
                 t("CG Marker", "mass", C::Cg, i.cg),
             ],
+            icons: vec![],
         },
         Group {
             name: "Analysis",
@@ -176,6 +177,7 @@ fn inspect_groups(s: &Shell) -> Vec<Group> {
                 off("Check", "check"),
             ],
             small: vec![],
+            icons: vec![],
         },
         Group {
             name: "Properties",
@@ -189,6 +191,7 @@ fn inspect_groups(s: &Shell) -> Vec<Group> {
                 t("Materials", "mass", C::Materials, i.browser.is_some()),
             ],
             small: vec![],
+            icons: vec![],
         },
     ]
 }
