@@ -80,8 +80,8 @@ the user's own download:
 
    ```
    body = import("91290A115.step", op: "new")
-   about = properties(part_number: "McMaster-Carr 91290A115", description: "Socket head screw M6x20",
-                      material: "ISO 898-1 class 12.9")
+   properties(part_number: "McMaster-Carr 91290A115", description: "Socket head screw M6x20",
+              vendor: "McMaster-Carr", material: "ISO 898-1 class 12.9")
    head = anchor(xy)   # a plane of the vendor file's own frame; pick faces for others
    ```
 

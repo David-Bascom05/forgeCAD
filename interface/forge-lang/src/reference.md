@@ -799,9 +799,6 @@ expect clearance(arm, post) >= 2 at crank.turn = 90deg
   `StdUnknownOption`) with the valid ones and, where one is clear, a SetArg fix to it. `fg std`
   lists the families, a family's sizes and lengths, or writes a part's file; `std:FAMILY|SIZE|L`
   runs as a file name.
-- **BOM properties:** in a part file, `about = properties(part_number:, description:, standard:,
-  material:, density:)`; a material of the library (forge-material) gives its density, and the BOM
-  (`fg run --json`, `assembly.bom`) each part's mass.
 - **References:** `inst.NAME` is the part's reference by name, evaluated in the part file: an
   anchor (`a = anchor(plane(..))`), a role name (`shank.axis`, `bar.end`), a sketch point; through
   subassemblies, `sub.inst.NAME`. `inst` alone is the instance's own frame. A call on an

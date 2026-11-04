@@ -843,7 +843,7 @@ pub fn generate(spec: &Spec) -> Result<Generated, StdErr> {
         .or_else(|| f.get("material").map(String::from))
         .expect("a family names its material");
     out += &format!(
-        "\nabout = properties(part_number: {name:?}, description: {:?}, standard: {:?}, material: {material:?})\n",
+        "\nproperties(part_number: {name:?}, description: {:?}, material: {material:?}, custom: [(\"Standard\", {:?})])\n",
         format!("{} {}", f.item(), name.trim_start_matches(&f.name).trim()),
         f.standard,
     );

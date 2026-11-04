@@ -431,12 +431,17 @@ jb = fastened(b.head, base.top)
     let out = r.asm.unwrap();
     let key = "std:ISO 4762|M6|20|grade=10.9";
     assert!(out.bom.contains(&(key.to_string(), 2)), "{:?}", out.bom);
-    let (p, mass) = &out.props[key];
-    assert_eq!(p.part_number.as_deref(), Some("ISO 4762 M6x20"));
-    assert_eq!(p.standard.as_deref(), Some("ISO 4762:2004"));
-    assert_eq!(p.material.as_deref(), Some("ISO 898-1 class 10.9"));
-    // 957.5545 mm3 of steel at 7.85 g/cm3
-    assert!((mass.unwrap() - 7.5168).abs() < 1e-3, "{mass:?}");
+    let rows = forge_lang::props::bom_rows(&out);
+    let (_, n, p, material, mass) = rows.iter().find(|r| r.0 == key).expect("the screw's BOM row");
+    assert_eq!(*n, 2);
+    assert_eq!(p.get("part_number"), Some("ISO 4762 M6x20"));
+    assert_eq!(
+        p.custom,
+        vec![("Standard".to_string(), "ISO 4762:2004".to_string())]
+    );
+    assert_eq!(material.as_deref(), Some("ISO 898-1 class 10.9"));
+    // 957.5545 mm3 of steel at 7.85 g/cm3, in kg
+    assert!((mass.unwrap() - 0.0075168).abs() < 1e-6, "{mass:?}");
 }
 
 #[test]
