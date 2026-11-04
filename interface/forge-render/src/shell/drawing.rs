@@ -1427,8 +1427,10 @@ impl Shell {
                 (None, true) => "Updating the drawing".into(),
                 (None, false) => {
                     let n = env.made.as_ref().map_or(0, |d| d.errors.len());
-                    if n > 0 {
+                    if n > 1 {
                         format!("{n} problems: see the browser")
+                    } else if n == 1 {
+                        "1 problem: see the browser".into()
                     } else {
                         "Ready".into()
                     }
@@ -1775,7 +1777,7 @@ impl Shell {
                 }
                 for f in &fixes {
                     let label = match f {
-                        DrawOp::SetArg { arg, value, .. } => format!("Reattach {arg} to {value}"),
+                        DrawOp::SetArg { value, .. } => format!("Reattach to {value}"),
                         DrawOp::DeleteItem { .. } => continue,
                         DrawOp::AddItem { text } => format!("Add {text}"),
                     };
