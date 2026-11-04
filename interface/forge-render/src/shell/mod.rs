@@ -11,6 +11,7 @@ pub mod fgasm;
 pub mod fgsketch;
 pub mod fgtool;
 pub mod icons;
+pub mod materials;
 pub mod panel;
 mod ribbon;
 mod sketch3d;

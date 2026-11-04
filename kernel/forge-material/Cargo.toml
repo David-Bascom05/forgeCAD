@@ -1,0 +1,12 @@
+[package]
+name = "forge-material"
+description = "ForgeCAD's engineering materials library: sourced densities, moduli, strengths, expansion"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true

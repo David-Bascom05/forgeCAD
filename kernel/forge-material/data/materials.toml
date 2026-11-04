@@ -1,0 +1,560 @@
+# ForgeCAD engineering materials library.
+# Mass comes from density; the other keys feed stress/thermal checks.
+#
+# Keys and units:
+#   name      canonical name a user types          aliases  other spellings
+#   family    steel | stainless | aluminium | copper | iron | titanium | plastic | rubber | wood
+#   density   kg/m^3 (required)                    youngs   Young's modulus, GPa
+#   poisson   Poisson's ratio (dimensionless)      yield    tensile yield, MPa (0.2% offset unless noted)
+#   uts       ultimate tensile / tensile strength at break, MPa
+#   cte       linear thermal expansion, 1e-6/K, about 20-100 C unless the note says otherwise
+#   colour    sRGB hex rendering colour (appearance only, not sourced)
+#   source    reference covering every value in the record; source_<key> overrides it for one value
+#   note      condition/temper, test basis, typical vs minimum, and why any key is left out
+#
+# Every number is taken from (or converted from US units out of) the cited source.
+# A key is absent when it does not apply or no source could be verified; the note says which.
+# Values are typical unless the note says minimum; they are not design allowables.
+
+# ---------------------------------------------------------------- carbon steels
+
+[[material]]
+name = "1008 cold rolled"
+aliases = ["1008 CR steel", "1008 CR", "CR 1008", "1008 cold rolled steel", "mild steel cold rolled", "AISI 1008 cold rolled", "ASTM A1008 CS Type B"]
+family = "steel"
+density = 7870
+youngs = 200
+poisson = 0.29
+yield = 200
+uts = 317
+cte = 12.4
+colour = "#8C8F93"
+source = "Cleveland-Cliffs, 'Cold-Rolled Steels product data bulletin' (2024), Table 1 and Engineering Properties, https://d1io3yog0oux5.cloudfront.net/_7ce3a04c09e74bf31ff5f89fc888db25/clevelandcliffs/db/1190/10473/file/CLF_ProductData_Cold+Rolled_62024.pdf"
+source_poisson = "Elgin Fasteners / MW Components, 'Carbon Steel Grade 1018 Data Sheet' (MatWeb-derived, 'typical for steel'), https://www.mwcomponents.com/uploads/Resource-Center/Elgin-Material-Sheets/Carbon-Steel-Grade-1018-Data-Sheet_Elgin.pdf"
+note = "Cold-rolled sheet as sold to ASTM A1008 Commercial Steel (CS Type B), annealed and temper rolled; yield/uts are Cliffs typical values, not minimums. CTE is Cliffs low-carbon value, 20-100 C. Cliffs gives no Poisson ratio; 0.29 is the generic steel value."
+
+[[material]]
+name = "1010 cold drawn"
+aliases = ["AISI 1010", "SAE 1010", "1010 steel", "1010 CD"]
+family = "steel"
+density = 7870
+youngs = 205
+poisson = 0.29
+yield = 305
+uts = 365
+cte = 12.2
+colour = "#8C8F93"
+source = "Elgin Fasteners / MW Components, 'Carbon Steel Grade 1010 Data Sheet - AISI 1010 Steel, cold drawn' (MatWeb-derived), https://www.mwcomponents.com/uploads/Resource-Center/Elgin-Material-Sheets/Carbon-Steel-Grade-1010-Data-Sheet_Elgin-Fasteners.pdf"
+note = "Cold drawn bar/wire, typical values. No sourced data for 1010 cold-rolled SHEET was found; cold-rolled 1010-chemistry sheet is sold to ASTM A1008 CS and matches the '1008 cold rolled' record. E and Poisson are 'typical for steel'. CTE 0-100 C. Same values in AZoM 'AISI 1010 Carbon Steel (UNS G10100)', https://www.azom.com/article.aspx?ArticleID=6539"
+
+[[material]]
+name = "1018 cold drawn"
+aliases = ["AISI 1018", "SAE 1018", "1018 steel", "1018 CD", "C1018"]
+family = "steel"
+density = 7870
+youngs = 200
+poisson = 0.29
+yield = 370
+uts = 440
+colour = "#8C8F93"
+source = "Elgin Fasteners / MW Components, 'Carbon Steel Grade 1018 Data Sheet - AISI 1018 Steel, cold drawn' (MatWeb-derived), https://www.mwcomponents.com/uploads/Resource-Center/Elgin-Material-Sheets/Carbon-Steel-Grade-1018-Data-Sheet_Elgin.pdf"
+note = "Cold drawn bar, typical values (AZoM ArticleID=9138 gives the same 440/370 MPa). cte omitted: no reachable source gives a 1018 value (MatWeb and the Lucefin card were blocked); ASM Ready Reference lists AISI 1020 annealed at 11.7e-6/K, 0-100 C, as the nearest grade."
+
+[[material]]
+name = "ASTM A36"
+aliases = ["A36", "A36 steel", "A36 structural steel", "mild steel plate"]
+family = "steel"
+density = 7850
+youngs = 200
+poisson = 0.26
+yield = 250
+uts = 400
+cte = 11.7
+colour = "#6E7175"
+source = "AZoM, 'ASTM A36 Mild/Low Carbon Steel', https://www.azom.com/article.aspx?ArticleID=6117"
+source_cte = "AmesWeb, 'Linear Thermal Expansion Coefficient of Metals' (citing Callister 7th ed. and Machinery's Handbook 29th ed.), room temperature, https://amesweb.info/Materials/Linear-Thermal-Expansion-Coefficient-Metals.aspx"
+note = "Hot-rolled structural plate/shapes. yield is the ASTM A36 specified minimum (250 MPa); uts is the bottom of the specified 400-550 MPa range."
+
+[[material]]
+name = "ISO 898-1 class 8.8"
+aliases = ["8.8", "class 8.8", "8.8 bolt", "grade 8.8", "property class 8.8", "8.8 steel"]
+family = "steel"
+density = 7850
+youngs = 210
+poisson = 0.30
+yield = 640
+uts = 800
+cte = 12
+colour = "#3F4144"
+source = "TR Fastenings, 'Mechanical properties - Steel Screws and Bolts ISO 898-1 / EN 20898-1', https://www.trfastenings.com/knowledge-base/metric-screws/screws-and-bolts-mechanical-properties"
+source_density = "Eurocode Applied, 'Steel design properties' (EN 1993-1-1 3.2.6 and EN 1991-1-1 Table A.4), https://cdn.eurocodeapplied.com/design/en1993/steel-design-properties"
+source_youngs = "Eurocode Applied, 'Steel design properties' (EN 1993-1-1 3.2.6), https://cdn.eurocodeapplied.com/design/en1993/steel-design-properties"
+source_poisson = "Eurocode Applied, 'Steel design properties' (EN 1993-1-1 3.2.6), https://cdn.eurocodeapplied.com/design/en1993/steel-design-properties"
+source_cte = "Eurocode Applied, 'Steel design properties' (EN 1993-1-1 3.2.6), https://cdn.eurocodeapplied.com/design/en1993/steel-design-properties"
+note = "Quenched and tempered medium-carbon steel bolts. Strength values are ISO 898-1 minimums for d <= 16 mm (Rp0.2 640, Rm 800 MPa); for d > 16 mm they are 660 / 830 MPa. Density, E, Poisson and CTE are the Eurocode 3 design values for carbon steel. Colour is black-oxide/phosphate finish."
+
+[[material]]
+name = "52100 hardened"
+aliases = ["AISI 52100", "SAE 52100", "E52100", "chrome steel", "100Cr6", "1.3505", "SUJ2", "GCr15", "bearing steel"]
+family = "steel"
+density = 7830
+youngs = 203
+poisson = 0.285
+yield = 2034
+uts = 2241
+cte = 10.75
+colour = "#C9CCCF"
+source = "Henderson Bearings, '15mm Chrome Steel Ball Grade 100 AISI 52100' (0.283 lb/in3, E 29,500,000 psi, tensile 325,000 psi, yield 295,000 psi; same figures on Thomson Industries precision-ball listings), https://www.hendersonbearings.co.uk/15mm-chrome-steel-ball-grade-100-aisi-52100.html"
+source_poisson = "SKT GmbH, 'Datasheet steel balls 1.3505 / AISI 52100 acc. to DIN 5401' (2025), https://www.skt-gmbh.de/wp-content/uploads/2025/09/Datasheet_balls_1.3505.pdf"
+source_cte = "SKT GmbH, 'Datasheet steel balls 1.3505 / AISI 52100 acc. to DIN 5401' (2025), https://www.skt-gmbh.de/wp-content/uploads/2025/09/Datasheet_balls_1.3505.pdf"
+note = "Through-hardened bearing balls, 60-67 HRC. Values converted from US units. Poisson (0.27-0.30) and CTE (10.5-11 e-6/K) are midpoints of the SKT ranges. Strength of hardened 52100 depends strongly on tempering; SKT quotes a much lower 1100-1600 MPa tensile range."
+
+# ---------------------------------------------------------------- stainless
+
+[[material]]
+name = "304 annealed"
+aliases = ["AISI 304", "304 stainless", "SS304", "304 SS", "1.4301", "A2 stainless", "18-8 stainless"]
+family = "stainless"
+density = 8000
+youngs = 193
+poisson = 0.29
+yield = 215
+uts = 505
+cte = 17.3
+colour = "#C4C7CA"
+source = "ASM Aerospace Specification Metals / MatWeb, 'AISI Type 304 Stainless Steel', https://www.aerospacemetals.com/wp-content/uploads/2023/07/AISI-Type-304-Stainless-Steel.pdf"
+note = "Annealed condition typical values. Sheet gives E as 193-200 GPa; lower bound used. CTE 0-100 C."
+
+[[material]]
+name = "316 annealed"
+aliases = ["AISI 316", "316 stainless", "SS316", "316 SS", "1.4401", "A4 stainless", "marine stainless"]
+family = "stainless"
+density = 8000
+youngs = 193
+poisson = 0.27
+yield = 290
+uts = 580
+cte = 16.0
+colour = "#C1C4C7"
+source = "ASM Aerospace Specification Metals / MatWeb, 'AISI Type 316 Stainless Steel, annealed sheet', https://www.aerospacemetals.com/wp-content/uploads/2023/07/AISI-Type-316-Stainless-Steel-annealed-sheet.pdf"
+source_poisson = "AZoM, 'Properties: Stainless Steel - Grade 316 (UNS S31600)', https://www.azom.com/properties.aspx?ArticleID=863"
+note = "Annealed sheet, typical values (annealed bar: yield 240, uts 550 MPa). CTE 0-100 C. Poisson is the midpoint of AZoM's 0.265-0.275 range; the ASM sheet gives none."
+
+[[material]]
+name = "430 annealed"
+aliases = ["AISI 430", "430 stainless", "SS430", "1.4016", "ferritic stainless"]
+family = "stainless"
+density = 7800
+youngs = 200
+poisson = 0.28
+yield = 345
+uts = 517
+cte = 10.4
+colour = "#BDC0C3"
+source = "ASM Aerospace Specification Metals / MatWeb, 'AISI Type 430 Stainless Steel annealed sheet', https://www.aerospacemetals.com/wp-content/uploads/2023/07/AISI-Type-430-Stainless-Steel-annealed-sheet.pdf"
+source_poisson = "AZoM, 'Properties: Stainless Steel - Grade 430 (UNS S43000)', https://www.azom.com/properties.aspx?ArticleID=996"
+note = "Annealed sheet, typical values (annealed bar: yield 310 MPa). CTE 0-100 C. Poisson is the midpoint of AZoM's 0.275-0.285 range; the ASM sheet gives none. Magnetic."
+
+# ---------------------------------------------------------------- aluminium
+
+[[material]]
+name = "5052-H32"
+aliases = ["Aluminium 5052-H32", "Aluminum 5052-H32", "AL5052-H32", "5052 H32", "5052"]
+family = "aluminium"
+density = 2680
+youngs = 70.3
+poisson = 0.33
+yield = 193
+uts = 228
+cte = 23.8
+colour = "#B8BCC2"
+source = "ASM Aerospace Specification Metals / MatWeb, 'Aluminum 5052-H32', https://www.aerospacemetals.com/wp-content/uploads/2023/06/Aluminum-5052-H32.pdf"
+note = "Aluminum Association typical values (not design minimums). E is the average of tension and compression. CTE averaged over 20-100 C."
+
+[[material]]
+name = "6061-T6"
+aliases = ["Aluminium 6061-T6", "Aluminum 6061-T6", "AL6061-T6", "6061 T6", "6061-T651", "6061"]
+family = "aluminium"
+density = 2700
+youngs = 68.9
+poisson = 0.33
+yield = 276
+uts = 310
+cte = 23.6
+colour = "#B5B9BF"
+source = "ASM Aerospace Specification Metals / MatWeb, 'Aluminum 6061-T6; 6061-T651', https://www.aerospacemetals.com/wp-content/uploads/2023/06/Aluminum-6061-T6-6061-T651.pdf"
+note = "Aluminum Association typical values (not design minimums). Poisson is estimated by ASM from similar alloys. CTE averaged over 20-100 C."
+
+[[material]]
+name = "6063-T5"
+aliases = ["Aluminium 6063-T5", "Aluminum 6063-T5", "AL6063-T5", "6063 T5", "6063", "aluminium extrusion"]
+family = "aluminium"
+density = 2700
+youngs = 68.9
+poisson = 0.33
+yield = 145
+uts = 186
+cte = 23.4
+colour = "#BABEC4"
+source = "ASM Aerospace Specification Metals / MatWeb, 'Aluminum 6063-T5', https://www.aerospacemetals.com/wp-content/uploads/2023/06/Aluminum-6063-T5.pdf"
+note = "Aluminum Association typical values (not design minimums). CTE averaged over 20-100 C."
+
+[[material]]
+name = "7075-T6"
+aliases = ["Aluminium 7075-T6", "Aluminum 7075-T6", "AL7075-T6", "7075 T6", "7075-T651", "7075"]
+family = "aluminium"
+density = 2810
+youngs = 71.7
+poisson = 0.33
+yield = 503
+uts = 572
+cte = 23.6
+colour = "#B0B4BA"
+source = "ASM Aerospace Specification Metals / MatWeb, 'Aluminum 7075-T6; 7075-T651', https://www.aerospacemetals.com/wp-content/uploads/2023/06/Aluminum-7075-T6-7075-T651.pdf"
+note = "Aluminum Association typical values (not design minimums). CTE averaged over 20-100 C."
+
+# ---------------------------------------------------------------- copper alloys
+
+[[material]]
+name = "C11000 H02"
+aliases = ["C110", "C11000", "ETP copper", "copper", "Cu-ETP", "CW004A", "copper half hard"]
+family = "copper"
+density = 8910
+youngs = 117.2
+poisson = 0.34
+yield = 248
+uts = 290
+cte = 16.9
+colour = "#B87333"
+source = "National Bronze & Metals, 'C11000 data sheet' (CDA standard data), https://www.nationalbronze.com/pdfs/C11000.pdf"
+source_poisson = "AZoM, 'Electrolytic Tough Pitch Copper (UNS C11000)', https://www.azom.com/article.aspx?ArticleID=6312"
+note = "H02 half hard, flat product 1 mm, typical values (yield at 0.5% extension under load). Converted from US units: 0.322 lb/in3, E 17,000 ksi, CTE 9.40e-6/F over 20-100 C, 42/36 ksi. Annealed (O60) is much weaker: about 221 MPa uts, 69 MPa yield. AZoM's Poisson 0.34 is a generic copper value."
+
+[[material]]
+name = "C36000 H02"
+aliases = ["C360", "C36000", "free-cutting brass", "free machining brass", "brass 360", "CW603N", "CuZn36Pb3"]
+family = "copper"
+density = 8500
+youngs = 96.5
+poisson = 0.34
+yield = 140
+uts = 345
+cte = 20.5
+colour = "#C9A64B"
+source = "National Bronze & Metals, 'C36000 data sheet' (CDA standard data; ASTM B16 rod minimums), https://www.nationalbronze.com/pdfs/C36000.pdf"
+source_poisson = "AZoM, 'Free Cutting Brass UNS C36000', https://www.azom.com/article.aspx?ArticleID=6391"
+note = "H02 half hard rod, 38 mm (1.5 in): uts and yield are ASTM B16 MINIMUMS (50 / 20 ksi), not typicals; small rod is stronger (under 12.7 mm: 57 ksi min uts). Converted from US units: 0.307 lb/in3, E 14,000 ksi, CTE 11.4e-6/F over 20-300 C (no 20-100 C value given). AZoM's Poisson 0.34 is a generic copper-alloy value."
+
+[[material]]
+name = "C26000 H02"
+aliases = ["C260", "C26000", "cartridge brass", "70/30 brass", "CuZn30", "CW505L"]
+family = "copper"
+density = 8530
+youngs = 110.3
+poisson = 0.33
+yield = 359
+uts = 427
+cte = 20.0
+colour = "#D6B46A"
+source = "National Bronze & Metals, 'C26000 data sheet' (CDA standard data), https://www.nationalbronze.com/pdfs/C26000.pdf"
+source_poisson = "Austral Wright Metals, 'C26000 70/30 Brass technical data', https://www.australwright.com.au/technical-data/alloys/copper-brass/c26000-70-30-brass/"
+note = "H02 half hard, flat product 1 mm, typical values (yield at 0.5% extension under load). Converted from US units: 0.308 lb/in3, E 16,000 ksi, 62/52 ksi, CTE 11.1e-6/F over 20-300 C (no 20-100 C value given)."
+
+# ---------------------------------------------------------------- cast iron
+
+[[material]]
+name = "Gray iron class 30"
+aliases = ["ASTM A48 class 30", "A48 class 30", "gray cast iron", "grey cast iron", "cast iron", "G3000"]
+family = "iron"
+density = 7150
+youngs = 101.5
+poisson = 0.26
+uts = 207
+cte = 11.4
+colour = "#55585B"
+source = "AmesWeb, 'Youngs Modulus of Iron' (citing J.R. Davis, Metals Handbook Desk Edition, ASM 1998), https://amesweb.info/Materials/Youngs-Modulus-of-Iron.aspx"
+source_density = "AmesWeb, 'Density of Iron' (citing J.R. Davis, Metals Handbook Desk Edition, ASM 1998), https://amesweb.info/Materials/Density_of_Iron.aspx"
+source_poisson = "AmesWeb, 'Poissons Ratio of Iron' (gray iron G3000; citing Callister 7th ed. and ASM Metals Handbook Desk Edition), https://amesweb.info/Materials/Poissons_Ratio_of_Iron.aspx"
+source_cte = "AmesWeb, 'Linear Thermal Expansion Coefficient of Metals' (gray iron G1800/G3000/G4000, room temperature), https://amesweb.info/Materials/Linear-Thermal-Expansion-Coefficient-Metals.aspx"
+source_uts = "ASTM A48/A48M: class 30 = 30 ksi (207 MPa) minimum tensile strength of a separately cast test bar"
+note = "No yield key: gray iron has no defined yield point (flake graphite, non-linear stress-strain). E is the midpoint of the ASM range 90-113 GPa (secant modulus, varies with section size). Density is the ASM generic gray iron value (range 6.95-7.35)."
+
+[[material]]
+name = "Ductile iron 65-45-12"
+aliases = ["65-45-12", "ASTM A536 65-45-12", "ductile iron", "nodular iron", "SG iron", "Dura-Bar 65-45-12"]
+family = "iron"
+density = 7060
+youngs = 168
+poisson = 0.29
+yield = 310
+uts = 448
+colour = "#5C5F62"
+source = "Dura-Bar, '65-45-12 Ductile Iron' product page and brief (ASTM A536 minimums), https://www.dura-bar.com/products/ductile-iron/65-45-12"
+source_density = "Dura-Bar, 'Dura-Bar Density' technical brief (ductile iron 0.255 lb/in3), https://www.dura-bar.com/getmedia/811341e6-6541-48f9-b719-1d1d666a2bc8/dura-bar-density-0219.pdf"
+source_youngs = "AmesWeb, 'Youngs Modulus of Iron' (citing J.R. Davis, Metals Handbook Desk Edition, ASM 1998), https://amesweb.info/Materials/Youngs-Modulus-of-Iron.aspx"
+source_poisson = "AmesWeb, 'Poissons Ratio of Iron' (citing Callister 7th ed. and ASM Metals Handbook Desk Edition), https://amesweb.info/Materials/Poissons_Ratio_of_Iron.aspx"
+note = "Ferritic as-cast ductile iron. yield and uts are ASTM A536 MINIMUMS (45 / 65 ksi). cte omitted: no grade-specific value found; ASM/Callister list 60-40-18 at 11.2 and 80-55-06 at 10.6 e-6/K."
+
+# ---------------------------------------------------------------- titanium
+
+[[material]]
+name = "Ti-6Al-4V annealed"
+aliases = ["Ti-6Al-4V", "Ti64", "Ti 6-4", "titanium grade 5", "grade 5 titanium", "Ti6Al4V", "3.7165"]
+family = "titanium"
+density = 4430
+youngs = 113.8
+poisson = 0.342
+yield = 880
+uts = 950
+cte = 8.6
+colour = "#8E8C88"
+source = "ASM Aerospace Specification Metals / MatWeb, 'Titanium Ti-6Al-4V (Grade 5), Annealed', https://www.aerospacemetals.com/wp-content/uploads/2023/07/Titanium-Ti-6Al-4V-Grade-5-Annealed.pdf"
+note = "Annealed, typical values. CTE 20-100 C."
+
+# ---------------------------------------------------------------- rubber
+
+[[material]]
+name = "EPDM 70A"
+aliases = ["EPDM", "EPDM 70 Shore A", "EPDM rubber", "ethylene propylene rubber", "Freudenberg 70 EPDM EP702705"]
+family = "rubber"
+density = 1130
+uts = 13.5
+cte = 160
+colour = "#1E1E1E"
+source = "Freudenberg FST, material data sheet '70 EPDM EP702705' v03 (2025-03-06), https://products.fst.com/medialibrary/materialdatasheets/70%20EPDM%20EP702705_en.pdf"
+source_cte = "Parker Hannifin O-Ring Division, 'Parker O-Ring Handbook' ORD 5700, Table 2-5, ethylene propylene 8.9e-5 in/in/F (24-191 C), https://mfc.arizona.edu/sites/default/files/2022-02/parker_o-ring_handbook.pdf"
+note = "Sulfur-cured black EPDM, 70 +/-5 Shore A nominal (74 typical, ISO 48-4). uts is typical tensile strength at break, ISO 37 (spec minimum 10 MPa); elongation 370%. No yield (rubber has no offset yield). youngs omitted: the datasheet gives only stress at 100% elongation (4.4 MPa), which is not a small-strain modulus. poisson omitted: not given by any source (rubber is nearly incompressible). CTE is Parker's generic EP value, not this compound."
+
+[[material]]
+name = "Natural rubber 40A"
+aliases = ["natural rubber", "NR", "gum rubber", "Kuriyama AB-138"]
+family = "rubber"
+density = 1140
+uts = 17.2
+colour = "#D8C8A8"
+source = "Kuriyama, 'AB-138 Natural Rubber sheet' technical specification (distributor copy), https://www.jmesales.com/content/docs/Kuriyama/AB-138.pdf"
+note = "Beige NR sheet, 40 Shore A (ASTM D2240), ASTM D2000 2AA420A13F17. uts is typical tensile at break, ASTM D412 (2500 psi; minimum 2000 psi / 13.8 MPa); elongation 700%. No yield (rubber). youngs, poisson and cte omitted: not given by the source and no reachable compound-specific value was found."
+
+# ---------------------------------------------------------------- wood
+
+[[material]]
+name = "White oak"
+aliases = ["oak", "Quercus alba", "white oak along grain", "American white oak"]
+family = "wood"
+density = 762
+youngs = 12.3
+poisson = 0.369
+cte = 3.8
+colour = "#C8A27A"
+source = "USDA Forest Products Laboratory, 'Wood Handbook: Wood as an Engineering Material', FPL-GTR-282 (2021), Table 5-3b (12% moisture), https://research.fs.usda.gov/download/treesearch/62200.pdf"
+source_poisson = "same Handbook, Table 5-2, white oak mu_LR"
+source_cte = "same Handbook, chapter 4 'Coefficient of Thermal Expansion' (parallel to grain, ovendry wood, 3.1-4.5e-6/K, all species)"
+note = "Clear wood, along grain, 12% moisture. Density = SG 0.68 x 1000 x 1.12 (Handbook eq. 4-14; SG is ovendry weight / volume at 12%), matches Table 4-6a. youngs is the static-bending MOE (1.78e6 psi); add 10% to remove shear deflection (about 13.5 GPa). poisson is mu_LR only; wood is orthotropic. No yield: wood has no 0.2% offset yield. uts omitted: the Handbook has no tension-parallel value for white oak (modulus of rupture is 105 MPa, compression parallel 51.3 MPa; neither is tensile strength). cte is the midpoint of the 3.1-4.5 range."
+
+[[material]]
+name = "Eastern white pine"
+aliases = ["pine", "white pine", "Pinus strobus", "eastern white pine along grain"]
+family = "wood"
+density = 392
+youngs = 8.5
+poisson = 0.329
+uts = 73.1
+cte = 3.8
+colour = "#E3C99A"
+source = "USDA Forest Products Laboratory, 'Wood Handbook: Wood as an Engineering Material', FPL-GTR-282 (2021), Table 5-3b (12% moisture), https://research.fs.usda.gov/download/treesearch/62200.pdf"
+source_poisson = "same Handbook, Table 5-2, western white pine mu_LR (no eastern white pine entry)"
+kind_poisson = "stand-in"
+source_uts = "same Handbook, Table 5-7, tension parallel to grain, eastern white pine 73,100 kPa (clear specimens tested green)"
+source_cte = "same Handbook, chapter 4 'Coefficient of Thermal Expansion' (parallel to grain, ovendry wood, 3.1-4.5e-6/K, all species)"
+note = "Clear wood, along grain, 12% moisture. Density = SG 0.35 x 1000 x 1.12 (Handbook eq. 4-14). youngs is the static-bending MOE (1.24e6 psi); add 10% to remove shear deflection. poisson is mu_LR of western white pine, a stand-in species. No yield: wood has no 0.2% offset yield. uts was tested GREEN; the Handbook says softwoods at 12% are about 13% stronger. cte is the midpoint of the 3.1-4.5 range."
+
+[[material]]
+name = "NBR 70A"
+aliases = ["NBR", "nitrile", "nitrile rubber", "Buna-N", "NBR 70 Shore A", "Freudenberg 72 NBR 872"]
+family = "rubber"
+density = 1210
+uts = 16.5
+cte = 112
+colour = "#1C1C1C"
+source = "Freudenberg FST, material data sheet '72 NBR 872' v16 (2021-03-25), https://products.fst.com/medialibrary/materialdatasheets/72%20NBR%20872_en.pdf"
+source_cte = "Parker Hannifin O-Ring Division, 'Parker O-Ring Handbook' ORD 5700, Table 2-5, general-purpose nitrile 6.2e-5 in/in/F (24-191 C), https://mfc.arizona.edu/sites/default/files/2022-02/parker_o-ring_handbook.pdf"
+note = "Sulfur-cured black NBR seal compound, 72 +/-5 Shore A (typical 72; nominal grade 70). uts is typical tensile strength at break, DIN 53504 S2 (min 14 MPa); elongation 295%. No yield (rubber). youngs omitted: only stress at 100% elongation (6.5 MPa) is given, not a small-strain modulus. poisson omitted: not given by the source (rubber is nearly incompressible). CTE is Parker's generic nitrile value, not this compound."
+
+# ---------------------------------------------------------------- plastics
+
+[[material]]
+name = "ABS"
+aliases = ["acrylonitrile butadiene styrene", "ABS plastic", "Terluran GP-35"]
+family = "plastic"
+density = 1040
+youngs = 2.3
+poisson = 0.39
+yield = 44
+cte = 95
+colour = "#E8E4D6"
+source = "INEOS Styrolution data via Sales Plastics, 'INEOS Styrolution GP 35' (Terluran GP-35), https://salesplastics.com/wp-content/uploads/2025/06/INEOS-Styrolution%C2%AE-GP-35.pdf"
+source_cte = "INEOS Styrolution data via Susheng Polymer (UL Prospector reprint), 'Terluran GP-35', https://sushengpolymer.com/media/pdf/WCaGfK_Terluran-GP-35.pdf"
+source_poisson = "Covestro, 'Engineering Polymers Part and Mold Design - Thermoplastics: A Design Guide', Table 3-1 (generic ABS), https://solutions.covestro.com/-/media/covestro/solution-center/brands/downloads/imported/1557214249.pdf"
+note = "Terluran GP-35, natural, ISO 527-2 at 23 C, density ISO 1183. uts omitted: the sheet gives no stress at break; yield is the peak stress. cte is the midpoint of the published 80-110e-6/K (flow, ISO 11359-2). Poisson is Covestro's generic ABS value."
+
+[[material]]
+name = "PC"
+aliases = ["polycarbonate", "Makrolon", "Lexan", "Makrolon 2405"]
+family = "plastic"
+density = 1200
+youngs = 2.4
+poisson = 0.38
+yield = 65
+uts = 65
+cte = 65
+colour = "#DDE6EA"
+source = "Covestro (hosted by OKW), 'Makrolon 2405 ISO Datasheet', edition 2015-09-01, https://www.okw.ch/it/PC/RW_Makrolon_2405_en.pdf"
+source_poisson = "Covestro, 'Engineering Polymers Part and Mold Design - Thermoplastics: A Design Guide', Table 3-1 (generic PC), https://solutions.covestro.com/-/media/covestro/solution-center/brands/downloads/imported/1557214249.pdf"
+note = "Makrolon 2405, ISO 527 (modulus at 1 mm/min, strength at 50 mm/min), 23 C. Clear; render with transparency. CTE 23-55 C, parallel and transverse, ISO 11359. Strain at break 125%."
+
+[[material]]
+name = "PA6"
+aliases = ["nylon 6", "polyamide 6", "PA 6", "Ultramid B3S"]
+family = "plastic"
+density = 1130
+youngs = 3.5
+poisson = 0.40
+yield = 90
+cte = 85
+colour = "#EFEBDD"
+source = "BASF data via Susheng Polymer (UL Prospector reprint), 'Ultramid B3S', https://www.sushengpolymer.com/media/pdf/Bd5fSu_Ultramid-B3S.pdf"
+source_poisson = "Covestro, 'Engineering Polymers Part and Mold Design - Thermoplastics: A Design Guide', Table 3-1 (PA unfilled), https://solutions.covestro.com/-/media/covestro/solution-center/brands/downloads/imported/1557214249.pdf"
+note = "BASF Ultramid B3S, DRY AS MOULDED, ISO 527-2 at 23 C. Conditioned (50% RH) is much softer: E 1.2 GPa, yield 45 MPa. uts omitted: no stress at break on the sheet. cte is the midpoint of the published 70-100e-6/K (flow, 23-80 C). Poisson is Covestro's generic unfilled-PA value."
+
+[[material]]
+name = "PA66"
+aliases = ["nylon 66", "nylon 6/6", "polyamide 66", "PA 66", "Zytel 101L"]
+family = "plastic"
+density = 1140
+youngs = 3.1
+poisson = 0.37
+yield = 82
+cte = 100
+colour = "#EFEBDD"
+source = "Celanese Materials Database (hosted by Quickparts), 'Zytel 101L NC010', revised 2023-04-04, https://quickparts.com/wp-content/uploads/2023/04/zytel®-101l-nc010-gb.pdf"
+note = "Zytel 101L NC010 (ex-DuPont), DRY AS MOULDED, ISO 527 at 23 C. Conditioned: E 1.4 GPa, yield 55 MPa, Poisson 0.43. uts omitted: no stress at break on the sheet. cte is parallel to flow (normal 110e-6/K), ISO 11359."
+
+[[material]]
+name = "POM"
+aliases = ["acetal", "Delrin", "POM-H", "acetal homopolymer", "polyoxymethylene", "Delrin 100"]
+family = "plastic"
+density = 1420
+youngs = 3.15
+poisson = 0.37
+yield = 72
+cte = 110
+colour = "#F4F2EA"
+source = "DuPont data via Susheng Polymer (UL Prospector reprint), 'Delrin 100 NC010', https://sushengpolymer.com/media/pdf/L1RBhh_Delrin-100-NC010.pdf"
+source_poisson = "DuPont data via Sales Plastics, 'DUPONT Delrin 100P' (sister grade), https://salesplastics.com/wp-content/uploads/2025/09/DUPONT-Delrin®-100P.pdf"
+note = "Acetal HOMOPOLYMER (Delrin 100 NC010), ISO 527-2, 23 C. uts omitted: no stress at break on the sheet; yield is the peak stress. cte is flow and transverse, 23-55 C, ISO 11359-2."
+
+[[material]]
+name = "PP"
+aliases = ["polypropylene", "PP homopolymer", "PP-H", "Moplen HP500N"]
+family = "plastic"
+density = 900
+youngs = 1.55
+poisson = 0.42
+yield = 35
+cte = 90
+colour = "#E6E4DC"
+source = "LyondellBasell data via Susheng Polymer (UL Prospector reprint), 'Moplen HP500N', https://www.sushengpolymer.com/media/pdf/gIOvs9_Moplen-HP500N.pdf"
+source_poisson = "INEOS Olefins & Polymers USA, 'Typical Engineering Properties of Polypropylene' (generic PP homopolymer), https://www.ineos.com/globalassets/ineos-group/businesses/ineos-olefins-and-polymers-usa/products/technical-information--patents/ineos-engineering-properties-of-pp.pdf"
+source_cte = "INEOS Olefins & Polymers USA, 'Typical Engineering Properties of Polypropylene' (generic PP homopolymer, 80-100e-6/K), same URL"
+note = "Moplen HP500N homopolymer, ISO 527-2, 23 C. uts omitted: no stress at break (strain at break > 50%). cte is the midpoint of the INEOS generic 80-100 range (temperature range not stated); the grade sheet has none."
+
+[[material]]
+name = "HDPE"
+aliases = ["high density polyethylene", "PE-HD", "PEHD", "SABIC HDPE M1053"]
+family = "plastic"
+density = 953
+youngs = 1.1
+yield = 26
+uts = 16
+cte = 120
+colour = "#ECECE6"
+source = "SABIC (hosted by Chemate), 'SABIC HDPE M1053 TDS', https://www.chemategroup.com/wp-content/uploads/2023/05/SABIC®-HDPE-M1053-TDS.pdf"
+source_cte = "INEOS Olefins & Polymers USA, 'Engineering Properties of HDPE' (Jan 2007, generic HDPE), https://service.polymech.info/api/vfs/get/machines/resources/papers/plastic/Engineering%20properties%20od%20HDPE.pdf"
+note = "SABIC M1053 injection grade (MFR 10), ISO 527-2, 23 C. uts is stress at break, which is below yield. cte is a generic HDPE value (temperature range not stated). poisson omitted: the only source found (INEOS generic sheet) gives 0.5, which is not usable in a solver."
+
+[[material]]
+name = "PMMA"
+aliases = ["acrylic", "Plexiglas", "Perspex", "acrylic glass", "Plexiglas 8N"]
+family = "plastic"
+density = 1190
+youngs = 3.3
+poisson = 0.37
+uts = 77
+cte = 80
+colour = "#E8F0F0"
+source = "Evonik Performance Materials, 'PLEXIGLAS 8N Technical Data' MC106-E3 (2018-03-28), https://www.uqgoptics.com/wp-content/uploads/2019/11/plexiglas-8n.pdf"
+source_poisson = "Roehm, 'PLEXIGLAS GS/XT' 211-1 (04/25), ISO 527-1 at 23 C, https://www.voskunststoffen.nl/files/166151/datasheet%20plexiglas%20XT%20GS.pdf"
+note = "PLEXIGLAS 8N moulding grade, ISO 527 (modulus 1 mm/min, break 5 mm/min). No yield: brittle, breaks at about 5.5% strain; uts is stress at break. CTE 0-50 C, ISO 11359. Clear; render with transparency."
+
+[[material]]
+name = "PETG"
+aliases = ["PET-G", "copolyester", "Eastar 6763"]
+family = "plastic"
+density = 1270
+youngs = 2.1
+yield = 50
+uts = 28
+cte = 51
+colour = "#E4EEEA"
+source = "Eastman (hosted by Plasticker), 'Eastar Copolyester 6763', https://plasticker.de/docs/recybase/43561_1720088124.pdf"
+source_cte = "Eastman data via Formerra/Protolabs, 'Eastar 6763' (Dec 2023), ASTM D696, https://protolabs.com/media/pzub5tfo/eastar-6763.pdf"
+note = "Eastar 6763 moulding grade, ISO 527 at 23 C. uts is stress at break, which is below yield. cte is flow direction, -30 to 40 C, ASTM D696 (no ISO 11359 value found). poisson omitted: none found. Clear; render with transparency."
+
+[[material]]
+name = "HIPS"
+aliases = ["high impact polystyrene", "PS-HI", "impact polystyrene", "PS 486N"]
+family = "plastic"
+density = 1040
+youngs = 1.8
+yield = 24
+cte = 80
+colour = "#F2F0EA"
+source = "INEOS Styrolution data via Susheng Polymer (UL Prospector reprint), 'Styrolution PS 486N', https://sushengpolymer.com/media/pdf/bsuFCg_Styrolution-PS-486N.pdf"
+note = "Styrolution PS 486N, ISO 527-2 at 23 C. uts omitted: no stress at break on the sheet. cte is flow direction, ISO 11359-2, temperature range not stated. poisson omitted: no producer source found."
+
+[[material]]
+name = "PTFE"
+aliases = ["Teflon", "polytetrafluoroethylene", "TECAFLON PTFE"]
+family = "plastic"
+density = 2160
+youngs = 0.70
+poisson = 0.46
+yield = 9.0
+uts = 31.0
+cte = 100
+colour = "#F7F7F4"
+source = "DuPont, 'Teflon PTFE Fluoropolymer Resin Properties Handbook' H-37051-3 (7/96), https://cdn.toxicdocs.org/K6/K6RD4NNj8dVar4pb7aORgak4X/K6RD4NNj8dVar4pb7aORgak4X.pdf"
+source_youngs = "Ensinger, 'TECAFLON PTFE' datasheet (version 10/05), ISO 527, https://hisse-et-oh.com/store/medias/sailing/5f9/c41/d63/original/5f9c41d639819f7e183d79a3.pdf"
+note = "Moulded granular PTFE resin, 23 C (ASTM D4894). yield is a diffuse yield. Machined stock shapes are weaker: Ensinger TECAFLON PTFE natural gives 22 MPa and CTE 130e-6/K over 23-100 C. CTE here is 23-60 C, ASTM E228. The DuPont handbook gives no Young's modulus, so youngs is Ensinger's."
+
+[[material]]
+name = "TPU 95A"
+aliases = ["TPU", "thermoplastic polyurethane", "TPU 95 Shore A", "Elastollan 1195A"]
+family = "plastic"
+density = 1150
+uts = 55
+colour = "#E9E6D2"
+source = "BASF, 'Elastollan E 1195 A 10FC000 TDS', https://download.basf.com/p1/8a8081ec96f843480197313c768004bb/en/Elastollan%25C2%25AE_E_1195_A_10FC000"
+note = "BASF Elastollan 1195 A, 96 Shore A / 48 Shore D. uts is tensile strength at break (DIN 53504-S2); elongation 500%. No yield (elastomer). youngs omitted: the sheet gives only stress at 20/100/300% elongation (6/10/18 MPa), not a modulus. poisson and cte omitted: not on any sheet reached."
+
+[[material]]
+name = "PBT-GF30"
+aliases = ["PBT GF30", "PBT 30% glass", "PBT-GF 30", "glass-filled PBT", "Ultradur B4300 G6"]
+family = "plastic"
+density = 1510
+youngs = 8.7
+uts = 130
+cte = 20
+colour = "#2B2B2B"
+source = "BASF, 'Ultradur B4300 G6 HR Product Information' (ISO data, uncoloured, 23 C), https://download.basf.com/p1/8a8082587fd4b608017fd63d9cd26b1f/en/ULTRADUR%253Csup%253E%25C2%25AE%253Csup%253E_B4300_G6_HR"
+note = "BASF Ultradur B4300 G6 HR (hydrolysis-resistant PBT, 30% glass fibre), dry, 23 C, ISO 527. No yield: brittle, breaks at 3.3% strain without a yield point; uts is stress at break. cte is longitudinal (flow direction), 23-55 C, ISO 11359; transverse is 150e-6/K. poisson omitted: not on the datasheet. Strongly anisotropic; values are flow-direction test bars."

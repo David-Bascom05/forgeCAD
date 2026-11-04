@@ -31,6 +31,7 @@ forge-lang = { path = "../forge-lang" }
 forge-math = { path = "../../kernel/forge-math" }
 forge-model = { path = "../../kernel/forge-model" }
 forge-sketch = { path = "../../kernel/forge-sketch" }
+forge-material = { path = "../../kernel/forge-material" }
 
 # the kernel builds meshes natively; the browser loads them (see README)
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
