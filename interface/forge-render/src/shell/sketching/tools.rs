@@ -373,6 +373,78 @@ impl SketchMode {
         Some(s)
     }
 
+    /// The circle inside the triangle three lines make.
+    fn incircle(&self, ls: &[String]) -> Option<(P, f64)> {
+        let s = self.solved.as_ref()?;
+        let g: Vec<(P, P)> = ls
+            .iter()
+            .map(|l| sk::line(s, l).ok().map(|(a, b)| ((a.x, a.y), (b.x, b.y))))
+            .collect::<Option<_>>()?;
+        let meet = |i: usize, j: usize| cross_lines(g[i].0, sub(g[i].1, g[i].0), g[j].0, sub(g[j].1, g[j].0));
+        let (a, b, c) = (meet(1, 2)?, meet(0, 2)?, meet(0, 1)?);
+        let (la, lb, lc) = (dist(b, c), dist(a, c), dist(a, b));
+        let per = la + lb + lc;
+        if per < 1e-9 {
+            return None;
+        }
+        let ctr = (
+            (la * a.0 + lb * b.0 + lc * c.0) / per,
+            (la * a.1 + lb * b.1 + lc * c.1) / per,
+        );
+        let area = ((b.0 - a.0) * (c.1 - a.1) - (b.1 - a.1) * (c.0 - a.0)).abs() * 0.5;
+        Some((ctr, 2.0 * area / per))
+    }
+
+    /// Inventor's Automatic Dimensions: a length on every line, a diameter on every circle, a
+    /// radius on every arc, then each point placed from the origin, each kept only if the sketch
+    /// still solves and can move less for it.
+    pub(super) fn auto_dimension(&mut self) {
+        let Some(s) = self.solved.clone() else { return };
+        let mut tries: Vec<String> = vec![];
+        for (name, id) in &s.names {
+            if sk::is_projected(name) || name == "o" {
+                continue;
+            }
+            match s.solved.entity(*id) {
+                Some(Entity::Line { .. }) => {
+                    if let Ok((a, b)) = sk::line(&s, name) {
+                        tries.push(format!("dist {name} {}", n(dist((a.x, a.y), (b.x, b.y)))));
+                    }
+                }
+                Some(Entity::Circle { .. }) => {
+                    tries.push(format!("dia {name} {}", n(2.0 * s.solved.radius(*id))))
+                }
+                Some(Entity::Arc { .. }) => tries.push(format!("rad {name} {}", n(s.solved.radius(*id)))),
+                _ => {}
+            }
+        }
+        for (w, q) in self.points() {
+            if w == "o" {
+                continue;
+            }
+            tries.push(format!("hdist o {w} {}", n(q.0)));
+            tries.push(format!("vdist o {w} {}", n(q.1)));
+        }
+        let mut free = sk::freedom(&s).0;
+        let mut added = 0;
+        for row in tries {
+            if free == 0 {
+                break;
+            }
+            let mut next = self.rows.clone();
+            next.push(row);
+            if let Ok(b) = self.build(&next)
+                && sk::freedom(&b).0 < free
+            {
+                free = sk::freedom(&b).0;
+                self.rows = next;
+                self.solved = Some(b);
+                added += 1;
+            }
+        }
+        self.error = (added == 0).then(|| "nothing left to dimension".to_string());
+    }
+
     /// The direction a line or arc leaves its end by, for a tangent arc started there.
     fn leaving(&self, end: &str) -> Option<P> {
         let (e, which) = end.split_once('.')?;
@@ -502,6 +574,26 @@ impl SketchMode {
                 self.two_points(word, at, reach);
             }
             SkTool::Collinear => self.two_of("colin", "l", at, reach),
+            SkTool::CircleTan => {
+                let Some(l) = self.entity_near(at, reach, "l") else {
+                    return true;
+                };
+                if !self.picks.contains(&l) {
+                    self.picks.push(l);
+                }
+                if self.picks.len() == 3 {
+                    let ls = std::mem::take(&mut self.picks);
+                    match self.incircle(&ls) {
+                        Some((c, r)) => {
+                            let me = self.name_after('c', 0);
+                            let mut rows = vec![format!("circle {} {}", pt(c), n(r))];
+                            rows.extend(ls.iter().map(|l| format!("tan {l} {me}")));
+                            self.add_all(rows);
+                        }
+                        None => self.error = Some("no circle touches those three lines".into()),
+                    }
+                }
+            }
             SkTool::Concentric => self.two_of("conc", "ca", at, reach),
             SkTool::Equal => {
                 let kinds = match self.picks.first().and_then(|p| p.chars().next()) {
@@ -1443,7 +1535,25 @@ impl SkTool {
                 "Click an arc's centre",
                 "Click to set the width",
             ][picked.min(2)],
+            SkTool::SlotArc3 => [
+                "Click the slot's start",
+                "Click its end",
+                "Click a point its centre passes through",
+                "Click to set the width",
+            ][picked.min(3)],
+            SkTool::SlotArcCenter => [
+                "Click the arc's centre",
+                "Click the slot's start",
+                "Click its end",
+                "Click to set the width",
+            ][picked.min(3)],
             SkTool::Polygon => ["Click the polygon's centre", "Click a corner"][picked.min(1)],
+            SkTool::CircleTan => [
+                "Click the first line it touches",
+                "Click the second line",
+                "Click the third line",
+            ][picked.min(2)],
+            SkTool::SplineCv => "Click control vertices; Enter ends it, its first vertex again closes it",
             SkTool::Ellipse => [
                 "Click the centre",
                 "Click the end of the major axis",
@@ -1602,6 +1712,27 @@ mod tests {
                 core::f64::consts::PI * (23.0 * 23.0 - 17.0 * 17.0) / 2.0 + core::f64::consts::PI * 9.0;
             assert!((p.area() - want).abs() < 1e-6, "{t:?} {} {:?}", p.area(), m.rows);
         }
+    }
+
+    #[test]
+    fn a_tangent_circle_sits_in_three_lines_and_auto_dimension_pins_a_sketch() {
+        let mut m = mode();
+        for r in ["line 0 0 30 0", "line 30 0 0 40", "line 0 40 0 0"] {
+            m.add(r.into());
+        }
+        m.set_tool(Some(SkTool::CircleTan));
+        click_all(&mut m, &[(15.0, 0.0), (15.0, 20.0), (0.0, 20.0)]);
+        solves(&m);
+        assert_eq!(m.rows[3], "circle 10 10 10");
+        assert_eq!(&m.rows[4..], ["tan l1 c1", "tan l2 c1", "tan l3 c1"]);
+        let mut m = mode();
+        m.add("line 5 5 25 5".into());
+        m.add("circle 40 10 6".into());
+        m.set_tool(Some(SkTool::AutoDim));
+        solves(&m);
+        let s = m.solved.as_ref().unwrap();
+        assert_eq!(sk::freedom(s).0, 0, "{:?}", m.rows);
+        assert!(m.rows.iter().any(|r| r == "dist l1 20"), "{:?}", m.rows);
     }
 
     #[test]

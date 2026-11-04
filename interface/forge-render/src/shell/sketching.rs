@@ -22,6 +22,8 @@ pub enum SkTool {
     Point,
     /// Through the points clicked: Enter ends it open, a click on its first point closes it.
     Spline,
+    /// Control vertices of a cubic B-spline.
+    SplineCv,
     Dimension,
     Coincident,
     Parallel,
@@ -39,6 +41,7 @@ pub enum SkTool {
     SlotCenter,
     SlotArc3,
     SlotArcCenter,
+    CircleTan,
     Polygon,
     Ellipse,
     SkFillet,
@@ -65,6 +68,8 @@ pub enum SkTool {
     Equal,
     /// Toggles: new lines as construction, constraint marks, each entity's freedom.
     Construction,
+    /// Dimensions added till the sketch can't move (each kept only if it takes freedom).
+    AutoDim,
     ShowConstraints,
     ShowDof,
 }
@@ -579,6 +584,7 @@ impl SketchMode {
             Some(SkTool::Construction) => return self.more.construction = !self.more.construction,
             Some(SkTool::ShowConstraints) => return self.more.hide_glyphs = !self.more.hide_glyphs,
             Some(SkTool::ShowDof) => return self.more.show_dof = !self.more.show_dof,
+            Some(SkTool::AutoDim) => return self.auto_dimension(),
             _ => {}
         }
         self.more.sel.clear();
@@ -608,7 +614,13 @@ impl SketchMode {
     pub fn finish_spline(&mut self, closed: bool) {
         if self.picks.len() >= 2 {
             let open = if closed { "" } else { " open" };
-            let row = format!("spline {}{open}", self.picks.join(" "));
+            // control vertices: a cubic B-spline once there are four, else the curve through
+            let word = if self.tool == Some(SkTool::SplineCv) && self.picks.len() > 3 {
+                "bspline 3"
+            } else {
+                "spline"
+            };
+            let row = format!("{word} {}{open}", self.picks.join(" "));
             self.add(row);
         }
         self.picks.clear();
@@ -914,7 +926,7 @@ impl SketchMode {
             }
         };
         match (tool, self.pick_at.len()) {
-            (SkTool::Spline, n) if n > 0 => {
+            (SkTool::Spline | SkTool::SplineCv, n) if n > 0 => {
                 // the curve it'll be, through the pointer too
                 let mut pts = self.pick_at.clone();
                 pts.push(at);
@@ -924,7 +936,11 @@ impl SketchMode {
                     .cloned()
                     .chain([format!("{} {}", at.0, at.1)])
                     .collect();
-                let row = format!("spline {} open", words.join(" "));
+                let row = if tool == SkTool::SplineCv && words.len() > 3 {
+                    format!("bspline 3 {} open", words.join(" "))
+                } else {
+                    format!("spline {} open", words.join(" "))
+                };
                 let mut rows = self.rows.clone();
                 rows.push(row);
                 let curve = self.build(&rows).ok().and_then(|s| {
@@ -1187,7 +1203,7 @@ impl SketchMode {
         if self.more_enter() {
             return;
         }
-        if self.tool == Some(SkTool::Spline) {
+        if matches!(self.tool, Some(SkTool::Spline | SkTool::SplineCv)) {
             self.finish_spline(false);
             return;
         }
@@ -1276,7 +1292,7 @@ impl SketchMode {
                 }
             }
             SkTool::Dimension | SkTool::Project => {}
-            SkTool::Spline => {
+            SkTool::Spline | SkTool::SplineCv => {
                 // its first point again closes it, once it has a shape
                 if self.pick_at.len() >= 3
                     && ((self.pick_at[0].0 - at.0).powi(2) + (self.pick_at[0].1 - at.1).powi(2)).sqrt()
@@ -1956,7 +1972,7 @@ impl Shell {
             if (enter
                 || (n_fields == 0
                     && ctx.input(|i| i.key_pressed(egui::Key::Enter))
-                    && m.tool == Some(SkTool::Spline)))
+                    && matches!(m.tool, Some(SkTool::Spline | SkTool::SplineCv))))
                 && !m.pick_at.is_empty()
             {
                 m.enter(reach);

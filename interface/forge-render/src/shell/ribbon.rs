@@ -355,6 +355,17 @@ fn groups(s: &Shell) -> Vec<Group> {
                 icons,
             };
             let more = s.sketch.as_ref().map(|m| m.more.clone()).unwrap_or_default();
+            // a Forge sketch's spline goes through its points; control vertices are the .fc rows'
+            let cv = Tool {
+                name: "Spline CV",
+                icon: "splinecv",
+                action: if s.fg.is_some() {
+                    None
+                } else {
+                    s.sketch_tool(SkTool::SplineCv)
+                },
+                on: on == Some(SkTool::SplineCv),
+            };
             let toggle = |name, icon, tool: SkTool, now: bool| Tool {
                 name,
                 icon,
@@ -375,14 +386,16 @@ fn groups(s: &Shell) -> Vec<Group> {
                     vec![
                         t("Spline", "spline", SkTool::Spline),
                         t("Polygon", "polygon", SkTool::Polygon),
-                        t("Ellipse", "ellipse", SkTool::Ellipse),
                         t("Point", "point", SkTool::Point),
                         t("Fillet", "skfillet", SkTool::SkFillet),
                         t("Chamfer", "skchamfer", SkTool::SkChamfer),
                         t("Text", "sktext", SkTool::Text),
                     ],
                     vec![
+                        cv,
+                        t("Ellipse", "ellipse", SkTool::Ellipse),
                         t("Three Point Circle", "circle3", SkTool::Circle3),
+                        t("Tangent Circle", "circletan", SkTool::CircleTan),
                         t("Three Point Arc", "arc3", SkTool::Arc3),
                         t("Tangent Arc", "arctan", SkTool::ArcTan),
                         t("Center Rectangle", "rectc", SkTool::RectCenter),
@@ -422,6 +435,7 @@ fn groups(s: &Shell) -> Vec<Group> {
                     vec![t("Dimension", "dim", SkTool::Dimension)],
                     vec![],
                     vec![
+                        t("Automatic Dimensions", "autodim", SkTool::AutoDim),
                         t("Coincident", "coincident", SkTool::Coincident),
                         t("Collinear", "collinear", SkTool::Collinear),
                         t("Concentric", "concentric", SkTool::Concentric),
@@ -452,7 +466,7 @@ fn groups(s: &Shell) -> Vec<Group> {
                             SkTool::ShowConstraints,
                             !more.hide_glyphs,
                         ),
-                        toggle("Freedom", "autodim", SkTool::ShowDof, more.show_dof),
+                        toggle("Freedom", "freedom", SkTool::ShowDof, more.show_dof),
                     ],
                 ),
                 g(
@@ -587,6 +601,7 @@ fn groups(s: &Shell) -> Vec<Group> {
 fn why_off(name: &str) -> Option<&'static str> {
     Some(match name {
         "Decal" => "not yet: the kernel has no image projection onto faces",
+        "Spline CV" => "not in Forge parts yet: the language's spline runs through its points",
         "Smooth (G2)" => {
             "not yet: the sketch solver has no curvature tie at a joint (Tangent holds G1 meanwhile)"
         }

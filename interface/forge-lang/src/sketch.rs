@@ -166,7 +166,14 @@ impl Sk {
     }
 
     /// A whole ellipse: its centre, one end of its major axis, its semi-minor axis.
-    pub fn ellipse(&mut self, c: EntityId, m: EntityId, b: f64, name: Option<&str>, span: Span) -> R<EntityId> {
+    pub fn ellipse(
+        &mut self,
+        c: EntityId,
+        m: EntityId,
+        b: f64,
+        name: Option<&str>,
+        span: Span,
+    ) -> R<EntityId> {
         let e = self.s.add_ellipse(c, m, b).map_err(self.kerr(span))?;
         self.con(Constraint::EllipseMinor(e, b), span)?;
         self.named(e, name, span);
