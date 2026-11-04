@@ -699,8 +699,7 @@ fn kind_button(
     t: &Theme,
     icon: &str,
     tip: &str,
-    on: bool,
-    enabled: bool,
+    (on, enabled): (bool, bool),
     name: String,
     places: &mut Vec<(String, Rect)>,
 ) -> bool {
@@ -1254,8 +1253,7 @@ impl Shell {
                             t,
                             j.2,
                             j.0,
-                            f.kind == k,
-                            true,
+                            (f.kind == k, true),
                             format!("asm:type:{}", j.0),
                             places,
                         ) {
@@ -1274,8 +1272,7 @@ impl Shell {
                             t,
                             c.2,
                             &tip,
-                            f.kind == k,
-                            c.1.is_some(),
+                            (f.kind == k, c.1.is_some()),
                             format!("asm:type:{}", c.0),
                             places,
                         ) {
@@ -1378,8 +1375,7 @@ impl Shell {
                         t,
                         icon,
                         &tip,
-                        f.motion.kind == k && k < 2,
-                        k < 2,
+                        (f.motion.kind == k && k < 2, k < 2),
                         format!("asm:motion:{w}"),
                         places,
                     ) {
