@@ -4,9 +4,13 @@
 //! guesses (`near`), as in the drawing; every number (guess, size, dimension) is a param of the
 //! sketch. A row with no Forge form is refused, typed.
 
+mod edit;
+
+pub use edit::{Opened, open};
+
 use super::fgtool::ToolError;
 use forge_doc::text::tokens;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 struct Out {
     name: String,
@@ -14,11 +18,16 @@ struct Out {
     rows: Vec<String>,
     /// What each .fc entity name (`l1`, `c2`, `p1`) is in Forge.
     names: HashMap<String, String>,
-    counts: HashMap<char, usize>,
-    /// Lines that are a rect's sides: (rect, side), for dimensions a fixed rect already holds.
+    /// The .fc names made so far, by kind: `l3` is the third line.
+    fc: HashMap<char, usize>,
+    /// Forge names in use: a fresh one is the next free `{kind}{k}`.
+    taken: HashSet<String>,
+    /// Names a rewritten statement keeps, taken before fresh ones.
+    keep: Vec<String>,
+    /// How many params the block has already: new ones are numbered on from there.
+    base: usize,
+    /// Lines that are a new rect's sides: (its row, side), for dimensions a fixed rect holds.
     rect_sides: HashMap<String, (usize, usize)>,
-    /// Each rect's size params, set by an `hdist`/`vdist` on its sides.
-    rects: Vec<[String; 2]>,
 }
 
 fn num(t: &str, row: &str) -> Result<f64, ToolError> {
@@ -35,19 +44,89 @@ fn fmt(v: f64) -> String {
     super::fg::short(v)
 }
 
+/// The kinds of the .fc names a row makes, in order (`rect`: four lines).
+pub(super) fn made(t: &[String]) -> Vec<char> {
+    match t.first().map(String::as_str) {
+        Some("pt") => vec!['p'],
+        Some("line") => vec!['l'],
+        Some("circle") => vec!['c'],
+        Some("arc") => vec!['a'],
+        Some("spline" | "bspline") => vec!['s'],
+        Some("ellipse" | "earc") => vec!['e'],
+        Some("rect") => vec!['l'; 4],
+        Some("poly") => {
+            let open = t.last().is_some_and(|w| w == "open");
+            let (mut k, mut pts) = (1, 0);
+            while k < t.len() - usize::from(open) {
+                k += if t[k].parse::<f64>().is_ok() { 2 } else { 1 };
+                pts += 1;
+            }
+            vec!['l'; pts - usize::from(open)]
+        }
+        _ => vec![],
+    }
+}
+
 impl Out {
+    fn new(name: &str, taken: HashSet<String>) -> Out {
+        Out {
+            name: name.to_string(),
+            params: vec![],
+            rows: vec![],
+            names: HashMap::new(),
+            fc: HashMap::new(),
+            taken,
+            keep: vec![],
+            base: 0,
+            rect_sides: HashMap::new(),
+        }
+    }
+
     fn param(&mut self, base: &str, v: f64) -> String {
-        let k = self.params.len() + 1;
+        self.param_in(base, &fmt(v))
+    }
+
+    fn param_in(&mut self, base: &str, text: &str) -> String {
+        let mut k = self.base + self.params.len() + 1;
+        while self.taken.contains(&format!("{base}{k}")) {
+            k += 1;
+        }
         let n = format!("{base}{k}");
-        self.params
-            .push(format!("param {}.{n} = {}\n", self.name, fmt(v)));
+        self.taken.insert(n.clone());
+        self.params.push(format!("param {}.{n} = {text}\n", self.name));
         n
     }
 
-    fn next(&mut self, kind: char) -> String {
-        let c = self.counts.entry(kind).or_default();
+    fn fc_next(&mut self, kind: char) -> String {
+        let c = self.fc.entry(kind).or_default();
         *c += 1;
         format!("{kind}{c}")
+    }
+
+    /// A Forge name for a new entity: the kept one, else the next free `{kind}{k}`.
+    fn fresh(&mut self, kind: char) -> String {
+        if !self.keep.is_empty() {
+            return self.keep.remove(0);
+        }
+        let n = (1..)
+            .map(|k| format!("{kind}{k}"))
+            .find(|n| !self.taken.contains(n))
+            .expect("a free name");
+        self.taken.insert(n.clone());
+        n
+    }
+
+    /// An entity row's own name: its .fc name, and the Forge one it's written as.
+    fn entity(&mut self, kind: char) -> String {
+        let f = self.fc_next(kind);
+        // its .fc name, where Forge has no such name yet
+        let n = if self.keep.is_empty() && self.taken.insert(f.clone()) {
+            f.clone()
+        } else {
+            self.fresh(kind)
+        };
+        self.names.insert(f, n.clone());
+        n
     }
 
     /// A point: `X Y` (two tokens, a free point there) or a name; returns the text and how many
@@ -82,81 +161,90 @@ impl Out {
             None => e.clone(),
         })
     }
-}
 
-fn no_form(row: &str) -> ToolError {
-    ToolError::NoForgeForm {
-        tool: "sketch",
-        why: format!("the row `{row}` has no Forge form here; write it in the source"),
-    }
-}
-
-/// The Forge block for a sketch named `name` on `on` (an anchor, a sketch, or `xy`/`xz`/`yz`):
-/// its params, then the block.
-pub fn block(name: &str, on: &str, rows: &[String]) -> Result<String, ToolError> {
-    let mut o = Out {
-        name: name.to_string(),
-        params: vec![],
-        rows: vec![],
-        names: HashMap::new(),
-        counts: HashMap::new(),
-        rect_sides: HashMap::new(),
-        rects: vec![],
-    };
-    // a rect's own width and height: the dimensions on its sides, else as drawn
-    let mut held: HashMap<(usize, usize), f64> = HashMap::new();
-    let mut lines_seen = 0usize;
-    // a circle's own radius: a dimension on it, else as drawn
-    let mut radii: HashMap<String, f64> = HashMap::new();
-    for r in rows {
-        let t = tokens(r);
-        match t.first().map(String::as_str) {
-            Some(w @ ("rad" | "dia")) => {
-                if let (Some(c), Some(v)) = (t.get(1), t.get(2))
-                    && c.starts_with('c')
-                    && !c.contains('.')
-                {
-                    let v = num(v, r)?;
-                    radii.insert(c.clone(), if w == "dia" { v / 2.0 } else { v });
-                }
-            }
-            Some("line") => lines_seen += 1,
-            Some("poly") => {
-                let open = t.last().is_some_and(|w| w == "open");
-                let (mut k, mut pts) = (1, 0);
-                while k < t.len() - usize::from(open) {
-                    k += if t[k].parse::<f64>().is_ok() { 2 } else { 1 };
-                    pts += 1;
-                }
-                lines_seen += pts - usize::from(open);
-            }
-            Some("rect") => {
-                let first = lines_seen + 1;
-                let rect = o.rects.len();
-                for side in 0..4 {
-                    o.rect_sides.insert(format!("l{}", first + side), (rect, side));
-                }
-                lines_seen += 4;
-                o.rects.push([String::new(), String::new()]);
-            }
-            Some(w @ ("hdist" | "vdist")) => {
-                let side = |p: &str| p.split_once('.').map(|x| x.0.to_string());
-                if let (Some(a), Some(b), Some(v)) = (
-                    t.get(1).and_then(|x| side(x)),
-                    t.get(2).and_then(|x| side(x)),
-                    t.get(3),
-                ) && a == b
-                    && let Some(&(rect, s)) = o.rect_sides.get(&a)
-                {
-                    let k = usize::from(w == "vdist" || s % 2 == 1);
-                    held.insert((rect, k), num(v, r)?);
-                }
-            }
-            _ => {}
+    /// A dimension's value: a number becomes a param, a name or expression is written as it is.
+    fn value(&mut self, base: &str, v: &str, row: &str, unit: &str) -> Result<String, ToolError> {
+        if v.parse::<f64>().is_ok() {
+            return Ok(self.param_in(base, &format!("{}{unit}", fmt(num(v, row)?))));
         }
+        Ok(v.strip_prefix('(')
+            .and_then(|x| x.strip_suffix(')'))
+            .unwrap_or(v)
+            .to_string())
     }
-    let mut rect_no = 0usize;
-    for r in rows {
+
+    /// Rows `from` on written as Forge rows (after `kept`, the Forge names of what each earlier
+    /// row makes).
+    fn rows_from(&mut self, rows: &[String], from: usize, kept: &[Vec<String>]) -> Result<(), ToolError> {
+        // a new rect's own width and height: the dimensions on its sides, else as drawn
+        let mut held: HashMap<(usize, usize), f64> = HashMap::new();
+        // a new circle's own radius: a dimension on it, else as drawn
+        let mut radii: HashMap<String, f64> = HashMap::new();
+        let mut counts: HashMap<char, usize> = HashMap::new();
+        let mut circles = vec![];
+        for (k, r) in rows.iter().enumerate() {
+            let t = tokens(r);
+            let kinds = made(&t);
+            for (side, kind) in kinds.iter().enumerate() {
+                let c = counts.entry(*kind).or_default();
+                *c += 1;
+                if k >= from && t[0] == "rect" {
+                    self.rect_sides.insert(format!("l{c}"), (k, side));
+                }
+                if k >= from && t[0] == "circle" {
+                    circles.push(format!("c{c}"));
+                }
+            }
+            match t.first().map(String::as_str) {
+                Some(w @ ("rad" | "dia")) => {
+                    if let (Some(c), Some(v)) = (t.get(1), t.get(2))
+                        && circles.contains(c)
+                    {
+                        let v = num(v, r)?;
+                        radii.insert(c.clone(), if w == "dia" { v / 2.0 } else { v });
+                    }
+                }
+                Some(w @ ("hdist" | "vdist")) => {
+                    let side = |p: &str| p.split_once('.').map(|x| x.0.to_string());
+                    if let (Some(a), Some(b), Some(v)) = (
+                        t.get(1).and_then(|x| side(x)),
+                        t.get(2).and_then(|x| side(x)),
+                        t.get(3),
+                    ) && a == b
+                        && let Some(&(rect, s)) = self.rect_sides.get(&a)
+                    {
+                        let k = usize::from(w == "vdist" || s % 2 == 1);
+                        held.insert((rect, k), num(v, r)?);
+                    }
+                }
+                _ => {}
+            }
+        }
+        for (k, r) in rows.iter().enumerate() {
+            if k < from {
+                let t = tokens(r);
+                let mut names = kept.get(k).into_iter().flatten();
+                for kind in made(&t) {
+                    let f = self.fc_next(kind);
+                    if let Some(n) = names.next() {
+                        self.names.insert(f, n.clone());
+                    }
+                }
+                continue;
+            }
+            self.row(k, r, &held, &radii)?;
+        }
+        Ok(())
+    }
+
+    fn row(
+        &mut self,
+        k: usize,
+        r: &str,
+        held: &HashMap<(usize, usize), f64>,
+        radii: &HashMap<String, f64>,
+    ) -> Result<(), ToolError> {
+        let o = self;
         let mut t = tokens(r);
         // a construction line is written as one; other construction geometry has no Forge form
         let cons = t.last().is_some_and(|w| w == "cons");
@@ -164,7 +252,7 @@ pub fn block(name: &str, on: &str, rows: &[String]) -> Result<String, ToolError>
             t.pop();
         }
         let Some((w, rest)) = t.split_first() else {
-            continue;
+            return Ok(());
         };
         if cons && w != "line" {
             return Err(no_form(r));
@@ -172,15 +260,13 @@ pub fn block(name: &str, on: &str, rows: &[String]) -> Result<String, ToolError>
         match w.as_str() {
             "pt" => {
                 let (p, _) = o.point(rest, r)?;
-                let n = o.next('p');
-                o.names.insert(n.clone(), n.clone());
+                let n = o.entity('p');
                 o.rows.push(format!("{n} = {p}"));
             }
             "line" => {
                 let (a, k) = o.point(rest, r)?;
                 let (b, _) = o.point(&rest[k..], r)?;
-                let n = o.next('l');
-                o.names.insert(n.clone(), n.clone());
+                let n = o.entity('l');
                 let c = if cons { ", construction: true" } else { "" };
                 o.rows.push(format!("{n} = line({a}, {b}{c})"));
             }
@@ -189,31 +275,27 @@ pub fn block(name: &str, on: &str, rows: &[String]) -> Result<String, ToolError>
                 let [x, y, w0, h0] = v[..] else {
                     return Err(no_form(r));
                 };
-                let w = held.get(&(rect_no, 0)).copied().unwrap_or(w0);
-                let h = held.get(&(rect_no, 1)).copied().unwrap_or(h0);
+                let w = held.get(&(k, 0)).copied().unwrap_or(w0);
+                let h = held.get(&(k, 1)).copied().unwrap_or(h0);
                 let (px, py) = (o.param("x", x), o.param("y", y));
                 let (pw, ph) = (o.param("w", w), o.param("h", h));
-                o.rects[rect_no] = [pw.clone(), ph.clone()];
-                let n = format!("r{}", rect_no + 1);
+                let n = o.fresh('r');
                 o.rows
                     .push(format!("{n} = rect(corner: ({px}, {py}), size: ({pw}, {ph}))"));
-                let first = o.counts.get(&'l').copied().unwrap_or(0) + 1;
                 for side in 0..4 {
-                    o.names
-                        .insert(format!("l{}", first + side), format!("{n}[{side}]"));
+                    let f = o.fc_next('l');
+                    o.names.insert(f, format!("{n}[{side}]"));
                 }
-                *o.counts.entry('l').or_default() += 4;
-                rect_no += 1;
             }
             "circle" => {
-                let (c, k) = o.point(rest, r)?;
-                let n = o.next('c');
-                let rr = match radii.get(&n) {
+                let (c, at) = o.point(rest, r)?;
+                let f = format!("c{}", o.fc.get(&'c').copied().unwrap_or(0) + 1);
+                let rr = match radii.get(&f) {
                     Some(&v) => v,
-                    None => num(rest.get(k).ok_or(no_form(r))?, r)?,
+                    None => num(rest.get(at).ok_or(no_form(r))?, r)?,
                 };
                 let pr = o.param("r", rr);
-                o.names.insert(n.clone(), n.clone());
+                let n = o.entity('c');
                 o.rows.push(format!("{n} = circle({c}, {pr})"));
             }
             "arc" => {
@@ -221,8 +303,7 @@ pub fn block(name: &str, on: &str, rows: &[String]) -> Result<String, ToolError>
                 let (s, k2) = o.point(&rest[k1..], r)?;
                 let (e, k3) = o.point(&rest[k1 + k2..], r)?;
                 let cw = rest.get(k1 + k2 + k3).is_some_and(|w| w == "cw");
-                let n = o.next('a');
-                o.names.insert(n.clone(), n.clone());
+                let n = o.entity('a');
                 o.rows.push(format!(
                     "{n} = arc(center: {c}, from: {s}, to: {e}{})",
                     if cw { ", cw: true" } else { "" }
@@ -233,8 +314,7 @@ pub fn block(name: &str, on: &str, rows: &[String]) -> Result<String, ToolError>
                 let (m, k2) = o.point(&rest[k1..], r)?;
                 let b = num(rest.get(k1 + k2).ok_or(no_form(r))?, r)?;
                 let pb = o.param("b", b);
-                let n = o.next('e');
-                o.names.insert(n.clone(), n.clone());
+                let n = o.entity('e');
                 o.rows
                     .push(format!("{n} = ellipse(center: {c}, major: {m}, b: {pb})"));
             }
@@ -248,8 +328,7 @@ pub fn block(name: &str, on: &str, rows: &[String]) -> Result<String, ToolError>
                     ps.push(p);
                     k += used;
                 }
-                let n = o.next('s');
-                o.names.insert(n.clone(), n.clone());
+                let n = o.entity('s');
                 o.rows.push(format!(
                     "{n} = spline([{}], closed: {})",
                     ps.join(", "),
@@ -304,15 +383,11 @@ pub fn block(name: &str, on: &str, rows: &[String]) -> Result<String, ToolError>
                     ps.push(p);
                     k += used;
                 }
-                let n = format!("o{}", o.counts.get(&'o').copied().unwrap_or(0) + 1);
-                *o.counts.entry('o').or_default() += 1;
-                let first = o.counts.get(&'l').copied().unwrap_or(0) + 1;
-                let sides = ps.len() - usize::from(open);
-                for side in 0..sides {
-                    o.names
-                        .insert(format!("l{}", first + side), format!("{n}[{side}]"));
+                let n = o.fresh('o');
+                for side in 0..ps.len() - usize::from(open) {
+                    let f = o.fc_next('l');
+                    o.names.insert(f, format!("{n}[{side}]"));
                 }
-                *o.counts.entry('l').or_default() += sides;
                 o.rows.push(format!(
                     "{n} = poly([{}], closed: {})",
                     ps.join(", "),
@@ -327,12 +402,12 @@ pub fn block(name: &str, on: &str, rows: &[String]) -> Result<String, ToolError>
             "dist" => match rest {
                 [l, v] => {
                     let e = o.reference(l, false, r)?;
-                    let d = o.param("d", num(v, r)?);
+                    let d = o.value("d", v, r, "")?;
                     o.rows.push(format!("distance({e}, {d})"));
                 }
                 [a, b, v] => {
                     let (a, b) = (o.reference(a, true, r)?, o.reference(b, false, r)?);
-                    let d = o.param("d", num(v, r)?);
+                    let d = o.value("d", v, r, "")?;
                     o.rows.push(format!("distance({a}, {b}, {d})"));
                 }
                 _ => return Err(no_form(r)),
@@ -341,22 +416,40 @@ pub fn block(name: &str, on: &str, rows: &[String]) -> Result<String, ToolError>
             "rad" | "dia" if rest.first().is_some_and(|c| radii.contains_key(c)) => {}
             "rad" | "dia" => {
                 let e = o.reference(rest.first().ok_or(no_form(r))?, false, r)?;
-                let v = num(rest.get(1).ok_or(no_form(r))?, r)?;
-                let d = o.param("r", if w == "dia" { v / 2.0 } else { v });
+                let v = rest.get(1).ok_or(no_form(r))?;
+                let v = match v.parse::<f64>() {
+                    Ok(x) if w == "dia" => (x / 2.0).to_string(),
+                    _ if w == "dia" => return Err(no_form(r)),
+                    _ => v.clone(),
+                };
+                let d = o.value("r", &v, r, "")?;
                 o.rows.push(format!("radius({e}, {d})"));
             }
             "ang" => {
                 let a = o.reference(rest.first().ok_or(no_form(r))?, false, r)?;
                 let b = o.reference(rest.get(1).ok_or(no_form(r))?, false, r)?;
-                let v = num(rest.get(2).ok_or(no_form(r))?, r)?;
-                let k = o.params.len() + 1;
-                let n = format!("ang{k}");
-                o.params.push(format!("param {}.{n} = {}deg\n", o.name, fmt(v)));
+                let v = rest.get(2).ok_or(no_form(r))?;
+                let n = o.value("ang", v, r, "deg")?;
                 o.rows.push(format!("angle({a}, {b}, {n})"));
             }
             _ => return Err(no_form(r)),
         }
+        Ok(())
     }
+}
+
+fn no_form(row: &str) -> ToolError {
+    ToolError::NoForgeForm {
+        tool: "sketch",
+        why: format!("the row `{row}` has no Forge form here; write it in the source"),
+    }
+}
+
+/// The Forge block for a sketch named `name` on `on` (an anchor, a sketch, or `xy`/`xz`/`yz`):
+/// its params, then the block.
+pub fn block(name: &str, on: &str, rows: &[String]) -> Result<String, ToolError> {
+    let mut o = Out::new(name, HashSet::new());
+    o.rows_from(rows, 0, &[])?;
     let mut out: String = o.params.concat();
     out.push_str(&format!("sketch {name}(on: {on}) {{\n"));
     for r in &o.rows {

@@ -161,6 +161,87 @@ fn unread(prog: &[Stmt], names: &BTreeSet<String>, from: usize, to: usize) -> R<
     Ok(())
 }
 
+/// The names a sketch block's rows bind (in its loops too).
+fn sketch_names(s: &Stmt) -> Option<BTreeSet<String>> {
+    match &s.kind {
+        StmtKind::Block {
+            kind: syntax::BlockKind::Sketch,
+            body,
+            ..
+        } => Some(bound(body)),
+        _ => None,
+    }
+}
+
+/// Every `id.NAME` an expression reads.
+fn members_read(e: &Expr, id: &str, out: &mut BTreeSet<String>) {
+    if let ExprKind::Attr(base, m) = &e.kind
+        && matches!(&base.kind, ExprKind::Name(n) if n == id)
+    {
+        out.insert(m.clone());
+    }
+    let mut sub = |x: &Expr| members_read(x, id, out);
+    match &e.kind {
+        ExprKind::List(xs) | ExprKind::Tuple(xs) => xs.iter().for_each(sub),
+        ExprKind::Map(xs) => xs.iter().for_each(|x| sub(&x.1)),
+        ExprKind::Comp { item, iter, cond, .. } => {
+            sub(item);
+            sub(iter);
+            if let Some(c) = cond {
+                sub(c);
+            }
+        }
+        ExprKind::Range { lo, hi, .. } | ExprKind::Bin(_, lo, hi) | ExprKind::Index(lo, hi) => {
+            sub(lo);
+            sub(hi);
+        }
+        ExprKind::Neg(a) | ExprKind::Not(a) | ExprKind::Attr(a, _) => sub(a),
+        ExprKind::Call(f, args) => {
+            sub(f);
+            args.iter().for_each(|a| sub(&a.value));
+        }
+        ExprKind::If { cond, then, other } => {
+            sub(cond);
+            sub(then);
+            sub(other);
+        }
+        _ => {}
+    }
+}
+
+/// A sketch's replacement keeps every entity a later statement reads by name (`sk.p`,
+/// `sk.r[2]`): one it takes out is `EntityStillRead`, naming the reader.
+fn sketch_entities_kept(prog: &[Stmt], k: usize, id: &str, new: &[Stmt]) -> R<()> {
+    let Some(old) = sketch_names(&prog[k]) else {
+        return Ok(());
+    };
+    let kept: BTreeSet<String> = new.iter().filter_map(sketch_names).flatten().collect();
+    for s in &prog[k + 1..] {
+        let mut read = BTreeSet::new();
+        syntax::walk(std::slice::from_ref(s), &mut |st| match &st.kind {
+            StmtKind::Shared { value, .. }
+            | StmtKind::Param { value, .. }
+            | StmtKind::Assign { value, .. }
+            | StmtKind::Expr(value)
+            | StmtKind::Return(value) => members_read(value, id, &mut read),
+            StmtKind::For { iter, .. } => members_read(iter, id, &mut read),
+            StmtKind::If { cond, .. } => members_read(cond, id, &mut read),
+            StmtKind::Block { args, .. } => args.iter().for_each(|a| members_read(&a.value, id, &mut read)),
+            _ => {}
+        });
+        if let Some(e) = read.iter().find(|e| old.contains(*e) && !kept.contains(*e)) {
+            return Err(Error::EntityStillRead {
+                sketch: id.into(),
+                entity: e.clone(),
+                reader: stmt_name(s)
+                    .map_or_else(|| format!("statement at byte {}", s.span.lo), str::to_string),
+                span: s.span,
+            });
+        }
+    }
+    Ok(())
+}
+
 /// The pre-checks every op makes, before it touches text or tree.
 fn precheck(src: &str, prog: &[Stmt], op: &Op) -> R<()> {
     let taken = |key: ParamKey| -> R<()> {
@@ -249,9 +330,9 @@ fn precheck(src: &str, prog: &[Stmt], op: &Op) -> R<()> {
             unread(prog, &bound(&prog[j..=k]), k + 1, prog.len())
         }
         Op::ReplaceFeature { id, text } => {
-            block(prog, id)?;
-            syntax::parse(&format!("{}\n", text.trim_end()))?;
-            Ok(())
+            let (_, k) = block(prog, id)?;
+            let new = syntax::parse(&format!("{}\n", text.trim_end()))?;
+            sketch_entities_kept(prog, k, id, &new)
         }
         Op::MoveFeature { id, before } => {
             let (j, k) = block(prog, id)?;

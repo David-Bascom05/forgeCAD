@@ -693,6 +693,14 @@ pub enum Error {
         reader: String,
         span: Span,
     },
+    /// A sketch's edit takes out an entity a later statement (`reader`, at `span`) reads as
+    /// `sketch.entity`.
+    EntityStillRead {
+        sketch: String,
+        entity: String,
+        reader: String,
+        span: Span,
+    },
     /// A function's local, a loop variable or a sketch's entity named as a top-level name.
     ShadowsTopLevel {
         span: Span,
@@ -830,6 +838,7 @@ impl Error {
             | UnknownMetric { span, .. }
             | ExpectCopied { span, .. }
             | StillRead { span, .. }
+            | EntityStillRead { span, .. }
             | ShadowsTopLevel { span, .. }
             | NotWith { span, .. }
             | TaperOnCurve { span, .. }
@@ -906,6 +915,7 @@ impl Error {
             NotAStatement { .. } => "NotAStatement",
             NameTaken { .. } => "NameTaken",
             StillRead { .. } => "StillRead",
+            EntityStillRead { .. } => "EntityStillRead",
             ShadowsTopLevel { .. } => "ShadowsTopLevel",
             EditDim { .. } => "EditDim",
             NotFinite { .. } => "NotFinite",
@@ -967,6 +977,8 @@ impl Error {
                 },
                 Op::MakeShared { param: param.clone() },
             ],
+            // what reads the entity goes too, or the edit keeps it
+            EntityStillRead { reader, .. } => vec![Op::DeleteFeature { id: reader.clone() }],
             ShadowsBuiltin { name, .. } => vec![Op::Rename {
                 from: name.clone(),
                 to: format!("{name}_1"),
@@ -1114,6 +1126,16 @@ impl Error {
             StillRead { name, reader, .. } => {
                 format!("{reader} reads {name}: the edit would change what it reads")
             }
+            EntityStillRead {
+                sketch,
+                entity,
+                reader,
+                ..
+            } => {
+                format!(
+                    "{reader} reads {sketch}.{entity}: keep {entity} in the sketch, or change what reads it"
+                )
+            }
             ShadowsTopLevel { name, .. } => format!("{name} is a top-level name; a local may not hide it"),
             EditDim { param, want, found } => format!("{param} is a {want:?}; the value is a {found:?}"),
             NotFinite { param, value } => {
@@ -1239,6 +1261,16 @@ impl Error {
             }
             UnknownFeature { id } | NotAStatement { id } => vec![("id", s(id))],
             StillRead { name, reader, .. } => vec![("name", s(name)), ("reader", s(reader))],
+            EntityStillRead {
+                sketch,
+                entity,
+                reader,
+                ..
+            } => vec![
+                ("sketch", s(sketch)),
+                ("entity", s(entity)),
+                ("reader", s(reader)),
+            ],
             ShadowsTopLevel { name, .. } => vec![("name", s(name))],
             Sheet(e) => e.data(),
             Thermo(e) => e.data(),

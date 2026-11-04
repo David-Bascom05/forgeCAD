@@ -163,6 +163,11 @@ pub enum ToolError {
         tool: &'static str,
         why: String,
     },
+    /// A sketch value changed where the file writes an expression: it has no handle of its own.
+    Driven {
+        value: String,
+        expr: String,
+    },
 }
 
 impl ToolError {
@@ -175,6 +180,7 @@ impl ToolError {
             ToolError::WrongPick { .. } => "WrongPick",
             ToolError::BadName { .. } => "BadName",
             ToolError::NoForgeForm { .. } => "NoForgeForm",
+            ToolError::Driven { .. } => "Driven",
         }
     }
 
@@ -189,6 +195,9 @@ impl ToolError {
             ToolError::WrongPick { slot, what } => format!("{slot} takes no {what}"),
             ToolError::BadName { name } => format!("{name:?} is not a feature name"),
             ToolError::NoForgeForm { tool, why } => format!("{tool}: {why}"),
+            ToolError::Driven { value, expr } => {
+                format!("{value}: that value is `{expr}`, driven by what it reads; change those instead")
+            }
         }
     }
 }

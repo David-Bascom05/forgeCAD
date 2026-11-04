@@ -257,6 +257,8 @@ pub enum SketchFor {
     New,
     /// A sketch already there.
     Line(ItemId),
+    /// A Forge part's sketch block, by its name.
+    Forge(String),
     /// A feature's inline profile, which becomes a named sketch line it reads, in one commit.
     Inline(ItemId, String),
 }
@@ -288,6 +290,8 @@ pub struct SketchMode {
     pub glyph_over: Option<String>,
     /// The rows it opened with: nothing changed, nothing to commit.
     opened: Vec<String>,
+    /// Which opened row each of the first rows is (the rows after it are new).
+    opened_at: Vec<usize>,
     /// A dimension's row being changed, when it's one already there.
     asking_row: Option<usize>,
     /// The values on screen for what's being drawn.
@@ -369,6 +373,7 @@ impl SketchMode {
             head,
             plane,
             opened: rows.clone(),
+            opened_at: (0..rows.len()).collect(),
             asking_row: None,
             fields: Vec::new(),
             want_focus: None,
@@ -577,9 +582,110 @@ impl SketchMode {
         (x / n, y / n)
     }
 
+    /// Values its dimension words read, by name (a Forge part's params).
+    pub fn set_params(&mut self, params: Vec<(String, String)>) {
+        self.params = params;
+        self.solve();
+    }
+
+    /// Which opened row each row is, for the rows that are one: the rows after are new.
+    pub fn kept(&self) -> &[usize] {
+        &self.opened_at[..self.opened_at.len().min(self.rows.len())]
+    }
+
+    /// Chooses the geometry under the pointer (or lets it go again), for Delete.
+    pub fn choose_at(&mut self, at: (f64, f64), reach: f64) {
+        let (w, _) = self.word_at(at, reach);
+        let hit = if w.starts_with('p') && !w.contains(['.', ' ']) {
+            Some(w)
+        } else {
+            self.entity_near(at, reach, "lcase")
+        };
+        match hit {
+            Some(e) => match self.more.sel.iter().position(|x| *x == e) {
+                Some(k) => {
+                    self.more.sel.remove(k);
+                }
+                None => self.more.sel.push(e),
+            },
+            None => self.more.sel.clear(),
+        }
+    }
+
+    /// Takes out the chosen geometry's rows and every row that reads what goes (a constraint on
+    /// it, a line from its end); the names after it move down, the rows reading them renamed.
+    pub fn delete_chosen(&mut self) -> bool {
+        let mut gone: Vec<usize> = self.more.sel.iter().filter_map(|e| self.row_of(e)).collect();
+        self.more.sel.clear();
+        if gone.is_empty() {
+            return false;
+        }
+        let made: Vec<Vec<String>> = {
+            let mut counts: HashMap<char, usize> = HashMap::new();
+            self.rows
+                .iter()
+                .map(|r| {
+                    super::fgsketch::made(&tokens(r))
+                        .into_iter()
+                        .map(|k| {
+                            let c = counts.entry(k).or_default();
+                            *c += 1;
+                            format!("{k}{c}")
+                        })
+                        .collect()
+                })
+                .collect()
+        };
+        let base = |t: &str| t.split('.').next().unwrap_or(t).to_string();
+        loop {
+            let dead: Vec<&String> = gone.iter().flat_map(|&k| &made[k]).collect();
+            let more: Vec<usize> = (0..self.rows.len())
+                .filter(|k| !gone.contains(k))
+                .filter(|&k| tokens(&self.rows[k]).iter().any(|t| dead.contains(&&base(t))))
+                .collect();
+            if more.is_empty() {
+                break;
+            }
+            gone.extend(more);
+        }
+        let mut renamed: HashMap<String, String> = HashMap::new();
+        let mut counts: HashMap<char, usize> = HashMap::new();
+        for (k, names) in made.iter().enumerate() {
+            if gone.contains(&k) {
+                continue;
+            }
+            for n in names {
+                let kind = n.chars().next().unwrap_or('?');
+                let c = counts.entry(kind).or_default();
+                *c += 1;
+                renamed.insert(n.clone(), format!("{kind}{c}"));
+            }
+        }
+        let rows: Vec<String> = (0..self.rows.len())
+            .filter(|k| !gone.contains(k))
+            .map(|k| {
+                tokens(&self.rows[k])
+                    .iter()
+                    .map(|t| match t.split_once('.') {
+                        Some((b, rest)) if renamed.contains_key(b) => format!("{}.{rest}", renamed[b]),
+                        _ => renamed.get(t).cloned().unwrap_or_else(|| t.clone()),
+                    })
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            })
+            .collect();
+        let n = self.opened_at.len().min(self.rows.len());
+        self.opened_at = (0..n).filter(|k| !gone.contains(k)).map(|k| self.opened_at[k]).collect();
+        self.rows = rows;
+        self.solved = None;
+        self.solve();
+        true
+    }
+
     /// Takes the last row back.
     pub fn undo(&mut self) {
         if self.rows.pop().is_some() {
+            self.opened_at.truncate(self.rows.len());
             self.solved = None;
             self.solve();
         }
@@ -2129,6 +2235,17 @@ impl Shell {
             && !ctx.egui_wants_keyboard_input()
         {
             m.undo();
+        }
+        // with no tool in hand a click chooses geometry, and Delete takes it out
+        if m.tool.is_none() && self.modal_clear() {
+            if let Some(at) = cursor
+                && ctx.input(|i| i.pointer.primary_clicked())
+            {
+                m.choose_at(at, reach);
+            }
+            if ctx.input(|i| i.key_pressed(egui::Key::Delete)) && !ctx.egui_wants_keyboard_input() {
+                m.delete_chosen();
+            }
         }
 
         // what state it's in, in the status bar; what's wrong, where it's seen

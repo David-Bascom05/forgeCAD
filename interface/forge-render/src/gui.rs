@@ -207,6 +207,7 @@ impl View {
 fn place_of(shell: &Shell, edit: &SketchFor) -> Option<forge_doc::ItemId> {
     match edit {
         SketchFor::Line(id) | SketchFor::Inline(id, _) => Some(*id),
+        SketchFor::Forge(_) => None,
         SketchFor::New => {
             let (doc, end) = (shell.doc.as_ref()?, shell.end_at?);
             let mut lines = doc.features().map(|i| i.id);
@@ -1770,6 +1771,7 @@ impl Gui {
                 before: marker,
                 items,
             }],
+            SketchFor::Forge(_) => return,
         };
         if let Some(v) = &mut self.view {
             self.calls.extend(calls.iter().cloned());

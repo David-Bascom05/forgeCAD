@@ -285,6 +285,42 @@ pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
     (run, ev.b.into_cache())
 }
 
+/// A sketch as evaluation left it, for an editor reading the block back.
+pub struct SketchView {
+    /// Solved, in the sketch plane's coordinates.
+    pub s: forge_sketch::Sketch,
+    /// Each name the block bound to an entity: the entity, and a loop's segments.
+    pub named: Vec<(String, forge_sketch::EntityId, Vec<forge_sketch::EntityId>)>,
+}
+
+/// The sketch `id` of `src` as evaluated (built with `opts.build`), if evaluation made it.
+pub fn sketch_view(src: &str, id: &str, opts: Options) -> Option<SketchView> {
+    let prog = syntax::parse(src).ok()?;
+    let mut ev = Eval::new(src, opts.rules, opts.build, Default::default());
+    ev.dir = opts.dir.clone();
+    ev.check_static(&prog);
+    if !ev.errors.is_empty() {
+        ev.b.building = false;
+    }
+    ev.run(&prog);
+    let (_, Value::Sketch(sk)) = ev.top_level().into_iter().find(|(n, _)| n == id)? else {
+        return None;
+    };
+    let sk = sk.borrow();
+    let named = sk
+        .named
+        .iter()
+        .filter_map(|(n, v)| match v {
+            Value::Ent(e) => Some((n.clone(), e.id, e.loop_segs.to_vec())),
+            _ => None,
+        })
+        .collect();
+    Some(SketchView {
+        s: sk.s.clone(),
+        named,
+    })
+}
+
 fn measure(ev: &mut Eval) -> Option<Measure> {
     let invalid = validity::problems(ev);
     let body = ev.b.body()?;
