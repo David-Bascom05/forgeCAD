@@ -3,6 +3,7 @@
 //! desktop app and the browser share it. Buttons never change the document themselves: the host
 //! turns an action into a tool call.
 
+pub mod asmtools;
 pub mod dialog;
 pub mod dim;
 pub mod fg;
@@ -135,6 +136,13 @@ pub enum FgCmd {
     Bom,
     Explode,
     Save,
+    /// The assembly's authoring tools (asmtools.rs).
+    Place,
+    Joint,
+    Constrain,
+    Pattern,
+    FreeMove,
+    FreeRotate,
 }
 
 /// One row of the tree.
@@ -527,6 +535,7 @@ impl Shell {
                 }
             }
             FgCmd::Save => fg.out.push(fg::FgAct::Save),
+            c => self.status = asmtools::command(fg, c),
         }
     }
 

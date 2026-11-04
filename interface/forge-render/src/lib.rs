@@ -34,6 +34,8 @@ pub mod load;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod measure;
 #[cfg(not(target_arch = "wasm32"))]
+pub mod snaps;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod tess;
 #[cfg(target_arch = "wasm32")]
 mod web;

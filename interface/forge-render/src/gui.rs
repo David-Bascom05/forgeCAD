@@ -23,6 +23,8 @@ use std::sync::mpsc::{Receiver, channel};
 use winit::dpi::PhysicalPosition;
 use winit::event::{ElementState, MouseButton, WindowEvent};
 
+#[path = "gui_asm.rs"]
+mod gui_asm;
 #[path = "gui_explode.rs"]
 mod gui_explode;
 #[path = "gui_overlay.rs"]
@@ -155,6 +157,8 @@ pub struct Gui {
     extras: gui_overlay::Extras,
     /// An assembly's meshes' boxes, each in its part's space.
     pub fg_asm_boxes: Vec<crate::explode::Aabb>,
+    /// The assembly tools' state between frames.
+    asm: gui_asm::AsmHost,
     /// The exploded view: its plan, and how far apart it is now.
     pub explode: gui_explode::Explode,
     /// A Forge part's solid as it was before its eye hid it.
@@ -267,6 +271,7 @@ impl Gui {
             gpu_failed,
             extras: Default::default(),
             fg_asm_boxes: Vec::new(),
+            asm: Default::default(),
             explode: Default::default(),
             body_rows: None,
         }
@@ -2026,7 +2031,17 @@ impl Gui {
             self.shell.part_middle = v.scene.bounds().0;
             let (at, p) = (self.shell.view_rect.min, self.pixels_per_point);
             let on_screen = |q: (f32, f32)| at + egui::vec2(q.0, q.1) / p;
-            self.shell.window_box = v.nav.window_box().map(|(a, b)| (on_screen(a), on_screen(b)));
+            let free = self
+                .shell
+                .fg
+                .as_ref()
+                .and_then(|p| p.asm.as_ref())
+                .is_some_and(|a| matches!(a.tool, Some(crate::shell::asmtools::AsmTool::Free(_))));
+            self.shell.window_box = v
+                .nav
+                .window_box()
+                .filter(|_| !free)
+                .map(|(a, b)| (on_screen(a), on_screen(b)));
             // held still, the menu shows; a flick needn't wait for it
             match v.nav.marking_from() {
                 Some(from) => {
@@ -3024,6 +3039,13 @@ impl Gui {
                     }
                 }
                 crate::shell::fg::FgAct::AsmAnchors(file) => self.asm_anchors(file),
+                a @ (crate::shell::fg::FgAct::AsmOps(_)
+                | crate::shell::fg::FgAct::AsmPreview(_)
+                | crate::shell::fg::FgAct::AsmPlace { .. }
+                | crate::shell::fg::FgAct::AsmBrowse
+                | crate::shell::fg::FgAct::AsmPattern { .. }
+                | crate::shell::fg::FgAct::AsmApplyMoves
+                | crate::shell::fg::FgAct::AsmSnaps(_)) => self.asm_act(a),
                 crate::shell::fg::FgAct::Flat(on) => {
                     if let Some(p) = &mut self.shell.fg {
                         p.flat = on && self.fg_flat.is_some();
@@ -3098,10 +3120,13 @@ impl Gui {
         let flagged = !a.highlight.is_empty();
         for (i, o) in occ.iter().enumerate() {
             let Some(k) = o.placement else { continue };
-            let rows = if shown.get(i).copied().unwrap_or(true) {
-                placed[k].1
-            } else {
+            let top = o.path.split('.').next().unwrap_or(&o.path);
+            let rows = if !shown.get(i).copied().unwrap_or(true) {
                 NOWHERE
+            } else if let Some(m) = a.moved.get(top) {
+                gui_asm::moved_rows(m, &placed[k].1)
+            } else {
+                placed[k].1
             };
             if scene.rows_of(k) != rows {
                 scene.set_rows(k, &rows);
@@ -3198,6 +3223,9 @@ impl Gui {
     fn fg_picks(&mut self, under: Option<crate::origin::Item>) {
         use crate::origin::Item;
         use crate::shell::fgtool::{SlotKind as K, ToolError};
+        if self.fg_asm.is_some() && self.asm_tools_frame() {
+            return;
+        }
         let Some(v) = &mut self.view else { return };
         if v.nav.clicks == v.clicks {
             return;

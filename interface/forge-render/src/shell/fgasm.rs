@@ -841,6 +841,14 @@ pub struct AsmPanel {
     pub interference: bool,
     pub bom_open: bool,
     pub explode_open: bool,
+    /// The authoring tool up: Place, Joint, Constrain, Pattern, Free Move or Free Rotate.
+    pub tool: Option<super::asmtools::AsmTool>,
+    /// What's under the pointer while a tool wants an origin (the host fills it each frame).
+    pub hover: Option<super::asmtools::Hover>,
+    /// Each part file's snap points, by its path as the solve names it (none yet: being found).
+    pub snaps: HashMap<String, Result<std::sync::Arc<crate::snaps::PartSnaps>, String>>,
+    /// Free Move's and Free Rotate's moves, by top-level instance: a world motion, not in the file.
+    pub moved: std::collections::BTreeMap<String, forge_math::Frame>,
 }
 
 /// Whether `path` is the row `key` or under it.
@@ -1117,6 +1125,30 @@ impl AsmPanel {
     }
 
     /// The joint as solved, when the top document writes it.
+    /// The freedoms an occurrence has left: none grounded, its joints' free ones when held by
+    /// joints, all six when nothing holds it.
+    pub fn dof(&self, occ: &str) -> usize {
+        let top = occ.split('.').next().unwrap_or(occ);
+        if self.grounded.iter().any(|g| g == top) {
+            return 0;
+        }
+        let held: Vec<&LinkOut> = self
+            .links
+            .iter()
+            .filter(|l| l.owner.is_empty() && !l.suppressed)
+            .filter(|l| matches!(l.family, LinkFamily::Joint | LinkFamily::Constraint))
+            .filter(|l| under(&l.a.0, top) || under(&l.b.0, top))
+            .collect();
+        if held.is_empty() {
+            return 6;
+        }
+        held.iter()
+            .filter_map(|l| self.joints.iter().find(|j| j.id == l.id))
+            .map(|j| j.free)
+            .min()
+            .unwrap_or(0)
+    }
+
     pub fn joint_of(&self, k: usize) -> Option<&JointOut> {
         let l = &self.links[k];
         if !l.owner.is_empty() {
@@ -1210,6 +1242,13 @@ enum MenuAct {
     Props(String),
     Drive(usize),
     Expand(String),
+    /// An edit to the file: ground, suppress, delete.
+    Ops(Vec<Op>),
+    /// Another occurrence of this one's file.
+    Again(String),
+    Pattern(String),
+    /// A relationship's dialog, filled from its statement.
+    Edit(String),
 }
 
 const TOOLBAR_H: f32 = 34.0;
@@ -1275,6 +1314,8 @@ impl Shell {
     /// The assembly's Model browser, in the side panel's place: a filter and Show all above its rows.
     pub(super) fn asm_tree(&mut self, ui: &mut Ui, area: Rect) {
         let Some(mut fg) = self.fg.take() else { return };
+        let source = fg.source.clone();
+        let mut pending: Vec<FgAct> = Vec::new();
         let Some(a) = &mut fg.asm else {
             self.fg = Some(fg);
             return;
@@ -1365,7 +1406,12 @@ impl Shell {
                 };
                 let isolated_out =
                     !origin && has_eye && shown_mask.as_ref().is_some_and(|m| n.occ.iter().all(|&o| !m[o]));
-                let dim = (has_eye && !origin && state == Eye::Hidden) || isolated_out;
+                let off = match n.kind {
+                    NodeKind::Link(l) => a.links[l].suppressed,
+                    NodeKind::Occ | NodeKind::Sub => a.insts.iter().any(|i| i.path == n.key && i.suppressed),
+                    _ => false,
+                };
+                let dim = (has_eye && !origin && state == Eye::Hidden) || isolated_out || off;
                 let flag_ink = match n.flag {
                     Some(Flag::Error) => Some(t.error),
                     Some(Flag::Warning) => Some(WARN),
@@ -1526,10 +1572,76 @@ impl Shell {
                                 menu = Some(MenuAct::Props(n.key.clone()));
                                 ui.close();
                             }
+                            // what the file says of a top-level component
+                            if let Some(i) = a.insts.iter().find(|i| i.path == n.key && !i.path.contains('.'))
+                            {
+                                ui.separator();
+                                let id = i.path.clone();
+                                let ground = if i.ground { "Unground" } else { "Ground" };
+                                if item(ui, ground, "ground") {
+                                    menu =
+                                        Some(MenuAct::Ops(vec![super::asmtools::ground_op(&id, !i.ground)]));
+                                    ui.close();
+                                }
+                                let sup = if i.suppressed { "Unsuppress" } else { "Suppress" };
+                                if item(ui, sup, "suppress") {
+                                    menu = Some(MenuAct::Ops(vec![super::asmtools::suppress_op(
+                                        &id,
+                                        !i.suppressed,
+                                    )]));
+                                    ui.close();
+                                }
+                                if item(ui, "Place again", "again") {
+                                    menu = Some(MenuAct::Again(id.clone()));
+                                    ui.close();
+                                }
+                                if !i.sub && item(ui, "Pattern…", "pattern") {
+                                    menu = Some(MenuAct::Pattern(id.clone()));
+                                    ui.close();
+                                }
+                                if item(ui, "Delete", "delete") {
+                                    menu = Some(MenuAct::Ops(super::asmtools::delete_ops(a, &id)));
+                                    ui.close();
+                                }
+                            }
                         }
-                        NodeKind::Link(l) if item(ui, "Drive…", "drive") => {
-                            menu = Some(MenuAct::Drive(l));
-                            ui.close();
+                        NodeKind::Link(l) => {
+                            let lk = &a.links[l];
+                            let top = lk.owner.is_empty()
+                                && matches!(
+                                    lk.family,
+                                    LinkFamily::Joint | LinkFamily::Constraint | LinkFamily::Relation
+                                );
+                            if top && item(ui, "Edit…", "edit") {
+                                menu = Some(MenuAct::Edit(lk.id.clone()));
+                                ui.close();
+                            }
+                            if item(ui, "Drive…", "drive") {
+                                menu = Some(MenuAct::Drive(l));
+                                ui.close();
+                            }
+                            if top && lk.family != LinkFamily::Relation {
+                                let sup = if lk.suppressed { "Unsuppress" } else { "Suppress" };
+                                if item(ui, sup, "suppress") {
+                                    menu = Some(MenuAct::Ops(vec![super::asmtools::suppress_op(
+                                        &lk.id,
+                                        !lk.suppressed,
+                                    )]));
+                                    ui.close();
+                                }
+                            }
+                            if lk.owner.is_empty() && item(ui, "Delete", "delete") {
+                                let mut ops = vec![Op::DeleteFeature { id: lk.id.clone() }];
+                                ops.extend(
+                                    a.links
+                                        .iter()
+                                        .filter(|r| r.owner.is_empty() && r.family == LinkFamily::Relation)
+                                        .filter(|r| r.a.0 == lk.id || r.b.0 == lk.id)
+                                        .map(|r| Op::DeleteFeature { id: r.id.clone() }),
+                                );
+                                menu = Some(MenuAct::Ops(ops));
+                                ui.close();
+                            }
                         }
                         _ => {}
                     }
@@ -1542,6 +1654,12 @@ impl Shell {
                     eye = Some(k);
                 } else if resp.double_clicked() {
                     match n.kind {
+                        // Inventor's: a relationship's own dialog, filled; one in a subassembly drives
+                        NodeKind::Link(l)
+                            if a.links[l].owner.is_empty() && a.links[l].family != LinkFamily::Fit =>
+                        {
+                            menu = Some(MenuAct::Edit(a.links[l].id.clone()))
+                        }
                         NodeKind::Link(l) => menu = Some(MenuAct::Drive(l)),
                         NodeKind::Occ => menu = Some(MenuAct::Props(n.key.clone())),
                         _ if !n.kids.is_empty() => {
@@ -1608,6 +1726,33 @@ impl Shell {
                 changed = true;
             }
             Some(MenuAct::Drive(l)) => a.drive = Some(l),
+            Some(MenuAct::Ops(ops)) => pending.push(FgAct::AsmOps(ops)),
+            Some(MenuAct::Again(id)) => {
+                let file = a
+                    .insts
+                    .iter()
+                    .find(|i| i.path == id)
+                    .map(|i| i.file.clone())
+                    .unwrap_or_default();
+                pending.push(FgAct::AsmPlace { file, like: Some(id) });
+            }
+            Some(MenuAct::Pattern(id)) => {
+                a.tool = Some(super::asmtools::AsmTool::Pattern(super::asmtools::PatternForm {
+                    inst: id,
+                    count: "3".into(),
+                    spacing: "50".into(),
+                    dir: 0,
+                }));
+            }
+            Some(MenuAct::Edit(id)) => match super::asmtools::LinkForm::edit(&source, &id) {
+                Some(f) => {
+                    a.tool = Some(super::asmtools::AsmTool::Link(Box::new(f)));
+                    a.drive = None;
+                }
+                None => {
+                    self.status = format!("{id}: made in a loop or a call; edit its statement in the file")
+                }
+            },
             Some(MenuAct::Expand(k)) if !a.expanded.remove(&k) => {
                 a.expanded.insert(k);
             }
@@ -1626,6 +1771,7 @@ impl Shell {
         if changed {
             fg.out.push(FgAct::AsmShow);
         }
+        fg.out.extend(pending);
         self.places.extend(places);
         self.fg = Some(fg);
     }
@@ -1724,9 +1870,10 @@ impl Shell {
         self.places.extend(places);
         fg.out.extend(out);
         self.fg = Some(fg);
+        self.asm_tool_window(ctx);
     }
 
-    fn window<'a>(
+    pub(super) fn window<'a>(
         title: &'a str,
         id: &str,
         t: &super::theme::Theme,

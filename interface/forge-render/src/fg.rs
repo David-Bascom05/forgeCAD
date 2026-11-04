@@ -820,6 +820,8 @@ pub struct Session {
     /// The last build whose whole mesh came, and that mesh's time.
     pub whole: u64,
     pub whole_ms: f64,
+    /// What's built is a dialog's preview, not the file.
+    pub previewing: bool,
 }
 
 impl Session {
@@ -860,6 +862,7 @@ impl Session {
             whole: 0,
             whole_ms: 0.0,
             changed: 0,
+            previewing: false,
         };
         s.rebuild();
         s
@@ -924,7 +927,29 @@ impl Session {
         Ok(reach)
     }
 
+    /// Several ops as one edit, one undo step: refused whole if the result wouldn't check.
+    pub fn apply_all(&mut self, ops: Vec<Op>) -> Result<(), Error> {
+        let text = edit::apply_all_checked(&self.src, &ops)?;
+        self.set_text(text);
+        self.ops.extend(ops);
+        Ok(())
+    }
+
+    /// A dialog's preview: these ops' text built in the file's place, the file's text kept (an
+    /// op that doesn't apply previews the file as it is); None builds the file's own again.
+    pub fn preview(&mut self, ops: Option<&[Op]>) -> u64 {
+        let text = ops.and_then(|o| edit::apply_all_checked(&self.src, o).ok());
+        self.previewing = text.is_some();
+        self.seq += 1;
+        self.sent_at.push((self.seq, Instant::now()));
+        let _ = self
+            .jobs
+            .send((self.seq, text.unwrap_or_else(|| self.src.clone()), self.overlap));
+        self.seq
+    }
+
     fn set_text(&mut self, text: String) {
+        self.previewing = false;
         let old = std::mem::replace(&mut self.src, text);
         self.undo.push(old);
         self.redo.clear();

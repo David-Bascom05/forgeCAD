@@ -4,6 +4,9 @@ use forge_render::gui::Headless;
 
 const USAGE: &str = "forge-app [PART | file.fc] [--size WxH] [--times]
   [--shot FILE.ppm [--scale S] [--light] [--tab N] [--select NAME] [--click NAME].. [--rclick NAME].. [--wait] [--at X Y] [--sketch ROW;ROW..] [--edit NAME] [--draw TOOL X Y] [--view YAW PITCH] [--marking]]
+  steps, in order: --click NAME --dclick NAME --rclick NAME --wait --type TEXT --key NAME (enter, escape, tab, backspace)
+  --hover X Y (the view's pick there) --clickat X Y --drag X Y X2 Y2 --snap FILE.ppm --save
+  --viewnow YAW PITCH --home
   [--present fifo|mailbox|immediate] [--run-for SECONDS] [--spin]
   [--bench]
 PART: a bench part or a .fc file. --times: input-to-present on exit. --shot: one frame, no window.
@@ -11,8 +14,18 @@ PART: a bench part or a .fc file. --times: input-to-present on exit. --shot: one
 
 enum Step {
     Click(String),
+    DoubleClick(String),
     RightClick(String),
     Wait,
+    Type(String),
+    Key(String),
+    Hover(f32, f32),
+    ClickAt(f32, f32),
+    Drag(f32, f32, f32, f32),
+    Snap(String),
+    Save,
+    View(f32, f32),
+    Home,
 }
 
 struct Args {
@@ -77,7 +90,34 @@ fn args() -> Result<Args, String> {
             "--select" => a.select = Some(v()?),
             "--click" => a.steps.push(Step::Click(v()?)),
             "--rclick" => a.steps.push(Step::RightClick(v()?)),
+            "--dclick" => a.steps.push(Step::DoubleClick(v()?)),
             "--wait" => a.steps.push(Step::Wait),
+            "--type" => a.steps.push(Step::Type(v()?)),
+            "--key" => a.steps.push(Step::Key(v()?)),
+            "--snap" => a.steps.push(Step::Snap(v()?)),
+            "--save" => a.steps.push(Step::Save),
+            "--home" => a.steps.push(Step::Home),
+            "--viewnow" => {
+                let y: f32 = v()?.parse().map_err(|_| USAGE)?;
+                let p: f32 = it.next().and_then(|w| w.parse().ok()).ok_or(USAGE)?;
+                a.steps.push(Step::View(y.to_radians(), p.to_radians()));
+            }
+            "--hover" | "--clickat" | "--drag" => {
+                let n = if k == "--drag" { 4 } else { 2 };
+                let mut xs = vec![];
+                for _ in 0..n {
+                    xs.push(
+                        it.next()
+                            .and_then(|w| w.parse::<f32>().ok())
+                            .ok_or(format!("{k} takes {n} numbers"))?,
+                    );
+                }
+                a.steps.push(match k.as_str() {
+                    "--hover" => Step::Hover(xs[0], xs[1]),
+                    "--clickat" => Step::ClickAt(xs[0], xs[1]),
+                    _ => Step::Drag(xs[0], xs[1], xs[2], xs[3]),
+                });
+            }
             "--at" => {
                 let x = v()?.parse().map_err(|_| USAGE)?;
                 let mut v = || it.next().ok_or(format!("{k} takes X Y\n{USAGE}"));
@@ -306,6 +346,21 @@ fn bench(h: &mut Headless) {
 }
 
 /// Frames until the Forge file's builds and checks are done, or a long while.
+/// The pointer to a place in the window, and frames till the view's pick there is back.
+fn hover(h: &mut Headless, x: f32, y: f32) {
+    h.move_to(x, y);
+    for _ in 0..200 {
+        h.step();
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        if h.gui.view.as_ref().is_none_or(|v| !v.nav.pick_pending()) {
+            break;
+        }
+    }
+    for _ in 0..3 {
+        h.step();
+    }
+}
+
 fn wait(h: &mut Headless) {
     let t = std::time::Instant::now();
     while t.elapsed().as_secs() < 900 {
@@ -361,10 +416,94 @@ fn run() -> Result<(), String> {
     }
     for step in &a.steps {
         let (right, c) = match step {
-            Step::Click(c) => (false, c),
+            Step::Click(c) | Step::DoubleClick(c) => (false, c),
             Step::RightClick(c) => (true, c),
             Step::Wait => {
                 wait(&mut h);
+                continue;
+            }
+            Step::Type(t) => {
+                h.text(t);
+                h.step();
+                h.step();
+                continue;
+            }
+            Step::Key(k) => {
+                let key = match k.as_str() {
+                    "enter" => egui::Key::Enter,
+                    "escape" => egui::Key::Escape,
+                    "tab" => egui::Key::Tab,
+                    "delete" => egui::Key::Delete,
+                    _ => egui::Key::Backspace,
+                };
+                h.key(key);
+                h.step();
+                h.step();
+                continue;
+            }
+            Step::Hover(x, y) => {
+                hover(&mut h, *x, *y);
+                continue;
+            }
+            Step::ClickAt(x, y) => {
+                hover(&mut h, *x, *y);
+                h.button(true);
+                h.step();
+                h.button(false);
+                for _ in 0..4 {
+                    h.step();
+                }
+                continue;
+            }
+            Step::Drag(x, y, x2, y2) => {
+                hover(&mut h, *x, *y);
+                h.button(true);
+                h.step();
+                for k in 1..=10 {
+                    let t = k as f32 / 10.0;
+                    h.move_to(x + (x2 - x) * t, y + (y2 - y) * t);
+                    h.step();
+                }
+                h.button(false);
+                for _ in 0..4 {
+                    h.step();
+                }
+                continue;
+            }
+            Step::Snap(f) => {
+                for _ in 0..3 {
+                    h.step();
+                }
+                std::fs::write(f, h.ppm()).map_err(|e| e.to_string())?;
+                continue;
+            }
+            Step::View(yaw, pitch) => {
+                if let Some(v) = &mut h.gui.view {
+                    v.nav.camera.yaw = *yaw;
+                    v.nav.camera.pitch = *pitch;
+                    v.mark_dirty();
+                }
+                for _ in 0..3 {
+                    h.step();
+                }
+                continue;
+            }
+            Step::Home => {
+                if let Some(v) = &mut h.gui.view {
+                    v.nav.home(&v.scene);
+                    v.mark_dirty();
+                }
+                // the camera's move there takes its time
+                for _ in 0..60 {
+                    h.step();
+                    std::thread::sleep(std::time::Duration::from_millis(10));
+                }
+                continue;
+            }
+            Step::Save => {
+                h.gui.shell.fg_command(forge_render::shell::FgCmd::Save);
+                h.step();
+                h.step();
                 continue;
             }
         };
@@ -388,6 +527,12 @@ fn run() -> Result<(), String> {
             h.button(true);
             h.step();
             h.button(false);
+            if matches!(step, Step::DoubleClick(_)) {
+                h.step();
+                h.button(true);
+                h.step();
+                h.button(false);
+            }
         }
         h.step();
         h.step();

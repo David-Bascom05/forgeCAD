@@ -53,8 +53,41 @@ fn asm_groups(s: &Shell) -> Option<Vec<Group>> {
         on,
     };
     let params = s.fg.as_ref().is_some_and(|f| f.params_open);
+    let tool = a.and_then(|a| a.tool.as_ref());
+    let up = |k: &str| match tool {
+        Some(super::asmtools::AsmTool::Place(_)) => k == "place",
+        Some(super::asmtools::AsmTool::Pattern(_)) => k == "pattern",
+        Some(super::asmtools::AsmTool::Free(r)) => k == if *r { "rotate" } else { "move" },
+        Some(super::asmtools::AsmTool::Link(f)) => k == if f.joint { "joint" } else { "constrain" },
+        None => false,
+    };
     match s.tab {
         0 => Some(vec![
+            g(
+                "Component",
+                vec![fg("Place", "part", FgCmd::Place, up("place"))],
+                vec![
+                    fg("Pattern", "rect", FgCmd::Pattern, up("pattern")),
+                    off("Mirror", "mirror"),
+                    off("Copy", "subasm"),
+                ],
+            ),
+            g(
+                "Position",
+                vec![
+                    fg("Free Move", "move", FgCmd::FreeMove, up("move")),
+                    fg("Free Rotate", "revolve", FgCmd::FreeRotate, up("rotate")),
+                ],
+                vec![],
+            ),
+            g(
+                "Relationships",
+                vec![
+                    fg("Joint", "jrevolute", FgCmd::Joint, up("joint")),
+                    fg("Constrain", "jmate", FgCmd::Constrain, up("constrain")),
+                ],
+                vec![],
+            ),
             g(
                 "Manage",
                 vec![

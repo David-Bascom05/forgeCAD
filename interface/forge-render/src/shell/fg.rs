@@ -202,6 +202,27 @@ pub enum FgAct {
     AsmCheck,
     /// A part file's anchors, for the instance chosen.
     AsmAnchors(String),
+    /// An assembly's edit as one undo step: a dialog's OK, a menu's Delete.
+    AsmOps(Vec<Op>),
+    /// A dialog's ops built in the file's place, the file kept; None: the file again.
+    AsmPreview(Option<Vec<Op>>),
+    /// Place a component from this file (from the assembly's folder), or another like `like`.
+    AsmPlace {
+        file: String,
+        like: Option<String>,
+    },
+    /// The system's file dialog for a component to place.
+    AsmBrowse,
+    /// `count` occurrences of a top-level instance, `step` apart in the world.
+    AsmPattern {
+        inst: String,
+        count: usize,
+        step: [f64; 3],
+    },
+    /// Free Move's moves written as the instances' poses.
+    AsmApplyMoves,
+    /// A part file's snap points, for the tool wanting an origin.
+    AsmSnaps(String),
 }
 
 /// A sheet metal part: its id, its bends, and why it has no flat pattern if it hasn't.

@@ -1896,6 +1896,42 @@ fn loop_points(body: &Body, f: FaceId) -> Vec<Vec<Point3>> {
     out
 }
 
+/// Where `F.center` is: planar faces' area centroid in plane `fr`, as `fr` moved there.
+pub fn faces_centroid(body: &Body, faces: &[FaceId], fr: &Frame) -> Option<Frame> {
+    let (mut a, mut cx, mut cy) = (0.0, 0.0, 0.0);
+    for &f in faces {
+        for lp in loop_points(body, f) {
+            for w in lp.windows(2) {
+                let (p, q) = (fr.point_to_local(w[0]), fr.point_to_local(w[1]));
+                let c = p.x * q.y - q.x * p.y;
+                a += c;
+                cx += (p.x + q.x) * c;
+                cy += (p.y + q.y) * c;
+            }
+        }
+    }
+    (a.abs() >= 1e-12)
+        .then(|| fr.with_origin(fr.point_to_world(Point3::new(cx / (3.0 * a), cy / (3.0 * a), 0.0))))
+}
+
+/// Where `F.center` is on cylindrical or conical faces: the axis, its origin halfway along them.
+pub fn faces_axis_middle(body: &Body, faces: &[FaceId]) -> Option<(Point3, UnitVec3)> {
+    let ax = match &body.face(*faces.first()?).surface {
+        Surface::Cylinder(c) => c.frame,
+        Surface::Cone(c) => c.frame,
+        _ => return None,
+    };
+    let (mut lo, mut hi) = (f64::MAX, f64::MIN);
+    for &f in faces {
+        for p in loop_points(body, f).into_iter().flatten() {
+            let t = (p - ax.origin).dot(ax.z().get());
+            lo = lo.min(t);
+            hi = hi.max(t);
+        }
+    }
+    (lo <= hi).then(|| (ax.origin + ax.z().get() * ((lo + hi) * 0.5), ax.z()))
+}
+
 /// `F.center`: a planar face set's plane with its origin at the faces' area centroid (x as the
 /// plane's); a cylinder's or cone's axis with its origin halfway along the face.
 fn face_center(ev: &mut Eval, fs: &Faces, span: Span) -> R<Value> {
@@ -1906,53 +1942,17 @@ fn face_center(ev: &mut Eval, fs: &Faces, span: Span) -> R<Value> {
         .face_ids()
         .filter(|&f| fs.names.contains(&body.face(f).name))
         .collect();
-    let not_planar = || Error::NotPlanar {
+    let got = match &fs.plane {
+        Some(fr) => {
+            faces_centroid(body, &faces, fr).map(|frame| Value::Plane(Rc::new(Plane { frame, world: None })))
+        }
+        None => faces_axis_middle(body, &faces).map(|(o, d)| Value::Axis(o, d)),
+    };
+    got.ok_or(Error::NotPlanar {
         span,
         id: fs.owner.clone(),
         role: fs.role,
-    };
-    if let Some(fr) = fs.plane {
-        let (mut a, mut cx, mut cy) = (0.0, 0.0, 0.0);
-        for &f in &faces {
-            for lp in loop_points(body, f) {
-                for w in lp.windows(2) {
-                    let (p, q) = (fr.point_to_local(w[0]), fr.point_to_local(w[1]));
-                    let c = p.x * q.y - q.x * p.y;
-                    a += c;
-                    cx += (p.x + q.x) * c;
-                    cy += (p.y + q.y) * c;
-                }
-            }
-        }
-        if a.abs() < 1e-12 {
-            return Err(not_planar());
-        }
-        let o = fr.point_to_world(Point3::new(cx / (3.0 * a), cy / (3.0 * a), 0.0));
-        return Ok(Value::Plane(Rc::new(Plane {
-            frame: fr.with_origin(o),
-            world: None,
-        })));
-    }
-    let Some(&f) = faces.first() else {
-        return Err(not_planar());
-    };
-    let ax = match &body.face(f).surface {
-        Surface::Cylinder(c) => c.frame,
-        Surface::Cone(c) => c.frame,
-        _ => return Err(not_planar()),
-    };
-    let (mut lo, mut hi) = (f64::MAX, f64::MIN);
-    for &f in &faces {
-        for p in loop_points(body, f).into_iter().flatten() {
-            let t = (p - ax.origin).dot(ax.z().get());
-            lo = lo.min(t);
-            hi = hi.max(t);
-        }
-    }
-    if lo > hi {
-        return Err(not_planar());
-    }
-    Ok(Value::Axis(ax.origin + ax.z().get() * ((lo + hi) * 0.5), ax.z()))
+    })
 }
 
 /// `EDGES.center` (a circle's or arc's centre on its axis, a line's midpoint, a curve's middle),
@@ -1971,20 +1971,28 @@ fn edge_point(ev: &mut Eval, es: &[Name], name: &str, span: Span) -> R<Value> {
     let Some(e) = body.edge_by_name(*n) else {
         return Ok(Value::Unresolved);
     };
+    Ok(match edge_snap(body, e, name) {
+        Ok(p) => Value::Point(p),
+        Err((o, d)) => Value::Axis(o, d),
+    })
+}
+
+/// What `EDGES.center|start|end` gives for one edge: a point, or a circle's axis (Err).
+pub fn edge_snap(body: &Body, e: EdgeId, name: &str) -> Result<Point3, (Point3, UnitVec3)> {
     let edge = body.edge(e);
-    Ok(match (name, &edge.curve) {
-        ("start", _) => Value::Point(body.vertex(edge.start).point),
-        ("end", _) => Value::Point(body.vertex(edge.end).point),
-        (_, Curve::Circle(c)) => Value::Axis(c.frame.origin, c.frame.z()),
+    match (name, &edge.curve) {
+        ("start", _) => Ok(body.vertex(edge.start).point),
+        ("end", _) => Ok(body.vertex(edge.end).point),
+        (_, Curve::Circle(c)) => Err((c.frame.origin, c.frame.z())),
         (_, Curve::Line(_)) => {
             let (a, b) = (body.vertex(edge.start).point, body.vertex(edge.end).point);
-            Value::Point(a + (b - a) * 0.5)
+            Ok(a + (b - a) * 0.5)
         }
-        _ => Value::Point(forge_geom::CurveGeom::eval(
+        _ => Ok(forge_geom::CurveGeom::eval(
             &edge.curve,
             edge.range.lo + edge.range.width() * 0.5,
         )),
-    })
+    }
 }
 
 /// `E.side(entity)`: the face an entity of the profile made.

@@ -263,6 +263,11 @@ impl Nav {
         self.modifiers.control_key()
     }
 
+    /// A button is held in the view.
+    pub fn held(&self) -> bool {
+        self.drag.is_some()
+    }
+
     /// Where in the world the pointer last was on the part.
     pub fn hit_point(&self) -> Option<[f32; 3]> {
         self.hit.map(|h| h.point)
