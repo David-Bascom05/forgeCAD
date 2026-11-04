@@ -148,7 +148,8 @@ members: points `x y`; lines `a b dir`; arcs `center a b`; circles `center`.
 Constraints (bare statements): `tangent(a, b)` (lines, arcs, circles, a spline's end),
 `coincident(p, q|line|circle)`, `horizontal(l)`, `vertical(l)`, `parallel(l, m)`,
 `perpendicular(l, m)`, `equal(a, b)`, `midpoint(p, l)`, `distance(p, q|l, d)`, `distance(l, d)`,
-`radius(c, r)`, `angle(l, m, A)`, `fix(p)`. A conflict is `SketchConflict` naming the rows;
+`radius(c, r)`, `angle(l, m, A)`, `fix(p)`, `concentric(c, d)` (circles, arcs), `collinear(l, m)`,
+`symmetric(a, b, l)` (two points, lines end for end, circles or arcs, mirrored about line l). A conflict is `SketchConflict` naming the rows;
 freedom left is the warning `UnderConstrained` with the count.
 
 `project(EDGES | FACES | POINT | AXIS, approx: TOL)` lays 3D geometry of the part as it stands on

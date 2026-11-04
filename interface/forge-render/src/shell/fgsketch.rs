@@ -121,6 +121,15 @@ pub fn block(name: &str, on: &str, rows: &[String]) -> Result<String, ToolError>
                 }
             }
             Some("line") => lines_seen += 1,
+            Some("poly") => {
+                let open = t.last().is_some_and(|w| w == "open");
+                let (mut k, mut pts) = (1, 0);
+                while k < t.len() - usize::from(open) {
+                    k += if t[k].parse::<f64>().is_ok() { 2 } else { 1 };
+                    pts += 1;
+                }
+                lines_seen += pts - usize::from(open);
+            }
             Some("rect") => {
                 let first = lines_seen + 1;
                 let rect = o.rects.len();
@@ -148,10 +157,18 @@ pub fn block(name: &str, on: &str, rows: &[String]) -> Result<String, ToolError>
     }
     let mut rect_no = 0usize;
     for r in rows {
-        let t = tokens(r);
+        let mut t = tokens(r);
+        // a construction line is written as one; other construction geometry has no Forge form
+        let cons = t.last().is_some_and(|w| w == "cons");
+        if cons {
+            t.pop();
+        }
         let Some((w, rest)) = t.split_first() else {
             continue;
         };
+        if cons && w != "line" {
+            return Err(no_form(r));
+        }
         match w.as_str() {
             "pt" => {
                 let (p, _) = o.point(rest, r)?;
@@ -164,7 +181,8 @@ pub fn block(name: &str, on: &str, rows: &[String]) -> Result<String, ToolError>
                 let (b, _) = o.point(&rest[k..], r)?;
                 let n = o.next('l');
                 o.names.insert(n.clone(), n.clone());
-                o.rows.push(format!("{n} = line({a}, {b})"));
+                let c = if cons { ", construction: true" } else { "" };
+                o.rows.push(format!("{n} = line({a}, {b}{c})"));
             }
             "rect" => {
                 let v: Vec<f64> = rest.iter().map(|x| num(x, r)).collect::<Result<_, _>>()?;
@@ -234,12 +252,14 @@ pub fn block(name: &str, on: &str, rows: &[String]) -> Result<String, ToolError>
                     .first()
                     .and_then(|x| x.split_once('.'))
                     .is_some_and(|x| o.rect_sides.contains_key(x.0)) => {}
-            "co" | "par" | "perp" | "tan" | "eq" => {
+            "co" | "par" | "perp" | "tan" | "eq" | "conc" | "colin" => {
                 let f = match w.as_str() {
                     "co" => "coincident",
                     "par" => "parallel",
                     "perp" => "perpendicular",
                     "tan" => "tangent",
+                    "conc" => "concentric",
+                    "colin" => "collinear",
                     _ => "equal",
                 };
                 let point = w == "co";
@@ -257,6 +277,37 @@ pub fn block(name: &str, on: &str, rows: &[String]) -> Result<String, ToolError>
                     let x = o.reference(e, w == "fix", r)?;
                     o.rows.push(format!("{f}({x})"));
                 }
+            }
+            "sym" => {
+                let p = o.reference(rest.first().ok_or(no_form(r))?, true, r)?;
+                let q = o.reference(rest.get(1).ok_or(no_form(r))?, true, r)?;
+                let l = o.reference(rest.get(2).ok_or(no_form(r))?, false, r)?;
+                o.rows.push(format!("symmetric({p}, {q}, {l})"));
+            }
+            "poly" => {
+                let open = rest.last().is_some_and(|w| w == "open");
+                let pts = if open { &rest[..rest.len() - 1] } else { rest };
+                let mut ps = vec![];
+                let mut k = 0;
+                while k < pts.len() {
+                    let (p, used) = o.point(&pts[k..], r)?;
+                    ps.push(p);
+                    k += used;
+                }
+                let n = format!("o{}", o.counts.get(&'o').copied().unwrap_or(0) + 1);
+                *o.counts.entry('o').or_default() += 1;
+                let first = o.counts.get(&'l').copied().unwrap_or(0) + 1;
+                let sides = ps.len() - usize::from(open);
+                for side in 0..sides {
+                    o.names
+                        .insert(format!("l{}", first + side), format!("{n}[{side}]"));
+                }
+                *o.counts.entry('l').or_default() += sides;
+                o.rows.push(format!(
+                    "{n} = poly([{}], closed: {})",
+                    ps.join(", "),
+                    if open { "false" } else { "true" }
+                ));
             }
             "mid" => {
                 let p = o.reference(rest.first().ok_or(no_form(r))?, true, r)?;
@@ -356,6 +407,33 @@ mod tests {
         // a row with no Forge form is refused, typed
         let e = block("sk1", "xy", &["project @e12".into()]).unwrap_err();
         assert_eq!(e.kind(), "NoForgeForm");
+    }
+
+    #[test]
+    fn concentric_collinear_symmetric_and_construction_rows_become_forge() {
+        let rows: Vec<String> = [
+            "circle 0 0 10",
+            "circle 1 1 4",
+            "conc c1 c2",
+            "line 0 -20 0 20 cons",
+            "line 20 0 30 0",
+            "line -22 0 -31 1",
+            "sym l2.a l3.a l1",
+            "sym l2.b l3.b l1",
+            "line 40 0 50 0",
+            "colin l2 l4",
+            "poly 60 0 70 0 65 8",
+        ]
+        .map(String::from)
+        .to_vec();
+        let text = block("sk3", "xy", &rows).unwrap();
+        assert!(text.contains("concentric(c1, c2)"), "{text}");
+        assert!(text.contains("construction: true)"), "{text}");
+        assert!(text.contains("symmetric(l2.a, l3.a, l1)"), "{text}");
+        assert!(text.contains("collinear(l2, l4)"), "{text}");
+        assert!(text.contains("o1 = poly(["), "{text}");
+        let r = check(&text);
+        assert!(r.errors.is_empty(), "{text}\n{:?}", r.errors);
     }
 
     #[test]

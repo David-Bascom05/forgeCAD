@@ -486,3 +486,83 @@ fn extrude_symmetric_new_solid_and_through_all() {
     assert!(src.contains("extrude1 = cut(marks.c, thru_all)"), "{src}");
     assert!(near(volume(&run), BLOCK - BOSS * 2.0, 1.0), "{}", volume(&run));
 }
+
+fn sketch_tool(h: &mut Headless, t: forge_render::shell::sketching::SkTool) {
+    h.gui.shell.out.push(forge_render::shell::Action::SketchTool(t));
+    h.step();
+}
+
+fn sketch_click(h: &mut Headless, at: (f64, f64)) {
+    h.gui.shell.sketch.as_mut().unwrap().click(at, 0.5);
+    h.step();
+}
+
+#[test]
+fn a_slot_constrained_and_text_on_a_face_become_forge_then_cut_and_emboss() {
+    use forge_render::shell::sketching::SkTool as T;
+    let Some(mut h) = open("slot") else { return };
+    assert!(h.click("tool:Start Sketch"));
+    h.step();
+    point_at(&mut h, [10.0, 50.0, 20.0]);
+    assert_eq!(h.gui.shell.sketch.as_ref().unwrap().head, "base.end");
+    sketch_tool(&mut h, T::SlotCenter);
+    for p in [(30.0, 20.0), (40.0, 20.0), (30.0, 24.0)] {
+        sketch_click(&mut h, p);
+    }
+    // the slot's straight sides made level, and the two arcs equal
+    sketch_tool(&mut h, T::Horizontal);
+    sketch_click(&mut h, (30.0, 24.0));
+    sketch_tool(&mut h, T::Equal);
+    sketch_click(&mut h, (16.0, 20.0));
+    sketch_click(&mut h, (44.0, 20.0));
+    sketch_tool(&mut h, T::Text);
+    sketch_click(&mut h, (10.0, 40.0));
+    let m = h.gui.shell.sketch.as_ref().unwrap();
+    assert!(m.error.is_none(), "{:?} {:?}", m.error, m.rows);
+    assert_eq!(m.rows.len(), 11, "{:?}", m.rows);
+    h.gui.shell.out.push(forge_render::shell::Action::FinishSketch);
+    h.step();
+    assert!(
+        h.gui.shell.sketch.is_none(),
+        "{:?}",
+        h.gui.shell.fg.as_ref().unwrap().refused
+    );
+    // the text goes on to Emboss, on the sketch at its point
+    let t = h
+        .gui
+        .shell
+        .fg
+        .as_ref()
+        .unwrap()
+        .tool
+        .as_ref()
+        .expect("Emboss opens");
+    assert_eq!(t.kind, "emboss");
+    assert_eq!(picks(&h, "Position"), ["sk1.p1"]);
+    let t = h.gui.shell.fg.as_mut().unwrap().tool.as_mut().unwrap();
+    t.words[0].1 = "AB".into();
+    let (src, run) = ok(&mut h, "emboss from the sketch");
+    assert!(src.contains("tangent(l1, a1)"), "{src}");
+    assert!(
+        src.contains("equal(a1, a2)") || src.contains("equal(a2, a1)"),
+        "{src}"
+    );
+    assert!(
+        src.contains(
+            "emboss1 = text(\"AB\", font: \"sans.ttf\", size: size, depth: depth, on: sk1, at: sk1.p1)"
+        ),
+        "{src}"
+    );
+    let embossed = volume(&run);
+    button(&mut h, "Extrude");
+    choose(&mut h, "Profile", "sk1");
+    click(&mut h, "fg:tool:choice:Output:Cut");
+    set(&mut h, "d", "2");
+    let (src, run) = ok(&mut h, "slot cut");
+    let slot = 2.0 * 4.0 * 20.0 + std::f64::consts::PI * 16.0;
+    assert!(
+        near(volume(&run), embossed - 2.0 * slot, 1e-3),
+        "{}\n{src}",
+        embossed - volume(&run)
+    );
+}

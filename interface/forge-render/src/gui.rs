@@ -3577,7 +3577,21 @@ impl Gui {
             .expect("a free name");
         match crate::shell::fgsketch::block(&name, &m.head, &m.rows) {
             Ok(text) => {
-                let _ = self.fg_apply(forge_lang::error::Op::AddFeature { before: None, text });
+                let added = self
+                    .fg_apply(forge_lang::error::Op::AddFeature { before: None, text })
+                    .is_ok();
+                // text placed in the sketch goes on to Emboss, as Inventor's does
+                if added && let Some((at, words)) = m.more.texts.first().cloned() {
+                    self.fg_open_tool("emboss");
+                    if let Some(t) = self.shell.fg.as_mut().and_then(|p| p.tool.as_mut()) {
+                        t.slots[0].picks = vec![name.clone()];
+                        t.slots[1].picks = vec![format!("{name}.{at}")];
+                        if let Some(w) = t.words.iter_mut().find(|w| w.0 == "text") {
+                            w.1 = words;
+                        }
+                        t.active = 1;
+                    }
+                }
             }
             Err(e) => {
                 self.fg_refuse(e);

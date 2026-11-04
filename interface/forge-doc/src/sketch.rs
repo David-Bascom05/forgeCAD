@@ -436,10 +436,10 @@ fn values_only(plane: Frame, rows: &[Vec<String>], num: &Num, was: &Sketch) -> O
         return None;
     }
     // every token but a dimension's value is a number, a name or a word, as before
-    const WORDS: [&str; 34] = [
+    const WORDS: [&str; 35] = [
         "ids", "pt", "line", "poly", "rect", "circle", "arc", "fix", "co", "hor", "ver", "par", "perp",
-        "tan", "eq", "conc", "mid", "sym", "dist", "hdist", "vdist", "rad", "dia", "ang", "ref", "cw",
-        "cons", "open", "spline", "bspline", "ellipse", "earc", "knots", "weights",
+        "tan", "eq", "conc", "colin", "mid", "sym", "dist", "hdist", "vdist", "rad", "dia", "ang", "ref",
+        "cw", "cons", "open", "spline", "bspline", "ellipse", "earc", "knots", "weights",
     ];
     let fixed = |t: &str| t.parse::<f64>().is_ok() || is_ref(t) || WORDS.contains(&t);
     for (a, b) in rows.iter().zip(&was.rows) {
@@ -1069,6 +1069,18 @@ impl B<'_, '_> {
                 };
                 self.add(k, con)?;
             }
+            "colin" => {
+                // parallel, and the second's start on the first
+                let (a, b) = (self.entity_tok(c)?, self.entity_tok(c)?);
+                let Some(Entity::Line { a: start, .. }) = self.s.entity(b) else {
+                    return Err("colin takes two lines".into());
+                };
+                if !line(self, a) {
+                    return Err("colin takes two lines".into());
+                }
+                self.add(k, C::Parallel(a, b))?;
+                self.add(k, C::PointOnLine(start, a))?;
+            }
             "eq" => {
                 let a = self.entity_tok(c)?;
                 let mut n = 0;
@@ -1145,7 +1157,7 @@ impl B<'_, '_> {
             }
             _ => {
                 return Err(
-                    "unknown row (pt line poly rect circle arc project spline bspline ellipse earc | fix co hor ver par perp tan eq conc mid sym | dist hdist vdist rad dia ang)"
+                    "unknown row (pt line poly rect circle arc project spline bspline ellipse earc | fix co hor ver par perp tan eq conc colin mid sym | dist hdist vdist rad dia ang)"
                         .into(),
                 );
             }

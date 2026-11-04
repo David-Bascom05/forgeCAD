@@ -992,7 +992,7 @@ pub const KINDS: &[Kind] = &[
     },
     Kind {
         name: "sketch",
-        syntax: "sketch [FRAME | on REF], then rows to `end`: pt line poly rect circle arc project | fix co hor ver par perp tan eq conc mid sym | dist hdist vdist rad dia ang",
+        syntax: "sketch [FRAME | on REF], then rows to `end`: pt line poly rect circle arc project | fix co hor ver par perp tan eq conc colin mid sym | dist hdist vdist rad dia ang",
         parse: |p| {
             if p.peek() == "-on" && p.t.get(p.k + 1).is_some_and(|t| is_ref(t)) {
                 return Err("a sketch goes on a face's outside: `on REF`, not `-on`".into());

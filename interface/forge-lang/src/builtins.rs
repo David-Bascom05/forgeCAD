@@ -62,6 +62,9 @@ pub const BUILTINS: &[&str] = &[
     "radius",
     "angle",
     "fix",
+    "concentric",
+    "collinear",
+    "symmetric",
     "extrude",
     "cut",
     "revolve",
@@ -869,7 +872,9 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
         }
         "spline" | "tarc" | "close" => path_seg(ev, name, args, span),
         "tangent" | "coincident" | "horizontal" | "vertical" | "parallel" | "perpendicular" | "equal"
-        | "midpoint" | "distance" | "radius" | "angle" | "fix" => constraint(ev, name, args, span),
+        | "midpoint" | "distance" | "radius" | "angle" | "fix" | "concentric" | "collinear" | "symmetric" => {
+            constraint(ev, name, args, span)
+        }
         "extrude" | "cut" | "intersect" => extrude(ev, name, args, span),
         "use" => crate::uses::call(ev, args, span),
         n if crate::sheet::BUILTINS.contains(&n) => crate::sheet::call(ev, name, args, span),
@@ -1139,6 +1144,65 @@ fn constraint(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<
             }
         }
         "equal" => Constraint::Equal(ent("a")?.id, ent("b")?.id),
+        "concentric" => {
+            let (x, y) = (ent("a")?, ent("b")?);
+            for (e, k) in [(&x, "a"), (&y, "b")] {
+                if !matches!(e.kind, EntKind::Circle | EntKind::Arc) {
+                    want(e, EntKind::Circle, a.span(k))?;
+                }
+            }
+            Constraint::Concentric(x.id, y.id)
+        }
+        "collinear" => {
+            // parallel, and the second's start on the first
+            let (x, y) = (ent("a")?, ent("b")?);
+            want(&x, EntKind::Line, a.span("a"))?;
+            want(&y, EntKind::Line, a.span("b"))?;
+            let start = match sk.borrow().s.entity(y.id) {
+                Some(forge_sketch::Entity::Line { a, .. }) => a,
+                _ => unreachable!("a line"),
+            };
+            sk.borrow_mut()
+                .constrain(Constraint::Parallel(x.id, y.id), span)?;
+            Constraint::PointOnLine(start, x.id)
+        }
+        "symmetric" => {
+            // two points mirrored about a line; two lines end for end, two circles or arcs by
+            // their centres (and an arc's ends)
+            let (x, y, l) = (ent("a")?, ent("b")?, ent("c")?);
+            want(&l, EntKind::Line, a.span("c"))?;
+            if x.kind != y.kind {
+                want(&y, x.kind, a.span("b"))?;
+            }
+            let ends = |e: &Ent| -> Vec<EntityId> {
+                match sk.borrow().s.entity(e.id) {
+                    Some(forge_sketch::Entity::Line { a, b }) => vec![a, b],
+                    Some(forge_sketch::Entity::Circle { center, .. }) => vec![center],
+                    Some(forge_sketch::Entity::Arc {
+                        center, start, end, ..
+                    }) => vec![center, start, end],
+                    _ => vec![e.id],
+                }
+            };
+            let (ps, qs) = (ends(&x), ends(&y));
+            if !matches!(
+                x.kind,
+                EntKind::Point | EntKind::Line | EntKind::Circle | EntKind::Arc
+            ) {
+                want(&x, EntKind::Point, a.span("a"))?;
+            }
+            // an arc mirrored runs the other way: its start is the other's end
+            let qs = if x.kind == EntKind::Arc {
+                vec![qs[0], qs[2], qs[1]]
+            } else {
+                qs
+            };
+            for (p, q) in ps.iter().zip(&qs).skip(1) {
+                sk.borrow_mut()
+                    .constrain(Constraint::Symmetric(*p, *q, l.id), span)?;
+            }
+            Constraint::Symmetric(ps[0], qs[0], l.id)
+        }
         "midpoint" => {
             let (x, y) = (ent("a")?, ent("b")?);
             want(&x, EntKind::Point, a.span("a"))?;

@@ -390,7 +390,7 @@ fn sketch_diagnostics() {
     assert_eq!(
         e("  rect 0 0 10 10\n  glue l1\n").1.split(':').nth(1),
         Some(
-            " unknown row (pt line poly rect circle arc project spline bspline ellipse earc | fix co hor ver par perp tan eq conc mid sym | dist hdist vdist rad dia ang)"
+            " unknown row (pt line poly rect circle arc project spline bspline ellipse earc | fix co hor ver par perp tan eq conc colin mid sym | dist hdist vdist rad dia ang)"
         )
     );
     assert_eq!(

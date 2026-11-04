@@ -10,6 +10,9 @@ use forge_math::{Frame, Point2};
 use forge_sketch::{Entity, Status};
 use std::collections::HashMap;
 
+mod tools;
+pub use tools::More;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SkTool {
     Line,
@@ -26,6 +29,41 @@ pub enum SkTool {
     Tangent,
     /// Edges and faces clicked in the view become `project` rows.
     Project,
+    Circle3,
+    Arc3,
+    ArcTan,
+    RectCenter,
+    Rect3,
+    SlotCC,
+    SlotOverall,
+    SlotCenter,
+    Polygon,
+    Ellipse,
+    SkFillet,
+    SkChamfer,
+    Text,
+    Move,
+    Copy,
+    Rotate,
+    Scale,
+    Mirror,
+    Offset,
+    RectPattern,
+    CircPattern,
+    Trim,
+    Extend,
+    Split,
+    Horizontal,
+    Vertical,
+    Collinear,
+    Concentric,
+    Fix,
+    Symmetric,
+    Equal,
+    /// Toggles: new lines as construction, constraint marks, each entity's freedom.
+    Construction,
+    ShowConstraints,
+    ShowDof,
 }
 
 /// A value on screen as an entity's being drawn: live until typed in, then what the entity obeys.
@@ -55,6 +93,8 @@ pub struct Draft {
     pub circle: Option<((f64, f64), f64)>,
     /// Centre, radius, start and end angles, counter-clockwise.
     pub arc: Option<((f64, f64), f64, f64, f64)>,
+    /// More arcs, as `arc` (a slot's second end).
+    pub arcs: Vec<((f64, f64), f64, f64, f64)>,
     pub rows: Vec<String>,
     pub glyphs: Vec<(Glyph, (f64, f64))>,
     /// Each field's live value and the dimension it is.
@@ -254,6 +294,8 @@ pub struct SketchMode {
     cursor: Option<(f64, f64)>,
     /// What each `project` row's references come to, from the worker that holds the part.
     pub sources: HashMap<String, Result<Vec<sk::Refd>, String>>,
+    /// The Modify tools' choice, the toggles, and text placed.
+    pub more: More,
 }
 
 /// A `project` row's references, its words after the word.
@@ -337,6 +379,7 @@ impl SketchMode {
             units: "mm",
             would_pick: None,
             glyph_over: None,
+            more: More::default(),
         };
         m.solve();
         m
@@ -528,6 +571,15 @@ impl SketchMode {
     }
 
     pub fn set_tool(&mut self, t: Option<SkTool>) {
+        // a toggle flips, the tool in hand stays
+        match t {
+            Some(SkTool::Construction) => return self.more.construction = !self.more.construction,
+            Some(SkTool::ShowConstraints) => return self.more.hide_glyphs = !self.more.hide_glyphs,
+            Some(SkTool::ShowDof) => return self.more.show_dof = !self.more.show_dof,
+            _ => {}
+        }
+        self.more.sel.clear();
+        self.more.placing = false;
         self.tool = t;
         self.picks.clear();
         self.pick_at.clear();
@@ -562,7 +614,12 @@ impl SketchMode {
 
     /// Esc: what's half done goes, then the tool.
     pub fn escape(&mut self) {
-        if !self.picks.is_empty() || self.asking.is_some() {
+        if !self.more.sel.is_empty() {
+            self.more.sel.clear();
+            self.more.placing = false;
+            self.picks.clear();
+            self.pick_at.clear();
+        } else if !self.picks.is_empty() || self.asking.is_some() {
             self.picks.clear();
             self.pick_at.clear();
             self.asking = None;
@@ -1099,7 +1156,7 @@ impl SketchMode {
                     .push(((t1 - t0) / deg, Measure::Sweep(c, radius * 1.15, t0, t1)));
                 d.end = Some((String::new(), end));
             }
-            _ => {}
+            _ => self.more_draft(tool, at, reach, &mut d),
         }
         d
     }
@@ -1124,6 +1181,9 @@ impl SketchMode {
 
     /// Enter: what's drafted goes down where the pointer is.
     pub fn enter(&mut self, reach: f64) {
+        if self.more_enter() {
+            return;
+        }
         if self.tool == Some(SkTool::Spline) {
             self.finish_spline(false);
             return;
@@ -1226,6 +1286,9 @@ impl SketchMode {
                 self.picks.push(w);
                 self.pick_at.push(p);
             }
+            t => {
+                self.more_click(t, at, reach);
+            }
         }
     }
 
@@ -1283,6 +1346,21 @@ impl SketchMode {
             SkTool::Parallel | SkTool::Perpendicular => self.entity_near(at, reach, "l"),
             SkTool::Tangent => self.entity_near(at, reach, "lcase"),
             SkTool::Dimension => self.entity_near(at, reach, "lcae"),
+            SkTool::Horizontal | SkTool::Vertical | SkTool::Collinear => self.entity_near(at, reach, "l"),
+            SkTool::Trim | SkTool::Extend | SkTool::Split => self.entity_near(at, reach, "l"),
+            SkTool::Concentric => self.entity_near(at, reach, "ca"),
+            SkTool::Equal => self.entity_near(at, reach, "lca"),
+            SkTool::Symmetric if self.picks.len() >= 2 => self.entity_near(at, reach, "l"),
+            SkTool::Fix | SkTool::Symmetric => {
+                let (w, _) = self.word_at(at, reach);
+                if w.contains(' ') {
+                    self.entity_near(at, reach, "lcas")
+                } else {
+                    Some(w)
+                }
+            }
+            SkTool::Mirror if self.more.placing => self.entity_near(at, reach, "l"),
+            t if t.modifies() && !self.more.placing => self.entity_near(at, reach, "lcasp"),
             _ => None,
         }
     }
@@ -1344,6 +1422,9 @@ impl SketchMode {
 
     /// The constraint rows that have a mark: the row, its icon, and the words it ties together.
     pub fn glyph_rows(&self) -> Vec<(String, &'static str, Vec<String>)> {
+        if self.more.hide_glyphs {
+            return Vec::new();
+        }
         self.rows
             .iter()
             .filter_map(|r| {
@@ -1356,6 +1437,11 @@ impl SketchMode {
                     "tan" => "tangent",
                     "co" => "coincident",
                     "mid" => "point",
+                    "colin" => "collinear",
+                    "conc" => "concentric",
+                    "fix" => "fix",
+                    "sym" => "symmetric",
+                    "eq" => "equal",
                     _ => return None,
                 };
                 Some((r.clone(), icon, t[1..].to_vec()))
@@ -1369,6 +1455,14 @@ impl SketchMode {
         let solved = s.solved.clone().solve().status == Status::Solved;
         Some((sk::freedom(s).0, solved))
     }
+}
+
+/// A line drawn as construction.
+fn is_construction(m: &SketchMode, name: &str) -> bool {
+    m.rows
+        .iter()
+        .enumerate()
+        .any(|(k, r)| r.ends_with(" cons") && m.row_of(name) == Some(k))
 }
 
 impl Shell {
@@ -1502,14 +1596,24 @@ impl Shell {
         let p = under;
         let ink = t.sketch;
         let line = Stroke::new(1.5, ink);
+        // what's pinned down is drawn as Inventor draws it, apart from what can still move
+        let loose: Vec<String> = m.solved.as_ref().map_or(Vec::new(), |s| sk::freedom(s).1);
+        let held = t.ink;
         if let Some(s) = &m.solved {
             let g = &s.solved;
             for (name, id) in &s.names {
                 // what's projected has its own colour
                 let (ink, line) = if sk::is_projected(name) {
                     (t.projected, Stroke::new(1.5, t.projected))
+                } else if !loose.contains(name) {
+                    (held, Stroke::new(1.5, held))
                 } else {
                     (ink, line)
+                };
+                let line = if m.rows.iter().any(|r| r.ends_with(" cons")) && is_construction(&m, name) {
+                    Stroke::new(1.0, ink.gamma_multiply(0.6))
+                } else {
+                    line
                 };
                 match g.entity(*id) {
                     Some(Entity::Line { a, b }) => {
@@ -1624,13 +1728,17 @@ impl Shell {
                 }
             }
         }
-        for w in m.picks.iter().filter(|_| {
-            matches!(
-                m.tool,
-                Some(SkTool::Coincident | SkTool::Parallel | SkTool::Perpendicular | SkTool::Tangent)
-            )
-        }) {
+        for w in m.picks.iter().filter(|w| !w.contains(' ')).chain(&m.more.sel) {
             mark(w, 3.0, t.focus);
+        }
+        // each entity that can still move, marked so, when asked
+        if m.more.show_dof {
+            for w in &loose {
+                let pts = m.outline_of(w);
+                if let Some(u) = pts.get(pts.len() / 2).copied().and_then(&screen) {
+                    super::icons::draw(&p, u + vec2(-7.0, -16.0), 14.0, "move", 1.25, t.accent);
+                }
+            }
         }
         m.glyph_over = glyph_over;
 
@@ -1694,8 +1802,8 @@ impl Shell {
                     p.circle_filled(u, 2.5, ink);
                 }
             }
-            if let Some((c, r, t0, t1)) = d.arc {
-                p.add(egui::Shape::line(round(c, r, t0, t1), line));
+            for (c, r, t0, t1) in d.arc.iter().chain(&d.arcs) {
+                p.add(egui::Shape::line(round(*c, *r, *t0, *t1), line));
             }
             // middles of lines near the pointer, quietly
             if let Some(s) = &m.solved {
@@ -1842,6 +1950,11 @@ impl Shell {
                 && !m.pick_at.is_empty()
             {
                 m.enter(reach);
+            } else if ctx.input(|i| i.key_pressed(egui::Key::Enter))
+                && self_clear
+                && m.tool.is_some_and(|t| t.modifies())
+            {
+                m.enter(reach);
             }
 
             if cursor.is_some() && ctx.input(|i| i.pointer.primary_clicked()) && self.modal_clear() {
@@ -1986,12 +2099,21 @@ impl Shell {
             Some(SkTool::Project) => Some("Click edges or faces to project them"),
             _ => None,
         };
+        let asks = m.tool.and_then(|tool| {
+            tool.prompt(
+                m.pick_at.len().max(m.picks.len()),
+                m.more.sel.len(),
+                m.more.placing,
+            )
+        });
         self.status = match m.solved.as_ref().map(|s| sk::freedom(s).0) {
+            _ if asks.is_some() => asks.unwrap_or_default().to_string(),
             _ if drawing.is_some() => drawing.unwrap_or_default().to_string(),
             Some(0) => "Fully constrained".to_string(),
             Some(n) => format!("{n} degrees of freedom"),
             None => String::new(),
         };
+        self.sketch_options(ctx, &mut m);
         if let Some(e) = &m.error {
             let g = ctx.fonts_mut(|f| f.layout(e.clone(), sans(12.0), Color32::WHITE, 420.0));
             let chip = Rect::from_min_size(view.min + vec2(12.0, 12.0), g.size() + vec2(14.0, 8.0));
@@ -1999,6 +2121,54 @@ impl Shell {
             p.galley(chip.min + vec2(7.0, 4.0), g, Color32::WHITE);
         }
         self.sketch = Some(m);
+    }
+
+    /// A tool's own value, over the view's top: a polygon's sides, a pattern's count, a corner's
+    /// size.
+    fn sketch_options(&mut self, ctx: &egui::Context, m: &mut SketchMode) {
+        let t = self.theme;
+        let what = match m.tool {
+            Some(SkTool::Polygon) => ("Sides", true, 6.0),
+            Some(SkTool::RectPattern | SkTool::CircPattern) => ("Count", true, 3.0),
+            Some(SkTool::SkFillet) => ("Radius", false, 0.0),
+            Some(SkTool::SkChamfer) => ("Distance", false, 0.0),
+            _ => return,
+        };
+        let v = self.view_rect;
+        let r = egui::Area::new(egui::Id::unique("sketch-options"))
+            .fixed_pos(egui::pos2(v.center().x - 90.0, v.top() + 10.0))
+            .order(egui::Order::Foreground)
+            .show(ctx, |ui| {
+                egui::Frame::new()
+                    .fill(t.surface)
+                    .stroke(Stroke::new(1.0, t.line))
+                    .corner_radius(4)
+                    .inner_margin(6)
+                    .show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            ui.label(egui::RichText::new(what.0).font(sans(12.0)).color(t.ink));
+                            let resp = if what.1 {
+                                if m.more.count == 0 {
+                                    m.more.count = what.2 as usize;
+                                }
+                                ui.add(egui::DragValue::new(&mut m.more.count).range(2..=64))
+                            } else {
+                                let r = ui.add(
+                                    egui::DragValue::new(&mut m.more.size)
+                                        .range(0.0..=1000.0)
+                                        .speed(0.1)
+                                        .suffix(" mm"),
+                                );
+                                if m.more.size == 0.0 {
+                                    ui.label(egui::RichText::new("(auto)").font(sans(11.0)).color(t.ink2));
+                                }
+                                r
+                            };
+                            self.places.push(("sketch:option".into(), resp.rect));
+                        });
+                    });
+            });
+        self.view_blocks.push(r.response.rect);
     }
 
     /// No menu or dialog is in the way of a click.

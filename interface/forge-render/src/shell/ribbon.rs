@@ -18,6 +18,8 @@ pub(super) struct Group {
     pub(super) name: &'static str,
     pub(super) big: Vec<Tool>,
     pub(super) small: Vec<Tool>,
+    /// Icon-only buttons in a grid of three rows, as Inventor's Constrain panel has them.
+    pub(super) icons: Vec<Tool>,
 }
 
 const fn off(name: &'static str, icon: &'static str) -> Tool {
@@ -44,7 +46,12 @@ const fn new(name: &'static str, icon: &'static str, kind: &'static str) -> Tool
 
 /// An assembly's Assemble and Inspect tabs, Inventor's: the commands this app has.
 fn asm_groups(s: &Shell) -> Option<Vec<Group>> {
-    let g = |name, big, small| Group { name, big, small };
+    let g = |name, big, small| Group {
+        name,
+        big,
+        small,
+        icons: vec![],
+    };
     let a = s.fg.as_ref()?.asm.as_ref();
     let fg = |name, icon, c: FgCmd, on: bool| Tool {
         name,
@@ -187,7 +194,12 @@ fn inspect_groups(s: &Shell) -> Vec<Group> {
 }
 
 fn groups(s: &Shell) -> Vec<Group> {
-    let g = |name, big, small| Group { name, big, small };
+    let g = |name, big, small| Group {
+        name,
+        big,
+        small,
+        icons: vec![],
+    };
     if let Some(env) = &s.drawing {
         // the Drawing environment's: a tool it has not got is drawn off
         let tool = |(c, icon): (super::drawing::DwgCmd, &'static str)| {
@@ -337,38 +349,119 @@ fn groups(s: &Shell) -> Vec<Group> {
                 action: s.sketch_tool(tool),
                 on: on == Some(tool),
             };
+            let gi = |name, big, small, icons| Group {
+                name,
+                big,
+                small,
+                icons,
+            };
+            let fg = s.fg.is_some();
+            let off_fg = |name, icon, tool: SkTool| Tool {
+                name,
+                icon,
+                action: if fg { None } else { s.sketch_tool(tool) },
+                on: on == Some(tool),
+            };
+            let more = s.sketch.as_ref().map(|m| m.more.clone()).unwrap_or_default();
+            let toggle = |name, icon, tool: SkTool, now: bool| Tool {
+                name,
+                icon,
+                action: s.sketch_tool(tool),
+                on: now,
+            };
             vec![
-                g(
+                gi(
                     "Create",
                     vec![
                         t("Line", "line", SkTool::Line),
                         t("Circle", "circle", SkTool::Circle),
                         t("Arc", "arc", SkTool::Arc),
                         t("Rectangle", "rectangle", SkTool::Rectangle),
+                        t("Slot", "slotcc", SkTool::SlotCC),
                         t("Project Geometry", "project", SkTool::Project),
                     ],
                     vec![
                         t("Spline", "spline", SkTool::Spline),
+                        t("Polygon", "polygon", SkTool::Polygon),
+                        // Forge sketches have no ellipse yet
+                        off_fg("Ellipse", "ellipse", SkTool::Ellipse),
                         t("Point", "point", SkTool::Point),
+                        t("Fillet", "skfillet", SkTool::SkFillet),
+                        t("Chamfer", "skchamfer", SkTool::SkChamfer),
+                        t("Text", "sktext", SkTool::Text),
+                    ],
+                    vec![
+                        t("Three Point Circle", "circle3", SkTool::Circle3),
+                        t("Three Point Arc", "arc3", SkTool::Arc3),
+                        t("Tangent Arc", "arctan", SkTool::ArcTan),
+                        t("Center Rectangle", "rectc", SkTool::RectCenter),
+                        t("Three Point Rectangle", "rect3", SkTool::Rect3),
+                        t("Overall Slot", "slot", SkTool::SlotOverall),
+                        t("Center Point Slot", "slot", SkTool::SlotCenter),
                     ],
                 ),
                 g(
                     "Modify",
                     vec![],
                     vec![
-                        off("Trim", "trim"),
-                        off("Offset", "offset"),
-                        off("Mirror", "mirror"),
+                        t("Move", "move", SkTool::Move),
+                        t("Copy", "copy", SkTool::Copy),
+                        t("Rotate", "rotate", SkTool::Rotate),
+                        t("Trim", "trim", SkTool::Trim),
+                        t("Extend", "extend", SkTool::Extend),
+                        t("Split", "split", SkTool::Split),
+                        t("Scale", "scale", SkTool::Scale),
+                        // Stretch moves chosen points with what holds them: not written yet
+                        off("Stretch", "stretch"),
+                        t("Offset", "offset", SkTool::Offset),
                     ],
                 ),
                 g(
+                    "Pattern",
+                    vec![],
+                    vec![
+                        t("Rectangular", "skrect", SkTool::RectPattern),
+                        t("Circular", "skcircular", SkTool::CircPattern),
+                        t("Mirror", "mirror", SkTool::Mirror),
+                    ],
+                ),
+                gi(
                     "Constrain",
                     vec![t("Dimension", "dim", SkTool::Dimension)],
+                    vec![],
                     vec![
                         t("Coincident", "coincident", SkTool::Coincident),
+                        t("Collinear", "collinear", SkTool::Collinear),
+                        t("Concentric", "concentric", SkTool::Concentric),
+                        t("Fix", "fix", SkTool::Fix),
                         t("Parallel", "parallel", SkTool::Parallel),
                         t("Perpendicular", "perp", SkTool::Perpendicular),
+                        t("Horizontal", "horizontal", SkTool::Horizontal),
+                        t("Vertical", "vertical", SkTool::Vertical),
                         t("Tangent", "tangent", SkTool::Tangent),
+                        // G2 needs a curvature tie the solver doesn't have
+                        off("Smooth (G2)", "smooth"),
+                        t("Symmetric", "symmetric", SkTool::Symmetric),
+                        t("Equal", "equal", SkTool::Equal),
+                    ],
+                ),
+                g(
+                    "Format",
+                    vec![],
+                    vec![
+                        toggle(
+                            "Construction",
+                            "construction",
+                            SkTool::Construction,
+                            more.construction,
+                        ),
+                        toggle(
+                            "Constraints",
+                            "constrainshow",
+                            SkTool::ShowConstraints,
+                            !more.hide_glyphs,
+                        ),
+                        toggle("Freedom", "autodim", SkTool::ShowDof, more.show_dof),
                     ],
                 ),
                 g(
@@ -503,6 +596,7 @@ const BIG_W: f32 = 54.0;
 const BIG_PAD: f32 = 12.0;
 const SMALL_W: f32 = 92.0;
 const SMALL_H: f32 = 27.0;
+const ICON_W: f32 = 30.0;
 
 /// A big button's label in two lines at most, split where the longer is shortest.
 fn big_label(name: &str) -> String {
@@ -551,7 +645,8 @@ impl Shell {
         for g in groups(self) {
             let bigs: Vec<f32> = g.big.iter().map(|tool| big_width(ui, tool)).collect();
             let cols: Vec<f32> = g.small.chunks(3).map(|c| small_width(ui, c)).collect();
-            let width = 12.0 + bigs.iter().sum::<f32>() + cols.iter().sum::<f32>();
+            let icon_cols = g.icons.len().div_ceil(3);
+            let width = 12.0 + bigs.iter().sum::<f32>() + cols.iter().sum::<f32>() + icon_cols as f32 * ICON_W;
             let width = width.max(
                 ui.fonts_mut(|f| f.layout_no_wrap(g.name.to_string(), sans(11.0), t.ink2))
                     .size()
@@ -571,6 +666,15 @@ impl Shell {
                     x + left,
                     y + 5.0 + (k % 3) as f32 * SMALL_H,
                     cols[k / 3],
+                );
+            }
+            let ix = x + cols.iter().sum::<f32>();
+            for (k, tool) in g.icons.iter().enumerate() {
+                self.grid_button(
+                    ui,
+                    tool,
+                    ix + (k / 3) as f32 * ICON_W,
+                    y + 5.0 + (k % 3) as f32 * SMALL_H,
                 );
             }
             p.text(
@@ -635,6 +739,12 @@ impl Shell {
         let p = ui.painter();
         icons::draw(p, pos2(r.center().x - 14.0, y + 6.0), 28.0, tool.icon, 1.25, ink);
         p.galley(pos2(r.center().x - g.size().x * 0.5, y + 36.0), g, ink);
+    }
+
+    fn grid_button(&mut self, ui: &mut Ui, tool: &Tool, x: f32, y: f32) {
+        let r = Rect::from_min_size(pos2(x, y), vec2(ICON_W - 2.0, 26.0));
+        let (ink, _) = self.tool_response(ui, tool, r);
+        icons::draw(ui.painter(), pos2(x + 5.0, y + 4.0), 18.0, tool.icon, 1.5, ink);
     }
 
     fn small_button(&mut self, ui: &mut Ui, tool: &Tool, x: f32, y: f32, w: f32) {
