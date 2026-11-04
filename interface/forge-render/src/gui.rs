@@ -3371,7 +3371,10 @@ impl Gui {
                 && let Some(t) = &mut p.tool
                 && let Some(i) = p.issues.iter().find(|i| {
                     i.severity == crate::shell::fg::Severity::Error
-                        && i.feature.as_deref() == Some(t.name.as_str())
+                        // its own statement, or one it writes after it (a tapped hole's thread)
+                        && i.feature.as_deref().is_some_and(|f| {
+                            f == t.name || f.strip_prefix(t.name.as_str()).is_some_and(|r| r.starts_with('_'))
+                        })
                 })
             {
                 t.note = Some(format!("{}: {}", i.kind, i.text));

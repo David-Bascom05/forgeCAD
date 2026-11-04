@@ -373,6 +373,48 @@ impl SketchMode {
         Some(s)
     }
 
+    /// Inventor's Dimension by what's picked: a line its length, a circle its diameter, an arc its
+    /// radius; then a second pick makes it two lines' angle, two points' distance, or a point's
+    /// distance from a line. The row without its value, and the value as it stands.
+    pub fn dimension_pick(&mut self, at: P, reach: f64) -> Option<(String, f64)> {
+        let s = self.solved.clone()?;
+        let (w, q) = self.word(at, reach);
+        let point = (!w.contains(' ')).then_some((w, q));
+        let line = if point.is_none() {
+            self.entity_near(at, reach, "l")
+        } else {
+            None
+        };
+        let prev = self.picks.last().cloned();
+        let ends = |l: &str| sk::line(&s, l).ok().map(|(a, b)| ((a.x, a.y), (b.x, b.y)));
+        let pt_of = |w: &str| sk::point(&s, w).ok().map(|p| (p.x, p.y));
+        let got = match (&prev, &point, &line) {
+            (Some(a), None, Some(b)) if a.starts_with('l') && !a.contains('.') && a != b => {
+                let ((a0, a1), (b0, b1)) = (ends(a)?, ends(b)?);
+                let t = dmath::atan2(b1.1 - b0.1, b1.0 - b0.0) - dmath::atan2(a1.1 - a0.1, a1.0 - a0.0);
+                let deg = (t.to_degrees()).rem_euclid(360.0);
+                Some((format!("ang {a} {b}"), deg))
+            }
+            (Some(a), Some((p, at_p)), None) if pt_of(a).is_some() && a != p => {
+                Some((format!("dist {a} {p}"), dist(pt_of(a)?, *at_p)))
+            }
+            (Some(a), None, Some(l)) if pt_of(a).is_some() && !a.starts_with('l') || a.contains('.') => {
+                let (l0, l1) = ends(l)?;
+                let p = pt_of(a)?;
+                let u = sub(l1, l0);
+                let d = ((p.0 - l0.0) * u.1 - (p.1 - l0.1) * u.0).abs() / len(u).max(1e-12);
+                Some((format!("dist {a} {l}"), d))
+            }
+            _ => None,
+        };
+        match (point, line) {
+            (Some((p, _)), _) => self.picks = vec![p],
+            (None, Some(l)) => self.picks = vec![l],
+            _ => self.picks.clear(),
+        }
+        got.or_else(|| self.dimension_at(at, reach))
+    }
+
     /// The circle inside the triangle three lines make.
     fn incircle(&self, ls: &[String]) -> Option<(P, f64)> {
         let s = self.solved.as_ref()?;
@@ -1733,6 +1775,30 @@ mod tests {
         let s = m.solved.as_ref().unwrap();
         assert_eq!(sk::freedom(s).0, 0, "{:?}", m.rows);
         assert!(m.rows.iter().any(|r| r == "dist l1 20"), "{:?}", m.rows);
+    }
+
+    #[test]
+    fn a_dimension_is_typed_by_what_is_picked() {
+        let mut m = mode();
+        m.add("line 0 0 10 0".into());
+        m.add("line 0 5 10 15".into());
+        m.add("pt 20 20".into());
+        m.set_tool(Some(SkTool::Dimension));
+        assert_eq!(
+            m.dimension_pick((5.0, 0.0), 0.5),
+            Some(("dist l1".to_string(), 10.0))
+        );
+        let (row, v) = m.dimension_pick((5.0, 10.0), 0.5).unwrap();
+        assert_eq!(row, "ang l1 l2");
+        assert!((v - 45.0).abs() < 1e-9, "{v}");
+        m.picks.clear();
+        m.dimension_pick((20.0, 20.0), 0.5);
+        let (row, v) = m.dimension_pick((0.0, 0.0), 0.5).unwrap();
+        assert_eq!(row, "dist p1 l1.a");
+        assert!((v - 800f64.sqrt()).abs() < 1e-9);
+        assert!(m.add(format!("{row} 30")));
+        assert!(m.add("ang l1 l2 30".into()));
+        assert!(m.dimensions().iter().any(|d| d.1 == "ang l1 l2"));
     }
 
     #[test]

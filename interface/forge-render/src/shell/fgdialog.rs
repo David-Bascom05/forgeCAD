@@ -670,14 +670,10 @@ pub fn offer_lists(t: &mut FgTool, dir: Option<&std::path::Path>) {
         v
     };
     let screws = hole_sizes();
-    let words: Vec<&'static str> = t.words.iter().map(|w| w.0).collect();
-    for w in words {
-        match w {
-            "font" => t.offer(w, beside(&["ttf", "otf"])),
-            "file" => t.offer(w, beside(&["step", "stp", "brep", "igs", "iges"])),
-            "screw" | "spec" => t.offer(w, screws.clone()),
-            "fit" => t.offer(w, hole_fits()),
-            _ => {}
-        }
-    }
+    // every list, whether or not the form has its word yet: a choice may bring it in
+    t.offer("font", beside(&["ttf", "otf"]));
+    t.offer("file", beside(&["step", "stp", "brep", "igs", "iges"]));
+    t.offer("screw", screws.clone());
+    t.offer("spec", screws);
+    t.offer("fit", hole_fits());
 }

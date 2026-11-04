@@ -533,6 +533,25 @@ impl SketchMode {
                     let n = (dx * dx + dy * dy).sqrt().max(1e-12);
                     Measure::Along((p.x, p.y), (q.x, q.y), (dx / n, dy / n))
                 }),
+                [w, a, b] if w == "ang" => {
+                    let (Ok((a0, a1)), Ok((b0, b1))) = (sk::line(s, a), sk::line(s, b)) else {
+                        continue;
+                    };
+                    // about where the two lines (or their run on) meet
+                    let (u, v) = ((a1.x - a0.x, a1.y - a0.y), (b1.x - b0.x, b1.y - b0.y));
+                    let den = u.0 * v.1 - u.1 * v.0;
+                    let c = if den.abs() < 1e-12 {
+                        ((a0.x + b0.x) * 0.5, (a0.y + b0.y) * 0.5)
+                    } else {
+                        let k = ((b0.x - a0.x) * v.1 - (b0.y - a0.y) * v.0) / den;
+                        (a0.x + u.0 * k, a0.y + u.1 * k)
+                    };
+                    let t0 = forge_math::dmath::atan2(u.1, u.0);
+                    let t1 =
+                        t0 + (forge_math::dmath::atan2(v.1, v.0) - t0).rem_euclid(core::f64::consts::TAU);
+                    let r = ((u.0 * u.0 + u.1 * u.1).sqrt()).min((v.0 * v.0 + v.1 * v.1).sqrt()) * 0.6;
+                    Some(Measure::Sweep(c, r, t0, t1))
+                }
                 [w, c] if w == "dia" || w == "rad" => s
                     .names
                     .iter()
@@ -1981,7 +2000,7 @@ impl Shell {
 
             if cursor.is_some() && ctx.input(|i| i.pointer.primary_clicked()) && self.modal_clear() {
                 if tool == SkTool::Dimension {
-                    if let (Some((row, value)), Some(pos)) = (m.dimension_at(at, reach), over) {
+                    if let (Some((row, value)), Some(pos)) = (m.dimension_pick(at, reach), over) {
                         let kind = if row.starts_with("ang") {
                             forge_doc::units::Kind::Angle
                         } else {
