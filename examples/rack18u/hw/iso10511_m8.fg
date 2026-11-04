@@ -1,12 +1,12 @@
 # ISO 10511 prevailing torque type hexagon thin nut with non-metallic insert M8
-# source: https://www.fasteners.eu/standards/ISO/10511/ (s 13, h 8, m 5.5, dw 11.6)
+# source: ISO 10511:2012 (interface/forge-lang/stdparts/iso10511.csv): s 13, h max 6.76, dw min 11.6; m 5.5 is DIN 985's hexagon height, above ISO's m min 3.70 (the old h 8 was DIN 985's)
 # frame: origin on the axis in the bearing face; +z through the nut towards the insert crown
 
 properties(description: "ISO 10511 prevailing torque type hexagon thin nut with non-metallic insert M8", material: "8.8")
 shared d = 8   # thread
 shared P = 1.25   # pitch
 shared s = 13   # across flats
-shared h = 8   # overall height
+shared h = 6.76   # overall height
 shared m = 5.5   # hexagon height (modelled at the table's m min: the metal thread)
 shared dw = 11.6   # insert crown diameter (modelled at dw min)
 shared rm = (d - 1.082532 * P) / 2   # bore: half the ISO 965 minor diameter D1 = d - 1.0825 P
@@ -37,4 +37,4 @@ end = anchor(plane(at: prof.pz1, normal: prof.zax.dir, x: prof.xax.dir))
 
 expect valid
 expect bodies = 1
-expect volume = 791.585 +- 0.05%
+expect volume = 703.565 +- 0.05%

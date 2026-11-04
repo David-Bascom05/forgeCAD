@@ -17,7 +17,7 @@ shared t2 = 1.88
 shared m4 = 4
 shared min_m4 = 2.77            # SPEC 8 rev B minima
 shared m8 = 8
-shared min_m8 = 8
+shared min_m8 = 6.76   # the ISO 10511 M8 nut's whole thread (h max)
 # expected heights (SPEC 5.9 rev B)
 shared z_washer = 894.98
 shared z_nut = 891.50

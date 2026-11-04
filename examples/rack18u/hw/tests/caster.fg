@@ -4,7 +4,7 @@ assembly
 
 shared z_plate = -3
 shared size_m8 = 8
-shared min_m8 = 8   # the nut's whole thread
+shared min_m8 = 6.76   # the nut's whole thread
 shared zx_pan = 0
 shared zx_wsh = 3.02
 shared zx_nut = 4.62

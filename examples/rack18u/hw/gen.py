@@ -502,10 +502,12 @@ PARTS = [
     button("iso7380_m6x12", 6, 1.0, 12, 10.5, 3.3, 5.9, 4, 2.08, FE + "7380/ (ISO 7380-1 table)"),
     hexbolt("iso4017_m8x20", "ISO 4017", 8, 1.25, 20, None, 13, 5.3, FE + "4017/"),
     hexbolt("iso4014_m8x55", "ISO 4014", 8, 1.25, 55, 22, 13, 5.3, FE + "4017/ (head) and ISO 4014 b = 2d + 6"),
-    shoulder("iso7379_8x12_m6", 8, 12, 6, 1.0, 11, 13, 5.5, 4, 3.0, 0.5,
-             FE + "7379/ (ds 8, dk 13, k 5.5, s 4, b 11); Ganter ISO 7379-8-M6 sheets (l2 11)"),
-    shoulder("iso7379_8x16_m6", 8, 16, 6, 1.0, 11, 13, 5.5, 4, 3.0, 0.5,
-             FE + "7379/ (ds 8, dk 13, k 5.5, s 4, b 11); Ganter ISO 7379-8-M6 sheets (l2 11)"),
+    shoulder("iso7379_8x12_m6", 8, 12, 6, 1.0, 11, 13, 5.5, 4, 3.3, 0.5,
+             FE + "7379/ (ds 8, dk 13, k 5.5, s 4, b 11); Ganter ISO 7379-8-M6 sheets (l2 11); "
+             "t 3.3 = ISO 7379:1983 t min (interface/forge-lang/stdparts/iso7379.csv)"),
+    shoulder("iso7379_8x16_m6", 8, 16, 6, 1.0, 11, 13, 5.5, 4, 3.3, 0.5,
+             FE + "7379/ (ds 8, dk 13, k 5.5, s 4, b 11); Ganter ISO 7379-8-M6 sheets (l2 11); "
+             "t 3.3 = ISO 7379:1983 t min (interface/forge-lang/stdparts/iso7379.csv)"),
     pan("iso7045_m4x40", 4, 0.7, 40, 8, 3.1, 8, 4.6, 1.0, 1.9, FE + "7045/ (dk 8, k 3.1, rf 8, m 4.6)"),
     pan("iso7045_m4x35", 4, 0.7, 35, 8, 3.1, 8, 4.6, 1.0, 1.9,
         FE + "7045/ (dk 8, k 3.1, rf 8, m 4.6); superseded by M4 x 40 in SPEC rev B R2, kept until removed"),
@@ -514,7 +516,9 @@ PARTS = [
     nyloc("iso10511_m4", 4, 0.7, 7, 5.0, 2.9, 5.9, FE + "10511/ (table per DIN 985: s 7, h 5, m 2.9, dw 5.9)"),
     nyloc("iso10511_m5", 5, 0.8, 8, 5.0, 3.2, 6.9, FE + "10511/ (table per DIN 985: s 8, h 5, m 3.2, dw 6.9)"),
     nyloc("iso10511_m6", 6, 1.0, 10, 6.0, 4.0, 8.9, FE + "10511/ (s 10, h 6, m 4, dw 8.9)"),
-    nyloc("iso10511_m8", 8, 1.25, 13, 8.0, 5.5, 11.6, FE + "10511/ (s 13, h 8, m 5.5, dw 11.6)"),
+    nyloc("iso10511_m8", 8, 1.25, 13, 6.76, 5.5, 11.6,
+          "ISO 10511:2012 (interface/forge-lang/stdparts/iso10511.csv): s 13, h max 6.76, dw min 11.6; "
+          "m 5.5 is DIN 985's hexagon height, above ISO's m min 3.70 (the old h 8 was DIN 985's)"),
     ring("iso7089_4", "ISO 7089 plain washer, size 4", FE + "7089/ (d1 4.3, d2 9, h 0.8)", 4.3, 9, 0.8),
     ring("iso7089_5", "ISO 7089 plain washer, size 5", FE + "7089/ (d1 5.3, d2 10, h 1.0)", 5.3, 10, 1.0),
     ring("iso7089_6", "ISO 7089 plain washer, size 6", FE + "7089/ (d1 6.4, d2 12, h 1.6)", 6.4, 12, 1.6),

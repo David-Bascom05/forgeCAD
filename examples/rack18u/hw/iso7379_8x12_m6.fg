@@ -1,5 +1,5 @@
 # ISO 7379 hexagon socket shoulder screw 8 x 12, thread M6 x 11
-# source: https://www.fasteners.eu/standards/ISO/7379/ (ds 8, dk 13, k 5.5, s 4, b 11); Ganter ISO 7379-8-M6 sheets (l2 11)
+# source: https://www.fasteners.eu/standards/ISO/7379/ (ds 8, dk 13, k 5.5, s 4, b 11); Ganter ISO 7379-8-M6 sheets (l2 11); t 3.3 = ISO 7379:1983 t min (interface/forge-lang/stdparts/iso7379.csv)
 # frame: origin on the axis at the head underside; +z along the shoulder to the tip; head at z < 0
 
 properties(description: "ISO 7379 hexagon socket shoulder screw 8 x 12, thread M6 x 11", material: "8.8")
@@ -11,7 +11,7 @@ shared lt = 11   # thread length
 shared dk = 13   # head diameter
 shared k = 5.5   # head height
 shared s = 4   # hexagon socket across flats
-shared t = 3   # socket depth (modelled; not on the supplier sheets read)
+shared t = 3.3   # socket depth (modelled; not on the supplier sheets read)
 shared c = 0.5   # head top edge chamfer (modelled)
 shared ch = 0.6 * P   # tip chamfer
 shared l = ls + lt   # head underside to the tip
@@ -46,4 +46,4 @@ tip = anchor(plane(at: prof.pz2, normal: prof.zax.dir, x: prof.xax.dir))
 
 expect valid
 expect bodies = 1
-expect volume = 1594.521 +- 0.05%
+expect volume = 1590.364 +- 0.05%

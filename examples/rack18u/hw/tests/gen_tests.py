@@ -145,7 +145,7 @@ TESTS = {
               ("wsh", "../iso7089_8.fg", ("on", "pan", "b", "a")),
               ("nut", "../iso10511_m8.fg", ("on", "wsh", "b", "seat")),
               ("bolt", "../iso4017_m8x20.fg", ("on", "plate", "a", "head"))],
-        rules=[("m8", "external_thread", "internal_thread", 8, 8.0)],
+        rules=[("m8", "external_thread", "internal_thread", 8, 6.76)],
         z={"pan": 0, "wsh": 3.02, "nut": 4.62, "bolt": -3.0}),
     "hanger": dict(
         doc="fan tray hanger (SPEC 5.9 rev B): FH-M8-25 in the top pan, spacer, ISO 7089-8, tray, ISO 10511-M8 "
@@ -156,7 +156,7 @@ TESTS = {
               ("wsh", "../iso7089_8.fg", ("on", "spc", "b", "a")),
               ("tray", "plates/tray_hanger_t2.fg", ("on", "wsh", "b", "a")),
               ("nut", "../iso10511_m8.fg", ("on", "tray", "b", "seat"))],
-        rules=[("m8", "external_thread", "internal_thread", 8, 8.0),
+        rules=[("m8", "external_thread", "internal_thread", 8, 6.76),
                ("press", '"../pem_fh_m8_25.fg"', '"plates/top_pan_t3.fg"', None, None)],
         z={"wsh": 11.02, "tray": 12.62, "nut": 14.5}),
     "post_pan": dict(
