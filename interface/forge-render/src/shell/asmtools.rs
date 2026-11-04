@@ -928,7 +928,7 @@ fn problems(
             .color(t.ink2),
     );
     places.push(("asm:dof".into(), r.rect));
-    mine.len()
+    mine.iter().filter(|i| i.severity == Severity::Error).count()
 }
 
 impl Shell {
@@ -1546,6 +1546,8 @@ impl Shell {
             }
             _ => {}
         }
+        // OK is held while the live solve says this link is in error
+        let mut errors = 0;
         if let Err(e) = &ops {
             let r = ui.label(egui::RichText::new(e).font(sans(11.0)).color(t.ink2));
             places.push(("asm:needs".into(), r.rect));
@@ -1553,9 +1555,9 @@ impl Shell {
             let r = ui.add(egui::Label::new(egui::RichText::new(e).font(sans(11.0)).color(t.error)).wrap());
             places.push(("asm:refused".into(), r.rect));
         } else {
-            problems(ui, t, issues, f.name.trim(), a.mobility, places);
+            errors = problems(ui, t, issues, f.name.trim(), a.mobility, places);
         }
-        let can_ok = ops.is_ok() && f.refused.is_none();
+        let can_ok = ops.is_ok() && f.refused.is_none() && errors == 0;
         match footer(ui, t, can_ok, f.editing.is_none(), places) {
             Some("cancel") => {
                 out.push(FgAct::AsmPreview(None));

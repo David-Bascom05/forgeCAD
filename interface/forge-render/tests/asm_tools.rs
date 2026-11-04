@@ -367,3 +367,29 @@ fn mirror_makes_a_reflected_part_file_and_copy_reuses_or_copies() {
     );
     assert!(src(&h).contains("arm_1 = part(\"arm.fg\""), "{}", src(&h));
 }
+
+/// Both picks on one component: the live solve's SelfLink is shown and OK is held.
+#[test]
+fn ok_is_held_while_the_live_solve_reports_an_error() {
+    let f = fixtures("selflink", TWO);
+    let Some(mut h) = open(&f) else { return };
+    let before = src(&h);
+    let mut form = LinkForm::new_constraint(&before);
+    form.picks = [pick("tip.a"), pick("tip.b")];
+    form.waiting = None;
+    let a = h.gui.shell.fg.as_mut().unwrap().asm.as_mut().unwrap();
+    a.tool = Some(AsmTool::Link(Box::new(form)));
+    h.step();
+    settle(&mut h);
+    h.step();
+    assert!(
+        h.gui.shell.places.iter().any(|p| p.0 == "asm:problem:SelfLink"),
+        "{:?}",
+        h.gui.shell.fg.as_ref().unwrap().issues
+    );
+    assert!(h.click("asm:ok"));
+    h.step();
+    settle(&mut h);
+    assert_eq!(src(&h), before, "OK wrote a link in error");
+    assert!(matches!(&asm(&h).tool, Some(AsmTool::Link(_))));
+}
