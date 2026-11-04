@@ -12,6 +12,7 @@ pub mod fgsketch;
 pub mod fgtool;
 pub mod icons;
 pub mod inspect;
+pub mod materials;
 pub mod panel;
 mod ribbon;
 mod sketch3d;

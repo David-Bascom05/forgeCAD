@@ -164,12 +164,15 @@ fn inspect_groups(s: &Shell) -> Vec<Group> {
         },
         Group {
             name: "Properties",
-            big: vec![t(
-                "iProperties",
-                "params",
-                C::Properties,
-                props.is_some_and(|p| p != 5),
-            )],
+            big: vec![
+                t(
+                    "iProperties",
+                    "params",
+                    C::Properties,
+                    props.is_some_and(|p| p != 5),
+                ),
+                t("Materials", "mass", C::Materials, i.browser.is_some()),
+            ],
             small: vec![],
         },
     ]

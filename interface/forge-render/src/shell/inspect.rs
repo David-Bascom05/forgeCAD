@@ -25,6 +25,8 @@ pub enum InspectCmd {
     Mass,
     /// The centre of gravity's marker, on or off.
     Cg,
+    /// The Material Browser.
+    Materials,
 }
 
 /// The Measure panel: what's picked (placement, entity, and how it reads), what it measures.
@@ -160,6 +162,15 @@ pub struct Inspect {
     pub want_physical: bool,
     /// The model's middle and reach in the world, for drawing planes.
     pub bounds: ([f32; 3], f32),
+    pub browser: Option<super::materials::Browser>,
+}
+
+/// The folder a document is in: where its project's materials are.
+pub fn doc_dir(file: &str) -> Option<std::path::PathBuf> {
+    std::fs::canonicalize(file)
+        .ok()?
+        .parent()
+        .map(|d| d.to_path_buf())
 }
 
 /// A unit's factor from base units (mm, kg) and its words.
@@ -229,6 +240,15 @@ impl Shell {
                     i.want_physical = true;
                 }
             }
+            InspectCmd::Materials => {
+                i.browser = match i.browser {
+                    Some(_) => None,
+                    None => Some(super::materials::Browser::open(
+                        self.fg.as_ref().and_then(|f| doc_dir(&f.file)),
+                        i.doc.material.clone(),
+                    )),
+                };
+            }
             InspectCmd::Cg => {
                 i.cg = !i.cg;
                 if i.cg && i.physical.is_none() {
@@ -262,6 +282,7 @@ impl Shell {
         if self.inspect.props.is_some() {
             blocks.extend(self.iprops_window(ctx, &t, v, &mut places, &mut ops));
         }
+        self.materials_ui(ctx);
         self.view_blocks.extend(blocks);
         self.places.extend(places);
         if let Some(fg) = &mut self.fg {
@@ -486,15 +507,32 @@ impl Shell {
                 });
                 let base = (0..3).map(|j| mid[j] * p.normal[j]).sum::<f64>()
                     - (0..3).map(|j| p.origin[j] * p.normal[j]).sum::<f64>();
-                ui.spacing_mut().slider_width = 200.0;
+                // the Drive dialog's slider: a visible track, its value, its range under it
+                let (lo, hi) = (base - reach, base + reach);
+                ui.label(egui::RichText::new("Offset").font(sans(12.0)).color(t.ink2));
+                ui.spacing_mut().slider_width = (ui.available_width() - 90.0).max(120.0);
                 ui.visuals_mut().widgets.inactive.bg_fill = t.ink2.gamma_multiply(0.35);
                 let r = ui.add(
-                    egui::Slider::new(&mut p.offset, base - reach..=base + reach)
-                        .text("Offset")
+                    egui::Slider::new(&mut p.offset, lo..=hi)
                         .trailing_fill(true)
                         .suffix(" mm")
                         .max_decimals(2),
                 );
+                ui.horizontal(|ui| {
+                    ui.set_width(ui.spacing().slider_width);
+                    ui.label(
+                        egui::RichText::new(format!("{lo:.0} mm"))
+                            .font(sans(10.0))
+                            .color(t.ink2),
+                    );
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.label(
+                            egui::RichText::new(format!("{hi:.0} mm"))
+                                .font(sans(10.0))
+                                .color(t.ink2),
+                        );
+                    });
+                });
                 places.push((format!("section:offset{}", k + 1), r.rect));
             }
             ui.add_space(8.0);
@@ -589,7 +627,9 @@ impl Shell {
                             let pts: Vec<Pos2> = (0..=48)
                                 .filter_map(|k| {
                                     let a = k as f64 / 48.0 * std::f64::consts::TAU;
-                                    to_screen(w(c + (u * forge_math::dmath::cos(a) + vv * forge_math::dmath::sin(a)) * rad))
+                                    to_screen(w(c
+                                        + (u * forge_math::dmath::cos(a) + vv * forge_math::dmath::sin(a))
+                                            * rad))
                                 })
                                 .collect();
                             painter.add(egui::Shape::line(pts, Stroke::new(1.5, ink)));
@@ -739,6 +779,8 @@ impl Shell {
         let physical = i.physical.clone();
         let busy = i.physical_busy;
         let mut want = false;
+        let mut browse = false;
+        let dir = doc_dir(&file);
         let p = i.props.as_mut()?;
         let name = std::path::Path::new(&file)
             .file_name()
@@ -928,10 +970,10 @@ impl Shell {
                         }
                     }
                     _ => {
-                        want |= Self::physical_tab(
+                        let (u, b) = Self::physical_tab(
                             ui,
                             t,
-                            assembly,
+                            (assembly, dir.as_deref()),
                             &doc,
                             physical.as_ref(),
                             busy,
@@ -939,33 +981,38 @@ impl Shell {
                             places,
                             ops,
                         );
+                        want |= u;
+                        browse |= b;
                     }
                 }
             },
         );
         let i = &mut self.inspect;
         i.want_physical |= want;
+        if browse && i.browser.is_none() {
+            i.browser = Some(super::materials::Browser::open(dir, i.doc.material.clone()));
+        }
         if close {
             i.props = None;
         }
         r.map(|r| r.response.rect)
     }
 
-    /// The Physical tab; true when Update was pressed.
+    /// The Physical tab; whether Update was pressed, and Browse.
     #[allow(clippy::too_many_arguments)]
     fn physical_tab(
         ui: &mut Ui,
         t: &Theme,
-        assembly: bool,
+        (assembly, dir): (bool, Option<&std::path::Path>),
         doc: &Props,
         physical: Option<&Result<Physical, String>>,
         busy: bool,
         units: &str,
         places: &mut Vec<(String, Rect)>,
         ops: &mut Vec<Op>,
-    ) -> bool {
-        let mut update = false;
-        let lib = forge_material::library();
+    ) -> (bool, bool) {
+        let (mut update, mut browse) = (false, false);
+        let libs = forge_material::Libraries::cached(dir);
         if !assembly {
             ui.horizontal(|ui| {
                 ui.label(egui::RichText::new("Material").font(sans(12.0)).color(t.ink2));
@@ -976,16 +1023,24 @@ impl Shell {
                     .width(220.0)
                     .height(420.0)
                     .show_ui(ui, |ui| {
-                        let mut family = "";
-                        for m in lib {
-                            if m.family != family {
-                                family = &m.family;
-                                ui.label(egui::RichText::new(family).font(medium(11.0)).color(t.ink2));
+                        let mut family = String::new();
+                        for (set, m) in libs.all() {
+                            let head = if set.lib == forge_material::Lib::ForgeCad {
+                                m.family.clone()
+                            } else {
+                                set.lib.label().to_string()
+                            };
+                            if head != family {
+                                ui.label(egui::RichText::new(&head).font(medium(11.0)).color(t.ink2));
+                                family = head;
                             }
                             ui.selectable_value(&mut pick, m.name.clone(), &m.name);
                         }
                     });
                 places.push(("iprops:material".into(), r.response.rect));
+                let r = ui.button(egui::RichText::new("Browse…").font(sans(12.0)));
+                places.push(("iprops:browse".into(), r.rect));
+                browse = r.clicked();
                 if pick != now {
                     ops.push(Op::SetProperty {
                         key: "material".into(),
@@ -993,7 +1048,7 @@ impl Shell {
                     });
                 }
             });
-            if let Some(m) = doc.material.as_deref().and_then(forge_material::find) {
+            if let Some((_, m)) = doc.material.as_deref().and_then(|n| libs.find(n)) {
                 ui.label(
                     egui::RichText::new(format!(
                         "Density {:.3} g/cm³{}",
@@ -1018,13 +1073,13 @@ impl Shell {
             }
         });
         let Some(p) = physical else {
-            return update;
+            return (update, browse);
         };
         let p = match p {
             Ok(p) => p,
             Err(e) => {
                 ui.label(egui::RichText::new(e).font(sans(11.0)).color(t.error));
-                return update;
+                return (update, browse);
             }
         };
         let k = per_unit(units);
@@ -1168,6 +1223,6 @@ impl Shell {
                 }
             }
         });
-        update
+        (update, browse)
     }
 }

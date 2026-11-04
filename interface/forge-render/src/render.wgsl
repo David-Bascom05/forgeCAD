@@ -177,7 +177,9 @@ fn cap_fs(in: Shaded) -> @location(0) vec4f {
     let v = cross(n, u);
     let stripe = fract((dot(q, u) + dot(q, v)) / spacing);
     let line = 1.0 - smoothstep(0.0, 0.16, min(stripe, 1.0 - stripe));
-    return vec4f(mix(in.tint.rgb * 0.82, vec3f(0.18, 0.19, 0.22), line * 0.6), 1.0);
+    // the cut face bold against the part's own surfaces: the part's tint pulled to a warm red
+    let cap = mix(in.tint.rgb, vec3f(0.86, 0.30, 0.18), 0.55);
+    return vec4f(mix(cap, vec3f(0.10, 0.05, 0.04), line * 0.7), 1.0);
 }
 
 // behind everything: light at the top of the window, a little darker below
