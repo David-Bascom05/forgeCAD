@@ -19,6 +19,8 @@ pub struct Model {
     pub paths: Vec<String>,
     /// Each body's part file, as the document wrote it.
     pub files: Vec<String>,
+    /// The assembly's grounded top-level instances.
+    pub grounded: Vec<String>,
 }
 
 impl Model {
@@ -30,10 +32,14 @@ impl Model {
                 bodies: vec![(Arc::new(b), Frame::WORLD)],
                 paths: vec![String::new()],
                 files: vec![String::new()],
+                grounded: vec![],
             });
         }
         let a = run.asm.as_ref()?;
-        let mut m = Model::default();
+        let mut m = Model {
+            grounded: a.grounded.clone(),
+            ..Model::default()
+        };
         for (k, (path, file, pose)) in a.occurrences.iter().enumerate() {
             if let Some(Some(p)) = a.occ_part.get(k) {
                 m.bodies.push((a.parts[*p].clone(), *pose));

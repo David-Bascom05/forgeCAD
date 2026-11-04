@@ -1,0 +1,13 @@
+drawing
+# RACK-001 18U rack, general assembly: asm/rack.fg in three views, an exploded iso with a
+# balloon on every part, and the parts list from the assembly's BOM.
+
+rack = assembly("../asm/rack.fg")
+s1 = sheet("D", title: "RACK, 18U, GENERAL ASSEMBLY", number: "RACK-001", rev: "A", drawn: "D. BASCOM")
+front = base_view(rack, sheet: s1, dir: "front", scale: 1/6, at: (95, 215))
+top = projected(front, at: (95, 425))
+right = projected(front, at: (250, 215))
+iso = projected(front, at: (255, 430), scale: 1/14)
+exploded = base_view(rack, sheet: s1, dir: "iso", scale: 1/8, explode: 1, hidden: false, at: (500, 310), label: "EXPLODED VIEW")
+balloons = auto_balloons(exploded)
+parts = parts_list(exploded, sheet: s1)

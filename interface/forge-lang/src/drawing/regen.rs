@@ -25,7 +25,11 @@ pub struct ModelOut {
     pub id: String,
     pub file: String,
     pub model: Model,
-    pub run: crate::Run,
+    /// The part's volume (mm3), when it built whole.
+    pub volume: Option<f64>,
+    /// A sheet metal part's material and thickness, and its flat patterns.
+    pub sheet: Option<(String, f64)>,
+    pub patterns: Vec<forge_sheet::Pattern>,
     /// Bill of materials: part file, count, part number, description; in item order.
     pub bom: Vec<(String, usize, String, String)>,
     /// g/cm3, as the drawing gives it.
@@ -35,8 +39,7 @@ pub struct ModelOut {
 impl ModelOut {
     /// The part's mass in kg: its volume times its density, when the density is known.
     pub fn mass(&self) -> Option<f64> {
-        let v = self.run.measure.as_ref()?.volume;
-        Some(v * self.density? * 1e-6)
+        Some(self.volume? * self.density? * 1e-6)
     }
 }
 
@@ -191,7 +194,12 @@ fn load(id: &str, file: &str, dir: &Path) -> Result<ModelOut, String> {
         id: id.to_string(),
         file: file.to_string(),
         model,
-        run,
+        volume: run.measure.as_ref().map(|m| m.volume),
+        sheet: run
+            .sheets
+            .first()
+            .map(|sh| (sh.material.clone().unwrap_or_default(), sh.sheet.gauge.thickness)),
+        patterns: run.sheets.iter().filter_map(|sh| sh.pattern().ok()).collect(),
         bom,
         density: None,
     })
@@ -246,76 +254,70 @@ fn is_hardware(file: &str) -> bool {
     file.contains("hw/")
 }
 
-/// How far each occurrence moves when the assembly is drawn `t` of the way apart: each top-level
-/// unit away from the assembly's middle along the axis it sits farthest out on, by its own size,
-/// and hardware out along its own axis by its length (Inventor's tweaks, made automatically).
+/// How far each occurrence moves when the assembly is drawn `t` of the way apart: the app's
+/// exploded view's plan (`forge_lang::explode`), units by the part files' folders (frame, panels,
+/// casters..) and subassemblies, hardware backing out along its own axis.
 fn explode_offsets(model: &Model, t: f64) -> Vec<Vec3> {
     let n = model.bodies.len();
-    let mut out = vec![Vec3::ZERO; n];
-    if t == 0.0 {
-        return out;
+    if t == 0.0 || n < 2 {
+        return vec![Vec3::ZERO; n];
     }
-    let boxes: Vec<forge_math::Box3> = model
-        .bodies
-        .iter()
-        .map(|(b, pose)| {
+    let folder = |f: &str| {
+        let p = Path::new(f);
+        p.parent()
+            .and_then(|d| d.file_name())
+            .map_or(String::new(), |d| d.to_string_lossy().into_owned())
+    };
+    let mut groups: Vec<String> = (0..n).map(|k| folder(&model.files[k])).collect();
+    groups.sort();
+    groups.dedup();
+    let mut subs: Vec<String> = Vec::new();
+    let items: Vec<crate::explode::Item> = (0..n)
+        .map(|k| {
+            let (b, pose) = &model.bodies[k];
+            let (x, y, z, o) = (pose.x().get(), pose.y().get(), pose.z().get(), pose.origin);
+            let rows = [
+                [x.x as f32, y.x as f32, z.x as f32, o.x as f32],
+                [x.y as f32, y.y as f32, z.y as f32, o.y as f32],
+                [x.z as f32, y.z as f32, z.z as f32, o.z as f32],
+            ];
             let lb = b.faces_box();
-            let mut w = forge_math::Box3::EMPTY;
-            for k in 0..8 {
-                let p = Point3::new(
-                    if k & 1 == 0 { lb.x.lo } else { lb.x.hi },
-                    if k & 2 == 0 { lb.y.lo } else { lb.y.hi },
-                    if k & 4 == 0 { lb.z.lo } else { lb.z.hi },
-                );
-                w.include(pose.point_to_world(p));
+            let path = &model.paths[k];
+            let top = path.split('.').next().unwrap_or("").to_string();
+            let sub = path
+                .contains('.')
+                .then(|| match subs.iter().position(|s| *s == top) {
+                    Some(i) => i,
+                    None => {
+                        subs.push(top.clone());
+                        subs.len() - 1
+                    }
+                });
+            let word = folder(&model.files[k]);
+            crate::explode::Item {
+                rows,
+                local: (
+                    [lb.x.lo as f32, lb.y.lo as f32, lb.z.lo as f32],
+                    [lb.x.hi as f32, lb.y.hi as f32, lb.z.hi as f32],
+                ),
+                group: groups.iter().position(|g| *g == word).unwrap_or(0),
+                sub,
+                ground: model.grounded.contains(&top),
+                axis: is_hardware(&model.files[k]).then(|| {
+                    if crate::explode::screw_like(&model.files[k]) {
+                        -1.0
+                    } else {
+                        1.0
+                    }
+                }),
             }
-            w
         })
         .collect();
-    let all = boxes.iter().fold(forge_math::Box3::EMPTY, |a, b| a.hull(b));
-    let mid = all.center();
-    let unit = |k: usize| model.paths[k].split('.').next().unwrap_or("").to_string();
-    let mut units: Vec<String> = (0..n).map(unit).collect();
-    units.sort();
-    units.dedup();
-    for u in &units {
-        let ks: Vec<usize> = (0..n).filter(|&k| &unit(k) == u).collect();
-        let ub = ks.iter().fold(forge_math::Box3::EMPTY, |a, &k| a.hull(&boxes[k]));
-        let d = ub.center() - mid;
-        let size = [all.x.width(), all.y.width(), all.z.width()];
-        let rel = [
-            d.x / size[0].max(1e-9),
-            d.y / size[1].max(1e-9),
-            d.z / size[2].max(1e-9),
-        ];
-        let axis = (0..3)
-            .max_by(|&a, &b| rel[a].abs().total_cmp(&rel[b].abs()))
-            .unwrap_or(2);
-        let mut dir = Vec3::ZERO;
-        let s = if rel[axis] >= 0.0 { 1.0 } else { -1.0 };
-        let reach = [ub.x.width(), ub.y.width(), ub.z.width()][axis];
-        match axis {
-            0 => dir.x = s,
-            1 => dir.y = s,
-            _ => dir.z = s,
-        }
-        // a unit at the middle stays
-        if rel[axis].abs() < 0.05 {
-            continue;
-        }
-        for &k in &ks {
-            out[k] = dir * (t * (0.6 * reach + 0.25 * size[axis]));
-        }
-    }
-    for (k, o) in out.iter_mut().enumerate() {
-        if is_hardware(&model.files[k]) {
-            let (b, pose) = &model.bodies[k];
-            let lb = b.faces_box();
-            let len = lb.z.width().max(lb.x.width()).max(lb.y.width());
-            *o += pose.z().get() * (-1.5 * t * len);
-        }
-    }
-    out
+    let plan = crate::explode::plan(&items);
+    crate::explode::at(&plan, t as f32)
+        .into_iter()
+        .map(|d| Vec3::new(d[0] as f64, d[1] as f64, d[2] as f64))
+        .collect()
 }
 
 struct Ctx {
@@ -581,8 +583,7 @@ impl Ctx {
             }
             ViewKind::Flat { model } => {
                 let m = self.model_of(model)?;
-                let run = &self.models[m].run;
-                let Some(pattern) = run.sheets.iter().find_map(|sh| sh.pattern().ok()) else {
+                let Some(pattern) = self.models[m].patterns.first().cloned() else {
                     self.errors.push(fail(
                         Problem::NotHere {
                             item: item.id.clone(),
@@ -2025,13 +2026,9 @@ fn defaults(ctx: &Ctx, f: &mut forge_draw::sheet::Fields, sheet: usize, n_sheets
                 f.title = desc.to_uppercase();
             }
             if f.material.is_empty()
-                && let Some(sh) = mo.run.sheets.first()
+                && let Some((material, t)) = &mo.sheet
             {
-                f.material = format!(
-                    "{} t{}",
-                    sh.material.clone().unwrap_or_default().to_uppercase(),
-                    number(sh.sheet.gauge.thickness, 2)
-                );
+                f.material = format!("{} t{}", material.to_uppercase(), number(*t, 2));
             }
         } else if f.title.is_empty() {
             f.title = Path::new(&mo.file)

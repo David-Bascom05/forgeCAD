@@ -7,6 +7,26 @@
 /// A pose as the renderer keeps it: three rows of a 3x4 matrix.
 pub type Rows = [[f32; 4]; 3];
 
+/// Whether a hardware part backs out towards its head (a screw or stud, its z < 0) rather than
+/// off the other way (a nut or washer), by its file's name.
+pub fn screw_like(file: &str) -> bool {
+    let stem = file
+        .rsplit('/')
+        .next()
+        .unwrap_or(file)
+        .trim_end_matches(".fg")
+        .to_ascii_lowercase();
+    const SCREWS: [&str; 16] = [
+        "iso4014", "iso4017", "iso4762", "iso7380", "iso7045", "iso7046", "iso7379", "iso10642", "iso1207",
+        "iso4026", "iso4027", "iso4028", "iso4029", "iso14579", "iso14580", "iso14583",
+    ];
+    stem.contains("screw")
+        || stem.contains("bolt")
+        || stem.contains("stud")
+        || stem.starts_with("pem_fh")
+        || SCREWS.iter().any(|s| stem.starts_with(s))
+}
+
 /// A box: its low and high corners.
 pub type Aabb = ([f32; 3], [f32; 3]);
 
