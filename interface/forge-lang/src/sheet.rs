@@ -4394,11 +4394,18 @@ impl SheetOut {
     /// The flat pattern as DXF: contours on CUT, bend lines on BEND, and on BEND_NOTES each
     /// bend's direction, angle and inside radius, and the part's note.
     pub fn dxf(&self) -> Result<String, SheetError> {
+        self.dxf_with(&fs::DxfLayers::default())
+    }
+
+    /// `dxf` with each kind of line on the layer asked for, or left out.
+    pub fn dxf_with(&self, layers: &fs::DxfLayers) -> Result<String, SheetError> {
+        Ok(fs::dxf_layered(&self.pattern()?, Some(&self.note()), layers))
+    }
+
+    /// The flat pattern as 2D drawing data, in the first wall's own coordinates (`sheet.frame`).
+    pub fn pattern(&self) -> Result<fs::Pattern, SheetError> {
         let b = fs::build_with(&self.sheet, Map::Flat)?;
-        Ok(fs::dxf_noted(
-            b.pattern.as_ref().expect("a flat build's pattern"),
-            &self.note(),
-        ))
+        Ok(b.pattern.expect("a flat build's pattern"))
     }
 
     /// The drawing's part note: the part, its material, its thickness and its bend rule.

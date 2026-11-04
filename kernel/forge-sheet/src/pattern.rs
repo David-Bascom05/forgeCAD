@@ -80,14 +80,85 @@ pub const FORM_LAYER: &str = "FORM";
 /// The pattern as an AutoCAD R2000 (AC1015) DXF in millimetres: contours on `CUT_LAYER`, bend
 /// lines on `BEND_LAYER`. Lines, arcs, circles (a whole-turn arc) and NURBS splines, exactly.
 pub fn dxf(p: &Pattern) -> String {
-    write_dxf(p, None)
+    write_dxf(p, None, &DxfLayers::default())
 }
 
 /// `dxf`, with notes on `NOTES_LAYER`: at each bend line's middle, along it, `UP 90.0 DEG IR
 /// 2.00` (UP: the flange turns towards the drawing's viewer, the reference skin; DOWN: away), and
 /// `part` below the pattern.
 pub fn dxf_noted(p: &Pattern, part: &str) -> String {
-    write_dxf(p, Some(part))
+    write_dxf(p, Some(part), &DxfLayers::default())
+}
+
+/// The layer each kind of line goes on, or none to leave it out: the choices Inventor's flat
+/// pattern export offers, one per kind. The default is `dxf_noted`'s.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DxfLayers {
+    /// The blank's outline, and the holes and cuts inside it.
+    pub outer: Option<String>,
+    pub inner: Option<String>,
+    /// Bend centre lines, by the way each turns as the drawing is seen.
+    pub bend_up: Option<String>,
+    pub bend_down: Option<String>,
+    /// Each bend zone's two tangent lines.
+    pub tangent: Option<String>,
+    /// Turret hits' and forms' centres with their tool ids.
+    pub punch: Option<String>,
+    pub form: Option<String>,
+    /// The bend notes and the part's note.
+    pub notes: Option<String>,
+}
+
+impl Default for DxfLayers {
+    fn default() -> DxfLayers {
+        let s = |x: &str| Some(x.to_string());
+        DxfLayers {
+            outer: s(CUT_LAYER),
+            inner: s(CUT_LAYER),
+            bend_up: s(BEND_LAYER),
+            bend_down: s(BEND_LAYER),
+            tangent: None,
+            punch: s(PUNCH_LAYER),
+            form: s(FORM_LAYER),
+            notes: s(NOTES_LAYER),
+        }
+    }
+}
+
+/// `dxf_noted` (or `dxf` with no `part`) with the lines on the layers asked for.
+pub fn dxf_layered(p: &Pattern, part: Option<&str>, layers: &DxfLayers) -> String {
+    write_dxf(p, part, layers)
+}
+
+/// The contour holding the rest: the one whose box is largest.
+pub fn outer_contour(p: &Pattern) -> Option<usize> {
+    let area = |c: &Vec<Curve2>| {
+        let (lo, hi) = bounds(&Pattern {
+            contours: vec![c.clone()],
+            ..Pattern::default()
+        });
+        (hi.x - lo.x) * (hi.y - lo.y)
+    };
+    (0..p.contours.len()).max_by(|&a, &b| area(&p.contours[a]).total_cmp(&area(&p.contours[b])))
+}
+
+/// A bend zone's tangent lines on the flat: its centre line moved half the allowance each way.
+pub fn tangent_lines(b: &BendLine) -> [(Point2, Point2); 2] {
+    let d = b.b - b.a;
+    let len = d.length();
+    if len == 0.0 {
+        return [(b.a, b.b); 2];
+    }
+    let n = Point2::new(-d.y / len, d.x / len);
+    let h = 0.5 * b.allowance;
+    let off = |s: f64| {
+        let v = Point2::new(n.x * s * h, n.y * s * h);
+        (
+            Point2::new(b.a.x + v.x, b.a.y + v.y),
+            Point2::new(b.b.x + v.x, b.b.y + v.y),
+        )
+    };
+    [off(-1.0), off(1.0)]
 }
 
 /// A bend's note: its direction as the drawing is seen (from the reference skin), its angle and
@@ -104,7 +175,8 @@ pub fn bend_note(b: &BendLine) -> String {
 /// The notes' text height (mm).
 const NOTE_H: f64 = 3.0;
 
-fn write_dxf(p: &Pattern, notes: Option<&str>) -> String {
+fn write_dxf(p: &Pattern, part: Option<&str>, l: &DxfLayers) -> String {
+    let notes = part.filter(|_| l.notes.is_some());
     let mut w = Dxf::default();
     // handles: tables and blocks first, entities after
     let ms_rec = 0x1F;
@@ -191,18 +263,24 @@ fn write_dxf(p: &Pattern, notes: Option<&str>) -> String {
         }
     });
     w.table("LAYER", 0x2, |w| {
-        let mut layers = vec![
-            ("0", "7"),
-            (CUT_LAYER, "7"),
-            (BEND_LAYER, "1"),
-            (PUNCH_LAYER, "5"),
-        ];
         // the FORM layer only where there are forms: other parts' files stay as they were
-        if !p.forms.is_empty() {
-            layers.push((FORM_LAYER, "6"));
-        }
-        if notes.is_some() {
-            layers.push((NOTES_LAYER, "3"));
+        let asked = [
+            (&l.outer, "7", true),
+            (&l.inner, "7", true),
+            (&l.bend_up, "1", true),
+            (&l.bend_down, "1", true),
+            (&l.tangent, "8", true),
+            (&l.punch, "5", true),
+            (&l.form, "6", !p.forms.is_empty()),
+            (&l.notes, "3", notes.is_some()),
+        ];
+        let mut layers: Vec<(&str, &str)> = vec![("0", "7")];
+        for (name, colour, want) in asked {
+            if let Some(n) = name.as_deref().filter(|_| want)
+                && !layers.iter().any(|x| x.0 == n)
+            {
+                layers.push((n, colour));
+            }
         }
         for (name, colour) in layers {
             let h = w.handle();
@@ -305,12 +383,28 @@ fn write_dxf(p: &Pattern, notes: Option<&str>) -> String {
 
     w.pair(0, "SECTION");
     w.pair(2, "ENTITIES");
-    for c in p.contours.iter().flatten() {
-        w.curve(c, CUT_LAYER, ms_rec);
+    let outer = outer_contour(p);
+    for (k, cs) in p.contours.iter().enumerate() {
+        let layer = if Some(k) == outer { &l.outer } else { &l.inner };
+        if let Some(layer) = layer {
+            for c in cs {
+                w.curve(c, layer, ms_rec);
+            }
+        }
     }
     for b in &p.bends {
-        w.curve(&Curve2::Line { a: b.a, b: b.b }, BEND_LAYER, ms_rec);
+        if let Some(layer) = if b.angle >= 0.0 { &l.bend_up } else { &l.bend_down } {
+            w.curve(&Curve2::Line { a: b.a, b: b.b }, layer, ms_rec);
+        }
     }
+    if let Some(layer) = &l.tangent {
+        for b in &p.bends {
+            for (a, e) in tangent_lines(b) {
+                w.curve(&Curve2::Line { a, b: e }, layer, ms_rec);
+            }
+        }
+    }
+    let notes_layer = l.notes.as_deref().unwrap_or(NOTES_LAYER);
     if let Some(part) = notes {
         for b in &p.bends {
             // along the line, read left to right, a little off it
@@ -324,24 +418,27 @@ fn write_dxf(p: &Pattern, notes: Option<&str>) -> String {
             let (s, c) = dmath::sin_cos(ang);
             let mid = b.a + d * 0.5;
             let at = Point2::new(mid.x - s * NOTE_H * 0.5, mid.y + c * NOTE_H * 0.5);
-            w.text(&bend_note(b), at, ang.to_degrees(), NOTES_LAYER, ms_rec);
+            w.text(&bend_note(b), at, ang.to_degrees(), notes_layer, ms_rec);
         }
         let (lo, _) = bounds(p);
         w.text(
             part,
             Point2::new(lo.x, lo.y - 2.0 * NOTE_H),
             0.0,
-            NOTES_LAYER,
+            notes_layer,
             ms_rec,
         );
     }
-    let marks = p
-        .hits
-        .iter()
-        .map(|h| (h.at, h.angle, h.tool.clone(), PUNCH_LAYER));
-    let forms = p.forms.iter().map(|f| {
-        let way = if f.up { "UP" } else { "DOWN" };
-        (f.at, f.angle, format!("{} {way}", f.tool), FORM_LAYER)
+    let marks = l.punch.iter().flat_map(|layer| {
+        p.hits
+            .iter()
+            .map(move |h| (h.at, h.angle, h.tool.clone(), layer.as_str()))
+    });
+    let forms = l.form.iter().flat_map(|layer| {
+        p.forms.iter().map(move |f| {
+            let way = if f.up { "UP" } else { "DOWN" };
+            (f.at, f.angle, format!("{} {way}", f.tool), layer.as_str())
+        })
     });
     for (at, angle, text, layer) in marks.chain(forms) {
         let h = crate::punch::Hit {

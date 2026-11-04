@@ -33,7 +33,10 @@ pub use form::{Form, FormError, FormMark, FormName, FormRules, FormShape, FormTo
 pub use graph::{Corner, CornerKind, Cut, Gauge, Joint, JointKind, Position, Sheet, Wall};
 pub use hardware::{Hardware, HardwareKind, Mount, Source, placeholder_catalogue};
 pub use hem::{GAP_FLOOR, HemError, HemJoint, HemKind, HemName, HemRow, HemSpec, HemTable};
-pub use pattern::{BendLine, Curve2, NOTES_LAYER, Pattern, bend_note, dxf, dxf_noted};
+pub use pattern::{
+    BendLine, Curve2, DxfLayers, NOTES_LAYER, Pattern, bend_note, dxf, dxf_layered, dxf_noted, outer_contour,
+    tangent_lines,
+};
 pub use punch::{CLUSTER_MAX, Hit, Punch, PunchError, PunchRules, PunchViolation, Tool, ToolShape};
 pub use relief::{
     BendReliefRule, Corner3Rule, Corner3Shape, CornerRule, CornerShape, DepthRef, Placement, Relief,

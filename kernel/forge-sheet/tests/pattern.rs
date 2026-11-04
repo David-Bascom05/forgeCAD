@@ -11,6 +11,7 @@ use forge_sheet::{
     BendRule, Curve2, FeatureId, Gauge, Map, Scaled, Sheet, ShopProfile, Skin, Stock, Strip, TrimRef,
     Violation, WallId, build_with, check, dxf,
 };
+use forge_sheet::{DxfLayers, dxf_layered, dxf_noted, outer_contour, tangent_lines};
 use forge_topo::Body;
 use std::collections::BTreeSet;
 
@@ -511,4 +512,46 @@ fn a_flange_with_its_own_radius() {
         c.flange_r(base, 1, ang(90.0), 30.0, 0.0),
         Err(forge_sheet::SheetError::Radius { .. })
     ));
+}
+
+#[test]
+fn dxf_layers_split_the_blank_as_asked_and_the_default_is_the_noted_file() {
+    let s = u_part(0.4);
+    let pat = build_with(&s, Map::Flat).unwrap().pattern.unwrap();
+    assert_eq!(
+        dxf_layered(&pat, Some("P"), &DxfLayers::default()),
+        dxf_noted(&pat, "P")
+    );
+    assert_eq!(dxf_layered(&pat, None, &DxfLayers::default()), dxf(&pat));
+    let some = |x: &str| Some(x.to_string());
+    let l = DxfLayers {
+        outer: some("IV_OUTER_PROFILE"),
+        inner: some("IV_INTERIOR_PROFILES"),
+        bend_up: some("IV_BEND"),
+        bend_down: some("IV_BEND_DOWN"),
+        tangent: some("IV_TANGENT"),
+        punch: None,
+        form: None,
+        notes: None,
+    };
+    let ents = entities(&dxf_layered(&pat, Some("P"), &l));
+    let on = |layer: &str| ents.iter().filter(|e| e.1 == layer).count();
+    let outer = outer_contour(&pat).unwrap();
+    assert_eq!(on("IV_OUTER_PROFILE"), pat.contours[outer].len());
+    let inner: usize = pat.contours.iter().map(Vec::len).sum::<usize>() - pat.contours[outer].len();
+    assert!(inner > 0);
+    assert_eq!(on("IV_INTERIOR_PROFILES"), inner);
+    // one bend up, one down (-60deg): each on its own layer, two tangents each
+    assert_eq!((on("IV_BEND"), on("IV_BEND_DOWN")), (1, 1));
+    assert_eq!(on("IV_TANGENT"), 4);
+    assert_eq!(on("BEND_NOTES") + on("CUT") + on("BEND"), 0);
+    // the tangent lines lie half the zone either side of the centre line
+    for b in &pat.bends {
+        for (a, e) in tangent_lines(b) {
+            let d = b.b - b.a;
+            let off = (a - b.a).cross(d) / d.length();
+            assert!((off.abs() - 0.5 * b.allowance).abs() < 1e-9);
+            assert!(((e - a).length() - d.length()).abs() < 1e-9);
+        }
+    }
 }

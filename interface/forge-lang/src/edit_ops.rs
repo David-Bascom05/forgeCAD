@@ -51,6 +51,18 @@ pub fn precheck_set_arg(prog: &[Stmt], id: &str, text: &str) -> R<()> {
     Ok(())
 }
 
+/// `#K`: the call's K-th positional argument, which has no keyword to name it by.
+fn positional(arg: &str) -> Option<usize> {
+    arg.strip_prefix('#')?.parse().ok()
+}
+
+fn find_arg<'a>(args: &'a [Arg], arg: &str) -> Option<&'a Arg> {
+    match positional(arg) {
+        Some(k) => args.get(k).filter(|a| a.name.is_none()),
+        None => args.iter().find(|a| a.name.as_ref().is_some_and(|n| n.0 == arg)),
+    }
+}
+
 pub fn apply_set_arg(src: &str, prog: &[Stmt], id: &str, arg: &str, text: &str) -> R<String> {
     let k = call_of(prog, id)?;
     let StmtKind::Assign { value, .. } = &prog[k].kind else {
@@ -59,8 +71,15 @@ pub fn apply_set_arg(src: &str, prog: &[Stmt], id: &str, arg: &str, text: &str) 
     let ExprKind::Call(_, args) = &value.kind else {
         unreachable!("a call")
     };
-    let (lo, hi, new) = match args.iter().find(|a| a.name.as_ref().is_some_and(|n| n.0 == arg)) {
+    let (lo, hi, new) = match find_arg(args, arg) {
         Some(a) => (a.value.span.lo, a.value.span.hi, text.to_string()),
+        None if positional(arg).is_some() => {
+            return Err(Error::UnknownArg {
+                span: value.span,
+                func: "SetArg",
+                arg: arg.into(),
+            });
+        }
         None => {
             // before the closing parenthesis
             let close = value.span.hi - 1;
@@ -81,6 +100,19 @@ pub fn ast_set_arg(prog: &mut [Stmt], id: &str, arg: &str, text: &str) -> R<()> 
     let ExprKind::Call(_, args) = &mut value.kind else {
         unreachable!("a call")
     };
+    if let Some(k) = positional(arg) {
+        return match args.get_mut(k).filter(|a| a.name.is_none()) {
+            Some(a) => {
+                a.value = e;
+                Ok(())
+            }
+            None => Err(Error::UnknownArg {
+                span: Span::default(),
+                func: "SetArg",
+                arg: arg.into(),
+            }),
+        };
+    }
     match args
         .iter_mut()
         .find(|a| a.name.as_ref().is_some_and(|n| n.0 == arg))

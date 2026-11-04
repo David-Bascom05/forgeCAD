@@ -228,3 +228,26 @@ fn a_shared_param_moves_what_reads_it_and_what_sits_on_it() {
     // the web pocket sits on the web's end face: it moves with tw though it never reads it
     assert!(moved.contains("wpsk") && !reads.contains("wpsk"));
 }
+
+#[test]
+fn set_arg_names_a_positional_argument_by_its_place() {
+    let src = "shared t = 2\nshared k = ratio(0.4)\nparam plan.L = 40\nparam plan.W = 30\nparam up.h = 20\nsketch plan(on: xy) {\n  outline = rect(corner: (0, 0), size: (L, W))\n}\nbase = sheet(plan, t: t, r: t, bend: kfactor(k))\nup = flange(base.edge(plan.outline[1]), height: h)\n";
+    let op = Op::SetArg {
+        id: "up".into(),
+        arg: "#0".into(),
+        text: "base.edge(plan.outline[2])".into(),
+    };
+    let out = apply(src, &op).unwrap();
+    assert!(
+        out.contains("up = flange(base.edge(plan.outline[2]), height: h)"),
+        "{out}"
+    );
+    assert!(build(&out).ok());
+    // no second positional argument: refused, typed
+    let op = Op::SetArg {
+        id: "up".into(),
+        arg: "#1".into(),
+        text: "3".into(),
+    };
+    assert_eq!(apply(src, &op).unwrap_err().kind(), "UnknownArg");
+}

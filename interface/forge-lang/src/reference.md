@@ -874,6 +874,7 @@ ReplaceFeature {id, text}           that statement (and its params just above) b
 MoveFeature {id, before}            that statement moved above `before` (or to the end)
 LiftLiteral {span, name, scope}     a loose number replaced by a new param (shared or local)
 SetArg {id, arg, text}              keyword argument arg of the call making id becomes text
+                                    (`#K`: its K-th positional argument)
 SetProperty {key, text}             an argument of properties(..) set (null: taken out)
 Rename {from, to}                   a top-level name and every use of it renamed
 ```
