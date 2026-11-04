@@ -160,6 +160,7 @@ pub struct LinkDef {
     pub flip: bool,
     pub drive: Vec<(Freedom, Num)>,
     pub limits: Vec<(Freedom, f64, f64)>,
+    pub suppressed: bool,
     pub span: Span,
 }
 
@@ -289,11 +290,18 @@ pub fn freedom_word(kind: JointKind, f: Freedom) -> &'static str {
 
 fn joint_args(kind: JointKind) -> &'static [&'static str] {
     match kind {
-        JointKind::Revolute => &["a", "b", "turn", "limit", "flip"],
-        JointKind::Slider => &["a", "b", "along", "limit", "flip"],
-        JointKind::Cylindrical | JointKind::PinSlot => {
-            &["a", "b", "along", "turn", "along_limit", "turn_limit", "flip"]
-        }
+        JointKind::Revolute => &["a", "b", "turn", "limit", "flip", "suppressed"],
+        JointKind::Slider => &["a", "b", "along", "limit", "flip", "suppressed"],
+        JointKind::Cylindrical | JointKind::PinSlot => &[
+            "a",
+            "b",
+            "along",
+            "turn",
+            "along_limit",
+            "turn_limit",
+            "flip",
+            "suppressed",
+        ],
         JointKind::Planar => &[
             "a",
             "b",
@@ -304,8 +312,9 @@ fn joint_args(kind: JointKind) -> &'static [&'static str] {
             "y_limit",
             "turn_limit",
             "flip",
+            "suppressed",
         ],
-        JointKind::Fastened | JointKind::Ball => &["a", "b", "flip"],
+        JointKind::Fastened | JointKind::Ball => &["a", "b", "flip", "suppressed"],
     }
 }
 
@@ -596,6 +605,7 @@ fn joint(ev: &mut Eval, name: &'static str, kind: JointKind, args: &[Arg], span:
     let ra = reference(&a.req("a")?, a.span("a"))?;
     let rb = reference(&a.req("b")?, a.span("b"))?;
     let flip = a.flag("flip")?;
+    let suppressed = a.flag("suppressed")?;
     let words = freedom_words(kind);
     let mut drive = vec![];
     let mut limits = vec![];
@@ -625,6 +635,7 @@ fn joint(ev: &mut Eval, name: &'static str, kind: JointKind, args: &[Arg], span:
         flip,
         drive,
         limits,
+        suppressed,
         span,
     });
     Ok(asm(AsmVal::Link {
@@ -635,10 +646,10 @@ fn joint(ev: &mut Eval, name: &'static str, kind: JointKind, args: &[Arg], span:
 
 fn constraint(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Value> {
     let names: &[&'static str] = match name {
-        "on_plane" | "mate" | "flush" | "insert" => &["a", "b", "offset"],
-        "concentric" | "parallel" => &["a", "b", "opposed"],
-        "angle" | "distance" => &["a", "b", "value"],
-        _ => &["a", "b"],
+        "on_plane" | "mate" | "flush" | "insert" => &["a", "b", "offset", "suppressed"],
+        "concentric" | "parallel" => &["a", "b", "opposed", "suppressed"],
+        "angle" | "distance" => &["a", "b", "value", "suppressed"],
+        _ => &["a", "b", "suppressed"],
     };
     let a = Args::bind(ev, name, names, args, span)?;
     let ra = reference(&a.req("a")?, a.span("a"))?;
@@ -684,6 +695,7 @@ fn constraint(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<
         }
         _ => (ConstraintKind::Lock, false),
     };
+    let suppressed = a.flag("suppressed")?;
     let id = ev.take_id(name, span)?;
     ev.record(&id, name, span, dims);
     doc(ev).links.push(LinkDef {
@@ -694,6 +706,7 @@ fn constraint(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<
         flip,
         drive: vec![],
         limits: vec![],
+        suppressed,
         span,
     });
     Ok(asm(AsmVal::Link { id, joint: None }))
@@ -818,6 +831,32 @@ pub fn member(a: &Rc<AsmVal>, name: &str, span: Span) -> R<Value> {
             span,
             ty: other.ty(),
             member: name.into(),
+        }),
+    }
+}
+
+/// A call on an instance or a reference, as its text (`plane(at: boss.end.center, normal: ..)`):
+/// a reference whose last step the part file evaluates.
+pub fn part_call_on(a: &Rc<AsmVal>, text: String, span: Span) -> R<Value> {
+    let seg = Seg {
+        name: text,
+        index: vec![],
+    };
+    match &**a {
+        AsmVal::Inst(id) => Ok(asm(AsmVal::Ref(RefDef {
+            inst: id.clone(),
+            segs: vec![seg],
+            span,
+        }))),
+        AsmVal::Ref(r) => {
+            let mut r = r.clone();
+            r.segs.push(seg);
+            r.span = span;
+            Ok(asm(AsmVal::Ref(r)))
+        }
+        other => Err(Error::NotCallable {
+            span,
+            found: other.ty(),
         }),
     }
 }
@@ -1780,11 +1819,33 @@ fn load_part_with(
         if out.refs.contains_key(r) {
             continue;
         }
-        let Some(segs) = crate::error::parse_path(r) else {
-            continue;
+        // a path (`shank.axis`, `stud[2]`), or a call's text: the part's own expression
+        let e = if r.contains('(') {
+            let Some(e) = crate::syntax::parse(&format!("ref_ = {r}\n"))
+                .ok()
+                .and_then(|p| p.into_iter().next())
+                .and_then(|s| match s.kind {
+                    crate::syntax::StmtKind::Assign { value, .. } => Some(value),
+                    _ => None,
+                })
+            else {
+                continue;
+            };
+            e
+        } else {
+            let Some(segs) = crate::error::parse_path(r) else {
+                continue;
+            };
+            ref_expr(&segs)
         };
-        let e = ref_expr(&segs);
-        if let Ok(v) = ev.expr(&e) {
+        let (errors, warnings) = (ev.errors.len(), ev.warnings.len());
+        let got = ev.expr(&e);
+        // a call's probe leaves nothing behind in the part's own results
+        if r.contains('(') {
+            ev.errors.truncate(errors);
+            ev.warnings.truncate(warnings);
+        }
+        if let Ok(v) = got {
             match as_reference(&mut ev, v) {
                 Some(x) => {
                     out.refs.insert(r.clone(), Ok(x));
@@ -1908,6 +1969,7 @@ pub struct InstOut {
     pub sub: bool,
     /// Grounded in its own document.
     pub ground: bool,
+    pub suppressed: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -1931,6 +1993,7 @@ pub struct LinkOut {
     /// its value (a relation), an occurrence (a fit), or what a fit rule matches.
     pub a: (String, String),
     pub b: (String, String),
+    pub suppressed: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -2069,7 +2132,8 @@ fn build_doc(
         let e = end(r, want);
         names.probe.push((r.clone(), e));
     }
-    for (n, l) in d.links.iter().enumerate() {
+    // a suppressed joint or constraint is listed, not solved
+    for (n, l) in d.links.iter().enumerate().filter(|(_, l)| !l.suppressed) {
         let a = end(&l.a, want);
         let b = end(&l.b, want);
         let id = hid(&l.id);
@@ -2086,7 +2150,7 @@ fn build_doc(
                     flip: l.flip,
                     drive: l.drive.iter().map(|(f, n)| (*f, n.v)).collect(),
                     limits: l.limits.clone(),
-                    suppressed: false,
+                    suppressed: l.suppressed,
                 });
             }
             LinkKind::Constraint(kind) => {
@@ -2097,7 +2161,7 @@ fn build_doc(
                     a,
                     b,
                     flip: l.flip,
-                    suppressed: false,
+                    suppressed: l.suppressed,
                 });
             }
         }
@@ -2183,6 +2247,7 @@ fn structure(
             file: i.file.clone(),
             sub: i.sub,
             ground: i.ground,
+            suppressed: i.suppressed,
         });
         // a cycle is refused elsewhere; a bound keeps this from following one
         if i.sub
@@ -2226,6 +2291,7 @@ fn structure(
             kind: kind.to_string(),
             a: end(&l.a),
             b: end(&l.b),
+            suppressed: l.suppressed,
         });
     }
     let value = |(joint, f): &(String, Freedom)| {
@@ -2248,6 +2314,7 @@ fn structure(
             kind: r.kind.name().to_string(),
             a: value(&r.leader),
             b: value(&r.follower),
+            suppressed: false,
         });
     }
     for f in &d.fits {
@@ -2258,6 +2325,7 @@ fn structure(
             kind: "fit".into(),
             a: (join(&f.a), String::new()),
             b: (join(&f.b), String::new()),
+            suppressed: false,
         });
     }
     let matcher = |m: &Matcher| match m {
@@ -2272,6 +2340,7 @@ fn structure(
             kind: "fit_rule".into(),
             a: (matcher(&r.a), String::new()),
             b: (matcher(&r.b), String::new()),
+            suppressed: false,
         });
     }
 }

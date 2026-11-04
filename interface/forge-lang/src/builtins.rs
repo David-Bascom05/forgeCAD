@@ -356,6 +356,7 @@ pub fn point_of(_ev: &Eval, v: Value, span: Span) -> R<Point3> {
             Ok(sk.world(sk.pos(id)))
         }
         Value::Axis(o, _) => Ok(o),
+        Value::Plane(p) => Ok(p.frame.origin),
         o => Err(Error::WrongType {
             span,
             what: "a point",
@@ -937,12 +938,16 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
                 dir_of(v, a.span(k))
             };
             let z = anchored("normal")?;
-            let x = anchored("x")?;
             let z = z.normalize().ok_or(Error::BadValue {
                 span: a.span("normal"),
                 what: "a zero normal",
                 value: 0.0,
             })?;
+            // no x: the frame's own (forge_math's choice from the normal)
+            let x = match a.opt("x") {
+                None => Frame::from_z(o, z).x().get(),
+                Some(_) => anchored("x")?,
+            };
             let frame = Frame::from_zx(o, z, x).ok_or(Error::BadValue {
                 span: a.span("x"),
                 what: "an x along the normal",
@@ -1825,6 +1830,7 @@ pub fn member(ev: &mut Eval, v: Value, name: &str, span: Span) -> R<Value> {
                 frame: plane_of(ev, v.clone(), span, "plane")?,
                 world: None,
             }))),
+            "center" => face_center(ev, fs, span),
             "normal" => Ok(Value::Dir(plane_of(ev, v.clone(), span, "normal")?.z().get())),
             "edges" => {
                 if !ev.b.building || (fs.names.is_empty() && !ev.errors.is_empty()) {
@@ -1844,6 +1850,7 @@ pub fn member(ev: &mut Eval, v: Value, name: &str, span: Span) -> R<Value> {
             }
             _ => Err(unknown(&v)),
         },
+        Value::Edges(es) if matches!(name, "center" | "start" | "end") => edge_point(ev, es, name, span),
         Value::Tuple(t) if t.len() == 2 => match name {
             "x" => Ok(t[0].clone()),
             "y" => Ok(t[1].clone()),
@@ -1864,6 +1871,120 @@ pub fn member(ev: &mut Eval, v: Value, name: &str, span: Span) -> R<Value> {
         Value::Unresolved => Ok(Value::Unresolved),
         _ => Err(unknown(&v)),
     }
+}
+
+/// Each loop of a face as points in its walking order (lines by their ends, curves sampled).
+fn loop_points(body: &Body, f: FaceId) -> Vec<Vec<Point3>> {
+    let mut out = vec![];
+    for &lp in body.face(f).loops.iter() {
+        let mut pts: Vec<Point3> = vec![];
+        for c in body.lp(lp).coedges() {
+            let ce = body.coedge(c);
+            let n = if matches!(body.edge(ce.edge).curve, Curve::Line(_)) {
+                1
+            } else {
+                64
+            };
+            let mut p = body.edge_points(ce.edge, n);
+            if !ce.forward {
+                p.reverse();
+            }
+            pts.extend(p.into_iter().skip(usize::from(!pts.is_empty())));
+        }
+        out.push(pts);
+    }
+    out
+}
+
+/// `F.center`: a planar face set's plane with its origin at the faces' area centroid (x as the
+/// plane's); a cylinder's or cone's axis with its origin halfway along the face.
+fn face_center(ev: &mut Eval, fs: &Faces, span: Span) -> R<Value> {
+    let Some(body) = ev.b.body().filter(|_| !fs.names.is_empty()) else {
+        return Ok(Value::Unresolved);
+    };
+    let faces: Vec<FaceId> = body
+        .face_ids()
+        .filter(|&f| fs.names.contains(&body.face(f).name))
+        .collect();
+    let not_planar = || Error::NotPlanar {
+        span,
+        id: fs.owner.clone(),
+        role: fs.role,
+    };
+    if let Some(fr) = fs.plane {
+        let (mut a, mut cx, mut cy) = (0.0, 0.0, 0.0);
+        for &f in &faces {
+            for lp in loop_points(body, f) {
+                for w in lp.windows(2) {
+                    let (p, q) = (fr.point_to_local(w[0]), fr.point_to_local(w[1]));
+                    let c = p.x * q.y - q.x * p.y;
+                    a += c;
+                    cx += (p.x + q.x) * c;
+                    cy += (p.y + q.y) * c;
+                }
+            }
+        }
+        if a.abs() < 1e-12 {
+            return Err(not_planar());
+        }
+        let o = fr.point_to_world(Point3::new(cx / (3.0 * a), cy / (3.0 * a), 0.0));
+        return Ok(Value::Plane(Rc::new(Plane {
+            frame: fr.with_origin(o),
+            world: None,
+        })));
+    }
+    let Some(&f) = faces.first() else {
+        return Err(not_planar());
+    };
+    let ax = match &body.face(f).surface {
+        Surface::Cylinder(c) => c.frame,
+        Surface::Cone(c) => c.frame,
+        _ => return Err(not_planar()),
+    };
+    let (mut lo, mut hi) = (f64::MAX, f64::MIN);
+    for &f in &faces {
+        for p in loop_points(body, f).into_iter().flatten() {
+            let t = (p - ax.origin).dot(ax.z().get());
+            lo = lo.min(t);
+            hi = hi.max(t);
+        }
+    }
+    if lo > hi {
+        return Err(not_planar());
+    }
+    Ok(Value::Axis(ax.origin + ax.z().get() * ((lo + hi) * 0.5), ax.z()))
+}
+
+/// `EDGES.center` (a circle's or arc's centre on its axis, a line's midpoint, a curve's middle),
+/// `EDGES.start`, `EDGES.end`: of one edge.
+fn edge_point(ev: &mut Eval, es: &[Name], name: &str, span: Span) -> R<Value> {
+    let Some(body) = ev.b.body() else {
+        return Ok(Value::Unresolved);
+    };
+    let [n] = es else {
+        return Err(Error::BadValue {
+            span,
+            what: "edges in a set a point is taken of (one)",
+            value: es.len() as f64,
+        });
+    };
+    let Some(e) = body.edge_by_name(*n) else {
+        return Ok(Value::Unresolved);
+    };
+    let edge = body.edge(e);
+    Ok(match (name, &edge.curve) {
+        ("start", _) => Value::Point(body.vertex(edge.start).point),
+        ("end", _) => Value::Point(body.vertex(edge.end).point),
+        (_, Curve::Circle(c)) => Value::Axis(c.frame.origin, c.frame.z()),
+        (_, Curve::Line(_)) => {
+            let (a, b) = (body.vertex(edge.start).point, body.vertex(edge.end).point);
+            Value::Point(a + (b - a) * 0.5)
+        }
+        _ => Value::Point(forge_geom::CurveGeom::eval(
+            &edge.curve,
+            edge.range.lo + edge.range.width() * 0.5,
+        )),
+    })
 }
 
 /// `E.side(entity)`: the face an entity of the profile made.

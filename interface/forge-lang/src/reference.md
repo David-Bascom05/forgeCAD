@@ -106,7 +106,7 @@ sketch S(on: PLANE, at: POINT)      at: the plane's origin moves to POINT droppe
 offset(PLANE, d)                    the plane moved d along its normal
 rotate(PLANE, about: AXIS, by: A)   the plane's normal turned about an axis lying in it
                                     (origin on the axis, x along it)
-plane(at: POINT, normal: DIR, x: DIR)
+plane(at: POINT, normal: DIR, x: DIR)   x optional: then any square to the normal
 axis(P, Q)                          the axis through two points
 mid(LINE)                           a sketch line's midpoint, as a 3D point
 ```
@@ -447,6 +447,10 @@ W.start  W.end          a sweep's, coil's or loft's end caps (planes carried fro
 S.inner  S.rim          a shell's inner (outward: outer) skin, and the rims round its open faces
 S.plane  S.origin  S.points  S.NAME   a sketch's plane, origin, points, named entities
 FACES.plane  FACES.normal  FACES.edges  FACES.axis (cylindrical)
+FACES.center            planar: the plane with its origin at the faces' area centroid;
+                        cylindrical or conical: the axis, its origin halfway along the face
+EDGES.center            of one edge: a circle's or arc's axis through its centre, a line's
+                        midpoint, a curve's middle; EDGES.start, EDGES.end its ends
 ```
 
 ## Selections
@@ -755,12 +759,16 @@ expect clearance(arm, post) >= 2 at crank.turn = 90deg
   literals-in-params lint. A reference instance is checked but not counted in the BOM.
 - **References:** `inst.NAME` is the part's reference by name, evaluated in the part file: an
   anchor (`a = anchor(plane(..))`), a role name (`shank.axis`, `bar.end`), a sketch point; through
-  subassemblies, `sub.inst.NAME`. `inst` alone is the instance's own frame. A reference that
-  resolves to nothing is `BrokenAnchor`, before any solve.
+  subassemblies, `sub.inst.NAME`. `inst` alone is the instance's own frame. A call on an
+  instance or reference is the part's own expression, its arguments evaluated in the part file:
+  `peg.pin.end.center`, `yoke.plane(at: edges(between: (boss.end, boss.side(plan.c))).center,
+  normal: boss.end.normal)` (what the app writes for a pick no declared anchor names). A
+  reference that resolves to nothing is `BrokenAnchor`, before any solve.
 - **Joints** (A moving, B the reference; values in B's frame): `fastened`, `revolute` (`turn`),
   `slider` (`along`), `cylindrical` (`along`, `turn`), `pin_slot` (`along` B's x, `turn`), `planar`
   (`x`, `y`, `turn`), `ball`. A value given is a drive; `limit: (lo, hi)` (or `turn_limit:` ..)
   bounds it; `flip: true` turns A's z over. `j.turn` is the value, for relations and expects.
+  `suppressed: true` on a joint or constraint lists it and leaves it out of the solve.
 - **Constraints**, each a known number of freedoms removed: `coincident` (3), `on_plane` (1,
   `offset:`), `on_line` (2), `mate` / `flush` (3, `offset:`; mate opposes the normals),
   `concentric` (4), `insert` (5), `parallel` (2), `perpendicular` (1), `angle(a, b, V)` (1),

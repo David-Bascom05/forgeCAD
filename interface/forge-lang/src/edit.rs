@@ -886,16 +886,7 @@ pub struct Reach {
 /// with that run's first new typed error. With the edited text, what a SetParam reaches.
 pub fn apply_checked(src: &str, op: &Op) -> R<(String, Option<Reach>)> {
     let text = apply(src, op)?;
-    let opts = crate::Options {
-        build: false,
-        ..crate::Options::default()
-    };
-    let (before, _) = crate::run(src, opts.clone(), Default::default());
-    let (after, _) = crate::run(&text, opts, Default::default());
-    let old: Vec<&str> = before.errors.iter().map(Error::kind).collect();
-    if let Some(e) = after.errors.iter().find(|e| !old.contains(&e.kind())) {
-        return Err(e.clone());
-    }
+    let after = checked(src, &text)?;
     let reach = match op {
         Op::SetParam { param, .. } => {
             // the param, and every param linked to it (transitively)
@@ -935,4 +926,30 @@ pub fn apply_checked(src: &str, op: &Op) -> R<(String, Option<Reach>)> {
         _ => None,
     };
     Ok((text, reach))
+}
+
+/// The edited text's run (evaluated, not built), or its first typed error the source hadn't.
+fn checked(src: &str, text: &str) -> R<crate::Run> {
+    let opts = crate::Options {
+        build: false,
+        ..crate::Options::default()
+    };
+    let (before, _) = crate::run(src, opts.clone(), Default::default());
+    let (after, _) = crate::run(text, opts, Default::default());
+    let old: Vec<&str> = before.errors.iter().map(Error::kind).collect();
+    if let Some(e) = after.errors.iter().find(|e| !old.contains(&e.kind())) {
+        return Err(e.clone());
+    }
+    Ok(after)
+}
+
+/// Several ops as one edit (an app's one undo step): each applied to the text the last one made,
+/// the result checked once, as `apply_checked` checks one.
+pub fn apply_all_checked(src: &str, ops: &[Op]) -> R<String> {
+    let mut text = src.to_string();
+    for op in ops {
+        text = apply(&text, op)?;
+    }
+    checked(src, &text)?;
+    Ok(text)
 }

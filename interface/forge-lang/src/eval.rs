@@ -1583,6 +1583,19 @@ impl<'s> Eval<'s> {
         {
             return crate::sheet::method(self, &s, m, args, span);
         }
+        // a call on an assembly's instance or reference (`yoke.plane(at: boss.end.center, normal:
+        // boss.end.normal)`): the part's, its arguments evaluated in the part file
+        if let ExprKind::Attr(o, _) = &f.kind
+            && self.asm.is_some()
+            && let Value::Asm(a) = self.expr(o)?
+        {
+            let text: String = self.src[o.span.hi as usize..span.hi as usize]
+                .trim_start_matches(|c: char| c == '.' || c.is_whitespace())
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ");
+            return crate::asm::part_call_on(&a, text, span);
+        }
         // `E.side(entity)`: the face one entity of E's profile made
         if let ExprKind::Attr(o, m) = &f.kind
             && m == "side"

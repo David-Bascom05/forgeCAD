@@ -1327,3 +1327,132 @@ f = fit(base, arm)
     // an end's anchor is what's left on the part it reaches
     assert_eq!(a.links[1].a.1, "a");
 }
+
+/// A pin 20 long, radius 5, on z from the origin.
+const PIN: &str = "shared r = 5
+shared h = 20
+sketch s(on: xy) {
+  c = circle((0, 0), r)
+}
+pin = extrude(s, h)
+";
+
+fn near(a: forge_math::Point3, b: (f64, f64, f64)) -> bool {
+    (a.x - b.0).abs() < 1e-6 && (a.y - b.1).abs() < 1e-6 && (a.z - b.2).abs() < 1e-6
+}
+
+#[test]
+fn face_and_edge_centres_are_what_a_pick_snaps_to() {
+    let text = format!(
+        "{PIN}top = anchor(pin.end.center)
+half = anchor(pin.side(s.c).center)
+rim = anchor(plane(at: edges(between: (pin.end, pin.side(s.c))).center, normal: pin.end.normal))
+"
+    );
+    let got = forge_lang::asm::part_anchors(&text, None);
+    let at = |n: &str| got.iter().find(|a| a.0 == n).expect(n).1;
+    assert!(near(at("top").origin, (0.0, 0.0, 20.0)), "{:?}", at("top"));
+    assert!((at("top").z().get().z - 1.0).abs() < 1e-9);
+    assert!(near(at("half").origin, (0.0, 0.0, 10.0)), "{:?}", at("half"));
+    assert!(near(at("rim").origin, (0.0, 0.0, 20.0)), "{:?}", at("rim"));
+    // a plate's top: the rectangle's centroid, not its sketch's origin
+    let plate = forge_lang::asm::part_anchors(&format!("{}c = anchor(plate.end.center)\n", base(D)), None);
+    let c = plate.iter().find(|a| a.0 == "c").unwrap().1;
+    assert!(near(c.origin, (50.0, -300.0, 3.0)), "{c:?}");
+}
+
+#[test]
+fn a_call_on_an_instance_is_the_parts_own_expression() {
+    let d = mech_dir("picked");
+    write(&d, "pin.fg", PIN);
+    // what the app writes for picks with no declared anchor: face centres, a rim's centre
+    let src = "assembly
+
+base = part(\"base.fg\", ground: true)
+peg = part(\"pin.fg\", at: pose(at: (0, 0, 40)))
+j = fastened(peg.pin.start.center, base.plate.end.center, flip: true)
+";
+    let r = run_in(&d, src);
+    assert!(r.ok(), "{:?}", errors(&r));
+    let p = pose(&r, "peg");
+    assert!(
+        near(p.point_to_world(forge_math::Point3::ORIGIN), (50.0, -300.0, 3.0)),
+        "{p:?}"
+    );
+    assert!((p.z().get().z - 1.0).abs() < 1e-9, "{p:?}");
+    let src2 = src.replace(
+        "peg.pin.start.center",
+        "peg.plane(at: edges(between: (pin.start, pin.side(s.c))).center, normal: pin.start.normal)",
+    );
+    let r = run_in(&d, &src2);
+    assert!(r.ok(), "{:?}", errors(&r));
+    assert!(near(pose(&r, "peg").origin, (50.0, -300.0, 3.0)));
+    // a call naming nothing in the part is a broken anchor, named by its text
+    let r = run_in(
+        &d,
+        &src.replace(
+            "pin.start.center",
+            "plane(at: nothing.center, normal: pin.end.normal)",
+        ),
+    );
+    assert!(
+        errors(&r).iter().any(|e| e.starts_with("BrokenAnchor")),
+        "{:?}",
+        errors(&r)
+    );
+}
+
+#[test]
+fn a_suppressed_joint_is_listed_and_not_solved() {
+    let d = mech_dir("suppressed");
+    let src = format!("{}j5 = revolute(crank.b, base.o4)\n", four_bar_doc(30.0));
+    let r = run_in(&d, &src);
+    assert!(errors(&r).iter().any(|e| e.starts_with("Conflict")));
+    let off = apply(
+        &src,
+        &Op::SetArg {
+            id: "j5".into(),
+            arg: "suppressed".into(),
+            text: "true".into(),
+        },
+    )
+    .unwrap();
+    assert!(
+        off.contains("j5 = revolute(crank.b, base.o4, suppressed: true)"),
+        "{off}"
+    );
+    let r = run_in(&d, &off);
+    assert!(r.ok(), "{:?}", errors(&r));
+    let links = &r.asm.as_ref().unwrap().links;
+    assert!(links.iter().any(|l| l.id == "j5" && l.suppressed));
+    assert!(links.iter().any(|l| l.id == "j1" && !l.suppressed));
+}
+
+#[test]
+fn several_ops_are_one_checked_edit() {
+    let src = "assembly\n\nbase = part(\"base.fg\", ground: true)\n";
+    let ops = [
+        Op::AddFeature {
+            before: None,
+            text: "arm = part(\"crank.fg\")".into(),
+        },
+        Op::AddFeature {
+            before: None,
+            text: "j = revolute(arm.a, base.o2)".into(),
+        },
+    ];
+    let text = forge_lang::edit::apply_all_checked(src, &ops).unwrap();
+    assert!(
+        text.ends_with("arm = part(\"crank.fg\")\nj = revolute(arm.a, base.o2)\n"),
+        "{text}"
+    );
+    // one bad op refuses the lot
+    let bad = [
+        ops[0].clone(),
+        Op::AddFeature {
+            before: None,
+            text: "j = revolute(nope.a, base.o2)".into(),
+        },
+    ];
+    assert!(forge_lang::edit::apply_all_checked(src, &bad).is_err());
+}

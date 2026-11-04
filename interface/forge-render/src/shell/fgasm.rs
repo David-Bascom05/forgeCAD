@@ -317,6 +317,7 @@ fn insts_of(occ: &[OccRow]) -> Vec<InstOut> {
                     file: String::new(),
                     sub: true,
                     ground: false,
+                    suppressed: false,
                 });
             }
         }
@@ -326,6 +327,7 @@ fn insts_of(occ: &[OccRow]) -> Vec<InstOut> {
                 file: o.file.clone(),
                 sub: false,
                 ground: false,
+                suppressed: false,
             });
         }
     }
@@ -2311,6 +2313,7 @@ mod tests {
             file: f.into(),
             sub,
             ground,
+            suppressed: false,
         }
     }
 
@@ -2322,6 +2325,7 @@ mod tests {
             kind: kind.into(),
             a: (a.into(), "x".into()),
             b: (b.into(), "y".into()),
+            suppressed: false,
         }
     }
 
