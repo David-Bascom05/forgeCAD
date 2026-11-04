@@ -1,8 +1,7 @@
-//! What a thermoforming shop forms, as data (data/materials.json): each sheet material's design
-//! limits, forming window, shrink and constitutive fits, every number with its source or marked a
-//! stand-in, and the machine's limits. Only the shrink reaches geometry (the tool is grown by it);
-//! the laws feed the thickness model and the rest the checks.
-use crate::data::{Val, parse};
+//! What a thermoforming shop forms, as data: each material's `thermo.*` values in forge-material's
+//! records (forming window, shrink, design limits, its stretch law), every one with its own source
+//! or marked a stand-in, and the machine's limits. Only the shrink reaches geometry (the mould is
+//! grown by it); the law feeds the thickness model and the rest the checks.
 
 /// A length as a multiple of the sheet's thickness plus a constant.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -162,183 +161,139 @@ impl FormShop {
     }
 }
 
-/// The material data the kernel ships: every number with its source or marked a stand-in.
-pub const DATA: &str = include_str!("../data/materials.json");
+/// The thermoforming keys a material record carries (`thermo.<key>`), as stand-in names.
+pub const KEYS: [&str; 16] = [
+    "window",
+    "normal",
+    "shrink",
+    "max_adr",
+    "draft_male",
+    "draft_female",
+    "min_radius",
+    "min_inside_radius",
+    "max_hd",
+    "min_gap",
+    "max_vent",
+    "min_wall",
+    "law",
+    "mu",
+    "alpha",
+    "law_temp",
+];
 
-/// What in the data could not be read: the material (or "rules") and the field.
+/// What in a record could not be read: the material and the key.
 #[derive(Clone, Debug, PartialEq)]
 pub struct DataError {
     pub record: String,
     pub field: String,
 }
 
-fn fail(record: &str, field: &str) -> DataError {
-    DataError {
-        record: record.into(),
-        field: field.into(),
+/// A record's thermoforming values (forge-material's `thermo.*` keys), or None if it has none.
+pub fn from_record(r: &forge_material::Material) -> Result<Option<Material>, DataError> {
+    use forge_material::{Kind, Value};
+    if r.extra("thermo.window").is_none() {
+        return Ok(None);
     }
-}
-
-/// A sourced value's number (`value`), and whether it is a stand-in.
-fn sourced(v: &Val, rec: &str, k: &'static str) -> Result<(Val, bool), DataError> {
-    let stand_in = v.get("stand_in").and_then(Val::bool).unwrap_or(false);
-    let has = v.get("source").and_then(Val::str).is_some_and(|s| !s.is_empty());
-    if !stand_in && !has {
-        return Err(fail(rec, k));
-    }
-    Ok((v.clone(), stand_in))
-}
-
-fn value_of(v: &Val, rec: &str, k: &'static str) -> Result<f64, DataError> {
-    v.get("value").and_then(Val::num).ok_or(fail(rec, k))
-}
-
-fn per_t_of(v: &Val, rec: &str, k: &'static str) -> Result<PerT, DataError> {
-    Ok(PerT {
-        per_t: v.get("per_t").and_then(Val::num).ok_or(fail(rec, k))?,
-        plus: v.get("plus").and_then(Val::num).ok_or(fail(rec, k))?,
-    })
-}
-
-fn nums(v: Option<&Val>) -> Vec<f64> {
-    v.map(|a| a.arr().iter().filter_map(Val::num).collect())
-        .unwrap_or_default()
-}
-
-/// A law record: Ogden (mu_mpa, alpha), Mooney-Rivlin (c10_mpa, c01_mpa) or neo-Hookean (mu_mpa
-/// or c10_mpa), as an Ogden law.
-fn law_of(v: &Val, rec: &str) -> Result<crate::stretch::Law, DataError> {
-    let model = v.get("model").and_then(Val::str).unwrap_or("");
-    let one = |k: &str| v.get(k).and_then(Val::num);
-    let terms = match model {
-        "ogden" => {
-            let (mu, al) = (nums(v.get("mu_mpa")), nums(v.get("alpha")));
-            if mu.is_empty() || mu.len() != al.len() {
-                return Err(fail(rec, "ogden"));
-            }
-            mu.into_iter().zip(al).collect()
-        }
-        "mooney_rivlin" => {
-            let (c10, c01) = (
-                one("c10_mpa").ok_or(fail(rec, "c10_mpa"))?,
-                one("c01_mpa").ok_or(fail(rec, "c01_mpa"))?,
-            );
-            vec![(2.0 * c10, 2.0), (-2.0 * c01, -2.0)]
-        }
-        "neo_hookean" => {
-            let mu = one("mu_mpa")
-                .or(one("c10_mpa").map(|c| 2.0 * c))
-                .ok_or(fail(rec, "mu_mpa"))?;
-            vec![(mu, 2.0)]
-        }
-        _ => return Err(fail(rec, "model")),
+    let fail = |k: &str| DataError {
+        record: r.name.clone(),
+        field: k.into(),
     };
-    Ok(crate::stretch::Law { terms })
+    let nums = |k: &str| -> Result<Vec<f64>, DataError> {
+        match r.extra(&format!("thermo.{k}")) {
+            Some(Value::Num(v)) => Ok(vec![*v]),
+            Some(Value::Nums(v)) => Ok(v.clone()),
+            _ => Err(fail(k)),
+        }
+    };
+    let one = |k: &str| nums(k).map(|v| v[0]);
+    let per_t = |k: &str| -> Result<PerT, DataError> {
+        let v = nums(k)?;
+        Ok(PerT {
+            per_t: v[0],
+            plus: v.get(1).copied().unwrap_or(0.0),
+        })
+    };
+    let window = nums("window")?;
+    if window.len() != 2 {
+        return Err(fail("window"));
+    }
+    let law = match r.extra("thermo.law") {
+        Some(Value::Str(s)) => s.as_str(),
+        _ => return Err(fail("law")),
+    };
+    let (mu, alpha) = (nums("mu")?, nums("alpha")?);
+    if mu.len() != alpha.len() || (law == "neo_hookean" && mu.len() != 1) {
+        return Err(fail("mu"));
+    }
+    let fits = vec![Fit {
+        law: crate::stretch::Law {
+            terms: mu.into_iter().zip(alpha).collect(),
+        },
+        temperature: one("law_temp").unwrap_or(0.5 * (window[0] + window[1])),
+        test: match r.extra("thermo.law_test") {
+            Some(Value::Str(s)) => s.clone(),
+            _ => String::new(),
+        },
+        source: r.source_of("thermo.law").to_string(),
+        stand_in: r.kind_of("thermo.law") == Kind::StandIn,
+    }];
+    Ok(Some(Material {
+        name: r.name.clone(),
+        grade: r.note.clone().unwrap_or_default(),
+        forming: (window[0], window[1]),
+        normal: one("normal").ok(),
+        shrink: one("shrink")?,
+        draft_male: one("draft_male")?.to_radians(),
+        draft_female: one("draft_female")?.to_radians(),
+        min_radius: per_t("min_radius")?,
+        min_inside_radius: per_t("min_inside_radius")?,
+        max_hd: one("max_hd")?,
+        max_adr: one("max_adr")?,
+        min_gap_ratio: one("min_gap")?,
+        max_vent: per_t("max_vent")?,
+        min_wall: one("min_wall")?,
+        fits,
+        curves: vec![],
+        stand_in: KEYS
+            .into_iter()
+            .filter(|k| r.kind_of(&format!("thermo.{k}")) == Kind::StandIn)
+            .collect(),
+    }))
 }
 
-/// The shop the data describes: its materials, and a placeholder machine.
-pub fn from_data(text: &str) -> Result<FormShop, DataError> {
-    let d = parse(text).map_err(|e| fail("", e.want))?;
-    let rules = d.get("rules").ok_or(fail("rules", "rules"))?;
-    let mut out = vec![];
-    for m in d.get("materials").map(Val::arr).unwrap_or(&[]) {
-        let name = m
-            .get("name")
-            .and_then(Val::str)
-            .ok_or(fail("?", "name"))?
-            .to_string();
-        let mut stand_in = vec![];
-        // the material's own field, else the rule every material shares
-        let mut field = |k: &'static str| -> Result<Val, DataError> {
-            let (v, guess) = match m.get(k) {
-                Some(v) => sourced(v, &name, k)?,
-                None => sourced(rules.get(k).ok_or(fail(&name, k))?, "rules", k)?,
-            };
-            if guess {
-                stand_in.push(k);
-            }
-            Ok(v)
-        };
-        let forming = field("forming_c")?;
-        let shrink = field("shrink")?;
-        let mut mat = Material {
-            grade: m.get("grade").and_then(Val::str).unwrap_or("").to_string(),
-            forming: (
-                forming
-                    .get("min")
-                    .and_then(Val::num)
-                    .ok_or(fail(&name, "forming_c"))?,
-                forming
-                    .get("max")
-                    .and_then(Val::num)
-                    .ok_or(fail(&name, "forming_c"))?,
-            ),
-            normal: forming.get("normal").and_then(Val::num),
-            shrink: value_of(&shrink, &name, "shrink")?,
-            draft_male: value_of(&field("draft_male_deg")?, &name, "draft_male_deg")?.to_radians(),
-            draft_female: value_of(&field("draft_female_deg")?, &name, "draft_female_deg")?.to_radians(),
-            min_radius: per_t_of(&field("min_radius")?, &name, "min_radius")?,
-            min_inside_radius: per_t_of(&field("min_inside_radius")?, &name, "min_inside_radius")?,
-            max_hd: value_of(&field("max_hd")?, &name, "max_hd")?,
-            max_adr: value_of(&field("max_adr")?, &name, "max_adr")?,
-            min_gap_ratio: value_of(&field("min_gap_ratio")?, &name, "min_gap_ratio")?,
-            max_vent: per_t_of(&field("max_vent")?, &name, "max_vent")?,
-            min_wall: value_of(&field("min_wall")?, &name, "min_wall")?,
-            fits: vec![],
-            curves: vec![],
-            name: name.clone(),
-            stand_in: vec![],
-        };
-        for f in m.get("laws").map(Val::arr).unwrap_or(&[]) {
-            let (f, guess) = sourced(f, &name, "laws")?;
-            mat.fits.push(Fit {
-                law: law_of(&f, &name)?,
-                temperature: f
-                    .get("temperature_c")
-                    .and_then(Val::num)
-                    .ok_or(fail(&name, "temperature_c"))?,
-                test: f.get("test").and_then(Val::str).unwrap_or("").to_string(),
-                source: f.get("source").and_then(Val::str).unwrap_or("").to_string(),
-                stand_in: guess,
-            });
+/// The thermoforming keys of a record that carry no source of their own and are not marked
+/// stand-ins: the record's source is a datasheet's, not theirs.
+pub fn unsourced(r: &forge_material::Material) -> Vec<String> {
+    r.extra
+        .iter()
+        .map(|(k, _)| k)
+        .filter(|k| k.starts_with("thermo.") && k.as_str() != "thermo.law_test")
+        .filter(|k| r.sources.iter().all(|s| &s.0 != *k) && r.kind_of(k) != forge_material::Kind::StandIn)
+        .cloned()
+        .collect()
+}
+
+/// The shop every thermoform reads unless it is given one: the materials ForgeCAD's library has
+/// thermoforming values for, and a placeholder machine (no limits, a 25 mm clamp, any gauge).
+pub fn placeholder() -> FormShop {
+    shop_of(forge_material::library().iter())
+}
+
+/// A shop of the records given (a library's, searched in order), the first of a name kept.
+pub fn shop_of<'a>(records: impl Iterator<Item = &'a forge_material::Material>) -> FormShop {
+    let mut materials: Vec<Material> = vec![];
+    for r in records {
+        if let Ok(Some(m)) = from_record(r)
+            && !materials.iter().any(|x| x.name.eq_ignore_ascii_case(&m.name))
+        {
+            materials.push(m);
         }
-        for c in m.get("curves").map(Val::arr).unwrap_or(&[]) {
-            let (c, _) = sourced(c, &name, "curves")?;
-            if c.get("kind").and_then(Val::str) != Some("storage_modulus") {
-                continue;
-            }
-            let mut points: Vec<(f64, f64)> = c
-                .get("points")
-                .map(|p| {
-                    p.arr()
-                        .iter()
-                        .filter_map(|q| Some((q.arr().first()?.num()?, q.arr().get(1)?.num()?)))
-                        .collect()
-                })
-                .unwrap_or_default();
-            points.sort_by(|a, b| a.0.total_cmp(&b.0));
-            mat.curves.push(Curve {
-                points,
-                source: c.get("source").and_then(Val::str).unwrap_or("").to_string(),
-            });
-        }
-        if mat.law_at(mat.forming_temperature()).stand_in {
-            stand_in.push("law");
-        }
-        mat.stand_in = stand_in;
-        out.push(mat);
     }
-    Ok(FormShop {
-        materials: out,
+    FormShop {
+        materials,
         machine: Machine {
             clamp: 25.0,
             ..Machine::default()
         },
-    })
-}
-
-/// The shop every thermoform reads unless it is given one: the shipped data, and a placeholder
-/// machine (no limits, a 25 mm clamp, a stand-in; any gauge).
-pub fn placeholder() -> FormShop {
-    from_data(DATA).expect("the shipped material data reads")
+    }
 }

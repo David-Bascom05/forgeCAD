@@ -804,8 +804,9 @@ thermoform(SHAPE, t: T, material: "ABS" | MATERIAL, from: "outer"|"wall"|"inner"
   mould's scale, the vents, and `walls`: min (mm) and where, max and where, mean, the points that
   never reached the mould, the sheet's temperature and the law it read, with its source.
 
-The shop is data: kernel/forge-thermo/data/materials.json, every number with its source or marked a
-stand-in, the forming windows and shrink from the suppliers' tables, the design rules from the
+The shop is data: the `thermo.*` values of the material library's records (kernel/forge-material;
+a project's materials/*.toml and the user's ~/.config/forgecad/materials/*.toml are searched
+first), every one with its own source or marked a stand-in, the forming windows and shrink from the suppliers' tables, the design rules from the
 guides (draft 4 deg male, 2 deg female; radii t + 0.8 convex, 0.4 concave; H:D 1; a gap as wide as
 the depth between raised parts; vents up to t / 2), fitted laws for ABS, HIPS and HDPE (PETG, PC
 and PMMA have no open fit: a stand-in, said on every run as `StandIn`, information).

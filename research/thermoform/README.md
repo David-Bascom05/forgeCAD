@@ -1,9 +1,13 @@
 # Thermoforming: where the numbers come from
 
-## The material data (`kernel/forge-thermo/data/materials.json`)
+## The material data (`thermo.*` keys in `kernel/forge-material/data/materials.toml`)
 
-Every number carries its source (a key of the file's `sources`, or the text itself) or
-`stand_in: true`; `material::from_data` refuses one with neither, and a test checks it.
+Each thermoforming value sits in the material's record (ABS, HIPS, PETG, PC, PMMA, HDPE, PP) as a
+`thermo.<key>` with its own `source_thermo.<key>` or `kind_thermo.<key> = "stand-in"`; a test
+refuses one with neither (`forge_thermo::unsourced`). Project and user libraries (materials/*.toml
+beside the part, ~/.config/forgecad/materials/*.toml) are searched first. The viscoelastic fits,
+not read yet, are kept as published in `kernel/forge-thermo/data/viscoelastic.json`. PP's window,
+shrink and draw ratio are Spartech's and Morris's; it has no open fit (a stand-in law).
 
 - Design rules, for every material (no maker gives them per material): draft 4 deg male, 2 deg
   female, radii t + 0.8 convex and 0.4 concave, H:D 1 (Universal Plastics, Thermoforming Design

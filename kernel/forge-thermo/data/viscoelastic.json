@@ -1,0 +1,121 @@
+{
+ "about": "Viscoelastic fits at forming temperature, kept as published for a viscoelastic model (the elastic model reads the thermo.* keys in forge-material's records). Each with its source.",
+ "sources": {
+  "UP13": "Universal Plastics, Thermoforming Design Guidelines v1.21, https://www.universalplastics.com/wp-content/uploads/2014/03/UP-Design-Guide-v1.21.pdf",
+  "FORMECH": "Formech, Vacuum Forming Guide (draft, venting, webbing, shrinkage, materials), https://www.capla.arizona.edu/sites/default/files/fromechvacuumguide_0.pdf",
+  "SPARTECH": "Spartech, Extruded sheet thermoforming information, rev. 7/2024, https://www.spartech.com/media/documents/SPA221015-Thermoforming-Data-Sheet.pdf",
+  "EASTMAN": "Eastman, Tips for thermoforming Eastar 6763 and Tritan MP100, https://www.eastman.com/content/dam/eastman/corporate/en/literature/t/trsmed269.pdf",
+  "RAPIDMADE": "RapidMade, Draw Ratio in Thermoforming (vendor blog), https://rapidmade.com/draw-ratio-in-thermoforming-how-it-controls-wall-thickness-strength-and-part-quality/",
+  "PLASTIGLAS": "Chemcast / Plastiglas de Mexico, Technical Manual - Thermoforming, Table 10 'Forming temperature ranges', p. 24-25, https://chemcast.com.mx/img/pdf/Fabrication_manual_thermoforming.pdf",
+  "ACRYLITE": "CYRO / ACRYLITE Tech Brief, Thermoforming ACRYLITE sheet, forming table, https://www.tapplastics.com/image/pdf/Tech%20Data-Thermo.pdf",
+  "MAKROLON": "Makrolon polycarbonate sheet fabrication guide (Bayer/Covestro), p. 7-9, https://www.emcoplastics.com/assets/pdf/makrolon/Makrolon%20Fabrication%20Guide%20.pdf",
+  "INTERSTATE": "Interstate Plastics, Polycarbonate fabrication guide r2, https://www.interstateplastics.com/docs/polycarbonate-fabrication-guide-r2.pdf",
+  "MORRIS": "Morris, The Science and Technology of Flexible Packaging, Elsevier 2017, Table 11.1 (forming range and maximum areal draw ratio), https://www.sciencedirect.com/topics/engineering/forming-temperature",
+  "ERCHIQUI2004": "Erchiqui & Kandil, Neuronal networks application for characterization of softened polymers, ANTEC 2004, in SPE Thermoforming Quarterly 24(1) 2005 pp. 10-15, Tables 1-3, https://thermoformingdivision.com/quarterly-mags-2005-1st/",
+  "ERCHIQUI2003": "Erchiqui & Gakwaya, Modelisation du comportement viscoelastique d'une membrane thermoplastique, Revue europeenne des elements finis 12(1):43-58 (2003), Tableau 1, https://journals.riverpublishers.com/index.php/EJCM/article/download/2511/1645/8023",
+  "CHA2019": "Cha, Kim, Park, Go, Int J Adv Manuf Technol 103:985-995 (2019), Table 1, DOI 10.1007/s00170-019-03408-8",
+  "ERCHIQUI2010": "Erchiqui, Dynamic finite element analysis of nonlinear isotropic hyperelastic and viscoelastic materials for thermoforming applications, in Finite Element Analysis (InTech 2010), Table 1 p. 325, DOI 10.5772/9794",
+  "ATMANI2020": "Atmani, Abbes, Li, Batkam, Abbes, Mechanics & Industry 21, 610 (2020), Tables 1-2, DOI 10.1051/meca/2020084"
+ },
+ "fits": {
+  "ABS": [
+   {
+    "model": "kbkz_wagner",
+    "reference_c": 170,
+    "tau_s": [
+     8.52e-05,
+     0.00142,
+     0.013,
+     0.0912,
+     0.574,
+     3.31,
+     17.6,
+     131
+    ],
+    "g_mpa": [
+     1.61,
+     0.28,
+     0.201,
+     0.186,
+     0.162,
+     0.103,
+     0.0423,
+     0.0103
+    ],
+    "wlf": {
+     "c1": 5.8,
+     "c2": 120.8
+    },
+    "damping": {
+     "form": "wagner_demarmels",
+     "alpha": 0.438
+    },
+    "test": "SAOS master curve 140-200 C and step strain, LG Chem extruded sheet",
+    "source": "CHA2019 Table 1, Figs. 5 and 7"
+   },
+   {
+    "model": "lodge",
+    "reference_c": 143,
+    "tau_s": [
+     28.4813
+    ],
+    "g_mpa": [
+     0.23959
+    ],
+    "test": "free bubble inflation, 1.57 mm sheet",
+    "source": "ERCHIQUI2003 Tableau 1"
+   }
+  ],
+  "HIPS": [
+   {
+    "model": "gsell_jonas",
+    "tg_c": 105,
+    "E0_mpa": 254.7,
+    "A_E": 23675,
+    "sigma00_mpa": 2.8,
+    "A_sigma": 20193,
+    "K0_mpa": 1.11,
+    "A_K": 89218,
+    "h0": 0.21,
+    "A_h": -46562,
+    "w": 11.4,
+    "m": 0.38,
+    "friction": {
+     "f0": 0.2,
+     "f1": -1040,
+     "f2": 107
+    },
+    "test": "uniaxial tension 100-140 C, 1.1 mm sheet, plus inverse fits to plug tests",
+    "source": "ATMANI2020 Tables 1-2 (two column headers lost in extraction: sigma00 and A_sigma placed by the order of Eq. 2)"
+   }
+  ],
+  "HDPE": [
+   {
+    "model": "lodge",
+    "reference_c": 150,
+    "tau_s": [
+     0.00714,
+     0.04997,
+     0.349854,
+     2.44898,
+     17.14286,
+     120.0
+    ],
+    "g_mpa": [
+     0.21177,
+     0.07837,
+     0.03165,
+     0.01122,
+     0.00324,
+     0.00117
+    ],
+    "wlf": {
+     "c1": 2.915,
+     "c2": 50.0
+    },
+    "test": "not stated; grade HDPE-6200",
+    "source": "ERCHIQUI2010 Table 1"
+   }
+  ]
+ }
+}

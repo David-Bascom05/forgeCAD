@@ -224,12 +224,17 @@ fn a_male_box_thins_down_its_walls() {
 
 #[test]
 fn every_number_in_the_data_has_a_source_or_is_a_stand_in() {
-    let shop = placeholder();
-    assert!(shop.materials.len() >= 6);
-    // a field with neither is refused, naming it
-    let bad = material::DATA.replacen("\"source\": \"PLASTIGLAS", "\"note\": \"PLASTIGLAS", 1);
-    let e = from_data(&bad).unwrap_err();
-    assert_eq!(e.field, "forming_c");
+    let lib = forge_material::library();
+    let with: Vec<_> = lib
+        .iter()
+        .filter(|r| r.extra("thermo.window").is_some())
+        .collect();
+    assert!(with.len() >= 7);
+    for r in &with {
+        assert!(unsourced(r).is_empty(), "{}: {:?}", r.name, unsourced(r));
+        assert!(from_record(r).unwrap().is_some(), "{}", r.name);
+    }
+    assert!(placeholder().materials.len() >= 7);
 }
 
 #[test]

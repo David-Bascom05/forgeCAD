@@ -5,7 +5,6 @@
 //! thickness run on every build. Sources: research/thermoform/.
 pub mod build;
 pub mod checks;
-pub mod data;
 pub mod field;
 pub mod material;
 pub mod prepare;
@@ -15,7 +14,10 @@ pub mod stretch;
 pub use build::{FormError, Formed, Report, Spec, Tool, analyse, form, plane_frame};
 pub use checks::{Violation, check};
 pub use field::{Field, Region, Valley};
-pub use material::{Curve, DataError, Fit, FormShop, LawAt, Machine, Material, PerT, from_data, placeholder};
+pub use material::{
+    Curve, DataError, Fit, FormShop, LawAt, Machine, Material, PerT, from_record, placeholder, shop_of,
+    unsourced,
+};
 pub use prepare::{Given, Prepared, prepare};
 pub use scale::{Unscalable, scaled};
 pub use stretch::{Law, Process, Step, Stretch, stretch};

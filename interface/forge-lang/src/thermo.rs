@@ -628,8 +628,8 @@ fn material(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         o => return Err(wrong(a.span("name"), "the material's name", Ty::Str, &o)),
     };
     // a material the placeholder knows starts from its row; what is given here is sourced
-    let mut m = ft::placeholder().material(&name).cloned().unwrap_or_else(|| {
-        let mut m = ft::placeholder().materials[0].clone();
+    let mut m = library(ev).material(&name).cloned().unwrap_or_else(|| {
+        let mut m = library(ev).materials[0].clone();
         m.name = name.clone();
         m.stand_in = vec![
             "forming_c",
@@ -756,7 +756,7 @@ fn shop(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         args,
         span,
     )?;
-    let mut shop = ft::placeholder();
+    let mut shop = library(ev);
     if let Some(v) = a.opt("materials") {
         let Value::List(xs) = &v else {
             return Err(wrong(a.span("materials"), "materials: a list", Ty::List, &v));
@@ -830,6 +830,16 @@ const ARGS: &[&str] = &[
     "pressure",
     "temperature",
 ];
+
+/// The materials a document finds: its project's library (materials/ beside it), the user's, then
+/// ForgeCAD's; a session kept to its root reads only ForgeCAD's.
+fn library(ev: &Eval) -> ft::FormShop {
+    if ev.root.is_some() {
+        return ft::placeholder();
+    }
+    let libs = forge_material::Libraries::cached(ev.dir.as_deref());
+    ft::shop_of(libs.all().map(|x| x.1))
+}
 
 /// What a thermoform built: the mould's surface solid it read, and what it made of it.
 #[derive(Clone)]
@@ -932,7 +942,7 @@ fn thermoform(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         }
     };
     let shop = match a.opt("shop") {
-        None => ft::placeholder(),
+        None => library(ev),
         Some(Value::Thermo(v)) if matches!(&*v, ThermoVal::Shop(_)) => match &*v {
             ThermoVal::Shop(s) => (**s).clone(),
             ThermoVal::Material(_) => unreachable!("matched"),
