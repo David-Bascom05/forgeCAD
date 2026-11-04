@@ -313,6 +313,16 @@ impl Gui {
 
     /// Opens a part in the background: the window never waits on the kernel.
     pub fn open(&mut self, path: &str) {
+        // a drawing opens in the Drawing environment
+        if path.ends_with(".fg")
+            && std::fs::read_to_string(path).is_ok_and(|s| forge_lang::drawing::is_drawing(&s))
+        {
+            match crate::shell::drawing::DrawingEnv::open(path) {
+                Ok(env) => self.shell.open_drawing(env),
+                Err(e) => self.shell.status = e,
+            }
+            return;
+        }
         if path.ends_with(".fg") {
             self.open_fg(path);
             return;
@@ -1359,6 +1369,36 @@ impl Gui {
                 self.shell.view.pastel = on;
                 self.part_colours();
                 continue;
+            }
+            match a {
+                Action::NewDrawing => {
+                    match self.fg.as_ref().and_then(|s| s.path.clone()) {
+                        Some(model) => {
+                            self.shell.new_drawing = Some(crate::shell::drawing::NewDrawing {
+                                model,
+                                size: 1,
+                                iso: false,
+                            })
+                        }
+                        None => {
+                            self.shell.status =
+                                "New Drawing: open a saved Forge part or assembly first".into()
+                        }
+                    }
+                    continue;
+                }
+                Action::CloseDrawing => {
+                    self.shell.drawing = None;
+                    self.shell.tab = 0;
+                    continue;
+                }
+                Action::Undo | Action::Redo if self.shell.drawing.is_some() => {
+                    if let Some(env) = &mut self.shell.drawing {
+                        env.undo(a == Action::Redo);
+                    }
+                    continue;
+                }
+                _ => {}
             }
             if let Some(s) = &mut self.fg {
                 // a Forge part's document changes only by typed ops, from its own panel

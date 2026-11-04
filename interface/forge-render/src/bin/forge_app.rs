@@ -6,7 +6,7 @@ const USAGE: &str = "forge-app [PART | file.fc] [--size WxH] [--times]
   [--shot FILE.ppm [--scale S] [--light] [--pastel] [--tab N] [--select NAME] [--click NAME].. [--rclick NAME].. [--wait] [--at X Y] [--sketch ROW;ROW..] [--edit NAME] [--draw TOOL X Y] [--view YAW PITCH] [--marking]]
   steps, in order: --click NAME --dclick NAME --rclick NAME --wait --type TEXT --key NAME (enter, escape, tab, backspace)
   --hover X Y (the view's pick there) --clickat X Y --drag X Y X2 Y2 --snap FILE.ppm --save
-  --viewnow YAW PITCH --home --zoom F (the camera's distance times F)
+  --viewnow YAW PITCH --home --zoom F (the camera's distance times F) --new-drawing
   [--present fifo|mailbox|immediate] [--run-for SECONDS] [--spin]
   [--bench]
 PART: a bench part or a .fc file. --times: input-to-present on exit. --shot: one frame, no window.
@@ -17,6 +17,8 @@ enum Step {
     DoubleClick(String),
     RightClick(String),
     Wait,
+    /// File > New Drawing.
+    NewDrawing,
     Type(String),
     Key(String),
     Hover(f32, f32),
@@ -97,6 +99,7 @@ fn args() -> Result<Args, String> {
             "--rclick" => a.steps.push(Step::RightClick(v()?)),
             "--dclick" => a.steps.push(Step::DoubleClick(v()?)),
             "--wait" => a.steps.push(Step::Wait),
+            "--new-drawing" => a.steps.push(Step::NewDrawing),
             "--type" => a.steps.push(Step::Type(v()?)),
             "--key" => a.steps.push(Step::Key(v()?)),
             "--snap" => a.steps.push(Step::Snap(v()?)),
@@ -372,6 +375,7 @@ fn wait(h: &mut Headless) {
     while t.elapsed().as_secs() < 900 {
         h.step();
         let busy = h.gui.fg.as_ref().is_some_and(|s| s.done != s.seq)
+            || h.gui.shell.drawing.as_ref().is_some_and(|d| d.busy)
             || h.gui
                 .shell
                 .fg
@@ -423,12 +427,20 @@ fn run() -> Result<(), String> {
     for _ in 0..5 {
         h.step();
     }
+    // a drawing opens on its first tab: the one asked for after
+    h.gui.shell.tab = a.tab;
     for step in &a.steps {
         let (right, c) = match step {
             Step::Click(c) | Step::DoubleClick(c) => (false, c),
             Step::RightClick(c) => (true, c),
             Step::Wait => {
                 wait(&mut h);
+                continue;
+            }
+            Step::NewDrawing => {
+                h.gui.shell.out.push(forge_render::shell::Action::NewDrawing);
+                h.step();
+                h.step();
                 continue;
             }
             Step::Type(t) => {

@@ -24,4 +24,3 @@ pub fn mesh_box(mesh: &crate::mesh::PartMesh) -> Aabb {
     }
     (lo, hi)
 }
-

@@ -733,6 +733,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-draw"
+version = "0.1.0"
+dependencies = [
+ "forge-bool",
+ "forge-geom",
+ "forge-math",
+ "forge-mesh",
+ "forge-ops",
+ "forge-topo",
+]
+
+[[package]]
 name = "forge-font"
 version = "0.1.0"
 dependencies = [
@@ -761,6 +773,7 @@ dependencies = [
  "forge-agent",
  "forge-asm",
  "forge-doc",
+ "forge-draw",
  "forge-font",
  "forge-geom",
  "forge-material",
@@ -826,6 +839,7 @@ dependencies = [
  "egui-winit",
  "forge-agent",
  "forge-doc",
+ "forge-draw",
  "forge-geom",
  "forge-lang",
  "forge-material",

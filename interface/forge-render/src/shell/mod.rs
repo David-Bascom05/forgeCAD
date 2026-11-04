@@ -6,6 +6,7 @@
 pub mod asmtools;
 pub mod dialog;
 pub mod dim;
+pub mod drawing;
 pub mod fg;
 pub mod fgasm;
 pub mod fgsketch;
@@ -139,6 +140,11 @@ pub enum Action {
     Inspect(inspect::InspectCmd),
     /// A sheet metal command, from the Sheet Metal or Flat Pattern tab.
     Sheet(sheet::SheetCmd),
+    /// A drawing's ribbon command.
+    Dwg(drawing::DwgCmd),
+    /// File > New Drawing, from the open part or assembly; File > Close Drawing.
+    NewDrawing,
+    CloseDrawing,
 }
 
 /// What the ribbon asks of a Forge file: Inventor's dialogs and commands.
@@ -358,6 +364,10 @@ pub struct Shell {
     style_set: Option<bool>,
     /// Measure, the section views, iProperties (`inspect.rs`).
     pub inspect: inspect::Inspect,
+    /// A drawing is open: the Drawing environment instead of the model's.
+    pub drawing: Option<drawing::DrawingEnv>,
+    /// File > New Drawing's dialog.
+    pub new_drawing: Option<drawing::NewDrawing>,
 }
 
 impl Default for Shell {
@@ -417,6 +427,8 @@ impl Default for Shell {
             sheet: sheet::SheetUi::new(),
             style_set: None,
             inspect: Default::default(),
+            drawing: None,
+            new_drawing: None,
         }
     }
 }
@@ -763,6 +775,11 @@ impl Shell {
         let s = ctx.content_rect();
         let p = ui.painter().clone();
         p.rect_filled(s, 0.0, t.bg);
+        if self.drawing.is_some() {
+            self.drawing_ui(ui);
+            self.new_drawing_window(&ctx);
+            return;
+        }
 
         let top = TITLE_H + TABS_H + RIBBON_H;
         let bottom = s.height() - DOCS_H - STATUS_H;
@@ -813,6 +830,7 @@ impl Shell {
         self.mode_bar(&ctx);
         self.resize_edges(ui, s);
         self.menus(&ctx);
+        self.new_drawing_window(&ctx);
     }
 
     /// The cube's words, painted on its faces: each glyph's corners go through the face's own
@@ -1005,11 +1023,19 @@ impl Shell {
         if asm && self.tab == 1 {
             self.tab = 0;
         }
-        for k in self.tab_order() {
+        let drawing = self.drawing.is_some();
+        let asm = asm && !drawing;
+        let order: Vec<usize> = if drawing {
+            (0..drawing::TABS.len()).collect()
+        } else {
+            self.tab_order()
+        };
+        for k in order {
             if asm && k == 1 {
                 continue;
             }
             let name = match k {
+                k if drawing => &drawing::TABS[k],
                 SHEET_TAB => &"Sheet Metal",
                 FLAT_TAB => &"Flat Pattern",
                 0 if asm => &"Assemble",
@@ -1457,11 +1483,16 @@ impl Shell {
         self.marking_menu(ctx);
         if self.file_menu {
             let at = pos2(8.0, TITLE_H + TABS_H);
-            let items = [
+            let model_open = self.fg.is_some() && self.drawing.is_none();
+            let mut items = vec![
                 ("New", Some(Action::New)),
                 ("New Sheet Metal", Some(Action::Sheet(sheet::SheetCmd::NewPart))),
                 ("Open...", Some(Action::Open)),
             ];
+            items.push(("New Drawing...", model_open.then_some(Action::NewDrawing)));
+            if self.drawing.is_some() {
+                items.push(("Close Drawing", Some(Action::CloseDrawing)));
+            }
             match menu_at(ctx, "file-menu", at, &t, &items) {
                 MenuResult::Chose(a) => {
                     self.out.push(a);

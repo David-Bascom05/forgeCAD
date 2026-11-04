@@ -180,6 +180,27 @@ fn inspect_groups(s: &Shell) -> Vec<Group> {
 
 fn groups(s: &Shell) -> Vec<Group> {
     let g = |name, big, small| Group { name, big, small };
+    if let Some(env) = &s.drawing {
+        // the Drawing environment's: a tool it has not got is drawn off
+        let tool = |(c, icon): (super::drawing::DwgCmd, &'static str)| {
+            if c == super::drawing::DwgCmd::BreakOut {
+                off(c.name(), icon)
+            } else {
+                go(c.name(), icon, Action::Dwg(c), env.tool == Some(c))
+            }
+        };
+        return s
+            .drawing_groups()
+            .into_iter()
+            .map(|(name, big, small)| {
+                g(
+                    name,
+                    big.into_iter().map(tool).collect(),
+                    small.into_iter().map(tool).collect(),
+                )
+            })
+            .collect();
+    }
     let v = s.view;
     if s.is_asm()
         && let Some(gs) = asm_groups(s)
