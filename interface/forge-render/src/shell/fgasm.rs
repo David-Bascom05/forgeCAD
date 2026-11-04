@@ -1585,10 +1585,11 @@ impl Shell {
                                 }
                                 let sup = if i.suppressed { "Unsuppress" } else { "Suppress" };
                                 if item(ui, sup, "suppress") {
-                                    menu = Some(MenuAct::Ops(vec![super::asmtools::suppress_op(
+                                    menu = Some(MenuAct::Ops(super::asmtools::suppress_ops(
+                                        a,
                                         &id,
                                         !i.suppressed,
-                                    )]));
+                                    )));
                                     ui.close();
                                 }
                                 if item(ui, "Place again", "again") {
@@ -1745,7 +1746,18 @@ impl Shell {
                 }));
             }
             Some(MenuAct::Edit(id)) => match super::asmtools::LinkForm::edit(&source, &id) {
-                Some(f) => {
+                Some(mut f) => {
+                    // each end's occurrence: the longest path its reference starts with
+                    for p in f.picks.iter_mut().flatten() {
+                        p.occ = a
+                            .insts
+                            .iter()
+                            .map(|i| i.path.as_str())
+                            .filter(|i| p.reference.starts_with(&format!("{i}.")))
+                            .max_by_key(|i| i.len())
+                            .unwrap_or_default()
+                            .to_string();
+                    }
                     a.tool = Some(super::asmtools::AsmTool::Link(Box::new(f)));
                     a.drive = None;
                 }

@@ -554,6 +554,26 @@ pub fn suppress_op(id: &str, on: bool) -> Op {
     }
 }
 
+/// A component suppressed with the joints and constraints that name it, as Inventor does;
+/// unsuppressed with them.
+pub fn suppress_ops(a: &AsmPanel, id: &str, on: bool) -> Vec<Op> {
+    let mut ops = vec![suppress_op(id, on)];
+    ops.extend(
+        a.links
+            .iter()
+            .filter(|l| l.owner.is_empty() && l.suppressed != on)
+            .filter(|l| {
+                matches!(
+                    l.family,
+                    forge_lang::asm::LinkFamily::Joint | forge_lang::asm::LinkFamily::Constraint
+                )
+            })
+            .filter(|l| [&l.a.0, &l.b.0].iter().any(|p| super::fgasm::under(p, id)))
+            .map(|l| suppress_op(&l.id, on)),
+    );
+    ops
+}
+
 pub fn delete_ops(a: &AsmPanel, id: &str) -> Vec<Op> {
     let mut gone: Vec<String> = a
         .links
@@ -670,6 +690,10 @@ fn origin_row(
             occ, kind: Some(k), ..
         }) if *k != SnapKind::Anchor => (format!("{occ} · {}", k.word()), t.ink),
         Some(Pick { reference, .. }) if !reference.contains('(') => (reference.clone(), t.ink),
+        Some(Pick { occ, reference, .. }) if !occ.is_empty() => {
+            let call = reference[occ.len() + 1..].split('(').next().unwrap_or("");
+            (format!("{occ} · {call}(…)"), t.ink)
+        }
         Some(p) => (p.reference.clone(), t.ink),
         None if waiting => ("Pick an origin on a component".to_string(), t.ink2),
         None => ("Origin".to_string(), t.ink2),
