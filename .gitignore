@@ -12,3 +12,4 @@ __pycache__/
 /tools/corpus/*.json
 /tools/bench-parts/block.ttf
 /interface/forge-lang/target
+target/
