@@ -4391,6 +4391,12 @@ pub fn outputs(ev: &Eval) -> Vec<SheetOut> {
 }
 
 impl SheetOut {
+    /// The flat pattern: contours, bend lines, hits and forms on the flat.
+    pub fn pattern(&self) -> Result<forge_sheet::Pattern, SheetError> {
+        let b = fs::build_with(&self.sheet, Map::Flat)?;
+        Ok(b.pattern.expect("a flat build's pattern"))
+    }
+
     /// The flat pattern as DXF: contours on CUT, bend lines on BEND, and on BEND_NOTES each
     /// bend's direction, angle and inside radius, and the part's note.
     pub fn dxf(&self) -> Result<String, SheetError> {

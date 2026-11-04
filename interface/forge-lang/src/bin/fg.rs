@@ -9,6 +9,7 @@ use std::io::{BufRead, Write};
 use std::process::ExitCode;
 
 const USAGE: &str = "fg run FILE [--json] [--render OUT.png] [--view iso|front|top|right|..] [--px N] [--dxf OUT.dxf] [--step OUT.step]
+fg run DRAWING.fg [--pdf OUT] [--dxf OUT] [--svg OUT] [--refs VIEW]   a drawing: its sheets, report or a view's references
 fg check FILE [--json]          parse, static rules, types and dimensions; no kernel
 fg edit FILE 'OP' [--json]      apply a typed op (JSON, as errors' fixes give them), then check
 fg handles FILE                 the editable handles: every param, its value and dimension
@@ -106,6 +107,48 @@ fn write_step(run: &forge_lang::Run, out: &str, name: &str) -> bool {
     }
 }
 
+/// A drawing: made, its sheets written as PDF (all sheets), SVG and DXF (one per sheet: OUT with
+/// `-<n>` before the extension when there are several), its report printed.
+fn run_drawing(file: &str, src: &str, args: &[String]) -> ExitCode {
+    let dir = dir_of(file).unwrap_or_default();
+    let d = forge_lang::drawing::regen::make(src, &dir);
+    if let Some(out) = opt(args, "--pdf")
+        && let Err(e) = std::fs::write(out, forge_draw::pdf::pdf(&d.pages))
+    {
+        eprintln!("{out}: {e}");
+    }
+    let per_sheet = |out: &str, k: usize| match (d.pages.len() > 1, out.rsplit_once('.')) {
+        (false, _) => out.to_string(),
+        (true, Some((stem, ext))) => format!("{stem}-{}.{ext}", k + 1),
+        (true, None) => format!("{out}-{}", k + 1),
+    };
+    for (k, p) in d.pages.iter().enumerate() {
+        if let Some(out) = opt(args, "--svg")
+            && let Err(e) = std::fs::write(per_sheet(out, k), forge_draw::svg::svg(p))
+        {
+            eprintln!("{out}: {e}");
+        }
+        if let Some(out) = opt(args, "--dxf")
+            && let Err(e) = std::fs::write(per_sheet(out, k), forge_draw::dxf::dxf(p))
+        {
+            eprintln!("{out}: {e}");
+        }
+    }
+    if let Some(view) = opt(args, "--refs") {
+        match forge_lang::drawing::regen::refs(&d, view) {
+            Some(j) => print_json(&j),
+            None => eprintln!("no view {view}"),
+        }
+    } else {
+        print_json(&forge_lang::drawing::regen::json(&d, src));
+    }
+    if d.ok() {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::from(1)
+    }
+}
+
 fn run_file(file: &str, args: &[String], build: bool) -> ExitCode {
     let src = match read(file) {
         Ok(s) => s,
@@ -114,6 +157,9 @@ fn run_file(file: &str, args: &[String], build: bool) -> ExitCode {
             return ExitCode::from(2);
         }
     };
+    if forge_lang::drawing::is_drawing(&src) {
+        return run_drawing(file, &src, args);
+    }
     let opts = Options {
         build,
         dir: dir_of(file),
@@ -238,6 +284,29 @@ fn main() -> ExitCode {
                     return ExitCode::from(2);
                 }
             };
+            if forge_lang::drawing::is_drawing(&src) {
+                let Some(op) = Json::parse(&args[2])
+                    .ok()
+                    .and_then(|j| forge_lang::drawing::ops::DrawOp::from_json(&j))
+                else {
+                    eprintln!("not a drawing op: {}", args[2]);
+                    return ExitCode::from(2);
+                };
+                return match forge_lang::drawing::ops::apply_checked(&src, &op) {
+                    Ok(new) => {
+                        if let Err(e) = std::fs::write(file, &new) {
+                            eprintln!("{file}: {e}");
+                            return ExitCode::from(2);
+                        }
+                        print_json(&Json::obj(vec![("ok", true.into()), ("op", op.json())]));
+                        ExitCode::SUCCESS
+                    }
+                    Err(e) => {
+                        print_json(&Json::obj(vec![("ok", false.into()), ("error", e.text().into())]));
+                        ExitCode::from(1)
+                    }
+                };
+            }
             let Some(op) = Json::parse(&args[2]).ok().and_then(|j| Op::from_json(&j)) else {
                 eprintln!("not an op: {}", args[2]);
                 return ExitCode::from(2);

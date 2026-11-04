@@ -73,9 +73,14 @@ pub fn json(looks: &[Look], points: Option<f64>) -> Json {
                         .pieces
                         .iter()
                         .map(|p| {
+                            let src = match p.source {
+                                forge_draw::Source::Edge(n) => format!("e{:016x}", n.0),
+                                forge_draw::Source::Outline(n) => format!("f{:016x}", n.0),
+                            };
                             Json::obj(vec![
                                 ("visible", p.visible.into()),
                                 ("class", class_word(p.class).into()),
+                                ("source", src.into()),
                                 (
                                     "points",
                                     Json::Arr(

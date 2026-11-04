@@ -1,0 +1,34 @@
+drawing
+# RACK-101 post: detail drawing of frame/post.fg. Every dimension and note is on the model's
+# persistent edge names: they follow the model, and one whose edge is gone turns sick.
+
+post = part("../frame/post.fg")
+s1 = sheet("B", title: "POST, 50 X 50 L, 906 LONG", number: "RACK-101", rev: "A", drawn: "D. BASCOM",
+           material: "CR 1008 STEEL, 3.02 (11 GA)")
+
+front = base_view(post, sheet: s1, dir: "front", up: (-1, 0, 0), scale: 1/3, at: (175, 172))
+top = projected(front, at: (175, 240))
+right = projected(front, at: (372, 172), scale: 1)
+a = section(front, line: [(15, 12), (15, -62)], at: (372, 95), scale: 1)
+b = detail(front, center: (40, -25), r: 42, scale: 1, at: (75, 95))
+iso = projected(front, at: (250, 95), scale: 0.15)
+
+length = dim(front, e("172dcabd876b5302"), e("8b9482e9e9721ad1"), at: (453, 75))
+holes_x = ordinate(front, e("172dcabd876b5302"), [e("53be59434aa627af"), e("cb74b528071da8a0"), e("050221157c4c4ff7"),
+                   e("485431f49d080074"), e("8c1f8cc9c669df01"), e("a1607c5765196a41"), e("8a18e664bf6319b6"),
+                   e("1df50a4bf01ba4bf"), e("95f95b30292400b6"), e("43e6b105c6c1d7a9"), e("56bcd5dfbe2af567"),
+                   e("e8fcee977fe72e45"), e("216ec262969e5181"), e("61ed0b762267e237")], at: (0, -95))
+stud = hole_note(front, e("53be59434aa627af"), at: (20, 60), text: "FOR PEM FH-M6-20")
+pnl = hole_note(front, e("485431f49d080074"), at: (230, 45), text: "FOR PEM SS-M5-0")
+nut = hole_note(front, e("8a18e664bf6319b6"), at: (520, 45), text: "FOR PEM S-M6-0")
+
+leg_a = dim(right, e("e0c0b1c9c81badae"), e("a7bc57bdc5dccda2"), at: (25, 14))
+leg_b = dim(right, e("d07630d3f679d621"), e("59a633e79248b229"), at: (-14, -25))
+t = dim(right, e("a7bc57bdc5dccda2"), at: (62, -1.5))
+bend = radius(right, e("afabe2f119f04085"), at: (22, -22))
+
+stud_y = dim(b, e("53be59434aa627af"), e("1a4d31eb92b1dad3"), at: (5, -12))
+hinge_y = dim(b, e("cb74b528071da8a0"), e("1a4d31eb92b1dad3"), at: (75, -16))
+marks = center_marks(b)
+
+notes = note("NOTES:\n1. BREAK ALL SHARP EDGES.\n2. PEM HARDWARE PRESSED IN AFTER FINISH, FLUSH SIDE OUT.\n3. 4 REQUIRED PER RACK; ONE PART AT EVERY CORNER.", at: (205, 145))

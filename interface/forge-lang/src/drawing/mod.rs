@@ -2,7 +2,10 @@
 //! (forge-draw's exact hidden-line views), annotations attached to the model's persistent names,
 //! and its sheets as PDF, DXF and SVG.
 
+pub mod doc;
 pub mod look;
+pub mod ops;
+pub mod regen;
 
 use forge_math::Frame;
 use std::sync::Arc;
@@ -54,4 +57,9 @@ impl Model {
             .map(|(b, pose)| forge_draw::Instance { body: b, pose: *pose })
             .collect()
     }
+}
+
+/// Whether a source is a drawing (its first line is the word `drawing`).
+pub fn is_drawing(src: &str) -> bool {
+    crate::syntax::parse(src).is_ok_and(|p| doc::declared(&p))
 }

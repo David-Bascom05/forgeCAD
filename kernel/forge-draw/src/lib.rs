@@ -2,11 +2,13 @@
 //! borders and title blocks, dimensions, and their PDF, DXF and SVG.
 
 pub mod annot;
+pub mod dxf;
 pub mod geom2;
 pub mod grid;
 pub mod hlr;
 pub mod page;
 pub mod pdf;
+pub mod section;
 pub mod sheet;
 pub mod svg;
 pub mod view;
