@@ -140,7 +140,9 @@ impl Gui {
                     .map(|d| d.join(&file))
                     .filter(|p| p.exists())
                     .unwrap_or_else(|| std::path::PathBuf::from(&file));
-                let text = text.or_else(|| std::fs::read_to_string(&path).ok());
+                let text = text
+                    .or_else(|| forge_lang::stdparts::text_of(&file))
+                    .or_else(|| std::fs::read_to_string(&path).ok());
                 let frames = text.map_or(vec![], |t| {
                     let at = if file == SELF {
                         dir.clone()

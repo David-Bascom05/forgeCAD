@@ -129,10 +129,10 @@ impl Gui {
         }
     }
 
-    /// The Place dialog's "Standard part…": the standard parts library's hook. It places what it
-    /// makes with `asm_place(file, None)` (a path from the assembly's folder).
+    /// The Place dialog's "Standard part…": Place from Content Center, which writes its own
+    /// `std(..)` statement.
     pub fn asm_standard_part(&mut self) {
-        self.shell.status = "Standard parts: the library isn't in this build yet".into();
+        self.shell.content.open = true;
     }
 
     /// A part file the solve names, as a path to read.

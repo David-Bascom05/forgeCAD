@@ -176,13 +176,25 @@ pub fn folder_word(file: &str, dir: Option<&Path>) -> String {
 
 /// A part file's name as the tree shows it: its stem.
 pub fn part_word(file: &str) -> String {
+    if let Some(d) = std_designation(file) {
+        return d;
+    }
     let n = file.rsplit('/').next().unwrap_or(file);
     n.trim_end_matches(".fg").to_string()
+}
+
+/// A standard part's designation from its key: `std:ISO 4762/M6/20` is "ISO 4762 M6x20".
+fn std_designation(file: &str) -> Option<String> {
+    let spec = forge_lang::stdparts::spec_of(file)?;
+    Some(forge_lang::stdparts::generate(&spec).ok()?.designation)
 }
 
 /// A part type as a person reads it: `iso7380_m6x12` is "ISO 7380 M6×12", `cage_nut_m6` is
 /// "Cage nut M6".
 pub fn type_label(file: &str) -> String {
+    if let Some(d) = std_designation(file) {
+        return d.replace('x', "\u{d7}");
+    }
     let stem = part_word(file);
     let words: Vec<String> = stem
         .split('_')

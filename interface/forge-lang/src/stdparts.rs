@@ -76,6 +76,14 @@ impl Family {
     pub fn has_lengths(&self) -> bool {
         !self.lengths.is_empty()
     }
+    /// Where the family sits in a browser: `Fasteners/Bolts/Socket head`.
+    pub fn category(&self) -> &str {
+        self.get("category").unwrap_or("Other")
+    }
+    /// One of the family, as a BOM describes it: `Hexagon socket head cap screw`.
+    pub fn item(&self) -> &str {
+        self.get("item").unwrap_or(&self.title)
+    }
 }
 
 /// A table's text read into a family; Err names the first fault.
@@ -678,7 +686,7 @@ pub fn generate(spec: &Spec) -> Result<Generated, StdErr> {
     }
     let name = designation(f, spec);
     let mut out = String::new();
-    out += &format!("# {} {}\n", f.title, name.trim_start_matches(&f.name).trim());
+    out += &format!("# {} {}\n", f.item(), name.trim_start_matches(&f.name).trim());
     out += &format!(
         "# made by the standard parts library from stdparts/{}.csv ({}), row {}\n",
         f.id, f.standard, row[0]
@@ -706,7 +714,7 @@ pub fn generate(spec: &Spec) -> Result<Generated, StdErr> {
     };
     out += &format!(
         "\nabout = properties(part_number: {name:?}, description: {:?}, standard: {:?}, material: {material:?}, density: {})\n",
-        format!("{} {}", f.title, name.trim_start_matches(&f.name).trim()),
+        format!("{} {}", f.item(), name.trim_start_matches(&f.name).trim()),
         f.standard,
         crate::values::fmt(density)
     );

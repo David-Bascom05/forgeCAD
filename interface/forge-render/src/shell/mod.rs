@@ -4,6 +4,7 @@
 //! turns an action into a tool call.
 
 pub mod asmtools;
+pub mod content;
 pub mod dialog;
 pub mod dim;
 pub mod drawing;
@@ -164,6 +165,7 @@ pub enum FgCmd {
     Copy,
     FreeMove,
     FreeRotate,
+    ContentCenter,
 }
 
 /// One row of the tree.
@@ -352,6 +354,8 @@ pub struct Shell {
     pub dim: Option<dim::DimEdit>,
     /// What's on the model and takes the pointer from the view.
     pub view_blocks: Vec<Rect>,
+    /// Place from Content Center: the standard parts library's dialog.
+    pub content: content::ContentCenter,
     /// What was typed for it, committed with Enter.
     pub dim_typed: Option<String>,
     /// A Forge (.fg) part is open: its tree and panel instead of the .fc ones.
@@ -420,6 +424,7 @@ impl Default for Shell {
             dialog: None,
             dim: None,
             view_blocks: Vec::new(),
+            content: Default::default(),
             dim_typed: None,
             fg: None,
             overlays: [PART_OVERLAYS, ASM_OVERLAYS],
@@ -551,6 +556,10 @@ impl Shell {
 
     /// A ribbon command for a Forge file: its dialog up or down.
     pub fn fg_command(&mut self, c: FgCmd) {
+        if c == FgCmd::ContentCenter {
+            self.content.open = !self.content.open;
+            return;
+        }
         let Some(fg) = &mut self.fg else { return };
         match c {
             FgCmd::Parameters => fg.params_open = !fg.params_open,
@@ -571,6 +580,7 @@ impl Shell {
                 }
             }
             FgCmd::Save => fg.out.push(fg::FgAct::Save),
+            FgCmd::ContentCenter => {}
             c => self.status = asmtools::command(fg, c),
         }
     }
@@ -822,6 +832,7 @@ impl Shell {
         self.fg_panel(&ctx);
         self.asm_windows(&ctx);
         self.inspect_ui(&ctx);
+        self.content_window(&ctx);
         self.fg_params_window(&ctx);
         self.fg_issues_window(&ctx);
         self.sheet_ui(&ctx);
