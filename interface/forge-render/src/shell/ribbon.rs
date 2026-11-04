@@ -682,7 +682,8 @@ impl Shell {
             let bigs: Vec<f32> = g.big.iter().map(|tool| big_width(ui, tool)).collect();
             let cols: Vec<f32> = g.small.chunks(3).map(|c| small_width(ui, c)).collect();
             let icon_cols = g.icons.len().div_ceil(3);
-            let width = 12.0 + bigs.iter().sum::<f32>() + cols.iter().sum::<f32>() + icon_cols as f32 * ICON_W;
+            let width =
+                12.0 + bigs.iter().sum::<f32>() + cols.iter().sum::<f32>() + icon_cols as f32 * ICON_W;
             let width = width.max(
                 ui.fonts_mut(|f| f.layout_no_wrap(g.name.to_string(), sans(11.0), t.ink2))
                     .size()

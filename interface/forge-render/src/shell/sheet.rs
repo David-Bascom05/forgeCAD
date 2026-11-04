@@ -665,6 +665,7 @@ fn slot(label: &'static str, kind: SlotKind) -> Slot {
         label,
         kind,
         picks: vec![],
+        optional: false,
     }
 }
 

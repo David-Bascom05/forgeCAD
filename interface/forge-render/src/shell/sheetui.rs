@@ -39,7 +39,12 @@ fn coming(name: &'static str, icon: &'static str) -> Tool {
 
 /// The Sheet Metal tab, Inventor's groups in Inventor's order.
 pub(super) fn sheet_groups(s: &Shell) -> Vec<Group> {
-    let g = |name, big, small| Group { name, big, small };
+    let g = |name, big, small| Group {
+        name,
+        big,
+        small,
+        icons: vec![],
+    };
     let on = |c: SheetCmd| s.sheet.dlg.as_ref().is_some_and(|d| d.cmd == c);
     let sketch_on = s.sketch_pick;
     vec![
@@ -137,7 +142,12 @@ pub(super) fn sheet_groups(s: &Shell) -> Vec<Group> {
 
 /// The Flat Pattern tab.
 pub(super) fn flat_groups(s: &Shell) -> Vec<Group> {
-    let g = |name, big, small| Group { name, big, small };
+    let g = |name, big, small| Group {
+        name,
+        big,
+        small,
+        icons: vec![],
+    };
     let u = &s.sheet;
     vec![
         g(
