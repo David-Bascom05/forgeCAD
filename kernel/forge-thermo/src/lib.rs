@@ -18,7 +18,7 @@ pub use field::{Field, Region, Valley};
 pub use material::{Curve, DataError, Fit, FormShop, LawAt, Machine, Material, PerT, from_data, placeholder};
 pub use prepare::{Given, Prepared, prepare};
 pub use scale::{Unscalable, scaled};
-pub use stretch::{Law, Process, Stretch, stretch};
+pub use stretch::{Law, Process, Step, Stretch, stretch};
 
 #[cfg(test)]
 mod bench;

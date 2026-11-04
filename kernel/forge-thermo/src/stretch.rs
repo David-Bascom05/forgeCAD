@@ -52,6 +52,8 @@ impl Default for Process {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Stretch {
     pub nodes: Vec<Point3>,
+    /// The sheet after each load step, the last the result.
+    pub steps: Vec<Step>,
     /// The nodes are a grid, (nx + 1) by (ny + 1), row by row from the window's corner.
     pub grid: (usize, usize),
     pub tris: Vec<[u32; 3]>,
@@ -214,6 +216,43 @@ fn height(field: &Field, p: Point2) -> f64 {
     };
     let (a, b, c, d) = (z(i, j), z(i + 1, j), z(i, j + 1), z(i + 1, j + 1));
     a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v
+}
+
+/// Each triangle's thickness over the sheet's (its first area over its area now), and each
+/// node's, its triangles' by first area.
+fn ratios(idx: &[[usize; 3]], reference: &[Vec3], x: &[Vec3]) -> (Vec<f64>, Vec<f64>) {
+    let area = |v: &[usize; 3], x: &[Vec3]| 0.5 * (x[v[1]] - x[v[0]]).cross(x[v[2]] - x[v[0]]).length();
+    let ratio: Vec<f64> = idx
+        .iter()
+        .map(|v| area(v, reference) / area(v, x).max(1e-12))
+        .collect();
+    let mut node = vec![0.0; x.len()];
+    let mut weight = vec![0.0; x.len()];
+    for (v, r) in idx.iter().zip(&ratio) {
+        let a = area(v, reference);
+        for &k in v {
+            node[k] += a * r;
+            weight[k] += a;
+        }
+    }
+    for (r, w) in node.iter_mut().zip(&weight) {
+        *r /= w.max(1e-12);
+    }
+    (ratio, node)
+}
+
+fn to_world(f: &forge_math::Frame, p: [f32; 3]) -> [f32; 3] {
+    let w = f.point_to_world(Point3::new(p[0] as f64, p[1] as f64, p[2] as f64));
+    [w.x as f32, w.y as f32, w.z as f32]
+}
+
+/// The sheet as it stood after a load step, for watching it form: its nodes (world), each
+/// node's thickness over the sheet's, and the stage (drape, vacuum, creep).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Step {
+    pub nodes: Vec<[f32; 3]>,
+    pub ratio: Vec<f32>,
+    pub stage: &'static str,
 }
 
 fn gap(field: &Field, p: Vec3) -> f64 {
@@ -438,6 +477,16 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
     // follow the tool into a corner much tighter than it is thick
     let reach = 0.25 * spec.t;
     let mut its = 0;
+    let mut steps: Vec<Step> = vec![];
+    let mut snap = |x: &[Vec3], stage: &'static str| {
+        let (_, r) = ratios(&idx, &reference, x);
+        steps.push(Step {
+            nodes: x.iter().map(|p| [p.x as f32, p.y as f32, p.z as f32]).collect(),
+            ratio: r.iter().map(|&v| v as f32).collect(),
+            stage,
+        });
+    };
+    snap(&x, "sheet");
     if male {
         // the clamp comes down over the tool to the table
         let drop = 6;
@@ -447,12 +496,14 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
                 x[k].z = z;
             }
             its += relax(&mut sheet, &field, &mut x, 0.0, cap, tol, reach, 150);
+            snap(&x, "drape");
         }
     }
-    let steps = 10;
-    for k in 1..=steps {
-        let p = pr.pressure * k as f64 / steps as f64;
+    let loads = 10;
+    for k in 1..=loads {
+        let p = pr.pressure * k as f64 / loads as f64;
         its += relax(&mut sheet, &field, &mut x, p, cap, tol, reach, 400);
+        snap(&x, "vacuum");
     }
     // a hot sheet held under the pressure creeps on until it meets the tool: an elastic sheet
     // gets there only at a higher one, so the pressure is raised while some of the part is free
@@ -468,28 +519,16 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
     while left > 0 && stalled < 2 && p < CREEP * pr.pressure {
         p *= 1.25;
         its += relax(&mut sheet, &field, &mut x, p, cap, tol, reach, 200);
+        snap(&x, "creep");
         let now = open(&sheet, &x);
         stalled = if now < left { 0 } else { stalled + 1 };
         left = now;
     }
-    let area = |v: &[usize; 3], x: &[Vec3]| 0.5 * (x[v[1]] - x[v[0]]).cross(x[v[2]] - x[v[0]]).length();
-    let ratio: Vec<f64> = idx
-        .iter()
-        .map(|v| area(v, &reference) / area(v, &x).max(1e-12))
-        .collect();
-    let mut node_ratio = vec![0.0; x.len()];
-    let mut weight = vec![0.0; x.len()];
-    for (v, r) in idx.iter().zip(&ratio) {
-        let a = area(v, &reference);
-        for &k in v {
-            node_ratio[k] += a * r;
-            weight[k] += a;
-        }
-    }
-    for (r, w) in node_ratio.iter_mut().zip(&weight) {
-        *r /= w.max(1e-12);
-    }
+    let (ratio, node_ratio) = ratios(&idx, &reference, &x);
     let world = |p: Vec3| f.frame.point_to_world(Point3::new(p.x, p.y, p.z));
+    steps
+        .iter_mut()
+        .for_each(|s| s.nodes.iter_mut().for_each(|p| *p = to_world(&f.frame, *p)));
     let (mut min, mut max) = (
         (f64::INFINITY, Point3::ORIGIN),
         (f64::NEG_INFINITY, Point3::ORIGIN),
@@ -510,7 +549,10 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
     for (v, &r) in idx.iter().zip(&ratio) {
         let c = (x[v[0]] + x[v[1]] + x[v[2]]) * (1.0 / 3.0);
         if inside(&poly, Point2::new(c.x, c.y)).0 {
-            let a = area(v, &reference);
+            let a = 0.5
+                * (reference[v[1]] - reference[v[0]])
+                    .cross(reference[v[2]] - reference[v[0]])
+                    .length();
             sum += a;
             total += a / r;
         }
@@ -522,6 +564,7 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
         .collect();
     Stretch {
         nodes: x.iter().map(|&p| world(p)).collect(),
+        steps,
         grid: (nx, ny),
         tris: idx.iter().map(|v| v.map(|k| k as u32)).collect(),
         ratio,

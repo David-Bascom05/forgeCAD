@@ -814,6 +814,7 @@ const ARGS: &[&str] = &[
     "material",
     "from",
     "tool",
+    "open",
     "pull",
     "trim",
     "flange",
@@ -963,9 +964,15 @@ fn thermoform(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         },
         o => return Err(wrong(a.span("material"), "the material's name", Ty::Str, &o)),
     };
-    let pull = match a.opt("pull") {
-        None => UnitVec3::Z,
-        Some(v) => crate::eval::unit_or_z(dir_of(v, a.span("pull"))?),
+    // the open face: where the sheet meets the clamp; the part leaves the mould away from it
+    // (male) or through it (female)
+    let pull = match (a.opt("open"), a.opt("pull")) {
+        (Some(v), _) => {
+            let n = crate::builtins::plane_of(ev, v, a.span("open"), "the open face")?.z();
+            if tool == Tool::Male { -n } else { n }
+        }
+        (None, None) => UnitVec3::Z,
+        (None, Some(v)) => crate::eval::unit_or_z(dir_of(v, a.span("pull"))?),
     };
     let trim = match a.opt("trim") {
         None => None,
