@@ -1081,9 +1081,9 @@ impl Error {
             SketchNotSolved { sketch, residual, .. } => {
                 format!("sketch {sketch} does not solve ({residual:e})")
             }
-            SketchKernel { sketch, error, .. } => format!("sketch {sketch}: {error:?}"),
-            SketchProfile { sketch, error, .. } => format!("sketch {sketch}: {error:?}"),
-            Build { id, error, .. } => format!("{id}: the kernel refused it: {error:?}"),
+            SketchKernel { sketch, error, .. } => format!("sketch {sketch}: {}", words(error)),
+            SketchProfile { sketch, error, .. } => format!("sketch {sketch}: {}", words(error)),
+            Build { id, error, .. } => format!("{id}: the kernel refused it: {}", regen_text(error)),
             NoFace { id, role, .. } => format!("{id}.{role:?}: no such face on the part here"),
             NotPlanar { id, role, .. } => format!("{id}.{role:?} is not planar"),
             EmptySelection { .. } => "the selection picks nothing".into(),
@@ -1324,4 +1324,56 @@ impl Warning {
         data.push(("fixes", Json::Arr(vec![])));
         Json::obj(data)
     }
+}
+
+/// A kernel refusal in words: the boolean's own text, else the error's variant names.
+fn regen_text(e: &forge_model::RegenError) -> String {
+    use forge_model::{EditError, RegenError as G};
+    match e {
+        G::Boolean { error, .. }
+        | G::Edit {
+            error: EditError::Boolean(error),
+            ..
+        } => error.to_string(),
+        G::Import { file, .. } => format!("no solid in {file:?}"),
+        G::NotClosed { what, .. } => format!("{what} is gone, so the part is no closed solid"),
+        G::MissingEdge { name, .. } => format!("the part has no edge {name:?}"),
+        G::Bodies { count } => format!("the part ends as {count} bodies, not one"),
+        _ => words(e),
+    }
+}
+
+/// An error's Debug text as words, without its data: `Boolean { .. }` is "boolean",
+/// `Profile(NotClosed)` is "profile: not closed", `Unsupported("a cone")` is "unsupported: a cone".
+pub fn words(e: &impl std::fmt::Debug) -> String {
+    let d = format!("{e:?}");
+    let mut out: Vec<String> = vec![];
+    let mut rest = d.as_str();
+    loop {
+        if let Some(q) = rest.strip_prefix('"') {
+            out.push(q.split('"').next().unwrap_or("").to_string());
+            break;
+        }
+        let n = rest
+            .find(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+            .unwrap_or(rest.len());
+        let (id, tail) = rest.split_at(n);
+        if !id.starts_with(|c: char| c.is_ascii_uppercase()) {
+            break;
+        }
+        let mut w = String::new();
+        for c in id.chars() {
+            if c.is_ascii_uppercase() && !w.is_empty() {
+                w.push(' ');
+            }
+            w.push(c.to_ascii_lowercase());
+        }
+        out.push(w);
+        // a field-less wrapper goes on into what it wraps; fields are data, not words
+        match tail.strip_prefix('(') {
+            Some(t) => rest = t,
+            None => break,
+        }
+    }
+    out.join(": ")
 }

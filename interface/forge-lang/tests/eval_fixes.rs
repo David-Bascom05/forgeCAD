@@ -211,3 +211,45 @@ flat = unfold(base, on: offset(base.bottom, gap))
     let text = report::text(&r, src);
     assert!(text.contains("touch"), "{text}");
 }
+
+/// A kernel refusal reads as words, not the error's Debug dump: a tapped hole where the
+/// counterbored hole1 already is.
+#[test]
+fn a_kernel_refusal_is_words() {
+    let src = format!(
+        "{}hole2 = hole(at: sk2.p1, screw: \"M5\", fit: \"tap\", depth: thru)\nhole2_thread = thread(hole: hole2, length: \"full\")\n",
+        include_str!("../../../examples/demo/part_tools.fg")
+    );
+    let r = run(&src);
+    let e = r
+        .errors
+        .iter()
+        .find(|e| e.kind() == "Build")
+        .expect("the thread is refused");
+    let t = e.text();
+    assert!(
+        t.starts_with("hole2_thread: the kernel refused it: not supported yet: "),
+        "{t}"
+    );
+    assert!(!t.contains(['{', '}']) && !t.contains("FaceRef"), "{t}");
+}
+
+#[test]
+fn error_words_drop_the_data() {
+    use forge_lang::error::words;
+    #[derive(Debug)]
+    #[allow(dead_code)]
+    enum In {
+        NotClosed,
+        TooLarge { edge: u32, max: f64 },
+    }
+    #[derive(Debug)]
+    #[allow(dead_code)]
+    enum Out {
+        Profile(In),
+        Unsupported(&'static str),
+    }
+    assert_eq!(words(&Out::Profile(In::NotClosed)), "profile: not closed");
+    assert_eq!(words(&In::TooLarge { edge: 3, max: 1.5 }), "too large");
+    assert_eq!(words(&Out::Unsupported("a cone")), "unsupported: a cone");
+}
