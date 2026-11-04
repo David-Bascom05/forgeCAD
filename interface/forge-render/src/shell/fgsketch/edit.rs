@@ -178,14 +178,18 @@ impl Rd<'_> {
 
     fn point(&self, e: &Expr) -> Option<Pt> {
         match &e.kind {
-            ExprKind::Tuple(xs) if xs.len() == 2 => Some(Pt::Fixed(Some(self.slot(&xs[0])), Some(self.slot(&xs[1])))),
+            ExprKind::Tuple(xs) if xs.len() == 2 => {
+                Some(Pt::Fixed(Some(self.slot(&xs[0])), Some(self.slot(&xs[1]))))
+            }
             _ => match call(e) {
-                Some(("near", a)) if a.len() == 2 => {
-                    Some(Pt::Free(Some(self.slot(&a[0].value)), Some(self.slot(&a[1].value))))
-                }
-                Some(("pt", a)) if a.len() == 2 => {
-                    Some(Pt::Fixed(Some(self.slot(&a[0].value)), Some(self.slot(&a[1].value))))
-                }
+                Some(("near", a)) if a.len() == 2 => Some(Pt::Free(
+                    Some(self.slot(&a[0].value)),
+                    Some(self.slot(&a[1].value)),
+                )),
+                Some(("pt", a)) if a.len() == 2 => Some(Pt::Fixed(
+                    Some(self.slot(&a[0].value)),
+                    Some(self.slot(&a[1].value)),
+                )),
                 _ => self.word(e).map(Pt::Word),
             },
         }
@@ -225,7 +229,13 @@ impl Rd<'_> {
         if args.iter().any(|a| matches!(a.value.kind, ExprKind::Comp { .. })) {
             return what("a list comprehension");
         }
-        let id = name.and_then(|n| self.view.named.iter().find(|x| x.0 == n).map(|x| (x.1, x.2.clone())));
+        let id = name.and_then(|n| {
+            self.view
+                .named
+                .iter()
+                .find(|x| x.0 == n)
+                .map(|x| (x.1, x.2.clone()))
+        });
         let ent = || -> Result<(EntityId, Vec<EntityId>), String> {
             if name.is_none() {
                 return Err(format!("an unnamed `{f}`"));
@@ -241,7 +251,11 @@ impl Rd<'_> {
         let mut dims: Vec<Vec<(String, Option<Slot>)>> = vec![];
         let mut row: Vec<(String, Option<Slot>)> = vec![];
         // a point's words in the row: its numbers (with their slots) or the word it shares
-        let put = |row: &mut Vec<(String, Option<Slot>)>, fixes: &mut Vec<String>, p: Option<Pt>, at: (f64, f64), me: String| {
+        let put = |row: &mut Vec<(String, Option<Slot>)>,
+                   fixes: &mut Vec<String>,
+                   p: Option<Pt>,
+                   at: (f64, f64),
+                   me: String| {
             match p {
                 Some(Pt::Word(w)) => row.push((w, None)),
                 Some(Pt::Fixed(x, y)) => {
@@ -258,7 +272,10 @@ impl Rd<'_> {
                 let (e, _) = ent()?;
                 let n = self.next('p');
                 row.push(w("pt"));
-                let p = Pt::Free(Some(self.slot(&args[0].value)), args.get(1).map(|a| self.slot(&a.value)));
+                let p = Pt::Free(
+                    Some(self.slot(&args[0].value)),
+                    args.get(1).map(|a| self.slot(&a.value)),
+                );
                 let p = if f == "pt" {
                     match p {
                         Pt::Free(x, y) => Pt::Fixed(x, y),
@@ -312,7 +329,13 @@ impl Rd<'_> {
             }
             "arc" => {
                 let (e, _) = ent()?;
-                let Some(Entity::Arc { center, start, end, ccw }) = self.view.s.entity(e) else {
+                let Some(Entity::Arc {
+                    center,
+                    start,
+                    end,
+                    ccw,
+                }) = self.view.s.entity(e)
+                else {
                     return unsupported();
                 };
                 let n = self.next('a');
@@ -345,7 +368,9 @@ impl Rd<'_> {
                 let corner = arg(args, 9, "corner");
                 let size = arg(args, 9, "size");
                 let pair = |e: Option<&Expr>| match e.map(|e| &e.kind) {
-                    Some(ExprKind::Tuple(xs)) if xs.len() == 2 => Some((self.slot(&xs[0]), self.slot(&xs[1]))),
+                    Some(ExprKind::Tuple(xs)) if xs.len() == 2 => {
+                        Some((self.slot(&xs[0]), self.slot(&xs[1])))
+                    }
                     _ => None,
                 };
                 let (cx, cy) = pair(corner).map_or((None, None), |(x, y)| (Some(x), Some(y)));
@@ -356,7 +381,9 @@ impl Rd<'_> {
                     Some((sw, sh)) => {
                         for (dim, l, s) in [("hdist", &ns[0], sw), ("vdist", &ns[1], sh)] {
                             dims.push(match self.value(&s) {
-                                Some(v) => vec![w(dim), w(&format!("{l}.a")), w(&format!("{l}.b")), (v, Some(s))],
+                                Some(v) => {
+                                    vec![w(dim), w(&format!("{l}.a")), w(&format!("{l}.b")), (v, Some(s))]
+                                }
                                 None => vec![w("ref"), w(dim), w(&format!("{l}.a")), w(&format!("{l}.b"))],
                             });
                         }
@@ -389,7 +416,11 @@ impl Rd<'_> {
                     }
                     v
                 } else {
-                    self.view.s.spline_points(e).map(<[EntityId]>::to_vec).unwrap_or_default()
+                    self.view
+                        .s
+                        .spline_points(e)
+                        .map(<[EntityId]>::to_vec)
+                        .unwrap_or_default()
                 };
                 if at.len() != ps.len() {
                     return unsupported();
@@ -425,7 +456,13 @@ impl Rd<'_> {
             }
             "ellipse" => {
                 let (e, _) = ent()?;
-                let Some(Entity::Ellipse { center, major, b, ends: None }) = self.view.s.entity(e) else {
+                let Some(Entity::Ellipse {
+                    center,
+                    major,
+                    b,
+                    ends: None,
+                }) = self.view.s.entity(e)
+                else {
                     return unsupported();
                 };
                 let n = self.next('e');
@@ -447,7 +484,8 @@ impl Rd<'_> {
                 ents.push((n, name.unwrap_or("").to_string()));
             }
             "tangent" | "coincident" | "horizontal" | "vertical" | "parallel" | "perpendicular" | "equal"
-            | "midpoint" | "concentric" | "collinear" | "symmetric" | "fix" | "distance" | "radius" | "angle"
+            | "midpoint" | "concentric" | "collinear" | "symmetric" | "fix" | "distance" | "radius"
+            | "angle"
                 if name.is_none() =>
             {
                 let kw = match f {
@@ -519,9 +557,9 @@ impl Rd<'_> {
 
 /// The program's sketch statement `id`, and the first of the params written just above it.
 fn find(prog: &[Stmt], id: &str) -> Option<(usize, usize)> {
-    let k = prog
-        .iter()
-        .position(|s| matches!(&s.kind, StmtKind::Block { kind: syntax::BlockKind::Sketch, name, .. } if name == id))?;
+    let k = prog.iter().position(
+        |s| matches!(&s.kind, StmtKind::Block { kind: syntax::BlockKind::Sketch, name, .. } if name == id),
+    )?;
     let mut j = k;
     while j > 0
         && matches!(&prog[j - 1].kind, StmtKind::Param { owner, .. } if owner.first().is_some_and(|o| o.name == id))
@@ -533,7 +571,10 @@ fn find(prog: &[Stmt], id: &str) -> Option<(usize, usize)> {
 
 /// Opens sketch `id` of `src` (fonts and used files from `dir`).
 pub fn open(src: &str, id: &str, dir: Option<std::path::PathBuf>) -> Result<Opened, ToolError> {
-    let no = |why: String| ToolError::NoForgeForm { tool: "Edit Sketch", why };
+    let no = |why: String| ToolError::NoForgeForm {
+        tool: "Edit Sketch",
+        why,
+    };
     let prog = syntax::parse(src).map_err(|e| no(e.text()))?;
     let (_, k) = find(&prog, id).ok_or_else(|| no(format!("{id} is not a sketch of this part")))?;
     let opts = forge_lang::Options {
@@ -551,7 +592,11 @@ pub fn open(src: &str, id: &str, dir: Option<std::path::PathBuf>) -> Result<Open
                 ..opts.clone()
             },
         )
-        .ok_or_else(|| no(format!("{id} didn't evaluate: fix what the issues list says first")))?,
+        .ok_or_else(|| {
+            no(format!(
+                "{id} didn't evaluate: fix what the issues list says first"
+            ))
+        })?,
     };
     let (run, _) = forge_lang::run(src, opts, Default::default());
     let mut params: HashMap<String, (ParamKey, Dim)> = HashMap::new();
@@ -560,7 +605,11 @@ pub fn open(src: &str, id: &str, dir: Option<std::path::PathBuf>) -> Result<Open
     // shared first, so the block's own of the same name wins
     for p in run.shared.iter().chain(run.locals.iter().filter(|p| own(&p.key))) {
         if let forge_lang::eval::Value::Num(n) = &p.value {
-            let v = if n.dim == Dim::Angle { n.v.to_degrees() } else { n.v };
+            let v = if n.dim == Dim::Angle {
+                n.v.to_degrees()
+            } else {
+                n.v
+            };
             params.insert(p.key.name.clone(), (p.key.clone(), n.dim));
             env.retain(|e: &(String, String)| e.0 != p.key.name);
             env.push((p.key.name.clone(), fmt(v)));
@@ -586,14 +635,21 @@ pub fn open(src: &str, id: &str, dir: Option<std::path::PathBuf>) -> Result<Open
             && read_only.is_none()
         {
             let line = s.span.lines(src).0;
-            read_only = Some(format!("{what} (line {line}) has no form in the sketcher yet; edit it in the source"));
+            read_only = Some(format!(
+                "{what} (line {line}) has no form in the sketcher yet; edit it in the source"
+            ));
         }
     }
     let (rows, of) = (rd.rows, rd.of);
     let mut taken: HashSet<String> = forge_lang::edit::bound(&prog).into_iter().collect();
     taken.extend(forge_lang::edit::bound(body));
     taken.extend(params.keys().cloned());
-    let mine: Vec<String> = run.locals.iter().filter(|p| own(&p.key)).map(|p| p.key.name.clone()).collect();
+    let mine: Vec<String> = run
+        .locals
+        .iter()
+        .filter(|p| own(&p.key))
+        .map(|p| p.key.name.clone())
+        .collect();
     taken.extend(mine.iter().cloned());
     Ok(Opened {
         id: id.to_string(),
@@ -652,7 +708,9 @@ impl Opened {
     /// (kept statements as they were written, changed numbers where they're written, gone ones
     /// out, new rows added) and the params set. `kept[k]` is the opened row that row k is.
     pub fn write_back(&self, rows: &[String], kept: &[usize]) -> Result<Vec<Op>, ToolError> {
-        let opened = self.names(&self.rows, &(0..self.rows.len()).collect::<Vec<_>>()).0;
+        let opened = self
+            .names(&self.rows, &(0..self.rows.len()).collect::<Vec<_>>())
+            .0;
         let (now, per) = self.names(rows, kept);
         let mut sets: Vec<Op> = vec![];
         // byte span to its new text
@@ -667,7 +725,11 @@ impl Opened {
             }
             let of = &self.of[o];
             // the same words, only values changed: each is put back where it's written
-            let same = a.len() == b.len() && a.iter().zip(&b).enumerate().all(|(i, (x, y))| x == y || of.slots[i].is_some());
+            let same = a.len() == b.len()
+                && a.iter()
+                    .zip(&b)
+                    .enumerate()
+                    .all(|(i, (x, y))| x == y || of.slots[i].is_some());
             if !same {
                 if of.main {
                     rewrite.push((k, of.st));
@@ -732,7 +794,9 @@ impl Opened {
             splices.retain(|x| !(s.lo <= x.0.lo && x.0.hi <= s.hi));
             // the whole line: its indent and its line break
             let lo = src[..s.lo as usize].rfind('\n').map_or(0, |n| n + 1);
-            let hi = src[s.hi as usize..].find('\n').map_or(src.len(), |n| s.hi as usize + n + 1);
+            let hi = src[s.hi as usize..]
+                .find('\n')
+                .map_or(src.len(), |n| s.hi as usize + n + 1);
             splices.push((Span::new(lo, hi), String::new()));
         }
         if splices.is_empty() && fresh.is_empty() && o.params.is_empty() {
@@ -799,7 +863,11 @@ mod tests {
     }
 
     fn demo() -> String {
-        std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/demo/part_tools.fg")).unwrap()
+        std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../examples/demo/part_tools.fg"
+        ))
+        .unwrap()
     }
 
     fn files(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
@@ -816,7 +884,10 @@ mod tests {
     #[test]
     fn every_example_sketch_opens_solves_and_finishes_unchanged_to_the_byte() {
         let mut paths = vec![];
-        files(std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples")), &mut paths);
+        files(
+            std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples")),
+            &mut paths,
+        );
         paths.sort();
         let (mut editable, mut looked, mut sketches) = (0, 0, 0);
         let mut bad = vec![];
@@ -857,14 +928,20 @@ mod tests {
         }
         assert!(bad.is_empty(), "{}", bad.join("\n\n"));
         // most of them are the sketcher's to edit; what isn't opens to be looked at
-        assert!(sketches > 300 && editable * 4 > sketches * 3, "{editable} editable, {looked} read-only of {sketches}");
+        assert!(
+            sketches > 300 && editable * 4 > sketches * 3,
+            "{editable} editable, {looked} read-only of {sketches}"
+        );
     }
 
     #[test]
     fn a_moved_point_and_a_changed_dimension_set_their_params() {
         let src = demo();
         let o = open(&src, "sk2", None).unwrap();
-        assert_eq!(o.rows, ["circle 0 0 12", "rad c1 r3", "pt 20 0"].map(String::from));
+        assert_eq!(
+            o.rows,
+            ["circle 0 0 12", "rad c1 r3", "pt 20 0"].map(String::from)
+        );
         let mut rows = o.rows.clone();
         rows[2] = "pt 25 -3".into();
         rows[1] = "rad c1 14".into();
@@ -874,7 +951,10 @@ mod tests {
         assert_eq!(ops.len(), 3, "{text:?}");
         assert!(ops.iter().all(|op| matches!(op, Op::SetParam { .. })), "{text:?}");
         let after = apply(&src, &ops).unwrap();
-        assert!(after.contains("param sk2.x4 = 25\n") && after.contains("param sk2.y5 = -3\n"), "{after}");
+        assert!(
+            after.contains("param sk2.x4 = 25\n") && after.contains("param sk2.y5 = -3\n"),
+            "{after}"
+        );
         assert!(after.contains("param sk2.r3 = 14\n"), "{after}");
         // the rect's sides are its size params
         let o = open(&src, "sk1", None).unwrap();
@@ -903,8 +983,14 @@ mod tests {
             panic!("{ops:?}")
         };
         assert_eq!(id, "sk2");
-        assert!(text.contains("  c1 = circle(near(x1, y2), r3)\n  p1 = near(x4, y5)\n"), "{text}");
-        assert!(text.contains("  l1 = line(near(x6, y7), near(x8, y9), construction: true)\n  horizontal(l1)\n}"), "{text}");
+        assert!(
+            text.contains("  c1 = circle(near(x1, y2), r3)\n  p1 = near(x4, y5)\n"),
+            "{text}"
+        );
+        assert!(
+            text.contains("  l1 = line(near(x6, y7), near(x8, y9), construction: true)\n  horizontal(l1)\n}"),
+            "{text}"
+        );
         assert!(text.contains("param sk2.x6 = 30\n"), "{text}");
         let after = apply(&src, &ops).unwrap();
         assert!(after.starts_with(&src[..src.find("param sk2.x1").unwrap()]));
@@ -936,7 +1022,13 @@ mod tests {
     fn a_driven_value_is_refused_and_a_loop_opens_to_be_looked_at() {
         let src = "shared d = 10\nsketch sk(on: xy) {\n  c = circle((0, 0), d / 2)\n  for i in 0..2 {\n    q = pt(i * 3, 1)\n  }\n}\nbase = extrude(sk.c, 2)\n";
         let o = open(src, "sk", None).unwrap();
-        assert!(o.read_only.as_ref().is_some_and(|r| r.contains("`for` loop (line 4)")), "{:?}", o.read_only);
+        assert!(
+            o.read_only
+                .as_ref()
+                .is_some_and(|r| r.contains("`for` loop (line 4)")),
+            "{:?}",
+            o.read_only
+        );
         assert_eq!(o.rows[2], "rad c1 (d / 2)");
         let m = mode(&o);
         assert!(m.error.is_none(), "{:?}", m.error);

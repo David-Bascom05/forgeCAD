@@ -675,7 +675,10 @@ impl SketchMode {
             })
             .collect();
         let n = self.opened_at.len().min(self.rows.len());
-        self.opened_at = (0..n).filter(|k| !gone.contains(k)).map(|k| self.opened_at[k]).collect();
+        self.opened_at = (0..n)
+            .filter(|k| !gone.contains(k))
+            .map(|k| self.opened_at[k])
+            .collect();
         self.rows = rows;
         self.solved = None;
         self.solve();

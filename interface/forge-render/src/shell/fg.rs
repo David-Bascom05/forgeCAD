@@ -234,6 +234,8 @@ pub enum FgAct {
     AsmSnaps(String),
     /// A sheet metal feature's dialog, to edit it.
     EditSheet(String),
+    /// A sketch block, in the Sketch tab with its geometry, constraints and dimensions.
+    EditSketch(String),
 }
 
 /// A sheet metal part: its id, its bends, and why it has no flat pattern if it hasn't.
@@ -728,12 +730,31 @@ impl Shell {
                     if let Some(c) = tint {
                         p.circle_filled(pos2(r.right() - 4.0, r.top() + 6.0), 3.0, c);
                     }
-                    if resp.clicked() {
+                    let is_sketch = kind == Some("sketch");
+                    // Start Sketch waiting for a plane: a sketch row is the one to edit
+                    if resp.clicked() && is_sketch && self.sketch_pick {
+                        fg.out.push(FgAct::EditSketch(row.key.clone()));
+                    } else if resp.clicked() {
                         chosen = Some(row.key.clone());
                     }
-                    // a sheet metal feature opens its dialog, as Inventor's double click does
+                    // a sheet metal feature opens its dialog, a sketch its sketch, as Inventor's
+                    // double click does
                     if resp.double_clicked() && kind.is_some_and(super::sheet::is_sheet_kind) {
                         edit_row = Some(row.key.clone());
+                    }
+                    if resp.double_clicked() && is_sketch {
+                        fg.out.push(FgAct::EditSketch(row.key.clone()));
+                    }
+                    if is_sketch {
+                        let key = row.key.clone();
+                        resp.context_menu(|ui| {
+                            let b = ui.button("Edit Sketch");
+                            self.places.push((format!("fg:menu:edit-sketch:{key}"), b.rect));
+                            if b.clicked() {
+                                fg.out.push(FgAct::EditSketch(key.clone()));
+                                ui.close();
+                            }
+                        });
                     }
                     places.push((format!("fg:row:{}", row.key), r));
                     if row.group && !open {

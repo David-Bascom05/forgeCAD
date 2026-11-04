@@ -148,6 +148,8 @@ pub struct Gui {
     /// The Forge part's last meshes, folded and (a sheet's) flat, and its sheets' DXF.
     fg_folded: Option<crate::mesh::PartMesh>,
     fg_flat: Option<crate::mesh::PartMesh>,
+    /// The Forge sketch block being edited in the Sketch tab, and the way back into the file.
+    fg_sketch: Option<crate::shell::fgsketch::Opened>,
     pub fg_sheets: Vec<crate::fg::SheetInfo>,
     /// Each thermoform's wall-thickness map, world triangles shown while the panel asks.
     pub fg_walls: Vec<crate::thermo_view::Gfx>,
@@ -278,6 +280,7 @@ impl Gui {
             fg_view: None,
             fg_folded: None,
             fg_flat: None,
+            fg_sketch: None,
             fg_sheets: Vec::new(),
             fg_walls: Vec::new(),
             fg_anchors: None,
@@ -1445,7 +1448,7 @@ impl Gui {
                     }
                     Action::StartSketch => {
                         self.shell.sketch_pick = true;
-                        self.shell.status = "Pick a planar face or an origin plane to sketch on".into();
+                        self.shell.status = "Pick a planar face or an origin plane to sketch on, or a sketch in the browser to edit".into();
                         continue;
                     }
                     Action::FinishSketch => {
@@ -3203,6 +3206,7 @@ impl Gui {
                 | crate::shell::fg::FgAct::AsmMirror { .. }
                 | crate::shell::fg::FgAct::AsmSnaps(_)) => self.asm_act(a),
                 crate::shell::fg::FgAct::EditSheet(id) => self.shell.sheet.edit_req = Some(id),
+                crate::shell::fg::FgAct::EditSketch(id) => self.fg_edit_sketch(&id),
                 crate::shell::fg::FgAct::Flat(on) => {
                     if let Some(p) = &mut self.shell.fg {
                         p.flat = on && self.fg_flat.is_some();
@@ -3580,10 +3584,104 @@ impl Gui {
         v.dirty = true;
     }
 
+    /// A Forge sketch block opened in the Sketch tab: its rows on its own plane, the part kept in
+    /// view. One the sketcher can't hold all of opens to be looked at, saying what.
+    fn fg_edit_sketch(&mut self, id: &str) {
+        let Some(s) = &self.fg else { return };
+        let dir = s
+            .path
+            .as_ref()
+            .and_then(|p| std::path::Path::new(p).parent().map(|d| d.to_path_buf()));
+        let o = match crate::shell::fgsketch::open(&s.src, id, dir) {
+            Ok(o) => o,
+            Err(e) => return self.fg_refuse(e),
+        };
+        let plane = self
+            .fg_anchors
+            .as_ref()
+            .and_then(|a| a.planes.get(&format!("{id}.plane")).copied())
+            .or_else(|| {
+                let p = self.shell.fg.as_ref()?;
+                p.feats.iter().find(|f| f.id == id)?.frame
+            });
+        let Some(plane) = plane else {
+            self.shell.status = format!("{id} has no plane yet: fix what the issues list says first");
+            return;
+        };
+        let mut m = SketchMode::new(
+            SketchFor::Forge(id.to_string()),
+            id.to_string(),
+            plane,
+            o.rows.clone(),
+            None,
+        );
+        m.units = "mm";
+        m.set_params(o.params.clone());
+        self.shell.status = match &o.read_only {
+            Some(why) => format!("{id} opens read-only: {why}"),
+            None => format!("Editing {id}"),
+        };
+        self.fg_sketch = Some(o);
+        self.shell.sketch = Some(m);
+        self.shell.sketch_pick = false;
+        self.shell.tab = 1;
+        if let Some(v) = &mut self.view {
+            v.nav.selected.clear();
+            v.clicked.clear();
+            look_at(v, plane);
+        }
+    }
+
+    /// An edited Forge sketch put back in its place, one undo step; refused, the sketch stays
+    /// open to be changed.
+    fn fg_finish_edit(&mut self, m: SketchMode) {
+        let Some(o) = self.fg_sketch.take() else { return };
+        if let Some(why) = &o.read_only {
+            self.shell.status = format!("{} is read-only here: {why}", o.id);
+            return;
+        }
+        let got = o
+            .write_back(&m.rows, m.kept())
+            .map_err(|e| format!("{}: {}", e.kind(), e.text()));
+        let got = got.and_then(|ops| {
+            if ops.is_empty() {
+                return Ok(());
+            }
+            let s = self.fg.as_mut().ok_or("no Forge part open")?;
+            s.apply_all(ops).map_err(|e| {
+                let fixes: Vec<String> = e.fixes().iter().map(crate::shell::fg::op_label).collect();
+                let fix = if fixes.is_empty() {
+                    String::new()
+                } else {
+                    format!(" (fix: {})", fixes.join(", "))
+                };
+                format!("{}: {}{fix}", e.kind(), e.text())
+            })
+        });
+        match got {
+            Ok(()) => {
+                self.shell.status = format!("Edited {}", o.id);
+                self.fg_text();
+            }
+            Err(why) => {
+                self.shell.status = format!("Edit {} refused: {why}", o.id);
+                if let Some(p) = self.shell.fg.as_mut() {
+                    p.refused = Some(why);
+                }
+                self.fg_sketch = Some(o);
+                self.shell.sketch = Some(m);
+                self.shell.tab = 1;
+            }
+        }
+    }
+
     /// The sketch drawn on a Forge part, written as a Forge sketch block and added.
     fn fg_finish_sketch(&mut self) {
         let Some(m) = self.shell.sketch.take() else { return };
         self.shell.tab = 0;
+        if matches!(m.edit, SketchFor::Forge(_)) {
+            return self.fg_finish_edit(m);
+        }
         if m.rows.is_empty() {
             return;
         }
