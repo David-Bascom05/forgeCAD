@@ -24,7 +24,7 @@ impl Placement {
                 [0.0, 1.0, 0.0, pos[1]],
                 [0.0, 0.0, 1.0, pos[2]],
             ],
-            tint: [0.60, 0.62, 0.66, 0.0],
+            tint: crate::palette::GREY,
         }
     }
 }

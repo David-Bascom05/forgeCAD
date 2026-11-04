@@ -309,6 +309,7 @@ fn groups(s: &Shell) -> Vec<Group> {
                 "Appearance",
                 vec![
                     go("Section", "section", Action::Section, v.section),
+                    go("Pastel Parts", "sun", Action::PartColours(!v.pastel), v.pastel),
                     Tool {
                         name: "Explode",
                         icon: "combine",

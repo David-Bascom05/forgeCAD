@@ -159,6 +159,8 @@ pub struct Gui {
     pub fg_asm_boxes: Vec<crate::explode::Aabb>,
     /// The assembly tools' state between frames.
     asm: gui_asm::AsmHost,
+    /// The settings as last saved; none: not kept (tests, shots).
+    settings_was: Option<(bool, bool)>,
     /// The exploded view: its plan, and how far apart it is now.
     pub explode: gui_explode::Explode,
     /// A Forge part's solid as it was before its eye hid it.
@@ -272,6 +274,7 @@ impl Gui {
             extras: Default::default(),
             fg_asm_boxes: Vec::new(),
             asm: Default::default(),
+            settings_was: None,
             explode: Default::default(),
             body_rows: None,
         }
@@ -431,6 +434,48 @@ impl Gui {
         self.shell.view_tex = Some(tex);
         self.shell.name = l.name;
         self.shell.status.clear();
+        self.part_colours();
+    }
+
+    /// The parts' colours as the setting has them: an assembly's per occurrence's file, a part's
+    /// by its own name.
+    pub fn part_colours(&mut self) {
+        if self.fg_asm.is_some() {
+            self.asm_show();
+            return;
+        }
+        let tint = crate::palette::part_colour(&self.shell.name, self.shell.view.pastel);
+        if let Some(v) = &mut self.view {
+            for p in &mut v.scene.placements {
+                p.tint = tint;
+            }
+            v.renderer.set_tints(&v.scene);
+            v.dirty = true;
+        }
+    }
+
+    /// The settings kept between sessions (the app's own, not a test's): theme, part colours.
+    pub fn load_settings(&mut self) {
+        for (k, v) in crate::palette::settings::load() {
+            match (k.as_str(), v.as_str()) {
+                ("theme", "light") => self.shell.theme = crate::shell::theme::LIGHT,
+                ("part_colours", "pastel") => self.shell.view.pastel = true,
+                _ => {}
+            }
+        }
+        self.settings_was = Some((self.shell.theme.dark, self.shell.view.pastel));
+    }
+
+    fn save_settings(&mut self) {
+        let now = (self.shell.theme.dark, self.shell.view.pastel);
+        if self.settings_was.is_none_or(|w| w == now) {
+            return;
+        }
+        self.settings_was = Some(now);
+        crate::palette::settings::save(&[
+            ("theme", if now.0 { "dark" } else { "light" }),
+            ("part_colours", if now.1 { "pastel" } else { "grey" }),
+        ]);
     }
 
     fn theme_view(&self, r: &mut Renderer) {
@@ -1303,6 +1348,11 @@ impl Gui {
     fn apply(&mut self) -> Vec<Action> {
         let mut host = Vec::new();
         for a in std::mem::take(&mut self.shell.out) {
+            if let Action::PartColours(on) = a {
+                self.shell.view.pastel = on;
+                self.part_colours();
+                continue;
+            }
             if let Some(s) = &mut self.fg {
                 // a Forge part's document changes only by typed ops, from its own panel
                 match a {
@@ -2002,6 +2052,7 @@ impl Gui {
         self.pixels_per_point = output.pixels_per_point;
         let host = self.apply();
         self.apply_fg();
+        self.save_settings();
         if self.explode_tick() {
             animating = true;
         }
@@ -3117,6 +3168,7 @@ impl Gui {
             return;
         }
         let (shown, picked) = (a.shown_mask(), a.picked_mask());
+        let pastel = self.shell.view.pastel;
         let flagged = !a.highlight.is_empty();
         for (i, o) in occ.iter().enumerate() {
             let Some(k) = o.placement else { continue };
@@ -3136,7 +3188,7 @@ impl Gui {
             } else if flagged && a.flagged(&o.path) {
                 crate::fg::CLASH_TINT
             } else {
-                crate::fg::PART_TINT
+                crate::palette::part_colour(&o.file, pastel)
             };
         }
         renderer.set_tints(scene);

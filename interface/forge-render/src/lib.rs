@@ -9,6 +9,7 @@ pub mod mesh;
 pub mod nav;
 pub mod origin;
 pub mod overlay;
+pub mod palette;
 pub mod render;
 pub mod scene;
 pub mod shell;

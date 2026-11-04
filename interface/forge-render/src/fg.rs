@@ -786,7 +786,7 @@ fn asm_view(
 }
 
 /// A part's colour in an assembly, and a selected one's.
-pub const PART_TINT: [f32; 4] = [0.60, 0.62, 0.66, 0.0];
+pub const PART_TINT: [f32; 4] = crate::palette::GREY;
 pub const PICKED_TINT: [f32; 4] = [0.95, 0.55, 0.15, 0.0];
 pub const CLASH_TINT: [f32; 4] = [0.90, 0.20, 0.20, 0.0];
 

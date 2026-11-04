@@ -3,7 +3,7 @@
 use forge_render::gui::Headless;
 
 const USAGE: &str = "forge-app [PART | file.fc] [--size WxH] [--times]
-  [--shot FILE.ppm [--scale S] [--light] [--tab N] [--select NAME] [--click NAME].. [--rclick NAME].. [--wait] [--at X Y] [--sketch ROW;ROW..] [--edit NAME] [--draw TOOL X Y] [--view YAW PITCH] [--marking]]
+  [--shot FILE.ppm [--scale S] [--light] [--pastel] [--tab N] [--select NAME] [--click NAME].. [--rclick NAME].. [--wait] [--at X Y] [--sketch ROW;ROW..] [--edit NAME] [--draw TOOL X Y] [--view YAW PITCH] [--marking]]
   steps, in order: --click NAME --dclick NAME --rclick NAME --wait --type TEXT --key NAME (enter, escape, tab, backspace)
   --hover X Y (the view's pick there) --clickat X Y --drag X Y X2 Y2 --snap FILE.ppm --save
   --viewnow YAW PITCH --home
@@ -33,6 +33,7 @@ struct Args {
     size: (f32, f32),
     scale: f32,
     light: bool,
+    pastel: bool,
     shot: Option<String>,
     tab: usize,
     select: Option<String>,
@@ -58,6 +59,7 @@ fn args() -> Result<Args, String> {
         size: (1600.0, 900.0),
         scale: 1.0,
         light: false,
+        pastel: false,
         shot: None,
         tab: 0,
         select: None,
@@ -85,6 +87,7 @@ fn args() -> Result<Args, String> {
             }
             "--scale" => a.scale = v()?.parse().map_err(|_| USAGE)?,
             "--light" => a.light = true,
+            "--pastel" => a.pastel = true,
             "--shot" => a.shot = Some(v()?),
             "--tab" => a.tab = v()?.parse().map_err(|_| USAGE)?,
             "--select" => a.select = Some(v()?),
@@ -407,6 +410,7 @@ fn run() -> Result<(), String> {
     if a.light {
         h.gui.shell.theme = forge_render::shell::theme::LIGHT;
     }
+    h.gui.shell.view.pastel = a.pastel;
     h.gui.shell.tab = a.tab;
     h.step();
     h.gui.open(a.file.as_deref().unwrap_or("bracket"));

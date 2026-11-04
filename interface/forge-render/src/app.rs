@@ -350,6 +350,7 @@ impl ApplicationHandler for App {
         let scale = window.scale_factor() as f32;
         let presenter = Presenter::start(queue.clone(), waker.clone(), self.times);
         let mut gui = Gui::new(device, queue, adapter.get_info(), config.format, waker, scale);
+        gui.load_settings();
         if let Some(f) = self.file.take() {
             gui.open(&f);
         }

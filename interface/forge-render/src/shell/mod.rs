@@ -91,6 +91,8 @@ pub enum Action {
     ResetOrientation,
     Lines(LineMode),
     Section,
+    /// Inventor grey or a pastel per part.
+    PartColours(bool),
     Tool(NavTool),
     Parallel(bool),
     Minimize,
@@ -180,6 +182,8 @@ pub struct ViewState {
     pub parallel: bool,
     pub tool: NavTool,
     pub maximized: bool,
+    /// Parts in a pastel each, not Inventor's grey.
+    pub pastel: bool,
 }
 
 impl Default for ViewState {
@@ -190,6 +194,7 @@ impl Default for ViewState {
             parallel: true,
             tool: NavTool::Select,
             maximized: false,
+            pastel: false,
         }
     }
 }
