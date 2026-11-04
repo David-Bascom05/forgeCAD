@@ -1,0 +1,18 @@
+[package]
+name = "forge-draw"
+description = "Drawings for the ForgeCAD kernel: exact hidden-line views, sections, details, sheets, PDF and DXF"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+forge-math = { path = "../forge-math" }
+forge-geom = { path = "../forge-geom" }
+forge-topo = { path = "../forge-topo" }
+forge-bool = { path = "../forge-bool" }
+forge-ops = { path = "../forge-ops" }
+forge-mesh = { path = "../forge-mesh" }
+
+[lints]
+workspace = true
