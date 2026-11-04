@@ -166,7 +166,10 @@ impl Gui {
             .and_then(|p| p.asm.as_ref())
             .and_then(|a| a.selected.clone());
         let feats = self.shell.fg.as_ref().map_or(0, |p| {
-            p.feats.len() * 7 + p.eyes.values().filter(|v| **v).count() * 131 + p.eyes.len()
+            p.feats.len() * 7
+                + p.eyes.values().filter(|v| **v).count() * 131
+                + p.eyes.len()
+                + usize::from(p.walls) * 7919
         });
         let key = (
             self.shell.overlays(),
@@ -254,6 +257,9 @@ impl Gui {
                 });
             }
             out.extend(through);
+        }
+        if p.walls {
+            self.fg_walls.iter().for_each(|w| out.extend_from_slice(w));
         }
         self.explode_trails(&mut out);
         (out, behind)

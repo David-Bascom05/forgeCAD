@@ -147,6 +147,8 @@ pub struct Gui {
     fg_folded: Option<crate::mesh::PartMesh>,
     fg_flat: Option<crate::mesh::PartMesh>,
     pub fg_sheets: Vec<crate::fg::SheetInfo>,
+    /// Each thermoform's wall-thickness map, world triangles shown while the panel asks.
+    pub fg_walls: Vec<Vec<crate::origin::WorldVert>>,
     /// What Forge names each face and edge of the part: what a pick becomes.
     pub fg_anchors: Option<Arc<crate::fg::AnchorView>>,
     /// An assembly's occurrences and their placements' poses as solved.
@@ -272,6 +274,7 @@ impl Gui {
             fg_folded: None,
             fg_flat: None,
             fg_sheets: Vec::new(),
+            fg_walls: Vec::new(),
             fg_anchors: None,
             fg_asm: None,
             fg_asm_anchors: None,
@@ -3079,6 +3082,11 @@ impl Gui {
             if b.inspect.is_some() {
                 inspect = b.inspect;
             }
+            let (rows, walls): (Vec<_>, Vec<_>) = b.thermos.into_iter().unzip();
+            if let Some(p) = &mut self.shell.fg {
+                p.thermos = rows;
+            }
+            self.fg_walls = walls;
             if let Some(a) = b.anchors {
                 if let Some(p) = &mut self.shell.fg {
                     p.sketches = a.sketches.clone();

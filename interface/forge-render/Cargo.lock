@@ -784,6 +784,7 @@ dependencies = [
  "forge-sheet",
  "forge-sketch",
  "forge-step",
+ "forge-thermo",
  "forge-topo",
 ]
 
@@ -848,6 +849,7 @@ dependencies = [
  "forge-model",
  "forge-sheet",
  "forge-sketch",
+ "forge-thermo",
  "forge-topo",
  "js-sys",
  "rfd",
@@ -883,6 +885,18 @@ dependencies = [
  "forge-geom",
  "forge-math",
  "forge-mesh",
+ "forge-topo",
+]
+
+[[package]]
+name = "forge-thermo"
+version = "0.1.0"
+dependencies = [
+ "forge-bool",
+ "forge-geom",
+ "forge-math",
+ "forge-mesh",
+ "forge-ops",
  "forge-topo",
 ]
 

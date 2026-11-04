@@ -38,5 +38,7 @@ pub mod measure;
 pub mod snaps;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod tess;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod thermo_view;
 #[cfg(target_arch = "wasm32")]
 mod web;

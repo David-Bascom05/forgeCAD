@@ -99,6 +99,8 @@ pub struct Built {
     pub flat: Option<PartMesh>,
     /// Each sheet metal part: its id, how many bends, and its flat pattern as DXF.
     pub sheets: Vec<SheetInfo>,
+    /// Each thermoform's panel row and its wall-thickness map (world triangles).
+    pub thermos: Vec<(crate::shell::thermo::ThermoRow, Vec<crate::origin::WorldVert>)>,
     /// The first build's renderer and scene: pipelines are dear, made here and never in a frame.
     pub view: Option<(Renderer, Scene)>,
     /// What Forge names each face and edge, when the text changed since the last.
@@ -606,6 +608,7 @@ fn work(
                 flat: None,
                 delta: None,
                 sheets: vec![],
+                thermos: vec![],
                 view,
                 anchors: None,
                 inspect: asm.as_ref().map(|a| a.inspect.clone()),
@@ -708,6 +711,7 @@ fn work(
             flat,
             delta,
             sheets,
+            thermos: run.thermos.iter().map(crate::thermo_view::view).collect(),
             view,
             anchors,
             asm: None,

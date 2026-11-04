@@ -22,6 +22,7 @@ mod sheetui;
 mod sketch3d;
 pub mod sketching;
 pub mod theme;
+pub mod thermo;
 mod tree;
 
 pub use crate::nav::NavTool;
@@ -828,6 +829,7 @@ impl Shell {
         self.sketches_ui(&ctx);
         self.window_ui(&ctx);
         self.dim_ui(&ctx);
+        self.thermo_probes(&ctx);
         self.dialog_ui(&ctx);
         self.fg_panel(&ctx);
         self.asm_windows(&ctx);
