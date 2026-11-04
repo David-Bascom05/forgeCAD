@@ -29,6 +29,7 @@ pub mod sheet;
 pub mod sketch;
 pub mod stdparts;
 pub mod syntax;
+pub mod thermo;
 pub mod uses;
 pub mod validity;
 pub mod values;
@@ -142,6 +143,8 @@ pub struct Run {
     pub observed: std::collections::BTreeSet<error::ParamKey>,
     /// The part's sheets as they ended, for the report and the flat pattern.
     pub sheets: Vec<sheet::SheetOut>,
+    /// The part's thermoforms as built (`thermo.rs`).
+    pub thermos: Vec<thermo::ThermoOut>,
     /// An assembly's solve, checks and timings (`asm.rs`).
     pub asm: Option<asm::AsmOut>,
     /// With `Options::anchors`: the anchor text of each face and edge of the finished part.
@@ -185,6 +188,7 @@ pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
                     body: None,
                     observed: Default::default(),
                     sheets: vec![],
+                    thermos: vec![],
                     asm: None,
                     anchors: None,
                     props: props::Props::default(),
@@ -261,6 +265,7 @@ pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
         body,
         observed: std::mem::take(&mut ev.observed),
         sheets: sheet::outputs(&ev),
+        thermos: std::mem::take(&mut ev.thermos),
         asm: asm_out,
         anchors: None,
         props: std::mem::take(&mut ev.props),

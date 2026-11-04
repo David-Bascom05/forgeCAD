@@ -122,6 +122,10 @@ pub fn constant(name: &str) -> Option<Value> {
             .iter()
             .find(|m| **m == n)
             .map(|m| Value::Builtin(m)),
+        n if crate::thermo::BUILTINS.contains(&n) => crate::thermo::BUILTINS
+            .iter()
+            .find(|m| **m == n)
+            .map(|m| Value::Builtin(m)),
         n => crate::wired::constant(n).or_else(|| crate::sheet::constant(n)),
     }
 }
@@ -869,6 +873,7 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
         "extrude" | "cut" | "intersect" => extrude(ev, name, args, span),
         "use" => crate::uses::call(ev, args, span),
         n if crate::sheet::BUILTINS.contains(&n) => crate::sheet::call(ev, name, args, span),
+        n if crate::thermo::BUILTINS.contains(&n) => crate::thermo::call(ev, name, args, span),
         "revolve" => revolve(ev, args, span),
         "fillet" => crate::fillets::fillet(ev, args, span),
         "chamfer" => finish(ev, name, args, span),

@@ -166,6 +166,8 @@ pub enum Value {
     Wired(Rc<crate::wired::W>),
     /// An assembly's instance, reference, joint or check (`asm.rs`).
     Asm(Rc<crate::asm::AsmVal>),
+    /// Thermoforming's materials and shops (`thermo.rs`).
+    Thermo(Rc<crate::thermo::ThermoVal>),
     /// What `check` cannot know without building (a selection, a face's plane).
     Unresolved,
 }
@@ -196,6 +198,7 @@ impl Value {
             Value::Sheet(s) => s.ty(),
             Value::Wired(w) => w.ty(),
             Value::Asm(a) => a.ty(),
+            Value::Thermo(t) => t.ty(),
             Value::Unresolved => Ty::Unresolved,
         }
     }
@@ -300,6 +303,8 @@ pub struct Eval<'s> {
     pub poisoned: bool,
     /// The part's sheets (`sheet.rs`).
     pub sheets: crate::sheet::Sheets,
+    /// The part's thermoforms (`thermo.rs`).
+    pub thermos: Vec<crate::thermo::ThermoOut>,
     /// Where the files features read (fonts, imports) are found: the part file's directory.
     pub dir: Option<std::path::PathBuf>,
     /// An assembly document's instances, joints and checks (`asm.rs`); None in a part.
@@ -373,6 +378,7 @@ impl<'s> Eval<'s> {
             volumes: false,
             poisoned: false,
             sheets: Default::default(),
+            thermos: vec![],
             dir: None,
             asm: None,
             root: None,

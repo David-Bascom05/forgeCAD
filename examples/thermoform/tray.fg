@@ -1,0 +1,29 @@
+# A tray with three round pockets, formed into a female tool: the mould is the tray's outside,
+# hanging under the trim plane, and the tool is a block with it cut in.
+shared t = 1.5
+shared W = 200
+shared L = 120
+shared D = 25
+shared lean = 3deg
+shared rc = 12
+shared rf = 4
+shared pd = 15
+param pk.r = 22
+param pk.pitch = 60
+param part.lip = 12
+sketch plan(on: xy) {
+  outline = hull(disc((rc - W / 2, rc - L / 2), rc), disc((W / 2 - rc, rc - L / 2), rc),
+                 disc((W / 2 - rc, L / 2 - rc), rc), disc((rc - W / 2, L / 2 - rc), rc))
+}
+tray = extrude(plan, -D, taper: lean)
+sketch pk(on: tray.end) {
+  for i in 0..3 {
+    c = circle(((i - 1) * pitch, 0), r)
+  }
+}
+for i in 0..3 {
+  pocket = extrude(pk.c[i], pd, taper: lean)
+}
+floor = fillet(edges(of: pocket[0].end + pocket[1].end + pocket[2].end), rf)
+rim = fillet(edges(of: tray.end, crease: "convex"), rf)
+part = thermoform(tray, t: t, material: "PETG", side: "outer", flange: lip)

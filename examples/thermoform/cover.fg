@@ -1,0 +1,16 @@
+# A vacuum-formed cover over a male tool: the mould is the cover's inside, the sheet goes on
+# outside it, and the tool is the mould grown by the plastic's shrink on a base.
+shared t = 2
+shared W = 120
+shared L = 80
+shared H = 35
+shared lean = 5deg
+shared r = 8
+shared rt = 5
+sketch plan(on: xy) {
+  outline = hull(disc((r - W / 2, r - L / 2), r), disc((W / 2 - r, r - L / 2), r),
+                 disc((W / 2 - r, L / 2 - r), r), disc((r - W / 2, L / 2 - r), r))
+}
+body = extrude(plan, H, taper: lean)
+round = fillet(edges(of: body.end), rt)
+cover = thermoform(body, t: t, material: "HIPS")

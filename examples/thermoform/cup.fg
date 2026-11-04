@@ -1,0 +1,12 @@
+# A deep drinking cup in a female tool: deeper than it is wide, so the draw checks speak.
+shared t = 1
+shared r = 32
+shared D = 75
+shared lean = 3deg
+shared rb = 6
+sketch plan(on: xy) {
+  rim = circle((0, 0), r)
+}
+cup = extrude(plan, -D, taper: lean)
+base = fillet(edges(of: cup.end), rb)
+part = thermoform(cup, t: t, material: "PETG", side: "outer")

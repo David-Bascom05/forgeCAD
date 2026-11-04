@@ -294,6 +294,8 @@ pub enum Ty {
     CornerKind,
     Hardware,
     ReliefRule,
+    ThermoMaterial,
+    ThermoShop,
     Instance,
     Reference,
     Joint,

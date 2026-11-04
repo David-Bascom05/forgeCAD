@@ -711,6 +711,8 @@ pub enum Error {
     },
     /// Sheet metal: the kernel's refusals and the language's own (`sheet.rs`).
     Sheet(Box<crate::sheet::SheetErr>),
+    /// Thermoforming: the kernel's refusals and the language's own (`thermo.rs`).
+    Thermo(Box<crate::thermo::ThermoErr>),
     /// A used file (`uses.rs`): missing, cyclic, misplaced, failing, or the target of an edit.
     Use(Box<crate::uses::UseErr>),
     // ---- shapes (sweep, coil, loft, shell, draft, offset, rib, face fillets, balls) ----
@@ -847,6 +849,7 @@ impl Error {
             | EditDim { .. }
             | NotFinite { .. } => None,
             Sheet(e) => e.span(),
+            Thermo(e) => e.span(),
             Use(e) => e.span(),
             Props(e) => e.span(),
         }
@@ -907,6 +910,7 @@ impl Error {
             EditDim { .. } => "EditDim",
             NotFinite { .. } => "NotFinite",
             Sheet(e) => e.kind(),
+            Thermo(e) => e.kind(),
             Use(e) => e.kind(),
             Props(e) => e.kind(),
             NotWith { .. } => "NotWith",
@@ -968,6 +972,7 @@ impl Error {
                 to: format!("{name}_1"),
             }],
             Sheet(e) => e.fixes(),
+            Thermo(e) => e.fixes(),
             Feat(e) => e.fixes(),
             Std(e) => e.fixes(),
             Asm(n) => n.fixes(),
@@ -1115,6 +1120,7 @@ impl Error {
                 format!("{param} cannot be set to {value}: only a finite number is written")
             }
             Sheet(e) => e.text(),
+            Thermo(e) => e.text(),
             Use(e) => e.text(),
             Props(e) => e.text(),
             NotWith { func, arg, with, .. } => format!("{func}: {arg} does not apply with {with}"),
@@ -1235,6 +1241,7 @@ impl Error {
             StillRead { name, reader, .. } => vec![("name", s(name)), ("reader", s(reader))],
             ShadowsTopLevel { name, .. } => vec![("name", s(name))],
             Sheet(e) => e.data(),
+            Thermo(e) => e.data(),
             Use(e) => e.data(),
             Props(e) => e.data(),
             NotWith { func, arg, with, .. } => vec![("func", s(func)), ("arg", s(arg)), ("with", s(with))],
@@ -1271,6 +1278,8 @@ pub enum Warning {
     NoEffect { span: Span, id: String },
     /// A sheet's kernel warning or shop violation, with fixes (`sheet.rs`).
     Sheet(Box<crate::sheet::SheetNote>),
+    /// A thermoform's shop check, with fixes (`thermo.rs`).
+    Thermo(Box<crate::thermo::ThermoNote>),
     /// An assembly's warning (redundancy, interference) or information (intended contact).
     Asm(Box<crate::asm::AsmNote>),
 }
@@ -1290,8 +1299,13 @@ impl Warning {
         if let Warning::Asm(n) = self {
             return n.json(src);
         }
+        if let Warning::Thermo(n) = self {
+            return n.json(src);
+        }
         let (kind, span, mut data): (&str, Span, Vec<(&str, Json)>) = match self {
-            Warning::Lint(_) | Warning::Sheet(_) | Warning::Asm(_) => unreachable!("above"),
+            Warning::Lint(_) | Warning::Sheet(_) | Warning::Asm(_) | Warning::Thermo(_) => {
+                unreachable!("above")
+            }
             Warning::UnderConstrained { span, sketch, dof } => (
                 "UnderConstrained",
                 *span,

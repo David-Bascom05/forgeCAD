@@ -161,6 +161,7 @@ dependencies = [
  "forge-sheet",
  "forge-sketch",
  "forge-step",
+ "forge-thermo",
  "forge-topo",
 ]
 
@@ -248,6 +249,18 @@ dependencies = [
 
 [[package]]
 name = "forge-step"
+version = "0.1.0"
+dependencies = [
+ "forge-bool",
+ "forge-geom",
+ "forge-math",
+ "forge-mesh",
+ "forge-ops",
+ "forge-topo",
+]
+
+[[package]]
+name = "forge-thermo"
 version = "0.1.0"
 dependencies = [
  "forge-bool",

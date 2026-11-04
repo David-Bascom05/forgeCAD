@@ -174,6 +174,12 @@ pub fn json(run: &Run, src: &str) -> Json {
     if let Some(p) = &run.physical {
         f.push(("physical", p.json()));
     }
+    if !run.thermos.is_empty() {
+        f.push((
+            "thermoforms",
+            Json::Arr(run.thermos.iter().map(|s| s.json()).collect()),
+        ));
+    }
     if let Some(a) = &run.asm {
         f.push(("assembly", crate::asm::json(a)));
         f.push(("bom_parts", crate::props::bom_json(a)));
