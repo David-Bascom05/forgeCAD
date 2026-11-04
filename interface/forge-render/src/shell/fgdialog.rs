@@ -370,6 +370,10 @@ impl Shell {
         if asked == Asked::Nothing && ctx.input(|i| i.key_pressed(egui::Key::Enter)) && !self.menu_open() {
             asked = Asked::Ok;
         }
+        // what the live preview refuses is held, as the dialog says why
+        if tool.note.is_some() && matches!(asked, Asked::Ok | Asked::Again) {
+            asked = Asked::Nothing;
+        }
         match asked {
             Asked::Ok | Asked::Again => match tool.text() {
                 Ok(text) => {
@@ -603,9 +607,16 @@ impl Shell {
             ),
         ];
         for (word, r, name, what) in buttons {
-            let resp = ui.interact(r, ui.scope_id().with(name), Sense::click());
+            let held = what != Asked::Cancel && tool.note.is_some();
+            let resp = ui.interact(
+                r,
+                ui.scope_id().with(name),
+                if held { Sense::hover() } else { Sense::click() },
+            );
             let ok = what == Asked::Ok;
-            let fill = if ok {
+            let fill = if held {
+                t.raised
+            } else if ok {
                 if resp.hovered() {
                     t.on.gamma_multiply(1.2)
                 } else {
@@ -624,7 +635,13 @@ impl Shell {
                 Align2::CENTER_CENTER,
                 word,
                 sans(13.0),
-                if ok { t.on_ink } else { t.ink },
+                if held {
+                    t.ink2
+                } else if ok {
+                    t.on_ink
+                } else {
+                    t.ink
+                },
             );
             let resp = if what == Asked::Again {
                 resp.on_hover_text("OK, then another")

@@ -277,3 +277,62 @@ fn the_demo_part_is_built_with_the_ribbons_tools() {
         "the demo the app builds differs from examples/demo/part_tools.fg"
     );
 }
+
+/// A tapped hole where hole1 already is: the preview's refusal is said in words and OK is held.
+#[test]
+fn a_refused_preview_holds_ok_and_says_why_in_words() {
+    let dir = std::env::temp_dir().join(format!("fg-demo-refused-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("part_tools.fg");
+    let demo = concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/demo/part_tools.fg");
+    std::fs::copy(demo, &file).unwrap();
+    let font = concat!(env!("CARGO_MANIFEST_DIR"), "/fonts/PublicSans-SemiBold.ttf");
+    std::fs::copy(font, dir.join("PublicSans-SemiBold.ttf")).unwrap();
+    let mut h = match Headless::new((1700.0, 1000.0), 1.0) {
+        Ok(h) => h,
+        Err(e) => {
+            eprintln!("skipped: {e}");
+            return;
+        }
+    };
+    h.step();
+    h.gui.open(file.to_str().unwrap());
+    settle(&mut h);
+    let before = h.gui.fg.as_ref().unwrap().src.clone();
+    button(&mut h, "Hole");
+    click(&mut h, "fg:tool:choice:Type:Tapped");
+    click(&mut h, "fg:choice:Points:sk2.p1");
+    assert!(
+        h.until(|g| g
+            .shell
+            .fg
+            .as_ref()
+            .and_then(|p| p.tool.as_ref())
+            .is_some_and(|t| t.note.is_some())),
+        "no refusal"
+    );
+    settle(&mut h);
+    let note = h
+        .gui
+        .shell
+        .fg
+        .as_ref()
+        .unwrap()
+        .tool
+        .as_ref()
+        .unwrap()
+        .note
+        .clone()
+        .unwrap();
+    assert!(
+        note.contains("not supported yet") && !note.contains('{'),
+        "{note}"
+    );
+    click(&mut h, "fg:tool:ok");
+    settle(&mut h);
+    assert!(
+        h.gui.shell.fg.as_ref().unwrap().tool.is_some(),
+        "OK closed a refused dialog"
+    );
+    assert_eq!(h.gui.fg.as_ref().unwrap().src, before);
+}
