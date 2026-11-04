@@ -127,6 +127,7 @@ q = near(x, y)                      free point
 l = line(a, b, construction: false) a, b: points or (x, y)
 a = arc(center: c, from: p, to: q, cw: false)
 c = circle(center, r)
+e = ellipse(center: P, major: P, b: r)   major: one end of the major axis; b: the semi-minor axis
 r = rect(corner: (x, y) | center: (x, y), size: (w, h))   sides 0..3: bottom, right, top, left
 s = slot(a, b, r)
 h = hull(ITEM, ITEM, ..)            convex outline, counter-clockwise: an item is a point or

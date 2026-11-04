@@ -1734,10 +1734,17 @@ impl Shell {
         }
         // each entity that can still move, marked so, when asked
         if m.more.show_dof {
-            for w in &loose {
+            for w in loose.iter().filter(|w| *w != "o") {
                 let pts = m.outline_of(w);
-                if let Some(u) = pts.get(pts.len() / 2).copied().and_then(&screen) {
-                    super::icons::draw(&p, u + vec2(-7.0, -16.0), 14.0, "move", 1.25, t.accent);
+                let mid = match pts[..] {
+                    [a, b] => Some(((a.0 + b.0) * 0.5, (a.1 + b.1) * 0.5)),
+                    _ => pts.get(pts.len() / 2).copied(),
+                };
+                if let Some(u) = mid.and_then(&screen) {
+                    let chip = Rect::from_min_size(u + vec2(-9.0, -24.0), vec2(18.0, 18.0));
+                    p.rect_filled(chip, 9.0, t.surface);
+                    p.rect_stroke(chip, 9.0, Stroke::new(1.0, t.sketch), egui::StrokeKind::Inside);
+                    super::icons::draw(&p, chip.min + vec2(2.0, 2.0), 14.0, "move", 1.25, t.sketch);
                 }
             }
         }

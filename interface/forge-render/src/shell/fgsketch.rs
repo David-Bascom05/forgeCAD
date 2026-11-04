@@ -228,6 +228,15 @@ pub fn block(name: &str, on: &str, rows: &[String]) -> Result<String, ToolError>
                     if cw { ", cw: true" } else { "" }
                 ));
             }
+            "ellipse" => {
+                let (c, k1) = o.point(rest, r)?;
+                let (m, k2) = o.point(&rest[k1..], r)?;
+                let b = num(rest.get(k1 + k2).ok_or(no_form(r))?, r)?;
+                let pb = o.param("b", b);
+                let n = o.next('e');
+                o.names.insert(n.clone(), n.clone());
+                o.rows.push(format!("{n} = ellipse(center: {c}, major: {m}, b: {pb})"));
+            }
             "spline" => {
                 let open = rest.last().is_some_and(|w| w == "open");
                 let pts = if open { &rest[..rest.len() - 1] } else { rest };
@@ -423,6 +432,7 @@ mod tests {
             "line 40 0 50 0",
             "colin l2 l4",
             "poly 60 0 70 0 65 8",
+            "ellipse 100 0 110 0 4",
         ]
         .map(String::from)
         .to_vec();
@@ -432,6 +442,7 @@ mod tests {
         assert!(text.contains("symmetric(l2.a, l3.a, l1)"), "{text}");
         assert!(text.contains("collinear(l2, l4)"), "{text}");
         assert!(text.contains("o1 = poly(["), "{text}");
+        assert!(text.contains("e1 = ellipse(center: near("), "{text}");
         let r = check(&text);
         assert!(r.errors.is_empty(), "{text}\n{:?}", r.errors);
     }

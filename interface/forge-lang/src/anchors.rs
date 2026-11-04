@@ -94,6 +94,7 @@ fn sketch_refs(id: &str, v: &Value) -> Option<SketchRefs> {
             EntKind::Point => r.points.push(text),
             EntKind::Line => r.lines.push(text),
             EntKind::Circle => r.closed.push(text),
+            EntKind::Spline if sk.closed_curve(e.id) => r.closed.push(text),
             EntKind::Arc | EntKind::Spline => r.curves.push(text),
             EntKind::Loop => {
                 for k in 0..e.loop_segs.len() {

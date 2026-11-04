@@ -45,6 +45,14 @@ pub fn param_label(kind: &str, name: &str) -> &'static str {
     }
 }
 
+/// The checkbox a value belongs to, when it's only asked for with it on.
+fn needs(kind: &str, param: &str) -> Option<&'static str> {
+    match (kind, param) {
+        ("emboss", "wrap") => Some("wrap to cylinder"),
+        _ => None,
+    }
+}
+
 fn word_label(w: &str) -> &'static str {
     match w {
         "text" => "Text",
@@ -527,16 +535,21 @@ impl Shell {
                 ),
             }
         }
-        for p in &mut tool.params {
+        let kind = tool.kind;
+        let flags = tool.flags.clone();
+        let row = |ui: &mut egui::Ui, p: &mut super::fgtool::ToolParam, places: &mut Vec<(String, Rect)>| {
             value_row(
                 ui,
                 t,
-                param_label(tool.kind, p.name),
+                param_label(kind, p.name),
                 &mut p.text,
                 unit(p.dim),
                 format!("fg:tool:param:{}", p.name),
                 places,
             );
+        };
+        for p in tool.params.iter_mut().filter(|p| needs(kind, p.name).is_none()) {
+            row(ui, p, places);
         }
         for (f, on) in &mut tool.flags {
             let r = ui.checkbox(
@@ -544,6 +557,14 @@ impl Shell {
                 egui::RichText::new(flag_label(f)).font(sans(13.0)).color(t.ink),
             );
             places.push((format!("fg:tool:flag:{f}"), r.rect));
+        }
+        // a value only its checkbox asks for, under it while it's on
+        for p in tool.params.iter_mut() {
+            if let Some(f) = needs(kind, p.name)
+                && flags.iter().any(|x| x.0 == f && x.1)
+            {
+                row(ui, p, places);
+            }
         }
         if let Some((name, k)) = chose {
             tool.choose(name, k);

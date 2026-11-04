@@ -62,3 +62,15 @@ discs = extrude(s.b, 1)
     );
     assert!((v - std::f64::consts::PI * 9.0).abs() < 1e-6, "{v}");
 }
+
+#[test]
+fn an_ellipse_is_a_profile_of_its_own() {
+    let v = volume(
+        "sketch s(on: xy) {
+  e = ellipse(center: (0, 0), major: (10, 0), b: 4)
+}
+oval = extrude(s.e, 2)
+",
+    );
+    assert!((v - std::f64::consts::PI * 10.0 * 4.0 * 2.0).abs() < 1e-6, "{v}");
+}

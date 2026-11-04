@@ -42,6 +42,7 @@ pub const BUILTINS: &[&str] = &[
     "line",
     "arc",
     "circle",
+    "ellipse",
     "rect",
     "slot",
     "hull",
@@ -742,6 +743,21 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
             {
                 s.nums.extend([(id, "x", x.clone()), (id, "y", y.clone())]);
             }
+            drop(s);
+            Ok(mk_ent(&sk, id))
+        }
+        "ellipse" => {
+            let sk = in_sketch(ev, name, span)?;
+            let a = Args::bind(ev, name, &["center", "major", "b"], args, span)?;
+            let c = p2_of(ev, a.req("center")?, a.span("center"))?;
+            let m = p2_of(ev, a.req("major")?, a.span("major"))?;
+            let b = a.req_num("b", LEN)?;
+            positive(&b, a.span("b"), "a semi-minor axis")?;
+            let mut s = sk.borrow_mut();
+            let (c, m) = (s.p2(c, span)?, s.p2(m, span)?);
+            let nm = pending_name(ev, span);
+            let id = s.ellipse(c, m, b.v, nm.as_deref(), span)?;
+            s.nums.push((id, "b", b.clone()));
             drop(s);
             Ok(mk_ent(&sk, id))
         }

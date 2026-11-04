@@ -274,7 +274,6 @@ fn groups(s: &Shell) -> Vec<Group> {
                     new("Rib", "rib", "rib"),
                     fg_new("Emboss", "emboss", "emboss"),
                     fg_new("Import", "import", "import"),
-                    // the kernel has no image projection: a decal has nothing to stand on
                     off("Decal", "decal"),
                 ],
             ),
@@ -355,13 +354,6 @@ fn groups(s: &Shell) -> Vec<Group> {
                 small,
                 icons,
             };
-            let fg = s.fg.is_some();
-            let off_fg = |name, icon, tool: SkTool| Tool {
-                name,
-                icon,
-                action: if fg { None } else { s.sketch_tool(tool) },
-                on: on == Some(tool),
-            };
             let more = s.sketch.as_ref().map(|m| m.more.clone()).unwrap_or_default();
             let toggle = |name, icon, tool: SkTool, now: bool| Tool {
                 name,
@@ -383,8 +375,7 @@ fn groups(s: &Shell) -> Vec<Group> {
                     vec![
                         t("Spline", "spline", SkTool::Spline),
                         t("Polygon", "polygon", SkTool::Polygon),
-                        // Forge sketches have no ellipse yet
-                        off_fg("Ellipse", "ellipse", SkTool::Ellipse),
+                        t("Ellipse", "ellipse", SkTool::Ellipse),
                         t("Point", "point", SkTool::Point),
                         t("Fillet", "skfillet", SkTool::SkFillet),
                         t("Chamfer", "skchamfer", SkTool::SkChamfer),
@@ -438,7 +429,6 @@ fn groups(s: &Shell) -> Vec<Group> {
                         t("Horizontal", "horizontal", SkTool::Horizontal),
                         t("Vertical", "vertical", SkTool::Vertical),
                         t("Tangent", "tangent", SkTool::Tangent),
-                        // G2 needs a curvature tie the solver doesn't have
                         off("Smooth (G2)", "smooth"),
                         t("Symmetric", "symmetric", SkTool::Symmetric),
                         t("Equal", "equal", SkTool::Equal),
@@ -591,6 +581,17 @@ fn groups(s: &Shell) -> Vec<Group> {
     }
 }
 
+/// Why a tool Inventor has is greyed here, said in its tooltip.
+fn why_off(name: &str) -> Option<&'static str> {
+    Some(match name {
+        "Decal" => "not yet: the kernel has no image projection onto faces",
+        "Smooth (G2)" => {
+            "not yet: the sketch solver has no curvature tie at a joint (Tangent holds G1 meanwhile)"
+        }
+        _ => return None,
+    })
+}
+
 const BIG_W: f32 = 54.0;
 const BIG_PAD: f32 = 12.0;
 const SMALL_W: f32 = 92.0;
@@ -697,10 +698,10 @@ impl Shell {
         };
         let resp = ui
             .interact(r, ui.scope_id().with(("tool", self.tab, tool.name)), sense)
-            .on_hover_text(if tool.action.is_some() {
-                tool.name.to_string()
-            } else {
-                format!("{}: coming", tool.name)
+            .on_hover_text(match (tool.action, why_off(tool.name)) {
+                (None, Some(why)) => format!("{}: {why}", tool.name),
+                (None, None) => format!("{}: coming", tool.name),
+                _ => tool.name.to_string(),
             });
         resp.widget_info(|| {
             egui::WidgetInfo::selected(egui::Role::Button, tool.action.is_some(), tool.on, tool.name)
