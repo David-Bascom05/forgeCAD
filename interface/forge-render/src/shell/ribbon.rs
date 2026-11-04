@@ -215,6 +215,24 @@ fn groups(s: &Shell) -> Vec<Group> {
     {
         return gs;
     }
+    if s.tab == super::THERMO_TAB {
+        return super::thermo_ui::groups(s)
+            .into_iter()
+            .map(|(name, big, small)| {
+                let tool = |(name, icon, action, on)| Tool {
+                    name,
+                    icon,
+                    action,
+                    on,
+                };
+                g(
+                    name,
+                    big.into_iter().map(tool).collect(),
+                    small.into_iter().map(tool).collect(),
+                )
+            })
+            .collect();
+    }
     let asm_explode = s.fg.as_ref().and_then(|f| f.asm.as_ref()).map(|a| a.explode_open);
     let fg_open = s.fg.is_some();
     match s.tab {

@@ -169,7 +169,16 @@ impl Gui {
             p.feats.len() * 7
                 + p.eyes.values().filter(|v| **v).count() * 131
                 + p.eyes.len()
-                + usize::from(p.walls) * 7919
+                + usize::from(p.thermo.mould.is_some()) * 31
+                + match p.thermo.analysis {
+                    crate::shell::thermo_ui::Analysis::None => 0,
+                    crate::shell::thermo_ui::Analysis::Draft => {
+                        7919 + (p.thermo.draft_min.unwrap_or(0.0) * 100.0) as usize * 3
+                    }
+                    crate::shell::thermo_ui::Analysis::Thickness => {
+                        104729 + p.thermo.step.unwrap_or(usize::MAX / 1024) * 11
+                    }
+                }
         });
         let key = (
             self.shell.overlays(),
@@ -258,8 +267,40 @@ impl Gui {
             }
             out.extend(through);
         }
-        if p.walls {
-            self.fg_walls.iter().for_each(|w| out.extend_from_slice(w));
+        // a thermoform's analysis: the wall thickness at the step watched, or the drafts
+        if let Some(g) = self.fg_walls.first() {
+            use crate::shell::thermo_ui::Analysis;
+            match p.thermo.analysis {
+                Analysis::Thickness => {
+                    let k = p
+                        .thermo
+                        .step
+                        .unwrap_or(usize::MAX)
+                        .min(g.steps.len().saturating_sub(1));
+                    if let Some(s) = g.steps.get(k) {
+                        out.extend_from_slice(s);
+                    }
+                }
+                Analysis::Draft => {
+                    let min = p
+                        .thermo
+                        .draft_min
+                        .or(p.thermos.first().map(|r| r.draft_min))
+                        .unwrap_or(3.0);
+                    out.extend(g.draft_tris(min));
+                }
+                Analysis::None => {}
+            }
+            // the mould's vents while its dialog is up
+            if p.thermo.mould.is_some() {
+                // seen through the part too: they lie under the sheet
+                for v in &g.vents {
+                    for (list, a) in [(&mut out, 1.0), (&mut behind, 0.9)] {
+                        crate::origin::disc(*v, px * 6.0, [0.05, 0.06, 0.08, a], cam, size, list);
+                        crate::origin::disc(*v, px * 3.5, [0.98, 0.72, 0.22, a], cam, size, list);
+                    }
+                }
+            }
         }
         self.explode_trails(&mut out);
         (out, behind)

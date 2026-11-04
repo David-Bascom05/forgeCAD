@@ -849,6 +849,7 @@ dependencies = [
  "forge-model",
  "forge-sheet",
  "forge-sketch",
+ "forge-step",
  "forge-thermo",
  "forge-topo",
  "js-sys",
@@ -894,6 +895,7 @@ version = "0.1.0"
 dependencies = [
  "forge-bool",
  "forge-geom",
+ "forge-material",
  "forge-math",
  "forge-mesh",
  "forge-ops",

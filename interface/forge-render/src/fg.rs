@@ -100,7 +100,7 @@ pub struct Built {
     /// Each sheet metal part: its id, how many bends, and its flat pattern as DXF.
     pub sheets: Vec<SheetInfo>,
     /// Each thermoform's panel row and its wall-thickness map (world triangles).
-    pub thermos: Vec<(crate::shell::thermo::ThermoRow, Vec<crate::origin::WorldVert>)>,
+    pub thermos: Vec<(crate::shell::thermo::ThermoRow, crate::thermo_view::Gfx)>,
     /// The first build's renderer and scene: pipelines are dear, made here and never in a frame.
     pub view: Option<(Renderer, Scene)>,
     /// What Forge names each face and edge, when the text changed since the last.
@@ -711,7 +711,22 @@ fn work(
             flat,
             delta,
             sheets,
-            thermos: run.thermos.iter().map(crate::thermo_view::view).collect(),
+            thermos: run
+                .thermos
+                .iter()
+                .map(|o| {
+                    let m = forge_thermo::placeholder().material(&o.material).cloned();
+                    let (wall, draft) = m.map_or((0.25, 3.0), |m| {
+                        let d = if o.tool == forge_thermo::Tool::Male {
+                            m.draft_male
+                        } else {
+                            m.draft_female
+                        };
+                        (m.min_wall, d.to_degrees() as f32)
+                    });
+                    crate::thermo_view::view(o, wall, draft)
+                })
+                .collect(),
             view,
             anchors,
             asm: None,

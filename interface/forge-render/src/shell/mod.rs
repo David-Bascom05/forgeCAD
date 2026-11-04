@@ -23,6 +23,7 @@ mod sketch3d;
 pub mod sketching;
 pub mod theme;
 pub mod thermo;
+pub mod thermo_ui;
 mod tree;
 
 pub use crate::nav::NavTool;
@@ -35,6 +36,8 @@ pub const TABS: [&str; 5] = ["3D Model", "Sketch", "Inspect", "View", "Manage"];
 /// A sheet metal part's own tabs: shown first, Inventor's way; the flat pattern's in its place.
 pub const SHEET_TAB: usize = 5;
 pub const FLAT_TAB: usize = 6;
+/// A Forge part's Thermoform tab: after Sketch.
+pub const THERMO_TAB: usize = 7;
 
 const TITLE_H: f32 = 36.0;
 const TABS_H: f32 = 34.0;
@@ -152,6 +155,8 @@ pub enum Action {
 /// What the ribbon asks of a Forge file: Inventor's dialogs and commands.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FgCmd {
+    /// The Thermoform tab's.
+    Thermo(thermo_ui::Cmd),
     Parameters,
     Interference,
     Bom,
@@ -563,6 +568,7 @@ impl Shell {
         }
         let Some(fg) = &mut self.fg else { return };
         match c {
+            FgCmd::Thermo(c) => fg.thermo_command(c),
             FgCmd::Parameters => fg.params_open = !fg.params_open,
             FgCmd::Interference => {
                 if let Some(a) = &mut fg.asm {
@@ -830,6 +836,7 @@ impl Shell {
         self.window_ui(&ctx);
         self.dim_ui(&ctx);
         self.thermo_probes(&ctx);
+        self.thermo_ui(&ctx);
         self.dialog_ui(&ctx);
         self.fg_panel(&ctx);
         self.asm_windows(&ctx);
@@ -1044,12 +1051,14 @@ impl Shell {
             self.tab_order()
         };
         for k in order {
-            if asm && k == 1 {
+            // a part opened as .fc has no thermoforms
+            if (asm && k == 1) || (k == THERMO_TAB && (asm || self.fg.is_none())) {
                 continue;
             }
             let name = match k {
                 k if drawing => &drawing::TABS[k],
                 SHEET_TAB => &"Sheet Metal",
+                THERMO_TAB => &"Thermoform",
                 FLAT_TAB => &"Flat Pattern",
                 0 if asm => &"Assemble",
                 k => &TABS[k],
@@ -1093,7 +1102,7 @@ impl Shell {
         } else if fg && self.sheet.env {
             vec![SHEET_TAB, 0, 1, 2, 3, 4]
         } else {
-            vec![0, 1, 2, 3, 4]
+            vec![0, 1, THERMO_TAB, 2, 3, 4]
         }
     }
 
@@ -1299,6 +1308,7 @@ impl Shell {
                 fg.issues_list = !fg.issues_list;
             }
         }
+        self.thermo_status(ui, r.left() - 12.0, st);
     }
 
     /// Esc backs out one level, wherever one is: never two, and never none.

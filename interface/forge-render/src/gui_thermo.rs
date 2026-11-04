@@ -1,0 +1,174 @@
+//! The host's side of the Thermoform tab: the materials Convert offers, fixes re-simulated off the
+//! window's thread, and the mould's and part's exports written beside the part's file.
+use super::Gui;
+use crate::shell::thermo_ui::{Export, MaterialRow};
+use std::sync::Mutex;
+
+/// Re-simulated fixes, as they come back: the fix's op as JSON text, and the thinnest wall.
+static RESIM: Mutex<Vec<(String, Option<f64>)>> = Mutex::new(Vec::new());
+
+impl Gui {
+    pub(super) fn thermo_host(&mut self) {
+        let Some(p) = &mut self.shell.fg else { return };
+        let dir = self
+            .fg
+            .as_ref()
+            .and_then(|s| s.path.as_ref())
+            .and_then(|f| std::path::Path::new(f).parent().map(|d| d.to_path_buf()));
+        if p.thermo_materials.is_empty() {
+            let libs = forge_material::Libraries::cached(dir.as_deref());
+            p.thermo_materials = forge_thermo::shop_of(libs.all().map(|x| x.1))
+                .materials
+                .iter()
+                .map(|m| MaterialRow {
+                    name: m.name.clone(),
+                    law: m.fits.first().map_or(String::new(), |f| {
+                        if f.stand_in {
+                            "stand-in law".into()
+                        } else {
+                            f.source.clone()
+                        }
+                    }),
+                    window: m.forming,
+                    normal: m.forming_temperature(),
+                    fitted: m.fits.first().filter(|f| !f.stand_in).map(|f| f.temperature),
+                })
+                .collect();
+        }
+        // fixes asked for, each run through the whole part once, off this thread
+        let want = std::mem::take(&mut p.thermo.want_resim);
+        if let (Some(s), false) = (&self.fg, want.is_empty()) {
+            let src = s.src.clone();
+            let id = p.thermos.first().map(|r| r.id.clone()).unwrap_or_default();
+            let mut list = RESIM.lock().unwrap_or_else(|e| e.into_inner());
+            let new: Vec<_> = want
+                .into_iter()
+                .filter(|op| {
+                    let k = op.json().to_string();
+                    !list.iter().any(|x| x.0 == k)
+                })
+                .collect();
+            if !new.is_empty() {
+                list.extend(new.iter().map(|op| (op.json().to_string(), None)));
+                let waker = self.waker.clone();
+                std::thread::spawn(move || {
+                    for op in new {
+                        let min = forge_lang::edit::apply(&src, &op).ok().and_then(|text| {
+                            let opts = forge_lang::Options {
+                                dir: dir.clone(),
+                                ..forge_lang::Options::default()
+                            };
+                            let run = forge_lang::run(&text, opts, Default::default()).0;
+                            let o = run.thermos.iter().find(|o| o.id == id)?;
+                            o.walls.as_ref().map(|w| w.min.0 * o.t)
+                        });
+                        let k = op.json().to_string();
+                        let mut list = RESIM.lock().unwrap_or_else(|e| e.into_inner());
+                        if let Some(x) = list.iter_mut().find(|x| x.0 == k) {
+                            x.1 = Some(min.unwrap_or(f64::NAN));
+                        }
+                        drop(list);
+                        waker();
+                    }
+                });
+            }
+        }
+        p.thermo.resim = RESIM.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        if let Some((id, e)) = p.thermo.want_export.take() {
+            let said = self.thermo_export(&id, e);
+            if let Some(p) = &mut self.shell.fg {
+                p.thermo.said = Some(said.clone());
+            }
+            self.shell.status = said;
+        }
+    }
+
+    /// Writes an export beside the part's file; says what it wrote, or why not.
+    fn thermo_export(&self, id: &str, e: Export) -> String {
+        let Some(g) = self.fg_walls.first() else {
+            return "nothing formed to export".into();
+        };
+        let Some(path) = self.fg.as_ref().and_then(|s| s.path.clone()) else {
+            return "save the part first: exports go beside it".into();
+        };
+        let stem = path.trim_end_matches(".fg").to_string();
+        let (file, bytes): (String, Result<Vec<u8>, String>) = match e {
+            Export::MouldStep | Export::PartStep => {
+                let (body, what) = if e == Export::MouldStep {
+                    (&g.mould, "mould")
+                } else {
+                    (&g.part, "part")
+                };
+                let opts = forge_step::Options {
+                    name: format!("{id}-{what}"),
+                    ..forge_step::Options::default()
+                };
+                (
+                    format!("{stem}-{id}-{what}.step"),
+                    forge_step::export(body, &opts)
+                        .map(|x| x.text.into_bytes())
+                        .map_err(|e| format!("{e:?}")),
+                )
+            }
+            Export::MouldStl => (
+                format!("{stem}-{id}-mould.stl"),
+                forge_mesh::tessellate(&g.mould, &forge_mesh::Quality::default())
+                    .map(|m| forge_mesh::stl::to_binary_stl(&m, &format!("{id} mould")))
+                    .map_err(|e| format!("{e:?}")),
+            ),
+            Export::TrimDxf => (format!("{stem}-{id}-trim.dxf"), Ok(dxf(&g.trim).into_bytes())),
+            Export::ProcessPdf => (format!("{stem}-{id}-process.pdf"), Ok(pdf(&g.sheet))),
+        };
+        match bytes.and_then(|b| std::fs::write(&file, b).map_err(|e| e.to_string())) {
+            Ok(()) => format!("Wrote {file}"),
+            Err(why) => format!("Not written: {why}"),
+        }
+    }
+}
+
+/// The trim line as an R12 DXF: its segments as LINEs on layer TRIM.
+fn dxf(pts: &[[f64; 3]]) -> String {
+    let mut s = String::from("0\nSECTION\n2\nENTITIES\n");
+    for k in 0..pts.len() {
+        let (a, b) = (pts[k], pts[(k + 1) % pts.len()]);
+        s += &format!(
+            "0\nLINE\n8\nTRIM\n10\n{:.6}\n20\n{:.6}\n30\n{:.6}\n11\n{:.6}\n21\n{:.6}\n31\n{:.6}\n",
+            a[0], a[1], a[2], b[0], b[1], b[2]
+        );
+    }
+    s + "0\nENDSEC\n0\nEOF\n"
+}
+
+/// A one-page PDF of text lines in Courier.
+fn pdf(lines: &[String]) -> Vec<u8> {
+    let esc = |s: &str| s.replace('\\', "\\\\").replace('(', "\\(").replace(')', "\\)");
+    let mut content = String::from("BT /F1 10 Tf 50 800 Td 13 TL\n");
+    for l in lines.iter().take(58) {
+        let ascii: String = l.chars().map(|c| if c.is_ascii() { c } else { '?' }).collect();
+        content += &format!("({}) '\n", esc(&ascii));
+    }
+    content += "ET";
+    let objs = [
+        "<< /Type /Catalog /Pages 2 0 R >>".to_string(),
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_string(),
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>".to_string(),
+        format!("<< /Length {} >>\nstream\n{content}\nendstream", content.len()),
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>".to_string(),
+    ];
+    let mut out = String::from("%PDF-1.4\n");
+    let mut at = vec![];
+    for (k, o) in objs.iter().enumerate() {
+        at.push(out.len());
+        out += &format!("{} 0 obj\n{o}\nendobj\n", k + 1);
+    }
+    let xref = out.len();
+    out += &format!("xref\n0 {}\n0000000000 65535 f \n", objs.len() + 1);
+    for a in at {
+        out += &format!("{a:010} 00000 n \n");
+    }
+    out += &format!(
+        "trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n",
+        objs.len() + 1
+    );
+    out.into_bytes()
+}

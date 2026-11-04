@@ -1,12 +1,13 @@
-//! A thermoform's report in the part panel, and its wall-thickness map over the view as an
-//! analysis tool shows one: a colour bar with its range in the view's corner, MIN and MAX pinned on
-//! the part where they are.
-use super::fg::FgPanel;
-use super::theme::{mono, sans};
-use super::{Shell, theme::Theme};
-use egui::{Color32, Pos2, Rect, Stroke, Ui, vec2};
+//! A thermoform as the app shows it: its numbers, and over the view, while the Thickness
+//! analysis is on, the wall-thickness map's banded legend (thickest at the top, as analysis tools
+//! stack it) with the model and the law it read, MIN, MAX and probes pinned on the part, and the
+//! forming's steps on a scrubber at the view's foot.
+use super::Shell;
+use super::theme::{mono, sans, semi};
+use super::thermo_ui::Analysis;
+use egui::{Align2, Color32, Pos2, Rect, Sense, Stroke, StrokeKind, pos2, vec2};
 
-/// One thermoform as the panel shows it.
+/// One thermoform as the app shows it (made from forge-lang's report on the host's side).
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct ThermoRow {
     pub id: String,
@@ -14,273 +15,325 @@ pub struct ThermoRow {
     /// The thinnest and thickest wall, mm, and where (world).
     pub min: (f64, [f32; 3]),
     pub max: (f64, [f32; 3]),
+    /// The thinnest the material allows, mm.
+    pub limit: f64,
     /// What the numbers are: the model and the law it read.
     pub model: String,
+    pub material: String,
+    pub female: bool,
+    pub from: String,
+    pub pull: String,
+    pub t: f64,
+    pub shrink: f64,
+    /// The material's least draft for the mould, degrees, and each face of the mould's surface's
+    /// least draft.
+    pub draft_min: f32,
+    pub face_drafts: Vec<f32>,
+    /// A section through the middle along x: the mould's top, the formed sheet's, and the base.
+    pub section: Vec<[f32; 2]>,
+    pub section_part: Vec<[f32; 2]>,
+    pub base: f32,
+    /// The forming's steps, by stage.
+    pub stages: Vec<&'static str>,
+    /// The sheet's points on the part (world) and the wall there, mm, at the last step.
+    pub points: Vec<([f32; 3], f32)>,
 }
 
-/// The map's colours, blue (thinnest) through cyan, green and yellow to red (thickest).
-pub fn colour(f: f32) -> [f32; 3] {
-    const STOPS: [[f32; 3]; 5] = [
-        [0.10, 0.25, 0.95],
-        [0.05, 0.80, 0.95],
-        [0.15, 0.85, 0.20],
-        [0.98, 0.88, 0.10],
-        [0.95, 0.15, 0.10],
-    ];
-    let x = f.clamp(0.0, 1.0) * 4.0;
-    let i = (x as usize).min(3);
-    let u = x - i as f32;
-    [0, 1, 2].map(|k| STOPS[i][k] + (STOPS[i + 1][k] - STOPS[i][k]) * u)
+/// The wall-thickness map's bands, thickest first.
+pub const BANDS: [[f32; 3]; 10] = [
+    [0.17, 0.35, 0.63],
+    [0.18, 0.53, 0.84],
+    [0.18, 0.72, 0.79],
+    [0.24, 0.79, 0.54],
+    [0.55, 0.81, 0.24],
+    [0.85, 0.82, 0.23],
+    [0.95, 0.66, 0.23],
+    [0.94, 0.42, 0.20],
+    [0.85, 0.20, 0.18],
+    [0.55, 0.12, 0.25],
+];
+
+/// The draft analysis's colours: OK, low, very low, undercut, flat.
+pub const DRAFT: [[f32; 3]; 5] = [
+    [0.24, 0.68, 0.42],
+    [0.89, 0.75, 0.29],
+    [0.96, 0.52, 0.49],
+    [0.79, 0.42, 0.85],
+    [0.55, 0.59, 0.64],
+];
+
+/// The band of a thickness `f` of the way from the thinnest (0) to the thickest (1).
+pub fn band(f: f32) -> [f32; 3] {
+    let k = ((1.0 - f.clamp(0.0, 1.0)) * 10.0) as usize;
+    BANDS[k.min(9)]
 }
 
-fn c32(c: [f32; 3]) -> Color32 {
+pub fn c32(c: [f32; 3]) -> Color32 {
     Color32::from_rgb((c[0] * 255.0) as u8, (c[1] * 255.0) as u8, (c[2] * 255.0) as u8)
 }
 
-/// The Convert to Thermoform form: what the body is, the mould, the sheet.
-#[derive(Clone, Debug, PartialEq)]
-pub struct FormChoice {
-    /// 0: a solid, its outside; 1: a thin wall; 2: a solid, its inside.
-    pub from: usize,
-    pub female: bool,
-    pub t: f64,
-    pub material: String,
-}
-
-impl Default for FormChoice {
-    fn default() -> Self {
-        FormChoice {
-            from: 0,
-            female: false,
-            t: 2.0,
-            material: "ABS".into(),
-        }
-    }
-}
-
-const FROM: [(&str, &str); 3] = [
-    ("outer", "Solid: the part's outside"),
-    ("wall", "Thin wall: the part as shelled"),
-    ("inner", "Solid: the part's inside"),
-];
-const MATERIALS: [&str; 6] = ["ABS", "HIPS", "PETG", "PC", "PMMA", "HDPE"];
-
-/// The statement that converts body `of`, named so as not to take a name the part has.
-pub fn convert_text(fg: &FgPanel, of: &str) -> String {
-    let taken = |n: &str| {
-        fg.feats
-            .iter()
-            .any(|f| f.id == n || f.id.starts_with(&format!("{n}[")))
-    };
-    let name = (1..)
-        .map(|k| {
-            if k == 1 {
-                "vacuum_part".to_string()
-            } else {
-                format!("vacuum_part{k}")
-            }
-        })
-        .find(|n| !taken(n))
-        .expect("a free name");
-    let c = &fg.form;
-    let (from, _) = FROM[c.from.min(2)];
-    let t = if from == "wall" {
-        String::new()
-    } else {
-        format!(", t: {}", c.t)
-    };
-    let tool = if c.female { ", tool: \"female\"" } else { "" };
-    format!(
-        "{name} = thermoform({of}, from: \"{from}\"{tool}{t}, material: \"{}\")\n",
-        c.material
-    )
-}
-
-/// The last feature that made or changed a solid: what Convert to Thermoform takes.
-fn last_solid(fg: &FgPanel) -> Option<String> {
-    fg.feats
-        .iter()
-        .rev()
-        .find(|f| {
-            !matches!(
-                f.kind.as_str(),
-                "sketch" | "plane" | "axis" | "point" | "param" | "thermoform"
-            )
-        })
-        .map(|f| f.id.clone())
+/// A flag pinned on the part: a dot where it is, a line to its label.
+fn flag(p: &egui::Painter, at: Pos2, text: String, fill: Color32, ink: Color32, toward: egui::Vec2) {
+    let g = p.layout_no_wrap(text, mono(12.0), ink);
+    let tip = at + toward;
+    let r = Rect::from_min_size(
+        tip - vec2(
+            if toward.x < 0.0 { g.size().x + 10.0 } else { 0.0 },
+            g.size().y + 8.0,
+        ),
+        g.size() + vec2(10.0, 8.0),
+    );
+    p.line_segment([at, tip], Stroke::new(1.2, Color32::WHITE));
+    p.circle_filled(at, 4.5, Color32::WHITE);
+    p.circle_filled(at, 3.0, Color32::from_rgb(20, 24, 30));
+    p.rect_filled(r, 2.0, fill);
+    p.rect_stroke(r, 2.0, Stroke::new(1.0, Color32::WHITE), StrokeKind::Inside);
+    p.galley(r.min + vec2(5.0, 4.0), g, ink);
 }
 
 impl Shell {
-    pub(super) fn fg_thermos(
-        ui: &mut Ui,
-        t: &Theme,
-        fg: &mut FgPanel,
-        out: &mut Vec<super::fg::FgAct>,
-        places: &mut Vec<(String, Rect)>,
-    ) {
-        if fg.thermos.is_empty() {
-            if fg.assembly || !fg.sheets.is_empty() {
-                return;
-            }
-            let Some(of) = last_solid(fg) else { return };
-            Self::fg_heading(ui, t, "Thermoform");
-            egui::ComboBox::from_id_salt("thermo-from")
-                .selected_text(FROM[fg.form.from.min(2)].1)
-                .show_ui(ui, |ui| {
-                    for (k, (_, label)) in FROM.iter().enumerate() {
-                        ui.selectable_value(&mut fg.form.from, k, *label);
-                    }
-                });
-            ui.horizontal(|ui| {
-                ui.selectable_value(&mut fg.form.female, false, "Male mould");
-                ui.selectable_value(&mut fg.form.female, true, "Female mould");
-            });
-            ui.horizontal(|ui| {
-                if fg.form.from != 1 {
-                    ui.label(egui::RichText::new("Sheet").font(sans(12.0)).color(t.ink2));
-                    ui.add(
-                        egui::DragValue::new(&mut fg.form.t)
-                            .range(0.1..=20.0)
-                            .speed(0.05)
-                            .suffix(" mm"),
-                    );
-                }
-                egui::ComboBox::from_id_salt("thermo-material")
-                    .selected_text(fg.form.material.clone())
-                    .show_ui(ui, |ui| {
-                        for m in MATERIALS {
-                            ui.selectable_value(&mut fg.form.material, m.to_string(), m);
-                        }
-                    });
-            });
-            ui.label(
-                egui::RichText::new(format!("the part: {of}"))
-                    .font(sans(11.0))
-                    .color(t.ink2),
-            );
-            if Self::fg_button(ui, "Convert to Thermoform", "fg:thermoform".into(), places) {
-                out.push(super::fg::FgAct::Apply(forge_lang::error::Op::AddFeature {
-                    before: None,
-                    text: convert_text(fg, &of),
-                }));
-            }
-            return;
-        }
-        Self::fg_heading(ui, t, "Thermoform");
-        let label = if fg.walls {
-            "Hide wall thickness"
-        } else {
-            "Show wall thickness"
-        };
-        if Self::fg_button(ui, label, "fg:walls".into(), places) {
-            fg.walls = !fg.walls;
-        }
-        for r in &fg.thermos {
-            ui.label(egui::RichText::new(&r.id).font(sans(12.0)).color(t.ink));
-            if r.max.0 > 0.0 {
-                ui.label(
-                    egui::RichText::new(format!("  wall {:.2} to {:.2} mm", r.min.0, r.max.0))
-                        .font(mono(11.0))
-                        .color(t.ink),
-                );
-            }
-            for (k, v) in &r.facts {
-                ui.label(
-                    egui::RichText::new(format!("  {k}: {v}"))
-                        .font(mono(11.0))
-                        .color(t.ink2),
-                );
-            }
-            if !r.model.is_empty() {
-                ui.label(
-                    egui::RichText::new(format!("  {}", r.model))
-                        .font(sans(10.0))
-                        .color(t.ink2),
-                );
-            }
-        }
-    }
-
-    /// The map's legend in the view's corner and its extremes pinned on the part.
+    /// The thickness map's legend and flags, and the step scrubber, over the view.
     pub(super) fn thermo_probes(&mut self, ctx: &egui::Context) {
-        let Some(fg) = &self.fg else { return };
-        if !fg.walls || fg.thermos.is_empty() {
+        let Some(fg) = &mut self.fg else { return };
+        if fg.thermo.analysis != Analysis::Thickness || fg.thermos.is_empty() {
             return;
         }
         let Some((camera, size)) = self.camera else { return };
         let (t, view, ppp) = (self.theme, self.view_rect, ctx.pixels_per_point());
-        let rows = fg.thermos.clone();
-        egui::Area::new(egui::Id::unique("thermo-probes"))
+        let r = fg.thermos[0].clone();
+        let n = r.stages.len().max(1);
+        // the steps play on their own
+        if fg.thermo.playing {
+            let now = ctx.input(|i| i.time);
+            let k = ((now * 8.0) as usize) % n;
+            fg.thermo.step = Some(k);
+            ctx.request_repaint_after(std::time::Duration::from_millis(60));
+        }
+        let step = fg.thermo.step.unwrap_or(n - 1).min(n - 1);
+        let playing = fg.thermo.playing;
+        let mut places = vec![];
+        let mut scrub = None;
+        let mut play = false;
+        let mut pin = None;
+        let probe = fg.thermo.probe;
+        let probes = fg.thermo.probes.clone();
+        egui::Area::new(egui::Id::unique("thermo-thickness"))
             .fixed_pos(view.min)
             .order(egui::Order::Middle)
-            .interactable(false)
+            .interactable(true)
             .constrain(false)
             .show(ctx, |ui| {
-                let p = ui.painter();
-                let (lo, hi) = rows.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), r| {
-                    (a.min(r.min.0), b.max(r.max.0))
-                });
-                // the colour bar: thickest at the top, as the analysis tools stack it
-                let (x, y0, w, h) = (view.min.x + 14.0, view.min.y + 76.0, 16.0, 180.0);
+                let p = ui.painter().clone();
+                let (lo, hi) = (r.min.0, r.max.0);
+                // the legend: title, the model's step and sheet, the bands
+                let (x, y0) = (view.min.x + 24.0, view.min.y + 56.0);
+                p.rect_filled(
+                    Rect::from_min_size(pos2(x - 12.0, y0 - 12.0), vec2(260.0, 380.0)),
+                    6.0,
+                    t.bg.gamma_multiply(0.88),
+                );
+                p.text(pos2(x, y0), Align2::LEFT_TOP, "Wall thickness", semi(14.0), t.ink);
                 p.text(
-                    Pos2::new(x, y0 - 18.0),
-                    egui::Align2::LEFT_BOTTOM,
-                    "Wall thickness (mm)",
-                    sans(12.0),
-                    t.ink,
+                    pos2(x, y0 + 22.0),
+                    Align2::LEFT_TOP,
+                    format!("Unit: mm · step {} / {n}", step + 1),
+                    sans(11.0),
+                    t.ink2,
                 );
-                let n = 24;
-                for k in 0..n {
-                    let (a, b) = (k as f32 / n as f32, (k + 1) as f32 / n as f32);
-                    let r = Rect::from_min_max(Pos2::new(x, y0 + h * a), Pos2::new(x + w, y0 + h * b));
-                    p.rect_filled(r, 0.0, c32(colour(1.0 - (a + b) / 2.0)));
-                }
-                p.rect_stroke(
-                    Rect::from_min_size(Pos2::new(x, y0), vec2(w, h)),
-                    0.0,
-                    Stroke::new(1.0, t.ink2),
-                    egui::StrokeKind::Outside,
+                p.text(
+                    pos2(x, y0 + 38.0),
+                    Align2::LEFT_TOP,
+                    format!("sheet {:.2} · {}", r.t, r.material),
+                    sans(11.0),
+                    t.ink2,
                 );
-                for k in 0..=5 {
-                    let f = k as f64 / 5.0;
-                    let v = hi - (hi - lo) * f;
-                    let label = match k {
-                        0 => format!("{v:.3} Max"),
-                        5 => format!("{v:.3} Min"),
-                        _ => format!("{v:.3}"),
+                let (bh, by) = (22.0, y0 + 62.0);
+                for (k, c) in BANDS.iter().enumerate() {
+                    let sw = Rect::from_min_size(pos2(x, by + k as f32 * bh), vec2(26.0, bh));
+                    p.rect_filled(sw, 0.0, c32(*c));
+                    let v = hi - (hi - lo) * k as f64 / 9.0;
+                    let tag = match k {
+                        0 => " Max",
+                        9 => " Min",
+                        _ => "",
                     };
                     p.text(
-                        Pos2::new(x + w + 6.0, y0 + h * f as f32),
-                        egui::Align2::LEFT_CENTER,
-                        label,
-                        mono(11.0),
+                        pos2(x + 34.0, sw.center().y),
+                        Align2::LEFT_CENTER,
+                        format!("{v:.2}{tag}"),
+                        mono(12.0),
                         t.ink,
                     );
                 }
-                // the extremes, pinned where they are
-                for r in &rows {
-                    for (tag, (v, at)) in [("MIN", r.min), ("MAX", r.max)] {
-                        let Some(px) = camera.pixel_of(at, size.0, size.1) else {
-                            continue;
-                        };
-                        let s = view.min + vec2(px.0, px.1) / ppp;
-                        let f = if hi > lo {
-                            ((v - lo) / (hi - lo)) as f32
-                        } else {
-                            0.5
-                        };
-                        let text = format!("{tag} {v:.3} mm");
-                        let tip = s + vec2(14.0, -18.0);
-                        p.line_segment([s, tip], Stroke::new(1.5, t.ink));
-                        p.circle_filled(s, 3.5, c32(colour(f)));
-                        p.circle_stroke(s, 3.5, Stroke::new(1.0, t.ink));
-                        let g = p.layout_no_wrap(text, mono(11.0), t.ink);
-                        let r = Rect::from_min_size(tip + vec2(0.0, -g.size().y), g.size()).expand(3.0);
-                        p.rect_filled(r, 3.0, t.raised);
-                        p.rect_stroke(r, 3.0, Stroke::new(1.0, c32(colour(f))), egui::StrokeKind::Inside);
-                        p.galley(r.min + vec2(3.0, 3.0), g, t.ink);
+                let lim_y = by + 10.0 * bh + 16.0;
+                if r.limit > 0.0 {
+                    let red = Color32::from_rgb(0xf0, 0x6a, 0x5c);
+                    p.text(
+                        pos2(x, lim_y),
+                        Align2::LEFT_CENTER,
+                        format!("— limit {:.2} (min_wall of t)", r.limit),
+                        sans(11.0),
+                        red,
+                    );
+                }
+                let g = p.layout(r.model.clone(), sans(11.0), t.ink2, 230.0);
+                p.galley(pos2(x, lim_y + 14.0), g, t.ink2);
+                // the extremes and the probes, pinned where they are
+                let on = |q: [f32; 3]| {
+                    camera
+                        .pixel_of(q, size.0, size.1)
+                        .map(|px| view.min + vec2(px.0, px.1) / ppp)
+                };
+                if let Some(s) = on(r.max.1) {
+                    flag(
+                        &p,
+                        s,
+                        format!("MAX {:.2} mm", r.max.0),
+                        c32(BANDS[0]),
+                        Color32::WHITE,
+                        vec2(-40.0, 48.0),
+                    );
+                }
+                if let Some(s) = on(r.min.1) {
+                    flag(
+                        &p,
+                        s,
+                        format!("MIN {:.2} mm", r.min.0),
+                        c32(BANDS[9]),
+                        Color32::WHITE,
+                        vec2(46.0, 40.0),
+                    );
+                }
+                for (k, (q, v)) in probes.iter().enumerate() {
+                    if let Some(s) = on(*q) {
+                        flag(
+                            &p,
+                            s,
+                            format!("Probe {} · {v:.2} mm", k + 1),
+                            t.raised,
+                            t.ink,
+                            vec2(-30.0, -46.0),
+                        );
                     }
                 }
+                // probing: the nearest point of the sheet under the pointer
+                if probe
+                    && let Some(at) = ctx.input(|i| i.pointer.hover_pos())
+                    && view.contains(at)
+                {
+                    let near = r
+                        .points
+                        .iter()
+                        .filter_map(|(q, v)| on(*q).map(|s| (s, *q, *v)))
+                        .min_by(|a, b| (a.0 - at).length().total_cmp(&(b.0 - at).length()));
+                    if let Some((s, q, v)) = near
+                        && (s - at).length() < 24.0
+                    {
+                        flag(&p, s, format!("{v:.2} mm"), t.raised, t.ink, vec2(16.0, -30.0));
+                        if ctx.input(|i| i.pointer.primary_clicked()) {
+                            pin = Some((q, v as f64));
+                        }
+                    }
+                }
+                // the scrubber: play, the step, the stages
+                let bar = Rect::from_min_max(
+                    pos2(view.min.x + 16.0, view.max.y - 44.0),
+                    pos2(view.max.x - 16.0, view.max.y - 12.0),
+                );
+                p.rect_filled(bar, 4.0, t.surface.gamma_multiply(0.92));
+                let pb = Rect::from_min_size(bar.min + vec2(8.0, 4.0), vec2(34.0, 24.0));
+                let resp = ui.interact(pb, ui.scope_id().with("thermo-play"), Sense::click());
+                p.rect_stroke(pb, 3.0, Stroke::new(1.0, t.line), StrokeKind::Inside);
+                let c = pb.center();
+                if playing {
+                    for dx in [-4.0, 2.0] {
+                        p.rect_filled(
+                            Rect::from_min_size(c + vec2(dx, -6.0), vec2(3.0, 12.0)),
+                            0.0,
+                            t.ink,
+                        );
+                    }
+                } else {
+                    p.add(egui::Shape::convex_polygon(
+                        vec![c + vec2(-4.0, -7.0), c + vec2(7.0, 0.0), c + vec2(-4.0, 7.0)],
+                        t.ink,
+                        Stroke::NONE,
+                    ));
+                }
+                places.push(("thermo:play".to_string(), pb));
+                if resp.clicked() {
+                    play = true;
+                }
+                p.text(
+                    pos2(pb.right() + 14.0, bar.center().y),
+                    Align2::LEFT_CENTER,
+                    "Step",
+                    sans(12.0),
+                    t.ink2,
+                );
+                let stages = stage_text(&r.stages);
+                let sg = p.layout_no_wrap(format!("{} / {n} · {stages}", step + 1), mono(12.0), t.ink);
+                let track = Rect::from_min_max(
+                    pos2(pb.right() + 56.0, bar.center().y - 3.0),
+                    pos2(bar.right() - sg.size().x - 24.0, bar.center().y + 3.0),
+                );
+                p.rect_filled(track, 3.0, t.line);
+                let f = if n > 1 { step as f32 / (n - 1) as f32 } else { 1.0 };
+                let knob = pos2(track.left() + track.width() * f, track.center().y);
+                let blue = Color32::from_rgb(0x2f, 0x86, 0xd6);
+                p.rect_filled(
+                    Rect::from_min_max(track.min, pos2(knob.x, track.max.y)),
+                    3.0,
+                    blue,
+                );
+                p.circle_filled(knob, 8.0, blue);
+                p.circle_stroke(knob, 8.0, Stroke::new(1.5, Color32::WHITE));
+                let hit = track.expand2(vec2(8.0, 10.0));
+                let drag = ui.interact(hit, ui.scope_id().with("thermo-scrub"), Sense::click_and_drag());
+                places.push(("thermo:scrub".to_string(), hit));
+                if (drag.dragged() || drag.clicked())
+                    && let Some(at) = drag.interact_pointer_pos()
+                {
+                    let f = ((at.x - track.left()) / track.width()).clamp(0.0, 1.0);
+                    scrub = Some((f * (n - 1) as f32).round() as usize);
+                }
+                p.galley(
+                    pos2(
+                        bar.right() - sg.size().x - 12.0,
+                        bar.center().y - sg.size().y / 2.0,
+                    ),
+                    sg,
+                    t.ink,
+                );
             });
+        let fg = self.fg.as_mut().expect("taken above");
+        if play {
+            fg.thermo.playing = !fg.thermo.playing;
+        }
+        if let Some(k) = scrub {
+            fg.thermo.playing = false;
+            fg.thermo.step = Some(k);
+        }
+        if let Some(q) = pin {
+            fg.thermo.probes.push(q);
+        }
+        self.places.extend(places);
     }
+}
+
+/// The stages as step ranges: "drape 2–7 · vacuum 8–17 · creep 18–21".
+fn stage_text(stages: &[&'static str]) -> String {
+    let mut out: Vec<String> = vec![];
+    let mut k = 0;
+    while k < stages.len() {
+        let s = stages[k];
+        let start = k;
+        while k < stages.len() && stages[k] == s {
+            k += 1;
+        }
+        if s != "sheet" {
+            out.push(format!("{s} {}–{}", start + 1, k));
+        }
+    }
+    out.join(" · ")
 }

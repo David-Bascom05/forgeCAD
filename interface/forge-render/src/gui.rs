@@ -33,6 +33,8 @@ pub mod gui_inspect;
 mod gui_overlay;
 #[path = "gui_sheet.rs"]
 mod gui_sheet;
+#[path = "gui_thermo.rs"]
+mod gui_thermo;
 
 pub type Waker = Arc<dyn Fn() + Send + Sync>;
 
@@ -148,7 +150,7 @@ pub struct Gui {
     fg_flat: Option<crate::mesh::PartMesh>,
     pub fg_sheets: Vec<crate::fg::SheetInfo>,
     /// Each thermoform's wall-thickness map, world triangles shown while the panel asks.
-    pub fg_walls: Vec<Vec<crate::origin::WorldVert>>,
+    pub fg_walls: Vec<crate::thermo_view::Gfx>,
     /// What Forge names each face and edge of the part: what a pick becomes.
     pub fg_anchors: Option<Arc<crate::fg::AnchorView>>,
     /// An assembly's occurrences and their placements' poses as solved.
@@ -3135,6 +3137,7 @@ impl Gui {
 
     /// The Forge panel's asks: typed ops, through forge-lang; saving.
     fn apply_fg(&mut self) {
+        self.thermo_host();
         let acts = self
             .shell
             .fg
