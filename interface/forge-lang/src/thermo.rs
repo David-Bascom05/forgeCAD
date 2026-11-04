@@ -46,13 +46,33 @@ pub struct ThermoOut {
     pub side: Side,
     pub t: f64,
     pub formed: Rc<ft::Formed>,
+    /// The thickness model's result (None: `walls: false`).
+    pub walls: Option<Rc<ft::Stretch>>,
 }
 
 impl ThermoOut {
     pub fn json(&self) -> Json {
         let r = &self.formed.report;
         let (lo, hi) = r.trim_box;
-        Json::obj(vec![
+        let walls = self.walls.as_ref().map(|w| {
+            (
+                "walls",
+                Json::obj(vec![
+                    ("min", (w.min.0 * self.t).into()),
+                    ("min_at", p3(w.min.1)),
+                    ("max", (w.max.0 * self.t).into()),
+                    ("max_at", p3(w.max.1)),
+                    ("mean", (w.mean * self.t).into()),
+                    ("min_ratio", w.min.0.into()),
+                    ("unformed", w.unformed.len().into()),
+                    (
+                        "model",
+                        "membrane, sticking contact, isothermal: an estimate".into(),
+                    ),
+                ]),
+            )
+        });
+        let mut f = vec![
             ("id", self.id.as_str().into()),
             ("material", self.material.as_str().into()),
             (
@@ -84,7 +104,9 @@ impl ThermoOut {
                         .collect(),
                 ),
             ),
-        ])
+        ];
+        f.extend(walls);
+        Json::obj(f)
     }
 }
 
@@ -265,6 +287,8 @@ fn note_kind(v: &Violation) -> &'static str {
         V::SheetTooSmall { .. } => "SheetTooSmall",
         V::SheetTooLarge { .. } => "SheetTooLarge",
         V::TooDeep { .. } => "TooDeep",
+        V::ThinWall { .. } => "ThinWall",
+        V::Bridged { .. } => "Bridged",
         V::StandIn { .. } => "StandIn",
     }
 }
@@ -277,6 +301,7 @@ impl ThermoNote {
     pub fn severity(&self) -> &'static str {
         match self.v {
             Violation::StandIn { .. } => "info",
+            Violation::ThinWall { .. } | Violation::Bridged { .. } => "warning",
             _ => "violation",
         }
     }
@@ -291,7 +316,9 @@ impl ThermoNote {
             | V::SharpEdge { at, .. }
             | V::DrawTooDeep { at, .. }
             | V::Webbing { at, .. }
-            | V::VentMissing { at, .. } => Some(*at),
+            | V::VentMissing { at, .. }
+            | V::ThinWall { at, .. }
+            | V::Bridged { at, .. } => Some(*at),
             _ => None,
         }
     }
@@ -391,6 +418,17 @@ impl ThermoNote {
                     mm(*max)
                 )
             }
+            V::ThinWall { ratio, min, t, .. } => format!(
+                "the wall is predicted to thin to {} ({:.0}% of the {} sheet){by}; the material's least is {:.0}%: \
+                 a thicker sheet, more draft or a larger round there, or a plug assist",
+                mm(ratio * t),
+                ratio * 100.0,
+                mm(*t),
+                min * 100.0
+            ),
+            V::Bridged { count, .. } => format!(
+                "the modelled sheet never reaches the tool at {count} points inside the trim: it bridges there"
+            ),
             V::StandIn { material, fields } => format!(
                 "{material}'s {} are stand-ins, not sourced numbers: give the shop's own",
                 fields.join(", ")
@@ -664,6 +702,8 @@ const ARGS: &[&str] = &[
     "vent",
     "vents",
     "vent_pitch",
+    "walls",
+    "pressure",
 ];
 
 /// The arguments' numbers as written, for fixes.
@@ -782,6 +822,15 @@ fn thermoform(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         ),
         Some(o) => return Err(wrong(a.span("vents"), "vents: a list of (x, y)", Ty::List, &o)),
     };
+    let walls = match a.opt("walls") {
+        Some(Value::Bool(false)) => None,
+        None | Some(Value::Bool(true)) => Some(ft::Process {
+            law: m.law.clone(),
+            pressure: a.num("pressure", RATIO)?.map_or(0.09, |n| n.v),
+            ..ft::Process::default()
+        }),
+        Some(o) => return Err(wrong(a.span("walls"), "walls: true or false", Ty::Bool, &o)),
+    };
     let sheet = match a.opt("sheet") {
         None => None,
         Some(v) => Some(pair(v, a.span("sheet"), LEN)?),
@@ -858,7 +907,7 @@ fn thermoform(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         && let Some(mb) = failed
         && let Ok(f) = ft::analyse(&mb, &spec)
     {
-        notes(ev, &id, span, before_n, &mb, &f, &spec, &m, &shop, &nums);
+        notes(ev, &id, span, before_n, &mb, &f, None, &spec, &m, &shop, &nums);
     }
     let (idx, _) = r?;
     let ok = ev.b.building && ev.feats.last().is_some_and(|f| f.status == Status::Ok);
@@ -875,17 +924,39 @@ fn thermoform(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     if let Some(mb) = mould_body {
         let key = format!("thermoform {text} {}", body_key(&mb));
         let formed = match made {
-            Some((f, _)) => ev.b.memo(key, || Some(f)),
-            None => ev.b.memo(key, || ft::form(&mb, &spec, hid).ok().map(Rc::new)),
+            Some((f, _)) => ev.b.memo(key.clone(), || Some(f)),
+            None => {
+                ev.b.memo(key.clone(), || ft::form(&mb, &spec, hid).ok().map(Rc::new))
+            }
         };
         if let Some(f) = formed {
-            notes(ev, &id, span, before_n, &mb, &f, &spec, &m, &shop, &nums);
+            let st = walls.as_ref().map(|pr| {
+                let key = format!("thermoform walls {key} {pr:?}");
+                let t0 = std::time::Instant::now();
+                let st = ev.b.memo(key, || Rc::new(ft::stretch(&f, &spec, pr)));
+                ev.b.kernel_ms += t0.elapsed().as_secs_f64() * 1e3;
+                st
+            });
+            notes(
+                ev,
+                &id,
+                span,
+                before_n,
+                &mb,
+                &f,
+                st.as_deref(),
+                &spec,
+                &m,
+                &shop,
+                &nums,
+            );
             ev.thermos.push(ThermoOut {
                 id: id.clone(),
                 material: m.name.clone(),
                 side,
                 t: t.v,
                 formed: f,
+                walls: st,
             });
         }
     }
@@ -909,12 +980,13 @@ fn notes(
     before: usize,
     mould: &Body,
     f: &ft::Formed,
+    walls: Option<&ft::Stretch>,
     spec: &ft::Spec,
     m: &ft::Material,
     shop: &ft::FormShop,
     nums: &Nums,
 ) {
-    let found = ft::check(mould, f, spec, m, shop);
+    let found = ft::check(mould, f, spec, m, shop, walls);
     if found.is_empty() {
         return;
     }
@@ -1064,6 +1136,44 @@ fn notes(
                     }],
                 )
             }
+            Violation::ThinWall { at, ratio, min, .. } => {
+                // the sheet that comes to the least there, else the tool eased where it is thinnest
+                let need = up(spec.t * min / ratio);
+                let gauge = shop
+                    .machine
+                    .gauges
+                    .iter()
+                    .copied()
+                    .filter(|g| *g >= need - 1e-9)
+                    .fold(None, |b: Option<f64>, g| Some(b.map_or(g, |b| b.min(g))))
+                    .unwrap_or(need);
+                let mut fixes = vec![set(Some(&nums.t), id, "t", gauge, "")];
+                let made = nearest_face(f, mould, *at)
+                    .map(|n| feats_of(&[n]))
+                    .unwrap_or_default();
+                for x in &made {
+                    match x.1 {
+                        "extrude" => {
+                            let now = num_of_feat(x.2, "taper").map_or(0.0, |n| n.v);
+                            let more = (now.to_degrees() + 2.0).round().to_radians();
+                            fixes.push(set(
+                                num_of_feat(x.2, "taper").as_ref(),
+                                &x.0,
+                                "taper",
+                                more,
+                                "deg",
+                            ));
+                        }
+                        "fillet" => {
+                            if let Some(r) = num_of_feat(x.2, "radius") {
+                                fixes.push(set(Some(&r), &x.0, "r", up(1.5 * r.v), ""));
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                (made, fixes)
+            }
             Violation::GaugeNotStocked { nearest, .. } => {
                 (vec![], vec![set(Some(&nums.t), id, "t", *nearest, "")])
             }
@@ -1107,4 +1217,19 @@ fn notes(
         }
     }
     ev.warnings.extend(out);
+}
+
+/// The face of the mould nearest a point (the mesh's nearest vertex's face).
+fn nearest_face(f: &ft::Formed, mould: &Body, at: Point3) -> Option<forge_topo::Name> {
+    let mut best: Option<(f64, usize)> = None;
+    for &t in &f.contact {
+        for &v in &f.mesh.triangles[t] {
+            let d = (f.mesh.positions[v as usize] - at).length();
+            if best.is_none_or(|b| d < b.0) {
+                best = Some((d, t));
+            }
+        }
+    }
+    let (_, t) = best?;
+    Some(mould.face(forge_topo::FaceId(f.mesh.face_of[t])).name)
 }

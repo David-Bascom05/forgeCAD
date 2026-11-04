@@ -89,6 +89,18 @@ pub enum Violation {
         depth: f64,
         max: f64,
     },
+    /// The thickness model's thinnest wall, as a fraction of the sheet, under the material's least.
+    ThinWall {
+        at: Point3,
+        ratio: f64,
+        min: f64,
+        t: f64,
+    },
+    /// Places inside the trim the modelled sheet never reached: it bridges there.
+    Bridged {
+        at: Point3,
+        count: usize,
+    },
     /// The material's numbers named are stand-ins, not sourced (information).
     StandIn {
         material: String,
@@ -112,7 +124,14 @@ fn normal_at(body: &Body, face: FaceId, p: Point3) -> Option<forge_math::Vec3> {
     body.face_normal(face, s.project(p)).map(|n| n.get())
 }
 
-pub fn check(mould: &Body, f: &Formed, spec: &Spec, m: &Material, shop: &FormShop) -> Vec<Violation> {
+pub fn check(
+    mould: &Body,
+    f: &Formed,
+    spec: &Spec,
+    m: &Material,
+    shop: &FormShop,
+    walls: Option<&crate::stretch::Stretch>,
+) -> Vec<Violation> {
     let mut out = vec![];
     let male = spec.side == Side::Inner;
     let d = spec.pull.get();
@@ -310,6 +329,22 @@ pub fn check(mould: &Body, f: &Formed, spec: &Spec, m: &Material, shop: &FormSho
             depth: f.report.depth,
             max,
         });
+    }
+    if let Some(st) = walls {
+        if st.min.0 < m.min_wall {
+            out.push(Violation::ThinWall {
+                at: st.min.1,
+                ratio: st.min.0,
+                min: m.min_wall,
+                t: spec.t,
+            });
+        }
+        if let Some(&at) = st.unformed.first() {
+            out.push(Violation::Bridged {
+                at,
+                count: st.unformed.len(),
+            });
+        }
     }
     if !m.stand_in.is_empty() {
         out.push(Violation::StandIn {

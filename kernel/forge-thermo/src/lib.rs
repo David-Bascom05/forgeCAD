@@ -7,12 +7,14 @@ pub mod checks;
 pub mod field;
 pub mod material;
 pub mod scale;
+pub mod stretch;
 
 pub use build::{FormError, Formed, Report, Side, Spec, analyse, form, plane_frame};
 pub use checks::{Violation, check};
 pub use field::{Field, Region, Valley};
 pub use material::{FormShop, Machine, Material, PerT, placeholder};
 pub use scale::{Unscalable, scaled};
+pub use stretch::{Law, Process, Stretch, stretch};
 
 #[cfg(test)]
 mod tests;

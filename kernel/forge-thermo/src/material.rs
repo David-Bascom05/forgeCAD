@@ -39,6 +39,8 @@ pub struct Material {
     pub max_vent: PerT,
     /// The thinnest wall a formed part may come to, as a fraction of the sheet (for the thickness model).
     pub min_wall: f64,
+    /// The sheet's law at its forming temperature, for the thickness model.
+    pub law: crate::stretch::Law,
     /// Fields that are guesses, by name: shown on every check that reads them.
     pub stand_in: Vec<&'static str>,
 }
@@ -91,7 +93,8 @@ fn row(name: &str, forming: (f64, f64), shrink: f64, max_adr: f64) -> Material {
             plus: 0.0,
         },
         min_wall: 0.25,
-        stand_in: vec!["max_adr", "min_wall"],
+        law: crate::stretch::Law::neo_hookean(0.5),
+        stand_in: vec!["max_adr", "min_wall", "law"],
     }
 }
 

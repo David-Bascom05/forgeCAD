@@ -305,7 +305,7 @@ impl Field {
                 })
             })
             .collect();
-        let clear = edt(&wall.iter().map(|&w| !w).collect::<Vec<bool>>(), nx, ny);
+        let clear = edt_with(&wall.iter().map(|&w| !w).collect::<Vec<bool>>(), nx, ny, true);
         // the hole's edge a cell clear of the wall, at most two cells further
         let r = (0.5 * d / self.h + 1.0).max(1.0);
         let reach = (3.0 * (pitch / self.h).clamp(2.0, 8.0)) as i64;
@@ -353,12 +353,17 @@ impl Field {
 /// the grid count as not in it): Felzenszwalb and Huttenlocher's two passes of the lower envelope
 /// of parabolas.
 pub fn edt(mask: &[bool], nx: usize, ny: usize) -> Vec<f64> {
+    edt_with(mask, nx, ny, false)
+}
+
+/// `edt`, with the cells outside the grid in the mask where `open` (the grid's edge is no wall).
+pub fn edt_with(mask: &[bool], nx: usize, ny: usize, open: bool) -> Vec<f64> {
     let big = ((nx + ny + 2) * (nx + ny + 2)) as f64;
     let mut g: Vec<f64> = mask.iter().map(|&m| if m { big } else { 0.0 }).collect();
     let pass = |f: &[f64]| -> Vec<f64> {
         // padded with an outside cell at either end
         let n = f.len() + 2;
-        let mut fp = vec![0.0; n];
+        let mut fp = vec![if open { big } else { 0.0 }; n];
         fp[1..n - 1].copy_from_slice(f);
         let mut v = vec![0usize; n];
         let mut z = vec![0.0f64; n + 1];

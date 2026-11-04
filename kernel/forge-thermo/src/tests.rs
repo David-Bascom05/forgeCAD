@@ -72,7 +72,7 @@ fn a_male_box_forms_over_its_mould() {
     assert!(!f.report.vents.is_empty());
     assert!((f.report.scale - 1.005).abs() < 1e-12);
     let shop = placeholder();
-    let c = check(&mould, &f, &s, shop.material("ABS").unwrap(), &shop);
+    let c = check(&mould, &f, &s, shop.material("ABS").unwrap(), &shop, None);
     let k = kinds(&c);
     assert!(!k.contains(&"DraftTooLow".into()), "{c:?}");
     // the top's edges are sharp
@@ -85,7 +85,7 @@ fn walls_square_to_the_pull_have_no_draft() {
     let s = spec(Side::Inner);
     let f = form(&mould, &s, 11).unwrap();
     let shop = placeholder();
-    let c = check(&mould, &f, &s, shop.material("ABS").unwrap(), &shop);
+    let c = check(&mould, &f, &s, shop.material("ABS").unwrap(), &shop, None);
     let n = c
         .iter()
         .filter(|x| matches!(x, Violation::DraftTooLow { .. }))
@@ -122,7 +122,7 @@ fn a_female_cavity_forms_inside() {
         forge_topo::check(&f.tool)
     );
     let shop = placeholder();
-    let c = check(&mould, &f, &s, shop.material("ABS").unwrap(), &shop);
+    let c = check(&mould, &f, &s, shop.material("ABS").unwrap(), &shop, None);
     let k = kinds(&c);
     assert!(!k.contains(&"DraftTooLow".into()), "{c:?}");
     assert!(!k.contains(&"Undercut".into()), "{c:?}");
@@ -143,7 +143,7 @@ fn a_tool_wider_at_the_top_is_an_undercut() {
     let s = spec(Side::Inner);
     let f = form(&mould, &s, 11).unwrap();
     let shop = placeholder();
-    let c = check(&mould, &f, &s, shop.material("ABS").unwrap(), &shop);
+    let c = check(&mould, &f, &s, shop.material("ABS").unwrap(), &shop, None);
     let n = c
         .iter()
         .filter(|x| matches!(x, Violation::Undercut { .. }))
@@ -175,4 +175,49 @@ fn absurd_sizes_are_refused_before_anything_is_laid_out() {
         form(&mould, &s, 11),
         Err(FormError::Size { what: "trim", .. })
     ));
+}
+
+#[test]
+fn a_cup_thins_most_at_its_floor_corner() {
+    let p = Profile {
+        plane: Frame::WORLD,
+        loops: vec![Profile::circle(Point2::new(0.0, 0.0), 30.0, 0)],
+    };
+    let mould = forge_ops::tapered(&p, -30.0, 3f64.to_radians(), 3)
+        .unwrap()
+        .remove(0);
+    let s = spec(Side::Outer);
+    let f = analyse(&mould, &s).unwrap();
+    let t = std::time::Instant::now();
+    let st = stretch(&f, &s, &Process::default());
+    eprintln!(
+        "cup: min {:?} max {:?} mean {} (ADR mean {}) unformed {} its {} in {:?}",
+        st.min,
+        st.max,
+        st.mean,
+        1.0 / f.report.adr,
+        st.unformed.len(),
+        st.iterations,
+        t.elapsed()
+    );
+    assert!(st.unformed.len() < 10);
+}
+
+#[test]
+fn a_male_box_thins_down_its_walls() {
+    let mould = block(60.0, 40.0, 25.0, 6.0, 5.0);
+    let s = spec(Side::Inner);
+    let f = analyse(&mould, &s).unwrap();
+    let t = std::time::Instant::now();
+    let st = stretch(&f, &s, &Process::default());
+    eprintln!(
+        "box: min {:?} max {:?} mean {} (ADR mean {}) unformed {} its {} in {:?}",
+        st.min,
+        st.max,
+        st.mean,
+        1.0 / f.report.adr,
+        st.unformed.len(),
+        st.iterations,
+        t.elapsed()
+    );
 }

@@ -307,6 +307,90 @@ pub fn wrap_tau(a: f64) -> f64 {
     r
 }
 
+const LN2_HI: f64 = 6.931_471_803_691_238_164_90e-1;
+const LN2_LO: f64 = 1.908_214_929_270_587_700_02e-10;
+
+/// 2^k, for k in the normal range.
+fn pow2(k: i32) -> f64 {
+    f64::from_bits(((0x3ff + k) as u64) << 52)
+}
+
+/// e^x (fdlibm's e_exp).
+pub fn exp(x: f64) -> f64 {
+    const INVLN2: f64 = 1.442_695_040_888_963_387_00;
+    const P1: f64 = 1.666_666_666_666_660_190_37e-1;
+    const P2: f64 = -2.777_777_777_701_559_338_42e-3;
+    const P3: f64 = 6.613_756_321_437_934_361_17e-5;
+    const P4: f64 = -1.653_390_220_546_525_153_90e-6;
+    const P5: f64 = 4.138_136_797_057_238_460_39e-8;
+    if x.is_nan() {
+        return x;
+    }
+    if x > 709.782_712_893_384 {
+        return f64::INFINITY;
+    }
+    if x < -745.133_219_101_941_1 {
+        return 0.0;
+    }
+    let k = (x * INVLN2 + if x < 0.0 { -0.5 } else { 0.5 }) as i32;
+    let hi = x - k as f64 * LN2_HI;
+    let lo = k as f64 * LN2_LO;
+    let r = hi - lo;
+    let z = r * r;
+    let c = r - z * (P1 + z * (P2 + z * (P3 + z * (P4 + z * P5))));
+    let y = 1.0 - ((lo - (r * c) / (2.0 - c)) - hi);
+    // two factors keep 2^k in range at either end
+    let h = k / 2;
+    y * pow2(h) * pow2(k - h)
+}
+
+/// The natural logarithm (fdlibm's e_log); NaN below 0, -inf at 0.
+pub fn ln(x: f64) -> f64 {
+    const LG1: f64 = 6.666_666_666_666_735_130e-1;
+    const LG2: f64 = 3.999_999_999_940_941_908e-1;
+    const LG3: f64 = 2.857_142_874_366_239_149e-1;
+    const LG4: f64 = 2.222_219_843_214_978_396e-1;
+    const LG5: f64 = 1.818_357_216_161_805_012e-1;
+    const LG6: f64 = 1.531_383_769_920_937_332e-1;
+    const LG7: f64 = 1.479_819_860_511_658_591e-1;
+    if x.is_nan() || x < 0.0 {
+        return f64::NAN;
+    }
+    if x == 0.0 {
+        return f64::NEG_INFINITY;
+    }
+    if x == f64::INFINITY {
+        return x;
+    }
+    let (mut x, mut k) = (x, 0i32);
+    if x < f64::MIN_POSITIVE {
+        x *= pow2(54);
+        k -= 54;
+    }
+    let bits = x.to_bits();
+    k += ((bits >> 52) & 0x7ff) as i32 - 0x3ff;
+    let mut m = f64::from_bits((bits & 0x000f_ffff_ffff_ffff) | 0x3ff0_0000_0000_0000);
+    if m > core::f64::consts::SQRT_2 {
+        m *= 0.5;
+        k += 1;
+    }
+    let f = m - 1.0;
+    let s = f / (2.0 + f);
+    let z = s * s;
+    let w = z * z;
+    let t1 = w * (LG2 + w * (LG4 + w * LG6));
+    let t2 = z * (LG1 + w * (LG3 + w * (LG5 + w * LG7)));
+    let r = t2 + t1;
+    let hfsq = 0.5 * f * f;
+    let k = k as f64;
+    k * LN2_HI - ((hfsq - (s * (hfsq + r) + k * LN2_LO)) - f)
+}
+
+/// x^y for x > 0, as e^(y ln x).
+pub fn powf(x: f64, y: f64) -> f64 {
+    exp(y * ln(x))
+}
+
 #[cfg(test)]
 #[allow(clippy::disallowed_methods)]
 mod tests {
@@ -322,6 +406,23 @@ mod tests {
         let ia = if ia < 0 { i64::MIN - ia } else { ia };
         let ib = if ib < 0 { i64::MIN - ib } else { ib };
         ia.abs_diff(ib)
+    }
+
+    #[test]
+    fn exp_and_ln_match_platform() {
+        let mut rng = Rng::new(7);
+        let mut worst = (0, 0);
+        for _ in 0..200_000 {
+            let x = (rng.unit() - 0.5) * 1400.0;
+            worst.0 = worst.0.max(ulps(exp(x), x.exp()));
+            let y = rng.unit() * 1e3 * if rng.unit() < 0.5 { 1e-300 } else { 1.0 };
+            worst.1 = worst.1.max(ulps(ln(y), y.ln()));
+        }
+        assert!(worst.0 <= 1 && worst.1 <= 1, "{worst:?}");
+        assert_eq!(exp(0.0), 1.0);
+        assert_eq!(ln(1.0), 0.0);
+        assert_eq!(exp(800.0), f64::INFINITY);
+        assert!(ln(-1.0).is_nan());
     }
 
     #[test]
