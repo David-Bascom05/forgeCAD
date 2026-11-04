@@ -23,6 +23,7 @@ mod sketch3d;
 pub mod sketching;
 pub mod theme;
 pub mod thermo;
+pub mod thermo_material;
 pub mod thermo_ui;
 mod tree;
 

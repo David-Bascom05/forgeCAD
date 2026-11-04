@@ -59,6 +59,8 @@ pub struct ThermoUi {
     /// Asked of the host: an export of the thermoform (its id, what).
     pub want_export: Option<(String, Export)>,
     pub said: Option<String>,
+    /// A material opened from Convert's "…": its record, and where saving it writes.
+    pub material: Option<forge_material::Material>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -679,6 +681,7 @@ impl Shell {
         self.mould_dialog(ctx, &t, &mut fg, &mut places);
         self.thermo_issues(ctx, &t, &mut fg, &mut places);
         self.draft_legend(ctx, &t, &mut fg, &mut places);
+        material_window(ctx, &t, &mut fg, &mut places);
         self.places.extend(places);
         self.fg = Some(fg);
     }
@@ -696,6 +699,7 @@ impl Shell {
         let v = self.view_rect;
         let mut close = false;
         let mut ok = false;
+        let mut open_material: Option<String> = None;
         egui::Window::new("Convert to Thermoform")
             .id(egui::Id::unique("thermo-convert"))
             .title_bar(false)
@@ -768,6 +772,14 @@ impl Shell {
                             }
                         });
                     places.push(("thermo:convert:material".into(), r.response.rect));
+                    let more = ui.add(
+                        egui::Button::new(egui::RichText::new("…").font(sans(13.0)))
+                            .min_size(vec2(30.0, 26.0)),
+                    );
+                    places.push(("thermo:convert:more".into(), more.rect));
+                    if more.clicked() {
+                        open_material = Some(c.material.clone());
+                    }
                 });
                 if c.from != 1 {
                     row(ui, t, "Gauge t", DLG_W, 32.0, |ui| {
@@ -830,6 +842,10 @@ impl Shell {
                 });
                 ui.add_space(12.0);
             });
+        if let Some(name) = open_material {
+            let libs = forge_material::Libraries::cached(None);
+            fg.thermo.material = libs.find(&name).map(|x| x.1.clone());
+        }
         if ok {
             fg.out.push(FgAct::Apply(Op::AddFeature {
                 before: None,
@@ -1648,4 +1664,156 @@ fn section(ctx: &egui::Context, t: &Theme, v: Rect, r: &ThermoRow, flange: Optio
 /// The banded legend's colour for a thickness between the range's ends.
 pub fn legend_colour(f: f32) -> Color32 {
     c32(band(f))
+}
+
+/// The browser's heading over a thermoform part's rows (none on a part without one).
+pub fn tree_heading(ui: &mut Ui, t: &Theme, fg: &FgPanel, w: f32, what: &str, note: &str) {
+    if fg.thermos.is_empty() {
+        return;
+    }
+    let (r, _) = ui.allocate_exact_size(vec2(w, 22.0), Sense::hover());
+    let g = ui.painter().layout_no_wrap(what.into(), sans(10.5), t.ink2);
+    let gw = g.size().x;
+    ui.painter()
+        .galley(pos2(r.left() + 14.0, r.center().y - g.size().y / 2.0), g, t.ink2);
+    ui.painter().text(
+        pos2(r.left() + 20.0 + gw, r.center().y),
+        Align2::LEFT_CENTER,
+        format!("({note})"),
+        sans(10.5),
+        t.ink2.gamma_multiply(0.8),
+    );
+}
+
+/// What each thermoform generated, in the browser under the shape: the formed part, the mould,
+/// the blank; a click opens what shows it.
+pub fn tree_generated(ui: &mut Ui, t: &Theme, fg: &mut FgPanel, w: f32, places: &mut Vec<(String, Rect)>) {
+    if fg.thermos.is_empty() {
+        return;
+    }
+    ui.add_space(6.0);
+    tree_heading(ui, t, fg, w, "GENERATED", "from the shape");
+    let rows: Vec<(String, String, String, &'static str, Cmd)> = fg
+        .thermos
+        .iter()
+        .flat_map(|r| {
+            let fact = |k: &str| {
+                r.facts
+                    .iter()
+                    .find(|f| f.0 == k)
+                    .map_or(String::new(), |f| f.1.clone())
+            };
+            [
+                (
+                    r.id.clone(),
+                    "Formed part".to_string(),
+                    format!("{:.2} nominal", r.t),
+                    "thicken",
+                    Cmd::Thickness,
+                ),
+                (
+                    r.id.clone(),
+                    "Mould".to_string(),
+                    format!("+{:.2} % · {} vents", r.shrink * 100.0, fact("vents")),
+                    "extrude",
+                    Cmd::Mould,
+                ),
+                (
+                    r.id.clone(),
+                    "Blank".to_string(),
+                    fact("sheet used"),
+                    "rect",
+                    Cmd::Trim,
+                ),
+            ]
+        })
+        .collect();
+    for (id, name, note, icon, cmd) in rows {
+        let (r, resp) = ui.allocate_exact_size(vec2(w, super::ROW_H), Sense::click());
+        let p = ui.painter();
+        if resp.hovered() {
+            p.rect_filled(r, 0.0, t.hover);
+        }
+        super::icons::draw(p, pos2(r.left() + 20.0, r.top() + 5.0), 16.0, icon, 1.5, t.ink);
+        let g = p.layout_no_wrap(name.clone(), sans(13.0), t.ink);
+        let gw = g.size().x;
+        p.galley(pos2(r.left() + 42.0, r.center().y - g.size().y / 2.0), g, t.ink);
+        p.text(
+            pos2(r.left() + 48.0 + gw, r.center().y),
+            Align2::LEFT_CENTER,
+            note,
+            sans(11.0),
+            t.ink2,
+        );
+        places.push((format!("fg:generated:{id}:{name}"), r));
+        if resp.clicked() {
+            fg.thermo_command(cmd);
+        }
+    }
+}
+
+/// A material's thermoforming values, opened from Convert: the Material Browser's Thermoform tab
+/// on its own, and Save to My materials.
+fn material_window(ctx: &egui::Context, t: &Theme, fg: &mut FgPanel, places: &mut Vec<(String, Rect)>) {
+    let Some(mut m) = fg.thermo.material.take() else {
+        return;
+    };
+    let mut open = true;
+    let mut save = false;
+    egui::Window::new(format!("Material · {} · Thermoform", m.name))
+        .id(egui::Id::unique("thermo-material"))
+        .collapsible(false)
+        .resizable(false)
+        .open(&mut open)
+        .frame(frame(t).inner_margin(14))
+        .default_pos(pos2(300.0, 190.0))
+        .default_size(vec2(760.0, 560.0))
+        .show(ctx, |ui| {
+            ui.set_width(760.0);
+            super::thermo_material::tab(ui, t, &mut m);
+            ui.add_space(10.0);
+            ui.horizontal(|ui| {
+                let dir = forge_material::user_dir().map(|d| d.join("mine.toml"));
+                ui.label(
+                    egui::RichText::new(match &dir {
+                        Some(d) => format!("Saves to {}", d.display()),
+                        None => "No user library here".into(),
+                    })
+                    .font(sans(11.5))
+                    .color(t.ink2),
+                );
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if button(
+                        ui,
+                        t,
+                        "Save to My materials",
+                        true,
+                        "thermo:material:save".into(),
+                        places,
+                    ) {
+                        save = true;
+                    }
+                });
+            });
+        });
+    if save {
+        let said = match forge_material::user_dir() {
+            Some(d) => {
+                let file = d.join("mine.toml");
+                let _ = std::fs::create_dir_all(&d);
+                match forge_material::save(&file, &m, None) {
+                    Ok(()) => {
+                        fg.thermo_materials.clear();
+                        format!("Saved {} to {}", m.name, file.display())
+                    }
+                    Err(e) => format!("Not saved: {e}"),
+                }
+            }
+            None => "No user library here".into(),
+        };
+        fg.thermo.said = Some(said);
+    }
+    if open {
+        fg.thermo.material = Some(m);
+    }
 }

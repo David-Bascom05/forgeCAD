@@ -6,6 +6,7 @@
 pub mod build;
 pub mod checks;
 pub mod field;
+pub mod fit;
 pub mod material;
 pub mod prepare;
 pub mod scale;

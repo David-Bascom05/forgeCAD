@@ -641,6 +641,7 @@ impl Shell {
                     }
                 }
                 let mut hidden: Option<String> = None;
+                super::thermo_ui::tree_heading(ui, &t, &fg, area.width(), "SHAPE", "what you modelled");
                 for row in &rows {
                     if let Some(h) = &hidden {
                         if row.key.starts_with(h.as_str()) && row.key != *h {
@@ -739,6 +740,7 @@ impl Shell {
                         hidden = Some(row.key.clone());
                     }
                 }
+                super::thermo_ui::tree_generated(ui, &t, &mut fg, area.width(), &mut places);
             });
         if let Some(k) = toggle
             && !fg.collapsed.remove(&k)

@@ -33,6 +33,7 @@ forge-math = { path = "../../kernel/forge-math" }
 forge-model = { path = "../../kernel/forge-model" }
 forge-sketch = { path = "../../kernel/forge-sketch" }
 forge-material = { path = "../../kernel/forge-material" }
+forge-thermo = { path = "../../kernel/forge-thermo" }
 
 # the kernel builds meshes natively; the browser loads them (see README)
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
@@ -42,7 +43,6 @@ forge-mesh = { path = "../../kernel/forge-mesh" }
 forge-geom = { path = "../../kernel/forge-geom" }
 forge-topo = { path = "../../kernel/forge-topo" }
 forge-sheet = { path = "../../kernel/forge-sheet" }
-forge-thermo = { path = "../../kernel/forge-thermo" }
 forge-step = { path = "../../kernel/forge-step" }
 
 # already in wgpu's tree on this target: only the entry point names them

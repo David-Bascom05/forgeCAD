@@ -24,7 +24,11 @@ pub struct ExtraTab {
 
 /// The tabs after Identity, Physical and Appearance, before Sources: thermoforming adds its own
 /// here (its values are `thermo.*` keys of the material).
-pub const EXTRA_TABS: &[ExtraTab] = &[];
+pub const EXTRA_TABS: &[ExtraTab] = &[ExtraTab {
+    title: "Thermoform",
+    applies: super::thermo_material::applies,
+    ui: super::thermo_material::tab,
+}];
 
 const FAMILIES: [&str; 9] = [
     "steel",
