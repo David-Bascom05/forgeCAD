@@ -68,7 +68,12 @@ fn asm_groups(s: &Shell) -> Option<Vec<Group>> {
                 "Component",
                 vec![
                     fg("Place", "part", FgCmd::Place, up("place")),
-                    go("Content Center", "folder", Action::Fg(FgCmd::ContentCenter), s.content.open),
+                    go(
+                        "Content Center",
+                        "folder",
+                        Action::Fg(FgCmd::ContentCenter),
+                        s.content.open,
+                    ),
                 ],
                 vec![
                     fg("Pattern", "rect", FgCmd::Pattern, up("pattern")),
