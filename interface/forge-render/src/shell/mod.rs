@@ -143,6 +143,8 @@ pub enum FgCmd {
     Joint,
     Constrain,
     Pattern,
+    Mirror,
+    Copy,
     FreeMove,
     FreeRotate,
 }

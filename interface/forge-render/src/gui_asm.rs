@@ -98,6 +98,7 @@ impl Gui {
                 });
             }
             FgAct::AsmPattern { inst, count, step } => self.asm_pattern(&inst, count, step),
+            FgAct::AsmStandardPart => self.asm_standard_part(),
             FgAct::AsmApplyMoves => {
                 let Some(a) = self.shell.fg.as_mut().and_then(|p| p.asm.as_mut()) else {
                     return;
@@ -119,8 +120,19 @@ impl Gui {
                 self.asm_show();
             }
             FgAct::AsmSnaps(file) => self.asm_find_snaps(file),
+            FgAct::AsmMirror { inst, plane, file } => {
+                if let Err(e) = self.asm_mirror(&inst, plane, file.as_deref()) {
+                    self.shell.status = e;
+                }
+            }
             _ => {}
         }
+    }
+
+    /// The Place dialog's "Standard part…": the standard parts library's hook. It places what it
+    /// makes with `asm_place(file, None)` (a path from the assembly's folder).
+    pub fn asm_standard_part(&mut self) {
+        self.shell.status = "Standard parts: the library isn't in this build yet".into();
     }
 
     /// A part file the solve names, as a path to read.
@@ -431,7 +443,7 @@ impl Gui {
 
     /// Place: a part (or subassembly) statement at the end, beside what's there; the first
     /// grounded. Another like `like`: its orientation, beside it.
-    fn asm_place(&mut self, file: &str, like: Option<&str>) {
+    pub fn asm_place(&mut self, file: &str, like: Option<&str>) {
         let path = self.asm_path(file);
         let text = match std::fs::read_to_string(&path) {
             Ok(t) => t,
@@ -528,6 +540,142 @@ impl Gui {
             v(x.z),
         );
         self.asm_act(FgAct::AsmOps(vec![Op::AddFeature { before: None, text }]));
+    }
+}
+
+impl Gui {
+    /// Mirror Components and Copy Components, as Inventor's: a new part file (this one reflected
+    /// in a plane of its own far enough off, the original cut away; or a copy), or the same file
+    /// reused; placed reflected in the assembly's plane (or beside the original).
+    fn asm_mirror(&mut self, inst: &str, plane: Option<usize>, file: Option<&str>) -> Result<(), String> {
+        let a = self
+            .shell
+            .fg
+            .as_ref()
+            .and_then(|p| p.asm.as_ref())
+            .ok_or("no assembly")?;
+        let i = a
+            .insts
+            .iter()
+            .find(|i| i.path == inst)
+            .ok_or("no such component")?
+            .clone();
+        let pose = a
+            .poses
+            .iter()
+            .find(|p| p.0 == inst)
+            .map(|p| p.1)
+            .ok_or("not solved yet")?;
+        let src_path = self.asm_path(&i.file);
+        let dir_of = |f: &str| f.rsplit_once('/').map_or(String::new(), |(d, _)| format!("{d}/"));
+        let rel = |name: &str| format!("{}{name}", dir_of(&i.file));
+        let Some(k) = plane else {
+            // Copy: a new file the same, or the same file, beside it
+            let placed = match file {
+                Some(name) => {
+                    let to = src_path.with_file_name(name);
+                    if to.exists() {
+                        return Err(format!("{}: there is a file of that name", to.display()));
+                    }
+                    std::fs::copy(&src_path, &to).map_err(|e| format!("{}: {e}", to.display()))?;
+                    rel(name)
+                }
+                None => i.file.clone(),
+            };
+            self.asm_place(&placed, Some(inst));
+            return Ok(());
+        };
+        // the assembly's plane through its origin, and the reflection in it
+        let n = [Vec3::Z, Vec3::Y, Vec3::X][k];
+        let reflect = |v: Vec3| v - n * (2.0 * v.dot(n));
+        // the part's own axis most along the plane's normal: its mirror plane is square to it
+        let axes = [pose.x().get(), pose.y().get(), pose.z().get()];
+        let j = (0..3)
+            .max_by(|&p, &q| axes[p].dot(n).abs().total_cmp(&axes[q].dot(n).abs()))
+            .unwrap_or(0);
+        let mut cols = axes.map(reflect);
+        cols[j] = -cols[j];
+        let origin = Point3::ORIGIN + reflect(pose.origin - Point3::ORIGIN);
+        let (placed, origin) = match file {
+            None => (i.file.clone(), origin),
+            Some(name) => {
+                let to = src_path.with_file_name(name);
+                if to.exists() {
+                    return Err(format!("{}: there is a file of that name", to.display()));
+                }
+                let text =
+                    std::fs::read_to_string(&src_path).map_err(|e| format!("{}: {e}", src_path.display()))?;
+                // a declared anchor names the unmirrored geometry: out, for the mirror's own picks
+                let text: String = text
+                    .lines()
+                    .map(|l| {
+                        let t = l.trim_start();
+                        let anchor = t.split_once(" = ").is_some_and(|(n, v)| {
+                            n.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+                                && v.starts_with("anchor(")
+                        });
+                        if anchor {
+                            format!("{}# mirrored, its anchor dropped: {t}\n", &l[..l.len() - t.len()])
+                        } else {
+                            format!("{l}\n")
+                        }
+                    })
+                    .collect();
+                // far enough off that the reflection clears the part: past its box on that axis
+                let (occ, placed) = self.fg_asm.as_ref().ok_or("no assembly")?;
+                let bx = occ
+                    .iter()
+                    .find(|o| o.path == inst)
+                    .and_then(|o| placed.get(o.placement?))
+                    .and_then(|p| self.fg_asm_boxes.get(p.0))
+                    .copied()
+                    .ok_or("the part has no solid")?;
+                let gap = (bx.1[j].max(-bx.0[j]) as f64 + 1.0).ceil();
+                let (pl, ax) = [("yz", "x"), ("xz", "y"), ("xy", "z")][j];
+                let stem = i.file.rsplit('/').next().unwrap_or(&i.file);
+                let body = format!(
+                    "{}\n# Mirror Components: {stem} reflected in its own {pl} plane, mirror_gap along {ax} (written by the app)\n\
+                     shared mirror_gap = {}\n\
+                     mirror_plane = workplane(on: offset({pl}, mirror_gap))\n\
+                     mirrored = pattern(whole: true, layout: mirror(on: mirror_plane))\n\
+                     mirror_cut = split(by: mirror_plane, keep: \"plus\")\n",
+                    text.trim_end(),
+                    crate::shell::fg::short(gap)
+                );
+                std::fs::write(&to, body).map_err(|e| format!("{}: {e}", to.display()))?;
+                // the new part's points lie 2 gap further along its axis: the pose takes that back
+                (rel(name), origin - cols[j] * (2.0 * gap))
+            }
+        };
+        let frame = Frame::from_axes(origin, cols[0], cols[1], cols[2]).ok_or("a degenerate pose")?;
+        let src = self
+            .shell
+            .fg
+            .as_ref()
+            .map(|p| p.source.clone())
+            .unwrap_or_default();
+        let stem: String = placed
+            .rsplit('/')
+            .next()
+            .unwrap_or(&placed)
+            .trim_end_matches(".fg")
+            .chars()
+            .map(|c| {
+                if c.is_ascii_alphanumeric() {
+                    c.to_ascii_lowercase()
+                } else {
+                    '_'
+                }
+            })
+            .collect();
+        let name = crate::shell::asmtools::free_name(&src, &stem);
+        let line = format!("{name} = part(\"{placed}\", at: {})", pose_text(&frame));
+        self.asm_act(FgAct::AsmOps(vec![Op::AddFeature {
+            before: None,
+            text: line,
+        }]));
+        self.shell.status = format!("Mirrored {inst} as {name}");
+        Ok(())
     }
 }
 

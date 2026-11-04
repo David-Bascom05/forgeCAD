@@ -57,6 +57,7 @@ fn asm_groups(s: &Shell) -> Option<Vec<Group>> {
     let up = |k: &str| match tool {
         Some(super::asmtools::AsmTool::Place(_)) => k == "place",
         Some(super::asmtools::AsmTool::Pattern(_)) => k == "pattern",
+        Some(super::asmtools::AsmTool::MirrorCopy(m)) => k == if m.mirror { "mirror" } else { "copy" },
         Some(super::asmtools::AsmTool::Free(r)) => k == if *r { "rotate" } else { "move" },
         Some(super::asmtools::AsmTool::Link(f)) => k == if f.joint { "joint" } else { "constrain" },
         None => false,
@@ -68,8 +69,8 @@ fn asm_groups(s: &Shell) -> Option<Vec<Group>> {
                 vec![fg("Place", "part", FgCmd::Place, up("place"))],
                 vec![
                     fg("Pattern", "rect", FgCmd::Pattern, up("pattern")),
-                    off("Mirror", "mirror"),
-                    off("Copy", "subasm"),
+                    fg("Mirror", "mirror", FgCmd::Mirror, up("mirror")),
+                    fg("Copy", "subasm", FgCmd::Copy, up("copy")),
                 ],
             ),
             g(

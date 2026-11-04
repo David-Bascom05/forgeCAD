@@ -307,3 +307,63 @@ fn a_double_click_on_a_relationship_opens_its_dialog() {
         asm(&h).tool
     );
 }
+
+#[test]
+fn mirror_makes_a_reflected_part_file_and_copy_reuses_or_copies() {
+    let f = fixtures("mirror", TWO);
+    let Some(mut h) = open(&f) else { return };
+    let dir = f.parent().unwrap().to_path_buf();
+    act(
+        &mut h,
+        FgAct::AsmMirror {
+            inst: "tip".into(),
+            plane: Some(2),
+            file: Some("arm_mirror.fg".into()),
+        },
+    );
+    let made = std::fs::read_to_string(dir.join("arm_mirror.fg")).unwrap();
+    assert!(
+        made.contains("mirror_cut = split(by: mirror_plane, keep: \"plus\")"),
+        "{made}"
+    );
+    let s = src(&h);
+    assert!(
+        s.contains("arm_mirror_1 = part(\"arm_mirror.fg\", at: pose("),
+        "{s}"
+    );
+    // the mirrored part's anchors land reflected in the yz plane: x negated, y and z kept
+    let pose = |id: &str| asm(&h).poses.iter().find(|p| p.0 == id).unwrap().1;
+    let opts = forge_lang::Options {
+        dir: Some(dir.clone()),
+        ..Default::default()
+    };
+    let (run, _) = forge_lang::run(&s, opts, Default::default());
+    assert!(
+        run.errors.is_empty(),
+        "{:?}",
+        run.errors.iter().map(|e| e.text()).collect::<Vec<_>>()
+    );
+    let centroid = |text: &str| {
+        let (r, _) = forge_lang::run(text, forge_lang::Options::default(), Default::default());
+        let c = r.measure.unwrap().centroid;
+        forge_math::Point3::new(c[0], c[1], c[2])
+    };
+    let w = pose("tip").point_to_world(centroid(&link(40.0)));
+    let wm = pose("arm_mirror_1").point_to_world(centroid(&made));
+    assert!(
+        // the mass centroid is integrated: to its own tolerance
+        (w.x + wm.x).abs() < 1e-2 && (w.y - wm.y).abs() < 1e-2 && (w.z - wm.z).abs() < 1e-2,
+        "{w:?} {wm:?}"
+    );
+    // its anchors were the unmirrored part's: taken out, to be picked again
+    assert!(forge_lang::asm::part_anchors(&made, None).is_empty());
+    act(
+        &mut h,
+        FgAct::AsmMirror {
+            inst: "tip".into(),
+            plane: None,
+            file: None,
+        },
+    );
+    assert!(src(&h).contains("arm_1 = part(\"arm.fg\""), "{}", src(&h));
+}

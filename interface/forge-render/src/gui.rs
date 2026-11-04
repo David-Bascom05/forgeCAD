@@ -3094,8 +3094,10 @@ impl Gui {
                 | crate::shell::fg::FgAct::AsmPreview(_)
                 | crate::shell::fg::FgAct::AsmPlace { .. }
                 | crate::shell::fg::FgAct::AsmBrowse
+                | crate::shell::fg::FgAct::AsmStandardPart
                 | crate::shell::fg::FgAct::AsmPattern { .. }
                 | crate::shell::fg::FgAct::AsmApplyMoves
+                | crate::shell::fg::FgAct::AsmMirror { .. }
                 | crate::shell::fg::FgAct::AsmSnaps(_)) => self.asm_act(a),
                 crate::shell::fg::FgAct::Flat(on) => {
                     if let Some(p) = &mut self.shell.fg {

@@ -122,11 +122,27 @@ pub struct PatternForm {
     pub dir: usize,
 }
 
+/// Inventor's Mirror Components and Copy Components: a new part file (a mirrored one, or a copy)
+/// placed, or the same file reused.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct MirrorForm {
+    pub inst: String,
+    /// Mirror (else Copy).
+    pub mirror: bool,
+    /// The assembly's plane mirrored in: 0 XY, 1 XZ, 2 YZ.
+    pub plane: usize,
+    /// The same part file again (a symmetric part, or a plain copy), not a new file.
+    pub reuse: bool,
+    /// The new file's name, beside the part's.
+    pub file: String,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum AsmTool {
     Place(PlaceForm),
     Link(Box<LinkForm>),
     Pattern(PatternForm),
+    MirrorCopy(MirrorForm),
     /// Free Move (false) or Free Rotate (true).
     Free(bool),
 }
@@ -933,6 +949,7 @@ impl Shell {
             let shown = Self::window("Assemble", "asm-tool", &t, at, W).show(ctx, |ui| match &mut tool {
                 AsmTool::Place(p) => keep = Self::place_ui(ui, &t, a, p, &mut out, &mut places),
                 AsmTool::Pattern(p) => keep = Self::pattern_ui(ui, &t, p, &mut out, &mut places),
+                AsmTool::MirrorCopy(m) => keep = Self::mirror_ui(ui, &t, m, &mut out, &mut places),
                 AsmTool::Free(rotate) => keep = Self::free_ui(ui, &t, a, *rotate, &mut out, &mut places),
                 AsmTool::Link(f) => keep = Self::link_ui(ui, &t, a, f, &src, &issues, &mut out, &mut places),
             });
@@ -1032,6 +1049,9 @@ impl Shell {
             if Self::fg_button(ui, "Browse…", "asm:browse".into(), places) {
                 out.push(FgAct::AsmBrowse);
             }
+            if Self::fg_button(ui, "Standard part…", "asm:stdpart".into(), places) {
+                out.push(FgAct::AsmStandardPart);
+            }
         });
         match footer(ui, t, p.chosen.is_some(), true, places) {
             Some("cancel") => keep = false,
@@ -1104,6 +1124,88 @@ impl Shell {
                     inst: p.inst.clone(),
                     count: n.unwrap_or(2),
                     step,
+                });
+                false
+            }
+            Some(_) => false,
+            None => true,
+        }
+    }
+
+    fn mirror_ui(
+        ui: &mut Ui,
+        t: &Theme,
+        m: &mut MirrorForm,
+        out: &mut Vec<FgAct>,
+        places: &mut Vec<(String, Rect)>,
+    ) -> bool {
+        let (icon, title) = if m.mirror {
+            ("mirror", "Mirror Components")
+        } else {
+            ("subasm", "Copy Components")
+        };
+        if dialog_head(ui, t, icon, title, "asm:mirror", places) {
+            return false;
+        }
+        ui.label(
+            egui::RichText::new(format!("Component  {}", m.inst))
+                .font(mono(12.0))
+                .color(t.ink),
+        );
+        if m.mirror {
+            ui.horizontal(|ui| {
+                ui.add_sized(
+                    vec2(96.0, 24.0),
+                    egui::Label::new(egui::RichText::new("Mirror plane").font(sans(12.0)).color(t.ink)),
+                );
+                for (k, w) in ["XY", "XZ", "YZ"].iter().enumerate() {
+                    let r = ui.selectable_label(m.plane == k, *w);
+                    places.push((format!("asm:plane:{w}"), r.rect));
+                    if r.clicked() {
+                        m.plane = k;
+                    }
+                }
+            });
+        }
+        ui.horizontal(|ui| {
+            ui.add_sized(
+                vec2(96.0, 24.0),
+                egui::Label::new(egui::RichText::new("Status").font(sans(12.0)).color(t.ink)),
+            );
+            let new = if m.mirror {
+                "Mirror (new part)"
+            } else {
+                "Copy (new part)"
+            };
+            for (k, w) in [new, "Reuse"].iter().enumerate() {
+                let r = ui.selectable_label(m.reuse == (k == 1), *w);
+                places.push((
+                    format!("asm:status:{}", if k == 1 { "reuse" } else { "new" }),
+                    r.rect,
+                ));
+                if r.clicked() {
+                    m.reuse = k == 1;
+                }
+            }
+        });
+        let ok_name = m.reuse
+            || (!m.file.trim().is_empty() && m.file.trim().ends_with(".fg") && !m.file.contains(['/', '\\']));
+        if !m.reuse {
+            field(ui, "New file", &mut m.file, "", "asm:newfile".into(), places, t);
+        }
+        let say = match (m.mirror, m.reuse) {
+            (true, false) => "A new part file: this one reflected, placed reflected in the plane",
+            (true, true) => "The same part placed reflected: for a part symmetric itself",
+            (false, false) => "A new part file, a copy of this one, placed beside it",
+            (false, true) => "The same part placed again beside it",
+        };
+        ui.label(egui::RichText::new(say).font(sans(11.0)).color(t.ink2));
+        match footer(ui, t, ok_name, false, places) {
+            Some("ok") => {
+                out.push(FgAct::AsmMirror {
+                    inst: m.inst.clone(),
+                    plane: m.mirror.then_some(m.plane),
+                    file: (!m.reuse).then(|| m.file.trim().to_string()),
                 });
                 false
             }
@@ -1626,6 +1728,7 @@ pub fn command(fg: &mut super::fg::FgPanel, c: super::FgCmd) -> String {
     };
     let same = match (&a.tool, c) {
         (Some(AsmTool::Place(_)), C::Place) | (Some(AsmTool::Pattern(_)), C::Pattern) => true,
+        (Some(AsmTool::MirrorCopy(m)), C::Mirror | C::Copy) => m.mirror == (c == C::Mirror),
         (Some(AsmTool::Free(r)), C::FreeMove | C::FreeRotate) => *r == (c == C::FreeRotate),
         (Some(AsmTool::Link(f)), C::Joint | C::Constrain) => f.joint == (c == C::Joint),
         _ => false,
@@ -1677,6 +1780,36 @@ pub fn command(fg: &mut super::fg::FgPanel, c: super::FgCmd) -> String {
         ),
         C::FreeMove => (AsmTool::Free(false), "Free Move: drag a component"),
         C::FreeRotate => (AsmTool::Free(true), "Free Rotate: drag a component"),
+        C::Mirror | C::Copy => {
+            let Some(i) = a.selected.clone().and_then(|k| {
+                a.insts
+                    .iter()
+                    .find(|i| i.path == k && !i.path.contains('.') && !i.sub)
+            }) else {
+                return "Choose a top-level part in the browser first".into();
+            };
+            let mirror = c == C::Mirror;
+            let stem = i
+                .file
+                .rsplit('/')
+                .next()
+                .unwrap_or(&i.file)
+                .trim_end_matches(".fg");
+            (
+                AsmTool::MirrorCopy(MirrorForm {
+                    inst: i.path.clone(),
+                    mirror,
+                    plane: 2,
+                    reuse: false,
+                    file: format!("{stem}_{}.fg", if mirror { "mirror" } else { "copy" }),
+                }),
+                if mirror {
+                    "Mirror: the plane, and a new part or reuse"
+                } else {
+                    "Copy: a new part or reuse"
+                },
+            )
+        }
         C::Pattern => {
             let Some(inst) = a.selected.clone().filter(|k| {
                 a.insts

@@ -213,6 +213,8 @@ pub enum FgAct {
     },
     /// The system's file dialog for a component to place.
     AsmBrowse,
+    /// Place's standard parts (screws, nuts, washers..): the host's hook (`Gui::asm_standard_part`).
+    AsmStandardPart,
     /// `count` occurrences of a top-level instance, `step` apart in the world.
     AsmPattern {
         inst: String,
@@ -221,6 +223,13 @@ pub enum FgAct {
     },
     /// Free Move's moves written as the instances' poses.
     AsmApplyMoves,
+    /// Mirror (in the assembly's plane: 0 XY, 1 XZ, 2 YZ) or copy (None) a top-level part: as a
+    /// new part file of this name beside it, or reusing its own (None).
+    AsmMirror {
+        inst: String,
+        plane: Option<usize>,
+        file: Option<String>,
+    },
     /// A part file's snap points, for the tool wanting an origin.
     AsmSnaps(String),
 }
