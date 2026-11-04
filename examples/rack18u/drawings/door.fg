@@ -1,0 +1,23 @@
+drawing
+# RACK-301 door: detail drawing of panels/door.fg, its face with the vents, a section across them,
+# the vent slots enlarged, the latch and hinge holes called out, and the flat pattern with bend
+# notes. 2 required (front and rear).
+
+door = part("../panels/door.fg", material: "1008 cold rolled")
+s1 = sheet("C", title: "DOOR, VENTED, t1.52", number: "RACK-301", rev: "A", drawn: "D. BASCOM",
+           material: "CR 1008 STEEL, 1.52 (16 GA)")
+
+face = base_view(door, sheet: s1, dir: "top", scale: 1/5, at: (110, 245))
+side = projected(face, at: (205, 245))
+b = section(face, [(-20, 600), (610, 600)], at: (110, 75), scale: 1/5)
+c = detail(face, (300, 600), r: 45, scale: 1, at: (290, 120))
+flat = flat_view(door, sheet: s1, scale: 1/8, at: (440, 320))
+iso = projected(face, at: (300, 330), scale: 1/9)
+
+width = dim(face, e("9bed508bd325d18c"), e("0040b3dc69f19d18"), at: (290, 870))
+height = dim(face, e("9c5bfeefdf797ca0"), e("4ffacc1eb243b384"), at: (-45, 400))
+marks = center_marks(face)
+latch = hole_note(face, e("1b1ba5d839419f74"), at: (650, 500), text: "LATCH")
+h4 = hole_note(face, e("39cd5191dd726a7c"), at: (650, 380))
+
+notes = note("NOTES:\n1. BEND RADIUS 1.6 INSIDE, K 0.40 (SENDCUTSEND).\n2. FLAT PATTERN AT 1:8; BEND NOTES ON THE BEND LINES.\n3. 2 REQUIRED: FRONT AND REAR (REAR TURNED 180 DEG).", sheet: s1, at: (330, 200))

@@ -1,0 +1,26 @@
+drawing
+# RACK-121 base pan: detail drawing of frame/base_pan.fg, folded views, a section across the
+# flanges, the corner relief enlarged, every hole size called out, and the flat pattern with its
+# bend notes for the shop.
+
+pan = part("../frame/base_pan.fg", material: "1008 cold rolled")
+s1 = sheet("C", title: "BASE PAN, 591 X 724, t3.02", number: "RACK-121", rev: "A", drawn: "D. BASCOM",
+           material: "CR 1008 STEEL, 3.02 (11 GA)")
+
+top = base_view(pan, sheet: s1, dir: "top", scale: 1/4, at: (125, 245))
+front = projected(top, at: (125, 105))
+a = section(top, [(-60, 390), (-60, -390)], at: (265, 245), scale: 1/4)
+b = detail(top, (275, 342), r: 26, scale: 1, at: (290, 95))
+flat = flat_view(pan, sheet: s1, scale: 1/6, at: (430, 300))
+iso = projected(top, at: (440, 135), scale: 1/8)
+
+width = dim(top, e("1634be636c7c6a9f"), e("e8c4b80550f553f9"), at: (0, 400))
+depth = dim(top, e("21d270329334646a"), e("a9a5f999a24f9028"), at: (-340, 0))
+marks = center_marks(top)
+flange = dim(front, e("c2090627fe00d337"), e("21d270329334646a"), at: (330, 15))
+
+h66 = hole_note(top, e("2c54d114ce5c437b"), at: (-250, -420), text: "FOR M6 POST STUDS")
+h9 = hole_note(top, e("41211f85bb8b8615"), at: (-120, -440), text: "CASTER MOUNTING")
+slot_r = radius(top, e("4d44cc79d22db3fb"), at: (-60, 420))
+
+notes = note("NOTES:\n1. BEND RADIUS 1.6 INSIDE, K 0.38 (SENDCUTSEND).\n2. FLAT PATTERN AT 1:6; BEND NOTES ON THE BEND LINES.\n3. BREAK ALL SHARP EDGES. 1 REQUIRED PER RACK.", sheet: s1, at: (330, 200))

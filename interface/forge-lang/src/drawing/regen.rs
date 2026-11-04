@@ -223,6 +223,16 @@ fn load(id: &str, file: &str, dir: &Path) -> Result<ModelOut, String> {
         return Err(format!("does not build: {}: {}", e.kind(), e.text()));
     }
     let model = Model::of(&run).ok_or("has no solid")?;
+    // the part as made: a sheet metal part's flat pattern is not part of it
+    let volume = if run.asm.is_none() {
+        model
+            .bodies
+            .first()
+            .and_then(|(b, _)| forge_topo::mass::mass(b).ok())
+            .map(|m| m.volume)
+    } else {
+        None
+    };
     let base = path.parent().map(Path::to_path_buf).unwrap_or_default();
     let bom = match &run.asm {
         Some(a) => a
@@ -242,7 +252,7 @@ fn load(id: &str, file: &str, dir: &Path) -> Result<ModelOut, String> {
         id: id.to_string(),
         file: file.to_string(),
         model,
-        volume: run.measure.as_ref().map(|m| m.volume),
+        volume,
         sheet: run
             .sheets
             .first()
@@ -1471,7 +1481,7 @@ fn annotate(
                 }
                 let Some((c, r)) = p.geom.circle() else { continue };
                 let (t0, t1) = p.geom.range();
-                if t1 - t0 < dmath::PI - 1e-6 || done.iter().any(|q| q.distance(c) < 1e-6) {
+                if t1 - t0 < dmath::TAU - 1e-6 || done.iter().any(|q| q.distance(c) < 1e-6) {
                     continue;
                 }
                 // concentric circles share one mark, the largest's
