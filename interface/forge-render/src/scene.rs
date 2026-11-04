@@ -287,21 +287,35 @@ impl Scene {
 
     /// Works out the frame's draws: finest levels first, which draws near things first.
     /// A level is the coarsest whose chord stays under `max_px` pixels on screen.
-    pub fn cull(&mut self, v: &View, max_px: f32, section: Option<[f32; 4]>) {
+    /// `second`: another cutting plane, and whether what either cuts goes (a quarter is left),
+    /// else only what both cut (three quarters are left).
+    pub fn cull(
+        &mut self,
+        v: &View,
+        max_px: f32,
+        section: Option<[f32; 4]>,
+        second: Option<([f32; 4], bool)>,
+    ) {
         let parts = self.chords.len();
         self.picked.clear();
         self.counts.fill(0);
         self.level.fill(HIDDEN);
         let [a, b, c, d, e] = v.planes;
-        // inside the view's planes, on the side of the cut that's kept
-        let kept = section.map_or([0.0, 0.0, 0.0, f32::MAX], |s| [-s[0], -s[1], -s[2], -s[3]]);
+        // inside the view's planes, and not wholly in what the cut takes away
+        let away = |p: [f32; 4], x: f32, y: f32, z: f32, r: f32| p[0] * x + p[1] * y + p[2] * z + p[3] > r;
+        let gone = |x: f32, y: f32, z: f32, r: f32| match (section, second) {
+            (None, _) => false,
+            (Some(a), None) => away(a, x, y, z, r),
+            (Some(a), Some((b, false))) => away(a, x, y, z, r) && away(b, x, y, z, r),
+            (Some(a), Some((b, true))) => away(a, x, y, z, r) || away(b, x, y, z, r),
+        };
         for i in 0..self.x.len() {
             if self.gone[i] {
                 continue;
             }
             let (x, y, z, r) = (self.x[i], self.y[i], self.z[i], -self.r[i]);
             let side = |p: [f32; 4]| p[0] * x + p[1] * y + p[2] * z + p[3] < r;
-            if side(a) | side(b) | side(c) | side(d) | side(e) | side(kept) {
+            if side(a) | side(b) | side(c) | side(d) | side(e) | gone(x, y, z, -r) {
                 continue;
             }
             let (dx, dy, dz) = (x - v.eye[0], y - v.eye[1], z - v.eye[2]);
@@ -341,8 +355,8 @@ impl Scene {
         if let Some(s) = section {
             let crossing = |&&(_, i): &&(u32, u32)| {
                 let i = i as usize;
-                let d = s[0] * self.x[i] + s[1] * self.y[i] + s[2] * self.z[i] + s[3];
-                d.abs() < self.r[i]
+                let d = |s: [f32; 4]| s[0] * self.x[i] + s[1] * self.y[i] + s[2] * self.z[i] + s[3];
+                d(s).abs() < self.r[i] || second.is_some_and(|b| d(b.0).abs() < self.r[i])
             };
             let mut cut: Vec<(u32, u32)> = self.picked.iter().filter(crossing).copied().collect();
             cut.sort_unstable();
@@ -516,7 +530,7 @@ mod tests {
         let v = cam.view(800, 600);
         let behind = [0, 1, 2].map(|k| v.eye[k] * 3.0);
         let mut s = scene(vec![Placement::at(0, behind), Placement::at(0, [0.0; 3])]);
-        s.cull(&v, 1.0, None);
+        s.cull(&v, 1.0, None, None);
         assert_eq!(s.visible, vec![1u32.to_le_bytes()]);
         assert_eq!(s.draws.len(), 1);
     }
@@ -528,7 +542,7 @@ mod tests {
         let dir = [0, 1, 2].map(|k| -v.eye[k]);
         let at = |t: f32| Placement::at(0, dir.map(|d| d * t));
         let mut s = scene(vec![at(1.0), at(1000.0)]);
-        s.cull(&v, 1.0, None);
+        s.cull(&v, 1.0, None, None);
         assert_eq!(s.draws.len(), 2);
         assert!(s.draws[0].lod < s.draws[1].lod);
     }
@@ -586,7 +600,7 @@ mod tests {
             Placement::at(0, [3.0, 0.0, 0.0]),
         ]);
         // cut away x > 0: radius 1, so 3 is gone, 0 crosses, -3 is whole
-        s.cull(&v, 1.0, Some([1.0, 0.0, 0.0, 0.0]));
+        s.cull(&v, 1.0, Some([1.0, 0.0, 0.0, 0.0]), None);
         let whole: u32 = s.draws.iter().map(|d| d.count).sum();
         let cut: u32 = s.cut_draws.iter().map(|d| d.count).sum();
         assert_eq!((whole, cut), (2, 1));

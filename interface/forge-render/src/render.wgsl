@@ -17,6 +17,10 @@ struct Globals {
     cube_box: vec4f,
     // the cutting plane: what's on its plus side is cut away; all zero cuts nothing
     section: vec4f,
+    // a second plane, and x: 0 none, 1 what both cut goes (three quarters left), 2 what either
+    // cuts goes (a quarter left); y: 1 shows only the cut faces (the end section)
+    section2: vec4f,
+    section_mode: vec4f,
     text: array<vec4u, 16>,
 }
 struct Placement {
@@ -92,8 +96,37 @@ fn surface_fs(in: Shaded) -> @location(0) vec4f {
     return shade(in);
 }
 
+fn plus(pl: vec4f, p: vec3f) -> bool {
+    return dot(pl.xyz, p) + pl.w > 0.0;
+}
+
 fn cut_away(p: vec3f) -> bool {
-    return dot(g.section.xyz, p) + g.section.w > 0.0;
+    let a = plus(g.section, p);
+    if g.section_mode.x < 0.5 {
+        return a;
+    }
+    let b = plus(g.section2, p);
+    if g.section_mode.x < 1.5 {
+        return a && b;
+    }
+    return a || b;
+}
+
+// where along the ray from the eye (0) to p (1) one plane's plus side is: lo..hi, empty if lo > hi
+fn span_on(pl: vec4f, p: vec3f) -> vec2f {
+    let se = dot(pl.xyz, g.eye.xyz) + pl.w;
+    let sp = dot(pl.xyz, p) + pl.w;
+    let t = se / (se - sp);
+    if se > 0.0 && sp > 0.0 {
+        return vec2f(0.0, 1.0);
+    }
+    if se > 0.0 {
+        return vec2f(0.0, t);
+    }
+    if sp > 0.0 {
+        return vec2f(t, 1.0);
+    }
+    return vec2f(1.0, 0.0);
 }
 
 @fragment
@@ -112,15 +145,33 @@ fn cap_fs(in: Shaded) -> @location(0) vec4f {
     if cut_away(in.p) {
         discard;
     }
-    let ray = in.p - g.eye.xyz;
-    let t = -(dot(g.section.xyz, g.eye.xyz) + g.section.w) / dot(g.section.xyz, ray);
-    if t <= 0.0 || t > 1.0 {
+    // the last place the ray to it leaves what's cut away, and the plane it leaves by
+    let a = span_on(g.section, in.p);
+    var t = select(-1.0, a.y, a.x <= a.y);
+    var n = g.section.xyz;
+    if g.section_mode.x > 0.5 {
+        let b = span_on(g.section2, in.p);
+        let b_ok = b.x <= b.y;
+        if g.section_mode.x < 1.5 {
+            // both: where both hold, its far end
+            let lo = max(a.x, b.x);
+            let hi = min(a.y, b.y);
+            t = select(-1.0, hi, a.x <= a.y && b_ok && lo <= hi);
+            if b.y < a.y {
+                n = g.section2.xyz;
+            }
+        } else if b_ok && b.y > t {
+            t = b.y;
+            n = g.section2.xyz;
+        }
+    }
+    if t <= 0.0 || t >= 1.0 {
         discard;
     }
+    let ray = in.p - g.eye.xyz;
     let q = g.eye.xyz + ray * t;
     let px_mm = dot(g.forward.xyz, q - g.eye.xyz) * g.ao.y * g.px.y;
     let spacing = pow(2.0, ceil(log2(px_mm * 9.0)));
-    let n = g.section.xyz;
     let side = select(vec3f(1.0, 0.0, 0.0), vec3f(0.0, 1.0, 0.0), abs(n.x) > 0.5);
     let u = normalize(cross(n, side));
     let v = cross(n, u);

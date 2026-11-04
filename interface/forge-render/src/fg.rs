@@ -77,6 +77,7 @@ pub struct AsmView {
     pub links: Vec<forge_lang::asm::LinkOut>,
     /// Each top-level instance's pose: where a subassembly's origin is.
     pub poses: Vec<(String, forge_math::Frame)>,
+    pub inspect: Arc<crate::gui::gui_inspect::InspectData>,
 }
 
 /// What one build gave: the panel's data, and the mesh when the part's shape changed.
@@ -107,6 +108,8 @@ pub struct Built {
     /// The worker's time for it: the build, and the mesh.
     pub build_ms: f64,
     pub mesh_ms: f64,
+    /// The exact bodies and iProperties behind it, for Measure and the physical properties.
+    pub inspect: Option<Arc<crate::gui::gui_inspect::InspectData>>,
 }
 
 impl Built {
@@ -459,6 +462,8 @@ fn work(
     let mut shown_ids: Option<Vec<String>> = None;
     // the text the last anchors were found for: unchanged text, unchanged anchors
     let mut anchored: Option<String> = None;
+    // the body on screen, for Measure
+    let mut last_body: Option<Arc<forge_topo::Body>> = None;
     let (to_mesh, bodies) = channel::<Whole>();
     {
         let (out, waker) = (out.clone(), waker.clone());
@@ -511,6 +516,7 @@ fn work(
                 sheets: vec![],
                 view,
                 anchors: None,
+                inspect: asm.as_ref().map(|a| a.inspect.clone()),
                 asm,
                 build_ms,
                 mesh_ms,
@@ -543,6 +549,9 @@ fn work(
         let changed = run.body.as_ref().filter(|_| !same);
         if changed.is_some() {
             shown_ids = Some(ids);
+        }
+        if let Some(b) = changed {
+            last_body = Some(Arc::new(b.clone()));
         }
         let first = gpu.is_some();
         let (mut mesh, mut flat, mut delta) = (None, None, None);
@@ -604,6 +613,14 @@ fn work(
             asm: None,
             build_ms,
             mesh_ms,
+            inspect: Some(Arc::new(crate::gui::gui_inspect::InspectData {
+                bodies: last_body.iter().cloned().collect(),
+                placed: vec![(0, forge_math::Frame::WORLD)],
+                names: vec![],
+                props: run.props.clone(),
+                physical: run.physical.clone(),
+                asm: None,
+            })),
         };
         if !send(Msg::Built(Box::new(built))) {
             return;
@@ -635,6 +652,8 @@ pub fn is_assembly(src: &str) -> bool {
 pub struct AsmMeshes {
     by_key: HashMap<u64, usize>,
     pub all: Vec<PartMesh>,
+    /// Each mesh's exact body.
+    pub bodies: Vec<Arc<forge_topo::Body>>,
     /// Each mesh's box in its part's space: what the exploded view keeps apart.
     pub boxes: Vec<crate::explode::Aabb>,
 }
@@ -701,7 +720,8 @@ fn asm_view(
         got.into_iter().map(|x| x.1).collect()
     };
     let mut new_meshes = vec![];
-    for ((key, _), m) in fresh.iter().zip(made) {
+    for ((key, k), m) in fresh.iter().zip(made) {
+        meshes.bodies.push(out.parts[*k].clone());
         meshes.by_key.insert(*key, meshes.all.len());
         new_meshes.push((meshes.all.len(), m.clone()));
         meshes.boxes.push(crate::explode::mesh_box(&m));
@@ -709,8 +729,10 @@ fn asm_view(
     }
     let mut occ = vec![];
     let mut placed = vec![];
+    let mut exact = vec![];
     for ((path, file, pose), part) in out.occurrences.iter().zip(&out.occ_part) {
         let placement = part.map(|k| {
+            exact.push((meshes.by_key[&keys[k]], *pose, path.clone()));
             placed.push((meshes.by_key[&keys[k]], rows_of(pose)));
             placed.len() - 1
         });
@@ -781,6 +803,19 @@ fn asm_view(
         insts: out.insts.clone(),
         links: out.links.clone(),
         poses: out.poses.clone(),
+        inspect: Arc::new(crate::gui::gui_inspect::InspectData {
+            bodies: meshes.bodies.clone(),
+            placed: exact.iter().map(|e| (e.0, e.1)).collect(),
+            names: exact.into_iter().map(|e| e.2).collect(),
+            props: run.props.clone(),
+            physical: None,
+            asm: Some(Arc::new(forge_lang::asm::AsmOut {
+                occurrences: out.occurrences.clone(),
+                occ_body: out.occ_body.clone(),
+                part_docs: out.part_docs.clone(),
+                ..Default::default()
+            })),
+        }),
     };
     (Some(asm), view)
 }

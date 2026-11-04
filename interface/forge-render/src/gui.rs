@@ -27,6 +27,8 @@ use winit::event::{ElementState, MouseButton, WindowEvent};
 mod gui_asm;
 #[path = "gui_explode.rs"]
 mod gui_explode;
+#[path = "gui_inspect.rs"]
+pub mod gui_inspect;
 #[path = "gui_overlay.rs"]
 mod gui_overlay;
 
@@ -165,6 +167,8 @@ pub struct Gui {
     pub explode: gui_explode::Explode,
     /// A Forge part's solid as it was before its eye hid it.
     body_rows: Option<crate::scene::Rows>,
+    /// Measure, sections and physical properties: the exact bodies, the jobs' thread.
+    inspector: gui_inspect::Inspector,
 }
 
 fn view_camera(center: [f32; 3], radius: f32, parallel: bool, size: (u32, u32)) -> Camera {
@@ -277,6 +281,7 @@ impl Gui {
             settings_was: None,
             explode: Default::default(),
             body_rows: None,
+            inspector: Default::default(),
         }
     }
 
@@ -1384,6 +1389,10 @@ impl Gui {
                         self.apply_fg();
                         continue;
                     }
+                    Action::Inspect(c) => {
+                        self.shell.inspect_command(c);
+                        continue;
+                    }
                     Action::SetUnits(_) => {
                         self.fg_refuse(crate::shell::fgtool::ToolError::NoForgeForm {
                             tool: "units",
@@ -1547,7 +1556,7 @@ impl Gui {
                 Action::DimDrag(value) => self.dim_drag(value),
                 Action::DimCommit(value) => self.dim_commit(value),
                 Action::DimCancel => self.dim_cancel(),
-                Action::Fg(_) => {}
+                Action::Fg(_) | Action::Inspect(_) => {}
                 other => host.push(other),
             }
         }
@@ -2053,6 +2062,7 @@ impl Gui {
         let host = self.apply();
         self.apply_fg();
         self.save_settings();
+        self.inspect_tick();
         if self.explode_tick() {
             animating = true;
         }
@@ -2139,6 +2149,9 @@ impl Gui {
             self.view = Some(v);
         }
         let t1 = now_ms();
+        if self.view.as_ref().is_some_and(|v| v.dirty) {
+            self.inspect_section();
+        }
         let (extra, extra_behind) = if self.view.as_ref().is_some_and(|v| v.dirty) {
             self.overlay_world()
         } else {
@@ -2147,7 +2160,6 @@ impl Gui {
         if let Some(v) = &mut self.view
             && v.dirty
         {
-            v.renderer.section = v.nav.section_plane();
             let mut world = extra;
             let (c, r) = v.scene.bounds();
             for (item, strong) in &v.origin_was {
@@ -2833,6 +2845,7 @@ impl Gui {
         let Some(s) = &mut self.fg else { return };
         let mut changed = false;
         let flat_shown = self.shell.fg.as_ref().is_some_and(|p| p.flat);
+        let mut inspect = None;
         for m in s.poll() {
             let b = match m {
                 crate::fg::Msg::Built(b) => *b,
@@ -3014,6 +3027,9 @@ impl Gui {
                     .collect();
             }
             self.fg_sheets = b.sheets;
+            if b.inspect.is_some() {
+                inspect = b.inspect;
+            }
             if let Some(a) = b.anchors {
                 if let Some(p) = &mut self.shell.fg {
                     p.sketches = a.sketches.clone();
@@ -3037,6 +3053,7 @@ impl Gui {
                 changed = true;
             }
         }
+        self.inspect_built(inspect);
         if changed {
             self.fg_show();
         }

@@ -429,6 +429,8 @@ pub fn op_label(op: &Op) -> String {
         },
         Op::SetArg { id, arg, text } => format!("Set {id}'s {arg}: {text}"),
         Op::Rename { from, to } => format!("Rename {from} to {to}"),
+        Op::SetProperty { key, text: Some(t) } => format!("Set {key}: {t}"),
+        Op::SetProperty { key, text: None } => format!("Clear {key}"),
     }
 }
 

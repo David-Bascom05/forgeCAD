@@ -97,6 +97,8 @@ pub struct Nav {
     explode_time: Option<f64>,
     /// What's been clicked, in order.
     pub selected: Vec<(u32, Entity)>,
+    /// What the last selecting click hit, whatever the host made of the selection since.
+    pub last_click: Option<(u32, Entity)>,
 }
 
 /// The view from a region of the cube, with the part's axes named this way: the named TOP is up, and
@@ -191,6 +193,7 @@ impl Nav {
             orient: Orient::default(),
             marked: None,
             selected: Vec::new(),
+            last_click: None,
             section: None,
             explode_to: 0.0,
             explode_at: 0.0,
@@ -451,6 +454,7 @@ impl Nav {
             {
                 self.clicks += 1;
                 let got = self.known_hit().map(|h| (h.placement, h.entity));
+                self.last_click = got;
                 if self.modifiers.shift_key() {
                     if let Some(g) = got
                         && !self.selected.contains(&g)

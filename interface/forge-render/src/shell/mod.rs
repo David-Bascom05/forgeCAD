@@ -11,7 +11,7 @@ pub mod fgasm;
 pub mod fgsketch;
 pub mod fgtool;
 pub mod icons;
-pub mod materials;
+pub mod inspect;
 pub mod panel;
 mod ribbon;
 mod sketch3d;
@@ -129,6 +129,8 @@ pub enum Action {
     DimCancel,
     /// A Forge file's ribbon command.
     Fg(FgCmd),
+    /// Measure, Section, iProperties and the centre of gravity.
+    Inspect(inspect::InspectCmd),
 }
 
 /// What the ribbon asks of a Forge file: Inventor's dialogs and commands.
@@ -344,6 +346,8 @@ pub struct Shell {
     pub overlays: [Overlays; 2],
     pub file_menu: bool,
     style_set: Option<bool>,
+    /// Measure, the section views, iProperties (`inspect.rs`).
+    pub inspect: inspect::Inspect,
 }
 
 impl Default for Shell {
@@ -401,6 +405,7 @@ impl Default for Shell {
             overlays: [PART_OVERLAYS, ASM_OVERLAYS],
             file_menu: false,
             style_set: None,
+            inspect: Default::default(),
         }
     }
 }
@@ -788,6 +793,7 @@ impl Shell {
         self.dialog_ui(&ctx);
         self.fg_panel(&ctx);
         self.asm_windows(&ctx);
+        self.inspect_ui(&ctx);
         self.fg_params_window(&ctx);
         self.fg_issues_window(&ctx);
         self.view_toolbar(&ctx);

@@ -113,8 +113,8 @@ fn asm_groups(s: &Shell) -> Option<Vec<Group>> {
                 vec![],
             ),
         ]),
-        2 => Some(vec![
-            g(
+        2 => Some(
+            vec![g(
                 "Interference",
                 vec![fg(
                     "Analyze Interference",
@@ -123,15 +123,56 @@ fn asm_groups(s: &Shell) -> Option<Vec<Group>> {
                     a.is_some_and(|a| a.interference),
                 )],
                 vec![],
-            ),
-            g(
-                "Measure",
-                vec![off("Distance", "measure")],
-                vec![off("Wall", "measure"), off("Mass", "mass")],
-            ),
-        ]),
+            )]
+            .into_iter()
+            .chain(inspect_groups(s))
+            .collect(),
+        ),
         _ => None,
     }
+}
+
+/// The Inspect tab's Measure, Analysis and Properties: a Forge document's.
+fn inspect_groups(s: &Shell) -> Vec<Group> {
+    use super::inspect::InspectCmd as C;
+    let i = &s.inspect;
+    let t = |name, icon, c: C, on: bool| Tool {
+        name,
+        icon,
+        action: s.fg.as_ref().map(|_| Action::Inspect(c)),
+        on,
+    };
+    let measuring = i.measure.as_ref().map(|m| m.wall);
+    let props = i.props.as_ref().map(|p| p.tab);
+    vec![
+        Group {
+            name: "Measure",
+            big: vec![t("Measure", "measure", C::Measure, measuring == Some(false))],
+            small: vec![
+                t("Wall", "measure", C::Wall, measuring == Some(true)),
+                t("Mass", "mass", C::Mass, props == Some(5)),
+                t("CG Marker", "mass", C::Cg, i.cg),
+            ],
+        },
+        Group {
+            name: "Analysis",
+            big: vec![
+                t("Section", "section", C::Section, i.cut.is_some()),
+                off("Check", "check"),
+            ],
+            small: vec![],
+        },
+        Group {
+            name: "Properties",
+            big: vec![t(
+                "iProperties",
+                "params",
+                C::Properties,
+                props.is_some_and(|p| p != 5),
+            )],
+            small: vec![],
+        },
+    ]
 }
 
 fn groups(s: &Shell) -> Vec<Group> {
@@ -269,18 +310,7 @@ fn groups(s: &Shell) -> Vec<Group> {
                 ),
             ]
         }
-        2 => vec![
-            g(
-                "Measure",
-                vec![off("Distance", "measure")],
-                vec![off("Wall", "measure"), off("Mass", "mass")],
-            ),
-            g(
-                "Analysis",
-                vec![off("Section", "section"), off("Check", "check")],
-                vec![],
-            ),
-        ],
+        2 => inspect_groups(s),
         3 => vec![
             g(
                 "Lines",

@@ -19,7 +19,7 @@ const HUD_CHARS: usize = 256;
 /// Characters per row of the overlay (render.wgsl).
 const HUD_COLUMNS: usize = 85;
 /// Where the overlay's text starts in the globals (see render.wgsl).
-const TEXT_AT: usize = 64 + 16 + 16 + 3 * 16 + 16 + DOTS * 16 + 3 * 16;
+const TEXT_AT: usize = 64 + 16 + 16 + 3 * 16 + 16 + DOTS * 16 + 5 * 16;
 /// Picked vertices a frame can mark.
 const DOTS: usize = 8;
 /// Picked faces and edges a frame can mark.
@@ -207,6 +207,12 @@ pub struct Renderer {
     line_cut: wgpu::RenderPipeline,
     /// The cutting plane (a, b, c, d: cut away where a x + b y + c z + d > 0).
     pub section: Option<[f32; 4]>,
+    /// A second plane: what either plane cuts goes (true: a quarter section), or only what both
+    /// cut (three quarters left).
+    pub section2: Option<([f32; 4], bool)>,
+    /// Only the cut faces are shown: the end section.
+    pub section_end: bool,
+    surface_hidden: wgpu::RenderPipeline,
     face_mark: wgpu::RenderPipeline,
     face_mark_exact: wgpu::RenderPipeline,
     /// Marked edges over everything, after shading: a dark band, then the colour.
@@ -619,6 +625,20 @@ impl Renderer {
             msaa,
             &opaque,
         );
+        // the end section: what's kept hides what's behind it, drawn in no colour
+        let unseen = [Some(wgpu::ColorTargetState {
+            format,
+            blend: None,
+            write_mask: wgpu::ColorWrites::empty(),
+        })];
+        let surface_hidden = pipeline(
+            ("surface_vs", "surface_cut_fs"),
+            &surface_buffers,
+            back_culled,
+            &writes,
+            msaa,
+            &unseen,
+        );
         // where a part is cut its inside shows: drawn as the plane it was cut by
         let cap = pipeline(
             ("surface_vs", "cap_fs"),
@@ -948,6 +968,9 @@ impl Renderer {
             cap,
             line_cut,
             section: None,
+            section2: None,
+            section_end: false,
+            surface_hidden,
             face_mark,
             face_mark_exact,
             edge_top,
@@ -1084,7 +1107,7 @@ impl Renderer {
     pub fn pick_start(&mut self, scene: &mut Scene, camera: &Camera, px: (f32, f32)) {
         let size = PICK_PX as f32;
         let view = camera.view_window(self.size.0, self.size.1, px, (size, size));
-        scene.cull(&view, self.lod_px, self.section);
+        scene.cull(&view, self.lod_px, self.section, self.section2);
         self.upload_moves(scene);
         self.queue
             .write_buffer(&self.instances, 0, scene.visible.as_flattened());
@@ -1197,7 +1220,7 @@ impl Renderer {
     ) -> Vec<(Entity, u32, u32)> {
         let (w, h) = self.size;
         let view = camera.view_window(w, h, (w as f32 * 0.5, h as f32 * 0.5), (w as f32, h as f32));
-        scene.cull(&view, self.lod_px, self.section);
+        scene.cull(&view, self.lod_px, self.section, self.section2);
         self.upload_moves(scene);
         self.queue
             .write_buffer(&self.instances, 0, scene.visible.as_flattened());
@@ -1451,7 +1474,12 @@ impl Renderer {
 
     fn write_section(&self, bytes: &mut [u8; GLOBALS]) {
         let plane = self.section.unwrap_or([0.0; 4]);
-        for (k, v) in plane.iter().enumerate() {
+        let (second, how) = match (self.section, self.section2) {
+            (Some(_), Some((b, quarter))) => (b, if quarter { 2.0 } else { 1.0 }),
+            _ => ([0.0; 4], 0.0),
+        };
+        let mode = [how, if self.section_end { 1.0 } else { 0.0 }, 0.0, 0.0];
+        for (k, v) in plane.iter().chain(&second).chain(&mode).enumerate() {
             bytes[SECTION_AT + k * 4..SECTION_AT + k * 4 + 4].copy_from_slice(&v.to_le_bytes());
         }
     }
@@ -1588,7 +1616,7 @@ impl Renderer {
         let hud = overlay.hud;
         let start = now_ms();
         let view = camera.view(self.size.0, self.size.1);
-        scene.cull(&view, self.lod_px, self.section);
+        scene.cull(&view, self.lod_px, self.section, self.section2);
         let culled = now_ms();
         self.upload_moves(scene);
         self.queue
@@ -1658,7 +1686,7 @@ impl Renderer {
                     view: &self.depth,
                     depth_ops: Some(wgpu::Operations {
                         load: wgpu::LoadOp::Clear(0.0),
-                        store: if self.ao {
+                        store: if self.ao && !self.section_end {
                             wgpu::StoreOp::Store
                         } else {
                             wgpu::StoreOp::Discard
@@ -1670,7 +1698,11 @@ impl Renderer {
                     wgpu::RenderPassTimestampWrites {
                         query_set: set,
                         beginning_of_pass_write_index: Some(0),
-                        end_of_pass_write_index: if self.ao { None } else { Some(1) },
+                        end_of_pass_write_index: if self.ao && !self.section_end {
+                            None
+                        } else {
+                            Some(1)
+                        },
                     }
                 }),
                 occlusion_query_set: None,
@@ -1680,7 +1712,12 @@ impl Renderer {
             pass.set_pipeline(&self.back);
             pass.draw(0..3, 0..1);
             let cut = self.section.is_some();
-            pass.set_pipeline(if cut { &self.surface_cut } else { &self.surface });
+            let end = cut && self.section_end;
+            pass.set_pipeline(match (cut, end) {
+                (_, true) => &self.surface_hidden,
+                (true, _) => &self.surface_cut,
+                _ => &self.surface,
+            });
             pass.set_vertex_buffer(0, self.vertices.slice(..));
             pass.set_vertex_buffer(1, self.instances.slice(..));
             pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint32);
@@ -1708,7 +1745,7 @@ impl Renderer {
                     drawn.draws += 1;
                 }
             }
-            if self.line_mode != LineMode::None {
+            if self.line_mode != LineMode::None && !end {
                 pass.set_pipeline(if cut { &self.line_cut } else { &self.line });
                 pass.set_vertex_buffer(0, self.instances.slice(..));
                 pass.set_index_buffer(self.line_indices.slice(..), wgpu::IndexFormat::Uint32);
@@ -1731,9 +1768,13 @@ impl Renderer {
                 }
             }
             if let Some((_, gpu)) = self.live.as_ref().filter(|_| live.is_some()) {
-                let surface = if cut { &self.surface_cut } else { &self.surface };
+                let surface = match (cut, end) {
+                    (_, true) => &self.surface_hidden,
+                    (true, _) => &self.surface_cut,
+                    _ => &self.surface,
+                };
                 let line = if cut { &self.line_cut } else { &self.line };
-                let lines = self.line_mode != LineMode::None;
+                let lines = self.line_mode != LineMode::None && !end;
                 let cap = cut.then_some(&self.cap);
                 for d in scene.draws.iter().filter(|d| Some(d.part) == live) {
                     let lined = lines.then_some(line);
@@ -1772,7 +1813,8 @@ impl Renderer {
                 pass.draw(0..cube_verts, 0..1);
             }
         }
-        if self.ao {
+        // the end section's unseen surfaces would shade what's seen
+        if self.ao && !self.section_end {
             let half = self.ao_size.half;
             let mut half_pass = |label, view, pipeline: &wgpu::RenderPipeline, reads: &wgpu::BindGroup| {
                 let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -2029,11 +2071,11 @@ const MARK_HALF_PX: f32 = 1.5;
 const PICK_EDGE_PX: f32 = 4.0;
 const PICK_VERTEX_PX: f32 = 7.0;
 /// Where the picked vertices start in the globals.
-const DOTS_AT: usize = TEXT_AT - 3 * 16 - DOTS * 16;
+const DOTS_AT: usize = TEXT_AT - 5 * 16 - DOTS * 16;
 /// Where occlusion's numbers start in the globals, then the cube's square.
-const AO_AT: usize = TEXT_AT - 3 * 16;
-/// Where the cutting plane is in the globals.
-const SECTION_AT: usize = TEXT_AT - 16;
+const AO_AT: usize = TEXT_AT - 5 * 16;
+/// Where the cutting planes are in the globals, then how they combine.
+const SECTION_AT: usize = TEXT_AT - 3 * 16;
 /// Half-size occlusion's format: how open, and the pixel's distance.
 const AO_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rg16Float;
 /// How far occlusion reaches, as a share of the window's height (research/render).

@@ -6,7 +6,7 @@ const USAGE: &str = "forge-app [PART | file.fc] [--size WxH] [--times]
   [--shot FILE.ppm [--scale S] [--light] [--pastel] [--tab N] [--select NAME] [--click NAME].. [--rclick NAME].. [--wait] [--at X Y] [--sketch ROW;ROW..] [--edit NAME] [--draw TOOL X Y] [--view YAW PITCH] [--marking]]
   steps, in order: --click NAME --dclick NAME --rclick NAME --wait --type TEXT --key NAME (enter, escape, tab, backspace)
   --hover X Y (the view's pick there) --clickat X Y --drag X Y X2 Y2 --snap FILE.ppm --save
-  --viewnow YAW PITCH --home
+  --viewnow YAW PITCH --home --zoom F (the camera's distance times F)
   [--present fifo|mailbox|immediate] [--run-for SECONDS] [--spin]
   [--bench]
 PART: a bench part or a .fc file. --times: input-to-present on exit. --shot: one frame, no window.
@@ -26,6 +26,8 @@ enum Step {
     Save,
     View(f32, f32),
     Home,
+    /// The camera's distance times this.
+    Zoom(f32),
 }
 
 struct Args {
@@ -100,6 +102,7 @@ fn args() -> Result<Args, String> {
             "--snap" => a.steps.push(Step::Snap(v()?)),
             "--save" => a.steps.push(Step::Save),
             "--home" => a.steps.push(Step::Home),
+            "--zoom" => a.steps.push(Step::Zoom(v()?.parse().map_err(|_| USAGE)?)),
             "--viewnow" => {
                 let y: f32 = v()?.parse().map_err(|_| USAGE)?;
                 let p: f32 = it.next().and_then(|w| w.parse().ok()).ok_or(USAGE)?;
@@ -374,7 +377,9 @@ fn wait(h: &mut Headless) {
                 .fg
                 .as_ref()
                 .and_then(|p| p.asm.as_ref())
-                .is_some_and(|a| a.checking);
+                .is_some_and(|a| a.checking)
+            || h.gui.shell.inspect.physical_busy
+            || h.gui.shell.inspect.measure.as_ref().is_some_and(|m| m.busy);
         if !busy {
             break;
         }
@@ -485,6 +490,16 @@ fn run() -> Result<(), String> {
                 if let Some(v) = &mut h.gui.view {
                     v.nav.camera.yaw = *yaw;
                     v.nav.camera.pitch = *pitch;
+                    v.mark_dirty();
+                }
+                for _ in 0..3 {
+                    h.step();
+                }
+                continue;
+            }
+            Step::Zoom(f) => {
+                if let Some(v) = &mut h.gui.view {
+                    v.nav.camera.dist *= *f;
                     v.mark_dirty();
                 }
                 for _ in 0..3 {
