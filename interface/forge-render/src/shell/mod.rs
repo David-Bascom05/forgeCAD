@@ -10,6 +10,7 @@ pub mod dim;
 pub mod drawing;
 pub mod fg;
 pub mod fgasm;
+pub mod fgdialog;
 pub mod fgsketch;
 pub mod fgtool;
 pub mod icons;
@@ -840,6 +841,7 @@ impl Shell {
         self.thermo_ui(&ctx);
         self.dialog_ui(&ctx);
         self.fg_panel(&ctx);
+        self.fg_dialog(&ctx);
         self.asm_windows(&ctx);
         self.inspect_ui(&ctx);
         self.content_window(&ctx);
@@ -1331,6 +1333,9 @@ impl Shell {
             self.renaming = None;
         } else if self.dialog.is_some() {
             self.out.push(Action::DialogCancel);
+        } else if let Some(p) = self.fg.as_mut().filter(|p| p.tool.is_some()) {
+            p.tool = None;
+            self.status.clear();
         } else if let Some(m) = &mut self.sketch {
             if m.has_tool() {
                 m.escape();

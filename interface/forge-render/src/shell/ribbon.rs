@@ -235,6 +235,13 @@ fn groups(s: &Shell) -> Vec<Group> {
     }
     let asm_explode = s.fg.as_ref().and_then(|f| f.asm.as_ref()).map(|a| a.explode_open);
     let fg_open = s.fg.is_some();
+    // the tools only a Forge part has a form for
+    let fg_new = |name, icon, kind| Tool {
+        name,
+        icon,
+        action: fg_open.then_some(Action::NewFeature(kind)),
+        on: false,
+    };
     match s.tab {
         0 => vec![
             g(
@@ -248,12 +255,15 @@ fn groups(s: &Shell) -> Vec<Group> {
                     new("Extrude", "extrude", "extrude"),
                     new("Revolve", "revolve", "revolve"),
                 ],
-                // off till each starts from what's picked and has its test in tests/tools.rs
                 vec![
-                    new("Sweep", "sweep", "sweep"),
                     new("Loft", "loft", "loft"),
+                    new("Sweep", "sweep", "sweep"),
                     new("Coil", "coil", "coil"),
                     new("Rib", "rib", "rib"),
+                    fg_new("Emboss", "emboss", "emboss"),
+                    fg_new("Import", "import", "import"),
+                    // the kernel has no image projection: a decal has nothing to stand on
+                    off("Decal", "decal"),
                 ],
             ),
             g(
@@ -267,18 +277,39 @@ fn groups(s: &Shell) -> Vec<Group> {
                     new("Shell", "shell", "shell"),
                     new("Draft", "draft", "draft"),
                     new("Thread", "thread", "thread"),
+                    fg_new("Split", "split", "split"),
                     new("Combine", "combine", "combine"),
+                    fg_new("Thicken", "thicken", "thicken"),
+                    fg_new("Direct", "move", "direct"),
+                    fg_new("Delete Face", "deleteface", "deleteface"),
+                    fg_new("Replace", "replaceface", "replaceface"),
                 ],
             ),
             g(
                 "Work Features",
                 vec![new("Plane", "plane", "plane")],
-                vec![new("Axis", "axis", "axis"), new("Point", "point", "point")],
+                vec![
+                    new("Axis", "axis", "axis"),
+                    new("Point", "point", "point"),
+                    fg_new("UCS", "ucs", "ucs"),
+                ],
             ),
             g(
                 "Pattern",
-                vec![new("Linear", "rect", "pattern")],
-                vec![off("Circular", "circular"), off("Mirror", "mirror")],
+                vec![new("Rectangular", "rect", "pattern")],
+                vec![
+                    fg_new("Circular", "circular", "circular"),
+                    fg_new("Sketch", "sketchpattern", "sketchpattern"),
+                    fg_new("Mirror", "mirror", "mirror"),
+                ],
+            ),
+            g(
+                "Bodies",
+                vec![],
+                vec![
+                    fg_new("Move", "movebody", "movebody"),
+                    fg_new("Copy", "copybody", "copybody"),
+                ],
             ),
         ]
         .into_iter()

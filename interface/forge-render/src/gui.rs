@@ -175,6 +175,8 @@ pub struct Gui {
     body_rows: Option<crate::scene::Rows>,
     /// Measure, sections and physical properties: the exact bodies, the jobs' thread.
     inspector: gui_inspect::Inspector,
+    /// The open tool's statement last shown as a preview.
+    fg_previewed: Option<String>,
 }
 
 fn view_camera(center: [f32; 3], radius: f32, parallel: bool, size: (u32, u32)) -> Camera {
@@ -289,6 +291,7 @@ impl Gui {
             explode: Default::default(),
             body_rows: None,
             inspector: Default::default(),
+            fg_previewed: None,
         }
     }
 
@@ -2112,6 +2115,7 @@ impl Gui {
         self.save_settings();
         self.inspect_tick();
         self.sheet_frame();
+        self.fg_preview();
         if self.explode_tick() {
             animating = true;
         }
@@ -3156,8 +3160,10 @@ impl Gui {
                 crate::shell::fg::FgAct::Tool(op) => {
                     if self.fg_apply(op).is_ok()
                         && let Some(p) = &mut self.shell.fg
+                        && let Some(t) = p.tool.take()
+                        && t.again
                     {
-                        p.tool = None;
+                        self.fg_open_tool(t.kind);
                     }
                 }
                 crate::shell::fg::FgAct::Refuse(e) => self.fg_refuse(e),
@@ -3320,6 +3326,52 @@ impl Gui {
         });
     }
 
+    /// What the open tool would make, built and shown; nothing once it's closed or can't be
+    /// written yet.
+    fn fg_preview(&mut self) {
+        let want = self
+            .shell
+            .fg
+            .as_ref()
+            .and_then(|p| p.tool.as_ref())
+            .and_then(|t| t.text().ok());
+        let Some(s) = &mut self.fg else { return };
+        let Some(text) = want else {
+            if s.previewing {
+                s.preview(None);
+            }
+            self.fg_previewed = None;
+            if let Some(t) = self.shell.fg.as_mut().and_then(|p| p.tool.as_mut()) {
+                t.note = None;
+            }
+            return;
+        };
+        if self.fg_previewed.as_deref() == Some(text.as_str()) {
+            return;
+        }
+        let op = forge_lang::error::Op::AddFeature {
+            before: None,
+            text: text.clone(),
+        };
+        // what wouldn't check is said, and the part shown as it is
+        let ops = [op];
+        let note = match forge_lang::edit::apply_all_checked(&s.src, &ops) {
+            Ok(_) => {
+                s.preview(Some(&ops));
+                None
+            }
+            Err(e) => {
+                s.preview(None);
+                Some(format!("{}: {}", e.kind(), e.text()))
+            }
+        };
+        if let Some(t) = self.shell.fg.as_mut().and_then(|p| p.tool.as_mut()) {
+            t.note = note;
+        }
+        self.fg_previewed = Some(text);
+        self.fg_text();
+    }
+
     /// A tool's form for a ribbon kind; one with no Forge form is refused, typed.
     pub fn fg_open_tool(&mut self, kind: &'static str) {
         let Some(p) = &mut self.shell.fg else { return };
@@ -3329,8 +3381,14 @@ impl Gui {
                 .iter()
                 .filter_map(|x| x.key.owner.first().map(|s| s.name.clone())),
         );
+        let dir = self
+            .fg
+            .as_ref()
+            .and_then(|s| s.path.as_deref())
+            .and_then(|f| std::path::Path::new(f).parent().map(|d| d.to_path_buf()));
         match crate::shell::fgtool::FgTool::new(kind, &taken) {
-            Some(t) => {
+            Some(mut t) => {
+                crate::shell::fgdialog::offer_lists(&mut t, dir.as_deref());
                 p.tool = Some(t);
                 p.refused = None;
                 self.shell.status = format!("{}: pick what it takes", crate::shell::panel::kind_word(kind));
@@ -3466,6 +3524,8 @@ impl Gui {
             | (K::Faces | K::Face, "face")
             | (K::Plane, "face" | "origin plane") => text,
             (K::Dir, "face") => text.map(|t| format!("{t}.normal")),
+            (K::Axis, "face") => text.map(|t| format!("{t}.axis")),
+            (K::EdgeOrFace, "edge" | "face") => text,
             (K::SheetEdge, "edge") => {
                 let k = edge.expect("an edge") as usize;
                 a.as_ref()

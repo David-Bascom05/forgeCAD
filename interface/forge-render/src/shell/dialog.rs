@@ -1283,9 +1283,9 @@ impl Dialog {
 }
 
 /// How wide a dialog's body is.
-const DIALOG_W: f32 = 284.0;
+pub(super) const DIALOG_W: f32 = 284.0;
 
-fn heading(ui: &mut egui::Ui, text: &str, t: &super::theme::Theme) {
+pub(super) fn heading(ui: &mut egui::Ui, text: &str, t: &super::theme::Theme) {
     let (r, _) = ui.allocate_exact_size(vec2(DIALOG_W, 18.0), Sense::hover());
     let g = ui.fonts_mut(|f| f.layout_no_wrap(text.to_string(), semi(12.0), t.ink2));
     let right = r.left() + g.size().x + 8.0;
@@ -1296,7 +1296,7 @@ fn heading(ui: &mut egui::Ui, text: &str, t: &super::theme::Theme) {
 }
 
 /// A row of big toggles with their words under them; which was clicked.
-fn toggle_row(
+pub(super) fn toggle_row(
     ui: &mut egui::Ui,
     t: &super::theme::Theme,
     items: &[(&str, &str, bool)],
@@ -1341,7 +1341,7 @@ fn toggle_row(
 type ThreadChange = (Option<String>, Option<String>, Option<String>, Option<String>);
 
 /// One of a thread's dropdowns.
-fn dropdown(
+pub(super) fn dropdown(
     ui: &mut egui::Ui,
     t: &super::theme::Theme,
     label: &str,
@@ -1415,7 +1415,7 @@ fn thread_rows(ui: &mut egui::Ui, c: &ThreadChoice, t: &super::theme::Theme, out
 }
 
 /// A row of worded toggles, side by side.
-fn text_toggles(
+pub(super) fn text_toggles(
     ui: &mut egui::Ui,
     t: &super::theme::Theme,
     items: &[(&str, bool)],
@@ -1574,7 +1574,7 @@ fn small_row(
 }
 
 /// A selection: what it wants, how many it has, and whether it's what the view's clicks go to.
-fn pick_row(
+pub(super) fn pick_row(
     ui: &mut egui::Ui,
     label: &str,
     n: usize,
@@ -1646,7 +1646,7 @@ fn value_row(ui: &mut egui::Ui, name: &str, value: &str, t: &super::theme::Theme
     );
 }
 
-const FIELD_AT: f32 = 92.0;
+pub(super) const FIELD_AT: f32 = 92.0;
 
 /// A named value: its word, its field, its unit when what's typed has none.
 fn field_row(

@@ -153,8 +153,13 @@ fn button(h: &mut Headless, tool: &str) {
 }
 
 fn choose(h: &mut Headless, slot: &str, text: &str) {
+    // the selection row first, as a person points at it, then what it takes
+    assert!(h.click(&format!("fg:tool:slot:{slot}")), "no slot {slot}");
+    h.step();
+    h.step();
     let name = format!("fg:choice:{slot}:{text}");
     assert!(h.click(&name), "no choice {name}");
+    h.step();
     h.step();
 }
 
@@ -172,6 +177,11 @@ fn picks(h: &Headless, slot: &str) -> Vec<String> {
 
 /// OK: the tool's statement applied and built; the part's text and what it builds.
 fn ok(h: &mut Headless, what: &str) -> (String, forge_lang::Run) {
+    // the preview built and the dialog settled, as a person sees it before OK
+    assert!(h.until(ready));
+    for _ in 0..3 {
+        h.step();
+    }
     let before = h.gui.fg.as_ref().unwrap().seq;
     assert!(h.click("fg:tool:ok"));
     h.step();
@@ -248,7 +258,7 @@ fn shell_opens_the_face_picked() {
     };
     button(&mut h, "Shell");
     point_at(&mut h, [5.0, 30.0, 20.0]);
-    assert_eq!(picks(&h, "Open"), ["base.end"]);
+    assert_eq!(picks(&h, "Remove Faces"), ["base.end"]);
     let (src, run) = ok(&mut h, "shell");
     assert!(src.contains("shell1 = shell(t, open: base.end)"), "{src}");
     let walls = 60.0 * 60.0 * 20.0 - 56.0 * 56.0 * 18.0;
@@ -300,7 +310,8 @@ fn extrude_cuts_a_sketch_loop_chosen() {
     button(&mut h, "Extrude");
     choose(&mut h, "Profile", "marks.sq");
     set(&mut h, "d", "5");
-    h.gui.shell.fg.as_mut().unwrap().tool.as_mut().unwrap().flags[0].1 = true;
+    assert!(h.click("fg:tool:choice:Output:Cut"));
+    h.step();
     let (src, run) = ok(&mut h, "extrude");
     assert!(src.contains("extrude1 = cut(marks.sq, d)"), "{src}");
     assert!(
@@ -383,7 +394,7 @@ fn linear_pattern_copies_a_feature_along_a_faces_normal() {
     let Some((mut h, _)) = open(BLOCK, "pattern") else {
         return;
     };
-    button(&mut h, "Linear");
+    button(&mut h, "Rectangular");
     choose(&mut h, "Features", "boss");
     h.click("fg:tool:slot:Direction");
     h.step();
@@ -428,6 +439,7 @@ fn sweep_coil_and_loft_take_sketch_entities() {
     button(&mut h, "Sweep");
     choose(&mut h, "Profile", "sec.c");
     choose(&mut h, "Path", "rail.route");
+    assert_eq!(picks(&h, "Path"), ["rail.route"]);
     let (src, run) = ok(&mut h, "sweep");
     assert!(src.contains("sweep1 = sweep(sec.c, along: rail.route)"), "{src}");
     let v1 = volume(&run);
