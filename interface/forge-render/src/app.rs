@@ -256,13 +256,16 @@ impl App {
                 Action::ResizeWindow(e) => {
                     let _ = l.window.drag_resize_window(resize_direction(e));
                 }
-                Action::New | Action::Open => {
+                Action::New | Action::Open | Action::Sheet(crate::shell::sheet::SheetCmd::NewPart) => {
                     let (send, recv) = std::sync::mpsc::channel();
                     self.dialog = Some(recv);
                     let proxy = self.proxy.clone();
                     let new = matches!(a, Action::New);
+                    let sheet = matches!(a, Action::Sheet(_));
                     std::thread::spawn(move || {
-                        let chosen = if new {
+                        let chosen = if sheet {
+                            crate::app::new_sheet_dialog()
+                        } else if new {
                             crate::app::new_dialog()
                         } else {
                             crate::app::open_dialog()
@@ -291,6 +294,18 @@ fn new_dialog() -> Option<String> {
         f.with_extension("fc")
     };
     std::fs::write(&f, "").ok()?;
+    Some(f.to_string_lossy().into_owned())
+}
+
+/// Where a new sheet metal part goes; it starts with its Sheet Metal Defaults.
+fn new_sheet_dialog() -> Option<String> {
+    let f = rfd::FileDialog::new()
+        .add_filter("Forge parts", &["fg"])
+        .set_file_name("SheetMetal.fg")
+        .save_file()?
+        .with_extension("fg");
+    let d = crate::shell::sheet::Defaults::default();
+    std::fs::write(&f, crate::shell::sheet::new_part_text(&d)).ok()?;
     Some(f.to_string_lossy().into_owned())
 }
 

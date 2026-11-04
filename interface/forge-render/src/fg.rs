@@ -193,6 +193,80 @@ pub struct SheetInfo {
     /// whatever later lanes add), as scalar facts and lists of one-line records.
     pub facts: Vec<(String, String)>,
     pub lists: Vec<(String, Vec<String>)>,
+    /// Its flat pattern as drawing data, the drawing's part note, and what the flat view draws.
+    pub pattern: Option<Arc<forge_sheet::Pattern>>,
+    pub note: String,
+    pub view: Option<crate::shell::sheet::FlatView>,
+}
+
+/// What the flat view draws of a sheet: its contours as polylines, its bends by the feature that
+/// made each, its tools' centres, its box.
+fn flat_view(s: &forge_lang::sheet::SheetOut, p: &forge_sheet::Pattern) -> crate::shell::sheet::FlatView {
+    use crate::shell::sheet::{FlatBend, FlatView};
+    use forge_sheet::Curve2;
+    let pt = |q: forge_math::Point2| [q.x, q.y];
+    let outline: Vec<Vec<[f64; 2]>> = p
+        .contours
+        .iter()
+        .map(|c| {
+            let mut line = vec![];
+            for cv in c {
+                match cv {
+                    Curve2::Arc { c, r, start, sweep } => {
+                        let n = ((sweep.abs() / 0.15).ceil() as usize).max(2);
+                        for i in 0..=n {
+                            let a = start + sweep * i as f64 / n as f64;
+                            let (sn, cs) = forge_math::dmath::sin_cos(a);
+                            line.push([c.x + r * cs, c.y + r * sn]);
+                        }
+                    }
+                    Curve2::Spline { points, .. } => line.extend(points.iter().map(|q| pt(*q))),
+                    Curve2::Line { a, b } => {
+                        line.push(pt(*a));
+                        line.push(pt(*b));
+                    }
+                }
+            }
+            line
+        })
+        .collect();
+    let (mut lo, mut hi) = ([f64::INFINITY; 2], [f64::NEG_INFINITY; 2]);
+    for q in outline.iter().flatten() {
+        lo = [lo[0].min(q[0]), lo[1].min(q[1])];
+        hi = [hi[0].max(q[0]), hi[1].max(q[1])];
+    }
+    if lo[0] > hi[0] {
+        (lo, hi) = ([0.0; 2], [0.0; 2]);
+    }
+    FlatView {
+        sheet: s.id.clone(),
+        frame: Some(s.sheet.frame),
+        outline,
+        bends: p
+            .bends
+            .iter()
+            .map(|b| FlatBend {
+                a: pt(b.a),
+                b: pt(b.b),
+                angle: b.angle.to_degrees(),
+                radius: b.radius,
+                allowance: b.allowance,
+                feature: s
+                    .joints
+                    .iter()
+                    .find(|j| j.0 == b.joint)
+                    .map_or_else(|| format!("bend {}", b.joint.0), |j| j.1.clone()),
+            })
+            .collect(),
+        tools: p
+            .hits
+            .iter()
+            .map(|h| (pt(h.at), h.tool.clone()))
+            .chain(p.forms.iter().map(|f| (pt(f.at), f.tool.clone())))
+            .collect(),
+        lo,
+        hi,
+    }
 }
 
 /// A JSON value in a line: numbers rounded, records as `k v, ..`.
@@ -568,10 +642,18 @@ fn work(
             .iter()
             .map(|s| {
                 let (facts, lists) = sheet_report(&s.json());
+                let pattern = s.pattern().map(Arc::new);
+                let note = s.note();
                 SheetInfo {
                     id: s.id.clone(),
                     bends: s.layout.as_ref().map_or(0, |l| l.bends.len()),
-                    dxf: s.dxf().map_err(|e| format!("{e:?}")),
+                    dxf: pattern
+                        .as_ref()
+                        .map(|p| forge_sheet::dxf_noted(p, &note))
+                        .map_err(|e| format!("{e:?}")),
+                    view: pattern.as_ref().ok().map(|p| flat_view(s, p)),
+                    pattern: pattern.ok(),
+                    note,
                     facts,
                     lists,
                 }

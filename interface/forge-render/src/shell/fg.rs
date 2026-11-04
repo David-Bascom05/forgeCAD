@@ -232,6 +232,8 @@ pub enum FgAct {
     },
     /// A part file's snap points, for the tool wanting an origin.
     AsmSnaps(String),
+    /// A sheet metal feature's dialog, to edit it.
+    EditSheet(String),
 }
 
 /// A sheet metal part: its id, its bends, and why it has no flat pattern if it hasn't.
@@ -568,6 +570,9 @@ impl Shell {
         let mut child = ui.new_child(egui::UiBuilder::new().max_rect(area));
         let planes = self.overlays().planes;
         let mut eye_flip: Option<Option<String>> = None;
+        let sheet = !fg.sheets.is_empty();
+        let mut flat_row = false;
+        let mut edit_row = None;
         egui::ScrollArea::vertical()
             .id_salt("fg-tree")
             .auto_shrink([false, false])
@@ -588,10 +593,11 @@ impl Shell {
                         1.5,
                         ink,
                     );
+                    // a sheet metal part's browser: Folded Model, and its Flat Pattern below
                     ui.painter().text(
                         pos2(r.left() + 42.0, r.center().y),
                         Align2::LEFT_CENTER,
-                        "Solid",
+                        if sheet { "Folded Model" } else { "Solid" },
                         medium(13.0),
                         ink,
                     );
@@ -599,6 +605,35 @@ impl Shell {
                         eye_flip = Some(None);
                     }
                     places.push(("fg:eye:solid".into(), eye_rect(r)));
+                    if sheet {
+                        let (r, resp) =
+                            ui.allocate_exact_size(vec2(area.width(), super::ROW_H), Sense::click());
+                        let on = fg.flat;
+                        if on {
+                            ui.painter().rect_filled(r, 0.0, t.on);
+                        } else if resp.hovered() {
+                            ui.painter().rect_filled(r, 0.0, t.hover);
+                        }
+                        icons::draw(
+                            ui.painter(),
+                            pos2(r.left() + 20.0, r.top() + 5.0),
+                            16.0,
+                            "flatpattern",
+                            1.5,
+                            if on { t.on_ink } else { t.ink },
+                        );
+                        ui.painter().text(
+                            pos2(r.left() + 42.0, r.center().y),
+                            Align2::LEFT_CENTER,
+                            "Flat Pattern",
+                            medium(13.0),
+                            if on { t.on_ink } else { t.ink },
+                        );
+                        places.push(("fg:row:flat".into(), r));
+                        if resp.double_clicked() || resp.clicked() {
+                            flat_row = true;
+                        }
+                    }
                 }
                 let mut hidden: Option<String> = None;
                 for row in &rows {
@@ -690,6 +725,10 @@ impl Shell {
                     if resp.clicked() {
                         chosen = Some(row.key.clone());
                     }
+                    // a sheet metal feature opens its dialog, as Inventor's double click does
+                    if resp.double_clicked() && kind.is_some_and(super::sheet::is_sheet_kind) {
+                        edit_row = Some(row.key.clone());
+                    }
                     places.push((format!("fg:row:{}", row.key), r));
                     if row.group && !open {
                         hidden = Some(row.key.clone());
@@ -700,6 +739,16 @@ impl Shell {
             && !fg.collapsed.remove(&k)
         {
             fg.collapsed.insert(k);
+        }
+        if flat_row {
+            self.out.push(super::Action::Sheet(if fg.flat {
+                super::sheet::SheetCmd::Folded
+            } else {
+                super::sheet::SheetCmd::FlatPattern
+            }));
+        }
+        if edit_row.is_some() {
+            self.sheet.edit_req = edit_row;
         }
         match eye_flip {
             Some(None) => fg.body_hidden = !fg.body_hidden,
@@ -1095,7 +1144,14 @@ impl Shell {
             Self::fg_heading(ui, t, &sel);
             let top = statement_of(&sel).to_string();
             let at = stmts.iter().position(|s| *s == top);
+            let sheet_kind = fg
+                .feats
+                .iter()
+                .any(|f| f.id == top && super::sheet::is_sheet_kind(&f.kind));
             ui.horizontal_wrapped(|ui| {
+                if sheet_kind && Self::fg_button(ui, "Edit Feature", "fg:editsheet".into(), places) {
+                    out.push(FgAct::EditSheet(top.clone()));
+                }
                 if let Some(k) = at {
                     if k > 0 && Self::fg_button(ui, "Move up", "fg:up".into(), places) {
                         out.push(FgAct::Apply(Op::MoveFeature {
@@ -1377,7 +1433,7 @@ impl Shell {
     /// An assembly's issues, over the status bar: each with its fixes and a Show.
     pub(super) fn fg_issues_window(&mut self, ctx: &egui::Context) {
         let Some(mut fg) = self.fg.take() else { return };
-        if !fg.issues_list || !(fg.assembly || fg.asm.is_some()) {
+        if !fg.issues_list {
             self.fg = Some(fg);
             return;
         }

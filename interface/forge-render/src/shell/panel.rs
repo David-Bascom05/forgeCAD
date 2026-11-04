@@ -567,6 +567,9 @@ pub fn icon(kind: &str) -> &'static str {
         "move" | "movebody" | "copybody" => "move",
         "text" => "text",
         "split" | "splitface" => "split",
+        k if super::sheet::is_sheet_kind(k) => {
+            super::sheet::icon(super::sheet::cmd_of_kind(k).expect("a sheet kind"))
+        }
         _ => "point",
     }
 }

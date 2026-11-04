@@ -31,6 +31,8 @@ mod gui_explode;
 pub mod gui_inspect;
 #[path = "gui_overlay.rs"]
 mod gui_overlay;
+#[path = "gui_sheet.rs"]
+mod gui_sheet;
 
 pub type Waker = Arc<dyn Fn() + Send + Sync>;
 
@@ -1557,6 +1559,7 @@ impl Gui {
                 Action::DimCommit(value) => self.dim_commit(value),
                 Action::DimCancel => self.dim_cancel(),
                 Action::Fg(_) | Action::Inspect(_) => {}
+                Action::Sheet(c) if c != crate::shell::sheet::SheetCmd::NewPart => self.sheet_cmd(c),
                 other => host.push(other),
             }
         }
@@ -2063,6 +2066,7 @@ impl Gui {
         self.apply_fg();
         self.save_settings();
         self.inspect_tick();
+        self.sheet_frame();
         if self.explode_tick() {
             animating = true;
         }
@@ -2815,6 +2819,10 @@ impl Gui {
                 self.shell.sketch = None;
                 self.shell.sketch_shapes.clear();
                 self.shell.flags.clear();
+                self.shell.sheet = crate::shell::sheet::SheetUi::new();
+                if self.shell.tab > 4 {
+                    self.shell.tab = 0;
+                }
                 self.shell.name = name.clone();
                 self.shell.status = format!("Opening {name}");
             }
@@ -3026,6 +3034,7 @@ impl Gui {
                     })
                     .collect();
             }
+            self.shell.sheet.flats = b.sheets.iter().filter_map(|s| s.view.clone()).collect();
             self.fg_sheets = b.sheets;
             if b.inspect.is_some() {
                 inspect = b.inspect;
@@ -3034,6 +3043,7 @@ impl Gui {
                 if let Some(p) = &mut self.shell.fg {
                     p.sketches = a.sketches.clone();
                 }
+                self.shell.sheet.edges = a.sheet_edges.iter().map(|e| e.0.clone()).collect();
                 self.fg_anchors = Some(a);
             }
             if let Some(d) = &b.delta
@@ -3116,6 +3126,7 @@ impl Gui {
                 | crate::shell::fg::FgAct::AsmApplyMoves
                 | crate::shell::fg::FgAct::AsmMirror { .. }
                 | crate::shell::fg::FgAct::AsmSnaps(_)) => self.asm_act(a),
+                crate::shell::fg::FgAct::EditSheet(id) => self.shell.sheet.edit_req = Some(id),
                 crate::shell::fg::FgAct::Flat(on) => {
                     if let Some(p) = &mut self.shell.fg {
                         p.flat = on && self.fg_flat.is_some();
@@ -3369,6 +3380,25 @@ impl Gui {
                         format!("a sketch goes on a planar face or an origin plane, not a {what}")
                 }
             }
+            return;
+        }
+        if let Some(d) = &mut self.shell.sheet.dlg {
+            let sheet_edge = edge.and_then(|k| {
+                a.as_ref()?
+                    .sheet_edges
+                    .iter()
+                    .find(|s| s.1.contains(&(k as usize)))
+                    .map(|s| s.0.clone())
+            });
+            let got = match (sheet_edge, &text) {
+                (Some(e), _) => d.pick_for_slot("sheet edge", &e),
+                (None, Ok(t)) => d.pick_for_slot(what, t),
+                (None, Err(e)) => Err(e.text()),
+            };
+            d.take(got);
+            v.nav.selected.clear();
+            v.clicked.clear();
+            v.dirty = true;
             return;
         }
         let Some(p) = &mut self.shell.fg else { return };

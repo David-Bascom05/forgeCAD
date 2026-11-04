@@ -7,17 +7,17 @@ use super::{Action, FgCmd, RIBBON_H, Shell, TABS_H, TITLE_H, icons};
 use crate::render::LineMode;
 use egui::{Align2, Rect, Sense, Stroke, Ui, pos2, vec2};
 
-struct Tool {
-    name: &'static str,
-    icon: &'static str,
-    action: Option<Action>,
-    on: bool,
+pub(super) struct Tool {
+    pub(super) name: &'static str,
+    pub(super) icon: &'static str,
+    pub(super) action: Option<Action>,
+    pub(super) on: bool,
 }
 
-struct Group {
-    name: &'static str,
-    big: Vec<Tool>,
-    small: Vec<Tool>,
+pub(super) struct Group {
+    pub(super) name: &'static str,
+    pub(super) big: Vec<Tool>,
+    pub(super) small: Vec<Tool>,
 }
 
 const fn off(name: &'static str, icon: &'static str) -> Tool {
@@ -235,15 +235,22 @@ fn groups(s: &Shell) -> Vec<Group> {
             ),
         ]
         .into_iter()
-        // a Forge part has sheet metal: a sheet from a sketch, flanges off its edges
-        .chain(s.fg.is_some().then(|| {
+        // a Forge part has sheet metal: its own tab, as Inventor's Convert to Sheet Metal gives
+        .chain((s.fg.is_some() && !s.sheet.env).then(|| {
             g(
-                "Sheet Metal",
-                vec![new("Sheet", "extrude", "sheet"), new("Flange", "plane", "flange")],
-                vec![new("Cutout", "hole", "cutout"), new("Unfold", "rect", "unfold")],
+                "Convert",
+                vec![go(
+                    "Convert to Sheet Metal",
+                    "smface",
+                    Action::Sheet(super::sheet::SheetCmd::Convert),
+                    false,
+                )],
+                vec![],
             )
         }))
         .collect(),
+        super::SHEET_TAB => super::sheetui::sheet_groups(s),
+        super::FLAT_TAB => super::sheetui::flat_groups(s),
         1 => {
             let on = s.sketch.as_ref().and_then(|m| m.tool);
             let t = |name, icon, tool: SkTool| Tool {
@@ -419,13 +426,35 @@ const BIG_PAD: f32 = 12.0;
 const SMALL_W: f32 = 92.0;
 const SMALL_H: f32 = 27.0;
 
-/// A big button is as wide as its label, its words a line each.
+/// A big button's label in two lines at most, split where the longer is shortest.
+fn big_label(name: &str) -> String {
+    let spaces: Vec<usize> = name.match_indices(' ').map(|m| m.0).collect();
+    match spaces.iter().min_by_key(|&&k| k.max(name.len() - k - 1)) {
+        Some(&k) => format!("{}\n{}", &name[..k], &name[k + 1..]),
+        None => name.to_string(),
+    }
+}
+
+/// A big button is as wide as its label.
 fn big_width(ui: &mut Ui, tool: &Tool) -> f32 {
     let text = ui
-        .fonts_mut(|f| f.layout_no_wrap(tool.name.replace(' ', "\n"), sans(12.0), egui::Color32::WHITE))
+        .fonts_mut(|f| f.layout_no_wrap(big_label(tool.name), sans(12.0), egui::Color32::WHITE))
         .size()
         .x;
     (text + BIG_PAD).max(BIG_W)
+}
+
+/// A column of small buttons is as wide as its longest label.
+fn small_width(ui: &mut Ui, tools: &[Tool]) -> f32 {
+    tools
+        .iter()
+        .map(|t| {
+            ui.fonts_mut(|f| f.layout_no_wrap(t.name.to_string(), sans(12.0), egui::Color32::WHITE))
+                .size()
+                .x
+                + 34.0
+        })
+        .fold(SMALL_W, f32::max)
 }
 
 impl Shell {
@@ -442,9 +471,9 @@ impl Shell {
         p.hline(0.0..=w, y + RIBBON_H - 0.5, Stroke::new(1.0, t.line));
         let mut gx = 0.0;
         for g in groups(self) {
-            let cols = g.small.len().div_ceil(3);
             let bigs: Vec<f32> = g.big.iter().map(|tool| big_width(ui, tool)).collect();
-            let width = 12.0 + bigs.iter().sum::<f32>() + cols as f32 * SMALL_W;
+            let cols: Vec<f32> = g.small.chunks(3).map(|c| small_width(ui, c)).collect();
+            let width = 12.0 + bigs.iter().sum::<f32>() + cols.iter().sum::<f32>();
             let width = width.max(
                 ui.fonts_mut(|f| f.layout_no_wrap(g.name.to_string(), sans(11.0), t.ink2))
                     .size()
@@ -457,11 +486,13 @@ impl Shell {
                 x += w;
             }
             for (k, tool) in g.small.iter().enumerate() {
+                let left: f32 = cols[..k / 3].iter().sum();
                 self.small_button(
                     ui,
                     tool,
-                    x + (k / 3) as f32 * SMALL_W,
+                    x + left,
                     y + 5.0 + (k % 3) as f32 * SMALL_H,
+                    cols[k / 3],
                 );
             }
             p.text(
@@ -485,7 +516,11 @@ impl Shell {
         };
         let resp = ui
             .interact(r, ui.scope_id().with(("tool", self.tab, tool.name)), sense)
-            .on_hover_text(tool.name);
+            .on_hover_text(if tool.action.is_some() {
+                tool.name.to_string()
+            } else {
+                format!("{}: coming", tool.name)
+            });
         resp.widget_info(|| {
             egui::WidgetInfo::selected(egui::Role::Button, tool.action.is_some(), tool.on, tool.name)
         });
@@ -518,14 +553,14 @@ impl Shell {
     fn big_button(&mut self, ui: &mut Ui, tool: &Tool, x: f32, y: f32, w: f32) {
         let r = Rect::from_min_size(pos2(x, y), vec2(w - 2.0, 72.0));
         let (ink, _) = self.tool_response(ui, tool, r);
-        let g = ui.fonts_mut(|f| f.layout_no_wrap(tool.name.replace(' ', "\n"), sans(12.0), ink));
+        let g = ui.fonts_mut(|f| f.layout_no_wrap(big_label(tool.name), sans(12.0), ink));
         let p = ui.painter();
         icons::draw(p, pos2(r.center().x - 14.0, y + 6.0), 28.0, tool.icon, 1.25, ink);
         p.galley(pos2(r.center().x - g.size().x * 0.5, y + 36.0), g, ink);
     }
 
-    fn small_button(&mut self, ui: &mut Ui, tool: &Tool, x: f32, y: f32) {
-        let r = Rect::from_min_size(pos2(x, y), vec2(SMALL_W - 2.0, 26.0));
+    fn small_button(&mut self, ui: &mut Ui, tool: &Tool, x: f32, y: f32, w: f32) {
+        let r = Rect::from_min_size(pos2(x, y), vec2(w - 2.0, 26.0));
         let (ink, _) = self.tool_response(ui, tool, r);
         let p = ui.painter();
         icons::draw(p, pos2(x + 4.0, y + 5.0), 16.0, tool.icon, 1.5, ink);

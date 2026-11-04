@@ -104,27 +104,37 @@ fn point_at(h: &mut Headless, world: [f32; 3]) {
 }
 
 fn button(h: &mut Headless, tool: &str) {
+    if h.gui.shell.tab != forge_render::shell::SHEET_TAB {
+        h.gui.shell.tab = forge_render::shell::SHEET_TAB;
+        h.step();
+        h.step();
+    }
     assert!(h.click(&format!("tool:{tool}")), "no button {tool}");
-    assert!(h.until(|g| g.shell.fg.as_ref().is_some_and(|p| p.tool.is_some())));
+    assert!(h.until(|g| g.shell.sheet.dlg.is_some()));
     h.step();
     h.step();
 }
 
 fn choose(h: &mut Headless, slot: &str, text: &str) {
-    let name = format!("fg:choice:{slot}:{text}");
+    let name = format!("sheet:choice:{slot}:{text}");
+    if h.gui.shell.place(&name).is_none() {
+        assert!(h.click(&format!("sheet:slot:{slot}")), "no slot {slot}");
+        h.step();
+        h.step();
+    }
     assert!(h.click(&name), "no choice {name}");
     h.step();
 }
 
 fn ok(h: &mut Headless, what: &str) -> (String, forge_lang::Run) {
-    assert!(h.click("fg:tool:ok"));
+    assert!(h.until(ready));
+    assert!(h.click("sheet:ok"));
     h.step();
-    let p = h.gui.shell.fg.as_ref().unwrap();
+    h.step();
     assert!(
-        p.tool.is_none(),
-        "{what}: {:?} {:?}",
-        p.tool.as_ref().and_then(|t| t.error.clone()),
-        p.refused
+        h.gui.shell.sheet.dlg.is_none(),
+        "{what}: {:?}",
+        h.gui.shell.sheet.dlg.as_ref().map(|d| d.error.clone())
     );
     assert!(h.until(ready));
     for _ in 0..3 {
@@ -139,15 +149,21 @@ fn ok(h: &mut Headless, what: &str) -> (String, forge_lang::Run) {
 #[test]
 fn a_sheet_from_a_sketch_and_a_flange_off_the_edge_picked() {
     let Some(mut h) = open(PLAN, "flange") else { return };
+    // a part with no sheet yet: Convert to Sheet Metal gives it the Sheet Metal tab
+    assert!(h.click("tool:Convert to Sheet Metal"));
+    h.step();
+    h.step();
+    assert_eq!(h.gui.shell.tab, forge_render::shell::SHEET_TAB);
     assert!(h.gui.shell.place("tool:Flange").is_some());
-    button(&mut h, "Sheet");
+    button(&mut h, "Face");
     choose(&mut h, "Profile", "plan");
     let (src, run) = ok(&mut h, "sheet");
     assert!(
-        src.contains("sheet1 = sheet(plan, t: t, r: r, bend: kfactor(k))"),
+        src.contains("face1 = sheet(plan, t: t, r: r, bend: kfactor(k))"),
         "{src}"
     );
-    assert!(src.contains("param sheet1.k = ratio(0.4)"), "{src}");
+    // the defaults it lacked, written above it
+    assert!(src.contains("shared r = 2\nshared k = ratio(0.44)\n"), "{src}");
     let flat_plate = 40.0 * 30.0 * 2.0;
     assert!((run.measure.as_ref().unwrap().volume - flat_plate).abs() < 1e-6);
     // its report in the panel: thickness, radius, its bends (none yet)
@@ -158,21 +174,14 @@ fn a_sheet_from_a_sketch_and_a_flange_off_the_edge_picked() {
         "{:?}",
         sheets[0].facts
     );
-    // a flange off the right edge, picked on the top skin
+    // a flange off the right edge, picked on the top skin in the view
     button(&mut h, "Flange");
     point_at(&mut h, [40.0, 15.0, 0.0]);
-    let picks = h.gui.shell.fg.as_ref().unwrap().tool.as_ref().unwrap().slots[0]
-        .picks
-        .clone();
-    assert_eq!(
-        picks,
-        ["sheet1.edge(plan.outline[1])"],
-        "{:?}",
-        h.gui.shell.fg.as_ref().unwrap().tool
-    );
+    let picks = h.gui.shell.sheet.dlg.as_ref().unwrap().slots[0].picks.clone();
+    assert_eq!(picks, ["face1.edge(plan.outline[1])"], "{}", h.gui.shell.status);
     let (src, run) = ok(&mut h, "flange");
     assert!(
-        src.contains("flange1 = flange(sheet1.edge(plan.outline[1]), height: height, angle: ang)"),
+        src.contains("param flange1.h = 20\nflange1 = flange(face1.edge(plan.outline[1]), height: h)"),
         "{src}"
     );
     assert!(run.measure.as_ref().unwrap().volume > flat_plate + 20.0 * 30.0 * 2.0 * 0.8);
@@ -180,7 +189,7 @@ fn a_sheet_from_a_sketch_and_a_flange_off_the_edge_picked() {
     let bends = sheets[0].lists.iter().find(|l| l.0 == "bends").unwrap();
     assert_eq!(bends.1.len(), 1, "{bends:?}");
     assert!(bends.1[0].contains("flange flange1"), "{bends:?}");
-    assert!(h.gui.shell.place("fg:sheet:sheet1:bends").is_some());
+    assert!(h.gui.shell.place("fg:sheet:face1:bends").is_some());
 }
 
 #[test]
@@ -188,17 +197,17 @@ fn a_cutout_on_a_flange_and_an_unfold_from_the_trees_names() {
     let Some(mut h) = open(L, "cutout") else { return };
     let before = forge_lang::run(L, forge_lang::Options::default(), Default::default()).0;
     let v0 = before.measure.as_ref().unwrap().volume;
-    button(&mut h, "Cutout");
+    button(&mut h, "Cut");
     choose(&mut h, "Profile", "hs.c");
-    choose(&mut h, "Wall", "up");
+    choose(&mut h, "Face", "up");
     let (src, run) = ok(&mut h, "cutout");
-    assert!(src.contains("cutout1 = cutout(hs.c, wall: up)"), "{src}");
+    assert!(src.contains("cut1 = cutout(hs.c, wall: up)"), "{src}");
     let hole = std::f64::consts::PI * 36.0 * 2.0;
     assert!((run.measure.as_ref().unwrap().volume - (v0 - hole)).abs() < 1e-3);
     button(&mut h, "Unfold");
     choose(&mut h, "Sheet", "base");
     let (src, run) = ok(&mut h, "unfold");
-    assert!(src.contains("unfold1 = unfold(base)"), "{src}");
+    assert!(src.contains("flat1 = unfold(base)"), "{src}");
     assert_eq!(run.measure.as_ref().unwrap().bodies, 2);
 }
 

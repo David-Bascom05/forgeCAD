@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::sync::OnceLock;
 
 const DATA: &str = include_str!("icons.txt");
+const SHEET: &str = include_str!("sheet_icons.txt");
 
 type Lines = Vec<Vec<(f32, f32)>>;
 
@@ -12,6 +13,7 @@ fn all() -> &'static HashMap<&'static str, Lines> {
     static ICONS: OnceLock<HashMap<&'static str, Lines>> = OnceLock::new();
     ICONS.get_or_init(|| {
         DATA.lines()
+            .chain(SHEET.lines())
             .filter(|l| !l.starts_with('#'))
             .filter_map(|l| l.split_once(' '))
             .map(|(name, d)| (name, flatten(d)))

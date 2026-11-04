@@ -15,6 +15,8 @@ pub mod inspect;
 pub mod materials;
 pub mod panel;
 mod ribbon;
+pub mod sheet;
+mod sheetui;
 mod sketch3d;
 pub mod sketching;
 pub mod theme;
@@ -27,6 +29,9 @@ use forge_doc::{Body, Document, ItemId};
 use theme::{Theme, medium, mono, sans, semi};
 
 pub const TABS: [&str; 5] = ["3D Model", "Sketch", "Inspect", "View", "Manage"];
+/// A sheet metal part's own tabs: shown first, Inventor's way; the flat pattern's in its place.
+pub const SHEET_TAB: usize = 5;
+pub const FLAT_TAB: usize = 6;
 
 const TITLE_H: f32 = 36.0;
 const TABS_H: f32 = 34.0;
@@ -132,6 +137,8 @@ pub enum Action {
     Fg(FgCmd),
     /// Measure, Section, iProperties and the centre of gravity.
     Inspect(inspect::InspectCmd),
+    /// A sheet metal command, from the Sheet Metal or Flat Pattern tab.
+    Sheet(sheet::SheetCmd),
 }
 
 /// What the ribbon asks of a Forge file: Inventor's dialogs and commands.
@@ -346,6 +353,8 @@ pub struct Shell {
     /// The view's switches for parts and for assemblies: kept for the session, each kind its own.
     pub overlays: [Overlays; 2],
     pub file_menu: bool,
+    /// The sheet metal environment: its tabs, dialogs and flat pattern.
+    pub sheet: sheet::SheetUi,
     style_set: Option<bool>,
     /// Measure, the section views, iProperties (`inspect.rs`).
     pub inspect: inspect::Inspect,
@@ -405,6 +414,7 @@ impl Default for Shell {
             fg: None,
             overlays: [PART_OVERLAYS, ASM_OVERLAYS],
             file_menu: false,
+            sheet: sheet::SheetUi::new(),
             style_set: None,
             inspect: Default::default(),
         }
@@ -797,6 +807,7 @@ impl Shell {
         self.inspect_ui(&ctx);
         self.fg_params_window(&ctx);
         self.fg_issues_window(&ctx);
+        self.sheet_ui(&ctx);
         self.view_toolbar(&ctx);
         self.sketch_ui(&ctx);
         self.mode_bar(&ctx);
@@ -994,11 +1005,16 @@ impl Shell {
         if asm && self.tab == 1 {
             self.tab = 0;
         }
-        for (k, name) in TABS.iter().enumerate() {
+        for k in self.tab_order() {
             if asm && k == 1 {
                 continue;
             }
-            let name = if asm && k == 0 { &"Assemble" } else { name };
+            let name = match k {
+                SHEET_TAB => &"Sheet Metal",
+                FLAT_TAB => &"Flat Pattern",
+                0 if asm => &"Assemble",
+                k => &TABS[k],
+            };
             let on = k == self.tab;
             let w = ui
                 .fonts_mut(|f| f.layout_no_wrap(name.to_string(), sans(13.0), t.ink))
@@ -1026,6 +1042,19 @@ impl Shell {
             p.text(r.center(), Align2::CENTER_CENTER, *name, font, ink);
             self.note(format!("tab:{name}"), r);
             x += w + 2.0;
+        }
+    }
+
+    /// The tabs shown, in order: a sheet metal part's Sheet Metal first, the flat pattern's tab
+    /// alone with Inspect, View and Manage.
+    pub fn tab_order(&self) -> Vec<usize> {
+        let fg = self.fg.is_some() && !self.is_asm();
+        if fg && self.sheet.flat_env {
+            vec![FLAT_TAB, 2, 3, 4]
+        } else if fg && self.sheet.env {
+            vec![SHEET_TAB, 0, 1, 2, 3, 4]
+        } else {
+            vec![0, 1, 2, 3, 4]
         }
     }
 
@@ -1210,13 +1239,27 @@ impl Shell {
             "valid".to_string()
         };
         let right = format!("{state} | {}", self.units);
-        p.text(
+        let r = p.text(
             pos2(s.width() - 10.0, st.center().y),
             Align2::RIGHT_CENTER,
             right,
             mono(12.0),
             Color32::WHITE,
         );
+        // a Forge part's issues, a click away: its shop's rules and its checks with their fixes
+        if let Some(fg) = &mut self.fg
+            && !fg.issues.is_empty()
+        {
+            let r = r.expand(3.0);
+            let resp = ui.interact(r, ui.scope_id().with("status-part-issues"), Sense::click());
+            if resp.hovered() || fg.issues_list {
+                p.rect_filled(r, 3.0, Color32::from_white_alpha(28));
+            }
+            self.places.push(("fg:issues:status".into(), r));
+            if resp.clicked() {
+                fg.issues_list = !fg.issues_list;
+            }
+        }
     }
 
     /// Esc backs out one level, wherever one is: never two, and never none.
@@ -1414,7 +1457,11 @@ impl Shell {
         self.marking_menu(ctx);
         if self.file_menu {
             let at = pos2(8.0, TITLE_H + TABS_H);
-            let items = [("New", Some(Action::New)), ("Open...", Some(Action::Open))];
+            let items = [
+                ("New", Some(Action::New)),
+                ("New Sheet Metal", Some(Action::Sheet(sheet::SheetCmd::NewPart))),
+                ("Open...", Some(Action::Open)),
+            ];
             match menu_at(ctx, "file-menu", at, &t, &items) {
                 MenuResult::Chose(a) => {
                     self.out.push(a);
