@@ -22,6 +22,8 @@ pub struct Gfx {
     pub sheet: Vec<String>,
     /// The vents drilled in the mould, at its surface.
     pub vents: Vec<[f32; 3]>,
+    /// The sheet's points on the part and the wall there, mm.
+    pub points: Vec<([f32; 3], f32)>,
 }
 
 impl Gfx {
@@ -245,6 +247,7 @@ pub fn view(o: &ThermoOut, limit: f64, draft_min: f32) -> (ThermoRow, Gfx) {
             .map(|k| (s.nodes[k], s.ratio[k] * o.t as f32))
             .collect();
     }
+    gfx.points = row.points.clone();
     let below = row.points.iter().filter(|p| (p.1 as f64) < limit * o.t).count();
     facts.push((
         "below limit".into(),

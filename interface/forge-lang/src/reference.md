@@ -775,12 +775,14 @@ cover = thermoform(body, t: t, material: "HIPS")
 
 ```
 thermoform(SHAPE, t: T, material: "ABS" | MATERIAL, from: "outer"|"wall"|"inner" = "outer",
-           tool: "male"|"female" = "male", pull: DIR = Z, trim: PROFILE, flange: W = 10,
+           tool: "male"|"female" = "male", open: FACES, pull: DIR = Z, trim: PROFILE, flange: W = 10,
            sheet: (W, L), shop: SHOP, shrink: ratio(S), base: B = 10, margin: M = 5,
            vent: D | false, vents: [(x, y), ..], vent_pitch: P = 25, walls: true,
            temperature: C, pressure: ratio(MPa))
 ```
 
+- `open:` the face the sheet meets the clamp at (`body.start`): the part leaves the mould away from
+  it (male) or through it (female); left out, `pull` (default Z) says the way.
 - SHAPE: the feature that made the part's body. The mould's surface is the part's side on it (from
   "outer" and a male mould: the body offset inward by t; "inner" and female: outward by t; a wall:
   its hollow, or the hollow and the wall); the formed part is that surface offset by t (exact offset

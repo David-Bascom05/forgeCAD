@@ -118,6 +118,13 @@ impl Gui {
             ),
             Export::TrimDxf => (format!("{stem}-{id}-trim.dxf"), Ok(dxf(&g.trim).into_bytes())),
             Export::ProcessPdf => (format!("{stem}-{id}-process.pdf"), Ok(pdf(&g.sheet))),
+            Export::ThicknessCsv => {
+                let mut s = String::from("x_mm,y_mm,z_mm,wall_mm\n");
+                for (p, t) in &g.points {
+                    s += &format!("{:.3},{:.3},{:.3},{:.4}\n", p[0], p[1], p[2], t);
+                }
+                (format!("{stem}-{id}-thickness.csv"), Ok(s.into_bytes()))
+            }
         };
         match bytes.and_then(|b| std::fs::write(&file, b).map_err(|e| e.to_string())) {
             Ok(()) => format!("Wrote {file}"),

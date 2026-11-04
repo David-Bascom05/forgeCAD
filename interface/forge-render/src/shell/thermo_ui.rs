@@ -24,6 +24,7 @@ pub enum Cmd {
     Animate,
     Mould,
     Export,
+    ExportCsv,
     Materials,
 }
 
@@ -70,6 +71,7 @@ pub enum Export {
     PartStep,
     TrimDxf,
     ProcessPdf,
+    ThicknessCsv,
 }
 
 /// A material as Convert offers it: its name, its law's source, its forming window and normal
@@ -321,6 +323,7 @@ pub fn groups(s: &Shell) -> Vec<(&'static str, Vec<Button>, Vec<Button>)> {
                     go(Cmd::Animate, has),
                     ui.is_some_and(|u| u.playing),
                 ),
+                ("Export CSV", "save", go(Cmd::ExportCsv, has), false),
             ],
         ),
         (
@@ -433,6 +436,11 @@ impl FgPanel {
                 u.playing = !u.playing;
                 if u.playing {
                     u.step = Some(0);
+                }
+            }
+            Cmd::ExportCsv => {
+                if let Some(id) = first {
+                    u.want_export = Some((id, Export::ThicknessCsv));
                 }
             }
             // the Material Browser is the material library's (shell/materials.rs)
