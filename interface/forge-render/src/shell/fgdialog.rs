@@ -198,10 +198,23 @@ fn chip(ui: &mut egui::Ui, t: &super::theme::Theme, text: &str, on: bool) -> egu
 /// What a slot can take that the view can't give: sketch entities, features, origin planes.
 fn choices_for(fg: &super::fg::FgPanel, kind: K) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
+    // a feature by what makes it: a work feature's call says what it is
+    let made_by = |f: &super::fg::FeatRow| -> String {
+        if f.kind != "work" {
+            return f.kind.clone();
+        }
+        let head = format!("{} = ", f.id);
+        fg.source
+            .lines()
+            .find_map(|l| l.trim_start().strip_prefix(&head))
+            .and_then(|r| r.split('(').next())
+            .unwrap_or("work")
+            .to_string()
+    };
     let of_kind = |ks: &[&str]| -> Vec<String> {
         fg.feats
             .iter()
-            .filter(|f| ks.contains(&f.kind.as_str()))
+            .filter(|f| ks.contains(&made_by(f).as_str()))
             .map(|f| f.id.clone())
             .collect()
     };
@@ -228,7 +241,7 @@ fn choices_for(fg: &super::fg::FgPanel, kind: K) -> Vec<String> {
     match kind {
         K::Plane => {
             out.extend(["xy", "xz", "yz"].map(String::from));
-            out.extend(of_kind(&["workplane"]));
+            out.extend(of_kind(&["workplane", "ucs"]));
         }
         K::Axis => {
             out.extend(of_kind(&["workaxis"]));
@@ -391,7 +404,12 @@ impl Shell {
                         .collect();
                     let (a, b) = items.split_at(items.len().div_ceil(2));
                     let first = text_toggles(ui, t, a, &name, places);
-                    let second = text_toggles(ui, t, b, &name, places).map(|k| k + a.len());
+                    // a second row of its own ids, its places under the choice's name
+                    let n = places.len();
+                    let second = text_toggles(ui, t, b, &format!("{name}+"), places).map(|k| k + a.len());
+                    for p in &mut places[n..] {
+                        p.0 = p.0.replacen(&format!("{name}+"), &name, 1);
+                    }
                     first.or(second)
                 };
                 if let Some(k) = k {

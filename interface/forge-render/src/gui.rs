@@ -3347,6 +3347,19 @@ impl Gui {
             return;
         };
         if self.fg_previewed.as_deref() == Some(text.as_str()) {
+            // what it made fails in the kernel: the part as it was back, to pick on, and why
+            let built = s.previewing() && s.done == s.seq;
+            if built
+                && let Some(p) = &mut self.shell.fg
+                && let Some(t) = &mut p.tool
+                && let Some(i) = p.issues.iter().find(|i| {
+                    i.severity == crate::shell::fg::Severity::Error
+                        && i.feature.as_deref() == Some(t.name.as_str())
+                })
+            {
+                t.note = Some(format!("{}: {}", i.kind, i.text));
+                s.end_preview();
+            }
             return;
         }
         let op = forge_lang::error::Op::AddFeature {

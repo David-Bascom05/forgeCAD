@@ -780,7 +780,9 @@ impl Shell {
                 .map_or("", |f| f.kind.as_str());
             let pick = match kind {
                 SlotKind::Profile | SlotKind::Profiles | SlotKind::Plane if is_sketch => Ok(k.clone()),
-                SlotKind::Plane if work == "workplane" => Ok(k.clone()),
+                SlotKind::Plane if work == "work" && fg.source.contains(&format!("{k} = workplane(")) => {
+                    Ok(k.clone())
+                }
                 SlotKind::Feature | SlotKind::Features if !is_sketch => Ok(k.clone()),
                 _ => Err(ToolError::WrongPick {
                     slot: tool.slots[tool.active].label,

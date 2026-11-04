@@ -729,7 +729,7 @@ fn form_of(kind: &str, c: &dyn Fn(&str) -> &'static str) -> Option<Form> {
         },
         "deleteface" => (vec![slot("Faces", K::Faces)], vec![], vec![], vec![]),
         "replaceface" => (
-            vec![slot("Existing Face", K::Face), slot("New Faces", K::Faces)],
+            vec![slot("Existing Face", K::Face), slot("New Face", K::Plane)],
             vec![],
             vec![],
             vec![],
@@ -1395,7 +1395,7 @@ impl FgTool {
             "replaceface" => format!(
                 "{n} = replace_face({}, with: {})",
                 self.one("Existing Face")?,
-                self.all("New Faces", " + ")?
+                self.one("New Face")?
             ),
             "movebody" | "copybody" => {
                 let motion = if self.choice("Motion") == "Spin" {
