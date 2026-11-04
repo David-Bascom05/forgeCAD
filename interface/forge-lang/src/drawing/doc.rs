@@ -1655,6 +1655,8 @@ pub fn read(src: &str) -> Doc {
         ));
         return r.doc;
     }
+    // names whose lines failed: what reads them says nothing more (one problem, at its root)
+    let mut failed: Vec<String> = Vec::new();
     for s in &prog[1..] {
         let res = match &s.kind {
             StmtKind::Shared { name, value } => r.expr(value).map(|v| {
@@ -1693,7 +1695,13 @@ pub fn read(src: &str) -> Doc {
             )),
         };
         if let Err(e) = res {
-            r.doc.errors.push(e);
+            let downstream = matches!(&e.problem, Problem::UnknownName { name } if failed.contains(name));
+            if let StmtKind::Assign { name, .. } = &s.kind {
+                failed.push(name.clone());
+            }
+            if !downstream {
+                r.doc.errors.push(e);
+            }
         }
     }
     r.doc

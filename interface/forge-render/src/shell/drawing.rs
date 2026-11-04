@@ -1298,18 +1298,19 @@ fn pen_colour(pen: Pen) -> Color32 {
     }
 }
 
+/// A ribbon group: its name, its big buttons and its small ones, each a command and its icon.
+pub type RibbonGroup = (
+    &'static str,
+    Vec<(DwgCmd, &'static str)>,
+    Vec<(DwgCmd, &'static str)>,
+);
+
 const SELECT: Color32 = Color32::from_rgb(0x1E, 0x6F, 0xD9);
 const PRESELECT: Color32 = Color32::from_rgb(0xFF, 0x9A, 0x1F);
 
 impl Shell {
     /// The Drawing environment's ribbon groups: Inventor's Place Views and Annotate.
-    pub(super) fn drawing_groups(
-        &self,
-    ) -> Vec<(
-        &'static str,
-        Vec<(DwgCmd, &'static str)>,
-        Vec<(DwgCmd, &'static str)>,
-    )> {
+    pub(super) fn drawing_groups(&self) -> Vec<RibbonGroup> {
         use DwgCmd::*;
         match self.tab {
             0 => vec![
@@ -1740,6 +1741,55 @@ impl Shell {
                 }
             } else if env.tool.is_some() {
                 env.cancel();
+            } else if let Some(q) = q {
+                env.selected = env.item_at(q).or_else(|| env.view_at(q));
+            }
+        }
+        // the right-click menu: edit, delete, and what the problems with it offer as fixes
+        if env.tool.is_none()
+            && let Some(id) = env.selected.clone()
+        {
+            let fixes: Vec<DrawOp> = env
+                .made
+                .as_ref()
+                .map(|m| {
+                    m.errors
+                        .iter()
+                        .filter(|e| problem_item(&e.problem) == Some(id.as_str()))
+                        .flat_map(|e| e.fixes.clone())
+                        .collect()
+                })
+                .unwrap_or_default();
+            let mut chosen: Option<DrawOp> = None;
+            let mut edit = false;
+            resp.context_menu(|ui| {
+                ui.set_min_width(220.0);
+                ui.label(egui::RichText::new(&id).font(semi(12.5)));
+                if ui.button("Edit...").clicked() {
+                    edit = true;
+                    ui.close();
+                }
+                if ui.button("Delete").clicked() {
+                    chosen = Some(DrawOp::DeleteItem { item: id.clone() });
+                    ui.close();
+                }
+                for f in &fixes {
+                    let label = match f {
+                        DrawOp::SetArg { arg, value, .. } => format!("Reattach {arg} to {value}"),
+                        DrawOp::DeleteItem { .. } => continue,
+                        DrawOp::AddItem { text } => format!("Add {text}"),
+                    };
+                    if ui.button(label).clicked() {
+                        chosen = Some(f.clone());
+                        ui.close();
+                    }
+                }
+            });
+            if edit {
+                env.edit(&id);
+            }
+            if let Some(op) = chosen {
+                env.apply(vec![op]);
             }
         }
         if env.tool.is_none()
@@ -2362,6 +2412,18 @@ fn strip_arg(src: &str, item: &str, arg: &str) -> String {
         }
     }
     src.to_string()
+}
+
+/// The item a problem is about, where it names one.
+fn problem_item(p: &doc::Problem) -> Option<&str> {
+    match p {
+        doc::Problem::Sick { item, .. }
+        | doc::Problem::NotInView { item, .. }
+        | doc::Problem::HiddenOnly { item, .. }
+        | doc::Problem::NotHere { item, .. }
+        | doc::Problem::Gdt { item, .. } => Some(item),
+        _ => None,
+    }
 }
 
 /// A drag ended: the view or annotation moves there, written back as its `at`.
