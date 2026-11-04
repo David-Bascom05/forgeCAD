@@ -150,3 +150,29 @@ fn a_tool_wider_at_the_top_is_an_undercut() {
         .count();
     assert_eq!(n, 4, "{c:?}");
 }
+
+#[test]
+fn absurd_sizes_are_refused_before_anything_is_laid_out() {
+    let mould = block(60.0, 40.0, 20.0, 6.0, 5.0);
+    let mut s = spec(Side::Inner);
+    s.flange = 1e9;
+    assert!(matches!(
+        form(&mould, &s, 11),
+        Err(FormError::Size { what: "trim", .. })
+    ));
+    let mut s = spec(Side::Inner);
+    s.margin = f64::INFINITY;
+    assert!(matches!(
+        form(&mould, &s, 11),
+        Err(FormError::Size { what: "margin", .. })
+    ));
+    let mut s = spec(Side::Inner);
+    s.trim = Some(Profile {
+        plane: Frame::WORLD,
+        loops: vec![Profile::rectangle(Point2::new(-5e8, -5e8), 1e9, 1e9, 0)],
+    });
+    assert!(matches!(
+        form(&mould, &s, 11),
+        Err(FormError::Size { what: "trim", .. })
+    ));
+}

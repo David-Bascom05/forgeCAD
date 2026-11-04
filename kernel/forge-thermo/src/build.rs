@@ -243,12 +243,18 @@ fn rounded(lo: Point2, hi: Point2, grow: f64, r: f64, id: u64) -> ProfileLoop {
 /// numbers. The checks read only this, so they run where the solids cannot be built.
 pub fn analyse(mould: &Body, spec: &Spec) -> Result<Formed, FormError> {
     for (what, v) in [("t", spec.t), ("base", spec.base)] {
-        if v.is_nan() || v <= tol::LINEAR {
+        if !v.is_finite() || v <= tol::LINEAR {
             return Err(FormError::Size { what, value: v });
         }
     }
-    for (what, v, lo) in [("flange", spec.flange, 0.0), ("shrink", spec.shrink, -0.5)] {
-        if v.is_nan() || v < lo {
+    for (what, v, lo) in [
+        ("flange", spec.flange, 0.0),
+        ("shrink", spec.shrink, -0.5),
+        ("margin", spec.margin, 0.0),
+        ("vent_pitch", spec.vent_pitch, 0.0),
+        ("vent", spec.vent.unwrap_or(0.0), 0.0),
+    ] {
+        if !v.is_finite() || v < lo || (what == "shrink" && v > 0.5) {
             return Err(FormError::Size { what, value: v });
         }
     }
@@ -313,7 +319,24 @@ pub fn analyse(mould: &Body, spec: &Spec) -> Result<Formed, FormError> {
         }
         None => rounded(lo, hi, spec.flange, spec.flange, 1),
     };
-    let poly = polygon(&trim);
+    // sizes out of all proportion to the mould are refused before anything is laid out
+    let limit = (10.0 * (hi.x - lo.x).max(hi.y - lo.y).max(depth)).max(1000.0);
+    let tpoly = polygon(&trim);
+    let (a, b) = bounds(&tpoly);
+    for (what, v) in [
+        ("trim", (b.x - a.x).max(b.y - a.y)),
+        ("t", spec.t),
+        ("flange", spec.flange),
+        ("base", spec.base),
+        ("margin", spec.margin),
+        ("vent_pitch", spec.vent_pitch),
+        ("vent", spec.vent.unwrap_or(0.0)),
+    ] {
+        if !v.is_finite() || v > limit {
+            return Err(FormError::Size { what, value: v });
+        }
+    }
+    let poly = tpoly;
     for (i, p) in local.iter().enumerate() {
         let (inn, dist) = inside(&poly, Point2::new(p.x, p.y));
         if !inn || dist < spec.t {

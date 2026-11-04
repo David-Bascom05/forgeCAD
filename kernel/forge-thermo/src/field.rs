@@ -40,7 +40,7 @@ pub struct Region {
     pub width: f64,
 }
 
-/// The cells along which most cells are in the field; at most this many either way.
+/// At most this many cells either way (one more where the span does not divide).
 const MAX_CELLS: f64 = 240.0;
 
 impl Field {
@@ -57,7 +57,7 @@ impl Field {
         inside: impl Fn(Point2) -> bool,
     ) -> Field {
         let span = (hi.x - lo.x).max(hi.y - lo.y);
-        let h = (span / MAX_CELLS).clamp(0.25, 5.0);
+        let h = (span / MAX_CELLS).max(0.25);
         let nx = ((hi.x - lo.x) / h).ceil().max(1.0) as usize;
         let ny = ((hi.y - lo.y) / h).ceil().max(1.0) as usize;
         let (x0, y0) = (lo.x, lo.y);
