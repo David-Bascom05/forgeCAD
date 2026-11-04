@@ -1,0 +1,74 @@
+# generator: hexagon socket head shoulder screw (ISO 7379)
+# frame: origin on the axis at the head underside; +z along the shoulder to the tip; head at z < 0
+# anchors (normals +z): head (underside), shoulder (shaft, ds over ls), clamp (shoulder end face),
+# thd (external thread, from the undercut to the tip), tip
+
+shared ds = 8         # shoulder diameter (max)
+shared dsn = 8        # shoulder diameter, nominal (the shaft anchor's size)
+shared ls = 12        # shoulder length (the nominal length)
+shared d = 6          # thread major diameter
+shared P = 1          # pitch
+shared b = 11.25      # thread length incl. the undercut (max)
+shared dk = 13        # head diameter
+shared k = 5.5        # head height
+shared s = 4          # socket across flats
+shared t = 3.3        # socket depth (minimum)
+shared g1 = 2.5       # head undercut width (max)
+shared dg1 = 7.42     # head undercut diameter (min)
+shared g2 = 2.5       # thread undercut width (max)
+shared dg2 = 4.58     # thread undercut diameter (max)
+shared modelled = 0   # 1: the thread modelled
+shared l = ls + b
+shared ch = 0.6 * P
+shared rsh = ds / 2
+shared rs = d / 2
+shared rk = dk / 2
+shared r1 = dg1 / 2
+shared r2 = dg2 / 2
+shared rc = s / sqrt(3)
+shared rcone = s / 2
+shared hcone = rcone / tan(59deg)
+shared n6 = count(6)
+
+sketch prof(on: xz) {
+  mouth = pt(rcone, -k)
+  face = line(mouth, (rk, -k))
+  wall = line((rk, -k), (rk, 0))
+  under = line((rk, 0), (r1, 0))
+  u1 = line((r1, 0), (r1, g1))
+  u2 = line((r1, g1), (rsh, g1))
+  sh = line((rsh, g1), (rsh, ls))
+  shend = line((rsh, ls), (r2, ls))
+  n1 = line((r2, ls), (r2, ls + g2))
+  n2 = line((r2, ls + g2), (rs, ls + g2))
+  thr = line((rs, ls + g2), (rs, l - ch))
+  pnt = line((rs, l - ch), (rs - ch, l))
+  endf = line((rs - ch, l), (0, l))
+  axl = line((0, l), (0, t - k + hcone))
+  cone = line((0, t - k + hcone), (rcone, t - k))
+  cwall = line((rcone, t - k), mouth)
+  o = pt(0, 0)
+  zls = pt(0, ls)
+  zth = pt(0, ls + g2)
+  ztip = pt(0, l)
+  ztop = pt(0, -k)
+  zax = line((0, 0), (0, l), construction: true)
+  xax = line((0, 0), (rs, 0), construction: true)
+}
+body = revolve(prof, axis: prof.zax)
+sketch hx(on: body.side(prof.face), at: prof.ztop) {
+  hexo = poly(polar(n: n6, r: rc, start: 0deg))
+}
+socket = cut(hx, t)
+if modelled > 0 {
+  thread_m = thread(face: body.side(prof.thr), spec: (d, P), length: "full")
+}
+
+head = anchor(plane(at: prof.o, normal: prof.zax.dir, x: prof.xax.dir))
+shoulder = anchor(plane(at: prof.o, normal: prof.zax.dir, x: prof.xax.dir), kind: shaft, size: dsn, depth: ls)
+clamp = anchor(plane(at: prof.zls, normal: prof.zax.dir, x: prof.xax.dir))
+thd = anchor(plane(at: prof.zth, normal: prof.zax.dir, x: prof.xax.dir), kind: external_thread, size: d, depth: b - g2)
+tip = anchor(plane(at: prof.ztip, normal: prof.zax.dir, x: prof.xax.dir))
+
+expect valid
+expect bodies = 1

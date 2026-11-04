@@ -1,0 +1,19 @@
+# generator: O-ring (AS568, ISO 3601-1)
+# frame: origin on the axis in the ring's middle plane
+# anchors (normals +z): middle (the middle plane)
+
+shared id = 10        # inside diameter
+shared w = 2          # cross-section diameter
+shared rc = id / 2 + w / 2
+
+sketch prof(on: xz) {
+  c = circle((rc, 0), w / 2)
+  o = pt(0, 0)
+  zax = line((0, -w), (0, w), construction: true)
+  xax = line((0, 0), (rc, 0), construction: true)
+}
+body = revolve(prof.c, axis: prof.zax)
+middle = anchor(plane(at: prof.o, normal: prof.zax.dir, x: prof.xax.dir))
+
+expect valid
+expect bodies = 1

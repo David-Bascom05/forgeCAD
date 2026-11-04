@@ -1,0 +1,40 @@
+# title: Parallel keys, form A (round ends), and keyways, deep pattern
+# standard: DIN 6885-1:1968-08 (form A); same key and keyway dimensions as ISO/R 773:1969 and IS 2048:1983
+# kind: key
+# units: mm
+# item: Parallel key, form A
+# category: Shaft parts/Keys
+# gen: key | b=b | h=h | l=@l
+# material: C45 bright
+# lengths: 6 8 10 12 14 16 18 20 22 25 28 32 36 40 45 50 56 63 70 80 90 100 110 125 140 160 180 200 220 250 280 320 360 400
+# src I: IS 2048:1983 'Parallel keys and keyways' (ISO/R 773 based), Table 1 (keys: b, h, tolerances, chamfer s, length range) and Table 3 (keyways: shaft range, t1, t2 and tolerances, radius r), public.resource.org scan (https://archive.org/details/gov.in.is.2048.1983), read from page renders 2026-11-04
+# src T: fasten.it DIN 6885-1 table 'source DIN 6885-1, 08/1968' (https://fasten.it/en/norms/norm/din_6885-1): b, h, shaft range, t1, t2
+# chk B: bd_warehouse 5a8a439 shaft_key_parameters.csv (Apache-2.0), keyed per shaft diameter 6..50 (its t4 is our shaft depth t1, its t2 our hub depth t2); no map line because its rows are shaft diameters, not key sizes; compared by shaft range
+# model: b, h nominal (key b h9 -> b_min; h h9 for square keys, h11 for rectangular -> h_min); shaft keyway depth t1 and hub depth t2 nominal, measured from the shaft surface / hub bore at the keyway sides (t1_max, t2_max = + tolerance); keyway bottom corner radius r_min..r_max; key edge chamfer s_min..s_max (45 deg or radius); form A key ends are full radius b/2; use the key for shafts d_over < d <= d_to
+size,b,h,b_min,h_min,d_over,d_to,t1,t1_max,t2,t2_max,r_min,r_max,s_min,s_max,l_min,l_max,src,checked
+2x2,2,2,1.975,1.975,6,8,1.2,1.3,1,1.1,0.08,0.16,0.16,0.25,6,20,I T,I T B
+3x3,3,3,2.975,2.975,8,10,1.8,1.9,1.4,1.5,0.08,0.16,0.16,0.25,6,36,I T,I T B
+4x4,4,4,3.97,3.97,10,12,2.5,2.6,1.8,1.9,0.08,0.16,0.16,0.25,8,45,I T,I T B
+5x5,5,5,4.97,4.97,12,17,3,3.1,2.3,2.4,0.16,0.25,0.25,0.4,10,56,I T,I T B
+6x6,6,6,5.97,5.97,17,22,3.5,3.6,2.8,2.9,0.16,0.25,0.25,0.4,14,70,I T,I T B
+8x7,8,7,7.964,6.91,22,30,4,4.2,3.3,3.5,0.16,0.25,0.25,0.4,18,90,I T,I T B
+10x8,10,8,9.964,7.91,30,38,5,5.2,3.3,3.5,0.25,0.4,0.4,0.6,22,110,I T,I T B
+12x8,12,8,11.957,7.91,38,44,5,5.2,3.3,3.5,0.25,0.4,0.4,0.6,28,140,I T,I T B
+14x9,14,9,13.957,8.91,44,50,5.5,5.7,3.8,4,0.25,0.4,0.4,0.6,36,160,I T,I T B
+16x10,16,10,15.957,9.91,50,58,6,6.2,4.3,4.5,0.25,0.4,0.4,0.6,45,180,I T,I T
+18x11,18,11,17.957,10.89,58,65,7,7.2,4.4,4.6,0.25,0.4,0.4,0.6,50,200,I T,I T
+20x12,20,12,19.948,11.89,65,75,7.5,7.7,4.9,5.1,0.4,0.6,0.6,0.8,56,220,I T,I T
+22x14,22,14,21.948,13.89,75,85,9,9.2,5.4,5.6,0.4,0.6,0.6,0.8,63,250,I T,I T
+25x14,25,14,24.948,13.89,85,95,9,9.2,5.4,5.6,0.4,0.6,0.6,0.8,70,280,I T,I T
+28x16,28,16,27.948,15.89,95,110,10,10.2,6.4,6.6,0.4,0.6,0.6,0.8,80,320,I T,I T
+32x18,32,18,31.938,17.89,110,130,11,11.2,7.4,7.6,0.4,0.6,0.6,0.8,90,360,I T,I T
+36x20,36,20,35.938,19.87,130,150,12,12.3,8.4,8.7,0.7,1,1,1.2,100,400,I T,I T
+40x22,40,22,39.938,21.87,150,170,13,13.3,9.4,9.7,0.7,1,1,1.2,110,400,I T,I T
+45x25,45,25,44.938,24.87,170,200,15,15.3,10.4,10.7,0.7,1,1,1.2,125,400,I T,I T
+50x28,50,28,49.938,27.87,200,230,17,17.3,11.4,11.7,0.7,1,1,1.2,140,400,I T,I T
+56x32,56,32,55.926,31.84,230,260,20,20.3,12.4,12.7,1.2,1.6,1.6,2,160,400,I T,I T
+63x32,63,32,62.926,31.84,260,290,20,20.3,12.4,12.7,1.2,1.6,1.6,2,180,400,I T,I T
+70x36,70,36,69.926,35.84,290,330,22,22.3,14.4,14.7,1.2,1.6,1.6,2,200,400,I T,I T
+80x40,80,40,79.926,39.84,330,380,25,25.3,15.4,15.7,2,2.5,2.5,3,220,400,I T,I T
+90x45,90,45,89.913,44.84,380,440,28,28.3,17.4,17.7,2,2.5,2.5,3,250,400,I T,I T
+100x50,100,50,99.913,49.84,440,500,31,31.3,19.5,19.8,2,2.5,2.5,3,280,400,I T,I T

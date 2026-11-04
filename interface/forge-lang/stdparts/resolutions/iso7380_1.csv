@@ -1,0 +1,31 @@
+family,size,column,source,theirs,ours,verdict
+iso7380_1,M10,l_max,B,100,90,"ours: ISO 7380-1:2011 Table 1 (continued) stair ends at 90 for M10-M16; FastenersWB agrees; B's 100 has no source (the 2022 Table 2, which amended the range, is not in its preview)"
+iso7380_1,M12,l_max,B,100,90,"ours: ISO 7380-1:2011 Table 1 (continued) stair ends at 90 for M10-M16; FastenersWB agrees; B's 100 has no source (the 2022 Table 2, which amended the range, is not in its preview)"
+iso7380_1,M16,l_max,B,100,90,"ours: ISO 7380-1:2011 Table 1 (continued) stair ends at 90 for M10-M16; FastenersWB agrees; B's 100 has no source (the 2022 Table 2, which amended the range, is not in its preview)"
+iso7380_1,M16,b,F,44,48,ours: the ISO 7380-1:2022 foreword raises b for partially threaded M16 to 3d = 48 (tensile test to ISO 3506-1); 44 is the 2011 value
+iso7380_1,M3,dw_min,A11,5,4.97,"ours: ISO 7380-1:2022 Table 1 reduced dw_min to 0.92 dk_min (foreword, footnote c); 5 is the 2011 value"
+iso7380_1,M3,e_min,A11,2.303,2.3,ours: ISO 7380-1:2022 Table 1 prints e_min rounded to two decimals (foreword: 'emin values have been rounded'); 2.303 is the 2011 three-decimal value
+iso7380_1,M4,dw_min,A11,6.84,6.66,"ours: ISO 7380-1:2022 Table 1 reduced dw_min to 0.92 dk_min (foreword, footnote c); 6.84 is the 2011 value"
+iso7380_1,M4,e_min,A11,2.873,2.87,ours: ISO 7380-1:2022 Table 1 prints e_min rounded to two decimals (foreword: 'emin values have been rounded'); 2.873 is the 2011 three-decimal value
+iso7380_1,M5,dw_min,A11,8.74,8.41,"ours: ISO 7380-1:2022 Table 1 reduced dw_min to 0.92 dk_min (foreword, footnote c); 8.74 is the 2011 value"
+iso7380_1,M5,e_min,A11,3.443,3.44,ours: ISO 7380-1:2022 Table 1 prints e_min rounded to two decimals (foreword: 'emin values have been rounded'); 3.443 is the 2011 three-decimal value
+iso7380_1,M6,dw_min,A11,9.57,9.26,"ours: ISO 7380-1:2022 Table 1 reduced dw_min to 0.92 dk_min (foreword, footnote c); 9.57 is the 2011 value"
+iso7380_1,M6,e_min,A11,4.583,4.58,ours: ISO 7380-1:2022 Table 1 prints e_min rounded to two decimals (foreword: 'emin values have been rounded'); 4.583 is the 2011 three-decimal value
+iso7380_1,M8,dw_min,A11,13.07,12.48,"ours: ISO 7380-1:2022 Table 1 reduced dw_min to 0.92 dk_min (foreword, footnote c); 13.07 is the 2011 value"
+iso7380_1,M8,e_min,A11,5.723,5.72,ours: ISO 7380-1:2022 Table 1 prints e_min rounded to two decimals (foreword: 'emin values have been rounded'); 5.723 is the 2011 three-decimal value
+iso7380_1,M10,dw_min,A11,16.57,15.7,"ours: ISO 7380-1:2022 Table 1 reduced dw_min to 0.92 dk_min (foreword, footnote c); 16.57 is the 2011 value"
+iso7380_1,M10,e_min,A11,6.863,6.86,ours: ISO 7380-1:2022 Table 1 prints e_min rounded to two decimals (foreword: 'emin values have been rounded'); 6.863 is the 2011 three-decimal value
+iso7380_1,M12,dw_min,A11,19.68,18.84,"ours: ISO 7380-1:2022 Table 1 reduced dw_min to 0.92 dk_min (foreword, footnote c); 19.68 is the 2011 value"
+iso7380_1,M12,e_min,A11,9.149,9.15,ours: ISO 7380-1:2022 Table 1 prints e_min rounded to two decimals (foreword: 'emin values have been rounded'); 9.149 is the 2011 three-decimal value
+iso7380_1,M16,b,A11,44,48,ours: the ISO 7380-1:2022 foreword raises b for partially threaded M16 to 3d = 48 (tensile test to ISO 3506-1); 44 is the 2011 value
+iso7380_1,M16,dw_min,A11,26.68,25.28,"ours: ISO 7380-1:2022 Table 1 reduced dw_min to 0.92 dk_min (foreword, footnote c); 26.68 is the 2011 value"
+iso7380_1,M16,e_min,A11,11.429,11.43,ours: ISO 7380-1:2022 Table 1 prints e_min rounded to two decimals (foreword: 'emin values have been rounded'); 11.429 is the 2011 three-decimal value
+iso7380_1,M3,e_min,R,2.303,2.3,ours: ISO 7380-1:2022 Table 1 prints e_min rounded to two decimals (foreword: 'emin values have been rounded'); 2.303 is the 2011 three-decimal value
+iso7380_1,M4,e_min,R,2.873,2.87,ours: ISO 7380-1:2022 Table 1 prints e_min rounded to two decimals (foreword: 'emin values have been rounded'); 2.873 is the 2011 three-decimal value
+iso7380_1,M5,e_min,R,3.443,3.44,ours: ISO 7380-1:2022 Table 1 prints e_min rounded to two decimals (foreword: 'emin values have been rounded'); 3.443 is the 2011 three-decimal value
+iso7380_1,M6,e_min,R,4.583,4.58,ours: ISO 7380-1:2022 Table 1 prints e_min rounded to two decimals (foreword: 'emin values have been rounded'); 4.583 is the 2011 three-decimal value
+iso7380_1,M8,e_min,R,5.723,5.72,ours: ISO 7380-1:2022 Table 1 prints e_min rounded to two decimals (foreword: 'emin values have been rounded'); 5.723 is the 2011 three-decimal value
+iso7380_1,M10,e_min,R,6.863,6.86,ours: ISO 7380-1:2022 Table 1 prints e_min rounded to two decimals (foreword: 'emin values have been rounded'); 6.863 is the 2011 three-decimal value
+iso7380_1,M12,e_min,R,9.149,9.15,ours: ISO 7380-1:2022 Table 1 prints e_min rounded to two decimals (foreword: 'emin values have been rounded'); 9.149 is the 2011 three-decimal value
+iso7380_1,M16,e_min,R,11.429,11.43,ours: ISO 7380-1:2022 Table 1 prints e_min rounded to two decimals (foreword: 'emin values have been rounded'); 11.429 is the 2011 three-decimal value
+iso7380_1,M16,b,R,44,48,ours: the ISO 7380-1:2022 foreword raises b for partially threaded M16 to 3d = 48 (tensile test to ISO 3506-1); 44 is the 2011 value

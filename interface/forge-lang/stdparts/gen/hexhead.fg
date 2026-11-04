@@ -1,0 +1,72 @@
+# generator: hexagon head bolt or screw (ISO 4014, ISO 4017, ASME B18.2.1 hex cap screw)
+# frame: origin on the axis at the head underside; +z along the shank to the tip; head at z < 0
+# anchors (normals +z): head (bearing face), top (head top), thd (external thread, from its start
+# to the tip), tip
+
+shared d = 8          # thread major diameter
+shared P = 1.25       # pitch
+shared l = 40         # nominal length
+shared b1 = 22        # thread length for l <= 125 (ISO 888)
+shared b2 = 28        # for 125 < l <= 200
+shared b3 = 41        # for l > 200
+shared lfull = 0      # the longest length threaded to the head
+shared lb1 = 125      # b1 up to this length (mm)
+shared lb2 = 200      # b2 up to this length (mm)
+shared s = 13         # across flats
+shared k = 5.3        # head height, washer face included
+shared dw = 11.63     # washer face (bearing face) diameter
+shared c = 0.6        # washer face thickness (max)
+shared r = 0.4        # under-head fillet radius (minimum)
+shared modelled = 0   # 1: the thread modelled
+shared b = b1 if l <= lb1 else (b2 if l <= lb2 else b3)
+shared lt = l if l <= lfull else b
+shared zt = max(l - lt, r)
+shared ch = 0.6 * P
+shared rs = d / 2
+shared rw = dw / 2
+shared re = s / sqrt(3)
+shared ang = 30deg    # head top chamfer, down to the bearing circle
+shared n6 = count(6)
+
+sketch prof(on: xz) {
+  wt = line((0, -c), (rw, -c))
+  ww = line((rw, -c), (rw, 0))
+  under = line((rw, 0), (rs + r, 0))
+  fil = arc(center: (rs + r, r), from: (rs + r, 0), to: (rs, r), cw: true)
+  if zt > r {
+    plain = line((rs, r), (rs, zt))
+    thr = line((rs, zt), (rs, l - ch))
+  } else {
+    thr = line((rs, r), (rs, l - ch))
+  }
+  pnt = line((rs, l - ch), (rs - ch, l))
+  endf = line((rs - ch, l), (0, l))
+  axl = line((0, l), (0, -c))
+  o = pt(0, 0)
+  ztop = pt(0, -k)
+  zthd = pt(0, zt)
+  ztip = pt(0, l)
+  zax = line((0, 0), (0, l), construction: true)
+  xax = line((0, 0), (rs, 0), construction: true)
+}
+body = revolve(prof, axis: prof.zax)
+sketch hx(on: body.side(prof.wt), at: prof.o) {
+  hexo = poly(polar(n: n6, r: re, start: 0deg))
+}
+hexa = extrude(hx, k - c)
+sketch tc(on: xz) {
+  corner = poly([(rw, -k), (re + 1, -k), (re + 1, (re + 1 - rw) * tan(ang) - k)])
+  ax = line((0, 0), (0, l), construction: true)
+}
+topc = revolve(tc.corner, axis: tc.ax, cut: true)
+if modelled > 0 {
+  thread_m = thread(face: body.side(prof.thr), spec: (d, P), length: "full")
+}
+
+head = anchor(plane(at: prof.o, normal: prof.zax.dir, x: prof.xax.dir))
+top = anchor(plane(at: prof.ztop, normal: prof.zax.dir, x: prof.xax.dir))
+thd = anchor(plane(at: prof.zthd, normal: prof.zax.dir, x: prof.xax.dir), kind: external_thread, size: d, depth: l - zt)
+tip = anchor(plane(at: prof.ztip, normal: prof.zax.dir, x: prof.xax.dir))
+
+expect valid
+expect bodies = 1

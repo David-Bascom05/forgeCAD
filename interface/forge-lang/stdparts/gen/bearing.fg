@@ -1,0 +1,48 @@
+# generator: radial deep groove ball bearing, by its ISO 15 boundary dimensions
+# (the rings and shields between them are drawn plainly: ISO 15 gives only d, D, B and r)
+# frame: origin on the axis in one side face; +z across the bearing
+# anchors (normals +z): a (side at z = 0), b (side at z = B), bore (bore, d over B), od (shaft, D
+# over B: what the housing bore holds)
+
+shared d = 20         # bore
+shared D = 47         # outside diameter
+shared B = 14         # width
+shared r = 1          # ring chamfer (r min), drawn as a round
+shared w = (D - d) / 2
+shared ri = d / 2 + 0.3 * w    # inner ring's shoulder (drawn)
+shared ro = D / 2 - 0.3 * w    # outer ring's shoulder (drawn)
+shared q = 0.06 * B            # shield recess (drawn)
+
+sketch prof(on: xz) {
+  path o(start: (d / 2, r)) {
+    line(to: (d / 2, B - r))
+    tarc(to: (d / 2 + r, B))
+    line(to: (ri, B))
+    line(to: (ri, B - q))
+    line(to: (ro, B - q))
+    line(to: (ro, B))
+    line(to: (D / 2 - r, B))
+    tarc(to: (D / 2, B - r))
+    line(to: (D / 2, r))
+    tarc(to: (D / 2 - r, 0))
+    line(to: (ro, 0))
+    line(to: (ro, q))
+    line(to: (ri, q))
+    line(to: (ri, 0))
+    line(to: (d / 2 + r, 0))
+    tarc(to: (d / 2, r))
+  }
+  a0 = pt(0, 0)
+  b0 = pt(0, B)
+  zax = line((0, 0), (0, B), construction: true)
+  xax = line((0, 0), (d / 2, 0), construction: true)
+}
+body = revolve(prof.o, axis: prof.zax)
+
+a = anchor(plane(at: prof.a0, normal: prof.zax.dir, x: prof.xax.dir))
+b = anchor(plane(at: prof.b0, normal: prof.zax.dir, x: prof.xax.dir))
+bore = anchor(plane(at: prof.a0, normal: prof.zax.dir, x: prof.xax.dir), kind: bore, size: d, depth: B)
+od = anchor(plane(at: prof.a0, normal: prof.zax.dir, x: prof.xax.dir), kind: shaft, size: D, depth: B)
+
+expect valid
+expect bodies = 1

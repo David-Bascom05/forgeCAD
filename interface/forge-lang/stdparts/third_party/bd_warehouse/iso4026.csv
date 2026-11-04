@@ -1,0 +1,16 @@
+# bd_warehouse 5a8a439, Copyright 2024 Gumyr, Apache-2.0: columns renamed and selected, sizes respelled
+# from setscrew_parameters.csv
+size,s,t_min,l_min,l_max
+M1.6,0.7,1.5,2.5,6
+M2,0.9,1.7,3,10
+M2.5,1.3,2,3,10
+M3,1.5,2,3,20
+M4,2,2.5,4,20
+M5,2.5,3,5,25
+M6,3,3.5,6,35
+M8,4,5,8,40
+M10,5,6,10,40
+M12,6,8,16,40
+M16,8,10,20,40
+M20,10,12,20,50
+M24,12,15,25,60

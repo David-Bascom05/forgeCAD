@@ -1,0 +1,10 @@
+family,size,column,source,theirs,ours,verdict
+asme_b18_22_1,0.125x0.312,d2_max,P,0.318,0.32,"ours: G, E and Q give 0.32 (Table 1A tolerances); P misprints this cell"
+asme_b18_22_1,#6,d2_max,P,0.383,0.39,"ours: G, E and Q give 0.39 (Table 1A tolerances); P misprints this cell"
+asme_b18_22_1,5/16 W,d2_max,P,0.89,0.905,"ours: G, E and Q give 0.905 (Table 1A tolerances); P misprints this cell"
+asme_b18_22_1,3/8 N,d2_max,P,0.842,0.827,"ours: G, E and Q give 0.827 (Table 1A tolerances); P misprints this cell"
+asme_b18_22_1,3/8 W,d2_max,P,1.015,1.03,"ours: G, E and Q give 1.03 (Table 1A tolerances); P misprints this cell"
+asme_b18_22_1,7/16 N,d2_max,P,0.952,0.937,"ours: G, E and Q give 0.937 (Table 1A tolerances); P misprints this cell"
+asme_b18_22_1,9/16 N,d2,P,1.158,1.156,"ours: G, E and Q give 1.156 (Table 1A tolerances); P misprints this cell"
+asme_b18_22_1,9/16 N,d2_max,P,1.188,1.186,"ours: G, E and Q give 1.186 (Table 1A tolerances); P misprints this cell"
+asme_b18_22_1,9/16 N,d2_min,P,1.151,1.149,"ours: G, E and Q give 1.149 (Table 1A tolerances); P misprints this cell"

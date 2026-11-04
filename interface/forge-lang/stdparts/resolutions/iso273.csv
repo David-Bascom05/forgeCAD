@@ -1,0 +1,39 @@
+family,size,column,source,theirs,ours,verdict
+iso273,M1,coarse,O,1.25,1.3,"ours: ISO 273:1979 table; O is not a per-size table, it adds a gap interpolated between a few listed sizes"
+iso273,M1.2,coarse,O,1.45,1.5,"ours: ISO 273:1979 table; O is not a per-size table, it adds a gap interpolated between a few listed sizes"
+iso273,M1.4,coarse,O,1.65,1.8,"ours: ISO 273:1979 table; O is not a per-size table, it adds a gap interpolated between a few listed sizes"
+iso273,M1.6,coarse,O,1.85,2,"ours: ISO 273:1979 table; O is not a per-size table, it adds a gap interpolated between a few listed sizes"
+iso273,M1.8,fine,O,1.9,2,"ours: ISO 273:1979 table; O is not a per-size table, it adds a gap interpolated between a few listed sizes"
+iso273,M1.8,coarse,O,2.075,2.2,"ours: ISO 273:1979 table; O is not a per-size table, it adds a gap interpolated between a few listed sizes"
+iso273,M2,fine,O,2.1,2.2,"ours: ISO 273:1979 table; O is not a per-size table, it adds a gap interpolated between a few listed sizes"
+iso273,M2,coarse,O,2.3,2.6,"ours: ISO 273:1979 table; O is not a per-size table, it adds a gap interpolated between a few listed sizes"
+iso273,M2.5,fine,O,2.6,2.7,"ours: ISO 273:1979 table; O is not a per-size table, it adds a gap interpolated between a few listed sizes"
+iso273,M2.5,coarse,O,2.95,3.1,"ours: ISO 273:1979 table; O is not a per-size table, it adds a gap interpolated between a few listed sizes"
+iso273,M3,fine,O,3.15,3.2,"ours: ISO 273:1979 table; O is not a per-size table, it adds a gap interpolated between a few listed sizes"
+iso273,M7,medium,O,7.8,7.6,"ours: ISO 273:1979 table; O is not a per-size table, it adds a gap interpolated between a few listed sizes"
+iso273,M7,coarse,O,8.5,8,"ours: ISO 273:1979 table; O is not a per-size table, it adds a gap interpolated between a few listed sizes"
+iso273,M12,medium,B,14,13.5,ours: ISO 273:1979 table gives M12 medium 13.5; B's M12 row (13/14/15) is not ISO 273's
+iso273,M12,coarse,B,15,14.5,ours: ISO 273:1979 table gives M12 coarse 14.5; B's M12 row (13/14/15) is not ISO 273's
+iso273,M14,medium,B,16,15.5,ours: ISO 273:1979 table gives M14 medium 15.5; B's M14 row (15/16/17) is not ISO 273's
+iso273,M14,coarse,B,17,16.5,ours: ISO 273:1979 table gives M14 coarse 16.5; B's M14 row (15/16/17) is not ISO 273's
+iso273,M16,medium,B,18,17.5,ours: ISO 273:1979 table gives M16 medium 17.5; B's M16 row (17/18/19) is not ISO 273's
+iso273,M16,coarse,B,19,18.5,ours: ISO 273:1979 table gives M16 coarse 18.5; B's M16 row (17/18/19) is not ISO 273's
+iso273,M18,medium,O,19.75,20,"ours: ISO 273:1979 table; O is not a per-size table, it adds a gap interpolated between a few listed sizes"
+iso273,M18,coarse,O,21.25,21,"ours: ISO 273:1979 table; O is not a per-size table, it adds a gap interpolated between a few listed sizes"
+iso273,M27,medium,O,29.5,30,"ours: ISO 273:1979 table; O is not a per-size table, it adds a gap interpolated between a few listed sizes"
+iso273,M27,coarse,O,31.5,32,"ours: ISO 273:1979 table; O is not a per-size table, it adds a gap interpolated between a few listed sizes"
+iso273,M33,coarse,O,38.5,38,"ours: ISO 273:1979 table; O is not a per-size table, it adds a gap interpolated between a few listed sizes"
+iso273,M45,fine,O,46.5,46,"ours: ISO 273:1979 table; O is not a per-size table, it adds a gap interpolated between a few listed sizes"
+iso273,M45,medium,O,48.5,48,"ours: ISO 273:1979 table; O is not a per-size table, it adds a gap interpolated between a few listed sizes"
+iso273,M52,medium,O,57,56,"ours: ISO 273:1979 table; O is not a per-size table, it adds a gap interpolated between a few listed sizes"
+iso273,M52,coarse,O,61,62,"ours: ISO 273:1979 table; O is not a per-size table, it adds a gap interpolated between a few listed sizes"
+iso273,M76,coarse,O,86.5,86,"ours: ISO 273:1979 table; O is not a per-size table, it adds a gap interpolated between a few listed sizes"
+iso273,M85,fine,O,87.5,87,"ours: ISO 273:1979 table; O is not a per-size table, it adds a gap interpolated between a few listed sizes"
+iso273,M95,fine,O,98.5,98,"ours: ISO 273:1979 table; O is not a per-size table, it adds a gap interpolated between a few listed sizes"
+iso273,M95,medium,O,101.5,101,"ours: ISO 273:1979 table; O is not a per-size table, it adds a gap interpolated between a few listed sizes"
+iso273,M95,coarse,O,106.5,107,"ours: ISO 273:1979 table; O is not a per-size table, it adds a gap interpolated between a few listed sizes"
+iso273,M130,coarse,O,142,144,"ours: ISO 273:1979 table; O is not a per-size table, it adds a gap interpolated between a few listed sizes"
+iso273,M140,coarse,O,152,155,"ours: ISO 273:1979 table; O is not a per-size table, it adds a gap interpolated between a few listed sizes"
+iso273,M150,fine,O,154,155,"ours: ISO 273:1979 table; O is not a per-size table, it adds a gap interpolated between a few listed sizes"
+iso273,M150,medium,O,157,158,"ours: ISO 273:1979 table; O is not a per-size table, it adds a gap interpolated between a few listed sizes"
+iso273,M150,coarse,O,162,165,"ours: ISO 273:1979 table; O is not a per-size table, it adds a gap interpolated between a few listed sizes"

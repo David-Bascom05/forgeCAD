@@ -1,0 +1,36 @@
+# title: Prevailing torque type hexagon thin nuts with non-metallic insert
+# standard: ISO 10511:2012 (ISO 10511:2025 is current; its tables are not in any free preview, see note)
+# kind: nut
+# item: Hexagon thin nut with nylon insert
+# category: Fasteners/Nuts/Lock
+# units: mm
+# item: Thin nut with nylon insert
+# category: Fasteners/Nuts/Lock
+# gen: nut | d=@d | P=@P | s=s | m=m_min | h=h_max | dw=dw_min | da=da_min | modelled=@modelled
+# option thread: cosmetic modelled
+# option grade: 04 05 A2-70
+# material: ISO 898-2 class 04
+# grade 04: ISO 898-2 class 04
+# grade 05: ISO 898-2 class 05
+# grade A2-70: ISO 3506-2 A2-70
+# src A12: ISO 10511:2012 Table 1, printed page 2 of the iTeh preview (https://cdn.standards.iteh.ai/samples/61369/9332a361b820448895a2594727485014/ISO-10511-2012.pdf), keyed 2026-11-04
+# chk A97: ISO 10511:1997 Table 1, printed page 2 of the iTeh preview (https://cdn.standards.iteh.ai/samples/18580/3c6637cfdcd44b2d82aaa7e9dd0beecc/ISO-10511-1997.pdf)
+# chk F: FreeCAD FastenersWB 2026-09-10 FsData/iso10511def.csv (GPL-2.0-or-later: consulted, never copied)
+# map F: iso10511def.csv | size=Dia | P=P | da_max=d_a_max | da_min=d_a_min | dw_min=d_w_min | e_min=e_min | h_max=h_max | h_min=h_min | m_min=m_min | mw_min=m_w_min | s=s_max | s_min=s_min
+# model: nominal where the standard gives one, else the max-material limit: s nom (hexagon exact; e_min is a gauge limit), overall height h_max, metal hexagon (wrenching) part at least m_min high with mw_min of wrenching flats, bearing face circle dw_min, countersink da at da_min; the insert collar above the metal part is not dimensioned beyond h (shape at the manufacturer's discretion)
+# note: ISO 10511:2025 (third edition, read: its foreword in the SIS preview https://www.sis.se/api/document/preview/82096616/) adds M7, M18, M22, M27, M33, M39, moves D < M5 to Annex A, gives da_max and dw_min two decimals, changes dw_min for D <= M5 to s_min - IT15, and raises h_max (and h_min) of M20 and M36 so the insert room h_max - m_min matches the regular and high nuts; those cells (M3..M5 dw_min, M20 and M36 h, da_max) are therefore the 2012 values until the 2025 table is read
+# note: m is the minimum height of the metal thread (no m max is specified); the prevailing torque element shape is optional
+size,P,da_max,da_min,dw_min,e_min,h_max,h_min,m_min,mw_min,s,s_min,grade,src,checked
+M3,0.5,3.45,3.00,4.56,6.01,3.90,3.42,1.55,1.24,5.50,5.32,A,A12,A12 A97 F
+M4,0.7,4.60,4.00,5.90,7.66,5.00,4.52,1.95,1.56,7.00,6.78,A,A12,A12 A97 F
+M5,0.8,5.75,5.00,6.90,8.79,5.00,4.52,2.45,1.96,8.00,7.78,A,A12,A12 A97 F
+M6,1,6.75,6.00,8.90,11.05,6.00,5.52,2.90,2.32,10.00,9.78,A,A12,A12 A97 F
+M8,1.25,8.75,8.00,11.60,14.38,6.76,6.18,3.70,2.96,13.00,12.73,A,A12,A12 A97 F
+M10,1.5,10.80,10.00,14.60,17.77,8.56,7.98,4.70,3.76,16.00,15.73,A,A12,A12 A97 F
+M12,1.75,13.00,12.00,16.60,20.03,10.23,9.53,5.70,4.56,18.00,17.73,A,A12,A12 A97 F
+M14,2,15.10,14.00,19.60,23.35,11.32,10.22,6.42,5.14,21.00,20.67,A,A12,A12 A97 F
+M16,2,17.30,16.00,22.50,26.75,12.42,11.32,7.42,5.94,24.00,23.67,A,A12,A12 A97 F
+M20,2.5,21.60,20.00,27.70,32.95,14.90,13.10,9.10,7.28,30.00,29.16,B,A12,A12 A97 F
+M24,3,25.90,24.00,33.20,39.55,17.80,16.00,10.90,8.72,36.00,35.00,B,A12,A12 A97 F
+M30,3.5,32.40,30.00,42.80,50.85,22.20,20.10,13.90,11.12,46.00,45.00,B,A12,A12 A97 F
+M36,4,38.90,36.00,51.10,60.79,25.50,23.40,16.90,13.52,55.00,53.80,B,A12,A12 A97 F

@@ -1,0 +1,43 @@
+# generator: self-clinching flush-head stud (PEM FH/FHS/FHA type)
+# frame: origin on the axis in the head's top face, flush with the sheet's outer face; +z along
+# the stud
+# anchors (normals +z): flush (head top), thd (external thread, from 2 pitches past S to the end),
+# tip
+
+shared d = 6          # thread major diameter
+shared P = 1          # pitch
+shared l = 20         # length from the flush face
+shared H = 8.2        # head diameter
+shared S = 3          # unthreaded length under the head (max)
+shared tmin = 1.6     # the least sheet it goes in
+shared modelled = 0   # 1: the thread modelled
+shared hh = 0.6 * tmin   # head thickness (modelled: the bulletin gives none; inside the least sheet)
+shared ch = 0.6 * P
+shared rs = d / 2
+
+sketch prof(on: xz) {
+  hd = line((0, 0), (H / 2, 0))
+  hw = line((H / 2, 0), (H / 2, hh))
+  hu = line((H / 2, hh), (rs, hh))
+  pl = line((rs, hh), (rs, S))
+  thr = line((rs, S), (rs, l - ch))
+  pnt = line((rs, l - ch), (rs - ch, l))
+  endf = line((rs - ch, l), (0, l))
+  axl = line((0, l), (0, 0))
+  f0 = pt(0, 0)
+  zt = pt(0, S + 2 * P)
+  ztip = pt(0, l)
+  zax = line((0, 0), (0, l), construction: true)
+  xax = line((0, 0), (H / 2, 0), construction: true)
+}
+body = revolve(prof, axis: prof.zax)
+if modelled > 0 {
+  thread_m = thread(face: body.side(prof.thr), spec: (d, P), length: "full")
+}
+
+flush = anchor(plane(at: prof.f0, normal: prof.zax.dir, x: prof.xax.dir))
+thd = anchor(plane(at: prof.zt, normal: prof.zax.dir, x: prof.xax.dir), kind: external_thread, size: d, depth: l - S - 2 * P)
+tip = anchor(plane(at: prof.ztip, normal: prof.zax.dir, x: prof.xax.dir))
+
+expect valid
+expect bodies = 1

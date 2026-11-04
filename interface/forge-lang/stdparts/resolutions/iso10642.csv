@@ -1,0 +1,100 @@
+family,size,column,source,theirs,ours,verdict
+iso10642,M3,dk_max,B,6,5.81,"ours: ISO 10642:2019/2026 Table 1 (G, W); B's dk row (6) is the DIN 7991 value, not ISO 10642"
+iso10642,M3,k_max,B,1.7,1.86,"ours: ISO 10642:2019/2026 Table 1 (G, W); B's k row (1.7) is the DIN 7991 value, not ISO 10642"
+iso10642,M3,s_max,B,2.1,2.08,"ours: ISO 10642:2019/2026 Table 1 (G, W); B's s row (2.1) is the DIN 7991 value, not ISO 10642"
+iso10642,M3,t_min,B,1.2,1.1,"ours: ISO 10642:2019/2026 Table 1 (G, W); B's t row (1.2) is the DIN 7991 value, not ISO 10642"
+iso10642,M4,dk_max,B,8,7.96,"ours: ISO 10642:2019/2026 Table 1 (G, W); B's dk row (8) is the DIN 7991 value, not ISO 10642"
+iso10642,M4,k_max,B,2.3,2.48,"ours: ISO 10642:2019/2026 Table 1 (G, W); B's k row (2.3) is the DIN 7991 value, not ISO 10642"
+iso10642,M4,s_max,B,2.6,2.58,"ours: ISO 10642:2019/2026 Table 1 (G, W); B's s row (2.6) is the DIN 7991 value, not ISO 10642"
+iso10642,M4,t_min,B,1.8,1.4,"ours: ISO 10642:2019/2026 Table 1 (G, W); B's t row (1.8) is the DIN 7991 value, not ISO 10642"
+iso10642,M4,l_min,B,8,10,ours: ISO 10642:2019 deleted the shorter lengths for M4-M20 (foreword); G's 2026 thread table starts at 10; B has the 2004 start
+iso10642,M5,dk_max,B,10,10.07,"ours: ISO 10642:2019/2026 Table 1 (G, W); B's dk row (10) is the DIN 7991 value, not ISO 10642"
+iso10642,M5,k_max,B,2.8,3.1,"ours: ISO 10642:2019/2026 Table 1 (G, W); B's k row (2.8) is the DIN 7991 value, not ISO 10642"
+iso10642,M5,s_max,B,3.1,3.08,"ours: ISO 10642:2019/2026 Table 1 (G, W); B's s row (3.1) is the DIN 7991 value, not ISO 10642"
+iso10642,M5,t_min,B,2.3,1.75,"ours: ISO 10642:2019/2026 Table 1 (G, W); B's t row (2.3) is the DIN 7991 value, not ISO 10642"
+iso10642,M5,l_min,B,8,12,ours: ISO 10642:2019 deleted the shorter lengths for M4-M20 (foreword); G's 2026 thread table starts at 12; B has the 2004 start
+iso10642,M6,dk_max,B,12,12.16,"ours: ISO 10642:2019/2026 Table 1 (G, W); B's dk row (12) is the DIN 7991 value, not ISO 10642"
+iso10642,M6,k_max,B,3.3,3.72,"ours: ISO 10642:2019/2026 Table 1 (G, W); B's k row (3.3) is the DIN 7991 value, not ISO 10642"
+iso10642,M6,s_max,B,4.12,4.095,"ours: ISO 10642:2019/2026 Table 1 (G, W); B's s row (4.12) is the DIN 7991 value, not ISO 10642"
+iso10642,M6,t_min,B,2.5,2.2,"ours: ISO 10642:2019/2026 Table 1 (G, W); B's t row (2.5) is the DIN 7991 value, not ISO 10642"
+iso10642,M6,l_min,B,8,12,ours: ISO 10642:2019 deleted the shorter lengths for M4-M20 (foreword); G's 2026 thread table starts at 12; B has the 2004 start
+iso10642,M8,dk_max,B,16,16.43,"ours: ISO 10642:2019/2026 Table 1 (G, W); B's dk row (16) is the DIN 7991 value, not ISO 10642"
+iso10642,M8,k_max,B,4.4,4.96,"ours: ISO 10642:2019/2026 Table 1 (G, W); B's k row (4.4) is the DIN 7991 value, not ISO 10642"
+iso10642,M8,t_min,B,3.5,2.9,"ours: ISO 10642:2019/2026 Table 1 (G, W); B's t row (3.5) is the DIN 7991 value, not ISO 10642"
+iso10642,M8,l_min,B,10,16,ours: ISO 10642:2019 deleted the shorter lengths for M4-M20 (foreword); G's 2026 thread table starts at 16; B has the 2004 start
+iso10642,M10,dk_max,B,20,20.69,"ours: ISO 10642:2019/2026 Table 1 (G, W); B's dk row (20) is the DIN 7991 value, not ISO 10642"
+iso10642,M10,k_max,B,5.5,6.2,"ours: ISO 10642:2019/2026 Table 1 (G, W); B's k row (5.5) is the DIN 7991 value, not ISO 10642"
+iso10642,M10,t_min,B,4.4,3.5,"ours: ISO 10642:2019/2026 Table 1 (G, W); B's t row (4.4) is the DIN 7991 value, not ISO 10642"
+iso10642,M10,l_min,B,12,20,ours: ISO 10642:2019 deleted the shorter lengths for M4-M20 (foreword); G's 2026 thread table starts at 20; B has the 2004 start
+iso10642,M12,dk_max,B,24,24.81,"ours: ISO 10642:2019/2026 Table 1 (G, W); B's dk row (24) is the DIN 7991 value, not ISO 10642"
+iso10642,M12,k_max,B,6.5,7.44,"ours: ISO 10642:2019/2026 Table 1 (G, W); B's k row (6.5) is the DIN 7991 value, not ISO 10642"
+iso10642,M12,t_min,B,4.6,4.3,"ours: ISO 10642:2019/2026 Table 1 (G, W); B's t row (4.6) is the DIN 7991 value, not ISO 10642"
+iso10642,M12,l_min,B,20,25,ours: ISO 10642:2019 deleted the shorter lengths for M4-M20 (foreword); G's 2026 thread table starts at 25; B has the 2004 start
+iso10642,M14,dk_max,B,27,28.31,"ours: ISO 10642:2019/2026 Table 1 (G, W); B's dk row (27) is the DIN 7991 value, not ISO 10642"
+iso10642,M14,k_max,B,7,8.4,"ours: ISO 10642:2019/2026 Table 1 (G, W); B's k row (7) is the DIN 7991 value, not ISO 10642"
+iso10642,M14,t_min,B,4.8,4.5,"ours: ISO 10642:2019/2026 Table 1 (G, W); B's t row (4.8) is the DIN 7991 value, not ISO 10642"
+iso10642,M14,l_min,B,25,30,ours: ISO 10642:2019 deleted the shorter lengths for M4-M20 (foreword); G's 2026 thread table starts at 30; B has the 2004 start
+iso10642,M16,dk_max,B,30,30.61,"ours: ISO 10642:2019/2026 Table 1 (G, W); B's dk row (30) is the DIN 7991 value, not ISO 10642"
+iso10642,M16,k_max,B,7.5,8.8,"ours: ISO 10642:2019/2026 Table 1 (G, W); B's k row (7.5) is the DIN 7991 value, not ISO 10642"
+iso10642,M16,t_min,B,5.3,4.8,"ours: ISO 10642:2019/2026 Table 1 (G, W); B's t row (5.3) is the DIN 7991 value, not ISO 10642"
+iso10642,M16,l_min,B,30,35,ours: ISO 10642:2019 deleted the shorter lengths for M4-M20 (foreword); G's 2026 thread table starts at 35; B has the 2004 start
+iso10642,M20,dk_max,B,36,36.75,"ours: ISO 10642:2019/2026 Table 1 (G, W); B's dk row (36) is the DIN 7991 value, not ISO 10642"
+iso10642,M20,k_max,B,8.5,10.16,"ours: ISO 10642:2019/2026 Table 1 (G, W); B's k row (8.5) is the DIN 7991 value, not ISO 10642"
+iso10642,M20,t_min,B,5.9,5.6,"ours: ISO 10642:2019/2026 Table 1 (G, W); B's t row (5.9) is the DIN 7991 value, not ISO 10642"
+iso10642,M20,l_min,B,35,40,ours: ISO 10642:2019 deleted the shorter lengths for M4-M20 (foreword); G's 2026 thread table starts at 40; B has the 2004 start
+iso10642,M2,b,F,16,,"ours: G and W print no b for M2 and M2.5 (threaded to the head at every length, l_full = l_max); F's 16 is its length limit"
+iso10642,M2,dk_theor_max,F,4.09,4.7,ours: G and W give dk theoretical max 4.7; F's 4.09 is the actual max (dk_max) put in the theoretical column
+iso10642,M2,da_max,F,2.36,,"ours: no non-GPL source seen gives da for M2/M2.5 (G, W print none; A04 has no M2); left empty"
+iso10642,M2,k_max,F,1.24,1.35,ours: G and W give k max 1.35; F's 1.24 has no source we can find
+iso10642,M2,t_min,F,0.8,0.75,ours: G and W give t_min 0.75
+iso10642,M2.5,b,F,25,,"ours: G and W print no b for M2 and M2.5 (threaded to the head at every length, l_full = l_max); F's 25 is its length limit"
+iso10642,M2.5,dk_theor_max,F,5.08,5.88,ours: G and W give dk theoretical max 5.88; F's 5.08 is the actual max (dk_max) put in the theoretical column
+iso10642,M2.5,da_max,F,2.74,,"ours: no non-GPL source seen gives da for M2/M2.5 (G, W print none; A04 has no M2); left empty"
+iso10642,M2.5,e_min,F,1.773,1.733,"ours: 1.14 x s_min 1.52 = 1.733 (G, W); F's 1.773 is a typo"
+iso10642,M2.5,k_max,F,1.55,1.69,ours: G and W give k max 1.69; F's 1.55 has no source we can find
+iso10642,M2.5,t_min,F,1.08,1,ours: G and W give t_min 1
+iso10642,M3,e_min,F,2.31,2.303,"ours: G, W and A04 print 2.303; F rounds e_min to two decimals"
+iso10642,M4,e_min,F,2.88,2.873,"ours: G, W and A04 print 2.873; F rounds e_min to two decimals"
+iso10642,M4,t_min,F,1.5,1.4,ours: ISO 10642:2019 replaced w_min by t_max and revised t_min (G and W agree); 1.5 is the ISO 10642:2004 value
+iso10642,M5,e_min,F,3.45,3.443,"ours: G, W and A04 print 3.443; F rounds e_min to two decimals"
+iso10642,M5,t_min,F,1.9,1.75,ours: ISO 10642:2019 replaced w_min by t_max and revised t_min (G and W agree); 1.9 is the ISO 10642:2004 value
+iso10642,M6,e_min,F,4.59,4.583,"ours: G, W and A04 print 4.583; F rounds e_min to two decimals"
+iso10642,M8,e_min,F,5.73,5.723,"ours: G, W and A04 print 5.723; F rounds e_min to two decimals"
+iso10642,M8,t_min,F,3,2.9,ours: ISO 10642:2019 replaced w_min by t_max and revised t_min (G and W agree); 3 is the ISO 10642:2004 value
+iso10642,M10,e_min,F,6.87,6.863,"ours: G, W and A04 print 6.863; F rounds e_min to two decimals"
+iso10642,M10,t_min,F,3.6,3.5,ours: ISO 10642:2019 replaced w_min by t_max and revised t_min (G and W agree); 3.6 is the ISO 10642:2004 value
+iso10642,M12,e_min,F,9.15,9.149,"ours: G, W and A04 print 9.149; F rounds e_min to two decimals"
+iso10642,M16,b,F,44,48,ours: ISO 10642:2019 raised b for partially threaded M14-M20 to 3d (foreword); G and W give 48; 44 is the 2004 value
+iso10642,M16,e_min,F,11.43,11.429,"ours: G, W and A04 print 11.429; F rounds e_min to two decimals"
+iso10642,M20,b,F,52,60,ours: ISO 10642:2019 raised b for partially threaded M14-M20 to 3d (foreword); G and W give 60; 52 is the 2004 value
+iso10642,M20,e_min,F,13.72,13.716,"ours: G, W and A04 print 13.716; F rounds e_min to two decimals"
+iso10642,M4,l_min,F,8,10,ours: ISO 10642:2019 deleted the shorter lengths for M4-M20 (foreword); G's 2026 thread table starts at 10; 8 is the 2004 start
+iso10642,M5,l_min,F,8,12,ours: ISO 10642:2019 deleted the shorter lengths for M4-M20 (foreword); G's 2026 thread table starts at 12; 8 is the 2004 start
+iso10642,M6,l_min,F,8,12,ours: ISO 10642:2019 deleted the shorter lengths for M4-M20 (foreword); G's 2026 thread table starts at 12; 8 is the 2004 start
+iso10642,M8,l_min,F,10,16,ours: ISO 10642:2019 deleted the shorter lengths for M4-M20 (foreword); G's 2026 thread table starts at 16; 10 is the 2004 start
+iso10642,M10,l_min,F,12,20,ours: ISO 10642:2019 deleted the shorter lengths for M4-M20 (foreword); G's 2026 thread table starts at 20; 12 is the 2004 start
+iso10642,M12,l_min,F,20,25,ours: ISO 10642:2019 deleted the shorter lengths for M4-M20 (foreword); G's 2026 thread table starts at 25; 20 is the 2004 start
+iso10642,M16,l_min,F,30,35,ours: ISO 10642:2019 deleted the shorter lengths for M4-M20 (foreword); G's 2026 thread table starts at 35; 30 is the 2004 start
+iso10642,M20,l_min,F,35,40,ours: ISO 10642:2019 deleted the shorter lengths for M4-M20 (foreword); G's 2026 thread table starts at 40; 35 is the 2004 start
+iso10642,M4,t_min,A04,1.5,1.4,ours: ISO 10642:2019 replaced w_min by t_max and revised t_min (G and W agree); 1.5 is the ISO 10642:2004 value
+iso10642,M4,l_min,A04,8,10,ours: ISO 10642:2019 deleted the shorter lengths for M4-M20 (foreword); G's 2026 thread table starts at 10; 8 is the 2004 start
+iso10642,M5,t_min,A04,1.9,1.75,ours: ISO 10642:2019 replaced w_min by t_max and revised t_min (G and W agree); 1.9 is the ISO 10642:2004 value
+iso10642,M5,l_min,A04,8,12,ours: ISO 10642:2019 deleted the shorter lengths for M4-M20 (foreword); G's 2026 thread table starts at 12; 8 is the 2004 start
+iso10642,M6,l_min,A04,8,12,ours: ISO 10642:2019 deleted the shorter lengths for M4-M20 (foreword); G's 2026 thread table starts at 12; 8 is the 2004 start
+iso10642,M8,t_min,A04,3,2.9,ours: ISO 10642:2019 replaced w_min by t_max and revised t_min (G and W agree); 3 is the ISO 10642:2004 value
+iso10642,M8,l_min,A04,10,16,ours: ISO 10642:2019 deleted the shorter lengths for M4-M20 (foreword); G's 2026 thread table starts at 16; 10 is the 2004 start
+iso10642,M10,t_min,A04,3.6,3.5,ours: ISO 10642:2019 replaced w_min by t_max and revised t_min (G and W agree); 3.6 is the ISO 10642:2004 value
+iso10642,M10,l_min,A04,12,20,ours: ISO 10642:2019 deleted the shorter lengths for M4-M20 (foreword); G's 2026 thread table starts at 20; 12 is the 2004 start
+iso10642,M12,l_min,A04,20,25,ours: ISO 10642:2019 deleted the shorter lengths for M4-M20 (foreword); G's 2026 thread table starts at 25; 20 is the 2004 start
+iso10642,M14,b,A04,40,42,ours: ISO 10642:2019 raised b for partially threaded M14-M20 to 3d (foreword); G and W give 42; 40 is the 2004 value
+iso10642,M14,l_min,A04,25,30,ours: ISO 10642:2019 deleted the shorter lengths for M4-M20 (foreword); G's 2026 thread table starts at 30; 25 is the 2004 start
+iso10642,M16,b,A04,44,48,ours: ISO 10642:2019 raised b for partially threaded M14-M20 to 3d (foreword); G and W give 48; 44 is the 2004 value
+iso10642,M16,l_min,A04,30,35,ours: ISO 10642:2019 deleted the shorter lengths for M4-M20 (foreword); G's 2026 thread table starts at 35; 30 is the 2004 start
+iso10642,M20,b,A04,52,60,ours: ISO 10642:2019 raised b for partially threaded M14-M20 to 3d (foreword); G and W give 60; 52 is the 2004 value
+iso10642,M20,dk_min,A04,36.05,35.4,ours: G and W give dk actual min 35.40 for 2019/2026 (ISO 10642:2004/Amd 1:2012 lowered it); 36.05 is the unamended 2004 value
+iso10642,M20,l_min,A04,35,40,ours: ISO 10642:2019 deleted the shorter lengths for M4-M20 (foreword); G's 2026 thread table starts at 40; 35 is the 2004 start
+iso10642,M4,t_min,R,1.5,1.4,ours: ISO 10642:2019 replaced w_min by t_max and revised t_min (G and W agree); 1.5 is the ISO 10642:2004 value
+iso10642,M5,t_min,R,1.9,1.75,ours: ISO 10642:2019 replaced w_min by t_max and revised t_min (G and W agree); 1.9 is the ISO 10642:2004 value
+iso10642,M8,t_min,R,3,2.9,ours: ISO 10642:2019 replaced w_min by t_max and revised t_min (G and W agree); 3 is the ISO 10642:2004 value
+iso10642,M10,t_min,R,3.6,3.5,ours: ISO 10642:2019 replaced w_min by t_max and revised t_min (G and W agree); 3.6 is the ISO 10642:2004 value
+iso10642,M20,dk_min,R,36.05,35.4,ours: G and W give dk actual min 35.40 for 2019/2026 (ISO 10642:2004/Amd 1:2012 lowered it); 36.05 is the unamended 2004 value

@@ -1,0 +1,4 @@
+family,size,column,source,theirs,ours,verdict
+iso15_bearings,6216,B,A98,,26,ours: ES 535 Table 6 (diameter series 2) leaves the d=80 dimension series 02 cell empty (transcription gap); NSK and Koyo both give 80x140x26 and the 02 widths run 24 25 26 28 for d 70..85
+iso15_bearings,6336,B,A98,76,75,"ours: NSK and Koyo both give 180x380x75; ES 535 Table 7 prints 76, out of step with the series 03 widths (72 75 78 80 for d 170..200): transcription typo"
+iso15_bearings,629,r_min,N,0.6,0.3,"ours: ES 535 Table 6 gives rs min 0.3 for d=9 D=26 (02-62 column) and bd_warehouse (SKF) has 0.3; NSK's r column is the shaft fillet and reads 0.024 in here, an NSK catalogue slip"

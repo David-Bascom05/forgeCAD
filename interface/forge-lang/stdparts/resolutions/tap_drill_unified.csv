@@ -1,0 +1,21 @@
+family,size,column,source,theirs,ours,verdict
+tap_drill_unified,#6-32,D1_min,X,0.1042,0.104,"ours: ISO 2306 Table 3/4 prints the limit ASME B1.1 tabulates, rounded to 3 decimals for these sizes; X is the unrounded ISO 5864 8.3 formula"
+tap_drill_unified,#8-32,D1_min,X,0.1302,0.13,"ours: ISO 2306 Table 3/4 prints the limit ASME B1.1 tabulates, rounded to 3 decimals for these sizes; X is the unrounded ISO 5864 8.3 formula"
+tap_drill_unified,#8-32,D1_max_2B,X,0.1389,0.139,"ours: ISO 2306 Table 3/4 prints the limit ASME B1.1 tabulates, rounded to 3 decimals for these sizes; X is the unrounded ISO 5864 8.3 formula"
+tap_drill_unified,#10-24,D1_min,X,0.1449,0.145,"ours: ISO 2306 Table 3/4 prints the limit ASME B1.1 tabulates, rounded to 3 decimals for these sizes; X is the unrounded ISO 5864 8.3 formula"
+tap_drill_unified,#10-24,D1_max_2B,X,0.1555,0.156,"ours: ISO 2306 Table 3/4 prints the limit ASME B1.1 tabulates, rounded to 3 decimals for these sizes; X is the unrounded ISO 5864 8.3 formula"
+tap_drill_unified,#10-24,drill_d,M,0.147,0.1495,ours: #25 is the 75 % drill of U/T/B; #26 (0.1470) gives 79 % thread
+tap_drill_unified,#12-24,D1_min,X,0.1709,0.171,"ours: ISO 2306 Table 3/4 prints the limit ASME B1.1 tabulates, rounded to 3 decimals for these sizes; X is the unrounded ISO 5864 8.3 formula"
+tap_drill_unified,#12-24,D1_max_2B,X,0.1807,0.181,"ours: ISO 2306 Table 3/4 prints the limit ASME B1.1 tabulates, rounded to 3 decimals for these sizes; X is the unrounded ISO 5864 8.3 formula"
+tap_drill_unified,#6-40,D1_min,X,0.1109,0.111,"ours: ISO 2306 Table 3/4 prints the limit ASME B1.1 tabulates, rounded to 3 decimals for these sizes; X is the unrounded ISO 5864 8.3 formula"
+tap_drill_unified,#6-40,D1_max_2B,X,0.1186,0.119,"ours: ISO 2306 Table 3/4 prints the limit ASME B1.1 tabulates, rounded to 3 decimals for these sizes; X is the unrounded ISO 5864 8.3 formula"
+tap_drill_unified,#8-36,D1_min,X,0.1339,0.134,"ours: ISO 2306 Table 3/4 prints the limit ASME B1.1 tabulates, rounded to 3 decimals for these sizes; X is the unrounded ISO 5864 8.3 formula"
+tap_drill_unified,#8-36,D1_max_2B,X,0.1416,0.142,"ours: ISO 2306 Table 3/4 prints the limit ASME B1.1 tabulates, rounded to 3 decimals for these sizes; X is the unrounded ISO 5864 8.3 formula"
+tap_drill_unified,#10-32,D1_min,X,0.1562,0.156,"ours: ISO 2306 Table 3/4 prints the limit ASME B1.1 tabulates, rounded to 3 decimals for these sizes; X is the unrounded ISO 5864 8.3 formula"
+tap_drill_unified,#10-32,D1_max_2B,X,0.1641,0.164,"ours: ISO 2306 Table 3/4 prints the limit ASME B1.1 tabulates, rounded to 3 decimals for these sizes; X is the unrounded ISO 5864 8.3 formula"
+tap_drill_unified,#12-28,D1_min,X,0.1773,0.177,"ours: ISO 2306 Table 3/4 prints the limit ASME B1.1 tabulates, rounded to 3 decimals for these sizes; X is the unrounded ISO 5864 8.3 formula"
+tap_drill_unified,#12-28,D1_max_2B,X,0.1857,0.186,"ours: ISO 2306 Table 3/4 prints the limit ASME B1.1 tabulates, rounded to 3 decimals for these sizes; X is the unrounded ISO 5864 8.3 formula"
+tap_drill_unified,#12-28,drill_d,M,0.18,0.182,ours: #14 is the 75 % drill of U/T/B; #15 (0.1800) gives 78 % thread
+tap_drill_unified,9/16-18,drill_d,X,0.5151,0.515625,"ours: every chart (T/M/B) gives 33/64, 0.0005 over the 2B minor diameter max; kept as the standard shop drill (ISO 2306 clause 0: the tapped minor diameter closes below the drill in tapping)"
+tap_drill_unified,5/8-18,drill_d,X,0.5776,0.578125,"ours: every chart (T/M/B) gives 37/64, 0.0005 over the 2B minor diameter max; kept as the standard shop drill (ISO 2306 clause 0: the tapped minor diameter closes below the drill in tapping)"
+tap_drill_unified,1-12,drill_d,B,0.9375,0.921875,ours: 59/64 is the 75 % drill of M; 15/16 (0.9375) is over the 2B minor diameter max 0.9279 (58 % thread)

@@ -1,0 +1,49 @@
+# generator: retaining ring (DIN 471 for shafts, DIN 472 for bores)
+# its section b, free diameter d3, thickness s and lug height a are the standard's; the gap and
+# the lug width are drawn (DIN gives none): gap = d5, each lug 2 d5 wide
+# frame: origin on the axis in one face; +z through the ring
+# anchors (normals +z): a (face at z = 0), b (face at z = s)
+
+shared d3 = 2.7       # free diameter: inside for DIN 471, outside for DIN 472
+shared s = 0.4        # thickness
+shared a = 1.9        # lug height (max)
+shared b = 0.8        # radial section
+shared d5 = 1         # lug hole diameter (min)
+shared inner = 0      # 1: DIN 472 (in a bore: lugs inward)
+shared r1 = d3 / 2 if inner == 0 else d3 / 2 - b
+shared r2 = d3 / 2 + b if inner == 0 else d3 / 2
+shared gap = d5
+shared lw = 2 * d5
+shared ly0 = r1 if inner == 0 else r2 - a
+shared ly1 = r1 + a if inner == 0 else r2
+shared lx = gap / 2 + lw / 2
+
+sketch ann(on: xy) {
+  co = circle((0, 0), r2)
+  ci = circle((0, 0), r1)
+  o = pt(0, 0)
+  xl = line((0, 0), (r2, 0), construction: true)
+}
+body = extrude(ann, s)
+sketch lg(on: ann.plane) {
+  pad = rect(corner: (-gap / 2 - lw, ly0), size: (gap + 2 * lw, a))
+}
+lugs = extrude(lg.pad, s)
+sketch tr(on: body.end) {
+  c = circle((0, 0), r1)
+}
+trim = cut(tr.c, thru)
+sketch sl(on: body.end) {
+  g = rect(corner: (-gap / 2, ly0 - b - 1), size: (gap, a + b + 2))
+  h1 = circle((lx, (ly0 + ly1) / 2), d5 / 2)
+  h2 = circle((-lx, (ly0 + ly1) / 2), d5 / 2)
+}
+open = cut(sl.g, thru)
+hole1 = cut(sl.h1, thru)
+hole2 = cut(sl.h2, thru)
+
+a_face = anchor(plane(at: ann.o, normal: ann.plane.normal, x: ann.xl.dir))
+b_face = anchor(body.end)
+
+expect valid
+expect bodies = 1

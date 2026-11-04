@@ -9,13 +9,184 @@ use forge_lang::{Options, Run};
 use std::collections::BTreeMap;
 
 /// The bundled copies of other sources' tables, as `tools/stdparts/import.py` wrote them.
-const THIRD_PARTY: &[(&str, &str, &str)] = &[(
-    "B",
-    "iso4762",
-    include_str!("../stdparts/third_party/bd_warehouse/iso4762.csv"),
-)];
+const THIRD_PARTY: &[(&str, &str, &str)] = &[
+    (
+        "B",
+        "asme_b18_3_shcs",
+        include_str!("../stdparts/third_party/bd_warehouse/asme_b18_3_shcs.csv"),
+    ),
+    (
+        "B",
+        "asme_clearance",
+        include_str!("../stdparts/third_party/bd_warehouse/asme_clearance.csv"),
+    ),
+    (
+        "B",
+        "din471",
+        include_str!("../stdparts/third_party/bd_warehouse/din471.csv"),
+    ),
+    (
+        "B",
+        "din472",
+        include_str!("../stdparts/third_party/bd_warehouse/din472.csv"),
+    ),
+    (
+        "B",
+        "iso10642",
+        include_str!("../stdparts/third_party/bd_warehouse/iso10642.csv"),
+    ),
+    (
+        "B",
+        "iso15_bearings",
+        include_str!("../stdparts/third_party/bd_warehouse/iso15_bearings.csv"),
+    ),
+    (
+        "B",
+        "iso273",
+        include_str!("../stdparts/third_party/bd_warehouse/iso273.csv"),
+    ),
+    (
+        "B",
+        "iso4014",
+        include_str!("../stdparts/third_party/bd_warehouse/iso4014.csv"),
+    ),
+    (
+        "B",
+        "iso4017",
+        include_str!("../stdparts/third_party/bd_warehouse/iso4017.csv"),
+    ),
+    (
+        "B",
+        "iso4026",
+        include_str!("../stdparts/third_party/bd_warehouse/iso4026.csv"),
+    ),
+    (
+        "B",
+        "iso4032",
+        include_str!("../stdparts/third_party/bd_warehouse/iso4032.csv"),
+    ),
+    (
+        "B",
+        "iso4035",
+        include_str!("../stdparts/third_party/bd_warehouse/iso4035.csv"),
+    ),
+    (
+        "B",
+        "iso4762",
+        include_str!("../stdparts/third_party/bd_warehouse/iso4762.csv"),
+    ),
+    (
+        "B",
+        "iso7089",
+        include_str!("../stdparts/third_party/bd_warehouse/iso7089.csv"),
+    ),
+    (
+        "B",
+        "iso7090",
+        include_str!("../stdparts/third_party/bd_warehouse/iso7090.csv"),
+    ),
+    (
+        "B",
+        "iso7093_1",
+        include_str!("../stdparts/third_party/bd_warehouse/iso7093_1.csv"),
+    ),
+    (
+        "B",
+        "iso7379",
+        include_str!("../stdparts/third_party/bd_warehouse/iso7379.csv"),
+    ),
+    (
+        "B",
+        "iso7380_1",
+        include_str!("../stdparts/third_party/bd_warehouse/iso7380_1.csv"),
+    ),
+    (
+        "B",
+        "iso7380_2",
+        include_str!("../stdparts/third_party/bd_warehouse/iso7380_2.csv"),
+    ),
+    (
+        "B",
+        "tap_drill_metric",
+        include_str!("../stdparts/third_party/bd_warehouse/tap_drill_metric.csv"),
+    ),
+    (
+        "B",
+        "tap_drill_unified",
+        include_str!("../stdparts/third_party/bd_warehouse/tap_drill_unified.csv"),
+    ),
+];
 
-const RESOLUTIONS: &[(&str, &str)] = &[("iso4762", include_str!("../stdparts/resolutions/iso4762.csv"))];
+const RESOLUTIONS: &[(&str, &str)] = &[
+    ("as568", include_str!("../stdparts/resolutions/as568.csv")),
+    (
+        "asme_b18_22_1",
+        include_str!("../stdparts/resolutions/asme_b18_22_1.csv"),
+    ),
+    (
+        "asme_b18_2_1_hex_cap",
+        include_str!("../stdparts/resolutions/asme_b18_2_1_hex_cap.csv"),
+    ),
+    (
+        "asme_b18_2_2_hex_nut",
+        include_str!("../stdparts/resolutions/asme_b18_2_2_hex_nut.csv"),
+    ),
+    (
+        "asme_b18_3_button",
+        include_str!("../stdparts/resolutions/asme_b18_3_button.csv"),
+    ),
+    (
+        "asme_b18_3_flat",
+        include_str!("../stdparts/resolutions/asme_b18_3_flat.csv"),
+    ),
+    (
+        "asme_b18_3_shcs",
+        include_str!("../stdparts/resolutions/asme_b18_3_shcs.csv"),
+    ),
+    (
+        "asme_clearance",
+        include_str!("../stdparts/resolutions/asme_clearance.csv"),
+    ),
+    (
+        "cbore_iso4762",
+        include_str!("../stdparts/resolutions/cbore_iso4762.csv"),
+    ),
+    ("din471", include_str!("../stdparts/resolutions/din471.csv")),
+    ("din472", include_str!("../stdparts/resolutions/din472.csv")),
+    ("din6885", include_str!("../stdparts/resolutions/din6885.csv")),
+    ("iso10511", include_str!("../stdparts/resolutions/iso10511.csv")),
+    ("iso10642", include_str!("../stdparts/resolutions/iso10642.csv")),
+    (
+        "iso15_bearings",
+        include_str!("../stdparts/resolutions/iso15_bearings.csv"),
+    ),
+    ("iso273", include_str!("../stdparts/resolutions/iso273.csv")),
+    ("iso4014", include_str!("../stdparts/resolutions/iso4014.csv")),
+    ("iso4017", include_str!("../stdparts/resolutions/iso4017.csv")),
+    ("iso4026", include_str!("../stdparts/resolutions/iso4026.csv")),
+    ("iso4027", include_str!("../stdparts/resolutions/iso4027.csv")),
+    ("iso4028", include_str!("../stdparts/resolutions/iso4028.csv")),
+    ("iso4029", include_str!("../stdparts/resolutions/iso4029.csv")),
+    ("iso4032", include_str!("../stdparts/resolutions/iso4032.csv")),
+    ("iso4035", include_str!("../stdparts/resolutions/iso4035.csv")),
+    ("iso4762", include_str!("../stdparts/resolutions/iso4762.csv")),
+    ("iso7090", include_str!("../stdparts/resolutions/iso7090.csv")),
+    ("iso7093_1", include_str!("../stdparts/resolutions/iso7093_1.csv")),
+    ("iso7379", include_str!("../stdparts/resolutions/iso7379.csv")),
+    ("iso7380_1", include_str!("../stdparts/resolutions/iso7380_1.csv")),
+    ("iso7380_2", include_str!("../stdparts/resolutions/iso7380_2.csv")),
+    ("pem_fh", include_str!("../stdparts/resolutions/pem_fh.csv")),
+    ("pem_s", include_str!("../stdparts/resolutions/pem_s.csv")),
+    ("pem_so", include_str!("../stdparts/resolutions/pem_so.csv")),
+    (
+        "tap_drill_metric",
+        include_str!("../stdparts/resolutions/tap_drill_metric.csv"),
+    ),
+    (
+        "tap_drill_unified",
+        include_str!("../stdparts/resolutions/tap_drill_unified.csv"),
+    ),
+];
 
 fn rows(text: &str) -> Vec<Vec<String>> {
     text.lines()
@@ -33,8 +204,8 @@ fn every_file_is_listed() {
         let n = e.file_name().to_string_lossy().to_string();
         if let Some(stem) = n.strip_suffix(".csv") {
             assert!(
-                stdparts::TABLES.iter().any(|t| t.0 == stem),
-                "stdparts/{n} is not in TABLES"
+                stdparts::TABLES.iter().chain(stdparts::HELD).any(|t| t.0 == stem),
+                "stdparts/{n} is neither in TABLES nor HELD"
             );
         }
     }
@@ -44,13 +215,35 @@ fn every_file_is_listed() {
 fn tables_parse() {
     for f in stdparts::families() {
         assert!(!f.rows.is_empty(), "{}", f.id);
-        let header = f.get("gen").unwrap_or_else(|| panic!("{}: no gen header", f.id));
-        let g = header.split('|').next().unwrap().trim();
-        assert!(
-            stdparts::GENERATORS.iter().any(|x| x.0 == g),
-            "{}: no generator {g}",
-            f.id
-        );
+        if f.kind == "hole" {
+            assert!(!f.placeable(), "{}: a hole table makes no part", f.id);
+        } else {
+            let header = f.get("gen").unwrap_or_else(|| panic!("{}: no gen header", f.id));
+            let g = header.split('|').next().unwrap().trim();
+            assert!(
+                stdparts::GENERATORS.iter().any(|x| x.0 == g),
+                "{}: no generator {g}",
+                f.id
+            );
+            // every material it can be made of is the library's, with its density
+            let mut names: Vec<&str> = f.get("material").into_iter().collect();
+            if let Some((_, grades)) = f.options.iter().find(|o| o.0 == "grade") {
+                for g in grades {
+                    names.push(
+                        f.get(&format!("grade {g}"))
+                            .unwrap_or_else(|| panic!("{}: grade {g} names no material", f.id)),
+                    );
+                }
+            }
+            assert!(!names.is_empty(), "{}: no material", f.id);
+            for n in names {
+                assert!(
+                    forge_material::find(n).is_some(),
+                    "{}: material {n:?} is not in the library",
+                    f.id
+                );
+            }
+        }
         let checked = f
             .col("checked")
             .unwrap_or_else(|| panic!("{}: no checked column", f.id));
@@ -63,7 +256,7 @@ fn tables_parse() {
                 f.id,
                 r[0]
             );
-            if f.has_lengths() {
+            if f.has_lengths() && f.placeable() {
                 assert!(!f.lengths_of(r).is_empty(), "{} {}: no lengths", f.id, r[0]);
             }
         }
@@ -124,7 +317,7 @@ fn spec(family: &str, size: &str, length: Option<f64>, opts: &[(&str, &str)]) ->
 /// valid, one solid, with no errors; the middle size with its thread modelled too.
 #[test]
 fn generators_build_across_sizes() {
-    for f in stdparts::families() {
+    for f in stdparts::families().iter().filter(|f| f.placeable()) {
         let n = f.rows.len();
         for (k, r) in [0, n / 2, n - 1].iter().map(|&k| (k, &f.rows[k])) {
             let ls = f.lengths_of(r);
@@ -183,15 +376,15 @@ fn keys_round_trip() {
         &[("thread", "modelled"), ("grade", "12.9")],
     );
     let k = stdparts::key(&s);
-    assert_eq!(k, "std:ISO 4762/M6/20/thread=modelled");
+    assert_eq!(k, "std:ISO 4762|M6|20|thread=modelled");
     let back = stdparts::spec_of(&k).unwrap();
     assert_eq!(stdparts::key(&back), k);
     assert!(stdparts::text_of(&k).is_some());
-    assert!(stdparts::text_of("std:ISO 4762/M6/21").is_none());
+    assert!(stdparts::text_of("std:ISO 4762|M6|21").is_none());
 }
 
-fn asm_dir(files: &[(&str, &str)]) -> std::path::PathBuf {
-    let d = std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("stdparts");
+fn asm_dir(tag: &str, files: &[(&str, &str)]) -> std::path::PathBuf {
+    let d = std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("stdparts-{tag}"));
     std::fs::create_dir_all(&d).unwrap();
     for (n, t) in files {
         std::fs::write(d.join(n), t).unwrap();
@@ -208,8 +401,8 @@ p = extrude(s, t)
 top = anchor(plane(at: s.c.center, normal: Z, x: X))
 ";
 
-fn asm_run(src: &str) -> Run {
-    let d = asm_dir(&[("plate.fg", PLATE)]);
+fn asm_run(tag: &str, src: &str) -> Run {
+    let d = asm_dir(tag, &[("plate.fg", PLATE)]);
     let opts = Options {
         dir: Some(d.clone()),
         root: Some(d),
@@ -221,6 +414,7 @@ fn asm_run(src: &str) -> Run {
 #[test]
 fn std_in_an_assembly_is_one_bom_line_with_properties() {
     let r = asm_run(
+        "bom",
         "assembly
 base = part(\"plate.fg\", ground: true)
 a = std(\"ISO 4762\", size: \"M6\", length: 20, grade: \"10.9\")
@@ -235,12 +429,12 @@ jb = fastened(b.head, base.top)
         r.errors.iter().map(|e| e.text()).collect::<Vec<_>>()
     );
     let out = r.asm.unwrap();
-    let key = "std:ISO 4762/M6/20/grade=10.9";
+    let key = "std:ISO 4762|M6|20|grade=10.9";
     assert!(out.bom.contains(&(key.to_string(), 2)), "{:?}", out.bom);
     let (p, mass) = &out.props[key];
     assert_eq!(p.part_number.as_deref(), Some("ISO 4762 M6x20"));
     assert_eq!(p.standard.as_deref(), Some("ISO 4762:2004"));
-    assert_eq!(p.material.as_deref(), Some("Steel, property class 10.9"));
+    assert_eq!(p.material.as_deref(), Some("ISO 898-1 class 10.9"));
     // 957.5545 mm3 of steel at 7.85 g/cm3
     assert!((mass.unwrap() - 7.5168).abs() < 1e-3, "{mass:?}");
 }
@@ -280,9 +474,10 @@ fn std_errors_are_typed_with_fixes() {
         ),
     ];
     for (call, kind, fix) in cases {
-        let r = asm_run(&format!(
-            "assembly\nbase = part(\"plate.fg\", ground: true)\nscr = {call}\n"
-        ));
+        let r = asm_run(
+            kind,
+            &format!("assembly\nbase = part(\"plate.fg\", ground: true)\nscr = {call}\n"),
+        );
         let e = r.errors.iter().find(|e| e.kind() == kind).unwrap_or_else(|| {
             panic!(
                 "{call}: {:?}",

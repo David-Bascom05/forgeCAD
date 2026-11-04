@@ -1,0 +1,2 @@
+family,size,column,source,theirs,ours,verdict
+pem_s,M10-1,sheet_min,K,2.31,2.29,"ours: bulletin CL page CL-5 prints 2.29 for M10 shank 1, and the catalogue's own S-M10-1ZI record says 2.29; only the CLS-M10-1 record says 2.31 (0.091 in converted), a catalogue entry slip"

@@ -558,3 +558,377 @@ cte = 20
 colour = "#2B2B2B"
 source = "BASF, 'Ultradur B4300 G6 HR Product Information' (ISO data, uncoloured, 23 C), https://download.basf.com/p1/8a8082587fd4b608017fd63d9cd26b1f/en/ULTRADUR%253Csup%253E%25C2%25AE%253Csup%253E_B4300_G6_HR"
 note = "BASF Ultradur B4300 G6 HR (hydrolysis-resistant PBT, 30% glass fibre), dry, 23 C, ISO 527. No yield: brittle, breaks at 3.3% strain without a yield point; uts is stress at break. cte is longitudinal (flow direction), 23-55 C, ISO 11359; transverse is 150e-6/K. poisson omitted: not on the datasheet. Strongly anisotropic; values are flow-direction test bars."
+
+# ---------------------------------------------------------------- standard parts: bolts, nuts, set screws
+
+[[material]]
+name = "ISO 898-1 class 10.9"
+aliases = ["10.9", "class 10.9", "10.9 bolt", "grade 10.9", "property class 10.9", "10.9 steel"]
+family = "steel"
+density = 7850
+youngs = 210
+poisson = 0.30
+yield = 940
+uts = 1040
+cte = 12
+colour = "#3F4144"
+source = "TR Fastenings, 'Mechanical properties - Steel Screws and Bolts ISO 898-1 / EN 20898-1', https://www.trfastenings.com/knowledge-base/metric-screws/screws-and-bolts-mechanical-properties"
+source_density = "Eurocode Applied, 'Steel design properties' (EN 1993-1-1 3.2.6 and EN 1991-1-1 Table A.4), https://cdn.eurocodeapplied.com/design/en1993/steel-design-properties"
+source_youngs = "Eurocode Applied, 'Steel design properties' (EN 1993-1-1 3.2.6), https://cdn.eurocodeapplied.com/design/en1993/steel-design-properties"
+source_poisson = "Eurocode Applied, 'Steel design properties' (EN 1993-1-1 3.2.6), https://cdn.eurocodeapplied.com/design/en1993/steel-design-properties"
+source_cte = "Eurocode Applied, 'Steel design properties' (EN 1993-1-1 3.2.6), https://cdn.eurocodeapplied.com/design/en1993/steel-design-properties"
+note = "Quenched and tempered (alloy) steel bolts. Strength values are ISO 898-1 minimums (Rp0.2 940, Rm 1040 MPa; nominal 900 / 1000); core hardness 32-39 HRC. Density, E, Poisson and CTE are the Eurocode 3 design values for carbon steel, as for class 8.8. Colour is black-oxide/phosphate finish."
+
+[[material]]
+name = "ISO 898-1 class 12.9"
+aliases = ["12.9", "class 12.9", "12.9 bolt", "grade 12.9", "property class 12.9", "12.9 steel"]
+family = "steel"
+density = 7850
+youngs = 210
+poisson = 0.30
+yield = 1100
+uts = 1220
+cte = 12
+colour = "#2E3033"
+source = "TR Fastenings, 'Mechanical properties - Steel Screws and Bolts ISO 898-1 / EN 20898-1', https://www.trfastenings.com/knowledge-base/metric-screws/screws-and-bolts-mechanical-properties"
+source_density = "Eurocode Applied, 'Steel design properties' (EN 1993-1-1 3.2.6 and EN 1991-1-1 Table A.4), https://cdn.eurocodeapplied.com/design/en1993/steel-design-properties"
+source_youngs = "Eurocode Applied, 'Steel design properties' (EN 1993-1-1 3.2.6), https://cdn.eurocodeapplied.com/design/en1993/steel-design-properties"
+source_poisson = "Eurocode Applied, 'Steel design properties' (EN 1993-1-1 3.2.6), https://cdn.eurocodeapplied.com/design/en1993/steel-design-properties"
+source_cte = "Eurocode Applied, 'Steel design properties' (EN 1993-1-1 3.2.6), https://cdn.eurocodeapplied.com/design/en1993/steel-design-properties"
+note = "Quenched and tempered alloy steel bolts (socket head cap screws are typically 12.9). Strength values are ISO 898-1 minimums (Rp0.2 1100, Rm 1220 MPa; nominal 1080 / 1200); core hardness 38-44 HRC. Density, E, Poisson and CTE are the Eurocode 3 design values for carbon steel, as for class 8.8. Colour is black-oxide finish."
+
+[[material]]
+name = "ISO 3506-1 A2-70"
+aliases = ["A2-70", "A2-70 bolt", "A2-70 screw", "A2 70"]
+family = "stainless"
+density = 8000
+youngs = 193
+poisson = 0.29
+yield = 450
+uts = 700
+cte = 17.3
+colour = "#C4C7CA"
+source = "AmesWeb, 'Stainless Steel Bolt Grades Chart' (ISO 3506-1 property classes), https://amesweb.info/Screws/stainless-steel-bolt-grades-chart.aspx"
+source_density = "ASM Aerospace Specification Metals / MatWeb, 'AISI Type 304 Stainless Steel', https://www.aerospacemetals.com/wp-content/uploads/2023/07/AISI-Type-304-Stainless-Steel.pdf"
+source_youngs = "ASM Aerospace Specification Metals / MatWeb, 'AISI Type 304 Stainless Steel', https://www.aerospacemetals.com/wp-content/uploads/2023/07/AISI-Type-304-Stainless-Steel.pdf"
+source_poisson = "ASM Aerospace Specification Metals / MatWeb, 'AISI Type 304 Stainless Steel', https://www.aerospacemetals.com/wp-content/uploads/2023/07/AISI-Type-304-Stainless-Steel.pdf"
+source_cte = "ASM Aerospace Specification Metals / MatWeb, 'AISI Type 304 Stainless Steel', https://www.aerospacemetals.com/wp-content/uploads/2023/07/AISI-Type-304-Stainless-Steel.pdf"
+note = "Austenitic A2 stainless bolts/screws, cold-worked to class 70. yield (stress at 0.2% permanent strain) and uts are ISO 3506-1 minimums, valid to M24. Density, E, Poisson and CTE (0-100 C) are the base steel 304 (1.4301) typical values, same as '304 annealed'; cold work changes them little."
+
+[[material]]
+name = "ISO 3506-1 A2-80"
+aliases = ["A2-80", "A2-80 bolt", "A2-80 screw", "A2 80"]
+family = "stainless"
+density = 8000
+youngs = 193
+poisson = 0.29
+yield = 600
+uts = 800
+cte = 17.3
+colour = "#C4C7CA"
+source = "AmesWeb, 'Stainless Steel Bolt Grades Chart' (ISO 3506-1 property classes), https://amesweb.info/Screws/stainless-steel-bolt-grades-chart.aspx"
+source_density = "ASM Aerospace Specification Metals / MatWeb, 'AISI Type 304 Stainless Steel', https://www.aerospacemetals.com/wp-content/uploads/2023/07/AISI-Type-304-Stainless-Steel.pdf"
+source_youngs = "ASM Aerospace Specification Metals / MatWeb, 'AISI Type 304 Stainless Steel', https://www.aerospacemetals.com/wp-content/uploads/2023/07/AISI-Type-304-Stainless-Steel.pdf"
+source_poisson = "ASM Aerospace Specification Metals / MatWeb, 'AISI Type 304 Stainless Steel', https://www.aerospacemetals.com/wp-content/uploads/2023/07/AISI-Type-304-Stainless-Steel.pdf"
+source_cte = "ASM Aerospace Specification Metals / MatWeb, 'AISI Type 304 Stainless Steel', https://www.aerospacemetals.com/wp-content/uploads/2023/07/AISI-Type-304-Stainless-Steel.pdf"
+note = "Austenitic A2 stainless bolts/screws, cold-worked to class 80. yield (stress at 0.2% permanent strain) and uts are ISO 3506-1 minimums, valid to M24. Density, E, Poisson and CTE (0-100 C) are the base steel 304 (1.4301) typical values, same as '304 annealed'."
+
+[[material]]
+name = "ISO 3506-1 A4-70"
+aliases = ["A4-70", "A4-70 bolt", "A4-70 screw", "A4 70"]
+family = "stainless"
+density = 8000
+youngs = 193
+poisson = 0.27
+yield = 450
+uts = 700
+cte = 16.0
+colour = "#C1C4C7"
+source = "AmesWeb, 'Stainless Steel Bolt Grades Chart' (ISO 3506-1 property classes), https://amesweb.info/Screws/stainless-steel-bolt-grades-chart.aspx"
+source_density = "ASM Aerospace Specification Metals / MatWeb, 'AISI Type 316 Stainless Steel, annealed sheet', https://www.aerospacemetals.com/wp-content/uploads/2023/07/AISI-Type-316-Stainless-Steel-annealed-sheet.pdf"
+source_youngs = "ASM Aerospace Specification Metals / MatWeb, 'AISI Type 316 Stainless Steel, annealed sheet', https://www.aerospacemetals.com/wp-content/uploads/2023/07/AISI-Type-316-Stainless-Steel-annealed-sheet.pdf"
+source_poisson = "AZoM, 'Properties: Stainless Steel - Grade 316 (UNS S31600)', https://www.azom.com/properties.aspx?ArticleID=863"
+source_cte = "ASM Aerospace Specification Metals / MatWeb, 'AISI Type 316 Stainless Steel, annealed sheet', https://www.aerospacemetals.com/wp-content/uploads/2023/07/AISI-Type-316-Stainless-Steel-annealed-sheet.pdf"
+note = "Austenitic A4 (molybdenum) stainless bolts/screws, cold-worked to class 70. yield (stress at 0.2% permanent strain) and uts are ISO 3506-1 minimums, valid to M24. Density, E, Poisson and CTE (0-100 C) are the base steel 316 (1.4401) values, same as '316 annealed'; Poisson is the midpoint of AZoM's 0.265-0.275."
+
+[[material]]
+name = "ISO 3506-1 A4-80"
+aliases = ["A4-80", "A4-80 bolt", "A4-80 screw", "A4 80"]
+family = "stainless"
+density = 8000
+youngs = 193
+poisson = 0.27
+yield = 600
+uts = 800
+cte = 16.0
+colour = "#C1C4C7"
+source = "AmesWeb, 'Stainless Steel Bolt Grades Chart' (ISO 3506-1 property classes), https://amesweb.info/Screws/stainless-steel-bolt-grades-chart.aspx"
+source_density = "ASM Aerospace Specification Metals / MatWeb, 'AISI Type 316 Stainless Steel, annealed sheet', https://www.aerospacemetals.com/wp-content/uploads/2023/07/AISI-Type-316-Stainless-Steel-annealed-sheet.pdf"
+source_youngs = "ASM Aerospace Specification Metals / MatWeb, 'AISI Type 316 Stainless Steel, annealed sheet', https://www.aerospacemetals.com/wp-content/uploads/2023/07/AISI-Type-316-Stainless-Steel-annealed-sheet.pdf"
+source_poisson = "AZoM, 'Properties: Stainless Steel - Grade 316 (UNS S31600)', https://www.azom.com/properties.aspx?ArticleID=863"
+source_cte = "ASM Aerospace Specification Metals / MatWeb, 'AISI Type 316 Stainless Steel, annealed sheet', https://www.aerospacemetals.com/wp-content/uploads/2023/07/AISI-Type-316-Stainless-Steel-annealed-sheet.pdf"
+note = "Austenitic A4 (molybdenum) stainless bolts/screws, cold-worked to class 80. yield (stress at 0.2% permanent strain) and uts are ISO 3506-1 minimums, valid to M24. Density, E, Poisson and CTE (0-100 C) are the base steel 316 (1.4401) values, same as '316 annealed'; Poisson is the midpoint of AZoM's 0.265-0.275."
+
+[[material]]
+name = "ISO 3506-2 A2-70"
+aliases = ["A2-70 nut", "A2 nut"]
+family = "stainless"
+density = 8000
+youngs = 193
+poisson = 0.29
+cte = 17.3
+colour = "#C4C7CA"
+source = "ASM Aerospace Specification Metals / MatWeb, 'AISI Type 304 Stainless Steel', https://www.aerospacemetals.com/wp-content/uploads/2023/07/AISI-Type-304-Stainless-Steel.pdf"
+note = "Austenitic A2 stainless nuts, class 70. ISO 3506-2 gives a stress under proof load Sp of 700 MPa for regular and high nuts (style 1/2) and 350 MPa for thin nuts (class 035), per the table reproduced by TorqBolt, https://torqbolt.com/iso-3506-2-nuts-suppliers-manufacturers. No yield/uts: a nut is specified by proof load, not by tensile tests. Density, E, Poisson and CTE (0-100 C) are the base steel 304 (1.4301) typical values."
+
+[[material]]
+name = "ISO 3506-2 A4-70"
+aliases = ["A4-70 nut", "A4 nut"]
+family = "stainless"
+density = 8000
+youngs = 193
+poisson = 0.27
+cte = 16.0
+colour = "#C1C4C7"
+source = "ASM Aerospace Specification Metals / MatWeb, 'AISI Type 316 Stainless Steel, annealed sheet', https://www.aerospacemetals.com/wp-content/uploads/2023/07/AISI-Type-316-Stainless-Steel-annealed-sheet.pdf"
+source_poisson = "AZoM, 'Properties: Stainless Steel - Grade 316 (UNS S31600)', https://www.azom.com/properties.aspx?ArticleID=863"
+note = "Austenitic A4 stainless nuts, class 70. ISO 3506-2 gives a stress under proof load Sp of 700 MPa for regular and high nuts (style 1/2) and 350 MPa for thin nuts (class 035), per the table reproduced by TorqBolt, https://torqbolt.com/iso-3506-2-nuts-suppliers-manufacturers. No yield/uts: a nut is specified by proof load. Density, E, Poisson and CTE (0-100 C) are the base steel 316 (1.4401) values; Poisson is the midpoint of AZoM's 0.265-0.275."
+
+[[material]]
+name = "ISO 898-2 class 8"
+aliases = ["class 8 nut", "property class 8 nut", "8 nut", "grade 8 metric nut"]
+family = "steel"
+density = 7850
+youngs = 210
+poisson = 0.30
+cte = 12
+colour = "#3F4144"
+source = "Eurocode Applied, 'Steel design properties' (EN 1993-1-1 3.2.6 and EN 1991-1-1 Table A.4), https://cdn.eurocodeapplied.com/design/en1993/steel-design-properties"
+note = "Carbon steel nuts to ISO 898-2:2012 class 8 (mates with 8.8 bolts); style 1 above M16 is quenched and tempered. Per Lucefin's ISO 898-2:2012 sheet (https://www.lucefin.com/wp-content/files_mf/1513680440nutspropertyclasses_carbonsteels.pdf): hardness 200-302 HV for M5-M16 and 233-353 HV for M16-M39 (coarse thread); proof load e.g. M10 50500 N, M12 74200 N. No yield/uts: a nut is specified by proof load and hardness. Density, E, Poisson and CTE are the Eurocode 3 carbon-steel values."
+
+[[material]]
+name = "ISO 898-2 class 10"
+aliases = ["class 10 nut", "property class 10 nut", "10 nut"]
+family = "steel"
+density = 7850
+youngs = 210
+poisson = 0.30
+cte = 12
+colour = "#3F4144"
+source = "Eurocode Applied, 'Steel design properties' (EN 1993-1-1 3.2.6 and EN 1991-1-1 Table A.4), https://cdn.eurocodeapplied.com/design/en1993/steel-design-properties"
+note = "Quenched and tempered carbon steel nuts to ISO 898-2:2012 class 10 (mates with 10.9 bolts). Per Lucefin's ISO 898-2:2012 sheet (https://www.lucefin.com/wp-content/files_mf/1513680440nutspropertyclasses_carbonsteels.pdf): hardness 272-353 HV (coarse thread, M5-M39); proof load e.g. M10 60300 N, M12 88500 N. No yield/uts: a nut is specified by proof load and hardness. Density, E, Poisson and CTE are the Eurocode 3 carbon-steel values."
+
+[[material]]
+name = "ISO 898-2 class 04"
+aliases = ["class 04 nut", "property class 04 nut", "04 thin nut"]
+family = "steel"
+density = 7850
+youngs = 210
+poisson = 0.30
+cte = 12
+colour = "#3F4144"
+source = "Eurocode Applied, 'Steel design properties' (EN 1993-1-1 3.2.6 and EN 1991-1-1 Table A.4), https://cdn.eurocodeapplied.com/design/en1993/steel-design-properties"
+note = "Carbon steel thin nuts (style 0, reduced loadability) to ISO 898-2:2012 class 04. Per Lucefin's ISO 898-2:2012 sheet (https://www.lucefin.com/wp-content/files_mf/1513680440nutspropertyclasses_carbonsteels.pdf): hardness 188-302 HV; proof load e.g. M10 22000 N; stripping load is lower than the proof load of a full nut. No yield/uts: a nut is specified by proof load and hardness. Density, E, Poisson and CTE are the Eurocode 3 carbon-steel values."
+
+[[material]]
+name = "ISO 898-2 class 05"
+aliases = ["class 05 nut", "property class 05 nut", "05 thin nut"]
+family = "steel"
+density = 7850
+youngs = 210
+poisson = 0.30
+cte = 12
+colour = "#3F4144"
+source = "Eurocode Applied, 'Steel design properties' (EN 1993-1-1 3.2.6 and EN 1991-1-1 Table A.4), https://cdn.eurocodeapplied.com/design/en1993/steel-design-properties"
+note = "Quenched and tempered carbon steel thin nuts (style 0, reduced loadability) to ISO 898-2:2012 class 05. Per Lucefin's ISO 898-2:2012 sheet (https://www.lucefin.com/wp-content/files_mf/1513680440nutspropertyclasses_carbonsteels.pdf): hardness 272-353 HV; proof load e.g. M10 29000 N; stripping load is lower than the proof load of a full nut. No yield/uts: a nut is specified by proof load and hardness. Density, E, Poisson and CTE are the Eurocode 3 carbon-steel values."
+
+[[material]]
+name = "SAE J429 Grade 5"
+aliases = ["grade 5", "grade 5 bolt", "SAE grade 5", "J429 grade 5"]
+family = "steel"
+density = 7850
+youngs = 210
+poisson = 0.30
+yield = 634
+uts = 827
+cte = 12
+colour = "#B9BCC0"
+source = "Fastenal Engineering & Design Support, 'Mechanical Properties of Inch Fasteners' (rev. 8-25-09), https://crafter.fastenal.com/static-assets/pdfs/Mechanical_Properties_of_Inch_Fasteners.pdf"
+source_density = "Eurocode Applied, 'Steel design properties' (EN 1993-1-1 3.2.6 and EN 1991-1-1 Table A.4), https://cdn.eurocodeapplied.com/design/en1993/steel-design-properties"
+source_youngs = "Eurocode Applied, 'Steel design properties' (EN 1993-1-1 3.2.6), https://cdn.eurocodeapplied.com/design/en1993/steel-design-properties"
+source_poisson = "Eurocode Applied, 'Steel design properties' (EN 1993-1-1 3.2.6), https://cdn.eurocodeapplied.com/design/en1993/steel-design-properties"
+source_cte = "Eurocode Applied, 'Steel design properties' (EN 1993-1-1 3.2.6), https://cdn.eurocodeapplied.com/design/en1993/steel-design-properties"
+note = "Medium carbon steel, quenched and tempered, inch bolts 1/4-1 in. yield and uts are SAE J429 minimums converted from 92,000 / 120,000 psi (proof 85,000 psi = 586 MPa; core 25-34 HRC). For 1-1/8 to 1-1/2 in. they drop to 81,000 / 105,000 psi (558 / 724 MPa). Density, E, Poisson and CTE are the Eurocode 3 carbon-steel values. Colour is zinc plate."
+
+[[material]]
+name = "SAE J429 Grade 8"
+aliases = ["grade 8", "grade 8 bolt", "SAE grade 8", "J429 grade 8"]
+family = "steel"
+density = 7850
+youngs = 210
+poisson = 0.30
+yield = 896
+uts = 1034
+cte = 12
+colour = "#C8B560"
+source = "Fastenal Engineering & Design Support, 'Mechanical Properties of Inch Fasteners' (rev. 8-25-09), https://crafter.fastenal.com/static-assets/pdfs/Mechanical_Properties_of_Inch_Fasteners.pdf"
+source_density = "Eurocode Applied, 'Steel design properties' (EN 1993-1-1 3.2.6 and EN 1991-1-1 Table A.4), https://cdn.eurocodeapplied.com/design/en1993/steel-design-properties"
+source_youngs = "Eurocode Applied, 'Steel design properties' (EN 1993-1-1 3.2.6), https://cdn.eurocodeapplied.com/design/en1993/steel-design-properties"
+source_poisson = "Eurocode Applied, 'Steel design properties' (EN 1993-1-1 3.2.6), https://cdn.eurocodeapplied.com/design/en1993/steel-design-properties"
+source_cte = "Eurocode Applied, 'Steel design properties' (EN 1993-1-1 3.2.6), https://cdn.eurocodeapplied.com/design/en1993/steel-design-properties"
+note = "Medium carbon alloy steel, quenched and tempered, inch bolts 1/4-1-1/2 in. yield and uts are SAE J429 minimums converted from 130,000 / 150,000 psi (proof 120,000 psi = 827 MPa; core 33-39 HRC). Density, E, Poisson and CTE are the Eurocode 3 carbon-steel values. Colour is yellow zinc."
+
+[[material]]
+name = "SAE J995 Grade 5"
+aliases = ["grade 5 nut", "SAE grade 5 nut", "J995 grade 5"]
+family = "steel"
+density = 7850
+youngs = 210
+poisson = 0.30
+cte = 12
+colour = "#B9BCC0"
+source = "Eurocode Applied, 'Steel design properties' (EN 1993-1-1 3.2.6 and EN 1991-1-1 Table A.4), https://cdn.eurocodeapplied.com/design/en1993/steel-design-properties"
+note = "Carbon steel inch hex nuts. Per Fastenal's 'Mechanical Properties of Inch Fasteners' (https://crafter.fastenal.com/static-assets/pdfs/Mechanical_Properties_of_Inch_Fasteners.pdf), SAE J995 Grade 5 proof load stress is 120,000 psi (827 MPa) UNC / 109,000 psi (752 MPa) UNF in the first size band (printed '1/4 - 4', read as 1/4-1 in.), and 105,000 / 94,000 psi over 1 to 1-1/2 in.; hardness max 32 HRC. No yield/uts: a nut is specified by proof load. Density, E, Poisson and CTE are the Eurocode 3 carbon-steel values."
+
+[[material]]
+name = "SAE J995 Grade 8"
+aliases = ["grade 8 nut", "SAE grade 8 nut", "J995 grade 8"]
+family = "steel"
+density = 7850
+youngs = 210
+poisson = 0.30
+cte = 12
+colour = "#C8B560"
+source = "Eurocode Applied, 'Steel design properties' (EN 1993-1-1 3.2.6 and EN 1991-1-1 Table A.4), https://cdn.eurocodeapplied.com/design/en1993/steel-design-properties"
+note = "Medium carbon or alloy steel inch hex nuts, quenched and tempered. Per Fastenal's 'Mechanical Properties of Inch Fasteners' (https://crafter.fastenal.com/static-assets/pdfs/Mechanical_Properties_of_Inch_Fasteners.pdf), SAE J995 Grade 8 proof load stress is 150,000 psi (1034 MPa) for 1/4-1-1/2 in.; hardness 24-32 HRC to 5/8, 26-34 HRC to 1, 26-36 HRC to 1-1/2 in. No yield/uts: a nut is specified by proof load. Density, E, Poisson and CTE are the Eurocode 3 carbon-steel values."
+
+[[material]]
+name = "ISO 4026-4029 class 45H"
+aliases = ["45H", "class 45H", "property class 45H", "ISO 898-5 45H", "set screw 45H"]
+family = "steel"
+density = 7850
+youngs = 210
+poisson = 0.30
+cte = 12
+colour = "#2E3033"
+source = "ISO 898-5:1998, Tables 1-3 (iTeh public preview), https://cdn.standards.iteh.ai/samples/25453/e333c8bcd2d7475ea53001b39a44a5cd/ISO-898-5-1998.pdf"
+source_density = "Eurocode Applied, 'Steel design properties' (EN 1993-1-1 3.2.6 and EN 1991-1-1 Table A.4), https://cdn.eurocodeapplied.com/design/en1993/steel-design-properties"
+source_youngs = "Eurocode Applied, 'Steel design properties' (EN 1993-1-1 3.2.6), https://cdn.eurocodeapplied.com/design/en1993/steel-design-properties"
+source_poisson = "Eurocode Applied, 'Steel design properties' (EN 1993-1-1 3.2.6), https://cdn.eurocodeapplied.com/design/en1993/steel-design-properties"
+source_cte = "Eurocode Applied, 'Steel design properties' (EN 1993-1-1 3.2.6), https://cdn.eurocodeapplied.com/design/en1993/steel-design-properties"
+note = "Hexagon socket set screws (ISO 4026-4029), alloy steel quenched and tempered, ISO 898-5 class 45H. The standard defines hardness only: 450-560 HV10, 428-532 HB, 45-53 HRC, surface max 580 HV0.3, no complete decarburization; set screws are not for tensile load, so ISO 898-5 gives no yield or tensile strength and none is given here. Density, E, Poisson and CTE are the Eurocode 3 carbon-steel values."
+
+# ---------------------------------------------------------------- standard parts: PEM self-clinching hardware
+
+[[material]]
+name = "PEM S carbon steel"
+aliases = ["PEM hardened carbon steel", "PEM carbon steel"]
+family = "steel"
+density = 7850
+youngs = 210
+poisson = 0.30
+cte = 12
+colour = "#B9BCC0"
+source = "PennEngineering, bulletins CL (https://damlite.pemnet.com/CLS-M6-1_pdf_2.pdf, p. CL-9), FH (https://damlite.pemnet.com/FH-M5-12ZC_pdf_1.pdf, p. FH-17) and SO (https://damlite.pemnet.com/SO-M3-6ZI_pdf_1.pdf, p. SO-8), 'Material and finish specifications'"
+source_density = "Eurocode Applied, 'Steel design properties' (EN 1993-1-1 3.2.6 and EN 1991-1-1 Table A.4), https://cdn.eurocodeapplied.com/design/en1993/steel-design-properties"
+source_youngs = "Eurocode Applied, 'Steel design properties' (EN 1993-1-1 3.2.6), https://cdn.eurocodeapplied.com/design/en1993/steel-design-properties"
+source_poisson = "Eurocode Applied, 'Steel design properties' (EN 1993-1-1 3.2.6), https://cdn.eurocodeapplied.com/design/en1993/steel-design-properties"
+source_cte = "Eurocode Applied, 'Steel design properties' (EN 1993-1-1 3.2.6), https://cdn.eurocodeapplied.com/design/en1993/steel-design-properties"
+note = "What PEM calls 'Hardened Carbon Steel': S, SS, H, PEM RT and SL nuts; FH, FHL, TFH, HFE, THFE, HFH studs; SO, BSO and DSO standoffs (TSO thru-hole standoffs are 'Non-heat Treated Carbon Steel'). Zinc plated (ZI). PEM names no grade, so no yield/uts. Density, E, Poisson and CTE are the Eurocode 3 carbon-steel values."
+
+[[material]]
+name = "PEM 300 series stainless"
+aliases = ["PEM 300 series", "PEM 300 series stainless steel"]
+family = "stainless"
+density = 8000
+youngs = 193
+poisson = 0.29
+cte = 17.3
+colour = "#C4C7CA"
+source = "PennEngineering, bulletins CL (https://damlite.pemnet.com/CLS-M6-1_pdf_2.pdf, p. CL-9), FH (https://damlite.pemnet.com/FH-M5-12ZC_pdf_1.pdf, p. FH-17) and SO (https://damlite.pemnet.com/SO-M3-6ZI_pdf_1.pdf, p. SO-8), 'Material and finish specifications'"
+source_density = "ASM Aerospace Specification Metals / MatWeb, 'AISI Type 304 Stainless Steel', https://www.aerospacemetals.com/wp-content/uploads/2023/07/AISI-Type-304-Stainless-Steel.pdf"
+kind_density = "stand-in"
+source_youngs = "ASM Aerospace Specification Metals / MatWeb, 'AISI Type 304 Stainless Steel', https://www.aerospacemetals.com/wp-content/uploads/2023/07/AISI-Type-304-Stainless-Steel.pdf"
+kind_youngs = "stand-in"
+source_poisson = "ASM Aerospace Specification Metals / MatWeb, 'AISI Type 304 Stainless Steel', https://www.aerospacemetals.com/wp-content/uploads/2023/07/AISI-Type-304-Stainless-Steel.pdf"
+kind_poisson = "stand-in"
+source_cte = "ASM Aerospace Specification Metals / MatWeb, 'AISI Type 304 Stainless Steel', https://www.aerospacemetals.com/wp-content/uploads/2023/07/AISI-Type-304-Stainless-Steel.pdf"
+kind_cte = "stand-in"
+note = "What PEM calls '300 Series Stainless Steel': CLS, CLSS and SMPS nuts; FHS, FHLS, TFHS, HFHS, SGPC studs and TPS, TPXS pins; SOS, BSOS, TSOS, DSOS, SOSG standoffs. Passivated. PEM names no grade (the SO bulletin does not say 303); values are 304 typical (stand-in). No yield/uts: grade and cold work unknown. Non-magnetic; for sheets HRB 70 or softer, not for stainless sheet."
+
+[[material]]
+name = "PEM 400 series stainless hardened"
+aliases = ["PEM 400 series", "PEM hardened 400 series stainless", "PEM hardened stainless"]
+family = "stainless"
+density = 7800
+youngs = 200
+cte = 9.9
+colour = "#BDC0C3"
+source = "PennEngineering, bulletins FH (https://damlite.pemnet.com/FH-M5-12ZC_pdf_1.pdf, p. FH-17 and 'A Note About 400 Series Fasteners For Stainless Steel Panels') and SO (https://damlite.pemnet.com/SO-M3-6ZI_pdf_1.pdf, p. SO-8)"
+source_density = "ASM Aerospace Specification Metals / MatWeb, 'AISI Type 410 Stainless Steel, tempered at test temperature plus 28 C, tested at 21 C', https://www.aerospacemetals.com/wp-content/uploads/2023/07/AISI-Type-410-Stainless-Steel-tempered-at-test-temperature-plus-28%C2%B0C-tested-at-21%C2%B0C-70%C2%B0F.pdf"
+kind_density = "stand-in"
+source_youngs = "ASM Aerospace Specification Metals / MatWeb, 'AISI Type 410 Stainless Steel, tempered at test temperature plus 28 C, tested at 21 C', https://www.aerospacemetals.com/wp-content/uploads/2023/07/AISI-Type-410-Stainless-Steel-tempered-at-test-temperature-plus-28%C2%B0C-tested-at-21%C2%B0C-70%C2%B0F.pdf"
+kind_youngs = "stand-in"
+source_cte = "ASM Aerospace Specification Metals / MatWeb, 'AISI Type 410 Stainless Steel, tempered at test temperature plus 28 C, tested at 21 C', https://www.aerospacemetals.com/wp-content/uploads/2023/07/AISI-Type-410-Stainless-Steel-tempered-at-test-temperature-plus-28%C2%B0C-tested-at-21%C2%B0C-70%C2%B0F.pdf"
+kind_cte = "stand-in"
+note = "What PEM calls 'Hardened 400 Series Stainless Steel': FH4 studs, TP4 pins, SO4, BSO4, TSO4 standoffs, for clinching into 300-series stainless sheet (HRB 88-92). PEM warns they are magnetic, corrode unless nickel plated, and are not for use above 149 C. SP/SMPP nuts and FHP studs are A286, not 400 series: see 'A286 age hardened'. PEM names no grade; density, E and CTE (0-100 C) are hardened 410 values (stand-in). No yield/uts or poisson: grade and temper unknown, and the 410 sheet gives no Poisson ratio."
+
+[[material]]
+name = "A286 age hardened"
+aliases = ["A286", "A-286", "UNS S66286", "Altemp A286", "PEM A286"]
+family = "stainless"
+density = 7920
+youngs = 201
+poisson = 0.3
+yield = 759
+uts = 1035
+cte = 16.5
+colour = "#C4C7CA"
+source = "ASM Aerospace Specification Metals / MatWeb, 'Allegheny Ludlum Altemp A286 Iron-Base Superalloy, UNS S66286', https://www.aerospacemetals.com/wp-content/uploads/2023/07/Allegheny-Ludlum-Altemp%C2%AE-A286-Iron-Base-Superalloy-UNS-S66286.pdf"
+source_yield = "ASM Aerospace Specification Metals / MatWeb, 'Nickelvac A-286 Specialty Steel, Heat Treatment: 982 C (1800 F) + Age', https://www.aerospacemetals.com/wp-content/uploads/2023/08/Nickelvac%C2%AE-A-286-Specialty-Steel-Heat-Treatment-982%C2%B0C-1800%C2%B0F-Age.pdf"
+source_uts = "ASM Aerospace Specification Metals / MatWeb, 'Nickelvac A-286 Specialty Steel, Heat Treatment: 982 C (1800 F) + Age', https://www.aerospacemetals.com/wp-content/uploads/2023/08/Nickelvac%C2%AE-A-286-Specialty-Steel-Heat-Treatment-982%C2%B0C-1800%C2%B0F-Age.pdf"
+note = "Austenitic iron-base superalloy, solution treated at 982 C and aged (32 HRC); non-magnetic. PEM uses 'Age Hardened A286 Stainless' for SP and SMPP nuts and FHP studs (bulletins CL p. CL-9, https://damlite.pemnet.com/CLS-M6-1_pdf_2.pdf, and FH p. FH-17, https://damlite.pemnet.com/FH-M5-12ZC_pdf_1.pdf) for clinching into stainless sheet. yield/uts are the Nickelvac sheet's values (150 / 110 ksi), not stated as typical or minimum. Density, E (dynamic), Poisson and CTE (20-93 C) from the Allegheny sheet (solution treated; solution-treated strength there is only 275 / 620 MPa)."
+
+# ---------------------------------------------------------------- standard parts: rings, keys, seals
+
+[[material]]
+name = "C75S spring steel"
+aliases = ["C75S", "1.1248", "Ck75", "C75E", "circlip steel", "retaining ring steel"]
+family = "steel"
+density = 7900
+youngs = 210
+poisson = 0.29
+cte = 11
+colour = "#2E3033"
+source = "Lamineries Matthey, 'Steel Ck75' data sheet (1.1248, C75E) v22, physical properties, https://www.matthey.ch/fileadmin/user_upload/downloads/fichetechnique/EN/1.1248-Ck75_v22E.pdf"
+note = "Carbon spring steel 1.1248 (C75S in EN 10132-4), hardened and tempered, the steel of DIN 471/472 retaining rings: Seeger's catalogue text names C75S, material No. 1.1248, as a primary retaining-ring steel (reproduced at https://www.aajjo.com/product/seeger-rings-circlips-in-manimajra-v-w-impex). CTE 20-100 C (12 for 20-300 C). No yield/uts: Matthey gives strip tempers only (soft 480-600 to extra hard 930+ MPa), not the hardened ring condition, and no public source for the ring hardness was found."
+
+[[material]]
+name = "C45 bright"
+aliases = ["C45", "1.0503", "C45+C", "C45 cold drawn", "C45 bright drawn"]
+family = "steel"
+density = 7850
+youngs = 210
+poisson = 0.30
+yield = 500
+uts = 710
+cte = 12
+colour = "#8C8F93"
+source = "Roymech, 'BS EN 10277-2 bright steel products, steels for general engineering', cold drawn C45 1.0503, https://roymech.org/Useful_Tables/Matter/Steel_Data/Steel-10277.html"
+source_density = "Eurocode Applied, 'Steel design properties' (EN 1993-1-1 3.2.6 and EN 1991-1-1 Table A.4), https://cdn.eurocodeapplied.com/design/en1993/steel-design-properties"
+source_youngs = "Eurocode Applied, 'Steel design properties' (EN 1993-1-1 3.2.6), https://cdn.eurocodeapplied.com/design/en1993/steel-design-properties"
+source_poisson = "Eurocode Applied, 'Steel design properties' (EN 1993-1-1 3.2.6), https://cdn.eurocodeapplied.com/design/en1993/steel-design-properties"
+source_cte = "Eurocode Applied, 'Steel design properties' (EN 1993-1-1 3.2.6), https://cdn.eurocodeapplied.com/design/en1993/steel-design-properties"
+note = "Cold drawn (+C) bright bar of EN 10083-2 C45 (1.0503, SAE 1045 equivalent per Saarstahl). yield is the EN 10277-2 minimum Rp0.2 and uts the bottom of the Rm range for 10 < t <= 16 mm (500, 710-1030 MPa); 5-10 mm: 565, 750-1050; 16-40 mm: 410, 650-1000; 40-63 mm: 360, 630-900. Intended for DIN 6885 parallel keys and generic bright bar; no public DIN 6885 text was found to confirm the key steel. Density, E, Poisson and CTE are the Eurocode 3 carbon-steel values."
+
+[[material]]
+name = "FKM 75A"
+aliases = ["FKM", "Viton", "fluoroelastomer", "fluorocarbon rubber", "FKM 75 Shore A", "Freudenberg 75 FKM V75"]
+family = "rubber"
+density = 1850
+uts = 15.6
+cte = 162
+colour = "#1C1C1C"
+source = "Freudenberg FST, material data sheet '75 FKM V75' v12 (2023-11-13), https://products.fst.com/medialibrary/materialdatasheets/75%20FKM%20V75_en.pdf"
+source_cte = "Parker Hannifin O-Ring Division, 'Parker O-Ring Handbook' ORD 5700, Table 2-5, fluorocarbon elastomer 9.0e-5 in/in/F (24-191 C), https://mfc.arizona.edu/sites/default/files/2022-02/parker_o-ring_handbook.pdf"
+note = "Bisphenol-cured black FKM seal compound, 77 Shore A typical (nominal 75). Density 1.85 g/cm3 (ISO 1183-1). uts is typical tensile strength at break, DIN 53504 S2 (ASTM D412 min 13 MPa); elongation 156%. No yield (rubber). youngs omitted: only stress at 100% elongation (9.2 MPa) is given. poisson omitted: not given (rubber is nearly incompressible). CTE is Parker's generic fluorocarbon value, not this compound."

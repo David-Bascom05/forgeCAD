@@ -1,0 +1,7 @@
+family,size,column,source,theirs,ours,verdict
+tap_drill_metric,M4.5,drill,B,3.75,3.7,ours: ISO 2306:1972 Table 1 gives drill 3.70 for M4.5; B's 'Soft' 3.75 is not ISO 2306's
+tap_drill_metric,M12,drill,B,10.3,10.2,ours: ISO 2306:1972 Table 1 gives drill 10.20 for M12; B's 'Soft' 10.3 is not ISO 2306's
+tap_drill_metric,M14,drill,B,12.1,12,ours: ISO 2306:1972 Table 1 gives drill 12.00 for M14; B's 'Soft' 12.1 is not ISO 2306's
+tap_drill_metric,M22,drill,B,18.5,19.5,"ours: ISO 2306:1972 Table 1 gives drill 19.50 for M22; B's 18.5 is below D1_min 19.294, a slip"
+tap_drill_metric,M6x0.75,drill,B,5.25,5.2,ours: ISO 2306:1972 Table 2 gives drill 5.20 for M6x0.75; B's 'Soft' 5.25 is not ISO 2306's
+tap_drill_metric,M7x0.75,drill,B,6.25,6.2,ours: ISO 2306:1972 Table 2 gives drill 6.20 for M7x0.75; B's 'Soft' 6.25 is not ISO 2306's

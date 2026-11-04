@@ -1,0 +1,29 @@
+# title: Parallel pins (dowel pins), hardened steel and martensitic stainless steel
+# standard: ISO 8734:1997
+# kind: pin
+# units: mm
+# item: Dowel pin, hardened
+# category: Pins/Parallel pins
+# gen: pin | d=d | l=@l | c=c
+# material: 52100 hardened
+# lengths: 3 4 5 6 8 10 12 14 16 18 20 22 24 26 28 30 32 35 40 45 50 55 60 65 70 75 80 85 90 95 100
+# src A: ISO 8734:1997 Table 1, printed page 2 of the iTeh preview (https://cdn.standards.iteh.ai/samples/20002/ba95529de6a64437ac7454e14dbd2ef6/ISO-8734-1997.pdf), keyed 2026-11-04: d, c and the stepped lines for l = 3..16 (the preview cuts the table there)
+# src A87: ISO 8734:1987 (first edition, French) Table, printed page 2 of the iTeh preview (https://cdn.standards.iteh.ai/samples/16143/fc55e89bd83246b6a3b8f57c552a6b61/ISO-8734-1987.pdf), keyed 2026-11-04: the commercial length ranges above l = 16 (they agree with every stepped line the 1997 preview shows); its a, c and r1 columns were replaced in 1997 and are not taken
+# chk G: globalfastener.com ISO 8734-1997 page (https://www.globalfastener.com/standards/detail_260.html): d limits and c, read 2026-11-04
+# chk F: FreeCAD FastenersWB 2026-09-10 FsData/iso8734def.csv (c, length range; GPL-2.0-or-later: consulted, never copied)
+# model: d nominal (m6: d_max = d + 0.008..0.021, d_min = d + 0.002..0.008 from ISO 286), chamfer c (approximate) at the chamfered end; type A (through hardened) carries a crowned end r ~ d in the 1987 figure, type B (case hardened) is flat with chamfers; the 1997 figure page is blank in the preview
+# note: for nominal lengths above 100 the series steps by 20; l tolerance: 3..10 +-0.25, 12..50 +-0.5, 55..100 +-0.75
+size,d,tol,c,l_min,l_max,src,checked
+1,1,m6,0.2,3,10,A,A G F
+1.5,1.5,m6,0.3,4,16,A,A G F
+2,2,m6,0.35,5,20,A A87,A G F
+2.5,2.5,m6,0.4,6,24,A A87,A G F
+3,3,m6,0.5,8,30,A A87,A G F
+4,4,m6,0.63,10,40,A A87,A G F
+5,5,m6,0.8,12,50,A A87,A G F
+6,6,m6,1.2,14,60,A A87,A G F
+8,8,m6,1.6,18,80,A A87,A G F
+10,10,m6,2,22,100,A A87,A G F
+12,12,m6,2.5,26,100,A A87,A G F
+16,16,m6,3,40,100,A A87,A G F
+20,20,m6,3.5,50,100,A A87,A G F

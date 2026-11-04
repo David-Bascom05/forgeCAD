@@ -1,0 +1,10 @@
+family,size,column,source,theirs,ours,verdict
+iso7093_1,M5,h_max,B,1.4,1.1,ours: ISO 7093-1:2000 Table 1/2 gives 1.1 for M5 (F agrees); B's 1.4 is the grade C ISO 7093-2 / DIN 9021 value
+iso7093_1,M18,d1_min,B,20,19,ours: ISO 7093-1:2000 Table 1/2 gives 19 for M18 (F agrees); B's 20 is the grade C ISO 7093-2 / DIN 9021 value
+iso7093_1,M18,h_max,B,4.6,4.3,ours: ISO 7093-1:2000 Table 1/2 gives 4.3 for M18 (F agrees); B's 4.6 is the grade C ISO 7093-2 / DIN 9021 value
+iso7093_1,M20,d1_min,B,22,21,ours: ISO 7093-1:2000 Table 1/2 gives 21 for M20 (F agrees); B's 22 is the grade C ISO 7093-2 / DIN 9021 value
+iso7093_1,M20,h_max,B,4.6,4.3,ours: ISO 7093-1:2000 Table 1/2 gives 4.3 for M20 (F agrees); B's 4.6 is the grade C ISO 7093-2 / DIN 9021 value
+iso7093_1,M24,d1_min,B,26,25,ours: ISO 7093-1:2000 Table 1/2 gives 25 for M24 (F agrees); B's 26 is the grade C ISO 7093-2 / DIN 9021 value
+iso7093_1,M24,h_max,B,6,5.6,ours: ISO 7093-1:2000 Table 1/2 gives 5.6 for M24 (F agrees); B's 6 is the grade C ISO 7093-2 / DIN 9021 value
+iso7093_1,M30,h_max,B,7,6.6,ours: ISO 7093-1:2000 Table 1/2 gives 6.6 for M30 (F agrees); B's 7 is the grade C ISO 7093-2 / DIN 9021 value
+iso7093_1,M36,h_max,B,9.2,9,ours: ISO 7093-1:2000 Table 1/2 gives 9 for M36 (F agrees); B's 9.2 is the grade C ISO 7093-2 / DIN 9021 value

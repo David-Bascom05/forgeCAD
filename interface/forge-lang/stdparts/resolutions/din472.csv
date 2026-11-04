@@ -1,0 +1,25 @@
+family,size,column,source,theirs,ours,verdict
+din472,9,d2_tol,B,+0.11/+0,+0.09/+0,ours: W and I give +0.09/0 (H11 for d2 9.4); B carries the 10..17 value +0.11 one row early
+din472,14,b,M,1.8,1.9,"ours: W, T, B and F give 1.9; M typo"
+din472,20,a_max,M,4.1,4.2,"ours: W, T, B and F give 4.2; M typo"
+din472,24,a_max,M,4.3,4.4,"ours: W, T, B and F give 4.4; M typo"
+din472,24,d3_tol,W,+0.42/-0.13,+0.42/-0.21,ours: B and I give +0.42/-0.21 (mirror of DIN 471's +0.21/-0.42 band); W repeats the 17..22 cell
+din472,25,d3_tol,W,+0.42/-0.13,+0.42/-0.21,ours: B and I give +0.42/-0.21 (mirror of DIN 471's +0.21/-0.42 band); W repeats the 17..22 cell
+din472,26,d3_tol,W,+0.42/-0.13,+0.42/-0.21,ours: B and I give +0.42/-0.21 (mirror of DIN 471's +0.21/-0.42 band); W repeats the 17..22 cell
+din472,28,d2,F,20.4,29.4,"ours: W, T, M and B give 29.4; F typo"
+din472,31,s,W,1.5,1.2,"ours: T, M, B, F and I give 1.2; W 1.5 is the s of 34"
+din472,32,s,W,1.5,1.2,"ours: T, M, B, F and I give 1.2; W 1.5 is the s of 34"
+din472,37,b,T,3.7,3.6,"ours: W, M, B and F give 3.6; T 3.7"
+din472,40,d3_tol,B,+0.5/-0.25,+0.9/-0.39,ours: W and I give +0.9/-0.39 for 40..45; B extends the 28..38 band
+din472,42,d3_tol,B,+0.5/-0.25,+0.9/-0.39,ours: W and I give +0.9/-0.39 for 40..45; B extends the 28..38 band
+din472,45,d3_tol,B,+0.5/-0.25,+0.9/-0.39,ours: W and I give +0.9/-0.39 for 40..45; B extends the 28..38 band
+din472,72,d3,B,76.6,76.5,"ours: W, T, M and F give 76.5; B typo"
+din472,78,a_max,T,7.9,8.5,"ours: W, B and F give 8.5; T typo"
+din472,82,s,B,3,2.5,"ours: W, T, F and I give 2.5; B 3 is the s of 85"
+din472,90,d3,B,95.55,95.5,"ours: W, T, M and F give 95.5; B typo"
+din472,100,d2,F,103,103.5,"ours: W, T, M and B give 103.5; F typo"
+din472,105,d2,T,108,109,"ours: B, F and I give 109 (t = 2); T typo"
+din472,145,d2,T,143,149,"ours: B, F and I give 149 (t = 2 as for 102..145); T typo (143 is not greater than d1)"
+din472,170,d3_tol,B,+1.5/-0.63,+1.7/-0.72,"ours: I (IS 3075-2 Table 1) starts the +1.7/-0.72 band at 170; B starts it at 175; no third source for DIN 472:2011, I's d3 bands agree with B everywhere else"
+din472,250,d2_tol,B,+0.72/+0,+0.81/+0,ours: I starts +0.81 at 250 and H13 for d2 256 is 0.81; B keeps 0.72 one row too long
+din472,290,d2,F,301,298,ours: T and B give 298 (t = 4 as for 260..300); F typo

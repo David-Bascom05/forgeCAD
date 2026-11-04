@@ -1,0 +1,34 @@
+# title: Clearance holes for inch bolts and screws
+# standard: ASME B18.2.8-1999 (R2010), inch table
+# kind: hole
+# units: in
+# src W: ASME B18.2.8 inch clearance holes as reproduced at amesweb (https://www.amesweb.info/Screws/Clearance-Hole-Chart.aspx, citing Machinery's Handbook 30th ed.): drill and hole diameter min/max per fit, read 2026-11-04
+# src J: J&E Supply clearance hole chart, ASME B18.2.8 (https://www.jandesupply.com/reference-clearance-holes.php), #8 to 1, minimum diameters, read 2026-11-04
+# src B: bd_warehouse 5a8a439 clearance_hole_sizes.csv (Apache-2.0; drill designations), third_party/bd_warehouse/asme_clearance.csv
+# chk O: BOSL2 screws.scad screw_hole() UTS_clearance (BSD-2-Clause): d plus a gap interpolated between listed sizes
+# map B: clearance_hole_sizes.csv | close_drill_d=Close | normal_drill_d=Normal | loose_drill_d=Loose
+# model: the hole diameter min (the max-material limit; the drill's diameter rounded to 3 decimals as the standard prints it)
+# note: drill_d is the drill's ASME B94.11M nominal diameter (fractions exact); the ASME sizes are the screw's nominal size, any thread pitch; B also lists #12, 9/16 and 1 3/4 to 4, which this ASME table does not
+size,d,close_drill,close_drill_d,close_min,close_max,normal_drill,normal_drill_d,normal_min,normal_max,loose_drill,loose_drill_d,loose_min,loose_max,src,checked
+"#0",0.06,"#51",0.067,0.067,0.071,"#48",0.076,0.076,0.082,3/32,0.09375,0.094,0.104,W,W B
+"#1",0.073,"#46",0.081,0.081,0.085,"#43",0.089,0.089,0.095,"#37",0.104,0.104,0.114,W,W B O
+"#2",0.086,3/32,0.09375,0.094,0.098,"#38",0.1015,0.102,0.108,"#32",0.116,0.116,0.126,W,W B
+"#3",0.099,"#36",0.1065,0.106,0.11,"#32",0.116,0.116,0.122,"#30",0.1285,0.128,0.14,W,W B
+"#4",0.112,"#31",0.12,0.12,0.124,"#30",0.1285,0.128,0.135,"#27",0.144,0.144,0.156,W,W B
+"#5",0.125,9/64,0.140625,0.141,0.146,5/32,0.15625,0.156,0.163,11/64,0.171875,0.172,0.184,W,W B O
+"#6",0.138,"#23",0.154,0.154,0.159,"#18",0.1695,0.17,0.177,"#13",0.185,0.185,0.197,W,W B O
+"#8",0.164,"#15",0.18,0.18,0.185,"#9",0.196,0.196,0.203,"#3",0.213,0.213,0.225,W,W B J
+"#10",0.19,"#5",0.2055,0.206,0.211,"#2",0.221,0.221,0.228,B,0.238,0.238,0.25,W,W B J
+1/4,0.25,17/64,0.265625,0.266,0.272,9/32,0.28125,0.281,0.29,19/64,0.296875,0.297,0.311,W,W B J O
+5/16,0.3125,21/64,0.328125,0.328,0.334,11/32,0.34375,0.344,0.354,23/64,0.359375,0.359,0.373,W,W B J O
+3/8,0.375,25/64,0.390625,0.391,0.397,13/32,0.40625,0.406,0.416,27/64,0.421875,0.422,0.438,W,W B J O
+7/16,0.4375,29/64,0.453125,0.453,0.46,15/32,0.46875,0.469,0.479,31/64,0.484375,0.484,0.5,W,W B J O
+1/2,0.5,17/32,0.53125,0.531,0.538,9/16,0.5625,0.562,0.572,39/64,0.609375,0.609,0.625,W,W B J O
+5/8,0.625,21/32,0.65625,0.656,0.663,11/16,0.6875,0.688,0.698,47/64,0.734375,0.734,0.754,W,W B J O
+3/4,0.75,25/32,0.78125,0.781,0.789,13/16,0.8125,0.812,0.824,29/32,0.90625,0.906,0.926,W,W B J O
+7/8,0.875,29/32,0.90625,0.906,0.914,15/16,0.9375,0.938,0.95,1 1/32,1.03125,1.031,1.051,W,W B J O
+1,1,1 1/32,1.03125,1.031,1.039,1 3/32,1.09375,1.094,1.106,1 5/32,1.15625,1.156,1.181,W,W B J O
+1 1/8,1.125,1 5/32,1.15625,1.156,1.164,1 7/32,1.21875,1.219,1.235,1 5/16,1.3125,1.312,1.337,W,W B O
+1 1/4,1.25,1 9/32,1.28125,1.281,1.291,1 11/32,1.34375,1.344,1.36,1 7/16,1.4375,1.438,1.463,W,W B O
+1 3/8,1.375,1 7/16,1.4375,1.438,1.448,1 1/2,1.5,1.5,1.516,1 39/64,1.609375,1.609,1.634,W,W B O
+1 1/2,1.5,1 9/16,1.5625,1.562,1.572,1 5/8,1.625,1.625,1.641,1 47/64,1.734375,1.734,1.759,W,W B O

@@ -1,0 +1,13 @@
+# bd_warehouse 5a8a439, Copyright 2024 Gumyr, Apache-2.0: columns renamed and selected, sizes respelled
+# from countersunk_head_parameters.csv
+size,dk_max,k_max,s_max,t_min,l_min,l_max
+M3,6,1.7,2.1,1.2,8,30
+M4,8,2.3,2.6,1.8,8,40
+M5,10,2.8,3.1,2.3,8,50
+M6,12,3.3,4.12,2.5,8,60
+M8,16,4.4,5.14,3.5,10,80
+M10,20,5.5,6.14,4.4,12,100
+M12,24,6.5,8.175,4.6,20,100
+M14,27,7,10.175,4.8,25,100
+M16,30,7.5,10.175,5.3,30,100
+M20,36,8.5,12.212,5.9,35,100

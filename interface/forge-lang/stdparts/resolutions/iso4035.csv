@@ -1,0 +1,90 @@
+family,size,column,source,theirs,ours,verdict
+iso4035,M1.6,dw_min,F,2.9,2.4,ours: ISO 4035:2012 Table 1 prints dw_min 2.4; FastenersWB 2.9 is a rounded or older-edition value
+iso4035,M1.6,e_min,F,3.4,3.41,ours: ISO 4035:2012 Table 1 prints e_min 3.41; FastenersWB 3.4 is a rounded or older-edition value
+iso4035,M1.6,mw_min,F,0.8,0.6,ours: ISO 4035:2012 Table 1 mw min 0.6; FastenersWB repeats ISO 4032's regular-nut mw in its thin-nut table
+iso4035,M2,dw_min,F,3.7,3.1,ours: ISO 4035:2012 Table 1 prints dw_min 3.1; FastenersWB 3.7 is a rounded or older-edition value
+iso4035,M2,e_min,F,4.4,4.32,ours: ISO 4035:2012 Table 1 prints e_min 4.32; FastenersWB 4.4 is a rounded or older-edition value
+iso4035,M2,mw_min,F,1.1,0.8,ours: ISO 4035:2012 Table 1 mw min 0.8; FastenersWB repeats ISO 4032's regular-nut mw in its thin-nut table
+iso4035,M2.5,dw_min,F,4.6,4.1,ours: ISO 4035:2012 Table 1 prints dw_min 4.1; FastenersWB 4.6 is a rounded or older-edition value
+iso4035,M2.5,e_min,F,5.5,5.45,ours: ISO 4035:2012 Table 1 prints e_min 5.45; FastenersWB 5.5 is a rounded or older-edition value
+iso4035,M2.5,mw_min,F,1.4,1.1,ours: ISO 4035:2012 Table 1 mw min 1.1; FastenersWB repeats ISO 4032's regular-nut mw in its thin-nut table
+iso4035,M3,dw_min,F,5.2,4.6,ours: ISO 4035:2012 Table 1 prints dw_min 4.6; FastenersWB 5.2 is a rounded or older-edition value
+iso4035,M3,e_min,F,6.1,6.01,ours: ISO 4035:2012 Table 1 prints e_min 6.01; FastenersWB 6.1 is a rounded or older-edition value
+iso4035,M3,mw_min,F,1.7,1.2,ours: ISO 4035:2012 Table 1 mw min 1.2; FastenersWB repeats ISO 4032's regular-nut mw in its thin-nut table
+iso4035,M3.5,dw_min,F,5.7,5.1,ours: ISO 4035:2012 Table 2 prints dw_min 5.1; FastenersWB 5.7 is a rounded or older-edition value
+iso4035,M3.5,e_min,F,6.6,6.58,ours: ISO 4035:2012 Table 2 prints e_min 6.58; FastenersWB 6.6 is a rounded or older-edition value
+iso4035,M3.5,mw_min,F,2,1.4,ours: ISO 4035:2012 Table 2 mw min 1.4; FastenersWB repeats ISO 4032's regular-nut mw in its thin-nut table
+iso4035,M4,dw_min,F,6.6,5.9,ours: ISO 4035:2012 Table 1 prints dw_min 5.9; FastenersWB 6.6 is a rounded or older-edition value
+iso4035,M4,e_min,F,7.7,7.66,ours: ISO 4035:2012 Table 1 prints e_min 7.66; FastenersWB 7.7 is a rounded or older-edition value
+iso4035,M4,mw_min,F,2.3,1.6,ours: ISO 4035:2012 Table 1 mw min 1.6; FastenersWB repeats ISO 4032's regular-nut mw in its thin-nut table
+iso4035,M5,dw_min,F,7.5,7.2,ours: ISO 4035:2023 Table 1 prints dw_min 7.2; FastenersWB 7.5 is a rounded or older-edition value
+iso4035,M5,e_min,F,8.9,8.79,ours: ISO 4035:2023 Table 1 prints e_min 8.79; FastenersWB 8.9 is a rounded or older-edition value
+iso4035,M5,mw_min,F,3.5,1.96,ours: ISO 4035:2023 Table 1 mw min 1.96; FastenersWB repeats ISO 4032's regular-nut mw in its thin-nut table
+iso4035,M6,dw_min,F,9.5,8.88,ours: ISO 4035:2023 Table 1 prints dw_min 8.88; FastenersWB 9.5 is a rounded or older-edition value
+iso4035,M6,mw_min,F,3.9,2.32,ours: ISO 4035:2023 Table 1 mw min 2.32; FastenersWB repeats ISO 4032's regular-nut mw in its thin-nut table
+iso4035,M8,dw_min,F,11.7,11.63,ours: ISO 4035:2023 Table 1 prints dw_min 11.63; FastenersWB 11.7 is a rounded or older-edition value
+iso4035,M8,e_min,F,14.5,14.38,ours: ISO 4035:2023 Table 1 prints e_min 14.38; FastenersWB 14.5 is a rounded or older-edition value
+iso4035,M8,mw_min,F,5.2,2.96,ours: ISO 4035:2023 Table 1 mw min 2.96; FastenersWB repeats ISO 4032's regular-nut mw in its thin-nut table
+iso4035,M10,dw_min,F,14.7,14.63,ours: ISO 4035:2023 Table 1 prints dw_min 14.63; FastenersWB 14.7 is a rounded or older-edition value
+iso4035,M10,e_min,F,17.9,17.77,ours: ISO 4035:2023 Table 1 prints e_min 17.77; FastenersWB 17.9 is a rounded or older-edition value
+iso4035,M10,mw_min,F,6.4,3.76,ours: ISO 4035:2023 Table 1 mw min 3.76; FastenersWB repeats ISO 4032's regular-nut mw in its thin-nut table
+iso4035,M12,da_max,F,13,12.96,ours: ISO 4035:2023 Table 1 prints da_max 12.96; FastenersWB 13 is a rounded or older-edition value
+iso4035,M12,dw_min,F,16.7,16.63,ours: ISO 4035:2023 Table 1 prints dw_min 16.63; FastenersWB 16.7 is a rounded or older-edition value
+iso4035,M12,e_min,F,20.1,20.03,ours: ISO 4035:2023 Table 1 prints e_min 20.03; FastenersWB 20.1 is a rounded or older-edition value
+iso4035,M12,mw_min,F,8.3,4.56,ours: ISO 4035:2023 Table 1 mw min 4.56; FastenersWB repeats ISO 4032's regular-nut mw in its thin-nut table
+iso4035,M14,da_max,F,15.1,15.12,ours: ISO 4035:2023 Table 1 prints da_max 15.12; FastenersWB 15.1 is a rounded or older-edition value
+iso4035,M14,dw_min,F,20.5,19.64,ours: ISO 4035:2023 Table 1 prints dw_min 19.64; FastenersWB 20.5 is a rounded or older-edition value
+iso4035,M14,e_min,F,24.5,23.36,ours: ISO 4035:2023 Table 1 prints e_min 23.36; FastenersWB 24.5 is a rounded or older-edition value
+iso4035,M14,mw_min,F,9.7,5.14,ours: ISO 4035:2023 Table 1 mw min 5.14; FastenersWB repeats ISO 4032's regular-nut mw in its thin-nut table
+iso4035,M14,s,F,22,21,ours: ISO 4035:2023 Table 1 s = 21; 22 is the DIN 439 width
+iso4035,M16,da_max,F,17.3,17.28,ours: ISO 4035:2023 Table 1 prints da_max 17.28; FastenersWB 17.3 is a rounded or older-edition value
+iso4035,M16,dw_min,F,22.4,22.49,ours: ISO 4035:2023 Table 1 prints dw_min 22.49; FastenersWB 22.4 is a rounded or older-edition value
+iso4035,M16,e_min,F,26.9,26.75,ours: ISO 4035:2023 Table 1 prints e_min 26.75; FastenersWB 26.9 is a rounded or older-edition value
+iso4035,M16,mw_min,F,11.3,5.94,ours: ISO 4035:2023 Table 1 mw min 5.94; FastenersWB repeats ISO 4032's regular-nut mw in its thin-nut table
+iso4035,M18,da_max,F,19.5,19.44,ours: ISO 4035:2023 Table 2 prints da_max 19.44; FastenersWB 19.5 is a rounded or older-edition value
+iso4035,M18,dw_min,F,24.9,24.85,ours: ISO 4035:2023 Table 2 prints dw_min 24.85; FastenersWB 24.9 is a rounded or older-edition value
+iso4035,M18,e_min,F,29.6,29.56,ours: ISO 4035:2023 Table 2 prints e_min 29.56; FastenersWB 29.6 is a rounded or older-edition value
+iso4035,M18,mw_min,F,12.3,6.74,ours: ISO 4035:2023 Table 2 mw min 6.74; FastenersWB repeats ISO 4032's regular-nut mw in its thin-nut table
+iso4035,M20,dw_min,F,28.2,27.7,ours: ISO 4035:2023 Table 2 prints dw_min 27.7; FastenersWB 28.2 is a rounded or older-edition value
+iso4035,M20,e_min,F,33.7,32.95,ours: ISO 4035:2023 Table 2 prints e_min 32.95; FastenersWB 33.7 is a rounded or older-edition value
+iso4035,M20,mw_min,F,13.5,7.28,ours: ISO 4035:2023 Table 2 mw min 7.28; FastenersWB repeats ISO 4032's regular-nut mw in its thin-nut table
+iso4035,M22,da_max,F,23.7,23.76,ours: ISO 4035:2023 Table 2 prints da_max 23.76; FastenersWB 23.7 is a rounded or older-edition value
+iso4035,M22,dw_min,F,31.4,31.35,ours: ISO 4035:2023 Table 2 prints dw_min 31.35; FastenersWB 31.4 is a rounded or older-edition value
+iso4035,M22,e_min,F,37.3,37.29,ours: ISO 4035:2023 Table 2 prints e_min 37.29; FastenersWB 37.3 is a rounded or older-edition value
+iso4035,M22,mw_min,F,15,7.92,ours: ISO 4035:2023 Table 2 mw min 7.92; FastenersWB repeats ISO 4032's regular-nut mw in its thin-nut table
+iso4035,M24,da_max,F,25.9,25.92,ours: ISO 4035:2023 Table 2 prints da_max 25.92; FastenersWB 25.9 is a rounded or older-edition value
+iso4035,M24,dw_min,F,33.7,33.25,ours: ISO 4035:2023 Table 2 prints dw_min 33.25; FastenersWB 33.7 is a rounded or older-edition value
+iso4035,M24,e_min,F,40.1,39.55,ours: ISO 4035:2023 Table 2 prints e_min 39.55; FastenersWB 40.1 is a rounded or older-edition value
+iso4035,M24,mw_min,F,16.2,8.72,ours: ISO 4035:2023 Table 2 mw min 8.72; FastenersWB repeats ISO 4032's regular-nut mw in its thin-nut table
+iso4035,M27,da_max,F,29.1,29.16,ours: ISO 4035:2023 Table 2 prints da_max 29.16; FastenersWB 29.1 is a rounded or older-edition value
+iso4035,M27,mw_min,F,18,9.92,ours: ISO 4035:2023 Table 2 mw min 9.92; FastenersWB repeats ISO 4032's regular-nut mw in its thin-nut table
+iso4035,M30,dw_min,F,42.8,42.75,ours: ISO 4035:2023 Table 2 prints dw_min 42.75; FastenersWB 42.8 is a rounded or older-edition value
+iso4035,M30,e_min,F,50.9,50.85,ours: ISO 4035:2023 Table 2 prints e_min 50.85; FastenersWB 50.9 is a rounded or older-edition value
+iso4035,M30,mw_min,F,19.4,11.12,ours: ISO 4035:2023 Table 2 mw min 11.12; FastenersWB repeats ISO 4032's regular-nut mw in its thin-nut table
+iso4035,M33,da_max,F,35.6,35.64,ours: ISO 4035:2023 Table 2 prints da_max 35.64; FastenersWB 35.6 is a rounded or older-edition value
+iso4035,M33,dw_min,F,46.6,46.55,ours: ISO 4035:2023 Table 2 prints dw_min 46.55; FastenersWB 46.6 is a rounded or older-edition value
+iso4035,M33,e_min,F,55.4,55.37,ours: ISO 4035:2023 Table 2 prints e_min 55.37; FastenersWB 55.4 is a rounded or older-edition value
+iso4035,M33,mw_min,F,21.4,12.32,ours: ISO 4035:2023 Table 2 mw min 12.32; FastenersWB repeats ISO 4032's regular-nut mw in its thin-nut table
+iso4035,M36,da_max,F,38.9,38.88,ours: ISO 4035:2023 Table 2 prints da_max 38.88; FastenersWB 38.9 is a rounded or older-edition value
+iso4035,M36,dw_min,F,51.2,51.11,ours: ISO 4035:2023 Table 2 prints dw_min 51.11; FastenersWB 51.2 is a rounded or older-edition value
+iso4035,M36,e_min,F,61,60.79,ours: ISO 4035:2023 Table 2 prints e_min 60.79; FastenersWB 61 is a rounded or older-edition value
+iso4035,M36,mw_min,F,23.5,13.52,ours: ISO 4035:2023 Table 2 mw min 13.52; FastenersWB repeats ISO 4032's regular-nut mw in its thin-nut table
+iso4035,M39,da_max,F,42.1,42.12,ours: ISO 4035:2023 Table 2 prints da_max 42.12; FastenersWB 42.1 is a rounded or older-edition value
+iso4035,M39,dw_min,F,55.9,55.86,ours: ISO 4035:2023 Table 2 prints dw_min 55.86; FastenersWB 55.9 is a rounded or older-edition value
+iso4035,M39,e_min,F,66.5,66.44,ours: ISO 4035:2023 Table 2 prints e_min 66.44; FastenersWB 66.5 is a rounded or older-edition value
+iso4035,M39,mw_min,F,24.5,14.56,ours: ISO 4035:2023 Table 2 mw min 14.56; FastenersWB repeats ISO 4032's regular-nut mw in its thin-nut table
+iso4035,M42,mw_min,F,25.9,15.8,ours: ISO 4035:2012 Table 1 mw min 15.8; FastenersWB repeats ISO 4032's regular-nut mw in its thin-nut table
+iso4035,M45,e_min,F,77,76.95,ours: ISO 4035:2012 Table 2 prints e_min 76.95; FastenersWB 77 is a rounded or older-edition value
+iso4035,M45,mw_min,F,27.9,17,ours: ISO 4035:2012 Table 2 mw min 17; FastenersWB repeats ISO 4032's regular-nut mw in its thin-nut table
+iso4035,M48,mw_min,F,29.1,18.2,ours: ISO 4035:2012 Table 1 mw min 18.2; FastenersWB repeats ISO 4032's regular-nut mw in its thin-nut table
+iso4035,M52,dw_min,F,74.5,74.2,ours: ISO 4035:2012 Table 2 prints dw_min 74.2; FastenersWB 74.5 is a rounded or older-edition value
+iso4035,M52,e_min,F,88.3,88.25,ours: ISO 4035:2012 Table 2 prints e_min 88.25; FastenersWB 88.3 is a rounded or older-edition value
+iso4035,M52,mw_min,F,32.1,19.8,ours: ISO 4035:2012 Table 2 mw min 19.8; FastenersWB repeats ISO 4032's regular-nut mw in its thin-nut table
+iso4035,M56,e_min,F,93.6,93.56,ours: ISO 4035:2012 Table 1 prints e_min 93.56; FastenersWB 93.6 is a rounded or older-edition value
+iso4035,M56,mw_min,F,34.7,21.4,ours: ISO 4035:2012 Table 1 mw min 21.4; FastenersWB repeats ISO 4032's regular-nut mw in its thin-nut table
+iso4035,M60,dw_min,F,82.7,83.4,ours: ISO 4035:2012 Table 2 prints dw_min 83.4; FastenersWB 82.7 is a rounded or older-edition value
+iso4035,M60,e_min,F,99.2,99.21,ours: ISO 4035:2012 Table 2 prints e_min 99.21; FastenersWB 99.2 is a rounded or older-edition value
+iso4035,M60,mw_min,F,38.7,23,ours: ISO 4035:2012 Table 2 mw min 23; FastenersWB repeats ISO 4032's regular-nut mw in its thin-nut table
+iso4035,M64,e_min,F,104.9,104.86,ours: ISO 4035:2012 Table 1 prints e_min 104.86; FastenersWB 104.9 is a rounded or older-edition value
+iso4035,M64,mw_min,F,39.3,24.3,ours: ISO 4035:2012 Table 1 mw min 24.3; FastenersWB repeats ISO 4032's regular-nut mw in its thin-nut table
+iso4035,M3.5,dw_min,T99,5,5.1,ours: ISO 4035:2012 Table 2 prints dw min 5.10 for M3.5; ISO 4032:1999 Table 2 prints 5; each table keeps its own standard's value

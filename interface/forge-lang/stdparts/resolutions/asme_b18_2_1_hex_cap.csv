@@ -1,0 +1,47 @@
+family,size,column,source,theirs,ours,verdict
+asme_b18_2_1_hex_cap,3/8-16,H,O,0.25,0.234375,"ours: ASME B18.2.1 hex cap screw H basic 15/64 (W; max/min 0.243/0.226 in A, G, W); BOSL2 carries the hex bolt head height 1/4"
+asme_b18_2_1_hex_cap,7/16-14,H,O,0.296875,0.28125,"ours: ASME B18.2.1 hex cap screw H basic 9/32 (W; max/min 0.291/0.272 in A, G, W); BOSL2 carries the hex bolt head height 19/64"
+asme_b18_2_1_hex_cap,1/2-13,H,O,0.34375,0.3125,"ours: ASME B18.2.1 hex cap screw H basic 5/16 (W; max/min 0.323/0.302 in A, G, W); BOSL2 carries the hex bolt head height 11/32"
+asme_b18_2_1_hex_cap,5/8-11,H,O,0.421875,0.390625,"ours: ASME B18.2.1 hex cap screw H basic 25/64 (W; max/min 0.403/0.378 in A, G, W); BOSL2 carries the hex bolt head height 27/64"
+asme_b18_2_1_hex_cap,3/4-10,H,O,0.5,0.46875,"ours: ASME B18.2.1 hex cap screw H basic 15/32 (W; max/min 0.483/0.455 in A, G, W); BOSL2 carries the hex bolt head height 1/2"
+asme_b18_2_1_hex_cap,7/8-9,H,O,0.578125,0.546875,"ours: ASME B18.2.1 hex cap screw H basic 35/64 (W; max/min 0.563/0.531 in A, G, W); BOSL2 carries the hex bolt head height 37/64"
+asme_b18_2_1_hex_cap,1-8,H,O,0.671875,0.609375,"ours: ASME B18.2.1 hex cap screw H basic 39/64 (W; max/min 0.627/0.591 in A, G, W); BOSL2 carries the hex bolt head height 43/64"
+asme_b18_2_1_hex_cap,1-1/4-7,H,O,0.84375,0.78125,"ours: ASME B18.2.1 hex cap screw H basic 25/32 (W; max/min 0.813/0.749 in A, G, W); BOSL2 carries the hex bolt head height 27/32"
+asme_b18_2_1_hex_cap,1/4-20,H,F,0.1719,0.15625,ours: hex cap screw H basic 5/32; FastenersWB k = 11/64 is the B18.2.1 hex bolt height
+asme_b18_2_1_hex_cap,1/4-20,wf_t_min,F,0.016,0.015,"ours: B18.2.1 (Table 6 note, via G) washer face thickness 0.015 min; FastenersWB 0.4064 mm = 0.016 is not a tabulated value"
+asme_b18_2_1_hex_cap,5/16-18,H,F,0.2188,0.203125,ours: hex cap screw H basic 13/64; FastenersWB k = 7/32 is the B18.2.1 hex bolt height
+asme_b18_2_1_hex_cap,5/16-18,wf_t_min,F,0.016,0.015,"ours: B18.2.1 (Table 6 note, via G) washer face thickness 0.015 min; FastenersWB 0.4064 mm = 0.016 is not a tabulated value"
+asme_b18_2_1_hex_cap,5/16-18,R_min,F,0.0167,0.015,"ours: R min 0.015 (W, G, and D for 1/4); FastenersWB r = 0.0167 is its own value, not the table's"
+asme_b18_2_1_hex_cap,3/8-16,H,F,0.25,0.234375,ours: hex cap screw H basic 15/64; FastenersWB k = 1/4 is the B18.2.1 hex bolt height
+asme_b18_2_1_hex_cap,3/8-16,wf_t_min,F,0.016,0.015,"ours: B18.2.1 (Table 6 note, via G) washer face thickness 0.015 min; FastenersWB 0.4064 mm = 0.016 is not a tabulated value"
+asme_b18_2_1_hex_cap,3/8-16,R_min,F,0.0188,0.015,"ours: R min 0.015 (W, G, and D for 1/4); FastenersWB r = 0.0188 is its own value, not the table's"
+asme_b18_2_1_hex_cap,7/16-14,H,F,0.2969,0.28125,ours: hex cap screw H basic 9/32; FastenersWB k = 19/64 is the B18.2.1 hex bolt height
+asme_b18_2_1_hex_cap,7/16-14,wf_t_min,F,0.016,0.015,"ours: B18.2.1 (Table 6 note, via G) washer face thickness 0.015 min; FastenersWB 0.4064 mm = 0.016 is not a tabulated value"
+asme_b18_2_1_hex_cap,7/16-14,R_min,F,0.0208,0.015,"ours: R min 0.015 (W, G, and D for 1/4); FastenersWB r = 0.0208 is its own value, not the table's"
+asme_b18_2_1_hex_cap,1/2-13,H,F,0.3438,0.3125,ours: hex cap screw H basic 5/16; FastenersWB k = 11/32 is the B18.2.1 hex bolt height
+asme_b18_2_1_hex_cap,1/2-13,wf_t_min,F,0.016,0.015,"ours: B18.2.1 (Table 6 note, via G) washer face thickness 0.015 min; FastenersWB 0.4064 mm = 0.016 is not a tabulated value"
+asme_b18_2_1_hex_cap,1/2-13,R_min,F,0.025,0.015,"ours: R min 0.015 (W, G, and D for 1/4); FastenersWB r = 0.0250 is its own value, not the table's"
+asme_b18_2_1_hex_cap,5/8-11,H,F,0.4219,0.390625,ours: hex cap screw H basic 25/64; FastenersWB k = 27/64 is the B18.2.1 hex bolt height
+asme_b18_2_1_hex_cap,5/8-11,wf_t_min,F,0.016,0.015,"ours: B18.2.1 (Table 6 note, via G) washer face thickness 0.015 min; FastenersWB 0.4064 mm = 0.016 is not a tabulated value"
+asme_b18_2_1_hex_cap,5/8-11,R_min,F,0.0312,0.02,"ours: R min 0.02 (W, G, and D for 1/4); FastenersWB r = 0.0312 is its own value, not the table's"
+asme_b18_2_1_hex_cap,3/4-10,H,F,0.5,0.46875,ours: hex cap screw H basic 15/32; FastenersWB k = 1/2 is the B18.2.1 hex bolt height
+asme_b18_2_1_hex_cap,3/4-10,wf_t_min,F,0.016,0.015,"ours: B18.2.1 (Table 6 note, via G) washer face thickness 0.015 min; FastenersWB 0.4064 mm = 0.016 is not a tabulated value"
+asme_b18_2_1_hex_cap,3/4-10,R_min,F,0.0375,0.02,"ours: R min 0.02 (W, G, and D for 1/4); FastenersWB r = 0.0375 is its own value, not the table's"
+asme_b18_2_1_hex_cap,7/8-9,H,F,0.5781,0.546875,ours: hex cap screw H basic 35/64; FastenersWB k = 37/64 is the B18.2.1 hex bolt height
+asme_b18_2_1_hex_cap,7/8-9,wf_t_min,F,0.016,0.015,"ours: B18.2.1 (Table 6 note, via G) washer face thickness 0.015 min; FastenersWB 0.4064 mm = 0.016 is not a tabulated value"
+asme_b18_2_1_hex_cap,7/8-9,R_min,F,0.0438,0.04,"ours: R min 0.04 (W, G, and D for 1/4); FastenersWB r = 0.0438 is its own value, not the table's"
+asme_b18_2_1_hex_cap,1-8,H,F,0.6719,0.609375,ours: hex cap screw H basic 39/64; FastenersWB k = 43/64 is the B18.2.1 hex bolt height
+asme_b18_2_1_hex_cap,1-8,wf_t_min,F,0.016,0.015,"ours: B18.2.1 (Table 6 note, via G) washer face thickness 0.015 min; FastenersWB 0.4064 mm = 0.016 is not a tabulated value"
+asme_b18_2_1_hex_cap,1-8,R_min,F,0.05,0.06,"ours: R min 0.06 (W, G, and D for 1/4); FastenersWB r = 0.0500 is its own value, not the table's"
+asme_b18_2_1_hex_cap,1-1/8-7,H,F,0.75,0.6875,ours: hex cap screw H basic 11/16; FastenersWB k = 3/4 is the B18.2.1 hex bolt height
+asme_b18_2_1_hex_cap,1-1/8-7,wf_t_min,F,0.016,0.015,"ours: B18.2.1 (Table 6 note, via G) washer face thickness 0.015 min; FastenersWB 0.4064 mm = 0.016 is not a tabulated value"
+asme_b18_2_1_hex_cap,1-1/8-7,R_min,F,0.0563,0.06,"ours: R min 0.06 (W, G, and D for 1/4); FastenersWB r = 0.0563 is its own value, not the table's"
+asme_b18_2_1_hex_cap,1-1/4-7,H,F,0.8438,0.78125,ours: hex cap screw H basic 25/32; FastenersWB k = 27/32 is the B18.2.1 hex bolt height
+asme_b18_2_1_hex_cap,1-1/4-7,wf_t_min,F,0.016,0.015,"ours: B18.2.1 (Table 6 note, via G) washer face thickness 0.015 min; FastenersWB 0.4064 mm = 0.016 is not a tabulated value"
+asme_b18_2_1_hex_cap,1-1/4-7,R_min,F,0.0625,0.06,"ours: R min 0.06 (W, G, and D for 1/4); FastenersWB r = 0.0625 is its own value, not the table's"
+asme_b18_2_1_hex_cap,1-3/8-6,H,F,0.9063,0.84375,ours: hex cap screw H basic 27/32; FastenersWB k = 29/32 is the B18.2.1 hex bolt height
+asme_b18_2_1_hex_cap,1-3/8-6,wf_t_min,F,0.016,0.015,"ours: B18.2.1 (Table 6 note, via G) washer face thickness 0.015 min; FastenersWB 0.4064 mm = 0.016 is not a tabulated value"
+asme_b18_2_1_hex_cap,1-3/8-6,R_min,F,0.0688,0.06,"ours: R min 0.06 (W, G, and D for 1/4); FastenersWB r = 0.0688 is its own value, not the table's"
+asme_b18_2_1_hex_cap,1-1/2-6,H,F,1,0.9375,ours: hex cap screw H basic 15/16; FastenersWB k = 1 is the B18.2.1 hex bolt height
+asme_b18_2_1_hex_cap,1-1/2-6,wf_t_min,F,0.016,0.015,"ours: B18.2.1 (Table 6 note, via G) washer face thickness 0.015 min; FastenersWB 0.4064 mm = 0.016 is not a tabulated value"
+asme_b18_2_1_hex_cap,1-1/2-6,R_min,F,0.075,0.06,"ours: R min 0.06 (W, G, and D for 1/4); FastenersWB r = 0.0750 is its own value, not the table's"

@@ -1,0 +1,31 @@
+# title: Self-clinching flush-head studs, types FH (carbon steel), FHS (stainless), FHA (aluminium), unified
+# standard: PennEngineering bulletin FH (2026-10 edition), FH/FHS/FHA unified table (vendor dimensions)
+# kind: stud
+# units: in
+# name: PEM FH (inch)
+# item: Self-clinching flush-head stud
+# category: Sheet metal hardware/Self-clinching studs
+# gen: pem_stud | d=@d | P=@P | l=@l | H=H | S=S_max | tmin=sheet_min | modelled=@modelled
+# option thread: cosmetic modelled
+# option grade: FH FHS
+# material: PEM S carbon steel
+# grade FH: PEM S carbon steel
+# grade FHS: PEM 300 series stainless
+# lengths: 0.25 0.312 0.375 0.5 0.625 0.75 0.875 1 1.25 1.5
+# src P: PEM bulletin FH, page FH-5, FH/FHS/FHA unified table (https://damlite.pemnet.com/FH-M5-12ZC_pdf_1.pdf, PDF created 2026-10-19), keyed 2026-11-04
+# chk K: PEM online catalogue (https://catalog.pemnet.com/viewitems/flush-head-threaded-studs-types-fh-fha-fhs/f-clinching-threaded-studs-type-fh-fhs-fha-unified): L and H of every FH item, one item record per thread for the other columns, read 2026-11-04
+# tolerance: L +-.015, H +-.015, hole +.003/-.000; length code = L in 16ths of an inch
+# model: H nominal (head diameter), S_max (unthreaded length under the head: threads gaugeable from 2 pitches past S_max, a class 3B/5H nut runs up to S_max), thread to the end; the head is flush with the sheet face (the bulletin gives no head thickness or clinch-ring profile: model the head as a flush disc no thicker than sheet_min)
+# note: one row per thread code; FH = heat-treated carbon steel (sheet HRB 80 / HB 150 or less), FHS = 300 series stainless (HRB 70 / HB 125), FHA = aluminium (HRB 50 / HB 82, aluminium sheet only); empty type cell = not made
+# note: hole_attached_max is the largest clearance hole in the mating part; part number = type-thread code-length code (FH-M4-12, FH-632-8 with the inch length in 16ths)
+# note: "PEM" is a trademark of PennEngineering; part numbers and dimensions are used descriptively, as facts
+# note: size is the PEM thread code (632 = #6-32)
+size,thread,d,tpi,fh,fhs,fha,l_min,l_max,sheet_min,hole,hole_max,H,S_max,hole_attached_max,edge_min,src,checked
+256,#2-56,0.086,56,FH,FHS,,0.25,0.75,0.04,0.085,0.088,0.144,0.075,0.105,0.187,P,P K
+440,#4-40,0.112,40,FH,FHS,FHA,0.25,1.25,0.04,0.111,0.114,0.176,0.085,0.135,0.219,P,P K
+632,#6-32,0.138,32,FH,FHS,FHA,0.25,1.5,0.04,0.137,0.14,0.206,0.09,0.16,0.25,P,P K
+832,#8-32,0.164,32,FH,FHS,FHA,0.25,1.5,0.04,0.163,0.166,0.237,0.09,0.185,0.281,P,P K
+024,#10-24,0.19,24,FH,FHS,FHA,0.312,1.5,0.04,0.189,0.192,0.256,0.1,0.21,0.281,P,P K
+032,#10-32,0.19,32,FH,FHS,FHA,0.312,1.5,0.04,0.189,0.192,0.256,0.1,0.21,0.281,P,P K
+0420,1/4-20,0.25,20,FH,FHS,FHA,0.375,1.5,0.062,0.249,0.252,0.337,0.135,0.27,0.312,P,P K
+0518,5/16-18,0.3125,18,FH,FHS,,0.5,1.5,0.093,0.311,0.314,0.376,0.16,0.333,0.375,P,P K

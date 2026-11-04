@@ -183,7 +183,7 @@ pub fn part_word(file: &str) -> String {
     n.trim_end_matches(".fg").to_string()
 }
 
-/// A standard part's designation from its key: `std:ISO 4762/M6/20` is "ISO 4762 M6x20".
+/// A standard part's designation from its key: `std:ISO 4762|M6|20` is "ISO 4762 M6x20".
 fn std_designation(file: &str) -> Option<String> {
     let spec = forge_lang::stdparts::spec_of(file)?;
     Some(forge_lang::stdparts::generate(&spec).ok()?.designation)

@@ -1,0 +1,87 @@
+# generator: hexagon socket set screw (ISO 4026 flat, 4027 cone, 4028 dog, 4029 cup point)
+# frame: origin on the axis in the socket end face; +z along the screw to the point
+# anchors (normals +z): top (socket end), thd (external thread over the whole length), tip (point end)
+
+shared d = 6          # thread major diameter
+shared P = 1          # pitch
+shared l = 10         # nominal length
+shared s = 3          # socket across flats
+shared tshort = 1.5   # socket depth (minimum) at or below lshort
+shared tlong = 2      # socket depth (minimum) above it
+shared lshort = 6     # the longest of the short lengths
+shared point = 0      # 0 flat, 1 cone, 2 dog, 3 cup
+shared dp = 4         # flat, dog or cup point diameter (dz for cup), max
+shared dt = 1.5       # cone point flat diameter, max
+shared zlong = 3      # dog length (max) above lshort
+shared zshort = 1.5   # dog length (max) at or below it
+shared modelled = 0   # 1: the thread modelled
+shared t = tshort if l <= lshort else tlong
+shared z = zshort if l <= lshort else zlong
+shared df = d - 1.226869 * P   # thread root: the ISO 68-1 minor diameter d3
+shared rs = d / 2
+shared rf = df / 2
+shared rp = dp / 2
+shared rt = dt / 2
+shared cup = 0.7 * rp          # cup recess rim (modelled: the standard draws the cup without a size)
+shared hcup = cup / tan(59deg)
+shared ch = rs - rf            # 45 degree end chamfers from the root
+shared rc = s / sqrt(3)
+shared rcone = s / 2
+shared hcone = rcone / tan(59deg)
+shared n6 = count(6)
+# where the point begins: the chamfer, cone or dog shoulder
+shared zp = l - (rs - rp) if point == 0 else (l - (rs - rt) if point == 1 else (l - z - (rs - rp) if point == 2 else l - (rs - rp)))
+
+sketch prof(on: xz) {
+  c0 = pt(0, 0)
+  m = pt(rcone, 0)
+  e0 = pt(rf, 0)
+  e1 = pt(rs, ch)
+  e2 = pt(rs, zp)
+  mouth = line(m, e0)
+  cham = line(e0, e1)
+  if point == 0 {
+    p0 = line(e2, (rp, l))
+    p1 = line((rp, l), (0, l))
+    body_ax = line((0, l), (0, t + hcone))
+  } else {
+    if point == 1 {
+      p0 = line(e2, (rt, l))
+      p1 = line((rt, l), (0, l))
+      body_ax = line((0, l), (0, t + hcone))
+    } else {
+      if point == 2 {
+        p0 = line(e2, (rp, l - z))
+        p1 = line((rp, l - z), (rp, l))
+        p2 = line((rp, l), (0, l))
+        body_ax = line((0, l), (0, t + hcone))
+      } else {
+        p0 = line(e2, (rp, l))
+        p1 = line((rp, l), (cup, l))
+        p2 = line((cup, l), (0, l - hcup))
+        body_ax = line((0, l - hcup), (0, t + hcone))
+      }
+    }
+  }
+  shank = line(e1, e2)
+  cone = line((0, t + hcone), (rcone, t))
+  cwall = line((rcone, t), m)
+  ztip = pt(0, l)
+  zax = line((0, 0), (0, l), construction: true)
+  xax = line((0, 0), (rs, 0), construction: true)
+}
+body = revolve(prof, axis: prof.zax)
+sketch hx(on: body.side(prof.mouth), at: prof.c0) {
+  hexo = poly(polar(n: n6, r: rc, start: 0deg))
+}
+socket = cut(hx, t)
+if modelled > 0 {
+  thread_m = thread(face: body.side(prof.shank), spec: (d, P), length: "full")
+}
+
+top = anchor(plane(at: prof.c0, normal: prof.zax.dir, x: prof.xax.dir))
+thd = anchor(plane(at: prof.c0, normal: prof.zax.dir, x: prof.xax.dir), kind: external_thread, size: d, depth: l)
+tip = anchor(plane(at: prof.ztip, normal: prof.zax.dir, x: prof.xax.dir))
+
+expect valid
+expect bodies = 1

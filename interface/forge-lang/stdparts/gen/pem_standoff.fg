@@ -1,0 +1,61 @@
+# generator: self-clinching standoff (PEM SO/SOS/SOA thru-threaded, BSO/BSOS/BSOA blind)
+# frame: origin on the axis in the head face, flush with the sheet; +z along the barrel
+# anchors (normals +z): flush (head face), thd (internal thread), end (barrel end, where the
+# mating part sits)
+
+shared d = 3          # thread major diameter
+shared P = 0.5        # pitch
+shared L = 10         # length, head face to barrel end
+shared C = 4.2        # barrel diameter (max)
+shared H = 4.8        # hexagon head across flats
+shared B = 3.2        # counterbore diameter at the barrel end (thru type)
+shared D = 0          # counterbore depth (0: none)
+shared F = 4          # blind type: thread depth from the barrel end (min)
+shared blind = 0      # 1: blind threaded (BSO)
+shared tmin = 1       # the least sheet it goes in
+shared modelled = 0   # 1: the thread modelled
+shared hh = tmin      # head thickness (modelled: the head sits in the sheet; the bulletin gives none)
+shared rm = (d - 1.082532 * P) / 2
+shared rc = H / sqrt(3)
+shared n6 = count(6)
+shared tz = L - D if blind == 0 else F
+
+sketch hx(on: xy) {
+  hexo = poly(polar(n: n6, r: rc, start: 0deg))
+  ax = pt(0, 0)
+  xl = line((0, 0), (H / 2, 0), construction: true)
+}
+head = extrude(hx, hh)
+sketch prof(on: rotate(hx.plane, about: hx.xl, by: 90deg)) {
+  if blind > 0 {
+    o = poly([(C / 2, hh), (C / 2, L), (rm, L), (rm, L - F), (0, L - F), (0, hh)])
+  } else {
+    if D > 0 {
+      o = poly([(C / 2, hh), (C / 2, L), (B / 2, L), (B / 2, L - D), (rm, L - D), (rm, hh)])
+    } else {
+      o = poly([(C / 2, hh), (C / 2, L), (rm, L), (rm, hh)])
+    }
+  }
+  zax = line((0, 0), (0, L), construction: true)
+  xax = line((0, 0), (C / 2, 0), construction: true)
+  f0 = pt(0, 0)
+  zt = pt(0, L - tz)
+  ze = pt(0, L)
+}
+barrel = revolve(prof.o, axis: prof.zax)
+if blind == 0 {
+  sketch bo(on: head.start, at: hx.ax) {
+    c = circle((0, 0), rm)
+  }
+  bore = cut(bo.c, thru)
+}
+if modelled > 0 {
+  thread_m = thread(on: plane(at: prof.ze, normal: prof.zax.dir, x: prof.xax.dir), at: prof.ze, spec: (d, P), internal: true, length: tz)
+}
+
+flush = anchor(plane(at: prof.f0, normal: prof.zax.dir, x: prof.xax.dir))
+thd = anchor(plane(at: prof.zt, normal: prof.zax.dir, x: prof.xax.dir), kind: internal_thread, size: d, depth: tz)
+end = anchor(plane(at: prof.ze, normal: prof.zax.dir, x: prof.xax.dir))
+
+expect valid
+expect bodies = 1

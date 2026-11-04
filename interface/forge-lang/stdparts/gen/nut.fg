@@ -1,0 +1,61 @@
+# generator: hexagon nut (ISO 4032 regular, ISO 4035 thin, ISO 10511 / ISO 7040 with a
+# non-metallic insert, ASME B18.2.2 hex and jam nuts)
+# frame: origin on the axis in the bearing face; +z through the nut (towards the insert crown)
+# anchors (normals +z): seat (bearing face), thd (internal thread, the whole height), end (top)
+
+shared d = 6          # thread major diameter
+shared P = 1          # pitch
+shared s = 10         # across flats
+shared m = 5.2        # height of the hexagon
+shared h = 5.2        # overall height (the insert's crown above m on a prevailing torque nut)
+shared dw = 8.9       # bearing circle the faces are chamfered down to; the crown's diameter
+shared da = 6.75      # thread countersink diameter at the faces
+shared modelled = 0   # 1: the thread modelled
+shared rm = (d - 1.082532 * P) / 2   # bore: the ISO 965 basic minor diameter D1
+shared re = s / sqrt(3)
+shared rw = dw / 2
+shared ang = 30deg    # face chamfers, down to the bearing circle
+shared csk = 60deg    # half the 120 degree countersink
+shared hc = (da / 2 - rm) / tan(csk)
+shared n6 = count(6)
+
+sketch hx(on: xy) {
+  hexo = poly(polar(n: n6, r: re, start: 0deg))
+  o = pt(0, 0)
+  xl = line((0, 0), (re, 0), construction: true)
+}
+hexa = extrude(hx, m)
+sketch prof(on: rotate(hx.plane, about: hx.xl, by: 90deg)) {
+  bore = poly([(0, -1), (da / 2 + 1, -1), (da / 2 + 1, 0), (da / 2, 0), (rm, hc), (rm, h - hc), (da / 2, h), (da / 2 + 0.001, h + 1), (0, h + 1)])
+  ax = line((0, 0), (0, h), construction: true)
+  f0 = pt(0, 0)
+  ze = pt(0, h)
+}
+if h > m {
+  sketch cr(on: prof.plane) {
+    crown = poly([(0, m), (rw, m), (rw, h), (0, h)])
+    cax = line((0, 0), (0, h), construction: true)
+  }
+  collar = revolve(cr.crown, axis: cr.cax)
+}
+sketch fb(on: prof.plane) {
+  bot = poly([(rw, 0), (re + 1, 0), (re + 1, (re + 1 - rw) * tan(ang))])
+  fax = line((0, 0), (0, h), construction: true)
+}
+cb = revolve(fb.bot, axis: fb.fax, cut: true)
+sketch ft(on: prof.plane) {
+  topc = poly([(rw, m), (re + 1, m), (re + 1, m - (re + 1 - rw) * tan(ang))])
+  fax = line((0, 0), (0, h), construction: true)
+}
+ct = revolve(ft.topc, axis: ft.fax, cut: true)
+bored = revolve(prof.bore, axis: prof.ax, cut: true)
+if modelled > 0 {
+  thread_m = thread(on: plane(at: prof.f0, normal: hx.plane.normal, x: hx.xl.dir), at: prof.f0, spec: (d, P), internal: true, flip: true, length: h - hc)
+}
+
+seat = anchor(plane(at: prof.f0, normal: hx.plane.normal, x: hx.xl.dir))
+thd = anchor(plane(at: prof.f0, normal: hx.plane.normal, x: hx.xl.dir), kind: internal_thread, size: d, depth: h)
+end = anchor(plane(at: prof.ze, normal: hx.plane.normal, x: hx.xl.dir))
+
+expect valid
+expect bodies = 1

@@ -1,0 +1,96 @@
+family,size,column,source,theirs,ours,verdict
+asme_b18_3_shcs,#1-64,s,U,0.062,0.0625,"ours: same hex key, the exact fraction 1/16; 0.062 is its 3-decimal print"
+asme_b18_3_shcs,#1-72,s,U,0.062,0.0625,"ours: same hex key, the exact fraction 1/16; 0.062 is its 3-decimal print"
+asme_b18_3_shcs,#2-56,s,U,0.078,0.078125,"ours: same hex key, the exact fraction 5/64; 0.078 is its 3-decimal print"
+asme_b18_3_shcs,#2-64,s,U,0.078,0.078125,"ours: same hex key, the exact fraction 5/64; 0.078 is its 3-decimal print"
+asme_b18_3_shcs,#3-48,s,U,0.078,0.078125,"ours: same hex key, the exact fraction 5/64; 0.078 is its 3-decimal print"
+asme_b18_3_shcs,#3-56,s,U,0.078,0.078125,"ours: same hex key, the exact fraction 5/64; 0.078 is its 3-decimal print"
+asme_b18_3_shcs,#4-40,s,U,0.094,0.09375,"ours: same hex key, the exact fraction 3/32; 0.094 is its 3-decimal print"
+asme_b18_3_shcs,#4-48,s,U,0.094,0.09375,"ours: same hex key, the exact fraction 3/32; 0.094 is its 3-decimal print"
+asme_b18_3_shcs,#5-40,s,U,0.094,0.09375,"ours: same hex key, the exact fraction 3/32; 0.094 is its 3-decimal print"
+asme_b18_3_shcs,#5-44,s,U,0.094,0.09375,"ours: same hex key, the exact fraction 3/32; 0.094 is its 3-decimal print"
+asme_b18_3_shcs,#6-32,s,U,0.109,0.109375,"ours: same hex key, the exact fraction 7/64; 0.109 is its 3-decimal print"
+asme_b18_3_shcs,#6-40,s,U,0.109,0.109375,"ours: same hex key, the exact fraction 7/64; 0.109 is its 3-decimal print"
+asme_b18_3_shcs,#8-32,s,U,0.141,0.140625,"ours: same hex key, the exact fraction 9/64; 0.141 is its 3-decimal print"
+asme_b18_3_shcs,#8-36,s,U,0.141,0.140625,"ours: same hex key, the exact fraction 9/64; 0.141 is its 3-decimal print"
+asme_b18_3_shcs,#10-24,s,U,0.156,0.15625,"ours: same hex key, the exact fraction 5/32; 0.156 is its 3-decimal print"
+asme_b18_3_shcs,#10-32,s,U,0.156,0.15625,"ours: same hex key, the exact fraction 5/32; 0.156 is its 3-decimal print"
+asme_b18_3_shcs,1/4-20,s,U,0.188,0.1875,"ours: same hex key, the exact fraction 3/16; 0.188 is its 3-decimal print"
+asme_b18_3_shcs,1/4-28,s,U,0.188,0.1875,"ours: same hex key, the exact fraction 3/16; 0.188 is its 3-decimal print"
+asme_b18_3_shcs,5/16-18,k_max,U,0.312,0.3125,ours: H max is the basic diameter 0.3125; 0.312 is its 3-decimal print
+asme_b18_3_shcs,5/16-24,k_max,U,0.312,0.3125,ours: H max is the basic diameter 0.3125; 0.312 is its 3-decimal print
+asme_b18_3_shcs,3/8-16,s,U,0.312,0.3125,"ours: same hex key, the exact fraction 5/16; 0.312 is its 3-decimal print"
+asme_b18_3_shcs,3/8-24,s,U,0.312,0.3125,"ours: same hex key, the exact fraction 5/16; 0.312 is its 3-decimal print"
+asme_b18_3_shcs,7/16-14,k_max,U,0.437,0.4375,ours: H max is the basic diameter 0.4375; 0.437 is its 3-decimal print
+asme_b18_3_shcs,7/16-20,k_max,U,0.437,0.4375,ours: H max is the basic diameter 0.4375; 0.437 is its 3-decimal print
+asme_b18_3_shcs,9/16-12,k_max,U,0.562,0.5625,ours: H max is the basic diameter 0.5625; 0.562 is its 3-decimal print
+asme_b18_3_shcs,9/16-12,s,U,0.438,0.4375,"ours: same hex key, the exact fraction 7/16; 0.438 is its 3-decimal print"
+asme_b18_3_shcs,9/16-18,k_max,U,0.562,0.5625,ours: H max is the basic diameter 0.5625; 0.562 is its 3-decimal print
+asme_b18_3_shcs,9/16-18,s,U,0.438,0.4375,"ours: same hex key, the exact fraction 7/16; 0.438 is its 3-decimal print"
+asme_b18_3_shcs,#1-64,s,R,0.062,0.0625,"ours: same hex key, the exact fraction 1/16; 0.062 is its 3-decimal print"
+asme_b18_3_shcs,#1-64,b,R,0.62,0.625,ours: U prints the basic thread length LT 0.625; R rounds it to 0.01
+asme_b18_3_shcs,#1-72,s,R,0.062,0.0625,"ours: same hex key, the exact fraction 1/16; 0.062 is its 3-decimal print"
+asme_b18_3_shcs,#1-72,b,R,0.62,0.625,ours: U prints the basic thread length LT 0.625; R rounds it to 0.01
+asme_b18_3_shcs,#2-56,s,R,0.078,0.078125,"ours: same hex key, the exact fraction 5/64; 0.078 is its 3-decimal print"
+asme_b18_3_shcs,#2-56,b,R,0.62,0.625,ours: U prints the basic thread length LT 0.625; R rounds it to 0.01
+asme_b18_3_shcs,#2-64,s,R,0.078,0.078125,"ours: same hex key, the exact fraction 5/64; 0.078 is its 3-decimal print"
+asme_b18_3_shcs,#2-64,b,R,0.62,0.625,ours: U prints the basic thread length LT 0.625; R rounds it to 0.01
+asme_b18_3_shcs,#3-48,s,R,0.078,0.078125,"ours: same hex key, the exact fraction 5/64; 0.078 is its 3-decimal print"
+asme_b18_3_shcs,#3-48,b,R,0.62,0.625,ours: U prints the basic thread length LT 0.625; R rounds it to 0.01
+asme_b18_3_shcs,#3-56,s,R,0.078,0.078125,"ours: same hex key, the exact fraction 5/64; 0.078 is its 3-decimal print"
+asme_b18_3_shcs,#3-56,b,R,0.62,0.625,ours: U prints the basic thread length LT 0.625; R rounds it to 0.01
+asme_b18_3_shcs,#4-40,s,R,0.094,0.09375,"ours: same hex key, the exact fraction 3/32; 0.094 is its 3-decimal print"
+asme_b18_3_shcs,#4-48,s,R,0.094,0.09375,"ours: same hex key, the exact fraction 3/32; 0.094 is its 3-decimal print"
+asme_b18_3_shcs,#5-40,s,R,0.094,0.09375,"ours: same hex key, the exact fraction 3/32; 0.094 is its 3-decimal print"
+asme_b18_3_shcs,#5-44,s,R,0.094,0.09375,"ours: same hex key, the exact fraction 3/32; 0.094 is its 3-decimal print"
+asme_b18_3_shcs,#6-32,s,R,0.109,0.109375,"ours: same hex key, the exact fraction 7/64; 0.109 is its 3-decimal print"
+asme_b18_3_shcs,#6-40,s,R,0.109,0.109375,"ours: same hex key, the exact fraction 7/64; 0.109 is its 3-decimal print"
+asme_b18_3_shcs,#8-32,s,R,0.141,0.140625,"ours: same hex key, the exact fraction 9/64; 0.141 is its 3-decimal print"
+asme_b18_3_shcs,#8-32,b,R,0.88,0.875,ours: U prints the basic thread length LT 0.875; R rounds it to 0.01
+asme_b18_3_shcs,#8-36,s,R,0.141,0.140625,"ours: same hex key, the exact fraction 9/64; 0.141 is its 3-decimal print"
+asme_b18_3_shcs,#8-36,b,R,0.88,0.875,ours: U prints the basic thread length LT 0.875; R rounds it to 0.01
+asme_b18_3_shcs,#10-24,s,R,0.156,0.15625,"ours: same hex key, the exact fraction 5/32; 0.156 is its 3-decimal print"
+asme_b18_3_shcs,#10-24,b,R,0.88,0.875,ours: U prints the basic thread length LT 0.875; R rounds it to 0.01
+asme_b18_3_shcs,#10-32,s,R,0.156,0.15625,"ours: same hex key, the exact fraction 5/32; 0.156 is its 3-decimal print"
+asme_b18_3_shcs,#10-32,b,R,0.88,0.875,ours: U prints the basic thread length LT 0.875; R rounds it to 0.01
+asme_b18_3_shcs,1/4-20,s,R,0.188,0.1875,"ours: same hex key, the exact fraction 3/16; 0.188 is its 3-decimal print"
+asme_b18_3_shcs,1/4-28,s,R,0.188,0.1875,"ours: same hex key, the exact fraction 3/16; 0.188 is its 3-decimal print"
+asme_b18_3_shcs,5/16-18,k_max,R,0.312,0.3125,ours: H max is the basic diameter 0.3125; 0.312 is its 3-decimal print
+asme_b18_3_shcs,5/16-18,b,R,1.12,1.125,ours: U prints the basic thread length LT 1.125; R rounds it to 0.01
+asme_b18_3_shcs,5/16-24,k_max,R,0.312,0.3125,ours: H max is the basic diameter 0.3125; 0.312 is its 3-decimal print
+asme_b18_3_shcs,5/16-24,b,R,1.12,1.125,ours: U prints the basic thread length LT 1.125; R rounds it to 0.01
+asme_b18_3_shcs,3/8-16,s,R,0.312,0.3125,"ours: same hex key, the exact fraction 5/16; 0.312 is its 3-decimal print"
+asme_b18_3_shcs,3/8-24,s,R,0.312,0.3125,"ours: same hex key, the exact fraction 5/16; 0.312 is its 3-decimal print"
+asme_b18_3_shcs,7/16-14,k_max,R,0.438,0.4375,ours: H max is the basic diameter 0.4375; 0.438 is its 3-decimal print
+asme_b18_3_shcs,7/16-14,b,R,1.38,1.375,ours: U prints the basic thread length LT 1.375; R rounds it to 0.01
+asme_b18_3_shcs,7/16-20,k_max,R,0.438,0.4375,ours: H max is the basic diameter 0.4375; 0.438 is its 3-decimal print
+asme_b18_3_shcs,7/16-20,b,R,1.38,1.375,ours: U prints the basic thread length LT 1.375; R rounds it to 0.01
+asme_b18_3_shcs,1-1/8-7,b,R,2.81,2.812,ours: U prints the basic thread length LT 2.812; R rounds it to 0.01
+asme_b18_3_shcs,1-1/8-12,b,R,2.81,2.812,ours: U prints the basic thread length LT 2.812; R rounds it to 0.01
+asme_b18_3_shcs,1-1/4-7,b,R,3.12,3.125,ours: U prints the basic thread length LT 3.125; R rounds it to 0.01
+asme_b18_3_shcs,1-1/4-12,b,R,3.12,3.125,ours: U prints the basic thread length LT 3.125; R rounds it to 0.01
+asme_b18_3_shcs,1-3/8-6,b,R,3.44,3.437,ours: U prints the basic thread length LT 3.437; R rounds it to 0.01
+asme_b18_3_shcs,1-3/8-12,b,R,3.44,3.437,ours: U prints the basic thread length LT 3.437; R rounds it to 0.01
+asme_b18_3_shcs,1-3/4-5,b,R,4.38,4.375,ours: U prints the basic thread length LT 4.375; R rounds it to 0.01
+asme_b18_3_shcs,2-1/4-4.5,b,R,5.62,5.625,ours: U prints the basic thread length LT 5.625; R rounds it to 0.01
+asme_b18_3_shcs,2-3/4-4,b,R,6.88,6.875,ours: U prints the basic thread length LT 6.875; R rounds it to 0.01
+asme_b18_3_shcs,#2-56,dk_max,O,0.140625,0.14,ours: U and R print 0.14; O keyed the fraction 9/64
+asme_b18_3_shcs,#2-64,dk_max,O,0.140625,0.14,ours: U and R print 0.14; O keyed the fraction 9/64
+asme_b18_3_shcs,#10-24,dk_max,O,0.3125,0.312,ours: U and R print 0.312; O keyed the fraction 5/16
+asme_b18_3_shcs,#10-32,dk_max,O,0.3125,0.312,ours: U and R print 0.312; O keyed the fraction 5/16
+asme_b18_3_shcs,5/16-18,dk_max,O,0.46875,0.469,ours: U and R print 0.469; O keyed the fraction 15/32
+asme_b18_3_shcs,5/16-24,dk_max,O,0.46875,0.469,ours: U and R print 0.469; O keyed the fraction 15/32
+asme_b18_3_shcs,3/8-16,dk_max,O,0.5625,0.562,ours: U and R print 0.562; O keyed the fraction 9/16
+asme_b18_3_shcs,3/8-24,dk_max,O,0.5625,0.562,ours: U and R print 0.562; O keyed the fraction 9/16
+asme_b18_3_shcs,7/16-14,dk_max,O,0.65625,0.656,ours: U and R print 0.656; O keyed the fraction 21/32
+asme_b18_3_shcs,7/16-20,dk_max,O,0.65625,0.656,ours: U and R print 0.656; O keyed the fraction 21/32
+asme_b18_3_shcs,9/16-12,dk_max,O,0.84375,0.843,ours: U and R print 0.843; O keyed the fraction 27/32
+asme_b18_3_shcs,9/16-18,dk_max,O,0.84375,0.843,ours: U and R print 0.843; O keyed the fraction 27/32
+asme_b18_3_shcs,5/8-11,dk_max,O,0.9375,0.938,ours: U and R print 0.938; O keyed the fraction 15/16
+asme_b18_3_shcs,5/8-18,dk_max,O,0.9375,0.938,ours: U and R print 0.938; O keyed the fraction 15/16
+asme_b18_3_shcs,7/8-9,dk_max,O,1.3125,1.312,ours: U and R print 1.312; O keyed the fraction 21/16
+asme_b18_3_shcs,7/8-14,dk_max,O,1.3125,1.312,ours: U and R print 1.312; O keyed the fraction 21/16
+asme_b18_3_shcs,1-1/8-7,dk_max,O,1.6875,1.688,ours: U and R print 1.688; O keyed the fraction 27/16
+asme_b18_3_shcs,1-1/8-12,dk_max,O,1.6875,1.688,ours: U and R print 1.688; O keyed the fraction 27/16
+asme_b18_3_shcs,1-3/8-6,dk_max,O,2.0625,2.062,ours: U and R print 2.062; O keyed the fraction 33/16
+asme_b18_3_shcs,1-3/8-12,dk_max,O,2.0625,2.062,ours: U and R print 2.062; O keyed the fraction 33/16

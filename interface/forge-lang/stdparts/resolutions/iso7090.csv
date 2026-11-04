@@ -1,0 +1,16 @@
+family,size,column,source,theirs,ours,verdict
+iso7090,M39,d1_min,B,40,42,ours: ISO 7090:2000 Table 1/2 gives d1 42 for M39 (F and Westfield's ISO 7089 agree); B's 40 is a DIN 6916/DIN 125-style value
+iso7090,M42,d1_min,B,43,45,ours: ISO 7090:2000 Table 1/2 gives d1 45 for M42 (F and Westfield's ISO 7089 agree); B's 43 is a DIN 6916/DIN 125-style value
+iso7090,M42,h_max,B,8,9,ours: ISO 7090:2000 Table 1/2 gives h 9 for M42 (F and Westfield's ISO 7089 agree); B's 8 is a DIN 6916/DIN 125-style value
+iso7090,M45,d1_min,B,46,48,ours: ISO 7090:2000 Table 1/2 gives d1 48 for M45 (F and Westfield's ISO 7089 agree); B's 46 is a DIN 6916/DIN 125-style value
+iso7090,M45,h_max,B,8,9,ours: ISO 7090:2000 Table 1/2 gives h 9 for M45 (F and Westfield's ISO 7089 agree); B's 8 is a DIN 6916/DIN 125-style value
+iso7090,M48,d1_min,B,50,52,ours: ISO 7090:2000 Table 1/2 gives d1 52 for M48 (F and Westfield's ISO 7089 agree); B's 50 is a DIN 6916/DIN 125-style value
+iso7090,M52,d1_min,B,54,56,ours: ISO 7090:2000 Table 1/2 gives d1 56 for M52 (F and Westfield's ISO 7089 agree); B's 54 is a DIN 6916/DIN 125-style value
+iso7090,M56,d1_min,B,58,62,ours: ISO 7090:2000 Table 1/2 gives d1 62 for M56 (F and Westfield's ISO 7089 agree); B's 58 is a DIN 6916/DIN 125-style value
+iso7090,M56,h_max,B,10,11,ours: ISO 7090:2000 Table 1/2 gives h 11 for M56 (F and Westfield's ISO 7089 agree); B's 10 is a DIN 6916/DIN 125-style value
+iso7090,M60,d1_min,B,62,66,ours: ISO 7090:2000 Table 1/2 gives d1 66 for M60 (F and Westfield's ISO 7089 agree); B's 62 is a DIN 6916/DIN 125-style value
+iso7090,M60,h_max,B,10,11,ours: ISO 7090:2000 Table 1/2 gives h 11 for M60 (F and Westfield's ISO 7089 agree); B's 10 is a DIN 6916/DIN 125-style value
+iso7090,M64,d1_min,B,66,70,ours: ISO 7090:2000 Table 1/2 gives d1 70 for M64 (F and Westfield's ISO 7089 agree); B's 66 is a DIN 6916/DIN 125-style value
+iso7090,M64,h_max,B,10,11,ours: ISO 7090:2000 Table 1/2 gives h 11 for M64 (F and Westfield's ISO 7089 agree); B's 10 is a DIN 6916/DIN 125-style value
+iso7090,M10,d2_max,W,21,20,ours: ISO 7090:2000 Table 1 gives 20 for M10 (ISO 7089 and F agree); Westfield's ISO 7090 sheet has a typo
+iso7090,M36,d2_max,W,64.8,66,ours: ISO 7090:2000 Table 1 gives 66 for M36 (ISO 7089 and F agree); Westfield's ISO 7090 sheet has a typo

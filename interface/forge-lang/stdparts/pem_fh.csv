@@ -1,0 +1,32 @@
+# title: Self-clinching flush-head studs, types FH (carbon steel), FHS (stainless), FHA (aluminium), metric
+# standard: PennEngineering bulletin FH (2026-10 edition), FH/FHS/FHA metric table (vendor dimensions)
+# kind: stud
+# units: mm
+# name: PEM FH
+# item: Self-clinching flush-head stud
+# category: Sheet metal hardware/Self-clinching studs
+# gen: pem_stud | d=@d | P=P | l=@l | H=H | S=S_max | tmin=sheet_min | modelled=@modelled
+# option thread: cosmetic modelled
+# option grade: FH FHS
+# material: PEM S carbon steel
+# grade FH: PEM S carbon steel
+# grade FHS: PEM 300 series stainless
+# lengths: 6 8 10 12 15 18 20 25 30 35
+# src P: PEM bulletin FH, page FH-5, FH/FHS/FHA metric table (https://damlite.pemnet.com/FH-M5-12ZC_pdf_1.pdf, PDF created 2026-10-19), keyed 2026-11-04
+# chk K: PEM online catalogue (https://catalog.pemnet.com/viewitems/flush-head-threaded-studs-types-fh-fha-fhs/lf-clinching-threaded-studs-type-fh-fhs-fha-metric): L and H of every FH item, one item record per thread for the other columns, read 2026-11-04
+# chk F: FreeCAD FastenersWB 2026-09-10 FsData/PEMFasteners.csv PEMStuddef + PEMStudrange (H S, length range; GPL-2.0-or-later: consulted, never copied)
+# map F: PEMFasteners.csv#PEMStuddef | size=Dia | H=H | S_max=S
+# map F: PEMFasteners.csv#PEMStudrange | size=Dia | l_min=Min_L | l_max=Max_L
+# tolerance: L +-0.4, H +-0.4, hole +0.08/-0
+# model: H nominal (head diameter), S_max (unthreaded length under the head: threads gaugeable from 2 pitches past S_max, a class 3B/5H nut runs up to S_max), thread to the end; the head is flush with the sheet face (the bulletin gives no head thickness or clinch-ring profile: model the head as a flush disc no thicker than sheet_min)
+# note: one row per thread code; FH = heat-treated carbon steel (sheet HRB 80 / HB 150 or less), FHS = 300 series stainless (HRB 70 / HB 125), FHA = aluminium (HRB 50 / HB 82, aluminium sheet only); empty type cell = not made
+# note: hole_attached_max is the largest clearance hole in the mating part; part number = type-thread code-length code (FH-M4-12, FH-632-8 with the inch length in 16ths)
+# note: "PEM" is a trademark of PennEngineering; part numbers and dimensions are used descriptively, as facts
+size,thread,P,fh,fhs,fha,l_min,l_max,sheet_min,hole,hole_max,H,S_max,hole_attached_max,edge_min,src,checked
+M2.5,M2.5x0.45,0.45,FH,FHS,FHA,6,18,1,2.5,2.58,4.1,1.95,3.1,5.4,P,P K F
+M3,M3x0.5,0.5,FH,FHS,FHA,6,25,1,3,3.08,4.6,2.1,3.6,5.6,P,P F
+M3.5,M3.5x0.6,0.6,FH,FHS,FHA,6,30,1,3.5,3.58,5.3,2.25,4.1,6.4,P,P K F
+M4,M4x0.7,0.7,FH,FHS,FHA,6,35,1,4,4.08,5.9,2.4,4.6,7.2,P,P K F
+M5,M5x0.8,0.8,FH,FHS,FHA,8,35,1,5,5.08,6.5,2.7,5.6,7.2,P,P K F
+M6,M6x1,1,FH,FHS,FHA,10,35,1.6,6,6.08,8.2,3,6.6,7.9,P,P K F
+M8,M8x1.25,1.25,FH,FHS,,12,35,2.4,8,8.08,9.6,3.7,8.6,9.6,P,P K F

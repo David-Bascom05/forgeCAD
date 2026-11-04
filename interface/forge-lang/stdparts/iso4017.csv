@@ -1,0 +1,59 @@
+# title: Hexagon head screws, product grades A and B (fully threaded)
+# standard: ISO 4017:2022
+# kind: screw
+# item: Hexagon head screw
+# category: Fasteners/Bolts and screws/Hex head
+# units: mm
+# item: Hexagon head screw
+# category: Fasteners/Bolts and screws/Hex head
+# gen: hexhead | d=@d | P=@P | l=@l | lfull=l_full | s=s | k=k | dw=dw_min | c=c_max | r=r_min | modelled=@modelled
+# option thread: cosmetic modelled
+# option grade: 8.8 10.9 A2-70 A4-70
+# material: ISO 898-1 class 8.8
+# grade 8.8: ISO 898-1 class 8.8
+# grade 10.9: ISO 898-1 class 10.9
+# grade A2-70: ISO 3506-1 A2-70
+# grade A4-70: ISO 3506-1 A4-70
+# lengths: 3 4 5 6 8 10 12 16 20 25 30 35 40 45 50 55 60 65 70 80 90 100 110 120 130 140 150 160 180 200
+# src A: ISO 4017:2022 Tables 1-4 (grade A M1.6..M24 for l <= 150; grade B M16..M24 for l > 150 and M27..M64), printed pages 3-6 of the iTeh preview (https://cdn.standards.iteh.ai/samples/72585/1179998ddd594550a909d6e13c416f3e/ISO-4017-2022.pdf), stepped length ranges read from the rendered pages, keyed 2026-11-04
+# chk T: ISO 4014:2022 Tables 1-4 and ISO 4014:2011 Table 1 (this directory's iso4014.csv): the same head, every shared column agrees
+# src B: bd_warehouse 5a8a439 hex_head_parameters.csv (Apache-2.0), k, s and length range only, third_party/bd_warehouse/iso4017.csv
+# chk O: BOSL2 screws.scad metric_hex (BSD-2), s and k only, M5..M30
+# chk F: FreeCAD FastenersWB 2026-09-10 FsData/iso4017head.csv (GPL-2.0-or-later: consulted, never copied)
+# map B: hex_head_parameters.csv | k_max=iso4017:k | s=iso4017:s | l_min=iso4017:short | l_max=iso4017:long
+# map F: iso4017head.csv | size=Dia | P=P | c_max=c | dw_min=dw | e_min=e | k=k | r_min=r | s=s
+# model: nominal where the standard gives one, else the max-material limit: k nom, s nom (hexagon exact; e_min is a gauge limit), washer face dw_min with thickness c_max, under-head fillet r_min, thread to the head with an incomplete run-out a (a_max = 3P, a_min = P; incomplete thread u <= 2P at the point)
+# note: columns without suffix _B are the limits of the row's grade (grade A for M1.6..M24 at lengths <= 150, grade B for M27 up); for M16..M24 the lengths from lB_min (160) are grade B and the *_B columns hold their limits (Table 3); c, da, r and a do not change with the grade
+# note: every length is threaded to the head, so l_full = l_max; the ISO 4017 table has no ds, ds is about the pitch diameter (Figure 2 note b)
+# note: sizes in brackets in the standard (non-preferred): M3.5, M7, M14, M18, M22, M27, M33, M39, M45, M52, M60
+size,P,a_max,a_min,c_max,c_min,da_max,dw_min,e_min,k,k_max,k_min,kw_min,r_min,s,s_min,grade,l_min,l_max,l_full,lB_min,dw_min_B,e_min_B,k_max_B,k_min_B,kw_min_B,s_min_B,src,checked
+M1.6,0.35,1.05,0.35,0.25,0.10,2.0,2.54,3.41,1.1,1.225,0.975,0.68,0.10,3.20,3.02,A,3,16,16,,,,,,,,A,A T B F
+M2,0.4,1.20,0.40,0.25,0.10,2.6,3.34,4.32,1.4,1.525,1.275,0.89,0.10,4.00,3.82,A,4,20,20,,,,,,,,A,A T B F
+M2.5,0.45,1.35,0.45,0.25,0.10,3.1,4.34,5.45,1.7,1.825,1.575,1.10,0.10,5.00,4.82,A,5,25,25,,,,,,,,A,A T B F
+M3,0.5,1.50,0.50,0.40,0.15,3.6,4.84,6.01,2,2.125,1.875,1.31,0.10,5.50,5.32,A,6,30,30,,,,,,,,A,A T B F
+M3.5,0.6,1.80,0.60,0.40,0.15,4.1,5.34,6.58,2.4,2.525,2.275,1.59,0.10,6.00,5.82,A,8,35,35,,,,,,,,A,A T B F
+M4,0.7,2.10,0.70,0.40,0.15,4.7,6.20,7.66,2.8,2.925,2.675,1.87,0.20,7.00,6.78,A,8,40,40,,,,,,,,A,A T B F
+M5,0.8,2.40,0.80,0.50,0.15,5.7,7.20,8.79,3.5,3.65,3.35,2.35,0.20,8.00,7.78,A,10,50,50,,,,,,,,A,A T B O F
+M6,1,3.00,1.00,0.50,0.15,6.8,8.88,11.05,4,4.15,3.85,2.70,0.25,10.00,9.78,A,12,60,60,,,,,,,,A,A T B O F
+M7,1,3.00,1.00,0.60,0.15,7.8,9.63,12.12,4.8,4.95,4.65,3.26,0.25,11.00,10.73,A,16,70,70,,,,,,,,A,A T
+M8,1.25,3.75,1.25,0.60,0.15,9.2,11.63,14.38,5.3,5.45,5.15,3.61,0.4,13.00,12.73,A,16,80,80,,,,,,,,A,A T B O F
+M10,1.5,4.50,1.50,0.60,0.15,11.2,14.63,17.77,6.4,6.58,6.22,4.35,0.4,16.00,15.73,A,20,100,100,,,,,,,,A,A T B O F
+M12,1.75,5.25,1.75,0.60,0.15,13.7,16.63,20.03,7.5,7.68,7.32,5.12,0.6,18.00,17.73,A,25,120,120,,,,,,,,A,A T B O F
+M14,2,6.0,2.0,0.60,0.15,15.7,19.64,23.36,8.8,8.98,8.62,6.03,0.6,21.00,20.67,A,30,140,140,,,,,,,,A,A T B O F
+M16,2,6.0,2.0,0.8,0.2,17.7,22.49,26.75,10,10.18,9.82,6.87,0.6,24.00,23.67,A,30,160,160,160,22.00,26.17,10.29,9.71,6.80,23.16,A,A T B O F
+M18,2.5,7.5,2.5,0.8,0.2,20.2,25.34,30.14,11.5,11.715,11.285,7.90,0.6,27.00,26.67,A,35,180,180,160,24.85,29.56,11.85,11.15,7.81,26.16,A,A T B O F
+M20,2.5,7.5,2.5,0.8,0.2,22.4,28.19,33.53,12.5,12.715,12.285,8.60,0.8,30.00,29.67,A,40,200,200,160,27.70,32.95,12.85,12.15,8.51,29.16,A,A T B O F
+M22,2.5,7.5,2.5,0.8,0.2,24.4,31.71,37.72,14,14.215,13.785,9.65,0.8,34.00,33.38,A,45,200,200,160,31.35,37.29,14.35,13.65,9.56,33.00,A,A T B F
+M24,3,9.0,3.0,0.8,0.2,26.4,33.61,39.98,15,15.215,14.785,10.35,0.8,36.00,35.38,A,50,200,200,160,33.25,39.55,15.35,14.65,10.26,35.00,A,A T B O F
+M27,3,9.0,3.0,0.8,0.2,30.4,38.00,45.20,17,17.35,16.65,11.66,1.0,41.00,40.00,B,55,200,200,,,,,,,,A,A T B F
+M30,3.5,10.5,3.5,0.8,0.2,33.4,42.75,50.85,18.7,19.12,18.28,12.80,1.0,46.00,45.00,B,60,200,200,,,,,,,,A,A T B O F
+M33,3.5,10.5,3.5,0.8,0.2,36.4,46.55,55.37,21,21.42,20.58,14.41,1.0,50.00,49.00,B,65,200,200,,,,,,,,A,A B F
+M36,4,12.0,4.0,0.8,0.2,39.4,51.11,60.79,22.5,22.92,22.08,15.46,1.0,55.00,53.80,B,70,200,200,,,,,,,,A,A T B F
+M39,4,12.0,4.0,1.0,0.3,42.4,55.86,66.44,25,25.42,24.58,17.21,1.0,60.00,58.80,B,80,200,200,,,,,,,,A,A B F
+M42,4.5,13.5,4.5,1.0,0.3,45.6,59.95,71.30,26,26.42,25.58,17.91,1.2,65.00,63.10,B,80,200,200,,,,,,,,A,A T B F
+M45,4.5,13.5,4.5,1.0,0.3,48.6,64.70,76.95,28,28.42,27.58,19.31,1.2,70.00,68.10,B,90,200,200,,,,,,,,A,A B F
+M48,5,15.0,5.0,1.0,0.3,52.6,69.45,82.60,30,30.42,29.58,20.71,1.6,75.00,73.10,B,100,200,200,,,,,,,,A,A T B F
+M52,5,15.0,5.0,1.0,0.3,56.6,74.20,88.25,33,33.50,32.50,22.75,1.6,80.00,78.10,B,100,200,200,,,,,,,,A,A B F
+M56,5.5,16.5,5.5,1.0,0.3,63.0,78.66,93.56,35,35.50,34.50,24.15,2.0,85.00,82.80,B,110,200,200,,,,,,,,A,A T B F
+M60,5.5,16.5,5.5,1.0,0.3,67.0,83.41,99.21,38,38.50,37.50,26.25,2.0,90.00,87.80,B,120,200,200,,,,,,,,A,A B F
+M64,6,18.0,6.0,1.0,0.3,71.0,88.16,104.86,40,40.50,39.50,27.65,2.0,95.00,92.80,B,120,200,200,,,,,,,,A,A T B F

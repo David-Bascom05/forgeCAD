@@ -1,0 +1,33 @@
+# title: Hexagon socket set screws with cone point
+# standard: ISO 4027:2003 (EN ISO 4027:2026 is listed as current; no 2026 preview found, see note)
+# kind: setscrew
+# units: mm
+# item: Set screw, cone point
+# category: Fasteners/Set screws
+# gen: setscrew | d=@d | P=P | l=@l | s=s | tshort=t_min_short | tlong=t_min | lshort=l_short | point=1 | dt=dt_max | modelled=@modelled
+# option thread: cosmetic modelled
+# material: ISO 4026-4029 class 45H
+# lengths: 2 2.5 3 4 5 6 8 10 12 16 20 25 30 35 40 45 50 55 60
+# src A03: ISO 4027:2003 Table 1, printed page 3 of the iTeh preview (https://cdn.standards.iteh.ai/samples/36430/dfcea24c694e460ea6b659cfc216c6c1/ISO-4027-2003.pdf), keyed 2026-11-04; commercial ranges and shaded (short-length) areas read from the rendered page
+# chk W: Westfield Fasteners product specification ISO 4027 Table 1 (https://westfieldfasteners.co.uk/Standards/ScrewBolt_GrubCone_M.html), read 2026-11-04; no length ranges
+# chk O: BOSL2 screws.scad metric_setscrew table, hex column (BSD-2), s only, M1.6 to M20
+# chk F: FreeCAD FastenersWB 2026-09-10 FsData/iso4026def.csv (GPL-2.0-or-later: consulted, never copied)
+# map F: iso4026def.csv#ISO4029def | size=Dia | P=P | s=s | t_min=t | dt_max=dt
+# map F: iso4026def.csv#ISO4029range | size=Dia | l_min=Min_L | l_max=Max_L
+# model: nominal where the standard gives one, else the max-material limit: s nominal (hexagon modelled exact; e_min = 1.14 s_min is a gauge limit), socket depth t_min_short for l <= l_short else t_min, point dt_max (cone point flat; dt is given as a max only); df (chamfer/face diameter at the socket end and the point) is "approximately the thread minor diameter"
+# note: cone point: 90 deg included cone to the dt flat; 120 deg at or below l_short; incomplete thread u < 2P; l_short is the longest nominal length in the shaded (short-length) area of Table 1
+# note: ISO 4027:2026 was not read (no preview found); its 2026 siblings add M30 and change only small-point tolerances, dt here is a max only
+size,P,dt_max,e_min,s,s_max,s_min,t_min_short,t_min,l_min,l_max,l_short,src,checked
+M1.6,0.35,0.4,0.809,0.7,0.724,0.71,0.7,1.5,2,8,2.5,A03,A03 W O
+M2,0.4,0.5,1.011,0.9,0.913,0.887,0.8,1.7,2,10,3,A03,A03 W O
+M2.5,0.45,0.65,1.454,1.3,1.3,1.275,1.2,2,2.5,12,3,A03,A03 W O
+M3,0.5,0.75,1.733,1.5,1.58,1.52,1.2,2,3,16,4,A03,A03 W O
+M4,0.7,1,2.303,2,2.08,2.02,1.5,2.5,4,20,5,A03,A03 W O
+M5,0.8,1.25,2.873,2.5,2.58,2.52,2,3,5,25,6,A03,A03 W O
+M6,1,1.5,3.443,3,3.08,3.02,2,3.5,6,30,6,A03,A03 W O
+M8,1.25,2,4.583,4,4.095,4.02,3,5,8,40,8,A03,A03 O
+M10,1.5,2.5,5.723,5,5.14,5.02,4,6,10,50,10,A03,A03 W O
+M12,1.75,3,6.863,6,6.14,6.02,4.8,8,12,60,12,A03,A03 W O
+M16,2,4,9.149,8,8.175,8.025,6.4,10,16,60,16,A03,A03 W O
+M20,2.5,5,11.429,10,10.175,10.025,8,12,20,60,20,A03,A03 W O
+M24,3,6,13.716,12,12.212,12.032,10,15,25,60,25,A03,A03 W

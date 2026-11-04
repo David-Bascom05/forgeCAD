@@ -1,0 +1,2 @@
+family,size,column,source,theirs,ours,verdict
+iso10511,M3,dw_min,A97,4.6,4.56,ours: ISO 10511:2012 Table 1 prints dw min 4.56; the 1997 edition printed 4.6 (one decimal)

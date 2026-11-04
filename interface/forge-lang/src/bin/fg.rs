@@ -20,7 +20,7 @@ fg view FILE [--view front,top,..] [--tangent] [--chord MM] [--pdf OUT] [--svg O
 
 fg std [FAMILY [SIZE [LENGTH]]] [--thread modelled] [--grade G] [--sheet T] [-o OUT.fg]
                                 the standard parts: families, a family's sizes and lengths, or a
-                                part's file (FILE may also be its key, `fg run 'std:ISO 4762/M6/20'`)";
+                                part's file (FILE may also be its key, `fg run 'std:ISO 4762|M6|20'`)";
 
 fn read(file: &str) -> Result<String, String> {
     if file.starts_with(forge_lang::stdparts::KEY) {

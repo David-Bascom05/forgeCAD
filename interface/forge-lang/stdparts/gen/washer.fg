@@ -1,0 +1,30 @@
+# generator: plain washer (ISO 7089, 7090 chamfered, 7092, 7093-1, ASME B18.22.1)
+# frame: origin on the axis in the bottom face; +z through the washer
+# anchors (normals +z): a (bottom face), b (top face), bore (the hole, d1 over h)
+
+shared d1 = 6.4       # hole (min: the max-material size)
+shared d2 = 12        # outside diameter (max)
+shared h = 1.6        # thickness (nominal)
+shared dn = 6         # nominal size (the bore anchor's size)
+shared bevel = 0      # 1: the outer top edge chamfered (ISO 7090: 30..45 deg, h/4..h/2 deep)
+shared cd = h / 4 if bevel > 0 else 0
+
+sketch prof(on: xz) {
+  if cd > 0 {
+    o = poly([(d1 / 2, 0), (d2 / 2, 0), (d2 / 2, h - cd), (d2 / 2 - cd, h), (d1 / 2, h)])
+  } else {
+    o = poly([(d1 / 2, 0), (d2 / 2, 0), (d2 / 2, h), (d1 / 2, h)])
+  }
+  a0 = pt(0, 0)
+  b0 = pt(0, h)
+  zax = line((0, 0), (0, h), construction: true)
+  xax = line((0, 0), (d2 / 2, 0), construction: true)
+}
+body = revolve(prof.o, axis: prof.zax)
+
+a = anchor(plane(at: prof.a0, normal: prof.zax.dir, x: prof.xax.dir))
+b = anchor(plane(at: prof.b0, normal: prof.zax.dir, x: prof.xax.dir))
+bore = anchor(plane(at: prof.a0, normal: prof.zax.dir, x: prof.xax.dir), kind: bore, size: dn, depth: h)
+
+expect valid
+expect bodies = 1

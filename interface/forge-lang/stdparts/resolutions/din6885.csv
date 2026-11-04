@@ -1,0 +1,2 @@
+family,size,column,source,theirs,ours,verdict
+din6885,8x7,t2_max,B,3.4,3.5,"ours: IS 2048 Table 3 gives t2 tolerance +0.2 for keys 8x7 to 32x18; B's row for shaft 24 has +0.1 while its rows 25..30 for the same key have +0.2 (slip)"

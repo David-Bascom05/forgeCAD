@@ -1,0 +1,36 @@
+# generator: self-clinching nut (PEM S/SS/CLS/CLSS/SP type), as installed in a sheet
+# frame: origin on the axis in the sheet's flush face (where the screw enters); +z through the
+# sheet to the head; the shank's end is recessed sheet - A below the flush face
+# anchors (normals +z): flush (the sheet's flush face), thd (internal thread, shank and head),
+# end (the head's top face)
+
+shared tsh = 1.88     # the sheet's thickness
+shared d = 6          # thread major diameter
+shared P = 1          # pitch
+shared A = 1.15       # shank length (max)
+shared C = 8.73       # shank diameter (max)
+shared E = 11.18      # head diameter
+shared T = 4.08       # head height above the sheet
+shared modelled = 0   # 1: the thread modelled
+shared rm = (d - 1.082532 * P) / 2   # bore: the ISO 965 basic minor diameter D1
+shared z0 = tsh - A
+
+sketch prof(on: xz) {
+  o = poly([(rm, z0), (C / 2, z0), (C / 2, tsh), (E / 2, tsh), (E / 2, tsh + T), (rm, tsh + T)])
+  f0 = pt(0, 0)
+  zs = pt(0, z0)
+  ze = pt(0, tsh + T)
+  zax = line((0, 0), (0, tsh + T), construction: true)
+  xax = line((0, 0), (E / 2, 0), construction: true)
+}
+body = revolve(prof.o, axis: prof.zax)
+if modelled > 0 {
+  thread_m = thread(face: body.side(prof.o[5]), spec: (d, P), length: "full")
+}
+
+flush = anchor(plane(at: prof.f0, normal: prof.zax.dir, x: prof.xax.dir))
+thd = anchor(plane(at: prof.zs, normal: prof.zax.dir, x: prof.xax.dir), kind: internal_thread, size: d, depth: A + T)
+end = anchor(plane(at: prof.ze, normal: prof.zax.dir, x: prof.xax.dir))
+
+expect valid
+expect bodies = 1

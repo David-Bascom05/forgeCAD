@@ -1,0 +1,25 @@
+# title: Counterbores for hexagon socket head cap screws (and cheese heads without washers)
+# standard: DIN 974-1:2008-02, series 1 (ISO 4762, ISO 1207, DIN 6912, DIN 7984 heads, no washer); series 2 (ISO 1580, DIN 7985)
+# kind: hole
+# units: mm
+# src K: DIN 974-1 table as reproduced at ingenieurkurse.de, "Senkungen für Schrauben mit Zylinderkopf" (https://www.ingenieurkurse.de/technische-darstellungen-maschienenbau/normgerechtes-bemassen-in-einer-technischen-zeichnung/hinweise-zu-speziellen-schrauben-und-gewindebedingungen.html): d1 series 1-6 and t for ISO 4762, read 2026-11-04 (the standard itself is not freely readable)
+# src N: neue-physik.de "Senkungen für Zylinderkopfschrauben (DIN 974-1)" (https://www.neue-physik.de/353.9_Senkungen.php): dh, d1, t, read 2026-11-04
+# chk S: strobel-industry.de Senkung rechner, ISO 4762 in DIN 974-1 series 1, M3-M20 d1 (https://strobel-industry.de/wissen/senkung-fase-rechner), read 2026-11-04
+# chk R: Noramark counterbore chart, ISO 4762 heads in DIN 974-1, M3-M24 d1 (https://www.noramark.com/resources/charts/counterbore-dimensions/), read 2026-11-04
+# chk M: schraube-mutter.de Bohrtabelle für Zylinderschrauben nach DIN 974-1 (https://schraube-mutter.de/bohrtabelle-fuer-zylinderschrauben/), d1 and t M2-M36, read 2026-11-04
+# model: counterbore diameter d1 (nominal, H13), depth t below the surface, through hole dh (ISO 273 medium, from iso273.csv, as the sources print it)
+# note: series 3-6 (screws with washers or spring washers) are given only by K and are not keyed; t for M27 (31), M30 (34) and M36 (37) is what K and N print, a larger allowance over k than the smaller sizes; M1.6-M2.5, M14, M18, M22, M33 are not keyed (one source only, or sources disagree); no standard gives counterbores for ISO 7380 button heads
+size,d,dh,d1,d1_s2,t,src,checked
+M3,3,3.4,6.5,7,3.4,K,K N S R
+M4,4,4.5,8,9,4.4,K,K N S R M
+M5,5,5.5,10,11,5.4,K,K N S R M
+M6,6,6.6,11,13,6.4,K,K N S R M
+M8,8,9,15,18,8.6,K,K N S R M
+M10,10,11,18,24,10.6,K,K N S R M
+M12,12,13.5,20,,12.6,K,K N S R M
+M16,16,17.5,26,,16.6,K,K N S R M
+M20,20,22,33,,20.6,K,K N S R M
+M24,24,26,40,,24.8,K,K N R M
+M27,27,30,46,,31,K,K M
+M30,30,33,50,,34,K,K N M
+M36,36,39,58,,37,K,K N M

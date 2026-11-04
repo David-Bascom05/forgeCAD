@@ -60,7 +60,7 @@ def theirs_rows(path, section=None):
 
 
 def respell(size, ours):
-    s = size.strip().strip('"')
+    s = size.strip().strip('"').removeprefix("* ")
     if s.startswith("M") and "-" in s:
         base, p = s.split("-", 1)
         row = ours.get(base)
@@ -137,7 +137,7 @@ def main():
                     names = [a for a, _ in pairs]
                     w.writerow(["size"] + names)
                     for s in [r["size"] for r in rows if r["size"] in got]:
-                        w.writerow([s] + ["" if got[s][n] is None else f"{got[s][n]:g}" for n in names])
+                        w.writerow([s] + ["" if got[s][n] is None else f"{got[s][n]:.10g}" for n in names])
     print(f"{unresolved} unresolved")
     sys.exit(1 if unresolved else 0)
 

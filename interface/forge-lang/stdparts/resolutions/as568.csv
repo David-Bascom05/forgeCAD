@@ -1,0 +1,9 @@
+family,size,column,source,theirs,ours,verdict
+as568,AS568-201,id_min/max,P,0.055,0.005,"ours: G and S give +-.005 and P's and E's own mm column gives 0.13 mm (= .005 in); .055 is a typo P and E share (E copies P's table)"
+as568,AS568-201,id_min/max,E,0.055,0.005,"ours: G and S give +-.005 and P's and E's own mm column gives 0.13 mm (= .005 in); .055 is a typo P and E share (E copies P's table)"
+as568,AS568-209,id_min/max,P,0.01,0.009,"ours: G and S give +-.009 and P's and E's own mm column gives 0.23 mm (= .009 in, as for 016..021 of similar ID)"
+as568,AS568-209,id_min/max,E,0.01,0.009,"ours: G and S give +-.009 and P's and E's own mm column gives 0.23 mm (= .009 in, as for 016..021 of similar ID)"
+as568,AS568-225,id_min/max,E,0.015,0.018,"ours: P, G, S give .018 and E's own mm column gives 0.46 mm (= .018 in); E typo"
+as568,AS568-239,id_min/max,E,0.024,0.028,"ours: P, G, S give .028 and E's own mm column gives 0.71 mm (= .028 in); E typo"
+as568,AS568-369,id,E,7.925,7.975,"ours: P, G, S give 7.975 and E's own mm column gives 202.57 mm (= 7.975 in); E typo"
+as568,AS568-391,id_min/max,G,0.95,0.1,"ours: P, E, S give .100 (2.54 mm); G .95 is a typo for its own .095, still the minority"

@@ -1,0 +1,78 @@
+# title: Self-clinching nuts, types S/SS (carbon steel), CLS/CLSS (stainless), SP (hardened stainless), unified
+# standard: PennEngineering bulletin CL (2026-10 edition), S/SS/CLS/CLSS/SP unified table (vendor dimensions, no ASME standard)
+# kind: nut
+# units: in
+# name: PEM S (inch)
+# item: Self-clinching nut
+# category: Sheet metal hardware/Self-clinching nuts
+# gen: pem_nut | tsh=@sheet | d=@d | P=@P | A=A_max | C=C_max | E=E | T=T | modelled=@modelled
+# option thread: cosmetic modelled
+# option grade: S CLS SP
+# option sheet: <length>
+# material: PEM S carbon steel
+# grade S: PEM S carbon steel
+# grade CLS: PEM 300 series stainless
+# grade SP: A286 age hardened
+# src P: PEM bulletin CL, page CL-4, S/SS/CLS/CLSS/SP unified table (https://damlite.pemnet.com/CLS-M6-1_pdf_2.pdf, PDF created 2026-10-13), keyed 2026-11-04
+# chk K: PEM online catalogue item records (https://catalog.pemnet.com/viewitems/nuts-types-s-ss-cls-clss-cla-sp/self-clinching-nuts-types-s-ss-cls-clss-sp-unified, one item page per type and code), all seven columns of 104 S/SS and CLS/CLSS items, read 2026-11-04
+# tolerance: hole +.003/-.000, C max, E +-.010, T +-.010
+# model: A_max, C_max (shank envelope, max material), E and T nominal (tolerance in the header), hole = the hole size in the sheet at its low limit (hole_max = hole + tolerance); thread bore = the internal thread minor diameter
+# note: one row per thread code and shank code; carbon (S/SS, heat-treated carbon steel), stainless (CLS/CLSS, 300 series) and hardened (SP, hardened 400 series stainless) are the type letters PEM sells with these dimensions; an empty type cell means that type is not made in that code (bulletin footnote 2: shank codes the SP column does not cover)
+# note: sheet hardness limits from bulletin CL page 4: S/SS HRB 80 / HB 150, CLS/CLSS HRB 70 / HB 125, SP (stainless sheet) HRB 90 / HB 192 or less
+# note: sheet_min is the recommended minimum sheet; the bulletin recommends the longest shank whose sheet_min does not exceed the sheet (footnote 1); A_max is the shank length (sheet side, below the head), T the head height, E the head diameter, C the shank diameter; the shank end may carry a counterbore (bulletin note); the clinch ring/undercut profile "may vary" and is not dimensioned
+# note: "PEM" is a trademark of PennEngineering; part numbers and dimensions are used descriptively, as facts (compatible with PEM S-M6-1 etc.)
+# note: size is PEM thread code - shank code (632-1 = #6-32, shank 1)
+size,thread,d,tpi,carbon,stainless,hardened,shank,A_max,sheet_min,hole,hole_max,C_max,E,T,edge_min,src,checked
+256-0,#2-56,0.086,56,S,CLS,SP,0,0.03,0.03,0.166,0.169,0.165,0.25,0.07,0.19,P,P K
+256-1,#2-56,0.086,56,S,CLS,SP,1,0.038,0.04,0.166,0.169,0.165,0.25,0.07,0.19,P,P K
+256-2,#2-56,0.086,56,S,CLS,SP,2,0.054,0.056,0.166,0.169,0.165,0.25,0.07,0.19,P,P K
+348-0,#3-48,0.099,48,S,CLS,,0,0.03,0.03,0.166,0.169,0.165,0.25,0.07,0.19,P,P K
+348-1,#3-48,0.099,48,S,CLS,,1,0.038,0.04,0.166,0.169,0.165,0.25,0.07,0.19,P,P K
+348-2,#3-48,0.099,48,S,CLS,,2,0.054,0.056,0.166,0.169,0.165,0.25,0.07,0.19,P,P K
+440-0,#4-40,0.112,40,S,CLS,SP,0,0.03,0.03,0.166,0.169,0.165,0.25,0.07,0.19,P,P K
+440-1,#4-40,0.112,40,S,CLS,SP,1,0.038,0.04,0.166,0.169,0.165,0.25,0.07,0.19,P,P K
+440-2,#4-40,0.112,40,S,CLS,SP,2,0.054,0.056,0.166,0.169,0.165,0.25,0.07,0.19,P,P K
+440-3,#4-40,0.112,40,S,CLS,,3,0.087,0.09,0.166,0.169,0.165,0.25,0.07,0.19,P,P K
+632-0,#6-32,0.138,32,S,CLS,SP,0,0.03,0.03,0.1875,0.1905,0.187,0.28,0.07,0.22,P,P K
+632-1,#6-32,0.138,32,S,CLS,SP,1,0.038,0.04,0.1875,0.1905,0.187,0.28,0.07,0.22,P,P K
+632-2,#6-32,0.138,32,S,CLS,SP,2,0.054,0.056,0.1875,0.1905,0.187,0.28,0.07,0.22,P,P K
+632-3,#6-32,0.138,32,S,CLS,,3,0.087,0.09,0.1875,0.1905,0.187,0.28,0.07,0.22,P,P K
+832-0,#8-32,0.164,32,S,CLS,SP,0,0.03,0.03,0.213,0.216,0.212,0.31,0.09,0.27,P,P K
+832-1,#8-32,0.164,32,S,CLS,SP,1,0.038,0.04,0.213,0.216,0.212,0.31,0.09,0.27,P,P K
+832-2,#8-32,0.164,32,S,CLS,SP,2,0.054,0.056,0.213,0.216,0.212,0.31,0.09,0.27,P,P K
+832-3,#8-32,0.164,32,S,CLS,,3,0.087,0.09,0.213,0.216,0.212,0.31,0.09,0.27,P,P K
+024-0,#10-24,0.19,24,SS,CLSS,SP,0,0.03,0.03,0.25,0.253,0.249,0.34,0.09,0.28,P,P K
+024-1,#10-24,0.19,24,SS,CLSS,SP,1,0.038,0.04,0.25,0.253,0.249,0.34,0.09,0.28,P,P K
+024-2,#10-24,0.19,24,SS,CLSS,SP,2,0.054,0.056,0.25,0.253,0.249,0.34,0.09,0.28,P,P K
+024-3,#10-24,0.19,24,SS,CLSS,,3,0.087,0.09,0.25,0.253,0.249,0.34,0.09,0.28,P,P K
+032-0,#10-32,0.19,32,SS,CLSS,SP,0,0.03,0.03,0.25,0.253,0.249,0.34,0.09,0.28,P,P K
+032-1,#10-32,0.19,32,SS,CLSS,SP,1,0.038,0.04,0.25,0.253,0.249,0.34,0.09,0.28,P,P K
+032-2,#10-32,0.19,32,SS,CLSS,SP,2,0.054,0.056,0.25,0.253,0.249,0.34,0.09,0.28,P,P K
+032-3,#10-32,0.19,32,SS,CLSS,,3,0.087,0.09,0.25,0.253,0.249,0.34,0.09,0.28,P,P K
+1224-1,#12-24,0.216,24,S,CLS,,1,0.038,0.04,0.277,0.28,0.276,0.37,0.13,0.31,P,P K
+1224-2,#12-24,0.216,24,S,CLS,,2,0.054,0.056,0.277,0.28,0.276,0.37,0.13,0.31,P,P K
+1224-3,#12-24,0.216,24,S,CLS,,3,0.087,0.09,0.277,0.28,0.276,0.37,0.13,0.31,P,P K
+0420-0,1/4-20,0.25,20,S,CLS,SP,0,0.045,0.047,0.344,0.347,0.343,0.44,0.17,0.34,P,P K
+0420-1,1/4-20,0.25,20,S,CLS,SP,1,0.054,0.056,0.344,0.347,0.343,0.44,0.17,0.34,P,P K
+0420-2,1/4-20,0.25,20,S,CLS,SP,2,0.087,0.09,0.344,0.347,0.343,0.44,0.17,0.34,P,P K
+0420-3,1/4-20,0.25,20,S,CLS,,3,0.12,0.125,0.344,0.347,0.343,0.44,0.17,0.34,P,P K
+0428-1,1/4-28,0.25,28,S,CLS,,1,0.054,0.056,0.344,0.347,0.343,0.44,0.17,0.34,P,P K
+0428-2,1/4-28,0.25,28,S,CLS,,2,0.087,0.09,0.344,0.347,0.343,0.44,0.17,0.34,P,P K
+0428-3,1/4-28,0.25,28,S,CLS,,3,0.12,0.125,0.344,0.347,0.343,0.44,0.17,0.34,P,P K
+0518-1,5/16-18,0.3125,18,S,CLS,SP,1,0.054,0.056,0.413,0.416,0.412,0.5,0.23,0.38,P,P K
+0518-2,5/16-18,0.3125,18,S,CLS,SP,2,0.087,0.09,0.413,0.416,0.412,0.5,0.23,0.38,P,P K
+0518-3,5/16-18,0.3125,18,S,CLS,,3,0.12,0.125,0.413,0.416,0.412,0.5,0.23,0.38,P,P K
+0524-1,5/16-24,0.3125,24,S,CLS,SP,1,0.054,0.056,0.413,0.416,0.412,0.5,0.23,0.38,P,P K
+0524-2,5/16-24,0.3125,24,S,CLS,SP,2,0.087,0.09,0.413,0.416,0.412,0.5,0.23,0.38,P,P K
+0524-3,5/16-24,0.3125,24,S,CLS,,3,0.12,0.125,0.413,0.416,0.412,0.5,0.23,0.38,P,P K
+0616-1,3/8-16,0.375,16,S,CLS,SP,1,0.087,0.09,0.5,0.503,0.499,0.56,0.27,0.44,P,P K
+0616-2,3/8-16,0.375,16,S,CLS,SP,2,0.12,0.125,0.5,0.503,0.499,0.56,0.27,0.44,P,P K
+0616-3,3/8-16,0.375,16,S,CLS,,3,0.235,0.25,0.5,0.503,0.499,0.56,0.27,0.44,P,P K
+0624-1,3/8-24,0.375,24,S,CLS,SP,1,0.087,0.09,0.5,0.503,0.499,0.56,0.27,0.44,P,P K
+0624-2,3/8-24,0.375,24,S,CLS,SP,2,0.12,0.125,0.5,0.503,0.499,0.56,0.27,0.44,P,P K
+0624-3,3/8-24,0.375,24,S,CLS,,3,0.235,0.25,0.5,0.503,0.499,0.56,0.27,0.44,P,P K
+0720-1,7/16-20,0.4375,20,S,,,1,0.087,0.092,0.562,0.565,0.561,0.687,0.311,0.562,P,P K
+0813-1,1/2-13,0.5,13,S,CLS,,1,0.12,0.125,0.656,0.659,0.655,0.81,0.36,0.63,P,P K
+0813-2,1/2-13,0.5,13,S,CLS,,2,0.235,0.25,0.656,0.659,0.655,0.81,0.36,0.63,P,P K
+0820-1,1/2-20,0.5,20,S,CLS,,1,0.12,0.125,0.656,0.659,0.655,0.81,0.36,0.63,P,P K
+0820-2,1/2-20,0.5,20,S,CLS,,2,0.235,0.25,0.656,0.659,0.655,0.81,0.36,0.63,P,P K

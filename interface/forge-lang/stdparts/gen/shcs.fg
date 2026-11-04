@@ -41,9 +41,14 @@ sketch prof(on: xz) {
   cbase = pt(rcone, t - k)
   capex = pt(0, t - k + hcone)
   face = line(mouth, rim)
-  wall = line(rim, edge)
-  bevel = line(edge, seat)
-  under = line(seat, f0)
+  if dw < dk {
+    wall = line(rim, edge)
+    bevel = line(edge, seat)
+    under = line(seat, f0)
+  } else {
+    wall = line(rim, (rk, 0))
+    under = line((rk, 0), f0)
+  }
   fil = arc(center: fc, from: f0, to: f1, cw: true)
   if zt > r {
     plain = line(f1, th0)

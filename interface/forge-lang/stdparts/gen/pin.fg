@@ -1,0 +1,26 @@
+# generator: parallel pin (ISO 2338 unhardened, ISO 8734 hardened dowel)
+# frame: origin on the axis in one end face; +z along the pin
+# anchors (normals +z): a (end at z = 0), b (end at z = l), pin (shaft, the whole length)
+
+shared d = 6          # diameter
+shared l = 20         # length
+shared c = 1.2        # end chamfer length (approximate in the standard)
+shared ang = 15deg    # chamfer angle to the axis, as the standard draws it
+shared r = d / 2
+shared rc = r - c * tan(ang)
+
+sketch prof(on: xz) {
+  o = poly([(0, 0), (rc, 0), (r, c), (r, l - c), (rc, l), (0, l)])
+  a0 = pt(0, 0)
+  b0 = pt(0, l)
+  zax = line((0, 0), (0, l), construction: true)
+  xax = line((0, 0), (r, 0), construction: true)
+}
+body = revolve(prof.o, axis: prof.zax)
+
+a = anchor(plane(at: prof.a0, normal: prof.zax.dir, x: prof.xax.dir))
+b = anchor(plane(at: prof.b0, normal: prof.zax.dir, x: prof.xax.dir))
+pin = anchor(plane(at: prof.a0, normal: prof.zax.dir, x: prof.xax.dir), kind: shaft, size: d, depth: l)
+
+expect valid
+expect bodies = 1

@@ -1,0 +1,91 @@
+# generator: hexagon socket button head screw (ISO 7380-1, ISO 7380-2 with collar, ASME B18.3)
+# frame: origin on the axis at the head underside; +z along the shank to the tip; head at z < 0
+# anchors (normals +z): head (underside), top (dome top), thd (external thread), tip
+
+shared d = 6          # thread major diameter
+shared P = 1          # pitch
+shared l = 12         # nominal length
+shared b = 24         # thread length past the longest length threaded to the head
+shared lfull = 30     # the longest length threaded to the head
+shared dk = 10.5      # head diameter (max)
+shared k = 3.3        # head height (max)
+shared rf = 6.15      # dome radius (max)
+shared dL = 6         # flat on the dome's top (0: none)
+shared dc = 0         # collar diameter (ISO 7380-2; 0: no collar)
+shared c = 0          # collar thickness
+shared s = 4          # socket across flats
+shared t = 2.08       # socket depth (minimum)
+shared r = 0.25       # under-head fillet radius (minimum)
+shared modelled = 0   # 1: the thread modelled
+shared lt = l if l <= lfull else b
+shared zt = max(l - lt, r)
+shared ch = 0.6 * P
+shared rs = d / 2
+shared rk = dk / 2
+shared zc = sqrt(rf * rf - dL * dL / 4) - k      # the dome's centre, on the axis
+# where the dome meets the head's rim: at dk, or (a dome too deep for k, as some inch tables
+# give) a tenth of k above the bearing face, a flat out to dk from there
+shared zr = min(zc - sqrt(rf * rf - rk * rk), -c - 0.1 * k)
+shared rr = min(rk, sqrt(rf * rf - (zc - zr) * (zc - zr)))
+shared zm = -k if dL > s else zc - sqrt(rf * rf - s * s / 4)   # where the socket meets the head's top
+shared tz = zm + t + k   # the socket floor, t below that, from the head's top plane
+shared rc = s / sqrt(3)
+shared rcone = s / 2
+shared hcone = rcone / tan(59deg)
+shared n6 = count(6)
+
+sketch prof(on: xz) {
+  mouth = pt(rcone, zm)
+  if dL > s {
+    face = line(mouth, (dL / 2, -k))
+    cap = arc(center: (0, zc), from: (dL / 2, -k), to: (rr, zr), cw: false)
+  } else {
+    cap = arc(center: (0, zc), from: mouth, to: (rr, zr), cw: false)
+  }
+  if rr < rk {
+    ledge = line((rr, zr), (rk, zr))
+  }
+  if dc > dk {
+    rim = line((rk, zr), (rk, -c))
+    cu = line((rk, -c), (dc / 2, -c))
+    cw = line((dc / 2, -c), (dc / 2, 0))
+    under = line((dc / 2, 0), (rs + r, 0))
+  } else {
+    rim = line((rk, zr), (rk, 0))
+    under = line((rk, 0), (rs + r, 0))
+  }
+  fil = arc(center: (rs + r, r), from: (rs + r, 0), to: (rs, r), cw: true)
+  if zt > r {
+    plain = line((rs, r), (rs, zt))
+    thr = line((rs, zt), (rs, l - ch))
+  } else {
+    thr = line((rs, r), (rs, l - ch))
+  }
+  pnt = line((rs, l - ch), (rs - ch, l))
+  endf = line((rs - ch, l), (0, l))
+  axl = line((0, l), (0, tz - k + hcone))
+  cone = line((0, tz - k + hcone), (rcone, tz - k))
+  cwall = line((rcone, tz - k), mouth)
+  o = pt(0, 0)
+  ztop = pt(0, -k)
+  zthd = pt(0, zt)
+  ztip = pt(0, l)
+  zax = line((0, 0), (0, l), construction: true)
+  xax = line((0, 0), (rs, 0), construction: true)
+}
+body = revolve(prof, axis: prof.zax)
+sketch hx(on: plane(at: prof.ztop, normal: -prof.zax.dir, x: prof.xax.dir)) {
+  hexo = poly(polar(n: n6, r: rc, start: 0deg))
+}
+socket = cut(hx, tz)
+if modelled > 0 {
+  thread_m = thread(face: body.side(prof.thr), spec: (d, P), length: "full")
+}
+
+head = anchor(plane(at: prof.o, normal: prof.zax.dir, x: prof.xax.dir))
+top = anchor(plane(at: prof.ztop, normal: prof.zax.dir, x: prof.xax.dir))
+thd = anchor(plane(at: prof.zthd, normal: prof.zax.dir, x: prof.xax.dir), kind: external_thread, size: d, depth: l - zt)
+tip = anchor(plane(at: prof.ztip, normal: prof.zax.dir, x: prof.xax.dir))
+
+expect valid
+expect bodies = 1

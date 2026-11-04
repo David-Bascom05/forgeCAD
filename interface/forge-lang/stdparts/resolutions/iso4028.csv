@@ -1,0 +1,4 @@
+family,size,column,source,theirs,ours,verdict
+iso4028,M4,l_max,F,30,20,ours: ISO 4028:2003 Table 1 stepped line closes the M4 column at 20 (masses listed 5..20); FastenersWB 30 is out of step with M3 16 and M5 25
+iso4028,M8,s_min,W,4.202,4.02,"ours: ISO 4028:2003 Table 1 gives s_min 4.02; Westfield prints 4.202, which is above s nominal 4 (decimal slip)"
+iso4028,M8,s_max,F,4095,4.095,ours: ISO 4028:2003 Table 1 gives 4.095; FastenersWB has 4095 (decimal point lost)

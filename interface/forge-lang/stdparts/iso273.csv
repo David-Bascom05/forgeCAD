@@ -1,0 +1,62 @@
+# title: Clearance holes for bolts and screws
+# standard: ISO 273:1979
+# kind: hole
+# units: mm
+# src A: ISO 273:1979 clause 2 table (fine, medium, coarse series), printed page 2 of the iTeh preview (https://cdn.standards.iteh.ai/samples/4183/1a8db2e6de054d2e9bed7d40be64d6e1/ISO-273-1979.pdf), read from the page rendered at 200 dpi, keyed 2026-11-04; the 1979 first edition is the current one
+# src B: bd_warehouse 5a8a439 clearance_hole_sizes.csv (Apache-2.0), third_party/bd_warehouse/iso273.csv
+# chk O: BOSL2 screws.scad screw_hole() ISO_clearance (BSD-2-Clause): d plus a gap interpolated between listed sizes, compared per size
+# map B: clearance_hole_sizes.csv | fine=Close | medium=Normal | coarse=Loose
+# model: the tabulated diameter (the hole's nominal and lower limit); the standard gives tolerance fields for information only: fine H12, medium H13, coarse H14
+# note: hole feature fits close/normal/loose = fine/medium/coarse; ISO 273 recommends a chamfer where the hole edge would foul the bolt's under-head fillet; B also lists M9, M15, M17, M25, M28, M32, which ISO 273 does not
+size,d,fine,medium,coarse,src,checked
+M1,1,1.1,1.2,1.3,A,A B
+M1.2,1.2,1.3,1.4,1.5,A,A B
+M1.4,1.4,1.5,1.6,1.8,A,A B
+M1.6,1.6,1.7,1.8,2,A,A B
+M1.8,1.8,2,2.1,2.2,A,A B
+M2,2,2.2,2.4,2.6,A,A B
+M2.5,2.5,2.7,2.9,3.1,A,A B
+M3,3,3.2,3.4,3.6,A,A B
+M3.5,3.5,3.7,3.9,4.2,A,A B O
+M4,4,4.3,4.5,4.8,A,A B O
+M4.5,4.5,4.8,5,5.3,A,A O
+M5,5,5.3,5.5,5.8,A,A B O
+M6,6,6.4,6.6,7,A,A B O
+M7,7,7.4,7.6,8,A,A B
+M8,8,8.4,9,10,A,A B O
+M10,10,10.5,11,12,A,A B O
+M12,12,13,13.5,14.5,A,A O
+M14,14,15,15.5,16.5,A,A O
+M16,16,17,17.5,18.5,A,A O
+M18,18,19,20,21,A,A B
+M20,20,21,22,24,A,A B O
+M22,22,23,24,26,A,A B O
+M24,24,25,26,28,A,A B O
+M27,27,28,30,32,A,A B
+M30,30,31,33,35,A,A B O
+M33,33,34,36,38,A,A B
+M36,36,37,39,42,A,A B O
+M39,39,40,42,45,A,A B O
+M42,42,43,45,48,A,A B O
+M45,45,46,48,52,A,A B
+M48,48,50,52,56,A,A B O
+M52,52,54,56,62,A,A B
+M56,56,58,62,66,A,A B O
+M60,60,62,66,70,A,A B O
+M64,64,66,70,74,A,A B O
+M68,68,70,74,78,A,A B O
+M72,72,74,78,82,A,A B O
+M76,76,78,82,86,A,A B
+M80,80,82,86,91,A,A B O
+M85,85,87,91,96,A,A B
+M90,90,93,96,101,A,A B O
+M95,95,98,101,107,A,A B
+M100,100,104,107,112,A,A B O
+M105,105,109,112,117,A,A B O
+M110,110,114,117,122,A,A B O
+M115,115,119,122,127,A,A B O
+M120,120,124,127,132,A,A B O
+M125,125,129,132,137,A,A B O
+M130,130,134,137,144,A,A B
+M140,140,144,147,155,A,A B
+M150,150,155,158,165,A,A B

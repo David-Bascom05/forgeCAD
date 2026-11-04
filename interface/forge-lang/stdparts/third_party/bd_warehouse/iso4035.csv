@@ -1,0 +1,29 @@
+# bd_warehouse 5a8a439, Copyright 2024 Gumyr, Apache-2.0: columns renamed and selected, sizes respelled
+# from hex_nut_parameters.csv
+size,m_max,s
+M1.6,1,3.2
+M2,1.2,4
+M2.5,1.6,5
+M3,1.8,5.5
+M3.5,2,6
+M4,2.2,7
+M5,2.7,8
+M6,3.2,10
+M8,4,13
+M10,5,16
+M12,6,18
+M14,7,21
+M16,8,24
+M18,9,27
+M20,10,30
+M22,11,34
+M24,12,36
+M27,13.5,41
+M30,15,46
+M33,16.5,50
+M36,18,55
+M39,19.5,60
+M42,21,65
+M45,22.5,70
+M48,24,75
+M52,26,80

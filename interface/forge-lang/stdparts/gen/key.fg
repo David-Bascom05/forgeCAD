@@ -1,0 +1,20 @@
+# generator: parallel key, form A (DIN 6885-1): round ends in plan
+# frame: origin at the key's middle on its bottom face; x along the key; +z up through it
+# anchors (normals +z): bottom (sits in the shaft keyway), top
+
+shared b = 8          # width
+shared h = 7          # height
+shared l = 32         # length
+shared r = b / 2
+
+sketch plan(on: xy) {
+  o = slot((r - l / 2, 0), (l / 2 - r, 0), r)
+  c0 = pt(0, 0)
+  xl = line((0, 0), (r, 0), construction: true)
+}
+body = extrude(plan, h)
+bottom = anchor(plane(at: plan.c0, normal: plan.plane.normal, x: plan.xl.dir))
+top = anchor(body.end)
+
+expect valid
+expect bodies = 1

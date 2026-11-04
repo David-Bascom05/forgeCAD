@@ -1,0 +1,35 @@
+# title: Hexagon socket button head screws with collar
+# standard: ISO 7380-2:2022
+# kind: screw
+# units: mm
+# item: Hexagon socket button head screw with collar
+# category: Fasteners/Bolts and screws/Button head
+# gen: button | d=@d | P=P | l=@l | b=b | lfull=l_full | dk=dk_max | k=k_max | rf=rf_max | dL=dL | dc=dc_max | c=c_max | s=s | t=t_min | r=rs_min | modelled=@modelled
+# option thread: cosmetic modelled
+# option grade: 10.9 12.9 A2-70 A4-70
+# material: ISO 898-1 class 10.9
+# grade 10.9: ISO 898-1 class 10.9
+# grade 12.9: ISO 898-1 class 12.9
+# grade A2-70: ISO 3506-1 A2-70
+# grade A4-70: ISO 3506-1 A4-70
+# lengths: 6 8 10 12 16 20 25 30 35 40 45 50 55 60 65 70 80 90
+# src A: ISO 7380-2:2022 Table 1, iTeh preview page 4 (https://cdn.standards.iteh.ai/samples/78700/6911ac6c6b9a46d7b3dfbc7da3b63459/ISO-7380-2-2022.pdf), keyed 2026-11-04; b for M16 (3d = 48) from the 2022 foreword
+# src A11: ISO 7380-2:2011 Table 1 and Table 1 (continued), iTeh preview pages 3-4 (https://cdn.standards.iteh.ai/samples/53672/801ec2c66dfc4359ba76493e3d01d97f/ISO-7380-2-2011.pdf), keyed 2026-11-04: b for M3-M12 and the length stair l_min, l_max, l_full (the 2022 Table 2 is not in its preview)
+# src B: bd_warehouse 5a8a439 button_head_with_collar_parameters.csv (Apache-2.0), third_party/bd_warehouse
+# chk R: Fuller Fasteners ISO 7380-2 table (https://fullerfasteners.com/tech/iso-7380-2-specifications-hex-socket-button-head-screws/), read 2026-11-04 (2011 values)
+# chk F: FreeCAD FastenersWB 2026-09-10 FsData/iso7380def.csv (GPL-2.0-or-later: consulted, never copied)
+# map B: button_head_with_collar_parameters.csv | dk_max=iso7380_2:dk | dL=iso7380_2:dl | dc_max=iso7380_2:dc | k_max=iso7380_2:k | rf_max=iso7380_2:rf | c_max=iso7380_2:c | s_max=iso7380_2:s | t_min=iso7380_2:t | l_min=iso7380_2:short | l_max=iso7380_2:long
+# map F: iso7380def.csv#ISO7380-2def | size=Dia | P=P | b=b | c_max=c | da_max=da | dk_max=dk | dc_max=dk_c | t_min=t_min | rs_min=r | k_max=k | e_min=e | wb_min=w
+# map F: iso7380def.csv#ISO7380-2range | size=Dia | l_min=Min_L | l_max=Max_L
+# model: nominal where the standard gives one, else the max-material limit: dk_max, dc_max, c_max, k_max, ds_max, s nominal, socket depth t_min, dome radius rf_max (2022 allows its centre off the axis; a dome of rf_max through k_max at the axis meets dk_max near the bearing face), top flat dL (ref), under-head radius rs_min (shank) or rt_min (fully threaded), da_max transition; dw_min is a bearing-face limit, not modelled
+# note: the 2022 edition amended the smallest and greatest standard lengths (its Table 2 is not in the preview): l_min, l_max, l_full are the 2011 stair; with b = 48 the M16 l_full may move
+# note: e_min is a gauge limit (e_min about 1.14 s_min); model the hexagon from s
+size,P,b,c_max,c_min,da_max,dc_max,dc_min,dk_max,dk_min,dL,ds_max,ds_min,dw_min,e_min,k_max,k_min,rf_max,rf_min,rs_min,rt_min,s,s_max,s_min,t_max,t_min,wb_min,l_min,l_max,l_full,src,checked
+M3,0.5,18,0.7,0.55,3.6,6.9,6.32,5.2,4.9,2.6,3,2.86,5.69,2.3,1.65,1.4,3.7,3.3,0.1,0.3,2,2.08,2.02,1.2,1.04,0.2,6,30,20,A A11,A A11 R B F
+M4,0.7,20,0.8,0.65,4.7,9.4,8.82,7.2,6.84,3.8,4,3.82,7.94,2.87,2.2,1.95,4.6,4.2,0.2,0.4,2.5,2.58,2.52,1.65,1.3,0.3,6,40,25,A A11,A A11 R B F
+M5,0.8,22,1,0.8,5.7,11.8,11.1,8.8,8.44,5,5,4.82,9.99,3.44,2.75,2.5,5.75,5.25,0.2,0.45,3,3.08,3.02,2.12,1.56,0.38,8,50,25,A A11,A A11 R B F
+M6,1,24,1.2,1,6.8,13.6,12.9,10,9.64,6,6,5.82,11.61,4.58,3.3,3,6.15,5.65,0.25,0.5,4,4.095,4.02,2.26,2.08,0.74,10,60,30,A A11,A A11 R B F
+M8,1.25,28,1.5,1.25,9.2,17.8,17.1,13.2,12.77,7.7,8,7.78,15.39,5.72,4.4,4.1,7.95,7.45,0.4,0.7,5,5.14,5.02,3.05,2.6,1.05,12,80,35,A A11,A A11 R B F
+M10,1.5,32,2,1.7,11.2,21.9,21.06,16.5,16.07,10,10,9.78,18.95,6.86,5.5,5.2,9.8,9.2,0.4,0.7,6,6.14,6.02,3.75,3.12,1.45,16,90,40,A A11,A A11 R B F
+M12,1.75,36,2.4,2.1,13.7,26,25.16,19.4,18.88,12,12,11.73,22.64,9.15,6.6,6.24,11.2,10.5,0.6,1.1,8,8.175,8.025,4.61,4.16,1.63,20,90,50,A A11,A A11 R B F
+M16,2,48,2.8,2.5,17.7,34,33,26,25.48,16,16,15.73,29.7,11.43,8.8,8.44,15.3,14.5,0.6,1.1,10,10.175,10.025,6.19,5.2,2.25,25,90,60,A A11,A A11 R B F

@@ -1,0 +1,36 @@
+# title: Parallel pins, unhardened steel and austenitic stainless steel
+# standard: ISO 2338:1997
+# kind: pin
+# units: mm
+# item: Parallel pin, unhardened
+# category: Pins/Parallel pins
+# gen: pin | d=d | l=@l | c=c
+# material: 1018 cold drawn
+# lengths: 2 3 4 5 6 8 10 12 14 16 18 20 22 24 26 28 30 32 35 40 45 50 55 60 65 70 75 80 85 90 95 100 120 140 160 180 200
+# src A: ISO 2338:1997 Table 1, printed page 2 of the iTeh preview (https://cdn.standards.iteh.ai/samples/20001/5b26cece48c448b782c0de1eccb5b16c/ISO-2338-1997.pdf), keyed 2026-11-04; commercial ranges from the bold stepped lines of the rendered page
+# chk G: globalfastener.com ISO 2338-1997 page (https://www.globalfastener.com/standards/detail.php?sid=NTI4OA==): d limits and c, read 2026-11-04
+# chk F: FreeCAD FastenersWB 2026-09-10 FsData/iso2338def.csv (c, length range; GPL-2.0-or-later: consulted, never copied)
+# model: d nominal (tolerance m6 or h8 by order; d is the max-material size for h8, m6 sits 0.002..0.025 above it), chamfer length c (approximate; ISO 8734:1987 draws it at about 15 deg), at both ends; the end form (chamfer or crown r) is at the maker's option and is not dimensioned in the preview
+# note: for nominal lengths above 200 the series steps by 20; l tolerance js15-like as tabulated: 2..10 +-0.25, 12..50 +-0.5, 55..200 +-0.75
+# note: the figure page (end forms, roughness) is blank in the preview; no r value is keyed
+size,d,tol,c,l_min,l_max,src,checked
+0.6,0.6,m6/h8,0.12,2,6,A,A G F
+0.8,0.8,m6/h8,0.16,2,8,A,A G F
+1,1,m6/h8,0.2,4,10,A,A G F
+1.2,1.2,m6/h8,0.25,4,12,A,A G F
+1.5,1.5,m6/h8,0.3,4,16,A,A G F
+2,2,m6/h8,0.35,6,20,A,A G F
+2.5,2.5,m6/h8,0.4,6,24,A,A G F
+3,3,m6/h8,0.5,8,30,A,A G F
+4,4,m6/h8,0.63,8,40,A,A G F
+5,5,m6/h8,0.8,10,50,A,A G F
+6,6,m6/h8,1.2,12,60,A,A G F
+8,8,m6/h8,1.6,14,80,A,A G F
+10,10,m6/h8,2,18,95,A,A G F
+12,12,m6/h8,2.5,22,140,A,A G F
+16,16,m6/h8,3,26,180,A,A G F
+20,20,m6/h8,3.5,35,200,A,A G F
+25,25,m6/h8,4,50,200,A,A G F
+30,30,m6/h8,5,60,200,A,A G F
+40,40,m6/h8,6.3,80,200,A,A G F
+50,50,m6/h8,8,95,200,A,A G F

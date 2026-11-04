@@ -1,0 +1,18 @@
+# bd_warehouse 5a8a439, Copyright 2024 Gumyr, Apache-2.0: columns renamed and selected, sizes respelled
+# from plain_washer_parameters.csv
+size,d1_min,d2_max,h_max
+M3,3.2,9,0.9
+M3.5,3.7,11,0.9
+M4,4.3,12,1.1
+M5,5.3,15,1.4
+M6,6.4,18,1.8
+M8,8.4,24,2.2
+M10,10.5,30,2.7
+M12,13,37,3.3
+M14,15,44,3.3
+M16,17,50,3.3
+M18,20,56,4.6
+M20,22,60,4.6
+M24,26,72,6
+M30,33,92,7
+M36,39,110,9.2

@@ -1,0 +1,10 @@
+family,size,column,source,theirs,ours,verdict
+asme_clearance,#0,close_min,O,0.068,0.067,ours: ASME B18.2.8 table (via Machinery's Handbook); O adds a gap interpolated between a few listed sizes
+asme_clearance,#0,loose_min,O,0.0912,0.094,ours: ASME B18.2.8 table (via Machinery's Handbook); O adds a gap interpolated between a few listed sizes
+asme_clearance,#2,loose_min,O,0.1172,0.116,ours: ASME B18.2.8 table (via Machinery's Handbook); O adds a gap interpolated between a few listed sizes
+asme_clearance,#3,normal_min,O,0.1146,0.116,ours: ASME B18.2.8 table (via Machinery's Handbook); O adds a gap interpolated between a few listed sizes
+asme_clearance,#3,loose_min,O,0.1303,0.128,ours: ASME B18.2.8 table (via Machinery's Handbook); O adds a gap interpolated between a few listed sizes
+asme_clearance,#4,loose_min,O,0.1432,0.144,ours: ASME B18.2.8 table (via Machinery's Handbook); O adds a gap interpolated between a few listed sizes
+asme_clearance,#8,normal_min,O,0.1953,0.196,ours: ASME B18.2.8 table (via Machinery's Handbook); O adds a gap interpolated between a few listed sizes
+asme_clearance,#8,loose_min,O,0.2109,0.213,ours: ASME B18.2.8 table (via Machinery's Handbook); O adds a gap interpolated between a few listed sizes
+asme_clearance,#10,loose_min,O,0.2369,0.238,ours: ASME B18.2.8 table (via Machinery's Handbook); O adds a gap interpolated between a few listed sizes

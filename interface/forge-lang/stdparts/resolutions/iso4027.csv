@@ -1,0 +1,40 @@
+family,size,column,source,theirs,ours,verdict
+iso4027,M1.6,dt_max,F,0.36,0.4,ours: ISO 4027:2003 Table 1 dt max 0.4; Westfield agrees; FastenersWB dt is not the ISO value
+iso4027,M1.6,t_min,F,1.1,1.5,ours: ISO 4027:2003 Table 1 t min for lengths below the shaded area is 1.5 (short lengths: see t_min_short); FastenersWB t is neither ISO row (DIN-style values); Westfield agrees with ours
+iso4027,M1.6,l_max,F,5,8,ours: ISO 4027:2003 Table 1 bold stepped lines (commercial lengths) give 8 for M1.6; FastenersWB carries a different (catalogue) range
+iso4027,M2,dt_max,F,0.45,0.5,ours: ISO 4027:2003 Table 1 dt max 0.5; Westfield agrees; FastenersWB dt is not the ISO value
+iso4027,M2,t_min,F,1.25,1.7,ours: ISO 4027:2003 Table 1 t min for lengths below the shaded area is 1.7 (short lengths: see t_min_short); FastenersWB t is neither ISO row (DIN-style values); Westfield agrees with ours
+iso4027,M2,l_min,F,3,2,ours: ISO 4027:2003 Table 1 bold stepped lines (commercial lengths) give 2 for M2; FastenersWB carries a different (catalogue) range
+iso4027,M2.5,dt_max,F,0.56,0.65,ours: ISO 4027:2003 Table 1 dt max 0.65; Westfield agrees; FastenersWB dt is not the ISO value
+iso4027,M2.5,t_min,F,1.6,2,ours: ISO 4027:2003 Table 1 t min for lengths below the shaded area is 2 (short lengths: see t_min_short); FastenersWB t is neither ISO row (DIN-style values); Westfield agrees with ours
+iso4027,M2.5,l_min,F,3,2.5,ours: ISO 4027:2003 Table 1 bold stepped lines (commercial lengths) give 2.5 for M2.5; FastenersWB carries a different (catalogue) range
+iso4027,M2.5,l_max,F,10,12,ours: ISO 4027:2003 Table 1 bold stepped lines (commercial lengths) give 12 for M2.5; FastenersWB carries a different (catalogue) range
+iso4027,M3,dt_max,F,0.68,0.75,ours: ISO 4027:2003 Table 1 dt max 0.75; Westfield agrees; FastenersWB dt is not the ISO value
+iso4027,M3,t_min,F,1.6,2,ours: ISO 4027:2003 Table 1 t min for lengths below the shaded area is 2 (short lengths: see t_min_short); FastenersWB t is neither ISO row (DIN-style values); Westfield agrees with ours
+iso4027,M3,l_max,F,20,16,ours: ISO 4027:2003 Table 1 bold stepped lines (commercial lengths) give 16 for M3; FastenersWB carries a different (catalogue) range
+iso4027,M4,dt_max,F,0.9,1,ours: ISO 4027:2003 Table 1 dt max 1; Westfield agrees; FastenersWB dt is not the ISO value
+iso4027,M4,t_min,F,2,2.5,ours: ISO 4027:2003 Table 1 t min for lengths below the shaded area is 2.5 (short lengths: see t_min_short); FastenersWB t is neither ISO row (DIN-style values); Westfield agrees with ours
+iso4027,M5,dt_max,F,1.1,1.25,ours: ISO 4027:2003 Table 1 dt max 1.25; Westfield agrees; FastenersWB dt is not the ISO value
+iso4027,M5,t_min,F,2.5,3,ours: ISO 4027:2003 Table 1 t min for lengths below the shaded area is 3 (short lengths: see t_min_short); FastenersWB t is neither ISO row (DIN-style values); Westfield agrees with ours
+iso4027,M6,dt_max,F,1.2,1.5,ours: ISO 4027:2003 Table 1 dt max 1.5; Westfield agrees; FastenersWB dt is not the ISO value
+iso4027,M6,t_min,F,2.75,3.5,ours: ISO 4027:2003 Table 1 t min for lengths below the shaded area is 3.5 (short lengths: see t_min_short); FastenersWB t is neither ISO row (DIN-style values); Westfield agrees with ours
+iso4027,M6,l_max,F,35,30,ours: ISO 4027:2003 Table 1 bold stepped lines (commercial lengths) give 30 for M6; FastenersWB carries a different (catalogue) range
+iso4027,M8,s_min,W,4.2,4.02,"ours: ISO 4027:2003 Table 1 gives s_min 4.02; Westfield prints 4.2, which is above s nominal 4 (decimal slip)"
+iso4027,M8,dt_max,F,1.7,2,ours: ISO 4027:2003 Table 1 dt max 2; Westfield agrees; FastenersWB dt is not the ISO value
+iso4027,M8,t_min,F,4,5,ours: ISO 4027:2003 Table 1 t min for lengths below the shaded area is 5 (short lengths: see t_min_short); FastenersWB t is neither ISO row (DIN-style values); Westfield agrees with ours
+iso4027,M10,dt_max,F,2.2,2.5,ours: ISO 4027:2003 Table 1 dt max 2.5; Westfield agrees; FastenersWB dt is not the ISO value
+iso4027,M10,t_min,F,5,6,ours: ISO 4027:2003 Table 1 t min for lengths below the shaded area is 6 (short lengths: see t_min_short); FastenersWB t is neither ISO row (DIN-style values); Westfield agrees with ours
+iso4027,M10,l_max,F,40,50,ours: ISO 4027:2003 Table 1 bold stepped lines (commercial lengths) give 50 for M10; FastenersWB carries a different (catalogue) range
+iso4027,M12,dt_max,F,2.7,3,ours: ISO 4027:2003 Table 1 dt max 3; Westfield agrees; FastenersWB dt is not the ISO value
+iso4027,M12,t_min,F,6.4,8,ours: ISO 4027:2003 Table 1 t min for lengths below the shaded area is 8 (short lengths: see t_min_short); FastenersWB t is neither ISO row (DIN-style values); Westfield agrees with ours
+iso4027,M12,l_min,F,16,12,ours: ISO 4027:2003 Table 1 bold stepped lines (commercial lengths) give 12 for M12; FastenersWB carries a different (catalogue) range
+iso4027,M12,l_max,F,40,60,ours: ISO 4027:2003 Table 1 bold stepped lines (commercial lengths) give 60 for M12; FastenersWB carries a different (catalogue) range
+iso4027,M16,dt_max,F,3.6,4,ours: ISO 4027:2003 Table 1 dt max 4; Westfield agrees; FastenersWB dt is not the ISO value
+iso4027,M16,t_min,F,8.2,10,ours: ISO 4027:2003 Table 1 t min for lengths below the shaded area is 10 (short lengths: see t_min_short); FastenersWB t is neither ISO row (DIN-style values); Westfield agrees with ours
+iso4027,M16,l_min,F,20,16,ours: ISO 4027:2003 Table 1 bold stepped lines (commercial lengths) give 16 for M16; FastenersWB carries a different (catalogue) range
+iso4027,M16,l_max,F,40,60,ours: ISO 4027:2003 Table 1 bold stepped lines (commercial lengths) give 60 for M16; FastenersWB carries a different (catalogue) range
+iso4027,M20,dt_max,F,4.6,5,ours: ISO 4027:2003 Table 1 dt max 5; Westfield agrees; FastenersWB dt is not the ISO value
+iso4027,M20,t_min,F,10,12,ours: ISO 4027:2003 Table 1 t min for lengths below the shaded area is 12 (short lengths: see t_min_short); FastenersWB t is neither ISO row (DIN-style values); Westfield agrees with ours
+iso4027,M20,l_max,F,50,60,ours: ISO 4027:2003 Table 1 bold stepped lines (commercial lengths) give 60 for M20; FastenersWB carries a different (catalogue) range
+iso4027,M24,dt_max,F,5.6,6,ours: ISO 4027:2003 Table 1 dt max 6; Westfield agrees; FastenersWB dt is not the ISO value
+iso4027,M24,t_min,F,12.5,15,ours: ISO 4027:2003 Table 1 t min for lengths below the shaded area is 15 (short lengths: see t_min_short); FastenersWB t is neither ISO row (DIN-style values); Westfield agrees with ours

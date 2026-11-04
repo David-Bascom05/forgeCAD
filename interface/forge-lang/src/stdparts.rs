@@ -1,7 +1,7 @@
 //! The standard parts library (a content centre): dimension tables (`stdparts/*.csv`, format in
 //! `stdparts/README.md`) and one generator part per family (`stdparts/gen/*.fg`). A standard part
 //! is a part file made from a generator with one table row's values: `std("ISO 4762", size: "M6",
-//! length: 20)` in an assembly, `fg std` on the command line. Its file key, `std:ISO 4762/M6/20`,
+//! length: 20)` in an assembly, `fg std` on the command line. Its file key, `std:ISO 4762|M6|20`,
 //! stands for the generated text wherever a part file is read (`asm::locate`), so it needs no
 //! file on disk and two uses of one size are one part in the BOM.
 
@@ -12,10 +12,97 @@ use std::collections::BTreeMap;
 use std::sync::OnceLock;
 
 /// Every family's table, by file stem.
-pub const TABLES: &[(&str, &str)] = &[("iso4762", include_str!("../stdparts/iso4762.csv"))];
+pub const TABLES: &[(&str, &str)] = &[
+    ("as568", include_str!("../stdparts/as568.csv")),
+    ("asme_b18_22_1", include_str!("../stdparts/asme_b18_22_1.csv")),
+    (
+        "asme_b18_2_1_hex_cap",
+        include_str!("../stdparts/asme_b18_2_1_hex_cap.csv"),
+    ),
+    (
+        "asme_b18_2_2_hex_nut",
+        include_str!("../stdparts/asme_b18_2_2_hex_nut.csv"),
+    ),
+    (
+        "asme_b18_3_button",
+        include_str!("../stdparts/asme_b18_3_button.csv"),
+    ),
+    ("asme_b18_3_flat", include_str!("../stdparts/asme_b18_3_flat.csv")),
+    ("asme_b18_3_shcs", include_str!("../stdparts/asme_b18_3_shcs.csv")),
+    ("asme_clearance", include_str!("../stdparts/asme_clearance.csv")),
+    (
+        "cbore_asme_b18_3",
+        include_str!("../stdparts/cbore_asme_b18_3.csv"),
+    ),
+    ("cbore_iso4762", include_str!("../stdparts/cbore_iso4762.csv")),
+    ("csink_iso10642", include_str!("../stdparts/csink_iso10642.csv")),
+    ("din471", include_str!("../stdparts/din471.csv")),
+    ("din472", include_str!("../stdparts/din472.csv")),
+    ("din6885", include_str!("../stdparts/din6885.csv")),
+    ("iso10511", include_str!("../stdparts/iso10511.csv")),
+    ("iso10642", include_str!("../stdparts/iso10642.csv")),
+    ("iso15_bearings", include_str!("../stdparts/iso15_bearings.csv")),
+    ("iso2338", include_str!("../stdparts/iso2338.csv")),
+    ("iso273", include_str!("../stdparts/iso273.csv")),
+    ("iso4014", include_str!("../stdparts/iso4014.csv")),
+    ("iso4017", include_str!("../stdparts/iso4017.csv")),
+    ("iso4026", include_str!("../stdparts/iso4026.csv")),
+    ("iso4027", include_str!("../stdparts/iso4027.csv")),
+    ("iso4028", include_str!("../stdparts/iso4028.csv")),
+    ("iso4029", include_str!("../stdparts/iso4029.csv")),
+    ("iso4032", include_str!("../stdparts/iso4032.csv")),
+    ("iso4035", include_str!("../stdparts/iso4035.csv")),
+    ("iso4762", include_str!("../stdparts/iso4762.csv")),
+    ("iso7040", include_str!("../stdparts/iso7040.csv")),
+    ("iso7089", include_str!("../stdparts/iso7089.csv")),
+    ("iso7090", include_str!("../stdparts/iso7090.csv")),
+    ("iso7092", include_str!("../stdparts/iso7092.csv")),
+    ("iso7093_1", include_str!("../stdparts/iso7093_1.csv")),
+    ("iso7379", include_str!("../stdparts/iso7379.csv")),
+    ("iso7380_1", include_str!("../stdparts/iso7380_1.csv")),
+    ("iso7380_2", include_str!("../stdparts/iso7380_2.csv")),
+    ("iso8734", include_str!("../stdparts/iso8734.csv")),
+    ("pem_fh", include_str!("../stdparts/pem_fh.csv")),
+    ("pem_fh_in", include_str!("../stdparts/pem_fh_in.csv")),
+    ("pem_s", include_str!("../stdparts/pem_s.csv")),
+    ("pem_s_in", include_str!("../stdparts/pem_s_in.csv")),
+    ("pem_so", include_str!("../stdparts/pem_so.csv")),
+    ("pem_so_in", include_str!("../stdparts/pem_so_in.csv")),
+    (
+        "tap_drill_metric",
+        include_str!("../stdparts/tap_drill_metric.csv"),
+    ),
+    (
+        "tap_drill_unified",
+        include_str!("../stdparts/tap_drill_unified.csv"),
+    ),
+];
+
+/// Tables kept out until a disagreement is decided, and why.
+pub const HELD: &[(&str, &str)] = &[(
+    "iso3601",
+    "ISO 3601-1:2012 not read: whether the AS568A metric sizes carry its class A tolerances is open",
+)];
 
 /// Every generator, by file stem.
-pub const GENERATORS: &[(&str, &str)] = &[("shcs", include_str!("../stdparts/gen/shcs.fg"))];
+pub const GENERATORS: &[(&str, &str)] = &[
+    ("bearing", include_str!("../stdparts/gen/bearing.fg")),
+    ("button", include_str!("../stdparts/gen/button.fg")),
+    ("csk", include_str!("../stdparts/gen/csk.fg")),
+    ("hexhead", include_str!("../stdparts/gen/hexhead.fg")),
+    ("key", include_str!("../stdparts/gen/key.fg")),
+    ("nut", include_str!("../stdparts/gen/nut.fg")),
+    ("oring", include_str!("../stdparts/gen/oring.fg")),
+    ("pem_nut", include_str!("../stdparts/gen/pem_nut.fg")),
+    ("pem_standoff", include_str!("../stdparts/gen/pem_standoff.fg")),
+    ("pem_stud", include_str!("../stdparts/gen/pem_stud.fg")),
+    ("pin", include_str!("../stdparts/gen/pin.fg")),
+    ("ring", include_str!("../stdparts/gen/ring.fg")),
+    ("setscrew", include_str!("../stdparts/gen/setscrew.fg")),
+    ("shcs", include_str!("../stdparts/gen/shcs.fg")),
+    ("shoulder", include_str!("../stdparts/gen/shoulder.fg")),
+    ("washer", include_str!("../stdparts/gen/washer.fg")),
+];
 
 /// The prefix of a standard part's file key.
 pub const KEY: &str = "std:";
@@ -65,13 +152,22 @@ impl Family {
     }
     /// The lengths a size comes in: the series within its commercial range.
     pub fn lengths_of(&self, row: &[String]) -> Vec<f64> {
-        let lo = self.value(row, "l_min").unwrap_or(f64::NEG_INFINITY);
+        // a table with no range per size (the ASME ones) offers no length under 1.5 d
+        let floor = match (self.col("l_min"), thread_of(self, row)) {
+            (None, Some((d, _))) => 1.5 * d,
+            _ => f64::NEG_INFINITY,
+        };
+        let lo = self.value(row, "l_min").unwrap_or(floor);
         let hi = self.value(row, "l_max").unwrap_or(f64::INFINITY);
         self.lengths
             .iter()
             .copied()
             .filter(|l| *l >= lo && *l <= hi)
             .collect()
+    }
+    /// Whether a generator makes parts of it (hole tables are data only).
+    pub fn placeable(&self) -> bool {
+        self.get("gen").is_some()
     }
     pub fn has_lengths(&self) -> bool {
         !self.lengths.is_empty()
@@ -114,12 +210,6 @@ pub fn parse(id: &'static str, text: &str) -> Result<Family, String> {
         if rows.iter().any(|x: &Vec<String>| x[0] == r[0]) {
             return Err(format!("line {n}: size {} twice", r[0]));
         }
-        for (c, v) in cols.iter().zip(&r).skip(1) {
-            if !v.is_empty() && !matches!(c.as_str(), "src" | "checked" | "note") && v.parse::<f64>().is_err()
-            {
-                return Err(format!("line {n}: {c} = {v:?} is not a number"));
-            }
-        }
         rows.push(r);
     }
     let get = |k: &str| {
@@ -129,7 +219,8 @@ pub fn parse(id: &'static str, text: &str) -> Result<Family, String> {
     };
     let req = |k: &str| get(k).ok_or(format!("no `{k}:` header"));
     let standard = req("standard")?;
-    let name = standard.split(':').next().unwrap_or(&standard).trim().to_string();
+    let name =
+        get("name").unwrap_or_else(|| standard.split(':').next().unwrap_or(&standard).trim().to_string());
     let units = req("units")?;
     if units != "mm" && units != "in" {
         return Err(format!("units {units:?}: mm or in"));
@@ -171,7 +262,9 @@ pub fn parse(id: &'static str, text: &str) -> Result<Family, String> {
 }
 
 fn cells(line: &str) -> Vec<String> {
-    line.split(',').map(|c| c.trim().to_string()).collect()
+    line.split(',')
+        .map(|c| c.trim().trim_matches('"').to_string())
+        .collect()
 }
 
 pub fn families() -> &'static [Family] {
@@ -195,7 +288,7 @@ pub fn family(name: &str) -> Option<&'static Family> {
     let q = squash(name);
     families()
         .iter()
-        .find(|f| squash(&f.name) == q || f.id == q || squash(&f.standard) == q)
+        .find(|f| squash(&f.name) == q || f.id == name || squash(&f.standard) == q)
 }
 
 /// A standard part's choice: family, size, length and options.
@@ -453,6 +546,7 @@ fn near_family(name: &str) -> Option<String> {
     let digits: String = name.chars().filter(|c| c.is_ascii_digit()).collect();
     let hits: Vec<&Family> = families()
         .iter()
+        .filter(|f| f.placeable())
         .filter(|f| {
             !digits.is_empty() && f.name.chars().filter(|c| c.is_ascii_digit()).collect::<String>() == digits
         })
@@ -474,12 +568,19 @@ pub struct Spans {
 
 /// A choice checked against the tables: its family and row.
 pub fn check(spec: &Spec, at: Spans) -> Result<(&'static Family, &'static [String]), StdErr> {
-    let f = family(&spec.family).ok_or_else(|| StdErr::UnknownFamily {
-        span: at.family,
-        name: spec.family.clone(),
-        near: near_family(&spec.family),
-        valid: families().iter().map(|f| f.name.clone()).collect(),
-    })?;
+    // hole tables are data for `hole`, not parts
+    let f = family(&spec.family)
+        .filter(|f| f.placeable())
+        .ok_or_else(|| StdErr::UnknownFamily {
+            span: at.family,
+            name: spec.family.clone(),
+            near: near_family(&spec.family),
+            valid: families()
+                .iter()
+                .filter(|f| f.placeable())
+                .map(|f| f.name.clone())
+                .collect(),
+        })?;
     let row = f.row(&spec.size).ok_or_else(|| StdErr::UnknownSize {
         span: at.size,
         family: f.name.clone(),
@@ -537,13 +638,30 @@ pub fn check(spec: &Spec, at: Spans) -> Result<(&'static Family, &'static [Strin
             });
         }
     }
+    if let Some(s) = spec.options.get("sheet").and_then(|s| s.parse::<f64>().ok())
+        && let Some(min) = f.value(row, "sheet_min")
+        && s < min
+    {
+        return Err(StdErr::UnknownOption {
+            span: at.options,
+            family: f.name.clone(),
+            option: "sheet".into(),
+            value: crate::values::fmt(s),
+            allowed: vec![format!(">= {}", crate::values::fmt(min))],
+        });
+    }
     Ok((f, row))
 }
 
 /// The major diameter and pitch a thread designation names, in the table's units: `M6`
 /// (coarse, from the row's P), `M8x1`, `#10-24`, `1/4-20`, `1-1/4-7`.
 fn thread_of(f: &Family, row: &[String]) -> Option<(f64, f64)> {
-    let size = row[0].as_str();
+    // the thread is the size, or a column of its own (`thread`, or `d` written `M6`)
+    let size = match (f.col("thread"), f.col("d")) {
+        (Some(c), _) => row[c].as_str(),
+        (None, Some(c)) if row[c].starts_with('M') => row[c].as_str(),
+        _ => row[0].as_str(),
+    };
     if let Some(m) = size.strip_prefix('M') {
         let (d, p) = match m.split_once('x') {
             Some((d, p)) => (d.parse().ok()?, p.parse().ok()?),
@@ -584,24 +702,24 @@ fn designation(f: &Family, spec: &Spec) -> String {
     }
 }
 
-/// The file key standing for this part: `std:ISO 4762/M6/20`, options other than the
-/// defaults after it (`/thread=modelled`).
+/// The file key standing for this part: `std:ISO 4762|M6|20`, options other than the
+/// defaults after it (`|thread=modelled`).
 pub fn key(spec: &Spec) -> String {
     let f = family(&spec.family);
     let mut k = format!(
-        "{KEY}{}/{}",
+        "{KEY}{}|{}",
         f.map_or(spec.family.as_str(), |f| f.name.as_str()),
         spec.size
     );
     if let Some(l) = spec.length {
-        k += &format!("/{}", crate::values::fmt(l));
+        k += &format!("|{}", crate::values::fmt(l));
     }
     for (o, v) in &spec.options {
         let default = f
             .and_then(|f| f.options.iter().find(|x| &x.0 == o))
             .and_then(|x| x.1.first());
         if default != Some(v) {
-            k += &format!("/{o}={v}");
+            k += &format!("|{o}={v}");
         }
     }
     k
@@ -609,7 +727,7 @@ pub fn key(spec: &Spec) -> String {
 
 /// A key read back into its choice (None: not a standard part key, or malformed).
 pub fn spec_of(key: &str) -> Option<Spec> {
-    let mut parts = key.strip_prefix(KEY)?.split('/');
+    let mut parts = key.strip_prefix(KEY)?.split('|');
     let family = parts.next()?.to_string();
     let size = parts.next()?.to_string();
     let mut length = None;
@@ -666,22 +784,39 @@ pub fn generate(spec: &Spec) -> Result<Generated, StdErr> {
     let mut set: BTreeMap<&str, String> = BTreeMap::new();
     for p in parts {
         let (param, from) = p.split_once('=').expect("gen: param=source");
+        // an angle written out (`ang=90deg`) goes in as written
+        if let Some(n) = from.trim().strip_suffix("deg")
+            && n.parse::<f64>().is_ok()
+        {
+            set.insert(param.trim(), from.trim().to_string());
+            continue;
+        }
         let v = match from.trim() {
             "@d" => thread.map(|t| t.0).or_else(|| plain_d(&row[0])).map(|v| v * unit),
             "@P" => thread.map(|t| t.1 * unit),
             "@l" => spec.length.map(|l| l * unit),
+            "@sheet" => opt("sheet")
+                .and_then(|v| v.parse::<f64>().ok())
+                .or_else(|| f.value(row, "sheet_min"))
+                .map(|v| v * unit),
             "@modelled" => Some(if opt("thread").as_deref() == Some("modelled") {
                 1.0
             } else {
                 0.0
             }),
             o if o.starts_with('@') => opt(&o[1..]).and_then(|v| v.parse::<f64>().ok()).map(|v| v * unit),
-            c => f
-                .value(row, c)
-                .map(|v| v * unit)
-                .or_else(|| c.parse::<f64>().ok()),
+            // a word column as a switch: `style==blind` is 1 on blind rows
+            c if c.contains("==") => {
+                let (col, word) = c.split_once("==").expect("contains ==");
+                f.col(col).map(|i| if row[i] == word { 1.0 } else { 0.0 })
+            }
+            c => match c.parse::<f64>() {
+                Ok(n) => Some(n),
+                Err(_) => f.value(row, c).map(|v| v * unit),
+            },
         };
-        let v = v.unwrap_or_else(|| panic!("{}: {from} has no value for {}", f.id, row[0]));
+        // a cell the standard leaves empty for this size: the generator's own value stands
+        let Some(v) = v else { continue };
         set.insert(param.trim(), crate::values::fmt(round(v)));
     }
     let name = designation(f, spec);
@@ -702,21 +837,15 @@ pub fn generate(spec: &Spec) -> Result<Generated, StdErr> {
         out += rewritten.as_deref().unwrap_or(line);
         out.push('\n');
     }
-    let grade = opt("grade");
-    let material = f.get("material").unwrap_or("Steel");
-    let (material, density) = match grade.as_deref() {
-        Some(g) if g.starts_with('A') => (format!("Stainless steel {g}"), 7.93),
-        Some(g) => (format!("{material}, property class {g}"), 7.85),
-        None => (
-            material.to_string(),
-            f.get("density").and_then(|d| d.parse().ok()).unwrap_or(7.85),
-        ),
-    };
+    // the material: the grade's (`grade 12.9: ISO 898-1 class 12.9`), else the family's
+    let material = opt("grade")
+        .and_then(|g| f.get(&format!("grade {g}")).map(String::from))
+        .or_else(|| f.get("material").map(String::from))
+        .expect("a family names its material");
     out += &format!(
-        "\nabout = properties(part_number: {name:?}, description: {:?}, standard: {:?}, material: {material:?}, density: {})\n",
+        "\nabout = properties(part_number: {name:?}, description: {:?}, standard: {:?}, material: {material:?})\n",
         format!("{} {}", f.item(), name.trim_start_matches(&f.name).trim()),
         f.standard,
-        crate::values::fmt(density)
     );
     Ok(Generated {
         key: key(spec),

@@ -1,0 +1,51 @@
+family,size,column,source,theirs,ours,verdict
+din471,3,a_max,F,2,1.9,"ours: W, T, K, M and B all give a max 1.9"
+din471,4,d2_tol,W,+0/-0.05,+0/-0.048,"ours: B and I (IS 3075-1 Table 1) give 0/-0.048, h10 for 3..6 mm; W rounds the merged cell to -0.05"
+din471,5,d2_tol,W,+0/-0.05,+0/-0.048,"ours: B and I (IS 3075-1 Table 1) give 0/-0.048, h10 for 3..6 mm; W rounds the merged cell to -0.05"
+din471,6,d2_tol,W,+0/-0.05,+0/-0.048,"ours: B and I (IS 3075-1 Table 1) give 0/-0.048, h10 for 3..6 mm; W rounds the merged cell to -0.05"
+din471,9,d2_tol,W,+0/-0.11,+0/-0.06,ours: B and I give 0/-0.06 (h10 for d2 8.6 is 0.058); W's 0/-0.11 cell starts one row early
+din471,11,s_tol,B,+0.06/-0.18,0/-0.06,ours: W gives 0/-0.06 for s 1..1.75 (I agrees on the band); B's +0.06/-0.18 is the d3 tolerance of d1 7..9 pasted into the s column (B itself has 0/-0.06 for the same s at 9 and 10)
+din471,12,s_tol,B,+0.06/-0.18,0/-0.06,ours: W gives 0/-0.06 for s 1..1.75 (I agrees on the band); B's +0.06/-0.18 is the d3 tolerance of d1 7..9 pasted into the s column (B itself has 0/-0.06 for the same s at 9 and 10)
+din471,13,s_tol,B,+0.06/-0.18,0/-0.06,ours: W gives 0/-0.06 for s 1..1.75 (I agrees on the band); B's +0.06/-0.18 is the d3 tolerance of d1 7..9 pasted into the s column (B itself has 0/-0.06 for the same s at 9 and 10)
+din471,14,s_tol,B,+0.06/-0.18,0/-0.06,ours: W gives 0/-0.06 for s 1..1.75 (I agrees on the band); B's +0.06/-0.18 is the d3 tolerance of d1 7..9 pasted into the s column (B itself has 0/-0.06 for the same s at 9 and 10)
+din471,15,s_tol,B,+0.06/-0.18,0/-0.06,ours: W gives 0/-0.06 for s 1..1.75 (I agrees on the band); B's +0.06/-0.18 is the d3 tolerance of d1 7..9 pasted into the s column (B itself has 0/-0.06 for the same s at 9 and 10)
+din471,16,s_tol,B,+0.06/-0.18,0/-0.06,ours: W gives 0/-0.06 for s 1..1.75 (I agrees on the band); B's +0.06/-0.18 is the d3 tolerance of d1 7..9 pasted into the s column (B itself has 0/-0.06 for the same s at 9 and 10)
+din471,17,s_tol,B,+0.06/-0.18,0/-0.06,ours: W gives 0/-0.06 for s 1..1.75 (I agrees on the band); B's +0.06/-0.18 is the d3 tolerance of d1 7..9 pasted into the s column (B itself has 0/-0.06 for the same s at 9 and 10)
+din471,18,s_tol,B,+0.06/-0.18,0/-0.06,ours: W gives 0/-0.06 for s 1..1.75 (I agrees on the band); B's +0.06/-0.18 is the d3 tolerance of d1 7..9 pasted into the s column (B itself has 0/-0.06 for the same s at 9 and 10)
+din471,19,s_tol,B,+0.06/-0.18,0/-0.06,ours: W gives 0/-0.06 for s 1..1.75 (I agrees on the band); B's +0.06/-0.18 is the d3 tolerance of d1 7..9 pasted into the s column (B itself has 0/-0.06 for the same s at 9 and 10)
+din471,20,s_tol,B,+0.06/-0.18,0/-0.06,ours: W gives 0/-0.06 for s 1..1.75 (I agrees on the band); B's +0.06/-0.18 is the d3 tolerance of d1 7..9 pasted into the s column (B itself has 0/-0.06 for the same s at 9 and 10)
+din471,21,s_tol,B,+0.06/-0.18,0/-0.06,ours: W gives 0/-0.06 for s 1..1.75 (I agrees on the band); B's +0.06/-0.18 is the d3 tolerance of d1 7..9 pasted into the s column (B itself has 0/-0.06 for the same s at 9 and 10)
+din471,22,s_tol,B,+0.06/-0.18,0/-0.06,ours: W gives 0/-0.06 for s 1..1.75 (I agrees on the band); B's +0.06/-0.18 is the d3 tolerance of d1 7..9 pasted into the s column (B itself has 0/-0.06 for the same s at 9 and 10)
+din471,24,s_tol,B,+0.06/-0.18,0/-0.06,ours: W gives 0/-0.06 for s 1..1.75 (I agrees on the band); B's +0.06/-0.18 is the d3 tolerance of d1 7..9 pasted into the s column (B itself has 0/-0.06 for the same s at 9 and 10)
+din471,25,s_tol,B,+0.06/-0.18,0/-0.06,ours: W gives 0/-0.06 for s 1..1.75 (I agrees on the band); B's +0.06/-0.18 is the d3 tolerance of d1 7..9 pasted into the s column (B itself has 0/-0.06 for the same s at 9 and 10)
+din471,26,s_tol,B,+0.06/-0.18,0/-0.06,ours: W gives 0/-0.06 for s 1..1.75 (I agrees on the band); B's +0.06/-0.18 is the d3 tolerance of d1 7..9 pasted into the s column (B itself has 0/-0.06 for the same s at 9 and 10)
+din471,28,s_tol,B,+0.06/-0.18,0/-0.06,ours: W gives 0/-0.06 for s 1..1.75 (I agrees on the band); B's +0.06/-0.18 is the d3 tolerance of d1 7..9 pasted into the s column (B itself has 0/-0.06 for the same s at 9 and 10)
+din471,29,s_tol,B,+0.06/-0.18,0/-0.06,ours: W gives 0/-0.06 for s 1..1.75 (I agrees on the band); B's +0.06/-0.18 is the d3 tolerance of d1 7..9 pasted into the s column (B itself has 0/-0.06 for the same s at 9 and 10)
+din471,30,s_tol,B,+0.06/-0.18,0/-0.06,ours: W gives 0/-0.06 for s 1..1.75 (I agrees on the band); B's +0.06/-0.18 is the d3 tolerance of d1 7..9 pasted into the s column (B itself has 0/-0.06 for the same s at 9 and 10)
+din471,32,s_tol,B,+0.06/-0.18,0/-0.06,ours: W gives 0/-0.06 for s 1..1.75 (I agrees on the band); B's +0.06/-0.18 is the d3 tolerance of d1 7..9 pasted into the s column (B itself has 0/-0.06 for the same s at 9 and 10)
+din471,34,s_tol,B,+0.06/-0.18,0/-0.06,ours: W gives 0/-0.06 for s 1..1.75 (I agrees on the band); B's +0.06/-0.18 is the d3 tolerance of d1 7..9 pasted into the s column (B itself has 0/-0.06 for the same s at 9 and 10)
+din471,35,s_tol,B,+0.06/-0.18,0/-0.06,ours: W gives 0/-0.06 for s 1..1.75 (I agrees on the band); B's +0.06/-0.18 is the d3 tolerance of d1 7..9 pasted into the s column (B itself has 0/-0.06 for the same s at 9 and 10)
+din471,36,s_tol,B,+0.06/-0.18,0/-0.06,ours: W gives 0/-0.06 for s 1..1.75 (I agrees on the band); B's +0.06/-0.18 is the d3 tolerance of d1 7..9 pasted into the s column (B itself has 0/-0.06 for the same s at 9 and 10)
+din471,38,s_tol,B,+0.06/-0.18,0/-0.06,ours: W gives 0/-0.06 for s 1..1.75 (I agrees on the band); B's +0.06/-0.18 is the d3 tolerance of d1 7..9 pasted into the s column (B itself has 0/-0.06 for the same s at 9 and 10)
+din471,40,s_tol,B,+0.06/-0.18,0/-0.06,ours: W gives 0/-0.06 for s 1..1.75 (I agrees on the band); B's +0.06/-0.18 is the d3 tolerance of d1 7..9 pasted into the s column (B itself has 0/-0.06 for the same s at 9 and 10)
+din471,42,a_max,T,6.2,6.5,"ours: W, B and F give 6.5 (I too); T 6.2"
+din471,42,s_tol,B,+0.06/-0.18,0/-0.06,ours: W gives 0/-0.06 for s 1..1.75 (I agrees on the band); B's +0.06/-0.18 is the d3 tolerance of d1 7..9 pasted into the s column (B itself has 0/-0.06 for the same s at 9 and 10)
+din471,45,s_tol,B,+0.06/-0.18,0/-0.06,ours: W gives 0/-0.06 for s 1..1.75 (I agrees on the band); B's +0.06/-0.18 is the d3 tolerance of d1 7..9 pasted into the s column (B itself has 0/-0.06 for the same s at 9 and 10)
+din471,48,s,B,2,1.75,"ours: W, T and F give 1.75 (I too); B's 2.0 is the s of 50"
+din471,48,s_tol,B,+0.06/-0.18,0/-0.06,ours: W gives 0/-0.06 for s 1..1.75 (I agrees on the band); B's +0.06/-0.18 is the d3 tolerance of d1 7..9 pasted into the s column (B itself has 0/-0.06 for the same s at 9 and 10)
+din471,52,d2,F,49.5,49,"ours: W, T and B give 49 (t = 1.5); F typo"
+din471,56,d3,W,51.5,51.8,"ours: T, B, F and I give 51.8; W's 51.5 is a typo (d3 steps 1 mm with d1 here)"
+din471,58,d3,W,53.5,53.8,"ours: T, B, F and I give 53.8; W's 53.5 is a typo (d3 steps 1 mm with d1 here)"
+din471,68,d3,T,53.5,63.5,"ours: W, B and F give 63.5; T typo"
+din471,68,b,B,6.2,6.5,"ours: W, T and F give 6.5; B 6.2"
+din471,82,d3,T,78.5,76.5,"ours: W, B and F give 76.5; T typo"
+din471,85,d2_tol,W,+0/-0.54,+0/-0.35,ours: B and I give 0/-0.35 (h12 for d2 81.5..96.5); W's -0.54 is the h13 value of the next band (105..120)
+din471,88,d2_tol,W,+0/-0.54,+0/-0.35,ours: B and I give 0/-0.35 (h12 for d2 81.5..96.5); W's -0.54 is the h13 value of the next band (105..120)
+din471,90,d2,T,85.5,86.5,"ours: W, B and F give 86.5 (t = 1.75 as for 85..100); T typo"
+din471,90,d2_tol,W,+0/-0.54,+0/-0.35,ours: B and I give 0/-0.35 (h12 for d2 81.5..96.5); W's -0.54 is the h13 value of the next band (105..120)
+din471,95,d2_tol,W,+0/-0.54,+0/-0.35,ours: B and I give 0/-0.35 (h12 for d2 81.5..96.5); W's -0.54 is the h13 value of the next band (105..120)
+din471,100,d2_tol,W,+0/-0.54,+0/-0.35,ours: B and I give 0/-0.35 (h12 for d2 81.5..96.5); W's -0.54 is the h13 value of the next band (105..120)
+din471,100,s_tol,B,+0/-0.1,0/-0.08,"ours: W gives 0/-0.08 for 85..100, all s = 3; B's -0.1 is the s = 4 value and contradicts B's own 85..95 rows"
+din471,150,n_min,T,6,7.5,"ours: B and I (IS 3075-1 Table 1, n min 7.5 from 150 up, with t 2.5) give 7.5; T is the only other source"
+din471,180,b,T,14,13.5,"ours: B and I (IS 3075-1 Table 1, b 13.5) give 13.5; T is the only other source"
+din471,185,b,T,14,13.5,"ours: B and I (IS 3075-1 Table 1, b 13.5) give 13.5; T is the only other source"

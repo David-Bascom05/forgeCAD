@@ -1,0 +1,129 @@
+# title: Self-clinching standoffs, through-hole threaded (SO/SOS/SOA/SO4) and blind threaded (BSO/BSOS/BSOA/BSO4), metric
+# standard: PennEngineering bulletin SO (PDF dated 2022-08-22), pages SO-3 and SO-4 (vendor dimensions)
+# kind: standoff
+# units: mm
+# name: PEM SO
+# item: Self-clinching standoff
+# category: Sheet metal hardware/Self-clinching standoffs
+# gen: pem_standoff | d=@d | P=P | L=L | C=C_max | H=H | B=B | D=D | F=F_min | blind=style==blind | tmin=sheet_min | modelled=@modelled
+# option thread: cosmetic modelled
+# option grade: SO SOS SO4
+# material: PEM S carbon steel
+# grade SO: PEM S carbon steel
+# grade SOS: PEM 300 series stainless
+# grade SO4: PEM 400 series stainless hardened
+# lengths: 3 4 6 8 10 12 14 16 18 20 22 25
+# src P: PEM bulletin SO, page SO-3 (SO) and SO-4 (BSO) metric tables (https://damlite.pemnet.com/SO-M3-6ZI_pdf_1.pdf), keyed 2026-11-04; D and F stepped by length as printed under each length chart
+# chk K: PEM online catalogue: every SO item record (one page per thread and length, all columns incl. B and D, e.g. https://catalog.pemnet.com/item/thru-hole-threaded-standoffs-types-so-soa-sos/ru-hole-threaded-standoffs-types-so-soa-sos-metric/so-m3-6zi) and the BSO list (https://catalog.pemnet.com/viewitems/blind-threaded-standoffs-types-bso-bsoa-bsos/lind-threaded-standoffs-types-bso-bsoa-bsos-metric: hole C F H L per item) plus one BSO item per thread, read 2026-11-04
+# chk F: FreeCAD FastenersWB 2026-09-10 FsData/PEMFasteners.csv PEMStandoffdef/length/range (thru SO only: B C H, D steps, length range; GPL-2.0-or-later: consulted, never copied)
+# tolerance: L +0.05/-0.13, C -0.13, B +-0.13, D +-0.25, hole +0.08/-0
+# note: size = type-thread code-length code as PEM numbers the carbon steel part; 3.5M3 is the M3 thread in the thicker-walled 3.5 body (bulletin footnote 2)
+# model: L nominal (overall: barrel end to the head face, which installs flush with the sheet), C max (barrel diameter, which is also the shank in the sheet hole), H nominal (thin hexagon head across flats), B nominal, D nominal, F_min; hole = the hole size in the sheet at its low limit; the bulletin gives no head thickness or clinch-groove profile: model the head flush in the sheet, no thicker than sheet_min
+# note: style thru = SO (through-hole threaded): threaded from the head end; D is the depth of the plain counterbore of diameter B at the barrel end (0 = none, bulletin "None"); style blind = BSO (closed at the head end, panel face stays clean): F_min is the minimum full-thread depth from the barrel end
+# note: types: SO/BSO heat-treated carbon steel (sheet HRB 80 / HB 150 or less), SOS/BSOS 300 series stainless (HRB 70 / HB 125), SOA/BSOA aluminium (HRB 50 / HB 82), SO4/BSO4 hardened 400 series stainless for stainless sheet (HRB 88 / HB 183); all four share these dimensions
+# note: "PEM" is a trademark of PennEngineering; part numbers and dimensions are used descriptively, as facts
+size,style,thread,P,code,L,sheet_min,hole,hole_max,B,C_max,H,edge_min,D,F_min,src,checked
+SO-M3-3,thru,M3x0.5,0.5,M3,3,1,4.22,4.3,3.2,4.2,4.8,6,0,,P,P K F
+SO-M3-4,thru,M3x0.5,0.5,M3,4,1,4.22,4.3,3.2,4.2,4.8,6,0,,P,P K F
+SO-M3-6,thru,M3x0.5,0.5,M3,6,1,4.22,4.3,3.2,4.2,4.8,6,0,,P,P K F
+SO-M3-8,thru,M3x0.5,0.5,M3,8,1,4.22,4.3,3.2,4.2,4.8,6,0,,P,P K F
+SO-M3-10,thru,M3x0.5,0.5,M3,10,1,4.22,4.3,3.2,4.2,4.8,6,4,,P,P K F
+SO-M3-12,thru,M3x0.5,0.5,M3,12,1,4.22,4.3,3.2,4.2,4.8,6,4,,P,P K F
+SO-M3-14,thru,M3x0.5,0.5,M3,14,1,4.22,4.3,3.2,4.2,4.8,6,4,,P,P K F
+SO-M3-16,thru,M3x0.5,0.5,M3,16,1,4.22,4.3,3.2,4.2,4.8,6,8,,P,P K F
+SO-M3-18,thru,M3x0.5,0.5,M3,18,1,4.22,4.3,3.2,4.2,4.8,6,8,,P,P K F
+SO-3.5M3-3,thru,M3x0.5,0.5,3.5M3,3,1,5.41,5.49,3.2,5.39,6.4,6.8,0,,P,P K F
+SO-3.5M3-4,thru,M3x0.5,0.5,3.5M3,4,1,5.41,5.49,3.2,5.39,6.4,6.8,0,,P,P K F
+SO-3.5M3-6,thru,M3x0.5,0.5,3.5M3,6,1,5.41,5.49,3.2,5.39,6.4,6.8,0,,P,P K F
+SO-3.5M3-8,thru,M3x0.5,0.5,3.5M3,8,1,5.41,5.49,3.2,5.39,6.4,6.8,0,,P,P K F
+SO-3.5M3-10,thru,M3x0.5,0.5,3.5M3,10,1,5.41,5.49,3.2,5.39,6.4,6.8,4,,P,P K F
+SO-3.5M3-12,thru,M3x0.5,0.5,3.5M3,12,1,5.41,5.49,3.2,5.39,6.4,6.8,4,,P,P K F
+SO-3.5M3-14,thru,M3x0.5,0.5,3.5M3,14,1,5.41,5.49,3.2,5.39,6.4,6.8,4,,P,P K F
+SO-3.5M3-16,thru,M3x0.5,0.5,3.5M3,16,1,5.41,5.49,3.2,5.39,6.4,6.8,8,,P,P K F
+SO-3.5M3-18,thru,M3x0.5,0.5,3.5M3,18,1,5.41,5.49,3.2,5.39,6.4,6.8,8,,P,P K F
+SO-M3.5-3,thru,M3.5x0.6,0.6,M3.5,3,1,5.41,5.49,3.9,5.39,6.4,6.8,0,,P,P K F
+SO-M3.5-4,thru,M3.5x0.6,0.6,M3.5,4,1,5.41,5.49,3.9,5.39,6.4,6.8,0,,P,P K F
+SO-M3.5-6,thru,M3.5x0.6,0.6,M3.5,6,1,5.41,5.49,3.9,5.39,6.4,6.8,0,,P,P K F
+SO-M3.5-8,thru,M3.5x0.6,0.6,M3.5,8,1,5.41,5.49,3.9,5.39,6.4,6.8,0,,P,P K F
+SO-M3.5-10,thru,M3.5x0.6,0.6,M3.5,10,1,5.41,5.49,3.9,5.39,6.4,6.8,4,,P,P K F
+SO-M3.5-12,thru,M3.5x0.6,0.6,M3.5,12,1,5.41,5.49,3.9,5.39,6.4,6.8,4,,P,P K F
+SO-M3.5-14,thru,M3.5x0.6,0.6,M3.5,14,1,5.41,5.49,3.9,5.39,6.4,6.8,4,,P,P K F
+SO-M3.5-16,thru,M3.5x0.6,0.6,M3.5,16,1,5.41,5.49,3.9,5.39,6.4,6.8,8,,P,P K F
+SO-M3.5-18,thru,M3.5x0.6,0.6,M3.5,18,1,5.41,5.49,3.9,5.39,6.4,6.8,8,,P,P K F
+SO-M3.5-20,thru,M3.5x0.6,0.6,M3.5,20,1,5.41,5.49,3.9,5.39,6.4,6.8,8,,P,P K F
+SO-M3.5-22,thru,M3.5x0.6,0.6,M3.5,22,1,5.41,5.49,3.9,5.39,6.4,6.8,11,,P,P K F
+SO-M3.5-25,thru,M3.5x0.6,0.6,M3.5,25,1,5.41,5.49,3.9,5.39,6.4,6.8,11,,P,P K F
+SO-M4-3,thru,M4x0.7,0.7,M4,3,1.27,7.14,7.22,4.8,7.12,7.9,8,0,,P,P K F
+SO-M4-4,thru,M4x0.7,0.7,M4,4,1.27,7.14,7.22,4.8,7.12,7.9,8,0,,P,P K F
+SO-M4-6,thru,M4x0.7,0.7,M4,6,1.27,7.14,7.22,4.8,7.12,7.9,8,0,,P,P K F
+SO-M4-8,thru,M4x0.7,0.7,M4,8,1.27,7.14,7.22,4.8,7.12,7.9,8,0,,P,P K F
+SO-M4-10,thru,M4x0.7,0.7,M4,10,1.27,7.14,7.22,4.8,7.12,7.9,8,4,,P,P K F
+SO-M4-12,thru,M4x0.7,0.7,M4,12,1.27,7.14,7.22,4.8,7.12,7.9,8,4,,P,P K F
+SO-M4-14,thru,M4x0.7,0.7,M4,14,1.27,7.14,7.22,4.8,7.12,7.9,8,4,,P,P K F
+SO-M4-16,thru,M4x0.7,0.7,M4,16,1.27,7.14,7.22,4.8,7.12,7.9,8,8,,P,P K F
+SO-M4-18,thru,M4x0.7,0.7,M4,18,1.27,7.14,7.22,4.8,7.12,7.9,8,8,,P,P K F
+SO-M4-20,thru,M4x0.7,0.7,M4,20,1.27,7.14,7.22,4.8,7.12,7.9,8,8,,P,P K F
+SO-M4-22,thru,M4x0.7,0.7,M4,22,1.27,7.14,7.22,4.8,7.12,7.9,8,11,,P,P K F
+SO-M4-25,thru,M4x0.7,0.7,M4,25,1.27,7.14,7.22,4.8,7.12,7.9,8,11,,P,P K F
+SO-M5-3,thru,M5x0.8,0.8,M5,3,1.27,7.14,7.22,5.35,7.12,7.9,8,0,,P,P K
+SO-M5-4,thru,M5x0.8,0.8,M5,4,1.27,7.14,7.22,5.35,7.12,7.9,8,0,,P,P K
+SO-M5-6,thru,M5x0.8,0.8,M5,6,1.27,7.14,7.22,5.35,7.12,7.9,8,0,,P,P K
+SO-M5-8,thru,M5x0.8,0.8,M5,8,1.27,7.14,7.22,5.35,7.12,7.9,8,0,,P,P K
+SO-M5-10,thru,M5x0.8,0.8,M5,10,1.27,7.14,7.22,5.35,7.12,7.9,8,4,,P,P K
+SO-M5-12,thru,M5x0.8,0.8,M5,12,1.27,7.14,7.22,5.35,7.12,7.9,8,4,,P,P K
+SO-M5-14,thru,M5x0.8,0.8,M5,14,1.27,7.14,7.22,5.35,7.12,7.9,8,4,,P,P K
+SO-M5-16,thru,M5x0.8,0.8,M5,16,1.27,7.14,7.22,5.35,7.12,7.9,8,8,,P,P K
+SO-M5-18,thru,M5x0.8,0.8,M5,18,1.27,7.14,7.22,5.35,7.12,7.9,8,8,,P,P K
+SO-M5-20,thru,M5x0.8,0.8,M5,20,1.27,7.14,7.22,5.35,7.12,7.9,8,8,,P,P K
+SO-M5-22,thru,M5x0.8,0.8,M5,22,1.27,7.14,7.22,5.35,7.12,7.9,8,11,,P,P K
+SO-M5-25,thru,M5x0.8,0.8,M5,25,1.27,7.14,7.22,5.35,7.12,7.9,8,11,,P,P K
+BSO-M3-6,blind,M3x0.5,0.5,M3,6,1,4.22,4.3,,4.2,4.8,6,,3.2,P,P K
+BSO-M3-8,blind,M3x0.5,0.5,M3,8,1,4.22,4.3,,4.2,4.8,6,,4,P,P K
+BSO-M3-10,blind,M3x0.5,0.5,M3,10,1,4.22,4.3,,4.2,4.8,6,,4,P,P K
+BSO-M3-12,blind,M3x0.5,0.5,M3,12,1,4.22,4.3,,4.2,4.8,6,,5,P,P K
+BSO-M3-14,blind,M3x0.5,0.5,M3,14,1,4.22,4.3,,4.2,4.8,6,,6.5,P,P K
+BSO-M3-16,blind,M3x0.5,0.5,M3,16,1,4.22,4.3,,4.2,4.8,6,,6.5,P,P K
+BSO-M3-18,blind,M3x0.5,0.5,M3,18,1,4.22,4.3,,4.2,4.8,6,,9.5,P,P K
+BSO-M3-20,blind,M3x0.5,0.5,M3,20,1,4.22,4.3,,4.2,4.8,6,,9.5,P,P K
+BSO-M3-22,blind,M3x0.5,0.5,M3,22,1,4.22,4.3,,4.2,4.8,6,,9.5,P,P K
+BSO-M3-25,blind,M3x0.5,0.5,M3,25,1,4.22,4.3,,4.2,4.8,6,,9.5,P,P K
+BSO-3.5M3-6,blind,M3x0.5,0.5,3.5M3,6,1,5.41,5.49,,5.39,6.4,6.8,,3.2,P,P K
+BSO-3.5M3-8,blind,M3x0.5,0.5,3.5M3,8,1,5.41,5.49,,5.39,6.4,6.8,,4,P,P K
+BSO-3.5M3-10,blind,M3x0.5,0.5,3.5M3,10,1,5.41,5.49,,5.39,6.4,6.8,,4,P,P K
+BSO-3.5M3-12,blind,M3x0.5,0.5,3.5M3,12,1,5.41,5.49,,5.39,6.4,6.8,,5,P,P K
+BSO-3.5M3-14,blind,M3x0.5,0.5,3.5M3,14,1,5.41,5.49,,5.39,6.4,6.8,,6.5,P,P K
+BSO-3.5M3-16,blind,M3x0.5,0.5,3.5M3,16,1,5.41,5.49,,5.39,6.4,6.8,,6.5,P,P K
+BSO-3.5M3-18,blind,M3x0.5,0.5,3.5M3,18,1,5.41,5.49,,5.39,6.4,6.8,,9.5,P,P K
+BSO-3.5M3-20,blind,M3x0.5,0.5,3.5M3,20,1,5.41,5.49,,5.39,6.4,6.8,,9.5,P,P K
+BSO-3.5M3-22,blind,M3x0.5,0.5,3.5M3,22,1,5.41,5.49,,5.39,6.4,6.8,,9.5,P,P K
+BSO-3.5M3-25,blind,M3x0.5,0.5,3.5M3,25,1,5.41,5.49,,5.39,6.4,6.8,,9.5,P,P K
+BSO-M3.5-6,blind,M3.5x0.6,0.6,M3.5,6,1,5.41,5.49,,5.39,6.4,6.8,,3.2,P,P K
+BSO-M3.5-8,blind,M3.5x0.6,0.6,M3.5,8,1,5.41,5.49,,5.39,6.4,6.8,,4,P,P K
+BSO-M3.5-10,blind,M3.5x0.6,0.6,M3.5,10,1,5.41,5.49,,5.39,6.4,6.8,,4,P,P K
+BSO-M3.5-12,blind,M3.5x0.6,0.6,M3.5,12,1,5.41,5.49,,5.39,6.4,6.8,,5,P,P K
+BSO-M3.5-14,blind,M3.5x0.6,0.6,M3.5,14,1,5.41,5.49,,5.39,6.4,6.8,,6.5,P,P K
+BSO-M3.5-16,blind,M3.5x0.6,0.6,M3.5,16,1,5.41,5.49,,5.39,6.4,6.8,,6.5,P,P K
+BSO-M3.5-18,blind,M3.5x0.6,0.6,M3.5,18,1,5.41,5.49,,5.39,6.4,6.8,,9.5,P,P K
+BSO-M3.5-20,blind,M3.5x0.6,0.6,M3.5,20,1,5.41,5.49,,5.39,6.4,6.8,,9.5,P,P K
+BSO-M3.5-22,blind,M3.5x0.6,0.6,M3.5,22,1,5.41,5.49,,5.39,6.4,6.8,,9.5,P,P K
+BSO-M3.5-25,blind,M3.5x0.6,0.6,M3.5,25,1,5.41,5.49,,5.39,6.4,6.8,,9.5,P,P K
+BSO-M4-6,blind,M4x0.7,0.7,M4,6,1.27,7.14,7.22,,7.12,7.9,8,,3.2,P,P K
+BSO-M4-8,blind,M4x0.7,0.7,M4,8,1.27,7.14,7.22,,7.12,7.9,8,,4,P,P K
+BSO-M4-10,blind,M4x0.7,0.7,M4,10,1.27,7.14,7.22,,7.12,7.9,8,,4,P,P K
+BSO-M4-12,blind,M4x0.7,0.7,M4,12,1.27,7.14,7.22,,7.12,7.9,8,,5,P,P K
+BSO-M4-14,blind,M4x0.7,0.7,M4,14,1.27,7.14,7.22,,7.12,7.9,8,,6.5,P,P K
+BSO-M4-16,blind,M4x0.7,0.7,M4,16,1.27,7.14,7.22,,7.12,7.9,8,,6.5,P,P K
+BSO-M4-18,blind,M4x0.7,0.7,M4,18,1.27,7.14,7.22,,7.12,7.9,8,,9.5,P,P K
+BSO-M4-20,blind,M4x0.7,0.7,M4,20,1.27,7.14,7.22,,7.12,7.9,8,,9.5,P,P K
+BSO-M4-22,blind,M4x0.7,0.7,M4,22,1.27,7.14,7.22,,7.12,7.9,8,,9.5,P,P K
+BSO-M4-25,blind,M4x0.7,0.7,M4,25,1.27,7.14,7.22,,7.12,7.9,8,,9.5,P,P K
+BSO-M5-6,blind,M5x0.8,0.8,M5,6,1.27,7.14,7.22,,7.12,7.9,8,,3.2,P,P K
+BSO-M5-8,blind,M5x0.8,0.8,M5,8,1.27,7.14,7.22,,7.12,7.9,8,,4,P,P K
+BSO-M5-10,blind,M5x0.8,0.8,M5,10,1.27,7.14,7.22,,7.12,7.9,8,,4,P,P K
+BSO-M5-12,blind,M5x0.8,0.8,M5,12,1.27,7.14,7.22,,7.12,7.9,8,,5,P,P K
+BSO-M5-14,blind,M5x0.8,0.8,M5,14,1.27,7.14,7.22,,7.12,7.9,8,,6.5,P,P K
+BSO-M5-16,blind,M5x0.8,0.8,M5,16,1.27,7.14,7.22,,7.12,7.9,8,,6.5,P,P K
+BSO-M5-18,blind,M5x0.8,0.8,M5,18,1.27,7.14,7.22,,7.12,7.9,8,,9.5,P,P K
+BSO-M5-20,blind,M5x0.8,0.8,M5,20,1.27,7.14,7.22,,7.12,7.9,8,,9.5,P,P K
+BSO-M5-22,blind,M5x0.8,0.8,M5,22,1.27,7.14,7.22,,7.12,7.9,8,,9.5,P,P K
+BSO-M5-25,blind,M5x0.8,0.8,M5,25,1.27,7.14,7.22,,7.12,7.9,8,,9.5,P,P K

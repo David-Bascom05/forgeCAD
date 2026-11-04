@@ -1,0 +1,62 @@
+# title: Tap drills for unified inch threads (UNC, UNF), with the 2B/3B minor diameter limits
+# standard: ASME B1.1 class 2B/3B minor diameter (as ISO 5864:1993 and ISO 2306:1972 Tables 3-4 give it); 75 % thread tap drills (shop practice, no standard)
+# kind: hole
+# units: in
+# src A: ISO 2306:1972 Table 3 (UNC) and Table 4 (UNF), minor diameter 2B max, 3B max, 2B/3B min, printed in mm (iTeh preview https://cdn.standards.iteh.ai/samples/7135/5bef5f85e78040d6b848307ffd62d83f/ISO-2306-1972.pdf, pages 3-4 rendered at 160 dpi), divided by 25.4 and rounded to 4 decimals, keyed 2026-11-04
+# chk X: ISO 5864:1993 clause 8.3 tolerance formulas on D1 (iTeh preview https://cdn.standards.iteh.ai/samples/12064/ea73f3afabfa45ae87315b65b29da741/ISO-5864-1993.pdf), basic D1 = D - 1.082532/n, computed 2026-11-04; also: the drill lies inside D1 limits
+# src U: UPenn MEAM tap drill chart, 75 % column (https://medesign.seas.upenn.edu/index.php/Guides/TapDrillChart), read 2026-11-04
+# src T: ETSU tap drill chart (https://faculty.etsu.edu/hemphill/tap_drill.htm), read 2026-11-04
+# src M: Tameson tap drill chart (https://tameson.com/pages/tap-drill-chart), read 2026-11-04
+# src B: bd_warehouse 5a8a439 tap_hole_sizes.csv, column Soft (Apache-2.0), third_party/bd_warehouse/tap_drill_unified.csv
+# chk F: FreeCAD FastenersWB 2026-09-10 FsData/inch_screw_hole_chart.csv, tap_drill (mm, one per nominal size, the UNC drill) (GPL-2.0-or-later: consulted, never copied)
+# map B: tap_hole_sizes.csv | drill_d=Soft
+# model: the hole is drilled at drill_d; a modelled tapped hole's minor diameter is D1_min (max material), D1_max_2B the gauge limit
+# note: drill is the drill designation (number #, letter, fraction); drill_d its ASME B94.11M nominal diameter (fractions exact); thread_pct = tpi (D - drill_d) / 0.01299, rounded; 9/16-18 (33/64) and 5/8-18 (37/64) drills are 0.0005 over D1_max_2B in every chart; ISO 2306 gives metric drills for these threads (not keyed here, mm)
+size,D,tpi,series,D1_min,D1_max_2B,D1_max_3B,drill,drill_d,thread_pct,src,checked
+"#1-64",0.073,64,UNC,0.0561,0.0623,0.0623,"#53",0.0595,67,A B T,A X F B T
+"#2-56",0.086,56,UNC,0.0667,0.0737,0.0737,"#50",0.07,69,A B T U,A X F B T U
+"#3-48",0.099,48,UNC,0.0764,0.0845,0.0845,"#47",0.0785,76,A B M T,A X F B M T
+"#4-40",0.112,40,UNC,0.0849,0.0939,0.0939,"#43",0.089,71,A B M T U,A X F B M T U
+"#5-40",0.125,40,UNC,0.0979,0.1062,0.1062,"#38",0.1015,72,A B M T,A X F B M T
+"#6-32",0.138,32,UNC,0.104,0.114,0.114,"#36",0.1065,78,A B M T U,A F B M T U
+"#8-32",0.164,32,UNC,0.13,0.139,0.1389,"#29",0.136,69,A B M T U,A F B M T U
+"#10-24",0.19,24,UNC,0.145,0.156,0.1555,"#25",0.1495,75,A B T U,A F B T U
+"#12-24",0.216,24,UNC,0.171,0.181,0.1807,"#16",0.177,72,A B M T U,A F B M T U
+1/4-20,0.25,20,UNC,0.1959,0.2074,0.2067,"#7",0.201,75,A B M T U,A X F B M T U
+5/16-18,0.3125,18,UNC,0.2524,0.2651,0.263,F,0.257,77,A B M T U,A X F B M T U
+3/8-16,0.375,16,UNC,0.3073,0.3214,0.3182,5/16,0.3125,77,A B M T U,A X F B M T U
+7/16-14,0.4375,14,UNC,0.3602,0.376,0.3717,U,0.368,75,A B M T,A X F B M T
+1/2-13,0.5,13,UNC,0.4167,0.4336,0.4284,27/64,0.421875,78,A B M T U,A X F B M T U
+9/16-12,0.5625,12,UNC,0.4723,0.4904,0.4843,31/64,0.484375,72,A B M T,A X F B M T
+5/8-11,0.625,11,UNC,0.5266,0.546,0.5391,17/32,0.53125,79,A B M T,A X F B M T
+3/4-10,0.75,10,UNC,0.6417,0.6627,0.6545,21/32,0.65625,72,A B M T,A X F B M T
+7/8-9,0.875,9,UNC,0.7547,0.7775,0.7685,49/64,0.765625,76,A B M T,A X F B M T
+1-8,1,8,UNC,0.8647,0.8897,0.8797,7/8,0.875,77,A B M T,A X F B M T
+1 1/8-7,1.125,7,UNC,0.9704,0.998,0.9875,63/64,0.984375,76,A M,A X F M
+1 1/4-7,1.25,7,UNC,1.0954,1.123,1.1125,1 7/64,1.109375,76,A M,A X F M
+1 3/8-6,1.375,6,UNC,1.1946,1.2252,1.2146,1 7/32,1.21875,72,A M,A X F M
+1 1/2-6,1.5,6,UNC,1.3196,1.3502,1.3396,1 11/32,1.34375,72,A M,A X F M
+"#0-80",0.06,80,UNF,0.0465,0.0514,0.0514,3/64,0.046875,81,A B T U,A X B T U
+"#1-72",0.073,72,UNF,0.058,0.0635,0.0635,"#53",0.0595,75,A B T,A X B T
+"#2-64",0.086,64,UNF,0.0691,0.0753,0.0753,"#50",0.07,79,A B T U,A X B T U
+"#3-56",0.099,56,UNF,0.0797,0.0865,0.0865,"#45",0.082,73,A B M T,A X B M T
+"#4-48",0.112,48,UNF,0.0894,0.0968,0.0968,"#42",0.0935,68,A B M T U,A X B M T U
+"#5-44",0.125,44,UNF,0.1004,0.1079,0.1079,"#37",0.104,71,A B M T,A X B M T
+"#6-40",0.138,40,UNF,0.111,0.119,0.1186,"#33",0.113,77,A B M T U,A B M T U
+"#8-36",0.164,36,UNF,0.134,0.142,0.1416,"#29",0.136,78,A B M T U,A B M T U
+"#10-32",0.19,32,UNF,0.156,0.164,0.1641,"#21",0.159,76,A B M T U,A B M T U
+"#12-28",0.216,28,UNF,0.177,0.186,0.1857,"#14",0.182,73,A B T U,A B T U
+1/4-28,0.25,28,UNF,0.2113,0.2197,0.219,"#3",0.213,80,A B M T U,A X B M T U
+5/16-24,0.3125,24,UNF,0.2674,0.2771,0.2754,I,0.272,75,A B M T U,A X B M T U
+3/8-24,0.375,24,UNF,0.3299,0.3396,0.3372,Q,0.332,79,A B M T U,A X B M T U
+7/16-20,0.4375,20,UNF,0.3834,0.3949,0.3916,25/64,0.390625,72,A B M T,A X B M T
+1/2-20,0.5,20,UNF,0.4459,0.4574,0.4537,29/64,0.453125,72,A B M T U,A X B M T U
+9/16-18,0.5625,18,UNF,0.5024,0.5151,0.5106,33/64,0.515625,65,A B M T,A B M T
+5/8-18,0.625,18,UNF,0.5649,0.5776,0.573,37/64,0.578125,65,A B M T,A B M T
+3/4-16,0.75,16,UNF,0.6823,0.6964,0.6908,11/16,0.6875,77,A B M T,A X B M T
+7/8-14,0.875,14,UNF,0.7977,0.8135,0.8068,13/16,0.8125,67,A B M T,A X B M T
+1-12,1,12,UNF,0.9098,0.9279,0.9198,59/64,0.921875,72,A M,A X M
+1 1/8-12,1.125,12,UNF,1.0348,1.0529,1.0448,1 3/64,1.046875,72,A M,A X M
+1 1/4-12,1.25,12,UNF,1.1598,1.1779,1.1698,1 11/64,1.171875,72,A M,A X M
+1 3/8-12,1.375,12,UNF,1.2848,1.3029,1.2948,1 19/64,1.296875,72,A M,A X M
+1 1/2-12,1.5,12,UNF,1.4098,1.4279,1.4198,1 27/64,1.421875,72,A M,A X M

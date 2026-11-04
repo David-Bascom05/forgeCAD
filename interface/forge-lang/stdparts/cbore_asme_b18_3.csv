@@ -1,0 +1,32 @@
+# title: Drill and counterbore sizes for inch socket head cap screws
+# standard: ASME B18.3 (Appendix, drill and counterbore sizes for socket head cap screws, 1960 series)
+# kind: hole
+# units: in
+# src W: amesweb counterbore hole dimensions chart (inch) (https://www.amesweb.info/Screws/Counterbore-Hole-Dimensions-Chart.aspx), reproducing ASME B18.3's appendix table: A close/normal drill, H, B, C, read 2026-11-04
+# src E: Engineers Edge drill and counterbore sizes (https://www.engineersedge.com/mechanical,045tolerances/drill_and_counterbore_sizes_14163.htm): A, B, C, read 2026-11-04
+# chk R: Noramark counterbore chart, inch socket head (https://www.noramark.com/resources/charts/counterbore-dimensions/), counterbore diameter #2-1, read 2026-11-04
+# model: through hole a_close or a_normal (the drill's diameter as the table prints it), counterbore b (nominal) h deep (h = D, the head height max, puts the head flush), countersink c at the hole's top edge to clear the under-head fillet (the appendix says it need not exceed the fillet's F max)
+# note: b_size is the counterbore's fractional size as the table prints it; drill columns hold the drill designations
+size,d,a_close_drill,a_close,a_normal_drill,a_normal,b_size,b,h,c,src,checked
+"#0",0.06,"#51",0.067,"#49",0.073,1/8,0.125,0.06,0.074,W,W E
+"#1",0.073,"#46",0.081,"#43",0.089,5/32,0.15625,0.073,0.087,W,W E
+"#2",0.086,3/32,0.094,"#36",0.106,3/16,0.1875,0.086,0.102,W,W E R
+"#3",0.099,"#36",0.106,"#31",0.12,7/32,0.21875,0.099,0.115,W,W E R
+"#4",0.112,1/8,0.125,"#29",0.136,7/32,0.21875,0.112,0.13,W,W E R
+"#5",0.125,9/64,0.141,"#23",0.154,1/4,0.25,0.125,0.145,W,W E R
+"#6",0.138,"#23",0.154,"#18",0.17,9/32,0.28125,0.138,0.158,W,W E R
+"#8",0.164,"#15",0.18,"#10",0.194,5/16,0.3125,0.164,0.188,W,W E R
+"#10",0.19,"#5",0.206,"#2",0.221,3/8,0.375,0.19,0.218,W,W E R
+1/4,0.25,17/64,0.266,9/32,0.281,7/16,0.4375,0.25,0.278,W,W E R
+5/16,0.3125,21/64,0.328,11/32,0.344,17/32,0.53125,0.312,0.346,W,W E R
+3/8,0.375,25/64,0.391,13/32,0.406,5/8,0.625,0.375,0.415,W,W E R
+7/16,0.4375,29/64,0.453,15/32,0.469,23/32,0.71875,0.438,0.483,W,W E R
+1/2,0.5,33/64,0.516,17/32,0.531,13/16,0.8125,0.5,0.552,W,W E R
+5/8,0.625,41/64,0.641,21/32,0.656,1,1,0.625,0.689,W,W E R
+3/4,0.75,49/64,0.766,25/32,0.781,1 3/16,1.1875,0.75,0.828,W,W E R
+7/8,0.875,57/64,0.891,29/32,0.906,1 3/8,1.375,0.875,0.963,W,W E R
+1,1,1 1/64,1.016,1 1/32,1.031,1 5/8,1.625,1,1.1,W,W E R
+1 1/4,1.25,1 9/32,1.281,1 5/16,1.312,2,2,1.25,1.37,W,W E
+1 1/2,1.5,1 17/32,1.531,1 9/16,1.562,2 3/8,2.375,1.5,1.64,W,W E
+1 3/4,1.75,1 25/32,1.781,1 13/16,1.812,2 3/4,2.75,1.75,1.91,W,W E
+2,2,2 1/32,2.031,2 1/16,2.062,3 1/8,3.125,2,2.18,W,W E

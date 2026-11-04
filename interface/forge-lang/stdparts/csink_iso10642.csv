@@ -1,0 +1,29 @@
+# title: Countersinks for 90 degree countersunk head screws
+# standard: ISO 15065:2005 (heads to ISO 7721: ISO 2009, ISO 7046-1/-2, ISO 1482, ISO 7050 ...); ISO 10642:2004 head dk; DIN 74 form F for ISO 10642
+# kind: hole
+# units: mm
+# angle: 90
+# src A: ISO 15065:2005 Table 1, printed page 2 of the iTeh preview (https://cdn.standards.iteh.ai/samples/37365/57c8c6dac6864ac5a6f7bfa6fdd06111/ISO-15065-2005.pdf), keyed 2026-11-04
+# src D: ISO 10642:2004 Table 1, dk theoretical max and actual min, iTeh preview (https://cdn.standards.iteh.ai/samples/34454/32dec7e84d974361b85f744935ab2175/ISO-10642-2004.pdf), keyed 2026-11-04; ISO 10642:2004/Amd 1:2012 lowers M20 dk actual min to 35.4 (36.05 here is the 2004 value)
+# src N: neue-physik.de "Senkungen für Senkschrauben (DIN 74)" (https://www.neue-physik.de/353.9_Senkungen.php), d2 and t, M3-M20, read 2026-11-04
+# chk S: strobel-industry.de Senkung rechner, ISO 10642 in DIN 74 form F, M3-M20 d2 (https://strobel-industry.de/wissen/senkung-fase-rechner), read 2026-11-04
+# chk O: BOSL2 screws.scad metric_flat_small (ISO 7721 theoretical head diameters) and metric_flat_large (ISO 10642 dk theor/actual), BSD-2-Clause
+# chk X: ISO 15065 footnote a: dh_min is ISO 273 medium (our iso273.csv), dh_max = dh_min + IT13
+# model: ISO 7721 heads (ISO 2009, ISO 7046 ...): cone 90 degrees from Dc_min at the surface (the nominal), hole dh_min; ISO 10642 socket heads: ISO 15065 does not cover them; seat flush at dk_10642 (theoretical sharp max) or cut to d2_din74f (DIN 74 form F, the German practice), depth t_din74f below the hole edge
+# note: size ST5.5 is a tapping-screw size only (dh 6.00 is not in ISO 273); st is the tapping-screw size sharing the row; ISO 10642 (2019 on) also has M2 and M2.5, whose dk the previews do not show (not keyed); no ISO countersink is standard past M10 (ISO 15065) or M20 (ISO 10642)
+size,d,st,dh_min,dh_max,Dc_min,Dc_max,t,dk_10642,dk_10642_min,d2_din74f,t_din74f,src,checked
+M1.6,1.6,,1.8,1.94,3.6,3.7,0.95,,,,,A,A X O
+M2,2,ST2.2,2.4,2.54,4.4,4.5,1.05,,,,,A,A X O
+M2.5,2.5,,2.9,3.04,5.5,5.6,1.35,,,,,A,A X O
+M3,3,ST2.9,3.4,3.58,6.3,6.5,1.55,6.72,5.54,6.9,1.8,A D N,A X O D N S
+M3.5,3.5,ST3.5,3.9,4.08,8.2,8.4,2.25,,,,,A,A X O
+M4,4,ST4.2,4.5,4.68,9.4,9.6,2.55,8.96,7.53,9.2,2.3,A D N,A X O D N S
+M5,5,ST4.8,5.5,5.68,10.4,10.65,2.58,11.2,9.43,11.5,3,A D N,A X O D N S
+ST5.5,5.5,ST5.5,6,6.18,11.5,11.75,2.88,,,,,A,A X
+M6,6,ST6.3,6.6,6.82,12.6,12.85,3.13,13.44,11.34,13.7,3.6,A D N,A X O D N S
+M8,8,ST8,9,9.22,17.3,17.55,4.28,17.92,15.24,18.3,4.6,A D N,A X O D N S
+M10,10,ST9.5,11,11.27,20,20.3,4.65,22.4,19.22,22.7,5.9,A D N,A X O D N S
+M12,12,,,,,,,26.88,23.12,27.2,6.9,D N,D O N S
+M14,14,,,,,,,30.8,26.52,,,D,D O
+M16,16,,,,,,,33.6,29.01,34,8.2,D N,D O N S
+M20,20,,,,,,,40.32,36.05,40.7,9.4,D N,D O N S

@@ -1,0 +1,63 @@
+# title: Hexagon head bolts, product grades A and B (partly threaded)
+# standard: ISO 4014:2022
+# kind: screw
+# item: Hexagon head bolt
+# category: Fasteners/Bolts and screws/Hex head
+# units: mm
+# item: Hexagon head bolt
+# category: Fasteners/Bolts and screws/Hex head
+# gen: hexhead | d=@d | P=@P | l=@l | b1=b1 | b2=b2 | b3=b3 | s=s | k=k | dw=dw_min | c=c_max | r=r_min | modelled=@modelled
+# option thread: cosmetic modelled
+# option grade: 8.8 10.9 A2-70 A4-70
+# material: ISO 898-1 class 8.8
+# grade 8.8: ISO 898-1 class 8.8
+# grade 10.9: ISO 898-1 class 10.9
+# grade A2-70: ISO 3506-1 A2-70
+# grade A4-70: ISO 3506-1 A4-70
+# lengths: 12 16 20 25 30 35 40 45 50 55 60 65 70 80 90 100 110 120 130 140 150 160 180 200 220 240 260 280 300 320 340 360 380 400 420 440 460 480 500
+# src A: ISO 4014:2022 Tables 1-4 (grade A M1.6..M24 for l <= 150, grade B M16..M24 for l > 150 and M27), printed pages 3-6 of the iTeh preview (https://cdn.standards.iteh.ai/samples/72579/81f2b1e966b440d7a25f6734e508ea48/ISO-4014-2022.pdf; the French sample https://cdn.standards.iteh.ai/samples/72579/624bec0b27314eafbf947e1528fb4205/ISO-4014-2022.pdf prints the same Tables 1-2), stepped length ranges read from the rendered pages, keyed 2026-11-04
+# src A11: ISO 4014:2011 Table 1 (continued), printed pages 5-7 of the iTeh preview (https://cdn.standards.iteh.ai/samples/56447/63b5e00f45d043e6a27a45ae955b88f9/ISO-4014-2011.pdf): M30, M36, M42, M48, M56, M64 (the 2022 preview stops before Tables 5-6), product grade B columns, keyed 2026-11-04
+# src H: ISO 4017:2022 Tables 3-4 (grade B head, identical in ISO 4014 for every size both print), iTeh preview pages 5-6 (https://cdn.standards.iteh.ai/samples/72585/1179998ddd594550a909d6e13c416f3e/ISO-4017-2022.pdf): head of the non-preferred M33, M39, M45, M52, M60, which the 2011 preview (preferred sizes only) lacks, keyed 2026-11-04
+# src N: ISO 888 thread length b = 2d + 6 (l <= 125), 2d + 12 (125 < l <= 200), 2d + 25 (l > 200), for M33..M60; checked against every b printed in ISO 4014:2022 Tables 1-4 and 2011 Table 1 (all match, M1.6 rounded to 9)
+# src R: ISO 4014:2022 Figure 1 footnotes d (shortest standard length 3.75d for M24..M60 rounded to the nearest standard length, 220 for M64) and e (longest <= 10d or 500, whichever is shorter), applied to the length series for M30..M64; the two ties (M36 135, M56 210) round up as the 2011 table did (140, 220) and as ISO 4017:2022 Table 1 does (M3.5, M7)
+# src B: bd_warehouse 5a8a439 hex_head_parameters.csv (Apache-2.0), k, s and length range only, third_party/bd_warehouse/iso4014.csv
+# chk O: BOSL2 screws.scad metric_hex (BSD-2), s and k only, M5..M30
+# chk F: FreeCAD FastenersWB 2026-09-10 FsData/iso4014head.csv (GPL-2.0-or-later: consulted, never copied)
+# map B: hex_head_parameters.csv | k=iso4014:k | s=iso4014:s | l_min=iso4014:short | l_max=iso4014:long
+# map F: iso4014head.csv | size=Dia | P=P | b1=b1 | b2=b2 | b3=b3 | c_max=c | dw_min=dw | e_min=e | k=k | r_min=r | s=s
+# model: nominal where the standard gives one, else the max-material limit: k nom, s nom (hexagon exact; e_min is a gauge limit), ds nom (= d), washer face dw_min with thickness c_max, under-head fillet r_min, thread b = b1 for l <= 125, b2 for 125 < l <= 200, b3 above; lg_max = l - b, ls_min = lg_max - 5P (ISO 888)
+# note: columns without suffix _B are the limits of the row's grade (grade A for M1.6..M24 at lengths <= 150; grade B for M27 up); for M16..M24 the lengths from lB_min (160) are grade B and the *_B columns hold their limits (Table 4); c, da, lf, r and b do not change with the grade
+# note: M33, M39, M45, M52, M60: ds_min and lf_max are left blank, the free previews do not show the 2011/2022 non-preferred table; generators should use ds = d and no lf transition for these sizes
+# note: the 2022 edition puts grade B lengths longer than 10d of the small sizes in an informative Annex A (not in the preview); l_max here is the standard range of Tables 1-4 and footnote e
+# note: sizes in brackets in the standard (non-preferred): M3.5, M7, M14, M18, M22, M27, M33, M39, M45, M52, M60
+size,P,b1,b2,b3,c_max,c_min,da_max,ds,ds_min,dw_min,e_min,k,k_max,k_min,kw_min,lf_max,r_min,s,s_min,grade,l_min,l_max,l_full,lB_min,ds_min_B,dw_min_B,e_min_B,k_max_B,k_min_B,kw_min_B,s_min_B,src,checked
+M1.6,0.35,9,,,0.25,0.10,2.0,1.60,1.46,2.54,3.41,1.1,1.225,0.975,0.68,0.6,0.10,3.20,3.02,A,12,16,,,,,,,,,,A,A H B F
+M2,0.4,10,,,0.25,0.10,2.6,2.00,1.86,3.34,4.32,1.4,1.525,1.275,0.89,0.8,0.10,4.00,3.82,A,16,20,,,,,,,,,,A,A H B F
+M2.5,0.45,11,,,0.25,0.10,3.1,2.50,2.36,4.34,5.45,1.7,1.825,1.575,1.10,1.0,0.10,5.00,4.82,A,16,25,,,,,,,,,,A,A H B F
+M3,0.5,12,,,0.40,0.15,3.6,3.00,2.86,4.84,6.01,2,2.125,1.875,1.31,1.0,0.10,5.50,5.32,A,20,30,,,,,,,,,,A,A H B F
+M3.5,0.6,13,,,0.40,0.15,4.1,3.50,3.32,5.34,6.58,2.4,2.525,2.275,1.59,1.0,0.10,6.00,5.82,A,20,35,,,,,,,,,,A,A H B F
+M4,0.7,14,,,0.40,0.15,4.7,4.00,3.82,6.20,7.66,2.8,2.925,2.675,1.87,1.2,0.20,7.00,6.78,A,25,40,,,,,,,,,,A,A H B F
+M5,0.8,16,,,0.50,0.15,5.7,5.00,4.82,7.20,8.79,3.5,3.65,3.35,2.35,1.2,0.20,8.00,7.78,A,25,50,,,,,,,,,,A,A H B O F
+M6,1,18,,,0.50,0.15,6.8,6.00,5.82,8.88,11.05,4.0,4.15,3.85,2.70,1.4,0.25,10.00,9.78,A,30,60,,,,,,,,,,A,A H B O F
+M7,1,20,,,0.60,0.15,7.8,7.00,6.78,9.63,12.12,4.8,4.95,4.65,3.26,1.4,0.25,11.00,10.73,A,35,70,,,,,,,,,,A,A H
+M8,1.25,22,,,0.60,0.15,9.2,8.00,7.78,11.63,14.38,5.3,5.45,5.15,3.61,2.0,0.40,13.00,12.73,A,40,80,,,,,,,,,,A,A H B O F
+M10,1.5,26,,,0.60,0.15,11.2,10.00,9.78,14.63,17.77,6.4,6.58,6.22,4.35,2.0,0.40,16.00,15.73,A,45,100,,,,,,,,,,A,A H B O F
+M12,1.75,30,,,0.60,0.15,13.7,12.00,11.73,16.63,20.03,7.5,7.68,7.32,5.12,3.0,0.60,18.00,17.73,A,50,120,,,,,,,,,,A,A H B O F
+M14,2,34,40,,0.60,0.15,15.7,14.00,13.73,19.64,23.36,8.8,8.98,8.62,6.03,3,0.6,21.00,20.67,A,55,140,,,,,,,,,,A,A H B O F
+M16,2,38,44,,0.80,0.20,17.7,16.00,15.73,22.49,26.75,10,10.18,9.82,6.87,3,0.6,24.00,23.67,A,65,160,,160,15.57,22.00,26.17,10.29,9.71,6.80,23.16,A,A H B O F
+M18,2.5,42,48,,0.80,0.20,20.2,18.00,17.73,25.34,30.14,11.5,11.715,11.285,7.90,3,0.6,27.00,26.67,A,70,180,,160,17.57,24.85,29.56,11.85,11.15,7.81,26.16,A,A H B O F
+M20,2.5,46,52,,0.80,0.20,22.4,20.00,19.67,28.19,33.53,12.5,12.715,12.285,8.60,4,0.8,30.00,29.67,A,80,200,,160,19.48,27.70,32.95,12.85,12.15,8.51,29.16,A,A H B O F
+M22,2.5,50,56,69,0.80,0.20,24.4,22.0,21.67,31.71,37.72,14,14.215,13.785,9.65,4,0.8,34.00,33.38,A,90,220,,160,21.48,31.35,37.29,14.35,13.65,9.56,33.00,A,A H B F
+M24,3,54,60,73,0.80,0.20,26.4,24.00,23.67,33.61,39.98,15,15.215,14.785,10.35,4,0.8,36.00,35.38,A,90,240,,160,23.48,33.25,39.55,15.35,14.65,10.26,35.00,A,A H B O F
+M27,3,60,66,79,0.8,0.2,30.4,27.00,26.48,38.00,45.20,17,17.35,16.65,11.66,6,1.0,41.00,40.00,B,100,260,,,,,,,,,,A,A H B F
+M30,3.5,66,72,85,0.8,0.2,33.4,30.00,29.48,42.75,50.85,18.7,19.12,18.28,12.8,6,1,46,45,B,110,300,,,,,,,,,,A11 R,A11 H R B O F
+M33,3.5,72,78,91,0.8,0.2,36.4,33.00,,46.55,55.37,21,21.42,20.58,14.41,,1.0,50.00,49.00,B,120,320,,,,,,,,,,H N R,H N R B F
+M36,4,,84,97,0.8,0.2,39.4,36.00,35.38,51.11,60.79,22.5,22.92,22.08,15.46,6,1,55.0,53.8,B,140,360,,,,,,,,,,A11 R,A11 H R B F
+M39,4,,90,103,1.0,0.3,42.4,39.00,,55.86,66.44,25,25.42,24.58,17.21,,1.0,60.00,58.80,B,150,380,,,,,,,,,,H N R,H N R B F
+M42,4.5,,96,109,1.0,0.3,45.6,42.00,41.38,59.95,71.3,26,26.42,25.58,17.91,8,1.2,65.0,63.1,B,160,420,,,,,,,,,,A11 R,A11 H R B F
+M45,4.5,,102,115,1.0,0.3,48.6,45.00,,64.70,76.95,28,28.42,27.58,19.31,,1.2,70.00,68.10,B,160,440,,,,,,,,,,H N R,H N R B F
+M48,5,,108,121,1.0,0.3,52.6,48.00,47.38,69.45,82.6,30,30.42,29.58,20.71,10,1.6,75.0,73.1,B,180,480,,,,,,,,,,A11 R,A11 H R B F
+M52,5,,116,129,1.0,0.3,56.6,52.00,,74.20,88.25,33,33.50,32.50,22.75,,1.6,80.00,78.10,B,200,500,,,,,,,,,,H N R,H N R B F
+M56,5.5,,,137,1.0,0.3,63,56.00,55.26,78.66,93.56,35,35.5,34.5,24.15,12,2,85.0,82.8,B,220,500,,,,,,,,,,A11 R,A11 H R B F
+M60,5.5,,,145,1.0,0.3,67.0,60.00,,83.41,99.21,38,38.50,37.50,26.25,,2.0,90.00,87.80,B,220,500,,,,,,,,,,H N R,H N R B F
+M64,6,,,153,1.0,0.3,71,64.00,63.26,88.16,104.86,40,40.5,39.5,27.65,13,2,95.0,92.8,B,220,500,,,,,,,,,,A11 R,A11 H R B F

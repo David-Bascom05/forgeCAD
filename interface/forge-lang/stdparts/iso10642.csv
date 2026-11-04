@@ -1,0 +1,40 @@
+# title: Hexagon socket countersunk head screws with reduced loadability
+# standard: ISO 10642:2026
+# kind: screw
+# units: mm
+# item: Hexagon socket countersunk head screw
+# category: Fasteners/Bolts and screws/Countersunk
+# gen: csk | d=@d | P=P | l=@l | b=b | lfull=l_full | dkt=dk_theor_max | dk=dk_max | k=k_max | ang=90deg | s=s | t=t_min | modelled=@modelled
+# option thread: cosmetic modelled
+# option grade: 10.9 12.9 A2-70 A4-70
+# material: ISO 898-1 class 10.9
+# grade 10.9: ISO 898-1 class 10.9
+# grade 12.9: ISO 898-1 class 12.9
+# grade A2-70: ISO 3506-1 A2-70
+# grade A4-70: ISO 3506-1 A4-70
+# lengths: 5 6 8 10 12 16 20 25 30 35 40 45 50 55 60 65 70 80 90 100
+# src G: GlobalFastener ISO 10642-2026 table (https://www.globalfastener.com/standards/detail.php?sid=MjYzNDU=, identical to its 2019 page sid=MjAzMDI=), read 2026-11-04; l_min, l_max, l_full from its per-length thread table (lidpost 337942-337962); the ISO 10642:2026 and 2019 iTeh previews (https://cdn.standards.iteh.ai/samples/iso/iso-10642-2026/963ae79e6892488fb4214c7c14758051/iso-10642-2026.pdf, https://cdn.standards.iteh.ai/samples/72578/da49eb5cf8d248e9a2b2a3849bc91737/ISO-10642-2019.pdf) stop before Table 1; the 2026 foreword lists only editorial changes to the tables
+# src W: Westfield Fasteners ISO 10642 product specification Table 1 (https://www.westfieldfasteners.co.uk/Standards/ScrewBolt_SHCsk_M.pdf), read 2026-11-04: same values as G for every head column
+# src A04: ISO 10642:2004 Table 1, iTeh preview pages 4-5 (https://cdn.standards.iteh.ai/samples/34454/32dec7e84d974361b85f744935ab2175/ISO-10642-2004.pdf), keyed 2026-11-04: da_max and the flushness F_max, which the 2019 edition moved out of Table 1 (Da, Dk, F are gauge dimensions in its Table 3, not seen); every other 2004 column compared
+# src B: bd_warehouse 5a8a439 countersunk_head_parameters.csv (Apache-2.0), third_party/bd_warehouse
+# chk R: Fuller Fasteners ISO 10642 table (https://fullerfasteners.com/tech/iso-10642-specifications-hex-socket-countersunk-head-screws/), read 2026-11-04 (2004 values)
+# chk F: FreeCAD FastenersWB 2026-09-10 FsData/iso10642def.csv (GPL-2.0-or-later: consulted, never copied)
+# map B: countersunk_head_parameters.csv | dk_max=iso10642:dk | k_max=iso10642:k | s_max=iso10642:s | t_min=iso10642:t | l_min=iso10642:short | l_max=iso10642:long
+# map F: iso10642def.csv | size=Dia | P=P | b=b | dk_theor_max=dk_theo | da_max=da | ds_min=ds_min | e_min=e | k_max=csh_height | r_min=r | t_min=t
+# map F: iso10642def.csv#ISO10642range | size=Dia | l_min=Min_L | l_max=Max_L
+# model: head a 90 deg cone (90..92) from ds_max up to the theoretical sharp dk_theor_max at k_max above the cone/shank intersection; the real top edge is truncated or rounded down to dk_max (dk_min..dk_max, edge shape free); socket depth t_min, s nominal, under-head radius r_min; flush gauge F_max (2004) for countersink checks
+# note: M14 is bracketed in the standard (avoid if possible); M2 and M2.5 are threaded to the head at every length (b none)
+# note: M2 s_min 1.32 is above s nominal 1.3 and e_min 1.454 is not 1.14 s_min, as both G and W print them; e_min is a gauge limit, model the hexagon from s
+size,P,b,da_max,dk_theor_max,dk_max,dk_min,ds_max,ds_min,e_min,k_max,k_min,F_max,r_min,s,s_max,s_min,t_max,t_min,l_min,l_max,l_full,src,checked
+M2,0.4,,,4.7,4.09,3.7,2,1.86,1.454,1.35,1.13,,0.1,1.3,1.36,1.32,0.85,0.75,5,16,16,G W,G W F
+M2.5,0.45,,,5.88,5.08,4.8,2.5,2.36,1.733,1.69,1.408,,0.1,1.5,1.56,1.52,1.15,1,6,25,25,G W,G W F
+M3,0.5,18,3.3,6.72,5.81,5.54,3,2.86,2.303,1.86,1.522,0.25,0.1,2,2.08,2.02,1.25,1.1,8,30,25,G W A04,A04 R G W B F
+M4,0.7,20,4.4,8.96,7.96,7.53,4,3.82,2.873,2.48,2.121,0.25,0.2,2.5,2.58,2.52,1.65,1.4,10,40,25,G W A04,A04 R G W B F
+M5,0.8,22,5.5,11.2,10.07,9.43,5,4.82,3.443,3.1,2.669,0.3,0.2,3,3.08,3.02,2,1.75,12,50,30,G W A04,A04 R G W B F
+M6,1,24,6.6,13.44,12.16,11.34,6,5.82,4.583,3.72,3.218,0.35,0.25,4,4.095,4.02,2.5,2.2,12,60,35,G W A04,A04 R G W B F
+M8,1.25,28,8.54,17.92,16.43,15.24,8,7.78,5.723,4.96,4.366,0.4,0.4,5,5.14,5.02,3.2,2.9,16,80,45,G W A04,A04 R G W B F
+M10,1.5,32,10.62,22.4,20.69,19.22,10,9.78,6.863,6.2,5.563,0.4,0.4,6,6.14,6.02,3.9,3.5,20,100,50,G W A04,A04 R G W B F
+M12,1.75,36,13.5,26.88,24.81,23.12,12,11.73,9.149,7.44,6.711,0.45,0.6,8,8.175,8.025,4.9,4.3,25,100,60,G W A04,A04 R G W B F
+M14,2,42,15.5,30.8,28.31,26.52,14,13.73,11.429,8.4,7.588,0.5,0.6,10,10.175,10.025,5.1,4.5,30,100,65,G W A04,A04 R G W B
+M16,2,48,17.5,33.6,30.61,29.01,16,15.73,11.429,8.8,7.874,0.6,0.6,10,10.175,10.025,5.4,4.8,35,100,70,G W A04,A04 R G W B F
+M20,2.5,60,22,40.32,36.75,35.4,20,19.67,13.716,10.16,9.037,0.75,0.8,12,12.212,12.032,6.4,5.6,40,100,90,G W A04,A04 R G W B F
