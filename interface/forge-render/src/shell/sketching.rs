@@ -1758,7 +1758,7 @@ impl Shell {
                     [a, b] => Some(((a.0 + b.0) * 0.5, (a.1 + b.1) * 0.5)),
                     _ => pts.get(pts.len() / 2).copied(),
                 };
-                if let Some(u) = mid.and_then(&screen) {
+                if let Some(u) = mid.and_then(screen) {
                     let chip = Rect::from_min_size(u + vec2(-9.0, -24.0), vec2(18.0, 18.0));
                     p.rect_filled(chip, 9.0, t.surface);
                     p.rect_stroke(chip, 9.0, Stroke::new(1.0, t.sketch), egui::StrokeKind::Inside);
@@ -1969,17 +1969,13 @@ impl Shell {
                     m.active = (active + if back { n_fields - 1 } else { 1 }) % n_fields;
                 }
             }
-            if (enter
-                || (n_fields == 0
-                    && ctx.input(|i| i.key_pressed(egui::Key::Enter))
-                    && matches!(m.tool, Some(SkTool::Spline | SkTool::SplineCv))))
-                && !m.pick_at.is_empty()
-            {
-                m.enter(reach);
-            } else if ctx.input(|i| i.key_pressed(egui::Key::Enter))
-                && self_clear
-                && m.tool.is_some_and(|t| t.modifies())
-            {
+            let pressed = ctx.input(|i| i.key_pressed(egui::Key::Enter));
+            let drawing = (enter
+                || (n_fields == 0 && pressed && matches!(m.tool, Some(SkTool::Spline | SkTool::SplineCv))))
+                && !m.pick_at.is_empty();
+            // a Modify tool's choosing ends with Enter too
+            let chosen = pressed && self_clear && m.tool.is_some_and(|t| t.modifies());
+            if drawing || chosen {
                 m.enter(reach);
             }
 
