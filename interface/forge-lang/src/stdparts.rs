@@ -858,3 +858,100 @@ pub fn generate(spec: &Spec) -> Result<Generated, StdErr> {
 fn round(v: f64) -> f64 {
     (v * 1e6).round() / 1e6
 }
+
+/// The hole sizes the hole feature drills (`hole(screw: ..)`), for a dialog to offer: the kernel's
+/// table (`forge_model::standard::SCREWS`), which `.fc` parts read too. `tables_hole` gives the
+/// same rows from these tables; `tests/stdparts.rs` holds the two together, every difference a
+/// row of `resolutions/hole_sizes.csv`.
+pub fn hole_screws() -> &'static [forge_model::standard::Screw] {
+    forge_model::standard::SCREWS
+}
+
+/// The hole size a designation names (`M6`, `M8x1`, `1/4-20`, `10-32` or `#10-32`).
+pub fn hole_screw(name: &str) -> Option<&'static forge_model::standard::Screw> {
+    forge_model::standard::screw(name.trim_start_matches('#'))
+}
+
+/// A kernel hole row with every value these tables hold put in from them (ISO 273 and ASME
+/// B18.2.8 clearances, ISO 2306 and 75% inch tap drills, DIN 974-1 and ASME B18.3 counterbores,
+/// ISO 10642 and ASME B18.3 countersinks). Metric holes of the ANSI convention take the ISO tap
+/// drills and counterbores: there is no ASME metric tap drill table, and ASME B18.3.1M is
+/// withdrawn.
+pub fn tables_hole(k: &forge_model::standard::Screw) -> forge_model::standard::Screw {
+    let mut s = forge_model::standard::Screw {
+        name: k.name,
+        size: k.size,
+        pitch: k.pitch,
+        clearance: k.clearance,
+        tap: k.tap,
+        counterbore: k.counterbore,
+        countersink: k.countersink,
+    };
+    fill_hole(&mut s);
+    s
+}
+
+fn table_value(fam: &str, size: &str, col: &str) -> Option<f64> {
+    let f = families().iter().find(|f| f.id == fam)?;
+    let unit = if f.inch { 25.4 } else { 1.0 };
+    f.value(f.row(size)?, col).map(|v| v * unit)
+}
+
+fn fill_hole(s: &mut forge_model::standard::Screw) {
+    let metric = s.name.starts_with('M');
+    // the plain size a clearance or seat row is keyed by: M8 for M8x1, #10 for 10-32, 1/4 for 1/4-20
+    // numbered inch sizes (#0 to #12) are under 1/4 inch; 1-8 is a whole inch
+    let numbered = !metric && s.size < 6.3;
+    let base: String = if metric {
+        s.name.split('x').next().unwrap_or(s.name).to_string()
+    } else {
+        let b = s.name.rsplit_once('-').map_or(s.name, |x| x.0);
+        if numbered { format!("#{b}") } else { b.to_string() }
+    };
+    let thread = if numbered {
+        format!("#{}", s.name)
+    } else {
+        s.name.to_string()
+    };
+    let set = |v: &mut f64, x: Option<f64>| {
+        if let Some(x) = x {
+            *v = x;
+        }
+    };
+    if metric {
+        for (k, col) in ["fine", "medium", "coarse"].iter().enumerate() {
+            set(&mut s.clearance[k], table_value("iso273", &base, col));
+        }
+        if let Some(t) = table_value("tap_drill_metric", &thread, "drill") {
+            s.tap = [t, t];
+        }
+        if let (Some(d), Some(t)) = (
+            table_value("cbore_iso4762", &base, "d1"),
+            table_value("cbore_iso4762", &base, "t"),
+        ) {
+            s.counterbore = [(d, t), (d, t)];
+        }
+        if let (Some(d), Some((_, a))) = (table_value("csink_iso10642", &base, "dk_10642"), s.countersink) {
+            s.countersink = Some((d, a));
+        }
+    } else {
+        for (k, col) in ["close_min", "normal_min", "loose_min"].iter().enumerate() {
+            set(&mut s.clearance[k], table_value("asme_clearance", &base, col));
+        }
+        if let Some(t) = table_value("tap_drill_unified", &thread, "drill_d") {
+            s.tap = [t, t];
+        }
+        if let (Some(d), Some(h)) = (
+            table_value("cbore_asme_b18_3", &base, "b"),
+            table_value("cbore_asme_b18_3", &base, "h"),
+        ) {
+            s.counterbore = [(d, h), (d, h)];
+        }
+        if let (Some(d), Some((_, a))) = (
+            table_value("asme_b18_3_flat", &thread, "dk_theor_max"),
+            s.countersink,
+        ) {
+            s.countersink = Some((d, a));
+        }
+    }
+}

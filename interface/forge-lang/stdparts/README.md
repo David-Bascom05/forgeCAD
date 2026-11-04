@@ -65,3 +65,27 @@ iso7089,M12,h,B,2.7,2.5,ours: ISO 7089:2000 Table 1 gives h nom 2.5 (2.3..2.8); 
 difference that has no row here. Comparisons against `chk` sources are made by
 `tools/stdparts/check_*.py` (run by hand, the sources are not in the repo); their findings are
 rows here too.
+
+## Vendor parts (McMaster-Carr, PEM, Misumi, Bossard ..)
+
+Vendor CAD is never bundled, fetched or cached by ForgeCAD: the vendors' terms forbid redistribution,
+and McMaster-Carr's forbid any automated access (`forgecad-gate/stdparts/sources.md`). The path is
+the user's own download:
+
+1. Download the STEP file yourself, signed in to the vendor's site in your browser.
+2. Put it in a `vendor-parts/` folder beside your assembly. That folder name is ignored by git
+   (`.gitignore`), so the file stays on your machine and is never committed or pushed.
+3. Make a part file beside it that imports the solid and says what it is for the BOM, with the
+   anchors you will joint to:
+
+   ```
+   body = import("91290A115.step", op: "new")
+   about = properties(part_number: "McMaster-Carr 91290A115", description: "Socket head screw M6x20",
+                      material: "ISO 898-1 class 12.9")
+   head = anchor(xy)   # a plane of the vendor file's own frame; pick faces for others
+   ```
+
+4. Place it like any part: `scr = part("vendor-parts/mcmaster_91290a115.fg")`.
+
+Prefer the library's own part (`std(..)`) where one exists: it is generated from the standard's
+table, with its thread, anchors and grade.

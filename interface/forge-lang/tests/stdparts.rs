@@ -495,3 +495,33 @@ fn std_errors_are_typed_with_fixes() {
         assert_eq!(e.fixes(), want, "{call}");
     }
 }
+
+/// The kernel's hole table (what `hole(screw: ..)` drills, in .fg and .fc parts alike) against
+/// these tables: every difference is a row of resolutions/hole_sizes.csv saying why it stands.
+#[test]
+fn hole_sizes_agree_or_are_resolved() {
+    let res = rows(include_str!("../stdparts/resolutions/hole_sizes.csv"));
+    let mut open = vec![];
+    for k in stdparts::hole_screws() {
+        let t = stdparts::tables_hole(k);
+        let mut check = |what: &str, a: f64, b: f64| {
+            if (a - b).abs() > 1e-6 && !res.iter().any(|r| r[1] == k.name && r[2] == what) {
+                open.push(format!("{} {what}: kernel {a} tables {b}", k.name));
+            }
+        };
+        for i in 0..3 {
+            check(["close", "normal", "loose"][i], k.clearance[i], t.clearance[i]);
+        }
+        for i in 0..2 {
+            let c = ["iso", "ansi"][i];
+            check(&format!("tap {c}"), k.tap[i], t.tap[i]);
+            check(&format!("cbore {c}"), k.counterbore[i].0, t.counterbore[i].0);
+            check(&format!("cbore depth {c}"), k.counterbore[i].1, t.counterbore[i].1);
+        }
+        if let (Some(a), Some(b)) = (k.countersink, t.countersink) {
+            check("csink", a.0, b.0);
+        }
+    }
+    assert!(open.is_empty(), "unresolved hole sizes:\n{}", open.join("\n"));
+    assert_eq!(stdparts::hole_screw("#10-32").map(|s| s.name), Some("10-32"));
+}
