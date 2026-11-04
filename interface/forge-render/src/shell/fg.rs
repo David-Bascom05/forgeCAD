@@ -1160,6 +1160,7 @@ impl Shell {
             .min_width(w)
             .max_width(w)
             .frame(super::fgasm::dialog_frame(&t))
+            .constrain_to(super::dialog_area(ctx))
             .show(ctx, |ui| {
                 close = super::fgasm::dialog_head(ui, &t, "params", "Parameters", "fg:params", &mut places);
                 ui.label(
@@ -1349,6 +1350,7 @@ impl Shell {
             .min_width(w)
             .max_width(w)
             .frame(super::fgasm::dialog_frame(&t))
+            .constrain_to(super::dialog_area(ctx))
             .show(ctx, |ui| {
                 close = super::fgasm::dialog_head(ui, &t, "warning", "Issues", "fg:issueswin", &mut places);
                 fg.issues_shown = Some(true);

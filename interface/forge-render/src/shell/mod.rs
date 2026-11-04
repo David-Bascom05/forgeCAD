@@ -62,6 +62,15 @@ const HEAD_H: f32 = 30.0;
 const ROW_H: f32 = 26.0;
 const DOCS_H: f32 = 28.0;
 const STATUS_H: f32 = 24.0;
+
+/// Where a dialog may stand: the window less its title bar, the document tabs and status bar.
+pub(crate) fn dialog_area(ctx: &egui::Context) -> egui::Rect {
+    let s = ctx.content_rect();
+    egui::Rect::from_min_max(
+        egui::pos2(s.left(), s.top() + TITLE_H),
+        egui::pos2(s.right(), s.bottom() - DOCS_H - STATUS_H),
+    )
+}
 const NAVBAR_W: f32 = 32.0;
 /// Below the view cube's widget.
 const NAVBAR_TOP: f32 = 176.0;

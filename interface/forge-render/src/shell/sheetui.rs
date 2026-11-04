@@ -258,6 +258,7 @@ impl Shell {
             .min_width(width)
             .max_width(width)
             .frame(dialog_frame(&t))
+            .constrain_to(super::dialog_area(ctx))
             .show(ctx, |ui| {
                 close = dialog_head(ui, &t, icon, head, id, &mut places);
                 ui.spacing_mut().item_spacing.y = 5.0;

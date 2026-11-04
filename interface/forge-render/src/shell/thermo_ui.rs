@@ -716,6 +716,7 @@ impl Shell {
             .default_pos(pos2(v.right() - DLG_W - 140.0, v.top() + 60.0))
             .fixed_size(vec2(DLG_W, 0.0))
             .frame(frame(t))
+            .constrain_to(super::dialog_area(ctx))
             .show(ctx, |ui| {
                 ui.spacing_mut().item_spacing.y = 6.0;
                 close = title(ui, t, "Convert to Thermoform", DLG_W, places, "thermo:convert");
@@ -892,6 +893,7 @@ impl Shell {
             .default_pos(pos2(v.left() + 24.0, v.top() + 24.0))
             .fixed_size(vec2(DLG_W - 64.0, 0.0))
             .frame(frame(t))
+            .constrain_to(super::dialog_area(ctx))
             .show(ctx, |ui| {
                 let w = DLG_W - 64.0;
                 ui.spacing_mut().item_spacing.y = 6.0;
@@ -1060,6 +1062,7 @@ impl Shell {
             .default_pos(pos2(v.right() - w - 20.0, v.top() + 20.0))
             .fixed_size(vec2(w, 0.0))
             .frame(frame(t))
+            .constrain_to(super::dialog_area(ctx))
             .show(ctx, |ui| {
                 ui.spacing_mut().item_spacing.y = 6.0;
                 close = title(ui, t, "Mould", w, places, "thermo:mould");
@@ -1776,6 +1779,7 @@ fn material_window(ctx: &egui::Context, t: &Theme, fg: &mut FgPanel, places: &mu
         .frame(frame(t).inner_margin(14))
         .default_pos(pos2(300.0, 190.0))
         .default_size(vec2(760.0, 560.0))
+        .constrain_to(super::dialog_area(ctx))
         .show(ctx, |ui| {
             ui.set_width(760.0);
             super::thermo_material::tab(ui, t, &mut m);

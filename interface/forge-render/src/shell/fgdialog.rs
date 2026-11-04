@@ -357,6 +357,7 @@ impl Shell {
             .default_pos(pos2(4.0, v.top() + 4.0))
             .fixed_size(vec2(DIALOG_W, 0.0))
             .frame(frame)
+            .constrain_to(super::dialog_area(ctx))
             .show(ctx, |ui| {
                 ui.spacing_mut().item_spacing.y = 6.0;
                 asked = Self::fg_dialog_body(ui, &t, &fg, &mut tool, &mut places);

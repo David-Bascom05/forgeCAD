@@ -228,14 +228,16 @@ pub fn tab(ui: &mut Ui, t: &Theme, m: &mut Material) -> bool {
             }
             ui.ctx().data_mut(|d| d.remove::<String>(ek));
         }
+        // the source in the room left, cut with an ellipsis; all of it on hover
         let (src, ink) = source_line(m, &key, t);
-        ui.painter().text(
-            pos2(r.left() + 360.0, r.center().y),
-            Align2::LEFT_CENTER,
-            src,
-            sans(12.0),
-            ink,
-        );
+        let room = Rect::from_min_max(pos2(r.left() + 360.0, r.top()), r.right_bottom());
+        let mut job = egui::text::LayoutJob::simple_singleline(src, sans(12.0), ink);
+        job.wrap = egui::text::TextWrapping::truncate_at_width(room.width());
+        let g = ui.fonts_mut(|f| f.layout_job(job));
+        ui.painter()
+            .galley(pos2(room.left(), room.center().y - g.size().y / 2.0), g, ink);
+        ui.interact(room, ui.scope_id().with(("thermo-src", &key)), Sense::hover())
+            .on_hover_text(m.source_of(&key));
     }
     // the stretch law
     ui.add_space(10.0);
@@ -344,6 +346,7 @@ fn fit_window(ctx: &egui::Context, t: &Theme, m: &Material, st: &mut FitState) {
         .open(&mut open)
         .frame(frame)
         .default_size(vec2(1000.0, 560.0))
+        .constrain_to(super::dialog_area(ctx))
         .show(ctx, |ui| {
             ui.horizontal_top(|ui| {
                 ui.vertical(|ui| {

@@ -1718,6 +1718,7 @@ impl Shell {
             .default_pos(pos2(v.left() + 16.0, v.top() + 16.0))
             .fixed_size(vec2(DIALOG_W, 0.0))
             .frame(frame)
+            .constrain_to(super::dialog_area(ctx))
             .show(ctx, |ui| {
                 ui.spacing_mut().item_spacing.y = 6.0;
                 // the feature, by its icon and name

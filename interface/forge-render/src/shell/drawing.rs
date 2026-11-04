@@ -2059,6 +2059,7 @@ impl Shell {
             .resizable(false)
             .frame(super::fgasm::dialog_frame(&t))
             .default_pos(pos2(420.0, 200.0))
+            .constrain_to(super::dialog_area(ctx))
             .show(ctx, |ui| {
                 ui.style_mut().spacing.item_spacing = vec2(8.0, 8.0);
                 match &mut next {
@@ -2643,6 +2644,7 @@ impl Shell {
             .collapsible(false)
             .resizable(false)
             .default_pos(pos2(500.0, 220.0))
+            .constrain_to(super::dialog_area(ctx))
             .show(ctx, |ui| {
                 ui.label(egui::RichText::new(format!("From {}", name_of(&nd.model))).font(semi(13.0)));
                 ui.label("Sheet size");

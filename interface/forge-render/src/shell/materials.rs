@@ -172,6 +172,7 @@ impl Shell {
             .default_pos(pos2(v.left() + 20.0, v.top() + 20.0))
             .fixed_size(vec2(1060.0, 600.0))
             .frame(dialog_frame(&t))
+            .constrain_to(super::dialog_area(ctx))
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     ui.label(

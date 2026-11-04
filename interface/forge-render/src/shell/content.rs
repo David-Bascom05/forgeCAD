@@ -29,6 +29,8 @@ pub struct ContentCenter {
     grade: usize,
     /// Scroll the size and length lists to their choices on the next frame.
     jump: bool,
+    /// Scroll the length list to its choice on the next frame: the size changed under it.
+    jump_length: bool,
     /// By the standard part's key: each family's tile, and each choice shown large.
     pictures: HashMap<String, Picture>,
     made: Option<(Sender<Made>, Receiver<Made>)>,
@@ -276,35 +278,39 @@ fn pick_list(
     places: &mut Vec<(String, Rect)>,
 ) -> Option<usize> {
     let mut out = None;
-    egui::ScrollArea::vertical()
+    // whole rows: the list's height, and the chosen row near the middle with the top row whole
+    let pitch = 20.0 + ui.spacing().item_spacing.y;
+    let shown = ((h + ui.spacing().item_spacing.y) / pitch).floor().max(1.0) as usize;
+    let mut area = egui::ScrollArea::vertical()
         .id_salt(id)
-        .max_height(h)
-        .auto_shrink([false, false])
-        .show(ui, |ui| {
-            for (k, it) in items.iter().enumerate() {
-                let (r, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 20.0), Sense::click());
-                let on = chosen == Some(k);
-                if on {
-                    ui.painter().rect_filled(r, 3.0, t.selection);
-                } else if resp.hovered() {
-                    ui.painter().rect_filled(r, 3.0, t.hover);
-                }
-                ui.painter().text(
-                    pos2(r.left() + 8.0, r.center().y),
-                    egui::Align2::LEFT_CENTER,
-                    it,
-                    mono(12.0),
-                    t.ink,
-                );
-                places.push((format!("cc:{id}:{it}"), r));
-                if on && jump {
-                    resp.scroll_to_me(Some(egui::Align::Center));
-                }
-                if resp.clicked() {
-                    out = Some(k);
-                }
+        .max_height(shown as f32 * pitch - ui.spacing().item_spacing.y)
+        .auto_shrink([false, false]);
+    if let Some(k) = chosen.filter(|_| jump) {
+        let top = k.saturating_sub(shown / 2).min(items.len().saturating_sub(shown));
+        area = area.vertical_scroll_offset(top as f32 * pitch);
+    }
+    area.show(ui, |ui| {
+        for (k, it) in items.iter().enumerate() {
+            let (r, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 20.0), Sense::click());
+            let on = chosen == Some(k);
+            if on {
+                ui.painter().rect_filled(r, 3.0, t.selection);
+            } else if resp.hovered() {
+                ui.painter().rect_filled(r, 3.0, t.hover);
             }
-        });
+            ui.painter().text(
+                pos2(r.left() + 8.0, r.center().y),
+                egui::Align2::LEFT_CENTER,
+                it,
+                mono(12.0),
+                t.ink,
+            );
+            places.push((format!("cc:{id}:{it}"), r));
+            if resp.clicked() {
+                out = Some(k);
+            }
+        }
+    });
     out
 }
 
@@ -332,6 +338,7 @@ impl Shell {
             .min_width(W)
             .max_width(W)
             .frame(dialog_frame(&t))
+            .constrain_to(super::dialog_area(ctx))
             .show(ctx, |ui| {
                 close = dialog_head(ui, &t, "part", "Place from Content Center", "cc", &mut places);
                 ui.add_space(4.0);
@@ -481,6 +488,7 @@ impl Shell {
                         };
                         // the family's table
                         let jump = std::mem::take(&mut cc.jump);
+                        let jump_length = std::mem::take(&mut cc.jump_length) || jump;
                         ui.horizontal_top(|ui| {
                             ui.vertical(|ui| {
                                 ui.set_width(150.0);
@@ -507,6 +515,7 @@ impl Shell {
                                 {
                                     cc.size = Some(sizes[k].clone());
                                     cc.pick_length(f);
+                                    cc.jump_length = true;
                                 }
                             });
                             if f.has_lengths() {
@@ -527,9 +536,16 @@ impl Shell {
                                     let words: Vec<String> =
                                         ls.iter().map(|l| forge_lang::values::fmt(*l)).collect();
                                     let k = cc.length.and_then(|l| ls.iter().position(|x| *x == l));
-                                    if let Some(k) =
-                                        pick_list(ui, &t, "length", &words, k, jump, 190.0, &mut places)
-                                    {
+                                    if let Some(k) = pick_list(
+                                        ui,
+                                        &t,
+                                        "length",
+                                        &words,
+                                        k,
+                                        jump_length,
+                                        190.0,
+                                        &mut places,
+                                    ) {
                                         cc.length = Some(ls[k]);
                                     }
                                 });
