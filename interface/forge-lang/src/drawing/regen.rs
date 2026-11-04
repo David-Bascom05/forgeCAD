@@ -516,7 +516,19 @@ impl Ctx {
                 let mo = &self.models[p.model].model;
                 for (k, (b, pose, occ)) in p.insts.iter().enumerate() {
                     if is_hardware(&mo.files[*occ]) {
-                        insts.push((b.clone(), *pose, *occ));
+                        // hardware is not cut, but goes with the half taken away when it is all in it
+                        let bb = b.faces_box();
+                        let gone = [bb.x.lo, bb.x.hi]
+                            .iter()
+                            .flat_map(|&x| [bb.y.lo, bb.y.hi].map(|y| (x, y)))
+                            .flat_map(|(x, y)| [bb.z.lo, bb.z.hi].map(|z| Point3::new(x, y, z)))
+                            .all(|q| {
+                                let q = p.view.project(pose.point_to_world(q));
+                                line.windows(2).all(|w| (q - w[0]).dot(away) > 0.0)
+                            });
+                        if !gone {
+                            insts.push((b.clone(), *pose, *occ));
+                        }
                         continue;
                     }
                     match cut_body(b, pose, &cut, reach, 0x5ec7_0000 + k as u64) {
@@ -1584,6 +1596,7 @@ fn annotate(
             match balloon_tip(model, v, occ) {
                 Some(tip) => {
                     let n = item_number(mo, occ);
+                    stack.insert(format!("balloon:{}:{n}", v.model), 1.0);
                     annot::balloon(an.page, pen, &an.st, tip, at_sheet, &n);
                 }
                 None => {
@@ -1790,7 +1803,7 @@ fn annotate(
             }
             "edge"
         }
-        AnnotKind::AutoBalloons => {
+        AnnotKind::AutoBalloons { from } => {
             if model.paths.len() <= 1 {
                 errors.push(fail(
                     Problem::NotHere {
@@ -1800,7 +1813,11 @@ fn annotate(
                     item.span,
                 ));
             }
-            auto_balloons(mo, v, &mut an);
+            let m = from
+                .as_ref()
+                .and_then(|f| ctx.views.iter().find(|x| &x.id == f))
+                .map_or(v.model, |x| x.model);
+            auto_balloons(&ctx.models[m], m, mo, v, &mut an, stack);
             "auto_balloons"
         }
     };
@@ -2058,33 +2075,177 @@ fn item_number(mo: &ModelOut, occ: &str) -> String {
         .map_or("?".into(), |i| (i + 1).to_string())
 }
 
-/// A balloon on each part of the BOM seen in the view, round the view, none on another.
-fn auto_balloons(mo: &ModelOut, v: &ViewOut, an: &mut Annotator) {
-    let centre = v.lo.lerp(v.hi, 0.5);
-    let reach = 0.5 * (v.hi - v.lo).length() + 12.0;
-    let mut tips: Vec<(f64, Point2, String)> = Vec::new();
-    for (i, (file, ..)) in mo.bom.iter().enumerate() {
+/// A balloon on each part of `num`'s BOM seen in the view and not already ballooned (in any view
+/// numbered by that BOM), Inventor's Auto Balloon "around": the balloons in tidy columns and rows
+/// beside the view's sides, each on the side nearest its part, evenly spaced and kept in the
+/// order of their parts along the side, so no two leaders cross. Parts match `num`'s by file name,
+/// so a view of a subassembly can carry the top assembly's item numbers.
+fn auto_balloons(
+    num: &ModelOut,
+    m: usize,
+    mo: &ModelOut,
+    v: &ViewOut,
+    an: &mut Annotator,
+    stack: &mut std::collections::HashMap<String, f64>,
+) {
+    let mut tips: Vec<(Point2, String)> = Vec::new();
+    for (i, (file, ..)) in num.bom.iter().enumerate() {
+        let key = format!("balloon:{m}:{}", i + 1);
+        if stack.contains_key(&key) {
+            continue;
+        }
         let name = Path::new(file).file_name();
-        let occ = (0..mo.model.paths.len()).find(|&k| {
-            (&mo.model.files[k] == file || Path::new(&mo.model.files[k]).file_name() == name)
-                && v.insts.iter().any(|x| x.2 == k)
-                && balloon_tip(&mo.model, v, &mo.model.paths[k]).is_some()
-        });
-        let Some(k) = occ else { continue };
-        let tip = balloon_tip(&mo.model, v, &mo.model.paths[k]).expect("checked");
-        let d = tip - centre;
-        tips.push((dmath::atan2(d.y, d.x), tip, (i + 1).to_string()));
+        let tip = (0..mo.model.paths.len())
+            .filter(|&k| {
+                (&mo.model.files[k] == file || Path::new(&mo.model.files[k]).file_name() == name)
+                    && v.insts.iter().any(|x| x.2 == k)
+            })
+            .find_map(|k| balloon_tip(&mo.model, v, &mo.model.paths[k]));
+        if let Some(t) = tip {
+            tips.push((t, (i + 1).to_string()));
+            stack.insert(key, 1.0);
+        }
     }
-    tips.sort_by(|a, b| a.0.total_cmp(&b.0));
-    // spread round the ring at least a balloon apart
-    let gap = 12.0 / reach;
-    let mut last = f64::NEG_INFINITY;
-    for (ang, tip, n) in tips {
-        let a = ang.max(last + gap);
-        last = a;
-        let (s, c) = dmath::sin_cos(a);
-        let at = centre + Vec2::new(c, s) * reach;
-        annot::balloon(an.page, Pen::Thin, &an.st, tip, at, &n);
+    let r = 0.5 * an.st.text_h.max(forge_draw::page::text_width("88", an.st.text_h)) + 2.0;
+    let step = 2.0 * r + 1.5;
+    let off = 10.0 + r;
+    let (lo, hi) = (v.lo, v.hi);
+    // the four sides: where their line is, which way it runs, from where to where
+    let sides = [
+        (Point2::new(lo.x - off, lo.y), Vec2::Y, hi.y - lo.y),
+        (Point2::new(hi.x + off, lo.y), Vec2::Y, hi.y - lo.y),
+        (Point2::new(lo.x, hi.y + off), Vec2::X, hi.x - lo.x),
+        (Point2::new(lo.x, lo.y - off), Vec2::X, hi.x - lo.x),
+    ];
+    // a labelled view keeps the side under it for its label
+    let open = if v.label.is_empty() { 4 } else { 3 };
+    let room: Vec<usize> = sides
+        .iter()
+        .enumerate()
+        .map(|(k, s)| {
+            if k < open {
+                ((s.2 + 2.0 * off) / step).floor().max(1.0) as usize
+            } else {
+                0
+            }
+        })
+        .collect();
+    let dist = |t: Point2, k: usize| {
+        let (o, d, _) = sides[k];
+        (t - o).dot(d.perp()).abs()
+    };
+    // each to its nearest side with room, the most decided first
+    let mut order: Vec<usize> = (0..tips.len()).collect();
+    order.sort_by(|&a, &b| {
+        let best = |i: usize| {
+            (0..open)
+                .map(|k| dist(tips[i].0, k))
+                .fold(f64::INFINITY, f64::min)
+        };
+        best(a).total_cmp(&best(b))
+    });
+    let mut on: Vec<Vec<usize>> = vec![vec![]; 4];
+    for i in order {
+        let mut ks: Vec<usize> = (0..open).collect();
+        ks.sort_by(|&a, &b| dist(tips[i].0, a).total_cmp(&dist(tips[i].0, b)));
+        let k = ks
+            .iter()
+            .copied()
+            .find(|&k| on[k].len() < room[k])
+            .unwrap_or(ks[0]);
+        on[k].push(i);
+    }
+    for (k, list) in on.iter_mut().enumerate() {
+        let (o, d, len) = sides[k];
+        let along = |t: Point2| (t - o).dot(d);
+        list.sort_by(|&a, &b| along(tips[a].0).total_cmp(&along(tips[b].0)));
+        // each as near its part as the spacing lets it be, all within the side
+        let n = list.len();
+        let (start, end) = (-off + r, len + off - r);
+        let mut pos: Vec<f64> = list.iter().map(|&i| along(tips[i].0).clamp(start, end)).collect();
+        for q in 1..n {
+            pos[q] = pos[q].max(pos[q - 1] + step);
+        }
+        if let Some(&last) = pos.last()
+            && last > end
+        {
+            let back = last - end;
+            for p in pos.iter_mut() {
+                *p -= back;
+            }
+            for q in (0..n.saturating_sub(1)).rev() {
+                pos[q] = pos[q].min(pos[q + 1] - step);
+            }
+        }
+        // tips at different depths can still cross: swap the places of any two that do (each
+        // swap shortens the leaders, so it ends)
+        let mut place: Vec<Point2> = pos.iter().map(|&t| o + d * t).collect();
+        for _ in 0..n * n {
+            let mut swapped = false;
+            for a in 0..n {
+                for b in a + 1..n {
+                    if crosses(tips[list[a]].0, place[a], tips[list[b]].0, place[b]) {
+                        place.swap(a, b);
+                        swapped = true;
+                    }
+                }
+            }
+            if !swapped {
+                break;
+            }
+        }
+        for (q, &i) in list.iter().enumerate() {
+            annot::balloon(an.page, Pen::Thin, &an.st, tips[i].0, place[q], &tips[i].1);
+        }
+    }
+}
+
+/// Whether segments a0-a1 and b0-b1 cross between their ends.
+fn crosses(a0: Point2, a1: Point2, b0: Point2, b1: Point2) -> bool {
+    let side = |p: Point2, q: Point2, r: Point2| (q - p).cross(r - p);
+    let (d1, d2) = (side(b0, b1, a0), side(b0, b1, a1));
+    let (d3, d4) = (side(a0, a1, b0), side(a0, a1, b1));
+    d1 * d2 < 0.0 && d3 * d4 < 0.0
+}
+
+/// The parts no balloon numbers, told on each BOM's last auto_balloons: they are in no view
+/// drawn, or inside others in every one (a section shows those).
+fn unballooned(
+    ctx: &Ctx,
+    d: &doc::Doc,
+    stack: &std::collections::HashMap<String, f64>,
+    errors: &mut Vec<DrawError>,
+) {
+    let mut last: Vec<(usize, &Item)> = Vec::new();
+    for item in &d.items {
+        let ItemKind::Annot(a) = &item.kind else { continue };
+        let AnnotKind::AutoBalloons { from } = &a.kind else {
+            continue;
+        };
+        let view = |id: &str| ctx.views.iter().find(|x| x.id == id);
+        let Some(v) = view(&a.view) else { continue };
+        let m = from.as_deref().and_then(view).map_or(v.model, |x| x.model);
+        last.retain(|x| x.0 != m);
+        last.push((m, item));
+    }
+    for (m, item) in last {
+        let missing: Vec<String> = (1..=ctx.models[m].bom.len())
+            .filter(|n| !stack.contains_key(&format!("balloon:{m}:{n}")))
+            .map(|n| n.to_string())
+            .collect();
+        if !missing.is_empty() {
+            errors.push(warn(
+                Problem::NotHere {
+                    item: item.id.clone(),
+                    why: format!(
+                        "items {} are seen in no ballooned view: balloon them in a section or another view (from: ..)",
+                        missing.join(", ")
+                    ),
+                },
+                item.span,
+                vec![],
+            ));
+        }
     }
 }
 
@@ -2220,7 +2381,17 @@ pub fn make(src: &str, dir: &Path) -> Drawing {
         if let ItemKind::View(def) = &item.kind
             && let Some(mut v) = ctx.view(item, def)
         {
-            cut_view(&mut v, def);
+            // a view not lined up with its parent is put where `at` says, cropped or not
+            let free = match v.kind {
+                "base" | "detail" => true,
+                "projected" => false,
+                _ => !ctx
+                    .views
+                    .iter()
+                    .find(|p| Some(&p.id) == v.parent.as_ref())
+                    .is_some_and(|p| p.scale == v.scale),
+            };
+            cut_view(&mut v, def, free);
             ctx.views.push(v);
         }
     }
@@ -2418,13 +2589,30 @@ pub fn make(src: &str, dir: &Path) -> Drawing {
                         vec![(i + 1).to_string(), n.to_string(), num.clone(), desc.clone()]
                     })
                     .collect();
-                let h = annot::table(
-                    &mut pages[k],
-                    corner,
-                    &["ITEM", "QTY", "PART NUMBER", "DESCRIPTION"],
-                    &[12.0, 12.0, 46.0, 110.0],
-                    &rows,
-                );
+                // the description column as wide as its longest, within reason; a list taller
+                // than the sheet goes on in a second table to its left, its header repeated
+                let desc_w = rows
+                    .iter()
+                    .map(|r| forge_draw::page::text_width(&r[3], 2.5) + 4.0)
+                    .fold(40.0, f64::max)
+                    .min(150.0);
+                let widths = [12.0, 12.0, 46.0, desc_w];
+                let table_w: f64 = widths.iter().sum();
+                let fit = (((i1.y - corner.y) / 6.0).floor() as usize)
+                    .saturating_sub(1)
+                    .max(4);
+                let mut h: f64 = 0.0;
+                for (c, chunk) in rows.chunks(fit).enumerate() {
+                    let at = Point2::new(corner.x - c as f64 * (table_w + 6.0), corner.y);
+                    h = h.max(annot::table(
+                        &mut pages[k],
+                        at,
+                        &["ITEM", "QTY", "PART NUMBER", "DESCRIPTION"],
+                        &widths,
+                        chunk,
+                    ));
+                }
+                let n_tables = rows.len().div_ceil(fit).max(1) as f64;
                 items.push(ItemOut {
                     dir: None,
                     fos: false,
@@ -2433,7 +2621,7 @@ pub fn make(src: &str, dir: &Path) -> Drawing {
                     id: item.id.clone(),
                     sheet: k,
                     kind: "parts_list",
-                    lo: Point2::new(corner.x - 180.0, corner.y),
+                    lo: Point2::new(corner.x - n_tables * (table_w + 6.0) + 6.0, corner.y),
                     hi: Point2::new(corner.x, corner.y + h),
                     sick: false,
                     value: None,
@@ -2443,6 +2631,7 @@ pub fn make(src: &str, dir: &Path) -> Drawing {
             _ => {}
         }
     }
+    unballooned(&ctx, &d, &stack, &mut errors);
     gdt_checks(&ctx, &d, &items, &mut errors);
     let sheets = ctx.sheets.iter().map(|s| s.0.clone()).collect();
     Drawing {
@@ -3156,7 +3345,7 @@ fn place_clear(
 
 /// A view cropped to its box and broken at its bands: lines outside the crop and inside a band
 /// go, lines past a band close up to it, and the break is drawn as two zigzag lines.
-fn cut_view(v: &mut ViewOut, def: &ViewDef) {
+fn cut_view(v: &mut ViewOut, def: &ViewDef, free: bool) {
     if def.crop.is_none() && def.breaks.is_empty() {
         return;
     }
@@ -3222,6 +3411,9 @@ fn cut_view(v: &mut ViewOut, def: &ViewDef) {
     v.pieces = pieces;
     v.extra = extra;
     let (lo, hi) = bounds(&v.pieces, &v.extra);
+    if free && def.crop.is_some() {
+        v.place.o += def.at - v.place.point(lo.lerp(hi, 0.5));
+    }
     v.lo = v.place.point(lo);
     v.hi = v.place.point(hi);
 }

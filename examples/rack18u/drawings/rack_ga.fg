@@ -1,6 +1,7 @@
 drawing
-# RACK-001 18U rack, general assembly: asm/rack.fg in three views, an exploded iso with a
-# balloon on every part, and the parts list from the assembly's BOM.
+# RACK-001 18U rack, general assembly: asm/rack.fg in three views and an exploded iso with a
+# balloon on every part seen (sheet 1); the parts list from the assembly's BOM, and sections
+# through a caster and the door latch ballooning the parts hidden inside them (sheet 2).
 
 rack = assembly("../asm/rack.fg")
 s1 = sheet("D", title: "RACK, 18U, GENERAL ASSEMBLY", number: "RACK-001", rev: "A", drawn: "D. BASCOM")
@@ -8,6 +9,15 @@ front = base_view(rack, sheet: s1, dir: "front", scale: 1/6, at: (95, 215))
 top = projected(front, at: (95, 425))
 right = projected(front, at: (250, 215))
 iso = projected(front, at: (255, 430), scale: 1/14)
-exploded = base_view(rack, sheet: s1, dir: "iso", scale: 1/8, explode: 1, hidden: false, at: (500, 310), label: "EXPLODED VIEW")
+exploded = base_view(rack, sheet: s1, dir: "iso", scale: 1/5, explode: 1, hidden: false, at: (610, 310), label: "EXPLODED VIEW")
 balloons = auto_balloons(exploded)
-parts = parts_list(exploded, sheet: s1)
+s2 = sheet("C", title: "RACK, 18U, PARTS LIST", number: "RACK-001", rev: "A", drawn: "D. BASCOM")
+parts = parts_list(exploded, sheet: s2)
+caster = assembly("../casters/caster_lock.fg")
+caster_side = base_view(caster, sheet: s2, dir: "front", scale: 1/2, at: (40, 340), label: "")
+caster_sec = section(caster_side, line: [(14, 30), (14, -45), (1, -45), (1, -150)], at: (190, 340), scale: 1)
+caster_balloons = auto_balloons(caster_sec, from: exploded)
+door = assembly("../panels/door_asm.fg")
+door_front = base_view(door, sheet: s2, dir: "front", scale: 1/12, at: (45, 170), label: "")
+latch_sec = section(door_front, line: [(220, 452), (300, 452)], at: (190, 170), scale: 1, crop: [(220, -60), (300, 60)])
+latch_balloons = auto_balloons(latch_sec, from: exploded)

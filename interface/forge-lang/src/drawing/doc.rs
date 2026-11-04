@@ -382,7 +382,11 @@ pub enum AnnotKind {
     Balloon {
         occ: String,
     },
-    AutoBalloons,
+    /// A balloon on each part seen; `from`, another view, numbers them by its model's parts list
+    /// and leaves out the items already ballooned there.
+    AutoBalloons {
+        from: Option<String>,
+    },
     /// A feature control frame: its rows (more than one stacked, or one composite frame).
     Fcf {
         to: Attach,
@@ -1572,7 +1576,22 @@ impl Reader<'_> {
                         upper: a.string("upper", Some(2))?.unwrap_or_else(|| "+0.3".into()),
                         lower: a.string("lower", None)?.unwrap_or_default(),
                     },
-                    _ => AnnotKind::AutoBalloons,
+                    _ => AnnotKind::AutoBalloons {
+                        from: match a.item("from", None)? {
+                            Some(id) if self.doc.view(&id).is_some() => Some(id),
+                            Some(id) => {
+                                return Err(err(
+                                    Problem::BadValue {
+                                        func,
+                                        arg: "from".into(),
+                                        why: format!("{id} is not a view"),
+                                    },
+                                    span,
+                                ));
+                            }
+                            None => None,
+                        },
+                    },
                 };
                 let dir_ok = |d: &Option<String>| {
                     d.as_deref()

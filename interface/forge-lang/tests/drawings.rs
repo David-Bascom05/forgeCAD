@@ -449,3 +449,51 @@ fn breaks_close_up_and_crops_clip_but_dimensions_stay_true() {
     let v = cropped.view("top").unwrap();
     assert!((v.hi.x - v.lo.x - 30.0).abs() < 1e-6);
 }
+
+/// The item numbers a drawing's balloons leave out, from its one warning about them.
+fn unballooned(d: &Drawing) -> Vec<usize> {
+    let w: Vec<String> = d
+        .errors
+        .iter()
+        .map(|e| e.problem.text())
+        .filter(|t| t.contains("seen in no ballooned view"))
+        .collect();
+    assert!(w.len() <= 1, "{w:?}");
+    w.first().map_or(vec![], |t| {
+        t.split("items ")
+            .nth(1)
+            .unwrap()
+            .split(" are")
+            .next()
+            .unwrap()
+            .split(", ")
+            .map(|n| n.parse().unwrap())
+            .collect()
+    })
+}
+
+#[test]
+fn balloons_hidden_parts_in_a_section_numbered_by_the_first_view() {
+    let caster =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../examples/rack18u/casters/caster_lock.fg");
+    let base = format!(
+        "drawing\nc = assembly(\"{}\")\ns = sheet(\"C\")\nex = base_view(c, sheet: s, dir: \"iso\", explode: 1, hidden: false, at: (150, 250))\nb = auto_balloons(ex)\n",
+        caster.display()
+    );
+    let d = regen::make(&base, &dir("drawing_balloons"));
+    assert!(d.ok(), "{:?}", d.errors);
+    // the bearing's balls, rings and cage are inside the wheel: no balloon in the iso
+    let inside = unballooned(&d);
+    assert!(inside.len() >= 4, "{inside:?}");
+    let src = format!(
+        "{base}side = base_view(c, sheet: s, dir: \"front\", scale: 1/2, at: (40, 340))\nsec = section(side, line: [(14, 30), (14, -45), (1, -45), (1, -150)], at: (300, 340), scale: 1)\nsb = auto_balloons(sec, from: ex)\n"
+    );
+    let d = regen::make(&src, &dir("drawing_balloons"));
+    assert!(d.ok(), "{:?}", d.errors);
+    let left = unballooned(&d);
+    // the section shows most of them, and balloons none twice
+    assert!(
+        left.len() < inside.len() && left.iter().all(|n| inside.contains(n)),
+        "{inside:?} -> {left:?}"
+    );
+}
