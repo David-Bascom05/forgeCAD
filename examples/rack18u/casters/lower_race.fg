@@ -2,6 +2,7 @@
 # source: SPEC 6.2 (OD and notch form representative)
 # frame: the caster frame (SPEC 5.10): origin on the kingpin axis in the plate's top face, z up, y along the plate's long side, the wheel towards -y
 
+properties(description: "caster lower race", material: "1008 CR")
 shared zt = 15.03   # top face below the plate's top
 shared tr = 2.5   # thickness
 shared ro = 25.5   # outer radius, inside the yoke skirt (26.5)

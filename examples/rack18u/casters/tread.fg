@@ -2,6 +2,7 @@
 # source: SPEC 6.2, 7 (Blickle: 80 x 32 TPU on nylon)
 # frame: origin at the wheel's centre, z along the axle (towards the nut side in the caster)
 
+properties(description: "caster tread", material: "TPU 95A")
 shared ro = 40
 shared ri = 32
 shared hw = 16

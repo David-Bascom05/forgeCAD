@@ -4,6 +4,7 @@
 # Both legs carry the same pattern, symmetric about w = 453 (the post turned end over end is the same part).
 # Shop: hw/shop.fg, copied verbatim (SPEC 10 gap 12).
 
+properties(part_number: "RACK-101", description: "Post, 50 x 50 L, t3, 906 long", material: "1008 CR")
 shared t3 = 3.02
 shared t2 = 1.88
 shared t1 = 1.52

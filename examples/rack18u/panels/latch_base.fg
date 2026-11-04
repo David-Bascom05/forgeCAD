@@ -7,6 +7,7 @@
 # face (anchor pivot_back): an S-M6-0 here sat 7.5 from the detent holes (PEM 8.6).
 # Rack angle: in the xz plane from +x towards +z, seen from the front.
 
+properties(part_number: "RACK-322", description: "Latch base, t3", material: "1008 CR")
 shared t3 = 3.02
 shared t2 = 1.88
 shared t1 = 1.52

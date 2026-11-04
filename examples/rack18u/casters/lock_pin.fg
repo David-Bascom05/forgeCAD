@@ -2,6 +2,7 @@
 # source: SPEC 6.2 (5.0 pin, 4.0 travel); placed at brake 0
 # frame: the caster frame (SPEC 5.10): origin on the kingpin axis in the plate's top face, z up, y along the plate's long side, the wheel towards -y; drawn at brake 0
 
+properties(description: "caster lock pin 5.0 with a domed foot", material: "AISI 1018")
 shared xp = 14.001513
 shared yp = 18.247127
 shared rp = 2.5

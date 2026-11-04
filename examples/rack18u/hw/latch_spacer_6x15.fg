@@ -2,6 +2,7 @@
 # source: SPEC 5.8 / section 7 (spec only, no part number)
 # frame: origin on the axis in the bottom face; +z through the part
 
+properties(description: "steel round spacer 6.0 OD x 4.3 ID x 15.0", material: "AISI 1018")
 shared di = 4.3   # inner diameter
 shared do = 6   # outer diameter
 shared h = 15   # thickness

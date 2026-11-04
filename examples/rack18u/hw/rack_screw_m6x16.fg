@@ -2,6 +2,7 @@
 # source: Rittal DK 7094.110 (M6, 16 thread length, cheese head); head per ISO 1207 M6 (dk 10, k 3.9, n 1.6, t 1.6)
 # frame: origin on the axis at the head underside; +z along the shank to the tip; head at z < 0
 
+properties(description: "rack screw M6 x 16, slotted cheese head", material: "8.8")
 shared d = 6   # thread major diameter
 shared P = 1   # pitch
 shared l = 16   # nominal length, under the head to the tip

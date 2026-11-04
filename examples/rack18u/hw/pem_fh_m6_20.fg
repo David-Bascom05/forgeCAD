@@ -2,6 +2,7 @@
 # source: PEM bulletin FH (https://damlite.pemnet.com/FH-M5-12ZC_pdf_1.pdf), FH metric table
 # frame: origin on the axis in the head's top face, which is flush with the sheet's outer face; +z along the stud
 
+properties(description: "PEM FH-M6-20 flush-head self-clinching stud", material: "AISI 1018")
 shared d = 6   # thread
 shared P = 1   # pitch
 shared l = 20   # length from the flush face

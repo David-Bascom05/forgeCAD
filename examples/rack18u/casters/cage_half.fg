@@ -2,6 +2,7 @@
 # source: SPEC 6.2 (pressed steel 2-piece ribbon cage, modelled, not a catalogue drawing)
 # frame: origin at the bearing's centre, z along its axis; the half on +z; `back` turns it over for the other half
 
+properties(description: "608 pressed steel ribbon cage, one half", material: "1008 CR")
 shared rci = 6.5
 shared rco = 8.5
 shared tw = 0.45   # web (ribbon) thickness

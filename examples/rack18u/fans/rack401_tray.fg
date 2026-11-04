@@ -7,6 +7,8 @@
 # x along -x, so the frame matches the top pan's hang anchor frame, which its 180deg turn about Y gives).
 
 # shop text from hw/shop.fg, verbatim (SPEC 10 gap 12)
+
+properties(part_number: "RACK-401", description: "Fan tray, t2", material: "1008 CR")
 shared t3 = 3.02
 shared t2 = 1.88
 shared t1 = 1.52

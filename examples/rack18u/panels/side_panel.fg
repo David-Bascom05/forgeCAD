@@ -5,6 +5,7 @@
 # Gap 1 workaround (no flange end offsets): a full-length return, cut back at each end through its
 # bend into the field (two small field notches; SPEC 8 accepts their HoleNearBend at 0, bug N4).
 
+properties(part_number: "RACK-141", description: "Side half-panel, t1", material: "1008 CR")
 shared t3 = 3.02
 shared t2 = 1.88
 shared t1 = 1.52

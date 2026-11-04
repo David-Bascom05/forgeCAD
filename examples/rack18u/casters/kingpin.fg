@@ -2,6 +2,7 @@
 # source: SPEC 6.2 (representative: Blickle gives only "riveted kingpin")
 # frame: the caster frame (SPEC 5.10): origin on the kingpin axis in the plate's top face, z up, y along the plate's long side, the wheel towards -y
 
+properties(description: "kingpin rivet 10.0", material: "AISI 1018")
 shared rs = 5   # shank
 shared rh = 8   # both heads
 shared hk = 3   # 90deg countersunk head depth

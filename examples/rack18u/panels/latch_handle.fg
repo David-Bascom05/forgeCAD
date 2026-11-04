@@ -4,6 +4,7 @@
 # A disc R 23.5 cut by the chord v = 18.5; the fin turns out (+w) off the chord, its tip 24.0 past the
 # handle's outer face (SPEC's y table: fin tip = outer face - 24.0, so 24.0 is measured inner).
 
+properties(part_number: "RACK-321", description: "Latch handle, t2", material: "1008 CR")
 shared t3 = 3.02
 shared t2 = 1.88
 shared t1 = 1.52

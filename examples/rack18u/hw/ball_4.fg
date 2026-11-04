@@ -2,6 +2,7 @@
 # source: SPEC 5.8 / section 7: 4.0 steel ball, ISO 3290 G100
 # frame: origin at the ball's centre
 
+properties(description: "steel ball 4", material: "AISI 52100")
 shared db = 4   # ball diameter
 shared rb = db / 2
 shared zref = rb

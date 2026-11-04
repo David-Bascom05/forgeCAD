@@ -2,6 +2,7 @@
 # source: ISO 15 / SPEC 6.2, 7 (GMN, MinebeaMitsumi 608); groove radius 0.52 Dw and depth 0.75 representative
 # frame: origin at the bearing's centre, z along its axis
 
+properties(description: "608-2RS inner ring", material: "AISI 52100")
 shared rb = 4   # bore
 shared rl = 6.2655   # land (shoulder) radius
 shared hb = 3.5   # half the width

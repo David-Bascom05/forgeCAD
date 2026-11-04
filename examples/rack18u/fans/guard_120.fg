@@ -8,6 +8,7 @@
 # is z -5..0. Anchors: fan (z = 0, +z), loop[0..3] (screw seat, z = -5, +z) in the order
 # (-,-), (+,-), (-,+), (+,+) of RACK-401's fan screws.
 
+properties(description: "120 mm wire finger guard", material: "1008 CR")
 shared gh = 5                   # guard depth
 shared hs = 52.5                # half the 105 hole square
 shared d_ring = 1.6

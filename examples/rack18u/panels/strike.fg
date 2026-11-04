@@ -4,6 +4,7 @@
 # base x -14.00..16.40, y -1.88..0, z -20..20; web on the +x edge, x 14.52..16.40, y -33.48..0;
 # notch in the web, open at its bottom edge: y -27.77..-25.00, z -20..+10.
 
+properties(part_number: "RACK-312", description: "Strike, t2", material: "1008 CR")
 shared t3 = 3.02
 shared t2 = 1.88
 shared t1 = 1.52

@@ -2,6 +2,7 @@
 # source: SPEC 6.2; Blickle (hub 36, axle bore 8); section representative
 # frame: origin at the wheel's centre, z along the axle (towards the nut side in the caster)
 
+properties(description: "caster wheel centre", material: "PA6")
 shared ro = 32   # tread seat
 shared hw = 16   # half the wheel width
 shared hl = 18   # half the hub length

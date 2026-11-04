@@ -7,6 +7,7 @@
 # Anchors: out (outlet face, +z), inlet (inlet face, +z), fhole[0..3] (outlet face, +z), order
 # (-,-), (+,-), (-,+), (+,+) as RACK-401's fan screws.
 
+properties(description: "120 x 120 x 25.4 axial fan, envelope", material: "PBT-GF30")
 shared A = 120                  # frame square
 shared H = 25.4                 # depth
 shared tf = 5                   # each corner flange

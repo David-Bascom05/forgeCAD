@@ -2,6 +2,7 @@
 # source: SPEC 6.2 (legs x +-18.20 inner, axle 8.4 at (y -40, z -71), pedal pin at (y 30, z -40)); the skirt and web are representative (README)
 # frame: the caster frame (SPEC 5.10): origin on the kingpin axis in the plate's top face, z up, y along the plate's long side, the wheel towards -y
 
+properties(description: "caster yoke", material: "1008 CR")
 shared rk = 5.2   # kingpin clearance in the head
 shared rh = 29   # head and skirt outer radius
 shared rsi = 26.5   # skirt inner radius

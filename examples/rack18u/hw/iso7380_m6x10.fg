@@ -2,6 +2,7 @@
 # source: https://www.fasteners.eu/standards/ISO/7380/ (ISO 7380-1 table)
 # frame: origin on the axis at the head underside; +z along the shank to the tip; head at z < 0
 
+properties(description: "ISO 7380-1 hexagon socket button head screw M6 x 10", material: "8.8")
 shared d = 6   # thread major diameter
 shared P = 1   # pitch
 shared l = 10   # nominal length, under the head to the tip

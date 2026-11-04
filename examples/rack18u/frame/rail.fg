@@ -4,6 +4,7 @@
 # face p = 0 (bears on the carrier). Inner edge p = 26.88. Every pattern is symmetric about r = 445.
 # Shop: hw/shop.fg, copied verbatim (SPEC 10 gap 12).
 
+properties(part_number: "RACK-201", description: "EIA rail, L 26.88 x 45 outer, t2, 890 long", material: "1008 CR")
 shared t3 = 3.02
 shared t2 = 1.88
 shared t1 = 1.52

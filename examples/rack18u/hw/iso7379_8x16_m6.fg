@@ -2,6 +2,7 @@
 # source: https://www.fasteners.eu/standards/ISO/7379/ (ds 8, dk 13, k 5.5, s 4, b 11); Ganter ISO 7379-8-M6 sheets (l2 11)
 # frame: origin on the axis at the head underside; +z along the shoulder to the tip; head at z < 0
 
+properties(description: "ISO 7379 hexagon socket shoulder screw 8 x 16, thread M6 x 11", material: "8.8")
 shared ds = 8   # shoulder diameter (f9)
 shared ls = 16   # shoulder length
 shared d = 6   # thread major diameter

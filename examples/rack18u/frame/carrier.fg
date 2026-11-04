@@ -4,6 +4,7 @@
 # vertical leg: outer face b = 0 (the rail web bears on it). Patterns symmetric about a = 357.
 # Shop: hw/shop.fg, copied verbatim (SPEC 10 gap 12).
 
+properties(part_number: "RACK-111", description: "Rail carrier, L 32 x 40 outer, t2, 714 long", material: "1008 CR")
 shared t3 = 3.02
 shared t2 = 1.88
 shared t1 = 1.52

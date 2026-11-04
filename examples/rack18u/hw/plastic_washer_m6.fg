@@ -2,6 +2,7 @@
 # source: SPEC 5.11 (1.0 thick, modelled); 6.4 x 12 assumed: Rittal publishes no size
 # frame: origin on the axis in the bottom face; +z through the part
 
+properties(description: "plastic washer for the M6 rack screw", material: "PA66")
 shared di = 6.4   # inner diameter
 shared do = 12   # outer diameter
 shared h = 1   # thickness

@@ -2,6 +2,7 @@
 # source: SPEC 6.2 (pivot pin 6.0 through the yoke legs at (y 30, z -40)); heads representative
 # frame: the caster frame (SPEC 5.10): origin on the kingpin axis in the plate's top face, z up, y along the plate's long side, the wheel towards -y
 
+properties(description: "caster pedal pivot pin 6.0, riveted heads 9.0 x 1.5 outside the yoke legs", material: "AISI 1018")
 shared yq = 30
 shared zq = 40
 shared rs = 3

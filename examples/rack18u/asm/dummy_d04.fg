@@ -3,6 +3,8 @@
 # frame: rack axes; origin on the ears' back face (against the rail, y = 0) at x = 0, at the bottom
 # boundary of the lowest U. Anchors ear[0..3]: (-x, bottom), (-x, top), (+x, bottom), (+x, top),
 # on y = 0, normal +y (into the rack), x = +z (as the left front rail's eia x).
+
+properties(part_number: "RACK-D04", description: "dummy 4U server")
 shared nU = count(4)
 shared u = 44.45
 shared h = u * nU

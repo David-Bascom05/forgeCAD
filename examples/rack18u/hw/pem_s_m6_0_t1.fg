@@ -2,6 +2,7 @@
 # source: PEM bulletin CL (https://damlite.pemnet.com/CLS-M6-1_pdf_2.pdf), S/SS/CLS table, shank code 0
 # frame: origin on the axis in the sheet's flush face (the face the screw enters); +z through the sheet to the nut head; the shank's end is recessed t - A below the flush face
 
+properties(description: "PEM S-M6-0 self-clinching nut, as installed in a 1.52 sheet", material: "AISI 1018")
 shared tsh = 1.52   # sheet thickness this file is for
 shared d = 6   # thread
 shared P = 1   # pitch

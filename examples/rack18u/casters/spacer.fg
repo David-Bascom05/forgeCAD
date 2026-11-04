@@ -2,6 +2,7 @@
 # source: SPEC 6.2
 # frame: origin on the axis in one end face; +z through the part
 
+properties(description: "caster axle spacer", material: "AISI 1018")
 shared ri = 4.1
 shared ro = 6
 shared h = 14.7

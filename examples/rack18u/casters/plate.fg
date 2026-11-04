@@ -2,6 +2,7 @@
 # source: SPEC 5.10, 6.2; Blickle LKPA-PATH 80KF (plate 90 x 66, holes 8.5 on 75 x 45)
 # frame: the caster frame (SPEC 5.10): origin on the kingpin axis in the plate's top face, z up, y along the plate's long side, the wheel towards -y
 
+properties(description: "caster top plate 90 x 66 x 3.0 with the upper raceway and the kingpin's countersink", material: "1008 CR")
 shared w = 66   # plate width (x)
 shared l = 90   # plate length (y)
 shared t = 3   # thickness, not published: modelled 3.0

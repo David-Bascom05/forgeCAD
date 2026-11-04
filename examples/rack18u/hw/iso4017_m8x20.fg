@@ -2,6 +2,7 @@
 # source: https://www.fasteners.eu/standards/ISO/4017/
 # frame: origin on the axis at the head underside; +z along the shank to the tip; head at z < 0
 
+properties(description: "ISO 4017 hexagon head screw M8 x 20", material: "8.8")
 shared d = 8   # thread major diameter
 shared P = 1.25   # pitch
 shared l = 20   # nominal length, under the head to the tip

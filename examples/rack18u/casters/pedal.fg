@@ -2,6 +2,7 @@
 # source: SPEC 6.2 (2.0 lever, pivot (y 30, z -40), pad to y 88); shape representative, worked out in gen.py
 # frame: the caster frame (SPEC 5.10): origin on the kingpin axis in the plate's top face, z up, y along the plate's long side, the wheel towards -y; drawn at brake 0
 
+properties(description: "caster total-lock pedal", material: "1008 CR")
 shared xc = 13   # cheek inner faces
 shared tc = 2   # lever sheet
 shared yq = 30

@@ -3,6 +3,7 @@
 # (rack X, Y, Z on the front-bottom instance). Material of the horizontal leg is zb -1.88..0.
 # Shop text below is SPEC section 3 verbatim (no imports in Forge yet, gap 12).
 
+properties(part_number: "RACK-311", description: "Hinge bracket, t2", material: "1008 CR")
 shared t3 = 3.02
 shared t2 = 1.88
 shared t1 = 1.52

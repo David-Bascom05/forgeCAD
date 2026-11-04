@@ -2,6 +2,7 @@
 # source: SPEC section 7 (8.2-8.4 ID x 14 x 8); 8.2 taken so it also bears on the 8.0 shoulder
 # frame: origin on the axis in the bottom face; +z through the part
 
+properties(description: "PA66 spacer 8.2 ID x 14 OD x 8.0", material: "PA66")
 shared di = 8.2   # inner diameter
 shared do = 14   # outer diameter
 shared h = 8   # thickness

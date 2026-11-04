@@ -2,6 +2,7 @@
 # source: https://www.fasteners.eu/standards/ISO/7089/ (d1 4.3, d2 9, h 0.8)
 # frame: origin on the axis in the bottom face; +z through the part
 
+properties(description: "ISO 7089 plain washer, size 4", material: "1008 CR")
 shared di = 4.3   # inner diameter
 shared do = 9   # outer diameter
 shared h = 0.8   # thickness

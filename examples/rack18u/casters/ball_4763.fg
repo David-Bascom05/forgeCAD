@@ -2,6 +2,7 @@
 # source: SPEC 6.2 (upper 24 on a 50.0 pitch circle, lower 20 on 36.0)
 # frame: origin at the ball's centre; uorb / lorb are the row's orbit centres, the ball out along their x
 
+properties(description: "steel ball 4.763", material: "AISI 52100")
 shared dw = 4.763   # ball diameter
 shared rw = dw / 2
 shared ru = 25   # upper row pitch radius

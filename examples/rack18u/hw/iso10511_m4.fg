@@ -2,6 +2,7 @@
 # source: https://www.fasteners.eu/standards/ISO/10511/ (table per DIN 985: s 7, h 5, m 2.9, dw 5.9)
 # frame: origin on the axis in the bearing face; +z through the nut towards the insert crown
 
+properties(description: "ISO 10511 prevailing torque type hexagon thin nut with non-metallic insert M4", material: "8.8")
 shared d = 4   # thread
 shared P = 0.7   # pitch
 shared s = 7   # across flats

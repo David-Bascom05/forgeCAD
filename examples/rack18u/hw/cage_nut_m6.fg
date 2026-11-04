@@ -2,6 +2,7 @@
 # source: Rittal DK 2094.200 (M6, 0.8-2.5 metal); envelope from Panduit CNWSM6-C drawing 10119-20
 # frame: origin on the axis in the rail's rear face (the cage's front face); +z behind the rail, the direction a screw from the front advances; x across the rack (the 11.81 side)
 
+properties(description: "M6 cage nut for 9.5 square holes", material: "AISI 1018")
 shared d = 6   # thread
 shared P = 1   # pitch
 shared wx = 11.81   # cage width, across the rack (Panduit CNWSM6-C .465)

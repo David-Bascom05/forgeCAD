@@ -6,6 +6,7 @@
 # The returns are modelled UP in the sheet's own terms (SPEC gap 6): the reference skin is the field's
 # inner face n = -1.52 with its normal -n, so sketches on the field read (h, -k).
 
+properties(part_number: "RACK-301", description: "Door, t1", material: "1008 CR")
 shared t3 = 3.02
 shared t2 = 1.88
 shared t1 = 1.52

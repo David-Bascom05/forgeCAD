@@ -3,6 +3,7 @@
 # door) at the latch axis; x = u (the arm), y = v, z = w (towards the door). Material z -1.88..0.
 # Outline: a disc R 21.9 about the axis joined to the arm's R 8 end, centred on u = 19 (tip r 27).
 
+properties(part_number: "RACK-313", description: "Latch cam, t2, flat", material: "1008 CR")
 shared t3 = 3.02
 shared t2 = 1.88
 shared t1 = 1.52

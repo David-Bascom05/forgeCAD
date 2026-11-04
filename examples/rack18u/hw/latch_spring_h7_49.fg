@@ -2,6 +2,7 @@
 # source: SPEC 5.8 (ID >= 8.4, OD <= 13, free ~12, solid <= 5.0, ~8 N/mm); no supplier row yet: wire 1.2, mean 10.8 (ID 9.6, OD 12.0), 4 turns, solid 4.8, rate G d^4 / (8 D^3 na) = 8.1 N/mm with 2 active
 # frame: origin on the axis in the seat plane z = 0; the coil runs to z = H
 
+properties(description: "latch compression spring at height 7.49", material: "AISI 1018")
 shared H = 7.49   # working height
 shared dw = 1.2   # wire diameter
 shared D = 10.8   # mean coil diameter

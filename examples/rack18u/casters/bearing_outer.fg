@@ -2,6 +2,7 @@
 # source: ISO 15 / SPEC 6.2, 7; groove radius 0.53 Dw, depth 0.75 and the recess representative
 # frame: origin at the bearing's centre, z along its axis
 
+properties(description: "608-2RS outer ring", material: "AISI 52100")
 shared ro = 11   # outside
 shared rl = 8.7345   # land (shoulder) radius
 shared rs = 9.7   # seal recess

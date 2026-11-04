@@ -2,6 +2,7 @@
 # source: SPEC 6.2 / 7 (608-2RS: 7 x 3.969)
 # frame: origin at the ball's centre
 
+properties(description: "steel ball 3.969", material: "AISI 52100")
 shared dw = 3.969   # ball diameter
 shared rw = dw / 2
 

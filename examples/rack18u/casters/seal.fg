@@ -2,6 +2,7 @@
 # source: SPEC 6.2 (2 rubber seals 0.8 thick in the outer ring); section representative
 # frame: origin at the bearing's centre, z along its axis; drawn on the +z side; `back` turns it over for the -z side
 
+properties(description: "608-2RS rubber seal 0.8", material: "NBR 70A")
 shared ri = 6.2655   # lip: on the inner ring's land
 shared ro = 9.7
 shared z0 = 2.55

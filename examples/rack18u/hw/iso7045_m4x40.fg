@@ -2,6 +2,7 @@
 # source: https://www.fasteners.eu/standards/ISO/7045/ (dk 8, k 3.1, rf 8, m 4.6)
 # frame: origin on the axis at the head underside; +z along the shank to the tip; head at z < 0
 
+properties(description: "ISO 7045 cross recessed pan head screw M4 x 40", material: "8.8")
 shared d = 4   # thread major diameter
 shared P = 0.7   # pitch
 shared l = 40   # nominal length, under the head to the tip
