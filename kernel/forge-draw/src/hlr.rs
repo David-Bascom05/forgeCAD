@@ -1021,6 +1021,39 @@ fn crossings(curves: &[Curve3], view: &View, chord: f64) -> Vec<Vec<f64>> {
             out[cj as usize].push(tb);
         }
     }
+    // where a curve ends on another (an outline ending where it touches a rim, which it meets
+    // tangentially, so no crossing shows it): split the other there
+    let size = (hi.x - lo.x).max(hi.y - lo.y).max(1.0);
+    let touch = 1e-7 * size + 1e-7;
+    for (c, (_, ps)) in samples.iter().enumerate() {
+        for e in [ps[0], ps[ps.len() - 1]] {
+            let r = chord + touch;
+            grid.near(
+                Point2::new(e.x - r, e.y - r),
+                Point2::new(e.x + r, e.y + r),
+                &mut near,
+            );
+            for &k in &near {
+                let (ck, sk) = segs[k as usize];
+                if ck as usize == c {
+                    continue;
+                }
+                let (a, b) = seg(k as usize);
+                let ab = b - a;
+                let x = ((e - a).dot(ab) / ab.dot(ab).max(1e-300)).clamp(0.0, 1.0);
+                if e.distance(a + ab * x) > r {
+                    continue;
+                }
+                let ts = &samples[ck as usize].0;
+                let guess = ts[sk as usize] + x * (ts[sk as usize + 1] - ts[sk as usize]);
+                let path = &curves[ck as usize].path;
+                let t = nearest_on_view(path, view, e, guess);
+                if view.project(path.at(t)).distance(e) <= touch {
+                    out[ck as usize].push(t);
+                }
+            }
+        }
+    }
     for (k, ts) in out.iter_mut().enumerate() {
         let (a, b) = curves[k].path.range();
         ts.retain(|t| *t >= a && *t <= b);
@@ -1028,6 +1061,27 @@ fn crossings(curves: &[Curve3], view: &View, chord: f64) -> Vec<Vec<f64>> {
         ts.dedup_by(|x, y| (*x - *y).abs() <= 1e-12 * (1.0 + x.abs()));
     }
     out
+}
+
+/// The parameter of `path`'s point nearest `q` on the view, by Gauss-Newton steps from `guess`.
+fn nearest_on_view(path: &Path3, view: &View, q: Point2, guess: f64) -> f64 {
+    let (lo, hi) = path.range();
+    if let Path3::Poly(_) = path {
+        return guess;
+    }
+    let h = 1e-7 * (hi - lo);
+    let mut t = guess;
+    for _ in 0..8 {
+        let p = |t: f64| view.project(path.at(t));
+        let d1 = (p(t + h) - p(t - h)) * (0.5 / h);
+        let r = p(t) - q;
+        let den = d1.dot(d1);
+        if den.abs() <= 1e-300 {
+            break;
+        }
+        t = (t - r.dot(d1) / den).clamp(lo, hi);
+    }
+    t
 }
 
 /// Where segments `ab` and `cd` cross: the fraction along each; None for parallel ones.
@@ -1080,7 +1134,19 @@ fn refine(p: &Path3, q: &Path3, view: &View, ta: f64, tb: f64) -> (f64, f64) {
 /// and where they disagree the change found by bisection.
 fn visibility(scene: &Scene, path: &Path3, a: f64, b: f64) -> Vec<(f64, f64, bool)> {
     let ks = [0.25, 0.5, 0.75];
-    let ts: Vec<f64> = ks.iter().map(|k| a + k * (b - a)).collect();
+    let mut ts: Vec<f64> = ks.iter().map(|k| a + k * (b - a)).collect();
+    // a polyline's points lie on the curve, its chords do not (inside a thin wire by their sag)
+    if let Path3::Poly(_) = path {
+        let mut at: Vec<f64> = ts
+            .iter()
+            .map(|t| t.round())
+            .filter(|t| *t > a && *t < b)
+            .collect();
+        at.dedup();
+        if !at.is_empty() {
+            ts = at;
+        }
+    }
     let vis: Vec<bool> = ts.iter().map(|&t| !scene.hidden(path.at(t))).collect();
     if vis.iter().all(|&v| v == vis[0]) {
         return vec![(a, b, vis[0])];
