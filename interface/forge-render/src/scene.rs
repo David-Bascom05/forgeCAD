@@ -610,6 +610,28 @@ mod tests {
     }
 
     #[test]
+    fn two_planes_cut_a_quarter_or_three_quarters() {
+        let cam = Camera::fit([0.0; 3], 100.0);
+        let v = cam.view(800, 600);
+        // one placement in each quarter of the xy plane, and one where the planes meet
+        let at = [[3.0, 3.0], [-3.0, 3.0], [-3.0, -3.0], [3.0, -3.0], [0.0, 0.0]];
+        let mut s = scene(at.iter().map(|p| Placement::at(0, [p[0], p[1], 0.0])).collect());
+        let (x, y) = ([1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0]);
+        let count = |s: &Scene| -> (u32, u32) {
+            (
+                s.draws.iter().map(|d| d.count).sum(),
+                s.cut_draws.iter().map(|d| d.count).sum(),
+            )
+        };
+        // what both cut goes (x > 0 and y > 0): three quarters and the middle are left
+        s.cull(&v, 1.0, Some(x), Some((y, false)));
+        assert_eq!(count(&s), (4, 1));
+        // what either cuts goes: only x < 0, y < 0 and the middle are left
+        s.cull(&v, 1.0, Some(x), Some((y, true)));
+        assert_eq!(count(&s), (2, 1));
+    }
+
+    #[test]
     fn stress_rotations_are_rigid_and_the_scene_is_repeatable() {
         let a = stress(15, 100, 300.0);
         let b = stress(15, 100, 300.0);

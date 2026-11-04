@@ -705,6 +705,8 @@ mod tests {
         }
     }
 
+    // wasm's test runner has no writable folder
+    #[cfg(not(target_family = "wasm"))]
     #[test]
     fn a_project_library_comes_before_forgecad_and_saves_in_place() {
         let d = std::env::temp_dir().join(format!("forge-material-{}", std::process::id()));
