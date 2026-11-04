@@ -152,7 +152,7 @@ fn refusals_are_typed_with_fixes() {
     assert_eq!(e.kind(), "UnknownMaterial");
     assert!(e.fixes().len() >= 6);
     // a male shape said to be female: its walls lean the wrong way for a cavity
-    let wrong = s.replace("material: \"HIPS\")", "material: \"HIPS\", side: \"outer\")");
+    let wrong = s.replace("material: \"HIPS\")", "material: \"HIPS\", tool: \"female\")");
     let r = run(&wrong);
     assert!(
         kinds(&r).contains(&"Undercut"),
@@ -186,4 +186,39 @@ fn the_shop_reads_gauges_and_the_sheet() {
         .expect("gauge");
     let fixed = apply(&s, &g.fixes[0]).expect("applies");
     assert!(!kinds(&run(&fixed)).contains(&"GaugeNotStocked"));
+}
+
+#[test]
+fn a_shelled_part_says_its_own_thickness() {
+    let s = src("shell_cover");
+    let r = built("shell_cover", &s);
+    assert!((r.thermos[0].t - 1.5).abs() < 0.01, "{}", r.thermos[0].t);
+    // a thickness given that is not the wall's is refused, with the wall's as the fix
+    let wrong = s.replace("from: \"wall\",", "from: \"wall\", t: 3,");
+    let r = run(&wrong);
+    let e = r.errors.first().expect("refused");
+    assert_eq!(e.kind(), "WallNotT");
+    let fixed = apply(&wrong, &e.fixes()[0]).expect("applies");
+    assert!(run(&fixed).errors.is_empty());
+}
+
+#[test]
+fn the_three_ways_in_give_the_moulds_they_should() {
+    let s = src("cover");
+    let top = |r: &Run| {
+        let m = &r.thermos[0].formed.mould;
+        m.vertex_ids()
+            .map(|v| m.vertex(v).point.z)
+            .fold(f64::MIN, f64::max)
+    };
+    // the solid is the outside: the mould is a wall's thickness under it, grown by the shrink
+    let outer = built("cover", &s);
+    let k = 1.0 + forge_thermo::placeholder().material("HIPS").unwrap().shrink;
+    assert!((top(&outer) - (35.0 - 2.0) * k).abs() < 0.05, "{}", top(&outer));
+    // the solid is the inside: the mould is the solid
+    let inner = built(
+        "cover",
+        &s.replace("material: \"HIPS\")", "material: \"HIPS\", from: \"inner\")"),
+    );
+    assert!((top(&inner) - 35.0 * k).abs() < 1e-6, "{}", top(&inner));
 }

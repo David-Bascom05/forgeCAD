@@ -749,12 +749,19 @@ writing the statement at the top when the document has none.
 
 ## Thermoforming
 
-Model the part's shape; the formed part and its mould are generated from it. The shape is a solid
-whose surface is the part's side that touches the mould: its inside for a part formed over a male
-mould (the default), or, with `side: "outer"`, its outside for one drawn into a female mould (model
-the cavity's solid, hanging under the trim plane). The touching side is the accurate one; the sheet
-is `t` thick and goes on the other side. The shape stands on a flat face square to the pull: its
-foot (male) or its top (female) is the trim plane.
+Model the part; the formed sheet and its mould are generated from it. `from:` says what the body
+is, each for either mould (`tool:`):
+
+- `from: "outer"` (the default): a solid whose surface is the part's outside, the wall t thick
+  inside it, open at its foot (a conversion, as `sheet` converts a profile).
+- `from: "wall"`: the thin-walled part itself (a `shell` of a solid, open at its foot); t is read
+  from the wall (`WallNotUniform` where it is not one thickness: its usual thickness, its thinnest
+  and thickest and where; `t:` given and not the wall's is `WallNotT`, fix: the wall's).
+- `from: "inner"`: a solid whose surface is the part's inside; the sheet goes outward by t.
+
+`tool: "male"` (the default) puts the part's inside on the mould, `"female"` its outside (a cavity).
+The side on the mould is the accurate one. The part leaves the mould along `pull`: its opening is a
+flat face square to the pull at its foot (male) or its top (female), and that is the trim plane.
 
 ```
 shared t = 2
@@ -767,18 +774,21 @@ cover = thermoform(body, t: t, material: "HIPS")
 ```
 
 ```
-thermoform(SHAPE, t: T, material: "ABS" | MATERIAL, side: "inner"|"outer" = "inner",
-           pull: DIR = Z, trim: PROFILE, flange: W = 10, sheet: (W, L), shop: SHOP,
-           shrink: ratio(S), base: B = 10, margin: M = 5, vent: D | false, vents: [(x, y), ..],
-           vent_pitch: P = 25, walls: true, temperature: C, pressure: ratio(MPa))
+thermoform(SHAPE, t: T, material: "ABS" | MATERIAL, from: "outer"|"wall"|"inner" = "outer",
+           tool: "male"|"female" = "male", pull: DIR = Z, trim: PROFILE, flange: W = 10,
+           sheet: (W, L), shop: SHOP, shrink: ratio(S), base: B = 10, margin: M = 5,
+           vent: D | false, vents: [(x, y), ..], vent_pitch: P = 25, walls: true,
+           temperature: C, pressure: ratio(MPa))
 ```
 
-- SHAPE: the feature that made the shape's body. The formed part is the shape's surface offset by t
-  (exact offset surfaces), cut square to the trim plane along the trim outline, with its flange on
-  the table (male) or the mould's top (female). `trim:` a closed profile on a plane square to the
+- SHAPE: the feature that made the part's body. The mould's surface is the part's side on it (from
+  "outer" and a male mould: the body offset inward by t; "inner" and female: outward by t; a wall:
+  its hollow, or the hollow and the wall); the formed part is that surface offset by t (exact offset
+  surfaces), cut square to the trim plane along the trim outline, with its flange on the table
+  (male) or the mould's top (female). `trim:` a closed profile on a plane square to the
   pull; left out, the shape's box on the trim plane grown by `flange` (corners rounded to it).
 - It makes two bodies: the formed part, a new body named by the feature, and the mould, in the
-  shape body's place: the shape grown by 1 + shrink (the material's, or `shrink:`) about the trim
+  part body's place: the mould's surface grown by 1 + shrink (the material's, or `shrink:`) about the trim
   plane under its middle, on a base `base` thick reaching `margin` past the trim (male), or cut into
   a block that deep under the cavity (female). Vents (`vent` across, default the material's largest,
   at most 1 mm) are drilled where the sheet meets the mould last (the cells of each low plateau
@@ -820,11 +830,11 @@ given by hand; fix: the point added), `GaugeNotStocked` (fix: the nearest gauge)
 `warning`: `ThinWall` (the predicted wall under min_wall of t, and where; fixes: the gauge that
 reaches it, more taper, a larger round there) and `Bridged` (points inside the trim the sheet never
 reached). Faults the same features make in several places are one note with a `count`. The checks
-run on the shape even when the solids fail. Refusals: `NoOpening` (fix: the other side),
+run on the shape even when the solids fail. Refusals: `NoOpening` (fix: the other tool),
 `TrimNotSquare`, `TrimCutsShape` (the trim must clear the shape by t), `SheetOffset` (the kernel's
 offset failed: a round tighter than t, or walls meeting), `ThermoSize` (a size not positive, not
 finite, or out of all proportion to the shape), `UnknownMaterial` (fixes: the shop's materials),
-`NotABody`.
+`NotAWall` and `WallNotUniform` (fix: from "outer"), `WallNotT` (fix: the wall's t), `NotABody`.
 
 ## Functions and recursion
 

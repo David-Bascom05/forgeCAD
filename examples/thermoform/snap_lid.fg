@@ -1,6 +1,7 @@
-# A snap-on lid on a male tool with two faults the checks catch: the snap bead round the top
-# overhangs the drafted walls (it turns under the pull: the formed lid locks on the tool), and
-# two posts on the top stand closer together than they are tall (the sheet webs between them).
+# A snap-on lid modelled from its inside (from: "inner": the solid is the lid's inner surface, the
+# sheet goes on outside it), on a male mould, with two faults the checks catch: the snap bead round
+# the top overhangs the drafted walls (it turns under the pull: the formed lid locks on the mould),
+# and two posts on the top stand closer together than they are tall (the sheet webs between them).
 shared t = 1.5
 shared W = 90
 shared L = 60
@@ -29,4 +30,4 @@ sketch pk(on: bead.end) {
 for i in 0..2 {
   posts = extrude(pk.c[i], ph, taper: lean)
 }
-lid = thermoform(body, t: t, material: "ABS")
+lid = thermoform(body, from: "inner", t: t, material: "ABS")

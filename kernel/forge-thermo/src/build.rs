@@ -16,16 +16,17 @@ use forge_ops::{ExtrudeError, Profile, ProfileLoop, Segment, ShellError};
 use forge_topo::{Body, FaceId, Name};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Side {
-    /// The shape is the part's inside: a male tool.
-    Inner,
-    /// The shape is the part's outside: a female tool (a cavity).
-    Outer,
+pub enum Tool {
+    /// The part's inside is on the mould: a male mould.
+    Male,
+    /// The part's outside is on the mould: a female mould (a cavity).
+    Female,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Spec {
-    pub side: Side,
+    /// What the mould's surface is (see `prepare`): `analyse` and `form` take that solid.
+    pub tool: Tool,
     /// The way the part comes off the tool.
     pub pull: UnitVec3,
     /// The sheet's thickness.
@@ -60,7 +61,16 @@ pub enum FormError {
     /// The shape has no flat face square to the pull at its foot (male: lowest; female: highest),
     /// so there is no trim plane.
     NoOpening {
-        side: Side,
+        tool: Tool,
+    },
+    /// A wall (`Given::Wall`) holds no hollow open at its foot: it is not a formed sheet's.
+    NotAWall,
+    /// A wall's thickness is not one: its usual thickness, and its thinnest and thickest where
+    /// they are.
+    WallNotUniform {
+        t: f64,
+        min: (f64, Point3),
+        max: (f64, Point3),
     },
     /// The trim plane's normal is not along the pull.
     TrimNotSquare,
@@ -258,7 +268,7 @@ pub fn analyse(shape: &Body, spec: &Spec) -> Result<Formed, FormError> {
             return Err(FormError::Size { what, value: v });
         }
     }
-    let male = spec.side == Side::Inner;
+    let male = spec.tool == Tool::Male;
     let d = spec.pull;
     let mesh = forge_mesh::tessellate(
         shape,
@@ -303,7 +313,7 @@ pub fn analyse(shape: &Body, spec: &Spec) -> Result<Formed, FormError> {
         open[f.0.index()] = f.2;
     }
     if !faces.iter().any(|f| f.2) {
-        return Err(FormError::NoOpening { side: spec.side });
+        return Err(FormError::NoOpening { tool: spec.tool });
     }
     let contact: Vec<usize> = (0..mesh.triangles.len())
         .filter(|&t| !open[mesh.face_of[t] as usize])
@@ -389,7 +399,7 @@ pub fn analyse(shape: &Body, spec: &Spec) -> Result<Formed, FormError> {
 /// Forms the sheet over `shape`: the part and the tool. `feature` names what is made.
 pub fn form(shape: &Body, spec: &Spec, feature: u64) -> Result<Formed, FormError> {
     let mut f = analyse(shape, spec)?;
-    let male = spec.side == Side::Inner;
+    let male = spec.tool == Tool::Male;
     let (frame, trim, depth) = (f.frame, f.trim.clone(), f.report.depth);
     let slab_id = feature ^ 0x5eed;
     let part = if male {

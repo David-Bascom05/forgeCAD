@@ -6,7 +6,7 @@
 //! step carries it into the tool stops where it crossed. The thickness is t0 times the area the
 //! sheet had over the area it has. Isothermal, no friction slip, no plug: an estimate under a
 //! stated model, best at saying where the sheet is thinnest. Design: research/thermoform/.
-use crate::build::{Formed, Side, Spec, inside, polygon};
+use crate::build::{Formed, Spec, Tool, inside, polygon};
 use crate::field::Field;
 use forge_math::{Point2, Point3, Vec3, dmath};
 
@@ -357,7 +357,7 @@ fn relax(
 
 /// The thickness the sheet comes to over the tool `f` formed with `spec` under `pr`.
 pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
-    let male = spec.side == Side::Inner;
+    let male = spec.tool == Tool::Male;
     let (tlo, thi) = f.report.trim_box;
     // the clamp window: the tool's outline
     let m = spec.margin.max(spec.t);

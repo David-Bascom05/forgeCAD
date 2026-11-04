@@ -1,4 +1,5 @@
-# A deep drinking cup in a female tool: deeper than it is wide, so the draw checks speak.
+# A deep drinking cup modelled as a solid (its outside), drawn into a female mould: deeper than it
+# is wide, so the draw checks speak.
 shared t = 1
 shared r = 32
 shared D = 75
@@ -9,4 +10,4 @@ sketch plan(on: xy) {
 }
 cup = extrude(plan, -D, taper: lean)
 base = fillet(edges(of: cup.end), rb)
-part = thermoform(cup, t: t, material: "PETG", side: "outer")
+part = thermoform(cup, t: t, material: "PETG", tool: "female")

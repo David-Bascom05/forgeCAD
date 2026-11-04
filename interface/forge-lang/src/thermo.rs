@@ -13,7 +13,7 @@ use crate::values::{Dim, Num, Src, Ty};
 use forge_agent::json::Json;
 use forge_math::{Point2, Point3, UnitVec3};
 use forge_model::{Feature, Solid};
-use forge_thermo::{self as ft, Side, Violation};
+use forge_thermo::{self as ft, Tool, Violation};
 use forge_topo::Body;
 use std::f64::consts::FRAC_PI_4;
 use std::rc::Rc;
@@ -45,7 +45,8 @@ impl ThermoVal {
 pub struct ThermoOut {
     pub id: String,
     pub material: String,
-    pub side: Side,
+    pub tool: Tool,
+    pub from: ft::Given,
     pub t: f64,
     pub formed: Rc<ft::Formed>,
     /// The thickness model's result (None: `walls: false`).
@@ -95,10 +96,19 @@ impl ThermoOut {
             ("id", self.id.as_str().into()),
             ("material", self.material.as_str().into()),
             (
-                "side",
-                match self.side {
-                    Side::Inner => "inner",
-                    Side::Outer => "outer",
+                "tool",
+                match self.tool {
+                    Tool::Male => "male",
+                    Tool::Female => "female",
+                }
+                .into(),
+            ),
+            (
+                "from",
+                match self.from {
+                    ft::Given::Outer => "outer",
+                    ft::Given::Wall => "wall",
+                    ft::Given::Inner => "inner",
                 }
                 .into(),
             ),
@@ -143,6 +153,13 @@ pub enum ThermoErr {
         name: String,
         known: Vec<String>,
     },
+    /// A thickness given for a wall that is not the wall's.
+    WallNotT {
+        span: Span,
+        id: String,
+        given: f64,
+        measured: f64,
+    },
     /// The shape names no body of the part.
     NotABody { span: Span, id: String },
 }
@@ -167,6 +184,7 @@ impl ThermoErr {
         match self {
             ThermoErr::Kernel { span, .. }
             | ThermoErr::UnknownMaterial { span, .. }
+            | ThermoErr::WallNotT { span, .. }
             | ThermoErr::NotABody { span, .. } => Some(*span),
         }
     }
@@ -176,6 +194,7 @@ impl ThermoErr {
         match self {
             ThermoErr::UnknownMaterial { .. } => "UnknownMaterial",
             ThermoErr::NotABody { .. } => "NotABody",
+            ThermoErr::WallNotT { .. } => "WallNotT",
             ThermoErr::Kernel { error, .. } => match error {
                 E::Size { .. } => "ThermoSize",
                 E::NoOpening { .. } => "NoOpening",
@@ -185,6 +204,8 @@ impl ThermoErr {
                 E::Bool(_) => "ThermoBoolean",
                 E::Offset(_) => "SheetOffset",
                 E::Mesh => "ThermoMesh",
+                E::NotAWall => "NotAWall",
+                E::WallNotUniform { .. } => "WallNotUniform",
             },
         }
     }
@@ -193,17 +214,31 @@ impl ThermoErr {
         match self {
             ThermoErr::Kernel {
                 id,
-                error: ft::FormError::NoOpening { side },
+                error: ft::FormError::NoOpening { tool },
                 ..
             } => vec![Op::SetArg {
                 id: id.clone(),
-                arg: "side".into(),
-                text: if *side == Side::Inner {
-                    "\"outer\""
+                arg: "tool".into(),
+                text: if *tool == Tool::Male {
+                    "\"female\""
                 } else {
-                    "\"inner\""
+                    "\"male\""
                 }
                 .into(),
+            }],
+            ThermoErr::WallNotT { id, measured, .. } => vec![Op::SetArg {
+                id: id.clone(),
+                arg: "t".into(),
+                text: crate::values::fmt((measured * 1000.0).round() / 1000.0),
+            }],
+            ThermoErr::Kernel {
+                id,
+                error: ft::FormError::WallNotUniform { .. } | ft::FormError::NotAWall,
+                ..
+            } => vec![Op::SetArg {
+                id: id.clone(),
+                arg: "from".into(),
+                text: "\"outer\"".into(),
             }],
             ThermoErr::UnknownMaterial { id, known, .. } => known
                 .iter()
@@ -225,13 +260,37 @@ impl ThermoErr {
                 format!("no material {name} in the shop; it has {}", known.join(", "))
             }
             ThermoErr::NotABody { id, .. } => format!("{id} made no body to form over"),
+            ThermoErr::WallNotT {
+                id, given, measured, ..
+            } => format!(
+                "{id}: t is {} but the wall is {} thick (a wall says its own thickness)",
+                mm(*given),
+                mm(*measured)
+            ),
             ThermoErr::Kernel { id, error, .. } => match error {
                 E::Size { what, value } => format!("{id}: {what} must be positive, not {value}"),
-                E::NoOpening { side } => format!(
-                    "{id}: the shape has no flat face square to the pull at its {} to stand the sheet's \
-                     trim plane on (side: \"{}\")",
-                    if *side == Side::Inner { "foot" } else { "top" },
-                    if *side == Side::Inner { "inner" } else { "outer" }
+                E::NoOpening { tool } => format!(
+                    "{id}: the shape has no flat face square to the pull at its {} for a {} mould's trim \
+                     plane (the part leaves a male mould along the pull, a female one too, its opening first)",
+                    if *tool == Tool::Male { "foot" } else { "top" },
+                    if *tool == Tool::Male { "male" } else { "female" }
+                ),
+                E::NotAWall => format!(
+                    "{id}: the shape is no wall: nothing hollow under it opens at its foot (from: \"wall\" \
+                     takes a shelled part)"
+                ),
+                E::WallNotUniform { t, min, max } => format!(
+                    "{id}: the wall is not one thickness: mostly {}, from {} near ({:.1}, {:.1}, {:.1}) to {} \
+                     near ({:.1}, {:.1}, {:.1})",
+                    mm(*t),
+                    mm(min.0),
+                    min.1.x,
+                    min.1.y,
+                    min.1.z,
+                    mm(max.0),
+                    max.1.x,
+                    max.1.y,
+                    max.1.z
                 ),
                 E::TrimNotSquare => {
                     format!("{id}: the trim must be one closed loop on a plane square to the pull")
@@ -264,11 +323,25 @@ impl ThermoErr {
                 ),
             ],
             ThermoErr::NotABody { id, .. } => vec![("id", id.as_str().into())],
+            ThermoErr::WallNotT {
+                id, given, measured, ..
+            } => vec![
+                ("id", id.as_str().into()),
+                ("given", (*given).into()),
+                ("measured", (*measured).into()),
+            ],
             ThermoErr::Kernel { id, error, .. } => {
                 let mut d = vec![("id", id.as_str().into())];
                 if let ft::FormError::TrimCutsShape { at, clear } = error {
                     d.push(("at", p3(*at)));
                     d.push(("clear", (*clear).into()));
+                }
+                if let ft::FormError::WallNotUniform { t, min, max } = error {
+                    d.push(("t", (*t).into()));
+                    d.push(("min", (min.0).into()));
+                    d.push(("min_at", p3(min.1)));
+                    d.push(("max", (max.0).into()));
+                    d.push(("max_at", p3(max.1)));
                 }
                 d
             }
@@ -739,7 +812,8 @@ const ARGS: &[&str] = &[
     "shape",
     "t",
     "material",
-    "side",
+    "from",
+    "tool",
     "pull",
     "trim",
     "flange",
@@ -756,9 +830,39 @@ const ARGS: &[&str] = &[
     "temperature",
 ];
 
+/// What a thermoform built: the mould's surface solid it read, and what it made of it.
+#[derive(Clone)]
+struct Made {
+    formed: Rc<ft::Formed>,
+    prep: Rc<ft::Prepared>,
+}
+
+/// The spec for a sheet `t` thick: a vent left to the material, its largest for that sheet.
+fn sized(spec: &ft::Spec, m: &ft::Material, t: f64) -> ft::Spec {
+    let mut s = spec.clone();
+    s.t = t;
+    if s.vent.is_some_and(f64::is_nan) {
+        s.vent = Some(m.max_vent.at(t).min(1.0));
+    }
+    s
+}
+
+/// A thickness given for a wall must be the wall's.
+fn check_t(given: Option<f64>, measured: f64, span: Span, id: &str) -> R<()> {
+    match given {
+        Some(g) if (g - measured).abs() > 0.05 * measured.max(0.4) => Err(thermo_err(ThermoErr::WallNotT {
+            span,
+            id: id.into(),
+            given: g,
+            measured,
+        })),
+        _ => Ok(()),
+    }
+}
+
 /// The arguments' numbers as written, for fixes.
 struct Nums {
-    t: Num,
+    t: Option<Num>,
     vent: Option<Num>,
 }
 
@@ -802,8 +906,30 @@ fn thermoform(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
             ));
         }
     };
-    let t = a.req_num("t", LEN)?;
-    positive(&t, a.span("t"), "the sheet's thickness")?;
+    let from = match crate::wired::word(&a, "from", &["outer", "wall", "inner"])? {
+        Some("wall") => ft::Given::Wall,
+        Some("inner") => ft::Given::Inner,
+        _ => ft::Given::Outer,
+    };
+    let tool = match crate::wired::word(&a, "tool", &["male", "female"])? {
+        Some("female") => Tool::Female,
+        _ => Tool::Male,
+    };
+    // a wall says its own thickness; the others are given it
+    let t = match (a.num("t", LEN)?, from) {
+        (Some(t), _) => {
+            positive(&t, a.span("t"), "the sheet's thickness")?;
+            Some(t)
+        }
+        (None, ft::Given::Wall) => None,
+        (None, _) => {
+            return Err(Error::MissingArg {
+                span,
+                func: "thermoform",
+                arg: "t",
+            });
+        }
+    };
     let shop = match a.opt("shop") {
         None => ft::placeholder(),
         Some(Value::Thermo(v)) if matches!(&*v, ThermoVal::Shop(_)) => match &*v {
@@ -837,10 +963,6 @@ fn thermoform(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         },
         o => return Err(wrong(a.span("material"), "the material's name", Ty::Str, &o)),
     };
-    let side = match crate::wired::word(&a, "side", &["inner", "outer"])? {
-        Some("outer") => Side::Outer,
-        _ => Side::Inner,
-    };
     let pull = match a.opt("pull") {
         None => UnitVec3::Z,
         Some(v) => crate::eval::unit_or_z(dir_of(v, a.span("pull"))?),
@@ -861,7 +983,8 @@ fn thermoform(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
             let n = num_of(v, LEN, a.span("vent"), "the vent's diameter")?;
             (Some(n.v), Some(n))
         }
-        None => (Some(m.max_vent.at(t.v).min(1.0)), None),
+        // the material's largest for the sheet, set once its thickness is known
+        None => (Some(f64::NAN), None),
     };
     let vents = match a.opt("vents") {
         None => None,
@@ -889,9 +1012,9 @@ fn thermoform(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         Some(v) => Some(pair(v, a.span("sheet"), LEN)?),
     };
     let spec = ft::Spec {
-        side,
+        tool,
         pull,
-        t: t.v,
+        t: t.as_ref().map_or(0.0, |t| t.v),
         trim,
         flange,
         shrink,
@@ -902,12 +1025,13 @@ fn thermoform(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         vent_pitch,
         sheet,
     };
+    let t_given = t.as_ref().map(|t| t.v);
     let nums = Nums {
         t: t.clone(),
         vent: vent_num,
     };
     let hid = history_id(&id);
-    let text = format!("{spec:?} {:?} {}", m, shape.idx);
+    let text = format!("{spec:?} {from:?} {:?} {}", m, shape.idx);
     let marker = Feature::Param(Box::new(forge_model::Param {
         name: format!("thermoform:{id}"),
         expr: text.clone(),
@@ -916,14 +1040,14 @@ fn thermoform(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     }));
     let solid = ev.b.features.len();
     let before_n = solid;
-    let mut made: Option<(Rc<ft::Formed>, Body)> = None;
-    let mut failed: Option<Body> = None;
+    let mut made: Option<(Made, Body)> = None;
+    let mut failed: Option<(Body, ft::Prepared, ft::Spec)> = None;
     let (sp, idc) = (span, id.clone());
     let r = ev.push_made(
         &id,
         "thermoform",
         span,
-        vec![dim("thickness", &t)],
+        t.iter().map(|t| dim("thickness", t)).collect(),
         hid,
         |b: &mut Builder| {
             b.push_with(marker, hid, |before: &[Solid]| {
@@ -933,13 +1057,19 @@ fn thermoform(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
                         id: shape.id.clone(),
                     })
                 })?;
-                let f = ft::form(&s.body, &spec, hid).map_err(|error| {
-                    failed = Some(s.body.clone());
+                let err = |error| {
                     thermo_err(ThermoErr::Kernel {
                         span: sp,
                         id: idc.clone(),
                         error,
                     })
+                };
+                let prep = ft::prepare(&s.body, from, &spec, hid).map_err(err)?;
+                let spec = sized(&spec, &m, prep.t);
+                check_t(t_given, prep.t, sp, &idc)?;
+                let f = ft::form(&prep.shape, &spec, hid).map_err(|e| {
+                    failed = Some((s.body.clone(), prep.clone(), spec.clone()));
+                    err(e)
                 })?;
                 let mut out: Vec<Solid> = before.iter().filter(|x| x.id != s.id).cloned().collect();
                 out.push(Solid {
@@ -950,17 +1080,23 @@ fn thermoform(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
                     id: solid,
                     body: f.part.clone(),
                 });
-                made = Some((Rc::new(f), s.body.clone()));
+                made = Some((
+                    Made {
+                        formed: Rc::new(f),
+                        prep: Rc::new(prep),
+                    },
+                    s.body.clone(),
+                ));
                 Ok(out)
             })
         },
     );
     // the solids failed: what the checks say about the shape still stands
     if r.is_err()
-        && let Some(mb) = failed
-        && let Ok(f) = ft::analyse(&mb, &spec)
+        && let Some((_, prep, spec)) = failed
+        && let Ok(f) = ft::analyse(&prep.shape, &spec)
     {
-        notes(ev, &id, span, before_n, &mb, &f, None, &spec, &m, &shop, &nums);
+        notes(ev, &id, span, before_n, &prep, &f, None, &spec, &m, &shop, &nums);
     }
     let (idx, _) = r?;
     let ok = ev.b.building && ev.feats.last().is_some_and(|f| f.status == Status::Ok);
@@ -976,13 +1112,20 @@ fn thermoform(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     };
     if let Some(mb) = shape_body {
         let key = format!("thermoform {text} {}", body_key(&mb));
-        let formed = match made {
-            Some((f, _)) => ev.b.memo(key.clone(), || Some(f)),
-            None => {
-                ev.b.memo(key.clone(), || ft::form(&mb, &spec, hid).ok().map(Rc::new))
-            }
+        let built = match made {
+            Some((m, _)) => ev.b.memo(key.clone(), || Some(m)),
+            None => ev.b.memo(key.clone(), || {
+                let prep = ft::prepare(&mb, from, &spec, hid).ok()?;
+                let spec = sized(&spec, &m, prep.t);
+                let f = ft::form(&prep.shape, &spec, hid).ok()?;
+                Some(Made {
+                    formed: Rc::new(f),
+                    prep: Rc::new(prep),
+                })
+            }),
         };
-        if let Some(f) = formed {
+        if let Some(Made { formed: f, prep }) = built {
+            let spec = sized(&spec, &m, prep.t);
             let st = walls.as_ref().map(|pr| {
                 let key = format!("thermoform walls {key} {pr:?}");
                 let t0 = std::time::Instant::now();
@@ -995,7 +1138,7 @@ fn thermoform(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
                 &id,
                 span,
                 before_n,
-                &mb,
+                &prep,
                 &f,
                 st.as_deref(),
                 &spec,
@@ -1006,8 +1149,9 @@ fn thermoform(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
             ev.thermos.push(ThermoOut {
                 id: id.clone(),
                 material: m.name.clone(),
-                side,
-                t: t.v,
+                tool,
+                from,
+                t: prep.t,
                 formed: f,
                 walls: st,
                 temperature,
@@ -1033,7 +1177,7 @@ fn notes(
     id: &str,
     span: Span,
     before: usize,
-    shape: &Body,
+    prep: &ft::Prepared,
     f: &ft::Formed,
     walls: Option<&ft::Stretch>,
     spec: &ft::Spec,
@@ -1041,6 +1185,7 @@ fn notes(
     shop: &ft::FormShop,
     nums: &Nums,
 ) {
+    let shape = &prep.shape;
     let found = ft::check(shape, f, spec, m, shop, walls);
     if found.is_empty() {
         return;
@@ -1050,6 +1195,8 @@ fn notes(
     let feats_of = |names: &[forge_topo::Name]| -> Vec<(String, &'static str, usize)> {
         let mut out: Vec<(String, &'static str, usize)> = vec![];
         for n in names {
+            // a face of a generated surface goes by the user's face it was offset from
+            let n = prep.origin.iter().find(|o| o.0 == *n).map_or(n, |o| &o.1);
             for &i in origin.get(n).map(|v| v.as_slice()).unwrap_or(&[]) {
                 if let Some(fi) = ev.feats.iter().find(|x| x.idx == i)
                     && !out.iter().any(|o| o.2 == i)
@@ -1084,7 +1231,7 @@ fn notes(
     for v in found {
         let (made, fixes): (Vec<(String, &'static str, usize)>, Vec<Op>) = match &v {
             Violation::DraftTooLow { face, draft, .. } | Violation::Undercut { face, draft, .. } => {
-                let want = if spec.side == Side::Inner {
+                let want = if spec.tool == Tool::Male {
                     m.draft_male
                 } else {
                     m.draft_female
@@ -1202,7 +1349,7 @@ fn notes(
                     .filter(|g| *g >= need - 1e-9)
                     .fold(None, |b: Option<f64>, g| Some(b.map_or(g, |b| b.min(g))))
                     .unwrap_or(need);
-                let mut fixes = vec![set(Some(&nums.t), id, "t", gauge, "")];
+                let mut fixes = vec![set(nums.t.as_ref(), id, "t", gauge, "")];
                 let made = nearest_face(f, shape, *at)
                     .map(|n| feats_of(&[n]))
                     .unwrap_or_default();
@@ -1230,7 +1377,7 @@ fn notes(
                 (made, fixes)
             }
             Violation::GaugeNotStocked { nearest, .. } => {
-                (vec![], vec![set(Some(&nums.t), id, "t", *nearest, "")])
+                (vec![], vec![set(nums.t.as_ref(), id, "t", *nearest, "")])
             }
             Violation::SheetTooSmall { need, .. } => (
                 vec![],

@@ -161,7 +161,7 @@ fn compare(
     upto: f64,
 ) -> f64 {
     let spec = Spec {
-        side: Side::Outer,
+        tool: Tool::Female,
         pull: UnitVec3::Z,
         t: t0,
         trim: None,

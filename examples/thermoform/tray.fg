@@ -1,5 +1,5 @@
-# A tray with three round pockets drawn into a female mould: the shape is the tray's outside,
-# hanging under the trim plane, and the generated mould is a block with it cut in.
+# A tray with three round pockets modelled as a solid (its outside, hanging under the trim plane),
+# drawn into a female mould: the generated mould is a block with it cut in.
 shared t = 1.5
 shared W = 200
 shared L = 120
@@ -26,4 +26,4 @@ for i in 0..3 {
 }
 floor = fillet(edges(of: pocket[0].end + pocket[1].end + pocket[2].end), rf)
 rim = fillet(edges(of: tray.end, crease: "convex"), rf)
-part = thermoform(tray, t: t, material: "PETG", side: "outer", flange: lip)
+part = thermoform(tray, t: t, material: "PETG", tool: "female", flange: lip)

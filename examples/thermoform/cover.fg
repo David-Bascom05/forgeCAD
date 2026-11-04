@@ -1,5 +1,6 @@
-# A vacuum-formed cover: the shape is the cover's inside, the sheet goes on outside it, and the
-# mould is generated from it: the shape grown by the plastic's shrink, on a base, vented.
+# A vacuum-formed cover modelled as a solid: its surface is the cover's outside, the wall t thick
+# inside it (from: "outer", the default). The male mould is generated: the solid less the wall,
+# grown by the plastic's shrink, on a base, vented.
 shared t = 2
 shared W = 120
 shared L = 80

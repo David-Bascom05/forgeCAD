@@ -1,7 +1,7 @@
 //! The shop's checks on a formed part, run on every build: what the tool's surface does to the sheet
 //! (draft, undercuts, radii, draw ratios, webbing), what the tool is (shrink, vents) and what the
 //! machine takes (gauge, sheet, depth). Each is a typed violation; angles in radians.
-use crate::build::{Formed, Side, Spec};
+use crate::build::{Formed, Spec, Tool};
 use crate::material::{FormShop, Material};
 use forge_geom::{CurveGeom, Surface, SurfaceGeom};
 use forge_math::{Point3, dmath};
@@ -133,7 +133,7 @@ pub fn check(
     walls: Option<&crate::stretch::Stretch>,
 ) -> Vec<Violation> {
     let mut out = vec![];
-    let male = spec.side == Side::Inner;
+    let male = spec.tool == Tool::Male;
     let d = spec.pull.get();
     // the tool's outward normal is the shape's (male) or its reverse
     let s = if male { 1.0 } else { -1.0 };
