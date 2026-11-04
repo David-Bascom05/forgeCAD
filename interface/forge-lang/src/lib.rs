@@ -9,6 +9,7 @@ pub mod asm;
 pub mod bodies;
 pub mod build;
 pub mod builtins;
+pub mod drawing;
 pub mod edit;
 pub mod edit_ops;
 pub mod error;

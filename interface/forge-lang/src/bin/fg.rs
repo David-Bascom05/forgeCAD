@@ -13,7 +13,9 @@ fg check FILE [--json]          parse, static rules, types and dimensions; no ke
 fg edit FILE 'OP' [--json]      apply a typed op (JSON, as errors' fixes give them), then check
 fg handles FILE                 the editable handles: every param, its value and dimension
 fg serve                        JSON lines on stdin: {\"cmd\":\"run\"|\"check\",\"file\":F}; stages kept per file
-fg reference                    the language reference";
+fg reference                    the language reference
+fg view FILE [--view front,top,..] [--tangent] [--chord MM] [--pdf OUT] [--svg OUT] [--points]
+                                a part's or assembly's exact hidden-line views: lengths by class (JSON), pages";
 
 fn read(file: &str) -> Result<String, String> {
     std::fs::read_to_string(file).map_err(|e| format!("{file}: {e}"))
@@ -152,11 +154,64 @@ fn run_file(file: &str, args: &[String], build: bool) -> ExitCode {
     }
 }
 
+fn view_file(file: &str, args: &[String]) -> ExitCode {
+    let src = match read(file) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("{e}");
+            return ExitCode::from(2);
+        }
+    };
+    let opts = Options {
+        build: true,
+        dir: dir_of(file),
+        ..Options::default()
+    };
+    let (run, _) = forge_lang::run(&src, opts, Cache::default());
+    let Some(model) = forge_lang::drawing::Model::of(&run) else {
+        print!("{}", report::text(&run, &src));
+        return ExitCode::from(1);
+    };
+    let names: Vec<&str> = opt(args, "--view")
+        .unwrap_or("front,top,right,iso")
+        .split(',')
+        .collect();
+    let hopts = forge_draw::Options {
+        tangent: flag(args, "--tangent"),
+        chord: opt(args, "--chord").and_then(|c| c.parse().ok()).unwrap_or(0.01),
+    };
+    let looks = match forge_lang::drawing::look::views(&model, &names, &hopts) {
+        Ok(l) => l,
+        Err(e) => {
+            eprintln!("{e}");
+            return ExitCode::from(2);
+        }
+    };
+    print_json(&forge_lang::drawing::look::json(
+        &looks,
+        flag(args, "--points").then_some(hopts.chord),
+    ));
+    let pages = forge_lang::drawing::look::pages(&looks);
+    if let Some(out) = opt(args, "--pdf")
+        && let Err(e) = std::fs::write(out, forge_draw::pdf::pdf(&pages))
+    {
+        eprintln!("{out}: {e}");
+    }
+    if let Some(out) = opt(args, "--svg")
+        && let Some(p) = pages.first()
+        && let Err(e) = std::fs::write(out, forge_draw::svg::svg(p))
+    {
+        eprintln!("{out}: {e}");
+    }
+    ExitCode::SUCCESS
+}
+
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {
         Some("run") if args.len() >= 2 => run_file(&args[1], &args[2..], true),
         Some("check") if args.len() >= 2 => run_file(&args[1], &args[2..], false),
+        Some("view") if args.len() >= 2 => view_file(&args[1], &args[2..]),
         Some("reference") => {
             print!("{}", forge_lang::REFERENCE);
             ExitCode::SUCCESS
