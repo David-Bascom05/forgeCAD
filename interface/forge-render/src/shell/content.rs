@@ -71,7 +71,7 @@ fn picture(f: &Family) -> Option<egui::ColorImage> {
 /// The tree's nodes: each category path and every prefix of it, sorted.
 fn categories() -> Vec<String> {
     let mut out: Vec<String> = vec![];
-    for f in families() {
+    for f in families().iter().filter(|f| f.placeable()) {
         let parts: Vec<&str> = f.category().split('/').collect();
         for k in 1..=parts.len() {
             let p = parts[..k].join("/");
@@ -314,7 +314,10 @@ impl Shell {
             .show(ctx, |ui| {
                 close = dialog_head(ui, &t, "part", "Place from Content Center", "cc", &mut places);
                 ui.add_space(4.0);
-                let fams: Vec<&'static Family> = families().iter().filter(|f| in_cat(f, &cc.cat)).collect();
+                let fams: Vec<&'static Family> = families()
+                    .iter()
+                    .filter(|f| f.placeable() && in_cat(f, &cc.cat))
+                    .collect();
                 cc.pictures(ctx, &fams);
                 ui.horizontal_top(|ui| {
                     // category view
@@ -389,7 +392,7 @@ impl Shell {
                         // families as pictures
                         egui::ScrollArea::vertical()
                             .id_salt("cc-fams")
-                            .max_height(190.0)
+                            .max_height(2.0 * (TILE + 44.0) + 10.0)
                             .show(ui, |ui| {
                                 ui.horizontal_wrapped(|ui| {
                                     ui.spacing_mut().item_spacing = vec2(8.0, 8.0);
