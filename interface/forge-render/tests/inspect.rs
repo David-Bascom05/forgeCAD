@@ -58,7 +58,13 @@ fn measure_reads_a_picked_face_on_the_exact_body() {
         if let Some(m) = &mut h.gui.shell.inspect.measure {
             m.picks = vec![(0, Entity::Face(f))];
         }
-        h.until(|g| g.shell.inspect.measure.as_ref().is_some_and(|m| m.reading.is_some()));
+        h.until(|g| {
+            g.shell
+                .inspect
+                .measure
+                .as_ref()
+                .is_some_and(|m| m.reading.is_some())
+        });
         let m = h.gui.shell.inspect.measure.as_ref().unwrap();
         let r = m.reading.as_ref().unwrap().as_ref().unwrap();
         let area = r.get(forge_agent::measure::Quantity::Area).unwrap();
@@ -100,7 +106,9 @@ fn a_section_reaches_the_renderer_and_ends() {
 
 #[test]
 fn the_physical_tab_has_the_parts_mass_and_assign_changes_the_material() {
-    let Some((mut h, file)) = open("physical") else { return };
+    let Some((mut h, file)) = open("physical") else {
+        return;
+    };
     h.gui.shell.out.push(Action::Inspect(InspectCmd::Mass));
     h.step();
     assert!(h.until(|g| g.shell.inspect.physical.is_some()));
@@ -109,21 +117,33 @@ fn the_physical_tab_has_the_parts_mass_and_assign_changes_the_material() {
     assert!((p.mass.unwrap() - 8000.0 * rho * 1e-9).abs() < 1e-12);
     assert_eq!(h.gui.shell.inspect.doc.get("part_number"), Some("T-1"));
     // the browser's Assign: an op on the file, and the mass follows the new density
+    h.gui.shell.inspect.props = None;
     h.gui.shell.out.push(Action::Inspect(InspectCmd::Materials));
     h.step();
-    let b = h.gui.shell.inspect.browser.as_mut().expect("the browser");
-    b.chosen = Some((forge_material::Lib::ForgeCad, "ABS".into()));
     h.step();
+    assert!(h.gui.shell.inspect.browser.is_some(), "the browser");
+    assert!(h.click("materials:item:1018 cold drawn"), "no such row");
     h.step();
     assert!(h.click("materials:assign"), "no Assign button");
     h.step();
-    assert!(h.until(|g| g.shell.inspect.doc.material.as_deref() == Some("ABS") && ready(g)));
+    let ok = h.until(|g| g.shell.inspect.doc.material.as_deref() == Some("1018 cold drawn") && ready(g));
+    assert!(
+        ok,
+        "{:?} {:?} {}",
+        h.gui.shell.inspect.doc.material,
+        h.gui.shell.fg.as_ref().and_then(|f| f.refused.clone()),
+        h.gui.shell.status
+    );
     h.gui.shell.inspect.want_physical = true;
     h.step();
     let p = h.gui.shell.inspect.physical.clone().unwrap().unwrap();
-    let abs = forge_material::find("ABS").unwrap().density;
-    assert!((p.mass.unwrap() - 8000.0 * abs * 1e-9).abs() < 1e-12, "{:?}", p.mass);
+    let steel = forge_material::find("1018 cold drawn").unwrap().density;
+    assert!(
+        (p.mass.unwrap() - 8000.0 * steel * 1e-9).abs() < 1e-12,
+        "{:?}",
+        p.mass
+    );
     h.gui.fg_save();
     let text = std::fs::read_to_string(&file).unwrap();
-    assert!(text.contains("material: \"ABS\""), "{text}");
+    assert!(text.contains("material: \"1018 cold drawn\""), "{text}");
 }

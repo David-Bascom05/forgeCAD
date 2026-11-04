@@ -606,7 +606,7 @@ impl Shell {
                                         });
                                     ui.end_row();
                                     ui.label("Made from");
-                                    ui.label(m.from.clone().unwrap_or_else(|| "—".into()));
+                                    ui.label(m.from.clone().unwrap_or_else(|| "-".into()));
                                     ui.end_row();
                                     ui.label("Note");
                                     let mut n = m.note.clone().unwrap_or_default();
@@ -681,11 +681,14 @@ impl Shell {
                                                         ui.selectable_value(&mut kind, x, x.word());
                                                     }
                                                 });
-                                            let r = ui.add(
-                                                egui::TextEdit::singleline(&mut src)
-                                                    .desired_width(200.0)
-                                                    .font(sans(11.5)),
-                                            );
+                                            let full = src.clone();
+                                            let r = ui
+                                                .add(
+                                                    egui::TextEdit::singleline(&mut src)
+                                                        .desired_width(200.0)
+                                                        .font(sans(11.5)),
+                                                )
+                                                .on_hover_text(full);
                                             if kind != k || r.changed() {
                                                 m.set_source(key, &src, kind);
                                                 edited = true;
@@ -751,11 +754,17 @@ impl Shell {
                                                 .font(sans(11.5))
                                                 .color(kind_colour(t, kind)),
                                         );
-                                        ui.label(
-                                            egui::RichText::new(m.source_of(&k))
-                                                .font(sans(11.5))
-                                                .color(t.ink),
-                                        );
+                                        ui.scope(|ui| {
+                                            ui.set_max_width(330.0);
+                                            ui.add(
+                                                egui::Label::new(
+                                                    egui::RichText::new(m.source_of(&k))
+                                                        .font(sans(11.5))
+                                                        .color(t.ink),
+                                                )
+                                                .wrap(),
+                                            );
+                                        });
                                         ui.end_row();
                                     }
                                 });
@@ -774,7 +783,7 @@ impl Shell {
             let note = match &b.editing {
                 Some(e) if e.changed => format!(
                     "Unsaved · saves to {}",
-                    b.file(e.lib).map_or("—".into(), |f| f.display().to_string())
+                    b.file(e.lib).map_or("-".into(), |f| f.display().to_string())
                 ),
                 _ if !editable => "ForgeCAD's library is read-only: Duplicate to change it".into(),
                 _ => b.status.clone(),

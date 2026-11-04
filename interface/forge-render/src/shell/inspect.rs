@@ -359,7 +359,7 @@ impl Shell {
                     }
                     None => {
                         ui.label(
-                            egui::RichText::new("Working it out…")
+                            egui::RichText::new("Working it out...")
                                 .font(sans(11.0))
                                 .color(t.ink2),
                         );
@@ -376,7 +376,7 @@ impl Shell {
                         ui.label(egui::RichText::new(e).font(sans(11.0)).color(t.error));
                     }
                     None if m.busy => {
-                        ui.label(egui::RichText::new("Measuring…").font(sans(11.0)).color(t.ink2));
+                        ui.label(egui::RichText::new("Measuring...").font(sans(11.0)).color(t.ink2));
                     }
                     None => {}
                 }
@@ -837,7 +837,7 @@ impl Shell {
                                 row(
                                     ui,
                                     "Size",
-                                    meta.as_ref().map_or("—".into(), |m| format!("{} bytes", m.len())),
+                                    meta.as_ref().map_or("-".into(), |m| format!("{} bytes", m.len())),
                                 );
                             });
                     }
@@ -853,7 +853,7 @@ impl Shell {
                                     if *key == "design_state" {
                                         let mut pick = now.clone();
                                         let r = egui::ComboBox::from_id_salt("iprops-state")
-                                            .selected_text(if now.is_empty() { "—" } else { now.as_str() })
+                                            .selected_text(if now.is_empty() { "-" } else { now.as_str() })
                                             .show_ui(ui, |ui| {
                                                 for s in STATES {
                                                     ui.selectable_value(&mut pick, s.to_string(), s);
@@ -1038,7 +1038,7 @@ impl Shell {
                         }
                     });
                 places.push(("iprops:material".into(), r.response.rect));
-                let r = ui.button(egui::RichText::new("Browse…").font(sans(12.0)));
+                let r = ui.button(egui::RichText::new("Browse...").font(sans(12.0)));
                 places.push(("iprops:browse".into(), r.rect));
                 browse = r.clicked();
                 if pick != now {
@@ -1066,7 +1066,7 @@ impl Shell {
             update = r.clicked();
             if busy {
                 ui.label(
-                    egui::RichText::new("Working it out…")
+                    egui::RichText::new("Working it out...")
                         .font(sans(11.0))
                         .color(t.ink2),
                 );
@@ -1126,7 +1126,7 @@ impl Shell {
                         "Mass".into(),
                         vec![
                             p.mass
-                                .map_or("— (no material)".into(), |m| format!("{} {mu}", fmt(m * km))),
+                                .map_or("none (no material)".into(), |m| format!("{} {mu}", fmt(m * km))),
                         ],
                     ),
                     ("Area".into(), vec![format!("{} {units}²", fmt(p.area * k * k))]),
@@ -1215,7 +1215,7 @@ impl Shell {
                             "{} · {} · {}",
                             s.id,
                             s.material.as_deref().unwrap_or("(none)"),
-                            s.mass.map_or("—".into(), |m| format!("{} {mu}", fmt(m * km)))
+                            s.mass.map_or("-".into(), |m| format!("{} {mu}", fmt(m * km)))
                         ))
                         .font(sans(11.0))
                         .color(t.ink2),
