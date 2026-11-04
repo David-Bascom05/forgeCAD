@@ -395,3 +395,113 @@ fn a_rack_panels_return_flange_edited_through_its_dialog() {
     h.step();
     assert!(src(&h).contains("shared ret = 20 "));
 }
+
+const BOX: &str = "shared t = 1.5
+shared r = 2
+shared k = ratio(0.44)
+param plan.L = 100
+param plan.W = 60
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (L, W))
+}
+base = sheet(plan, t: t, r: r, bend: kfactor(k))
+param right.h = 25
+right = flange(base.edge(plan.outline[1]), height: h, position: \"outside\")
+param back.h = 25
+back = flange(base.edge(plan.outline[2]), height: h, position: \"outside\")
+param lip.a = 15
+param lip.b = 12
+sketch lip(on: yz) {
+  l1 = line((0, 0), (0, a))
+  l2 = line((0, a), (-b, a))
+}
+";
+
+#[test]
+fn the_other_commands_preview_from_their_dialogs() {
+    let Some(mut h) = headless() else { return };
+    let dir = std::env::temp_dir().join(format!("sheet-others-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("box.fg");
+    std::fs::write(&file, BOX).unwrap();
+    // Fold: a plate bent along a line typed on it, square across
+    let plate = dir.join("plate.fg");
+    std::fs::write(&plate, BOX.split("param right.h").next().unwrap()).unwrap();
+    h.step();
+    h.gui.open(plate.to_str().unwrap());
+    settle(&mut h);
+    click(&mut h, "tool:Fold");
+    click(&mut h, "sheet:choice:Face:base");
+    for (k, v) in [("x0", "60"), ("y0", "-5"), ("x1", "60"), ("y1", "65")] {
+        type_in(&mut h, k, v);
+    }
+    type_in(&mut h, "ang", "30");
+    settle(&mut h);
+    shot(&mut h, "17-fold");
+    assert!(
+        h.gui.shell.place("sheet:error").is_none(),
+        "{:?}",
+        h.gui.shell.fg.as_ref().unwrap().issues
+    );
+    ok(&mut h, "fold");
+    assert!(src(&h).contains("param fold1.ang = 30deg"), "{}", src(&h));
+    h.gui.open(file.to_str().unwrap());
+    settle(&mut h);
+    assert_eq!(h.gui.shell.tab, forge_render::shell::SHEET_TAB);
+    // Corner Relief at the corner the two flanges make
+    click(&mut h, "tool:Corner Relief");
+    click(&mut h, "sheet:choice:Flange 1:right");
+    click(&mut h, "sheet:choice:Flange 2:back");
+    click(&mut h, "sheet:field:Relief shape");
+    click(&mut h, "sheet:opt:Relief shape:square");
+    type_in(&mut h, "size", "4");
+    settle(&mut h);
+    shot(&mut h, "16-corner-relief");
+    ok(&mut h, "corner relief");
+    assert!(
+        src(&h).contains("corner1 = corner_relief(right, back, square_relief(size))"),
+        "{}",
+        src(&h)
+    );
+    // Contour Flange: an open sketch run along the front edge
+    click(&mut h, "tool:Contour Flange");
+    click(&mut h, "sheet:choice:Profile:lip.l1");
+    click(&mut h, "sheet:choice:Profile:lip.l2");
+    click(&mut h, "sheet:slot:Edge");
+    click(&mut h, "sheet:choice:Edge:base.edge(plan.outline[0])");
+    settle(&mut h);
+    shot(&mut h, "18-contour-flange");
+    assert!(
+        h.gui.shell.place("sheet:error").is_none(),
+        "{:?}",
+        h.gui.shell.fg.as_ref().unwrap().issues
+    );
+    ok(&mut h, "contour flange");
+    assert!(
+        src(&h).contains("contour1 = contour([lip.l1, lip.l2], edge: base.edge(plan.outline[0]))"),
+        "{}",
+        src(&h)
+    );
+    // Jog, Unfold and the rules editor, as they open
+    click(&mut h, "tool:Jog");
+    click(&mut h, "sheet:choice:Face:base");
+    shot(&mut h, "19-jog");
+    click(&mut h, "sheet:cancel");
+    click(&mut h, "tool:Unfold");
+    click(&mut h, "sheet:choice:Sheet:base");
+    settle(&mut h);
+    shot(&mut h, "20-unfold");
+    click(&mut h, "sheet:cancel");
+    settle(&mut h);
+    click(&mut h, "tool:Rules");
+    shot(&mut h, "21-rules");
+    click(&mut h, "sheet:rule:save");
+    settle(&mut h);
+    let s = src(&h);
+    assert!(s.contains("shared rule1 = shop([rule1_stock], kerf: 0.2)"), "{s}");
+    assert!(
+        s.contains("base = sheet(plan, t: t, r: r, bend: kfactor(k), shop: rule1)"),
+        "{s}"
+    );
+    built_ok(&h, "with the new rule");
+}

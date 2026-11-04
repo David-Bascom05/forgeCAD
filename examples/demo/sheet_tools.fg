@@ -1,0 +1,46 @@
+# a sheet metal part: Sheet Metal Defaults below; Face makes its first wall
+shared t = 1.5
+shared r = 2
+shared k = ratio(0.44)
+param sk1.x1 = 0
+param sk1.y2 = 0
+param sk1.w3 = 120
+param sk1.h4 = 80
+sketch sk1(on: xy) {
+  r1 = rect(corner: (x1, y2), size: (w3, h4))
+}
+face1 = sheet(sk1, t: t, r: r, bend: kfactor(k))
+param flange1.h = 36
+flange1 = flange(face1.edge(sk1.r1[1]), height: h, position: "outside")
+param flange2.h = 30
+flange2 = flange(face1.edge(sk1.r1[3]), height: h, position: "outside")
+param flange3.h = 30
+flange3 = flange(face1.edge(sk1.r1[0]), height: h, position: "outside")
+param seam1.gap = 0.5
+seam1 = seam(flange3, flange1, gap: gap)
+param hem1.leg = 8
+param hem1.gap = 1
+hem1 = hem(flange2.tip, kind: "open", length: leg, gap: gap, side: "down")
+param sk2.x1 = 45
+param sk2.y2 = 25
+param sk2.w3 = 30
+param sk2.h4 = 30
+sketch sk2(on: face1.top) {
+  r1 = rect(corner: (x1, y2), size: (w3, h4))
+}
+cut1 = cutout(sk2, wall: face1)
+param punch1.x = 25
+param punch1.y = 40
+param punch1.ang = 90deg
+shared tool_ob20x6 = ("OB20X6", "obround", 20, 6)
+punch1 = punch(tool_ob20x6, at: (x, y), wall: face1, angle: ang)
+param punch2.x = 95
+param punch2.y = 40
+shared tool_dm20 = ("DM20", "dimple", 20, 4, 60deg, 1, 2)
+punch2 = form(tool_dm20, at: (x, y), wall: face1)
+param pem1_at.x = 60
+param pem1_at.y = 12
+sketch pem1_at(on: face1.top) {
+  p = pt(x, y)
+}
+pem1 = pem("nut", "M4", at: pem1_at.p, wall: face1)

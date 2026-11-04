@@ -231,8 +231,7 @@ impl Shell {
         id: &str,
         icon: &str,
         head: &str,
-        at: egui::Pos2,
-        width: f32,
+        (at, width): (egui::Pos2, f32),
         body: impl FnOnce(&mut Ui, &mut Vec<(String, Rect)>) -> R,
     ) -> (bool, Option<R>) {
         let t = self.theme;
@@ -271,6 +270,11 @@ impl Shell {
         let sketches: Vec<String> = fg.sketches.iter().map(|s| s.id.clone()).collect();
         let loops: Vec<String> = fg.sketches.iter().flat_map(|s| s.closed.clone()).collect();
         let points: Vec<String> = fg.sketches.iter().flat_map(|s| s.points.clone()).collect();
+        let paths: Vec<String> = fg
+            .sketches
+            .iter()
+            .flat_map(|s| s.lines.iter().chain(&s.curves).cloned())
+            .collect();
         let walls: Vec<String> = fg
             .feats
             .iter()
@@ -308,6 +312,19 @@ impl Shell {
                     .iter()
                     .find(|f| d.writes(&f.id) && f.status == super::fg::Status::Failed)
                     .map(|f| format!("{} doesn't build", f.id))
+            })
+            .or_else(|| {
+                // an error the part didn't have before the dialog: its own, unnamed
+                let errs: Vec<&super::fg::Issue> = fg
+                    .issues
+                    .iter()
+                    .filter(|i| i.severity == super::fg::Severity::Error)
+                    .collect();
+                (d.base.is_some()
+                    && d.sent.as_ref().is_some_and(|s| !s.is_empty())
+                    && errs.len() > d.base_errors)
+                    .then(|| errs.last().map(|i| format!("{}: {}", i.kind, i.text)))
+                    .flatten()
             });
         let catalogue = self.sheet.catalogue.clone();
         let v = self.view_rect;
@@ -323,9 +340,7 @@ impl Shell {
             ctx,
             "sheet:dlg",
             icon(d.cmd),
-            &head,
-            pos2(v.left() + 16.0, v.top() + 48.0),
-            DLG_W,
+            &head, (pos2(v.left() + 16.0, v.top() + 48.0), DLG_W),
             |ui, places| {
                 // the tabs a command has: punch and hardware are one page
                 let tabs: Vec<usize> = (0..TABS.len())
@@ -356,7 +371,7 @@ impl Shell {
                     ui.painter().hline(r.left()..=r.right(), r.top() - 3.0, Stroke::new(1.0, t.line));
                 }
                 if d.tab == 0 {
-                    Self::sheet_picks(ui, &t, &mut d, places, &edges, &sketches, &loops, &points, &walls, &flanges, &sheets);
+                    Self::sheet_picks(ui, &t, &mut d, places, &edges, &sketches, &loops, &points, &walls, &flanges, &sheets, &paths);
                     match d.cmd {
                         SheetCmd::Punch => Self::sheet_library(ui, &t, &mut d, places),
                         SheetCmd::Hardware => Self::sheet_catalogue(ui, &t, &mut d, places, &catalogue),
@@ -449,6 +464,7 @@ impl Shell {
         walls: &[String],
         flanges: &[String],
         sheets: &[String],
+        paths: &[String],
     ) {
         for k in 0..d.slots.len() {
             let (lab, kind) = (d.slots[k].label, d.slots[k].kind);
@@ -504,7 +520,7 @@ impl Shell {
                 SlotKind::Feature if lab == "Sheet" => sheets.to_vec(),
                 SlotKind::Feature => walls.to_vec(),
                 SlotKind::Profile | SlotKind::Profiles => sketches.iter().chain(loops).cloned().collect(),
-                SlotKind::Path => sketches.to_vec(),
+                SlotKind::Path => paths.to_vec(),
                 SlotKind::Points => points.to_vec(),
                 _ => vec![],
             };
@@ -577,7 +593,10 @@ impl Shell {
             if f.tab != tab || !shown[k] || (matches!(d.cmd, SheetCmd::Hardware) && f.arg.starts_with('#')) {
                 continue;
             }
-            let key = if f.param.is_empty() { f.arg } else { f.param };
+            let key = [f.param, f.arg, f.label]
+                .into_iter()
+                .find(|k| !k.is_empty())
+                .unwrap_or("");
             if let Some(h) = heads.iter().find(|h| h.0 == key) {
                 section(ui, t, h.1);
             }
@@ -831,7 +850,7 @@ impl Shell {
         let mut ok = false;
         let mut cancel = false;
         let mut styles = false;
-        let (close, _) = self.sheet_window(ctx, "sheet:defaults", "smdefaults", "Sheet Metal Defaults", pos2(v.left() + 16.0, v.top() + 48.0), 340.0, |ui, places| {
+        let (close, _) = self.sheet_window(ctx, "sheet:defaults", "smdefaults", "Sheet Metal Defaults", (pos2(v.left() + 16.0, v.top() + 48.0), 340.0), |ui, places| {
             ui.horizontal(|ui| {
                 label(ui, &t, "Sheet Metal Rule");
                 let now = dd.rule.clone().unwrap_or_else(|| "By value (no shop)".into());
@@ -944,8 +963,7 @@ impl Shell {
             "sheet:rules",
             "params",
             "Style and Standard Editor: Sheet Metal Rules",
-            pos2(v.left() + 380.0, v.top() + 48.0),
-            420.0,
+            (pos2(v.left() + 380.0, v.top() + 48.0), 420.0),
             |ui, places| {
                 section(ui, &t, "In this part");
                 if existing.is_empty() {
@@ -1056,8 +1074,7 @@ impl Shell {
             "sheet:bends",
             "bendtable",
             "Bend Table",
-            pos2(v.right() - 480.0, v.top() + 48.0),
-            460.0,
+            (pos2(v.right() - 480.0, v.top() + 48.0), 460.0),
             |ui, _| {
                 for f in &flats {
                     ui.label(
@@ -1130,8 +1147,7 @@ impl Shell {
             "sheet:dxf",
             "dxf",
             "Flat Pattern DXF Export Options",
-            pos2(v.left() + 16.0, v.top() + 48.0),
-            480.0,
+            (pos2(v.left() + 16.0, v.top() + 48.0), 480.0),
             |ui, places| {
                 ui.horizontal(|ui| {
                     label(ui, &t, "Sheet");

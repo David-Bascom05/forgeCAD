@@ -644,8 +644,10 @@ pub struct SheetDlg {
     /// A point typed instead of picked: (x, y) on the wall.
     pub typed_at: bool,
     pub error: Option<String>,
-    /// The part's params as they were when the dialog opened: what its ops are made against.
+    /// The part's params as they were when the dialog opened: what its ops are made against;
+    /// and how many errors it had then (more while previewing: the dialog's).
     pub base: Option<Vec<ParamRow>>,
+    pub base_errors: usize,
     /// The sheet edges as they were when the dialog opened: its own preview takes some away.
     pub edges: Option<Vec<String>>,
     /// Editing: each argument as the call wrote it, by keyword or `#K`.
@@ -883,6 +885,7 @@ impl SheetDlg {
             firsts: vec![],
             edges: None,
             base: None,
+            base_errors: 0,
             sent: None,
             done: false,
             again: false,
@@ -1214,7 +1217,12 @@ impl SheetDlg {
                 "sheet"
             }
             SheetCmd::Contour => {
-                pos.push(pick("Profile")?);
+                let s = self.slot("Profile").expect("its slot");
+                pos.push(match s.picks.len() {
+                    0 => return Err("Profile: pick the path's lines and arcs, in order".into()),
+                    1 => s.picks[0].clone(),
+                    _ => format!("[{}]", s.picks.join(", ")),
+                });
                 match &picks[1].1 {
                     Some(e) => kw.push(format!("edge: {e}")),
                     None => {
@@ -1872,7 +1880,7 @@ impl SheetUi {
     /// The dialog's ops for the host to preview, if they changed since the last.
     /// `settled`: the part as built is the text before any preview, so its params are the ones
     /// the dialog's ops are made against (a preview's own would undo them).
-    pub fn pump(&mut self, params: &[ParamRow], settled: bool) {
+    pub fn pump(&mut self, params: &[ParamRow], errors: usize, settled: bool) {
         let defaults = self.defaults.clone();
         let Some(d) = &mut self.dlg else { return };
         if d.base.is_none() {
@@ -1880,6 +1888,7 @@ impl SheetUi {
                 return;
             }
             d.base = Some(params.to_vec());
+            d.base_errors = errors;
         }
         let ops = d.ops(&defaults, d.base.as_deref().expect("set"));
         match ops {

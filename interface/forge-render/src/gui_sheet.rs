@@ -75,7 +75,12 @@ impl Gui {
         let fg = self.shell.fg.as_ref().expect("checked");
         let params = fg.params.clone();
         let settled = self.fg.as_ref().is_some_and(|s| !s.previewing && s.done == s.seq);
-        self.shell.sheet.pump(&params, settled);
+        let errors = fg
+            .issues
+            .iter()
+            .filter(|i| i.severity == crate::shell::fg::Severity::Error)
+            .count();
+        self.shell.sheet.pump(&params, errors, settled);
         // OK: once the last preview is the dialog's, it's kept
         let done = self.shell.sheet.dlg.as_ref().is_some_and(|d| d.done);
         let acts = std::mem::take(&mut self.shell.sheet.out);
@@ -119,11 +124,22 @@ impl Gui {
                         p.flat = on;
                     }
                     self.fg_show();
-                    self.apply_view(crate::shell::Action::FitAll);
-                    // the flat as Inventor shows it: square on
+                    // the flat as Inventor shows it: square on, all of it in sight
                     let frame = self.shell.sheet.flats.first().and_then(|f| f.frame);
-                    if let (true, Some(f), Some(v)) = (on, frame, &mut self.view) {
-                        super::look_at(v, f);
+                    match (on, frame, &mut self.view) {
+                        (true, Some(f), Some(v)) => {
+                            let z: forge_math::Vec3 = f.z().into();
+                            let mut to = crate::nav::sheet_view(
+                                v.nav.camera,
+                                [z.x as f32, z.y as f32, z.z as f32],
+                                &v.nav.orient,
+                            );
+                            let (c, radius) = v.scene.bounds();
+                            to.target = c;
+                            to.fit_to(radius * 1.1, v.size.0, v.size.1);
+                            v.nav.go_to(to);
+                        }
+                        _ => self.apply_view(crate::shell::Action::FitAll),
                     }
                     if let Some(v) = &mut self.view {
                         v.mark_dirty();
