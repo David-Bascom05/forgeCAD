@@ -659,7 +659,23 @@ impl Shell {
         p.hline(0.0..=w, y, Stroke::new(1.0, t.line));
         p.hline(0.0..=w, y + RIBBON_H - 0.5, Stroke::new(1.0, t.line));
         let mut gx = 0.0;
-        for g in groups(self) {
+        let gs = groups(self);
+        // too wide for the window: small buttons lose their words, as Inventor's ribbon shrinks
+        let full: f32 = gs
+            .iter()
+            .map(|g| {
+                12.0 + g.big.iter().map(|tool| big_width(ui, tool)).sum::<f32>()
+                    + g.small.chunks(3).map(|c| small_width(ui, c)).sum::<f32>()
+                    + g.icons.len().div_ceil(3) as f32 * ICON_W
+            })
+            .sum();
+        let compact = full > w;
+        for mut g in gs {
+            if compact {
+                let mut small = std::mem::take(&mut g.small);
+                small.append(&mut g.icons);
+                g.icons = small;
+            }
             let bigs: Vec<f32> = g.big.iter().map(|tool| big_width(ui, tool)).collect();
             let cols: Vec<f32> = g.small.chunks(3).map(|c| small_width(ui, c)).collect();
             let icon_cols = g.icons.len().div_ceil(3);

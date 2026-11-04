@@ -124,6 +124,7 @@ fn choose(h: &mut Headless, slot: &str, text: &str) {
     }
     assert!(h.click(&name), "no choice {name}");
     h.step();
+    h.step();
 }
 
 fn ok(h: &mut Headless, what: &str) -> (String, forge_lang::Run) {

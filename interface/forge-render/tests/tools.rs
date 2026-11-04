@@ -583,7 +583,7 @@ fn linear_pattern_copies_the_feature_picked_along_the_way_chosen() {
         return;
     };
     let was = built(&file, "before");
-    button(&mut h, "Linear");
+    button(&mut h, "Rectangular");
     assert!(h.gui.shell.dialog.as_ref().unwrap().waiting_for_pick());
     point_at(&mut h, [5.0, 5.0, 15.0]);
     h.click("dialog:way:Y");
