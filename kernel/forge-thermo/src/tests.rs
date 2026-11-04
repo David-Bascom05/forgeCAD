@@ -52,18 +52,18 @@ fn kinds(v: &[Violation]) -> Vec<String> {
 
 #[test]
 fn a_male_box_forms_over_its_mould() {
-    let mould = block(60.0, 40.0, 20.0, 6.0, 5.0);
+    let shape = block(60.0, 40.0, 20.0, 6.0, 5.0);
     let s = spec(Side::Inner);
-    let f = form(&mould, &s, 11).unwrap();
+    let f = form(&shape, &s, 11).unwrap();
     assert!(
         forge_topo::check(&f.part).is_empty(),
         "{:?}",
         forge_topo::check(&f.part)
     );
     assert!(
-        forge_topo::check(&f.tool).is_empty(),
+        forge_topo::check(&f.mould).is_empty(),
         "{:?}",
-        forge_topo::check(&f.tool)
+        forge_topo::check(&f.mould)
     );
     let v = forge_topo::mass::mass(&f.part).unwrap().volume;
     // the formed area plus the flange's, times t, near enough (the offset adds at convex corners)
@@ -72,7 +72,7 @@ fn a_male_box_forms_over_its_mould() {
     assert!(!f.report.vents.is_empty());
     assert!((f.report.scale - 1.005).abs() < 1e-12);
     let shop = placeholder();
-    let c = check(&mould, &f, &s, shop.material("ABS").unwrap(), &shop, None);
+    let c = check(&shape, &f, &s, shop.material("ABS").unwrap(), &shop, None);
     let k = kinds(&c);
     assert!(!k.contains(&"DraftTooLow".into()), "{c:?}");
     // the top's edges are sharp
@@ -81,11 +81,11 @@ fn a_male_box_forms_over_its_mould() {
 
 #[test]
 fn walls_square_to_the_pull_have_no_draft() {
-    let mould = block(60.0, 40.0, 20.0, 6.0, 0.0);
+    let shape = block(60.0, 40.0, 20.0, 6.0, 0.0);
     let s = spec(Side::Inner);
-    let f = form(&mould, &s, 11).unwrap();
+    let f = form(&shape, &s, 11).unwrap();
     let shop = placeholder();
-    let c = check(&mould, &f, &s, shop.material("ABS").unwrap(), &shop, None);
+    let c = check(&shape, &f, &s, shop.material("ABS").unwrap(), &shop, None);
     let n = c
         .iter()
         .filter(|x| matches!(x, Violation::DraftTooLow { .. }))
@@ -106,23 +106,23 @@ fn a_female_cavity_forms_inside() {
             0,
         )],
     };
-    let mould = forge_ops::tapered(&p, -25.0, 3f64.to_radians(), 3)
+    let shape = forge_ops::tapered(&p, -25.0, 3f64.to_radians(), 3)
         .unwrap()
         .remove(0);
     let s = spec(Side::Outer);
-    let f = form(&mould, &s, 11).unwrap();
+    let f = form(&shape, &s, 11).unwrap();
     assert!(
         forge_topo::check(&f.part).is_empty(),
         "{:?}",
         forge_topo::check(&f.part)
     );
     assert!(
-        forge_topo::check(&f.tool).is_empty(),
+        forge_topo::check(&f.mould).is_empty(),
         "{:?}",
-        forge_topo::check(&f.tool)
+        forge_topo::check(&f.mould)
     );
     let shop = placeholder();
-    let c = check(&mould, &f, &s, shop.material("ABS").unwrap(), &shop, None);
+    let c = check(&shape, &f, &s, shop.material("ABS").unwrap(), &shop, None);
     let k = kinds(&c);
     assert!(!k.contains(&"DraftTooLow".into()), "{c:?}");
     assert!(!k.contains(&"Undercut".into()), "{c:?}");
@@ -137,13 +137,13 @@ fn a_tool_wider_at_the_top_is_an_undercut() {
         plane: Frame::WORLD,
         loops: vec![Profile::rectangle(Point2::new(-20.0, -15.0), 40.0, 30.0, 0)],
     };
-    let mould = forge_ops::tapered(&p, 20.0, -5f64.to_radians(), 3)
+    let shape = forge_ops::tapered(&p, 20.0, -5f64.to_radians(), 3)
         .unwrap()
         .remove(0);
     let s = spec(Side::Inner);
-    let f = form(&mould, &s, 11).unwrap();
+    let f = form(&shape, &s, 11).unwrap();
     let shop = placeholder();
-    let c = check(&mould, &f, &s, shop.material("ABS").unwrap(), &shop, None);
+    let c = check(&shape, &f, &s, shop.material("ABS").unwrap(), &shop, None);
     let n = c
         .iter()
         .filter(|x| matches!(x, Violation::Undercut { .. }))
@@ -153,17 +153,17 @@ fn a_tool_wider_at_the_top_is_an_undercut() {
 
 #[test]
 fn absurd_sizes_are_refused_before_anything_is_laid_out() {
-    let mould = block(60.0, 40.0, 20.0, 6.0, 5.0);
+    let shape = block(60.0, 40.0, 20.0, 6.0, 5.0);
     let mut s = spec(Side::Inner);
     s.flange = 1e9;
     assert!(matches!(
-        form(&mould, &s, 11),
+        form(&shape, &s, 11),
         Err(FormError::Size { what: "trim", .. })
     ));
     let mut s = spec(Side::Inner);
     s.margin = f64::INFINITY;
     assert!(matches!(
-        form(&mould, &s, 11),
+        form(&shape, &s, 11),
         Err(FormError::Size { what: "margin", .. })
     ));
     let mut s = spec(Side::Inner);
@@ -172,7 +172,7 @@ fn absurd_sizes_are_refused_before_anything_is_laid_out() {
         loops: vec![Profile::rectangle(Point2::new(-5e8, -5e8), 1e9, 1e9, 0)],
     });
     assert!(matches!(
-        form(&mould, &s, 11),
+        form(&shape, &s, 11),
         Err(FormError::Size { what: "trim", .. })
     ));
 }
@@ -183,11 +183,11 @@ fn a_cup_thins_most_at_its_floor_corner() {
         plane: Frame::WORLD,
         loops: vec![Profile::circle(Point2::new(0.0, 0.0), 30.0, 0)],
     };
-    let mould = forge_ops::tapered(&p, -30.0, 3f64.to_radians(), 3)
+    let shape = forge_ops::tapered(&p, -30.0, 3f64.to_radians(), 3)
         .unwrap()
         .remove(0);
     let s = spec(Side::Outer);
-    let f = analyse(&mould, &s).unwrap();
+    let f = analyse(&shape, &s).unwrap();
     let t = std::time::Instant::now();
     let st = stretch(&f, &s, &Process::default());
     eprintln!(
@@ -205,9 +205,9 @@ fn a_cup_thins_most_at_its_floor_corner() {
 
 #[test]
 fn a_male_box_thins_down_its_walls() {
-    let mould = block(60.0, 40.0, 25.0, 6.0, 5.0);
+    let shape = block(60.0, 40.0, 25.0, 6.0, 5.0);
     let s = spec(Side::Inner);
-    let f = analyse(&mould, &s).unwrap();
+    let f = analyse(&shape, &s).unwrap();
     let t = std::time::Instant::now();
     let st = stretch(&f, &s, &Process::default());
     eprintln!(

@@ -1,5 +1,5 @@
 //! The tool's surface as a height field over the trim plane: the height the sheet meets above each
-//! cell (male: the mould's top, the table elsewhere; female: the cavity's floor, the tool's top
+//! cell (male: the shape's top, the table elsewhere; female: the cavity's floor, the tool's top
 //! elsewhere). The draw ratios, the webbing scan and the vents' places are read from it.
 use forge_math::{Frame, Point2, Point3};
 use forge_mesh::TriMesh;
@@ -16,7 +16,7 @@ pub struct Field {
     pub ny: usize,
     /// Height along the pull over each cell centre, row by row; NaN outside the trim.
     pub z: Vec<f64>,
-    /// Cells under the mould (male) or over the cavity (female).
+    /// Cells under the shape (male) or over the cavity (female).
     pub under: Vec<bool>,
 }
 
@@ -31,7 +31,7 @@ pub struct Valley {
     pub width: f64,
 }
 
-/// One region the mould stands on (male) or a cavity opens through (female): its deepest draw and
+/// One region the shape stands on (male) or a cavity opens through (female): its deepest draw and
 /// the widest circle its outline holds.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Region {
@@ -135,7 +135,7 @@ impl Field {
         self.frame.point_to_world(Point3::new(p.x, p.y, z))
     }
 
-    /// The regions under the mould or over the cavity, each its own connected set of cells.
+    /// The regions under the shape or over the cavity, each its own connected set of cells.
     pub fn regions(&self) -> Vec<Region> {
         let (nx, ny) = (self.nx, self.ny);
         let dist = edt(&self.under, nx, ny);

@@ -151,7 +151,7 @@ fn refusals_are_typed_with_fixes() {
     };
     assert_eq!(e.kind(), "UnknownMaterial");
     assert!(e.fixes().len() >= 6);
-    // a male mould said to be female: its walls lean the wrong way for a cavity
+    // a male shape said to be female: its walls lean the wrong way for a cavity
     let wrong = s.replace("material: \"HIPS\")", "material: \"HIPS\", side: \"outer\")");
     let r = run(&wrong);
     assert!(

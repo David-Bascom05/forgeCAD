@@ -1,34 +1,49 @@
 # Thermoforming: where the numbers come from
 
-## The placeholder shop (`kernel/forge-thermo/src/material.rs`, `placeholder()`)
+## The material data (`kernel/forge-thermo/data/materials.json`)
 
-The design guides give one set of rules for every material; no maker gives per-material draft,
-radius or spacing. Used as written:
+Every number carries its source (a key of the file's `sources`, or the text itself) or
+`stand_in: true`; `material::from_data` refuses one with neither, and a test checks it.
 
-- Draft: male tool 4 deg, female 2 deg. Universal Plastics, Thermoforming Design Guidelines v1.21
-  (https://www.universalplastics.com/wp-content/uploads/2014/03/UP-Design-Guide-v1.21.pdf): "min 4
-  deg male (3-4 general), min 2 deg female (1.5-2 general)". Formech's Vacuum Forming Guide is
-  stricter (5 deg male, 3 deg female); ACRYLITE recommends over 5 deg.
-- Radii: a male tool's outside radius at least t + 1/32 in (0.8 mm); a female tool's inside corner
-  as tight as 1/64 in (0.4 mm). Universal Plastics, same guide. Taken as convex t + 0.8 and concave
-  0.4 on the tool's surface, either side.
-- H:D: 1:1 without special techniques. Universal Plastics.
-- Spacing between raised parts: 1 in of gap per 1 in of depth. Eastman, "Tips for thermoforming
-  Eastar 6763 and Tritan MP100" (https://www.eastman.com/content/dam/eastman/corporate/en/literature/t/trsmed269.pdf).
-  Mayku and Formech say the same in words.
-- Vent holes: under half the sheet's thickness at the tool's surface (0.5-1 mm typical), back-drilled
-  larger; placed where the sheet touches last (corners, cavities, internal edges). Formech, Vacuum
-  Forming Guide (https://www.capla.arizona.edu/sites/default/files/fromechvacuumguide_0.pdf).
-  ACRYLITE allows up to t.
-- Shrink (the middle of the published ranges): ABS 0.6% (Formech 0.3-0.8, Spartech 0.45-0.7),
-  HIPS 0.5% (0.3-0.5 / 0.45-0.65), PETG 0.5% (Spartech 0.5-0.7, Eastman Eastar 0.40-0.45), PC 0.7%
-  (Formech 0.6-0.8), PMMA 0.6% (Formech 0.3-0.8), HDPE 3% (Formech 3.0-3.5, Spartech 2.2-3.0).
-  Spartech, Extruded sheet thermoforming information, rev. 7/2024
-  (https://www.spartech.com/media/documents/SPA221015-Thermoforming-Data-Sheet.pdf).
-- Forming temperatures (reported, not checked): Formech's ranges.
-- Stand-ins, said on every run: the areal draw ratios (RapidMade's "typical safe" upper figures,
-  a vendor blog: ABS 3.0, HIPS 3.5, PETG 2.5, PC 2.0, HDPE 1.6, PMMA 2.0), the thinnest wall
-  (0.25 t, a guess), and the placeholder machine's 25 mm clamp.
+- Design rules, for every material (no maker gives them per material): draft 4 deg male, 2 deg
+  female, radii t + 0.8 convex and 0.4 concave, H:D 1 (Universal Plastics, Thermoforming Design
+  Guidelines v1.21); a gap as wide as the depth between raised parts (Eastman, Tips for
+  thermoforming Eastar 6763); vents under t / 2 (Formech, Vacuum Forming Guide). Formech asks more
+  draft (5 male, 3 female).
+- Forming windows and normal temperatures: Plastiglas Technical Manual Table 10 (ABS), Spartech's
+  thermoforming data sheet rev. 7/2024 (HIPS, PETG, HDPE), Makrolon fabrication guide (PC), ACRYLITE
+  tech brief (PMMA). Shrink: the middle of Spartech's in/in ranges, Interstate's for PC, Formech's
+  for PMMA. Largest areal draw ratio: Morris, The Science and Technology of Flexible Packaging
+  (2017) Table 11.1 (ABS 10, HIPS 8, PC 8, HDPE 8); PETG and PMMA keep a vendor blog's figure
+  (RapidMade), a stand-in. The thinnest wall (0.25 t) is a stand-in: no guide states one.
+- Laws the thickness model reads: ABS 3-term Ogden at 150 C and Mooney-Rivlin C1 = 0.230 MPa at
+  145 C; HIPS 3-term Ogden at 145 C and Mooney-Rivlin C1 = 0.085 MPa at 150 C; all from free bubble
+  inflation (Erchiqui & Kandil, ANTEC 2004, SPE Thermoforming Quarterly 24(1) 2005, Tables 1-3).
+  HDPE: neo-Hookean with G = 0.337 MPa, the instantaneous modulus of the 6-mode Lodge spectrum in
+  Erchiqui 2010 (InTech, Finite Element Analysis, Table 1). PETG, PC and PMMA: no open fit at forming
+  temperature (Dong 2005 for PMMA and Cheng & Chang 2012 for PC are paywalled): a stand-in.
+- Kept for a viscoelastic model, not read yet: ABS K-BKZ (Wagner) 8-mode spectrum at 170 C with WLF
+  and damping (Cha et al. 2019, Int J Adv Manuf Technol 103, Table 1), ABS Lodge at 143 C (Erchiqui
+  & Gakwaya 2003), HDPE Lodge spectrum (Erchiqui 2010), HIPS G'Sell-Jonas 100-140 C (Atmani et al.
+  2020, Mechanics & Industry 21).
+
+## The thickness model against measured parts (`src/bench.rs`, `data/benchmarks/*.csv`)
+
+`cargo test -p forge-thermo bench -- --nocapture` forms each part as published (fillets assumed
+where not given, as each CSV says), reads the thickness along the measured cut and prints both.
+Measured profiles were digitised by eye from the papers' figures (about 0.03 mm).
+
+```
+part                                   law (source)                  mean |error|   minimum: measured / model
+Duarte 2022 PS/HIPS cone, 1 mm, 140 C  HIPS Ogden 145 C              1.2% of t0     0.050 / 0.067 mm, both at the bottom edge
+Erdogan 2014 HIPS cylinder, 2.5 mm     HIPS Mooney-Rivlin 150 C      16.7%          0.83 / 0.40 mm
+Erdogan 2014 HIPS box, axis cut, 2 mm  "                             12.7%          0.60 / 0.49 mm
+Erdogan 2014 HIPS box, diagonal cut    "                             12.3%          0.19 / 0.27 mm
+```
+
+(80 sheet nodes across; 56, the default, gives 3.2% on Duarte's cone.) Erdogan's parts were formed
+at 180 C, past the fits' 145-150 C, and hold more material than their opening: the sheet slid in
+from the flange, which sticking contact cannot do, so the model thins their floors too much.
 
 ## Prior art
 

@@ -1,9 +1,9 @@
-//! Thermoforming in Forge, on forge-thermo. `thermoform(MOULD, t:, material:, ..)` forms a sheet
-//! of thickness t over a modelled mould: the mould's surface is the part's inner skin (`side:
-//! "inner"`, a male tool) or its outer one (`"outer"`, a female tool). It makes two bodies: the
-//! formed part (a new body, named by the feature) and the tool, which takes the mould body's place.
-//! The shop's checks run on every build, typed, with fixes where a param or argument cures them.
-//! Materials and machines are data: `thermo_material(..)` and `thermo_shop(..)`.
+//! Thermoforming in Forge, on forge-thermo. The user models the part's shape; `thermoform(SHAPE,
+//! t:, material:, ..)` generates the rest: the shape's surface is the part's inner skin (`side:
+//! "inner"`, a male mould) or its outer one (`"outer"`, a female mould). It makes two bodies: the
+//! formed part (a new body, named by the feature) and the mould, which takes the shape body's place.
+//! The shop's checks and the wall's thickness run on every build, typed, with fixes where a param
+//! or argument cures them. Materials and machines are data: `thermo_material(..)`, `thermo_shop(..)`.
 use crate::build::{Builder, history_id};
 use crate::builtins::{Args, LEN, dim, dir_of, not_in_sketch, num_of, positive, profile_of};
 use crate::error::{Error, Literal, Op, Warning};
@@ -113,7 +113,7 @@ impl ThermoOut {
                 "trim_size",
                 Json::Arr(vec![(hi.x - lo.x).into(), (hi.y - lo.y).into()]),
             ),
-            ("tool_scale", r.scale.into()),
+            ("mould_scale", r.scale.into()),
             (
                 "vents",
                 Json::Arr(
@@ -143,7 +143,7 @@ pub enum ThermoErr {
         name: String,
         known: Vec<String>,
     },
-    /// The mould names no body of the part.
+    /// The shape names no body of the part.
     NotABody { span: Span, id: String },
 }
 
@@ -180,7 +180,7 @@ impl ThermoErr {
                 E::Size { .. } => "ThermoSize",
                 E::NoOpening { .. } => "NoOpening",
                 E::TrimNotSquare => "TrimNotSquare",
-                E::TrimCutsMould { .. } => "TrimCutsMould",
+                E::TrimCutsShape { .. } => "TrimCutsShape",
                 E::Extrude(_) => "ThermoExtrude",
                 E::Bool(_) => "ThermoBoolean",
                 E::Offset(_) => "SheetOffset",
@@ -228,7 +228,7 @@ impl ThermoErr {
             ThermoErr::Kernel { id, error, .. } => match error {
                 E::Size { what, value } => format!("{id}: {what} must be positive, not {value}"),
                 E::NoOpening { side } => format!(
-                    "{id}: the mould has no flat face square to the pull at its {} to stand the sheet's \
+                    "{id}: the shape has no flat face square to the pull at its {} to stand the sheet's \
                      trim plane on (side: \"{}\")",
                     if *side == Side::Inner { "foot" } else { "top" },
                     if *side == Side::Inner { "inner" } else { "outer" }
@@ -236,20 +236,20 @@ impl ThermoErr {
                 E::TrimNotSquare => {
                     format!("{id}: the trim must be one closed loop on a plane square to the pull")
                 }
-                E::TrimCutsMould { at, clear } => format!(
-                    "{id}: the trim outline runs {} the mould near ({}, {}, {}); it must clear it by the sheet's thickness",
+                E::TrimCutsShape { at, clear } => format!(
+                    "{id}: the trim outline runs {} the shape near ({}, {}, {}); it must clear it by the sheet's thickness",
                     if *clear < 0.0 { "inside" } else { "too close to" },
                     crate::values::fmt((at.x * 100.0).round() / 100.0),
                     crate::values::fmt((at.y * 100.0).round() / 100.0),
                     crate::values::fmt((at.z * 100.0).round() / 100.0)
                 ),
                 E::Offset(e) => format!(
-                    "{id}: the sheet cannot be offset off the tool by its thickness ({e:?}): a round on the tool \
+                    "{id}: the sheet cannot be offset off the shape by its thickness ({e:?}): a round on the shape \
                      is tighter than the sheet is thick, or its walls meet"
                 ),
-                E::Extrude(e) => format!("{id}: the trim or tool outline: {e:?}"),
+                E::Extrude(e) => format!("{id}: the trim or mould outline: {e:?}"),
                 E::Bool(e) => format!("{id}: the kernel's boolean refused: {e:?}"),
-                E::Mesh => format!("{id}: the mould could not be meshed"),
+                E::Mesh => format!("{id}: the shape could not be meshed"),
             },
         }
     }
@@ -266,7 +266,7 @@ impl ThermoErr {
             ThermoErr::NotABody { id, .. } => vec![("id", id.as_str().into())],
             ThermoErr::Kernel { id, error, .. } => {
                 let mut d = vec![("id", id.as_str().into())];
-                if let ft::FormError::TrimCutsMould { at, clear } = error {
+                if let ft::FormError::TrimCutsShape { at, clear } = error {
                     d.push(("at", p3(*at)));
                     d.push(("clear", (*clear).into()));
                 }
@@ -360,24 +360,24 @@ impl ThermoNote {
         };
         match &self.v {
             V::DraftTooLow { draft, min, .. } => format!(
-                "a face of the tool{by} is drafted {}; the material needs {} on this side",
+                "a face of the shape{by} is drafted {}; the material needs {} on this side",
                 deg(*draft),
                 deg(*min)
             ),
             V::Undercut { draft, .. } => format!(
-                "a face of the tool{by} leans {} under the pull: the formed part locks on it",
+                "a face of the shape{by} leans {} under the pull: the formed part locks on it",
                 deg(-draft)
             ),
             V::RadiusTooTight {
                 radius, min, convex, ..
             } => format!(
-                "a {} round on the tool{by} is {}; the sheet needs at least {}",
+                "a {} round on the shape{by} is {}; the sheet needs at least {}",
                 if *convex { "convex" } else { "concave" },
                 mm(*radius),
                 mm(*min)
             ),
             V::SharpEdge { convex, min, .. } => format!(
-                "a sharp {} edge on the tool{by}: round it to at least {}",
+                "a sharp {} edge on the shape{by}: round it to at least {}",
                 if *convex { "convex" } else { "concave" },
                 mm(*min)
             ),
@@ -402,7 +402,7 @@ impl ThermoNote {
                 mm(*min_gap)
             ),
             V::ShrinkNotApplied { shrink, .. } => format!(
-                "the tool is not grown by the shrink ({:.2}%): a surface of the mould has no exact scaled form, \
+                "the mould is not grown by the shrink ({:.2}%): a surface of the shape has no exact scaled form, \
                  so the part comes out that much small",
                 shrink * 100.0
             ),
@@ -410,7 +410,7 @@ impl ThermoNote {
                 format!("vents {} across mark the part; at most {}", mm(*d), mm(*max))
             }
             V::VentMissing { at, .. } => format!(
-                "no vent where the sheet meets the tool last, near ({:.1}, {:.1}, {:.1})",
+                "no vent where the sheet meets the mould last, near ({:.1}, {:.1}, {:.1})",
                 at.x, at.y, at.z
             ),
             V::GaugeNotStocked { t, nearest } => {
@@ -446,7 +446,7 @@ impl ThermoNote {
                 min * 100.0
             ),
             V::Bridged { count, .. } => format!(
-                "the modelled sheet never reaches the tool at {count} points inside the trim: it bridges there"
+                "the modelled sheet never reaches the mould at {count} points inside the trim: it bridges there"
             ),
             V::StandIn { material, fields } => format!(
                 "{material}'s {} are stand-ins, not sourced numbers: give the shop's own",
@@ -736,7 +736,7 @@ fn shop(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
 }
 
 const ARGS: &[&str] = &[
-    "mould",
+    "shape",
     "t",
     "material",
     "side",
@@ -777,8 +777,8 @@ fn body_key(b: &Body) -> u64 {
     h
 }
 
-/// The mould's solid among `solids`: the one its feature made, else the only one.
-fn mould_of(solids: &[Solid], idx: usize) -> Option<&Solid> {
+/// The shape's solid among `solids`: the one its feature made, else the only one.
+fn shape_of(solids: &[Solid], idx: usize) -> Option<&Solid> {
     solids
         .iter()
         .find(|s| s.id == idx)
@@ -791,12 +791,12 @@ fn thermoform(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     if a.poisoned() {
         return Ok(Value::Unresolved);
     }
-    let mould = match a.req("mould")? {
+    let shape = match a.req("shape")? {
         Value::Feature(f) => f,
         o => {
             return Err(wrong(
-                a.span("mould"),
-                "the mould (the feature that made its body)",
+                a.span("shape"),
+                "the shape (the feature that made its body)",
                 Ty::Feature,
                 &o,
             ));
@@ -907,7 +907,7 @@ fn thermoform(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         vent: vent_num,
     };
     let hid = history_id(&id);
-    let text = format!("{spec:?} {:?} {}", m, mould.idx);
+    let text = format!("{spec:?} {:?} {}", m, shape.idx);
     let marker = Feature::Param(Box::new(forge_model::Param {
         name: format!("thermoform:{id}"),
         expr: text.clone(),
@@ -927,10 +927,10 @@ fn thermoform(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         hid,
         |b: &mut Builder| {
             b.push_with(marker, hid, |before: &[Solid]| {
-                let s = mould_of(before, mould.idx).ok_or_else(|| {
+                let s = shape_of(before, shape.idx).ok_or_else(|| {
                     thermo_err(ThermoErr::NotABody {
                         span: sp,
-                        id: mould.id.clone(),
+                        id: shape.id.clone(),
                     })
                 })?;
                 let f = ft::form(&s.body, &spec, hid).map_err(|error| {
@@ -944,7 +944,7 @@ fn thermoform(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
                 let mut out: Vec<Solid> = before.iter().filter(|x| x.id != s.id).cloned().collect();
                 out.push(Solid {
                     id: s.id,
-                    body: f.tool.clone(),
+                    body: f.mould.clone(),
                 });
                 out.push(Solid {
                     id: solid,
@@ -955,7 +955,7 @@ fn thermoform(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
             })
         },
     );
-    // the solids failed: what the checks say about the mould still stands
+    // the solids failed: what the checks say about the shape still stands
     if r.is_err()
         && let Some(mb) = failed
         && let Ok(f) = ft::analyse(&mb, &spec)
@@ -964,17 +964,17 @@ fn thermoform(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     }
     let (idx, _) = r?;
     let ok = ev.b.building && ev.feats.last().is_some_and(|f| f.status == Status::Ok);
-    // the mould as it stood before, for the checks and the memo's key
-    let mould_body = match &made {
+    // the shape as it stood before, for the checks and the memo's key
+    let shape_body = match &made {
         Some((_, b)) => Some(b.clone()),
         None if ok => {
             ev.b.stages
                 .get(before_n.wrapping_sub(1))
-                .and_then(|st| mould_of(&st.solids, mould.idx).map(|s| s.body.clone()))
+                .and_then(|st| shape_of(&st.solids, shape.idx).map(|s| s.body.clone()))
         }
         None => None,
     };
-    if let Some(mb) = mould_body {
+    if let Some(mb) = shape_body {
         let key = format!("thermoform {text} {}", body_key(&mb));
         let formed = match made {
             Some((f, _)) => ev.b.memo(key.clone(), || Some(f)),
@@ -1033,7 +1033,7 @@ fn notes(
     id: &str,
     span: Span,
     before: usize,
-    mould: &Body,
+    shape: &Body,
     f: &ft::Formed,
     walls: Option<&ft::Stretch>,
     spec: &ft::Spec,
@@ -1041,7 +1041,7 @@ fn notes(
     shop: &ft::FormShop,
     nums: &Nums,
 ) {
-    let found = ft::check(mould, f, spec, m, shop, walls);
+    let found = ft::check(shape, f, spec, m, shop, walls);
     if found.is_empty() {
         return;
     }
@@ -1061,15 +1061,15 @@ fn notes(
         out
     };
     let edge_faces = |e: forge_topo::Name| -> Vec<forge_topo::Name> {
-        mould
+        shape
             .edge_ids()
-            .find(|&x| mould.edge(x).name == e)
+            .find(|&x| shape.edge(x).name == e)
             .map(|x| {
-                mould
+                shape
                     .edge(x)
                     .coedges
                     .iter()
-                    .map(|&c| mould.face(mould.coedge_face(c)).name)
+                    .map(|&c| shape.face(shape.coedge_face(c)).name)
                     .collect()
             })
             .unwrap_or_default()
@@ -1192,7 +1192,7 @@ fn notes(
                 )
             }
             Violation::ThinWall { at, ratio, min, .. } => {
-                // the sheet that comes to the least there, else the tool eased where it is thinnest
+                // the sheet that comes to the least there, else the shape eased where it is thinnest
                 let need = up(spec.t * min / ratio);
                 let gauge = shop
                     .machine
@@ -1203,7 +1203,7 @@ fn notes(
                     .fold(None, |b: Option<f64>, g| Some(b.map_or(g, |b| b.min(g))))
                     .unwrap_or(need);
                 let mut fixes = vec![set(Some(&nums.t), id, "t", gauge, "")];
-                let made = nearest_face(f, mould, *at)
+                let made = nearest_face(f, shape, *at)
                     .map(|n| feats_of(&[n]))
                     .unwrap_or_default();
                 for x in &made {
@@ -1274,8 +1274,8 @@ fn notes(
     ev.warnings.extend(out);
 }
 
-/// The face of the mould nearest a point (the mesh's nearest vertex's face).
-fn nearest_face(f: &ft::Formed, mould: &Body, at: Point3) -> Option<forge_topo::Name> {
+/// The face of the shape nearest a point (the mesh's nearest vertex's face).
+fn nearest_face(f: &ft::Formed, shape: &Body, at: Point3) -> Option<forge_topo::Name> {
     let mut best: Option<(f64, usize)> = None;
     for &t in &f.contact {
         for &v in &f.mesh.triangles[t] {
@@ -1286,5 +1286,5 @@ fn nearest_face(f: &ft::Formed, mould: &Body, at: Point3) -> Option<forge_topo::
         }
     }
     let (_, t) = best?;
-    Some(mould.face(forge_topo::FaceId(f.mesh.face_of[t])).name)
+    Some(shape.face(forge_topo::FaceId(f.mesh.face_of[t])).name)
 }

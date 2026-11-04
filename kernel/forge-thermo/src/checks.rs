@@ -125,7 +125,7 @@ fn normal_at(body: &Body, face: FaceId, p: Point3) -> Option<forge_math::Vec3> {
 }
 
 pub fn check(
-    mould: &Body,
+    shape: &Body,
     f: &Formed,
     spec: &Spec,
     m: &Material,
@@ -135,7 +135,7 @@ pub fn check(
     let mut out = vec![];
     let male = spec.side == Side::Inner;
     let d = spec.pull.get();
-    // the tool's outward normal is the mould's (male) or its reverse
+    // the tool's outward normal is the shape's (male) or its reverse
     let s = if male { 1.0 } else { -1.0 };
     let min_draft = if male { m.draft_male } else { m.draft_female };
     let min_r = |convex: bool| {
@@ -150,14 +150,14 @@ pub fn check(
         if opening {
             continue;
         }
-        let face = mould.face(fid);
+        let face = shape.face(fid);
         let pts = match &face.surface {
             Surface::Plane(p) => vec![p.frame.origin],
             _ => samples(f, fid),
         };
         let mut worst: Option<(f64, Point3)> = None;
         for p in pts {
-            let Some(n) = normal_at(mould, fid, p) else {
+            let Some(n) = normal_at(shape, fid, p) else {
                 continue;
             };
             let a = dmath::asin((n.dot(d) * s).clamp(-1.0, 1.0));
@@ -206,25 +206,25 @@ pub fn check(
             });
         }
     }
-    for e in mould.edge_ids() {
-        let edge = mould.edge(e);
+    for e in shape.edge_ids() {
+        let edge = shape.edge(e);
         if !edge.alive || edge.coedges.len() != 2 {
             continue;
         }
         let (ca, cb) = (edge.coedges[0], edge.coedges[1]);
-        let (fa, fb) = (mould.coedge_face(ca), mould.coedge_face(cb));
+        let (fa, fb) = (shape.coedge_face(ca), shape.coedge_face(cb));
         if open(fa) || open(fb) {
             continue;
         }
         let t = 0.5 * (edge.range.lo + edge.range.hi);
         let der = edge.curve.deriv(t);
-        let (Some(na), Some(nb)) = (normal_at(mould, fa, der.p), normal_at(mould, fb, der.p)) else {
+        let (Some(na), Some(nb)) = (normal_at(shape, fa, der.p), normal_at(shape, fb, der.p)) else {
             continue;
         };
         if na.dot(nb) > dmath::cos(2f64.to_radians()) {
             continue;
         }
-        let tan = if mould.coedge(ca).forward { der.d1 } else { -der.d1 };
+        let tan = if shape.coedge(ca).forward { der.d1 } else { -der.d1 };
         let convex = nb.dot(na.cross(tan)) < 0.0;
         out.push(Violation::SharpEdge {
             edge: edge.name,

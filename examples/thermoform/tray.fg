@@ -1,5 +1,5 @@
-# A tray with three round pockets, formed into a female tool: the mould is the tray's outside,
-# hanging under the trim plane, and the tool is a block with it cut in.
+# A tray with three round pockets drawn into a female mould: the shape is the tray's outside,
+# hanging under the trim plane, and the generated mould is a block with it cut in.
 shared t = 1.5
 shared W = 200
 shared L = 120

@@ -1,5 +1,5 @@
 //! The thickness model against parts formed and measured in published work (data/benchmarks):
-//! each mould built as described, its sheet formed, the thickness read along the measured cut, and
+//! each shape built as described, its sheet formed, the thickness read along the measured cut, and
 //! the error printed and bounded. Run with --nocapture to see the tables.
 use crate::*;
 use forge_math::{Frame, Point2, Point3, UnitVec3, Vec2, Vec3};
@@ -152,7 +152,7 @@ fn at(curve: &[(f64, f64)], s: f64) -> f64 {
 #[allow(clippy::too_many_arguments)]
 fn compare(
     name: &str,
-    mould: &Body,
+    shape: &Body,
     t0: f64,
     flange: f64,
     mat: &str,
@@ -174,7 +174,7 @@ fn compare(
         vent_pitch: 25.0,
         sheet: None,
     };
-    let f = analyse(mould, &spec).expect("analyses");
+    let f = analyse(shape, &spec).expect("analyses");
     let m = placeholder().material(mat).cloned().unwrap();
     let law = m.law_at(temp);
     let pr = Process {
@@ -217,10 +217,10 @@ fn compare(
 
 #[test]
 fn erdogan_cylinder() {
-    let mould = cavity(100.0, 100.0 - 1e-3, 100.0, 10.0);
+    let shape = cavity(100.0, 100.0 - 1e-3, 100.0, 10.0);
     let e = compare(
         "erdogan2014_cylinder",
-        &mould,
+        &shape,
         2.5,
         40.0,
         "HIPS",
@@ -233,10 +233,10 @@ fn erdogan_cylinder() {
 
 #[test]
 fn erdogan_box() {
-    let mould = box_cavity(150.0, 75.0, 10.0);
+    let shape = box_cavity(150.0, 75.0, 10.0);
     let a = compare(
         "erdogan2014_box_axis",
-        &mould,
+        &shape,
         2.0,
         65.0,
         "HIPS",
@@ -246,7 +246,7 @@ fn erdogan_box() {
     );
     let d = compare(
         "erdogan2014_box_diagonal",
-        &mould,
+        &shape,
         2.0,
         65.0,
         "HIPS",
@@ -259,7 +259,7 @@ fn erdogan_box() {
 
 #[test]
 fn duarte_cone() {
-    let mould = cavity(65.0, 55.0, 100.0, 3.0);
-    let e = compare("duarte2022_cone", &mould, 1.0, 50.0, "HIPS", 140.0, false, 150.0);
+    let shape = cavity(65.0, 55.0, 100.0, 3.0);
+    let e = compare("duarte2022_cone", &shape, 1.0, 50.0, "HIPS", 140.0, false, 150.0);
     assert!(e < 0.03, "{e}");
 }

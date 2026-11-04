@@ -749,11 +749,12 @@ writing the statement at the top when the document has none.
 
 ## Thermoforming
 
-A thermoform is a sheet vacuum formed over a modelled mould. Model the solid whose surface is the
-part's side that touches the tool: the inside of a part formed over a male tool (the default), or,
-with `side: "outer"`, the outside of a part drawn into a female tool (model the cavity's solid,
-hanging under the trim plane). The touching side is the accurate one. The mould stands on a flat
-face square to the pull: its foot (male) or its top (female) is the trim plane.
+Model the part's shape; the formed part and its mould are generated from it. The shape is a solid
+whose surface is the part's side that touches the mould: its inside for a part formed over a male
+mould (the default), or, with `side: "outer"`, its outside for one drawn into a female mould (model
+the cavity's solid, hanging under the trim plane). The touching side is the accurate one; the sheet
+is `t` thick and goes on the other side. The shape stands on a flat face square to the pull: its
+foot (male) or its top (female) is the trim plane.
 
 ```
 shared t = 2
@@ -766,53 +767,64 @@ cover = thermoform(body, t: t, material: "HIPS")
 ```
 
 ```
-thermoform(MOULD, t: T, material: "ABS" | MATERIAL, side: "inner"|"outer" = "inner",
+thermoform(SHAPE, t: T, material: "ABS" | MATERIAL, side: "inner"|"outer" = "inner",
            pull: DIR = Z, trim: PROFILE, flange: W = 10, sheet: (W, L), shop: SHOP,
            shrink: ratio(S), base: B = 10, margin: M = 5, vent: D | false, vents: [(x, y), ..],
-           vent_pitch: P = 25)
+           vent_pitch: P = 25, walls: true, temperature: C, pressure: ratio(MPa))
 ```
 
-- MOULD: the feature that made the mould's body. The part is the mould's surface offset off the tool
-  by t (exact offset surfaces), cut square to the trim plane along the trim outline, with its flange
-  lying on the table (male) or the tool's top (female). `trim:` a closed profile on a plane square to
-  the pull; left out, the mould's box on the trim plane grown by `flange` (corners rounded to it).
-- It makes two bodies: the formed part, a new body named by the feature, and the tool, in the mould
-  body's place: the mould grown by 1 + shrink (the material's, or `shrink:`) about the trim plane
-  under its middle, on a base `base` thick reaching `margin` past the trim (male), or cut into a
-  block that deep under the cavity (female). Vents (`vent` across, default the material's largest,
-  at most 1 mm) are drilled where the sheet meets the tool last (the cells of each low plateau most
-  closed in by walls, `vent_pitch` apart), or at `vents:` (points on the trim plane's axes).
+- SHAPE: the feature that made the shape's body. The formed part is the shape's surface offset by t
+  (exact offset surfaces), cut square to the trim plane along the trim outline, with its flange on
+  the table (male) or the mould's top (female). `trim:` a closed profile on a plane square to the
+  pull; left out, the shape's box on the trim plane grown by `flange` (corners rounded to it).
+- It makes two bodies: the formed part, a new body named by the feature, and the mould, in the
+  shape body's place: the shape grown by 1 + shrink (the material's, or `shrink:`) about the trim
+  plane under its middle, on a base `base` thick reaching `margin` past the trim (male), or cut into
+  a block that deep under the cavity (female). Vents (`vent` across, default the material's largest,
+  at most 1 mm) are drilled where the sheet meets the mould last (the cells of each low plateau
+  most closed in by walls, `vent_pitch` apart), or at `vents:` (points on the trim plane's axes).
+- The wall's thickness (`walls: false` skips it): the sheet as an incompressible hyperelastic
+  membrane (the material's fit at `temperature`, deg C, default its normal forming temperature),
+  clamped round the window, draped over a male mould as the clamp comes down, drawn by `pressure`
+  (MPa, default 0.09, a vacuum) and on while part of it is free, each point stopping where it first
+  meets the mould (sticking contact). An estimate: isothermal, no slip, no plug; against measured
+  parts it finds where the wall is thinnest (research/thermoform/README.md has the comparison).
 - `fg run --json` lists each thermoform: depth, formed and opening areas, the areal draw ratio, the
-  mean wall t / ADR, the largest linear draw ratio along a row or column, the trim's size, the tool's
-  scale and the vents.
+  mean wall t / ADR, the largest linear draw ratio along a row or column, the trim's size, the
+  mould's scale, the vents, and `walls`: min (mm) and where, max and where, mean, the points that
+  never reached the mould, the sheet's temperature and the law it read, with its source.
 
-The shop is data. `thermo_material("NAME", shrink: ratio, draft_male: A, draft_female: A,
-min_radius: L | per_t(F, plus: L), min_inside_radius: .., max_hd: ratio, max_adr: ratio,
-min_gap: ratio, max_vent: L | per_t(..), min_wall: ratio, forming: (lo, hi))` is one material: a
-name the placeholder table knows starts from its row; any other starts from ABS's with every number
-a stand-in. `thermo_shop(materials: [..], max_sheet: (W, L), max_depth: D, clamp: C = 25,
-gauges: [T, ..])` is the machine and the materials it adds or replaces. The placeholder table
-(forge_thermo::placeholder): ABS, HIPS, PETG, PC, PMMA, HDPE with the design guides' rules (draft 4
-deg male, 2 deg female; radii t + 0.8 convex, 0.4 concave; H:D 1; a gap as wide as the depth
-between raised parts; vents up to t / 2), Formech's and Spartech's shrink and forming temperatures;
-the areal draw ratios (one vendor's) and the thinnest wall are stand-ins, said on every run
-(`StandIn`, information). Sources: research/thermoform/README.md.
+The shop is data: kernel/forge-thermo/data/materials.json, every number with its source or marked a
+stand-in, the forming windows and shrink from the suppliers' tables, the design rules from the
+guides (draft 4 deg male, 2 deg female; radii t + 0.8 convex, 0.4 concave; H:D 1; a gap as wide as
+the depth between raised parts; vents up to t / 2), fitted laws for ABS, HIPS and HDPE (PETG, PC
+and PMMA have no open fit: a stand-in, said on every run as `StandIn`, information).
+`thermo_material("NAME", shrink: ratio, draft_male: A, draft_female: A, min_radius: L | per_t(F,
+plus: L), min_inside_radius: .., max_hd: ratio, max_adr: ratio, min_gap: ratio, max_vent: L |
+per_t(..), min_wall: ratio, forming: (lo, hi), law: [(mu, alpha), ..], law_temperature: C)` is one
+material: a name the data knows starts from its record; any other starts from ABS's with every
+number a stand-in; `law` is an Ogden law (mu in MPa). `thermo_shop(materials: [..], max_sheet: (W,
+L), max_depth: D, clamp: C = 25, gauges: [T, ..])` is the machine and the materials it adds or
+replaces.
 
-Every build checks the tool's surface, the part and the machine; each is a typed warning (severity
-`violation`; the part builds) with fixes where an argument or param cures it: `DraftTooLow` (a face
-leaning off the pull less than the side's least; fix: the making extrude's taper), `Undercut` (a face
-turned under the pull: the part locks on the tool), `RadiusTooTight` (a round under the least for
-its crease; fix: the fillet's radius), `SharpEdge` (no round; fix: a fillet of the cap's or the
-meeting features' edges), `DrawTooDeep` (a region deeper than max_hd times the widest circle its
-outline holds), `AreaDrawTooHigh`, `Webbing` (raised parts of a male tool closer than min_gap times
-the depth between them), `ShrinkNotApplied`, `VentTooLarge` (fix: the vent), `VentMissing` (vents
-given by hand; fix: the point added), `GaugeNotStocked` (fix: the nearest gauge),
-`SheetTooSmall` (the trim's box and the clamp each side; fix: the sheet), `SheetTooLarge`,
-`TooDeep`. Faults the same features make in several places are one note with a `count`. The
-checks run on the mould even when the solids fail. Refusals: `NoOpening` (fix: the other side),
-`TrimNotSquare`, `TrimCutsMould` (the trim must clear the mould by t), `SheetOffset` (the
-kernel's offset failed: a round tighter than t, or walls meeting), `UnknownMaterial` (fixes: the
-shop's materials), `NotABody`.
+Every build checks the shape, the part and the machine; each is a typed warning (the part builds)
+with fixes where an argument or param cures it. Severity `violation`: `DraftTooLow` (a face leaning
+off the pull less than the side's least; fix: the making extrude's taper), `Undercut` (a face turned
+under the pull: the part locks on the mould), `RadiusTooTight` (a round under the least for its
+crease; fix: the fillet's radius), `SharpEdge` (no round; fix: a fillet of the cap's or the meeting
+features' edges), `DrawTooDeep` (a region deeper than max_hd times the widest circle its outline
+holds), `AreaDrawTooHigh`, `Webbing` (raised parts of a male shape closer than min_gap times the
+depth between them), `ShrinkNotApplied`, `VentTooLarge` (fix: the vent), `VentMissing` (vents
+given by hand; fix: the point added), `GaugeNotStocked` (fix: the nearest gauge), `SheetTooSmall`
+(the trim's box and the clamp each side; fix: the sheet), `SheetTooLarge`, `TooDeep`. Severity
+`warning`: `ThinWall` (the predicted wall under min_wall of t, and where; fixes: the gauge that
+reaches it, more taper, a larger round there) and `Bridged` (points inside the trim the sheet never
+reached). Faults the same features make in several places are one note with a `count`. The checks
+run on the shape even when the solids fail. Refusals: `NoOpening` (fix: the other side),
+`TrimNotSquare`, `TrimCutsShape` (the trim must clear the shape by t), `SheetOffset` (the kernel's
+offset failed: a round tighter than t, or walls meeting), `ThermoSize` (a size not positive, not
+finite, or out of all proportion to the shape), `UnknownMaterial` (fixes: the shop's materials),
+`NotABody`.
 
 ## Functions and recursion
 

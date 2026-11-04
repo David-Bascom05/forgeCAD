@@ -1,7 +1,8 @@
-//! Thermoforming: a sheet formed over a modelled mould. The mould's surface is the part's inner
-//! skin (male tool) or outer one (female); the part is that surface offset by the sheet's thickness,
-//! trimmed, with its flange; the tool is the mould grown by the shrink, on a base or in a block,
-//! vented. The shop's checks run on every build. Sources: research/thermoform/.
+//! Thermoforming: the user models the part's shape, and the rest is generated from it. The
+//! shape's surface is the part's inner skin (a male mould) or its outer one (female); the formed
+//! part is that surface offset by the sheet's thickness, trimmed, with its flange; the mould is the
+//! shape grown by the shrink, on a base or in a block, vented. The shop's checks and the wall's
+//! thickness run on every build. Sources: research/thermoform/.
 pub mod build;
 pub mod checks;
 pub mod data;

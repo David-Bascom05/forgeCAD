@@ -42,7 +42,7 @@ impl Default for Process {
         Process {
             law: Law::neo_hookean(0.5),
             pressure: 0.09,
-            resolution: 64,
+            resolution: 56,
         }
     }
 }
@@ -59,7 +59,7 @@ pub struct Stretch {
     /// Each node's thickness over the sheet's (its triangles' by area), and whether it touched.
     pub node_ratio: Vec<f64>,
     pub touched: Vec<bool>,
-    /// Over the triangles inside the trim: the thinnest and thickest, and where (world).
+    /// Over the nodes inside the trim that touched the tool: the thinnest and thickest, and where.
     pub min: (f64, Point3),
     pub max: (f64, Point3),
     pub mean: f64,
@@ -110,11 +110,24 @@ fn element(law: &Law, t: &Tri, x: &[Vec3], g: Option<&mut [Vec3]>) -> Option<f64
     let l3 = 1.0 / (l1 * l2);
     let mut w = 0.0;
     let (mut g1, mut g2) = (0.0, 0.0);
+    // a stretch's logarithm once, each term's power from it
+    let logs = law
+        .terms
+        .iter()
+        .any(|t| !matches!(t.1, 1.0 | 2.0 | -2.0))
+        .then(|| (dmath::ln(l1), dmath::ln(l2)));
     for &(mu, al) in &law.terms {
-        let p3 = pw(l3, al);
-        w += mu / al * (pw(l1, al) + pw(l2, al) + p3 - 3.0);
-        g1 += mu * (pw(l1, al - 1.0) - p3 / l1);
-        g2 += mu * (pw(l2, al - 1.0) - p3 / l2);
+        let (p1, p2, p3) = match logs {
+            Some((a1, a2)) if !matches!(al, 1.0 | 2.0 | -2.0) => (
+                dmath::exp(al * a1),
+                dmath::exp(al * a2),
+                dmath::exp(-al * (a1 + a2)),
+            ),
+            _ => (pw(l1, al), pw(l2, al), pw(l3, al)),
+        };
+        w += mu / al * (p1 + p2 + p3 - 3.0);
+        g1 += mu * (p1 - p3) / l1;
+        g2 += mu * (p2 - p3) / l2;
     }
     let Some(g) = g else { return Some(t.vol * w) };
     // S = sum (dW/dl_a / l_a) N_a N_a^T
@@ -427,19 +440,19 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
     let mut its = 0;
     if male {
         // the clamp comes down over the tool to the table
-        let drop = 12;
+        let drop = 6;
         for k in 1..=drop {
             let z = z_start * (1.0 - k as f64 / drop as f64);
             for &k in &edge {
                 x[k].z = z;
             }
-            its += relax(&mut sheet, &field, &mut x, 0.0, cap, tol, reach, 400);
+            its += relax(&mut sheet, &field, &mut x, 0.0, cap, tol, reach, 150);
         }
     }
     let steps = 10;
     for k in 1..=steps {
         let p = pr.pressure * k as f64 / steps as f64;
-        its += relax(&mut sheet, &field, &mut x, p, cap, tol, reach, 600);
+        its += relax(&mut sheet, &field, &mut x, p, cap, tol, reach, 400);
     }
     // a hot sheet held under the pressure creeps on until it meets the tool: an elastic sheet
     // gets there only at a higher one, so the pressure is raised while some of the part is free
@@ -449,10 +462,15 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
             .filter(|&k| sheet.free[k] && inside(&poly, Point2::new(x[k].x, x[k].y)).0)
             .count()
     };
+    // until it is formed, or two raises in a row reach no more of it: it bridges there
     let mut p = pr.pressure;
-    while open(&sheet, &x) > 0 && p < CREEP * pr.pressure {
+    let (mut left, mut stalled) = (open(&sheet, &x), 0);
+    while left > 0 && stalled < 2 && p < CREEP * pr.pressure {
         p *= 1.25;
-        its += relax(&mut sheet, &field, &mut x, p, cap, tol, reach, 600);
+        its += relax(&mut sheet, &field, &mut x, p, cap, tol, reach, 200);
+        let now = open(&sheet, &x);
+        stalled = if now < left { 0 } else { stalled + 1 };
+        left = now;
     }
     let area = |v: &[usize; 3], x: &[Vec3]| 0.5 * (x[v[1]] - x[v[0]]).cross(x[v[2]] - x[v[0]]).length();
     let ratio: Vec<f64> = idx
@@ -462,7 +480,7 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
     let mut node_ratio = vec![0.0; x.len()];
     let mut weight = vec![0.0; x.len()];
     for (v, r) in idx.iter().zip(&ratio) {
-        let a = area(v, &x);
+        let a = area(v, &reference);
         for &k in v {
             node_ratio[k] += a * r;
             weight[k] += a;
@@ -476,8 +494,9 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
         (f64::INFINITY, Point3::ORIGIN),
         (f64::NEG_INFINITY, Point3::ORIGIN),
     );
+    // over the sheet on the tool: where it bridges it is said apart (`unformed`)
     for (k, &r) in node_ratio.iter().enumerate() {
-        if !inside(&poly, Point2::new(x[k].x, x[k].y)).0 {
+        if sheet.free[k] || !inside(&poly, Point2::new(x[k].x, x[k].y)).0 {
             continue;
         }
         if r < min.0 {

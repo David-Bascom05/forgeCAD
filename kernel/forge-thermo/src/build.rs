@@ -1,13 +1,13 @@
-//! A sheet formed over a modelled mould. The mould's surface is the formed part's inner skin
-//! (male, the default) or its outer one (female); the part is that surface offset off the tool by
-//! the sheet's thickness, trimmed square to the trim plane along the trim outline, with the flange
-//! lying on the table (male) or the tool's top (female). The tool is the mould grown by the
-//! plastic's shrink, on a base (male) or cut into a block (female), with vents drilled where the
-//! sheet meets it last.
+//! A part generated from its modelled shape. The shape's surface is the formed part's inner skin
+//! (a male mould, the default) or its outer one (female); the part is that surface offset by the
+//! sheet's thickness, trimmed square to the trim plane along the trim outline, with the flange
+//! lying on the table (male) or the mould's top (female). The mould (the tool) is the shape grown
+//! by the plastic's shrink, on a base (male) or cut into a block (female), with vents drilled where
+//! the sheet meets it last.
 //!
-//! One construction serves both sides: M is the tool's working shape inside the trim (male: the
-//! mould on a slab of the trim outline; female: a block of the trim outline less the mould), and
-//! the part is M's outward offset, opened where the slab or block is cut off, less M.
+//! Male: the shape shelled outward by t, opened at its foot, joined to the flange's slab less the
+//! shape. Female: M, a block of the trim outline less the shape, offset outward by t but where the
+//! block is cut off, less M.
 use crate::field::Field;
 use forge_bool::{BoolError, Op, boolean};
 use forge_math::{Frame, Point2, Point3, UnitVec3, Vec3, dmath, tol};
@@ -17,9 +17,9 @@ use forge_topo::{Body, FaceId, Name};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Side {
-    /// The mould is the part's inside: a male tool.
+    /// The shape is the part's inside: a male tool.
     Inner,
-    /// The mould is the part's outside: a female tool (a cavity).
+    /// The shape is the part's outside: a female tool (a cavity).
     Outer,
 }
 
@@ -30,11 +30,11 @@ pub struct Spec {
     pub pull: UnitVec3,
     /// The sheet's thickness.
     pub t: f64,
-    /// The trim outline, on a plane square to the pull (any height); None: the mould's outline's
+    /// The trim outline, on a plane square to the pull (any height); None: the shape's outline's
     /// box grown by `flange`, its corners rounded to it.
     pub trim: Option<Profile>,
     pub flange: f64,
-    /// The tool is the mould grown by 1 + shrink about the trim plane under its centre.
+    /// The tool is the shape grown by 1 + shrink about the trim plane under its centre.
     pub shrink: f64,
     /// The tool's base under the trim plane (male) or under the cavity (female), and how far it
     /// reaches past the trim outline.
@@ -57,16 +57,16 @@ pub enum FormError {
         what: &'static str,
         value: f64,
     },
-    /// The mould has no flat face square to the pull at its foot (male: lowest; female: highest),
+    /// The shape has no flat face square to the pull at its foot (male: lowest; female: highest),
     /// so there is no trim plane.
     NoOpening {
         side: Side,
     },
     /// The trim plane's normal is not along the pull.
     TrimNotSquare,
-    /// The trim outline does not hold the mould: a point of the mould outside it, `clear` short of
+    /// The trim outline does not hold the shape: a point of the shape outside it, `clear` short of
     /// the sheet's thickness inside.
-    TrimCutsMould {
+    TrimCutsShape {
         at: Point3,
         clear: f64,
     },
@@ -81,7 +81,7 @@ pub enum FormError {
 /// What a build reports: the numbers a shop reads, and every check reads.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Report {
-    /// Area of the mould's surface the sheet forms onto, and of its opening on the trim plane.
+    /// Area of the shape's surface the sheet forms onto, and of its opening on the trim plane.
     pub formed_area: f64,
     pub opening_area: f64,
     /// Area inside the trim outline.
@@ -94,7 +94,7 @@ pub struct Report {
     pub depth: f64,
     /// The trim outline's box on the plane, and the sheet it needs with the machine's clamp.
     pub trim_box: (Point2, Point2),
-    /// The tool's scale (1 + shrink), or 1 where the mould could not be scaled.
+    /// The tool's scale (1 + shrink), or 1 where the shape could not be scaled.
     pub scale: f64,
     pub unscaled: Option<crate::scale::Unscalable>,
     pub vents: Vec<Point3>,
@@ -103,17 +103,17 @@ pub struct Report {
 #[derive(Clone, Debug)]
 pub struct Formed {
     pub part: Body,
-    pub tool: Body,
+    pub mould: Body,
     /// The trim plane: z the pull, origin on it under the world's origin.
     pub frame: Frame,
-    /// The mould's surface, meshed, and which of its triangles the sheet forms onto (all but the
+    /// The shape's surface, meshed, and which of its triangles the sheet forms onto (all but the
     /// opening): what the checks and the thickness model read.
     pub mesh: TriMesh,
     pub contact: Vec<usize>,
-    /// The mould's faces: (face, name, is the opening), and the same by face index.
+    /// The shape's faces: (face, name, is the opening), and the same by face index.
     pub faces: Vec<(FaceId, Name, bool)>,
     pub open: Vec<bool>,
-    /// The trim outline on the trim plane, and the middle of the mould's box there.
+    /// The trim outline on the trim plane, and the middle of the shape's box there.
     pub trim: ProfileLoop,
     pub centre: Point2,
     pub field: Field,
@@ -239,9 +239,9 @@ fn rounded(lo: Point2, hi: Point2, grow: f64, r: f64, id: u64) -> ProfileLoop {
     }
 }
 
-/// What the sheet meets, without the solids: the mould meshed, its height field and the draw's
+/// What the sheet meets, without the solids: the shape meshed, its height field and the draw's
 /// numbers. The checks read only this, so they run where the solids cannot be built.
-pub fn analyse(mould: &Body, spec: &Spec) -> Result<Formed, FormError> {
+pub fn analyse(shape: &Body, spec: &Spec) -> Result<Formed, FormError> {
     for (what, v) in [("t", spec.t), ("base", spec.base)] {
         if !v.is_finite() || v <= tol::LINEAR {
             return Err(FormError::Size { what, value: v });
@@ -261,7 +261,7 @@ pub fn analyse(mould: &Body, spec: &Spec) -> Result<Formed, FormError> {
     let male = spec.side == Side::Inner;
     let d = spec.pull;
     let mesh = forge_mesh::tessellate(
-        mould,
+        shape,
         &Quality {
             chord: 0.02,
             max_angle: dmath::PI / 24.0,
@@ -279,11 +279,11 @@ pub fn analyse(mould: &Body, spec: &Spec) -> Result<Formed, FormError> {
     let frame = plane_frame(d, z0);
     let depth = zmax - zmin;
     // the opening: flat faces on the trim plane facing off the part's side of it
-    let mut open = vec![false; mould.faces.len()];
-    let faces: Vec<(FaceId, Name, bool)> = mould
+    let mut open = vec![false; shape.faces.len()];
+    let faces: Vec<(FaceId, Name, bool)> = shape
         .face_ids()
         .map(|f| {
-            let face = mould.face(f);
+            let face = shape.face(f);
             let is_open = match &face.surface {
                 forge_geom::Surface::Plane(p) => {
                     let n = if face.same_sense {
@@ -319,7 +319,7 @@ pub fn analyse(mould: &Body, spec: &Spec) -> Result<Formed, FormError> {
         }
         None => rounded(lo, hi, spec.flange, spec.flange, 1),
     };
-    // sizes out of all proportion to the mould are refused before anything is laid out
+    // sizes out of all proportion to the shape are refused before anything is laid out
     let limit = (10.0 * (hi.x - lo.x).max(hi.y - lo.y).max(depth)).max(1000.0);
     let tpoly = polygon(&trim);
     let (a, b) = bounds(&tpoly);
@@ -340,7 +340,7 @@ pub fn analyse(mould: &Body, spec: &Spec) -> Result<Formed, FormError> {
     for (i, p) in local.iter().enumerate() {
         let (inn, dist) = inside(&poly, Point2::new(p.x, p.y));
         if !inn || dist < spec.t {
-            return Err(FormError::TrimCutsMould {
+            return Err(FormError::TrimCutsShape {
                 at: mesh.positions[i],
                 clear: if inn { dist } else { -dist },
             });
@@ -348,7 +348,7 @@ pub fn analyse(mould: &Body, spec: &Spec) -> Result<Formed, FormError> {
     }
     let (tlo, thi) = bounds(&poly);
     let field = Field::new(frame, tlo, thi, &mesh, &contact, male, |p| inside(&poly, p).0);
-    let area = forge_topo::mass::mass(mould).map(|m| m.faces).unwrap_or_default();
+    let area = forge_topo::mass::mass(shape).map(|m| m.faces).unwrap_or_default();
     let (mut formed_area, mut opening_area) = (0.0, 0.0);
     for (f, a) in area {
         if open[f.index()] {
@@ -373,7 +373,7 @@ pub fn analyse(mould: &Body, spec: &Spec) -> Result<Formed, FormError> {
     };
     Ok(Formed {
         part: Body::new(),
-        tool: Body::new(),
+        mould: Body::new(),
         frame,
         mesh,
         contact,
@@ -386,24 +386,24 @@ pub fn analyse(mould: &Body, spec: &Spec) -> Result<Formed, FormError> {
     })
 }
 
-/// Forms the sheet over `mould`: the part and the tool. `feature` names what is made.
-pub fn form(mould: &Body, spec: &Spec, feature: u64) -> Result<Formed, FormError> {
-    let mut f = analyse(mould, spec)?;
+/// Forms the sheet over `shape`: the part and the tool. `feature` names what is made.
+pub fn form(shape: &Body, spec: &Spec, feature: u64) -> Result<Formed, FormError> {
+    let mut f = analyse(shape, spec)?;
     let male = spec.side == Side::Inner;
     let (frame, trim, depth) = (f.frame, f.trim.clone(), f.report.depth);
     let slab_id = feature ^ 0x5eed;
     let part = if male {
-        // the mould's skin grown by t, opened at its foot, and the flange's slab less the mould
+        // the shape's skin grown by t, opened at its foot, and the flange's slab less the shape
         let open: Vec<Name> = f.faces.iter().filter(|f| f.2).map(|f| f.1).collect();
-        let skin = forge_ops::shell(mould, spec.t, true, &open, feature).map_err(FormError::Offset)?;
+        let skin = forge_ops::shell(shape, spec.t, true, &open, feature).map_err(FormError::Offset)?;
         let slab = prism(&trim, frame, 0.0, spec.t, slab_id)?;
-        let flange = boolean(&slab, mould, Op::Subtract, feature).map_err(err_b)?;
+        let flange = boolean(&slab, shape, Op::Subtract, feature).map_err(err_b)?;
         boolean(&skin, &flange, Op::Union, feature).map_err(err_b)?
     } else {
-        // M, the block of the trim less the mould, grown by t but where the block is cut off
+        // M, the block of the trim less the shape, grown by t but where the block is cut off
         let block = prism(&trim, frame, -(depth + 2.0 * spec.t), 0.0, slab_id)?;
         let cut = slab_names(&block, &frame, 0.0);
-        let m = boolean(&block, mould, Op::Subtract, feature).map_err(err_b)?;
+        let m = boolean(&block, shape, Op::Subtract, feature).map_err(err_b)?;
         let open: Vec<Name> = m
             .face_ids()
             .map(|f| m.face(f).name)
@@ -418,19 +418,19 @@ pub fn form(mould: &Body, spec: &Spec, feature: u64) -> Result<Formed, FormError
     // the tool
     let k = 1.0 + spec.shrink;
     let c = frame.point_to_world(Point3::new(f.centre.x, f.centre.y, 0.0));
-    let (grown_mould, unscaled) = match crate::scale::scaled(mould, c, k) {
+    let (grown_shape, unscaled) = match crate::scale::scaled(shape, c, k) {
         Ok(b) => (b, None),
-        Err(e) => (mould.clone(), Some(e)),
+        Err(e) => (shape.clone(), Some(e)),
     };
     let (tlo, thi) = f.report.trim_box;
     let tool_id = feature ^ 0x7001;
     let outline = rounded(tlo, thi, spec.margin, 0.0, 1);
     let mut tool = if male {
         let base = prism(&outline, frame, -spec.base, 0.0, tool_id)?;
-        boolean(&grown_mould, &base, Op::Union, tool_id).map_err(err_b)?
+        boolean(&grown_shape, &base, Op::Union, tool_id).map_err(err_b)?
     } else {
         let block = prism(&outline, frame, -(depth * k + spec.base), 0.0, tool_id)?;
-        boolean(&block, &grown_mould, Op::Subtract, tool_id).map_err(err_b)?
+        boolean(&block, &grown_shape, Op::Subtract, tool_id).map_err(err_b)?
     };
     let mut vents = vec![];
     if let Some(dv) = spec.vent {
@@ -461,7 +461,7 @@ pub fn form(mould: &Body, spec: &Spec, feature: u64) -> Result<Formed, FormError
     f.report.unscaled = unscaled;
     f.report.vents = vents;
     f.part = part;
-    f.tool = tool;
+    f.mould = tool;
     Ok(f)
 }
 

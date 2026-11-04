@@ -1,4 +1,4 @@
-//! A body scaled about a point: the mould grown by the plastic's shrink. The analytic surfaces and
+//! A body scaled about a point: the shape grown by the plastic's shrink. The analytic surfaces and
 //! curves scale in closed form; an intersection curve is the same chain on the scaled surfaces;
 //! a procedural surface or curve is wrapped, its points the original's scaled, so it stays exact.
 use forge_geom::curve::{CurveDeriv, ProcCurve, ProceduralCurve};
