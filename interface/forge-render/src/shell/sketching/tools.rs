@@ -81,6 +81,7 @@ fn points_wanted(t: SkTool) -> Option<usize> {
     Some(match t {
         SkTool::Circle3 | SkTool::Arc3 | SkTool::Rect3 | SkTool::Ellipse => 3,
         SkTool::SlotCenter | SkTool::SlotOverall | SkTool::SlotCC => 3,
+        SkTool::SlotArc3 | SkTool::SlotArcCenter => 4,
         SkTool::ArcTan | SkTool::RectCenter | SkTool::Polygon => 2,
         _ => return None,
     })
@@ -268,6 +269,48 @@ impl SketchMode {
                 s.lines.push((off(b, -1.0), off(a, -1.0)));
                 s.arcs.push(arc_of(b, off(b, -1.0), off(b, 1.0), true));
                 s.arcs.push(arc_of(a, off(a, 1.0), off(a, -1.0), true));
+            }
+            SkTool::SlotArc3 | SkTool::SlotArcCenter => {
+                // the centre line: through three points, or about a centre from one to another
+                let (c, st, en, ccw) = if tool == SkTool::SlotArc3 {
+                    let (c, _) = circumcircle(p[0], p[1], p[2])?;
+                    let side = (p[1].0 - p[0].0) * (p[2].1 - p[0].1) - (p[1].1 - p[0].1) * (p[2].0 - p[0].0);
+                    (c, p[0], p[1], side < 0.0)
+                } else {
+                    let r = dist(p[0], p[1]);
+                    let t = dmath::atan2(p[2].1 - p[0].1, p[2].0 - p[0].0);
+                    (
+                        p[0],
+                        p[1],
+                        (p[0].0 + r * dmath::cos(t), p[0].1 + r * dmath::sin(t)),
+                        true,
+                    )
+                };
+                // drawn counter-clockwise: a clockwise centre line runs from its end
+                let (st, en) = if ccw { (st, en) } else { (en, st) };
+                let r = dist(c, st);
+                let w = (dist(c, p[3]) - r).abs();
+                if r < 1e-9 || w < 1e-9 || w >= r {
+                    return None;
+                }
+                let at = |q: P, k: f64| {
+                    let u = sub(q, c);
+                    let l = len(u);
+                    (c.0 + u.0 / l * (r + k), c.1 + u.1 / l * (r + k))
+                };
+                let (so, eo, ei, si) = (at(st, w), at(en, w), at(en, -w), at(st, -w));
+                let a = |k: usize| self.name_after('a', k);
+                s.rows.push(format!("arc {} {} {}", pt(c), pt(so), pt(eo)));
+                s.rows.push(format!("arc {} {}.b {}", pt(en), a(0), pt(ei)));
+                s.rows.push(format!("arc {} {}.b {} cw", pt(c), a(1), pt(si)));
+                s.rows.push(format!("arc {} {}.b {}.a", pt(st), a(2), a(0)));
+                // concentric sides; the caps are drawn tangent but not tied so: the solver reads a
+                // tangency at a half circle's end as implied by the arcs' shared ends
+                s.rows.push(format!("conc {} {}", a(0), a(2)));
+                s.arcs.push(arc_of(c, so, eo, true));
+                s.arcs.push(arc_of(en, eo, ei, true));
+                s.arcs.push(arc_of(c, ei, si, false));
+                s.arcs.push(arc_of(st, si, so, true));
             }
             SkTool::Polygon => {
                 let sides = if self.more.count == 0 {
@@ -1537,6 +1580,27 @@ mod tests {
                 (a - (2.0 * r * len + core::f64::consts::PI * r * r)).abs() < 1e-6,
                 "{t:?} {a}"
             );
+        }
+    }
+
+    #[test]
+    fn arc_slots_by_three_points_and_by_centre() {
+        for t in [SkTool::SlotArc3, SkTool::SlotArcCenter] {
+            let mut m = mode();
+            m.set_tool(Some(t));
+            let pts: &[P] = if t == SkTool::SlotArc3 {
+                &[(20.0, 0.0), (-20.0, 0.0), (0.0, 20.0), (0.0, 23.0)]
+            } else {
+                &[(0.0, 0.0), (20.0, 0.0), (-20.0, 0.0), (0.0, 23.0)]
+            };
+            click_all(&mut m, pts);
+            solves(&m);
+            let s = m.solved.as_ref().unwrap();
+            let p = sk::profile(s, None).expect("one closed loop");
+            // half a ring 6 wide about radius 20, and two half-discs of radius 3
+            let want =
+                core::f64::consts::PI * (23.0 * 23.0 - 17.0 * 17.0) / 2.0 + core::f64::consts::PI * 9.0;
+            assert!((p.area() - want).abs() < 1e-6, "{t:?} {} {:?}", p.area(), m.rows);
         }
     }
 

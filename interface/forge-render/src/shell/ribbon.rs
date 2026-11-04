@@ -389,6 +389,8 @@ fn groups(s: &Shell) -> Vec<Group> {
                         t("Three Point Rectangle", "rect3", SkTool::Rect3),
                         t("Overall Slot", "slot", SkTool::SlotOverall),
                         t("Center Point Slot", "slot", SkTool::SlotCenter),
+                        t("Three Point Arc Slot", "slotarc", SkTool::SlotArc3),
+                        t("Center Point Arc Slot", "slotarc", SkTool::SlotArcCenter),
                     ],
                 ),
                 g(

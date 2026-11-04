@@ -235,7 +235,8 @@ pub fn block(name: &str, on: &str, rows: &[String]) -> Result<String, ToolError>
                 let pb = o.param("b", b);
                 let n = o.next('e');
                 o.names.insert(n.clone(), n.clone());
-                o.rows.push(format!("{n} = ellipse(center: {c}, major: {m}, b: {pb})"));
+                o.rows
+                    .push(format!("{n} = ellipse(center: {c}, major: {m}, b: {pb})"));
             }
             "spline" => {
                 let open = rest.last().is_some_and(|w| w == "open");

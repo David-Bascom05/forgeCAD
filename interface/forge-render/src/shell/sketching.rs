@@ -37,6 +37,8 @@ pub enum SkTool {
     SlotCC,
     SlotOverall,
     SlotCenter,
+    SlotArc3,
+    SlotArcCenter,
     Polygon,
     Ellipse,
     SkFillet,
