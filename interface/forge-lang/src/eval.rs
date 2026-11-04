@@ -600,8 +600,17 @@ impl<'s> Eval<'s> {
                 if crate::asm::written_pose(f) {
                     return;
                 }
+                // a standard part's length and sheet pick a catalog row, like its size string
+                let catalog = matches!(&f.kind, ExprKind::Name(n) if n == "std");
                 for a in args {
                     if a.name.as_ref().is_some_and(|(n, _)| n == "at") && crate::asm::places(f) {
+                        continue;
+                    }
+                    if catalog
+                        && a.name
+                            .as_ref()
+                            .is_some_and(|(n, _)| n == "length" || n == "sheet")
+                    {
                         continue;
                     }
                     let c = a.name.as_ref().is_some_and(|(n, _)| n == "n" || n == "count");

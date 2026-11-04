@@ -445,6 +445,30 @@ jb = fastened(b.head, base.top)
 }
 
 #[test]
+fn a_std_length_is_a_catalog_pick_not_a_loose_number() {
+    // the statement Content Center's Place writes lints clean
+    let r = asm_run(
+        "lint",
+        "assembly
+base = part(\"plate.fg\", ground: true)
+a = std(\"ISO 4762\", size: \"M6\", length: 20)
+ja = fastened(a.head, base.top)
+",
+    );
+    assert!(
+        r.errors.is_empty(),
+        "{:?}",
+        r.errors.iter().map(|e| e.text()).collect::<Vec<_>>()
+    );
+    let loose: Vec<_> = r
+        .warnings
+        .iter()
+        .filter(|w| matches!(w, forge_lang::error::Warning::Lint(e) if e.kind() == "LooseLiteral"))
+        .collect();
+    assert!(loose.is_empty(), "{loose:?}");
+}
+
+#[test]
 fn std_errors_are_typed_with_fixes() {
     let cases = [
         (
