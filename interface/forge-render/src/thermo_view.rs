@@ -308,12 +308,52 @@ fn process_sheet(o: &ThermoOut, row: &ThermoRow) -> Vec<String> {
     }
     out.push(String::new());
     out.push("Vent positions (mm):".into());
+    out.push(format!("  {:>8} {:>8} {:>8}", "x", "y", "z"));
+    // to the hundredth, a -0.004 is 0.00
+    let mm = |x: f64| {
+        let r = (x * 100.0).round() / 100.0;
+        if r == 0.0 { 0.0 } else { r }
+    };
     for v in r.vents.iter().take(40) {
-        out.push(format!("  {:8.2} {:8.2} {:8.2}", v.x, v.y, v.z));
+        out.push(format!("  {:8.2} {:8.2} {:8.2}", mm(v.x), mm(v.y), mm(v.z)));
     }
-    out.push(String::new());
-    out.push(row.model.clone());
+    if !row.model.is_empty() {
+        out.push(String::new());
+        out.push(row.model.clone());
+    }
     out
+}
+
+/// The process sheet as a one-page PDF in Courier, its text in WinAnsi (so `×` and `°` print).
+pub fn process_pdf(lines: &[String]) -> Vec<u8> {
+    let mut content = String::from("BT /F1 10 Tf 50 800 Td 13 TL\n");
+    for l in lines.iter().take(58) {
+        content += &format!("{} '\n", forge_draw::pdf::pdf_str(l));
+    }
+    content += "ET";
+    let objs = [
+        "<< /Type /Catalog /Pages 2 0 R >>".to_string(),
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_string(),
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>".to_string(),
+        format!("<< /Length {} >>\nstream\n{content}\nendstream", content.len()),
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Courier /Encoding /WinAnsiEncoding >>".to_string(),
+    ];
+    let mut out = String::from("%PDF-1.4\n");
+    let mut at = vec![];
+    for (k, o) in objs.iter().enumerate() {
+        at.push(out.len());
+        out += &format!("{} 0 obj\n{o}\nendobj\n", k + 1);
+    }
+    let xref = out.len();
+    out += &format!("xref\n0 {}\n0000000000 65535 f \n", objs.len() + 1);
+    for a in at {
+        out += &format!("{a:010} 00000 n \n");
+    }
+    out += &format!(
+        "trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n",
+        objs.len() + 1
+    );
+    out.into_bytes()
 }
 
 /// A source as the legend cites it: its authors and year, then its table.

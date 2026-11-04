@@ -54,8 +54,9 @@ fn path(o: &mut String, g: &Geom2) {
     }
 }
 
-/// The text as a PDF string in WinAnsi: ASCII as it is, the drawing signs by their codes, Ø for ⌀.
-fn pdf_str(s: &str) -> String {
+/// The text as a PDF string for a font in /WinAnsiEncoding: ASCII as it is, Latin-1 and the
+/// WinAnsi extras (dashes, quotes, bullet, ellipsis, euro) by their codes, Ø for ⌀, else `?`.
+pub fn pdf_str(s: &str) -> String {
     let mut o = String::from("(");
     for c in s.chars() {
         match c {
@@ -64,13 +65,20 @@ fn pdf_str(s: &str) -> String {
                 o.push(c);
             }
             ' '..='~' => o.push(c),
-            '\u{2300}' | '\u{d8}' => o.push_str("\\330"),
             _ => {
                 let code = match c {
-                    '\u{b0}' => 0xb0,
-                    '\u{b1}' => 0xb1,
-                    '\u{d7}' => 0xd7,
-                    '\u{f8}' => 0xf8,
+                    '\u{2300}' => 0xd8,
+                    '\u{a0}'..='\u{ff}' => c as u32,
+                    '\u{20ac}' => 0x80,
+                    '\u{2026}' => 0x85,
+                    '\u{2018}' => 0x91,
+                    '\u{2019}' => 0x92,
+                    '\u{201c}' => 0x93,
+                    '\u{201d}' => 0x94,
+                    '\u{2022}' => 0x95,
+                    '\u{2013}' => 0x96,
+                    '\u{2014}' => 0x97,
+                    '\u{2122}' => 0x99,
                     _ => b'?' as u32,
                 };
                 let _ = write!(o, "\\{code:03o}");

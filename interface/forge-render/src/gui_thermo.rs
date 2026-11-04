@@ -107,17 +107,20 @@ impl Gui {
                     format!("{stem}-{id}-{what}.step"),
                     forge_step::export(body, &opts)
                         .map(|x| x.text.into_bytes())
-                        .map_err(|e| format!("{e:?}")),
+                        .map_err(|e| e.to_string()),
                 )
             }
             Export::MouldStl => (
                 format!("{stem}-{id}-mould.stl"),
                 forge_mesh::tessellate(&g.mould, &forge_mesh::Quality::default())
                     .map(|m| forge_mesh::stl::to_binary_stl(&m, &format!("{id} mould")))
-                    .map_err(|e| format!("{e:?}")),
+                    .map_err(|e| forge_lang::error::words(&e)),
             ),
             Export::TrimDxf => (format!("{stem}-{id}-trim.dxf"), Ok(dxf(&g.trim).into_bytes())),
-            Export::ProcessPdf => (format!("{stem}-{id}-process.pdf"), Ok(pdf(&g.sheet))),
+            Export::ProcessPdf => (
+                format!("{stem}-{id}-process.pdf"),
+                Ok(crate::thermo_view::process_pdf(&g.sheet)),
+            ),
             Export::ThicknessCsv => {
                 let mut s = String::from("x_mm,y_mm,z_mm,wall_mm\n");
                 for (p, t) in &g.points {
@@ -144,38 +147,4 @@ fn dxf(pts: &[[f64; 3]]) -> String {
         );
     }
     s + "0\nENDSEC\n0\nEOF\n"
-}
-
-/// A one-page PDF of text lines in Courier.
-fn pdf(lines: &[String]) -> Vec<u8> {
-    let esc = |s: &str| s.replace('\\', "\\\\").replace('(', "\\(").replace(')', "\\)");
-    let mut content = String::from("BT /F1 10 Tf 50 800 Td 13 TL\n");
-    for l in lines.iter().take(58) {
-        let ascii: String = l.chars().map(|c| if c.is_ascii() { c } else { '?' }).collect();
-        content += &format!("({}) '\n", esc(&ascii));
-    }
-    content += "ET";
-    let objs = [
-        "<< /Type /Catalog /Pages 2 0 R >>".to_string(),
-        "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_string(),
-        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>".to_string(),
-        format!("<< /Length {} >>\nstream\n{content}\nendstream", content.len()),
-        "<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>".to_string(),
-    ];
-    let mut out = String::from("%PDF-1.4\n");
-    let mut at = vec![];
-    for (k, o) in objs.iter().enumerate() {
-        at.push(out.len());
-        out += &format!("{} 0 obj\n{o}\nendobj\n", k + 1);
-    }
-    let xref = out.len();
-    out += &format!("xref\n0 {}\n0000000000 65535 f \n", objs.len() + 1);
-    for a in at {
-        out += &format!("{a:010} 00000 n \n");
-    }
-    out += &format!(
-        "trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n",
-        objs.len() + 1
-    );
-    out.into_bytes()
 }
