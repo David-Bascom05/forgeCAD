@@ -402,6 +402,9 @@ struct Ctx {
     letters: usize,
     /// Views' lines made ahead, all at once (`ahead`): taken by the view that asks the same.
     drawn: std::collections::HashMap<DrawKey, (Vec<Piece>, Vec<Stroke>)>,
+    /// What every view's lines take from a part alone (its curves for a direction, its meshes),
+    /// made once for the drawing.
+    parts: forge_draw::Parts,
 }
 
 /// What a view's lines are made of: its direction, its options, and each body (by its `Arc`)
@@ -529,11 +532,11 @@ impl Ctx {
             };
             plans.extend(plan);
         }
-        let models = &self.models;
+        let (models, parts) = (&self.models, &self.parts);
         let made = crate::par::map(plans.len(), |k| {
             let p = &plans[k];
             (
-                draw(&p.insts, &p.view, p.tangent, p.hidden),
+                draw(&p.insts, &p.view, p.tangent, p.hidden, parts),
                 thread_lines(&models[p.model].model, &p.insts, &p.view, p.hidden),
             )
         });
@@ -556,7 +559,7 @@ impl Ctx {
             return m;
         }
         (
-            draw(insts, view, tangent, hidden),
+            draw(insts, view, tangent, hidden, &self.parts),
             thread_lines(&self.models[model].model, insts, view, hidden),
         )
     }
@@ -726,7 +729,7 @@ impl Ctx {
                     }
                 }
                 let hidden = def.hidden.unwrap_or(false);
-                let pieces = draw(&insts, &view, tangent, hidden);
+                let pieces = draw(&insts, &view, tangent, hidden, &self.parts);
                 let mut extra = thread_lines(mo, &insts, &view, hidden);
                 let s = def.scale.unwrap_or(p.scale);
                 for (n, (i, fs)) in faces.iter().enumerate() {
@@ -1015,13 +1018,22 @@ fn de_boor(p: usize, knots: &[f64], pts: &[Point2], w: Option<&[f64]>, t: f64) -
     Point2::new(d[p].0 / d[p].2, d[p].1 / d[p].2)
 }
 
-fn draw(insts: &[(Arc<Body>, Frame, usize)], view: &View, tangent: bool, hidden: bool) -> Vec<Piece> {
+fn draw(
+    insts: &[(Arc<Body>, Frame, usize)],
+    view: &View,
+    tangent: bool,
+    hidden: bool,
+    parts: &forge_draw::Parts,
+) -> Vec<Piece> {
+    for (b, ..) in insts {
+        parts.hold(b);
+    }
     let is: Vec<Instance> = insts
         .iter()
         .map(|(b, pose, _)| Instance { body: b, pose: *pose })
         .collect();
     let opts = forge_draw::Options { tangent, chord: 0.01 };
-    let mut p = forge_draw::hlr(&is, view, &opts);
+    let mut p = forge_draw::hlr_with(&is, view, &opts, parts);
     if !hidden {
         p.retain(|x| x.visible);
     }
@@ -2679,6 +2691,7 @@ fn make_with(src: &str, dir: &Path, mut show: Option<&mut dyn FnMut(Shown)>) -> 
         errors: d.errors.clone(),
         letters: 0,
         drawn: Default::default(),
+        parts: Default::default(),
     };
     // the models, each built on its own cores
     let wanted: Vec<(&str, &str)> = d

@@ -720,17 +720,30 @@ fn box_on_view(view: &View, pose: &Frame, b: &forge_math::Box3) -> (Point2, Poin
 }
 
 impl<'a> Scene<'a> {
-    fn new(insts: &'a [Instance<'a>], view: View) -> Scene<'a> {
+    fn new(insts: &'a [Instance<'a>], view: View, parts: &Parts) -> Scene<'a> {
         let idx: Vec<Index> = insts.iter().map(|i| Index::new(i.body)).collect();
         let mut faces = Vec::new();
         let mut cover: Vec<Option<Cover>> = Vec::new();
         let mut lo = Point2::new(f64::INFINITY, f64::INFINITY);
         let mut hi = Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY);
-        let mut locals: std::collections::HashMap<usize, Local> = Default::default();
+        let mut locals: std::collections::HashMap<usize, std::sync::Arc<Local>> = Default::default();
         for (k, inst) in insts.iter().enumerate() {
-            let local = locals
-                .entry(inst.body as *const Body as usize)
-                .or_insert_with(|| local_covers(inst.body));
+            let at = inst.body as *const Body as usize;
+            let local = locals.entry(at).or_insert_with(|| {
+                if !parts.held(inst.body) {
+                    return std::sync::Arc::new(local_covers(inst.body));
+                }
+                if let Some(l) = parts.covers.lock().unwrap_or_else(|e| e.into_inner()).get(&at) {
+                    return l.clone();
+                }
+                let l = std::sync::Arc::new(local_covers(inst.body));
+                parts
+                    .covers
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .insert(at, l.clone());
+                l
+            });
             let mut tris = covers(local, &inst.pose, &view);
             for f in inst.body.face_ids() {
                 cover.push(tris[f.index()].take());
@@ -855,14 +868,57 @@ impl<'a> Scene<'a> {
     }
 }
 
+/// A part's curves in its own space for a direction there, and its procedural faces' meshes:
+/// what `hlr` makes of a body that depends on nothing else, kept for every view a set of drawings
+/// makes of the same bodies. Bodies are known by address, so the cache holds each body it has
+/// seen (no other body can come to have that address while it lives).
+#[derive(Default)]
+pub struct Parts {
+    curves:
+        std::sync::Mutex<std::collections::HashMap<CurveKey, std::sync::Arc<PartCurves>>>,
+    covers: std::sync::Mutex<std::collections::HashMap<usize, std::sync::Arc<Local>>>,
+    held: std::sync::Mutex<std::collections::HashMap<usize, std::sync::Arc<Body>>>,
+}
+
+/// A part's edges and outlines in its own space, each with what it is drawn from and its class.
+type PartCurves = Vec<(Source, Class, Path3)>;
+
+/// A body (by address), the view's direction in its space, the chord and whether tangent edges
+/// are drawn: all a part's curves are made from.
+type CurveKey = (usize, [u64; 3], u64, bool);
+
+impl Parts {
+    /// Keeps `body` alive while the cache lives, so its address stands for it alone.
+    pub fn hold(&self, body: &std::sync::Arc<Body>) {
+        self.held
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .entry(std::sync::Arc::as_ptr(body) as usize)
+            .or_insert_with(|| body.clone());
+    }
+
+    fn held(&self, body: &Body) -> bool {
+        self.held
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .contains_key(&(body as *const Body as usize))
+    }
+}
+
 /// The view of the instances: every edge (tangent ones if asked) and every outline, split where
 /// they cross on the view, each piece seen or hidden; a hidden piece lying on a seen one, and a
 /// second copy of one, are left out.
 pub fn hlr(insts: &[Instance], view: &View, opts: &Options) -> Vec<Piece> {
+    hlr_with(insts, view, opts, &Parts::default())
+}
+
+/// `hlr`, what depends on a part alone taken from `parts` where it was made before (for a body
+/// `parts` holds) and kept there: the same numbers either way.
+pub fn hlr_with(insts: &[Instance], view: &View, opts: &Options, parts: &Parts) -> Vec<Piece> {
     use forge_math::trace::span;
     let _all = span("hlr");
     let t = span("hlr scene");
-    let scene = Scene::new(insts, *view);
+    let scene = Scene::new(insts, *view, parts);
     drop(t);
     let t = span("hlr curves");
     // each part's curves on a core of its own, put together in part order
@@ -889,11 +945,16 @@ pub fn hlr(insts: &[Instance], view: &View, opts: &Options) -> Vec<Piece> {
         }
         slot.push(s);
     }
-    let local: Vec<Vec<(Source, Class, Path3)>> = forge_math::par::map(reps.len(), |r| {
+    let local: Vec<std::sync::Arc<PartCurves>> = forge_math::par::map(reps.len(), |r| {
         let i = reps[r];
         let inst = &insts[i];
         let body = inst.body;
         let d = inst.pose.vec_to_local(view.toward.get());
+        let key: CurveKey = (keys[i].0, keys[i].1, opts.chord.to_bits(), opts.tangent);
+        let keep = parts.held(body);
+        if keep && let Some(c) = parts.curves.lock().unwrap_or_else(|e| e.into_inner()).get(&key) {
+            return c.clone();
+        }
         let mut out = Vec::new();
         for e in body.edge_ids() {
             let edge = body.edge(e);
@@ -913,11 +974,19 @@ pub fn hlr(insts: &[Instance], view: &View, opts: &Options) -> Vec<Piece> {
                 out.push((Source::Outline(body.face(f).name), Class::Outline, path));
             }
         }
+        let out = std::sync::Arc::new(out);
+        if keep {
+            parts
+                .curves
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .insert(key, out.clone());
+        }
         out
     });
     let per_inst: Vec<Vec<Curve3>> = forge_math::par::map(insts.len(), |i| {
         let mut curves: Vec<Curve3> = Vec::new();
-        for (source, class, path) in &local[slot[i]] {
+        for (source, class, path) in local[slot[i]].iter() {
             push_curve(&mut curves, view, i, *source, *class, path.placed(&insts[i].pose));
         }
         curves
@@ -994,7 +1063,7 @@ pub fn seen_runs(insts: &[Instance], view: &View, lines: &[Vec<Point3>]) -> Vec<
     if lines.is_empty() {
         return vec![];
     }
-    let scene = Scene::new(insts, *view);
+    let scene = Scene::new(insts, *view, &Parts::default());
     forge_math::par::map(lines.len(), |k| {
         if lines[k].len() < 2 {
             return vec![];
