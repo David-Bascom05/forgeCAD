@@ -42,3 +42,4 @@ import ForgeLang.Counter.Nested
 import ForgeLang.OpMemo
 import ForgeLang.NestedOps
 import ForgeLang.NestedAll
+import ForgeLang.Fence

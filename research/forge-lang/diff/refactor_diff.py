@@ -257,6 +257,37 @@ def check_fixed(fg, tmp, t):
     t.note("module" if any(e["kind"] == "UseFailed" for e in j["errors"]) else "module:use_cycle", "use_cycle", str(j["errors"]))
 
 
+# Fence.tree_reads (Lean): the read fence on the same tree, case by case. (file, want): "ok" or "Outside".
+FENCE = [("near.fg", "ok"), ("../out/in.fg", "ok"), ("../../X/far.fg", "Outside"), ("lfar.fg", "Outside"),
+         ("lin.fg", "ok"), ("../out/back/near.fg", "ok"), ("../../X/missing.fg", "Outside"), ("/etc/passwd", "Outside")]
+
+
+def check_fence(fg, tmp, t):
+    """Fence.lean on the harness's tree: project P (holding .git), the document in P/w."""
+    part = "shared q = 1\nsketch s(on: xy) {\n  o = circle((0, 0), 5)\n}\nb = extrude(s, q)\n"
+    b = os.path.join(tmp, "fence")
+    for d in ("P/.git", "P/w", "P/out", "X"):
+        os.makedirs(os.path.join(b, d), exist_ok=True)
+    for f in ("P/out/in.fg", "X/far.fg", "P/w/near.fg"):
+        with open(os.path.join(b, f), "w") as fh:
+            fh.write(part)
+    os.symlink("../../X/far.fg", os.path.join(b, "P/w/lfar.fg"))
+    os.symlink("../out/in.fg", os.path.join(b, "P/w/lin.fg"))
+    os.symlink("../w", os.path.join(b, "P/out/back"))
+    got = {}
+    for f, _ in FENCE:
+        doc = os.path.join(b, "P/w/m.fg")
+        with open(doc, "w") as fh:
+            fh.write(f'c = part("{f}")\n')
+        j = run(fg, doc)
+        got[f] = "ok" if not j["errors"] else (j["errors"][0].get("problem") or j["errors"][0]["kind"])
+    if not any(v == "Outside" for v in got.values()):
+        t.note("fence-skipped", "fence", "this fg fences no reads")
+        return
+    for f, want in FENCE:
+        t.note("fence" if got[f] == want else f"fence:{f}", f, f"want {want}, got {got[f]}")
+
+
 KNOWN: set = set()  # X1-X4 fixed on unified-doc-2 936d26d6
 
 
@@ -286,7 +317,8 @@ def main():
         check_extract(a.fg, tmp, key, doc, t)
         check_make(a.fg, tmp, key, doc, rng, t)
     check_fixed(a.fg, tmp, t)
-    counts = {"extract", "make", "fixed", "module"}
+    check_fence(a.fg, tmp, t)
+    counts = {"extract", "make", "fixed", "module", "fence", "fence-skipped"}
     bad = sorted(k for k in t.n if k not in counts and k not in known)
     for k in sorted(t.n):
         print(f"{k:28} {t.n[k]}{'  NEW' if k in bad else ''}")

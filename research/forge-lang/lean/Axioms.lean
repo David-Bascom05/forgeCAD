@@ -117,3 +117,9 @@ open ForgeLang ForgeLang.Counter
 #print axioms ForgeLang.Counter.nested_delete_exact
 #print axioms ForgeLang.lift_all
 #print axioms ForgeLang.Counter.nested_loop_delete_exact
+#print axioms ForgeLang.Fence.read_inside
+#print axioms ForgeLang.Fence.outside_same
+#print axioms ForgeLang.Fence.link_out_refused
+#print axioms ForgeLang.Fence.root_contains_doc
+#print axioms ForgeLang.Fence.cycle_missing
+#print axioms ForgeLang.Fence.tree_reads

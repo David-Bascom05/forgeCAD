@@ -733,6 +733,7 @@ an occurrence written above. Findings also in `forgecad-gate/unified-doc/proof-f
 | `ScopedMore.lean` | `scopedMove_ok`, `scopedReplace_ok`, `occ_body`, `default_no_capture`, `occ_caller_indep` |
 | `Counter/Qualify.lean` | `unqualified_shadow`, `qualify_string_collides` |
 | `Nested.lean` | `defs_congr_closed`, `scoped_occ_closed`, `avoids_reach`, `rank_acyclic`, `occ_pre` |
+| `Fence.lean` | the read fence: `read_inside`, `outside_same`, `link_out_refused`, `root_contains_doc`, `cycle_missing`, `tree_reads` |
 | `NestedAll.lean` | `lift_all`: scoped ops in loops, conditionals and repeated placements, any depth |
 | `NestedOps.lean` | `occ_body_closed`, `lift_block`, `lift_occ`: scoped ops at any depth |
 | `Counter/Nested.lean` | `nested_ids`, `context_*`, `place_cycle_fuel`, `nested_delete_dangles` |
