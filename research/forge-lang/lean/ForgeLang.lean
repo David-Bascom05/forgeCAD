@@ -24,3 +24,7 @@ import ForgeLang.Scope
 import ForgeLang.LL1.Core
 import ForgeLang.LL1.Proof
 import ForgeLang.LL1.Forge
+import ForgeLang.Memo
+import ForgeLang.Counter.Memo
+import ForgeLang.Refactor
+import ForgeLang.Counter.Refactor
