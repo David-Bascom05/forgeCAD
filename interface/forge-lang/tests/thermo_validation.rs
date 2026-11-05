@@ -731,6 +731,8 @@ fn scoreboard() {
                     Some((o, m)) => (o, m.parse().expect("cfg:mu")),
                     None => (cfg.as_str(), n(c, "mu", 0.3)),
                 };
+                // the solve's iterations and time, when it was solved here (not the run's own)
+                let mut cost: Option<(usize, f64)> = None;
                 let (sc, st_label) = match th.and_then(|t| Some((t, t.process.clone()?))) {
                     None => (None, "build error"),
                     Some((t, mut p)) => {
@@ -741,7 +743,9 @@ fn scoreboard() {
                             let st: &Stretch = if Some(&p) == t.process.as_ref() {
                                 t.walls.as_deref().expect("walls")
                             } else {
+                                let at = std::time::Instant::now();
                                 fresh = forge_thermo::stretch(&t.formed, &t.spec, &p);
+                                cost = Some((fresh.iterations, at.elapsed().as_secs_f64() * 1e3));
                                 &fresh
                             };
                             let sc = match s(c, "mode") {
@@ -787,7 +791,7 @@ fn scoreboard() {
                 );
                 let jn = |x: Option<f64>| x.map_or("null".to_string(), |v| format!("{v:.4}"));
                 let json_row = format!(
-                    "{{\"label\":\"{label}\",\"config\":\"{cfg}\",\"case\":\"{id}\",\"mode\":\"{}\",\"n\":{},\"mean_err_pct\":{:.4},\"max_err_pct\":{:.4},\"bias_pct\":{:.4},\"thin_err_pct\":{},\"thin_loc_err_mm\":{},\"drawin_excess_pct\":{},\"status\":\"{st_label}\",\"cause\":\"{cause}\",\"note\":\"{}\"}}",
+                    "{{\"label\":\"{label}\",\"config\":\"{cfg}\",\"case\":\"{id}\",\"mode\":\"{}\",\"n\":{},\"mean_err_pct\":{:.4},\"max_err_pct\":{:.4},\"bias_pct\":{:.4},\"thin_err_pct\":{},\"thin_loc_err_mm\":{},\"drawin_excess_pct\":{},\"status\":\"{st_label}\",\"cause\":\"{cause}\",\"note\":\"{}\",\"iterations\":{},\"solve_ms\":{}}}",
                     s(c, "mode"),
                     sc.n,
                     sc.mean,
@@ -796,7 +800,9 @@ fn scoreboard() {
                     jn(sc.thin),
                     jn(sc.thin_loc),
                     jn(sc.drawin),
-                    sc.note.replace('"', "'")
+                    sc.note.replace('"', "'"),
+                    cost.map_or("null".to_string(), |c| c.0.to_string()),
+                    cost.map_or("null".to_string(), |c| format!("{:.0}", c.1))
                 );
                 let md_row = format!(
                     "| {id} | {} | {:.1} | {:.1} | {:+.1} | {} | {} | {} | {st_label} | {cause} |\n",

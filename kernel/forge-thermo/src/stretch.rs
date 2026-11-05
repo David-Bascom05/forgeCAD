@@ -311,7 +311,7 @@ fn pw(x: f64, a: f64) -> f64 {
 /// With `wrinkle` the membrane carries no compression (tension-field theory): where its lesser
 /// stretch is under the width uniaxial tension leaves it, it wrinkles and holds that tension only;
 /// slack both ways, nothing.
-fn element(law: &Law, t: &Tri, x: &[Vec3], wrinkle: bool) -> Option<(f64, Vec3, Vec3)> {
+fn element(law: &Law, t: &Tri, x: &[Vec3], wrinkle: bool) -> Option<Part> {
     let (x0, x1, x2) = (x[t.v[0]], x[t.v[1]], x[t.v[2]]);
     let (e1, e2) = (x1 - x0, x2 - x0);
     let f0 = e1 * t.dinv[0][0] + e2 * t.dinv[1][0];
@@ -417,6 +417,12 @@ struct Shared {
     incident: Vec<Vec<(u32, u8)>>,
     owner: Vec<(u32, u32)>,
     gathered: Vec<Mutex<Vec<Vec3>>>,
+    /// Each worker's triangles' normals (by area) at the last `each` and at the last `keep`, and
+    /// whether the last `each` turned one over from the kept (see `turns`).
+    normals: Vec<Mutex<(Vec<Vec3>, Vec<Vec3>)>>,
+    flipped: AtomicBool,
+    /// The triangles a step can move (a corner free), the only ones checked.
+    live: RwLock<Vec<bool>>,
 }
 
 /// A hinge's energy and what it adds to its four corners' gradient.
@@ -436,7 +442,30 @@ impl Shared {
                 .iter()
                 .map(|t| element(&self.law, t, x, self.wrinkle)),
         );
+        drop(o);
+        self.run_normals(w, x);
         self.run_bends(w, x);
+    }
+
+    fn run_normals(&self, w: usize, x: &[Vec3]) {
+        let mut n = self.normals[w].lock().unwrap_or_else(|e| e.into_inner());
+        let (now, kept) = &mut *n;
+        let r = self.share(w);
+        let live = self.live.read().unwrap_or_else(|e| e.into_inner());
+        let Some(live) = live.get(r.clone()) else { return };
+        now.resize(r.len(), Vec3::ZERO);
+        let check = kept.len() == now.len();
+        let mut flipped = false;
+        for (k, t) in self.tris[r].iter().enumerate() {
+            if live[k] {
+                let a = x[t.v[0]];
+                now[k] = (x[t.v[1]] - a).cross(x[t.v[2]] - a);
+                flipped |= check && turns(kept[k], now[k]);
+            }
+        }
+        if flipped {
+            self.flipped.store(true, Ordering::Relaxed);
+        }
     }
 
     fn run_bends(&self, w: usize, x: &[Vec3]) {
@@ -504,6 +533,9 @@ impl Pool {
             incident,
             owner,
             gathered: (0..n).map(|_| Mutex::new(vec![])).collect(),
+            normals: (0..n).map(|_| Mutex::new((vec![], vec![]))).collect(),
+            flipped: AtomicBool::new(false),
+            live: RwLock::new(vec![]),
         });
         let workers = if n > 1 {
             (1..n)
@@ -535,9 +567,11 @@ impl Pool {
 
     /// Each triangle's energy and gradient at `x`, in order (None: one is turned inside out);
     /// the hinges' are made in the same round, for `bends`.
-    fn each(&self, x: &[Vec3], f: &mut dyn FnMut(usize, (f64, Vec3, Vec3))) -> Option<()> {
+    fn each(&self, x: &[Vec3], f: &mut dyn FnMut(usize, Part)) -> Option<()> {
         let s = &self.shared;
+        s.flipped.store(false, Ordering::Relaxed);
         if self.workers.is_empty() {
+            s.run_normals(0, x);
             for (k, t) in s.tris.iter().enumerate() {
                 f(k, element(&s.law, t, x, s.wrinkle)?);
             }
@@ -567,6 +601,46 @@ impl Pool {
             }
         }
         Some(())
+    }
+
+    /// Whether the last `each` turned a triangle over from the last `keep`'s.
+    fn flipped(&self) -> bool {
+        self.shared.flipped.load(Ordering::Relaxed)
+    }
+
+    /// The triangles to check from now on.
+    fn live(&self, live: impl Iterator<Item = bool>) {
+        let mut l = self.shared.live.write().unwrap_or_else(|e| e.into_inner());
+        l.clear();
+        l.extend(live);
+    }
+
+    /// Keeps the last `each`'s normals, for `flipped` to check the next ones against.
+    fn keep(&self) {
+        for n in &self.shared.normals {
+            let mut n = n.lock().unwrap_or_else(|e| e.into_inner());
+            let (now, kept) = &mut *n;
+            std::mem::swap(now, kept);
+        }
+    }
+
+    /// Whether any of triangles `ks`, with normals `n(k)`, turned over from the kept.
+    fn turns_any(&self, ks: impl Iterator<Item = usize>, n: impl Fn(usize) -> Vec3) -> bool {
+        let s = &self.shared;
+        let all: Vec<_> = s
+            .normals
+            .iter()
+            .map(|n| n.lock().unwrap_or_else(|e| e.into_inner()))
+            .collect();
+        let w = all.len();
+        let mut ks = ks;
+        ks.any(|k| {
+            let at = (0..w).find(|&i| s.share(i).contains(&k)).expect("a worker's");
+            all[at]
+                .1
+                .get(k - s.share(at).start)
+                .is_some_and(|a| turns(*a, n(k)))
+        })
     }
 
     /// The hinges' energy at the `x` of the last `each`, summed in hinge order, and their
@@ -631,10 +705,8 @@ struct Sheet {
     volume: Option<(f64, f64, f64)>,
     /// A dead load down on each node, MPa over its share (the sag's).
     gravity: f64,
-    /// No step may turn a triangle over (on sheets finer than the default's, where a stop holding
-    /// one corner back turns them: see `turned`; off at the default's, where it never fires, for
-    /// its cost).
-    guard: bool,
+    /// Each node's triangles.
+    around: Vec<Vec<u32>>,
 }
 
 /// Sliding nodes carried off the tool's top (over the cavity) fall free.
@@ -980,19 +1052,44 @@ fn crossing(field: &Gap, a: Vec3, b: Vec3, reach: f64) -> Option<Vec3> {
     None
 }
 
-/// Whether a step from `x` to `y` turns any triangle over: its normal past square to the one it
-/// had, or in one step from under 17 to past 30 degrees beyond vertical (the sheet folding back
-/// over itself,
-/// where a sheet drawn onto a mould never goes; the pressure on a fold's under side would blow it
-/// up with nothing to stop it, a membrane having no contact with itself).
-fn turned(idx: &[[usize; 3]], x: &[Vec3], y: &[Vec3]) -> bool {
-    idx.iter().any(|t| {
-        let n = |p: &[Vec3]| (p[t[1]] - p[t[0]]).cross(p[t[2]] - p[t[0]]);
-        let (a, b) = (n(x), n(y));
-        // a triangle already flat to nothing has no side to keep
-        let tiny = 1e-12 * (1.0 + a.length_sq());
-        a.length_sq() > tiny && (a.dot(b) < 0.0 || (b.z < -0.5 * b.length() && a.z >= -0.3 * a.length()))
-    })
+/// Whether the triangles at the stops turn over with their corners at the stops.
+fn stops_turn(sheet: &Sheet, trial: &mut [Vec3], stops: &[(usize, Vec3)]) -> bool {
+    if stops.is_empty() {
+        return false;
+    }
+    let was: Vec<Vec3> = stops
+        .iter()
+        .map(|&(i, c)| std::mem::replace(&mut trial[i], c))
+        .collect();
+    let y: &[Vec3] = trial;
+    let out = sheet.pool.turns_any(
+        stops
+            .iter()
+            .flat_map(|&(i, _)| sheet.around[i].iter().map(|&k| k as usize)),
+        |k: usize| {
+            let t = sheet.idx[k];
+            (y[t[1]] - y[t[0]]).cross(y[t[2]] - y[t[0]])
+        },
+    );
+    for (&(i, _), w) in stops.iter().zip(was) {
+        trial[i] = w;
+    }
+    out
+}
+
+/// Whether a triangle of normal `a` turned over in a step to normal `b`: its normal past square
+/// to the one it had, or in one step from under 17 to past 30 degrees beyond vertical (the sheet
+/// folding back over itself, where a sheet drawn onto a mould never goes; the pressure on a fold's
+/// under side would blow it up with nothing to stop it, a membrane having no contact with itself).
+#[inline]
+fn turns(a: Vec3, b: Vec3) -> bool {
+    let (a2, b2) = (a.length_sq(), b.length_sq());
+    // a triangle already flat to nothing has no side to keep; no square roots or branches, for
+    // the batch's vectorising
+    let flat = a2 <= 1e-12 * (1.0 + a2);
+    let past = (b.z < 0.0) & (b.z * b.z > 0.25 * b2);
+    let was = (a.z >= 0.0) | (a.z * a.z <= 0.09 * a2);
+    !flat & ((a.dot(b) < 0.0) | (past & was))
 }
 
 /// Minimises the sheet's energy at pressure `p` over its free nodes, stopping each node that
@@ -1011,9 +1108,14 @@ fn relax(
     const M: usize = 6;
     let n = x.len();
     let mut g = vec![Vec3::ZERO; n];
+    let moves = |k: usize| sheet.free[k] && !(sheet.slide[k] && sheet.dir[k].is_none());
+    sheet
+        .pool
+        .live(sheet.idx.iter().map(|t| t.iter().any(|&k| moves(k))));
     let Some(mut e) = sheet.energy(x, p, Some(&mut g)) else {
         return 0;
     };
+    sheet.pool.keep();
     let (mut ss, mut ys): (Vec<Vec<Vec3>>, Vec<Vec<Vec3>>) = (vec![], vec![]);
     let dot = |a: &[Vec3], b: &[Vec3]| a.iter().zip(b).map(|(u, v)| u.dot(*v)).sum::<f64>();
     let mut g2 = vec![Vec3::ZERO; n];
@@ -1076,16 +1178,12 @@ fn relax(
             // its side (C is the same either way up), so a turned-over triangle meets no
             // resistance and the pressure on its wrong side drives it on (the fine meshes'
             // blow-outs, where a stop held one corner back while the others went on)
-            let turns = sheet.guard && {
-                let mut stopped_at = trial.clone();
-                for &(i, c) in &stops {
-                    stopped_at[i] = c;
-                }
-                turned(&sheet.idx, x, &stopped_at)
-            };
-            if !turns
-                && let Some(e2) = sheet.energy(&trial, p, Some(&mut g2))
+            // (the energy checks the step's normals against the last state's; the few triangles
+            // at a stop are checked here, at their stops)
+            if let Some(e2) = sheet.energy(&trial, p, Some(&mut g2))
                 && e2 <= e + 1e-4 * a * slope
+                && !sheet.pool.flipped()
+                && !stops_turn(sheet, &mut trial, &stops)
             {
                 taken = Some(e2);
                 break;
@@ -1119,6 +1217,7 @@ fn relax(
         }
         x.copy_from_slice(&trial);
         std::mem::swap(&mut g, &mut g2);
+        sheet.pool.keep();
         e = e2;
     }
     max_it
@@ -1301,7 +1400,13 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
         plug_anchor: x.clone(),
         volume: None,
         gravity: 0.0,
-        guard: nx.max(ny) > 57,
+        around: {
+            let mut a = vec![vec![]; x.len()];
+            for (k, t) in idx.iter().enumerate() {
+                t.iter().for_each(|&i| a[i].push(k as u32));
+            }
+            a
+        },
         slide,
     };
     // a finer sheet takes more iterations to settle (its stiffness's spread grows with it): the
