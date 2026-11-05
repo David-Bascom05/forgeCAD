@@ -182,7 +182,7 @@ fn inspect_groups(s: &Shell) -> Vec<Group> {
             small: vec![
                 t("Wall", "measure", C::Wall, measuring == Some(true)),
                 t("Mass", "mass", C::Mass, props == Some(5)),
-                t("CG Marker", "mass", C::Cg, i.cg),
+                t("CG Marker", "cg", C::Cg, i.cg),
             ],
             icons: vec![],
         },

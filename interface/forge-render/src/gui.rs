@@ -2900,7 +2900,10 @@ impl Headless {
 
     /// Frames until this holds, or a good while.
     pub fn until(&mut self, what: impl Fn(&Gui) -> bool) -> bool {
-        for _ in 0..5000 {
+        // by the clock, not a count of frames: a build on its worker thread starved by a busy
+        // machine takes longer in time, not in frames
+        let end = std::time::Instant::now() + std::time::Duration::from_secs(90);
+        while std::time::Instant::now() < end {
             self.step();
             if what(&self.gui) {
                 return true;
