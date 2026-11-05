@@ -1391,6 +1391,14 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
             .filter(|&k| sheet.free[k] && !sheet.slide[k] && inside(&poly, Point2::new(x[k].x, x[k].y)).0)
             .count()
     };
+    let cavity: f64 = field
+        .z
+        .iter()
+        .filter(|z| !z.is_nan())
+        .map(|z| (-z).max(0.0))
+        .sum::<f64>()
+        * field.h
+        * field.h;
     let mut by_volume = pr.volume && !male;
     let (mut done, mut lambda) = (0, 0.0);
     if !by_volume {
@@ -1404,15 +1412,16 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
                 sheet.anchor.clone(),
             );
             let before = open(&sheet, &x);
+            let v0 = sheet.enclosed(&x);
             sheet.hold = hold_at(p);
             let reach = reach_at(&x);
             its += step(&mut sheet, &tool, &mut x, p, cap, tol, &reach, 400);
             release(&mut sheet, &tool, &x, 0.25 * spec.t);
-            if pr.snap_guard
-                && !male
-                && before > 0
-                && 5 * (before - open(&sheet, &x).min(before)) > 3 * before
-            {
+            // a snap: most of the free sheet on the tool at once, or most of the cavity's air out
+            // in one step (no equilibrium in between: past the limit point)
+            let landed = before > 0 && 5 * (before - open(&sheet, &x).min(before)) > 3 * before;
+            let swept = (v0 - sheet.enclosed(&x)).abs() > 0.4 * cavity;
+            if pr.snap_guard && !male && (landed || swept) {
                 (x, sheet.free, sheet.slide, sheet.dir, sheet.anchor) = kept;
                 by_volume = true;
                 lambda = pr.pressure * done as f64 / loads as f64;
@@ -1423,14 +1432,6 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
         }
     }
     if by_volume {
-        let cavity: f64 = field
-            .z
-            .iter()
-            .filter(|z| !z.is_nan())
-            .map(|z| (-z).max(0.0))
-            .sum::<f64>()
-            * field.h
-            * field.h;
         let parts = 2 * loads;
         let each = cavity / parts as f64;
         let stiff = pr.pressure / (0.05 * each).max(1e-9);
