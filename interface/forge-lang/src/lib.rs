@@ -35,6 +35,7 @@ pub mod stdparts;
 pub mod store;
 pub mod syntax;
 pub mod thermo;
+pub mod thermo_kept;
 pub mod uses;
 pub mod validity;
 pub mod values;

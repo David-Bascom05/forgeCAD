@@ -829,10 +829,28 @@ fn work(
             .and_then(|f| std::fs::canonicalize(f).ok())
             .map(|p| p.to_string_lossy().to_string());
         let opening = gpu.is_some();
-        if opening
-            && let Some(place) = &place
-            && let Some((mesh, flat)) = shown_before(place, &job.1)
-        {
+        let before = if opening {
+            place.as_deref().and_then(|p| shown_before(p, &job.1))
+        } else {
+            None
+        };
+        // opening with nothing kept: the part as built without its checks first (a thermoform's
+        // forming, the measures), on screen while they run
+        let before = before.or_else(|| {
+            if !opening {
+                return None;
+            }
+            let quick = Options {
+                checks: false,
+                dir: dir.clone(),
+                ..Options::default()
+            };
+            let (shape, c) = forge_lang::run(&job.1, quick, std::mem::take(&mut cache));
+            cache = c;
+            let b = shape.body.as_ref()?;
+            Some(whole(b, flat_body(&shape).as_ref()))
+        });
+        if opening && let Some((mesh, flat)) = before {
             let quick = Options {
                 build: false,
                 dir: dir.clone(),

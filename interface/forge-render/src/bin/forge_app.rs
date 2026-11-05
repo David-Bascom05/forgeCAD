@@ -411,6 +411,7 @@ fn wait(h: &mut Headless) {
                 .fg
                 .as_ref()
                 .is_some_and(|p| p.thermo.asm_part.is_some() && p.thermos.is_empty())
+            || h.gui.fg_walls.first().is_some_and(|g| g.working())
             || h.gui.shell.inspect.physical_busy
             || h.gui.shell.inspect.measure.as_ref().is_some_and(|m| m.busy);
         if !busy {

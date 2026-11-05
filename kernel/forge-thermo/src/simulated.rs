@@ -757,19 +757,16 @@ pub(crate) fn built_on(
     // the part's triangles on the tool's surface, or on the trim plane facing it (the flange's)
     let near = Near::new(tool, 2.0 * t);
     let on = 0.05 * t;
-    let is_side: Vec<bool> = tris
-        .iter()
-        .map(|tri| {
-            let [a, b, c] = tri.map(|i| pos[i as usize]);
-            let g = Point3::ORIGIN
-                + ((a - Point3::ORIGIN) + (b - Point3::ORIGIN) + (c - Point3::ORIGIN)) * (1.0 / 3.0);
-            let Some(n) = (b - a).cross(c - a).normalize() else {
-                return false;
-            };
-            let flat = frame.point_to_local(g).z.abs() < on && n.get().dot(frame.z().get()).abs() > 0.999;
-            flat || near.nearest(g).is_some_and(|x| (x - g).length() < on)
-        })
-        .collect();
+    let is_side: Vec<bool> = forge_math::par::map(tris.len(), |k| {
+        let [a, b, c] = tris[k].map(|i| pos[i as usize]);
+        let g = Point3::ORIGIN
+            + ((a - Point3::ORIGIN) + (b - Point3::ORIGIN) + (c - Point3::ORIGIN)) * (1.0 / 3.0);
+        let Some(n) = (b - a).cross(c - a).normalize() else {
+            return false;
+        };
+        let flat = frame.point_to_local(g).z.abs() < on && n.get().dot(frame.z().get()).abs() > 0.999;
+        flat || near.nearest(g).is_some_and(|x| (x - g).length() < on)
+    });
     if !is_side.iter().any(|x| *x) {
         return None;
     }
@@ -784,6 +781,7 @@ pub(crate) fn built_on(
     // the exact surface's normal at each point, of each face off the tool it is on
     let mut normal = vec![Vec3::ZERO; pos.len()];
     let mut done: std::collections::HashSet<(u32, u32)> = Default::default();
+    let mut asks: Vec<(u32, u32, Vec3)> = vec![];
     for ((tri, s), &f) in tris.iter().zip(&is_side).zip(&faces) {
         if *s {
             continue;
@@ -792,9 +790,17 @@ pub(crate) fn built_on(
         let near = (b - a).cross(c - a);
         for &i in tri {
             if done.insert((i, f)) {
-                normal[i as usize] += face_normal(part, f, pos[i as usize], near);
+                asks.push((i, f, near));
             }
         }
+    }
+    // the surfaces' normals on all cores, summed in the same order
+    let got = forge_math::par::map(asks.len(), |k| {
+        let (i, f, near) = asks[k];
+        face_normal(part, f, pos[i as usize], near)
+    });
+    for ((i, _, _), n) in asks.iter().zip(got) {
+        normal[*i as usize] += n;
     }
     let normal: Vec<Vec3> = normal
         .into_iter()
@@ -809,10 +815,9 @@ pub(crate) fn built_on(
             }
         })
         .collect();
-    let wall: Vec<f64> = foot
-        .iter()
-        .map(|p| field.and_then(|f| f.at(*p)).map_or(t, |x| x.0))
-        .collect();
+    let wall: Vec<f64> = forge_math::par::map(foot.len(), |i| {
+        field.and_then(|f| f.at(foot[i])).map_or(t, |x| x.0)
+    });
     // the modelled part is the side on the tool moved off it by t: moved by the wall instead
     let mut mesh = TriMesh {
         positions: pos.clone(),
@@ -892,11 +897,11 @@ pub(crate) fn built_on(
         sheet_volume = f.volume;
     }
     // the colours: the model's own wall at each point of the modelled part, as painted there
-    let (raw, sheet): (Vec<f64>, Vec<Point3>) = pos
-        .iter()
-        .zip(&wall)
-        .map(|(p, w)| field.and_then(|f| f.raw_at(*p)).unwrap_or((*w, *p)))
-        .unzip();
+    let (raw, sheet): (Vec<f64>, Vec<Point3>) = forge_math::par::map(pos.len(), |i| {
+        field.and_then(|f| f.raw_at(pos[i])).unwrap_or((wall[i], pos[i]))
+    })
+    .into_iter()
+    .unzip();
     Some(Simulated {
         wall: wall.iter().map(|w| w * k).collect(),
         raw,

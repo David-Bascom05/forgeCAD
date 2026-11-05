@@ -27,8 +27,11 @@ pub struct Gfx {
     pub points: Vec<([f32; 3], f32)>,
     /// The simulated part (a mesh fitted from the model) and the blank, as the view draws them,
     /// and the simulated part's wall map, just off its face.
+    /// (Made when first shown, off the window's thread: `want_sim`.)
     pub sim: Option<Lod>,
+    pub has_sim: bool,
     pub sim_mesh: Option<forge_mesh::TriMesh>,
+    pub sim_modelled: Option<std::sync::Arc<Vec<Point3>>>,
     pub sim_feet: Option<Vec<Point3>>,
     pub sim_heat: Vec<WorldVert>,
     pub blank: Lod,
@@ -48,6 +51,20 @@ pub struct Gfx {
     pub at: (Point3, Point3),
     /// The sheet's thickness, mm.
     pub t: f64,
+    /// What the workers have made and are making.
+    pub made: std::sync::Arc<std::sync::Mutex<Made>>,
+}
+
+/// Where MIN and MAX go.
+type Pins = ([f32; 3], [f32; 3]);
+
+/// The simulated part's drawing and the colours, as the workers finish them.
+#[derive(Debug, Default)]
+pub struct Made {
+    sim: Option<(Lod, Vec<WorldVert>)>,
+    sim_asked: bool,
+    heat: Option<(usize, Vec<WorldVert>, Option<Pins>)>,
+    heat_asked: Option<usize>,
 }
 
 /// A solid's faces and edges in the part's body.
@@ -134,11 +151,9 @@ pub fn view(o: &ThermoOut, spans: &[forge_lang::build::Span], draft_min: f32) ->
         // shown through the formed part: lifted off the mould past the sheet
         vents: r.vents.iter().map(|v| f3(*v + d * (o.t * 1.2 + 0.3))).collect(),
         blank: crate::tess::lod_of_mesh(&o.blank(), UNPICKED + 8),
-        sim: o
-            .sim
-            .as_ref()
-            .map(|s| crate::tess::lod_of_mesh(&s.mesh, UNPICKED)),
+        has_sim: o.sim.is_some(),
         sim_mesh: o.sim.as_ref().map(|s| s.mesh.clone()),
+        sim_modelled: o.sim.as_ref().map(|s| std::sync::Arc::new(s.modelled.clone())),
         sim_feet: o.sim.as_ref().map(|s| s.foot.clone()),
         part_span: span_of(spans, o.part_solid),
         mould_span: span_of(spans, o.mould_solid),
@@ -337,19 +352,6 @@ pub fn view(o: &ThermoOut, spans: &[forge_lang::build::Span], draft_min: f32) ->
             .collect();
     }
     gfx.points = row.points.clone();
-    // the simulated part's outside, banded as the legend is, by the model's own wall at each
-    // point of the modelled part it was moved from: the same colours as the modelled part's
-    if let (Some(sim), Some(field)) = (&o.sim, &o.field) {
-        let m = &sim.mesh;
-        let tris: Vec<[(Point3, Point3); 3]> = m
-            .triangles
-            .iter()
-            .zip(&m.face_of)
-            .filter(|x| *x.1 != forge_thermo::simulated::TOOL_SIDE)
-            .map(|x| x.0.map(|i| (m.positions[i as usize], sim.modelled[i as usize])))
-            .collect();
-        paint_mesh(&tris, field, (wlo, whi), &mut gfx.sim_heat, &mut |_, _| {}, None);
-    }
     // MIN and MAX on the simulated part: its outside's points whose sheet points are the model's
     // thinnest and thickest (the modelled part's are found the same way when it is painted)
     if let Some(sim) = &o.sim {
@@ -592,7 +594,7 @@ pub fn marks(u: &crate::shell::thermo_ui::ThermoUi, g: &Gfx) -> Vec<crate::rende
     let faces = |b: Body| -> std::ops::Range<u32> {
         match b {
             Body::Part if !u.shows(Body::Part) => 0..0,
-            Body::Part if u.simulated && g.sim.is_some() => UNPICKED..UNPICKED + 3,
+            Body::Part if u.simulated && g.has_sim => UNPICKED..UNPICKED + 3,
             Body::Part => g.part_span.as_ref().map_or(0..0, |s| s.faces.clone()),
             Body::Mould if !u.shows(Body::Mould) => 0..0,
             Body::Mould => g.mould_span.as_ref().map_or(0..0, |s| s.faces.clone()),
@@ -623,51 +625,164 @@ fn vertex_at(b: &[u8], i: usize) -> Point3 {
 }
 
 impl Gfx {
+    /// Takes in what the workers finished; true when something came (the view is drawn again).
+    pub fn take_made(&mut self) -> bool {
+        let mut m = self.made.lock().unwrap_or_else(|e| e.into_inner());
+        let mut got = false;
+        if let Some((lod, heat)) = m.sim.take() {
+            self.sim = Some(lod);
+            self.sim_heat = heat;
+            got = true;
+        }
+        if let Some((key, heat, ext)) = m.heat.take() {
+            self.heat_for = key;
+            self.heat = heat;
+            if ext.is_some() {
+                self.extremes = ext;
+            }
+            got = true;
+        }
+        got
+    }
+
+    /// The simulated part's drawing and its colours, made on a worker the first time they are
+    /// wanted.
+    pub fn want_sim(&mut self, waker: &crate::gui::Waker) {
+        if !self.has_sim || self.sim.is_some() {
+            return;
+        }
+        let mut m = self.made.lock().unwrap_or_else(|e| e.into_inner());
+        if m.sim_asked {
+            return;
+        }
+        m.sim_asked = true;
+        let (Some(mesh), Some(modelled)) = (self.sim_mesh.clone(), self.sim_modelled.clone()) else {
+            return;
+        };
+        let (field, range, made, waker) = (self.field.clone(), self.range, self.made.clone(), waker.clone());
+        std::thread::spawn(move || {
+            let lod = crate::tess::lod_of_mesh(&mesh, UNPICKED);
+            // the simulated part's outside, banded as the legend is, by the model's own wall at
+            // each point of the modelled part it was moved from: the modelled part's colours
+            let mut heat = vec![];
+            if let Some(field) = &field {
+                let tris: Vec<[(Point3, Point3); 3]> = mesh
+                    .triangles
+                    .iter()
+                    .zip(&mesh.face_of)
+                    .filter(|x| *x.1 != forge_thermo::simulated::TOOL_SIDE)
+                    .map(|x| x.0.map(|i| (mesh.positions[i as usize], modelled[i as usize])))
+                    .collect();
+                paint_mesh(&tris, field, range, &mut heat, &mut |_, _| {}, None);
+            }
+            made.lock().unwrap_or_else(|e| e.into_inner()).sim = Some((lod, heat));
+            waker();
+        });
+    }
+
     /// The formed part's faces of `mesh` (the view's own, finest level) coloured by the model's
     /// wall at each point (at its foot on the sheet), banded as the legend is; and the points on
-    /// the part's outside, and the simulated part's, over the model's thinnest and thickest.
-    pub fn paint(&mut self, mesh: &PartMesh, key: usize) {
+    /// the part's outside over the model's thinnest and thickest: on a worker, once per mesh.
+    pub fn want_heat(&mut self, mesh: &PartMesh, key: usize, waker: &crate::gui::Waker) {
         if self.heat_for == key {
             return;
         }
-        self.heat_for = key;
-        self.heat.clear();
-        // the level the view's mesh has at a twentieth of a millimetre (its finest is a hundredth:
-        // far more triangles than a map needs), the map lifted clear of its chord
-        let Some(l) = mesh.lods.iter().find(|l| l.chord >= 0.04).or(mesh.lods.first()) else {
+        let mut m = self.made.lock().unwrap_or_else(|e| e.into_inner());
+        if m.heat_asked == Some(key) {
             return;
-        };
-        let (Some(field), Some(span)) = (&self.field, &self.part_span) else {
-            return;
-        };
-        // MIN and MAX: the outside's points whose sheet points are the model's thinnest and thickest
-        let (mut best_lo, mut best_hi) = ((f64::INFINITY, [0.0f32; 3]), (f64::INFINITY, [0.0f32; 3]));
-        let (target_lo, target_hi) = self.at;
-        // on the part's outside: well off the sheet (its side on the tool is within a quarter of t)
-        let off = 0.6 * self.t;
-        let mut mark = |p: Point3, foot: Point3| {
-            if (p - foot).length() > off {
-                for (best, target) in [(&mut best_lo, target_lo), (&mut best_hi, target_hi)] {
-                    let d = (foot - target).length_sq();
-                    if d < best.0 {
-                        *best = (d, f3(p));
-                    }
-                }
-            }
-        };
-        let idx = |k: usize| u32::from_le_bytes(l.indices[k * 4..k * 4 + 4].try_into().expect("4 bytes"));
-        let mut tris = vec![];
-        for f in l.faces.iter().filter(|f| span.faces.contains(&f.face)) {
-            for t in f.first_tri..f.first_tri + f.tris {
-                let p = [0, 1, 2].map(|k| vertex_at(&l.vertices, idx(t as usize * 3 + k) as usize));
-                tris.push(p.map(|x| (x, x)));
-            }
         }
-        paint_mesh(&tris, field, self.range, &mut self.heat, &mut mark, Some(self.t));
-        if best_lo.0.is_finite() && best_hi.0.is_finite() {
-            self.extremes = Some((best_lo.1, best_hi.1));
+        let (Some(field), Some(span)) = (self.field.clone(), self.part_span.clone()) else {
+            return;
+        };
+        // the level the view's mesh has at a twentieth of a millimetre (its finest is a
+        // hundredth: far more triangles than a map needs), the map lifted clear of its chord
+        let Some(l) = mesh
+            .lods
+            .iter()
+            .find(|l| l.chord >= 0.04)
+            .or(mesh.lods.first())
+            .cloned()
+        else {
+            return;
+        };
+        m.heat_asked = Some(key);
+        let (range, at, t, made, waker) = (self.range, self.at, self.t, self.made.clone(), waker.clone());
+        std::thread::spawn(move || {
+            let (heat, ext) = paint(&l, &span, &field, range, at, t);
+            let mut m = made.lock().unwrap_or_else(|e| e.into_inner());
+            // a newer mesh asked meanwhile: this one is not kept
+            if m.heat_asked == Some(key) {
+                m.heat = Some((key, heat, ext));
+            }
+            drop(m);
+            waker();
+        });
+    }
+
+    /// Whether a worker is still making something asked for.
+    pub fn working(&self) -> bool {
+        let m = self.made.lock().unwrap_or_else(|e| e.into_inner());
+        (m.sim_asked && self.has_sim && self.sim.is_none())
+            || m.heat_asked.is_some_and(|k| k != self.heat_for)
+    }
+
+    /// `want_heat` and `want_sim` done here and now (for tests and shots).
+    pub fn made_now(&mut self, mesh: Option<&PartMesh>) {
+        if let (Some(mesh), Some(field), Some(span)) = (mesh, &self.field, &self.part_span)
+            && let Some(l) = mesh.lods.iter().find(|l| l.chord >= 0.04).or(mesh.lods.first())
+        {
+            let (heat, ext) = paint(l, span, field, self.range, self.at, self.t);
+            self.heat = heat;
+            self.extremes = ext.or(self.extremes);
+        }
+        if self.has_sim && self.sim.is_none() {
+            let (tx, rx) = std::sync::mpsc::channel::<()>();
+            let waker: crate::gui::Waker = std::sync::Arc::new(move || {
+                let _ = tx.send(());
+            });
+            self.want_sim(&waker);
+            let _ = rx.recv();
+            self.take_made();
         }
     }
+}
+
+/// `Gfx::want_heat`'s painting of level `l`.
+fn paint(
+    l: &Lod,
+    span: &Span,
+    field: &forge_thermo::WallField,
+    range: (f64, f64),
+    at: (Point3, Point3),
+    t: f64,
+) -> (Vec<WorldVert>, Option<Pins>) {
+    // MIN and MAX: the outside's points whose sheet points are the model's thinnest and thickest
+    let (mut best_lo, mut best_hi) = ((f64::INFINITY, [0.0f32; 3]), (f64::INFINITY, [0.0f32; 3]));
+    let (target_lo, target_hi) = at;
+    // on the part's outside: well off the sheet (its side on the tool is within a quarter of t)
+    let off = 0.6 * t;
+    let mut mark = |p: Point3, foot: Point3| {
+        if (p - foot).length() > off {
+            for (best, target) in [(&mut best_lo, target_lo), (&mut best_hi, target_hi)] {
+                let d = (foot - target).length_sq();
+                if d < best.0 {
+                    *best = (d, f3(p));
+                }
+            }
+        }
+    };
+    let idx = |k: usize| u32::from_le_bytes(l.indices[k * 4..k * 4 + 4].try_into().expect("4 bytes"));
+    let mut tris = vec![];
+    for f in l.faces.iter().filter(|f| span.faces.contains(&f.face)) {
+        for t in f.first_tri..f.first_tri + f.tris {
+            let p = [0, 1, 2].map(|k| vertex_at(&l.vertices, idx(t as usize * 3 + k) as usize));
+            tris.push(p.map(|x| (x, x)));
+        }
+    }
+    let mut heat = vec![];
+    paint_mesh(&tris, field, range, &mut heat, &mut mark, Some(t));
+    let ext = (best_lo.0.is_finite() && best_hi.0.is_finite()).then_some((best_lo.1, best_hi.1));
+    (heat, ext)
 }
 
 /// How long a side of a painted triangle is at most, mm: the wall is looked up at every corner, so a
@@ -710,7 +825,7 @@ pub fn paint_mesh(
         .filter(|t| t[0] != t[1] && t[1] != t[2] && t[0] != t[2])
         .collect();
     split_mesh(&mut pts, &mut mesh);
-    let wall: Vec<Option<(f64, Point3)>> = pts.iter().map(|c| field.raw_at(c.1)).collect();
+    let wall: Vec<Option<(f64, Point3)>> = forge_math::par::map(pts.len(), |i| field.raw_at(pts[i].1));
     // each corner's lift off the face: the mesh's normal there by area (a sliver turned over
     // weighs nothing), the same for every triangle at it, so no piece leaves a crack or sinks
     let mut normal = vec![Vec3::ZERO; pts.len()];

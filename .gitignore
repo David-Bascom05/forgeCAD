@@ -13,6 +13,8 @@ __pycache__/
 /tools/bench-parts/block.ttf
 /interface/forge-lang/target
 target/
+# any build directory a worktree makes beside its target (target-ref, target-*)
+target*/
 
 # vendor CAD a user downloaded themselves (stdparts/README.md): never committed
 vendor-parts/

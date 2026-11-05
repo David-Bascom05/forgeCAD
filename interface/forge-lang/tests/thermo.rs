@@ -305,3 +305,25 @@ fn an_assembly_draws_a_formed_part_without_its_mould_and_keeps_the_mould_as_tool
     assert_eq!(tool.faces.len(), faces(o.mould_solid));
     assert_eq!(a.interferences, 0);
 }
+
+/// Opening shows the part built without its checks first: the checked build after it reuses
+/// every stage and still forms the sheet, the same as a checked build from nothing.
+#[test]
+fn the_shape_first_then_its_checks_reuses_the_stages() {
+    let s = src("cup");
+    let quick = Options {
+        checks: false,
+        ..Options::default()
+    };
+    let (shape, cache) = forge_lang::run(&s, quick, Default::default());
+    assert!(shape.body.is_some());
+    assert!(shape.thermos.iter().all(|t| t.sim.is_none()));
+    let (checked, _) = forge_lang::run(&s, Options::default(), cache);
+    assert_eq!(checked.rebuilt, 0, "every stage reused");
+    let fresh = run(&s);
+    assert_eq!(checked.thermos.len(), fresh.thermos.len());
+    for (a, b) in checked.thermos.iter().zip(&fresh.thermos) {
+        assert_eq!(a.walls, b.walls);
+        assert_eq!(a.sim, b.sim);
+    }
+}

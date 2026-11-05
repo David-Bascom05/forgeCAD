@@ -9,6 +9,8 @@
 use crate::build::{Formed, Spec, Tool, inside, polygon};
 use crate::field::Field;
 use forge_math::{Point2, Point3, Vec3, dmath};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Barrier, Mutex, RwLock};
 
 /// An incompressible Ogden law: W = sum mu_i / alpha_i (l1^a + l2^a + l3^a - 3), mu in MPa.
 #[derive(Clone, Debug, PartialEq)]
@@ -71,6 +73,7 @@ pub struct Stretch {
     pub iterations: usize,
 }
 
+#[derive(Clone)]
 struct Tri {
     v: [usize; 3],
     /// The inverse of the reference edge matrix, and the reference volume.
@@ -93,8 +96,9 @@ fn pw(x: f64, a: f64) -> f64 {
     }
 }
 
-/// Energy of one triangle and its gradient, or None where it is turned inside out.
-fn element(law: &Law, t: &Tri, x: &[Vec3], g: Option<&mut [Vec3]>) -> Option<f64> {
+/// Energy of one triangle and its gradient at its second and third corners (the first's is
+/// minus both), or None where it is turned inside out.
+fn element(law: &Law, t: &Tri, x: &[Vec3]) -> Option<(f64, Vec3, Vec3)> {
     let (x0, x1, x2) = (x[t.v[0]], x[t.v[1]], x[t.v[2]]);
     let (e1, e2) = (x1 - x0, x2 - x0);
     let f0 = e1 * t.dinv[0][0] + e2 * t.dinv[1][0];
@@ -131,7 +135,6 @@ fn element(law: &Law, t: &Tri, x: &[Vec3], g: Option<&mut [Vec3]>) -> Option<f64
         g1 += mu * (p1 - p3) / l1;
         g2 += mu * (p2 - p3) / l2;
     }
-    let Some(g) = g else { return Some(t.vol * w) };
     // S = sum (dW/dl_a / l_a) N_a N_a^T
     let (k1, k2) = (g1 / l1, g2 / l2);
     let (sxx, sxy, syy) = if disc <= 1e-12 * (a + c) {
@@ -157,20 +160,131 @@ fn element(law: &Law, t: &Tri, x: &[Vec3], g: Option<&mut [Vec3]>) -> Option<f64
     let p1 = (f0 * sxy + f1 * syy) * t.vol;
     let ga = p0 * t.dinv[0][0] + p1 * t.dinv[0][1];
     let gb = p0 * t.dinv[1][0] + p1 * t.dinv[1][1];
-    g[t.v[1]] += ga;
-    g[t.v[2]] += gb;
-    g[t.v[0]] = g[t.v[0]] - ga - gb;
-    Some(t.vol * w)
+    Some((t.vol * w, ga, gb))
 }
 
-struct Sheet<'a> {
-    law: &'a Law,
+/// The triangles' energies on all cores: workers kept for the whole solve, each its share of the
+/// triangles per call; the answers come back in triangle order, so they are summed as one thread
+/// would sum them.
+struct Pool {
+    shared: Arc<Shared>,
+    workers: Vec<std::thread::JoinHandle<()>>,
+}
+
+/// A triangle's energy and its gradient at its second and third corners.
+type Part = (f64, Vec3, Vec3);
+
+struct Shared {
+    law: Law,
+    tris: Vec<Tri>,
+    x: RwLock<Vec<Vec3>>,
+    stop: AtomicBool,
+    start: Barrier,
+    done: Barrier,
+    out: Vec<Mutex<Vec<Option<Part>>>>,
+}
+
+impl Shared {
+    fn share(&self, w: usize) -> std::ops::Range<usize> {
+        let n = self.out.len();
+        w * self.tris.len() / n..(w + 1) * self.tris.len() / n
+    }
+
+    fn run(&self, w: usize, x: &[Vec3]) {
+        let mut o = self.out[w].lock().unwrap_or_else(|e| e.into_inner());
+        o.clear();
+        o.extend(self.tris[self.share(w)].iter().map(|t| element(&self.law, t, x)));
+    }
+}
+
+impl Pool {
+    /// Below this many triangles a call is not worth sharing out.
+    const MIN: usize = 1024;
+
+    fn new(law: &Law, tris: &[Tri]) -> Pool {
+        let n = forge_math::par::threads().min(tris.len() / 256).max(1);
+        let shared = Arc::new(Shared {
+            law: law.clone(),
+            tris: tris.to_vec(),
+            x: RwLock::new(vec![]),
+            stop: AtomicBool::new(false),
+            start: Barrier::new(n),
+            done: Barrier::new(n),
+            out: (0..n).map(|_| Mutex::new(vec![])).collect(),
+        });
+        let workers = if n > 1 && tris.len() >= Self::MIN {
+            (1..n)
+                .map(|w| {
+                    let s = shared.clone();
+                    std::thread::spawn(move || {
+                        loop {
+                            s.start.wait();
+                            if s.stop.load(Ordering::Acquire) {
+                                return;
+                            }
+                            let x = s.x.read().unwrap_or_else(|e| e.into_inner());
+                            s.run(w, &x);
+                            drop(x);
+                            s.done.wait();
+                        }
+                    })
+                })
+                .collect()
+        } else {
+            vec![]
+        };
+        Pool { shared, workers }
+    }
+
+    /// Each triangle's energy and gradient at `x`, in order (None: one is turned inside out).
+    fn each(&self, x: &[Vec3], f: &mut dyn FnMut(usize, (f64, Vec3, Vec3))) -> Option<()> {
+        let s = &self.shared;
+        if self.workers.is_empty() {
+            for (k, t) in s.tris.iter().enumerate() {
+                f(k, element(&s.law, t, x)?);
+            }
+            return Some(());
+        }
+        {
+            let mut shared_x = s.x.write().unwrap_or_else(|e| e.into_inner());
+            shared_x.clear();
+            shared_x.extend_from_slice(x);
+        }
+        s.start.wait();
+        s.run(0, x);
+        s.done.wait();
+        let mut k = 0;
+        for o in &s.out {
+            for e in o.lock().unwrap_or_else(|e| e.into_inner()).iter() {
+                f(k, (*e)?);
+                k += 1;
+            }
+        }
+        Some(())
+    }
+}
+
+impl Drop for Pool {
+    fn drop(&mut self) {
+        if self.workers.is_empty() {
+            return;
+        }
+        self.shared.stop.store(true, Ordering::Release);
+        self.shared.start.wait();
+        for w in self.workers.drain(..) {
+            let _ = w.join();
+        }
+    }
+}
+
+struct Sheet {
+    pool: Pool,
     tris: Vec<Tri>,
     idx: Vec<[usize; 3]>,
     free: Vec<bool>,
 }
 
-impl Sheet<'_> {
+impl Sheet {
     /// The membrane's energy plus the pressure's work (p times the signed volume under the
     /// sheet), and its gradient on the free nodes.
     fn energy(&self, x: &[Vec3], p: f64, mut g: Option<&mut Vec<Vec3>>) -> Option<f64> {
@@ -178,8 +292,15 @@ impl Sheet<'_> {
             g.iter_mut().for_each(|v| *v = Vec3::ZERO);
         }
         let mut e = 0.0;
-        for (t, v) in self.tris.iter().zip(&self.idx) {
-            e += element(self.law, t, x, g.as_deref_mut().map(|g| g.as_mut_slice()))?;
+        self.pool.each(x, &mut |k, (w, ga, gb)| {
+            let v = &self.idx[k];
+            e += w;
+            if let Some(g) = g.as_deref_mut() {
+                let t = &self.tris[k];
+                g[t.v[1]] += ga;
+                g[t.v[2]] += gb;
+                g[t.v[0]] = g[t.v[0]] - ga - gb;
+            }
             if p != 0.0 {
                 let (a, b, c) = (x[v[0]], x[v[1]], x[v[2]]);
                 e += p / 6.0 * a.dot(b.cross(c));
@@ -189,7 +310,7 @@ impl Sheet<'_> {
                     g[v[2]] += a.cross(b) * (p / 6.0);
                 }
             }
-        }
+        })?;
         if let Some(g) = g {
             for (gi, &f) in g.iter_mut().zip(&self.free) {
                 if !f {
@@ -465,7 +586,7 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
         }
     }
     let mut sheet = Sheet {
-        law: &pr.law,
+        pool: Pool::new(&pr.law, &tris),
         tris,
         idx: idx.clone(),
         free,

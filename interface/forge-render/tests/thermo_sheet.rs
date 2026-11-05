@@ -29,8 +29,9 @@ fn the_view_hides_a_solid_by_its_eye_and_draws_the_simulated_part_unpicked() {
     let src = include_str!("../../../examples/thermoform/cover.fg");
     let r = forge_lang::run(src, Default::default(), Default::default()).0;
     let o = r.thermos.first().expect("the cover's thermoform");
-    let (row, gfx) = view(o, &r.solids, 3.0);
+    let (row, mut gfx) = view(o, &r.solids, 3.0);
     let full = forge_render::tess::build_part(r.body.as_ref().unwrap()).unwrap();
+    gfx.made_now(None);
     let mould = gfx.mould_span.clone().expect("the mould's faces");
     let part = gfx.part_span.clone().expect("the part's faces");
     // simulated, mould shown: the modelled part's faces go, the simulated part's come, unpicked
@@ -73,7 +74,7 @@ fn the_colours_at_min_and_max_are_the_legends_in_both_states() {
     let o = r.thermos.first().expect("the cover's thermoform");
     let (_, mut gfx) = view(o, &r.solids, 3.0);
     let full = forge_render::tess::build_part(r.body.as_ref().unwrap()).unwrap();
-    gfx.paint(&full, 1);
+    gfx.made_now(Some(&full));
     let (lo, hi) = gfx.extremes.expect("MIN and MAX on the modelled part");
     let (slo, shi) = gfx.sim_extremes.expect("MIN and MAX on the simulated part");
     // the colour the map has nearest a point
@@ -95,11 +96,11 @@ fn the_colours_at_min_and_max_are_the_legends_in_both_states() {
     assert_eq!(nearest(&gfx.sim_heat, slo), unlit(BANDS[9]), "MIN, simulated");
     assert_eq!(nearest(&gfx.sim_heat, shi), unlit(BANDS[0]), "MAX, simulated");
     // painted again (another mesh, another frame): the same places
-    gfx.paint(&full, 2);
+    gfx.made_now(Some(&full));
     assert_eq!(gfx.extremes, Some((lo, hi)));
     assert_eq!(gfx.sim_extremes, Some((slo, shi)));
     let (_, mut again) = view(o, &r.solids, 3.0);
-    again.paint(&full, 1);
+    again.made_now(Some(&full));
     assert_eq!(again.extremes, Some((lo, hi)));
     assert_eq!(again.sim_extremes, Some((slo, shi)));
     // every band is on the part, the extremes' too

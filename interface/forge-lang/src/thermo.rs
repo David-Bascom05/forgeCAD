@@ -1319,8 +1319,17 @@ fn thermoform(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
             let spec = sized(&spec, &m, prep.t);
             let st = walls.as_ref().filter(|_| ev.checks).map(|pr| {
                 let key = format!("thermoform walls {key} {pr:?}");
+                let key_of = key.clone();
                 let t0 = std::time::Instant::now();
-                let st = ev.b.memo(key, || Rc::new(ft::stretch(&f, &spec, pr)));
+                let st = ev.b.memo(key, || {
+                    // kept on disk by all it is made from: the same, bit for bit
+                    let disk = crate::thermo_kept::key("thermo-stretch", &key_of, &id, &mb);
+                    Rc::new(crate::thermo_kept::get_stretch(disk).unwrap_or_else(|| {
+                        let s = ft::stretch(&f, &spec, pr);
+                        crate::thermo_kept::put_stretch(disk, &s);
+                        s
+                    }))
+                });
                 ev.b.kernel_ms += t0.elapsed().as_secs_f64() * 1e3;
                 st
             });
@@ -1340,6 +1349,7 @@ fn thermoform(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
             // the part as the model leaves it, and the modelled one's mass, both kept with it
             let sim = st.as_ref().map(|w| {
                 let key = format!("thermoform simulated 2 {key} {walls:?}");
+                let key_of = key.clone();
                 ev.b.memo(key, || {
                     let trim = ft::build::polygon(&f.trim);
                     let on = ft::OnTool {
@@ -1351,7 +1361,14 @@ fn thermoform(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
                     // side on the tool, finely meshed, so the rounds are smooth (about 0.3 s)
                     let sheet = ft::simulated_on(&f.frame, &trim, w, prep.t, &on, 1);
                     let field = ft::WallField::of(&sheet, 3.0 * prep.t);
-                    let part = ft::simulated_part(&f.part, &f.frame, &on, &field, prep.t, 3.0);
+                    let disk = crate::thermo_kept::key("thermo-sim", &key_of, &id, &mb);
+                    let part = crate::thermo_kept::get_sim(disk).or_else(|| {
+                        let part = ft::simulated_part(&f.part, &f.frame, &on, &field, prep.t, 3.0);
+                        if let Some(p) = &part {
+                            crate::thermo_kept::put_sim(disk, p);
+                        }
+                        part
+                    });
                     (Rc::new(part.unwrap_or(sheet)), Rc::new(field))
                 })
             });

@@ -31,13 +31,27 @@ impl Gui {
             self.shell.inspect.physical_more = more;
         }
         // the wall's colours on the part's own faces, painted again for each new mesh of it
-        if let (Some(m), Some(g)) = (&self.fg_folded, self.fg_walls.first_mut()) {
-            let key = m
-                .lods
-                .first()
-                .map_or(0, |l| l.vertices.len() * 31 + l.indices.len())
-                ^ (g.range.0.to_bits() as usize).rotate_left(7);
-            g.paint(m, key);
+        // made only when shown, on workers: the part is on screen before them
+        if let (Some(p), Some(g)) = (&mut self.shell.fg, self.fg_walls.first_mut()) {
+            if g.take_made() {
+                p.thermo.drawn = None;
+                if let Some(v) = &mut self.view {
+                    v.dirty = true;
+                }
+            }
+            if p.thermo.simulated {
+                g.want_sim(&self.waker);
+            }
+            if p.thermo.analysis == crate::shell::thermo_ui::Analysis::Thickness
+                && let Some(m) = &self.fg_folded
+            {
+                let key = m
+                    .lods
+                    .first()
+                    .map_or(0, |l| l.vertices.len() * 31 + l.indices.len())
+                    ^ (g.range.0.to_bits() as usize).rotate_left(7);
+                g.want_heat(m, key, &self.waker);
+            }
         }
         if let (Some(p), Some(g)) = (&mut self.shell.fg, self.fg_walls.first())
             && p.asm.is_none()
