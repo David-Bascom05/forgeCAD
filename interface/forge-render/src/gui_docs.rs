@@ -430,6 +430,14 @@ impl Gui {
         }
     }
 
+    /// The tab of a file that's gone (a made file the agent's Undo moved aside): closed, not
+    /// saved.
+    pub(super) fn close_file(&mut self, path: &str) {
+        if let Some(i) = self.docs.iter().position(|d| d.is(path, None)) {
+            self.close_document(i, false);
+        }
+    }
+
     /// Files the chrome asked to open (a new drawing, a part from its assembly): each in its tab.
     pub(super) fn open_asked(&mut self) {
         for p in std::mem::take(&mut self.shell.open_paths) {

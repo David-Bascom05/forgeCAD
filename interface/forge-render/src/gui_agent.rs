@@ -260,6 +260,7 @@ impl Gui {
                 {
                     self.agent_open(&back);
                 }
+                self.close_file(&f.path);
                 self.shell.status = format!("Moved {} aside to .forgecad-trash", name_of(&f.path));
             } else {
                 let from = f.trash.clone().ok_or("the file isn't in the trash")?;

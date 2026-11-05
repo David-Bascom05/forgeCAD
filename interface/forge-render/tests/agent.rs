@@ -711,6 +711,8 @@ fn a_file_the_agent_makes_opens_and_its_undo_moves_it_aside_and_goes_back() {
     let trash: Vec<_> = std::fs::read_dir(dir.join(".forgecad-trash")).unwrap().collect();
     assert_eq!(trash.len(), 1);
     assert_eq!(h.gui.agent_path().as_deref(), Some(plate.to_str().unwrap()));
+    // its tab closed, and the build thread with it
+    assert!(h.until(|_| forge_render::fg::builders_running() <= 1));
     // and the edit to the part, open again, is taken back in the app (unsaved, as an edit)
     assert!(h.click("agent:undo:0:0"));
     h.step();
@@ -719,15 +721,16 @@ fn a_file_the_agent_makes_opens_and_its_undo_moves_it_aside_and_goes_back() {
     h.step();
     assert!(Path::new(&window).exists());
     assert_eq!(h.gui.agent_path().as_deref(), Some(window.as_str()));
-    // a closed document's build thread ends on its own; the open one's when the app goes
+    // a closed document's build thread ends on its own; the open ones' (the part's and the made
+    // file's tabs) when the app goes
     h.settle();
     let t = std::time::Instant::now();
-    while forge_render::fg::builders_running() > 1 && t.elapsed().as_secs() < 60 {
+    while forge_render::fg::builders_running() > 2 && t.elapsed().as_secs() < 60 {
         h.step();
         std::thread::sleep(std::time::Duration::from_millis(20));
     }
     assert!(
-        forge_render::fg::builders_running() <= 1,
+        forge_render::fg::builders_running() <= 2,
         "{} build threads",
         forge_render::fg::builders_running()
     );
