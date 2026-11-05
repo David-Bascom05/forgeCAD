@@ -266,6 +266,9 @@ fn split_part_and_trim_solid_cut_on_a_work_plane() {
     h.gui.shell.out.push(forge_render::shell::Action::Undo);
     h.step();
     button(&mut h, "Split");
+    // the name is free again at once, before the undone text is built
+    let t = h.gui.shell.fg.as_ref().unwrap().tool.as_ref().unwrap();
+    assert_eq!(t.name, "split1");
     click(&mut h, "fg:tool:choice:Method:Trim Solid");
     choose(&mut h, "Split Tool", "half");
     let (src, run) = ok(&mut h, "trim");
@@ -580,4 +583,20 @@ fn the_right_buttons_ok_and_cancel_close_a_dialog_as_its_buttons_do() {
     h.step();
     assert!(h.gui.shell.fg.as_ref().unwrap().tool.is_none());
     assert!(h.gui.fg.as_ref().unwrap().src.contains("chamfer1 = chamfer("));
+}
+
+#[test]
+fn a_tool_opened_in_the_frame_of_an_undo_takes_the_freed_name() {
+    let Some(mut h) = open("undo-name") else { return };
+    button(&mut h, "Split");
+    choose(&mut h, "Split Tool", "half");
+    let (src, _) = ok(&mut h, "split");
+    assert!(src.contains("split1 = split("), "{src}");
+    // the undo and the new tool in one frame: no build of the undone text can come between
+    let out = &mut h.gui.shell.out;
+    out.push(forge_render::shell::Action::Undo);
+    out.push(forge_render::shell::Action::NewFeature("split"));
+    h.step();
+    let t = h.gui.shell.fg.as_ref().unwrap().tool.as_ref().expect("the Split dialog");
+    assert_eq!(t.name, "split1");
 }

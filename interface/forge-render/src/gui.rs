@@ -3585,12 +3585,25 @@ impl Gui {
     /// A tool's form for a ribbon kind; one with no Forge form is refused, typed.
     pub fn fg_open_tool(&mut self, kind: &'static str) {
         let Some(p) = &mut self.shell.fg else { return };
-        let mut taken = crate::shell::fg::statements(&p.feats);
-        taken.extend(
-            p.params
-                .iter()
-                .filter_map(|x| x.key.owner.first().map(|s| s.name.clone())),
-        );
+        // the names the text has now: the browser's rows are the last build's, which an undo
+        // or an edit not yet built is ahead of
+        let src = self.fg.as_ref().map(|s| s.src.as_str());
+        let taken = match src.map(forge_lang::syntax::parse) {
+            Some(Ok(prog)) => {
+                let mut t = Vec::new();
+                statement_names(&prog, &mut t);
+                t
+            }
+            _ => {
+                let mut t = crate::shell::fg::statements(&p.feats);
+                t.extend(
+                    p.params
+                        .iter()
+                        .filter_map(|x| x.key.owner.first().map(|s| s.name.clone())),
+                );
+                t
+            }
+        };
         let dir = self
             .fg
             .as_ref()
@@ -3967,5 +3980,23 @@ impl Gui {
         self.fg_text();
         // the assemblies and drawings open that use it, at once
         self.check_files();
+    }
+}
+
+/// The names a program's statements give, in loops and branches too (a sketch's rows and a
+/// function's body are their own).
+fn statement_names(prog: &[forge_lang::syntax::Stmt], out: &mut Vec<String>) {
+    use forge_lang::syntax::StmtKind as K;
+    for st in prog {
+        match &st.kind {
+            K::Assign { name, .. } | K::Block { name, .. } | K::Fn { name, .. } => out.push(name.clone()),
+            K::Param { owner, .. } => out.extend(owner.first().map(|s| s.name.clone())),
+            K::For { body, .. } => statement_names(body, out),
+            K::If { then, other, .. } => {
+                statement_names(then, out);
+                statement_names(other.as_deref().unwrap_or_default(), out);
+            }
+            _ => {}
+        }
     }
 }
