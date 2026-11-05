@@ -612,14 +612,23 @@ mod tests {
         let now = Instant::now();
         let later = now + Duration::from_millis(600);
         // a tooltip's delay: the loop wakes at it, not only on the next key
-        assert_eq!(while_out(now, Some(later), None, false), (ControlFlow::WaitUntil(later), false));
+        assert_eq!(
+            while_out(now, Some(later), None, false),
+            (ControlFlow::WaitUntil(later), false)
+        );
         // due already: woken when the frame's back
-        assert_eq!(while_out(later, Some(now), None, false), (ControlFlow::Wait, true));
+        assert_eq!(
+            while_out(later, Some(now), None, false),
+            (ControlFlow::Wait, true)
+        );
         // nothing wanted: just waits; a pick to answer wakes it when back
         assert_eq!(while_out(now, None, None, false), (ControlFlow::Wait, false));
         assert_eq!(while_out(now, None, None, true), (ControlFlow::Wait, true));
         // the sooner of a wanted frame and the run's end
         let end = now + Duration::from_millis(100);
-        assert_eq!(while_out(now, Some(later), Some(end), false).0, ControlFlow::WaitUntil(end));
+        assert_eq!(
+            while_out(now, Some(later), Some(end), false).0,
+            ControlFlow::WaitUntil(end)
+        );
     }
 }

@@ -98,7 +98,11 @@ fn a_ribbon_button_takes_every_kind_of_click() {
         away(&mut h);
         let was = h.gui.shell.inspect.measure.is_some();
         tap(&mut h, "tool:Measure", how);
-        assert_ne!(h.gui.shell.inspect.measure.is_some(), was, "{how:?}: the click on Measure was lost");
+        assert_ne!(
+            h.gui.shell.inspect.measure.is_some(),
+            was,
+            "{how:?}: the click on Measure was lost"
+        );
     }
 }
 
@@ -113,7 +117,11 @@ fn a_browser_row_takes_every_kind_of_click() {
         h.step();
         tap(&mut h, "fg:row:extrude1", how);
         let picked = h.gui.shell.fg.as_ref().and_then(|f| f.selected.clone());
-        assert_eq!(picked.as_deref(), Some("extrude1"), "{how:?}: the click on the row was lost");
+        assert_eq!(
+            picked.as_deref(),
+            Some("extrude1"),
+            "{how:?}: the click on the row was lost"
+        );
     }
 }
 
@@ -123,17 +131,19 @@ fn a_dialog_button_takes_every_kind_of_click() {
     h.gui.shell.tab = 2;
     h.step();
     for how in TAPS {
-        h.gui
-            .shell
-            .out
-            .push(forge_render::shell::Action::Inspect(forge_render::shell::inspect::InspectCmd::Measure));
+        h.gui.shell.out.push(forge_render::shell::Action::Inspect(
+            forge_render::shell::inspect::InspectCmd::Measure,
+        ));
         for _ in 0..3 {
             h.step();
         }
         assert!(h.gui.shell.inspect.measure.is_some());
         away(&mut h);
         tap(&mut h, "measure:close:close", how);
-        assert!(h.gui.shell.inspect.measure.is_none(), "{how:?}: the click on Close was lost");
+        assert!(
+            h.gui.shell.inspect.measure.is_none(),
+            "{how:?}: the click on Close was lost"
+        );
     }
 }
 
@@ -153,7 +163,10 @@ fn a_click_in_the_view_takes_what_is_there_even_before_the_view_has_looked() {
         }
         tap_at(&mut h, at, how);
         let v = h.gui.view.as_ref().unwrap();
-        assert!(!v.nav.selected.is_empty(), "{how:?}: the click on the boss chose nothing");
+        assert!(
+            !v.nav.selected.is_empty(),
+            "{how:?}: the click on the boss chose nothing"
+        );
     }
 }
 
@@ -181,7 +194,10 @@ fn a_tooltip_comes_on_a_plain_rest_and_the_longer_one_after_it() {
         }
     }
     let secs = |k: Option<usize>| k.map(|k| k as f32 / 60.0);
-    let (a, b) = (secs(first).expect("no tooltip on a rest"), secs(longer).expect("no longer tooltip"));
+    let (a, b) = (
+        secs(first).expect("no tooltip on a rest"),
+        secs(longer).expect("no longer tooltip"),
+    );
     assert!((a - short).abs() < 0.1, "the tooltip came after {a} s");
     assert!((b - long).abs() < 0.1, "the longer one came after {b} s");
     // the delays are Settings': half a second sooner

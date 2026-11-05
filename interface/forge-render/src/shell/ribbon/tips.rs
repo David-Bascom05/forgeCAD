@@ -142,7 +142,9 @@ impl Shell {
         let rest = self.settings.tip_long as f64;
         let long = now - since >= rest;
         if resp.hovered() && !long {
-            ctx.request_repaint_after(std::time::Duration::from_secs_f64((rest - (now - since)).max(0.0)));
+            ctx.request_repaint_after(std::time::Duration::from_secs_f64(
+                (rest - (now - since)).max(0.0),
+            ));
         }
         let scope = scope(self);
         resp.on_hover_ui(|ui| self.tip_body(ui, scope, tool, long))
