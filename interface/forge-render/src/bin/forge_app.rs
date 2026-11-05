@@ -8,6 +8,7 @@ const USAGE: &str = "forge-app [PART | file.fc] [--size WxH] [--times]
   --hover X Y (the view's pick there) --clickat X Y --drag X Y X2 Y2 --snap FILE.ppm --save
   --viewnow YAW PITCH --home --zoom F (the camera's distance times F) --new-drawing
   --start-sketch (on XY) --rest NAME SECONDS (the pointer still on it, for its tooltip)
+  --open FILE (another document, in its own tab) --doc N (the Nth tab up)
   [--present fifo|mailbox|immediate] [--run-for SECONDS] [--spin]
   [--bench]
 PART: a bench part or a .fc file. --times: input-to-present on exit. --shot: one frame, no window.
@@ -20,6 +21,9 @@ enum Step {
     Wait,
     /// File > New Drawing.
     NewDrawing,
+    /// Another file, in a tab of its own; a tab brought up by its place in the strip.
+    Open(String),
+    Doc(usize),
     Type(String),
     Key(String),
     Hover(f32, f32),
@@ -117,6 +121,8 @@ fn args() -> Result<Args, String> {
                     .ok_or("--rest takes NAME SECONDS")?;
                 a.steps.push(Step::Rest(name, secs));
             }
+            "--open" => a.steps.push(Step::Open(v()?)),
+            "--doc" => a.steps.push(Step::Doc(v()?.parse().map_err(|_| "--doc N")?)),
             "--type" => a.steps.push(Step::Type(v()?)),
             "--key" => a.steps.push(Step::Key(v()?)),
             "--snap" => a.steps.push(Step::Snap(v()?)),
@@ -478,6 +484,22 @@ fn run() -> Result<(), String> {
                 h.gui.shell.out.push(forge_render::shell::Action::NewDrawing);
                 h.step();
                 h.step();
+                continue;
+            }
+            Step::Open(f) => {
+                h.gui.open(f);
+                wait(&mut h);
+                for _ in 0..5 {
+                    h.step();
+                }
+                continue;
+            }
+            Step::Doc(k) => {
+                h.gui.activate(*k);
+                wait(&mut h);
+                for _ in 0..5 {
+                    h.step();
+                }
                 continue;
             }
             Step::Type(t) => {
