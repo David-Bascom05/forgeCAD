@@ -62,3 +62,12 @@ open ForgeLang ForgeLang.Counter
 #print axioms ForgeLang.LL1.UnifiedImpl.grammar_ll1
 #print axioms ForgeLang.LL1.UnifiedImpl.reject_component_kwarg
 #print axioms ForgeLang.LL1.UnifiedImpl.nopredict_arg_component
+#print axioms move_down
+#print axioms move_up
+#print axioms replace_complete
+#print axioms scopedMove_ok
+#print axioms scopedReplace_ok
+#print axioms default_no_capture
+#print axioms occ_caller_indep
+#print axioms unqualified_shadow
+#print axioms qualify_string_collides
