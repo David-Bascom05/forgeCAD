@@ -376,6 +376,15 @@ fn extract(src: &str, name: &str, file: &str, read: &dyn Fn(&str) -> Option<Stri
     ) else {
         return Err(Error::UnknownFeature { id: name.into() });
     };
+    if !plain_name(file) {
+        return Err(comp_error(
+            prog[k].span,
+            CompProblem::NotInlinable {
+                file: file.into(),
+                why: "a new file is a plain name beside this one, ending .fg".into(),
+            },
+        ));
+    }
     if read(file).is_some() {
         return Err(comp_error(
             prog[k].span,
@@ -783,4 +792,40 @@ fn attr_chains(e: &Expr, out: &mut Vec<Vec<String>>) {
         }
         _ => {}
     }
+}
+
+/// A file a refactor may make: a plain name beside the document (no folder, no `..`, not
+/// absolute), ending `.fg`.
+pub fn plain_name(file: &str) -> bool {
+    let p = std::path::Path::new(file);
+    file.ends_with(".fg")
+        && file.len() > 3
+        && !file.contains(['/', '\\'])
+        && !file.starts_with('.')
+        && p.components().count() == 1
+        && matches!(p.components().next(), Some(std::path::Component::Normal(_)))
+}
+
+/// Writes a file a refactor made, in `dir`: refused unless its name is plain and nothing at all
+/// is there (a file, a directory, a link, dangling or not), and created new, never through a link.
+pub fn write_new(dir: &std::path::Path, file: &str, text: &str) -> std::io::Result<()> {
+    use std::io::Write;
+    if !plain_name(file) {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("{file}: not a plain .fg name"),
+        ));
+    }
+    let path = dir.join(file);
+    if std::fs::symlink_metadata(&path).is_ok() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::AlreadyExists,
+            format!("{file} exists already"),
+        ));
+    }
+    let mut f = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&path)?;
+    f.write_all(text.as_bytes())
 }

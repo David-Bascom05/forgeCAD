@@ -253,3 +253,36 @@ hinge = revolute(lid.hp, base.hp)
     assert_eq!(e.kind(), "StillReadBy", "{}", e.text());
     assert!(e.text().contains("j") && e.text().contains("k2"), "{}", e.text());
 }
+
+#[test]
+fn a_new_file_is_never_written_through_a_link_or_outside() {
+    use forge_lang::refactor::write_new;
+    let d = dir("write-new");
+    let target = d.join("victim.txt");
+    std::fs::write(&target, "keep").unwrap();
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::symlink(&target, d.join("cup.fg")).unwrap();
+        std::os::unix::fs::symlink(d.join("nowhere"), d.join("ghost.fg")).unwrap();
+        assert!(write_new(&d, "cup.fg", "x").is_err());
+        assert!(write_new(&d, "ghost.fg", "x").is_err());
+        assert!(!d.join("nowhere").exists());
+    }
+    for bad in ["../x.fg", "/tmp/x.fg", "a/b.fg", ".fg", "x.txt", ".."] {
+        assert!(write_new(&d, bad, "x").is_err(), "{bad}");
+    }
+    assert_eq!(std::fs::read_to_string(&target).unwrap(), "keep");
+    write_new(&d, "fresh.fg", "shared a = 1\n").unwrap();
+    assert!(write_new(&d, "fresh.fg", "again").is_err());
+    // the refactor itself refuses a name that is not plain
+    let e = apply_in(
+        &d,
+        PEGS,
+        &Refactor::ExtractComponent {
+            component: "peg".into(),
+            file: "../peg.fg".into(),
+        },
+    )
+    .unwrap_err();
+    assert_eq!(e.kind(), "NotInlinable", "{}", e.text());
+}

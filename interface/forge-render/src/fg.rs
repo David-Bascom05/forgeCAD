@@ -1514,20 +1514,31 @@ impl Session {
     /// A refactor between this file and others (Make / Extract / Inline Component): all or
     /// nothing, the files it makes written beside this one, one undo step for this file's text.
     pub fn refactor(&mut self, r: &forge_lang::refactor::Refactor) -> Result<Vec<String>, Error> {
+        let refused = |why: String| {
+            forge_lang::asm::comp_error(
+                forge_lang::syntax::Span::default(),
+                forge_lang::asm::CompProblem::NotInlinable {
+                    file: String::new(),
+                    why,
+                },
+            )
+        };
+        // beside the file only: an untitled document has nowhere to write (never the cwd)
         let dir = self
             .path
             .as_deref()
             .and_then(|f| std::fs::canonicalize(f).ok())
             .and_then(|f| f.parent().map(|d| d.to_path_buf()))
-            .unwrap_or_default();
-        let read = |f: &str| std::fs::read_to_string(dir.join(f)).ok();
+            .ok_or_else(|| refused("save this file first: a moved component goes beside it".into()))?;
+        // what is there is there: a name, a link, dangling or not, reads as taken
+        let read = |f: &str| {
+            std::fs::read_to_string(dir.join(f))
+                .ok()
+                .or_else(|| std::fs::symlink_metadata(dir.join(f)).ok().map(|_| String::new()))
+        };
         let w = forge_lang::refactor::apply_checked(&self.src, r, &read)?;
         for (f, t) in &w.files {
-            std::fs::write(dir.join(f), t).map_err(|e| Error::BadValue {
-                span: forge_lang::syntax::Span::default(),
-                what: "a file written",
-                value: e.raw_os_error().unwrap_or(0) as f64,
-            })?;
+            forge_lang::refactor::write_new(&dir, f, t).map_err(|e| refused(e.to_string()))?;
         }
         self.set_text(w.doc);
         Ok(w.files.into_iter().map(|f| f.0).collect())
