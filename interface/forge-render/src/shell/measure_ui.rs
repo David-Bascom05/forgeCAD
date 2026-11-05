@@ -235,6 +235,7 @@ impl Shell {
             painter: &painter,
             taken: vec![],
             places: vec![],
+            boxes: vec![],
         };
         let line = Stroke::new(1.5, INK);
         for s in &r.shown {
@@ -380,7 +381,7 @@ impl Shell {
                 }
             }
         }
-        let places = labels.places;
+        let places = labels.finish();
         self.places.extend(places);
     }
 }
@@ -443,6 +444,8 @@ struct Labels<'a> {
     painter: &'a egui::Painter,
     taken: Vec<Rect>,
     places: Vec<(String, Rect)>,
+    /// Drawn last, over every line, arrow and leader: nothing crosses a label.
+    boxes: Vec<(Rect, std::sync::Arc<egui::Galley>)>,
 }
 
 impl Labels<'_> {
@@ -460,12 +463,19 @@ impl Labels<'_> {
             let to = pos2(anchor.x.clamp(r.left(), r.right()), anchor.y.clamp(r.top(), r.bottom()));
             self.painter.line_segment([anchor, to], leader);
         }
-        self.painter.rect_filled(r, 3.0, GROUND);
-        self.painter
-            .rect_stroke(r, 3.0, Stroke::new(1.0, INK.gamma_multiply(0.6)), egui::StrokeKind::Inside);
-        self.painter.galley(r.min + vec2(5.0, 3.0), g, INK);
         self.taken.push(r);
+        self.boxes.push((r, g));
         self.places.push((format!("measure:mark:{key}"), r));
+    }
+
+    fn finish(self) -> Vec<(String, Rect)> {
+        for (r, g) in self.boxes {
+            self.painter.rect_filled(r, 3.0, GROUND);
+            self.painter
+                .rect_stroke(r, 3.0, Stroke::new(1.0, INK.gamma_multiply(0.6)), egui::StrokeKind::Inside);
+            self.painter.galley(r.min + vec2(5.0, 3.0), g, INK);
+        }
+        self.places
     }
 }
 

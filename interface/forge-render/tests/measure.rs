@@ -603,28 +603,37 @@ fn changed_off_the_part(h: &Headless, before: &forge_render::gui::Pixels, after:
 
 #[test]
 fn a_picked_face_is_tinted_on_itself_and_nowhere_else() {
-    let Some(mut h) = open("tint") else { return };
+    tinted_on_itself(TOP, "tint");
+}
+
+#[test]
+fn a_picked_cylinder_is_drawn_on_itself_and_nowhere_else() {
+    tinted_on_itself([0.0, -12.0, 15.0], "tint-cyl");
+}
+
+fn tinted_on_itself(world: [f32; 3], tag: &str) {
+    let Some(mut h) = open(tag) else { return };
     measure(&mut h);
-    let (at, _) = hover(&mut h, TOP);
+    let (at, _) = hover(&mut h, world);
     h.move_to(5.0, 5.0);
     for _ in 0..10 {
         h.step();
     }
     let before = h.gui_pixels();
     h.move_to(at.0, at.1);
-    click(&mut h, TOP);
+    click(&mut h, world);
     let _ = reading(&mut h);
     for _ in 0..10 {
         h.step();
     }
     let hovered = h.gui_pixels();
     let n = changed_off_the_part(&h, &before, &hovered);
-    assert!(n < 50, "{n} pixels off the part changed with the top face picked and hovered");
+    assert!(n < 50, "{n} pixels off the part changed with the face picked and hovered");
     h.move_to(5.0, 5.0);
     for _ in 0..10 {
         h.step();
     }
     let picked = h.gui_pixels();
     let n = changed_off_the_part(&h, &before, &picked);
-    assert!(n < 50, "{n} pixels off the part changed with the top face picked");
+    assert!(n < 50, "{n} pixels off the part changed with the face picked");
 }
