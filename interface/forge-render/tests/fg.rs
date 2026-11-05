@@ -344,7 +344,7 @@ fn a_warm_rebuild_in_the_app_is_milliseconds() {
     unchanged.sort_by(f64::total_cmp);
     let summary = h.gui.shell.fg.as_ref().unwrap().summary.clone();
     assert!(summary.contains("rebuilt 0"), "{summary}");
-    // the last feature's param: one stage rebuilt
+    // the last feature's param: one stage rebuilt, then the values tried before none
     let mut late = vec![];
     for r in [1.25, 1.5, 1.25, 1.5, 1.25] {
         h.gui
@@ -369,7 +369,8 @@ fn a_warm_rebuild_in_the_app_is_milliseconds() {
     assert!(h.until(|g| g.fg.as_ref().is_some_and(|s| s.whole == s.seq)));
     let whole_ms = h.gui.fg.as_ref().unwrap().whole_ms;
     let late_summary = h.gui.shell.fg.as_ref().unwrap().summary.clone();
-    assert!(late_summary.contains("rebuilt 1,"), "{late_summary}");
+    // a value the session built before is served its kept stage: nothing rebuilt
+    assert!(late_summary.contains("rebuilt 0,"), "{late_summary}");
     eprintln!(
         "bracket.fg in the app: unchanged rebuild median {:.1} ms ({summary}); last param edited median {:.1} ms on screen ({late_summary}), whole mesh after it {whole_ms:.1} ms",
         unchanged[2], late[2]

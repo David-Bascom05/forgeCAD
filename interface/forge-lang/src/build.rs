@@ -16,6 +16,9 @@ pub struct Stage {
     pub solids: Vec<Solid>,
     view: OnceCell<Body>,
     spans: OnceCell<Vec<Span>>,
+    /// Which stage this is, never another's: equal ids, the same stage (a kept one served again
+    /// has its own).
+    pub id: u64,
 }
 
 /// Where one solid's faces and edges are in the stage's joined body.
@@ -28,10 +31,12 @@ pub struct Span {
 
 impl Stage {
     pub fn new(solids: Vec<Solid>) -> Stage {
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
         Stage {
             solids,
             view: OnceCell::new(),
             spans: OnceCell::new(),
+            id: NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
         }
     }
 
@@ -90,8 +95,9 @@ pub struct Cache {
     features: Vec<Feature>,
     ids: Vec<u64>,
     stages: Vec<Rc<Stage>>,
-    /// The finished part's measures, with the stage they were taken of.
-    pub measured: Option<(Rc<Stage>, crate::Measure)>,
+    /// The finished part's measures, by the stage they were taken of (by its id; the stage held,
+    /// so the id is its), the last `MEASURES` of them.
+    pub measured: Vec<(Rc<Stage>, crate::Measure)>,
     /// An assembly's loaded parts, solver and checker, kept between runs (`asm.rs`).
     pub asm: Option<Box<crate::asm::AsmCache>>,
     /// Work done outside the kernel's history (a sheet's builds and shop checks), by a key
@@ -146,6 +152,8 @@ struct Kept {
 
 /// How many stages a session keeps beyond its last run's.
 const KEPT: usize = 512;
+/// How many stages' measures a session keeps.
+const MEASURES: usize = 16;
 /// How many memo entries (`Builder::memo`) a session keeps beyond its last run's.
 const MEMO_KEPT: usize = 128;
 
@@ -316,13 +324,19 @@ impl Builder {
 
     /// The measures of the finished part, if the last run took them of this same stage.
     pub fn measured(&self) -> Option<crate::Measure> {
-        let (st, m) = self.cache.measured.as_ref()?;
-        Rc::ptr_eq(st, self.stages.last()?).then(|| m.clone())
+        let last = self.stages.last()?;
+        let (_, m) = self.cache.measured.iter().find(|(st, _)| Rc::ptr_eq(st, last))?;
+        Some(m.clone())
     }
 
     pub fn keep_measure(&mut self, m: crate::Measure) {
         if let Some(st) = self.stages.last() {
-            self.cache.measured = Some((st.clone(), m));
+            let kept = &mut self.cache.measured;
+            kept.retain(|(s, _)| !Rc::ptr_eq(s, st));
+            if kept.len() >= MEASURES {
+                kept.remove(0);
+            }
+            kept.push((st.clone(), m));
         }
     }
 
@@ -472,6 +486,11 @@ impl Builder {
 
     pub fn history(&self) -> History<'_> {
         History::new(&self.features, Some(&self.ids))
+    }
+
+    /// The id of the stage the part stands at (`Stage::id`), 0 before any.
+    pub fn stage_id(&self) -> u64 {
+        self.stages.last().map_or(0, |s| s.id)
     }
 
     /// The part as it stands, joined.

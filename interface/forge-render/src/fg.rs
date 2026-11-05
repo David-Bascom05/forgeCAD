@@ -703,7 +703,7 @@ fn work(
     // an assembly's meshes by part content, and the placements' meshes last shown
     let mut asm_meshes = AsmMeshes::default();
     let mut asm_shape: Option<Vec<usize>> = None;
-    let mut shown_ids: Option<Vec<String>> = None;
+    let mut shown_ids: Option<(Vec<String>, u64)> = None;
     // the text the last anchors were found for: unchanged text, unchanged anchors
     let mut anchored: Option<String> = None;
     // the body on screen, for Measure
@@ -942,11 +942,13 @@ fn work(
             let build_ms = t.elapsed().as_secs_f64() * 1e3;
             let t = Instant::now();
             let ids: Vec<String> = run.feats.iter().map(|f| f.id.clone()).collect();
-            // all stages reused and the same features: the same body, already on screen
-            let same = run.rebuilt == 0 && shown_ids.as_ref() == Some(&ids);
+            // the very stage on screen, and the same features: nothing to show again (a kept stage
+            // served for an edit taken back is another stage than the one shown)
+            let now = (ids, run.stage);
+            let same = run.stage != 0 && shown_ids.as_ref() == Some(&now);
             let changed = run.body.as_ref().filter(|_| !same);
             if changed.is_some() {
-                shown_ids = Some(ids);
+                shown_ids = Some(now);
             }
             if let Some(b) = changed {
                 last_body = Some(Arc::new(b.clone()));

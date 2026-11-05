@@ -162,6 +162,8 @@ pub struct Run {
     pub threads: Vec<holes::Cosmetic>,
     /// Where each solid is in `body`: its faces and edges.
     pub solids: Vec<build::Span>,
+    /// The stage `body` is (`build::Stage::id`): equal ids, the very same body.
+    pub stage: u64,
     /// An assembly's solve, checks and timings (`asm.rs`).
     pub asm: Option<asm::AsmOut>,
     /// With `Options::anchors`: the anchor text of each face and edge of the finished part.
@@ -208,6 +210,7 @@ pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
                     thermos: vec![],
                     threads: vec![],
                     solids: vec![],
+                    stage: 0,
                     asm: None,
                     anchors: None,
                     props: props::Props::default(),
@@ -293,6 +296,7 @@ pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
         } else {
             vec![]
         },
+        stage: if built_all { ev.b.stage_id() } else { 0 },
         asm: asm_out,
         anchors: None,
         props: std::mem::take(&mut ev.props),
