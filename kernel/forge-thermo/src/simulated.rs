@@ -184,6 +184,72 @@ impl<'a> Near<'a> {
     }
 }
 
+/// Where the formed part lies on the tool: its surface (within `on` of it) or the trim plane
+/// (flat on it), as the simulated part tells its side on the tool from the rest. Owned, for the
+/// view's workers.
+#[derive(Clone, Debug)]
+pub struct ToolSide {
+    frame: Frame,
+    on: f64,
+    tris: Vec<[Point3; 3]>,
+    cell: f64,
+    cells: HashMap<(i64, i64, i64), Vec<u32>>,
+}
+
+impl ToolSide {
+    pub fn new(frame: &Frame, tool: &OnTool, on: f64) -> ToolSide {
+        let tris: Vec<[Point3; 3]> = tool
+            .contact
+            .iter()
+            .map(|&k| tool.mesh.triangles[k].map(|i| tool.mesh.positions[i as usize]))
+            .collect();
+        let cell = (4.0 * on).max(0.5);
+        let key = |v: f64| (v / cell).floor() as i64;
+        let mut cells: HashMap<(i64, i64, i64), Vec<u32>> = HashMap::new();
+        for (k, [a, b, c]) in tris.iter().enumerate() {
+            let lo = [a.x.min(b.x).min(c.x), a.y.min(b.y).min(c.y), a.z.min(b.z).min(c.z)];
+            let hi = [a.x.max(b.x).max(c.x), a.y.max(b.y).max(c.y), a.z.max(b.z).max(c.z)];
+            for i in key(lo[0] - on)..=key(hi[0] + on) {
+                for j in key(lo[1] - on)..=key(hi[1] + on) {
+                    for l in key(lo[2] - on)..=key(hi[2] + on) {
+                        cells.entry((i, j, l)).or_default().push(k as u32);
+                    }
+                }
+            }
+        }
+        ToolSide {
+            frame: *frame,
+            on,
+            tris,
+            cell,
+            cells,
+        }
+    }
+
+    /// Whether a triangle of the part lies on the tool's side: its middle on the tool, or flat on
+    /// the trim plane.
+    pub fn has(&self, t: [Point3; 3]) -> bool {
+        let [a, b, c] = t;
+        let g = Point3::ORIGIN + ((a - Point3::ORIGIN) + (b - Point3::ORIGIN) + (c - Point3::ORIGIN)) * (1.0 / 3.0);
+        let flat = (b - a)
+            .cross(c - a)
+            .normalize()
+            .is_some_and(|n| n.get().dot(self.frame.z().get()).abs() > 0.999);
+        if flat && self.frame.point_to_local(g).z.abs() < self.on {
+            return true;
+        }
+        let key = |v: f64| (v / self.cell).floor() as i64;
+        self.cells
+            .get(&(key(g.x), key(g.y), key(g.z)))
+            .is_some_and(|l| {
+                l.iter().any(|&k| {
+                    let [a, b, c] = self.tris[k as usize];
+                    (closest(g, a, b, c) - g).length() < self.on
+                })
+            })
+    }
+}
+
 /// The point of triangle abc nearest p (Ericson, Real-Time Collision Detection 5.1.5).
 fn closest(p: Point3, a: Point3, b: Point3, c: Point3) -> Point3 {
     let (ab, ac, ap) = (b - a, c - a, p - a);

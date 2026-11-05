@@ -16,6 +16,7 @@ const TIMERS: usize = 4;
 const CUBE_BYTES: u64 = 24 * 3 * 4096;
 // the view's own lines and marks, and a part's wall map on all its faces
 const WORLD_BYTES: u64 = 28 * 1_048_576;
+const WORLD_MAX: u64 = 256 * 1_048_576;
 const HUD_CHARS: usize = 256;
 /// Characters per row of the overlay (render.wgsl).
 const HUD_COLUMNS: usize = 85;
@@ -1993,7 +1994,17 @@ impl Renderer {
         let mut bytes = globals_bytes(&view, self.size, self.back_colour, hud.unwrap_or(""));
         let ground = self.write_backdrop(&mut bytes, scene);
         let cube_verts = self.write_cube(camera, &overlay);
-        let room = (WORLD_BYTES / 28) as usize;
+        // grown (to the next power of two, up to WORLD_MAX) when a map needs more
+        let need = ((overlay.world.len() + overlay.behind.len()) * 28) as u64;
+        if need > self.world_verts.size() && self.world_verts.size() < WORLD_MAX {
+            self.world_verts = self.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("world"),
+                size: need.next_power_of_two().clamp(WORLD_BYTES, WORLD_MAX),
+                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+        }
+        let room = (self.world_verts.size() / 28) as usize;
         let world_count = overlay.world.len().min(room) as u32;
         let behind_count = overlay.behind.len().min(room - world_count as usize) as u32;
         if world_count + behind_count > 0 {

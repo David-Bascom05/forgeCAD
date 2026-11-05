@@ -108,3 +108,120 @@ fn the_colours_at_min_and_max_are_the_legends_in_both_states() {
         assert!(gfx.heat.iter().any(|v| v.colour == unlit(c)), "{c:?}");
     }
 }
+
+#[test]
+fn the_paint_stands_off_every_face_at_a_hard_edge() {
+    use forge_math::Point3;
+    use forge_render::thermo_view::lifts;
+    // a box's corner: a big face meeting two small ones, as a part's flat top meets its fillet-less
+    // sides (and a concave step), each corner's lift checked against every face at it
+    let p = |x: f64, y: f64, z: f64| {
+        let q = Point3::new(x, y, z);
+        (q, q)
+    };
+    let pts = vec![
+        p(0.0, 0.0, 0.0),
+        p(40.0, 0.0, 0.0),
+        p(40.0, 40.0, 0.0),
+        p(0.0, 40.0, 0.0),
+        p(0.0, 0.0, -1.0),
+        p(40.0, 0.0, -1.0),
+        p(0.0, 40.0, -1.0),
+        p(-5.0, 0.0, -1.0),
+        p(-5.0, 40.0, -1.0),
+    ];
+    let mesh: Vec<[u32; 3]> = vec![
+        // top, up
+        [0, 1, 2],
+        [0, 2, 3],
+        // front wall, -y
+        [0, 4, 5],
+        [0, 5, 1],
+        // left wall, -x (a step down)
+        [0, 3, 6],
+        [0, 6, 4],
+        // the floor beyond the step, up
+        [4, 6, 8],
+        [4, 8, 7],
+    ];
+    let lift = lifts(&pts, &mesh);
+    let lift_min = 0.079;
+    for t in &mesh {
+        let [a, b, c] = t.map(|i| pts[i as usize].0);
+        let n = (b - a).cross(c - a).normalize().unwrap().get();
+        for &i in t {
+            let off = lift[i as usize].dot(n);
+            assert!(off >= lift_min, "corner {i} sits {off} off face {t:?}");
+        }
+    }
+}
+
+/// The modelled part's map covers each face off the tool whole, and none on it: a deep tray's
+/// walls (thinner than half a sheet, so its free side lies near the sheet's middle) and its flange's
+/// cut edge are painted all over, its side against the mould not at all.
+#[test]
+fn every_face_off_the_tool_is_painted_whole() {
+    use forge_math::Point3;
+    use forge_render::thermo_view::view;
+    let src = include_str!("../../../examples/thermoform/tray.fg");
+    let r = forge_lang::run(src, Default::default(), Default::default()).0;
+    let o = r.thermos.first().expect("the tray's thermoform");
+    let (_, mut gfx) = view(o, &r.solids, 3.0);
+    let full = forge_render::tess::build_part(r.body.as_ref().unwrap()).unwrap();
+    gfx.made_now(Some(&full));
+    let l = full.lods.iter().find(|l| l.chord >= 0.04).unwrap();
+    let span = gfx.part_span.clone().unwrap();
+    let tool = gfx.tool.clone().unwrap();
+    let at = |i: usize| {
+        let f = |k: usize| {
+            let b = &l.vertices[i * forge_render::mesh::VERTEX + k..][..4];
+            f32::from_le_bytes(b.try_into().unwrap()) as f64
+        };
+        Point3::new(f(0), f(4), f(8))
+    };
+    let idx = |k: usize| u32::from_le_bytes(l.indices[k * 4..k * 4 + 4].try_into().unwrap()) as usize;
+    let heat: Vec<Point3> = gfx
+        .heat
+        .chunks(3)
+        .map(|t| {
+            let c = |k: usize| (t[0].at[k] + t[1].at[k] + t[2].at[k]) as f64 / 3.0;
+            Point3::new(c(0), c(1), c(2))
+        })
+        .collect();
+    let (mut painted, mut bare) = (0, 0);
+    for f in l.faces.iter().filter(|f| span.faces.contains(&f.face)) {
+        let tris: Vec<[Point3; 3]> = (f.first_tri..f.first_tri + f.tris)
+            .map(|k| [0, 1, 2].map(|c| at(idx(k as usize * 3 + c))))
+            .collect();
+        let on = tris.iter().filter(|t| tool.has(**t)).count();
+        // every triangle of the face has paint over it, or none has
+        let covered = tris
+            .iter()
+            .filter(|t| {
+                let g = Point3::new(
+                    (t[0].x + t[1].x + t[2].x) / 3.0,
+                    (t[0].y + t[1].y + t[2].y) / 3.0,
+                    (t[0].z + t[1].z + t[2].z) / 3.0,
+                );
+                heat.iter().any(|h| (*h - g).length() < 1.5)
+            })
+            .count();
+        if 2 * on > tris.len() {
+            bare += 1;
+            assert!(
+                covered < tris.len(),
+                "face {} is on the tool yet painted all over",
+                f.face
+            );
+        } else {
+            painted += 1;
+            assert_eq!(
+                covered,
+                tris.len(),
+                "face {} is off the tool, painted in part",
+                f.face
+            );
+        }
+    }
+    assert!(painted > 10 && bare > 10, "{painted} painted, {bare} bare");
+}

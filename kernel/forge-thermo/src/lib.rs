@@ -23,7 +23,7 @@ pub use material::{
 pub use prepare::{Given, Prepared, prepare};
 pub use scale::{Unscalable, scaled};
 pub use simulated::{
-    MeshMass, OnTool, Simulated, WallField, blank, mesh_mass, simulated, simulated_on, simulated_part,
+    MeshMass, OnTool, Simulated, ToolSide, WallField, blank, mesh_mass, simulated, simulated_on, simulated_part,
 };
 pub use stretch::{Law, Process, Step, Stretch, stretch};
 

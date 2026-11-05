@@ -47,6 +47,13 @@ fn the_min_markers_pixels_are_the_legends_min_colour() {
             p.thermo.analysis = forge_render::shell::thermo_ui::Analysis::None;
             p.thermo_command(Cmd::Colours);
         }
+        // the map is made on a worker: till it is in
+        h.step();
+        let t = std::time::Instant::now();
+        while t.elapsed().as_secs() < 300 && h.gui.fg_walls.first().is_some_and(|g| g.working()) {
+            h.step();
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
         for _ in 0..30 {
             h.step();
         }

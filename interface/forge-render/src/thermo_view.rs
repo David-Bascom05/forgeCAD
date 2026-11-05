@@ -42,6 +42,7 @@ pub struct Gfx {
     /// each point coloured by the wall there (`paint`), for the mesh it was painted on; and where
     /// MIN and MAX go on them, and on the simulated part.
     pub field: Option<std::sync::Arc<forge_thermo::WallField>>,
+    pub tool: Option<std::sync::Arc<forge_thermo::ToolSide>>,
     pub heat: Vec<WorldVert>,
     pub heat_for: usize,
     pub extremes: Option<([f32; 3], [f32; 3])>,
@@ -158,6 +159,14 @@ pub fn view(o: &ThermoOut, spans: &[forge_lang::build::Span], draft_min: f32) ->
         part_span: span_of(spans, o.part_solid),
         mould_span: span_of(spans, o.mould_solid),
         field: o.field.as_ref().map(|f| std::sync::Arc::new((**f).clone())),
+        tool: Some(std::sync::Arc::new(forge_thermo::ToolSide::new(
+            &f.frame,
+            &forge_thermo::OnTool {
+                mesh: &f.mesh,
+                contact: &f.contact,
+            },
+            0.1 * o.t,
+        ))),
         ..Gfx::default()
     };
     let kg = o.density.map(|d| d * 1e-9);
@@ -673,7 +682,7 @@ impl Gfx {
                     .filter(|x| *x.1 != forge_thermo::simulated::TOOL_SIDE)
                     .map(|x| x.0.map(|i| (mesh.positions[i as usize], modelled[i as usize])))
                     .collect();
-                paint_mesh(&tris, field, range, &mut heat, &mut |_, _| {}, None);
+                paint_mesh(&tris, field, range, &mut heat, &mut |_, _| {});
             }
             made.lock().unwrap_or_else(|e| e.into_inner()).sim = Some((lod, heat));
             waker();
@@ -691,7 +700,9 @@ impl Gfx {
         if m.heat_asked == Some(key) {
             return;
         }
-        let (Some(field), Some(span)) = (self.field.clone(), self.part_span.clone()) else {
+        let (Some(field), Some(span), Some(tool)) =
+            (self.field.clone(), self.part_span.clone(), self.tool.clone())
+        else {
             return;
         };
         // the level the view's mesh has at a twentieth of a millimetre (its finest is a
@@ -708,7 +719,7 @@ impl Gfx {
         m.heat_asked = Some(key);
         let (range, at, t, made, waker) = (self.range, self.at, self.t, self.made.clone(), waker.clone());
         std::thread::spawn(move || {
-            let (heat, ext) = paint(&l, &span, &field, range, at, t);
+            let (heat, ext) = paint(&l, &span, &field, &tool, range, at, t);
             let mut m = made.lock().unwrap_or_else(|e| e.into_inner());
             // a newer mesh asked meanwhile: this one is not kept
             if m.heat_asked == Some(key) {
@@ -728,10 +739,11 @@ impl Gfx {
 
     /// `want_heat` and `want_sim` done here and now (for tests and shots).
     pub fn made_now(&mut self, mesh: Option<&PartMesh>) {
-        if let (Some(mesh), Some(field), Some(span)) = (mesh, &self.field, &self.part_span)
+        if let (Some(mesh), Some(field), Some(span), Some(tool)) =
+            (mesh, &self.field, &self.part_span, &self.tool)
             && let Some(l) = mesh.lods.iter().find(|l| l.chord >= 0.04).or(mesh.lods.first())
         {
-            let (heat, ext) = paint(l, span, field, self.range, self.at, self.t);
+            let (heat, ext) = paint(l, span, field, tool, self.range, self.at, self.t);
             self.heat = heat;
             self.extremes = ext.or(self.extremes);
         }
@@ -748,10 +760,12 @@ impl Gfx {
 }
 
 /// `Gfx::want_heat`'s painting of level `l`.
+#[allow(clippy::too_many_arguments)]
 fn paint(
     l: &Lod,
     span: &Span,
     field: &forge_thermo::WallField,
+    tool: &forge_thermo::ToolSide,
     range: (f64, f64),
     at: (Point3, Point3),
     t: f64,
@@ -772,15 +786,36 @@ fn paint(
         }
     };
     let idx = |k: usize| u32::from_le_bytes(l.indices[k * 4..k * 4 + 4].try_into().expect("4 bytes"));
-    let mut tris = vec![];
-    for f in l.faces.iter().filter(|f| span.faces.contains(&f.face)) {
-        for t in f.first_tri..f.first_tri + f.tris {
-            let p = [0, 1, 2].map(|k| vertex_at(&l.vertices, idx(t as usize * 3 + k) as usize));
-            tris.push(p.map(|x| (x, x)));
+    // a face on the tool's side (most of its area lies on the tool, or flat on the trim plane) is
+    // left bare, whole: each face is painted all over or not at all, so no edge of the map is
+    // ragged
+    let faces: Vec<&crate::mesh::FaceRange> =
+        l.faces.iter().filter(|f| span.faces.contains(&f.face)).collect();
+    let tris_of = |f: &crate::mesh::FaceRange| -> Vec<[Point3; 3]> {
+        (f.first_tri..f.first_tri + f.tris)
+            .map(|k| [0, 1, 2].map(|c| vertex_at(&l.vertices, idx(k as usize * 3 + c) as usize)))
+            .collect()
+    };
+    let bare = forge_math::par::map(faces.len(), |k| {
+        let (mut on, mut all) = (0.0, 0.0);
+        for p in tris_of(faces[k]) {
+            let a = (p[1] - p[0]).cross(p[2] - p[0]).length();
+            all += a;
+            if tool.has(p) {
+                on += a;
+            }
         }
-    }
+        on > 0.5 * all
+    });
+    let tris: Vec<[(Point3, Point3); 3]> = faces
+        .iter()
+        .zip(&bare)
+        .filter(|x| !*x.1)
+        .flat_map(|x| tris_of(x.0))
+        .map(|p| p.map(|x| (x, x)))
+        .collect();
     let mut heat = vec![];
-    paint_mesh(&tris, field, range, &mut heat, &mut mark, Some(t));
+    paint_mesh(&tris, field, range, &mut heat, &mut mark);
     let ext = (best_lo.0.is_finite() && best_hi.0.is_finite()).then_some((best_lo.1, best_hi.1));
     (heat, ext)
 }
@@ -792,15 +827,13 @@ const PAINT: f64 = 2.0;
 /// A part's triangles, drawn at `p`, their colours looked up at `q` (their points on the modelled
 /// part): one mesh, its sides split till none is over `PAINT` (a side split in both its triangles,
 /// so no piece leaves a crack beside its neighbour), the wall looked up once at every corner, then
-/// each triangle banded as the legend is. `mark` sees each corner and its sheet point; with
-/// `skip_under` (the sheet's thickness) the triangles on the tool's side are left bare.
+/// each triangle banded as the legend is. `mark` sees each corner and its sheet point.
 pub fn paint_mesh(
     tris: &[[(Point3, Point3); 3]],
     field: &forge_thermo::WallField,
     range: (f64, f64),
     out: &mut Vec<WorldVert>,
     mark: &mut dyn FnMut(Point3, Point3),
-    skip_under: Option<f64>,
 ) {
     // one corner where triangles meet
     let mut pts: Vec<(Point3, Point3)> = vec![];
@@ -826,18 +859,7 @@ pub fn paint_mesh(
         .collect();
     split_mesh(&mut pts, &mut mesh);
     let wall: Vec<Option<(f64, Point3)>> = forge_math::par::map(pts.len(), |i| field.raw_at(pts[i].1));
-    // each corner's lift off the face: the mesh's normal there by area (a sliver turned over
-    // weighs nothing), the same for every triangle at it, so no piece leaves a crack or sinks
-    let mut normal = vec![Vec3::ZERO; pts.len()];
-    for t in &mesh {
-        let [a, b, c] = t.map(|i| pts[i as usize].0);
-        let n = (b - a).cross(c - a);
-        t.iter().for_each(|&i| normal[i as usize] += n);
-    }
-    let lift: Vec<Vec3> = normal
-        .iter()
-        .map(|n| n.normalize().map_or(Vec3::ZERO, |u| u.get() * LIFT))
-        .collect();
+    let lift = lifts(&pts, &mesh);
     for (c, w) in pts.iter().zip(&wall) {
         if let Some((_, foot)) = w {
             mark(c.0, *foot);
@@ -849,13 +871,6 @@ pub fn paint_mesh(
         if known.is_empty() {
             continue;
         }
-        if let Some(th) = skip_under
-            && t.iter()
-                .zip(&w)
-                .all(|(&i, x)| x.is_some_and(|x| (x.1 - pts[i as usize].1).length() < 0.5 * th))
-        {
-            continue;
-        }
         let fill = known.iter().sum::<f64>() / known.len() as f64;
         banded(
             t.map(|i| pts[i as usize].0 + lift[i as usize]),
@@ -864,6 +879,67 @@ pub fn paint_mesh(
             out,
         );
     }
+}
+
+/// Each corner's lift off the part, the same for every triangle at it so no piece leaves a crack:
+/// at least `LIFT` off every face that meets there. On a smooth patch that is its normal; at a hard
+/// edge or corner it leans out along the faces' bisector, so neither face's paint sinks into it.
+pub fn lifts(pts: &[(Point3, Point3)], mesh: &[[u32; 3]]) -> Vec<Vec3> {
+    // the faces' directions at each corner, those within CREASE of each other one direction
+    const CREASE: f64 = 0.94;
+    let mut dirs: Vec<Vec<Vec3>> = vec![vec![]; pts.len()];
+    for t in mesh {
+        let [a, b, c] = t.map(|i| pts[i as usize].0);
+        let n = (b - a).cross(c - a);
+        let Some(u) = n.normalize().map(|u| u.get()) else {
+            continue;
+        };
+        if n.length() < 1e-10 {
+            continue;
+        }
+        for &i in t {
+            let d = &mut dirs[i as usize];
+            match d
+                .iter_mut()
+                .find(|m| m.normalize().is_some_and(|m| m.get().dot(u) > CREASE))
+            {
+                Some(m) => *m += n,
+                None => d.push(n),
+            }
+        }
+    }
+    dirs.iter()
+        .map(|d| {
+            let n: Vec<Vec3> = d.iter().filter_map(|m| m.normalize().map(|m| m.get())).collect();
+            let Some(&first) = n.first() else {
+                return Vec3::ZERO;
+            };
+            let mut v = n
+                .iter()
+                .fold(Vec3::ZERO, |a, &m| a + m)
+                .normalize()
+                .map_or(first, |u| u.get())
+                * LIFT;
+            // pushed out till it is LIFT off each face (a fold back on itself is held at 3 LIFT)
+            for _ in 0..32 {
+                let mut moved = false;
+                for m in &n {
+                    let short = LIFT - v.dot(*m);
+                    if short > 1e-6 * LIFT {
+                        v += *m * short;
+                        moved = true;
+                    }
+                }
+                if !moved {
+                    break;
+                }
+            }
+            if v.length() > 3.0 * LIFT {
+                v = v * (3.0 * LIFT / v.length());
+            }
+            v
+        })
+        .collect()
 }
 
 /// Longest sides halved till none is over `PAINT` (looked at on the modelled points), each split
