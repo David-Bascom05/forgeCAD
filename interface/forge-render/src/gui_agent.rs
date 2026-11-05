@@ -1,10 +1,11 @@
-//! The Agent tab's host side: the backend made for the open file and the settings, its events
-//! into the transcript, what it writes to the file taken in as one undo step a turn.
+//! The Agent tab's host side: the backend made for the open document's folder and the
+//! settings, its events into the transcript, what it writes taken in as one undo step a file a
+//! turn, a file it makes opened. The chat is the app's: it follows the document open.
 
 use super::Gui;
 use crate::agent::claude::{self, ClaudeCode};
 use crate::agent::openai::{self, OpenAi};
-use crate::agent::{Backend, Out, Turns, fg_cli, keys, system_prompt};
+use crate::agent::{Backend, Doc, Out, Turns, fg_cli, keys, system_prompt, trash_path};
 use crate::shell::agent::{AgentAct, Entry, Event, counts, prompt, undo_label};
 use crate::shell::agent_settings::{AgentSettings, Kind, SettingsAct, missing};
 use std::path::{Path, PathBuf};
@@ -14,17 +15,20 @@ use std::sync::mpsc::{Receiver, channel};
 pub struct AgentHost {
     backend: Option<Box<dyn Backend>>,
     rx: Option<Receiver<Event>>,
-    /// What the backend was made for: the file, the settings.
+    /// What the backend was made for: the folder, the settings.
     made_for: Option<(String, AgentSettings)>,
     /// Claude Code's session, carried to a new process when only the model changed.
     session: Option<std::sync::Arc<std::sync::Mutex<Option<String>>>>,
     pub turns: Turns,
-    /// The file the chat's about.
-    file: Option<String>,
+    /// The document the agent was last told is open.
+    told: Option<String>,
     loaded: bool,
     keyring: Option<Receiver<Result<Option<bool>, String>>>,
-    /// `claude`, unless a test says otherwise.
+    /// `claude`, and where it runs, unless a test says otherwise.
     pub program: Option<String>,
+    pub cwd: Option<PathBuf>,
+    /// `agent.toml`, unless a test says otherwise.
+    pub settings_file: Option<PathBuf>,
 }
 
 fn settings_path() -> Option<PathBuf> {
@@ -34,28 +38,38 @@ fn settings_path() -> Option<PathBuf> {
     Some(base.join("forgecad").join("agent.toml"))
 }
 
+fn name_of(path: &str) -> String {
+    Path::new(path)
+        .file_name()
+        .map_or_else(|| path.to_string(), |n| n.to_string_lossy().to_string())
+}
+
+fn dir_of(path: &str) -> String {
+    Path::new(path)
+        .parent()
+        .map(|d| d.display().to_string())
+        .unwrap_or_default()
+}
+
 impl Gui {
-    /// A turn's running.
+    /// A turn's running (not waiting to be let into a folder).
     pub fn agent_busy(&self) -> bool {
-        self.shell.agent.running
+        self.shell.agent.running && self.shell.agent.trust_ask.is_none()
     }
 
-    /// Before the frame: the settings once, a new file's fresh chat, the backend's events.
+    /// Before the frame: the settings once, the backend's events.
     pub(crate) fn take_agent(&mut self) {
         if !self.agent.loaded {
             self.agent.loaded = true;
-            if let Some(text) = settings_path().and_then(|p| std::fs::read_to_string(p).ok()) {
+            if let Some(text) = self
+                .agent
+                .settings_file
+                .clone()
+                .or_else(settings_path)
+                .and_then(|p| std::fs::read_to_string(p).ok())
+            {
                 self.shell.agent.settings = AgentSettings::from_toml(&text);
             }
-        }
-        let file = self.fg.as_ref().and_then(|s| s.path.clone());
-        if file != self.agent.file {
-            if self.agent.file.is_some() && !self.shell.agent.entries.is_empty() {
-                self.shell.agent.new_chat();
-                self.shell.agent.out.clear();
-            }
-            self.agent_reset();
-            self.agent.file = file;
         }
         if let Some(r) = &self.agent.keyring
             && let Ok(got) = r.try_recv()
@@ -86,14 +100,7 @@ impl Gui {
             .unwrap_or_default();
         for e in got {
             match e {
-                Event::FileChanged(text) => {
-                    if let Some(s) = &mut self.fg
-                        && self.agent.turns.changed(s, text)
-                    {
-                        self.fg_text();
-                        self.shell.status = "The agent changed the file".into();
-                    }
-                }
+                Event::FileChanged { path, before, text } => self.agent_file(path, before, text),
                 Event::Done { .. } | Event::Problem { .. } => {
                     self.shell.agent.take(e);
                     self.agent_turn_over();
@@ -101,6 +108,52 @@ impl Gui {
                 e => self.shell.agent.take(e),
             }
         }
+    }
+
+    /// A file the agent wrote: the open document takes it as the turn's step; a file it made
+    /// opens, the app switching to it.
+    fn agent_file(&mut self, path: String, before: Option<String>, text: String) {
+        let active = self.agent_path();
+        if active.as_deref() == Some(path.as_str()) {
+            let d = doc(&mut self.shell.drawing, &mut self.fg);
+            if d.as_ref().is_some_and(|d| d.text() == text) {
+                return;
+            }
+            self.agent.turns.changed(d, &path, before, text);
+            self.fg_text();
+            self.shell.status = "The agent changed the file".into();
+            return;
+        }
+        let made = before.is_none();
+        let first = self.agent.turns.changed(None, &path, before, text);
+        if made && first && path.ends_with(".fg") {
+            if let Some(f) = self.agent.turns.file_mut(&path) {
+                f.opened_from = active;
+            }
+            self.agent_open(&path);
+            self.shell.agent.take(Event::Note {
+                text: format!("Opened {}, which the agent made", name_of(&path)),
+                error: false,
+            });
+        }
+    }
+
+    /// Opens a document in the app: as the active one.
+    fn agent_open(&mut self, path: &str) {
+        self.open(path);
+        if let Some(b) = &mut self.agent.backend {
+            b.set_file(Path::new(path));
+        }
+    }
+
+    /// The file the agent works on: the drawing open, else the part or assembly.
+    pub fn agent_path(&self) -> Option<String> {
+        let p = match &self.shell.drawing {
+            Some(d) => d.path.clone(),
+            None => self.fg.as_ref().and_then(|s| s.path.clone())?,
+        };
+        // absolute: the agent runs elsewhere
+        Some(std::fs::canonicalize(&p).map_or(p, |a| a.display().to_string()))
     }
 
     fn agent_keyring(&mut self, f: impl FnOnce() -> Result<Option<bool>, String> + Send + 'static) {
@@ -118,25 +171,23 @@ impl Gui {
         self.agent.rx = None;
         self.agent.made_for = None;
         self.agent.session = None;
+        self.agent.told = None;
         self.agent.turns = Turns::default();
     }
 
-    /// The turn's change, if it made one, as its diff in the chat.
+    /// The turn's changes, a diff for each file it changed or made.
     fn agent_turn_over(&mut self) {
-        let Some(s) = &self.fg else {
-            self.agent.turns.open = None;
+        let Some((turn, files)) = self.agent.turns.finish() else {
             return;
         };
-        if let Some((turn, lines)) = self.agent.turns.finish(s) {
+        for (index, lines) in files {
+            let f = &self.agent.turns.done[turn].files[index];
             let (added, removed) = counts(&lines);
-            let file = s
-                .path
-                .as_deref()
-                .and_then(|p| Path::new(p).file_name())
-                .map_or_else(|| "file".into(), |n| n.to_string_lossy().to_string());
             self.shell.agent.entries.push(Entry::Diff {
                 turn,
-                file,
+                index,
+                created: f.before.is_none(),
+                file: name_of(&f.path),
                 lines,
                 added,
                 removed,
@@ -145,12 +196,110 @@ impl Gui {
         }
     }
 
+    fn agent_save_settings(&self) {
+        if let Some(p) = self.agent.settings_file.clone().or_else(settings_path) {
+            if let Some(d) = p.parent() {
+                let _ = std::fs::create_dir_all(d);
+            }
+            let _ = std::fs::write(p, self.shell.agent.settings.to_toml());
+        }
+    }
+
+    /// A file's change in a turn taken back or put back: through the document when it's open;
+    /// a made file moved aside (never deleted) and its document closed, or moved back and opened.
+    fn agent_flip(&mut self, turn: usize, index: usize, undo: bool) -> Result<(), String> {
+        let Some(f) = self
+            .agent
+            .turns
+            .done
+            .get(turn)
+            .and_then(|t| t.files.get(index))
+            .cloned()
+        else {
+            return Err("no such change".into());
+        };
+        if f.undone == undo {
+            return Ok(());
+        }
+        let active = self.agent_path();
+        let set = |g: &mut Gui, trash: Option<PathBuf>| {
+            let r = &mut g.agent.turns.done[turn].files[index];
+            r.undone = undo;
+            r.trash = trash;
+        };
+        if f.before.is_none() {
+            if undo {
+                let to = trash_path(Path::new(&f.path));
+                if let Some(d) = to.parent() {
+                    std::fs::create_dir_all(d).map_err(|e| format!("{}: {e}", d.display()))?;
+                }
+                std::fs::rename(&f.path, &to).map_err(|e| format!("{}: {e}", f.path))?;
+                set(self, Some(to));
+                if active.as_deref() == Some(f.path.as_str())
+                    && let Some(back) = f.opened_from.clone()
+                {
+                    self.agent_open(&back);
+                }
+                self.shell.status = format!("Moved {} aside to .forgecad-trash", name_of(&f.path));
+            } else {
+                let from = f.trash.clone().ok_or("the file isn't in the trash")?;
+                if Path::new(&f.path).exists() {
+                    return Err(format!("{} exists again: not put back", f.path));
+                }
+                std::fs::rename(&from, &f.path).map_err(|e| format!("{}: {e}", from.display()))?;
+                set(self, None);
+                self.agent_open(&f.path);
+            }
+            return Ok(());
+        }
+        if active.as_deref() == Some(f.path.as_str())
+            && let Some(d) = doc(&mut self.shell.drawing, &mut self.fg)
+        {
+            self.agent.turns.flip_doc(d, turn, index, undo);
+            self.fg_text();
+            return Ok(());
+        }
+        // not open: the file itself
+        let text = if undo {
+            f.before.clone().unwrap_or_default()
+        } else {
+            f.after.clone()
+        };
+        std::fs::write(&f.path, text).map_err(|e| format!("{}: {e}", f.path))?;
+        set(self, None);
+        Ok(())
+    }
+
     /// After the frame: what the tab asked for.
     pub(crate) fn agent_acts(&mut self) {
         let acts = std::mem::take(&mut self.shell.agent.out);
         for a in acts {
             match a {
                 AgentAct::Send { text, refs } => self.agent_send(&text, &refs),
+                AgentAct::Trust { dir, yes } => {
+                    self.shell.agent.trust_ask = None;
+                    let pending = self.shell.agent.pending.take();
+                    if yes {
+                        self.shell.agent.settings.trusted.push(dir);
+                        self.agent_save_settings();
+                        if let Some((text, refs)) = pending {
+                            self.agent_send(&text, &refs);
+                        }
+                    } else {
+                        self.shell.agent.take(Event::Done {
+                            error: Some("Not sent: the folder isn't trusted".into()),
+                            stopped: false,
+                        });
+                    }
+                }
+                AgentAct::Stop if self.shell.agent.trust_ask.is_some() => {
+                    self.shell.agent.trust_ask = None;
+                    self.shell.agent.pending = None;
+                    self.shell.agent.take(Event::Done {
+                        error: None,
+                        stopped: true,
+                    });
+                }
                 AgentAct::Stop => {
                     if let Some(b) = &mut self.agent.backend {
                         b.stop();
@@ -162,35 +311,32 @@ impl Gui {
                     }
                 }
                 AgentAct::NewChat => self.agent_reset(),
-                AgentAct::Undo(k) | AgentAct::Redo(k) => {
-                    let undo = matches!(a, AgentAct::Undo(_));
-                    if let Some(s) = &mut self.fg
-                        && self.agent.turns.flip(s, k, undo)
-                    {
-                        self.fg_text();
-                        for e in &mut self.shell.agent.entries {
-                            if let Entry::Diff { turn, undone, .. } = e
-                                && *turn == k
-                            {
-                                *undone = undo;
+                AgentAct::Undo(k, i) | AgentAct::Redo(k, i) => {
+                    let undo = matches!(a, AgentAct::Undo(..));
+                    match self.agent_flip(k, i, undo) {
+                        Ok(()) => {
+                            for e in &mut self.shell.agent.entries {
+                                if let Entry::Diff {
+                                    turn, index, undone, ..
+                                } = e
+                                    && (*turn, *index) == (k, i)
+                                {
+                                    *undone = self.agent.turns.done[k].files[i].undone;
+                                }
+                            }
+                            let label = &self.agent.turns.done[k].label;
+                            if !self.shell.status.starts_with("Moved") {
+                                self.shell.status = if undo {
+                                    format!("Undid {label}")
+                                } else {
+                                    format!("Redid {label}")
+                                };
                             }
                         }
-                        let label = &self.agent.turns.done[k].label;
-                        self.shell.status = if undo {
-                            format!("Undid {label}")
-                        } else {
-                            format!("Redid {label}")
-                        };
+                        Err(e) => self.shell.agent.take(Event::Note { text: e, error: true }),
                     }
                 }
-                AgentAct::Settings(SettingsAct::Changed) => {
-                    if let Some(p) = settings_path() {
-                        if let Some(d) = p.parent() {
-                            let _ = std::fs::create_dir_all(d);
-                        }
-                        let _ = std::fs::write(p, self.shell.agent.settings.to_toml());
-                    }
-                }
+                AgentAct::Settings(SettingsAct::Changed) => self.agent_save_settings(),
                 AgentAct::Settings(SettingsAct::SaveKey { url, key }) => {
                     let forget = key.is_empty();
                     self.agent_keyring(move || keys::set(&url, &key).map(|_| Some(!forget)));
@@ -203,52 +349,84 @@ impl Gui {
         let fail = |g: &mut Gui, text: String, fix: Option<String>| {
             g.shell.agent.take(Event::Problem { text, fix });
         };
-        let Some(s) = &mut self.fg else {
-            return fail(self, "Open a Forge part first".into(), None);
+        let Some(path) = self.agent_path() else {
+            let why = if self.fg.is_some() {
+                "Save the part to a file first: the agent works on the file"
+            } else {
+                "Open a Forge part first"
+            };
+            return fail(self, why.into(), None);
         };
-        let Some(path) = s.path.clone() else {
-            return fail(
-                self,
-                "Save the part to a file first: the agent works on the file".into(),
-                None,
-            );
-        };
+        // a folder outside the projects tree is trusted once, by asking
+        let dir = Path::new(&path)
+            .parent()
+            .and_then(|d| d.canonicalize().ok())
+            .map(|d| d.display().to_string())
+            .unwrap_or_default();
+        if !trusted(&dir, &self.shell.agent.settings.trusted) {
+            self.shell.agent.trust_ask = Some(dir);
+            self.shell.agent.pending = Some((text.to_string(), refs.to_vec()));
+            return;
+        }
         // the agent reads the file: what's on screen is what it gets
-        if s.dirty() {
+        if self.shell.drawing.is_none()
+            && let Some(s) = &mut self.fg
+            && s.dirty()
+        {
             if let Err(e) = s.save() {
                 return fail(self, format!("Couldn't save the part for the agent: {e}"), None);
             }
             self.fg_text();
+            self.shell.agent.take(Event::Note {
+                text: format!(
+                    "Saved your unsaved edits to {} first: the agent works on the file",
+                    name_of(&path)
+                ),
+                error: false,
+            });
         }
         let settings = self.shell.agent.settings.clone();
         if let Some(why) = missing(&settings) {
             self.shell.agent.settings_open = true;
             return fail(self, why.into(), None);
         }
-        let want = (path.clone(), settings.clone());
+        let want = (dir_of(&path), settings.clone());
         if self.agent.made_for.as_ref() != Some(&want) {
             let was = self.agent.made_for.take();
             let carry = match &was {
-                Some((f, w))
-                    if *f == path && w.kind == Kind::ClaudeCode && settings.kind == Kind::ClaudeCode =>
+                Some((d, w))
+                    if *d == want.0 && w.kind == Kind::ClaudeCode && settings.kind == Kind::ClaudeCode =>
                 {
                     self.agent.session.as_ref().and_then(|s| s.lock().ok()?.clone())
                 }
                 _ => None,
             };
             if was.is_some() && carry.is_none() && !self.shell.agent.entries.is_empty() {
+                let why = if was.as_ref().is_some_and(|w| w.0 != want.0) {
+                    format!("Now in {}: a new conversation", want.0)
+                } else {
+                    format!("Now {}: a new conversation", settings.label())
+                };
                 self.shell.agent.take(Event::Note {
-                    text: format!("Now {}: a new conversation", settings.label()),
+                    text: why,
                     error: false,
                 });
             }
             self.agent_make(Path::new(&path), &settings, carry);
             self.agent.made_for = Some(want);
+            self.agent.told = Some(path.clone());
         }
-        let src = self.fg.as_ref().map(|s| s.src.clone()).unwrap_or_default();
-        self.agent.turns.start(undo_label(text), src);
+        self.agent.turns.start(undo_label(text));
+        let mut msg = prompt(text, refs);
+        if self.agent.told.as_deref() != Some(path.as_str()) {
+            msg = format!("(The open file is now {path}.)\n\n{msg}");
+            self.agent.told = Some(path.clone());
+            if let Some(b) = &mut self.agent.backend {
+                b.set_file(Path::new(&path));
+            }
+        }
         if let Some(b) = &mut self.agent.backend {
-            b.send(prompt(text, refs));
+            b.send(msg);
         }
     }
 
@@ -259,7 +437,8 @@ impl Gui {
             tx,
             wake: self.waker.clone(),
         };
-        let system = system_prompt(file, fg_cli().as_deref());
+        let fg = fg_cli();
+        let system = system_prompt(file, fg.as_deref());
         self.agent.backend = Some(match s.kind {
             Kind::ClaudeCode => {
                 let c = ClaudeCode::new(
@@ -268,6 +447,8 @@ impl Gui {
                         model: s.claude_model.clone(),
                         file: file.to_path_buf(),
                         system,
+                        fg,
+                        cwd: self.agent.cwd.clone().unwrap_or_else(claude::clean_cwd),
                     },
                     out,
                     session,
@@ -287,4 +468,22 @@ impl Gui {
             )),
         });
     }
+}
+
+/// The document open: the drawing, else the part or assembly.
+fn doc<'a>(
+    drawing: &'a mut Option<crate::shell::drawing::DrawingEnv>,
+    fg: &'a mut Option<crate::fg::Session>,
+) -> Option<&'a mut dyn Doc> {
+    match drawing {
+        Some(d) => Some(d),
+        None => fg.as_mut().map(|s| s as &mut dyn Doc),
+    }
+}
+
+/// A folder the agent may work in without asking: under ~/projects, or trusted once.
+pub fn trusted(dir: &str, trusted: &[String]) -> bool {
+    let home = std::env::var("HOME").unwrap_or_default();
+    let projects = format!("{home}/projects/");
+    (!home.is_empty() && format!("{dir}/").starts_with(&projects)) || trusted.iter().any(|t| t == dir)
 }

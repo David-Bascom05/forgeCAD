@@ -312,6 +312,8 @@ pub struct DrawingEnv {
     /// The file as it was before each edit, and after each undone one.
     undo: Vec<String>,
     redo: Vec<String>,
+    /// Steps written from outside (the Agent tab): the undo depth each made, its label and key.
+    tags: Vec<(usize, String, u64)>,
 }
 
 fn name_of(path: &str) -> String {
@@ -363,6 +365,7 @@ impl DrawingEnv {
             pointer: None,
             undo: vec![],
             redo: vec![],
+            tags: vec![],
         };
         e.regen();
         Ok(e)
@@ -452,8 +455,41 @@ impl DrawingEnv {
         }
         self.undo.push(std::mem::replace(&mut self.src, src));
         self.redo.clear();
+        self.tags.retain(|t| t.0 < self.undo.len());
         self.message.clear();
         self.regen();
+    }
+
+    /// The file's text from outside (the Agent tab) as one labelled undo step, a later text under
+    /// the same key joining it; written unless the file holds it already.
+    pub fn external(&mut self, text: String, label: &str, key: u64, on_disk: bool) {
+        if text == self.src {
+            return;
+        }
+        if !on_disk && let Err(e) = std::fs::write(&self.path, &text) {
+            self.message = format!("{}: {e}", self.path);
+            return;
+        }
+        let joins = self
+            .tags
+            .last()
+            .is_some_and(|t| t.2 == key && t.0 == self.undo.len() && self.redo.is_empty());
+        if joins {
+            self.src = text;
+        } else {
+            self.undo.push(std::mem::replace(&mut self.src, text));
+            self.redo.clear();
+            self.tags.retain(|t| t.0 < self.undo.len());
+            self.tags.push((self.undo.len(), label.to_string(), key));
+        }
+        self.message.clear();
+        self.regen();
+    }
+
+    /// The label and key of the step Undo would take back, if it came from outside.
+    pub fn undo_tag(&self) -> Option<(&str, u64)> {
+        let t = self.tags.iter().rev().find(|t| t.0 == self.undo.len())?;
+        Some((&t.1, t.2))
     }
 
     /// Undo (or redo) the last edit: the file goes back as it was.
@@ -1876,13 +1912,12 @@ impl Shell {
         let p = ui.painter().clone();
         p.rect_filled(side, 0.0, t.surface);
         p.vline(side.right(), side.top()..=side.bottom(), Stroke::new(1.0, t.line));
-        p.text(
-            pos2(side.left() + 10.0, side.top() + 15.0),
-            Align2::LEFT_CENTER,
-            "Model",
-            semi(13.0),
-            t.ink,
-        );
+        self.side_tabs(ui, side.top(), side.width(), "");
+        if self.agent.tab == super::agent::SideTab::Agent {
+            let area = Rect::from_min_max(pos2(side.left(), side.top() + super::HEAD_H), side.max);
+            self.agent_ui(ui, area);
+            return;
+        }
         let Some(env) = &mut self.drawing else { return };
         let Some(made) = &env.made else { return };
         let d = &made.doc;

@@ -21,6 +21,8 @@ pub struct AgentSettings {
     /// An OpenAI-compatible endpoint: its base (up to `/v1`) and model id.
     pub base_url: String,
     pub model: String,
+    /// Folders outside ~/projects the agent was let into.
+    pub trusted: Vec<String>,
 }
 
 impl Default for AgentSettings {
@@ -30,6 +32,7 @@ impl Default for AgentSettings {
             claude_model: String::new(),
             base_url: "http://localhost:8080/v1".into(),
             model: String::new(),
+            trusted: Vec::new(),
         }
     }
 }
@@ -76,11 +79,12 @@ impl AgentSettings {
             Kind::OpenAi => "openai",
         };
         format!(
-            "backend = {}\nclaude_model = {}\nbase_url = {}\nmodel = {}\n",
+            "backend = {}\nclaude_model = {}\nbase_url = {}\nmodel = {}\ntrusted = {}\n",
             quote(kind),
             quote(&self.claude_model),
             quote(&self.base_url),
-            quote(&self.model)
+            quote(&self.model),
+            quote(&self.trusted.join("\n"))
         )
     }
 
@@ -103,6 +107,7 @@ impl AgentSettings {
                 "claude_model" => s.claude_model = v,
                 "base_url" => s.base_url = v,
                 "model" => s.model = v,
+                "trusted" => s.trusted = v.lines().filter(|l| !l.is_empty()).map(str::to_string).collect(),
                 _ => {}
             }
         }
@@ -242,6 +247,7 @@ mod tests {
             claude_model: "opus".into(),
             base_url: "http://node1:8080/v1".into(),
             model: "qwen \"3.6\"".into(),
+            trusted: vec!["/mnt/usb/parts".into(), "/tmp/x y".into()],
         };
         assert_eq!(AgentSettings::from_toml(&s.to_toml()), s);
         assert_eq!(s.label(), "node1:8080 · qwen \"3.6\"");

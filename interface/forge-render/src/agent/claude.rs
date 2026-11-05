@@ -184,6 +184,20 @@ pub struct Config {
     pub model: String,
     pub file: PathBuf,
     pub system: String,
+    /// The `fg` CLI: the one command its Bash may run.
+    pub fg: Option<PathBuf>,
+    /// Where it runs: a folder of ForgeCAD's own, never the part's.
+    pub cwd: PathBuf,
+}
+
+/// Where Claude Code runs: empty and ForgeCAD's, so a downloaded project's `.claude/`,
+/// `.mcp.json` and `CLAUDE.md` never load; the part's folder comes in by `--add-dir`.
+pub fn clean_cwd() -> PathBuf {
+    let base = std::env::var_os("XDG_STATE_HOME")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/state")))
+        .unwrap_or_else(std::env::temp_dir);
+    base.join("forgecad").join("agent")
 }
 
 pub struct ClaudeCode {
@@ -213,8 +227,16 @@ impl ClaudeCode {
         }
     }
 
-    /// The command line, as run.
+    /// The command line, as run. Only David's user settings load (no project or local
+    /// settings, so no project hooks), no MCP servers, four tools, and in `dontAsk` mode only
+    /// what's allowed here runs: the folder's files, and the `fg` CLI on the open file.
     pub fn args(&self) -> Vec<String> {
+        let dir = self
+            .cfg
+            .file
+            .parent()
+            .map(|d| d.display().to_string())
+            .unwrap_or_default();
         let mut a: Vec<String> = [
             "-p",
             "--output-format",
@@ -223,11 +245,34 @@ impl ClaudeCode {
             "stream-json",
             "--verbose",
             "--include-partial-messages",
-            "--append-system-prompt",
+            "--setting-sources",
+            "user",
+            "--strict-mcp-config",
+            "--mcp-config",
+            r#"{"mcpServers":{}}"#,
+            "--permission-mode",
+            "dontAsk",
+            "--tools",
+            "Read,Edit,Write,Bash",
+            "--add-dir",
         ]
         .iter()
         .map(|s| s.to_string())
         .collect();
+        a.push(dir.clone());
+        a.push("--allowedTools".into());
+        // `//` starts an absolute path in a permission rule
+        for t in ["Read", "Edit", "Write"] {
+            a.push(format!("{t}(/{dir}/**)"));
+        }
+        if let Some(fg) = &self.cfg.fg {
+            let fg = fg.display();
+            for cmd in ["run", "check", "handles", "edit"] {
+                a.push(format!("Bash({fg} {cmd} {dir}/*)"));
+            }
+            a.push(format!("Bash({fg} reference*)"));
+        }
+        a.push("--append-system-prompt".into());
         a.push(self.cfg.system.clone());
         if !self.cfg.model.trim().is_empty() {
             a.push("--model".into());
@@ -241,12 +286,13 @@ impl ClaudeCode {
     }
 
     fn spawn(&mut self) -> Result<(), Event> {
-        let dir = self
-            .cfg
-            .file
-            .parent()
-            .map(|d| d.to_path_buf())
-            .unwrap_or_default();
+        let dir = self.cfg.cwd.clone();
+        if let Err(e) = std::fs::create_dir_all(&dir) {
+            return Err(Event::Problem {
+                text: format!("No folder for the agent to run in: {}: {e}", dir.display()),
+                fix: None,
+            });
+        }
         let mut c = Command::new(&self.cfg.program);
         c.args(self.args())
             .current_dir(&dir)
@@ -300,12 +346,14 @@ impl ClaudeCode {
             .name("agent-claude".into())
             .spawn(move || {
                 let mut parser = Parser::default();
-                let mut watch = Watch::new(&file);
+                let mut watch = Watch::new(file.parent().unwrap_or(std::path::Path::new(".")));
                 for line in BufReader::new(stdout).lines().map_while(Result::ok) {
                     for e in parser.line(&line) {
                         let after = matches!(e, Event::ToolDone { .. } | Event::Done { .. });
-                        if after && let Some(t) = watch.check() {
-                            out.send(Event::FileChanged(t));
+                        if after {
+                            for c in watch.check() {
+                                out.send(c);
+                            }
                         }
                         if matches!(e, Event::Done { .. } | Event::Problem { .. }) {
                             busy.store(false, Ordering::SeqCst);
@@ -317,8 +365,8 @@ impl ClaudeCode {
                     }
                 }
                 *alive.lock().expect("no panics while held") = false;
-                if let Some(t) = watch.check() {
-                    out.send(Event::FileChanged(t));
+                for c in watch.check() {
+                    out.send(c);
                 }
                 if !busy.swap(false, Ordering::SeqCst) {
                     return;

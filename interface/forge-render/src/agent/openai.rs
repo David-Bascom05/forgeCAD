@@ -12,6 +12,7 @@ use std::sync::{Arc, Mutex};
 
 const MAX_STEPS: usize = 30;
 
+#[derive(Clone)]
 pub struct Config {
     /// Up to and including `/v1`.
     pub base_url: String,
@@ -149,6 +150,12 @@ impl Backend for OpenAi {
     fn stop(&mut self) {
         self.stop.store(true, Ordering::SeqCst);
     }
+
+    fn set_file(&mut self, file: &std::path::Path) {
+        let mut c = (*self.cfg).clone();
+        c.file = file.to_path_buf();
+        self.cfg = Arc::new(c);
+    }
 }
 
 /// A turn: replies and tool calls until a reply calls none. Its end, as the event to send.
@@ -173,7 +180,7 @@ fn turn(cfg: &Config, out: &Out, history: &Mutex<Vec<Json>>, stop: &AtomicBool) 
             .build(),
     );
     let url = format!("{}/chat/completions", cfg.base_url.trim().trim_end_matches('/'));
-    let mut watch = Watch::new(&cfg.file);
+    let mut watch = Watch::new(cfg.file.parent().unwrap_or(std::path::Path::new(".")));
     let stopped = Event::Done {
         error: None,
         stopped: true,
@@ -343,8 +350,8 @@ fn turn(cfg: &Config, out: &Out, history: &Mutex<Vec<Json>>, stop: &AtomicBool) 
             } else {
                 tools::call(&name, &args, &cfg.file)
             };
-            if let Some(t) = watch.check() {
-                out.send(Event::FileChanged(t));
+            for c in watch.check() {
+                out.send(c);
             }
             out.send(Event::ToolDone {
                 id: id.clone(),

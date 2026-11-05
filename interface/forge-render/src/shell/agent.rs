@@ -51,8 +51,12 @@ pub enum Event {
         text: String,
         fix: Option<String>,
     },
-    /// The open file's text changed on disk while the agent ran.
-    FileChanged(String),
+    /// A Forge file in the folder changed or appeared while the agent ran; what it held before.
+    FileChanged {
+        path: String,
+        before: Option<String>,
+        text: String,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -88,9 +92,11 @@ pub enum Entry {
         output: String,
         state: ToolState,
     },
-    /// A turn's change to the file, as one undo step.
+    /// A turn's change to one file, as one undo step; `created`: the agent made the file.
     Diff {
         turn: usize,
+        index: usize,
+        created: bool,
         file: String,
         lines: Vec<Line>,
         added: usize,
@@ -113,9 +119,14 @@ pub enum AgentAct {
     Stop,
     NewChat,
     /// A turn's change taken back, or put back.
-    Undo(usize),
-    Redo(usize),
+    Undo(usize, usize),
+    Redo(usize, usize),
     Settings(SettingsAct),
+    /// The answer to "Trust this folder for the agent?".
+    Trust {
+        dir: String,
+        yes: bool,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -144,6 +155,9 @@ pub struct AgentTab {
     pub open: std::collections::HashSet<String>,
     /// What the selection is, as the agent names it, if anything's selected.
     pub selection: Option<String>,
+    /// A folder outside the projects tree, asked about once; the message waiting on it.
+    pub trust_ask: Option<String>,
+    pub pending: Option<(String, Vec<String>)>,
 }
 
 pub const INPUT_ID: &str = "agent-input";
@@ -217,7 +231,7 @@ impl AgentTab {
                 self.running = false;
                 self.problem = Some(Problem { text, fix });
             }
-            Event::FileChanged(_) => {}
+            Event::FileChanged { .. } => {}
         }
     }
 
@@ -464,6 +478,7 @@ pub fn tool_summary(name: &str, input: &Json) -> (String, String) {
             (format!("Applied {}", one_line(&t, 50)), t)
         }
         "run_check" => ("Built and checked the part".into(), String::new()),
+        "create_file" => (format!("Made {}", s(input, "name")), s(input, "text").to_string()),
         "TodoWrite" => ("Updated its plan".into(), whole()),
         _ => (name.to_string(), whole()),
     }
@@ -521,10 +536,9 @@ fn plain_job(text: &str, font: FontId, ink: Color32, width: f32) -> LayoutJob {
 
 impl Shell {
     /// The panel's tabs, Model and Agent, with the part's name at the right on Model's.
-    pub(super) fn side_tabs(&mut self, ui: &mut Ui, y: f32, right: &str) {
+    pub(super) fn side_tabs(&mut self, ui: &mut Ui, y: f32, w: f32, right: &str) {
         let t = self.theme;
         let p = ui.painter().clone();
-        let w = self.side_w();
         let h = Rect::from_min_size(pos2(0.0, y), vec2(w, HEAD_H));
         p.rect_filled(h, 0.0, t.raised);
         p.hline(0.0..=w, y + HEAD_H - 0.5, Stroke::new(1.0, t.line));
@@ -599,6 +613,9 @@ impl Shell {
     /// The selection as the agent names it: the face picked in the view, a browser row, an
     /// assembly's occurrence.
     pub(super) fn agent_selection(&self) -> Option<String> {
+        if let Some(d) = &self.drawing {
+            return d.selected.clone();
+        }
         let fg = self.fg.as_ref()?;
         if let Some(a) = &fg.asm {
             return a.selected.clone();
@@ -659,10 +676,9 @@ impl Shell {
     pub(super) fn agent_ui(&mut self, ui: &mut Ui, area: Rect) {
         let t = self.theme;
         self.agent.selection = self.agent_selection();
-        self.agent.file = self
-            .fg
-            .as_ref()
-            .map(|f| base(&f.file).to_string())
+        let drawing = self.drawing.as_ref().map(|d| d.name());
+        self.agent.file = drawing
+            .or_else(|| self.fg.as_ref().map(|f| base(&f.file).to_string()))
             .filter(|f| !f.is_empty())
             .or_else(|| (!self.name.is_empty()).then(|| self.name.clone()));
         let p = ui.painter().clone();
@@ -869,7 +885,9 @@ impl Shell {
                 }
                 if a.entries.is_empty() && a.problem.is_none() {
                     let what = match &a.file {
-                        Some(f) if self.fg.is_some() => format!("Ask for a change to {f}"),
+                        Some(f) if self.fg.is_some() || self.drawing.is_some() => {
+                            format!("Ask for a change to {f}")
+                        }
                         _ => "Open a Forge part to work on it with the agent".into(),
                     };
                     let g = ui.fonts_mut(|f| f.layout_job(plain_job(&what, sans(13.0), t.ink2, inner)));
@@ -985,6 +1003,8 @@ impl Shell {
                         }
                         Entry::Diff {
                             turn,
+                            index,
+                            created,
                             file,
                             lines,
                             added,
@@ -1009,6 +1029,17 @@ impl Shell {
                                 medium(12.0),
                                 t.ink,
                             );
+                            let name = if *created {
+                                p.text(
+                                    pos2(name.right() + 6.0, head.center().y),
+                                    Align2::LEFT_CENTER,
+                                    "new",
+                                    sans(11.0),
+                                    t.ink2,
+                                )
+                            } else {
+                                name
+                            };
                             let plus = p.text(
                                 pos2(name.right() + 8.0, head.center().y),
                                 Align2::LEFT_CENTER,
@@ -1029,19 +1060,22 @@ impl Shell {
                                 pos2(head.right() - bw - 4.0, head.top() + 3.0),
                                 vec2(bw, 20.0),
                             );
-                            let resp =
-                                ui.interact(br, ui.scope_id().with(("agent-undo", *turn)), Sense::click());
+                            let resp = ui.interact(
+                                br,
+                                ui.scope_id().with(("agent-undo", *turn, *index)),
+                                Sense::click(),
+                            );
                             resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, word));
                             p.rect_filled(br, 3.0, if resp.hovered() { t.hover } else { t.raised });
                             p.rect_stroke(br, 3.0, Stroke::new(1.0, t.line), StrokeKind::Inside);
                             p.text(br.center(), Align2::CENTER_CENTER, word, sans(12.0), t.ink);
-                            places.push((format!("agent:undo:{turn}"), br));
-                            places.push((format!("agent:diff:{turn}"), card));
+                            places.push((format!("agent:undo:{turn}:{index}"), br));
+                            places.push((format!("agent:diff:{turn}:{index}"), card));
                             if resp.clicked() {
                                 acts.push(if *undone {
-                                    AgentAct::Redo(*turn)
+                                    AgentAct::Redo(*turn, *index)
                                 } else {
-                                    AgentAct::Undo(*turn)
+                                    AgentAct::Undo(*turn, *index)
                                 });
                             }
                             p.hline(
@@ -1115,7 +1149,10 @@ impl Shell {
                         }
                     }
                 }
-                if a.running {
+                if let Some(dir) = &a.trust_ask {
+                    trust_card(ui, &t, dir, w, &mut places);
+                }
+                if a.running && a.trust_ask.is_none() {
                     let dots = ".".repeat(1 + (ui.input(|i| i.time) * 3.0) as usize % 3);
                     let (r, _) = ui.allocate_exact_size(vec2(w, 22.0), Sense::hover());
                     ui.painter().text(
@@ -1141,6 +1178,18 @@ impl Shell {
         {
             ui.ctx().copy_text(cmd);
             self.status = "Copied the command".into();
+        }
+        if let Some(dir) = self.agent.trust_ask.clone() {
+            for (name, yes) in [("agent:trust:yes", true), ("agent:trust:no", false)] {
+                if let Some(r) = places.iter().find(|p| p.0 == name).map(|p| p.1)
+                    && ui.interact(r, ui.scope_id().with(name), Sense::click()).clicked()
+                {
+                    acts.push(AgentAct::Trust {
+                        dir: dir.clone(),
+                        yes,
+                    });
+                }
+            }
         }
         self.places.extend(places);
         self.agent.out.extend(acts);
@@ -1201,7 +1250,7 @@ impl Shell {
         } else {
             "Ask the agent"
         };
-        let enabled = self.fg.is_some();
+        let enabled = self.fg.is_some() || self.drawing.is_some();
         let resp = child.add_enabled(
             enabled,
             egui::TextEdit::multiline(&mut self.agent.input)
@@ -1307,6 +1356,49 @@ fn chip(ui: &mut Ui, t: &Theme, at: egui::Pos2, id: &str, room: f32) -> Rect {
         t.ink2,
     );
     r
+}
+
+/// "Trust this folder for the agent?": the folder, Trust and Not now.
+fn trust_card(ui: &mut Ui, t: &Theme, dir: &str, w: f32, places: &mut Vec<(String, Rect)>) {
+    let inner = w - 2.0 * PAD - 16.0;
+    let q = ui.fonts_mut(|f| {
+        f.layout_job(plain_job(
+            "Trust this folder for the agent?",
+            medium(13.0),
+            t.ink,
+            inner,
+        ))
+    });
+    let d = ui.fonts_mut(|f| f.layout_job(plain_job(dir, mono(11.0), t.ink2, inner)));
+    let h = q.size().y + d.size().y + 52.0;
+    let (r, _) = ui.allocate_exact_size(vec2(w, h), Sense::hover());
+    let card = Rect::from_min_max(pos2(PAD, r.top() + 4.0), pos2(w - PAD, r.bottom() - 4.0));
+    let p = ui.painter();
+    p.rect_filled(card, 6.0, t.raised);
+    p.rect_stroke(card, 6.0, Stroke::new(1.0, t.focus), StrokeKind::Inside);
+    p.galley(pos2(card.left() + 8.0, card.top() + 8.0), q.clone(), t.ink);
+    p.galley(
+        pos2(card.left() + 8.0, card.top() + 12.0 + q.size().y),
+        d.clone(),
+        t.ink2,
+    );
+    let by = card.bottom() - 28.0;
+    let yes = Rect::from_min_size(pos2(card.left() + 8.0, by), vec2(60.0, 22.0));
+    let no = Rect::from_min_size(pos2(yes.right() + 6.0, by), vec2(70.0, 22.0));
+    p.rect_filled(yes, 4.0, t.focus.gamma_multiply(0.85));
+    p.text(
+        yes.center(),
+        Align2::CENTER_CENTER,
+        "Trust",
+        medium(12.0),
+        Color32::WHITE,
+    );
+    p.rect_filled(no, 4.0, t.field);
+    p.rect_stroke(no, 4.0, Stroke::new(1.0, t.line), StrokeKind::Inside);
+    p.text(no.center(), Align2::CENTER_CENTER, "Not now", sans(12.0), t.ink);
+    places.push(("agent:trust".into(), card));
+    places.push(("agent:trust:yes".into(), yes));
+    places.push(("agent:trust:no".into(), no));
 }
 
 fn problem_card(ui: &mut Ui, t: &Theme, pr: &Problem, w: f32, places: &mut Vec<(String, Rect)>) {

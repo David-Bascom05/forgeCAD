@@ -53,6 +53,12 @@ pub fn specs() -> Json {
             vec!["op"],
         ),
         tool(
+            "create_file",
+            "Make a new .fg file (a new part, assembly or drawing) in the open file's folder; the app opens it. `name` is a plain file name, not a path, and mustn't exist yet.",
+            vec![("name", string("e.g. window.fg")), ("text", string("the whole file"))],
+            vec!["name", "text"],
+        ),
+        tool(
             "run_check",
             "Build the open file and report its errors, warnings and measures.",
             vec![],
@@ -106,6 +112,34 @@ pub fn call(name: &str, args: &Json, file: &Path) -> (String, bool) {
             })?;
             write(&new)?;
             Ok(format!("Applied.\n{}", check(&new, file)))
+        })(),
+        "create_file" => (|| {
+            let name = args
+                .get("name")
+                .and_then(Json::str)
+                .ok_or("create_file takes `name`")?;
+            let text = args
+                .get("text")
+                .and_then(Json::str)
+                .ok_or("create_file takes `text`")?;
+            let plain = !name.is_empty()
+                && !name.starts_with('.')
+                && name.ends_with(".fg")
+                && !name.contains(['/', '\\'])
+                && !name.contains("..");
+            if !plain {
+                return Err(format!("`{name}` isn't a plain .fg file name"));
+            }
+            let dir = file.parent().ok_or("the open file has no folder")?;
+            let new = dir.join(name);
+            let mut f = std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&new)
+                .map_err(|e| format!("{}: {e}", new.display()))?;
+            std::io::Write::write_all(&mut f, text.as_bytes())
+                .map_err(|e| format!("{}: {e}", new.display()))?;
+            Ok(format!("Made {name}.\n{}", check(text, &new)))
         })(),
         "run_check" => read().map(|t| check(&t, file)),
         other => Err(format!("no tool `{other}`")),
