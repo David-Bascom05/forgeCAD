@@ -7,7 +7,8 @@
 use super::Shell;
 use super::fg::FgAct;
 use super::fgasm::{dialog_frame, dialog_head};
-use super::theme::{Theme, medium, mono, sans};
+use super::materials::{button_at, clipped, section, tab_strip};
+use super::theme::{Theme, medium, mono, sans, semi};
 use crate::render::Entity;
 use egui::{Align2, Color32, Pos2, Rect, Sense, Stroke, Ui, pos2, vec2};
 use forge_agent::measure::{Quantity, Reading, Shown};
@@ -141,6 +142,13 @@ pub struct PropsPanel {
 }
 
 const PROP_TABS: [&str; 6] = ["General", "Summary", "Project", "Status", "Custom", "Physical"];
+const IPROPS_W: f32 = 600.0;
+const IPROPS_BODY: f32 = 560.0;
+/// The iProperties rows: their words' column, a value column's width, a date field's.
+const LABEL_W: f32 = 150.0;
+const COL_W: f32 = 140.0;
+const DATE_W: f32 = 130.0;
+const TENSOR_W: f32 = 116.0;
 
 #[derive(Default)]
 pub struct Inspect {
@@ -158,6 +166,9 @@ pub struct Inspect {
     pub assembly: bool,
     pub physical: Option<Result<Physical, String>>,
     pub physical_busy: bool,
+    /// Other states of the part beside the modelled one (a formed part's simulated state, say):
+    /// each a column of the Physical tab after Modeled, by its name.
+    pub physical_more: Vec<(String, Physical)>,
     /// The host is asked to work the physical properties out (again).
     pub want_physical: bool,
     /// The model's middle and reach in the world, for drawing planes.
@@ -244,7 +255,7 @@ impl Shell {
                 i.browser = match i.browser {
                     Some(_) => None,
                     None => Some(super::materials::Browser::open(
-                        self.fg.as_ref().and_then(|f| doc_dir(&f.file)),
+                        self.fg.as_ref().and_then(|f| doc_dir(&f.path)),
                         i.doc.material.clone(),
                     )),
                 };
@@ -761,7 +772,6 @@ impl Shell {
         }
     }
 
-    #[allow(clippy::too_many_lines)]
     fn iprops_window(
         &mut self,
         ctx: &egui::Context,
@@ -771,12 +781,27 @@ impl Shell {
         ops: &mut Vec<Op>,
     ) -> Option<Rect> {
         let mut close = false;
-        let file = self.fg.as_ref().map(|f| f.file.clone()).unwrap_or_default();
+        let file = self
+            .fg
+            .as_ref()
+            .map(|f| {
+                if f.path.is_empty() {
+                    f.file.clone()
+                } else {
+                    f.path.clone()
+                }
+            })
+            .unwrap_or_default();
         let units = self.units;
+        let (contents, dirty) = self
+            .fg
+            .as_ref()
+            .map_or((String::new(), false), |f| (contents(f), f.dirty));
         let i = &mut self.inspect;
         let assembly = i.assembly;
         let doc = i.doc.clone();
         let physical = i.physical.clone();
+        let more = i.physical_more.clone();
         let busy = i.physical_busy;
         let mut want = false;
         let mut browse = false;
@@ -786,207 +811,50 @@ impl Shell {
             .file_name()
             .map_or("Untitled".to_string(), |n| n.to_string_lossy().into_owned());
         let title = format!("{name} iProperties");
-        let r = Self::inspect_window(&title, "iprops", t, pos2(v.left() + 40.0, v.top() + 40.0), 460.0).show(
-            ctx,
-            |ui| {
-                close = dialog_head(ui, t, "part", &title, "iprops:close", places);
-                ui.horizontal_wrapped(|ui| {
-                    for (k, name) in PROP_TABS.iter().enumerate() {
-                        let r = ui.selectable_label(p.tab == k, egui::RichText::new(*name).font(sans(12.0)));
-                        places.push((format!("iprops:tab:{name}"), r.rect));
-                        if r.clicked() {
-                            p.tab = k;
-                            if k == 5 {
-                                want = true;
+        let at = pos2(v.left() + 40.0, v.top() + 40.0);
+        let r = Self::inspect_window(&title, "iprops", t, at, IPROPS_W).show(ctx, |ui| {
+            let icon = if assembly { "subasm" } else { "part" };
+            close = dialog_head(ui, t, icon, &title, "iprops:close", places);
+            ui.add_space(6.0);
+            if tab_strip(ui, t, &PROP_TABS, &mut p.tab, "iprops:tab", places) && p.tab == 5 {
+                want = true;
+            }
+            egui::ScrollArea::vertical()
+                .id_salt(("iprops-body", p.tab))
+                .auto_shrink([false, false])
+                .min_scrolled_height(IPROPS_BODY)
+                .max_height(IPROPS_BODY)
+                .show(ui, |ui| {
+                    ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
+                    match p.tab {
+                        0 => Self::general_tab(ui, t, &file, assembly, units, &contents, dirty),
+                        1..=3 => Self::fields_tab(ui, t, p, &doc, &file, ops, places),
+                        4 => Self::custom_tab(ui, t, p, &doc, ops, places),
+                        _ => {
+                            let mut states: Vec<(&str, &Physical)> = vec![];
+                            let got = physical.as_ref().map(|r| r.as_ref());
+                            if let Some(Ok(m)) = got {
+                                states.push(("Modeled", m));
+                                states.extend(more.iter().map(|(n, x)| (n.as_str(), x)));
                             }
+                            let (u, b) = Self::physical_tab(
+                                ui,
+                                t,
+                                (assembly, dir.as_deref()),
+                                &doc,
+                                (got, &states),
+                                busy,
+                                units,
+                                places,
+                                ops,
+                            );
+                            want |= u;
+                            browse |= b;
                         }
                     }
+                    ui.add_space(8.0);
                 });
-                ui.separator();
-                let set = |key: &str, text: &str| -> Op {
-                    Op::SetProperty {
-                        key: key.into(),
-                        text: (!text.is_empty()).then(|| forge_lang::props::quote(text)),
-                    }
-                };
-                match p.tab {
-                    0 => {
-                        let meta = std::fs::metadata(&file).ok();
-                        egui::Grid::new("iprops-general")
-                            .num_columns(2)
-                            .spacing(vec2(12.0, 6.0))
-                            .show(ui, |ui| {
-                                let row = |ui: &mut Ui, k: &str, val: String| {
-                                    ui.label(egui::RichText::new(k).font(sans(12.0)).color(t.ink2));
-                                    ui.label(egui::RichText::new(val).font(sans(12.0)).color(t.ink));
-                                    ui.end_row();
-                                };
-                                row(ui, "Name", name.clone());
-                                row(
-                                    ui,
-                                    "Type",
-                                    if assembly { "Forge Assembly" } else { "Forge Part" }.into(),
-                                );
-                                row(
-                                    ui,
-                                    "Location",
-                                    std::path::Path::new(&file)
-                                        .parent()
-                                        .map_or(String::new(), |d| d.display().to_string()),
-                                );
-                                row(
-                                    ui,
-                                    "Size",
-                                    meta.as_ref().map_or("-".into(), |m| format!("{} bytes", m.len())),
-                                );
-                            });
-                    }
-                    1..=3 => {
-                        let tab = [Tab::Summary, Tab::Project, Tab::Status][p.tab - 1];
-                        egui::Grid::new(("iprops-fields", p.tab))
-                            .num_columns(2)
-                            .spacing(vec2(12.0, 5.0))
-                            .show(ui, |ui| {
-                                for (key, label, _) in FIELDS.iter().filter(|f| f.2 == tab) {
-                                    ui.label(egui::RichText::new(*label).font(sans(12.0)).color(t.ink2));
-                                    let now = doc.get(key).unwrap_or("").to_string();
-                                    if *key == "design_state" {
-                                        let mut pick = now.clone();
-                                        let r = egui::ComboBox::from_id_salt("iprops-state")
-                                            .selected_text(if now.is_empty() { "-" } else { now.as_str() })
-                                            .show_ui(ui, |ui| {
-                                                for s in STATES {
-                                                    ui.selectable_value(&mut pick, s.to_string(), s);
-                                                }
-                                            });
-                                        places.push(("iprops:design_state".into(), r.response.rect));
-                                        if pick != now {
-                                            ops.push(set(key, &pick));
-                                        }
-                                    } else {
-                                        // a value sent waits for the build that has it
-                                        if p.pending.get(*key) == Some(&now) {
-                                            p.pending.remove(*key);
-                                        }
-                                        let was = p.pending.get(*key).cloned().unwrap_or_else(|| now.clone());
-                                        let text =
-                                            p.typing.entry(key.to_string()).or_insert_with(|| was.clone());
-                                        let r = ui.add(
-                                            egui::TextEdit::singleline(text)
-                                                .desired_width(280.0)
-                                                .font(sans(12.0))
-                                                .hint_text(if key.ends_with("_date") {
-                                                    "YYYY-MM-DD"
-                                                } else {
-                                                    ""
-                                                }),
-                                        );
-                                        places.push((format!("iprops:{key}"), r.rect));
-                                        if r.lost_focus() && *text != was {
-                                            ops.push(
-                                                if *key == "estimated_cost"
-                                                    && text.trim().parse::<f64>().is_ok()
-                                                {
-                                                    Op::SetProperty {
-                                                        key: key.to_string(),
-                                                        text: Some(text.trim().to_string()),
-                                                    }
-                                                } else {
-                                                    set(key, text)
-                                                },
-                                            );
-                                            p.pending.insert(key.to_string(), text.clone());
-                                        } else if !r.has_focus() {
-                                            *text = was;
-                                        }
-                                    }
-                                    ui.end_row();
-                                }
-                            });
-                    }
-                    4 => {
-                        let mut rows = doc.custom.clone();
-                        let mut changed = false;
-                        egui::Grid::new("iprops-custom")
-                            .num_columns(3)
-                            .spacing(vec2(12.0, 5.0))
-                            .show(ui, |ui| {
-                                ui.label(egui::RichText::new("Name").font(medium(12.0)).color(t.ink));
-                                ui.label(egui::RichText::new("Value").font(medium(12.0)).color(t.ink));
-                                ui.end_row();
-                                let mut gone = None;
-                                for (k, (n, val)) in rows.iter().enumerate() {
-                                    ui.label(egui::RichText::new(n).font(sans(12.0)).color(t.ink2));
-                                    ui.label(egui::RichText::new(val).font(sans(12.0)).color(t.ink));
-                                    let r = ui.small_button("Delete");
-                                    places.push((format!("iprops:custom:delete:{n}"), r.rect));
-                                    if r.clicked() {
-                                        gone = Some(k);
-                                    }
-                                    ui.end_row();
-                                }
-                                if let Some(k) = gone {
-                                    rows.remove(k);
-                                    changed = true;
-                                }
-                                let r = ui.add(
-                                    egui::TextEdit::singleline(&mut p.new_custom.0)
-                                        .desired_width(130.0)
-                                        .hint_text("Name"),
-                                );
-                                places.push(("iprops:custom:name".into(), r.rect));
-                                let r = ui.add(
-                                    egui::TextEdit::singleline(&mut p.new_custom.1)
-                                        .desired_width(170.0)
-                                        .hint_text("Value"),
-                                );
-                                places.push(("iprops:custom:value".into(), r.rect));
-                                let r = ui.button("Add");
-                                places.push(("iprops:custom:add".into(), r.rect));
-                                if r.clicked() && !p.new_custom.0.trim().is_empty() {
-                                    let (n, val) = std::mem::take(&mut p.new_custom);
-                                    rows.retain(|x| x.0 != n.trim());
-                                    rows.push((n.trim().to_string(), val));
-                                    changed = true;
-                                }
-                                ui.end_row();
-                            });
-                        if changed {
-                            let text = rows
-                                .iter()
-                                .map(|(n, val)| {
-                                    format!(
-                                        "({}, {})",
-                                        forge_lang::props::quote(n),
-                                        forge_lang::props::quote(val)
-                                    )
-                                })
-                                .collect::<Vec<_>>()
-                                .join(", ");
-                            ops.push(Op::SetProperty {
-                                key: "custom".into(),
-                                text: (!rows.is_empty()).then(|| format!("[{text}]")),
-                            });
-                        }
-                    }
-                    _ => {
-                        let (u, b) = Self::physical_tab(
-                            ui,
-                            t,
-                            (assembly, dir.as_deref()),
-                            &doc,
-                            physical.as_ref(),
-                            busy,
-                            units,
-                            places,
-                            ops,
-                        );
-                        want |= u;
-                        browse |= b;
-                    }
-                }
-            },
-        );
+        });
         let i = &mut self.inspect;
         i.want_physical |= want;
         if browse && i.browser.is_none() {
@@ -998,231 +866,837 @@ impl Shell {
         r.map(|r| r.response.rect)
     }
 
-    /// The Physical tab; whether Update was pressed, and Browse.
+    /// A row of words and a value beside them; its rect.
+    fn info_row(ui: &mut Ui, t: &Theme, words: &str, value: &str, font: egui::FontId, ink: Color32) -> Rect {
+        let w = ui.available_width();
+        let (r, _) = ui.allocate_exact_size(vec2(w, 30.0), Sense::hover());
+        ui.painter().text(
+            pos2(r.left(), r.center().y),
+            Align2::LEFT_CENTER,
+            words,
+            sans(12.5),
+            t.ink2,
+        );
+        let v = Rect::from_min_max(
+            pos2(r.left() + LABEL_W, r.top()),
+            pos2(r.right() - 4.0, r.bottom()),
+        );
+        clipped(ui, v, value, font, ink, words);
+        v
+    }
+
     #[allow(clippy::too_many_arguments)]
+    fn general_tab(
+        ui: &mut Ui,
+        t: &Theme,
+        file: &str,
+        assembly: bool,
+        units: &str,
+        contents: &str,
+        dirty: bool,
+    ) {
+        let path = std::path::Path::new(file);
+        let meta = std::fs::metadata(file).ok();
+        ui.add_space(12.0);
+        let w = ui.available_width();
+        let (r, _) = ui.allocate_exact_size(vec2(w, 48.0), Sense::hover());
+        let p = ui.painter();
+        let tile = Rect::from_min_size(r.min, vec2(44.0, 44.0));
+        p.rect_filled(tile, 6.0, t.raised);
+        p.rect_stroke(tile, 6.0, Stroke::new(1.0, t.line), egui::StrokeKind::Inside);
+        super::icons::draw(
+            p,
+            tile.min + vec2(10.0, 10.0),
+            24.0,
+            if assembly { "subasm" } else { "part" },
+            1.5,
+            t.ink,
+        );
+        let name = path
+            .file_name()
+            .map_or("Untitled".to_string(), |n| n.to_string_lossy().into_owned());
+        p.text(
+            pos2(tile.right() + 14.0, r.top() + 13.0),
+            Align2::LEFT_CENTER,
+            name,
+            semi(16.0),
+            t.ink,
+        );
+        p.text(
+            pos2(tile.right() + 14.0, r.top() + 34.0),
+            Align2::LEFT_CENTER,
+            if assembly { "Forge assembly" } else { "Forge part" },
+            sans(12.0),
+            t.ink2,
+        );
+        section(ui, t, "File");
+        let dir = doc_dir(file).map_or(String::new(), |d| {
+            let d = d.display().to_string();
+            match std::env::var("HOME") {
+                Ok(h) if !h.is_empty() && d.starts_with(&h) => format!("~{}", &d[h.len()..]),
+                _ => d,
+            }
+        });
+        Self::info_row(ui, t, "Location", &dir, sans(12.5), t.ink);
+        if let Some(m) = &meta {
+            Self::info_row(ui, t, "Size", &size_words(m.len()), sans(12.5), t.ink);
+            for (words, at) in [
+                ("Created", m.created().ok()),
+                ("Modified", m.modified().ok()),
+                ("Accessed", m.accessed().ok()),
+            ] {
+                if let Some(at) = at {
+                    Self::info_row(ui, t, words, &when(at), mono(12.0), t.ink);
+                }
+            }
+        }
+        section(ui, t, "Document");
+        let mass = mass_unit(units);
+        let unit_words = |u: &str| match u {
+            "mm" => "millimetres",
+            "cm" => "centimetres",
+            "m" => "metres",
+            "in" => "inches",
+            "ft" => "feet",
+            "kg" => "kilograms",
+            "lb" => "pounds",
+            _ => "",
+        };
+        Self::info_row(
+            ui,
+            t,
+            "Units",
+            &format!(
+                "{} ({units}) · {} ({mass})",
+                capitalised(unit_words(units)),
+                unit_words(mass)
+            ),
+            sans(12.5),
+            t.ink,
+        );
+        if !contents.is_empty() {
+            Self::info_row(ui, t, "Contents", contents, sans(12.5), t.ink);
+        }
+        let (state, ink) = if dirty {
+            ("Unsaved changes", super::materials::amber(t))
+        } else {
+            ("Saved", t.ink)
+        };
+        Self::info_row(ui, t, "State", state, sans(12.5), ink);
+    }
+
+    /// A property's text box: what's typed leaves as a SetProperty op when it loses focus.
+    #[allow(clippy::too_many_arguments)]
+    fn prop_field(
+        ui: &mut Ui,
+        p: &mut PropsPanel,
+        doc: &Props,
+        key: &str,
+        r: Rect,
+        hint: &str,
+        ops: &mut Vec<Op>,
+        places: &mut Vec<(String, Rect)>,
+    ) {
+        let now = doc.get(key).unwrap_or("").to_string();
+        // a value sent waits for the build that has it
+        if p.pending.get(key) == Some(&now) {
+            p.pending.remove(key);
+        }
+        let was = p.pending.get(key).cloned().unwrap_or_else(|| now.clone());
+        let text = p.typing.entry(key.to_string()).or_insert_with(|| was.clone());
+        let edit = if key == "comments" {
+            egui::TextEdit::multiline(text).desired_rows(3)
+        } else {
+            egui::TextEdit::singleline(text)
+        };
+        let resp = ui.put(r, edit.font(sans(12.5)).margin(vec2(8.0, 5.0)).hint_text(hint));
+        places.push((format!("iprops:{key}"), resp.rect));
+        if resp.lost_focus() && *text != was {
+            let v = text.trim();
+            ops.push(Op::SetProperty {
+                key: key.to_string(),
+                text: if v.is_empty() {
+                    None
+                } else if key == "estimated_cost" && v.parse::<f64>().is_ok() {
+                    Some(v.to_string())
+                } else {
+                    Some(forge_lang::props::quote(v))
+                },
+            });
+            p.pending.insert(key.to_string(), text.clone());
+        } else if !resp.has_focus() {
+            *text = was;
+        }
+    }
+
+    /// Summary, Project and Status: Inventor's fields, each written back as typed.
+    fn fields_tab(
+        ui: &mut Ui,
+        t: &Theme,
+        p: &mut PropsPanel,
+        doc: &Props,
+        file: &str,
+        ops: &mut Vec<Op>,
+        places: &mut Vec<(String, Rect)>,
+    ) {
+        let stem = std::path::Path::new(file)
+            .file_stem()
+            .map_or(String::new(), |s| s.to_string_lossy().into_owned());
+        let tab = [Tab::Summary, Tab::Project, Tab::Status][p.tab - 1];
+        let label = |key: &str| FIELDS.iter().find(|f| f.0 == key).map_or("", |f| f.1);
+        let hint = |key: &str| -> String {
+            match key {
+                "part_number" => stem.clone(),
+                k if k.ends_with("_date") => "YYYY-MM-DD".into(),
+                _ => String::new(),
+            }
+        };
+        ui.add_space(10.0);
+        if tab == Tab::Status {
+            // what the part is, then its state and who signed it off when
+            let number = doc.get("part_number").map_or(stem.clone(), str::to_string);
+            Self::info_row(ui, t, "Part Number", &number, sans(12.5), t.ink);
+            if let Some(d) = doc.get("description") {
+                Self::info_row(ui, t, "Description", d, sans(12.5), t.ink);
+            }
+            section(ui, t, "Status");
+            let w = ui.available_width();
+            let (r, _) = ui.allocate_exact_size(vec2(w, 36.0), Sense::hover());
+            ui.painter().text(
+                pos2(r.left(), r.center().y),
+                Align2::LEFT_CENTER,
+                "Design State",
+                sans(12.5),
+                t.ink2,
+            );
+            let now = doc.get("design_state").unwrap_or("").to_string();
+            let mut pick = now.clone();
+            let at = Rect::from_min_size(pos2(r.left() + LABEL_W, r.top() + 5.0), vec2(200.0, 26.0));
+            ui.scope_builder(egui::UiBuilder::new().max_rect(at), |ui| {
+                let c = egui::ComboBox::from_id_salt("iprops-state")
+                    .selected_text(if now.is_empty() { "—" } else { state_words(&now) })
+                    .width(200.0)
+                    .show_ui(ui, |ui| {
+                        for s in STATES {
+                            ui.selectable_value(&mut pick, s.to_string(), state_words(s));
+                        }
+                    });
+                places.push(("iprops:design_state".into(), c.response.rect));
+            });
+            if pick != now {
+                ops.push(Op::SetProperty {
+                    key: "design_state".into(),
+                    text: Some(forge_lang::props::quote(&pick)),
+                });
+            }
+            section(ui, t, "Sign-off");
+            let (r, _) = ui.allocate_exact_size(vec2(w, 22.0), Sense::hover());
+            let by_x = r.left() + LABEL_W;
+            let date_x = r.right() - 4.0 - DATE_W;
+            for (x, s) in [(by_x, "BY"), (date_x, "DATE")] {
+                ui.painter()
+                    .text(pos2(x, r.center().y), Align2::LEFT_CENTER, s, semi(10.0), t.ink2);
+            }
+            for (words, by, date) in [
+                ("Checked", "checked_by", "checked_date"),
+                ("Eng. Approved", "eng_approved_by", "eng_approved_date"),
+                ("Mfg. Approved", "mfg_approved_by", "mfg_approved_date"),
+            ] {
+                let (r, _) = ui.allocate_exact_size(vec2(w, 36.0), Sense::hover());
+                ui.painter().text(
+                    pos2(r.left(), r.center().y),
+                    Align2::LEFT_CENTER,
+                    words,
+                    sans(12.5),
+                    t.ink2,
+                );
+                let f = Rect::from_min_max(pos2(by_x, r.top() + 5.0), pos2(date_x - 10.0, r.bottom() - 5.0));
+                Self::prop_field(ui, p, doc, by, f, "", ops, places);
+                let f = Rect::from_min_max(
+                    pos2(date_x, r.top() + 5.0),
+                    pos2(r.right() - 4.0, r.bottom() - 5.0),
+                );
+                Self::prop_field(ui, p, doc, date, f, "YYYY-MM-DD", ops, places);
+            }
+            return;
+        }
+        for (key, _, _) in FIELDS.iter().filter(|f| f.2 == tab) {
+            let w = ui.available_width();
+            let h = if *key == "comments" { 76.0 } else { 36.0 };
+            let (r, _) = ui.allocate_exact_size(vec2(w, h), Sense::hover());
+            ui.painter().text(
+                pos2(r.left(), r.top() + 18.0),
+                Align2::LEFT_CENTER,
+                label(key),
+                sans(12.5),
+                t.ink2,
+            );
+            let f = Rect::from_min_max(
+                pos2(r.left() + LABEL_W, r.top() + 5.0),
+                pos2(r.right() - 4.0, r.bottom() - 5.0),
+            );
+            Self::prop_field(ui, p, doc, key, f, &hint(key), ops, places);
+        }
+    }
+
+    fn custom_tab(
+        ui: &mut Ui,
+        t: &Theme,
+        p: &mut PropsPanel,
+        doc: &Props,
+        ops: &mut Vec<Op>,
+        places: &mut Vec<(String, Rect)>,
+    ) {
+        let mut rows = doc.custom.clone();
+        let mut changed = false;
+        ui.add_space(10.0);
+        let w = ui.available_width();
+        let name_w = 180.0;
+        let (h, _) = ui.allocate_exact_size(vec2(w, 24.0), Sense::hover());
+        for (x, s) in [(h.left() + 8.0, "NAME"), (h.left() + name_w + 12.0, "VALUE")] {
+            ui.painter()
+                .text(pos2(x, h.center().y), Align2::LEFT_CENTER, s, semi(10.0), t.ink2);
+        }
+        ui.painter()
+            .hline(h.x_range(), h.bottom() - 0.5, Stroke::new(1.0, t.line));
+        let mut gone = None;
+        for (k, (n, val)) in rows.clone().iter().enumerate() {
+            let (r, _) = ui.allocate_exact_size(vec2(w, 38.0), Sense::hover());
+            if k % 2 == 1 {
+                ui.painter().rect_filled(r, 0.0, t.raised);
+            }
+            clipped(
+                ui,
+                Rect::from_min_max(pos2(r.left() + 8.0, r.top()), pos2(r.left() + name_w, r.bottom())),
+                n,
+                medium(12.5),
+                t.ink,
+                n,
+            );
+            let key = format!("custom:{n}");
+            let text = p.typing.entry(key.clone()).or_insert_with(|| val.clone());
+            let f = Rect::from_min_max(
+                pos2(r.left() + name_w + 4.0, r.top() + 6.0),
+                pos2(r.right() - 40.0, r.bottom() - 6.0),
+            );
+            let resp = ui.put(
+                f,
+                egui::TextEdit::singleline(text)
+                    .font(sans(12.5))
+                    .margin(vec2(8.0, 5.0)),
+            );
+            places.push((format!("iprops:custom:value:{n}"), resp.rect));
+            if resp.lost_focus() && *text != *val {
+                rows[k].1 = text.clone();
+                changed = true;
+            } else if !resp.has_focus() {
+                *text = val.clone();
+            }
+            let x = Rect::from_center_size(pos2(r.right() - 18.0, r.center().y), vec2(22.0, 22.0));
+            let resp = ui.interact(x, ui.scope_id().with(("custom-delete", k)), Sense::click());
+            if resp.hovered() {
+                ui.painter().rect_filled(x, 4.0, t.hover);
+            }
+            super::icons::draw(
+                ui.painter(),
+                x.min + vec2(3.0, 3.0),
+                16.0,
+                "delete",
+                1.5,
+                if resp.hovered() { t.error } else { t.ink2 },
+            );
+            let resp = resp.on_hover_text(format!("Delete {n}"));
+            places.push((format!("iprops:custom:delete:{n}"), x));
+            if resp.clicked() {
+                gone = Some(k);
+            }
+        }
+        if let Some(k) = gone {
+            p.typing.remove(&format!("custom:{}", rows[k].0));
+            rows.remove(k);
+            changed = true;
+        }
+        ui.add_space(10.0);
+        let (r, _) = ui.allocate_exact_size(vec2(w, 34.0), Sense::hover());
+        let f = Rect::from_min_max(
+            pos2(r.left(), r.top() + 4.0),
+            pos2(r.left() + name_w, r.bottom() - 4.0),
+        );
+        let resp = ui.put(
+            f,
+            egui::TextEdit::singleline(&mut p.new_custom.0)
+                .font(sans(12.5))
+                .margin(vec2(8.0, 5.0))
+                .hint_text("Name"),
+        );
+        places.push(("iprops:custom:name".into(), resp.rect));
+        let f = Rect::from_min_max(
+            pos2(r.left() + name_w + 4.0, r.top() + 4.0),
+            pos2(r.right() - 84.0, r.bottom() - 4.0),
+        );
+        let resp = ui.put(
+            f,
+            egui::TextEdit::singleline(&mut p.new_custom.1)
+                .font(sans(12.5))
+                .margin(vec2(8.0, 5.0))
+                .hint_text("Value"),
+        );
+        places.push(("iprops:custom:value".into(), resp.rect));
+        let b = Rect::from_min_max(
+            pos2(r.right() - 76.0, r.top() + 2.0),
+            pos2(r.right() - 4.0, r.bottom() - 2.0),
+        );
+        let resp = button_at(ui, t, b, "Add", false, !p.new_custom.0.trim().is_empty());
+        places.push(("iprops:custom:add".into(), resp.rect));
+        if resp.clicked() {
+            let (n, val) = std::mem::take(&mut p.new_custom);
+            rows.retain(|x| x.0 != n.trim());
+            rows.push((n.trim().to_string(), val));
+            changed = true;
+        }
+        if changed {
+            let text = rows
+                .iter()
+                .map(|(n, val)| {
+                    format!(
+                        "({}, {})",
+                        forge_lang::props::quote(n),
+                        forge_lang::props::quote(val)
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
+            ops.push(Op::SetProperty {
+                key: "custom".into(),
+                text: (!rows.is_empty()).then(|| format!("[{text}]")),
+            });
+        }
+    }
+
+    /// The Physical tab: the material, then each state's properties in a column of its own
+    /// (Modeled, and whatever else the part gives); whether Update was pressed, and Browse.
+    #[allow(clippy::too_many_arguments, clippy::too_many_lines)]
     fn physical_tab(
         ui: &mut Ui,
         t: &Theme,
         (assembly, dir): (bool, Option<&std::path::Path>),
         doc: &Props,
-        physical: Option<&Result<Physical, String>>,
+        (got, states): States,
         busy: bool,
         units: &str,
         places: &mut Vec<(String, Rect)>,
         ops: &mut Vec<Op>,
     ) -> (bool, bool) {
-        let (mut update, mut browse) = (false, false);
+        let mut browse = false;
         let libs = forge_material::Libraries::cached(dir);
+        let w = ui.available_width();
+        ui.add_space(10.0);
+        let material = doc
+            .material
+            .as_deref()
+            .and_then(|n| libs.find(n))
+            .map(|x| x.1.clone());
         if !assembly {
-            ui.horizontal(|ui| {
-                ui.label(egui::RichText::new("Material").font(sans(12.0)).color(t.ink2));
-                let now = doc.material.clone().unwrap_or_default();
-                let mut pick = now.clone();
-                let r = egui::ComboBox::from_id_salt("iprops-material")
-                    .selected_text(if now.is_empty() { "(none)" } else { now.as_str() })
-                    .width(220.0)
+            let (r, _) = ui.allocate_exact_size(vec2(w, 36.0), Sense::hover());
+            ui.painter().text(
+                pos2(r.left(), r.center().y),
+                Align2::LEFT_CENTER,
+                "Material",
+                sans(12.5),
+                t.ink2,
+            );
+            let now = doc.material.clone().unwrap_or_default();
+            let mut pick = now.clone();
+            let at = Rect::from_min_size(pos2(r.left() + LABEL_W, r.top() + 5.0), vec2(260.0, 26.0));
+            ui.scope_builder(egui::UiBuilder::new().max_rect(at), |ui| {
+                let c = egui::ComboBox::from_id_salt("iprops-material")
+                    .selected_text(if now.is_empty() { "None" } else { now.as_str() })
+                    .width(at.width())
                     .height(420.0)
                     .show_ui(ui, |ui| {
                         let mut family = String::new();
                         for (set, m) in libs.all() {
                             let head = if set.lib == forge_material::Lib::ForgeCad {
-                                m.family.clone()
+                                super::materials::capital(&m.family)
                             } else {
                                 set.lib.label().to_string()
                             };
                             if head != family {
-                                ui.label(egui::RichText::new(&head).font(medium(11.0)).color(t.ink2));
+                                ui.add_space(4.0);
+                                ui.label(egui::RichText::new(&head).font(semi(11.0)).color(t.ink2));
                                 family = head;
                             }
                             ui.selectable_value(&mut pick, m.name.clone(), &m.name);
                         }
                     });
-                places.push(("iprops:material".into(), r.response.rect));
-                let r = ui.button(egui::RichText::new("Browse...").font(sans(12.0)));
-                places.push(("iprops:browse".into(), r.rect));
-                browse = r.clicked();
-                if pick != now {
-                    ops.push(Op::SetProperty {
-                        key: "material".into(),
-                        text: Some(forge_lang::props::quote(&pick)),
-                    });
-                }
+                places.push(("iprops:material".into(), c.response.rect));
             });
-            if let Some((_, m)) = doc.material.as_deref().and_then(|n| libs.find(n)) {
-                ui.label(
-                    egui::RichText::new(format!(
-                        "Density {:.3} g/cm³{}",
-                        m.density / 1000.0,
-                        m.note.as_ref().map_or(String::new(), |n| format!(" · {n}"))
-                    ))
-                    .font(sans(11.0))
-                    .color(t.ink2),
-                );
+            let b = Rect::from_min_size(pos2(at.right() + 8.0, at.top() - 1.0), vec2(96.0, 28.0));
+            let r = button_at(ui, t, b, "Browse…", false, true);
+            places.push(("iprops:browse".into(), r.rect));
+            browse = r.clicked();
+            if pick != now {
+                ops.push(Op::SetProperty {
+                    key: "material".into(),
+                    text: Some(forge_lang::props::quote(&pick)),
+                });
             }
         }
-        ui.horizontal(|ui| {
-            let r = ui.button(egui::RichText::new("Update").font(sans(12.0)));
-            places.push(("iprops:update".into(), r.rect));
-            update = r.clicked();
-            if busy {
-                ui.label(
-                    egui::RichText::new("Working it out...")
-                        .font(sans(11.0))
-                        .color(t.ink2),
-                );
-            }
-        });
-        let Some(p) = physical else {
+        let (r, _) = ui.allocate_exact_size(vec2(w, 38.0), Sense::hover());
+        let b = Rect::from_min_size(pos2(r.left(), r.top() + 5.0), vec2(84.0, 28.0));
+        let resp = button_at(ui, t, b, "Update", false, !busy);
+        places.push(("iprops:update".into(), resp.rect));
+        let update = resp.clicked();
+        let note = match (busy, got) {
+            (true, _) => "Working it out…".to_string(),
+            (_, Some(Ok(p))) => format!(
+                "Exact B-rep integration · relative error under {:.0e}",
+                p.rel_err.max(1e-15)
+            ),
+            _ => String::new(),
+        };
+        ui.painter().text(
+            pos2(b.right() + 12.0, b.center().y),
+            Align2::LEFT_CENTER,
+            note,
+            sans(12.0),
+            t.ink2,
+        );
+        if let Some(Err(e)) = got {
+            ui.add_space(6.0);
+            ui.label(egui::RichText::new(e).font(sans(12.0)).color(t.error));
+        }
+        if states.is_empty() {
             return (update, browse);
-        };
-        let p = match p {
-            Ok(p) => p,
-            Err(e) => {
-                ui.label(egui::RichText::new(e).font(sans(11.0)).color(t.error));
-                return (update, browse);
-            }
-        };
+        }
         let k = per_unit(units);
         let mu = mass_unit(units);
         let km = per_unit(mu);
-        let fmt = |x: f64| {
-            if x.abs() >= 1e5 || (x != 0.0 && x.abs() < 1e-3) {
-                format!("{x:.4e}")
-            } else {
-                format!("{x:.4}")
-            }
-        };
-        let iu = format!("{mu} {units}²");
         let ik = km * k * k;
-        let head = |ui: &mut Ui, text: &str| {
-            ui.add_space(6.0);
-            ui.label(egui::RichText::new(text).font(medium(12.0)).color(t.ink));
-        };
-        // a section's rows: words, then values in columns
-        let grid =
-            |ui: &mut Ui, id: &str, rows: Vec<(String, Vec<String>)>, places: &mut Vec<(String, Rect)>| {
-                let cols = rows.iter().map(|r| r.1.len()).max().unwrap_or(1) + 1;
-                egui::Grid::new(id)
-                    .num_columns(cols)
-                    .spacing(vec2(14.0, 3.0))
-                    .show(ui, |ui| {
-                        for (what, vals) in rows {
-                            ui.label(egui::RichText::new(&what).font(sans(12.0)).color(t.ink2));
-                            for v in vals {
-                                let r = ui.label(egui::RichText::new(v).font(mono(12.0)).color(t.ink));
-                                places.push((format!("iprops:{what}"), r.rect));
-                            }
-                            ui.end_row();
-                        }
-                    });
-            };
-        egui::ScrollArea::vertical().max_height(520.0).show(ui, |ui| {
-            head(ui, "General Properties");
-            grid(
-                ui,
-                "phys-general",
-                vec![
-                    (
-                        "Mass".into(),
-                        vec![
-                            p.mass
-                                .map_or("none (no material)".into(), |m| format!("{} {mu}", fmt(m * km))),
-                        ],
-                    ),
-                    ("Area".into(), vec![format!("{} {units}²", fmt(p.area * k * k))]),
-                    (
-                        "Volume".into(),
-                        vec![format!("{} {units}³", fmt(p.volume * k * k * k))],
-                    ),
-                ],
-                places,
-            );
-            head(ui, "Center of Gravity");
-            grid(
-                ui,
-                "phys-cg",
-                ["X", "Y", "Z"]
-                    .iter()
-                    .enumerate()
-                    .map(|(j, a)| (a.to_string(), vec![format!("{} {units}", fmt(p.centroid[j] * k))]))
-                    .collect(),
-                places,
-            );
-            if let Some((pm, _)) = &p.principal {
-                head(ui, &format!("Principal Moments ({iu})"));
-                grid(
-                    ui,
-                    "phys-principal",
-                    vec![("I1  I2  I3".into(), pm.iter().map(|x| fmt(x * ik)).collect())],
-                    places,
+        let iu = format!("{mu}·{units}²");
+        let n = states.len();
+        let col = |j: usize| LABEL_W + COL_W * (j + 1) as f32;
+        let p0 = ui.painter().clone();
+        if n > 1 {
+            let (r, _) = ui.allocate_exact_size(vec2(w, 26.0), Sense::hover());
+            for (j, (name, _)) in states.iter().enumerate() {
+                p0.text(
+                    pos2(r.left() + col(j), r.bottom() - 6.0),
+                    Align2::RIGHT_BOTTOM,
+                    *name,
+                    medium(12.0),
+                    t.ink,
                 );
             }
-            for (what, m) in [
-                ("About Center of Gravity", p.inertia),
-                ("Global, about the origin", p.origin_inertia),
-            ] {
-                let Some(m) = m else { continue };
-                head(ui, &format!("{what} ({iu})"));
-                grid(
-                    ui,
-                    what,
-                    vec![
-                        (
-                            "Ixx  Iyy  Izz".into(),
-                            (0..3).map(|j| fmt(m[j][j] * ik)).collect(),
-                        ),
-                        (
-                            "Ixy  Iyz  Ixz".into(),
-                            [(0, 1), (1, 2), (0, 2)]
-                                .iter()
-                                .map(|&(a, b)| fmt(m[a][b] * ik))
-                                .collect(),
-                        ),
-                    ],
-                    places,
-                );
-            }
-            ui.add_space(4.0);
-            ui.label(
-                egui::RichText::new(format!(
-                    "Accuracy: exact B-rep integration, relative error under {:.0e}",
-                    p.rel_err.max(1e-15)
-                ))
-                .font(sans(11.0))
-                .color(t.ink2),
+        }
+        // a quantity's row: words, a value for each state, its unit
+        let mut row = |ui: &mut Ui, words: &str, vals: Vec<Option<f64>>, unit: &str| {
+            let (r, _) = ui.allocate_exact_size(vec2(w, 28.0), Sense::hover());
+            let p = ui.painter();
+            p.text(
+                pos2(r.left(), r.center().y),
+                Align2::LEFT_CENTER,
+                words,
+                sans(12.5),
+                t.ink2,
             );
-            if !p.missing.is_empty() {
-                ui.label(
-                    egui::RichText::new(format!(
-                        "No material (volume only, no mass): {}{}",
-                        p.missing.iter().take(6).cloned().collect::<Vec<_>>().join(", "),
-                        if p.missing.len() > 6 {
-                            format!(" and {} more", p.missing.len() - 6)
-                        } else {
-                            String::new()
-                        }
-                    ))
-                    .font(sans(11.0))
-                    .color(super::fg::WARN),
+            for (j, v) in vals.iter().enumerate() {
+                let at = pos2(r.left() + col(j), r.center().y);
+                let (s, ink) = v.map_or(("—".to_string(), t.ink2), |x| (fig(x), t.ink));
+                let g = p.layout_no_wrap(s, mono(12.5), ink);
+                let cell = Rect::from_min_max(
+                    at - vec2(g.size().x, g.size().y / 2.0),
+                    at + vec2(0.0, g.size().y / 2.0),
                 );
-            }
-            if p.solids.len() > 1 && !assembly {
-                ui.add_space(4.0);
-                ui.label(egui::RichText::new("Bodies").font(medium(12.0)).color(t.ink));
-                for s in &p.solids {
-                    ui.label(
-                        egui::RichText::new(format!(
-                            "{} · {} · {}",
-                            s.id,
-                            s.material.as_deref().unwrap_or("(none)"),
-                            s.mass.map_or("-".into(), |m| format!("{} {mu}", fmt(m * km)))
-                        ))
-                        .font(sans(11.0))
-                        .color(t.ink2),
-                    );
+                p.galley(cell.min, g, ink);
+                if j == 0 {
+                    places.push((format!("iprops:{words}"), cell));
                 }
             }
-        });
+            p.text(
+                pos2(r.left() + col(n - 1) + 10.0, r.center().y),
+                Align2::LEFT_CENTER,
+                unit,
+                sans(12.0),
+                t.ink2,
+            );
+        };
+        let all = |f: &dyn Fn(&Physical) -> Option<f64>| states.iter().map(|s| f(s.1)).collect::<Vec<_>>();
+        section(ui, t, "General");
+        row(ui, "Mass", all(&|p| p.mass.map(|m| m * km)), mu);
+        row(ui, "Area", all(&|p| Some(p.area * k * k)), &format!("{units}²"));
+        row(
+            ui,
+            "Volume",
+            all(&|p| Some(p.volume * k * k * k)),
+            &format!("{units}³"),
+        );
+        if let Some(m) = &material {
+            let d = all(&|p| p.mass.map(|_| m.density));
+            row(ui, "Density", d, "kg/m³");
+        }
+        section(ui, t, "Center of gravity");
+        for (j, a) in ["X", "Y", "Z"].iter().enumerate() {
+            row(ui, a, all(&|p| Some(p.centroid[j] * k)), units);
+        }
+        if states.iter().any(|s| s.1.principal.is_some()) {
+            section(ui, t, "Principal moments");
+            for (j, a) in ["I1", "I2", "I3"].iter().enumerate() {
+                row(ui, a, all(&|p| p.principal.map(|x| x.0[j] * ik)), &iu);
+            }
+        }
+        for (what, of) in [
+            ("Inertia about the center of gravity", 0),
+            ("Inertia about the origin", 1),
+        ] {
+            let ms: Vec<(&str, [[f64; 3]; 3])> = states
+                .iter()
+                .filter_map(|(name, p)| {
+                    if of == 0 { p.inertia } else { p.origin_inertia }.map(|m| (*name, m))
+                })
+                .collect();
+            if ms.is_empty() {
+                continue;
+            }
+            section(ui, t, what);
+            for (name, m) in ms {
+                let corner = if n > 1 {
+                    format!("{name} · {iu}")
+                } else {
+                    String::new()
+                };
+                Self::tensor(ui, t, &corner, &m, ik, &iu, places, what);
+            }
+        }
+        let p = states[0].1;
+        if p.solids.len() > 1 && !assembly {
+            section(ui, t, "Bodies");
+            for s in &p.solids {
+                let (r, _) = ui.allocate_exact_size(vec2(w, 28.0), Sense::hover());
+                let pp = ui.painter();
+                pp.text(
+                    pos2(r.left(), r.center().y),
+                    Align2::LEFT_CENTER,
+                    &s.id,
+                    sans(12.5),
+                    t.ink,
+                );
+                pp.text(
+                    pos2(r.left() + LABEL_W, r.center().y),
+                    Align2::LEFT_CENTER,
+                    s.material.as_deref().unwrap_or("None"),
+                    sans(12.5),
+                    if s.material.is_some() { t.ink } else { t.ink2 },
+                );
+                pp.text(
+                    pos2(r.left() + col(0) + COL_W, r.center().y),
+                    Align2::RIGHT_CENTER,
+                    s.mass.map_or("—".into(), |m| format!("{} {mu}", fig(m * km))),
+                    mono(12.5),
+                    t.ink,
+                );
+            }
+        }
+        if !p.missing.is_empty() {
+            ui.add_space(10.0);
+            let list = p.missing.iter().take(6).cloned().collect::<Vec<_>>().join(", ");
+            let more = if p.missing.len() > 6 {
+                format!(" and {} more", p.missing.len() - 6)
+            } else {
+                String::new()
+            };
+            ui.label(
+                egui::RichText::new(format!("No material, so no mass: {list}{more}"))
+                    .font(sans(12.0))
+                    .color(super::fg::WARN),
+            );
+        }
         (update, browse)
+    }
+
+    /// A symmetric 3 × 3 tensor as a table, the axes along its edges.
+    #[allow(clippy::too_many_arguments)]
+    fn tensor(
+        ui: &mut Ui,
+        t: &Theme,
+        corner: &str,
+        m: &[[f64; 3]; 3],
+        k: f64,
+        unit: &str,
+        places: &mut Vec<(String, Rect)>,
+        what: &str,
+    ) {
+        let w = ui.available_width();
+        let cell = |j: usize| LABEL_W + TENSOR_W * (j + 1) as f32;
+        let (r, _) = ui.allocate_exact_size(vec2(w, 24.0), Sense::hover());
+        let p = ui.painter().clone();
+        let (corner, ink) = if corner.is_empty() {
+            (unit, t.ink2)
+        } else {
+            (corner, t.ink)
+        };
+        p.text(
+            pos2(r.left(), r.center().y),
+            Align2::LEFT_CENTER,
+            corner,
+            medium(12.0),
+            ink,
+        );
+        for (j, a) in ["X", "Y", "Z"].iter().enumerate() {
+            p.text(
+                pos2(r.left() + cell(j), r.center().y),
+                Align2::RIGHT_CENTER,
+                *a,
+                semi(10.5),
+                t.ink2,
+            );
+        }
+        for (a, axis) in ["X", "Y", "Z"].iter().enumerate() {
+            let (r, _) = ui.allocate_exact_size(vec2(w, 26.0), Sense::hover());
+            p.text(
+                pos2(r.left() + LABEL_W - 16.0, r.center().y),
+                Align2::RIGHT_CENTER,
+                *axis,
+                semi(10.5),
+                t.ink2,
+            );
+            for b in 0..3 {
+                let ink = if a == b { t.ink } else { t.ink2 };
+                let at = pos2(r.left() + cell(b), r.center().y);
+                let g = p.layout_no_wrap(fig(m[a][b] * k), mono(12.5), ink);
+                let c = Rect::from_min_max(
+                    at - vec2(g.size().x, g.size().y / 2.0),
+                    at + vec2(0.0, g.size().y / 2.0),
+                );
+                p.galley(c.min, g, ink);
+                places.push((format!("iprops:{what}:{axis}{}", ["X", "Y", "Z"][b]), c));
+            }
+        }
+        ui.add_space(4.0);
+    }
+}
+
+/// The physical properties as worked out (or why not), and each state's, by name.
+type States<'a> = (
+    Option<Result<&'a Physical, &'a String>>,
+    &'a [(&'a str, &'a Physical)],
+);
+
+/// What a document holds, in a line.
+fn contents(f: &super::fg::FgPanel) -> String {
+    use super::fg::plural;
+    match &f.asm {
+        Some(a) => format!(
+            "{} · {}",
+            plural(a.bom.len(), "part"),
+            plural(a.occ.len(), "occurrence")
+        ),
+        None => format!(
+            "{} · {}",
+            plural(f.feats.len(), "feature"),
+            plural(f.params.len(), "parameter")
+        ),
+    }
+}
+
+fn capitalised(s: &str) -> String {
+    super::materials::capital(s)
+}
+
+/// Inventor's words for a design state.
+fn state_words(s: &str) -> &str {
+    match s {
+        "WorkInProgress" => "Work in progress",
+        "Pending" => "Pending",
+        "Released" => "Released",
+        x => x,
+    }
+}
+
+/// A file's size: in KB or MB, and its bytes.
+fn size_words(n: u64) -> String {
+    let grouped = {
+        let s = n.to_string();
+        let mut out = String::new();
+        for (k, c) in s.chars().enumerate() {
+            if k > 0 && (s.len() - k).is_multiple_of(3) {
+                out.push(',');
+            }
+            out.push(c);
+        }
+        out
+    };
+    match n {
+        0..1024 => format!("{grouped} bytes"),
+        1024..1_048_576 => format!("{:.1} KB ({grouped} bytes)", n as f64 / 1024.0),
+        _ => format!("{:.1} MB ({grouped} bytes)", n as f64 / 1_048_576.0),
+    }
+}
+
+/// A time, to the minute, in UTC.
+fn when(at: std::time::SystemTime) -> String {
+    let s = at
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs()) as i64;
+    let (days, rem) = (s.div_euclid(86_400), s.rem_euclid(86_400));
+    // days to a date (Hinnant's civil_from_days)
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = yoe + era * 400 + i64::from(m <= 2);
+    format!(
+        "{y:04}-{m:02}-{d:02} {:02}:{:02} UTC",
+        rem / 3600,
+        rem % 3600 / 60
+    )
+}
+
+/// A value to five figures or so, its thousands apart; very small or large ones in powers of ten.
+fn fig(x: f64) -> String {
+    if x == 0.0 {
+        return "0".into();
+    }
+    let a = x.abs();
+    if !(1e-4..1e12).contains(&a) {
+        return format!("{x:.4e}");
+    }
+    let int = if a < 1.0 { 1 } else { a.log10().floor() as i32 + 1 };
+    let places = (5 - int).clamp(0, 4) as usize;
+    let s = format!("{a:.places$}");
+    let (i, f) = s.split_once('.').map_or((s.as_str(), ""), |(i, f)| (i, f));
+    let mut out = String::new();
+    for (k, c) in i.chars().enumerate() {
+        if k > 0 && (i.len() - k).is_multiple_of(3) {
+            out.push(' ');
+        }
+        out.push(c);
+    }
+    if !f.is_empty() && f.bytes().any(|b| b != b'0') {
+        out.push('.');
+        out.push_str(f);
+    }
+    if x < 0.0 { format!("−{out}") } else { out }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn values_read_as_a_person_writes_them() {
+        assert_eq!(fig(14_605_312.4), "14 605 312");
+        assert_eq!(fig(71.764), "71.764");
+        assert_eq!(fig(0.0096), "0.0096");
+        assert_eq!(fig(-42_117.11), "−42 117");
+        assert_eq!(fig(395.9859), "395.99");
+        assert_eq!(fig(2700.0), "2 700");
+        assert_eq!(size_words(2431), "2.4 KB (2,431 bytes)");
+        let at = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_793_836_800 + 3600 * 9 + 60 * 12);
+        assert_eq!(when(at), "2026-11-05 09:12 UTC");
     }
 }

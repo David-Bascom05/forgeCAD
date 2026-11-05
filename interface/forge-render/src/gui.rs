@@ -2879,6 +2879,7 @@ impl Gui {
                 let name = name_of(path);
                 self.shell.fg = Some(crate::shell::fg::FgPanel {
                     file: name.clone(),
+                    path: path.to_string(),
                     assembly: crate::fg::is_assembly(&s.src),
                     source: s.src.clone(),
                     ..Default::default()

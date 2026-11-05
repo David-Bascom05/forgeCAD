@@ -297,6 +297,8 @@ pub struct TreeRow {
 #[derive(Default)]
 pub struct FgPanel {
     pub file: String,
+    /// The file as opened, for what's beside it (its folder, its project's materials).
+    pub path: String,
     /// Its text declares an assembly.
     pub assembly: bool,
     pub source: String,
