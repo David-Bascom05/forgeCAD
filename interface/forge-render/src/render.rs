@@ -285,6 +285,8 @@ struct PickState {
     ready: Arc<AtomicBool>,
     /// The pixel asked about, the camera it was asked with, when.
     busy: Option<((f32, f32), Camera, f64)>,
+    /// The geometry it was asked of.
+    asked: u64,
 }
 
 /// Realistic's floor shadow: the parts seen from straight above into a small target, then read
@@ -305,6 +307,8 @@ struct Timer {
 }
 
 pub struct Renderer {
+    /// Counts each change to the geometry drawn: a pick asked of other geometry is no answer.
+    geometry: u64,
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
     pub adapter: wgpu::AdapterInfo,
@@ -1025,6 +1029,7 @@ impl Renderer {
             line: pick_line,
             ready: Arc::new(AtomicBool::new(false)),
             busy: None,
+            asked: 0,
         };
 
         let has_timer = device.features().contains(wgpu::Features::TIMESTAMP_QUERY);
@@ -1165,6 +1170,7 @@ impl Renderer {
             mapped_at_creation: false,
         });
         Renderer {
+            geometry: 0,
             device,
             queue,
             adapter,
@@ -1247,6 +1253,7 @@ impl Renderer {
 
     /// New meshes for the parts, the same parts in the same places.
     pub fn set_parts(&mut self, parts: &[PartMesh]) {
+        self.geometry += 1;
         let g = geometry(&self.device, parts);
         let layout = &self.bind_layout;
         let all = |globals| [globals, &self.placements, &g.segments, &self.tints];
@@ -1274,6 +1281,7 @@ impl Renderer {
     }
 
     pub fn live_apply(&mut self, part: u32, delta: &crate::livegpu::Delta) -> u64 {
+        self.geometry += 1;
         let (globals, placements, tints) = (&self.globals, &self.placements, &self.tints);
         let (_, gpu) = self.live.get_or_insert_with(|| {
             let layout = &self.bind_layout;
@@ -1291,6 +1299,9 @@ impl Renderer {
     /// Draws the dragged part from its faces (`on`) or its mesh again.
     pub fn live_show(&mut self, on: bool) {
         if let Some((_, gpu)) = &mut self.live {
+            if gpu.shown != on {
+                self.geometry += 1;
+            }
             gpu.shown = on;
         }
     }
@@ -1432,6 +1443,7 @@ impl Renderer {
                 }
             });
         self.pick.busy = Some((px, *camera, now_ms()));
+        self.pick.asked = self.geometry;
     }
 
     /// What can be seen of each entity, for a selection window: how many of its pixels are in this box
@@ -1657,7 +1669,16 @@ impl Renderer {
         drop(depths);
         self.pick.id_read.unmap();
         self.pick.depth_read.unmap();
+        // asked of geometry since replaced (a build landed): its ids are another mesh's
+        if self.pick.asked != self.geometry {
+            return None;
+        }
         Some((px, hit, now_ms() - asked))
+    }
+
+    /// Which geometry is drawn: changes each time the parts' meshes do.
+    pub fn geometry(&self) -> u64 {
+        self.geometry
     }
 
     /// The level a pick and a mark use for a level on screen: one that knows its faces and edges.

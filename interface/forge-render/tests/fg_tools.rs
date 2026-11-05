@@ -689,3 +689,33 @@ fn a_double_click_on_a_feature_opens_its_dialog_filled_and_ok_replaces_it_in_pla
         "{src}"
     );
 }
+
+
+#[test]
+fn a_pick_made_before_a_build_lands_is_of_what_is_shown_after() {
+    // the pointer on the top face, its pick answered against the plain block's mesh
+    let Some((mut h, _)) = open(PLAIN, "stale-pick") else {
+        return;
+    };
+    let (cam, size) = h.gui.shell.camera.unwrap();
+    let on = cam.pixel_of([5.0, 30.0, 20.0], size.0, size.1).unwrap();
+    let r = h.gui.shell.view_rect;
+    h.move_to(r.min.x + on.0, r.min.y + on.1);
+    for _ in 0..40 {
+        h.step();
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    assert!(!h.gui.view.as_ref().unwrap().nav.pick_pending());
+    // Shell opened without the pointer moving: its preview (a hollow block, other faces) lands
+    h.gui.fg_open_tool("shell");
+    let seq = h.gui.fg.as_ref().unwrap().seq;
+    assert!(h.until(|g| g.fg.as_ref().is_some_and(|s| s.done >= seq) && ready(g)));
+    // and a click where the pointer is takes the face that's there now
+    h.button(true);
+    h.step();
+    h.button(false);
+    for _ in 0..10 {
+        h.step();
+    }
+    assert_eq!(picks(&h, "Remove Faces"), ["base.end"], "status: {}", h.gui.shell.status);
+}

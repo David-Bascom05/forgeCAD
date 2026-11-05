@@ -349,3 +349,22 @@ fn a_cut_lets_picks_through_and_shows_the_inside_as_the_cut_face() {
     let row = 3 * SIZE.0 as usize * px.1 as usize;
     assert_eq!(was_side, &cut[row..row + 3], "the cut-away side is gone");
 }
+
+#[test]
+fn a_pick_asked_before_the_meshes_changed_gives_no_answer() {
+    let Some(mut g) = rig(BOX, vec![Placement::at(0, [0.0; 3])], from_above(90.0)) else {
+        return;
+    };
+    let px = (SIZE.0 as f32 / 2.0, SIZE.1 as f32 / 2.0);
+    let g0 = g.r.geometry();
+    // asked of the box, then the box drawn anew (a build landed) before the answer's read
+    g.r.pick_start(&mut g.scene, &g.camera, px);
+    let parts = g.parts.clone();
+    g.r.set_parts(&parts);
+    assert_ne!(g.r.geometry(), g0);
+    g.r.wait();
+    assert!(g.r.pick_poll(&g.scene).is_none(), "an answer of the meshes before");
+    assert!(!g.r.pick_busy(), "and it's done: the next is asked of these");
+    // asked again: answered
+    assert!(g.pick(px).is_some());
+}

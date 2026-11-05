@@ -1431,6 +1431,12 @@ impl Gui {
     /// Asks for what's under the cursor, and takes in the answer. True if that changed anything.
     pub fn picks(&mut self) -> bool {
         let Some(v) = &mut self.view else { return false };
+        // a build landed since: what's under the cursor is asked again of what's drawn now
+        let g = v.renderer.geometry();
+        if g != v.nav.geometry {
+            v.nav.geometry = g;
+            v.nav.geometry_changed();
+        }
         // what a pick would read is the mesh from before the drag
         if v.live_drag {
             v.nav.take_pick();

@@ -113,6 +113,8 @@ pub struct Nav {
     pub last_click: Option<(u32, Entity)>,
     /// Where on the part the last click was, in the world.
     pub last_click_at: Option<[f32; 3]>,
+    /// The renderer's geometry the picks were of.
+    pub geometry: u64,
 }
 
 /// The view from a region of the cube, with the part's axes named this way: the named TOP is up, and
@@ -196,6 +198,7 @@ impl Nav {
             want_pick: None,
             click_due: None,
             last_click_at: None,
+            geometry: 0,
             want_home: false,
             tool: NavTool::Orbit,
             clicks: 0,
@@ -238,6 +241,14 @@ impl Nav {
     }
 
     /// The pixel a pick is wanted for, once.
+    /// The geometry drawn changed (a build landed): what was under the cursor was of the mesh
+    /// before, its ids another's. It's asked again of this one; a click till then waits for it.
+    pub fn geometry_changed(&mut self) {
+        self.hit = None;
+        self.hit_at = None;
+        self.want_pick = Some(self.cursor);
+    }
+
     pub fn take_pick(&mut self) -> Option<(f32, f32)> {
         self.want_pick.take()
     }
