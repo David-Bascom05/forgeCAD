@@ -160,13 +160,13 @@ pub const NAMES: &[(&str, &str, &str, &[&str])] = &[
     ),
     (
         "thermo_view",
-        "A thermoformed part's analysis colours on the view: none, draft, or thickness (the simulated wall's thickness). One view step.",
-        r#"{"analysis":{"type":"string","enum":["none","draft","thickness"]}}"#,
-        &["analysis"],
+        "A thermoformed part's view, as its browser rows and Thermoform tab set it: which bodies show (part = the formed part, mould, blank), the wall as simulated or as modelled, the analysis colours (none, draft, thickness), and Check Forming open or closed. Give only what changes. One view step.",
+        r#"{"analysis":{"type":"string","enum":["none","draft","thickness"]},"part":{"type":"boolean"},"mould":{"type":"boolean"},"blank":{"type":"boolean"},"simulated":{"type":"boolean"},"check":{"type":"boolean"}}"#,
+        &[],
     ),
     (
         "thermo_report",
-        "A thermoformed part's numbers as the app shows them: thinnest and thickest wall and where, the material's limit, the forming facts.",
+        "A thermoformed part's numbers as Check Forming shows them (thinnest and thickest wall, the material's limit, the forming facts) and what of it shows now.",
         "{}",
         &[],
     ),

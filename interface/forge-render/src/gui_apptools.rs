@@ -22,6 +22,8 @@ pub struct ViewSnap {
     style: VisualStyle,
     section: bool,
     analysis: Analysis,
+    /// The thermoform's bodies shown, wall as simulated, Check Forming up.
+    thermo: (crate::shell::thermo_ui::Show, bool, bool),
     camera: Option<crate::camera::Camera>,
     driven: Option<Vec<Op>>,
 }
@@ -62,6 +64,9 @@ impl Gui {
             style: self.shell.view.style,
             section: self.shell.view.section,
             analysis: p.map_or(Analysis::None, |p| p.thermo.analysis),
+            thermo: p.map_or(Default::default(), |p| {
+                (p.thermo.show, p.thermo.simulated, p.thermo.check)
+            }),
             camera: self.view.as_ref().map(|v| v.nav.camera),
             driven: self.apps.driven.clone(),
         }
@@ -82,6 +87,7 @@ impl Gui {
             p.body_hidden = v.body_hidden;
             p.selected = v.selected;
             p.thermo.analysis = v.analysis;
+            (p.thermo.show, p.thermo.simulated, p.thermo.check) = v.thermo;
         }
         *self.shell.overlays_mut() = v.overlays;
         if self.shell.view.style != v.style {
@@ -328,23 +334,73 @@ impl Gui {
                     return Reply::err("no Forge part is open");
                 };
                 if p.thermos.is_empty() {
-                    return Reply::err("the part has no thermoform");
+                    return Reply::err("the part has no thermoform (or it hasn't been made yet)");
                 }
-                p.thermo.analysis = match s(a, "analysis") {
-                    "none" => Analysis::None,
-                    "draft" => Analysis::Draft,
-                    "thickness" => Analysis::Thickness,
-                    w => return Reply::err(format!("no analysis `{w}`")),
-                };
-                Reply::ok(format!("Thermoform analysis: {}", s(a, "analysis")))
+                let u = &mut p.thermo;
+                let mut said = Vec::new();
+                if let Some(w) = a.get("analysis").and_then(Json::str) {
+                    u.analysis = match w {
+                        "none" => Analysis::None,
+                        "draft" => Analysis::Draft,
+                        "thickness" => Analysis::Thickness,
+                        w => return Reply::err(format!("no analysis `{w}`")),
+                    };
+                    said.push(format!("colours {w}"));
+                }
+                for (k, slot) in [
+                    ("part", &mut u.show.part),
+                    ("mould", &mut u.show.mould),
+                    ("blank", &mut u.show.blank),
+                ] {
+                    if let Some(on) = b(a, k) {
+                        *slot = on;
+                        said.push(format!("{k} {}", if on { "shown" } else { "hidden" }));
+                    }
+                }
+                if let Some(on) = b(a, "simulated") {
+                    u.simulated = on;
+                    said.push(if on {
+                        "wall as simulated".into()
+                    } else {
+                        "wall as modelled".to_string()
+                    });
+                }
+                if let Some(on) = b(a, "check") {
+                    u.check = on;
+                    if on && u.analysis == Analysis::None && p.asm.is_none() {
+                        u.analysis = Analysis::Thickness;
+                    }
+                    said.push(format!("Check Forming {}", if on { "open" } else { "closed" }));
+                }
+                if said.is_empty() {
+                    return Reply::err("thermo_view takes analysis, part, mould, blank, simulated or check");
+                }
+                u.picked = None;
+                Reply::ok(format!("Thermoform: {}", said.join(", ")))
             }
             "thermo_report" => {
-                let Some(r) = self.shell.fg.as_ref().and_then(|p| p.thermo_row()) else {
+                let Some(p) = self.shell.fg.as_ref() else {
+                    return Reply::err("no Forge part is open");
+                };
+                let Some(r) = p.thermo_row() else {
                     return Reply::err("the part has no thermoform (or it hasn't been made yet)");
                 };
+                let u = &p.thermo;
+                let on = |b: bool| if b { "shown" } else { "hidden" };
                 let mut t = format!(
-                    "{}: wall {:.2} to {:.2} mm (limit {:.2} mm), {} {}",
-                    r.id, r.min.0, r.max.0, r.limit, r.material, r.model
+                    "{}: wall {:.2} to {:.2} mm (limit {:.2} mm), {} {}\nshown: part {}, mould {}, blank {}; wall as {}; colours {:?}; Check Forming {}",
+                    r.id,
+                    r.min.0,
+                    r.max.0,
+                    r.limit,
+                    r.material,
+                    r.model,
+                    on(u.show.part),
+                    on(u.show.mould),
+                    on(u.show.blank),
+                    if u.simulated { "simulated" } else { "modelled" },
+                    u.analysis,
+                    if u.check { "open" } else { "closed" }
                 );
                 for (k, v) in &r.facts {
                     t.push_str(&format!("\n{k}: {v}"));

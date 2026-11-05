@@ -1066,6 +1066,33 @@ fn the_thermoform_tools_show_the_wall_and_read_its_numbers() {
         h.gui.shell.fg.as_ref().unwrap().thermo.analysis,
         forge_render::shell::thermo_ui::Analysis::Thickness
     );
+    let r = app_call(
+        &mut h,
+        &tools,
+        "thermo_view",
+        r#"{"mould":false,"blank":true,"simulated":false,"check":true}"#,
+    );
+    assert!(!r.error, "{}", r.text);
+    let u = &h.gui.shell.fg.as_ref().unwrap().thermo;
+    assert!(!u.show.mould && u.show.blank && u.show.part && !u.simulated && u.check);
+    assert!(
+        app_call(&mut h, &tools, "thermo_view", "{}").error,
+        "nothing asked"
+    );
+    let r = app_call(&mut h, &tools, "thermo_report", "{}");
+    assert!(
+        r.text.contains("mould hidden")
+            && r.text.contains("blank shown")
+            && r.text.contains("Check Forming open"),
+        "{}",
+        r.text
+    );
+    assert!(!app_call(&mut h, &tools, "undo_view", "{}").error);
+    let u = &h.gui.shell.fg.as_ref().unwrap().thermo;
+    assert!(
+        u.show.mould && !u.show.blank && !u.check,
+        "one undo_view takes the whole switch back"
+    );
     let r = app_call(&mut h, &tools, "thermo_report", "{}");
     assert!(
         !r.error && r.text.contains("wall") && r.text.contains("limit"),
