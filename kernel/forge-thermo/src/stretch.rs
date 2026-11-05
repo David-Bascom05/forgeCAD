@@ -37,6 +37,33 @@ pub struct Process {
     pub pressure: f64,
     /// Sheet nodes along the window's longer side.
     pub resolution: usize,
+    /// What the sheet meets: the tool's height over each cell, or its 3-D distance field.
+    pub surface: Surface,
+}
+
+/// The tool as the contact reads it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Surface {
+    /// The height over each cell of the trim plane, the gap along the pull (the reference).
+    #[default]
+    Height,
+    /// A 3-D signed distance field: the gap along the surface's normal (`sdf.rs`).
+    Distance,
+}
+
+/// The gap from a point (on the plane's axes) to the tool.
+enum Gap<'a> {
+    Height(&'a Field),
+    Distance(&'a crate::sdf::Sdf),
+}
+
+impl Gap<'_> {
+    fn at(&self, p: Vec3) -> f64 {
+        match self {
+            Gap::Height(f) => p.z - height(f, Point2::new(p.x, p.y)),
+            Gap::Distance(s) => s.distance(p),
+        }
+    }
 }
 
 impl Default for Process {
@@ -45,6 +72,7 @@ impl Default for Process {
             law: Law::neo_hookean(0.5),
             pressure: 0.09,
             resolution: 56,
+            surface: Surface::Height,
         }
     }
 }
@@ -376,21 +404,17 @@ pub struct Step {
     pub stage: &'static str,
 }
 
-fn gap(field: &Field, p: Vec3) -> f64 {
-    p.z - height(field, Point2::new(p.x, p.y))
-}
-
 /// Where the move from `a` to `b` first comes within `reach` of the tool, if it does.
-fn crossing(field: &Field, a: Vec3, b: Vec3, reach: f64) -> Option<Vec3> {
+fn crossing(field: &Gap, a: Vec3, b: Vec3, reach: f64) -> Option<Vec3> {
     let n = 8;
     let mut lo = a;
     for k in 1..=n {
         let hi = a + (b - a) * (k as f64 / n as f64);
-        if gap(field, hi) <= reach {
+        if field.at(hi) <= reach {
             let mut hi = hi;
             for _ in 0..30 {
                 let m = (lo + hi) * 0.5;
-                if gap(field, m) <= reach {
+                if field.at(m) <= reach {
                     hi = m;
                 } else {
                     lo = m;
@@ -408,7 +432,7 @@ fn crossing(field: &Field, a: Vec3, b: Vec3, reach: f64) -> Option<Vec3> {
 #[allow(clippy::too_many_arguments)]
 fn relax(
     sheet: &mut Sheet,
-    field: &Field,
+    field: &Gap,
     x: &mut [Vec3],
     p: f64,
     step_cap: f64,
@@ -526,6 +550,26 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
         Point2::new(thi.x + m, thi.y + m),
     );
     let field = Field::new(f.frame, wlo, whi, &f.mesh, &f.contact, male, |_| true);
+    let sdf = (pr.surface == Surface::Distance).then(|| {
+        // nodes half the sheet apart (a quarter of a millimetre to a millimetre), exact a sheet
+        // and a half either side of the surface
+        let h = (0.5 * spec.t).clamp(0.25, 1.0);
+        crate::sdf::Sdf::new(
+            f.frame,
+            &f.mesh,
+            &f.contact,
+            male,
+            field.clone(),
+            wlo,
+            whi,
+            h,
+            1.5 * spec.t,
+        )
+    });
+    let tool = match &sdf {
+        Some(s) => Gap::Distance(s),
+        None => Gap::Height(&field),
+    };
     let (w, h) = (whi.x - wlo.x, whi.y - wlo.y);
     let res = pr.resolution.clamp(8, 160);
     let s = w.max(h) / res as f64;
@@ -581,7 +625,7 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
         .collect();
     // a female sheet lies on the tool's top round the cavity from the start
     for k in 0..x.len() {
-        if free[k] && gap(&field, x[k]) <= 0.0 {
+        if free[k] && tool.at(x[k]) <= 0.0 {
             free[k] = false;
         }
     }
@@ -616,14 +660,14 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
             for &k in &edge {
                 x[k].z = z;
             }
-            its += relax(&mut sheet, &field, &mut x, 0.0, cap, tol, reach, 150);
+            its += relax(&mut sheet, &tool, &mut x, 0.0, cap, tol, reach, 150);
             snap(&x, "drape");
         }
     }
     let loads = 10;
     for k in 1..=loads {
         let p = pr.pressure * k as f64 / loads as f64;
-        its += relax(&mut sheet, &field, &mut x, p, cap, tol, reach, 400);
+        its += relax(&mut sheet, &tool, &mut x, p, cap, tol, reach, 400);
         snap(&x, "vacuum");
     }
     // a hot sheet held under the pressure creeps on until it meets the tool: an elastic sheet
@@ -639,7 +683,7 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
     let (mut left, mut stalled) = (open(&sheet, &x), 0);
     while left > 0 && stalled < 2 && p < CREEP * pr.pressure {
         p *= 1.25;
-        its += relax(&mut sheet, &field, &mut x, p, cap, tol, reach, 200);
+        its += relax(&mut sheet, &tool, &mut x, p, cap, tol, reach, 200);
         snap(&x, "creep");
         let now = open(&sheet, &x);
         stalled = if now < left { 0 } else { stalled + 1 };

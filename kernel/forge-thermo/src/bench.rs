@@ -152,6 +152,7 @@ fn at(curve: &[(f64, f64)], s: f64) -> f64 {
 #[allow(clippy::too_many_arguments)]
 fn compare(
     name: &str,
+    surface: Surface,
     shape: &Body,
     t0: f64,
     flange: f64,
@@ -181,13 +182,17 @@ fn compare(
         law: law.law.clone(),
         pressure: 0.09,
         resolution: 80,
+        surface,
     };
     let st = stretch(&f, &spec, &pr);
     let model = along(&st, t0, diagonal);
     let data = measured(name);
     let mut err = 0.0;
     let mut n = 0;
-    eprintln!("\n{name}: {mat} law {:?} ({})", law.law.terms, law.source);
+    eprintln!(
+        "\n{name} ({surface:?}): {mat} law {:?} ({})",
+        law.law.terms, law.source
+    );
     eprintln!("  s     measured  model");
     let (mut mmin, mut pmin) = ((f64::INFINITY, 0.0), (f64::INFINITY, 0.0));
     for &(s, t) in data.iter().filter(|d| d.0 <= upto) {
@@ -220,6 +225,7 @@ fn erdogan_cylinder() {
     let shape = cavity(100.0, 100.0 - 1e-3, 100.0, 10.0);
     let e = compare(
         "erdogan2014_cylinder",
+        Surface::Height,
         &shape,
         2.5,
         40.0,
@@ -236,6 +242,7 @@ fn erdogan_box() {
     let shape = box_cavity(150.0, 75.0, 10.0);
     let a = compare(
         "erdogan2014_box_axis",
+        Surface::Height,
         &shape,
         2.0,
         65.0,
@@ -246,6 +253,7 @@ fn erdogan_box() {
     );
     let d = compare(
         "erdogan2014_box_diagonal",
+        Surface::Height,
         &shape,
         2.0,
         65.0,
@@ -260,6 +268,63 @@ fn erdogan_box() {
 #[test]
 fn duarte_cone() {
     let shape = cavity(65.0, 55.0, 100.0, 3.0);
-    let e = compare("duarte2022_cone", &shape, 1.0, 50.0, "HIPS", 140.0, false, 150.0);
+    let e = compare(
+        "duarte2022_cone",
+        Surface::Height,
+        &shape,
+        1.0,
+        50.0,
+        "HIPS",
+        140.0,
+        false,
+        150.0,
+    );
     assert!(e < 0.03, "{e}");
+}
+
+/// The 3-D distance field against the height field on the measured parts: the same parts, the
+/// gap now along the surface's normal.
+#[test]
+fn the_distance_field_forms_the_measured_parts_as_well() {
+    let cone = cavity(65.0, 55.0, 100.0, 3.0);
+    let cyl = cavity(100.0, 100.0 - 1e-3, 100.0, 10.0);
+    let bx = box_cavity(150.0, 75.0, 10.0);
+    for (name, shape, t0, flange, temp, diagonal, upto) in [
+        ("duarte2022_cone", &cone, 1.0, 50.0, 140.0, false, 150.0),
+        ("erdogan2014_cylinder", &cyl, 2.5, 40.0, 180.0, false, 185.0),
+        ("erdogan2014_box_axis", &bx, 2.0, 65.0, 180.0, false, 125.0),
+        ("erdogan2014_box_diagonal", &bx, 2.0, 65.0, 180.0, true, 145.0),
+    ] {
+        let h = compare(
+            name,
+            Surface::Height,
+            shape,
+            t0,
+            flange,
+            "HIPS",
+            temp,
+            diagonal,
+            upto,
+        );
+        let d = compare(
+            name,
+            Surface::Distance,
+            shape,
+            t0,
+            flange,
+            "HIPS",
+            temp,
+            diagonal,
+            upto,
+        );
+        eprintln!(
+            "{name}: height {:.2} % t0, distance {:.2} % t0",
+            h * 100.0,
+            d * 100.0
+        );
+        // measured: cone +0.24, cylinder +0.17, box +2.4 (axis) % t0. On the box's steep walls the
+        // height field's vertical reach was a normal one of reach cos(wall): the sheet stuck later
+        // there; the field sticks it a quarter of t off the wall itself. Within 3 % t0
+        assert!(d <= h + 0.03, "{name}: {d} {h}");
+    }
 }

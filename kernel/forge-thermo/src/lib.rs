@@ -10,6 +10,7 @@ pub mod fit;
 pub mod material;
 pub mod prepare;
 pub mod scale;
+pub mod sdf;
 pub mod simulated;
 pub mod stretch;
 
@@ -26,7 +27,7 @@ pub use simulated::{
     MeshMass, OnTool, PartMesh, Simulated, ToolSide, WallField, blank, mesh_mass, part_mesh, simulated,
     simulated_from, simulated_on, simulated_part,
 };
-pub use stretch::{Law, Process, Step, Stretch, stretch};
+pub use stretch::{Law, Process, Step, Stretch, Surface, stretch};
 
 #[cfg(test)]
 mod bench;

@@ -585,3 +585,145 @@ fn the_simulated_part_on_the_modelled_part_is_smooth_and_keeps_its_wall_integral
         assert!((k - 1.0).abs() < 0.08, "{name}: {k}");
     }
 }
+
+/// The 3-D distance field of a formed part's tool against the exact distance (every face tried):
+/// within a tenth of the sheet in the band (measured: exact there, the band's distances worked
+/// out from the nearest faces), its sign the exact one's.
+#[test]
+fn the_distance_field_is_the_tools_distance_to_a_tenth_of_the_sheet() {
+    let cup = {
+        let p = Profile {
+            plane: Frame::WORLD,
+            loops: vec![Profile::circle(Point2::new(0.0, 0.0), 30.0, 0)],
+        };
+        forge_ops::tapered(&p, -30.0, 3f64.to_radians(), 3)
+            .unwrap()
+            .remove(0)
+    };
+    for (name, shape, tool) in [
+        ("cover", block(120.0, 80.0, 35.0, 8.0, 5.0), Tool::Male),
+        ("cup", cup, Tool::Female),
+    ] {
+        let s = spec(tool);
+        let f = analyse(&shape, &s).unwrap();
+        let male = tool == Tool::Male;
+        let (tlo, thi) = f.report.trim_box;
+        let m = s.margin.max(s.t);
+        let (lo, hi) = (
+            Point2::new(tlo.x - m, tlo.y - m),
+            Point2::new(thi.x + m, thi.y + m),
+        );
+        let table = field::Field::new(f.frame, lo, hi, &f.mesh, &f.contact, male, |_| true);
+        let t0 = std::time::Instant::now();
+        let h = 0.5 * s.t;
+        let sdf = sdf::Sdf::new(
+            f.frame,
+            &f.mesh,
+            &f.contact,
+            male,
+            table.clone(),
+            lo,
+            hi,
+            h,
+            1.5 * s.t,
+        );
+        let built = t0.elapsed();
+        // exact: every face, and the table where the shape doesn't stand
+        let faces: Vec<[forge_math::Vec3; 3]> = f
+            .contact
+            .iter()
+            .map(|&k| {
+                f.mesh.triangles[k].map(|i| {
+                    let p = f.frame.point_to_local(f.mesh.positions[i as usize]);
+                    forge_math::Vec3::new(p.x, p.y, p.z)
+                })
+            })
+            .collect();
+        let mut seed = 12345u64;
+        let mut rnd = || {
+            seed = seed
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            (seed >> 11) as f64 / (1u64 << 53) as f64
+        };
+        let (mut worst, mut n, mut wrong_side) = (0.0f64, 0, 0);
+        for _ in 0..3000 {
+            // a point off a face of the tool, or over the window, within the band
+            let p = if rnd() < 0.7 {
+                let [a, b, c] = faces[(rnd() * faces.len() as f64) as usize % faces.len()];
+                let (u, v) = (rnd(), rnd());
+                let (u, v) = if u + v > 1.0 { (1.0 - u, 1.0 - v) } else { (u, v) };
+                let q = a + (b - a) * u + (c - a) * v;
+                let nrm = (b - a).cross(c - a).normalize().unwrap().get();
+                q + nrm * ((rnd() * 2.0 - 1.0) * 1.2 * s.t)
+            } else {
+                forge_math::Vec3::new(
+                    lo.x + rnd() * (hi.x - lo.x),
+                    lo.y + rnd() * (hi.y - lo.y),
+                    (rnd() * 2.0 - 1.0) * 1.2 * s.t,
+                )
+            };
+            let Some(exact) = sdf.exact(p) else { continue };
+            if exact.abs() > 1.2 * s.t {
+                continue;
+            }
+            // the exact distance, unsigned, by trying every face (and the table): the sign is the
+            // field's own, checked by the height field where it's plain
+            let brute = faces
+                .iter()
+                .map(|[a, b, c]| {
+                    let q = brute_closest(p, *a, *b, *c);
+                    (p - q).length()
+                })
+                .fold(f64::INFINITY, f64::min);
+            let d = sdf.distance(p);
+            let want = brute.min(if exact.abs() == p.z.abs() {
+                p.z.abs()
+            } else {
+                f64::INFINITY
+            });
+            worst = worst.max((d.abs() - want).abs());
+            n += 1;
+            if (d > 0.0) != (exact > 0.0) && d.abs() > 1e-6 {
+                wrong_side += 1;
+            }
+        }
+        eprintln!(
+            "{name}: {} nodes, built in {built:?}; worst |field - exact| {worst:.4} mm over {n} points (t/10 = {})",
+            sdf.nodes(),
+            s.t / 10.0
+        );
+        assert!(n > 1500, "{name}");
+        assert!(worst < s.t / 10.0, "{name}: {worst}");
+        assert_eq!(wrong_side, 0);
+    }
+}
+
+fn brute_closest(
+    p: forge_math::Vec3,
+    a: forge_math::Vec3,
+    b: forge_math::Vec3,
+    c: forge_math::Vec3,
+) -> forge_math::Vec3 {
+    // the nearest point of the triangle: of its face if p projects inside it, else of its sides
+    let n = (b - a).cross(c - a);
+    let nn = n.length_sq();
+    if nn > 0.0 {
+        let q = p - n * ((p - a).dot(n) / nn);
+        let inside = [(a, b), (b, c), (c, a)]
+            .iter()
+            .all(|(u, v)| (*v - *u).cross(q - *u).dot(n) >= 0.0);
+        if inside {
+            return q;
+        }
+    }
+    let seg = |u: forge_math::Vec3, v: forge_math::Vec3| {
+        let e = v - u;
+        let f = ((p - u).dot(e) / e.length_sq().max(1e-300)).clamp(0.0, 1.0);
+        u + e * f
+    };
+    [seg(a, b), seg(b, c), seg(c, a)]
+        .into_iter()
+        .min_by(|x, y| (p - *x).length_sq().total_cmp(&(p - *y).length_sq()))
+        .unwrap()
+}
