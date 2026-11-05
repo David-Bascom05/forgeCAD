@@ -626,3 +626,77 @@ fn the_sheet_bends_as_a_plate_on_the_measured_parts() {
         eprintln!("BEND {name}: membrane {} | plate {}", row[0], row[1]);
     }
 }
+
+/// The plug-only test (Atmani 2020, Fig. 13): a 1.1 mm HIPS sheet clamped on a 90 mm round window
+/// (here the rim of a deep round cavity, the sheet stuck on its top), an R90-nosed d42 plug driven
+/// in from 20 mm above, no pressure; dry (the sheet sticks to the plug) and lubricated (it slides).
+/// The stroke is not printed: the one whose section is as long as the measured one is used. The
+/// measured section, clamp to clamp, is compared through its middle, each side's arc length scaled
+/// to the model's. Mean error of t0 for each.
+#[test]
+fn a_plug_drives_the_sheet_as_measured() {
+    let shape = cavity(45.0, 45.0 - 1e-3, 150.0, 5.0);
+    let spec = Spec {
+        tool: Tool::Female,
+        pull: UnitVec3::Z,
+        t: 1.1,
+        trim: None,
+        flange: 45.0,
+        shrink: 0.0,
+        base: 10.0,
+        margin: 10.0,
+        vent: None,
+        vents: None,
+        vent_pitch: 25.0,
+        sheet: None,
+    };
+    let f = analyse(&shape, &spec).expect("analyses");
+    let law = placeholder().material("HIPS").cloned().unwrap().law_at(130.0);
+    for (name, slip) in [
+        ("atmani2020_plugonly_dry130", false),
+        ("atmani2020_plugonly_lub130", true),
+    ] {
+        let data = measured(name);
+        let total = data.last().map_or(0.0, |d| d.0);
+        for stroke in [45.0, 55.0, 65.0] {
+            let pr = Process {
+                law: law.law.clone(),
+                pressure: 0.0,
+                resolution: 100,
+                plug: Some(Plug {
+                    at: (0.0, 0.0),
+                    radius: 21.0,
+                    nose: 90.0,
+                    edge: 10.0,
+                    start: 20.0,
+                    stroke,
+                    steps: 40,
+                    slip,
+                }),
+                ..Process::default()
+            };
+            let st = stretch(&f, &spec, &pr);
+            let model = along(&st, spec.t, false);
+            // the model's arc to the clamp: where the row comes back up to the trim plane
+            let (nx, ny) = st.grid;
+            let row = (0..=nx - nx / 2).map(|k| st.nodes[(ny / 2) * (nx + 1) + nx / 2 + k]);
+            let half = row
+                .zip(&model)
+                .find(|(p, _)| f.frame.point_to_local(*p).z > -0.05)
+                .map_or(0.0, |(_, m)| m.0);
+            let mut err = 0.0;
+            for &(s, t) in &data {
+                let c = (s - total / 2.0).abs() / (total / 2.0) * half;
+                err += (at(&model, c) - t).abs();
+            }
+            let mae = err / data.len() as f64 / spec.t;
+            eprintln!(
+                "PLUG {name} stroke {stroke}: section {:.1} mm (measured {total}), under the plug {:.3} mm (measured {:.2}), mean |error| {:.1} % of t0",
+                2.0 * half,
+                at(&model, 0.0),
+                at(&data, total / 2.0),
+                mae * 100.0
+            );
+        }
+    }
+}

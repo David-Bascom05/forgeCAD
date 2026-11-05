@@ -56,6 +56,62 @@ pub struct Process {
     /// The sheet bends as a plate of its thickness (D = G t^3 / 3) besides stretching (false: a
     /// membrane, the default).
     pub bending: bool,
+    /// A plug pushed into the sheet before the pressure (a female tool's), as it is driven.
+    pub plug: Option<Plug>,
+}
+
+/// A round plug: a dome nose of radius `nose` meeting its body of radius `radius` in a round of
+/// `edge`, its axis at `at` on the trim plane, driven from its tip `start` mm above the sheet to
+/// `stroke` mm below it in `steps`. The sheet sticks where it touches it, or with `slip` slides on
+/// it (a lubricated plug).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Plug {
+    pub at: (f64, f64),
+    pub radius: f64,
+    pub nose: f64,
+    pub edge: f64,
+    pub start: f64,
+    pub stroke: f64,
+    pub steps: usize,
+    pub slip: bool,
+}
+
+impl Plug {
+    /// The plug's face over `r` from its axis with its tip at `tip`: its height and slope (None:
+    /// past its side).
+    fn face(&self, r: f64, tip: f64) -> Option<(f64, f64)> {
+        if r >= self.radius {
+            return None;
+        }
+        let c = self.radius - self.edge;
+        let r1 = c * self.nose / (self.nose - self.edge);
+        if r <= r1 {
+            let q = (self.nose * self.nose - r * r).max(1e-12).sqrt();
+            return Some((tip + self.nose - q, r / q));
+        }
+        let ne = self.nose - self.edge;
+        let zc = tip + self.nose - (ne * ne - c * c).max(0.0).sqrt();
+        let u = r - c;
+        let q = (self.edge * self.edge - u * u).max(1e-12).sqrt();
+        Some((zc - q, u / q))
+    }
+
+    /// How far a point is inside the plug (up from its face), and that depth's gradient.
+    fn inside(&self, p: Vec3, tip: f64) -> Option<(f64, Vec3)> {
+        let (dx, dy) = (p.x - self.at.0, p.y - self.at.1);
+        let r = (dx * dx + dy * dy).sqrt();
+        let (z, slope) = self.face(r, tip)?;
+        let d = p.z - z;
+        if d <= 0.0 {
+            return None;
+        }
+        let radial = if r > 1e-12 {
+            Vec3::new(dx / r, dy / r, 0.0)
+        } else {
+            Vec3::ZERO
+        };
+        Some((d, Vec3::new(0.0, 0.0, 1.0) - radial * slope))
+    }
 }
 
 /// The clamp frame's grip on the sheet under it.
@@ -102,6 +158,7 @@ impl Default for Process {
             wrinkle: false,
             steps: 10,
             bending: false,
+            plug: None,
         }
     }
 }
@@ -399,6 +456,10 @@ struct Sheet {
     hold: Vec<f64>,
     anchor: Vec<Vec3>,
     dir: Vec<Option<Vec3>>,
+    /// The plug where it is, its tip's height, and (sliding) the stiffness of its face, MPa/mm;
+    /// each node's share of the sheet.
+    plug: Option<(Plug, f64, f64)>,
+    share: Vec<f64>,
 }
 
 /// Sliding nodes carried off the tool's top (over the cavity) fall free.
@@ -488,6 +549,16 @@ impl Sheet {
                 self.membrane(x, p, &mut g)?
             }
         };
+        if let Some((plug, tip, stiff)) = self.plug.filter(|p| p.0.slip) {
+            for k in 0..x.len() {
+                if let (true, Some((d, n))) = (self.free[k], plug.inside(x[k], tip)) {
+                    e += 0.5 * stiff * self.share[k] * d * d;
+                    if let Some(g) = g.as_deref_mut() {
+                        g[k] += n * (stiff * self.share[k] * d);
+                    }
+                }
+            }
+        }
         for k in 0..x.len() {
             if let (true, Some(d)) = (self.slide[k], self.dir[k]) {
                 e += self.hold[k] * d.dot(x[k] - self.anchor[k]);
@@ -960,6 +1031,8 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
         hold: hold_at(0.0),
         anchor: x.clone(),
         dir: vec![None; x.len()],
+        plug: None,
+        share: share.clone(),
         slide,
     };
     let mu = pr.law.shear().max(1e-9);
@@ -1003,6 +1076,45 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
             its += step(&mut sheet, &tool, &mut x, 0.0, cap, tol, &reach, 150);
             release(&mut sheet, &tool, &x, 0.25 * spec.t);
             snap(&x, "drape");
+        }
+    }
+    if let (Some(plug), false) = (pr.plug, male) {
+        // the plug comes down: what it touches sticks to it and goes down with it (or slides on
+        // it, held off its face by a stiff spring), the rest drawn after
+        let stiff = 1e3 * mu / spec.t;
+        let mut on: Vec<bool> = vec![false; x.len()];
+        let mut was = plug.start;
+        for k in 1..=plug.steps.max(1) {
+            let tip = plug.start - (plug.start + plug.stroke) * k as f64 / plug.steps.max(1) as f64;
+            sheet.plug = Some((plug, tip, stiff));
+            for (n, p) in x.iter_mut().enumerate() {
+                if on[n] {
+                    p.z += tip - was;
+                }
+            }
+            was = tip;
+            for _ in 0..20 {
+                let mut touched = false;
+                if !plug.slip {
+                    for n in 0..x.len() {
+                        if sheet.free[n] && !sheet.slide[n] && plug.inside(x[n], tip).is_some() {
+                            let (dx, dy) = (x[n].x - plug.at.0, x[n].y - plug.at.1);
+                            let r = (dx * dx + dy * dy).sqrt();
+                            x[n].z = plug.face(r, tip).map_or(x[n].z, |f| f.0);
+                            sheet.free[n] = false;
+                            on[n] = true;
+                            touched = true;
+                        }
+                    }
+                }
+                let reach = reach_at(&x);
+                its += step(&mut sheet, &tool, &mut x, 0.0, cap, tol, &reach, 200);
+                release(&mut sheet, &tool, &x, 0.25 * spec.t);
+                if plug.slip || !touched {
+                    break;
+                }
+            }
+            snap(&x, "plug");
         }
     }
     let loads = pr.steps.max(1);

@@ -1,0 +1,24 @@
+# Atmani, Abbes F., Li, Batkam, Abbes B., Mechanics & Industry 21:607 (2020), DOI 10.1051/meca/2020084, open access;
+# Fig. 13 measured curve (lub130), digitised by eye (+-3 mm in s, +-0.04 mm in t). Plug-only test: HIPS 1.1 mm,
+# 200 x 200 blank clamped on a 90 mm round window, aluminium plug d42 (R90 nose, R10 edge), 1 m/s, from 20 mm above
+# the sheet; stroke not printed. s: along the deformed sheet, clamp to clamp through the middle.
+s,t
+0,1.10
+10,0.90
+20,0.68
+30,0.58
+40,0.48
+50,0.40
+60,0.33
+70,0.34
+80,0.34
+90,0.35
+100,0.36
+110,0.35
+120,0.34
+130,0.38
+140,0.50
+150,0.65
+160,0.80
+170,0.95
+180,1.10
