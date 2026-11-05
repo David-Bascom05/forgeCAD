@@ -43,13 +43,19 @@ expect volume = 107177 +- 0.1%
   Syntax errors carry the exact set of tokens that were expected. A negative literal is one token;
   methods and members bind tightest; `:` is only for keyword arguments and keyed maps, never a
   ternary; `in` is not a unit; a comprehension has one item.
-  - **Proven.** The same sets are the certificate of the Lean check on branch `forge-lang-proof`
-    (`research/forge-lang/lean`, P6 in `research/forge-lang/ASSUMPTIONS.md`):
-    `python3 gen_grammar.py <grammar.ll1> > ForgeLang/LL1/Forge.lean && lake build` re-checks
-    LL(1), hence unambiguity and the parser's round trip, in the kernel. The lexer assumptions
-    the proof needs are tested in `tests/lexer.rs`: lexing is deterministic, tokens and the kept
-    whitespace and comments (`lex_lossless`) rebuild the source bytes, and every literal SetParam
-    writes lexes back as one number (NaN and infinity are refused as `NotFinite`).
+  - **Proven.** `tests/grammar.rs` also writes `research/forge-lang/lean/ForgeLang/LL1/Impl.lean`
+    from the same data as table.rs (`the_lean_grammar_is_current` fails when it is stale); there
+    `lake build` checks in the kernel that the grammar is LL(1) on table.rs's own sets, hence
+    unambiguous with an exact parser, and that TABLE is that parser's choice on every cell
+    (`table_choose`). `LL1/Lex.lean` models the lexer: lossless, maximal munch, and every literal
+    SetParam writes lexes back as one number (P6 in `research/forge-lang/ASSUMPTIONS.md`).
+    `tests/lexer.rs` tests the same properties of the Rust lexer (NaN and infinity are refused as
+    `NotFinite`). `tests/parse_diff.rs` runs the stack driver, its actions and the lexer against
+    the Lean parser and lexer model: every token string of up to 4 tokens with viable prefixes,
+    random sentences and edits, every .fg file; same accept/reject (but for the actions' own
+    checks), same trees, same tokens. Lean's answers are kept as a digest; after a grammar or
+    lexer change: `lake build fgparse fglex` there, then `FG_LEAN=1 cargo test -p forge-lang
+    --test parse_diff`.
   - **Same trees as the hand parser it replaced** (`tests/equiv.rs` against `tests/old_parser`):
     identical trees, or the same error at the same span, on every `.fg`, string literal and doc
     code block in the crate, the fair-test models, 50000 random sentences of the grammar, and
@@ -180,8 +186,11 @@ Tests (`cargo test -p forge-lang`):
 - `props`: 400 random documents, four random typed ops each: the edited text parses to the tree
   the op makes, SetParam changes only the param's right side, a document that checked still
   checks after any op that applied, and ids of features not added or deleted are unchanged.
-- `grammar`: zero LL(1) conflicts; the generated table is current; every random sentence of the
-  grammar parses.
+- `grammar`: zero LL(1) conflicts; the generated table and Lean file are current; every random
+  sentence of the grammar parses.
+- `parse_diff`: the parser and lexer against the Lean parser and lexer model (see Grammar above).
+- `core_diff`: the evaluator and edit ops against the Lean core calculus
+  (`research/forge-lang/diff`).
 - `lexer`: determinism, lossless tokens and trivia, SetParam literals as one number.
 - `equiv`: the table parser against the hand parser (see Grammar above).
 - forge-ops `roles`: the builders name caps and walls by role.

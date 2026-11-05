@@ -71,3 +71,10 @@ open ForgeLang ForgeLang.Counter
 #print axioms occ_caller_indep
 #print axioms unqualified_shadow
 #print axioms qualify_string_collides
+#print axioms ForgeLang.LL1.Impl.grammar_ll1
+#print axioms ForgeLang.LL1.Impl.table_choose
+#print axioms ForgeLang.LL1.Impl.impl_unambiguous
+#print axioms ForgeLang.LL1.Impl.source_to_tree
+#print axioms ForgeLang.LL1.Lex.lex_lossless
+#print axioms ForgeLang.LL1.Lex.word_maximal
+#print axioms ForgeLang.LL1.Lex.num_literal

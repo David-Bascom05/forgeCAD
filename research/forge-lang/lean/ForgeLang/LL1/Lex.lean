@@ -355,4 +355,228 @@ theorem word_maximal {C pv d c s k t r d'} (h : step C pv d c s = .ok (k, t, r, 
     · cases h; exact absurd rfl (h7 _)
     · cases h
 
+/-! ## SetParam's literals lex back as one number -/
+
+/-- The shape of a literal SetParam writes: `-`? digits (`.` digits)? (`e` `-`? digits)? unit. -/
+structure Lit where
+  neg : Bool
+  int : Bytes
+  frac : Option Bytes
+  exp : Option (Bool × Bytes)
+  unit : Unit
+
+def unitText : Unit → Bytes
+  | .none => []
+  | .mm => [109, 109]
+  | .deg => [100, 101, 103]
+
+def Lit.mant (l : Lit) : Bytes := l.int ++ (match l.frac with | some f => DOT :: f | none => [])
+def Lit.expPart (l : Lit) : Bytes :=
+  match l.exp with | some (n, e) => 101 :: (if n then [MINUS] else []) ++ e | none => []
+def Lit.text (l : Lit) : Bytes := (if l.neg then [MINUS] else []) ++ l.mant ++ l.expPart ++ unitText l.unit
+
+/-- Digits where digits are written. -/
+def Lit.Ok (l : Lit) : Prop :=
+  l.int ≠ [] ∧ l.int.all isDigit = true ∧ (∀ f, l.frac = some f → f ≠ [] ∧ f.all isDigit = true) ∧
+  (∀ n e, l.exp = some (n, e) → e ≠ [] ∧ e.all isDigit = true)
+
+/-- What follows cannot continue a number: not a digit, letter or dot. -/
+def Stops (r : Bytes) : Prop := ∀ c ∈ r.head?, isDigit c = false ∧ isAlpha c = false ∧ c ≠ DOT
+
+theorem takeWhile_all (p : Nat → Bool) : ∀ (a r : Bytes), a.all p = true → (∀ c ∈ r.head?, p c = false) →
+    takeWhile p (a ++ r) = (a, r)
+  | [], [], _, _ => rfl
+  | [], c :: r, _, h => by simp at h; simp [takeWhile, h]
+  | x :: a, r, ha, h => by
+    simp only [List.all_cons, Bool.and_eq_true] at ha
+    simp [takeWhile, ha.1, takeWhile_all p a r ha.2 h]
+
+theorem mantissa_digits : ∀ (a s : Bytes), a.all isDigit = true → mantissa (a ++ s) = (a ++ (mantissa s).1, (mantissa s).2)
+  | [], s, _ => by simp
+  | x :: a, s, ha => by
+    simp only [List.all_cons, Bool.and_eq_true] at ha
+    simp [mantissa, ha.1, mantissa_digits a s ha.2]
+
+theorem mantissa_stop {s : Bytes} (h : ∀ c ∈ s.head?, isDigit c = false ∧ c ≠ DOT) : mantissa s = ([], s) := by
+  cases s with
+  | nil => rfl
+  | cons c s =>
+    simp at h
+    simp [mantissa, h.1, h.2]
+
+theorem isDigit_ne_dot {c} (h : isDigit c = true) : c ≠ DOT := by
+  intro e; subst e; simp [isDigit, DOT] at h
+
+theorem mant_scan {l : Lit} (hl : l.Ok) {X : Bytes} (hX : ∀ c ∈ X.head?, isDigit c = false ∧ c ≠ DOT) :
+    mantissa (l.mant ++ X) = (l.mant, X) := by
+  obtain ⟨_, hi, hf, _⟩ := hl
+  unfold Lit.mant
+  rw [List.append_assoc, mantissa_digits _ _ hi]
+  cases hfr : l.frac with
+  | none => simp [mantissa_stop hX]
+  | some f =>
+    obtain ⟨hne, hfd⟩ := hf f hfr
+    obtain ⟨d, f', rfl⟩ : ∃ d f', f = d :: f' := ⟨f.head hne, f.tail, by simp⟩
+    simp only [List.all_cons, Bool.and_eq_true] at hfd
+    have h1 : mantissa (d :: (f' ++ X)) = (d :: f', X) := by
+      rw [show d :: (f' ++ X) = (d :: f') ++ X from rfl, mantissa_digits _ _ (by simp [hfd.1, hfd.2]), mantissa_stop hX]
+      simp
+    have hd46 : d ≠ DOT := isDigit_ne_dot hfd.1
+    simp only [List.cons_append]
+    rw [mantissa, if_pos (by simp [isDigit, DOT] at hd46 ⊢; omega), h1]
+
+theorem unit_head (u : Unit) (r : Bytes) (hr : Stops r) :
+    ∀ c ∈ (unitText u ++ r).head?, isDigit c = false ∧ c ≠ DOT := by
+  intro c hc
+  cases u with
+  | none => have := hr c (by simpa [unitText] using hc); exact ⟨this.1, this.2.2⟩
+  | mm => simp [unitText] at hc; subst hc; decide
+  | deg => simp [unitText] at hc; subst hc; decide
+
+theorem exp_scan {l : Lit} (hl : l.Ok) (Y : Bytes) (hY : ∀ c ∈ Y.head?, isDigit c = false) (hYe : ∀ c ∈ Y.head?, c ≠ 69 ∧ c ≠ 101) :
+    exponent (l.expPart ++ Y) = (l.expPart, Y) := by
+  obtain ⟨_, _, _, he⟩ := hl
+  unfold Lit.expPart
+  cases hx : l.exp with
+  | none =>
+    simp only [List.nil_append]
+    match Y, hYe with
+    | [], _ => rfl
+    | [_], _ => rfl
+    | c :: d :: s, h =>
+      have := h c (by simp)
+      simp [exponent, this.1, this.2]
+  | some p =>
+    obtain ⟨n, e⟩ := p
+    obtain ⟨hne, hed⟩ := he n e hx
+    obtain ⟨d, e', rfl⟩ : ∃ d e', e = d :: e' := ⟨e.head hne, e.tail, by simp⟩
+    simp only [List.all_cons, Bool.and_eq_true] at hed
+    cases n
+    · simp [exponent, hed.1, takeWhile_all isDigit e' Y hed.2 hY]
+    · have := takeWhile_all isDigit (d :: e') Y (by simp [hed.1, hed.2]) hY
+      simp only [List.cons_append] at this
+      simp [exponent, MINUS, this]
+
+theorem floatOk_lit {l : Lit} (hl : l.Ok) : floatOk (l.mant ++ l.expPart) = true := by
+  obtain ⟨hi0, hi, hf, he⟩ := hl
+  have hm : (l.mant).all (fun c => c != 69 && c != 101) = true := by
+    unfold Lit.mant
+    have h1 : ∀ x ∈ l.int, x ≠ 69 ∧ x ≠ 101 := fun x hx => by
+      have := List.all_eq_true.1 hi x hx; simp [isDigit] at this; omega
+    cases hfr : l.frac with
+    | none => simp; intro x hx; exact h1 x hx
+    | some f =>
+      have h2 : ∀ x ∈ f, x ≠ 69 ∧ x ≠ 101 := fun x hx => by
+        have := List.all_eq_true.1 (hf f hfr).2 x hx; simp [isDigit] at this; omega
+      simp [DOT]
+      exact ⟨fun x hx => h1 x hx, fun x hx => h2 x hx⟩
+  have hsplit : takeWhile (fun c => c != 69 && c != 101) (l.mant ++ l.expPart) = (l.mant, l.expPart) := by
+    apply takeWhile_all _ _ _ hm
+    unfold Lit.expPart; cases l.exp <;> simp
+  unfold floatOk
+  rw [hsplit]
+  simp only [Bool.and_eq_true, decide_eq_true_eq]
+  refine ⟨⟨?_, ?_⟩, ?_⟩
+  · unfold Lit.mant
+    have h0 : (l.int.filter (· == DOT)) = [] := by
+      rw [List.filter_eq_nil_iff]; intro x hx
+      have := List.all_eq_true.1 hi x hx; simp [isDigit, DOT] at this ⊢; omega
+    cases hfr : l.frac with
+    | none => simp [h0]
+    | some f =>
+      have h3 : (f.filter (· == DOT)) = [] := by
+        rw [List.filter_eq_nil_iff]; intro x hx
+        have := List.all_eq_true.1 (hf f hfr).2 x hx; simp [isDigit, DOT] at this ⊢; omega
+      have e0 := congrArg List.length h0
+      have e3 := congrArg List.length h3
+      simp only [DOT, List.length_nil] at e0 e3
+      simp [List.filter_append, DOT, e0, e3]
+  · unfold Lit.mant
+    obtain ⟨x, xs, hx⟩ : ∃ x xs, l.int = x :: xs := ⟨l.int.head hi0, l.int.tail, by simp⟩
+    rw [hx] at hi ⊢
+    simp only [List.all_cons, Bool.and_eq_true] at hi
+    simp [hi.1]
+  · unfold Lit.expPart
+    cases hx : l.exp with
+    | none => rfl
+    | some p =>
+      obtain ⟨n, e⟩ := p
+      obtain ⟨hne, hed⟩ := he n e hx
+      obtain ⟨d, e', rfl⟩ : ∃ d e', e = d :: e' := ⟨e.head hne, e.tail, by simp⟩
+      simp only [List.all_cons, Bool.and_eq_true] at hed
+      have hd : ¬ (d = 45 ∨ d = 43) := by have := hed.1; simp [isDigit] at this; omega
+      cases n <;> simp [MINUS, hed.1, hed.2, hd]
+
+/-- SetParam's literals lex back as one token: a literal of `Lit`'s shape, followed by anything
+that cannot continue a number, is one number piece with its unit, and the rest is left as it was.
+A negative literal needs a place where no value precedes it (a literal position: after `=`, `(`,
+`,`, an operator or a keyword). -/
+theorem num_literal (C : Cfg) (pv : Bool) (d : Nat) (l : Lit) (hl : l.Ok) (r : Bytes) (hr : Stops r)
+    (hpv : l.neg = true → pv = false) :
+    ∃ c s, l.text ++ r = c :: s ∧ step C pv d c s = .ok (.num l.unit, l.text, r, d) := by
+  have hY : ∀ c ∈ (unitText l.unit ++ r).head?, isDigit c = false := fun c hc => (unit_head _ r hr c hc).1
+  have hYe : ∀ c ∈ (unitText l.unit ++ r).head?, c ≠ 69 ∧ c ≠ 101 := by
+    cases hu : l.unit <;> simp [unitText]
+    intro c hc; have := (hr c (by simp [hc])).2.1; simp [isAlpha] at this; omega
+  have hE := exp_scan hl _ hY hYe
+  have hX : ∀ c ∈ (l.expPart ++ (unitText l.unit ++ r)).head?, isDigit c = false ∧ c ≠ DOT := by
+    unfold Lit.expPart; cases l.exp
+    · exact unit_head _ r hr
+    · simp [isDigit, DOT]
+  have hM := mant_scan hl hX
+  have hU : takeWhile isAlpha (unitText l.unit ++ r) = (unitText l.unit, r) := by
+    apply takeWhile_all
+    · cases l.unit <;> simp [unitText, isAlpha]
+    · intro c hc; exact (hr c hc).2.1
+  have hunit : unitOf (unitText l.unit) = some l.unit := by cases l.unit <;> rfl
+  obtain ⟨hi0, hi, _, _⟩ := hl
+  obtain ⟨x, xs, hx⟩ : ∃ x xs, l.int = x :: xs := ⟨l.int.head hi0, l.int.tail, by simp⟩
+  have hxd : isDigit x = true := by rw [hx] at hi; simp at hi; exact hi.1
+  have hm1 : l.mant = x :: (xs ++ (match l.frac with | some f => DOT :: f | none => [])) := by
+    simp [Lit.mant, hx]
+  have nNL : ∀ {c}, isDigit c = true ∨ c = MINUS → (c == NL) = false ∧ isSpace c = false ∧ (c == HASH) = false := by
+    intro c hc; rcases hc with h | rfl
+    · simp [isDigit] at h; simp [NL, isSpace, HASH]; omega
+    · simp [NL, isSpace, HASH, MINUS]
+  cases hn : l.neg
+  · -- the literal starts with its first digit
+    refine ⟨x, xs ++ (match l.frac with | some f => DOT :: f | none => []) ++ l.expPart ++ unitText l.unit ++ r, ?_, ?_⟩
+    · simp [Lit.text, hn, hm1]
+    · obtain ⟨a1, a2, a3⟩ := nNL (Or.inl hxd)
+      have hrest : x :: (xs ++ (match l.frac with | some f => DOT :: f | none => []) ++ l.expPart ++ unitText l.unit ++ r) =
+          l.mant ++ (l.expPart ++ (unitText l.unit ++ r)) := by simp [hm1]
+      have hmant : mant x (xs ++ (match l.frac with | some f => DOT :: f | none => []) ++ l.expPart ++ unitText l.unit ++ r) =
+          (l.mant, l.expPart ++ (unitText l.unit ++ r)) := by
+        have : (x == MINUS) = false := by simp [isDigit] at hxd; simp [MINUS]; omega
+        simp only [mant, this, Bool.false_eq_true, ite_false]
+        rw [hrest, hM]
+      have hnum : number x (xs ++ (match l.frac with | some f => DOT :: f | none => []) ++ l.expPart ++ unitText l.unit ++ r) =
+          .ok (.num l.unit, l.text, r) := by
+        have hb : (x == MINUS) = false := by simp [isDigit] at hxd; simp [MINUS]; omega
+        unfold number numBody numUnit numRest numText
+        rw [hmant]
+        simp only [hE, hb, Bool.false_eq_true, ite_false, floatOk_lit ⟨hi0, hi, by assumption, by assumption⟩, hU, hunit]
+        simp [Lit.text, hn]
+      unfold step
+      simp only [a1, a2, a3, hxd, Bool.true_or, Bool.false_eq_true, ite_false, ite_true, hnum]
+  · -- `-`, then the digits
+    have hpv' := hpv hn
+    refine ⟨MINUS, l.mant ++ l.expPart ++ unitText l.unit ++ r, ?_, ?_⟩
+    · simp [Lit.text, hn]
+    · obtain ⟨a1, a2, a3⟩ := nNL (Or.inr rfl)
+      have hmant : mant MINUS (l.mant ++ l.expPart ++ unitText l.unit ++ r) =
+          (MINUS :: l.mant, l.expPart ++ (unitText l.unit ++ r)) := by
+        simp only [mant, beq_self_eq_true, ite_true, List.append_assoc]
+        rw [hM]
+      have hnum : number MINUS (l.mant ++ l.expPart ++ unitText l.unit ++ r) = .ok (.num l.unit, l.text, r) := by
+        unfold number numBody numUnit numRest numText
+        rw [hmant]
+        simp only [hE, beq_self_eq_true, ite_true, List.cons_append, List.tail_cons,
+          floatOk_lit ⟨hi0, hi, by assumption, by assumption⟩, hU, hunit]
+        simp [Lit.text, hn]
+      have hg : (isDigit MINUS || (MINUS == MINUS && ((l.mant ++ l.expPart ++ unitText l.unit ++ r).head?.map isDigit).getD false && !pv)) = true := by
+        simp [hpv', hm1, hxd]
+      unfold step
+      simp only [a1, a2, a3, hg, Bool.false_eq_true, ite_false, ite_true, hnum]
+
 end ForgeLang.LL1.Lex

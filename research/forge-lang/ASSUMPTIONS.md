@@ -224,7 +224,8 @@ the concrete instance; `Split.lean` has the general theorem.
   - `ambiguous_rejected`: `e := e '-' e | NUM` fails the check, so the check is not vacuous.
 - **A syntax change is a data change.** Re-run `gen_grammar.py` and `lake build`. Nothing in
   `LL1/Proof.lean` depends on Forge.
-- **Assumed, not proven: the lexer.** The theorems are about token strings. What the lexer must
+- **The lexer** (now proven of a model, `LL1/Lex.lean`, and tested against Rust; see "The
+  implementation against the proof"). The theorems are about token strings. What the lexer must
   do:
   - It is a function from text to tokens, with maximal munch.
   - The prototype's lexer is context-sensitive: a leading `-` joins a number only where no value
@@ -456,6 +457,87 @@ or `nopredict` (a table fact).
 - Body components (a body named by a joint), joints, poses, BOM rows beyond "one row per key",
   drawing block contents, the kernel.
 
+## The implementation against the proof (impl-proof, 2026-11-04)
+
+What ties the Rust in `interface/forge-lang` to the theorems above. Mismatches found are in
+`forgecad-gate/unified-doc/impl-proof-findings.md` (P for the parser, E for the evaluator).
+
+### Parser: one grammar, the table proven (`LL1/Impl.lean`)
+
+- **One source.** `tests/grammar.rs` writes `src/syntax/table.rs` and `LL1/Impl.lean` from the
+  same `Grammar` read from `grammar.ll1`. `the_lean_grammar_is_current` fails when Impl.lean is
+  stale, as `the_table_is_current` does for table.rs. Impl.lean holds table.rs's LHS, RHS,
+  NULLABLE, FIRST, FOLLOW, FOLLOW_END and TABLE literally, and the lexer's KEYWORDS and OPS.
+- `Impl.grammar_ll1`: `check grammar certT = true`, with `certT` table.rs's own sets. The sets the
+  parser ships are a valid certificate, so `impl_unambiguous` and `impl_roundtrip` hold for the
+  parser's grammar (`decide +kernel`, about 90 s).
+- `Impl.table_choose`: `∀ A < NN, ∀ a < NT, choose grammar certT A (some a) = tableAt A a`. On
+  every cell, TABLE names the rule the proven parser `parse` expands by, and NONE exactly where it
+  has none.
+- `Impl.source_to_tree`: lexing with the model (below) and parsing the tokens gives a parse tree
+  with exactly those tokens, and the lexed pieces are the source byte for byte.
+- Checked on de9bb4ee's grammar too (generated the same way; all theorems hold).
+
+### Lexer (`LL1/Lex.lean`)
+
+A model of `lex_into` on bytes, parametrised by the keyword and operator lists.
+- `lex_lossless`: `lex C s = .ok ps → (ps.map Piece.text).flatten = s`.
+- `word_maximal`: a name or keyword piece is never followed by a name byte.
+- `num_literal`: a literal `-`? digits (`.` digits)? (`e` `-`? digits)? unit, followed by a byte
+  that is not a digit, letter or dot, is one number piece with that unit, and the rest is left
+  as it was. A negative literal needs a place no value precedes (always so in the grammar's
+  literal positions). With `tests/lexer.rs` (SetParam writes only this shape) this is the P6
+  lexer assumption, now proven of the model.
+- Determinism is free (a function).
+
+### Differential (`tests/parse_diff.rs`)
+
+What the proofs cannot reach, the stack driver in `syntax.rs` (chains, kept values, error mode),
+its actions and the Rust lexer, is run against the proven objects:
+- the Lean parser (`lake exe fgparse`, `Oracle/Parse.lean`: the proven `parse`, nothing else) and
+  the lexer model (`lake exe fglex`);
+- in the suite through a reference port of `parse` whose answers are the oracle's by digest
+  (`tests/parse_diff.digest`); `FG_LEAN=1` re-asks Lean answer by answer and rewrites it;
+- inputs: every token string of up to 4 tokens whose proper prefixes are viable (99018 on main,
+  102893 on de9bb4ee: every sentence that short and every first error), 3000 random sentences
+  (seed 0x5eed_f00d_cafe_0001) and one random edit of each, every .fg file in the repository with
+  a token cut at 8 places; for the lexer every 1 to 3 byte text over a 30-byte alphabet, 8000
+  random texts and 2000 random programs (37931 texts). `FG_DIFF_LONG=1`: 5 tokens, 40000
+  sentences, 4 bytes, 100000 texts;
+- required: the parser accepts exactly the oracle's sentences, except for the checks its actions
+  add (assignment and keyword to a name, positional after keyword, a param's owner, an integer
+  instance index), and its tree equals the tree of the text printed from the oracle's tree with
+  every operation bracketed (left-associated chains, right-associated `^`), spans aside. The
+  lexer's pieces, kinds and lengths, or its error and span, equal the model's.
+- Result: no difference, on main and on de9bb4ee. Two AST quirks (P1, P2) are noted.
+
+### Evaluator and edit ops (`diff/`, `ScopedMore.lean`, `Counter/Qualify.lean`)
+
+`diff/core_diff.py` prints one random program as a `.fg` and as a core-calculus `Doc` and
+compares `fg run --json` / `fg edit` with Lean's `run`: ids, numbers, handles, structural
+params, refusals, edited text (`diff/README.md`). Every counterexample that maps to a `.fg` is a
+fixed case. It found E1 to E10 (component evaluations shared by value, observed links, defaults
+seeing the caller, `use` of components, zero-count loops, and others).
+
+Closed in Lean:
+- `move_down`, `move_up`, `scopedMove`/`scopedMove_ok`: MoveFeature inside a block, as an op
+  function, refusing or giving every occurrence a permutation of its fragment and log.
+- `replace_complete`, `scopedReplace`/`scopedReplace_ok`: ReplaceFeature with the same binder.
+- `occ_body`: any block op that preserves "evaluates, related by Rel" holds at every occurrence
+  (under `NoPlace`).
+- `default_no_capture`: a default that reads a caller's local is `unbound` (E10 is Rust's side).
+- `occ_caller_indep`: an occurrence depends only on its arguments' names and `Defs.reads`.
+- `unqualified_shadow`, `qualify_string_collides`: unqualified module names silently take the
+  first module; `file#comp` as one string collides unless `#` is barred from names.
+
+### Still not mechanised
+
+- The Rust stack driver itself (tested, not proven), and the action checks that refuse some
+  sentences.
+- Scoped ops under nested placement (only fg's `InComponent` refusal is tested).
+- MakeComponent, Extract and Inline as Rust ops (fg has none yet).
+- Diamond `use` and `use` paths fenced to the session root.
+
 ## Verdicts on the hypotheses
 
 | Hypothesis | Verdict |
@@ -608,5 +690,10 @@ or `nopredict` (a table fact).
 | `Modules.lean` | `load_total`, `link_inert`, `ids_rooted`, `use_cycle`, `with_unknown_param` |
 | `LL1/Unified.lean` | generated from `unified.ll1` + `unified.examples`: the proposed grammar, `grammar_ll1`, examples |
 | `LL1/UnifiedImpl.lean` | generated from `unified-impl.ll1`: the branch's grammar, `reject_component_kwarg` |
+| `LL1/Impl.lean` | generated by `interface/forge-lang/tests/grammar.rs`: the parser's grammar, sets and table; `grammar_ll1`, `table_choose`, `source_to_tree` |
+| `LL1/Lex.lean` | the lexer model: `lex_lossless`, `word_maximal`, `num_literal` |
+| `Oracle/*.lean` | `lake exe fgparse`, `lake exe fglex`: the oracles of `tests/parse_diff.rs` |
+| `ScopedMore.lean` | `scopedMove_ok`, `scopedReplace_ok`, `occ_body`, `default_no_capture`, `occ_caller_indep` |
+| `Counter/Qualify.lean` | `unqualified_shadow`, `qualify_string_collides` |
 | `Axioms.lean` | `lake env lean Axioms.lean`: the axioms of every main theorem |
 | `Counter/*.lean` | every counterexample named above, proven by evaluation (`rfl`/`decide`) or induction |

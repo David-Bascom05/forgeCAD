@@ -435,7 +435,7 @@ fn exhaustive(len: usize, out: &mut Vec<Vec<u8>>) {
 }
 
 fn short() -> usize {
-    if long() { 6 } else { 4 }
+    if long() { 5 } else { 4 }
 }
 
 #[test]
