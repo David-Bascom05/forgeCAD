@@ -9,10 +9,14 @@
 
 mod ll1;
 
-use ll1::{Grammar, generate, read};
+use ll1::{Grammar, generate, generate_lean, read};
 use std::collections::BTreeSet;
 
 const TABLE_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/src/syntax/table.rs");
+const LEAN_PATH: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../research/forge-lang/lean/ForgeLang/LL1/Impl.lean"
+);
 
 fn forge() -> Grammar {
     read(&std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/grammar.ll1")).expect("grammar"))
@@ -37,6 +41,23 @@ fn the_table_is_current() {
     assert!(
         have == want,
         "src/syntax/table.rs is stale: FG_REGEN=1 cargo test -p forge-lang --test grammar"
+    );
+}
+
+/// The Lean proof is about this grammar: Impl.lean holds table.rs's rules, sets and table, and the
+/// kernel checks LL(1) on them and that the table is the proven parser's choice (`table_choose`).
+#[test]
+fn the_lean_grammar_is_current() {
+    use forge_lang::syntax::{KEYWORDS, OPS};
+    let want = generate_lean(&forge(), &KEYWORDS, &OPS);
+    if std::env::var_os("FG_REGEN").is_some() {
+        std::fs::write(LEAN_PATH, &want).expect("write Impl.lean");
+        return;
+    }
+    let have = std::fs::read_to_string(LEAN_PATH).unwrap_or_default();
+    assert!(
+        have == want,
+        "research/forge-lang/lean/ForgeLang/LL1/Impl.lean is stale: FG_REGEN=1 cargo test -p forge-lang --test grammar, then lake build there"
     );
 }
 

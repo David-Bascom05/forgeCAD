@@ -7,3 +7,14 @@ relaxedAutoImplicit = false
 
 [[lean_lib]]
 name = "ForgeLang"
+
+[[lean_exe]]
+name = "fgparse"
+root = "Oracle.Parse"
+
+[[lean_lib]]
+name = "Oracle"
+
+[[lean_exe]]
+name = "fglex"
+root = "Oracle.Lex"

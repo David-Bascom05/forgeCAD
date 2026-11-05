@@ -523,3 +523,232 @@ pub fn min_lengths(g: &Grammar) -> Vec<usize> {
         }
     }
 }
+
+fn lean_list<T: std::fmt::Display>(xs: impl IntoIterator<Item = T>) -> String {
+    let v: Vec<String> = xs.into_iter().map(|x| x.to_string()).collect();
+    format!("[{}]", v.join(", "))
+}
+
+/// research/forge-lang/lean/ForgeLang/LL1/Impl.lean: the rules, sets and table of table.rs as Lean
+/// data, and the theorems the kernel checks about them. Written from the same `Grammar` as
+/// `generate`, so the Lean grammar is the parser's grammar and the certificate is its own sets.
+pub fn generate_lean(g: &Grammar, keywords: &[&str], ops: &[&str]) -> String {
+    let table = g.table();
+    let mut o = String::new();
+    let w = &mut o;
+    let (nt, nn) = (g.terms.len(), g.nts.len());
+    let q = |s: &str| format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\""));
+    writeln!(w, "import ForgeLang.LL1.Proof").unwrap();
+    writeln!(w, "import ForgeLang.LL1.Lex").unwrap();
+    writeln!(w).unwrap();
+    writeln!(
+        w,
+        "/-! Generated from interface/forge-lang/grammar.ll1 by interface/forge-lang/tests/grammar.rs, from"
+    )
+    .unwrap();
+    writeln!(
+        w,
+        "the same data as src/syntax/table.rs; do not edit. `the_lean_grammar_is_current` fails when it is"
+    )
+    .unwrap();
+    writeln!(
+        w,
+        "stale; `FG_REGEN=1 cargo test -p forge-lang --test grammar` writes it, then `lake build`."
+    )
+    .unwrap();
+    writeln!(
+        w,
+        "`lhs`, `rhs`, `nullable`, `first`, `follow`, `followEnd` and `table` are table.rs's LHS, RHS,"
+    )
+    .unwrap();
+    writeln!(
+        w,
+        "NULLABLE, FIRST, FOLLOW, FOLLOW_END and TABLE (sets as lists, NONE as 255); `keywords` and `ops`"
+    )
+    .unwrap();
+    writeln!(w, "are syntax.rs's KEYWORDS and OPS, as bytes. -/").unwrap();
+    writeln!(w).unwrap();
+    writeln!(w, "namespace ForgeLang.LL1.Impl").unwrap();
+    writeln!(w).unwrap();
+    writeln!(w, "def NT : Nat := {nt}").unwrap();
+    writeln!(w, "def NN : Nat := {nn}").unwrap();
+    writeln!(
+        w,
+        "def tNames : List String := {}",
+        lean_list(g.terms.iter().map(|t| q(t)))
+    )
+    .unwrap();
+    writeln!(
+        w,
+        "def ntNames : List String := {}",
+        lean_list(g.nts.iter().map(|t| q(t)))
+    )
+    .unwrap();
+    writeln!(w).unwrap();
+    writeln!(
+        w,
+        "def lhs : List Nat := {}",
+        lean_list(g.rules.iter().map(|r| r.0))
+    )
+    .unwrap();
+    writeln!(w, "def rhs : List (List Nat) := [").unwrap();
+    for (i, (a, r)) in g.rules.iter().enumerate() {
+        let text: Vec<&str> = r.iter().map(|s| g.name(*s)).collect();
+        let sep = if i + 1 < g.rules.len() { "," } else { "" };
+        writeln!(
+            w,
+            "  {}{sep}  -- {} := {}",
+            lean_list(r.iter()),
+            g.nts[*a],
+            if text.is_empty() {
+                "%empty".into()
+            } else {
+                text.join(" ")
+            }
+        )
+        .unwrap();
+    }
+    writeln!(w, "]").unwrap();
+    writeln!(w, "def nullable : List Bool := {}", lean_list(g.nullable.iter())).unwrap();
+    let sets = |s: &BTreeSet<usize>| lean_list(s.iter().filter(|x| **x != END));
+    writeln!(
+        w,
+        "def first : List (List Nat) := {}",
+        lean_list(g.first.iter().map(sets))
+    )
+    .unwrap();
+    writeln!(
+        w,
+        "def follow : List (List Nat) := {}",
+        lean_list(g.follow.iter().map(sets))
+    )
+    .unwrap();
+    writeln!(
+        w,
+        "def followEnd : List Bool := {}",
+        lean_list(g.follow.iter().map(|f| f.contains(&END)))
+    )
+    .unwrap();
+    writeln!(w, "def table : List (List Nat) := [").unwrap();
+    for (i, row) in table.iter().enumerate() {
+        let sep = if i + 1 < table.len() { "," } else { "" };
+        writeln!(w, "  {}{sep}", lean_list(row.iter().map(|c| c.unwrap_or(255)))).unwrap();
+    }
+    writeln!(w, "]").unwrap();
+    let bytes = |s: &&str| lean_list(s.bytes());
+    writeln!(
+        w,
+        "def keywords : List (List Nat) := {}",
+        lean_list(keywords.iter().map(bytes))
+    )
+    .unwrap();
+    writeln!(
+        w,
+        "def ops : List (List Nat) := {}",
+        lean_list(ops.iter().map(bytes))
+    )
+    .unwrap();
+    let term = |s: &str| {
+        g.terms
+            .iter()
+            .position(|t| t == s)
+            .unwrap_or_else(|| panic!("{s} is not a terminal"))
+    };
+    let quoted = |k: &&str| term(&format!("'{k}'"));
+    writeln!(
+        w,
+        "def kwTerm : List Nat := {}",
+        lean_list(keywords.iter().map(quoted))
+    )
+    .unwrap();
+    writeln!(
+        w,
+        "def opTerm : List Nat := {}",
+        lean_list(ops.iter().map(quoted))
+    )
+    .unwrap();
+    writeln!(
+        w,
+        "def tNUM : Nat := {}\ndef tSTR : Nat := {}\ndef tID : Nat := {}\ndef tNL : Nat := {}\ndef tEOF : Nat := {}",
+        term("NUM"),
+        term("STR"),
+        term("ID"),
+        term("NL"),
+        term("EOF")
+    )
+    .unwrap();
+    writeln!(w).unwrap();
+    w.push_str(LEAN_TAIL);
+    o
+}
+
+const LEAN_TAIL: &str = r#"/-- The lexer model on the parser's keywords and operators. -/
+def lexCfg : Lex.Cfg := ⟨keywords, ops⟩
+
+def sym (x : Nat) : Sym := if x < 128 then .t x else .n (x - 128)
+
+/-- The parser's grammar: table.rs's LHS and RHS, read as rules. -/
+def grammar : Grammar where
+  start := 0
+  rules := (lhs.zip rhs).map fun (a, r) => (a, r.map sym)
+
+/-- table.rs's own NULLABLE, FIRST and FOLLOW, as the certificate `check` verifies. -/
+def certT : Tables :=
+  ⟨(List.range NN).filter (nullable.getD · false),
+   tblOf ((List.range NN).map fun A => (A, first.getD A [])),
+   tblOf ((List.range NN).map fun A => (A, (if followEnd.getD A false then [none] else []) ++
+     (follow.getD A []).map some))⟩
+
+/-- TABLE[A][a], `none` where it is NONE. -/
+def tableAt (A a : Nat) : Option Nat :=
+  match (table.getD A []).getD a 255 with
+  | 255 => none
+  | r => some r
+
+def tableB : Bool :=
+  table.length == NN && table.all (·.length == NT) && lhs.length == rhs.length &&
+  (List.range NN).all fun A => (List.range NT).all fun a => choose grammar certT A (some a) == tableAt A a
+
+set_option maxRecDepth 100000 in
+/-- The check, run by the Lean kernel on table.rs's sets: the parser's grammar is LL(1). -/
+theorem grammar_ll1 : check grammar certT = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+theorem tableB_true : tableB = true := by decide +kernel
+
+/-- The parser's table is the proven parser's choice: on every nonterminal and lookahead token,
+TABLE names the rule `choose` (and so `parse`) expands by, and NONE exactly where `choose` has
+none. -/
+theorem table_choose : ∀ A, A < NN → ∀ a, a < NT → choose grammar certT A (some a) = tableAt A a := by
+  have h := tableB_true
+  simp only [tableB, Bool.and_eq_true, List.all_eq_true, List.mem_range, beq_iff_eq] at h
+  exact fun A hA a ha => h.2 A hA a ha
+
+/-- So: unambiguous, and the parser driven by `table` finds every tree (`LL1/Driver.lean`). -/
+theorem impl_unambiguous {t1 t2 : Tree} (h1 : VT grammar t1 (.n grammar.start))
+    (h2 : VT grammar t2 (.n grammar.start)) (he : t1.yield = t2.yield) : t1 = t2 :=
+  unambiguous grammar_ll1 h1 h2 he
+
+/-- The terminal a lexed piece is; none for trivia. -/
+def terminalOf : Lex.Kind → Option Nat
+  | .num _ => some tNUM | .str => some tSTR | .id => some tID | .nl => some tNL
+  | .kw k => kwTerm[k]? | .op o => opTerm[o]?
+  | .space | .comment | .newline => none
+
+/-- The parser's input: the tokens' terminals, then EOF. -/
+def terminals (ps : List Lex.Piece) : List Nat := ps.filterMap (terminalOf ·.kind) ++ [tEOF]
+
+/-- Source to tree, end to end: if the lexer takes the text and the parser the tokens, the result
+is a parse tree, the only one with those tokens (`impl_unambiguous`), and the pieces the lexer
+cut are the text byte for byte. -/
+theorem source_to_tree {s : Lex.Bytes} {ps : List Lex.Piece} {n : Nat} {t : Tree}
+    (hl : Lex.lex lexCfg s = .ok ps) (hp : parse grammar certT n (.n grammar.start) (terminals ps) = some (t, [])) :
+    VT grammar t (.n grammar.start) ∧ t.yield = terminals ps ∧ (ps.map Lex.Piece.text).flatten = s :=
+  ⟨(lossless hp).1, (lossless hp).2, Lex.lex_lossless hl⟩
+
+theorem impl_roundtrip {t : Tree} (h : VT grammar t (.n grammar.start)) :
+    parse grammar certT t.size (.n grammar.start) t.yield = some (t, []) :=
+  roundtrip grammar_ll1 h
+
+end ForgeLang.LL1.Impl
+"#;
