@@ -2,6 +2,7 @@
 //! scrolls, and groups its fields in sections, in tabs where a kind has many. It says what the fields
 //! are; the host turns them into a tool call, previews it live and commits it on OK.
 
+use crate::shell::placed::Placed;
 use super::theme::{mono, sans, semi};
 use super::{Action, Shell, panel};
 use egui::{Align2, Color32, Rect, Sense, Stroke, pos2, vec2};
@@ -1739,7 +1740,7 @@ impl Shell {
             .fixed_size(vec2(DIALOG_W, 0.0))
             .frame(frame)
             .constrain_to(super::dialog_area(ctx))
-            .show(ctx, |ui| {
+            .show_placed(ctx, &mut places, |ui, places| {
                 ui.spacing_mut().item_spacing.y = 6.0;
                 // the feature, by its icon and name
                 let (head, _) = ui.allocate_exact_size(vec2(DIALOG_W, 30.0), Sense::hover());
@@ -1788,7 +1789,7 @@ impl Shell {
                             ("Concentric", h.placing == Placing::Concentric),
                         ],
                         "dialog:place",
-                        &mut places,
+                        places,
                     ) {
                         h.placing = [Placing::Sketch, Placing::Linear, Placing::Concentric][k];
                         if let Some(f) = d.fields.iter_mut().find(|f| f.0 == "Points") {
@@ -1805,7 +1806,7 @@ impl Shell {
                                 n == 0,
                                 "Pick a circular edge",
                                 &t,
-                                &mut places,
+                                places,
                             );
                         }
                         Placing::Linear => {
@@ -1817,7 +1818,7 @@ impl Shell {
                                 face == 0,
                                 "Pick the face it goes in",
                                 &t,
-                                &mut places,
+                                places,
                             );
                             let n = h.linear.edges.len();
                             pick_row(
@@ -1827,10 +1828,10 @@ impl Shell {
                                 face == 1 && n < 2,
                                 "Pick two straight edges of it",
                                 &t,
-                                &mut places,
+                                places,
                             );
-                            field_row(ui, "Distance 1", &mut h.linear.first, units, &t, &mut places);
-                            field_row(ui, "Distance 2", &mut h.linear.second, units, &t, &mut places);
+                            field_row(ui, "Distance 1", &mut h.linear.first, units, &t, places);
+                            field_row(ui, "Distance 2", &mut h.linear.second, units, &t, places);
                         }
                         Placing::Sketch => {}
                     }
@@ -1844,7 +1845,7 @@ impl Shell {
                                 ("forward", "Out of it", h.turned),
                             ],
                             "dialog:turn",
-                            &mut places,
+                            places,
                         )
                     {
                         h.turned = k == 1;
@@ -1867,7 +1868,7 @@ impl Shell {
                             n == 0,
                             "Pick sketch points or circle centres",
                             &t,
-                            &mut places,
+                            places,
                         );
                     }
                     let flipped = points.starts_with("-on ");
@@ -1881,7 +1882,7 @@ impl Shell {
                                 ("backward", "Against the normal", flipped),
                             ],
                             "dialog:flip",
-                            &mut places,
+                            places,
                         );
                         if let Some(k) = way {
                             let rest = points.split_once(' ').map_or("", |p| p.1);
@@ -1906,13 +1907,13 @@ impl Shell {
                             ("Tapped", h.kind == HoleKind::Tapped),
                         ],
                         "dialog:holekind",
-                        &mut places,
+                        places,
                     ) {
                         h.kind = [HoleKind::Simple, HoleKind::Clearance, HoleKind::Tapped][k];
                     }
                     match h.kind {
                         HoleKind::Simple => {
-                            field_row(ui, "Diameter", &mut h.diameter, units, &t, &mut places);
+                            field_row(ui, "Diameter", &mut h.diameter, units, &t, places);
                         }
                         HoleKind::Clearance => {
                             let items: Vec<(String, String, bool)> = screws()
@@ -1967,16 +1968,16 @@ impl Shell {
                             ("Countersink", h.seat == Seat::Countersink),
                         ],
                         "dialog:seat",
-                        &mut places,
+                        places,
                     ) {
                         h.seat = [Seat::None, Seat::Counterbore, Seat::Spotface, Seat::Countersink][k];
                     }
                     if h.seat != Seat::None {
-                        field_row(ui, "Seat diameter", &mut h.seat_diameter, units, &t, &mut places);
+                        field_row(ui, "Seat diameter", &mut h.seat_diameter, units, &t, places);
                         if h.seat == Seat::Countersink {
-                            field_row(ui, "Angle", &mut h.seat_angle, units, &t, &mut places);
+                            field_row(ui, "Angle", &mut h.seat_angle, units, &t, places);
                         } else {
-                            field_row(ui, "Seat depth", &mut h.seat_depth, units, &t, &mut places);
+                            field_row(ui, "Seat depth", &mut h.seat_depth, units, &t, places);
                         }
                     }
                     ui.add_space(4.0);
@@ -1991,7 +1992,7 @@ impl Shell {
                             ("To", h.termination == Termination::Surface),
                         ],
                         "dialog:end",
-                        &mut places,
+                        places,
                     ) {
                         h.termination = [
                             Termination::Distance,
@@ -2009,17 +2010,17 @@ impl Shell {
                             n == 0,
                             "Pick the face it stops at",
                             &t,
-                            &mut places,
+                            places,
                         );
                     }
                     if h.termination == Termination::Distance {
-                        field_row(ui, "Depth", &mut h.depth, units, &t, &mut places);
+                        field_row(ui, "Depth", &mut h.depth, units, &t, places);
                         if let Some(k) = text_toggles(
                             ui,
                             &t,
                             &[("Flat", h.point.is_none()), ("Angled 118", h.point.is_some())],
                             "dialog:point",
-                            &mut places,
+                            places,
                         ) {
                             h.point = (k == 1).then(|| "118".to_string());
                         }
@@ -2062,7 +2063,7 @@ impl Shell {
                                 &t,
                                 if combine { &three[..] } else { &four[..] },
                                 "dialog:op",
-                                &mut places,
+                                places,
                             );
                             if let Some(k) = row {
                                 *text = if combine {
@@ -2083,7 +2084,7 @@ impl Shell {
                                     ("backward", "Left-handed", text == "left"),
                                 ],
                                 "dialog:hand",
-                                &mut places,
+                                places,
                             ) {
                                 *text = ["", "left"][k].to_string();
                             }
@@ -2099,7 +2100,7 @@ impl Shell {
                                     ("chain", "All that's tangent to it", text.is_empty()),
                                 ],
                                 "dialog:chain",
-                                &mut places,
+                                places,
                             ) {
                                 *text = ["only", ""][k].to_string();
                             }
@@ -2115,7 +2116,7 @@ impl Shell {
                                     ("backward", "The other side", text == "flip"),
                                 ],
                                 "dialog:flip",
-                                &mut places,
+                                places,
                             ) {
                                 *text = ["", "flip"][k].to_string();
                                 settled_now = true;
@@ -2141,7 +2142,7 @@ impl Shell {
                                     ("axisz", "Z", now == "lin 0 0 1"),
                                 ],
                                 "dialog:way",
-                                &mut places,
+                                places,
                             );
                             if let Some(k) = row {
                                 *text = ["lin 1 0 0", "lin 0 1 0", "lin 0 0 1"][k].to_string();
@@ -2184,7 +2185,7 @@ impl Shell {
                                 _ => forge_doc::text::tokens(text).len(),
                             };
                             let hint = pick.as_ref().filter(|(l, _)| l == label).map_or("", |(_, w)| *w);
-                            if pick_row(ui, label, n, wanted && waiting, hint, &t, &mut places) {
+                            if pick_row(ui, label, n, wanted && waiting, hint, &t, places) {
                                 activate = Some(label.clone());
                             }
                             continue;
@@ -2201,7 +2202,7 @@ impl Shell {
                                 "Extents",
                                 &[("angle", "Angle", !full), ("full", "Full", full)],
                                 "dialog:extents",
-                                &mut places,
+                                places,
                             ) {
                                 full = k == 1;
                             }
@@ -2219,7 +2220,7 @@ impl Shell {
                                     ("twoway", "Two directions", way == Way::Two),
                                 ],
                                 "dialog:way",
-                                &mut places,
+                                places,
                             ) {
                                 way = [Way::Forward, Way::Back, Way::Symmetric, Way::Two][k];
                             }
@@ -2236,7 +2237,7 @@ impl Shell {
                                     ("tosurface", "To Surface", extent == Extent::Surface),
                                 ],
                                 "dialog:extent",
-                                &mut places,
+                                places,
                             ) {
                                 extent =
                                     [Extent::Distance, Extent::Through, Extent::Next, Extent::Surface][k];
@@ -2251,7 +2252,7 @@ impl Shell {
                                     ("symmetric", "Symmetric", toward == Toward::Both),
                                 ],
                                 "dialog:dir",
-                                &mut places,
+                                places,
                             ) {
                                 toward = [Toward::Forward, Toward::Back, Toward::Both][k];
                             }
@@ -2259,7 +2260,7 @@ impl Shell {
                                 continue;
                             }
                         }
-                        field_row(ui, label, text, units, &t, &mut places);
+                        field_row(ui, label, text, units, &t, places);
                     }
                 }
                 d.extent = extent;

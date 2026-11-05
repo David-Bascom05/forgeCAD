@@ -4,6 +4,7 @@
 //! the CSV), Make Mould (its settings and the exports). The browser holds the formed part, the
 //! mould and the blank, each with its eye; the formed part shows as modelled (t everywhere) or as
 //! simulated (the wall the model gives), its colours on or off in either. Every edit is a dialog.
+use crate::shell::placed::Placed;
 use super::fg::{FgAct, FgPanel, Severity};
 use super::theme::{Theme, medium, mono, sans, semi};
 use super::thermo::{Masses, ThermoRow, band, c32};
@@ -1059,7 +1060,7 @@ impl Shell {
             .fixed_size(vec2(DLG_W, 0.0))
             .frame(frame(t))
             .constrain_to(super::dialog_area(ctx))
-            .show(ctx, |ui| {
+            .show_placed(ctx, places, |ui, places| {
                 ui.spacing_mut().item_spacing.y = 6.0;
                 close = head(
                     ui,
@@ -1218,7 +1219,7 @@ impl Shell {
             .fixed_size(vec2(w, 0.0))
             .frame(frame(t))
             .constrain_to(super::dialog_area(ctx))
-            .show(ctx, |ui| {
+            .show_placed(ctx, places, |ui, places| {
                 ui.spacing_mut().item_spacing.y = 6.0;
                 close = head(ui, t, "thicken", &format!("Formed Part · {}", f.id), w, places, "thermo:form");
                 tabs(ui, t, &["Shape", "Trim", "Plug"], &mut f.tab, w, places, "thermo:form:tab");
@@ -1346,7 +1347,7 @@ impl Shell {
             .fixed_size(vec2(w, 0.0))
             .frame(frame(t))
             .constrain_to(super::dialog_area(ctx))
-            .show(ctx, |ui| {
+            .show_placed(ctx, places, |ui, places| {
                 ui.spacing_mut().item_spacing.y = 3.0;
                 close = head(
                     ui,
@@ -1501,7 +1502,7 @@ impl Shell {
             .fixed_size(vec2(w, 0.0))
             .frame(frame(t))
             .constrain_to(super::dialog_area(ctx))
-            .show(ctx, |ui| {
+            .show_placed(ctx, places, |ui, places| {
                 ui.spacing_mut().item_spacing.y = 2.0;
                 close = head(
                     ui,
@@ -1780,7 +1781,7 @@ impl Shell {
             .pivot(Align2::RIGHT_BOTTOM)
             .fixed_pos(pos2(v.right() - 8.0, v.bottom() - 8.0))
             .order(egui::Order::Foreground)
-            .show(ctx, |ui| {
+            .show_placed(ctx, places, |ui, places| {
                 frame(t).show(ui, |ui| {
                     ui.set_width(w);
                     ui.spacing_mut().item_spacing.y = 4.0;
@@ -1911,7 +1912,7 @@ impl Shell {
         egui::Area::new(egui::Id::unique("thermo-draft"))
             .fixed_pos(pos2(v.left() + 16.0, v.top() + 48.0))
             .order(egui::Order::Middle)
-            .show(ctx, |ui| {
+            .show_placed(ctx, places, |ui, places| {
                 frame(t).show(ui, |ui| {
                     ui.set_width(w);
                     ui.add_space(10.0);
@@ -2260,7 +2261,7 @@ fn material_window(ctx: &egui::Context, t: &Theme, fg: &mut FgPanel, places: &mu
         .default_pos(pos2(300.0, 190.0))
         .default_size(vec2(760.0, 560.0))
         .constrain_to(super::dialog_area(ctx))
-        .show(ctx, |ui| {
+        .show_placed(ctx, places, |ui, places| {
             ui.set_width(760.0);
             super::thermo_material::tab(ui, t, &mut m);
             ui.add_space(10.0);

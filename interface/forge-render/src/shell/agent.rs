@@ -978,7 +978,7 @@ impl Shell {
                                 let mut body = input.trim_end().to_string();
                                 if !output.trim().is_empty() {
                                     if !body.is_empty() {
-                                        body.push_str("\n──\n");
+                                        body.push_str("\n---\n");
                                     }
                                     let out: Vec<&str> = output.trim_end().lines().take(40).collect();
                                     body.push_str(&out.join("\n"));

@@ -2,6 +2,7 @@
 //! left, the chosen category's families as pictures, and the chosen family's table (size, length,
 //! thread, grade) with the part's designation; Place writes `NAME = std(..)` into the assembly.
 
+use crate::shell::placed::Placed;
 use super::fgasm::{dialog_frame, dialog_head};
 use super::theme::{Theme, medium, mono, sans, semi};
 use super::{Shell, icons};
@@ -339,8 +340,8 @@ impl Shell {
             .max_width(W)
             .frame(dialog_frame(&t))
             .constrain_to(super::dialog_area(ctx))
-            .show(ctx, |ui| {
-                close = dialog_head(ui, &t, "part", "Place from Content Center", "cc", &mut places);
+            .show_placed(ctx, &mut places, |ui, places| {
+                close = dialog_head(ui, &t, "part", "Place from Content Center", "cc", places);
                 ui.add_space(4.0);
                 let fams: Vec<&'static Family> = families()
                     .iter()
@@ -511,7 +512,7 @@ impl Shell {
                                 let sizes: Vec<String> = f.sizes().iter().map(|s| s.to_string()).collect();
                                 let k = cc.size.as_ref().and_then(|s| sizes.iter().position(|x| x == s));
                                 if let Some(k) =
-                                    pick_list(ui, &t, "size", &sizes, k, jump, 190.0, &mut places)
+                                    pick_list(ui, &t, "size", &sizes, k, jump, 190.0, places)
                                 {
                                     cc.size = Some(sizes[k].clone());
                                     cc.pick_length(f);
@@ -544,7 +545,7 @@ impl Shell {
                                         k,
                                         jump_length,
                                         190.0,
-                                        &mut places,
+                                        places,
                                     ) {
                                         cc.length = Some(ls[k]);
                                     }

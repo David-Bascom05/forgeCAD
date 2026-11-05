@@ -1,6 +1,7 @@
 //! The selected feature's number on the model: an arrow along its real axis that drags in real
 //! millimetres, its value beside it in a field, and a clear word if a value can't build.
 
+use crate::shell::placed::Placed;
 use super::theme::mono;
 use super::{Action, Shell, icons, theme};
 use crate::camera::{Camera, dot};
@@ -122,12 +123,13 @@ impl Shell {
             e.dragging = false;
             e.text = e.handle.text.clone();
         }
-        egui::Area::new(egui::Id::unique("dim-arrow"))
+        let placed_before = self.places.len();
+        let (_, sizing) = egui::Area::new(egui::Id::unique("dim-arrow"))
             .fixed_pos(view.min)
             .order(egui::Order::Middle)
             .interactable(true)
             .constrain(false)
-            .show(ctx, |ui| {
+            .show_sizing(ctx, |ui| {
                 let p = ui.painter().clone();
                 let side = vec2(-way.y, way.x);
                 let usable = facing < 0.97 && e.handle.draggable;
@@ -182,6 +184,10 @@ impl Shell {
                     }
                 }
             });
+        // what it named unseen, sizing itself, is off
+        if sizing {
+            self.places.truncate(placed_before);
+        }
         if let Some(c) = hint {
             ctx.set_cursor_icon(c);
         }
@@ -198,11 +204,12 @@ impl Shell {
             at.x.clamp(view.left() + 4.0 + word_w, view.right() - FIELD_W - 60.0),
             at.y.clamp(view.top() + 4.0, view.bottom() - 60.0),
         );
-        egui::Area::new(egui::Id::unique("dim-field"))
+        let placed_before = self.places.len();
+        let (_, sizing) = egui::Area::new(egui::Id::unique("dim-field"))
             .fixed_pos(at)
             .order(egui::Order::Foreground)
             .constrain(false)
-            .show(ctx, |ui| {
+            .show_sizing(ctx, |ui| {
                 let (row, _) = ui.allocate_exact_size(vec2(FIELD_W + 54.0, 26.0), Sense::hover());
                 let field = Rect::from_min_size(row.min, vec2(FIELD_W, 26.0));
                 ui.painter().rect_filled(field, 4.0, t.surface);
@@ -282,6 +289,10 @@ impl Shell {
                     self.places.push(("dim:error".to_string(), bx));
                 }
             });
+        // what it named unseen, sizing itself, is off
+        if sizing {
+            self.places.truncate(placed_before);
+        }
         self.out.extend(actions);
         if typed.is_some() {
             self.dim_typed = typed;

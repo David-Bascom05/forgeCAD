@@ -4,6 +4,7 @@
 //! dialog, whose fields leave as SetProperty ops. The host fills in what it works out
 //! (readings, physical properties, planes picked) and does the cutting.
 
+use crate::shell::placed::Placed;
 use super::Shell;
 use super::fg::FgAct;
 use super::fgasm::{dialog_frame, dialog_head};
@@ -602,7 +603,7 @@ impl Shell {
             pos2(v.left() + 16.0, v.top() + 56.0),
             320.0,
         )
-        .show(ctx, |ui| {
+        .show_placed(ctx, places, |ui, places| {
             close = dialog_head(ui, t, "section", "Section View", "section:close", places);
             ui.horizontal_wrapped(|ui| {
                 for (k, name) in KINDS {
@@ -885,7 +886,7 @@ impl Shell {
         let top = (v.top() + 12.0).max(area.top() + 4.0);
         let body = IPROPS_BODY.min(area.bottom() - top - 124.0).max(200.0);
         let at = pos2(v.left() + 40.0, top);
-        let r = Self::inspect_window(&title, "iprops", t, at, IPROPS_W).show(ctx, |ui| {
+        let r = Self::inspect_window(&title, "iprops", t, at, IPROPS_W).show_placed(ctx, places, |ui, places| {
             let icon = if assembly { "subasm" } else { "part" };
             close = dialog_head(ui, t, icon, &title, "iprops:close", places);
             ui.add_space(6.0);

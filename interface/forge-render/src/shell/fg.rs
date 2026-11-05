@@ -2,6 +2,7 @@
 //! the tools that edit them), the Parameters dialog, the Issues window with each issue's fixes. Like the rest of the shell it changes nothing itself: every
 //! edit leaves as a typed op in `out`, which the host applies through forge-lang.
 
+use crate::shell::placed::Placed;
 use super::theme::{medium, mono, sans, semi};
 use super::{Shell, icons, panel};
 use egui::{Align2, Color32, Rect, Sense, Stroke, Ui, pos2, vec2};
@@ -937,8 +938,8 @@ impl Shell {
             .max_width(w)
             .frame(super::fgasm::dialog_frame(&t))
             .constrain_to(super::dialog_area(ctx))
-            .show(ctx, |ui| {
-                close = super::fgasm::dialog_head(ui, &t, "params", "Parameters", "fg:params", &mut places);
+            .show_placed(ctx, &mut places, |ui, places| {
+                close = super::fgasm::dialog_head(ui, &t, "params", "Parameters", "fg:params", places);
                 ui.label(
                     egui::RichText::new(format!(
                         "{} · a driving value is edited in place; a driven one by what it reads",
@@ -970,7 +971,7 @@ impl Shell {
                                 }
                                 ui.end_row();
                                 for p in &params {
-                                    Self::param_row(ui, &t, &mut fg, p, &mut out, &mut places);
+                                    Self::param_row(ui, &t, &mut fg, p, &mut out, places);
                                     ui.end_row();
                                 }
                             });
@@ -1128,13 +1129,13 @@ impl Shell {
             .max_width(w)
             .frame(super::fgasm::dialog_frame(&t))
             .constrain_to(super::dialog_area(ctx))
-            .show(ctx, |ui| {
-                close = super::fgasm::dialog_head(ui, &t, "warning", "Issues", "fg:issueswin", &mut places);
+            .show_placed(ctx, &mut places, |ui, places| {
+                close = super::fgasm::dialog_head(ui, &t, "warning", "Issues", "fg:issueswin", places);
                 egui::ScrollArea::vertical()
                     .auto_shrink([false, true])
                     .max_height((v.height() * 0.45).max(160.0))
                     .show(ui, |ui| {
-                        Self::fg_issues(ui, &t, &mut fg, &mut out, &mut places);
+                        Self::fg_issues(ui, &t, &mut fg, &mut out, places);
                     });
             });
         if let Some(r) = shown {

@@ -3,6 +3,7 @@
 //! the drawing file (`forge_lang::drawing::ops`), checked before it is written; the sheet is made
 //! again from the file in the background, so the window never waits on the kernel.
 
+use crate::shell::placed::Placed;
 use super::theme::{mono, sans, semi};
 use super::{Action, Shell, icons};
 use egui::{Align2, Color32, Pos2, Rect, Sense, Shape, Stroke, StrokeKind, Ui, pos2, vec2};
@@ -2154,14 +2155,14 @@ impl Shell {
             Dlg::EditDim { .. } => "Edit Dimension",
             Dlg::EditView { .. } => "Edit View",
         };
-        egui::Window::new(title)
+        let (_, sizing) = egui::Window::new(title)
             .id(egui::Id::unique("dwg-dialog"))
             .collapsible(false)
             .resizable(false)
             .frame(super::fgasm::dialog_frame(&t))
             .default_pos(pos2(420.0, 200.0))
             .constrain_to(super::dialog_area(ctx))
-            .show(ctx, |ui| {
+            .show_sizing(ctx, |ui| {
                 ui.style_mut().spacing.item_spacing = vec2(8.0, 8.0);
                 match &mut next {
                     Dlg::Base {
@@ -2367,7 +2368,8 @@ impl Shell {
                 });
             });
         env.dlg = Some(next.clone());
-        if let Some(r) = ok_rect {
+        // unseen, sizing itself: its OK isn't there yet
+        if let Some(r) = ok_rect.filter(|_| !sizing) {
             self.places.push(("dwgdlg:OK".into(), r));
         }
         let Some(env) = &mut self.drawing else { return };

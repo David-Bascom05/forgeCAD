@@ -3,6 +3,7 @@
 //! Sheet Metal Defaults and rules, the flat pattern's bend lines and extents over the view, its
 //! bend table and its DXF export.
 
+use crate::shell::placed::Placed;
 use super::fgasm::{dialog_frame, dialog_head};
 use super::fgtool::SlotKind;
 use super::ribbon::{Group, Tool};
@@ -259,10 +260,10 @@ impl Shell {
             .max_width(width)
             .frame(dialog_frame(&t))
             .constrain_to(super::dialog_area(ctx))
-            .show(ctx, |ui| {
-                close = dialog_head(ui, &t, icon, head, id, &mut places);
+            .show_placed(ctx, &mut places, |ui, places| {
+                close = dialog_head(ui, &t, icon, head, id, places);
                 ui.spacing_mut().item_spacing.y = 5.0;
-                got = Some(body(ui, &mut places));
+                got = Some(body(ui, places));
             });
         if let Some(r) = shown {
             self.view_blocks.push(r.response.rect);

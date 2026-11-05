@@ -4,6 +4,7 @@
 //! stand-in). Saved as forge-material's TOML in `~/.config/forgecad/materials/mine.toml` or the
 //! project's `materials/project.toml`; Assign to Part sets the part's material.
 
+use crate::shell::placed::Placed;
 use super::Shell;
 use super::fg::FgAct;
 use super::fgasm::dialog_frame;
@@ -476,7 +477,7 @@ impl Shell {
             .fixed_size(vec2(W, h))
             .frame(dialog_frame(&t).inner_margin(0))
             .constrain_to(area)
-            .show(ctx, |ui| {
+            .show_placed(ctx, &mut places, |ui, places| {
                 let all = Rect::from_min_size(ui.max_rect().min, vec2(W, h));
                 ui.allocate_rect(all, Sense::hover());
                 let head = Rect::from_min_size(all.min, vec2(W, HEAD_H));
@@ -498,16 +499,16 @@ impl Shell {
                 p.hline(all.x_range(), head.bottom() - 0.5, Stroke::new(1.0, t.line));
                 p.vline(libs.right() - 0.5, body.y_range(), Stroke::new(1.0, t.line));
                 p.vline(list.right() - 0.5, body.y_range(), Stroke::new(1.0, t.line));
-                close |= Self::browser_head(ui, &t, head, &mut b, &mut places);
+                close |= Self::browser_head(ui, &t, head, &mut b, places);
                 let region = |r: Rect, m: egui::Vec2| egui::UiBuilder::new().max_rect(r.shrink2(m));
                 ui.scope_builder(region(libs, vec2(10.0, 10.0)), |ui| {
-                    Self::browser_libraries(ui, &t, &mut b, &mut places)
+                    Self::browser_libraries(ui, &t, &mut b, places)
                 });
                 ui.scope_builder(region(list, vec2(0.0, 0.0)), |ui| {
-                    Self::browser_list(ui, &t, &mut b, &mut places)
+                    Self::browser_list(ui, &t, &mut b, places)
                 });
                 ui.scope_builder(region(detail, vec2(0.0, 0.0)), |ui| {
-                    Self::browser_detail(ui, &t, &mut b, part, &mut places, &mut assign, &mut close)
+                    Self::browser_detail(ui, &t, &mut b, part, places, &mut assign, &mut close)
                 });
             });
         if let Some(r) = r {

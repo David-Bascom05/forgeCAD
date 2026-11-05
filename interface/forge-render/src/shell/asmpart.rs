@@ -2,6 +2,7 @@
 //! features: the rest of the assembly dims, the feature's dialog opens over the view, and OK
 //! writes the edit back to the part's own file (the assembly then builds again).
 
+use crate::shell::placed::Placed;
 use super::Shell;
 use super::fg::{DimRow, FeatRow, FgAct, From, parse_value, short};
 use super::fgasm::{AsmPanel, PartFeats, dialog_head};
@@ -409,7 +410,7 @@ impl Shell {
             pos2(v.left() + 16.0, v.top() + 56.0),
             300.0,
         )
-        .show(ctx, |ui| {
+        .show_placed(ctx, places, |ui, places| {
             ui.label(
                 egui::RichText::new(format!("in {} · {}", ip.occ, file_name(&ip.file)))
                     .font(mono(11.0))

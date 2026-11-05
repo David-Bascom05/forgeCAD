@@ -5,6 +5,7 @@
 //! What Inventor puts in dialogs is in dialogs here: Parameters, Drive, iProperties, Analyze
 //! Interference, the bill of materials, the explode controls.
 
+use crate::shell::placed::Placed;
 use super::Shell;
 use super::fg::{FgAct, From, Severity, short};
 use super::icons;
@@ -2286,7 +2287,7 @@ impl Shell {
         let link = a.links.get(l)?.clone();
         let mut close = false;
         let r =
-            Self::window("Drive", "drive", t, pos2(v.left() + 16.0, v.top() + 56.0), 340.0).show(ctx, |ui| {
+            Self::window("Drive", "drive", t, pos2(v.left() + 16.0, v.top() + 56.0), 340.0).show_placed(ctx, places, |ui, places| {
                 close = dialog_head(
                     ui,
                     t,
@@ -2443,7 +2444,7 @@ impl Shell {
             pos2(v.left() + 16.0, v.top() + 56.0),
             360.0,
         )
-        .show(ctx, |ui| {
+        .show_placed(ctx, places, |ui, places| {
             close = dialog_head(ui, t, "part", &format!("{key} iProperties"), "asm:props", places);
             egui::Grid::new("asm-props")
                 .num_columns(2)
@@ -2522,7 +2523,7 @@ impl Shell {
     ) -> Option<Rect> {
         let mut close = false;
         let at = pos2(v.right() - 476.0, v.top() + 56.0);
-        let r = Self::window("Analyze Interference", "interference", t, at, 440.0).show(ctx, |ui| {
+        let r = Self::window("Analyze Interference", "interference", t, at, 440.0).show_placed(ctx, places, |ui, places| {
             close = dialog_head(ui, t, "check", "Analyze Interference", "asm:interference", places);
             ui.label(
                 egui::RichText::new("Every pair of parts, and every expect in the file.")
@@ -2635,7 +2636,7 @@ impl Shell {
     ) -> Option<Rect> {
         let mut close = false;
         let at = pos2(v.center().x - 200.0, v.top() + 56.0);
-        let r = Self::window("Bill of Materials", "bom", t, at, 400.0).show(ctx, |ui| {
+        let r = Self::window("Bill of Materials", "bom", t, at, 400.0).show_placed(ctx, places, |ui, places| {
             close = dialog_head(ui, t, "rule", "Bill of Materials", "asm:bomwin", places);
             let total: usize = a.bom.iter().map(|b| b.1).sum();
             ui.label(
@@ -2693,7 +2694,7 @@ impl Shell {
         let at = pos2(v.center().x - 170.0, v.bottom() - 16.0);
         let r = Self::window("Explode", "explode", t, at, 340.0)
             .pivot(Align2::LEFT_BOTTOM)
-            .show(ctx, |ui| {
+            .show_placed(ctx, places, |ui, places| {
                 close = dialog_head(ui, t, "combine", "Explode", "asm:explodewin", places);
                 ui.horizontal(|ui| {
                     let apart = a.explode >= 0.5;

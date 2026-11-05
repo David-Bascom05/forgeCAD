@@ -25,6 +25,7 @@ pub mod inspect;
 pub mod materials;
 mod measure_ui;
 pub mod panel;
+pub(crate) mod placed;
 mod ribbon;
 pub mod settings;
 pub mod sheet;
@@ -39,6 +40,7 @@ mod tree;
 mod visual_style;
 
 pub use crate::nav::NavTool;
+use crate::shell::placed::Placed;
 use crate::render::VisualStyle;
 use egui::{Align2, Color32, CornerRadius, Rect, Sense, Stroke, StrokeKind, Ui, pos2, vec2};
 use forge_doc::{Body, Document, ItemId};
@@ -688,7 +690,7 @@ impl Shell {
         let r = egui::Area::new(egui::Id::unique("view-toolbar"))
             .fixed_pos(at)
             .order(egui::Order::Middle)
-            .show(ctx, |ui| {
+            .show_placed(ctx, &mut places, |ui, places| {
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = 2.0;
                     for (name, word) in OVERLAY_SWITCHES {
@@ -1465,11 +1467,12 @@ impl Shell {
         let t = self.theme;
         let v = self.view_rect;
         let mut out = None;
-        egui::Area::new(egui::Id::unique("mode-bar"))
+        let placed_before = self.places.len();
+        let (_, sizing) = egui::Area::new(egui::Id::unique("mode-bar"))
             .pivot(Align2::CENTER_TOP)
             .fixed_pos(pos2(v.center().x, v.top() + 10.0))
             .order(egui::Order::Foreground)
-            .show(ctx, |ui| {
+            .show_sizing(ctx, |ui| {
                 egui::Frame::NONE
                     .fill(t.surface)
                     .stroke(Stroke::new(1.0, t.line))
@@ -1494,6 +1497,10 @@ impl Shell {
                         });
                     });
             });
+        // what it named unseen, sizing itself, is off
+        if sizing {
+            self.places.truncate(placed_before);
+        }
         self.out.extend(out);
     }
 
@@ -1723,10 +1730,11 @@ impl Shell {
             })
         });
         let wedge = wedge.filter(|k| items[*k].2.is_some());
-        egui::Area::new(egui::Id::unique("marking"))
+        let placed_before = self.places.len();
+        let (_, sizing) = egui::Area::new(egui::Id::unique("marking"))
             .fixed_pos(pos2(0.0, 0.0))
             .order(egui::Order::Foreground)
-            .show(ctx, |ui| {
+            .show_sizing(ctx, |ui| {
                 let p = ui.painter();
                 let around = |a: f32, r: f32| c + vec2(a.sin() * r, -a.cos() * r);
                 // the ring, and the wedge the pointer's in
@@ -1822,6 +1830,10 @@ impl Shell {
                     y += 26.0;
                 }
             });
+        // what it named unseen, sizing itself, is off
+        if sizing {
+            self.places.truncate(placed_before);
+        }
         let clicked = ctx.input(|i| i.pointer.primary_clicked());
         if clicked && !closing {
             match wedge {
@@ -1891,7 +1903,7 @@ fn menu_at(
     let inner = egui::Area::new(egui::Id::unique(id))
         .fixed_pos(at)
         .order(egui::Order::Foreground)
-        .show(ctx, |ui| {
+        .show_placed(ctx, places, |ui, places| {
             let (panel, _) =
                 ui.allocate_exact_size(vec2(w, 8.0 + items.len() as f32 * ROW_H), Sense::click());
             ui.painter().rect_filled(panel, 4.0, t.surface);

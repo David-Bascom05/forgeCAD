@@ -3,6 +3,7 @@
 //! change is typed forge-lang ops on the .fg. A dialog previews its ops as they stand (the solve
 //! and its typed problems show before OK, as Inventor's do); OK applies them as one undo step.
 
+use crate::shell::placed::Placed;
 use super::Shell;
 use super::fg::{FgAct, Severity, short};
 use super::fgasm::{AsmPanel, dialog_head};
@@ -946,12 +947,12 @@ impl Shell {
         {
             let at = pos2(v.left() + 16.0, v.top() + 56.0);
             let mut keep = true;
-            let shown = Self::window("Assemble", "asm-tool", &t, at, W).show(ctx, |ui| match &mut tool {
-                AsmTool::Place(p) => keep = Self::place_ui(ui, &t, a, p, &mut out, &mut places),
-                AsmTool::Pattern(p) => keep = Self::pattern_ui(ui, &t, p, &mut out, &mut places),
-                AsmTool::MirrorCopy(m) => keep = Self::mirror_ui(ui, &t, m, &mut out, &mut places),
-                AsmTool::Free(rotate) => keep = Self::free_ui(ui, &t, a, *rotate, &mut out, &mut places),
-                AsmTool::Link(f) => keep = Self::link_ui(ui, &t, a, f, &src, &issues, &mut out, &mut places),
+            let shown = Self::window("Assemble", "asm-tool", &t, at, W).show_placed(ctx, &mut places, |ui, places| match &mut tool {
+                AsmTool::Place(p) => keep = Self::place_ui(ui, &t, a, p, &mut out, places),
+                AsmTool::Pattern(p) => keep = Self::pattern_ui(ui, &t, p, &mut out, places),
+                AsmTool::MirrorCopy(m) => keep = Self::mirror_ui(ui, &t, m, &mut out, places),
+                AsmTool::Free(rotate) => keep = Self::free_ui(ui, &t, a, *rotate, &mut out, places),
+                AsmTool::Link(f) => keep = Self::link_ui(ui, &t, a, f, &src, &issues, &mut out, places),
             });
             if let Some(s) = shown {
                 self.view_blocks.push(s.response.rect);

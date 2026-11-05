@@ -3,6 +3,7 @@
 //! the results drawn in the model as dimensions (arrowed lines, angle arcs, tinted faces with
 //! their areas, circles with their diameters), all in the world, so they stay put as it turns.
 
+use crate::shell::placed::Placed;
 use super::Shell;
 use super::fgasm::dialog_head;
 use super::inspect::{Added, Filter, Follow, IntoField, MPick, panel_values, shown, shown_dual};
@@ -88,12 +89,7 @@ impl Shell {
         let n = m.precision;
         // wider with a second unit beside every value
         let width = if m.dual.is_some() { 400.0 } else { 330.0 };
-        // egui lays a new window out once unseen to size it: what it places then isn't where
-        // anything is, so a click by name then would miss
-        let before = places.len();
-        let mut sizing = false;
-        let r = Self::inspect_window(title, "measure", t, at, width).show(ctx, |ui| {
-            sizing = ui.is_sizing_pass();
+        let r = Self::inspect_window(title, "measure", t, at, width).show_placed(ctx, places, |ui, places| {
             close = dialog_head(ui, t, "measure", title, "measure:close", places);
             if m.wall {
                 wall_rows(ui, t, m, places);
@@ -479,9 +475,6 @@ impl Shell {
                 .wrap(),
             );
         });
-        if sizing {
-            places.truncate(before);
-        }
         // a value Use was pressed on: into the field, and Measure's done, as Inventor's
         let used = m.used.take().zip(m.into.clone());
         if let Some((x, (into, kind))) = used {

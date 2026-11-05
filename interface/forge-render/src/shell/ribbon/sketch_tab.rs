@@ -1,6 +1,7 @@
 //! The Sketch tab as Inventor lays it out: a shape's variants under one split button (its arrow
 //! drops them; the last one used becomes the face), the constraints each with its name.
 
+use crate::shell::placed::Placed;
 use super::super::sketching::SkTool;
 use super::super::theme::{mono, sans};
 use super::super::{Action, RIBBON_H, Shell, TABS_H, TITLE_H, icons};
@@ -489,11 +490,12 @@ impl Shell {
         let t = self.theme;
         let face_now = sp.variants.iter().position(|v| v.on);
         let mut picked: Option<(usize, Action, bool)> = None;
-        let area = egui::Area::new(Id::unique(("sketch-drop-menu", sp.id)))
+        let placed_before = self.places.len();
+        let (area, sizing) = egui::Area::new(Id::unique(("sketch-drop-menu", sp.id)))
             .fixed_pos(below.left_bottom() + vec2(0.0, 2.0))
             .order(egui::Order::Foreground)
             .fade_in(false)
-            .show(ctx, |ui| {
+            .show_sizing(ctx, |ui| {
                 egui::Frame::new()
                     .fill(t.surface)
                     .stroke(Stroke::new(1.0, t.line))
@@ -590,6 +592,10 @@ impl Shell {
                         }
                     });
             });
+        // what it named unseen, sizing itself, is off
+        if sizing {
+            self.places.truncate(placed_before);
+        }
         let menu = area.response.rect;
         self.view_blocks.push(menu);
         if let Some((k, a, is_toggle)) = picked {

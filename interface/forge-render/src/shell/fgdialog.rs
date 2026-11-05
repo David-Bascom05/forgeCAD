@@ -3,6 +3,7 @@
 //! its values with their units, OK, Cancel and +. Enter is OK and Esc Cancel; the status bar
 //! says what to pick next. The part shows what OK would make while it's open.
 
+use crate::shell::placed::Placed;
 use super::dialog::{DIALOG_W, FIELD_AT, dropdown, heading, pick_row, text_toggles, toggle_row};
 use super::fg::FgAct;
 use super::fgtool::{FgTool, SlotKind as K};
@@ -380,9 +381,9 @@ impl Shell {
             .fixed_size(vec2(DIALOG_W, 0.0))
             .frame(frame)
             .constrain_to(super::dialog_area(ctx))
-            .show(ctx, |ui| {
+            .show_placed(ctx, &mut places, |ui, places| {
                 ui.spacing_mut().item_spacing.y = 6.0;
-                asked = Self::fg_dialog_body(ui, &t, &fg, &mut tool, &mut places);
+                asked = Self::fg_dialog_body(ui, &t, &fg, &mut tool, places);
             });
         if let Some(r) = shown {
             self.view_blocks.push(r.response.rect);

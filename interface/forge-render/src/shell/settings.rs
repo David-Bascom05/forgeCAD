@@ -4,6 +4,7 @@
 //! once and is kept in `settings.toml` under `$XDG_CONFIG_HOME/forgecad`.
 
 use super::fgasm::{dialog_frame, dialog_head};
+use crate::shell::placed::Placed;
 use super::materials::{button_at, section};
 use super::theme::{Theme, medium, sans, semi};
 use super::{ASM_OVERLAYS, Action, OVERLAY_SWITCHES, Overlays, PART_OVERLAYS, Shell, theme};
@@ -499,7 +500,7 @@ impl Shell {
             // over the view's own drawings (Measure's marks), which are a layer of their own
             .order(egui::Order::Foreground)
             .frame(dialog_frame(&t).inner_margin(0))
-            .show(ctx, |ui| {
+            .show_placed(ctx, &mut places, |ui, places| {
                 let all = Rect::from_min_size(ui.max_rect().min, vec2(WIN_W, h));
                 ui.allocate_rect(all, egui::Sense::hover());
                 let head = Rect::from_min_size(all.min, vec2(WIN_W, HEAD_H));
@@ -526,7 +527,7 @@ impl Shell {
                 ui.scope_builder(
                     egui::UiBuilder::new().max_rect(head.shrink2(vec2(16.0, 11.0))),
                     |ui| {
-                        close = dialog_head(ui, &t, "options", "Settings", "settings:close", &mut places);
+                        close = dialog_head(ui, &t, "options", "Settings", "settings:close", places);
                     },
                 );
                 // the sections, Inventor's Application Options' list
@@ -583,7 +584,7 @@ impl Shell {
                         .show(ui, |ui| {
                             ui.set_width(body.width() - 20.0);
                             ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
-                            draw(ui, &t, &mut s, prefs, &mut places);
+                            draw(ui, &t, &mut s, prefs, places);
                             ui.add_space(12.0);
                         });
                 });

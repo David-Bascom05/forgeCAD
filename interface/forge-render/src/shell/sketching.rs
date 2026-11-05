@@ -1,6 +1,7 @@
 //! Sketch mode: draw on a plane with the solver behind every row. Each tool adds a row to the block a
 //! part file would hold; the rows solve here in-process, and Finish Sketch commits them as one call.
 
+use crate::shell::placed::Placed;
 use super::theme::{mono, sans};
 use super::{Action, Shell};
 use egui::{Color32, Pos2, Rect, Sense, Stroke, vec2};
@@ -2214,11 +2215,12 @@ impl Shell {
                 {
                     at_px = o + vec2(0.0, if at_px.y > o.y { 34.0 } else { -34.0 });
                 }
-                egui::Area::new(id.with("area"))
+                let placed_before = self.places.len();
+                let (_, sizing) = egui::Area::new(id.with("area"))
                     .fixed_pos(at_px - vec2(FIELD_W * 0.5, 12.0))
                     .order(egui::Order::Foreground)
                     .fade_in(false)
-                    .show(ctx, |ui| {
+                    .show_sizing(ctx, |ui| {
                         let (r, _) = ui.allocate_exact_size(vec2(FIELD_W, 24.0), Sense::hover());
                         ui.visuals_mut().selection.stroke.color = t.on_ink;
                         ui.visuals_mut().selection.bg_fill = t.on;
@@ -2264,6 +2266,10 @@ impl Shell {
                             resp.request_focus();
                         }
                     });
+                // what it named unseen, sizing itself, is off
+                if sizing {
+                    self.places.truncate(placed_before);
+                }
             }
             if n_fields > 0 {
                 let back = ctx.input_mut(|i| i.consume_key(egui::Modifiers::SHIFT, egui::Key::Tab));
@@ -2331,11 +2337,12 @@ impl Shell {
             ink: t.ink2,
             sides: (0, 0),
         };
-        egui::Area::new(egui::Id::unique("sketch-dims"))
+        let placed_before = self.places.len();
+        let (_, sizing) = egui::Area::new(egui::Id::unique("sketch-dims"))
             .fixed_pos(view.min)
             .order(egui::Order::Middle)
             .constrain(false)
-            .show(ctx, |ui| {
+            .show_sizing(ctx, |ui| {
                 for (k, words, value, what) in &chips {
                     let Some(pos) = pen.draw(*what) else { continue };
                     let text = match what {
@@ -2366,6 +2373,10 @@ impl Shell {
                     }
                 }
             });
+        // what it named unseen, sizing itself, is off
+        if sizing {
+            self.places.truncate(placed_before);
+        }
         if let Some((k, words, pos, value)) = ask_chip {
             m.asking = Some((words, pos - vec2(12.0, -13.0), value));
             m.asking_row = Some(k);
@@ -2374,10 +2385,11 @@ impl Shell {
         // a dimension's value
         let mut asked = None;
         if let Some((row, at, text)) = &mut m.asking {
-            egui::Area::new(egui::Id::unique("sketch-dim"))
+            let placed_before = self.places.len();
+            let (_, sizing) = egui::Area::new(egui::Id::unique("sketch-dim"))
                 .fixed_pos(*at + vec2(12.0, -13.0))
                 .order(egui::Order::Foreground)
-                .show(ctx, |ui| {
+                .show_sizing(ctx, |ui| {
                     let (r, _) = ui.allocate_exact_size(vec2(100.0, 26.0), Sense::hover());
                     ui.painter().rect_filled(r, 4.0, t.surface);
                     let f = ui.put(
@@ -2401,6 +2413,10 @@ impl Shell {
                         asked = Some(format!("{row} {file}"));
                     }
                 });
+            // what it named unseen, sizing itself, is off
+            if sizing {
+                self.places.truncate(placed_before);
+            }
         }
         if let Some(row) = asked {
             match m.asking_row.take() {
@@ -2509,10 +2525,11 @@ impl Shell {
             _ => return,
         };
         let v = self.view_rect;
-        let r = egui::Area::new(egui::Id::unique("sketch-options"))
+        let placed_before = self.places.len();
+        let (r, sizing) = egui::Area::new(egui::Id::unique("sketch-options"))
             .fixed_pos(egui::pos2(v.center().x - 90.0, v.top() + 10.0))
             .order(egui::Order::Foreground)
-            .show(ctx, |ui| {
+            .show_sizing(ctx, |ui| {
                 egui::Frame::new()
                     .fill(t.surface)
                     .stroke(Stroke::new(1.0, t.line))
@@ -2542,6 +2559,10 @@ impl Shell {
                         });
                     });
             });
+        // what it named unseen, sizing itself, is off
+        if sizing {
+            self.places.truncate(placed_before);
+        }
         self.view_blocks.push(r.response.rect);
     }
 
