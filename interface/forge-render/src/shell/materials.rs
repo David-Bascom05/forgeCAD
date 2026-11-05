@@ -73,6 +73,7 @@ const THERMO_WORDS: [(&str, &str); 15] = [
 ];
 
 const W: f32 = 1160.0;
+/// The tallest it gets: on a short screen, what's left.
 const H: f32 = 660.0;
 const HEAD_H: f32 = 48.0;
 const LIBS_W: f32 = 214.0;
@@ -460,6 +461,7 @@ impl Shell {
         let part = !self.inspect.assembly;
         // placed where it fits whole: egui lays a window out where it was put, then moves it
         let area = super::dialog_area(ctx);
+        let h = H.min(area.height() - 16.0).max(420.0);
         let r = egui::Window::new("Material Browser")
             .id(egui::Id::unique("material-browser"))
             .title_bar(false)
@@ -469,13 +471,13 @@ impl Shell {
             .fade_in(false)
             .default_pos(pos2(
                 (v.left() + 20.0).min(area.right() - W - 8.0).max(area.left()),
-                (v.top() + 20.0).min(area.bottom() - H - 8.0).max(area.top()),
+                (v.top() + 20.0).min(area.bottom() - h - 8.0).max(area.top()),
             ))
-            .fixed_size(vec2(W, H))
+            .fixed_size(vec2(W, h))
             .frame(dialog_frame(&t).inner_margin(0))
             .constrain_to(area)
             .show(ctx, |ui| {
-                let all = Rect::from_min_size(ui.max_rect().min, vec2(W, H));
+                let all = Rect::from_min_size(ui.max_rect().min, vec2(W, h));
                 ui.allocate_rect(all, Sense::hover());
                 let head = Rect::from_min_size(all.min, vec2(W, HEAD_H));
                 let body = Rect::from_min_max(pos2(all.left(), head.bottom()), all.max);
@@ -1101,6 +1103,7 @@ impl Shell {
         let mut edited = false;
         let tab = b.tab;
         ui.scope_builder(egui::UiBuilder::new().max_rect(body), |ui| {
+            ui.spacing_mut().scroll = egui::style::ScrollStyle::solid();
             egui::ScrollArea::vertical()
                 .id_salt(("material-detail", tab))
                 .auto_shrink([false, false])
@@ -1344,29 +1347,6 @@ impl Shell {
                 )
             });
         }
-        if editable || m.note.is_some() {
-            section(ui, t, "Note");
-            if editable {
-                let mut n = m.note.clone().unwrap_or_default();
-                let w = ui.available_width();
-                if ui
-                    .add(
-                        egui::TextEdit::multiline(&mut n)
-                            .font(sans(12.5))
-                            .margin(vec2(8.0, 6.0))
-                            .desired_width(w - 4.0)
-                            .desired_rows(4)
-                            .hint_text("What this material is, and how its values were got"),
-                    )
-                    .changed()
-                {
-                    m.note = (!n.is_empty()).then_some(n);
-                    edited = true;
-                }
-            } else if let Some(n) = &m.note {
-                Self::paragraph(ui, n, sans(12.5), t.ink);
-            }
-        }
         edited
     }
 
@@ -1374,7 +1354,7 @@ impl Shell {
         let mut out = vec![];
         let (mut x, mut y) = (0.0, 2.0);
         for n in names {
-            let g = ui.fonts_mut(|f| f.layout_no_wrap(n.clone(), sans(12.0), Color32::WHITE));
+            let g = ui.fonts_mut(|f| f.layout_no_wrap(n.clone(), sans(12.0), Color32::PLACEHOLDER));
             let cw = g.size().x + 16.0;
             if x > 0.0 && w > 0.0 && x + cw > w {
                 x = 0.0;

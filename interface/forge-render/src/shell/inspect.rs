@@ -143,7 +143,8 @@ pub struct PropsPanel {
 
 const PROP_TABS: [&str; 6] = ["General", "Summary", "Project", "Status", "Custom", "Physical"];
 const IPROPS_W: f32 = 600.0;
-const IPROPS_BODY: f32 = 560.0;
+/// The body's height at most; less on a short screen, where it scrolls.
+const IPROPS_BODY: f32 = 640.0;
 /// The iProperties rows: their words' column, a value column's width, a date field's.
 const LABEL_W: f32 = 150.0;
 const COL_W: f32 = 140.0;
@@ -811,7 +812,11 @@ impl Shell {
             .file_name()
             .map_or("Untitled".to_string(), |n| n.to_string_lossy().into_owned());
         let title = format!("{name} iProperties");
-        let at = pos2(v.left() + 40.0, v.top() + 40.0);
+        // under the ribbon, as tall as the screen leaves (the head and tabs take about 116)
+        let area = super::dialog_area(ctx);
+        let top = (v.top() + 12.0).max(area.top() + 4.0);
+        let body = IPROPS_BODY.min(area.bottom() - top - 124.0).max(200.0);
+        let at = pos2(v.left() + 40.0, top);
         let r = Self::inspect_window(&title, "iprops", t, at, IPROPS_W).show(ctx, |ui| {
             let icon = if assembly { "subasm" } else { "part" };
             close = dialog_head(ui, t, icon, &title, "iprops:close", places);
@@ -819,11 +824,14 @@ impl Shell {
             if tab_strip(ui, t, &PROP_TABS, &mut p.tab, "iprops:tab", places) && p.tab == 5 {
                 want = true;
             }
+            // a solid bar: a long tab reads as one that scrolls
+            ui.spacing_mut().scroll = egui::style::ScrollStyle::solid();
             egui::ScrollArea::vertical()
                 .id_salt(("iprops-body", p.tab))
                 .auto_shrink([false, false])
-                .min_scrolled_height(IPROPS_BODY)
-                .max_height(IPROPS_BODY)
+                .min_scrolled_height(body)
+                .max_height(body)
+                .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded)
                 .show(ui, |ui| {
                     ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
                     match p.tab {
@@ -1391,7 +1399,7 @@ impl Shell {
         }
         // a quantity's row: words, a value for each state, its unit
         let mut row = |ui: &mut Ui, words: &str, vals: Vec<Option<f64>>, unit: &str| {
-            let (r, _) = ui.allocate_exact_size(vec2(w, 28.0), Sense::hover());
+            let (r, _) = ui.allocate_exact_size(vec2(w, 24.0), Sense::hover());
             let p = ui.painter();
             p.text(
                 pos2(r.left(), r.center().y),
@@ -1528,7 +1536,7 @@ impl Shell {
     ) {
         let w = ui.available_width();
         let cell = |j: usize| LABEL_W + TENSOR_W * (j + 1) as f32;
-        let (r, _) = ui.allocate_exact_size(vec2(w, 24.0), Sense::hover());
+        let (r, _) = ui.allocate_exact_size(vec2(w, 22.0), Sense::hover());
         let p = ui.painter().clone();
         let (corner, ink) = if corner.is_empty() {
             (unit, t.ink2)
@@ -1552,7 +1560,7 @@ impl Shell {
             );
         }
         for (a, axis) in ["X", "Y", "Z"].iter().enumerate() {
-            let (r, _) = ui.allocate_exact_size(vec2(w, 26.0), Sense::hover());
+            let (r, _) = ui.allocate_exact_size(vec2(w, 23.0), Sense::hover());
             p.text(
                 pos2(r.left() + LABEL_W - 16.0, r.center().y),
                 Align2::RIGHT_CENTER,
