@@ -184,7 +184,23 @@ fn write_step(run: &forge_lang::Run, out: &str, name: &str, o: &mut Output) -> b
 /// `-<n>` before the extension when there are several), its report printed.
 fn run_drawing(file: &str, src: &str, args: &[String], o: &mut Output) {
     let dir = dir_of(file).unwrap_or_default();
-    let d = forge_lang::drawing::regen::make(src, &dir);
+    // one of a .fg's drawing blocks, drawing the document it is in
+    let d = match opt(args, "--drawing") {
+        Some(id) => {
+            let own = std::path::Path::new(file)
+                .file_name()
+                .map_or_else(|| file.to_string(), |n| n.to_string_lossy().to_string());
+            match forge_lang::drawing::block::make(src, &dir, None, &own, id) {
+                Some(d) => d,
+                None => {
+                    o.err(format!("no drawing block {id}"));
+                    o.code = 2;
+                    return;
+                }
+            }
+        }
+        None => forge_lang::drawing::regen::make(src, &dir),
+    };
     if let Some(out) = opt(args, "--pdf") {
         o.write(out.to_string(), forge_draw::pdf::pdf(&d.pages));
     }
@@ -245,7 +261,7 @@ fn run_file(file: &str, args: &[String], build: bool) -> ExitCode {
 }
 
 fn run_src(file: &str, src: &str, args: &[String], build: bool, o: &mut Output) {
-    if forge_lang::drawing::is_drawing(src) {
+    if forge_lang::drawing::is_drawing(src) || opt(args, "--drawing").is_some() {
         return run_drawing(file, src, args, o);
     }
     let opts = Options {
@@ -463,7 +479,11 @@ fn main() -> ExitCode {
                     return ExitCode::from(2);
                 }
             };
-            if forge_lang::drawing::is_drawing(&src) {
+            // a drawing op: on a drawing file, or inside a .fg's drawing block (`"drawing": ID`)
+            let block = Json::parse(&args[2])
+                .ok()
+                .and_then(|j| j.get("drawing").and_then(|d| d.str().map(str::to_string)));
+            if forge_lang::drawing::is_drawing(&src) || block.is_some() {
                 let Some(op) = Json::parse(&args[2])
                     .ok()
                     .and_then(|j| forge_lang::drawing::ops::DrawOp::from_json(&j))
@@ -471,7 +491,11 @@ fn main() -> ExitCode {
                     eprintln!("not a drawing op: {}", args[2]);
                     return ExitCode::from(2);
                 };
-                return match forge_lang::drawing::ops::apply_checked(&src, &op) {
+                let done = match &block {
+                    Some(id) => forge_lang::drawing::block::apply_checked(&src, id, &op),
+                    None => forge_lang::drawing::ops::apply_checked(&src, &op),
+                };
+                return match done {
                     Ok(new) => {
                         if let Err(e) = std::fs::write(file, &new) {
                             eprintln!("{file}: {e}");

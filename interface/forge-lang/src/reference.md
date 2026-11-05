@@ -946,6 +946,13 @@ hinge = revolute(lid.hp, base.hp, turn: open)         # naming bodies makes them
   occurrence, `#root`, held where the document makes them.
 - **Expects:** part measures (`volume`, `valid`, ..) are of the document's model as made; the
   assembly measures below of the solve; `x(lid)`, `z(lid)` take a body component.
+- **Drawings in the file:** `drawing NAME(..) { .. }` at the top level, any number: the drawing
+  language (as a drawing file's) over this document; `part()` with no file draws this document's
+  model, `part(component: "lid")` one of its components on its own, `part("x.fg")` any file. The
+  block sees the shared params; the model's run skips it. `fg run F.fg --json` lists the blocks
+  (`drawings: [{id, line, sheets, views, errors}]`) without drawing them; `fg run F.fg --drawing
+  NAME [--pdf|--svg|--dxf OUT]` draws one; a drawing op with `"drawing": NAME` (`fg edit`)
+  writes inside that block. A drawing file's first line `drawing` stays as it is.
 - `subassembly(FILE)` of a file with components of its own (inline calls, bodies): the file is
   evaluated and built as a document, its parts made there and named through it
   (`box.fg|#lid(w=40)`, one BOM row per call wherever it is placed); `part()` of a file that

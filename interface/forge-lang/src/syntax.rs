@@ -65,7 +65,7 @@ pub struct Tok {
     pub span: Span,
 }
 
-pub const KEYWORDS: [&str; 18] = [
+pub const KEYWORDS: [&str; 19] = [
     "shared",
     "param",
     "fn",
@@ -84,6 +84,7 @@ pub const KEYWORDS: [&str; 18] = [
     "path",
     "at",
     "component",
+    "drawing",
 ];
 
 pub const OPS: [&str; 26] = [
@@ -553,6 +554,9 @@ pub enum BlockKind {
     Path,
     /// `component NAME(at: ..) { statements }`: a part of its own, placed in this document.
     Component,
+    /// `drawing NAME(..) { statements }`: a drawing of this document, in the drawing language;
+    /// the model's evaluation skips it.
+    Drawing,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -635,6 +639,8 @@ enum V {
     RangeTail(bool, Expr),
     Comp(Box<(Vec<String>, Expr, Option<Box<Expr>>)>),
     Map(Vec<(String, Expr)>),
+    /// drawtail: a drawing block's name, args and statements.
+    Draw(Box<(String, Vec<Arg>, Vec<Stmt>)>),
 }
 
 type R<T> = Result<T, Error>;
@@ -1084,6 +1090,32 @@ impl Parser {
                     body: list!(self, b + 5, V::Stmts),
                 })
             }
+            // `drawing` alone: a drawing file's first line, the word as it always was
+            P::StmtDrawing => match self.take(b + 1) {
+                V::None => {
+                    let at = self.tok(b).span;
+                    stmt!(StmtKind::Expr(Expr {
+                        kind: ExprKind::Name("drawing".into()),
+                        span: at,
+                    }))
+                }
+                V::Draw(d) => {
+                    let (name, args, body) = *d;
+                    stmt!(StmtKind::Block {
+                        kind: BlockKind::Drawing,
+                        name,
+                        args,
+                        body,
+                    })
+                }
+                _ => unreachable!("rule action and grammar.ll1 disagree"),
+            },
+            P::DrawtailId => {
+                let mut args = list!(self, b + 1, V::Args);
+                args.reverse();
+                V::Draw(Box::new((self.text(b), args, list!(self, b + 2, V::Stmts))))
+            }
+            P::DargsLparen => self.take(b + 1),
             P::StmtExpr => {
                 let e = self.expr(b);
                 stmt!(match self.take(b + 1) {
@@ -1447,6 +1479,8 @@ impl Parser {
             | P::AssigntailEmpty
             | P::CmprestEmpty
             | P::CompifEmpty
+            | P::DargsEmpty
+            | P::DrawtailEmpty
             | P::ElsepartEmpty
             | P::ExpargsEmpty
             | P::ExpcmpEmpty

@@ -575,6 +575,8 @@ struct Reader<'a> {
     env: HashMap<String, Val>,
     doc: Doc,
     src: &'a str,
+    /// In a drawing block of a .fg: that file, what `part()` with no file draws.
+    own: Option<&'a str>,
 }
 
 fn err(problem: Problem, span: Span) -> DrawError {
@@ -990,7 +992,12 @@ impl Reader<'_> {
         let mut a = self.args(func, args, span)?;
         let kind = match func {
             "part" | "assembly" => {
-                let (v, s) = a.need("file", Some(0))?;
+                // no file in a drawing block: the document it is in
+                let (v, s) = match (a.get("file", Some(0)), self.own) {
+                    (Some(x), _) => x,
+                    (None, Some(own)) => (Val::Str(own.to_string()), span),
+                    (None, None) => a.need("file", Some(0))?,
+                };
                 let Val::Str(path) = v else {
                     return Err(a.wrong("file", "string", &v, s));
                 };
@@ -1656,6 +1663,11 @@ fn v_span(a: &Args, k: &str) -> Span {
 
 /// Reads a drawing's source: every item it can, every problem typed.
 pub fn read(src: &str) -> Doc {
+    read_with(src, None)
+}
+
+/// `read`, for a drawing block of the .fg `own` (`part()` draws it).
+pub fn read_with<'a>(src: &'a str, own: Option<&'a str>) -> Doc {
     let prog = match syntax::parse(src) {
         Ok(p) => p,
         Err(e) => {
@@ -1670,6 +1682,7 @@ pub fn read(src: &str) -> Doc {
         env: HashMap::new(),
         doc: Doc::default(),
         src,
+        own,
     };
     if !declared(&prog) {
         r.doc.errors.push(err(

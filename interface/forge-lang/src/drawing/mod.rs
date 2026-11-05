@@ -2,6 +2,7 @@
 //! (forge-draw's exact hidden-line views), annotations attached to the model's persistent names,
 //! and its sheets as PDF, DXF and SVG.
 
+pub mod block;
 pub mod doc;
 pub mod look;
 pub mod ops;

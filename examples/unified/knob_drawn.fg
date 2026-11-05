@@ -1,0 +1,15 @@
+# A knob and its drawing in one file: the model above, the drawing block below it.
+shared r = 9
+shared h = 12
+properties(part_number: "KNOB-2", material: "ABS")
+sketch s(on: xy) {
+  c = circle((0, 0), r)
+}
+body = extrude(s, h)
+
+drawing dwg_knob {
+  m = part()
+  s1 = sheet("A", title: "KNOB", number: "DWG-K2", rev: "A", drawn: "D. BASCOM")
+  top = base_view(m, sheet: s1, dir: "top", scale: 4, at: (100, 150))
+  side = projected(top, at: (200, 150))
+}

@@ -1203,6 +1203,8 @@ impl<'s> Eval<'s> {
                 BlockKind::Sketch => self.sketch_block(s, name, args, body),
                 BlockKind::Path => self.path_block(s, name, args, body),
                 BlockKind::Component => crate::asm::component_block(self, s, name, args, body),
+                // a drawing of this document: drawn only when asked (`drawing::block`)
+                BlockKind::Drawing => Ok(()),
             },
             StmtKind::Assign { name, value } => {
                 let saved = self.ctx.owner.clone();

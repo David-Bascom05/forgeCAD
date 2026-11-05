@@ -2684,13 +2684,13 @@ fn defaults(ctx: &Ctx, f: &mut forge_draw::sheet::Fields, sheet: usize, n_sheets
 
 /// Makes the drawing: `src` read, its models built (paths from `dir`), its sheets laid out.
 pub fn make(src: &str, dir: &Path) -> Drawing {
-    make_with(src, dir, None, None)
+    make_with(src, dir, None, None, None)
 }
 
 /// `make` for a session kept to `root` (`fg serve`, MCP): no model or part read outside it.
 pub fn make_in(src: &str, dir: &Path, root: Option<&Path>) -> Drawing {
     let root = root.and_then(|r| std::fs::canonicalize(r).ok());
-    make_with(src, dir, root.as_deref(), None)
+    make_with(src, dir, root.as_deref(), None, None)
 }
 
 /// A drawing on its way: the sheets with the views made so far (or, `kept`, as the last make of
@@ -2724,7 +2724,7 @@ pub fn shown(src: &str, file: &Path, show: &mut dyn FnMut(Shown)) -> Drawing {
             kept: true,
         });
     }
-    let (d, from) = crate::kept::watched(&file, src, || make_with(src, &dir, None, Some(show)));
+    let (d, from) = crate::kept::watched(&file, src, || make_with(src, &dir, None, None, Some(show)));
     crate::kept::keep("drawing-pages", key, &from, &super::pagecode::write(&d.pages));
     d
 }
@@ -2786,8 +2786,20 @@ fn sheets_so_far(ctx: &Ctx) -> Vec<Page> {
     pages
 }
 
-fn make_with(src: &str, dir: &Path, root: Option<&Path>, mut show: Option<&mut dyn FnMut(Shown)>) -> Drawing {
-    let d = doc::read(src);
+/// A drawing block's text made (`block::text`): `own` is the .fg it is in, what `part()` draws.
+pub fn make_own(src: &str, dir: &Path, root: Option<&Path>, own: &str) -> Drawing {
+    let root = root.and_then(|r| std::fs::canonicalize(r).ok());
+    make_with(src, dir, root.as_deref(), Some(own), None)
+}
+
+fn make_with(
+    src: &str,
+    dir: &Path,
+    root: Option<&Path>,
+    own: Option<&str>,
+    mut show: Option<&mut dyn FnMut(Shown)>,
+) -> Drawing {
+    let d = doc::read_with(src, own);
     let mut ctx = Ctx {
         dir: dir.to_path_buf(),
         models: vec![],

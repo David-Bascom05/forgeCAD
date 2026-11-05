@@ -22,8 +22,11 @@ stmt        := 'shared' ID '=' expr
              | 'sketch' ID '(' args ')' block
              | 'path' ID '(' args ')' block
              | 'component' ID '(' args ')' block
+             | 'drawing' drawtail
              | expr assigntail ;
 assigntail  := '=' expr | %empty ;
+drawtail    := ID dargs block | %empty ;
+dargs       := '(' args ')' | %empty ;
 
 path        := ID keys pathrest ;
 pathrest    := '.' ID keys pathrest | %empty ;

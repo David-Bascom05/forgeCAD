@@ -267,6 +267,10 @@ pub fn json(run: &Run, src: &str) -> Json {
             ]),
         ));
     }
+    // the document's drawing blocks, listed, not drawn (`fg run F.fg --drawing ID` draws one)
+    if !crate::drawing::block::blocks(src).is_empty() {
+        f.push(("drawings", crate::drawing::block::summary(src, "")));
+    }
     Json::obj(f)
 }
 
