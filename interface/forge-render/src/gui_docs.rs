@@ -69,6 +69,10 @@ pub struct OpenDoc {
     pub title: String,
     pub dirty: bool,
     pub kind: crate::shell::docs::DocKind,
+    /// When it was last brought up, to let the least lately used's GPU picture go first.
+    used: u64,
+    /// Its GPU picture was let go: made again when it comes up.
+    evicted: bool,
     /// None while it's the active one: its state is in the `Gui`'s and `Shell`'s fields.
     state: Option<Box<DocState>>,
 }
@@ -82,8 +86,15 @@ impl OpenDoc {
             title,
             dirty: false,
             kind: Default::default(),
+            used: 0,
+            evicted: false,
             state: None,
         }
+    }
+
+    /// Its GPU picture is kept: it's up, or idle and not let go.
+    pub fn resident(&self) -> bool {
+        self.state.as_ref().is_none_or(|s| s.gui.view.is_some())
     }
 
     /// The same file (and sub-document) as this path names.
@@ -96,6 +107,11 @@ impl OpenDoc {
                 .is_some_and(|p| p == path || canon(p) == canon(path))
     }
 }
+
+/// How many documents keep their GPU picture (renderer, meshes' buffers, target) at once; past
+/// it the least lately used idle Forge document lets its go, made again from the build's warm
+/// stages when it comes up.
+pub const RESIDENT_VIEWS: usize = 6;
 
 impl Gui {
     /// The open documents, in their tabs' order.
@@ -147,6 +163,7 @@ impl Gui {
             self.sync_tab();
             return None;
         }
+        self.came_up();
         self.sync_tab();
         let opened = self.active;
         if !activate {
@@ -211,7 +228,48 @@ impl Gui {
         self.docs[self.active].state = Some(st);
         self.active = i;
         self.after_switch();
+        self.came_up();
         self.sync_tab();
+    }
+
+    /// The active document marked as used now; its picture made again if it was let go; others'
+    /// let go past the cap.
+    fn came_up(&mut self) {
+        let now = self.docs.iter().map(|d| d.used).max().unwrap_or(0) + 1;
+        let gpu = (self.device.clone(), self.queue.clone(), self.adapter.clone());
+        let d = &mut self.docs[self.active];
+        d.used = now;
+        if std::mem::take(&mut d.evicted)
+            && let Some(s) = &mut self.fg
+        {
+            s.regpu(gpu);
+        }
+        loop {
+            let idle: Vec<usize> = (0..self.docs.len())
+                .filter(|&i| {
+                    i != self.active
+                        && self.docs[i]
+                            .state
+                            .as_ref()
+                            .is_some_and(|s| s.gui.view.is_some() && s.gui.fg.is_some())
+                })
+                .collect();
+            if idle.len() < RESIDENT_VIEWS {
+                return;
+            }
+            let Some(&i) = idle.iter().min_by_key(|&&i| self.docs[i].used) else {
+                return;
+            };
+            let d = &mut self.docs[i];
+            d.evicted = true;
+            let st = d.state.as_mut().expect("an idle document's state");
+            st.gui.fg_view = None;
+            st.shell.view_tex = None;
+            if let Some(v) = st.gui.view.take() {
+                st.gui.fg_keep_camera = Some(v.nav.camera);
+                self.egui.free_texture(&v.tex);
+            }
+        }
     }
 
     /// What was mid-gesture in the window is for the document that went.

@@ -628,6 +628,7 @@ fn work(
     dir: Option<std::path::PathBuf>,
     file: Option<String>,
     jobs: Receiver<Job>,
+    gpus: Receiver<Gpu>,
     out: Sender<Msg>,
     mut gpu: Option<Gpu>,
     waker: Arc<dyn Fn() + Send + Sync>,
@@ -680,6 +681,12 @@ fn work(
         // only the latest text matters
         while let Ok(j) = jobs.try_recv() {
             job = j;
+        }
+        // a new view asked for: everything goes to it whole, as at first
+        if let Ok(g) = gpus.try_recv() {
+            gpu = Some(g);
+            asm_shape = None;
+            shown_ids = None;
         }
         let t = Instant::now();
         if is_assembly(&job.1) {
@@ -1135,6 +1142,8 @@ pub struct Session {
     /// Steps made from outside (the Agent tab): the undo depth each made, its label and key.
     tags: Vec<(usize, String, u64)>,
     jobs: Sender<Job>,
+    /// A new GPU picture asked for: the old one was let go to save memory.
+    gpus: Sender<Gpu>,
     built: Receiver<Msg>,
     /// The last text sent to the worker, and the last one back.
     pub seq: u64,
@@ -1178,6 +1187,7 @@ impl Session {
         waker: Arc<dyn Fn() + Send + Sync>,
     ) -> Session {
         let (jobs, rx) = channel();
+        let (gpus, gpu_rx) = channel();
         let (tx, built) = channel();
         // fonts and imported files are found beside the part
         let dir = path
@@ -1189,7 +1199,7 @@ impl Session {
             .name("forge-fg".into())
             .spawn({
                 let file = path.clone();
-                move || work(dir, file, rx, tx, gpu, waker, flag)
+                move || work(dir, file, rx, gpu_rx, tx, gpu, waker, flag)
             })
             .expect("a thread");
         {
@@ -1205,6 +1215,7 @@ impl Session {
             redo: vec![],
             tags: vec![],
             jobs,
+            gpus,
             built,
             seq: 0,
             done: 0,
@@ -1228,6 +1239,12 @@ impl Session {
     pub fn open(path: &str, gpu: Option<Gpu>, waker: Arc<dyn Fn() + Send + Sync>) -> Result<Session, String> {
         let src = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
         Ok(Session::new(Some(path.to_string()), src, gpu, waker))
+    }
+
+    /// Its view made again from scratch, on this GPU: after it was let go while the tab was idle.
+    pub fn regpu(&mut self, gpu: Gpu) -> u64 {
+        let _ = self.gpus.send(gpu);
+        self.rebuild()
     }
 
     /// An assembly's overlap check, from now on.

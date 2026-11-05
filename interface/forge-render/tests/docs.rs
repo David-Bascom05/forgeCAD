@@ -352,3 +352,30 @@ fn new_is_an_untitled_tab() {
     h.gui.activate(0);
     assert_eq!(h.gui.open_document(to.to_str().unwrap(), true), Some(1));
 }
+
+#[test]
+fn idle_tabs_past_the_cap_let_their_pictures_go() {
+    let Some(mut h) = headless() else { return };
+    let d = scratch("cap");
+    let n = forge_render::gui::gui_docs::RESIDENT_VIEWS + 2;
+    let mut yaws = vec![];
+    for k in 0..n {
+        let f = d.join(format!("bar{k}.fg"));
+        std::fs::write(&f, bar(20.0 + k as f64)).unwrap();
+        open_in(&mut h, &f);
+        h.gui.view.as_mut().unwrap().nav.camera.yaw += 0.1 * k as f32;
+        yaws.push(yaw(&h));
+    }
+    let kept: Vec<bool> = h.gui.documents().iter().map(|d| d.resident()).collect();
+    assert_eq!(
+        kept.iter().filter(|k| **k).count(),
+        forge_render::gui::gui_docs::RESIDENT_VIEWS
+    );
+    // the first two, least lately used, let theirs go
+    assert!(!kept[0] && !kept[1], "{kept:?}");
+    // back up: built again, the camera where it was left
+    h.gui.activate(0);
+    ready(&mut h);
+    assert_eq!(yaw(&h), yaws[0]);
+    assert!(h.gui.documents()[0].resident());
+}
