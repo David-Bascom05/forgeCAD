@@ -269,6 +269,59 @@ fn key_part_file_content() {
     assert_eq!(d, None, "a font changed under its name");
 }
 
+/// `file`, by content: a font replaced by another of the same length with its old modification
+/// time put back (what `cp -p`, `rsync -t` or an editor that keeps times do). A key that holds the
+/// file's path, length and time and not its bytes serves the old font: `key_needs_file_content`.
+#[test]
+#[ignore = "F1b: a file is keyed by its path, length and time (media.rs), not its bytes"]
+fn key_part_file_content_same_stamp() {
+    let other = PathBuf::from("/usr/share/fonts/truetype/bebasneue/BebasNeue-Regular.ttf");
+    if !other.exists() {
+        eprintln!("key_part_file_content_same_stamp: skipped, no second font here");
+        return;
+    }
+    let (src, dir) = part_tools();
+    let font = "PublicSans-SemiBold.ttf";
+    let a = std::fs::read(dir.join(font)).expect("font");
+    let b = std::fs::read(&other).expect("font");
+    let n = a.len().max(b.len());
+    let pad = |mut v: Vec<u8>| {
+        v.resize(n, 0);
+        v
+    };
+    let (a, b) = (pad(a), pad(b));
+    let tmp = std::env::temp_dir().join(format!("memo-diff-stamp-{}", std::process::id()));
+    std::fs::create_dir_all(&tmp).expect("mkdir");
+    let when = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_700_000_000);
+    let put = |name: &str, bytes: &[u8]| {
+        std::fs::write(tmp.join(name), bytes).expect("write");
+        let f = std::fs::File::options()
+            .write(true)
+            .open(tmp.join(name))
+            .expect("open");
+        f.set_modified(when).expect("set time");
+    };
+    // the same text naming another file holding each content: what a fresh read gives
+    let fresh = |name: &str, bytes: &[u8]| {
+        put(name, bytes);
+        let (r, _) = forge_lang::run(&src.replace(font, name), opts(&tmp), Cache::default());
+        bits(&r)
+    };
+    let fresh_a = fresh("a.ttf", &a);
+    let fresh_b = fresh("b.ttf", &b);
+    assert_ne!(fresh_a, fresh_b, "the two fonts make different text");
+    put(font, &a);
+    let (first, cache) = forge_lang::run(&src, opts(&tmp), Cache::default());
+    assert_eq!(bits(&first), fresh_a, "the file's name does not change the part");
+    put(font, &b);
+    let (kept, _) = forge_lang::run(&src, opts(&tmp), cache);
+    assert_eq!(
+        bits(&kept),
+        fresh_b,
+        "the old font served for new bytes of the same length and time"
+    );
+}
+
 /// `backend` and thread count: a fresh build is the same on one thread and on all, and with the
 /// batch backend on or off (when it is not, the backend must be in the key: op-memo-proof.md 5).
 #[test]
