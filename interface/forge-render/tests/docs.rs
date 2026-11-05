@@ -379,3 +379,27 @@ fn idle_tabs_past_the_cap_let_their_pictures_go() {
     assert_eq!(yaw(&h), yaws[0]);
     assert!(h.gui.documents()[0].resident());
 }
+
+#[test]
+fn what_follows_an_open_is_for_the_document_it_came_from() {
+    let Some(mut h) = headless() else { return };
+    let d = scratch("order");
+    let [plate, bar_f, _] = files(&d);
+    open_in(&mut h, &plate);
+    h.gui.fg_apply(set_t(15.0)).unwrap();
+    ready(&mut h);
+    // one frame's acts: open the bar, then save, then a tab ask
+    let p = h.gui.shell.fg.as_mut().unwrap();
+    p.out.push(forge_render::shell::fg::FgAct::OpenFile(
+        bar_f.to_string_lossy().into_owned(),
+    ));
+    p.out.push(forge_render::shell::fg::FgAct::Save);
+    h.step();
+    ready(&mut h);
+    assert_eq!(titles(&h), ["plate.fg", "bar.fg"]);
+    assert_eq!(h.gui.active_document(), 1);
+    // the Save was the plate's
+    assert!(std::fs::read_to_string(&plate).unwrap().contains("shared t = 15"));
+    assert!(!h.gui.documents()[0].dirty);
+    assert_eq!(std::fs::read_to_string(&bar_f).unwrap(), bar(100.0));
+}

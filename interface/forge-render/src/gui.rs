@@ -195,6 +195,8 @@ pub struct Gui {
     active: usize,
     /// What they read on disk, looked at for changes.
     watch: gui_docs::Watch,
+    /// The tabs' asks, done once the frame's acts on the document they came from are.
+    doc_later: Vec<crate::shell::docs::DocCmd>,
 }
 
 fn view_camera(center: [f32; 3], radius: f32, parallel: bool, size: (u32, u32)) -> Camera {
@@ -317,6 +319,7 @@ impl Gui {
             docs: Vec::new(),
             active: 0,
             watch: Default::default(),
+            doc_later: Vec::new(),
         }
     }
 
@@ -1472,8 +1475,9 @@ impl Gui {
                     }
                     continue;
                 }
+                // after the rest, which are this document's
                 Action::Doc(c) => {
-                    self.doc_cmd(c);
+                    self.doc_later.push(c);
                     continue;
                 }
                 Action::New => {
@@ -2226,6 +2230,7 @@ impl Gui {
         self.apply_fg();
         self.agent_acts();
         self.app_calls();
+        self.docs_asked();
         self.open_asked();
         self.sync_tab();
         self.save_settings();
@@ -3320,10 +3325,8 @@ impl Gui {
                     let _ = self.fg_apply(op);
                 }
                 crate::shell::fg::FgAct::Save => self.fg_save(),
-                crate::shell::fg::FgAct::OpenFile(path) => {
-                    self.open_document(&path, true);
-                    return;
-                }
+                // after the rest, which are this document's
+                crate::shell::fg::FgAct::OpenFile(path) => self.shell.open_paths.push(path),
                 crate::shell::fg::FgAct::Tool(op) => {
                     if self.fg_apply(op).is_ok()
                         && let Some(p) = &mut self.shell.fg

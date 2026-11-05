@@ -41,7 +41,7 @@ per_doc!(
     app [
         ctx, egui, shell, device, queue, adapter, waker, captured, over_view, pointer_px,
         pixels_per_point, warm_textures, target_px, mark_held, gpu_failed, settings_was, docs,
-        active, watch, agent, apps,
+        active, watch, doc_later, agent, apps,
     ]
 );
 
@@ -420,6 +420,13 @@ impl Gui {
             DocCmd::CloseActive => self.request_close(self.active),
             DocCmd::CloseNow(i, save) => self.close_document(i, save),
             DocCmd::Move(a, b) => self.move_document(a, b),
+        }
+    }
+
+    /// The tabs' and keys' asks of this frame.
+    pub(super) fn docs_asked(&mut self) {
+        for c in std::mem::take(&mut self.doc_later) {
+            self.doc_cmd(c);
         }
     }
 
