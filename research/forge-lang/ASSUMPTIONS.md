@@ -546,6 +546,25 @@ One new low-severity point: fg refuses an edit only on an error kind the documen
 - MakeComponent, Extract and Inline as Rust ops (fg has none yet).
 - Diamond `use` and `use` paths fenced to the session root.
 
+## Round 2: nesting and in-context references (`Nested.lean`, `Counter/Nested.lean`)
+
+The core already holds both: a block may place components, and an argument may be a reference to
+an occurrence written above. Findings also in `forgecad-gate/unified-doc/proof-findings.md`.
+
+- `defs_congr_closed`: editing `c0` changes nothing that places only components of a set closed
+  under placement that excludes `c0` (`Avoids`), at any depth. `NoPlace` (NestedComponent) is the
+  special case (`noPlace_avoids`); `avoids_reach` builds the set from reachability.
+- `scoped_occ_closed`: an occurrence of the edited component at any depth runs as the edited block.
+- `occ_pre`, `pre_pre`, `nested_ids`: ids are path-joined (`box1.lid1.plate`).
+- `context_trace`, `context_key_needs_ref`: a reference argument's provenance is the referenced
+  geometry's sites, and its value is an input in the key (memo_sound as for numbers).
+- `context_forward_unbound`, `context_loop_unbound`: a reference reaches only what is written
+  above, so no context cycle can be written (ContextCycle is that refusal).
+- Rules forced: `place_cycle_fuel` (a self-placing component never finishes: a static
+  `ComponentCycle` check, `rank_acyclic`), `nested_delete_dangles` (a scoped delete must check
+  references through occurrence paths in every placing block).
+- Not yet: scoped ops at depth as op functions (the relational lift with that check); poses.
+
 ## Verdicts on the hypotheses
 
 | Hypothesis | Verdict |
@@ -703,5 +722,7 @@ One new low-severity point: fg refuses an edit only on an error kind the documen
 | `Oracle/*.lean` | `lake exe fgparse`, `lake exe fglex`: the oracles of `tests/parse_diff.rs` |
 | `ScopedMore.lean` | `scopedMove_ok`, `scopedReplace_ok`, `occ_body`, `default_no_capture`, `occ_caller_indep` |
 | `Counter/Qualify.lean` | `unqualified_shadow`, `qualify_string_collides` |
+| `Nested.lean` | `defs_congr_closed`, `scoped_occ_closed`, `avoids_reach`, `rank_acyclic`, `occ_pre` |
+| `Counter/Nested.lean` | `nested_ids`, `context_*`, `place_cycle_fuel`, `nested_delete_dangles` |
 | `Axioms.lean` | `lake env lean Axioms.lean`: the axioms of every main theorem |
 | `Counter/*.lean` | every counterexample named above, proven by evaluation (`rfl`/`decide`) or induction |

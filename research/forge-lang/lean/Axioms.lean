@@ -79,3 +79,15 @@ open ForgeLang ForgeLang.Counter
 #print axioms ForgeLang.LL1.Lex.word_maximal
 #print axioms ForgeLang.LL1.Lex.num_literal
 #print axioms ForgeLang.LL1.ImplUnifiedDoc.table_choose
+#print axioms ForgeLang.defs_congr_closed
+#print axioms ForgeLang.scoped_occ_closed
+#print axioms ForgeLang.avoids_reach
+#print axioms ForgeLang.rank_acyclic
+#print axioms ForgeLang.occ_pre
+#print axioms ForgeLang.Counter.nested_ids
+#print axioms ForgeLang.Counter.context_trace
+#print axioms ForgeLang.Counter.context_key_needs_ref
+#print axioms ForgeLang.Counter.context_forward_unbound
+#print axioms ForgeLang.Counter.context_loop_unbound
+#print axioms ForgeLang.Counter.place_cycle_fuel
+#print axioms ForgeLang.Counter.nested_delete_dangles
