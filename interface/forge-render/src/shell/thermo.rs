@@ -54,6 +54,7 @@ pub struct ThermoRow {
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct Masses {
     pub volume: f64,
+    pub area: f64,
     pub mass: Option<f64>,
     pub cog: [f64; 3],
     pub inertia: Option<[[f64; 3]; 3]>,

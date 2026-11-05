@@ -17,6 +17,19 @@ static AFTER_OPEN: Mutex<Option<crate::shell::thermo_ui::Cmd>> = Mutex::new(None
 impl Gui {
     pub(super) fn thermo_host(&mut self) {
         self.thermo_asm();
+        // iProperties' Simulated column: the part with its formed part as the model leaves it
+        let more = match (&self.shell.inspect.physical, self.shell.fg.as_ref()) {
+            (Some(Ok(m)), Some(p)) if p.asm.is_none() => p
+                .thermos
+                .first()
+                .and_then(|r| crate::shell::thermo_ui::simulated_physical(m, r))
+                .map(|x| vec![("Simulated".to_string(), x)])
+                .unwrap_or_default(),
+            _ => vec![],
+        };
+        if self.shell.inspect.physical_more != more {
+            self.shell.inspect.physical_more = more;
+        }
         // the wall's colours on the part's own faces, painted again for each new mesh of it
         if let (Some(m), Some(g)) = (&self.fg_folded, self.fg_walls.first_mut()) {
             let key = m

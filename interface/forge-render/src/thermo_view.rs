@@ -131,8 +131,9 @@ pub fn view(o: &ThermoOut, spans: &[forge_lang::build::Span], draft_min: f32) ->
         ..Gfx::default()
     };
     let kg = o.density.map(|d| d * 1e-9);
-    let masses = |volume: f64, c: Point3, i: [[f64; 3]; 3]| Masses {
+    let masses = |volume: f64, area: f64, c: Point3, i: [[f64; 3]; 3]| Masses {
         volume,
+        area,
         mass: kg.map(|k| k * volume),
         cog: [c.x, c.y, c.z],
         inertia: kg.map(|k| i.map(|r| r.map(|x| x * k))),
@@ -224,11 +225,11 @@ pub fn view(o: &ThermoOut, spans: &[forge_lang::build::Span], draft_min: f32) ->
         modelled: o
             .modelled
             .as_ref()
-            .map(|m| masses(m.volume, m.centroid, m.inertia)),
+            .map(|m| masses(m.volume, m.area, m.centroid, m.inertia)),
         simulated: o
             .sim
             .as_ref()
-            .map(|s| masses(s.mass.volume, s.mass.centroid, s.mass.inertia)),
+            .map(|s| masses(s.mass.volume, s.mesh.area(), s.mass.centroid, s.mass.inertia)),
         density: o.density,
         passes: o.passes(),
         unformed: o.walls.as_ref().map_or(0, |w| w.unformed.len()),

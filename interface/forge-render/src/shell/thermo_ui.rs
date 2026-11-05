@@ -2197,94 +2197,50 @@ pub fn tree_children(
     chosen
 }
 
-/// iProperties' word on a formed part: its mass as modelled and as simulated, side by side.
-pub fn masses(ui: &mut Ui, t: &Theme, r: &ThermoRow, units: &str, places: &mut Vec<(String, Rect)>) {
-    let (Some(a), b) = (&r.modelled, &r.simulated) else {
-        return;
+/// The part's physical properties with its formed part as simulated in the modelled one's place:
+/// iProperties' Simulated column, beside Modeled.
+pub fn simulated_physical(
+    m: &forge_lang::props::Physical,
+    r: &ThermoRow,
+) -> Option<forge_lang::props::Physical> {
+    let (a, b) = (r.modelled.as_ref()?, r.simulated.as_ref()?);
+    let mut p = m.clone();
+    p.volume += b.volume - a.volume;
+    p.area += b.area - a.area;
+    if let Some(s) = p.solids.iter_mut().find(|s| s.id == r.id) {
+        s.volume = b.volume;
+        s.area = b.area;
+        s.mass = b.mass;
+        s.centroid = b.cog;
+    }
+    let (Some(ma), Some(mb), Some(mm)) = (a.mass, b.mass, m.mass) else {
+        return Some(p);
     };
-    let unit: f64 = if matches!(units, "in" | "ft") { 25.4 } else { 1.0 };
-    let len = if unit == 1.0 { "mm" } else { "in" };
-    let both: Vec<&Masses> = std::iter::once(a).chain(b.iter()).collect();
-    ui.add_space(8.0);
-    ui.label(
-        egui::RichText::new(format!("Formed part · {} ({})", r.id, r.material))
-            .font(medium(12.0))
-            .color(t.ink),
-    );
-    let cell = |x: f64| {
-        if x.abs() >= 1e5 || (x != 0.0 && x.abs() < 1e-3) {
-            format!("{x:.4e}")
-        } else {
-            format!("{x:.4}")
-        }
+    let ms = mm - ma + mb;
+    let c: [f64; 3] = std::array::from_fn(|i| (mm * m.centroid[i] - ma * a.cog[i] + mb * b.cog[i]) / ms);
+    p.mass = Some(ms);
+    p.centroid = c;
+    // each body's inertia about its centre carried to the origin, the formed part's swapped
+    let carried = |i: [[f64; 3]; 3], mass: f64, c: [f64; 3], sign: f64| -> [[f64; 3]; 3] {
+        let cc = c[0] * c[0] + c[1] * c[1] + c[2] * c[2];
+        std::array::from_fn(|r| {
+            std::array::from_fn(|k| {
+                let d = if r == k { cc } else { 0.0 };
+                i[r][k] + sign * mass * (d - c[r] * c[k])
+            })
+        })
     };
-    let rows: Vec<(String, Vec<String>)> = vec![
-        (
-            "Mass".into(),
-            both.iter()
-                .map(|m| m.mass.map_or("no density".into(), |k| format!("{} kg", cell(k))))
-                .collect(),
-        ),
-        (
-            "CoG X Y Z".into(),
-            both.iter()
-                .map(|m| {
-                    m.cog
-                        .iter()
-                        .map(|c| {
-                            let x = (c / unit * 100.0).round() / 100.0;
-                            format!("{:.2}", if x == 0.0 { 0.0 } else { x })
-                        })
-                        .collect::<Vec<_>>()
-                        .join("  ")
-                })
-                .collect(),
-        ),
-        (
-            format!("Ixx Iyy Izz (kg {len}²)"),
-            both.iter()
-                .map(|m| {
-                    m.inertia.map_or("-".into(), |i| {
-                        (0..3)
-                            .map(|k| cell(i[k][k] / unit / unit))
-                            .collect::<Vec<_>>()
-                            .join("  ")
-                    })
-                })
-                .collect(),
-        ),
-    ];
-    egui::Grid::new("thermo-masses")
-        .num_columns(3)
-        .spacing(vec2(14.0, 3.0))
-        .show(ui, |ui| {
-            ui.label("");
-            for (h, tip) in [
-                (
-                    "Modelled",
-                    "t everywhere: the reference for joints, dimensions and drawings",
-                ),
-                (
-                    "Simulated",
-                    "the wall the thickness model gives, a mesh fitted from it",
-                ),
-            ]
-            .iter()
-            .take(both.len())
-            {
-                ui.label(egui::RichText::new(*h).font(medium(12.0)).color(t.ink2))
-                    .on_hover_text(*tip);
-            }
-            ui.end_row();
-            for (what, vals) in rows {
-                ui.label(egui::RichText::new(&what).font(sans(12.0)).color(t.ink2));
-                for v in vals {
-                    let rr = ui.label(egui::RichText::new(v).font(mono(12.0)).color(t.ink));
-                    places.push((format!("iprops:thermo:{what}"), rr.rect));
-                }
-                ui.end_row();
-            }
-        });
+    if let (Some(io), Some(ia), Some(ib)) = (m.origin_inertia, a.inertia, b.inertia) {
+        let (fa, fb) = (carried(ia, ma, a.cog, 1.0), carried(ib, mb, b.cog, 1.0));
+        let o: [[f64; 3]; 3] =
+            std::array::from_fn(|r| std::array::from_fn(|k| io[r][k] - fa[r][k] + fb[r][k]));
+        let about = carried(o, ms, c, -1.0);
+        let (pm, axes) = forge_topo::mass::eigen(about);
+        p.origin_inertia = Some(o);
+        p.inertia = Some(about);
+        p.principal = Some((pm, axes.map(|v| [v.x, v.y, v.z])));
+    }
+    Some(p)
 }
 
 /// A material's thermoforming values, opened from Convert: the Material Browser's Thermoform tab
