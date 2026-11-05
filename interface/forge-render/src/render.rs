@@ -19,7 +19,7 @@ const HUD_CHARS: usize = 256;
 /// Characters per row of the overlay (render.wgsl).
 const HUD_COLUMNS: usize = 85;
 /// Where the overlay's text starts in the globals (see render.wgsl).
-const TEXT_AT: usize = 64 + 16 + 16 + 3 * 16 + 16 + DOTS * 16 + 5 * 16;
+const TEXT_AT: usize = 64 + 16 + 16 + 3 * 16 + 16 + DOTS * 16 + 8 * 16;
 /// Picked vertices a frame can mark.
 const DOTS: usize = 8;
 /// Picked faces and edges a frame can mark.
@@ -37,6 +37,29 @@ const BACKGROUND: wgpu::Color = wgpu::Color {
     b: 0.79,
     a: 1.0,
 };
+
+/// The view's background: Inventor's floor (a gradient, a ground plane fading to it, the part's
+/// soft shadow on it), the gradient alone, or one colour. It's drawn first and writes no depth, so
+/// nothing in the view (sketches, axes, the grid) is ever behind it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Backdrop {
+    #[default]
+    Floor,
+    Gradient,
+    Solid,
+}
+
+/// A gradient's top and bottom and the floor's colour, linear, for the theme the flat colour is
+/// of: Inventor's own look in a light theme, its dark theme's in a dark.
+pub fn backdrop_colours(flat: [f32; 3]) -> [[f32; 3]; 3] {
+    let light = 0.2126 * flat[0] + 0.7152 * flat[1] + 0.0722 * flat[2] > 0.25;
+    let rgb = crate::viewcube::rgb;
+    if light {
+        [rgb(0xF5F7FA), rgb(0xB4BFCC), rgb(0xD0D7E0)]
+    } else {
+        [rgb(0x34404F), rgb(0x0C0F13), rgb(0x2A323D)]
+    }
+}
 
 #[derive(Clone, Copy)]
 struct LodDraw {
@@ -199,8 +222,10 @@ pub struct Renderer {
     world: wgpu::RenderPipeline,
     world_behind: wgpu::RenderPipeline,
     world_verts: wgpu::Buffer,
-    /// The view's flat background, and the view cube's colours: linear.
+    /// The view's background colour (its top, for a gradient), and the view cube's colours: linear.
     pub back_colour: [f32; 3],
+    /// How the background's drawn, the same for every kind of document.
+    pub backdrop: Backdrop,
     pub cube_palette: crate::viewcube::Palette,
     surface_cut: wgpu::RenderPipeline,
     cap: wgpu::RenderPipeline,
@@ -963,6 +988,8 @@ impl Renderer {
             world_behind,
             world_verts,
             back_colour: crate::viewcube::rgb(0x12171D),
+            // the app sets the person's; a renderer on its own (tests, shots) draws the flat colour
+            backdrop: Backdrop::Solid,
             cube_palette: crate::viewcube::DARK,
             surface_cut,
             cap,
@@ -1472,6 +1499,52 @@ impl Renderer {
         Entity::Edge(e.edge)
     }
 
+    /// The background's style in the colour's fourth number, its lower colour and the floor's
+    /// height, and the footprint its shadow is under: the shown box's middle and half size.
+    fn write_backdrop(&self, bytes: &mut [u8; GLOBALS], scene: &Scene) {
+        let style = match self.backdrop {
+            Backdrop::Solid => 0.0f32,
+            Backdrop::Gradient => 1.0,
+            Backdrop::Floor => 2.0,
+        };
+        // the flat colour's fourth number, after the matrix, eye, pixel sizes and three axes
+        let at = 64 + 16 + 16 + 3 * 16 + 12;
+        bytes[at..at + 4].copy_from_slice(&style.to_le_bytes());
+        let (lo, hi) = scene.shown_box().unwrap_or_else(|| {
+            let (c, r) = scene.bounds();
+            (c.map(|v| v - r), c.map(|v| v + r))
+        });
+        let reach = (0..3)
+            .map(|k| (hi[k] - lo[k]).powi(2))
+            .sum::<f32>()
+            .sqrt()
+            .max(1e-3);
+        let [top, low, floor] = backdrop_colours(self.back_colour);
+        if self.backdrop != Backdrop::Solid {
+            for (k, v) in top.iter().enumerate() {
+                let at = 64 + 16 + 16 + 3 * 16 + k * 4;
+                bytes[at..at + 4].copy_from_slice(&v.to_le_bytes());
+            }
+        }
+        let words = [
+            low[0],
+            low[1],
+            low[2],
+            lo[2] - reach * 0.002,
+            floor[0],
+            floor[1],
+            floor[2],
+            0.0,
+            (lo[0] + hi[0]) * 0.5,
+            (lo[1] + hi[1]) * 0.5,
+            (hi[0] - lo[0]) * 0.5,
+            (hi[1] - lo[1]) * 0.5,
+        ];
+        for (k, v) in words.iter().enumerate() {
+            bytes[BACK_AT + k * 4..BACK_AT + k * 4 + 4].copy_from_slice(&v.to_le_bytes());
+        }
+    }
+
     fn write_section(&self, bytes: &mut [u8; GLOBALS]) {
         let plane = self.section.unwrap_or([0.0; 4]);
         let (second, how) = match (self.section, self.section2) {
@@ -1623,6 +1696,7 @@ impl Renderer {
             .write_buffer(&self.instances, 0, scene.visible.as_flattened());
 
         let mut bytes = globals_bytes(&view, self.size, self.back_colour, hud.unwrap_or(""));
+        self.write_backdrop(&mut bytes, scene);
         let cube_verts = self.write_cube(camera, &overlay);
         let room = (WORLD_BYTES / 28) as usize;
         let world_count = overlay.world.len().min(room) as u32;
@@ -2071,11 +2145,13 @@ const MARK_HALF_PX: f32 = 1.5;
 const PICK_EDGE_PX: f32 = 4.0;
 const PICK_VERTEX_PX: f32 = 7.0;
 /// Where the picked vertices start in the globals.
-const DOTS_AT: usize = TEXT_AT - 5 * 16 - DOTS * 16;
+const DOTS_AT: usize = TEXT_AT - 8 * 16 - DOTS * 16;
 /// Where occlusion's numbers start in the globals, then the cube's square.
-const AO_AT: usize = TEXT_AT - 5 * 16;
+const AO_AT: usize = TEXT_AT - 8 * 16;
 /// Where the cutting planes are in the globals, then how they combine.
-const SECTION_AT: usize = TEXT_AT - 3 * 16;
+const SECTION_AT: usize = TEXT_AT - 6 * 16;
+/// Where the background's lower colour and the floor's footprint are in the globals.
+const BACK_AT: usize = TEXT_AT - 3 * 16;
 /// Half-size occlusion's format: how open, and the pixel's distance.
 const AO_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rg16Float;
 /// How far occlusion reaches, as a share of the window's height (research/render).

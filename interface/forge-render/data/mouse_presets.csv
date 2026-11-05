@@ -1,0 +1,45 @@
+preset,name,action,gesture,source,note
+inventor,Inventor (ForgeCAD default),select,Left,https://help.autodesk.com/cloudhelp/2026/ENU/Inventor-Help/files/GUID-DEEB0723-DFC7-4B28-95F4-099CC1E1EBF8.htm,
+inventor,Inventor (ForgeCAD default),orbit,Shift+Middle,https://help.autodesk.com/view/INVNTOR/2024/ENU/?guid=GUID-08AFE9FE-E8BD-4648-B52C-F25CEE881FB6,
+inventor,Inventor (ForgeCAD default),orbit,F4+Left,https://help.autodesk.com/cloudhelp/2026/ENU/Inventor-Help/files/GUID-DEEB0723-DFC7-4B28-95F4-099CC1E1EBF8.htm,the help lists F4 as Rotate: held with the left button
+inventor,Inventor (ForgeCAD default),pan,Middle,https://help.autodesk.com/cloudhelp/2026/ENU/Inventor-Help/files/GUID-DEEB0723-DFC7-4B28-95F4-099CC1E1EBF8.htm,plain middle drag pans; F2 (Pan) is Rename here so F2+Left is left out
+inventor,Inventor (ForgeCAD default),zoom,F3+Left,https://help.autodesk.com/cloudhelp/2026/ENU/Inventor-Help/files/GUID-DEEB0723-DFC7-4B28-95F4-099CC1E1EBF8.htm,
+inventor,Inventor (ForgeCAD default),wheel,forward-in,https://help.autodesk.com/cloudhelp/2025/ENU/Inventor-Help/files/GUID-760D1240-4E53-4509-90A5-40A66CCD96CD.htm,the page names a Reverse direction option but not its default; ForgeCAD keeps forward zooming in
+solidworks,SolidWorks,select,Left,https://help.solidworks.com/2021/English/SolidWorks/sldworks/r_Middle_Mouse_Button.htm,
+solidworks,SolidWorks,orbit,Middle,https://help.solidworks.com/2021/English/SolidWorks/sldworks/r_Middle_Mouse_Button.htm,
+solidworks,SolidWorks,pan,Ctrl+Middle,https://help.solidworks.com/2021/English/SolidWorks/sldworks/r_Middle_Mouse_Button.htm,
+solidworks,SolidWorks,zoom,Shift+Middle,https://help.solidworks.com/2021/English/SolidWorks/sldworks/r_Middle_Mouse_Button.htm,
+solidworks,SolidWorks,wheel,forward-out,https://help.solidworks.com/2021/English/SolidWorks/sldworks/r_Middle_Mouse_Button.htm,direction unstated on the page (forward and back zoom); forward-out per resellers
+fusion,Fusion 360,select,Left,https://help.autodesk.com/cloudhelp/ENU/Fusion-GetStarted/files/GUID-878489CD-3A23-4303-8450-C2F4F8E410B1.htm,
+fusion,Fusion 360,orbit,Shift+Middle,https://help.autodesk.com/cloudhelp/ENU/Fusion-GetStarted/files/GUID-878489CD-3A23-4303-8450-C2F4F8E410B1.htm,
+fusion,Fusion 360,pan,Middle,https://help.autodesk.com/cloudhelp/ENU/Fusion-GetStarted/files/GUID-878489CD-3A23-4303-8450-C2F4F8E410B1.htm,
+fusion,Fusion 360,zoom,Ctrl+Shift+Middle,https://help.autodesk.com/cloudhelp/ENU/Fusion-GetStarted/files/GUID-878489CD-3A23-4303-8450-C2F4F8E410B1.htm,
+fusion,Fusion 360,wheel,forward-out,https://help.autodesk.com/cloudhelp/ENU/Fusion-GetStarted/files/GUID-878489CD-3A23-4303-8450-C2F4F8E410B1.htm,direction unstated on the page; forward-out per an Autodesk Community moderator
+onshape,Onshape,select,Left,https://cad.onshape.com/help/Content/View/view_navigation_and_the_view_cube.htm,
+onshape,Onshape,orbit,Right,https://cad.onshape.com/help/Content/View/view_navigation_and_the_view_cube.htm,a right click with no drag still opens the menu
+onshape,Onshape,pan,Middle,https://cad.onshape.com/help/Content/View/view_navigation_and_the_view_cube.htm,
+onshape,Onshape,pan,Ctrl+Right,https://cad.onshape.com/help/Content/View/view_navigation_and_the_view_cube.htm,
+onshape,Onshape,wheel,forward-in,https://cad.onshape.com/help/Content/View/view_navigation_and_the_view_cube.htm,"stated: scroll wheel up, zoom in"
+creo,Creo Parametric,select,Left,https://support.ptc.com/help/creo/creo_pma/r9.0/usascii/fundamentals/fundamentals/About_Dynamic_Viewing.html,
+creo,Creo Parametric,orbit,Middle,https://support.ptc.com/help/creo/creo_pma/r9.0/usascii/fundamentals/fundamentals/About_Dynamic_Viewing.html,
+creo,Creo Parametric,pan,Shift+Middle,https://support.ptc.com/help/creo/creo_pma/r9.0/usascii/fundamentals/fundamentals/Tip_Shortcuts_for_Changing_the_Model_View.html,
+creo,Creo Parametric,zoom,Ctrl+Middle,https://support.ptc.com/help/creo/creo_pma/r9.0/usascii/fundamentals/fundamentals/Tip_Shortcuts_for_Changing_the_Model_View.html,dragged up and down (Creo turns the view when it's dragged across)
+creo,Creo Parametric,wheel,forward-in,https://support.ptc.com/help/creo/creo_pma/r9.0/usascii/fundamentals/fundamentals/About_Dynamic_Viewing.html,direction unstated on the page
+nx,Siemens NX,select,Left,https://community.3dcs.com/help_manual/nx_mouse-operations.htm,not from Siemens' own pages (they could not be read); the guides agree
+nx,Siemens NX,orbit,Middle,https://community.3dcs.com/help_manual/nx_mouse-operations.htm,
+nx,Siemens NX,pan,Middle+Right,https://community.3dcs.com/help_manual/nx_mouse-operations.htm,
+nx,Siemens NX,pan,Shift+Middle,https://community.3dcs.com/help_manual/nx_mouse-operations.htm,
+nx,Siemens NX,zoom,Left+Middle,https://community.3dcs.com/help_manual/nx_mouse-operations.htm,
+nx,Siemens NX,zoom,Ctrl+Middle,https://community.3dcs.com/help_manual/nx_mouse-operations.htm,
+nx,Siemens NX,wheel,forward-in,https://community.3dcs.com/help_manual/nx_mouse-operations.htm,direction unstated; NX 10 is reported to have reversed it
+catia,CATIA V5,select,Left,https://support.ptc.com/help/wnc/r12.1.0.0/en/Windchill_Help_Center/common_thingview/Mouse_Navigation_Modes_CATIA.html,PTC's description of its CATIA mode: Dassault's own help could not be found
+catia,CATIA V5,pan,Middle,https://support.ptc.com/help/wnc/r12.1.0.0/en/Windchill_Help_Center/common_thingview/Mouse_Navigation_Modes_CATIA.html,
+catia,CATIA V5,orbit,Middle+Left,https://support.ptc.com/help/wnc/r12.1.0.0/en/Windchill_Help_Center/common_thingview/Mouse_Navigation_Modes_CATIA.html,
+catia,CATIA V5,orbit,Middle+Right,https://support.ptc.com/help/wnc/r12.1.0.0/en/Windchill_Help_Center/common_thingview/Mouse_Navigation_Modes_CATIA.html,
+catia,CATIA V5,zoom,Ctrl+Middle,https://support.ptc.com/help/wnc/r12.1.0.0/en/Windchill_Help_Center/common_thingview/Mouse_Navigation_Modes_CATIA.html,CATIA's own is middle held then a right click and a drag; PTC's mode gives Ctrl+Middle
+catia,CATIA V5,wheel,none,https://support.ptc.com/help/wnc/r12.1.0.0/en/Windchill_Help_Center/common_thingview/Mouse_Navigation_Modes_CATIA.html,V5's wheel does not zoom by default
+blender,Blender,select,Left,https://docs.blender.org/manual/en/latest/editors/preferences/keymap.html,left click select is the default since 2.80
+blender,Blender,orbit,Middle,https://docs.blender.org/manual/en/4.2/editors/3dview/navigate/navigation.html,
+blender,Blender,pan,Shift+Middle,https://docs.blender.org/manual/en/4.2/editors/3dview/navigate/navigation.html,
+blender,Blender,zoom,Ctrl+Middle,https://docs.blender.org/manual/en/4.2/editors/3dview/navigate/navigation.html,
+blender,Blender,wheel,forward-in,https://docs.blender.org/manual/en/4.2/editors/preferences/navigation.html,direction unstated; the page names an Invert Zoom Direction option

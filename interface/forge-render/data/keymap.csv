@@ -1,0 +1,23 @@
+id,name,group,default,kind
+undo,Undo,Edit,Ctrl+Z,
+redo,Redo,Edit,Ctrl+Shift+Z,
+redo_alt,Redo (second key),Edit,Ctrl+Y,
+open,Open,File,Ctrl+O,
+save,Save,File,Ctrl+S,
+measure,Measure,Inspect,M,
+rename,Rename the chosen feature,Browser,F2,
+delete,Delete the chosen feature,Browser,Delete,
+home,Home view,View,F6,
+home_alt,Home view (second key),View,Home,
+fit_all,Fit all,View,A,
+fit_selected,Zoom to what's chosen,View,F,
+section,"Section: across x, y, z, off",View,S,
+explode,Explode or bring together,View,E,
+lines,"Edges: near, far, none",View,L,
+ao,Ambient occlusion,View,O,
+escape,Back out one level,Fixed,Escape,fixed
+ok,OK in a dialog,Fixed,Enter,fixed
+sketch_undo,Undo a sketch step (in a sketch),In context,Ctrl+Z,context
+sketch_delete,Delete what's chosen (in a sketch),In context,Delete,context
+sheet_fit,Fit the sheet (in a drawing),In context,F,context
+sheet_delete,Delete what's chosen (in a drawing),In context,Delete,context

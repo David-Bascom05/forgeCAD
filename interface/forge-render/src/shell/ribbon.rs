@@ -533,7 +533,6 @@ fn groups(s: &Shell) -> Vec<Group> {
                 "Appearance",
                 vec![
                     go("Section", "section", Action::Section, v.section),
-                    go("Pastel Parts", "sun", Action::PartColours(!v.pastel), v.pastel),
                     Tool {
                         name: "Explode",
                         icon: "combine",
@@ -599,11 +598,8 @@ fn groups(s: &Shell) -> Vec<Group> {
                 vec![],
             ),
             g(
-                "Units",
-                forge_doc::units::DOC_LENGTHS
-                    .into_iter()
-                    .map(|u| go(u, "measure", Action::SetUnits(u), s.units == u))
-                    .collect(),
+                "Options",
+                vec![go("Settings", "options", Action::Settings, s.prefs.open)],
                 vec![],
             ),
         ],

@@ -21,6 +21,7 @@ pub mod inspect;
 pub mod materials;
 pub mod panel;
 mod ribbon;
+pub mod settings;
 pub mod sheet;
 mod sheetui;
 mod sketch3d;
@@ -165,6 +166,10 @@ pub enum Action {
     /// File > New Drawing, from the open part or assembly; File > Close Drawing.
     NewDrawing,
     CloseDrawing,
+    /// A shortcut's command (`settings::KeyCmd`), its key as set in Settings.
+    Key(settings::KeyCmd),
+    /// Manage > Settings.
+    Settings,
 }
 
 /// What the ribbon asks of a Forge file: Inventor's dialogs and commands.
@@ -397,6 +402,9 @@ pub struct Shell {
     pub drawing: Option<drawing::DrawingEnv>,
     /// File > New Drawing's dialog.
     pub new_drawing: Option<drawing::NewDrawing>,
+    /// What's set in Settings, and its window.
+    pub settings: settings::Settings,
+    pub prefs: settings::Window,
 }
 
 impl Default for Shell {
@@ -460,6 +468,8 @@ impl Default for Shell {
             inspect: Default::default(),
             drawing: None,
             new_drawing: None,
+            settings: Default::default(),
+            prefs: Default::default(),
         }
     }
 }
@@ -820,8 +830,10 @@ impl Shell {
         let p = ui.painter().clone();
         p.rect_filled(s, 0.0, t.bg);
         if self.drawing.is_some() {
+            self.shortcuts(&ctx);
             self.drawing_ui(ui);
             self.new_drawing_window(&ctx);
+            self.settings_window(&ctx);
             return;
         }
 
@@ -847,6 +859,7 @@ impl Shell {
         }
         self.cube_words(ui, ppp);
         self.title_bar(ui, s.width());
+        self.shortcuts(&ctx);
         self.escape_one_level(&ctx);
         self.tabs_row(ui, s.width());
         self.ribbon(ui, s.width());
@@ -872,6 +885,7 @@ impl Shell {
         self.mode_bar(&ctx);
         self.resize_edges(ui, s);
         self.menus(&ctx);
+        self.settings_window(&ctx);
         self.new_drawing_window(&ctx);
     }
 
@@ -1013,23 +1027,6 @@ impl Shell {
             if self.icon_button(ui, name, r, icon, tip, Color32::WHITE).clicked() {
                 self.out.push(action);
             }
-        }
-        let label = if t.dark { "Light" } else { "Dark" };
-        let r = Rect::from_min_size(pos2(w - 170.0, 5.0), vec2(52.0, 26.0));
-        let resp = ui.interact(r, ui.scope_id().with("theme"), Sense::click());
-        resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, label));
-        let edge = Color32::from_white_alpha(if resp.hovered() { 150 } else { 77 });
-        p.rect_stroke(r, 4.0, Stroke::new(1.0, edge), StrokeKind::Inside);
-        p.text(
-            r.center(),
-            Align2::CENTER_CENTER,
-            label,
-            sans(12.0),
-            Color32::WHITE,
-        );
-        self.note("theme", r);
-        if resp.clicked() {
-            self.theme = if t.dark { theme::LIGHT } else { theme::DARK };
         }
     }
 
@@ -1549,7 +1546,6 @@ impl Shell {
 
     fn menus(&mut self, ctx: &egui::Context) {
         let t = self.theme;
-        self.tree_keys(ctx);
         self.marking_menu(ctx);
         if self.file_menu {
             let at = pos2(8.0, TITLE_H + TABS_H);
@@ -1627,20 +1623,6 @@ impl Shell {
 }
 
 impl Shell {
-    /// Keys for what's chosen in the tree, when no field has the keyboard.
-    fn tree_keys(&mut self, ctx: &egui::Context) {
-        if ctx.egui_wants_keyboard_input() {
-            return;
-        }
-        let Some(id) = self.selected else { return };
-        if ctx.input(|i| i.key_pressed(egui::Key::F2)) {
-            self.out.push(Action::StartRename(id));
-        }
-        if ctx.input(|i| i.key_pressed(egui::Key::Delete)) {
-            self.out.push(Action::Delete(id));
-        }
-    }
-
     pub fn start_rename(&mut self, id: ItemId) {
         let title = self.rows.iter().find(|r| r.id == id).map(|r| r.title.clone());
         if let Some(t) = title {

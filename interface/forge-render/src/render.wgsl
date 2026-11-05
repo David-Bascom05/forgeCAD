@@ -21,6 +21,11 @@ struct Globals {
     // cuts goes (a quarter left); y: 1 shows only the cut faces (the end section)
     section2: vec4f,
     section_mode: vec4f,
+    // the background's lower colour, and the floor's height
+    back_low: vec4f,
+    // the floor's colour, then its shadow: the shown box's middle (x, y) and half size
+    floor: vec4f,
+    footprint: vec4f,
     text: array<vec4u, 16>,
 }
 struct Placement {
@@ -182,10 +187,37 @@ fn cap_fs(in: Shaded) -> @location(0) vec4f {
     return vec4f(mix(cap, vec3f(0.10, 0.05, 0.04), line * 0.7), 1.0);
 }
 
-// behind everything: light at the top of the window, a little darker below
+// behind everything, by g.back.w: 0 one colour, 1 a gradient down the window, 2 that and a floor
+// under the part, fading to the gradient far off, with the part's soft shadow on it
 @fragment
 fn back_fs(@builtin(position) at: vec4f) -> @location(0) vec4f {
-    return vec4f(g.back.rgb, 1.0);
+    if g.back.w < 0.5 {
+        return vec4f(g.back.rgb, 1.0);
+    }
+    let v = clamp(at.y * g.px.y * 0.5, 0.0, 1.0);
+    let sky = mix(g.back.rgb, g.back_low.rgb, v * v * (3.0 - 2.0 * v));
+    if g.back.w < 1.5 {
+        return vec4f(sky, 1.0);
+    }
+    // the ray through this pixel, from the eye, onto the floor
+    let ndc = vec2f(at.x * g.px.x - 1.0, 1.0 - at.y * g.px.y);
+    let d = g.forward.xyz + ndc.x * g.ao.x * g.right.xyz + ndc.y * g.ao.y * g.up.xyz;
+    let ground = g.back_low.w;
+    let eye = g.eye.xyz;
+    if eye.z <= ground || d.z >= -1e-6 {
+        return vec4f(sky, 1.0);
+    }
+    let p = eye + d * ((ground - eye.z) / d.z);
+    let half = max(g.footprint.zw, vec2f(1e-3));
+    let reach = max(length(half), 1e-3);
+    let off = abs(p.xy - g.footprint.xy) - half;
+    let out = length(max(off, vec2f(0.0))) + min(max(off.x, off.y), 0.0);
+    let shadow = 0.42 * exp(-pow(max(out, 0.0) / (0.35 * reach), 2.0)) * select(1.0, 1.15, out < 0.0);
+    let floor = g.floor.rgb * (1.0 - min(shadow, 0.5));
+    // far off and at a grazing look the floor is the gradient
+    let far = smoothstep(2.5 * reach, 9.0 * reach, length(p.xy - g.footprint.xy));
+    let graze = smoothstep(0.02, 0.12, -normalize(d).z);
+    return vec4f(mix(sky, floor, (1.0 - far) * graze), 1.0);
 }
 
 struct Line {

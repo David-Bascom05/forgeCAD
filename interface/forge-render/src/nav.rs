@@ -1,9 +1,12 @@
-//! Navigation from real window events: left drag orbits about the point under the cursor, middle
-//! drag pans it with the cursor, the wheel zooms at it; shift + middle orbits too. The right button
-//! is the marking menu's: a click brings it up, a flick chooses from it. The view
+//! Navigation from real window events, by the binding table in force (`bindings::MouseMap`, a CAD
+//! tool's preset or the person's own): Inventor's by default, left drag a selection window, middle
+//! drag pans with the cursor, shift + middle (or F4 + left) orbits about the point under the
+//! cursor, the wheel zooms at it. An unbound right button is the marking menu's: a click brings it
+//! up, a flick chooses from it. The view
 //! cube's faces, edges and corners go to their views, smoothly, its ring spins about up. Nothing
 //! here touches the window or the GPU: what's under the cursor comes back through `on_pick`.
 
+use crate::bindings::{MouseMap, NavAction};
 use crate::camera::{Camera, PITCH_END, dot};
 use crate::render::{Entity, Mark, PickHit};
 use crate::scene::Scene;
@@ -77,9 +80,12 @@ pub struct Nav {
     pub cube_hover: Option<Hit>,
     /// The view its home button goes to; none: fit the part from the opening angle.
     pub home_view: Option<Camera>,
-    /// It was right-clicked here: the host's menu goes up, once.
-    /// F4 is down: the left button orbits, whatever the tool.
-    pub orbit_held: bool,
+    /// What the mouse does: the settings' binding table.
+    pub mouse: MouseMap,
+    /// The keys a gesture holds that are down now (F4 for Inventor's orbit).
+    pub held_keys: Vec<String>,
+    /// The buttons down, in the order pressed: a second makes a chord.
+    down: Vec<MouseButton>,
     /// A selection window dragged and let go: from, to.
     pub window: Option<((f32, f32), (f32, f32))>,
     pub cube_menu: Option<(f32, f32)>,
@@ -186,7 +192,9 @@ impl Nav {
             transition: None,
             cube_hover: None,
             home_view: None,
-            orbit_held: false,
+            mouse: MouseMap::default(),
+            held_keys: Vec::new(),
+            down: Vec::new(),
             window: None,
             cube_menu: None,
             cube_menu_region: None,
@@ -335,7 +343,7 @@ impl Nav {
             WindowEvent::MouseInput { state, button, .. } => match state {
                 // a held button hides the hover mark, so these redraw
                 ElementState::Pressed => self.press(*button) || self.known_hit().is_some(),
-                ElementState::Released => self.release() || self.known_hit().is_some(),
+                ElementState::Released => self.release(*button) || self.known_hit().is_some(),
             },
             WindowEvent::CursorMoved { position, .. } => {
                 self.moved_to((position.x as f32, position.y as f32))
@@ -345,6 +353,7 @@ impl Nav {
                 self.cube_hover = None;
                 self.hit_at = None;
                 self.drag = None;
+                self.down.clear();
                 was
             }
             WindowEvent::MouseWheel { delta, .. } => {
@@ -375,18 +384,46 @@ impl Nav {
             self.drag = Some(if h == Hit::Ring { Drag::Ring } else { Drag::Cube });
             return false;
         }
-        let shift = self.modifiers.shift_key();
-        self.drag = Some(match button {
-            MouseButton::Left if self.orbit_held => Drag::Orbit,
-            MouseButton::Left => match self.tool {
-                NavTool::Select => Drag::Window,
+        let m = self.modifiers;
+        let (shift, ctrl, alt) = (m.shift_key(), m.control_key(), m.alt_key());
+        let of = |a: NavAction| match a {
+            NavAction::Select => Drag::Window,
+            NavAction::Orbit => Drag::Orbit,
+            NavAction::Pan => Drag::Pan,
+            NavAction::Zoom => Drag::Zoom,
+        };
+        // a second button while the first drags: the chord's gesture, if the table has one
+        if let (Some(&first), Some(d)) = (self.down.first(), self.drag)
+            && !matches!(d, Drag::Cube | Drag::Ring)
+        {
+            self.down.push(button);
+            if let Some(a) = self
+                .mouse
+                .action(first, Some(button), shift, ctrl, alt, &self.held_keys)
+            {
+                self.drag = Some(of(a));
+                self.press_button = first;
+            }
+            return false;
+        }
+        self.down = vec![button];
+        let bound = self.mouse.action(button, None, shift, ctrl, alt, &self.held_keys);
+        self.drag = Some(match (button, bound) {
+            // a held key's gesture first, then the navigation bar's tool
+            (MouseButton::Left, Some(a)) if !self.held_keys.is_empty() && a != NavAction::Select => of(a),
+            (MouseButton::Left, _) if self.tool != NavTool::Select => match self.tool {
                 NavTool::Orbit => Drag::Orbit,
                 NavTool::Pan => Drag::Pan,
-                NavTool::Zoom => Drag::Zoom,
+                _ => Drag::Zoom,
             },
-            MouseButton::Right => Drag::Mark,
-            MouseButton::Middle if shift => Drag::Orbit,
-            _ => Drag::Pan,
+            (_, Some(a)) => of(a),
+            (MouseButton::Left, None) => Drag::Window,
+            (MouseButton::Right, None) => Drag::Mark,
+            _ => {
+                self.down.clear();
+                self.drag = None;
+                return false;
+            }
         });
         // what's under the cursor may be known already from hovering
         if self.hit_at == Some(self.cursor) {
@@ -400,8 +437,20 @@ impl Nav {
         false
     }
 
-    fn release(&mut self) -> bool {
+    fn release(&mut self, button: MouseButton) -> bool {
+        let first = self.down.first().copied();
+        self.down.retain(|b| *b != button);
+        // the chord's other button: the drag ended with the first let go
+        if first.is_some_and(|f| f != button) && self.drag.is_none() {
+            return false;
+        }
+        self.down.clear();
         let drag = self.drag.take();
+        // a right button that drags (Onshape's orbit) still brings the menu up with a click
+        if self.press_button == MouseButton::Right && !self.moved && drag.is_some_and(|d| d != Drag::Mark) {
+            self.marked = Some((self.press_at, self.press_at));
+            return false;
+        }
         if drag == Some(Drag::Mark) {
             self.marked = Some((self.press_at, self.cursor));
             self.moved = false;
@@ -544,6 +593,9 @@ impl Nav {
             self.hit_at = None;
             return true;
         }
+        if !self.mouse.wheel_zooms {
+            return false;
+        }
         self.transition = None;
         // the point under the cursor, or the target's depth there, stays put
         let at = self.known_hit().map_or_else(
@@ -553,7 +605,14 @@ impl Nav {
             },
             |h| h.point,
         );
-        self.camera.zoom_at(at, steps);
+        self.camera.zoom_at(
+            at,
+            if self.mouse.forward_zooms_in {
+                steps
+            } else {
+                -steps
+            },
+        );
         if self.hit_at != Some(self.cursor) {
             self.want_pick = Some(self.cursor);
         }

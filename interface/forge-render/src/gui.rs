@@ -10,6 +10,7 @@ use crate::scene::{Motion, Placement, Scene};
 use crate::shell::SketchChild;
 use crate::shell::dialog::{Dialog, DialogTarget};
 use crate::shell::dim::DimEdit;
+use crate::shell::settings::KeyCmd;
 use crate::shell::sketching::{SkTool, SketchFor, SketchMode, project_refs};
 use crate::shell::{Action, Shell};
 use crate::viewcube;
@@ -170,7 +171,7 @@ pub struct Gui {
     /// The assembly tools' state between frames.
     asm: gui_asm::AsmHost,
     /// The settings as last saved; none: not kept (tests, shots).
-    settings_was: Option<(bool, bool)>,
+    settings_was: Option<crate::shell::settings::Settings>,
     /// The exploded view: its plan, and how far apart it is now.
     pub explode: gui_explode::Explode,
     /// A Forge part's solid as it was before its eye hid it.
@@ -301,12 +302,26 @@ impl Gui {
 
     /// A key that means something while it's down, as the window sees it; true if it was one.
     pub fn held_key(&mut self, code: winit::keyboard::KeyCode, down: bool) -> bool {
-        if code != winit::keyboard::KeyCode::F4 {
+        use winit::keyboard::KeyCode as K;
+        let name = match code {
+            K::F1 => "F1",
+            K::F2 => "F2",
+            K::F3 => "F3",
+            K::F4 => "F4",
+            K::F5 => "F5",
+            K::F7 => "F7",
+            K::F8 => "F8",
+            K::F9 => "F9",
+            _ => return false,
+        };
+        // a key the mouse table holds (Inventor's F4: the left button orbits while it's down)
+        let Some(v) = &mut self.view else { return false };
+        if !v.nav.mouse.held_keys().iter().any(|k| k == name) {
             return false;
         }
-        // F4: the left button orbits while it's down
-        if let Some(v) = &mut self.view {
-            v.nav.orbit_held = down;
+        v.nav.held_keys.retain(|k| k != name);
+        if down {
+            v.nav.held_keys.push(name.into());
         }
         true
     }
@@ -412,6 +427,7 @@ impl Gui {
         let camera = view_camera(center, fit, self.shell.view.parallel, size);
         renderer.resize(size);
         self.theme_view(&mut renderer);
+        renderer.line_mode = self.shell.view.lines;
         let target = Offscreen::new(&self.device, size);
         let raw = raw_view(&target);
         let tex = self
@@ -483,33 +499,29 @@ impl Gui {
         }
     }
 
-    /// The settings kept between sessions (the app's own, not a test's): theme, part colours.
+    /// The settings kept between sessions (the app's own, not a test's): `settings.toml`.
     pub fn load_settings(&mut self) {
-        for (k, v) in crate::palette::settings::load() {
-            match (k.as_str(), v.as_str()) {
-                ("theme", "light") => self.shell.theme = crate::shell::theme::LIGHT,
-                ("part_colours", "pastel") => self.shell.view.pastel = true,
-                _ => {}
-            }
-        }
-        self.settings_was = Some((self.shell.theme.dark, self.shell.view.pastel));
+        let s = crate::shell::settings::load();
+        self.shell.use_settings(s.clone());
+        self.settings_was = Some(s);
     }
 
     fn save_settings(&mut self) {
-        let now = (self.shell.theme.dark, self.shell.view.pastel);
-        if self.settings_was.is_none_or(|w| w == now) {
+        if self
+            .settings_was
+            .as_ref()
+            .is_none_or(|w| *w == self.shell.settings)
+        {
             return;
         }
-        self.settings_was = Some(now);
-        crate::palette::settings::save(&[
-            ("theme", if now.0 { "dark" } else { "light" }),
-            ("part_colours", if now.1 { "pastel" } else { "grey" }),
-        ]);
+        self.settings_was = Some(self.shell.settings.clone());
+        crate::shell::settings::save(&self.shell.settings);
     }
 
     fn theme_view(&self, r: &mut Renderer) {
         let t = self.shell.theme;
         r.back_colour = viewcube::rgb(t.view);
+        r.backdrop = self.shell.settings.backdrop;
         r.cube_palette = if t.dark { viewcube::DARK } else { viewcube::LIGHT };
     }
 
@@ -1325,20 +1337,40 @@ impl Gui {
         }
     }
 
-    /// A key, if no field has the keyboard.
-    pub fn view_key(&mut self, code: winit::keyboard::KeyCode) -> bool {
-        if self.ctx.egui_wants_keyboard_input() {
-            return false;
-        }
-        let Some(v) = &mut self.view else { return false };
+    /// A shortcut's command: one the chrome has an action for, or done here on the view.
+    fn key_command(&mut self, k: KeyCmd) -> Option<Action> {
         use winit::keyboard::KeyCode as K;
-        let changed = match code {
-            K::KeyL => {
+        let code = match k {
+            KeyCmd::Undo => return Some(Action::Undo),
+            KeyCmd::Redo => return Some(Action::Redo),
+            KeyCmd::Open => return Some(Action::Open),
+            KeyCmd::Home => return Some(Action::Home),
+            KeyCmd::FitAll => return Some(Action::FitAll),
+            KeyCmd::Measure => {
+                if self.shell.fg.is_some() {
+                    return Some(Action::Inspect(crate::shell::inspect::InspectCmd::Measure));
+                }
+                self.shell.status = "Measure: open a Forge part (.fg)".into();
+                return None;
+            }
+            KeyCmd::Save => {
+                self.fg_save();
+                return None;
+            }
+            KeyCmd::Rename | KeyCmd::Delete => return None,
+            KeyCmd::FitSelected => K::KeyF,
+            KeyCmd::Section => K::KeyS,
+            KeyCmd::Explode => K::KeyE,
+            KeyCmd::Lines | KeyCmd::Ao => K::KeyL,
+        };
+        let v = self.view.as_mut()?;
+        let changed = match k {
+            KeyCmd::Lines => {
                 v.renderer.line_mode = v.renderer.line_mode.next();
                 self.shell.view.lines = v.renderer.line_mode;
                 true
             }
-            K::KeyO => {
+            KeyCmd::Ao => {
                 v.renderer.ao = !v.renderer.ao;
                 true
             }
@@ -1346,7 +1378,7 @@ impl Gui {
         };
         self.shell.view.section = v.nav.section.is_some();
         v.dirty |= changed;
-        changed
+        None
     }
 
     /// Asks for what's under the cursor, and takes in the answer. True if that changed anything.
@@ -1377,6 +1409,17 @@ impl Gui {
     fn apply(&mut self) -> Vec<Action> {
         let mut host = Vec::new();
         for a in std::mem::take(&mut self.shell.out) {
+            let a = match a {
+                Action::Key(k) => match self.key_command(k) {
+                    Some(a) => a,
+                    None => continue,
+                },
+                Action::Settings => {
+                    self.shell.prefs.open = !self.shell.prefs.open;
+                    continue;
+                }
+                a => a,
+            };
             if let Action::PartColours(on) = a {
                 self.shell.view.pastel = on;
                 self.part_colours();
@@ -1462,13 +1505,12 @@ impl Gui {
                         self.shell.inspect_command(c);
                         continue;
                     }
-                    Action::SetUnits(_) => {
-                        self.fg_refuse(crate::shell::fgtool::ToolError::NoForgeForm {
-                            tool: "units",
-                            why:
-                                "a Forge part reads in mm and degrees; give a value a unit (`2in` is not one)"
-                                    .into(),
-                        });
+                    // a Forge part's numbers are mm in its text: the unit is how they're shown
+                    Action::SetUnits(u) => {
+                        self.shell.units = u;
+                        if let Some(m) = &mut self.shell.inspect.measure {
+                            m.unit = u;
+                        }
                         continue;
                     }
                     a if fc_only(a) => continue,
@@ -2218,7 +2260,14 @@ impl Gui {
             v.nav.scale = self.pixels_per_point;
         }
         if let Some(mut v) = self.view.take() {
+            let was = (v.renderer.back_colour, v.renderer.backdrop);
             self.theme_view(&mut v.renderer);
+            v.dirty |= was != (v.renderer.back_colour, v.renderer.backdrop);
+            // the mouse table Settings has in force
+            if v.nav.mouse != self.shell.prefs.mouse {
+                v.nav.mouse = self.shell.prefs.mouse.clone();
+                v.nav.held_keys.clear();
+            }
             self.view = Some(v);
         }
         let t1 = now_ms();
@@ -2877,6 +2926,7 @@ impl Gui {
         match crate::fg::Session::open(path, Some(gpu), waker) {
             Ok(s) => {
                 let name = name_of(path);
+                self.shell.units = self.shell.settings.length;
                 self.shell.fg = Some(crate::shell::fg::FgPanel {
                     file: name.clone(),
                     path: path.to_string(),

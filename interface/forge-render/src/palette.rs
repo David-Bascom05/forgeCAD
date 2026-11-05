@@ -41,36 +41,6 @@ pub fn part_colour(file: &str, pastel: bool) -> [f32; 4] {
     [c[0], c[1], c[2], 0.0]
 }
 
-/// The app's own settings, kept between sessions (theme, part colours).
-pub mod settings {
-    fn path() -> Option<std::path::PathBuf> {
-        let base = std::env::var_os("XDG_CONFIG_HOME")
-            .map(std::path::PathBuf::from)
-            .or_else(|| std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join(".config")))?;
-        Some(base.join("forgecad").join("settings"))
-    }
-
-    /// `key=value` lines.
-    pub fn load() -> Vec<(String, String)> {
-        let text = path()
-            .and_then(|p| std::fs::read_to_string(p).ok())
-            .unwrap_or_default();
-        text.lines()
-            .filter_map(|l| l.split_once('='))
-            .map(|(k, v)| (k.trim().to_string(), v.trim().to_string()))
-            .collect()
-    }
-
-    pub fn save(kv: &[(&str, &str)]) {
-        let Some(p) = path() else { return };
-        if let Some(d) = p.parent() {
-            let _ = std::fs::create_dir_all(d);
-        }
-        let text: String = kv.iter().map(|(k, v)| format!("{k}={v}\n")).collect();
-        let _ = std::fs::write(p, text);
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

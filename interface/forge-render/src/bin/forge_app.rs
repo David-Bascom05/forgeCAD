@@ -3,8 +3,8 @@
 use forge_render::gui::Headless;
 
 const USAGE: &str = "forge-app [PART | file.fc] [--size WxH] [--times]
-  [--shot FILE.ppm [--scale S] [--light] [--pastel] [--tab N] [--select NAME] [--click NAME].. [--rclick NAME].. [--wait] [--at X Y] [--sketch ROW;ROW..] [--edit NAME] [--draw TOOL X Y] [--view YAW PITCH] [--marking]]
-  steps, in order: --click NAME --dclick NAME --rclick NAME --wait --type TEXT --key NAME (enter, escape, tab, backspace)
+  [--shot FILE.ppm [--scale S] [--light] [--pastel] [--background floor|gradient|solid] [--tab N] [--select NAME] [--click NAME].. [--rclick NAME].. [--wait] [--at X Y] [--sketch ROW;ROW..] [--edit NAME] [--draw TOOL X Y] [--view YAW PITCH] [--marking]]
+  steps, in order: --click NAME --dclick NAME --rclick NAME --wait --type TEXT --key NAME (enter, escape, tab, backspace, or M, Ctrl+Z, F6...)
   --hover X Y (the view's pick there) --clickat X Y --drag X Y X2 Y2 --snap FILE.ppm --save
   --viewnow YAW PITCH --home --zoom F (the camera's distance times F) --new-drawing
   [--present fifo|mailbox|immediate] [--run-for SECONDS] [--spin]
@@ -38,6 +38,8 @@ struct Args {
     scale: f32,
     light: bool,
     pastel: bool,
+    /// The view's background: floor, gradient, solid.
+    background: Option<String>,
     shot: Option<String>,
     tab: usize,
     select: Option<String>,
@@ -64,6 +66,7 @@ fn args() -> Result<Args, String> {
         scale: 1.0,
         light: false,
         pastel: false,
+        background: None,
         shot: None,
         tab: 0,
         select: None,
@@ -92,6 +95,7 @@ fn args() -> Result<Args, String> {
             "--scale" => a.scale = v()?.parse().map_err(|_| USAGE)?,
             "--light" => a.light = true,
             "--pastel" => a.pastel = true,
+            "--background" => a.background = Some(v()?),
             "--shot" => a.shot = Some(v()?),
             "--tab" => a.tab = v()?.parse().map_err(|_| USAGE)?,
             "--select" => a.select = Some(v()?),
@@ -416,10 +420,19 @@ fn run() -> Result<(), String> {
         );
     }
     let mut h = Headless::new(a.size, a.scale)?;
-    if a.light {
-        h.gui.shell.theme = forge_render::shell::theme::LIGHT;
+    let mut settings = forge_render::shell::settings::Settings {
+        dark: !a.light,
+        pastel: a.pastel,
+        ..Default::default()
+    };
+    if let Some(b) = &a.background {
+        settings.backdrop = match b.as_str() {
+            "solid" => forge_render::render::Backdrop::Solid,
+            "gradient" => forge_render::render::Backdrop::Gradient,
+            _ => forge_render::render::Backdrop::Floor,
+        };
     }
-    h.gui.shell.view.pastel = a.pastel;
+    h.gui.shell.use_settings(settings);
     h.gui.shell.tab = a.tab;
     h.step();
     h.gui.open(a.file.as_deref().unwrap_or("bracket"));
@@ -450,14 +463,28 @@ fn run() -> Result<(), String> {
                 continue;
             }
             Step::Key(k) => {
+                // a name (enter, escape, ...), or a key as Settings writes it: M, Ctrl+Z, F6
                 let key = match k.as_str() {
-                    "enter" => egui::Key::Enter,
-                    "escape" => egui::Key::Escape,
-                    "tab" => egui::Key::Tab,
-                    "delete" => egui::Key::Delete,
-                    _ => egui::Key::Backspace,
+                    "enter" => Some(egui::Key::Enter),
+                    "escape" => Some(egui::Key::Escape),
+                    "tab" => Some(egui::Key::Tab),
+                    "delete" => Some(egui::Key::Delete),
+                    "backspace" => Some(egui::Key::Backspace),
+                    _ => None,
                 };
-                h.key(key);
+                match key.map(|key| (key, egui::Modifiers::NONE)).or_else(|| {
+                    forge_render::bindings::Chord::parse(k).map(|c| {
+                        let mut m = egui::Modifiers::NONE;
+                        m.ctrl = c.ctrl;
+                        m.command = c.ctrl;
+                        m.shift = c.shift;
+                        m.alt = c.alt;
+                        (c.key, m)
+                    })
+                }) {
+                    Some((key, m)) => h.key_with(key, m),
+                    None => return Err(format!("no key {k}")),
+                }
                 h.step();
                 h.step();
                 continue;

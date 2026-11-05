@@ -2,6 +2,7 @@
 //! natively `tess` builds that from the kernel, in the browser it arrives as a file.
 
 pub mod bench;
+pub mod bindings;
 pub mod camera;
 pub mod explode;
 pub mod livegpu;

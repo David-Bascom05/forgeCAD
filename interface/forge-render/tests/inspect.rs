@@ -46,6 +46,69 @@ fn open(tag: &str) -> Option<(Headless, std::path::PathBuf)> {
     Some((h, file))
 }
 
+// no key ever ran Measure: the only keys were matched by hand in the window's event loop, M not
+// among them; now the shortcut table runs it, in the app and headless alike
+#[test]
+fn m_opens_measure_and_settings_units_are_what_it_reads_in() {
+    let Some((mut h, _)) = open("m-key") else { return };
+    assert!(h.gui.shell.inspect.measure.is_none());
+    h.key(egui::Key::M);
+    h.step();
+    h.step();
+    let m = h.gui.shell.inspect.measure.as_ref().expect("M opens Measure");
+    assert!(!m.wall);
+    assert_eq!(m.unit, "mm");
+    // Manage > Settings > Units: inches, radians, two places
+    h.gui.shell.tab = 4;
+    h.step();
+    assert!(h.click("tool:Settings"));
+    h.step();
+    assert!(h.gui.shell.prefs.open);
+    for _ in 0..3 {
+        h.step();
+    }
+    assert!(h.click("settings:tab:Units"));
+    h.step();
+    for name in ["settings:length:in", "settings:angle:rad", "settings:decimals:2"] {
+        assert!(h.click(name), "{name}");
+        h.step();
+    }
+    h.step();
+    assert_eq!(h.gui.shell.units, "in");
+    let m = h.gui.shell.inspect.measure.as_ref().unwrap();
+    assert_eq!((m.unit, m.angle, m.precision), ("in", "rad", 2));
+    assert!(h.gui.shell.fg.as_ref().unwrap().refused.is_none());
+    assert_eq!(
+        forge_render::shell::inspect::shown(
+            forge_agent::measure::Quantity::Length,
+            25.4,
+            (m.unit, m.angle),
+            2
+        ),
+        "1.00 in"
+    );
+    // M again closes it, as its ribbon button does; a key moved in Settings runs it from there
+    h.key(egui::Key::M);
+    h.step();
+    assert!(h.gui.shell.inspect.measure.is_none());
+    assert!(h.click("settings:tab:Keyboard"));
+    h.step();
+    assert!(h.click("settings:key:measure"));
+    h.step();
+    h.key_with(egui::Key::M, egui::Modifiers::SHIFT);
+    h.step();
+    h.step();
+    h.key(egui::Key::M);
+    h.step();
+    assert!(
+        h.gui.shell.inspect.measure.is_none(),
+        "plain M no longer measures"
+    );
+    h.key_with(egui::Key::M, egui::Modifiers::SHIFT);
+    h.step();
+    assert!(h.gui.shell.inspect.measure.is_some());
+}
+
 #[test]
 fn measure_reads_a_picked_face_on_the_exact_body() {
     let Some((mut h, _)) = open("measure") else { return };

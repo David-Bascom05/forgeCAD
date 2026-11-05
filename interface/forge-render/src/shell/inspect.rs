@@ -40,6 +40,8 @@ pub struct MeasurePanel {
     /// Decimal places shown.
     pub precision: usize,
     pub unit: &'static str,
+    /// Angles in degrees or radians (Settings > Units).
+    pub angle: &'static str,
     /// The thinnest wall, not picks: its thickness and where.
     pub wall: bool,
     pub wall_at: Option<Result<(f64, Point3), String>>,
@@ -193,9 +195,10 @@ fn per_unit(unit: &str) -> f64 {
     }
 }
 
-/// A value read in the panel's unit, at its precision, with the unit.
-pub fn shown(q: Quantity, v: f64, unit: &str, places: usize) -> String {
+/// A value read in the panel's units (length, angle), at its precision, with the unit.
+pub fn shown(q: Quantity, v: f64, (unit, angle): (&str, &str), places: usize) -> String {
     match q.power() {
+        0 if angle == "rad" => format!("{:.places$} rad", v.to_radians()),
         0 => format!("{v:.places$}°"),
         2 => format!("{:.places$} {unit}²", v * per_unit(unit).powi(2)),
         _ => format!("{:.places$} {unit}", v * per_unit(unit)),
@@ -218,8 +221,9 @@ impl Shell {
                     None
                 } else {
                     Some(MeasurePanel {
-                        precision: 3,
+                        precision: self.settings.decimals,
                         unit: self.units,
+                        angle: self.settings.angle,
                         wall,
                         ..MeasurePanel::default()
                     })
@@ -352,7 +356,7 @@ impl Shell {
                 });
             }
             ui.add_space(4.0);
-            let unit = m.unit;
+            let unit = (m.unit, m.angle);
             let places_n = m.precision;
             if m.wall {
                 match &m.wall_at {
@@ -597,7 +601,7 @@ impl Shell {
         };
         let w = |p: Point3| [p.x, p.y, p.z];
         if let Some(m) = &self.inspect.measure {
-            let (unit, n) = (m.unit, m.precision);
+            let (unit, n) = ((m.unit, m.angle), m.precision);
             if let Some(Ok(r)) = &m.reading {
                 for s in &r.shown {
                     match *s {

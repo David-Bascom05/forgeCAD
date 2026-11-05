@@ -12,7 +12,7 @@ use winit::application::ApplicationHandler;
 use winit::dpi::{LogicalSize, PhysicalSize};
 use winit::event::{ElementState, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy};
-use winit::keyboard::{KeyCode, ModifiersState, PhysicalKey};
+use winit::keyboard::{ModifiersState, PhysicalKey};
 use winit::window::{ResizeDirection, Window, WindowId};
 
 /// `--times` says what a frame longer than this spent (ms).
@@ -432,33 +432,6 @@ impl ApplicationHandler for App {
             WindowEvent::KeyboardInput { event, .. }
                 if matches!(event.physical_key, PhysicalKey::Code(c)
                     if l.gui.held_key(c, event.state == ElementState::Pressed)) => {}
-            WindowEvent::KeyboardInput { event, .. } if event.state == ElementState::Pressed => {
-                if let PhysicalKey::Code(code) = event.physical_key {
-                    let ctrl = self.mods.control_key();
-                    let shift = self.mods.shift_key();
-                    let action = match code {
-                        KeyCode::KeyZ if ctrl && shift => Some(Action::Redo),
-                        KeyCode::KeyZ if ctrl => Some(Action::Undo),
-                        KeyCode::KeyY if ctrl => Some(Action::Redo),
-                        KeyCode::KeyO if ctrl => Some(Action::Open),
-                        KeyCode::KeyS if ctrl => {
-                            // a Forge part is written when asked; an .fc part with every act
-                            l.gui.fg_save();
-                            redraw = true;
-                            None
-                        }
-                        _ => None,
-                    };
-                    if let Some(a) = action {
-                        if !l.gui.ctx.egui_wants_keyboard_input() {
-                            l.gui.shell.out.push(a);
-                            redraw = true;
-                        }
-                    } else if !ctrl {
-                        redraw |= l.gui.view_key(code);
-                    }
-                }
-            }
             _ => {}
         }
         if l.gui.view_dirty() {

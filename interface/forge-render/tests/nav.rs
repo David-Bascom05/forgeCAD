@@ -312,3 +312,119 @@ fn keys_step_the_section_and_explode_and_ctrl_wheel_moves_the_cut() {
     assert_eq!(last, 1.0);
     assert!(now < 700.0);
 }
+
+fn with_mods(m: ModifiersState) -> WindowEvent {
+    WindowEvent::ModifiersChanged(Modifiers::from(m))
+}
+
+/// A drag of `b` from the view's middle, with these modifiers: what the camera became.
+fn drag(n: &mut Nav, b: MouseButton, m: ModifiersState) -> Camera {
+    n.event(&with_mods(m));
+    n.event(&moved(400.0, 300.0));
+    n.event(&button(ElementState::Pressed, b));
+    n.event(&moved(430.0, 300.0));
+    n.event(&moved(460.0, 320.0));
+    n.event(&button(ElementState::Released, b));
+    n.event(&with_mods(ModifiersState::empty()));
+    n.camera
+}
+
+fn preset(id: &str) -> forge_render::bindings::MouseMap {
+    let p = forge_render::bindings::presets()
+        .into_iter()
+        .find(|p| p.id == id)
+        .unwrap();
+    forge_render::bindings::preset_map(&p)
+}
+
+fn turned(a: &Camera, b: &Camera) -> bool {
+    (a.yaw - b.yaw).abs() > 1e-4 || (a.pitch - b.pitch).abs() > 1e-4
+}
+
+fn panned(a: &Camera, b: &Camera) -> bool {
+    (0..3).any(|k| (a.target[k] - b.target[k]).abs() > 1e-3)
+}
+
+#[test]
+fn the_mouse_preset_decides_what_a_drag_does() {
+    use forge_render::nav::NavTool;
+    // Inventor's (the default): left selects, middle pans, shift + middle orbits, right is the menu
+    let mut n = nav();
+    n.tool = NavTool::Select;
+    let c0 = n.camera;
+    let c = drag(&mut n, MouseButton::Left, ModifiersState::empty());
+    assert!(!turned(&c0, &c) && !panned(&c0, &c));
+    assert!(n.window.take().is_some(), "a selection window");
+    let c0 = n.camera;
+    let c = drag(&mut n, MouseButton::Middle, ModifiersState::empty());
+    assert!(panned(&c0, &c) && !turned(&c0, &c));
+    let c0 = n.camera;
+    let c = drag(&mut n, MouseButton::Middle, ModifiersState::SHIFT);
+    assert!(turned(&c0, &c));
+    let c0 = n.camera;
+    let c = drag(&mut n, MouseButton::Right, ModifiersState::empty());
+    assert!(!turned(&c0, &c) && !panned(&c0, &c));
+    assert!(n.marked.take().is_some(), "the marking menu's");
+    // F4 held: the left button orbits
+    n.held_keys = vec!["F4".into()];
+    let c0 = n.camera;
+    let c = drag(&mut n, MouseButton::Left, ModifiersState::empty());
+    assert!(turned(&c0, &c));
+    n.held_keys.clear();
+
+    // SolidWorks: middle orbits, ctrl + middle pans
+    let mut n = nav();
+    n.tool = NavTool::Select;
+    n.mouse = preset("solidworks");
+    let c0 = n.camera;
+    let c = drag(&mut n, MouseButton::Middle, ModifiersState::empty());
+    assert!(turned(&c0, &c));
+    let c0 = n.camera;
+    let c = drag(&mut n, MouseButton::Middle, ModifiersState::CONTROL);
+    assert!(panned(&c0, &c) && !turned(&c0, &c));
+
+    // Onshape: a right drag orbits, a right click still brings the menu up
+    let mut n = nav();
+    n.tool = NavTool::Select;
+    n.mouse = preset("onshape");
+    let c0 = n.camera;
+    let c = drag(&mut n, MouseButton::Right, ModifiersState::empty());
+    assert!(turned(&c0, &c));
+    assert!(n.marked.take().is_none());
+    n.event(&button(ElementState::Pressed, MouseButton::Right));
+    n.event(&button(ElementState::Released, MouseButton::Right));
+    assert!(n.marked.take().is_some());
+
+    // NX: middle then right held together pans
+    let mut n = nav();
+    n.tool = NavTool::Select;
+    n.mouse = preset("nx");
+    let c0 = n.camera;
+    n.event(&moved(400.0, 300.0));
+    n.event(&button(ElementState::Pressed, MouseButton::Middle));
+    n.event(&button(ElementState::Pressed, MouseButton::Right));
+    n.event(&moved(440.0, 330.0));
+    n.event(&button(ElementState::Released, MouseButton::Right));
+    n.event(&button(ElementState::Released, MouseButton::Middle));
+    assert!(panned(&c0, &n.camera) && !turned(&c0, &n.camera));
+}
+
+#[test]
+fn the_wheel_zooms_the_way_the_preset_says() {
+    let mut n = nav();
+    n.event(&moved(400.0, 300.0));
+    let d = n.camera.dist;
+    n.event(&wheel(1.0));
+    let inventor = n.camera.dist;
+    assert!(inventor < d, "away from you zooms in");
+    let mut n = nav();
+    n.mouse = preset("solidworks");
+    n.event(&moved(400.0, 300.0));
+    n.event(&wheel(1.0));
+    assert!(n.camera.dist > d, "SolidWorks: away from you zooms out");
+    let mut n = nav();
+    n.mouse = preset("catia");
+    n.event(&moved(400.0, 300.0));
+    n.event(&wheel(1.0));
+    assert_eq!(n.camera.dist, d, "CATIA V5's wheel doesn't zoom");
+}

@@ -554,11 +554,11 @@ fn what_a_forge_part_cannot_take_is_refused_typed() {
     assert_eq!(e.kind(), "MissingPick");
     assert!(h.click("fg:tool:cancel"));
     h.step();
-    // units: a Forge part reads in mm
+    // units: a Forge part reads in mm, shown in the unit chosen; nothing refuses it
     h.gui.shell.out.push(Action::SetUnits("in"));
     h.step();
-    let why = h.gui.shell.fg.as_ref().unwrap().refused.clone().unwrap();
-    assert!(why.starts_with("NoForgeForm"), "{why}");
+    assert_eq!(h.gui.shell.units, "in");
+    assert!(h.gui.shell.fg.as_ref().unwrap().refused.is_none());
     // a click with no tool shows what Forge calls it
     point_at(&mut h, [30.0, 0.0, 20.0]);
     let picked = h.gui.shell.fg.as_ref().unwrap().picked.clone().unwrap();

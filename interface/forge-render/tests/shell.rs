@@ -247,7 +247,18 @@ fn a_part_that_cannot_open_says_why_and_the_app_goes_on() {
 #[test]
 fn themes_change_every_colour_including_the_views() {
     let Some(mut h) = app() else { return };
-    h.click("theme");
+    assert!(
+        h.gui.shell.place("theme").is_none(),
+        "the title bar has no theme button"
+    );
+    h.gui.shell.tab = 4;
+    h.step();
+    assert!(h.click("tool:Settings"));
+    h.step();
+    for _ in 0..3 {
+        h.step();
+    }
+    assert!(h.click("settings:theme:Light"));
     h.step();
     h.step();
     h.step();
