@@ -62,6 +62,8 @@ pub struct ThermoOut {
     pub sheet: Option<(f64, f64)>,
     /// The part as the thickness model leaves it, and the modelled part's exact mass, unit density.
     pub sim: Option<Rc<ft::Simulated>>,
+    /// The model's wall about the part: what the app paints on the part's own faces.
+    pub field: Option<Rc<ft::WallField>>,
     pub modelled: Option<forge_topo::mass::MassProps>,
     /// The part's solids, by the id the stages give them: the mould's and the formed part's.
     pub mould_solid: usize,
@@ -1337,17 +1339,26 @@ fn thermoform(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
             );
             // the part as the model leaves it, and the modelled one's mass, both kept with it
             let sim = st.as_ref().map(|w| {
-                let key = format!("thermoform simulated 1 {key} {walls:?}");
+                let key = format!("thermoform simulated 2 {key} {walls:?}");
                 ev.b.memo(key, || {
                     let trim = ft::build::polygon(&f.trim);
                     let on = ft::OnTool {
                         mesh: &f.mesh,
                         contact: &f.contact,
                     };
-                    // one split: within the 0.5 % gate, about 0.1 s (two: 0.6 s, past it)
-                    Rc::new(ft::simulated_on(&f.frame, &trim, w, prep.t, &on, 1))
+                    // the model's sheet, split once and put on the tool (within 0.25 % of its wall
+                    // integral, about 0.1 s), then its wall carried onto the modelled part's own
+                    // side on the tool, finely meshed, so the rounds are smooth (about 0.3 s)
+                    let sheet = ft::simulated_on(&f.frame, &trim, w, prep.t, &on, 1);
+                    let field = ft::WallField::of(&sheet, 3.0 * prep.t);
+                    let part = ft::simulated_part(&f.part, &f.frame, &on, &field, prep.t, 3.0);
+                    (Rc::new(part.unwrap_or(sheet)), Rc::new(field))
                 })
             });
+            let (sim, field) = match sim {
+                Some((s, f)) => (Some(s), Some(f)),
+                None => (None, None),
+            };
             let modelled = ev.b.memo(format!("thermoform modelled {key}"), || {
                 forge_topo::mass::mass(&f.part).ok()
             });
@@ -1374,6 +1385,7 @@ fn thermoform(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
                 density,
                 sheet,
                 sim,
+                field,
                 modelled,
                 mould_solid,
                 part_solid: solid,

@@ -347,7 +347,9 @@ pub fn lod_of_mesh(m: &forge_mesh::TriMesh, face: u32) -> Lod {
         let (Some(x), Some(y)) = (unit(p.2), unit(q.2)) else {
             continue;
         };
-        if x.get().dot(y.get()) > FLAT_COS {
+        // a sliver turned over in a fit's mesh is a fold, no silhouette: no line on it
+        let small = |t: usize| m.triangle_normal(m.triangles[t]).length() < 0.1;
+        if x.get().dot(y.get()) > FLAT_COS || x.get().dot(y.get()) < 0.0 || small(p.2) || small(q.2) {
             continue;
         }
         segment(&mut lod.segments, a, b, oct(x.get()), oct(y.get()));

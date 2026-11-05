@@ -23,10 +23,11 @@ pub struct MeshMass {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Simulated {
-    /// Closed and facing out: the tool side's vertices first, then the free side's, in step.
+    /// Closed and facing out; `face_of` says which side each triangle is on.
     pub mesh: TriMesh,
-    /// The wall at each tool-side vertex, mm.
+    /// The wall at each vertex, mm, and its foot: the point on the tool side it stands off.
     pub wall: Vec<f64>,
+    pub foot: Vec<Point3>,
     /// The tool side's area, and the integral of the wall over the wall's middle surface (what
     /// the membrane conserves): the mesh's volume is within 0.5 % of it on formed parts.
     pub area: f64,
@@ -455,8 +456,9 @@ impl Builder {
         }
         let mass = mesh_mass(&mesh);
         Simulated {
+            foot: self.pos.iter().chain(&self.pos).copied().collect(),
+            wall: self.wall.iter().chain(&self.wall).copied().collect(),
             mesh,
-            wall: self.wall,
             area,
             sheet_volume,
             mass,
@@ -526,4 +528,418 @@ pub fn blank(frame: &Frame, middle: Point2, size: (f64, f64), z: f64, t: f64) ->
         m.face_of.extend([f as u32, f as u32]);
     }
     m
+}
+
+/// The model's wall over the sheet as it lies on the tool: for any point near it, the wall at
+/// its foot (the nearest point of the sheet), by the foot's triangle's corners.
+#[derive(Clone, Debug, Default)]
+pub struct WallField {
+    /// The sheet's wall integrated over its middle surface: the material formed.
+    pub volume: f64,
+    pos: Vec<Point3>,
+    tris: Vec<[u32; 3]>,
+    wall: Vec<f64>,
+    cell: f64,
+    cells: HashMap<(i64, i64, i64), Vec<u32>>,
+}
+
+impl WallField {
+    /// The tool side of a simulated sheet, looked up within `reach` of it.
+    pub fn of(sim: &Simulated, reach: f64) -> WallField {
+        let n = sim.mesh.positions.len();
+        let tris: Vec<[u32; 3]> = sim
+            .mesh
+            .triangles
+            .iter()
+            .zip(&sim.mesh.face_of)
+            .filter(|x| *x.1 == TOOL_SIDE)
+            .map(|x| *x.0)
+            .collect();
+        let cell = reach.max(0.5);
+        let key = |v: f64| (v / cell).floor() as i64;
+        let mut cells: HashMap<(i64, i64, i64), Vec<u32>> = HashMap::new();
+        for (k, t) in tris.iter().enumerate() {
+            let [a, b, c] = t.map(|i| sim.mesh.positions[i as usize]);
+            let lo = [
+                a.x.min(b.x).min(c.x),
+                a.y.min(b.y).min(c.y),
+                a.z.min(b.z).min(c.z),
+            ];
+            let hi = [
+                a.x.max(b.x).max(c.x),
+                a.y.max(b.y).max(c.y),
+                a.z.max(b.z).max(c.z),
+            ];
+            for i in key(lo[0] - reach)..=key(hi[0] + reach) {
+                for j in key(lo[1] - reach)..=key(hi[1] + reach) {
+                    for l in key(lo[2] - reach)..=key(hi[2] + reach) {
+                        cells.entry((i, j, l)).or_default().push(k as u32);
+                    }
+                }
+            }
+        }
+        // the model's wall from node to node is noisy where the sheet turns a corner: smoothed
+        // over the sheet, its integral kept
+        let pos = &sim.mesh.positions[..n];
+        let mut wall = sim.wall.clone();
+        let integral = |w: &[f64]| -> f64 {
+            tris.iter()
+                .map(|t| {
+                    let [a, b, c] = t.map(|i| pos[i as usize]);
+                    0.5 * (b - a).cross(c - a).length() * t.iter().map(|&i| w[i as usize]).sum::<f64>()
+                })
+                .sum()
+        };
+        let before = integral(&wall);
+        let mut nb: Vec<Vec<u32>> = vec![vec![]; n];
+        for t in &tris {
+            for (a, b) in [(t[0], t[1]), (t[1], t[2]), (t[2], t[0])] {
+                nb[a as usize].push(b);
+                nb[b as usize].push(a);
+            }
+        }
+        for _ in 0..SMOOTH {
+            let w0 = wall.clone();
+            for (k, list) in nb.iter().enumerate() {
+                if !list.is_empty() {
+                    wall[k] = 0.5 * w0[k]
+                        + 0.5 * list.iter().map(|&j| w0[j as usize]).sum::<f64>() / list.len() as f64;
+                }
+            }
+        }
+        let after = integral(&wall);
+        if after > 0.0 {
+            wall.iter_mut().for_each(|w| *w *= before / after);
+        }
+        WallField {
+            volume: sim.sheet_volume,
+            pos: pos.to_vec(),
+            tris,
+            wall,
+            cell,
+            cells,
+        }
+    }
+
+    /// The wall at `p`'s foot on the sheet, and the foot (None: no sheet within reach).
+    pub fn at(&self, p: Point3) -> Option<(f64, Point3)> {
+        let key = |v: f64| (v / self.cell).floor() as i64;
+        let list = self.cells.get(&(key(p.x), key(p.y), key(p.z)))?;
+        let mut best: Option<(f64, f64, Point3)> = None;
+        for &k in list {
+            let [a, b, c] = self.tris[k as usize].map(|i| self.pos[i as usize]);
+            let q = closest(p, a, b, c);
+            let d = (q - p).length_sq();
+            if best.is_some_and(|x| x.0 <= d) {
+                continue;
+            }
+            let w = bary(q, a, b, c);
+            let [i, j, l] = self.tris[k as usize].map(|i| i as usize);
+            best = Some((
+                d,
+                w[0] * self.wall[i] + w[1] * self.wall[j] + w[2] * self.wall[l],
+                q,
+            ));
+        }
+        best.map(|b| (b.1, b.2))
+    }
+}
+
+/// Passes of the smoothing of the model's wall over its sheet.
+const SMOOTH: usize = 8;
+
+/// A point's weights on triangle abc (it lies on it).
+fn bary(q: Point3, a: Point3, b: Point3, c: Point3) -> [f64; 3] {
+    let (v0, v1, v2) = (b - a, c - a, q - a);
+    let (d00, d01, d11) = (v0.dot(v0), v0.dot(v1), v1.dot(v1));
+    let (d20, d21) = (v2.dot(v0), v2.dot(v1));
+    let den = d00 * d11 - d01 * d01;
+    if den.abs() < 1e-300 {
+        return [1.0 / 3.0; 3];
+    }
+    let v = (d11 * d20 - d01 * d21) / den;
+    let w = (d00 * d21 - d01 * d20) / den;
+    [1.0 - v - w, v, w]
+}
+
+/// The simulated part made from the modelled part itself: its mesh (fine on its rounds, sides
+/// longer than `h` split) with every point off the tool moved toward its foot on the part's side
+/// on the tool (on the tool's surface, or the flange on the trim plane) till it stands the model's
+/// wall off it instead of t (`field`, smoothed); the wall then scaled so the solid holds the
+/// model's material (the wall integrated over the sheet's middle surface). At t everywhere it is
+/// the modelled part. None where the part has no side on the tool.
+pub fn simulated_part(
+    part: &forge_topo::Body,
+    frame: &Frame,
+    tool: &OnTool,
+    field: &WallField,
+    t: f64,
+    h: f64,
+) -> Option<Simulated> {
+    built_on(part, frame, tool, Some(field), t, h, ANGLE)
+}
+
+/// The tessellation's largest turn per side on the part's rounds.
+pub(crate) const ANGLE: f64 = std::f64::consts::PI / 18.0;
+
+/// `simulated_part`, or with no field the wall t everywhere: the modelled part again, as a mesh.
+pub(crate) fn built_on(
+    part: &forge_topo::Body,
+    frame: &Frame,
+    tool: &OnTool,
+    field: Option<&WallField>,
+    t: f64,
+    h: f64,
+    angle: f64,
+) -> Option<Simulated> {
+    let q = forge_mesh::Quality {
+        chord: 0.02,
+        max_angle: angle,
+    };
+    let m = forge_mesh::tessellate(part, &q).ok()?;
+    // one point where faces meet, and points closer than a twentieth of a millimetre one: the
+    // slivers the tessellation leaves along a face's edge would turn over when moved
+    let mut pos: Vec<Point3> = vec![];
+    let mut cells: HashMap<(i64, i64, i64), Vec<u32>> = HashMap::new();
+    let key = |p: Point3| {
+        (
+            (p.x / WELD).floor() as i64,
+            (p.y / WELD).floor() as i64,
+            (p.z / WELD).floor() as i64,
+        )
+    };
+    let mut weld = |p: Point3| -> u32 {
+        let (x, y, z) = key(p);
+        for dx in -1..=1 {
+            for dy in -1..=1 {
+                for dz in -1..=1 {
+                    for &i in cells.get(&(x + dx, y + dy, z + dz)).into_iter().flatten() {
+                        if (pos[i as usize] - p).length() < WELD {
+                            return i;
+                        }
+                    }
+                }
+            }
+        }
+        pos.push(p);
+        let i = (pos.len() - 1) as u32;
+        cells.entry((x, y, z)).or_default().push(i);
+        i
+    };
+    let (mut tris, mut faces): (Vec<[u32; 3]>, Vec<u32>) = m
+        .triangles
+        .iter()
+        .zip(&m.face_of)
+        .map(|(tri, &f)| (tri.map(|i| weld(m.positions[i as usize])), f))
+        .filter(|(t, _)| t[0] != t[1] && t[1] != t[2] && t[0] != t[2])
+        .unzip();
+    refine(&mut pos, &mut tris, &mut faces, h);
+    // the part's triangles on the tool's surface, or on the trim plane facing it (the flange's)
+    let near = Near::new(tool, 2.0 * t);
+    let on = 0.05 * t;
+    let is_side: Vec<bool> = tris
+        .iter()
+        .map(|tri| {
+            let [a, b, c] = tri.map(|i| pos[i as usize]);
+            let g = Point3::ORIGIN
+                + ((a - Point3::ORIGIN) + (b - Point3::ORIGIN) + (c - Point3::ORIGIN)) * (1.0 / 3.0);
+            let Some(n) = (b - a).cross(c - a).normalize() else {
+                return false;
+            };
+            let flat = frame.point_to_local(g).z.abs() < on && n.get().dot(frame.z().get()).abs() > 0.999;
+            flat || near.nearest(g).is_some_and(|x| (x - g).length() < on)
+        })
+        .collect();
+    if !is_side.iter().any(|x| *x) {
+        return None;
+    }
+    let mut on_side = vec![false; pos.len()];
+    for (tri, s) in tris.iter().zip(&is_side) {
+        if *s {
+            tri.iter().for_each(|&i| on_side[i as usize] = true);
+        }
+    }
+    // every other point's normal over the faces off the tool, its foot t in along it (the
+    // modelled part is the side on the tool moved off it by t), and the wall there
+    // the exact surface's normal at each point, of each face off the tool it is on
+    let mut normal = vec![Vec3::ZERO; pos.len()];
+    let mut done: std::collections::HashSet<(u32, u32)> = Default::default();
+    for ((tri, s), &f) in tris.iter().zip(&is_side).zip(&faces) {
+        if *s {
+            continue;
+        }
+        let [a, b, c] = tri.map(|i| pos[i as usize]);
+        let near = (b - a).cross(c - a);
+        for &i in tri {
+            if done.insert((i, f)) {
+                normal[i as usize] += face_normal(part, f, pos[i as usize], near);
+            }
+        }
+    }
+    let normal: Vec<Vec3> = normal
+        .into_iter()
+        .map(|v| v.normalize().map_or(Vec3::ZERO, |u| u.get()))
+        .collect();
+    let foot: Vec<Point3> = (0..pos.len())
+        .map(|i| {
+            if on_side[i] {
+                pos[i]
+            } else {
+                pos[i] - normal[i] * t
+            }
+        })
+        .collect();
+    let wall: Vec<f64> = foot
+        .iter()
+        .map(|p| field.and_then(|f| f.at(*p)).map_or(t, |x| x.0))
+        .collect();
+    // the modelled part is the side on the tool moved off it by t: moved by the wall instead
+    let mut mesh = TriMesh {
+        positions: pos.clone(),
+        triangles: tris.clone(),
+        face_of: tris
+            .iter()
+            .zip(&is_side)
+            .map(|(tri, s)| match (s, tri.iter().any(|&i| on_side[i as usize])) {
+                (true, _) => TOOL_SIDE,
+                (false, true) => RIM,
+                _ => FREE_SIDE,
+            })
+            .collect(),
+        ..TriMesh::default()
+    };
+    // each point's move in from t to the wall, smoothed over its neighbours off the tool: where
+    // the tessellation's normals turn quickly (a round's ends) the moves stay in step
+    let mut nb: Vec<Vec<u32>> = vec![vec![]; pos.len()];
+    for tri in &tris {
+        for (a, b) in [(tri[0], tri[1]), (tri[1], tri[2]), (tri[2], tri[0])] {
+            if !on_side[a as usize] && !on_side[b as usize] {
+                nb[a as usize].push(b);
+                nb[b as usize].push(a);
+            }
+        }
+    }
+    let smooth = |d: &mut Vec<Vec3>| {
+        for _ in 0..MOVES {
+            let d0 = d.clone();
+            for (i, list) in nb.iter().enumerate() {
+                if !on_side[i] && !list.is_empty() {
+                    let mean =
+                        list.iter().fold(Vec3::ZERO, |s, &j| s + d0[j as usize]) * (1.0 / list.len() as f64);
+                    d[i] = d0[i] * 0.5 + mean * 0.5;
+                }
+            }
+        }
+    };
+    let place = |mesh: &mut TriMesh, k: f64| {
+        let mut d: Vec<Vec3> = (0..pos.len())
+            .map(|i| {
+                if on_side[i] {
+                    Vec3::ZERO
+                } else {
+                    -normal[i] * (t - k * wall[i])
+                }
+            })
+            .collect();
+        smooth(&mut d);
+        for i in 0..pos.len() {
+            mesh.positions[i] = pos[i] + d[i];
+        }
+    };
+    place(&mut mesh, 1.0);
+    let (mut area, mut sheet_volume) = (0.0, 0.0);
+    let side = tris.iter().zip(&is_side).filter(|x| *x.1).map(|x| x.0);
+    for tri in side {
+        let [a, b, c] = tri.map(|i| pos[i as usize]);
+        let s = 0.5 * (b - a).cross(c - a).length();
+        area += s;
+        sheet_volume += s * tri.iter().map(|&i| wall[i as usize]).sum::<f64>() / 3.0;
+    }
+    // the material the model formed, kept: the part's own side has sharp corners and rounds the
+    // model's sheet bridges, so the wall is scaled (by about 1 %) till the solid holds the
+    // model's volume, its wall integrated over its middle surface
+    let mut mass = mesh_mass(&mesh);
+    let mut k = 1.0;
+    if let Some(f) = field.filter(|f| f.volume > 0.0) {
+        for _ in 0..3 {
+            if mass.volume <= 0.0 {
+                break;
+            }
+            k *= f.volume / mass.volume;
+            place(&mut mesh, k);
+            mass = mesh_mass(&mesh);
+        }
+        sheet_volume = f.volume;
+    }
+    Some(Simulated {
+        wall: wall.iter().map(|w| w * k).collect(),
+        foot,
+        mesh,
+        area,
+        sheet_volume,
+        mass,
+    })
+}
+
+/// Points closer than this are one, mm.
+const WELD: f64 = 0.05;
+
+/// Passes of the smoothing of the moves from the modelled part's outside.
+const MOVES: usize = 8;
+
+/// Splits sides longer than `h`, keeping the mesh conforming: a side split is split in both its
+/// triangles.
+fn refine(pos: &mut Vec<Point3>, tris: &mut Vec<[u32; 3]>, faces: &mut Vec<u32>, h: f64) {
+    for _ in 0..12 {
+        let len = |a: u32, b: u32, pos: &[Point3]| (pos[a as usize] - pos[b as usize]).length();
+        let key = |a: u32, b: u32| (a.min(b), a.max(b));
+        let mut split: HashMap<(u32, u32), u32> = HashMap::new();
+        for &[a, b, c] in tris.iter() {
+            let sides = [(a, b), (b, c), (c, a)];
+            let (x, y) = sides
+                .into_iter()
+                .max_by(|p, q| len(p.0, p.1, pos).total_cmp(&len(q.0, q.1, pos)))
+                .expect("three sides");
+            if len(x, y, pos) > h && !split.contains_key(&key(x, y)) {
+                pos.push(pos[x as usize] + (pos[y as usize] - pos[x as usize]) * 0.5);
+                split.insert(key(x, y), (pos.len() - 1) as u32);
+            }
+        }
+        if split.is_empty() {
+            return;
+        }
+        let mut out = Vec::with_capacity(tris.len() * 2);
+        let mut of = Vec::with_capacity(tris.len() * 2);
+        for (&[a, b, c], &f) in tris.iter().zip(faces.iter()) {
+            let was = out.len();
+            let m = |x: u32, y: u32| split.get(&key(x, y)).copied();
+            match (m(a, b), m(b, c), m(c, a)) {
+                (None, None, None) => out.push([a, b, c]),
+                (Some(p), None, None) => out.extend([[a, p, c], [p, b, c]]),
+                (None, Some(p), None) => out.extend([[a, b, p], [a, p, c]]),
+                (None, None, Some(p)) => out.extend([[a, b, p], [p, b, c]]),
+                (Some(p), Some(q), None) => out.extend([[a, p, c], [p, b, q], [p, q, c]]),
+                (None, Some(p), Some(q)) => out.extend([[a, b, q], [q, b, p], [q, p, c]]),
+                (Some(p), None, Some(q)) => out.extend([[a, p, q], [p, b, c], [q, p, c]]),
+                (Some(p), Some(q), Some(r)) => out.extend([[a, p, r], [p, b, q], [r, q, c], [p, q, r]]),
+            }
+            of.extend(std::iter::repeat_n(f, out.len() - was));
+        }
+        *tris = out;
+        *faces = of;
+    }
+}
+
+/// A body face's outward normal at a point near it; `near` (its triangle's) where it has none.
+fn face_normal(body: &forge_topo::Body, f: u32, p: Point3, near: Vec3) -> Vec3 {
+    use forge_geom::SurfaceGeom;
+    let face = body.face(forge_topo::FaceId(f));
+    let near = near.normalize().map_or(Vec3::ZERO, |u| u.get());
+    match face.surface.normal(face.surface.project(p)) {
+        Some(n) => {
+            let n = if face.same_sense { n.get() } else { -n.get() };
+            if n.dot(near) > 0.2 { n } else { near }
+        }
+        None => near,
+    }
 }

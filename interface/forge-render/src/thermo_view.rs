@@ -29,11 +29,23 @@ pub struct Gfx {
     /// and the simulated part's wall map, just off its face.
     pub sim: Option<Lod>,
     pub sim_mesh: Option<forge_mesh::TriMesh>,
+    pub sim_feet: Option<Vec<Point3>>,
     pub sim_heat: Vec<WorldVert>,
     pub blank: Lod,
     /// The formed part's and the mould's faces and edges in the part's body.
     pub part_span: Option<Span>,
     pub mould_span: Option<Span>,
+    /// The model's wall about the part, and the formed part's own faces as the view meshes them,
+    /// each point coloured by the wall there (`paint`), for the mesh it was painted on; and where
+    /// MIN and MAX go on them, and on the simulated part.
+    pub field: Option<std::sync::Arc<forge_thermo::WallField>>,
+    pub heat: Vec<WorldVert>,
+    pub heat_for: usize,
+    pub extremes: Option<([f32; 3], [f32; 3])>,
+    pub sim_extremes: Option<([f32; 3], [f32; 3])>,
+    /// The wall's range the colours span, mm, and where the model's thinnest and thickest are.
+    pub range: (f64, f64),
+    pub at: (Point3, Point3),
 }
 
 /// A solid's faces and edges in the part's body.
@@ -42,6 +54,9 @@ pub struct Span {
     pub faces: std::ops::Range<u32>,
     pub edges: std::ops::Range<u32>,
 }
+
+/// How far a wall map lies off the face it's painted on, mm: clear of it in depth, no gap seen.
+const LIFT: f64 = 0.03;
 
 /// Faces numbered from here are no body's: a pick passes them by.
 pub const UNPICKED: u32 = 0x7000_0000;
@@ -109,8 +124,10 @@ pub fn view(o: &ThermoOut, spans: &[forge_lang::build::Span], draft_min: f32) ->
             .as_ref()
             .map(|s| crate::tess::lod_of_mesh(&s.mesh, UNPICKED)),
         sim_mesh: o.sim.as_ref().map(|s| s.mesh.clone()),
+        sim_feet: o.sim.as_ref().map(|s| s.foot.clone()),
         part_span: span_of(spans, o.part_solid),
         mould_span: span_of(spans, o.mould_solid),
+        field: o.field.as_ref().map(|f| std::sync::Arc::new((**f).clone())),
         ..Gfx::default()
     };
     let kg = o.density.map(|d| d * 1e-9);
@@ -247,6 +264,8 @@ pub fn view(o: &ThermoOut, spans: &[forge_lang::build::Span], draft_min: f32) ->
         })
         .collect();
     let (wlo, whi) = (w.min.0 * o.t, w.max.0 * o.t);
+    gfx.range = (wlo, whi);
+    gfx.at = (w.min.1, w.max.1);
     for s in &w.steps {
         let mut n = vec![[0.0f32; 3]; s.nodes.len()];
         for v in &w.tris {
@@ -304,17 +323,16 @@ pub fn view(o: &ThermoOut, spans: &[forge_lang::build::Span], draft_min: f32) ->
     // the simulated part's free side, banded as the model's map is, a hair off it
     if let Some(sim) = &o.sim {
         let m = &sim.mesh;
-        let n = sim.wall.len();
         for (k, tri) in m.triangles.iter().enumerate() {
-            if m.face_of[k] != forge_thermo::simulated::FREE_SIDE {
+            if m.face_of[k] == forge_thermo::simulated::TOOL_SIDE {
                 continue;
             }
             let up = m
                 .triangle_normal(*tri)
                 .normalize()
-                .map_or(Vec3::ZERO, |u| u.get() * 0.06);
+                .map_or(Vec3::ZERO, |u| u.get() * LIFT);
             for &i in tri {
-                let h = sim.wall[i as usize - n];
+                let h = sim.wall[i as usize];
                 let c = band(if whi > wlo {
                     ((h - wlo) / (whi - wlo)) as f32
                 } else {
@@ -571,4 +589,96 @@ pub fn marks(u: &crate::shell::thermo_ui::ThermoUi, g: &Gfx) -> Vec<crate::rende
             })
         })
         .collect()
+}
+
+fn vertex_at(b: &[u8], i: usize) -> Point3 {
+    let f = |k: usize| {
+        f32::from_le_bytes(b[i * VERTEX + k..i * VERTEX + k + 4].try_into().expect("4 bytes")) as f64
+    };
+    Point3::new(f(0), f(4), f(8))
+}
+
+impl Gfx {
+    /// The formed part's faces of `mesh` (the view's own, finest level) coloured by the model's
+    /// wall at each point (at its foot on the sheet), banded as the legend is; and the points on
+    /// the part's outside, and the simulated part's, over the model's thinnest and thickest.
+    pub fn paint(&mut self, mesh: &PartMesh, key: usize) {
+        if self.heat_for == key {
+            return;
+        }
+        self.heat_for = key;
+        self.heat.clear();
+        self.extremes = None;
+        let (Some(field), Some(span), Some(l)) = (&self.field, &self.part_span, mesh.lods.first()) else {
+            return;
+        };
+        let (lo, hi) = self.range;
+        let colour = |h: f64| {
+            let c = band(if hi > lo {
+                ((h - lo) / (hi - lo)) as f32
+            } else {
+                0.5
+            });
+            [c[0], c[1], c[2], 1.0]
+        };
+        let mut at: std::collections::HashMap<u32, Option<(f64, Point3)>> = Default::default();
+        let (mut near_lo, mut near_hi) = ((f64::INFINITY, [0.0f32; 3]), (f64::INFINITY, [0.0f32; 3]));
+        let idx = |k: usize| u32::from_le_bytes(l.indices[k * 4..k * 4 + 4].try_into().expect("4 bytes"));
+        for f in l.faces.iter().filter(|f| span.faces.contains(&f.face)) {
+            for t in f.first_tri..f.first_tri + f.tris {
+                let v = [0, 1, 2].map(|k| idx(t as usize * 3 + k));
+                let p = v.map(|i| vertex_at(&l.vertices, i as usize));
+                let Some(n) = (p[1] - p[0]).cross(p[2] - p[0]).normalize() else {
+                    continue;
+                };
+                let walls = v.map(|i| {
+                    *at.entry(i)
+                        .or_insert_with(|| field.at(vertex_at(&l.vertices, i as usize)))
+                });
+                for k in 0..3 {
+                    // the outside stands off its foot along its face; it carries MIN and MAX
+                    let Some((_, foot)) = walls[k] else { continue };
+                    if (p[k] - foot).dot(n.get()) > 0.5 {
+                        for (best, target) in [(&mut near_lo, self.at.0), (&mut near_hi, self.at.1)] {
+                            let d = (foot - target).length();
+                            if d < best.0 {
+                                *best = (d, f3(p[k] + n.get() * LIFT));
+                            }
+                        }
+                    }
+                }
+                // a point the field has not near it takes its neighbours' wall, so no face is bare
+                let known: Vec<f64> = walls.iter().flatten().map(|w| w.0).collect();
+                let fill = known.iter().sum::<f64>() / known.len().max(1) as f64;
+                for k in 0..3 {
+                    let h = walls[k].map_or(if known.is_empty() { lo } else { fill }, |w| w.0);
+                    self.heat.push(WorldVert {
+                        at: f3(p[k] + n.get() * LIFT),
+                        colour: colour(h),
+                    });
+                }
+            }
+        }
+        if near_lo.0.is_finite() && near_hi.0.is_finite() {
+            self.extremes = Some((near_lo.1, near_hi.1));
+        }
+        if let (Some(m), Some(feet)) = (&self.sim_mesh, &self.sim_feet) {
+            let (mut a, mut b) = ((f64::INFINITY, [0.0f32; 3]), (f64::INFINITY, [0.0f32; 3]));
+            for (i, &foot) in feet.iter().enumerate() {
+                let top = m.positions[i];
+                if (top - foot).length() < 0.3 {
+                    continue;
+                }
+                for (best, target) in [(&mut a, self.at.0), (&mut b, self.at.1)] {
+                    let d = (foot - target).length();
+                    if d < best.0 {
+                        *best = (d, f3(top));
+                    }
+                }
+            }
+            if a.0.is_finite() {
+                self.sim_extremes = Some((a.1, b.1));
+            }
+        }
+    }
 }

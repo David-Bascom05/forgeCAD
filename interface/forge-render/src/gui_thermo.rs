@@ -17,6 +17,25 @@ static AFTER_OPEN: Mutex<Option<crate::shell::thermo_ui::Cmd>> = Mutex::new(None
 impl Gui {
     pub(super) fn thermo_host(&mut self) {
         self.thermo_asm();
+        // the wall's colours on the part's own faces, painted again for each new mesh of it
+        if let (Some(m), Some(g)) = (&self.fg_folded, self.fg_walls.first_mut()) {
+            let key = m
+                .lods
+                .first()
+                .map_or(0, |l| l.vertices.len() * 31 + l.indices.len())
+                ^ (g.range.0.to_bits() as usize).rotate_left(7);
+            g.paint(m, key);
+        }
+        if let (Some(p), Some(g)) = (&mut self.shell.fg, self.fg_walls.first())
+            && p.asm.is_none()
+            && let Some(r) = p.thermos.first_mut()
+        {
+            let sim = p.thermo.simulated && g.sim.is_some();
+            if let Some((lo, hi)) = if sim { g.sim_extremes } else { g.extremes } {
+                r.min.1 = lo;
+                r.max.1 = hi;
+            }
+        }
         let Some(p) = &mut self.shell.fg else { return };
         let dir = self
             .fg

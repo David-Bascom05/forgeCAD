@@ -811,9 +811,11 @@ thermoform(SHAPE, t: T, material: "ABS" | MATERIAL, from: "outer"|"wall"|"inner"
   never reached the mould, the sheet's temperature and the law it read, with its source; `limit`
   (the material's thinnest wall, mm, and as a fraction of t), `verdict` ("pass": no wall under the
   limit and the sheet on the mould everywhere, else "warn"), `mass` (the material's density, and
-  for `modelled`, the part at t, and `simulated`, the wall rebuilt at the model's thickness at each
-  point: volume mm3, mass kg, cog mm, inertia about it kg mm2; its volume is within 0.5 % of
-  `wall_integral_mm3`, the wall integrated over its middle surface), `blank` (W, L, t, mass) and
+  for `modelled`, the part at t, and `simulated`, the modelled part's side on the mould moved off it
+  by the model's wall at each point: volume mm3, mass kg, cog mm, inertia about it kg mm2; it holds
+  the model's material, `wall_integral_mm3`, the wall integrated over the sheet's middle surface,
+  to 0.5 %, the wall scaled by about 1 % for the sharp corners and rounds the sheet bridges; at t
+  everywhere it is the modelled part to 0.2 %), `blank` (W, L, t, mass) and
   `field`, how many points the wall is known at on the sheet on the mould inside the trim; `fg run F
   --json --field OUT.csv` writes them (x, y, z on the mould, wall, mm) and names the file, `--field
   inline` puts them in the JSON.

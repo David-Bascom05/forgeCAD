@@ -171,6 +171,7 @@ impl Gui {
                 + p.eyes.len()
                 + usize::from(p.thermo.mould.is_some()) * 31
                 + p.thermo.view_key() * 1_000_003
+                + self.fg_walls.first().map_or(0, |g| g.heat.len() * 17)
                 + match p.thermo.analysis {
                     crate::shell::thermo_ui::Analysis::None => 0,
                     crate::shell::thermo_ui::Analysis::Draft => {
@@ -281,6 +282,9 @@ impl Gui {
                     if !p.thermo.shows(crate::shell::thermo_ui::Body::Part) {
                     } else if p.thermo.simulated && g.sim.is_some() && p.thermo.step.is_none() {
                         out.extend_from_slice(&g.sim_heat);
+                    } else if !g.heat.is_empty() && p.thermo.step.is_none() {
+                        // on the part's own faces, every one of them
+                        out.extend_from_slice(&g.heat);
                     } else if let Some(s) = g.steps.get(k) {
                         out.extend_from_slice(s);
                     }
