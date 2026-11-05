@@ -377,13 +377,13 @@ pub fn point_of(_ev: &Eval, v: Value, span: Span) -> R<Point3> {
 
 /// A plane an anchor gives: a world plane (first feature only), a plane value, a sketch's
 /// plane, a planar face set.
-pub fn plane_of(ev: &mut Eval, v: Value, span: Span, what: &'static str) -> R<Frame> {
+pub fn plane_of(ev: &mut Eval, v: Value, span: Span, _what: &'static str) -> R<Frame> {
     // an occurrence's face (`l1.plate.end`): where that occurrence is written, made in context
     if let Value::Asm(a) = &v
         && matches!(&**a, crate::asm::AsmVal::Ref(_) | crate::asm::AsmVal::Inst(_))
     {
         let here = crate::asm::context_value(ev, a, span)?;
-        return plane_of(ev, here, span, what);
+        return plane_of(ev, here, span, _what);
     }
     match v {
         Value::Plane(p) => {
