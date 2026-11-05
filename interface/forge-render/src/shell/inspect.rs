@@ -53,7 +53,13 @@ pub enum Filter {
 }
 
 impl Filter {
-    pub const ALL: [Filter; 5] = [Filter::Any, Filter::Faces, Filter::Edges, Filter::Points, Filter::Bodies];
+    pub const ALL: [Filter; 5] = [
+        Filter::Any,
+        Filter::Faces,
+        Filter::Edges,
+        Filter::Points,
+        Filter::Bodies,
+    ];
 
     pub fn word(self) -> &'static str {
         match self {
@@ -171,7 +177,10 @@ impl MeasurePanel {
     /// angle at the second, as Inventor's.
     pub fn take_with(&mut self, p: MPick, shift: bool) {
         let point = |p: &MPick| {
-            matches!(p, MPick::Ent(_, Entity::Vertex(_)) | MPick::Free(Free::Point(_), _))
+            matches!(
+                p,
+                MPick::Ent(_, Entity::Vertex(_)) | MPick::Free(Free::Point(_), _)
+            )
         };
         let third = shift && self.picks.len() == 2 && self.picks.iter().all(point) && point(&p);
         if self.picks.len() >= 2 && !third {
@@ -414,14 +423,21 @@ fn mass_unit(length: &str) -> &'static str {
 impl Shell {
     /// Measure opened from a dialog's value field: what it measures can go in the field.
     pub fn measure_into(&mut self, label: &str) {
-        let Some(kind) = super::panel::field_kind(label) else { return };
+        let Some(kind) = super::panel::field_kind(label) else {
+            return;
+        };
         self.open_measure_into(IntoField::Dialog(label.to_string()), kind);
     }
 
     /// Measure opened from a tool's parameter field (a length or an angle).
     pub fn measure_into_param(&mut self, name: &'static str) {
         use forge_lang::values::Dim;
-        let dim = self.fg.as_ref().and_then(|f| f.tool.as_ref()).and_then(|t| t.params.iter().find(|p| p.name == name)).map(|p| p.dim);
+        let dim = self
+            .fg
+            .as_ref()
+            .and_then(|f| f.tool.as_ref())
+            .and_then(|t| t.params.iter().find(|p| p.name == name))
+            .map(|p| p.dim);
         let kind = match dim {
             Some(Dim::Length) => forge_doc::units::Kind::Length,
             Some(Dim::Angle) => forge_doc::units::Kind::Angle,
@@ -546,7 +562,13 @@ impl Shell {
         }
     }
 
-    pub(super) fn inspect_window<'a>(title: &'a str, id: &str, t: &Theme, at: Pos2, w: f32) -> egui::Window<'a> {
+    pub(super) fn inspect_window<'a>(
+        title: &'a str,
+        id: &str,
+        t: &Theme,
+        at: Pos2,
+        w: f32,
+    ) -> egui::Window<'a> {
         egui::Window::new(title)
             .id(egui::Id::unique(("inspect-window", id)))
             .title_bar(false)

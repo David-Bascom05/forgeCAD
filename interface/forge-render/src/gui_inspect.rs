@@ -145,7 +145,9 @@ fn handle(
             let mut err = None;
             // one edge or point reads off the body alone; faces, bodies and pairs want the mesh
             let wants = picks.len() > 1
-                || picks.iter().any(|p| matches!(p, Tgt::Whole(..) | Tgt::Ent((_, _, Ent::Face(_)))));
+                || picks
+                    .iter()
+                    .any(|p| matches!(p, Tgt::Whole(..) | Tgt::Ent((_, _, Ent::Face(_)))));
             let bare = Arc::new(TriMesh::default());
             for p in &picks {
                 let m = match p {
@@ -315,13 +317,23 @@ impl Gui {
     /// The density (kg/mm³) of what's at a placement: its occurrence's material, else the part's.
     fn density_of(&self, pl: u32) -> Option<f64> {
         let d = self.inspector.data.as_ref()?;
-        let phys = self.shell.inspect.physical.as_ref().and_then(|p| p.as_ref().ok()).or(d.physical.as_ref())?;
+        let phys = self
+            .shell
+            .inspect
+            .physical
+            .as_ref()
+            .and_then(|p| p.as_ref().ok())
+            .or(d.physical.as_ref())?;
         let name = d.names.get(pl as usize);
-        let solid = phys
-            .solids
-            .iter()
-            .find(|s| name.is_some_and(|n| *n == s.id))
-            .or(if phys.solids.len() == 1 { phys.solids.first() } else { None });
+        let solid =
+            phys.solids
+                .iter()
+                .find(|s| name.is_some_and(|n| *n == s.id))
+                .or(if phys.solids.len() == 1 {
+                    phys.solids.first()
+                } else {
+                    None
+                });
         match solid {
             // kg/m³ to kg/mm³
             Some(s) => s.density.map(|k| k * 1e-9),
@@ -345,9 +357,11 @@ impl Gui {
         let b = d.bodies.get(mesh)?;
         let near = at.map(|p| frame.point_to_local(Point3::new(p[0] as f64, p[1] as f64, p[2] as f64)));
         let near = near.unwrap_or_else(|| select::centre(b, ent(e)));
-        let eye = self.view.as_ref().map(|v| v.nav.camera.eye()).map(|q| {
-            frame.point_to_local(Point3::new(q[0] as f64, q[1] as f64, q[2] as f64))
-        });
+        let eye = self
+            .view
+            .as_ref()
+            .map(|v| v.nav.camera.eye())
+            .map(|q| frame.point_to_local(Point3::new(q[0] as f64, q[1] as f64, q[2] as f64)));
         let edge_gap = |x: EdgeId| {
             b.edge_points(x, 48)
                 .into_iter()
@@ -355,25 +369,27 @@ impl Gui {
                 .fold(f64::INFINITY, f64::min)
         };
         let ends = |x: EdgeId| [b.edge(x).start, b.edge(x).end];
-        let edges_at = |v: VertexId| {
-            b.edge_ids()
-                .filter(|&x| ends(x).contains(&v))
-                .collect::<Vec<_>>()
-        };
+        let edges_at = |v: VertexId| b.edge_ids().filter(|&x| ends(x).contains(&v)).collect::<Vec<_>>();
         let nearest_vertex = |vs: Vec<VertexId>| {
-            vs.into_iter()
-                .min_by(|a, c| {
-                    b.vertex(*a)
-                        .point
-                        .distance(near)
-                        .total_cmp(&b.vertex(*c).point.distance(near))
-                })
+            vs.into_iter().min_by(|a, c| {
+                b.vertex(*a)
+                    .point
+                    .distance(near)
+                    .total_cmp(&b.vertex(*c).point.distance(near))
+            })
         };
         let picked = match (filter, ent(e)) {
-            (Filter::Faces, Ent::Face(_)) | (Filter::Edges, Ent::Edge(_)) | (Filter::Points, Ent::Vert(_)) => ent(e),
-            (Filter::Faces, Ent::Edge(x)) => Ent::Face(self.facing(b, &select::faces_of_edge(b, x), near, eye)?),
+            (Filter::Faces, Ent::Face(_))
+            | (Filter::Edges, Ent::Edge(_))
+            | (Filter::Points, Ent::Vert(_)) => ent(e),
+            (Filter::Faces, Ent::Edge(x)) => {
+                Ent::Face(self.facing(b, &select::faces_of_edge(b, x), near, eye)?)
+            }
             (Filter::Faces, Ent::Vert(v)) => {
-                let mut fs: Vec<FaceId> = edges_at(v).into_iter().flat_map(|x| select::faces_of_edge(b, x)).collect();
+                let mut fs: Vec<FaceId> = edges_at(v)
+                    .into_iter()
+                    .flat_map(|x| select::faces_of_edge(b, x))
+                    .collect();
                 fs.sort_by_key(|f| f.0);
                 fs.dedup();
                 Ent::Face(self.facing(b, &fs, near, eye)?)
@@ -403,15 +419,10 @@ impl Gui {
     /// Of faces meeting at a point, the one turned most to the eye there.
     fn facing(&self, b: &Body, faces: &[FaceId], near: Point3, eye: Option<Point3>) -> Option<FaceId> {
         let to_eye = eye.map_or(Vec3::Z, |e| e - near);
-        faces
-            .iter()
-            .copied()
-            .max_by(|a, c| {
-                let n = |f: FaceId| {
-                    forge_agent::measure::normal_near(b, f, near).map_or(-1.0, |n| n.dot(to_eye))
-                };
-                n(*a).total_cmp(&n(*c))
-            })
+        faces.iter().copied().max_by(|a, c| {
+            let n = |f: FaceId| forge_agent::measure::normal_near(b, f, near).map_or(-1.0, |n| n.dot(to_eye));
+            n(*a).total_cmp(&n(*c))
+        })
     }
 
     /// What the view marks for Measure: what's picked, and what a click would pick now (a whole
@@ -592,7 +603,9 @@ impl Gui {
 
     /// What's under the pointer, as Measure would pick it: marked before the click.
     fn measure_hover(&mut self) {
-        let Some(m) = &self.shell.inspect.measure else { return };
+        let Some(m) = &self.shell.inspect.measure else {
+            return;
+        };
         let filter = m.filter;
         let Some(v) = &self.view else { return };
         // what's under the pointer even when it's picked already: else the plane behind it shows
@@ -747,8 +760,15 @@ impl Gui {
         if let Some(i) = origin {
             return Ok(origin_free(i));
         }
-        let d = self.inspector.data.as_ref().ok_or("nothing is built to measure yet")?;
-        let (pl, rest) = match t.split_once('/').filter(|(occ, _)| d.names.iter().any(|n| n == occ)) {
+        let d = self
+            .inspector
+            .data
+            .as_ref()
+            .ok_or("nothing is built to measure yet")?;
+        let (pl, rest) = match t
+            .split_once('/')
+            .filter(|(occ, _)| d.names.iter().any(|n| n == occ))
+        {
             // an occurrence's entity: `name/face:3`
             Some((occ, r)) => (
                 d.names
@@ -759,7 +779,10 @@ impl Gui {
             ),
             None => (0, t),
         };
-        let number = |w: &str| w.parse::<u32>().map_err(|_| format!("`{t}`: not a number after `:`"));
+        let number = |w: &str| {
+            w.parse::<u32>()
+                .map_err(|_| format!("`{t}`: not a number after `:`"))
+        };
         if let Some((kind, k)) = rest
             .split_once(':')
             .filter(|(k, _)| matches!(*k, "face" | "edge" | "vertex" | "body"))
@@ -783,24 +806,35 @@ impl Gui {
             return Err("`selected` is one of two: say `selected` as a and leave b out, or `selected:1` and `selected:2`".into());
         }
         // a Forge name: the faces or edges anchors call so
-        let a = self.fg_anchors.as_ref().ok_or(format!("`{t}`: the part's names aren't found yet"))?;
+        let a = self
+            .fg_anchors
+            .as_ref()
+            .ok_or(format!("`{t}`: the part's names aren't found yet"))?;
         if let Some(f) = a.faces.iter().position(|n| n.as_deref() == Some(rest)) {
             return Ok(MPick::Ent(pl, Entity::Face(f as u32)));
         }
         if let Some(e) = a.edges.iter().position(|n| n.as_deref() == Some(rest)) {
             return Ok(MPick::Ent(pl, Entity::Edge(e as u32)));
         }
-        Err(format!("nothing called `{t}` to measure (try face:N, an origin plane, or body)"))
+        Err(format!(
+            "nothing called `{t}` to measure (try face:N, an origin plane, or body)"
+        ))
     }
 
     /// The agent's `measure(a, b)`: the reading in words, a value a line, in the panel's units
     /// (Settings' when Measure isn't open). Works it out here and now.
     pub fn measure(&mut self, a: &str, b: Option<&str>) -> Result<String, String> {
-        let chosen = self.shell.inspect.measure.as_ref().map(|m| m.picks.clone()).unwrap_or_else(|| {
-            self.view
-                .as_ref()
-                .map_or(vec![], |v| v.nav.selected.iter().map(|&(pl, e)| MPick::Ent(pl, e)).collect())
-        });
+        let chosen = self
+            .shell
+            .inspect
+            .measure
+            .as_ref()
+            .map(|m| m.picks.clone())
+            .unwrap_or_else(|| {
+                self.view.as_ref().map_or(vec![], |v| {
+                    v.nav.selected.iter().map(|&(pl, e)| MPick::Ent(pl, e)).collect()
+                })
+            });
         let one = |text: &str| -> Result<MPick, String> {
             match text.trim() {
                 "selected" | "selected:1" => chosen.first().cloned().ok_or("nothing is selected".into()),
@@ -853,7 +887,11 @@ impl Gui {
         };
         let (unit, angle, n) = match &self.shell.inspect.measure {
             Some(m) => (m.unit, m.angle, m.precision),
-            None => (self.shell.units, self.shell.settings.angle, self.shell.settings.decimals),
+            None => (
+                self.shell.units,
+                self.shell.settings.angle,
+                self.shell.settings.decimals,
+            ),
         };
         let mut out: Vec<String> = targets.iter().map(|t| t.1.clone()).collect();
         out[0] = format!("Measured: {}", out.join(" and "));

@@ -2070,7 +2070,12 @@ impl Renderer {
             .marks
             .iter()
             .take(MARKS)
-            .map(|m| (m.placement | if m.selected { SELECTED_BIT } else { 0 } | if m.second { SECOND_BIT } else { 0 }).to_le_bytes())
+            .map(|m| {
+                (m.placement
+                    | if m.selected { SELECTED_BIT } else { 0 }
+                    | if m.second { SECOND_BIT } else { 0 })
+                .to_le_bytes()
+            })
             .collect();
         if !marked.is_empty() {
             self.queue.write_buffer(&self.marks, 0, marked.as_flattened());

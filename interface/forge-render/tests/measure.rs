@@ -58,7 +58,15 @@ fn hover(h: &mut Headless, world: [f32; 3]) -> ((f32, f32), Option<(u32, Entity)
             break;
         }
     }
-    let got = h.gui.view.as_ref().unwrap().nav.marks().into_iter().rfind(|m| !m.selected);
+    let got = h
+        .gui
+        .view
+        .as_ref()
+        .unwrap()
+        .nav
+        .marks()
+        .into_iter()
+        .rfind(|m| !m.selected);
     (at, got.map(|m| (m.placement, m.entity)))
 }
 
@@ -67,7 +75,12 @@ const TOP: [f32; 3] = [30.0, 22.0, 12.0];
 const BOSS_TOP: [f32; 3] = [4.0, 4.0, 20.0];
 
 fn picks(h: &Headless) -> Vec<(u32, Entity)> {
-    h.gui.shell.inspect.measure.as_ref().map_or(vec![], |m| m.marked())
+    h.gui
+        .shell
+        .inspect
+        .measure
+        .as_ref()
+        .map_or(vec![], |m| m.marked())
 }
 
 fn measure(h: &mut Headless) {
@@ -148,14 +161,25 @@ fn measuring_feeds_no_other_pick_the_browser_or_a_feature_dialog() {
     assert_eq!(picks(&h), vec![e]);
     let p = h.gui.shell.fg.as_ref().unwrap();
     assert!(p.picked.is_none() && h.gui.shell.selected.is_none() && h.gui.shell.dim.is_none());
-    assert!(!h.gui.shell.status.starts_with("Picked"), "{}", h.gui.shell.status);
+    assert!(
+        !h.gui.shell.status.starts_with("Picked"),
+        "{}",
+        h.gui.shell.status
+    );
     // a Fillet dialog waiting for edges takes none of Measure's
     h.gui.fg_open_tool("fillet");
     h.step();
     let f = click(&mut h, TOP);
     let tool = h.gui.shell.fg.as_ref().unwrap().tool.as_ref().unwrap();
-    assert!(tool.slots.iter().all(|s| s.picks.is_empty()), "the fillet took Measure's pick");
-    assert!(tool.error.is_none(), "the fillet was given Measure's face: {:?}", tool.error);
+    assert!(
+        tool.slots.iter().all(|s| s.picks.is_empty()),
+        "the fillet took Measure's pick"
+    );
+    assert!(
+        tool.error.is_none(),
+        "the fillet was given Measure's face: {:?}",
+        tool.error
+    );
     assert_eq!(picks(&h), vec![e, f]);
     // what the view marks is what's measured
     assert_eq!(h.gui.view.as_ref().unwrap().nav.selected, vec![e, f]);
@@ -191,7 +215,10 @@ fn a_window_drag_while_measuring_changes_nothing_picked() {
     h.button(true);
     h.step();
     for k in 1..=10 {
-        h.move_to(r.left() + 20.0 + 60.0 * k as f32, r.bottom() - 20.0 - 40.0 * k as f32);
+        h.move_to(
+            r.left() + 20.0 + 60.0 * k as f32,
+            r.bottom() - 20.0 - 40.0 * k as f32,
+        );
         h.step();
     }
     h.button(false);
@@ -260,7 +287,9 @@ fn value(text: &str, label: &str) -> f64 {
 }
 
 fn measured(h: &mut Headless, a: &str, b: Option<&str>) -> String {
-    h.gui.measure(a, b).unwrap_or_else(|e| panic!("measure({a}, {b:?}): {e}"))
+    h.gui
+        .measure(a, b)
+        .unwrap_or_else(|e| panic!("measure({a}, {b:?}): {e}"))
 }
 
 #[track_caller]
@@ -294,7 +323,10 @@ fn every_kind_of_reading_on_the_demo_part_is_exact() {
     close(value(&t, "Radius"), 4.5);
     close(value(&t, "Area"), 2.0 * PI * 4.5 * 3.0);
     // the counterbore's seat: a ring
-    close(value(&measured(&mut h, "hole1.seat", None), "Area"), PI * (4.5 * 4.5 - 2.5 * 2.5));
+    close(
+        value(&measured(&mut h, "hole1.seat", None), "Area"),
+        PI * (4.5 * 4.5 - 2.5 * 2.5),
+    );
     // an edge: the base's back bottom edge, and the loop round the bottom it's in
     let back = "edges(between: (extrude1.side(sk1.r1[2]), extrude1.start))";
     let front = "edges(between: (extrude1.side(sk1.r1[0]), extrude1.start))";
@@ -306,9 +338,18 @@ fn every_kind_of_reading_on_the_demo_part_is_exact() {
     close(value(&t, "Minimum distance"), 60.0);
     close(value(&t, "Maximum distance"), 100.0);
     // a side and the bottom: square
-    close(value(&measured(&mut h, "extrude1.side(sk1.r1[1])", Some("extrude1.start")), "Angle"), 90.0);
+    close(
+        value(
+            &measured(&mut h, "extrude1.side(sk1.r1[1])", Some("extrude1.start")),
+            "Angle",
+        ),
+        90.0,
+    );
     // origin items: the XY plane to the boss's top, the Z axis to the hole 20 off it
-    close(value(&measured(&mut h, "xy", Some("extrude2.end")), "Minimum distance"), 20.0);
+    close(
+        value(&measured(&mut h, "xy", Some("extrude2.end")), "Minimum distance"),
+        20.0,
+    );
     let t = measured(&mut h, "z", Some("hole1.bore"));
     close(value(&t, "Axis to axis"), 20.0);
     close(value(&t, "Minimum distance"), 20.0 - 4.5);
@@ -358,7 +399,10 @@ fn in_the_rack_occurrences_are_measured_where_they_stand() {
     close(rr.1, 825.0 - lf.1);
     close(rr.2, lf.2);
     let t = measured(&mut h, "rail_lf/vertex:0", Some("rail_rr/vertex:0"));
-    close(value(&t, "Minimum distance"), ((rr.0 - lf.0).powi(2) + (rr.1 - lf.1).powi(2)).sqrt());
+    close(
+        value(&t, "Minimum distance"),
+        ((rr.0 - lf.0).powi(2) + (rr.1 - lf.1).powi(2)).sqrt(),
+    );
     // the pans: the top pan's outer face at 906 (SPEC 5.2), so the gap is 906 less both pans
     let hb = value(&measured(&mut h, "base_pan/body", None), "Box Z");
     let ht = value(&measured(&mut h, "top_pan/body", None), "Box Z");
@@ -392,7 +436,11 @@ fn the_dimensions_stay_on_the_model_as_it_turns_and_sit_under_the_panel() {
     let on_screen = |h: &Headless| {
         let (cam, size) = h.gui.shell.camera.unwrap();
         let p = cam
-            .pixel_of([centre.x as f32, centre.y as f32, centre.z as f32], size.0, size.1)
+            .pixel_of(
+                [centre.x as f32, centre.y as f32, centre.z as f32],
+                size.0,
+                size.1,
+            )
             .unwrap();
         let v = h.gui.shell.view_rect;
         egui::pos2(v.min.x + p.0, v.min.y + p.1)
@@ -412,7 +460,10 @@ fn the_dimensions_stay_on_the_model_as_it_turns_and_sit_under_the_panel() {
     h.step();
     let after = place(&h, "measure:mark:Area");
     let anchor = on_screen(&h);
-    assert!((after.center() - before.center()).length() > 5.0, "the label didn't move with the view");
+    assert!(
+        (after.center() - before.center()).length() > 5.0,
+        "the label didn't move with the view"
+    );
     assert!((after.center() - (anchor + egui::vec2(28.0, -28.0))).length() < 1.0);
     // the panel dragged over the label: the panel's what shows there
     let bodies = place(&h, "measure:filter:Bodies");
@@ -436,11 +487,18 @@ fn the_dimensions_stay_on_the_model_as_it_turns_and_sit_under_the_panel() {
     let label = place(&h, "measure:mark:Area").center();
     let bodies = place(&h, "measure:filter:Bodies");
     let blank = egui::pos2(bodies.right() + 30.0, bodies.center().y);
-    assert!((blank - label).length() < 3.0, "the panel didn't land on the label: {blank:?} {label:?}");
+    assert!(
+        (blank - label).length() < 3.0,
+        "the panel didn't land on the label: {blank:?} {label:?}"
+    );
     let px = h.gui_pixels();
     let at = |p: egui::Pos2| px.at(p.x as usize, p.y as usize);
     let s = h.gui.shell.theme.surface;
-    assert_eq!(at(label), [s.r(), s.g(), s.b()], "the label shows through the panel");
+    assert_eq!(
+        at(label),
+        [s.r(), s.g(), s.b()],
+        "the label shows through the panel"
+    );
 }
 
 #[test]
@@ -453,21 +511,47 @@ fn the_selection_priority_picks_faces_edges_points_or_whole_bodies() {
         h.step();
         h.step();
     };
-    let first = |h: &Headless| h.gui.shell.inspect.measure.as_ref().unwrap().picks.first().cloned();
+    let first = |h: &Headless| {
+        h.gui
+            .shell
+            .inspect
+            .measure
+            .as_ref()
+            .unwrap()
+            .picks
+            .first()
+            .cloned()
+    };
     set(&mut h, Filter::Edges);
     click(&mut h, TOP);
-    assert!(matches!(first(&h), Some(MPick::Ent(_, Entity::Edge(_)))), "{:?}", first(&h));
-    assert!(reading(&mut h).get(forge_agent::measure::Quantity::Length).is_some());
+    assert!(
+        matches!(first(&h), Some(MPick::Ent(_, Entity::Edge(_)))),
+        "{:?}",
+        first(&h)
+    );
+    assert!(
+        reading(&mut h)
+            .get(forge_agent::measure::Quantity::Length)
+            .is_some()
+    );
     set(&mut h, Filter::Points);
     click(&mut h, TOP);
-    assert!(matches!(first(&h), Some(MPick::Ent(_, Entity::Vertex(_)))), "{:?}", first(&h));
+    assert!(
+        matches!(first(&h), Some(MPick::Ent(_, Entity::Vertex(_)))),
+        "{:?}",
+        first(&h)
+    );
     // a click on an edge with faces first: the face of it turned to the eye
     set(&mut h, Filter::Faces);
     let (_, under) = hover(&mut h, [0.0, -30.0, 12.0]);
     assert!(matches!(under, Some((_, Entity::Edge(_)))), "{under:?}");
     // marked before it's clicked, as what it'll pick
     let m = h.gui.shell.inspect.measure.as_ref().unwrap();
-    assert!(matches!(m.hover, Some(MPick::Ent(_, Entity::Face(_)))), "{:?}", m.hover);
+    assert!(
+        matches!(m.hover, Some(MPick::Ent(_, Entity::Face(_)))),
+        "{:?}",
+        m.hover
+    );
     click(&mut h, [0.0, -30.0, 12.0]);
     assert!(matches!(first(&h), Some(MPick::Ent(_, Entity::Face(_)))));
     set(&mut h, Filter::Bodies);
@@ -496,7 +580,12 @@ fn accumulate_adds_up_what_it_is_given() {
     h.step();
     h.step();
     let m = h.gui.shell.inspect.measure.as_ref().unwrap();
-    let total: f64 = m.accum.iter().filter(|x| x.q == Quantity::Area).map(|x| x.x).sum();
+    let total: f64 = m
+        .accum
+        .iter()
+        .filter(|x| x.q == Quantity::Area)
+        .map(|x| x.x)
+        .sum();
     assert!((total - 2.0 * a).abs() < 1e-9);
     assert!(h.gui.shell.place("measure:accum:Areas").is_some());
     assert!(h.click("measure:clear"));
@@ -525,7 +614,13 @@ fn origin_items_from_the_browser_and_sketch_geometry_are_picked() {
     let Some(forge_lang::eval::Value::Plane(p)) = forge_lang::builtins::constant("xy") else {
         panic!("xy")
     };
-    let mut m = SketchMode::new(SketchFor::New, "xy".into(), p.frame, vec!["line -60 -50 -20 -50".into()], None);
+    let mut m = SketchMode::new(
+        SketchFor::New,
+        "xy".into(),
+        p.frame,
+        vec!["line -60 -50 -20 -50".into()],
+        None,
+    );
     m.units = "mm";
     h.gui.shell.sketch = Some(m);
     h.gui.shell.tab = 1;
@@ -543,7 +638,11 @@ fn origin_items_from_the_browser_and_sketch_geometry_are_picked() {
         h.step();
     }
     let me = h.gui.shell.inspect.measure.as_ref().unwrap();
-    assert!(matches!(me.picks.first(), Some(MPick::Free(Free::Segment(..), _))), "{:?}", me.picks);
+    assert!(
+        matches!(me.picks.first(), Some(MPick::Free(Free::Segment(..), _))),
+        "{:?}",
+        me.picks
+    );
     assert!((reading(&mut h).get(Quantity::Length).unwrap() - 40.0).abs() < 1e-9);
 }
 
@@ -569,7 +668,11 @@ fn measuring_goes_on_across_the_tabs() {
 
 /// Pixels changed between two frames, off the part and off the panels: a face's tint stays on
 /// the face.
-fn changed_off_the_part(h: &Headless, before: &forge_render::gui::Pixels, after: &forge_render::gui::Pixels) -> usize {
+fn changed_off_the_part(
+    h: &Headless,
+    before: &forge_render::gui::Pixels,
+    after: &forge_render::gui::Pixels,
+) -> usize {
     let (cam, size) = h.gui.shell.camera.unwrap();
     let r = h.gui.shell.view_rect;
     let mut lo = egui::pos2(f32::MAX, f32::MAX);
@@ -644,7 +747,10 @@ fn tinted_on_itself(world: [f32; 3], tag: &str) {
     }
     let hovered = h.gui_pixels();
     let n = changed_off_the_part(&h, &before, &hovered);
-    assert!(n < 50, "{n} pixels off the part changed with the face picked and hovered");
+    assert!(
+        n < 50,
+        "{n} pixels off the part changed with the face picked and hovered"
+    );
     h.move_to(5.0, 5.0);
     for _ in 0..10 {
         h.step();
@@ -684,10 +790,17 @@ fn the_deltas_follow_the_distance_chosen_and_the_view_draws_that_one() {
     measure(&mut h);
     let r = read_free(
         &mut h,
-        vec![Free::Circle(Point3::new(0.0, 0.0, 30.0), Vec3::Z, 3.0), Free::Point(Point3::new(10.0, 0.0, 34.0))],
+        vec![
+            Free::Circle(Point3::new(0.0, 0.0, 30.0), Vec3::Z, 3.0),
+            Free::Point(Point3::new(10.0, 0.0, 34.0)),
+        ],
     );
     assert!(r.get(Quantity::CentreDistance).is_some() && r.get(Quantity::MaxDistance).is_some());
-    assert!(marks(&h).contains(&"Minimum distance".to_string()), "{:?}", marks(&h));
+    assert!(
+        marks(&h).contains(&"Minimum distance".to_string()),
+        "{:?}",
+        marks(&h)
+    );
     assert!(!marks(&h).contains(&"Center to center".to_string()));
     assert!(h.click("measure:follow:Center"));
     h.step();
@@ -695,7 +808,10 @@ fn the_deltas_follow_the_distance_chosen_and_the_view_draws_that_one() {
     let m = h.gui.shell.inspect.measure.as_ref().unwrap();
     assert_eq!(m.follow, Follow::Centre);
     let ms = marks(&h);
-    assert!(ms.contains(&"Center to center".to_string()) && !ms.contains(&"Minimum distance".to_string()), "{ms:?}");
+    assert!(
+        ms.contains(&"Center to center".to_string()) && !ms.contains(&"Minimum distance".to_string()),
+        "{ms:?}"
+    );
     // centre (0, 0, 30) to (10, 0, 34)
     let v = panel_values(&r, Follow::Centre, None, false);
     let get = |q| v.iter().find(|x| x.0 == q).unwrap().1;
@@ -705,7 +821,11 @@ fn the_deltas_follow_the_distance_chosen_and_the_view_draws_that_one() {
     let v = panel_values(&r, Follow::Max, None, false);
     close(v.iter().find(|x| x.0 == Quantity::Dx).unwrap().1, 13.0);
     // and with the deltas hidden, none listed
-    assert!(panel_values(&r, Follow::Min, None, true).iter().all(|x| !matches!(x.0, Quantity::Dx | Quantity::Dy | Quantity::Dz)));
+    assert!(
+        panel_values(&r, Follow::Min, None, true)
+            .iter()
+            .all(|x| !matches!(x.0, Quantity::Dx | Quantity::Dy | Quantity::Dz))
+    );
     // a value clicked: drawn forward, and a distance clicked is the one followed
     assert!(h.click("measure:label:Maximum distance"));
     h.step();
@@ -732,12 +852,23 @@ fn advanced_settings_give_a_second_unit_and_a_coordinate_system() {
     for p in ["measure:dual", "measure:ucs", "measure:delta"] {
         assert!(h.gui.shell.place(p).is_some(), "no {p}");
     }
-    assert_eq!(shown_dual(Quantity::Length, 25.4, ("mm", "deg"), 3, Some("in")), "25.400 mm (1.000 in)");
-    assert_eq!(shown_dual(Quantity::Angle, 90.0, ("mm", "deg"), 1, Some("in")), "90.0°");
+    assert_eq!(
+        shown_dual(Quantity::Length, 25.4, ("mm", "deg"), 3, Some("in")),
+        "25.400 mm (1.000 in)"
+    );
+    assert_eq!(
+        shown_dual(Quantity::Angle, 90.0, ("mm", "deg"), 1, Some("in")),
+        "90.0°"
+    );
     // a point in a sketch's frame: sk2 sits on the base's top, 12 up
     let r = read_free(&mut h, vec![Free::Point(Point3::new(3.0, 4.0, 17.0))]);
     let fg = h.gui.shell.fg.as_ref().unwrap();
-    let frame = fg.feats.iter().find(|f| f.id == "sk2").and_then(|f| f.frame).expect("sk2's frame");
+    let frame = fg
+        .feats
+        .iter()
+        .find(|f| f.id == "sk2")
+        .and_then(|f| f.frame)
+        .expect("sk2's frame");
     let v = panel_values(&r, Follow::Min, Some(&frame), false);
     let local = frame.point_to_local(Point3::new(3.0, 4.0, 17.0));
     close(v.iter().find(|x| x.0 == Quantity::Z).unwrap().1, local.z);
@@ -762,7 +893,17 @@ fn accumulate_adds_takes_away_and_deletes_a_value_or_a_group() {
     assert!(h.click("measure:add:Perimeter"));
     h.step();
     let total = |h: &Headless, q: Quantity| -> f64 {
-        h.gui.shell.inspect.measure.as_ref().unwrap().accum.iter().filter(|x| x.q == q).map(|x| x.x).sum()
+        h.gui
+            .shell
+            .inspect
+            .measure
+            .as_ref()
+            .unwrap()
+            .accum
+            .iter()
+            .filter(|x| x.q == q)
+            .map(|x| x.x)
+            .sum()
     };
     assert!((total(&h, Quantity::Area) - a).abs() < 1e-9);
     assert!((total(&h, Quantity::Perimeter) - p).abs() < 1e-9);
@@ -775,7 +916,11 @@ fn accumulate_adds_takes_away_and_deletes_a_value_or_a_group() {
     h.step();
     let m = h.gui.shell.inspect.measure.as_ref().unwrap();
     assert_eq!(m.accum.len(), 2);
-    assert!(m.accum.iter().all(|x| x.q == Quantity::Area && !x.what.is_empty()));
+    assert!(
+        m.accum
+            .iter()
+            .all(|x| x.q == Quantity::Area && !x.what.is_empty())
+    );
 }
 
 #[test]
@@ -833,13 +978,39 @@ fn measure_from_a_dialog_field_puts_the_value_in_it() {
     for _ in 0..4 {
         h.step();
     }
-    let tool = h.gui.shell.fg.as_ref().unwrap().tool.as_ref().expect("the extrude's dialog");
-    let name = tool.params.iter().find(|p| p.dim == Dim::Length).expect("a length").name;
+    let tool = h
+        .gui
+        .shell
+        .fg
+        .as_ref()
+        .unwrap()
+        .tool
+        .as_ref()
+        .expect("the extrude's dialog");
+    let name = tool
+        .params
+        .iter()
+        .find(|p| p.dim == Dim::Length)
+        .expect("a length")
+        .name;
     h.gui.shell.measure_into_param(name);
     h.step();
     h.step();
-    assert!(h.gui.shell.inspect.measure.as_ref().is_some_and(|m| m.into.is_some()));
-    let _ = read_free(&mut h, vec![Free::Point(Point3::new(0.0, 0.0, 0.0)), Free::Point(Point3::new(0.0, 0.0, 17.5))]);
+    assert!(
+        h.gui
+            .shell
+            .inspect
+            .measure
+            .as_ref()
+            .is_some_and(|m| m.into.is_some())
+    );
+    let _ = read_free(
+        &mut h,
+        vec![
+            Free::Point(Point3::new(0.0, 0.0, 0.0)),
+            Free::Point(Point3::new(0.0, 0.0, 17.5)),
+        ],
+    );
     for _ in 0..3 {
         h.step();
     }
@@ -847,7 +1018,10 @@ fn measure_from_a_dialog_field_puts_the_value_in_it() {
     assert!(h.gui.shell.place("measure:use:Angle").is_none());
     assert!(h.click("measure:use:Minimum distance"));
     h.step();
-    assert!(h.gui.shell.inspect.measure.is_none(), "Measure is done once a value is used");
+    assert!(
+        h.gui.shell.inspect.measure.is_none(),
+        "Measure is done once a value is used"
+    );
     let tool = h.gui.shell.fg.as_ref().unwrap().tool.as_ref().unwrap();
     assert_eq!(tool.params.iter().find(|p| p.name == name).unwrap().text, "17.5");
 }

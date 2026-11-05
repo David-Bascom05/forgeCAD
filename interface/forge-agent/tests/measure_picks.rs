@@ -197,15 +197,28 @@ fn work_features_origin_items_and_sketch_geometry_measure_against_faces() {
     let z = Target::Free(Free::Axis(Point3::ORIGIN, Vec3::Z));
     let side = face(Point3::new(50.0, 0.0, 10.0));
     let r = read_pair(&z, &side);
-    assert!(near(r.get(Q::Distance), 50.0) && near(r.get(Q::Angle), 0.0), "{r:?}");
+    assert!(
+        near(r.get(Q::Distance), 50.0) && near(r.get(Q::Angle), 0.0),
+        "{r:?}"
+    );
     // the Z axis and a hole's bore: axis to axis, 20
     let bore = face(Point3::new(25.0, 0.0, 10.0));
     assert!(near(read_pair(&z, &bore).get(Q::AxisDistance), 20.0));
     // a sketch line square to the top face: 90 degrees, its arc drawn at their corner
-    let up = Target::Free(Free::Segment(Point3::new(0.0, 0.0, 30.0), Point3::new(0.0, 0.0, 40.0)));
+    let up = Target::Free(Free::Segment(
+        Point3::new(0.0, 0.0, 30.0),
+        Point3::new(0.0, 0.0, 40.0),
+    ));
     let r = read_pair(&up, &top);
-    assert!(near(r.get(Q::Angle), 90.0) && near(r.get(Q::Distance), 10.0), "{r:?}");
-    assert!(r.shown.iter().any(|s| matches!(s, Shown::Angle(_, _, _, d) if (d - 90.0).abs() < 1e-9)));
+    assert!(
+        near(r.get(Q::Angle), 90.0) && near(r.get(Q::Distance), 10.0),
+        "{r:?}"
+    );
+    assert!(
+        r.shown
+            .iter()
+            .any(|s| matches!(s, Shown::Angle(_, _, _, d) if (d - 90.0).abs() < 1e-9))
+    );
     // a sketch circle: its own sizes
     let c = read(&Target::Free(Free::Circle(Point3::ORIGIN, Vec3::Z, 5.0)));
     assert!(near(c.get(Q::Diameter), 10.0) && near(c.get(Q::Length), std::f64::consts::TAU * 5.0));
@@ -214,7 +227,10 @@ fn work_features_origin_items_and_sketch_geometry_measure_against_faces() {
 #[test]
 fn the_maximum_distance_of_points_lines_and_circles_in_one_plane() {
     let seg = |a: (f64, f64), b: (f64, f64)| {
-        Target::Free(Free::Segment(Point3::new(a.0, a.1, 0.0), Point3::new(b.0, b.1, 0.0)))
+        Target::Free(Free::Segment(
+            Point3::new(a.0, a.1, 0.0),
+            Point3::new(b.0, b.1, 0.0),
+        ))
     };
     let r = read_pair(&seg((0.0, 0.0), (10.0, 0.0)), &seg((0.0, 5.0), (10.0, 5.0)));
     assert!(near(r.get(Q::Distance), 5.0));
@@ -240,7 +256,10 @@ fn two_faces_at_an_angle_draw_it_at_their_common_edge_and_a_face_is_tinted() {
         })
     };
     // the side at x = 40 and the bevel from (40, 20) to (20, 40): 45 degrees between them
-    let (side, bevel) = (pick(Point3::new(40.0, 10.0, 10.0)), pick(Point3::new(30.0, 30.0, 10.0)));
+    let (side, bevel) = (
+        pick(Point3::new(40.0, 10.0, 10.0)),
+        pick(Point3::new(30.0, 30.0, 10.0)),
+    );
     let r = read_pair(&side, &bevel);
     assert!(near(r.get(Q::Angle), 45.0), "{r:?}");
     let arc = r.shown.iter().find_map(|s| match s {
@@ -259,7 +278,11 @@ fn two_faces_at_an_angle_draw_it_at_their_common_edge_and_a_face_is_tinted() {
         .shown
         .iter()
         .filter_map(|s| match s {
-            Shown::Face(t, _) => Some(t.iter().map(|[a, b, c]| (*b - *a).cross(*c - *a).length() / 2.0).sum::<f64>()),
+            Shown::Face(t, _) => Some(
+                t.iter()
+                    .map(|[a, b, c]| (*b - *a).cross(*c - *a).length() / 2.0)
+                    .sum::<f64>(),
+            ),
             _ => None,
         })
         .sum();
@@ -280,7 +303,10 @@ fn a_whole_body_reads_its_volume_mass_and_box_where_it_stands() {
     let r = read(&w);
     assert!(near(r.get(Q::Volume), 120_000.0), "{r:?}");
     assert!((r.get(Q::Mass).unwrap() - 0.324).abs() < 1e-9);
-    assert!(near(r.get(Q::SizeX), 100.0) && near(r.get(Q::SizeY), 60.0) && near(r.get(Q::SizeZ), 20.0), "{r:?}");
+    assert!(
+        near(r.get(Q::SizeX), 100.0) && near(r.get(Q::SizeY), 60.0) && near(r.get(Q::SizeZ), 20.0),
+        "{r:?}"
+    );
     // two bodies, one moved 150 along x: 50 apart
     let w2 = Target::Whole(Whole {
         body: &b,
@@ -344,7 +370,11 @@ fn three_points_read_the_angle_at_the_middle_one() {
     let p = |x: f64, y: f64| Target::Free(Free::Point(Point3::new(x, y, 0.0)));
     let r = read_three(&p(10.0, 0.0), &p(0.0, 0.0), &p(0.0, 5.0));
     assert!(near(r.get(Q::Angle), 90.0), "{r:?}");
-    assert!(r.shown.iter().any(|s| matches!(s, Shown::Angle(v, ..) if v.distance(Point3::ORIGIN) < 1e-12)));
+    assert!(
+        r.shown
+            .iter()
+            .any(|s| matches!(s, Shown::Angle(v, ..) if v.distance(Point3::ORIGIN) < 1e-12))
+    );
     let r = read_three(&p(1.0, 0.0), &p(0.0, 0.0), &p(1.0, 1.0));
     assert!(near(r.get(Q::Angle), 45.0), "{r:?}");
 }
@@ -362,8 +392,17 @@ fn a_sketch_loop_reads_its_area_and_perimeter_labelled_inside() {
         perimeter: 14.0,
         inside: Point3::new(2.0, 1.5, 1.0),
     }));
-    assert!(near(r.get(Q::Area), 12.0) && near(r.get(Q::Perimeter), 14.0), "{r:?}");
-    assert!(matches!(r.shown.first(), Some(Shown::Face(t, c)) if t.is_empty() && c.distance(Point3::new(2.0, 1.5, 1.0)) < 1e-12));
+    assert!(
+        near(r.get(Q::Area), 12.0) && near(r.get(Q::Perimeter), 14.0),
+        "{r:?}"
+    );
+    assert!(
+        matches!(r.shown.first(), Some(Shown::Face(t, c)) if t.is_empty() && c.distance(Point3::new(2.0, 1.5, 1.0)) < 1e-12)
+    );
     // drawn closed
-    assert!(r.shown.iter().any(|s| matches!(s, Shown::Curve(p, Q::Perimeter) if p.len() == 5)));
+    assert!(
+        r.shown
+            .iter()
+            .any(|s| matches!(s, Shown::Curve(p, Q::Perimeter) if p.len() == 5))
+    );
 }

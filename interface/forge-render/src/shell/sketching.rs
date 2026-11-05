@@ -1576,20 +1576,28 @@ impl SketchMode {
     /// As `measure_word`, and where there's no point or curve, the closed region the pointer's
     /// in (Inventor's Detect Sketch Loops), the smallest if they nest.
     pub fn measure_word_or_loop(&self, at: (f64, f64), reach: f64, loops: bool) -> Option<String> {
-        self.measure_word(at, reach)
-            .or_else(|| loops.then(|| self.loop_at(at)).flatten().map(|k| format!("loop:{k}")))
+        self.measure_word(at, reach).or_else(|| {
+            loops
+                .then(|| self.loop_at(at))
+                .flatten()
+                .map(|k| format!("loop:{k}"))
+        })
     }
 
     /// The sketch's loops as Measure takes them: each closed region (its outside, its holes,
     /// its exact area and perimeter), and each hole that's no region of its own as one.
     fn measure_loops(&self) -> Vec<(Vec<Vec<Point2>>, f64, f64)> {
-        let Some(s) = self.solved.as_ref() else { return vec![] };
+        let Some(s) = self.solved.as_ref() else {
+            return vec![];
+        };
         let rs = sk::regions(s);
         let same = |a: &[Point2], b: &[Point2]| {
             a.len() == b.len() && a.iter().all(|p| b.iter().any(|q| (*p - *q).length() < 1e-9))
         };
-        let mut out: Vec<(Vec<Vec<Point2>>, f64, f64)> =
-            rs.iter().map(|r| (r.loops.clone(), r.area, r.perimeter)).collect();
+        let mut out: Vec<(Vec<Vec<Point2>>, f64, f64)> = rs
+            .iter()
+            .map(|r| (r.loops.clone(), r.area, r.perimeter))
+            .collect();
         for r in &rs {
             for (k, h) in r.loops.iter().enumerate().skip(1) {
                 if !rs.iter().any(|o| o.loops.first().is_some_and(|f| same(f, h))) {
@@ -1623,7 +1631,10 @@ impl SketchMode {
             let (loops, area, perimeter) = self.measure_loops().into_iter().nth(k)?;
             let inside = inside_point(&loops);
             return Some(Free::Loop {
-                loops: loops.iter().map(|l| l.iter().map(|q| w((q.x, q.y))).collect()).collect(),
+                loops: loops
+                    .iter()
+                    .map(|l| l.iter().map(|q| w((q.x, q.y))).collect())
+                    .collect(),
                 area,
                 perimeter,
                 inside: w((inside.x, inside.y)),
@@ -1659,8 +1670,12 @@ impl SketchMode {
         // a region: round its outside
         if let Some(k) = word.strip_prefix("loop:").and_then(|k| k.parse::<usize>().ok()) {
             let _ = s;
-            let Some((loops, _, _)) = self.measure_loops().into_iter().nth(k) else { return Vec::new() };
-            let mut o: Vec<(f64, f64)> = loops.first().map_or(vec![], |o| o.iter().map(|q| (q.x, q.y)).collect());
+            let Some((loops, _, _)) = self.measure_loops().into_iter().nth(k) else {
+                return Vec::new();
+            };
+            let mut o: Vec<(f64, f64)> = loops
+                .first()
+                .map_or(vec![], |o| o.iter().map(|q| (q.x, q.y)).collect());
             o.extend(o.first().copied());
             return o;
         }
@@ -2568,7 +2583,11 @@ fn inside_point(loops: &[Vec<Point2>]) -> Point2 {
         cx += (p.x + q.x) * c;
         cy += (p.y + q.y) * c;
     }
-    let c = if a.abs() > 1e-12 { Point2::new(cx / (3.0 * a), cy / (3.0 * a)) } else { o[0] };
+    let c = if a.abs() > 1e-12 {
+        Point2::new(cx / (3.0 * a), cy / (3.0 * a))
+    } else {
+        o[0]
+    };
     let within = |p: Point2| in_polygon(o, p) && !loops[1..].iter().any(|h| in_polygon(h, p));
     if within(c) {
         return c;
@@ -2928,7 +2947,13 @@ mod tests {
         m.set_tool(None);
         // inside the rectangle, outside the circle: the rectangle less the hole
         let w = m.measure_word_or_loop((6.0, 6.0), 0.5, true).expect("a region");
-        let Some(Free::Loop { area, perimeter, loops, inside }) = m.measure_free(&w) else {
+        let Some(Free::Loop {
+            area,
+            perimeter,
+            loops,
+            inside,
+        }) = m.measure_free(&w)
+        else {
             panic!("{w}: no loop");
         };
         assert!((area - (300.0 - 4.0 * PI)).abs() < 1e-9, "{area}");
@@ -2937,12 +2962,20 @@ mod tests {
         // labelled inside it, not in the hole
         assert!(inside.x * inside.x + inside.y * inside.y > 4.0, "{inside:?}");
         // in the circle: the circle's own
-        let w = m.measure_word_or_loop((0.5, 0.3), 0.1, true).expect("the circle's region");
-        let Some(Free::Loop { area, .. }) = m.measure_free(&w) else { panic!() };
+        let w = m
+            .measure_word_or_loop((0.5, 0.3), 0.1, true)
+            .expect("the circle's region");
+        let Some(Free::Loop { area, .. }) = m.measure_free(&w) else {
+            panic!()
+        };
         assert!((area - 4.0 * PI).abs() < 1e-9, "{area}");
         // Detect Sketch Loops off: nothing there; and a curve under the pointer comes first
         assert!(m.measure_word_or_loop((6.0, 6.0), 0.5, false).is_none());
-        assert!(!m.measure_word_or_loop((10.0, 2.0), 0.5, true).unwrap().starts_with("loop:"));
+        assert!(
+            !m.measure_word_or_loop((10.0, 2.0), 0.5, true)
+                .unwrap()
+                .starts_with("loop:")
+        );
     }
 
     #[test]

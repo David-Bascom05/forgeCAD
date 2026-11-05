@@ -181,8 +181,12 @@ fn value_row(
     // as Inventor's value fields: Measure, and the value measured goes in
     if let Some(param) = measure {
         edit.context_menu(|ui| {
-            if ui.button(egui::RichText::new("Measure...").font(sans(12.0))).clicked() {
-                ui.ctx().data_mut(|d| d.insert_temp(egui::Id::unique(MEASURE_PARAM), param));
+            if ui
+                .button(egui::RichText::new("Measure...").font(sans(12.0)))
+                .clicked()
+            {
+                ui.ctx()
+                    .data_mut(|d| d.insert_temp(egui::Id::unique(MEASURE_PARAM), param));
                 ui.close();
             }
         });
@@ -341,7 +345,8 @@ impl Shell {
     /// The open Forge tool's dialog, over the view's top left.
     pub(super) fn fg_dialog(&mut self, ctx: &egui::Context) {
         // a field's Measure... last frame
-        if let Some(param) = ctx.data_mut(|d| d.remove_temp::<&'static str>(egui::Id::unique(MEASURE_PARAM))) {
+        if let Some(param) = ctx.data_mut(|d| d.remove_temp::<&'static str>(egui::Id::unique(MEASURE_PARAM)))
+        {
             self.measure_into_param(param);
         }
         let t = self.theme;

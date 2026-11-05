@@ -41,12 +41,18 @@ fn group_quantity(power: u8) -> Quantity {
 }
 
 /// Selection 1's and 2's colours, as Inventor shows each set in its own.
-const SET_INK: [Color32; 2] = [Color32::from_rgb(0xF0, 0x90, 0x30), Color32::from_rgb(0x40, 0xC8, 0x90)];
+const SET_INK: [Color32; 2] = [
+    Color32::from_rgb(0xF0, 0x90, 0x30),
+    Color32::from_rgb(0x40, 0xC8, 0x90),
+];
 
 /// What's added up: the values Inventor's Accumulate takes (lengths, angles, areas, volumes,
 /// masses; not coordinates or deltas).
 fn adds_up(q: Quantity) -> bool {
-    !matches!(q, Quantity::X | Quantity::Y | Quantity::Z | Quantity::Dx | Quantity::Dy | Quantity::Dz)
+    !matches!(
+        q,
+        Quantity::X | Quantity::Y | Quantity::Z | Quantity::Dx | Quantity::Dy | Quantity::Dz
+    )
 }
 
 impl Shell {
@@ -69,7 +75,12 @@ impl Shell {
         let frames: Vec<(String, forge_math::Frame)> = self
             .fg
             .as_ref()
-            .map(|f| f.feats.iter().filter_map(|r| r.frame.map(|fr| (r.id.clone(), fr))).collect())
+            .map(|f| {
+                f.feats
+                    .iter()
+                    .filter_map(|r| r.frame.map(|fr| (r.id.clone(), fr)))
+                    .collect()
+            })
             .unwrap_or_default();
         let m = self.inspect.measure.as_mut()?;
         let title = if m.wall { "Wall Thickness" } else { "Measure" };
@@ -112,11 +123,15 @@ impl Shell {
             });
             ui.add_space(2.0);
             for k in 0..m.picks.len().max(2) {
-                let name = m.names.get(k).cloned().unwrap_or_else(|| match (k, m.picks.len()) {
-                    (0, _) => "Pick anything: a face, edge, point, plane, body".into(),
-                    (1, 0) => String::new(),
-                    _ => "A second, to measure between".into(),
-                });
+                let name = m
+                    .names
+                    .get(k)
+                    .cloned()
+                    .unwrap_or_else(|| match (k, m.picks.len()) {
+                        (0, _) => "Pick anything: a face, edge, point, plane, body".into(),
+                        (1, 0) => String::new(),
+                        _ => "A second, to measure between".into(),
+                    });
                 ui.horizontal(|ui| {
                     ui.add_sized(
                         vec2(70.0, 16.0),
@@ -135,13 +150,22 @@ impl Shell {
             let col = if m.label_w > 0.0 { m.label_w } else { LABEL_W };
             let dual = m.dual;
             let text_of = |q: Quantity, x: f64| shown_dual(q, x, units, n, dual);
-            let frame = m.ucs.as_ref().and_then(|id| frames.iter().find(|f| &f.0 == id)).map(|f| f.1);
+            let frame = m
+                .ucs
+                .as_ref()
+                .and_then(|id| frames.iter().find(|f| &f.0 == id))
+                .map(|f| f.1);
             // what the reading lists, worked out before the panel changes anything
             let listed = match &m.reading {
                 Some(Ok(r)) => {
-                    let kinds: Vec<Follow> =
-                        Follow::ALL.into_iter().filter(|f| r.get(f.quantity()).is_some()).collect();
-                    Some(Ok((panel_values(r, m.follow, frame.as_ref(), m.hide_delta), kinds)))
+                    let kinds: Vec<Follow> = Follow::ALL
+                        .into_iter()
+                        .filter(|f| r.get(f.quantity()).is_some())
+                        .collect();
+                    Some(Ok((
+                        panel_values(r, m.follow, frame.as_ref(), m.hide_delta),
+                        kinds,
+                    )))
                 }
                 Some(Err(e)) => Some(Err(e.clone())),
                 None => None,
@@ -155,16 +179,22 @@ impl Shell {
                             ui.spacing_mut().item_spacing.x = 2.0;
                             ui.add_sized(
                                 vec2(col, 16.0),
-                                egui::Label::new(egui::RichText::new("Delta follows").font(sans(11.0)).color(t.ink2)),
+                                egui::Label::new(
+                                    egui::RichText::new("Delta follows")
+                                        .font(sans(11.0))
+                                        .color(t.ink2),
+                                ),
                             );
                             for f in kinds {
                                 let on = m.follow == *f;
                                 let r = ui.add(
-                                    egui::Button::new(egui::RichText::new(f.word()).font(sans(10.0)).color(if on {
-                                        t.on_ink
-                                    } else {
-                                        t.ink
-                                    }))
+                                    egui::Button::new(
+                                        egui::RichText::new(f.word()).font(sans(10.0)).color(if on {
+                                            t.on_ink
+                                        } else {
+                                            t.ink
+                                        }),
+                                    )
                                     .fill(if on { t.on } else { t.surface })
                                     .small(),
                                 );
@@ -205,7 +235,10 @@ impl Shell {
                     if h.hovered() || h.dragged() {
                         ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
                         ui.painter().line_segment(
-                            [pos2(edge.center().x, edge.top()), pos2(edge.center().x, edge.bottom())],
+                            [
+                                pos2(edge.center().x, edge.top()),
+                                pos2(edge.center().x, edge.bottom()),
+                            ],
                             Stroke::new(1.0, t.ink2),
                         );
                     }
@@ -213,7 +246,11 @@ impl Shell {
                         m.label_w = (col + h.drag_delta().x).clamp(60.0, 220.0);
                     }
                     if values.is_empty() {
-                        ui.label(egui::RichText::new("Nothing to measure there").font(sans(11.0)).color(t.ink2));
+                        ui.label(
+                            egui::RichText::new("Nothing to measure there")
+                                .font(sans(11.0))
+                                .color(t.ink2),
+                        );
                     }
                 }
                 Some(Err(e)) => {
@@ -247,7 +284,9 @@ impl Shell {
                 ui.label(egui::RichText::new("Accumulated").font(medium(11.0)).color(t.ink));
                 let (mut drop_one, mut drop_kind) = (None, None);
                 for power in [1, 2, 3, 4, 0] {
-                    let of: Vec<usize> = (0..m.accum.len()).filter(|&i| m.accum[i].q.power() == power).collect();
+                    let of: Vec<usize> = (0..m.accum.len())
+                        .filter(|&i| m.accum[i].q.power() == power)
+                        .collect();
                     if of.is_empty() {
                         continue;
                     }
@@ -262,7 +301,9 @@ impl Shell {
                         let r = ui.label(egui::RichText::new(&total).font(mono(12.0)).color(t.ink));
                         places.push((format!("measure:accum:{}", kind_word(power)), r.rect));
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            let x = ui.small_button(egui::RichText::new("×").font(sans(11.0))).on_hover_text("Delete the group");
+                            let x = ui
+                                .small_button(egui::RichText::new("×").font(sans(11.0)))
+                                .on_hover_text("Delete the group");
                             places.push((format!("measure:accum:drop:{}", kind_word(power)), x.rect));
                             if x.clicked() {
                                 drop_kind = Some(power);
@@ -275,11 +316,18 @@ impl Shell {
                             ui.add_space(10.0);
                             ui.add_sized(
                                 vec2(col - 10.0, 14.0),
-                                egui::Label::new(egui::RichText::new(&a.what).font(sans(10.0)).color(t.ink2)).truncate(),
+                                egui::Label::new(egui::RichText::new(&a.what).font(sans(10.0)).color(t.ink2))
+                                    .truncate(),
                             );
-                            ui.label(egui::RichText::new(text_of(a.q, a.x)).font(mono(11.0)).color(t.ink2));
+                            ui.label(
+                                egui::RichText::new(text_of(a.q, a.x))
+                                    .font(mono(11.0))
+                                    .color(t.ink2),
+                            );
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                let x = ui.small_button(egui::RichText::new("×").font(sans(10.0))).on_hover_text("Delete the value");
+                                let x = ui
+                                    .small_button(egui::RichText::new("×").font(sans(10.0)))
+                                    .on_hover_text("Delete the value");
                                 places.push((format!("measure:accum:entry:{i}"), x.rect));
                                 if x.clicked() {
                                     drop_one = Some(i);
@@ -331,13 +379,19 @@ impl Shell {
             });
             if copy_all {
                 let mut text: Vec<String> = match &listed {
-                    Some(Ok((values, _))) => {
-                        values.iter().map(|(q, x)| format!("{}\t{}", q.label(), text_of(*q, *x))).collect()
-                    }
+                    Some(Ok((values, _))) => values
+                        .iter()
+                        .map(|(q, x)| format!("{}\t{}", q.label(), text_of(*q, *x)))
+                        .collect(),
                     _ => vec![],
                 };
                 for power in [1, 2, 3, 4, 0] {
-                    let of: Vec<f64> = m.accum.iter().filter(|a| a.q.power() == power).map(|a| a.x).collect();
+                    let of: Vec<f64> = m
+                        .accum
+                        .iter()
+                        .filter(|a| a.q.power() == power)
+                        .map(|a| a.x)
+                        .collect();
                     if !of.is_empty() {
                         let total = text_of(group_quantity(power), of.iter().sum());
                         text.push(format!("{} total\t{total}", kind_word(power)));
@@ -346,8 +400,14 @@ impl Shell {
                 ui.ctx().copy_text(text.join("\n"));
             }
             // Inventor's Advanced Settings: a second unit, the coordinate system, the deltas
-            let words = if m.advanced { "Hide advanced settings" } else { "Advanced settings..." };
-            let a = ui.add(egui::Button::new(egui::RichText::new(words).font(sans(11.0)).color(t.ink2)).frame(false));
+            let words = if m.advanced {
+                "Hide advanced settings"
+            } else {
+                "Advanced settings..."
+            };
+            let a = ui.add(
+                egui::Button::new(egui::RichText::new(words).font(sans(11.0)).color(t.ink2)).frame(false),
+            );
             places.push(("measure:advanced".into(), a.rect));
             if a.clicked() {
                 m.advanced = !m.advanced;
@@ -372,7 +432,11 @@ impl Shell {
                 ui.horizontal(|ui| {
                     ui.add_sized(
                         vec2(col, 16.0),
-                        egui::Label::new(egui::RichText::new("Coordinate system").font(sans(11.0)).color(t.ink2)),
+                        egui::Label::new(
+                            egui::RichText::new("Coordinate system")
+                                .font(sans(11.0))
+                                .color(t.ink2),
+                        ),
                     );
                     let r = egui::ComboBox::from_id_salt("measure-ucs")
                         .selected_text(m.ucs.clone().unwrap_or("World".into()))
@@ -387,20 +451,30 @@ impl Shell {
                 });
                 let mut loops = !m.no_loops;
                 let r = ui
-                    .checkbox(&mut loops, egui::RichText::new("Detect sketch loops").font(sans(11.0)))
-                    .on_hover_text("In a sketch, a click inside a closed region measures its area and perimeter");
+                    .checkbox(
+                        &mut loops,
+                        egui::RichText::new("Detect sketch loops").font(sans(11.0)),
+                    )
+                    .on_hover_text(
+                        "In a sketch, a click inside a closed region measures its area and perimeter",
+                    );
                 places.push(("measure:loops".into(), r.rect));
                 m.no_loops = !loops;
-                                let mut show = !m.hide_delta;
-                let r = ui.checkbox(&mut show, egui::RichText::new("Show Delta X, Y, Z").font(sans(11.0)));
+                let mut show = !m.hide_delta;
+                let r = ui.checkbox(
+                    &mut show,
+                    egui::RichText::new("Show Delta X, Y, Z").font(sans(11.0)),
+                );
                 places.push(("measure:delta".into(), r.rect));
                 m.hide_delta = !show;
             }
             ui.add(
                 egui::Label::new(
-                    egui::RichText::new("Esc clears, Enter starts again. Shift on a third point: the angle at the second")
-                        .font(sans(10.0))
-                        .color(t.ink2),
+                    egui::RichText::new(
+                        "Esc clears, Enter starts again. Shift on a third point: the angle at the second",
+                    )
+                    .font(sans(10.0))
+                    .color(t.ink2),
                 )
                 .wrap(),
             );
@@ -473,7 +547,10 @@ impl Shell {
         // the distance the deltas follow is the one drawn
         let follow = {
             let q = m.follow.quantity();
-            let drawn = r.shown.iter().any(|s| matches!(s, Shown::Line(_, _, k) if *k == q));
+            let drawn = r
+                .shown
+                .iter()
+                .any(|s| matches!(s, Shown::Line(_, _, k) if *k == q));
             if drawn { q } else { Quantity::Distance }
         };
         let base = Stroke::new(1.5, INK);
@@ -568,7 +645,10 @@ impl Shell {
                 Shown::Curve(pts, q) => {
                     let ps: Vec<Pos2> = pts.iter().filter_map(|p| to_screen(*p)).collect();
                     labels.poly(&ps);
-                    painter.add(egui::Shape::line(ps.clone(), Stroke::new(line.width + 1.5, line.color)));
+                    painter.add(egui::Shape::line(
+                        ps.clone(),
+                        Stroke::new(line.width + 1.5, line.color),
+                    ));
                     // a length along its curve; a loop's perimeter is with its area
                     if let Some(mid) = ps.get(ps.len() / 2).copied()
                         && *q == Quantity::Length
@@ -580,8 +660,7 @@ impl Shell {
                 Shown::Angle(vtx, u, w, deg) => {
                     let Some(vs) = to_screen(*vtx) else { continue };
                     // the arc 48 points out on screen, whatever the zoom
-                    let per_mm = to_screen(*vtx + *u)
-                        .map_or(1.0, |q| (q - vs).length().max(1e-3) as f64);
+                    let per_mm = to_screen(*vtx + *u).map_or(1.0, |q| (q - vs).length().max(1e-3) as f64);
                     let reach = 48.0 / per_mm;
                     let w2 = (*w - *u * u.dot(*w)).normalize().map_or(*w, |x| x.get());
                     let sweep = deg.to_radians();
@@ -629,7 +708,13 @@ impl Shell {
                         value(Quantity::SizeZ),
                         to_screen(c(7)),
                     ) {
-                        labels.put(top, top + vec2(30.0, -30.0), format!("{x} × {y} × {z}"), "Box", line);
+                        labels.put(
+                            top,
+                            top + vec2(30.0, -30.0),
+                            format!("{x} × {y} × {z}"),
+                            "Box",
+                            line,
+                        );
                     }
                 }
             }
@@ -649,14 +734,38 @@ fn wall_rows(ui: &mut Ui, t: &Theme, m: &super::inspect::MeasurePanel, places: &
     match &m.wall_at {
         Some(Ok((w, p))) => {
             let text = shown(Quantity::Length, *w, (m.unit, m.angle), m.precision);
-            value_row(ui, t, "Thinnest wall", &text, false, false, false, LABEL_W, places);
-            value_row(ui, t, "At", &format!("{:.1}, {:.1}, {:.1}", p.x, p.y, p.z), false, false, false, LABEL_W, places);
+            value_row(
+                ui,
+                t,
+                "Thinnest wall",
+                &text,
+                false,
+                false,
+                false,
+                LABEL_W,
+                places,
+            );
+            value_row(
+                ui,
+                t,
+                "At",
+                &format!("{:.1}, {:.1}, {:.1}", p.x, p.y, p.z),
+                false,
+                false,
+                false,
+                LABEL_W,
+                places,
+            );
         }
         Some(Err(e)) => {
             ui.label(egui::RichText::new(e).font(sans(11.0)).color(t.error));
         }
         None => {
-            ui.label(egui::RichText::new("Working it out...").font(sans(11.0)).color(t.ink2));
+            ui.label(
+                egui::RichText::new("Working it out...")
+                    .font(sans(11.0))
+                    .color(t.ink2),
+            );
         }
     }
 }
@@ -711,8 +820,10 @@ fn value_row(
         if w.clicked() {
             out = Row::Focus;
         }
-        let r = ui
-            .add(egui::Label::new(egui::RichText::new(value).font(mono(12.0)).color(t.ink)).sense(egui::Sense::click()));
+        let r = ui.add(
+            egui::Label::new(egui::RichText::new(value).font(mono(12.0)).color(t.ink))
+                .sense(egui::Sense::click()),
+        );
         places.push((format!("measure:value:{what}"), r.rect));
         if r.clicked() {
             out = Row::Focus;
@@ -778,7 +889,10 @@ fn quantity_of(s: &Shown) -> Quantity {
 }
 
 fn is_distance(q: Quantity) -> bool {
-    matches!(q, Quantity::Distance | Quantity::CentreDistance | Quantity::MaxDistance)
+    matches!(
+        q,
+        Quantity::Distance | Quantity::CentreDistance | Quantity::MaxDistance
+    )
 }
 
 /// A label asked for: what it points at, where it would like to be, what it says.
@@ -826,21 +940,35 @@ impl Labels<'_> {
         for (k, w) in self.wants.into_iter().enumerate() {
             let g = self.painter.layout_no_wrap(w.text, mono(12.0), INK);
             let size = g.size() + vec2(10.0, 6.0);
-            let r = place_label(&w.anchor, w.want, size, k, &anchors, &taken, &self.segs, w.leader != Stroke::NONE);
+            let r = place_label(
+                &w.anchor,
+                w.want,
+                size,
+                k,
+                &anchors,
+                &taken,
+                &self.segs,
+                w.leader != Stroke::NONE,
+            );
             taken.push(r);
             set.push((r, g, w.anchor, w.leader, w.key));
         }
         // leaders under every box
         for (r, _, anchor, leader, _) in &set {
             if *leader != Stroke::NONE {
-                self.painter.line_segment([*anchor, nearest_on_rect(*r, *anchor)], *leader);
+                self.painter
+                    .line_segment([*anchor, nearest_on_rect(*r, *anchor)], *leader);
             }
         }
         let mut places = vec![];
         for (r, g, _, _, key) in set {
             self.painter.rect_filled(r, 3.0, GROUND);
-            self.painter
-                .rect_stroke(r, 3.0, Stroke::new(1.0, INK.gamma_multiply(0.6)), egui::StrokeKind::Inside);
+            self.painter.rect_stroke(
+                r,
+                3.0,
+                Stroke::new(1.0, INK.gamma_multiply(0.6)),
+                egui::StrokeKind::Inside,
+            );
             self.painter.galley(r.min + vec2(5.0, 3.0), g, INK);
             places.push((format!("measure:mark:{key}"), r));
         }
@@ -866,7 +994,10 @@ fn place_label(
         let near = r.expand(3.0);
         !taken.iter().any(|o| o.expand(2.0).intersects(r))
             && !segs.iter().any(|(a, b)| seg_hits_rect(*a, *b, near))
-            && !anchors.iter().enumerate().any(|(k, a)| k != me && r.expand(6.0).contains(*a))
+            && !anchors
+                .iter()
+                .enumerate()
+                .any(|(k, a)| k != me && r.expand(6.0).contains(*a))
             && !(leader && {
                 let end = nearest_on_rect(r, anchor);
                 taken.iter().any(|o| seg_hits_rect(anchor, end, o.shrink(1.0)))
@@ -959,7 +1090,11 @@ fn arrow(p: &egui::Painter, tip: Pos2, from: Pos2, ink: Color32) {
     }
     let side = vec2(-way.y, way.x);
     p.add(egui::Shape::convex_polygon(
-        vec![tip, tip - way * ARROW + side * 3.5, tip - way * ARROW - side * 3.5],
+        vec![
+            tip,
+            tip - way * ARROW + side * 3.5,
+            tip - way * ARROW - side * 3.5,
+        ],
         ink,
         Stroke::NONE,
     ));
@@ -984,7 +1119,12 @@ fn across(z: Vec3) -> (Vec3, Vec3) {
 
 /// Free geometry picked, drawn over the model: a point's cross, a line, a circle, a curve, an
 /// axis as a long dashed line, a plane as a square about its origin.
-fn free_shape(p: &egui::Painter, to_screen: &dyn Fn(Point3) -> Option<Pos2>, f: &forge_agent::measure::Free, reach: f64) {
+fn free_shape(
+    p: &egui::Painter,
+    to_screen: &dyn Fn(Point3) -> Option<Pos2>,
+    f: &forge_agent::measure::Free,
+    reach: f64,
+) {
     use forge_agent::measure::Free;
     let s = Stroke::new(2.5, Color32::from_rgb(0x40, 0xC0, 0xF0));
     let poly = |pts: Vec<Point3>| {

@@ -1541,7 +1541,12 @@ pub fn regions(s: &Sketch) -> Vec<Region> {
                 .map(|l| l.segments.iter().flat_map(|g| along(&g.0)).collect())
                 .collect(),
             area: p.area(),
-            perimeter: p.loops.iter().flat_map(|l| &l.segments).map(|g| segment_length(&g.0)).sum(),
+            perimeter: p
+                .loops
+                .iter()
+                .flat_map(|l| &l.segments)
+                .map(|g| segment_length(&g.0))
+                .sum(),
             loop_areas: p.loops.iter().map(|l| l.signed_area().abs()).collect(),
             loop_lengths: p
                 .loops

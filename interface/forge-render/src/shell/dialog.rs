@@ -1682,8 +1682,12 @@ fn field_row(
     // as Inventor's value fields: Measure, the value measured goes in
     if panel::field_kind(label).is_some() {
         edit.context_menu(|ui| {
-            if ui.button(egui::RichText::new("Measure...").font(sans(12.0))).clicked() {
-                ui.ctx().data_mut(|d| d.insert_temp(egui::Id::unique(MEASURE_INTO), label.to_string()));
+            if ui
+                .button(egui::RichText::new("Measure...").font(sans(12.0)))
+                .clicked()
+            {
+                ui.ctx()
+                    .data_mut(|d| d.insert_temp(egui::Id::unique(MEASURE_INTO), label.to_string()));
                 ui.close();
             }
         });

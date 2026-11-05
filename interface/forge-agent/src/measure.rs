@@ -596,14 +596,12 @@ pub fn read_one(p: &Pick) -> Reading {
             }
         }
         Ent::Face(f) => {
-            let area = forge_topo::mass::face_area(b, f)
-                .ok()
-                .unwrap_or_else(|| {
-                    one(b, p.mesh, p.ent)
-                        .into_iter()
-                        .find(|x| x.0 == "area")
-                        .map_or(0.0, |x| x.1)
-                });
+            let area = forge_topo::mass::face_area(b, f).ok().unwrap_or_else(|| {
+                one(b, p.mesh, p.ent)
+                    .into_iter()
+                    .find(|x| x.0 == "area")
+                    .map_or(0.0, |x| x.1)
+            });
             r.values.push((Quantity::Area, area));
             let per: f64 = select::edges_of_face(b, f)
                 .iter()
@@ -1017,12 +1015,19 @@ fn angle_shown(ga: Geom, gb: Geom, p: Point3, q: Point3, deg: f64) -> Option<Sho
     };
     let (vertex, mut u, mut w) = match (ga, gb) {
         (Geom::Segment(a0, a1), Geom::Segment(b0, b1))
-            if [a0, a1].iter().any(|x| x.distance(b0) < 1e-9 || x.distance(b1) < 1e-9) =>
+            if [a0, a1]
+                .iter()
+                .any(|x| x.distance(b0) < 1e-9 || x.distance(b1) < 1e-9) =>
         {
-            let (v, ua, wb) = [(a0, a1, b0, b1), (a0, a1, b1, b0), (a1, a0, b0, b1), (a1, a0, b1, b0)]
-                .into_iter()
-                .find(|x| x.0.distance(x.2) < 1e-9)
-                .map(|x| (x.0, x.1 - x.0, x.3 - x.2))?;
+            let (v, ua, wb) = [
+                (a0, a1, b0, b1),
+                (a0, a1, b1, b0),
+                (a1, a0, b0, b1),
+                (a1, a0, b1, b0),
+            ]
+            .into_iter()
+            .find(|x| x.0.distance(x.2) < 1e-9)
+            .map(|x| (x.0, x.1 - x.0, x.3 - x.2))?;
             (v, ua.normalize()?.get(), wb.normalize()?.get())
         }
         (Geom::Plane(c1, n1), Geom::Plane(c2, n2)) => {
@@ -1083,7 +1088,12 @@ pub fn read(t: &Target) -> Reading {
                     r.shown.insert(0, Shown::Face(face_tris(p, f), c));
                 }
                 Ent::Edge(x) if !matches!(geom(p), Geom::Segment(..)) => {
-                    let pts = p.body.edge_points(x, 64).into_iter().map(|q| p.at.point_to_world(q)).collect();
+                    let pts = p
+                        .body
+                        .edge_points(x, 64)
+                        .into_iter()
+                        .map(|q| p.at.point_to_world(q))
+                        .collect();
                     r.shown.push(Shown::Curve(pts, Quantity::Length));
                 }
                 _ => {}
@@ -1105,7 +1115,10 @@ pub fn read(t: &Target) -> Reading {
                 r.values.push((Quantity::Mass, volume * rho));
             }
             r.values.push((Quantity::Area, area));
-            let (mut lo, mut hi) = (Point3::new(f64::MAX, f64::MAX, f64::MAX), Point3::new(f64::MIN, f64::MIN, f64::MIN));
+            let (mut lo, mut hi) = (
+                Point3::new(f64::MAX, f64::MAX, f64::MAX),
+                Point3::new(f64::MIN, f64::MIN, f64::MIN),
+            );
             let mut hull = |q: Point3| {
                 lo = Point3::new(lo.x.min(q.x), lo.y.min(q.y), lo.z.min(q.z));
                 hi = Point3::new(hi.x.max(q.x), hi.y.max(q.y), hi.z.max(q.z));
@@ -1118,7 +1131,11 @@ pub fn read(t: &Target) -> Reading {
             if square && exact.x.lo <= exact.x.hi {
                 for k in 0..8 {
                     let pick = |i: forge_math::Interval, bit: usize| if k & bit == 0 { i.lo } else { i.hi };
-                    hull(w.at.point_to_world(Point3::new(pick(exact.x, 1), pick(exact.y, 2), pick(exact.z, 4))));
+                    hull(w.at.point_to_world(Point3::new(
+                        pick(exact.x, 1),
+                        pick(exact.y, 2),
+                        pick(exact.z, 4),
+                    )));
                 }
             } else {
                 for q in &w.mesh.positions {
@@ -1138,7 +1155,8 @@ pub fn read(t: &Target) -> Reading {
         Target::Free(f) => {
             let mut r = Reading::default();
             let at = |r: &mut Reading, q: Point3| {
-                r.values.extend([(Quantity::X, q.x), (Quantity::Y, q.y), (Quantity::Z, q.z)]);
+                r.values
+                    .extend([(Quantity::X, q.x), (Quantity::Y, q.y), (Quantity::Z, q.z)]);
             };
             match f {
                 Free::Point(q) => {
@@ -1181,7 +1199,8 @@ pub fn read(t: &Target) -> Reading {
                     perimeter,
                     inside,
                 } => {
-                    r.values.extend([(Quantity::Area, *area), (Quantity::Perimeter, *perimeter)]);
+                    r.values
+                        .extend([(Quantity::Area, *area), (Quantity::Perimeter, *perimeter)]);
                     // its loops drawn round, its area and perimeter labelled inside it
                     for l in loops {
                         let mut ring = l.clone();
@@ -1341,7 +1360,12 @@ fn body_box(b: &Body, mesh: &TriMesh) -> forge_math::Box3 {
     }
     let round: Vec<u32> = b
         .face_ids()
-        .filter(|&f| matches!(b.face(f).surface, forge_geom::Surface::Sphere(_) | forge_geom::Surface::Torus(_)))
+        .filter(|&f| {
+            matches!(
+                b.face(f).surface,
+                forge_geom::Surface::Sphere(_) | forge_geom::Surface::Torus(_)
+            )
+        })
         .map(|f| f.0)
         .collect();
     for (tri, f) in mesh.triangles.iter().zip(&mesh.face_of) {
