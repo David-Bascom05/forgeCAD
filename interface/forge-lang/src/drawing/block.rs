@@ -189,3 +189,41 @@ pub fn summary(src: &str, own: &str) -> forge_agent::json::Json {
             .collect(),
     )
 }
+
+/// The statements of block `name` as written (between its braces).
+pub fn body<'a>(src: &'a str, name: &str) -> Option<&'a str> {
+    let b = blocks(src).into_iter().find(|b| b.name == name)?;
+    src.get(b.body.0..b.body.1)
+}
+
+/// `src` with block `name`'s statements those of `from`'s block of that name.
+pub fn with_body(src: &str, name: &str, from: &str) -> Option<String> {
+    let b = blocks(src).into_iter().find(|b| b.name == name)?;
+    let new = body(from, name)?;
+    Some(format!("{}{new}{}", &src[..b.body.0], &src[b.body.1..]))
+}
+
+/// Unsaved text `mine` (edited from `base`) and the file now on disk `disk`, where only drawing
+/// blocks changed from `base`: `mine` with those blocks as on disk. None if the disk changed
+/// anything else, or a block both sides changed: then there is no one text both edits make.
+pub fn merge(base: &str, mine: &str, disk: &str) -> Option<String> {
+    let names: Vec<String> = blocks(disk).into_iter().map(|b| b.name).collect();
+    if names.len() != blocks(base).len() {
+        return None;
+    }
+    let mut out = mine.to_string();
+    let mut back = disk.to_string();
+    for n in &names {
+        if body(base, n) == body(disk, n) {
+            continue;
+        }
+        // the disk's change to this block, onto mine: refused if mine changed it too
+        if body(mine, n) != body(base, n) {
+            return None;
+        }
+        out = with_body(&out, n, disk)?;
+        back = with_body(&back, n, base)?;
+    }
+    // with its blocks put back as they were, the disk is the base: nothing else changed there
+    (back == base).then_some(out)
+}

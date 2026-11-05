@@ -1640,6 +1640,16 @@ impl Session {
         self.set_text(text);
     }
 
+    /// The file changed on disk to `disk` while this has unsaved text, and `text` is this text
+    /// with the disk's change in it (a drawing tab's edit of its block): one undo step, still
+    /// unsaved; Save writes both.
+    pub fn merged(&mut self, disk: String, text: String) {
+        self.saved = disk;
+        if text != self.src {
+            self.set_text(text);
+        }
+    }
+
     pub fn save(&mut self) -> Result<(), String> {
         let path = self.path.as_ref().ok_or("no file to save to")?;
         std::fs::write(path, &self.src).map_err(|e| format!("{path}: {e}"))?;

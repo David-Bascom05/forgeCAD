@@ -504,6 +504,12 @@ impl DrawingEnv {
 
     /// Applies typed ops to the file, all or none, writes it and makes the sheet again.
     fn apply(&mut self, ops: Vec<DrawOp>) {
+        // a block edits the file as it is now: what another tab of it saved stays
+        if self.block.is_some()
+            && let Ok(now) = std::fs::read_to_string(&self.path)
+        {
+            self.src = now;
+        }
         let mut src = self.src.clone();
         for op in &ops {
             let done = match &self.block {
@@ -571,7 +577,16 @@ impl DrawingEnv {
             (&mut self.undo, &mut self.redo)
         };
         let Some(src) = from.pop() else { return };
-        to.push(std::mem::replace(&mut self.src, src));
+        match &self.block {
+            // a block's undo is its block only, onto the rest of the file as it is now
+            Some(b) => {
+                let now = std::fs::read_to_string(&self.path).unwrap_or_else(|_| self.src.clone());
+                let back = forge_lang::drawing::block::with_body(&now, b, &src).unwrap_or(src);
+                to.push(std::mem::replace(&mut self.src, now));
+                self.src = back;
+            }
+            None => to.push(std::mem::replace(&mut self.src, src)),
+        }
         if let Err(e) = std::fs::write(&self.path, &self.src) {
             self.message = format!("{}: {e}", self.path);
         }

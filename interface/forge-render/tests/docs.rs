@@ -555,3 +555,91 @@ fn a_files_drawing_blocks_are_tabs_beside_its_model() {
     // read again once the watch sees the file the drawing tab wrote
     assert!(h.until(|g| g.fg.as_ref().is_some_and(|s| s.src.contains("n1 = note"))));
 }
+
+/// Both tabs edit one file: the model tab's unsaved change and the drawing tab's edit of its
+/// block both end up written, neither over the other; the drawing's undo takes back its block
+/// only.
+#[test]
+fn a_drawing_tabs_edit_and_the_models_unsaved_change_are_both_kept() {
+    let Some(mut h) = headless() else { return };
+    let d = scratch("blocks-merge");
+    let f = d.join("knob_drawn.fg");
+    std::fs::copy(
+        concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../examples/unified/knob_drawn.fg"
+        ),
+        &f,
+    )
+    .unwrap();
+    open_in(&mut h, &f);
+    // the model: r 9 -> 11, not saved
+    h.gui
+        .fg_apply(Op::SetParam {
+            param: ParamKey::shared("r"),
+            value: Literal {
+                value: 11.0,
+                dim: Dim::Length,
+            },
+        })
+        .unwrap();
+    ready(&mut h);
+    assert!(h.gui.fg.as_ref().unwrap().dirty());
+    // the drawing tab adds a note: written to the file at once
+    h.gui.activate(1);
+    assert!(h.until(|g| {
+        g.shell
+            .drawing
+            .as_ref()
+            .is_some_and(|e| !e.busy && e.made.is_some())
+    }));
+    let env = h.gui.shell.drawing.as_mut().unwrap();
+    let out = forge_lang::drawing::block::apply_checked(
+        &env.src,
+        "dwg_knob",
+        &forge_lang::drawing::ops::DrawOp::AddItem {
+            text: "n1 = note(\"BREAK EDGES\", sheet: s1, at: (40, 30))".into(),
+        },
+    )
+    .unwrap();
+    env.external(out, "note", 1, false);
+    h.step();
+    let disk = std::fs::read_to_string(&f).unwrap();
+    assert!(
+        disk.contains("n1 = note") && disk.contains("shared r = 9"),
+        "{disk}"
+    );
+    // the model's tab has both, still unsaved; Save writes both
+    h.gui.activate(0);
+    ready(&mut h);
+    let s = h.gui.fg.as_ref().unwrap();
+    assert!(
+        s.dirty() && s.src.contains("shared r = 11") && s.src.contains("n1 = note"),
+        "{}",
+        s.src
+    );
+    h.gui.fg.as_mut().unwrap().save().unwrap();
+    let disk = std::fs::read_to_string(&f).unwrap();
+    assert!(
+        disk.contains("shared r = 11") && disk.contains("n1 = note"),
+        "{disk}"
+    );
+    // the drawing's undo: its note goes, the model's saved r stays
+    h.gui.activate(1);
+    h.step();
+    h.gui.shell.drawing.as_mut().unwrap().undo(false);
+    h.step();
+    let disk = std::fs::read_to_string(&f).unwrap();
+    assert!(
+        !disk.contains("n1 = note") && disk.contains("shared r = 11"),
+        "{disk}"
+    );
+    h.gui.activate(0);
+    ready(&mut h);
+    let s = h.gui.fg.as_ref().unwrap();
+    assert!(
+        !s.dirty() && !s.src.contains("n1 = note") && s.src.contains("shared r = 11"),
+        "{}",
+        s.src
+    );
+}

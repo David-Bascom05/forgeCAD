@@ -88,3 +88,31 @@ fn two_blocks_each_have_their_own_ids_and_one_may_draw_another_file() {
     assert!(d.ok(), "{:?}", d.errors);
     assert_eq!(d.views.len(), 1);
 }
+
+#[test]
+fn a_blocks_write_merges_into_unsaved_text_of_the_rest() {
+    let base = knob();
+    let mine = base.replace("shared r = 9", "shared r = 11");
+    let disk = block::apply_checked(
+        &base,
+        "dwg_knob",
+        &DrawOp::AddItem {
+            text: "n1 = note(\"X\", sheet: s1, at: (40, 30))".into(),
+        },
+    )
+    .unwrap();
+    let merged = block::merge(&base, &mine, &disk).unwrap();
+    assert!(
+        merged.contains("shared r = 11") && merged.contains("n1 = note(\"X\""),
+        "{merged}"
+    );
+    // the disk changed outside the blocks too, or both changed the block: no merge
+    assert!(block::merge(&base, &mine, &disk.replace("shared h = 12", "shared h = 13")).is_none());
+    let mine2 = base.replace(
+        "m = part()",
+        "m = part()\n  n9 = note(\"Y\", sheet: s1, at: (1, 1))",
+    );
+    assert!(block::merge(&base, &mine2, &disk).is_none());
+    // nothing to merge: mine as it is
+    assert_eq!(block::merge(&base, &mine, &base).as_deref(), Some(mine.as_str()));
+}

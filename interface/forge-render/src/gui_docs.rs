@@ -786,7 +786,13 @@ impl Gui {
                     if s.saved == *text {
                         continue;
                     }
-                    if s.dirty() {
+                    // a drawing block written from its tab: into the unsaved text, Save writes both
+                    if s.dirty()
+                        && let Some(m) = forge_lang::drawing::block::merge(&s.saved, &s.src, text)
+                    {
+                        s.merged(text.clone(), m);
+                        *status = format!("{name}: the drawing's edit is in your unsaved changes");
+                    } else if s.dirty() {
                         *status = format!(
                             "{name} changed on disk: your changes here are kept, Save writes over it"
                         );
