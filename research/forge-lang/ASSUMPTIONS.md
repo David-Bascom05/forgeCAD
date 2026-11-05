@@ -724,5 +724,6 @@ an occurrence written above. Findings also in `forgecad-gate/unified-doc/proof-f
 | `Counter/Qualify.lean` | `unqualified_shadow`, `qualify_string_collides` |
 | `Nested.lean` | `defs_congr_closed`, `scoped_occ_closed`, `avoids_reach`, `rank_acyclic`, `occ_pre` |
 | `Counter/Nested.lean` | `nested_ids`, `context_*`, `place_cycle_fuel`, `nested_delete_dangles` |
+| `OpMemo.lean` | kernel-op memo: `memo_exact`, `memo_exact_iff`, `drop_ok_iff`, `hit_of_mem`, hashing (`verified_exact`), one counterexample per key part (findings: forgecad-gate/instant-load/op-memo-proof.md) |
 | `Axioms.lean` | `lake env lean Axioms.lean`: the axioms of every main theorem |
 | `Counter/*.lean` | every counterexample named above, proven by evaluation (`rfl`/`decide`) or induction |
