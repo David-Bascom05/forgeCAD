@@ -111,3 +111,7 @@ open ForgeLang ForgeLang.Counter
 #print axioms ForgeLang.OpMemo.Counter.key_needs_version
 #print axioms ForgeLang.OpMemo.Counter.key_needs_exact_params
 #print axioms ForgeLang.OpMemo.Counter.keyAll_covers
+#print axioms ForgeLang.lift_block
+#print axioms ForgeLang.lift_occ
+#print axioms ForgeLang.occ_body_closed
+#print axioms ForgeLang.Counter.nested_delete_exact

@@ -563,7 +563,13 @@ an occurrence written above. Findings also in `forgecad-gate/unified-doc/proof-f
 - Rules forced: `place_cycle_fuel` (a self-placing component never finishes: a static
   `ComponentCycle` check, `rank_acyclic`), `nested_delete_dangles` (a scoped delete must check
   references through occurrence paths in every placing block).
-- Not yet: scoped ops at depth as op functions (the relational lift with that check); poses.
+- Scoped ops at depth (`NestedOps.lean`): `occ_body_closed` (an in-block op on `c0` holds at its
+  occurrences with nesting allowed), `lift_block`/`lift_occ` (one level up: a block placing the
+  edited component directly, its other statements unable to reach `c0`, nothing after reading the
+  occurrence (R2): it evaluates to its old model with that occurrence's fragment changed as the
+  op says). Iterated from `c0` up, every scoped op holds at every depth; `nested_delete_exact` is
+  the concrete case. Not covered: a placement inside a loop or `if` of the placing block. Poses
+  are not in the core.
 
 ## Verdicts on the hypotheses
 
@@ -723,6 +729,7 @@ an occurrence written above. Findings also in `forgecad-gate/unified-doc/proof-f
 | `ScopedMore.lean` | `scopedMove_ok`, `scopedReplace_ok`, `occ_body`, `default_no_capture`, `occ_caller_indep` |
 | `Counter/Qualify.lean` | `unqualified_shadow`, `qualify_string_collides` |
 | `Nested.lean` | `defs_congr_closed`, `scoped_occ_closed`, `avoids_reach`, `rank_acyclic`, `occ_pre` |
+| `NestedOps.lean` | `occ_body_closed`, `lift_block`, `lift_occ`: scoped ops at any depth |
 | `Counter/Nested.lean` | `nested_ids`, `context_*`, `place_cycle_fuel`, `nested_delete_dangles` |
 | `OpMemo.lean` | kernel-op memo: `memo_exact`, `memo_exact_iff`, `drop_ok_iff`, `hit_of_mem`, hashing (`verified_exact`), one counterexample per key part (findings: forgecad-gate/instant-load/op-memo-proof.md) |
 | `Axioms.lean` | `lake env lean Axioms.lean`: the axioms of every main theorem |

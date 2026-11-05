@@ -120,4 +120,18 @@ theorem nested_delete_dangles :
       .ok [([.nm "box1", .nm "lid1", .nm "plate"], .site 1), ([.nm "box1", .nm "h"], .site 1)] ∧
     run 30 (placerDoc { lidC with body := [] }) = .error (.dangling "lid1" [.nm "plate"]) := ⟨rfl, rfl⟩
 
+/-- With R2 kept (nothing in `box` reads `lid1`), the same delete is exact at depth 2: `box1`'s
+model loses exactly `box1.lid1.plate` (the general form: NestedOps.lift_occ). -/
+def plainBox : Comp := { params := [], body := [.feat "wall" (.lit 2), .occ "lid1" "lid" []], vis := [] }
+def emptyLid : Comp := { params := [], body := [], vis := [] }
+def boxDoc (lid : Comp) : Doc where
+  defs := { comps := [("lid", lid), ("box", plainBox)] }
+  body := [.occ "box1" "box" []]
+  σ := fun _ => 5
+
+theorem nested_delete_exact :
+    (run 30 (boxDoc lidC)).map (·.1) =
+      .ok [([.nm "box1", .nm "wall"], .site 2), ([.nm "box1", .nm "lid1", .nm "plate"], .site 1)] ∧
+    (run 30 (boxDoc emptyLid)).map (·.1) = .ok [([.nm "box1", .nm "wall"], .site 2)] := ⟨rfl, rfl⟩
+
 end ForgeLang.Counter
