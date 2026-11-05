@@ -275,15 +275,13 @@ fn a_file_changed_on_disk_reads_again() {
     assert!(s.src.contains("t = 20") && !s.dirty());
     // changed here and on disk: what's here is kept
     h.gui.fg_apply(set_t(7.0)).unwrap();
-    std::fs::write(&plate, PLATE.replace("t = 6", "t = 30")).unwrap();
+    // a length of its own: two writes in one tick of the file clock still differ
+    std::fs::write(&plate, PLATE.replace("t = 6", "t = 300")).unwrap();
     h.gui.check_files();
+    let said = h.gui.shell.status.clone();
+    assert!(said.contains("changed on disk"), "{said}");
     h.step();
     assert!(h.gui.fg.as_ref().unwrap().src.contains("t = 7"));
-    assert!(
-        h.gui.shell.status.contains("changed on disk"),
-        "{}",
-        h.gui.shell.status
-    );
 }
 
 #[test]
@@ -316,4 +314,17 @@ fn a_part_the_agent_makes_opens() {
     assert_eq!(h.gui.active_document(), 2);
     ready(&mut h);
     assert_eq!(h.gui.shell.name, "hinge.fg");
+}
+
+#[test]
+fn an_occurrence_opens_its_part_in_a_tab() {
+    let Some(mut h) = headless() else { return };
+    let d = scratch("occ");
+    let [_, _, frame] = files(&d);
+    open_in(&mut h, &frame);
+    assert!(h.menu_item("asm:row:top", "asm:menu:open"), "no Open on the row");
+    ready(&mut h);
+    assert_eq!(titles(&h), ["frame.fg", "bar.fg"]);
+    assert_eq!(h.gui.active_document(), 1);
+    assert!(!h.gui.shell.fg.as_ref().unwrap().assembly);
 }

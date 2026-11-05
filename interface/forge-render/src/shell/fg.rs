@@ -224,6 +224,8 @@ pub struct Issue {
 #[derive(Clone, Debug, PartialEq)]
 pub enum FgAct {
     Apply(Op),
+    /// A file in a tab of its own: an assembly's part.
+    OpenFile(String),
     Save,
     /// A tool's statement: applied, and the tool closed if it was.
     Tool(Op),

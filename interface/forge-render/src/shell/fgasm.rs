@@ -1458,6 +1458,8 @@ pub fn named(issue: &AsmIssue) -> (Vec<String>, Vec<String>) {
 /// What a browser row's right-click menu asks.
 enum MenuAct {
     Visibility(String),
+    /// The occurrence's file, in a tab.
+    Open(String),
     Isolate(String),
     Props(String),
     Drive(usize),
@@ -1832,6 +1834,11 @@ impl Shell {
                                 menu = Some(MenuAct::Props(n.key.clone()));
                                 ui.close();
                             }
+                            // its part (or subassembly) in a tab of its own
+                            if n.kind != NodeKind::Pattern && item(ui, "Open", "open") {
+                                menu = Some(MenuAct::Open(n.key.clone()));
+                                ui.close();
+                            }
                             // what the file says of a top-level component
                             if let Some(i) = a.insts.iter().find(|i| i.path == n.key && !i.path.contains('.'))
                             {
@@ -1983,6 +1990,18 @@ impl Shell {
             Some(MenuAct::Visibility(k)) => {
                 a.flip_eye(&k);
                 changed = true;
+            }
+            Some(MenuAct::Open(k)) => {
+                let file = a
+                    .occ
+                    .iter()
+                    .find(|o| o.path == k || o.path.starts_with(&format!("{k}.")))
+                    .map(|o| o.file.clone());
+                let sub = a.insts.iter().find(|i| i.path == k).map(|i| i.file.clone());
+                if let Some(f) = sub.or(file) {
+                    let at = a.dir.as_ref().map_or_else(|| f.clone().into(), |d| d.join(&f));
+                    pending.push(FgAct::OpenFile(at.to_string_lossy().into_owned()));
+                }
             }
             Some(MenuAct::Isolate(k)) => {
                 a.isolated = if a.isolated.as_deref() == Some(k.as_str()) {

@@ -3302,6 +3302,10 @@ impl Gui {
                     let _ = self.fg_apply(op);
                 }
                 crate::shell::fg::FgAct::Save => self.fg_save(),
+                crate::shell::fg::FgAct::OpenFile(path) => {
+                    self.open_document(&path, true);
+                    return;
+                }
                 crate::shell::fg::FgAct::Tool(op) => {
                     if self.fg_apply(op).is_ok()
                         && let Some(p) = &mut self.shell.fg
