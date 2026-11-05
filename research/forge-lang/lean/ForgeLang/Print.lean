@@ -58,6 +58,8 @@ def skelS : Stmt → List Tok
   | .ifs c a b => [.sym "if"] ++ skelE c ++ [.sym "{"] ++ skelB a ++ [.sym "}", .sym "else", .sym "{"] ++
       skelB b ++ [.sym "}"]
   | .use x p a => [.id x, .sym "=", .id p, .sym "("] ++ skelE a ++ [.sym ")", .sym ";"]
+  | .occ x c args => [.id x, .sym "=", .id "part", .sym "(", .id c, .sym "("] ++ skelKV args ++
+      [.sym ")", .sym ")", .sym ";"]
 def skelB : List Stmt → List Tok
   | [] => []
   | s :: ss => skelS s ++ skelB ss

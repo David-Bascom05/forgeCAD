@@ -18,7 +18,7 @@ The complete half (the edit *does* evaluate when nothing reads the binding) is `
 namespace ForgeLang
 
 def Stmt.binder : Stmt → Option Name
-  | .let_ x _ | .set x _ | .feat x _ | .forN x _ _ _ | .forK x _ _ _ | .use x _ _ => some x
+  | .let_ x _ | .set x _ | .feat x _ | .forN x _ _ _ | .forK x _ _ _ | .use x _ _ | .occ x _ _ => some x
   | .ifs _ _ _ => none
 
 def binders (ss : List Stmt) : List Name := ss.filterMap Stmt.binder
@@ -91,6 +91,28 @@ theorem execOne_keys {n D σ ρ s Δ m l} (h : execOne n D σ ρ s = .ok (Δ, m,
       split at h
       · rw [bind_ok] at h; obtain ⟨_, _, h⟩ := h; cases h; simp [keys, Stmt.binder]
       · cases h
+    | occ _ _ _ =>
+      simp only [execOne] at h
+      split at h
+      · split at h
+        · simp only [bind_ok] at h
+          obtain ⟨_, _, _, _, _, _, h⟩ := h; cases h; simp [keys, Stmt.binder]
+        · cases h
+      · cases h
+
+theorem evalA_keys : ∀ (as : List (Name × Expr)) {n D σ ρ Δ l}, evalA n D σ ρ as = .ok (Δ, l) →
+    keys Δ = as.map Prod.fst
+  | [], n, _, _, _, _, _, h => by
+    cases n <;> simp [evalA] at h
+    obtain ⟨rfl, -⟩ := h; rfl
+  | (y, e) :: as, n, _, _, _, _, _, h => by
+    cases n with
+    | zero => simp [evalA] at h
+    | succ n =>
+      simp only [evalA, bind_ok] at h
+      obtain ⟨_, _, ⟨Δ', l'⟩, h1, h⟩ := h
+      cases h
+      simp [keys, ← evalA_keys as h1]
 
 theorem execS_keys : ∀ (ss : List Stmt) {n D σ ρ Δ m l}, execS n D σ ρ ss = .ok (Δ, m, l) →
     ∀ x ∈ keys Δ, x ∈ binders ss

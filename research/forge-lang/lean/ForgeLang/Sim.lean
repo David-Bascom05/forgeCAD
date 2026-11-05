@@ -58,12 +58,14 @@ structure Sim (n : Nat) : Prop where
     loopN m D σ' ρ i b ks = .ok r
   lk : ∀ {D σ σ' ρ i b kvs r m}, (D.track = true ∨ ∀ s, σ s = σ' s) → loopK n D σ ρ i b kvs = .ok r → Agree σ σ' r.2 →
     n ≤ m → loopK m D σ' ρ i b kvs = .ok r
+  a : ∀ {D σ σ' ρ as r m}, (D.track = true ∨ ∀ s, σ s = σ' s) → evalA n D σ ρ as = .ok r → Agree σ σ' r.2 →
+    n ≤ m → evalA m D σ' ρ as = .ok r
 
 theorem sim : ∀ n, Sim n := by
   intro n
   induction n with
   | zero =>
-    constructor <;> intros <;> simp_all [evalE, execOne, execS, loopN, loopK]
+    constructor <;> intros <;> simp_all [evalE, execOne, execS, loopN, loopK, evalA]
   | succ n ih =>
     constructor
     · intro D σ σ' ρ x r m htr h ag hm
@@ -185,6 +187,20 @@ theorem sim : ∀ n, Sim n := by
           simp only [agree_append] at ag
           simp [execOne, ih.e htr ha ag.1 hm, hp, ih.s htr hb ag.2 hm]
         · cases h
+      | occ x c args =>
+        simp only [execOne] at h
+        split at h
+        · rename_i C hC
+          split at h
+          · rename_i hok
+            simp only [bind_ok] at h
+            obtain ⟨⟨Δg, lg⟩, hg, ⟨Δd, ld⟩, hd, ⟨ρ1, mm, l⟩, hb, h⟩ := h
+            cases h
+            simp only [List.append_assoc] at hb
+            simp only [agree_append] at ag
+            simp [execOne, hC, hok, ih.a htr hg ag.1.1 hm, ih.a htr hd ag.1.2 hm, ih.s htr hb ag.2 hm]
+          · cases h
+        · cases h
     · intro D σ σ' ρ x r m htr h ag hm
       obtain ⟨m, rfl⟩ : ∃ k, m = k + 1 := ⟨m - 1, by omega⟩
       have hm : n ≤ m := by omega
@@ -219,5 +235,17 @@ theorem sim : ∀ n, Sim n := by
         cases h
         simp only [agree_append] at ag
         simp [loopK, ih.e htr h0 ag.1.1 hm, ih.s htr h1 ag.1.2 hm, ih.lk htr h2 ag.2 hm]
+    · intro D σ σ' ρ as r m htr h ag hm
+      obtain ⟨m, rfl⟩ : ∃ k, m = k + 1 := ⟨m - 1, by omega⟩
+      have hm : n ≤ m := by omega
+      cases as with
+      | nil => simpa [evalA] using h
+      | cons a as =>
+        obtain ⟨y, e⟩ := a
+        simp only [evalA, bind_ok] at h
+        obtain ⟨⟨t, l⟩, h0, ⟨Δ, l'⟩, h1, h⟩ := h
+        cases h
+        simp only [agree_append] at ag
+        simp [evalA, ih.e htr h0 ag.1 hm, ih.a htr h1 ag.2 hm]
 
 end ForgeLang

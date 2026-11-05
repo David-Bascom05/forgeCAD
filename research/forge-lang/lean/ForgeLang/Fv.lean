@@ -35,6 +35,7 @@ def fvS : Stmt → List Name
   | .forK _ _ kvs b => fvKV kvs ++ fvB b
   | .ifs c a b => fvE c ++ fvB a ++ fvB b
   | .use _ _ a => fvE a
+  | .occ _ _ args => fvKV args
 def fvB : List Stmt → List Name
   | [] => []
   | s :: ss => fvS s ++ fvB ss
@@ -43,10 +44,12 @@ def fvKV : List (Name × Expr) → List Name
   | (_, e) :: kvs => fvE e ++ fvKV kvs
 end
 
-/-- Every name a function or procedure body mentions, other than its own parameter. -/
+/-- Every name a function or procedure body mentions, other than its own parameter, and every
+name a component's body or defaults mention that the component can see (`vis`). -/
 def Defs.reads (D : Defs) : List Name :=
   D.fns.flatMap (fun f => (fvE f.2.2).filter (· ≠ f.2.1)) ++
-    D.procs.flatMap (fun p => (fvB p.2.2).filter (· ≠ p.2.1))
+    D.procs.flatMap (fun p => (fvB p.2.2).filter (· ≠ p.2.1)) ++
+    D.comps.flatMap (fun c => (fvB c.2.body ++ fvKV c.2.params).filter (· ∈ c.2.vis))
 
 def AgreeOn (N : List Name) (ρ ρ' : Env) : Prop := ∀ y ∈ N, ρ.lookup y = ρ'.lookup y
 
@@ -110,13 +113,39 @@ theorem fn_reads {D : Defs} {f x : Name} {body : Expr} (hf : D.fns.lookup f = so
     ∀ y ∈ fvE body, y ≠ x → y ∈ D.reads := by
   intro y hy hyx
   simp only [Defs.reads, List.mem_append, List.mem_flatMap, List.mem_filter]
-  exact .inl ⟨(f, x, body), lookup_mem hf, hy, by simpa using hyx⟩
+  exact .inl (.inl ⟨(f, x, body), lookup_mem hf, hy, by simpa using hyx⟩)
 
 theorem proc_reads {D : Defs} {p y0 : Name} {body : List Stmt} (hp : D.procs.lookup p = some (y0, body)) :
     ∀ y ∈ fvB body, y ≠ y0 → y ∈ D.reads := by
   intro y hy hyx
   simp only [Defs.reads, List.mem_append, List.mem_flatMap, List.mem_filter]
-  exact .inr ⟨(p, y0, body), lookup_mem hp, hy, by simpa using hyx⟩
+  exact .inl (.inr ⟨(p, y0, body), lookup_mem hp, hy, by simpa using hyx⟩)
+
+theorem comp_reads {D : Defs} {c : Name} {C : Comp} (hC : D.comps.lookup c = some C) :
+    ∀ y ∈ fvB C.body ++ fvKV C.params, y ∈ C.vis → y ∈ D.reads := by
+  intro y hy hv
+  simp only [Defs.reads, List.mem_append, List.mem_flatMap, List.mem_filter]
+  exact .inr ⟨(c, C), lookup_mem hC, by simpa using hy, by simpa using hv⟩
+
+theorem fvKV_filter {p : Name × Expr → Bool} : ∀ {kvs : List (Name × Expr)} {y : Name},
+    y ∈ fvKV (kvs.filter p) → y ∈ fvKV kvs
+  | [], _, h => by simp [fvKV] at h
+  | (k, e) :: kvs, y, h => by
+    rw [List.filter_cons] at h
+    split at h
+    · simp only [fvKV, List.mem_append] at h ⊢
+      exact h.elim .inl fun h => .inr (fvKV_filter h)
+    · simp only [fvKV, List.mem_append]; exact .inr (fvKV_filter h)
+
+/-- A component body starts from the visible names only: agreeing on the visible names that
+are read is enough. -/
+theorem agree_only {N M V : List Name} {ρ ρ' : Env} (h : AgreeOn N ρ ρ') (hs : ∀ y ∈ M, y ∈ V → y ∈ N) :
+    AgreeOn M (only V ρ) (only V ρ') := by
+  intro y hy
+  rw [lookup_only, lookup_only]
+  split
+  · exact h y (hs y hy ‹_›)
+  · rfl
 
 theorem lookupNum_agree {ρ ρ' : Env} {x : Name} (h : ρ.lookup x = ρ'.lookup x) :
     lookupNum ρ x = lookupNum ρ' x := by unfold lookupNum; rw [h]
@@ -135,6 +164,8 @@ structure Indep (n : Nat) : Prop where
     loopN n D σ ρ' i b ks = .ok r
   lk : ∀ {D σ ρ ρ' i b kvs r}, loopK n D σ ρ i b kvs = .ok r →
     AgreeOn (fvKV kvs ++ fvB b ++ D.reads) ρ ρ' → loopK n D σ ρ' i b kvs = .ok r
+  a : ∀ {D σ ρ ρ' as r}, evalA n D σ ρ as = .ok r → AgreeOn (fvKV as ++ D.reads) ρ ρ' →
+    evalA n D σ ρ' as = .ok r
 
 /-- Split an agreement over `a ++ b ++ D.reads` style unions. -/
 theorem ag_l {N M R : List Name} {ρ ρ' : Env} (h : AgreeOn (N ++ M ++ R) ρ ρ') : AgreeOn (N ++ R) ρ ρ' :=
@@ -149,7 +180,7 @@ theorem ag_N {N R : List Name} {ρ ρ' : Env} (h : AgreeOn (N ++ R) ρ ρ') : Ag
 theorem indep : ∀ n, Indep n := by
   intro n
   induction n with
-  | zero => constructor <;> intros <;> simp_all [evalE, execOne, execS, loopN, loopK]
+  | zero => constructor <;> intros <;> simp_all [evalE, execOne, execS, loopN, loopK, evalA]
   | succ n ih =>
     constructor
     · intro D σ ρ ρ' x r h ag
@@ -264,6 +295,31 @@ theorem indep : ∀ n, Indep n := by
           cases h
           simp [execOne, ih.e ha ag, hp, ih.s hb (agree_body (proc_reads hp) (ag_R ag))]
         · cases h
+      | occ x c args =>
+        simp only [fvS] at ag
+        simp only [execOne] at h
+        split at h
+        · rename_i C hC
+          split at h
+          · rename_i hok
+            simp only [bind_ok] at h
+            obtain ⟨⟨Δg, lg⟩, hg, ⟨Δd, ld⟩, hd, ⟨ρ1, mm, l⟩, hb, h⟩ := h
+            cases h
+            simp only [List.append_assoc] at hb
+            have cr := comp_reads hC
+            have ad : AgreeOn (fvKV (dflts C.params args) ++ D.reads) (only C.vis ρ) (only C.vis ρ') :=
+              agree_only ag fun y hy hv => by
+                rcases List.mem_append.1 hy with hy | hy
+                · exact List.mem_append_right _ (cr y (List.mem_append_right _ (fvKV_filter hy)) hv)
+                · exact List.mem_append_right _ hy
+            have ab : AgreeOn (fvB C.body ++ D.reads) (Δg ++ (Δd ++ only C.vis ρ)) (Δg ++ (Δd ++ only C.vis ρ')) :=
+              ((agree_only ag fun y hy hv => by
+                rcases List.mem_append.1 hy with hy | hy
+                · exact List.mem_append_right _ (cr y (List.mem_append_left _ hy) hv)
+                · exact List.mem_append_right _ hy).append Δd).append Δg
+            simp [execOne, hC, hok, ih.a hg ag, ih.a hd ad, ih.s hb ab]
+          · cases h
+        · cases h
     · intro D σ ρ ρ' x r h ag
       cases x with
       | nil => simpa [execS] using h
@@ -297,5 +353,15 @@ theorem indep : ∀ n, Indep n := by
         have a2 : AgreeOn (fvKV kvs ++ fvB b ++ D.reads) ρ ρ' :=
           ag.mono fun y hy => by simp only [List.mem_append] at hy ⊢; grind
         simp [loopK, ih.e h0 a0, ih.s h1 (a1.cons _), ih.lk h2 a2]
+    · intro D σ ρ ρ' as r h ag
+      cases as with
+      | nil => simpa [evalA] using h
+      | cons a as =>
+        obtain ⟨y, e⟩ := a
+        simp only [fvKV] at ag
+        simp only [evalA, bind_ok] at h
+        obtain ⟨⟨t, l⟩, h0, ⟨Δ, l'⟩, h1, h⟩ := h
+        cases h
+        simp [evalA, ih.e h0 (ag_l ag), ih.a h1 (ag_r ag)]
 
 end ForgeLang

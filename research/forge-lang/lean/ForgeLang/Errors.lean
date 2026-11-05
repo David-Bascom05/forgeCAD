@@ -19,6 +19,9 @@ theorem bind_err {α β : Type} {x : R α} {f : α → R β} {e : Err} :
 theorem evalE_mono {n m D σ ρ x r} (h : evalE n D σ ρ x = .ok r) (hm : n ≤ m) :
     evalE m D σ ρ x = .ok r := (sim n).e (.inr fun _ => rfl) h (fun _ _ => rfl) hm
 
+theorem evalA_mono {n m D σ ρ x r} (h : evalA n D σ ρ x = .ok r) (hm : n ≤ m) :
+    evalA m D σ ρ x = .ok r := (sim n).a (.inr fun _ => rfl) h (fun _ _ => rfl) hm
+
 structure ErrStable (n : Nat) : Prop where
   e : ∀ {D σ ρ x er m}, evalE n D σ ρ x = .error er → er ≠ .fuel → n ≤ m → evalE m D σ ρ x = .error er
   one : ∀ {D σ ρ x er m}, execOne n D σ ρ x = .error er → er ≠ .fuel → n ≤ m →
@@ -28,12 +31,13 @@ structure ErrStable (n : Nat) : Prop where
     loopN m D σ ρ i b ks = .error er
   lk : ∀ {D σ ρ i b kvs er m}, loopK n D σ ρ i b kvs = .error er → er ≠ .fuel → n ≤ m →
     loopK m D σ ρ i b kvs = .error er
+  a : ∀ {D σ ρ as er m}, evalA n D σ ρ as = .error er → er ≠ .fuel → n ≤ m → evalA m D σ ρ as = .error er
 
 theorem errStable : ∀ n, ErrStable n := by
   intro n
   induction n with
   | zero =>
-    constructor <;> intros <;> simp_all [evalE, execOne, execS, loopN, loopK]
+    constructor <;> intros <;> simp_all [evalE, execOne, execS, loopN, loopK, evalA]
   | succ n ih =>
     constructor
     · intro D σ ρ x er m h hf hm
@@ -139,6 +143,21 @@ theorem errStable : ∀ n, ErrStable n := by
             · cases h
           · cases h
             simp [execOne, evalE_mono ha hm, *]
+      | occ x c args =>
+        simp only [execOne] at h
+        split at h
+        · rename_i C hC
+          split at h
+          · rename_i hok
+            simp only [bind_err] at h
+            rcases h with h | ⟨⟨Δg, lg⟩, hg, h | ⟨⟨Δd, ld⟩, hd, h | ⟨_, _, h⟩⟩⟩
+            · simp [execOne, hC, hok, ih.a h hf hm]
+            · simp [execOne, hC, hok, evalA_mono hg hm, ih.a h hf hm]
+            · simp only [List.append_assoc] at h
+              simp [execOne, hC, hok, evalA_mono hg hm, evalA_mono hd hm, ih.s h hf hm]
+            · cases h
+          · cases h; simp [execOne, hC, *]
+        · cases h; simp [execOne, *]
     · intro D σ ρ x er m h hf hm
       obtain ⟨m, rfl⟩ : ∃ k, m = k + 1 := ⟨m - 1, by omega⟩
       have hm : n ≤ m := by omega
@@ -173,6 +192,18 @@ theorem errStable : ∀ n, ErrStable n := by
         · simp [loopK, ih.e h hf hm]
         · simp [loopK, evalE_mono h0 hm, ih.s h hf hm]
         · simp [loopK, evalE_mono h0 hm, execS_mono h1 hm, ih.lk h hf hm]
+        · cases h
+    · intro D σ ρ as er m h hf hm
+      obtain ⟨m, rfl⟩ : ∃ k, m = k + 1 := ⟨m - 1, by omega⟩
+      have hm : n ≤ m := by omega
+      cases as with
+      | nil => simp [evalA] at h
+      | cons a as =>
+        obtain ⟨y, e⟩ := a
+        simp only [evalA, bind_err] at h
+        rcases h with h | ⟨_, h0, h | ⟨_, _, h⟩⟩
+        · simp [evalA, ih.e h hf hm]
+        · simp [evalA, evalE_mono h0 hm, ih.a h hf hm]
         · cases h
 
 /-- P2: the meaning of a document is the same under every budget large enough to finish it, and

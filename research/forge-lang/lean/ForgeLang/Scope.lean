@@ -98,6 +98,24 @@ def execOneL : Nat → Defs → (Site → Int) → Env → Env → Stmt → R (E
         let (_, m, l) ← execSL n D σ G ((y, .num ta) :: G) body
         .ok ([(x, .frag m)], pre [.nm x] m, la ++ l)
       | none => .error (.noFn p)
+    | .occ x c args =>
+      match D.comps.lookup c with
+      | some C =>
+        if argsOK C.params args then do
+          let (Δg, lg) ← evalAL n D σ G ρ args
+          let (Δd, ld) ← evalAL n D σ (only C.vis G) (only C.vis G) (dflts C.params args)
+          let (_, m, l) ← execSL n D σ (only C.vis G) (Δg ++ Δd ++ only C.vis G) C.body
+          .ok ([(x, .frag m)], pre [.nm x] m, lg ++ ld ++ l)
+        else .error (.noParam c)
+      | none => .error (.noComp c)
+
+def evalAL : Nat → Defs → (Site → Int) → Env → Env → List (Name × Expr) → R (Env × Log)
+  | 0, _, _, _, _, _ => .error .fuel
+  | _ + 1, _, _, _, _, [] => .ok ([], [])
+  | n + 1, D, σ, G, ρ, (y, e) :: as => do
+    let (t, l) ← evalEL n D σ G ρ e
+    let (Δ, l') ← evalAL n D σ G ρ as
+    .ok ((y, .num t) :: Δ, l ++ l')
 
 def execSL : Nat → Defs → (Site → Int) → Env → Env → List Stmt → R (Env × Model × Log)
   | 0, _, _, _, _, _ => .error .fuel
@@ -151,9 +169,12 @@ def locS : Stmt → List Name
   | _ => []
 end
 
-/-- The rule: no local name is one a body reads. -/
+/-- The rule: no local name is one a body reads. A component's params and the names its body
+binds are local to it. In lexical scope a component's body (and the functions it calls) see the
+document's visible names (`vis`) and nothing else of it. -/
 def DefsOK (D : Defs) : Prop :=
-  (∀ f ∈ D.fns, f.2.1 ∉ D.reads) ∧ (∀ p ∈ D.procs, p.2.1 ∉ D.reads ∧ ∀ y ∈ allB p.2.2, y ∉ D.reads)
+  (∀ f ∈ D.fns, f.2.1 ∉ D.reads) ∧ (∀ p ∈ D.procs, p.2.1 ∉ D.reads ∧ ∀ y ∈ allB p.2.2, y ∉ D.reads) ∧
+  (∀ c ∈ D.comps, (∀ y ∈ c.2.params.map Prod.fst, y ∉ D.reads) ∧ ∀ y ∈ allB c.2.body, y ∉ D.reads)
 
 def NoReads (D : Defs) (N : List Name) : Prop := ∀ y ∈ N, y ∉ D.reads
 
@@ -180,6 +201,8 @@ structure ScopeAt (n : Nat) : Prop where
   lk : ∀ {D σ G ρL ρE i b kvs}, DefsOK D → NoReads D (i :: allB b) →
     AgreeOn (fvKV kvs ++ fvB b ++ D.reads) ρL ρE → AgreeOn D.reads G ρE →
     loopKL n D σ G ρL i b kvs = loopK n D σ ρE i b kvs
+  a : ∀ {D σ G ρL ρE as}, DefsOK D → AgreeOn (fvKV as ++ D.reads) ρL ρE → AgreeOn D.reads G ρE →
+    evalAL n D σ G ρL as = evalA n D σ ρE as
 
 macro "agm" h:term : term => `(AgreeOn.mono $h (fun y hy => by simp [fvE, fvS, fvB, fvKV] at hy ⊢; grind))
 
@@ -299,9 +322,63 @@ theorem scopeAt : ∀ n, ScopeAt n := by
           | some yb =>
             obtain ⟨y, body⟩ := yb
             simp only
-            have hy := dok.2 (p, y, body) (lookup_mem hp)
+            have hy := dok.2.1 (p, y, body) (lookup_mem hp)
             rw [ih.s dok hy.2 (agree_body (proc_reads hp) hG)
               (hG.ext_fresh (Δ := [(y, .num pa.1)]) (by intro z hz; simp [keys] at hz; subst hz; exact hy.1))]
+      | occ x c args =>
+        simp only [execOneL, execOne]
+        cases hC : D.comps.lookup c with
+        | none => rfl
+        | some C =>
+          simp only
+          have hc := dok.2.2 (c, C) (lookup_mem hC)
+          have cr := comp_reads hC
+          split
+          · rename_i hok
+            rw [ih.a dok (agm ag) hG]
+            cases hg : evalA n D σ ρE args with
+            | error e => rfl
+            | ok pg =>
+              obtain ⟨Δg, lg⟩ := pg
+              simp only [ok_bind]
+              have av : AgreeOn D.reads (only C.vis G) (only C.vis ρE) := agree_only hG (fun y hy _ => hy)
+              rw [ih.a dok (agree_only hG fun y hy hv => by
+                rcases List.mem_append.1 hy with hy | hy
+                · exact cr y (List.mem_append_right _ (fvKV_filter hy)) hv
+                · exact hy) av]
+              cases hd : evalA n D σ (only C.vis ρE) (dflts C.params args) with
+              | error e => rfl
+              | ok pd =>
+                obtain ⟨Δd, ld⟩ := pd
+                simp only [ok_bind]
+                have ab : AgreeOn (fvB C.body ++ D.reads) (Δg ++ Δd ++ only C.vis G) (Δg ++ Δd ++ only C.vis ρE) := by
+                  rw [List.append_assoc, List.append_assoc]
+                  exact ((agree_only hG fun y hy hv => by
+                    rcases List.mem_append.1 hy with hy | hy
+                    · exact cr y (List.mem_append_left _ hy) hv
+                    · exact hy).append Δd).append Δg
+                have fr : ∀ y ∈ keys (Δg ++ Δd), y ∉ D.reads := by
+                  intro y hy
+                  simp only [keys, List.map_append, List.mem_append] at hy
+                  apply hc.1 y
+                  rcases hy with hy | hy
+                  · have e := evalA_keys args hg
+                    simp only [keys] at e
+                    rw [e] at hy
+                    obtain ⟨⟨y', e'⟩, hm, rfl⟩ := List.mem_map.1 hy
+                    have := List.all_eq_true.1 hok _ hm
+                    simp only [Option.isSome_iff_exists] at this
+                    obtain ⟨d, hd⟩ := this
+                    exact List.mem_map.2 ⟨(y', d), lookup_mem hd, rfl⟩
+                  · have e := evalA_keys _ hd
+                    simp only [keys] at e
+                    rw [e] at hy
+                    obtain ⟨⟨y', e'⟩, hm, rfl⟩ := List.mem_map.1 hy
+                    exact List.mem_map.2 ⟨(y', e'), (List.mem_filter.1 hm).1, rfl⟩
+                have aG := av.ext_fresh fr
+                rw [List.append_assoc] at aG
+                rw [ih.s dok hc.2 ab (by rw [List.append_assoc]; exact aG)]
+          · rfl
     · intro D σ G ρL ρE x dok nr ag hG
       cases x with
       | nil => rfl
@@ -345,6 +422,16 @@ theorem scopeAt : ∀ n, ScopeAt n := by
           cases execS n D σ ((i, .num pe.1) :: ρE) b with
           | error e => rfl
           | ok p1 => simp only [ok_bind]; rw [ih.lk dok nr (agm ag) hG]
+    · intro D σ G ρL ρE as dok ag hG
+      cases as with
+      | nil => rfl
+      | cons a as =>
+        obtain ⟨y, e⟩ := a
+        simp only [evalAL, evalA]
+        rw [ih.e dok (agm ag) hG]
+        cases evalE n D σ ρE e with
+        | error e => rfl
+        | ok pe => simp only [ok_bind]; rw [ih.a dok (agm ag) hG]
 
 theorem execTop_eq : ∀ n {D σ ρ ss}, DefsOK D → (∀ s ∈ ss, NoReads D (locS s)) →
     execTop n D σ ρ ss = execS n D σ ρ ss

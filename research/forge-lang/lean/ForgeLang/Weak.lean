@@ -46,17 +46,39 @@ theorem Sub.lookupRef {ρ' ρ : Env} (h : Sub ρ' ρ) {x : Name} {rel : FId} {t 
   · cases hx
   · cases hx
 
+theorem lookup_only (N : List Name) (x : Name) :
+    ∀ ρ : Env, (only N ρ).lookup x = if x ∈ N then ρ.lookup x else none
+  | [] => by simp [only, List.lookup]
+  | (y, b) :: ρ => by
+    have ih := lookup_only N x ρ
+    unfold only at ih ⊢
+    rw [List.filter_cons]
+    by_cases hxy : x = y
+    · subst hxy
+      by_cases hx : x ∈ N <;> simp [hx, List.lookup] at ih ⊢
+      exact ih
+    · have e : (x == y) = false := by simp [hxy]
+      split <;> simp only [List.lookup, e, ih]
+
+theorem Sub.only (N : List Name) {ρ' ρ : Env} (h : Sub ρ' ρ) : Sub (only N ρ') (only N ρ) := by
+  intro x b hx
+  rw [lookup_only] at hx ⊢
+  split at hx
+  · rw [if_pos ‹_›]; exact h x b hx
+  · cases hx
+
 structure Weak (n : Nat) : Prop where
   e : ∀ {D σ ρ' ρ x r}, evalE n D σ ρ' x = .ok r → Sub ρ' ρ → evalE n D σ ρ x = .ok r
   one : ∀ {D σ ρ' ρ x r}, execOne n D σ ρ' x = .ok r → Sub ρ' ρ → execOne n D σ ρ x = .ok r
   s : ∀ {D σ ρ' ρ x r}, execS n D σ ρ' x = .ok r → Sub ρ' ρ → execS n D σ ρ x = .ok r
   ln : ∀ {D σ ρ' ρ i b ks r}, loopN n D σ ρ' i b ks = .ok r → Sub ρ' ρ → loopN n D σ ρ i b ks = .ok r
   lk : ∀ {D σ ρ' ρ i b kvs r}, loopK n D σ ρ' i b kvs = .ok r → Sub ρ' ρ → loopK n D σ ρ i b kvs = .ok r
+  a : ∀ {D σ ρ' ρ as r}, evalA n D σ ρ' as = .ok r → Sub ρ' ρ → evalA n D σ ρ as = .ok r
 
 theorem weak : ∀ n, Weak n := by
   intro n
   induction n with
-  | zero => constructor <;> intros <;> simp_all [evalE, execOne, execS, loopN, loopK]
+  | zero => constructor <;> intros <;> simp_all [evalE, execOne, execS, loopN, loopK, evalA]
   | succ n ih =>
     constructor
     · intro D σ ρ' ρ x r h hs
@@ -163,6 +185,21 @@ theorem weak : ∀ n, Weak n := by
           cases h
           simp [execOne, ih.e ha hs, hp, ih.s hb (hs.cons _)]
         · cases h
+      | occ x c args =>
+        simp only [execOne] at h
+        split at h
+        · rename_i C hC
+          split at h
+          · rename_i hok
+            simp only [bind_ok] at h
+            obtain ⟨⟨Δg, lg⟩, hg, ⟨Δd, ld⟩, hd, ⟨ρ1, mm, l⟩, hb, h⟩ := h
+            cases h
+            simp only [List.append_assoc] at hb
+            have so := hs.only C.vis
+            have hb' := ih.s hb ((so.append Δd).append Δg)
+            simp [execOne, hC, hok, ih.a hg hs, ih.a hd so, hb']
+          · cases h
+        · cases h
     · intro D σ ρ' ρ x r h hs
       cases x with
       | nil => simpa [execS] using h
@@ -188,5 +225,14 @@ theorem weak : ∀ n, Weak n := by
         obtain ⟨⟨t, l0⟩, h0, ⟨ρ1, m1, l1⟩, h1, ⟨m2, l2⟩, h2, h⟩ := h
         cases h
         simp [loopK, ih.e h0 hs, ih.s h1 (hs.cons _), ih.lk h2 hs]
+    · intro D σ ρ' ρ as r h hs
+      cases as with
+      | nil => simpa [evalA] using h
+      | cons a as =>
+        obtain ⟨y, e⟩ := a
+        simp only [evalA, bind_ok] at h
+        obtain ⟨⟨t, l⟩, h0, ⟨Δ, l'⟩, h1, h⟩ := h
+        cases h
+        simp [evalA, ih.e h0 hs, ih.a h1 hs]
 
 end ForgeLang

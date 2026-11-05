@@ -98,6 +98,8 @@ inductive Stmt where
   | ifs : Expr → List Stmt → List Stmt → Stmt
   /-- `x = proc(arg)`: the procedure's features under `x`. -/
   | use : Name → Name → Expr → Stmt
+  /-- `x = part(c(y1: e1, ..))`: an occurrence of component `c`, its features under `x`. -/
+  | occ : Name → Name → List (Name × Expr) → Stmt
 
 inductive Bind where
   | num : Tr → Bind
@@ -105,9 +107,18 @@ inductive Bind where
 
 abbrev Env := List (Name × Bind)
 
+/-- `component c(y1: d1, ..) { body }`: params with defaults, and the names of the defining
+document the body may see (its shared params; empty for a component of a used module, whose own
+shared params are linked in as params). Functions are in `Defs` and seen everywhere. -/
+structure Comp where
+  params : List (Name × Expr)
+  body : List Stmt
+  vis : List Name
+
 structure Defs where
   fns : List (Name × (Name × Expr)) := []
   procs : List (Name × (Name × List Stmt)) := []
+  comps : List (Name × Comp) := []
   /-- Record observed sites. `true` is the language; `false` exists only for the counterexample. -/
   track : Bool := true
 
@@ -120,6 +131,8 @@ inductive Err where
   | range
   | noFn (f : Name)
   | dupId
+  | noComp (c : Name)
+  | noParam (c : Name)
   deriving DecidableEq, Repr
 
 abbrev R (α : Type) := Except Err α
@@ -148,6 +161,15 @@ def lookupRef (ρ : Env) (x : Name) (rel : FId) : R Tr :=
     | none => .error (.dangling x rel)
   | some (.num _) => .error (.notFeature x)
   | none => .error (.unbound x)
+
+/-- The environment a component body starts from: only the visible names of the caller's. -/
+def only (N : List Name) (ρ : Env) : Env := ρ.filter fun e => N.contains e.1
+
+/-- The params a call leaves to their defaults. -/
+def dflts (ps args : List (Name × Expr)) : List (Name × Expr) := ps.filter fun p => (args.lookup p.1).isNone
+
+/-- Every argument names a param. -/
+def argsOK (ps args : List (Name × Expr)) : Bool := args.all fun a => (ps.lookup a.1).isSome
 
 /-- An index read from a number: negative is an error, never a wrap or a clamp. -/
 def toIx (v : Int) : R Nat := if v < 0 then .error .range else .ok v.toNat
@@ -233,6 +255,25 @@ def execOne : Nat → Defs → (Site → Int) → Env → Stmt → R (Env × Mod
         let (_, m, l) ← execS n D σ ((y, .num ta) :: ρ) body
         .ok ([(x, .frag m)], pre [.nm x] m, la ++ l)
       | none => .error (.noFn p)
+    | .occ x c args =>
+      match D.comps.lookup c with
+      | some C =>
+        if argsOK C.params args then do
+          let (Δg, lg) ← evalA n D σ ρ args
+          let (Δd, ld) ← evalA n D σ (only C.vis ρ) (dflts C.params args)
+          let (_, m, l) ← execS n D σ (Δg ++ Δd ++ only C.vis ρ) C.body
+          .ok ([(x, .frag m)], pre [.nm x] m, lg ++ ld ++ l)
+        else .error (.noParam c)
+      | none => .error (.noComp c)
+
+/-- Arguments, each evaluated in the same environment, bound to their param names. -/
+def evalA : Nat → Defs → (Site → Int) → Env → List (Name × Expr) → R (Env × Log)
+  | 0, _, _, _, _ => .error .fuel
+  | _ + 1, _, _, _, [] => .ok ([], [])
+  | n + 1, D, σ, ρ, (y, e) :: as => do
+    let (t, l) ← evalE n D σ ρ e
+    let (Δ, l') ← evalA n D σ ρ as
+    .ok ((y, .num t) :: Δ, l ++ l')
 
 def execS : Nat → Defs → (Site → Int) → Env → List Stmt → R (Env × Model × Log)
   | 0, _, _, _, _ => .error .fuel

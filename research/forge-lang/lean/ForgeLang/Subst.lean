@@ -100,6 +100,26 @@ theorem lookupRef_subst (θ : Site → Tr) (ρ : Env) (x : Name) (rel : FId) :
 theorem toIx_den {θ : Site → Tr} {σA σB : Site → Int} (hσ : ∀ s, σA s = (θ s).den σB) (t : Tr) :
     toIx ((t.subst θ).den σB) = toIx (t.den σA) := by rw [Tr.den_subst hσ]
 
+def fA (θ : Site → Tr) (r : Env × Log) : Env × Log := (r.1.subst θ, substLog θ r.2)
+
+theorem only_subst (N : List Name) (θ : Site → Tr) (ρ : Env) : (only N ρ).subst θ = only N (ρ.subst θ) := by
+  simp [only, Env.subst, List.filter_map, Function.comp_def]
+
+theorem compT_body {θ : Site → Tr} {D : Defs} {c : Name} {C : Comp} {N : List Site}
+    (hC : D.comps.lookup c = some C) (fix : FixT θ (N ++ D.code)) : FixT θ (codeB C.body ++ D.code) :=
+  fix.mono fun s hs => by
+    rcases List.mem_append.1 hs with hs | hs
+    · exact List.mem_append_right _ (comp_code hC s (List.mem_append_left _ hs))
+    · exact List.mem_append_right _ hs
+
+theorem compT_dflts {θ : Site → Tr} {D : Defs} {c : Name} {C : Comp} {N : List Site}
+    (args : List (Name × Expr)) (hC : D.comps.lookup c = some C) (fix : FixT θ (N ++ D.code)) :
+    FixT θ (codeKV (dflts C.params args) ++ D.code) :=
+  fix.mono fun s hs => by
+    rcases List.mem_append.1 hs with hs | hs
+    · exact List.mem_append_right _ (comp_code hC s (List.mem_append_right _ (codeKV_filter hs)))
+    · exact List.mem_append_right _ hs
+
 structure SubstAt (θ : Site → Tr) (σA σB : Site → Int) (n : Nat) : Prop where
   e : ∀ {D ρ x}, FixT θ (codeE x ++ D.code) →
     evalE n D σB (ρ.subst θ) x = (evalE n D σA ρ x).map (fE θ)
@@ -111,6 +131,8 @@ structure SubstAt (θ : Site → Tr) (σA σB : Site → Int) (n : Nat) : Prop w
     loopN n D σB (ρ.subst θ) i b ks = (loopN n D σA ρ i b ks).map (fL θ)
   lk : ∀ {D ρ i b kvs}, FixT θ (codeKV kvs ++ codeB b ++ D.code) →
     loopK n D σB (ρ.subst θ) i b kvs = (loopK n D σA ρ i b kvs).map (fL θ)
+  a : ∀ {D ρ as}, FixT θ (codeKV as ++ D.code) →
+    evalA n D σB (ρ.subst θ) as = (evalA n D σA ρ as).map (fA θ)
 
 macro "fxt" fix:term : term => `(FixT.mono $fix (fun s hs => by simp [codeE, codeS, codeB, codeKV] at hs ⊢; grind))
 
@@ -118,7 +140,7 @@ theorem substEq {θ : Site → Tr} {σA σB : Site → Int} (hσ : ∀ s, σA s 
     ∀ n, SubstAt θ σA σB n := by
   intro n
   induction n with
-  | zero => constructor <;> intros <;> simp [evalE, execOne, execS, loopN, loopK]
+  | zero => constructor <;> intros <;> simp [evalE, execOne, execS, loopN, loopK, evalA]
   | succ n ih =>
     constructor
     · intro D ρ x fix
@@ -286,6 +308,31 @@ theorem substEq {θ : Site → Tr} {σA σB : Site → Int} (hσ : ∀ s, σA s 
             rw [this]
             cases execS n D σA ((y, .num ta) :: ρ) body <;>
               simp [fS, substLog_append, Env.subst, Bind.subst, Model.subst_pre]
+      | occ x c args =>
+        simp only [execOne]
+        cases hC : D.comps.lookup c with
+        | none => rfl
+        | some C =>
+          simp only
+          split
+          · rw [ih.a (fxt fix)]
+            cases evalA n D σA ρ args with
+            | error e => rfl
+            | ok pg =>
+              obtain ⟨Δg, lg⟩ := pg
+              simp only [map_ok, ok_bind, fA]
+              rw [← only_subst, ih.a (compT_dflts args hC fix)]
+              cases evalA n D σA (only C.vis ρ) (dflts C.params args) with
+              | error e => rfl
+              | ok pd =>
+                obtain ⟨Δd, ld⟩ := pd
+                simp only [map_ok, ok_bind, fA]
+                have := ih.s (D := D) (ρ := Δg ++ Δd ++ only C.vis ρ) (x := C.body) (compT_body hC fix)
+                rw [Env.subst_append, Env.subst_append] at this
+                rw [this]
+                cases execS n D σA (Δg ++ Δd ++ only C.vis ρ) C.body <;>
+                  simp [fS, substLog_append, Env.subst, Bind.subst, Model.subst_pre]
+          · rfl
     · intro D ρ x fix
       cases x with
       | nil => simp [execS, fS, Env.subst, Model.subst, substLog]
@@ -341,5 +388,19 @@ theorem substEq {θ : Site → Tr} {σA σB : Site → Int} (hσ : ∀ s, σA s 
             rw [ih.lk (fxt fix)]
             cases loopK n D σA ρ i b kvs <;>
               simp [fL, fS, Model.subst_append, Model.subst_pre, substLog_append]
+    · intro D ρ as fix
+      cases as with
+      | nil => simp [evalA, fA, Env.subst, substLog]
+      | cons a as =>
+        obtain ⟨y, e⟩ := a
+        simp only [evalA]
+        rw [ih.e (fxt fix)]
+        cases evalE n D σA ρ e with
+        | error e => rfl
+        | ok pe =>
+          obtain ⟨t, l0⟩ := pe
+          simp only [map_ok, ok_bind, fE]
+          rw [ih.a (fxt fix)]
+          cases evalA n D σA ρ as <;> simp [fA, Env.subst, Bind.subst, substLog_append]
 
 end ForgeLang

@@ -114,6 +114,7 @@ def codeS : Stmt → List Site
   | .forN _ _ c b => codeE c ++ codeB b
   | .forK _ _ kvs b => codeKV kvs ++ codeB b
   | .ifs c a b => codeE c ++ codeB a ++ codeB b
+  | .occ _ _ args => codeKV args
 def codeB : List Stmt → List Site
   | [] => []
   | s :: ss => codeS s ++ codeB ss
@@ -123,7 +124,8 @@ def codeKV : List (Name × Expr) → List Site
 end
 
 def Defs.code (D : Defs) : List Site :=
-  D.fns.flatMap (fun f => codeE f.2.2) ++ D.procs.flatMap (fun p => codeB p.2.2)
+  D.fns.flatMap (fun f => codeE f.2.2) ++ D.procs.flatMap (fun p => codeB p.2.2) ++
+    D.comps.flatMap (fun c => codeB c.2.body ++ codeKV c.2.params)
 
 /-- `θ` fixes every site in `N`. -/
 def Fix (θ : Site → Site) (N : List Site) : Prop := ∀ s ∈ N, θ s = s
@@ -144,13 +146,48 @@ theorem fn_code {D : Defs} {f x : Name} {body : Expr} (hf : D.fns.lookup f = som
     ∀ s ∈ codeE body, s ∈ D.code := by
   intro s hs
   simp only [Defs.code, List.mem_append, List.mem_flatMap]
-  exact .inl ⟨(f, x, body), lookup_mem hf, hs⟩
+  exact .inl (.inl ⟨(f, x, body), lookup_mem hf, hs⟩)
 
 theorem proc_code {D : Defs} {p y : Name} {body : List Stmt} (hp : D.procs.lookup p = some (y, body)) :
     ∀ s ∈ codeB body, s ∈ D.code := by
   intro s hs
   simp only [Defs.code, List.mem_append, List.mem_flatMap]
-  exact .inr ⟨(p, y, body), lookup_mem hp, hs⟩
+  exact .inl (.inr ⟨(p, y, body), lookup_mem hp, hs⟩)
+
+theorem comp_code {D : Defs} {c : Name} {C : Comp} (hC : D.comps.lookup c = some C) :
+    ∀ s ∈ codeB C.body ++ codeKV C.params, s ∈ D.code := by
+  intro s hs
+  simp only [Defs.code, List.mem_append, List.mem_flatMap]
+  exact .inr ⟨(c, C), lookup_mem hC, by simpa using hs⟩
+
+theorem codeKV_filter {p : Name × Expr → Bool} : ∀ {kvs : List (Name × Expr)} {s : Site},
+    s ∈ codeKV (kvs.filter p) → s ∈ codeKV kvs
+  | [], _, h => by simp [codeKV] at h
+  | (k, e) :: kvs, s, h => by
+    rw [List.filter_cons] at h
+    split at h
+    · simp only [codeKV, List.mem_append] at h ⊢
+      exact h.elim .inl fun h => .inr (codeKV_filter h)
+    · simp only [codeKV, List.mem_append]; exact .inr (codeKV_filter h)
+
+theorem only_ren (N : List Name) (θ : Site → Site) (ρ : Env) : (only N ρ).ren θ = only N (ρ.ren θ) := by
+  simp [only, Env.ren, List.filter_map, Function.comp_def]
+
+/-- A component's code: its body's and defaults' sites are in `D.code`. -/
+theorem comp_fix_body {θ : Site → Site} {D : Defs} {c : Name} {C : Comp} {N : List Site}
+    (hC : D.comps.lookup c = some C) (fix : Fix θ (N ++ D.code)) : Fix θ (codeB C.body ++ D.code) :=
+  fix.mono fun s hs => by
+    rcases List.mem_append.1 hs with hs | hs
+    · exact List.mem_append_right _ (comp_code hC s (List.mem_append_left _ hs))
+    · exact List.mem_append_right _ hs
+
+theorem comp_fix_dflts {θ : Site → Site} {D : Defs} {c : Name} {C : Comp} {N : List Site}
+    (args : List (Name × Expr)) (hC : D.comps.lookup c = some C) (fix : Fix θ (N ++ D.code)) :
+    Fix θ (codeKV (dflts C.params args) ++ D.code) :=
+  fix.mono fun s hs => by
+    rcases List.mem_append.1 hs with hs | hs
+    · exact List.mem_append_right _ (comp_code hC s (List.mem_append_right _ (codeKV_filter hs)))
+    · exact List.mem_append_right _ hs
 
 structure RenAt (θ : Site → Site) (σA σB : Site → Int) (n : Nat) : Prop where
   e : ∀ {D ρ x r}, evalE n D σA (ρ.ren θ) x = .ok r → Fix θ (codeE x ++ D.code) →
@@ -163,13 +200,15 @@ structure RenAt (θ : Site → Site) (σA σB : Site → Int) (n : Nat) : Prop w
     ∃ r', loopN n D σB ρ i b ks = .ok r' ∧ (r'.1.ren θ, r'.2.map θ) = r
   lk : ∀ {D ρ i b kvs r}, loopK n D σA (ρ.ren θ) i b kvs = .ok r → Fix θ (codeKV kvs ++ codeB b ++ D.code) →
     ∃ r', loopK n D σB ρ i b kvs = .ok r' ∧ (r'.1.ren θ, r'.2.map θ) = r
+  a : ∀ {D ρ as r}, evalA n D σA (ρ.ren θ) as = .ok r → Fix θ (codeKV as ++ D.code) →
+    ∃ r', evalA n D σB ρ as = .ok r' ∧ (r'.1.ren θ, r'.2.map θ) = r
 
 theorem fx {θ : Site → Site} {N M : List Site} (h : Fix θ N) (hs : ∀ s, s ∈ M → s ∈ N) : Fix θ M := h.mono hs
 
 theorem ren : ∀ {θ σA σB}, (∀ s, σB s = σA (θ s)) → ∀ (n : Nat), RenAt θ σA σB n := by
   intro θ σA σB hσ n
   induction n with
-  | zero => constructor <;> intros <;> simp_all [evalE, execOne, execS, loopN, loopK]
+  | zero => constructor <;> intros <;> simp_all [evalE, execOne, execS, loopN, loopK, evalA]
   | succ n ih =>
     constructor
     · intro D ρ x r h fix
@@ -357,6 +396,32 @@ theorem ren : ∀ {θ σA σB}, (∀ s, σB s = σA (θ s)) → ∀ (n : Nat), R
           exact ⟨_, by simp [execOne, ha', hp, hb'] <;> rfl, by
             simp [Env.ren, Bind.ren, Model.ren_pre]⟩
         · cases h
+      | occ x c args =>
+        simp only [execOne] at h
+        split at h
+        · rename_i C hC
+          split at h
+          · rename_i hok
+            simp only [bind_ok] at h
+            obtain ⟨⟨Δg, lg⟩, hg, ⟨Δd, ld⟩, hd, ⟨ρ1, mm, l⟩, hb, h⟩ := h
+            cases h
+            obtain ⟨⟨Δg', lg'⟩, hg', eg⟩ := ih.a hg (fx fix fun s hs => by simp [codeS] at *; grind)
+            simp only [Prod.mk.injEq] at eg
+            obtain ⟨rfl, rfl⟩ := eg
+            rw [← only_ren] at hd
+            obtain ⟨⟨Δd', ld'⟩, hd', ed⟩ := ih.a hd (comp_fix_dflts args hC fix)
+            simp only [Prod.mk.injEq] at ed
+            obtain ⟨rfl, rfl⟩ := ed
+            have hb2 : execS n D σA (Env.ren θ (Δg' ++ Δd' ++ only C.vis ρ)) C.body = .ok (ρ1, mm, l) := by
+              simpa [Env.ren_append, only_ren] using hb
+            obtain ⟨⟨ρ1', mm', l'⟩, hb', eb⟩ := ih.s hb2 (comp_fix_body hC fix)
+            simp only [Prod.mk.injEq] at eb
+            obtain ⟨-, rfl, rfl⟩ := eb
+            simp only [List.append_assoc] at hb'
+            exact ⟨_, by simp [execOne, hC, hok, hg', hd', hb'] <;> rfl, by
+              simp [Env.ren, Bind.ren, Model.ren_pre]⟩
+          · cases h
+        · cases h
     · intro D ρ x r h fix
       cases x with
       | nil =>
@@ -416,5 +481,22 @@ theorem ren : ∀ {θ σA σB}, (∀ s, σB s = σA (θ s)) → ∀ (n : Nat), R
         simp only [Prod.mk.injEq] at e2
         obtain ⟨rfl, rfl⟩ := e2
         exact ⟨_, by simp [loopK, h0', h1', h2'] <;> rfl, by simp [Model.ren_append, Model.ren_pre]⟩
+    · intro D ρ as r h fix
+      cases as with
+      | nil =>
+        cases n <;> simp [evalA] at h
+        all_goals (subst h; exact ⟨_, rfl, by simp [Env.ren]⟩)
+      | cons a as =>
+        obtain ⟨y, e⟩ := a
+        simp only [evalA, bind_ok] at h
+        obtain ⟨⟨t, l0⟩, h0, ⟨Δ, l1⟩, h1, h⟩ := h
+        cases h
+        obtain ⟨⟨t', l0'⟩, h0', e0⟩ := ih.e h0 (fx fix fun s hs => by simp [codeKV] at *; grind)
+        simp only [Prod.mk.injEq] at e0
+        obtain ⟨rfl, rfl⟩ := e0
+        obtain ⟨⟨Δ', l1'⟩, h1', e1⟩ := ih.a h1 (fx fix fun s hs => by simp [codeKV] at *; grind)
+        simp only [Prod.mk.injEq] at e1
+        obtain ⟨rfl, rfl⟩ := e1
+        exact ⟨_, by simp [evalA, h0', h1'] <;> rfl, by simp [Env.ren, Bind.ren]⟩
 
 end ForgeLang

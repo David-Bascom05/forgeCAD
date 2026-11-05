@@ -123,6 +123,20 @@ theorem modelSites_append (A B : Model) : modelSites (A ++ B) = modelSites A ++ 
   simp [modelSites]
 @[simp] theorem modelSites_nil : modelSites [] = [] := rfl
 
+theorem AllIn.env_sub {L C : List Site} {D : Defs} {ρ1 ρ2 : Env} (h : AllIn L C D ρ1)
+    (hs : ∀ s ∈ envSites ρ1, s ∈ envSites ρ2) : AllIn L C D ρ2 := by
+  intro s hs'
+  rcases h s hs' with h | h | h
+  · exact .inl h
+  · exact .inr (.inl h)
+  · exact .inr (.inr (hs s h))
+
+theorem envSites_only (N : List Name) (ρ : Env) : ∀ s ∈ envSites (only N ρ), s ∈ envSites ρ := by
+  intro s hs
+  simp only [envSites, only, List.mem_flatMap, List.mem_filter] at hs ⊢
+  obtain ⟨e, ⟨he, -⟩, hs⟩ := hs
+  exact ⟨e, he, hs⟩
+
 structure SitesIn (n : Nat) : Prop where
   e : ∀ {D σ ρ x t l}, evalE n D σ ρ x = .ok (t, l) → AllIn (t.sites ++ l) (codeE x) D ρ
   one : ∀ {D σ ρ x Δ m l}, execOne n D σ ρ x = .ok (Δ, m, l) →
@@ -132,13 +146,14 @@ structure SitesIn (n : Nat) : Prop where
   ln : ∀ {D σ ρ i b ks m l}, loopN n D σ ρ i b ks = .ok (m, l) → AllIn (modelSites m ++ l) (codeB b) D ρ
   lk : ∀ {D σ ρ i b kvs m l}, loopK n D σ ρ i b kvs = .ok (m, l) →
     AllIn (modelSites m ++ l) (codeKV kvs ++ codeB b) D ρ
+  a : ∀ {D σ ρ as Δ l}, evalA n D σ ρ as = .ok (Δ, l) → AllIn (envSites Δ ++ l) (codeKV as) D ρ
 
 macro "fin" : tactic => `(tactic| ((repeat' apply And.intro) <;> first | assumption | exact allIn_nil))
 
 theorem sitesIn : ∀ n, SitesIn n := by
   intro n
   induction n with
-  | zero => constructor <;> intros <;> simp_all [evalE, execOne, execS, loopN, loopK]
+  | zero => constructor <;> intros <;> simp_all [evalE, execOne, execS, loopN, loopK, evalA]
   | succ n ih =>
     constructor
     · intro D σ ρ x t l h
@@ -298,6 +313,38 @@ theorem sitesIn : ∀ n, SitesIn n := by
             List.append_nil]
           fin
         · cases h
+      | occ x c args =>
+        simp only [execOne] at h
+        split at h
+        · rename_i C hC
+          split at h
+          · simp only [bind_ok] at h
+            obtain ⟨⟨Δg, lg⟩, hg, ⟨Δd, ld⟩, hd, ⟨ρ1, mm, l'⟩, hb, h⟩ := h
+            cases h
+            have cc := comp_code hC
+            have G := (ih.a hg).mono (C' := codeS (.occ x c args)) (by intro s hs; simp [codeS, hs])
+            rw [allIn_append] at G
+            obtain ⟨G1, G2⟩ := G
+            have Dd := (((ih.a hd).toDefs (C' := codeS (.occ x c args))
+              (fun s hs => cc s (List.mem_append_right _ (codeKV_filter hs)))).env_sub (envSites_only _ _))
+            rw [allIn_append] at Dd
+            obtain ⟨D1, D2⟩ := Dd
+            have B := (((ih.s hb).toDefs (C' := codeS (.occ x c args))
+              (fun s hs => cc s (List.mem_append_left _ hs))).env_sub (ρ2 := (Δg ++ Δd) ++ ρ) (by
+                intro s hs
+                simp only [envSites_append, List.mem_append] at hs ⊢
+                rcases hs with (hs | hs) | hs
+                · exact .inl (.inl hs)
+                · exact .inl (.inr hs)
+                · exact .inr (envSites_only _ _ s hs))).unenv (by
+                  rw [envSites_append, allIn_append]; exact ⟨G1, D1⟩)
+            rw [allIn_append, allIn_append] at B
+            obtain ⟨⟨-, B1⟩, B2⟩ := B
+            simp only [envSites_cons, bind_sites_frag, modelSites_pre, envSites_nil, allIn_append,
+              List.append_nil]
+            fin
+          · cases h
+        · cases h
     · intro D σ ρ x Δ m l h
       cases x with
       | nil => simp [execS] at h; obtain ⟨rfl, rfl, rfl⟩ := h; simpa using allIn_nil
@@ -347,6 +394,22 @@ theorem sitesIn : ∀ n, SitesIn n := by
         rw [allIn_append] at S2
         obtain ⟨S2a, S2b⟩ := S2
         simp only [modelSites_append, modelSites_pre, allIn_append]
+        fin
+    · intro D σ ρ as Δ l h
+      cases as with
+      | nil => simp [evalA] at h; obtain ⟨rfl, rfl⟩ := h; simpa using allIn_nil
+      | cons a as =>
+        obtain ⟨y, e⟩ := a
+        simp only [evalA, bind_ok] at h
+        obtain ⟨⟨t, l0⟩, h0, ⟨Δ1, l1⟩, h1, h⟩ := h
+        cases h
+        have E := (ih.e h0).mono (C' := codeKV ((y, e) :: as)) (by intro s hs; simp [codeKV, hs])
+        rw [allIn_append] at E
+        obtain ⟨E1, E2⟩ := E
+        have S := (ih.a h1).mono (C' := codeKV ((y, e) :: as)) (by intro s hs; simp [codeKV, hs])
+        rw [allIn_append] at S
+        obtain ⟨S1, S2⟩ := S
+        simp only [envSites_cons, bind_sites_num, allIn_append]
         fin
 
 /-- After SplitInstance, a feature of instance `k` carries no other instance's literal. -/
