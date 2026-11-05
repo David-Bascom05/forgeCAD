@@ -55,6 +55,17 @@ impl Grid {
         n: usize,
         boxes: impl Fn(usize) -> (Point2, Point2) + Sync,
     ) -> Grid {
+        Grid::packed_as(lo, hi, n, boxes, |i| i as u32)
+    }
+
+    /// `packed`, item `i` going in as the id `id(i)` (several items may share one).
+    pub fn packed_as(
+        lo: Point2,
+        hi: Point2,
+        n: usize,
+        boxes: impl Fn(usize) -> (Point2, Point2) + Sync,
+        id: impl Fn(usize) -> u32 + Sync,
+    ) -> Grid {
         let mut g = Grid::new(lo, hi, n);
         let cells = g.nx * g.ny;
         g.cells = Vec::new();
@@ -82,27 +93,46 @@ impl Grid {
             }
             c
         });
-        // where each run starts in each cell: the cells in order, the runs in order within each
-        let mut start = vec![0u32; cells + 1];
-        let mut at = vec![vec![0u32; cells]; runs];
+        // each cell's size, then where each cell starts (cells in order), then where each run's
+        // ids start within each cell (runs in order): bands of cells on all cores
+        const BAND: usize = 4096;
+        let bands = cells.div_ceil(BAND);
+        let sizes: Vec<Vec<u32>> = forge_math::par::map(bands, |b| {
+            (b * BAND..((b + 1) * BAND).min(cells))
+                .map(|k| counts.iter().map(|c| c[k]).sum())
+                .collect()
+        });
+        let mut start = Vec::with_capacity(cells + 1);
         let mut total = 0u32;
-        for k in 0..cells {
-            start[k] = total;
-            for r in 0..runs {
-                at[r][k] = total;
-                total += counts[r][k];
-            }
+        for n in sizes.iter().flatten() {
+            start.push(total);
+            total += n;
         }
-        start[cells] = total;
+        start.push(total);
+        // where each run's ids go in each cell, band by band: run r's, cell k's at
+        // `offsets[k / BAND][r * BAND + k % BAND]`
+        let offsets: Vec<Vec<u32>> = forge_math::par::map(bands, |b| {
+            let mut off = vec![0u32; runs * BAND];
+            for k in b * BAND..((b + 1) * BAND).min(cells) {
+                let mut acc = start[k];
+                for (r, c) in counts.iter().enumerate() {
+                    off[r * BAND + k % BAND] = acc;
+                    acc += c[k];
+                }
+            }
+            off
+        });
         let placed: Vec<Vec<(u32, u32)>> = forge_math::par::map(runs, |r| {
-            let mut next = at[r].clone();
+            let mut next: Vec<u32> = (0..cells)
+                .map(|k| offsets[k / BAND][r * BAND + k % BAND])
+                .collect();
             let mut out = Vec::new();
             for i in r * RUN..((r + 1) * RUN).min(n) {
                 let (x0, x1, y0, y1) = span(&g, i);
                 for y in y0..=y1 {
                     for x in x0..=x1 {
                         let k = y * g.nx + x;
-                        out.push((next[k], i as u32));
+                        out.push((next[k], id(i)));
                         next[k] += 1;
                     }
                 }

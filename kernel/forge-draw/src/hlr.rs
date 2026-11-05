@@ -721,42 +721,66 @@ fn box_on_view(view: &View, pose: &Frame, b: &forge_math::Box3) -> (Point2, Poin
 
 impl<'a> Scene<'a> {
     fn new(insts: &'a [Instance<'a>], view: View, parts: &Parts) -> Scene<'a> {
-        let idx: Vec<Index> = insts.iter().map(|i| Index::new(i.body)).collect();
+        // each body's procedural meshes once (the first occurrence's body stands for the rest)
+        let mut first: std::collections::HashMap<usize, usize> = Default::default();
+        let mut bodies: Vec<usize> = Vec::new();
+        for (k, inst) in insts.iter().enumerate() {
+            first.entry(inst.body as *const Body as usize).or_insert_with(|| {
+                bodies.push(k);
+                bodies.len() - 1
+            });
+        }
+        let locals: Vec<std::sync::Arc<Local>> = forge_math::par::map(bodies.len(), |n| {
+            let body = insts[bodies[n]].body;
+            let at = body as *const Body as usize;
+            if !parts.held(body) {
+                return std::sync::Arc::new(local_covers(body));
+            }
+            if let Some(l) = parts.covers.lock().unwrap_or_else(|e| e.into_inner()).get(&at) {
+                return l.clone();
+            }
+            let l = std::sync::Arc::new(local_covers(body));
+            parts
+                .covers
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .insert(at, l.clone());
+            l
+        });
+        // each occurrence's index, meshes on the view and faces' boxes, on all cores, in order
+        type Made<'b> = (Index<'b>, Vec<(Option<Cover>, (Point2, Point2, f64))>);
+        let made: Vec<Made<'a>> = forge_math::par::map(insts.len(), |k| {
+            let inst = &insts[k];
+            let idx = Index::new(inst.body);
+            let local = &locals[first[&(inst.body as *const Body as usize)]];
+            let mut tris = covers(local, &inst.pose, &view);
+            let fs = inst
+                .body
+                .face_ids()
+                .map(|f| {
+                    (
+                        tris[f.index()].take(),
+                        box_on_view(&view, &inst.pose, &idx.face_box(f)),
+                    )
+                })
+                .collect();
+            (idx, fs)
+        });
+        let mut idx = Vec::with_capacity(insts.len());
         let mut faces = Vec::new();
         let mut cover: Vec<Option<Cover>> = Vec::new();
         let mut lo = Point2::new(f64::INFINITY, f64::INFINITY);
         let mut hi = Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY);
-        let mut locals: std::collections::HashMap<usize, std::sync::Arc<Local>> = Default::default();
-        for (k, inst) in insts.iter().enumerate() {
-            let at = inst.body as *const Body as usize;
-            let local = locals.entry(at).or_insert_with(|| {
-                if !parts.held(inst.body) {
-                    return std::sync::Arc::new(local_covers(inst.body));
-                }
-                if let Some(l) = parts.covers.lock().unwrap_or_else(|e| e.into_inner()).get(&at) {
-                    return l.clone();
-                }
-                let l = std::sync::Arc::new(local_covers(inst.body));
-                parts
-                    .covers
-                    .lock()
-                    .unwrap_or_else(|e| e.into_inner())
-                    .insert(at, l.clone());
-                l
-            });
-            let mut tris = covers(local, &inst.pose, &view);
-            for f in inst.body.face_ids() {
-                cover.push(tris[f.index()].take());
-                let (a, b, near) = box_on_view(&view, &inst.pose, &idx[k].face_box(f));
+        for (k, (ix, fs)) in made.into_iter().enumerate() {
+            for (f, (c, (a, b, near))) in insts[k].body.face_ids().zip(fs) {
+                cover.push(c);
                 lo = Point2::new(lo.x.min(a.x), lo.y.min(a.y));
                 hi = Point2::new(hi.x.max(b.x), hi.y.max(b.y));
                 faces.push((k, f, a, b, near));
             }
+            idx.push(ix);
         }
-        let mut grid = Grid::new(lo, hi, faces.len());
-        for (k, f) in faces.iter().enumerate() {
-            grid.insert(k as u32, f.2, f.3);
-        }
+        let grid = Grid::packed(lo, hi, faces.len(), |k| (faces[k].2, faces[k].3));
         let size = (hi.x - lo.x).max(hi.y - lo.y).max(1.0);
         Scene {
             insts,
@@ -1023,19 +1047,16 @@ pub fn hlr_with(insts: &[Instance], view: &View, opts: &Options, parts: &Parts) 
     }
     drop(t);
     let t = span("hlr unique");
-    let geoms: Vec<Geom2> = pieces
-        .iter()
-        .map(|(_, p, _)| {
-            let (a, b) = p.range();
-            p.geom(view, a, b)
-        })
+    let geoms: Vec<Geom2> = forge_math::par::map(pieces.len(), |k| {
+        let p = &pieces[k].1;
+        let (a, b) = p.range();
+        p.geom(view, a, b)
+    });
+    // seen pieces win over hidden ones, then the earlier piece over the later
+    let order: Vec<usize> = (0..pieces.len())
+        .filter(|&k| pieces[k].2)
+        .chain((0..pieces.len()).filter(|&k| !pieces[k].2))
         .collect();
-    let order: Vec<usize> = {
-        let mut o: Vec<usize> = (0..pieces.len()).collect();
-        // seen pieces win over hidden ones, then the earlier piece over the later
-        o.sort_by_key(|&k| (!pieces[k].2, k));
-        o
-    };
     let curve: Vec<usize> = pieces.iter().map(|p| p.0).collect();
     let kept = unique(&geoms, &curve, &order, opts.chord);
 
@@ -1145,15 +1166,14 @@ fn crossings(curves: &[Curve3], view: &View, chord: f64) -> Vec<Vec<f64>> {
             }
         }
     }
-    let mut out: Vec<Vec<f64>> = curves
-        .iter()
-        .map(|c| {
-            let (a, b) = c.path.range();
-            vec![a, b]
-        })
-        .collect();
     if segs.is_empty() {
-        return out;
+        return curves
+            .iter()
+            .map(|c| {
+                let (a, b) = c.path.range();
+                vec![a, b]
+            })
+            .collect();
     }
     let seg = |k: usize| {
         let (c, s) = segs[k];
@@ -1168,12 +1188,17 @@ fn crossings(curves: &[Curve3], view: &View, chord: f64) -> Vec<Vec<f64>> {
         )
     });
     // each segment's box, side by side: the test most pairs fail, without going to the samples
-    let boxes: Vec<[f64; 4]> = (0..segs.len())
-        .map(|k| {
-            let (a, b) = seg(k);
-            [a.x.min(b.x), a.y.min(b.y), a.x.max(b.x), a.y.max(b.y)]
-        })
-        .collect();
+    let boxes: Vec<[f64; 4]> = forge_math::par::map(segs.len().div_ceil(16384), |r| {
+        (r * 16384..((r + 1) * 16384).min(segs.len()))
+            .map(|k| {
+                let (a, b) = seg(k);
+                [a.x.min(b.x), a.y.min(b.y), a.x.max(b.x), a.y.max(b.y)]
+            })
+            .collect::<Vec<_>>()
+    })
+    .into_iter()
+    .flatten()
+    .collect();
     // every crossing, each pair of segments taken once: in the cell holding the low corner of
     // where their boxes meet, a run of cells to a core at a time (the splits are sorted below,
     // so the order they are found in does not matter)
@@ -1214,10 +1239,6 @@ fn crossings(curves: &[Curve3], view: &View, chord: f64) -> Vec<Vec<f64>> {
         }
         got
     });
-    for (ci, ta, cj, tb) in found.into_iter().flatten() {
-        out[ci as usize].push(ta);
-        out[cj as usize].push(tb);
-    }
     // where a curve ends on another (an outline ending where it touches a rim, which it meets
     // tangentially, so no crossing shows it): split the other there
     let size = (hi.x - lo.x).max(hi.y - lo.y).max(1.0);
@@ -1259,16 +1280,47 @@ fn crossings(curves: &[Curve3], view: &View, chord: f64) -> Vec<Vec<f64>> {
         }
         got
     });
-    for (ck, t) in ends.into_iter().flatten() {
-        out[ck as usize].push(t);
-    }
-    for (k, ts) in out.iter_mut().enumerate() {
-        let (a, b) = curves[k].path.range();
-        ts.retain(|t| *t >= a && *t <= b);
-        ts.sort_by(f64::total_cmp);
-        ts.dedup_by(|x, y| (*x - *y).abs() <= 1e-12 * (1.0 + x.abs()));
-    }
-    out
+    // every curve's splits put together, sorted and made one where they agree: on all cores, a
+    // band of curves to each (a curve's splits are a set, so the order they come in is no matter)
+    const BAND: usize = 512;
+    let bands = curves.len().div_ceil(BAND);
+    let found: Vec<Vec<Vec<(u32, f64)>>> = forge_math::par::map(found.len() + ends.len(), |n| {
+        let mut by: Vec<Vec<(u32, f64)>> = vec![Vec::new(); bands];
+        let mut put = |c: u32, t: f64| by[c as usize / BAND].push((c, t));
+        if n < found.len() {
+            for &(ci, ta, cj, tb) in &found[n] {
+                put(ci, ta);
+                put(cj, tb);
+            }
+        } else {
+            for &(ck, t) in &ends[n - found.len()] {
+                put(ck, t);
+            }
+        }
+        by
+    });
+    let banded: Vec<Vec<Vec<f64>>> = forge_math::par::map(bands, |band| {
+        let first = band * BAND;
+        let mut mine: Vec<Vec<f64>> = (first..(first + BAND).min(curves.len()))
+            .map(|k| {
+                let (a, b) = curves[k].path.range();
+                vec![a, b]
+            })
+            .collect();
+        for chunk in &found {
+            for &(c, t) in &chunk[band] {
+                mine[c as usize - first].push(t);
+            }
+        }
+        for (i, ts) in mine.iter_mut().enumerate() {
+            let (a, b) = curves[first + i].path.range();
+            ts.retain(|t| *t >= a && *t <= b);
+            ts.sort_by(f64::total_cmp);
+            ts.dedup_by(|x, y| (*x - *y).abs() <= 1e-12 * (1.0 + x.abs()));
+        }
+        mine
+    });
+    banded.into_iter().flatten().collect()
 }
 
 /// The parameter of `path`'s point nearest `q` on the view, by Gauss-Newton steps from `guess`.
@@ -1440,14 +1492,18 @@ fn unique(geoms: &[Geom2], curve: &[usize], order: &[usize], chord: f64) -> Vec<
         )
     });
     // every piece's ends, so a run between two samples is not missed
-    let mut ends = Grid::new(lo, hi, 2 * geoms.len());
-    for (k, g) in geoms.iter().enumerate() {
-        if !samples[k].0.is_empty() {
-            for p in [g.start(), g.end()] {
-                ends.insert(k as u32, p, p);
-            }
-        }
-    }
+    let with: Vec<usize> = (0..geoms.len()).filter(|&k| !samples[k].0.is_empty()).collect();
+    let ends = Grid::packed_as(
+        lo,
+        hi,
+        2 * with.len(),
+        |i| {
+            let g = &geoms[with[i / 2]];
+            let p = if i % 2 == 0 { g.start() } else { g.end() };
+            (p, p)
+        },
+        |i| with[i / 2] as u32,
+    );
     forge_math::par::map(geoms.len(), |k| {
         let geom = &geoms[k];
         if samples[k].0.is_empty() {
