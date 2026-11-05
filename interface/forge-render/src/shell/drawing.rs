@@ -269,11 +269,21 @@ struct Drag {
 }
 
 /// The drawing file, made, and the environment's state.
+/// What the maker sends: the sheets so far, then the drawing.
+enum Made {
+    Part(regen::Shown),
+    Done(Drawing),
+}
+
 pub struct DrawingEnv {
     pub path: String,
     pub src: String,
     pub made: Option<Drawing>,
-    pending: Option<Receiver<Drawing>>,
+    pending: Option<Receiver<Made>>,
+    /// While making: the views made of how many, and whether what is shown is only a preview.
+    pub progress: Option<(usize, usize)>,
+    started: std::time::Instant,
+    previewing: bool,
     pub sheet: usize,
     /// Screen pixels per sheet millimetre; where the sheet's origin (lower left) is on screen.
     zoom: f32,
@@ -327,6 +337,9 @@ impl DrawingEnv {
             src,
             made: None,
             pending: None,
+            progress: None,
+            started: std::time::Instant::now(),
+            previewing: false,
             sheet: 0,
             zoom: 2.0,
             origin: pos2(0.0, 0.0),
@@ -368,33 +381,55 @@ impl DrawingEnv {
             .ok()
             .and_then(|p| p.parent().map(|d| d.to_path_buf()))
             .unwrap_or_default();
+        let file = dir.join(std::path::Path::new(&self.path).file_name().unwrap_or_default());
         std::thread::spawn(move || {
-            let _ = send.send(regen::make(&src, &dir));
+            let d = regen::shown(&src, &file, &mut |s| {
+                let _ = send.send(Made::Part(s));
+            });
+            let _ = send.send(Made::Done(d));
         });
         self.pending = Some(recv);
         self.busy = true;
+        self.progress = None;
+        self.started = std::time::Instant::now();
     }
 
     /// Takes a finished make, if there is one: true when the sheet changed.
     pub fn poll(&mut self) -> bool {
         let Some(r) = &self.pending else { return false };
-        match r.try_recv() {
-            Ok(d) => {
-                self.made = Some(d);
-                self.made_n += 1;
-                self.pending = None;
-                self.busy = false;
-                if let Some(d) = &self.made {
-                    self.sheet = self.sheet.min(d.pages.len().saturating_sub(1));
+        let mut changed = false;
+        loop {
+            match r.try_recv() {
+                Ok(Made::Part(s)) => {
+                    self.progress = Some((s.done, s.total));
+                    // the sheets as they come, only until a whole drawing is on screen
+                    if self.made.is_none() || self.previewing {
+                        self.made = Some(s.drawing);
+                        self.made_n += 1;
+                        self.previewing = true;
+                        changed = true;
+                    }
                 }
-                true
-            }
-            Err(std::sync::mpsc::TryRecvError::Empty) => false,
-            Err(_) => {
-                self.pending = None;
-                self.busy = false;
-                self.message = "The drawing could not be made".into();
-                true
+                Ok(Made::Done(d)) => {
+                    self.made = Some(d);
+                    self.made_n += 1;
+                    self.pending = None;
+                    self.busy = false;
+                    self.progress = None;
+                    self.previewing = false;
+                    if let Some(d) = &self.made {
+                        self.sheet = self.sheet.min(d.pages.len().saturating_sub(1));
+                    }
+                    return true;
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => return changed,
+                Err(_) => {
+                    self.pending = None;
+                    self.busy = false;
+                    self.progress = None;
+                    self.message = "The drawing could not be made".into();
+                    return true;
+                }
             }
         }
     }
@@ -1435,7 +1470,15 @@ impl Shell {
             self.status = match (&env.tool, env.busy) {
                 _ if !env.message.is_empty() => env.message.clone(),
                 (Some(tool), _) => tool.prompt(env.step()).to_string(),
-                (None, true) => "Updating the drawing".into(),
+                (None, true) => match env.progress {
+                    Some((done, total)) if total > 0 && done > 0 => {
+                        let spent = env.started.elapsed().as_secs_f64();
+                        let left = spent / done as f64 * (total - done) as f64;
+                        format!("Making the drawing: {done} of {total} views, about {left:.0} s left")
+                    }
+                    Some((_, total)) if total > 0 => format!("Making the drawing: 0 of {total} views"),
+                    _ => "Updating the drawing".into(),
+                },
                 (None, false) => {
                     let n = env.made.as_ref().map_or(0, |d| d.errors.len());
                     if n > 1 {

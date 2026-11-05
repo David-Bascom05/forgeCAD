@@ -2687,7 +2687,9 @@ impl Headless {
     pub fn settle(&mut self) {
         for _ in 0..20_000 {
             self.step();
-            if !self.gui.loading() && self.gui.shell.doc.is_some() {
+            let fg_built = self.gui.fg.as_ref().is_some_and(|s| s.seq > 0 && s.done == s.seq);
+            let drawn = self.gui.shell.drawing.as_ref().is_some_and(|d| !d.busy);
+            if !self.gui.loading() && (self.gui.shell.doc.is_some() || fg_built || drawn) {
                 break;
             }
             std::thread::sleep(std::time::Duration::from_millis(1));

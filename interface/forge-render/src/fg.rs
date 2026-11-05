@@ -114,10 +114,16 @@ pub struct Built {
     pub mesh_ms: f64,
     /// The exact bodies and iProperties behind it, for Measure and the physical properties.
     pub inspect: Option<Arc<crate::gui::gui_inspect::InspectData>>,
+    /// The last build's mesh of the same file (nothing it read has changed), shown while this
+    /// one builds: the build it stands for is still to come.
+    pub preview: bool,
 }
 
 impl Built {
     pub fn summary(&self) -> String {
+        if self.preview {
+            return "opening: the last build on screen while it builds".into();
+        }
         let mut s = match &self.measure {
             Some(m) => format!(
                 "volume {} mm³ · {} faces · {} · ",
@@ -543,8 +549,48 @@ fn mesh_whole(bodies: Receiver<Whole>, out: Sender<Msg>, waker: Arc<dyn Fn() + S
 /// The worker: owns the stage cache (it is not `Send`: it never leaves this thread) and builds
 /// the latest text it was given. A changed part goes to the screen first as the faces that changed
 /// (meshed once per face, as a drag's), then whole.
+/// Where a part's last screen mesh is kept: its file, text and the meshing code.
+fn shown_key(file: &str, src: &str) -> u128 {
+    forge_lang::store::key("app-part-mesh", |h| {
+        h.str(file);
+        h.str(src);
+        h.str(env!("FORGE_KERNEL_HASH"));
+        h.str(&tess::ladder_key());
+    })
+}
+
+/// The part's mesh (and flat pattern's) as last shown, if nothing it was built from changed.
+fn shown_before(file: &str, src: &str) -> Option<(PartMesh, Option<PartMesh>)> {
+    let b = forge_lang::kept::fetch("app-part-mesh", shown_key(file, src))?;
+    let mut i = forge_lang::store::In(&b);
+    let mesh = PartMesh::from_bytes(i.bytes()?)?;
+    let flat = if i.bool()? {
+        Some(PartMesh::from_bytes(i.bytes()?)?)
+    } else {
+        None
+    };
+    Some((mesh, flat))
+}
+
+fn keep_shown(
+    file: &str,
+    src: &str,
+    from: &forge_lang::deps::Deps,
+    mesh: &PartMesh,
+    flat: Option<&PartMesh>,
+) {
+    let mut o = forge_lang::store::Out::default();
+    o.bytes(&mesh.to_bytes());
+    o.bool(flat.is_some());
+    if let Some(f) = flat {
+        o.bytes(&f.to_bytes());
+    }
+    forge_lang::kept::keep("app-part-mesh", shown_key(file, src), from, &o.0);
+}
+
 fn work(
     dir: Option<std::path::PathBuf>,
+    file: Option<String>,
     jobs: Receiver<Job>,
     out: Sender<Msg>,
     mut gpu: Option<Gpu>,
@@ -614,6 +660,7 @@ fn work(
                 view,
                 anchors: None,
                 inspect: asm.as_ref().map(|a| a.inspect.clone()),
+                preview: false,
                 asm,
                 build_ms,
                 mesh_ms,
@@ -623,13 +670,74 @@ fn work(
             }
             continue;
         }
+        // opening: the mesh last shown of this very file and all it read, at once
+        let place = file
+            .as_deref()
+            .and_then(|f| std::fs::canonicalize(f).ok())
+            .map(|p| p.to_string_lossy().to_string());
+        let opening = gpu.is_some();
+        if opening
+            && let Some(place) = &place
+            && let Some((mesh, flat)) = shown_before(place, &job.1)
+        {
+            let quick = Options {
+                build: false,
+                dir: dir.clone(),
+                ..Options::default()
+            };
+            let (checked, _) = forge_lang::run(&job.1, quick, Default::default());
+            let (feats, params, issues) = rows(&checked, &job.1);
+            let view = gpu.take().map(|(device, queue, adapter)| {
+                let parts = [mesh.clone()];
+                let mut scene = Scene::new(&part_info(&parts), vec![Placement::at(0, [0.0; 3])]);
+                scene.set_explode(0.0);
+                let r = Renderer::new(
+                    device,
+                    queue,
+                    adapter,
+                    render::OFFSCREEN,
+                    (16, 16),
+                    &parts,
+                    &scene,
+                );
+                (r, scene)
+            });
+            let shown = Built {
+                seq: job.0,
+                ok: true,
+                feats,
+                params,
+                issues,
+                measure: None,
+                timings: checked.timings.clone(),
+                rebuilt: 0,
+                reused: 0,
+                mesh: Some(mesh),
+                flat,
+                delta: None,
+                sheets: vec![],
+                thermos: vec![],
+                view,
+                anchors: None,
+                asm: None,
+                build_ms: t.elapsed().as_secs_f64() * 1e3,
+                mesh_ms: 0.0,
+                inspect: None,
+                preview: true,
+            };
+            if !send(Msg::Built(Box::new(shown))) {
+                return;
+            }
+        }
         let want = anchored.as_deref() != Some(job.1.as_str());
         let opts = Options {
             anchors: want,
             dir: dir.clone(),
             ..Options::default()
         };
+        let watch = opening.then(forge_lang::deps::watch);
         let (run, c) = forge_lang::run(&job.1, opts, std::mem::take(&mut cache));
+        let read = watch.map(|w| w.done());
         let anchors = run
             .anchors
             .as_ref()
@@ -650,11 +758,15 @@ fn work(
         if let Some(b) = changed {
             last_body = Some(Arc::new(b.clone()));
         }
-        let first = gpu.is_some();
+        // the first build comes whole (after a preview too, which it replaces)
+        let first = opening;
         let (mut mesh, mut flat, mut delta) = (None, None, None);
         match changed {
             Some(b) if first => {
                 let (m, f) = whole(b, flat_body(&run).as_ref());
+                if let (Some(place), Some(read)) = (&place, &read) {
+                    keep_shown(place, &job.1, read, &m, f.as_ref());
+                }
                 (mesh, flat) = (Some(m), f);
             }
             Some(b) => delta = Some(mesher.delta(b)),
@@ -742,6 +854,7 @@ fn work(
                 physical: run.physical.clone(),
                 asm: None,
             })),
+            preview: false,
         };
         if !send(Msg::Built(Box::new(built))) {
             return;
@@ -997,7 +1110,10 @@ impl Session {
             .and_then(|p| std::path::Path::new(p).parent().map(|d| d.to_path_buf()));
         std::thread::Builder::new()
             .name("forge-fg".into())
-            .spawn(move || work(dir, rx, tx, gpu, waker))
+            .spawn({
+                let file = path.clone();
+                move || work(dir, file, rx, tx, gpu, waker)
+            })
             .expect("a thread");
         let mut s = Session {
             path,
@@ -1050,7 +1166,10 @@ impl Session {
         for m in &got {
             match m {
                 Msg::Built(b) => {
-                    self.done = b.seq;
+                    // a preview is on screen, its build still to come
+                    if !b.preview {
+                        self.done = b.seq;
+                    }
                     if b.delta.is_some() || b.mesh.is_some() {
                         self.changed = b.seq;
                     }

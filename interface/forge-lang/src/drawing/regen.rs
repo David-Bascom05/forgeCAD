@@ -2310,6 +2310,102 @@ fn defaults(ctx: &Ctx, f: &mut forge_draw::sheet::Fields, sheet: usize, n_sheets
 
 /// Makes the drawing: `src` read, its models built (paths from `dir`), its sheets laid out.
 pub fn make(src: &str, dir: &Path) -> Drawing {
+    make_with(src, dir, None)
+}
+
+/// A drawing on its way: the sheets with the views made so far (or, `kept`, as the last make of
+/// the same file and everything it read left them), for a screen to show until it is done.
+pub struct Shown {
+    pub drawing: Drawing,
+    pub done: usize,
+    pub total: usize,
+    pub kept: bool,
+}
+
+/// `make`, showing first the sheets as last made (when nothing they were made from changed), then
+/// each view as it is made; the sheets made are kept for the next open.
+pub fn shown(src: &str, file: &Path, show: &mut dyn FnMut(Shown)) -> Drawing {
+    let file = std::fs::canonicalize(file).unwrap_or_else(|_| file.to_path_buf());
+    let dir = file.parent().map(Path::to_path_buf).unwrap_or_default();
+    let key = crate::store::key("drawing-pages", |h| {
+        h.str(&file.to_string_lossy());
+        h.str(src);
+    });
+    let total = doc::read(src)
+        .items
+        .iter()
+        .filter(|i| matches!(i.kind, ItemKind::View(_)))
+        .count();
+    if let Some(pages) = crate::kept::fetch("drawing-pages", key).and_then(|b| super::pagecode::read(&b)) {
+        show(Shown {
+            drawing: preview(src, pages),
+            done: 0,
+            total,
+            kept: true,
+        });
+    }
+    let (d, from) = crate::kept::watched(&file, src, || make_with(src, &dir, Some(show)));
+    crate::kept::keep("drawing-pages", key, &from, &super::pagecode::write(&d.pages));
+    d
+}
+
+/// A drawing that is only its sheets: what a screen shows while the real one is made.
+fn preview(src: &str, pages: Vec<Page>) -> Drawing {
+    Drawing {
+        doc: doc::read(src),
+        models: vec![],
+        sheets: vec![],
+        pages,
+        views: vec![],
+        items: vec![],
+        errors: vec![],
+    }
+}
+
+/// The sheets, their frames and the views made so far: no annotations yet.
+fn sheets_so_far(ctx: &Ctx) -> Vec<Page> {
+    let n = ctx.sheets.len();
+    let mut pages: Vec<Page> = ctx
+        .sheets
+        .iter()
+        .enumerate()
+        .map(|(k, (_, s))| {
+            let mut page = Page {
+                w: s.w,
+                h: s.h,
+                ..Page::default()
+            };
+            let mut f = s.fields.clone();
+            defaults(ctx, &mut f, k, n);
+            forge_draw::sheet::format(&mut page, &f, s.third_angle);
+            page
+        })
+        .collect();
+    for v in &ctx.views {
+        let Some(page) = pages.get_mut(v.sheet) else {
+            continue;
+        };
+        for p in &v.pieces {
+            page.strokes.push(Stroke {
+                pen: match (p.visible, p.class) {
+                    (false, _) => Pen::Hidden,
+                    (true, Class::Tangent) => Pen::Tangent,
+                    _ => Pen::Visible,
+                },
+                geom: p.geom.placed(&v.place),
+            });
+        }
+        for st in &v.extra {
+            page.strokes.push(Stroke {
+                pen: st.pen,
+                geom: st.geom.placed(&v.place),
+            });
+        }
+    }
+    pages
+}
+
+fn make_with(src: &str, dir: &Path, mut show: Option<&mut dyn FnMut(Shown)>) -> Drawing {
     let d = doc::read(src);
     let mut ctx = Ctx {
         dir: dir.to_path_buf(),
@@ -2395,6 +2491,11 @@ pub fn make(src: &str, dir: &Path) -> Drawing {
             },
         ));
     }
+    let views_total = d
+        .items
+        .iter()
+        .filter(|i| matches!(i.kind, ItemKind::View(_)))
+        .count();
     for item in &d.items {
         if let ItemKind::View(def) = &item.kind
             && let Some(mut v) = ctx.view(item, def)
@@ -2411,6 +2512,14 @@ pub fn make(src: &str, dir: &Path) -> Drawing {
             };
             cut_view(&mut v, def, free);
             ctx.views.push(v);
+            if let Some(show) = show.as_mut() {
+                show(Shown {
+                    drawing: preview(src, sheets_so_far(&ctx)),
+                    done: ctx.views.len(),
+                    total: views_total,
+                    kept: false,
+                });
+            }
         }
     }
     let n = ctx.sheets.len();

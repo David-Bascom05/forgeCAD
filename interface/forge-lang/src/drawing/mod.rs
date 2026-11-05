@@ -5,6 +5,7 @@
 pub mod doc;
 pub mod look;
 pub mod ops;
+pub mod pagecode;
 pub mod regen;
 
 use forge_math::Frame;
