@@ -168,12 +168,12 @@ impl Viewer {
         let gpu = self.renderer.gpu_ms.unwrap_or(0.0);
         let measured = self.measured_text();
         let hud = format!(
-            "frame {:.1} ms gpu {gpu:.1} ms pick {:.1} ms {} parts {:.1}m tris lines {} {}\n{}",
+            "frame {:.1} ms gpu {gpu:.1} ms pick {:.1} ms {} parts {:.1}m tris style {} {}\n{}",
             self.frame_ms,
             self.pick_ms,
             self.parts,
             self.tris as f64 / 1e6,
-            self.renderer.line_mode.name(),
+            self.renderer.style.key(),
             self.nav.marked_text(),
             measured
         );
@@ -240,7 +240,7 @@ impl Viewer {
                 if let PhysicalKey::Code(code) = event.physical_key {
                     let changed = match code {
                         KeyCode::KeyL => {
-                            self.renderer.line_mode = self.renderer.line_mode.next();
+                            self.renderer.style = self.renderer.style.next();
                             true
                         }
                         KeyCode::KeyO => {

@@ -31,9 +31,10 @@ pub mod thermo;
 pub mod thermo_material;
 pub mod thermo_ui;
 mod tree;
+mod visual_style;
 
 pub use crate::nav::NavTool;
-use crate::render::LineMode;
+use crate::render::VisualStyle;
 use egui::{Align2, Color32, CornerRadius, Rect, Sense, Stroke, StrokeKind, Ui, pos2, vec2};
 use forge_doc::{Body, Document, ItemId};
 use theme::{Theme, medium, mono, sans, semi};
@@ -118,7 +119,7 @@ pub enum Action {
     /// This face of the cube takes this name.
     SetFaceAs([i8; 3], [i8; 3]),
     ResetOrientation,
-    Lines(LineMode),
+    VisualStyle(VisualStyle),
     Section,
     /// Inventor grey or a pastel per part.
     PartColours(bool),
@@ -226,7 +227,7 @@ pub enum SketchChild {
 /// What the view shows, for the buttons that reflect it.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ViewState {
-    pub lines: LineMode,
+    pub style: VisualStyle,
     pub section: bool,
     pub parallel: bool,
     pub tool: NavTool,
@@ -238,7 +239,7 @@ pub struct ViewState {
 impl Default for ViewState {
     fn default() -> ViewState {
         ViewState {
-            lines: LineMode::Near,
+            style: VisualStyle::ShadedEdges,
             section: false,
             parallel: true,
             tool: NavTool::Select,
@@ -1495,7 +1496,11 @@ impl Shell {
             pos2(side.right() - 3.0, side.top()),
             pos2(side.right() + 3.0, side.bottom()),
         );
-        let resp = ui.interact(r, egui::Id::unique("side-splitter"), egui::Sense::click_and_drag());
+        let resp = ui.interact(
+            r,
+            egui::Id::unique("side-splitter"),
+            egui::Sense::click_and_drag(),
+        );
         let live = resp.hovered() || resp.dragged();
         if live {
             ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);

@@ -11,7 +11,7 @@ for t in 0.125 0.25 0.5 1 2 4 8; do
   for view in far mid; do
     case $view in far) d=11000 ;; mid) d=3000 ;; esac
     "$bin" --stress 5000 --lod-px "$t" --size 1920x1080 --dist "$d" --shot "$out/$view-$t.ppm" > "$out/$view-$t.txt"
-    "$bin" --stress 5000 --lod-px "$t" --size 1920x1080 --dist "$d" --lines none --shot "$out/$view-surface-$t.ppm" > /dev/null
+    "$bin" --stress 5000 --lod-px "$t" --size 1920x1080 --dist "$d" --style shaded --shot "$out/$view-surface-$t.ppm" > /dev/null
   done
   "$bin" --stress 5000 --lod-px "$t" --bench --frames 600 --size 1920x1080 > "$out/bench-$t.txt"
 done

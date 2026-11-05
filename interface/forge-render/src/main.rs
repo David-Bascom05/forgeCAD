@@ -1,7 +1,7 @@
 use forge_render::bench::{self, Path};
 use forge_render::camera::Camera;
 use forge_render::mesh::PartMesh;
-use forge_render::render::{self, LineMode, Mark, Offscreen, Overlay, Renderer, part_info};
+use forge_render::render::{self, Mark, Offscreen, Overlay, Renderer, VisualStyle, part_info};
 use forge_render::scene::{self, Motion, Placement, Scene};
 use forge_render::viewer::{Bench, Viewer, now_ms};
 use std::fmt::Write as _;
@@ -14,7 +14,7 @@ use winit::window::{Window, WindowId};
 
 const USAGE: &str =
     "forge-render [PART | file.fc | file.fg] [--stress N] [--moving N] [--bench] [--hover] [--window] [--frames N]
-  [--size WxH] [--lod-px T] [--lines near|far|none] [--no-ao] [--section x|y|z] [--explode T] [--no-cache] [--shot FILE.ppm [--select X Y]..] [--yaw R --pitch R --dist X]
+  [--size WxH] [--lod-px T] [--style realistic|shaded|shaded-edges|shaded-hidden|wireframe|wireframe-hidden|wireframe-visible|monochrome|illustration] [--no-ao] [--section x|y|z] [--explode T] [--no-cache] [--shot FILE.ppm [--select X Y]..] [--yaw R --pitch R --dist X]
   An assembly .fg with --shot: [--explode T] [--view iso|front|back|left|right|top|bottom] [--trails] [--anim N]
   [--export FILE] [--levels] [--dims] [--drag-bench [--drag-parts A,B] [--ticks N]]
 PART: a bench part (default crank). --stress: all 15 bench parts placed N times. --moving N: N of
@@ -24,7 +24,7 @@ orbit, frame times on stdout, headless unless --window. --shot: one headless fra
 In the window: left drag orbits about what's under the cursor, middle or right drag pans, the wheel
 zooms at the cursor. Click selects, ctrl or shift + click adds; one or two selected on a part are
 measured. Home or F6 home, A fit all, F fit selection, Esc clear. View cube: click to go, drag to
-orbit. L lines near, far, none. O occlusion. S section x, y, z, off; ctrl + wheel moves it. E explode.
+orbit. L the next visual style. O occlusion. S section x, y, z, off; ctrl + wheel moves it. E explode.
 
 --dims lists the numbers a part has. --drag-bench: drags over every bench part, value change to frame, headless.";
 
@@ -38,7 +38,7 @@ struct Args {
     frames: usize,
     size: (u32, u32),
     lod_px: f32,
-    lines: LineMode,
+    style: VisualStyle,
     ao: bool,
     section: Option<usize>,
     explode: f32,
@@ -71,7 +71,7 @@ fn args() -> Result<Args, String> {
         frames: 1200,
         size: (1920, 1080),
         lod_px: render::LOD_PX,
-        lines: LineMode::Near,
+        style: VisualStyle::ShadedEdges,
         ao: true,
         section: None,
         explode: 0.0,
@@ -105,8 +105,12 @@ fn args() -> Result<Args, String> {
             "--window" => a.window = true,
             "--frames" => a.frames = num(it.next(), &k)?,
             "--lod-px" => a.lod_px = num(it.next(), &k)?,
-            "--lines" => {
-                a.lines = it.next().as_deref().and_then(LineMode::from_name).ok_or(USAGE)?;
+            "--style" => {
+                a.style = it
+                    .next()
+                    .as_deref()
+                    .and_then(VisualStyle::from_key)
+                    .ok_or(USAGE)?;
             }
             "--no-ao" => a.ao = false,
             "--explode" => a.explode = num(it.next(), &k)?,
@@ -174,6 +178,30 @@ struct Stage {
 
 fn stage(a: &Args) -> Result<Stage, String> {
     let t = now_ms();
+    // an assembly .fg: its parts where it solves them (the rack bench)
+    if a.part.ends_with(".fg")
+        && std::fs::read_to_string(&a.part).is_ok_and(|t| forge_render::fg::is_assembly(&t))
+    {
+        let st = forge_render::asmshot::stage(&a.part)?;
+        let (center, radius) = st.scene.bounds();
+        let camera =
+            forge_render::nav::region_view(Camera::fit(center, radius), forge_render::nav::HOME_CORNER);
+        let path = Path {
+            center,
+            far: camera.dist,
+            near: camera.dist * 0.35,
+            frames: a.frames,
+        };
+        return Ok(Stage {
+            names: vec![a.part.clone()],
+            parts: st.parts,
+            scene: st.scene,
+            camera,
+            path,
+            spent_ms: now_ms() - t,
+            hits: 0,
+        });
+    }
     let names: Vec<&str> = if a.stress > 0 {
         forge_agent::bench::NAMES.to_vec()
     } else {
@@ -229,7 +257,7 @@ fn headless(a: &Args, mut s: Stage) -> Result<(), String> {
         &s.scene,
     );
     r.lod_px = a.lod_px;
-    r.line_mode = a.lines;
+    r.style = a.style;
     r.ao = a.ao;
     r.section = a.section.map(|axis| {
         let (c, _) = s.scene.bounds();
@@ -388,7 +416,7 @@ impl ApplicationHandler for App {
             &s.scene,
         );
         renderer.lod_px = self.args.lod_px;
-        renderer.line_mode = self.args.lines;
+        renderer.style = self.args.style;
         renderer.ao = self.args.ao;
         let mut v = Viewer::new(window.clone(), surface, config, renderer, s.scene, s.camera);
         v.measure = forge_render::measure::Measurer::new(s.names);
@@ -507,7 +535,7 @@ fn asm_shot(a: &Args) -> Result<(), String> {
         &st.scene,
     );
     r.lod_px = a.lod_px;
-    r.line_mode = a.lines;
+    r.style = a.style;
     r.ao = a.ao;
     let target = Offscreen::new(&r.device, a.size);
     // the camera holds the most apart it gets, so an animation's frames share it

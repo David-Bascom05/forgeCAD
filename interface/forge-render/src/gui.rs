@@ -427,7 +427,6 @@ impl Gui {
         let camera = view_camera(center, fit, self.shell.view.parallel, size);
         renderer.resize(size);
         self.theme_view(&mut renderer);
-        renderer.line_mode = self.shell.view.lines;
         let target = Offscreen::new(&self.device, size);
         let raw = raw_view(&target);
         let tex = self
@@ -523,6 +522,7 @@ impl Gui {
         r.back_colour = viewcube::rgb(t.view);
         r.backdrop = self.shell.settings.backdrop;
         r.cube_palette = if t.dark { viewcube::DARK } else { viewcube::LIGHT };
+        r.style = self.shell.view.style;
     }
 
     /// The viewport's size in device pixels, at least one.
@@ -1366,8 +1366,9 @@ impl Gui {
         let v = self.view.as_mut()?;
         let changed = match k {
             KeyCmd::Lines => {
-                v.renderer.line_mode = v.renderer.line_mode.next();
-                self.shell.view.lines = v.renderer.line_mode;
+                self.shell.view.style = self.shell.view.style.next();
+                self.shell.settings.style = self.shell.view.style;
+                v.renderer.style = self.shell.view.style;
                 true
             }
             KeyCmd::Ao => {
@@ -1551,7 +1552,7 @@ impl Gui {
                 | Action::SetFaceAs(..)
                 | Action::ResetOrientation
                 | Action::Parallel(_)
-                | Action::Lines(_)
+                | Action::VisualStyle(_)
                 | Action::Section
                 | Action::Tool(_) => {
                     self.apply_view(a);
@@ -2105,9 +2106,10 @@ impl Gui {
                 v.nav.orient = Default::default();
             }
             Action::Parallel(on) => v.nav.set_parallel(on, &v.scene),
-            Action::Lines(mode) => {
-                v.renderer.line_mode = mode;
-                self.shell.view.lines = mode;
+            Action::VisualStyle(style) => {
+                v.renderer.style = style;
+                self.shell.view.style = style;
+                self.shell.settings.style = style;
             }
             Action::Section => {
                 v.nav.key(winit::keyboard::KeyCode::KeyS, &v.scene);

@@ -57,17 +57,24 @@ fn the_tree_shows_the_parts_real_features_and_a_click_selects_in_its_own_frame()
 fn tabs_change_the_ribbon_and_only_what_works_is_enabled() {
     let Some(mut h) = app() else { return };
     assert!(h.gui.shell.place("tool:Extrude").is_some());
-    assert!(h.gui.shell.place("tool:Near").is_none());
+    assert!(h.gui.shell.place("tool:Visual Style").is_none());
     h.click(&format!("tab:{}", TABS[3]));
     h.step();
     h.step();
     assert_eq!(h.gui.shell.tab, 3);
-    assert!(h.gui.shell.place("tool:Near").is_some());
-    // a live button does what it says, and shows it
-    h.click("tool:Far");
+    assert!(h.gui.shell.place("tool:Visual Style").is_some());
+    // a live button does what it says, and shows it: the style list, then a style from it
+    h.click("tool:Visual Style");
+    h.step();
+    assert!(h.click("style:Wireframe with Hidden Edges"));
     h.step();
     h.step();
-    assert_eq!(h.gui.view.as_ref().unwrap().renderer.line_mode.name(), "far");
+    let style = h.gui.view.as_ref().unwrap().renderer.style;
+    assert_eq!(style, forge_render::render::VisualStyle::WireframeHidden);
+    assert!(
+        h.gui.shell.place("style:Wireframe").is_none(),
+        "the list closes on a choice"
+    );
     // a disabled one is hover only
     h.click("tab:3D Model");
     h.step();

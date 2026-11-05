@@ -13,7 +13,7 @@ fit_all,Fit all,View,A,
 fit_selected,Zoom to what's chosen,View,F,
 section,"Section: across x, y, z, off",View,S,
 explode,Explode or bring together,View,E,
-lines,"Edges: near, far, none",View,L,
+lines,"Next visual style",View,L,
 ao,Ambient occlusion,View,O,
 escape,Back out one level,Fixed,Escape,fixed
 ok,OK in a dialog,Fixed,Enter,fixed

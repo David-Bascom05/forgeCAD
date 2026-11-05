@@ -4,7 +4,6 @@
 use super::sketching::SkTool;
 use super::theme::sans;
 use super::{Action, FgCmd, RIBBON_H, Shell, TABS_H, TITLE_H, icons};
-use crate::render::LineMode;
 use egui::{Align2, Rect, Sense, Stroke, Ui, pos2, vec2};
 
 pub(super) struct Tool {
@@ -506,32 +505,14 @@ fn groups(s: &Shell) -> Vec<Group> {
         2 => inspect_groups(s),
         3 => vec![
             g(
-                "Lines",
-                vec![
-                    go(
-                        "Near",
-                        "lines",
-                        Action::Lines(LineMode::Near),
-                        v.lines == LineMode::Near,
-                    ),
-                    go(
-                        "Far",
-                        "lines",
-                        Action::Lines(LineMode::Far),
-                        v.lines == LineMode::Far,
-                    ),
-                    go(
-                        "None",
-                        "lines",
-                        Action::Lines(LineMode::None),
-                        v.lines == LineMode::None,
-                    ),
-                ],
-                vec![],
-            ),
-            g(
                 "Appearance",
                 vec![
+                    go(
+                        super::visual_style::BUTTON,
+                        "lines",
+                        Action::VisualStyle(v.style),
+                        false,
+                    ),
                     go("Section", "section", Action::Section, v.section),
                     Tool {
                         name: "Explode",
@@ -698,7 +679,11 @@ impl Shell {
             );
             let mut x = gx + 6.0;
             for (tool, w) in g.big.iter().zip(&bigs) {
-                self.big_button(ui, tool, x, y + 6.0, *w);
+                if tool.name == super::visual_style::BUTTON {
+                    self.style_button(ui, tool, x, y + 6.0, *w);
+                } else {
+                    self.big_button(ui, tool, x, y + 6.0, *w);
+                }
                 x += w;
             }
             for (k, tool) in g.small.iter().enumerate() {
@@ -732,7 +717,12 @@ impl Shell {
         }
     }
 
-    fn tool_response(&mut self, ui: &mut Ui, tool: &Tool, r: Rect) -> (egui::Color32, egui::Response) {
+    pub(super) fn tool_response(
+        &mut self,
+        ui: &mut Ui,
+        tool: &Tool,
+        r: Rect,
+    ) -> (egui::Color32, egui::Response) {
         let t = self.theme;
         let sense = if tool.action.is_some() {
             Sense::click()

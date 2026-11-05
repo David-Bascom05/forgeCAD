@@ -19,7 +19,7 @@ const HUD_CHARS: usize = 256;
 /// Characters per row of the overlay (render.wgsl).
 const HUD_COLUMNS: usize = 85;
 /// Where the overlay's text starts in the globals (see render.wgsl).
-const TEXT_AT: usize = 64 + 16 + 16 + 3 * 16 + 16 + DOTS * 16 + 8 * 16;
+const TEXT_AT: usize = 64 + 16 + 16 + 3 * 16 + 16 + DOTS * 16 + 10 * 16;
 /// Picked vertices a frame can mark.
 const DOTS: usize = 8;
 /// Picked faces and edges a frame can mark.
@@ -112,37 +112,115 @@ pub struct Drawn {
     pub encode_ms: f32,
 }
 
-/// Which lines are drawn: one setting, for keys, the command line and the future UI.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum LineMode {
+/// How the view draws parts, Inventor's Visual Styles.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default, Hash)]
+pub enum VisualStyle {
+    /// Studio light, reflections, a soft shadow on the floor; no edges.
+    Realistic,
+    Shaded,
     /// Edges and silhouettes on parts near enough for a tessellated level, none on far ones.
-    Near,
-    /// On far parts too, their longer B-rep edges.
-    Far,
-    None,
+    #[default]
+    ShadedEdges,
+    /// And the edges behind, dashed and faint.
+    ShadedHidden,
+    /// Every edge, no faces: far parts keep their longer edges.
+    Wireframe,
+    WireframeHidden,
+    WireframeVisible,
+    Monochrome,
+    /// Flat bands of light and bold edges.
+    Illustration,
 }
 
-impl LineMode {
-    pub fn next(self) -> LineMode {
-        match self {
-            LineMode::Near => LineMode::Far,
-            LineMode::Far => LineMode::None,
-            LineMode::None => LineMode::Near,
-        }
+impl VisualStyle {
+    pub const ALL: [VisualStyle; 9] = [
+        VisualStyle::Realistic,
+        VisualStyle::Shaded,
+        VisualStyle::ShadedEdges,
+        VisualStyle::ShadedHidden,
+        VisualStyle::Wireframe,
+        VisualStyle::WireframeHidden,
+        VisualStyle::WireframeVisible,
+        VisualStyle::Monochrome,
+        VisualStyle::Illustration,
+    ];
+
+    pub fn next(self) -> VisualStyle {
+        let k = VisualStyle::ALL.iter().position(|s| *s == self).unwrap_or(0);
+        VisualStyle::ALL[(k + 1) % VisualStyle::ALL.len()]
     }
 
+    /// Its words in the menu.
     pub fn name(self) -> &'static str {
         match self {
-            LineMode::Near => "near",
-            LineMode::Far => "far",
-            LineMode::None => "none",
+            VisualStyle::Realistic => "Realistic",
+            VisualStyle::Shaded => "Shaded",
+            VisualStyle::ShadedEdges => "Shaded with Edges",
+            VisualStyle::ShadedHidden => "Shaded with Hidden Edges",
+            VisualStyle::Wireframe => "Wireframe",
+            VisualStyle::WireframeHidden => "Wireframe with Hidden Edges",
+            VisualStyle::WireframeVisible => "Wireframe with Visible Edges Only",
+            VisualStyle::Monochrome => "Monochrome",
+            VisualStyle::Illustration => "Illustration",
         }
     }
 
-    pub fn from_name(s: &str) -> Option<LineMode> {
-        [LineMode::Near, LineMode::Far, LineMode::None]
-            .into_iter()
-            .find(|m| m.name() == s)
+    /// Its word in the settings file and on the command line.
+    pub fn key(self) -> &'static str {
+        match self {
+            VisualStyle::Realistic => "realistic",
+            VisualStyle::Shaded => "shaded",
+            VisualStyle::ShadedEdges => "shaded-edges",
+            VisualStyle::ShadedHidden => "shaded-hidden",
+            VisualStyle::Wireframe => "wireframe",
+            VisualStyle::WireframeHidden => "wireframe-hidden",
+            VisualStyle::WireframeVisible => "wireframe-visible",
+            VisualStyle::Monochrome => "monochrome",
+            VisualStyle::Illustration => "illustration",
+        }
+    }
+
+    pub fn from_key(s: &str) -> Option<VisualStyle> {
+        VisualStyle::ALL.into_iter().find(|m| m.key() == s)
+    }
+
+    pub fn wireframe(self) -> bool {
+        matches!(
+            self,
+            VisualStyle::Wireframe | VisualStyle::WireframeHidden | VisualStyle::WireframeVisible
+        )
+    }
+
+    /// Faces hide what's behind them, drawn or not.
+    fn occludes(self) -> bool {
+        self != VisualStyle::Wireframe
+    }
+
+    fn edges(self) -> bool {
+        !matches!(self, VisualStyle::Realistic | VisualStyle::Shaded)
+    }
+
+    fn hidden_edges(self) -> bool {
+        matches!(self, VisualStyle::ShadedHidden | VisualStyle::WireframeHidden)
+    }
+
+    /// The shader's: how faces are lit (render.wgsl's `shade`), edges in the part's colour, how
+    /// strong hidden edges are, how wide a line is.
+    fn uniforms(self) -> [f32; 4] {
+        let lit = match self {
+            VisualStyle::Realistic => 1.0,
+            VisualStyle::Monochrome => 2.0,
+            VisualStyle::Illustration => 3.0,
+            _ => 0.0,
+        };
+        let coloured = if self.wireframe() { 1.0 } else { 0.0 };
+        let hidden = if self.wireframe() { 0.75 } else { 0.4 };
+        let half = if self == VisualStyle::Illustration {
+            1.05
+        } else {
+            LINE_HALF_PX
+        };
+        [lit, coloured, hidden, half]
     }
 }
 
@@ -203,6 +281,17 @@ struct PickState {
     busy: Option<((f32, f32), Camera, f64)>,
 }
 
+/// Realistic's floor shadow: the parts seen from straight above into a small target, then read
+/// softly by a quad under them.
+struct Shadow {
+    view: wgpu::TextureView,
+    globals: wgpu::Buffer,
+    binds: wgpu::BindGroup,
+    draw: wgpu::RenderPipeline,
+    floor: wgpu::RenderPipeline,
+    floor_binds: wgpu::BindGroup,
+}
+
 struct Timer {
     read: wgpu::Buffer,
     ready: Arc<AtomicBool>,
@@ -257,6 +346,8 @@ pub struct Renderer {
     indices: wgpu::Buffer,
     instances: wgpu::Buffer,
     lods: Vec<Vec<LodDraw>>,
+    boxes: Vec<([f32; 3], [f32; 3])>,
+    edge_lengths: Vec<Vec<Vec<(f32, u32)>>>,
     /// Each part's faces and edges, by level, for telling what a pick hit.
     index: Vec<Vec<PickIndex>>,
     vertex_faces: wgpu::Buffer,
@@ -266,9 +357,16 @@ pub struct Renderer {
     ao_pipe: AoPipelines,
     ao_size: AoTargets,
     back: wgpu::RenderPipeline,
-    /// Occlusion is on.
+    /// Occlusion is on (where the style has faces).
     pub ao: bool,
-    pub line_mode: LineMode,
+    pub style: VisualStyle,
+    /// A floor's height to put Realistic's shadow on, over the backdrop's own floor (with none,
+    /// and no floor drawn: just under what's shown).
+    pub floor_z: Option<f32>,
+    surface_skip: wgpu::RenderPipeline,
+    /// Edges behind the faces, in a pass of their own that reads the depth.
+    line_hidden: wgpu::RenderPipeline,
+    shadow: Shadow,
     depth: wgpu::TextureView,
     timer_set: Option<wgpu::QuerySet>,
     timer_resolve: wgpu::Buffer,
@@ -369,6 +467,10 @@ pub async fn open_device(
 /// A parts' meshes on the GPU.
 struct Geometry {
     lods: Vec<Vec<LodDraw>>,
+    /// Each level's B-rep edges, longest first: how long, and the segments up to its end.
+    edge_lengths: Vec<Vec<Vec<(f32, u32)>>>,
+    /// Each part's box in its own space, from its finest level.
+    boxes: Vec<([f32; 3], [f32; 3])>,
     index: Vec<Vec<PickIndex>>,
     vertices: wgpu::Buffer,
     indices: wgpu::Buffer,
@@ -414,7 +516,45 @@ fn geometry(device: &wgpu::Device, parts: &[PartMesh]) -> Geometry {
         }
         lods.push(row);
     }
+    let boxes = parts
+        .iter()
+        .map(|p| {
+            let (mut lo, mut hi) = ([f32::MAX; 3], [f32::MIN; 3]);
+            for v in p
+                .lods
+                .first()
+                .map_or(&[][..], |l| &l.vertices[..])
+                .as_chunks::<VERTEX>()
+                .0
+            {
+                for k in 0..3 {
+                    let x = f32::from_le_bytes(v[k * 4..k * 4 + 4].try_into().expect("4 bytes"));
+                    lo[k] = lo[k].min(x);
+                    hi[k] = hi[k].max(x);
+                }
+            }
+            (lo, hi)
+        })
+        .collect();
     let all_lods = || parts.iter().flat_map(|p| &p.lods);
+    let edge_lengths = parts
+        .iter()
+        .map(|p| {
+            p.lods
+                .iter()
+                .map(|l| {
+                    let mut upto = 0;
+                    l.edges
+                        .iter()
+                        .map(|e| {
+                            upto += e.count;
+                            (edge_length(l, e), upto)
+                        })
+                        .collect()
+                })
+                .collect()
+        })
+        .collect();
     let v: Vec<&[u8]> = all_lods().map(|l| &l.vertices[..]).collect();
     let i: Vec<&[u8]> = all_lods().map(|l| &l.indices[..]).collect();
     let s: Vec<&[u8]> = all_lods().map(|l| &l.segments[..]).collect();
@@ -474,6 +614,8 @@ fn geometry(device: &wgpu::Device, parts: &[PartMesh]) -> Geometry {
     let segments = filled(device, "segments", sbytes, wgpu::BufferUsages::STORAGE, s);
     Geometry {
         lods,
+        edge_lengths,
+        boxes,
         index,
         vertices,
         indices,
@@ -664,6 +806,15 @@ impl Renderer {
             msaa,
             &unseen,
         );
+        // a dragged part in a wireframe: its faces neither seen nor hiding anything
+        let surface_skip = pipeline(
+            ("surface_vs", "surface_cut_fs"),
+            &surface_buffers,
+            back_culled,
+            &always,
+            msaa,
+            &unseen,
+        );
         // where a part is cut its inside shows: drawn as the plane it was cut by
         let cap = pipeline(
             ("surface_vs", "cap_fs"),
@@ -765,6 +916,8 @@ impl Renderer {
 
         let Geometry {
             lods,
+            edge_lengths,
+            boxes,
             index,
             vertices,
             indices,
@@ -968,6 +1121,37 @@ impl Renderer {
             layout: ao_layout,
         };
         let ao_size = ao_targets(&device, &ao_pipe.layout, &depth_texture_view(&depth_view), size);
+        let line_hidden = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("hidden edges"),
+            layout: Some(&ao_pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("line_hidden_vs"),
+                compilation_options: Default::default(),
+                buffers: &line_buffers,
+            },
+            primitive: wgpu::PrimitiveState::default(),
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("line_hidden_fs"),
+                compilation_options: Default::default(),
+                targets: &over,
+            }),
+            multiview_mask: None,
+            cache: None,
+        });
+        let shadow = shadow(
+            &device,
+            &shader,
+            &bind_layout,
+            [&placements, &segments, &tints],
+            &surface_buffers,
+            msaa,
+            &tests,
+            format,
+        );
         let cube_verts = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("view cube"),
             size: CUBE_BYTES,
@@ -1015,6 +1199,8 @@ impl Renderer {
             indices,
             instances,
             lods,
+            edge_lengths,
+            boxes,
             index,
             vertex_faces,
             line_indices,
@@ -1024,7 +1210,11 @@ impl Renderer {
             ao_size,
             back,
             ao: true,
-            line_mode: LineMode::Near,
+            style: VisualStyle::default(),
+            floor_z: None,
+            surface_skip,
+            line_hidden,
+            shadow,
             depth: depth_view,
             timer_set,
             timer_resolve,
@@ -1056,7 +1246,10 @@ impl Renderer {
         let all = |globals| [globals, &self.placements, &g.segments, &self.tints];
         self.binds = bind_all(&self.device, layout, all(&self.globals));
         self.pick.binds = bind_all(&self.device, layout, all(&self.pick.globals));
+        self.shadow.binds = bind_all(&self.device, layout, all(&self.shadow.globals));
         self.lods = g.lods;
+        self.boxes = g.boxes;
+        self.edge_lengths = g.edge_lengths;
         self.index = g.index;
         self.vertices = g.vertices;
         self.indices = g.indices;
@@ -1500,8 +1693,9 @@ impl Renderer {
     }
 
     /// The background's style in the colour's fourth number, its lower colour and the floor's
-    /// height, and the footprint its shadow is under: the shown box's middle and half size.
-    fn write_backdrop(&self, bytes: &mut [u8; GLOBALS], scene: &Scene) {
+    /// height, and the footprint its shadow is under: the shown box's middle and half size. The
+    /// floor's height, if it draws one.
+    fn write_backdrop(&self, bytes: &mut [u8; GLOBALS], scene: &Scene) -> Option<f32> {
         let style = match self.backdrop {
             Backdrop::Solid => 0.0f32,
             Backdrop::Gradient => 1.0,
@@ -1519,6 +1713,7 @@ impl Renderer {
             .sum::<f32>()
             .sqrt()
             .max(1e-3);
+        let ground = lo[2] - reach * 0.002;
         let [top, low, floor] = backdrop_colours(self.back_colour);
         if self.backdrop != Backdrop::Solid {
             for (k, v) in top.iter().enumerate() {
@@ -1530,7 +1725,7 @@ impl Renderer {
             low[0],
             low[1],
             low[2],
-            lo[2] - reach * 0.002,
+            ground,
             floor[0],
             floor[1],
             floor[2],
@@ -1543,6 +1738,7 @@ impl Renderer {
         for (k, v) in words.iter().enumerate() {
             bytes[BACK_AT + k * 4..BACK_AT + k * 4 + 4].copy_from_slice(&v.to_le_bytes());
         }
+        (self.backdrop == Backdrop::Floor).then_some(ground)
     }
 
     fn write_section(&self, bytes: &mut [u8; GLOBALS]) {
@@ -1600,7 +1796,8 @@ impl Renderer {
             let Entity::Face(f) = m.entity else { continue };
             // what the surface drew, if this is it: its own level, from the same buffers
             let found = |lod: usize| self.index[part as usize][lod].faces.iter().find(|r| r.face == f);
-            let same = found(lod as usize).filter(|_| Some(part) != live);
+            // with no faces drawn there's no depth to match: the lifted fill instead
+            let same = found(lod as usize).filter(|_| Some(part) != live && self.style.occludes());
             let (pipeline, lod, r) = match same {
                 Some(r) => (&self.face_mark_exact, lod as usize, r),
                 None => {
@@ -1643,6 +1840,103 @@ impl Renderer {
                 }
             }
         }
+    }
+
+    /// Every visible part's edges and silhouette candidates, with the pipeline set; how many
+    /// segments. Far parts (a clustered level, no lines of their own) have none, but in a
+    /// wireframe (and behind, for hidden edges) their longer edges from the coarsest level with
+    /// lines: they'd be gone otherwise.
+    /// `hidden`: the hidden-edge pass's, from this view: B-rep edges only (hidden silhouettes
+    /// are noise), and only those `HIDDEN_EDGE_PX` long on parts of `HIDDEN_PART_PX` radius, so small
+    /// holes and threads behind a panel don't blot it.
+    fn draw_lines(
+        &self,
+        pass: &mut wgpu::RenderPass<'_>,
+        scene: &Scene,
+        live: Option<u32>,
+        hidden: Option<&View>,
+        draws: &mut u32,
+    ) -> u64 {
+        let far = self.style.wireframe();
+        let mut segments = 0;
+        pass.set_vertex_buffer(0, self.instances.slice(..));
+        pass.set_index_buffer(self.line_indices.slice(..), wgpu::IndexFormat::Uint32);
+        for d in scene.draws.iter().filter(|d| Some(d.part) != live) {
+            let mut l = self.lods[d.part as usize][d.lod as usize];
+            // the nearest of its placements: how many pixels a mm is there
+            let px = hidden.map(|view| {
+                (d.first..d.first + d.count)
+                    .map(|k| {
+                        let i = u32::from_le_bytes(scene.visible[k as usize]) as usize;
+                        let (c, _) = scene.sphere(i);
+                        let ahead = (0..3)
+                            .map(|j| (c[j] - view.eye[j]) * view.forward[j])
+                            .sum::<f32>();
+                        view.px_mm / ahead.max(view.near)
+                    })
+                    .fold(0.0, f32::max)
+            });
+            let i = u32::from_le_bytes(scene.visible[d.first as usize]) as usize;
+            if px.is_some_and(|px| scene.sphere(i).1 * px < HIDDEN_PART_PX) {
+                continue;
+            }
+            let mut level = d.lod as usize;
+            if l.segments == 0 && (far || hidden.is_some()) {
+                let far = l.far_segments;
+                level = self.pick_lod(d.part, d.lod);
+                l = self.lods[d.part as usize][level];
+                l.segments = far;
+            }
+            if let Some(px) = px {
+                let lengths = &self.edge_lengths[d.part as usize][level];
+                let n = lengths.partition_point(|(length, _)| length * px >= HIDDEN_EDGE_PX);
+                l.segments = l.segments.min(n.checked_sub(1).map_or(0, |k| lengths[k].1));
+            }
+            if l.segments > 0 {
+                pass.draw_indexed(
+                    0..l.segments * 6,
+                    l.first_segment as i32 * 4,
+                    d.first..d.first + d.count,
+                );
+                segments += l.segments as u64 * d.count as u64;
+                *draws += 1;
+            }
+        }
+        segments
+    }
+
+    /// Realistic's floor: a square under what's shown and wider, and its height.
+    /// `ground`: the background's floor's height, if it draws one: the shadow lies on it.
+    fn floor_square(&self, scene: &Scene, ground: Option<f32>) -> [f32; 4] {
+        let (mut lo, mut hi) = ([f32::MAX; 3], [f32::MIN; 3]);
+        for (i, p) in scene.placements.iter().enumerate() {
+            let squashed = p.rows.iter().all(|r| r[0] == 0.0 && r[1] == 0.0 && r[2] == 0.0);
+            let Some((a, b)) = self.boxes.get(p.part as usize) else {
+                continue;
+            };
+            if scene.is_gone(i) || squashed || a[0] > b[0] {
+                continue;
+            }
+            for k in 0..8 {
+                let corner = [0, 1, 2].map(|j| if k >> j & 1 == 0 { a[j] } else { b[j] });
+                let w = place(&p.rows, corner);
+                for j in 0..3 {
+                    lo[j] = lo[j].min(w[j]);
+                    hi[j] = hi[j].max(w[j]);
+                }
+            }
+        }
+        if lo[0] > hi[0] {
+            return [0.0, 0.0, 1.0, 0.0];
+        }
+        let side = (hi[0] - lo[0]).max(hi[1] - lo[1]);
+        // and the shadow's reach from what's high up (render.wgsl's SUN)
+        let half = side * 0.5 * FLOOR_REACH + (hi[2] - lo[2]) * 0.8;
+        let z = self
+            .floor_z
+            .or(ground)
+            .unwrap_or(lo[2] - side.max(hi[2] - lo[2]) * 1e-3);
+        [(lo[0] + hi[0]) * 0.5, (lo[1] + hi[1]) * 0.5, half.max(1e-3), z]
     }
 
     /// Reads back any GPU times the GPU has finished.
@@ -1696,7 +1990,7 @@ impl Renderer {
             .write_buffer(&self.instances, 0, scene.visible.as_flattened());
 
         let mut bytes = globals_bytes(&view, self.size, self.back_colour, hud.unwrap_or(""));
-        self.write_backdrop(&mut bytes, scene);
+        let ground = self.write_backdrop(&mut bytes, scene);
         let cube_verts = self.write_cube(camera, &overlay);
         let room = (WORLD_BYTES / 28) as usize;
         let world_count = overlay.world.len().min(room) as u32;
@@ -1721,6 +2015,40 @@ impl Renderer {
             bytes[AO_AT + k * 4..AO_AT + k * 4 + 4].copy_from_slice(&v.to_le_bytes());
         }
         self.write_section(&mut bytes);
+        let style = self.style;
+        let realistic = style == VisualStyle::Realistic;
+        let floor = realistic.then(|| self.floor_square(scene, ground));
+        let [cx, cy, half, z] = floor.unwrap_or_default();
+        for (k, v) in style.uniforms().iter().chain(&[cx, cy, half, z]).enumerate() {
+            bytes[STYLE_AT + k * 4..STYLE_AT + k * 4 + 4].copy_from_slice(&v.to_le_bytes());
+        }
+        if realistic {
+            // the parts from straight above, the floor's square filling the target
+            let mut shadow_bytes = bytes;
+            let k = 1.0 / half;
+            let top_down = [
+                k,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                k,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                -cx * k,
+                -cy * k,
+                0.5,
+                1.0,
+            ];
+            for (j, v) in top_down.iter().enumerate() {
+                shadow_bytes[j * 4..j * 4 + 4].copy_from_slice(&v.to_le_bytes());
+            }
+            self.queue.write_buffer(&self.shadow.globals, 0, &shadow_bytes);
+        }
         self.write_dots(&mut bytes, scene, overlay.marks);
         let marked: Vec<[u8; 4]> = overlay
             .marks
@@ -1744,6 +2072,64 @@ impl Renderer {
             upload_ms: (uploaded - culled) as f32,
             ..Drawn::default()
         };
+        let cut = self.section.is_some();
+        let end = cut && self.section_end;
+        let faces = !style.wireframe();
+        let ao = self.ao && faces && !self.section_end;
+        let lines = style.edges() && !end;
+        let hidden = lines && style.hidden_edges();
+        let keep_depth = ao || hidden;
+        // the last pass ends the GPU's time
+        let last = if ao {
+            2
+        } else if hidden {
+            1
+        } else {
+            0
+        };
+        let stamp = |pass: u32| {
+            let ends = pass == 0 || pass == last;
+            self.timer_set
+                .as_ref()
+                .filter(|_| timed && ends)
+                .map(|set| wgpu::RenderPassTimestampWrites {
+                    query_set: set,
+                    beginning_of_pass_write_index: (pass == 0).then_some(0),
+                    end_of_pass_write_index: (pass == last).then_some(1),
+                })
+        };
+        let live = self.live_part();
+        if floor.is_some() {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("floor shadow"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &self.shadow.view,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            pass.set_bind_group(0, &self.shadow.binds, &[]);
+            pass.set_pipeline(&self.shadow.draw);
+            pass.set_vertex_buffer(0, self.vertices.slice(..));
+            pass.set_vertex_buffer(1, self.instances.slice(..));
+            pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint32);
+            for d in scene.draws.iter().filter(|d| Some(d.part) != live) {
+                let l = self.lods[d.part as usize][d.lod as usize];
+                pass.draw_indexed(
+                    l.first_index..l.first_index + l.indices,
+                    l.base_vertex,
+                    d.first..d.first + d.count,
+                );
+            }
+        }
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("scene"),
@@ -1760,7 +2146,7 @@ impl Renderer {
                     view: &self.depth,
                     depth_ops: Some(wgpu::Operations {
                         load: wgpu::LoadOp::Clear(0.0),
-                        store: if self.ao && !self.section_end {
+                        store: if keep_depth {
                             wgpu::StoreOp::Store
                         } else {
                             wgpu::StoreOp::Discard
@@ -1768,45 +2154,37 @@ impl Renderer {
                     }),
                     stencil_ops: None,
                 }),
-                timestamp_writes: self.timer_set.as_ref().filter(|_| timed).map(|set| {
-                    wgpu::RenderPassTimestampWrites {
-                        query_set: set,
-                        beginning_of_pass_write_index: Some(0),
-                        end_of_pass_write_index: if self.ao && !self.section_end {
-                            None
-                        } else {
-                            Some(1)
-                        },
-                    }
-                }),
+                timestamp_writes: stamp(0),
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
             pass.set_bind_group(0, &self.binds, &[]);
             pass.set_pipeline(&self.back);
             pass.draw(0..3, 0..1);
-            let cut = self.section.is_some();
-            let end = cut && self.section_end;
-            pass.set_pipeline(match (cut, end) {
-                (_, true) => &self.surface_hidden,
-                (true, _) => &self.surface_cut,
-                _ => &self.surface,
-            });
+            // a wireframe that hides draws its faces into the depth only
+            let surface = match (cut, end, faces, style.occludes()) {
+                (_, _, false, false) => None,
+                (_, true, _, _) | (_, _, false, true) => Some(&self.surface_hidden),
+                (true, _, _, _) => Some(&self.surface_cut),
+                _ => Some(&self.surface),
+            };
             pass.set_vertex_buffer(0, self.vertices.slice(..));
             pass.set_vertex_buffer(1, self.instances.slice(..));
             pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint32);
-            let live = self.live_part();
-            for d in scene.draws.iter().filter(|d| Some(d.part) != live) {
-                let l = self.lods[d.part as usize][d.lod as usize];
-                pass.draw_indexed(
-                    l.first_index..l.first_index + l.indices,
-                    l.base_vertex,
-                    d.first..d.first + d.count,
-                );
-                drawn.tris += l.indices as u64 / 3 * d.count as u64;
-                drawn.draws += 1;
+            if let Some(surface) = surface {
+                pass.set_pipeline(surface);
+                for d in scene.draws.iter().filter(|d| Some(d.part) != live) {
+                    let l = self.lods[d.part as usize][d.lod as usize];
+                    pass.draw_indexed(
+                        l.first_index..l.first_index + l.indices,
+                        l.base_vertex,
+                        d.first..d.first + d.count,
+                    );
+                    drawn.tris += l.indices as u64 / 3 * d.count as u64;
+                    drawn.draws += 1;
+                }
             }
-            if cut {
+            if cut && faces {
                 pass.set_pipeline(&self.cap);
                 for d in scene.cut_draws.iter().filter(|d| Some(d.part) != live) {
                     let l = self.lods[d.part as usize][d.lod as usize];
@@ -1819,37 +2197,19 @@ impl Renderer {
                     drawn.draws += 1;
                 }
             }
-            if self.line_mode != LineMode::None && !end {
+            if floor.is_some() {
+                pass.set_pipeline(&self.shadow.floor);
+                pass.set_bind_group(2, &self.shadow.floor_binds, &[]);
+                pass.draw(0..6, 0..1);
+            }
+            if lines {
                 pass.set_pipeline(if cut { &self.line_cut } else { &self.line });
-                pass.set_vertex_buffer(0, self.instances.slice(..));
-                pass.set_index_buffer(self.line_indices.slice(..), wgpu::IndexFormat::Uint32);
-                for d in scene.draws.iter().filter(|d| Some(d.part) != live) {
-                    let mut l = self.lods[d.part as usize][d.lod as usize];
-                    if l.segments == 0 && self.line_mode == LineMode::Far {
-                        let far = l.far_segments;
-                        l = self.lods[d.part as usize][self.pick_lod(d.part, d.lod)];
-                        l.segments = far;
-                    }
-                    if l.segments > 0 {
-                        pass.draw_indexed(
-                            0..l.segments * 6,
-                            l.first_segment as i32 * 4,
-                            d.first..d.first + d.count,
-                        );
-                        drawn.segments += l.segments as u64 * d.count as u64;
-                        drawn.draws += 1;
-                    }
-                }
+                drawn.segments += self.draw_lines(&mut pass, scene, live, None, &mut drawn.draws);
             }
             if let Some((_, gpu)) = self.live.as_ref().filter(|_| live.is_some()) {
-                let surface = match (cut, end) {
-                    (_, true) => &self.surface_hidden,
-                    (true, _) => &self.surface_cut,
-                    _ => &self.surface,
-                };
+                let surface = surface.unwrap_or(&self.surface_skip);
                 let line = if cut { &self.line_cut } else { &self.line };
-                let lines = self.line_mode != LineMode::None && !end;
-                let cap = cut.then_some(&self.cap);
+                let cap = (cut && faces).then_some(&self.cap);
                 for d in scene.draws.iter().filter(|d| Some(d.part) == live) {
                     let lined = lines.then_some(line);
                     gpu.draw(
@@ -1887,8 +2247,32 @@ impl Renderer {
                 pass.draw(0..cube_verts, 0..1);
             }
         }
+        // edges behind the faces: each fragment looks at the depth around it, so an edge isn't
+        // called hidden along the face it bounds
+        if hidden {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("hidden edges"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: target,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: stamp(1),
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            pass.set_bind_group(0, &self.binds, &[]);
+            pass.set_bind_group(1, &self.ao_size.read_smooth, &[]);
+            pass.set_pipeline(&self.line_hidden);
+            drawn.segments += self.draw_lines(&mut pass, scene, live, Some(&view), &mut drawn.draws);
+        }
         // the end section's unseen surfaces would shade what's seen
-        if self.ao && !self.section_end {
+        if ao {
             let half = self.ao_size.half;
             let mut half_pass = |label, view, pipeline: &wgpu::RenderPipeline, reads: &wgpu::BindGroup| {
                 let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -1928,13 +2312,7 @@ impl Renderer {
                     },
                 })],
                 depth_stencil_attachment: None,
-                timestamp_writes: self.timer_set.as_ref().filter(|_| timed).map(|set| {
-                    wgpu::RenderPassTimestampWrites {
-                        query_set: set,
-                        beginning_of_pass_write_index: None,
-                        end_of_pass_write_index: Some(1),
-                    }
-                }),
+                timestamp_writes: stamp(2),
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
@@ -2139,19 +2517,26 @@ impl Offscreen {
 
 /// In far-lines mode, an edge shorter than this on screen isn't drawn (research/render).
 const FAR_EDGE_PX: f32 = 6.0;
+/// A hidden edge shorter than this on screen isn't drawn.
+const HIDDEN_EDGE_PX: f32 = 16.0;
+/// Nor on a part whose radius is under this many pixels.
+const HIDDEN_PART_PX: f32 = 12.0;
 /// Half a marked edge's width in pixels.
 const MARK_HALF_PX: f32 = 1.5;
 /// How far from a pixel an edge is picked, and a vertex at its end (pixels).
 const PICK_EDGE_PX: f32 = 4.0;
 const PICK_VERTEX_PX: f32 = 7.0;
 /// Where the picked vertices start in the globals.
-const DOTS_AT: usize = TEXT_AT - 8 * 16 - DOTS * 16;
+const DOTS_AT: usize = TEXT_AT - 10 * 16 - DOTS * 16;
 /// Where occlusion's numbers start in the globals, then the cube's square.
-const AO_AT: usize = TEXT_AT - 8 * 16;
+const AO_AT: usize = TEXT_AT - 10 * 16;
 /// Where the cutting planes are in the globals, then how they combine.
-const SECTION_AT: usize = TEXT_AT - 6 * 16;
+const SECTION_AT: usize = TEXT_AT - 8 * 16;
 /// Where the background's lower colour and the floor's footprint are in the globals.
-const BACK_AT: usize = TEXT_AT - 3 * 16;
+const BACK_AT: usize = TEXT_AT - 5 * 16;
+/// Where the visual style's numbers are, then Realistic's shadow's square (centre x y, half its
+/// side, the floor's height).
+const STYLE_AT: usize = TEXT_AT - 2 * 16;
 /// Half-size occlusion's format: how open, and the pixel's distance.
 const AO_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rg16Float;
 /// How far occlusion reaches, as a share of the window's height (research/render).
@@ -2160,6 +2545,163 @@ const AO_REACH: f32 = 0.06;
 const LINE_HALF_PX: f32 = 0.7;
 /// A level's chord may be this many pixels on screen (research/render).
 pub const LOD_PX: f32 = 1.0;
+
+/// Realistic's floor is this many times as wide as what's on it.
+const FLOOR_REACH: f32 = 1.6;
+/// Realistic's shadow's target, a side (the floor's square).
+const SHADOW_PX: u32 = 512;
+
+#[allow(clippy::too_many_arguments)]
+fn shadow(
+    device: &wgpu::Device,
+    shader: &wgpu::ShaderModule,
+    bind_layout: &wgpu::BindGroupLayout,
+    rest: [&wgpu::Buffer; 3],
+    surface_buffers: &[Option<wgpu::VertexBufferLayout>],
+    msaa: wgpu::MultisampleState,
+    tests: &Option<wgpu::DepthStencilState>,
+    format: wgpu::TextureFormat,
+) -> Shadow {
+    let view = device
+        .create_texture(&wgpu::TextureDescriptor {
+            label: Some("floor shadow"),
+            size: wgpu::Extent3d {
+                width: SHADOW_PX,
+                height: SHADOW_PX,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::R8Unorm,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        })
+        .create_view(&Default::default());
+    let globals = device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("shadow globals"),
+        size: GLOBALS as u64,
+        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        mapped_at_creation: false,
+    });
+    let binds = bind_all(device, bind_layout, [&globals, rest[0], rest[1], rest[2]]);
+    let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: None,
+        bind_group_layouts: &[Some(bind_layout)],
+        immediate_size: 0,
+    });
+    let darkest = wgpu::BlendComponent {
+        src_factor: wgpu::BlendFactor::One,
+        dst_factor: wgpu::BlendFactor::One,
+        operation: wgpu::BlendOperation::Max,
+    };
+    let draw = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("floor shadow"),
+        layout: Some(&layout),
+        vertex: wgpu::VertexState {
+            module: shader,
+            entry_point: Some("shadow_vs"),
+            compilation_options: Default::default(),
+            buffers: surface_buffers,
+        },
+        primitive: wgpu::PrimitiveState::default(),
+        depth_stencil: None,
+        multisample: wgpu::MultisampleState::default(),
+        fragment: Some(wgpu::FragmentState {
+            module: shader,
+            entry_point: Some("shadow_fs"),
+            compilation_options: Default::default(),
+            targets: &[Some(wgpu::ColorTargetState {
+                format: wgpu::TextureFormat::R8Unorm,
+                blend: Some(wgpu::BlendState {
+                    color: darkest,
+                    alpha: darkest,
+                }),
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+        }),
+        multiview_mask: None,
+        cache: None,
+    });
+    let floor_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: None,
+        entries: &[
+            wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    multisampled: false,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 1,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                count: None,
+            },
+        ],
+    });
+    let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+        mag_filter: wgpu::FilterMode::Linear,
+        min_filter: wgpu::FilterMode::Linear,
+        ..Default::default()
+    });
+    let floor_binds = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: None,
+        layout: &floor_layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(&view),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::Sampler(&sampler),
+            },
+        ],
+    });
+    let floor_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: None,
+        bind_group_layouts: &[Some(bind_layout), None, Some(&floor_layout)],
+        immediate_size: 0,
+    });
+    let floor = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("floor"),
+        layout: Some(&floor_pipeline_layout),
+        vertex: wgpu::VertexState {
+            module: shader,
+            entry_point: Some("floor_vs"),
+            compilation_options: Default::default(),
+            buffers: &[],
+        },
+        primitive: wgpu::PrimitiveState::default(),
+        depth_stencil: tests.clone(),
+        multisample: msaa,
+        fragment: Some(wgpu::FragmentState {
+            module: shader,
+            entry_point: Some("floor_fs"),
+            compilation_options: Default::default(),
+            targets: &[Some(wgpu::ColorTargetState {
+                format,
+                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+        }),
+        multiview_mask: None,
+        cache: None,
+    });
+    Shadow {
+        view,
+        globals,
+        binds,
+        draw,
+        floor,
+        floor_binds,
+    }
+}
 
 /// The depth target again, to read rather than draw to.
 fn depth_texture_view(depth: &wgpu::TextureView) -> wgpu::TextureView {

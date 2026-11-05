@@ -10,7 +10,7 @@ use crate::bindings::{
     Chord, Gesture, KeyCommand, KeyMap, MouseMap, NAV_ACTIONS, NavAction, Preset, Toml, gesture_choices,
     preset_map, presets,
 };
-use crate::render::{Backdrop, LineMode};
+use crate::render::{Backdrop, VisualStyle};
 use egui::{Rect, Stroke, StrokeKind, Ui, pos2, vec2};
 
 pub const ANGLES: [&str; 2] = ["deg", "rad"];
@@ -37,18 +37,14 @@ const BACKDROPS: [(Backdrop, &str, &str); 3] = [
     (Backdrop::Gradient, "gradient", "Gradient"),
     (Backdrop::Solid, "solid", "Solid colour"),
 ];
-const LINES: [(LineMode, &str, &str); 3] = [
-    (LineMode::Near, "near", "Near parts"),
-    (LineMode::Far, "far", "All parts"),
-    (LineMode::None, "none", "None"),
-];
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Settings {
     pub dark: bool,
     pub pastel: bool,
     pub backdrop: Backdrop,
-    pub lines: LineMode,
+    /// The view's visual style (the View tab's dropdown sets it too).
+    pub style: VisualStyle,
     pub parallel: bool,
     /// What a part's and an assembly's view show when opened.
     pub overlays: [Overlays; 2],
@@ -70,7 +66,7 @@ impl Default for Settings {
             dark: true,
             pastel: false,
             backdrop: Backdrop::Floor,
-            lines: LineMode::Near,
+            style: VisualStyle::ShadedEdges,
             parallel: true,
             overlays: [PART_OVERLAYS, ASM_OVERLAYS],
             length: "mm",
@@ -129,7 +125,7 @@ impl Settings {
             if self.pastel { "pastel" } else { "grey" },
         );
         t.set("appearance", "background", word(&BACKDROPS, self.backdrop));
-        t.set("display", "edges", word(&LINES, self.lines));
+        t.set("display", "visual_style", self.style.key());
         t.set(
             "display",
             "projection",
@@ -178,7 +174,14 @@ impl Settings {
         s.dark = get("appearance", "theme") != "light";
         s.pastel = get("appearance", "part_colours") == "pastel";
         s.backdrop = by_word(&BACKDROPS, &get("appearance", "background")).unwrap_or(s.backdrop);
-        s.lines = by_word(&LINES, &get("display", "edges")).unwrap_or(s.lines);
+        // the edges setting it replaces: no lines was Shaded, the rest Shaded with Edges
+        s.style = VisualStyle::from_key(&get("display", "visual_style")).unwrap_or(
+            if get("display", "edges") == "none" {
+                VisualStyle::Shaded
+            } else {
+                s.style
+            },
+        );
         s.parallel = get("display", "projection") != "perspective";
         for (k, kind) in ["part", "assembly"].into_iter().enumerate() {
             for (name, _) in OVERLAY_SWITCHES {
@@ -463,7 +466,7 @@ impl Shell {
     pub fn use_settings(&mut self, s: Settings) {
         self.theme = if s.dark { theme::DARK } else { theme::LIGHT };
         self.view.pastel = s.pastel;
-        self.view.lines = s.lines;
+        self.view.style = s.style;
         self.view.parallel = s.parallel;
         self.overlays = s.overlays;
         self.units = s.length;
@@ -484,8 +487,8 @@ impl Shell {
         if s.length != was.length {
             self.out.push(Action::SetUnits(s.length));
         }
-        if s.lines != was.lines {
-            self.out.push(Action::Lines(s.lines));
+        if s.style != was.style {
+            self.out.push(Action::VisualStyle(s.style));
         }
         if s.parallel != was.parallel {
             self.out.push(Action::Parallel(s.parallel));
@@ -654,19 +657,21 @@ fn appearance(ui: &mut Ui, t: &Theme, s: &mut Settings, _: &mut Window, places: 
 
 fn display(ui: &mut Ui, t: &Theme, s: &mut Settings, _: &mut Window, places: &mut Vec<(String, Rect)>) {
     group(ui, t, "View", |ui| {
-        row(ui, t, "Edges", |ui| {
-            for (m, name, word) in LINES {
-                if pill(
-                    ui,
-                    t,
-                    s.lines == m,
-                    word,
-                    format!("settings:edges:{name}"),
-                    places,
-                ) {
-                    s.lines = m;
-                }
-            }
+        row(ui, t, "Visual style", |ui| {
+            let r = egui::ComboBox::from_id_salt("settings visual style")
+                .selected_text(egui::RichText::new(s.style.name()).font(sans(12.0)))
+                .width(240.0)
+                .show_ui(ui, |ui| {
+                    for v in VisualStyle::ALL {
+                        let r = ui.selectable_value(
+                            &mut s.style,
+                            v,
+                            egui::RichText::new(v.name()).font(sans(12.0)),
+                        );
+                        places.push((format!("settings:style:{}", v.key()), r.rect));
+                    }
+                });
+            places.push(("settings:visual_style".into(), r.response.rect));
         });
         row(ui, t, "Projection", |ui| {
             for (p, word) in [(true, "Orthographic"), (false, "Perspective")] {
@@ -924,7 +929,7 @@ mod tests {
             dark: false,
             pastel: true,
             backdrop: Backdrop::Gradient,
-            lines: LineMode::Far,
+            style: VisualStyle::WireframeHidden,
             parallel: false,
             length: "in",
             angle: "rad",
@@ -946,6 +951,15 @@ mod tests {
         assert_eq!(Settings::from_toml(&text), s, "{text}");
         assert!(text.contains("[agent]"), "{text}");
         assert_eq!(Settings::from_toml(""), Settings::default());
+    }
+
+    #[test]
+    fn the_old_edges_setting_becomes_a_visual_style() {
+        let style = |t: &str| Settings::from_toml(t).style;
+        assert_eq!(style("[display]\nedges = none\n"), VisualStyle::Shaded);
+        assert_eq!(style("[display]\nedges = far\n"), VisualStyle::ShadedEdges);
+        let both = "[display]\nedges = none\nvisual_style = wireframe-hidden\n";
+        assert_eq!(style(both), VisualStyle::WireframeHidden);
     }
 
     #[test]

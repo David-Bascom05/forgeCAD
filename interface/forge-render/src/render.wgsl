@@ -26,6 +26,11 @@ struct Globals {
     // the floor's colour, then its shadow: the shown box's middle (x, y) and half size
     floor: vec4f,
     footprint: vec4f,
+    // the visual style: x how faces are lit (0 plain, 1 realistic, 2 monochrome, 3 illustration),
+    // y 1 for edges in the part's colour, z how strong hidden edges are, w a line's half width
+    style: vec4f,
+    // Realistic's shadow's square on the floor: its centre x y, half its side, the floor's height
+    shadow_square: vec4f,
     text: array<vec4u, 16>,
 }
 struct Placement {
@@ -80,8 +85,18 @@ fn shade(in: Shaded) -> vec4f {
     let n = normalize(in.n);
     let v = normalize(g.eye.xyz - in.p);
     let nv = max(dot(n, v), 0.0);
-    let base = in.tint.rgb;
+    var base = in.tint.rgb;
     let metal = in.tint.a;
+    if g.style.x > 2.5 {
+        return illustrate(n, v, base);
+    }
+    if g.style.x > 1.5 {
+        // monochrome: the part's lightness only, kept off black and white
+        base = vec3f(0.18 + 0.62 * dot(base, vec3f(0.2126, 0.7152, 0.0722)) / 0.6);
+    }
+    if g.style.x > 0.5 && g.style.x < 1.5 {
+        return realistic(n, v, base, metal);
+    }
     // a key light over the shoulder of the eye, the room's light from above
     let key = normalize(v + normalize(g.up.xyz * 0.7 + g.right.xyz * 0.35));
     let nl = max(dot(n, key), 0.0);
@@ -94,6 +109,56 @@ fn shade(in: Shaded) -> vec4f {
     let lobe = pow(max(dot(n, h), 0.0), mix(40.0, 90.0, metal)) * mix(0.18, 0.55, metal);
     let spec = fresnel * studio(reflect(-v, n)) * mix(0.35, 0.95, metal) + lobe * f0 * 2.0;
     return vec4f(diffuse + spec, 1.0);
+}
+
+// a photo studio: softboxes overhead and to the sides, a bright horizon, a grey floor
+fn studio_sharp(r: vec3f) -> vec3f {
+    let up = smoothstep(-0.02, 0.02, r.z);
+    let sky = mix(vec3f(0.55, 0.58, 0.63), vec3f(1.05, 1.07, 1.10), smoothstep(0.1, 0.9, r.z));
+    let floor = mix(vec3f(0.10, 0.10, 0.11), vec3f(0.30, 0.30, 0.31), smoothstep(-1.0, 0.0, r.z));
+    let horizon = smoothstep(0.12, 0.0, abs(r.z - 0.05)) * 0.9;
+    // two long softboxes, either side
+    let side = smoothstep(0.80, 0.92, abs(r.x)) * smoothstep(0.0, 0.25, r.z) * 0.9;
+    let top = smoothstep(0.93, 0.98, r.z) * 1.2;
+    return mix(floor, sky, up) + horizon + side + top;
+}
+
+// ACES's filmic curve (Narkowicz's fit): highlights roll off instead of clipping
+fn filmic(x: vec3f) -> vec3f {
+    return saturate((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14));
+}
+
+fn realistic(n: vec3f, v: vec3f, base: vec3f, metal: f32) -> vec4f {
+    let nv = max(dot(n, v), 1e-3);
+    // a sun high over the scene's back left, as the floor's shadow has it from above
+    let sun = normalize(SUN);
+    let nl = max(dot(n, sun), 0.0);
+    let sky = mix(vec3f(0.16, 0.15, 0.14), vec3f(0.62, 0.66, 0.74), n.z * 0.5 + 0.5);
+    // a fill from the eye's side so nothing goes flat black
+    let fill = max(dot(n, v), 0.0) * 0.25;
+    let diffuse = base * (1.0 - metal) * (sky * 0.55 + nl * vec3f(1.0, 0.97, 0.92) * 1.0 + fill);
+    // GGX for the sun, Schlick's Fresnel on the studio's reflection
+    let rough = mix(0.38, 0.22, metal);
+    let a2 = rough * rough * rough * rough;
+    let h = normalize(sun + v);
+    let nh = max(dot(n, h), 0.0);
+    let d = nh * nh * (a2 - 1.0) + 1.0;
+    let ggx = a2 / (3.14159 * d * d);
+    let f0 = mix(vec3f(0.04), base, metal);
+    let fresnel = f0 + (vec3f(1.0) - f0) * pow(1.0 - nv, 5.0);
+    let env = studio_sharp(reflect(-v, n));
+    let spec = fresnel * env * mix(0.45, 1.0, metal) + f0 * ggx * nl * 0.25;
+    return vec4f(filmic((diffuse + spec) * 0.9), 1.0);
+}
+
+// three flat bands of light, a highlight, and the part's colour kept bright
+fn illustrate(n: vec3f, v: vec3f, base: vec3f) -> vec4f {
+    let key = normalize(v + normalize(g.up.xyz * 0.8 + g.right.xyz * 0.4));
+    let nl = dot(n, key);
+    let band = select(select(0.55, 0.78, nl > 0.35), 1.0, nl > 0.8);
+    let paper = mix(base, vec3f(1.0), 0.25);
+    let shine = select(0.0, 0.25, dot(reflect(-key, n), v) > 0.96);
+    return vec4f(paper * band + shine, 1.0);
 }
 
 @fragment
@@ -283,25 +348,39 @@ fn line_end_at(vi: u32, pl: Placement) -> vec3f {
     return place(pl, bitcast<vec3f>(end.xyz));
 }
 
-fn line_at(vi: u32, at: u32) -> Line {
-    let pl = placements[at];
+// a line's colour: ink on shaded parts, the part's own in a wireframe (pushed off the
+// background); a B-rep edge between faces that meet smoothly lighter
+fn line_colour(at: u32, soft: bool) -> vec3f {
+    if g.style.y < 0.5 {
+        return select(vec3f(0.05, 0.06, 0.08), vec3f(0.30, 0.32, 0.35), soft);
+    }
+    let back_light = dot(g.back.rgb, vec3f(0.2126, 0.7152, 0.0722)) > 0.25;
+    let tint = tints[at].rgb;
+    let c = select(mix(tint, vec3f(0.85), 0.35), tint * 0.3, back_light);
+    return select(c, mix(c, g.back.rgb, 0.35), soft);
+}
+
+// a segment's colour, or none if it's a silhouette candidate that isn't one from here
+fn segment_colour(vi: u32, at: u32, pl: Placement) -> vec4f {
     let s0 = segments[vi / 4u * 2u];
     let s1 = segments[vi / 4u * 2u + 1u];
-    var colour = vec3f(0.05, 0.06, 0.08);
     if (s0.w & 0xffffu) == 0x8000u {
-        if (s1.w & 0xffffu) != 0u {
-            colour = vec3f(0.30, 0.32, 0.35);
-        }
-    } else {
-        let v = g.eye.xyz - place(pl, bitcast<vec3f>(s0.xyz));
-        let front_a = dot(turn(pl, unoct(signed_pair(s0.w))), v);
-        let front_b = dot(turn(pl, unoct(signed_pair(s1.w))), v);
-        if front_a * front_b > 0.0 {
-            return Line(NOWHERE, colour, 0.0);
-        }
+        return vec4f(line_colour(at, (s1.w & 0xffffu) != 0u), 1.0);
     }
-    let half_px = g.px.z + FEATHER;
-    return Line(line_corner(vi, pl, half_px), colour, LINE_CORNERS[vi % 4u].y * half_px);
+    let v = g.eye.xyz - place(pl, bitcast<vec3f>(s0.xyz));
+    let front_a = dot(turn(pl, unoct(signed_pair(s0.w))), v);
+    let front_b = dot(turn(pl, unoct(signed_pair(s1.w))), v);
+    return vec4f(line_colour(at, false), select(1.0, 0.0, front_a * front_b > 0.0));
+}
+
+fn line_at(vi: u32, at: u32) -> Line {
+    let pl = placements[at];
+    let c = segment_colour(vi, at, pl);
+    if c.a == 0.0 {
+        return Line(NOWHERE, c.rgb, 0.0);
+    }
+    let half_px = g.style.w + FEATHER;
+    return Line(line_corner(vi, pl, half_px), c.rgb, LINE_CORNERS[vi % 4u].y * half_px);
 }
 
 @vertex
@@ -327,13 +406,13 @@ fn line_cut_fs(in: CutLine) -> @location(0) vec4f {
     if cut_away(in.p) {
         discard;
     }
-    let half_px = g.px.z + FEATHER;
+    let half_px = g.style.w + FEATHER;
     return vec4f(in.colour, saturate((half_px - abs(in.across)) / FEATHER));
 }
 
 @fragment
 fn line_fs(in: Line) -> @location(0) vec4f {
-    let half_px = g.px.z + FEATHER;
+    let half_px = g.style.w + FEATHER;
     return vec4f(in.colour, saturate((half_px - abs(in.across)) / FEATHER));
 }
 
@@ -624,4 +703,125 @@ fn ao_apply_fs(@builtin(position) at: vec4f) -> @location(0) vec4f {
         }
     }
     return vec4f(vec3f(sum / max(weight, 1e-5)), 1.0);
+}
+
+// an edge behind the faces, drawn after them, dashed and faint. A fragment of it is hidden where
+// the depth around it (a cross 2 pixels out) is all nearer: so along the face an edge bounds,
+// where its width spills over that face, it isn't
+struct HiddenLine {
+    @builtin(position) clip: vec4f,
+    @location(0) colour: vec3f,
+    @location(1) across: f32,
+    @location(2) p: vec3f,
+    // the segment's direction on screen, in pixels
+    @location(3) along: vec2f,
+}
+
+const DASH_PX = 5.0;
+// a surface must be this much nearer (of its depth, at the ordinary lens: g.eye.w scales it, as
+// LIFT) to hide an edge
+const HIDDEN_BY = 1e-3;
+const HIDDEN_BY_MIN = 1e-6;
+
+@vertex
+fn line_hidden_vs(@builtin(vertex_index) vi: u32, @location(0) at: u32) -> HiddenLine {
+    let pl = placements[at];
+    // a smooth edge behind is clutter, as Inventor leaves it out
+    if (segments[vi / 4u * 2u + 1u].w & 0xffffu) != 0u {
+        return HiddenLine(NOWHERE, vec3f(0.0), 0.0, vec3f(0.0), vec2f(1.0, 0.0));
+    }
+    let l = line_at(vi, at);
+    let a = g.view_proj * vec4f(place(pl, bitcast<vec3f>(segments[vi / 4u * 2u].xyz)), 1.0);
+    let b = g.view_proj * vec4f(place(pl, bitcast<vec3f>(segments[vi / 4u * 2u + 1u].xyz)), 1.0);
+    let d = (b.xy / max(b.w, 1e-6) - a.xy / max(a.w, 1e-6)) / g.px.xy;
+    let along = d / max(length(d), 1e-6);
+    return HiddenLine(l.clip, l.colour, l.across, line_end_at(vi, pl), along);
+}
+
+@fragment
+fn line_hidden_fs(in: HiddenLine) -> @location(0) vec4f {
+    if cut_away(in.p) {
+        discard;
+    }
+    let size = vec2i(textureDimensions(scene_depth)) - 1;
+    let px = vec2i(in.clip.xy);
+    let line = in.clip.z * (1.0 + max(HIDDEN_BY * g.eye.w, HIDDEN_BY_MIN));
+    var nearest_open = 1e9;
+    for (var k = 0; k < 5; k += 1) {
+        let o = array<vec2i, 5>(vec2i(0, 0), vec2i(2, 0), vec2i(-2, 0), vec2i(0, 2), vec2i(0, -2))[k];
+        let d = textureLoad(scene_depth, clamp(px + o, vec2i(0), size), 0);
+        nearest_open = min(nearest_open, d);
+    }
+    // nearer is larger: hidden only if every surface around is nearer than the edge
+    if nearest_open <= line {
+        discard;
+    }
+    let dash = fract(dot(in.clip.xy, in.along) / (DASH_PX * 2.0));
+    if dash > 0.6 {
+        discard;
+    }
+    let half_px = g.style.w + FEATHER;
+    let edge = saturate((half_px - abs(in.across)) / FEATHER);
+    // on shaded faces a mid grey: ink would read as dirt where small holes lie behind
+    let ink = select(in.colour, vec3f(0.30, 0.32, 0.36), g.style.y < 0.5);
+    return vec4f(ink, edge * g.style.z);
+}
+
+// Realistic's floor shadow: the parts from straight above, darker the nearer the floor they are
+struct Above {
+    @builtin(position) clip: vec4f,
+    @location(0) height: f32,
+}
+
+// Realistic's sun (see `realistic`): shadows fall away from it
+const SUN = vec3f(-0.35, 0.45, 0.82);
+
+@vertex
+fn shadow_vs(@location(0) p: vec3f, @location(1) n: vec2f, @location(2) at: u32) -> Above {
+    let w = place(placements[at], p);
+    let up = w.z - g.shadow_square.w;
+    let s = normalize(SUN);
+    let on_floor = vec3f(w.xy - s.xy / s.z * up, g.shadow_square.w);
+    return Above(g.view_proj * vec4f(on_floor, 1.0), up / g.shadow_square.z);
+}
+
+@fragment
+fn shadow_fs(in: Above) -> @location(0) vec4f {
+    let dark = 1.0 - 0.7 * smoothstep(0.0, 0.8, in.height);
+    return vec4f(dark, 0.0, 0.0, 1.0);
+}
+
+struct OnFloor {
+    @builtin(position) clip: vec4f,
+    @location(0) p: vec3f,
+}
+
+@vertex
+fn floor_vs(@builtin(vertex_index) vi: u32) -> OnFloor {
+    let c = CORNERS[vi % 6u];
+    let p = vec3f(g.shadow_square.xy + vec2f(c.x * 2.0 - 1.0, c.y) * g.shadow_square.z, g.shadow_square.w);
+    return OnFloor(g.view_proj * vec4f(p, 1.0), p);
+}
+
+@group(2) @binding(0) var shadow_map: texture_2d<f32>;
+@group(2) @binding(1) var shadow_smooth: sampler;
+
+@fragment
+fn floor_fs(in: OnFloor) -> @location(0) vec4f {
+    if g.eye.z < g.shadow_square.w {
+        discard;
+    }
+    let local = (in.p.xy - g.shadow_square.xy) / g.shadow_square.z;
+    let uv = vec2f(local.x * 0.5 + 0.5, 0.5 - local.y * 0.5);
+    // a disc of taps, its reach a share of the floor: soft, as under a big softbox
+    var sum = 0.0;
+    for (var i = 0; i < 16; i += 1) {
+        let u = (f32(i) + 0.5) / 16.0;
+        let turn_by = f32(i) * 2.3999632;
+        let off = vec2f(cos(turn_by), sin(turn_by)) * sqrt(u) * 0.03;
+        sum += textureSampleLevel(shadow_map, shadow_smooth, uv + off, 0.0).r;
+    }
+    // fading out toward the floor's sides, so it has no edge
+    let fade = 1.0 - smoothstep(0.7, 1.0, max(abs(local.x), abs(local.y)));
+    return vec4f(0.0, 0.0, 0.0, sum / 16.0 * 0.5 * fade);
 }
