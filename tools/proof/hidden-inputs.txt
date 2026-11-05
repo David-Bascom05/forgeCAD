@@ -236,7 +236,33 @@ no-output (powi: small integer exponents, same bits native and wasm; ban-list it
 no-output (no iteration order reaches an output; audit)  @ forge-sheet/src/region.rs|hash-order|type Map<K, V> = HashMap<K, V, std::hash::BuildHasherDefault<Mix>>;
 no-output (FFI buffer or a local identity of one object)  @ forge-sheet/src/region.rs|pointer|let x_is_spline = matches!(x, Piece::Spline { s: q, .. } if Arc::ptr_eq(q, s));
 no-output (test code)  @ forge-thermo/src/bench.rs|env|let path = format!("{}/data/benchmarks/{name}.csv", env!("CARGO_MANIFEST_DIR"));
+no-output (looked up by key only: get, entry; nodes() sums counts, an integer)  @ forge-thermo/src/sdf.rs|hash-order|bricks: HashMap<(i32, i32, i32), Box<[f32; B * B * B]>>,
+no-output (looked up by key only: get, entry; each cell's list in triangle order)  @ forge-thermo/src/sdf.rs|hash-order|cells: HashMap<(i64, i64, i64), Vec<u32>>,
+no-output (looked up by key only; each key's sum added in triangle order)  @ forge-thermo/src/sdf.rs|hash-order|edge_normal: HashMap<(u32, u32), Vec3>,
+no-output (looked up by key only: get, entry; each cell's list in triangle order)  @ forge-thermo/src/sdf.rs|hash-order|let mut cells: HashMap<(i64, i64, i64), Vec<u32>> = HashMap::new();
+no-output (looked up by key only; each key's sum added in triangle order)  @ forge-thermo/src/sdf.rs|hash-order|let mut edge_normal: HashMap<(u32, u32), Vec3> = HashMap::new();
+no-output (looked up by key only: entry; the new indices follow the triangles' order)  @ forge-thermo/src/sdf.rs|hash-order|let mut index: HashMap<u32, u32> = HashMap::new();
+no-output (iterated, but each node's distance is a function of its own position, written to its own slot: any order gives the same bricks)  @ forge-thermo/src/sdf.rs|hash-order|let mut want: std::collections::HashSet<(i64, i64, i64)> = Default::default();
+no-output (looked up by key only: get, entry, insert, contains)  @ forge-thermo/src/simulated.rs|hash-order|cells: HashMap<(i64, i64, i64), Vec<u32>>,  x 2
+no-output (looked up by key only: get, entry, insert, contains)  @ forge-thermo/src/simulated.rs|hash-order|cells: HashMap<(i64, i64, i64), Vec<usize>>,
+no-output (looked up by key only: get, entry, insert, contains)  @ forge-thermo/src/simulated.rs|hash-order|cuts: HashMap<(i64, i64), usize>,
+no-output (looked up by key only: get, entry, insert, contains)  @ forge-thermo/src/simulated.rs|hash-order|let mut cells: HashMap<(i64, i64, i64), Vec<u32>> = HashMap::new();  x 3
+no-output (looked up by key only: get, entry, insert, contains)  @ forge-thermo/src/simulated.rs|hash-order|let mut cells: HashMap<(i64, i64, i64), Vec<usize>> = HashMap::new();
+no-output (its keys are sorted before use: the rim, simulated.rs)  @ forge-thermo/src/simulated.rs|hash-order|let mut directed: HashMap<(usize, usize), usize> = HashMap::new();
+no-output (looked up by key only: get, entry, insert, contains)  @ forge-thermo/src/simulated.rs|hash-order|let mut done: std::collections::HashSet<(u32, u32)> = Default::default();
+no-output (looked up by key only: get, entry, insert, contains)  @ forge-thermo/src/simulated.rs|hash-order|let mut mid: HashMap<(u32, u32), u32> = HashMap::new();
+no-output (looked up by key only: get, entry, insert, contains)  @ forge-thermo/src/simulated.rs|hash-order|let mut split: HashMap<(u32, u32), u32> = HashMap::new();
+no-output (looked up by key only: get, entry, insert, contains)  @ forge-thermo/src/simulated.rs|hash-order|nodes: HashMap<usize, usize>,
+no-output (the turned-triangle guard: set by any worker, read after the pool's barrier; an OR of per-triangle tests, the same whatever the worker count or order)  @ forge-thermo/src/stretch.rs|atomic|flipped: AtomicBool,
+no-output (the turned-triangle guard: set by any worker, read after the pool's barrier; an OR of per-triangle tests, the same whatever the worker count or order)  @ forge-thermo/src/stretch.rs|atomic|flipped: AtomicBool::new(false),
+no-output (the stretch's worker pool: stops its workers when dropped; the triangles' answers come back in triangle order whatever the worker count, summed as one thread sums them)  @ forge-thermo/src/stretch.rs|atomic|stop: AtomicBool,
+no-output (the stretch's worker pool: stops its workers when dropped; the triangles' answers come back in triangle order whatever the worker count, summed as one thread sums them)  @ forge-thermo/src/stretch.rs|atomic|stop: AtomicBool::new(false),
+no-output (the stretch's worker pool: stops its workers when dropped; the triangles' answers come back in triangle order whatever the worker count, summed as one thread sums them)  @ forge-thermo/src/stretch.rs|atomic|use std::sync::atomic::{AtomicBool, Ordering};
+no-output (looked up by key only: insert, remove; the hinges pushed in triangle order)  @ forge-thermo/src/stretch.rs|hash-order|let mut side: HashMap<(usize, usize), (usize, usize)> = HashMap::new();
+no-output (the stretch's worker pool: stops its workers when dropped; the triangles' answers come back in triangle order whatever the worker count, summed as one thread sums them)  @ forge-thermo/src/stretch.rs|threads|std::thread::spawn(move || {
 no-output (test code)  @ forge-thermo/src/tests.rs|clock|let t = std::time::Instant::now();  x 2
+no-output (a test's timing)  @ forge-thermo/src/tests.rs|clock|let t0 = std::time::Instant::now();  x 3
+no-output (a test's own check)  @ forge-thermo/src/tests.rs|hash-order|let mut sides: std::collections::HashMap<(u32, u32), Vec<usize>> = Default::default();
 speed (lazy field or constant table)  @ forge-topo/src/body.rs|lazy|Cached(std::sync::OnceLock::new())
 speed (lazy field or constant table)  @ forge-topo/src/body.rs|lazy|pub struct Cached<T>(std::sync::OnceLock<T>);
 no-output (test switch, off unless a test sets it)  @ forge-topo/src/check.rs|atomic|static BOTH: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -257,19 +283,3 @@ no-output (constant tables or print switches)  @ forge-topo/src/mass.rs|static|s
 no-output (constant tables or print switches)  @ forge-topo/src/mass.rs|static|static R: OnceLock<[Curtis; 2]> = OnceLock::new();
 no-output (constant tables or print switches)  @ forge-topo/src/mass.rs|static|static R: OnceLock<[Fejer; 3]> = OnceLock::new();
 no-output (constant tables or print switches)  @ forge-topo/src/mass.rs|static|static R: OnceLock<[Kronrod; 2]> = OnceLock::new();
-no-output (looked up by key only: get, entry, insert, contains)  @ forge-thermo/src/simulated.rs|hash-order|cells: HashMap<(i64, i64, i64), Vec<u32>>,  x 2
-no-output (looked up by key only: get, entry, insert, contains)  @ forge-thermo/src/simulated.rs|hash-order|cells: HashMap<(i64, i64, i64), Vec<usize>>,
-no-output (looked up by key only: get, entry, insert, contains)  @ forge-thermo/src/simulated.rs|hash-order|cuts: HashMap<(i64, i64), usize>,
-no-output (looked up by key only: get, entry, insert, contains)  @ forge-thermo/src/simulated.rs|hash-order|let mut cells: HashMap<(i64, i64, i64), Vec<u32>> = HashMap::new();  x 3
-no-output (looked up by key only: get, entry, insert, contains)  @ forge-thermo/src/simulated.rs|hash-order|let mut cells: HashMap<(i64, i64, i64), Vec<usize>> = HashMap::new();
-no-output (its keys are sorted before use: the rim, simulated.rs)  @ forge-thermo/src/simulated.rs|hash-order|let mut directed: HashMap<(usize, usize), usize> = HashMap::new();
-no-output (looked up by key only: get, entry, insert, contains)  @ forge-thermo/src/simulated.rs|hash-order|let mut done: std::collections::HashSet<(u32, u32)> = Default::default();
-no-output (looked up by key only: get, entry, insert, contains)  @ forge-thermo/src/simulated.rs|hash-order|let mut mid: HashMap<(u32, u32), u32> = HashMap::new();
-no-output (looked up by key only: get, entry, insert, contains)  @ forge-thermo/src/simulated.rs|hash-order|let mut split: HashMap<(u32, u32), u32> = HashMap::new();
-no-output (looked up by key only: get, entry, insert, contains)  @ forge-thermo/src/simulated.rs|hash-order|nodes: HashMap<usize, usize>,
-no-output (a test's timing)  @ forge-thermo/src/tests.rs|clock|let t0 = std::time::Instant::now();  x 2
-no-output (a test's own check)  @ forge-thermo/src/tests.rs|hash-order|let mut sides: std::collections::HashMap<(u32, u32), Vec<usize>> = Default::default();
-no-output (the stretch's worker pool: stops its workers when dropped; the triangles' answers come back in triangle order whatever the worker count, summed as one thread sums them)  @ forge-thermo/src/stretch.rs|atomic|stop: AtomicBool,
-no-output (the stretch's worker pool: stops its workers when dropped; the triangles' answers come back in triangle order whatever the worker count, summed as one thread sums them)  @ forge-thermo/src/stretch.rs|atomic|stop: AtomicBool::new(false),
-no-output (the stretch's worker pool: stops its workers when dropped; the triangles' answers come back in triangle order whatever the worker count, summed as one thread sums them)  @ forge-thermo/src/stretch.rs|atomic|use std::sync::atomic::{AtomicBool, Ordering};
-no-output (the stretch's worker pool: stops its workers when dropped; the triangles' answers come back in triangle order whatever the worker count, summed as one thread sums them)  @ forge-thermo/src/stretch.rs|threads|std::thread::spawn(move || {
