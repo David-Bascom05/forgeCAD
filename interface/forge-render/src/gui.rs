@@ -1332,10 +1332,6 @@ impl Gui {
                     }
                 }
             }
-            // Measure picks one at a time: a window chooses nothing then
-            if self.shell.inspect.measure.is_some() {
-                v.nav.window = None;
-            }
             if let Some((a, b)) = v.nav.window.take() {
                 v.dirty = true;
                 let lo = (a.0.min(b.0), a.1.min(b.1));
@@ -2354,6 +2350,7 @@ impl Gui {
         } else {
             (Vec::new(), Vec::new())
         };
+        let measuring = self.measure_view_marks();
         if let Some(v) = &mut self.view
             && v.dirty
         {
@@ -2442,12 +2439,16 @@ impl Gui {
                     .as_ref()
                     .is_some_and(|m| m.tool != Some(SkTool::Project))
                     || self.shell.sketch_hover.is_some();
-                let mut m: Vec<Mark> = v
-                    .nav
-                    .marks()
-                    .into_iter()
-                    .filter(|m| !m.selected && !quiet)
-                    .collect();
+                // measuring: what's picked and what a click would pick, as Measure takes them
+                let mut m: Vec<Mark> = match measuring {
+                    Some(ms) if self.shell.sketch.is_none() => ms,
+                    _ => v
+                        .nav
+                        .marks()
+                        .into_iter()
+                        .filter(|m| !m.selected && !quiet)
+                        .collect(),
+                };
                 // with a dialog up the picks are what's marked
                 if self.shell.dialog.is_some() {
                     m.extend(v.nav.selected.iter().map(|&(placement, entity)| Mark {

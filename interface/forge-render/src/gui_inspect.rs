@@ -3,12 +3,12 @@
 //! put on the renderer, and the physical properties worked out when asked.
 
 use super::Gui;
-use crate::render::Entity;
-use crate::shell::inspect::CutPlane;
-use forge_agent::measure::{Pick, Reading, read_one, read_two};
-use forge_agent::select::Ent;
+use crate::render::{Entity, Mark};
+use crate::shell::inspect::{CutPlane, Filter, MPick};
+use forge_agent::measure::{Free, Pick, Reading, Target, Whole, read, read_pair};
+use forge_agent::select::{self, Ent};
 use forge_lang::props::{Physical, Props};
-use forge_math::{Frame, Point3};
+use forge_math::{Frame, Point3, Vec3};
 use forge_mesh::TriMesh;
 use forge_topo::{Body, EdgeId, FaceId, VertexId};
 use std::collections::HashMap;
@@ -40,8 +40,17 @@ impl std::fmt::Debug for InspectData {
 
 type Picked = (Arc<Body>, Frame, Ent);
 
+/// A pick as the worker takes it: what it is, with the body it's of.
+#[derive(Clone)]
+enum Tgt {
+    Ent(Picked),
+    /// A whole body where it stands, and its density (kg/mm³) where its material says.
+    Whole(Arc<Body>, Frame, Option<f64>),
+    Free(Free),
+}
+
 enum Job {
-    Measure(u64, Vec<Picked>),
+    Measure(u64, Vec<Tgt>),
     Wall(u64, Arc<Body>, Frame),
     Physical(Arc<forge_lang::asm::AsmOut>),
 }
@@ -62,9 +71,11 @@ pub struct Inspector {
     /// The view's click count last seen, and the picks last measured.
     clicks: u32,
     open: bool,
-    measured: Option<(Vec<(u32, Entity)>, bool)>,
+    measured: Option<(Vec<MPick>, bool)>,
     /// The picks the last job was for, kept across a rebuild.
-    asked: Option<(Vec<(u32, Entity)>, bool)>,
+    asked: Option<(Vec<MPick>, bool)>,
+    /// The origin item last chosen in the browser, taken once.
+    origin_seen: Option<crate::origin::Item>,
     /// What the renderer was last given.
     cut: Option<crate::shell::inspect::Cut>,
 }
@@ -120,24 +131,51 @@ fn handle(
 ) -> Result<(), ()> {
     let a = match job {
         Job::Measure(id, picks) => {
-            let got: Result<Vec<Arc<TriMesh>>, String> = picks.iter().map(|p| mesh(&p.0)).collect();
-            let r = got.map(|ms| {
-                let ps: Vec<Pick> = picks
-                    .iter()
-                    .zip(&ms)
-                    .map(|(p, m)| Pick {
-                        body: &p.0,
-                        mesh: m,
-                        at: p.1,
-                        ent: p.2,
+            let mut meshes = vec![];
+            let mut err = None;
+            for p in &picks {
+                let m = match p {
+                    Tgt::Ent((b, _, _)) | Tgt::Whole(b, _, _) => match mesh(b) {
+                        Ok(m) => Some(m),
+                        Err(e) => {
+                            err = Some(e);
+                            None
+                        }
+                    },
+                    Tgt::Free(_) => None,
+                };
+                meshes.push(m);
+            }
+            let r = match err {
+                Some(e) => Err(e),
+                None => {
+                    let ts: Vec<Target> = picks
+                        .iter()
+                        .zip(&meshes)
+                        .map(|(p, m)| match (p, m) {
+                            (Tgt::Ent((b, at, e)), Some(m)) => Target::Ent(Pick {
+                                body: b,
+                                mesh: m,
+                                at: *at,
+                                ent: *e,
+                            }),
+                            (Tgt::Whole(b, at, density), Some(m)) => Target::Whole(Whole {
+                                body: b,
+                                mesh: m,
+                                at: *at,
+                                density: *density,
+                            }),
+                            (Tgt::Free(f), _) => Target::Free(f.clone()),
+                            _ => unreachable!("a body's mesh is made above"),
+                        })
+                        .collect();
+                    Ok(match &ts[..] {
+                        [a] => read(a),
+                        [a, b] => read_pair(a, b),
+                        _ => Reading::default(),
                     })
-                    .collect();
-                match &ps[..] {
-                    [a] => read_one(a),
-                    [a, b] => read_two(a, b),
-                    _ => Reading::default(),
                 }
-            });
+            };
             Answer::Measure(id, r)
         }
         Job::Wall(id, b, at) => {
@@ -188,22 +226,28 @@ impl Gui {
         // a pick the rebuilt part hasn't got, or one on a part whose topology changed, is gone:
         // measuring starts again rather than read some other face by its old number
         let was = self.inspector.data.take();
-        let kept = |pl: u32, e: Entity| {
-            let shape = |d: &InspectData| {
+        let kept = |p: &MPick| {
+            let shape = |d: &InspectData, pl: u32, e: Option<Entity>| {
                 let &(mesh, _) = d.placed.get(pl as usize)?;
                 let b = d.bodies.get(mesh)?;
                 let n = match e {
-                    Entity::Face(i) => (i as usize) < b.faces.len(),
-                    Entity::Edge(i) => (i as usize) < b.edges.len(),
-                    Entity::Vertex(i) => (i as usize) < b.vertices.len(),
+                    Some(Entity::Face(i)) => (i as usize) < b.faces.len(),
+                    Some(Entity::Edge(i)) => (i as usize) < b.edges.len(),
+                    Some(Entity::Vertex(i)) => (i as usize) < b.vertices.len(),
+                    None => true,
                 };
                 n.then_some((b.faces.len(), b.edges.len(), b.vertices.len()))
             };
-            let now = shape(&d);
-            now.is_some() && was.as_ref().is_none_or(|w| shape(w) == now)
+            let (pl, e) = match p {
+                MPick::Ent(pl, e) => (*pl, Some(*e)),
+                MPick::Whole(pl) => (*pl, None),
+                MPick::Free(..) => return true,
+            };
+            let now = shape(&d, pl, e);
+            now.is_some() && was.as_ref().is_none_or(|w| shape(w, pl, e) == now)
         };
         if let Some(m) = &mut self.shell.inspect.measure
-            && !m.picks.iter().all(|&(pl, e)| kept(pl, e))
+            && !m.picks.iter().all(kept)
         {
             m.restart();
             self.inspector.asked = None;
@@ -231,6 +275,161 @@ impl Gui {
             _ => kind_word(&b, e),
         };
         Some(((b, at, e), name))
+    }
+
+    /// A Measure pick as the worker takes it, and its words.
+    fn target_of(&self, p: &MPick) -> Option<(Tgt, String)> {
+        match p {
+            MPick::Ent(pl, e) => self.picked(*pl, *e).map(|(t, w)| (Tgt::Ent(t), w)),
+            MPick::Whole(pl) => {
+                let d = self.inspector.data.as_ref()?;
+                let &(mesh, at) = d.placed.get(*pl as usize)?;
+                let b = d.bodies.get(mesh)?.clone();
+                let name = d.names.get(*pl as usize).filter(|n| !n.is_empty());
+                Some((
+                    Tgt::Whole(b, at, self.density_of(*pl)),
+                    name.map_or("Body".into(), |n| format!("Body · {n}")),
+                ))
+            }
+            MPick::Free(f, w) => Some((Tgt::Free(f.clone()), w.clone())),
+        }
+    }
+
+    /// The density (kg/mm³) of what's at a placement: its occurrence's material, else the part's.
+    fn density_of(&self, pl: u32) -> Option<f64> {
+        let d = self.inspector.data.as_ref()?;
+        let phys = self.shell.inspect.physical.as_ref().and_then(|p| p.as_ref().ok()).or(d.physical.as_ref())?;
+        let name = d.names.get(pl as usize);
+        let solid = phys
+            .solids
+            .iter()
+            .find(|s| name.is_some_and(|n| *n == s.id))
+            .or(if phys.solids.len() == 1 { phys.solids.first() } else { None });
+        match solid {
+            // kg/m³ to kg/mm³
+            Some(s) => s.density.map(|k| k * 1e-9),
+            None if d.asm.is_none() => phys.mass.map(|m| m / phys.volume.max(1e-12)),
+            None => None,
+        }
+    }
+
+    /// What a click (or the pointer) at a placement's entity picks under the selection priority:
+    /// the face of an edge facing the eye, the nearest edge of a face, the nearest point, the
+    /// whole body.
+    fn filtered(&self, filter: Filter, pl: u32, e: Entity, at: Option<[f32; 3]>) -> Option<MPick> {
+        if filter == Filter::Bodies {
+            return Some(MPick::Whole(pl));
+        }
+        if filter == Filter::Any {
+            return Some(MPick::Ent(pl, e));
+        }
+        let d = self.inspector.data.as_ref()?;
+        let &(mesh, frame) = d.placed.get(pl as usize)?;
+        let b = d.bodies.get(mesh)?;
+        let near = at.map(|p| frame.point_to_local(Point3::new(p[0] as f64, p[1] as f64, p[2] as f64)));
+        let near = near.unwrap_or_else(|| select::centre(b, ent(e)));
+        let eye = self.view.as_ref().map(|v| v.nav.camera.eye()).map(|q| {
+            frame.point_to_local(Point3::new(q[0] as f64, q[1] as f64, q[2] as f64))
+        });
+        let edge_gap = |x: EdgeId| {
+            b.edge_points(x, 48)
+                .into_iter()
+                .map(|q| q.distance(near))
+                .fold(f64::INFINITY, f64::min)
+        };
+        let ends = |x: EdgeId| [b.edge(x).start, b.edge(x).end];
+        let edges_at = |v: VertexId| {
+            b.edge_ids()
+                .filter(|&x| ends(x).contains(&v))
+                .collect::<Vec<_>>()
+        };
+        let nearest_vertex = |vs: Vec<VertexId>| {
+            vs.into_iter()
+                .min_by(|a, c| {
+                    b.vertex(*a)
+                        .point
+                        .distance(near)
+                        .total_cmp(&b.vertex(*c).point.distance(near))
+                })
+        };
+        let picked = match (filter, ent(e)) {
+            (Filter::Faces, Ent::Face(_)) | (Filter::Edges, Ent::Edge(_)) | (Filter::Points, Ent::Vert(_)) => ent(e),
+            (Filter::Faces, Ent::Edge(x)) => Ent::Face(self.facing(b, &select::faces_of_edge(b, x), near, eye)?),
+            (Filter::Faces, Ent::Vert(v)) => {
+                let mut fs: Vec<FaceId> = edges_at(v).into_iter().flat_map(|x| select::faces_of_edge(b, x)).collect();
+                fs.sort_by_key(|f| f.0);
+                fs.dedup();
+                Ent::Face(self.facing(b, &fs, near, eye)?)
+            }
+            (Filter::Edges, Ent::Face(f)) => Ent::Edge(
+                select::edges_of_face(b, f)
+                    .into_iter()
+                    .min_by(|a, c| edge_gap(*a).total_cmp(&edge_gap(*c)))?,
+            ),
+            (Filter::Edges, Ent::Vert(v)) => Ent::Edge(*edges_at(v).first()?),
+            (Filter::Points, Ent::Edge(x)) => Ent::Vert(nearest_vertex(ends(x).to_vec())?),
+            (Filter::Points, Ent::Face(f)) => Ent::Vert(nearest_vertex(
+                select::edges_of_face(b, f).into_iter().flat_map(ends).collect(),
+            )?),
+            _ => return None,
+        };
+        Some(MPick::Ent(
+            pl,
+            match picked {
+                Ent::Face(f) => Entity::Face(f.0),
+                Ent::Edge(x) => Entity::Edge(x.0),
+                Ent::Vert(v) => Entity::Vertex(v.0),
+            },
+        ))
+    }
+
+    /// Of faces meeting at a point, the one turned most to the eye there.
+    fn facing(&self, b: &Body, faces: &[FaceId], near: Point3, eye: Option<Point3>) -> Option<FaceId> {
+        let to_eye = eye.map_or(Vec3::Z, |e| e - near);
+        faces
+            .iter()
+            .copied()
+            .max_by(|a, c| {
+                let n = |f: FaceId| {
+                    forge_agent::measure::normal_near(b, f, near).map_or(-1.0, |n| n.dot(to_eye))
+                };
+                n(*a).total_cmp(&n(*c))
+            })
+    }
+
+    /// What the view marks for Measure: what's picked, and what a click would pick now (a whole
+    /// body all its faces).
+    pub(crate) fn measure_view_marks(&self) -> Option<Vec<Mark>> {
+        let m = self.shell.inspect.measure.as_ref()?;
+        let d = self.inspector.data.as_ref();
+        let mut out = vec![];
+        let mut put = |p: &MPick, selected: bool| match p {
+            MPick::Ent(placement, entity) => out.push(Mark {
+                placement: *placement,
+                entity: *entity,
+                selected,
+            }),
+            MPick::Whole(pl) => {
+                let faces = d
+                    .and_then(|d| d.placed.get(*pl as usize).and_then(|(k, _)| d.bodies.get(*k)))
+                    .map_or(0, |b| b.faces.len());
+                out.extend((0..faces as u32).map(|f| Mark {
+                    placement: *pl,
+                    entity: Entity::Face(f),
+                    selected,
+                }));
+            }
+            MPick::Free(..) => {}
+        };
+        for p in &m.picks {
+            put(p, true);
+        }
+        if let Some(h) = &m.hover
+            && !m.picks.contains(h)
+        {
+            put(h, false);
+        }
+        Some(out)
     }
 
     /// Once a frame: the view's clicks taken as picks, jobs sent and answers taken, the section
@@ -265,6 +464,8 @@ impl Gui {
             }
         }
         self.inspect_clicks();
+        self.measure_browser();
+        self.measure_hover();
         self.inspect_measure();
         if std::mem::take(&mut self.shell.inspect.want_physical) {
             let asm = self.inspector.data.as_ref().and_then(|d| d.asm.clone());
@@ -342,20 +543,67 @@ impl Gui {
             }
             return;
         }
+        let Some(m) = &self.shell.inspect.measure else {
+            return;
+        };
+        let (filter, wall) = (m.filter, m.wall);
+        // in a sketch its own geometry is what's measured (sketching.rs takes those clicks)
+        if self.shell.sketch.is_some() {
+            return;
+        }
+        let at = self.view.as_ref().and_then(|v| v.nav.last_click_at);
+        let pick = match hit {
+            Some((pl, e)) => self.filtered(filter, pl, e, at),
+            // an origin plane, axis or point under the pointer
+            None => self.shell.origin_hover.map(origin_free),
+        };
         let Some(m) = &mut self.shell.inspect.measure else {
             return;
         };
-        match hit {
-            Some(h) if m.wall => m.picks = vec![h],
-            Some(h) => {
-                if m.picks.len() >= 2 {
-                    m.picks.clear();
-                }
-                if !m.picks.contains(&h) {
-                    m.picks.push(h);
-                }
+        match pick {
+            Some(p) if wall => m.picks = vec![p],
+            Some(p) => m.take(p),
+            None => m.restart(),
+        }
+    }
+
+    /// What's under the pointer, as Measure would pick it: marked before the click.
+    fn measure_hover(&mut self) {
+        let Some(m) = &self.shell.inspect.measure else { return };
+        let filter = m.filter;
+        let Some(v) = &self.view else { return };
+        let hover = v
+            .nav
+            .marks()
+            .into_iter()
+            .rfind(|k| !k.selected)
+            .map(|k| (k.placement, k.entity));
+        let at = v.nav.hit_point();
+        let pick = match hover {
+            Some((pl, e)) => self.filtered(filter, pl, e, at),
+            None => self.shell.origin_hover.map(origin_free),
+        };
+        if let Some(m) = &mut self.shell.inspect.measure
+            && m.hover != pick
+        {
+            m.hover = pick;
+            if let Some(v) = &mut self.view {
+                v.mark_dirty();
             }
-            None => m.picks.clear(),
+        }
+    }
+
+    /// An origin item chosen in the browser while measuring: a pick.
+    fn measure_browser(&mut self) {
+        let now = self.shell.origin_selected;
+        if now == self.inspector.origin_seen {
+            return;
+        }
+        self.inspector.origin_seen = now;
+        if let (Some(i), Some(m)) = (now, &mut self.shell.inspect.measure)
+            && !m.wall
+        {
+            m.take(origin_free(i));
         }
     }
 
@@ -366,23 +614,28 @@ impl Gui {
             return;
         };
         let (picks, wall) = (m.picks.clone(), m.wall);
+        let marked = m.marked();
         if let Some(v) = &mut self.view
-            && v.nav.selected != picks
+            && v.nav.selected != marked
         {
-            v.nav.selected = picks.clone();
+            v.nav.selected = marked;
             v.mark_dirty();
         }
         if self.inspector.measured.as_ref() == Some(&(picks.clone(), wall)) {
             return;
         }
         self.inspector.measured = Some((picks.clone(), wall));
-        let got: Vec<(Picked, String)> = picks.iter().filter_map(|&(pl, e)| self.picked(pl, e)).collect();
+        let got: Vec<(Tgt, String)> = picks.iter().filter_map(|p| self.target_of(p)).collect();
         self.inspector.seq += 1;
         let id = self.inspector.seq;
         let names: Vec<String> = got.iter().map(|g| g.1.clone()).collect();
         let job = if wall {
             // the part picked, or the part (an assembly's first)
-            let target = got.first().map(|g| (g.0.0.clone(), g.0.1)).or_else(|| {
+            let first = got.first().and_then(|g| match &g.0 {
+                Tgt::Ent((b, at, _)) | Tgt::Whole(b, at, _) => Some((b.clone(), *at)),
+                Tgt::Free(_) => None,
+            });
+            let target = first.or_else(|| {
                 let d = self.inspector.data.as_ref()?;
                 let &(mesh, at) = d.placed.first()?;
                 Some((d.bodies.get(mesh)?.clone(), at))
@@ -408,4 +661,20 @@ impl Gui {
             self.inspect_send(j);
         }
     }
+}
+
+/// An origin item as Measure takes it: in the world, with its name.
+fn origin_free(i: crate::origin::Item) -> MPick {
+    use crate::origin::Item;
+    let o = Point3::ORIGIN;
+    let f = match i {
+        Item::XyPlane => Free::Plane(o, Vec3::Z),
+        Item::XzPlane => Free::Plane(o, Vec3::Y),
+        Item::YzPlane => Free::Plane(o, Vec3::X),
+        Item::XAxis => Free::Axis(o, Vec3::X),
+        Item::YAxis => Free::Axis(o, Vec3::Y),
+        Item::ZAxis => Free::Axis(o, Vec3::Z),
+        Item::Center => Free::Point(o),
+    };
+    MPick::Free(f, i.name().to_string())
 }

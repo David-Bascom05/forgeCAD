@@ -119,7 +119,7 @@ fn measure_reads_a_picked_face_on_the_exact_body() {
     let mut found = false;
     for f in 0..faces {
         if let Some(m) = &mut h.gui.shell.inspect.measure {
-            m.picks = vec![(0, Entity::Face(f))];
+            m.picks = vec![forge_render::shell::inspect::MPick::Ent(0, Entity::Face(f))];
         }
         h.until(|g| {
             g.shell

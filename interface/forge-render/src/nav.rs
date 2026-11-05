@@ -111,6 +111,8 @@ pub struct Nav {
     press_hit: Option<PickHit>,
     /// What the last selecting click hit, whatever the host made of the selection since.
     pub last_click: Option<(u32, Entity)>,
+    /// Where on the part the last click was, in the world.
+    pub last_click_at: Option<[f32; 3]>,
 }
 
 /// The view from a region of the cube, with the part's axes named this way: the named TOP is up, and
@@ -193,6 +195,7 @@ impl Nav {
             pan_depth: None,
             want_pick: None,
             click_due: None,
+            last_click_at: None,
             want_home: false,
             tool: NavTool::Orbit,
             clicks: 0,
@@ -560,6 +563,7 @@ impl Nav {
         self.clicks += 1;
         let got = hit.map(|h| (h.placement, h.entity));
         self.last_click = got;
+        self.last_click_at = hit.map(|h| h.point);
         if shift {
             if let Some(g) = got
                 && !self.selected.contains(&g)

@@ -269,6 +269,15 @@ pub enum Quantity {
     X,
     Y,
     Z,
+    /// The farthest two points of two entities lie apart, where Inventor gives it: points,
+    /// lines, arcs and circles in one plane.
+    MaxDistance,
+    /// A body's: its volume, its mass (from its material's density), its box's three sides.
+    Volume,
+    Mass,
+    SizeX,
+    SizeY,
+    SizeZ,
 }
 
 impl Quantity {
@@ -290,27 +299,43 @@ impl Quantity {
             Quantity::X => "X",
             Quantity::Y => "Y",
             Quantity::Z => "Z",
+            Quantity::MaxDistance => "Maximum distance",
+            Quantity::Volume => "Volume",
+            Quantity::Mass => "Mass",
+            Quantity::SizeX => "Box X",
+            Quantity::SizeY => "Box Y",
+            Quantity::SizeZ => "Box Z",
         }
     }
 
-    /// What it measures: a length (1), an area (2), or an angle (0).
+    /// What it measures: a length (1), an area (2), a volume (3), an angle (0), a mass (4).
     pub fn power(self) -> u8 {
         match self {
             Quantity::Angle => 0,
             Quantity::Area => 2,
+            Quantity::Volume => 3,
+            Quantity::Mass => 4,
             _ => 1,
         }
     }
 }
 
 /// What the view draws for a measurement, in world coordinates.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Shown {
     /// A dimension line between two points, labelled with this quantity.
     Line(Point3, Point3, Quantity),
     Point(Point3),
     /// A circle's centre, its axis and radius.
     Circle(Point3, Vec3, f64),
+    /// An angle: its vertex, the two ways its arms run, and the angle (degrees) the arc spans.
+    Angle(Point3, Vec3, Vec3, f64),
+    /// A face tinted, by its triangles, with its area and perimeter labelled at this point.
+    Face(Vec<[Point3; 3]>, Point3),
+    /// A curve or a loop drawn over, labelled with this quantity.
+    Curve(Vec<Point3>, Quantity),
+    /// A body's box, corner to corner.
+    Box(Point3, Point3),
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -334,6 +359,8 @@ enum Geom {
     Plane(Point3, Vec3),
     Cylinder(Point3, Vec3),
     Sphere(Point3),
+    /// An infinite line: a work axis, an origin axis.
+    Axis(Point3, Vec3),
     Other,
 }
 
@@ -500,6 +527,7 @@ fn nearest(a: &Pick, b: &Pick) -> (Point3, Point3) {
 fn geom_direction(g: Geom) -> Option<(Vec3, bool)> {
     match g {
         Geom::Segment(a, b) => (b - a).normalize().map(|u| (u.get(), false)),
+        Geom::Axis(_, u) => Some((u, false)),
         Geom::Plane(_, n) => Some((n, true)),
         Geom::Cylinder(_, z) => Some((z, false)),
         Geom::Circle(_, z, _) => Some((z, true)),
@@ -668,4 +696,515 @@ pub fn read_two(a: &Pick, b: &Pick) -> Reading {
         r.values.push((Quantity::Angle, ang));
     }
     r
+}
+
+/// A whole placed body (an assembly's occurrence, a part's body): its mesh, where it stands, and
+/// its material's density in kg/mm³ where that's known.
+#[derive(Clone, Copy)]
+pub struct Whole<'a> {
+    pub body: &'a Body,
+    pub mesh: &'a TriMesh,
+    pub at: forge_math::Frame,
+    pub density: Option<f64>,
+}
+
+/// Geometry that is no body's, in the world: a work plane, axis or point, an origin item, or
+/// sketch geometry.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Free {
+    Point(Point3),
+    /// An infinite line through a point.
+    Axis(Point3, Vec3),
+    Plane(Point3, Vec3),
+    Segment(Point3, Point3),
+    Circle(Point3, Vec3, f64),
+    /// An arc: its centre, axis, radius, and the points it runs through, end to end.
+    Arc(Point3, Vec3, f64, Vec<Point3>),
+    /// A spline or an ellipse, as the points it runs through.
+    Curve(Vec<Point3>),
+}
+
+/// What Measure takes: an entity of a body, a whole body, or free geometry.
+#[derive(Clone)]
+pub enum Target<'a> {
+    Ent(Pick<'a>),
+    Whole(Whole<'a>),
+    Free(Free),
+}
+
+fn free_geom(f: &Free) -> Geom {
+    match f {
+        Free::Point(p) => Geom::Point(*p),
+        Free::Axis(p, u) => Geom::Axis(*p, unit(*u)),
+        Free::Plane(p, n) => Geom::Plane(*p, unit(*n)),
+        Free::Segment(a, b) => Geom::Segment(*a, *b),
+        Free::Circle(c, z, r) | Free::Arc(c, z, r, _) => Geom::Circle(*c, unit(*z), *r),
+        Free::Curve(_) => Geom::Other,
+    }
+}
+
+fn unit(v: Vec3) -> Vec3 {
+    v.normalize().map_or(Vec3::Z, |u| u.get())
+}
+
+fn target_geom(t: &Target) -> Geom {
+    match t {
+        Target::Ent(p) => geom(p),
+        Target::Whole(_) => Geom::Other,
+        Target::Free(f) => free_geom(f),
+    }
+}
+
+fn polyline_length(pts: &[Point3]) -> f64 {
+    pts.windows(2).map(|w| w[0].distance(w[1])).sum()
+}
+
+/// The nearest point of a polyline to `q`.
+fn polyline_nearest(pts: &[Point3], q: Point3) -> Option<Point3> {
+    pts.windows(2)
+        .map(|w| segment_distance(q, w[0], w[1]))
+        .min_by(|a, b| a.0.total_cmp(&b.0))
+        .map(|x| x.1)
+        .or(pts.first().copied())
+}
+
+/// Points over a target in the world, for the nearest pair to start from.
+fn target_points(t: &Target) -> Vec<Point3> {
+    let ring = |c: Point3, z: Vec3, r: f64| {
+        let (u, v) = across(z);
+        (0..96)
+            .map(|k| {
+                let a = k as f64 / 96.0 * dmath::TAU;
+                c + (u * dmath::cos(a) + v * dmath::sin(a)) * r
+            })
+            .collect::<Vec<_>>()
+    };
+    match t {
+        Target::Ent(p) => world_points(p),
+        Target::Whole(w) => {
+            let step = w.mesh.positions.len() / 3000 + 1;
+            w.mesh
+                .positions
+                .iter()
+                .step_by(step)
+                .map(|q| w.at.point_to_world(*q))
+                .collect()
+        }
+        Target::Free(f) => match f {
+            Free::Point(p) | Free::Axis(p, _) | Free::Plane(p, _) => vec![*p],
+            Free::Segment(a, b) => (0..=32).map(|k| *a + (*b - *a) * (k as f64 / 32.0)).collect(),
+            Free::Circle(c, z, r) => ring(*c, unit(*z), *r),
+            Free::Arc(_, _, _, pts) | Free::Curve(pts) => pts.clone(),
+        },
+    }
+}
+
+/// Two directions square to `z` and to each other.
+fn across(z: Vec3) -> (Vec3, Vec3) {
+    let x = if z.x.abs() < 0.9 { Vec3::X } else { Vec3::Y };
+    let u = unit(z.cross(x));
+    (u, z.cross(u))
+}
+
+/// The closest point of a triangle to `p`.
+fn triangle_nearest(p: Point3, [a, b, c]: [Point3; 3]) -> Point3 {
+    let n = (b - a).cross(c - a);
+    let nn = n.dot(n);
+    if nn > 0.0 {
+        let inside = [(a, b), (b, c), (c, a)]
+            .iter()
+            .all(|(u, v)| (*v - *u).cross(p - *u).dot(n) >= 0.0);
+        if inside {
+            return p - n * ((p - a).dot(n) / nn);
+        }
+    }
+    [(a, b), (b, c), (c, a)]
+        .iter()
+        .map(|(u, v)| segment_distance(p, *u, *v))
+        .min_by(|x, y| x.0.total_cmp(&y.0))
+        .map_or(a, |x| x.1)
+}
+
+/// The target's point nearest `q`, from its exact geometry where it has one.
+fn target_nearest_on(t: &Target, q: Point3) -> Option<Point3> {
+    match t {
+        Target::Ent(p) => nearest_on(p, q),
+        Target::Whole(w) => {
+            // the nearest triangle says which face; that face's surface says where exactly
+            let local = w.at.point_to_local(q);
+            let m = w.mesh;
+            let (face, near) = m
+                .triangles
+                .iter()
+                .zip(&m.face_of)
+                .map(|(tri, f)| {
+                    let on = triangle_nearest(local, tri.map(|i| m.positions[i as usize]));
+                    (*f, on)
+                })
+                .min_by(|a, b| a.1.distance(local).total_cmp(&b.1.distance(local)))?;
+            let pick = Pick {
+                body: w.body,
+                mesh: w.mesh,
+                at: w.at,
+                ent: Ent::Face(forge_topo::FaceId(face)),
+            };
+            nearest_on(&pick, q).or(Some(w.at.point_to_world(near)))
+        }
+        Target::Free(f) => Some(match f {
+            Free::Point(p) => *p,
+            Free::Axis(p, u) => {
+                let u = unit(*u);
+                *p + u * (q - *p).dot(u)
+            }
+            Free::Plane(p, n) => {
+                let n = unit(*n);
+                q - n * (q - *p).dot(n)
+            }
+            Free::Segment(a, b) => segment_distance(q, *a, *b).1,
+            Free::Circle(c, z, r) => {
+                let z = unit(*z);
+                let flat = (q - *c) - z * (q - *c).dot(z);
+                match flat.normalize() {
+                    Some(d) => *c + d.get() * *r,
+                    None => *c + across(z).0 * *r,
+                }
+            }
+            Free::Arc(_, _, _, pts) | Free::Curve(pts) => polyline_nearest(pts, q)?,
+        }),
+    }
+}
+
+/// The nearest pair of points of two targets: closed forms where the geometry has them, else
+/// the nearest of samples walked down by projecting each onto the other.
+fn target_nearest(a: &Target, b: &Target) -> (Point3, Point3) {
+    if let (Target::Ent(x), Target::Ent(y)) = (a, b) {
+        return nearest(x, y);
+    }
+    let (ga, gb) = (target_geom(a), target_geom(b));
+    match (ga, gb) {
+        (Geom::Point(p), Geom::Point(q)) => return (p, q),
+        (Geom::Segment(a0, a1), Geom::Segment(b0, b1)) => return segments(a0, a1, b0, b1),
+        (Geom::Point(p), _) => {
+            if let Some(q) = target_nearest_on(b, p) {
+                return (p, q);
+            }
+        }
+        (_, Geom::Point(q)) => {
+            if let Some(p) = target_nearest_on(a, q) {
+                return (p, q);
+            }
+        }
+        _ => {}
+    }
+    let (pa, pb) = (target_points(a), target_points(b));
+    let mut best = (f64::INFINITY, Point3::ORIGIN, Point3::ORIGIN);
+    // an axis or plane has one sample: its nearest point to each of the other's is exact
+    let one_a = matches!(ga, Geom::Axis(..) | Geom::Plane(..));
+    let one_b = matches!(gb, Geom::Axis(..) | Geom::Plane(..));
+    if one_a || one_b {
+        let (from, onto, flip) = if one_a { (&pb, a, true) } else { (&pa, b, false) };
+        for p in from {
+            if let Some(q) = target_nearest_on(onto, *p) {
+                let d = p.distance(q);
+                if d < best.0 {
+                    best = if flip { (d, q, *p) } else { (d, *p, q) };
+                }
+            }
+        }
+    } else {
+        for p in &pa {
+            for q in &pb {
+                let d = p.distance(*q);
+                if d < best.0 {
+                    best = (d, *p, *q);
+                }
+            }
+        }
+    }
+    let (mut d, mut p, mut q) = best;
+    for _ in 0..60 {
+        let Some(p2) = target_nearest_on(a, q) else { break };
+        let Some(q2) = target_nearest_on(b, p2) else { break };
+        let d2 = p2.distance(q2);
+        if d2 >= d - 1e-13 {
+            break;
+        }
+        (d, p, q) = (d2, p2, q2);
+    }
+    (p, q)
+}
+
+/// The farthest two points of two targets, where Inventor gives it: points, lines, arcs and
+/// circles (two circles in one plane).
+fn max_distance(ga: Geom, gb: Geom) -> Option<f64> {
+    let ends = |g: Geom| match g {
+        Geom::Point(p) => Some(vec![p]),
+        Geom::Segment(a, b) => Some(vec![a, b]),
+        _ => None,
+    };
+    // a circle's farthest point from a point: across the centre, off its plane as the point is
+    let from_circle = |c: Point3, z: Vec3, r: f64, p: Point3| {
+        let w = p - c;
+        let h = w.dot(z);
+        let rho = (w - z * h).length();
+        (h * h + (rho + r) * (rho + r)).sqrt()
+    };
+    match (ga, gb) {
+        (Geom::Circle(c1, z1, r1), Geom::Circle(c2, z2, r2)) => {
+            let coplanar = z1.cross(z2).length() < 1e-9 && (c2 - c1).dot(z1).abs() < 1e-6;
+            coplanar.then(|| c1.distance(c2) + r1 + r2)
+        }
+        (Geom::Circle(c, z, r), g) | (g, Geom::Circle(c, z, r)) => {
+            let e = ends(g)?;
+            e.into_iter().map(|p| from_circle(c, z, r, p)).reduce(f64::max)
+        }
+        (a, b) => {
+            let (ea, eb) = (ends(a)?, ends(b)?);
+            if ea.len() == 1 && eb.len() == 1 {
+                return None;
+            }
+            ea.iter()
+                .flat_map(|p| eb.iter().map(move |q| p.distance(*q)))
+                .reduce(f64::max)
+        }
+    }
+}
+
+/// The arc an angle's drawn as: its vertex and two arms, the arms turned so the arc between them
+/// is the angle read.
+fn angle_shown(ga: Geom, gb: Geom, p: Point3, q: Point3, deg: f64) -> Option<Shown> {
+    let dir = |g: Geom| match g {
+        Geom::Segment(a, b) => (b - a).normalize().map(|u| u.get()),
+        Geom::Axis(_, u) | Geom::Cylinder(_, u) => Some(u),
+        _ => None,
+    };
+    let (vertex, mut u, mut w) = match (ga, gb) {
+        (Geom::Segment(a0, a1), Geom::Segment(b0, b1))
+            if [a0, a1].iter().any(|x| x.distance(b0) < 1e-9 || x.distance(b1) < 1e-9) =>
+        {
+            let (v, ua, wb) = [(a0, a1, b0, b1), (a0, a1, b1, b0), (a1, a0, b0, b1), (a1, a0, b1, b0)]
+                .into_iter()
+                .find(|x| x.0.distance(x.2) < 1e-9)
+                .map(|x| (x.0, x.1 - x.0, x.3 - x.2))?;
+            (v, ua.normalize()?.get(), wb.normalize()?.get())
+        }
+        (Geom::Plane(c1, n1), Geom::Plane(c2, n2)) => {
+            let d = n1.cross(n2).normalize()?.get();
+            // the line both planes hold, nearest the middle of the two faces
+            let m = c1 + (c2 - c1) * 0.5;
+            let (h1, h2) = (n1.dot(c1 - Point3::ORIGIN), n2.dot(c2 - Point3::ORIGIN));
+            let k = n1.dot(n2);
+            let den = 1.0 - k * k;
+            let a = (h1 - h2 * k) / den;
+            let b = (h2 - h1 * k) / den;
+            let on = Point3::ORIGIN + n1 * a + n2 * b;
+            let v = on + d * (m - on).dot(d);
+            let arm = |n: Vec3, c: Point3| {
+                let a = unit(n.cross(d));
+                if (c - v).dot(a) < 0.0 { a * -1.0 } else { a }
+            };
+            (v, arm(n1, c1), arm(n2, c2))
+        }
+        (Geom::Plane(_, n), g) | (g, Geom::Plane(_, n)) => {
+            let u = dir(g)?;
+            // square to the plane: any way in it will do
+            let flat = (u - n * u.dot(n)).normalize().map_or(across(n).0, |f| f.get());
+            let v = if matches!(ga, Geom::Plane(..)) { q } else { p };
+            (v, u, flat)
+        }
+        _ => (p + (q - p) * 0.5, dir(ga)?, dir(gb)?),
+    };
+    let between = |u: Vec3, w: Vec3| dmath::acos(u.dot(w).clamp(-1.0, 1.0)) * 180.0 / dmath::PI;
+    if (between(u, w) - deg).abs() > 1e-6 {
+        w = w * -1.0;
+    }
+    if (between(u, w) - deg).abs() > 1e-6 {
+        u = u * -1.0;
+    }
+    Some(Shown::Angle(vertex, u, w, deg))
+}
+
+/// A face's triangles in the world.
+fn face_tris(p: &Pick, f: forge_topo::FaceId) -> Vec<[Point3; 3]> {
+    let m = p.mesh;
+    m.triangles
+        .iter()
+        .zip(&m.face_of)
+        .filter(|x| *x.1 == f.0)
+        .map(|x| x.0.map(|i| p.at.point_to_world(m.positions[i as usize])))
+        .collect()
+}
+
+/// What one target reads, with what the view draws for it.
+pub fn read(t: &Target) -> Reading {
+    match t {
+        Target::Ent(p) => {
+            let mut r = read_one(p);
+            match p.ent {
+                Ent::Face(f) => {
+                    let c = p.at.point_to_world(select::centre(p.body, p.ent));
+                    r.shown.insert(0, Shown::Face(face_tris(p, f), c));
+                }
+                Ent::Edge(x) if !matches!(geom(p), Geom::Segment(..)) => {
+                    let pts = p.body.edge_points(x, 64).into_iter().map(|q| p.at.point_to_world(q)).collect();
+                    r.shown.push(Shown::Curve(pts, Quantity::Length));
+                }
+                _ => {}
+            }
+            r
+        }
+        Target::Whole(w) => {
+            let mut r = Reading::default();
+            let m = mass(w.mesh);
+            r.values.push((Quantity::Volume, m.volume));
+            if let Some(rho) = w.density {
+                r.values.push((Quantity::Mass, m.volume * rho));
+            }
+            r.values.push((Quantity::Area, m.area));
+            let (mut lo, mut hi) = (Point3::new(f64::MAX, f64::MAX, f64::MAX), Point3::new(f64::MIN, f64::MIN, f64::MIN));
+            for q in &w.mesh.positions {
+                let q = w.at.point_to_world(*q);
+                lo = Point3::new(lo.x.min(q.x), lo.y.min(q.y), lo.z.min(q.z));
+                hi = Point3::new(hi.x.max(q.x), hi.y.max(q.y), hi.z.max(q.z));
+            }
+            if lo.x <= hi.x {
+                r.values.extend([
+                    (Quantity::SizeX, hi.x - lo.x),
+                    (Quantity::SizeY, hi.y - lo.y),
+                    (Quantity::SizeZ, hi.z - lo.z),
+                ]);
+                r.shown.push(Shown::Box(lo, hi));
+            }
+            r
+        }
+        Target::Free(f) => {
+            let mut r = Reading::default();
+            let at = |r: &mut Reading, q: Point3| {
+                r.values.extend([(Quantity::X, q.x), (Quantity::Y, q.y), (Quantity::Z, q.z)]);
+            };
+            match f {
+                Free::Point(q) => {
+                    at(&mut r, *q);
+                    r.shown.push(Shown::Point(*q));
+                }
+                Free::Axis(q, _) | Free::Plane(q, _) => {
+                    at(&mut r, *q);
+                    r.shown.push(Shown::Point(*q));
+                }
+                Free::Segment(a, b) => {
+                    r.values.push((Quantity::Length, a.distance(*b)));
+                    r.shown.push(Shown::Line(*a, *b, Quantity::Length));
+                }
+                Free::Circle(c, z, rad) => {
+                    r.values.extend([
+                        (Quantity::Length, dmath::TAU * rad),
+                        (Quantity::Radius, *rad),
+                        (Quantity::Diameter, 2.0 * rad),
+                    ]);
+                    at(&mut r, *c);
+                    r.shown.push(Shown::Circle(*c, unit(*z), *rad));
+                }
+                Free::Arc(c, _, rad, pts) => {
+                    r.values.extend([
+                        (Quantity::Length, polyline_length(pts)),
+                        (Quantity::Radius, *rad),
+                        (Quantity::Diameter, 2.0 * rad),
+                    ]);
+                    at(&mut r, *c);
+                    r.shown.push(Shown::Curve(pts.clone(), Quantity::Length));
+                }
+                Free::Curve(pts) => {
+                    r.values.push((Quantity::Length, polyline_length(pts)));
+                    r.shown.push(Shown::Curve(pts.clone(), Quantity::Length));
+                }
+            }
+            r
+        }
+    }
+}
+
+/// What two targets read: the minimum distance and its deltas, the maximum where Inventor gives
+/// it, centre to centre and axis to axis for round things, and the angle where both have a way,
+/// drawn as an arc.
+pub fn read_pair(a: &Target, b: &Target) -> Reading {
+    if let (Target::Ent(x), Target::Ent(y)) = (a, b) {
+        let mut r = read_two(x, y);
+        let (ga, gb) = (geom(x), geom(y));
+        finish_pair(&mut r, ga, gb);
+        return r;
+    }
+    let mut r = Reading::default();
+    let (ga, gb) = (target_geom(a), target_geom(b));
+    let (p, q) = match (ga, gb) {
+        (Geom::Plane(c, n), Geom::Plane(c2, n2)) if n.cross(n2).length() < 1e-9 => {
+            let d = (c2 - c).dot(n);
+            (c, c + n * d)
+        }
+        _ => target_nearest(a, b),
+    };
+    let d = q - p;
+    r.values.extend([
+        (Quantity::Distance, d.length()),
+        (Quantity::Dx, d.x.abs()),
+        (Quantity::Dy, d.y.abs()),
+        (Quantity::Dz, d.z.abs()),
+    ]);
+    r.shown.push(Shown::Line(p, q, Quantity::Distance));
+    if let (Some(c1), Some(c2)) = (centre_of(ga), centre_of(gb))
+        && !matches!((ga, gb), (Geom::Point(_), Geom::Point(_)))
+    {
+        r.values.push((Quantity::CentreDistance, c1.distance(c2)));
+        r.shown.push(Shown::Line(c1, c2, Quantity::CentreDistance));
+    }
+    let axis = |g: Geom| match g {
+        Geom::Cylinder(o, z) | Geom::Circle(o, z, _) | Geom::Axis(o, z) => Some((o, z)),
+        _ => None,
+    };
+    if let (Some((o1, z1)), Some((o2, z2))) = (axis(ga), axis(gb))
+        && z1.cross(z2).length() < 1e-9
+    {
+        let w = o2 - o1;
+        let off = w - z1 * w.dot(z1);
+        r.values.push((Quantity::AxisDistance, off.length()));
+    }
+    if let (Some((u, pu)), Some((w, pw))) = (geom_direction(ga), geom_direction(gb))
+        && !(axis(ga).is_some() && axis(gb).is_some() && u.cross(w).length() < 1e-9)
+    {
+        let deg = |x: f64| x * 180.0 / dmath::PI;
+        let c = u.dot(w).clamp(-1.0, 1.0);
+        let ang = if pu == pw {
+            let a = deg(dmath::acos(c));
+            a.min(180.0 - a)
+        } else {
+            90.0 - deg(dmath::acos(c.abs()))
+        };
+        r.values.push((Quantity::Angle, ang));
+    }
+    finish_pair(&mut r, ga, gb);
+    r
+}
+
+/// The maximum distance and the angle's arc, for any pair.
+fn finish_pair(r: &mut Reading, ga: Geom, gb: Geom) {
+    if let Some(m) = max_distance(ga, gb) {
+        r.values.push((Quantity::MaxDistance, m));
+    }
+    let line = r.shown.iter().find_map(|s| match s {
+        Shown::Line(p, q, Quantity::Distance) => Some((*p, *q)),
+        _ => None,
+    });
+    if let (Some(deg), Some((p, q))) = (r.get(Quantity::Angle), line)
+        && deg > 1e-9
+        && let Some(s) = angle_shown(ga, gb, p, q, deg)
+    {
+        r.shown.push(s);
+    }
+}
+
+/// A face's outward normal at its point nearest `q` (in the body's space).
+pub fn normal_near(body: &Body, f: forge_topo::FaceId, q: Point3) -> Option<Vec3> {
+    use forge_geom::SurfaceGeom;
+    let face = body.face(f);
+    let n = face.surface.normal(face.surface.project(q))?.get();
+    Some(if face.same_sense { n } else { -n })
 }

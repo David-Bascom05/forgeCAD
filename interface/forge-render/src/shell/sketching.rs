@@ -1564,6 +1564,44 @@ impl SketchMode {
         }
     }
 
+    /// What Measure would take here: one of the sketch's points, else a curve.
+    pub fn measure_word(&self, at: (f64, f64), reach: f64) -> Option<String> {
+        let (w, _) = self.word_at(at, reach);
+        if !w.contains(' ') {
+            return Some(w);
+        }
+        self.entity_near(at, reach, "lcasej")
+    }
+
+    /// A point or curve of the sketch as Measure takes it: in the world, on the sketch's plane.
+    pub fn measure_free(&self, word: &str) -> Option<forge_agent::measure::Free> {
+        use forge_agent::measure::Free;
+        let s = self.solved.as_ref()?;
+        let w = |p: (f64, f64)| self.plane.plane_point(Point2::new(p.0, p.1));
+        let z: forge_math::Vec3 = self.plane.z().into();
+        if let Some((_, p)) = self.points().into_iter().find(|p| p.0 == word) {
+            return Some(Free::Point(w(p)));
+        }
+        let (_, id) = s.names.iter().find(|n| n.0 == word)?;
+        let g = &s.solved;
+        Some(match g.entity(*id)? {
+            Entity::Line { a, b } => {
+                let (p, q) = (g.point(a), g.point(b));
+                Free::Segment(w((p.x, p.y)), w((q.x, q.y)))
+            }
+            Entity::Circle { center, .. } => {
+                let c = g.point(center);
+                Free::Circle(w((c.x, c.y)), z, g.radius(*id))
+            }
+            Entity::Arc { center, .. } => {
+                let c = g.point(center);
+                let pts = self.outline_of(word).into_iter().map(w).collect();
+                Free::Arc(w((c.x, c.y)), z, g.radius(*id), pts)
+            }
+            _ => Free::Curve(self.outline_of(word).into_iter().map(w).collect()),
+        })
+    }
+
     /// A curve of the sketch as points on its plane, or a place as one point.
     pub fn outline_of(&self, word: &str) -> Vec<(f64, f64)> {
         let Some(s) = &self.solved else { return Vec::new() };
@@ -2315,8 +2353,29 @@ impl Shell {
                 }
             }
         }
-        // with no tool in hand a click chooses geometry, and Delete takes it out
-        if m.tool.is_none() && self.modal_clear() {
+        // measuring with no tool in hand: a click takes the sketch's point or curve for Measure
+        if m.tool.is_none() && self.inspect.measure.is_some() && self.modal_clear() {
+            let word = cursor.and_then(|at| m.measure_word(at, reach));
+            m.would_pick = word.clone();
+            if let Some(w) = &word {
+                let pts: Vec<Pos2> = m.outline_of(w).into_iter().filter_map(&screen).collect();
+                if let [one] = pts[..] {
+                    p.circle_stroke(one, 6.0, Stroke::new(3.0, t.focus));
+                } else if pts.len() > 1 {
+                    p.add(egui::Shape::line(pts, Stroke::new(3.0, t.focus)));
+                }
+            }
+            if cursor.is_some() && ctx.input(|i| i.pointer.primary_clicked()) {
+                let pick = word.and_then(|w| Some((m.measure_free(&w)?, w)));
+                if let Some(me) = &mut self.inspect.measure {
+                    match pick {
+                        Some((f, w)) => me.take(super::inspect::MPick::Free(f, format!("Sketch {w}"))),
+                        None => me.restart(),
+                    }
+                }
+            }
+        } else if m.tool.is_none() && self.modal_clear() {
+            // with no tool in hand a click chooses geometry, and Delete takes it out
             if let Some(at) = cursor
                 && ctx.input(|i| i.pointer.primary_clicked())
             {

@@ -59,17 +59,15 @@ fn hover(h: &mut Headless, world: [f32; 3]) -> ((f32, f32), Option<(u32, Entity)
         }
     }
     let got = h.gui.view.as_ref().unwrap().nav.marks().into_iter().rfind(|m| !m.selected);
-    eprintln!("DBG hover {world:?} at {at:?} rect {r:?} got {got:?} pending {}", h.gui.view.as_ref().unwrap().nav.pick_pending());
     (at, got.map(|m| (m.placement, m.entity)))
 }
 
-/// Points on the demo part: the base's top face, the boss's top, a corner of the base.
+/// Points on the demo part: the base's top face, the boss's top.
 const TOP: [f32; 3] = [30.0, 22.0, 12.0];
 const BOSS_TOP: [f32; 3] = [4.0, 4.0, 20.0];
-const CORNER: [f32; 3] = [40.0, 30.0, 12.0];
 
 fn picks(h: &Headless) -> Vec<(u32, Entity)> {
-    h.gui.shell.inspect.measure.as_ref().map_or(vec![], |m| m.picks.clone())
+    h.gui.shell.inspect.measure.as_ref().map_or(vec![], |m| m.marked())
 }
 
 fn measure(h: &mut Headless) {
@@ -106,4 +104,135 @@ fn a_quick_click_on_a_face_is_a_pick_not_a_click_on_nothing() {
     assert_eq!(picks(&h), vec![want]);
     quick_click(&mut h, at2.0, at2.1);
     assert_eq!(picks(&h), vec![want, want2]);
+}
+
+/// A click that waits for the hover's pick, as a steady hand clicks.
+fn click(h: &mut Headless, world: [f32; 3]) -> (u32, Entity) {
+    let (at, e) = hover(h, world);
+    h.button(true);
+    h.step();
+    h.button(false);
+    for _ in 0..6 {
+        h.step();
+    }
+    let _ = at;
+    e.expect("something under the pointer")
+}
+
+fn reading(h: &mut Headless) -> forge_agent::measure::Reading {
+    assert!(h.until(|g| {
+        g.shell
+            .inspect
+            .measure
+            .as_ref()
+            .is_some_and(|m| m.reading.is_some() && !m.busy)
+    }));
+    let m = h.gui.shell.inspect.measure.as_ref().unwrap();
+    m.reading.clone().unwrap().unwrap()
+}
+
+#[test]
+fn measuring_feeds_no_other_pick_the_browser_or_a_feature_dialog() {
+    let Some(mut h) = open("leak") else { return };
+    measure(&mut h);
+    let e = click(&mut h, [0.0, -30.0, 12.0]);
+    assert!(matches!(e.1, Entity::Edge(_)), "{e:?}");
+    assert_eq!(picks(&h), vec![e]);
+    let p = h.gui.shell.fg.as_ref().unwrap();
+    assert!(p.picked.is_none() && h.gui.shell.selected.is_none() && h.gui.shell.dim.is_none());
+    assert!(!h.gui.shell.status.starts_with("Picked"), "{}", h.gui.shell.status);
+    // a Fillet dialog waiting for edges takes none of Measure's
+    h.gui.fg_open_tool("fillet");
+    h.step();
+    let f = click(&mut h, TOP);
+    let tool = h.gui.shell.fg.as_ref().unwrap().tool.as_ref().unwrap();
+    assert!(tool.slots.iter().all(|s| s.picks.is_empty()), "the fillet took Measure's pick");
+    assert!(tool.error.is_none(), "the fillet was given Measure's face: {:?}", tool.error);
+    assert_eq!(picks(&h), vec![e, f]);
+    // what the view marks is what's measured
+    assert_eq!(h.gui.view.as_ref().unwrap().nav.selected, vec![e, f]);
+}
+
+#[test]
+fn esc_clears_the_picks_then_ends_measure() {
+    let Some(mut h) = open("esc") else { return };
+    measure(&mut h);
+    click(&mut h, TOP);
+    let _ = reading(&mut h);
+    h.key(egui::Key::Escape);
+    h.step();
+    h.step();
+    let m = h.gui.shell.inspect.measure.as_ref().expect("still measuring");
+    assert!(m.picks.is_empty() && m.reading.is_none());
+    h.key(egui::Key::Escape);
+    h.step();
+    h.step();
+    assert!(h.gui.shell.inspect.measure.is_none());
+}
+
+#[test]
+fn a_window_drag_while_measuring_changes_nothing_picked() {
+    let Some(mut h) = open("window") else { return };
+    measure(&mut h);
+    let a = click(&mut h, TOP);
+    let b = click(&mut h, BOSS_TOP);
+    assert_eq!(picks(&h), vec![a, b]);
+    let r = h.gui.shell.view_rect;
+    h.move_to(r.left() + 20.0, r.bottom() - 20.0);
+    h.step();
+    h.button(true);
+    h.step();
+    for k in 1..=10 {
+        h.move_to(r.left() + 20.0 + 60.0 * k as f32, r.bottom() - 20.0 - 40.0 * k as f32);
+        h.step();
+    }
+    h.button(false);
+    // not even for a frame
+    for _ in 0..6 {
+        h.step();
+        assert_eq!(picks(&h), vec![a, b]);
+        assert_eq!(h.gui.view.as_ref().unwrap().nav.selected, vec![a, b]);
+    }
+}
+
+#[test]
+fn a_rebuild_keeps_the_reading_on_screen_and_reads_it_again() {
+    let Some(mut h) = open("rebuild") else { return };
+    measure(&mut h);
+    let a = click(&mut h, TOP);
+    let b = click(&mut h, BOSS_TOP);
+    let _ = (a, b);
+    let before = reading(&mut h);
+    let gap = before.get(forge_agent::measure::Quantity::Distance).unwrap();
+    assert!((gap - 8.0).abs() < 1e-6, "{gap}");
+    // the boss 10 high: the same faces, further apart
+    h.gui
+        .fg_apply(forge_lang::error::Op::SetParam {
+            param: forge_lang::error::ParamKey::parse("extrude2.d").unwrap(),
+            value: forge_lang::error::Literal {
+                value: 10.0,
+                dim: forge_lang::values::Dim::Length,
+            },
+        })
+        .unwrap();
+    let mut blank = 0;
+    for _ in 0..2000 {
+        h.step();
+        let m = h.gui.shell.inspect.measure.as_ref().unwrap();
+        if m.reading.is_none() {
+            blank += 1;
+        }
+        if let Some(Ok(r)) = &m.reading
+            && !m.busy
+            && r.get(forge_agent::measure::Quantity::Distance)
+                .is_some_and(|d| (d - 10.0).abs() < 1e-6)
+        {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(2));
+    }
+    let after = reading(&mut h);
+    let gap = after.get(forge_agent::measure::Quantity::Distance).unwrap();
+    assert!((gap - 10.0).abs() < 1e-6, "{gap}");
+    assert_eq!(blank, 0, "the reading went blank for {blank} frames");
 }

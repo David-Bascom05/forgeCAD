@@ -11,7 +11,7 @@ use super::materials::{button_at, clipped, section, tab_strip};
 use super::theme::{Theme, medium, mono, sans, semi};
 use crate::render::Entity;
 use egui::{Align2, Color32, Pos2, Rect, Sense, Stroke, Ui, pos2, vec2};
-use forge_agent::measure::{Quantity, Reading, Shown};
+use forge_agent::measure::{Free, Quantity, Reading};
 use forge_lang::error::Op;
 use forge_lang::props::{FIELDS, Physical, Props, STATES, Tab};
 use forge_math::Point3;
@@ -30,13 +30,55 @@ pub enum InspectCmd {
     Materials,
 }
 
-/// The Measure panel: what's picked (placement, entity, and how it reads), what it measures.
+/// What Measure has picked: an entity of a placed body, a whole body (an occurrence), or free
+/// geometry (an origin item, a work feature, sketch geometry) with its words.
+#[derive(Clone, Debug, PartialEq)]
+pub enum MPick {
+    Ent(u32, Entity),
+    Whole(u32),
+    Free(Free, String),
+}
+
+/// What a click picks, as Inventor's selection priority has it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Filter {
+    /// Faces, edges and points, whichever is under the pointer.
+    #[default]
+    Any,
+    Faces,
+    Edges,
+    Points,
+    /// Whole bodies: a part's, an assembly's occurrences.
+    Bodies,
+}
+
+impl Filter {
+    pub const ALL: [Filter; 5] = [Filter::Any, Filter::Faces, Filter::Edges, Filter::Points, Filter::Bodies];
+
+    pub fn word(self) -> &'static str {
+        match self {
+            Filter::Any => "Any",
+            Filter::Faces => "Faces",
+            Filter::Edges => "Edges",
+            Filter::Points => "Points",
+            Filter::Bodies => "Bodies",
+        }
+    }
+}
+
+/// The Measure panel: what's picked and how it reads, what's under the pointer, the selection
+/// priority, the values added up, and how values are shown.
 #[derive(Clone, Debug, Default)]
 pub struct MeasurePanel {
-    pub picks: Vec<(u32, Entity)>,
+    pub picks: Vec<MPick>,
     pub names: Vec<String>,
     pub reading: Option<Result<Reading, String>>,
     pub busy: bool,
+    /// What a click would pick now, for the view to mark.
+    pub hover: Option<MPick>,
+    pub filter: Filter,
+    /// Values added to the running totals (Inventor's Accumulate).
+    pub accum: Vec<(Quantity, f64)>,
     /// Decimal places shown.
     pub precision: usize,
     pub unit: &'static str,
@@ -48,12 +90,33 @@ pub struct MeasurePanel {
 }
 
 impl MeasurePanel {
-    /// A new measuring: nothing picked, nothing read.
+    /// A new measuring: nothing picked, nothing read (what's added up stays).
     pub fn restart(&mut self) {
         self.picks.clear();
         self.names.clear();
         self.reading = None;
         self.busy = false;
+    }
+
+    /// A pick taken: a third starts a new measuring, as Inventor's does.
+    pub fn take(&mut self, p: MPick) {
+        if self.picks.len() >= 2 {
+            self.restart();
+        }
+        if !self.picks.contains(&p) {
+            self.picks.push(p);
+        }
+    }
+
+    /// The picks on bodies, as the view marks them.
+    pub fn marked(&self) -> Vec<(u32, Entity)> {
+        self.picks
+            .iter()
+            .filter_map(|p| match p {
+                MPick::Ent(pl, e) => Some((*pl, *e)),
+                _ => None,
+            })
+            .collect()
     }
 }
 
@@ -211,6 +274,9 @@ pub fn shown(q: Quantity, v: f64, (unit, angle): (&str, &str), places: usize) ->
         0 if angle == "rad" => format!("{:.places$} rad", v.to_radians()),
         0 => format!("{v:.places$}°"),
         2 => format!("{:.places$} {unit}²", v * per_unit(unit).powi(2)),
+        3 => format!("{:.places$} {unit}³", v * per_unit(unit).powi(3)),
+        4 if matches!(unit, "in" | "ft") => format!("{:.places$} lb", v / 0.453_592_37),
+        4 => format!("{v:.places$} kg"),
         _ => format!("{:.places$} {unit}", v * per_unit(unit)),
     }
 }
@@ -294,6 +360,14 @@ impl Shell {
             return;
         }
         self.inspect_marks(ctx);
+        self.measure_marks(ctx);
+        // Enter starts the measuring again, as a click on nothing does
+        if let Some(m) = &mut self.inspect.measure
+            && !ctx.egui_wants_keyboard_input()
+            && ctx.input(|i| i.key_pressed(egui::Key::Enter))
+        {
+            m.restart();
+        }
         let mut places: Vec<(String, Rect)> = vec![];
         let mut blocks: Vec<Rect> = vec![];
         let mut ops: Vec<Op> = vec![];
@@ -316,7 +390,7 @@ impl Shell {
         }
     }
 
-    fn inspect_window<'a>(title: &'a str, id: &str, t: &Theme, at: Pos2, w: f32) -> egui::Window<'a> {
+    pub(super) fn inspect_window<'a>(title: &'a str, id: &str, t: &Theme, at: Pos2, w: f32) -> egui::Window<'a> {
         egui::Window::new(title)
             .id(egui::Id::unique(("inspect-window", id)))
             .title_bar(false)
@@ -328,141 +402,6 @@ impl Shell {
             .min_width(w)
             .max_width(w)
             .frame(dialog_frame(t))
-    }
-
-    fn measure_window(
-        &mut self,
-        ctx: &egui::Context,
-        t: &Theme,
-        v: Rect,
-        places: &mut Vec<(String, Rect)>,
-    ) -> Option<Rect> {
-        let mut close = false;
-        let at = pos2(v.left() + 16.0, v.top() + 56.0);
-        let m = self.inspect.measure.as_mut()?;
-        let title = if m.wall { "Wall Thickness" } else { "Measure" };
-        let r = Self::inspect_window(title, "measure", t, at, 300.0).show(ctx, |ui| {
-            close = dialog_head(ui, t, "measure", title, "measure:close", places);
-            if m.wall {
-                ui.label(
-                    egui::RichText::new("The thinnest wall of the part picked, or of the part")
-                        .font(sans(11.0))
-                        .color(t.ink2),
-                );
-            }
-            for k in 0..if m.wall { 1 } else { 2 } {
-                let name = m.names.get(k).cloned().unwrap_or_else(|| "Pick an entity".into());
-                ui.horizontal(|ui| {
-                    ui.add_sized(
-                        vec2(80.0, 18.0),
-                        egui::Label::new(
-                            egui::RichText::new(format!("Selection {}", k + 1))
-                                .font(medium(12.0))
-                                .color(t.ink),
-                        ),
-                    );
-                    let r = ui.label(egui::RichText::new(name).font(sans(11.0)).color(t.ink2));
-                    places.push((format!("measure:pick{}", k + 1), r.rect));
-                });
-            }
-            ui.add_space(4.0);
-            let unit = (m.unit, m.angle);
-            let places_n = m.precision;
-            if m.wall {
-                match &m.wall_at {
-                    Some(Ok((w, p))) => {
-                        Self::result_row(
-                            ui,
-                            t,
-                            "Thinnest wall",
-                            shown(Quantity::Length, *w, unit, places_n),
-                            places,
-                        );
-                        Self::result_row(ui, t, "At", format!("{:.1}, {:.1}, {:.1}", p.x, p.y, p.z), places);
-                    }
-                    Some(Err(e)) => {
-                        ui.label(egui::RichText::new(e).font(sans(11.0)).color(t.error));
-                    }
-                    None => {
-                        ui.label(
-                            egui::RichText::new("Working it out...")
-                                .font(sans(11.0))
-                                .color(t.ink2),
-                        );
-                    }
-                }
-            } else {
-                match &m.reading {
-                    Some(Ok(r)) => {
-                        for (q, x) in &r.values {
-                            Self::result_row(ui, t, q.label(), shown(*q, *x, unit, places_n), places);
-                        }
-                    }
-                    Some(Err(e)) => {
-                        ui.label(egui::RichText::new(e).font(sans(11.0)).color(t.error));
-                    }
-                    None if m.busy => {
-                        ui.label(egui::RichText::new("Measuring...").font(sans(11.0)).color(t.ink2));
-                    }
-                    None => {}
-                }
-            }
-            ui.add_space(6.0);
-            ui.horizontal(|ui| {
-                ui.label(egui::RichText::new("Precision").font(sans(11.0)).color(t.ink2));
-                let r = egui::ComboBox::from_id_salt("measure-precision")
-                    .selected_text(format!("{}", m.precision))
-                    .width(44.0)
-                    .show_ui(ui, |ui| {
-                        for p in 0..=6 {
-                            ui.selectable_value(&mut m.precision, p, format!("{p}"));
-                        }
-                    });
-                places.push(("measure:precision".into(), r.response.rect));
-                ui.label(egui::RichText::new("Units").font(sans(11.0)).color(t.ink2));
-                let r = egui::ComboBox::from_id_salt("measure-unit")
-                    .selected_text(m.unit)
-                    .width(44.0)
-                    .show_ui(ui, |ui| {
-                        for u in forge_doc::units::DOC_LENGTHS {
-                            ui.selectable_value(&mut m.unit, u, u);
-                        }
-                    });
-                places.push(("measure:unit".into(), r.response.rect));
-                if !m.wall {
-                    let r = ui.button(egui::RichText::new("Restart").font(sans(12.0)));
-                    places.push(("measure:restart".into(), r.rect));
-                    if r.clicked() {
-                        m.restart();
-                    }
-                }
-            });
-        });
-        if close {
-            self.inspect.measure = None;
-        }
-        r.map(|r| r.response.rect)
-    }
-
-    /// A result: its words, its value, and a button that copies the value.
-    fn result_row(ui: &mut Ui, t: &Theme, what: &str, value: String, places: &mut Vec<(String, Rect)>) {
-        ui.horizontal(|ui| {
-            ui.add_sized(
-                vec2(118.0, 18.0),
-                egui::Label::new(egui::RichText::new(what).font(sans(12.0)).color(t.ink2)),
-            );
-            let r = ui.label(egui::RichText::new(&value).font(mono(12.0)).color(t.ink));
-            places.push((format!("measure:value:{what}"), r.rect));
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let c = ui
-                    .add(egui::Button::new(egui::RichText::new("Copy").font(sans(10.0))).small())
-                    .on_hover_text("Copy the value");
-                places.push((format!("measure:copy:{what}"), c.rect));
-                if c.clicked() {
-                    ui.ctx().copy_text(value.clone());
-                }
-            });
-        });
     }
 
     fn section_window(
@@ -604,73 +543,16 @@ impl Shell {
             painter.galley(r.min + vec2(4.0, 2.0), g, ink);
         };
         let w = |p: Point3| [p.x, p.y, p.z];
-        if let Some(m) = &self.inspect.measure {
-            let (unit, n) = ((m.unit, m.angle), m.precision);
-            if let Some(Ok(r)) = &m.reading {
-                for s in &r.shown {
-                    match *s {
-                        Shown::Line(a, b, q) => {
-                            let (Some(pa), Some(pb)) = (to_screen(w(a)), to_screen(w(b))) else {
-                                continue;
-                            };
-                            let value = r.get(q).unwrap_or(a.distance(b));
-                            painter.line_segment([pa, pb], Stroke::new(1.5, ink));
-                            for e in [pa, pb] {
-                                painter.circle_filled(e, 3.0, ink);
-                            }
-                            // the minimum below its line, the rest above: lines in line keep apart
-                            let off = if q == Quantity::Distance { 12.0 } else { -12.0 };
-                            label(pa + (pb - pa) * 0.5 + vec2(0.0, off), shown(q, value, unit, n));
-                        }
-                        Shown::Point(p) => {
-                            if let Some(q) = to_screen(w(p)) {
-                                painter.circle_stroke(q, 5.0, Stroke::new(1.5, ink));
-                                painter.line_segment(
-                                    [q - vec2(8.0, 0.0), q + vec2(8.0, 0.0)],
-                                    Stroke::new(1.0, ink),
-                                );
-                                painter.line_segment(
-                                    [q - vec2(0.0, 8.0), q + vec2(0.0, 8.0)],
-                                    Stroke::new(1.0, ink),
-                                );
-                            }
-                        }
-                        Shown::Circle(c, z, rad) => {
-                            let z = z.normalize().map_or(forge_math::Vec3::Z, |u| u.get());
-                            let x = if z.x.abs() < 0.9 {
-                                forge_math::Vec3::X
-                            } else {
-                                forge_math::Vec3::Y
-                            };
-                            let u = z.cross(x).normalize().map_or(x, |u| u.get());
-                            let vv = z.cross(u);
-                            let pts: Vec<Pos2> = (0..=48)
-                                .filter_map(|k| {
-                                    let a = k as f64 / 48.0 * std::f64::consts::TAU;
-                                    to_screen(w(c
-                                        + (u * forge_math::dmath::cos(a) + vv * forge_math::dmath::sin(a))
-                                            * rad))
-                                })
-                                .collect();
-                            painter.add(egui::Shape::line(pts, Stroke::new(1.5, ink)));
-                            if let Some(q) = to_screen(w(c)) {
-                                painter.circle_filled(q, 2.5, ink);
-                                label(
-                                    q + vec2(0.0, -14.0),
-                                    format!("Ø {}", shown(Quantity::Diameter, 2.0 * rad, unit, n)),
-                                );
-                            }
-                        }
-                    }
-                }
-            }
-            if let Some(Ok((thick, p))) = &m.wall_at
-                && m.wall
-                && let Some(q) = to_screen(w(*p))
-            {
-                painter.circle_stroke(q, 6.0, Stroke::new(2.0, ink));
-                label(q + vec2(0.0, -16.0), shown(Quantity::Length, *thick, unit, n));
-            }
+        if let Some(m) = &self.inspect.measure
+            && let Some(Ok((thick, p))) = &m.wall_at
+            && m.wall
+            && let Some(q) = to_screen(w(*p))
+        {
+            painter.circle_stroke(q, 6.0, Stroke::new(2.0, ink));
+            label(
+                q + vec2(0.0, -16.0),
+                shown(Quantity::Length, *thick, (m.unit, m.angle), m.precision),
+            );
         }
         if self.inspect.section_open
             && let Some(s) = &self.inspect.cut

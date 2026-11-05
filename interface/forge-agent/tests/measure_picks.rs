@@ -170,3 +170,124 @@ fn picks_on_placed_bodies_are_measured_where_they_are() {
         "{p:?}"
     );
 }
+
+use forge_agent::measure::{Free, Shown, Target, Whole, read, read_pair};
+
+#[test]
+fn work_features_origin_items_and_sketch_geometry_measure_against_faces() {
+    let (b, m) = part(PLATE);
+    let face = |p| {
+        Target::Ent(Pick {
+            body: &b,
+            mesh: &m,
+            at: Frame::WORLD,
+            ent: face_at(&b, p),
+        })
+    };
+    let top = face(Point3::new(0.0, 20.0, 20.0));
+    // the XY origin plane: the plate's top is 20 above it, parallel
+    let xy = Target::Free(Free::Plane(Point3::ORIGIN, Vec3::Z));
+    let r = read_pair(&top, &xy);
+    assert!(near(r.get(Q::Distance), 20.0), "{r:?}");
+    assert!(near(r.get(Q::Dz), 20.0) && near(r.get(Q::Dx), 0.0));
+    // a work point above the top: its height off it, exactly
+    let p = Target::Free(Free::Point(Point3::new(3.0, 4.0, 32.5)));
+    assert!(near(read_pair(&top, &p).get(Q::Distance), 12.5));
+    // the Z axis and the side face at x = 50: 50 apart, at 0 degrees (the axis lies along it)
+    let z = Target::Free(Free::Axis(Point3::ORIGIN, Vec3::Z));
+    let side = face(Point3::new(50.0, 0.0, 10.0));
+    let r = read_pair(&z, &side);
+    assert!(near(r.get(Q::Distance), 50.0) && near(r.get(Q::Angle), 0.0), "{r:?}");
+    // the Z axis and a hole's bore: axis to axis, 20
+    let bore = face(Point3::new(25.0, 0.0, 10.0));
+    assert!(near(read_pair(&z, &bore).get(Q::AxisDistance), 20.0));
+    // a sketch line square to the top face: 90 degrees, its arc drawn at their corner
+    let up = Target::Free(Free::Segment(Point3::new(0.0, 0.0, 30.0), Point3::new(0.0, 0.0, 40.0)));
+    let r = read_pair(&up, &top);
+    assert!(near(r.get(Q::Angle), 90.0) && near(r.get(Q::Distance), 10.0), "{r:?}");
+    assert!(r.shown.iter().any(|s| matches!(s, Shown::Angle(_, _, _, d) if (d - 90.0).abs() < 1e-9)));
+    // a sketch circle: its own sizes
+    let c = read(&Target::Free(Free::Circle(Point3::ORIGIN, Vec3::Z, 5.0)));
+    assert!(near(c.get(Q::Diameter), 10.0) && near(c.get(Q::Length), std::f64::consts::TAU * 5.0));
+}
+
+#[test]
+fn the_maximum_distance_of_points_lines_and_circles_in_one_plane() {
+    let seg = |a: (f64, f64), b: (f64, f64)| {
+        Target::Free(Free::Segment(Point3::new(a.0, a.1, 0.0), Point3::new(b.0, b.1, 0.0)))
+    };
+    let r = read_pair(&seg((0.0, 0.0), (10.0, 0.0)), &seg((0.0, 5.0), (10.0, 5.0)));
+    assert!(near(r.get(Q::Distance), 5.0));
+    assert!(near(r.get(Q::MaxDistance), 125f64.sqrt()), "{r:?}");
+    let circle = |x: f64, rad: f64| Target::Free(Free::Circle(Point3::new(x, 0.0, 0.0), Vec3::Z, rad));
+    let r = read_pair(&circle(0.0, 3.0), &circle(20.0, 2.0));
+    assert!(near(r.get(Q::Distance), 15.0) && near(r.get(Q::CentreDistance), 20.0));
+    assert!(near(r.get(Q::MaxDistance), 25.0), "{r:?}");
+    // two points: one distance, no maximum
+    let p = |x: f64| Target::Free(Free::Point(Point3::new(x, 0.0, 0.0)));
+    assert!(read_pair(&p(0.0), &p(3.0)).get(Q::MaxDistance).is_none());
+}
+
+#[test]
+fn two_faces_at_an_angle_draw_it_at_their_common_edge_and_a_face_is_tinted() {
+    let (b, m) = part("extrude 20 poly 0 0 40 0 40 20 20 40 0 40");
+    let pick = |p| {
+        Target::Ent(Pick {
+            body: &b,
+            mesh: &m,
+            at: Frame::WORLD,
+            ent: face_at(&b, p),
+        })
+    };
+    // the side at x = 40 and the bevel from (40, 20) to (20, 40): 45 degrees between them
+    let (side, bevel) = (pick(Point3::new(40.0, 10.0, 10.0)), pick(Point3::new(30.0, 30.0, 10.0)));
+    let r = read_pair(&side, &bevel);
+    assert!(near(r.get(Q::Angle), 45.0), "{r:?}");
+    let arc = r.shown.iter().find_map(|s| match s {
+        Shown::Angle(v, u, w, d) => Some((*v, *u, *w, *d)),
+        _ => None,
+    });
+    let (v, u, w, d) = arc.expect("the angle's arc");
+    // on the edge the two faces share (x 40, y 20), its arms along each face away from it
+    assert!((v.x - 40.0).abs() < 1e-6 && (v.y - 20.0).abs() < 1e-6, "{v:?}");
+    assert!((u.dot(w) - d.to_radians().cos()).abs() < 1e-9);
+    // one face: its area, and its triangles to tint
+    let top = read(&pick(Point3::new(10.0, 10.0, 20.0)));
+    let area = 40.0 * 40.0 - 0.5 * 20.0 * 20.0;
+    assert!(near(top.get(Q::Area), area), "{top:?}");
+    let tint: f64 = top
+        .shown
+        .iter()
+        .filter_map(|s| match s {
+            Shown::Face(t, _) => Some(t.iter().map(|[a, b, c]| (*b - *a).cross(*c - *a).length() / 2.0).sum::<f64>()),
+            _ => None,
+        })
+        .sum();
+    assert!((tint - area).abs() < 1e-6, "{tint}");
+}
+
+#[test]
+fn a_whole_body_reads_its_volume_mass_and_box_where_it_stands() {
+    let (b, m) = part("extrude 20 rect -50 -30 100 60");
+    let at = Frame::WORLD.with_origin(Point3::new(100.0, 0.0, 0.0));
+    // aluminium: 2.7e-6 kg/mm³
+    let w = Target::Whole(Whole {
+        body: &b,
+        mesh: &m,
+        at,
+        density: Some(2.7e-6),
+    });
+    let r = read(&w);
+    assert!(near(r.get(Q::Volume), 120_000.0), "{r:?}");
+    assert!((r.get(Q::Mass).unwrap() - 0.324).abs() < 1e-9);
+    assert!(near(r.get(Q::SizeX), 100.0) && near(r.get(Q::SizeY), 60.0) && near(r.get(Q::SizeZ), 20.0));
+    // two bodies, one moved 150 along x: 50 apart
+    let w2 = Target::Whole(Whole {
+        body: &b,
+        mesh: &m,
+        at: Frame::WORLD.with_origin(Point3::new(250.0, 0.0, 0.0)),
+        density: None,
+    });
+    let r = read_pair(&w, &w2);
+    assert!(near(r.get(Q::Distance), 50.0), "{r:?}");
+}
