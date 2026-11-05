@@ -54,7 +54,7 @@ pub struct Process {
     /// Load steps up to the forming pressure.
     pub steps: usize,
     /// The sheet bends as a plate of its thickness (D = G t^3 / 3) besides stretching (false: a
-    /// membrane, the reference).
+    /// membrane, the default).
     pub bending: bool,
 }
 
@@ -251,12 +251,17 @@ struct Shared {
     law: Law,
     wrinkle: bool,
     tris: Vec<Tri>,
+    hinges: Vec<Hinge>,
     x: RwLock<Vec<Vec3>>,
     stop: AtomicBool,
     start: Barrier,
     done: Barrier,
     out: Vec<Mutex<Vec<Option<Part>>>>,
+    bent: Vec<Mutex<Vec<Bend>>>,
 }
+
+/// A hinge's energy and what it adds to its four corners' gradient.
+type Bend = (f64, [Vec3; 4]);
 
 impl Shared {
     fn share(&self, w: usize) -> std::ops::Range<usize> {
@@ -272,6 +277,11 @@ impl Shared {
                 .iter()
                 .map(|t| element(&self.law, t, x, self.wrinkle)),
         );
+        let n = self.bent.len();
+        let mut b = self.bent[w].lock().unwrap_or_else(|e| e.into_inner());
+        b.clear();
+        let h = &self.hinges[w * self.hinges.len() / n..(w + 1) * self.hinges.len() / n];
+        b.extend(h.iter().map(|h| bend(h, x)));
     }
 }
 
@@ -279,17 +289,19 @@ impl Pool {
     /// Below this many triangles a call is not worth sharing out.
     const MIN: usize = 1024;
 
-    fn new(law: &Law, tris: &[Tri], wrinkle: bool) -> Pool {
+    fn new(law: &Law, tris: &[Tri], wrinkle: bool, hinges: Vec<Hinge>) -> Pool {
         let n = forge_math::par::threads().min(tris.len() / 256).max(1);
         let shared = Arc::new(Shared {
             law: law.clone(),
             wrinkle,
             tris: tris.to_vec(),
+            hinges,
             x: RwLock::new(vec![]),
             stop: AtomicBool::new(false),
             start: Barrier::new(n),
             done: Barrier::new(n),
             out: (0..n).map(|_| Mutex::new(vec![])).collect(),
+            bent: (0..n).map(|_| Mutex::new(vec![])).collect(),
         });
         let workers = if n > 1 && tris.len() >= Self::MIN {
             (1..n)
@@ -315,12 +327,21 @@ impl Pool {
         Pool { shared, workers }
     }
 
-    /// Each triangle's energy and gradient at `x`, in order (None: one is turned inside out).
-    fn each(&self, x: &[Vec3], f: &mut dyn FnMut(usize, (f64, Vec3, Vec3))) -> Option<()> {
+    /// Each triangle's energy and gradient at `x`, in order (None: one is turned inside out),
+    /// then each hinge's.
+    fn each(
+        &self,
+        x: &[Vec3],
+        f: &mut dyn FnMut(usize, (f64, Vec3, Vec3)),
+        fh: &mut dyn FnMut(&Hinge, &Bend),
+    ) -> Option<()> {
         let s = &self.shared;
         if self.workers.is_empty() {
             for (k, t) in s.tris.iter().enumerate() {
                 f(k, element(&s.law, t, x, s.wrinkle)?);
+            }
+            for h in &s.hinges {
+                fh(h, &bend(h, x));
             }
             return Some(());
         }
@@ -336,6 +357,13 @@ impl Pool {
         for o in &s.out {
             for e in o.lock().unwrap_or_else(|e| e.into_inner()).iter() {
                 f(k, (*e)?);
+                k += 1;
+            }
+        }
+        let mut k = 0;
+        for b in &s.bent {
+            for e in b.lock().unwrap_or_else(|e| e.into_inner()).iter() {
+                fh(&s.hinges[k], e);
                 k += 1;
             }
         }
@@ -368,8 +396,6 @@ struct Sheet {
     hold: Vec<f64>,
     anchor: Vec<Vec3>,
     dir: Vec<Option<Vec3>>,
-    /// The sheet's hinges, for its bending (none: a membrane).
-    hinges: Vec<Hinge>,
 }
 
 /// Sliding nodes carried off the tool's top (over the cavity) fall free.
@@ -485,27 +511,40 @@ impl Sheet {
         g.iter_mut().for_each(|v| *v = Vec3::ZERO);
         let mut g = Some(g);
         let mut e = 0.0;
-        self.pool.each(x, &mut |k, (w, ga, gb)| {
-            let v = &self.idx[k];
-            e += w;
-            if let Some(g) = g.as_deref_mut() {
-                let t = &self.tris[k];
-                g[t.v[1]] += ga;
-                g[t.v[2]] += gb;
-                g[t.v[0]] = g[t.v[0]] - ga - gb;
-            }
-            if p != 0.0 {
-                let (a, b, c) = (x[v[0]], x[v[1]], x[v[2]]);
-                e += p / 6.0 * a.dot(b.cross(c));
+        let mut bending = 0.0;
+        let mut gh: Vec<(usize, Vec3)> = vec![];
+        self.pool.each(
+            x,
+            &mut |k, (w, ga, gb)| {
+                let v = &self.idx[k];
+                e += w;
                 if let Some(g) = g.as_deref_mut() {
-                    g[v[0]] += b.cross(c) * (p / 6.0);
-                    g[v[1]] += c.cross(a) * (p / 6.0);
-                    g[v[2]] += a.cross(b) * (p / 6.0);
+                    let t = &self.tris[k];
+                    g[t.v[1]] += ga;
+                    g[t.v[2]] += gb;
+                    g[t.v[0]] = g[t.v[0]] - ga - gb;
                 }
-            }
-        })?;
-        for h in &self.hinges {
-            e += hinge(h, x, Some(&mut *g.as_deref_mut().expect("a gradient")));
+                if p != 0.0 {
+                    let (a, b, c) = (x[v[0]], x[v[1]], x[v[2]]);
+                    e += p / 6.0 * a.dot(b.cross(c));
+                    if let Some(g) = g.as_deref_mut() {
+                        g[v[0]] += b.cross(c) * (p / 6.0);
+                        g[v[1]] += c.cross(a) * (p / 6.0);
+                        g[v[2]] += a.cross(b) * (p / 6.0);
+                    }
+                }
+            },
+            &mut |h, (w, d)| {
+                bending += w;
+                for (i, v) in h.v.iter().zip(d) {
+                    gh.push((*i, *v));
+                }
+            },
+        )?;
+        e += bending;
+        let g = g.expect("a gradient");
+        for (i, v) in gh {
+            g[i] += v;
         }
         Some(e)
     }
@@ -549,8 +588,8 @@ fn hinges(idx: &[[usize; 3]], reference: &[Vec3], d: f64) -> Vec<Hinge> {
 }
 
 /// A hinge's energy k theta^2 (theta the turn between its triangles' normals about the side), and
-/// its gradient into `g` (Bridson, Marino, Fedkiw 2003).
-fn hinge(h: &Hinge, x: &[Vec3], g: Option<&mut [Vec3]>) -> f64 {
+/// what it adds to its corners' gradient (Bridson, Marino, Fedkiw 2003).
+fn bend(h: &Hinge, x: &[Vec3]) -> Bend {
     let [a, b, c, d] = h.v.map(|i| x[i]);
     let e = b - a;
     let el = e.length();
@@ -558,20 +597,33 @@ fn hinge(h: &Hinge, x: &[Vec3], g: Option<&mut [Vec3]>) -> f64 {
     let n2 = (b - d).cross(a - d);
     let (q1, q2) = (n1.length_sq(), n2.length_sq());
     if el < 1e-12 || q1 < 1e-24 || q2 < 1e-24 {
-        return 0.0;
+        return (0.0, [Vec3::ZERO; 4]);
     }
     let (u1, u2) = (n1 * (1.0 / q1.sqrt()), n2 * (1.0 / q2.sqrt()));
     let theta = dmath::atan2(u1.cross(u2).dot(e) / el, u1.dot(u2));
+    let w = 2.0 * h.k * theta;
+    let (m1, m2) = (n1 * (1.0 / q1), n2 * (1.0 / q2));
+    let ehat = e * (1.0 / el);
+    (
+        h.k * theta * theta,
+        [
+            (m1 * (b - c).dot(ehat) + m2 * (b - d).dot(ehat)) * w,
+            -((m1 * (a - c).dot(ehat) + m2 * (a - d).dot(ehat)) * w),
+            -(m1 * (el * w)),
+            -(m2 * (el * w)),
+        ],
+    )
+}
+
+#[cfg(test)]
+fn hinge(h: &Hinge, x: &[Vec3], g: Option<&mut [Vec3]>) -> f64 {
+    let (e, d) = bend(h, x);
     if let Some(g) = g {
-        let w = 2.0 * h.k * theta;
-        let (m1, m2) = (n1 * (1.0 / q1), n2 * (1.0 / q2));
-        let ehat = e * (1.0 / el);
-        g[h.v[2]] -= m1 * (el * w);
-        g[h.v[3]] -= m2 * (el * w);
-        g[h.v[0]] += (m1 * (b - c).dot(ehat) + m2 * (b - d).dot(ehat)) * w;
-        g[h.v[1]] -= (m1 * (a - c).dot(ehat) + m2 * (a - d).dot(ehat)) * w;
+        for (i, v) in h.v.iter().zip(d) {
+            g[*i] += v;
+        }
     }
-    h.k * theta * theta
+    e
 }
 
 /// The tool's height under a point (bilinear between cell centres).
@@ -898,7 +950,16 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
             .collect()
     };
     let mut sheet = Sheet {
-        pool: Pool::new(&pr.law, &tris, pr.wrinkle),
+        pool: Pool::new(
+            &pr.law,
+            &tris,
+            pr.wrinkle,
+            if pr.bending {
+                hinges(&idx, &reference, pr.law.shear() * spec.t * spec.t * spec.t / 3.0)
+            } else {
+                vec![]
+            },
+        ),
         tris,
         idx: idx.clone(),
         free,
@@ -906,11 +967,6 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
         anchor: x.clone(),
         dir: vec![None; x.len()],
         slide,
-        hinges: if pr.bending {
-            hinges(&idx, &reference, pr.law.shear() * spec.t * spec.t * spec.t / 3.0)
-        } else {
-            vec![]
-        },
     };
     let mu = pr.law.shear().max(1e-9);
     let tol = 1e-5 * mu * spec.t * s;
