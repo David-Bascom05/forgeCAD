@@ -9,6 +9,7 @@
 use crate::build::{Formed, Spec, Tool, inside, polygon};
 use crate::field::Field;
 use forge_math::{Point2, Point3, Vec3, dmath};
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Barrier, Mutex, RwLock};
 
@@ -52,6 +53,9 @@ pub struct Process {
     pub wrinkle: bool,
     /// Load steps up to the forming pressure.
     pub steps: usize,
+    /// The sheet bends as a plate of its thickness (D = G t^3 / 3) besides stretching (false: a
+    /// membrane, the reference).
+    pub bending: bool,
 }
 
 /// The clamp frame's grip on the sheet under it.
@@ -97,6 +101,7 @@ impl Default for Process {
             clamp: None,
             wrinkle: false,
             steps: 10,
+            bending: false,
         }
     }
 }
@@ -363,6 +368,8 @@ struct Sheet {
     hold: Vec<f64>,
     anchor: Vec<Vec3>,
     dir: Vec<Option<Vec3>>,
+    /// The sheet's hinges, for its bending (none: a membrane).
+    hinges: Vec<Hinge>,
 }
 
 /// Sliding nodes carried off the tool's top (over the cavity) fall free.
@@ -497,8 +504,74 @@ impl Sheet {
                 }
             }
         })?;
+        for h in &self.hinges {
+            e += hinge(h, x, Some(&mut *g.as_deref_mut().expect("a gradient")));
+        }
         Some(e)
     }
+}
+
+/// Two triangles' shared side, for the sheet's bending: its ends `a`, `b`, the corners across it
+/// `c` (of the triangle a b c) and `d` (of b a d), and the stiffness `k` in E = k theta^2.
+#[derive(Clone, Copy, Debug)]
+struct Hinge {
+    v: [usize; 4],
+    k: f64,
+}
+
+/// The sheet's hinges with a plate's bending stiffness D = G t^3 / 3 (incompressible): over a
+/// side of length l shared by triangles of areas A1, A2, E = 3 D l^2 theta^2 / (8 (A1 + A2)), the
+/// energy D/2 kappa^2 over the side's third of both, kappa its angle over the centroids' span.
+fn hinges(idx: &[[usize; 3]], reference: &[Vec3], d: f64) -> Vec<Hinge> {
+    let mut side: HashMap<(usize, usize), (usize, usize)> = HashMap::new();
+    let mut out = vec![];
+    let area = |t: &[usize; 3]| {
+        0.5 * (reference[t[1]] - reference[t[0]])
+            .cross(reference[t[2]] - reference[t[0]])
+            .length()
+    };
+    for (k, t) in idx.iter().enumerate() {
+        for c in 0..3 {
+            let (a, b, o) = (t[c], t[(c + 1) % 3], t[(c + 2) % 3]);
+            match side.remove(&(b, a)) {
+                Some((other, opp)) => {
+                    let l = (reference[b] - reference[a]).length_sq();
+                    let k = 3.0 * d * l / (8.0 * (area(t) + area(&idx[other])));
+                    out.push(Hinge { v: [a, b, o, opp], k });
+                }
+                None => {
+                    side.insert((a, b), (k, o));
+                }
+            }
+        }
+    }
+    out
+}
+
+/// A hinge's energy k theta^2 (theta the turn between its triangles' normals about the side), and
+/// its gradient into `g` (Bridson, Marino, Fedkiw 2003).
+fn hinge(h: &Hinge, x: &[Vec3], g: Option<&mut [Vec3]>) -> f64 {
+    let [a, b, c, d] = h.v.map(|i| x[i]);
+    let e = b - a;
+    let el = e.length();
+    let n1 = (a - c).cross(b - c);
+    let n2 = (b - d).cross(a - d);
+    let (q1, q2) = (n1.length_sq(), n2.length_sq());
+    if el < 1e-12 || q1 < 1e-24 || q2 < 1e-24 {
+        return 0.0;
+    }
+    let (u1, u2) = (n1 * (1.0 / q1.sqrt()), n2 * (1.0 / q2.sqrt()));
+    let theta = dmath::atan2(u1.cross(u2).dot(e) / el, u1.dot(u2));
+    if let Some(g) = g {
+        let w = 2.0 * h.k * theta;
+        let (m1, m2) = (n1 * (1.0 / q1), n2 * (1.0 / q2));
+        let ehat = e * (1.0 / el);
+        g[h.v[2]] -= m1 * (el * w);
+        g[h.v[3]] -= m2 * (el * w);
+        g[h.v[0]] += (m1 * (b - c).dot(ehat) + m2 * (b - d).dot(ehat)) * w;
+        g[h.v[1]] -= (m1 * (a - c).dot(ehat) + m2 * (a - d).dot(ehat)) * w;
+    }
+    h.k * theta * theta
 }
 
 /// The tool's height under a point (bilinear between cell centres).
@@ -833,6 +906,11 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
         anchor: x.clone(),
         dir: vec![None; x.len()],
         slide,
+        hinges: if pr.bending {
+            hinges(&idx, &reference, pr.law.shear() * spec.t * spec.t * spec.t / 3.0)
+        } else {
+            vec![]
+        },
     };
     let mu = pr.law.shear().max(1e-9);
     let tol = 1e-5 * mu * spec.t * s;
@@ -964,5 +1042,67 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
         mean: if total > 0.0 { sum / total } else { 1.0 },
         unformed,
         iterations: its,
+    }
+}
+
+#[cfg(test)]
+mod hinge_tests {
+    use super::*;
+
+    /// The hinge's gradient is its energy's, by central differences, folded either way.
+    #[test]
+    fn a_hinges_gradient_is_its_energys() {
+        for z in [0.3, -0.7] {
+            let x = vec![
+                Vec3::new(0.0, 0.0, 0.0),
+                Vec3::new(1.0, 0.1, 0.0),
+                Vec3::new(0.4, 0.9, 0.2),
+                Vec3::new(0.6, -0.8, z),
+            ];
+            let h = Hinge {
+                v: [0, 1, 2, 3],
+                k: 1.7,
+            };
+            let mut g = vec![Vec3::ZERO; 4];
+            hinge(&h, &x, Some(&mut g));
+            for i in 0..4 {
+                for c in 0..3 {
+                    let at = |d: f64| {
+                        let mut y = x.clone();
+                        match c {
+                            0 => y[i].x += d,
+                            1 => y[i].y += d,
+                            _ => y[i].z += d,
+                        }
+                        hinge(&h, &y, None)
+                    };
+                    let fd = (at(1e-6) - at(-1e-6)) / 2e-6;
+                    let an = [g[i].x, g[i].y, g[i].z][c];
+                    assert!(
+                        (fd - an).abs() < 1e-5 * (1.0 + fd.abs()),
+                        "node {i} axis {c}: {fd} vs {an}"
+                    );
+                }
+            }
+        }
+    }
+
+    /// Flat, no energy; a fold of angle theta, k theta^2.
+    #[test]
+    fn a_hinge_holds_k_theta_squared() {
+        let th: f64 = 0.4;
+        let x = vec![
+            Vec3::new(0.0, 0.0, 0.0),
+            Vec3::new(1.0, 0.0, 0.0),
+            Vec3::new(0.5, 1.0, 0.0),
+            Vec3::new(0.5, -dmath::cos(th), dmath::sin(th)),
+        ];
+        let flat = [x[0], x[1], x[2], Vec3::new(0.5, -1.0, 0.0)];
+        let h = Hinge {
+            v: [0, 1, 2, 3],
+            k: 2.0,
+        };
+        assert!(hinge(&h, &flat, None).abs() < 1e-24);
+        assert!((hinge(&h, &x, None) - 2.0 * th * th).abs() < 1e-12);
     }
 }

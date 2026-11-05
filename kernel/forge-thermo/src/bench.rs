@@ -519,12 +519,19 @@ fn the_membrane_fills_a_corner_as_the_closed_form_says() {
     };
     let f = analyse(&shape, &spec).expect("analyses");
     let (k, lc) = (4.0 / std::f64::consts::PI - 1.0, 1.110_720_7);
-    for (res, steps) in [(80, 10), (160, 10), (160, 100)] {
+    let mut radius = vec![];
+    for (res, steps, bending) in [
+        (80, 10, false),
+        (160, 10, false),
+        (160, 100, false),
+        (160, 10, true),
+    ] {
         let pr = Process {
             law: Law::neo_hookean(1.0),
             pressure: 0.05,
             resolution: res,
             steps,
+            bending,
             ..Process::default()
         };
         let st = stretch(&f, &spec, &pr);
@@ -559,15 +566,63 @@ fn the_membrane_fills_a_corner_as_the_closed_form_says() {
         let mean = errs.iter().sum::<f64>() / errs.len().max(1) as f64;
         let worst = errs.iter().copied().fold(0.0, f64::max);
         eprintln!(
-            "CORNER res {res} steps {steps}: R/d {:.3}, {} wall points, t/t0 error mean {:.4} worst {:.4}",
+            "CORNER res {res} steps {steps} bending {bending}: R/d {:.3}, {} wall points, t/t0 error mean {:.4} worst {:.4}",
             r / d,
             errs.len(),
             mean,
             worst
         );
+        radius.push(r);
+        if bending {
+            // a plate cannot follow the corner as tight as a membrane: its radius is larger, and
+            // the wall it lays down away from the corner is the membrane's
+            assert!(
+                r > radius[1],
+                "bending radius {r} vs the membrane's {}",
+                radius[1]
+            );
+            assert!(mean < 0.02, "mean {mean}");
+            continue;
+        }
         assert!(errs.len() >= 8);
         // the closed form's acceptance is 1 %: the mean holds it, the worst (next to the corner)
         // within 2 %
         assert!(mean < 0.01 && worst < 0.02, "mean {mean} worst {worst}");
+    }
+}
+
+/// Bending (a plate D = G t^3 / 3 at the sheet's first thickness) against the membrane on the
+/// measured parts, mean error of t0 each.
+#[test]
+fn the_sheet_bends_as_a_plate_on_the_measured_parts() {
+    let cone = cavity(65.0, 55.0, 100.0, 3.0);
+    let cyl = cavity(100.0, 100.0 - 1e-3, 100.0, 10.0);
+    let bx = box_cavity(150.0, 75.0, 10.0);
+    for (name, shape, t0, flange, temp, diagonal, upto) in [
+        ("duarte2022_cone", &cone, 1.0, 50.0, 140.0, false, 150.0),
+        ("erdogan2014_cylinder", &cyl, 2.5, 40.0, 180.0, false, 185.0),
+        ("karabeyoglu2017_cylinder", &cyl, 2.0, 40.0, 150.0, false, 185.0),
+        ("erdogan2014_box_axis", &bx, 2.0, 65.0, 180.0, false, 125.0),
+        ("erdogan2014_box_diagonal", &bx, 2.0, 65.0, 180.0, true, 145.0),
+    ] {
+        let row: Vec<String> = [false, true]
+            .iter()
+            .map(|&b| {
+                let e = compare(
+                    name,
+                    Surface::Height,
+                    &|p: &mut Process| p.bending = b,
+                    shape,
+                    t0,
+                    flange,
+                    "HIPS",
+                    temp,
+                    diagonal,
+                    upto,
+                );
+                format!("{:.2}", e * 100.0)
+            })
+            .collect();
+        eprintln!("BEND {name}: membrane {} | plate {}", row[0], row[1]);
     }
 }
