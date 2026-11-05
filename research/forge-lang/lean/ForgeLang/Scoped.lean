@@ -7,7 +7,7 @@ import ForgeLang.Print
 The design gives every existing op scope by id prefix: `cup.body` is statement `body` of block
 `cup`, and the op is the same function applied to the block's statements. Here:
 
-* `congr`: changing one component's definition changes nothing that does not place it. The
+* `defs_congr`: changing one component's definition changes nothing that does not place it. The
   hypothesis `NoPlace` (no procedure and no component body places it) is the design's
   `NestedComponent` rule.
 * `scoped_occ`: so an occurrence of the edited component evaluates exactly as the occurrence of a
@@ -69,7 +69,7 @@ structure CongrAt (D : Defs) (c0 : Name) (C' : Comp) (n : Nat) : Prop where
   lk : ∀ {σ ρ i b kvs}, c0 ∉ placesB b → loopK n (D.withComp c0 C') σ ρ i b kvs = loopK n D σ ρ i b kvs
   a : ∀ {σ ρ as}, evalA n (D.withComp c0 C') σ ρ as = evalA n D σ ρ as
 
-theorem congr {D : Defs} {c0 : Name} {C' : Comp} (hD : NoPlace c0 D) : ∀ n, CongrAt D c0 C' n := by
+theorem defs_congr {D : Defs} {c0 : Name} {C' : Comp} (hD : NoPlace c0 D) : ∀ n, CongrAt D c0 C' n := by
   intro n
   induction n with
   | zero => constructor <;> intros <;> simp [evalE, execOne, execS, loopN, loopK, evalA]
@@ -162,7 +162,7 @@ the old definitions: every scoped op is the unscoped op on the block's statement
 theorem scoped_occ {n D σ ρ x c0 args} {C' : Comp} (hD : NoPlace c0 D) (hb : c0 ∉ placesB C'.body) :
     execOne (n + 1) (D.withComp c0 C') σ ρ (.occ x c0 args) = occRun n D σ ρ x c0 C' args := by
   rw [execOne_occ (withComp_lookup_self D c0 C')]
-  simp only [occRun, (congr hD n).a, (congr hD n).s hb]
+  simp only [occRun, (defs_congr hD n).a, (defs_congr hD n).s hb]
 
 /-! ## Ops as functions: refusal or the edited definitions -/
 

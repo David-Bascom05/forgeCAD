@@ -404,4 +404,19 @@ theorem roundtrip (hc : check G T = true) {t : Tree} (h : VT G t (.n G.start)) :
 theorem lossless {n w t} (h : parse G T n (.n G.start) w = some (t, [])) : VT G t (.n G.start) ∧ t.yield = w := by
   simpa using parse_sound h
 
+/-- The derived parser reads the whole input. -/
+def parsesAll (G : Grammar) (T : Tables) (n : Nat) (w : List Tok) : Bool :=
+  match parse G T n (.n G.start) w with
+  | some (_, []) => true
+  | _ => false
+
+/-- An accepted input has a parse tree with exactly its tokens as leaves (and, under `check`, only
+that one: `unambiguous`). -/
+theorem parsesAll_tree {G : Grammar} {T : Tables} {n : Nat} {w : List Tok} (h : parsesAll G T n w = true) :
+    ∃ t, VT G t (.n G.start) ∧ t.yield = w := by
+  unfold parsesAll at h
+  split at h
+  · rename_i t hp; exact ⟨t, lossless hp⟩
+  · cases h
+
 end ForgeLang.LL1

@@ -44,6 +44,11 @@ calculus and the theorems hold with them. A deterministic *evaluation order* is 
   at each site and fills the holes from `σ` (`Print.lean`).
 - `.move(d)` is arithmetic on a placement value, so `add` stands for it. Method chaining
   (`a.f(b)` = `f(a, b)`) is grammar, covered under P6.
+- Components (unified document, below): `Comp` = params with defaults, a block, and the names of
+  the defining document the block sees (`vis`, its shared params). `Stmt.occ x c args` is
+  `x = part(c(args))`. The block runs in its own environment: the arguments (evaluated where the
+  call is), the defaults left alone (evaluated in the visible names), and the visible names. Its
+  features are under `x`.
 
 `Sim.lean` holds the one induction that carries most of the rest. A run that finished is repeated
 exactly (same traces, ids and log) under more fuel, and under any literal table that agrees on the
@@ -53,6 +58,9 @@ logged sites. Four more inductions of the same shape:
   procedure bodies mention (`Defs.reads`).
 - `Ren.lean`: renaming sites commutes with evaluation when no code mentions the renamed sites.
 - `Sites.lean`: a trace's sites come only from the code, the definitions or the environment.
+
+All five, and `Errors`, `Subst`, `Scope` and `Struct`, carry the component case, so every theorem
+below holds for documents with component definitions, occurrences and linked modules.
 
 ## P1: one meaning
 
@@ -243,6 +251,211 @@ the concrete instance; `Split.lean` has the general theorem.
   - unary `-` before a literal: SetParam to a negative number must replace the sign too.
   - `a - b.move()` needs "methods bind tightest" (FastCAD has that rule).
 
+## Unified document: components, calls, modules (2026-11-04)
+
+Checks `forgecad-gate/unified-doc/design.md` ("Parts as functions, files as modules", "UI
+round-trip") before its language changes merge. Findings for the implementation are also in
+`forgecad-gate/unified-doc/proof-findings.md`.
+
+### P1 to P5 with components
+
+**Proven, no theorem changed shape.** `component NAME(params) { body }` is `Comp`, an occurrence
+is `Stmt.occ`, modules are linked into `Defs.comps`. Every induction (`Sim`, `Weak`, `Fv`,
+`Errors`, `Ren`, `Subst`, `Sites`, `Scope`, `Struct`) has the new case, so `run_unique`,
+`run_mono`, `run_error_stable`, `handle_honest`, `sole_driver`, `setParam_roundtrip`,
+`setParam_ids`, the Add/Delete/Move halves, SplitInstance, InlineExpr, MakeShared and
+`scope_equiv` hold with components. The Add/Delete/Move completeness theorems now take any start
+environment (a block runs in its own).
+
+- **Weakening** holds for occurrences because the block starts from `only vis ρ`: a binding the
+  block cannot see cannot change it. This is the formal reason "a component sees only the shared
+  params" makes components safe to move.
+- **Scope** (`scope_equiv`, extended): call-site and lexical scope agree for blocks under the rule
+  that a component's params and the names its block binds are local, so no function may read
+  them. `comp_scope_differs`: a param `w` named like a shared `w` that a function reads; the two
+  scopes give different parts. **Rule:** a component param may not reuse a shared param's name
+  (scope error).
+
+### Memoisation (`Memo.lean`, `Counter/Memo.lean`)
+
+**Proven.** The cache entry for a call is the *parametric* run: the block with each input name
+(argument, default, visible shared param) as a fresh slot site, under a table that gives each
+slot the input's number.
+
+- `memo_inst`: a call's run is its parametric run with each slot replaced by the call's input
+  trace. Both directions: one evaluates exactly when the other does.
+- `memo_key`: the parametric run depends only on the key.
+- `memo_sound`: an entry built for one call gives every call with an equal key exactly its own
+  run, with its own provenance. The calls may be in one document (instancing, one BOM row) or in
+  two (the instant-load build cache).
+- `memo_nums`: instantiated traces read, under the call's table, as the entry reads under the
+  entry's table, so the geometry built once is every instance's geometry.
+
+What the key must hold, each shown necessary:
+
+| Key part | Counterexample without it |
+|---|---|
+| The block's text with its literal *numbers*, not just the tree | `key_needs_literals`: same skeleton, `d * 5` vs `d * 3` |
+| The definitions the block reaches (function and component bodies) | `key_needs_defs`: same block, `f(x) = x` vs `f(x) = x + x` |
+| The input numbers, *including the shared params the block sees* | `key_needs_shared`: same block and argument, `W = 1` vs `W = 2` |
+| The entry stored parametric (or, if concrete, the inputs' traces in the key) | `concrete_cache_wrong`: `c1 = part(cup(d: small))`, `c2 = part(cup(d: big))`, `small = big = 80`. A value-keyed concrete entry gives `c2.b` the trace of `small`: today's numbers agree, its handle is `small`, and SetParam `big = 90` leaves it at 80 while the document moves it |
+
+Not needed: the inputs' provenance (with a parametric entry); which call site it is. Within one
+run the design's key (definition, resolved arguments) is enough, since shared params and
+definitions are fixed in a run. Across runs it is not. The key may drop visible names the block
+and functions do not read (`indep`). The kernel version is outside the model and must be in the
+key too.
+
+### Refactors (`Refactor.lean`, `Counter/Refactor.lean`)
+
+- **ExtractComponent and InlineComponent: proven, as one equation** (`extract_occ`).
+  - An occurrence of the inline block and the same occurrence of the file form give the same
+    bindings, model, ids, traces and log.
+  - The file form has the passed names as params, nothing visible, and calls with `W: W` added.
+  - So `OCC.NAME` references and feature ids are unchanged, and no reference is rewritten.
+  - Side conditions (`ExtractPair`):
+    - every visible name the block or a function reads is passed;
+    - the passed names are fresh as params;
+    - defaults are literals.
+
+  | Assumption | Counterexample without it |
+  |---|---|
+  | Read shared params are passed (`part(FILE, with: {.., W: W})`) | `extract_naive_unbound`: the file form cannot see `W`, refused. `extract_copy_cuts_link`: copying `W`'s value into the file keeps today's numbers, but SetParam `W` then moves the inline part and not the extracted one. Silent. `extract_passes`: passing `W` is the identical run |
+  | Functions the block calls are copied, not reached by `use` of the source file | `use_cycle`: the new file would `use` the file that uses it |
+
+- **MakeComponent: proven** (`makeComponent`).
+  - Moving `ms` into `component N() { ms }` and writing `o = part(N)` in their place gives the
+    old model with `ms`'s fragment under `o`. Every other fragment and the log are unchanged.
+  - The moved features' **ids change** (`make_ids_move`: `lid` becomes `L1.lid`). So it is a
+    structural op, not an id-stable one.
+  - Side conditions:
+    - no later statement or function reads what moved (the design's refusal);
+    - the new occurrence name is unread;
+    - **missing from the design:** no moved statement reads a document name the component
+      cannot see.
+
+  | Assumption | Counterexample without it |
+  |---|---|
+  | Moved statements read only shared names (or the op lifts them to params) | `make_reads_local`: a moved feature reads a document `let`: `unbound` inside the block |
+  | No reader outside the file | `make_breaks_placer`: a file that places this one and refers to `x.lid` now gets `dangling`. The in-file check cannot see it. The same holds for drawings that name the moved features' edges (not modelled) |
+
+### Scoped edit ops (`Scoped.lean`)
+
+**Proven.**
+
+- `defs_congr`: changing one component's definition changes nothing that does not place it. The
+  hypothesis `NoPlace` (no procedure or block places it) is the design's `NestedComponent` rule.
+- `scoped_occ`: an occurrence of the edited component evaluates as the occurrence of a component
+  whose block *is* the edited statement list. So every block op is the unscoped op on the block,
+  as the design says ("no op changes shape").
+- `scopedDelete_ok` and `scopedAdd_ok` treat DeleteFeature `{id: "cup.x"}` and AddFeature
+  `{before: "cup.y" | "cup."}` as functions.
+  - Each refuses with a typed `Refusal` (`noComp`, `noFeature`, `stillRead`, `taken`) or returns
+    the edited definitions.
+  - When it returns, every occurrence that evaluated before evaluates after, to its old fragment
+    with the statement's part removed or added, under that occurrence. All occurrences change
+    together.
+- `addParam_occ`: AddComponentParam with a literal default leaves every occurrence's result
+  unchanged, when no call names the new param yet and nothing reads it.
+- SetArg with a literal is SetParam on that literal's site: an occurrence argument's site is in
+  the body, a default's in `D.code`. `setParam_roundtrip` covers both, with its condition that the
+  site is not observed. A default the block uses as a count is structural, and editing it is a
+  re-run.
+- `scoped_text_insert`: inserting into block `c` changes the printed document by exactly the new
+  statement's tokens inside the block. P6 says the text parses back to the edited document.
+
+### Modules (`Modules.lean`)
+
+**Proven.**
+
+- `load_total`: with a budget of one more than the number of files, loading the `use` graph never
+  runs out. It links, or stops with the typed error `useCycle` or `noFile`. With `run`'s own budget
+  (P2), evaluation with `use` is total. `use_cycle` is the concrete cycle.
+- `link_inert`: linking a module's components and default part that the document does not place
+  changes no run. `use` adds definitions, never statements, so a used file's top level is not
+  placed.
+- `ids_rooted`: every feature id starts with the name of one of the document's statements. A used
+  file's features appear only under an occurrence that this document names.
+- `with_unknown_param`: `part(FILE, with: {k: ..})` with `k` not a shared param of the file is the
+  typed `noParam`.
+
+### Grammar (`unified.ll1`, `LL1/Unified.lean`, `LL1/UnifiedImpl.lean`)
+
+`gen_grammar.py` now takes a module name and an examples file. Each example is checked by kernel
+`decide`: `accept` (the derived parser reads it; `parsesAll_tree` gives the parse tree), `reject`,
+or `nopredict` (a table fact).
+
+- **The proposed grammar is LL(1)** (`Unified.grammar_ll1`), so it is unambiguous and round-trips.
+  It is the main grammar plus:
+  - `stmt := 'component' ID '(' args ')' block`;
+  - `stmt := 'drawing' drawtail`, `drawtail := ID dargs block | %empty`,
+    `dargs := '(' args ')' | %empty`;
+  - `arg := .. | 'component' ':' expr`.
+- Accepted:
+  - `component cup(d: 80, h: 95) { .. }` and `component lid(at: .., ground: false) { }`;
+  - `part(cup(d: small), at: pose(at: (0, 0, 0)))` and `part(cup, at: p)`;
+  - `t = use("f.fg")` then `part(t.cup(d: 90))`;
+  - `part("mug.fg", with: {d: 70})`;
+  - `revolute(c2.body.side(c2.s.o), c1.body.end)`;
+  - `drawing dwg901(title: ..) { .. part(component: "lid") }` and `drawing NAME { }`;
+  - a drawing file's `drawing` header line;
+  - `part("box.fg", component: "lid")`.
+- Rejected: `x = component c() {}`. A definition is not an expression.
+- `part` and `component` do not conflict, because `part` stays an identifier (a call) and
+  `component` is a statement keyword. `use(..)` member access is ordinary postfix `.ID(args)`, and
+  `with:` is an identifier keyword argument. Zero conflicts confirms all three.
+- **The branch's grammar** (`unified-impl.ll1`, equal to unified-doc's working tree on 2026-11-04)
+  is LL(1), but it **rejects `part(component: "lid")`** (`UnifiedImpl.reject_component_kwarg`).
+  - `component` is a keyword there, and no alternative of `args` or `arg` is chosen on it
+    (`nopredict_*`).
+  - Fix: `arg := .. | 'component' ':' expr`, as for `at`.
+  - Drawing blocks are not in it yet. When `drawing` becomes a keyword, the header line must stay
+    a statement (`drawtail := .. | %empty`), or every drawing file stops parsing.
+
+### Verdicts
+
+| Question | Verdict |
+|---|---|
+| P1 to P5 with components, calls, occurrences, modules | **Hold**, every theorem, no new hypothesis. Weakening is *stronger*: a block cannot see what it is not given |
+| Memoisation soundness | **Proven**, with the key: block text and literal numbers, reachable definitions, input numbers including visible shared params, kernel version; entry stored parametric. Provenance not needed. A value key with concrete entries is unsound |
+| Id stability, Extract/Inline | **Proven**: same model, ids and traces. Read shared params must be passed, not copied |
+| Id stability, MakeComponent | **Fails by design**: moved ids gain the occurrence prefix. Model otherwise equal. Needs the second refusal rule (moved statements read only shared names) |
+| Edit-op round trip, scoped | **Proven** for Delete and Add (refuse or apply, at every occurrence), the general scoping theorem for any block op, AddComponentParam, SetArg with literals, text locality |
+| Modules: termination, cycles, top level not placed | **Proven** |
+| Grammar LL(1) | **Proven** for the proposed grammar. The branch's grammar rejects `part(component: ..)` |
+
+### Recommendations for the syntax and the ops
+
+1. Add `'component' ':' expr` to `arg` (or rename the drawing kwarg).
+2. Keep the `drawing` header a statement when `drawing` becomes a keyword.
+3. A component param may not reuse a shared param's name (`comp_scope_differs`).
+4. The build cache key holds the definition text with literal numbers, every definition it
+   reaches, input numbers including the shared params read, and the kernel version. Store entries
+   parametric, or put the inputs' traces in the key.
+5. ExtractComponent passes read shared params (`with: {W: W}`) and copies called functions.
+   InlineComponent drops the `W: W` arguments.
+6. MakeComponent refuses (or lifts to a param) when a moved statement reads a non-shared document
+   name. Its dialog says the moved features get new ids. Refuse it when other files or drawings
+   reference the moved bodies, or rewrite them.
+7. Keep `NestedComponent` (a block places no component) until procedures and nested placement
+   are modelled. The scoped-op theorems use it.
+
+### Not mechanised
+
+- No-parse of `part(component: ..)` under the branch's grammar is the derived parser's verdict at
+  fuel 400 plus the table fact `nopredict_*`. That every tree would need an `args` node starting
+  with `component` is not proven.
+- Lexer: `component`, `drawing` and `use` as keywords or identifiers, maximal munch (as before).
+- MoveFeature and ReplaceFeature in a block are covered by `scoped_occ` with the unscoped
+  theorems, but not stated as op functions like Delete and Add.
+- Scoped ops on components that other components or procedures place (needs `NestedComponent`).
+- Defaults that read names. Defaults are literals in the Extract theorem, and in the semantics a
+  default does not see earlier params.
+- Module qualification of names (`file#comp` as one string), diamond `use` loaded twice, and
+  `use` paths fenced by the session root.
+- Body components (a body named by a joint), joints, poses, BOM rows beyond "one row per key",
+  drawing block contents, the kernel.
+
 ## Verdicts on the hypotheses
 
 | Hypothesis | Verdict |
@@ -389,4 +602,11 @@ the concrete instance; `Split.lean` has the general theorem.
 | `gen_grammar.py` | regenerates `LL1/Forge.lean` from `grammar.ll1` |
 | `Loops.lean` | P5 `count_prefix`, `keyed_insert` |
 | `Print.lean` | P4 text: `setLit_text`, `body_text_insert`, `body_text_swap` |
+| `Memo.lean` | memoisation: `memo_inst`, `memo_key`, `memo_sound`, `memo_nums` |
+| `Refactor.lean` | `extract_occ` (Extract/Inline), `makeComponent`; argument-list lemmas |
+| `Scoped.lean` | `defs_congr`, `scoped_occ`, `scopedDelete_ok`, `scopedAdd_ok`, `addParam_occ`, `scoped_text_insert` |
+| `Modules.lean` | `load_total`, `link_inert`, `ids_rooted`, `use_cycle`, `with_unknown_param` |
+| `LL1/Unified.lean` | generated from `unified.ll1` + `unified.examples`: the proposed grammar, `grammar_ll1`, examples |
+| `LL1/UnifiedImpl.lean` | generated from `unified-impl.ll1`: the branch's grammar, `reject_component_kwarg` |
+| `Axioms.lean` | `lake env lean Axioms.lean`: the axioms of every main theorem |
 | `Counter/*.lean` | every counterexample named above, proven by evaluation (`rfl`/`decide`) or induction |

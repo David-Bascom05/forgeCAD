@@ -1,0 +1,8 @@
+# The branch's grammar: component blocks parse; `part(component: "lid")` does not.
+accept component_def: 'component' ID '(' ID ':' NUM ',' ID ':' NUM ')' '{' ID '=' ID '(' ID ',' ID ')' '}' EOF
+accept use_member: ID '=' ID '(' STR ')' NL ID '=' ID '(' ID '.' ID '(' ID ':' NUM ')' ')' EOF
+accept with_map: ID '=' ID '(' STR ',' ID ':' '{' ID ':' NUM '}' ')' EOF
+# lid = part(component: "lid")
+reject component_kwarg: ID '=' ID '(' 'component' ':' STR ')' EOF
+nopredict args_component: args 'component'
+nopredict arg_component: arg 'component'

@@ -464,4 +464,19 @@ theorem scope_differs :
 theorem shadowDoc_breaks_rule : ¬ NoReads shadowDoc.defs (locS (shadowDoc.body[1]'(by decide))) := by
   intro h; exact h "w" (by decide) (by decide)
 
+/-- The same for components: a param named like a shared name a function reads. Inside the block,
+call-site scope gives the function the param; lexical scope gives it the document's shared `w`. -/
+def shadowCup : Comp := { params := [("w", .lit 1)], body := [.feat "b" (.call "f" (.cst 0))], vis := ["w"] }
+
+def shadowCompDoc : Doc where
+  defs := { fns := [("f", ("x", .var "w"))], comps := [("cup", shadowCup)] }
+  body := [.let_ "w" (.lit 0), .occ "c1" "cup" []]
+  σ := fun _ => 7
+
+theorem comp_scope_differs :
+    run 30 shadowCompDoc = .ok ([([.nm "c1", .nm "b"], .site 1)], []) ∧
+    runL 30 shadowCompDoc = .ok ([([.nm "c1", .nm "b"], .site 0)], []) ∧
+    ¬ DefsOK shadowCompDoc.defs :=
+  ⟨rfl, rfl, fun h => (h.2.2 ("cup", shadowCup) (by simp [shadowCompDoc])).1 "w" (by simp [shadowCup]) (by decide)⟩
+
 end ForgeLang

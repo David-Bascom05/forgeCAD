@@ -1,0 +1,95 @@
+# The unified-doc branch's grammar as of 2026-11-04 (working tree): main plus `component` blocks
+# only, `component` a keyword. Checked by LL1/UnifiedImpl.lean: LL(1), but it rejects
+# `part(component: "lid")` (design.md, drawings).
+# Forge's grammar, LL(1). Terminals are quoted, or NUM STR ID NL EOF (from the lexer: a NUM may
+# carry a unit, mm or deg, and a leading minus where no value precedes it; NL is a line break
+# outside ( ) and [ ]). %empty is the empty string. tests/grammar.rs computes FIRST and FOLLOW
+# and checks every choice is made on one token: zero conflicts, so the grammar is unambiguous.
+# The parser runs the table generated from this file (src/syntax/table.rs); a syntax change is
+# this file, `FG_REGEN=1 cargo test -p forge-lang --test grammar`, and the actions in syntax.rs.
+
+program     := seps stmts EOF ;
+block       := '{' seps stmts '}' ;
+stmts       := stmt stmtsrest | %empty ;
+stmtsrest   := sep seps stmts | %empty ;
+seps        := sep seps | %empty ;
+sep         := NL | ';' ;
+
+stmt        := 'shared' ID '=' expr
+             | 'param' path '=' expr
+             | 'fn' ID '(' fparams ')' block
+             | 'for' ID forvars 'in' expr block
+             | 'if' expr block elsepart
+             | 'return' expr
+             | 'expect' ID expargs expcmp expat
+             | 'sketch' ID '(' args ')' block
+             | 'path' ID '(' args ')' block
+             | 'component' ID '(' args ')' block
+             | expr assigntail ;
+assigntail  := '=' expr | %empty ;
+
+path        := ID keys pathrest ;
+pathrest    := '.' ID keys pathrest | %empty ;
+keys        := '[' key keyrest ']' | %empty ;
+key         := NUM | ID ;
+keyrest     := ',' key keyrest | %empty ;
+
+fparams     := fparam fparamrest | %empty ;
+fparamrest  := ',' fparams | %empty ;
+fparam      := ID fptype fpdefault ;
+fptype      := ':' ID | %empty ;
+fpdefault   := '=' expr | %empty ;
+forvars     := ',' ID forvars | %empty ;
+elsepart    := 'else' elsebody | %empty ;
+elsebody    := block | 'if' expr block elsepart ;
+
+expargs     := '(' exprs ')' | %empty ;
+exprs       := expr exprsrest | %empty ;
+exprsrest   := ',' exprs | %empty ;
+expcmp      := cmpop expr exptol | %empty ;
+cmpop       := '=' | '<' | '<=' | '>' | '>=' ;
+exptol      := '+-' unary pct | %empty ;
+pct         := '%' | %empty ;
+expat       := 'at' atpath '=' expr expmore | %empty ;
+expmore     := ',' atpath '=' expr expmore | %empty ;
+atpath      := ID keys pathrest ;
+
+args        := arg argsrest | %empty ;
+argsrest    := ',' args | %empty ;
+arg         := expr argkw | 'at' ':' expr ;
+argkw       := ':' expr | %empty ;
+
+expr        := or ifpart ;
+ifpart      := 'if' or 'else' expr | %empty ;
+or          := and orrest ;
+orrest      := 'or' and orrest | %empty ;
+and         := not andrest ;
+andrest     := 'and' not andrest | %empty ;
+not         := 'not' not | cmp ;
+cmp         := range cmprest ;
+cmprest     := relop range cmprest | %empty ;
+relop       := '==' | '!=' | '<' | '<=' | '>' | '>=' ;
+range       := add rangetail ;
+rangetail   := '..' add | '..=' add | %empty ;
+add         := mul addrest ;
+addrest     := '+' mul addrest | '-' mul addrest | %empty ;
+mul         := unary mulrest ;
+mulrest     := '*' unary mulrest | '/' unary mulrest | %empty ;
+unary       := '-' unary | power ;
+power       := postfix powtail ;
+powtail     := '^' unary | %empty ;
+postfix     := atom postrest ;
+postrest    := '(' args ')' postrest | '.' ID postrest | '[' expr ']' postrest | %empty ;
+atom        := NUM | STR | ID | 'true' | 'false'
+             | '(' tuple ')'
+             | '[' listbody ']'
+             | '{' seps mapbody '}' ;
+tuple       := expr tuplerest | %empty ;
+tuplerest   := ',' tuple | %empty ;
+listbody    := expr listtail | %empty ;
+listtail    := 'for' ID forvars 'in' or compif | ',' listmore | %empty ;
+listmore    := expr listrest | %empty ;
+listrest    := ',' listmore | %empty ;
+compif      := 'if' or | %empty ;
+mapbody     := ID ':' expr seps maprest | %empty ;
+maprest     := ',' seps mapbody | %empty ;

@@ -181,7 +181,7 @@ theorem link_inert {D : Defs} {body : List Stmt} :
       · exact hc.2.2 q (by simp [hq])
       · exact hc.2.1.2 q hq
     show execS n ((linkAll L D).withComp c C) σ ρ body = _
-    rw [(congr np n).s hc.1]
+    rw [(defs_congr np n).s hc.1]
     exact link_inert L (fun c' hc' => by
       have := h c' (by simp [hc'])
       exact ⟨this.1, this.2.1, fun p hp => this.2.2 p (by simp [hp])⟩) n σ ρ

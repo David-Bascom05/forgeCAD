@@ -1,0 +1,25 @@
+# Token strings of the unified-doc constructs (design.md), as the lexer gives them.
+# component cup(d: 80, h: 95) { body = extrude(s, h) }
+accept component_def: 'component' ID '(' ID ':' NUM ',' ID ':' NUM ')' '{' ID '=' ID '(' ID ',' ID ')' '}' EOF
+# component lid(at: pose(at: (0, 0, h)), ground: false) { }
+accept component_at: 'component' ID '(' 'at' ':' ID '(' 'at' ':' '(' NUM ',' NUM ',' ID ')' ')' ',' ID ':' 'false' ')' '{' '}' EOF
+# c1 = part(cup(d: small), at: pose(at: (0, 0, 0)))
+accept occurrence: ID '=' ID '(' ID '(' ID ':' ID ')' ',' 'at' ':' ID '(' 'at' ':' '(' NUM ',' NUM ',' NUM ')' ')' ')' EOF
+# c3 = part(cup, at: p)
+accept occurrence_bare: ID '=' ID '(' ID ',' 'at' ':' ID ')' EOF
+# t = use("dinner_table.fg") NL c4 = part(t.cup(d: 90))
+accept use_member: ID '=' ID '(' STR ')' NL ID '=' ID '(' ID '.' ID '(' ID ':' NUM ')' ')' EOF
+# mug = part("mug.fg", with: {d: 70})
+accept with_map: ID '=' ID '(' STR ',' ID ':' '{' ID ':' NUM '}' ')' EOF
+# hinge = revolute(c2.body.side(c2.s.o), c1.body.end)
+accept occ_refs: ID '=' ID '(' ID '.' ID '.' ID '(' ID '.' ID '.' ID ')' ',' ID '.' ID '.' ID ')' EOF
+# drawing dwg901(title: "BEARING FLANGE") { m = part() NL lid = part(component: "lid") }
+accept drawing_block: 'drawing' ID '(' ID ':' STR ')' '{' ID '=' ID '(' ')' NL ID '=' ID '(' 'component' ':' STR ')' '}' EOF
+# drawing NAME { }
+accept drawing_empty: 'drawing' ID '{' '}' EOF
+# a drawing file: header line, then statements
+accept drawing_header: 'drawing' NL ID '=' ID '(' STR ')' EOF
+# part("box.fg", component: "lid")
+accept component_kwarg: ID '=' ID '(' STR ',' 'component' ':' STR ')' EOF
+# a component block may not be an expression: x = component c() {} has no parse
+reject component_expr: ID '=' 'component' ID '(' ')' '{' '}' EOF
