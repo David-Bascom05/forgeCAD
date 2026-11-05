@@ -703,6 +703,8 @@ struct Sheet {
     /// Drawn by volume: the volume under the sheet aimed at, the penalty's stiffness and the
     /// pressure so far (an augmented Lagrangian).
     volume: Option<(f64, f64, f64)>,
+    /// The volume's gradient at the last energy's x (drawn by volume).
+    dv: std::cell::RefCell<Vec<Vec3>>,
     /// A dead load down on each node, MPa over its share (the sag's).
     gravity: f64,
     /// Each node's triangles.
@@ -821,20 +823,6 @@ impl Sheet {
                 }
             }
         }
-        if let Some((aim, stiff, lambda)) = self.volume {
-            let v = self.enclosed(x);
-            let d = v - aim;
-            e += lambda * d + 0.5 * stiff * d * d;
-            if let Some(g) = g.as_deref_mut() {
-                let p = lambda + stiff * d;
-                for t in &self.idx {
-                    let (a, b, c) = (x[t[0]], x[t[1]], x[t[2]]);
-                    g[t[0]] += b.cross(c) * (p / 6.0);
-                    g[t[1]] += c.cross(a) * (p / 6.0);
-                    g[t[2]] += a.cross(b) * (p / 6.0);
-                }
-            }
-        }
         for k in 0..x.len() {
             if let (true, Some(d)) = (self.slide[k], self.dir[k]) {
                 e += self.hold[k] * d.dot(x[k] - self.anchor[k]);
@@ -888,7 +876,28 @@ impl Sheet {
                 }
             }
         })?;
-        e += self.pool.bends(g.expect("a gradient"));
+        let g = g.expect("a gradient");
+        e += self.pool.bends(g);
+        // drawn by volume: the volume and its gradient in one pass, its multiplier after
+        if let Some((aim, stiff, lambda)) = self.volume {
+            let mut dv = self.dv.borrow_mut();
+            dv.clear();
+            dv.resize(x.len(), Vec3::ZERO);
+            let mut vol = 0.0;
+            for v in &self.idx {
+                let (a, b, c) = (x[v[0]], x[v[1]], x[v[2]]);
+                vol += a.dot(b.cross(c)) / 6.0;
+                dv[v[0]] += b.cross(c) * (1.0 / 6.0);
+                dv[v[1]] += c.cross(a) * (1.0 / 6.0);
+                dv[v[2]] += a.cross(b) * (1.0 / 6.0);
+            }
+            let d = vol - aim;
+            e += lambda * d + 0.5 * stiff * d * d;
+            let p = lambda + stiff * d;
+            for (gi, v) in g.iter_mut().zip(dv.iter()) {
+                *gi += *v * p;
+            }
+        }
         Some(e)
     }
 }
@@ -1399,6 +1408,7 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
         on_plug: vec![None; x.len()],
         plug_anchor: x.clone(),
         volume: None,
+        dv: Default::default(),
         gravity: 0.0,
         around: {
             let mut a = vec![vec![]; x.len()];
@@ -1597,6 +1607,9 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
         * field.h;
     let mut by_volume = pr.volume && !male;
     let (mut done, mut lambda) = (0, 0.0);
+    let flat = sheet.enclosed(&x);
+    // the air the first load step takes out, the volume's parts' size
+    let mut first: Option<f64> = None;
     if !by_volume {
         for k in 1..=loads {
             let p = pr.pressure * k as f64 / loads as f64;
@@ -1615,9 +1628,16 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
             release(&mut sheet, &tool, &x, 0.25 * spec.t);
             // a snap: most of the free sheet on the tool at once, or most of the cavity's air out
             // in one step (no equilibrium in between: past the limit point)
+            if k == 1 {
+                first = Some((v0 - sheet.enclosed(&x)).abs());
+            }
             let landed = before > 0 && 5 * (before - open(&sheet, &x).min(before)) > 3 * before;
             let swept = (v0 - sheet.enclosed(&x)).abs() > 0.4 * cavity;
-            if pr.snap_guard && !male && (landed || swept) {
+            // blown out: more air out than the cavity holds (a fold of the free sheet the
+            // pressure drives on with nothing to stop it, a membrane having no contact with
+            // itself); drawn by volume from the last good step it cannot
+            let blown = flat - sheet.enclosed(&x) > 1.05 * cavity;
+            if !male && (blown || (pr.snap_guard && (landed || swept))) {
                 (x, sheet.free, sheet.slide, sheet.dir, sheet.anchor) = kept;
                 by_volume = true;
                 lambda = pr.pressure * done as f64 / loads as f64;
@@ -1628,13 +1648,49 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
         }
     }
     if by_volume {
-        let parts = 2 * loads;
-        let each = cavity / parts as f64;
+        // the parts: the air the first load step takes out (a bubble's whole forming may be a
+        // small part of a deep cavity), at most a load step's share of the cavity
+        let first = first.unwrap_or_else(|| {
+            let kept = x.clone();
+            let p = pr.pressure / loads as f64;
+            sheet.hold = hold_at(p);
+            let (free, slide, dir, anchor) = (
+                sheet.free.clone(),
+                sheet.slide.clone(),
+                sheet.dir.clone(),
+                sheet.anchor.clone(),
+            );
+            let v0 = sheet.enclosed(&x);
+            let reach = reach_at(&x);
+            its += step(&mut sheet, &tool, &mut x, p, cap, tol, &reach, its_at(400));
+            let v = (v0 - sheet.enclosed(&x)).abs();
+            (x, sheet.free, sheet.slide, sheet.dir, sheet.anchor) = (kept, free, slide, dir, anchor);
+            v
+        });
+        let full = first.min(cavity / loads as f64).max(1e-6 * cavity);
+        // the parts of the cavity drawn grow while one round of the multiplier meets them and
+        // shrink when it takes many; the multiplier's start is the last two parts' trend
+        let mut each = 0.5 * full;
         let stiff = pr.pressure / (0.05 * each).max(1e-9);
         let base = sheet.enclosed(&x);
-        for k in 1..=parts {
-            let aim = base - each * k as f64;
+        let (mut drawn, mut trend) = (0.0, None::<(f64, f64)>);
+        while drawn < cavity - 1e-9 * cavity.max(1.0) {
+            each = each.min(cavity - drawn);
+            let aim = base - drawn - each;
+            let was = lambda;
+            if let Some((rise, over)) = trend {
+                lambda = (lambda + rise * each / over).max(0.0);
+            }
+            let kept = (
+                x.clone(),
+                sheet.free.clone(),
+                sheet.slide.clone(),
+                sheet.dir.clone(),
+                sheet.anchor.clone(),
+            );
+            let mut rounds = 0;
             for _ in 0..6 {
+                rounds += 1;
                 sheet.volume = Some((aim, stiff, lambda));
                 sheet.hold = hold_at(lambda.max(0.0));
                 let reach = reach_at(&x);
@@ -1642,14 +1698,27 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
                 release(&mut sheet, &tool, &x, 0.25 * spec.t);
                 let d = sheet.enclosed(&x) - aim;
                 lambda += stiff * d;
-                if d.abs() < 0.02 * each {
+                if d.abs() < 0.01 * full || lambda >= pr.pressure {
                     break;
                 }
             }
-            snap(&x, "vacuum", lambda.max(0.0));
+            // past the forming pressure: the part is not drawn so (the tool's corners would take
+            // more than the vacuum gives), and the pressure takes over from where it stood
             if lambda >= pr.pressure {
+                (x, sheet.free, sheet.slide, sheet.dir, sheet.anchor) = kept;
+                lambda = was;
                 break;
             }
+            drawn += each;
+            trend = Some((lambda - was, each));
+            snap(&x, "vacuum", lambda.max(0.0));
+            each = if rounds <= 1 {
+                (1.5 * each).min(full)
+            } else if rounds >= 4 {
+                (0.5 * each).max(full / 8.0)
+            } else {
+                each
+            };
         }
         sheet.volume = None;
         let from = (lambda / pr.pressure.max(1e-12)).clamp(0.0, 1.0);
