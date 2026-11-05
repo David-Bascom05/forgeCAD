@@ -771,8 +771,9 @@ fn hinges(idx: &[[usize; 3]], reference: &[Vec3], d: f64) -> Vec<Hinge> {
     out
 }
 
-/// A hinge's energy k theta^2 (theta the turn between its triangles' normals about the side), and
-/// what it adds to its corners' gradient (Bridson, Marino, Fedkiw 2003).
+/// A hinge's energy 2 k (1 - cos theta), k theta^2 for a small fold (theta the turn between its
+/// triangles' normals about the side), and what it adds to its corners' gradient (Bridson,
+/// Marino, Fedkiw 2003, times sin theta for theta).
 fn bend(h: &Hinge, x: &[Vec3]) -> Bend {
     let [a, b, c, d] = h.v.map(|i| x[i]);
     let e = b - a;
@@ -783,13 +784,16 @@ fn bend(h: &Hinge, x: &[Vec3]) -> Bend {
     if el < 1e-12 || q1 < 1e-24 || q2 < 1e-24 {
         return (0.0, [Vec3::ZERO; 4]);
     }
-    let (u1, u2) = (n1 * (1.0 / q1.sqrt()), n2 * (1.0 / q2.sqrt()));
-    let theta = dmath::atan2(u1.cross(u2).dot(e) / el, u1.dot(u2));
-    let w = 2.0 * h.k * theta;
+    // 2 k (1 - cos theta), k theta^2 for a small fold: its cosine and sine from the normals, no
+    // angle worked out
+    let inv = 1.0 / (q1 * q2).sqrt();
+    let cos = n1.dot(n2) * inv;
+    let sin = n1.cross(n2).dot(e) * (inv / el);
+    let w = 2.0 * h.k * sin;
     let (m1, m2) = (n1 * (1.0 / q1), n2 * (1.0 / q2));
     let ehat = e * (1.0 / el);
     (
-        h.k * theta * theta,
+        2.0 * h.k * (1.0 - cos),
         [
             (m1 * (b - c).dot(ehat) + m2 * (b - d).dot(ehat)) * w,
             -((m1 * (a - c).dot(ehat) + m2 * (a - d).dot(ehat)) * w),
@@ -1375,7 +1379,7 @@ mod hinge_tests {
         }
     }
 
-    /// Flat, no energy; a fold of angle theta, k theta^2.
+    /// Flat, no energy; a fold of angle theta, 2 k (1 - cos theta).
     #[test]
     fn a_hinge_holds_k_theta_squared() {
         let th: f64 = 0.4;
@@ -1391,6 +1395,8 @@ mod hinge_tests {
             k: 2.0,
         };
         assert!(hinge(&h, &flat, None).abs() < 1e-24);
-        assert!((hinge(&h, &x, None) - 2.0 * th * th).abs() < 1e-12);
+        // 2 k (1 - cos theta): k theta^2 less 1.3 % at 0.4
+        assert!((hinge(&h, &x, None) - 4.0 * (1.0 - dmath::cos(th))).abs() < 1e-12);
+        assert!((hinge(&h, &x, None) / (2.0 * th * th) - 1.0).abs() < 0.02);
     }
 }
