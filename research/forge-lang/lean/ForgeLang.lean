@@ -39,3 +39,4 @@ import ForgeLang.Counter.Qualify
 import ForgeLang.LL1.ImplUnifiedDoc
 import ForgeLang.Nested
 import ForgeLang.Counter.Nested
+import ForgeLang.OpMemo
