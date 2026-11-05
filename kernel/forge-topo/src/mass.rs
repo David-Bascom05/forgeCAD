@@ -95,6 +95,19 @@ pub fn shell_volume(body: &Body, shell: crate::body::ShellId) -> f64 {
         .sum()
 }
 
+/// One face's area, exactly as `mass` integrates it, without the rest of the body.
+pub fn face_area(body: &Body, f: FaceId) -> Result<f64, MassError> {
+    let n = body.vertices.len().max(1) as f64;
+    let c = body
+        .vertices
+        .iter()
+        .fold(Point3::ORIGIN, |a, v| a + (v.point - Point3::ORIGIN) * (1.0 / n));
+    let size = body.face_box(f).diagonal().max(1e-9);
+    face_integrals(body, f, c, size, REL)
+        .map(|(v, _)| v[10])
+        .map_err(|why| MassError { face: f, why })
+}
+
 pub fn mass_rel(body: &Body, rel: f64) -> Result<MassProps, MassError> {
     // moments about a point inside the part keep the cancellation small
     let n = body.vertices.len().max(1) as f64;

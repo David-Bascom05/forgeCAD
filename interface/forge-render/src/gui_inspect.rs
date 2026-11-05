@@ -51,6 +51,8 @@ enum Tgt {
 
 enum Job {
     Measure(u64, Vec<Tgt>),
+    /// Bodies meshed ahead, as Measure opens: the first pick's answer doesn't wait for them.
+    Warm(Vec<Arc<Body>>),
     Wall(u64, Arc<Body>, Frame),
     Physical(Arc<forge_lang::asm::AsmOut>),
 }
@@ -76,6 +78,8 @@ pub struct Inspector {
     asked: Option<(Vec<MPick>, bool)>,
     /// The origin item last chosen in the browser, taken once.
     origin_seen: Option<crate::origin::Item>,
+    /// The bodies were sent to be meshed ahead for this build.
+    warmed: bool,
     /// What the renderer was last given.
     cut: Option<crate::shell::inspect::Cut>,
 }
@@ -130,11 +134,22 @@ fn handle(
     out: &Sender<Answer>,
 ) -> Result<(), ()> {
     let a = match job {
+        Job::Warm(bodies) => {
+            for b in &bodies {
+                let _ = mesh(b);
+            }
+            return Ok(());
+        }
         Job::Measure(id, picks) => {
             let mut meshes = vec![];
             let mut err = None;
+            // one edge or point reads off the body alone; faces, bodies and pairs want the mesh
+            let wants = picks.len() > 1
+                || picks.iter().any(|p| matches!(p, Tgt::Whole(..) | Tgt::Ent((_, _, Ent::Face(_)))));
+            let bare = Arc::new(TriMesh::default());
             for p in &picks {
                 let m = match p {
+                    Tgt::Ent(..) | Tgt::Whole(..) if !wants => Some(bare.clone()),
                     Tgt::Ent((b, _, _)) | Tgt::Whole(b, _, _) => match mesh(b) {
                         Ok(m) => Some(m),
                         Err(e) => {
@@ -254,6 +269,7 @@ impl Gui {
         }
         self.inspector.data = Some(d);
         self.inspector.measured = None;
+        self.inspector.warmed = false;
     }
 
     /// A pick on placement `pl`: its body, pose and name.
@@ -456,6 +472,8 @@ impl Gui {
                 Answer::Physical(r) => {
                     s.physical = Some(*r);
                     s.physical_busy = false;
+                    // a body measured before its material was known: read again, with its mass
+                    self.inspector.measured = None;
                 }
                 _ => {}
             }
@@ -611,6 +629,14 @@ impl Gui {
         };
         let (picks, wall) = (m.picks.clone(), m.wall);
         let marked = m.marked();
+        if !self.inspector.warmed
+            && let Some(d) = &self.inspector.data
+        {
+            self.inspector.warmed = true;
+            // a part's body, or an assembly's first few: the rest as they're picked
+            let bodies: Vec<Arc<Body>> = d.bodies.iter().take(8).cloned().collect();
+            self.inspect_send(Job::Warm(bodies));
+        }
         if let Some(v) = &mut self.view
             && v.nav.selected != marked
         {
@@ -621,6 +647,15 @@ impl Gui {
             return;
         }
         self.inspector.measured = Some((picks.clone(), wall));
+        // an occurrence's mass is from the assembly's materials: worked out once, when asked
+        let s = &mut self.shell.inspect;
+        if picks.iter().any(|p| matches!(p, MPick::Whole(_)))
+            && self.inspector.data.as_ref().is_some_and(|d| d.asm.is_some())
+            && s.physical.is_none()
+            && !s.physical_busy
+        {
+            s.want_physical = true;
+        }
         let got: Vec<(Tgt, String)> = picks.iter().filter_map(|p| self.target_of(p)).collect();
         self.inspector.seq += 1;
         let id = self.inspector.seq;

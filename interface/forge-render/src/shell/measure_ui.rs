@@ -258,6 +258,8 @@ impl Shell {
                         labels.put(at, at + vec2(28.0, -28.0), text.join("\n"), "Area", line);
                     }
                 }
+                // two that touch: nothing between them to draw (the angle says it)
+                Shown::Line(a, b, _) if a.distance(*b) < 1e-9 => {}
                 Shown::Line(a, b, q) => {
                     let (Some(pa), Some(pb)) = (to_screen(*a), to_screen(*b)) else {
                         continue;

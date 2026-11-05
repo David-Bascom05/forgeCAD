@@ -591,9 +591,8 @@ pub fn read_one(p: &Pick) -> Reading {
             }
         }
         Ent::Face(f) => {
-            let area = forge_topo::mass::mass(b)
+            let area = forge_topo::mass::face_area(b, f)
                 .ok()
-                .and_then(|m| m.faces.iter().find(|x| x.0 == f).map(|x| x.1))
                 .unwrap_or_else(|| {
                     one(b, p.mesh, p.ent)
                         .into_iter()

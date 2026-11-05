@@ -248,7 +248,7 @@ fn value(text: &str, label: &str) -> f64 {
         .find(|l| l.starts_with(&format!("{label}: ")))
         .unwrap_or_else(|| panic!("no {label} in\n{text}"));
     line[label.len() + 2..]
-        .split(|c: char| c == ' ' || c == '°')
+        .split([' ', '°'])
         .next()
         .and_then(|v| v.parse().ok())
         .unwrap_or_else(|| panic!("{line}"))

@@ -761,6 +761,10 @@ impl Gui {
             if let Some(v) = &mut self.view {
                 v.clicks = v.nav.clicks;
                 v.clicked.clear();
+                // the part under the pointer is what's there, not an origin plane behind it
+                if v.nav.hover_hit().is_some() {
+                    self.shell.origin_hover = None;
+                }
             }
             return;
         }
