@@ -96,28 +96,19 @@ impl Grid {
         }
     }
 
+    /// The number of cells.
+    pub fn cells(&self) -> usize {
+        self.cells.len()
+    }
+
+    /// Cell `k` (row by row): its column, row and ids, in the order they went in.
+    pub fn cell_at(&self, k: usize) -> ((usize, usize), &[u32]) {
+        ((k % self.nx, k / self.nx), &self.cells[k])
+    }
+
     /// The cell holding `p`.
     pub fn cell(&self, p: Point2) -> (usize, usize) {
         (self.ix(p.x, self.nx, self.lo.x), self.ix(p.y, self.ny, self.lo.y))
-    }
-
-    /// Each id in every cell the box meets, with the cell (an id in several of them once per cell).
-    pub fn each_in_cells(&self, lo: Point2, hi: Point2, mut f: impl FnMut(u32, (usize, usize))) {
-        let (x0, x1) = (
-            self.ix(lo.x, self.nx, self.lo.x),
-            self.ix(hi.x, self.nx, self.lo.x),
-        );
-        let (y0, y1) = (
-            self.ix(lo.y, self.ny, self.lo.y),
-            self.ix(hi.y, self.ny, self.lo.y),
-        );
-        for y in y0..=y1 {
-            for x in x0..=x1 {
-                for &i in &self.cells[y * self.nx + x] {
-                    f(i, (x, y));
-                }
-            }
-        }
     }
 
     /// Whether any id in a cell the box meets is one `f` wants.

@@ -2686,7 +2686,9 @@ fn make_with(src: &str, dir: &Path, mut show: Option<&mut dyn FnMut(Shown)>) -> 
             _ => None,
         })
         .collect();
+    let _sp = forge_math::trace::span("drawing models");
     let mut loaded = crate::par::map(wanted.len(), |k| load(wanted[k].0, wanted[k].1, &ctx.dir)).into_iter();
+    drop(_sp);
     for item in &d.items {
         match &item.kind {
             ItemKind::Model {
@@ -2753,7 +2755,10 @@ fn make_with(src: &str, dir: &Path, mut show: Option<&mut dyn FnMut(Shown)>) -> 
             },
         ));
     }
+    let _sp = forge_math::trace::span("drawing views");
     ctx.ahead(&d.items);
+    drop(_sp);
+    let _sp = forge_math::trace::span("drawing sheets");
     let views_total = d
         .items
         .iter()

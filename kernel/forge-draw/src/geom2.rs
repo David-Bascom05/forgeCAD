@@ -288,6 +288,10 @@ impl Geom2 {
             let (mut a, mut b) = (a, b);
             for _ in 0..50 {
                 let m = 0.5 * (a + b);
+                // a and b side by side: every step after would be this one
+                if m == a || m == b {
+                    break;
+                }
                 if inside(m) == ia {
                     a = m;
                 } else {

@@ -1034,12 +1034,16 @@ fn push_curve(curves: &mut Vec<Curve3>, view: &View, inst: usize, source: Source
     for w in cuts.windows(2) {
         let p = path.sub(w[0], w[1]);
         let (a, b) = p.range();
-        let len: f64 = p
-            .ts(1e-3)
-            .windows(2)
-            .map(|x| view.project(p.at(x[0])).distance(view.project(p.at(x[1]))))
-            .sum();
-        if len <= 1e-9 * (1.0 + view.project(p.at(a)).to_vec().length()) {
+        // only a point on the view: its length summed till it passes the least that is drawn
+        let least = 1e-9 * (1.0 + view.project(p.at(a)).to_vec().length());
+        let mut len = 0.0;
+        for x in p.ts(1e-3).windows(2) {
+            len += view.project(p.at(x[0])).distance(view.project(p.at(x[1])));
+            if len > least {
+                break;
+            }
+        }
+        if len <= least {
             continue;
         }
         let _ = b;
@@ -1053,9 +1057,6 @@ fn push_curve(curves: &mut Vec<Curve3>, view: &View, inst: usize, source: Source
 }
 
 /// Every curve's split parameters: its ends and where it crosses another curve on the view.
-/// Segments a core takes at a time where each is little work.
-const CHUNK: usize = 1024;
-
 fn crossings(curves: &[Curve3], view: &View, chord: f64) -> Vec<Vec<f64>> {
     let samples: Vec<(Vec<f64>, Vec<Point2>)> = forge_math::par::map(curves.len(), |k| {
         let c = &curves[k];
@@ -1106,43 +1107,43 @@ fn crossings(curves: &[Curve3], view: &View, chord: f64) -> Vec<Vec<f64>> {
             [a.x.min(b.x), a.y.min(b.y), a.x.max(b.x), a.y.max(b.y)]
         })
         .collect();
-    // every crossing, found by chunks of segments on all cores and kept in segment order
-    let found: Vec<Vec<(u32, f64, u32, f64)>> = forge_math::par::map(segs.len().div_ceil(CHUNK), |n| {
+    // every crossing, each pair of segments taken once: in the cell holding the low corner of
+    // where their boxes meet, a run of cells to a core at a time (the splits are sorted below,
+    // so the order they are found in does not matter)
+    const CELLS: usize = 256;
+    let found: Vec<Vec<(u32, f64, u32, f64)>> = forge_math::par::map(grid.cells().div_ceil(CELLS), |n| {
         let mut got = Vec::new();
-        for k in n * CHUNK..((n + 1) * CHUNK).min(segs.len()) {
-            let (a, b) = seg(k);
-            let (lo, hi) = (
-                Point2::new(a.x.min(b.x), a.y.min(b.y)),
-                Point2::new(a.x.max(b.x), a.y.max(b.y)),
-            );
-            // each pair once: in the cell holding the low corner of where their boxes meet
-            grid.each_in_cells(lo, hi, |j, cell| {
-                let j = j as usize;
-                if j <= k {
-                    return;
+        for cell_k in n * CELLS..((n + 1) * CELLS).min(grid.cells()) {
+            let (cell, ids) = grid.cell_at(cell_k);
+            for (x, &k) in ids.iter().enumerate() {
+                let k = k as usize;
+                let bk = boxes[k];
+                let (a, b) = seg(k);
+                for &j in &ids[x + 1..] {
+                    let j = j as usize;
+                    let bj = boxes[j];
+                    if bj[2] < bk[0] || bj[0] > bk[2] || bj[3] < bk[1] || bj[1] > bk[3] {
+                        continue;
+                    }
+                    let ((ci, si), (cj, sj)) = (segs[k], segs[j]);
+                    if ci == cj && si.abs_diff(sj) <= 1 {
+                        continue;
+                    }
+                    let corner = Point2::new(bk[0].max(bj[0]), bk[1].max(bj[1]));
+                    if grid.cell(corner) != cell {
+                        continue;
+                    }
+                    let (c, d) = seg(j);
+                    let Some((x, y)) = seg_cross(a, b, c, d) else {
+                        continue;
+                    };
+                    let (ti, tj) = (&samples[ci as usize].0, &samples[cj as usize].0);
+                    let ta = ti[si as usize] + x * (ti[si as usize + 1] - ti[si as usize]);
+                    let tb = tj[sj as usize] + y * (tj[sj as usize + 1] - tj[sj as usize]);
+                    let (ta, tb) = refine(&curves[ci as usize].path, &curves[cj as usize].path, view, ta, tb);
+                    got.push((ci, ta, cj, tb));
                 }
-                let bj = boxes[j];
-                if bj[2] < lo.x || bj[0] > hi.x || bj[3] < lo.y || bj[1] > hi.y {
-                    return;
-                }
-                let ((ci, si), (cj, sj)) = (segs[k], segs[j]);
-                if ci == cj && si.abs_diff(sj) <= 1 {
-                    return;
-                }
-                let corner = Point2::new(lo.x.max(bj[0]), lo.y.max(bj[1]));
-                if grid.cell(corner) != cell {
-                    return;
-                }
-                let (c, d) = seg(j);
-                let Some((x, y)) = seg_cross(a, b, c, d) else {
-                    return;
-                };
-                let (ti, tj) = (&samples[ci as usize].0, &samples[cj as usize].0);
-                let ta = ti[si as usize] + x * (ti[si as usize + 1] - ti[si as usize]);
-                let tb = tj[sj as usize] + y * (tj[sj as usize + 1] - tj[sj as usize]);
-                let (ta, tb) = refine(&curves[ci as usize].path, &curves[cj as usize].path, view, ta, tb);
-                got.push((ci, ta, cj, tb));
-            });
+            }
         }
         got
     });
@@ -1307,6 +1308,10 @@ fn visibility(scene: &Scene, path: &Path3, a: f64, b: f64, last: &mut Option<u32
             let (mut x, mut y) = (ts[k - 1], ts[k]);
             for _ in 0..50 {
                 let m = 0.5 * (x + y);
+                // x and y side by side: every step after would be this one
+                if m == x || m == y {
+                    break;
+                }
                 if !scene.hidden_from(path.at(m), last) == vis[k - 1] {
                     x = m;
                 } else {
