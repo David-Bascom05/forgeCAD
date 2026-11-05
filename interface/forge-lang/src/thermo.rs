@@ -66,6 +66,8 @@ pub struct ThermoOut {
     /// The part's solids, by the id the stages give them: the mould's and the formed part's.
     pub mould_solid: usize,
     pub part_solid: usize,
+    /// The feature that made the shape's body (the mould is in its place).
+    pub shape: String,
 }
 
 /// The clamp's margin round the trim, each side, for the blank.
@@ -1375,6 +1377,7 @@ fn thermoform(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
                 modelled,
                 mould_solid,
                 part_solid: solid,
+                shape: shape.id.clone(),
             });
         }
     }

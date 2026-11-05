@@ -91,6 +91,22 @@ pub struct ThermoUi {
     pub converted: bool,
     /// What the host drew the part's mesh for last (`view_key`).
     pub drawn: Option<usize>,
+    /// The body chosen in the browser, and the one under the pointer there: the formed part, the
+    /// mould, the blank.
+    pub picked: Option<Body>,
+    pub hover: Option<Body>,
+    /// The blank's numbers, opened from its row.
+    pub blank_info: bool,
+    /// What the host marked in the view last (`picked`, `hover`).
+    pub marked: Option<(Option<Body>, Option<Body>)>,
+}
+
+/// One of a thermoform's bodies, as the browser has them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Body {
+    Part,
+    Mould,
+    Blank,
 }
 
 impl ThermoUi {
@@ -970,6 +986,10 @@ impl Shell {
         self.form_dialog(ctx, &t, &mut fg, &mut places);
         self.mould_dialog(ctx, &t, &mut fg, &mut places);
         self.check_window(ctx, &t, &mut fg, &mut places);
+        self.blank_window(ctx, &t, &mut fg, &mut places);
+        if fg.selected.is_some() {
+            fg.thermo.picked = None;
+        }
         self.thermo_issues(ctx, &t, &mut fg, &mut places);
         self.draft_legend(ctx, &t, &mut fg, &mut places);
         material_window(ctx, &t, &mut fg, &mut places);
@@ -1405,6 +1425,70 @@ impl Shell {
         }
     }
 
+    /// The blank: the sheet cut before forming, its size, gauge and mass.
+    fn blank_window(
+        &self,
+        ctx: &egui::Context,
+        t: &Theme,
+        fg: &mut FgPanel,
+        places: &mut Vec<(String, Rect)>,
+    ) {
+        if !fg.thermo.blank_info {
+            return;
+        }
+        let Some(r) = fg.thermos.first().cloned() else {
+            return;
+        };
+        let v = self.view_rect;
+        let w = 300.0;
+        let mut close = false;
+        let mut edit = false;
+        egui::Window::new("Blank")
+            .id(egui::Id::unique("thermo-blank"))
+            .title_bar(false)
+            .collapsible(false)
+            .resizable(false)
+            .default_pos(pos2(v.left() + 24.0, v.top() + 44.0))
+            .fixed_size(vec2(w, 0.0))
+            .frame(frame(t))
+            .constrain_to(super::dialog_area(ctx))
+            .show(ctx, |ui| {
+                ui.spacing_mut().item_spacing.y = 2.0;
+                close = head(
+                    ui,
+                    t,
+                    "rect",
+                    &format!("Blank · {}", r.id),
+                    w,
+                    places,
+                    "thermo:blank",
+                );
+                ui.add_space(4.0);
+                let (bw, bl) = r.blank;
+                fact(ui, t, "Size", &format!("{bw:.0} × {bl:.0} mm"), w, t.ink);
+                fact(ui, t, "Gauge", &format!("{:.2} mm", r.t), w, t.ink);
+                fact(ui, t, "Material", &r.material, w, t.ink);
+                let mass = r.density.map_or("no density".into(), |d| {
+                    format!("{:.1} g", bw * bl * r.t * d * 1e-6)
+                });
+                fact(ui, t, "Mass", &mass, w, t.ink);
+                ui.add_space(6.0);
+                ui.horizontal(|ui| {
+                    ui.add_space(14.0);
+                    edit = button(ui, t, "Edit Size…", false, "thermo:blank:edit".into(), places);
+                    close |= button(ui, t, "Close", false, "thermo:blank:done".into(), places);
+                });
+                ui.add_space(10.0);
+            });
+        if edit {
+            fg.thermo.form = None;
+            fg.thermo_command(Cmd::Trim);
+        }
+        if close || edit {
+            fg.thermo.blank_info = false;
+        }
+    }
+
     /// Check Forming: the one results window. The verdict, the wall's extremes, what colours the
     /// part, probes, the forming played, the two masses, the checks, the CSV.
     fn check_window(
@@ -1668,6 +1752,11 @@ impl Shell {
                     if button(ui, t, "Export CSV…", false, "thermo:check:csv".into(), places) {
                         u.want_export = Some((r.id.clone(), Export::ThicknessCsv));
                     }
+                    if !issues.is_empty()
+                        && button(ui, t, "Fixes…", false, "thermo:check:fixes".into(), places)
+                    {
+                        u.issues = !u.issues;
+                    }
                     if button(ui, t, "Close", false, "thermo:check:done".into(), places) {
                         close = true;
                     }
@@ -1718,14 +1807,7 @@ impl Shell {
                 frame(t).show(ui, |ui| {
                     ui.set_width(w);
                     ui.spacing_mut().item_spacing.y = 4.0;
-                    close = title(
-                        ui,
-                        t,
-                        "Issues · opened from the status bar",
-                        w,
-                        places,
-                        "thermo:issues",
-                    );
+                    close = title(ui, t, "Issues and their fixes", w, places, "thermo:issues");
                     egui::ScrollArea::vertical()
                         .max_height(v.height() - 120.0)
                         .show(ui, |ui| {
@@ -1932,66 +2014,6 @@ impl Shell {
             });
         if (min - r.draft_min).abs() > 1e-4 || fg.thermo.draft_min.is_some() {
             fg.thermo.draft_min = Some(min);
-        }
-    }
-
-    /// The status bar's word on a part with a thermoform: its issues, a click away.
-    pub(super) fn thermo_status(&mut self, ui: &mut Ui, right: f32, st: Rect) {
-        let Some(fg) = &mut self.fg else { return };
-        if fg.thermos.is_empty() {
-            return;
-        }
-        let ids: Vec<&String> = fg.thermos.iter().map(|r| &r.id).collect();
-        let (mut e, mut w) = (0, 0);
-        for i in fg
-            .issues
-            .iter()
-            .filter(|i| i.feature.as_ref().is_some_and(|f| ids.contains(&f)))
-        {
-            match i.severity {
-                Severity::Error => e += 1,
-                Severity::Lint => {}
-                _ => w += 1,
-            }
-        }
-        let text = format!(
-            "Thermoform: {} · {}",
-            super::fg::plural(e, "error"),
-            super::fg::plural(w, "warning")
-        );
-        let g = ui.fonts_mut(|f| f.layout_no_wrap(text, sans(12.0), Color32::WHITE));
-        let r = Rect::from_min_max(
-            pos2(right - g.size().x - 22.0, st.top() + 2.0),
-            pos2(right, st.bottom() - 2.0),
-        );
-        let resp = ui.interact(r, ui.scope_id().with("thermo-status"), Sense::click());
-        let p = ui.painter();
-        if resp.hovered() || fg.thermo.issues {
-            p.rect_filled(r, 3.0, Color32::from_white_alpha(28));
-        }
-        let ink = if e > 0 {
-            self.theme.error
-        } else if w > 0 {
-            super::fg::WARN
-        } else {
-            Color32::WHITE
-        };
-        super::icons::draw(
-            p,
-            pos2(r.left() + 3.0, r.center().y - 7.0),
-            14.0,
-            "warning",
-            1.5,
-            ink,
-        );
-        p.galley(
-            pos2(r.left() + 20.0, r.center().y - g.size().y * 0.5),
-            g,
-            Color32::WHITE,
-        );
-        self.places.push(("thermo:status".into(), r));
-        if resp.clicked() {
-            fg.thermo.issues = !fg.thermo.issues;
         }
     }
 }
@@ -2205,7 +2227,8 @@ pub fn feature_row(resp: &egui::Response, fg: &mut FgPanel, places: &mut Vec<(St
     });
 }
 
-/// Under a thermoform in the browser: the formed part, the mould and the blank, each with its eye.
+/// Under a thermoform in the browser: the formed part, the mould and the blank, each with its eye,
+/// clicked, hovered and opened as any row is. Returns the feature that made the body clicked.
 pub fn tree_children(
     ui: &mut Ui,
     t: &Theme,
@@ -2214,10 +2237,8 @@ pub fn tree_children(
     key: &str,
     x0: f32,
     places: &mut Vec<(String, Rect)>,
-) {
-    let Some(r) = fg.thermos.iter().find(|r| r.id == key).cloned() else {
-        return;
-    };
+) -> Option<String> {
+    let r = fg.thermos.iter().find(|r| r.id == key).cloned()?;
     let fact = |k: &str| {
         r.facts
             .iter()
@@ -2260,13 +2281,39 @@ pub fn tree_children(
             Cmd::Trim,
         ),
     ];
-    for (name, icon, note, shown, eye, edit) in rows {
+    let mut chosen = None;
+    if fg.thermo.hover.is_some() {
+        fg.thermo.hover = None;
+    }
+    for ((name, icon, note, shown, eye, edit), body) in
+        rows.into_iter().zip([Body::Part, Body::Mould, Body::Blank])
+    {
         let (rr, resp) = ui.allocate_exact_size(vec2(w, super::ROW_H), Sense::click());
         let p = ui.painter();
-        if resp.hovered() {
+        let on = u.picked == Some(body);
+        if on {
+            p.rect_filled(rr, 0.0, t.on);
+            p.rect_filled(Rect::from_min_size(rr.min, vec2(2.0, super::ROW_H)), 0.0, t.focus);
+        } else if resp.hovered() {
             p.rect_filled(rr, 0.0, t.hover);
         }
-        let ink = if shown { t.ink } else { t.ink2.gamma_multiply(0.6) };
+        if resp.hovered() {
+            fg.thermo.hover = Some(body);
+        }
+        // a click chooses the body: marked in the view, and what a tool waiting for one takes
+        if resp.clicked() {
+            fg.thermo.picked = if on { None } else { Some(body) };
+            fg.selected = None;
+            chosen = Some(match body {
+                Body::Mould => r.shape.clone(),
+                _ => r.id.clone(),
+            });
+        }
+        let ink = match (on, shown) {
+            (true, _) => t.on_ink,
+            (_, true) => t.ink,
+            _ => t.ink2.gamma_multiply(0.6),
+        };
         let x = rr.left() + x0 + 16.0;
         super::icons::draw(p, pos2(x + 12.0, rr.top() + 5.0), 16.0, icon, 1.5, ink);
         let g = p.layout_no_wrap(name.to_string(), sans(13.0), ink);
@@ -2286,7 +2333,12 @@ pub fn tree_children(
         places.push((format!("fg:row:thermo:{name}"), rr));
         if resp.double_clicked() {
             fg.thermo.form = None;
-            fg.thermo_command(edit);
+            fg.thermo.mould = None;
+            if body == Body::Blank {
+                fg.thermo.blank_info = true;
+            } else {
+                fg.thermo_command(edit);
+            }
         }
         resp.context_menu(|ui| {
             let mut item = |word: &str, c: Cmd, fg: &mut FgPanel| {
@@ -2322,10 +2374,17 @@ pub fn tree_children(
             } else if name == "Mould" {
                 item("Make Mould…", Cmd::Mould, fg);
             } else {
-                item("Edit Blank…", Cmd::Trim, fg);
+                item("Edit Blank Size…", Cmd::Trim, fg);
+                let b = ui.button("Blank…");
+                places.push(("fg:menu:Blank…".into(), b.rect));
+                if b.clicked() {
+                    fg.thermo.blank_info = true;
+                    ui.close();
+                }
             }
         });
     }
+    chosen
 }
 
 /// iProperties' word on a formed part: its mass as modelled and as simulated, side by side.

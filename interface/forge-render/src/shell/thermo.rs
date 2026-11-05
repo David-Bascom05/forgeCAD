@@ -44,6 +44,9 @@ pub struct ThermoRow {
     /// No wall under the limit and the sheet on the mould everywhere (None: no model).
     pub passes: Option<bool>,
     pub unformed: usize,
+    /// The blank, (W, L) mm, and the feature whose body the mould took the place of.
+    pub blank: (f64, f64),
+    pub shape: String,
 }
 
 /// A body's mass properties: volume mm3, mass kg (None: no density), centre mm, inertia about it

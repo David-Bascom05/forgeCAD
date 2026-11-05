@@ -2465,6 +2465,9 @@ impl Gui {
                     entity,
                     selected: false,
                 }));
+                if let (Some(p), Some(g)) = (self.shell.fg.as_ref(), self.fg_walls.first()) {
+                    m.extend(crate::thermo_view::marks(&p.thermo, g));
+                }
                 let over = self.shell.tree_hover.filter(|h| Some(*h) != self.shell.selected);
                 m.extend(
                     over.map_or(Vec::new(), |id| v.facts.faces_of(id))

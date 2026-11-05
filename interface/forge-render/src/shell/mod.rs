@@ -1316,9 +1316,6 @@ impl Shell {
                 mono(12.0),
                 Color32::WHITE,
             );
-            if !asm {
-                self.thermo_status(ui, r.left() - 12.0, st);
-            }
             return;
         }
         // the check's word only if it's taking long: a quick one shouldn't flicker

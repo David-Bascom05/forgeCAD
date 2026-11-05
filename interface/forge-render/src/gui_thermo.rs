@@ -81,6 +81,15 @@ impl Gui {
             self.fg_show();
         }
         let Some(p) = &mut self.shell.fg else { return };
+        // the body chosen or under the pointer in the browser changed: its marks drawn again
+        let marked = Some((p.thermo.picked, p.thermo.hover));
+        if p.thermo.marked != marked {
+            p.thermo.marked = marked;
+            if let Some(v) = &mut self.view {
+                v.dirty = true;
+            }
+        }
+        let Some(p) = &mut self.shell.fg else { return };
         if let Some((id, e)) = p.thermo.want_export.take() {
             let said = self.thermo_export(&id, e);
             if let Some(p) = &mut self.shell.fg {

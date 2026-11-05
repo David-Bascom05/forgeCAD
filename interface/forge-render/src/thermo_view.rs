@@ -215,6 +215,8 @@ pub fn view(o: &ThermoOut, spans: &[forge_lang::build::Span], draft_min: f32) ->
         density: o.density,
         passes: o.passes(),
         unformed: o.walls.as_ref().map_or(0, |w| w.unformed.len()),
+        blank: o.blank_size(),
+        shape: o.shape.clone(),
         ..ThermoRow::default()
     };
     let Some(w) = &o.walls else {
@@ -540,4 +542,32 @@ pub fn compose(full: &PartMesh, hide: &[&Span], extra: &[&Lod]) -> PartMesh {
         radius: full.radius,
         lods,
     }
+}
+
+/// The browser's chosen body marked in the view, and the one under the pointer there lit.
+pub fn marks(u: &crate::shell::thermo_ui::ThermoUi, g: &Gfx) -> Vec<crate::render::Mark> {
+    use crate::shell::thermo_ui::Body;
+    let faces = |b: Body| -> std::ops::Range<u32> {
+        match b {
+            Body::Part if !u.show.part => 0..0,
+            Body::Part if u.simulated && g.sim.is_some() => UNPICKED..UNPICKED + 3,
+            Body::Part => g.part_span.as_ref().map_or(0..0, |s| s.faces.clone()),
+            Body::Mould if !u.show.mould => 0..0,
+            Body::Mould => g.mould_span.as_ref().map_or(0..0, |s| s.faces.clone()),
+            Body::Blank if !u.show.blank => 0..0,
+            Body::Blank => UNPICKED + 8..UNPICKED + 14,
+        }
+    };
+    let over = u.hover.filter(|h| Some(*h) != u.picked);
+    [(u.picked, true), (over, false)]
+        .into_iter()
+        .filter_map(|(b, selected)| b.map(|b| (faces(b), selected)))
+        .flat_map(|(r, selected)| {
+            r.map(move |f| crate::render::Mark {
+                placement: 0,
+                entity: crate::render::Entity::Face(f),
+                selected,
+            })
+        })
+        .collect()
 }

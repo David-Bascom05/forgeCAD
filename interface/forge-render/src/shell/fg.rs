@@ -819,7 +819,7 @@ impl Shell {
                     if kind == Some("thermoform") {
                         super::thermo_ui::feature_row(&resp, &mut fg, &mut places, &row.key);
                         let x0 = x - r.left();
-                        super::thermo_ui::tree_children(
+                        let body = super::thermo_ui::tree_children(
                             ui,
                             &t,
                             &mut fg,
@@ -828,6 +828,10 @@ impl Shell {
                             x0,
                             &mut places,
                         );
+                        // a tool waiting for a body takes the one clicked
+                        if body.is_some() && fg.tool.is_some() {
+                            chosen = body;
+                        }
                     }
                     if row.group && !open {
                         hidden = Some(row.key.clone());
