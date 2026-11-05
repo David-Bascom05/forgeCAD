@@ -533,6 +533,11 @@ Closed in Lean:
 - `unqualified_shadow`, `qualify_string_collides`: unqualified module names silently take the
   first module; `file#comp` as one string collides unless `#` is barred from names.
 
+Rerun on unified-doc 27252794 and 72aa22c8: E1 to E8 and E10 fixed as the model says, E9 a
+typed `NotYet` for now; the parser and lexer diff unchanged and clean (long run on 27252794). The
+harness now gives component defaults their own sites (E6's fix: a default is its own handle).
+One new low-severity point: fg refuses an edit only on an error kind the document lacked.
+
 ### Still not mechanised
 
 - The Rust stack driver itself (tested, not proven), and the action checks that refuse some

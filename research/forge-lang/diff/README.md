@@ -25,7 +25,8 @@ caller name, `use` of a component), and cross-run cache keys (`key_needs_literal
 
 ## Mapping
 
-- A literal shared param (`shared w = 3`, `count(2)`) is a Lean site; a loose literal is `cst`.
+- A literal shared param (`shared w = 3`, `count(2)`) is a Lean site, and so is a component
+  param's default (`cup.d`, its own handle); a loose literal is `cst`.
 - A shared param whose value is an expression is a Lean `let`. fg names it in provenance
   (`driving: q`), the model names its sites: category `link`, not a finding (SetParam on it
   is InlineExpr then SetParam, both proven).

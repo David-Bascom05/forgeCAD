@@ -168,12 +168,17 @@ def lean_stmts(ss, sites):
 
 
 def doc_sites(doc):
-    """Site numbers: one per literal shared param, in order (1, 2, ...)."""
+    """Site numbers: one per literal shared param, in order (1, 2, ...), then one per component
+    param default (`cup.d`: a default literal is a site in the definitions, its own handle)."""
     sites, table = {}, {}
     for s in doc["body"]:
         if s[0] == "shared":
             sites[s[1]] = len(sites) + 1
             table[sites[s[1]]] = s[2]
+    for c, (ps, _) in doc["comps"].items():
+        for n, k in ps:
+            sites[f"{c}.{n}"] = len(sites) + 1
+            table[sites[f"{c}.{n}"]] = k
     return sites, table
 
 
@@ -184,7 +189,7 @@ def lean_doc(doc):
     procs = ", ".join(f"({lean_str(f)}, ({lean_str(x)}, [{', '.join(lean_stmts(ss, sites))}]))" for f, (x, ss) in doc["procs"].items())
     vis = "[" + ", ".join(lean_str(n) for n in shared) + "]"
     comps = ", ".join(
-        f"({lean_str(c)}, {{ params := [{', '.join(f'({lean_str(n)}, .cst {k})' for n, k in ps)}], body := [{', '.join(lean_stmts(ss, sites))}], vis := {vis} }})"
+        f"({lean_str(c)}, {{ params := [{', '.join(f'({lean_str(n)}, .lit {sites[c + "." + n]})' for n, k in ps)}], body := [{', '.join(lean_stmts(ss, sites))}], vis := {vis} }})"
         for c, (ps, ss) in doc["comps"].items())
     sig = " ".join(f"if s = {k} then {v} else" for k, v in table.items()) + " 0"
     return (f"{{ defs := {{ fns := [{fns}], procs := [{procs}], comps := [{comps}] }}, "
@@ -485,7 +490,8 @@ def lean_view(doc, res):
     nm = names_of(doc)
     loops = loop_kind(doc)
     occs = {s[1]: s[2] for s in doc["body"] if s[0] == "occ"}
-    feats, comps, per_occ = {}, set(), {}
+    feats, comps = {}, set()
+    per_occ = {o: set() for o in occs}
     for path, val, h, sites in res["feats"]:
         if h is not None:
             src = ("driving", nm[h])
@@ -585,6 +591,8 @@ def classify(doc, lv, rv):
                 if q in rv["used_by"] and not rv["used_by"][q] and q not in links:
                     out.append(("E2", f"{q} drives a component's value, used_by []"))
     for p, s in lv["structural"].items():
+        if "." in p and p not in rv["structural"]:
+            continue  # a component default: fg lists no params for those
         rs = rv["structural"].get(p)
         if rs != s:
             # E4: Rust logs the observed link param, not the sites under it
@@ -592,10 +600,10 @@ def classify(doc, lv, rv):
                 "over-structural" if rs and not s else "structural"
             if cat == "structural" and s and p in loop_counts(doc, links):
                 cat = "E8"
-            if cat == "over-structural" and p in comp_reads(doc, links):
-                cat = "E7"
-            elif cat == "over-structural" and p in list_reads(doc, links):
+            if cat == "over-structural" and p in list_reads(doc, links):
                 cat = "strict-list"
+            elif cat == "over-structural" and p in comp_reads(doc, links):
+                cat = "E7"
             out.append((cat, f"{p}: lean {s} rust {rs}"))
     return out
 
@@ -671,13 +679,18 @@ def list_reads(doc, links):
 
 
 def comp_reads(doc, links):
-    """Params a component body may observe: what it and the functions mention."""
+    """Params the body of a component that is never placed may observe: what it and the
+    functions it calls mention."""
     out = set()
-    for ps, ss in doc["comps"].values():
+    placed = {s[2] for s in stmts_walk(doc["body"]) if s[0] == "occ"}
+    for c, (ps, ss) in doc["comps"].items():
+        if c in placed:
+            continue
         for s in stmts_walk(ss):
             out |= mentions(s[2], links)
-    for x, e in doc["fns"].values():
-        out |= mentions(e, links)
+            for f, (x, e) in doc["fns"].items():
+                if f in str(s[2]):
+                    out |= mentions(e, links)
     return out
 
 
@@ -871,7 +884,10 @@ def compare(cases, lean, fg, tmp, note):
                     note(f"op-refused:{opn}" + (":strict-list" if strict else ""), ek, f"{o} rust {err} lean ok", fgtext)
                 continue
             if not le["ok"]:
-                note(f"op-applied:{opn}", ek, f"{o} lean {le['err']}", fgtext)
+                # fg refuses only a kind of error the document did not have; a strict list can
+                # give the document that kind already (strict-list)
+                strict = not rv["ok"] and rv.get("err") == "IndexOut" and le["err"] == "range"
+                note(f"op-applied:{opn}" + (":strict-list" if strict else ""), ek, f"{o} lean {le['err']}", fgtext)
                 continue
             new = open(p2).read()
             want = fg_doc(nd)
@@ -974,7 +990,7 @@ def run_all(cases, lean, a, exit_=True):
 # Differences that are filed findings (impl-proof-findings.md), or the mapping itself (`link`:
 # fg names a shared param whose value is an expression where the model names its sites;
 # `strict-list`: fg evaluates every element of a list, the model's `sel` only the chosen one).
-KNOWN = "link,strict-list,E1,E2,E3,E4,E5,E7,E8,comp_scope_differs_ok,default_no_capture,use_member_component"
+KNOWN = "link,strict-list,use_member_component"
 
 
 def main():
