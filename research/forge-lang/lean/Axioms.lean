@@ -115,3 +115,5 @@ open ForgeLang ForgeLang.Counter
 #print axioms ForgeLang.lift_occ
 #print axioms ForgeLang.occ_body_closed
 #print axioms ForgeLang.Counter.nested_delete_exact
+#print axioms ForgeLang.lift_all
+#print axioms ForgeLang.Counter.nested_loop_delete_exact

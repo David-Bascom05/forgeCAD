@@ -134,4 +134,20 @@ theorem nested_delete_exact :
       .ok [([.nm "box1", .nm "wall"], .site 2), ([.nm "box1", .nm "lid1", .nm "plate"], .site 1)] ∧
     (run 30 (boxDoc emptyLid)).map (·.1) = .ok [([.nm "box1", .nm "wall"], .site 2)] := ⟨rfl, rfl⟩
 
+/-- In a loop and twice (`NestedAll.lift_all`): `box` places `lid` in a `for` of two and once more;
+deleting `lid.plate` removes exactly the three `plate`s, at their paths. -/
+def loopBox : Comp :=
+  { params := [], body := [.forN "L" "k" (.cst 2) [.occ "lid1" "lid" []], .occ "lid2" "lid" [], .feat "wall" (.lit 2)], vis := [] }
+def loopDoc (lid : Comp) : Doc where
+  defs := { comps := [("lid", lid), ("box", loopBox)] }
+  body := [.occ "box1" "box" []]
+  σ := fun _ => 5
+
+theorem nested_loop_delete_exact :
+    (run 40 (loopDoc lidC)).map (·.1) =
+      .ok [([.nm "box1", .nm "L", .ix 0, .nm "lid1", .nm "plate"], .site 1),
+           ([.nm "box1", .nm "L", .ix 1, .nm "lid1", .nm "plate"], .site 1),
+           ([.nm "box1", .nm "lid2", .nm "plate"], .site 1), ([.nm "box1", .nm "wall"], .site 2)] ∧
+    (run 40 (loopDoc emptyLid)).map (·.1) = .ok [([.nm "box1", .nm "wall"], .site 2)] := ⟨rfl, rfl⟩
+
 end ForgeLang.Counter
