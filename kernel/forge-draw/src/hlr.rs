@@ -821,8 +821,10 @@ impl<'a> Scene<'a> {
 /// second copy of one, are left out.
 pub fn hlr(insts: &[Instance], view: &View, opts: &Options) -> Vec<Piece> {
     let scene = Scene::new(insts, *view);
-    let mut curves: Vec<Curve3> = Vec::new();
-    for (i, inst) in insts.iter().enumerate() {
+    // each part's curves on a core of its own, put together in part order
+    let per_inst: Vec<Vec<Curve3>> = forge_math::par::map(insts.len(), |i| {
+        let mut curves: Vec<Curve3> = Vec::new();
+        let inst = &insts[i];
         let body = inst.body;
         let d = inst.pose.vec_to_local(view.toward.get());
         for e in body.edge_ids() {
@@ -852,10 +854,12 @@ pub fn hlr(insts: &[Instance], view: &View, opts: &Options) -> Vec<Piece> {
                 );
             }
         }
-    }
+        curves
+    });
+    let curves: Vec<Curve3> = per_inst.into_iter().flatten().collect();
     let splits = crossings(&curves, view, opts.chord);
-    let mut pieces: Vec<(usize, Path3, bool)> = Vec::new();
-    for (k, c) in curves.iter().enumerate() {
+    let runs_of: Vec<Vec<(f64, f64, bool)>> = forge_math::par::map(curves.len(), |k| {
+        let c = &curves[k];
         let mut runs: Vec<(f64, f64, bool)> = Vec::new();
         let ts = &splits[k];
         for w in ts.windows(2) {
@@ -870,8 +874,12 @@ pub fn hlr(insts: &[Instance], view: &View, opts: &Options) -> Vec<Piece> {
                 }
             }
         }
+        runs
+    });
+    let mut pieces: Vec<(usize, Path3, bool)> = Vec::new();
+    for (k, runs) in runs_of.into_iter().enumerate() {
         for (a, b, vis) in runs {
-            pieces.push((k, c.path.sub(a, b), vis));
+            pieces.push((k, curves[k].path.sub(a, b), vis));
         }
     }
     let geoms: Vec<Geom2> = pieces
@@ -947,15 +955,16 @@ fn push_curve(curves: &mut Vec<Curve3>, view: &View, inst: usize, source: Source
 }
 
 /// Every curve's split parameters: its ends and where it crosses another curve on the view.
+/// Segments a core takes at a time where each is little work.
+const CHUNK: usize = 1024;
+
 fn crossings(curves: &[Curve3], view: &View, chord: f64) -> Vec<Vec<f64>> {
-    let samples: Vec<(Vec<f64>, Vec<Point2>)> = curves
-        .iter()
-        .map(|c| {
-            let ts = c.path.ts(chord);
-            let ps = ts.iter().map(|&t| view.project(c.path.at(t))).collect();
-            (ts, ps)
-        })
-        .collect();
+    let samples: Vec<(Vec<f64>, Vec<Point2>)> = forge_math::par::map(curves.len(), |k| {
+        let c = &curves[k];
+        let ts = c.path.ts(chord);
+        let ps = ts.iter().map(|&t| view.project(c.path.at(t))).collect();
+        (ts, ps)
+    });
     let mut segs: Vec<(u32, u32)> = Vec::new();
     let mut lo = Point2::new(f64::INFINITY, f64::INFINITY);
     let mut hi = Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY);
@@ -992,40 +1001,51 @@ fn crossings(curves: &[Curve3], view: &View, chord: f64) -> Vec<Vec<f64>> {
             Point2::new(a.x.max(b.x), a.y.max(b.y)),
         );
     }
-    let mut near = Vec::new();
-    for k in 0..segs.len() {
-        let (a, b) = seg(k);
-        grid.near(
-            Point2::new(a.x.min(b.x), a.y.min(b.y)),
-            Point2::new(a.x.max(b.x), a.y.max(b.y)),
-            &mut near,
-        );
-        for &j in &near {
-            let j = j as usize;
-            if j <= k {
-                continue;
+    // every crossing, found by chunks of segments on all cores and kept in segment order
+    let found: Vec<Vec<(u32, f64, u32, f64)>> = forge_math::par::map(segs.len().div_ceil(CHUNK), |n| {
+        let mut near = Vec::new();
+        let mut got = Vec::new();
+        for k in n * CHUNK..((n + 1) * CHUNK).min(segs.len()) {
+            let (a, b) = seg(k);
+            grid.near(
+                Point2::new(a.x.min(b.x), a.y.min(b.y)),
+                Point2::new(a.x.max(b.x), a.y.max(b.y)),
+                &mut near,
+            );
+            for &j in &near {
+                let j = j as usize;
+                if j <= k {
+                    continue;
+                }
+                let ((ci, si), (cj, sj)) = (segs[k], segs[j]);
+                if ci == cj && si.abs_diff(sj) <= 1 {
+                    continue;
+                }
+                let (c, d) = seg(j);
+                let Some((x, y)) = seg_cross(a, b, c, d) else {
+                    continue;
+                };
+                let (ti, tj) = (&samples[ci as usize].0, &samples[cj as usize].0);
+                let ta = ti[si as usize] + x * (ti[si as usize + 1] - ti[si as usize]);
+                let tb = tj[sj as usize] + y * (tj[sj as usize + 1] - tj[sj as usize]);
+                let (ta, tb) = refine(&curves[ci as usize].path, &curves[cj as usize].path, view, ta, tb);
+                got.push((ci, ta, cj, tb));
             }
-            let ((ci, si), (cj, sj)) = (segs[k], segs[j]);
-            if ci == cj && si.abs_diff(sj) <= 1 {
-                continue;
-            }
-            let (c, d) = seg(j);
-            let Some((x, y)) = seg_cross(a, b, c, d) else {
-                continue;
-            };
-            let (ti, tj) = (&samples[ci as usize].0, &samples[cj as usize].0);
-            let ta = ti[si as usize] + x * (ti[si as usize + 1] - ti[si as usize]);
-            let tb = tj[sj as usize] + y * (tj[sj as usize + 1] - tj[sj as usize]);
-            let (ta, tb) = refine(&curves[ci as usize].path, &curves[cj as usize].path, view, ta, tb);
-            out[ci as usize].push(ta);
-            out[cj as usize].push(tb);
         }
+        got
+    });
+    for (ci, ta, cj, tb) in found.into_iter().flatten() {
+        out[ci as usize].push(ta);
+        out[cj as usize].push(tb);
     }
     // where a curve ends on another (an outline ending where it touches a rim, which it meets
     // tangentially, so no crossing shows it): split the other there
     let size = (hi.x - lo.x).max(hi.y - lo.y).max(1.0);
     let touch = 1e-7 * size + 1e-7;
-    for (c, (_, ps)) in samples.iter().enumerate() {
+    let ends: Vec<Vec<(u32, f64)>> = forge_math::par::map(samples.len(), |c| {
+        let ps = &samples[c].1;
+        let mut near = Vec::new();
+        let mut got = Vec::new();
         for e in [ps[0], ps[ps.len() - 1]] {
             let r = chord + touch;
             grid.near(
@@ -1049,10 +1069,14 @@ fn crossings(curves: &[Curve3], view: &View, chord: f64) -> Vec<Vec<f64>> {
                 let path = &curves[ck as usize].path;
                 let t = nearest_on_view(path, view, e, guess);
                 if view.project(path.at(t)).distance(e) <= touch {
-                    out[ck as usize].push(t);
+                    got.push((ck, t));
                 }
             }
         }
+        got
+    });
+    for (ck, t) in ends.into_iter().flatten() {
+        out[ck as usize].push(t);
     }
     for (k, ts) in out.iter_mut().enumerate() {
         let (a, b) = curves[k].path.range();
@@ -1177,17 +1201,15 @@ fn visibility(scene: &Scene, path: &Path3, a: f64, b: f64) -> Vec<(f64, f64, boo
 /// curve) are taken out. Pieces too short to draw cover nothing.
 fn unique(geoms: &[Geom2], curve: &[usize], order: &[usize], chord: f64) -> Vec<Vec<Geom2>> {
     let fine = chord.min(1e-3);
-    let samples: Vec<(Vec<f64>, Vec<Point2>)> = geoms
-        .iter()
-        .map(|g| {
-            if g.length() <= 1e-6 {
-                return (Vec::new(), Vec::new());
-            }
-            let ts = g.params(fine);
-            let ps = ts.iter().map(|&t| g.at(t)).collect();
-            (ts, ps)
-        })
-        .collect();
+    let samples: Vec<(Vec<f64>, Vec<Point2>)> = forge_math::par::map(geoms.len(), |k| {
+        let g = &geoms[k];
+        if g.length() <= 1e-6 {
+            return (Vec::new(), Vec::new());
+        }
+        let ts = g.params(fine);
+        let ps = ts.iter().map(|&t| g.at(t)).collect();
+        (ts, ps)
+    });
     let mut lo = Point2::new(f64::INFINITY, f64::INFINITY);
     let mut hi = Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY);
     let mut segs: Vec<(u32, u32)> = Vec::new();
@@ -1200,9 +1222,8 @@ fn unique(geoms: &[Geom2], curve: &[usize], order: &[usize], chord: f64) -> Vec<
             }
         }
     }
-    let mut out: Vec<Vec<Geom2>> = vec![Vec::new(); geoms.len()];
     if segs.is_empty() {
-        return out;
+        return vec![Vec::new(); geoms.len()];
     }
     let size = (hi.x - lo.x).max(hi.y - lo.y).max(1.0);
     // how near a curve must lie to another to be the same line on the sheet
@@ -1231,11 +1252,12 @@ fn unique(geoms: &[Geom2], curve: &[usize], order: &[usize], chord: f64) -> Vec<
             }
         }
     }
-    let mut near = Vec::new();
-    for (k, geom) in geoms.iter().enumerate() {
+    forge_math::par::map(geoms.len(), |k| {
+        let geom = &geoms[k];
         if samples[k].0.is_empty() {
-            continue;
+            return Vec::new();
         }
+        let mut near = Vec::new();
         let (ts, ps) = &samples[k];
         let mut also = Vec::new();
         for (i, w) in ps.windows(2).enumerate() {
@@ -1287,11 +1309,9 @@ fn unique(geoms: &[Geom2], curve: &[usize], order: &[usize], chord: f64) -> Vec<
                     && other.tangent(at).is_some_and(|d| d.cross(dir).abs() <= 0.05)
             })
         };
-        out[k] = geom
-            .runs_where_also(chord, &also, |t| !covered(t))
+        geom.runs_where_also(chord, &also, |t| !covered(t))
             .into_iter()
             .filter(|g| g.length() > 10.0 * tol)
-            .collect();
-    }
-    out
+            .collect()
+    })
 }

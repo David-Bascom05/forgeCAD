@@ -53,12 +53,84 @@ fn print_json(j: &Json) {
     println!("{s}");
 }
 
+/// What a run prints and writes: made whole first, so a run kept on disk (`store`) gives back
+/// the same, byte for byte.
+#[derive(Default)]
+struct Output {
+    stdout: String,
+    stderr: String,
+    /// Each file, and whether failing to write it fails the run (a STEP's).
+    files: Vec<(String, Vec<u8>, bool)>,
+    code: u8,
+}
+
+impl Output {
+    fn err(&mut self, line: impl std::fmt::Display) {
+        self.stderr.push_str(&format!("{line}\n"));
+    }
+
+    fn json(&mut self, j: &Json) {
+        j.write(&mut self.stdout);
+        self.stdout.push('\n');
+    }
+
+    fn write(&mut self, path: String, bytes: impl Into<Vec<u8>>) {
+        self.files.push((path, bytes.into(), false));
+    }
+
+    /// Writes its files and prints what it printed, as the run would have.
+    fn emit(self) -> ExitCode {
+        let mut stderr = self.stderr;
+        let mut code = self.code;
+        for (path, bytes, must) in &self.files {
+            if let Err(e) = std::fs::write(path, bytes) {
+                stderr.push_str(&format!("{path}: {e}\n"));
+                if *must {
+                    code = code.max(1);
+                }
+            }
+        }
+        eprint!("{stderr}");
+        print!("{}", self.stdout);
+        ExitCode::from(code)
+    }
+
+    fn save(&self, o: &mut forge_lang::store::Out) {
+        o.str(&self.stdout);
+        o.str(&self.stderr);
+        o.u64(self.files.len() as u64);
+        for (p, b, must) in &self.files {
+            o.str(p);
+            o.bytes(b);
+            o.bool(*must);
+        }
+        o.u64(self.code as u64);
+    }
+
+    fn load(i: &mut forge_lang::store::In) -> Option<Output> {
+        let stdout = i.str()?.to_string();
+        let stderr = i.str()?.to_string();
+        let n = i.count(16)?;
+        let mut files = Vec::with_capacity(n);
+        for _ in 0..n {
+            files.push((i.str()?.to_string(), i.bytes()?.to_vec(), i.bool()?));
+        }
+        let code = u8::try_from(i.u64()?).ok()?;
+        i.done().then_some(Output {
+            stdout,
+            stderr,
+            files,
+            code,
+        })
+    }
+}
+
 /// Each sheet's flat pattern as DXF: OUT itself for one sheet, OUT with `-<id>` before its
 /// extension for each of several.
-fn write_dxf(run: &forge_lang::Run, out: &str) {
+fn write_dxf(run: &forge_lang::Run, out: &str, o: &mut Output) {
     let many = run.sheets.len() > 1;
     if run.sheets.is_empty() {
-        eprintln!("--dxf: the part has no sheet");
+        o.err("--dxf: the part has no sheet");
     }
     for s in &run.sheets {
         let path = if many {
@@ -70,12 +142,8 @@ fn write_dxf(run: &forge_lang::Run, out: &str) {
             out.to_string()
         };
         match s.dxf() {
-            Ok(text) => {
-                if let Err(e) = std::fs::write(&path, text) {
-                    eprintln!("{path}: {e}");
-                }
-            }
-            Err(e) => eprintln!("--dxf {}: the sheet is refused: {e:?}", s.id),
+            Ok(text) => o.write(path, text),
+            Err(e) => o.err(format!("--dxf {}: the sheet is refused: {e:?}", s.id)),
         }
     }
 }
@@ -88,8 +156,8 @@ fn stem(file: &str) -> String {
 }
 
 /// The part's STEP (folded) in OUT and each flat pattern beside it (`OUT-<unfold>.step`); an
-/// assembly's structure in OUT. False when nothing could be written.
-fn write_step(run: &forge_lang::Run, out: &str, name: &str) -> bool {
+/// assembly's structure in OUT. False when nothing could be made.
+fn write_step(run: &forge_lang::Run, out: &str, name: &str, o: &mut Output) -> bool {
     match forge_lang::export::step(run, name) {
         Ok(files) => {
             for f in files {
@@ -98,16 +166,13 @@ fn write_step(run: &forge_lang::Run, out: &str, name: &str) -> bool {
                     (false, Some((stem, ext))) => format!("{stem}{}.{ext}", f.suffix),
                     (false, None) => format!("{out}{}", f.suffix),
                 };
-                if let Err(e) = std::fs::write(&path, f.text) {
-                    eprintln!("{path}: {e}");
-                    return false;
-                }
-                eprintln!("--step: {path}, {} solids", f.solids);
+                o.err(format!("--step: {path}, {} solids", f.solids));
+                o.files.push((path, f.text.into(), true));
             }
             true
         }
         Err(e) => {
-            eprintln!("--step: {e}");
+            o.err(format!("--step: {e}"));
             false
         }
     }
@@ -115,13 +180,11 @@ fn write_step(run: &forge_lang::Run, out: &str, name: &str) -> bool {
 
 /// A drawing: made, its sheets written as PDF (all sheets), SVG and DXF (one per sheet: OUT with
 /// `-<n>` before the extension when there are several), its report printed.
-fn run_drawing(file: &str, src: &str, args: &[String]) -> ExitCode {
+fn run_drawing(file: &str, src: &str, args: &[String], o: &mut Output) {
     let dir = dir_of(file).unwrap_or_default();
     let d = forge_lang::drawing::regen::make(src, &dir);
-    if let Some(out) = opt(args, "--pdf")
-        && let Err(e) = std::fs::write(out, forge_draw::pdf::pdf(&d.pages))
-    {
-        eprintln!("{out}: {e}");
+    if let Some(out) = opt(args, "--pdf") {
+        o.write(out.to_string(), forge_draw::pdf::pdf(&d.pages));
     }
     let per_sheet = |out: &str, k: usize| match (d.pages.len() > 1, out.rsplit_once('.')) {
         (false, _) => out.to_string(),
@@ -129,30 +192,22 @@ fn run_drawing(file: &str, src: &str, args: &[String]) -> ExitCode {
         (true, None) => format!("{out}-{}", k + 1),
     };
     for (k, p) in d.pages.iter().enumerate() {
-        if let Some(out) = opt(args, "--svg")
-            && let Err(e) = std::fs::write(per_sheet(out, k), forge_draw::svg::svg(p))
-        {
-            eprintln!("{out}: {e}");
+        if let Some(out) = opt(args, "--svg") {
+            o.write(per_sheet(out, k), forge_draw::svg::svg(p));
         }
-        if let Some(out) = opt(args, "--dxf")
-            && let Err(e) = std::fs::write(per_sheet(out, k), forge_draw::dxf::dxf(p))
-        {
-            eprintln!("{out}: {e}");
+        if let Some(out) = opt(args, "--dxf") {
+            o.write(per_sheet(out, k), forge_draw::dxf::dxf(p));
         }
     }
     if let Some(view) = opt(args, "--refs") {
         match forge_lang::drawing::regen::refs(&d, view) {
-            Some(j) => print_json(&j),
-            None => eprintln!("no view {view}"),
+            Some(j) => o.json(&j),
+            None => o.err(format!("no view {view}")),
         }
     } else {
-        print_json(&forge_lang::drawing::regen::json(&d, src));
+        o.json(&forge_lang::drawing::regen::json(&d, src));
     }
-    if d.ok() {
-        ExitCode::SUCCESS
-    } else {
-        ExitCode::from(1)
-    }
+    o.code = if d.ok() { 0 } else { 1 };
 }
 
 fn run_file(file: &str, args: &[String], build: bool) -> ExitCode {
@@ -163,8 +218,33 @@ fn run_file(file: &str, args: &[String], build: bool) -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    if forge_lang::drawing::is_drawing(&src) {
-        return run_drawing(file, &src, args);
+    if !build {
+        let mut o = Output::default();
+        run_src(file, &src, args, false, &mut o);
+        return o.emit();
+    }
+    // the same file, text, arguments and everything it read: the last run's output
+    let place = std::fs::canonicalize(file).map_or_else(|_| file.to_string(), |p| p.to_string_lossy().into());
+    let key = forge_lang::kept::run_key(&place, &src, args);
+    if let Some(o) =
+        forge_lang::kept::fetch("fg-run", key).and_then(|b| Output::load(&mut forge_lang::store::In(&b)))
+    {
+        return o.emit();
+    }
+    let (o, from) = forge_lang::kept::watched(std::path::Path::new(&place), &src, || {
+        let mut o = Output::default();
+        run_src(file, &src, args, true, &mut o);
+        o
+    });
+    let mut e = forge_lang::store::Out::default();
+    o.save(&mut e);
+    forge_lang::kept::keep("fg-run", key, &from, &e.0);
+    o.emit()
+}
+
+fn run_src(file: &str, src: &str, args: &[String], build: bool, o: &mut Output) {
+    if forge_lang::drawing::is_drawing(src) {
+        return run_drawing(file, src, args, o);
     }
     let opts = Options {
         build,
@@ -173,37 +253,29 @@ fn run_file(file: &str, args: &[String], build: bool) -> ExitCode {
         step: opt(args, "--step").map(|_| stem(file)),
         ..Options::default()
     };
-    let (run, _) = forge_lang::run(&src, opts, Cache::default());
+    let (run, _) = forge_lang::run(src, opts, Cache::default());
     let posed = run.asm.as_ref().and_then(forge_lang::asm::compound);
     if let (Some(out), Some(body)) = (opt(args, "--render"), run.body.as_ref().or(posed.as_ref())) {
         let view = opt(args, "--view").unwrap_or("iso");
         let px = opt(args, "--px").and_then(|p| p.parse().ok()).unwrap_or(600);
         match forge_lang::render(body, view, px) {
-            Ok(png) => {
-                if let Err(e) = std::fs::write(out, png) {
-                    eprintln!("{out}: {e}");
-                }
-            }
-            Err(e) => eprintln!("render: {e}"),
+            Ok(png) => o.write(out.to_string(), png),
+            Err(e) => o.err(format!("render: {e}")),
         }
     }
     if let Some(out) = opt(args, "--dxf") {
-        write_dxf(&run, out);
+        write_dxf(&run, out, o);
     }
     let mut wrote = true;
     if let Some(out) = opt(args, "--step") {
-        wrote = write_step(&run, out, &stem(file));
+        wrote = write_step(&run, out, &stem(file), o);
     }
     if flag(args, "--json") {
-        print_json(&report::json(&run, &src));
+        o.json(&report::json(&run, src));
     } else {
-        print!("{}", report::text(&run, &src));
+        o.stdout.push_str(&report::text(&run, src));
     }
-    if run.ok() && wrote {
-        ExitCode::SUCCESS
-    } else {
-        ExitCode::from(1)
-    }
+    o.code = if run.ok() && wrote { 0 } else { 1 };
 }
 
 fn view_file(file: &str, args: &[String]) -> ExitCode {

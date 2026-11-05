@@ -182,7 +182,9 @@ fn describe(path: &Path, file: &str) -> (String, String) {
     let stem = Path::new(file)
         .file_stem()
         .map_or_else(|| file.to_string(), |s| s.to_string_lossy().into_owned());
-    let Ok(src) = std::fs::read_to_string(path) else {
+    let src = std::fs::read_to_string(path);
+    crate::deps::read(path, src.as_ref().ok().map(|s| s.as_bytes()));
+    let Ok(src) = src else {
         return (stem, String::new());
     };
     let first = src
@@ -210,10 +212,15 @@ fn describe(path: &Path, file: &str) -> (String, String) {
 
 fn load(id: &str, file: &str, dir: &Path) -> Result<ModelOut, String> {
     let path = dir.join(file);
-    let src = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    let src = std::fs::read_to_string(&path);
+    crate::deps::read(&path, src.as_ref().ok().map(|s| s.as_bytes()));
+    let src = src.map_err(|e| e.to_string())?;
+    // a drawing shows the model's shape: its overlap check and expects are its own report's
     let opts = crate::Options {
         build: true,
         render: true,
+        overlap: false,
+        expects: false,
         dir: path.parent().map(Path::to_path_buf),
         ..crate::Options::default()
     };
@@ -2312,6 +2319,16 @@ pub fn make(src: &str, dir: &Path) -> Drawing {
         errors: d.errors.clone(),
         letters: 0,
     };
+    // the models, each built on its own cores
+    let wanted: Vec<(&str, &str)> = d
+        .items
+        .iter()
+        .filter_map(|i| match &i.kind {
+            ItemKind::Model { path, .. } => Some((i.id.as_str(), path.as_str())),
+            _ => None,
+        })
+        .collect();
+    let mut loaded = crate::par::map(wanted.len(), |k| load(wanted[k].0, wanted[k].1, &ctx.dir)).into_iter();
     for item in &d.items {
         match &item.kind {
             ItemKind::Model {
@@ -2319,12 +2336,13 @@ pub fn make(src: &str, dir: &Path) -> Drawing {
                 material,
                 density,
                 ..
-            } => match load(&item.id, path, &ctx.dir) {
+            } => match loaded.next().expect("one load per model") {
                 Ok(m) => {
                     // the part's material: the drawing's name for it, else its sheet's
                     let name = material
                         .clone()
                         .or_else(|| m.sheet.as_ref().map(|s| s.0.clone()).filter(|n| !n.is_empty()));
+                    crate::deps::materials(Some(&ctx.dir));
                     let libs = forge_material::Libraries::cached(Some(&ctx.dir));
                     let found = name
                         .as_deref()

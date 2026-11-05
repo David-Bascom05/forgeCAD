@@ -243,7 +243,7 @@ fn sketch_entities_kept(prog: &[Stmt], k: usize, id: &str, new: &[Stmt]) -> R<()
 }
 
 /// The pre-checks every op makes, before it touches text or tree.
-fn precheck(src: &str, prog: &[Stmt], op: &Op) -> R<()> {
+fn precheck(prog: &[Stmt], op: &Op, dim_of: &dyn Fn(&ParamKey) -> Option<Dim>) -> R<()> {
     let taken = |key: ParamKey| -> R<()> {
         if param_stmt(prog, &key).is_some() {
             return Err(Error::NameTaken {
@@ -272,7 +272,7 @@ fn precheck(src: &str, prog: &[Stmt], op: &Op) -> R<()> {
                     value: value.value,
                 });
             }
-            match param_dim(src, param) {
+            match dim_of(param) {
                 Some(d) if d != value.dim && d != Dim::Any => Err(Error::EditDim {
                     param: param.clone(),
                     want: d,
@@ -396,7 +396,7 @@ fn splice(src: &str, lo: u32, hi: u32, text: &str) -> String {
 }
 
 /// The dimension a param's definition gives, from a check of the document.
-fn param_dim(src: &str, key: &ParamKey) -> Option<Dim> {
+pub(crate) fn param_dim(src: &str, key: &ParamKey) -> Option<Dim> {
     let opts = crate::Options {
         build: false,
         ..crate::Options::default()
@@ -437,6 +437,11 @@ fn rename(src: &str, from: &str, to: &str) -> R<String> {
 }
 
 pub fn apply(src: &str, op: &Op) -> R<String> {
+    apply_with(src, op, &|k| param_dim(src, k))
+}
+
+/// `apply`, a param's dimension in `src` asked of `dim_of` (one who already evaluated `src`).
+pub(crate) fn apply_with(src: &str, op: &Op, dim_of: &dyn Fn(&ParamKey) -> Option<Dim>) -> R<String> {
     // a reserved word used as a name: the text does not parse, so the rename is on its tokens
     if let Op::Rename { from, to } = op
         && syntax::RESERVED.contains(&from.as_str())
@@ -444,14 +449,14 @@ pub fn apply(src: &str, op: &Op) -> R<String> {
         return rename(src, from, to);
     }
     let prog = syntax::parse(src)?;
-    precheck(src, &prog, op)?;
+    precheck(&prog, op, dim_of)?;
     match op {
         Op::SetArg { id, arg, text } => crate::edit_ops::apply_set_arg(src, &prog, id, arg, text),
         Op::Rename { from, to } => crate::edit_ops::apply_rename(src, from, to),
         Op::SetProperty { key, text } => crate::props::apply_set(src, &prog, key, text.as_deref()),
         Op::SetParam { param, value } => {
             let s = param_stmt(&prog, param).ok_or(Error::UnknownParam { param: param.clone() })?;
-            if let Some(d) = param_dim(src, param)
+            if let Some(d) = dim_of(param)
                 && d != value.dim
                 && d != Dim::Any
             {
@@ -624,7 +629,7 @@ pub fn apply_ast(src: &str, op: &Op) -> R<Vec<Stmt>> {
         return syntax::parse(&apply(src, op)?);
     }
     let mut prog = syntax::parse(src)?;
-    precheck(src, &prog, op)?;
+    precheck(&prog, op, &|k| param_dim(src, k))?;
     let find_param = |prog: &[Stmt], key: &ParamKey| {
         prog.iter().position(|s| match &s.kind {
             StmtKind::Shared { name, .. } => key.owner.is_empty() && *name == key.name,

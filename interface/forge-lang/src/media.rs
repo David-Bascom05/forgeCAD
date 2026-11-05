@@ -54,6 +54,24 @@ fn find(
         return Err(err(FileProblem::WrongKind));
     }
     let dir = dir.ok_or_else(|| err(FileProblem::Missing))?;
+    let found = find_in(dir, root, file, span);
+    // read only once the fence, kind and size let it through; else only whether it is there
+    match &found {
+        Ok((p, _)) => crate::deps::file(p),
+        Err(_) => crate::deps::looked(&dir.join(file)),
+    }
+    found
+}
+
+fn find_in(dir: &Path, root: Option<&Path>, file: &str, span: Span) -> R<(PathBuf, Stamp)> {
+    let err = |problem| -> Error {
+        FeatError::File {
+            span,
+            file: file.into(),
+            problem,
+        }
+        .into()
+    };
     let p = std::fs::canonicalize(dir.join(file)).map_err(|_| err(FileProblem::Missing))?;
     if root.is_some_and(|r| !p.starts_with(r)) {
         return Err(err(FileProblem::Missing));

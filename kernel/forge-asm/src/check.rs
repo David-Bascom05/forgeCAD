@@ -21,6 +21,7 @@ pub struct PartMesh {
     bvh: OnceLock<Bvh>,
     boxes: OnceLock<Vec<Box3>>,
     sharp: OnceLock<Vec<[bool; 3]>>,
+    content: OnceLock<u128>,
 }
 
 impl PartMesh {
@@ -32,7 +33,26 @@ impl PartMesh {
             bvh: OnceLock::new(),
             boxes: OnceLock::new(),
             sharp: OnceLock::new(),
+            content: OnceLock::new(),
         }
+    }
+    /// A hash of the mesh itself (points, triangles, tolerance): equal meshes, equal answers.
+    pub fn content(&self) -> u128 {
+        *self.content.get_or_init(|| {
+            let mut h = forge_math::hash::Hash128::new();
+            h.word(self.tolerance.to_bits());
+            h.word(self.positions.len() as u64);
+            for p in &self.positions {
+                h.word(p.x.to_bits());
+                h.word(p.y.to_bits());
+                h.word(p.z.to_bits());
+            }
+            for t in &self.triangles {
+                h.word(t[0] as u64 | (t[1] as u64) << 32);
+                h.word(t[2] as u64);
+            }
+            h.finish()
+        })
     }
     pub fn from_trimesh(m: &forge_mesh::TriMesh, tolerance: f64) -> PartMesh {
         PartMesh::new(m.positions.clone(), m.triangles.clone(), tolerance)
@@ -659,6 +679,102 @@ fn pieces(m: &PartMesh, found: &[usize], keep: &[bool]) -> Vec<Vec<usize>> {
 }
 
 /// Least distance between two meshes, B placed by `rel` in A's frame; None past `limit`.
+pub type NarrowKey = (u128, u128, [u64; 9]);
+
+/// Narrow-phase answers by both meshes' content and their relative pose (the depth follows from
+/// the meshes), kept across checkers: a re-solve that moved nothing tests nothing.
+static NARROWS: std::sync::Mutex<Option<std::collections::HashMap<NarrowKey, Narrow>>> =
+    std::sync::Mutex::new(None);
+
+pub type Gap = Option<(f64, Point3, Point3)>;
+/// Both meshes' content, the relative pose's bits and the limit's.
+pub type GapKey = (u128, u128, [u64; 9], u64);
+
+/// Mesh distances and narrow-phase answers (0 clear, 1 cross, 2 inside): pure functions of the
+/// meshes' content and their pose, so they may be kept anywhere and given back to any process
+/// of the same kernel.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Learned {
+    pub gaps: Vec<(GapKey, Gap)>,
+    pub narrows: Vec<(NarrowKey, u8)>,
+    pub volumes: Vec<(VolumeKey, Result<f64, ExactFail>)>,
+}
+
+static FRESH: std::sync::Mutex<Option<Learned>> = std::sync::Mutex::new(None);
+
+/// What this process worked out since the last call.
+pub fn learned() -> Learned {
+    FRESH.lock().ok().and_then(|mut f| f.take()).unwrap_or_default()
+}
+
+/// Answers worked out before (`learned`, kept): taken as known.
+pub fn teach(l: &Learned) {
+    if let Ok(mut m) = GAPS.lock() {
+        let m = m.get_or_insert_with(Default::default);
+        for (k, g) in &l.gaps {
+            m.insert(*k, *g);
+        }
+    }
+    if let Ok(mut m) = NARROWS.lock() {
+        let m = m.get_or_insert_with(Default::default);
+        for (k, n) in &l.narrows {
+            let n = match n {
+                0 => Narrow::Clear,
+                1 => Narrow::Cross,
+                2 => Narrow::Inside,
+                _ => continue,
+            };
+            m.insert(*k, n);
+        }
+    }
+    if let Ok(mut m) = VOLUMES.lock() {
+        let m = m.get_or_insert_with(Default::default);
+        for (k, v) in &l.volumes {
+            m.insert(*k, v.clone());
+        }
+    }
+}
+
+fn fresh(f: impl FnOnce(&mut Learned)) {
+    if let Ok(mut l) = FRESH.lock() {
+        f(l.get_or_insert_with(Default::default));
+    }
+}
+
+/// Mesh distances worked out in this process, by both meshes' content, the relative pose and
+/// the limit: what `distance` would answer, bit for bit.
+static GAPS: std::sync::Mutex<Option<std::collections::HashMap<GapKey, Gap>>> = std::sync::Mutex::new(None);
+
+fn gap_key(a: &PartMesh, b: &PartMesh, rel: &Frame, limit: f64) -> GapKey {
+    (a.content(), b.content(), pose_bits(rel), limit.to_bits())
+}
+
+fn known_gap(k: &GapKey) -> Option<Gap> {
+    GAPS.lock().ok()?.as_ref()?.get(k).copied()
+}
+
+fn keep_gap(k: GapKey, g: Gap) {
+    if let Ok(mut m) = GAPS.lock() {
+        let m = m.get_or_insert_with(Default::default);
+        // a long session's worth, then start over
+        if m.len() > 1 << 20 {
+            m.clear();
+        }
+        m.insert(k, g);
+    }
+    fresh(|l| l.gaps.push((k, g)));
+}
+
+fn distance_kept(a: &PartMesh, b: &PartMesh, rel: &Frame, limit: f64) -> Gap {
+    let k = gap_key(a, b, rel, limit);
+    if let Some(g) = known_gap(&k) {
+        return g;
+    }
+    let g = distance(a, b, rel, limit);
+    keep_gap(k, g);
+    g
+}
+
 fn distance(a: &PartMesh, b: &PartMesh, rel: &Frame, limit: f64) -> Option<(f64, Point3, Point3)> {
     let pl = Placed::new(a, b, rel);
     let mut best: Option<(f64, Point3, Point3)> = None;
@@ -746,10 +862,44 @@ impl Exact for NoExact {
 #[derive(Default)]
 pub struct BrepExact {
     pub bodies: BTreeMap<(DocId, u64), forge_topo::Body>,
+    /// What each body is made from, as one hash (its document, what that read, the body's
+    /// name): equal ones are the same solid, so their overlaps may be kept and given back.
+    pub idents: BTreeMap<(DocId, u64), u128>,
 }
+
+/// Two solids' identities and the second's pose in the first's frame.
+pub type VolumeKey = (u128, u128, [u64; 9]);
+
+static VOLUMES: std::sync::Mutex<Option<std::collections::HashMap<VolumeKey, Result<f64, ExactFail>>>> =
+    std::sync::Mutex::new(None);
 
 impl Exact for BrepExact {
     fn overlap_volume(&self, a: &PartRef, b: &PartRef, b_in_a: &Frame) -> Result<f64, ExactFail> {
+        let key = match (
+            self.idents.get(&(a.doc.clone(), a.body)),
+            self.idents.get(&(b.doc.clone(), b.body)),
+        ) {
+            (Some(x), Some(y)) => Some((*x, *y, pose_bits(b_in_a))),
+            _ => None,
+        };
+        if let Some(k) = &key
+            && let Some(v) = VOLUMES.lock().ok().and_then(|m| m.as_ref()?.get(k).cloned())
+        {
+            return v;
+        }
+        let v = self.overlap_now(a, b, b_in_a);
+        if let Some(k) = key {
+            if let Ok(mut m) = VOLUMES.lock() {
+                m.get_or_insert_with(Default::default).insert(k, v.clone());
+            }
+            fresh(|l| l.volumes.push((k, v.clone())));
+        }
+        v
+    }
+}
+
+impl BrepExact {
+    fn overlap_now(&self, a: &PartRef, b: &PartRef, b_in_a: &Frame) -> Result<f64, ExactFail> {
         let ba = self
             .bodies
             .get(&(a.doc.clone(), a.body))
@@ -1062,25 +1212,44 @@ fn pose_bits(f: &Frame) -> [u64; 9] {
 }
 
 fn par<T: Send>(n: usize, threads: usize, f: impl Fn(usize) -> T + Sync) -> Vec<T> {
+    if n < 64 {
+        return (0..n).map(f).collect();
+    }
+    par_any(n, threads, f)
+}
+
+/// `par` for few but heavy items: each a thread's work, in order.
+fn par_any<T: Send>(n: usize, threads: usize, f: impl Fn(usize) -> T + Sync) -> Vec<T> {
     #[cfg(target_family = "wasm")]
     let threads = {
         let _ = threads;
         1
     };
-    if threads <= 1 || n < 64 {
+    if threads <= 1 || n < 2 {
         return (0..n).map(f).collect();
     }
-    let chunk = n.div_ceil(threads);
-    std::thread::scope(|s| {
-        let hs: Vec<_> = (0..n)
-            .step_by(chunk)
-            .map(|lo| {
-                let f = &f;
-                s.spawn(move || (lo..(lo + chunk).min(n)).map(f).collect::<Vec<T>>())
+    // items taken one at a time, as costs differ; put back in order
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    let mut got: Vec<(usize, T)> = std::thread::scope(|s| {
+        let hs: Vec<_> = (0..threads.min(n))
+            .map(|_| {
+                let (f, next) = (&f, &next);
+                s.spawn(move || {
+                    let mut out = Vec::new();
+                    loop {
+                        let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        if i >= n {
+                            return out;
+                        }
+                        out.push((i, f(i)));
+                    }
+                })
             })
             .collect();
         hs.into_iter().flat_map(|h| h.join().expect("a check")).collect()
-    })
+    });
+    got.sort_unstable_by_key(|x| x.0);
+    got.into_iter().map(|x| x.1).collect()
 }
 
 /// Below this exact volume (mm³) two solids only touch.
@@ -1195,17 +1364,57 @@ impl<P: Parts, E: Exact> Checker<P, E> {
             .collect();
         rep.cache_hits = pairs.len() - todo.len();
         rep.narrow_tests = todo.len();
-        let narrowed = par(todo.len(), self.threads, |t| {
-            let k = todo[t];
+        // the meshes' content and pose: a pair any checker of this process tested is not tested again
+        let meshes = |k: usize| {
             let (i, j) = pairs[k];
             let (x, y) = if keyed[k].2 { (j, i) } else { (i, j) };
-            let (ma, mb) = (
-                occ[x].mesh.as_ref().expect("boxed"),
-                occ[y].mesh.as_ref().expect("boxed"),
-            );
+            (
+                occ[x].mesh.as_deref().expect("boxed"),
+                occ[y].mesh.as_deref().expect("boxed"),
+            )
+        };
+        let tested: Vec<(NarrowKey, Option<Narrow>)> = todo
+            .iter()
+            .map(|&k| {
+                let (ma, mb) = meshes(k);
+                let nk = (ma.content(), mb.content(), keyed[k].0.2);
+                let known = NARROWS.lock().ok().and_then(|m| m.as_ref()?.get(&nk).copied());
+                (nk, known)
+            })
+            .collect();
+        let fresh: Vec<usize> = (0..todo.len()).filter(|&t| tested[t].1.is_none()).collect();
+        let made = par(fresh.len(), self.threads, |f| {
+            let k = todo[fresh[f]];
+            let (ma, mb) = meshes(k);
             let depth = ma.tolerance + mb.tolerance + tol::LINEAR;
             narrow(ma, mb, &keyed[k].1, depth)
         });
+        if let Ok(mut m) = NARROWS.lock() {
+            let m = m.get_or_insert_with(Default::default);
+            if m.len() > 1 << 20 {
+                m.clear();
+            }
+            for (f, r) in fresh.iter().zip(&made) {
+                m.insert(tested[*f].0, *r);
+            }
+        }
+        self::fresh(|l| {
+            for (f, r) in fresh.iter().zip(&made) {
+                let n = match r {
+                    Narrow::Clear => 0,
+                    Narrow::Cross => 1,
+                    Narrow::Inside => 2,
+                };
+                l.narrows.push((tested[*f].0, n));
+            }
+        });
+        let mut made = made.into_iter();
+        let narrowed: Vec<Narrow> = tested
+            .iter()
+            .map(|t| {
+                t.1.unwrap_or_else(|| made.next().expect("one made per fresh pair"))
+            })
+            .collect();
         let fit_at: BTreeMap<(&Path, &Path), usize> = fits
             .iter()
             .enumerate()
@@ -1346,13 +1555,41 @@ impl<P: Parts, E: Exact> Checker<P, E> {
         let (x, y) = (find(a)?, find(b)?);
         let (ma, mb) = (x.mesh.as_ref()?, y.mesh.as_ref()?);
         let rel = x.pose.inverse().compose(&y.pose);
-        let (d, p, q) = distance(ma, mb, &rel, limit)?;
+        let (d, p, q) = distance_kept(ma, mb, &rel, limit)?;
         Some(Clearance {
             distance: d,
             on_a: x.pose.point_to_world(p),
             on_b: x.pose.point_to_world(q),
             tolerance: ma.tolerance + mb.tolerance,
         })
+    }
+
+    /// Works out the clearances of these pairs on all threads, so `clearance` then finds them
+    /// done: the same answers, sooner.
+    pub fn prefetch_clearances(&self, sol: &Solution, pairs: &[(Path, Path)], limit: f64) {
+        let occ = self.occurrences(sol);
+        let find = |p: &Path| occ.iter().find(|o| &o.path == p);
+        let mut todo: Vec<(GapKey, &PartMesh, &PartMesh, Frame)> = Vec::new();
+        for (a, b) in pairs {
+            let (Some(x), Some(y)) = (find(a), find(b)) else {
+                continue;
+            };
+            let (Some(ma), Some(mb)) = (x.mesh.as_deref(), y.mesh.as_deref()) else {
+                continue;
+            };
+            let rel = x.pose.inverse().compose(&y.pose);
+            let k = gap_key(ma, mb, &rel, limit);
+            if known_gap(&k).is_none() && !todo.iter().any(|t| t.0 == k) {
+                todo.push((k, ma, mb, rel));
+            }
+        }
+        let gaps = par_any(todo.len(), self.threads, |t| {
+            let (_, a, b, rel) = &todo[t];
+            distance(a, b, rel, limit)
+        });
+        for (t, g) in todo.into_iter().zip(gaps) {
+            keep_gap(t.0, g);
+        }
     }
 
     /// Every pair of occurrences closer than `limit`, with its clearance, by path.

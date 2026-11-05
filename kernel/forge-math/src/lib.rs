@@ -11,6 +11,7 @@ pub mod frame;
 pub mod hash;
 pub mod interval;
 pub mod linalg;
+pub mod par;
 pub mod poly;
 pub mod predicates;
 pub mod rng;

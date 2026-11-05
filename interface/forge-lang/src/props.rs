@@ -281,6 +281,7 @@ pub fn material(ev: &Eval, name: &str, span: Span, at: MaterialAt) -> R<Material
 
 /// The material libraries a document sees: its project's, the user's, ForgeCAD's.
 pub fn libraries(ev: &Eval) -> std::sync::Arc<forge_material::Libraries> {
+    crate::deps::materials(ev.dir.as_deref());
     forge_material::Libraries::cached(ev.dir.as_deref())
 }
 

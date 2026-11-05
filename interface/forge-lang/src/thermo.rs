@@ -837,6 +837,7 @@ fn library(ev: &Eval) -> ft::FormShop {
     if ev.root.is_some() {
         return ft::placeholder();
     }
+    crate::deps::materials(ev.dir.as_deref());
     let libs = forge_material::Libraries::cached(ev.dir.as_deref());
     ft::shop_of(libs.all().map(|x| x.1))
 }

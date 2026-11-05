@@ -47,3 +47,65 @@ impl BitHasher {
         self.0
     }
 }
+
+/// Two lanes of a multiply-xorshift mix over 64-bit words, 128 bits out: a fast content key for
+/// caches (not a checksum against malice). Bytes go in as words, their count after them.
+#[derive(Clone, Copy, Debug)]
+pub struct Hash128(u64, u64);
+
+impl Default for Hash128 {
+    fn default() -> Hash128 {
+        Hash128(0x243f_6a88_85a3_08d3, 0x1319_8a2e_0370_7344)
+    }
+}
+
+impl Hash128 {
+    pub fn new() -> Hash128 {
+        Hash128::default()
+    }
+    pub fn word(&mut self, x: u64) {
+        self.0 = (self.0 ^ x).wrapping_mul(0x9e37_79b9_7f4a_7c15).rotate_left(31);
+        self.1 = (self.1 ^ x.rotate_left(17))
+            .wrapping_mul(0xc2b2_ae3d_27d4_eb4f)
+            .rotate_left(29);
+    }
+    pub fn f64(&mut self, v: f64) {
+        self.word(v.to_bits());
+    }
+    pub fn bytes(&mut self, b: &[u8]) {
+        let (words, rest) = b.as_chunks::<8>();
+        for c in words {
+            self.word(u64::from_le_bytes(*c));
+        }
+        let mut last = [0u8; 8];
+        last[..rest.len()].copy_from_slice(rest);
+        self.word(u64::from_le_bytes(last));
+        self.word(b.len() as u64);
+    }
+    pub fn str(&mut self, s: &str) {
+        self.bytes(s.as_bytes());
+    }
+    pub fn u128(&mut self, x: u128) {
+        self.word(x as u64);
+        self.word((x >> 64) as u64);
+    }
+    pub fn finish(&self) -> u128 {
+        let f = |mut z: u64| {
+            z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+            z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+            z ^ (z >> 31)
+        };
+        let (a, b) = (
+            f(self.0 ^ self.1.rotate_left(7)),
+            f(self.1 ^ self.0.rotate_left(13)),
+        );
+        (a as u128) << 64 | b as u128
+    }
+}
+
+/// `Hash128` of some bytes.
+pub fn hash128(b: &[u8]) -> u128 {
+    let mut h = Hash128::new();
+    h.bytes(b);
+    h.finish()
+}

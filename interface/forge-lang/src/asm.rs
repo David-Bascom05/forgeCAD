@@ -17,7 +17,7 @@ use forge_asm as fa;
 use forge_asm::check::{BrepExact, Checker, Exact, PartMesh};
 use forge_asm::{ConstraintKind, Freedom, JointKind};
 use forge_math::{Frame, Point3, UnitVec3, Vec3};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Instant;
@@ -1626,6 +1626,12 @@ pub struct PartLoad {
     pub bodies: BTreeMap<String, forge_topo::Body>,
     /// Its iProperties and solids with their materials, for the BOM and the assembly's mass.
     pub summary: Arc<crate::props::PartSummary>,
+    /// The file is an assembly document, not a part.
+    pub declared: bool,
+    /// The interference meshes of `bodies`, by name.
+    pub body_meshes: BTreeMap<String, Arc<PartMesh>>,
+    /// Its text and everything it read, as one hash: the same ident, the same solids.
+    pub ident: u128,
 }
 
 /// A part file's text hash and the references and bodies asked of it.
@@ -1675,6 +1681,65 @@ pub(crate) fn locate(
     fence: &Option<std::path::PathBuf>,
     file: &str,
 ) -> Option<std::path::PathBuf> {
+    let key = (dir.clone(), fence.clone(), file.to_string());
+    let hit = LOCATED.with(|m| m.borrow().as_ref().and_then(|m| m.get(&key).cloned()));
+    let found = hit.unwrap_or_else(|| {
+        let found = locate_now(dir, fence, file);
+        LOCATED.with(|m| {
+            if let Some(m) = m.borrow_mut().as_mut() {
+                m.insert(key, found.clone());
+            }
+        });
+        found
+    });
+    // read only once the fence, kind and size let it through; else only whether it is there
+    if !file.starts_with(crate::stdparts::KEY) {
+        match (&found, dir) {
+            (Some(p), _) => crate::deps::file(p),
+            (None, Some(d)) => crate::deps::looked(&d.join(file)),
+            (None, None) => {}
+        }
+    }
+    found
+}
+
+type LocateKey = (Option<std::path::PathBuf>, Option<std::path::PathBuf>, String);
+
+thread_local! {
+    /// Files located during one assembly's finish (its `at` runs too): each path resolved once.
+    static LOCATED: std::cell::RefCell<Option<HashMap<LocateKey, Option<std::path::PathBuf>>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Keeps `locate`'s answers while alive; the outermost one clears them.
+struct LocateScope(bool);
+
+impl LocateScope {
+    fn enter() -> LocateScope {
+        LocateScope(LOCATED.with(|m| {
+            let mut m = m.borrow_mut();
+            let outer = m.is_none();
+            if outer {
+                *m = Some(HashMap::new());
+            }
+            outer
+        }))
+    }
+}
+
+impl Drop for LocateScope {
+    fn drop(&mut self) {
+        if self.0 {
+            LOCATED.with(|m| *m.borrow_mut() = None);
+        }
+    }
+}
+
+fn locate_now(
+    dir: &Option<std::path::PathBuf>,
+    fence: &Option<std::path::PathBuf>,
+    file: &str,
+) -> Option<std::path::PathBuf> {
     // a standard part's key stands for its generated text, wherever the document is
     if file.starts_with(crate::stdparts::KEY) {
         return crate::stdparts::text_of(file).map(|_| std::path::PathBuf::from(file));
@@ -1702,12 +1767,14 @@ pub(crate) fn read_capped(p: &std::path::Path) -> Option<String> {
         return crate::stdparts::text_of(k);
     }
     let mut s = String::new();
-    std::fs::File::open(p)
-        .ok()?
-        .take(LIMIT)
-        .read_to_string(&mut s)
-        .ok()?;
-    Some(s)
+    let read = std::fs::File::open(p)
+        .ok()
+        .and_then(|f| f.take(LIMIT).read_to_string(&mut s).ok());
+    crate::deps::read(p, read.map(|_| s.as_bytes()));
+    if let Some(d) = p.parent() {
+        crate::deps::materials(Some(d));
+    }
+    read.map(|_| s)
 }
 
 /// The key of a file that could not be located: it reads as missing everywhere.
@@ -1854,7 +1921,11 @@ fn load_part_with(
         mesh: None,
         bodies: BTreeMap::new(),
         summary: Default::default(),
+        declared: false,
+        body_meshes: BTreeMap::new(),
+        ident: 0,
     };
+    let watch = crate::deps::watch();
     let prog = match crate::syntax::parse(text) {
         Ok(p) => p,
         Err(e) => {
@@ -1863,6 +1934,8 @@ fn load_part_with(
         }
     };
     if declared(&prog) {
+        out.declared = true;
+        drop(watch);
         return out;
     }
     let mut ev = Eval::new(text, crate::eval::Rules::default(), true, Default::default());
@@ -1959,21 +2032,37 @@ fn load_part_with(
         }
     }
     out.errors = std::mem::take(&mut ev.errors);
-    if mesh && let Some(b) = &out.body {
-        let q = forge_mesh::Quality {
-            chord: MESH_CHORD,
-            max_angle: forge_math::dmath::PI / 12.0,
-        };
-        if let Ok(m) = forge_mesh::tessellate(b, &q) {
-            out.mesh = Some(Arc::new(PartMesh::from_trimesh(&m, MESH_CHORD)));
-        }
+    let read = watch.done();
+    out.ident = crate::store::key("part", |h| {
+        h.str(text);
+        h.u128(read.digest());
+    });
+    if mesh {
+        out.mesh = out.body.as_ref().and_then(interference_mesh);
+        out.body_meshes = out
+            .bodies
+            .iter()
+            .filter_map(|(n, b)| Some((n.clone(), interference_mesh(b)?)))
+            .collect();
     }
     out
+}
+
+fn interference_mesh(b: &forge_topo::Body) -> Option<Arc<PartMesh>> {
+    let q = forge_mesh::Quality {
+        chord: MESH_CHORD,
+        max_angle: forge_math::dmath::PI / 12.0,
+    };
+    let m = forge_mesh::tessellate(b, &q).ok()?;
+    Some(Arc::new(PartMesh::from_trimesh(&m, MESH_CHORD)))
 }
 
 /// The interference meshes' chord tolerance (mm): overlaps shallower than about twice this may
 /// go unseen, and the report says so per pair.
 pub const MESH_CHORD: f64 = 0.01;
+
+/// How far a `clearance` expect looks: everywhere.
+const CLEARANCE_REACH: f64 = 1e9;
 
 fn load_sub(
     text: &str,
@@ -2048,6 +2137,8 @@ pub struct AsmOut {
     /// With `Options::render`: each part's body once, and each occurrence's (by `occurrences`'
     /// order) index into it, so a picture meshes a part once and draws it at every occurrence.
     pub parts: Vec<Arc<forge_topo::Body>>,
+    /// Each of `parts`' identity (its document, all it read, its body): 0 where unknown.
+    pub part_idents: Vec<u128>,
     pub occ_part: Vec<Option<usize>>,
     /// The probed expects' values, by position (`Options::probe`).
     pub probes: Vec<(usize, Option<f64>)>,
@@ -2473,6 +2564,8 @@ pub fn finish(
         ev.asm = Some(d);
         return (None, Some(cache));
     }
+    let _located = LocateScope::enter();
+    crate::geomemo::recall();
     let mut t = AsmTimings::default();
     let t0 = Instant::now();
     let dir = opts.dir.clone();
@@ -2607,6 +2700,35 @@ pub fn finish(
     let mut loads: Vec<usize> = vec![];
     let mut part_docs: BTreeMap<String, Arc<crate::props::PartSummary>> = BTreeMap::new();
     let mut declared_kinds: BTreeSet<String> = BTreeSet::new();
+    // the parts not yet built, built on all cores first
+    let mut missing: Vec<(PartKey, String)> = vec![];
+    for (file, (refs, bodies)) in &want {
+        let Some(text) = (!file.starts_with('?'))
+            .then(|| read_capped(std::path::Path::new(file)))
+            .flatten()
+        else {
+            continue;
+        };
+        let ck = (
+            file.clone(),
+            text_hash(&text),
+            refs.iter().cloned().collect(),
+            bodies.iter().cloned().collect(),
+            fence.clone(),
+        );
+        if !cache.parts.contains_key(&ck) && !missing.iter().any(|m| m.0 == ck) {
+            missing.push((ck, text));
+        }
+    }
+    let built = crate::par::map(missing.len(), |i| {
+        let ((file, _, refs, bodies, fence), text) = &missing[i];
+        let parent = std::path::Path::new(file).parent().map(|p| p.to_path_buf());
+        load_part(text, parent, fence.clone(), refs, bodies)
+    });
+    t.built += built.len();
+    for ((ck, _), l) in missing.into_iter().zip(built) {
+        cache.parts.insert(ck, Arc::new(l));
+    }
     for (file, (refs, bodies)) in &want {
         // named as the document wrote it, never by its real path
         let named = d
@@ -2657,7 +2779,7 @@ pub fn finish(
             }
         };
         loads.push(Arc::as_ptr(&load) as usize);
-        if crate::syntax::parse(&text).is_ok_and(|p| declared(&p)) {
+        if load.declared {
             ev.errors.push(note(
                 span,
                 Issue::PartFile {
@@ -2699,15 +2821,10 @@ pub fn finish(
             let mesh = if k == 0 {
                 load.mesh.clone()
             } else {
-                body.as_ref().and_then(|b| {
-                    let q = forge_mesh::Quality {
-                        chord: MESH_CHORD,
-                        max_angle: forge_math::dmath::PI / 12.0,
-                    };
-                    forge_mesh::tessellate(b, &q)
-                        .ok()
-                        .map(|m| Arc::new(PartMesh::from_trimesh(&m, MESH_CHORD)))
-                })
+                load.body_meshes
+                    .iter()
+                    .find(|(n, _)| hid(n) == k)
+                    .map(|(_, m)| m.clone())
             };
             catalog.parts.insert(
                 (doc.clone(), k),
@@ -2719,6 +2836,13 @@ pub fn finish(
                 },
             );
             if let Some(b) = body {
+                exact.idents.insert(
+                    (doc.clone(), k),
+                    crate::store::key("body", |h| {
+                        h.u128(load.ident);
+                        h.word(k);
+                    }),
+                );
                 exact.bodies.insert((doc.clone(), k), b);
             }
         }
@@ -2951,6 +3075,8 @@ pub fn finish(
                 Some(&k) => k,
                 None => {
                     out.parts.push(Arc::new(b.clone()));
+                    out.part_idents
+                        .push(checker.exact().idents.get(&key).copied().unwrap_or(0));
                     unique.insert(key, out.parts.len() - 1);
                     out.parts.len() - 1
                 }
@@ -3034,6 +3160,40 @@ pub fn finish(
     } else {
         vec![]
     };
+    // the clearances asked for, worked out on all threads before they are read one by one
+    let mut pairs: Vec<(fa::Path, fa::Path)> = Vec::new();
+    for (k, s) in expects.iter().enumerate() {
+        let StmtKind::Expect { metric, args, at, .. } = &s.kind else {
+            continue;
+        };
+        let wanted = match &opts.probe {
+            Some(ps) => ps.contains(&k),
+            None => at.is_empty(),
+        };
+        if !wanted || metric != "clearance" {
+            continue;
+        }
+        let m = Measure {
+            names: &names,
+            sol,
+            catalog: &catalog,
+            checker,
+            fits: &every_fit,
+        };
+        let mark = ev.enter_expect(k);
+        let (errors, warnings) = (ev.errors.len(), ev.warnings.len());
+        if let (Ok((pa, _)), Ok((pb, _))) = (m.place(ev, args, 0), m.place(ev, args, 1)) {
+            for x in m.parts_under(&pa) {
+                for y in m.parts_under(&pb) {
+                    pairs.push((x.path.clone(), y.path.clone()));
+                }
+            }
+        }
+        ev.errors.truncate(errors);
+        ev.warnings.truncate(warnings);
+        ev.leave_expect(mark);
+    }
+    checker.prefetch_clearances(sol, &pairs, CLEARANCE_REACH);
     // the expects measured on this solve (all of them when probing for an `at` run)
     let mut direct: BTreeMap<usize, Result<f64, Issue>> = BTreeMap::new();
     for (k, s) in expects.iter().enumerate() {
@@ -3064,15 +3224,13 @@ pub fn finish(
             }
         }
     }
-    // this solve is where the `at` runs start: each re-solves and re-checks only what its
-    // drives move
-    let mut live = Some(live);
     // expects `at` the same params share one run: the document with those values, the parts
-    // from this run's cache (only the drives differ), every expect of the set measured at once
+    // from this run's cache, every expect of the set measured at once
     let mut at_values: BTreeMap<usize, Option<f64>> = BTreeMap::new();
     let mut at_why: BTreeMap<usize, Unevaluable> = BTreeMap::new();
     if opts.probe.is_none() {
         let mut sets: BTreeMap<String, Vec<usize>> = BTreeMap::new();
+        let mut texts = AtTexts::default();
         for (k, s) in expects.iter().enumerate() {
             let StmtKind::Expect { at, .. } = &s.kind else {
                 continue;
@@ -3081,7 +3239,7 @@ pub fn finish(
                 continue;
             }
             let mark = ev.enter_expect(k);
-            let text = at_text(ev, at);
+            let text = at_text(ev, at, &mut texts);
             ev.leave_expect(mark);
             match text {
                 Ok((text, set)) => {
@@ -3121,20 +3279,25 @@ pub fn finish(
                 }
             }
         }
-        for (text, ks) in sets {
+        // each set's document from a fresh solve, on all cores: the parts come from this run
+        let sets: Vec<(String, Vec<usize>)> = sets.into_iter().collect();
+        let (parts, subs) = (cache.parts.clone(), cache.subs.clone());
+        let runs = crate::par::map(sets.len(), |j| {
+            let (text, ks) = &sets[j];
+            // a probe measures its own interferences when it asks for them
             let o = crate::Options {
                 probe: Some(ks.clone()),
+                overlap: false,
                 ..opts.clone()
             };
-            if let Some(l) = live.take() {
-                cache.last = Some(l);
-            }
             let mut kept = crate::build::Cache::default();
-            kept.asm = Some(std::mem::take(&mut cache));
-            let (run, back) = crate::run(&text, o, kept);
-            cache = back.asm.unwrap_or_default();
-            t.at_runs += 1;
-            t.built += run.asm.as_ref().map_or(0, |a| a.timings.built);
+            kept.asm = Some(Box::new(AsmCache {
+                parts: parts.clone(),
+                subs: subs.clone(),
+                last: None,
+            }));
+            let (run, _) = crate::run(text, o, kept);
+            let built = run.asm.as_ref().map_or(0, |a| a.timings.built);
             // a joint past its limit at these params: every check of the set measured at the limit
             let past: Vec<Issue> = run
                 .errors
@@ -3144,6 +3307,11 @@ pub fn finish(
                     _ => None,
                 })
                 .collect();
+            (past, run.asm.map(|a| a.probes).unwrap_or_default(), built)
+        });
+        for ((_, ks), (past, probed, built)) in sets.into_iter().zip(runs) {
+            t.at_runs += 1;
+            t.built += built;
             for k in &ks {
                 for limit in &past {
                     let w = Warning::Asm(Box::new(AsmNote {
@@ -3165,7 +3333,6 @@ pub fn finish(
                     }
                 }
             }
-            let probed = run.asm.map(|a| a.probes).unwrap_or_default();
             for k in ks {
                 let v = probed.iter().find(|p| p.0 == k).and_then(|p| p.1);
                 at_values.insert(k, v);
@@ -3284,20 +3451,27 @@ pub fn finish(
     }
     t.expects_ms = t4.elapsed().as_secs_f64() * 1e3;
     out.timings = t;
-    if let Some(l) = live {
-        cache.last = Some(l);
+    cache.last = Some(live);
+    if opts.probe.is_none() {
+        crate::geomemo::keep();
     }
     (Some(out), Some(cache))
 }
 
 /// The document with an `expect`'s `at P = v` params set: what it is measured on. None when a
 /// value is not a number here, or a param is not the document's.
-fn at_text(ev: &mut Eval, at: &[(Vec<Seg>, Expr)]) -> Result<(String, Vec<(ParamKey, f64)>), Unevaluable> {
-    let mut text = ev.src.to_string();
-    let mut set = vec![];
+fn at_text(
+    ev: &mut Eval,
+    at: &[(Vec<Seg>, Expr)],
+    done: &mut AtTexts,
+) -> Result<(String, Vec<(ParamKey, f64)>), Unevaluable> {
+    let mut edits: Vec<(ParamKey, Literal, f64)> = vec![];
+    // the first value that is not one stops the edits there, as an edit failing first would
+    let mut bad: Option<Unevaluable> = None;
     for (path, e) in at {
         let Some((last, owner)) = path.split_last() else {
-            return Err(Unevaluable::AtFailed);
+            bad = Some(Unevaluable::AtFailed);
+            break;
         };
         let param = ParamKey {
             owner: owner.to_vec(),
@@ -3306,9 +3480,10 @@ fn at_text(ev: &mut Eval, at: &[(Vec<Seg>, Expr)]) -> Result<(String, Vec<(Param
         let n = match ev.expr(e) {
             Ok(Value::Num(n)) => n,
             _ => {
-                return Err(Unevaluable::AtNotANumber {
+                bad = Some(Unevaluable::AtNotANumber {
                     param: param.to_string(),
                 });
+                break;
             }
         };
         let value = Literal {
@@ -3319,24 +3494,85 @@ fn at_text(ev: &mut Eval, at: &[(Vec<Seg>, Expr)]) -> Result<(String, Vec<(Param
             },
             dim: if n.dim == Dim::Any { Dim::Length } else { n.dim },
         };
-        set.push((param.clone(), n.v));
-        text = match crate::edit::apply(
-            &text,
-            &Op::SetParam {
-                param: param.clone(),
-                value,
-            },
-        ) {
-            Ok(t) => t,
-            Err(Error::UnknownParam { .. }) => {
-                return Err(Unevaluable::AtUnknownParam {
-                    param: param.to_string(),
-                });
-            }
-            Err(_) => return Err(Unevaluable::AtFailed),
-        };
+        edits.push((param, value, n.v));
     }
-    Ok((text, set))
+    // expects at the same values share one text
+    let key: Vec<(ParamKey, u64, Dim)> = edits
+        .iter()
+        .map(|(p, l, _)| (p.clone(), l.value.to_bits(), l.dim))
+        .collect();
+    let set: Vec<(ParamKey, f64)> = edits.iter().map(|(p, _, v)| (p.clone(), *v)).collect();
+    if bad.is_none()
+        && let Some(r) = done.texts.get(&key)
+    {
+        return r.clone().map(|t| (t, set));
+    }
+    if done.dims.is_none() {
+        done.dims = Some(
+            ev.shared
+                .iter()
+                .chain(&ev.locals)
+                .map(|p| {
+                    let d = match &p.value {
+                        Value::Num(n) => Some(n.dim),
+                        _ => None,
+                    };
+                    (p.key.clone(), d)
+                })
+                .collect(),
+        );
+    }
+    let mut text = ev.src.to_string();
+    // the document's dimensions hold while each value set keeps its param's dimension; after a
+    // param of no fixed dimension is set they are worked out again from the text
+    let mut fresh = false;
+    let r = (|| {
+        for (param, value, _) in &edits {
+            let base = done.dims.as_ref().expect("made above");
+            let known = |k: &ParamKey| -> Option<Dim> {
+                if fresh {
+                    return crate::edit::param_dim(&text, k);
+                }
+                base.get(k).copied().flatten()
+            };
+            let was = known(param);
+            text = match crate::edit::apply_with(
+                &text,
+                &Op::SetParam {
+                    param: param.clone(),
+                    value: *value,
+                },
+                &known,
+            ) {
+                Ok(t) => t,
+                Err(Error::UnknownParam { .. }) => {
+                    return Err(Unevaluable::AtUnknownParam {
+                        param: param.to_string(),
+                    });
+                }
+                Err(_) => return Err(Unevaluable::AtFailed),
+            };
+            if was.is_none_or(|d| d == Dim::Any) {
+                fresh = true;
+            }
+        }
+        Ok(text.clone())
+    })();
+    if let Some(why) = bad {
+        r?;
+        return Err(why);
+    }
+    done.texts.insert(key, r.clone());
+    r.map(|t| (t, set))
+}
+
+/// `at_text`'s work so far in one assembly's run: the document's param dimensions, and the text
+/// made for each set of values.
+#[derive(Default)]
+struct AtTexts {
+    dims: Option<HashMap<ParamKey, Option<Dim>>>,
+    #[allow(clippy::type_complexity)]
+    texts: HashMap<Vec<(ParamKey, u64, Dim)>, Result<String, Unevaluable>>,
 }
 
 /// The fits and fit rules of an assembly and of every subassembly used in it, each under its
@@ -3508,7 +3744,7 @@ impl Measure<'_> {
                         for y in &ob {
                             let c = self
                                 .checker
-                                .clearance(self.sol, &x.path, &y.path, 1e9)
+                                .clearance(self.sol, &x.path, &y.path, CLEARANCE_REACH)
                                 .ok_or_else(|| {
                                     why(Unevaluable::NoGeometry {
                                         reference: name(&x.path),
