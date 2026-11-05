@@ -328,3 +328,27 @@ fn an_occurrence_opens_its_part_in_a_tab() {
     assert_eq!(h.gui.active_document(), 1);
     assert!(!h.gui.shell.fg.as_ref().unwrap().assembly);
 }
+
+#[test]
+fn new_is_an_untitled_tab() {
+    let Some(mut h) = headless() else { return };
+    let d = scratch("new");
+    let [plate, ..] = files(&d);
+    open_in(&mut h, &plate);
+    h.gui.shell.out.push(forge_render::shell::Action::New);
+    ready(&mut h);
+    assert_eq!(titles(&h), ["plate.fg", "Part1.fg"]);
+    assert_eq!(h.gui.active_document(), 1);
+    // its first Save asks the host where
+    h.gui.fg_save();
+    let out = h.step();
+    assert!(out.host.contains(&forge_render::shell::Action::SaveAs));
+    let to = d.join("bracket.fg");
+    h.gui.save_as(to.to_str().unwrap());
+    h.step();
+    assert!(to.exists());
+    assert_eq!(titles(&h), ["plate.fg", "bracket.fg"]);
+    // and it's that file now: opening it finds its tab
+    h.gui.activate(0);
+    assert_eq!(h.gui.open_document(to.to_str().unwrap(), true), Some(1));
+}

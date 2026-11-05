@@ -176,6 +176,8 @@ pub enum Action {
     Settings,
     /// The document tabs' asks.
     Doc(docs::DocCmd),
+    /// Where an untitled document is to be saved: the host's file dialog, then `Gui::save_as`.
+    SaveAs,
 }
 
 /// What the ribbon asks of a Forge file: Inventor's dialogs and commands.

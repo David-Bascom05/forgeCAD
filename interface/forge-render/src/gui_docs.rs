@@ -155,6 +155,51 @@ impl Gui {
         Some(opened)
     }
 
+    /// File > New: an untitled Forge part in a tab of its own, saved where asked on its first
+    /// Save.
+    pub fn new_document(&mut self) -> usize {
+        if !self.docs.is_empty() {
+            self.sync_tab();
+            let mut st = Box::<DocState>::default();
+            self.swap_state(&mut st);
+            self.docs[self.active].state = Some(st);
+            self.after_switch();
+        }
+        let n = 1 + self.docs.iter().filter(|d| d.path.is_none()).count();
+        let name = format!("Part{n}.fg");
+        let mut d = OpenDoc::new(None, None);
+        d.title = name.clone();
+        self.docs.push(d);
+        self.active = self.docs.len() - 1;
+        let gpu = (self.device.clone(), self.queue.clone(), self.adapter.clone());
+        let waker = self.waker.clone();
+        let waker: Arc<dyn Fn() + Send + Sync> = Arc::new(move || waker());
+        let s = crate::fg::Session::new(None, String::new(), Some(gpu), waker);
+        self.shell.fg = Some(crate::shell::fg::FgPanel {
+            file: name.clone(),
+            ..Default::default()
+        });
+        self.fg = Some(s);
+        self.shell.name = name;
+        self.sync_tab();
+        self.active
+    }
+
+    /// Where the host's dialog said an untitled document goes: written there, its tab named so.
+    pub fn save_as(&mut self, path: &str) {
+        let Some(s) = &mut self.fg else { return };
+        s.path = Some(path.to_string());
+        let name = name_of(path);
+        self.shell.name = name.clone();
+        if let Some(p) = &mut self.shell.fg {
+            p.file = name;
+        }
+        if let Some(d) = self.docs.get_mut(self.active) {
+            d.path = Some(path.to_string());
+        }
+        self.fg_save();
+    }
+
     /// Brings this tab's document to the window: its own view, camera, browser and undo, as left.
     pub fn activate(&mut self, i: usize) {
         if i == self.active || i >= self.docs.len() {
@@ -272,7 +317,10 @@ impl Gui {
     /// The active tab's name and unsaved mark as its document has them; the strip's tabs.
     pub(super) fn sync_tab(&mut self) {
         if let Some(d) = self.docs.get_mut(self.active) {
-            if !self.shell.name.is_empty() {
+            if d.path.is_none() && self.fg.as_ref().is_some_and(|s| s.path.is_none()) {
+                // an untitled one keeps the name it was given
+                self.shell.name.clone_from(&d.title);
+            } else if !self.shell.name.is_empty() {
                 d.title = self.shell.name.clone();
             }
             d.dirty = self.fg.as_ref().is_some_and(|s| s.dirty());

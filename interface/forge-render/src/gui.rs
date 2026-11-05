@@ -1476,6 +1476,10 @@ impl Gui {
                     self.doc_cmd(c);
                     continue;
                 }
+                Action::New => {
+                    self.new_document();
+                    continue;
+                }
                 // a drawing in its own tab: the tab closes
                 Action::CloseDrawing if self.fg.is_none() && !self.docs.is_empty() => {
                     self.request_close(self.active);
@@ -3909,6 +3913,11 @@ impl Gui {
     /// Writes the Forge part's text to its file.
     pub fn fg_save(&mut self) {
         let Some(s) = &mut self.fg else { return };
+        // an untitled one: the host asks where
+        if s.path.is_none() {
+            self.shell.out.push(Action::SaveAs);
+            return;
+        }
         self.shell.status = match s.save() {
             Ok(()) => format!("Saved {}", s.path.as_deref().unwrap_or("")),
             Err(why) => why,

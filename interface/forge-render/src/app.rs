@@ -186,6 +186,8 @@ pub struct App {
     /// Report input-to-pixels on exit (`--times`).
     times: bool,
     dialog: Option<std::sync::mpsc::Receiver<Option<String>>>,
+    /// Save As's, for an untitled document.
+    save_as: Option<std::sync::mpsc::Receiver<Option<String>>>,
     /// `--present`: how frames go out.
     present: Option<String>,
     /// `--run-for`: leaves by itself then, the orderly way.
@@ -271,6 +273,21 @@ impl App {
                 }
                 Action::ResizeWindow(e) => {
                     let _ = l.window.drag_resize_window(resize_direction(e));
+                }
+                Action::SaveAs => {
+                    let (send, recv) = std::sync::mpsc::channel();
+                    self.save_as = Some(recv);
+                    let proxy = self.proxy.clone();
+                    let name = l.gui.shell.name.clone();
+                    std::thread::spawn(move || {
+                        let chosen = rfd::FileDialog::new()
+                            .add_filter("Forge parts", &["fg"])
+                            .set_file_name(name)
+                            .save_file()
+                            .map(|f| f.with_extension("fg").to_string_lossy().into_owned());
+                        let _ = send.send(chosen);
+                        let _ = proxy.send_event(());
+                    });
                 }
                 Action::New | Action::Open | Action::Sheet(crate::shell::sheet::SheetCmd::NewPart) => {
                     let (send, recv) = std::sync::mpsc::channel();
@@ -407,6 +424,14 @@ impl ApplicationHandler for App {
     }
 
     fn user_event(&mut self, _: &ActiveEventLoop, _: ()) {
+        if let Some(d) = &self.save_as
+            && let Ok(got) = d.try_recv()
+        {
+            self.save_as = None;
+            if let (Some(path), Some(l)) = (got, &mut self.live) {
+                l.gui.save_as(&path);
+            }
+        }
         if let Some(d) = &self.dialog
             && let Ok(got) = d.try_recv()
         {
@@ -569,6 +594,7 @@ pub fn run(
         next: None,
         times,
         dialog: None,
+        save_as: None,
         present,
         run_until: run_for.map(|s| Instant::now() + std::time::Duration::from_secs_f64(s)),
         spin,
