@@ -75,6 +75,14 @@ pub const LIGHT: Theme = Theme {
     projected: c(0x9A7A00),
 };
 
+/// A control's edge: a box, a button, a checkbox. Firmer than a rule (`line`), so a checkbox or a
+/// field reads on its window in either theme.
+pub fn edge(t: &Theme) -> Color32 {
+    let m = |a: u8, b: u8| (a as f32 + (b as f32 - a as f32) * 0.38).round() as u8;
+    let (a, b) = (t.line, t.ink2);
+    Color32::from_rgb(m(a.r(), b.r()), m(a.g(), b.g()), m(a.b(), b.b()))
+}
+
 pub fn sans(size: f32) -> FontId {
     FontId::new(size, FontFamily::Proportional)
 }
@@ -157,6 +165,10 @@ pub fn apply(ctx: &egui::Context, t: &Theme) {
             x.weak_bg_fill = t.surface;
         }
         w.noninteractive.bg_stroke = Stroke::new(1.0, t.line);
+        // a checkbox's square and a radio's ring: in the fields' colour, an edge that shows
+        w.inactive.bg_fill = t.field;
+        w.inactive.bg_stroke = Stroke::new(1.0, edge(&t));
+        w.hovered.bg_stroke = Stroke::new(1.0, t.ink2);
         w.hovered.bg_fill = t.hover;
         w.hovered.weak_bg_fill = t.hover;
         w.active.bg_fill = t.on;
