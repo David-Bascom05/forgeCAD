@@ -438,6 +438,13 @@ impl Gui {
     }
 }
 
+/// A file as last seen: its length, when it was written, and its content's hash (two writes in
+/// one tick of the file clock, the same length, still differ); None: not there.
+type Seen = Option<(u64, std::time::SystemTime, u128)>;
+
+/// Past this a file is told apart by its length and time alone.
+const HASH_MAX: u64 = 16 << 20;
+
 /// O_NOFOLLOW and O_NONBLOCK (the values differ by platform): a name that is a link is not
 /// opened, and a pipe swapped in after the check does not hold the open.
 #[cfg(unix)]
@@ -478,13 +485,6 @@ fn read_file(p: &Path, max: u64) -> Option<Vec<u8>> {
     Some(b)
 }
 
-/// A file as last seen: its length, when it was written, and its content's hash (two writes in
-/// one tick of the file clock, the same length, still differ); None: not there.
-type Seen = Option<(u64, std::time::SystemTime, u128)>;
-
-/// Past this a file is told apart by its length and time alone.
-const HASH_MAX: u64 = 16 << 20;
-
 fn look(p: &Path) -> Seen {
     let m = std::fs::symlink_metadata(p).ok()?;
     if !m.is_file() {
@@ -492,6 +492,17 @@ fn look(p: &Path) -> Seen {
     }
     let hash = read_file(p, HASH_MAX).map_or(0, |b| crate::cache::hash(&[&b]));
     Some((m.len(), m.modified().ok()?, hash))
+}
+
+/// The folder a document's reads are watched inside: the repository it's in (the nearest
+/// folder up with a `.git`), else its own folder.
+fn root_of(path: &str) -> Option<PathBuf> {
+    let dir = folder_of(path)?;
+    let repo = dir
+        .ancestors()
+        .find(|a| a.join(".git").exists())
+        .map(Path::to_path_buf);
+    Some(repo.unwrap_or(dir))
 }
 
 /// The .fg files in a folder (not below it): where an agent's new part shows up.
@@ -605,15 +616,25 @@ impl Gui {
         out
     }
 
+    /// The files the watch looks at: each open document's own and what it read inside its root.
+    pub fn watched_files(&self) -> Vec<PathBuf> {
+        self.watched().files
+    }
+
     fn watched(&self) -> Watched {
         let mut files: Vec<PathBuf> = vec![];
         let mut dirs: Vec<PathBuf> = vec![];
         for (i, d) in self.docs.iter().enumerate() {
-            if let Some(p) = d.path.as_deref() {
-                files.push(std::fs::canonicalize(p).unwrap_or_else(|_| p.into()));
-                dirs.extend(folder_of(p));
+            let Some(p) = d.path.as_deref() else { continue };
+            let Ok(own) = std::fs::canonicalize(p) else {
+                continue;
+            };
+            files.push(own);
+            dirs.extend(folder_of(p));
+            // what it read, only inside its root
+            if let Some(root) = root_of(p) {
+                files.extend(self.reads_of(i).into_iter().filter(|r| r.starts_with(&root)));
             }
-            files.extend(self.reads_of(i));
         }
         files.sort();
         files.dedup();
@@ -694,7 +715,8 @@ impl Gui {
                 continue;
             };
             let own = std::fs::canonicalize(&path).is_ok_and(|p| p == file);
-            let reads = !own && self.reads_of(i).iter().any(|r| r == file);
+            let inside = root_of(&path).is_some_and(|r| file.starts_with(r));
+            let reads = !own && inside && self.reads_of(i).iter().any(|r| r == file);
             let name = self.docs[i].title.clone();
             let (session, drawing, status) = self.doc_parts(i);
             if own {

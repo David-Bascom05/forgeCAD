@@ -439,3 +439,54 @@ fn a_same_length_rewrite_is_seen() {
         );
     }
 }
+
+#[test]
+fn a_new_fc_part_is_the_hosts_to_place() {
+    let Some(mut h) = headless() else { return };
+    h.gui.shell.out.push(forge_render::shell::Action::NewFc);
+    let out = h.step();
+    assert!(out.host.contains(&forge_render::shell::Action::NewFc));
+    assert!(h.gui.documents().is_empty());
+}
+
+#[test]
+fn the_watch_never_reads_a_device_a_link_out_or_a_huge_file() {
+    let Some(mut h) = headless() else { return };
+    let d = scratch("unsafe");
+    let out = scratch("unsafe-outside");
+    std::fs::write(d.join("bar.fg"), bar(100.0)).unwrap();
+    std::fs::write(out.join("secret.fg"), bar(5.0)).unwrap();
+    #[cfg(unix)]
+    {
+        let _ = std::os::unix::fs::symlink("/dev/zero", d.join("zero.fg"));
+        let _ = std::os::unix::fs::symlink(out.join("secret.fg"), d.join("link.fg"));
+    }
+    let big = std::fs::File::create(d.join("big.fg")).unwrap();
+    big.set_len(forge_lang::asm::LIMIT + 1).unwrap();
+    let asm = d.join("asm.fg");
+    let secret = out.join("secret.fg");
+    std::fs::write(
+        &asm,
+        format!(
+            "assembly\n\nbase = part(\"bar.fg\", ground: true)\nz = part(\"/dev/zero\", ground: true)\nzz = part(\"zero.fg\", ground: true)\nl = part(\"link.fg\", ground: true)\nb = part(\"big.fg\", ground: true)\no = part(\"{}\", ground: true)\n",
+            secret.display()
+        ),
+    )
+    .unwrap();
+    h.gui.open(asm.to_str().unwrap());
+    assert!(h.until(|g| g.fg.as_ref().is_some_and(|s| s.done == s.seq && s.done > 0)));
+    // the build read what it read; the watch looks only inside the assembly's root
+    let deps = h.gui.watched_files();
+    let bar_real = std::fs::canonicalize(d.join("bar.fg")).unwrap();
+    assert!(deps.contains(&bar_real), "{deps:?}");
+    for p in &deps {
+        assert!(
+            p.starts_with(std::fs::canonicalize(&d).unwrap()),
+            "{p:?} in {deps:?}"
+        );
+        assert!(!p.ends_with("big.fg") && !p.starts_with("/dev"), "{p:?}");
+    }
+    // a look at it all returns, having read nothing it shouldn't
+    h.gui.check_files();
+    h.step();
+}
