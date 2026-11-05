@@ -61,10 +61,10 @@ theorem execS_cons_compose {s : Stmt} {ys : List Stmt} {k k' D σ ρ Δs ms ls �
 
 /-- DeleteFeature, complete: if no later statement and no function body mentions what `s` binds,
 the block without `s` evaluates, to the old model without `s`'s fragment. -/
-theorem delete_complete {n D σ xs s ys Δ m l} (hr : NotRead s (fvB ys ++ D.reads))
-    (h : execS n D σ [] (xs ++ s :: ys) = .ok (Δ, m, l)) :
+theorem delete_complete {n D σ ρ xs s ys Δ m l} (hr : NotRead s (fvB ys ++ D.reads))
+    (h : execS n D σ ρ (xs ++ s :: ys) = .ok (Δ, m, l)) :
     ∃ m1 ms m3 l1 ls l3, m = m1 ++ ms ++ m3 ∧ l = l1 ++ ls ++ l3 ∧
-      ∃ N Δ', execS N D σ [] (xs ++ ys) = .ok (Δ', m1 ++ m3, l1 ++ l3) := by
+      ∃ N Δ', execS N D σ ρ (xs ++ ys) = .ok (Δ', m1 ++ m3, l1 ++ l3) := by
   obtain ⟨Δ1, m1, l1, Δ2, m2, l2, h1, h2, e⟩ := execS_append xs (s :: ys) h
   obtain ⟨Δs, ms, ls, Δ3, m3, l3, hs, h3, e2⟩ := execS_cons h2
   have h3' := (indep n).s h3 (agree_drop hs hr _)
@@ -77,11 +77,11 @@ theorem delete_complete {n D σ xs s ys Δ m l} (hr : NotRead s (fvB ys ++ D.rea
 /-- AddFeature, complete: if `s` evaluates where it is inserted and nothing after it (nor any
 function body) mentions what it binds, the longer block evaluates, to the old model with `s`'s
 fragment in place. -/
-theorem add_complete {n D σ xs s ys Δ m l} (hr : NotRead s (fvB ys ++ D.reads))
-    (h : execS n D σ [] (xs ++ ys) = .ok (Δ, m, l))
-    (hs : ∀ Δ1 m1 l1, execS n D σ [] xs = .ok (Δ1, m1, l1) → ∃ k r, execOne k D σ (Δ1 ++ []) s = .ok r) :
+theorem add_complete {n D σ ρ xs s ys Δ m l} (hr : NotRead s (fvB ys ++ D.reads))
+    (h : execS n D σ ρ (xs ++ ys) = .ok (Δ, m, l))
+    (hs : ∀ Δ1 m1 l1, execS n D σ ρ xs = .ok (Δ1, m1, l1) → ∃ k r, execOne k D σ (Δ1 ++ ρ) s = .ok r) :
     ∃ m1 ms m3 l1 ls l3, m = m1 ++ m3 ∧ l = l1 ++ l3 ∧
-      ∃ N Δ', execS N D σ [] (xs ++ s :: ys) = .ok (Δ', m1 ++ ms ++ m3, l1 ++ ls ++ l3) := by
+      ∃ N Δ', execS N D σ ρ (xs ++ s :: ys) = .ok (Δ', m1 ++ ms ++ m3, l1 ++ ls ++ l3) := by
   obtain ⟨Δ1, m1, l1, Δ3, m3, l3, h1, h3, e⟩ := execS_append xs ys h
   obtain ⟨k, ⟨Δs, ms, ls⟩, hS⟩ := hs Δ1 m1 l1 h1
   have h3' := (indep n).s h3 (agree_drop hS hr _).symm
@@ -94,12 +94,12 @@ theorem add_complete {n D σ xs s ys Δ m l} (hr : NotRead s (fvB ys ++ D.reads)
 /-- MoveFeature, complete: if neither of two neighbours (nor any function body) mentions what the
 other binds, and they bind different names, the swapped block evaluates, to the old model with
 the two fragments swapped. -/
-theorem move_complete {n D σ xs s t ys Δ m l}
+theorem move_complete {n D σ ρ xs s t ys Δ m l}
     (hst : ∀ x, s.binder = some x → t.binder ≠ some x)
     (hs : NotRead s (fvS t ++ D.reads)) (ht : NotRead t (fvS s ++ D.reads))
-    (h : execS n D σ [] (xs ++ s :: t :: ys) = .ok (Δ, m, l)) :
+    (h : execS n D σ ρ (xs ++ s :: t :: ys) = .ok (Δ, m, l)) :
     ∃ m1 ms mt m3 l1 ls lt l3, m = m1 ++ ms ++ mt ++ m3 ∧ l = l1 ++ ls ++ lt ++ l3 ∧
-      ∃ N Δ', execS N D σ [] (xs ++ t :: s :: ys) = .ok (Δ', m1 ++ mt ++ ms ++ m3, l1 ++ lt ++ ls ++ l3) := by
+      ∃ N Δ', execS N D σ ρ (xs ++ t :: s :: ys) = .ok (Δ', m1 ++ mt ++ ms ++ m3, l1 ++ lt ++ ls ++ l3) := by
   obtain ⟨Δ1, m1, l1, Δ2, m2, l2, h1, h2, e⟩ := execS_append xs (s :: t :: ys) h
   obtain ⟨Δs, ms, ls, Δ3, m3, l3, hS, h3, e2⟩ := execS_cons h2
   obtain ⟨Δt, mt, lt, Δ4, m4, l4, hT, h4, e3⟩ := execS_cons h3
@@ -108,7 +108,7 @@ theorem move_complete {n D σ xs s t ys Δ m l}
   have dis : ∀ x ∈ keys Δt, x ∉ keys Δs := by
     intro x hx hx'
     exact hst x (execOne_keys hS x hx') (execOne_keys hT x hx)
-  have sw := sub_swap (ρ := Δ1 ++ []) dis
+  have sw := sub_swap (ρ := Δ1 ++ ρ) dis
   rw [List.append_assoc, List.append_assoc] at sw
   have h4' := (weak n).s h4 sw
   obtain ⟨Na, ha⟩ := execS_cons_compose hS' h4'

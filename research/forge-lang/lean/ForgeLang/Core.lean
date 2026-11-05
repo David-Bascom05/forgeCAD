@@ -133,6 +133,8 @@ inductive Err where
   | dupId
   | noComp (c : Name)
   | noParam (c : Name)
+  | useCycle (f : String)
+  | noFile (f : String)
   deriving DecidableEq, Repr
 
 abbrev R (α : Type) := Except Err α
