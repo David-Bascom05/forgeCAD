@@ -281,8 +281,17 @@ def canary_files(b):
     for f, text in files.items():
         with open(os.path.join(b, f), "w") as fh:
             fh.write(text)
+    with open(os.path.join(b, "w/line2.fg"), "w") as fh:
+        fh.write(f"x = 1\n{CANARY} (((\n")
+    with open(os.path.join(b, "w/blob.fg"), "wb") as fh:
+        fh.write(bytes(range(256)) + CANARY.encode() + bytes(range(256)))
+    with open(os.path.join(b, "w/huge.fg"), "w") as fh:
+        fh.write(("# " + CANARY + "\n") * 200000 + "x = (((\n")
     os.symlink("notes.txt", os.path.join(b, "w/link.fg"))
-    return ["notes.txt", "bad.fg", "badstr.fg", "bad.step", "bad.ttf", "link.fg", "../X/secret.fg"]
+    os.symlink("/dev/zero", os.path.join(b, "w/zero.fg"))
+    os.mkfifo(os.path.join(b, "w/pipe.fg"))
+    return ["notes.txt", "bad.fg", "badstr.fg", "bad.step", "bad.ttf", "link.fg", "../X/secret.fg",
+            "line2.fg", "blob.fg", "huge.fg", "zero.fg", "pipe.fg"]
 
 
 def docs_for(f):
@@ -309,8 +318,11 @@ def check_canary(fg, tmp, t):
             outs = []
             step = os.path.join(w, f"out_{loader}.step")
             for args in (["run", doc, "--json"], ["run", doc], ["check", doc, "--json"], ["run", doc, "--step", step]):
-                r = subprocess.run([fg] + args, capture_output=True, text=True, errors="replace")
-                outs += [r.stdout, r.stderr]
+                try:
+                    r = subprocess.run([fg] + args, capture_output=True, text=True, errors="replace", timeout=60)
+                    outs += [r.stdout, r.stderr]
+                except subprocess.TimeoutExpired:
+                    t.note(f"canary-hang:{loader}", f"{loader} {f}", "fg did not finish in 60 s")
             if os.path.exists(step):
                 outs.append(open(step, errors="replace").read())
             leak = any(CANARY in o for o in outs)
@@ -322,9 +334,13 @@ def check_canary(fg, tmp, t):
         doc = os.path.join(w, "m_inline.fg")
         with open(doc, "w") as fh:
             fh.write(f'c = part("{f}")\n')
-        r = subprocess.run([fg, "edit", doc, json.dumps({"op": "InlineComponent", "file": f, "name": "brought"})],
-                           capture_output=True, text=True, errors="replace")
-        outs = [r.stdout, r.stderr, open(doc, errors="replace").read()]
+        try:
+            r = subprocess.run([fg, "edit", doc, json.dumps({"op": "InlineComponent", "file": f, "name": "brought"})],
+                               capture_output=True, text=True, errors="replace", timeout=60)
+            outs = [r.stdout, r.stderr, open(doc, errors="replace").read()]
+        except subprocess.TimeoutExpired:
+            t.note("canary-hang:inline", f"inline {f}", "fg edit did not finish in 60 s")
+            outs = []
         leak = any(CANARY in o for o in outs)
         t.note("canary-leak:inline" if leak else "canary", f"inline {f}", "the canary is in an output")
 

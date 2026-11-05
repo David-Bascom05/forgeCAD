@@ -121,3 +121,4 @@ open ForgeLang ForgeLang.Counter
 #print axioms ForgeLang.Fence.read_ok_parses
 #print axioms ForgeLang.Fence.output_through_parse
 #print axioms ForgeLang.Fence.canary
+#print axioms ForgeLang.Fence.line_leaks

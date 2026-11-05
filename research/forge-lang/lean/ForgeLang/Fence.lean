@@ -126,6 +126,17 @@ theorem canary {Out : Type} (out : List (Except Refusal Parsed) → Out) (reads 
 
 end
 
+/-- A refusal that says where the file stopped parsing (unified-doc-3's `NotForge {line}`) is a
+function of the file's bytes: two rejected files differing only in leading lines that parse
+(comments, say) are told apart, so the bytes of a rejected file do reach the output (a little:
+the line number). `canary` holds only for a refusal that carries no such number. -/
+def stopLine (b : Bytes) : Nat := (b.takeWhile (· = 35)).length + 1
+
+theorem line_leaks :
+    let out (r : Option Nat) := r
+    let refuse (b : Bytes) : Option Nat := some (stopLine b)
+    out (refuse [35, 35, 7]) ≠ out (refuse [7]) := by decide
+
 /-- Two links naming each other: missing, at any budget. -/
 def loopFS : FS := fun p =>
   if p = ["a"] then some (.link ["b"]) else if p = ["b"] then some (.link ["a"]) else none
