@@ -513,7 +513,8 @@ fn inline(src: &str, file: &str, name: &str, read: &dyn Fn(&str) -> Found) -> R<
                 CompProblem::Outside { file: file.into() },
             ));
         }
-        Found::Missing | Found::Link | Found::Taken => return Err(no("no such file")),
+        Found::Taken => return Err(no("it is not a Forge file this reads")),
+        Found::Missing | Found::Link => return Err(no("no such file")),
     };
     let fp = syntax::parse(&theirs).map_err(|_| no("it doesn't parse"))?;
     if bound(&prog).contains(name) {

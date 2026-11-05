@@ -348,47 +348,19 @@ pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
     (run, ev.b.into_cache())
 }
 
-/// Where a run may read files: the session's root if one is given, else the project the
-/// document is in (the nearest folder above it holding `.git`), else the document's own folder.
-/// Symlinks are resolved before every check, so a link cannot read past it.
+/// Where a run may read files: under the session's root if one is given (`fg serve`, MCP), else
+/// anywhere a loader's kind check lets it (each loader reads only its own kind of file, checked
+/// by its content, and no read file's bytes reach any output).
 pub fn fence_of(opts: &Options) -> Option<std::path::PathBuf> {
     fence_for(opts.dir.as_deref(), opts.root.as_deref())
 }
 
-/// The roots sessions were given (`fg serve`, MCP): a run fenced by one reads nothing of the
-/// user's either (their material library).
-static SESSION_ROOTS: std::sync::Mutex<std::collections::BTreeSet<std::path::PathBuf>> =
-    std::sync::Mutex::new(std::collections::BTreeSet::new());
-
-/// Whether `fence` is a session's root, not only the project a document is in.
-pub(crate) fn session_kept(fence: Option<&std::path::Path>) -> bool {
-    fence.is_some_and(|f| {
-        SESSION_ROOTS
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .contains(f)
-    })
-}
-
-/// The fence of a document in `dir`, under a session's `root` if one is given.
+/// The fence of a document in `dir`: its session's `root`, canonical, if one is given.
 pub fn fence_for(
-    dir: Option<&std::path::Path>,
+    _dir: Option<&std::path::Path>,
     root: Option<&std::path::Path>,
 ) -> Option<std::path::PathBuf> {
-    if let Some(r) = root {
-        let r = std::fs::canonicalize(r).ok()?;
-        SESSION_ROOTS
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .insert(r.clone());
-        return Some(r);
-    }
-    let dir = std::fs::canonicalize(dir?).ok()?;
-    let project = dir
-        .ancestors()
-        .find(|a| a.join(".git").exists())
-        .map(|a| a.to_path_buf());
-    Some(project.unwrap_or(dir))
+    std::fs::canonicalize(root?).ok()
 }
 
 /// Whether `file` beside `dir` is outside the fence: as written (whether or not it is there, so

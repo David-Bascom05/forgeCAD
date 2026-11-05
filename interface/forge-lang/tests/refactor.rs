@@ -311,36 +311,32 @@ fn each_refusal_on_disk_is_its_own() {
 }
 
 #[test]
-fn inline_reads_nothing_outside_the_project() {
+fn inline_reads_only_a_forge_file_and_nothing_outside_a_session_root() {
     use forge_lang::refactor::run_on_disk;
     let base = dir("fence-inline");
     let proj = base.join("proj");
-    std::fs::create_dir_all(proj.join(".git")).unwrap();
-    std::fs::create_dir_all(proj.join("hw")).unwrap();
+    std::fs::create_dir_all(&proj).unwrap();
     std::fs::create_dir_all(base.join("out")).unwrap();
-    std::fs::write(base.join("out/secret.fg"), "shared s = 1\nbox(size: (s, s, s))\n").unwrap();
-    std::fs::write(proj.join("hw/ok.fg"), "shared s = 1\nbox(size: (s, s, s))\n").unwrap();
+    std::fs::write(base.join("out/secret.fg"), "shared s = 1\n").unwrap();
+    std::fs::write(proj.join("key.fg"), "-----BEGIN KEY-----\nCANARY-51c\n").unwrap();
     let doc = proj.join("a.fg");
-    let src = "x = part(\"../out/secret.fg\")\n";
+    let src = "x = part(\"key.fg\")\n";
     std::fs::write(&doc, src).unwrap();
     let inl = |file: &str| Refactor::InlineComponent {
         file: file.into(),
         name: "s".into(),
     };
-    let e = run_on_disk(Some(&doc), None, src, &inl("../out/secret.fg")).unwrap_err();
+    // not a Forge file: refused, none of it said
+    let e = run_on_disk(Some(&doc), None, src, &inl("key.fg")).unwrap_err();
+    assert_eq!(e.kind(), "NotInlinable", "{}", e.text());
+    assert!(!e.text().contains("CANARY") && !format!("{}", e.json(src)).contains("CANARY"));
+    // under a session root, outside it (and through a link) is never read
+    let e = run_on_disk(Some(&doc), Some(&proj), src, &inl("../out/secret.fg")).unwrap_err();
     assert_eq!(e.kind(), "Outside", "{}", e.text());
     #[cfg(unix)]
     {
         std::os::unix::fs::symlink(base.join("out/secret.fg"), proj.join("link.fg")).unwrap();
-        let e = run_on_disk(Some(&doc), None, src, &inl("link.fg")).unwrap_err();
+        let e = run_on_disk(Some(&doc), Some(&proj), src, &inl("link.fg")).unwrap_err();
         assert_eq!(e.kind(), "Outside", "{}", e.text());
     }
-    // inside the project, up a folder, is read
-    let sub = proj.join("asm");
-    std::fs::create_dir_all(&sub).unwrap();
-    let doc2 = sub.join("b.fg");
-    let src2 = "x = part(\"../hw/ok.fg\")\n";
-    std::fs::write(&doc2, src2).unwrap();
-    let e = run_on_disk(Some(&doc2), None, src2, &inl("../hw/ok.fg"));
-    assert!(e.as_ref().map_or_else(|e| e.kind() != "Outside", |_| true));
 }

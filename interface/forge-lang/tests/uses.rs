@@ -197,7 +197,7 @@ fn use_errors_are_typed() {
         outside.file_name().expect("name").to_string_lossy()
     );
     assert!(matches!(first(&up), UseErr::Outside { .. }));
-    assert!(matches!(first("s = use(\"a.txt\")\n"), UseErr::Missing { .. }));
+    assert!(matches!(first("s = use(\"a.txt\")\n"), UseErr::NotForge { .. }));
     // a cycle, reported where it closes, inside the files
     match first("s = use(\"a.fg\")\n") {
         UseErr::InFile { file, error, .. } => {

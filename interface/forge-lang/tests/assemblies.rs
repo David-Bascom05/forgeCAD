@@ -788,11 +788,14 @@ fn an_assembly_reads_nothing_outside_its_root() {
             let src = format!("assembly\n\nbase = part(\"base.fg\", ground: true)\nx = {call}(\"{file}\")\n");
             let r = forge_lang::run(&src, opts.clone(), Default::default()).0;
             let texts: Vec<String> = r.errors.iter().map(|e| e.text()).collect();
-            // outside the root: refused as such, whether or not it is there; inside: not a part
+            // outside the root: refused as such, whether or not it is there; inside: no Forge
+            // file it reads, or nothing there
             let said = if [outside.as_str(), "../outside.fg", "link.fg"].contains(&file) {
-                format!("{file} is outside this project, not read")
-            } else {
+                format!("{file} is outside the session's root, not read")
+            } else if file == "nowhere.fg" {
                 format!("{file}: no such file")
+            } else {
+                format!("{file} is not a Forge file this reads (a plain .fg of text, at most 64 MB)")
             };
             assert_eq!(texts, vec![said], "{call}({file})");
             assert!(r.errors.iter().all(|e| e.kind() == "PartFile"));
@@ -873,8 +876,8 @@ mark = text(\"A\", font: \"../../outside.ttf\", size: size, depth: t, on: body.e
     assert_eq!(
         file_errors(Some(root.clone())),
         vec![
-            "../../outside.step: outside this project, not read".to_string(),
-            "../../outside.ttf: outside this project, not read".to_string(),
+            "../../outside.step: outside the session's root, not read".to_string(),
+            "../../outside.ttf: outside the session's root, not read".to_string(),
         ]
     );
     // with no root both are read: the fence is what refuses

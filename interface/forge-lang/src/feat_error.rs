@@ -174,7 +174,7 @@ impl FeatError {
                 FileProblem::Missing => format!("{file}: not found beside the part file"),
                 FileProblem::WrongKind => format!("{file}: not a kind of file this reads"),
                 FileProblem::Unreadable(why) => format!("{file}: {why}"),
-                FileProblem::Outside => format!("{file}: outside this project, not read"),
+                FileProblem::Outside => format!("{file}: outside the session's root, not read"),
             },
         }
     }

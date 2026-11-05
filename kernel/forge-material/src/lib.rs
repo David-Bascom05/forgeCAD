@@ -529,6 +529,30 @@ pub fn project_dir(doc_dir: &Path) -> PathBuf {
     doc_dir.join("materials")
 }
 
+/// A library file's text: a regular file (no device, fifo or link to one), at most 4 MB, UTF-8.
+fn read_plain(p: &Path) -> Option<String> {
+    use std::io::Read;
+    const MAX: u64 = 4 << 20;
+    let m = std::fs::metadata(p).ok()?;
+    if !m.is_file() || m.len() > MAX {
+        return None;
+    }
+    let mut o = std::fs::OpenOptions::new();
+    o.read(true);
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        o.custom_flags(0o4000);
+    }
+    let f = o.open(p).ok()?;
+    if !f.metadata().ok()?.is_file() {
+        return None;
+    }
+    let mut s = String::new();
+    f.take(MAX).read_to_string(&mut s).ok()?;
+    Some(s)
+}
+
 fn toml_files(dir: &Path) -> Vec<PathBuf> {
     let mut out: Vec<PathBuf> = std::fs::read_dir(dir)
         .map(|r| {
@@ -561,7 +585,8 @@ impl Libraries {
         for (lib, dir) in dirs {
             let Some(dir) = dir else { continue };
             for f in toml_files(&dir) {
-                let Ok(text) = std::fs::read_to_string(&f) else {
+                // a plain file of text only, and no bigger than a library is
+                let Some(text) = read_plain(&f) else {
                     continue;
                 };
                 match parse(&text) {
@@ -570,7 +595,14 @@ impl Libraries {
                         file: Some(f),
                         materials,
                     }),
-                    Err(e) => out.errors.push((f, e)),
+                    // where it stops, never what it holds
+                    Err(e) => out.errors.push((
+                        f,
+                        ParseError {
+                            line: e.line,
+                            why: "not a material library this reads".into(),
+                        },
+                    )),
                 }
             }
         }

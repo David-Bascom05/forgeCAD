@@ -356,7 +356,14 @@ fn a_subassembly_with_components_of_its_own_places() {
     std::fs::write(d.join("box.fg"), BOX).unwrap();
     let r = run_in(&d, "b = subassembly(\"box.fg\", ground: true)\n");
     assert!(r.ok(), "{:?}", errors(&r));
-    assert!(r.asm.as_ref().unwrap().bom.iter().all(|b| b.0.starts_with("box.fg|#")));
+    assert!(
+        r.asm
+            .as_ref()
+            .unwrap()
+            .bom
+            .iter()
+            .all(|b| b.0.starts_with("box.fg|#"))
+    );
 }
 
 #[test]
@@ -541,58 +548,6 @@ fn the_same_call_under_different_parents_is_one_part() {
 }
 
 #[test]
-fn reads_stay_inside_the_project() {
-    let base = dir("fence-reads");
-    let proj = base.join("proj");
-    for d in [
-        proj.join(".git"),
-        proj.join("hw"),
-        proj.join("asm"),
-        base.join("out"),
-    ] {
-        std::fs::create_dir_all(d).unwrap();
-    }
-    let block = "shared s = 10\nsketch p(on: xy) {\n  c = circle((0, 0), s)\n}\nb = extrude(p, s)\n";
-    std::fs::write(base.join("out/secret.fg"), block).unwrap();
-    std::fs::write(proj.join("hw/ok.fg"), block).unwrap();
-    let at = proj.join("asm");
-    let text = |r: &Run| {
-        format!(
-            "{:?} {:?}",
-            errors(r),
-            r.errors.iter().map(|e| e.json("")).collect::<Vec<_>>()
-        )
-    };
-    // a part up a folder inside the project is read; one outside it is refused, as such
-    let r = run_in(&at, "x = part(\"../hw/ok.fg\", ground: true)\n");
-    assert!(r.ok(), "{}", text(&r));
-    let r = run_in(&at, "x = part(\"../../out/secret.fg\", ground: true)\n");
-    assert!(text(&r).contains("Outside"), "{}", text(&r));
-    // through a link too, resolved before the check
-    #[cfg(unix)]
-    {
-        let _ = std::os::unix::fs::symlink(base.join("out/secret.fg"), at.join("link.fg"));
-        let r = run_in(&at, "x = part(\"link.fg\", ground: true)\n");
-        assert!(text(&r).contains("Outside"), "{}", text(&r));
-        let r = run_in(
-            &at,
-            "t = use(\"link.fg\")\nsketch p(on: xy) {\n  c = circle((0, 0), 1)\n}\nb = extrude(p, 1)\n",
-        );
-        assert!(kinds(&r).contains(&"UseOutside"), "{}", text(&r));
-    }
-    let r = run_in(
-        &at,
-        "t = use(\"../../out/secret.fg\")\nsketch p(on: xy) {\n  c = circle((0, 0), 1)\n}\nb = extrude(p, 1)\n",
-    );
-    assert!(kinds(&r).contains(&"UseOutside"), "{}", text(&r));
-    let r = run_in(
-        &at,
-        "t = use(\"../hw/ok.fg\")\nsketch p(on: xy) {\n  c = circle((0, 0), t.s)\n}\nb = extrude(p, 1)\n",
-    );
-    assert!(r.ok(), "{}", text(&r));
-}
-
-#[test]
 fn a_file_with_components_of_its_own_places_as_a_subassembly() {
     let d = dir("sub-infile");
     let ex = concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/unified/");
@@ -607,7 +562,10 @@ fn a_file_with_components_of_its_own_places_as_a_subassembly() {
     // each call one row, by the file and its identity there, summed over every placement
     assert!(bom.contains(&("nested_boxes.fg|#lid(w=40)", 2)), "{bom:?}");
     assert!(bom.contains(&("nested_boxes.fg|#lid(w=60)", 2)), "{bom:?}");
-    assert!(bom.iter().any(|b| b.0.starts_with("hinged_box.fg|#lid")), "{bom:?}");
+    assert!(
+        bom.iter().any(|b| b.0.starts_with("hinged_box.fg|#lid")),
+        "{bom:?}"
+    );
     assert!(!bom.iter().any(|b| b.0.contains("/lid")), "{bom:?}");
     // its own report: the parts' masses are found
     let rows = forge_lang::props::bom_rows(a);

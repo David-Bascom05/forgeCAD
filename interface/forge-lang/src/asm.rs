@@ -1545,6 +1545,11 @@ impl ItemName {
 #[derive(Clone, Debug, PartialEq)]
 pub enum FileProblem {
     Missing,
+    /// There, but no Forge file: not a plain `.fg`, too big, not text, or it does not parse
+    /// (the line it stops at). None of its text is said.
+    NotForge {
+        line: Option<usize>,
+    },
     /// There, but outside the project (or the session's root) once links are resolved.
     Outside,
     /// The file has errors of its own: how many, and the first's kind.
@@ -1919,7 +1924,13 @@ fn issue_text(i: &Issue) -> String {
         } => format!("{func} is for part files, not assemblies"),
         Issue::PartFile { file, problem } => match problem {
             FileProblem::Missing => format!("{file}: no such file"),
-            FileProblem::Outside => format!("{file} is outside this project, not read"),
+            FileProblem::NotForge { line: Some(l) } => {
+                format!("{file} is not a Forge file this reads (it does not parse at line {l})")
+            }
+            FileProblem::NotForge { line: None } => {
+                format!("{file} is not a Forge file this reads (a plain .fg of text, at most 64 MB)")
+            }
+            FileProblem::Outside => format!("{file} is outside the session's root, not read"),
             FileProblem::Errors { count, first } => format!("{file}: {count} errors, the first {first}"),
             FileProblem::WrongKind { assembly: true } => format!("{file} is an assembly: use subassembly()"),
             FileProblem::WrongKind { assembly: false } => format!("{file} is a part: use part()"),
@@ -2267,7 +2278,11 @@ fn is_infile(file: &str) -> bool {
 
 /// `text` evaluated as a document of its own and built: its document ready to solve, its
 /// in-file parts' evaluations, and its errors.
-fn file_env(text: &str, dir: Option<std::path::PathBuf>, fence: Option<std::path::PathBuf>) -> (FileEnv, Doc, Vec<Error>) {
+fn file_env(
+    text: &str,
+    dir: Option<std::path::PathBuf>,
+    fence: Option<std::path::PathBuf>,
+) -> (FileEnv, Doc, Vec<Error>) {
     let text = kept_text(text.to_string());
     let mut ev = Eval::new(text, crate::eval::Rules::default(), true, Default::default());
     ev.dir = dir;
@@ -2528,31 +2543,55 @@ fn not_located(
 ) -> FileProblem {
     let file = variant_split(file).map_or(file, |v| v.0);
     if crate::outside(dir.as_deref(), fence.as_deref(), file) {
-        FileProblem::Outside
-    } else {
-        FileProblem::Missing
+        return FileProblem::Outside;
+    }
+    // something there the loader refused: not a plain .fg, or too big; read no further
+    match dir.as_ref().map(|d| d.join(file)) {
+        Some(p) if std::fs::symlink_metadata(&p).is_ok() => FileProblem::NotForge { line: None },
+        _ => FileProblem::Missing,
     }
 }
 
-/// A located file's text, read no further than `LIMIT`.
+/// A located file's text, read no further than `LIMIT`: only a plain file that is UTF-8 and
+/// parses as Forge (anything else is no Forge file, and none of its bytes go anywhere).
 pub(crate) fn read_capped(p: &std::path::Path) -> Option<String> {
-    use std::io::Read;
+    read_fg(p).ok()
+}
+
+/// `read_capped`, or why not: the line a text that does not parse stops at (None: not a plain
+/// file, or not text).
+pub(crate) fn read_fg(p: &std::path::Path) -> Result<String, Option<usize>> {
     // a component's key is never a file to read
     if p.to_str().is_none_or(is_infile) {
-        return None;
+        return Err(None);
     }
     if let Some(k) = p.to_str().filter(|k| k.starts_with(crate::stdparts::KEY)) {
-        return crate::stdparts::text_of(k);
+        return crate::stdparts::text_of(k).ok_or(None);
     }
-    let mut s = String::new();
-    let read = std::fs::File::open(p)
+    // a link inside the fence is the file it names (the loaders' fence looked through it):
+    // read as it is, a regular file, capped (deps::read_plain)
+    let bytes = std::fs::canonicalize(p)
         .ok()
-        .and_then(|f| f.take(LIMIT).read_to_string(&mut s).ok());
-    crate::deps::read(p, read.map(|_| s.as_bytes()));
+        .and_then(|real| crate::deps::read_plain(&real, LIMIT).ok());
+    crate::deps::read(p, bytes.as_deref());
     if let Some(d) = p.parent() {
         crate::deps::materials(Some(d));
     }
-    read.map(|_| s)
+    let s = String::from_utf8(bytes.ok_or(None)?).map_err(|_| None)?;
+    if let Err(e) = crate::syntax::parse(&s) {
+        return Err(Some(e.span().map_or(1, |sp| sp.lines(&s).0)));
+    }
+    Ok(s)
+}
+
+/// Why a file located but did not read: not there, or there and no Forge file (where it stops).
+fn read_problem(p: &std::path::Path) -> FileProblem {
+    if std::fs::symlink_metadata(p).is_err() {
+        return FileProblem::Missing;
+    }
+    FileProblem::NotForge {
+        line: read_fg(p).err().flatten(),
+    }
 }
 
 /// The key of a file that could not be located: it reads as missing everywhere.
@@ -3581,7 +3620,10 @@ pub fn finish(
                 };
                 let path = format!("{}/", rest.trim_start_matches('#'));
                 let found = match owner {
-                    Some(f) => envs.get(f).and_then(|e| e.prepared.get(&path)).map(|x| namespaced(x, f)),
+                    Some(f) => envs
+                        .get(f)
+                        .and_then(|e| e.prepared.get(&path))
+                        .map(|x| namespaced(x, f)),
                     None => prepared.get(&path).cloned(),
                 };
                 if !subs.contains_key(&key)
@@ -3624,7 +3666,7 @@ pub fn finish(
                     i.span,
                     Issue::PartFile {
                         file: i.file.clone(),
-                        problem: FileProblem::Missing,
+                        problem: read_problem(&p),
                     },
                 ));
                 continue;
@@ -3852,7 +3894,11 @@ pub fn finish(
                 }
             };
             let Some(text) = text else {
-                let problem = named.map_or(FileProblem::Missing, |i| not_located(&dir, &fence, &i.file));
+                // located and read but no Forge file, or never located
+                let problem = match std::path::Path::new(&path) {
+                    p if p.is_absolute() && std::fs::symlink_metadata(p).is_ok() => read_problem(p),
+                    _ => named.map_or(FileProblem::Missing, |i| not_located(&dir, &fence, &i.file)),
+                };
                 ev.errors
                     .push(note(span, Issue::PartFile { file: shown, problem }));
                 continue;
@@ -5591,7 +5637,7 @@ impl CompProblem {
                 format!("{file}: a new file is a plain name ending .fg, beside this one (no folder)")
             }
             CompProblem::UntitledDocument => "save this file first: what moves out goes beside it".into(),
-            CompProblem::Outside { file } => format!("{file} is outside this project, not read"),
+            CompProblem::Outside { file } => format!("{file} is outside the session's root, not read"),
             CompProblem::NotInlinable { file, why } => format!("{file} can't be brought in: {why}"),
             CompProblem::Cycle { a, b } => {
                 format!("{a} places {b}, which places {a}: a component may not place itself")
