@@ -578,9 +578,14 @@ fn score_ref_inflation(c: &Case, data: &Path, st: &Stretch, p_end: f64) -> Score
     sc
 }
 
-fn score_corner(c: &Case, data: &Path, st: &Stretch, _p_end: f64) -> Score {
+fn score_corner(c: &Case, data: &Path, st: &Stretch, middle: bool) -> Score {
     let (d, t0, g) = (n(c, "d", 20.0), n(c, "t0", 1.0), n(c, "G", 0.5));
     let w = d / 2f64.sqrt();
+    // with the sheet's middle half a thickness off the tool, its walls are the mould's moved in by
+    // that: the corner's vertex up its bisector by o sqrt 2, a node on a wall within o + t0/10
+    let o = if middle { 0.5 * t0 } else { 0.0 };
+    let vz = -w + o * 2f64.sqrt();
+    let on = |x: f64, z: f64| (z - (x.abs() - w)) / 2f64.sqrt() <= o + 0.42 * t0;
     let rows = table(data);
     let pi: Vec<f64> = rows.iter().filter_map(|r| num(r, "Pi")).collect();
     let rr: Vec<f64> = rows.iter().filter_map(|r| num(r, "R_over_d")).collect();
@@ -593,9 +598,9 @@ fn score_corner(c: &Case, data: &Path, st: &Stretch, _p_end: f64) -> Score {
             .map(|&k| s.nodes[k])
             .filter(|p| {
                 let (x, z) = (p[0] as f64, p[2] as f64);
-                x.abs() < w && z < -1e-3 && z - (x.abs() - w) <= 0.6 * t0
+                x.abs() < w && z < -1e-3 && on(x, z)
             })
-            .map(|p| ((p[0] as f64).abs().powi(2) + (p[2] as f64 + w).powi(2)).sqrt() / d)
+            .map(|p| ((p[0] as f64).abs().powi(2) + (p[2] as f64 - vz).powi(2)).sqrt() / d)
             .min_by(|a, b| a.total_cmp(b))
     };
     let mut sc = Score::default();
@@ -628,10 +633,10 @@ fn score_corner(c: &Case, data: &Path, st: &Stretch, _p_end: f64) -> Score {
         for &kk in &row {
             let p = last.nodes[kk];
             let (x, z) = (p[0] as f64, p[2] as f64);
-            if !(x > 0.0 && x < w && z - (x - w) <= 0.6 * t0) {
+            if !(x > 0.0 && x < w && on(x, z)) {
                 continue;
             }
-            let along = (x * x + (z + w).powi(2)).sqrt();
+            let along = (x * x + (z - vz).powi(2)).sqrt();
             if along >= 2.0 * r_end * d && along <= d {
                 we.push((last.ratio[kk] as f64 - forge_math::dmath::powf(along / d, k) / lc) * 100.0);
             }
@@ -743,7 +748,12 @@ fn scoreboard() {
                                 "mean" => score_mean(c, &data_file, st),
                                 "bubble" => score_bubble(c, &data_file, st, p.pressure),
                                 "ref_inflation" => score_ref_inflation(c, &data_file, st, p.pressure),
-                                "corner" => score_corner(c, &data_file, st, p.pressure),
+                                "corner" => score_corner(
+                                    c,
+                                    &data_file,
+                                    st,
+                                    p.surface == forge_thermo::Surface::Distance,
+                                ),
                                 _ => score_profile(c, &data_file, st, m.female),
                             };
                             // the sheet through the tool: the solver lost contact (a robustness fault)
