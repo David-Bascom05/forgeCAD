@@ -420,3 +420,66 @@ fn a_formed_part_simulated_weighs_the_integral_of_its_wall() {
         assert!((0.45..0.75).contains(&r), "{name}: {r}");
     }
 }
+
+#[test]
+fn a_finer_simulated_part_keeps_its_wall_integral_and_lies_on_the_tool() {
+    let cup = {
+        let p = Profile {
+            plane: Frame::WORLD,
+            loops: vec![Profile::circle(Point2::new(0.0, 0.0), 30.0, 0)],
+        };
+        forge_ops::tapered(&p, -30.0, 3f64.to_radians(), 3)
+            .unwrap()
+            .remove(0)
+    };
+    for (name, shape, tool) in [
+        ("box", block(60.0, 40.0, 25.0, 6.0, 5.0), Tool::Male),
+        ("cover", block(120.0, 80.0, 35.0, 8.0, 5.0), Tool::Male),
+        ("cup", cup, Tool::Female),
+    ] {
+        let s = spec(tool);
+        let f = form(&shape, &s, 11).unwrap();
+        let st = stretch(&f, &s, &Process::default());
+        let trim = build::polygon(&f.trim);
+        let on = OnTool {
+            mesh: &f.mesh,
+            contact: &f.contact,
+        };
+        for levels in 0..3 {
+            let t0 = std::time::Instant::now();
+            let sim = simulated_on(&f.frame, &trim, &st, s.t, &on, levels);
+            let ms = t0.elapsed().as_secs_f64() * 1e3;
+            let rel = (sim.mass.volume - sim.sheet_volume) / sim.sheet_volume;
+            eprintln!(
+                "{name} L{levels}: {} tris, {ms:.1} ms, volume {:.1} integral {:.1} rel {rel:.5}",
+                sim.mesh.triangles.len(),
+                sim.mass.volume,
+                sim.sheet_volume
+            );
+            assert!(sim.mesh.open_edges().is_empty(), "{name} {levels}");
+            // measured: within 0.25 % to one split, past 0.5 % at two (the box's -0.66 %), so the
+            // app takes one
+            if levels <= 1 {
+                assert!(rel.abs() < 0.005, "{name} {levels}: {rel}");
+            }
+            // the tool side lies on the tool or the table: no point the model left a quarter of t
+            // off it is left so
+            if levels == 1 {
+                let tool = simulated::Near::new(&on, 2.0 * s.t);
+                let near = sim.mesh.positions[..sim.wall.len()]
+                    .iter()
+                    .filter(|p| {
+                        f.frame.point_to_local(**p).z.abs() < 1e-9
+                            || tool.nearest(**p).is_some_and(|q| (q - **p).length() < 1e-6)
+                    })
+                    .count();
+                assert!(
+                    near * 10 > sim.wall.len() * 6,
+                    "{name}: {near} of {}",
+                    sim.wall.len()
+                );
+            }
+        }
+    }
+    let _ = simulated;
+}

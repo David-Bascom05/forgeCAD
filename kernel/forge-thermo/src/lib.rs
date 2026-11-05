@@ -22,7 +22,7 @@ pub use material::{
 };
 pub use prepare::{Given, Prepared, prepare};
 pub use scale::{Unscalable, scaled};
-pub use simulated::{MeshMass, Simulated, blank, mesh_mass, simulated};
+pub use simulated::{MeshMass, OnTool, Simulated, blank, mesh_mass, simulated, simulated_on};
 pub use stretch::{Law, Process, Step, Stretch, stretch};
 
 #[cfg(test)]

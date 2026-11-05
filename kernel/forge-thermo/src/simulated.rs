@@ -37,6 +37,178 @@ pub struct Simulated {
 /// The simulated part of `st`, a sheet `t` thick formed with its trim plane `frame` (z the pull)
 /// and trimmed to `trim` (on the plane's axes).
 pub fn simulated(frame: &Frame, trim: &[Point2], st: &Stretch, t: f64) -> Simulated {
+    let sheet = Sheet {
+        nodes: st.nodes.clone(),
+        tris: st.tris.clone(),
+        ratio: st.node_ratio.clone(),
+        touched: st.touched.clone(),
+    };
+    fitted(frame, trim, &sheet, t)
+}
+
+/// The tool the sheet lies on: its surface's mesh (world) and the triangles the sheet meets.
+pub struct OnTool<'a> {
+    pub mesh: &'a TriMesh,
+    pub contact: &'a [usize],
+}
+
+/// As `simulated`, finer: each of the model's triangles split in four `levels` times, and every
+/// point the sheet touched put on the tool (or the table, the trim plane) where it lies within a
+/// sheet's thickness of it: the model leaves it up to a quarter of t off, and its grid's
+/// straight sides across the tool's rounds.
+pub fn simulated_on(
+    frame: &Frame,
+    trim: &[Point2],
+    st: &Stretch,
+    t: f64,
+    tool: &OnTool,
+    levels: usize,
+) -> Simulated {
+    let mut sheet = Sheet {
+        nodes: st.nodes.clone(),
+        tris: st.tris.clone(),
+        ratio: st.node_ratio.clone(),
+        touched: st.touched.clone(),
+    };
+    for _ in 0..levels {
+        sheet = sheet.split();
+    }
+    let near = Near::new(tool, 2.0 * t);
+    for k in 0..sheet.nodes.len() {
+        if !sheet.touched[k] {
+            continue;
+        }
+        let p = sheet.nodes[k];
+        let l = frame.point_to_local(p);
+        // the table: the trim plane, under the sheet's flange
+        let mut best = (l.z.abs(), frame.point_to_world(Point3::new(l.x, l.y, 0.0)));
+        if let Some(q) = near.nearest(p) {
+            let d = (q - p).length();
+            if d < best.0 {
+                best = (d, q);
+            }
+        }
+        if best.0 <= t {
+            sheet.nodes[k] = best.1;
+        }
+    }
+    fitted(frame, trim, &sheet, t)
+}
+
+/// The sheet as the fit reads it: its nodes (world), triangles, each node's wall over t, and
+/// whether it touched the tool.
+struct Sheet {
+    nodes: Vec<Point3>,
+    tris: Vec<[u32; 3]>,
+    ratio: Vec<f64>,
+    touched: Vec<bool>,
+}
+
+impl Sheet {
+    /// Each triangle in four, by its sides' middles: a middle touched where both its ends did.
+    fn split(self) -> Sheet {
+        let mut s = self;
+        let mut mid: HashMap<(u32, u32), u32> = HashMap::new();
+        let mut tris = Vec::with_capacity(s.tris.len() * 4);
+        for &[a, b, c] in &s.tris.clone() {
+            let mut m = |x: u32, y: u32| -> u32 {
+                *mid.entry((x.min(y), x.max(y))).or_insert_with(|| {
+                    let (i, j) = (x as usize, y as usize);
+                    s.nodes.push(s.nodes[i] + (s.nodes[j] - s.nodes[i]) * 0.5);
+                    s.ratio.push(0.5 * (s.ratio[i] + s.ratio[j]));
+                    s.touched.push(s.touched[i] && s.touched[j]);
+                    (s.nodes.len() - 1) as u32
+                })
+            };
+            let (ab, bc, ca) = (m(a, b), m(b, c), m(c, a));
+            tris.extend([[a, ab, ca], [ab, b, bc], [ca, bc, c], [ab, bc, ca]]);
+        }
+        s.tris = tris;
+        s
+    }
+}
+
+/// The tool's triangles in cells, for the nearest point on it.
+pub(crate) struct Near<'a> {
+    tool: &'a OnTool<'a>,
+    cell: f64,
+    cells: HashMap<(i64, i64, i64), Vec<usize>>,
+}
+
+impl<'a> Near<'a> {
+    pub(crate) fn new(tool: &'a OnTool<'a>, reach: f64) -> Near<'a> {
+        let cell = reach.max(0.5);
+        let key = |v: f64| (v / cell).floor() as i64;
+        let mut cells: HashMap<(i64, i64, i64), Vec<usize>> = HashMap::new();
+        for &k in tool.contact {
+            let [a, b, c] = tool.mesh.triangles[k].map(|i| tool.mesh.positions[i as usize]);
+            let lo = [
+                a.x.min(b.x).min(c.x),
+                a.y.min(b.y).min(c.y),
+                a.z.min(b.z).min(c.z),
+            ];
+            let hi = [
+                a.x.max(b.x).max(c.x),
+                a.y.max(b.y).max(c.y),
+                a.z.max(b.z).max(c.z),
+            ];
+            for i in key(lo[0] - reach)..=key(hi[0] + reach) {
+                for j in key(lo[1] - reach)..=key(hi[1] + reach) {
+                    for l in key(lo[2] - reach)..=key(hi[2] + reach) {
+                        cells.entry((i, j, l)).or_default().push(k);
+                    }
+                }
+            }
+        }
+        Near { tool, cell, cells }
+    }
+
+    pub(crate) fn nearest(&self, p: Point3) -> Option<Point3> {
+        let key = |v: f64| (v / self.cell).floor() as i64;
+        let list = self.cells.get(&(key(p.x), key(p.y), key(p.z)))?;
+        list.iter()
+            .map(|&k| {
+                let [a, b, c] = self.tool.mesh.triangles[k].map(|i| self.tool.mesh.positions[i as usize]);
+                closest(p, a, b, c)
+            })
+            .min_by(|x, y| (*x - p).length_sq().total_cmp(&(*y - p).length_sq()))
+    }
+}
+
+/// The point of triangle abc nearest p (Ericson, Real-Time Collision Detection 5.1.5).
+fn closest(p: Point3, a: Point3, b: Point3, c: Point3) -> Point3 {
+    let (ab, ac, ap) = (b - a, c - a, p - a);
+    let (d1, d2) = (ab.dot(ap), ac.dot(ap));
+    if d1 <= 0.0 && d2 <= 0.0 {
+        return a;
+    }
+    let bp = p - b;
+    let (d3, d4) = (ab.dot(bp), ac.dot(bp));
+    if d3 >= 0.0 && d4 <= d3 {
+        return b;
+    }
+    let vc = d1 * d4 - d3 * d2;
+    if vc <= 0.0 && d1 >= 0.0 && d3 <= 0.0 {
+        return a + ab * (d1 / (d1 - d3));
+    }
+    let cp = p - c;
+    let (d5, d6) = (ab.dot(cp), ac.dot(cp));
+    if d6 >= 0.0 && d5 <= d6 {
+        return c;
+    }
+    let vb = d5 * d2 - d1 * d6;
+    if vb <= 0.0 && d2 >= 0.0 && d6 <= 0.0 {
+        return a + ac * (d2 / (d2 - d6));
+    }
+    let va = d3 * d6 - d5 * d4;
+    if va <= 0.0 && d4 - d3 >= 0.0 && d5 - d6 >= 0.0 {
+        return b + (c - b) * ((d4 - d3) / ((d4 - d3) + (d5 - d6)));
+    }
+    let den = 1.0 / (va + vb + vc);
+    a + ab * (vb * den) + ac * (vc * den)
+}
+
+fn fitted(frame: &Frame, trim: &[Point2], st: &Sheet, t: f64) -> Simulated {
     let poly = clean(trim);
     let convex = is_convex(&poly);
     let local: Vec<Point3> = st.nodes.iter().map(|p| frame.point_to_local(*p)).collect();
@@ -74,7 +246,7 @@ pub fn simulated(frame: &Frame, trim: &[Point2], st: &Stretch, t: f64) -> Simula
         .zip(&lean)
         .map(|(n, l)| *n * (1.0 / if l.1 > 0.0 { (l.0 / l.1).max(0.5) } else { 1.0 }))
         .collect();
-    let wall: Vec<f64> = st.node_ratio.iter().map(|r| r * t).collect();
+    let wall: Vec<f64> = st.ratio.iter().map(|r| r * t).collect();
 
     let mut out = Builder::default();
     for v in &st.tris {

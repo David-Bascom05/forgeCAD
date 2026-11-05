@@ -1335,10 +1335,15 @@ fn thermoform(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
             );
             // the part as the model leaves it, and the modelled one's mass, both kept with it
             let sim = st.as_ref().map(|w| {
-                let key = format!("thermoform simulated {key} {walls:?}");
+                let key = format!("thermoform simulated 1 {key} {walls:?}");
                 ev.b.memo(key, || {
                     let trim = ft::build::polygon(&f.trim);
-                    Rc::new(ft::simulated(&f.frame, &trim, w, prep.t))
+                    let on = ft::OnTool {
+                        mesh: &f.mesh,
+                        contact: &f.contact,
+                    };
+                    // one split: within the 0.5 % gate, about 0.1 s (two: 0.6 s, past it)
+                    Rc::new(ft::simulated_on(&f.frame, &trim, w, prep.t, &on, 1))
                 })
             });
             let modelled = ev.b.memo(format!("thermoform modelled {key}"), || {
