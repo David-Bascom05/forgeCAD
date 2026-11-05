@@ -251,6 +251,9 @@ fn a_cover_reports_its_verdict_its_two_masses_and_its_field() {
     // the field: every point on the part, inside the extremes
     let field = o.field();
     assert!(field.len() > 500);
+    // the report says how many, the points only when asked (`fg run --field`)
+    assert_eq!(num(&["field", "count"]), Some(field.len() as f64));
+    assert!(t.get("field").and_then(|f| f.get("points")).is_none());
     assert!(
         field
             .iter()

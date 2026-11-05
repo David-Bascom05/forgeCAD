@@ -814,8 +814,9 @@ thermoform(SHAPE, t: T, material: "ABS" | MATERIAL, from: "outer"|"wall"|"inner"
   for `modelled`, the part at t, and `simulated`, the wall rebuilt at the model's thickness at each
   point: volume mm3, mass kg, cog mm, inertia about it kg mm2; its volume is within 0.5 % of
   `wall_integral_mm3`, the wall integrated over its middle surface), `blank` (W, L, t, mass) and
-  `field`, the wall at each point of the sheet on the mould inside the trim (x, y, z on the mould,
-  wall, mm); `fg run F --json --field OUT.csv` writes the points to a file and names it instead.
+  `field`, how many points the wall is known at on the sheet on the mould inside the trim; `fg run F
+  --json --field OUT.csv` writes them (x, y, z on the mould, wall, mm) and names the file, `--field
+  inline` puts them in the JSON.
 
 The shop is data: the `thermo.*` values of the material library's records (kernel/forge-material;
 a project's materials/*.toml and the user's ~/.config/forgecad/materials/*.toml are searched

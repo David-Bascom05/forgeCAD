@@ -277,20 +277,25 @@ impl ThermoOut {
                     ),
                     ("unit", "mm".into()),
                     ("at", "the sheet's side on the tool, inside the trim".into()),
+                    ("count", pts.len().into()),
                     (
-                        "points",
-                        Json::Arr(
-                            pts.iter()
-                                .map(|(p, h)| {
-                                    Json::Arr(vec![p.x.into(), p.y.into(), p.z.into(), (*h).into()])
-                                })
-                                .collect(),
-                        ),
+                        "get",
+                        "fg run FILE --json --field OUT.csv | --field inline".into(),
                     ),
                 ]),
             ));
         }
         Json::obj(f)
+    }
+
+    /// The thickness field's points as JSON: [x, y, z, wall], mm.
+    pub fn field_json(&self) -> Json {
+        Json::Arr(
+            self.field()
+                .iter()
+                .map(|(p, h)| Json::Arr(vec![p.x.into(), p.y.into(), p.z.into(), (*h).into()]))
+                .collect(),
+        )
     }
 
     /// The thickness field as CSV: x, y, z, wall, mm.
