@@ -131,6 +131,8 @@ impl Gui {
             if activate {
                 self.activate(i);
             }
+            // opened again after it changed on disk: what's on disk now
+            self.check_files();
             return Some(i);
         }
         let was = self.active;
