@@ -970,6 +970,7 @@ pub fn hlr(insts: &[Instance], view: &View, opts: &Options) -> Vec<Piece> {
     };
     let curve: Vec<usize> = pieces.iter().map(|p| p.0).collect();
     let kept = unique(&geoms, &curve, &order, opts.chord);
+
     drop(t);
     let mut out = Vec::new();
     for (k, runs) in kept.into_iter().enumerate() {
@@ -1433,14 +1434,26 @@ fn unique(geoms: &[Geom2], curve: &[usize], order: &[usize], chord: f64) -> Vec<
                 .iter()
                 .fold(boxes[0].1, |h, x| Point2::new(h.x.max(x.1.x), h.y.max(x.1.y)));
             items.clear();
-            grid.each_near(lo, hi, |s| {
-                let (g, _) = segs[s as usize];
-                if curve[g as usize] != curve[k] && rank[g as usize] < rank[k] {
+            // each once: in the cell holding the low corner of where its box (as it went in)
+            // meets the look's; one whose box misses the look's is near none of the chords
+            grid.each_near_in(lo, hi, |s, cell| {
+                let (g, i) = segs[s as usize];
+                if curve[g as usize] == curve[k] || rank[g as usize] >= rank[k] {
+                    return;
+                }
+                let op = &samples[g as usize].1;
+                let (c, d) = (op[i as usize], op[i as usize + 1]);
+                let (bl, bh) = (
+                    Point2::new(c.x.min(d.x) - reach, c.y.min(d.y) - reach),
+                    Point2::new(c.x.max(d.x) + reach, c.y.max(d.y) + reach),
+                );
+                if bh.x < lo.x || bl.x > hi.x || bh.y < lo.y || bl.y > hi.y {
+                    return;
+                }
+                if grid.cell(Point2::new(lo.x.max(bl.x), lo.y.max(bl.y))) == cell {
                     items.push(s);
                 }
             });
-            items.sort_unstable();
-            items.dedup();
             for &s in &items {
                 let (g, i) = segs[s as usize];
                 let op = &samples[g as usize].1;
@@ -1551,13 +1564,42 @@ fn unique(geoms: &[Geom2], curve: &[usize], order: &[usize], chord: f64) -> Vec<
                 .iter()
                 .any(|&w| marked.get(w).is_some_and(|m| *m))
         };
+        // many candidates (a circle on another, each of its chords one): binned by their boxes
+        // grown by the reach, so a point looks only at those whose box it is in, the only ones
+        // its test can pass
+        let local = (cand.len() > 32).then(|| {
+            let (mut lo, mut hi) = (
+                Point2::new(f64::INFINITY, f64::INFINITY),
+                Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY),
+            );
+            let boxes: Vec<(Point2, Point2)> = cand
+                .iter()
+                .map(|&s| {
+                    let (g, i) = segs[s as usize];
+                    let op = &samples[g as usize].1;
+                    let (a, b) = (op[i as usize], op[i as usize + 1]);
+                    let (l, h) = (
+                        Point2::new(a.x.min(b.x) - reach, a.y.min(b.y) - reach),
+                        Point2::new(a.x.max(b.x) + reach, a.y.max(b.y) + reach),
+                    );
+                    lo = Point2::new(lo.x.min(l.x), lo.y.min(l.y));
+                    hi = Point2::new(hi.x.max(h.x), hi.y.max(h.y));
+                    (l, h)
+                })
+                .collect();
+            let mut g = Grid::new(lo, hi, cand.len());
+            for (n, (l, h)) in boxes.iter().enumerate() {
+                g.insert(n as u32, *l, *h);
+            }
+            (g, lo, hi)
+        });
         let covered = |t: f64| {
             if !maybe(t) {
                 return false;
             }
             let q = geom.at(t);
             let Some(dir) = geom.tangent(t) else { return false };
-            cand.iter().any(|&s| {
+            let test = |s: u32| {
                 let (g, i) = segs[s as usize];
                 if curve[g as usize] == curve[k] || rank[g as usize] > rank[k] {
                     return false;
@@ -1578,7 +1620,15 @@ fn unique(geoms: &[Geom2], curve: &[usize], order: &[usize], chord: f64) -> Vec<
                 let at = other.nearest(q, t0 + x * (t1 - t0));
                 other.at(at).distance(q) <= tol
                     && other.tangent(at).is_some_and(|d| d.cross(dir).abs() <= 0.05)
-            })
+            };
+            match &local {
+                // a point off the grid is within reach of none (the grid holds every grown box)
+                Some((g, lo, hi)) => {
+                    !(q.x < lo.x || q.x > hi.x || q.y < lo.y || q.y > hi.y)
+                        && g.at(q).iter().any(|&n| test(cand[n as usize]))
+                }
+                None => cand.iter().any(|&s| test(s)),
+            }
         };
         geom.runs_where_also(chord, &also, |t| !covered(t))
             .into_iter()
