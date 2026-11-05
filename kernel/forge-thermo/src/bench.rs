@@ -153,6 +153,7 @@ fn at(curve: &[(f64, f64)], s: f64) -> f64 {
 fn compare(
     name: &str,
     surface: Surface,
+    slide: Option<f64>,
     shape: &Body,
     t0: f64,
     flange: f64,
@@ -183,6 +184,7 @@ fn compare(
         pressure: 0.09,
         resolution: 80,
         surface,
+        slide,
     };
     let st = stretch(&f, &spec, &pr);
     let model = along(&st, t0, diagonal);
@@ -226,6 +228,7 @@ fn erdogan_cylinder() {
     let e = compare(
         "erdogan2014_cylinder",
         Surface::Height,
+        None,
         &shape,
         2.5,
         40.0,
@@ -243,6 +246,7 @@ fn erdogan_box() {
     let a = compare(
         "erdogan2014_box_axis",
         Surface::Height,
+        None,
         &shape,
         2.0,
         65.0,
@@ -254,6 +258,7 @@ fn erdogan_box() {
     let d = compare(
         "erdogan2014_box_diagonal",
         Surface::Height,
+        None,
         &shape,
         2.0,
         65.0,
@@ -271,6 +276,7 @@ fn duarte_cone() {
     let e = compare(
         "duarte2022_cone",
         Surface::Height,
+        None,
         &shape,
         1.0,
         50.0,
@@ -298,6 +304,7 @@ fn the_distance_field_forms_the_measured_parts_as_well() {
         let h = compare(
             name,
             Surface::Height,
+            None,
             shape,
             t0,
             flange,
@@ -309,6 +316,7 @@ fn the_distance_field_forms_the_measured_parts_as_well() {
         let d = compare(
             name,
             Surface::Distance,
+            None,
             shape,
             t0,
             flange,
@@ -327,5 +335,43 @@ fn the_distance_field_forms_the_measured_parts_as_well() {
         // field's vertical quarter of t0; these parts' error is the slip and draw-in the model
         // leaves out (stage 2), not the contact's distance. Within 3 % t0
         assert!(d <= h + 0.03, "{name}: {d} {h}");
+    }
+}
+
+/// Draw-in: the sheet on the mould's top sliding in against Coulomb friction (mu times the
+/// vacuum). Measured against the parts, the mean error of t0 for each mu (stuck, 2, 1, 0.5, 0.25):
+/// cone 1.20 3.27 1.58 1.18 1.58; cylinder 16.63 16.29 16.47 16.65 16.89; box axis 12.43 11.00
+/// 12.62 12.09 11.48; diagonal 12.14 10.79 11.97 12.14 11.55. Slip on the top moves the Erdogan
+/// error by at most 1.4 % t0, not under 8: the material they hold beyond the opening is not drawn
+/// over the mould's top (the clamp frame's own draw-in and pre-forming sag are what's left).
+#[test]
+fn the_sheet_drawn_in_over_the_mould_top() {
+    let cone = cavity(65.0, 55.0, 100.0, 3.0);
+    let cyl = cavity(100.0, 100.0 - 1e-3, 100.0, 10.0);
+    let bx = box_cavity(150.0, 75.0, 10.0);
+    for (name, shape, t0, flange, temp, diagonal, upto) in [
+        ("duarte2022_cone", &cone, 1.0, 50.0, 140.0, false, 150.0),
+        ("erdogan2014_cylinder", &cyl, 2.5, 40.0, 180.0, false, 185.0),
+        ("erdogan2014_box_axis", &bx, 2.0, 65.0, 180.0, false, 125.0),
+        ("erdogan2014_box_diagonal", &bx, 2.0, 65.0, 180.0, true, 145.0),
+    ] {
+        let mut row = vec![];
+        for mu in [None, Some(2.0), Some(1.0), Some(0.5), Some(0.25)] {
+            let e = compare(
+                name,
+                Surface::Height,
+                mu,
+                shape,
+                t0,
+                flange,
+                "HIPS",
+                temp,
+                diagonal,
+                upto,
+            );
+            row.push(format!("{mu:?} {:.2}", e * 100.0));
+        }
+        eprintln!("DRAW {name}: {}", row.join(" | "));
+        assert_eq!(row.len(), 5);
     }
 }

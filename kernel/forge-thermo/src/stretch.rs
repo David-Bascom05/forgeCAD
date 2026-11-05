@@ -39,6 +39,10 @@ pub struct Process {
     pub resolution: usize,
     /// What the sheet meets: the tool's height over each cell, or its 3-D distance field.
     pub surface: Surface,
+    /// Draw-in: the sheet lying on the tool's top (a female tool's, round the cavity) slides on it
+    /// against Coulomb friction, this coefficient times the forming pressure pressing it there
+    /// (None: it sticks where it lies, the reference).
+    pub slide: Option<f64>,
 }
 
 /// The tool as the contact reads it.
@@ -73,6 +77,7 @@ impl Default for Process {
             pressure: 0.09,
             resolution: 56,
             surface: Surface::Height,
+            slide: None,
         }
     }
 }
@@ -310,7 +315,25 @@ struct Sheet {
     tris: Vec<Tri>,
     idx: Vec<[usize; 3]>,
     free: Vec<bool>,
+    /// Nodes sliding on the tool's top: held to its plane, each against its friction force
+    /// (N) from where it stood at the load step's start.
+    slide: Vec<bool>,
+    hold: Vec<f64>,
+    anchor: Vec<Vec3>,
 }
+
+/// Sliding nodes carried off the tool's top (over the cavity) fall free.
+fn release(sheet: &mut Sheet, tool: &Gap, x: &[Vec3], off: f64) {
+    for (s, p) in sheet.slide.iter_mut().zip(x) {
+        if *s && tool.at(*p) > off {
+            *s = false;
+        }
+    }
+}
+
+/// The friction's smoothing length, mm: below it the hold grows like a spring, past it it is the
+/// Coulomb force (the lagged, smoothed friction of an incremental potential).
+const SLIP: f64 = 0.02;
 
 impl Sheet {
     /// The membrane's energy plus the pressure's work (p times the signed volume under the
@@ -339,10 +362,24 @@ impl Sheet {
                 }
             }
         })?;
+        for k in 0..x.len() {
+            if !self.slide[k] {
+                continue;
+            }
+            let d = Vec3::new(x[k].x - self.anchor[k].x, x[k].y - self.anchor[k].y, 0.0);
+            let l = (d.length_sq() + SLIP * SLIP).sqrt();
+            e += self.hold[k] * (l - SLIP);
+            if let Some(g) = g.as_deref_mut() {
+                g[k] += d * (self.hold[k] / l);
+            }
+        }
         if let Some(g) = g {
-            for (gi, &f) in g.iter_mut().zip(&self.free) {
+            for (k, (gi, &f)) in g.iter_mut().zip(&self.free).enumerate() {
                 if !f {
                     *gi = Vec3::ZERO;
+                } else if self.slide[k] {
+                    // held to the tool's top
+                    gi.z = 0.0;
                 }
             }
         }
@@ -506,6 +543,7 @@ fn relax(
         let mut stopped = false;
         for i in 0..n {
             if sheet.free[i]
+                && !sheet.slide[i]
                 && let Some(c) = crossing(field, x[i], trial[i], reach[i])
             {
                 trial[i] = c;
@@ -623,17 +661,36 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
             }
         })
         .collect();
-    // a female sheet lies on the tool's top round the cavity from the start
+    // a female sheet lies on the tool's top round the cavity from the start: stuck there, or
+    // sliding on it
+    let mut slide = vec![false; x.len()];
     for k in 0..x.len() {
         if free[k] && tool.at(x[k]) <= 0.0 {
-            free[k] = false;
+            if pr.slide.is_some() {
+                slide[k] = true;
+            } else {
+                free[k] = false;
+            }
         }
     }
+    // each node's share of the sheet, for its friction
+    let mut share = vec![0.0; x.len()];
+    for v in &idx {
+        let a = 0.5
+            * (reference[v[1]] - reference[v[0]])
+                .cross(reference[v[2]] - reference[v[0]])
+                .length();
+        v.iter().for_each(|&k| share[k] += a / 3.0);
+    }
+    let hold_at = |p: f64| -> Vec<f64> { share.iter().map(|a| pr.slide.unwrap_or(0.0) * p * a).collect() };
     let mut sheet = Sheet {
         pool: Pool::new(&pr.law, &tris),
         tris,
         idx: idx.clone(),
         free,
+        hold: hold_at(0.0),
+        anchor: x.clone(),
+        slide,
     };
     let mu = pr.law.shear().max(1e-9);
     let tol = 1e-5 * mu * spec.t * s;
@@ -671,16 +728,22 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
             for &k in &edge {
                 x[k].z = z;
             }
+            sheet.anchor.copy_from_slice(&x);
+            sheet.hold = hold_at(0.0);
             let reach = reach_at(&x);
             its += relax(&mut sheet, &tool, &mut x, 0.0, cap, tol, &reach, 150);
+            release(&mut sheet, &tool, &x, 0.25 * spec.t);
             snap(&x, "drape");
         }
     }
     let loads = 10;
     for k in 1..=loads {
         let p = pr.pressure * k as f64 / loads as f64;
+        sheet.anchor.copy_from_slice(&x);
+        sheet.hold = hold_at(p);
         let reach = reach_at(&x);
         its += relax(&mut sheet, &tool, &mut x, p, cap, tol, &reach, 400);
+        release(&mut sheet, &tool, &x, 0.25 * spec.t);
         snap(&x, "vacuum");
     }
     // a hot sheet held under the pressure creeps on until it meets the tool: an elastic sheet
@@ -696,8 +759,11 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
     let (mut left, mut stalled) = (open(&sheet, &x), 0);
     while left > 0 && stalled < 2 && p < CREEP * pr.pressure {
         p *= 1.25;
+        sheet.anchor.copy_from_slice(&x);
+        sheet.hold = hold_at(p);
         let reach = reach_at(&x);
         its += relax(&mut sheet, &tool, &mut x, p, cap, tol, &reach, 200);
+        release(&mut sheet, &tool, &x, 0.25 * spec.t);
         snap(&x, "creep");
         let now = open(&sheet, &x);
         stalled = if now < left { 0 } else { stalled + 1 };
