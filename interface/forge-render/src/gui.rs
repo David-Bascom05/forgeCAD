@@ -2869,6 +2869,20 @@ impl Headless {
         false
     }
 
+    /// Frames until what's under the pointer is known for the part as it is now: the Forge
+    /// worker's builds (a dialog's preview too) back and whole, the view still, and the pick for
+    /// this very pixel read. A click after it lands on what a person sees, however slow the
+    /// machine.
+    pub fn settle_hover(&mut self) -> bool {
+        self.until(|g| {
+            g.fg.as_ref()
+                .is_none_or(|s| s.done == s.seq && s.whole >= s.changed)
+                && g.view
+                    .as_ref()
+                    .is_some_and(|v| !v.nav.moving() && !v.nav.pick_pending() && !v.renderer.pick_busy())
+        })
+    }
+
     /// A right click on what's drawn under `at`, then a click on its menu's `item`.
     pub fn menu_item(&mut self, at: &str, item: &str) -> bool {
         let Some(r) = self.gui.shell.place(at) else {

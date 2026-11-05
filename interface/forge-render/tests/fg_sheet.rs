@@ -84,17 +84,12 @@ fn point_at(h: &mut Headless, world: [f32; 3]) {
     let on = cam.pixel_of(world, size.0, size.1).unwrap();
     let r = h.gui.shell.view_rect;
     h.move_to(r.min.x + on.0, r.min.y + on.1);
-    let mut waited = 0;
-    loop {
-        h.step();
-        std::thread::sleep(std::time::Duration::from_millis(5));
-        waited += 1;
-        let v = h.gui.view.as_ref().unwrap();
-        let known = v.nav.marks().iter().any(|m| !m.selected) && !v.nav.pick_pending();
-        if (known && waited > 10) || waited > 120 {
-            break;
-        }
-    }
+    // what's under it read for the part as built now, not a count of frames
+    assert!(
+        h.settle_hover(),
+        "the pointer's pick never came: {}",
+        h.gui.shell.status
+    );
     h.button(true);
     h.step();
     h.button(false);
