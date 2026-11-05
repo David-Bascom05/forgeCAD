@@ -15,7 +15,10 @@ pub fn socket_path() -> PathBuf {
     let dir = std::env::var_os("XDG_RUNTIME_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(std::env::temp_dir);
-    dir.join(format!("forgecad-agent-{}.sock", std::process::id()))
+    // one per app in the process, as a process may hold several (tests do)
+    static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+    let k = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    dir.join(format!("forgecad-agent-{}-{k}.sock", std::process::id()))
 }
 
 /// Serves the tools on `path` from a thread, a connection at a time each on its own.

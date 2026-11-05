@@ -301,6 +301,8 @@ impl ClaudeCode {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
         clean_env(&mut c);
+        // the folder as it is before the agent can touch it: a write in its first moment is a change
+        let mut watch = Watch::new(self.cfg.file.parent().unwrap_or(std::path::Path::new(".")));
         let mut child = c.spawn().map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
                 Event::Problem {
@@ -336,18 +338,16 @@ impl ClaudeCode {
                 }
             })
             .expect("a thread");
-        let (out, session, alive, busy, file) = (
+        let (out, session, alive, busy) = (
             self.out.clone(),
             self.session.clone(),
             self.alive.clone(),
             self.busy.clone(),
-            self.cfg.file.clone(),
         );
         std::thread::Builder::new()
             .name("agent-claude".into())
             .spawn(move || {
                 let mut parser = Parser::default();
-                let mut watch = Watch::new(file.parent().unwrap_or(std::path::Path::new(".")));
                 for line in BufReader::new(stdout).lines().map_while(Result::ok) {
                     for e in parser.line(&line) {
                         let after = matches!(e, Event::ToolDone { .. } | Event::Done { .. });

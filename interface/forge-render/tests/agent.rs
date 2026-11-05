@@ -48,6 +48,20 @@ fn text_of(evs: &[Event]) -> String {
         .collect()
 }
 
+/// Frames until this holds, by the clock, not a frame count: a run under load is slow, never
+/// wrong. Two minutes, then it says no.
+fn wait(h: &mut forge_render::gui::Headless, what: impl Fn(&forge_render::gui::Gui) -> bool) -> bool {
+    let t = std::time::Instant::now();
+    while t.elapsed().as_secs() < 120 {
+        h.step();
+        if what(&h.gui) {
+            return true;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(2));
+    }
+    false
+}
+
 /// A fresh directory for a test's files.
 fn scratch(name: &str) -> PathBuf {
     let d = std::env::temp_dir().join(format!("forgecad-agent-{name}-{}", std::process::id()));
@@ -378,9 +392,9 @@ fn in_the_app_a_turn_reloads_the_part_as_one_undo_step_and_the_tabs_keep_their_s
     assert_eq!(h.gui.shell.agent.input, "make the base plate thicker");
     assert!(h.click("agent:send"));
     // a folder outside ~/projects is asked about once
-    assert!(h.until(|g| g.shell.place("agent:trust:yes").is_some()));
+    assert!(wait(&mut h, |g| g.shell.place("agent:trust:yes").is_some()));
     assert!(h.click("agent:trust:yes"));
-    assert!(h.until(|g| {
+    assert!(wait(&mut h, |g| {
         !g.shell.agent.running
             && g.shell
                 .agent
@@ -659,14 +673,25 @@ fn a_file_the_agent_makes_opens_and_its_undo_moves_it_aside_and_goes_back() {
     h.step();
     assert!(h.click("agent:send"));
     let window = dir.join("window.fg").display().to_string();
-    assert!(h.until(|g| {
+    let done = wait(&mut h, |g| {
         !g.shell.agent.running
             && g.shell
                 .agent
                 .entries
                 .iter()
                 .any(|e| matches!(e, Entry::Diff { created: true, .. }))
-    }));
+    });
+    assert!(
+        done,
+        "running {}, entries {:?}, tabs {:?}",
+        h.gui.shell.agent.running,
+        h.gui.shell.agent.entries,
+        h.gui
+            .documents()
+            .iter()
+            .map(|d| d.title.clone())
+            .collect::<Vec<_>>()
+    );
     h.step();
     // the app's on the new file, the chat the same
     assert_eq!(h.gui.agent_path().as_deref(), Some(window.as_str()));
@@ -712,7 +737,7 @@ fn a_file_the_agent_makes_opens_and_its_undo_moves_it_aside_and_goes_back() {
     assert_eq!(trash.len(), 1);
     assert_eq!(h.gui.agent_path().as_deref(), Some(plate.to_str().unwrap()));
     // its tab closed, and the build thread with it
-    assert!(h.until(|_| forge_render::fg::builders_running() <= 1));
+    assert!(wait(&mut h, |_| forge_render::fg::builders_running() <= 1));
     // and the edit to the part, open again, is taken back in the app (unsaved, as an edit)
     assert!(h.click("agent:undo:0:0"));
     h.step();
@@ -860,7 +885,8 @@ fn app_call(
     std::thread::spawn(move || {
         let _ = tx.send(t.call(&name, args));
     });
-    for _ in 0..3000 {
+    let t = std::time::Instant::now();
+    while t.elapsed().as_secs() < 120 {
         h.step();
         if let Ok(r) = rx.try_recv() {
             for _ in 0..3 {
@@ -894,7 +920,7 @@ fn the_app_tools_work_the_rack_view_and_never_its_file() {
     h.gui.open(rack.to_str().unwrap());
     let t = std::time::Instant::now();
     while !asm_ready(&h.gui) && t.elapsed().as_secs() < 600 {
-        h.until(asm_ready);
+        wait(&mut h, asm_ready);
     }
     assert!(asm_ready(&h.gui), "{}", h.gui.shell.status);
     let (tools, rx) = forge_render::agent::apptools::AppTools::new(Arc::new(|| {}));
@@ -991,7 +1017,7 @@ fn the_app_tools_work_the_rack_view_and_never_its_file() {
         (iso.yaw - front.yaw).abs() > 0.1,
         "framed: {iso:?} from {front:?}"
     );
-    h.until(|g| g.fg.as_ref().is_some_and(|s| s.done == s.seq));
+    wait(&mut h, |g| g.fg.as_ref().is_some_and(|s| s.done == s.seq));
     assert!(
         h.gui.fg.as_ref().unwrap().previewing,
         "the build shows the driven pose"
@@ -1027,7 +1053,11 @@ fn the_thermoform_tools_show_the_wall_and_read_its_numbers() {
     };
     h.step();
     h.gui.open(cover.canonicalize().unwrap().to_str().unwrap());
-    assert!(h.until(|g| g.shell.fg.as_ref().is_some_and(|p| !p.thermos.is_empty())));
+    assert!(wait(&mut h, |g| g
+        .shell
+        .fg
+        .as_ref()
+        .is_some_and(|p| !p.thermos.is_empty())));
     let (tools, rx) = forge_render::agent::apptools::AppTools::new(Arc::new(|| {}));
     h.gui.agent.app_rx = Some(rx);
     let r = app_call(&mut h, &tools, "thermo_view", r#"{"analysis":"thickness"}"#);
@@ -1112,7 +1142,7 @@ fn the_agent_hides_the_racks_side_panels_and_opens_its_door_without_editing() {
     h.gui.open(rack.to_str().unwrap());
     let t = std::time::Instant::now();
     while !asm_ready(&h.gui) && t.elapsed().as_secs() < 600 {
-        h.until(asm_ready);
+        wait(&mut h, asm_ready);
     }
     assert!(h.click("side:tab:Agent"));
     h.step();
@@ -1294,7 +1324,7 @@ fn a_file_open_in_another_tab_takes_the_agents_writes_as_one_step_and_its_undo_b
     h.text("widen the other part too");
     h.step();
     assert!(h.click("agent:send"));
-    assert!(h.until(|g| {
+    assert!(wait(&mut h, |g| {
         !g.shell.agent.running
             && g.shell
                 .agent

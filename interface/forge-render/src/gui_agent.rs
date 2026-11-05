@@ -139,10 +139,17 @@ impl Gui {
         let active = self.agent_path();
         if active.as_deref() == Some(path.as_str()) {
             let d = doc(&mut self.shell.drawing, &mut self.fg);
-            if d.as_ref().is_some_and(|d| d.text() == text) {
-                return;
+            // the document has it already (a file it made, opened by the watch first): still the
+            // turn's change, kept for its diff and Undo
+            let d = d.filter(|d| d.text() != text);
+            let made = before.is_none();
+            if self.agent.turns.changed(d, &path, before, text) && made {
+                // opened by the watch before this came
+                self.shell.agent.take(Event::Note {
+                    text: format!("Opened {}, which the agent made", name_of(&path)),
+                    error: false,
+                });
             }
-            self.agent.turns.changed(d, &path, before, text);
             self.fg_text();
             self.shell.status = "The agent changed the file".into();
             return;
@@ -156,9 +163,8 @@ impl Gui {
                 (Some(s), None) => Some(s),
                 _ => None,
             };
-            if d.as_ref().is_none_or(|d| d.text() != text) {
-                turns.changed(d, &path, before, text);
-            }
+            let d = d.filter(|d| d.text() != text);
+            turns.changed(d, &path, before, text);
             self.agent.turns = turns;
             return;
         }
