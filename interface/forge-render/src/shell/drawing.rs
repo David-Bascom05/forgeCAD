@@ -1392,7 +1392,8 @@ impl Shell {
         let s = ctx.content_rect();
         let top = super::TITLE_H + super::TABS_H + super::RIBBON_H;
         let bottom = s.height() - super::DOCS_H - super::STATUS_H;
-        let side = Rect::from_min_max(pos2(0.0, top), pos2(super::SIDE_W + 30.0, bottom));
+        let side_w = self.side_px.unwrap_or(super::SIDE_W + 30.0);
+        let side = Rect::from_min_max(pos2(0.0, top), pos2(side_w, bottom));
         let canvas = Rect::from_min_max(pos2(side.right() + 1.0, top), pos2(s.width(), bottom));
         self.view_rect = canvas;
         if let Some(env) = &mut self.drawing
@@ -1424,6 +1425,7 @@ impl Shell {
         }
         self.drawing_canvas(ui, canvas);
         self.drawing_browser(ui, side);
+        self.side_splitter(ui, side, s.width());
         self.docs_and_status(ui, s, bottom);
         self.drawing_dialogs(&ctx);
         self.drawing_mode_bar(&ctx, canvas);

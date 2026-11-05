@@ -59,6 +59,7 @@ const RIBBON_H: f32 = 104.0;
 const SIDE_W: f32 = 270.0;
 /// An assembly's browser: wider, for what each relationship ties.
 const ASM_SIDE_W: f32 = 340.0;
+const SIDE_MIN_W: f32 = 180.0;
 const HEAD_H: f32 = 30.0;
 const ROW_H: f32 = 26.0;
 const DOCS_H: f32 = 28.0;
@@ -372,6 +373,8 @@ pub struct Shell {
     pub dim: Option<dim::DimEdit>,
     /// What's on the model and takes the pointer from the view.
     pub view_blocks: Vec<Rect>,
+    /// The browser's width as dragged; None for the mode's default.
+    pub side_px: Option<f32>,
     /// Place from Content Center: the standard parts library's dialog.
     pub content: content::ContentCenter,
     /// What was typed for it, committed with Enter.
@@ -442,6 +445,7 @@ impl Default for Shell {
             dialog: None,
             dim: None,
             view_blocks: Vec::new(),
+            side_px: None,
             content: Default::default(),
             dim_typed: None,
             fg: None,
@@ -569,7 +573,8 @@ impl Shell {
     }
 
     pub fn side_w(&self) -> f32 {
-        if self.is_asm() { ASM_SIDE_W } else { SIDE_W }
+        self.side_px
+            .unwrap_or(if self.is_asm() { ASM_SIDE_W } else { SIDE_W })
     }
 
     /// A ribbon command for a Forge file: its dialog up or down.
@@ -837,6 +842,7 @@ impl Shell {
         self.tabs_row(ui, s.width());
         self.ribbon(ui, s.width());
         self.side(ui, side);
+        self.side_splitter(ui, side, s.width());
         self.docs_and_status(ui, s, bottom);
         self.navbar(&ctx);
         self.sketches_ui(&ctx);
@@ -1477,6 +1483,29 @@ impl Shell {
     }
 
     /// With no title bar from the system, the window's edges resize it.
+    /// The browser's right edge: drag to resize it, double-click for its default width.
+    pub(super) fn side_splitter(&mut self, ui: &mut Ui, side: Rect, window_w: f32) {
+        let r = Rect::from_min_max(
+            pos2(side.right() - 3.0, side.top()),
+            pos2(side.right() + 3.0, side.bottom()),
+        );
+        let resp = ui.interact(r, egui::Id::unique("side-splitter"), egui::Sense::click_and_drag());
+        let live = resp.hovered() || resp.dragged();
+        if live {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
+            ui.painter()
+                .vline(side.right(), side.y_range(), Stroke::new(2.0, self.theme.accent));
+        }
+        if resp.dragged() {
+            let max = (window_w * 0.6).max(SIDE_MIN_W);
+            self.side_px = Some((side.width() + resp.drag_delta().x).clamp(SIDE_MIN_W, max));
+        }
+        if resp.double_clicked() {
+            self.side_px = None;
+        }
+        self.view_blocks.push(r);
+    }
+
     fn resize_edges(&mut self, ui: &mut Ui, s: Rect) {
         if self.view.maximized {
             return;

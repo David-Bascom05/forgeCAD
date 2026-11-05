@@ -2095,3 +2095,40 @@ fn project_geometry_takes_a_fillets_faces_tilted_and_parallel_exact_where_it_can
     let m = forge_agent::model::Model::new(&text);
     assert!(m.error.is_none(), "{:?}\n{text}", m.error);
 }
+
+#[test]
+fn dragging_the_browsers_edge_resizes_it_and_the_view_follows_and_a_double_click_resets_it() {
+    let Some(mut h) = app() else { return };
+    let w0 = h.gui.shell.side_w();
+    let y = h.gui.shell.view_rect.center().y;
+    h.move_to(w0, y);
+    h.step();
+    h.button(true);
+    h.step();
+    for i in 1..=10 {
+        h.move_to(w0 + 12.0 * i as f32, y);
+        h.step();
+    }
+    h.button(false);
+    h.step();
+    h.step();
+    let w1 = h.gui.shell.side_w();
+    assert!((w1 - (w0 + 120.0)).abs() < 2.0, "{w0} -> {w1}");
+    assert!((h.gui.shell.view_rect.left() - (w1 + 1.0)).abs() < 1.0);
+    // never past its floor
+    h.move_to(w1, y);
+    h.step();
+    h.button(true);
+    h.step();
+    h.move_to(10.0, y);
+    h.step();
+    h.button(false);
+    h.step();
+    assert!(h.gui.shell.side_w() >= 180.0);
+    let w2 = h.gui.shell.side_w();
+    for _ in 0..2 {
+        h.click_at(w2, y);
+    }
+    h.step();
+    assert_eq!(h.gui.shell.side_w(), w0);
+}
