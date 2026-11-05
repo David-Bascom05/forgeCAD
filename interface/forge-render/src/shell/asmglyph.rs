@@ -1,9 +1,10 @@
 //! The assembly's joints and constraints in the view, as Inventor draws them: a small glyph of
 //! each one's kind where it ties its parts, the same size on screen however far, red when it's in
 //! trouble. Hovering a glyph (or its browser row) lights the two parts and the two anchors it
-//! ties; a click picks its row, a double click opens its Joint or Constrain dialog. All of them,
-//! a kind, or one at a time can be turned off: the View tab, and the eyes on the Relationships
-//! rows.
+//! ties; a click picks its row, a double click opens its Joint or Constrain dialog. As Inventor's,
+//! they show when called for: the chosen component's, the dragged one's, the relationship whose
+//! row is chosen or hovered; the View tab's Relationships shows them all. The eyes on the
+//! Relationships rows filter either way.
 
 use super::Shell;
 use super::fgasm::{AsmPanel, Flag, kind_icon, under};
@@ -21,6 +22,8 @@ pub const DIM_TINT: [f32; 4] = [0.36, 0.38, 0.42, 0.0];
 /// The glyphs turned off: all, by kind (`Joint:revolute`), or one by one (`owner/id`).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Glyphs {
+    /// Show All (the View tab's Relationships): every glyph, not only those called for.
+    pub all: bool,
     pub hidden: bool,
     pub kinds_off: BTreeSet<String>,
     pub off: HashSet<String>,
@@ -89,6 +92,41 @@ impl AsmPanel {
         format!("l:{l}")
     }
 
+    /// Whether relationship `l`'s glyph is called for: Show All, its row chosen or under the
+    /// pointer, or it ties the chosen component or the one being dragged.
+    pub fn glyph_wanted(&self, l: usize) -> bool {
+        if self.glyphs.all || self.glyphs.row == Some(l) || self.hover_link == Some(l) {
+            return true;
+        }
+        let Some(lk) = self.links.get(l) else {
+            return false;
+        };
+        let ties = |key: &str| {
+            !key.is_empty()
+                && ((!lk.a.0.is_empty() && under(&lk.a.0, key))
+                    || (!lk.b.0.is_empty() && under(&lk.b.0, key)))
+        };
+        if let Some(g) = &self.posing.grab
+            && ties(super::asmdrag::top(&g.occ))
+        {
+            return true;
+        }
+        let Some(sel) = self.selected.as_deref() else {
+            return false;
+        };
+        // a relationship's own row (under Relationships, or under a component that it holds)
+        if let Some((_, k)) = sel.rsplit_once("l:") {
+            return k.parse() == Ok(l);
+        }
+        let key = sel
+            .strip_prefix("s:")
+            .or_else(|| sel.strip_prefix("p:"))
+            .unwrap_or(sel);
+        // a feature's row of a part in the assembly: that part's
+        let key = key.split_once(">f:").map_or(key, |x| x.0);
+        !key.contains(':') && ties(key)
+    }
+
     /// The relationships whose glyph is drawn, with where.
     pub fn glyph_list(&self) -> Vec<(usize, Point3)> {
         // editing a part in place: the assembly's relationships stand back
@@ -98,7 +136,7 @@ impl AsmPanel {
         self.links
             .iter()
             .enumerate()
-            .filter(|(_, l)| self.glyphs.shown(l))
+            .filter(|(k, l)| self.glyphs.shown(l) && self.glyph_wanted(*k))
             .filter_map(|(k, _)| Some((k, glyph_at(self.link_at.get(k)?)?)))
             .collect()
     }

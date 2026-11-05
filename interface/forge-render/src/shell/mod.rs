@@ -5,6 +5,7 @@
 
 pub mod agent;
 pub mod agent_settings;
+pub mod asmdrag;
 pub mod asmglyph;
 pub mod asmpart;
 pub mod asmtools;
@@ -202,8 +203,11 @@ pub enum FgCmd {
     Copy,
     FreeMove,
     FreeRotate,
+    /// A drag's transient pose written to the file, or dropped (asmdrag.rs).
+    KeepPosition,
+    ReturnToDesign,
     ContentCenter,
-    /// The joints' and constraints' glyphs in the view, on or off.
+    /// Show All of the joints' and constraints' glyphs in the view (else only those called for).
     Relationships,
 }
 
@@ -643,7 +647,7 @@ impl Shell {
             }
             FgCmd::Relationships => {
                 if let Some(a) = &mut fg.asm {
-                    a.glyphs.hidden = !a.glyphs.hidden;
+                    a.glyphs.all = !a.glyphs.all;
                 }
             }
             FgCmd::Explode => {
@@ -653,6 +657,8 @@ impl Shell {
                 }
             }
             FgCmd::Save => fg.out.push(fg::FgAct::Save),
+            FgCmd::KeepPosition => self.status = asmdrag::command(fg, true),
+            FgCmd::ReturnToDesign => self.status = asmdrag::command(fg, false),
             FgCmd::ContentCenter => {}
             c => self.status = asmtools::command(fg, c),
         }
@@ -810,6 +816,31 @@ impl Shell {
                     ("Undo", "undo", Some(Action::Undo)),
                     ("Fit All", "fit", Some(Action::FitAll)),
                 ],
+            );
+        }
+        // a dragged pose, Inventor's: kept or returned from the view's menu
+        if self
+            .fg
+            .as_ref()
+            .and_then(|p| p.asm.as_ref())
+            .is_some_and(|a| !a.posing.is_empty())
+        {
+            return (
+                [
+                    ("Keep Position", "pin", Some(Action::Fg(FgCmd::KeepPosition))),
+                    ("Undo", "undo", Some(Action::Undo)),
+                    NONE,
+                    ("Fit All", "fit", Some(Action::FitAll)),
+                    (
+                        "Return to Design",
+                        "home",
+                        Some(Action::Fg(FgCmd::ReturnToDesign)),
+                    ),
+                    NONE,
+                    ("Home", "home", Some(Action::Home)),
+                    NONE,
+                ],
+                Vec::new(),
             );
         }
         if let Some(id) = self.selected.filter(|s| self.rows.iter().any(|r| r.id == *s)) {
@@ -1376,6 +1407,13 @@ impl Shell {
         } else if let Some(p) = self.fg.as_mut().filter(|p| p.tool.is_some()) {
             p.tool = None;
             self.status.clear();
+        } else if let Some(p) = self
+            .fg
+            .as_mut()
+            .filter(|p| p.asm.as_ref().is_some_and(|a| !a.posing.is_empty()))
+        {
+            // a dragged pose: Return to Design
+            self.status = asmdrag::command(p, false);
         } else if let Some(m) = &mut self.sketch {
             if m.has_tool() {
                 m.escape();

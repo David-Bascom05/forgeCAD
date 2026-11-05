@@ -30,6 +30,8 @@ pub mod gui_agent;
 pub mod gui_apptools;
 #[path = "gui_asm.rs"]
 mod gui_asm;
+#[path = "gui_asmdrag.rs"]
+mod gui_asmdrag;
 #[path = "gui_docs.rs"]
 pub mod gui_docs;
 #[path = "gui_explode.rs"]
@@ -2217,6 +2219,7 @@ impl Gui {
         self.sync_tab();
         let shell = &mut self.shell;
         let mut output = self.ctx.run_ui(raw, |ui| shell.ui(ui));
+        self.asm_drag_cursor(&mut output.platform_output);
         if self.shell.selected != was_selected
             && let Some(v) = &mut self.view
         {
@@ -3085,9 +3088,14 @@ impl Gui {
         let mut changed = false;
         let flat_shown = self.shell.fg.as_ref().is_some_and(|p| p.flat);
         let mut inspect = None;
+        let mut posed = None;
         for m in s.poll() {
             let b = match m {
                 crate::fg::Msg::Built(b) => *b,
+                crate::fg::Msg::Posed { poses, .. } => {
+                    posed = poses.or(posed);
+                    continue;
+                }
                 crate::fg::Msg::Warm(d) => {
                     // the faces as they are: the live set's start, not shown
                     if let Some(r) = self
@@ -3303,6 +3311,9 @@ impl Gui {
             }
         }
         self.inspect_built(inspect);
+        if let Some(p) = posed {
+            asm_moved |= self.asm_posed(&p);
+        }
         if changed {
             self.fg_show();
         }
@@ -3672,6 +3683,9 @@ impl Gui {
     fn fg_picks(&mut self, under: Option<crate::origin::Item>) {
         use crate::origin::Item;
         use crate::shell::fgtool::{SlotKind as K, ToolError};
+        if self.fg_asm.is_some() {
+            self.asm_drag_frame();
+        }
         if self.fg_asm.is_some() && self.asm_tools_frame() {
             return;
         }

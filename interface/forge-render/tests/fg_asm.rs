@@ -1,7 +1,7 @@
 //! Assemblies (.fg) in the app: the posed parts drawn (each part meshed once, placed at every
 //! occurrence), the instance tree, choosing, hiding and isolating instances, a part's anchors,
-//! a drive moved by its slider (a SetParam), the typed results shown, the overlap check on
-//! request, expects, DOF and the BOM; and the 18U rack opened.
+//! a drive moved by its slider (a transient SetParam, kept on Keep Position), the typed results
+//! shown, the overlap check on request, expects, DOF and the BOM; and the 18U rack opened.
 
 use forge_lang::error::Op;
 use forge_render::gui::{Gui, Headless};
@@ -316,7 +316,7 @@ fn choosing_hiding_isolating_and_a_parts_anchors() {
 }
 
 #[test]
-fn a_drive_slider_is_a_set_param_and_the_crank_turns() {
+fn a_drive_slider_is_a_transient_set_param_kept_on_keep_position_and_the_crank_turns() {
     let d = scratch("drive");
     fixtures(&d);
     let file = d.join("mech.fg");
@@ -333,11 +333,11 @@ fn a_drive_slider_is_a_set_param_and_the_crank_turns() {
     h.step();
     h.button(false);
     h.step();
-    let ops = h.gui.fg.as_ref().unwrap().ops.clone();
-    assert_eq!(ops.len(), 1, "{ops:?}");
-    let Op::SetParam { param, value } = &ops[0] else {
-        panic!("{ops:?}")
-    };
+    // a transient pose, as a drag's: built, the file kept
+    assert!(h.gui.fg.as_ref().unwrap().ops.is_empty());
+    let posing = asm(&h).posing.clone();
+    assert_eq!(posing.params.len(), 1, "{posing:?}");
+    let (param, value) = posing.params[0].clone();
     assert_eq!(param.to_string(), "j1.turn");
     assert_ne!(value.value, 30.0);
     assert!(h.until(ready));
@@ -347,6 +347,14 @@ fn a_drive_slider_is_a_set_param_and_the_crank_turns() {
     // the joint reports the new angle
     let j1 = asm(&h).joints.iter().find(|j| j.id == "j1").unwrap().clone();
     assert!((j1.values[0].1.to_degrees() - value.value).abs() < 1e-6, "{j1:?}");
+    // Keep Position writes it
+    h.gui.keep_position().unwrap();
+    let ops = h.gui.fg.as_ref().unwrap().ops.clone();
+    assert_eq!(ops.len(), 1, "{ops:?}");
+    let Op::SetParam { param, .. } = &ops[0] else {
+        panic!("{ops:?}")
+    };
+    assert_eq!(param.to_string(), "j1.turn");
 }
 
 #[test]

@@ -870,6 +870,16 @@ fn the_mcp_server_lists_and_runs_the_app_tools_over_its_socket() {
 }
 
 /// An app tool called as an agent calls it, from another thread, the frames going on till it answers.
+/// The assembly holds a transient pose (a joint driven, a component dragged).
+fn posed(h: &forge_render::gui::Headless) -> bool {
+    h.gui
+        .shell
+        .fg
+        .as_ref()
+        .and_then(|p| p.asm.as_ref())
+        .is_some_and(|a| !a.posing.is_empty())
+}
+
 fn app_call(
     h: &mut forge_render::gui::Headless,
     tools: &forge_render::agent::apptools::AppTools,
@@ -1011,7 +1021,7 @@ fn the_app_tools_work_the_rack_view_and_never_its_file() {
         r#"{"joint":"f_door_f","value":90}"#,
     );
     assert!(!r.error, "{}", r.text);
-    assert!(h.gui.apps.driven.is_some());
+    assert!(posed(&h));
     let iso = h.gui.view.as_ref().unwrap().nav.camera;
     assert!(
         (iso.yaw - front.yaw).abs() > 0.1,
@@ -1024,7 +1034,7 @@ fn the_app_tools_work_the_rack_view_and_never_its_file() {
     );
     assert_eq!(h.gui.fg.as_ref().unwrap().src, src);
     assert!(!app_call(&mut h, &tools, "return_to_design", "{}").error);
-    assert!(h.gui.apps.driven.is_none());
+    assert!(!posed(&h));
     assert!(app_call(&mut h, &tools, "drive_joint", r#"{"joint":"panel_ll","value":1}"#).error);
 
     let shot = app_call(&mut h, &tools, "screenshot", "{}");
@@ -1190,7 +1200,7 @@ fn the_agent_hides_the_racks_side_panels_and_opens_its_door_without_editing() {
     }
     say(&mut h, "open the front door");
     let log = format!("{:?}", h.gui.shell.agent.entries);
-    assert!(h.gui.apps.driven.is_some(), "the door wasn't driven: {log}");
+    assert!(posed(&h), "the door wasn't driven: {log}");
     assert_eq!(
         std::fs::read_to_string(&rack).unwrap(),
         before,

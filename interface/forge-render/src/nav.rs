@@ -47,6 +47,8 @@ enum Drag {
     Ring,
     /// The right button: nothing moves; where it ends says what's meant.
     Mark,
+    /// The left button took a component (the host's drag): no window, no orbit; still a click.
+    Grab,
 }
 
 struct Transition {
@@ -105,6 +107,8 @@ pub struct Nav {
     explode_time: Option<f64>,
     /// What's been clicked, in order.
     pub selected: Vec<(u32, Entity)>,
+    /// What was under the left button's press, once known.
+    press_hit: Option<PickHit>,
     /// What the last selecting click hit, whatever the host made of the selection since.
     pub last_click: Option<(u32, Entity)>,
 }
@@ -204,6 +208,7 @@ impl Nav {
             orient: Orient::default(),
             marked: None,
             selected: Vec::new(),
+            press_hit: None,
             last_click: None,
             section: None,
             explode_to: 0.0,
@@ -262,6 +267,28 @@ impl Nav {
     /// The window being dragged: from, to.
     pub fn window_box(&self) -> Option<((f32, f32), (f32, f32))> {
         (self.drag == Some(Drag::Window) && self.moved).then_some((self.press_at, self.cursor))
+    }
+
+    /// What the press being held is on, once a pick has said (the left button, selecting).
+    pub fn press_hit(&self) -> Option<PickHit> {
+        (self.drag == Some(Drag::Window) || self.drag == Some(Drag::Grab))
+            .then_some(self.press_hit)
+            .flatten()
+    }
+
+    /// The host takes the selecting press for its own drag: no window comes of it, a press let go
+    /// where it was still clicks. False: no selecting press is held.
+    pub fn grab(&mut self) -> bool {
+        if self.drag != Some(Drag::Window) {
+            return self.drag == Some(Drag::Grab);
+        }
+        self.drag = Some(Drag::Grab);
+        true
+    }
+
+    /// A grab being dragged: where it was pressed, where the pointer is (pixels).
+    pub fn grabbed(&self) -> Option<((f32, f32), (f32, f32))> {
+        (self.drag == Some(Drag::Grab) && self.moved).then_some((self.press_at, self.cursor))
     }
 
     /// Held on the right button, for a marking menu: where it began.
@@ -327,6 +354,7 @@ impl Nav {
         {
             self.pivot = hit.map(|h| h.point);
             self.pan_depth = hit.map(|h| h.depth);
+            self.press_hit = hit;
         }
         self.marks() != before
     }
@@ -439,9 +467,11 @@ impl Nav {
         if self.hit_at == Some(self.cursor) {
             self.pivot = self.hit.map(|h| h.point);
             self.pan_depth = self.hit.map(|h| h.depth);
+            self.press_hit = self.hit;
         } else {
             self.pivot = None;
             self.pan_depth = None;
+            self.press_hit = None;
             self.want_pick = Some(self.cursor);
         }
         false
@@ -508,7 +538,7 @@ impl Nav {
                 true
             }
             // a click with a tool up still selects
-            Some(Drag::Window | Drag::Orbit | Drag::Pan | Drag::Zoom)
+            Some(Drag::Window | Drag::Grab | Drag::Orbit | Drag::Pan | Drag::Zoom)
                 if matches!(self.press_button, MouseButton::Left) =>
             {
                 let (shift, ctrl) = (self.modifiers.shift_key(), self.modifiers.control_key());
@@ -567,7 +597,7 @@ impl Nav {
         }
         match drag {
             Drag::Mark => return false,
-            Drag::Window => return true,
+            Drag::Window | Drag::Grab => return true,
             Drag::Orbit => {
                 let pivot = self.pivot.unwrap_or(self.camera.target);
                 self.camera.orbit_about(pivot, dx, dy);

@@ -5,11 +5,15 @@
 use super::Gui;
 use crate::agent::apptools::{AppCall, Reply};
 use crate::render::VisualStyle;
-use crate::shell::fg::{FgAct, From};
+use crate::shell::fg::FgAct;
 use crate::shell::thermo_ui::Analysis;
 use forge_agent::json::Json;
-use forge_lang::error::{Literal, Op};
+use forge_lang::error::{Literal, ParamKey};
+use forge_math::Frame;
 use std::collections::{HashMap, HashSet};
+
+/// An assembly's transient pose: its params driven and its components dragged.
+type Pose = (Vec<(ParamKey, Literal)>, Vec<(String, Frame)>);
 
 /// The view as the app tools change it, kept before each change.
 #[derive(Clone)]
@@ -25,14 +29,13 @@ pub struct ViewSnap {
     /// The thermoform's bodies shown, wall as simulated, Check Forming up.
     thermo: (crate::shell::thermo_ui::Show, bool, bool),
     camera: Option<crate::camera::Camera>,
-    driven: Option<Vec<Op>>,
+    /// The assembly's transient pose (joints driven, components dragged).
+    posed: Option<Pose>,
 }
 
 #[derive(Default)]
 pub struct AppHost {
     pub undo: Vec<ViewSnap>,
-    /// The joints driven for a look, as ops the file doesn't hold.
-    pub driven: Option<Vec<Op>>,
     /// Pictures asked for: taken once the next frame's drawn.
     shots: Vec<std::sync::mpsc::Sender<Reply>>,
     /// The agent turned the view itself this turn: a driven joint leaves the camera alone.
@@ -68,7 +71,10 @@ impl Gui {
                 (p.thermo.show, p.thermo.simulated, p.thermo.check)
             }),
             camera: self.view.as_ref().map(|v| v.nav.camera),
-            driven: self.apps.driven.clone(),
+            posed: p
+                .and_then(|p| p.asm.as_ref())
+                .filter(|a| !a.posing.is_empty())
+                .map(|a| (a.posing.params.clone(), a.posing.poses.clone())),
         }
     }
 
@@ -100,10 +106,19 @@ impl Gui {
             view.nav.camera = c;
             view.mark_dirty();
         }
-        if self.apps.driven != v.driven {
-            self.apps.driven = v.driven.clone();
-            if let Some(p) = &mut self.shell.fg {
-                p.out.push(FgAct::AsmPreview(v.driven));
+        let now = self
+            .shell
+            .fg
+            .as_ref()
+            .and_then(|p| p.asm.as_ref())
+            .filter(|a| !a.posing.is_empty())
+            .map(|a| (a.posing.params.clone(), a.posing.poses.clone()));
+        if now != v.posed {
+            match v.posed {
+                None => {
+                    let _ = self.return_to_design();
+                }
+                Some((params, poses)) => self.pose_again(params, poses),
             }
         }
     }
@@ -408,25 +423,14 @@ impl Gui {
                 Reply::ok(t)
             }
             "drive_joint" => self.app_drive(a),
-            "return_to_design" => {
-                if self.apps.driven.take().is_none() {
-                    return Reply::ok("Nothing was driven");
-                }
-                if let Some(p) = &mut self.shell.fg {
-                    p.out.push(FgAct::AsmPreview(None));
-                }
-                Reply::ok("Back to the design's position")
-            }
-            "keep_position" => {
-                let Some(ops) = self.apps.driven.take() else {
-                    return Reply::err("nothing is driven to keep");
-                };
-                if let Some(p) = &mut self.shell.fg {
-                    p.out.push(FgAct::AsmPreview(None));
-                    p.out.push(FgAct::AsmOps(ops));
-                }
-                Reply::ok("Kept: the driven values are in the file, as one undo step (not saved yet)")
-            }
+            "return_to_design" => match self.return_to_design() {
+                Ok(t) => Reply::ok(t),
+                Err(e) => Reply::err(e),
+            },
+            "keep_position" => match self.keep_position() {
+                Ok(t) => Reply::ok(format!("{t}: one undo step in the file (not saved yet)")),
+                Err(e) => Reply::err(e),
+            },
             "open_document" => {
                 let path = s(a, "path");
                 let dir = self
@@ -560,61 +564,36 @@ impl Gui {
                     .get(k)
                     .map(|l| l.id.clone())
             });
-        let joint = link.as_deref().unwrap_or(s(a, "joint"));
+        let joint = link.as_deref().unwrap_or(s(a, "joint")).to_string();
         let Some(value) = a.get("value").and_then(Json::num) else {
             return Reply::err("drive_joint takes `value`");
         };
         let what = s(a, "what");
-        let Some(p) = &mut self.shell.fg else {
-            return Reply::err("no Forge document is open");
+        let id = joint.split_once('.').map_or(joint.as_str(), |(i, _)| i);
+        let spec = if what.is_empty() {
+            joint.clone()
+        } else {
+            format!("{id}.{what}")
         };
-        if p.asm.is_none() {
-            return Reply::err("drive_joint moves an assembly's joints");
-        }
-        let Some(f) = p.feats.iter().find(|f| f.id == joint) else {
-            return Reply::err(format!("no joint `{joint}` in the open file"));
+        let words = match self.drive_joint(&spec, value) {
+            Ok(w) => w,
+            Err(e) => return Reply::err(e),
         };
-        let Some(d) = f
-            .dims
-            .iter()
-            .find(|d| matches!(d.from, From::Driving(_)) && (what.is_empty() || d.what == what))
-        else {
-            return Reply::err(format!(
-                "`{joint}` has no driving value{}: it needs a param to drive (say so and ask before editing the file)",
-                if what.is_empty() {
-                    String::new()
-                } else {
-                    format!(" `{what}`")
-                }
-            ));
-        };
-        let From::Driving(key) = &d.from else {
-            unreachable!()
-        };
-        let op = Op::SetParam {
-            param: key.clone(),
-            value: Literal { value, dim: d.dim },
-        };
-        let mut ops = self.apps.driven.take().unwrap_or_default();
-        ops.retain(|o| !matches!(o, Op::SetParam { param, .. } if param == key));
-        ops.push(op);
-        p.out.push(FgAct::AsmPreview(Some(ops.clone())));
-        self.apps.driven = Some(ops);
         // what moves: the joint's second side, framed in an iso view wide enough for its swing
-        let moving = p
-            .asm
+        let moving = self
+            .shell
+            .fg
             .as_ref()
-            .and_then(|a| a.links.iter().find(|l| l.id == joint))
+            .and_then(|p| p.asm.as_ref())
+            .and_then(|a| a.links.iter().find(|l| l.id == id))
             .map(|l| l.b.0.clone());
-        let (d_what, d_value) = (d.what.clone(), d.value);
         if !self.apps.view_set
             && let Some(m) = moving
         {
             self.app_frame(&m);
         }
-
         Reply::ok(format!(
-            "Driven {joint}.{d_what} to {value} for a look (the file's {d_value}), framed in an iso view: \
+            "Driven {words} for a look, the file kept, framed in an iso view: \
              return_to_design puts it back, keep_position keeps it"
         ))
     }

@@ -985,6 +985,8 @@ pub struct AsmPanel {
     pub glyphs: super::asmglyph::Glyphs,
     /// The relationship under the pointer, in the view or on its browser row.
     pub hover_link: Option<usize>,
+    /// A drag's transient pose (asmdrag.rs): built in the file's place till kept or returned.
+    pub posing: super::asmdrag::Posing,
 }
 
 /// Whether `path` is the row `key` or under it.
@@ -2392,6 +2394,13 @@ impl Shell {
                         });
                     });
                     places.push((format!("asm:drive:{name}"), resp.rect));
+                    // a transient pose, as a drag's: the solve follows the slider, Keep Position
+                    // writes it
+                    let rad = if angle { x.to_radians() } else { x };
+                    if resp.dragged() && resp.changed() {
+                        a.posing.live = vec![(link.id.clone(), what.clone(), rad)];
+                        a.posing.set_param(key.clone(), Literal { value: x, dim });
+                    }
                     if resp.dragged() {
                         a.dragging = Some((name.clone(), x));
                     }
@@ -2399,10 +2408,8 @@ impl Shell {
                     if let_go {
                         a.dragging = None;
                         if x != value {
-                            out.push(FgAct::Apply(Op::SetParam {
-                                param: key.clone(),
-                                value: Literal { value: x, dim },
-                            }));
+                            a.posing.set_param(key.clone(), Literal { value: x, dim });
+                            out.push(FgAct::AsmPreview(Some(a.posing.ops())));
                         }
                     }
                 }
@@ -3074,7 +3081,7 @@ mod tests {
     /// Every joint and constraint has a glyph: the Relationships eye turns them all off, a kind's
     /// eye its kind, a row's its own; fits and fit rules have none.
     #[test]
-    fn relationship_glyphs_turn_off_all_by_kind_or_one() {
+    fn relationship_glyphs_show_when_called_for_and_turn_off_all_by_kind_or_one() {
         let rows = vec![occ("base", "base.fg"), occ("arm", "arm.fg"), occ("pin", "pin.fg")];
         let insts = vec![
             inst("base", "base.fg", false, true),
@@ -3096,6 +3103,14 @@ mod tests {
                 .map(|g| p.links[g.0].id.clone())
                 .collect::<Vec<_>>()
         };
+        // none till called for: the chosen component's, then all of them
+        assert!(shown(&p).is_empty());
+        p.selected = Some("pin".into());
+        assert_eq!(shown(&p), ["j2", "j3"]);
+        p.selected = Some(p.link_row_key(0));
+        assert_eq!(shown(&p), ["j1"]);
+        p.selected = None;
+        p.glyphs.all = true;
         assert_eq!(shown(&p), ["j1", "j2", "j3"]);
         let kind = p.tree.find("r::Joint:revolute").unwrap();
         p.flip_glyph_eye(kind);

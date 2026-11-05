@@ -27,6 +27,16 @@ pub type Gpu = (wgpu::Device, wgpu::Queue, wgpu::AdapterInfo);
 /// overlap check and its expects).
 pub type Job = (u64, String, bool);
 
+/// A joint value set by a drag: the joint's id, its freedom's word, the value (radians, mm).
+pub type Drive = (String, String, f64);
+
+/// What the worker is given: a text to build, or drives set straight in the kept solve.
+#[derive(Clone)]
+enum Work {
+    Text(Job),
+    Drive(u64, Vec<Drive>),
+}
+
 /// A placement's rows from a pose: the frame's axes as columns, its origin last.
 pub fn rows_of(f: &forge_math::Frame) -> crate::scene::Rows {
     let (x, y, z, o) = (f.x().get(), f.y().get(), f.z().get(), f.origin);
@@ -533,6 +543,13 @@ pub enum Msg {
         flat: Option<PartMesh>,
         mesh_ms: f64,
     },
+    /// Drives set in the kept solve: each occurrence's pose (the last build's order), or None
+    /// when they need a build; and the solve's time.
+    Posed {
+        seq: u64,
+        poses: Option<Vec<forge_math::Frame>>,
+        ms: f64,
+    },
 }
 
 fn whole(body: &forge_topo::Body, flat: Option<&forge_topo::Body>) -> (PartMesh, Option<PartMesh>) {
@@ -670,7 +687,7 @@ fn work(
     file: Option<String>,
     deps: Reads,
     // the texts to build, and a new GPU picture when one's asked for
-    (jobs, gpus): (Receiver<Job>, Receiver<Gpu>),
+    (jobs, gpus): (Receiver<Work>, Receiver<Gpu>),
     out: Sender<Msg>,
     mut gpu: Option<Gpu>,
     // the host's: woken when a result is in, and told to stop when the document closes
@@ -704,25 +721,47 @@ fn work(
         waker();
         ok
     };
+    // a drive sent after a text, kept till that text is built
+    let mut next: Option<Work> = None;
     loop {
-        // waiting, a stop is seen within a tenth of a second
-        let next = loop {
-            if stop.load(Ordering::SeqCst) {
-                break None;
-            }
-            match jobs.recv_timeout(std::time::Duration::from_millis(100)) {
-                Ok(j) => break Some(j),
-                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => continue,
-                Err(_) => break None,
-            }
+        let first = match next.take() {
+            Some(w) => w,
+            // waiting, a stop is seen within a tenth of a second
+            None => loop {
+                if stop.load(Ordering::SeqCst) {
+                    stopped(to_mesh, mesher_thread);
+                    return;
+                }
+                match jobs.recv_timeout(std::time::Duration::from_millis(100)) {
+                    Ok(w) => break w,
+                    Err(std::sync::mpsc::RecvTimeoutError::Timeout) => continue,
+                    Err(_) => {
+                        stopped(to_mesh, mesher_thread);
+                        return;
+                    }
+                }
+            },
         };
-        let Some(mut job) = next else {
-            stopped(to_mesh, mesher_thread);
-            return;
-        };
-        // only the latest text matters
-        while let Ok(j) = jobs.try_recv() {
-            job = j;
+        let mut all = vec![first];
+        all.extend(jobs.try_iter());
+        // only the latest text matters, and the latest drive after it
+        let text = all.iter().rposition(|w| matches!(w, Work::Text(_)));
+        let drive = all
+            .iter()
+            .rposition(|w| matches!(w, Work::Drive(..)))
+            .filter(|&d| text.is_none_or(|t| d > t));
+        if let Some(d) = drive {
+            if text.is_some() {
+                next = Some(all[d].clone());
+            } else if let Work::Drive(seq, drives) = &all[d] {
+                let t = Instant::now();
+                let poses = cache.asm.as_mut().and_then(|a| a.drive(drives));
+                let ms = t.elapsed().as_secs_f64() * 1e3;
+                if !send(Msg::Posed { seq: *seq, poses, ms }) {
+                    return;
+                }
+                continue;
+            }
         }
         // a new view asked for: everything goes to it whole, as at first
         if let Ok(g) = gpus.try_recv() {
@@ -730,6 +769,9 @@ fn work(
             asm_shape = None;
             shown_ids = None;
         }
+        let Some(Work::Text(job)) = text.map(|t| all.swap_remove(t)) else {
+            continue;
+        };
         let t = Instant::now();
         if is_assembly(&job.1) {
             let opts = Options {
@@ -1200,7 +1242,7 @@ pub struct Session {
     redo: Vec<String>,
     /// Steps made from outside (the Agent tab): the undo depth each made, its label and key.
     tags: Vec<(usize, String, u64)>,
-    jobs: Sender<Job>,
+    jobs: Sender<Work>,
     /// A new GPU picture asked for: the old one was let go to save memory.
     gpus: Sender<Gpu>,
     /// What its last build read of the disk.
@@ -1320,7 +1362,20 @@ impl Session {
     pub fn rebuild(&mut self) -> u64 {
         self.seq += 1;
         self.sent_at.push((self.seq, Instant::now()));
-        let _ = self.jobs.send((self.seq, self.src.clone(), self.overlap));
+        let _ = self
+            .jobs
+            .send(Work::Text((self.seq, self.src.clone(), self.overlap)));
+        self.seq
+    }
+
+    /// Joint values set straight in the assembly's kept solve (a drag's): the poses come back as
+    /// `Msg::Posed`, the text and what's built from it unchanged.
+    pub fn drive(&mut self, drives: Vec<Drive>) -> u64 {
+        self.seq += 1;
+        self.sent_at.push((self.seq, Instant::now()));
+        // what's on screen is no longer the file's
+        self.previewing = true;
+        let _ = self.jobs.send(Work::Drive(self.seq, drives));
         self.seq
     }
 
@@ -1352,6 +1407,14 @@ impl Session {
                     self.whole = *seq;
                     self.whole_ms = *mesh_ms;
                 }
+                Msg::Posed { seq, ms, .. } => {
+                    self.done = *seq;
+                    self.build_ms = *ms;
+                    if let Some(&(_, t)) = self.sent_at.iter().find(|s| s.0 == *seq) {
+                        self.round_ms = t.elapsed().as_secs_f64() * 1e3;
+                    }
+                    self.sent_at.retain(|s| s.0 > *seq);
+                }
                 Msg::Warm(_) => {}
             }
         }
@@ -1382,9 +1445,11 @@ impl Session {
         self.previewing = text.is_some();
         self.seq += 1;
         self.sent_at.push((self.seq, Instant::now()));
-        let _ = self
-            .jobs
-            .send((self.seq, text.unwrap_or_else(|| self.src.clone()), self.overlap));
+        let _ = self.jobs.send(Work::Text((
+            self.seq,
+            text.unwrap_or_else(|| self.src.clone()),
+            self.overlap,
+        )));
         self.seq
     }
 

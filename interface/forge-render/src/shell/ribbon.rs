@@ -97,7 +97,20 @@ fn asm_groups(s: &Shell) -> Option<Vec<Group>> {
                     fg("Free Move", "move", FgCmd::FreeMove, up("move")),
                     fg("Free Rotate", "revolve", FgCmd::FreeRotate, up("rotate")),
                 ],
-                vec![],
+                {
+                    // a drag's pose: written, or dropped
+                    let posed = a.is_some_and(|a| !a.posing.is_empty());
+                    let pose = |name, icon, c| Tool {
+                        name,
+                        icon,
+                        action: posed.then_some(Action::Fg(c)),
+                        on: false,
+                    };
+                    vec![
+                        pose("Keep Position", "pin", FgCmd::KeepPosition),
+                        pose("Return to Design", "home", FgCmd::ReturnToDesign),
+                    ]
+                },
             ),
             g(
                 "Relationships",
@@ -252,10 +265,7 @@ fn groups(s: &Shell) -> Vec<Group> {
             .collect();
     }
     let asm_explode = s.fg.as_ref().and_then(|f| f.asm.as_ref()).map(|a| a.explode_open);
-    let asm_glyphs =
-        s.fg.as_ref()
-            .and_then(|f| f.asm.as_ref())
-            .map(|a| !a.glyphs.hidden);
+    let asm_glyphs = s.fg.as_ref().and_then(|f| f.asm.as_ref()).map(|a| a.glyphs.all);
     let fg_open = s.fg.is_some();
     // the tools only a Forge part has a form for
     let fg_new = |name, icon, kind| Tool {

@@ -1664,6 +1664,26 @@ pub struct AsmCache {
 
 type PartPool = std::sync::Mutex<BTreeMap<PartKey, Arc<std::sync::OnceLock<Arc<PartLoad>>>>>;
 
+impl AsmCache {
+    /// Joint values set straight in the kept solve, as a drag in the app sets them: `(joint id,
+    /// freedom word, value)` with angles in radians. Only the partitions they reach are solved
+    /// again; nothing is evaluated or checked. Each part occurrence's pose comes back in the order
+    /// of the last run's `AsmOut::occurrences`. None: no solve kept, or a value isn't a drive
+    /// of a top-level joint (that needs a run).
+    pub fn drive(&mut self, drives: &[(String, String, f64)]) -> Option<Vec<Frame>> {
+        let l = self.last.as_mut()?;
+        for (joint, word, v) in drives {
+            let id = fa::JointId(hid(joint));
+            let j = l.asm.joints.iter_mut().find(|j| j.id == id)?;
+            let f = freedom_words(j.kind).iter().find(|w| w.0 == word)?.1;
+            // the kept document follows, so the next run sets back what it doesn't say
+            j.drive.iter_mut().find(|d| d.0 == f)?.1 = *v;
+            l.solver.set_drive(id, f, *v);
+        }
+        Some(l.solver.solution().occurrences.iter().map(|o| o.pose).collect())
+    }
+}
+
 /// A solve kept for the next run: when only drive values change, the solver re-solves only the
 /// partitions they reach and the checker re-tests only what moved.
 struct Live {
