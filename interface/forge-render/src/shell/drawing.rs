@@ -376,6 +376,12 @@ impl DrawingEnv {
     }
 
     /// Makes the sheet again from the file, in the background.
+    /// The drawing's text as it is on disk now, or its model changed: made again.
+    pub fn reload(&mut self, src: String) {
+        self.src = src;
+        self.regen();
+    }
+
     fn regen(&mut self) {
         let (send, recv) = channel();
         let src = self.src.clone();

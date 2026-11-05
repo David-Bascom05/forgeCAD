@@ -3,6 +3,8 @@
 
 use super::*;
 use crate::shell::docs::{DocKind, ShellDoc, per_doc};
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 
 per_doc!(
     #[derive(Default)]
@@ -39,7 +41,7 @@ per_doc!(
     app [
         ctx, egui, shell, device, queue, adapter, waker, captured, over_view, pointer_px,
         pixels_per_point, warm_textures, target_px, mark_held, gpu_failed, settings_was, docs,
-        active, agent, apps,
+        active, watch, agent, apps,
     ]
 );
 
@@ -318,5 +320,288 @@ impl Gui {
         for p in std::mem::take(&mut self.shell.open_paths) {
             self.open_document(&p, true);
         }
+    }
+}
+
+/// O_NOFOLLOW and O_NONBLOCK (the values differ by platform): a name that is a link is not
+/// opened, and a pipe swapped in after the check does not hold the open.
+#[cfg(unix)]
+const NOFOLLOW: i32 = if cfg!(any(target_os = "macos", target_os = "ios", target_os = "freebsd")) {
+    0x100 | 0x4
+} else if cfg!(any(target_arch = "aarch64", target_arch = "arm")) {
+    0o100000 | 0o4000
+} else {
+    0o400000 | 0o4000
+};
+
+/// A regular file's text, never more than `max` bytes of it; nothing for a link, a device, a
+/// folder, or a file swapped in between the look and the open.
+fn read_file(p: &Path, max: u64) -> Option<Vec<u8>> {
+    use std::io::Read;
+    let checked = std::fs::symlink_metadata(p).ok()?;
+    if !checked.is_file() {
+        return None;
+    }
+    let mut o = std::fs::OpenOptions::new();
+    o.read(true);
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::custom_flags(&mut o, NOFOLLOW);
+    let f = o.open(p).ok()?;
+    let held = f.metadata().ok()?;
+    if !held.is_file() {
+        return None;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        if (held.dev(), held.ino()) != (checked.dev(), checked.ino()) {
+            return None;
+        }
+    }
+    let mut b = vec![];
+    f.take(max).read_to_end(&mut b).ok()?;
+    Some(b)
+}
+
+/// A file as last seen: its length and when it was written.
+type Stamp = Option<(u64, std::time::SystemTime)>;
+
+fn stamp(p: &Path) -> Stamp {
+    let m = std::fs::symlink_metadata(p).ok()?;
+    if !m.is_file() {
+        return None;
+    }
+    Some((m.len(), m.modified().ok()?))
+}
+
+/// How deep below an open document's folder its parts are looked for, and how many at most.
+const DEP_DEPTH: usize = 3;
+const DEP_MAX: usize = 2000;
+
+/// The .fg files in a folder and below it.
+fn fg_files(dir: &Path) -> Vec<PathBuf> {
+    let mut out = vec![];
+    let mut todo = vec![(dir.to_path_buf(), 0)];
+    while let Some((d, depth)) = todo.pop() {
+        let Ok(rd) = std::fs::read_dir(&d) else { continue };
+        for e in rd.flatten() {
+            let p = e.path();
+            let Ok(ft) = e.file_type() else { continue };
+            if ft.is_dir() && depth < DEP_DEPTH {
+                todo.push((p, depth + 1));
+            } else if ft.is_file() && p.extension().is_some_and(|x| x == "fg") {
+                out.push(p);
+                if out.len() >= DEP_MAX {
+                    return out;
+                }
+            }
+        }
+    }
+    out.sort();
+    out
+}
+
+fn folder_of(path: &str) -> Option<PathBuf> {
+    std::fs::canonicalize(path).ok()?.parent().map(Path::to_path_buf)
+}
+
+/// What the open documents read on disk, as last looked at; a thread that wakes the window when
+/// any of it changes.
+#[derive(Default)]
+pub struct Watch {
+    seen: HashMap<PathBuf, Stamp>,
+    /// The folders the last look was in.
+    looked: Vec<PathBuf>,
+    /// The folders looked in, shared with the thread.
+    dirs: Arc<std::sync::Mutex<Vec<PathBuf>>>,
+    /// The thread saw a change since the last look.
+    changed: Arc<std::sync::atomic::AtomicBool>,
+    started: bool,
+    /// An agent's turn is going on: a new .fg in any open document's folder opens in a tab.
+    pub agent: bool,
+}
+
+/// What the thread compares: every .fg file under the folders, and its stamp.
+fn sweep(dirs: &[PathBuf]) -> Vec<(PathBuf, Stamp)> {
+    let mut all: Vec<(PathBuf, Stamp)> = dirs
+        .iter()
+        .flat_map(|d| fg_files(d))
+        .map(|p| {
+            let s = stamp(&p);
+            (p, s)
+        })
+        .collect();
+    all.sort_by(|a, b| a.0.cmp(&b.0));
+    all.dedup_by(|a, b| a.0 == b.0);
+    all
+}
+
+impl Watch {
+    /// The thread, once: it looks every half second and wakes the window on a change.
+    fn start(&mut self, waker: Waker) {
+        if self.started {
+            return;
+        }
+        self.started = true;
+        let (dirs, changed) = (self.dirs.clone(), self.changed.clone());
+        let _ = std::thread::Builder::new()
+            .name("forge-watch".into())
+            .spawn(move || {
+                let mut was: Option<Vec<(PathBuf, Stamp)>> = None;
+                loop {
+                    std::thread::sleep(std::time::Duration::from_millis(500));
+                    let now = {
+                        let d = dirs.lock().unwrap_or_else(|e| e.into_inner()).clone();
+                        sweep(&d)
+                    };
+                    if was.as_ref().is_some_and(|w| *w != now) {
+                        changed.store(true, std::sync::atomic::Ordering::Relaxed);
+                        waker();
+                    }
+                    was = Some(now);
+                }
+            });
+    }
+}
+
+impl Gui {
+    /// An agent's turn began or ended: while it goes on, a .fg it makes beside an open document
+    /// opens in a tab of its own and comes up.
+    pub fn agent_turn(&mut self, on: bool) {
+        if on {
+            // what's there already is not new
+            self.check_files();
+        }
+        self.watch.agent = on;
+    }
+
+    /// What the open documents are in and read, on disk.
+    fn watched_dirs(&self) -> Vec<PathBuf> {
+        let mut d: Vec<PathBuf> = self
+            .docs
+            .iter()
+            .filter_map(|d| folder_of(d.path.as_deref()?))
+            .collect();
+        d.sort();
+        d.dedup();
+        d
+    }
+
+    /// The frame's look at the disk: only when the thread saw something change.
+    pub(super) fn watch_frame(&mut self) {
+        let dirs = self.watched_dirs();
+        // a folder not looked in yet: what's in it now is what's there, not new
+        let moved = dirs != self.watch.looked;
+        *self.watch.dirs.lock().unwrap_or_else(|e| e.into_inner()) = dirs;
+        if !self.docs.is_empty() {
+            self.watch.start(self.waker.clone());
+        }
+        if self
+            .watch
+            .changed
+            .swap(false, std::sync::atomic::Ordering::Relaxed)
+            || moved
+        {
+            self.check_files();
+        }
+    }
+
+    /// Looks at what the open documents read: a document changed on disk (and not here) reads
+    /// it again; an assembly or drawing whose parts changed builds again; a new .fg made in an
+    /// agent's turn opens. The file watch calls this; so do saves, at once.
+    pub fn check_files(&mut self) {
+        let dirs = self.watched_dirs();
+        let now: HashMap<PathBuf, Stamp> = sweep(&dirs).into_iter().collect();
+        let looked = std::mem::replace(&mut self.watch.looked, dirs);
+        let mut changed: Vec<PathBuf> = vec![];
+        let mut made: Vec<PathBuf> = vec![];
+        for (p, s) in &now {
+            match self.watch.seen.get(p) {
+                Some(was) if was == s => {}
+                Some(_) => changed.push(p.clone()),
+                // new in a folder looked in before: made since
+                None if looked.iter().any(|d| p.starts_with(d)) => made.push(p.clone()),
+                None => {}
+            }
+        }
+        self.watch.seen = now;
+        made.sort();
+        for p in &changed {
+            self.file_changed(p);
+        }
+        if self.watch.agent {
+            for p in made {
+                let p = p.to_string_lossy().into_owned();
+                // the agent's tab says what it wrote; the watch opens it if the tab didn't
+                if !self.docs.iter().any(|d| d.is(&p, None)) {
+                    self.open_document(&p, true);
+                }
+            }
+        }
+    }
+
+    /// One file changed on disk: the documents it is, or that read it, made again.
+    fn file_changed(&mut self, file: &Path) {
+        let text = read_file(file, forge_lang::asm::LIMIT).and_then(|b| String::from_utf8(b).ok());
+        for i in 0..self.docs.len() {
+            let Some(path) = self.docs[i].path.clone() else {
+                continue;
+            };
+            let own = std::fs::canonicalize(&path).is_ok_and(|p| p == file);
+            let under = folder_of(&path).is_some_and(|d| file.starts_with(d));
+            let name = self.docs[i].title.clone();
+            let (session, drawing, status) = self.doc_parts(i);
+            if own {
+                let Some(text) = &text else { continue };
+                if let Some(s) = session {
+                    if s.saved == *text {
+                        continue;
+                    }
+                    if s.dirty() {
+                        *status = format!(
+                            "{name} changed on disk: your changes here are kept, Save writes over it"
+                        );
+                    } else {
+                        s.reload(text.clone());
+                        *status = format!("{name} changed on disk: read again");
+                    }
+                } else if let Some(d) = drawing
+                    && d.src != *text
+                {
+                    d.reload(text.clone());
+                }
+            } else if under {
+                // a part of an assembly, a drawing's model
+                if let Some(s) = session.filter(|s| crate::fg::is_assembly(&s.src)) {
+                    s.rebuild();
+                } else if let Some(d) = drawing {
+                    d.reload(d.src.clone());
+                }
+            }
+        }
+    }
+
+    /// A document's build, drawing and status line, active or idle.
+    fn doc_parts(
+        &mut self,
+        i: usize,
+    ) -> (
+        Option<&mut crate::fg::Session>,
+        Option<&mut crate::shell::drawing::DrawingEnv>,
+        &mut String,
+    ) {
+        if i == self.active {
+            return (
+                self.fg.as_mut(),
+                self.shell.drawing.as_mut(),
+                &mut self.shell.status,
+            );
+        }
+        let st = self.docs[i].state.as_mut().expect("an idle document's state");
+        (
+            st.gui.fg.as_mut(),
+            st.shell.drawing.as_mut(),
+            &mut st.shell.status,
+        )
     }
 }

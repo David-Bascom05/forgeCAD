@@ -22,16 +22,16 @@ plate = extrude(plan, t)
 
 fn bar(len: f64) -> String {
     format!(
-        "sketch plan(on: xy) {{
-  outline = rect(corner: (-4, -4), size: ({}, 8))
+        "shared ln = {len}
+sketch plan(on: xy) {{
+  outline = rect(corner: (-4, -4), size: (ln + 8, 8))
   p0 = pt(0, 0)
-  p1 = pt({len}, 0)
+  p1 = pt(ln, 0)
 }}
 bar = extrude(plan, 4)
 a = anchor(plane(at: plan.p0, normal: plan.plane.normal, x: plan.outline[0].dir))
 b = anchor(plane(at: plan.p1, normal: plan.plane.normal, x: plan.outline[0].dir))
-",
-        len + 8.0
+"
     )
 }
 
@@ -217,4 +217,103 @@ fn closing_with_changes_asks() {
     h.step();
     assert!(h.gui.documents().is_empty());
     assert!(std::fs::read_to_string(&plate).unwrap().contains("shared t = 11"));
+}
+
+fn set_len(v: f64) -> Op {
+    Op::SetParam {
+        param: ParamKey::shared("ln"),
+        value: Literal {
+            value: v,
+            dim: Dim::Length,
+        },
+    }
+}
+
+fn boxes(h: &Headless) -> String {
+    format!("{:?}", h.gui.fg_asm_boxes)
+}
+
+#[test]
+fn a_part_saved_refreshes_its_assembly() {
+    let Some(mut h) = headless() else { return };
+    let d = scratch("refresh");
+    let [_, bar_f, frame] = files(&d);
+    open_in(&mut h, &frame);
+    let was = boxes(&h);
+    open_in(&mut h, &bar_f);
+    // an edit not saved is the bar's own: the assembly reads the file
+    h.gui.fg_apply(set_len(200.0)).unwrap();
+    ready(&mut h);
+    h.gui.activate(0);
+    ready(&mut h);
+    assert_eq!(boxes(&h), was);
+    // saved from its tab: the assembly, idle, builds again on its own
+    h.gui.activate(1);
+    h.step();
+    h.gui.fg_save();
+    h.step();
+    assert!(!h.gui.documents()[1].dirty);
+    h.gui.activate(0);
+    assert!(
+        h.until(|g| settled(g) && format!("{:?}", g.fg_asm_boxes) != was),
+        "the assembly never saw the bar change"
+    );
+    // its undo is untouched: nothing to undo in the assembly
+    assert!(!h.gui.fg.as_mut().unwrap().undo());
+}
+
+#[test]
+fn a_file_changed_on_disk_reads_again() {
+    let Some(mut h) = headless() else { return };
+    let d = scratch("disk");
+    let [plate, ..] = files(&d);
+    open_in(&mut h, &plate);
+    std::fs::write(&plate, PLATE.replace("t = 6", "t = 20")).unwrap();
+    h.gui.check_files();
+    ready(&mut h);
+    let s = h.gui.fg.as_ref().unwrap();
+    assert!(s.src.contains("t = 20") && !s.dirty());
+    // changed here and on disk: what's here is kept
+    h.gui.fg_apply(set_t(7.0)).unwrap();
+    std::fs::write(&plate, PLATE.replace("t = 6", "t = 30")).unwrap();
+    h.gui.check_files();
+    h.step();
+    assert!(h.gui.fg.as_ref().unwrap().src.contains("t = 7"));
+    assert!(
+        h.gui.shell.status.contains("changed on disk"),
+        "{}",
+        h.gui.shell.status
+    );
+}
+
+#[test]
+fn a_part_the_agent_makes_opens() {
+    let Some(mut h) = headless() else { return };
+    let d = scratch("agent");
+    let [plate, ..] = files(&d);
+    open_in(&mut h, &plate);
+    // not in an agent's turn: a new file is left alone
+    std::fs::write(d.join("other.fg"), PLATE).unwrap();
+    h.gui.check_files();
+    assert_eq!(h.gui.documents().len(), 1);
+    h.gui.agent_turn(true);
+    std::fs::write(d.join("bracket.fg"), bar(40.0)).unwrap();
+    h.gui.check_files();
+    assert_eq!(titles(&h), ["plate.fg", "bracket.fg"]);
+    assert_eq!(h.gui.active_document(), 1);
+    ready(&mut h);
+    assert_eq!(h.gui.shell.name, "bracket.fg");
+    // the agent's tab says what it wrote: opened once, not again by the watch
+    std::fs::write(d.join("hinge.fg"), bar(30.0)).unwrap();
+    let hinge = d.join("hinge.fg");
+    assert_eq!(h.gui.open_document(hinge.to_str().unwrap(), true), Some(2));
+    h.gui.check_files();
+    h.gui.agent_turn(false);
+    assert_eq!(titles(&h), ["plate.fg", "bracket.fg", "hinge.fg"]);
+    // opened in the background: the active one stays
+    let other = d.join("other.fg");
+    assert_eq!(h.gui.open_document(other.to_str().unwrap(), false), Some(3));
+    assert_eq!(h.gui.active_document(), 2);
+    ready(&mut h);
+    assert_eq!(h.gui.shell.name, "hinge.fg");
 }

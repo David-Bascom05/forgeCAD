@@ -193,6 +193,8 @@ pub struct Gui {
     /// The documents open, in their tabs; which is in the window.
     docs: Vec<gui_docs::OpenDoc>,
     active: usize,
+    /// What they read on disk, looked at for changes.
+    watch: gui_docs::Watch,
 }
 
 fn view_camera(center: [f32; 3], radius: f32, parallel: bool, size: (u32, u32)) -> Camera {
@@ -314,6 +316,7 @@ impl Gui {
             fg_previewed: None,
             docs: Vec::new(),
             active: 0,
+            watch: Default::default(),
         }
     }
 
@@ -2175,6 +2178,7 @@ impl Gui {
             self.view = None;
             self.shell.view_tex = None;
         }
+        self.watch_frame();
         self.take_loaded();
         self.take_live();
         self.take_fg();
@@ -3906,5 +3910,7 @@ impl Gui {
             Err(why) => why,
         };
         self.fg_text();
+        // the assemblies and drawings open that use it, at once
+        self.check_files();
     }
 }

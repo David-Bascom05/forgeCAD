@@ -1364,6 +1364,12 @@ impl Session {
         self.src != self.saved
     }
 
+    /// The file's text as it is on disk now, read again: an undo step back to what was here.
+    pub fn reload(&mut self, text: String) {
+        self.saved = text.clone();
+        self.set_text(text);
+    }
+
     pub fn save(&mut self) -> Result<(), String> {
         let path = self.path.as_ref().ok_or("no file to save to")?;
         std::fs::write(path, &self.src).map_err(|e| format!("{path}: {e}"))?;
