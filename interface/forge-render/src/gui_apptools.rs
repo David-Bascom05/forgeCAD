@@ -489,7 +489,12 @@ impl Gui {
 
     /// A joint moved for a look: its driving param set in the build only, the file kept.
     fn app_drive(&mut self, a: &Json) -> Reply {
-        let joint = s(a, "joint");
+        // a relationship's browser key (`l:473`) names its joint too
+        let link = s(a, "joint")
+            .strip_prefix("l:")
+            .and_then(|k| k.parse::<usize>().ok())
+            .and_then(|k| self.shell.fg.as_ref()?.asm.as_ref()?.links.get(k).map(|l| l.id.clone()));
+        let joint = link.as_deref().unwrap_or(s(a, "joint"));
         let Some(value) = a.get("value").and_then(Json::num) else {
             return Reply::err("drive_joint takes `value`");
         };
