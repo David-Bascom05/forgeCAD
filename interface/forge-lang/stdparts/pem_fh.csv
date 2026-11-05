@@ -6,7 +6,7 @@
 # item: Self-clinching flush-head stud
 # category: Sheet metal hardware/Self-clinching studs
 # gen: pem_stud | d=@d | P=P | l=@l | H=H | S=S_max | tmin=sheet_min | modelled=@modelled
-# option thread: cosmetic modelled
+# option thread: modelled cosmetic
 # option grade: FH FHS
 # material: PEM S carbon steel
 # grade FH: PEM S carbon steel

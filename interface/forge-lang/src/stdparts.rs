@@ -703,7 +703,7 @@ fn designation(f: &Family, spec: &Spec) -> String {
 }
 
 /// The file key standing for this part: `std:ISO 4762|M6|20`, options other than the
-/// defaults after it (`|thread=modelled`).
+/// defaults after it (`|thread=cosmetic`).
 pub fn key(spec: &Spec) -> String {
     let f = family(&spec.family);
     let mut k = format!(

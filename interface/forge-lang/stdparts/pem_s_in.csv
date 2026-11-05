@@ -6,7 +6,7 @@
 # item: Self-clinching nut
 # category: Sheet metal hardware/Self-clinching nuts
 # gen: pem_nut | tsh=@sheet | d=@d | P=@P | A=A_max | C=C_max | E=E | T=T | modelled=@modelled
-# option thread: cosmetic modelled
+# option thread: modelled cosmetic
 # option grade: S CLS SP
 # option sheet: <length>
 # material: PEM S carbon steel

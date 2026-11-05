@@ -48,6 +48,7 @@ sketch hx(on: offset(body.side(prof.under), -k), at: prof.c0) {
   hexo = poly(polar(n: n6, r: rc, start: 0deg))
 }
 socket = cut(hx, -t)
+thread_m = thread(on: plane(at: prof.pz1, normal: prof.zax.dir, x: prof.xax.dir), spec: (d, P), length: l - P)
 
 head = anchor(plane(at: prof.pz0, normal: prof.zax.dir, x: prof.xax.dir))
 thd = anchor(plane(at: prof.pz0, normal: prof.zax.dir, x: prof.xax.dir), kind: external_thread, size: d, depth: l)
@@ -55,4 +56,4 @@ tip = anchor(plane(at: prof.pz1, normal: prof.zax.dir, x: prof.xax.dir))
 
 expect valid
 expect bodies = 1
-expect volume = 331.548 +- 0.05%
+expect volume = 292.574 +- 2.991

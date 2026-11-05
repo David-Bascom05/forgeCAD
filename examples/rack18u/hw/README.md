@@ -11,10 +11,12 @@ assemblies fasten and the fit rules check. SPEC sections 3, 5.8, 5.12, 7, 8 and 
 - **Frames.** Every part's axis is its z axis, and +z is the direction the screw advances (from head to
   tip; for nuts, washers and spacers, the direction a screw passes through them). Every anchor's
   normal is +z, so a stack is a chain of `fastened(next.<anchor>, prev.<anchor>)`.
-- **Threads are cosmetic** (SPEC gap 18): external threads are modelled at the major diameter, internal
-  ones at the ISO 965 minor diameter D1 = d - 1.0825 P. A screw in its nut therefore overlaps it, and
-  only a fit rule makes that intended. Without the rules every threaded pair is an Interference (the
-  tests check this).
+- **Threads are modelled**: an ISO 68-1 groove cut into the shank at the major diameter, or into the
+  nut's bore at the ISO 965 minor diameter D1 = d - 1.0825 P. A screw's runs from its tip and stops a
+  pitch short of the head; a nyloc's is the metal part only (the insert stays at D1). The groove's
+  phase is wherever the screw happens to turn, so a screw in its nut still overlaps it, and only a fit
+  rule makes that intended. Without the rules every threaded pair is an Interference (the tests check
+  this). The `thd` anchors (the fit features) are unchanged.
 - **Placing:**
   - screw: `fastened(scr.head, <clamped part's face where the head sits>)`;
   - PEM nut: `fastened(nut.flush, sheet.<PEM anchor>)`. Use the file for that sheet's thickness: the

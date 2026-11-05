@@ -35,6 +35,7 @@ sketch tb(on: block.side(prof.o[2]), at: prof.c0) {
   c = circle((0, 0), rm)
 }
 tcut = cut(tb, tn)
+thread_m = thread(on: plane(at: prof.pz1, normal: prof.zax.dir, x: prof.xax.dir), spec: (d, P), internal: true, flip: true, length: tn + P)
 
 seat = anchor(plane(at: prof.pz0, normal: prof.zax.dir, x: prof.xax.dir))
 thd = anchor(plane(at: prof.pz1, normal: prof.zax.dir, x: prof.xax.dir), kind: internal_thread, size: d, depth: tn)
@@ -42,4 +43,4 @@ end = anchor(plane(at: prof.pz2, normal: prof.zax.dir, x: prof.xax.dir))
 
 expect valid
 expect bodies = 1
-expect volume = 756.804 +- 0.05%
+expect volume = 737.851 +- 4.334

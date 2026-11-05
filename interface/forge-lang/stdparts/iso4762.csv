@@ -13,7 +13,7 @@
 # map F: iso4762def.csv | size=Dia | P=P | b=b | dk_max=dk_max | da_max=da | ds_min=ds_min | e_min=e | lf_max=lf | k_max=k | r_min=r | t_min=t | v_max=v | dw_min=dw | w_min=w
 # map F: iso4762def.csv#ISO4762range | size=Dia | l_min=Min_L | l_max=Max_L
 # gen: shcs | d=@d | P=@P | l=@l | b=b | lfull=l_full | dk=dk_max | dw=dw_min | k=k_max | s=s | t=t_min | r=r_min | modelled=@modelled
-# option thread: cosmetic modelled
+# option thread: modelled cosmetic
 # option grade: 12.9 10.9 8.8 A2-70 A4-70
 # material: ISO 898-1 class 12.9
 # grade 12.9: ISO 898-1 class 12.9

@@ -5,7 +5,7 @@
 # item: Set screw, dog point
 # category: Fasteners/Set screws
 # gen: setscrew | d=@d | P=P | l=@l | s=s | tshort=t_min_short | tlong=t_min | lshort=l_short | point=2 | dp=dp_max | zlong=z_max | zshort=z_short_max | modelled=@modelled
-# option thread: cosmetic modelled
+# option thread: modelled cosmetic
 # material: ISO 4026-4029 class 45H
 # lengths: 2 2.5 3 4 5 6 8 10 12 16 20 25 30 35 40 45 50 55 60
 # src A03: ISO 4028:2003 Table 1, printed page 3 of the iTeh preview (https://cdn.standards.iteh.ai/samples/36432/747ac323337a46f7a02c6211e6675ce6/ISO-4028-2003.pdf), keyed 2026-11-04; commercial ranges and shaded (short-length) areas read from the rendered page

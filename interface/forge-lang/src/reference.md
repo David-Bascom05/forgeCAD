@@ -884,9 +884,11 @@ expect clearance(arm, post) >= 2 at crank.turn = 90deg
   `subassembly(FILE, at:, ..)`. `at:` is a pose: `pose(at: (x, y, z), z: DIR, x: DIR, rz: ANGLE)`,
   a point, or a plane. Written poses are where the solve starts, not design numbers: no
   literals-in-params lint. A reference instance is checked but not counted in the BOM.
-- **Standard parts:** `std(FAMILY, size: S, length: L, thread: "cosmetic"|"modelled", grade: G,
+- **Standard parts:** `std(FAMILY, size: S, length: L, thread: "modelled"|"cosmetic", grade: G,
   sheet: T, at:, ground:, ..)` places a part made from the standard parts library's table
-  (`stdparts/`): `std("ISO 4762", size: "M6", length: 20, grade: "10.9")`. Its anchors are the
+  (`stdparts/`): `std("ISO 4762", size: "M6", length: 20, grade: "10.9")`. Its thread is modelled
+  (a helical groove) unless `thread: "cosmetic"` (the shank at the major diameter, a nut's bore at
+  the minor). Every use of one key is one part, built once and placed at each use. Its anchors are the
   generator's (screws: `head`, `top`, `thd`, `tip`; nuts: `seat`, `thd`, `end`; washers `a`, `b`,
   `bore`; PEM-type parts `flush`). A size, length or option the table does not hold is a typed
   error (`StdUnknownFamily`, `StdUnknownSize`, `StdNeedsLength`, `StdUnknownLength`,

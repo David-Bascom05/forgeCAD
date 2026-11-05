@@ -17,7 +17,7 @@ fg serve                        JSON lines on stdin: {\"cmd\":\"run\"|\"check\",
 fg reference                    the language reference
 fg view FILE [--view front,top,..] [--tangent] [--chord MM] [--pdf OUT] [--svg OUT] [--points]
                                 a part's or assembly's exact hidden-line views: lengths by class (JSON), pages
-fg std [FAMILY [SIZE [LENGTH]]] [--thread modelled] [--grade G] [--sheet T] [-o OUT.fg]
+fg std [FAMILY [SIZE [LENGTH]]] [--thread cosmetic] [--grade G] [--sheet T] [-o OUT.fg]
                                 the standard parts: families, a family's sizes and lengths, or a
                                 part's file (FILE may also be its key, `fg run 'std:ISO 4762|M6|20'`)";
 

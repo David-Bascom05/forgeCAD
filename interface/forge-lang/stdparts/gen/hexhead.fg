@@ -17,7 +17,7 @@ shared k = 5.3        # head height, washer face included
 shared dw = 11.63     # washer face (bearing face) diameter
 shared c = 0.6        # washer face thickness (max)
 shared r = 0.4        # under-head fillet radius (minimum)
-shared modelled = 0   # 1: the thread modelled
+shared modelled = 1   # 1: the thread modelled; 0: cosmetic
 shared b = b1 if l <= lb1 else (b2 if l <= lb2 else b3)
 shared lt = l if l <= lfull else b
 shared zt = max(l - lt, r)

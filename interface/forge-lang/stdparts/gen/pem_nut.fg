@@ -11,7 +11,7 @@ shared A = 1.15       # shank length (max)
 shared C = 8.73       # shank diameter (max)
 shared E = 11.18      # head diameter
 shared T = 4.08       # head height above the sheet
-shared modelled = 0   # 1: the thread modelled
+shared modelled = 1   # 1: the thread modelled; 0: cosmetic
 shared rm = (d - 1.082532 * P) / 2   # bore: the ISO 965 basic minor diameter D1
 shared z0 = tsh - A
 

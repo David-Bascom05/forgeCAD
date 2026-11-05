@@ -2007,6 +2007,9 @@ pub struct AsmTimings {
     pub incremental: bool,
     /// Runs made for `expect .. at`: one per distinct set of params.
     pub at_runs: usize,
+    /// Part files built, these runs together: one per file or standard part key, however many
+    /// occurrences place it; none for one the last run built.
+    pub built: usize,
 }
 
 /// One joint's values after the solve.
@@ -2058,6 +2061,9 @@ pub struct AsmOut {
     pub insts: Vec<InstOut>,
     /// Every joint, constraint, relation, fit and fit rule, through subassemblies.
     pub links: Vec<LinkOut>,
+    /// Where each of `links` is in the world, solved: a joint's or constraint's two ends' frames
+    /// (the anchors it ties); None for an end that is not an anchor on a placed part.
+    pub link_at: Vec<[Option<Frame>; 2]>,
     /// Each part file's iProperties and solids, by the file as `occurrences` names it.
     pub part_docs: BTreeMap<String, Arc<crate::props::PartSummary>>,
     /// Each occurrence's body (0: the part as made, else a `body:` by its name's hash) and
@@ -2646,6 +2652,7 @@ pub fn finish(
                 let parent = std::path::Path::new(file).parent().map(|p| p.to_path_buf());
                 let l = Arc::new(load_part(&text, parent, fence.clone(), &refs, &bodies));
                 cache.parts.insert(ck, l.clone());
+                t.built += 1;
                 l
             }
         };
@@ -2955,6 +2962,31 @@ pub fn finish(
         }
     }
     out.bom = bom.into_iter().collect();
+    let placed: BTreeMap<String, (Frame, &fa::PartRef)> = sol
+        .occurrences
+        .iter()
+        .map(|o| (occ_name(&o.path), (o.pose, &o.part)))
+        .collect();
+    let world = |end: &(String, String)| -> Option<Frame> {
+        let (pose, part) = placed.get(&end.0)?;
+        if end.1.is_empty() {
+            return Some(*pose);
+        }
+        let r = fa::Parts::part(&**checker.parts(), part)?
+            .refs
+            .get(&end.1)?
+            .as_ref()
+            .ok()?;
+        Some(pose.compose(&r.frame))
+    };
+    out.link_at = out
+        .links
+        .iter()
+        .map(|l| match l.family {
+            LinkFamily::Joint | LinkFamily::Constraint => [world(&l.a), world(&l.b)],
+            _ => [None, None],
+        })
+        .collect();
     out.hashes = sol
         .hashes
         .iter()
@@ -3102,6 +3134,7 @@ pub fn finish(
             let (run, back) = crate::run(&text, o, kept);
             cache = back.asm.unwrap_or_default();
             t.at_runs += 1;
+            t.built += run.asm.as_ref().map_or(0, |a| a.timings.built);
             // a joint past its limit at these params: every check of the set measured at the limit
             let past: Vec<Issue> = run
                 .errors
@@ -4003,6 +4036,7 @@ pub fn json(out: &AsmOut) -> Json {
                 ("expects", t.expects_ms.into()),
                 ("incremental", t.incremental.into()),
                 ("at_runs", t.at_runs.into()),
+                ("built", t.built.into()),
             ]),
         ),
     ];

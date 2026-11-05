@@ -5,7 +5,7 @@
 # item: Hexagon socket head shoulder screw
 # category: Fasteners/Bolts and screws/Shoulder
 # gen: shoulder | ds=ds_max | dsn=ds | ls=@l | d=@d | P=P | b=b_max | dk=dk_max | k=k_max | s=s | t=t_min | g1=g1_max | dg1=dg1_min | g2=g2_max | dg2=dg2_max | modelled=@modelled
-# option thread: cosmetic modelled
+# option thread: modelled cosmetic
 # material: ISO 898-1 class 12.9
 # lengths: 10 12 16 20 25 30 40 50 60 70 80 90 100 120
 # src A: ISO 7379:1983 table, printed page 3 of the iTeh preview (https://cdn.standards.iteh.ai/samples/14078/66d6be2c979341abb895fa52330708be/ISO-7379-1983.pdf), keyed 2026-11-04 from the rendered page (the text layer is OCR-garbled); commercial ranges from the bold stepped lines

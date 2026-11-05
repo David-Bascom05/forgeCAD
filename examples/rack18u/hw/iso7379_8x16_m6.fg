@@ -37,6 +37,7 @@ sketch hx(on: body.side(prof.o[0]), at: prof.c0) {
   hexo = poly(polar(n: n6, r: rc, start: 0deg))
 }
 socket = cut(hx, t)
+thread_m = thread(on: plane(at: prof.pz2, normal: prof.zax.dir, x: prof.xax.dir), spec: (d, P), length: lt - P)
 
 head = anchor(plane(at: prof.pz0, normal: prof.zax.dir, x: prof.xax.dir))
 shoulder = anchor(plane(at: prof.pz0, normal: prof.zax.dir, x: prof.xax.dir), kind: shaft, size: ds, depth: ls)
@@ -46,4 +47,4 @@ tip = anchor(plane(at: prof.pz2, normal: prof.zax.dir, x: prof.xax.dir))
 
 expect valid
 expect bodies = 1
-expect volume = 1791.426 +- 0.05%
+expect volume = 1739.85 +- 6.187

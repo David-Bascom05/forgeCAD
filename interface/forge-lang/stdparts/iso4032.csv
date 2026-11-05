@@ -7,7 +7,7 @@
 # item: Hexagon nut
 # category: Fasteners/Nuts/Hex
 # gen: nut | d=@d | P=@P | s=s | m=m_max | h=m_max | dw=dw_min | da=da_min | modelled=@modelled
-# option thread: cosmetic modelled
+# option thread: modelled cosmetic
 # option grade: 8 10 A2-70 A4-70
 # material: ISO 898-2 class 8
 # grade 8: ISO 898-2 class 8

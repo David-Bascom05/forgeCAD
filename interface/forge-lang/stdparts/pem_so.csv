@@ -6,7 +6,7 @@
 # item: Self-clinching standoff
 # category: Sheet metal hardware/Self-clinching standoffs
 # gen: pem_standoff | d=@d | P=P | L=L | C=C_max | H=H | B=B | D=D | F=F_min | blind=style==blind | tmin=sheet_min | modelled=@modelled
-# option thread: cosmetic modelled
+# option thread: modelled cosmetic
 # option grade: SO SOS SO4
 # material: PEM S carbon steel
 # grade SO: PEM S carbon steel

@@ -14,7 +14,7 @@ shared k = 6          # head height
 shared s = 5          # socket across flats
 shared t = 3          # socket depth (minimum)
 shared r = 0.25       # under-head fillet radius (minimum)
-shared modelled = 0   # 1: the thread modelled; 0: cosmetic (the shank at the major diameter)
+shared modelled = 1   # 1: the thread modelled; 0: cosmetic (the shank at the major diameter)
 shared lt = l if l <= lfull else b
 shared zt = max(l - lt, r)
 shared ch = 0.6 * P

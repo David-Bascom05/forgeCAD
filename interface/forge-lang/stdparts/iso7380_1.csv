@@ -5,7 +5,7 @@
 # item: Hexagon socket button head screw
 # category: Fasteners/Bolts and screws/Button head
 # gen: button | d=@d | P=P | l=@l | b=b | lfull=l_full | dk=dk_max | k=k_max | rf=rf_max | dL=dL | s=s | t=t_min | r=rs_min | modelled=@modelled
-# option thread: cosmetic modelled
+# option thread: modelled cosmetic
 # option grade: 10.9 12.9 A2-70 A4-70
 # material: ISO 898-1 class 10.9
 # grade 10.9: ISO 898-1 class 10.9

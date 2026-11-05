@@ -314,7 +314,8 @@ fn spec(family: &str, size: &str, length: Option<f64>, opts: &[(&str, &str)]) ->
 }
 
 /// The first, middle and last size of each family at its shortest and longest length build
-/// valid, one solid, with no errors; the middle size with its thread modelled too.
+/// valid, one solid, with no errors (threads modelled, the default); the middle size with its
+/// thread cosmetic too.
 #[test]
 fn generators_build_across_sizes() {
     for f in stdparts::families().iter().filter(|f| f.placeable()) {
@@ -329,7 +330,7 @@ fn generators_build_across_sizes() {
             for l in lengths {
                 let mut variants = vec![vec![]];
                 if k == n / 2 && f.options.iter().any(|o| o.0 == "thread") {
-                    variants.push(vec![("thread", "modelled")]);
+                    variants.push(vec![("thread", "cosmetic")]);
                 }
                 for o in variants {
                     let s = spec(&f.name, &r[0], l, &o);
@@ -361,7 +362,7 @@ fn generators_build_across_sizes() {
 /// under-head fillet, the shank and its tip chamfer, less the socket and its drill point.
 #[test]
 fn iso4762_m6x20_volume() {
-    let g = stdparts::generate(&spec("ISO 4762", "M6", Some(20.0), &[])).unwrap();
+    let g = stdparts::generate(&spec("ISO 4762", "M6", Some(20.0), &[("thread", "cosmetic")])).unwrap();
     let v = run(&g.text).measure.unwrap().volume;
     // tools/stdparts/volumes.py, iso4762 M6 20
     assert!((v - 957.5545).abs() < 1e-3, "{v}");
@@ -373,14 +374,45 @@ fn keys_round_trip() {
         "ISO 4762",
         "M6",
         Some(20.0),
-        &[("thread", "modelled"), ("grade", "12.9")],
+        &[("thread", "cosmetic"), ("grade", "12.9")],
     );
     let k = stdparts::key(&s);
-    assert_eq!(k, "std:ISO 4762|M6|20|thread=modelled");
+    assert_eq!(k, "std:ISO 4762|M6|20|thread=cosmetic");
     let back = stdparts::spec_of(&k).unwrap();
     assert_eq!(stdparts::key(&back), k);
     assert!(stdparts::text_of(&k).is_some());
     assert!(stdparts::text_of("std:ISO 4762|M6|21").is_none());
+}
+
+/// The thread is modelled unless asked for cosmetic: the default's key names no thread, and the
+/// screw is the cosmetic one less its groove, (l - zt) / P turns of the ISO 68-1 form give or take
+/// a turn for its ends (the groove starts in air past the tip, its full depth ends at the head).
+#[test]
+fn threads_are_modelled_by_default() {
+    let plain = spec("ISO 4762", "M6", Some(20.0), &[]);
+    let modelled = spec("ISO 4762", "M6", Some(20.0), &[("thread", "modelled")]);
+    let cosmetic = spec("ISO 4762", "M6", Some(20.0), &[("thread", "cosmetic")]);
+    assert_eq!(stdparts::key(&plain), "std:ISO 4762|M6|20");
+    assert_eq!(stdparts::key(&modelled), stdparts::key(&plain));
+    assert_eq!(stdparts::key(&cosmetic), "std:ISO 4762|M6|20|thread=cosmetic");
+    let volume = |s: &Spec| {
+        let r = run(&stdparts::generate(s).unwrap().text);
+        let m = r.measure.unwrap();
+        assert!(m.problems == 0 && m.bodies == 1, "{m:?}");
+        m.volume
+    };
+    let (v, vc) = (volume(&plain), volume(&cosmetic));
+    let turn = std::f64::consts::TAU * forge_model::thread::groove_moment(6.0, 1.0, false);
+    // M6 x 20: threaded to the head, from zt = r = 0.25
+    let turns = (20.0 - 0.25) / 1.0;
+    let groove = vc - v;
+    assert!(
+        (groove - turns * turn).abs() < turn,
+        "groove {groove}, {turns} turns of {turn}"
+    );
+    // a nut's thread too
+    let nut = |t: &str| volume(&spec("ISO 4032", "M6", None, &[("thread", t)]));
+    assert!(nut("modelled") < nut("cosmetic"));
 }
 
 fn asm_dir(tag: &str, files: &[(&str, &str)]) -> std::path::PathBuf {
@@ -417,8 +449,8 @@ fn std_in_an_assembly_is_one_bom_line_with_properties() {
         "bom",
         "assembly
 base = part(\"plate.fg\", ground: true)
-a = std(\"ISO 4762\", size: \"M6\", length: 20, grade: \"10.9\")
-b = std(\"ISO 4762\", size: \"M6\", length: 20, grade: \"10.9\")
+a = std(\"ISO 4762\", size: \"M6\", length: 20, thread: \"cosmetic\", grade: \"10.9\")
+b = std(\"ISO 4762\", size: \"M6\", length: 20, thread: \"cosmetic\", grade: \"10.9\")
 ja = fastened(a.head, base.top)
 jb = fastened(b.head, base.top)
 ",
@@ -429,7 +461,7 @@ jb = fastened(b.head, base.top)
         r.errors.iter().map(|e| e.text()).collect::<Vec<_>>()
     );
     let out = r.asm.unwrap();
-    let key = "std:ISO 4762|M6|20|grade=10.9";
+    let key = "std:ISO 4762|M6|20|grade=10.9|thread=cosmetic";
     assert!(out.bom.contains(&(key.to_string(), 2)), "{:?}", out.bom);
     let rows = forge_lang::props::bom_rows(&out);
     let (_, n, p, material, mass) = rows.iter().find(|r| r.0 == key).expect("the screw's BOM row");
@@ -557,4 +589,61 @@ fn hole_sizes_agree_or_are_resolved() {
     }
     assert!(open.is_empty(), "unresolved hole sizes:\n{}", open.join("\n"));
     assert_eq!(stdparts::hole_screw("#10-32").map(|s| s.name), Some("10-32"));
+}
+
+fn screws_and_nuts(n: usize, rule: bool, nut_size: &str, off_axis: f64) -> String {
+    let mut s = String::from("assembly\n");
+    if rule {
+        s += "m6 = fit_rule(external_thread, internal_thread, size: 6)\n";
+    }
+    for i in 0..n {
+        let x = 20.0 * i as f64;
+        s += &format!(
+            "s{i} = std(\"ISO 4762\", size: \"M6\", length: 20, ground: true, at: pose(at: ({x}, 0, 0)))\n"
+        );
+        s += &format!(
+            "n{i} = std(\"ISO 4032\", size: \"{nut_size}\", ground: true, at: pose(at: ({}, 0, 8)))\n",
+            x + off_axis
+        );
+    }
+    s
+}
+
+/// Every use of one standard part key is one part: forty screws and forty nuts build two part
+/// files, and a second run of the same document builds none.
+#[test]
+fn a_std_key_is_built_once_however_often_placed() {
+    let src = screws_and_nuts(40, true, "M6", 0.0);
+    let (r, cache) = forge_lang::run(&src, Options::default(), Default::default());
+    assert!(
+        r.errors.is_empty(),
+        "{:?}",
+        r.errors.iter().map(|e| e.text()).collect::<Vec<_>>()
+    );
+    let out = r.asm.unwrap();
+    assert_eq!(out.occurrences.len(), 80);
+    assert_eq!(out.timings.built, 2);
+    let (again, _) = forge_lang::run(&src, Options::default(), cache);
+    assert_eq!(again.asm.unwrap().timings.built, 0);
+}
+
+/// Modelled threads mate as Inventor's "matching threads" filter has it: a screw in a nut of its
+/// thread, on its axis, is intended where a fit rule names the pair, and counted as an
+/// interference without one, in a nut of another size, or off the axis.
+#[test]
+fn modelled_threads_mate_only_where_they_match() {
+    let interferences = |rule: bool, nut: &str, off: f64| {
+        let r = forge_lang::run(
+            &screws_and_nuts(1, rule, nut, off),
+            Options::default(),
+            Default::default(),
+        )
+        .0;
+        let out = r.asm.expect("an assembly");
+        (out.interferences, out.intended)
+    };
+    assert_eq!(interferences(true, "M6", 0.0), (0, 1));
+    assert_eq!(interferences(false, "M6", 0.0), (1, 0));
+    assert_eq!(interferences(true, "M5", 0.0), (1, 0));
+    assert_eq!(interferences(true, "M6", 0.3), (1, 0));
 }

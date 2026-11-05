@@ -14,7 +14,7 @@ shared dp = 4         # flat, dog or cup point diameter (dz for cup), max
 shared dt = 1.5       # cone point flat diameter, max
 shared zlong = 3      # dog length (max) above lshort
 shared zshort = 1.5   # dog length (max) at or below it
-shared modelled = 0   # 1: the thread modelled
+shared modelled = 1   # 1: the thread modelled; 0: cosmetic
 shared t = tshort if l <= lshort else tlong
 shared z = zshort if l <= lshort else zlong
 shared df = d - 1.226869 * P   # thread root: the ISO 68-1 minor diameter d3

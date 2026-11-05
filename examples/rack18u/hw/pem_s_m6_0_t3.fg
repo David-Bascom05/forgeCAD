@@ -28,6 +28,7 @@ sketch prof(on: xz) {
   xax = line((0, 0), (xref, 0), construction: true)
 }
 body = revolve(prof.o, axis: prof.zax)
+thread_m = thread(on: plane(at: prof.pz1, normal: prof.zax.dir, x: prof.xax.dir), spec: (d, P), internal: true, flip: true, length: A + T + P)
 
 flush = anchor(plane(at: prof.pz0, normal: prof.zax.dir, x: prof.xax.dir))
 thd = anchor(plane(at: prof.pz1, normal: prof.zax.dir, x: prof.xax.dir), kind: internal_thread, size: d, depth: A + T)
@@ -35,4 +36,4 @@ end = anchor(plane(at: prof.pz2, normal: prof.zax.dir, x: prof.xax.dir))
 
 expect valid
 expect bodies = 1
-expect volume = 367.293 +- 0.05%
+expect volume = 346.556 +- 4.138

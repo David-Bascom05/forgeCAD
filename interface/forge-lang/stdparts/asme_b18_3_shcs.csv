@@ -8,7 +8,7 @@
 # lengths: 0.125 0.1875 0.25 0.3125 0.375 0.4375 0.5 0.625 0.75 0.875 1 1.25 1.5 1.75 2 2.25 2.5 2.75 3 3.25 3.5 3.75 4 4.5 5 5.5 6
 # note: the lengths are the common commercial series (ASME B18.3 lists none per size); lengths under 1.5 d are not offered
 # gen: shcs | d=@d | P=@P | l=@l | b=b | lfull=0 | dk=dk_max | dw=dk_max | k=k_max | s=s | t=t_min | r=0.25 | modelled=@modelled
-# option thread: cosmetic modelled
+# option thread: modelled cosmetic
 # option grade: alloy A2-70
 # material: ISO 898-1 class 12.9
 # grade alloy: ISO 898-1 class 12.9

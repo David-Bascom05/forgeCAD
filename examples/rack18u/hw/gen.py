@@ -7,12 +7,25 @@ Each part's expected volume is worked out here from the drawing dimensions, inde
 """
 from math import pi, sqrt, asin
 from pathlib import Path
+import json
 
 OUT = Path(__file__).resolve().parent
 
 # ISO 965 basic minor diameter of the internal thread, D1 = D - 1.0825 P
 def d1(d, p):
     return d - 1.082532 * p
+
+# the groove's volume per radian of turn (forge_model::thread::groove_moment): the integral of
+# r over the ISO 68-1 form's groove between the minor and major radii
+def groove_moment(major, pitch, internal):
+    depth = 5 / 16 * sqrt(3) * pitch
+    rj, rn = major / 2, major / 2 - depth
+    slope = 1 / sqrt(3)
+    a, b = rn, rj
+    w0, k = (pitch * 3 / 4, -2 * slope) if internal else (pitch / 4, 2 * slope)
+    dd = b - a
+    return w0 * (b * b - a * a) / 2 + k * (dd ** 3 / 3 + a * dd * dd / 2)
+
 
 def num(v):
     s = f"{v:.6f}".rstrip("0").rstrip(".")
@@ -29,6 +42,7 @@ class Part:
         self.zpts = {}
         self.volume = None
         self.anchor_doc = []
+        self.threads = []     # (zname, length, internal, groove volume, one turn's)
 
     def p(self, name, value, comment=""):
         self.params.append((name, value if isinstance(value, str) else num(value), comment))
@@ -42,20 +56,36 @@ class Part:
         self.anchors.append((name, self.zpt(zexpr), kind, size, depth))
         self.anchor_doc.append((name, doc))
 
+    def thread(self, zexpr, length, internal, d, P, run):
+        # modelled from a free end (the groove starts a pitch back, in air): a screw's from its
+        # tip towards the head, a nut's from the face a screw enters; run is the groove's length
+        # in the material, for the volume
+        turn = 2 * pi * groove_moment(d, P, internal)
+        self.threads.append((zexpr, length, internal, turn * run / P, turn))
+
     def text(self):
         out = [f"# {self.title}", f"# source: {self.source}", f"# frame: {self.frame}", ""]
+        if self.name in PROPS:
+            desc, mat = PROPS[self.name]
+            out += [f"properties(description: {json.dumps(desc)}, material: {json.dumps(mat)})"]
         for n, v, c in self.params:
             out.append(f"shared {n} = {v}" + (f"   # {c}" if c else ""))
         out.append("")
         out.append("sketch prof(on: xz) {")
         out += ["  " + r for r in self.prof]
         out.append("  c0 = pt(0, 0)")
+        for t in self.threads:
+            self.zpt(t[0])
         for z, n in self.zpts.items():
             out.append(f"  {n} = pt(0, {z})")
         out.append("  zax = line((0, 0), (0, zref), construction: true)")
         out.append("  xax = line((0, 0), (xref, 0), construction: true)")
         out.append("}")
         out += self.body
+        for z, length, internal, _, _ in self.threads:
+            plane = f"plane(at: prof.{self.zpts[z]}, normal: prof.zax.dir, x: prof.xax.dir)"
+            how = ", internal: true, flip: true" if internal else ""
+            out.append(f"thread_m = thread(on: {plane}, spec: (d, P){how}, length: {length})")
         out.append("")
         for n, z, kind, size, depth in self.anchors:
             a = f"{n} = anchor(plane(at: prof.{z}, normal: prof.zax.dir, x: prof.xax.dir)"
@@ -65,7 +95,13 @@ class Part:
         out.append("")
         out.append("expect valid")
         out.append("expect bodies = 1")
-        out.append(f"expect volume = {num(round(self.volume, 3))} +- 0.05%")
+        if self.threads:
+            # the groove's ends are not worked out here: one turn of it either way
+            v = self.volume - sum(t[3] for t in self.threads)
+            tol = sum(t[4] for t in self.threads) + 0.0005 * v
+            out.append(f"expect volume = {num(round(v, 3))} +- {num(round(tol, 3))}")
+        else:
+            out.append(f"expect volume = {num(round(self.volume, 3))} +- 0.05%")
         return "\n".join(out) + "\n"
 
     def write(self):
@@ -95,6 +131,7 @@ def band_area(r, w):
 
 
 def common_screw_params(pt, d, P, l):
+    pt.d, pt.P, pt.l = d, P, l
     pt.p("d", d, "thread major diameter")
     pt.p("P", P, "pitch")
     pt.p("l", l, "nominal length, under the head to the tip")
@@ -105,6 +142,10 @@ def common_screw_params(pt, d, P, l):
 
 
 def screw_anchors(pt, thread_start="0", thread_len="l", size="d"):
+    if thread_start == "0":
+        pt.thread("l", "l - P", False, pt.d, pt.P, pt.l - pt.P - 0.3 * pt.P)
+    else:
+        pt.thread("l", thread_len, False, pt.d, pt.P, pt.b - 0.3 * pt.P)
     pt.anchor("head", "0", "head underside (the seat), normal along the shank towards the tip")
     pt.anchor("thd", thread_start, "external thread, from where the full thread starts towards the tip",
               "external_thread", size, thread_len)
@@ -250,6 +291,7 @@ def hexbolt(name, std, d, P, l, b, s, k, src):
     pt.p("n6", "count(6)")
     if not full:
         pt.p("b", b, "thread length (ISO 4014: 2d + 6 for l <= 125)")
+        pt.b = b
     pt.prof += poly_rows("o", [("0", "0"), ("rs", "0"), ("rs", "l - ch"), ("rs - ch", "l"), ("0", "l")])
     pt.body += [
         "shank = revolve(prof.o, axis: prof.zax)",
@@ -301,6 +343,7 @@ def shoulder(name, ds, ls, d, P, lt, dk, k, s, t, c, src):
     pt.anchor("shoulder", "0", "the shoulder (a pin), from the head underside along +z", "shaft", "ds", "ls")
     pt.anchor("clamp", "ls", "the shoulder's end face, where it clamps on the nut side part")
     pt.anchor("thd", "ls", "external thread, from the shoulder end to the tip", "external_thread", "d", "lt")
+    pt.thread("l", "lt - P", False, d, P, lt - P - 0.3 * P)
     pt.anchor("tip", "l", "the end of the thread")
     rk = dk / 2
     head = pi * rk * rk * (k - c) + cone_frustum(rk, rk - c, c)
@@ -331,6 +374,7 @@ def pem_nut(name, code, t_sheet, d, P, A, C, E, T, c, src):
     pt.body += ["body = revolve(prof.o, axis: prof.zax)"]
     pt.anchor("flush", "0", "the sheet's flush face: place on the sheet part's PEM anchor (same origin, same normal)")
     pt.anchor("thd", "z0", "internal thread, through the shank and head: A + T", "internal_thread", "d", "A + T")
+    pt.thread("z0", "A + T + P", True, d, P, A + T)
     pt.anchor("end", "tsh + T", "the head's top face (where a screw tip protrudes)")
     rm = d1(d, P) / 2
     pt.volume = (pi * ((C / 2) ** 2 - rm * rm) * A + pi * ((E / 2) ** 2 - rm * rm) * (T - c)
@@ -358,6 +402,7 @@ def pem_stud(name, code, d, P, L, H, hh, S, src):
     pt.body += ["body = revolve(prof.o, axis: prof.zax)"]
     pt.anchor("flush", "0", "head top, flush with the sheet's outer face: place on the sheet part's stud anchor")
     pt.anchor("thd", "S + 2 * P", "external thread, full from S + 2P to the end", "external_thread", "d", "l - S - 2 * P")
+    pt.thread("l", "l - S - 2 * P", False, d, P, L - S - 2 * P - 0.3 * P)
     pt.anchor("tip", "l", "the stud's end")
     pt.volume = pi * (H / 2) ** 2 * hh + pi * (d / 2) ** 2 * (L - hh - 0.6 * P) + cone_frustum(d / 2, d / 2 - 0.6 * P, 0.6 * P)
     return pt
@@ -390,6 +435,8 @@ def nyloc(name, d, P, s, h, m, dw, src):
     pt.anchor("seat", "0", "bearing face (on the washer), normal through the nut")
     pt.anchor("thd", "0", "internal thread, the whole height (the screw must pass the insert)",
               "internal_thread", "d", "h")
+    # the metal thread; the insert is left at the minor diameter for the screw to form
+    pt.thread("0", "m", True, d, P, m)
     pt.anchor("end", "h", "top of the insert crown")
     rm = d1(d, P) / 2
     pt.volume = (hex_area(s) - pi * rm * rm) * m + pi * ((dw / 2) ** 2 - rm * rm) * (h - m)
@@ -448,6 +495,7 @@ def cage_nut(name, d, P, wx, wy, depth, tn, dc, src):
     ]
     pt.anchor("seat", "0", "the cage's front face on the rail's rear face, centred on the square hole")
     pt.anchor("thd", "zn", "internal thread, tn long", "internal_thread", "d", "tn")
+    pt.thread("zn", "tn + P", True, d, P, tn)
     pt.anchor("end", "dp", "the back of the cage")
     rm = d1(d, P) / 2
     pt.volume = wx * wy * depth - pi * (dc / 2) ** 2 * (depth - tn) - pi * rm * rm * tn
@@ -545,6 +593,47 @@ PARTS = [
     cage_nut("cage_nut_m6", 6, 1.0, 11.81, 10.11, 8.03, 4.78, 6.6,
              "Rittal DK 2094.200 (M6, 0.8-2.5 metal); envelope from Panduit CNWSM6-C drawing 10119-20"),
 ]
+
+
+# each part's iProperties: (description, material)
+PROPS = {
+    "ball_4": ("steel ball 4", "AISI 52100"),
+    "cage_nut_m6": ("M6 cage nut for 9.5 square holes", "AISI 1018"),
+    "iso10511_m4": ("ISO 10511 prevailing torque type hexagon thin nut with non-metallic insert M4", "8.8"),
+    "iso10511_m5": ("ISO 10511 prevailing torque type hexagon thin nut with non-metallic insert M5", "8.8"),
+    "iso10511_m6": ("ISO 10511 prevailing torque type hexagon thin nut with non-metallic insert M6", "8.8"),
+    "iso10511_m8": ("ISO 10511 prevailing torque type hexagon thin nut with non-metallic insert M8", "8.8"),
+    "iso4014_m8x55": ("ISO 4014 hexagon head bolt M8 x 55", "8.8"),
+    "iso4017_m8x20": ("ISO 4017 hexagon head screw M8 x 20", "8.8"),
+    "iso7045_m4x35": ("ISO 7045 cross recessed pan head screw M4 x 35", "8.8"),
+    "iso7045_m4x40": ("ISO 7045 cross recessed pan head screw M4 x 40", "8.8"),
+    "iso7089_4": ("ISO 7089 plain washer, size 4", "1008 CR"),
+    "iso7089_5": ("ISO 7089 plain washer, size 5", "1008 CR"),
+    "iso7089_6": ("ISO 7089 plain washer, size 6", "1008 CR"),
+    "iso7089_8": ("ISO 7089 plain washer, size 8", "1008 CR"),
+    "iso7379_8x12_m6": ("ISO 7379 hexagon socket shoulder screw 8 x 12, thread M6 x 11", "8.8"),
+    "iso7379_8x16_m6": ("ISO 7379 hexagon socket shoulder screw 8 x 16, thread M6 x 11", "8.8"),
+    "iso7380_m4x25": ("ISO 7380-1 hexagon socket button head screw M4 x 25", "8.8"),
+    "iso7380_m5x10": ("ISO 7380-1 hexagon socket button head screw M5 x 10", "8.8"),
+    "iso7380_m5x12": ("ISO 7380-1 hexagon socket button head screw M5 x 12", "8.8"),
+    "iso7380_m6x10": ("ISO 7380-1 hexagon socket button head screw M6 x 10", "8.8"),
+    "iso7380_m6x12": ("ISO 7380-1 hexagon socket button head screw M6 x 12", "8.8"),
+    "latch_spacer_6x15": ("steel round spacer 6.0 OD x 4.3 ID x 15.0", "AISI 1018"),
+    "latch_spring_h7_49": ("latch compression spring at height 7.49", "AISI 1018"),
+    "latch_spring_h7_77": ("latch compression spring at height 7.77", "AISI 1018"),
+    "latch_spring_h8_17": ("latch compression spring at height 8.17", "AISI 1018"),
+    "nylon_spacer_8x14x8": ("PA66 spacer 8.2 ID x 14 OD x 8.0", "PA66"),
+    "pem_fh_m4_12": ("PEM FH-M4-12 flush-head self-clinching stud", "AISI 1018"),
+    "pem_fh_m6_20": ("PEM FH-M6-20 flush-head self-clinching stud", "AISI 1018"),
+    "pem_fh_m8_25": ("PEM FH-M8-25 flush-head self-clinching stud", "AISI 1018"),
+    "pem_s_m4_0_t2": ("PEM S-M4-0 self-clinching nut, as installed in a 1.88 sheet", "AISI 1018"),
+    "pem_s_m6_0_t1": ("PEM S-M6-0 self-clinching nut, as installed in a 1.52 sheet", "AISI 1018"),
+    "pem_s_m6_0_t2": ("PEM S-M6-0 self-clinching nut, as installed in a 1.88 sheet", "AISI 1018"),
+    "pem_s_m6_0_t3": ("PEM S-M6-0 self-clinching nut, as installed in a 3.02 sheet", "AISI 1018"),
+    "pem_ss_m5_0_t3": ("PEM SS-M5-0 self-clinching nut, as installed in a 3.02 sheet", "AISI 1018"),
+    "plastic_washer_m6": ("plastic washer for the M6 rack screw", "PA66"),
+    "rack_screw_m6x16": ("rack screw M6 x 16, slotted cheese head", "8.8"),
+}
 
 
 SHOP_HEAD = """# SendCutSend shop, cold rolled 1008: SPEC section 3, copied verbatim by hw/gen.py (do not edit here).

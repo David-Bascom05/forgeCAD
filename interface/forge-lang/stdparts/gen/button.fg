@@ -16,7 +16,7 @@ shared c = 0          # collar thickness
 shared s = 4          # socket across flats
 shared t = 2.08       # socket depth (minimum)
 shared r = 0.25       # under-head fillet radius (minimum)
-shared modelled = 0   # 1: the thread modelled
+shared modelled = 1   # 1: the thread modelled; 0: cosmetic
 shared lt = l if l <= lfull else b
 shared zt = max(l - lt, r)
 shared ch = 0.6 * P

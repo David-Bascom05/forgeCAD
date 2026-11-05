@@ -7,7 +7,7 @@
 # item: Thin nut with nylon insert
 # category: Fasteners/Nuts/Lock
 # gen: nut | d=@d | P=@P | s=s | m=m_min | h=h_max | dw=dw_min | da=da_min | modelled=@modelled
-# option thread: cosmetic modelled
+# option thread: modelled cosmetic
 # option grade: 04 05 A2-70
 # material: ISO 898-2 class 04
 # grade 04: ISO 898-2 class 04

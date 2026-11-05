@@ -7,7 +7,7 @@
 # item: Hexagon head bolt
 # category: Fasteners/Bolts and screws/Hex head
 # gen: hexhead | d=@d | P=@P | l=@l | b1=b1 | b2=b2 | b3=b3 | s=s | k=k | dw=dw_min | c=c_max | r=r_min | modelled=@modelled
-# option thread: cosmetic modelled
+# option thread: modelled cosmetic
 # option grade: 8.8 10.9 A2-70 A4-70
 # material: ISO 898-1 class 8.8
 # grade 8.8: ISO 898-1 class 8.8

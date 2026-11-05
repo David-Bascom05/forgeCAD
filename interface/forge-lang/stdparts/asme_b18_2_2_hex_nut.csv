@@ -8,7 +8,7 @@
 # item: Hex nut
 # category: Fasteners/Nuts/Hex
 # gen: nut | d=@d | P=@P | s=F | m=H | h=H | dw=F | da=D | modelled=@modelled
-# option thread: cosmetic modelled
+# option thread: modelled cosmetic
 # option grade: 5 8
 # material: SAE J995 Grade 5
 # grade 5: SAE J995 Grade 5

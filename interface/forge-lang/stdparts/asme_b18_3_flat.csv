@@ -8,7 +8,7 @@
 # lengths: 0.125 0.1875 0.25 0.3125 0.375 0.4375 0.5 0.625 0.75 0.875 1 1.25 1.5 1.75 2 2.25 2.5 2.75 3 3.25 3.5 3.75 4 4.5 5 5.5 6
 # note: the lengths are the common commercial series (ASME B18.3 lists none per size); lengths under 1.5 d are not offered
 # gen: csk | d=@d | P=@P | l=@l | b=l_full | lfull=l_full | dkt=dk_theor_max | dk=dk_min | k=k | ang=82deg | s=s | t=t_min | modelled=@modelled
-# option thread: cosmetic modelled
+# option thread: modelled cosmetic
 # material: ISO 898-1 class 10.9
 # src U: Unbrako Socket Products Engineering Guide, Flat Head Socket Screws Dimensions, printed page 14 (https://www.unbrako.com/images/downloads/engguide.pdf), dimensions to ANSI/ASME B18.3, keyed 2026-11-04 from the rendered page; the only source for the protrusion gauge G, P, the fillet r_max and l_full
 # src R: Fuller Fasteners ANSI/ASME B18.3 flat socket head cap screw table (https://fullerfasteners.com/tech/ansi-asme-b18-3-specifications-flat-socket-head-cap-screws/), read 2026-11-04; the source for 1-1/8 to 1-1/2 and for dk_min 7/8 and 1, dk_theor_max 1/2 where it, BOSL2 and FastenersWB agree against U

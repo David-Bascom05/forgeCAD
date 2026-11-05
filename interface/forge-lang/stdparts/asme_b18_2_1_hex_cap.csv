@@ -10,7 +10,7 @@
 # lengths: 0.5 0.625 0.75 0.875 1 1.25 1.5 1.75 2 2.25 2.5 2.75 3 3.25 3.5 3.75 4 4.5 5 5.5 6 6.5 7 7.5 8
 # note: the lengths are the common commercial series (ASME B18.2.1 lists none per size); lengths under 1.5 d are not offered
 # gen: hexhead | d=@d | P=@P | l=@l | b1=LT | b2=LT_long | b3=LT_long | lb1=152.4 | lb2=100000 | s=F | k=H | dw=F_max | c=wf_t_max | r=R_min | modelled=@modelled
-# option thread: cosmetic modelled
+# option thread: modelled cosmetic
 # option grade: 5 8
 # material: SAE J429 Grade 5
 # grade 5: SAE J429 Grade 5

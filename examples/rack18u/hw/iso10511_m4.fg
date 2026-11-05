@@ -30,6 +30,7 @@ sketch hx(on: crown.side(prof.o[0]), at: prof.c0) {
   bo = circle((0, 0), rm)
 }
 hexa = extrude(hx, m)
+thread_m = thread(on: plane(at: prof.pz0, normal: prof.zax.dir, x: prof.xax.dir), spec: (d, P), internal: true, flip: true, length: m)
 
 seat = anchor(plane(at: prof.pz0, normal: prof.zax.dir, x: prof.xax.dir))
 thd = anchor(plane(at: prof.pz0, normal: prof.zax.dir, x: prof.xax.dir), kind: internal_thread, size: d, depth: h)
@@ -37,4 +38,4 @@ end = anchor(plane(at: prof.pz1, normal: prof.zax.dir, x: prof.xax.dir))
 
 expect valid
 expect bodies = 1
-expect volume = 139.195 +- 0.05%
+expect volume = 133.863 +- 1.354
