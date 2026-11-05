@@ -3725,6 +3725,10 @@ pub fn finish(
         declared_kinds.extend(load.kinds.iter().cloned());
         let doc = fa::DocId(short(&dir, file).into());
         part_docs.insert(doc.0.to_string(), load.summary.clone());
+        // and by its identity, what the BOM's rows name
+        part_docs
+            .entry(bom_key(&doc.0))
+            .or_insert_with(|| load.summary.clone());
         // a part's threads are on its own body, not on a named body it also has
         threads_of.insert((doc.clone(), 0), Arc::new(load.threads.clone()));
         if let Some(t) = &load.tooling {
@@ -3998,7 +4002,7 @@ pub fn finish(
         out.occ_tooling
             .push(tooling.get(&o.part.doc.0.to_string()).cloned());
         if !o.reference {
-            *bom.entry(o.part.doc.0.to_string()).or_default() += 1;
+            *bom.entry(bom_key(&o.part.doc.0)).or_default() += 1;
         }
         if opts.render
             && let Some(b) = checker.exact().bodies.get(&(o.part.doc.clone(), o.part.body))
@@ -5417,6 +5421,24 @@ pub struct Comp<'s> {
 /// How deep components may place components (a cycle the static check misses stops here).
 pub const DEPTH: usize = 16;
 
+/// A part's identity, what its BOM row is by: a call of a component of this file is its
+/// definition and values (`#lid(w=40)`), whatever calls it is under; a body of a call is that
+/// call's (`#box(w=40)/base`); a file is itself.
+pub fn bom_key(doc: &str) -> String {
+    let Some(rest) = doc.strip_prefix('#') else {
+        return doc.to_string();
+    };
+    let segs: Vec<&str> = rest.split('/').collect();
+    let last = segs.last().copied().unwrap_or(rest);
+    if last.contains('(') {
+        return format!("#{last}");
+    }
+    match segs.iter().rev().skip(1).find(|s| s.contains('(')) {
+        Some(call) => format!("#{call}/{last}"),
+        None => doc.to_string(),
+    }
+}
+
 /// The key of the bodies no joint names, in an evaluation under `path`.
 pub fn root_key(path: &str) -> String {
     if path.is_empty() {
@@ -5498,6 +5520,9 @@ pub fn keep_comp_caches(ev: &mut Eval) {
 #[derive(Clone, Debug)]
 pub struct CompDef {
     pub name: String,
+    /// Where it is written: its name under the definitions it is inside (`box.lid`), what a
+    /// part's identity and its features' ids are by, wherever it is called from.
+    pub qual: String,
     pub params: Vec<Arg>,
     pub body: Rc<Vec<crate::syntax::Stmt>>,
     pub span: Span,
@@ -5542,7 +5567,19 @@ pub fn component_block(
                 .push(note(st.span, Issue::Component(CompProblem::Shared)));
         }
     }
+    // the definitions this one is written inside, from the calls this evaluation is under
+    let outer: Vec<&str> = ev
+        .comp_path
+        .split('/')
+        .filter(|x| !x.is_empty())
+        .map(|x| x.split(['(', '?']).next().unwrap_or(x))
+        .collect();
+    let qual = match outer.last() {
+        Some(o) => format!("{o}.{name}"),
+        None => name.to_string(),
+    };
     let def = Rc::new(CompDef {
+        qual,
         name: name.to_string(),
         params: args.to_vec(),
         body: Rc::new(
@@ -5782,7 +5819,7 @@ fn call_key(def: &CompDef, values: &[(String, Value)]) -> String {
         o => format!("{:?}", o.ty()),
     };
     let args: Vec<String> = values.iter().map(|(n, v)| format!("{n}={}", show(v))).collect();
-    format!("{}({})", def.name, args.join(","))
+    format!("{}({})", def.qual, args.join(","))
 }
 
 fn sub_eval<'s>(
@@ -5942,7 +5979,7 @@ pub fn call_def(ev: &mut Eval, def: &Rc<CompDef>, args: &[Arg], span: Span) -> R
         ev.comps.push(Comp {
             id: key.clone(),
             eval_key: eval_key.clone(),
-            def: def.name.clone(),
+            def: def.qual.clone(),
             ev: sub,
             span: def.span,
             sub: is_sub,

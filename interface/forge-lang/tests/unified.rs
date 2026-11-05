@@ -512,3 +512,33 @@ fn a_feature_read_through_an_occurrence_is_not_deleted() {
     let out = out.unwrap_or_else(|e| panic!("{}", e.text()));
     assert!(out.contains("component pin(r: 3)"), "{out}");
 }
+
+#[test]
+fn the_same_call_under_different_parents_is_one_part() {
+    let src = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/unified/nested_boxes.fg"
+    ))
+    .unwrap();
+    // a third lid placed by itself, the same call as b1's (w = 40)
+    let src = src.replace(
+        "expect interferences = 0",
+        "l3 = part(lid(w: 40), at: (0, 200, 0), ground: true)\nexpect interferences = 0",
+    );
+    let r = run_in(&dir("bom-identity"), &src);
+    assert!(r.ok(), "{:?}", errors(&r));
+    let bom: Vec<(&str, usize)> = r
+        .asm
+        .as_ref()
+        .unwrap()
+        .bom
+        .iter()
+        .map(|b| (b.0.as_str(), b.1))
+        .collect();
+    assert!(bom.contains(&("#lid(w=40)", 2)), "{bom:?}");
+    assert!(bom.contains(&("#lid(w=60)", 1)), "{bom:?}");
+    assert!(!bom.iter().any(|b| b.0.contains("/lid")), "{bom:?}");
+    // the rows' iProperties and mass are found by the same identity
+    let rows = forge_lang::props::bom_rows(r.asm.as_ref().unwrap());
+    assert!(rows.iter().any(|row| row.0 == "#lid(w=40)" && row.1 == 2));
+}
