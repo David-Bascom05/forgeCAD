@@ -621,6 +621,7 @@ pub fn marks(u: &crate::shell::thermo_ui::ThermoUi, g: &Gfx) -> Vec<crate::rende
                 placement: 0,
                 entity: crate::render::Entity::Face(f),
                 selected,
+                second: false,
             })
         })
         .collect()
