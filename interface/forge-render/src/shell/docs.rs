@@ -81,7 +81,7 @@ per_doc!(
     app [
         theme, view, out, view_rect, places, cube_menu, cube_menu_fresh, cube_region, marking,
         marking_row, window_box, view_blocks, side_px, overlays, file_menu, style_set, settings,
-        prefs, doc_tabs, active_doc, close_ask, open_paths, doc_scroll, doc_drag, agent,
+        prefs, doc_tabs, active_doc, close_ask, open_paths, open_blocks, doc_scroll, doc_drag, agent,
     ]
 );
 

@@ -490,3 +490,68 @@ fn the_watch_never_reads_a_device_a_link_out_or_a_huge_file() {
     h.gui.check_files();
     h.step();
 }
+
+/// A .fg's drawing blocks open beside its model, a tab each (Onshape's tabs along the bottom):
+/// the block's drawing made from the document, an edit in it written inside its braces, the
+/// model's tab read again from the same file.
+#[test]
+fn a_files_drawing_blocks_are_tabs_beside_its_model() {
+    let Some(mut h) = headless() else { return };
+    let d = scratch("blocks");
+    let f = d.join("knob_drawn.fg");
+    std::fs::copy(
+        concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../examples/unified/knob_drawn.fg"
+        ),
+        &f,
+    )
+    .unwrap();
+    open_in(&mut h, &f);
+    assert_eq!(titles(&h), ["knob_drawn.fg", "knob_drawn.fg · dwg_knob"]);
+    assert_eq!(h.gui.active_document(), 0);
+    assert!(h.gui.shell.drawing.is_none());
+    h.gui.activate(1);
+    assert!(h.until(|g| {
+        g.shell
+            .drawing
+            .as_ref()
+            .is_some_and(|e| !e.busy && e.made.as_ref().is_some_and(|m| m.views.len() == 2))
+    }));
+    let env = h.gui.shell.drawing.as_ref().unwrap();
+    assert_eq!(env.block.as_deref(), Some("dwg_knob"));
+    assert!(
+        env.made.as_ref().unwrap().ok(),
+        "{:?}",
+        env.made.as_ref().unwrap().errors
+    );
+    // an edit from outside (the Agent's way): the whole file, the block's lines changed
+    let src = std::fs::read_to_string(&f).unwrap();
+    let out = forge_lang::drawing::block::apply_checked(
+        &src,
+        "dwg_knob",
+        &forge_lang::drawing::ops::DrawOp::AddItem {
+            text: "n1 = note(\"BREAK EDGES\", sheet: s1, at: (40, 30))".into(),
+        },
+    )
+    .unwrap();
+    h.gui
+        .shell
+        .drawing
+        .as_mut()
+        .unwrap()
+        .external(out.clone(), "note", 1, false);
+    assert_eq!(std::fs::read_to_string(&f).unwrap(), out);
+    assert!(h.until(|g| {
+        g.shell
+            .drawing
+            .as_ref()
+            .is_some_and(|e| !e.busy && e.doc().item("n1").is_some())
+    }));
+    // the model's tab: the same file, its model as before
+    h.gui.activate(0);
+    ready(&mut h);
+    assert!(h.gui.shell.drawing.is_none());
+    // read again once the watch sees the file the drawing tab wrote
+    assert!(h.until(|g| g.fg.as_ref().is_some_and(|s| s.src.contains("n1 = note"))));
+}

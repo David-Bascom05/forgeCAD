@@ -438,6 +438,8 @@ pub struct Shell {
     pub close_ask: Option<usize>,
     /// Files to open in tabs of their own: a new drawing, a part from its assembly.
     pub open_paths: Vec<String>,
+    /// Drawing blocks of .fg files to open in tabs of their own (file, block).
+    pub open_blocks: Vec<(String, String)>,
     /// How far the strip is scrolled; the tab being dragged.
     doc_scroll: f32,
     doc_drag: Option<usize>,
@@ -511,6 +513,7 @@ impl Default for Shell {
             active_doc: 0,
             close_ask: None,
             open_paths: Vec::new(),
+            open_blocks: Vec::new(),
             doc_scroll: 0.0,
             doc_drag: None,
         }

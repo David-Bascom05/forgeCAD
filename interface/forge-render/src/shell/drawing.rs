@@ -278,7 +278,12 @@ enum Made {
 
 pub struct DrawingEnv {
     pub path: String,
+    /// A drawing block of a .fg (`drawing NAME { .. }`): `src` is the whole file, edits go
+    /// inside the block; none: a drawing file.
+    pub block: Option<String>,
     pub src: String,
+    /// It wrote its file since the host last looked: other tabs of the same file read it again.
+    pub wrote: bool,
     pub made: Option<Drawing>,
     pending: Option<Receiver<Made>>,
     /// While making: the views made of how many, and whether what is shown is only a preview.
@@ -336,10 +341,28 @@ fn pt(p: Point2) -> String {
 
 impl DrawingEnv {
     pub fn open(path: &str) -> Result<DrawingEnv, String> {
+        Self::open_in(path, None)
+    }
+
+    /// A drawing block `name` of the .fg at `path`, in the Drawing environment.
+    pub fn open_block(path: &str, name: &str) -> Result<DrawingEnv, String> {
+        Self::open_in(path, Some(name.to_string()))
+    }
+
+    fn open_in(path: &str, block: Option<String>) -> Result<DrawingEnv, String> {
         let src = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
+        if let Some(b) = &block
+            && !forge_lang::drawing::block::blocks(&src)
+                .iter()
+                .any(|x| x.name == *b)
+        {
+            return Err(format!("{}: no drawing {b}", name_of(path)));
+        }
         let mut e = DrawingEnv {
             path: path.to_string(),
+            block,
             src,
+            wrote: false,
             made: None,
             pending: None,
             progress: None,
@@ -376,7 +399,20 @@ impl DrawingEnv {
     }
 
     pub fn name(&self) -> String {
-        name_of(&self.path)
+        match &self.block {
+            Some(b) => format!("{} · {b}", name_of(&self.path)),
+            None => name_of(&self.path),
+        }
+    }
+
+    /// The drawing as written: a drawing file's, or the block's (spans in the whole file).
+    pub fn doc(&self) -> doc::Doc {
+        match &self.block {
+            Some(b) => {
+                forge_lang::drawing::block::read(&self.src, &name_of(&self.path), b).unwrap_or_default()
+            }
+            None => self.doc(),
+        }
     }
 
     /// Makes the sheet again from the file, in the background.
@@ -396,11 +432,18 @@ impl DrawingEnv {
             .unwrap_or_default();
         let file = dir.join(std::path::Path::new(&self.path).file_name().unwrap_or_default());
         let deps = self.deps.clone();
+        let block = self.block.clone();
+        let own = name_of(&self.path);
         std::thread::spawn(move || {
             let watch = forge_lang::deps::watch();
-            let d = regen::shown(&src, &file, &mut |s| {
-                let _ = send.send(Made::Part(s));
-            });
+            let d = match &block {
+                // a block of the .fg: the document it is in drawn
+                Some(b) => forge_lang::drawing::block::make(&src, &dir, None, &own, b)
+                    .unwrap_or_else(|| regen::make("drawing\n", &dir)),
+                None => regen::shown(&src, &file, &mut |s| {
+                    let _ = send.send(Made::Part(s));
+                }),
+            };
             let read: Vec<std::path::PathBuf> = watch
                 .done()
                 .0
@@ -463,7 +506,11 @@ impl DrawingEnv {
     fn apply(&mut self, ops: Vec<DrawOp>) {
         let mut src = self.src.clone();
         for op in &ops {
-            match apply_checked(&src, op) {
+            let done = match &self.block {
+                Some(b) => forge_lang::drawing::block::apply_checked(&src, b, op),
+                None => apply_checked(&src, op),
+            };
+            match done {
                 Ok(s) => src = s,
                 Err(e) => {
                     self.message = e.text();
@@ -475,6 +522,7 @@ impl DrawingEnv {
             self.message = format!("{}: {e}", self.path);
             return;
         }
+        self.wrote = true;
         self.undo.push(std::mem::replace(&mut self.src, src));
         self.redo.clear();
         self.tags.retain(|t| t.0 < self.undo.len());
@@ -492,6 +540,7 @@ impl DrawingEnv {
             self.message = format!("{}: {e}", self.path);
             return;
         }
+        self.wrote = true;
         let joins = self
             .tags
             .last()
@@ -526,12 +575,13 @@ impl DrawingEnv {
         if let Err(e) = std::fs::write(&self.path, &self.src) {
             self.message = format!("{}: {e}", self.path);
         }
+        self.wrote = true;
         self.regen();
     }
 
     /// A fresh item id: `prefix` and the first number free.
     fn fresh(&self, prefix: &str) -> String {
-        let d = doc::read(&self.src);
+        let d = self.doc();
         (1..)
             .map(|k| format!("{prefix}{k}"))
             .find(|n| d.item(n).is_none())
@@ -554,7 +604,7 @@ impl DrawingEnv {
     }
 
     fn model_id(&self) -> Option<String> {
-        doc::read(&self.src).items.iter().find_map(|i| match i.kind {
+        self.doc().items.iter().find_map(|i| match i.kind {
             ItemKind::Model { .. } => Some(i.id.clone()),
             _ => None,
         })
@@ -699,7 +749,7 @@ impl DrawingEnv {
 
     /// The next datum letter no datum symbol on the drawing has.
     fn free_letter(&self) -> String {
-        let d = doc::read(&self.src);
+        let d = self.doc();
         let taken: Vec<String> = d
             .items
             .iter()
@@ -1317,7 +1367,7 @@ impl DrawingEnv {
 
     /// The dialog to edit an item, by its kind.
     fn edit(&mut self, id: &str) {
-        let d = doc::read(&self.src);
+        let d = self.doc();
         let Some(item) = d.item(id) else { return };
         match &item.kind {
             ItemKind::View(v) => {
@@ -2405,14 +2455,12 @@ impl Shell {
                         env.picks.clear();
                     }
                     TextFor::Edit(id) => {
-                        let arg = if matches!(
-                            doc::read(&env.src).item(&id).map(|i| &i.kind),
-                            Some(ItemKind::Note { .. })
-                        ) {
-                            "0"
-                        } else {
-                            "text"
-                        };
+                        let arg =
+                            if matches!(env.doc().item(&id).map(|i| &i.kind), Some(ItemKind::Note { .. })) {
+                                "0"
+                            } else {
+                                "text"
+                            };
                         env.apply(vec![DrawOp::SetArg {
                             item: id,
                             arg: arg.into(),
@@ -2547,7 +2595,7 @@ fn problem_item(p: &doc::Problem) -> Option<&str> {
 /// A drag ended: the view or annotation moves there, written back as its `at`.
 fn moved(env: &mut DrawingEnv, d: &Drag) {
     let Some(made) = &env.made else { return };
-    let doc = doc::read(&env.src);
+    let doc = env.doc();
     let Some(item) = doc.item(&d.id) else { return };
     let op = match &item.kind {
         ItemKind::View(v) => DrawOp::SetArg {
@@ -2661,6 +2709,7 @@ fn fcf_form(ui: &mut Ui, f: &mut FcfForm, t: super::theme::Theme) {
 /// its three projections on the sheet size chosen.
 pub fn new_drawing(model: &str, size: &str, standard: &str) -> Result<String, String> {
     let path = std::path::Path::new(model);
+    let text = drawing_text(model, size, standard)?;
     let stem = path
         .file_stem()
         .map(|s| s.to_string_lossy().into_owned())
@@ -2676,6 +2725,18 @@ pub fn new_drawing(model: &str, size: &str, standard: &str) -> Result<String, St
         })
         .find(|p| !p.exists())
         .ok_or("no name free")?;
+    std::fs::write(&out, text).map_err(|e| e.to_string())?;
+    Ok(out.to_string_lossy().into_owned())
+}
+
+/// A new drawing's text for `model`: a base view and its three projections on the sheet.
+fn drawing_text(model: &str, size: &str, standard: &str) -> Result<String, String> {
+    let path = std::path::Path::new(model);
+    let stem = path
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .ok_or("no file name")?;
+    let dir = path.parent().unwrap_or(std::path::Path::new("."));
     let src = std::fs::read_to_string(model).map_err(|e| format!("{model}: {e}"))?;
     let asm = forge_lang::syntax::parse(&src).is_ok_and(|p| forge_lang::asm::declared(&p));
     let (w, h) = forge_draw::sheet::size(size).ok_or("no such sheet size")?;
@@ -2723,8 +2784,45 @@ pub fn new_drawing(model: &str, size: &str, standard: &str) -> Result<String, St
         num(w * 0.62),
         num(h * 0.72)
     );
-    std::fs::write(&out, text).map_err(|e| e.to_string())?;
-    Ok(out.to_string_lossy().into_owned())
+    Ok(text)
+}
+
+/// File > New Drawing in the model's own file: `new_drawing`'s sheet and views as a drawing block
+/// (`drawing dwgN { .. }`) at the end of the .fg, drawing the document (`part()`); its name.
+pub fn new_drawing_block(model: &str, size: &str, standard: &str) -> Result<String, String> {
+    let src = std::fs::read_to_string(model).map_err(|e| format!("{model}: {e}"))?;
+    let have: Vec<String> = forge_lang::drawing::block::blocks(&src)
+        .into_iter()
+        .map(|b| b.name)
+        .collect();
+    let name = (1..)
+        .map(|k| format!("dwg{k}"))
+        .find(|n| !have.contains(n))
+        .ok_or("no name free")?;
+    // the same sheet a drawing file gets, its lines inside the block
+    let text = drawing_text(model, size, standard)?;
+    let body: String = text
+        .lines()
+        .skip(1)
+        .filter(|l| !l.trim().is_empty() && !l.starts_with('#'))
+        .map(|l| {
+            let l = match l
+                .split_once(" = part(\"")
+                .or_else(|| l.split_once(" = assembly(\""))
+            {
+                Some((id, _)) => format!("{id} = part()"),
+                None => l.to_string(),
+            };
+            format!("  {l}\n")
+        })
+        .collect();
+    let mut out = src.clone();
+    if !out.ends_with('\n') {
+        out.push('\n');
+    }
+    out.push_str(&format!("\ndrawing {name} {{\n{body}}}\n"));
+    std::fs::write(model, out).map_err(|e| format!("{model}: {e}"))?;
+    Ok(name)
 }
 
 /// The New Drawing dialog's choices.
@@ -2733,6 +2831,8 @@ pub struct NewDrawing {
     pub model: String,
     pub size: usize,
     pub iso: bool,
+    /// In the model's own file, as a drawing block (a .fg model only); else a drawing file.
+    pub in_file: bool,
 }
 
 impl Shell {
@@ -2764,6 +2864,13 @@ impl Shell {
                         }
                     }
                 });
+                if nd.model.ends_with(".fg") {
+                    ui.horizontal(|ui| {
+                        ui.label("Where");
+                        ui.selectable_value(&mut nd.in_file, true, "In this file");
+                        ui.selectable_value(&mut nd.in_file, false, "A drawing file beside it");
+                    });
+                }
                 ui.horizontal(|ui| {
                     ui.label("Standard");
                     ui.selectable_value(&mut nd.iso, false, "ANSI (ASME Y14.5-2018), third angle");
@@ -2784,7 +2891,16 @@ impl Shell {
         if ok {
             let nd = self.new_drawing.take().expect("the dialog is up");
             let size = forge_draw::sheet::SIZES[nd.size].0;
-            match new_drawing(&nd.model, size, if nd.iso { "ISO" } else { "ASME" }) {
+            let standard = if nd.iso { "ISO" } else { "ASME" };
+            if nd.in_file && nd.model.ends_with(".fg") {
+                // a drawing block at the end of the model's file, in a tab of its own
+                match new_drawing_block(&nd.model, size, standard) {
+                    Ok(b) => self.open_blocks.push((nd.model.clone(), b)),
+                    Err(e) => self.status = format!("New Drawing: {e}"),
+                }
+                return;
+            }
+            match new_drawing(&nd.model, size, standard) {
                 // in a tab of its own, the model's left as it was
                 Ok(p) if !self.doc_tabs.is_empty() => self.open_paths.push(p),
                 Ok(p) => match DrawingEnv::open(&p) {

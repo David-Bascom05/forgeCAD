@@ -128,7 +128,26 @@ impl Gui {
     /// Opens a file in a tab of its own (or finds the tab it's already in), and brings it to the
     /// window if `activate`; the tab's index. What the agent calls for a file it made.
     pub fn open_document(&mut self, path: &str, activate: bool) -> Option<usize> {
-        if let Some(i) = self.docs.iter().position(|d| d.is(path, None)) {
+        let at = self.open_in(path, None, activate)?;
+        // a .fg's drawing blocks: a tab each beside its model, Onshape's way
+        if path.ends_with(".fg")
+            && let Ok(src) = std::fs::read_to_string(path)
+            && !forge_lang::drawing::is_drawing(&src)
+        {
+            for b in forge_lang::drawing::block::blocks(&src) {
+                self.open_in(path, Some(&b.name), false);
+            }
+        }
+        Some(at)
+    }
+
+    /// A drawing block `name` of the .fg at `path` in its tab (or the tab it's in), brought up.
+    pub fn open_drawing_block(&mut self, path: &str, name: &str) -> Option<usize> {
+        self.open_in(path, Some(name), true)
+    }
+
+    fn open_in(&mut self, path: &str, sub: Option<&str>, activate: bool) -> Option<usize> {
+        if let Some(i) = self.docs.iter().position(|d| d.is(path, sub)) {
             if activate {
                 self.activate(i);
             }
@@ -145,9 +164,23 @@ impl Gui {
             self.docs[self.active].state = Some(st);
             self.after_switch();
         }
-        self.docs.push(OpenDoc::new(Some(path.to_string()), None));
+        self.docs
+            .push(OpenDoc::new(Some(path.to_string()), sub.map(str::to_string)));
         self.active = self.docs.len() - 1;
-        if !self.load(path) {
+        let loaded = match sub {
+            Some(name) => match crate::shell::drawing::DrawingEnv::open_block(path, name) {
+                Ok(env) => {
+                    self.shell.open_drawing(env);
+                    true
+                }
+                Err(e) => {
+                    self.shell.status = e;
+                    false
+                }
+            },
+            None => self.load(path),
+        };
+        if !loaded {
             // nothing opened: the tab goes, the one before comes back, saying why
             let why = std::mem::take(&mut self.shell.status);
             self.docs.pop();
@@ -444,6 +477,9 @@ impl Gui {
         for p in std::mem::take(&mut self.shell.open_paths) {
             self.open_document(&p, true);
         }
+        for (p, b) in std::mem::take(&mut self.shell.open_blocks) {
+            self.open_drawing_block(&p, &b);
+        }
     }
 }
 
@@ -712,6 +748,18 @@ impl Gui {
                     self.open_document(&p, true);
                 }
             }
+        }
+    }
+
+    /// The drawing up wrote its file (a drawing block's edit writes its .fg): every other tab of
+    /// that file reads it again now, not when the watch next looks.
+    pub(super) fn drawing_wrote(&mut self) {
+        let Some(d) = self.shell.drawing.as_mut().filter(|d| d.wrote) else {
+            return;
+        };
+        d.wrote = false;
+        if let Ok(p) = std::fs::canonicalize(&d.path) {
+            self.file_changed(&p);
         }
     }
 

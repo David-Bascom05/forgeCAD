@@ -1502,6 +1502,7 @@ impl Gui {
                                 model,
                                 size: 1,
                                 iso: false,
+                                in_file: true,
                             })
                         }
                         None => {
@@ -2269,6 +2270,7 @@ impl Gui {
         self.app_calls();
         self.docs_asked();
         self.open_asked();
+        self.drawing_wrote();
         self.sync_tab();
         self.save_settings();
         self.inspect_tick();
