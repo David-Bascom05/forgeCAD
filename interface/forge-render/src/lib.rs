@@ -6,6 +6,7 @@ pub mod bindings;
 pub mod camera;
 pub mod explode;
 pub mod livegpu;
+pub mod look;
 pub mod mesh;
 pub mod nav;
 pub mod origin;

@@ -396,7 +396,7 @@ fn groups(s: &Shell) -> Vec<Group> {
                         on: asm_glyphs == Some(true),
                     },
                 ],
-                vec![],
+                super::visual_style::ground_tools(&s.settings),
             ),
             g(
                 "Navigate",

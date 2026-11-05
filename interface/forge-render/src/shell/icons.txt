@@ -212,3 +212,8 @@ slotarcc M3 17a10 10 0 0 1 18 0M7 17a6 6 0 0 1 10 0M3 17a2 2 0 0 0 4 0M17 17a2 2
 ellipseaxis M2.0 12.0A10.0 6.0 0 1 0 22.0 12.0A10.0 6.0 0 1 0 2.0 12.0M2 12h20M0.5 12.0A1.5 1.5 0 1 0 3.5 12.0M20.5 12.0A1.5 1.5 0 1 0 23.5 12.0
 ellipsebox M2.0 12.0A10.0 6.0 0 1 0 22.0 12.0A10.0 6.0 0 1 0 2.0 12.0M2 6h20v12H2z
 polygonout M12 3l8 5v8l-8 5-8-5V8zM5.1 12.0A6.9 6.9 0 1 0 18.9 12.0A6.9 6.9 0 1 0 5.1 12.0
+groundplane M2 19l5-5h15l-5 5zM10 4h6v6h-6zM13 10v4
+groundreflect M9 2h6v6H9zM2 12h20M9 16h6v6H9z
+groundshadow M9 3h6v6H9zM4 18c0-2 4-3 8-3s8 1 8 3-4 3-8 3-8-1-8-3z
+objshadow M3.0 5.0A2.0 2.0 0 1 0 7.0 5.0A2.0 2.0 0 1 0 3.0 5.0 M12 7h8v8h-8zM12 15l-5 5h8l5-5
+ambientshadow M4 20h16M6 20V10h12v10M9 20v-6h6v6

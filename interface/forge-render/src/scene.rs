@@ -82,6 +82,28 @@ fn squashed(rows: &Rows) -> bool {
 
 impl Scene {
     /// Whether a placement is left out of the draws (hidden).
+    /// Every shown placement, not culled, each part at the level `lod` gives it for its chords:
+    /// what a view that doesn't move with the eye (the floor's shadow, the sun's) draws.
+    pub fn all_shown(&self, lod: impl Fn(&[f32]) -> u32, list: &mut Vec<[u8; 4]>, draws: &mut Vec<Draw>) {
+        list.clear();
+        draws.clear();
+        let mut by_part: Vec<(u32, u32)> = (0..self.placements.len())
+            .filter(|&i| !self.gone[i])
+            .map(|i| (self.placements[i].part, i as u32))
+            .collect();
+        by_part.sort_unstable();
+        for group in by_part.chunk_by(|a, b| a.0 == b.0) {
+            let part = group[0].0;
+            draws.push(Draw {
+                part,
+                lod: lod(&self.chords[part as usize]),
+                first: list.len() as u32,
+                count: group.len() as u32,
+            });
+            list.extend(group.iter().map(|&(_, i)| i.to_le_bytes()));
+        }
+    }
+
     pub fn is_gone(&self, i: usize) -> bool {
         self.gone[i]
     }

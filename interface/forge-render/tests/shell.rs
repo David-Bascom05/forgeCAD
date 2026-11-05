@@ -2150,3 +2150,51 @@ fn dragging_the_browsers_edge_resizes_it_and_the_view_follows_and_a_double_click
     h.step();
     assert_eq!(h.gui.shell.side_w(), w0);
 }
+
+#[test]
+fn appearance_cards_and_the_view_tab_change_the_look_the_view_draws() {
+    let Some(mut h) = app() else { return };
+    h.gui.shell.tab = 4;
+    h.step();
+    assert!(h.click("tool:Settings"));
+    for _ in 0..4 {
+        h.step();
+    }
+    let look = |h: &Headless| h.gui.view.as_ref().unwrap().renderer.look.clone();
+    let click = |h: &mut Headless, name: &str| {
+        assert!(h.click(name), "{name}");
+        for _ in 0..3 {
+            h.step();
+        }
+    };
+    click(&mut h, "settings:scheme:forest");
+    assert_eq!(h.gui.shell.settings.scheme, "forest");
+    let forest = forge_render::look::scheme("forest");
+    assert_eq!(Some(look(&h).top), forest.top);
+    // the rest is below: the wheel over the window's page
+    let at = h.gui.shell.place("settings:scheme:forest").unwrap().center();
+    for _ in 0..4 {
+        h.move_to(at.x, at.y);
+        h.step();
+        h.wheel(-400.0);
+        for _ in 0..20 {
+            h.step();
+        }
+    }
+    click(&mut h, "settings:lighting:warm_light");
+    assert_eq!(look(&h).lighting.id, "warm_light");
+    click(&mut h, "settings:environment:night_sky");
+    assert_eq!(look(&h).environment.id, "night_sky");
+    let was = look(&h).object_shadows;
+    click(&mut h, "settings:ground:object_shadows");
+    assert_eq!(look(&h).object_shadows, !was);
+    // View > Ground Plane is the same switch
+    h.gui.shell.prefs.open = false;
+    h.step();
+    h.gui.shell.tab = 3;
+    h.step();
+    let was = look(&h).ground_plane;
+    click(&mut h, "tool:Ground Plane");
+    assert_eq!(look(&h).ground_plane, !was);
+    assert_eq!(h.gui.shell.settings.ground_plane, !was);
+}

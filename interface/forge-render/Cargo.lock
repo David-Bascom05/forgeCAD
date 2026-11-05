@@ -1170,6 +1170,8 @@ dependencies = [
  "wgpu",
  "winit",
  "zbus-secret-service-keyring-store",
+ "zune-core",
+ "zune-jpeg",
 ]
 
 [[package]]

@@ -1,0 +1,13 @@
+# Realistic's environments: made here from these numbers (no image files, so nothing to licence).
+# sky_low/sky_high: the sky at the horizon and straight up; ground_low/ground_high: the floor far
+# below and at the horizon; horizon, side, top: how bright the horizon band, the two side softboxes
+# and the overhead one are; grid: lines across the sky (a lit studio grid), 0 none; sun: the sun's
+# direction (x y z, z up), colour and strength; exposure: the whole scene's.
+id,name,sky_low,sky_high,ground_low,ground_high,horizon,side,top,grid,sun_dir,sun_colour,sun,exposure
+studio,Studio Softboxes,8C949F,F7FAFF,1A1A1C,4D4D50,0.9,0.9,1.2,0,-0.35 0.45 0.82,FFF7EB,1,0.9
+grid_room,Grid Room,9AA3AE,E8EDF3,2A2C30,5C5F64,0.5,0.4,0.6,0.35,-0.3 -0.5 0.81,FFFFFF,0.9,0.95
+bright_lab,Bright Lab,C9CED4,FFFFFF,6B6E73,A6A9AE,0.6,0.7,1.4,0,0.2 0.3 0.93,FFFFFF,0.8,0.8
+warehouse,Old Warehouse,6B5A48,B39B7E,1F1912,4A3D30,0.6,0.3,0.4,0,-0.6 0.3 0.74,FFD6A0,1.1,1
+desert_sun,Desert Sun,E8C9A0,7FB2E8,6E5236,C79E6E,0.4,0,0,0,0.5 -0.3 0.81,FFF0D0,1.4,0.85
+overcast,Overcast Sky,B4BAC2,DDE1E6,4A4C4F,8A8D91,0.2,0,0.5,0,0 0 1,FFFFFF,0.35,1
+night_sky,Night Sky,1C2433,05070C,050608,15181D,0.3,0.15,0.2,0,-0.4 0.2 0.89,AFC4FF,0.7,1.2

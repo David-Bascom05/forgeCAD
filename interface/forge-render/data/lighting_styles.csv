@@ -1,0 +1,12 @@
+# The view's lighting styles (Inventor's View > Appearance > Lighting Styles; ours, not its values).
+# A light's dir is in the eye's frame (right up back) when frame = eye, or the world's (x y z, z up)
+# when world. Colours hex sRGB, intensities 0..1. room_low/room_high: the light from below and above.
+id,name,key_frame,key_dir,key_colour,key,fill_frame,fill_dir,fill_colour,fill,room_low,room_high,spec,shine
+studio,Studio,eye,0.316 0.632 0.707,FFFFFF,0.55,eye,0 0 1,FFFFFF,0,8C8A87,C4C9D0,1,40
+two_lights,Two Lights,eye,0.5 0.6 0.62,FFFFFF,0.5,eye,-0.6 -0.2 0.77,FFFFFF,0.25,807F7D,B9BDC4,1,48
+cool_light,Cool Light,eye,0.35 0.7 0.62,E6EEFF,0.55,eye,-0.5 0.1 0.86,D2E0FF,0.15,828894,C2C9D6,1.1,56
+warm_light,Warm Light,eye,0.35 0.7 0.62,FFEEDD,0.55,eye,-0.5 0.1 0.86,FFE4CC,0.15,8E8780,D2CCC4,0.9,36
+grid_light,Grid Light,world,-0.3 -0.5 0.81,FFFFFF,0.45,world,0.6 0.4 0.69,F0F4FF,0.25,858890,CDD2DA,1,44
+sharp_highlights,Sharp Highlights,eye,0.25 0.75 0.61,FFFFFF,0.7,eye,0 0 1,FFFFFF,0,6E6D6B,ADB2B9,1.6,110
+soft_light,Soft Light,eye,0.3 0.5 0.81,FFFFFF,0.35,eye,-0.3 0.3 0.9,FFFFFF,0.2,A3A19E,D2D5DA,0.6,24
+dark_sky,Dark Sky,world,-0.35 0.45 0.82,C9D6FF,0.6,eye,0 0 1,FFFFFF,0,3E434D,7D8798,1.2,64

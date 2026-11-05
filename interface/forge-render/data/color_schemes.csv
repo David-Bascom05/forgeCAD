@@ -1,0 +1,17 @@
+# The view's colour schemes, Inventor's Application Options > Colors list (our colours; Inventor's
+# own values aren't published). Hex sRGB. solid: the 1 Color background; top/bottom: the gradient;
+# floor: the ground plane; hover/selection: what's under the cursor and what's chosen; sketch and
+# projected: sketch geometry. "theme" in a field keeps the UI theme's own colour.
+id,name,solid,top,bottom,floor,hover,selection,sketch,projected
+theme,Match UI Theme,theme,theme,theme,theme,7CBCF9,E0A21B,theme,theme
+light,Light Theme,DDE2E8,F5F7FA,B4BFCC,D0D7E0,7CBCF9,E0A21B,C4006E,9A7A00
+dark,Dark Theme,12171D,34404F,0C0F13,2A323D,7CBCF9,E0A21B,FF2E9A,D9C24A
+presentation,Presentation,FFFFFF,FFFFFF,C9D3DF,E6EBF0,3F8CF2,F28C28,0067C5,8A6D00
+sky,Sky,A9C8E8,DCEBFA,6F9CCB,C3D3E2,FFD24A,E0551B,1B4F8A,2E8B3A
+deep_blue,Deep Blue,0E2747,2B5A8E,061426,1D3553,52C8FF,FFB000,7FE3FF,FFE36B
+forest,Forest,1C3320,4E7A4A,0E1A10,2C4630,B8F26B,F2C230,E8FFC2,F2D16B
+amber,Amber,2A1A08,6E4512,140B02,3E2A12,FFC861,FF6B2E,FFE0A3,9CE07A
+wonderland,Wonderland,3A2350,8E5AA8,1E1030,4E3866,FF8AD8,FFD54A,FFC2F0,9CF2E0
+winter_night,Winter Night,141B26,3B4A5E,070A0F,26303D,8FC9FF,F2A33A,BFE3FF,F2E08A
+high_contrast,High Contrast,000000,000000,000000,1A1A1A,00FFFF,FFFF00,FFFFFF,00FF00
+millennium,Millennium,8EA3B8,C7D3DE,5C7187,A4B3C2,1F5FBF,C8402A,0B2E6B,6B5A00

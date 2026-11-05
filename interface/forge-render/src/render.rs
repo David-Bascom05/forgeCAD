@@ -29,7 +29,13 @@ const MARKS: usize = 256;
 const SELECTED_BIT: u32 = 1 << 31;
 /// A mark's placement's next bit: Measure's second selection.
 const SECOND_BIT: u32 = 1 << 30;
-const GLOBALS: usize = TEXT_AT + HUD_CHARS;
+const GLOBALS: usize = LOOK_AT + LOOK_WORDS * 16;
+/// Where the look's numbers start in the globals, after the overlay's text (render.wgsl's `hover`
+/// on), and how many vec4s.
+const LOOK_AT: usize = TEXT_AT + HUD_CHARS;
+const LOOK_WORDS: usize = 21;
+/// The sun's view's target, a side: what objects' shadows are read from.
+const SUN_PX: u32 = 2048;
 /// A pick draws this many pixels around the cursor.
 const PICK_PX: u32 = 11;
 const PICK_ID: wgpu::TextureFormat = wgpu::TextureFormat::Rg32Uint;
@@ -42,28 +48,7 @@ const BACKGROUND: wgpu::Color = wgpu::Color {
     a: 1.0,
 };
 
-/// The view's background: Inventor's floor (a gradient, a ground plane fading to it, the part's
-/// soft shadow on it), the gradient alone, or one colour. It's drawn first and writes no depth, so
-/// nothing in the view (sketches, axes, the grid) is ever behind it.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum Backdrop {
-    #[default]
-    Floor,
-    Gradient,
-    Solid,
-}
-
-/// A gradient's top and bottom and the floor's colour, linear, for the theme the flat colour is
-/// of: Inventor's own look in a light theme, its dark theme's in a dark.
-pub fn backdrop_colours(flat: [f32; 3]) -> [[f32; 3]; 3] {
-    let light = 0.2126 * flat[0] + 0.7152 * flat[1] + 0.0722 * flat[2] > 0.25;
-    let rgb = crate::viewcube::rgb;
-    if light {
-        [rgb(0xF5F7FA), rgb(0xB4BFCC), rgb(0xD0D7E0)]
-    } else {
-        [rgb(0x34404F), rgb(0x0C0F13), rgb(0x2A323D)]
-    }
-}
+pub use crate::look::{Backdrop, Look};
 
 #[derive(Clone, Copy)]
 struct LodDraw {
@@ -81,6 +66,7 @@ struct LodDraw {
 
 struct AoPipelines {
     layout: wgpu::BindGroupLayout,
+    z: wgpu::RenderPipeline,
     ao: wgpu::RenderPipeline,
     blur: wgpu::RenderPipeline,
     apply: wgpu::RenderPipeline,
@@ -88,6 +74,9 @@ struct AoPipelines {
 
 /// Half-size targets and what reads them, for this window size.
 struct AoTargets {
+    /// Every other pixel's distance, read once from the multisampled depth for occlusion's taps.
+    z: wgpu::TextureView,
+    read_z: wgpu::BindGroup,
     open: wgpu::TextureView,
     smooth: wgpu::TextureView,
     /// Reads the smoothed target (for applying), and the raw one (for smoothing).
@@ -297,7 +286,11 @@ struct Shadow {
     binds: wgpu::BindGroup,
     draw: wgpu::RenderPipeline,
     floor: wgpu::RenderPipeline,
+    /// Reads the softened shadow (the floor), and the drawn one (the softening).
     floor_binds: wgpu::BindGroup,
+    soft_reads: wgpu::BindGroup,
+    soft_view: wgpu::TextureView,
+    soften: wgpu::RenderPipeline,
 }
 
 struct Timer {
@@ -323,8 +316,12 @@ pub struct Renderer {
     world_verts: wgpu::Buffer,
     /// The view's background colour (its top, for a gradient), and the view cube's colours: linear.
     pub back_colour: [f32; 3],
-    /// How the background's drawn, the same for every kind of document.
-    pub backdrop: Backdrop,
+    /// The background, lighting and ground, the same for every kind of document.
+    pub look: Look,
+    back_image: BackImage,
+    sun: Sun,
+    /// The parts mirrored in the ground plane.
+    reflect: wgpu::RenderPipeline,
     pub cube_palette: crate::viewcube::Palette,
     surface_cut: wgpu::RenderPipeline,
     cap: wgpu::RenderPipeline,
@@ -366,7 +363,13 @@ pub struct Renderer {
     colour: wgpu::TextureView,
     ao_pipe: AoPipelines,
     ao_size: AoTargets,
+    /// The background before anything (when faces only hide, drawing no colour) and after the
+    /// opaque parts, only where nothing was drawn.
     back: wgpu::RenderPipeline,
+    back_late: wgpu::RenderPipeline,
+    /// The same with a picture.
+    back_img: wgpu::RenderPipeline,
+    back_late_img: wgpu::RenderPipeline,
     /// Occlusion is on (where the style has faces).
     pub ao: bool,
     pub style: VisualStyle,
@@ -377,6 +380,16 @@ pub struct Renderer {
     /// Edges behind the faces, in a pass of their own that reads the depth.
     line_hidden: wgpu::RenderPipeline,
     shadow: Shadow,
+    /// What the floor's shadow target holds was drawn from: it's redrawn only when this changes.
+    shadow_key: Option<u64>,
+    /// The sun's depth as it was drawn from: likewise.
+    sun_key: Option<u64>,
+    /// Every shown placement, uncull'd, for the views from above and from the sun.
+    above: wgpu::Buffer,
+    above_list: Vec<[u8; 4]>,
+    above_draws: Vec<crate::scene::Draw>,
+    /// Bumped when the placements' poses or the parts' meshes change.
+    poses_gen: u64,
     depth: wgpu::TextureView,
     timer_set: Option<wgpu::QuerySet>,
     timer_resolve: wgpu::Buffer,
@@ -755,15 +768,29 @@ impl Renderer {
         let tests = depth_state(false, wgpu::CompareFunction::GreaterEqual);
         let always = depth_state(false, wgpu::CompareFunction::Always);
         let back_culled = Some(wgpu::Face::Back);
-        let pipeline = |entries: (&str, &str),
-                        buffers: &[Option<wgpu::VertexBufferLayout>],
-                        cull: Option<wgpu::Face>,
-                        depth: &Option<wgpu::DepthStencilState>,
-                        multisample: wgpu::MultisampleState,
-                        targets: &[Option<wgpu::ColorTargetState>]| {
+        // surfaces read the sun's view (objects' shadows); the background, its image
+        let sun_layout = texture_layout(&device, true);
+        let image_layout = texture_layout(&device, false);
+        let lit_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: None,
+            bind_group_layouts: &[Some(&bind_layout), Some(&sun_layout)],
+            immediate_size: 0,
+        });
+        let back_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: None,
+            bind_group_layouts: &[Some(&bind_layout), None, Some(&image_layout)],
+            immediate_size: 0,
+        });
+        let pipeline_in = |layout: &wgpu::PipelineLayout,
+                           entries: (&str, &str),
+                           buffers: &[Option<wgpu::VertexBufferLayout>],
+                           cull: Option<wgpu::Face>,
+                           depth: &Option<wgpu::DepthStencilState>,
+                           multisample: wgpu::MultisampleState,
+                           targets: &[Option<wgpu::ColorTargetState>]| {
             device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some(entries.1),
-                layout: Some(&layout),
+                layout: Some(layout),
                 vertex: wgpu::VertexState {
                     module: &shader,
                     entry_point: Some(entries.0),
@@ -786,7 +813,23 @@ impl Renderer {
                 cache: None,
             })
         };
-        let surface = pipeline(
+        let pipeline = |entries: (&str, &str),
+                        buffers: &[Option<wgpu::VertexBufferLayout>],
+                        cull: Option<wgpu::Face>,
+                        depth: &Option<wgpu::DepthStencilState>,
+                        multisample: wgpu::MultisampleState,
+                        targets: &[Option<wgpu::ColorTargetState>]| {
+            pipeline_in(&layout, entries, buffers, cull, depth, multisample, targets)
+        };
+        let lit = |entries: (&str, &str),
+                   buffers: &[Option<wgpu::VertexBufferLayout>],
+                   cull: Option<wgpu::Face>,
+                   depth: &Option<wgpu::DepthStencilState>,
+                   multisample: wgpu::MultisampleState,
+                   targets: &[Option<wgpu::ColorTargetState>]| {
+            pipeline_in(&lit_layout, entries, buffers, cull, depth, multisample, targets)
+        };
+        let surface = lit(
             ("surface_vs", "surface_fs"),
             &surface_buffers,
             back_culled,
@@ -794,7 +837,7 @@ impl Renderer {
             msaa,
             &opaque,
         );
-        let surface_cut = pipeline(
+        let surface_cut = lit(
             ("surface_vs", "surface_cut_fs"),
             &surface_buffers,
             back_culled,
@@ -808,8 +851,8 @@ impl Renderer {
             blend: None,
             write_mask: wgpu::ColorWrites::empty(),
         })];
-        let surface_hidden = pipeline(
-            ("surface_vs", "surface_cut_fs"),
+        let surface_hidden = lit(
+            ("surface_vs", "surface_depth_fs"),
             &surface_buffers,
             back_culled,
             &writes,
@@ -817,8 +860,8 @@ impl Renderer {
             &unseen,
         );
         // a dragged part in a wireframe: its faces neither seen nor hiding anything
-        let surface_skip = pipeline(
-            ("surface_vs", "surface_cut_fs"),
+        let surface_skip = lit(
+            ("surface_vs", "surface_depth_fs"),
             &surface_buffers,
             back_culled,
             &always,
@@ -826,7 +869,7 @@ impl Renderer {
             &unseen,
         );
         // where a part is cut its inside shows: drawn as the plane it was cut by
-        let cap = pipeline(
+        let cap = lit(
             ("surface_vs", "cap_fs"),
             &surface_buffers,
             Some(wgpu::Face::Front),
@@ -922,7 +965,45 @@ impl Renderer {
             &over,
         );
         let dot = pipeline(("dot_vs", "dot_fs"), &[], None, &tests, msaa, &over);
-        let back = pipeline(("hud_vs", "back_fs"), &[], None, &always, msaa, &opaque);
+        let untouched = depth_state(false, wgpu::CompareFunction::Equal);
+        let back_pipe = |depth: &Option<wgpu::DepthStencilState>, image: bool| {
+            let constants = [("BACK_IMAGE", if image { 1.0 } else { 0.0 })];
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("back_fs"),
+                layout: Some(&back_layout),
+                vertex: wgpu::VertexState {
+                    module: &shader,
+                    entry_point: Some("hud_vs"),
+                    compilation_options: Default::default(),
+                    buffers: &[],
+                },
+                primitive: wgpu::PrimitiveState::default(),
+                depth_stencil: depth.clone(),
+                multisample: msaa,
+                fragment: Some(wgpu::FragmentState {
+                    module: &shader,
+                    entry_point: Some("back_fs"),
+                    compilation_options: wgpu::PipelineCompilationOptions {
+                        constants: &constants,
+                        ..Default::default()
+                    },
+                    targets: &opaque,
+                }),
+                multiview_mask: None,
+                cache: None,
+            })
+        };
+        let (back, back_img) = (back_pipe(&always, false), back_pipe(&always, true));
+        let (back_late, back_late_img) = (back_pipe(&untouched, false), back_pipe(&untouched, true));
+        // mirrored, so its faces wind the other way
+        let reflect = lit(
+            ("reflect_vs", "reflect_fs"),
+            &surface_buffers,
+            Some(wgpu::Face::Front),
+            &writes,
+            msaa,
+            &over,
+        );
 
         let Geometry {
             lods,
@@ -955,6 +1036,12 @@ impl Renderer {
             wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             vec![&tint_bytes],
         );
+        let above = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("above"),
+            size: scene.placements.len().max(1) as u64 * 4,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
         let instances = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("visible"),
             // each may be listed twice: drawn, and its inside where a section crosses it
@@ -1126,12 +1213,26 @@ impl Renderer {
             alpha: wgpu::BlendComponent::OVER,
         };
         let ao_pipe = AoPipelines {
+            z: fullscreen("occlusion depth", "ao_z_fs", wgpu::TextureFormat::R32Float, None),
             ao: fullscreen("occlusion", "ao_fs", AO_FORMAT, None),
             blur: fullscreen("occlusion smoothing", "ao_blur_fs", AO_FORMAT, None),
             apply: fullscreen("occlusion applying", "ao_apply_fs", format, Some(multiply)),
             layout: ao_layout,
         };
         let ao_size = ao_targets(&device, &ao_pipe.layout, &depth_texture_view(&depth_view), size);
+        let back_image = BackImage {
+            binds: image_binds(&device, &queue, &image_layout, (1, 1, &[0, 0, 0, 255])),
+            layout: image_layout,
+            size: (0, 0),
+        };
+        let sun = sun(
+            &device,
+            &shader,
+            &bind_layout,
+            [&placements, &segments, &tints],
+            &surface_buffers,
+            sun_layout,
+        );
         let line_hidden = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("hidden edges"),
             layout: Some(&ao_pipeline_layout),
@@ -1185,7 +1286,10 @@ impl Renderer {
             world_verts,
             back_colour: crate::viewcube::rgb(0x12171D),
             // the app sets the person's; a renderer on its own (tests, shots) draws the flat colour
-            backdrop: Backdrop::Solid,
+            look: Look::default(),
+            back_image,
+            sun,
+            reflect,
             cube_palette: crate::viewcube::DARK,
             surface_cut,
             cap,
@@ -1221,12 +1325,21 @@ impl Renderer {
             ao_pipe,
             ao_size,
             back,
+            back_late,
+            back_img,
+            back_late_img,
             ao: true,
             style: VisualStyle::default(),
             floor_z: None,
             surface_skip,
             line_hidden,
             shadow,
+            shadow_key: None,
+            sun_key: None,
+            above,
+            above_list: Vec::new(),
+            above_draws: Vec::new(),
+            poses_gen: 0,
             depth: depth_view,
             timer_set,
             timer_resolve,
@@ -1260,7 +1373,9 @@ impl Renderer {
         self.binds = bind_all(&self.device, layout, all(&self.globals));
         self.pick.binds = bind_all(&self.device, layout, all(&self.pick.globals));
         self.shadow.binds = bind_all(&self.device, layout, all(&self.shadow.globals));
+        self.sun.binds = bind_all(&self.device, layout, all(&self.sun.globals));
         self.lods = g.lods;
+        self.poses_gen += 1;
         self.boxes = g.boxes;
         self.edge_lengths = g.edge_lengths;
         self.index = g.index;
@@ -1268,6 +1383,17 @@ impl Renderer {
         self.indices = g.indices;
         self.vertex_faces = g.vertex_faces;
         self.line_indices = g.line_indices;
+    }
+
+    /// The background's picture: RGBA (sRGB), width and height; none, the scheme's colours.
+    pub fn set_background_image(&mut self, image: Option<(u32, u32, &[u8])>) {
+        let (w, h, rgba) = image.unwrap_or((1, 1, &[0, 0, 0, 255]));
+        let max = self.device.limits().max_texture_dimension_2d;
+        if w == 0 || h == 0 || w > max || h > max || rgba.len() < (w * h * 4) as usize {
+            return;
+        }
+        self.back_image.binds = image_binds(&self.device, &self.queue, &self.back_image.layout, (w, h, rgba));
+        self.back_image.size = if image.is_some() { (w, h) } else { (0, 0) };
     }
 
     /// Takes in a dragged part's changed faces, uploading those only: the bytes it wrote.
@@ -1329,6 +1455,7 @@ impl Renderer {
 
     fn upload_moves(&mut self, scene: &mut Scene) {
         if let Some((lo, hi)) = scene.take_dirty() {
+            self.poses_gen += 1;
             self.queue
                 .write_buffer(&self.placements, lo as u64, &scene.rows_bytes[lo..hi]);
         }
@@ -1719,19 +1846,22 @@ impl Renderer {
         Entity::Edge(e.edge)
     }
 
-    /// The background's style in the colour's fourth number, its lower colour and the floor's
-    /// height, and the footprint its shadow is under: the shown box's middle and half size. The
-    /// floor's height, if it draws one.
-    fn write_backdrop(&self, bytes: &mut [u8; GLOBALS], scene: &Scene) -> Option<f32> {
-        let style = match self.backdrop {
+    /// The background's kind in the colour's fourth number, its lower colour and the floor's
+    /// height, the footprint the contact shadow is under (the shown box's middle and half size),
+    /// and the look's numbers. The floor's height, if it draws one; the sphere what's shown is in.
+    fn write_backdrop(&self, bytes: &mut [u8; GLOBALS], scene: &Scene) -> (Option<f32>, ([f32; 3], f32)) {
+        let look = &self.look;
+        let image = look.backdrop == Backdrop::Image && self.back_image.size.0 > 0;
+        let kind = match look.backdrop {
             Backdrop::Solid => 0.0f32,
             Backdrop::Gradient => 1.0,
-            Backdrop::Floor => 2.0,
+            Backdrop::Image if image => 2.0,
+            Backdrop::Image => 1.0,
         };
         // the flat colour's fourth number, after the matrix, eye, pixel sizes and three axes
         let at = 64 + 16 + 16 + 3 * 16 + 12;
-        bytes[at..at + 4].copy_from_slice(&style.to_le_bytes());
-        let (lo, hi) = scene.shown_box().unwrap_or_else(|| {
+        bytes[at..at + 4].copy_from_slice(&kind.to_le_bytes());
+        let (lo, hi) = self.shown_box(scene).unwrap_or_else(|| {
             let (c, r) = scene.bounds();
             (c.map(|v| v - r), c.map(|v| v + r))
         });
@@ -1741,13 +1871,13 @@ impl Renderer {
             .sqrt()
             .max(1e-3);
         let ground = lo[2] - reach * 0.002;
-        let [top, low, floor] = backdrop_colours(self.back_colour);
-        if self.backdrop != Backdrop::Solid {
-            for (k, v) in top.iter().enumerate() {
+        if look.backdrop != Backdrop::Solid {
+            for (k, v) in look.top.iter().enumerate() {
                 let at = 64 + 16 + 16 + 3 * 16 + k * 4;
                 bytes[at..at + 4].copy_from_slice(&v.to_le_bytes());
             }
         }
+        let (low, floor) = (look.bottom, look.floor);
         let words = [
             low[0],
             low[1],
@@ -1765,7 +1895,51 @@ impl Renderer {
         for (k, v) in words.iter().enumerate() {
             bytes[BACK_AT + k * 4..BACK_AT + k * 4 + 4].copy_from_slice(&v.to_le_bytes());
         }
-        (self.backdrop == Backdrop::Floor).then_some(ground)
+        let (l, e) = (&look.lighting, &look.environment);
+        let four = |v: [f32; 3], w: f32| [v[0], v[1], v[2], w];
+        let flag = |b: bool| if b { 1.0 } else { 0.0 };
+        let mut words: Vec<[f32; 4]> = vec![
+            four(look.hover, 0.0),
+            four(look.selection, 0.0),
+            four(l.key.dir, flag(l.key.eye)),
+            four(l.key.colour, l.key.strength),
+            four(l.fill.dir, flag(l.fill.eye)),
+            four(l.fill.colour, l.fill.strength),
+            four(l.room_low, l.spec),
+            four(l.room_high, l.shine),
+            four(e.sky_low, 0.0),
+            four(e.sky_high, 0.0),
+            four(e.ground_low, 0.0),
+            four(e.ground_high, 0.0),
+            e.lights,
+            four(e.sun_dir, e.sun),
+            four(e.sun_colour, e.exposure),
+            [
+                flag(look.ground_plane),
+                if look.reflections { REFLECTION } else { 0.0 },
+                flag(look.object_shadows),
+                flag(look.ambient_shadows),
+            ],
+            [
+                match look.fit {
+                    crate::look::ImageFit::Stretch => 0.0,
+                    crate::look::ImageFit::Tile => 1.0,
+                    crate::look::ImageFit::Centre => 2.0,
+                },
+                self.back_image.size.0 as f32,
+                self.back_image.size.1 as f32,
+                // a texel of the sun's view, in mm
+                reach / SUN_PX as f32,
+            ],
+        ];
+        let middle = [0, 1, 2].map(|k| (lo[k] + hi[k]) * 0.5);
+        let sphere = (middle, reach * 0.5);
+        let m = sun_matrix(e.sun_dir, middle, reach * 0.5);
+        words.extend(m.as_chunks::<4>().0.iter().copied());
+        for (k, v) in words.iter().flatten().enumerate() {
+            bytes[LOOK_AT + k * 4..LOOK_AT + k * 4 + 4].copy_from_slice(&v.to_le_bytes());
+        }
+        (look.ground_plane.then_some(ground), sphere)
     }
 
     fn write_section(&self, bytes: &mut [u8; GLOBALS]) {
@@ -1932,9 +2106,8 @@ impl Renderer {
         segments
     }
 
-    /// Realistic's floor: a square under what's shown and wider, and its height.
-    /// `ground`: the background's floor's height, if it draws one: the shadow lies on it.
-    fn floor_square(&self, scene: &Scene, ground: Option<f32>) -> [f32; 4] {
+    /// What's shown, tightly: each placement's part's box, placed.
+    fn shown_box(&self, scene: &Scene) -> Option<([f32; 3], [f32; 3])> {
         let (mut lo, mut hi) = ([f32::MAX; 3], [f32::MIN; 3]);
         for (i, p) in scene.placements.iter().enumerate() {
             let squashed = p.rows.iter().all(|r| r[0] == 0.0 && r[1] == 0.0 && r[2] == 0.0);
@@ -1953,11 +2126,49 @@ impl Renderer {
                 }
             }
         }
-        if lo[0] > hi[0] {
-            return [0.0, 0.0, 1.0, 0.0];
+        (lo[0] <= hi[0]).then_some((lo, hi))
+    }
+
+    /// Every shown part's surfaces from `above`, at its one level, with the pipeline and bind
+    /// groups set (the live part's own buffers stay out: it's being changed).
+    fn draw_above(&self, pass: &mut wgpu::RenderPass<'_>) {
+        pass.set_vertex_buffer(0, self.vertices.slice(..));
+        pass.set_vertex_buffer(1, self.above.slice(..));
+        pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint32);
+        let live = self.live_part();
+        for d in self.above_draws.iter().filter(|d| Some(d.part) != live) {
+            let l = self.lods[d.part as usize][d.lod as usize];
+            pass.draw_indexed(
+                l.first_index..l.first_index + l.indices,
+                l.base_vertex,
+                d.first..d.first + d.count,
+            );
         }
+    }
+
+    /// Every visible part's surfaces, with the pipeline and bind groups set.
+    fn draw_surfaces(&self, pass: &mut wgpu::RenderPass<'_>, scene: &Scene, live: Option<u32>) {
+        pass.set_vertex_buffer(0, self.vertices.slice(..));
+        pass.set_vertex_buffer(1, self.instances.slice(..));
+        pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint32);
+        for d in scene.draws.iter().filter(|d| Some(d.part) != live) {
+            let l = self.lods[d.part as usize][d.lod as usize];
+            pass.draw_indexed(
+                l.first_index..l.first_index + l.indices,
+                l.base_vertex,
+                d.first..d.first + d.count,
+            );
+        }
+    }
+
+    /// Realistic's floor: a square under what's shown and wider, and its height.
+    /// `ground`: the background's floor's height, if it draws one: the shadow lies on it.
+    fn floor_square(&self, scene: &Scene, ground: Option<f32>) -> [f32; 4] {
+        let Some((lo, hi)) = self.shown_box(scene) else {
+            return [0.0, 0.0, 1.0, 0.0];
+        };
         let side = (hi[0] - lo[0]).max(hi[1] - lo[1]);
-        // and the shadow's reach from what's high up (render.wgsl's SUN)
+        // and the shadow's reach from what's high up, cast along the environment's sun
         let half = side * 0.5 * FLOOR_REACH + (hi[2] - lo[2]) * 0.8;
         let z = self
             .floor_z
@@ -2017,7 +2228,7 @@ impl Renderer {
             .write_buffer(&self.instances, 0, scene.visible.as_flattened());
 
         let mut bytes = globals_bytes(&view, self.size, self.back_colour, hud.unwrap_or(""));
-        let ground = self.write_backdrop(&mut bytes, scene);
+        let (ground, sphere) = self.write_backdrop(&mut bytes, scene);
         let cube_verts = self.write_cube(camera, &overlay);
         // grown (to the next power of two, up to WORLD_MAX) when a map needs more
         let need = ((overlay.world.len() + overlay.behind.len()) * 28) as u64;
@@ -2053,13 +2264,103 @@ impl Renderer {
         }
         self.write_section(&mut bytes);
         let style = self.style;
-        let realistic = style == VisualStyle::Realistic;
-        let floor = realistic.then(|| self.floor_square(scene, ground));
+        let faces = !style.wireframe();
+        // the ground shadow, cast along the environment's sun onto the floor
+        let floor = (self.look.ground_shadows && faces && !self.section_end)
+            .then(|| self.floor_square(scene, ground));
         let [cx, cy, half, z] = floor.unwrap_or_default();
         for (k, v) in style.uniforms().iter().chain(&[cx, cy, half, z]).enumerate() {
             bytes[STYLE_AT + k * 4..STYLE_AT + k * 4 + 4].copy_from_slice(&v.to_le_bytes());
         }
-        if realistic {
+        let sun_on = self.look.object_shadows && faces;
+        if sun_on {
+            let mut sun_bytes = bytes;
+            let m = sun_matrix(self.look.environment.sun_dir, sphere.0, sphere.1);
+            for (j, v) in m.iter().enumerate() {
+                sun_bytes[j * 4..j * 4 + 4].copy_from_slice(&v.to_le_bytes());
+            }
+            self.queue.write_buffer(&self.sun.globals, 0, &sun_bytes);
+        }
+        let mirror = self.look.reflections
+            && faces
+            && self.section.is_none()
+            && ground.is_some_and(|z| view.eye[2] > z);
+        // the shadow is seen from above, so the camera doesn't change it: redrawn only when
+        // what it shows does
+        // the views from above and from the sun don't move with the eye: what they draw is
+        // every shown placement at one level, and they're redrawn only when that or their own
+        // square changes
+        let live = self.live_part();
+        let fixed = |extra: &[u32], made: u64, list: &[[u8; 4]], draws: &[crate::scene::Draw]| {
+            use std::hash::{Hash, Hasher};
+            let mut h = std::hash::DefaultHasher::new();
+            extra.hash(&mut h);
+            (live, made).hash(&mut h);
+            list.hash(&mut h);
+            for d in draws {
+                (d.part, d.lod, d.first, d.count).hash(&mut h);
+            }
+            h.finish()
+        };
+        if floor.is_some() || sun_on {
+            let side = 2.0 * floor.map_or(sphere.1, |f| f[2]);
+            // a chord a texel of the shadow's target long is all it can show
+            let chord = side / SHADOW_PX as f32;
+            let (mut list, mut draws) = (
+                std::mem::take(&mut self.above_list),
+                std::mem::take(&mut self.above_draws),
+            );
+            scene.all_shown(
+                |c| c.partition_point(|&x| x <= chord).saturating_sub(1) as u32,
+                &mut list,
+                &mut draws,
+            );
+            let bytes = list.len() as u64 * 4;
+            if bytes > self.above.size() {
+                self.above = self.device.create_buffer(&wgpu::BufferDescriptor {
+                    label: Some("above"),
+                    size: bytes,
+                    usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                    mapped_at_creation: false,
+                });
+                self.shadow_key = None;
+                self.sun_key = None;
+            }
+            (self.above_list, self.above_draws) = (list, draws);
+        }
+        let sun_dir = self.look.environment.sun_dir.map(f32::to_bits);
+        let shadow_now = floor.is_some_and(|sq| {
+            let mut extra = sq.map(f32::to_bits).to_vec();
+            extra.extend(sun_dir);
+            let key = fixed(&extra, self.poses_gen, &self.above_list, &self.above_draws);
+            let new = self.shadow_key != Some(key);
+            self.shadow_key = Some(key);
+            new
+        });
+        if floor.is_none() {
+            self.shadow_key = None;
+        }
+        let sun_now = sun_on && {
+            let mut extra = vec![
+                sphere.0[0].to_bits(),
+                sphere.0[1].to_bits(),
+                sphere.0[2].to_bits(),
+                sphere.1.to_bits(),
+            ];
+            extra.extend(sun_dir);
+            let key = fixed(&extra, self.poses_gen, &self.above_list, &self.above_draws);
+            let new = self.sun_key != Some(key);
+            self.sun_key = Some(key);
+            new
+        };
+        if !sun_on {
+            self.sun_key = None;
+        }
+        if shadow_now || sun_now {
+            self.queue
+                .write_buffer(&self.above, 0, self.above_list.as_flattened());
+        }
+        if shadow_now {
             // the parts from straight above, the floor's square filling the target
             let mut shadow_bytes = bytes;
             let k = 1.0 / half;
@@ -2116,8 +2417,7 @@ impl Renderer {
         };
         let cut = self.section.is_some();
         let end = cut && self.section_end;
-        let faces = !style.wireframe();
-        let ao = self.ao && faces && !self.section_end;
+        let ao = self.ao && self.look.ambient_shadows && faces && !self.section_end;
         let lines = style.edges() && !end;
         let hidden = lines && style.hidden_edges();
         let keep_depth = ao || hidden;
@@ -2129,23 +2429,71 @@ impl Renderer {
         } else {
             0
         };
+        // and the first starts it: the sun's view, the floor's shadow, the scene
+        let first = if sun_now {
+            11
+        } else if shadow_now {
+            10
+        } else {
+            0
+        };
         let stamp = |pass: u32| {
-            let ends = pass == 0 || pass == last;
+            let ends = pass == first || pass == last;
             self.timer_set
                 .as_ref()
                 .filter(|_| timed && ends)
                 .map(|set| wgpu::RenderPassTimestampWrites {
                     query_set: set,
-                    beginning_of_pass_write_index: (pass == 0).then_some(0),
+                    beginning_of_pass_write_index: (pass == first).then_some(0),
                     end_of_pass_write_index: (pass == last).then_some(1),
                 })
         };
-        let live = self.live_part();
-        if floor.is_some() {
+        if sun_now {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("sun's depth"),
+                color_attachments: &[],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &self.sun.view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
+                timestamp_writes: stamp(11),
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            pass.set_bind_group(0, &self.sun.binds, &[]);
+            pass.set_pipeline(&self.sun.draw);
+            self.draw_above(&mut pass);
+        }
+        if shadow_now {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("floor shadow"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &self.shadow.view,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: stamp(10),
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            pass.set_bind_group(0, &self.shadow.binds, &[]);
+            pass.set_pipeline(&self.shadow.draw);
+            self.draw_above(&mut pass);
+        }
+        if shadow_now {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("floor shadow softening"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &self.shadow.soft_view,
                     depth_slice: None,
                     resolve_target: None,
                     ops: wgpu::Operations {
@@ -2159,19 +2507,22 @@ impl Renderer {
                 multiview_mask: None,
             });
             pass.set_bind_group(0, &self.shadow.binds, &[]);
-            pass.set_pipeline(&self.shadow.draw);
-            pass.set_vertex_buffer(0, self.vertices.slice(..));
-            pass.set_vertex_buffer(1, self.instances.slice(..));
-            pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint32);
-            for d in scene.draws.iter().filter(|d| Some(d.part) != live) {
-                let l = self.lods[d.part as usize][d.lod as usize];
-                pass.draw_indexed(
-                    l.first_index..l.first_index + l.indices,
-                    l.base_vertex,
-                    d.first..d.first + d.count,
-                );
-            }
+            pass.set_bind_group(2, &self.shadow.soft_reads, &[]);
+            pass.set_pipeline(&self.shadow.soften);
+            pass.draw(0..3, 0..1);
         }
+        // one colour and nothing on it is the pass's clear; anything else is drawn after the
+        // opaque parts, where they left the depth untouched, so nothing they cover is shaded
+        let flat = self.look.backdrop == Backdrop::Solid && !self.look.ground_plane;
+        // faces that hide but draw nothing (a wireframe's, an end section's) would keep it out
+        let late = faces && !end;
+        let pictured = self.look.backdrop == Backdrop::Image && self.back_image.size.0 > 0;
+        let clear = if flat {
+            let [r, g, b] = self.back_colour.map(f64::from);
+            wgpu::Color { r, g, b, a: 1.0 }
+        } else {
+            BACKGROUND
+        };
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("scene"),
@@ -2180,7 +2531,7 @@ impl Renderer {
                     depth_slice: None,
                     resolve_target: Some(target),
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(BACKGROUND),
+                        load: wgpu::LoadOp::Clear(clear),
                         store: wgpu::StoreOp::Discard,
                     },
                 })],
@@ -2201,8 +2552,12 @@ impl Renderer {
                 multiview_mask: None,
             });
             pass.set_bind_group(0, &self.binds, &[]);
-            pass.set_pipeline(&self.back);
-            pass.draw(0..3, 0..1);
+            pass.set_bind_group(1, &self.sun.read, &[]);
+            pass.set_bind_group(2, &self.back_image.binds, &[]);
+            if !flat && !late {
+                pass.set_pipeline(if pictured { &self.back_img } else { &self.back });
+                pass.draw(0..3, 0..1);
+            }
             // a wireframe that hides draws its faces into the depth only
             let surface = match (cut, end, faces, style.occludes()) {
                 (_, _, false, false) => None,
@@ -2238,6 +2593,21 @@ impl Renderer {
                     drawn.tris += l.indices as u64 / 3 * d.count as u64;
                     drawn.draws += 1;
                 }
+            }
+            if !flat && late {
+                pass.set_pipeline(if pictured {
+                    &self.back_late_img
+                } else {
+                    &self.back_late
+                });
+                pass.draw(0..3, 0..1);
+            }
+            // the parts mirrored in the floor, after the parts so what they cover is never shaded,
+            // blended over the background
+            if mirror {
+                pass.set_pipeline(&self.reflect);
+                self.draw_surfaces(&mut pass, scene, live);
+                pass.set_bind_group(0, &self.binds, &[]);
             }
             if floor.is_some() {
                 pass.set_pipeline(&self.shadow.floor);
@@ -2340,7 +2710,8 @@ impl Renderer {
                 pass.draw(0..3, 0..1);
             };
             let t = &self.ao_size;
-            half_pass("occlusion", &t.open, &self.ao_pipe.ao, &t.read_smooth);
+            half_pass("occlusion depth", &t.z, &self.ao_pipe.z, &t.read_smooth);
+            half_pass("occlusion", &t.open, &self.ao_pipe.ao, &t.read_z);
             half_pass("occlusion smoothing", &t.smooth, &self.ao_pipe.blur, &t.read_open);
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("occlusion applying"),
@@ -2588,6 +2959,256 @@ const LINE_HALF_PX: f32 = 0.7;
 /// A level's chord may be this many pixels on screen (research/render).
 pub const LOD_PX: f32 = 1.0;
 
+/// The background's picture, if any: what reads it, and its size in pixels (0: none).
+struct BackImage {
+    layout: wgpu::BindGroupLayout,
+    binds: wgpu::BindGroup,
+    size: (u32, u32),
+}
+
+/// Objects' shadows: the scene's depth seen from the sun, and what reads it.
+struct Sun {
+    view: wgpu::TextureView,
+    globals: wgpu::Buffer,
+    binds: wgpu::BindGroup,
+    draw: wgpu::RenderPipeline,
+    /// For the surfaces: the sun's depth and its comparing sampler.
+    read: wgpu::BindGroup,
+}
+
+/// A fragment's texture and sampler: the sun's depth (bindings 2, 3, comparing) or a colour image
+/// (0, 1).
+fn texture_layout(device: &wgpu::Device, depth: bool) -> wgpu::BindGroupLayout {
+    let (first, sample_type, sampler) = if depth {
+        (
+            2,
+            wgpu::TextureSampleType::Depth,
+            wgpu::SamplerBindingType::Comparison,
+        )
+    } else {
+        (
+            0,
+            wgpu::TextureSampleType::Float { filterable: true },
+            wgpu::SamplerBindingType::Filtering,
+        )
+    };
+    device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: None,
+        entries: &[
+            wgpu::BindGroupLayoutEntry {
+                binding: first,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    sample_type,
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    multisampled: false,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: first + 1,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Sampler(sampler),
+                count: None,
+            },
+        ],
+    })
+}
+
+/// An RGBA picture (sRGB) for the background, tiled where it's asked to be.
+fn image_binds(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    layout: &wgpu::BindGroupLayout,
+    (w, h, rgba): (u32, u32, &[u8]),
+) -> wgpu::BindGroup {
+    let size = wgpu::Extent3d {
+        width: w,
+        height: h,
+        depth_or_array_layers: 1,
+    };
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("background image"),
+        size,
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8UnormSrgb,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    });
+    queue.write_texture(
+        texture.as_image_copy(),
+        rgba,
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(w * 4),
+            rows_per_image: None,
+        },
+        size,
+    );
+    let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+        address_mode_u: wgpu::AddressMode::Repeat,
+        address_mode_v: wgpu::AddressMode::Repeat,
+        mag_filter: wgpu::FilterMode::Linear,
+        min_filter: wgpu::FilterMode::Linear,
+        ..Default::default()
+    });
+    let view = texture.create_view(&Default::default());
+    device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: None,
+        layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(&view),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::Sampler(&sampler),
+            },
+        ],
+    })
+}
+
+fn sun(
+    device: &wgpu::Device,
+    shader: &wgpu::ShaderModule,
+    bind_layout: &wgpu::BindGroupLayout,
+    rest: [&wgpu::Buffer; 3],
+    surface_buffers: &[Option<wgpu::VertexBufferLayout>],
+    read_layout: wgpu::BindGroupLayout,
+) -> Sun {
+    let view = device
+        .create_texture(&wgpu::TextureDescriptor {
+            label: Some("sun's depth"),
+            size: wgpu::Extent3d {
+                width: SUN_PX,
+                height: SUN_PX,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: DEPTH,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        })
+        .create_view(&Default::default());
+    let globals = device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("sun globals"),
+        size: GLOBALS as u64,
+        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        mapped_at_creation: false,
+    });
+    let binds = bind_all(device, bind_layout, [&globals, rest[0], rest[1], rest[2]]);
+    let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: None,
+        bind_group_layouts: &[Some(bind_layout)],
+        immediate_size: 0,
+    });
+    let draw = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("sun's depth"),
+        layout: Some(&layout),
+        vertex: wgpu::VertexState {
+            module: shader,
+            entry_point: Some("surface_vs"),
+            compilation_options: Default::default(),
+            buffers: surface_buffers,
+        },
+        primitive: wgpu::PrimitiveState::default(),
+        depth_stencil: Some(wgpu::DepthStencilState {
+            format: DEPTH,
+            depth_write_enabled: Some(true),
+            depth_compare: Some(wgpu::CompareFunction::Less),
+            stencil: wgpu::StencilState::default(),
+            bias: wgpu::DepthBiasState {
+                constant: 0,
+                slope_scale: 1.5,
+                clamp: 0.0,
+            },
+        }),
+        multisample: wgpu::MultisampleState::default(),
+        fragment: None,
+        multiview_mask: None,
+        cache: None,
+    });
+    let compare = device.create_sampler(&wgpu::SamplerDescriptor {
+        mag_filter: wgpu::FilterMode::Linear,
+        min_filter: wgpu::FilterMode::Linear,
+        compare: Some(wgpu::CompareFunction::Less),
+        ..Default::default()
+    });
+    let read = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: None,
+        layout: &read_layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 2,
+                resource: wgpu::BindingResource::TextureView(&view),
+            },
+            wgpu::BindGroupEntry {
+                binding: 3,
+                resource: wgpu::BindingResource::Sampler(&compare),
+            },
+        ],
+    });
+    Sun {
+        view,
+        globals,
+        binds,
+        draw,
+        read,
+    }
+}
+
+/// The sun's view of a sphere: orthographic, along `toward` (the way to the sun), depth 0 at the
+/// sun's side, 1 past the far side. Column major.
+fn sun_matrix(toward: [f32; 3], c: [f32; 3], r: f32) -> [f32; 16] {
+    let dot = |a: [f32; 3], b: [f32; 3]| a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+    let cross = |a: [f32; 3], b: [f32; 3]| {
+        [
+            a[1] * b[2] - a[2] * b[1],
+            a[2] * b[0] - a[0] * b[2],
+            a[0] * b[1] - a[1] * b[0],
+        ]
+    };
+    let unit = |a: [f32; 3]| {
+        let n = dot(a, a).sqrt().max(1e-9);
+        a.map(|x| x / n)
+    };
+    let f = unit(toward.map(|x| -x));
+    let up = if f[2].abs() > 0.95 {
+        [0.0, 1.0, 0.0]
+    } else {
+        [0.0, 0.0, 1.0]
+    };
+    let right = unit(cross(f, up));
+    let u = cross(right, f);
+    let r = r.max(1e-3);
+    let (k, d) = (1.0 / r, 0.5 / r);
+    [
+        right[0] * k,
+        u[0] * k,
+        f[0] * d,
+        0.0,
+        right[1] * k,
+        u[1] * k,
+        f[1] * d,
+        0.0,
+        right[2] * k,
+        u[2] * k,
+        f[2] * d,
+        0.0,
+        -dot(c, right) * k,
+        -dot(c, u) * k,
+        -dot(c, f) * d + 0.5,
+        1.0,
+    ]
+}
+
+/// How strongly the ground plane mirrors the parts, right under them.
+const REFLECTION: f32 = 0.35;
 /// Realistic's floor is this many times as wide as what's on it.
 const FLOOR_REACH: f32 = 1.6;
 /// Realistic's shadow's target, a side (the floor's square).
@@ -2604,22 +3225,25 @@ fn shadow(
     tests: &Option<wgpu::DepthStencilState>,
     format: wgpu::TextureFormat,
 ) -> Shadow {
-    let view = device
-        .create_texture(&wgpu::TextureDescriptor {
-            label: Some("floor shadow"),
-            size: wgpu::Extent3d {
-                width: SHADOW_PX,
-                height: SHADOW_PX,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::R8Unorm,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-            view_formats: &[],
-        })
-        .create_view(&Default::default());
+    let make = |label| {
+        device
+            .create_texture(&wgpu::TextureDescriptor {
+                label: Some(label),
+                size: wgpu::Extent3d {
+                    width: SHADOW_PX,
+                    height: SHADOW_PX,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::R8Unorm,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            })
+            .create_view(&Default::default())
+    };
+    let (view, soft_view) = (make("floor shadow"), make("floor shadow softened"));
     let globals = device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("shadow globals"),
         size: GLOBALS as u64,
@@ -2691,20 +3315,23 @@ fn shadow(
         min_filter: wgpu::FilterMode::Linear,
         ..Default::default()
     });
-    let floor_binds = device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: None,
-        layout: &floor_layout,
-        entries: &[
-            wgpu::BindGroupEntry {
-                binding: 0,
-                resource: wgpu::BindingResource::TextureView(&view),
-            },
-            wgpu::BindGroupEntry {
-                binding: 1,
-                resource: wgpu::BindingResource::Sampler(&sampler),
-            },
-        ],
-    });
+    let reads = |v: &wgpu::TextureView| {
+        device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: None,
+            layout: &floor_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(v),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&sampler),
+                },
+            ],
+        })
+    };
+    let (floor_binds, soft_reads) = (reads(&soft_view), reads(&view));
     let floor_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: None,
         bind_group_layouts: &[Some(bind_layout), None, Some(&floor_layout)],
@@ -2735,6 +3362,31 @@ fn shadow(
         multiview_mask: None,
         cache: None,
     });
+    let soften = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("floor shadow softening"),
+        layout: Some(&floor_pipeline_layout),
+        vertex: wgpu::VertexState {
+            module: shader,
+            entry_point: Some("hud_vs"),
+            compilation_options: Default::default(),
+            buffers: &[],
+        },
+        primitive: wgpu::PrimitiveState::default(),
+        depth_stencil: None,
+        multisample: wgpu::MultisampleState::default(),
+        fragment: Some(wgpu::FragmentState {
+            module: shader,
+            entry_point: Some("shadow_soft_fs"),
+            compilation_options: Default::default(),
+            targets: &[Some(wgpu::ColorTargetState {
+                format: wgpu::TextureFormat::R8Unorm,
+                blend: None,
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+        }),
+        multiview_mask: None,
+        cache: None,
+    });
     Shadow {
         view,
         globals,
@@ -2742,6 +3394,9 @@ fn shadow(
         draw,
         floor,
         floor_binds,
+        soft_reads,
+        soft_view,
+        soften,
     }
 }
 
@@ -2760,7 +3415,7 @@ fn ao_targets(
     size: (u32, u32),
 ) -> AoTargets {
     let half = (size.0.div_ceil(2), size.1.div_ceil(2));
-    let make = |label| {
+    let make_as = |label, format| {
         device
             .create_texture(&wgpu::TextureDescriptor {
                 label: Some(label),
@@ -2772,13 +3427,15 @@ fn ao_targets(
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
-                format: AO_FORMAT,
+                format,
                 usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
                 view_formats: &[],
             })
             .create_view(&Default::default())
     };
+    let make = |label| make_as(label, AO_FORMAT);
     let (open, smooth) = (make("occlusion"), make("occlusion smoothed"));
+    let z = make_as("occlusion depth", wgpu::TextureFormat::R32Float);
     let reads = |t: &wgpu::TextureView| {
         device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
@@ -2796,6 +3453,8 @@ fn ao_targets(
         })
     };
     AoTargets {
+        read_z: reads(&z),
+        z,
         read_smooth: reads(&smooth),
         read_open: reads(&open),
         open,

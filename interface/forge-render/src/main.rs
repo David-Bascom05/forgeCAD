@@ -14,7 +14,7 @@ use winit::window::{Window, WindowId};
 
 const USAGE: &str =
     "forge-render [PART | file.fc | file.fg] [--stress N] [--moving N] [--bench] [--hover] [--window] [--frames N]
-  [--size WxH] [--lod-px T] [--style realistic|shaded|shaded-edges|shaded-hidden|wireframe|wireframe-hidden|wireframe-visible|monochrome|illustration] [--no-ao] [--section x|y|z] [--explode T] [--no-cache] [--shot FILE.ppm [--select X Y]..] [--yaw R --pitch R --dist X]
+  [--size WxH] [--lod-px T] [--style realistic|shaded|shaded-edges|shaded-hidden|wireframe|wireframe-hidden|wireframe-visible|monochrome|illustration] [--no-ao] [--settings FILE.toml] [--section x|y|z] [--explode T] [--no-cache] [--shot FILE.ppm [--select X Y]..] [--yaw R --pitch R --dist X]
   An assembly .fg with --shot: [--explode T] [--view iso|front|back|left|right|top|bottom] [--trails] [--anim N]
   [--export FILE] [--levels] [--dims] [--drag-bench [--drag-parts A,B] [--ticks N]]
 PART: a bench part (default crank). --stress: all 15 bench parts placed N times. --moving N: N of
@@ -39,6 +39,8 @@ struct Args {
     size: (u32, u32),
     lod_px: f32,
     style: VisualStyle,
+    /// The look (background, lighting, ground) from a settings.toml.
+    look: Option<forge_render::look::Look>,
     ao: bool,
     section: Option<usize>,
     explode: f32,
@@ -72,6 +74,7 @@ fn args() -> Result<Args, String> {
         size: (1920, 1080),
         lod_px: render::LOD_PX,
         style: VisualStyle::ShadedEdges,
+        look: None,
         ao: true,
         section: None,
         explode: 0.0,
@@ -105,6 +108,11 @@ fn args() -> Result<Args, String> {
             "--window" => a.window = true,
             "--frames" => a.frames = num(it.next(), &k)?,
             "--lod-px" => a.lod_px = num(it.next(), &k)?,
+            "--settings" => {
+                let f = it.next().ok_or(USAGE)?;
+                let text = std::fs::read_to_string(&f).map_err(|e| format!("{f}: {e}"))?;
+                a.look = Some(forge_render::shell::settings::Settings::from_toml(&text).look());
+            }
             "--style" => {
                 a.style = it
                     .next()
@@ -258,6 +266,9 @@ fn headless(a: &Args, mut s: Stage) -> Result<(), String> {
     );
     r.lod_px = a.lod_px;
     r.style = a.style;
+    if let Some(l) = &a.look {
+        r.look = l.clone();
+    }
     r.ao = a.ao;
     r.section = a.section.map(|axis| {
         let (c, _) = s.scene.bounds();
@@ -418,6 +429,9 @@ impl ApplicationHandler for App {
         );
         renderer.lod_px = self.args.lod_px;
         renderer.style = self.args.style;
+        if let Some(l) = &self.args.look {
+            renderer.look = l.clone();
+        }
         renderer.ao = self.args.ao;
         let mut v = Viewer::new(window.clone(), surface, config, renderer, s.scene, s.camera);
         v.measure = forge_render::measure::Measurer::new(s.names);
@@ -537,6 +551,9 @@ fn asm_shot(a: &Args) -> Result<(), String> {
     );
     r.lod_px = a.lod_px;
     r.style = a.style;
+    if let Some(l) = &a.look {
+        r.look = l.clone();
+    }
     r.ao = a.ao;
     let target = Offscreen::new(&r.device, a.size);
     // the camera holds the most apart it gets, so an animation's frames share it

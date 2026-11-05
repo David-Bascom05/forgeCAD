@@ -107,6 +107,11 @@ view,Section,Cut the view open with a plane,section
 view,Pastel Parts,Give each part a pastel colour of its own,
 view,Explode,Pull an assembly's parts apart along their joints,explode
 view,Relationships,"Show or hide the joint and constraint marks in an assembly",
+view,Ground Plane,"A floor under the model, with its grid (Settings > Appearance has the rest)",
+view,Reflections,"The model mirrored in the ground plane; needs the ground plane on",
+view,Ground Shadows,The model's shadow cast down on the ground plane,
+view,Object Shadows,"Parts shadow each other, from the lighting style's key light",
+view,Ambient Shadows,"Darkens creases and corners light can't reach, and the ground right under the model",
 view,Orbit,The left button turns the view,
 view,Pan,The left button moves the view,
 view,Zoom,The left button zooms the view,

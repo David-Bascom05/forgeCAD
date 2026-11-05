@@ -120,6 +120,26 @@ pub(super) fn icon(p: &Painter, at: Pos2, side: f32, style: VisualStyle, ink: Co
     }
 }
 
+/// The View tab's ground and shadow switches, Inventor's Appearance panel's.
+pub(super) fn ground_tools(s: &super::settings::Settings) -> Vec<Tool> {
+    use crate::look::Toggle as G;
+    [
+        ("Ground Plane", "groundplane", G::GroundPlane),
+        ("Reflections", "groundreflect", G::Reflections),
+        ("Ground Shadows", "groundshadow", G::GroundShadows),
+        ("Object Shadows", "objshadow", G::ObjectShadows),
+        ("Ambient Shadows", "ambientshadow", G::AmbientShadows),
+    ]
+    .into_iter()
+    .map(|(name, icon, g)| Tool {
+        name,
+        icon,
+        action: Some(Action::Look(g)),
+        on: s.toggle(g),
+    })
+    .collect()
+}
+
 impl Shell {
     /// The ribbon's Visual Style button: the style it's in, and a list of them below on a click.
     pub(super) fn style_button(&mut self, ui: &mut Ui, tool: &Tool, x: f32, y: f32, w: f32) {

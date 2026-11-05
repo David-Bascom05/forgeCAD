@@ -195,6 +195,10 @@ pub struct App {
     /// `--spin`: turns the view all the while, as a held orbit does.
     spin: bool,
     started: Instant,
+    /// `--times`: each frame's own work (acquired to handed to the presenter), the time from the
+    /// last frame's start, and the GPU's time for the view, in ms.
+    frames: Vec<(f64, f64, f64)>,
+    last_began: Option<f64>,
 }
 
 fn resize_direction(e: Edge) -> ResizeDirection {
@@ -243,6 +247,12 @@ impl App {
         l.window.pre_present_notify();
         l.presenter.present(frame, l.input_at.take());
         let done = now_ms();
+        if self.times {
+            let gpu = l.gui.view.as_ref().and_then(|v| v.renderer.gpu_ms).unwrap_or(0.0) as f64;
+            let gap = self.last_began.map_or(0.0, |b| began - b);
+            self.frames.push((done - acquired, gap, gpu));
+        }
+        self.last_began = Some(began);
         if self.times && done - began > SLOW_MS {
             let t = out.times;
             eprintln!(
@@ -544,6 +554,16 @@ impl ApplicationHandler for App {
                     println!("present calls: {}", spread(log.calls.clone()));
                 }
                 println!("frames dropped while one was out: {}", log.dropped);
+                // the first second is opening: left out
+                let steady: Vec<_> = self.frames.iter().skip(60).copied().collect();
+                if !steady.is_empty() {
+                    println!("frame work: {}", spread(steady.iter().map(|f| f.0).collect()));
+                    println!(
+                        "frame to frame: {}",
+                        spread(steady.iter().skip(1).map(|f| f.1).collect())
+                    );
+                    println!("view gpu: {}", spread(steady.iter().map(|f| f.2).collect()));
+                }
                 let secs = self.started.elapsed().as_secs_f64();
                 println!(
                     "presents per second over {secs:.1} s: {:.1}",
@@ -598,6 +618,8 @@ pub fn run(
         run_until: run_for.map(|s| Instant::now() + std::time::Duration::from_secs_f64(s)),
         spin,
         started: Instant::now(),
+        frames: Vec::new(),
+        last_began: None,
     };
     on_loop.run_app(&mut app).map_err(|e| e.to_string())
 }

@@ -12,6 +12,7 @@ per_doc!(
     GuiDoc,
     [
         view: Option<View>,
+        back_image_was: Option<String>,
         loading: Option<Receiver<Result<Loaded, String>>>,
         calls: Vec<Call>,
         view_file: Option<String>,

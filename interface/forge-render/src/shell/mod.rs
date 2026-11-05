@@ -185,6 +185,8 @@ pub enum Action {
     Doc(docs::DocCmd),
     /// Where an untitled document is to be saved: the host's file dialog, then `Gui::save_as`.
     SaveAs,
+    /// A ground or shadow switch of the View tab, flipped.
+    Look(crate::look::Toggle),
 }
 
 /// What the ribbon asks of a Forge file: Inventor's dialogs and commands.

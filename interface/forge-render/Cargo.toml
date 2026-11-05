@@ -50,6 +50,9 @@ png = "=0.18.1"
 ureq = { version = "=3.5.0", default-features = false, features = ["rustls"] }
 keyring-core = "=1.0.1"
 zbus-secret-service-keyring-store = { version = "=1.0.1", features = ["crypto-rust"] }
+# a background image's file (zune: MIT OR Apache-2.0 OR Zlib), already in the lock
+zune-jpeg = { version = "=0.5.15", default-features = false, features = ["std"] }
+zune-core = { version = "=0.5.3", default-features = false, features = ["std"] }
 
 # already in wgpu's tree on this target: only the entry point names them
 [target.'cfg(target_arch = "wasm32")'.dependencies]

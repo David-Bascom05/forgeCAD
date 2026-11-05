@@ -184,6 +184,8 @@ pub struct Gui {
     asm: gui_asm::AsmHost,
     /// The settings as last saved; none: not kept (tests, shots).
     settings_was: Option<crate::shell::settings::Settings>,
+    /// The background image file the view has, if one was asked for (loaded or not).
+    back_image_was: Option<String>,
     /// The exploded view: its plan, and how far apart it is now.
     pub explode: gui_explode::Explode,
     /// A Forge part's solid as it was before its eye hid it.
@@ -314,6 +316,7 @@ impl Gui {
             fg_asm_boxes: Vec::new(),
             asm: Default::default(),
             settings_was: None,
+            back_image_was: None,
             explode: Default::default(),
             body_rows: None,
             inspector: Default::default(),
@@ -554,8 +557,15 @@ impl Gui {
     fn theme_view(&self, r: &mut Renderer) {
         let t = self.shell.theme;
         r.back_colour = viewcube::rgb(t.view);
-        r.backdrop = self.shell.settings.backdrop;
-        r.cube_palette = if t.dark { viewcube::DARK } else { viewcube::LIGHT };
+        r.look = self.shell.settings.look();
+        // the cube in the scheme's light or dark, as the view behind it is
+        let [x, y, z] = if r.look.backdrop == crate::look::Backdrop::Solid {
+            r.back_colour
+        } else {
+            r.look.top
+        };
+        let light = 0.2126 * x + 0.7152 * y + 0.0722 * z > 0.25;
+        r.cube_palette = if light { viewcube::LIGHT } else { viewcube::DARK };
         r.style = self.shell.view.style;
     }
 
@@ -1472,6 +1482,11 @@ impl Gui {
                     self.shell.prefs.open = !self.shell.prefs.open;
                     continue;
                 }
+                Action::Look(g) => {
+                    let s = &mut self.shell.settings;
+                    s.set_toggle(g, !s.toggle(g));
+                    continue;
+                }
                 a => a,
             };
             if let Action::PartColours(on) = a {
@@ -2341,9 +2356,23 @@ impl Gui {
             v.nav.scale = self.pixels_per_point;
         }
         if let Some(mut v) = self.view.take() {
-            let was = (v.renderer.back_colour, v.renderer.backdrop);
+            let was = (v.renderer.back_colour, v.renderer.look.clone());
             self.theme_view(&mut v.renderer);
-            v.dirty |= was != (v.renderer.back_colour, v.renderer.backdrop);
+            v.dirty |= was != (v.renderer.back_colour, v.renderer.look.clone());
+            // the background's picture, read when its file changes
+            let s = &self.shell.settings;
+            let want =
+                (s.backdrop == crate::look::Backdrop::Image && !s.image.is_empty()).then(|| s.image.clone());
+            if want != self.back_image_was {
+                let img = want.as_deref().and_then(crate::look::read_image);
+                if want.is_some() && img.is_none() {
+                    self.shell.status = format!("Background image: can't read {}", s.image);
+                }
+                v.renderer
+                    .set_background_image(img.as_ref().map(|(w, h, b)| (*w, *h, &b[..])));
+                self.back_image_was = want;
+                v.dirty = true;
+            }
             // the mouse table Settings has in force
             if v.nav.mouse != self.shell.prefs.mouse {
                 v.nav.mouse = self.shell.prefs.mouse.clone();
@@ -2898,6 +2927,17 @@ impl Headless {
                 modifiers,
             });
         }
+    }
+
+    /// The wheel turned at the pointer by this many points (down negative), as a scroll.
+    pub fn wheel(&mut self, dy: f32) {
+        self.pending.push(egui::Event::MouseWheel {
+            unit: egui::MouseWheelUnit::Point,
+            delta: egui::vec2(0.0, dy),
+            phase: egui::TouchPhase::Move,
+            source: egui::MouseWheelSource::Wheel,
+            modifiers: Default::default(),
+        });
     }
 
     pub fn text(&mut self, s: &str) {

@@ -3,10 +3,10 @@
 use forge_render::gui::Headless;
 
 const USAGE: &str = "forge-app [PART | file.fc] [--size WxH] [--times]
-  [--shot FILE.ppm [--scale S] [--light] [--pastel] [--background floor|gradient|solid] [--tab N] [--select NAME] [--click NAME].. [--rclick NAME].. [--wait] [--at X Y] [--sketch ROW;ROW..] [--edit NAME] [--draw TOOL X Y] [--view YAW PITCH] [--marking]]
+  [--shot FILE.ppm [--scale S] [--light] [--pastel] [--background floor|gradient|solid] [--settings FILE.toml] [--tab N] [--select NAME] [--click NAME].. [--rclick NAME].. [--wait] [--at X Y] [--sketch ROW;ROW..] [--edit NAME] [--draw TOOL X Y] [--view YAW PITCH] [--marking]]
   steps, in order: --click NAME --dclick NAME --rclick NAME --wait --type TEXT --key NAME (enter, escape, tab, backspace, or M, Ctrl+Z, F6...)
   --hover X Y (the view's pick there) --clickat X Y --drag X Y X2 Y2 --snap FILE.ppm --save
-  --viewnow YAW PITCH --home --zoom F (the camera's distance times F) --new-drawing
+  --viewnow YAW PITCH --home --zoom F (the camera's distance times F) --wheel X Y DY (scroll there) --new-drawing
   --start-sketch (on XY) --rest NAME SECONDS (the pointer still on it, for its tooltip)
   --open FILE (another document, in its own tab) --doc N (the Nth tab up)
   [--present fifo|mailbox|immediate] [--run-for SECONDS] [--spin]
@@ -35,6 +35,8 @@ enum Step {
     Home,
     /// The camera's distance times this.
     Zoom(f32),
+    /// The wheel turned at a point by this much (down negative).
+    Wheel(f32, f32, f32),
     StartSketch,
     /// The pointer held on a place this long (seconds).
     Rest(String, f32),
@@ -48,6 +50,8 @@ struct Args {
     pastel: bool,
     /// The view's background: floor, gradient, solid.
     background: Option<String>,
+    /// A settings.toml to start from (the scheme, lighting, ground...), before the flags above.
+    settings: Option<String>,
     shot: Option<String>,
     tab: usize,
     select: Option<String>,
@@ -75,6 +79,7 @@ fn args() -> Result<Args, String> {
         light: false,
         pastel: false,
         background: None,
+        settings: None,
         shot: None,
         tab: 0,
         select: None,
@@ -104,6 +109,7 @@ fn args() -> Result<Args, String> {
             "--light" => a.light = true,
             "--pastel" => a.pastel = true,
             "--background" => a.background = Some(v()?),
+            "--settings" => a.settings = Some(v()?),
             "--shot" => a.shot = Some(v()?),
             "--tab" => a.tab = v()?.parse().map_err(|_| USAGE)?,
             "--select" => a.select = Some(v()?),
@@ -128,6 +134,12 @@ fn args() -> Result<Args, String> {
             "--snap" => a.steps.push(Step::Snap(v()?)),
             "--save" => a.steps.push(Step::Save),
             "--home" => a.steps.push(Step::Home),
+            "--wheel" => {
+                let xs: Vec<f32> = (0..3)
+                    .map(|_| v().and_then(|x| x.parse().map_err(|_| USAGE.into())))
+                    .collect::<Result<_, String>>()?;
+                a.steps.push(Step::Wheel(xs[0], xs[1], xs[2]));
+            }
             "--zoom" => a.steps.push(Step::Zoom(v()?.parse().map_err(|_| USAGE)?)),
             "--viewnow" => {
                 let y: f32 = v()?.parse().map_err(|_| USAGE)?;
@@ -456,16 +468,23 @@ fn run() -> Result<(), String> {
         );
     }
     let mut h = Headless::new(a.size, a.scale)?;
+    let base = match &a.settings {
+        Some(f) => forge_render::shell::settings::Settings::from_toml(
+            &std::fs::read_to_string(f).map_err(|e| format!("{f}: {e}"))?,
+        ),
+        None => Default::default(),
+    };
     let mut settings = forge_render::shell::settings::Settings {
         dark: !a.light,
-        pastel: a.pastel,
-        ..Default::default()
+        pastel: a.pastel || base.pastel,
+        ..base
     };
     if let Some(b) = &a.background {
-        settings.backdrop = match b.as_str() {
-            "solid" => forge_render::render::Backdrop::Solid,
-            "gradient" => forge_render::render::Backdrop::Gradient,
-            _ => forge_render::render::Backdrop::Floor,
+        use forge_render::render::Backdrop;
+        (settings.backdrop, settings.ground_plane) = match b.as_str() {
+            "solid" => (Backdrop::Solid, false),
+            "gradient" => (Backdrop::Gradient, false),
+            _ => (Backdrop::Gradient, true),
         };
     }
     h.gui.shell.use_settings(settings);
@@ -584,6 +603,15 @@ fn run() -> Result<(), String> {
                     v.mark_dirty();
                 }
                 for _ in 0..3 {
+                    h.step();
+                }
+                continue;
+            }
+            Step::Wheel(x, y, dy) => {
+                h.move_to(*x, *y);
+                h.step();
+                h.wheel(*dy);
+                for _ in 0..30 {
                     h.step();
                 }
                 continue;

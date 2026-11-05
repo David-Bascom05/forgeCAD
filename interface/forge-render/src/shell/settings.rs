@@ -11,6 +11,7 @@ use crate::bindings::{
     Chord, Gesture, KeyCommand, KeyMap, MouseMap, NAV_ACTIONS, NavAction, Preset, Toml, gesture_choices,
     preset_map, presets,
 };
+use crate::look::{self, ImageFit, Look, Toggle};
 use crate::render::{Backdrop, VisualStyle};
 use crate::shell::placed::Placed;
 use egui::{Color32, Rect, Stroke, StrokeKind, Ui, pos2, vec2};
@@ -36,9 +37,22 @@ pub const SECTIONS: &[(&str, SectionUi)] = &[
 /// The tables the built-in sections own; any other in settings.toml is a registered section's.
 const OWN_TABLES: [&str; 6] = ["appearance", "display", "units", "keys", "mouse", "mouse.custom"];
 const BACKDROPS: [(Backdrop, &str, &str); 3] = [
-    (Backdrop::Floor, "floor", "Inventor floor"),
+    (Backdrop::Solid, "solid", "1 Color"),
     (Backdrop::Gradient, "gradient", "Gradient"),
-    (Backdrop::Solid, "solid", "Solid colour"),
+    (Backdrop::Image, "image", "Background Image"),
+];
+const FITS: [(ImageFit, &str, &str); 3] = [
+    (ImageFit::Stretch, "stretch", "Stretch"),
+    (ImageFit::Tile, "tile", "Tile"),
+    (ImageFit::Centre, "centre", "Centre"),
+];
+/// The ground's switches: their words in settings.toml and the window.
+const GROUND: [(Toggle, &str, &str); 5] = [
+    (Toggle::GroundPlane, "ground_plane", "Ground plane"),
+    (Toggle::Reflections, "ground_reflections", "Ground reflections"),
+    (Toggle::GroundShadows, "ground_shadows", "Ground shadows"),
+    (Toggle::ObjectShadows, "object_shadows", "Object shadows"),
+    (Toggle::AmbientShadows, "ambient_shadows", "Ambient shadows"),
 ];
 
 #[derive(Clone, Debug, PartialEq)]
@@ -46,6 +60,19 @@ pub struct Settings {
     pub dark: bool,
     pub pastel: bool,
     pub backdrop: Backdrop,
+    /// The colour scheme's id (`data/color_schemes.csv`).
+    pub scheme: String,
+    /// The background image's file, and how it fills the view.
+    pub image: String,
+    pub fit: ImageFit,
+    /// The lighting style's and Realistic's environment's ids.
+    pub lighting: String,
+    pub environment: String,
+    pub ground_plane: bool,
+    pub ground_reflections: bool,
+    pub ground_shadows: bool,
+    pub object_shadows: bool,
+    pub ambient_shadows: bool,
     /// The view's visual style (the View tab's dropdown sets it too).
     pub style: VisualStyle,
     pub parallel: bool,
@@ -71,7 +98,17 @@ impl Default for Settings {
         Settings {
             dark: true,
             pastel: false,
-            backdrop: Backdrop::Floor,
+            backdrop: Backdrop::Gradient,
+            scheme: "theme".into(),
+            image: String::new(),
+            fit: ImageFit::Stretch,
+            lighting: "studio".into(),
+            environment: "studio".into(),
+            ground_plane: true,
+            ground_reflections: false,
+            ground_shadows: true,
+            object_shadows: false,
+            ambient_shadows: true,
             style: VisualStyle::ShadedEdges,
             parallel: true,
             overlays: [PART_OVERLAYS, ASM_OVERLAYS],
@@ -123,6 +160,66 @@ impl Settings {
         m
     }
 
+    pub fn toggle(&self, g: Toggle) -> bool {
+        match g {
+            Toggle::GroundPlane => self.ground_plane,
+            Toggle::Reflections => self.ground_reflections,
+            Toggle::GroundShadows => self.ground_shadows,
+            Toggle::ObjectShadows => self.object_shadows,
+            Toggle::AmbientShadows => self.ambient_shadows,
+        }
+    }
+
+    pub fn set_toggle(&mut self, g: Toggle, on: bool) {
+        *match g {
+            Toggle::GroundPlane => &mut self.ground_plane,
+            Toggle::Reflections => &mut self.ground_reflections,
+            Toggle::GroundShadows => &mut self.ground_shadows,
+            Toggle::ObjectShadows => &mut self.object_shadows,
+            Toggle::AmbientShadows => &mut self.ambient_shadows,
+        } = on;
+    }
+
+    /// The UI theme with the colour scheme's view and sketch colours.
+    pub fn theme(&self) -> Theme {
+        let mut t = if self.dark { theme::DARK } else { theme::LIGHT };
+        let sc = look::scheme(&self.scheme);
+        if let Some(v) = sc.solid {
+            t.view = srgb_hex(v);
+        }
+        let hex = |x: u32| egui::Color32::from_rgb((x >> 16) as u8, (x >> 8) as u8, x as u8);
+        if let Some(x) = sc.sketch {
+            t.sketch = hex(x);
+        }
+        if let Some(x) = sc.projected {
+            t.projected = hex(x);
+        }
+        t
+    }
+
+    /// What the renderer draws of it, in this theme.
+    pub fn look(&self) -> Look {
+        let sc = look::scheme(&self.scheme);
+        // the theme's own gradient and floor where the scheme keeps them
+        let own = look::scheme(if self.dark { "dark" } else { "light" });
+        Look {
+            backdrop: self.backdrop,
+            fit: self.fit,
+            top: sc.top.or(own.top).unwrap_or_default(),
+            bottom: sc.bottom.or(own.bottom).unwrap_or_default(),
+            floor: sc.floor.or(own.floor).unwrap_or_default(),
+            hover: sc.hover,
+            selection: sc.selection,
+            lighting: look::lighting(&self.lighting).clone(),
+            environment: look::environment(&self.environment).clone(),
+            ground_plane: self.ground_plane,
+            reflections: self.ground_reflections && self.ground_plane,
+            ground_shadows: self.ground_shadows,
+            object_shadows: self.object_shadows,
+            ambient_shadows: self.ambient_shadows,
+        }
+    }
+
     pub fn to_toml(&self) -> String {
         let mut t = Toml::default();
         let b = |v: bool| if v { "true" } else { "false" };
@@ -133,6 +230,14 @@ impl Settings {
             if self.pastel { "pastel" } else { "grey" },
         );
         t.set("appearance", "background", word(&BACKDROPS, self.backdrop));
+        t.set("appearance", "scheme", self.scheme.clone());
+        t.set("appearance", "background_image", self.image.clone());
+        t.set("appearance", "image_fit", word(&FITS, self.fit));
+        t.set("appearance", "lighting", self.lighting.clone());
+        t.set("appearance", "environment", self.environment.clone());
+        for (g, name, _) in GROUND {
+            t.set("appearance", name, b(self.toggle(g)));
+        }
         t.set("display", "visual_style", self.style.key());
         t.set(
             "display",
@@ -183,7 +288,41 @@ impl Settings {
         let get = |sec: &str, k: &str| t.get(sec, k).unwrap_or("").to_string();
         s.dark = get("appearance", "theme") != "light";
         s.pastel = get("appearance", "part_colours") == "pastel";
-        s.backdrop = by_word(&BACKDROPS, &get("appearance", "background")).unwrap_or(s.backdrop);
+        // the old "floor" background was the gradient and the ground plane
+        let background = get("appearance", "background");
+        s.ground_plane = background.is_empty() || background == "floor";
+        s.backdrop = by_word(&BACKDROPS, &background).unwrap_or(s.backdrop);
+        let known_id = |id: String, ids: Vec<&str>, or: &str| {
+            if ids.contains(&id.as_str()) {
+                id
+            } else {
+                or.to_string()
+            }
+        };
+        s.scheme = known_id(
+            get("appearance", "scheme"),
+            look::schemes().iter().map(|x| x.id.as_str()).collect(),
+            "theme",
+        );
+        s.lighting = known_id(
+            get("appearance", "lighting"),
+            look::lightings().iter().map(|x| x.id.as_str()).collect(),
+            "studio",
+        );
+        s.environment = known_id(
+            get("appearance", "environment"),
+            look::environments().iter().map(|x| x.id.as_str()).collect(),
+            "studio",
+        );
+        s.image = get("appearance", "background_image");
+        s.fit = by_word(&FITS, &get("appearance", "image_fit")).unwrap_or(s.fit);
+        for (g, name, _) in GROUND {
+            match get("appearance", name).as_str() {
+                "true" => s.set_toggle(g, true),
+                "false" => s.set_toggle(g, false),
+                _ => {}
+            }
+        }
         // the edges setting it replaces: no lines was Shaded, the rest Shaded with Edges
         s.style = VisualStyle::from_key(&get("display", "visual_style")).unwrap_or(
             if get("display", "edges") == "none" {
@@ -235,6 +374,20 @@ impl Settings {
         }
         s
     }
+}
+
+/// A linear colour as the theme's 0xRRGGBB sRGB.
+fn srgb_hex(c: [f32; 3]) -> u32 {
+    let b = |v: f32| {
+        let v = v.clamp(0.0, 1.0);
+        let s = if v <= 0.003_130_8 {
+            v * 12.92
+        } else {
+            1.055 * v.powf(1.0 / 2.4) - 0.055
+        };
+        (s * 255.0).round() as u32
+    };
+    (b(c[0]) << 16) | (b(c[1]) << 8) | b(c[2])
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -626,7 +779,7 @@ impl Shell {
 
     /// Settings as loaded: everything they decide, without the actions a change makes.
     pub fn use_settings(&mut self, s: Settings) {
-        self.theme = if s.dark { theme::DARK } else { theme::LIGHT };
+        self.theme = s.theme();
         self.view.pastel = s.pastel;
         self.view.style = s.style;
         self.view.parallel = s.parallel;
@@ -640,8 +793,8 @@ impl Shell {
     pub fn settings_changed(&mut self, was: &Settings) {
         let s = self.settings.clone();
         self.prefs.mouse = s.mouse_map();
-        if s.dark != was.dark {
-            self.theme = if s.dark { theme::DARK } else { theme::LIGHT };
+        if s.dark != was.dark || s.scheme != was.scheme {
+            self.theme = s.theme();
         }
         if s.pastel != was.pastel {
             self.out.push(Action::PartColours(s.pastel));
@@ -780,59 +933,116 @@ fn rgb(c: [f32; 3]) -> Color32 {
     Color32::from_rgb(s(c[0]), s(c[1]), s(c[2]))
 }
 
-/// A view's background as a card shows it: the renderer's colours for the theme.
-fn backdrop_preview(p: &egui::Painter, r: Rect, b: Backdrop, t: &Theme) {
-    let v = t.view;
-    let flat = [(v >> 16) as u8, (v >> 8) as u8, v as u8].map(|x| (x as f32 / 255.0).powf(2.2));
-    let [top, bottom, floor] = crate::render::backdrop_colours(flat).map(rgb);
-    match b {
+/// A view's background as a card shows it: the settings' scheme, in their theme.
+fn backdrop_preview(p: &egui::Painter, r: Rect, s: &Settings) {
+    let l = s.look();
+    let v = s.theme().view;
+    let [top, bottom, floor] = [l.top, l.bottom, l.floor].map(rgb);
+    match s.backdrop {
         Backdrop::Solid => {
-            p.rect_filled(r, 3.0, rgb(flat));
+            p.rect_filled(
+                r,
+                3.0,
+                Color32::from_rgb((v >> 16) as u8, (v >> 8) as u8, v as u8),
+            );
         }
-        _ => {
-            // a gradient, top to bottom, in bands
-            let n = 24;
-            for k in 0..n {
-                let f = k as f32 / (n - 1) as f32;
-                let c = lerp(top, bottom, f);
-                let y0 = r.top() + r.height() * k as f32 / n as f32;
-                let band = Rect::from_min_max(
-                    pos2(r.left(), y0),
-                    pos2(r.right(), y0 + r.height() / n as f32 + 1.0),
-                );
-                p.rect_filled(band, 0.0, c);
-            }
-            if b == Backdrop::Floor {
-                // the floor's grid going away from the eye
-                let horizon = r.top() + r.height() * 0.48;
-                let ground = Rect::from_min_max(pos2(r.left(), horizon), r.max);
-                p.rect_filled(ground, 0.0, floor.gamma_multiply(0.85));
-                let ink = lerp(floor, Color32::WHITE, if t.dark { 0.12 } else { 0.45 });
-                for k in 1..6 {
-                    let f = (k as f32 / 6.0).powf(1.6);
-                    p.hline(
-                        r.x_range(),
-                        horizon + (r.bottom() - horizon) * f,
-                        Stroke::new(1.0, ink),
-                    );
-                }
-                for k in -6..=6 {
-                    let x = r.center().x + k as f32 * r.width() / 10.0;
-                    p.line_segment(
-                        [
-                            pos2(r.center().x + k as f32 * 4.0, horizon),
-                            pos2(x * 1.0 + (x - r.center().x) * 0.8, r.bottom()),
-                        ],
-                        Stroke::new(1.0, ink),
-                    );
-                }
-            }
+        Backdrop::Gradient => bands(p, r, top, bottom),
+        Backdrop::Image => {
+            // a picture: sky, a sun and hills
+            bands(
+                p,
+                r,
+                Color32::from_rgb(0x9C, 0xC4, 0xE4),
+                Color32::from_rgb(0xE6, 0xEE, 0xF4),
+            );
+            p.circle_filled(
+                pos2(r.right() - r.width() * 0.2, r.top() + r.height() * 0.25),
+                r.height() * 0.08,
+                Color32::from_rgb(0xF6, 0xD8, 0x7A),
+            );
+            let hill = |x0: f32, x1: f32, h: f32, c: Color32| {
+                let pts: Vec<egui::Pos2> = (0..=16)
+                    .map(|i| {
+                        let f = i as f32 / 16.0;
+                        pos2(
+                            r.left() + r.width() * (x0 + (x1 - x0) * f),
+                            r.bottom() - r.height() * h * (f * std::f32::consts::PI).sin(),
+                        )
+                    })
+                    .collect();
+                p.add(egui::Shape::convex_polygon(pts, c, Stroke::NONE));
+            };
+            hill(-0.1, 0.7, 0.45, Color32::from_rgb(0x7E, 0xA0, 0x7A));
+            hill(0.35, 1.1, 0.35, Color32::from_rgb(0x5F, 0x84, 0x5E));
         }
     }
-    // a part on it, for scale
+    if s.ground_plane {
+        // the floor's grid going away from the eye
+        let horizon = r.top() + r.height() * 0.62;
+        let ink = lerp(floor, Color32::WHITE, if s.dark { 0.12 } else { 0.45 });
+        for k in 0..5 {
+            let f = (k as f32 / 5.0).powf(1.6);
+            p.hline(
+                r.x_range(),
+                horizon + (r.bottom() - horizon) * f,
+                Stroke::new(1.0, ink),
+            );
+        }
+    }
     super::materials::ball(
         p,
         pos2(r.center().x, r.top() + r.height() * 0.5),
+        r.height() * 0.2,
+        Color32::from_rgb(0xC8, 0xCC, 0xD2),
+    );
+}
+
+/// A gradient, top to bottom, in bands.
+fn bands(p: &egui::Painter, r: Rect, top: Color32, bottom: Color32) {
+    let n = 24;
+    for k in 0..n {
+        let c = lerp(top, bottom, k as f32 / (n - 1) as f32);
+        let y0 = r.top() + r.height() * k as f32 / n as f32;
+        let band = Rect::from_min_max(
+            pos2(r.left(), y0),
+            pos2(r.right(), y0 + r.height() / n as f32 + 1.0),
+        );
+        p.rect_filled(band, 0.0, c);
+    }
+}
+
+/// A lighting style: its room's light behind a part lit by its key's colour.
+fn lighting_preview(p: &egui::Painter, r: Rect, l: &look::Lighting) {
+    bands(p, r, rgb(l.room_high), rgb(l.room_low));
+    let k = l.key.colour.map(|c| c * (0.45 + l.key.strength));
+    let tint = |base: u8, c: f32| (base as f32 * c.clamp(0.0, 1.2)).min(255.0) as u8;
+    super::materials::ball(
+        p,
+        r.center(),
+        r.height() * 0.26,
+        Color32::from_rgb(tint(0xC8, k[0]), tint(0xCC, k[1]), tint(0xD2, k[2])),
+    );
+}
+
+/// An environment: its sky over its ground, the sun where it is.
+fn environment_preview(p: &egui::Painter, r: Rect, e: &look::Environment) {
+    let horizon = r.top() + r.height() * 0.6;
+    let sky = Rect::from_min_max(r.min, pos2(r.right(), horizon));
+    let ground = Rect::from_min_max(pos2(r.left(), horizon), r.max);
+    let ex = |c: [f32; 3]| rgb(c.map(|x| x * e.exposure));
+    bands(p, sky, ex(e.sky_high), ex(e.sky_low));
+    bands(p, ground, ex(e.ground_high), ex(e.ground_low));
+    if e.sun > 0.0 {
+        let [x, _, z] = e.sun_dir;
+        let at = pos2(
+            r.center().x + x.clamp(-1.0, 1.0) * r.width() * 0.4,
+            horizon - z.clamp(0.0, 1.0) * sky.height() * 0.8,
+        );
+        p.circle_filled(at, 4.0, ex(e.sun_colour.map(|c| c * (0.6 + e.sun))));
+    }
+    super::materials::ball(
+        p,
+        pos2(r.center().x, horizon),
         r.height() * 0.2,
         Color32::from_rgb(0xC8, 0xCC, 0xD2),
     );
@@ -925,6 +1135,26 @@ fn appearance(ui: &mut Ui, t: &Theme, s: &mut Settings, _: &mut Window, places: 
     ) {
         s.pastel = k == 1;
     }
+    let small = vec2(128.0, 88.0);
+    section(ui, t, "Colour scheme");
+    let all = look::schemes();
+    let items: Vec<(&str, bool)> = all.iter().map(|x| (x.name.as_str(), s.scheme == x.id)).collect();
+    if let Some(k) = cards(
+        ui,
+        t,
+        &items,
+        small,
+        &|k| format!("settings:scheme:{}", all[k].id),
+        places,
+        &|p, r, k| {
+            let mut x = s.clone();
+            x.scheme = all[k].id.clone();
+            x.backdrop = Backdrop::Gradient;
+            backdrop_preview(p, r, &x);
+        },
+    ) {
+        s.scheme = all[k].id.clone();
+    }
     section(ui, t, "Background");
     let items: Vec<(&str, bool)> = BACKDROPS.iter().map(|b| (b.2, s.backdrop == b.0)).collect();
     if let Some(k) = cards(
@@ -934,10 +1164,89 @@ fn appearance(ui: &mut Ui, t: &Theme, s: &mut Settings, _: &mut Window, places: 
         card,
         &|k| format!("settings:background:{}", BACKDROPS[k].1),
         places,
-        &|p, r, k| backdrop_preview(p, r, BACKDROPS[k].0, t),
+        &|p, r, k| {
+            let mut x = s.clone();
+            x.backdrop = BACKDROPS[k].0;
+            backdrop_preview(p, r, &x);
+        },
     ) {
         s.backdrop = BACKDROPS[k].0;
     }
+    if s.backdrop == Backdrop::Image {
+        row(ui, t, "Image", |ui| {
+            let r = ui.add(
+                egui::TextEdit::singleline(&mut s.image)
+                    .desired_width(260.0)
+                    .hint_text("a .png or .jpg file")
+                    .font(sans(12.5)),
+            );
+            places.push(("settings:image".into(), r.rect));
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                let r = ui.button(egui::RichText::new("Browse...").font(sans(12.5)));
+                places.push(("settings:image:browse".into(), r.rect));
+                if r.clicked()
+                    && let Some(f) = rfd::FileDialog::new()
+                        .add_filter("Image", &["png", "jpg", "jpeg"])
+                        .pick_file()
+                {
+                    s.image = f.to_string_lossy().into_owned();
+                }
+            }
+        });
+        row(ui, t, "Fit", |ui| {
+            let items: Vec<(&str, bool)> = FITS.iter().map(|f| (f.2, s.fit == f.0)).collect();
+            if let Some(k) = segmented(ui, t, &items, &|k| format!("settings:fit:{}", FITS[k].1), places) {
+                s.fit = FITS[k].0;
+            }
+        });
+    }
+    section(ui, t, "Lighting style");
+    let all = look::lightings();
+    let items: Vec<(&str, bool)> = all
+        .iter()
+        .map(|x| (x.name.as_str(), s.lighting == x.id))
+        .collect();
+    if let Some(k) = cards(
+        ui,
+        t,
+        &items,
+        small,
+        &|k| format!("settings:lighting:{}", all[k].id),
+        places,
+        &|p, r, k| lighting_preview(p, r, &all[k]),
+    ) {
+        s.lighting = all[k].id.clone();
+    }
+    section(ui, t, "Environment (Realistic)");
+    let all = look::environments();
+    let items: Vec<(&str, bool)> = all
+        .iter()
+        .map(|x| (x.name.as_str(), s.environment == x.id))
+        .collect();
+    if let Some(k) = cards(
+        ui,
+        t,
+        &items,
+        small,
+        &|k| format!("settings:environment:{}", all[k].id),
+        places,
+        &|p, r, k| environment_preview(p, r, &all[k]),
+    ) {
+        s.environment = all[k].id.clone();
+    }
+    section(ui, t, "Ground and shadows");
+    ui.horizontal_wrapped(|ui| {
+        ui.spacing_mut().item_spacing.x = 18.0;
+        for (g, name, word) in GROUND {
+            let mut on = s.toggle(g);
+            let r = ui.checkbox(&mut on, egui::RichText::new(word).font(sans(12.5)));
+            places.push((format!("settings:ground:{name}"), r.rect));
+            if on != s.toggle(g) {
+                s.set_toggle(g, on);
+            }
+        }
+    });
 }
 
 fn display(ui: &mut Ui, t: &Theme, s: &mut Settings, _: &mut Window, places: &mut Vec<(String, Rect)>) {
@@ -1457,7 +1766,16 @@ mod tests {
         let mut s = Settings {
             dark: false,
             pastel: true,
-            backdrop: Backdrop::Gradient,
+            backdrop: Backdrop::Image,
+            scheme: "winter_night".into(),
+            image: "/pictures/shop floor.png".into(),
+            fit: ImageFit::Tile,
+            lighting: "cool_light".into(),
+            environment: "desert_sun".into(),
+            ground_plane: false,
+            ground_reflections: true,
+            object_shadows: true,
+            ambient_shadows: false,
             style: VisualStyle::WireframeHidden,
             parallel: false,
             length: "in",
@@ -1482,6 +1800,39 @@ mod tests {
         assert_eq!(Settings::from_toml(&text), s, "{text}");
         assert!(text.contains("[agent]"), "{text}");
         assert_eq!(Settings::from_toml(""), Settings::default());
+    }
+
+    #[test]
+    fn the_old_backgrounds_and_unknown_names_read_as_something_kept() {
+        let s = Settings::from_toml("[appearance]\nbackground = floor\n");
+        assert_eq!((s.backdrop, s.ground_plane), (Backdrop::Gradient, true));
+        let s = Settings::from_toml("[appearance]\nbackground = solid\n");
+        assert_eq!((s.backdrop, s.ground_plane), (Backdrop::Solid, false));
+        let s = Settings::from_toml("[appearance]\nscheme = gone\nlighting = gone\nenvironment = gone\n");
+        assert_eq!(
+            (&*s.scheme, &*s.lighting, &*s.environment),
+            ("theme", "studio", "studio")
+        );
+        let d = Settings::default();
+        assert!(d.ground_plane && d.ground_shadows && d.ambient_shadows);
+        assert!(!d.ground_reflections && !d.object_shadows);
+    }
+
+    #[test]
+    fn a_scheme_colours_the_view_and_sketches_and_the_theme_one_keeps_the_theme() {
+        let mut s = Settings::default();
+        let dark = s.theme();
+        assert_eq!(dark.view, theme::DARK.view);
+        s.scheme = "sky".into();
+        let sky = s.theme();
+        assert_ne!(sky.view, dark.view);
+        assert_ne!(sky.sketch, dark.sketch);
+        assert_eq!(sky.ink, dark.ink, "the chrome stays the UI theme's");
+        assert_ne!(s.look().top, Settings::default().look().top);
+        // the toggles reach the renderer; reflections only with a ground to reflect in
+        s.ground_reflections = true;
+        s.ground_plane = false;
+        assert!(!s.look().reflections);
     }
 
     #[test]
