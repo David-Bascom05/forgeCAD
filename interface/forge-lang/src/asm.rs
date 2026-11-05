@@ -1632,10 +1632,21 @@ pub struct PartLoad {
     pub body_meshes: BTreeMap<String, Arc<PartMesh>>,
     /// Its text and everything it read, as one hash: the same ident, the same solids.
     pub ident: u128,
+    /// Its threads left cosmetic, in its frame.
+    pub threads: Vec<crate::holes::Cosmetic>,
 }
 
 /// A part file's text hash and the references and bodies asked of it.
-type PartKey = (String, u64, Vec<String>, Vec<String>, Option<std::path::PathBuf>);
+/// A part file, its text hash, the references and bodies asked of it, the fence, and whether
+/// its threads are left cosmetic (a drawing's).
+type PartKey = (
+    String,
+    u64,
+    Vec<String>,
+    Vec<String>,
+    Option<std::path::PathBuf>,
+    bool,
+);
 /// A subassembly document evaluated, and its errors.
 type SubLoad = (Doc, Vec<Error>);
 
@@ -1645,7 +1656,11 @@ pub struct AsmCache {
     parts: BTreeMap<PartKey, Arc<PartLoad>>,
     subs: BTreeMap<(String, u64, Option<std::path::PathBuf>), Arc<SubLoad>>,
     last: Option<Live>,
+    /// Parts runs on other threads build at once (`at` runs): each built by one of them only.
+    pool: Option<Arc<PartPool>>,
 }
+
+type PartPool = std::sync::Mutex<BTreeMap<PartKey, Arc<std::sync::OnceLock<Arc<PartLoad>>>>>;
 
 /// A solve kept for the next run: when only drive values change, the solver re-solves only the
 /// partitions they reach and the checker re-tests only what moved.
@@ -1885,7 +1900,7 @@ fn placed_body(ev: &Eval) -> Option<forge_topo::Body> {
 /// A part file's declared anchors (loops' too: `stud[2]`) as frames in the part's own space: a
 /// plane's frame, an axis's along its z, a point's at its origin. What the app draws them by.
 pub fn part_anchors(text: &str, dir: Option<std::path::PathBuf>) -> Vec<(String, Frame)> {
-    let p = load_part_with(text, dir, None, &[], &[], false);
+    let p = load_part_with(text, dir, None, &[], &[], false, false);
     p.refs
         .into_iter()
         .filter_map(|(n, r)| r.ok().map(|r| (n, r.frame)))
@@ -1898,8 +1913,9 @@ fn load_part(
     fence: Option<std::path::PathBuf>,
     refs: &[String],
     bodies: &[String],
+    cosmetic: bool,
 ) -> PartLoad {
-    load_part_with(text, dir, fence, refs, bodies, true)
+    load_part_with(text, dir, fence, refs, bodies, true, cosmetic)
 }
 
 fn load_part_with(
@@ -1909,6 +1925,7 @@ fn load_part_with(
     refs: &[String],
     bodies: &[String],
     mesh: bool,
+    cosmetic: bool,
 ) -> PartLoad {
     let hash = content_hash(text);
     let mut out = PartLoad {
@@ -1924,6 +1941,7 @@ fn load_part_with(
         declared: false,
         body_meshes: BTreeMap::new(),
         ident: 0,
+        threads: vec![],
     };
     let watch = crate::deps::watch();
     let prog = match crate::syntax::parse(text) {
@@ -1941,11 +1959,13 @@ fn load_part_with(
     let mut ev = Eval::new(text, crate::eval::Rules::default(), true, Default::default());
     ev.dir = dir;
     ev.root = fence;
+    ev.cosmetic_threads = cosmetic;
     ev.check_static(&prog);
     if !ev.errors.is_empty() {
         ev.b.building = false;
     }
     ev.run(&prog);
+    out.threads = std::mem::take(&mut ev.threads);
     crate::sheet::finish(&mut ev);
     out.body = placed_body(&ev);
     out.summary = Arc::new(crate::props::PartSummary::of(&ev));
@@ -2139,6 +2159,8 @@ pub struct AsmOut {
     pub parts: Vec<Arc<forge_topo::Body>>,
     /// Each of `parts`' identity (its document, all it read, its body): 0 where unknown.
     pub part_idents: Vec<u128>,
+    /// Each of `parts`' threads left cosmetic (`Options::cosmetic_threads`), in its frame.
+    pub part_threads: Vec<Arc<Vec<crate::holes::Cosmetic>>>,
     pub occ_part: Vec<Option<usize>>,
     /// The probed expects' values, by position (`Options::probe`).
     pub probes: Vec<(usize, Option<f64>)>,
@@ -2700,6 +2722,7 @@ pub fn finish(
     let mut loads: Vec<usize> = vec![];
     let mut part_docs: BTreeMap<String, Arc<crate::props::PartSummary>> = BTreeMap::new();
     let mut declared_kinds: BTreeSet<String> = BTreeSet::new();
+    let mut threads_of: BTreeMap<(fa::DocId, u64), Arc<Vec<crate::holes::Cosmetic>>> = BTreeMap::new();
     // the parts not yet built, built on all cores first
     let mut missing: Vec<(PartKey, String)> = vec![];
     for (file, (refs, bodies)) in &want {
@@ -2715,19 +2738,37 @@ pub fn finish(
             refs.iter().cloned().collect(),
             bodies.iter().cloned().collect(),
             fence.clone(),
+            opts.cosmetic_threads,
         );
         if !cache.parts.contains_key(&ck) && !missing.iter().any(|m| m.0 == ck) {
             missing.push((ck, text));
         }
     }
+    let pool = cache.pool.clone();
     let built = crate::par::map(missing.len(), |i| {
-        let ((file, _, refs, bodies, fence), text) = &missing[i];
-        let parent = std::path::Path::new(file).parent().map(|p| p.to_path_buf());
-        load_part(text, parent, fence.clone(), refs, bodies)
+        let (ck, text) = &missing[i];
+        let (file, _, refs, bodies, fence, cosmetic) = ck;
+        let make = || {
+            let parent = std::path::Path::new(file).parent().map(|p| p.to_path_buf());
+            Arc::new(load_part(text, parent, fence.clone(), refs, bodies, *cosmetic))
+        };
+        let Some(pool) = &pool else { return (make(), true) };
+        let cell = pool
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .entry(ck.clone())
+            .or_default()
+            .clone();
+        let mut mine = false;
+        let l = cell.get_or_init(|| {
+            mine = true;
+            make()
+        });
+        (l.clone(), mine)
     });
-    t.built += built.len();
-    for ((ck, _), l) in missing.into_iter().zip(built) {
-        cache.parts.insert(ck, Arc::new(l));
+    for ((ck, _), (l, mine)) in missing.into_iter().zip(built) {
+        t.built += mine as usize;
+        cache.parts.insert(ck, l);
     }
     for (file, (refs, bodies)) in &want {
         // named as the document wrote it, never by its real path
@@ -2767,12 +2808,20 @@ pub fn finish(
             refs.clone(),
             bodies.clone(),
             fence.clone(),
+            opts.cosmetic_threads,
         );
         let load = match cache.parts.get(&ck) {
             Some(l) => l.clone(),
             None => {
                 let parent = std::path::Path::new(file).parent().map(|p| p.to_path_buf());
-                let l = Arc::new(load_part(&text, parent, fence.clone(), &refs, &bodies));
+                let l = Arc::new(load_part(
+                    &text,
+                    parent,
+                    fence.clone(),
+                    &refs,
+                    &bodies,
+                    opts.cosmetic_threads,
+                ));
                 cache.parts.insert(ck, l.clone());
                 t.built += 1;
                 l
@@ -2804,6 +2853,8 @@ pub fn finish(
         declared_kinds.extend(load.kinds.iter().cloned());
         let doc = fa::DocId(short(&dir, file).into());
         part_docs.insert(doc.0.to_string(), load.summary.clone());
+        // a part's threads are on its own body, not on a named body it also has
+        threads_of.insert((doc.clone(), 0), Arc::new(load.threads.clone()));
         let mut entries: Vec<(u64, Option<forge_topo::Body>)> = vec![(0, load.body.clone())];
         for (name, b) in &load.bodies {
             entries.push((hid(name), Some(b.clone())));
@@ -3077,6 +3128,8 @@ pub fn finish(
                     out.parts.push(Arc::new(b.clone()));
                     out.part_idents
                         .push(checker.exact().idents.get(&key).copied().unwrap_or(0));
+                    out.part_threads
+                        .push(threads_of.get(&key).cloned().unwrap_or_default());
                     unique.insert(key, out.parts.len() - 1);
                     out.parts.len() - 1
                 }
@@ -3282,6 +3335,7 @@ pub fn finish(
         // each set's document from a fresh solve, on all cores: the parts come from this run
         let sets: Vec<(String, Vec<usize>)> = sets.into_iter().collect();
         let (parts, subs) = (cache.parts.clone(), cache.subs.clone());
+        let pool: Arc<PartPool> = Arc::default();
         let runs = crate::par::map(sets.len(), |j| {
             let (text, ks) = &sets[j];
             // a probe measures its own interferences when it asks for them
@@ -3295,6 +3349,7 @@ pub fn finish(
                 parts: parts.clone(),
                 subs: subs.clone(),
                 last: None,
+                pool: Some(pool.clone()),
             }));
             let (run, _) = crate::run(text, o, kept);
             let built = run.asm.as_ref().map_or(0, |a| a.timings.built);

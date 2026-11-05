@@ -73,6 +73,11 @@ pub struct Options {
     pub anchors: bool,
     /// An assembly: write its structure as STEP under this product name (`fg run --step`).
     pub step: Option<String>,
+    /// A part's measures, expects and physical properties and a thermoform's wall simulation;
+    /// off, a UI shows the shape first and runs them after.
+    pub checks: bool,
+    /// Threads on an axis not modelled but recorded (`Run::threads`), as a drawing draws them.
+    pub cosmetic_threads: bool,
 }
 
 impl Default for Options {
@@ -89,6 +94,8 @@ impl Default for Options {
             expects: true,
             anchors: false,
             step: None,
+            checks: true,
+            cosmetic_threads: false,
         }
     }
 }
@@ -150,6 +157,8 @@ pub struct Run {
     pub sheets: Vec<sheet::SheetOut>,
     /// The part's thermoforms as built (`thermo.rs`).
     pub thermos: Vec<thermo::ThermoOut>,
+    /// The threads left unmodelled (`Options::cosmetic_threads`), in the part's frame.
+    pub threads: Vec<holes::Cosmetic>,
     /// An assembly's solve, checks and timings (`asm.rs`).
     pub asm: Option<asm::AsmOut>,
     /// With `Options::anchors`: the anchor text of each face and edge of the finished part.
@@ -194,6 +203,7 @@ pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
                     observed: Default::default(),
                     sheets: vec![],
                     thermos: vec![],
+                    threads: vec![],
                     asm: None,
                     anchors: None,
                     props: props::Props::default(),
@@ -205,6 +215,8 @@ pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
     };
     let mut ev = Eval::new(src, opts.rules, opts.build, cache);
     ev.volumes = opts.volumes;
+    ev.checks = opts.checks;
+    ev.cosmetic_threads = opts.cosmetic_threads;
     ev.dir = opts.dir.clone();
     ev.root = opts.root.as_ref().and_then(|r| std::fs::canonicalize(r).ok());
     if asm::declared(&prog) {
@@ -227,7 +239,7 @@ pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
     timings.kernel_ms = ev.b.kernel_ms;
     let t3 = Instant::now();
     let built_all = opts.build && ev.errors.is_empty() && ev.b.built() == ev.b.features.len();
-    let measure = match (built_all, ev.b.measured()) {
+    let measure = match (built_all && opts.checks, ev.b.measured()) {
         (false, _) => None,
         (true, Some(m)) => Some(m),
         (true, None) => {
@@ -248,7 +260,7 @@ pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
     }
     timings.measure_ms = t3.elapsed().as_secs_f64() * 1e3;
     timings.total_ms = t0.elapsed().as_secs_f64() * 1e3;
-    let physical = if built_all && ev.asm.is_none() {
+    let physical = if built_all && opts.checks && ev.asm.is_none() {
         props::part_physical(&mut ev, measure.as_ref().and_then(|m| m.mass.as_ref()))
     } else {
         None
@@ -271,6 +283,7 @@ pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
         observed: std::mem::take(&mut ev.observed),
         sheets: sheet::outputs(&ev),
         thermos: std::mem::take(&mut ev.thermos),
+        threads: std::mem::take(&mut ev.threads),
         asm: asm_out,
         anchors: None,
         props: std::mem::take(&mut ev.props),

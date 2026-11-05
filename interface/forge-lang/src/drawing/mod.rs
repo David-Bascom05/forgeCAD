@@ -22,6 +22,8 @@ pub struct Model {
     pub files: Vec<String>,
     /// The assembly's grounded top-level instances.
     pub grounded: Vec<String>,
+    /// Each body's threads drawn by convention, in its frame (`Options::cosmetic_threads`).
+    pub threads: Vec<Arc<Vec<crate::holes::Cosmetic>>>,
 }
 
 impl Model {
@@ -34,6 +36,7 @@ impl Model {
                 paths: vec![String::new()],
                 files: vec![String::new()],
                 grounded: vec![],
+                threads: vec![Arc::new(run.threads.clone())],
             });
         }
         let a = run.asm.as_ref()?;
@@ -44,6 +47,8 @@ impl Model {
         for (k, (path, file, pose)) in a.occurrences.iter().enumerate() {
             if let Some(Some(p)) = a.occ_part.get(k) {
                 m.bodies.push((a.parts[*p].clone(), *pose));
+                m.threads
+                    .push(a.part_threads.get(*p).cloned().unwrap_or_default());
                 m.paths.push(path.clone());
                 m.files.push(file.clone());
             }

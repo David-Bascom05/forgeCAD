@@ -1144,7 +1144,7 @@ fn thermoform(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         };
         if let Some(Made { formed: f, prep }) = built {
             let spec = sized(&spec, &m, prep.t);
-            let st = walls.as_ref().map(|pr| {
+            let st = walls.as_ref().filter(|_| ev.checks).map(|pr| {
                 let key = format!("thermoform walls {key} {pr:?}");
                 let t0 = std::time::Instant::now();
                 let st = ev.b.memo(key, || Rc::new(ft::stretch(&f, &spec, pr)));

@@ -299,12 +299,18 @@ pub struct Eval<'s> {
     pub reads: BTreeSet<ParamKey>,
     /// Measure the part's volume after every feature.
     pub volumes: bool,
+    /// Run the slow checks (a thermoform's wall simulation); off, the shape alone.
+    pub checks: bool,
     /// Whether the built-in being called was given something unknown.
     pub poisoned: bool,
     /// The part's sheets (`sheet.rs`).
     pub sheets: crate::sheet::Sheets,
     /// The part's thermoforms (`thermo.rs`).
     pub thermos: Vec<crate::thermo::ThermoOut>,
+    /// Threads drawn as standards draw them (`Options::cosmetic_threads`): not modelled, only
+    /// recorded, so a drawing's hidden-line pass sees the plain envelope.
+    pub cosmetic_threads: bool,
+    pub threads: Vec<crate::holes::Cosmetic>,
     /// Where the files features read (fonts, imports) are found: the part file's directory.
     pub dir: Option<std::path::PathBuf>,
     /// An assembly document's instances, joints and checks (`asm.rs`); None in a part.
@@ -376,9 +382,12 @@ impl<'s> Eval<'s> {
             calls: 0,
             reads: BTreeSet::new(),
             volumes: false,
+            checks: true,
             poisoned: false,
             sheets: Default::default(),
             thermos: vec![],
+            cosmetic_threads: false,
+            threads: vec![],
             dir: None,
             asm: None,
             root: None,

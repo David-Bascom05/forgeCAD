@@ -215,12 +215,15 @@ fn load(id: &str, file: &str, dir: &Path) -> Result<ModelOut, String> {
     let src = std::fs::read_to_string(&path);
     crate::deps::read(&path, src.as_ref().ok().map(|s| s.as_bytes()));
     let src = src.map_err(|e| e.to_string())?;
-    // a drawing shows the model's shape: its overlap check and expects are its own report's
+    // a drawing shows the model's shape: its checks (overlap, expects) are its own report's
     let opts = crate::Options {
         build: true,
         render: true,
         overlap: false,
         expects: false,
+        checks: false,
+        // threads as the standards draw them: the envelope, and thin lines (`thread_lines`)
+        cosmetic_threads: true,
         dir: path.parent().map(Path::to_path_buf),
         ..crate::Options::default()
     };
@@ -444,10 +447,11 @@ impl Ctx {
                     && view.toward.get().z.abs() > 1e-9;
                 let hidden = def.hidden.unwrap_or(!iso);
                 let pieces = draw(&insts, &view, tangent, hidden);
+                let threads = thread_lines(mo, &insts, &view, hidden);
                 let s = def.scale.unwrap_or(1.0);
                 let (lo, hi) = bounds(&pieces, &[]);
                 let c = lo.lerp(hi, 0.5);
-                Some(self.out(
+                let mut v = self.out(
                     item,
                     def,
                     "base",
@@ -458,7 +462,9 @@ impl Ctx {
                     Place::new(def.at - c.to_vec() * s, s),
                     pieces,
                     insts,
-                ))
+                );
+                v.extra = threads;
+                Some(v)
             }
             ViewKind::Projected { parent } => {
                 let p = self.views.iter().find(|v| &v.id == parent)?.clone();
@@ -477,6 +483,7 @@ impl Ctx {
                 };
                 let hidden = def.hidden.unwrap_or(!diagonal);
                 let pieces = draw(&p.insts, &view, tangent, hidden);
+                let threads = thread_lines(&self.models[p.model].model, &p.insts, &view, hidden);
                 let s = def.scale.unwrap_or(p.scale);
                 let (lo, hi) = bounds(&pieces, &[]);
                 let c = lo.lerp(hi, 0.5);
@@ -489,7 +496,7 @@ impl Ctx {
                         o.x = p.place.o.x;
                     }
                 }
-                Some(self.out(
+                let mut v = self.out(
                     item,
                     def,
                     "projected",
@@ -500,7 +507,9 @@ impl Ctx {
                     Place::new(o, s),
                     pieces,
                     p.insts.clone(),
-                ))
+                );
+                v.extra = threads;
+                Some(v)
             }
             ViewKind::Section { parent, line } => {
                 let p = self.views.iter().find(|v| &v.id == parent)?.clone();
@@ -566,7 +575,7 @@ impl Ctx {
                 }
                 let hidden = def.hidden.unwrap_or(false);
                 let pieces = draw(&insts, &view, tangent, hidden);
-                let mut extra = Vec::new();
+                let mut extra = thread_lines(mo, &insts, &view, hidden);
                 let s = def.scale.unwrap_or(p.scale);
                 for (n, (i, fs)) in faces.iter().enumerate() {
                     let (b, pose, _) = &insts[*i];
@@ -865,6 +874,109 @@ fn draw(insts: &[(Arc<Body>, Frame, usize)], view: &View, tangent: bool, hidden:
         p.retain(|x| x.visible);
     }
     p
+}
+
+/// The threads of the bodies in a view drawn as ISO 6410 / ASME Y14.6 draw them, the parts
+/// themselves plain to the thread's envelope: across the axis, a thin line at the minor
+/// diameter of a screw (the major of a nut) and a thick line where the thread ends; along it,
+/// three quarters of a thin circle. Each line is seen or hidden among the parts as an edge is.
+fn thread_lines(
+    model: &Model,
+    insts: &[(Arc<Body>, Frame, usize)],
+    view: &View,
+    hidden: bool,
+) -> Vec<Stroke> {
+    const N: usize = 24;
+    let toward = view.toward.get();
+    let mut lines: Vec<Vec<Point3>> = Vec::new();
+    let mut pens: Vec<Pen> = Vec::new();
+    for (_, pose, occ) in insts {
+        let Some(ts) = model.threads.get(*occ) else {
+            continue;
+        };
+        for t in ts.iter() {
+            let at = pose.compose(&t.at);
+            let (o, z) = (at.origin, at.z().get());
+            let (big, small) = (t.major, t.minor);
+            // off the surface toward the eye by a hair, so a line on a face is not hidden by it
+            let lift = toward * (1e-6 * big.max(1.0));
+            let across = toward - z * z.dot(toward);
+            match across.normalize() {
+                Some(n) if across.length() > 0.2 => {
+                    let (n, u) = (n.get(), z.cross(n.get()));
+                    // the thin line: on the screw's near face, or the nut's bore wall at mid depth
+                    let (r, front) = if t.internal {
+                        (big, 0.0)
+                    } else {
+                        (small, (big * big - small * small).max(0.0).sqrt())
+                    };
+                    for side in [-1.0, 1.0] {
+                        lines.push(
+                            (0..=N)
+                                .map(|k| {
+                                    o + z * (t.length * k as f64 / N as f64)
+                                        + u * (side * r)
+                                        + n * front
+                                        + lift
+                                })
+                                .collect(),
+                        );
+                        pens.push(Pen::Thin);
+                    }
+                    // the thread's end, across its major diameter
+                    let end = o + z * t.length;
+                    lines.push(
+                        (0..=N)
+                            .map(|k| {
+                                let s = big * (2.0 * k as f64 / N as f64 - 1.0);
+                                let h = if t.internal {
+                                    0.0
+                                } else {
+                                    (big * big - s * s).max(0.0).sqrt()
+                                };
+                                end + u * s + n * h + lift
+                            })
+                            .collect(),
+                    );
+                    pens.push(Pen::Visible);
+                }
+                _ => {
+                    // seen end on: the end nearer the eye, three quarters of the circle
+                    let c = if z.dot(toward) < 0.0 { o } else { o + z * t.length };
+                    let r = if t.internal { big } else { small };
+                    let (u, v) = (view.right.get(), view.up.get());
+                    lines.push(
+                        (0..=3 * N)
+                            .map(|k| {
+                                let a = dmath::FRAC_PI_2 * k as f64 / N as f64;
+                                let (sn, cs) = dmath::sin_cos(a);
+                                c + u * (r * cs) + v * (r * sn) + lift
+                            })
+                            .collect(),
+                    );
+                    pens.push(Pen::Thin);
+                }
+            }
+        }
+    }
+    let is: Vec<Instance> = insts
+        .iter()
+        .map(|(b, pose, _)| Instance { body: b, pose: *pose })
+        .collect();
+    let mut out = Vec::new();
+    for (runs, pen) in forge_draw::seen_runs(&is, view, &lines).into_iter().zip(pens) {
+        for (geom, seen) in runs {
+            match (seen, hidden) {
+                (true, _) => out.push(Stroke { pen, geom }),
+                (false, true) => out.push(Stroke {
+                    pen: Pen::Hidden,
+                    geom,
+                }),
+                (false, false) => {}
+            }
+        }
+    }
+    out
 }
 
 /// What a reference is on a view: a point, a line, or a circle (centre and radius in model mm).

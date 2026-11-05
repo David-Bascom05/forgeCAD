@@ -16,6 +16,6 @@ pub mod svg;
 pub mod view;
 
 pub use geom2::{Geom2, Place};
-pub use hlr::{Class, Instance, Options, Piece, Source, hlr};
+pub use hlr::{Class, Instance, Options, Piece, Source, hlr, seen_runs};
 pub use page::{Align, Page, Pen, Stroke, Text};
 pub use view::View;

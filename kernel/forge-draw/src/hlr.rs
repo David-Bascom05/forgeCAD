@@ -913,6 +913,30 @@ pub fn hlr(insts: &[Instance], view: &View, opts: &Options) -> Vec<Piece> {
     out
 }
 
+/// Lines drawn by convention among the parts (a thread's minor diameter, its end): each polyline,
+/// in model space, as its runs seen (true) and hidden on the view.
+pub fn seen_runs(insts: &[Instance], view: &View, lines: &[Vec<Point3>]) -> Vec<Vec<(Geom2, bool)>> {
+    if lines.is_empty() {
+        return vec![];
+    }
+    let scene = Scene::new(insts, *view);
+    forge_math::par::map(lines.len(), |k| {
+        if lines[k].len() < 2 {
+            return vec![];
+        }
+        let path = Path3::Poly(lines[k].clone());
+        let (a, b) = path.range();
+        visibility(&scene, &path, a, b)
+            .into_iter()
+            .map(|(x, y, vis)| {
+                let p = path.sub(x, y);
+                let (a, b) = p.range();
+                (p.geom(view, a, b), vis)
+            })
+            .collect()
+    })
+}
+
 /// Adds a curve, split where it turns back on the view (a circle seen edge-on is drawn there and
 /// back on one line) and left out if it is only a point on the view.
 fn push_curve(curves: &mut Vec<Curve3>, view: &View, inst: usize, source: Source, class: Class, path: Path3) {

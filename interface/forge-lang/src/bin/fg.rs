@@ -13,7 +13,7 @@ fg run DRAWING.fg [--pdf OUT] [--dxf OUT] [--svg OUT] [--refs VIEW]   a drawing:
 fg check FILE [--json]          parse, static rules, types and dimensions; no kernel
 fg edit FILE 'OP' [--json]      apply a typed op (JSON, as errors' fixes give them), then check
 fg handles FILE                 the editable handles: every param, its value and dimension
-fg serve                        JSON lines on stdin: {\"cmd\":\"run\"|\"check\",\"file\":F}; stages kept per file
+fg serve                        JSON lines on stdin: {\"cmd\":\"run\"|\"check\",\"file\":F[,\"checks\":false]}; stages kept per file
 fg reference                    the language reference
 fg view FILE [--view front,top,..] [--tangent] [--chord MM] [--pdf OUT] [--svg OUT] [--points]
                                 a part's or assembly's exact hidden-line views: lengths by class (JSON), pages
@@ -434,9 +434,14 @@ fn main() -> ExitCode {
                     }
                 };
                 let cache = caches.remove(&file).unwrap_or_default();
+                // `"checks": false`: the shape alone, as a UI shows it before the checks
+                let checks = !matches!(req.get("checks"), Some(Json::Bool(false)));
                 let opts = Options {
                     build: cmd != "check",
                     dir: dir_of(&file),
+                    checks,
+                    overlap: checks,
+                    expects: checks,
                     ..Options::default()
                 };
                 let (run, cache) = forge_lang::run(&src, opts, cache);

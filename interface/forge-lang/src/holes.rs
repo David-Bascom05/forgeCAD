@@ -400,9 +400,35 @@ pub fn thread(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         chamfer: a.flag("chamfer")?,
         runout: a.flag("runout")?,
     };
-    let f = crate::bodies::wrap_in(ev, &a, Feature::Thread(Box::new(t)))?;
+    // a drawing's thread: the envelope stays plain, the thread is recorded for its lines
+    let kernel = match (ev.cosmetic_threads, t.on, t.length) {
+        (true, ThreadOn::Axis { at, spec, internal }, ThreadLength::Distance(length)) => {
+            let (major, pitch) = (spec.major(), spec.pitch());
+            ev.threads.push(Cosmetic {
+                at,
+                major: major / 2.0,
+                minor: major / 2.0 - 5.0 / 16.0 * 3f64.sqrt() * pitch,
+                length,
+                internal,
+            });
+            Feature::Plane(at)
+        }
+        _ => Feature::Thread(Box::new(t)),
+    };
+    let f = crate::bodies::wrap_in(ev, &a, kernel)?;
     let (idx, hid) = ev.push_feature(&id, "thread", f, span, dims)?;
     Ok(feat(id, "thread", idx, hid, None))
+}
+
+/// A thread a drawing draws by convention (ISO 6410, ASME Y14.6): from `at`'s origin along its
+/// z for `length`, between the radii, outside a rod (`internal` false) or inside a bore.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Cosmetic {
+    pub at: forge_math::Frame,
+    pub major: f64,
+    pub minor: f64,
+    pub length: f64,
+    pub internal: bool,
 }
 
 /// The kernel feature a statement made, through any `bodies:` wrapper.
