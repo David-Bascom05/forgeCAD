@@ -188,6 +188,53 @@ fold = true
 how = "arc length from the clamp (data folded about its midpoint), x axis"
 
 [[case]]
+id = "atmani2020_plugonly_dry130_plug"
+model = "atmani2020_plugonly_cavity.fg"
+data = "s2_atmani2020_plugonly_thickness.csv"
+mode = "arc"
+s_col = "s_mm"
+t_col = "t_130C_dry_mm"
+t0 = 1.1
+cut_deg = 0
+axisym = true
+fold_about = 85.0
+plug = [21, 90, 10, 20, 55]
+how = "arc length from the centre (data folded about s = 85), a plug driven in"
+cause = "plug: sticking on the plug; stroke assumed"
+
+[[case]]
+id = "atmani2020_plugonly_lub130_plug"
+model = "atmani2020_plugonly_cavity.fg"
+data = "s2_atmani2020_plugonly_thickness.csv"
+mode = "arc"
+s_col = "s_mm"
+t_col = "t_130C_lub_mm"
+t0 = 1.1
+cut_deg = 0
+axisym = true
+fold_about = 90.0
+plug = [21, 90, 10, 20, 55]
+plug_slip = true
+how = "arc length from the centre (data folded about s = 90), a lubricated plug"
+cause = "plug: sliding on the plug; stroke assumed"
+
+[[case]]
+id = "atmani2020_plugonly_lub120_plug"
+model = "atmani2020_plugonly_cavity.fg"
+data = "s2_atmani2020_plugonly_thickness.csv"
+mode = "arc"
+s_col = "s_mm"
+t_col = "t_120C_lub_mm"
+t0 = 1.1
+cut_deg = 0
+axisym = true
+fold_about = 90.0
+plug = [21, 90, 10, 20, 55]
+plug_slip = true
+how = "arc length from the centre (data folded about s = 90), a lubricated plug, the 130 C law"
+cause = "plug + temperature: 120 C run with the 130 C law"
+
+[[case]]
 id = "atmani2020_cup"
 cause = "missing plug model (89% of the depth drawn by the plug); 0.5 MPa blows through on the coarse mesh"
 model = "atmani2020_cup.fg"
@@ -202,6 +249,21 @@ fold_about = 100.0
 how = "arc length from bottom centre (data folded about s = 100)"
 
 [[case]]
+id = "atmani2020_cup_plug"
+cause = "plug then air; cup diameter derived"
+model = "atmani2020_cup.fg"
+data = "s2_atmani2020_cup_thickness.csv"
+mode = "arc"
+s_col = "s_mm"
+t_col = "t_exp_mm"
+t0 = 1.1
+cut_deg = 0
+axisym = true
+fold_about = 100.0
+how = "arc length from bottom centre (data folded about s = 100)"
+plug = [21, 90, 10, 20, 80]
+
+[[case]]
 id = "varedi2024_hemisphere"
 cause = "sticking vs slip on the 80 C mould + temperature non-uniformity (140/131 C); pre-contact sag"
 model = "varedi2024_hemisphere.fg"
@@ -214,6 +276,24 @@ t0 = 3.0
 cut_deg = 90
 axisym = true
 how = "horizontal distance from the axis along y"
+
+[[case]]
+id = "varedi2024_hemisphere_heat"
+cause = "uneven sheet temperature (Fig. 6b profile, ABS WLF, flow regime)"
+model = "varedi2024_hemisphere.fg"
+data = "s3_varedi2024_thickness_fig13.csv"
+filter = "method=ultrasonic"
+mode = "radial"
+s_col = "y_mm"
+t_col = "t_mm"
+t0 = 3.0
+cut_deg = 90
+axisym = true
+how = "horizontal distance from the axis along y"
+heat_profile = [0, 140, 15, 139.4, 45, 137.9, 75, 135.9, 105, 133.1, 135, 130.8, 165, 127.3]
+heat_wlf = [170, 5.8, 120.8]
+heat_temp = 140
+heat_power = 1
 
 [[case]]
 id = "buntinx2014_tray25"

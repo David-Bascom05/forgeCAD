@@ -122,6 +122,13 @@ fn configure(p: &mut Process, cfg: &str, _mu: f64) -> bool {
     })
 }
 
+/// What the case itself asks of the solver past the model: a plug (`plug = [radius, nose, edge,
+/// start, stroke]`, `plug_slip`) or an uneven sheet temperature (`heat_profile = [r, T, ..]`,
+/// `heat_wlf = [tref, c1, c2]`, `heat_temp`, `heat_power`). A solver without them: false ("n/a").
+fn case_options(_p: &mut Process, c: &Case) -> bool {
+    !c.contains_key("plug") && !c.contains_key("heat_profile")
+}
+
 /// The sheet's nodes at the start (the grid), from the first step.
 fn start(st: &Stretch) -> Vec<[f64; 3]> {
     st.steps[0]
@@ -647,7 +654,7 @@ fn scoreboard() {
                 let (sc, st_label) = match th.and_then(|t| Some((t, t.process.clone()?))) {
                     None => (None, "build error"),
                     Some((t, mut p)) => {
-                        if !configure(&mut p, opt, mu) {
+                        if !configure(&mut p, opt, mu) || !case_options(&mut p, c) {
                             (None, "n/a")
                         } else {
                             let fresh;

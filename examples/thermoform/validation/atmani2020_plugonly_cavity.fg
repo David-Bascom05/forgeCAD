@@ -1,0 +1,9 @@
+# Atmani et al. 2020, Mechanics & Industry 21:607: HIPS 1.1 mm plug-only test on a 90 mm round window.
+# The window is the rim of a deep round cavity (never reached); the plug is the solver's (cases.toml
+# `plug`). Notes: atmani2020_plugonly_cavity.notes.md.
+sketch plan(on: xy) {
+  rim = circle((0, 0), 45)
+}
+cav = extrude(plan, -150)
+floor = fillet(edges(of: cav.end), 5)
+part = thermoform(cav, t: 1.1, material: "HIPS", tool: "female", flange: 45, margin: 10, shrink: ratio(0), vent: false, temperature: 130, pressure: ratio(0.000001))
