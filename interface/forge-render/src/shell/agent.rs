@@ -423,6 +423,15 @@ fn strip_cd(c: &str) -> &str {
 
 /// A tool call as its row reads, and what it was given in full.
 pub fn tool_summary(name: &str, input: &Json) -> (String, String) {
+    let name = name
+        .strip_prefix("mcp__forgecad__")
+        .or_else(|| name.strip_prefix("app_"))
+        .unwrap_or(name);
+    let list = |k: &str| match input.get(k) {
+        Some(Json::Arr(a)) => a.iter().filter_map(Json::str).collect::<Vec<_>>().join(", "),
+        _ => String::new(),
+    };
+    let on = |k: &str| input.get(k) == Some(&Json::Bool(true));
     let whole = || {
         let mut t = String::new();
         input.write(&mut t);
@@ -480,6 +489,35 @@ pub fn tool_summary(name: &str, input: &Json) -> (String, String) {
         "run_check" => ("Built and checked the part".into(), String::new()),
         "create_file" => (format!("Made {}", s(input, "name")), s(input, "text").to_string()),
         "TodoWrite" => ("Updated its plan".into(), whole()),
+        "tree" => ("Looked at the browser".into(), whole()),
+        "set_visibility" => (
+            format!(
+                "{} {}",
+                if on("visible") { "Showed" } else { "Hid" },
+                one_line(&list("ids"), 50)
+            ),
+            whole(),
+        ),
+        "isolate" => (format!("Isolated {}", s(input, "id")), whole()),
+        "show_all" => ("Showed everything".into(), whole()),
+        "select" => (format!("Selected {}", s(input, "id")), whole()),
+        "set_view" => (format!("Turned the view to {}", s(input, "view")), whole()),
+        "drive_joint" => (
+            format!(
+                "Moved {} to {} for a look",
+                s(input, "joint"),
+                input.get("value").map(|v| v.to_string()).unwrap_or_default()
+            ),
+            whole(),
+        ),
+        "return_to_design" => ("Put the joints back".into(), whole()),
+        "keep_position" => ("Kept the position in the file".into(), whole()),
+        "screenshot" => ("Looked at the view".into(), whole()),
+        "undo_view" => ("Took back its last view step".into(), whole()),
+        "fg_run" | "fg_check" => (format!("Built and checked {}", s(input, "file")), whole()),
+        "fg_edit" => (format!("Applied an edit to {}", s(input, "file")), whole()),
+        "fg_handles" => (format!("Listed the parameters of {}", s(input, "file")), whole()),
+        "fg_reference" => ("Read the Forge reference".into(), whole()),
         _ => (name.to_string(), whole()),
     }
 }
@@ -612,7 +650,7 @@ impl Shell {
 
     /// The selection as the agent names it: the face picked in the view, a browser row, an
     /// assembly's occurrence.
-    pub(super) fn agent_selection(&self) -> Option<String> {
+    pub fn agent_selection(&self) -> Option<String> {
         if let Some(d) = &self.drawing {
             return d.selected.clone();
         }

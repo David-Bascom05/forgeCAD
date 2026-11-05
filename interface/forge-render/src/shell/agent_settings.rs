@@ -78,13 +78,14 @@ impl AgentSettings {
             Kind::ClaudeCode => "claude-code",
             Kind::OpenAi => "openai",
         };
+        let trusted: Vec<String> = self.trusted.iter().map(|t| quote(t)).collect();
         format!(
-            "backend = {}\nclaude_model = {}\nbase_url = {}\nmodel = {}\ntrusted = {}\n",
+            "backend = {}\nclaude_model = {}\nbase_url = {}\nmodel = {}\ntrusted = [{}]\n",
             quote(kind),
             quote(&self.claude_model),
             quote(&self.base_url),
             quote(&self.model),
-            quote(&self.trusted.join("\n"))
+            trusted.join(", ")
         )
     }
 
@@ -107,7 +108,7 @@ impl AgentSettings {
                 "claude_model" => s.claude_model = v,
                 "base_url" => s.base_url = v,
                 "model" => s.model = v,
-                "trusted" => s.trusted = v.lines().filter(|l| !l.is_empty()).map(str::to_string).collect(),
+                "trusted" => s.trusted = strings(line.split_once('=').map_or("", |x| x.1)),
                 _ => {}
             }
         }
@@ -118,6 +119,38 @@ impl AgentSettings {
 pub fn host_of(url: &str) -> String {
     let rest = url.split_once("://").map_or(url, |x| x.1);
     rest.split('/').next().unwrap_or(rest).to_string()
+}
+
+/// A folder fit to trust: absolute, no control characters (a newline would be a second entry).
+pub fn trustable(dir: &str) -> bool {
+    dir.starts_with('/') && !dir.chars().any(char::is_control)
+}
+
+/// A TOML array of strings: each quoted one, the untrustable left out.
+fn strings(v: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut it = v.trim().trim_start_matches('[').chars().peekable();
+    while let Some(c) = it.next() {
+        if c != '"' {
+            continue;
+        }
+        let mut s = String::new();
+        while let Some(c) = it.next() {
+            match c {
+                '"' => break,
+                '\\' => match it.next() {
+                    Some('n') => s.push('\n'),
+                    Some(c) => s.push(c),
+                    None => {}
+                },
+                c => s.push(c),
+            }
+        }
+        if trustable(&s) {
+            out.push(s);
+        }
+    }
+    out
 }
 
 fn quote(s: &str) -> String {
@@ -247,11 +280,18 @@ mod tests {
             claude_model: "opus".into(),
             base_url: "http://node1:8080/v1".into(),
             model: "qwen \"3.6\"".into(),
-            trusted: vec!["/mnt/usb/parts".into(), "/tmp/x y".into()],
+            trusted: vec!["/mnt/usb/parts".into(), "/tmp/x, \"y\"".into()],
         };
         assert_eq!(AgentSettings::from_toml(&s.to_toml()), s);
         assert_eq!(s.label(), "node1:8080 · qwen \"3.6\"");
         assert_eq!(AgentSettings::from_toml(""), AgentSettings::default());
         assert!(!s.to_toml().contains("key"));
+        // a newline can't make a second entry: an untrustable path is dropped on reading
+        let sneaky = AgentSettings {
+            trusted: vec!["/ok".into(), "/a\n/etc".into()],
+            ..AgentSettings::default()
+        };
+        assert_eq!(AgentSettings::from_toml(&sneaky.to_toml()).trusted, ["/ok"]);
+        assert!(!trustable("/a\nb") && !trustable("rel") && trustable("/home/x y"));
     }
 }

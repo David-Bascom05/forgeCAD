@@ -160,3 +160,73 @@ pub fn check(text: &str, file: &Path) -> String {
     let (run, _) = forge_lang::run(text, opts, Default::default());
     forge_lang::report::text(&run, text)
 }
+
+/// A file name the agent gave, as a file in `dir`: plain names (and sub-folders) only, no `..`,
+/// no absolute path, a `.fg`, and still in `dir` once links are followed.
+pub fn in_folder(dir: &Path, name: &str) -> Result<std::path::PathBuf, String> {
+    let p = Path::new(name);
+    let plain = !name.is_empty()
+        && !name.starts_with('-')
+        && p.components()
+            .all(|c| matches!(c, std::path::Component::Normal(_)))
+        && name.ends_with(".fg");
+    if !plain {
+        return Err(format!(
+            "`{name}` isn't a .fg file name in the folder (no `..`, no absolute path, no flags)"
+        ));
+    }
+    let root = std::fs::canonicalize(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    let full = std::fs::canonicalize(root.join(p)).map_err(|e| format!("{name}: {e}"))?;
+    if !full.starts_with(&root) {
+        return Err(format!("`{name}` leads out of the folder"));
+    }
+    Ok(full)
+}
+
+/// The fg CLI's work, in the app: run, check, edit, handles, reference, each on a file named in
+/// the open document's folder. Its answer and whether it failed.
+pub fn fg_call(name: &str, args: &Json, dir: &Path) -> (String, bool) {
+    if name == "fg_reference" {
+        return (forge_lang::REFERENCE.to_string(), false);
+    }
+    let got = (|| {
+        let f = in_folder(dir, args.get("file").and_then(Json::str).unwrap_or(""))?;
+        let text = std::fs::read_to_string(&f).map_err(|e| format!("{}: {e}", f.display()))?;
+        match name {
+            "fg_run" => Ok(check(&text, &f)),
+            "fg_check" => {
+                let opts = forge_lang::Options {
+                    build: false,
+                    dir: f.parent().map(|d| d.to_path_buf()),
+                    ..forge_lang::Options::default()
+                };
+                let (run, _) = forge_lang::run(&text, opts, Default::default());
+                Ok(forge_lang::report::text(&run, &text))
+            }
+            "fg_handles" => Ok(forge_lang::edit::handles(&text)
+                .into_iter()
+                .map(|(k, l)| format!("{k} = {}  ({})\n", l.text(), l.dim.name()))
+                .collect()),
+            "fg_edit" => {
+                let op = args.get("op").ok_or("fg_edit takes `op`")?;
+                let op = match op {
+                    Json::Str(s) => Json::parse(s).map_err(|e| format!("op: {e}"))?,
+                    o => o.clone(),
+                };
+                let op = Op::from_json(&op).ok_or("not a Forge edit op")?;
+                let (new, _) = forge_lang::edit::apply_checked(&text, &op).map_err(|e| {
+                    let mut s = String::from("refused: ");
+                    e.json(&text).write(&mut s);
+                    s
+                })?;
+                std::fs::write(&f, &new).map_err(|e| format!("{}: {e}", f.display()))?;
+                Ok(format!("Applied.\n{}", check(&new, &f)))
+            }
+            other => Err(format!("no tool `{other}`")),
+        }
+    })();
+    match got {
+        Ok(s) => (s, false),
+        Err(e) => (e, true),
+    }
+}

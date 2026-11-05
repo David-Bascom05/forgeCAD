@@ -415,6 +415,16 @@ fn wait(h: &mut Headless) {
 }
 
 fn main() {
+    // Claude Code's way to the app's own tools: stdio to this app's socket
+    let argv: Vec<String> = std::env::args().collect();
+    if argv.get(1).map(String::as_str) == Some("--mcp-bridge") {
+        let r = forge_render::agent::mcp::bridge(argv.get(2).map_or("", String::as_str));
+        if let Err(e) = r {
+            eprintln!("forge-app --mcp-bridge: {e}");
+            std::process::exit(1);
+        }
+        return;
+    }
     if let Err(e) = run() {
         eprintln!("{e}");
         std::process::exit(1);

@@ -1163,6 +1163,11 @@ impl AsmPanel {
         self.sync();
     }
 
+    /// What's hidden, isolated and selected: the view's state, for a look at it.
+    pub fn clone_view(&self) -> (HashSet<String>, Option<String>, Option<String>) {
+        (self.hidden.clone(), self.isolated.clone(), self.selected.clone())
+    }
+
     pub fn show_all(&mut self) {
         self.hidden.clear();
         self.isolated = None;

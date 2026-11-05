@@ -21,6 +21,8 @@ pub struct Config {
     pub system: String,
     /// A key given outright (tests); else the keyring's for the URL.
     pub key: Option<String>,
+    /// The app's own tools (`app_*`), when the app's there.
+    pub apps: Option<super::apptools::AppTools>,
 }
 
 pub struct OpenAi {
@@ -194,7 +196,16 @@ fn turn(cfg: &Config, out: &Out, history: &Mutex<Vec<Json>>, stop: &AtomicBool) 
         let body = Json::obj(vec![
             ("model", cfg.model.trim().into()),
             ("messages", Json::Arr(messages)),
-            ("tools", tools::specs()),
+            ("tools", {
+                let mut t = match tools::specs() {
+                    Json::Arr(a) => a,
+                    _ => vec![],
+                };
+                if cfg.apps.is_some() {
+                    t.extend(super::apptools::openai_specs());
+                }
+                Json::Arr(t)
+            }),
             ("stream", true.into()),
         ])
         .to_string();
@@ -345,8 +356,13 @@ fn turn(cfg: &Config, out: &Out, history: &Mutex<Vec<Json>>, stop: &AtomicBool) 
                 summary,
                 input,
             });
+            let mut picture = None;
             let (text, error) = if args == Json::Null {
                 (format!("the arguments aren't JSON: {args_text}"), true)
+            } else if let (Some(app), Some(t)) = (&cfg.apps, name.strip_prefix("app_")) {
+                let r = app.call(t, args.clone());
+                picture = r.png;
+                (r.text, r.error)
             } else {
                 tools::call(&name, &args, &cfg.file)
             };
@@ -363,6 +379,23 @@ fn turn(cfg: &Config, out: &Out, history: &Mutex<Vec<Json>>, stop: &AtomicBool) 
                 ("tool_call_id", id.into()),
                 ("content", text.into()),
             ]));
+            // a picture comes as the person's message after it: tool messages hold text only
+            if let Some(png) = picture {
+                let url = format!("data:image/png;base64,{}", super::apptools::base64(&png));
+                history.lock().expect("no panics while held").push(Json::obj(vec![
+                    ("role", "user".into()),
+                    (
+                        "content",
+                        Json::Arr(vec![
+                            Json::obj(vec![("type", "text".into()), ("text", "The screenshot:".into())]),
+                            Json::obj(vec![
+                                ("type", "image_url".into()),
+                                ("image_url", Json::obj(vec![("url", url.into())])),
+                            ]),
+                        ]),
+                    ),
+                ]));
+            }
             if stop.load(Ordering::SeqCst) {
                 return stopped;
             }

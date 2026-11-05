@@ -5,7 +5,7 @@
 use super::Gui;
 use crate::agent::claude::{self, ClaudeCode};
 use crate::agent::openai::{self, OpenAi};
-use crate::agent::{Backend, Doc, Out, Turns, fg_cli, keys, system_prompt, trash_path};
+use crate::agent::{Backend, Doc, Out, Turns, keys, system_prompt, trash_path};
 use crate::shell::agent::{AgentAct, Entry, Event, counts, prompt, undo_label};
 use crate::shell::agent_settings::{AgentSettings, Kind, SettingsAct, missing};
 use std::path::{Path, PathBuf};
@@ -29,6 +29,12 @@ pub struct AgentHost {
     pub cwd: Option<PathBuf>,
     /// `agent.toml`, unless a test says otherwise.
     pub settings_file: Option<PathBuf>,
+    /// The app tools' calls, to the frame's thread; the way to them, for the backends.
+    pub app_rx: Option<Receiver<crate::agent::apptools::AppCall>>,
+    app_tools: Option<crate::agent::apptools::AppTools>,
+    /// Claude Code's MCP server: this app's socket and the `forge-app` that bridges to it.
+    mcp: Option<String>,
+    pub mcp_exe: Option<PathBuf>,
 }
 
 fn settings_path() -> Option<PathBuf> {
@@ -279,7 +285,15 @@ impl Gui {
                 AgentAct::Trust { dir, yes } => {
                     self.shell.agent.trust_ask = None;
                     let pending = self.shell.agent.pending.take();
-                    if yes {
+                    if yes && !crate::shell::agent_settings::trustable(&dir) {
+                        self.shell.agent.take(Event::Done {
+                            error: Some(
+                                "Not sent: that folder's path can't be trusted (it has control characters)"
+                                    .into(),
+                            ),
+                            stopped: false,
+                        });
+                    } else if yes {
                         self.shell.agent.settings.trusted.push(dir);
                         self.agent_save_settings();
                         if let Some((text, refs)) = pending {
@@ -425,6 +439,9 @@ impl Gui {
                 b.set_file(Path::new(&path));
             }
         }
+        if let (Some(t), Some(d)) = (&self.agent.app_tools, Path::new(&path).parent()) {
+            t.set_dir(d);
+        }
         if let Some(b) = &mut self.agent.backend {
             b.send(msg);
         }
@@ -437,8 +454,31 @@ impl Gui {
             tx,
             wake: self.waker.clone(),
         };
-        let fg = fg_cli();
-        let system = system_prompt(file, fg.as_deref());
+        let system = system_prompt(file);
+        if self.agent.app_tools.is_none() {
+            let (tools, rx) = crate::agent::apptools::AppTools::new(self.waker.clone());
+            self.agent.app_rx = Some(rx);
+            // Claude Code reaches them through `forge-app --mcp-bridge`, so only from the app itself
+            let exe = self.agent.mcp_exe.clone().or_else(|| {
+                std::env::current_exe()
+                    .ok()
+                    .filter(|e| e.file_name().is_some_and(|n| n == "forge-app"))
+            });
+            if let Some(exe) = exe {
+                let sock = crate::agent::mcp::socket_path();
+                match crate::agent::mcp::serve(&sock, tools.clone()) {
+                    Ok(()) => self.agent.mcp = Some(crate::agent::mcp::config(&exe, &sock)),
+                    Err(e) => self.shell.agent.take(Event::Note {
+                        text: format!(
+                            "The app's own tools aren't there for the agent: {}: {e}",
+                            sock.display()
+                        ),
+                        error: true,
+                    }),
+                }
+            }
+            self.agent.app_tools = Some(tools);
+        }
         self.agent.backend = Some(match s.kind {
             Kind::ClaudeCode => {
                 let c = ClaudeCode::new(
@@ -447,8 +487,8 @@ impl Gui {
                         model: s.claude_model.clone(),
                         file: file.to_path_buf(),
                         system,
-                        fg,
                         cwd: self.agent.cwd.clone().unwrap_or_else(claude::clean_cwd),
+                        mcp: self.agent.mcp.clone(),
                     },
                     out,
                     session,
@@ -463,6 +503,7 @@ impl Gui {
                     file: file.to_path_buf(),
                     system,
                     key: None,
+                    apps: self.agent.app_tools.clone(),
                 },
                 out,
             )),
@@ -483,6 +524,9 @@ fn doc<'a>(
 
 /// A folder the agent may work in without asking: under ~/projects, or trusted once.
 pub fn trusted(dir: &str, trusted: &[String]) -> bool {
+    if !crate::shell::agent_settings::trustable(dir) {
+        return false;
+    }
     let home = std::env::var("HOME").unwrap_or_default();
     let projects = format!("{home}/projects/");
     (!home.is_empty() && format!("{dir}/").starts_with(&projects)) || trusted.iter().any(|t| t == dir)

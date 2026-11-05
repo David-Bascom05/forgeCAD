@@ -184,10 +184,10 @@ pub struct Config {
     pub model: String,
     pub file: PathBuf,
     pub system: String,
-    /// The `fg` CLI: the one command its Bash may run.
-    pub fg: Option<PathBuf>,
     /// Where it runs: a folder of ForgeCAD's own, never the part's.
     pub cwd: PathBuf,
+    /// The `--mcp-config` of the app's own tools; none: no MCP server at all.
+    pub mcp: Option<String>,
 }
 
 /// Where Claude Code runs: empty and ForgeCAD's, so a downloaded project's `.claude/`,
@@ -228,8 +228,8 @@ impl ClaudeCode {
     }
 
     /// The command line, as run. Only David's user settings load (no project or local
-    /// settings, so no project hooks), no MCP servers, four tools, and in `dontAsk` mode only
-    /// what's allowed here runs: the folder's files, and the `fg` CLI on the open file.
+    /// settings, so no project hooks), only ForgeCAD's MCP server, no Bash, and in `dontAsk`
+    /// mode only what's allowed here runs: the folder's files, and the app's tools (fg among them).
     pub fn args(&self) -> Vec<String> {
         let dir = self
             .cfg
@@ -248,29 +248,30 @@ impl ClaudeCode {
             "--setting-sources",
             "user",
             "--strict-mcp-config",
-            "--mcp-config",
-            r#"{"mcpServers":{}}"#,
             "--permission-mode",
             "dontAsk",
             "--tools",
-            "Read,Edit,Write,Bash",
+            "Read,Edit,Write",
             "--add-dir",
         ]
         .iter()
         .map(|s| s.to_string())
         .collect();
         a.push(dir.clone());
+        a.push("--mcp-config".into());
+        a.push(
+            self.cfg
+                .mcp
+                .clone()
+                .unwrap_or_else(|| r#"{"mcpServers":{}}"#.into()),
+        );
         a.push("--allowedTools".into());
+        if self.cfg.mcp.is_some() {
+            a.push(format!("mcp__{}", super::mcp::SERVER));
+        }
         // `//` starts an absolute path in a permission rule
         for t in ["Read", "Edit", "Write"] {
             a.push(format!("{t}(/{dir}/**)"));
-        }
-        if let Some(fg) = &self.cfg.fg {
-            let fg = fg.display();
-            for cmd in ["run", "check", "handles", "edit"] {
-                a.push(format!("Bash({fg} {cmd} {dir}/*)"));
-            }
-            a.push(format!("Bash({fg} reference*)"));
         }
         a.push("--append-system-prompt".into());
         a.push(self.cfg.system.clone());

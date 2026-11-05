@@ -26,6 +26,8 @@ use winit::event::{ElementState, MouseButton, WindowEvent};
 
 #[path = "gui_agent.rs"]
 pub mod gui_agent;
+#[path = "gui_apptools.rs"]
+pub mod gui_apptools;
 #[path = "gui_asm.rs"]
 mod gui_asm;
 #[path = "gui_explode.rs"]
@@ -116,6 +118,8 @@ pub struct Gui {
     pub ctx: egui::Context,
     /// The Agent tab's backend and its turns (`gui_agent.rs`).
     pub agent: gui_agent::AgentHost,
+    /// The agent's app tools' view steps and driven joints (`gui_apptools.rs`).
+    pub apps: gui_apptools::AppHost,
     egui: egui_wgpu::Renderer,
     pub shell: Shell,
     device: wgpu::Device,
@@ -260,6 +264,7 @@ impl Gui {
         warm_shell.out.clear();
         Gui {
             agent: Default::default(),
+            apps: Default::default(),
             ctx,
             egui,
             shell: Shell::default(),
@@ -2186,6 +2191,7 @@ impl Gui {
         let host = self.apply();
         self.apply_fg();
         self.agent_acts();
+        self.app_calls();
         self.save_settings();
         self.inspect_tick();
         self.sheet_frame();

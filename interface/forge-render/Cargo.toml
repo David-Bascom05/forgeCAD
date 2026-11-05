@@ -45,6 +45,7 @@ forge-topo = { path = "../../kernel/forge-topo" }
 forge-sheet = { path = "../../kernel/forge-sheet" }
 forge-step = { path = "../../kernel/forge-step" }
 # the Agent tab's OpenAI-compatible endpoints, and their keys in the Secret Service
+png = "=0.18.1"
 ureq = { version = "=3.5.0", default-features = false, features = ["rustls"] }
 keyring-core = "=1.0.1"
 zbus-secret-service-keyring-store = { version = "=1.0.1", features = ["crypto-rust"] }

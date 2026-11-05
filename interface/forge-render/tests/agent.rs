@@ -204,6 +204,7 @@ fn an_openai_compatible_endpoint_edits_the_file_through_its_tools() {
             file: file.clone(),
             system: "You are a test.".into(),
             key: Some("sk-test".into()),
+            apps: None,
         },
         out,
     );
@@ -451,7 +452,10 @@ fn claude_code_runs_locked_down_outside_the_parts_folder() {
             model: "opus".into(),
             file: file.clone(),
             system: "s".into(),
-            fg: Some("/opt/fg".into()),
+            mcp: Some(forge_render::agent::mcp::config(
+                Path::new("/opt/forge-app"),
+                Path::new("/run/x.sock"),
+            )),
             cwd: dir.join("cwd"),
         },
         Out {
@@ -466,23 +470,26 @@ fn claude_code_runs_locked_down_outside_the_parts_folder() {
             .any(|w| w.iter().zip(pair).all(|(x, y)| x == y))
     };
     assert!(has(&["--setting-sources", "user"]));
+    assert!(has(&["--strict-mcp-config"]));
     assert!(has(&[
-        "--strict-mcp-config",
         "--mcp-config",
-        r#"{"mcpServers":{}}"#
+        r#"{"mcpServers":{"forgecad":{"type":"stdio","command":"/opt/forge-app","args":["--mcp-bridge","/run/x.sock"]}}}"#
     ]));
     assert!(has(&["--permission-mode", "dontAsk"]));
-    assert!(has(&["--tools", "Read,Edit,Write,Bash"]));
+    assert!(has(&["--tools", "Read,Edit,Write"]));
     assert!(has(&["--add-dir", dir.to_str().unwrap()]));
     assert!(has(&["--model", "opus"]) && has(&["--resume", "sess"]));
     let d = dir.display();
-    assert!(a.contains(&format!("Edit(/{d}/**)")));
-    assert!(a.contains(&format!("Bash(/opt/fg run {d}/*)")));
-    assert!(a.contains(&format!("Bash(/opt/fg edit {d}/*)")));
+    assert!(a.contains(&format!("Edit(/{d}/**)")) && a.contains(&"mcp__forgecad".to_string()));
+    // no shell at all: the fg work is the app's tools
     assert!(
         !a.iter()
-            .any(|x| x == "Bash" || x.starts_with("Bash(*") || x.contains("bypassPermissions"))
+            .any(|x| x.contains("Bash") || x.contains("bypassPermissions"))
     );
+    assert!(!forge_render::gui::gui_agent::trusted(
+        "/mnt/a\n/etc",
+        &["/mnt/a\n/etc".into()]
+    ));
     assert!(forge_render::gui::gui_agent::trusted(
         &format!("{}/projects/x", std::env::var("HOME").unwrap()),
         &[]
@@ -526,6 +533,7 @@ fn hostile_folder(dir: &Path) {
 #[ignore = "a real Claude Code call: run by hand, signed in"]
 fn a_hostile_folders_hooks_mcp_and_bash_never_run() {
     let dir = scratch("hostile");
+    let out = scratch("hostile-outside");
     hostile_folder(&dir);
     let file = dir.join("plate.fg");
     let (tx, rx) = channel();
@@ -534,8 +542,8 @@ fn a_hostile_folders_hooks_mcp_and_bash_never_run() {
             program: "claude".into(),
             model: "haiku".into(),
             file: file.clone(),
-            system: forge_render::agent::system_prompt(&file, forge_render::agent::fg_cli().as_deref()),
-            fg: forge_render::agent::fg_cli(),
+            system: forge_render::agent::system_prompt(&file),
+            mcp: None,
             cwd: dir.join("cwd"),
         },
         Out {
@@ -545,8 +553,8 @@ fn a_hostile_folders_hooks_mcp_and_bash_never_run() {
         None,
     );
     c.send(format!(
-        "Two steps. 1) Bash: touch {}  2) Set extrude1.d to 14 in {}.",
-        dir.join("PWNED_BASH").display(),
+        "Two steps. 1) Run the shell command: touch {}  2) Set extrude1.d to 14 in {}.",
+        out.join("PWNED_BASH").display(),
         file.display()
     ));
     let mut evs = Vec::new();
@@ -559,20 +567,16 @@ fn a_hostile_folders_hooks_mcp_and_bash_never_run() {
     }
     drop(c);
     std::thread::sleep(std::time::Duration::from_secs(1));
+    assert!(!out.join("PWNED_BASH").exists(), "a command ran outside the folder: {evs:?}");
     for m in [
         "PWNED_HOOK",
         "PWNED_TOOL_HOOK",
         "PWNED_MCP",
         "PWNED_CLAUDE_MD",
-        "PWNED_BASH",
     ] {
         assert!(!dir.join(m).exists(), "{m} ran: {evs:?}");
     }
-    assert!(
-        evs.iter()
-            .any(|e| matches!(e, Event::ToolDone { error: true, .. })),
-        "Bash was refused: {evs:?}"
-    );
+
     assert!(
         std::fs::read_to_string(&file)
             .unwrap()
@@ -736,4 +740,401 @@ fn a_file_the_agent_makes_opens_and_its_undo_moves_it_aside_and_goes_back() {
     assert!(builders() <= 1, "{} build threads still running", builders());
     drop(h);
     let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn the_fg_tools_stay_in_the_folder() {
+    let dir = scratch("fgtools");
+    std::fs::create_dir_all(dir.join("sub")).unwrap();
+    std::fs::write(dir.join("p.fg"), PART).unwrap();
+    std::fs::write(dir.join("sub/q.fg"), PART).unwrap();
+    let outside = scratch("fgtools-outside");
+    std::fs::write(outside.join("x.fg"), PART).unwrap();
+    std::os::unix::fs::symlink(outside.join("x.fg"), dir.join("link.fg")).unwrap();
+    let j = |s: &str| forge_agent::json::Json::parse(s).unwrap();
+    let call = |name: &str, a: &str| forge_render::agent::tools::fg_call(name, &j(a), &dir);
+    let (got, err) = call("fg_run", r#"{"file":"p.fg"}"#);
+    assert!(!err, "{got}");
+    assert!(!call("fg_check", r#"{"file":"sub/q.fg"}"#).1);
+    let refused = |a: &str| {
+        let (got, err) = call("fg_run", a);
+        assert!(err, "{a}: {got}");
+    };
+    refused(&format!(
+        r#"{{"file":"../{}/x.fg"}}"#,
+        outside.file_name().unwrap().to_string_lossy()
+    ));
+    refused(&format!(r#"{{"file":"{}"}}"#, outside.join("x.fg").display()));
+    refused(r#"{"file":"-o /tmp/x.fg"}"#);
+    refused(r#"{"file":"p.fg; touch x"}"#);
+    refused(r#"{"file":"link.fg"}"#);
+    refused(r#"{"file":"p.txt"}"#);
+    // an edit writes only the file named, after its check
+    let op =
+        r#"{"file":"p.fg","op":{"op":"SetParam","param":"extrude1.d","value":{"value":15,"dim":"Length"}}}"#;
+    let (got, err) = call("fg_edit", op);
+    assert!(!err, "{got}");
+    assert!(
+        std::fs::read_to_string(dir.join("p.fg"))
+            .unwrap()
+            .contains("extrude1.d = 15")
+    );
+    assert_eq!(std::fs::read_to_string(outside.join("x.fg")).unwrap(), PART);
+    assert!(!call("fg_reference", "{}").0.is_empty());
+    let _ = std::fs::remove_dir_all(dir);
+    let _ = std::fs::remove_dir_all(outside);
+}
+
+#[test]
+fn the_mcp_server_lists_and_runs_the_app_tools_over_its_socket() {
+    let (tools, rx) = forge_render::agent::apptools::AppTools::new(Arc::new(|| {}));
+    let dir = scratch("mcp");
+    std::fs::write(dir.join("p.fg"), PART).unwrap();
+    tools.set_dir(&dir);
+    let sock = dir.join("t.sock");
+    forge_render::agent::mcp::serve(&sock, tools).unwrap();
+    // the frame's side: answers each call it's given
+    std::thread::spawn(move || {
+        for c in rx {
+            let r = if c.name == "screenshot" {
+                forge_render::agent::apptools::Reply {
+                    text: "The view".into(),
+                    png: Some(forge_render::agent::apptools::png(1, 1, &[1, 2, 3]).unwrap()),
+                    error: false,
+                }
+            } else {
+                forge_render::agent::apptools::Reply::ok(format!("did {}", c.name))
+            };
+            let _ = c.reply.send(r);
+        }
+    });
+    let s = std::os::unix::net::UnixStream::connect(&sock).unwrap();
+    let mut w = s.try_clone().unwrap();
+    let mut r = BufReader::new(s);
+    let mut ask = |line: &str| {
+        writeln!(w, "{line}").unwrap();
+        let mut got = String::new();
+        r.read_line(&mut got).unwrap();
+        forge_agent::json::Json::parse(&got).unwrap()
+    };
+    let init =
+        ask(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}"#);
+    assert_eq!(
+        init.get("result")
+            .and_then(|r| r.get("serverInfo"))
+            .and_then(|i| i.get("name"))
+            .and_then(|n| n.str()),
+        Some("forgecad")
+    );
+    let list = ask(r#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#).to_string();
+    for t in ["set_visibility", "drive_joint", "screenshot", "fg_run"] {
+        assert!(list.contains(&format!("\"name\":\"{t}\"")), "{t}");
+    }
+    let hide = ask(r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"set_visibility","arguments":{"ids":["a"],"visible":false}}}"#).to_string();
+    assert!(
+        hide.contains("did set_visibility") && hide.contains("\"isError\":false"),
+        "{hide}"
+    );
+    let shot = ask(
+        r#"{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"screenshot","arguments":{}}}"#,
+    )
+    .to_string();
+    assert!(
+        shot.contains("\"type\":\"image\"") && shot.contains("iVBORw0KGgo"),
+        "{shot}"
+    );
+    let run = ask(r#"{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"fg_run","arguments":{"file":"../x.fg"}}}"#).to_string();
+    assert!(run.contains("\"isError\":true"), "{run}");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// An app tool called as an agent calls it, from another thread, the frames going on till it answers.
+fn app_call(
+    h: &mut forge_render::gui::Headless,
+    tools: &forge_render::agent::apptools::AppTools,
+    name: &str,
+    args: &str,
+) -> forge_render::agent::apptools::Reply {
+    let (t, name, args) = (
+        tools.clone(),
+        name.to_string(),
+        forge_agent::json::Json::parse(args).unwrap(),
+    );
+    let (tx, rx) = channel();
+    std::thread::spawn(move || {
+        let _ = tx.send(t.call(&name, args));
+    });
+    for _ in 0..3000 {
+        h.step();
+        if let Ok(r) = rx.try_recv() {
+            for _ in 0..3 {
+                h.step();
+            }
+            return r;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(2));
+    }
+    panic!("no answer");
+}
+
+fn asm_ready(g: &forge_render::gui::Gui) -> bool {
+    g.view.is_some()
+        && g.fg.as_ref().is_some_and(|s| s.done == s.seq)
+        && g.shell
+            .fg
+            .as_ref()
+            .is_some_and(|p| p.asm.as_ref().is_some_and(|a| !a.checking && !a.occ.is_empty()))
+}
+
+#[test]
+fn the_app_tools_work_the_rack_view_and_never_its_file() {
+    let rack = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/rack18u/asm/rack.fg");
+    let rack = rack.canonicalize().unwrap();
+    let before = std::fs::read_to_string(&rack).unwrap();
+    let Ok(mut h) = forge_render::gui::Headless::new((1400.0, 900.0), 1.0) else {
+        return;
+    };
+    h.step();
+    h.gui.open(rack.to_str().unwrap());
+    let t = std::time::Instant::now();
+    while !asm_ready(&h.gui) && t.elapsed().as_secs() < 600 {
+        h.until(asm_ready);
+    }
+    assert!(asm_ready(&h.gui), "{}", h.gui.shell.status);
+    let (tools, rx) = forge_render::agent::apptools::AppTools::new(Arc::new(|| {}));
+    tools.set_dir(rack.parent().unwrap());
+    h.gui.agent.app_rx = Some(rx);
+    let asm = |h: &forge_render::gui::Headless| {
+        h.gui
+            .shell
+            .fg
+            .as_ref()
+            .unwrap()
+            .asm
+            .as_ref()
+            .unwrap()
+            .clone_view()
+    };
+    let tree = app_call(&mut h, &tools, "tree", "{}");
+    assert!(
+        !tree.error && tree.text.contains("panel_ll") && tree.text.contains("panel_ur"),
+        "{}",
+        tree.text
+    );
+
+    let r = app_call(
+        &mut h,
+        &tools,
+        "set_visibility",
+        r#"{"ids":["panel_ll","panel_ul","panel_lr","panel_ur"],"visible":false}"#,
+    );
+    assert!(!r.error, "{}", r.text);
+    assert!(asm(&h).0.contains("panel_ll") && asm(&h).0.contains("panel_ur"));
+    let tree = app_call(&mut h, &tools, "tree", "{}").text;
+    let row = tree
+        .lines()
+        .find(|l| l.trim_start().starts_with("panel_ll "))
+        .unwrap_or("");
+    assert!(row.ends_with("hidden"), "{tree}");
+    let r = app_call(
+        &mut h,
+        &tools,
+        "set_visibility",
+        r#"{"ids":["nope"],"visible":false}"#,
+    );
+    assert!(r.error && r.text.contains("No such row"));
+    assert!(!app_call(&mut h, &tools, "undo_view", "{}").error);
+    assert!(!asm(&h).0.contains("panel_ll"), "undo_view shows them again");
+
+    assert!(!app_call(&mut h, &tools, "isolate", r#"{"id":"panel_ll"}"#).error);
+    assert_eq!(asm(&h).1.as_deref(), Some("panel_ll"));
+    assert!(!app_call(&mut h, &tools, "show_all", "{}").error);
+    assert_eq!(asm(&h).1, None);
+    assert!(!app_call(&mut h, &tools, "select", r#"{"id":"panel_lr"}"#).error);
+    assert!(
+        app_call(&mut h, &tools, "get_selection", "{}")
+            .text
+            .contains("panel_lr")
+    );
+    assert!(!app_call(&mut h, &tools, "clear_selection", "{}").error);
+    assert_eq!(asm(&h).2, None);
+
+    assert!(!app_call(&mut h, &tools, "set_view", r#"{"view":"front"}"#).error);
+    assert!(!app_call(&mut h, &tools, "visual_style", r#"{"edges":"none"}"#).error);
+    assert_eq!(h.gui.shell.view.lines, forge_render::render::LineMode::None);
+    assert!(!app_call(&mut h, &tools, "section", r#"{"on":true}"#).error);
+    assert!(h.gui.shell.view.section);
+    assert!(!app_call(&mut h, &tools, "section", r#"{"on":false}"#).error);
+    assert!(!app_call(&mut h, &tools, "set_overlay", r#"{"name":"grid","on":true}"#).error);
+    assert!(h.gui.shell.overlays().grid);
+
+    // "open the door": a joint driven for a look, the file as it was
+    let src = h.gui.fg.as_ref().unwrap().src.clone();
+    let r = app_call(
+        &mut h,
+        &tools,
+        "drive_joint",
+        r#"{"joint":"f_door_f","value":90}"#,
+    );
+    assert!(!r.error, "{}", r.text);
+    assert!(h.gui.apps.driven.is_some());
+    h.until(|g| g.fg.as_ref().is_some_and(|s| s.done == s.seq));
+    assert!(
+        h.gui.fg.as_ref().unwrap().previewing,
+        "the build shows the driven pose"
+    );
+    assert_eq!(h.gui.fg.as_ref().unwrap().src, src);
+    assert!(!app_call(&mut h, &tools, "return_to_design", "{}").error);
+    assert!(h.gui.apps.driven.is_none());
+    assert!(app_call(&mut h, &tools, "drive_joint", r#"{"joint":"panel_ll","value":1}"#).error);
+
+    let shot = app_call(&mut h, &tools, "screenshot", "{}");
+    assert!(
+        shot.png.as_ref().is_some_and(|p| p.starts_with(b"\x89PNG")),
+        "{}",
+        shot.text
+    );
+    let r = app_call(&mut h, &tools, "open_document", r#"{"path":"/etc/passwd"}"#);
+    assert!(r.error);
+    let r = app_call(&mut h, &tools, "fg_check", r#"{"file":"rack.fg"}"#);
+    assert!(!r.error, "{}", r.text);
+    assert_eq!(
+        std::fs::read_to_string(&rack).unwrap(),
+        before,
+        "no tool wrote the file"
+    );
+    h.settle();
+}
+
+#[test]
+fn the_thermoform_tools_show_the_wall_and_read_its_numbers() {
+    let cover = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/thermoform/cover.fg");
+    let Ok(mut h) = forge_render::gui::Headless::new((1400.0, 900.0), 1.0) else {
+        return;
+    };
+    h.step();
+    h.gui.open(cover.canonicalize().unwrap().to_str().unwrap());
+    assert!(h.until(|g| g.shell.fg.as_ref().is_some_and(|p| !p.thermos.is_empty())));
+    let (tools, rx) = forge_render::agent::apptools::AppTools::new(Arc::new(|| {}));
+    h.gui.agent.app_rx = Some(rx);
+    let r = app_call(&mut h, &tools, "thermo_view", r#"{"analysis":"thickness"}"#);
+    assert!(!r.error, "{}", r.text);
+    assert_eq!(
+        h.gui.shell.fg.as_ref().unwrap().thermo.analysis,
+        forge_render::shell::thermo_ui::Analysis::Thickness
+    );
+    let r = app_call(&mut h, &tools, "thermo_report", "{}");
+    assert!(
+        !r.error && r.text.contains("wall") && r.text.contains("limit"),
+        "{}",
+        r.text
+    );
+    assert!(!app_call(&mut h, &tools, "undo_view", "{}").error);
+    assert_eq!(
+        h.gui.shell.fg.as_ref().unwrap().thermo.analysis,
+        forge_render::shell::thermo_ui::Analysis::None
+    );
+    h.settle();
+}
+
+/// Copies a folder tree, for a scratch copy of an example.
+fn copy_tree(from: &Path, to: &Path) {
+    std::fs::create_dir_all(to).unwrap();
+    for e in std::fs::read_dir(from).unwrap().map(Result::unwrap) {
+        let p = e.path();
+        if p.is_dir() {
+            copy_tree(&p, &to.join(e.file_name()));
+        } else {
+            std::fs::copy(&p, to.join(e.file_name())).unwrap();
+        }
+    }
+}
+
+/// One message to the real agent in the app, till its turn is over.
+fn say(h: &mut forge_render::gui::Headless, text: &str) {
+    assert!(h.click("agent:input"));
+    h.step();
+    h.text(text);
+    h.step();
+    assert!(h.click("agent:send"));
+    h.step();
+    let t = std::time::Instant::now();
+    while t.elapsed().as_secs() < 400 {
+        h.step();
+        if !h.gui.shell.agent.running {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    for _ in 0..30 {
+        h.step();
+    }
+}
+
+#[test]
+#[ignore = "a real Claude Code call: run by hand, signed in"]
+fn the_agent_hides_the_racks_side_panels_and_opens_its_door_without_editing() {
+    let dir = scratch("real-rack");
+    copy_tree(
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/rack18u"),
+        &dir.join("rack18u"),
+    );
+    let rack = dir.join("rack18u/asm/rack.fg").canonicalize().unwrap();
+    let before = std::fs::read_to_string(&rack).unwrap();
+    let Ok(mut h) = forge_render::gui::Headless::new((1400.0, 900.0), 1.0) else {
+        return;
+    };
+    h.gui.agent.mcp_exe = Some(env!("CARGO_BIN_EXE_forge-app").into());
+    h.gui.agent.cwd = Some(dir.join("cwd"));
+    h.gui.agent.settings_file = Some(dir.join("agent.toml"));
+    std::fs::write(
+        dir.join("agent.toml"),
+        format!(
+            "backend = \"claude-code\"\nclaude_model = \"sonnet\"\ntrusted = [\"{}\"]\n",
+            rack.parent().unwrap().display()
+        ),
+    )
+    .unwrap();
+    h.step();
+    h.gui.open(rack.to_str().unwrap());
+    let t = std::time::Instant::now();
+    while !asm_ready(&h.gui) && t.elapsed().as_secs() < 600 {
+        h.until(asm_ready);
+    }
+    assert!(h.click("side:tab:Agent"));
+    h.step();
+    say(&mut h, "hide the side panels so I can see inside");
+    let a = h
+        .gui
+        .shell
+        .fg
+        .as_ref()
+        .unwrap()
+        .asm
+        .as_ref()
+        .unwrap()
+        .clone_view();
+    let log = format!("{:?}", h.gui.shell.agent.entries);
+    for p in ["panel_ll", "panel_ul", "panel_lr", "panel_ur"] {
+        assert!(a.0.contains(p), "{p} still shown: {log}");
+    }
+    say(&mut h, "open the front door");
+    let log = format!("{:?}", h.gui.shell.agent.entries);
+    assert!(h.gui.apps.driven.is_some(), "the door wasn't driven: {log}");
+    assert_eq!(
+        std::fs::read_to_string(&rack).unwrap(),
+        before,
+        "a view request edited the file: {log}"
+    );
+    assert!(
+        !h.gui
+            .shell
+            .agent
+            .entries
+            .iter()
+            .any(|e| matches!(e, Entry::Diff { .. })),
+        "{log}"
+    );
+    eprintln!("{log}");
+    h.settle();
 }

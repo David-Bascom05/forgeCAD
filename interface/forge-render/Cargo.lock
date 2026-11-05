@@ -1162,6 +1162,7 @@ dependencies = [
  "forge-topo",
  "js-sys",
  "keyring-core",
+ "png",
  "rfd",
  "ureq",
  "wasm-bindgen",
