@@ -348,3 +348,22 @@ fn three_points_read_the_angle_at_the_middle_one() {
     let r = read_three(&p(1.0, 0.0), &p(0.0, 0.0), &p(1.0, 1.0));
     assert!(near(r.get(Q::Angle), 45.0), "{r:?}");
 }
+
+#[test]
+fn a_sketch_loop_reads_its_area_and_perimeter_labelled_inside() {
+    use forge_agent::measure::{Free, Shown, Target, read};
+    let sq: Vec<Point3> = [(0.0, 0.0), (4.0, 0.0), (4.0, 3.0), (0.0, 3.0)]
+        .into_iter()
+        .map(|(x, y)| Point3::new(x, y, 1.0))
+        .collect();
+    let r = read(&Target::Free(Free::Loop {
+        loops: vec![sq],
+        area: 12.0,
+        perimeter: 14.0,
+        inside: Point3::new(2.0, 1.5, 1.0),
+    }));
+    assert!(near(r.get(Q::Area), 12.0) && near(r.get(Q::Perimeter), 14.0), "{r:?}");
+    assert!(matches!(r.shown.first(), Some(Shown::Face(t, c)) if t.is_empty() && c.distance(Point3::new(2.0, 1.5, 1.0)) < 1e-12));
+    // drawn closed
+    assert!(r.shown.iter().any(|s| matches!(s, Shown::Curve(p, Q::Perimeter) if p.len() == 5)));
+}

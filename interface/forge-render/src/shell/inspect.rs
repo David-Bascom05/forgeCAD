@@ -129,12 +129,16 @@ pub struct MeasurePanel {
     /// its feature's name; none for the world.
     pub ucs: Option<String>,
     pub hide_delta: bool,
+    /// Inventor's Detect Sketch Loops off: a click in a sketch's closed region takes nothing.
+    pub no_loops: bool,
     /// Which distance Delta X, Y, Z follow and the view draws.
     pub follow: Follow,
     /// The value clicked in the panel: its dimension drawn forward in the view.
     pub focus: Option<Quantity>,
     /// Advanced settings unfolded.
     pub advanced: bool,
+    /// The values' words' column, as dragged (none: as it starts).
+    pub label_w: f32,
     /// Opened from a dialog's value field (which, and its kind): a value's Use puts it there.
     pub into: Option<(IntoField, forge_doc::units::Kind)>,
     /// A value Use was pressed on, for the shell to put in the field.

@@ -1573,11 +1573,62 @@ impl SketchMode {
         self.entity_near(at, reach, "lcasej")
     }
 
+    /// As `measure_word`, and where there's no point or curve, the closed region the pointer's
+    /// in (Inventor's Detect Sketch Loops), the smallest if they nest.
+    pub fn measure_word_or_loop(&self, at: (f64, f64), reach: f64, loops: bool) -> Option<String> {
+        self.measure_word(at, reach)
+            .or_else(|| loops.then(|| self.loop_at(at)).flatten().map(|k| format!("loop:{k}")))
+    }
+
+    /// The sketch's loops as Measure takes them: each closed region (its outside, its holes,
+    /// its exact area and perimeter), and each hole that's no region of its own as one.
+    fn measure_loops(&self) -> Vec<(Vec<Vec<Point2>>, f64, f64)> {
+        let Some(s) = self.solved.as_ref() else { return vec![] };
+        let rs = sk::regions(s);
+        let same = |a: &[Point2], b: &[Point2]| {
+            a.len() == b.len() && a.iter().all(|p| b.iter().any(|q| (*p - *q).length() < 1e-9))
+        };
+        let mut out: Vec<(Vec<Vec<Point2>>, f64, f64)> =
+            rs.iter().map(|r| (r.loops.clone(), r.area, r.perimeter)).collect();
+        for r in &rs {
+            for (k, h) in r.loops.iter().enumerate().skip(1) {
+                if !rs.iter().any(|o| o.loops.first().is_some_and(|f| same(f, h))) {
+                    out.push((vec![h.clone()], r.loop_areas[k], r.loop_lengths[k]));
+                }
+            }
+        }
+        out
+    }
+
+    /// The loop a point of the plane is in, by its number in `measure_loops`: the smallest if
+    /// they nest.
+    fn loop_at(&self, at: (f64, f64)) -> Option<usize> {
+        let p = Point2::new(at.0, at.1);
+        self.measure_loops()
+            .iter()
+            .enumerate()
+            .filter(|(_, (ls, _, _))| {
+                ls.first().is_some_and(|o| in_polygon(o, p)) && !ls[1..].iter().any(|h| in_polygon(h, p))
+            })
+            .min_by(|a, b| a.1.1.total_cmp(&b.1.1))
+            .map(|(k, _)| k)
+    }
+
     /// A point or curve of the sketch as Measure takes it: in the world, on the sketch's plane.
     pub fn measure_free(&self, word: &str) -> Option<forge_agent::measure::Free> {
         use forge_agent::measure::Free;
         let s = self.solved.as_ref()?;
         let w = |p: (f64, f64)| self.plane.plane_point(Point2::new(p.0, p.1));
+        if let Some(k) = word.strip_prefix("loop:").and_then(|k| k.parse::<usize>().ok()) {
+            let (loops, area, perimeter) = self.measure_loops().into_iter().nth(k)?;
+            let inside = inside_point(&loops);
+            return Some(Free::Loop {
+                loops: loops.iter().map(|l| l.iter().map(|q| w((q.x, q.y))).collect()).collect(),
+                area,
+                perimeter,
+                inside: w((inside.x, inside.y)),
+            });
+        }
         let z: forge_math::Vec3 = self.plane.z().into();
         if let Some((_, p)) = self.points().into_iter().find(|p| p.0 == word) {
             return Some(Free::Point(w(p)));
@@ -1605,6 +1656,14 @@ impl SketchMode {
     /// A curve of the sketch as points on its plane, or a place as one point.
     pub fn outline_of(&self, word: &str) -> Vec<(f64, f64)> {
         let Some(s) = &self.solved else { return Vec::new() };
+        // a region: round its outside
+        if let Some(k) = word.strip_prefix("loop:").and_then(|k| k.parse::<usize>().ok()) {
+            let _ = s;
+            let Some((loops, _, _)) = self.measure_loops().into_iter().nth(k) else { return Vec::new() };
+            let mut o: Vec<(f64, f64)> = loops.first().map_or(vec![], |o| o.iter().map(|q| (q.x, q.y)).collect());
+            o.extend(o.first().copied());
+            return o;
+        }
         if word.contains('.') {
             return sk::point(s, word).map_or(Vec::new(), |p| vec![(p.x, p.y)]);
         }
@@ -2355,7 +2414,8 @@ impl Shell {
         }
         // measuring with no tool in hand: a click takes the sketch's point or curve for Measure
         if m.tool.is_none() && self.inspect.measure.is_some() && self.modal_clear() {
-            let word = cursor.and_then(|at| m.measure_word(at, reach));
+            let loops = self.inspect.measure.as_ref().is_some_and(|me| !me.no_loops);
+            let word = cursor.and_then(|at| m.measure_word_or_loop(at, reach, loops));
             m.would_pick = word.clone();
             if let Some(w) = &word {
                 let pts: Vec<Pos2> = m.outline_of(w).into_iter().filter_map(&screen).collect();
@@ -2369,6 +2429,9 @@ impl Shell {
                 let pick = word.and_then(|w| Some((m.measure_free(&w)?, w)));
                 if let Some(me) = &mut self.inspect.measure {
                     match pick {
+                        Some((f, w)) if w.starts_with("loop:") => {
+                            me.take(super::inspect::MPick::Free(f, "Sketch loop".into()))
+                        }
                         Some((f, w)) => me.take(super::inspect::MPick::Free(f, format!("Sketch {w}"))),
                         None => me.restart(),
                     }
@@ -2476,6 +2539,55 @@ impl Shell {
     pub(super) fn sketch_tool(&self, t: SkTool) -> Option<Action> {
         self.sketch.as_ref().map(|_| Action::SketchTool(t))
     }
+}
+
+/// Whether a point is inside a closed polygon (even-odd).
+fn in_polygon(poly: &[Point2], p: Point2) -> bool {
+    let mut inside = false;
+    let n = poly.len();
+    for k in 0..n {
+        let (a, b) = (poly[k], poly[(k + 1) % n]);
+        if (a.y > p.y) != (b.y > p.y) && p.x < a.x + (p.y - a.y) / (b.y - a.y) * (b.x - a.x) {
+            inside = !inside;
+        }
+    }
+    inside
+}
+
+/// A point in a region to label it at: its outside's centroid if that's in the region, else
+/// the middle of the widest run across it through the centroid's height.
+fn inside_point(loops: &[Vec<Point2>]) -> Point2 {
+    let Some(o) = loops.first().filter(|o| o.len() > 2) else {
+        return Point2::new(0.0, 0.0);
+    };
+    let (mut a, mut cx, mut cy) = (0.0, 0.0, 0.0);
+    for k in 0..o.len() {
+        let (p, q) = (o[k], o[(k + 1) % o.len()]);
+        let c = p.x * q.y - q.x * p.y;
+        a += c;
+        cx += (p.x + q.x) * c;
+        cy += (p.y + q.y) * c;
+    }
+    let c = if a.abs() > 1e-12 { Point2::new(cx / (3.0 * a), cy / (3.0 * a)) } else { o[0] };
+    let within = |p: Point2| in_polygon(o, p) && !loops[1..].iter().any(|h| in_polygon(h, p));
+    if within(c) {
+        return c;
+    }
+    // where the line at the centroid's height crosses the loops, the widest inside span
+    let mut xs: Vec<f64> = loops
+        .iter()
+        .flat_map(|l| {
+            (0..l.len()).filter_map(move |k| {
+                let (a, b) = (l[k], l[(k + 1) % l.len()]);
+                ((a.y > c.y) != (b.y > c.y)).then(|| a.x + (c.y - a.y) / (b.y - a.y) * (b.x - a.x))
+            })
+        })
+        .collect();
+    xs.sort_by(f64::total_cmp);
+    xs.chunks(2)
+        .filter(|w| w.len() == 2)
+        .max_by(|a, b| (a[1] - a[0]).total_cmp(&(b[1] - b[0])))
+        .map_or(o[0], |w| Point2::new(0.5 * (w[0] + w[1]), c.y))
 }
 
 #[cfg(test)]
@@ -2800,6 +2912,37 @@ mod tests {
         let d = m.draft((15.0, 20.0), 0.5);
         assert!(d.glyphs.iter().any(|g| g.0 == Glyph::Midpoint));
         assert_eq!(m.rows, before, "looking at one writes nothing");
+    }
+
+    #[test]
+    fn measure_takes_a_closed_region_inside_its_loops_exactly() {
+        use forge_agent::measure::Free;
+        use std::f64::consts::PI;
+        let mut m = mode();
+        m.set_tool(Some(SkTool::Rectangle));
+        m.click((10.0, 10.0), 0.5);
+        m.click((-10.0, -5.0), 0.5);
+        m.set_tool(Some(SkTool::Circle));
+        m.click((0.0, 0.0), 0.5);
+        m.click((2.0, 0.0), 0.5);
+        m.set_tool(None);
+        // inside the rectangle, outside the circle: the rectangle less the hole
+        let w = m.measure_word_or_loop((6.0, 6.0), 0.5, true).expect("a region");
+        let Some(Free::Loop { area, perimeter, loops, inside }) = m.measure_free(&w) else {
+            panic!("{w}: no loop");
+        };
+        assert!((area - (300.0 - 4.0 * PI)).abs() < 1e-9, "{area}");
+        assert!((perimeter - (70.0 + 4.0 * PI)).abs() < 1e-9, "{perimeter}");
+        assert_eq!(loops.len(), 2);
+        // labelled inside it, not in the hole
+        assert!(inside.x * inside.x + inside.y * inside.y > 4.0, "{inside:?}");
+        // in the circle: the circle's own
+        let w = m.measure_word_or_loop((0.5, 0.3), 0.1, true).expect("the circle's region");
+        let Some(Free::Loop { area, .. }) = m.measure_free(&w) else { panic!() };
+        assert!((area - 4.0 * PI).abs() < 1e-9, "{area}");
+        // Detect Sketch Loops off: nothing there; and a curve under the pointer comes first
+        assert!(m.measure_word_or_loop((6.0, 6.0), 0.5, false).is_none());
+        assert!(!m.measure_word_or_loop((10.0, 2.0), 0.5, true).unwrap().starts_with("loop:"));
     }
 
     #[test]

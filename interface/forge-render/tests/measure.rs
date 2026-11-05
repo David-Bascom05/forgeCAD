@@ -867,3 +867,33 @@ fn the_two_selections_are_marked_each_in_its_own_colour() {
     assert!(r1 > g1 && r1 > b1, "first {r1} {g1} {b1}");
     assert!(g2 > r2 && g2 > b2, "second {r2} {g2} {b2}");
 }
+
+#[test]
+fn the_values_column_is_dragged_wider_and_narrower() {
+    let Some(mut h) = open("column") else { return };
+    measure(&mut h);
+    click(&mut h, BOSS_TOP);
+    let _ = reading(&mut h);
+    for _ in 0..4 {
+        h.step();
+    }
+    let edge = h.gui.shell.place("measure:column").expect("the column's edge");
+    let before = h.gui.shell.place("measure:value:Area").unwrap();
+    let (x, y) = (edge.center().x, edge.center().y);
+    h.move_to(x, y);
+    h.step();
+    h.button(true);
+    h.step();
+    for k in 1..=8 {
+        h.move_to(x + 5.0 * k as f32, y);
+        h.step();
+    }
+    h.button(false);
+    for _ in 0..3 {
+        h.step();
+    }
+    let m = h.gui.shell.inspect.measure.as_ref().unwrap();
+    assert!((m.label_w - (112.0 + 40.0)).abs() < 2.0, "{}", m.label_w);
+    let after = h.gui.shell.place("measure:value:Area").unwrap();
+    assert!(after.left() > before.left() + 30.0, "{before:?} {after:?}");
+}

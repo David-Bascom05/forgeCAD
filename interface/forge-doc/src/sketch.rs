@@ -1440,6 +1440,24 @@ pub struct Region {
     pub through: String,
     /// Its outside, then its holes, as points around each.
     pub loops: Vec<Vec<Point2>>,
+    /// Its area (less its holes) and the length round every loop, exact from its curves (a
+    /// spline's length to its samples).
+    pub area: f64,
+    pub perimeter: f64,
+    /// Each loop's own area and length, in `loops`' order.
+    pub loop_areas: Vec<f64>,
+    pub loop_lengths: Vec<f64>,
+}
+
+/// A profile curve's length: exact for lines, arcs and circles.
+fn segment_length(g: &forge_ops::Segment) -> f64 {
+    use forge_ops::Segment;
+    match g {
+        Segment::Line { a, b } => (*b - *a).length(),
+        Segment::Arc { radius, sweep, .. } => radius * sweep.abs(),
+        Segment::Circle { radius, .. } => core::f64::consts::TAU * radius,
+        Segment::Spline(_) => g.samples(512).windows(2).map(|w| (w[1] - w[0]).length()).sum(),
+    }
 }
 
 /// Points along a curve, about one per `STEP` radians where it bends.
@@ -1521,6 +1539,14 @@ pub fn regions(s: &Sketch) -> Vec<Region> {
                 .loops
                 .iter()
                 .map(|l| l.segments.iter().flat_map(|g| along(&g.0)).collect())
+                .collect(),
+            area: p.area(),
+            perimeter: p.loops.iter().flat_map(|l| &l.segments).map(|g| segment_length(&g.0)).sum(),
+            loop_areas: p.loops.iter().map(|l| l.signed_area().abs()).collect(),
+            loop_lengths: p
+                .loops
+                .iter()
+                .map(|l| l.segments.iter().map(|g| segment_length(&g.0)).sum())
                 .collect(),
         })
         .collect()

@@ -726,6 +726,14 @@ pub enum Free {
     Arc(Point3, Vec3, f64, Vec<Point3>),
     /// A spline or an ellipse, as the points it runs through.
     Curve(Vec<Point3>),
+    /// A sketch's closed region (Inventor's sketch loop): its outside then its holes as points
+    /// round each, its exact area and the length round them all, and a point inside it.
+    Loop {
+        loops: Vec<Vec<Point3>>,
+        area: f64,
+        perimeter: f64,
+        inside: Point3,
+    },
 }
 
 /// What Measure takes: an entity of a body, a whole body, or free geometry.
@@ -743,7 +751,7 @@ fn free_geom(f: &Free) -> Geom {
         Free::Plane(p, n) => Geom::Plane(*p, unit(*n)),
         Free::Segment(a, b) => Geom::Segment(*a, *b),
         Free::Circle(c, z, r) | Free::Arc(c, z, r, _) => Geom::Circle(*c, unit(*z), *r),
-        Free::Curve(_) => Geom::Other,
+        Free::Curve(_) | Free::Loop { .. } => Geom::Other,
     }
 }
 
@@ -799,6 +807,7 @@ fn target_points(t: &Target) -> Vec<Point3> {
             Free::Segment(a, b) => (0..=32).map(|k| *a + (*b - *a) * (k as f64 / 32.0)).collect(),
             Free::Circle(c, z, r) => ring(*c, unit(*z), *r),
             Free::Arc(_, _, _, pts) | Free::Curve(pts) => pts.clone(),
+            Free::Loop { loops, .. } => loops.concat(),
         },
     }
 }
@@ -874,6 +883,10 @@ fn target_nearest_on(t: &Target, q: Point3) -> Option<Point3> {
                 }
             }
             Free::Arc(_, _, _, pts) | Free::Curve(pts) => polyline_nearest(pts, q)?,
+            Free::Loop { loops, .. } => loops
+                .iter()
+                .filter_map(|l| polyline_nearest(l, q))
+                .min_by(|a, b| a.distance(q).total_cmp(&b.distance(q)))?,
         }),
     }
 }
@@ -1161,6 +1174,21 @@ pub fn read(t: &Target) -> Reading {
                 Free::Curve(pts) => {
                     r.values.push((Quantity::Length, polyline_length(pts)));
                     r.shown.push(Shown::Curve(pts.clone(), Quantity::Length));
+                }
+                Free::Loop {
+                    loops,
+                    area,
+                    perimeter,
+                    inside,
+                } => {
+                    r.values.extend([(Quantity::Area, *area), (Quantity::Perimeter, *perimeter)]);
+                    // its loops drawn round, its area and perimeter labelled inside it
+                    for l in loops {
+                        let mut ring = l.clone();
+                        ring.extend(l.first().copied());
+                        r.shown.push(Shown::Curve(ring, Quantity::Perimeter));
+                    }
+                    r.shown.insert(0, Shown::Face(Vec::new(), *inside));
                 }
             }
             r
