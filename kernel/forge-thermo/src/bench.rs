@@ -465,3 +465,109 @@ fn the_sheets_stiffness_does_not_move_a_converged_forming() {
         "stiffness moves the converged forming by {spread} of t0"
     );
 }
+
+/// A long female V groove, its walls at 90 degrees, `d` from its bottom to each edge along the
+/// wall, `len` long.
+fn v_groove(d: f64, len: f64) -> Body {
+    let h = d / 2f64.sqrt();
+    let pts = [Point2::new(-h, 0.0), Point2::new(0.0, -h), Point2::new(h, 0.0)];
+    let segs = (0..3)
+        .map(|k| {
+            (
+                Segment::Line {
+                    a: pts[k],
+                    b: pts[(k + 1) % 3],
+                },
+                k as u64 + 1,
+            )
+        })
+        .collect();
+    let plane = Frame::from_axes(Point3::new(-len / 2.0, 0.0, 0.0), Vec3::Y, Vec3::Z, Vec3::X).unwrap();
+    let p = Profile {
+        plane,
+        loops: vec![ProfileLoop::new(segs)],
+    };
+    forge_ops::extrude(&p, len, 5).expect("extrudes")
+}
+
+/// The membrane filling a 90 degree corner under sticking contact, against the closed form
+/// (validation/s1_ref_corner_fill.csv, its spec): an incompressible neo-Hookean strip pushed into
+/// the corner deposits t/t0 = (x/d)^k / lambda_c on the walls, x from the corner, k = 4/pi - 1,
+/// lambda_c = 1.1107, whatever the pressure it ends at. Here a long groove (plane strain in its
+/// middle), the sheet stuck on the mould's top at the groove's edges. Mean and worst error of
+/// t/t0 on the walls (three nodes from the corner, two from the clamp's edge), printed and bounded.
+/// Measured, mean / worst of t/t0: 80 nodes across the window and 10 steps 0.33 / 1.04 %; 160 and
+/// 10, 0.44 / 1.64 %; 160 and 100, 0.35 / 1.39 %; R/d 0.018 (the pressure raised till the corner
+/// is full).
+#[test]
+fn the_membrane_fills_a_corner_as_the_closed_form_says() {
+    let d = 20.0;
+    let shape = v_groove(d, 120.0);
+    let spec = Spec {
+        tool: Tool::Female,
+        pull: UnitVec3::Z,
+        t: 1.0,
+        trim: None,
+        flange: 5.0,
+        shrink: 0.0,
+        base: 10.0,
+        margin: 5.0,
+        vent: None,
+        vents: None,
+        vent_pitch: 25.0,
+        sheet: None,
+    };
+    let f = analyse(&shape, &spec).expect("analyses");
+    let (k, lc) = (4.0 / std::f64::consts::PI - 1.0, 1.110_720_7);
+    for (res, steps) in [(80, 10), (160, 10), (160, 100)] {
+        let pr = Process {
+            law: Law::neo_hookean(1.0),
+            pressure: 0.05,
+            resolution: res,
+            steps,
+            ..Process::default()
+        };
+        let st = stretch(&f, &spec, &pr);
+        let (nx, ny) = st.grid;
+        let id = |i: usize, j: usize| j * (nx + 1) + i;
+        let h = d / 2f64.sqrt();
+        let local = |p: Point3| f.frame.point_to_local(p);
+        // the middle row across the groove: each wall point's distance from the corner
+        let row: Vec<(f64, f64, bool)> = (0..=ny)
+            .map(|j| id(nx / 2, j))
+            .map(|n| {
+                let p = local(st.nodes[n]);
+                let x = (p.y * p.y + (p.z + h) * (p.z + h)).sqrt();
+                (x, st.node_ratio[n], st.touched[n])
+            })
+            .filter(|w| w.0 < d - 1e-6)
+            .collect();
+        let r = row
+            .iter()
+            .filter(|w| w.2)
+            .map(|w| w.0)
+            .fold(f64::INFINITY, f64::min);
+        // the grid's spacing (on the flat flange, unmoved): a node's wall is its triangles' by
+        // area, so the three nodes at the corner and the two at the clamp's edge read the
+        // elements either side
+        let h = (local(st.nodes[id(nx / 2, 1)]) - local(st.nodes[id(nx / 2, 0)])).length();
+        let errs: Vec<f64> = row
+            .iter()
+            .filter(|w| w.2 && w.0 >= (2.0 * r).max(3.0 * h) && w.0 <= d - 2.0 * h)
+            .map(|w| (w.1 - forge_math::dmath::powf(w.0 / d, k) / lc).abs())
+            .collect();
+        let mean = errs.iter().sum::<f64>() / errs.len().max(1) as f64;
+        let worst = errs.iter().copied().fold(0.0, f64::max);
+        eprintln!(
+            "CORNER res {res} steps {steps}: R/d {:.3}, {} wall points, t/t0 error mean {:.4} worst {:.4}",
+            r / d,
+            errs.len(),
+            mean,
+            worst
+        );
+        assert!(errs.len() >= 8);
+        // the closed form's acceptance is 1 %: the mean holds it, the worst (next to the corner)
+        // within 2 %
+        assert!(mean < 0.01 && worst < 0.02, "mean {mean} worst {worst}");
+    }
+}
