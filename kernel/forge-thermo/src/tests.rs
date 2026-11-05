@@ -727,3 +727,24 @@ fn brute_closest(
         .min_by(|x, y| (p - *x).length_sq().total_cmp(&(p - *y).length_sq()))
         .unwrap()
 }
+
+/// Stage 4A: the shrink band from free contraction (where the part set, between demould and its
+/// glass transition, to 23 C) overlaps the vendors' measured mould shrink (Spartech 2024, Formech):
+/// ABS 0.45-0.8 %, HIPS 0.3-0.65 %.
+#[test]
+fn the_shrink_band_overlaps_the_measured_one() {
+    let shop = crate::placeholder();
+    for (name, lo, hi) in [("ABS", 0.0030, 0.0080), ("HIPS", 0.0030, 0.0065)] {
+        let m = shop.material(name).expect("in the library");
+        let (a, b) = m.shrink_band().expect("a band");
+        eprintln!(
+            "SHRINK {name}: {:.2}-{:.2} % (measured {:.2}-{:.2} %)",
+            a * 100.0,
+            b * 100.0,
+            lo * 100.0,
+            hi * 100.0
+        );
+        assert!(a <= hi && b >= lo, "{name} band {a}-{b}");
+        assert!(a < b);
+    }
+}

@@ -432,6 +432,11 @@ source_thermo.law_temp = "Erchiqui & Kandil, Neuronal networks application for c
 thermo.law_test = "free bubble inflation, 0.46 mm sheet"
 source_thermo.law_test = "Erchiqui & Kandil, Neuronal networks application for characterization of softened polymers, ANTEC 2004, in SPE Thermoforming Quarterly 24(1) 2005 pp. 10-15, Tables 1-3, https://thermoformingdivision.com/quarterly-mags-2005-1st/; Table 3 (the text says 145 C, the caption 150 C)"
 
+thermo.demould = 82
+source_thermo.demould = "Spartech, Extruded sheet and rollstock thermoforming information, rev. 7/2024, https://www.spartech.com/media/documents/SPA221015-Thermoforming-Data-Sheet.pdf; maximum demould temperature (high-impact ABS)"
+thermo.tg = 111
+source_thermo.tg = "Wang, Hopmann et al., Continuous Two-Domain Equations of State for the Description of the PVT Behavior of Polymers, Polymers 12(2):409 (2020), https://doi.org/10.3390/polym12020409; ABS transition temperature at atmospheric pressure, 111.2 C"
+
 [[material]]
 name = "PC"
 aliases = ["polycarbonate", "Makrolon", "Lexan", "Makrolon 2405"]
@@ -764,6 +769,11 @@ thermo.law_temp = 145
 source_thermo.law_temp = "Erchiqui & Kandil, Neuronal networks application for characterization of softened polymers, ANTEC 2004, in SPE Thermoforming Quarterly 24(1) 2005 pp. 10-15, Tables 1-3, https://thermoformingdivision.com/quarterly-mags-2005-1st/; Table 2"
 thermo.law_test = "free bubble inflation, 0.97 mm sheet"
 source_thermo.law_test = "Erchiqui & Kandil, Neuronal networks application for characterization of softened polymers, ANTEC 2004, in SPE Thermoforming Quarterly 24(1) 2005 pp. 10-15, Tables 1-3, https://thermoformingdivision.com/quarterly-mags-2005-1st/; Table 2"
+
+thermo.demould = 79
+source_thermo.demould = "Spartech, Extruded sheet and rollstock thermoforming information, rev. 7/2024, https://www.spartech.com/media/documents/SPA221015-Thermoforming-Data-Sheet.pdf; maximum demould temperature (HIPS)"
+thermo.tg = 105
+source_thermo.tg = "Atmani, Abbes F., Li, Batkam, Abbes B., Experimental investigation and constitutive modelling of the deformation behaviour of high impact polystyrene for plug-assisted thermoforming, Mechanics & Industry 21:607 (2020), https://doi.org/10.1051/meca/2020084; DMA loss-modulus peak at 1 Hz, about 105 C"
 
 [[material]]
 name = "PTFE"

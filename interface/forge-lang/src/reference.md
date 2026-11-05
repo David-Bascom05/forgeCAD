@@ -815,7 +815,10 @@ thermoform(SHAPE, t: T, material: "ABS" | MATERIAL, from: "outer"|"wall"|"inner"
   by the model's wall at each point: volume mm3, mass kg, cog mm, inertia about it kg mm2; it holds
   the model's material, `wall_integral_mm3`, the wall integrated over the sheet's middle surface,
   to 0.5 %, the wall scaled by about 1 % for the sharp corners and rounds the sheet bridges; at t
-  everywhere it is the modelled part to 0.2 %), `blank` (W, L, t, mass) and
+  everywhere it is the modelled part to 0.2 %), `shrink` (the vendor's linear shrink, the mould's
+  scale; and `band`, the shrink free contraction gives from where the part set, between its
+  demould temperature and its glass transition, to 23 C: [low, high], for sheets with those on
+  record, null otherwise), `blank` (W, L, t, mass) and
   `field`, how many points the wall is known at on the sheet on the mould inside the trim; `fg run F
   --json --field OUT.csv` writes them (x, y, z on the mould, wall, mm) and names the file, `--field
   inline` puts them in the JSON.

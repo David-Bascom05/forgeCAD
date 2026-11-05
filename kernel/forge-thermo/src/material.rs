@@ -45,6 +45,11 @@ pub struct Material {
     /// Constitutive fits, each at its temperature, and measured modulus curves.
     pub fits: Vec<Fit>,
     pub curves: Vec<Curve>,
+    /// For the shrink band (stage 4A): the glass transition and the hottest a part is taken off
+    /// the mould at, C, and the linear expansion at room temperature, 1/K.
+    pub tg: Option<f64>,
+    pub demould: Option<f64>,
+    pub cte: Option<f64>,
     /// Fields that are guesses, by name: shown on every check that reads them.
     pub stand_in: Vec<&'static str>,
 }
@@ -79,6 +84,15 @@ pub struct LawAt {
 const FIT_REACH: f64 = 15.0;
 
 impl Material {
+    /// The part's linear shrink after forming, as a band (stage 4A, amorphous): it contracts
+    /// freely from where it set, somewhere between being taken off the mould and its glass
+    /// transition, to room temperature (23 C). None without those (a semi-crystalline sheet's
+    /// shrink is its crystallising, not this: the vendor's `shrink` stands).
+    pub fn shrink_band(&self) -> Option<(f64, f64)> {
+        let (tg, off, a) = (self.tg?, self.demould?, self.cte?);
+        Some((a * (off.min(tg) - 23.0), a * (tg - 23.0)))
+    }
+
     /// The sheet's normal forming temperature (its source's), else the window's middle.
     pub fn forming_temperature(&self) -> f64 {
         self.normal.unwrap_or(0.5 * (self.forming.0 + self.forming.1))
@@ -162,7 +176,9 @@ impl FormShop {
 }
 
 /// The thermoforming keys a material record carries (`thermo.<key>`), as stand-in names.
-pub const KEYS: [&str; 16] = [
+pub const KEYS: [&str; 18] = [
+    "tg",
+    "demould",
     "window",
     "normal",
     "shrink",
@@ -254,6 +270,9 @@ pub fn from_record(r: &forge_material::Material) -> Result<Option<Material>, Dat
         min_wall: one("min_wall")?,
         fits,
         curves: vec![],
+        tg: one("tg").ok(),
+        demould: one("demould").ok(),
+        cte: r.cte.map(|c| c * 1e-6),
         stand_in: KEYS
             .into_iter()
             .filter(|k| r.kind_of(&format!("thermo.{k}")) == Kind::StandIn)

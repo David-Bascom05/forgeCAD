@@ -257,6 +257,21 @@ impl ThermoOut {
             mass.push(("simulated_over_modelled", (s.mass.volume / m.volume).into()));
         }
         f.push(("mass", Json::obj(mass)));
+        // the part's shrink after forming: the vendor's figure, and the band free contraction
+        // from where it set gives (amorphous sheets with a glass transition and demould on record)
+        let m = forge_thermo::placeholder().material(&self.material).cloned();
+        f.push((
+            "shrink",
+            Json::obj(vec![
+                ("vendor", m.as_ref().map_or(Json::Null, |m| m.shrink.into())),
+                (
+                    "band",
+                    m.as_ref()
+                        .and_then(|m| m.shrink_band())
+                        .map_or(Json::Null, |(a, b)| Json::Arr(vec![a.into(), b.into()])),
+                ),
+            ]),
+        ));
         let (bw, bl) = self.blank_size();
         f.push((
             "blank",
