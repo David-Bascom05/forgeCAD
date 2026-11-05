@@ -1431,6 +1431,8 @@ impl ItemName {
 #[derive(Clone, Debug, PartialEq)]
 pub enum FileProblem {
     Missing,
+    /// There, but outside the project (or the session's root) once links are resolved.
+    Outside,
     /// The file has errors of its own: how many, and the first's kind.
     Errors {
         count: usize,
@@ -1805,6 +1807,7 @@ fn issue_text(i: &Issue) -> String {
         } => format!("{func} is for part files, not assemblies"),
         Issue::PartFile { file, problem } => match problem {
             FileProblem::Missing => format!("{file}: no such file"),
+            FileProblem::Outside => format!("{file} is outside this project, not read"),
             FileProblem::Errors { count, first } => format!("{file}: {count} errors, the first {first}"),
             FileProblem::WrongKind { assembly: true } => format!("{file} is an assembly: use subassembly()"),
             FileProblem::WrongKind { assembly: false } => format!("{file} is a part: use part()"),
@@ -1949,7 +1952,10 @@ fn issue_data(i: &Issue) -> Vec<(&'static str, Json)> {
             CompProblem::ReadOtherwise { component, reader } => {
                 vec![("component", s(component)), ("reader", s(reader))]
             }
-            CompProblem::FileExists { file } => vec![("file", s(file))],
+            CompProblem::FileExists { file }
+            | CompProblem::TargetIsLink { file }
+            | CompProblem::BadFileName { file }
+            | CompProblem::Outside { file } => vec![("file", s(file))],
             CompProblem::NotInlinable { file, why } => vec![("file", s(file)), ("why", s(why))],
             CompProblem::Cycle { a, b } => vec![("a", s(a)), ("b", s(b))],
             _ => vec![],
@@ -2342,6 +2348,20 @@ fn locate_now(
         return None;
     }
     Some(p)
+}
+
+/// Why a file did not locate: outside the fence (links resolved), or not there to read.
+fn not_located(
+    dir: &Option<std::path::PathBuf>,
+    fence: &Option<std::path::PathBuf>,
+    file: &str,
+) -> FileProblem {
+    let file = variant_split(file).map_or(file, |v| v.0);
+    if crate::outside(dir.as_deref(), fence.as_deref(), file) {
+        FileProblem::Outside
+    } else {
+        FileProblem::Missing
+    }
 }
 
 /// A located file's text, read no further than `LIMIT`.
@@ -3376,7 +3396,7 @@ pub fn finish(
     let t0 = Instant::now();
     let dir = opts.dir.clone();
     // the session's root: nothing outside it is read
-    let fence = opts.root.as_ref().and_then(|r| std::fs::canonicalize(r).ok());
+    let fence = crate::fence_of(opts);
     let mut names = Names::default();
 
     // subassemblies, depth first, each document once; a cycle is refused
@@ -3416,7 +3436,7 @@ pub fn finish(
                     i.span,
                     Issue::PartFile {
                         file: i.file.clone(),
-                        problem: FileProblem::Missing,
+                        problem: not_located(&here, &fence, &i.file),
                     },
                 ));
                 continue;
@@ -3663,13 +3683,9 @@ pub fn finish(
                 }
             };
             let Some(text) = text else {
-                ev.errors.push(note(
-                    span,
-                    Issue::PartFile {
-                        file: shown,
-                        problem: FileProblem::Missing,
-                    },
-                ));
+                let problem = named.map_or(FileProblem::Missing, |i| not_located(&dir, &fence, &i.file));
+                ev.errors
+                    .push(note(span, Issue::PartFile { file: shown, problem }));
                 continue;
             };
             let ck = (
@@ -5335,6 +5351,14 @@ pub enum CompProblem {
     ReadOtherwise { component: String, reader: String },
     /// The file to write already exists.
     FileExists { file: String },
+    /// The file to write is a link (dangling or not): never written through.
+    TargetIsLink { file: String },
+    /// A file a refactor makes is a plain `.fg` name beside the document, and this is not.
+    BadFileName { file: String },
+    /// The document has no file yet: nowhere beside it to write.
+    UntitledDocument,
+    /// The file is outside the project (or the session's root): never read.
+    Outside { file: String },
     /// A file not inlinable as written: why.
     NotInlinable { file: String, why: String },
     /// Components placing each other round (a placing b placing a, or a itself): no end (R1).
@@ -5364,6 +5388,10 @@ impl CompProblem {
             CompProblem::StillReadBy { .. } => "StillReadBy",
             CompProblem::ReadOtherwise { .. } => "ReadOtherwise",
             CompProblem::FileExists { .. } => "FileExists",
+            CompProblem::TargetIsLink { .. } => "TargetIsLink",
+            CompProblem::BadFileName { .. } => "BadFileName",
+            CompProblem::UntitledDocument => "UntitledDocument",
+            CompProblem::Outside { .. } => "Outside",
             CompProblem::NotInlinable { .. } => "NotInlinable",
             CompProblem::Cycle { .. } => "ComponentCycle",
         }
@@ -5389,6 +5417,12 @@ impl CompProblem {
                 format!("{reader} reads {component} other than placing it (part({component}(..)))")
             }
             CompProblem::FileExists { file } => format!("{file} exists already: pick another name"),
+            CompProblem::TargetIsLink { file } => format!("{file} is a link: pick another name"),
+            CompProblem::BadFileName { file } => {
+                format!("{file}: a new file is a plain name ending .fg, beside this one (no folder)")
+            }
+            CompProblem::UntitledDocument => "save this file first: what moves out goes beside it".into(),
+            CompProblem::Outside { file } => format!("{file} is outside this project, not read"),
             CompProblem::NotInlinable { file, why } => format!("{file} can't be brought in: {why}"),
             CompProblem::Cycle { a, b } => {
                 format!("{a} places {b}, which places {a}: a component may not place itself")

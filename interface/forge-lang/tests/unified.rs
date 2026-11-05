@@ -542,3 +542,55 @@ fn the_same_call_under_different_parents_is_one_part() {
     let rows = forge_lang::props::bom_rows(r.asm.as_ref().unwrap());
     assert!(rows.iter().any(|row| row.0 == "#lid(w=40)" && row.1 == 2));
 }
+
+#[test]
+fn reads_stay_inside_the_project() {
+    let base = dir("fence-reads");
+    let proj = base.join("proj");
+    for d in [
+        proj.join(".git"),
+        proj.join("hw"),
+        proj.join("asm"),
+        base.join("out"),
+    ] {
+        std::fs::create_dir_all(d).unwrap();
+    }
+    let block = "shared s = 10\nsketch p(on: xy) {\n  c = circle((0, 0), s)\n}\nb = extrude(p, s)\n";
+    std::fs::write(base.join("out/secret.fg"), block).unwrap();
+    std::fs::write(proj.join("hw/ok.fg"), block).unwrap();
+    let at = proj.join("asm");
+    let text = |r: &Run| {
+        format!(
+            "{:?} {:?}",
+            errors(r),
+            r.errors.iter().map(|e| e.json("")).collect::<Vec<_>>()
+        )
+    };
+    // a part up a folder inside the project is read; one outside it is refused, as such
+    let r = run_in(&at, "x = part(\"../hw/ok.fg\", ground: true)\n");
+    assert!(r.ok(), "{}", text(&r));
+    let r = run_in(&at, "x = part(\"../../out/secret.fg\", ground: true)\n");
+    assert!(text(&r).contains("Outside"), "{}", text(&r));
+    // through a link too, resolved before the check
+    #[cfg(unix)]
+    {
+        let _ = std::os::unix::fs::symlink(base.join("out/secret.fg"), at.join("link.fg"));
+        let r = run_in(&at, "x = part(\"link.fg\", ground: true)\n");
+        assert!(text(&r).contains("Outside"), "{}", text(&r));
+        let r = run_in(
+            &at,
+            "t = use(\"link.fg\")\nsketch p(on: xy) {\n  c = circle((0, 0), 1)\n}\nb = extrude(p, 1)\n",
+        );
+        assert!(kinds(&r).contains(&"UseOutside"), "{}", text(&r));
+    }
+    let r = run_in(
+        &at,
+        "t = use(\"../../out/secret.fg\")\nsketch p(on: xy) {\n  c = circle((0, 0), 1)\n}\nb = extrude(p, 1)\n",
+    );
+    assert!(kinds(&r).contains(&"UseOutside"), "{}", text(&r));
+    let r = run_in(
+        &at,
+        "t = use(\"../hw/ok.fg\")\nsketch p(on: xy) {\n  c = circle((0, 0), t.s)\n}\nb = extrude(p, 1)\n",
+    );
+    assert!(r.ok(), "{}", text(&r));
+}

@@ -1,7 +1,7 @@
 //! Make, Extract and Inline Component: all or nothing, the same model before and after where the
 //! proof says so, and refused typed (every reader named) where it would not be.
 
-use forge_lang::refactor::{Refactor, Written, apply_checked};
+use forge_lang::refactor::{Found, Refactor, Written, apply_checked};
 use forge_lang::{Options, Run};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -44,7 +44,7 @@ fn total(r: &Run) -> f64 {
 }
 
 fn apply_in(d: &Path, src: &str, r: &Refactor) -> Result<Written, forge_lang::error::Error> {
-    let read = |f: &str| std::fs::read_to_string(d.join(f)).ok();
+    let read = |f: &str| std::fs::read_to_string(d.join(f)).map_or(Found::Missing, Found::Text);
     let w = apply_checked(src, r, &read)?;
     for (f, t) in &w.files {
         std::fs::write(d.join(f), t).unwrap();
@@ -284,5 +284,63 @@ fn a_new_file_is_never_written_through_a_link_or_outside() {
         },
     )
     .unwrap_err();
-    assert_eq!(e.kind(), "NotInlinable", "{}", e.text());
+    assert_eq!(e.kind(), "BadFileName", "{}", e.text());
+}
+
+#[test]
+fn each_refusal_on_disk_is_its_own() {
+    use forge_lang::refactor::run_on_disk;
+    let d = dir("on-disk");
+    let doc = d.join("pegs.fg");
+    std::fs::write(&doc, PEGS).unwrap();
+    let ext = |file: &str| Refactor::ExtractComponent {
+        component: "peg".into(),
+        file: file.into(),
+    };
+    let kind =
+        |doc: Option<&Path>, r: &Refactor| run_on_disk(doc, None, PEGS, r).unwrap_err().kind().to_string();
+    assert_eq!(kind(None, &ext("peg.fg")), "UntitledDocument");
+    assert_eq!(kind(Some(&doc), &ext("../peg.fg")), "BadFileName");
+    std::fs::write(d.join("taken.fg"), "shared x = 1\n").unwrap();
+    assert_eq!(kind(Some(&doc), &ext("taken.fg")), "FileExists");
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::symlink(d.join("nowhere"), d.join("ghost.fg")).unwrap();
+        assert_eq!(kind(Some(&doc), &ext("ghost.fg")), "TargetIsLink");
+    }
+}
+
+#[test]
+fn inline_reads_nothing_outside_the_project() {
+    use forge_lang::refactor::run_on_disk;
+    let base = dir("fence-inline");
+    let proj = base.join("proj");
+    std::fs::create_dir_all(proj.join(".git")).unwrap();
+    std::fs::create_dir_all(proj.join("hw")).unwrap();
+    std::fs::create_dir_all(base.join("out")).unwrap();
+    std::fs::write(base.join("out/secret.fg"), "shared s = 1\nbox(size: (s, s, s))\n").unwrap();
+    std::fs::write(proj.join("hw/ok.fg"), "shared s = 1\nbox(size: (s, s, s))\n").unwrap();
+    let doc = proj.join("a.fg");
+    let src = "x = part(\"../out/secret.fg\")\n";
+    std::fs::write(&doc, src).unwrap();
+    let inl = |file: &str| Refactor::InlineComponent {
+        file: file.into(),
+        name: "s".into(),
+    };
+    let e = run_on_disk(Some(&doc), None, src, &inl("../out/secret.fg")).unwrap_err();
+    assert_eq!(e.kind(), "Outside", "{}", e.text());
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::symlink(base.join("out/secret.fg"), proj.join("link.fg")).unwrap();
+        let e = run_on_disk(Some(&doc), None, src, &inl("link.fg")).unwrap_err();
+        assert_eq!(e.kind(), "Outside", "{}", e.text());
+    }
+    // inside the project, up a folder, is read
+    let sub = proj.join("asm");
+    std::fs::create_dir_all(&sub).unwrap();
+    let doc2 = sub.join("b.fg");
+    let src2 = "x = part(\"../hw/ok.fg\")\n";
+    std::fs::write(&doc2, src2).unwrap();
+    let e = run_on_disk(Some(&doc2), None, src2, &inl("../hw/ok.fg"));
+    assert!(e.as_ref().map_or_else(|e| e.kind() != "Outside", |_| true));
 }

@@ -237,7 +237,7 @@ pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
     ev.checks = opts.checks;
     ev.cosmetic_threads = opts.cosmetic_threads;
     ev.dir = opts.dir.clone();
-    ev.root = opts.root.as_ref().and_then(|r| std::fs::canonicalize(r).ok());
+    ev.root = fence_of(&opts);
     // any document may hold components and joints (an `assembly` first line is optional)
     ev.asm = Some(asm::Doc {
         declared: asm::declared(&prog),
@@ -348,6 +348,71 @@ pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
     (run, ev.b.into_cache())
 }
 
+/// Where a run may read files: the session's root if one is given, else the project the
+/// document is in (the nearest folder above it holding `.git`), else the document's own folder.
+/// Symlinks are resolved before every check, so a link cannot read past it.
+pub fn fence_of(opts: &Options) -> Option<std::path::PathBuf> {
+    fence_for(opts.dir.as_deref(), opts.root.as_deref())
+}
+
+/// The roots sessions were given (`fg serve`, MCP): a run fenced by one reads nothing of the
+/// user's either (their material library).
+static SESSION_ROOTS: std::sync::Mutex<std::collections::BTreeSet<std::path::PathBuf>> =
+    std::sync::Mutex::new(std::collections::BTreeSet::new());
+
+/// Whether `fence` is a session's root, not only the project a document is in.
+pub(crate) fn session_kept(fence: Option<&std::path::Path>) -> bool {
+    fence.is_some_and(|f| {
+        SESSION_ROOTS
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .contains(f)
+    })
+}
+
+/// The fence of a document in `dir`, under a session's `root` if one is given.
+pub fn fence_for(
+    dir: Option<&std::path::Path>,
+    root: Option<&std::path::Path>,
+) -> Option<std::path::PathBuf> {
+    if let Some(r) = root {
+        let r = std::fs::canonicalize(r).ok()?;
+        SESSION_ROOTS
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(r.clone());
+        return Some(r);
+    }
+    let dir = std::fs::canonicalize(dir?).ok()?;
+    let project = dir
+        .ancestors()
+        .find(|a| a.join(".git").exists())
+        .map(|a| a.to_path_buf());
+    Some(project.unwrap_or(dir))
+}
+
+/// Whether `file` beside `dir` is outside the fence: as written (whether or not it is there, so
+/// the refusal says nothing of what is outside), or once its links are resolved.
+pub(crate) fn outside(dir: Option<&std::path::Path>, fence: Option<&std::path::Path>, file: &str) -> bool {
+    let (Some(d), Some(f)) = (dir, fence) else {
+        return false;
+    };
+    let Ok(d) = std::fs::canonicalize(d) else {
+        return false;
+    };
+    let mut lexical = std::path::PathBuf::new();
+    for c in d.join(file).components() {
+        match c {
+            std::path::Component::ParentDir => {
+                lexical.pop();
+            }
+            std::path::Component::CurDir => {}
+            c => lexical.push(c),
+        }
+    }
+    !lexical.starts_with(f) || std::fs::canonicalize(d.join(file)).is_ok_and(|p| !p.starts_with(f))
+}
+
 /// A sketch as evaluation left it, for an editor reading the block back.
 pub struct SketchView {
     /// Solved, in the sketch plane's coordinates.
@@ -361,7 +426,7 @@ pub fn sketch_view(src: &str, id: &str, opts: Options) -> Option<SketchView> {
     let prog = syntax::parse(src).ok()?;
     let mut ev = Eval::new(src, opts.rules, opts.build, Default::default());
     ev.dir = opts.dir.clone();
-    ev.root = opts.root.as_ref().and_then(|r| std::fs::canonicalize(r).ok());
+    ev.root = fence_of(&opts);
     ev.asm = Some(asm::Doc::default());
     ev.check_static(&prog);
     if !ev.errors.is_empty() {

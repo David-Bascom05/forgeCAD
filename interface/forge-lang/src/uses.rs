@@ -29,8 +29,10 @@ pub struct Lib {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum UseErr {
-    /// The file is not there, not a `.fg`, too big, or outside the session's root.
+    /// The file is not there, not a `.fg`, or too big.
     Missing { span: Span, file: String },
+    /// The file is outside the project (or the session's root): never read.
+    Outside { span: Span, file: String },
     /// The file uses, directly or through others, a file already being used. `chain`: the
     /// files being used, as each document named them.
     Cycle {
@@ -61,6 +63,7 @@ impl UseErr {
     pub fn span(&self) -> Option<Span> {
         match self {
             UseErr::Missing { span, .. }
+            | UseErr::Outside { span, .. }
             | UseErr::Cycle { span, .. }
             | UseErr::NotBound { span }
             | UseErr::NotTopLevel { span }
@@ -72,6 +75,7 @@ impl UseErr {
     pub fn kind(&self) -> &'static str {
         match self {
             UseErr::Missing { .. } => "UseMissing",
+            UseErr::Outside { .. } => "UseOutside",
             UseErr::Cycle { .. } => "UseCycle",
             UseErr::NotBound { .. } => "UseNotBound",
             UseErr::NotTopLevel { .. } => "UseNotTopLevel",
@@ -82,6 +86,7 @@ impl UseErr {
 
     pub fn text(&self) -> String {
         match self {
+            UseErr::Outside { file, .. } => format!("use: {file} is outside this project, not read"),
             UseErr::Missing { file, .. } => {
                 format!("use: no file {file} (a .fg beside this one, under the session's root)")
             }
@@ -107,7 +112,7 @@ impl UseErr {
     pub fn data(&self) -> Vec<(&'static str, Json)> {
         let s = |x: &str| Json::Str(x.into());
         match self {
-            UseErr::Missing { file, .. } => vec![("file", s(file))],
+            UseErr::Missing { file, .. } | UseErr::Outside { file, .. } => vec![("file", s(file))],
             UseErr::Cycle { file, chain, .. } => vec![
                 ("file", s(file)),
                 ("chain", Json::Arr(chain.iter().map(|c| s(c)).collect())),
@@ -180,6 +185,9 @@ pub fn call(ev: &mut Eval, args: &[crate::syntax::Arg], span: Span) -> R<Value> 
     };
     let fence = ev.root.clone();
     let Some(path) = crate::asm::locate(&ev.dir, &fence, &file) else {
+        if crate::outside(ev.dir.as_deref(), fence.as_deref(), &file) {
+            return Err(err(UseErr::Outside { span, file }));
+        }
         return Err(err(UseErr::Missing { span, file }));
     };
     if ev.use_chain.contains(&path) {

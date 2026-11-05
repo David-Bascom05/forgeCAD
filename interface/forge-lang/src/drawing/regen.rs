@@ -181,11 +181,17 @@ fn fail(problem: Problem, span: Span) -> DrawError {
 }
 
 /// A part file's first comment line, read as part number and description: `# RACK-101 post: ..`.
-fn describe(path: &Path, file: &str) -> (String, String) {
+fn describe(path: &Path, file: &str, fence: Option<&Path>) -> (String, String) {
     let stem = Path::new(file)
         .file_stem()
         .map_or_else(|| file.to_string(), |s| s.to_string_lossy().into_owned());
-    let src = std::fs::read_to_string(path);
+    // read only inside the fence, links resolved
+    let inside = std::fs::canonicalize(path).is_ok_and(|p| fence.is_none_or(|f| p.starts_with(f)));
+    let src = if inside {
+        std::fs::read_to_string(path)
+    } else {
+        Err(std::io::ErrorKind::NotFound.into())
+    };
     crate::deps::read(path, src.as_ref().ok().map(|s| s.as_bytes()));
     let Ok(src) = src else {
         return (stem, String::new());
@@ -246,6 +252,10 @@ fn load(
     component: Option<&str>,
 ) -> Result<ModelOut, String> {
     let path = dir.join(file);
+    let fence = crate::fence_for(Some(dir), None);
+    if crate::outside(Some(dir), fence.as_deref(), file) {
+        return Err("is outside this project, not read".into());
+    }
     let src = std::fs::read_to_string(&path);
     crate::deps::read(&path, src.as_ref().ok().map(|s| s.as_bytes()));
     let src = src.map_err(|e| e.to_string())?;
@@ -295,12 +305,12 @@ fn load(
             .bom
             .iter()
             .map(|(f, n)| {
-                let (num, desc) = describe(&resolve(&base, &model, f), f);
+                let (num, desc) = describe(&resolve(&base, &model, f), f, fence.as_deref());
                 (f.clone(), *n, num, desc)
             })
             .collect(),
         None => {
-            let (num, desc) = describe(&path, file);
+            let (num, desc) = describe(&path, file, fence.as_deref());
             vec![(file.to_string(), 1, num, desc)]
         }
     };

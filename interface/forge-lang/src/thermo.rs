@@ -1089,7 +1089,7 @@ const ARGS: &[&str] = &[
 /// The materials a document finds: its project's library (materials/ beside it), the user's, then
 /// ForgeCAD's; a session kept to its root reads only ForgeCAD's.
 fn library(ev: &Eval) -> ft::FormShop {
-    if ev.root.is_some() {
+    if crate::session_kept(ev.root.as_deref()) {
         return ft::placeholder();
     }
     crate::deps::materials(ev.dir.as_deref());

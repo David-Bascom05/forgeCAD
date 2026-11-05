@@ -413,7 +413,12 @@ fn extracted(name: &str, src: &str) -> (PathBuf, String) {
     use forge_lang::refactor::{Refactor, apply_checked};
     let d = dir(name);
     let _ = std::fs::remove_file(d.join("cup.fg"));
-    let read = |f: &str| std::fs::read_to_string(d.join(f)).ok();
+    let read = |f: &str| {
+        std::fs::read_to_string(d.join(f)).map_or(
+            forge_lang::refactor::Found::Missing,
+            forge_lang::refactor::Found::Text,
+        )
+    };
     let w = apply_checked(
         src,
         &Refactor::ExtractComponent {
@@ -464,7 +469,12 @@ fn x3_x4_extract_then_inline_is_the_same_text() {
         XCUP.replace("c1 = part(cup(d: H))\n", "e = 1\n"),
     ] {
         let (d, doc) = extracted("x34", &src);
-        let read = |f: &str| std::fs::read_to_string(d.join(f)).ok();
+        let read = |f: &str| {
+            std::fs::read_to_string(d.join(f)).map_or(
+                forge_lang::refactor::Found::Missing,
+                forge_lang::refactor::Found::Text,
+            )
+        };
         let back = apply_checked(
             &doc,
             &Refactor::InlineComponent {

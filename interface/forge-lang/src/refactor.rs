@@ -9,8 +9,10 @@
 //!
 //! Refusals are typed (`asm::CompProblem`): a moved statement reading a name left behind
 //! (ReadsOutside), a statement left behind reading a moved name (StillReadBy, every reader),
-//! a component read other than placed (ReadOtherwise), a file that exists (FileExists), a file
-//! that is no plain part (NotInlinable).
+//! a component read other than placed (ReadOtherwise), a file that exists (FileExists) or is a
+//! link (TargetIsLink), a new name not plain (BadFileName), a file outside the project
+//! (Outside), a document with no file (UntitledDocument), a file that is no plain part
+//! (NotInlinable).
 
 use crate::asm::{CompProblem, comp_error};
 use crate::edit::{bound, mentions};
@@ -81,8 +83,8 @@ impl Refactor {
         })
     }
 
-    /// The refactor, `read` giving a file's text by its name (beside the document).
-    pub fn apply(&self, src: &str, read: &dyn Fn(&str) -> Option<String>) -> R<Written> {
+    /// The refactor, `read` saying what is at a file's name (beside the document).
+    pub fn apply(&self, src: &str, read: &dyn Fn(&str) -> Found) -> R<Written> {
         match self {
             Refactor::MakeComponent { statements, name } => make(src, statements, name),
             Refactor::ExtractComponent { component, file } => extract(src, component, file, read),
@@ -369,7 +371,7 @@ fn fns_reached(prog: &[Stmt], mut names: BTreeSet<String>) -> Vec<&Stmt> {
 }
 
 /// Move to Own File: the component's block becomes FILE's top level.
-fn extract(src: &str, name: &str, file: &str, read: &dyn Fn(&str) -> Option<String>) -> R<Written> {
+fn extract(src: &str, name: &str, file: &str, read: &dyn Fn(&str) -> Found) -> R<Written> {
     let prog = syntax::parse(src)?;
     let Some(k) = prog.iter().position(
         |s| matches!(&s.kind, StmtKind::Block { kind: BlockKind::Component, name: n, .. } if n == name),
@@ -379,17 +381,16 @@ fn extract(src: &str, name: &str, file: &str, read: &dyn Fn(&str) -> Option<Stri
     if !plain_name(file) {
         return Err(comp_error(
             prog[k].span,
-            CompProblem::NotInlinable {
-                file: file.into(),
-                why: "a new file is a plain name beside this one, ending .fg".into(),
-            },
+            CompProblem::BadFileName { file: file.into() },
         ));
     }
-    if read(file).is_some() {
-        return Err(comp_error(
-            prog[k].span,
-            CompProblem::FileExists { file: file.into() },
-        ));
+    let taken = match read(file) {
+        Found::Missing => None,
+        Found::Link => Some(CompProblem::TargetIsLink { file: file.into() }),
+        Found::Text(_) | Found::Taken | Found::Outside => Some(CompProblem::FileExists { file: file.into() }),
+    };
+    if let Some(p) = taken {
+        return Err(comp_error(prog[k].span, p));
     }
     let StmtKind::Block { args, body, .. } = &prog[k].kind else {
         unreachable!("a block")
@@ -493,7 +494,7 @@ fn marker(name: &str, file: &str) -> String {
 
 /// Bring Into This File: FILE's top level becomes `component NAME(p: DEFAULT, ..) { .. }`,
 /// its shared params the params; each `part(FILE, with: {..})` a call.
-fn inline(src: &str, file: &str, name: &str, read: &dyn Fn(&str) -> Option<String>) -> R<Written> {
+fn inline(src: &str, file: &str, name: &str, read: &dyn Fn(&str) -> Found) -> R<Written> {
     let prog = syntax::parse(src)?;
     let no = |why: &str| {
         comp_error(
@@ -504,7 +505,16 @@ fn inline(src: &str, file: &str, name: &str, read: &dyn Fn(&str) -> Option<Strin
             },
         )
     };
-    let theirs = read(file).ok_or_else(|| no("no such file"))?;
+    let theirs = match read(file) {
+        Found::Text(t) => t,
+        Found::Outside => {
+            return Err(comp_error(
+                Span::default(),
+                CompProblem::Outside { file: file.into() },
+            ));
+        }
+        Found::Missing | Found::Link | Found::Taken => return Err(no("no such file")),
+    };
     let fp = syntax::parse(&theirs).map_err(|_| no("it doesn't parse"))?;
     if bound(&prog).contains(name) {
         return Err(Error::NameTaken { name: name.into() });
@@ -694,7 +704,7 @@ fn file_placements<'a>(e: &'a Expr, file: &str, out: &mut Vec<FilePlacement<'a>>
 
 /// The refactor, then the document as it leaves it checked (no error it did not have), and each
 /// new file parsed: all or nothing.
-pub fn apply_checked(src: &str, r: &Refactor, read: &dyn Fn(&str) -> Option<String>) -> R<Written> {
+pub fn apply_checked(src: &str, r: &Refactor, read: &dyn Fn(&str) -> Found) -> R<Written> {
     let w = r.apply(src, read)?;
     crate::edit::checked(src, &w.doc)?;
     for (_, t) in &w.files {
@@ -792,6 +802,81 @@ fn attr_chains(e: &Expr, out: &mut Vec<Vec<String>>) {
         }
         _ => {}
     }
+}
+
+/// What is at a name a refactor reads or would write.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Found {
+    /// Nothing at all.
+    Missing,
+    /// A file inside the fence, read.
+    Text(String),
+    /// A link (dangling or not), where a file would be written.
+    Link,
+    /// Something not readable as a part (a folder, too big, not text).
+    Taken,
+    /// There, but outside the fence once links are resolved: never read.
+    Outside,
+}
+
+/// What is at `file` beside `dir`, read only inside `fence` (links resolved first) and no
+/// further than a part file's limit.
+pub fn found(dir: &std::path::Path, fence: Option<&std::path::Path>, file: &str) -> Found {
+    let at = dir.join(file);
+    let Ok(meta) = std::fs::symlink_metadata(&at) else {
+        return Found::Missing;
+    };
+    let Ok(real) = std::fs::canonicalize(&at) else {
+        // a dangling link
+        return if meta.file_type().is_symlink() {
+            Found::Link
+        } else {
+            Found::Taken
+        };
+    };
+    if fence.is_some_and(|f| !real.starts_with(f)) {
+        return Found::Outside;
+    }
+    match crate::asm::read_capped(&real) {
+        Some(t) if real.is_file() => Found::Text(t),
+        _ if meta.file_type().is_symlink() => Found::Link,
+        _ => Found::Taken,
+    }
+}
+
+/// A refactor of the document at `doc` (None: untitled, refused), reading beside it inside
+/// `root` (else the project it is in), the files it makes written new beside it: the new text.
+pub fn run_on_disk(
+    doc: Option<&std::path::Path>,
+    root: Option<&std::path::Path>,
+    src: &str,
+    r: &Refactor,
+) -> R<Written> {
+    let untitled = || comp_error(Span::default(), CompProblem::UntitledDocument);
+    let doc = doc
+        .and_then(|f| std::fs::canonicalize(f).ok())
+        .ok_or_else(untitled)?;
+    let dir = doc.parent().ok_or_else(untitled)?.to_path_buf();
+    let fence = crate::fence_for(Some(&dir), root);
+    let read = |f: &str| found(&dir, fence.as_deref(), f);
+    let w = apply_checked(src, r, &read)?;
+    for (f, t) in &w.files {
+        write_new(&dir, f, t).map_err(|e| {
+            let file = f.clone();
+            comp_error(
+                Span::default(),
+                match e.kind() {
+                    std::io::ErrorKind::InvalidInput => CompProblem::BadFileName { file },
+                    std::io::ErrorKind::AlreadyExists => CompProblem::FileExists { file },
+                    _ => CompProblem::NotInlinable {
+                        file,
+                        why: e.to_string(),
+                    },
+                },
+            )
+        })?;
+    }
+    Ok(w)
 }
 
 /// A file a refactor may make: a plain name beside the document (no folder, no `..`, not

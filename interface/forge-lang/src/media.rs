@@ -65,9 +65,12 @@ fn find_in(dir: &Path, root: Option<&Path>, file: &str, span: Span) -> R<PathBuf
         }
         .into()
     };
+    if crate::outside(Some(dir), root, file) {
+        return Err(err(FileProblem::Outside));
+    }
     let p = std::fs::canonicalize(dir.join(file)).map_err(|_| err(FileProblem::Missing))?;
     if root.is_some_and(|r| !p.starts_with(r)) {
-        return Err(err(FileProblem::Missing));
+        return Err(err(FileProblem::Outside));
     }
     let meta = std::fs::metadata(&p).map_err(|_| err(FileProblem::Missing))?;
     if !meta.is_file() {

@@ -491,24 +491,9 @@ fn main() -> ExitCode {
                 .ok()
                 .and_then(|j| forge_lang::refactor::Refactor::from_json(&j))
             {
-                let Some(dir) = dir_of(file) else {
-                    eprintln!("{file}: no directory to write beside");
-                    return ExitCode::from(2);
-                };
-                // what is there is there: a name, a link, dangling or not, reads as taken
-                let read = |f: &str| {
-                    std::fs::read_to_string(dir.join(f))
-                        .ok()
-                        .or_else(|| std::fs::symlink_metadata(dir.join(f)).ok().map(|_| String::new()))
-                };
-                return match forge_lang::refactor::apply_checked(&src, &r, &read) {
+                let doc = std::path::Path::new(file);
+                return match forge_lang::refactor::run_on_disk(Some(doc), None, &src, &r) {
                     Ok(w) => {
-                        for (f, t) in &w.files {
-                            if let Err(e) = forge_lang::refactor::write_new(&dir, f, t) {
-                                eprintln!("{f}: {e}");
-                                return ExitCode::from(2);
-                            }
-                        }
                         if let Err(e) = std::fs::write(file, &w.doc) {
                             eprintln!("{file}: {e}");
                             return ExitCode::from(2);

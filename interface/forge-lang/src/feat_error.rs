@@ -90,6 +90,8 @@ pub enum FileProblem {
     WrongKind,
     /// Read, but refused: the reader's reason.
     Unreadable(String),
+    /// Outside the project (or the session's root) the part is in: never read.
+    Outside,
 }
 
 impl FeatError {
@@ -172,6 +174,7 @@ impl FeatError {
                 FileProblem::Missing => format!("{file}: not found beside the part file"),
                 FileProblem::WrongKind => format!("{file}: not a kind of file this reads"),
                 FileProblem::Unreadable(why) => format!("{file}: {why}"),
+                FileProblem::Outside => format!("{file}: outside this project, not read"),
             },
         }
     }
@@ -215,6 +218,7 @@ impl FeatError {
                         FileProblem::Missing => "Missing",
                         FileProblem::WrongKind => "WrongKind",
                         FileProblem::Unreadable(_) => "Unreadable",
+                        FileProblem::Outside => "Outside",
                     }),
                 ),
             ],
