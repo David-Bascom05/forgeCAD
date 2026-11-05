@@ -13,7 +13,6 @@ use forge_math::{Point3, Vec3, dmath};
 
 /// The dimensions' ink, a face's tint, and the labels' ground.
 const INK: Color32 = Color32::from_rgb(0xFF, 0xD0, 0x40);
-const TINT: Color32 = Color32::from_rgba_premultiplied(0x30, 0x70, 0xC0, 0x50);
 const GROUND: Color32 = Color32::from_rgba_premultiplied(0x10, 0x12, 0x16, 0xE0);
 const ARROW: f32 = 9.0;
 
@@ -240,13 +239,8 @@ impl Shell {
         let line = Stroke::new(1.5, INK);
         for s in &r.shown {
             match s {
-                Shown::Face(tris, c) => {
-                    for tri in tris {
-                        let pts: Option<Vec<Pos2>> = tri.iter().map(|p| to_screen(*p)).collect();
-                        if let Some(pts) = pts {
-                            painter.add(egui::Shape::convex_polygon(pts, TINT, Stroke::NONE));
-                        }
-                    }
+                // the face's tint is the view's own mark, drawn where the face is seen
+                Shown::Face(_, c) => {
                     if let Some(at) = to_screen(*c) {
                         let mut text = vec![];
                         if let Some(a) = value(Quantity::Area) {

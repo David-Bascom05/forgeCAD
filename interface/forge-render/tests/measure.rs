@@ -561,3 +561,70 @@ fn measuring_goes_on_across_the_tabs() {
     let b = click(&mut h, BOSS_TOP);
     assert_eq!(picks(&h), vec![a, b]);
 }
+
+/// Pixels changed between two frames, off the part and off the panels: a face's tint stays on
+/// the face.
+fn changed_off_the_part(h: &Headless, before: &forge_render::gui::Pixels, after: &forge_render::gui::Pixels) -> usize {
+    let (cam, size) = h.gui.shell.camera.unwrap();
+    let r = h.gui.shell.view_rect;
+    let mut lo = egui::pos2(f32::MAX, f32::MAX);
+    let mut hi = egui::pos2(f32::MIN, f32::MIN);
+    for x in [-40.0, 40.0] {
+        for y in [-30.0, 30.0] {
+            for z in [0.0, 20.0] {
+                let p = cam.pixel_of([x, y, z], size.0, size.1).unwrap();
+                let p = egui::pos2(r.min.x + p.0, r.min.y + p.1);
+                lo = lo.min(p);
+                hi = hi.max(p);
+            }
+        }
+    }
+    let part = egui::Rect::from_min_max(lo, hi).expand(12.0);
+    // the panel, as wide as its rows make it
+    let panel = h
+        .gui
+        .shell
+        .places
+        .iter()
+        .filter(|p| p.0.starts_with("measure"))
+        .fold(egui::Rect::NOTHING, |a, p| a.union(p.1))
+        .expand(40.0);
+    let mut n = 0;
+    for y in (r.min.y as usize + 80)..(r.max.y as usize - 4) {
+        for x in (r.min.x as usize + 4)..(r.max.x as usize - 180) {
+            let at = egui::pos2(x as f32, y as f32);
+            if !part.contains(at) && !panel.contains(at) && before.at(x, y) != after.at(x, y) {
+                n += 1;
+            }
+        }
+    }
+    n
+}
+
+#[test]
+fn a_picked_face_is_tinted_on_itself_and_nowhere_else() {
+    let Some(mut h) = open("tint") else { return };
+    measure(&mut h);
+    let (at, _) = hover(&mut h, TOP);
+    h.move_to(5.0, 5.0);
+    for _ in 0..10 {
+        h.step();
+    }
+    let before = h.gui_pixels();
+    h.move_to(at.0, at.1);
+    click(&mut h, TOP);
+    let _ = reading(&mut h);
+    for _ in 0..10 {
+        h.step();
+    }
+    let hovered = h.gui_pixels();
+    let n = changed_off_the_part(&h, &before, &hovered);
+    assert!(n < 50, "{n} pixels off the part changed with the top face picked and hovered");
+    h.move_to(5.0, 5.0);
+    for _ in 0..10 {
+        h.step();
+    }
+    let picked = h.gui_pixels();
+    let n = changed_off_the_part(&h, &before, &picked);
+    assert!(n < 50, "{n} pixels off the part changed with the top face picked");
+}
