@@ -638,7 +638,7 @@ fn run() -> Result<(), String> {
                 continue;
             }
             Step::Rest(name, secs) => {
-                let Some(r) = h.gui.shell.place(name) else {
+                let Some(r) = h.placed(name) else {
                     return Err(format!("nothing called {name}"));
                 };
                 h.move_to(r.center().x, r.center().y);
@@ -655,7 +655,7 @@ fn run() -> Result<(), String> {
             }
         };
         // by its name, or the first whose name starts so
-        let found = h.gui.shell.place(c).or_else(|| {
+        let found = h.placed(c).or_else(|| {
             h.gui
                 .shell
                 .places

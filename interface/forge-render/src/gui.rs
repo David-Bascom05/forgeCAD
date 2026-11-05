@@ -2898,6 +2898,18 @@ impl Headless {
         self.pending.push(egui::Event::Text(s.to_string()));
     }
 
+    /// Where `name` is drawn, a few frames given for it to be: a panel just opened is named once
+    /// it's laid out and seen, not on egui's unseen sizing pass.
+    pub fn placed(&mut self, name: &str) -> Option<egui::Rect> {
+        for _ in 0..4 {
+            if let Some(r) = self.gui.shell.place(name) {
+                return Some(r);
+            }
+            self.step();
+        }
+        self.gui.shell.place(name)
+    }
+
     /// Frames until this holds, or a good while.
     pub fn until(&mut self, what: impl Fn(&Gui) -> bool) -> bool {
         // by the clock, not a count of frames: a build on its worker thread starved by a busy
@@ -2943,7 +2955,7 @@ impl Headless {
 
     /// Queues a click at the middle of what the shell last drew under this name.
     pub fn click(&mut self, name: &str) -> bool {
-        let Some(r) = self.gui.shell.place(name) else {
+        let Some(r) = self.placed(name) else {
             return false;
         };
         self.move_to(r.center().x, r.center().y);

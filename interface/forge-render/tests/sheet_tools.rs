@@ -49,7 +49,7 @@ fn click(h: &mut Headless, name: &str) {
 /// A number typed into a dialog field, over what it held.
 fn type_in(h: &mut Headless, field: &str, text: &str) {
     assert!(
-        h.gui.shell.place(&format!("sheet:field:{field}")).is_some(),
+        h.placed(&format!("sheet:field:{field}")).is_some(),
         "no field {field}"
     );
     h.gui.shell.sheet.dlg.as_mut().unwrap().set(field, text);
