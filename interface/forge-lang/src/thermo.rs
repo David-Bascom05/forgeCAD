@@ -1255,9 +1255,12 @@ fn thermoform(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
                         error,
                     })
                 };
+                let t = forge_math::trace::span("thermoform prepare");
                 let prep = ft::prepare(&s.body, from, &spec, hid).map_err(err)?;
+                drop(t);
                 let spec = sized(&spec, &m, prep.t);
                 check_t(t_given, prep.t, sp, &idc)?;
+                let _t = forge_math::trace::span("thermoform form");
                 let f = ft::form(&prep.shape, &spec, hid).map_err(|e| {
                     failed = Some((s.body.clone(), prep.clone(), spec.clone()));
                     err(e)

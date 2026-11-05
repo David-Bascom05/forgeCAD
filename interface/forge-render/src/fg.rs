@@ -132,12 +132,17 @@ pub struct Built {
     /// The last build's mesh of the same file (nothing it read has changed), shown while this
     /// one builds: the build it stands for is still to come.
     pub preview: bool,
+    /// The checks ran (measures, expects, a thermoform's walls); else they follow in another.
+    pub checked: bool,
 }
 
 impl Built {
     pub fn summary(&self) -> String {
         if self.preview {
             return "opening: the last build on screen while it builds".into();
+        }
+        if !self.checked {
+            return "built; checking".into();
         }
         let mut s = match &self.measure {
             Some(m) => format!(
@@ -814,6 +819,7 @@ fn work(
                 anchors: None,
                 inspect: asm.as_ref().map(|a| a.inspect.clone()),
                 preview: false,
+                checked: true,
                 asm,
                 build_ms,
                 mesh_ms,
@@ -895,142 +901,163 @@ fn work(
                 mesh_ms: 0.0,
                 inspect: None,
                 preview: true,
+                checked: false,
             };
             if !send(Msg::Built(Box::new(shown))) {
                 return;
             }
         }
-        let want = anchored.as_deref() != Some(job.1.as_str());
-        let opts = Options {
-            anchors: want,
-            dir: dir.clone(),
-            ..Options::default()
-        };
-        let watch = forge_lang::deps::watch();
-        let (run, c) = forge_lang::run(&job.1, opts, std::mem::take(&mut cache));
-        let all = watch.done();
-        note_deps(&deps, &all);
-        let read = opening.then_some(all);
-        let anchors = run
-            .anchors
-            .as_ref()
-            .map(|a| Arc::new(AnchorView::of(a, run.body.as_ref())));
-        if anchors.is_some() {
-            anchored = Some(job.1.clone());
-        }
-        cache = c;
-        if stop.load(Ordering::SeqCst) {
-            stopped(to_mesh, mesher_thread);
-            return;
-        }
-        let build_ms = t.elapsed().as_secs_f64() * 1e3;
-        let t = Instant::now();
-        let ids: Vec<String> = run.feats.iter().map(|f| f.id.clone()).collect();
-        // all stages reused and the same features: the same body, already on screen
-        let same = run.rebuilt == 0 && shown_ids.as_ref() == Some(&ids);
-        let changed = run.body.as_ref().filter(|_| !same);
-        if changed.is_some() {
-            shown_ids = Some(ids);
-        }
-        if let Some(b) = changed {
-            last_body = Some(Arc::new(b.clone()));
-        }
-        // the first build comes whole (after a preview too, which it replaces)
-        let first = opening;
-        let (mut mesh, mut flat, mut delta) = (None, None, None);
-        match changed {
-            Some(b) if first => {
-                let (m, f) = whole(b, flat_body(&run).as_ref());
-                if let (Some(place), Some(read)) = (&place, &read) {
-                    keep_shown(place, &job.1, read, &m, f.as_ref());
-                }
-                (mesh, flat) = (Some(m), f);
+        // the shape first, on screen as soon as it is built; then the checks (measures, expects,
+        // a thermoform's walls) with every stage reused, unless a newer text is waiting
+        let mut checks = false;
+        // what the shape's build rebuilt, which the checks' build (all reused) reports for it
+        let mut shaped: Option<(usize, usize)> = None;
+        loop {
+            let t = if checks { Instant::now() } else { t };
+            let opening = opening && !checks;
+            let want = anchored.as_deref() != Some(job.1.as_str());
+            let opts = Options {
+                anchors: want,
+                dir: dir.clone(),
+                checks,
+                ..Options::default()
+            };
+            let watch = forge_lang::deps::watch();
+            let (run, c) = forge_lang::run(&job.1, opts, std::mem::take(&mut cache));
+            let all = watch.done();
+            note_deps(&deps, &all);
+            let read = opening.then_some(all);
+            let anchors = run
+                .anchors
+                .as_ref()
+                .map(|a| Arc::new(AnchorView::of(a, run.body.as_ref())));
+            if anchors.is_some() {
+                anchored = Some(job.1.clone());
             }
-            Some(b) => delta = Some(mesher.delta(b)),
-            None => {}
-        }
-        let sheets = run
-            .sheets
-            .iter()
-            .map(|s| {
-                let (facts, lists) = sheet_report(&s.json());
-                let pattern = s.pattern().map(Arc::new);
-                let note = s.note();
-                SheetInfo {
-                    id: s.id.clone(),
-                    bends: s.layout.as_ref().map_or(0, |l| l.bends.len()),
-                    dxf: pattern
-                        .as_ref()
-                        .map(|p| forge_sheet::dxf_noted(p, &note))
-                        .map_err(|e| forge_lang::error::words(&e)),
-                    view: pattern.as_ref().ok().map(|p| flat_view(s, p)),
-                    pattern: pattern.ok(),
-                    note,
-                    facts,
-                    lists,
-                }
-            })
-            .collect();
-        let mesh_ms = t.elapsed().as_secs_f64() * 1e3;
-        let view = gpu.take().map(|(device, queue, adapter)| {
-            let parts = [mesh.clone().unwrap_or_else(PartMesh::empty)];
-            let mut scene = Scene::new(&part_info(&parts), vec![Placement::at(0, [0.0; 3])]);
-            scene.set_explode(0.0);
-            let r = Renderer::new(
-                device,
-                queue,
-                adapter,
-                render::OFFSCREEN,
-                (16, 16),
-                &parts,
-                &scene,
-            );
-            (r, scene)
-        });
-        let (feats, params, issues) = rows(&run, &job.1);
-        let built = Built {
-            seq: job.0,
-            ok: run.ok(),
-            feats,
-            params,
-            issues,
-            measure: run.measure.clone(),
-            timings: run.timings.clone(),
-            rebuilt: run.rebuilt,
-            reused: run.reused,
-            mesh,
-            flat,
-            delta,
-            sheets,
-            thermos: thermo_views(&run),
-            view,
-            anchors,
-            asm: None,
-            build_ms,
-            mesh_ms,
-            inspect: Some(Arc::new(crate::gui::gui_inspect::InspectData {
-                bodies: last_body.iter().cloned().collect(),
-                placed: vec![(0, forge_math::Frame::WORLD)],
-                names: vec![],
-                props: run.props.clone(),
-                physical: run.physical.clone(),
-                asm: None,
-            })),
-            preview: false,
-        };
-        if !send(Msg::Built(Box::new(built))) {
-            return;
-        }
-        let Some(b) = changed else { continue };
-        if first {
-            // the GPU's live set starts as the whole part, so later deltas carry only changes
-            if !send(Msg::Warm(mesher.delta(b))) {
+            cache = c;
+            if stop.load(Ordering::SeqCst) {
+                stopped(to_mesh, mesher_thread);
                 return;
             }
-            continue;
-        }
-        if to_mesh.send((job.0, b.clone(), flat_body(&run))).is_err() {
-            return;
+            let build_ms = t.elapsed().as_secs_f64() * 1e3;
+            let t = Instant::now();
+            let ids: Vec<String> = run.feats.iter().map(|f| f.id.clone()).collect();
+            // all stages reused and the same features: the same body, already on screen
+            let same = run.rebuilt == 0 && shown_ids.as_ref() == Some(&ids);
+            let changed = run.body.as_ref().filter(|_| !same);
+            if changed.is_some() {
+                shown_ids = Some(ids);
+            }
+            if let Some(b) = changed {
+                last_body = Some(Arc::new(b.clone()));
+            }
+            // the first build comes whole (after a preview too, which it replaces)
+            let first = opening;
+            let (mut mesh, mut flat, mut delta) = (None, None, None);
+            match changed {
+                Some(b) if first => {
+                    let (m, f) = whole(b, flat_body(&run).as_ref());
+                    if let (Some(place), Some(read)) = (&place, &read) {
+                        keep_shown(place, &job.1, read, &m, f.as_ref());
+                    }
+                    (mesh, flat) = (Some(m), f);
+                }
+                Some(b) => delta = Some(mesher.delta(b)),
+                None => {}
+            }
+            let sheets = run
+                .sheets
+                .iter()
+                .map(|s| {
+                    let (facts, lists) = sheet_report(&s.json());
+                    let pattern = s.pattern().map(Arc::new);
+                    let note = s.note();
+                    SheetInfo {
+                        id: s.id.clone(),
+                        bends: s.layout.as_ref().map_or(0, |l| l.bends.len()),
+                        dxf: pattern
+                            .as_ref()
+                            .map(|p| forge_sheet::dxf_noted(p, &note))
+                            .map_err(|e| forge_lang::error::words(&e)),
+                        view: pattern.as_ref().ok().map(|p| flat_view(s, p)),
+                        pattern: pattern.ok(),
+                        note,
+                        facts,
+                        lists,
+                    }
+                })
+                .collect();
+            let mesh_ms = t.elapsed().as_secs_f64() * 1e3;
+            let view = gpu.take().map(|(device, queue, adapter)| {
+                let parts = [mesh.clone().unwrap_or_else(PartMesh::empty)];
+                let mut scene = Scene::new(&part_info(&parts), vec![Placement::at(0, [0.0; 3])]);
+                scene.set_explode(0.0);
+                let r = Renderer::new(
+                    device,
+                    queue,
+                    adapter,
+                    render::OFFSCREEN,
+                    (16, 16),
+                    &parts,
+                    &scene,
+                );
+                (r, scene)
+            });
+            let (feats, params, issues) = rows(&run, &job.1);
+            let built = Built {
+                seq: job.0,
+                ok: run.ok(),
+                feats,
+                params,
+                issues,
+                measure: run.measure.clone(),
+                timings: run.timings.clone(),
+                rebuilt: shaped.map_or(run.rebuilt, |x| x.0),
+                reused: shaped.map_or(run.reused, |x| x.1),
+                mesh,
+                flat,
+                delta,
+                sheets,
+                thermos: thermo_views(&run),
+                view,
+                anchors,
+                asm: None,
+                build_ms,
+                mesh_ms,
+                inspect: Some(Arc::new(crate::gui::gui_inspect::InspectData {
+                    bodies: last_body.iter().cloned().collect(),
+                    placed: vec![(0, forge_math::Frame::WORLD)],
+                    names: vec![],
+                    props: run.props.clone(),
+                    physical: run.physical.clone(),
+                    asm: None,
+                })),
+                preview: false,
+                checked: checks,
+            };
+            if !send(Msg::Built(Box::new(built))) {
+                return;
+            }
+            if let Some(b) = changed {
+                if first {
+                    // the GPU's live set starts as the whole part, so later deltas carry only changes
+                    if !send(Msg::Warm(mesher.delta(b))) {
+                        return;
+                    }
+                } else if to_mesh.send((job.0, b.clone(), flat_body(&run))).is_err() {
+                    return;
+                }
+            }
+            if checks {
+                break;
+            }
+            // something newer sent (a text, a drive): it goes first, the checks wait for it
+            if let Ok(w) = jobs.try_recv() {
+                next = Some(w);
+                break;
+            }
+            checks = true;
+            shaped = Some((run.rebuilt, run.reused));
         }
     }
 }
@@ -1399,7 +1426,8 @@ impl Session {
             match m {
                 Msg::Built(b) => {
                     // a preview is on screen, its build still to come
-                    if !b.preview {
+                    // done once checked: the shape alone, or a preview, has its checks to come
+                    if !b.preview && b.checked {
                         self.done = b.seq;
                     }
                     if b.delta.is_some() || b.mesh.is_some() {

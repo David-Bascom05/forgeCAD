@@ -398,7 +398,10 @@ pub fn analyse(shape: &Body, spec: &Spec) -> Result<Formed, FormError> {
 
 /// Forms the sheet over `shape`: the part and the tool. `feature` names what is made.
 pub fn form(shape: &Body, spec: &Spec, feature: u64) -> Result<Formed, FormError> {
+    let t = forge_math::trace::span("thermoform analyse");
     let mut f = analyse(shape, spec)?;
+    drop(t);
+    let t = forge_math::trace::span("thermoform part");
     let male = spec.tool == Tool::Male;
     let (frame, trim, depth) = (f.frame, f.trim.clone(), f.report.depth);
     let slab_id = feature ^ 0x5eed;
@@ -426,6 +429,8 @@ pub fn form(shape: &Body, spec: &Spec, feature: u64) -> Result<Formed, FormError
     };
 
     // the tool
+    drop(t);
+    let t = forge_math::trace::span("thermoform tool");
     let k = 1.0 + spec.shrink;
     let c = frame.point_to_world(Point3::new(f.centre.x, f.centre.y, 0.0));
     let (grown_shape, unscaled) = match crate::scale::scaled(shape, c, k) {
@@ -442,6 +447,8 @@ pub fn form(shape: &Body, spec: &Spec, feature: u64) -> Result<Formed, FormError
         let block = prism(&outline, frame, -(depth * k + spec.base), 0.0, tool_id)?;
         boolean(&block, &grown_shape, Op::Subtract, tool_id).map_err(err_b)?
     };
+    drop(t);
+    let _t = forge_math::trace::span("thermoform vents and rest");
     let mut vents = vec![];
     if let Some(dv) = spec.vent {
         let places: Vec<(Point2, f64)> = match &spec.vents {
