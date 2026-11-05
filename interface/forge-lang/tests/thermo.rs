@@ -381,10 +381,17 @@ fn the_process_options_form_and_move_the_wall() {
             &format!("material: \"{material}\", tool: \"female\"{extra})"),
         )
     };
-    for extra in [", bending: true", ", plug: \"dry\", plug_stroke: 40", ", plug: \"lubricated\", plug_stroke: 40"] {
+    for extra in [
+        ", bending: true",
+        ", plug: \"dry\", plug_stroke: 40",
+        ", plug: \"lubricated\", plug_stroke: 40",
+    ] {
         let r = run(&with(extra, "PETG"));
         assert!(r.ok(), "{extra}: {:?}", r.errors);
-        assert!((thinnest(&r) - thinnest(&plain)).abs() > 1e-6, "{extra} moved nothing");
+        assert!(
+            (thinnest(&r) - thinnest(&plain)).abs() > 1e-6,
+            "{extra} moved nothing"
+        );
     }
     let hips = run(&with("", "HIPS"));
     let hot = run(&with(", heat_edge: 150", "HIPS"));

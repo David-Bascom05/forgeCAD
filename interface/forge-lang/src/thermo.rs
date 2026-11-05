@@ -1078,6 +1078,7 @@ const ARGS: &[&str] = &[
     "plug_start",
     "plug_stroke",
     "heat_edge",
+    "plug_friction",
 ];
 
 /// The materials a document finds: its project's library (materials/ beside it), the user's, then
@@ -1294,6 +1295,7 @@ fn thermoform(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
                         .v,
                         steps: 40,
                         slip: how == "lubricated",
+                        friction: a.num("plug_friction", RATIO)?.map(|n| n.v),
                     })
                 }
             },

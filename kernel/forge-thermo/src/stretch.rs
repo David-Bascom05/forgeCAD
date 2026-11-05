@@ -135,6 +135,9 @@ pub struct Plug {
     pub stroke: f64,
     pub steps: usize,
     pub slip: bool,
+    /// Coulomb friction on the plug (between sticking and `slip`): a node on it sticks till its
+    /// pull along the plug's face is over this times its pull into it, then slides against that.
+    pub friction: Option<f64>,
 }
 
 impl Plug {
@@ -155,6 +158,22 @@ impl Plug {
         let u = r - c;
         let q = (self.edge * self.edge - u * u).max(1e-12).sqrt();
         Some((zc - q, u / q))
+    }
+
+    /// The plug's face's direction into it over a point (None: past its side).
+    fn inward(&self, p: Vec3, tip: f64) -> Option<Vec3> {
+        let at = self.at.unwrap_or((0.0, 0.0));
+        let (dx, dy) = (p.x - at.0, p.y - at.1);
+        let r = (dx * dx + dy * dy).sqrt();
+        let (_, slope) = self.face(r, tip)?;
+        let radial = if r > 1e-12 {
+            Vec3::new(dx / r, dy / r, 0.0)
+        } else {
+            Vec3::ZERO
+        };
+        (Vec3::new(0.0, 0.0, 1.0) - radial * slope)
+            .normalize()
+            .map(|u| u.get())
     }
 
     /// How far a point is inside the plug (up from its face), and that depth's gradient.
@@ -589,6 +608,10 @@ struct Sheet {
     /// each node's share of the sheet.
     plug: Option<(Plug, f64, f64)>,
     share: Vec<f64>,
+    /// Nodes sliding on the plug: the way they slide and the friction against it (N), from where
+    /// they stood at the step's start.
+    on_plug: Vec<Option<(Vec3, f64)>>,
+    plug_anchor: Vec<Vec3>,
 }
 
 /// Sliding nodes carried off the tool's top (over the cavity) fall free.
@@ -678,12 +701,19 @@ impl Sheet {
                 self.membrane(x, p, &mut g)?
             }
         };
-        if let Some((plug, tip, stiff)) = self.plug.filter(|p| p.0.slip) {
+        if let Some((plug, tip, stiff)) = self.plug.filter(|p| p.0.slip || p.0.friction.is_some()) {
             for k in 0..x.len() {
                 if let (true, Some((d, n))) = (self.free[k], plug.inside(x[k], tip)) {
                     e += 0.5 * stiff * self.share[k] * d * d;
                     if let Some(g) = g.as_deref_mut() {
                         g[k] += n * (stiff * self.share[k] * d);
+                    }
+                }
+                // sliding on it against its friction
+                if let (true, Some((d, h))) = (self.free[k], self.on_plug[k]) {
+                    e += h * d.dot(x[k] - self.plug_anchor[k]);
+                    if let Some(g) = g.as_deref_mut() {
+                        g[k] += d * h;
                     }
                 }
             }
@@ -1181,6 +1211,8 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
         dir: vec![None; x.len()],
         plug: None,
         share: share.clone(),
+        on_plug: vec![None; x.len()],
+        plug_anchor: x.clone(),
         slide,
     };
     let mu = pr.law.shear().max(1e-9);
@@ -1241,11 +1273,30 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
                 }
             }
             was = tip;
+            sheet.plug_anchor.copy_from_slice(&x);
+            // Coulomb: each step starts with what slides on the plug stuck again, on its face
+            if plug.friction.is_some() {
+                for n in 0..x.len() {
+                    if sheet.on_plug[n].take().is_some() && sheet.free[n] {
+                        let at = plug.at.unwrap_or((0.0, 0.0));
+                        let (dx, dy) = (x[n].x - at.0, x[n].y - at.1);
+                        if let Some((z, _)) = plug.face((dx * dx + dy * dy).sqrt(), tip) {
+                            x[n].z = z;
+                            sheet.free[n] = false;
+                            on[n] = true;
+                        }
+                    }
+                }
+            }
             for _ in 0..20 {
                 let mut touched = false;
                 if !plug.slip {
                     for n in 0..x.len() {
-                        if sheet.free[n] && !sheet.slide[n] && plug.inside(x[n], tip).is_some() {
+                        if sheet.free[n]
+                            && !sheet.slide[n]
+                            && sheet.on_plug[n].is_none()
+                            && plug.inside(x[n], tip).is_some()
+                        {
                             let at = plug.at.unwrap_or((0.0, 0.0));
                             let (dx, dy) = (x[n].x - at.0, x[n].y - at.1);
                             let r = (dx * dx + dy * dy).sqrt();
@@ -1259,6 +1310,29 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
                 let reach = reach_at(&x);
                 its += step(&mut sheet, &tool, &mut x, 0.0, cap, tol, &reach, 200);
                 release(&mut sheet, &tool, &x, 0.25 * spec.t);
+                // Coulomb: a stuck node whose pull along the face is over mu times its pull into
+                // the plug lets go and slides along that pull against the friction
+                if let Some(m) = plug.friction {
+                    let mut g = vec![Vec3::ZERO; x.len()];
+                    if sheet.membrane(&x, 0.0, &mut g).is_some() {
+                        for n in 0..x.len() {
+                            if !on[n] {
+                                continue;
+                            }
+                            let Some(u) = plug.inward(x[n], tip) else { continue };
+                            let f = -g[n];
+                            let into = f.dot(u);
+                            let along = f - u * into;
+                            if into > 0.0 && along.length() > m * into {
+                                on[n] = false;
+                                sheet.free[n] = true;
+                                sheet.on_plug[n] = Some((along * (1.0 / along.length()), m * into));
+                                sheet.plug_anchor[n] = x[n];
+                                touched = true;
+                            }
+                        }
+                    }
+                }
                 if plug.slip || !touched {
                     break;
                 }

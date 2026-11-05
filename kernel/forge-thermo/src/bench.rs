@@ -652,9 +652,13 @@ fn a_plug_drives_the_sheet_as_measured() {
     };
     let f = analyse(&shape, &spec).expect("analyses");
     let law = placeholder().material("HIPS").cloned().unwrap().law_at(130.0);
-    for (name, slip) in [
-        ("atmani2020_plugonly_dry130", false),
-        ("atmani2020_plugonly_lub130", true),
+    for (name, slip, friction) in [
+        ("atmani2020_plugonly_dry130", false, None),
+        // Atmani's own f(T) at 130 C (Table 2, T in C): 1.32
+        ("atmani2020_plugonly_dry130", false, Some(1.316)),
+        ("atmani2020_plugonly_dry130", false, Some(0.6)),
+        ("atmani2020_plugonly_lub130", false, Some(0.1)),
+        ("atmani2020_plugonly_lub130", true, None),
     ] {
         let data = measured(name);
         let total = data.last().map_or(0.0, |d| d.0);
@@ -672,6 +676,7 @@ fn a_plug_drives_the_sheet_as_measured() {
                     stroke,
                     steps: 40,
                     slip,
+                    friction,
                 }),
                 ..Process::default()
             };
@@ -691,7 +696,7 @@ fn a_plug_drives_the_sheet_as_measured() {
             }
             let mae = err / data.len() as f64 / spec.t;
             eprintln!(
-                "PLUG {name} stroke {stroke}: section {:.1} mm (measured {total}), under the plug {:.3} mm (measured {:.2}), mean |error| {:.1} % of t0",
+                "PLUG {name} friction {friction:?} stroke {stroke}: section {:.1} mm (measured {total}), under the plug {:.3} mm (measured {:.2}), mean |error| {:.1} % of t0",
                 2.0 * half,
                 at(&model, 0.0),
                 at(&data, total / 2.0),
