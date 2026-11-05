@@ -437,7 +437,7 @@ fn relax(
     p: f64,
     step_cap: f64,
     tol: f64,
-    reach: f64,
+    reach: &[f64],
     max_it: usize,
 ) -> usize {
     const M: usize = 6;
@@ -506,7 +506,7 @@ fn relax(
         let mut stopped = false;
         for i in 0..n {
             if sheet.free[i]
-                && let Some(c) = crossing(field, x[i], trial[i], reach)
+                && let Some(c) = crossing(field, x[i], trial[i], reach[i])
             {
                 trial[i] = c;
                 sheet.free[i] = false;
@@ -638,9 +638,20 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
     let mu = pr.law.shear().max(1e-9);
     let tol = 1e-5 * mu * spec.t * s;
     let cap = 0.3 * s;
-    // a point within a quarter of the sheet's thickness of the tool is on it: a sheet cannot
-    // follow the tool into a corner much tighter than it is thick
-    let reach = 0.25 * spec.t;
+    // the height field: a point within a quarter of the sheet's thickness above the tool is on it
+    // (a sheet cannot follow the tool into a corner much tighter than it is thick); the distance
+    // field: the sheet's middle is on the tool when half its thickness now, from each node's
+    // triangles, is off it along the tool's normal
+    let reach_at = |x: &[Vec3]| -> Vec<f64> {
+        match pr.surface {
+            Surface::Height => vec![0.25 * spec.t; x.len()],
+            Surface::Distance => ratios(&idx, &reference, x)
+                .1
+                .iter()
+                .map(|r| 0.5 * spec.t * r)
+                .collect(),
+        }
+    };
     let mut its = 0;
     let mut steps: Vec<Step> = vec![];
     let mut snap = |x: &[Vec3], stage: &'static str| {
@@ -660,14 +671,16 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
             for &k in &edge {
                 x[k].z = z;
             }
-            its += relax(&mut sheet, &tool, &mut x, 0.0, cap, tol, reach, 150);
+            let reach = reach_at(&x);
+            its += relax(&mut sheet, &tool, &mut x, 0.0, cap, tol, &reach, 150);
             snap(&x, "drape");
         }
     }
     let loads = 10;
     for k in 1..=loads {
         let p = pr.pressure * k as f64 / loads as f64;
-        its += relax(&mut sheet, &tool, &mut x, p, cap, tol, reach, 400);
+        let reach = reach_at(&x);
+        its += relax(&mut sheet, &tool, &mut x, p, cap, tol, &reach, 400);
         snap(&x, "vacuum");
     }
     // a hot sheet held under the pressure creeps on until it meets the tool: an elastic sheet
@@ -683,7 +696,8 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
     let (mut left, mut stalled) = (open(&sheet, &x), 0);
     while left > 0 && stalled < 2 && p < CREEP * pr.pressure {
         p *= 1.25;
-        its += relax(&mut sheet, &tool, &mut x, p, cap, tol, reach, 200);
+        let reach = reach_at(&x);
+        its += relax(&mut sheet, &tool, &mut x, p, cap, tol, &reach, 200);
         snap(&x, "creep");
         let now = open(&sheet, &x);
         stalled = if now < left { 0 } else { stalled + 1 };

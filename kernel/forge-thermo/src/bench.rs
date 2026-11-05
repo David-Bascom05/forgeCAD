@@ -322,9 +322,10 @@ fn the_distance_field_forms_the_measured_parts_as_well() {
             h * 100.0,
             d * 100.0
         );
-        // measured: cone +0.24, cylinder +0.17, box +2.4 (axis) % t0. On the box's steep walls the
-        // height field's vertical reach was a normal one of reach cos(wall): the sheet stuck later
-        // there; the field sticks it a quarter of t off the wall itself. Within 3 % t0
+        // measured, the sheet's middle on the tool half its thickness now off it along the normal:
+        // cone +0.19, cylinder +0.73, box +1.41 (axis) +0.86 (diagonal) % t0 over the height
+        // field's vertical quarter of t0; these parts' error is the slip and draw-in the model
+        // leaves out (stage 2), not the contact's distance. Within 3 % t0
         assert!(d <= h + 0.03, "{name}: {d} {h}");
     }
 }
