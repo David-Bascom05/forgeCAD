@@ -605,11 +605,15 @@ struct Scene<'a> {
 /// How far a procedural face's mesh may be from it on the view, with room to spare.
 const COVER: f64 = 0.1;
 
-/// A procedural face's mesh: each triangle in the body's space and on the view.
-type Cover = Vec<([Point3; 3], [Point2; 3])>;
+/// A procedural face's mesh: each triangle in the body's space, on the view, and in the face's
+/// parameters (its corners projected onto the surface).
+type Cover = Vec<([Point3; 3], [Point2; 3], [Point2; 3])>;
 
-/// The mesh of each procedural face of `body`, by face index.
-fn covers(body: &Body, pose: &Frame, view: &View) -> Vec<Option<Cover>> {
+/// A body's procedural faces' meshes in its own space, with their corners' parameters, by face
+/// index: the same for every occurrence of the body, so made once for it.
+type Local = Vec<Option<Vec<([Point3; 3], [Point2; 3])>>>;
+
+fn local_covers(body: &Body) -> Local {
     let mut out = vec![None; body.faces.len()];
     if !body
         .face_ids()
@@ -624,25 +628,44 @@ fn covers(body: &Body, pose: &Frame, view: &View) -> Vec<Option<Cover>> {
     let Ok(mesh) = forge_mesh::tessellate(body, &q) else {
         return out;
     };
+    // each corner's parameters once, on the face its triangle is of
+    let mut uv: std::collections::HashMap<(u32, u32), Point2> = Default::default();
     for (t, &f) in mesh.triangles.iter().zip(&mesh.face_of) {
-        if !matches!(body.faces[f as usize].surface, Surface::Procedural(_)) {
+        let surface = &body.faces[f as usize].surface;
+        if !matches!(surface, Surface::Procedural(_)) {
             continue;
         }
         let tri = t.map(|k| mesh.positions[k as usize]);
-        out[f as usize]
-            .get_or_insert_with(Vec::new)
-            .push((tri, tri.map(|p| view.project(pose.point_to_world(p)))));
+        let at = t.map(|k| {
+            *uv.entry((f, k))
+                .or_insert_with(|| surface.project(mesh.positions[k as usize]))
+        });
+        out[f as usize].get_or_insert_with(Vec::new).push((tri, at));
     }
     out
 }
 
-/// Where the ray `o + t d` meets `s`, by Newton's method on (u, v, t) from the point `seed` at
-/// `t_seed`: the ray's parameter and the point; None where it does not settle.
-fn newton_ray(s: &Surface, o: Point3, d: Vec3, seed: Point3, t_seed: f64) -> Option<(f64, Point3)> {
-    let mut uv = s.project(seed);
+/// `local_covers` placed at `pose` and seen on the view.
+fn covers(local: &Local, pose: &Frame, view: &View) -> Vec<Option<Cover>> {
+    local
+        .iter()
+        .map(|c| {
+            c.as_ref().map(|tris| {
+                tris.iter()
+                    .map(|(tri, uv)| (*tri, tri.map(|p| view.project(pose.point_to_world(p))), *uv))
+                    .collect()
+            })
+        })
+        .collect()
+}
+
+/// Where the ray `o + t d` meets `s`, by Newton's method on (u, v, t) from parameters `uv` near
+/// the point `seed`, at `t_seed`: the ray's parameter and the point; None where it does not settle.
+fn newton_ray(s: &Surface, o: Point3, d: Vec3, uv: Point2, t_seed: f64) -> Option<(f64, Point3)> {
+    let mut uv = uv;
     let mut t = t_seed;
     for _ in 0..20 {
-        let sd = s.deriv(uv);
+        let sd = s.deriv1(uv);
         let r = sd.p - (o + d * t);
         if r.length() <= 1e-10 {
             return Some((t, sd.p));
@@ -703,8 +726,12 @@ impl<'a> Scene<'a> {
         let mut cover: Vec<Option<Cover>> = Vec::new();
         let mut lo = Point2::new(f64::INFINITY, f64::INFINITY);
         let mut hi = Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY);
+        let mut locals: std::collections::HashMap<usize, Local> = Default::default();
         for (k, inst) in insts.iter().enumerate() {
-            let mut tris = covers(inst.body, &inst.pose, &view);
+            let local = locals
+                .entry(inst.body as *const Body as usize)
+                .or_insert_with(|| local_covers(inst.body));
+            let mut tris = covers(local, &inst.pose, &view);
             for f in inst.body.face_ids() {
                 cover.push(tris[f.index()].take());
                 let (a, b, near) = box_on_view(&view, &inst.pose, &idx[k].face_box(f));
@@ -776,25 +803,29 @@ impl<'a> Scene<'a> {
         let o = pose.point_to_local(p);
         let d = pose.vec_to_local(self.view.toward.get());
         let mut tried: Vec<f64> = Vec::new();
-        for (t3, t2) in tris {
+        for (t3, t2, tuv) in tris {
             if tri_distance(q, t2) > COVER {
                 continue;
             }
             // the ray's point over the triangle, from q's barycentric place (clamped)
             let area = (t2[1] - t2[0]).cross(t2[2] - t2[0]);
-            let seed = if area.abs() > 1e-12 {
+            let (b1, b2) = if area.abs() > 1e-12 {
                 let b1 = ((q - t2[0]).cross(t2[2] - t2[0]) / area).clamp(0.0, 1.0);
                 let b2 = ((t2[1] - t2[0]).cross(q - t2[0]) / area).clamp(0.0, 1.0 - b1);
-                t3[0] + (t3[1] - t3[0]) * b1 + (t3[2] - t3[0]) * b2
+                (b1, b2)
             } else {
-                t3[0]
+                (0.0, 0.0)
             };
+            let seed = t3[0] + (t3[1] - t3[0]) * b1 + (t3[2] - t3[0]) * b2;
+            // the corners' parameters carried the same way: a start as near as the mesh, with no
+            // search of the surface
+            let uv = tuv[0] + (tuv[1] - tuv[0]) * b1 + (tuv[2] - tuv[0]) * b2;
             let t_seed = (seed - o).dot(d);
             if tried.iter().any(|x| (x - t_seed).abs() <= 1e-3) {
                 continue;
             }
             tried.push(t_seed);
-            match newton_ray(surface, o, d, seed, t_seed) {
+            match newton_ray(surface, o, d, uv, t_seed) {
                 Some((t, at)) => {
                     if t > self.eps && self.idx[i].point_in_face(f, at) == Where::Inside {
                         return true;
