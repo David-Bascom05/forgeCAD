@@ -72,8 +72,13 @@ fn picks(h: &Headless) -> Vec<(u32, Entity)> {
 
 fn measure(h: &mut Headless) {
     h.gui.shell.out.push(Action::Inspect(InspectCmd::Measure));
-    h.step();
-    h.step();
+    // till the panel's laid out and its buttons named
+    for _ in 0..10 {
+        h.step();
+        if h.gui.shell.place("measure:filter:Any").is_some() {
+            break;
+        }
+    }
     assert!(h.gui.shell.inspect.measure.is_some());
 }
 
@@ -896,4 +901,22 @@ fn the_values_column_is_dragged_wider_and_narrower() {
     assert!((m.label_w - (112.0 + 40.0)).abs() < 2.0, "{}", m.label_w);
     let after = h.gui.shell.place("measure:value:Area").unwrap();
     assert!(after.left() > before.left() + 30.0, "{before:?} {after:?}");
+}
+
+#[test]
+fn the_panel_stands_still_from_its_first_frame() {
+    let Some(mut h) = open("still") else { return };
+    h.gui.shell.out.push(Action::Inspect(InspectCmd::Measure));
+    let names = ["measure:filter:Any", "measure:pick2", "measure:advanced"];
+    let mut first = None;
+    for _ in 0..8 {
+        h.step();
+        let now: Vec<Option<egui::Rect>> = names.iter().map(|n| h.gui.shell.place(n)).collect();
+        if now.iter().all(Option::is_some) {
+            // once its buttons are named, they're where they stay
+            let was = first.get_or_insert(now.clone());
+            assert_eq!(*was, now);
+        }
+    }
+    assert!(first.is_some());
 }
