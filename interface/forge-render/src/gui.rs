@@ -2614,6 +2614,12 @@ impl Pixels {
 
 /// The app with no window: input by hand, a texture for a target. What `--shot`, `--bench` and the
 /// tests run. Clicks go by the shell's own names for what it drew.
+impl Drop for Headless {
+    fn drop(&mut self) {
+        crate::fg::stop_builders();
+    }
+}
+
 pub struct Headless {
     pub gui: Gui,
     size: (f32, f32),

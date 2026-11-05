@@ -431,6 +431,7 @@ impl Gui {
             self.agent.told = Some(path.clone());
         }
         self.agent.turns.start(undo_label(text));
+        self.apps.view_set = false;
         let mut msg = prompt(text, refs);
         if self.agent.told.as_deref() != Some(path.as_str()) {
             msg = format!("(The open file is now {path}.)\n\n{msg}");

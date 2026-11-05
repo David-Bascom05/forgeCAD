@@ -17,6 +17,7 @@ use forge_lang::values::{Dim, Src};
 use forge_lang::{Measure, Options, Run, Timings};
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::time::Instant;
 
@@ -588,6 +589,41 @@ fn keep_shown(
     forge_lang::kept::keep("app-part-mesh", shown_key(file, src), from, &o.0);
 }
 
+/// Every document's build thread, by the thread that opened it (the app's), with its stop flag:
+/// a closed document's finishes the build it's in, then ends; on exit each is stopped and waited
+/// for before the GPU device goes.
+type Builder = (
+    std::thread::ThreadId,
+    Arc<AtomicBool>,
+    std::thread::JoinHandle<()>,
+);
+static BUILDERS: std::sync::Mutex<Vec<Builder>> = std::sync::Mutex::new(Vec::new());
+
+/// Stops the build threads this thread's documents started, and waits for each.
+pub fn stop_builders() {
+    let me = std::thread::current().id();
+    let mine: Vec<Builder> = {
+        let mut b = BUILDERS.lock().unwrap_or_else(|e| e.into_inner());
+        let (mine, rest) = std::mem::take(&mut *b).into_iter().partition(|x| x.0 == me);
+        *b = rest;
+        mine
+    };
+    for (_, stop, _) in &mine {
+        stop.store(true, Ordering::SeqCst);
+    }
+    for (_, _, h) in mine {
+        let _ = h.join();
+    }
+}
+
+/// This thread's documents' build threads still running.
+pub fn builders_running() -> usize {
+    let me = std::thread::current().id();
+    let mut b = BUILDERS.lock().unwrap_or_else(|e| e.into_inner());
+    b.retain(|x| !x.2.is_finished());
+    b.iter().filter(|x| x.0 == me).count()
+}
+
 fn work(
     dir: Option<std::path::PathBuf>,
     file: Option<String>,
@@ -595,6 +631,7 @@ fn work(
     out: Sender<Msg>,
     mut gpu: Option<Gpu>,
     waker: Arc<dyn Fn() + Send + Sync>,
+    stop: Arc<AtomicBool>,
 ) {
     let mut cache = Cache::default();
     let mut mesher = Mesher::default();
@@ -607,20 +644,39 @@ fn work(
     // the body on screen, for Measure
     let mut last_body: Option<Arc<forge_topo::Body>> = None;
     let (to_mesh, bodies) = channel::<Whole>();
-    {
+    let mesher_thread = {
         let (out, waker) = (out.clone(), waker.clone());
         std::thread::Builder::new()
             .name("forge-fg-mesh".into())
             .spawn(move || mesh_whole(bodies, out, waker))
-            .expect("a thread");
-    }
+            .expect("a thread")
+    };
+    // stopped (the document closed, the app going): no more GPU work, the mesher waited for
+    let stopped = |to_mesh: Sender<Whole>, t: std::thread::JoinHandle<()>| {
+        drop(to_mesh);
+        let _ = t.join();
+    };
     let send = |m: Msg| {
         let ok = out.send(m).is_ok();
         waker();
         ok
     };
     loop {
-        let Ok(mut job) = jobs.recv() else { return };
+        // waiting, a stop is seen within a tenth of a second
+        let next = loop {
+            if stop.load(Ordering::SeqCst) {
+                break None;
+            }
+            match jobs.recv_timeout(std::time::Duration::from_millis(100)) {
+                Ok(j) => break Some(j),
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => continue,
+                Err(_) => break None,
+            }
+        };
+        let Some(mut job) = next else {
+            stopped(to_mesh, mesher_thread);
+            return;
+        };
         // only the latest text matters
         while let Ok(j) = jobs.try_recv() {
             job = j;
@@ -637,6 +693,10 @@ fn work(
             };
             let (run, c) = forge_lang::run(&job.1, opts, std::mem::take(&mut cache));
             cache = c;
+            if stop.load(Ordering::SeqCst) {
+                stopped(to_mesh, mesher_thread);
+                return;
+            }
             let build_ms = t.elapsed().as_secs_f64() * 1e3;
             let t = Instant::now();
             let (asm, view) = asm_view(&run, &mut asm_meshes, &mut gpu, &mut asm_shape);
@@ -746,6 +806,10 @@ fn work(
             anchored = Some(job.1.clone());
         }
         cache = c;
+        if stop.load(Ordering::SeqCst) {
+            stopped(to_mesh, mesher_thread);
+            return;
+        }
         let build_ms = t.elapsed().as_secs_f64() * 1e3;
         let t = Instant::now();
         let ids: Vec<String> = run.feats.iter().map(|f| f.id.clone()).collect();
@@ -1094,6 +1158,15 @@ pub struct Session {
     pub whole_ms: f64,
     /// What's built is a dialog's preview, not the file.
     pub previewing: bool,
+    /// Tells its build thread to stop: set when the document closes.
+    stop: Arc<AtomicBool>,
+}
+
+impl Drop for Session {
+    fn drop(&mut self) {
+        // its thread finishes the build it's in, does no GPU work after, and ends
+        self.stop.store(true, Ordering::SeqCst);
+    }
 }
 
 impl Session {
@@ -1110,13 +1183,20 @@ impl Session {
         let dir = path
             .as_deref()
             .and_then(|p| std::path::Path::new(p).parent().map(|d| d.to_path_buf()));
-        std::thread::Builder::new()
+        let stop = Arc::new(AtomicBool::new(false));
+        let flag = stop.clone();
+        let h = std::thread::Builder::new()
             .name("forge-fg".into())
             .spawn({
                 let file = path.clone();
-                move || work(dir, file, rx, tx, gpu, waker)
+                move || work(dir, file, rx, tx, gpu, waker, flag)
             })
             .expect("a thread");
+        {
+            let mut b = BUILDERS.lock().unwrap_or_else(|e| e.into_inner());
+            b.retain(|x| !x.2.is_finished());
+            b.push((std::thread::current().id(), stop.clone(), h));
+        }
         let mut s = Session {
             path,
             saved: src.clone(),
@@ -1139,6 +1219,7 @@ impl Session {
             whole_ms: 0.0,
             changed: 0,
             previewing: false,
+            stop,
         };
         s.rebuild();
         s

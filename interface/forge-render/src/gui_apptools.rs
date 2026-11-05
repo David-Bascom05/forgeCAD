@@ -33,6 +33,8 @@ pub struct AppHost {
     pub driven: Option<Vec<Op>>,
     /// Pictures asked for: taken once the next frame's drawn.
     shots: Vec<std::sync::mpsc::Sender<Reply>>,
+    /// The agent turned the view itself this turn: a driven joint leaves the camera alone.
+    pub view_set: bool,
 }
 
 fn s<'a>(j: &'a Json, k: &str) -> &'a str {
@@ -301,6 +303,7 @@ impl Gui {
                 }
                 v.nav.fit_all(&v.scene);
                 v.mark_dirty();
+                self.apps.view_set = true;
                 Reply::ok(format!("View: {}", s(a, "view")))
             }
             "visual_style" => {
@@ -493,7 +496,16 @@ impl Gui {
         let link = s(a, "joint")
             .strip_prefix("l:")
             .and_then(|k| k.parse::<usize>().ok())
-            .and_then(|k| self.shell.fg.as_ref()?.asm.as_ref()?.links.get(k).map(|l| l.id.clone()));
+            .and_then(|k| {
+                self.shell
+                    .fg
+                    .as_ref()?
+                    .asm
+                    .as_ref()?
+                    .links
+                    .get(k)
+                    .map(|l| l.id.clone())
+            });
         let joint = link.as_deref().unwrap_or(s(a, "joint"));
         let Some(value) = a.get("value").and_then(Json::num) else {
             return Reply::err("drive_joint takes `value`");
@@ -534,9 +546,50 @@ impl Gui {
         ops.push(op);
         p.out.push(FgAct::AsmPreview(Some(ops.clone())));
         self.apps.driven = Some(ops);
+        // what moves: the joint's second side, framed in an iso view wide enough for its swing
+        let moving = p
+            .asm
+            .as_ref()
+            .and_then(|a| a.links.iter().find(|l| l.id == joint))
+            .map(|l| l.b.0.clone());
+        let (d_what, d_value) = (d.what.clone(), d.value);
+        if !self.apps.view_set
+            && let Some(m) = moving
+        {
+            self.app_frame(&m);
+        }
+
         Reply::ok(format!(
-            "Driven {joint}.{} to {value} for a look (the file's {}): return_to_design puts it back, keep_position keeps it",
-            d.what, d.value
+            "Driven {joint}.{d_what} to {value} for a look (the file's {d_value}), framed in an iso view: \
+             return_to_design puts it back, keep_position keeps it"
         ))
+    }
+
+    /// The view turned iso and fitted to an occurrence (and what's under it), room for its swing.
+    fn app_frame(&mut self, path: &str) {
+        let (Some((occ, _)), Some(v)) = (&self.fg_asm, &mut self.view) else {
+            return;
+        };
+        let spheres: Vec<([f32; 3], f32)> = occ
+            .iter()
+            .filter(|o| crate::shell::fgasm::under(&o.path, path))
+            .filter_map(|o| o.placement)
+            .filter(|&k| k < v.scene.placements.len())
+            .map(|k| v.scene.sphere(k))
+            .collect();
+        if spheres.is_empty() {
+            return;
+        }
+        let n = spheres.len() as f32;
+        let c = spheres.iter().fold([0.0f32; 3], |a, (p, _)| {
+            [a[0] + p[0] / n, a[1] + p[1] / n, a[2] + p[2] / n]
+        });
+        let r = spheres
+            .iter()
+            .map(|(p, r)| ((p[0] - c[0]).powi(2) + (p[1] - c[1]).powi(2) + (p[2] - c[2]).powi(2)).sqrt() + r)
+            .fold(0.0f32, f32::max);
+        v.nav.camera = crate::nav::region_view_as(v.nav.camera, [1, -1, 1], &v.nav.orient);
+        v.nav.fit_sphere(c, r * 2.0);
+        v.mark_dirty();
     }
 }

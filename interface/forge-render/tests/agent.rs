@@ -567,13 +567,11 @@ fn a_hostile_folders_hooks_mcp_and_bash_never_run() {
     }
     drop(c);
     std::thread::sleep(std::time::Duration::from_secs(1));
-    assert!(!out.join("PWNED_BASH").exists(), "a command ran outside the folder: {evs:?}");
-    for m in [
-        "PWNED_HOOK",
-        "PWNED_TOOL_HOOK",
-        "PWNED_MCP",
-        "PWNED_CLAUDE_MD",
-    ] {
+    assert!(
+        !out.join("PWNED_BASH").exists(),
+        "a command ran outside the folder: {evs:?}"
+    );
+    for m in ["PWNED_HOOK", "PWNED_TOOL_HOOK", "PWNED_MCP", "PWNED_CLAUDE_MD"] {
         assert!(!dir.join(m).exists(), "{m} ran: {evs:?}");
     }
 
@@ -718,26 +716,18 @@ fn a_file_the_agent_makes_opens_and_its_undo_moves_it_aside_and_goes_back() {
     h.step();
     assert!(Path::new(&window).exists());
     assert_eq!(h.gui.agent_path().as_deref(), Some(window.as_str()));
-    // the closed documents' build threads gone before the GPU is: one left, the open one's
+    // a closed document's build thread ends on its own; the open one's when the app goes
     h.settle();
-    let builders = || {
-        std::fs::read_dir("/proc/self/task")
-            .map(|d| {
-                d.filter_map(Result::ok)
-                    .filter(|t| {
-                        std::fs::read_to_string(t.path().join("comm")).is_ok_and(|c| c.trim() == "forge-fg")
-                    })
-                    .count()
-            })
-            .unwrap_or(0)
-    };
-    for _ in 0..600 {
-        if builders() <= 1 {
-            break;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(50));
+    let t = std::time::Instant::now();
+    while forge_render::fg::builders_running() > 1 && t.elapsed().as_secs() < 60 {
+        h.step();
+        std::thread::sleep(std::time::Duration::from_millis(20));
     }
-    assert!(builders() <= 1, "{} build threads still running", builders());
+    assert!(
+        forge_render::fg::builders_running() <= 1,
+        "{} build threads",
+        forge_render::fg::builders_running()
+    );
     drop(h);
     let _ = std::fs::remove_dir_all(dir);
 }
@@ -970,6 +960,18 @@ fn the_app_tools_work_the_rack_view_and_never_its_file() {
 
     // "open the door": a joint driven for a look, the file as it was
     let src = h.gui.fg.as_ref().unwrap().src.clone();
+    // turned to the front by the agent this turn: the drive leaves the camera
+    let front = h.gui.view.as_ref().unwrap().nav.camera;
+    let r = app_call(
+        &mut h,
+        &tools,
+        "drive_joint",
+        r#"{"joint":"f_door_f","value":45}"#,
+    );
+    assert!(!r.error, "{}", r.text);
+    assert_eq!(h.gui.view.as_ref().unwrap().nav.camera.yaw, front.yaw);
+    // a new turn: the moved door framed in an iso view
+    h.gui.apps.view_set = false;
     let r = app_call(
         &mut h,
         &tools,
@@ -978,6 +980,11 @@ fn the_app_tools_work_the_rack_view_and_never_its_file() {
     );
     assert!(!r.error, "{}", r.text);
     assert!(h.gui.apps.driven.is_some());
+    let iso = h.gui.view.as_ref().unwrap().nav.camera;
+    assert!(
+        (iso.yaw - front.yaw).abs() > 0.1,
+        "framed: {iso:?} from {front:?}"
+    );
     h.until(|g| g.fg.as_ref().is_some_and(|s| s.done == s.seq));
     assert!(
         h.gui.fg.as_ref().unwrap().previewing,
@@ -1137,4 +1144,28 @@ fn the_agent_hides_the_racks_side_panels_and_opens_its_door_without_editing() {
     );
     eprintln!("{log}");
     h.settle();
+}
+
+#[test]
+fn a_closed_documents_build_thread_ends_and_exit_waits_for_the_rest() {
+    let s = forge_render::fg::Session::new(None, PART.into(), None, Arc::new(|| {}));
+    let t = forge_render::fg::Session::new(None, PART.into(), None, Arc::new(|| {}));
+    assert_eq!(forge_render::fg::builders_running(), 2);
+    drop(s);
+    let start = std::time::Instant::now();
+    while forge_render::fg::builders_running() > 1 && start.elapsed().as_secs() < 60 {
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    assert_eq!(
+        forge_render::fg::builders_running(),
+        1,
+        "the closed one's thread ended"
+    );
+    forge_render::fg::stop_builders();
+    assert_eq!(
+        forge_render::fg::builders_running(),
+        0,
+        "exit waited for the open one's"
+    );
+    drop(t);
 }

@@ -488,6 +488,8 @@ impl ApplicationHandler for App {
     }
 
     fn exiting(&mut self, _: &ActiveEventLoop) {
+        // the documents' build threads end before the GPU device they may hold does
+        crate::fg::stop_builders();
         if let Some(l) = &mut self.live {
             l.presenter.stop();
             if self.times {
