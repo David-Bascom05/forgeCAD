@@ -631,6 +631,10 @@ struct Sheet {
     volume: Option<(f64, f64, f64)>,
     /// A dead load down on each node, MPa over its share (the sag's).
     gravity: f64,
+    /// No step may turn a triangle over (on sheets finer than the default's, where a stop holding
+    /// one corner back turns them: see `turned`; off at the default's, where it never fires, for
+    /// its cost).
+    guard: bool,
 }
 
 /// Sliding nodes carried off the tool's top (over the cavity) fall free.
@@ -976,6 +980,21 @@ fn crossing(field: &Gap, a: Vec3, b: Vec3, reach: f64) -> Option<Vec3> {
     None
 }
 
+/// Whether a step from `x` to `y` turns any triangle over: its normal past square to the one it
+/// had, or in one step from under 17 to past 30 degrees beyond vertical (the sheet folding back
+/// over itself,
+/// where a sheet drawn onto a mould never goes; the pressure on a fold's under side would blow it
+/// up with nothing to stop it, a membrane having no contact with itself).
+fn turned(idx: &[[usize; 3]], x: &[Vec3], y: &[Vec3]) -> bool {
+    idx.iter().any(|t| {
+        let n = |p: &[Vec3]| (p[t[1]] - p[t[0]]).cross(p[t[2]] - p[t[0]]);
+        let (a, b) = (n(x), n(y));
+        // a triangle already flat to nothing has no side to keep
+        let tiny = 1e-12 * (1.0 + a.length_sq());
+        a.length_sq() > tiny && (a.dot(b) < 0.0 || (b.z < -0.5 * b.length() && a.z >= -0.3 * a.length()))
+    })
+}
+
 /// Minimises the sheet's energy at pressure `p` over its free nodes, stopping each node that
 /// crosses into the tool where it crosses. Returns the iterations spent.
 #[allow(clippy::too_many_arguments)]
@@ -1038,11 +1057,34 @@ fn relax(
         let dmax = d.iter().map(|v| v.length()).fold(0.0, f64::max);
         let mut a = if dmax > step_cap { step_cap / dmax } else { 1.0 };
         let mut taken = None;
+        let mut stops: Vec<(usize, Vec3)> = vec![];
         for _ in 0..30 {
             for i in 0..n {
                 trial[i] = x[i] + d[i] * a;
             }
-            if let Some(e2) = sheet.energy(&trial, p, Some(&mut g2))
+            // contact: a node carried into the tool stops where it crossed (applied below)
+            stops.clear();
+            for i in 0..n {
+                if sheet.free[i]
+                    && !sheet.slide[i]
+                    && let Some(c) = crossing(field, x[i], trial[i], reach[i])
+                {
+                    stops.push((i, c));
+                }
+            }
+            // no triangle turned over by the step and its stops: a membrane's energy cannot see
+            // its side (C is the same either way up), so a turned-over triangle meets no
+            // resistance and the pressure on its wrong side drives it on (the fine meshes'
+            // blow-outs, where a stop held one corner back while the others went on)
+            let turns = sheet.guard && {
+                let mut stopped_at = trial.clone();
+                for &(i, c) in &stops {
+                    stopped_at[i] = c;
+                }
+                turned(&sheet.idx, x, &stopped_at)
+            };
+            if !turns
+                && let Some(e2) = sheet.energy(&trial, p, Some(&mut g2))
                 && e2 <= e + 1e-4 * a * slope
             {
                 taken = Some(e2);
@@ -1051,17 +1093,10 @@ fn relax(
             a *= 0.5;
         }
         let Some(mut e2) = taken else { return it };
-        // contact: a node carried into the tool stops where it crossed, and stays
-        let mut stopped = false;
-        for i in 0..n {
-            if sheet.free[i]
-                && !sheet.slide[i]
-                && let Some(c) = crossing(field, x[i], trial[i], reach[i])
-            {
-                trial[i] = c;
-                sheet.free[i] = false;
-                stopped = true;
-            }
+        let stopped = !stops.is_empty();
+        for &(i, c) in &stops {
+            trial[i] = c;
+            sheet.free[i] = false;
         }
         if stopped {
             match sheet.energy(&trial, p, Some(&mut g2)) {
@@ -1266,8 +1301,13 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
         plug_anchor: x.clone(),
         volume: None,
         gravity: 0.0,
+        guard: nx.max(ny) > 57,
         slide,
     };
+    // a finer sheet takes more iterations to settle (its stiffness's spread grows with it): the
+    // caps grow with the nodes along the window past the default's 56
+    let more = (nx.max(ny) as f64 / 56.0).max(1.0);
+    let its_at = |n: usize| (n as f64 * more) as usize;
     let mu = pr.law.shear().max(1e-9);
     let tol = 1e-5 * mu * spec.t * s;
     let cap = 0.3 * s;
@@ -1307,7 +1347,7 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
             }
             sheet.hold = hold_at(0.0);
             let reach = reach_at(&x);
-            its += step(&mut sheet, &tool, &mut x, 0.0, cap, tol, &reach, 150);
+            its += step(&mut sheet, &tool, &mut x, 0.0, cap, tol, &reach, its_at(150));
             release(&mut sheet, &tool, &x, 0.25 * spec.t);
             snap(&x, "drape", 0.0);
         }
@@ -1319,7 +1359,7 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
         for _ in 0..120 {
             sheet.gravity = q;
             let reach = reach_at(&x);
-            its += step(&mut sheet, &tool, &mut x, 0.0, cap, tol, &reach, 200);
+            its += step(&mut sheet, &tool, &mut x, 0.0, cap, tol, &reach, its_at(200));
             if x.iter().map(|p| -p.z).fold(0.0, f64::max) >= depth {
                 break;
             }
@@ -1397,7 +1437,7 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
                     }
                 }
                 let reach = reach_at(&x);
-                its += step(&mut sheet, &tool, &mut x, 0.0, cap, tol, &reach, 200);
+                its += step(&mut sheet, &tool, &mut x, 0.0, cap, tol, &reach, its_at(200));
                 release(&mut sheet, &tool, &x, 0.25 * spec.t);
                 // Coulomb: a stuck node whose pull along the face is over mu times its pull into
                 // the plug lets go and slides along that pull against the friction
@@ -1466,7 +1506,7 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
             let v0 = sheet.enclosed(&x);
             sheet.hold = hold_at(p);
             let reach = reach_at(&x);
-            its += step(&mut sheet, &tool, &mut x, p, cap, tol, &reach, 400);
+            its += step(&mut sheet, &tool, &mut x, p, cap, tol, &reach, its_at(400));
             release(&mut sheet, &tool, &x, 0.25 * spec.t);
             // a snap: most of the free sheet on the tool at once, or most of the cavity's air out
             // in one step (no equilibrium in between: past the limit point)
@@ -1493,7 +1533,7 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
                 sheet.volume = Some((aim, stiff, lambda));
                 sheet.hold = hold_at(lambda.max(0.0));
                 let reach = reach_at(&x);
-                its += step(&mut sheet, &tool, &mut x, 0.0, cap, tol, &reach, 400);
+                its += step(&mut sheet, &tool, &mut x, 0.0, cap, tol, &reach, its_at(400));
                 release(&mut sheet, &tool, &x, 0.25 * spec.t);
                 let d = sheet.enclosed(&x) - aim;
                 lambda += stiff * d;
@@ -1512,7 +1552,7 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
             let p = pr.pressure * k as f64 / loads as f64;
             sheet.hold = hold_at(p);
             let reach = reach_at(&x);
-            its += step(&mut sheet, &tool, &mut x, p, cap, tol, &reach, 400);
+            its += step(&mut sheet, &tool, &mut x, p, cap, tol, &reach, its_at(400));
             release(&mut sheet, &tool, &x, 0.25 * spec.t);
             snap(&x, "vacuum", p);
         }
@@ -1526,7 +1566,7 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
         p *= 1.25;
         sheet.hold = hold_at(p);
         let reach = reach_at(&x);
-        its += step(&mut sheet, &tool, &mut x, p, cap, tol, &reach, 200);
+        its += step(&mut sheet, &tool, &mut x, p, cap, tol, &reach, its_at(200));
         release(&mut sheet, &tool, &x, 0.25 * spec.t);
         snap(&x, "creep", p);
         let now = open(&sheet, &x);
