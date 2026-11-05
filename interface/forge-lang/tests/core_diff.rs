@@ -32,3 +32,28 @@ fn fg_agrees_with_the_core_calculus() {
         String::from_utf8_lossy(&out.stderr)
     );
 }
+
+/// Make / Extract / Inline Component and file components against the Lean equations
+/// (research/forge-lang/diff/refactor_diff.py); skipped where fg has no component refactors.
+#[test]
+fn refactors_agree_with_the_core_calculus() {
+    let script =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../research/forge-lang/diff/refactor_diff.py");
+    let out = match Command::new("python3")
+        .arg(&script)
+        .args(["--fg", env!("CARGO_BIN_EXE_fg"), "--count", "20"])
+        .output()
+    {
+        Ok(o) => o,
+        Err(e) => {
+            eprintln!("refactor_diff: skipped, no python3 ({e})");
+            return;
+        }
+    };
+    assert!(
+        out.status.success(),
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
