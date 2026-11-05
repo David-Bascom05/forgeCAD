@@ -2317,15 +2317,15 @@ fn hole_depth(body: &Body, rim: Name) -> Option<f64> {
     None
 }
 
-/// Where a balloon on an occurrence points: the middle of its longest drawn piece.
+/// Where a balloon on an occurrence points: the middle of its longest drawn piece. Pieces as long
+/// to within a nanometre (an occurrence's copies of one edge) are one length, the last of them
+/// taken: which is longest does not turn on the last bits of where hidden lines were cut.
 fn balloon_tip(model: &Model, v: &ViewOut, occ: &str) -> Option<Point2> {
     let k = model.paths.iter().position(|p| p == occ)?;
     let inst = v.insts.iter().position(|x| x.2 == k)?;
-    let p = v
-        .pieces
-        .iter()
-        .filter(|p| p.inst == inst && p.visible)
-        .max_by(|a, b| a.geom.length().total_cmp(&b.geom.length()))?;
+    let seen = || v.pieces.iter().filter(|p| p.inst == inst && p.visible);
+    let most = seen().map(|p| p.geom.length()).fold(f64::NEG_INFINITY, f64::max);
+    let p = seen().rfind(|p| p.geom.length() >= most - 1e-6)?;
     let (t0, t1) = p.geom.range();
     Some(v.map(p.geom.at(0.5 * (t0 + t1))))
 }

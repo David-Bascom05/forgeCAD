@@ -77,6 +77,49 @@ impl Grid {
         out.dedup();
     }
 
+    /// Each id in every cell the box meets, as often as it is in them (unsorted).
+    pub fn each_near(&self, lo: Point2, hi: Point2, mut f: impl FnMut(u32)) {
+        let (x0, x1) = (
+            self.ix(lo.x, self.nx, self.lo.x),
+            self.ix(hi.x, self.nx, self.lo.x),
+        );
+        let (y0, y1) = (
+            self.ix(lo.y, self.ny, self.lo.y),
+            self.ix(hi.y, self.ny, self.lo.y),
+        );
+        for y in y0..=y1 {
+            for x in x0..=x1 {
+                for &i in &self.cells[y * self.nx + x] {
+                    f(i);
+                }
+            }
+        }
+    }
+
+    /// The cell holding `p`.
+    pub fn cell(&self, p: Point2) -> (usize, usize) {
+        (self.ix(p.x, self.nx, self.lo.x), self.ix(p.y, self.ny, self.lo.y))
+    }
+
+    /// Each id in every cell the box meets, with the cell (an id in several of them once per cell).
+    pub fn each_in_cells(&self, lo: Point2, hi: Point2, mut f: impl FnMut(u32, (usize, usize))) {
+        let (x0, x1) = (
+            self.ix(lo.x, self.nx, self.lo.x),
+            self.ix(hi.x, self.nx, self.lo.x),
+        );
+        let (y0, y1) = (
+            self.ix(lo.y, self.ny, self.lo.y),
+            self.ix(hi.y, self.ny, self.lo.y),
+        );
+        for y in y0..=y1 {
+            for x in x0..=x1 {
+                for &i in &self.cells[y * self.nx + x] {
+                    f(i, (x, y));
+                }
+            }
+        }
+    }
+
     /// Whether any id in a cell the box meets is one `f` wants.
     pub fn any_near(&self, lo: Point2, hi: Point2, f: impl Fn(u32) -> bool) -> bool {
         let (x0, x1) = (

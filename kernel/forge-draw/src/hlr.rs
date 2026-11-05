@@ -729,29 +729,37 @@ impl<'a> Scene<'a> {
         }
     }
 
-    /// Whether a face lies between `p` and the eye.
-    fn hidden(&self, p: Point3) -> bool {
+    /// Whether face `k` (of `faces`) lies between `p` and the eye.
+    fn face_blocks(&self, k: usize, p: Point3, q: Point2, depth: f64) -> bool {
+        let (i, f, lo, hi, near) = self.faces[k];
+        if q.x < lo.x || q.x > hi.x || q.y < lo.y || q.y > hi.y || near <= depth + self.eps {
+            return false;
+        }
+        match &self.cover[k] {
+            Some(tris) => self.blocks_meshed(i, f, p, q, tris),
+            None => self.blocks(i, f, p),
+        }
+    }
+
+    /// Whether a face lies between `p` and the eye, trying first the face that hid the last point
+    /// asked about (`last`, kept up to date): along a curve one face mostly hides the next point
+    /// too. Each face's test stands alone, so the order they are tried in does not change the answer.
+    fn hidden_from(&self, p: Point3, last: &mut Option<u32>) -> bool {
         let q = self.view.project(p);
         let depth = self.view.depth(p);
+        if let Some(k) = *last
+            && self.face_blocks(k as usize, p, q, depth)
+        {
+            return true;
+        }
         // faces with a closed form first: a hit there spares the costly ones
         for costly in [false, true] {
             for &k in self.grid.at(q) {
-                let (i, f, lo, hi, near) = self.faces[k as usize];
-                let cover = &self.cover[k as usize];
-                if cover.is_some() != costly
-                    || q.x < lo.x
-                    || q.x > hi.x
-                    || q.y < lo.y
-                    || q.y > hi.y
-                    || near <= depth + self.eps
-                {
+                if self.cover[k as usize].is_some() != costly || Some(k) == *last {
                     continue;
                 }
-                let hit = match cover {
-                    Some(tris) => self.blocks_meshed(i, f, p, q, tris),
-                    None => self.blocks(i, f, p),
-                };
-                if hit {
+                if self.face_blocks(k as usize, p, q, depth) {
+                    *last = Some(k);
                     return true;
                 }
             }
@@ -892,13 +900,14 @@ pub fn hlr(insts: &[Instance], view: &View, opts: &Options) -> Vec<Piece> {
     let runs_of: Vec<Vec<(f64, f64, bool)>> = forge_math::par::map(curves.len(), |k| {
         let c = &curves[k];
         let mut runs: Vec<(f64, f64, bool)> = Vec::new();
+        let mut last = None;
         let ts = &splits[k];
         for w in ts.windows(2) {
             let (a, b) = (w[0], w[1]);
             if b - a <= 1e-12 * (1.0 + b.abs()) {
                 continue;
             }
-            for (x, y, vis) in visibility(&scene, &c.path, a, b) {
+            for (x, y, vis) in visibility(&scene, &c.path, a, b, &mut last) {
                 match runs.last_mut() {
                     Some(r) if r.2 == vis && (r.1 - x).abs() <= 1e-12 * (1.0 + x.abs()) => r.1 = y,
                     _ => runs.push((x, y, vis)),
@@ -960,7 +969,7 @@ pub fn seen_runs(insts: &[Instance], view: &View, lines: &[Vec<Point3>]) -> Vec<
         }
         let path = Path3::Poly(lines[k].clone());
         let (a, b) = path.range();
-        visibility(&scene, &path, a, b)
+        visibility(&scene, &path, a, b, &mut None)
             .into_iter()
             .map(|(x, y, vis)| {
                 let p = path.sub(x, y);
@@ -1059,36 +1068,50 @@ fn crossings(curves: &[Curve3], view: &View, chord: f64) -> Vec<Vec<f64>> {
             Point2::new(a.x.max(b.x), a.y.max(b.y)),
         );
     }
+    // each segment's box, side by side: the test most pairs fail, without going to the samples
+    let boxes: Vec<[f64; 4]> = (0..segs.len())
+        .map(|k| {
+            let (a, b) = seg(k);
+            [a.x.min(b.x), a.y.min(b.y), a.x.max(b.x), a.y.max(b.y)]
+        })
+        .collect();
     // every crossing, found by chunks of segments on all cores and kept in segment order
     let found: Vec<Vec<(u32, f64, u32, f64)>> = forge_math::par::map(segs.len().div_ceil(CHUNK), |n| {
-        let mut near = Vec::new();
         let mut got = Vec::new();
         for k in n * CHUNK..((n + 1) * CHUNK).min(segs.len()) {
             let (a, b) = seg(k);
-            grid.near(
+            let (lo, hi) = (
                 Point2::new(a.x.min(b.x), a.y.min(b.y)),
                 Point2::new(a.x.max(b.x), a.y.max(b.y)),
-                &mut near,
             );
-            for &j in &near {
+            // each pair once: in the cell holding the low corner of where their boxes meet
+            grid.each_in_cells(lo, hi, |j, cell| {
                 let j = j as usize;
                 if j <= k {
-                    continue;
+                    return;
+                }
+                let bj = boxes[j];
+                if bj[2] < lo.x || bj[0] > hi.x || bj[3] < lo.y || bj[1] > hi.y {
+                    return;
                 }
                 let ((ci, si), (cj, sj)) = (segs[k], segs[j]);
                 if ci == cj && si.abs_diff(sj) <= 1 {
-                    continue;
+                    return;
+                }
+                let corner = Point2::new(lo.x.max(bj[0]), lo.y.max(bj[1]));
+                if grid.cell(corner) != cell {
+                    return;
                 }
                 let (c, d) = seg(j);
                 let Some((x, y)) = seg_cross(a, b, c, d) else {
-                    continue;
+                    return;
                 };
                 let (ti, tj) = (&samples[ci as usize].0, &samples[cj as usize].0);
                 let ta = ti[si as usize] + x * (ti[si as usize + 1] - ti[si as usize]);
                 let tb = tj[sj as usize] + y * (tj[sj as usize + 1] - tj[sj as usize]);
                 let (ta, tb) = refine(&curves[ci as usize].path, &curves[cj as usize].path, view, ta, tb);
                 got.push((ci, ta, cj, tb));
-            }
+            });
         }
         got
     });
@@ -1214,7 +1237,7 @@ fn refine(p: &Path3, q: &Path3, view: &View, ta: f64, tb: f64) -> (f64, f64) {
 
 /// Seen or hidden along `path` from `a` to `b`: a quarter, the middle and three quarters looked at,
 /// and where they disagree the change found by bisection.
-fn visibility(scene: &Scene, path: &Path3, a: f64, b: f64) -> Vec<(f64, f64, bool)> {
+fn visibility(scene: &Scene, path: &Path3, a: f64, b: f64, last: &mut Option<u32>) -> Vec<(f64, f64, bool)> {
     let ks = [0.25, 0.5, 0.75];
     let mut ts: Vec<f64> = ks.iter().map(|k| a + k * (b - a)).collect();
     // a polyline's points lie on the curve, its chords do not (inside a thin wire by their sag)
@@ -1229,7 +1252,7 @@ fn visibility(scene: &Scene, path: &Path3, a: f64, b: f64) -> Vec<(f64, f64, boo
             ts = at;
         }
     }
-    let vis: Vec<bool> = ts.iter().map(|&t| !scene.hidden(path.at(t))).collect();
+    let vis: Vec<bool> = ts.iter().map(|&t| !scene.hidden_from(path.at(t), last)).collect();
     if vis.iter().all(|&v| v == vis[0]) {
         return vec![(a, b, vis[0])];
     }
@@ -1240,7 +1263,7 @@ fn visibility(scene: &Scene, path: &Path3, a: f64, b: f64) -> Vec<(f64, f64, boo
             let (mut x, mut y) = (ts[k - 1], ts[k]);
             for _ in 0..50 {
                 let m = 0.5 * (x + y);
-                if !scene.hidden(path.at(m)) == vis[k - 1] {
+                if !scene.hidden_from(path.at(m), last) == vis[k - 1] {
                     x = m;
                 } else {
                     y = m;
@@ -1320,38 +1343,134 @@ fn unique(geoms: &[Geom2], curve: &[usize], order: &[usize], chord: f64) -> Vec<
         // the earlier pieces of other curves that come within reach of this one: only they can
         // cover it (a point of it is within `fine` of its chords), so the test below looks at them
         // alone; none, and it is kept whole
-        let pad = 2.0 * fine;
-        // which of its chords an earlier piece of another curve comes within reach of: a point
-        // of the piece lies within `fine` of its chord, so it can be covered only on those
-        let mut marked = vec![false; ps.len().saturating_sub(1).max(1)];
-        let mut look = |i: usize, lo: Point2, hi: Point2| {
-            marked[i] = grid.any_near(
-                Point2::new(lo.x - pad, lo.y - pad),
-                Point2::new(hi.x + pad, hi.y + pad),
-                |s| {
-                    let (g, _) = segs[s as usize];
-                    curve[g as usize] != curve[k] && rank[g as usize] < rank[k]
-                },
-            );
+        // the segments of earlier pieces of other curves that can cover a point of this one: within
+        // reach of a point of it (so within reach and its chords' sag of a chord), and for two lines
+        // only one along it
+        let sag = match geom {
+            Geom2::Conic { u, v, t0, t1, .. } => {
+                let r = u.length().max(v.length());
+                let n = crate::geom2::conic_steps(r, t1 - t0, fine);
+                r * (1.0 - dmath::cos(0.5 * (t1 - t0).abs() / n as f64))
+            }
+            _ => 0.0,
         };
-        if ps.len() == 1 {
-            look(0, ps[0], ps[0]);
+        let m = reach + 2.0 * sag.max(fine) + 1e-9;
+        let line_dir = match geom {
+            Geom2::Line { .. } => Some(geom.tangent(0.0)),
+            _ => None,
+        };
+        let mut cand: Vec<u32> = Vec::new();
+        let chords: Vec<(Point2, Point2)> = if ps.len() == 1 {
+            vec![(ps[0], ps[0])]
+        } else {
+            ps.windows(2).map(|w| (w[0], w[1])).collect()
+        };
+        // the chords a block at a time: one look in the grid for each run of them
+        let pad_box = |a: Point2, b: Point2| {
+            (
+                Point2::new(a.x.min(b.x) - m, a.y.min(b.y) - m),
+                Point2::new(a.x.max(b.x) + m, a.y.max(b.y) + m),
+            )
+        };
+        let mut items: Vec<u32> = Vec::new();
+        let mut marked = vec![false; chords.len()];
+        for (b, block) in chords.chunks(16).enumerate() {
+            let first = 16 * b;
+            let boxes: Vec<(Point2, Point2)> = block.iter().map(|&(a, b)| pad_box(a, b)).collect();
+            let lo = boxes
+                .iter()
+                .fold(boxes[0].0, |l, x| Point2::new(l.x.min(x.0.x), l.y.min(x.0.y)));
+            let hi = boxes
+                .iter()
+                .fold(boxes[0].1, |h, x| Point2::new(h.x.max(x.1.x), h.y.max(x.1.y)));
+            items.clear();
+            grid.each_near(lo, hi, |s| {
+                let (g, _) = segs[s as usize];
+                if curve[g as usize] != curve[k] && rank[g as usize] < rank[k] {
+                    items.push(s);
+                }
+            });
+            items.sort_unstable();
+            items.dedup();
+            for &s in &items {
+                let (g, i) = segs[s as usize];
+                let op = &samples[g as usize].1;
+                let (c, d) = (op[i as usize], op[i as usize + 1]);
+                let other = &geoms[g as usize];
+                if let (Some(dir), Geom2::Line { .. }) = (line_dir, other) {
+                    match (dir, other.tangent(0.0)) {
+                        (Some(dir), Some(d)) if d.cross(dir).abs() <= 0.05 => {}
+                        _ => continue,
+                    }
+                }
+                let mut near_one = false;
+                for (q, (&(a, b), &(lo, hi))) in block.iter().zip(&boxes).enumerate() {
+                    if !(c.x.max(d.x) < lo.x
+                        || c.x.min(d.x) > hi.x
+                        || c.y.max(d.y) < lo.y
+                        || c.y.min(d.y) > hi.y)
+                        && seg_distance(a, b, c, d) <= m
+                    {
+                        // which chords it comes near: a point of the piece within reach of it lies
+                        // within its chord's sag of one of those, so only there can it be covered
+                        marked[first + q] = true;
+                        near_one = true;
+                    }
+                }
+                if near_one {
+                    cand.push(s);
+                }
+            }
         }
-        for (i, w) in ps.windows(2).enumerate() {
-            let (a, b) = (w[0], w[1]);
-            look(
-                i,
-                Point2::new(a.x.min(b.x), a.y.min(b.y)),
-                Point2::new(a.x.max(b.x), a.y.max(b.y)),
-            );
-        }
-        let alone = !marked.iter().any(|m| *m);
+        cand.sort_unstable();
+        cand.dedup();
+        let alone = cand.is_empty();
         if alone {
             let (t0, t1) = geom.range();
             return if t1 > t0 { vec![geom.sub(t0, t1)] } else { vec![] }
                 .into_iter()
                 .filter(|g| g.length() > 10.0 * tol)
                 .collect();
+        }
+        // a line covered by lines alone: what each covers of it is where it passes within `tol`
+        // of that segment, an interval found in closed form, and what is left is kept
+        if let Geom2::Line { a: pa, b: pb } = *geom {
+            let lines: Option<Vec<(Point2, Point2)>> = cand
+                .iter()
+                .map(|&s| match geoms[segs[s as usize].0 as usize] {
+                    Geom2::Line { a, b } => Some((a, b)),
+                    _ => None,
+                })
+                .collect();
+            if let Some(mut lines) = lines {
+                lines.sort_by(|x, y| {
+                    (x.0.x, x.0.y, x.1.x, x.1.y)
+                        .partial_cmp(&(y.0.x, y.0.y, y.1.x, y.1.y))
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                });
+                lines.dedup();
+                let mut cov: Vec<(f64, f64)> = lines
+                    .iter()
+                    .filter_map(|&(c, d)| near_segment(pa, pb, c, d, tol))
+                    .filter_map(|(x, y)| {
+                        let (x, y) = (x.max(0.0), y.min(1.0));
+                        (y > x).then_some((x, y))
+                    })
+                    .collect();
+                cov.sort_by(|x, y| x.0.total_cmp(&y.0));
+                let mut out = Vec::new();
+                let mut at = 0.0;
+                for (x, y) in cov {
+                    if x > at {
+                        out.push(geom.sub(at, x));
+                    }
+                    at = at.max(y);
+                }
+                if at < 1.0 {
+                    out.push(geom.sub(at, 1.0));
+                }
+                return out.into_iter().filter(|g| g.length() > 10.0 * tol).collect();
+            }
         }
         let mut also = Vec::new();
         for (i, w) in ps.windows(2).enumerate() {
@@ -1389,7 +1508,7 @@ fn unique(geoms: &[Geom2], curve: &[usize], order: &[usize], chord: f64) -> Vec<
             }
             let q = geom.at(t);
             let Some(dir) = geom.tangent(t) else { return false };
-            grid.at(q).iter().any(|&s| {
+            cand.iter().any(|&s| {
                 let (g, i) = segs[s as usize];
                 if curve[g as usize] == curve[k] || rank[g as usize] > rank[k] {
                     return false;
@@ -1417,4 +1536,110 @@ fn unique(geoms: &[Geom2], curve: &[usize], order: &[usize], chord: f64) -> Vec<
             .filter(|g| g.length() > 10.0 * tol)
             .collect()
     })
+}
+
+/// The distance between segments `ab` and `cd`.
+fn seg_distance(a: Point2, b: Point2, c: Point2, d: Point2) -> f64 {
+    if seg_cross(a, b, c, d).is_some() {
+        return 0.0;
+    }
+    let to = |q: Point2, a: Point2, b: Point2| {
+        let ab = b - a;
+        let x = ((q - a).dot(ab) / ab.dot(ab).max(1e-300)).clamp(0.0, 1.0);
+        q.distance(a + ab * x)
+    };
+    to(a, c, d).min(to(b, c, d)).min(to(c, a, b)).min(to(d, a, b))
+}
+
+/// Where the line `a + t (b - a)` passes within `tol` of segment `cd`: the interval of t (the
+/// segment's capsule is convex, so one interval, the hull of its two end discs' and its band's).
+fn near_segment(a: Point2, b: Point2, c: Point2, d: Point2, tol: f64) -> Option<(f64, f64)> {
+    let u = b - a;
+    let uu = u.dot(u);
+    if uu <= 1e-300 {
+        return None;
+    }
+    let mut lo = f64::INFINITY;
+    let mut hi = f64::NEG_INFINITY;
+    let mut take = |x: f64, y: f64| {
+        if x <= y {
+            lo = lo.min(x);
+            hi = hi.max(y);
+        }
+    };
+    for e in [c, d] {
+        let w = a - e;
+        let (p, q) = (u.dot(w) / uu, (w.dot(w) - tol * tol) / uu);
+        let disc = p * p - q;
+        if disc >= 0.0 {
+            let r = disc.sqrt();
+            take(-p - r, -p + r);
+        }
+    }
+    let v = d - c;
+    let vv = v.dot(v);
+    if vv > 1e-300 {
+        let vl = vv.sqrt();
+        // f(t) = f0 + t f1 kept within [l, h]
+        let within = |f0: f64, f1: f64, l: f64, h: f64| -> Option<(f64, f64)> {
+            if f1.abs() <= 1e-300 {
+                return (f0 >= l && f0 <= h).then_some((f64::NEG_INFINITY, f64::INFINITY));
+            }
+            let (x, y) = ((l - f0) / f1, (h - f0) / f1);
+            Some((x.min(y), x.max(y)))
+        };
+        let w = a - c;
+        let s = within(w.dot(v) / vv, u.dot(v) / vv, 0.0, 1.0);
+        let n = within(v.cross(w) / vl, v.cross(u) / vl, -tol, tol);
+        if let (Some(s), Some(n)) = (s, n) {
+            take(s.0.max(n.0), s.1.min(n.1));
+        }
+    }
+    (lo <= hi).then_some((lo, hi))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `near_segment` against the test `unique` makes of each point: the segment's nearest point
+    /// within `tol`. Lines along it, across it, ending near it, short and long.
+    #[test]
+    fn a_lines_cover_by_another_is_its_closed_form() {
+        let tol = 1e-3;
+        let mut seed = 0x9e37_79b9_7f4a_7c15u64;
+        let mut rnd = || {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            (seed >> 11) as f64 / (1u64 << 53) as f64
+        };
+        let mut covered_some = 0;
+        for _ in 0..4000 {
+            let a = Point2::new(10.0 * rnd() - 5.0, 0.0);
+            let b = Point2::new(10.0 * rnd() - 5.0, 2e-3 * (rnd() - 0.5));
+            let c = Point2::new(10.0 * rnd() - 5.0, 3e-3 * (rnd() - 0.5));
+            let d = Point2::new(10.0 * rnd() - 5.0, 3e-3 * (rnd() - 0.5));
+            let line = Geom2::Line { a: c, b: d };
+            let got = near_segment(a, b, c, d, tol);
+            let inside = |t: f64| {
+                let q = a.lerp(b, t);
+                let at = line.nearest(q, 0.0);
+                line.at(at).distance(q) <= tol
+            };
+            for k in 0..=400 {
+                let t = k as f64 / 400.0;
+                let want = inside(t);
+                let have = got.is_some_and(|(x, y)| t >= x && t <= y);
+                // at an end of the interval the two may round apart
+                let edge = got.is_some_and(|(x, y)| (t - x).abs() < 1e-9 || (t - y).abs() < 1e-9);
+                assert!(
+                    want == have || edge,
+                    "t {t}: {want} {have} {a:?} {b:?} {c:?} {d:?} {got:?}"
+                );
+                covered_some += want as usize;
+            }
+        }
+        assert!(covered_some > 1000, "the cases cover something: {covered_some}");
+    }
 }
