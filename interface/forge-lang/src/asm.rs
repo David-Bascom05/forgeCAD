@@ -2230,6 +2230,15 @@ pub const LIMIT: u64 = 64 << 20;
 /// naming document's own directory, its real path a `.fg` file of at most `LIMIT` bytes under
 /// `fence` (the session's root) when there is one. Every refusal is the same None, so a client
 /// learns nothing of what exists outside.
+/// A file placed another way (`mug.fg|with:d=70`): its own name and the variant; a standard
+/// part's key (`std:ISO 4762|M6|20`) is none.
+fn variant_split(file: &str) -> Option<(&str, &str)> {
+    if file.starts_with(crate::stdparts::KEY) {
+        return None;
+    }
+    file.split_once('|')
+}
+
 /// What a placement names: a component of this file by its key (`#box(w=40)`, which the solve
 /// finds among the document's evaluations, never on disk), else a part file as `locate` finds it.
 fn locate_part(
@@ -2253,7 +2262,7 @@ pub(crate) fn locate(
         return None;
     }
     // a file placed another way (`mug.fg|with:..`): the file's own place
-    if let Some((path, _)) = file.split_once('|') {
+    if let Some((path, _)) = variant_split(file) {
         return locate(dir, fence, path);
     }
     let key = (dir.clone(), fence.clone(), file.to_string());
@@ -2367,7 +2376,7 @@ fn located(dir: &Option<std::path::PathBuf>, fence: &Option<std::path::PathBuf>,
         return file.to_string();
     }
     // a file placed another way: its own place, the variant kept
-    if let Some((path, variant)) = file.split_once('|') {
+    if let Some((path, variant)) = variant_split(file) {
         return format!("{}|{variant}", located(dir, fence, path));
     }
     locate(dir, fence, file).map_or_else(|| unlocated(file), |p| p.to_string_lossy().to_string())
@@ -2668,7 +2677,7 @@ fn variant_text<'d>(
     fence: &Option<std::path::PathBuf>,
     file: &str,
 ) -> Result<(String, Option<&'d Variant>, Option<String>), String> {
-    let path = file.split_once('|').map_or(file, |x| x.0).to_string();
+    let path = variant_split(file).map_or(file, |x| x.0).to_string();
     let variant = d
         .variants
         .iter()
@@ -3594,7 +3603,7 @@ pub fn finish(
         let (ck, text) = &missing[i];
         let (file, _, refs, bodies, fence, (cosmetic, meshed)) = ck;
         let make = || {
-            let path = file.split_once('|').map_or(file.as_str(), |x| x.0);
+            let path = variant_split(file).map_or(file.as_str(), |x| x.0);
             let variant = d
                 .variants
                 .iter()
