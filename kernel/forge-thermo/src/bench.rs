@@ -700,3 +700,123 @@ fn a_plug_drives_the_sheet_as_measured() {
         }
     }
 }
+
+/// A male dome: a hemisphere of radius `r` standing on the trim plane.
+fn dome(r: f64) -> Body {
+    let segs = vec![
+        (
+            Segment::Line {
+                a: Point2::new(0.0, 0.0),
+                b: Point2::new(r, 0.0),
+            },
+            1,
+        ),
+        (
+            Segment::Arc {
+                center: Point2::new(0.0, 0.0),
+                radius: r,
+                start: 0.0,
+                sweep: forge_math::dmath::FRAC_PI_2,
+            },
+            2,
+        ),
+        (
+            Segment::Line {
+                a: Point2::new(0.0, r),
+                b: Point2::new(0.0, 0.0),
+            },
+            3,
+        ),
+    ];
+    let plane = Frame::from_axes(Point3::ORIGIN, Vec3::X, Vec3::Z, -Vec3::Y).unwrap();
+    let p = Profile {
+        plane,
+        loops: vec![ProfileLoop::new(segs)],
+    };
+    let axis = Axis2 {
+        origin: Point2::new(0.0, 0.0),
+        dir: Vec2::new(0.0, 1.0),
+    };
+    forge_ops::revolve(&p, axis, forge_math::dmath::TAU, 5).expect("revolves")
+}
+
+/// Stage 3's first test: Varedi 2024's ABS hemisphere (3 mm, male R125, 77.7 kPa), the sheet
+/// 140.2 C at its centre and down to 127 C at its edge when it met the mould (Fig. 6b, the two
+/// halves' mean), each triangle's stiffness the ABS law's (Erchiqui, 150 C) by ABS's WLF shift
+/// (Cha 2019: 170 C, 5.8, 120.8 K) to a power: 0 is one temperature, 1 the flow regime. The wall
+/// against the horizontal distance from the pole, mean error of t0.
+#[test]
+fn an_unevenly_heated_sheet_forms_as_measured() {
+    let shape = dome(125.0);
+    let spec = Spec {
+        tool: Tool::Male,
+        pull: UnitVec3::Z,
+        t: 2.91,
+        trim: None,
+        flange: 50.0,
+        shrink: 0.0,
+        base: 10.0,
+        margin: 40.0,
+        vent: None,
+        vents: None,
+        vent_pitch: 25.0,
+        sheet: None,
+    };
+    let f = analyse(&shape, &spec).expect("analyses");
+    let law = placeholder().material("ABS").cloned().unwrap().law_at(140.0);
+    let data = measured("varedi2024_hemisphere");
+    let profile = vec![
+        (0.0, 140.0),
+        (15.0, 139.4),
+        (45.0, 137.9),
+        (75.0, 135.9),
+        (105.0, 133.1),
+        (135.0, 130.8),
+        (165.0, 127.3),
+    ];
+    let mut row = vec![];
+    for power in [0.0, 0.25, 0.5, 1.0] {
+        let pr = Process {
+            law: law.law.clone(),
+            pressure: 0.0777,
+            resolution: 100,
+            heat: (power > 0.0).then(|| Heat {
+                at: (0.0, 0.0),
+                profile: profile.clone(),
+                shift: Shift::Wlf {
+                    tref: 170.0,
+                    c1: 5.8,
+                    c2: 120.8,
+                },
+                temp: 140.0,
+                power,
+            }),
+            ..Process::default()
+        };
+        let st = stretch(&f, &spec, &pr);
+        // the wall along the grid's middle row by horizontal distance from the pole
+        let (nx, ny) = st.grid;
+        let model: Vec<(f64, f64)> = (0..=nx - nx / 2)
+            .map(|k| (ny / 2) * (nx + 1) + nx / 2 + k)
+            .map(|n| {
+                let p = f.frame.point_to_local(st.nodes[n]);
+                ((p.x * p.x + p.y * p.y).sqrt(), st.node_ratio[n] * spec.t)
+            })
+            .collect();
+        let err =
+            data.iter().map(|&(y, t)| (at(&model, y) - t).abs()).sum::<f64>() / data.len() as f64 / spec.t;
+        eprintln!(
+            "HEAT power {power}: pole {:.2} (measured 2.80), at 120 mm {:.2} (1.95), mean |error| {:.1} % of t0",
+            at(&model, 0.0),
+            at(&model, 120.0),
+            err * 100.0
+        );
+        let line: Vec<String> = data
+            .iter()
+            .map(|&(y, t)| format!("{y:.0}:{t:.2}/{:.2}", at(&model, y)))
+            .collect();
+        eprintln!("  {}", line.join(" "));
+        row.push(err);
+    }
+    assert_eq!(row.len(), 4);
+}

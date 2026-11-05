@@ -58,8 +58,66 @@ pub struct Process {
     pub bending: bool,
     /// A plug pushed into the sheet before the pressure (a female tool's), as it is driven.
     pub plug: Option<Plug>,
+    /// The sheet's temperature over it (stage 3): each triangle's stiffness the law's at its own
+    /// temperature by the polymer's shift (None: one temperature, the law's).
+    pub heat: Option<Heat>,
 }
 
+/// A sheet heated unevenly: its temperature `profile` (C) by distance from `at` on the trim plane
+/// (linear between, held past the ends), and how its stiffness follows: the law's at `temp`,
+/// times the shift factor's ratio to `temp`'s to the `power` (1: as a viscosity, the flow regime).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Heat {
+    pub at: (f64, f64),
+    pub profile: Vec<(f64, f64)>,
+    pub shift: Shift,
+    pub temp: f64,
+    pub power: f64,
+}
+
+/// A time-temperature shift.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Shift {
+    /// log10 aT = -c1 (T - tref) / (c2 + T - tref)
+    Wlf { tref: f64, c1: f64, c2: f64 },
+    /// ln aT = (ea / R) (1/T - 1/tref), ea in kJ/mol, temperatures in C
+    Arrhenius { tref: f64, ea: f64 },
+}
+
+impl Shift {
+    pub fn ln_at(&self, t: f64) -> f64 {
+        match *self {
+            Shift::Wlf { tref, c1, c2 } => -c1 * (t - tref) / (c2 + t - tref) * std::f64::consts::LN_10,
+            Shift::Arrhenius { tref, ea } => {
+                ea * 1e3 / 8.314_462_618 * (1.0 / (t + 273.15) - 1.0 / (tref + 273.15))
+            }
+        }
+    }
+}
+
+impl Heat {
+    /// The temperature at a point of the trim plane.
+    pub fn at_point(&self, x: f64, y: f64) -> f64 {
+        let r = ((x - self.at.0) * (x - self.at.0) + (y - self.at.1) * (y - self.at.1)).sqrt();
+        let p = &self.profile;
+        match (p.first(), p.last()) {
+            (Some(a), _) if r <= a.0 => a.1,
+            (_, Some(b)) if r >= b.0 => b.1,
+            _ => p
+                .windows(2)
+                .find(|w| r >= w[0].0 && r <= w[1].0)
+                .map_or(self.temp, |w| {
+                    w[0].1 + (r - w[0].0) / (w[1].0 - w[0].0).max(1e-12) * (w[1].1 - w[0].1)
+                }),
+        }
+    }
+
+    /// The stiffness there over the law's.
+    pub fn factor(&self, x: f64, y: f64) -> f64 {
+        let t = self.at_point(x, y);
+        dmath::exp(self.power * (self.shift.ln_at(t) - self.shift.ln_at(self.temp)))
+    }
+}
 /// A round plug: a dome nose of radius `nose` meeting its body of radius `radius` in a round of
 /// `edge`, its axis at `at` on the trim plane, driven from its tip `start` mm above the sheet to
 /// `stroke` mm below it in `steps`. The sheet sticks where it touches it, or with `slip` slides on
@@ -159,6 +217,7 @@ impl Default for Process {
             steps: 10,
             bending: false,
             plug: None,
+            heat: None,
         }
     }
 }
@@ -961,7 +1020,13 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
             Tri {
                 v: *v,
                 dinv: [[d / det, -b / det], [-c / det, a / det]],
-                vol: 0.5 * det * spec.t,
+                vol: 0.5
+                    * det
+                    * spec.t
+                    * pr.heat.as_ref().map_or(1.0, |h| {
+                        let c = (p0 + p1 + p2) * (1.0 / 3.0);
+                        h.factor(c.x, c.y)
+                    }),
             }
         })
         .collect();
