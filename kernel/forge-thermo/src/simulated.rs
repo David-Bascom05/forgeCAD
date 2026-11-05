@@ -207,8 +207,16 @@ impl ToolSide {
         let key = |v: f64| (v / cell).floor() as i64;
         let mut cells: HashMap<(i64, i64, i64), Vec<u32>> = HashMap::new();
         for (k, [a, b, c]) in tris.iter().enumerate() {
-            let lo = [a.x.min(b.x).min(c.x), a.y.min(b.y).min(c.y), a.z.min(b.z).min(c.z)];
-            let hi = [a.x.max(b.x).max(c.x), a.y.max(b.y).max(c.y), a.z.max(b.z).max(c.z)];
+            let lo = [
+                a.x.min(b.x).min(c.x),
+                a.y.min(b.y).min(c.y),
+                a.z.min(b.z).min(c.z),
+            ];
+            let hi = [
+                a.x.max(b.x).max(c.x),
+                a.y.max(b.y).max(c.y),
+                a.z.max(b.z).max(c.z),
+            ];
             for i in key(lo[0] - on)..=key(hi[0] + on) {
                 for j in key(lo[1] - on)..=key(hi[1] + on) {
                     for l in key(lo[2] - on)..=key(hi[2] + on) {
@@ -230,7 +238,8 @@ impl ToolSide {
     /// the trim plane.
     pub fn has(&self, t: [Point3; 3]) -> bool {
         let [a, b, c] = t;
-        let g = Point3::ORIGIN + ((a - Point3::ORIGIN) + (b - Point3::ORIGIN) + (c - Point3::ORIGIN)) * (1.0 / 3.0);
+        let g = Point3::ORIGIN
+            + ((a - Point3::ORIGIN) + (b - Point3::ORIGIN) + (c - Point3::ORIGIN)) * (1.0 / 3.0);
         let flat = (b - a)
             .cross(c - a)
             .normalize()
@@ -239,14 +248,12 @@ impl ToolSide {
             return true;
         }
         let key = |v: f64| (v / self.cell).floor() as i64;
-        self.cells
-            .get(&(key(g.x), key(g.y), key(g.z)))
-            .is_some_and(|l| {
-                l.iter().any(|&k| {
-                    let [a, b, c] = self.tris[k as usize];
-                    (closest(g, a, b, c) - g).length() < self.on
-                })
+        self.cells.get(&(key(g.x), key(g.y), key(g.z))).is_some_and(|l| {
+            l.iter().any(|&k| {
+                let [a, b, c] = self.tris[k as usize];
+                (closest(g, a, b, c) - g).length() < self.on
             })
+        })
     }
 }
 
@@ -765,6 +772,33 @@ pub fn simulated_part(
     built_on(part, frame, tool, Some(field), t, h, ANGLE)
 }
 
+/// What the simulated part reads of the modelled part: its tessellation (welded, sides split to
+/// `h`) and, at each triangle's corners, the exact surface's outward normal. Its bytes key the
+/// simulated part on disk: they are all of the part it depends on.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PartMesh {
+    pub pos: Vec<Point3>,
+    pub tris: Vec<[u32; 3]>,
+    pub faces: Vec<u32>,
+    pub normals: Vec<[Vec3; 3]>,
+}
+
+/// `PartMesh` of `part`, None where it does not tessellate.
+pub fn part_mesh(part: &forge_topo::Body, h: f64) -> Option<PartMesh> {
+    tessellated(part, h, ANGLE)
+}
+
+/// `simulated_part` from the part's `PartMesh`.
+pub fn simulated_from(
+    m: &PartMesh,
+    frame: &Frame,
+    tool: &OnTool,
+    field: &WallField,
+    t: f64,
+) -> Option<Simulated> {
+    built_from(m, frame, tool, Some(field), t)
+}
+
 /// The tessellation's largest turn per side on the part's rounds.
 pub(crate) const ANGLE: f64 = std::f64::consts::PI / 18.0;
 
@@ -778,6 +812,10 @@ pub(crate) fn built_on(
     h: f64,
     angle: f64,
 ) -> Option<Simulated> {
+    built_from(&tessellated(part, h, angle)?, frame, tool, field, t)
+}
+
+fn tessellated(part: &forge_topo::Body, h: f64, angle: f64) -> Option<PartMesh> {
     let q = forge_mesh::Quality {
         chord: 0.02,
         max_angle: angle,
@@ -820,6 +858,28 @@ pub(crate) fn built_on(
         .filter(|(t, _)| t[0] != t[1] && t[1] != t[2] && t[0] != t[2])
         .unzip();
     refine(&mut pos, &mut tris, &mut faces, h);
+    // the exact surface's normal at each triangle's corners, on all cores in order
+    let normals = forge_math::par::map(tris.len(), |k| {
+        let [a, b, c] = tris[k].map(|i| pos[i as usize]);
+        let near = (b - a).cross(c - a);
+        tris[k].map(|i| face_normal(part, faces[k], pos[i as usize], near))
+    });
+    Some(PartMesh {
+        pos,
+        tris,
+        faces,
+        normals,
+    })
+}
+
+fn built_from(
+    pm: &PartMesh,
+    frame: &Frame,
+    tool: &OnTool,
+    field: Option<&WallField>,
+    t: f64,
+) -> Option<Simulated> {
+    let (pos, tris, faces) = (&pm.pos, &pm.tris, &pm.faces);
     // the part's triangles on the tool's surface, or on the trim plane facing it (the flange's)
     let near = Near::new(tool, 2.0 * t);
     let on = 0.05 * t;
@@ -847,26 +907,15 @@ pub(crate) fn built_on(
     // the exact surface's normal at each point, of each face off the tool it is on
     let mut normal = vec![Vec3::ZERO; pos.len()];
     let mut done: std::collections::HashSet<(u32, u32)> = Default::default();
-    let mut asks: Vec<(u32, u32, Vec3)> = vec![];
-    for ((tri, s), &f) in tris.iter().zip(&is_side).zip(&faces) {
+    for (k, (tri, s)) in tris.iter().zip(&is_side).enumerate() {
         if *s {
             continue;
         }
-        let [a, b, c] = tri.map(|i| pos[i as usize]);
-        let near = (b - a).cross(c - a);
-        for &i in tri {
-            if done.insert((i, f)) {
-                asks.push((i, f, near));
+        for (c, &i) in tri.iter().enumerate() {
+            if done.insert((i, faces[k])) {
+                normal[i as usize] += pm.normals[k][c];
             }
         }
-    }
-    // the surfaces' normals on all cores, summed in the same order
-    let got = forge_math::par::map(asks.len(), |k| {
-        let (i, f, near) = asks[k];
-        face_normal(part, f, pos[i as usize], near)
-    });
-    for ((i, _, _), n) in asks.iter().zip(got) {
-        normal[*i as usize] += n;
     }
     let normal: Vec<Vec3> = normal
         .into_iter()
@@ -902,7 +951,7 @@ pub(crate) fn built_on(
     // each point's move in from t to the wall, smoothed over its neighbours off the tool: where
     // the tessellation's normals turn quickly (a round's ends) the moves stay in step
     let mut nb: Vec<Vec<u32>> = vec![vec![]; pos.len()];
-    for tri in &tris {
+    for tri in tris {
         for (a, b) in [(tri[0], tri[1]), (tri[1], tri[2]), (tri[2], tri[0])] {
             if !on_side[a as usize] && !on_side[b as usize] {
                 nb[a as usize].push(b);

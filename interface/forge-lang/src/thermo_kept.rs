@@ -1,40 +1,86 @@
-//! A thermoform's forming and simulated part kept on disk (`store`), keyed by everything they are
-//! made from: the shape's whole body, the feature's text and id, the material's law and the
-//! process. Opening the part again, or an edit elsewhere in it, reads them back bit for bit.
+//! A thermoform's forming and simulated part kept on disk (`store`). Each is keyed by the bytes of
+//! everything it reads: the forming by the process and spec, the tool's mesh and contact, the
+//! trim and the plane; the simulated part by the forming's key and the modelled part as it reads
+//! it (its tessellation and the exact normals at its corners). The entry holds those bytes and a
+//! read compares them, so a hit is the same inputs, never two that only hash alike. Opening the
+//! part again, or an edit elsewhere in it, reads them back bit for bit.
 
 use crate::store::{self, In, Out};
 use forge_math::Point3;
-use forge_thermo::{MeshMass, Simulated, Step, Stretch};
+use forge_thermo::{Formed, MeshMass, PartMesh, Simulated, Spec, Step, Stretch};
 
-/// The forming's key: `memo` is the feature's in-run memo key (its text, material, process).
-pub fn key(kind: &str, memo: &str, id: &str, shape: &forge_topo::Body) -> u128 {
-    store::key(kind, |h| {
-        h.str(memo);
-        h.str(id);
-        h.str(&format!("{shape:?}"));
-    })
+/// The bytes of all the forming reads: `memo` is the feature's memo text (its spec, material and
+/// process, printed exactly), `spec` the spec it forms with.
+pub fn stretch_key(memo: &str, spec: &Spec, f: &Formed) -> Vec<u8> {
+    let mut o = Out::default();
+    o.str(memo);
+    o.str(&format!("{spec:?}"));
+    o.str(&format!("{:?}", f.frame));
+    o.str(&format!("{:?}", f.report.trim_box));
+    o.str(&format!("{:?}", f.trim));
+    points(&mut o, &f.mesh.positions);
+    tris(&mut o, &f.mesh.triangles);
+    o.u64(f.contact.len() as u64);
+    f.contact.iter().for_each(|&k| o.u64(k as u64));
+    o.0
 }
 
-pub fn get_stretch(key: u128) -> Option<Stretch> {
-    let b = store::get("thermo-stretch", key)?;
-    read_stretch(&mut In(&b))
+/// The bytes of all the simulated part reads besides the forming (`stretch`, its key).
+pub fn sim_key(stretch: &[u8], walls: &str, t: f64, part: &PartMesh) -> Vec<u8> {
+    let mut o = Out::default();
+    o.bytes(stretch);
+    o.str(walls);
+    o.f64(t);
+    points(&mut o, &part.pos);
+    tris(&mut o, &part.tris);
+    o.u64(part.faces.len() as u64);
+    part.faces.iter().for_each(|&f| o.u64(f as u64));
+    o.u64(part.normals.len() as u64);
+    for n in part.normals.iter().flatten() {
+        o.f64(n.x);
+        o.f64(n.y);
+        o.f64(n.z);
+    }
+    o.0
 }
 
-pub fn put_stretch(key: u128, s: &Stretch) {
+/// The entry's bytes after its key's, when the key it holds is `key`.
+fn get(kind: &str, key: &[u8]) -> Option<Vec<u8>> {
+    let b = store::get(kind, store::key(kind, |h| h.bytes(key)))?;
+    opened(&b, key).map(<[u8]>::to_vec)
+}
+
+/// An entry's payload, when the key it was kept under is `key` byte for byte.
+fn opened<'a>(entry: &'a [u8], key: &[u8]) -> Option<&'a [u8]> {
+    let mut i = In(entry);
+    (i.bytes()? == key).then_some(i.0)
+}
+
+fn put(kind: &str, key: &[u8], o: Out) {
+    let mut e = Out::default();
+    e.bytes(key);
+    e.0.extend_from_slice(&o.0);
+    store::put(kind, store::key(kind, |h| h.bytes(key)), &e.0);
+}
+
+pub fn get_stretch(key: &[u8]) -> Option<Stretch> {
+    read_stretch(&mut In(&get("thermo-stretch", key)?))
+}
+
+pub fn put_stretch(key: &[u8], s: &Stretch) {
     let mut o = Out::default();
     write_stretch(&mut o, s);
-    store::put("thermo-stretch", key, &o.0);
+    put("thermo-stretch", key, o);
 }
 
-pub fn get_sim(key: u128) -> Option<Simulated> {
-    let b = store::get("thermo-sim", key)?;
-    read_sim(&mut In(&b))
+pub fn get_sim(key: &[u8]) -> Option<Simulated> {
+    read_sim(&mut In(&get("thermo-sim", key)?))
 }
 
-pub fn put_sim(key: u128, s: &Simulated) {
+pub fn put_sim(key: &[u8], s: &Simulated) {
     let mut o = Out::default();
     write_sim(&mut o, s);
-    store::put("thermo-sim", key, &o.0);
+    put("thermo-sim", key, o);
 }
 
 fn point(o: &mut Out, p: Point3) {
@@ -237,4 +283,21 @@ fn read_sim(i: &mut In) -> Option<Simulated> {
             inertia,
         },
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_entry_is_read_only_under_its_own_key() {
+        let mut e = Out::default();
+        e.bytes(b"the key");
+        e.0.extend_from_slice(b"payload");
+        assert_eq!(opened(&e.0, b"the key"), Some(&b"payload"[..]));
+        // another key that hashed to the same file is a miss, never the other's forming
+        assert_eq!(opened(&e.0, b"the kez"), None);
+        assert_eq!(opened(&e.0, b"the key and more"), None);
+        assert_eq!(opened(&e.0[..3], b"the key"), None);
+    }
 }
