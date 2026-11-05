@@ -337,13 +337,18 @@ fn with_text(src: &str, w: &Expr, name: &str) -> String {
 }
 
 /// A file's text kept for the run's evaluations of it (each text once, for the process: an
-/// evaluation borrows its text as long as the document's).
+/// evaluation borrows its text as long as the document's). Found by the text itself, never by a
+/// hash of it: two texts are never one.
 fn kept_text(text: String) -> &'static str {
     use std::sync::{Mutex, OnceLock};
-    static TEXTS: OnceLock<Mutex<BTreeMap<u64, &'static str>>> = OnceLock::new();
-    let h = text_hash(&text);
+    static TEXTS: OnceLock<Mutex<std::collections::BTreeSet<&'static str>>> = OnceLock::new();
     let mut m = TEXTS.get_or_init(Default::default).lock().expect("texts");
-    m.entry(h).or_insert_with(|| Box::leak(text.into_boxed_str()))
+    if let Some(t) = m.get(text.as_str()) {
+        return t;
+    }
+    let t: &'static str = Box::leak(text.into_boxed_str());
+    m.insert(t);
+    t
 }
 
 /// `part(FILE, with: {..})` evaluated as a call of the file's default part: its shared params
