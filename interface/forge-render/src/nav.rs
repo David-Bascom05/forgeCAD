@@ -71,6 +71,8 @@ pub struct Nav {
     pivot: Option<[f32; 3]>,
     pan_depth: Option<f32>,
     want_pick: Option<(f32, f32)>,
+    /// A click made before the pick under it answered: where, and Shift and Ctrl then.
+    click_due: Option<((f32, f32), bool, bool)>,
     want_home: bool,
     pub tool: NavTool,
     /// Clicks that select, so far: the host's other things in the view can answer one.
@@ -186,6 +188,7 @@ impl Nav {
             pivot: None,
             pan_depth: None,
             want_pick: None,
+            click_due: None,
             want_home: false,
             tool: NavTool::Orbit,
             clicks: 0,
@@ -309,6 +312,13 @@ impl Nav {
         let before = self.marks();
         self.hit = hit;
         self.hit_at = Some(px);
+        if let Some((at, shift, ctrl)) = self.click_due
+            && at == px
+        {
+            self.click_due = None;
+            self.click(hit, shift, ctrl);
+            return true;
+        }
         // the answer for this drag's press, even if the drag has moved on since
         if self
             .drag
@@ -501,25 +511,37 @@ impl Nav {
             Some(Drag::Window | Drag::Orbit | Drag::Pan | Drag::Zoom)
                 if matches!(self.press_button, MouseButton::Left) =>
             {
-                self.clicks += 1;
-                let got = self.known_hit().map(|h| (h.placement, h.entity));
-                self.last_click = got;
-                if self.modifiers.shift_key() {
-                    if let Some(g) = got
-                        && !self.selected.contains(&g)
-                    {
-                        self.selected.push(g);
-                    }
-                } else if self.modifiers.control_key() {
-                    if let Some(g) = got {
-                        self.selected.retain(|s| *s != g);
-                    }
-                } else {
-                    self.selected = got.into_iter().collect();
+                let (shift, ctrl) = (self.modifiers.shift_key(), self.modifiers.control_key());
+                if self.hit_at == Some(self.cursor) {
+                    self.click(self.hit, shift, ctrl);
+                    return true;
                 }
-                true
+                // what's under it isn't known yet: the click counts when the pick answers
+                self.click_due = Some((self.cursor, shift, ctrl));
+                self.want_pick = Some(self.cursor);
+                false
             }
             _ => false,
+        }
+    }
+
+    /// A click on what the pick found there (or on nothing).
+    fn click(&mut self, hit: Option<PickHit>, shift: bool, ctrl: bool) {
+        self.clicks += 1;
+        let got = hit.map(|h| (h.placement, h.entity));
+        self.last_click = got;
+        if shift {
+            if let Some(g) = got
+                && !self.selected.contains(&g)
+            {
+                self.selected.push(g);
+            }
+        } else if ctrl {
+            if let Some(g) = got {
+                self.selected.retain(|s| *s != g);
+            }
+        } else {
+            self.selected = got.into_iter().collect();
         }
     }
 

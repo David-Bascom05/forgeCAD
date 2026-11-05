@@ -52,6 +52,9 @@ pub struct Settings {
     pub length: &'static str,
     pub angle: &'static str,
     pub decimals: usize,
+    /// Seconds the pointer rests on a tool before its tooltip, and before the longer one.
+    pub tip_delay: f32,
+    pub tip_long: f32,
     pub keys: KeyMap,
     pub mouse_preset: String,
     /// Actions whose gestures the person set, in place of the preset's.
@@ -73,6 +76,8 @@ impl Default for Settings {
             length: "mm",
             angle: "deg",
             decimals: 3,
+            tip_delay: 0.6,
+            tip_long: 2.0,
             keys: KeyMap::default(),
             mouse_preset: presets()[0].id.clone(),
             mouse_custom: Vec::new(),
@@ -148,6 +153,8 @@ impl Settings {
         t.set("units", "length", self.length);
         t.set("units", "angle", self.angle);
         t.set("units", "decimals", self.decimals.to_string());
+        t.set("display", "tooltip_delay", self.tip_delay.to_string());
+        t.set("display", "tooltip_long", self.tip_long.to_string());
         for (id, k) in &self.keys.custom {
             t.set("keys", id, k.map_or(String::new(), |k| k.to_string()));
         }
@@ -196,6 +203,9 @@ impl Settings {
         s.length = known(&forge_doc::units::DOC_LENGTHS, &get("units", "length")).unwrap_or("mm");
         s.angle = known(&ANGLES, &get("units", "angle")).unwrap_or("deg");
         s.decimals = get("units", "decimals").parse().unwrap_or(3).min(6);
+        let secs = |k: &str, d: f32| get("display", k).parse::<f32>().ok().filter(|v| v.is_finite()).map_or(d, |v| v.clamp(0.0, 10.0));
+        s.tip_delay = secs("tooltip_delay", s.tip_delay);
+        s.tip_long = secs("tooltip_long", s.tip_long);
         let cmds = crate::bindings::commands();
         for (id, k) in t.section("keys") {
             if let Some(c) = cmds.iter().find(|c| c.id == id && !c.fixed) {
@@ -721,6 +731,28 @@ fn display(ui: &mut Ui, t: &Theme, s: &mut Settings, _: &mut Window, places: &mu
             });
         });
     }
+    tooltips(ui, t, s, places);
+}
+
+/// The tooltips' delays: the short tip, then the longer one with its picture.
+fn tooltips(ui: &mut Ui, t: &Theme, s: &mut Settings, places: &mut Vec<(String, Rect)>) {
+    group(ui, t, "Tooltips", |ui| {
+        for (words, key, v) in [
+            ("Tooltip after", "tip_delay", &mut s.tip_delay),
+            ("Longer tooltip after", "tip_long", &mut s.tip_long),
+        ] {
+            row(ui, t, words, |ui| {
+                let r = ui.add(
+                    egui::DragValue::new(v)
+                        .range(0.0..=10.0)
+                        .speed(0.05)
+                        .fixed_decimals(1)
+                        .suffix(" s"),
+                );
+                places.push((format!("settings:{key}"), r.rect));
+            });
+        }
+    });
 }
 
 fn units(ui: &mut Ui, t: &Theme, s: &mut Settings, _: &mut Window, places: &mut Vec<(String, Rect)>) {
@@ -949,6 +981,8 @@ mod tests {
             length: "in",
             angle: "rad",
             decimals: 5,
+            tip_delay: 1.5,
+            tip_long: 3.0,
             mouse_preset: "onshape".into(),
             invert_zoom: true,
             ..Settings::default()

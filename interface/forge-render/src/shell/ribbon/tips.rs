@@ -10,8 +10,6 @@ use egui::{Response, RichText, Ui, vec2};
 use std::sync::OnceLock;
 
 const TIPS_CSV: &str = include_str!("../../../data/tool_tips.csv");
-/// How long the pointer rests before the extended tooltip, in seconds.
-const LONG_REST: f64 = 1.4;
 
 /// The rows of a CSV with a header line; a field may be quoted to hold commas.
 pub(in crate::shell) fn csv_rows(text: &str) -> Vec<Vec<String>> {
@@ -140,15 +138,24 @@ impl Shell {
             ctx.data_mut(|d| d.remove::<f64>(key));
             now
         };
-        let long = now - since >= LONG_REST;
+        // how long the pointer rests before the extended tooltip: Settings > Display
+        let rest = self.settings.tip_long as f64;
+        let long = now - since >= rest;
         if resp.hovered() && !long {
-            ctx.request_repaint_after(std::time::Duration::from_secs_f64(LONG_REST - (now - since)));
+            ctx.request_repaint_after(std::time::Duration::from_secs_f64((rest - (now - since)).max(0.0)));
         }
         let scope = scope(self);
         resp.on_hover_ui(|ui| self.tip_body(ui, scope, tool, long))
     }
 
+    /// The tool whose tooltip was last drawn, and whether it was the longer one.
+    pub fn tip_shown(ctx: &egui::Context) -> Option<(String, bool)> {
+        ctx.data(|d| d.get_temp::<(String, bool)>(egui::Id::unique("tip-shown")))
+    }
+
     fn tip_body(&self, ui: &mut Ui, scope: &str, tool: &Tool, long: bool) {
+        ui.ctx()
+            .data_mut(|d| d.insert_temp(egui::Id::unique("tip-shown"), (tool.name.to_string(), long)));
         let t = self.theme;
         ui.set_max_width(300.0);
         let (line, key) = tip(scope, tool.name).unwrap_or(("", ""));

@@ -130,6 +130,22 @@ impl Presenter {
     }
 }
 
+/// What the loop waits for while a frame is out: a frame asked for later (a tooltip's delay, a
+/// field's blink) keeps its time, so the loop wakes for it even if nothing else happens; one
+/// already due, or a pick to answer, waits for the frame to be back. Without the timer a tooltip
+/// waited for the next key or move to come up.
+fn while_out(
+    now: Instant,
+    next: Option<Instant>,
+    run_until: Option<Instant>,
+    picking: bool,
+) -> (ControlFlow, bool) {
+    let due = next.is_some_and(|n| now >= n);
+    let wake = [next.filter(|_| !due), run_until].into_iter().flatten().min();
+    let flow = wake.map_or(ControlFlow::Wait, ControlFlow::WaitUntil);
+    (flow, picking || due)
+}
+
 fn spread(mut v: Vec<f64>) -> String {
     v.sort_by(f64::total_cmp);
     let at = |p: f64| v[((v.len() - 1) as f64 * p) as usize];
@@ -456,13 +472,16 @@ impl ApplicationHandler for App {
         }
         // nothing can be drawn till it's back; it wakes the loop only if something's waiting on it
         if l.presenter.is_out() {
-            if l.gui.pick_busy() || l.gui.picks() {
+            let (flow, wake_when_back) = while_out(
+                Instant::now(),
+                self.next,
+                self.run_until,
+                l.gui.pick_busy() || l.gui.picks(),
+            );
+            if wake_when_back {
                 l.presenter.busy();
             }
-            on_loop.set_control_flow(match self.run_until {
-                Some(end) => ControlFlow::WaitUntil(end),
-                None => ControlFlow::Wait,
-            });
+            on_loop.set_control_flow(flow);
             return;
         }
         if l.gui.picks() {
@@ -556,4 +575,26 @@ pub fn run(
         started: Instant::now(),
     };
     on_loop.run_app(&mut app).map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Duration;
+
+    #[test]
+    fn a_frame_wanted_later_is_waited_for_while_one_is_out() {
+        let now = Instant::now();
+        let later = now + Duration::from_millis(600);
+        // a tooltip's delay: the loop wakes at it, not only on the next key
+        assert_eq!(while_out(now, Some(later), None, false), (ControlFlow::WaitUntil(later), false));
+        // due already: woken when the frame's back
+        assert_eq!(while_out(later, Some(now), None, false), (ControlFlow::Wait, true));
+        // nothing wanted: just waits; a pick to answer wakes it when back
+        assert_eq!(while_out(now, None, None, false), (ControlFlow::Wait, false));
+        assert_eq!(while_out(now, None, None, true), (ControlFlow::Wait, true));
+        // the sooner of a wanted frame and the run's end
+        let end = now + Duration::from_millis(100);
+        assert_eq!(while_out(now, Some(later), Some(end), false).0, ControlFlow::WaitUntil(end));
+    }
 }

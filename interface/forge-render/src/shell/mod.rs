@@ -830,6 +830,11 @@ impl Shell {
             theme::apply(&ctx, &t);
             self.style_set = Some(t.dark);
         }
+        // the tooltip's delay as Settings has it
+        if ctx.global_style().interaction.tooltip_delay != self.settings.tip_delay {
+            let d = self.settings.tip_delay;
+            ctx.all_styles_mut(|s| s.interaction.tooltip_delay = d);
+        }
         self.places.clear();
         self.view_blocks.clear();
         let s = ctx.content_rect();
