@@ -597,6 +597,14 @@ fn a_tool_opened_in_the_frame_of_an_undo_takes_the_freed_name() {
     out.push(forge_render::shell::Action::Undo);
     out.push(forge_render::shell::Action::NewFeature("split"));
     h.step();
-    let t = h.gui.shell.fg.as_ref().unwrap().tool.as_ref().expect("the Split dialog");
+    let t = h
+        .gui
+        .shell
+        .fg
+        .as_ref()
+        .unwrap()
+        .tool
+        .as_ref()
+        .expect("the Split dialog");
     assert_eq!(t.name, "split1");
 }
