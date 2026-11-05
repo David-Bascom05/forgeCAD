@@ -11,6 +11,7 @@ pub mod asmtools;
 pub mod content;
 pub mod dialog;
 pub mod dim;
+pub mod docs;
 pub mod drawing;
 pub mod fg;
 pub mod fgasm;

@@ -30,6 +30,8 @@ pub mod gui_agent;
 pub mod gui_apptools;
 #[path = "gui_asm.rs"]
 mod gui_asm;
+#[path = "gui_docs.rs"]
+pub mod gui_docs;
 #[path = "gui_explode.rs"]
 mod gui_explode;
 #[path = "gui_inspect.rs"]
@@ -47,7 +49,7 @@ pub type Waker = Arc<dyn Fn() + Send + Sync>;
 /// as stored.
 pub const HEADLESS_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 
-struct Loaded {
+pub(crate) struct Loaded {
     /// Its file, if it has one.
     file: Option<String>,
     name: String,
@@ -112,7 +114,7 @@ pub struct FrameOut {
 /// An assembly's occurrences, and each placement's mesh and solved pose.
 pub type AsmPlaced = (Vec<crate::fg::Occ>, Vec<(usize, crate::scene::Rows)>);
 /// A part file, and its anchors or why not.
-type PartAnchors = (String, Result<Vec<String>, String>);
+pub(crate) type PartAnchors = (String, Result<Vec<String>, String>);
 
 pub struct Gui {
     pub ctx: egui::Context,
