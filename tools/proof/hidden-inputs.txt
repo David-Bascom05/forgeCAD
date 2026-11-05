@@ -257,10 +257,10 @@ no-output (constant tables or print switches)  @ forge-topo/src/mass.rs|static|s
 no-output (constant tables or print switches)  @ forge-topo/src/mass.rs|static|static R: OnceLock<[Curtis; 2]> = OnceLock::new();
 no-output (constant tables or print switches)  @ forge-topo/src/mass.rs|static|static R: OnceLock<[Fejer; 3]> = OnceLock::new();
 no-output (constant tables or print switches)  @ forge-topo/src/mass.rs|static|static R: OnceLock<[Kronrod; 2]> = OnceLock::new();
-no-output (looked up by key only: get, entry, insert, contains)  @ forge-thermo/src/simulated.rs|hash-order|cells: HashMap<(i64, i64, i64), Vec<u32>>,
+no-output (looked up by key only: get, entry, insert, contains)  @ forge-thermo/src/simulated.rs|hash-order|cells: HashMap<(i64, i64, i64), Vec<u32>>,  x 2
 no-output (looked up by key only: get, entry, insert, contains)  @ forge-thermo/src/simulated.rs|hash-order|cells: HashMap<(i64, i64, i64), Vec<usize>>,
 no-output (looked up by key only: get, entry, insert, contains)  @ forge-thermo/src/simulated.rs|hash-order|cuts: HashMap<(i64, i64), usize>,
-no-output (looked up by key only: get, entry, insert, contains)  @ forge-thermo/src/simulated.rs|hash-order|let mut cells: HashMap<(i64, i64, i64), Vec<u32>> = HashMap::new();  x 2
+no-output (looked up by key only: get, entry, insert, contains)  @ forge-thermo/src/simulated.rs|hash-order|let mut cells: HashMap<(i64, i64, i64), Vec<u32>> = HashMap::new();  x 3
 no-output (looked up by key only: get, entry, insert, contains)  @ forge-thermo/src/simulated.rs|hash-order|let mut cells: HashMap<(i64, i64, i64), Vec<usize>> = HashMap::new();
 no-output (its keys are sorted before use: the rim, simulated.rs)  @ forge-thermo/src/simulated.rs|hash-order|let mut directed: HashMap<(usize, usize), usize> = HashMap::new();
 no-output (looked up by key only: get, entry, insert, contains)  @ forge-thermo/src/simulated.rs|hash-order|let mut done: std::collections::HashSet<(u32, u32)> = Default::default();
@@ -269,3 +269,7 @@ no-output (looked up by key only: get, entry, insert, contains)  @ forge-thermo/
 no-output (looked up by key only: get, entry, insert, contains)  @ forge-thermo/src/simulated.rs|hash-order|nodes: HashMap<usize, usize>,
 no-output (a test's timing)  @ forge-thermo/src/tests.rs|clock|let t0 = std::time::Instant::now();  x 2
 no-output (a test's own check)  @ forge-thermo/src/tests.rs|hash-order|let mut sides: std::collections::HashMap<(u32, u32), Vec<usize>> = Default::default();
+no-output (the stretch's worker pool: stops its workers when dropped; the triangles' answers come back in triangle order whatever the worker count, summed as one thread sums them)  @ forge-thermo/src/stretch.rs|atomic|stop: AtomicBool,
+no-output (the stretch's worker pool: stops its workers when dropped; the triangles' answers come back in triangle order whatever the worker count, summed as one thread sums them)  @ forge-thermo/src/stretch.rs|atomic|stop: AtomicBool::new(false),
+no-output (the stretch's worker pool: stops its workers when dropped; the triangles' answers come back in triangle order whatever the worker count, summed as one thread sums them)  @ forge-thermo/src/stretch.rs|atomic|use std::sync::atomic::{AtomicBool, Ordering};
+no-output (the stretch's worker pool: stops its workers when dropped; the triangles' answers come back in triangle order whatever the worker count, summed as one thread sums them)  @ forge-thermo/src/stretch.rs|threads|std::thread::spawn(move || {
