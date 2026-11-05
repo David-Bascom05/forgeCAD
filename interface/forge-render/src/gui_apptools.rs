@@ -381,7 +381,7 @@ impl Gui {
                     (Some(w), Some(d))
                         if w.parent() == Some(d.as_path()) && w.extension().is_some_and(|x| x == "fg") =>
                     {
-                        self.open(&w.display().to_string());
+                        self.open_document(&w.display().to_string(), true);
                         Reply::ok(format!("Opened {}", w.display()))
                     }
                     _ => Reply::err("open_document opens a .fg file in the open document's folder"),

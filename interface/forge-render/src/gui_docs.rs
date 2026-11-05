@@ -723,6 +723,10 @@ impl Gui {
                 continue;
             };
             let own = std::fs::canonicalize(&path).is_ok_and(|p| p == file);
+            // in an agent's turn its own writes come through its tab, as one labelled undo step
+            if own && self.watch.agent {
+                continue;
+            }
             let inside = root_of(&path).is_some_and(|r| file.starts_with(r));
             let reads = !own && inside && self.reads_of(i).iter().any(|r| r == file);
             let name = self.docs[i].title.clone();
@@ -757,7 +761,7 @@ impl Gui {
     }
 
     /// A document's build, drawing and status line, active or idle.
-    fn doc_parts(
+    pub(super) fn doc_parts(
         &mut self,
         i: usize,
     ) -> (

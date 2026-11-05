@@ -1256,3 +1256,96 @@ fn settings_reset_all_keeps_the_agents_choices_and_trusted_folders() {
     drop(h);
     let _ = std::fs::remove_dir_all(dir);
 }
+
+#[test]
+fn a_file_open_in_another_tab_takes_the_agents_writes_as_one_step_and_its_undo_brings_it_up() {
+    let Ok(mut h) = forge_render::gui::Headless::new((1400.0, 900.0), 1.0) else {
+        return;
+    };
+    let dir = scratch("tabs");
+    let plate = dir.join("plate.fg");
+    let other = dir.join("other.fg");
+    std::fs::write(&plate, PART).unwrap();
+    std::fs::write(&other, PART).unwrap();
+    // two writes to the other tab's file in the turn: one step there
+    let more = format!(
+        "sed -i 's/w3 = 80/w3 = 85/' '{0}/other.fg'\nsleep 0.3\nsed -i 's/w3 = 85/w3 = 90/' '{0}/other.fg'",
+        dir.display()
+    );
+    h.gui.agent.program = Some(fake_claude_doing(&dir, &more).display().to_string());
+    h.gui.agent.cwd = Some(dir.join("cwd"));
+    h.gui.agent.settings_file = Some(dir.join("agent.toml"));
+    std::fs::write(
+        dir.join("agent.toml"),
+        format!("trusted = \"{}\"\n", dir.canonicalize().unwrap().display()),
+    )
+    .unwrap();
+    h.step();
+    h.gui.open_document(other.to_str().unwrap(), true);
+    h.settle();
+    h.gui.open_document(plate.to_str().unwrap(), true);
+    h.settle();
+    assert_eq!(h.gui.documents().len(), 2);
+    let plate_tab = h.gui.active_document();
+    assert!(h.click("side:tab:Agent"));
+    h.step();
+    assert!(h.click("agent:input"));
+    h.step();
+    h.text("widen the other part too");
+    h.step();
+    assert!(h.click("agent:send"));
+    assert!(h.until(|g| {
+        !g.shell.agent.running
+            && g.shell
+                .agent
+                .entries
+                .iter()
+                .filter(|e| matches!(e, Entry::Diff { .. }))
+                .count()
+                == 2
+    }));
+    assert_eq!(
+        h.gui.active_document(),
+        plate_tab,
+        "the chat's tab stays where it was"
+    );
+    // in the other tab: the agent's step, labelled, not the file watch's reloads
+    let other_tab = 1 - plate_tab;
+    h.gui.activate(other_tab);
+    h.step();
+    let s = h.gui.fg.as_ref().unwrap();
+    assert!(s.src.contains("w3 = 90"));
+    assert_eq!(
+        s.undo_tag().map(|t| t.0.to_string()),
+        Some("Agent: widen the other part too".into())
+    );
+    h.gui.activate(plate_tab);
+    h.step();
+    // the other tab's Undo: it comes up, back as it was in one step
+    let at = h
+        .gui
+        .shell
+        .agent
+        .entries
+        .iter()
+        .find_map(|e| match e {
+            Entry::Diff { index, file, .. } if file == "other.fg" => Some(*index),
+            _ => None,
+        })
+        .unwrap();
+    assert!(h.click(&format!("agent:undo:0:{at}")));
+    h.step();
+    assert_ne!(h.gui.active_document(), plate_tab);
+    assert_eq!(
+        h.gui.agent_path().as_deref(),
+        Some(other.canonicalize().unwrap().to_str().unwrap())
+    );
+    assert_eq!(h.gui.fg.as_ref().unwrap().src, PART);
+    assert_eq!(
+        h.gui.shell.agent.tab,
+        SideTab::Agent,
+        "the chat is the app's, not the tab's"
+    );
+    drop(h);
+    let _ = std::fs::remove_dir_all(dir);
+}

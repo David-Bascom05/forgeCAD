@@ -147,6 +147,21 @@ impl Gui {
             self.shell.status = "The agent changed the file".into();
             return;
         }
+        // open in another tab: that document takes it, one undo step there
+        if let Some(i) = self.agent_tab_of(&path) {
+            let mut turns = std::mem::take(&mut self.agent.turns);
+            let (session, drawing, _) = self.doc_parts(i);
+            let d: Option<&mut dyn Doc> = match (session, drawing) {
+                (_, Some(d)) => Some(d),
+                (Some(s), None) => Some(s),
+                _ => None,
+            };
+            if d.as_ref().is_none_or(|d| d.text() != text) {
+                turns.changed(d, &path, before, text);
+            }
+            self.agent.turns = turns;
+            return;
+        }
         let made = before.is_none();
         let first = self.agent.turns.changed(None, &path, before, text);
         if made && first && path.ends_with(".fg") {
@@ -161,9 +176,23 @@ impl Gui {
         }
     }
 
-    /// Opens a document in the app: as the active one.
+    /// The tab a file is open in, if it's not the active one.
+    fn agent_tab_of(&self, path: &str) -> Option<usize> {
+        let want = std::fs::canonicalize(path).ok()?;
+        let i = self.documents().iter().position(|d| {
+            d.sub.is_none()
+                && d.path
+                    .as_deref()
+                    .and_then(|p| std::fs::canonicalize(p).ok())
+                    .as_ref()
+                    == Some(&want)
+        })?;
+        (i != self.active_document()).then_some(i)
+    }
+
+    /// Opens a document in the app, in its tab, as the active one.
     fn agent_open(&mut self, path: &str) {
-        self.open(path);
+        self.open_document(path, true);
         if let Some(b) = &mut self.agent.backend {
             b.set_file(Path::new(path));
         }
@@ -200,6 +229,7 @@ impl Gui {
 
     /// The turn's changes, a diff for each file it changed or made.
     fn agent_turn_over(&mut self) {
+        self.agent_turn(false);
         let Some((turn, files)) = self.agent.turns.finish() else {
             return;
         };
@@ -273,6 +303,14 @@ impl Gui {
             }
             return Ok(());
         }
+        // open in another tab: it comes up, and is taken back there
+        let active = match self.agent_tab_of(&f.path) {
+            Some(i) => {
+                self.activate(i);
+                self.agent_path()
+            }
+            None => active,
+        };
         if active.as_deref() == Some(f.path.as_str())
             && let Some(d) = doc(&mut self.shell.drawing, &mut self.fg)
         {
@@ -458,6 +496,8 @@ impl Gui {
         if let (Some(t), Some(d)) = (&self.agent.app_tools, Path::new(&path).parent()) {
             t.set_dir(d);
         }
+        // the turn's on: a .fg it makes beside an open document opens in a tab
+        self.agent_turn(true);
         if let Some(b) = &mut self.agent.backend {
             b.send(msg);
         }
