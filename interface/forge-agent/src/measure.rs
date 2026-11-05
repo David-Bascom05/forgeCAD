@@ -582,6 +582,11 @@ pub fn read_one(p: &Pick) -> Reading {
                 Geom::Circle(c, z, rad) => {
                     r.values
                         .extend([(Quantity::Radius, rad), (Quantity::Diameter, 2.0 * rad)]);
+                    // an arc's sweep, as Inventor's angle of an arc: its length over its radius
+                    let sweep = select::length(b, x) / rad;
+                    if rad > 0.0 && sweep < dmath::TAU * (1.0 - 1e-9) {
+                        r.values.push((Quantity::Angle, sweep * 180.0 / dmath::PI));
+                    }
                     r.values
                         .extend([(Quantity::X, c.x), (Quantity::Y, c.y), (Quantity::Z, c.z)]);
                     r.shown.push(Shown::Circle(c, z, rad));
@@ -935,7 +940,7 @@ fn target_nearest(a: &Target, b: &Target) -> (Point3, Point3) {
 
 /// The farthest two points of two targets, where Inventor gives it: points, lines, arcs and
 /// circles (two circles in one plane).
-fn max_distance(ga: Geom, gb: Geom) -> Option<f64> {
+fn max_distance(ga: Geom, gb: Geom) -> Option<(f64, Point3, Point3)> {
     let ends = |g: Geom| match g {
         Geom::Point(p) => Some(vec![p]),
         Geom::Segment(a, b) => Some(vec![a, b]),
@@ -944,18 +949,38 @@ fn max_distance(ga: Geom, gb: Geom) -> Option<f64> {
     // a circle's farthest point from a point: across the centre, off its plane as the point is
     let from_circle = |c: Point3, z: Vec3, r: f64, p: Point3| {
         let w = p - c;
-        let h = w.dot(z);
-        let rho = (w - z * h).length();
-        (h * h + (rho + r) * (rho + r)).sqrt()
+        let flat = w - z * w.dot(z);
+        let out = flat.normalize().map_or_else(|| across(z).0, |u| u.get());
+        let far = c - out * r;
+        (p.distance(far), far)
     };
+    let pair = |(d, a, b): (f64, Point3, Point3)| Some((d, a, b));
     match (ga, gb) {
         (Geom::Circle(c1, z1, r1), Geom::Circle(c2, z2, r2)) => {
             let coplanar = z1.cross(z2).length() < 1e-9 && (c2 - c1).dot(z1).abs() < 1e-6;
-            coplanar.then(|| c1.distance(c2) + r1 + r2)
+            if !coplanar {
+                return None;
+            }
+            let u = (c2 - c1).normalize().map_or_else(|| across(z1).0, |u| u.get());
+            pair((c1.distance(c2) + r1 + r2, c1 - u * r1, c2 + u * r2))
         }
-        (Geom::Circle(c, z, r), g) | (g, Geom::Circle(c, z, r)) => {
+        (Geom::Circle(c, z, r), g) => {
             let e = ends(g)?;
-            e.into_iter().map(|p| from_circle(c, z, r, p)).reduce(f64::max)
+            e.into_iter()
+                .map(|p| {
+                    let (d, far) = from_circle(c, z, r, p);
+                    (d, far, p)
+                })
+                .max_by(|a, b| a.0.total_cmp(&b.0))
+        }
+        (g, Geom::Circle(c, z, r)) => {
+            let e = ends(g)?;
+            e.into_iter()
+                .map(|p| {
+                    let (d, far) = from_circle(c, z, r, p);
+                    (d, p, far)
+                })
+                .max_by(|a, b| a.0.total_cmp(&b.0))
         }
         (a, b) => {
             let (ea, eb) = (ends(a)?, ends(b)?);
@@ -963,8 +988,8 @@ fn max_distance(ga: Geom, gb: Geom) -> Option<f64> {
                 return None;
             }
             ea.iter()
-                .flat_map(|p| eb.iter().map(move |q| p.distance(*q)))
-                .reduce(f64::max)
+                .flat_map(|p| eb.iter().map(move |q| (p.distance(*q), *p, *q)))
+                .max_by(|a, b| a.0.total_cmp(&b.0))
         }
     }
 }
@@ -1204,10 +1229,32 @@ pub fn read_pair(a: &Target, b: &Target) -> Reading {
     r
 }
 
+/// Three points (Shift on the third, as Inventor's): the angle at the middle one. Anything with
+/// a centre counts as its centre.
+pub fn read_three(a: &Target, b: &Target, c: &Target) -> Reading {
+    let mut r = Reading::default();
+    let at = |t: &Target| centre_of(target_geom(t));
+    let (Some(p), Some(v), Some(q)) = (at(a), at(b), at(c)) else {
+        return r;
+    };
+    let (Some(u), Some(w)) = ((p - v).normalize(), (q - v).normalize()) else {
+        return r;
+    };
+    let (u, w) = (u.get(), w.get());
+    let deg = dmath::acos(u.dot(w).clamp(-1.0, 1.0)) * 180.0 / dmath::PI;
+    r.values.push((Quantity::Angle, deg));
+    r.shown.push(Shown::Point(p));
+    r.shown.push(Shown::Point(v));
+    r.shown.push(Shown::Point(q));
+    r.shown.push(Shown::Angle(v, u, w, deg));
+    r
+}
+
 /// The maximum distance and the angle's arc, for any pair.
 fn finish_pair(r: &mut Reading, ga: Geom, gb: Geom) {
-    if let Some(m) = max_distance(ga, gb) {
+    if let Some((m, a, b)) = max_distance(ga, gb) {
         r.values.push((Quantity::MaxDistance, m));
+        r.shown.push(Shown::Line(a, b, Quantity::MaxDistance));
     }
     let line = r.shown.iter().find_map(|s| match s {
         Shown::Line(p, q, Quantity::Distance) => Some((*p, *q)),

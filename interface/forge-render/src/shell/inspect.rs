@@ -66,6 +66,50 @@ impl Filter {
     }
 }
 
+/// A value added up: what it measures, signed (taken away is negative), and what was picked.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Added {
+    pub q: Quantity,
+    pub x: f64,
+    pub what: String,
+}
+
+/// The field Measure was opened from: a dialog's, by its label, or a tool's parameter.
+#[derive(Clone, Debug, PartialEq)]
+pub enum IntoField {
+    Dialog(String),
+    Param(&'static str),
+}
+
+/// Which of the distances between two picks the deltas follow, as Inventor's toggle.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Follow {
+    #[default]
+    Min,
+    Centre,
+    Max,
+}
+
+impl Follow {
+    pub const ALL: [Follow; 3] = [Follow::Min, Follow::Centre, Follow::Max];
+
+    pub fn quantity(self) -> Quantity {
+        match self {
+            Follow::Min => Quantity::Distance,
+            Follow::Centre => Quantity::CentreDistance,
+            Follow::Max => Quantity::MaxDistance,
+        }
+    }
+
+    pub fn word(self) -> &'static str {
+        match self {
+            Follow::Min => "Minimum",
+            Follow::Centre => "Center",
+            Follow::Max => "Maximum",
+        }
+    }
+}
+
 /// The Measure panel: what's picked and how it reads, what's under the pointer, the selection
 /// priority, the values added up, and how values are shown.
 #[derive(Clone, Debug, Default)]
@@ -77,8 +121,24 @@ pub struct MeasurePanel {
     /// What a click would pick now, for the view to mark.
     pub hover: Option<MPick>,
     pub filter: Filter,
-    /// Values added to the running totals (Inventor's Accumulate).
-    pub accum: Vec<(Quantity, f64)>,
+    /// Values added to (or taken from) the running totals: Inventor's Accumulate.
+    pub accum: Vec<Added>,
+    /// A second length unit every length, area and volume is shown in too.
+    pub dual: Option<&'static str>,
+    /// The coordinate system points and deltas are in: a work plane's or sketch's frame, by
+    /// its feature's name; none for the world.
+    pub ucs: Option<String>,
+    pub hide_delta: bool,
+    /// Which distance Delta X, Y, Z follow and the view draws.
+    pub follow: Follow,
+    /// The value clicked in the panel: its dimension drawn forward in the view.
+    pub focus: Option<Quantity>,
+    /// Advanced settings unfolded.
+    pub advanced: bool,
+    /// Opened from a dialog's value field (which, and its kind): a value's Use puts it there.
+    pub into: Option<(IntoField, forge_doc::units::Kind)>,
+    /// A value Use was pressed on, for the shell to put in the field.
+    pub used: Option<f64>,
     /// Decimal places shown.
     pub precision: usize,
     pub unit: &'static str,
@@ -100,7 +160,17 @@ impl MeasurePanel {
 
     /// A pick taken: a third starts a new measuring, as Inventor's does.
     pub fn take(&mut self, p: MPick) {
-        if self.picks.len() >= 2 {
+        self.take_with(p, false);
+    }
+
+    /// A pick taken, Shift held or not: after two points a third point with Shift reads the
+    /// angle at the second, as Inventor's.
+    pub fn take_with(&mut self, p: MPick, shift: bool) {
+        let point = |p: &MPick| {
+            matches!(p, MPick::Ent(_, Entity::Vertex(_)) | MPick::Free(Free::Point(_), _))
+        };
+        let third = shift && self.picks.len() == 2 && self.picks.iter().all(point) && point(&p);
+        if self.picks.len() >= 2 && !third {
             self.restart();
         }
         if !self.picks.contains(&p) {
@@ -268,6 +338,57 @@ fn per_unit(unit: &str) -> f64 {
     }
 }
 
+/// A value in the panel's units and, for a length, area or volume, in the second unit too.
+pub fn shown_dual(q: Quantity, v: f64, units: (&str, &str), places: usize, dual: Option<&str>) -> String {
+    let one = shown(q, v, units, places);
+    match dual {
+        Some(d) if (1..=3).contains(&q.power()) && d != units.0 => {
+            format!("{one} ({})", shown(q, v, (d, units.1), places))
+        }
+        _ => one,
+    }
+}
+
+/// What the panel lists of a reading: Delta X, Y, Z along the distance followed and in the
+/// coordinate system chosen (or left out), a point's X, Y, Z in that system too.
+pub fn panel_values(
+    r: &Reading,
+    follow: Follow,
+    frame: Option<&forge_math::Frame>,
+    hide_delta: bool,
+) -> Vec<(Quantity, f64)> {
+    use forge_agent::measure::Shown;
+    let line = |q: Quantity| {
+        r.shown.iter().find_map(|s| match s {
+            Shown::Line(a, b, k) if *k == q => Some(*b - *a),
+            _ => None,
+        })
+    };
+    let d = line(follow.quantity())
+        .or_else(|| line(Quantity::Distance))
+        .map(|d| frame.map_or(d, |f| f.vec_to_local(d)));
+    let p = match (r.get(Quantity::X), r.get(Quantity::Y), r.get(Quantity::Z)) {
+        (Some(x), Some(y), Some(z)) => {
+            let p = Point3::new(x, y, z);
+            Some(frame.map_or(p, |f| f.point_to_local(p)))
+        }
+        _ => None,
+    };
+    r.values
+        .iter()
+        .filter_map(|&(q, x)| match q {
+            Quantity::Dx | Quantity::Dy | Quantity::Dz if hide_delta => None,
+            Quantity::Dx => Some((q, d.map_or(x, |d| d.x.abs()))),
+            Quantity::Dy => Some((q, d.map_or(x, |d| d.y.abs()))),
+            Quantity::Dz => Some((q, d.map_or(x, |d| d.z.abs()))),
+            Quantity::X => Some((q, p.map_or(x, |p| p.x))),
+            Quantity::Y => Some((q, p.map_or(x, |p| p.y))),
+            Quantity::Z => Some((q, p.map_or(x, |p| p.z))),
+            _ => Some((q, x)),
+        })
+        .collect()
+}
+
 /// A value read in the panel's units (length, angle), at its precision, with the unit.
 pub fn shown(q: Quantity, v: f64, (unit, angle): (&str, &str), places: usize) -> String {
     match q.power() {
@@ -287,6 +408,35 @@ fn mass_unit(length: &str) -> &'static str {
 }
 
 impl Shell {
+    /// Measure opened from a dialog's value field: what it measures can go in the field.
+    pub fn measure_into(&mut self, label: &str) {
+        let Some(kind) = super::panel::field_kind(label) else { return };
+        self.open_measure_into(IntoField::Dialog(label.to_string()), kind);
+    }
+
+    /// Measure opened from a tool's parameter field (a length or an angle).
+    pub fn measure_into_param(&mut self, name: &'static str) {
+        use forge_lang::values::Dim;
+        let dim = self.fg.as_ref().and_then(|f| f.tool.as_ref()).and_then(|t| t.params.iter().find(|p| p.name == name)).map(|p| p.dim);
+        let kind = match dim {
+            Some(Dim::Length) => forge_doc::units::Kind::Length,
+            Some(Dim::Angle) => forge_doc::units::Kind::Angle,
+            _ => return,
+        };
+        self.open_measure_into(IntoField::Param(name), kind);
+    }
+
+    fn open_measure_into(&mut self, into: IntoField, kind: forge_doc::units::Kind) {
+        if self.inspect.measure.as_ref().is_none_or(|m| m.wall) {
+            self.inspect.measure = None;
+            self.inspect_command(InspectCmd::Measure);
+        }
+        if let Some(m) = &mut self.inspect.measure {
+            m.restart();
+            m.into = Some((into, kind));
+        }
+    }
+
     pub fn inspect_command(&mut self, c: InspectCmd) {
         let i = &mut self.inspect;
         match c {
@@ -374,7 +524,9 @@ impl Shell {
         let t = self.theme;
         let v = self.view_rect;
         if self.inspect.measure.is_some() {
-            blocks.extend(self.measure_window(ctx, &t, v, &mut places));
+            let panel = self.measure_window(ctx, &t, v, &mut places);
+            places.extend(panel.map(|r| ("measure:panel".to_string(), r)));
+            blocks.extend(panel);
         }
         if self.inspect.section_open {
             blocks.extend(self.section_window(ctx, &t, v, &mut places));

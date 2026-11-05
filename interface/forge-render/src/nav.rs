@@ -251,6 +251,7 @@ impl Nav {
                 placement,
                 entity,
                 selected: true,
+                second: false,
             })
             .collect();
         if self.drag.is_none()
@@ -262,6 +263,7 @@ impl Nav {
                 placement: h.placement,
                 entity: h.entity,
                 selected: false,
+                second: false,
             });
         }
         out

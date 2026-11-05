@@ -2459,6 +2459,7 @@ impl Gui {
                         placement,
                         entity,
                         selected: true,
+                        second: false,
                     }));
                 }
                 let of = self
@@ -2470,6 +2471,7 @@ impl Gui {
                     placement: 0,
                     entity: Entity::Face(f),
                     selected: true,
+                    second: false,
                 }));
                 // what's at fault on a chosen feature: as it's named on the part shown
                 let at_fault: Vec<Entity> = self
@@ -2484,6 +2486,7 @@ impl Gui {
                     placement: 0,
                     entity,
                     selected: false,
+                    second: false,
                 }));
                 if let (Some(p), Some(g)) = (self.shell.fg.as_ref(), self.fg_walls.first()) {
                     m.extend(crate::thermo_view::marks(&p.thermo, g));
@@ -2496,6 +2499,7 @@ impl Gui {
                             placement: 0,
                             entity: Entity::Face(f),
                             selected: false,
+                            second: false,
                         }),
                 );
                 m

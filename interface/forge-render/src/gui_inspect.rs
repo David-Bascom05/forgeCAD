@@ -187,6 +187,7 @@ fn handle(
                     Ok(match &ts[..] {
                         [a] => read(a),
                         [a, b] => read_pair(a, b),
+                        [a, b, c] => forge_agent::measure::read_three(a, b, c),
                         _ => Reading::default(),
                     })
                 }
@@ -419,11 +420,12 @@ impl Gui {
         let m = self.shell.inspect.measure.as_ref()?;
         let d = self.inspector.data.as_ref();
         let mut out = vec![];
-        let mut put = |p: &MPick, selected: bool| match p {
+        let mut put = |p: &MPick, selected: bool, second: bool| match p {
             MPick::Ent(placement, entity) => out.push(Mark {
                 placement: *placement,
                 entity: *entity,
                 selected,
+                second,
             }),
             MPick::Whole(pl) => {
                 let faces = d
@@ -433,17 +435,19 @@ impl Gui {
                     placement: *pl,
                     entity: Entity::Face(f),
                     selected,
+                    second,
                 }));
             }
             MPick::Free(..) => {}
         };
-        for p in &m.picks {
-            put(p, true);
+        // the second selection in its own colour, as Inventor's sets
+        for (k, p) in m.picks.iter().enumerate() {
+            put(p, true, k == 1);
         }
         if let Some(h) = &m.hover
             && !m.picks.contains(h)
         {
-            put(h, false);
+            put(h, false, false);
         }
         Some(out)
     }
@@ -575,12 +579,13 @@ impl Gui {
             // an origin plane, axis or point under the pointer
             None => self.shell.origin_hover.map(origin_free),
         };
+        let shift = self.view.as_ref().is_some_and(|v| v.nav.shift_held());
         let Some(m) = &mut self.shell.inspect.measure else {
             return;
         };
         match pick {
             Some(p) if wall => m.picks = vec![p],
-            Some(p) => m.take(p),
+            Some(p) => m.take_with(p, shift),
             None => m.restart(),
         }
     }

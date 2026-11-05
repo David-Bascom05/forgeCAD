@@ -250,7 +250,7 @@ fn two_faces_at_an_angle_draw_it_at_their_common_edge_and_a_face_is_tinted() {
     let (v, u, w, d) = arc.expect("the angle's arc");
     // on the edge the two faces share (x 40, y 20), its arms along each face away from it
     assert!((v.x - 40.0).abs() < 1e-6 && (v.y - 20.0).abs() < 1e-6, "{v:?}");
-    assert!((u.dot(w) - d.to_radians().cos()).abs() < 1e-9);
+    assert!((u.dot(w) - forge_math::dmath::cos(d.to_radians())).abs() < 1e-9);
     // one face: its area, and its triangles to tint
     let top = read(&pick(Point3::new(10.0, 10.0, 20.0)));
     let area = 40.0 * 40.0 - 0.5 * 20.0 * 20.0;
@@ -290,4 +290,61 @@ fn a_whole_body_reads_its_volume_mass_and_box_where_it_stands() {
     });
     let r = read_pair(&w, &w2);
     assert!(near(r.get(Q::Distance), 50.0), "{r:?}");
+}
+
+#[test]
+fn an_arc_reads_its_sweep_and_a_circle_none() {
+    let (b, m) = part("extrude 20 rect -50 -30 100 60\nfillet 5 (edges along +z)\n");
+    let pick = |ent| Pick {
+        body: &b,
+        mesh: &m,
+        at: Frame::WORLD,
+        ent,
+    };
+    let arc = b
+        .edge_ids()
+        .find(|&e| matches!(&b.edge(e).curve, forge_geom::Curve::Circle(c) if (c.radius - 5.0).abs() < 1e-9))
+        .expect("a rounded corner's arc");
+    let r = read_one(&pick(Ent::Edge(arc)));
+    assert!(near(r.get(Q::Angle), 90.0), "{r:?}");
+    assert!(near(r.get(Q::Radius), 5.0));
+    // a whole circle: no sweep
+    let (b, m) = part(PLATE);
+    let r = read_one(&Pick {
+        body: &b,
+        mesh: &m,
+        at: Frame::WORLD,
+        ent: rim(&b, 20.0),
+    });
+    if (r.get(Q::Length).unwrap() - std::f64::consts::TAU * 5.0).abs() < 1e-9 {
+        assert!(r.get(Q::Angle).is_none(), "{r:?}");
+    }
+}
+
+#[test]
+fn the_maximum_distance_is_drawn_between_its_two_points() {
+    use forge_agent::measure::{Free, Shown, Target, read_pair};
+    let circle = |x: f64, rad: f64| Target::Free(Free::Circle(Point3::new(x, 0.0, 0.0), Vec3::Z, rad));
+    let r = read_pair(&circle(0.0, 3.0), &circle(20.0, 2.0));
+    let line = r.shown.iter().find_map(|s| match s {
+        Shown::Line(a, b, Q::MaxDistance) => Some((*a, *b)),
+        _ => None,
+    });
+    let (a, b) = line.expect("the maximum drawn");
+    assert!(a.distance(Point3::new(-3.0, 0.0, 0.0)) < 1e-9 && b.distance(Point3::new(22.0, 0.0, 0.0)) < 1e-9);
+    // a point off a circle's plane: the far side of the rim, across the centre
+    let p = Target::Free(Free::Point(Point3::new(4.0, 0.0, 3.0)));
+    let r = read_pair(&circle(0.0, 2.0), &p);
+    assert!(near(r.get(Q::MaxDistance), (36.0f64 + 9.0).sqrt()), "{r:?}");
+}
+
+#[test]
+fn three_points_read_the_angle_at_the_middle_one() {
+    use forge_agent::measure::{Free, Shown, Target, read_three};
+    let p = |x: f64, y: f64| Target::Free(Free::Point(Point3::new(x, y, 0.0)));
+    let r = read_three(&p(10.0, 0.0), &p(0.0, 0.0), &p(0.0, 5.0));
+    assert!(near(r.get(Q::Angle), 90.0), "{r:?}");
+    assert!(r.shown.iter().any(|s| matches!(s, Shown::Angle(v, ..) if v.distance(Point3::ORIGIN) < 1e-12)));
+    let r = read_three(&p(1.0, 0.0), &p(0.0, 0.0), &p(1.0, 1.0));
+    assert!(near(r.get(Q::Angle), 45.0), "{r:?}");
 }

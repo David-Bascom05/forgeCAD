@@ -1648,6 +1648,9 @@ fn value_row(ui: &mut egui::Ui, name: &str, value: &str, t: &super::theme::Theme
 
 pub(super) const FIELD_AT: f32 = 92.0;
 
+/// Where a field's Measure... leaves the field's label for the shell to take.
+pub(super) const MEASURE_INTO: &str = "measure-into-field";
+
 /// A named value: its word, its field, its unit when what's typed has none.
 fn field_row(
     ui: &mut egui::Ui,
@@ -1669,13 +1672,22 @@ fn field_row(
         pos2(row.left() + FIELD_AT, row.top() + 2.0),
         vec2(DIALOG_W - FIELD_AT, 26.0),
     );
-    ui.put(
+    let edit = ui.put(
         field,
         egui::TextEdit::singleline(text)
             .font(mono(13.0))
             .desired_width(field.width() - 14.0)
             .margin(vec2(7.0, 5.0)),
     );
+    // as Inventor's value fields: Measure, the value measured goes in
+    if panel::field_kind(label).is_some() {
+        edit.context_menu(|ui| {
+            if ui.button(egui::RichText::new("Measure...").font(sans(12.0))).clicked() {
+                ui.ctx().data_mut(|d| d.insert_temp(egui::Id::unique(MEASURE_INTO), label.to_string()));
+                ui.close();
+            }
+        });
+    }
     if let Some(kind) = panel::field_kind(label)
         && forge_doc::units::is_bare(text)
     {
@@ -1692,6 +1704,10 @@ fn field_row(
 
 impl Shell {
     pub(super) fn dialog_ui(&mut self, ctx: &egui::Context) {
+        // a field's Measure... last frame
+        if let Some(label) = ctx.data_mut(|d| d.remove_temp::<String>(egui::Id::unique(MEASURE_INTO))) {
+            self.measure_into(&label);
+        }
         let t = self.theme;
         let Some(mut d) = self.dialog.take() else { return };
         let frame = egui::Frame::new()

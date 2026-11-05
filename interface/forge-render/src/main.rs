@@ -298,6 +298,7 @@ fn headless(a: &Args, mut s: Stage) -> Result<(), String> {
                     placement: h.placement,
                     entity: h.entity,
                     selected: true,
+                    second: false,
                 });
             }
         }

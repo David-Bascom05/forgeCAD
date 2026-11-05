@@ -488,7 +488,12 @@ fn pick_fs(in: Picked) -> @location(0) vec2u {
 const HOVER = vec4f(0.20, 0.50, 0.95, 0.40);
 // the theme's focus amber, in linear
 const CHOSEN = vec4f(0.745, 0.361, 0.011, 0.45);
+// Measure's second selection, as Inventor's sets each have their own
+const SECOND = vec4f(0.10, 0.62, 0.42, 0.45);
 const SELECTED_BIT = 0x80000000u;
+// Measure's second selection
+const SECOND_BIT = 0x40000000u;
+const PLACE_BITS = 0x3fffffffu;
 // just nearer than the same triangles drawn before, so it wins without fighting
 const MARK_LIFT = 1e-5;
 const MARK_LIFT_MIN = 1.5e-7;
@@ -498,8 +503,11 @@ struct Mark {
     @location(0) colour: vec4f,
 }
 
-fn mark_colour(selected: bool) -> vec4f {
-    return select(HOVER, CHOSEN, selected);
+fn mark_colour(at: u32) -> vec4f {
+    if (at & SECOND_BIT) != 0u {
+        return SECOND;
+    }
+    return select(HOVER, CHOSEN, (at & SELECTED_BIT) != 0u);
 }
 
 struct ExactMark {
@@ -510,8 +518,8 @@ struct ExactMark {
 // the very triangles the surface drew, at the very depth: the fill can't fight it
 @vertex
 fn face_mark_exact_vs(@location(0) p: vec3f, @location(2) at: u32) -> ExactMark {
-    let w = place(placements[at & ~SELECTED_BIT], p);
-    return ExactMark(g.view_proj * vec4f(w, 1.0), mark_colour((at & SELECTED_BIT) != 0u));
+    let w = place(placements[at & PLACE_BITS], p);
+    return ExactMark(g.view_proj * vec4f(w, 1.0), mark_colour(at));
 }
 
 @fragment
@@ -521,20 +529,20 @@ fn exact_mark_fs(in: ExactMark) -> @location(0) vec4f {
 
 @vertex
 fn face_mark_vs(@location(0) p: vec3f, @location(2) at: u32) -> Mark {
-    let clip = g.view_proj * vec4f(place(placements[at & ~SELECTED_BIT], p), 1.0);
-    return Mark(vec4f(clip.xy, clip.z * (1.0 + max(MARK_LIFT * g.eye.w, MARK_LIFT_MIN)), clip.w), mark_colour((at & SELECTED_BIT) != 0u));
+    let clip = g.view_proj * vec4f(place(placements[at & PLACE_BITS], p), 1.0);
+    return Mark(vec4f(clip.xy, clip.z * (1.0 + max(MARK_LIFT * g.eye.w, MARK_LIFT_MIN)), clip.w), mark_colour(at));
 }
 
 @vertex
 fn edge_mark_vs(@builtin(vertex_index) vi: u32, @location(0) at: u32) -> Mark {
-    let colour = vec4f(mark_colour((at & SELECTED_BIT) != 0u).rgb, 1.0);
-    return Mark(line_corner(vi, placements[at & ~SELECTED_BIT], g.px.w), colour);
+    let colour = vec4f(mark_colour(at).rgb, 1.0);
+    return Mark(line_corner(vi, placements[at & PLACE_BITS], g.px.w), colour);
 }
 
 // a dark band behind a marked edge, so it reads on anything
 @vertex
 fn edge_halo_vs(@builtin(vertex_index) vi: u32, @location(0) at: u32) -> Mark {
-    return Mark(line_corner(vi, placements[at & ~SELECTED_BIT], g.px.w * 2.5), vec4f(0.0, 0.0, 0.0, 0.75));
+    return Mark(line_corner(vi, placements[at & PLACE_BITS], g.px.w * 2.5), vec4f(0.0, 0.0, 0.0, 0.75));
 }
 
 @fragment
@@ -558,7 +566,7 @@ fn dot_vs(@builtin(vertex_index) vi: u32) -> Dot {
     }
     let clip = g.view_proj * vec4f(d.xyz, 1.0);
     let off = corner * 5.0 * g.px.xy;
-    let colour = vec4f(mark_colour(d.w > 1.5).rgb, 1.0);
+    let colour = vec4f(mark_colour(select(0u, SELECTED_BIT, d.w > 1.5)).rgb, 1.0);
     return Dot(vec4f(clip.xy + off * clip.w, clip.z * LIFT * LIFT, clip.w), colour, corner);
 }
 

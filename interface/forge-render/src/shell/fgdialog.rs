@@ -144,7 +144,11 @@ pub fn tool_icon(kind: &str) -> &'static str {
     }
 }
 
-/// A value: its word, its field, its unit.
+/// Where a tool's field's Measure... leaves its parameter for the shell to take.
+const MEASURE_PARAM: &str = "measure-into-param";
+
+/// A value: its word, its field, its unit; `measure`, the parameter Measure... can fill.
+#[allow(clippy::too_many_arguments)]
 fn value_row(
     ui: &mut egui::Ui,
     t: &super::theme::Theme,
@@ -152,6 +156,7 @@ fn value_row(
     text: &mut String,
     unit: &str,
     name: String,
+    measure: Option<&'static str>,
     places: &mut Vec<(String, Rect)>,
 ) {
     let (row, _) = ui.allocate_exact_size(vec2(DIALOG_W, 30.0), Sense::hover());
@@ -166,13 +171,22 @@ fn value_row(
         pos2(row.left() + FIELD_AT, row.top() + 2.0),
         vec2(DIALOG_W - FIELD_AT, 26.0),
     );
-    ui.put(
+    let edit = ui.put(
         field,
         egui::TextEdit::singleline(text)
             .font(mono(13.0))
             .desired_width(field.width() - 14.0)
             .margin(vec2(7.0, 5.0)),
     );
+    // as Inventor's value fields: Measure, and the value measured goes in
+    if let Some(param) = measure {
+        edit.context_menu(|ui| {
+            if ui.button(egui::RichText::new("Measure...").font(sans(12.0))).clicked() {
+                ui.ctx().data_mut(|d| d.insert_temp(egui::Id::unique(MEASURE_PARAM), param));
+                ui.close();
+            }
+        });
+    }
     let bare = text.trim().parse::<f64>().is_ok();
     if bare && !unit.is_empty() {
         ui.painter().text(
@@ -326,6 +340,10 @@ pub(super) enum Asked {
 impl Shell {
     /// The open Forge tool's dialog, over the view's top left.
     pub(super) fn fg_dialog(&mut self, ctx: &egui::Context) {
+        // a field's Measure... last frame
+        if let Some(param) = ctx.data_mut(|d| d.remove_temp::<&'static str>(egui::Id::unique(MEASURE_PARAM))) {
+            self.measure_into_param(param);
+        }
         let t = self.theme;
         let Some(mut fg) = self.fg.take() else { return };
         let Some(mut tool) = fg.tool.take() else {
@@ -541,6 +559,7 @@ impl Shell {
                     text,
                     "",
                     format!("fg:tool:word:{w}"),
+                    None,
                     places,
                 ),
             }
@@ -555,6 +574,7 @@ impl Shell {
                 &mut p.text,
                 unit(p.dim),
                 format!("fg:tool:param:{}", p.name),
+                matches!(p.dim, Dim::Length | Dim::Angle).then_some(p.name),
                 places,
             );
         };

@@ -27,6 +27,8 @@ const DOTS: usize = 8;
 /// Picked faces and edges a frame can mark.
 const MARKS: usize = 256;
 const SELECTED_BIT: u32 = 1 << 31;
+/// A mark's placement's next bit: Measure's second selection.
+const SECOND_BIT: u32 = 1 << 30;
 const GLOBALS: usize = TEXT_AT + HUD_CHARS;
 /// A pick draws this many pixels around the cursor.
 const PICK_PX: u32 = 11;
@@ -254,6 +256,8 @@ pub struct Mark {
     pub placement: u32,
     pub entity: Entity,
     pub selected: bool,
+    /// Measure's second selection, drawn in its own colour.
+    pub second: bool,
 }
 
 /// What was under a pixel.
@@ -2066,7 +2070,7 @@ impl Renderer {
             .marks
             .iter()
             .take(MARKS)
-            .map(|m| (m.placement | if m.selected { SELECTED_BIT } else { 0 }).to_le_bytes())
+            .map(|m| (m.placement | if m.selected { SELECTED_BIT } else { 0 } | if m.second { SECOND_BIT } else { 0 }).to_le_bytes())
             .collect();
         if !marked.is_empty() {
             self.queue.write_buffer(&self.marks, 0, marked.as_flattened());
