@@ -1035,13 +1035,8 @@ fn work(
     }
 }
 
-/// Whether a text is an assembly document: its first statement is `assembly`.
-pub fn is_assembly(src: &str) -> bool {
-    src.lines()
-        .map(str::trim)
-        .find(|l| !l.is_empty() && !l.starts_with('#'))
-        .is_some_and(|l| l == "assembly")
-}
+// plain text, so the shell has it for the browser too
+pub use crate::shell::fg::is_assembly;
 
 /// An assembly's part meshes so far: one per distinct body (by content), in the order made.
 #[derive(Default)]

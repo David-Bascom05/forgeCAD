@@ -34,6 +34,8 @@ forge-model = { path = "../../kernel/forge-model" }
 forge-sketch = { path = "../../kernel/forge-sketch" }
 forge-material = { path = "../../kernel/forge-material" }
 forge-thermo = { path = "../../kernel/forge-thermo" }
+# in the browser's tree already, through forge-lang: its plain math (a mass's principal axes)
+forge-topo = { path = "../../kernel/forge-topo" }
 
 # the kernel builds meshes natively; the browser loads them (see README)
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
@@ -41,7 +43,6 @@ rfd = { version = "=0.17.2", default-features = false, features = ["xdg-portal",
 egui-winit = { version = "=0.37.0", default-features = false, features = ["wayland", "x11", "smithay-clipboard"] }
 forge-mesh = { path = "../../kernel/forge-mesh" }
 forge-geom = { path = "../../kernel/forge-geom" }
-forge-topo = { path = "../../kernel/forge-topo" }
 forge-sheet = { path = "../../kernel/forge-sheet" }
 forge-step = { path = "../../kernel/forge-step" }
 # the Agent tab's OpenAI-compatible endpoints, and their keys in the Secret Service

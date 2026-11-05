@@ -1758,7 +1758,7 @@ pub fn command(fg: &mut super::fg::FgPanel, c: super::FgCmd) -> String {
                         .filter(|f| !own.ends_with(f.as_str()) || f.contains('/'))
                         .map(|f| {
                             let sub =
-                                std::fs::read_to_string(d.join(&f)).is_ok_and(|t| crate::fg::is_assembly(&t));
+                                std::fs::read_to_string(d.join(&f)).is_ok_and(|t| super::fg::is_assembly(&t));
                             (f, sub)
                         })
                         .collect()

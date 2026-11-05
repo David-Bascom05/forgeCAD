@@ -4,8 +4,13 @@
 //! forge-lang evaluates (`pin.end.center`, `plane(at: edges(between: (..)).center, normal: ..)`);
 //! a face no anchor names has no stable name and offers nothing but declared anchors.
 
+// the finding is the kernel's, natively; what's found is plain data the browser shows too
+#[cfg(not(target_arch = "wasm32"))]
 use forge_lang::builtins::{edge_snap, faces_axis_middle, faces_centroid};
-use forge_math::{Frame, Point3, UnitVec3};
+use forge_math::Frame;
+#[cfg(not(target_arch = "wasm32"))]
+use forge_math::{Point3, UnitVec3};
+#[cfg(not(target_arch = "wasm32"))]
 use forge_topo::{Body, EdgeId, FaceId};
 use std::collections::HashMap;
 
@@ -64,15 +69,18 @@ pub struct PartSnaps {
     pub anchors: Vec<usize>,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn same(a: &Frame, b: &Frame) -> bool {
     (a.origin - b.origin).length() < 1e-6 && a.z().get().dot(b.z().get()) > 1.0 - 1e-9
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 /// What `plane(at: P, normal: N)` makes (forge-lang's default x).
 fn plane_at(p: Point3, n: UnitVec3) -> Frame {
     Frame::from_z(p, n)
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 /// A part file's snaps, from its run with anchors.
 pub fn part_snaps(text: &str, dir: Option<std::path::PathBuf>) -> Result<PartSnaps, String> {
     let opts = forge_lang::Options {
@@ -96,6 +104,7 @@ pub fn part_snaps(text: &str, dir: Option<std::path::PathBuf>) -> Result<PartSna
     snaps_of(&body, &a, &declared)
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn snaps_of(
     body: &Body,
     a: &forge_lang::anchors::Anchors,

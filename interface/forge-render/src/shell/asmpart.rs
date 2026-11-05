@@ -43,7 +43,16 @@ pub fn read_feats(file: &str, dir: Option<&Path>) -> PartFeats {
         ..Default::default()
     };
     let run = forge_lang::run(&text, opts, Default::default()).0;
-    Ok(crate::fg::rows(&run, &text).0)
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        Ok(crate::fg::rows(&run, &text).0)
+    }
+    // the browser lists no part's features: their rows are made with the desktop's build
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = run;
+        Err("a part's features are listed in the desktop app".to_string())
+    }
 }
 
 /// How one of the dialog's values is written back.

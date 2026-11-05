@@ -1215,6 +1215,15 @@ impl Shell {
     }
 }
 
+/// A Forge file is an assembly: its first line that says anything is `assembly`. Plain text,
+/// so the browser asks it too.
+pub fn is_assembly(src: &str) -> bool {
+    src.lines()
+        .map(str::trim)
+        .find(|l| !l.is_empty() && !l.starts_with('#'))
+        .is_some_and(|l| l == "assembly")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
