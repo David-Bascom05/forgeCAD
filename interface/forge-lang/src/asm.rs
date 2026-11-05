@@ -3768,7 +3768,9 @@ pub fn finish(
     match &cache.wants {
         Some((all, true)) => {
             let mut all = all.lock().unwrap_or_else(|e| e.into_inner());
-            for (file, (refs, bodies)) in &want {
+            // a file's own components (`#lid`) are named by the document they are in, and never
+            // loaded through the pool: no other document's are the same
+            for (file, (refs, bodies)) in want.iter().filter(|(f, _)| !f.starts_with('#')) {
                 let e = all.entry(file.clone()).or_default();
                 e.0.extend(refs.iter().cloned());
                 e.1.extend(bodies.iter().cloned());
@@ -3779,7 +3781,7 @@ pub fn finish(
         }
         Some((all, false)) => {
             let all = all.lock().unwrap_or_else(|e| e.into_inner());
-            for (file, (refs, bodies)) in want.iter_mut() {
+            for (file, (refs, bodies)) in want.iter_mut().filter(|(f, _)| !f.starts_with('#')) {
                 if let Some((r, b)) = all.get(file) {
                     refs.extend(r.iter().cloned());
                     bodies.extend(b.iter().cloned());

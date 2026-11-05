@@ -2827,9 +2827,19 @@ fn make_with(
     // serves them all (the rack and the door drawn on its own ask the door's parts for different
     // references)
     let wants: Arc<crate::asm::Wants> = Arc::default();
-    crate::par::map(wanted.len(), |k| wants_of(wanted[k].1, &ctx.dir, root, &pool, &wants));
+    crate::par::map(wanted.len(), |k| {
+        wants_of(wanted[k].1, &ctx.dir, root, &pool, &wants)
+    });
     let mut loaded = crate::par::map(wanted.len(), |k| {
-        load(wanted[k].0, wanted[k].1, &ctx.dir, root, &pool, &wants, wanted[k].2)
+        load(
+            wanted[k].0,
+            wanted[k].1,
+            &ctx.dir,
+            root,
+            &pool,
+            &wants,
+            wanted[k].2,
+        )
     })
     .into_iter();
     let part_loads = crate::asm::pool_files(&pool);

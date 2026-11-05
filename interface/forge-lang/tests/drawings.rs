@@ -518,3 +518,29 @@ fn each_part_file_of_a_drawing_is_loaded_once() {
     );
     assert_eq!(files.len(), 68);
 }
+
+/// Another file's component placed through `use` (`part(t.cup(d: 10))`) is loaded through the
+/// drawing's pool like a part file: two assemblies asking it for different references (one joins
+/// its start, the other its end) share one load of it.
+#[test]
+fn another_files_component_is_loaded_once_for_every_model() {
+    let dir = std::env::temp_dir().join(format!("fg-dwg-wants-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("lib.fg"),
+        "component cup(d: 9) {\n  sketch s(on: xy) {\n    o = circle((0, 0), 5)\n  }\n  b = extrude(s, d)\n}\n",
+    )
+    .unwrap();
+    let asm = |face: &str| {
+        format!(
+            "t = use(\"lib.fg\")\nsketch p(on: xy) {{\n  o = rect(center: (0, 0), size: (20, 20))\n}}\nplate = extrude(p, 2)\nground(plate)\nc = part(t.cup(d: 10))\nj = fastened(c.b.{face}, plate.end, flip: true)\n"
+        )
+    };
+    std::fs::write(dir.join("a1.fg"), asm("start")).unwrap();
+    std::fs::write(dir.join("a2.fg"), asm("end")).unwrap();
+    let src = "drawing\nm1 = assembly(\"a1.fg\")\nm2 = assembly(\"a2.fg\")\ns1 = sheet(\"A\")\nv1 = base_view(m1, sheet: s1, dir: \"top\", at: (100, 100))\nv2 = base_view(m2, sheet: s1, dir: \"top\", at: (200, 100))\n";
+    let d = regen::make(src, &dir);
+    assert!(d.ok(), "{:?}", d.errors);
+    let cups: Vec<&String> = d.part_loads.iter().filter(|f| f.contains("lib.fg|cup")).collect();
+    assert_eq!(cups.len(), 1, "{:?}", d.part_loads);
+}
