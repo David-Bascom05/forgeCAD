@@ -9,7 +9,6 @@ use super::fgtool::{FgTool, SlotKind as K};
 use super::theme::{mono, sans, semi};
 use super::{Shell, panel};
 use egui::{Align2, Color32, Rect, Sense, Stroke, pos2, vec2};
-use forge_lang::error::Op;
 use forge_lang::values::Dim;
 
 /// What a param is called in the dialog: Inventor's word for it.
@@ -378,7 +377,7 @@ impl Shell {
             Asked::Ok | Asked::Again => match tool.text() {
                 Ok(text) => {
                     tool.again = asked == Asked::Again;
-                    fg.out.push(FgAct::Tool(Op::AddFeature { before: None, text }));
+                    fg.out.push(FgAct::Tool(tool.op(text)));
                 }
                 Err(e) => tool.error = Some(e),
             },
@@ -416,20 +415,26 @@ impl Shell {
             1.5,
             t.ink,
         );
+        let head_text = match &tool.edit {
+            Some(_) => format!("Edit {}", title(tool.kind)),
+            None => title(tool.kind).to_string(),
+        };
         ui.painter().text(
             pos2(head.left() + 32.0, head.center().y),
             Align2::LEFT_CENTER,
-            title(tool.kind),
+            head_text,
             semi(15.0),
             t.ink,
         );
+        // an edit keeps its name: what reads it reads it by that name (the browser renames)
         let name_at = Rect::from_min_size(pos2(head.right() - 92.0, head.top() + 3.0), vec2(92.0, 24.0));
         ui.put(
             name_at,
             egui::TextEdit::singleline(&mut tool.name)
                 .font(mono(11.0))
                 .desired_width(80.0)
-                .margin(vec2(5.0, 4.0)),
+                .margin(vec2(5.0, 4.0))
+                .interactive(tool.edit.is_none()),
         );
         places.push(("fg:tool:name".into(), name_at));
 
@@ -607,6 +612,10 @@ impl Shell {
             ),
         ];
         for (word, r, name, what) in buttons {
+            // an edit is one feature: no + for another after it
+            if what == Asked::Again && tool.edit.is_some() {
+                continue;
+            }
             let held = what != Asked::Cancel && tool.note.is_some();
             let resp = ui.interact(
                 r,

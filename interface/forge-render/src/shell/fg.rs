@@ -1,16 +1,15 @@
-//! A Forge (.fg) part's chrome: the tree of its feature ids, its params and dimensions, its
-//! errors and lints with their fixes. Like the rest of the shell it changes nothing itself: every
+//! A Forge (.fg) part's chrome: the browser of its feature ids (its menus and double click open
+//! the tools that edit them), the Parameters dialog, the Issues window with each issue's fixes. Like the rest of the shell it changes nothing itself: every
 //! edit leaves as a typed op in `out`, which the host applies through forge-lang.
 
 use super::theme::{medium, mono, sans, semi};
 use super::{Shell, icons, panel};
-use egui::{Align2, Color32, Rect, Sense, Stroke, StrokeKind, Ui, pos2, vec2};
+use egui::{Align2, Color32, Rect, Sense, Stroke, Ui, pos2, vec2};
 use forge_lang::error::{Literal, Op, ParamKey, Scope, parse_path, path_text};
 use forge_lang::syntax::Seg;
 use forge_lang::values::Dim;
 use std::collections::HashSet;
 
-pub(super) const PANEL_W: f32 = 340.0;
 pub(super) const WARN: Color32 = Color32::from_rgb(0xE0, 0xA0, 0x30);
 
 /// Errors, and everything else (warnings, lints, a shop's rules); an assembly's notes (intended
@@ -99,6 +98,42 @@ pub(super) fn fold_head(
     );
     resp
 }
+
+/// A browser row's name typed in its place, all of it selected at first: Enter or a click away
+/// renames it everywhere, Esc leaves it.
+fn rename_edit(ui: &mut Ui, fg: &mut FgPanel, at: Rect, places: &mut Vec<(String, Rect)>) {
+    let Some((from, text)) = &mut fg.renaming else { return };
+    let id = egui::Id::unique(("fg-rename", from.as_str()));
+    let resp = ui.put(
+        at,
+        egui::TextEdit::singleline(text)
+            .id(id)
+            .font(mono(12.0))
+            .margin(vec2(4.0, 2.0)),
+    );
+    places.push(("fg:renametext".into(), at));
+    if fg.rename_fresh {
+        fg.rename_fresh = false;
+        resp.request_focus();
+        if let Some(mut st) = egui::TextEdit::load_state(ui.ctx(), id) {
+            let n = text.chars().count();
+            st.cursor.set_char_range(Some(egui::text::CCursorRange::two(
+                egui::text::CCursor::new(0),
+                egui::text::CCursor::new(n),
+            )));
+            st.store(ui.ctx(), id);
+        }
+        return;
+    }
+    if resp.lost_focus() {
+        let (from, to) = (from.clone(), text.trim().to_string());
+        fg.renaming = None;
+        if !to.is_empty() && to != from {
+            fg.out.push(FgAct::Apply(Op::Rename { from, to }));
+        }
+    }
+}
+
 const INDENT: f32 = 16.0;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -183,15 +218,11 @@ pub struct Issue {
     pub asm: Option<forge_lang::asm::Issue>,
 }
 
-/// What the panel asks of the host.
+/// What the browser and the dialogs ask of the host.
 #[derive(Clone, Debug, PartialEq)]
 pub enum FgAct {
     Apply(Op),
     Save,
-    /// The sheet's flat pattern, as DXF beside the part's file.
-    ExportDxf(String),
-    /// Show the flat pattern, or the folded part.
-    Flat(bool),
     /// A tool's statement: applied, and the tool closed if it was.
     Tool(Op),
     /// What only an .fc part can do, asked of a Forge part: said, typed.
@@ -232,10 +263,10 @@ pub enum FgAct {
     },
     /// A part file's snap points, for the tool wanting an origin.
     AsmSnaps(String),
-    /// A sheet metal feature's dialog, to edit it.
-    EditSheet(String),
     /// A sketch block, in the Sketch tab with its geometry, constraints and dimensions.
     EditSketch(String),
+    /// A feature's tool dialog, filled from its statement, to edit it.
+    EditFeature(String),
 }
 
 /// A sheet metal part: its id, its bends, and why it has no flat pattern if it hasn't.
@@ -278,18 +309,14 @@ pub struct FgPanel {
     /// A param's value being typed.
     pub editing: Option<(ParamKey, String)>,
     pub edit_fresh: bool,
-    /// A feature's statement being typed, to add above the selected one.
-    pub add_text: String,
     /// Every issue listed, not the first few.
     pub all_issues: bool,
-    /// The issues list opened or shut by a click; unset, it's open while there are errors.
-    pub issues_shown: Option<bool>,
-    /// The selected statement's new name, being typed.
-    pub rename: String,
+    /// A browser row being renamed in place: its statement and the name typed so far.
+    pub renaming: Option<(String, String)>,
+    pub rename_fresh: bool,
     /// The last op the host refused, and why.
     pub refused: Option<String>,
     pub collapsed: HashSet<String>,
-    pub show_source: bool,
     pub sheets: Vec<SheetRow>,
     /// The part's thermoforms, and whether their wall thickness is mapped on the view.
     pub thermos: Vec<super::thermo::ThermoRow>,
@@ -313,7 +340,7 @@ pub struct FgPanel {
     pub picked: Option<Result<String, super::fgtool::ToolError>>,
     /// The Parameters dialog is up.
     pub params_open: bool,
-    /// The issues list is up, over the status bar (an assembly's, which has no panel).
+    /// The Issues window is up, over the status bar.
     pub issues_list: bool,
 }
 
@@ -488,14 +515,6 @@ impl FgPanel {
         tree_rows(&self.feats)
     }
 
-    pub fn issues_open(&self, errors: usize) -> bool {
-        self.issues_shown.unwrap_or(errors > 0)
-    }
-
-    fn feat(&self, id: &str) -> Option<&FeatRow> {
-        self.feats.iter().find(|f| f.id == id)
-    }
-
     /// The worst issue in a feature, or in any feature under a group's key.
     fn flag(&self, key: &str) -> Option<Severity> {
         let under =
@@ -520,31 +539,10 @@ impl FgPanel {
         worst
     }
 
-    /// The params shown: those the selected feature reads or owns, or all.
-    pub fn shown_params(&self) -> Vec<&ParamRow> {
-        let Some(sel) = &self.selected else {
-            return self.params.iter().collect();
-        };
-        let top = statement_of(sel);
-        let reads: Vec<&ParamKey> = self
-            .feats
-            .iter()
-            .filter(|f| {
-                f.id == *sel || f.id.starts_with(&format!("{sel}.")) || f.id.starts_with(&format!("{sel}["))
-            })
-            .flat_map(|f| &f.reads)
-            .collect();
-        self.params
-            .iter()
-            .filter(|p| reads.contains(&&p.key) || p.key.owner.first().is_some_and(|s| s.name == top))
-            .collect()
-    }
-
-    /// The selected row is one instance of a loop or call: the params it shares, each of which
+    /// The row is one instance of a loop or call: the params it shares, each of which
     /// SplitInstance would give it alone.
-    pub fn splittable(&self) -> Vec<(Vec<Seg>, ParamKey)> {
-        let Some(sel) = &self.selected else { return vec![] };
-        let Some(segs) = parse_path(sel) else {
+    pub fn splittable(&self, key: &str) -> Vec<(Vec<Seg>, ParamKey)> {
+        let Some(segs) = parse_path(key) else {
             return vec![];
         };
         if segs.iter().all(|s| s.index.is_empty()) {
@@ -579,7 +577,8 @@ impl Shell {
         let mut eye_flip: Option<Option<String>> = None;
         let sheet = !fg.sheets.is_empty();
         let mut flat_row = false;
-        let mut edit_row = None;
+        let stmts = statements(&fg.feats);
+        let mut menu_places: Vec<(String, Rect)> = Vec::new();
         egui::ScrollArea::vertical()
             .id_salt("fg-tree")
             .auto_shrink([false, false])
@@ -675,7 +674,8 @@ impl Shell {
                         }
                         places.push((format!("fg:open:{}", row.key), arrow));
                     }
-                    let kind = row.feat.map(|i| fg.feats[i].kind.as_str());
+                    let kind_of = row.feat.map(|i| fg.feats[i].kind.clone());
+                    let kind = kind_of.as_deref();
                     let icon = match kind {
                         Some(k) => panel::icon(k),
                         None => "pattern",
@@ -702,13 +702,22 @@ impl Shell {
                     } else {
                         ink
                     };
-                    p.text(
-                        pos2(x + 34.0, r.center().y),
-                        Align2::LEFT_CENTER,
-                        &row.label,
-                        font,
-                        ink,
-                    );
+                    let renaming = fg.renaming.as_ref().is_some_and(|n| n.0 == row.key);
+                    if renaming {
+                        let at = Rect::from_min_max(
+                            pos2(x + 30.0, r.top() + 2.0),
+                            pos2(r.right() - 60.0, r.bottom() - 2.0),
+                        );
+                        rename_edit(ui, &mut fg, at, &mut places);
+                    } else {
+                        p.text(
+                            pos2(x + 34.0, r.center().y),
+                            Align2::LEFT_CENTER,
+                            &row.label,
+                            font,
+                            ink,
+                        );
+                    }
                     // a sketch's or a work plane's plane: its eye
                     let plane = row.feat.is_some_and(|i| fg.feats[i].frame.is_some());
                     if let Some(k) = kind {
@@ -737,25 +746,70 @@ impl Shell {
                     } else if resp.clicked() {
                         chosen = Some(row.key.clone());
                     }
-                    // a sheet metal feature opens its dialog, a sketch its sketch, as Inventor's
+                    // a feature opens its tool's dialog, a sketch its sketch, as Inventor's
                     // double click does
-                    if resp.double_clicked() && kind.is_some_and(super::sheet::is_sheet_kind) {
-                        edit_row = Some(row.key.clone());
+                    if resp.double_clicked() && !renaming {
+                        if is_sketch {
+                            fg.out.push(FgAct::EditSketch(row.key.clone()));
+                        } else if kind.is_some() && statement_of(&row.key) == row.key {
+                            fg.out.push(FgAct::EditFeature(row.key.clone()));
+                        }
                     }
-                    if resp.double_clicked() && is_sketch {
-                        fg.out.push(FgAct::EditSketch(row.key.clone()));
-                    }
-                    if is_sketch {
-                        let key = row.key.clone();
-                        resp.context_menu(|ui| {
-                            let b = ui.button("Edit Sketch");
-                            self.places.push((format!("fg:menu:edit-sketch:{key}"), b.rect));
-                            if b.clicked() {
-                                fg.out.push(FgAct::EditSketch(key.clone()));
+                    let key = row.key.clone();
+                    let edit = row.feat.is_some() && statement_of(&key) == key;
+                    resp.context_menu(|ui| {
+                        ui.set_min_width(150.0);
+                        let mut item = |ui: &mut Ui, label: &str, name: &str| {
+                            let b = ui.button(egui::RichText::new(label).font(sans(12.0)));
+                            menu_places.push((format!("fg:menu:{name}:{key}"), b.rect));
+                            let hit = b.clicked();
+                            if hit {
                                 ui.close();
                             }
-                        });
-                    }
+                            hit
+                        };
+                        if is_sketch {
+                            if item(ui, "Edit Sketch", "edit-sketch") {
+                                fg.out.push(FgAct::EditSketch(key.clone()));
+                            }
+                        } else if edit && item(ui, "Edit Feature", "edit") {
+                            fg.out.push(FgAct::EditFeature(key.clone()));
+                        }
+                        let at = stmts.iter().position(|s| *s == key);
+                        if let Some(k) = at {
+                            if item(ui, "Rename", "rename") {
+                                fg.renaming = Some((key.clone(), key.clone()));
+                                fg.rename_fresh = true;
+                            }
+                            if k > 0 && item(ui, "Move Up", "up") {
+                                fg.out.push(FgAct::Apply(Op::MoveFeature {
+                                    id: key.clone(),
+                                    before: Some(stmts[k - 1].clone()),
+                                }));
+                            }
+                            if k + 1 < stmts.len() && item(ui, "Move Down", "down") {
+                                fg.out.push(FgAct::Apply(Op::MoveFeature {
+                                    id: key.clone(),
+                                    before: stmts.get(k + 2).cloned(),
+                                }));
+                            }
+                            ui.separator();
+                            if item(ui, "Delete", "delete") {
+                                fg.out.push(FgAct::Apply(Op::DeleteFeature { id: key.clone() }));
+                            }
+                        }
+                        // one instance of a loop or a call: a shared param of its own
+                        for (id, param) in fg.splittable(&key) {
+                            let op = Op::SplitInstance { id, param };
+                            let name = match &op {
+                                Op::SplitInstance { param, .. } => format!("split:{param}"),
+                                _ => unreachable!("just made"),
+                            };
+                            if item(ui, &op_label(&op), &name) {
+                                fg.out.push(FgAct::Apply(op));
+                            }
+                        }
+                    });
                     places.push((format!("fg:row:{}", row.key), r));
                     if row.group && !open {
                         hidden = Some(row.key.clone());
@@ -775,9 +829,7 @@ impl Shell {
                 super::sheet::SheetCmd::FlatPattern
             }));
         }
-        if edit_row.is_some() {
-            self.sheet.edit_req = edit_row;
-        }
+        places.extend(menu_places);
         match eye_flip {
             Some(None) => fg.body_hidden = !fg.body_hidden,
             Some(Some(k)) => {
@@ -827,84 +879,6 @@ impl Shell {
         self.fg = Some(fg);
     }
 
-    /// The params, the selected feature's dimensions and actions, and the issues: a panel on the
-    /// view's right.
-    pub(super) fn fg_panel(&mut self, ctx: &egui::Context) {
-        // an assembly has no panel: what it held is in the browser, the ribbon's dialogs and the
-        // status bar, as Inventor has it
-        if self.is_asm() {
-            return;
-        }
-        let Some(mut fg) = self.fg.take() else { return };
-        let t = self.theme;
-        let v = self.view_rect;
-        let rect = Rect::from_min_max(pos2(v.right(), v.top()), pos2(v.right() + PANEL_W, v.bottom()));
-        let mut places: Vec<(String, Rect)> = Vec::new();
-        let mut out: Vec<FgAct> = Vec::new();
-        egui::Area::new(egui::Id::unique("fg-panel"))
-            .fixed_pos(rect.min)
-            .constrain(false)
-            .order(egui::Order::Middle)
-            .show(ctx, |ui| {
-                ui.set_min_size(rect.size());
-                ui.set_max_size(rect.size());
-                // a long value (a list param, a sheet's report) is cut at the panel's edge, never
-                // widening the panel over the view
-                ui.set_clip_rect(rect);
-                ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Truncate);
-                ui.painter().rect_filled(rect, 0.0, t.surface);
-                ui.painter()
-                    .vline(rect.left(), rect.y_range(), Stroke::new(1.0, t.line));
-                egui::ScrollArea::vertical()
-                    .id_salt("fg-panel-scroll")
-                    .auto_shrink([false, false])
-                    .max_height(rect.height())
-                    .show(ui, |ui| {
-                        egui::Frame::new().inner_margin(10).show(ui, |ui| {
-                            ui.set_width(PANEL_W - 20.0);
-                            ui.spacing_mut().item_spacing.y = 4.0;
-                            Self::fg_head(ui, &t, &mut fg, &mut out, &mut places);
-                            Self::fg_tool(ui, &t, &fg, &mut places);
-                            Self::fg_sheets(ui, &t, &fg, &mut out, &mut places);
-                            Self::fg_selection(ui, &t, &mut fg, &mut out, &mut places);
-                            Self::fg_issues(ui, &t, &mut fg, &mut out, &mut places);
-                            Self::fg_source(ui, &t, &mut fg);
-                        });
-                    });
-            });
-        self.view_blocks.push(rect);
-        self.places.extend(places);
-        fg.out.extend(out);
-        self.fg = Some(fg);
-    }
-
-    /// The tool's form: its name, a row per slot with what's picked and what can be chosen, its
-    /// params, OK and Cancel.
-    fn fg_tool(ui: &mut Ui, t: &super::theme::Theme, fg: &FgPanel, places: &mut Vec<(String, Rect)>) {
-        let Some(tool) = &fg.tool else {
-            if let Some(p) = &fg.picked {
-                let text = match p {
-                    Ok(a) => format!("Picked: {a}"),
-                    Err(e) => format!("Picked: {}", e.text()),
-                };
-                let r = ui.label(egui::RichText::new(text).font(mono(11.0)).color(t.ink2));
-                places.push(("fg:picked".into(), r.rect));
-            }
-            return;
-        };
-        // its form is a dialog over the view; the panel says what it's taking
-        let r = ui.label(
-            egui::RichText::new(format!(
-                "{}: {}",
-                super::fgdialog::title(tool.kind),
-                tool.prompt()
-            ))
-            .font(sans(12.0))
-            .color(t.ink2),
-        );
-        places.push(("fg:tool:state".into(), r.rect));
-    }
-
     pub(super) fn fg_button(
         ui: &mut Ui,
         label: &str,
@@ -914,246 +888,6 @@ impl Shell {
         let r = ui.add(egui::Button::new(egui::RichText::new(label).font(sans(12.0))));
         places.push((name, r.rect));
         r.clicked()
-    }
-
-    pub(super) fn fg_heading(ui: &mut Ui, t: &super::theme::Theme, text: &str) {
-        ui.add_space(6.0);
-        ui.label(egui::RichText::new(text).font(semi(12.0)).color(t.ink));
-        let r = ui.available_rect_before_wrap();
-        ui.painter()
-            .hline(r.left()..=r.right(), r.top(), Stroke::new(1.0, t.line));
-        ui.add_space(2.0);
-    }
-
-    fn fg_head(
-        ui: &mut Ui,
-        t: &super::theme::Theme,
-        fg: &mut FgPanel,
-        out: &mut Vec<FgAct>,
-        places: &mut Vec<(String, Rect)>,
-    ) {
-        ui.horizontal(|ui| {
-            let name = if fg.dirty {
-                format!("{} (unsaved)", fg.file)
-            } else {
-                fg.file.clone()
-            };
-            ui.label(egui::RichText::new(name).font(semi(14.0)).color(t.ink));
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if Self::fg_button(ui, "Save", "fg:save".into(), places) {
-                    out.push(FgAct::Save);
-                }
-            });
-        });
-        if !fg.summary.is_empty() {
-            ui.label(egui::RichText::new(&fg.summary).font(sans(11.0)).color(t.ink2));
-        }
-        if let Some(why) = &fg.refused {
-            ui.label(
-                egui::RichText::new(format!("Refused: {why}"))
-                    .font(sans(12.0))
-                    .color(t.error),
-            );
-        }
-    }
-
-    fn fg_sheets(
-        ui: &mut Ui,
-        t: &super::theme::Theme,
-        fg: &FgPanel,
-        out: &mut Vec<FgAct>,
-        places: &mut Vec<(String, Rect)>,
-    ) {
-        if fg.sheets.is_empty() {
-            return;
-        }
-        Self::fg_heading(ui, t, "Sheet metal");
-        let label = if fg.flat { "Show folded" } else { "Show flat" };
-        if Self::fg_button(ui, label, "fg:flat".into(), places) {
-            out.push(FgAct::Flat(!fg.flat));
-        }
-        for s in &fg.sheets {
-            ui.horizontal(|ui| {
-                ui.label(
-                    egui::RichText::new(format!("{} · {} bends", s.id, s.bends))
-                        .font(sans(12.0))
-                        .color(t.ink),
-                );
-                match &s.refused {
-                    None => {
-                        if Self::fg_button(ui, "Export DXF", format!("fg:dxf:{}", s.id), places) {
-                            out.push(FgAct::ExportDxf(s.id.clone()));
-                        }
-                    }
-                    Some(why) => {
-                        ui.label(
-                            egui::RichText::new(format!("no flat: {why}"))
-                                .font(sans(11.0))
-                                .color(t.error),
-                        );
-                    }
-                }
-            });
-            // its report, by what it holds: a field or list a later lane adds shows here as is
-            for (k, v) in &s.facts {
-                ui.label(
-                    egui::RichText::new(format!("  {k}: {v}"))
-                        .font(mono(11.0))
-                        .color(t.ink2),
-                );
-            }
-            for (k, items) in &s.lists {
-                if items.is_empty() {
-                    continue;
-                }
-                let r = ui.label(
-                    egui::RichText::new(format!("  {k}"))
-                        .font(medium(11.0))
-                        .color(t.ink),
-                );
-                places.push((format!("fg:sheet:{}:{k}", s.id), r.rect));
-                for it in items {
-                    ui.label(
-                        egui::RichText::new(format!("    {it}"))
-                            .font(mono(10.0))
-                            .color(t.ink2),
-                    );
-                }
-            }
-        }
-        // the shop's rules broken, each with its typed fixes
-        let shop: Vec<(usize, &Issue)> = fg
-            .issues
-            .iter()
-            .enumerate()
-            .filter(|(_, i)| i.severity == Severity::Violation)
-            .collect();
-        if !shop.is_empty() {
-            ui.label(egui::RichText::new("Shop").font(semi(12.0)).color(t.ink));
-            for (i, is) in shop {
-                let r = ui.label(
-                    egui::RichText::new(format!("{}: {}", is.kind, is.text))
-                        .font(sans(11.0))
-                        .color(Color32::from_rgb(0xE0, 0xA0, 0x30)),
-                );
-                places.push((format!("fg:shop:{i}"), r.rect));
-                ui.horizontal_wrapped(|ui| {
-                    for (j, op) in is.fixes.iter().enumerate() {
-                        if Self::fg_button(ui, &op_label(op), format!("fg:shopfix:{i}:{j}"), places) {
-                            out.push(FgAct::Apply(op.clone()));
-                        }
-                    }
-                });
-            }
-        }
-    }
-
-    fn fg_selection(
-        ui: &mut Ui,
-        t: &super::theme::Theme,
-        fg: &mut FgPanel,
-        out: &mut Vec<FgAct>,
-        places: &mut Vec<(String, Rect)>,
-    ) {
-        let stmts = statements(&fg.feats);
-        if let Some(sel) = fg.selected.clone() {
-            Self::fg_heading(ui, t, &sel);
-            let top = statement_of(&sel).to_string();
-            let at = stmts.iter().position(|s| *s == top);
-            let sheet_kind = fg
-                .feats
-                .iter()
-                .any(|f| f.id == top && super::sheet::is_sheet_kind(&f.kind));
-            ui.horizontal_wrapped(|ui| {
-                if sheet_kind && Self::fg_button(ui, "Edit Feature", "fg:editsheet".into(), places) {
-                    out.push(FgAct::EditSheet(top.clone()));
-                }
-                if let Some(k) = at {
-                    if k > 0 && Self::fg_button(ui, "Move up", "fg:up".into(), places) {
-                        out.push(FgAct::Apply(Op::MoveFeature {
-                            id: top.clone(),
-                            before: Some(stmts[k - 1].clone()),
-                        }));
-                    }
-                    if k + 1 < stmts.len() && Self::fg_button(ui, "Move down", "fg:down".into(), places) {
-                        out.push(FgAct::Apply(Op::MoveFeature {
-                            id: top.clone(),
-                            before: stmts.get(k + 2).cloned(),
-                        }));
-                    }
-                    if Self::fg_button(ui, &format!("Delete {top}"), "fg:delete".into(), places) {
-                        out.push(FgAct::Apply(Op::DeleteFeature { id: top.clone() }));
-                    }
-                    let r = ui.add(
-                        egui::TextEdit::singleline(&mut fg.rename)
-                            .font(mono(12.0))
-                            .hint_text("new name")
-                            .desired_width(90.0),
-                    );
-                    places.push(("fg:renametext".into(), r.rect));
-                    if Self::fg_button(ui, "Rename", "fg:rename".into(), places)
-                        && !fg.rename.trim().is_empty()
-                    {
-                        out.push(FgAct::Apply(Op::Rename {
-                            from: top.clone(),
-                            to: fg.rename.trim().to_string(),
-                        }));
-                        fg.rename.clear();
-                    }
-                }
-            });
-            for (id, param) in fg.splittable() {
-                let op = Op::SplitInstance { id, param };
-                let name = format!(
-                    "fg:split:{}",
-                    match &op {
-                        Op::SplitInstance { param, .. } => param.to_string(),
-                        _ => unreachable!("just made"),
-                    }
-                );
-                if Self::fg_button(ui, &op_label(&op), name, places) {
-                    out.push(FgAct::Apply(op));
-                }
-            }
-            if let Some(f) = fg.feat(&sel).cloned() {
-                for (k, d) in f.dims.iter().enumerate() {
-                    ui.horizontal(|ui| {
-                        ui.label(egui::RichText::new(&d.what).font(sans(12.0)).color(t.ink2));
-                        let value = format!("{} {}", short(d.value), unit(d.dim));
-                        ui.label(egui::RichText::new(value).font(mono(12.0)).color(t.ink));
-                        let from = match &d.from {
-                            From::Const => "constant".to_string(),
-                            From::Driving(p) => format!("= {p}"),
-                            From::Driven(ps) => format!("← {}", keys(ps)),
-                        };
-                        let r = ui.label(egui::RichText::new(from).font(sans(11.0)).color(t.ink2));
-                        places.push((format!("fg:dim:{k}"), r.rect));
-                    });
-                }
-            }
-        }
-        if fg.asm.is_some() {
-            return;
-        }
-        Self::fg_heading(ui, t, "Add feature");
-        let r = ui.add(
-            egui::TextEdit::singleline(&mut fg.add_text)
-                .font(mono(12.0))
-                .hint_text("name = extrude(sketch, t)")
-                .desired_width(f32::INFINITY),
-        );
-        places.push(("fg:addtext".into(), r.rect));
-        let before = fg.selected.as_deref().map(|s| statement_of(s).to_string());
-        let label = match &before {
-            Some(b) => format!("Add above {b}"),
-            None => "Add at the end".into(),
-        };
-        if Self::fg_button(ui, &label, "fg:add".into(), places) && !fg.add_text.trim().is_empty() {
-            out.push(FgAct::Apply(Op::AddFeature {
-                before,
-                text: fg.add_text.trim().to_string(),
-            }));
-        }
     }
 
     /// The Parameters dialog, as Inventor's fx: every param with its unit, its equation (a
@@ -1347,7 +1081,8 @@ impl Shell {
         }
     }
 
-    /// An assembly's issues, over the status bar: each with its fixes and a Show.
+    /// The document's issues, over the status bar: each with its fixes (a shop rule's too), and an
+    /// assembly's with a Show.
     pub(super) fn fg_issues_window(&mut self, ctx: &egui::Context) {
         let Some(mut fg) = self.fg.take() else { return };
         if !fg.issues_list {
@@ -1374,7 +1109,6 @@ impl Shell {
             .constrain_to(super::dialog_area(ctx))
             .show(ctx, |ui| {
                 close = super::fgasm::dialog_head(ui, &t, "warning", "Issues", "fg:issueswin", &mut places);
-                fg.issues_shown = Some(true);
                 egui::ScrollArea::vertical()
                     .auto_shrink([false, true])
                     .max_height((v.height() * 0.45).max(160.0))
@@ -1393,8 +1127,6 @@ impl Shell {
         self.fg = Some(fg);
     }
 
-    /// The issues: one line of counts, opened by a click; open by itself only while there are
-    /// errors, until a click says otherwise.
     fn fg_issues(
         ui: &mut Ui,
         t: &super::theme::Theme,
@@ -1403,9 +1135,7 @@ impl Shell {
         places: &mut Vec<(String, Rect)>,
     ) {
         let (errors, warnings) = issue_counts(&fg.issues);
-        let open = fg.issues_open(errors) && !fg.issues.is_empty();
         let head = format!("{} · {}", plural(errors, "error"), plural(warnings, "warning"));
-        ui.add_space(6.0);
         let ink = if errors > 0 {
             t.error
         } else if warnings > 0 {
@@ -1413,14 +1143,8 @@ impl Shell {
         } else {
             t.ink2
         };
-        let r = fold_head(ui, t, &head, open, ink);
+        let r = ui.label(egui::RichText::new(head).font(medium(12.0)).color(ink));
         places.push(("fg:issues".into(), r.rect));
-        if r.clicked() && !fg.issues.is_empty() {
-            fg.issues_shown = Some(!open);
-        }
-        if !open {
-            return;
-        }
         let issues = std::mem::take(&mut fg.issues);
         // a long list shows its first few until asked
         let cap = if fg.all_issues { 300 } else { 8 };
@@ -1467,35 +1191,6 @@ impl Shell {
             }
         }
         fg.issues = issues;
-    }
-
-    fn fg_source(ui: &mut Ui, t: &super::theme::Theme, fg: &mut FgPanel) {
-        ui.add_space(6.0);
-        if fold_head(ui, t, "Source", fg.show_source, t.ink).clicked() {
-            fg.show_source = !fg.show_source;
-        }
-        if !fg.show_source {
-            return;
-        }
-        let marked: Vec<(usize, Severity)> = fg.issues.iter().map(|i| (i.line, i.severity)).collect();
-        for (k, line) in fg.source.lines().enumerate() {
-            let no = k + 1;
-            let mark = marked.iter().find(|m| m.0 == no).map(|m| m.1);
-            let ink = match mark {
-                Some(Severity::Error) => t.error,
-                Some(_) => Color32::from_rgb(0xE0, 0xA0, 0x30),
-                None => t.ink,
-            };
-            let r = ui.label(
-                egui::RichText::new(format!("{no:>4} {line}"))
-                    .font(mono(11.0))
-                    .color(ink),
-            );
-            if mark.is_some() {
-                ui.painter()
-                    .rect_stroke(r.rect, 2.0, Stroke::new(1.0, ink), StrokeKind::Outside);
-            }
-        }
     }
 }
 

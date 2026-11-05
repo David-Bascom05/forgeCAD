@@ -607,12 +607,14 @@ fn a_feature_renamed_in_the_tree_is_renamed_everywhere() {
     let Some((mut h, _)) = open(BLOCK, "rename") else {
         return;
     };
-    assert!(h.click("fg:row:boss"));
+    // its menu's Rename: the name typed over in its row, Enter
+    assert!(h.menu_item("fg:row:boss", "fg:menu:rename:boss"));
     h.step();
-    assert!(h.click("fg:renametext"));
+    assert!(h.gui.shell.place("fg:renametext").is_some());
     h.text("knob");
     h.step();
-    assert!(h.click("fg:rename"));
+    h.key(egui::Key::Enter);
+    h.step();
     h.step();
     assert_eq!(
         h.gui.fg.as_ref().unwrap().ops,
@@ -638,4 +640,51 @@ fn a_feature_renamed_in_the_tree_is_renamed_everywhere() {
             .iter()
             .any(|f| f.id == "knob")
     );
+}
+
+#[test]
+fn a_double_click_on_a_feature_opens_its_dialog_filled_and_ok_replaces_it_in_place() {
+    let Some((mut h, _)) = open(BLOCK, "edit") else {
+        return;
+    };
+    let row = h.gui.shell.place("fg:row:boss").expect("the boss row");
+    h.move_to(row.center().x, row.center().y);
+    h.step();
+    for _ in 0..2 {
+        h.button(true);
+        h.step();
+        h.button(false);
+        h.step();
+    }
+    assert!(
+        h.until(|g| g.shell.fg.as_ref().is_some_and(|p| p.tool.is_some())),
+        "no dialog: {}",
+        h.gui.shell.status
+    );
+    let t = h.gui.shell.fg.as_ref().unwrap().tool.clone().unwrap();
+    assert_eq!((t.kind, t.edit.as_deref(), t.name.as_str()), ("extrude", Some("boss"), "boss"));
+    assert_eq!(picks(&h, "Profile"), ["marks.c"]);
+    // its own param's value, in the field
+    assert_eq!(t.params.iter().find(|p| p.name == "d").unwrap().text, "10");
+    // no + on an edit
+    h.step();
+    assert!(h.gui.shell.place("fg:tool:again").is_none());
+    set(&mut h, "d", "14");
+    let (src, _) = ok(&mut h, "edit boss");
+    assert!(
+        src.ends_with("param boss.d = 14\nboss = extrude(marks.c, d)\n"),
+        "{src}"
+    );
+    assert!(!src.contains("param boss.h"), "{src}");
+    assert!(matches!(
+        h.gui.fg.as_ref().unwrap().ops.last(),
+        Some(forge_lang::error::Op::ReplaceFeature { id, .. }) if id == "boss"
+    ));
+    // the base reads a shared param: its field keeps it as written
+    assert!(h.menu_item("fg:row:base", "fg:menu:edit:base"));
+    assert!(h.until(|g| g.shell.fg.as_ref().is_some_and(|p| p.tool.is_some())));
+    let t = h.gui.shell.fg.as_ref().unwrap().tool.clone().unwrap();
+    assert_eq!(t.params.iter().find(|p| p.name == "d").unwrap().text, "t");
+    let (src, _) = ok(&mut h, "edit base");
+    assert!(src.contains("param base.d = t\nbase = extrude(plan, d)\n"), "{src}");
 }

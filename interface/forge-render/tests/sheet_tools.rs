@@ -379,8 +379,8 @@ fn a_rack_panels_return_flange_edited_through_its_dialog() {
     // a sheet metal part opens in its environment
     assert_eq!(h.gui.shell.tab, forge_render::shell::SHEET_TAB);
     // its flange row's Edit Feature
-    click(&mut h, "fg:row:rtn");
-    click(&mut h, "fg:editsheet");
+    assert!(h.menu_item("fg:row:rtn", "fg:menu:edit:rtn"));
+    h.step();
     let d = h.gui.shell.sheet.dlg.as_ref().expect("the flange's dialog");
     assert_eq!(d.cmd, SheetCmd::Flange);
     assert_eq!(d.field("h").unwrap().num(), "20");

@@ -189,7 +189,7 @@ fn open_edit_a_param_rebuild_fix_and_save() {
     assert!(matches!(&fix, Op::LiftLiteral { scope: Scope::Local(o), .. } if o[0].name == "mark"));
     // the issues are a line of counts until opened: a lint alone leaves them shut
     assert!(h.gui.shell.place(&format!("fg:fix:{lint}:0")).is_none());
-    assert!(h.click("fg:issues"));
+    assert!(h.click("fg:issues:status"));
     h.step();
     h.step();
     assert!(h.click(&format!("fg:fix:{lint}:0")));
@@ -207,8 +207,13 @@ fn open_edit_a_param_rebuild_fix_and_save() {
             .all(|i| i.kind != "LooseLiteral")
     );
 
-    // saved: exactly the ops' text edits, applied to what was opened
-    assert!(h.click("fg:save"));
+    // saved from File > Save: exactly the ops' text edits, applied to what was opened
+    assert!(h.gui.shell.place("title:name").is_some());
+    assert!(h.click("file"));
+    h.step();
+    h.step();
+    assert!(h.click("file-menu:Save"));
+    h.step();
     h.step();
     let saved = std::fs::read_to_string(&file).unwrap();
     let want = edit::apply(&edit::apply(PLATE, &set).unwrap(), &fix).unwrap();
@@ -233,18 +238,14 @@ fn tree_actions_are_typed_ops_and_a_refusal_is_typed() {
     assert!(h.click("fg:row:base"));
     h.step();
     assert_eq!(h.gui.shell.fg.as_ref().unwrap().selected.as_deref(), Some("base"));
-    assert!(h.click("fg:delete"));
-    h.step();
+    assert!(h.menu_item("fg:row:base", "fg:menu:delete:base"));
     let refused = h.gui.shell.fg.as_ref().unwrap().refused.clone().unwrap();
     assert!(refused.starts_with("StillRead"), "{refused}");
     assert!(h.gui.fg.as_ref().unwrap().ops.is_empty());
     assert_eq!(h.gui.fg.as_ref().unwrap().src, PLATE);
 
     // one loop instance gets its own width
-    assert!(h.click("fg:row:psk[1]"));
-    h.step();
-    assert!(h.click("fg:split:psk.w"));
-    h.step();
+    assert!(h.menu_item("fg:row:psk[1]", "fg:menu:split:psk.w:psk[1]"));
     let src = h.gui.fg.as_ref().unwrap().src.clone();
     assert!(src.contains("param psk[1].w = "), "{src}");
     settle(&mut h);
@@ -260,10 +261,7 @@ fn tree_actions_are_typed_ops_and_a_refusal_is_typed() {
     );
 
     // the mark moves up above the lug, and ids hold
-    assert!(h.click("fg:row:mark"));
-    h.step();
-    assert!(h.click("fg:up"));
-    h.step();
+    assert!(h.menu_item("fg:row:mark", "fg:menu:up:mark"));
     let ops = &h.gui.fg.as_ref().unwrap().ops;
     assert_eq!(
         ops.last().unwrap(),
@@ -287,14 +285,14 @@ fn tree_actions_are_typed_ops_and_a_refusal_is_typed() {
     let lug = ids.iter().position(|i| i == "lug.post").unwrap();
     assert!(mark < lug, "{ids:?}");
 
-    // a feature added at the end through its text; undo takes it back out
+    // a feature added at the end; undo takes it back out
     let n = h.gui.shell.fg.as_ref().unwrap().feats.len();
-    h.gui.shell.fg.as_mut().unwrap().selected = None;
-    h.step();
-    assert!(h.click("fg:addtext"));
-    h.text("rim = chamfer(edges(of: dent, shape: \"circle\", crease: \"convex\"), t / n / n / n)");
-    h.step();
-    assert!(h.click("fg:add"));
+    h.gui
+        .fg_apply(Op::AddFeature {
+            before: None,
+            text: "rim = chamfer(edges(of: dent, shape: \"circle\", crease: \"convex\"), t / n / n / n)".into(),
+        })
+        .unwrap();
     h.step();
     assert!(matches!(
         h.gui.fg.as_ref().unwrap().ops.last(),
@@ -394,23 +392,25 @@ fn a_sheet_part_shows_flat_and_exports_its_dxf() {
     assert_eq!(sheets[0].bends, 1);
     assert!(sheets[0].refused.is_none());
     let folded = h.gui.view.as_ref().unwrap().scene.bounds();
-    // flat: the base and the flange laid out in one plane, so longer than the folded L
-    assert!(h.click("fg:flat"));
+    // flat, from the browser's Flat Pattern row: the base and the flange laid out in one
+    // plane, so longer than the folded L
+    assert!(h.click("fg:row:flat"));
+    assert!(h.until(|g| g.shell.fg.as_ref().is_some_and(|f| f.flat)));
     h.step();
-    h.step();
-    assert!(h.gui.shell.fg.as_ref().unwrap().flat);
     let flat = h.gui.view.as_ref().unwrap().scene.bounds();
     assert!(flat.1 > folded.1, "flat radius {} vs folded {}", flat.1, folded.1);
-    assert!(h.click("fg:flat"));
-    h.step();
-    assert!(!h.gui.shell.fg.as_ref().unwrap().flat);
-    // the flat pattern as DXF beside the part
-    let id = sheets[0].id.clone();
-    assert!(h.click(&format!("fg:dxf:{id}")));
-    h.step();
+    // the flat pattern as DXF beside the part, from the ribbon
+    for name in ["tool:Save Copy As DXF", "sheet:dxf:ok"] {
+        h.step();
+        assert!(h.click(name), "no {name}");
+        h.step();
+        h.step();
+    }
+    assert!(h.click("tool:Go to Folded Part"));
+    assert!(h.until(|g| g.shell.fg.as_ref().is_some_and(|f| !f.flat)));
     let dxf = std::fs::read_to_string(dir.join("l.dxf")).unwrap();
     assert!(
-        dxf.contains("SECTION") && dxf.contains("BEND") && dxf.contains("CUT"),
+        dxf.contains("SECTION") && dxf.contains("IV_BEND") && dxf.contains("IV_OUTER_PROFILE"),
         "{dxf}"
     );
     let _ = std::fs::remove_dir_all(&dir);

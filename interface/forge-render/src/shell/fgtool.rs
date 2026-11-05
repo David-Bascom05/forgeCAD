@@ -115,6 +115,9 @@ pub struct ToolParam {
     pub name: &'static str,
     pub text: String,
     pub dim: Dim,
+    /// What an edited feature wrote for it where that's no plain number (`t`, `w / 2`): kept
+    /// as written while the field still shows it.
+    pub expr: Option<String>,
 }
 
 /// A row of toggles in the dialog: its items (word, icon) and which is on. Choosing another
@@ -222,6 +225,8 @@ pub struct FgTool {
     pub note: Option<String>,
     /// + was pressed: another of these after this one.
     pub again: bool,
+    /// The statement it edits (Edit Feature), replaced in its place; none: a new one.
+    pub edit: Option<String>,
 }
 
 fn slot(label: &'static str, kind: SlotKind) -> Slot {
@@ -245,11 +250,12 @@ fn param(name: &'static str, text: &str, dim: Dim) -> ToolParam {
         name,
         text: text.into(),
         dim,
+        expr: None,
     }
 }
 
 /// A tool's form: its slots, params, words and flags.
-type Form = (
+pub(super) type Form = (
     Vec<Slot>,
     Vec<ToolParam>,
     Vec<(&'static str, String)>,
@@ -314,7 +320,7 @@ const EXTENTS: &[(&str, &str)] = &[
 const PATTERN_OF: &[(&str, &str)] = &[("Features", "features"), ("Solids", "solids")];
 
 /// The choices each kind starts with, Inventor's defaults first.
-fn choices_of(kind: &str) -> Vec<Choice> {
+pub(super) fn choices_of(kind: &str) -> Vec<Choice> {
     let c = |name, items| Choice { name, items, on: 0 };
     match kind {
         "extrude" => vec![c("Extents", EXTENTS), c("Output", OUTPUT)],
@@ -430,7 +436,7 @@ fn choices_of(kind: &str) -> Vec<Choice> {
 }
 
 /// A kind's form under its choices (`c` gives a choice's word).
-fn form_of(kind: &str, c: &dyn Fn(&str) -> &'static str) -> Option<Form> {
+pub(super) fn form_of(kind: &str, c: &dyn Fn(&str) -> &'static str) -> Option<Form> {
     use SlotKind as K;
     Some(match kind {
         "extrude" => {
@@ -843,7 +849,16 @@ impl FgTool {
             error: None,
             note: None,
             again: false,
+            edit: None,
         })
+    }
+
+    /// Its text as the op OK applies: a new statement at the end, or the edited one replaced.
+    pub fn op(&self, text: String) -> forge_lang::error::Op {
+        match &self.edit {
+            Some(id) => forge_lang::error::Op::ReplaceFeature { id: id.clone(), text },
+            None => forge_lang::error::Op::AddFeature { before: None, text },
+        }
     }
 
     pub fn choice(&self, name: &str) -> &'static str {
@@ -1022,6 +1037,10 @@ impl FgTool {
     fn param_lines(&self, skip: &[&str]) -> Result<String, ToolError> {
         let mut out = String::new();
         for p in self.params.iter().filter(|p| !skip.contains(&p.name)) {
+            if p.expr.as_deref() == Some(p.text.as_str()) {
+                out.push_str(&format!("param {}.{} = {}\n", self.name, p.name, p.text));
+                continue;
+            }
             let v = super::fg::parse_value(&p.text, p.dim)
                 .filter(|l| l.dim == p.dim)
                 .ok_or(ToolError::BadNumber {
@@ -1039,6 +1058,10 @@ impl FgTool {
 
     fn value(&self, name: &str) -> Option<f64> {
         let p = self.params.iter().find(|p| p.name == name)?;
+        // an expression kept as written: no known number, so never one a default leaves out
+        if p.expr.as_deref() == Some(p.text.as_str()) {
+            return Some(f64::NAN);
+        }
         super::fg::parse_value(&p.text, p.dim).map(|v| v.value)
     }
 
@@ -1473,6 +1496,10 @@ impl FgTool {
                 });
             }
         };
+        // an edit replaces its own statement only: what a new one writes after it stays as it is
+        if self.edit.is_some() {
+            after.clear();
+        }
         Ok(format!("{}{stmt}\n{after}", self.param_lines(&skip)?))
     }
 }

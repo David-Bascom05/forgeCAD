@@ -190,7 +190,6 @@ fn a_sheet_from_a_sketch_and_a_flange_off_the_edge_picked() {
     let bends = sheets[0].lists.iter().find(|l| l.0 == "bends").unwrap();
     assert_eq!(bends.1.len(), 1, "{bends:?}");
     assert!(bends.1[0].contains("flange flange1"), "{bends:?}");
-    assert!(h.gui.shell.place("fg:sheet:face1:bends").is_some());
 }
 
 #[test]
@@ -227,7 +226,11 @@ fn the_shops_broken_rules_show_with_their_fixes_and_a_fix_clears_its_own() {
     assert_eq!(kinds, ["RadiusNotTooled", "FlangeTooShort"], "{:?}", p.issues);
     let (k, _) = shop[0].clone();
     let fix = p.issues[k].fixes[0].clone();
-    assert!(h.click(&format!("fg:shopfix:{k}:0")));
+    // in the Issues window, from the status bar's count
+    assert!(h.click("fg:issues:status"));
+    h.step();
+    h.step();
+    assert!(h.click(&format!("fg:fix:{k}:0")));
     h.step();
     assert_eq!(h.gui.fg.as_ref().unwrap().ops, [fix]);
     assert!(h.until(ready));

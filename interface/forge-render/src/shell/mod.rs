@@ -11,6 +11,7 @@ pub mod drawing;
 pub mod fg;
 pub mod fgasm;
 pub mod fgdialog;
+mod fgedit;
 pub mod fgsketch;
 pub mod fgtool;
 pub mod icons;
@@ -375,7 +376,7 @@ pub struct Shell {
     pub content: content::ContentCenter,
     /// What was typed for it, committed with Enter.
     pub dim_typed: Option<String>,
-    /// A Forge (.fg) part is open: its tree and panel instead of the .fc ones.
+    /// A Forge (.fg) part is open: its browser and dialogs instead of the .fc ones.
     pub fg: Option<fg::FgPanel>,
     /// The view's switches for parts and for assemblies: kept for the session, each kind its own.
     pub overlays: [Overlays; 2],
@@ -816,15 +817,9 @@ impl Shell {
         let side = Rect::from_min_max(pos2(0.0, top), pos2(side_w, bottom));
         let ppp = ctx.pixels_per_point();
         let snap = |v: f32| (v * ppp).round() / ppp;
-        // a Forge file's panel stands beside the view, not over it: the cube stays in sight
-        let panel = if self.fg.is_some() && !self.is_asm() {
-            fg::PANEL_W
-        } else {
-            0.0
-        };
         self.view_rect = Rect::from_min_max(
             pos2(snap(side_w + 1.0), snap(top)),
-            pos2(snap(s.width() - panel), snap(bottom)),
+            pos2(snap(s.width()), snap(bottom)),
         );
 
         p.rect_filled(
@@ -850,7 +845,6 @@ impl Shell {
         self.thermo_probes(&ctx);
         self.thermo_ui(&ctx);
         self.dialog_ui(&ctx);
-        self.fg_panel(&ctx);
         self.fg_dialog(&ctx);
         self.asm_windows(&ctx);
         self.inspect_ui(&ctx);
@@ -978,13 +972,21 @@ impl Shell {
                 self.out.push(action);
             }
         }
-        p.text(
+        // a Forge file with edits not yet written says so, as File > Save clears it
+        let dirty = self.drawing.is_none() && self.fg.as_ref().is_some_and(|f| f.dirty);
+        let name = if dirty {
+            format!("{} (unsaved)", self.name)
+        } else {
+            self.name.clone()
+        };
+        let r = p.text(
             pos2(w * 0.5, TITLE_H * 0.5),
             Align2::CENTER_CENTER,
-            &self.name,
+            name,
             mono(12.0),
             Color32::WHITE,
         );
+        self.note("title:name", r);
 
         let wins = [
             ("minimize", "minimize", "Minimize", Action::Minimize),
@@ -1216,10 +1218,10 @@ impl Shell {
             sans(12.0),
             Color32::WHITE,
         );
-        // an assembly's: its timings on hover, its issues a click away
-        if self.is_asm()
-            && let Some(fg) = &mut self.fg
-        {
+        // a Forge file's issues a click away (an assembly's timings on hover): its checks, a
+        // shop's rules, each with its fixes, in the Issues window
+        let asm = self.is_asm();
+        if let Some(fg) = &mut self.fg {
             if let Some(a) = &fg.asm
                 && !a.timings.is_empty()
             {
@@ -1267,7 +1269,8 @@ impl Shell {
                 g,
                 Color32::WHITE,
             );
-            self.places.push(("asm:issues".into(), r));
+            let name = if asm { "asm:issues" } else { "fg:issues:status" };
+            self.places.push((name.into(), r));
             if resp.clicked() {
                 fg.issues_list = !fg.issues_list;
             }
@@ -1278,6 +1281,9 @@ impl Shell {
                 mono(12.0),
                 Color32::WHITE,
             );
+            if !asm {
+                self.thermo_status(ui, r.left() - 12.0, st);
+            }
             return;
         }
         // the check's word only if it's taking long: a quick one shouldn't flicker
@@ -1300,28 +1306,13 @@ impl Shell {
             "valid".to_string()
         };
         let right = format!("{state} | {}", self.units);
-        let r = p.text(
+        p.text(
             pos2(s.width() - 10.0, st.center().y),
             Align2::RIGHT_CENTER,
             right,
             mono(12.0),
             Color32::WHITE,
         );
-        // a Forge part's issues, a click away: its shop's rules and its checks with their fixes
-        if let Some(fg) = &mut self.fg
-            && !fg.issues.is_empty()
-        {
-            let r = r.expand(3.0);
-            let resp = ui.interact(r, ui.scope_id().with("status-part-issues"), Sense::click());
-            if resp.hovered() || fg.issues_list {
-                p.rect_filled(r, 3.0, Color32::from_white_alpha(28));
-            }
-            self.places.push(("fg:issues:status".into(), r));
-            if resp.clicked() {
-                fg.issues_list = !fg.issues_list;
-            }
-        }
-        self.thermo_status(ui, r.left() - 12.0, st);
     }
 
     /// Esc backs out one level, wherever one is: never two, and never none.
@@ -1341,6 +1332,8 @@ impl Shell {
             self.marking_row = None;
         } else if self.renaming.is_some() {
             self.renaming = None;
+        } else if let Some(p) = self.fg.as_mut().filter(|p| p.renaming.is_some()) {
+            p.renaming = None;
         } else if self.dialog.is_some() {
             self.out.push(Action::DialogCancel);
         } else if let Some(p) = self.fg.as_mut().filter(|p| p.tool.is_some()) {
@@ -1528,11 +1521,13 @@ impl Shell {
                 ("New Sheet Metal", Some(Action::Sheet(sheet::SheetCmd::NewPart))),
                 ("Open...", Some(Action::Open)),
             ];
+            // a Forge file is written when asked (Ctrl+S too); an .fc part with every act
+            items.push(("Save", model_open.then_some(Action::Fg(FgCmd::Save))));
             items.push(("New Drawing...", model_open.then_some(Action::NewDrawing)));
             if self.drawing.is_some() {
                 items.push(("Close Drawing", Some(Action::CloseDrawing)));
             }
-            match menu_at(ctx, "file-menu", at, &t, &items) {
+            match menu_at(ctx, "file-menu", at, &t, &items, &mut self.places) {
                 MenuResult::Chose(a) => {
                     self.out.push(a);
                     self.file_menu = false;
@@ -1581,7 +1576,7 @@ impl Shell {
                 Some(Action::Parallel(false)),
             ));
             let fresh = std::mem::take(&mut self.cube_menu_fresh);
-            match menu_at(ctx, "cube-menu", at, &t, &items) {
+            match menu_at(ctx, "cube-menu", at, &t, &items, &mut self.places) {
                 MenuResult::Chose(a) => {
                     self.out.push(a);
                     self.cube_menu = None;
@@ -1793,6 +1788,7 @@ fn menu_at(
     at: egui::Pos2,
     t: &Theme,
     items: &[(&str, Option<Action>)],
+    places: &mut Vec<(String, Rect)>,
 ) -> MenuResult {
     let mut out = MenuResult::Open;
     let w = 220.0;
@@ -1816,6 +1812,7 @@ fn menu_at(
                     Sense::hover()
                 };
                 let resp = ui.interact(r, ui.scope_id().with(k), sense);
+                places.push((format!("{id}:{label}"), r));
                 resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, action.is_some(), *label));
                 if (resp.hovered() || resp.has_focus()) && action.is_some() {
                     ui.painter().rect_filled(r, 0.0, t.on);

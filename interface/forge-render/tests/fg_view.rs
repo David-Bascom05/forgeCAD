@@ -254,7 +254,7 @@ fn cube_snaps(h: &mut Headless) {
 }
 
 #[test]
-fn the_cube_shows_beside_the_panel_and_snaps_in_a_part() {
+fn the_cube_snaps_in_a_part() {
     let Some(mut h) = headless() else { return };
     let d = scratch("cube-part");
     let f = d.join("part.fg");
@@ -354,7 +354,7 @@ fn the_views_switches_are_off_for_assemblies_and_kept_per_kind() {
 }
 
 #[test]
-fn issues_are_one_line_open_only_with_errors() {
+fn issues_are_a_count_in_the_status_bar_and_a_window_a_click_away() {
     let Some(mut h) = headless() else { return };
     let d = scratch("issues");
     let f = d.join("part.fg");
@@ -368,30 +368,30 @@ fn issues_are_one_line_open_only_with_errors() {
         .filter(|i| i.severity == forge_render::shell::fg::Severity::Error)
         .count();
     assert_eq!(errors, 0);
-    assert!(h.gui.shell.place("fg:issues").is_some());
+    // the status bar's count, the list a click away in the Issues window
+    assert!(h.gui.shell.place("fg:issues:status").is_some());
     assert!(
         h.gui.shell.place("fg:issue:0").is_none(),
         "a warning opened the list"
     );
     if !p.issues.is_empty() {
-        assert!(h.click("fg:issues"));
+        assert!(h.click("fg:issues:status"));
         h.step();
         h.step();
         assert!(h.gui.shell.place("fg:issue:0").is_some());
     }
-    // an error opens it by itself
+    // an error: its count in the bar, the list a click away
     std::fs::write(&f, "plate = extrude(nothing_here, 6)\n").unwrap();
     open_in(&mut h, &f, 60);
+    h.step();
     let p = h.gui.shell.fg.as_ref().unwrap();
-    assert!(
-        h.gui.shell.place("fg:issue:0").is_some(),
-        "an error left the list shut: {:?} {:?}",
-        p.issues
-            .iter()
-            .map(|i| (i.severity, i.kind.clone()))
-            .collect::<Vec<_>>(),
-        p.issues_shown
-    );
+    assert!(p.issues.iter().any(|i| i.severity == forge_render::shell::fg::Severity::Error));
+    if !p.issues_list {
+        assert!(h.click("fg:issues:status"));
+        h.step();
+        h.step();
+    }
+    assert!(h.gui.shell.place("fg:issue:0").is_some());
 }
 
 #[test]

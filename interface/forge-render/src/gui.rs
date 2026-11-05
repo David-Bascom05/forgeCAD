@@ -1413,7 +1413,7 @@ impl Gui {
                 _ => {}
             }
             if let Some(s) = &mut self.fg {
-                // a Forge part's document changes only by typed ops, from its own panel
+                // a Forge part's document changes only by typed ops, from its browser and dialogs
                 match a {
                     Action::Undo => {
                         s.undo();
@@ -1437,9 +1437,7 @@ impl Gui {
                             p.tool = None;
                         } else if let Some(t) = &mut p.tool {
                             match t.text() {
-                                Ok(text) => p.out.push(crate::shell::fg::FgAct::Tool(
-                                    forge_lang::error::Op::AddFeature { before: None, text },
-                                )),
+                                Ok(text) => p.out.push(crate::shell::fg::FgAct::Tool(t.op(text))),
                                 Err(e) => t.error = Some(e),
                             }
                         }
@@ -2760,6 +2758,20 @@ impl Headless {
         false
     }
 
+    /// A right click on what's drawn under `at`, then a click on its menu's `item`.
+    pub fn menu_item(&mut self, at: &str, item: &str) -> bool {
+        let Some(r) = self.gui.shell.place(at) else {
+            return false;
+        };
+        self.move_to(r.center().x, r.center().y);
+        self.step();
+        self.right_click_here();
+        self.step();
+        let hit = self.click(item);
+        self.step();
+        hit
+    }
+
     /// Queues a click at the middle of what the shell last drew under this name.
     pub fn click(&mut self, name: &str) -> bool {
         let Some(r) = self.gui.shell.place(name) else {
@@ -2836,7 +2848,7 @@ impl Headless {
 }
 
 /// What only an .fc part's worker can do (its dialogs, its tree's items, its dimensions on the
-/// model): a Forge part's edits are its panel's typed ops, its tools' forms, its sketches.
+/// model): a Forge part's edits are its browser's typed ops, its tools' forms, its sketches.
 fn fc_only(a: Action) -> bool {
     matches!(
         a,
@@ -2901,7 +2913,7 @@ impl Gui {
         }
     }
 
-    /// The panel's text and dirty mark, after the session's text changed.
+    /// The shell's text and dirty mark, after the session's text changed.
     fn fg_text(&mut self) {
         if let (Some(s), Some(p)) = (&self.fg, &mut self.shell.fg) {
             p.source = s.src.clone();
@@ -2909,7 +2921,7 @@ impl Gui {
         }
     }
 
-    /// What the Forge worker has built: the panel's rows, the part's mesh.
+    /// What the Forge worker has built: the browser's rows, the part's mesh.
     fn take_fg(&mut self) {
         // a part's anchors, found off the frame's thread
         if let Some(r) = &self.fg_asm_anchors
@@ -3161,7 +3173,7 @@ impl Gui {
         }
     }
 
-    /// The Forge panel's asks: typed ops, through forge-lang; saving.
+    /// What the Forge browser and dialogs ask: typed ops, through forge-lang; saving.
     fn apply_fg(&mut self) {
         self.thermo_host();
         let acts = self
@@ -3176,9 +3188,6 @@ impl Gui {
                     let _ = self.fg_apply(op);
                 }
                 crate::shell::fg::FgAct::Save => self.fg_save(),
-                crate::shell::fg::FgAct::ExportDxf(id) => {
-                    let _ = self.fg_export_dxf(&id);
-                }
                 crate::shell::fg::FgAct::Tool(op) => {
                     if self.fg_apply(op).is_ok()
                         && let Some(p) = &mut self.shell.fg
@@ -3205,19 +3214,13 @@ impl Gui {
                 | crate::shell::fg::FgAct::AsmApplyMoves
                 | crate::shell::fg::FgAct::AsmMirror { .. }
                 | crate::shell::fg::FgAct::AsmSnaps(_)) => self.asm_act(a),
-                crate::shell::fg::FgAct::EditSheet(id) => self.shell.sheet.edit_req = Some(id),
                 crate::shell::fg::FgAct::EditSketch(id) => self.fg_edit_sketch(&id),
-                crate::shell::fg::FgAct::Flat(on) => {
-                    if let Some(p) = &mut self.shell.fg {
-                        p.flat = on && self.fg_flat.is_some();
-                    }
-                    self.fg_show();
-                }
+                crate::shell::fg::FgAct::EditFeature(id) => self.fg_edit_feature(&id),
             }
         }
     }
 
-    /// Applies a typed op to the Forge part, as the panel does: refused with its typed error, or
+    /// Applies a typed op to the Forge part, as the browser does: refused with its typed error, or
     /// applied and rebuilt.
     pub fn fg_apply(&mut self, op: forge_lang::error::Op) -> Result<(), String> {
         let Some(s) = &mut self.fg else {
@@ -3388,9 +3391,9 @@ impl Gui {
             }
             return;
         }
-        let op = forge_lang::error::Op::AddFeature {
-            before: None,
-            text: text.clone(),
+        let op = match self.shell.fg.as_ref().and_then(|p| p.tool.as_ref()) {
+            Some(t) => t.op(text.clone()),
+            None => return,
         };
         // what wouldn't check is said, and the part shown as it is
         let ops = [op];
@@ -3439,7 +3442,42 @@ impl Gui {
         }
     }
 
-    /// Something asked of a Forge part that can't be: said in the panel and the status bar.
+    /// A browser row's Edit Feature: a sheet metal feature's dialog, or the tool's that writes
+    /// its kind, filled from its statement; what no dialog can hold is refused in the status bar.
+    pub fn fg_edit_feature(&mut self, id: &str) {
+        let Some(p) = &mut self.shell.fg else { return };
+        let Some(kind) = p.feats.iter().find(|f| f.id == id).map(|f| f.kind.clone()) else {
+            return;
+        };
+        if kind == "sketch" {
+            self.fg_edit_sketch(id);
+            return;
+        }
+        if crate::shell::sheet::is_sheet_kind(&kind) {
+            self.shell.sheet.edit_req = Some(id.into());
+            return;
+        }
+        if p.tool.is_some() {
+            self.shell.status = "Finish or cancel the dialog that's open first".into();
+            return;
+        }
+        let dir = self
+            .fg
+            .as_ref()
+            .and_then(|s| s.path.as_deref())
+            .and_then(|f| std::path::Path::new(f).parent().map(|d| d.to_path_buf()));
+        match crate::shell::fgtool::FgTool::edit(id, &p.source) {
+            Ok(mut t) => {
+                crate::shell::fgdialog::offer_lists(&mut t, dir.as_deref());
+                self.shell.status = format!("Edit {}: {}", crate::shell::fgdialog::title(t.kind), t.prompt());
+                p.tool = Some(t);
+                p.refused = None;
+            }
+            Err(e) => self.fg_refuse(e),
+        }
+    }
+
+    /// Something asked of a Forge part that can't be: said in the status bar.
     pub fn fg_refuse(&mut self, e: crate::shell::fgtool::ToolError) {
         let why = format!("{}: {}", e.kind(), e.text());
         if let Some(p) = &mut self.shell.fg {
@@ -3551,6 +3589,10 @@ impl Gui {
         }
         let Some(p) = &mut self.shell.fg else { return };
         let Some(tool) = &mut p.tool else {
+            self.shell.status = match &text {
+                Ok(a) => format!("Picked: {a}"),
+                Err(e) => format!("Picked: {}", e.text()),
+            };
             p.picked = Some(text);
             return;
         };
@@ -3738,40 +3780,6 @@ impl Gui {
             v.scene.set_part(part, m.center, m.radius, chords);
             v.dirty = true;
         }
-    }
-
-    /// A sheet's flat pattern as DXF beside the part's file: `<stem>.dxf`, or `<stem>-<id>.dxf`
-    /// when the part has several sheets. Returns where it went.
-    pub fn fg_export_dxf(&mut self, id: &str) -> Result<String, String> {
-        let got = (|| -> Result<String, String> {
-            let path = self
-                .fg
-                .as_ref()
-                .and_then(|s| s.path.clone())
-                .ok_or("no file beside which to write")?;
-            let s = self
-                .fg_sheets
-                .iter()
-                .find(|s| s.id == id)
-                .ok_or(format!("no sheet {id}"))?;
-            let text = s
-                .dxf
-                .clone()
-                .map_err(|e| format!("{id} has no flat pattern: {e}"))?;
-            let stem = path.strip_suffix(".fg").unwrap_or(&path);
-            let out = if self.fg_sheets.len() > 1 {
-                format!("{stem}-{id}.dxf")
-            } else {
-                format!("{stem}.dxf")
-            };
-            std::fs::write(&out, text).map_err(|e| format!("{out}: {e}"))?;
-            Ok(out)
-        })();
-        self.shell.status = match &got {
-            Ok(out) => format!("Wrote {out}"),
-            Err(why) => why.clone(),
-        };
-        got
     }
 
     /// Writes the Forge part's text to its file.
