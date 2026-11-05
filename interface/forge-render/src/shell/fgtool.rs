@@ -171,6 +171,11 @@ pub enum ToolError {
         value: String,
         expr: String,
     },
+    /// A pick in the posed view on an occurrence that is not this document's own model (a
+    /// component's call, a part file): changed where it is made.
+    NotOwnModel {
+        occurrence: String,
+    },
 }
 
 impl ToolError {
@@ -184,6 +189,7 @@ impl ToolError {
             ToolError::BadName { .. } => "BadName",
             ToolError::NoForgeForm { .. } => "NoForgeForm",
             ToolError::Driven { .. } => "Driven",
+            ToolError::NotOwnModel { .. } => "NotOwnModel",
         }
     }
 
@@ -200,6 +206,11 @@ impl ToolError {
             ToolError::NoForgeForm { tool, why } => format!("{tool}: {why}"),
             ToolError::Driven { value, expr } => {
                 format!("{value}: that value is `{expr}`, driven by what it reads; change those instead")
+            }
+            ToolError::NotOwnModel { occurrence } => {
+                format!(
+                    "{occurrence} is not this document's own model: open its component or file to change it"
+                )
             }
         }
     }

@@ -608,3 +608,63 @@ fn a_tool_opened_in_the_frame_of_an_undo_takes_the_freed_name() {
         .expect("the Split dialog");
     assert_eq!(t.name, "split1");
 }
+
+/// A file with components shows posed; a 3D Model tool's pick on its own bodies there is named as
+/// the model names it, and one on a component's call is refused, saying why.
+#[test]
+fn picks_in_the_posed_view_feed_3d_model_tools() {
+    let dir = std::env::temp_dir().join(format!("fg-model-{}-posed", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("p.fg");
+    let src = format!(
+        "{PART}component peg(r: 3) {{\n  sketch s(on: xy) {{\n    c = circle((0, 0), r)\n  }}\n  rod = extrude(s, 10)\n}}\npg = part(peg, at: (200, 0, 0), ground: true)\n"
+    );
+    std::fs::write(&file, src).unwrap();
+    let mut h = match Headless::new((1700.0, 1000.0), 1.0) {
+        Ok(h) => h,
+        Err(e) => {
+            eprintln!("skipped: {e}");
+            return;
+        }
+    };
+    h.step();
+    h.gui.open(file.to_str().unwrap());
+    let posed = |g: &Gui| {
+        g.fg_anchors.is_some()
+            && g.fg_asm.is_some()
+            && g.view.is_some()
+            && g.fg.as_ref().is_some_and(|s| s.done == s.seq)
+    };
+    assert!(h.until(posed), "never posed: {}", h.gui.shell.status);
+    h.gui.shell.tab = 0;
+    for _ in 0..3 {
+        h.step();
+    }
+    button(&mut h, "Thicken");
+    point_at(&mut h, [30.0, 0.0, 10.0]);
+    assert_eq!(
+        picks(&h, "Faces"),
+        ["base.side(plan.outline[0])"],
+        "{}",
+        h.gui.shell.status
+    );
+    point_at(&mut h, [200.0, -3.0, 5.0]);
+    let said = h
+        .gui
+        .shell
+        .fg
+        .as_ref()
+        .unwrap()
+        .tool
+        .as_ref()
+        .unwrap()
+        .error
+        .clone();
+    assert_eq!(
+        said.map(|e| e.kind()),
+        Some("NotOwnModel"),
+        "{}",
+        h.gui.shell.status
+    );
+    assert_eq!(picks(&h, "Faces"), ["base.side(plan.outline[0])"]);
+}

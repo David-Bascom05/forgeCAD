@@ -2676,6 +2676,52 @@ fn look_at(v: &mut View, plane: forge_math::Frame) {
 const MARK_SHOW_MS: f64 = 220.0;
 
 /// The entities of the part shown with the name a check gave: none if a later feature took it.
+/// A pick on placement `pl` of the posed view, as the document's model names it: an occurrence
+/// of its own bodies (`#root`, a body component) is the model's faces where it is posed; a call
+/// of a component or a part file is not this document's model to change.
+fn posed_name(
+    occ: &[crate::fg::Occ],
+    data: Option<&crate::gui::gui_inspect::InspectData>,
+    anchors: Option<&crate::fg::AnchorView>,
+    pl: usize,
+    e: Entity,
+) -> Result<String, crate::shell::fgtool::ToolError> {
+    use crate::shell::fgtool::ToolError;
+    let what = match e {
+        Entity::Face(_) => "face",
+        Entity::Edge(_) => "edge",
+        Entity::Vertex(_) => "vertex",
+    };
+    let unnamed = ToolError::NoStableName { what };
+    let o = occ
+        .iter()
+        .find(|o| o.placement == Some(pl))
+        .ok_or(unnamed.clone())?;
+    if !o.file.starts_with('#') || o.file.contains('(') || o.file.contains('/') {
+        return Err(ToolError::NotOwnModel {
+            occurrence: o.path.clone(),
+        });
+    }
+    // its faces are the model's: named by the model's anchors, by name
+    let name = (|| {
+        let d = data?;
+        let &(mesh, _) = d.placed.get(pl)?;
+        let b = d.bodies.get(mesh)?;
+        let a = anchors?;
+        match e {
+            Entity::Face(f) if (f as usize) < b.faces.len() => {
+                a.by_face.get(&b.face(forge_topo::FaceId(f)).name)
+            }
+            Entity::Edge(x) if (x as usize) < b.edges.len() => {
+                a.by_edge.get(&b.edge(forge_topo::EdgeId(x)).name)
+            }
+            _ => None,
+        }
+        .cloned()
+    })();
+    name.ok_or(unnamed)
+}
+
 fn fault_marks(facts: &Facts, e: forge_topo::Entity) -> Vec<Entity> {
     use forge_topo::Entity as T;
     let find = |names: &[u64], n: u64| -> Vec<u32> {
@@ -3844,8 +3890,26 @@ impl Gui {
             return;
         }
         v.clicks = v.nav.clicks;
+        // a 3D Model tool waiting, in the posed view: a pick on this document's own bodies is
+        // named as the model names it
+        let waiting = self.shell.sketch_pick || self.shell.fg.as_ref().is_some_and(|p| p.tool.is_some());
+        let mut posed: Option<Result<String, ToolError>> = None;
+        if let Some((occ, _)) = &self.fg_asm
+            && waiting
+            && let Some(&(pl, e)) = v.nav.selected.last()
+        {
+            posed = Some(posed_name(
+                occ,
+                self.inspector.data.as_deref(),
+                self.fg_anchors.as_deref(),
+                pl as usize,
+                e,
+            ));
+        }
         // an assembly: a click chooses the occurrence under it
-        if let Some((occ, _)) = &self.fg_asm {
+        if let Some((occ, _)) = &self.fg_asm
+            && posed.is_none()
+        {
             let at = v.nav.selected.last().map(|x| x.0 as usize);
             let k = at.and_then(|p| occ.iter().position(|o| o.placement == Some(p)));
             v.nav.selected.clear();
@@ -3869,13 +3933,21 @@ impl Gui {
             Item::YzPlane => Some("yz"),
             _ => None,
         });
-        let (what, text, edge): (&'static str, Result<String, ToolError>, Option<u32>) = match ent {
-            Some(Entity::Face(f)) => ("face", named(a.as_ref().map(|a| &a.faces), f, "face"), None),
-            Some(Entity::Edge(e)) => ("edge", named(a.as_ref().map(|a| &a.edges), e, "edge"), Some(e)),
-            Some(Entity::Vertex(_)) => ("vertex", Err(ToolError::NoStableName { what: "vertex" }), None),
-            None => match origin {
-                Some(o) => ("origin plane", Ok(o.to_string()), None),
-                None => return,
+        let (what, text, edge): (&'static str, Result<String, ToolError>, Option<u32>) = match (ent, posed) {
+            // the posed view's pick, named through the model (its edges' indices are the model's
+            // no more: no sheet edge by index)
+            // not this document's to change, whatever was under the pointer
+            (_, Some(Err(e @ ToolError::NotOwnModel { .. }))) => ("face", Err(e), None),
+            (Some(Entity::Edge(_)), Some(t)) => ("edge", t, None),
+            (Some(_), Some(t)) => ("face", t, None),
+            (ent, _) => match ent {
+                Some(Entity::Face(f)) => ("face", named(a.as_ref().map(|a| &a.faces), f, "face"), None),
+                Some(Entity::Edge(e)) => ("edge", named(a.as_ref().map(|a| &a.edges), e, "edge"), Some(e)),
+                Some(Entity::Vertex(_)) => ("vertex", Err(ToolError::NoStableName { what: "vertex" }), None),
+                None => match origin {
+                    Some(o) => ("origin plane", Ok(o.to_string()), None),
+                    None => return,
+                },
             },
         };
         if self.shell.sketch_pick {

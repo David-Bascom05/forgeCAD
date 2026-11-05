@@ -182,6 +182,10 @@ pub struct AnchorView {
     pub sketches: Vec<forge_lang::anchors::SketchRefs>,
     /// Sheet edges a flange can stand on, with the part's edges (by index) each is.
     pub sheet_edges: Vec<(String, Vec<usize>)>,
+    /// Each face and edge anchored, by its name: an occurrence of this document's own bodies in
+    /// the posed view is named through these (its faces are the model's).
+    pub by_face: HashMap<forge_topo::Name, String>,
+    pub by_edge: HashMap<forge_topo::Name, String>,
 }
 
 /// An entity of the body `old` names, in the body `new` names: the one face or edge with the same
@@ -224,6 +228,8 @@ impl AnchorView {
         };
         let edge_names: Vec<forge_topo::Name> = b.edge_ids().map(|e| b.edge(e).name).collect();
         AnchorView {
+            by_face: a.faces.clone(),
+            by_edge: a.edges.clone(),
             faces: b
                 .face_ids()
                 .map(|f| a.faces.get(&b.face(f).name).cloned())
@@ -825,7 +831,10 @@ fn work(
         };
         let t = Instant::now();
         if is_assembly(&job.1) {
+            // the document's own model named too: picks in the posed view feed 3D Model's tools
+            let want = anchored.as_deref() != Some(job.1.as_str());
             let opts = Options {
+                anchors: want,
                 dir: dir.clone(),
                 render: true,
                 // the overlap check and the expects are the slow part of a big assembly: on request
@@ -843,6 +852,13 @@ fn work(
             }
             let build_ms = t.elapsed().as_secs_f64() * 1e3;
             let t = Instant::now();
+            let anchors = run
+                .anchors
+                .as_ref()
+                .map(|a| Arc::new(AnchorView::of(a, run.body.as_ref())));
+            if anchors.is_some() {
+                anchored = Some(job.1.clone());
+            }
             let (asm, view) = asm_view(&run, &mut asm_meshes, &mut gpu, &mut asm_shape);
             let mesh_ms = t.elapsed().as_secs_f64() * 1e3;
             let (feats, params, issues) = rows(&run, &job.1);
@@ -862,7 +878,7 @@ fn work(
                 sheets: vec![],
                 thermos: vec![],
                 view,
-                anchors: None,
+                anchors,
                 inspect: asm.as_ref().map(|a| a.inspect.clone()),
                 preview: false,
                 checked: true,

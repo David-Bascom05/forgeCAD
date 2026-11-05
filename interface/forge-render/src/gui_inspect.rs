@@ -69,7 +69,7 @@ pub struct Inspector {
     to: Option<Sender<Job>>,
     from: Option<Receiver<Answer>>,
     seq: u64,
-    data: Option<Arc<InspectData>>,
+    pub(crate) data: Option<Arc<InspectData>>,
     /// The view's click count last seen, and the picks last measured.
     clicks: u32,
     open: bool,
