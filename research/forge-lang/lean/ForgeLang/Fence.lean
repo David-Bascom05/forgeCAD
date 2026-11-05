@@ -1,158 +1,139 @@
 /-!
-# The read fence: a file is read only when its real path is inside the project
+# Reads: only files of the loader's own kind, and no read byte in any output
 
-A model of forge-lang's reads (`part`, `subassembly`, `use`, `import`, fonts, drawings, Bring Into
-This File) as unified-doc-3 fences them: the path is resolved first, every symbolic link on the way
-followed and `..` taken on the real path reached so far (as `canonicalize` does), and the file is
-read only if the resolved path lies under the root (the project: the nearest folder holding `.git`,
-else the document's own; a session's root when given).
+David's rule (unified-doc-3, replacing the folder fence): there is no folder fence; each loader
+(`part`, `subassembly`, `use`, `import`, a font, a drawing, Bring Into This File) accepts only
+its own kind of file, validated by parsing it, else the typed refusal `WrongKind`; and no byte of
+any file read appears in any output (errors, JSON, logs, agent replies, exports). A canary
+planted in a file that is not CAD must never surface.
 
-* `read_inside`: whatever is read is the content of a file whose resolved path is under the root,
-  however the path was written (`..`, absolute, through links, links to links).
-* `outside_same`: a path resolving outside is refused the same whether or not a file is there (the
-  refusal tells nothing about what lies outside).
-* `link_out_refused`: a link inside the root to a file outside is refused.
-* `root_contains_doc`: the project root found by walking up is an ancestor of the document's folder.
-* `cycle_missing`: a cycle of links resolves to nothing (refused as missing), at any budget.
+The model: a loader is a parser `parse k : Bytes → Option Parsed`; links are followed (cycles
+are `missing`); a read gives the parsed value or a refusal that holds the path and the kind but
+no bytes. A document is any list of reads; its output is any function of their results.
+
+* `read_ok_parses`: a read succeeds only on a file that parses as the loader's kind, to what the
+  parser made of it.
+* `output_through_parse`: outputs depend on the files only through what their parsers return:
+  two file systems whose read files parse alike give the same output (non-interference).
+* `canary`: so the bytes of a file that is not of its loader's kind (a canary in a `.txt`, a
+  `.fg` that does not parse, a font that is no font) never change any output: any other bytes
+  that also fail to parse give the same output, whatever the output function.
+* `cycle_missing`: a cycle of links reads as missing, at any budget.
+
+What is not modelled: a valid CAD file's own text (names, string literals) does reach outputs, as
+it must; the rule is about files that are not of the loader's kind.
 -/
 
 namespace ForgeLang.Fence
 
 abbrev Path := List String
+abbrev Bytes := List Nat
 
 inductive Node where
-  | file (content : Nat)
-  | link (target : Path) (absolute : Bool)
+  | file (bytes : Bytes)
+  | link (target : Path)
   | dir
-  deriving DecidableEq
 
 abbrev FS := Path → Option Node
 
-/-- Resolve `rel` from the real folder `cur`, following links (each costs a step of `fuel`). -/
-def resolve (fs : FS) : Nat → Path → List String → Option Path
-  | 0, _, _ => none
-  | _ + 1, cur, [] => some cur
-  | n + 1, cur, c :: rest =>
-    if c = "." then resolve fs n cur rest
-    else if c = ".." then resolve fs n cur.dropLast rest
-    else
-      match fs (cur ++ [c]) with
-      | some (.link t abs) => resolve fs n (if abs then [] else cur) (t ++ rest)
-      | _ => resolve fs n (cur ++ [c]) rest
+/-- Follow links from `p` (each costs a step of `fuel`); `none` for a cycle or a dangling link. -/
+def follow (fs : FS) : Nat → Path → Option Bytes
+  | 0, _ => none
+  | n + 1, p =>
+    match fs p with
+    | some (.file b) => some b
+    | some (.link t) => follow fs n t
+    | _ => none
 
-inductive Err where
-  | missing | outside
+/-- A refusal says which file and which loader, never what is in the file. -/
+inductive Refusal where
+  | missing (p : Path)
+  | wrongKind (k : Nat) (p : Path)
   deriving DecidableEq
 
-/-- Read `rel` from the document's folder `base` under `root`. -/
-def read (fs : FS) (fuel : Nat) (root base : Path) (rel : List String) (abs : Bool) : Except Err Nat :=
-  match resolve fs fuel (if abs then [] else base) rel with
-  | none => .error .missing
-  | some p =>
-    if root.isPrefixOf p then
-      match fs p with
-      | some (.file c) => .ok c
-      | _ => .error .missing
-    else .error .outside
+section
+variable {Parsed : Type} (parse : Nat → Bytes → Option Parsed)
 
-theorem read_inside {fs fuel root base rel abs c} (h : read fs fuel root base rel abs = .ok c) :
-    ∃ p, resolve fs fuel (if abs then [] else base) rel = some p ∧ root.isPrefixOf p = true ∧
-      fs p = some (.file c) := by
+def read (fs : FS) (fuel : Nat) (k : Nat) (p : Path) : Except Refusal Parsed :=
+  match follow fs fuel p with
+  | none => .error (.missing p)
+  | some b =>
+    match parse k b with
+    | some v => .ok v
+    | none => .error (.wrongKind k p)
+
+/-- What a read's file came to: missing, or what its loader's parser made of its bytes. -/
+def seen (fs : FS) (fuel : Nat) (k : Nat) (p : Path) : Option (Option Parsed) :=
+  (follow fs fuel p).map (parse k)
+
+theorem read_ok_parses {fs fuel k p v} (h : read parse fs fuel k p = .ok v) :
+    ∃ b, follow fs fuel p = some b ∧ parse k b = some v := by
   unfold read at h
   split at h
   · cases h
-  · rename_i p hp
+  · rename_i b hb
     split at h
-    · rename_i hr
-      split at h
-      · rename_i c' hf; cases h; exact ⟨p, hp, hr, hf⟩
-      · cases h
+    · rename_i v' hv; cases h; exact ⟨b, hb, hv⟩
     · cases h
 
-/-- Outside is refused alike whether a file is there or not: change what is at the resolved path
-(not on the way to it) and the answer is the same. -/
-theorem outside_same {fs fs' : FS} {fuel root base rel abs p}
-    (hp : resolve fs fuel (if abs then [] else base) rel = some p)
-    (hp' : resolve fs' fuel (if abs then [] else base) rel = some p) (ho : root.isPrefixOf p = false) :
-    read fs fuel root base rel abs = .error .outside ∧ read fs' fuel root base rel abs = .error .outside := by
-  constructor <;> simp [read, hp, hp', ho]
+theorem read_of_seen {fs fs' : FS} {fuel k p} (h : seen parse fs fuel k p = seen parse fs' fuel k p) :
+    read parse fs fuel k p = read parse fs' fuel k p := by
+  unfold seen at h
+  unfold read
+  cases h1 : follow fs fuel p <;> cases h2 : follow fs' fuel p <;> simp_all
 
-/-- A link inside the root naming a file outside is refused. -/
-theorem link_out_refused {fs : FS} {fuel root base name t p} (h1 : name ≠ ".") (h2 : name ≠ "..")
-    (hl : fs (base ++ [name]) = some (.link t true)) (hr : resolve fs fuel [] t = some p)
-    (ho : root.isPrefixOf p = false) :
-    read fs (fuel + 1) root base [name] false = .error .outside := by
-  have : resolve fs (fuel + 1) base [name] = some p := by
-    simp only [resolve, h1, h2, ite_false, hl, ite_true, List.append_nil]
-    exact hr
-  simp [read, this, ho]
+/-- Non-interference: a document reads `reads` (loader kind and path each) and outputs anything
+computed from the results. Two file systems on which every read file parses alike give the same
+output. -/
+theorem output_through_parse {Out : Type} (out : List (Except Refusal Parsed) → Out)
+    (reads : List (Nat × Path)) {fs fs' : FS} {fuel}
+    (h : ∀ r ∈ reads, seen parse fs fuel r.1 r.2 = seen parse fs' fuel r.1 r.2) :
+    out (reads.map fun r => read parse fs fuel r.1 r.2) = out (reads.map fun r => read parse fs' fuel r.1 r.2) := by
+  congr 1
+  apply List.map_congr_left
+  intro r hr
+  exact read_of_seen parse (h r hr)
 
-/-- The nearest ancestor of `dir` holding `.git`, else `dir` itself. -/
-def projectRoot (fs : FS) (dir : Path) : Path :=
-  match (List.range (dir.length + 1)).reverse.find? (fun k => (fs (dir.take k ++ [".git"])).isSome) with
-  | some k => dir.take k
-  | none => dir
-
-theorem root_contains_doc (fs : FS) (dir : Path) : (projectRoot fs dir).isPrefixOf dir = true := by
-  unfold projectRoot
-  split
-  · rename_i k _
-    exact List.isPrefixOf_iff_prefix.mpr (List.take_prefix k dir)
-  · exact List.isPrefixOf_iff_prefix.mpr (List.prefix_refl dir)
-
-/-- Two links naming each other: nothing, at any budget. -/
-def loopFS : FS := fun p =>
-  if p = ["w", "a"] then some (.link ["w", "b"] true)
-  else if p = ["w", "b"] then some (.link ["w", "a"] true)
-  else none
-
-theorem cycle_missing : ∀ n, resolve loopFS n ["w"] ["a"] = none := by
-  -- the walk alternates between the two links, each step costing fuel
-  have step : ∀ n, resolve loopFS n [] ["w", "a"] = none ∧ resolve loopFS n [] ["w", "b"] = none := by
+/-- The canary: a file at `q` that its loaders reject. Any other bytes that they reject too give
+the same output, for every document and every output function. -/
+theorem canary {Out : Type} (out : List (Except Refusal Parsed) → Out) (reads : List (Nat × Path))
+    (fs : FS) (q : Path) (b b' : Bytes) {fuel}
+    (hb : ∀ r ∈ reads, parse r.1 b = none) (hb' : ∀ r ∈ reads, parse r.1 b' = none) :
+    let put (x : Bytes) : FS := fun p => if p = q then some (.file x) else fs p
+    out (reads.map fun r => read parse (put b) fuel r.1 r.2) =
+      out (reads.map fun r => read parse (put b') fuel r.1 r.2) := by
+  intro put
+  apply output_through_parse parse out reads
+  intro r hr
+  -- the two systems differ only at `q`, whose bytes neither parse as `r`'s kind
+  unfold seen
+  have hf : ∀ n p, (follow (put b) n p).map (parse r.1) = (follow (put b') n p).map (parse r.1) := by
     intro n
-    induction n using Nat.strongRecOn with
-    | _ n ih =>
-      match n with
-      | 0 => exact ⟨rfl, rfl⟩
-      | 1 => exact ⟨rfl, rfl⟩
-      | k + 2 =>
-        have h := ih k (by omega)
-        constructor
-        · show resolve loopFS (k + 2) [] ["w", "a"] = none
-          simp only [resolve, loopFS]
-          simpa using h.2
-        · show resolve loopFS (k + 2) [] ["w", "b"] = none
-          simp only [resolve, loopFS]
-          simpa using h.1
+    induction n with
+    | zero => intro p; rfl
+    | succ n ih =>
+      intro p
+      by_cases e : p = q
+      · subst e; simp [follow, put, hb r hr, hb' r hr]
+      · have h1 : put b p = fs p := by simp [put, e]
+        have h2 : put b' p = fs p := by simp [put, e]
+        simp only [follow, h1, h2]
+        split
+        · rfl
+        · exact ih _
+        · rfl
+  exact hf fuel r.2
+
+end
+
+/-- Two links naming each other: missing, at any budget. -/
+def loopFS : FS := fun p =>
+  if p = ["a"] then some (.link ["b"]) else if p = ["b"] then some (.link ["a"]) else none
+
+theorem cycle_missing : ∀ n, follow loopFS n ["a"] = none ∧ follow loopFS n ["b"] = none := by
   intro n
-  match n with
-  | 0 => rfl
-  | k + 1 =>
-    simp only [resolve, loopFS]
-    simpa using (step k).2
-
-/-- The harness's tree (impl-proof-findings, unified-doc-3): project `P` (holding `.git`), the
-document in `P/w`, `P/out/in` inside, `X/far` outside, `P/w/lfar -> ../../X/far`,
-`P/w/lin -> ../out/in`, `P/out/back -> ../w`. -/
-def tree : FS := fun p =>
-  if p = ["P", ".git"] then some .dir
-  else if p = ["P", "out", "in"] then some (.file 1)
-  else if p = ["X", "far"] then some (.file 2)
-  else if p = ["P", "w", "near"] then some (.file 3)
-  else if p = ["P", "w", "lfar"] then some (.link ["..", "..", "X", "far"] false)
-  else if p = ["P", "w", "lin"] then some (.link ["..", "out", "in"] false)
-  else if p = ["P", "out", "back"] then some (.link ["..", "w"] false)
-  else none
-
-theorem tree_reads :
-    projectRoot tree ["P", "w"] = ["P"] ∧
-    read tree 20 ["P"] ["P", "w"] ["..", "out", "in"] false = .ok 1 ∧
-    read tree 20 ["P"] ["P", "w"] ["..", "..", "X", "far"] false = .error .outside ∧
-    read tree 20 ["P"] ["P", "w"] ["lfar"] false = .error .outside ∧
-    read tree 20 ["P"] ["P", "w"] ["lin"] false = .ok 1 ∧
-    read tree 20 ["P"] ["P", "w"] ["..", "out", "back", "near"] false = .ok 3 ∧
-    read tree 20 ["P"] ["P", "w"] ["..", "..", "X", "missing"] false = .error .outside ∧
-    read tree 20 ["P", "w"] ["P", "w"] ["lin"] false = .error .outside :=
-  ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  induction n with
+  | zero => exact ⟨rfl, rfl⟩
+  | succ n ih => exact ⟨by simpa [follow, loopFS] using ih.2, by simpa [follow, loopFS] using ih.1⟩
 
 end ForgeLang.Fence

@@ -257,35 +257,76 @@ def check_fixed(fg, tmp, t):
     t.note("module" if any(e["kind"] == "UseFailed" for e in j["errors"]) else "module:use_cycle", "use_cycle", str(j["errors"]))
 
 
-# Fence.tree_reads (Lean): the read fence on the same tree, case by case. (file, want): "ok" or "Outside".
-FENCE = [("near.fg", "ok"), ("../out/in.fg", "ok"), ("../../X/far.fg", "Outside"), ("lfar.fg", "Outside"),
-         ("lin.fg", "ok"), ("../out/back/near.fg", "ok"), ("../../X/missing.fg", "Outside"), ("/etc/passwd", "Outside")]
+# Fence.canary (Lean): no byte of a file its loader rejects reaches any output. A canary is planted
+# in files that are not of their loader's kind, each loader is pointed at each, and every output is
+# searched: stdout and stderr of `fg run --json`, `fg run`, `fg check --json`, `fg edit`
+# (InlineComponent), the STEP export and the document after the edit.
+CANARY = "CANARY-9f41c2e7-do-not-surface"
+SOLID = "shared q = 1\nsketch s(on: xy) {\n  o = circle((0, 0), 20)\n}\nb = extrude(s, 5)\n"
 
 
-def check_fence(fg, tmp, t):
-    """Fence.lean on the harness's tree: project P (holding .git), the document in P/w."""
-    part = "shared q = 1\nsketch s(on: xy) {\n  o = circle((0, 0), 5)\n}\nb = extrude(s, q)\n"
-    b = os.path.join(tmp, "fence")
-    for d in ("P/.git", "P/w", "P/out", "X"):
-        os.makedirs(os.path.join(b, d), exist_ok=True)
-    for f in ("P/out/in.fg", "X/far.fg", "P/w/near.fg"):
+def canary_files(b):
+    """Files that are not CAD of the loader's kind, each holding the canary (one through a link,
+    one outside the folder)."""
+    os.makedirs(os.path.join(b, "w"), exist_ok=True)
+    os.makedirs(os.path.join(b, "X"), exist_ok=True)
+    files = {
+        "w/notes.txt": f"notes {CANARY}\n",
+        "w/bad.fg": f"{CANARY} = (((\n",
+        "w/badstr.fg": f'x = "{CANARY}\n',
+        "w/bad.step": f"ISO-10303-21;\nHEADER;\n/* {CANARY} */\n#1=FOO('{CANARY}');\n",
+        "w/bad.ttf": f"{CANARY}" * 40,
+        "X/secret.fg": f"{CANARY}\n",
+    }
+    for f, text in files.items():
         with open(os.path.join(b, f), "w") as fh:
-            fh.write(part)
-    os.symlink("../../X/far.fg", os.path.join(b, "P/w/lfar.fg"))
-    os.symlink("../out/in.fg", os.path.join(b, "P/w/lin.fg"))
-    os.symlink("../w", os.path.join(b, "P/out/back"))
-    got = {}
-    for f, _ in FENCE:
-        doc = os.path.join(b, "P/w/m.fg")
+            fh.write(text)
+    os.symlink("notes.txt", os.path.join(b, "w/link.fg"))
+    return ["notes.txt", "bad.fg", "badstr.fg", "bad.step", "bad.ttf", "link.fg", "../X/secret.fg"]
+
+
+def docs_for(f):
+    """Each loader pointed at `f`."""
+    text = f"sketch s(on: xy) {{\n  o = circle((0, 0), 20)\n}}\nb = extrude(s, 5)\n"
+    return {
+        "part": f'c = part("{f}")\n',
+        "subassembly": f'c = subassembly("{f}")\n',
+        "use": f't = use("{f}")\nshared z = 1\n',
+        "import": f'c = import("{f}")\n',
+        "font": text + f'm = text("A", font: "{f}", size: 5, depth: 1, on: b.end, at: s.o.center)\n',
+    }
+
+
+def check_canary(fg, tmp, t):
+    b = os.path.join(tmp, "canary")
+    names = canary_files(b)
+    w = os.path.join(b, "w")
+    for f in names:
+        for loader, text in docs_for(f).items():
+            doc = os.path.join(w, f"m_{loader}.fg")
+            with open(doc, "w") as fh:
+                fh.write(text)
+            outs = []
+            step = os.path.join(w, f"out_{loader}.step")
+            for args in (["run", doc, "--json"], ["run", doc], ["check", doc, "--json"], ["run", doc, "--step", step]):
+                r = subprocess.run([fg] + args, capture_output=True, text=True, errors="replace")
+                outs += [r.stdout, r.stderr]
+            if os.path.exists(step):
+                outs.append(open(step, errors="replace").read())
+            leak = any(CANARY in o for o in outs)
+            refused = any(f.split("/")[-1] in o or "Kind" in o or "File" in o for o in outs)
+            t.note(f"canary-leak:{loader}" if leak else "canary", f"{loader} {f}", "the canary is in an output")
+            if not refused:
+                t.note(f"canary-unread:{loader}", f"{loader} {f}", "no output names the file: was it read?")
+        # Bring Into This File
+        doc = os.path.join(w, "m_inline.fg")
         with open(doc, "w") as fh:
             fh.write(f'c = part("{f}")\n')
-        j = run(fg, doc)
-        got[f] = "ok" if not j["errors"] else (j["errors"][0].get("problem") or j["errors"][0]["kind"])
-    if not any(v == "Outside" for v in got.values()):
-        t.note("fence-skipped", "fence", "this fg fences no reads")
-        return
-    for f, want in FENCE:
-        t.note("fence" if got[f] == want else f"fence:{f}", f, f"want {want}, got {got[f]}")
+        r = subprocess.run([fg, "edit", doc, json.dumps({"op": "InlineComponent", "file": f, "name": "brought"})],
+                           capture_output=True, text=True, errors="replace")
+        outs = [r.stdout, r.stderr, open(doc, errors="replace").read()]
+        leak = any(CANARY in o for o in outs)
+        t.note("canary-leak:inline" if leak else "canary", f"inline {f}", "the canary is in an output")
 
 
 KNOWN: set = set()  # X1-X4 fixed on unified-doc-2 936d26d6
@@ -317,8 +358,8 @@ def main():
         check_extract(a.fg, tmp, key, doc, t)
         check_make(a.fg, tmp, key, doc, rng, t)
     check_fixed(a.fg, tmp, t)
-    check_fence(a.fg, tmp, t)
-    counts = {"extract", "make", "fixed", "module", "fence", "fence-skipped"}
+    check_canary(a.fg, tmp, t)
+    counts = {"extract", "make", "fixed", "module", "canary"}
     bad = sorted(k for k in t.n if k not in counts and k not in known)
     for k in sorted(t.n):
         print(f"{k:28} {t.n[k]}{'  NEW' if k in bad else ''}")
