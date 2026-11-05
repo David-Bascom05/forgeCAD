@@ -224,6 +224,8 @@ fn load(id: &str, file: &str, dir: &Path, pool: &Arc<crate::asm::PartPool>) -> R
         checks: false,
         // threads as the standards draw them: the envelope, and thin lines (`thread_lines`)
         cosmetic_threads: true,
+        // its parts' meshes serve the overlap check and the expects, neither asked for here
+        meshes: false,
         dir: path.parent().map(Path::to_path_buf),
         ..crate::Options::default()
     };

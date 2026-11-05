@@ -79,6 +79,10 @@ pub struct Options {
     pub checks: bool,
     /// Threads on an axis not modelled but recorded (`Run::threads`), as a drawing draws them.
     pub cosmetic_threads: bool,
+    /// An assembly: mesh its parts for the overlap check and the expects' clearances. Off (a
+    /// drawing, which asks for neither), a part loads without them, and a run that needs them
+    /// does not share its loads (the setting is in their key).
+    pub meshes: bool,
 }
 
 impl Default for Options {
@@ -97,6 +101,7 @@ impl Default for Options {
             step: None,
             checks: true,
             cosmetic_threads: false,
+            meshes: true,
         }
     }
 }

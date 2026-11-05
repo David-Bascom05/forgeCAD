@@ -4022,6 +4022,12 @@ pub fn method(ev: &mut Eval, s: &SheetVal, m: &str, args: &[Arg], span: Span) ->
 
 /// The shop checks of every sheet, as typed notes on the features they name.
 pub fn finish(ev: &mut Eval) {
+    finish_with(ev, true)
+}
+
+/// `finish`, the shop's rules checked only when `shop` (a part loaded into an assembly keeps no
+/// warnings of its own: what it would be told is not looked for).
+pub fn finish_with(ev: &mut Eval, shop: bool) {
     let mut notes = vec![];
     // each build's warning about the other map: a flat overlap on the folded part, a folded clash
     // on an unfold
@@ -4084,7 +4090,7 @@ pub fn finish(ev: &mut Eval) {
             }
         }
     }
-    for st in &ev.sheets.list {
+    for st in ev.sheets.list.iter().filter(|_| shop) {
         // the shop's rules where there is a shop; hardware's own rows always
         let (violations, warnings) = {
             let key = format!("checks {:?} {:?}", st.sheet, st.shop.as_ref().map(|s| &s.shop));

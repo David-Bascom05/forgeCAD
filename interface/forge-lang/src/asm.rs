@@ -1640,14 +1640,14 @@ pub struct PartLoad {
 
 /// A part file's text hash and the references and bodies asked of it.
 /// A part file, its text hash, the references and bodies asked of it, the fence, and whether
-/// its threads are left cosmetic (a drawing's).
+/// its threads are left cosmetic (a drawing's) and it is meshed (`Options::meshes`).
 type PartKey = (
     String,
     u64,
     Vec<String>,
     Vec<String>,
     Option<std::path::PathBuf>,
-    bool,
+    (bool, bool),
 );
 /// A subassembly document evaluated, and its errors.
 type SubLoad = (Doc, Vec<Error>);
@@ -1959,17 +1959,6 @@ pub fn part_anchors(text: &str, dir: Option<std::path::PathBuf>) -> Vec<(String,
         .collect()
 }
 
-fn load_part(
-    text: &str,
-    dir: Option<std::path::PathBuf>,
-    fence: Option<std::path::PathBuf>,
-    refs: &[String],
-    bodies: &[String],
-    cosmetic: bool,
-) -> PartLoad {
-    load_part_with(text, dir, fence, refs, bodies, true, cosmetic)
-}
-
 fn load_part_with(
     text: &str,
     dir: Option<std::path::PathBuf>,
@@ -2019,7 +2008,8 @@ fn load_part_with(
     }
     ev.run(&prog);
     out.threads = std::mem::take(&mut ev.threads);
-    crate::sheet::finish(&mut ev);
+    // a part's warnings stay with it: an assembly keeps none of them, so its shop rules go unasked
+    crate::sheet::finish_with(&mut ev, false);
     out.body = placed_body(&ev);
     out.tooling = tooling_body(&ev).map(Arc::new);
     out.summary = Arc::new(crate::props::PartSummary::of(&ev));
@@ -2795,7 +2785,7 @@ pub fn finish(
             refs.iter().cloned().collect(),
             bodies.iter().cloned().collect(),
             fence.clone(),
-            opts.cosmetic_threads,
+            (opts.cosmetic_threads, opts.meshes),
         );
         if !cache.parts.contains_key(&ck) && !missing.iter().any(|m| m.0 == ck) {
             missing.push((ck, text));
@@ -2804,10 +2794,18 @@ pub fn finish(
     let pool = cache.pool.clone();
     let built = crate::par::map(missing.len(), |i| {
         let (ck, text) = &missing[i];
-        let (file, _, refs, bodies, fence, cosmetic) = ck;
+        let (file, _, refs, bodies, fence, (cosmetic, meshed)) = ck;
         let make = || {
             let parent = std::path::Path::new(file).parent().map(|p| p.to_path_buf());
-            Arc::new(load_part(text, parent, fence.clone(), refs, bodies, *cosmetic))
+            Arc::new(load_part_with(
+                text,
+                parent,
+                fence.clone(),
+                refs,
+                bodies,
+                *meshed,
+                *cosmetic,
+            ))
         };
         let Some(pool) = &pool else { return (make(), true) };
         let cell = pool
@@ -2865,18 +2863,19 @@ pub fn finish(
             refs.clone(),
             bodies.clone(),
             fence.clone(),
-            opts.cosmetic_threads,
+            (opts.cosmetic_threads, opts.meshes),
         );
         let load = match cache.parts.get(&ck) {
             Some(l) => l.clone(),
             None => {
                 let parent = std::path::Path::new(file).parent().map(|p| p.to_path_buf());
-                let l = Arc::new(load_part(
+                let l = Arc::new(load_part_with(
                     &text,
                     parent,
                     fence.clone(),
                     &refs,
                     &bodies,
+                    opts.meshes,
                     opts.cosmetic_threads,
                 ));
                 cache.parts.insert(ck, l.clone());
