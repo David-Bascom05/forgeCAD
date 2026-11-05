@@ -846,3 +846,61 @@ fn an_unevenly_heated_sheet_forms_as_measured() {
     }
     assert_eq!(row.len(), 4);
 }
+
+/// A male block standing on the trim plane, `a` square, `h` tall, its vertical edges rounded `rf`.
+fn male_block(a: f64, h: f64, rf: f64) -> Body {
+    let p = Profile {
+        plane: Frame::WORLD,
+        loops: vec![Profile::rounded_rectangle(
+            Point2::new(-a / 2.0, -a / 2.0),
+            a,
+            a,
+            rf,
+            0,
+        )],
+    };
+    forge_ops::extrude(&p, h, 5).unwrap()
+}
+
+/// Webbing (stage 2g): a tall male block webs at its corners (Formech's rule: a male part over
+/// about as tall as it is wide), a low one does not. Squeezed area and folds for each: 15 mm
+/// tall, 72 triangles squeezed (144 mm2), no fold; 90 mm, 187 (374 mm2), 94 folds.
+#[test]
+fn a_tall_male_block_webs_and_a_low_one_does_not() {
+    let mut found = vec![];
+    for h in [15.0, 90.0] {
+        let shape = male_block(80.0, h, 5.0);
+        let spec = Spec {
+            tool: Tool::Male,
+            pull: UnitVec3::Z,
+            t: 1.5,
+            trim: None,
+            flange: 30.0,
+            shrink: 0.0,
+            base: 10.0,
+            margin: 10.0,
+            vent: None,
+            vents: None,
+            vent_pitch: 25.0,
+            sheet: None,
+        };
+        let f = analyse(&shape, &spec).expect("analyses");
+        let law = placeholder().material("HIPS").cloned().unwrap().law_at(160.0);
+        let pr = Process {
+            law: law.law,
+            resolution: 80,
+            ..Process::default()
+        };
+        let st = stretch(&f, &spec, &pr);
+        let w = crate::surface::webbing(&st, &f.frame, spec.t, 0.05);
+        eprintln!(
+            "WEB block {h} mm tall: {} squeezed triangles, {:.0} mm2 of the flat sheet, {} folds",
+            w.squeezed.len(),
+            w.squeezed_area,
+            w.folds.len()
+        );
+        found.push(w);
+    }
+    assert!(found[1].squeezed_area > found[0].squeezed_area);
+    assert!(found[0].folds.is_empty() && !found[1].folds.is_empty());
+}

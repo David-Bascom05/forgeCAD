@@ -240,3 +240,67 @@ mod tests {
         }
     }
 }
+
+/// Where the sheet webs (stage 2g): the triangles squeezed across (their lesser stretch under the
+/// width uniaxial tension would leave, by `slack`: gathered material, the start of a web), their
+/// area on the flat sheet, and the points where the sheet folds onto itself (two points within
+/// the sheet's thickness that were more than three apart on the flat sheet).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Webbing {
+    pub squeezed: Vec<usize>,
+    pub squeezed_area: f64,
+    pub folds: Vec<Point3>,
+}
+
+pub fn webbing(st: &Stretch, frame: &Frame, t: f64, slack: f64) -> Webbing {
+    let Some(x0) = flat(st, frame) else {
+        return Webbing::default();
+    };
+    let sv = stretches(st, frame);
+    let mut w = Webbing::default();
+    for (k, tri) in st.tris.iter().enumerate() {
+        if sv.l2[k] < (1.0 - slack) / sv.l1[k].sqrt() {
+            w.squeezed.push(k);
+            let [a, b, c] = tri.map(|i| x0[i as usize]);
+            w.squeezed_area += 0.5 * (b - a).cross(c - a).length();
+        }
+    }
+    // the sheet on itself: a hash grid of cells t across over the formed nodes
+    let key = |p: Point3| {
+        (
+            (p.x / t).floor() as i64,
+            (p.y / t).floor() as i64,
+            (p.z / t).floor() as i64,
+        )
+    };
+    let mut cells: std::collections::HashMap<(i64, i64, i64), Vec<usize>> = Default::default();
+    for (k, p) in st.nodes.iter().enumerate() {
+        cells.entry(key(*p)).or_default().push(k);
+    }
+    let mut seen = vec![false; st.nodes.len()];
+    for (k, p) in st.nodes.iter().enumerate() {
+        if seen[k] {
+            continue;
+        }
+        let (x, y, z) = key(*p);
+        let mut hit = None;
+        'near: for dx in -1..=1 {
+            for dy in -1..=1 {
+                for dz in -1..=1 {
+                    for &q in cells.get(&(x + dx, y + dy, z + dz)).into_iter().flatten() {
+                        if (st.nodes[q] - *p).length() < t && (x0[q] - x0[k]).length() > 3.0 * t {
+                            hit = Some(q);
+                            break 'near;
+                        }
+                    }
+                }
+            }
+        }
+        if let Some(q) = hit {
+            seen[k] = true;
+            seen[q] = true;
+            w.folds.push(*p);
+        }
+    }
+    w
+}

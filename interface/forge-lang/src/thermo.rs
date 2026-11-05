@@ -294,6 +294,25 @@ impl ThermoOut {
                     ("max_anisotropy", uneven.into()),
                 ]),
             ));
+            // where it webs: squeezed across (gathered), and folded onto itself
+            let web = ft::surface::webbing(w, &self.formed.frame, self.t, 0.05);
+            f.push((
+                "webbing",
+                Json::obj(vec![
+                    ("squeezed_mm2", web.squeezed_area.into()),
+                    ("folds", web.folds.len().into()),
+                    (
+                        "at",
+                        Json::Arr(
+                            web.folds
+                                .iter()
+                                .take(20)
+                                .map(|p| Json::Arr(vec![p.x.into(), p.y.into(), p.z.into()]))
+                                .collect(),
+                        ),
+                    ),
+                ]),
+            ));
         }
         // the part's shrink after forming: the vendor's figure, and the band free contraction
         // from where it set gives (amorphous sheets with a glass transition and demould on record)

@@ -819,7 +819,9 @@ thermoform(SHAPE, t: T, material: "ABS" | MATERIAL, from: "outer"|"wall"|"inner"
   scale; and `band`, the shrink free contraction gives from where the part set, between its
   demould temperature and its glass transition, to 23 C: [low, high], for sheets with those on
   record, null otherwise), `surface` (over the sheet on the mould: the largest principal stretch,
-  the largest areal stretch, the most uneven l1/l2), `blank` (W, L, t, mass) and
+  the largest areal stretch, the most uneven l1/l2), `webbing` (the flat sheet's area squeezed
+  across, gathered where a web starts, mm2; and the folds, points where the sheet lies on itself
+  within its thickness, the first 20 of them), `blank` (W, L, t, mass) and
   `field`, how many points the wall is known at on the sheet on the mould inside the trim; `fg run F
   --json --field OUT.csv` writes them (x, y, z on the mould, wall, mm) and names the file, `--field
   inline` puts them in the JSON. `--print-art ART.ppm --print OUT.ppm` writes each thermoform's
