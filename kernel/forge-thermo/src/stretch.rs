@@ -327,21 +327,13 @@ impl Pool {
         Pool { shared, workers }
     }
 
-    /// Each triangle's energy and gradient at `x`, in order (None: one is turned inside out),
-    /// then each hinge's.
-    fn each(
-        &self,
-        x: &[Vec3],
-        f: &mut dyn FnMut(usize, (f64, Vec3, Vec3)),
-        fh: &mut dyn FnMut(&Hinge, &Bend),
-    ) -> Option<()> {
+    /// Each triangle's energy and gradient at `x`, in order (None: one is turned inside out);
+    /// the hinges' are made in the same round, for `bends`.
+    fn each(&self, x: &[Vec3], f: &mut dyn FnMut(usize, (f64, Vec3, Vec3))) -> Option<()> {
         let s = &self.shared;
         if self.workers.is_empty() {
             for (k, t) in s.tris.iter().enumerate() {
                 f(k, element(&s.law, t, x, s.wrinkle)?);
-            }
-            for h in &s.hinges {
-                fh(h, &bend(h, x));
             }
             return Some(());
         }
@@ -360,6 +352,18 @@ impl Pool {
                 k += 1;
             }
         }
+        Some(())
+    }
+
+    /// Each hinge's energy and gradient at the `x` of the last `each`, in order.
+    fn bends(&self, x: &[Vec3], fh: &mut dyn FnMut(&Hinge, &Bend)) {
+        let s = &self.shared;
+        if self.workers.is_empty() {
+            for h in &s.hinges {
+                fh(h, &bend(h, x));
+            }
+            return;
+        }
         let mut k = 0;
         for b in &s.bent {
             for e in b.lock().unwrap_or_else(|e| e.into_inner()).iter() {
@@ -367,7 +371,6 @@ impl Pool {
                 k += 1;
             }
         }
-        Some(())
     }
 }
 
@@ -511,41 +514,32 @@ impl Sheet {
         g.iter_mut().for_each(|v| *v = Vec3::ZERO);
         let mut g = Some(g);
         let mut e = 0.0;
-        let mut bending = 0.0;
-        let mut gh: Vec<(usize, Vec3)> = vec![];
-        self.pool.each(
-            x,
-            &mut |k, (w, ga, gb)| {
-                let v = &self.idx[k];
-                e += w;
+        self.pool.each(x, &mut |k, (w, ga, gb)| {
+            let v = &self.idx[k];
+            e += w;
+            if let Some(g) = g.as_deref_mut() {
+                let t = &self.tris[k];
+                g[t.v[1]] += ga;
+                g[t.v[2]] += gb;
+                g[t.v[0]] = g[t.v[0]] - ga - gb;
+            }
+            if p != 0.0 {
+                let (a, b, c) = (x[v[0]], x[v[1]], x[v[2]]);
+                e += p / 6.0 * a.dot(b.cross(c));
                 if let Some(g) = g.as_deref_mut() {
-                    let t = &self.tris[k];
-                    g[t.v[1]] += ga;
-                    g[t.v[2]] += gb;
-                    g[t.v[0]] = g[t.v[0]] - ga - gb;
+                    g[v[0]] += b.cross(c) * (p / 6.0);
+                    g[v[1]] += c.cross(a) * (p / 6.0);
+                    g[v[2]] += a.cross(b) * (p / 6.0);
                 }
-                if p != 0.0 {
-                    let (a, b, c) = (x[v[0]], x[v[1]], x[v[2]]);
-                    e += p / 6.0 * a.dot(b.cross(c));
-                    if let Some(g) = g.as_deref_mut() {
-                        g[v[0]] += b.cross(c) * (p / 6.0);
-                        g[v[1]] += c.cross(a) * (p / 6.0);
-                        g[v[2]] += a.cross(b) * (p / 6.0);
-                    }
-                }
-            },
-            &mut |h, (w, d)| {
-                bending += w;
-                for (i, v) in h.v.iter().zip(d) {
-                    gh.push((*i, *v));
-                }
-            },
-        )?;
-        e += bending;
+            }
+        })?;
         let g = g.expect("a gradient");
-        for (i, v) in gh {
-            g[i] += v;
-        }
+        self.pool.bends(x, &mut |h, (w, d)| {
+            e += w;
+            for (i, v) in h.v.iter().zip(d) {
+                g[*i] += *v;
+            }
+        });
         Some(e)
     }
 }
