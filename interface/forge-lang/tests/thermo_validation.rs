@@ -3,7 +3,8 @@
 //! data stay outside the repo (THERMO_VALIDATION_DATA, default ~/projects/forgecad-gate/thermo-fea/
 //! validation); without them the test says so and passes. Long: run with
 //! `cargo test --release -p forge-lang --test thermo_validation -- --ignored`.
-//! THERMO_CONFIGS (default "height,height_fine"), THERMO_SCOREBOARD_LABEL (default "run") and
+//! THERMO_CONFIGS (default "height,height_fine"; OPTION[_fine][_nh][:mu]), THERMO_CASES (id
+//! prefixes, default all), THERMO_SCOREBOARD_LABEL (default "run") and
 //! THERMO_SCOREBOARD_OUT (default the data folder's ../scoreboard) steer it. Writes LABEL.csv,
 //! LABEL.json, LABEL.md and LABEL/profiles/CASE_CONFIG.csv there.
 use forge_lang::thermo::ThermoOut;
@@ -103,14 +104,17 @@ fn table(path: &Path) -> Vec<BTreeMap<String, String>> {
 
 /// What the model is run with, past the language's own run: the solver's options.
 /// `height` is the language's default (the height field, 56 nodes along the window); `_fine`
-/// doubles the nodes. Options this solver lacks return false (the row says "n/a").
+/// doubles the nodes; `_nh` swaps the law for a neo-Hookean one of the same small-strain shear
+/// (how much the law's shape matters). Options this solver lacks return false (the row: "n/a").
 fn configure(p: &mut Process, cfg: &str, _mu: f64) -> bool {
-    let (base, fine) = match cfg.strip_suffix("_fine") {
-        Some(b) => (b, true),
-        None => (cfg, false),
-    };
-    if fine {
+    let mut base = cfg;
+    if let Some(b) = base.strip_suffix("_nh") {
+        p.law = forge_thermo::Law::neo_hookean(p.law.shear());
+        base = b;
+    }
+    if let Some(b) = base.strip_suffix("_fine") {
         p.resolution *= 2;
+        base = b;
     }
     base == "height"
 }
@@ -582,7 +586,13 @@ fn scoreboard() {
         .collect();
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../examples/thermoform/validation");
     let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let list = cases(&std::fs::read_to_string(dir.join("cases.toml")).expect("cases.toml"));
+    let only: Vec<String> = std::env::var("THERMO_CASES")
+        .map(|v| v.split(',').map(|x| x.trim().to_string()).collect())
+        .unwrap_or_default();
+    let list: Vec<Case> = cases(&std::fs::read_to_string(dir.join("cases.toml")).expect("cases.toml"))
+        .into_iter()
+        .filter(|c| only.is_empty() || only.iter().any(|o| s(c, "id").starts_with(o.as_str())))
+        .collect();
     std::fs::create_dir_all(out.join(&label).join("profiles")).expect("scoreboard folder");
 
     let mut models: BTreeMap<String, Model> = BTreeMap::new();
@@ -620,11 +630,15 @@ fn scoreboard() {
                 None => data.join(d),
             };
             let th: Option<&ThermoOut> = m.run.thermos.first().filter(|_| m.run.errors.is_empty());
-            let mu = n(c, "mu", 0.3);
+            // `slide:0.05` overrides the case's friction coefficient
+            let (opt, mu) = match cfg.split_once(':') {
+                Some((o, m)) => (o, m.parse().expect("cfg:mu")),
+                None => (cfg.as_str(), n(c, "mu", 0.3)),
+            };
             let (sc, st_label) = match th.and_then(|t| Some((t, t.process.clone()?))) {
                 None => (None, "build error"),
                 Some((t, mut p)) => {
-                    if !configure(&mut p, cfg, mu) {
+                    if !configure(&mut p, opt, mu) {
                         (None, "n/a")
                     } else {
                         let fresh;

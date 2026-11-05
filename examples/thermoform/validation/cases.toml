@@ -9,6 +9,7 @@
 
 [[case]]
 id = "duarte2022_cone"
+cause = "none dominant (uniform T, deep cone: sticking holds)"
 model = "duarte2022_cone.fg"
 data = "repo:kernel/forge-thermo/data/benchmarks/duarte2022_cone.csv"
 mode = "arc"
@@ -21,6 +22,7 @@ how = "arc length from the bottom centre along a radial cut (grid row through th
 
 [[case]]
 id = "erdogan2014_cylinder"
+cause = "draw-in: measured holds +33% material; floor 2x thicker than model (not recovered by flange slide even at mu 0)"
 model = "erdogan2014_cylinder.fg"
 data = "repo:kernel/forge-thermo/data/benchmarks/erdogan2014_cylinder.csv"
 mode = "arc"
@@ -33,6 +35,7 @@ how = "arc length from base centre, radial cut"
 
 [[case]]
 id = "erdogan2014_cone"
+cause = "geometry/clamp: base diameter assumed, measured clamp-ring dip at s 140-150; no draw-in excess"
 model = "erdogan2014_cone.fg"
 data = "s2_erdogan2014_cone_thickness.csv"
 mode = "arc"
@@ -45,6 +48,7 @@ how = "arc length from base centre, radial cut"
 
 [[case]]
 id = "erdogan2014_box_axis"
+cause = "draw-in: floor 58% t0 measured vs 39% model (same lab/180 C as the cylinder)"
 model = "erdogan2014_box.fg"
 data = "repo:kernel/forge-thermo/data/benchmarks/erdogan2014_box_axis.csv"
 mode = "arc"
@@ -57,6 +61,7 @@ how = "arc length from floor centre along the x axis"
 
 [[case]]
 id = "erdogan2014_box_diagonal"
+cause = "draw-in at the floor; corner min close (0.19 vs 0.28 mm)"
 model = "erdogan2014_box.fg"
 data = "repo:kernel/forge-thermo/data/benchmarks/erdogan2014_box_diagonal.csv"
 mode = "arc"
@@ -69,6 +74,7 @@ how = "arc length from floor centre along the diagonal"
 
 [[case]]
 id = "karabeyoglu2017_cone"
+cause = "draw-in at the rim: measured > t0 there, +29% material"
 model = "karabeyoglu2017_cone.fg"
 data = "s2_karabeyoglu2017_ps_cone_cyl_thickness.csv"
 filter = "part=cone"
@@ -82,6 +88,7 @@ how = "arc length from base centre, radial cut"
 
 [[case]]
 id = "karabeyoglu2017_cylinder"
+cause = "draw-in at the rim: floor matches, wall/rim far too thin, +44% material"
 model = "karabeyoglu2017_cylinder.fg"
 data = "s2_karabeyoglu2017_ps_cone_cyl_thickness.csv"
 filter = "part=cylinder"
@@ -95,6 +102,7 @@ how = "arc length from base centre, radial cut"
 
 [[case]]
 id = "eksi2017_hemisphere"
+cause = "draw-in + temperature non-uniformity (120-155 C); 5 mm gauge (no bending)"
 model = "eksi2017_hemisphere.fg"
 data = "s2_eksi2017_abs5mm_thickness.csv"
 filter = "part=hemisphere"
@@ -109,6 +117,7 @@ how = "point index mapped to arc length from the pole (1 -> 0, 20 -> rim)"
 
 [[case]]
 id = "eksi2017_cone"
+cause = "draw-in + temperature non-uniformity; base diameter derived from point labels"
 model = "eksi2017_cone.fg"
 data = "s2_eksi2017_abs5mm_thickness.csv"
 filter = "part=cone"
@@ -123,6 +132,7 @@ how = "point index mapped to arc length (1 centre, 10 base edge, 22 rim)"
 
 [[case]]
 id = "eksi2017_cylinder"
+cause = "draw-in + temperature non-uniformity; dimensions assumed"
 model = "eksi2017_cylinder.fg"
 data = "s2_eksi2017_abs5mm_thickness.csv"
 filter = "part=cylinder"
@@ -137,6 +147,7 @@ how = "point index mapped to arc length (1 centre, 10 base edge ASSUMED, 20 rim)
 
 [[case]]
 id = "atmani2020_plugonly_dry130"
+cause = "missing plug model: drape over a fixed male stand-in, square window, sticking (no slip on the plug)"
 model = "atmani2020_plugonly.fg"
 data = "s2_atmani2020_plugonly_thickness.csv"
 mode = "arc_edge"
@@ -150,6 +161,7 @@ how = "arc length from the clamp (data folded about its midpoint), x axis"
 
 [[case]]
 id = "atmani2020_plugonly_lub130"
+cause = "missing plug model: drape over a fixed male stand-in, square window, sticking (no slip on the plug)"
 model = "atmani2020_plugonly.fg"
 data = "s2_atmani2020_plugonly_thickness.csv"
 mode = "arc_edge"
@@ -163,6 +175,7 @@ how = "arc length from the clamp (data folded about its midpoint), x axis"
 
 [[case]]
 id = "atmani2020_plugonly_lub120"
+cause = "missing plug model: drape over a fixed male stand-in, square window, sticking (no slip on the plug)"
 model = "atmani2020_plugonly.fg"
 data = "s2_atmani2020_plugonly_thickness.csv"
 mode = "arc_edge"
@@ -176,6 +189,7 @@ how = "arc length from the clamp (data folded about its midpoint), x axis"
 
 [[case]]
 id = "atmani2020_cup"
+cause = "missing plug model (89% of the depth drawn by the plug); 0.5 MPa blows through on the coarse mesh"
 model = "atmani2020_cup.fg"
 data = "s2_atmani2020_cup_thickness.csv"
 mode = "arc"
@@ -189,6 +203,7 @@ how = "arc length from bottom centre (data folded about s = 100)"
 
 [[case]]
 id = "varedi2024_hemisphere"
+cause = "sticking vs slip on the 80 C mould + temperature non-uniformity (140/131 C); pre-contact sag"
 model = "varedi2024_hemisphere.fg"
 data = "s3_varedi2024_thickness_fig13.csv"
 filter = "method=ultrasonic"
@@ -202,6 +217,7 @@ how = "horizontal distance from the axis along y"
 
 [[case]]
 id = "buntinx2014_tray25"
+cause = "mean only (law-independent): passes; tray75 blows through at 0.4 MPa on the fine mesh"
 model = "buntinx2014_tray25.fg"
 data = "s2_buntinx2014_trays_mean_thickness.csv"
 filter = "tray=25"
@@ -215,6 +231,7 @@ how = "mean wall over the part / t0, per table row"
 
 [[case]]
 id = "buntinx2014_tray50"
+cause = "mean only (law-independent): passes; tray75 blows through at 0.4 MPa on the fine mesh"
 model = "buntinx2014_tray50.fg"
 data = "s2_buntinx2014_trays_mean_thickness.csv"
 filter = "tray=50"
@@ -228,6 +245,7 @@ how = "mean wall over the part / t0, per table row"
 
 [[case]]
 id = "buntinx2014_tray50R5"
+cause = "mean only (law-independent): passes; tray75 blows through at 0.4 MPa on the fine mesh"
 model = "buntinx2014_tray50R5.fg"
 data = "s2_buntinx2014_trays_mean_thickness.csv"
 filter = "tray=50R5"
@@ -241,6 +259,7 @@ how = "mean wall over the part / t0, per table row"
 
 [[case]]
 id = "buntinx2014_tray75"
+cause = "mean only (law-independent): passes; tray75 blows through at 0.4 MPa on the fine mesh"
 model = "buntinx2014_tray75.fg"
 data = "s2_buntinx2014_trays_mean_thickness.csv"
 filter = "tray=75"
@@ -254,6 +273,7 @@ how = "mean wall over the part / t0, per table row"
 
 [[case]]
 id = "erchiqui2003_bubble"
+cause = "material law/rate: last step past the neo-Hookean limit point (dynamic test)"
 model = "erchiqui2003_bubble.fg"
 data = "s1_erchiqui2003_abs_bubble.csv"
 mode = "bubble"
@@ -268,6 +288,7 @@ how = "pole height vs pressure at the 10 load steps"
 
 [[case]]
 id = "erchiqui2020_bubble"
+cause = "material law/rate: limit point at peak pressure; initial sag offset in the data"
 model = "erchiqui2020_bubble.fg"
 data = "s1_erchiqui2020_hdpe_pmsq_bubble.csv"
 mode = "bubble"
@@ -282,6 +303,7 @@ how = "pole height vs pressure at the 10 load steps"
 
 [[case]]
 id = "ref_inflation_neohookean"
+cause = "mesh convergence: first order (2.0% -> 1.2% of a at 2x); clamp staircase"
 model = "ref_inflation_neohookean.fg"
 data = "s1_ref_inflation_neohookean.csv"
 mode = "ref_inflation"
@@ -296,6 +318,7 @@ how = "H and t_pole/t0 vs P at the 10 load steps"
 
 [[case]]
 id = "ref_inflation_mooney_rivlin"
+cause = "mesh convergence: first order (2.0% -> 1.2% of a at 2x); clamp staircase"
 model = "ref_inflation_mooney_rivlin.fg"
 data = "s1_ref_inflation_mooney_rivlin_c2_c1_0p1.csv"
 mode = "ref_inflation"
@@ -310,6 +333,7 @@ how = "H and t_pole/t0 vs P at the 10 load steps"
 
 [[case]]
 id = "ref_inflation_ogden_abs"
+cause = "mesh convergence: first order (2.0% -> 1.2% of a at 2x); clamp staircase"
 model = "ref_inflation_ogden_abs.fg"
 data = "s1_ref_inflation_ogden_abs_erchiqui_kandil.csv"
 mode = "ref_inflation"
@@ -324,6 +348,7 @@ how = "H and t_pole/t0 vs P at the 10 load steps"
 
 [[case]]
 id = "ref_inflation_ogden_hips"
+cause = "mesh convergence: first order (2.0% -> 1.2% of a at 2x); clamp staircase"
 model = "ref_inflation_ogden_hips.fg"
 data = "s1_ref_inflation_ogden_hips_erchiqui_kandil.csv"
 mode = "ref_inflation"
@@ -338,6 +363,7 @@ how = "H and t_pole/t0 vs P at the 10 load steps"
 
 [[case]]
 id = "ref_corner_fill"
+cause = "load-step convergence: sticking is path dependent; 10 linear steps + creep raise; worse at 2x mesh"
 model = "ref_corner_fill.fg"
 data = "s1_ref_corner_fill.csv"
 mode = "corner"
