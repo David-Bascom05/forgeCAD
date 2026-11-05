@@ -272,6 +272,8 @@ pub enum FgAct {
     EditSketch(String),
     /// A feature's tool dialog, filled from its statement, to edit it.
     EditFeature(String),
+    /// Move a component to its own file, bring one in, or make bodies a component.
+    Refactor(forge_lang::refactor::Refactor),
 }
 
 /// A sheet metal part: its id, its bends, and why it has no flat pattern if it hasn't.

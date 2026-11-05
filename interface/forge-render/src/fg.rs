@@ -1511,6 +1511,28 @@ impl Session {
         got
     }
 
+    /// A refactor between this file and others (Make / Extract / Inline Component): all or
+    /// nothing, the files it makes written beside this one, one undo step for this file's text.
+    pub fn refactor(&mut self, r: &forge_lang::refactor::Refactor) -> Result<Vec<String>, Error> {
+        let dir = self
+            .path
+            .as_deref()
+            .and_then(|f| std::fs::canonicalize(f).ok())
+            .and_then(|f| f.parent().map(|d| d.to_path_buf()))
+            .unwrap_or_default();
+        let read = |f: &str| std::fs::read_to_string(dir.join(f)).ok();
+        let w = forge_lang::refactor::apply_checked(&self.src, r, &read)?;
+        for (f, t) in &w.files {
+            std::fs::write(dir.join(f), t).map_err(|e| Error::BadValue {
+                span: forge_lang::syntax::Span::default(),
+                what: "a file written",
+                value: e.raw_os_error().unwrap_or(0) as f64,
+            })?;
+        }
+        self.set_text(w.doc);
+        Ok(w.files.into_iter().map(|f| f.0).collect())
+    }
+
     /// Applies a typed op through forge-lang: refused, with its typed error, if the result
     /// wouldn't check; else the new text builds.
     pub fn apply(&mut self, op: Op) -> Result<Option<Reach>, Error> {

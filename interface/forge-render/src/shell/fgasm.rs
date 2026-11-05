@@ -1552,6 +1552,8 @@ enum MenuAct {
     InPlace(String),
     /// A placed call of a component of this file: its params (Edit Occurrence).
     Occurrence(String),
+    /// Move to Own File, Bring Into This File, Make Component.
+    Refactor(forge_lang::refactor::Refactor),
 }
 
 const TOOLBAR_H: f32 = 34.0;
@@ -1935,9 +1937,61 @@ impl Shell {
                                 .insts
                                 .iter()
                                 .any(|i| i.path == n.key && i.file.starts_with('#') && i.file.contains('('));
-                            if n.kind == NodeKind::Occ && call && item(ui, "Edit Occurrence…", "edit-feature") {
+                            if n.kind == NodeKind::Occ && call && item(ui, "Edit Occurrence…", "edit-feature")
+                            {
                                 menu = Some(MenuAct::Occurrence(n.key.clone()));
                                 ui.close();
+                            }
+                            // between this file and others: a component's own file, or back
+                            if n.kind == NodeKind::Occ
+                                && let Some(i) =
+                                    a.insts.iter().find(|i| i.path == n.key && !i.path.contains('.'))
+                            {
+                                use forge_lang::refactor::Refactor;
+                                let own = i.file.strip_prefix('#');
+                                match own {
+                                    Some(c) if c.contains('(') && !c.contains('/') => {
+                                        let def = c.split('(').next().unwrap_or(c).to_string();
+                                        if item(ui, "Move to Own File", "subasm") {
+                                            menu = Some(MenuAct::Refactor(Refactor::ExtractComponent {
+                                                file: format!("{def}.fg"),
+                                                component: def,
+                                            }));
+                                            ui.close();
+                                        }
+                                    }
+                                    Some(b)
+                                        if !b.contains('(')
+                                            && !b.contains('/')
+                                            && i.file != forge_lang::asm::ROOT =>
+                                    {
+                                        let chain = a
+                                            .body_chains
+                                            .iter()
+                                            .find(|c| c.0 == b)
+                                            .map_or_else(|| vec![b.to_string()], |c| c.1.clone());
+                                        if item(ui, "Make Component", "part") {
+                                            menu = Some(MenuAct::Refactor(Refactor::MakeComponent {
+                                                statements: chain,
+                                                name: format!("{b}_part"),
+                                            }));
+                                            ui.close();
+                                        }
+                                    }
+                                    None if i.file.ends_with(".fg") && !i.file.contains('|') => {
+                                        let stem = std::path::Path::new(&i.file)
+                                            .file_stem()
+                                            .map_or_else(String::new, |s| s.to_string_lossy().to_string());
+                                        if item(ui, "Bring Into This File", "folder") {
+                                            menu = Some(MenuAct::Refactor(Refactor::InlineComponent {
+                                                file: i.file.clone(),
+                                                name: stem,
+                                            }));
+                                            ui.close();
+                                        }
+                                    }
+                                    _ => {}
+                                }
                             }
                             // what the file says of a top-level component
                             if let Some(i) = a.insts.iter().find(|i| i.path == n.key && !i.path.contains('.'))
@@ -2130,6 +2184,7 @@ impl Shell {
             Some(MenuAct::Drive(l)) => a.drive = Some(l),
             Some(MenuAct::Ops(ops)) => pending.push(FgAct::AsmOps(ops)),
             Some(MenuAct::Occurrence(id)) => pending.push(FgAct::EditFeature(id)),
+            Some(MenuAct::Refactor(r)) => pending.push(FgAct::Refactor(r)),
             Some(MenuAct::Again(id)) => {
                 let file = a
                     .insts
@@ -3213,7 +3268,10 @@ mod tests {
         // the document's other features are no body's and no component's: the root has none here
         // the file's own features beside the components, its sketches too
         assert!(p.tree.find("#doc>f:plan").is_some());
-        assert!(p.tree.find("#doc>f:peg").is_none(), "a component is no feature row of its own here");
+        assert!(
+            p.tree.find("#doc>f:peg").is_none(),
+            "a component is no feature row of its own here"
+        );
         p.edit_in_place("#doc>f:board").unwrap();
         assert_eq!(p.host_edit.take().as_deref(), Some("board"));
         p.edit_in_place("p2>f:shank").unwrap();

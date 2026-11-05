@@ -3516,6 +3516,14 @@ impl Gui {
                 | crate::shell::fg::FgAct::AsmSnaps(_)) => self.asm_act(a),
                 crate::shell::fg::FgAct::EditSketch(id) => self.fg_edit_sketch(&id),
                 crate::shell::fg::FgAct::EditFeature(id) => self.fg_edit_feature(&id),
+                crate::shell::fg::FgAct::Refactor(r) => {
+                    let Some(s) = &mut self.fg else { continue };
+                    self.shell.status = match s.refactor(&r) {
+                        Ok(files) if files.is_empty() => "Done: one undo step".into(),
+                        Ok(files) => format!("Wrote {}", files.join(", ")),
+                        Err(e) => format!("{}: {}", e.kind(), e.text()),
+                    };
+                }
             }
         }
     }
