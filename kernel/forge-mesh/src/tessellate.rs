@@ -1457,7 +1457,7 @@ fn strays_from(s: &Surface, x: forge_math::Point3, y: forge_math::Point3, uv: Po
     if y.distance(x) <= c {
         return false;
     }
-    let (mut uv, mut d) = (uv, s.deriv(uv));
+    let (mut uv, mut d) = (uv, s.deriv1(uv));
     if let Some(n) = d.du.cross(d.dv).normalize()
         && (x - d.p).dot(n.get()).abs() > c
     {
@@ -1473,7 +1473,7 @@ fn strays_from(s: &Surface, x: forge_math::Point3, y: forge_math::Point3, uv: Po
         }
         let (a, b) = (d.du.dot(r), d.dv.dot(r));
         let next = Point2::new(uv.x + (g * a - f * b) / det, uv.y + (e * b - f * a) / det);
-        let dn = s.deriv(next);
+        let dn = s.deriv1(next);
         let dist = dn.p.distance(x);
         if dist.is_nan() || dist >= best {
             break;

@@ -127,7 +127,7 @@ impl Offset {
 
     /// The point alone (`first`'s).
     fn place(&self, uv: Point2) -> Point3 {
-        let b = self.base.deriv(uv);
+        let b = self.base.deriv1(uv);
         let n = b.du.cross(b.dv);
         let len = n.length();
         if len == 0.0 {
@@ -178,6 +178,22 @@ impl Procedural for Offset {
             duu: (u1 - u0) / (2.0 * hu),
             duv: (v1 - v0) / (2.0 * hu),
             dvv: (v3 - v2) / (2.0 * hv),
+        }
+    }
+    fn column_d1(&self, u: f64, vs: &[f64], out: &mut Vec<SurfDeriv>) {
+        out.extend(vs.iter().map(|&v| self.deriv1(Point2::new(u, v))));
+    }
+    /// `first` alone: `deriv`'s point and first derivatives without the four more it
+    /// differences for the second.
+    fn deriv1(&self, uv: Point2) -> SurfDeriv {
+        let (p, du, dv) = self.first(uv);
+        SurfDeriv {
+            p,
+            du,
+            dv,
+            duu: Vec3::ZERO,
+            duv: Vec3::ZERO,
+            dvv: Vec3::ZERO,
         }
     }
     fn normal(&self, uv: Point2) -> Option<UnitVec3> {
@@ -1528,6 +1544,13 @@ impl Procedural for Pipe {
     fn column_d1(&self, u: f64, vs: &[f64], out: &mut Vec<SurfDeriv>) {
         self.derivs1(u, vs, out)
     }
+    /// `derivs1`: the same section `derivs` takes its point and first derivatives from, without
+    /// the two more it differences for d2/du2.
+    fn deriv1(&self, uv: Point2) -> SurfDeriv {
+        let mut out = Vec::with_capacity(1);
+        self.derivs1(uv.x, &[uv.y], &mut out);
+        out.pop().expect("one derivative")
+    }
     fn exact_d1(&self) -> bool {
         self.spine.exact_d1()
     }
@@ -1786,6 +1809,49 @@ mod tests {
             }
         }
         assert!(seen[0] > 0 && seen[1] > 0, "both kinds of spine: {seen:?}");
+    }
+
+    /// `deriv1` is `deriv`'s point and first derivatives bit for bit: on a pipe round a traced
+    /// spine, on its offset, and on an offset of that.
+    #[test]
+    fn deriv1_is_derivs_first_derivatives_bit_for_bit() {
+        let cyl = Surface::Cylinder(Cylinder {
+            frame: Frame::from_z(Point3::new(0.0, 0.0, 0.0), UnitVec3::X),
+            radius: 3.0,
+        });
+        let sph = Surface::Sphere(Sphere {
+            frame: Frame::WORLD.with_origin(Point3::new(0.0, 1.0, 0.0)),
+            radius: 8.0,
+        });
+        let wide = Box3::from_points([Point3::new(-12.0, -12.0, -12.0), Point3::new(12.0, 12.0, 12.0)]);
+        let b = Blend::new(&cyl, &sph, 1.0, 1.0, Point3::new(7.5, 3.0, 0.0), wide).unwrap();
+        assert!(matches!(&b.surface, Surface::Procedural(_)), "a pipe");
+        let once = offset(&b.surface, 0.5).expect("an offset");
+        let twice = offset(&once, 0.25).expect("an offset of it");
+        let mut checked = 0;
+        for s in [b.surface.clone(), once, twice] {
+            let Surface::Procedural(pr) = &s else {
+                panic!("procedural")
+            };
+            let d = pr.domain();
+            let (u, v) = (d.u.interval(), d.v.interval());
+            for i in 0..=12 {
+                for j in 0..=6 {
+                    let uv = Point2::new(
+                        u.lo + u.width() * i as f64 / 12.0,
+                        v.lo.max(-0.5) + (v.hi.min(1.5) - v.lo.max(-0.5)) * j as f64 / 6.0,
+                    );
+                    let (a, b) = (pr.deriv(uv), pr.deriv1(uv));
+                    let bits = |x: Vec3| [x.x.to_bits(), x.y.to_bits(), x.z.to_bits()];
+                    assert_eq!(bits(a.p.to_vec()), bits(b.p.to_vec()), "{} {uv:?}", pr.kind());
+                    assert_eq!(bits(a.du), bits(b.du), "{} {uv:?}", pr.kind());
+                    assert_eq!(bits(a.dv), bits(b.dv), "{} {uv:?}", pr.kind());
+                    assert_eq!(s.deriv1(uv).p, b.p);
+                    checked += 1;
+                }
+            }
+        }
+        assert_eq!(checked, 3 * 13 * 7);
     }
 
     #[test]

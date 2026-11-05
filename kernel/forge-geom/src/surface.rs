@@ -103,6 +103,15 @@ pub enum Surface {
 }
 
 impl Surface {
+    /// The point, du and dv of `deriv`, bit for bit, with the second derivatives perhaps left out
+    /// (a procedural surface's `deriv1`).
+    pub fn deriv1(&self, uv: Point2) -> SurfDeriv {
+        match self {
+            Surface::Procedural(p) => p.deriv1(uv),
+            _ => self.deriv(uv),
+        }
+    }
+
     /// What kind of surface this is, in a word, for a refusal to name.
     pub fn kind(&self) -> &'static str {
         match self {
@@ -165,6 +174,11 @@ pub trait Procedural: Send + Sync + std::fmt::Debug {
         "procedural"
     }
     fn deriv(&self, uv: Point2) -> SurfDeriv;
+    /// The point, du and dv of `deriv`, bit for bit, for callers that want no more; the second
+    /// derivatives may be left out (zero). By default `deriv` itself.
+    fn deriv1(&self, uv: Point2) -> SurfDeriv {
+        self.deriv(uv)
+    }
     /// This surface as a span of a loft's wall, where it is one.
     fn as_skinned(&self) -> Option<&crate::skinned::Skinned> {
         None
