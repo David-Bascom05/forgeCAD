@@ -371,9 +371,15 @@ struct Shared {
     x: RwLock<Vec<Vec3>>,
     stop: AtomicBool,
     start: Barrier,
+    mid: Barrier,
     done: Barrier,
     out: Vec<Mutex<Vec<Option<Part>>>>,
-    bent: Vec<Mutex<Vec<Bend>>>,
+    bent: Vec<RwLock<Vec<Bend>>>,
+    /// Each node's hinges and its corner in them, in hinge order; where each hinge's answer is
+    /// (its worker, its place there); each worker's nodes' sums of their hinges' gradients.
+    incident: Vec<Vec<(u32, u8)>>,
+    owner: Vec<(u32, u32)>,
+    gathered: Vec<Mutex<Vec<Vec3>>>,
 }
 
 /// A hinge's energy and what it adds to its four corners' gradient.
@@ -393,11 +399,37 @@ impl Shared {
                 .iter()
                 .map(|t| element(&self.law, t, x, self.wrinkle)),
         );
+        self.run_bends(w, x);
+    }
+
+    fn run_bends(&self, w: usize, x: &[Vec3]) {
         let n = self.bent.len();
-        let mut b = self.bent[w].lock().unwrap_or_else(|e| e.into_inner());
+        let mut b = self.bent[w].write().unwrap_or_else(|e| e.into_inner());
         b.clear();
         let h = &self.hinges[w * self.hinges.len() / n..(w + 1) * self.hinges.len() / n];
         b.extend(h.iter().map(|h| bend(h, x)));
+    }
+
+    /// Each of worker `w`'s nodes' sum of its hinges' gradients, in hinge order: the same sums
+    /// whatever the number of workers.
+    fn gather(&self, w: usize) {
+        let n = self.gathered.len();
+        let all: Vec<_> = self
+            .bent
+            .iter()
+            .map(|b| b.read().unwrap_or_else(|e| e.into_inner()))
+            .collect();
+        let mut out = self.gathered[w].lock().unwrap_or_else(|e| e.into_inner());
+        out.clear();
+        let m = self.incident.len();
+        for list in &self.incident[w * m / n..(w + 1) * m / n] {
+            let mut g = Vec3::ZERO;
+            for &(k, c) in list {
+                let (o, i) = self.owner[k as usize];
+                g += all[o as usize][i as usize].1[c as usize];
+            }
+            out.push(g);
+        }
     }
 }
 
@@ -405,8 +437,21 @@ impl Pool {
     /// Below this many triangles a call is not worth sharing out.
     const MIN: usize = 1024;
 
-    fn new(law: &Law, tris: &[Tri], wrinkle: bool, hinges: Vec<Hinge>) -> Pool {
+    fn new(law: &Law, tris: &[Tri], wrinkle: bool, nodes: usize, hinges: Vec<Hinge>) -> Pool {
         let n = forge_math::par::threads().min(tris.len() / 256).max(1);
+        let n = if n > 1 && tris.len() >= Self::MIN { n } else { 1 };
+        let mut incident: Vec<Vec<(u32, u8)>> = vec![vec![]; if hinges.is_empty() { 0 } else { nodes }];
+        for (k, h) in hinges.iter().enumerate() {
+            for (c, &v) in h.v.iter().enumerate() {
+                incident[v].push((k as u32, c as u8));
+            }
+        }
+        let owner = (0..n)
+            .flat_map(|w| {
+                let (a, b) = (w * hinges.len() / n, (w + 1) * hinges.len() / n);
+                (a..b).map(move |k| (w as u32, (k - a) as u32))
+            })
+            .collect();
         let shared = Arc::new(Shared {
             law: law.clone(),
             wrinkle,
@@ -415,11 +460,15 @@ impl Pool {
             x: RwLock::new(vec![]),
             stop: AtomicBool::new(false),
             start: Barrier::new(n),
+            mid: Barrier::new(n),
             done: Barrier::new(n),
             out: (0..n).map(|_| Mutex::new(vec![])).collect(),
-            bent: (0..n).map(|_| Mutex::new(vec![])).collect(),
+            bent: (0..n).map(|_| RwLock::new(vec![])).collect(),
+            incident,
+            owner,
+            gathered: (0..n).map(|_| Mutex::new(vec![])).collect(),
         });
-        let workers = if n > 1 && tris.len() >= Self::MIN {
+        let workers = if n > 1 {
             (1..n)
                 .map(|w| {
                     let s = shared.clone();
@@ -432,6 +481,10 @@ impl Pool {
                             let x = s.x.read().unwrap_or_else(|e| e.into_inner());
                             s.run(w, &x);
                             drop(x);
+                            if !s.hinges.is_empty() {
+                                s.mid.wait();
+                                s.gather(w);
+                            }
                             s.done.wait();
                         }
                     })
@@ -451,6 +504,10 @@ impl Pool {
             for (k, t) in s.tris.iter().enumerate() {
                 f(k, element(&s.law, t, x, s.wrinkle)?);
             }
+            if !s.hinges.is_empty() {
+                s.run_bends(0, x);
+                s.gather(0);
+            }
             return Some(());
         }
         {
@@ -460,6 +517,10 @@ impl Pool {
         }
         s.start.wait();
         s.run(0, x);
+        if !s.hinges.is_empty() {
+            s.mid.wait();
+            s.gather(0);
+        }
         s.done.wait();
         let mut k = 0;
         for o in &s.out {
@@ -471,22 +532,27 @@ impl Pool {
         Some(())
     }
 
-    /// Each hinge's energy and gradient at the `x` of the last `each`, in order.
-    fn bends(&self, x: &[Vec3], fh: &mut dyn FnMut(&Hinge, &Bend)) {
+    /// The hinges' energy at the `x` of the last `each`, summed in hinge order, and their
+    /// gradient added into `g`, each node's sum gathered in hinge order.
+    fn bends(&self, g: &mut [Vec3]) -> f64 {
         let s = &self.shared;
-        if self.workers.is_empty() {
-            for h in &s.hinges {
-                fh(h, &bend(h, x));
-            }
-            return;
+        if s.hinges.is_empty() {
+            return 0.0;
         }
-        let mut k = 0;
+        let mut e = 0.0;
         for b in &s.bent {
-            for e in b.lock().unwrap_or_else(|e| e.into_inner()).iter() {
-                fh(&s.hinges[k], e);
-                k += 1;
+            for x in b.read().unwrap_or_else(|e| e.into_inner()).iter() {
+                e += x.0;
             }
         }
+        let mut n = 0;
+        for w in &s.gathered {
+            for v in w.lock().unwrap_or_else(|e| e.into_inner()).iter() {
+                g[n] += *v;
+                n += 1;
+            }
+        }
+        e
     }
 }
 
@@ -663,13 +729,7 @@ impl Sheet {
                 }
             }
         })?;
-        let g = g.expect("a gradient");
-        self.pool.bends(x, &mut |h, (w, d)| {
-            e += w;
-            for (i, v) in h.v.iter().zip(d) {
-                g[*i] += *v;
-            }
-        });
+        e += self.pool.bends(g.expect("a gradient"));
         Some(e)
     }
 }
@@ -1084,6 +1144,7 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
             &pr.law,
             &tris,
             pr.wrinkle,
+            x.len(),
             if pr.bending {
                 hinges(&idx, &reference, pr.law.shear() * spec.t * spec.t * spec.t / 3.0)
             } else {
