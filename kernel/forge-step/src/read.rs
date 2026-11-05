@@ -1375,12 +1375,9 @@ pub(crate) fn finish(
         return Err("a solid with no faces".into());
     }
     measure_gaps(&proto, stats);
-    forge_geom::budget::begin(lim.max_evals);
+    let budget = forge_geom::budget::scoped(lim.max_evals);
     proto.split_closed_splines();
-    if let Err(why) = proto.add_seams() {
-        forge_geom::budget::end();
-        return Err(why);
-    }
+    proto.add_seams()?;
     let size = Box3::from_points(proto.verts.iter().map(|v| v.0)).diagonal();
     proto.tighten(heal_limit(uncertainty, size));
     stats.tangent_off += proto.tangent;
@@ -1389,7 +1386,7 @@ pub(crate) fn finish(
     let mut body = proto.into_body();
     record_deviations(&mut body, stats);
     let agree = measures_agree(&body);
-    forge_geom::budget::end();
+    drop(budget);
     body.unverified = agree?;
     Ok(body)
 }

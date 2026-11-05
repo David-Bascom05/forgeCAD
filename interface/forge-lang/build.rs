@@ -23,8 +23,35 @@ fn main() {
         println!("cargo:rerun-if-changed={d}");
         walk(Path::new(d), &mut files);
     }
+    // and what changes the numbers a build computes: the toolchain, the flags, the profile
+    for f in [
+        "../../rust-toolchain.toml",
+        "../../Cargo.toml",
+        "../../.cargo/config.toml",
+        "../../.cargo/config",
+    ] {
+        println!("cargo:rerun-if-changed={f}");
+        if Path::new(f).exists() {
+            files.push(f.into());
+        }
+    }
     files.sort();
     let mut h = 0xcbf29ce484222325u64;
+    for k in [
+        "PROFILE",
+        "OPT_LEVEL",
+        "DEBUG",
+        "CARGO_ENCODED_RUSTFLAGS",
+        "TARGET",
+        "RUSTC",
+    ] {
+        println!("cargo:rerun-if-env-changed={k}");
+        for b in k.bytes().chain(std::env::var(k).unwrap_or_default().into_bytes()) {
+            h = (h ^ b as u64).wrapping_mul(0x100000001b3);
+        }
+    }
+    let debug_assertions = std::env::var_os("CARGO_CFG_DEBUG_ASSERTIONS").is_some();
+    h = (h ^ debug_assertions as u64).wrapping_mul(0x100000001b3);
     for f in files {
         for b in f
             .to_string_lossy()

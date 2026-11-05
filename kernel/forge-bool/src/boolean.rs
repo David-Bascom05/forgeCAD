@@ -847,6 +847,23 @@ thread_local! {
     static ODD: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
+/// A retry flag held for as long as this lives, cleared when it goes, unwinding too: a boolean that
+/// panics leaves the next one on its thread as it found it.
+struct Held(&'static std::thread::LocalKey<std::cell::Cell<bool>>);
+
+impl Held {
+    fn set(k: &'static std::thread::LocalKey<std::cell::Cell<bool>>, on: bool) -> Held {
+        k.with(|c| c.set(on));
+        Held(k)
+    }
+}
+
+impl Drop for Held {
+    fn drop(&mut self) {
+        self.0.with(|c| c.set(false));
+    }
+}
+
 fn plan(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
     let curved = |x: &Body| {
         x.face_ids()
@@ -855,9 +872,9 @@ fn plan(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
     match plan_retried(a, b, op, scratch) {
         Err(BoolError::Internal(w)) if curved(a) || curved(b) => {
             RETRIED.with(|r| r.set(true));
-            CAREFUL.with(|c| c.set(true));
+            let careful = Held::set(&CAREFUL, true);
             let r = plan_retried(a, b, op, scratch);
-            CAREFUL.with(|c| c.set(false));
+            drop(careful);
             r.map_err(|e| match e {
                 BoolError::Internal(_) => BoolError::Internal(w),
                 e => e,
@@ -882,11 +899,12 @@ fn plan_retried(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
             RETRIED.with(|r| r.set(true));
             let crossed = matches!(*w, Lost::SplitCrossed { .. });
             for (absorb, chords) in [(crossed, !crossed), (!crossed, crossed)] {
-                forge_geom::intersect::ABSORB_HAIR_ROOTS.with(|k| k.set(absorb));
-                CHORDS.with(|c| c.set(chords));
+                let held = (
+                    Held::set(&forge_geom::intersect::ABSORB_HAIR_ROOTS, absorb),
+                    Held::set(&CHORDS, chords),
+                );
                 let r = plan_fenced(a, b, op, scratch);
-                forge_geom::intersect::ABSORB_HAIR_ROOTS.with(|k| k.set(false));
-                CHORDS.with(|c| c.set(false));
+                drop(held);
                 if !matches!(r, Err(BoolError::Internal(_))) {
                     return r;
                 }
@@ -894,9 +912,9 @@ fn plan_retried(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
             if !crossed {
                 return Err(BoolError::Internal(w));
             }
-            NO_RUN_ON.with(|c| c.set(true));
+            let held = Held::set(&NO_RUN_ON, true);
             let r = plan_fenced(a, b, op, scratch);
-            NO_RUN_ON.with(|c| c.set(false));
+            drop(held);
             r.map_err(|e| match e {
                 BoolError::Internal(_) => BoolError::Internal(w),
                 e => e,
@@ -910,9 +928,9 @@ fn plan_fenced(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
     ODD.with(|o| o.set(false));
     match plan_once(a, b, op, scratch) {
         Err(BoolError::Internal(w)) if ODD.with(|o| o.get()) => {
-            FENCES.with(|f| f.set(true));
+            let held = Held::set(&FENCES, true);
             let r = plan_once(a, b, op, scratch);
-            FENCES.with(|f| f.set(false));
+            drop(held);
             r.map_err(|e| match e {
                 BoolError::Internal(_) => BoolError::Internal(w),
                 e => e,
@@ -6311,5 +6329,28 @@ mod bent_edge_tests {
             Vec3::Y.normalize().unwrap(),
         )));
         assert!(holds_edge(&across, &e));
+    }
+}
+
+#[cfg(test)]
+mod held_tests {
+    use super::*;
+
+    #[test]
+    fn a_retry_flag_is_cleared_when_its_boolean_panics() {
+        for k in [
+            &CAREFUL,
+            &CHORDS,
+            &NO_RUN_ON,
+            &FENCES,
+            &forge_geom::intersect::ABSORB_HAIR_ROOTS,
+        ] {
+            let r = std::panic::catch_unwind(|| {
+                let _h = Held::set(k, true);
+                panic!("a boolean lost its way");
+            });
+            assert!(r.is_err());
+            assert!(!k.with(|c| c.get()));
+        }
     }
 }

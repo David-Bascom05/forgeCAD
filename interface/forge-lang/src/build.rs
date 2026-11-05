@@ -9,6 +9,7 @@ use std::any::Any;
 use std::cell::OnceCell;
 use std::collections::HashMap;
 use std::rc::Rc;
+use std::sync::Arc;
 use std::time::Instant;
 
 pub struct Stage {
@@ -101,6 +102,25 @@ pub struct Cache {
     kept: Kept,
     /// The steps of the last run's history, by position (as `stages`).
     steps: Vec<Option<Rc<Step>>>,
+    /// The kernel's switches the last run's stages were built under (`forge_model::switches`).
+    switches: String,
+}
+
+/// The same step as one built before: equal features, and a file one reads (an import's body, a
+/// text's font) the very one read then, so a file changed under its name is read again.
+fn same_step(a: &Feature, b: &Feature) -> bool {
+    fn files(f: &Feature) -> Option<(usize, usize)> {
+        match f {
+            Feature::Import(t) => Some((1, t.body.as_ref().map_or(0, |b| Arc::as_ptr(b) as usize))),
+            Feature::Text(t) => Some((2, t.font.font.as_ref().map_or(0, |b| Arc::as_ptr(b) as usize))),
+            Feature::Body(b) => match &**b {
+                forge_model::BodyFeature::In { feature, .. } => files(feature),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+    a == b && files(a) == files(b)
 }
 
 /// One step of a history: the step before it (by identity), and this one's feature as text with
@@ -112,11 +132,14 @@ pub struct Step {
     id: u64,
 }
 
+/// A kept stage: its full key, the stage, when it was last used.
+type Entry = (Rc<Step>, Rc<Stage>, u64);
+
 /// Stages by step, the least lately used dropped past `KEPT`.
 #[derive(Default)]
 struct Kept {
     /// By a hash of the key (`bucket`), each entry the full key and its stage.
-    stages: HashMap<u128, Vec<(Rc<Step>, Rc<Stage>, u64)>>,
+    stages: HashMap<u128, Vec<Entry>>,
     len: usize,
     tick: u64,
 }
@@ -140,7 +163,7 @@ fn keyed(steps: &[Option<Rc<Step>>], f: &Feature) -> Option<String> {
     if steps.last().is_some_and(|s| s.is_none()) || reads_a_file(f) || inner {
         return None;
     }
-    Some(format!("{f:?}"))
+    Some(format!("{} {f:?}", forge_model::switches()))
 }
 
 fn bucket(before: &Option<Rc<Step>>, text: &str, id: u64) -> u128 {
@@ -223,6 +246,7 @@ pub struct Builder {
     /// The steps of this run's history so far, and whether they are all keyed: not after a step
     /// that reads what its text does not hold (an imported file, a font).
     steps: Vec<Option<Rc<Step>>>,
+    switches: String,
 }
 
 impl Builder {
@@ -242,6 +266,7 @@ impl Builder {
             memo: HashMap::new(),
             remade: 0,
             steps: vec![],
+            switches: forge_model::switches(),
         }
     }
 
@@ -285,6 +310,7 @@ impl Builder {
             memo,
             kept: self.cache.kept,
             steps: self.steps,
+            switches: self.switches,
         }
     }
 
@@ -310,7 +336,12 @@ impl Builder {
             return Ok(i);
         }
         if self.reuse
-            && self.cache.features.get(i) == Some(&self.features[i])
+            && self.cache.switches == self.switches
+            && self
+                .cache
+                .features
+                .get(i)
+                .is_some_and(|f| same_step(f, &self.features[i]))
             && self.cache.ids.get(i) == Some(&id)
             && let Some(st) = self.cache.stages.get(i)
         {
@@ -376,7 +407,12 @@ impl Builder {
             return Ok(i);
         }
         if self.reuse
-            && self.cache.features.get(i) == Some(&self.features[i])
+            && self.cache.switches == self.switches
+            && self
+                .cache
+                .features
+                .get(i)
+                .is_some_and(|f| same_step(f, &self.features[i]))
             && self.cache.ids.get(i) == Some(&id)
             && let Some(st) = self.cache.stages.get(i)
         {

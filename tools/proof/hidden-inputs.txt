@@ -1,0 +1,259 @@
+# Hidden inputs of the kernel ops: every static, thread-local, env read, clock read, thread-count
+# read, pointer identity, hash-ordered collection and unspecified-precision float op in the
+# kernel crates (kernel/forge-model/tests/hidden_inputs.rs scans for them). Each is classed:
+#   keyed       in the op memo's key
+#   speed       a cache or counter whose answers are a function of its own key, or stats
+#   no-output   reviewed: does not reach an op's output (geometry, ids, verdict)
+#   must-fix N  item N of forgecad-gate/instant-load/op-memo-proof.md ("Audit"): an op's output
+#               depends on it today; remove it or key it, then reclass the line
+# Reviewed 2026-11-04 (impl-proof audit of main f730c784). Format: class  @ file|kind|line  [x count]
+speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/boolean.rs|clock|let mut clock = phases_on().then(std::time::Instant::now);  x 2
+speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/boolean.rs|clock|let now = std::time::Instant::now();
+no-output (prints only)  @ forge-bool/src/boolean.rs|env|*ON.get_or_init(|| std::env::var_os("FORGE_DEBUG").is_some())
+no-output (prints only)  @ forge-bool/src/boolean.rs|env|*ON.get_or_init(|| std::env::var_os("FORGE_PHASES").is_some())
+no-output (prints only)  @ forge-bool/src/boolean.rs|env|*ON.get_or_init(|| std::env::var_os("FORGE_SPECS").is_some())
+speed (lazy field or constant table)  @ forge-bool/src/boolean.rs|lazy|let boxes = std::cell::OnceCell::<Vec<(Box3, Vec<Box3>)>>::new();
+speed (lazy field or constant table)  @ forge-bool/src/boolean.rs|lazy|let drawn = std::cell::OnceCell::<Vec<Option<Vec<Point2>>>>::new();
+speed (lazy field or constant table)  @ forge-bool/src/boolean.rs|lazy|let ks = runs.get_or_init(|| vec![std::cell::OnceCell::new(); cycles.len()])[o]
+speed (lazy field or constant table)  @ forge-bool/src/boolean.rs|lazy|let outlines = std::cell::OnceCell::<Vec<Outline>>::new();  x 2
+speed (lazy field or constant table)  @ forge-bool/src/boolean.rs|lazy|let region_boxes = std::cell::OnceCell::<Vec<(Box3, Vec<Box3>)>>::new();
+speed (lazy field or constant table)  @ forge-bool/src/boolean.rs|lazy|let runs = std::cell::OnceCell::<Vec<std::cell::OnceCell<Vec<[f64; 4]>>>>::new();
+speed (lazy field or constant table)  @ forge-bool/src/boolean.rs|lazy|static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();  x 3
+no-output (reset at op entry, boolean.rs:539-540, 910)  @ forge-bool/src/boolean.rs|static|pub(crate) static UNDECIDED: std::cell::Cell<Option<Point3>> = const { std::cell::Cell::new(None) };
+no-output (a retry flag: set and cleared inside one boolean by boolean::Held, unwinding too; held_tests)  @ forge-bool/src/boolean.rs|static|static CAREFUL: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+no-output (a retry flag: set and cleared inside one boolean by boolean::Held, unwinding too; held_tests)  @ forge-bool/src/boolean.rs|static|static CHORDS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+no-output (a retry flag: set and cleared inside one boolean by boolean::Held, unwinding too; held_tests)  @ forge-bool/src/boolean.rs|static|static FENCES: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+no-output (a retry flag: set and cleared inside one boolean by boolean::Held, unwinding too; held_tests)  @ forge-bool/src/boolean.rs|static|static NO_RUN_ON: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+no-output (reset at op entry, boolean.rs:539-540, 910)  @ forge-bool/src/boolean.rs|static|static ODD: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+no-output (constant tables or print switches)  @ forge-bool/src/boolean.rs|static|static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();  x 3
+speed (buffers, stats)  @ forge-bool/src/boolean.rs|static|static PHASES: std::cell::RefCell<[u64; 7]> = const { std::cell::RefCell::new([0; 7]) };
+no-output (reset at op entry, boolean.rs:539-540, 910)  @ forge-bool/src/boolean.rs|static|static RETRIED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+speed (buffers, stats)  @ forge-bool/src/boolean.rs|static|static SCRATCH: std::cell::RefCell<Scratch> = std::cell::RefCell::default();
+no-output (the retry flags, Held-scoped to one boolean; SCRATCH speed; PHASES stats)  @ forge-bool/src/boolean.rs|thread_local|thread_local! {  x 3
+speed (lazy field or constant table)  @ forge-bool/src/classify.rs|lazy|boxes: std::sync::OnceLock::new(),
+speed (lazy field or constant table)  @ forge-bool/src/classify.rs|lazy|boxes: std::sync::OnceLock<Vec<Box3>>,
+speed (lazy field or constant table)  @ forge-bool/src/classify.rs|lazy|drawn: std::sync::OnceLock::new(),
+speed (lazy field or constant table)  @ forge-bool/src/classify.rs|lazy|drawn: std::sync::OnceLock<Drawn>,
+speed (lazy field or constant table)  @ forge-bool/src/classify.rs|lazy|info.drawn = std::sync::OnceLock::new();  x 2
+speed (lazy field or constant table)  @ forge-bool/src/classify.rs|lazy|info.simple = std::sync::OnceLock::new();  x 2
+speed (lazy field or constant table)  @ forge-bool/src/classify.rs|lazy|simple: std::sync::OnceLock::new(),
+speed (lazy field or constant table)  @ forge-bool/src/classify.rs|lazy|simple: std::sync::OnceLock<Option<Simple>>,
+keyed (the imprint's mode is in forge_model::switches, part of the session's step key and its prefix reuse; kept_switches)  @ forge-bool/src/imprint.rs|atomic|static MODE: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(u8::MAX);
+no-output (work index, counter or stop flag)  @ forge-bool/src/imprint.rs|atomic|static TAKEN: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+keyed (the imprint's mode is in forge_model::switches, part of the session's step key and its prefix reuse; kept_switches)  @ forge-bool/src/imprint.rs|env|let m = match std::env::var("FORGE_IMPRINT").as_deref() {
+speed (lazy field or constant table)  @ forge-bool/src/imprint.rs|lazy|static CUT: std::sync::OnceLock<Name> = std::sync::OnceLock::new();  x 2
+no-output (constant tables or print switches)  @ forge-bool/src/imprint.rs|static|static CUT: std::sync::OnceLock<Name> = std::sync::OnceLock::new();  x 2
+keyed (the imprint's mode is in forge_model::switches, part of the session's step key and its prefix reuse; kept_switches)  @ forge-bool/src/imprint.rs|static|static MODE: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(u8::MAX);
+speed (stats counter)  @ forge-bool/src/imprint.rs|static|static TAKEN: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+no-output (work index, counter or stop flag)  @ forge-bool/src/nary.rs|atomic|let next = AtomicUsize::new(0);
+no-output (work index, counter or stop flag)  @ forge-bool/src/nary.rs|atomic|static PICK: AtomicUsize = AtomicUsize::new(0);
+no-output (work index, counter or stop flag)  @ forge-bool/src/nary.rs|atomic|use std::sync::atomic::{AtomicUsize, Ordering};
+speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/nary.rs|clock|let merge_start = std::time::Instant::now();
+speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/nary.rs|clock|let mut clock = std::time::Instant::now();
+speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/nary.rs|clock|let now = std::time::Instant::now();
+speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/nary.rs|clock|let start = std::time::Instant::now();
+speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/nary.rs|clock|let t = std::time::Instant::now();
+speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/nary.rs|clock|let t0 = std::time::Instant::now();
+no-output (prints only)  @ forge-bool/src/nary.rs|env|*ON.get_or_init(|| std::env::var_os("FORGE_NARY").is_some())
+no-output (prints only)  @ forge-bool/src/nary.rs|env|*REG.get_or_init(|| std::env::var("FORGE_NARY_REG").ok().and_then(|v| v.parse().ok()))
+no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-bool/src/nary.rs|float|let r = |e: forge_math::Vec3| ((a * x.dot(e)).powi(2) + (b * y.dot(e)).powi(2)).sqrt();
+speed (lazy field or constant table)  @ forge-bool/src/nary.rs|lazy|(0..list.len()).map(|_| std::sync::OnceLock::new()).collect();  x 2
+speed (lazy field or constant table)  @ forge-bool/src/nary.rs|lazy|.map(|_| std::sync::OnceLock::new())
+speed (lazy field or constant table)  @ forge-bool/src/nary.rs|lazy|let geom: Vec<std::sync::OnceLock<(f64, Reach)>> =
+speed (lazy field or constant table)  @ forge-bool/src/nary.rs|lazy|let held: Vec<std::sync::OnceLock<Held>> =
+speed (lazy field or constant table)  @ forge-bool/src/nary.rs|lazy|let inert_at: Vec<Vec<std::sync::OnceLock<bool>>> = (0..n)
+speed (lazy field or constant table)  @ forge-bool/src/nary.rs|lazy|static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+speed (lazy field or constant table)  @ forge-bool/src/nary.rs|lazy|static REG: std::sync::OnceLock<Option<usize>> = std::sync::OnceLock::new();
+speed (lazy field or constant table)  @ forge-bool/src/nary.rs|lazy|type Geom = [std::sync::OnceLock<(f64, Reach)>];
+no-output (constant tables or print switches)  @ forge-bool/src/nary.rs|static|static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+speed (buffers, stats)  @ forge-bool/src/nary.rs|static|static PHASES: std::cell::RefCell<[u64; 9]> = const { std::cell::RefCell::new([0; 9]) };
+speed (stats counter)  @ forge-bool/src/nary.rs|static|static PICK: AtomicUsize = AtomicUsize::new(0);
+no-output (constant tables or print switches)  @ forge-bool/src/nary.rs|static|static REG: std::sync::OnceLock<Option<usize>> = std::sync::OnceLock::new();
+speed (stats counter)  @ forge-bool/src/nary.rs|thread_local|thread_local! {
+no-output (results and errors put back in index order)  @ forge-bool/src/nary.rs|threads|let parts: Vec<Vec<(usize, T)>> = std::thread::scope(|s| {
+no-output (no iteration order reaches an output; audit)  @ forge-bool/src/ssi.rs|hash-order|std::collections::HashMap<
+speed (cache answering a function of its own key)  @ forge-bool/src/ssi.rs|static|static MET: std::cell::RefCell<Mets> = std::cell::RefCell::new(Default::default());
+speed (cache answering a function of its own key)  @ forge-bool/src/ssi.rs|static|static MET_MOST: std::cell::Cell<usize> = const { std::cell::Cell::new(4096) };
+speed (cache answering a function of its own key)  @ forge-bool/src/ssi.rs|thread_local|thread_local! {
+speed (lazy field or constant table)  @ forge-geom/src/blend.rs|lazy|samples: OnceLock::new(),  x 5
+speed (lazy field or constant table)  @ forge-geom/src/blend.rs|lazy|samples: OnceLock<Vec<(f64, Point3)>>,
+speed (lazy field or constant table)  @ forge-geom/src/blend.rs|lazy|smooth: OnceLock::new(),  x 8
+speed (lazy field or constant table)  @ forge-geom/src/blend.rs|lazy|smooth: OnceLock<Option<(Curve, Arc<ChordCurve>)>>,
+speed (lazy field or constant table)  @ forge-geom/src/blend.rs|lazy|smooth: OnceLock<Option<Surface>>,
+speed (lazy field or constant table)  @ forge-geom/src/blend.rs|lazy|use std::sync::{Arc, Mutex, OnceLock};
+speed (cache answering a function of its own key)  @ forge-geom/src/blend.rs|static|static SEEN: Box<[Seen; 256]> = Box::new(  x 2
+speed (cache answering a function of its own key)  @ forge-geom/src/blend.rs|thread_local|thread_local! {  x 2
+no-output (a read's limit, held by budget::scoped and cleared when it goes, unwinding too; a_read_that_panics_leaves_no_limit_behind)  @ forge-geom/src/budget.rs|static|static LEFT: Cell<u64> = const { Cell::new(u64::MAX) };
+no-output (a read's limit, held by budget::scoped and cleared when it goes, unwinding too; a_read_that_panics_leaves_no_limit_behind)  @ forge-geom/src/budget.rs|thread_local|thread_local! {
+speed (lazy field or constant table)  @ forge-geom/src/corner.rs|lazy|seeds: OnceLock::new(),
+speed (lazy field or constant table)  @ forge-geom/src/corner.rs|lazy|seeds: OnceLock<Vec<(Point2, Point3)>>,
+speed (lazy field or constant table)  @ forge-geom/src/corner.rs|lazy|use std::sync::{Arc, OnceLock};
+no-output (no iteration order reaches an output; audit)  @ forge-geom/src/corner/rational.rs|hash-order|fn cache() -> &'static Mutex<HashMap<Vec<u64>, bool>> {
+no-output (no iteration order reaches an output; audit)  @ forge-geom/src/corner/rational.rs|hash-order|static C: OnceLock<Mutex<HashMap<Vec<u64>, bool>>> = OnceLock::new();
+speed (lazy field or constant table)  @ forge-geom/src/corner/rational.rs|lazy|static C: OnceLock<Mutex<HashMap<Vec<u64>, bool>>> = OnceLock::new();
+speed (lazy field or constant table)  @ forge-geom/src/corner/rational.rs|lazy|static T: OnceLock<Box<Table>> = OnceLock::new();
+speed (lazy field or constant table)  @ forge-geom/src/corner/rational.rs|lazy|use std::sync::{Mutex, OnceLock};
+speed (cache answering a function of its own key)  @ forge-geom/src/corner/rational.rs|static|static C: OnceLock<Mutex<HashMap<Vec<u64>, bool>>> = OnceLock::new();
+speed (cache answering a function of its own key)  @ forge-geom/src/corner/rational.rs|static|static T: OnceLock<Box<Table>> = OnceLock::new();
+keyed (the session's steps key their input stage by identity: a hit is the very object built before, its sharing of procedural surfaces included)  @ forge-geom/src/curve.rs|pointer|std::sync::Arc::ptr_eq(&self.0, &o.0)
+speed (lazy field: cold and warm give the same bits, intcurve.rs:303-314)  @ forge-geom/src/intcurve.rs|lazy|hints: OnceLock::new(),
+speed (lazy field: cold and warm give the same bits, intcurve.rs:303-314)  @ forge-geom/src/intcurve.rs|lazy|hints: OnceLock<[Option<Vec<Point2>>; 2]>,
+speed (lazy field: cold and warm give the same bits, intcurve.rs:303-314)  @ forge-geom/src/intcurve.rs|lazy|reach: OnceLock::new(),
+speed (lazy field: cold and warm give the same bits, intcurve.rs:303-314)  @ forge-geom/src/intcurve.rs|lazy|reach: OnceLock<f64>,
+speed (lazy field: cold and warm give the same bits, intcurve.rs:303-314)  @ forge-geom/src/intcurve.rs|lazy|use std::sync::OnceLock;
+no-output (stalls noted only inside intcurve::noting, the caller's restored on unwind; a_trace_that_panics_leaves_no_noting_behind)  @ forge-geom/src/intcurve.rs|static|static STALLS: std::cell::RefCell<Option<Vec<Point3>>> = const { std::cell::RefCell::new(None) };
+no-output (stalls noted only inside intcurve::noting, the caller's restored on unwind; a_trace_that_panics_leaves_no_noting_behind)  @ forge-geom/src/intcurve.rs|thread_local|thread_local! {
+speed (lazy field: cold and warm give the same bits, intcurve.rs:303-314)  @ forge-geom/src/intersect.rs|lazy|let (asked, near) = (std::cell::OnceCell::new(), std::cell::Cell::new(Some(near)));
+no-output (a retry flag: set and cleared inside one boolean by boolean::Held, unwinding too; held_tests)  @ forge-geom/src/intersect.rs|static|pub static ABSORB_HAIR_ROOTS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+no-output (ABSORB_HAIR_ROOTS, Held-scoped to one boolean)  @ forge-geom/src/intersect.rs|thread_local|thread_local! {
+no-output (test code)  @ forge-geom/src/meet_tests.rs|clock|let at = std::time::Instant::now();
+no-output (work index, counter or stop flag)  @ forge-geom/src/screw.rs|atomic|static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+speed (cache answering a function of its own key)  @ forge-geom/src/screw.rs|static|static KEPT: [KeptSlot; KeptSeeds::SLOTS] = const {
+no-output (fresh surface ids: Debug text only; never key on Debug)  @ forge-geom/src/screw.rs|static|static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+speed (cache answering a function of its own key)  @ forge-geom/src/screw.rs|static|static SEEN: Box<[Answer; 256]> =
+speed (cache answering a function of its own key)  @ forge-geom/src/screw.rs|thread_local|thread_local! {  x 2
+speed (lazy field or constant table)  @ forge-geom/src/skinned.rs|lazy|patches: std::sync::OnceLock::new(),
+speed (lazy field or constant table)  @ forge-geom/src/skinned.rs|lazy|patches: std::sync::OnceLock<Vec<Box3>>,
+speed (lazy field or constant table)  @ forge-geom/src/skinned.rs|lazy|s.patches = std::sync::OnceLock::new();
+speed (lazy field or constant table)  @ forge-geom/src/smooth.rs|lazy|joins: OnceLock::new(),  x 2
+speed (lazy field or constant table)  @ forge-geom/src/smooth.rs|lazy|joins: OnceLock<Vec<f64>>,
+speed (lazy field or constant table)  @ forge-geom/src/smooth.rs|lazy|use std::sync::{Arc, OnceLock};
+no-output (constant tables or print switches)  @ forge-geom/src/spline.rs|static|static BINOM: [[f64; WORK]; WORK] = binomials();
+no-output (FFI buffer or a local identity of one object)  @ forge-geom/src/spline/extruded.rs|pointer|let same = if Arc::ptr_eq(&s.c, &self.c) {
+no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-geom/src/spline/tests.rs|float|((x.0 - y.0).powi(2) + (x.1 - y.1).powi(2)).sqrt() < 1e-12,
+no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-geom/src/spline/tests.rs|float|(1.0 - u).powi(3),
+no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-geom/src/spline/tests.rs|float|3.0 * (1.0 - u).powi(2) * u,
+no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-geom/src/spline/tests.rs|float|let g = ((x.0 - y.0).powi(2) + (x.1 - y.1).powi(2)).sqrt();
+no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-geom/src/spline/tests.rs|float|let w = [(1.0 - u).powi(2), 2.0 * (1.0 - u) * u, u * u];
+no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-geom/src/spline/tests.rs|float|u.powi(3),
+keyed (the session's steps key their input stage by identity: a hit is the very object built before, its sharing of procedural surfaces included)  @ forge-geom/src/surface.rs|pointer|Surface::Procedural(p) => Bits::Procedural(std::sync::Arc::as_ptr(&p.0).cast::<()>() as usize),
+keyed (the session's steps key their input stage by identity: a hit is the very object built before, its sharing of procedural surfaces included)  @ forge-geom/src/surface.rs|pointer|std::sync::Arc::ptr_eq(&self.0, &o.0)
+no-output (work index, counter or stop flag)  @ forge-gpu/src/lib.rs|atomic|static NEXT_ID: AtomicU64 = AtomicU64::new(1);
+no-output (read only by the n-ary regen, Part::regenerate_nary*; forge-lang builds by step_solids, which never batches, and the n-ary regen is not memoised)  @ forge-gpu/src/lib.rs|atomic|static RENT: AtomicU64 = AtomicU64::new(0);
+no-output (work index, counter or stop flag)  @ forge-gpu/src/lib.rs|atomic|use std::sync::atomic::{AtomicU64, Ordering};
+no-output (read only by the n-ary regen, Part::regenerate_nary*; forge-lang builds by step_solids, which never batches, and the n-ary regen is not memoised)  @ forge-gpu/src/lib.rs|clock|let s = Instant::now();
+no-output (read only by the n-ary regen, Part::regenerate_nary*; forge-lang builds by step_solids, which never batches, and the n-ary regen is not memoised)  @ forge-gpu/src/lib.rs|clock|let t = Instant::now();
+no-output (read only by the n-ary regen, Part::regenerate_nary*; forge-lang builds by step_solids, which never batches, and the n-ary regen is not memoised)  @ forge-gpu/src/lib.rs|env|*ENV.get_or_init(|| match std::env::var("FORGE_BATCH").as_deref() {
+no-output (read only by the n-ary regen, Part::regenerate_nary*; forge-lang builds by step_solids, which never batches, and the n-ary regen is not memoised)  @ forge-gpu/src/lib.rs|lazy|static CROSSOVER: OnceLock<usize> = OnceLock::new();
+no-output (read only by the n-ary regen, Part::regenerate_nary*; forge-lang builds by step_solids, which never batches, and the n-ary regen is not memoised)  @ forge-gpu/src/lib.rs|lazy|static ENV: OnceLock<Backend> = OnceLock::new();
+no-output (read only by the n-ary regen, Part::regenerate_nary*; forge-lang builds by step_solids, which never batches, and the n-ary regen is not memoised)  @ forge-gpu/src/lib.rs|lazy|static GPU: OnceLock<Option<Gpu>> = OnceLock::new();
+speed (lazy field or constant table)  @ forge-gpu/src/lib.rs|lazy|use std::sync::{Mutex, Once, OnceLock};
+no-output (FFI buffer or a local identity of one object)  @ forge-gpu/src/lib.rs|pointer|(self.api.to_device)(buf.ptr, data.as_ptr().cast(), std::mem::size_of_val(data)),
+no-output (FFI buffer or a local identity of one object)  @ forge-gpu/src/lib.rs|pointer|let h = unsafe { dlopen(lib.as_ptr(), 2) };
+no-output (FFI buffer or a local identity of one object)  @ forge-gpu/src/lib.rs|pointer|let name = unsafe { std::ffi::CStr::from_ptr(name.as_ptr()) }
+no-output (FFI buffer or a local identity of one object)  @ forge-gpu/src/lib.rs|pointer|let p = unsafe { dlsym(h, c.as_ptr()) };
+no-output (FFI buffer or a local identity of one object)  @ forge-gpu/src/lib.rs|pointer|ok((api.function)(&mut f, module, c.as_ptr()), "cuModuleGetFunction")?;
+no-output (FFI buffer or a local identity of one object)  @ forge-gpu/src/lib.rs|pointer|ok((api.load)(&mut module, ptx.as_ptr().cast()), "cuModuleLoadData")?;
+no-output (read only by the n-ary regen, Part::regenerate_nary*; forge-lang builds by step_solids, which never batches, and the n-ary regen is not memoised)  @ forge-gpu/src/lib.rs|static|static CROSSOVER: OnceLock<usize> = OnceLock::new();
+no-output (read only by the n-ary regen, Part::regenerate_nary*; forge-lang builds by step_solids, which never batches, and the n-ary regen is not memoised)  @ forge-gpu/src/lib.rs|static|static ENV: OnceLock<Backend> = OnceLock::new();
+no-output (read only by the n-ary regen, Part::regenerate_nary*; forge-lang builds by step_solids, which never batches, and the n-ary regen is not memoised)  @ forge-gpu/src/lib.rs|static|static GPU: OnceLock<Option<Gpu>> = OnceLock::new();
+no-output (constant tables or print switches)  @ forge-gpu/src/lib.rs|static|static NEXT_ID: AtomicU64 = AtomicU64::new(1);
+no-output (read only by the n-ary regen, Part::regenerate_nary*; forge-lang builds by step_solids, which never batches, and the n-ary regen is not memoised)  @ forge-gpu/src/lib.rs|static|static OPEN: Once = Once::new();
+no-output (read only by the n-ary regen, Part::regenerate_nary*; forge-lang builds by step_solids, which never batches, and the n-ary regen is not memoised)  @ forge-gpu/src/lib.rs|static|static RENT: AtomicU64 = AtomicU64::new(0);
+no-output (constant tables or print switches)  @ forge-gpu/src/lib.rs|static|static SAID: Once = Once::new();
+no-output (read only by the n-ary regen, Part::regenerate_nary*; forge-lang builds by step_solids, which never batches, and the n-ary regen is not memoised)  @ forge-gpu/src/lib.rs|threads|std::thread::spawn(gpu);
+no-output (forge_math::par: answers in item order, each a function of its item; the thread count only splits the work)  @ forge-math/src/par.rs|atomic|let next = std::sync::atomic::AtomicUsize::new(0);
+no-output (forge_math::par: answers in item order, each a function of its item; the thread count only splits the work)  @ forge-math/src/par.rs|env|std::env::var("FORGECAD_THREADS")
+no-output (forge_math::par: answers in item order, each a function of its item; the thread count only splits the work)  @ forge-math/src/par.rs|threads|.unwrap_or_else(|| std::thread::available_parallelism().map_or(1, |n| n.get()))
+no-output (forge_math::par: answers in item order, each a function of its item; the thread count only splits the work)  @ forge-math/src/par.rs|threads|let mut got: Vec<(usize, T)> = std::thread::scope(|s| {
+no-output (prints only)  @ forge-math/src/trace.rs|clock|Span(name, on().then(Instant::now))
+no-output (prints only)  @ forge-math/src/trace.rs|env|*ON.get_or_init(|| std::env::var_os("FORGECAD_TRACE").is_some())
+no-output (prints only)  @ forge-math/src/trace.rs|lazy|static ON: OnceLock<bool> = OnceLock::new();
+no-output (prints only)  @ forge-math/src/trace.rs|lazy|use std::sync::OnceLock;
+no-output (prints only)  @ forge-math/src/trace.rs|static|static ON: OnceLock<bool> = OnceLock::new();
+no-output (prints only)  @ forge-mesh/src/tessellate.rs|env|if let Some(path) = std::env::var_os("FORGE_CDT_DUMP") {
+no-output (no iteration order reaches an output; audit)  @ forge-mesh/src/tessellate.rs|hash-order|let mut placed: std::collections::HashMap<(u32, u64, u64), u32> = std::collections::HashMap::new();
+no-output (no iteration order reaches an output; audit)  @ forge-model/src/bodies.rs|hash-order|fn split_off(mut b: Body, taken: &HashSet<Name>, salt: impl Fn(Name) -> Name) -> Body {
+no-output (no iteration order reaches an output; audit)  @ forge-model/src/bodies.rs|hash-order|let taken: HashSet<Name> = all_names(&below).collect();
+no-output (no iteration order reaches an output; audit)  @ forge-model/src/bodies.rs|hash-order|let wholes: HashSet<Name> = taken.iter().map(|n| n.whole()).collect();
+no-output (results and errors put back in index order)  @ forge-model/src/bodies.rs|threads|let built: Vec<Result<Vec<Vec<Tool>>, RegenError>> = std::thread::scope(|s| {
+no-output (work index, counter or stop flag)  @ forge-model/src/lib.rs|atomic|let next = std::sync::atomic::AtomicUsize::new(from);
+speed (lazy field or constant table)  @ forge-model/src/lib.rs|lazy|let index = std::cell::OnceCell::new();
+speed (a counter, stats only)  @ forge-model/src/lib.rs|static|static NAME_FALLBACKS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+speed (a counter, stats only)  @ forge-model/src/lib.rs|thread_local|thread_local! {
+no-output (results and errors put back in index order)  @ forge-model/src/lib.rs|threads|let done: Vec<Vec<Built>> = std::thread::scope(|s| {
+no-output (no iteration order reaches an output; audit)  @ forge-model/src/splitface.rs|hash-order|leave: &HashMap<VertexId, Use>,
+no-output (no iteration order reaches an output; audit)  @ forge-model/src/splitface.rs|hash-order|let mut cuts: HashMap<EdgeId, Vec<(f64, VertexId)>> = HashMap::new();
+no-output (no iteration order reaches an output; audit)  @ forge-model/src/splitface.rs|hash-order|let mut from: HashMap<VertexId, Vec<usize>> = HashMap::new();
+no-output (no iteration order reaches an output; audit)  @ forge-model/src/splitface.rs|hash-order|let mut leave: HashMap<VertexId, Use> = HashMap::new();
+no-output (no iteration order reaches an output; audit)  @ forge-model/src/splitface.rs|hash-order|let mut pieces: HashMap<EdgeId, Vec<EdgeId>> = HashMap::new();
+no-output (no iteration order reaches an output; audit)  @ forge-model/src/splitface.rs|hash-order|let mut seen: std::collections::HashSet<Use> = cycles.iter().flatten().copied().collect();
+no-output (no iteration order reaches an output; audit)  @ forge-model/src/splitface.rs|hash-order|let mut vert: HashMap<usize, VertexId> = HashMap::new();
+no-output (no iteration order reaches an output; audit)  @ forge-model/src/splitface.rs|hash-order|pieces: &HashMap<EdgeId, Vec<EdgeId>>,
+no-output (constant tables or print switches)  @ forge-model/src/standard.rs|static|pub static SCREWS: &[Screw] = &[
+speed (cache answering a function of its own key)  @ forge-model/src/swept.rs|static|static BUILT: std::cell::RefCell<Vec<(u64, String, Tool)>> = const { std::cell::RefCell::new(Vec::new()) };
+speed (cache answering a function of its own key)  @ forge-model/src/swept.rs|static|static BUILT_MOST: std::cell::Cell<usize> = const { std::cell::Cell::new(64) };
+speed (cache answering a function of its own key)  @ forge-model/src/swept.rs|static|static SEEN: std::cell::RefCell<Vec<(Feature, Option<Box3>)>> = const { std::cell::RefCell::new(Vec::new()) };
+speed (cache answering a function of its own key)  @ forge-model/src/swept.rs|thread_local|thread_local! {  x 2
+keyed (FORGE_CHECK/FORGE_SVG are in forge_model::switches, part of the session's step key)  @ forge-model/src/trace.rs|env|check: std::env::var_os("FORGE_CHECK").is_some(),
+keyed (FORGE_CHECK/FORGE_SVG are in forge_model::switches, part of the session's step key)  @ forge-model/src/trace.rs|env|svg: std::env::var("FORGE_SVG").ok(),
+keyed (FORGE_CHECK/FORGE_SVG are in forge_model::switches, part of the session's step key)  @ forge-model/src/trace.rs|lazy|static ON: std::sync::OnceLock<Env> = std::sync::OnceLock::new();
+keyed (FORGE_CHECK/FORGE_SVG are in forge_model::switches, part of the session's step key)  @ forge-model/src/trace.rs|static|static ON: std::sync::OnceLock<Env> = std::sync::OnceLock::new();
+no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-model/src/upto.rs|float|let inside = ((rho - tr.major).powi(2) + h * h).sqrt() < tr.minor;
+no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-model/src/upto.rs|float|let radius = |t: f64| ((l.x + v.x * t).powi(2) + (l.y + v.y * t).powi(2)).sqrt();
+no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-model/src/upto.rs|float|let w = [(l.z - hc).powi(2), 2.0 * (l.z - hc) * v.z, v.z * v.z];
+no-output (work index, counter or stop flag)  @ forge-model/src/verify.rs|atomic|pub fn faults<'a>(stages: impl IntoIterator<Item = &'a [Solid]>, from: usize, stop: &AtomicBool) -> Verdict {
+no-output (work index, counter or stop flag)  @ forge-model/src/verify.rs|atomic|use std::sync::atomic::{AtomicBool, Ordering};
+no-output (no iteration order reaches an output; audit)  @ forge-ops/src/chamfer.rs|hash-order|bevel_of: &HashMap<EdgeId, usize>,
+no-output (no iteration order reaches an output; audit)  @ forge-ops/src/chamfer.rs|hash-order|cap: HashMap<End, (FaceId, Path)>,
+no-output (no iteration order reaches an output; audit)  @ forge-ops/src/chamfer.rs|hash-order|contact: HashMap<(EdgeId, bool, FaceId), VertexId>,
+no-output (no iteration order reaches an output; audit)  @ forge-ops/src/chamfer.rs|hash-order|corner_path: HashMap<CoedgeId, Path>,
+no-output (no iteration order reaches an output; audit)  @ forge-ops/src/chamfer.rs|hash-order|corners: &HashMap<VertexId, Vec<(FaceId, CoedgeId, CoedgeId)>>,
+no-output (no iteration order reaches an output; audit)  @ forge-ops/src/chamfer.rs|hash-order|end_vertex: HashMap<End, VertexId>,
+no-output (no iteration order reaches an output; audit)  @ forge-ops/src/chamfer.rs|hash-order|let mut bevel_of: HashMap<EdgeId, usize> = HashMap::new();
+no-output (no iteration order reaches an output; audit)  @ forge-ops/src/chamfer.rs|hash-order|let mut contact_edge: HashMap<(EdgeId, FaceId), EdgeId> = HashMap::new();
+no-output (no iteration order reaches an output; audit)  @ forge-ops/src/chamfer.rs|hash-order|let mut corners: HashMap<VertexId, Vec<(FaceId, CoedgeId, CoedgeId)>> = HashMap::new();
+no-output (no iteration order reaches an output; audit)  @ forge-ops/src/chamfer.rs|hash-order|let mut used: HashMap<EdgeId, bool> = HashMap::new();
+no-output (no iteration order reaches an output; audit)  @ forge-ops/src/direct.rs|hash-order|let had: HashSet<Name> = sharp.edge_ids().map(|e| sharp.edge(e).name).collect();
+no-output (no iteration order reaches an output; audit)  @ forge-ops/src/direct.rs|hash-order|let had: HashSet<Name> = sharp.vertices.iter().map(|v| v.name).collect();
+no-output (no iteration order reaches an output; audit)  @ forge-ops/src/direct.rs|hash-order|let kept: HashSet<Name> = sharp.face_ids().map(|f| sharp.face(f).name).collect();
+no-output (no iteration order reaches an output; audit)  @ forge-ops/src/direct.rs|hash-order|let mut count: HashMap<&Vec<Name>, (usize, usize, Option<Name>)> = HashMap::new();
+no-output (no iteration order reaches an output; audit)  @ forge-ops/src/direct.rs|hash-order|let mut sub: HashMap<EdgeId, Option<(EdgeId, bool)>> = HashMap::new();
+no-output (no iteration order reaches an output; audit)  @ forge-ops/src/direct.rs|hash-order|let mut used: HashSet<Name> = out.edge_ids().map(|e| out.edge(e).name).collect();
+no-output (no iteration order reaches an output; audit)  @ forge-ops/src/direct.rs|hash-order|let mut used: HashSet<Name> = out.vertices.iter().map(|v| v.name).collect();
+no-output (work index, counter or stop flag)  @ forge-ops/src/fillet.rs|atomic|let next = std::sync::atomic::AtomicUsize::new(0);
+no-output (each fillet_with starts its own walk budget and restores its caller's, unwinding too; a_fillet_starts_with_its_own_walk_budget_and_leaves_its_callers)  @ forge-ops/src/fillet.rs|static|static WALK_LEFT: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+no-output (each fillet_with starts its own walk budget and restores its caller's, unwinding too; a_fillet_starts_with_its_own_walk_budget_and_leaves_its_callers)  @ forge-ops/src/fillet.rs|thread_local|thread_local! {
+no-output (results and errors put back in index order)  @ forge-ops/src/fillet.rs|threads|let parts: Vec<Vec<(usize, T)>> = std::thread::scope(|s| {
+no-output (results and errors put back in index order)  @ forge-ops/src/fillet.rs|threads|let threads = std::thread::available_parallelism().map_or(1, |t| t.get()).min(n);
+speed (lazy field or constant table)  @ forge-ops/src/selfx.rs|lazy|let loops: Vec<OnceCell<Vec<UvLoop>>> = vec![OnceCell::new(); n];
+speed (lazy field or constant table)  @ forge-ops/src/selfx.rs|lazy|let pieces: Vec<OnceCell<Vec<Box3>>> = vec![OnceCell::new(); n];
+speed (lazy field or constant table)  @ forge-ops/src/selfx.rs|lazy|let verts: Vec<OnceCell<Vec<VertexId>>> = vec![OnceCell::new(); n];
+speed (lazy field or constant table)  @ forge-ops/src/selfx.rs|lazy|use std::cell::OnceCell;
+no-output (no iteration order reaches an output; audit)  @ forge-ops/src/shell.rs|hash-order|let mut links: std::collections::HashMap<(VertexId, VertexId), EdgeId> = std::collections::HashMap::new();
+no-output (no iteration order reaches an output; audit)  @ forge-ops/src/shell.rs|hash-order|let mut sub: HashMap<EdgeId, Option<(EdgeId, bool)>> = HashMap::new();
+no-output (no iteration order reaches an output; audit)  @ forge-ops/src/shell.rs|hash-order|links: &'a mut std::collections::HashMap<(VertexId, VertexId), EdgeId>,
+no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-ops/src/sweep.rs|float|let l3 = q.d1.length().powi(3);
+no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-sheet/src/build.rs|float|let size = (bx.x.width().powi(2) + bx.y.width().powi(2) + bx.z.width().powi(2)).sqrt();  x 3
+no-output (no iteration order reaches an output; audit)  @ forge-sheet/src/build.rs|hash-order|let index: HashMap<(usize, usize), usize> = sides.iter().enumerate().map(|(k, s)| (*s, k)).collect();
+no-output (no iteration order reaches an output; audit)  @ forge-sheet/src/build.rs|hash-order|let joined: std::collections::HashSet<(usize, usize)> = self
+no-output (no iteration order reaches an output; audit)  @ forge-sheet/src/build.rs|hash-order|let mut count: HashMap<u64, usize> = HashMap::new();
+no-output (no iteration order reaches an output; audit)  @ forge-sheet/src/build.rs|hash-order|let mut rails: HashMap<usize, EdgeId> = HashMap::new();
+no-output (no iteration order reaches an output; audit)  @ forge-sheet/src/build.rs|hash-order|let mut tedges: HashMap<(usize, usize), [EdgeId; 2]> = HashMap::new();
+no-output (no iteration order reaches an output; audit)  @ forge-sheet/src/build.rs|hash-order|twin: HashMap<(usize, usize), (usize, usize)>,
+no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-sheet/src/form.rs|float|+ (hi.powi(3) - lo.powi(3)) / 3.0 * (dmath::sin(s1) - dmath::sin(s0))
+no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-sheet/src/form.rs|float|let r = (near(l.x, self.c.x).powi(2) + near(l.y, self.c.y).powi(2)).sqrt();
+no-output (no iteration order reaches an output; audit)  @ forge-sheet/src/region.rs|hash-order|type Map<K, V> = HashMap<K, V, std::hash::BuildHasherDefault<Mix>>;
+no-output (FFI buffer or a local identity of one object)  @ forge-sheet/src/region.rs|pointer|let x_is_spline = matches!(x, Piece::Spline { s: q, .. } if Arc::ptr_eq(q, s));
+no-output (test code)  @ forge-thermo/src/bench.rs|env|let path = format!("{}/data/benchmarks/{name}.csv", env!("CARGO_MANIFEST_DIR"));
+no-output (test code)  @ forge-thermo/src/tests.rs|clock|let t = std::time::Instant::now();  x 2
+speed (lazy field or constant table)  @ forge-topo/src/body.rs|lazy|Cached(std::sync::OnceLock::new())
+speed (lazy field or constant table)  @ forge-topo/src/body.rs|lazy|pub struct Cached<T>(std::sync::OnceLock<T>);
+no-output (test switch, off unless a test sets it)  @ forge-topo/src/check.rs|atomic|static BOTH: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+no-output (test switch, off unless a test sets it)  @ forge-topo/src/check.rs|lazy|let drawn: Vec<std::cell::OnceCell<Drawn>> = vec![std::cell::OnceCell::new(); body.faces.len()];
+no-output (test switch, off unless a test sets it)  @ forge-topo/src/check.rs|lazy|let fine = std::cell::OnceCell::new();
+no-output (test switch, off unless a test sets it)  @ forge-topo/src/check.rs|lazy|let signs: Vec<std::cell::OnceCell<Option<i64>>> = vec![std::cell::OnceCell::new(); body.shells.len()];
+no-output (test switch, off unless a test sets it)  @ forge-topo/src/check.rs|static|static BOTH: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-topo/src/mass.rs|float|1e-6 * rel * size.powi(k)
+no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-topo/src/mass.rs|float|let floor: F = std::array::from_fn(|m| 1e-6 * rel * size.powi([3, 4, 4, 4, 5, 5, 5, 5, 5, 5, 2][m]));
+speed (lazy field or constant table)  @ forge-topo/src/mass.rs|lazy|static R: OnceLock<Kronrod> = OnceLock::new();  x 2
+speed (lazy field or constant table)  @ forge-topo/src/mass.rs|lazy|static R: OnceLock<Vec<Vec<(f64, f64)>>> = OnceLock::new();
+speed (lazy field or constant table)  @ forge-topo/src/mass.rs|lazy|static R: OnceLock<[Curtis; 2]> = OnceLock::new();
+speed (lazy field or constant table)  @ forge-topo/src/mass.rs|lazy|static R: OnceLock<[Fejer; 3]> = OnceLock::new();
+speed (lazy field or constant table)  @ forge-topo/src/mass.rs|lazy|static R: OnceLock<[Kronrod; 2]> = OnceLock::new();
+speed (lazy field or constant table)  @ forge-topo/src/mass.rs|lazy|use std::sync::OnceLock;
+no-output (constant tables or print switches)  @ forge-topo/src/mass.rs|static|static R: OnceLock<Kronrod> = OnceLock::new();  x 2
+no-output (constant tables or print switches)  @ forge-topo/src/mass.rs|static|static R: OnceLock<Vec<Vec<(f64, f64)>>> = OnceLock::new();
+no-output (constant tables or print switches)  @ forge-topo/src/mass.rs|static|static R: OnceLock<[Curtis; 2]> = OnceLock::new();
+no-output (constant tables or print switches)  @ forge-topo/src/mass.rs|static|static R: OnceLock<[Fejer; 3]> = OnceLock::new();
+no-output (constant tables or print switches)  @ forge-topo/src/mass.rs|static|static R: OnceLock<[Kronrod; 2]> = OnceLock::new();

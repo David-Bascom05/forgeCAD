@@ -1803,7 +1803,7 @@ impl<'a> Strips<'a> {
         let mut slot: Vec<Vec<usize>> = loops.iter().map(|l| vec![usize::MAX; l.bounds.len()]).collect();
         let mut slots: Vec<(usize, Point2)> = Vec::new();
         // per (bend, side): the walls' tangent stretches, (y0, y1, loop, index), y in the joint frame
-        let mut stretches: HashMap<(usize, Side), Vec<Stretch>> = HashMap::new();
+        let mut stretches: std::collections::BTreeMap<(usize, Side), Vec<Stretch>> = Default::default();
         for (li, l) in loops.iter().enumerate() {
             if l.strip >= nw {
                 continue;

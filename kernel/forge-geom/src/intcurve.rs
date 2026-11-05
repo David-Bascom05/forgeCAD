@@ -959,10 +959,25 @@ fn stalled(pts: Vec<Point3>, p: Point3) -> Option<(Vec<Point3>, bool)> {
 /// `trace`, where a branch that stalls ends there, with the points it stalled at. The branch's other
 /// stretches are seeded and traced by themselves.
 pub fn trace_past_stalls(a: &Surface, b: &Surface, region: Box3) -> Option<(Vec<IntCurve>, Vec<Point3>)> {
-    STALLS.with(|s| *s.borrow_mut() = Some(Vec::new()));
-    let curves = trace(a, b, region);
-    let stalls = STALLS.with(|s| s.borrow_mut().take()).unwrap_or_default();
+    let (curves, stalls) = noting(|| trace(a, b, region));
     Some((curves?, stalls))
+}
+
+/// `f`, with the stalls of the branches it traces noted: only while it runs, unwinding too, so a
+/// trace that panics leaves the next one as it found it.
+fn noting<T>(f: impl FnOnce() -> T) -> (T, Vec<Point3>) {
+    struct Noting(Option<Vec<Point3>>);
+    impl Drop for Noting {
+        fn drop(&mut self) {
+            let was = self.0.take();
+            STALLS.with(|s| *s.borrow_mut() = was);
+        }
+    }
+    let guard = Noting(STALLS.with(|s| s.borrow_mut().replace(Vec::new())));
+    let t = f();
+    let stalls = STALLS.with(|s| s.borrow_mut().take()).unwrap_or_default();
+    drop(guard);
+    (t, stalls)
 }
 
 /// Whether the surfaces' normals at p are near parallel, as at a curve's narrow tip, but not so near
@@ -1097,5 +1112,15 @@ mod tests {
         assert!(!cs.is_empty());
         cs.iter().for_each(on_both);
         let _ = cs[0].a.project(Point3::ORIGIN);
+    }
+}
+
+#[cfg(test)]
+mod noting_tests {
+    #[test]
+    fn a_trace_that_panics_leaves_no_noting_behind() {
+        let r = std::panic::catch_unwind(|| super::noting(|| panic!("a trace lost")));
+        assert!(r.is_err());
+        assert!(super::STALLS.with(|s| s.borrow().is_none()));
     }
 }

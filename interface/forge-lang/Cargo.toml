@@ -28,5 +28,8 @@ forge-doc = { path = "../forge-doc" }
 forge-asm = { path = "../../kernel/forge-asm" }
 forge-draw = { path = "../../kernel/forge-draw" }
 
+[dev-dependencies]
+forge-bool = { path = "../../kernel/forge-bool" }
+
 [lints]
 workspace = true

@@ -18,6 +18,21 @@ pub fn end() {
     LEFT.set(u64::MAX);
 }
 
+/// `most` evaluations while this lives, no limit again when it goes, unwinding too: a read that
+/// panics leaves no limit behind for what runs next on its thread.
+pub struct Budget(());
+
+pub fn scoped(most: u64) -> Budget {
+    begin(most);
+    Budget(())
+}
+
+impl Drop for Budget {
+    fn drop(&mut self) {
+        end();
+    }
+}
+
 #[inline]
 pub fn spend() {
     LEFT.set(LEFT.get().saturating_sub(1));
@@ -35,4 +50,18 @@ pub fn over() -> bool {
 /// How many are left (`u64::MAX` less what was spent, with no limit set).
 pub fn left() -> u64 {
     LEFT.get()
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn a_read_that_panics_leaves_no_limit_behind() {
+        let r = std::panic::catch_unwind(|| {
+            let _b = super::scoped(3);
+            super::spend_many(5);
+            panic!("a read went wrong");
+        });
+        assert!(r.is_err());
+        assert_eq!(super::left(), u64::MAX);
+    }
 }

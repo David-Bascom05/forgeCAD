@@ -2240,6 +2240,13 @@ fn shape(f: &Feature) -> Shape {
     }
 }
 
+/// The process-wide switches a step's result may depend on (the imprint's mode; FORGE_CHECK and
+/// FORGE_SVG, under which the local imprint is not used): what a result kept between steps is
+/// keyed with besides its own inputs.
+pub fn switches() -> String {
+    format!("imprint {:?} trace {}", forge_bool::imprint::mode(), trace::on())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

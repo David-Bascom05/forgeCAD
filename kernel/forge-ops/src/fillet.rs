@@ -390,6 +390,15 @@ fn carries(body: &Body, edges: &[FilletEdge], opts: &FilletOptions) -> bool {
 
 /// `fillet` with laws started at given vertices and corners set back by given distances.
 pub fn fillet_with(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, feature: u64) -> R<Body> {
+    // each fillet starts with its own walk budget, whatever ran before it on this thread, and
+    // leaves its caller's as it was (unwinding too)
+    struct Walk(u32);
+    impl Drop for Walk {
+        fn drop(&mut self) {
+            WALK_LEFT.with(|w| w.set(self.0));
+        }
+    }
+    let _walk = Walk(WALK_LEFT.with(|w| w.replace(walk_tests(edges.len()))));
     let got = fillet_tried(body, edges, opts, feature);
     // carried past a kink and refused: as if it were not carried, the round ending at the kink
     if got.is_err() && carries(body, edges, opts) {
@@ -7528,6 +7537,33 @@ fn arc_length(c: &Curve, a: f64, b: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_fillet_starts_with_its_own_walk_budget_and_leaves_its_callers() {
+        use crate::profile::Profile;
+        use forge_math::Point2;
+        let p = Profile {
+            plane: Frame::WORLD,
+            loops: vec![Profile::rectangle(Point2::ORIGIN, 10.0, 10.0, 0)],
+        };
+        let b = crate::extrude::extrude(&p, 10.0, 1).unwrap();
+        let e = b.edge_ids().next().unwrap();
+        let picked = [FilletEdge {
+            edge: e,
+            radius: Radius::Constant(1.0),
+        }];
+        let walk = FilletOptions {
+            walk: true,
+            ..FilletOptions::default()
+        };
+        // a spent budget left by whatever ran before changes nothing
+        WALK_LEFT.with(|w| w.set(0));
+        let spent = fillet_with(&b, &picked, &walk, 2).map(|b| b.vertices.len());
+        assert_eq!(WALK_LEFT.with(|w| w.get()), 0, "the caller's left as it was");
+        WALK_LEFT.with(|w| w.set(u32::MAX));
+        let full = fillet_with(&b, &picked, &walk, 2).map(|b| b.vertices.len());
+        assert_eq!(spent, full);
+    }
 
     #[test]
     fn merges_naming_each_other_end() {
