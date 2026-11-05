@@ -42,7 +42,9 @@ fn param_value(p: &ParamInfo) -> Json {
 /// For each param, the features whose dimensions it drives or feeds.
 pub fn uses(run: &Run) -> BTreeMap<ParamKey, Vec<String>> {
     let mut out: BTreeMap<ParamKey, Vec<String>> = BTreeMap::new();
-    for f in &run.feats {
+    // a component's features too, in every evaluation (proof E2)
+    let comps = run.components.iter().flat_map(|c| &c.feats);
+    for f in run.feats.iter().chain(comps) {
         for d in &f.dims {
             for p in d.num.src.params() {
                 let v = out.entry(p).or_default();
@@ -58,42 +60,39 @@ pub fn uses(run: &Run) -> BTreeMap<ParamKey, Vec<String>> {
 pub fn json(run: &Run, src: &str) -> Json {
     let line = |lo: u32| src[..(lo as usize).min(src.len())].matches('\n').count() + 1;
     let uses = uses(run);
-    let feats = run
-        .feats
-        .iter()
-        .map(|f| {
-            Json::obj(vec![
-                ("id", f.id.as_str().into()),
-                ("kind", f.kind.into()),
-                ("line", line(f.span.lo).into()),
-                (
-                    "status",
-                    match f.status {
-                        Status::Ok => "ok",
-                        Status::Failed => "error",
-                        Status::NotBuilt => "not built",
-                    }
-                    .into(),
+    let feat = |f: &crate::eval::FeatInfo| {
+        Json::obj(vec![
+            ("id", f.id.as_str().into()),
+            ("kind", f.kind.into()),
+            ("line", line(f.span.lo).into()),
+            (
+                "status",
+                match f.status {
+                    Status::Ok => "ok",
+                    Status::Failed => "error",
+                    Status::NotBuilt => "not built",
+                }
+                .into(),
+            ),
+            (
+                "dims",
+                Json::Arr(
+                    f.dims
+                        .iter()
+                        .map(|d| {
+                            Json::obj(vec![
+                                ("what", d.what.into()),
+                                ("value", shown(d.num.v, d.num.dim).into()),
+                                ("dim", d.num.dim.name().into()),
+                                ("from", src_json(&d.num.src)),
+                            ])
+                        })
+                        .collect(),
                 ),
-                (
-                    "dims",
-                    Json::Arr(
-                        f.dims
-                            .iter()
-                            .map(|d| {
-                                Json::obj(vec![
-                                    ("what", d.what.into()),
-                                    ("value", shown(d.num.v, d.num.dim).into()),
-                                    ("dim", d.num.dim.name().into()),
-                                    ("from", src_json(&d.num.src)),
-                                ])
-                            })
-                            .collect(),
-                    ),
-                ),
-            ])
-        })
-        .collect();
+            ),
+        ])
+    };
+    let feats = run.feats.iter().map(feat).collect();
     let params = run
         .shared
         .iter()
@@ -165,6 +164,52 @@ pub fn json(run: &Run, src: &str) -> Json {
             ),
         ),
     ];
+    if !run.components.is_empty() {
+        // each evaluation's own occurrences: the calls with its values and provenance (proof E3)
+        let occ = |eval: &str| -> Json {
+            Json::Arr(
+                run.asm
+                    .iter()
+                    .flat_map(|a| &a.evals)
+                    .filter(|e| e.1 == eval)
+                    .map(|e| Json::Str(e.0.clone()))
+                    .collect(),
+            )
+        };
+        f.push((
+            "components",
+            Json::Arr(
+                run.components
+                    .iter()
+                    .map(|c| {
+                        Json::obj(vec![
+                            ("call", c.id.as_str().into()),
+                            ("inputs", c.eval_key.split_once('|').map_or("", |x| x.1).into()),
+                            ("component", c.def.as_str().into()),
+                            ("line", line(c.span.lo).into()),
+                            ("occurrences", occ(&c.eval_key)),
+                            ("features", Json::Arr(c.feats.iter().map(feat).collect())),
+                            (
+                                "params",
+                                Json::Arr(
+                                    c.locals
+                                        .iter()
+                                        .map(|p| {
+                                            Json::obj(vec![
+                                                ("param", p.key.to_string().into()),
+                                                ("value", param_value(p)),
+                                            ])
+                                        })
+                                        .collect(),
+                                ),
+                            ),
+                            ("properties", c.props.json()),
+                        ])
+                    })
+                    .collect(),
+            ),
+        ));
+    }
     if !run.sheets.is_empty() {
         f.push(("sheets", Json::Arr(run.sheets.iter().map(|s| s.json()).collect())));
     }

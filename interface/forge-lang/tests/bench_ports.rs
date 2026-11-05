@@ -29,7 +29,8 @@ fn fc_measure(src: &str) -> (f64, usize, usize, usize) {
     )
 }
 
-/// A directory holding the bench font, for the ports' text.
+/// A directory holding the bench font, for the ports' text: written once per process, so no
+/// test reads it while another is writing it (a truncated font was a flake).
 fn font_dir() -> std::path::PathBuf {
     // made once for the whole run: tests on other threads read the font while one would be
     // writing it again (a file is read whole each time, never kept by its size and time)

@@ -95,6 +95,8 @@ pub struct AsmView {
     pub inspect: Arc<crate::gui::gui_inspect::InspectData>,
     /// The part files with a thermoform, as the occurrences name them.
     pub thermo_files: Vec<String>,
+    /// Each body of the file and the features that made it (a body component's tree).
+    pub body_chains: Vec<(String, Vec<String>)>,
 }
 
 /// What one build gave: the panel's data, and the mesh when the part's shape changed.
@@ -409,9 +411,14 @@ fn line_of(src: &str, at: u32) -> usize {
 /// The run as the panel's rows.
 pub fn rows(run: &Run, src: &str) -> (Vec<FeatRow>, Vec<ParamRow>, Vec<Issue>) {
     let uses = forge_lang::report::uses(run);
+    // a component's features after the document's, by their definition ids (`peg.shank`): its
+    // browser rows fall under the component's own, and once however many calls it has
+    let mut seen = std::collections::HashSet::new();
     let feats = run
         .feats
         .iter()
+        .chain(run.components.iter().flat_map(|c| &c.feats))
+        .filter(|f| seen.insert(f.id.clone()))
         .map(|f| FeatRow {
             id: f.id.clone(),
             kind: f.kind.to_string(),
@@ -439,10 +446,13 @@ pub fn rows(run: &Run, src: &str) -> (Vec<FeatRow>, Vec<ParamRow>, Vec<Issue>) {
             frame: f.frame,
         })
         .collect();
+    let mut seen = std::collections::HashSet::new();
     let params = run
         .shared
         .iter()
         .chain(&run.locals)
+        .chain(run.components.iter().flat_map(|c| &c.locals))
+        .filter(|p| seen.insert(p.key.clone()))
         .map(|p| ParamRow {
             key: p.key.clone(),
             value: match &p.value {
@@ -463,9 +473,10 @@ pub fn rows(run: &Run, src: &str) -> (Vec<FeatRow>, Vec<ParamRow>, Vec<Issue>) {
     let feature_at = |span: Option<forge_lang::syntax::Span>| {
         let s = span?;
         let inside = |o: forge_lang::syntax::Span| o.lo <= s.lo && s.hi <= o.hi;
-        run.feats
-            .iter()
+        let comp = run.components.iter().flat_map(|c| &c.feats);
+        comp.clone()
             .find(|f| inside(f.span))
+            .or_else(|| run.feats.iter().find(|f| inside(f.span)))
             .or_else(|| run.feats.iter().find(|f| inside(f.stmt)))
             .map(|f| f.id.clone())
     };
@@ -1261,6 +1272,7 @@ fn asm_view(
     let parts = meshes.all.len();
     let meshed = new_meshes.len();
     let asm = AsmView {
+        body_chains: run.body_chains.clone(),
         occ,
         placed,
         meshes: new_meshes,
@@ -1502,7 +1514,12 @@ impl Session {
     /// Applies a typed op through forge-lang: refused, with its typed error, if the result
     /// wouldn't check; else the new text builds.
     pub fn apply(&mut self, op: Op) -> Result<Option<Reach>, Error> {
-        let (text, reach) = edit::apply_checked(&self.src, &op)?;
+        let dir = self
+            .path
+            .as_deref()
+            .and_then(|f| std::fs::canonicalize(f).ok())
+            .and_then(|f| f.parent().map(|d| d.to_path_buf()));
+        let (text, reach) = edit::apply_checked_in(&self.src, &op, dir)?;
         self.set_text(text);
         self.ops.push(op);
         Ok(reach)

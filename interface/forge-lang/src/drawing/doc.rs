@@ -482,6 +482,9 @@ pub enum ItemKind {
         material: Option<String>,
         /// g/cm3: an explicit override of the material's density.
         density: Option<f64>,
+        /// One component of the file on its own (`part("box.fg", component: "lid")`): a body, a
+        /// component's first call, or a call by its key (`peg(d=6,h=30)`).
+        component: Option<String>,
     },
     Sheet(SheetDef),
     View(ViewDef),
@@ -1007,6 +1010,7 @@ impl Reader<'_> {
                     asm: func == "assembly",
                     material: a.string("material", None)?,
                     density,
+                    component: a.string("component", None)?,
                 }
             }
             "sheet" => {

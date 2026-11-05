@@ -73,7 +73,7 @@ fn asm_groups(s: &Shell) -> Option<Vec<Group>> {
         None => false,
     };
     match s.tab {
-        0 => Some(vec![
+        super::ASM_TAB => Some(vec![
             g(
                 "Component",
                 vec![
@@ -241,7 +241,7 @@ fn groups(s: &Shell) -> Vec<Group> {
             .collect();
     }
     let v = s.view;
-    if s.is_asm()
+    if (s.is_asm() || s.tab == super::ASM_TAB)
         && let Some(gs) = asm_groups(s)
     {
         return gs;

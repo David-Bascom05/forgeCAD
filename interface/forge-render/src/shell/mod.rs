@@ -24,6 +24,7 @@ pub mod icons;
 pub mod inspect;
 pub mod materials;
 mod measure_ui;
+pub mod occedit;
 pub mod panel;
 pub(crate) mod placed;
 mod ribbon;
@@ -52,6 +53,9 @@ pub const SHEET_TAB: usize = 5;
 pub const FLAT_TAB: usize = 6;
 /// A Forge part's Thermoform tab: after Sketch.
 pub const THERMO_TAB: usize = 7;
+/// Assemble: a Forge file's, beside 3D Model, whatever the file holds (any file may hold
+/// components and joints).
+pub const ASM_TAB: usize = 8;
 
 const TITLE_H: f32 = 36.0;
 const TABS_H: f32 = 34.0;
@@ -622,7 +626,7 @@ impl Shell {
 
     /// A Forge assembly is open (known from its text, before its first solve).
     pub fn is_asm(&self) -> bool {
-        self.fg.as_ref().is_some_and(|f| f.assembly || f.asm.is_some())
+        self.fg.as_ref().is_some_and(|f| f.assembly)
     }
 
     pub fn side_w(&self) -> f32 {
@@ -946,6 +950,7 @@ impl Shell {
         self.thermo_ui(&ctx);
         self.dialog_ui(&ctx);
         self.fg_dialog(&ctx);
+        self.occ_dialog(&ctx);
         self.asm_windows(&ctx);
         self.inspect_ui(&ctx);
         self.content_window(&ctx);
@@ -1137,11 +1142,7 @@ impl Shell {
             self.file_menu = !self.file_menu;
         }
         let mut x = 66.0;
-        // an assembly's first tab is Assemble, and it has no sketches
         let asm = self.is_asm();
-        if asm && self.tab == 1 {
-            self.tab = 0;
-        }
         let drawing = self.drawing.is_some();
         let asm = asm && !drawing;
         let order: Vec<usize> = if drawing {
@@ -1151,7 +1152,8 @@ impl Shell {
         };
         for k in order {
             // a part opened as .fc has no thermoforms
-            if (asm && k == 1) || (k == THERMO_TAB && !self.thermo_tab()) {
+            // the Model tab in an assembly too (one document); Thermoform where there is one
+            if k == THERMO_TAB && !self.thermo_tab() {
                 continue;
             }
             let name = match k {
@@ -1159,7 +1161,7 @@ impl Shell {
                 SHEET_TAB => &"Sheet Metal",
                 THERMO_TAB => &"Thermoform",
                 FLAT_TAB => &"Flat Pattern",
-                0 if asm => &"Assemble",
+                ASM_TAB => &"Assemble",
                 k => &TABS[k],
             };
             let on = k == self.tab;
@@ -1173,6 +1175,12 @@ impl Shell {
             resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, on, *name));
             if resp.clicked() {
                 self.tab = k;
+                // Assemble's tools on a file with no components yet: placing one makes it an assembly
+                if k == ASM_TAB
+                    && let Some(f) = &mut self.fg
+                {
+                    f.asm.get_or_insert_with(Default::default);
+                }
             }
             if on {
                 p.rect_filled(r, up, t.raised);
@@ -1199,7 +1207,9 @@ impl Shell {
         if fg && self.sheet.flat_env {
             vec![FLAT_TAB, 2, 3, 4]
         } else if fg && self.sheet.env {
-            vec![SHEET_TAB, 0, 1, 2, 3, 4]
+            vec![SHEET_TAB, 0, 1, ASM_TAB, 2, 3, 4]
+        } else if self.fg.is_some() {
+            vec![0, 1, ASM_TAB, THERMO_TAB, 2, 3, 4]
         } else {
             vec![0, 1, THERMO_TAB, 2, 3, 4]
         }
@@ -1221,7 +1231,7 @@ impl Shell {
         let tree = Rect::from_min_max(pos2(0.0, side.top() + HEAD_H), pos2(side.right(), side.bottom()));
         if self.agent.tab == agent::SideTab::Agent {
             self.agent_ui(ui, tree);
-        } else if self.fg.as_ref().is_some_and(|f| f.asm.is_some()) {
+        } else if self.is_asm() && self.fg.as_ref().is_some_and(|f| f.asm.is_some()) {
             self.asm_tree(ui, tree);
         } else if self.fg.is_some() {
             self.fg_tree(ui, tree);

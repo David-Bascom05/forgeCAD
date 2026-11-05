@@ -561,8 +561,27 @@ impl Rd<'_> {
     }
 }
 
-/// The program's sketch statement `id`, and the first of the params written just above it.
-fn find(prog: &[Stmt], id: &str) -> Option<(usize, usize)> {
+/// The component a sketch id is inside (`peg.s`: `peg`, its statements, `s`), if it is.
+fn component_of<'p>(prog: &'p [Stmt], id: &'p str) -> Option<(&'p str, &'p [Stmt], &'p str)> {
+    let (c, rest) = id.split_once('.')?;
+    prog.iter().find_map(|s| match &s.kind {
+        StmtKind::Block {
+            kind: syntax::BlockKind::Component,
+            name,
+            body,
+            ..
+        } if name == c => Some((c, body.as_slice(), rest)),
+        _ => None,
+    })
+}
+
+/// The program's sketch statement `id` (in a component, `peg.s`), and the first of the params
+/// written just above it.
+fn find<'p>(prog: &'p [Stmt], id: &'p str) -> Option<(&'p Stmt, &'p Stmt)> {
+    let (prog, id) = match component_of(prog, id) {
+        Some((_, body, rest)) => (body, rest),
+        None => (prog, id),
+    };
     let k = prog.iter().position(
         |s| matches!(&s.kind, StmtKind::Block { kind: syntax::BlockKind::Sketch, name, .. } if name == id),
     )?;
@@ -572,7 +591,12 @@ fn find(prog: &[Stmt], id: &str) -> Option<(usize, usize)> {
     {
         j -= 1;
     }
-    Some((j, k))
+    Some((&prog[j], &prog[k]))
+}
+
+/// A sketch's own name: `s` of `peg.s`.
+fn own_name(prog: &[Stmt], id: &str) -> String {
+    component_of(prog, id).map_or(id, |x| x.2).to_string()
 }
 
 /// Opens sketch `id` of `src` (fonts and used files from `dir`).
@@ -582,7 +606,8 @@ pub fn open(src: &str, id: &str, dir: Option<std::path::PathBuf>) -> Result<Open
         why,
     };
     let prog = syntax::parse(src).map_err(|e| no(e.text()))?;
-    let (_, k) = find(&prog, id).ok_or_else(|| no(format!("{id} is not a sketch of this part")))?;
+    let (_, block) = find(&prog, id).ok_or_else(|| no(format!("{id} is not a sketch of this part")))?;
+    let comp = component_of(&prog, id).map(|x| (x.0.to_string(), x.1));
     let opts = forge_lang::Options {
         build: false,
         dir: dir.clone(),
@@ -607,9 +632,45 @@ pub fn open(src: &str, id: &str, dir: Option<std::path::PathBuf>) -> Result<Open
     let (run, _) = forge_lang::run(src, opts, Default::default());
     let mut params: HashMap<String, (ParamKey, Dim)> = HashMap::new();
     let mut env = vec![];
-    let own = |p: &ParamKey| p.owner.len() == 1 && p.owner[0].name == id && p.owner[0].index.is_empty();
+    // a component's sketch: its params by their defaults (read as values: a call sets them), its
+    // own params under the component's name
+    let owner: Vec<&str> = match &comp {
+        Some((c, _)) => vec![c.as_str(), id.split_once('.').map_or(id, |x| x.1)],
+        None => vec![id],
+    };
+    let own = |p: &ParamKey| {
+        p.owner.len() == owner.len()
+            && p.owner
+                .iter()
+                .zip(&owner)
+                .all(|(s, o)| s.name == *o && s.index.is_empty())
+    };
+    if let Some((c, _)) = &comp
+        && let Some(StmtKind::Block { args, .. }) = prog.iter().find_map(|s| match &s.kind {
+            k @ StmtKind::Block { name, .. } if name == c => Some(k),
+            _ => None,
+        })
+    {
+        for a in args {
+            if let Some((n, _)) = &a.name {
+                let t = src[a.value.span.lo as usize..a.value.span.hi as usize]
+                    .trim()
+                    .to_string();
+                env.push((n.clone(), t));
+            }
+        }
+    }
+    let locals: Vec<&forge_lang::eval::ParamInfo> = run
+        .locals
+        .iter()
+        .chain(run.components.iter().flat_map(|c| &c.locals))
+        .collect();
     // shared first, so the block's own of the same name wins
-    for p in run.shared.iter().chain(run.locals.iter().filter(|p| own(&p.key))) {
+    for p in run
+        .shared
+        .iter()
+        .chain(locals.iter().copied().filter(|p| own(&p.key)))
+    {
         if let forge_lang::eval::Value::Num(n) = &p.value {
             let v = if n.dim == Dim::Angle {
                 n.v.to_degrees()
@@ -621,7 +682,7 @@ pub fn open(src: &str, id: &str, dir: Option<std::path::PathBuf>) -> Result<Open
             env.push((p.key.name.clone(), fmt(v)));
         }
     }
-    let StmtKind::Block { body, .. } = &prog[k].kind else {
+    let StmtKind::Block { body, .. } = &block.kind else {
         unreachable!("a sketch block")
     };
     let mut rd = Rd {
@@ -650,12 +711,14 @@ pub fn open(src: &str, id: &str, dir: Option<std::path::PathBuf>) -> Result<Open
     let mut taken: HashSet<String> = forge_lang::edit::bound(&prog).into_iter().collect();
     taken.extend(forge_lang::edit::bound(body));
     taken.extend(params.keys().cloned());
-    let mine: Vec<String> = run
-        .locals
+    let mine: Vec<String> = locals
         .iter()
         .filter(|p| own(&p.key))
         .map(|p| p.key.name.clone())
         .collect();
+    if let Some((_, body)) = &comp {
+        taken.extend(forge_lang::edit::bound(body));
+    }
     taken.extend(mine.iter().cloned());
     Ok(Opened {
         id: id.to_string(),
@@ -783,7 +846,11 @@ impl Opened {
             })
             .collect();
         let from = kept.len().min(rows.len());
-        let mut o = Out::new(&self.id, self.taken.clone());
+        let parsed = syntax::parse(src).map_err(|e| ToolError::NoForgeForm {
+            tool: "sketch",
+            why: e.text(),
+        })?;
+        let mut o = Out::new(&own_name(&parsed, &self.id), self.taken.clone());
         o.base = self.own;
         // names the new rows read, and what rewritten ones keep
         o.rows_from(rows, from, &per)?;
@@ -812,8 +879,8 @@ impl Opened {
             tool: "sketch",
             why: e.text(),
         })?;
-        let (j, k) = find(&prog, &self.id).expect("opened from this text");
-        let (lo, hi) = (prog[j].span.lo as usize, prog[k].span.hi as usize);
+        let (first, block) = find(&prog, &self.id).expect("opened from this text");
+        let (lo, hi) = (first.span.lo as usize, block.span.hi as usize);
         // new rows go in above the block's closing brace, new params above the block
         let close = src[..hi - 1].rfind('\n').map_or(hi - 1, |n| n + 1);
         let inline = !src[close..hi - 1].trim().is_empty();
@@ -826,7 +893,7 @@ impl Opened {
         };
         splices.push((Span::new(close, close), rows_text));
         splices.push((
-            Span::new(prog[k].span.lo as usize, prog[k].span.lo as usize),
+            Span::new(block.span.lo as usize, block.span.lo as usize),
             o.params.concat(),
         ));
         splices.sort_by_key(|s| (s.0.lo, s.0.hi));
@@ -888,6 +955,16 @@ mod tests {
     }
 
     #[test]
+    fn a_components_sketch_reads_its_params_and_writes_inside_its_block() {
+        let src = "shared plen = 30\ncomponent peg(d: 6, h: 30) {\n  sketch s(on: xy) {\n    c = circle((0, 0), d / 2)\n  }\n  shank = extrude(s, h)\n}\np = part(peg(h: plen))\n";
+        let o = open(src, "peg.s", None).unwrap();
+        assert!(o.read_only.is_none(), "{:?}", o.read_only);
+        let m = mode(&o);
+        assert!(m.error.is_none(), "{:?}", m.error);
+        assert!(o.write_back(&m.rows, m.kept()).unwrap().is_empty());
+    }
+
+    #[test]
     fn every_example_sketch_opens_solves_and_finishes_unchanged_to_the_byte() {
         let mut paths = vec![];
         files(
@@ -900,15 +977,32 @@ mod tests {
         for p in &paths {
             let src = std::fs::read_to_string(p).unwrap();
             let Ok(prog) = syntax::parse(&src) else { continue };
+            // a component's sketches too, by their ids from outside (`peg.s`)
+            let mut ids: Vec<String> = vec![];
             for s in &prog {
-                let StmtKind::Block {
-                    kind: syntax::BlockKind::Sketch,
-                    name,
-                    ..
-                } = &s.kind
-                else {
-                    continue;
-                };
+                match &s.kind {
+                    StmtKind::Block {
+                        kind: syntax::BlockKind::Sketch,
+                        name,
+                        ..
+                    } => ids.push(name.clone()),
+                    StmtKind::Block {
+                        kind: syntax::BlockKind::Component,
+                        name: c,
+                        body,
+                        ..
+                    } => ids.extend(body.iter().filter_map(|b| match &b.kind {
+                        StmtKind::Block {
+                            kind: syntax::BlockKind::Sketch,
+                            name,
+                            ..
+                        } => Some(format!("{c}.{name}")),
+                        _ => None,
+                    })),
+                    _ => {}
+                }
+            }
+            for name in &ids {
                 sketches += 1;
                 let o = match open(&src, name, p.parent().map(|d| d.to_path_buf())) {
                     Ok(o) => o,

@@ -201,7 +201,8 @@ impl PropErr {
             BadDate { key, text, .. } => format!("{key}: {text:?} is not a date written YYYY-MM-DD"),
             BadState { text, .. } => format!("design_state: {text:?} is not one of {}", STATES.join(", ")),
             MaterialInAssembly { .. } => {
-                "an assembly has no material of its own: its parts' materials give its mass".into()
+                "this document makes no body of its own for the material: its parts' materials give its mass"
+                    .into()
             }
             NoSuchBody { id, .. } => format!("bodies: {id} made no body of this part"),
             NotTopLevel { .. } => "properties(..) is a statement of its own, at the top level".into(),
@@ -260,6 +261,17 @@ pub fn quote(s: &str) -> String {
 pub fn map_text(m: &[(String, String)]) -> String {
     let rows: Vec<String> = m.iter().map(|(k, v)| format!("{k}: {}", quote(v))).collect();
     format!("{{{}}}", rows.join(", "))
+}
+
+/// A document with a material but no solid of its own (an assembly of parts): the material
+/// would weigh nothing.
+pub fn material_unused(ev: &Eval) -> Option<Error> {
+    let solids = ev.b.stages.last().map_or(0, |s| s.solids.len());
+    (ev.props.material.is_some() && solids == 0 && ev.b.building).then(|| {
+        err(PropErr::MaterialInAssembly {
+            span: ev.props.span.unwrap_or_default(),
+        })
+    })
 }
 
 fn err(e: PropErr) -> Error {
@@ -362,24 +374,13 @@ pub fn call(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
                 .push(pair.ok_or_else(|| wrong("custom", crate::values::Ty::Tuple, r))?);
         }
     }
-    let in_asm = ev.asm.is_some();
     if let Some(v) = a.opt("material") {
-        if in_asm {
-            return Err(err(PropErr::MaterialInAssembly {
-                span: a.span("material"),
-            }));
-        }
         let Value::Str(s) = &v else {
             return Err(wrong("material", crate::values::Ty::Str, &v));
         };
         p.material = Some(material(ev, s, a.span("material"), MaterialAt::Part)?.name);
     }
     if let Some(v) = a.opt("bodies") {
-        if in_asm {
-            return Err(err(PropErr::MaterialInAssembly {
-                span: a.span("bodies"),
-            }));
-        }
         let Value::Map(m) = &v else {
             return Err(wrong("bodies", crate::values::Ty::Map, &v));
         };
@@ -407,6 +408,16 @@ pub fn call(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
 pub fn check_placement(prog: &[Stmt], errors: &mut Vec<Error>) {
     let is_props = |e: &Expr| matches!(&e.kind, ExprKind::Call(f, _) if matches!(&f.kind, ExprKind::Name(n) if n == "properties"));
     for (k, s) in prog.iter().enumerate() {
+        // a component's properties are its own, checked by its own evaluation
+        if matches!(
+            &s.kind,
+            StmtKind::Block {
+                kind: syntax::BlockKind::Component,
+                ..
+            }
+        ) {
+            continue;
+        }
         let top = matches!(&s.kind, StmtKind::Expr(e) if is_props(e));
         let mut found = vec![];
         syntax::walk(std::slice::from_ref(s), &mut |st| match &st.kind {
@@ -797,6 +808,17 @@ pub struct PartSummary {
 }
 
 impl PartSummary {
+    pub fn new(
+        props: Props,
+        solids: Vec<(String, Option<Material>, std::sync::Arc<forge_topo::Body>)>,
+    ) -> PartSummary {
+        PartSummary {
+            props,
+            solids,
+            masses: Default::default(),
+        }
+    }
+
     pub fn of(ev: &Eval) -> PartSummary {
         PartSummary {
             props: ev.props.clone(),

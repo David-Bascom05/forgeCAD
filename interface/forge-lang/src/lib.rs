@@ -27,6 +27,7 @@ pub mod par;
 pub mod patterns;
 pub mod project;
 pub mod props;
+pub mod refactor;
 pub mod report;
 pub mod shapes;
 pub mod sheet;
@@ -177,6 +178,10 @@ pub struct Run {
     pub props: props::Props,
     /// A part's mass, centre of gravity and inertia from its solids' materials.
     pub physical: Option<props::Physical>,
+    /// The inline components (`component NAME(..) { .. }`), each as its own part.
+    pub components: Vec<asm::CompOut>,
+    /// A document with components: each body and the features that made it (`asm::body_chains`).
+    pub body_chains: Vec<(String, Vec<String>)>,
 }
 
 impl Run {
@@ -220,6 +225,8 @@ pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
                     anchors: None,
                     props: props::Props::default(),
                     physical: None,
+                    components: vec![],
+                    body_chains: vec![],
                 },
                 cache,
             );
@@ -231,9 +238,11 @@ pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
     ev.cosmetic_threads = opts.cosmetic_threads;
     ev.dir = opts.dir.clone();
     ev.root = opts.root.as_ref().and_then(|r| std::fs::canonicalize(r).ok());
-    if asm::declared(&prog) {
-        ev.asm = Some(asm::Doc::default());
-    }
+    // any document may hold components and joints (an `assembly` first line is optional)
+    ev.asm = Some(asm::Doc {
+        declared: asm::declared(&prog),
+        ..Default::default()
+    });
     let t1 = Instant::now();
     ev.check_static(&prog);
     timings.check_ms = t1.elapsed().as_secs_f64() * 1e3;
@@ -244,6 +253,10 @@ pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
     let t2 = Instant::now();
     ev.run(&prog);
     sheet::finish(&mut ev);
+    let assembly = ev.asm.as_ref().is_some_and(|d| !d.is_empty());
+    if assembly && let Some(e) = props::material_unused(&ev) {
+        ev.errors.push(e);
+    }
     let kept = ev.b.cache.asm.take();
     let (asm_out, kept) = asm::finish(&mut ev, &opts, kept);
     ev.b.cache.asm = kept;
@@ -265,6 +278,10 @@ pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
     let mut expects = vec![];
     if let Some(m) = &measure {
         for s in ev.expects.clone() {
+            // an assembly's metrics are its solve's (`asm.rs`)
+            if assembly && asm::is_metric(&s) {
+                continue;
+            }
             if let Some(r) = expect(&mut ev, &s, m) {
                 expects.push(r);
             }
@@ -272,12 +289,17 @@ pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
     }
     timings.measure_ms = t3.elapsed().as_secs_f64() * 1e3;
     timings.total_ms = t0.elapsed().as_secs_f64() * 1e3;
-    let physical = if built_all && opts.checks && ev.asm.is_none() {
+    let physical = if built_all && opts.checks && !assembly {
         props::part_physical(&mut ev, measure.as_ref().and_then(|m| m.mass.as_ref()))
     } else {
         None
     };
     let body = if built_all { ev.b.body().cloned() } else { None };
+    let chains = if assembly && built_all {
+        asm::body_chains(&mut ev)
+    } else {
+        vec![]
+    };
     let (rebuilt, reused) = (ev.b.rebuilt, ev.b.reused);
     let run = Run {
         errors: std::mem::take(&mut ev.errors),
@@ -306,6 +328,8 @@ pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
         anchors: None,
         props: std::mem::take(&mut ev.props),
         physical,
+        components: vec![],
+        body_chains: vec![],
     };
     let mut run = run;
     // a sheet that names no stock is the part's material
@@ -318,6 +342,9 @@ pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
         let body = run.body.clone();
         run.anchors = Some(anchors::find(&mut ev, body.as_ref()));
     }
+    run.components = asm::components(&ev);
+    run.body_chains = chains;
+    asm::keep_comp_caches(&mut ev);
     (run, ev.b.into_cache())
 }
 
@@ -334,12 +361,22 @@ pub fn sketch_view(src: &str, id: &str, opts: Options) -> Option<SketchView> {
     let prog = syntax::parse(src).ok()?;
     let mut ev = Eval::new(src, opts.rules, opts.build, Default::default());
     ev.dir = opts.dir.clone();
+    ev.root = opts.root.as_ref().and_then(|r| std::fs::canonicalize(r).ok());
+    ev.asm = Some(asm::Doc::default());
     ev.check_static(&prog);
     if !ev.errors.is_empty() {
         ev.b.building = false;
     }
     ev.run(&prog);
-    let (_, Value::Sketch(sk)) = ev.top_level().into_iter().find(|(n, _)| n == id)? else {
+    // a sketch of a component (`peg.s`): as the component's defaults evaluate it
+    let inner = id
+        .split_once('.')
+        .and_then(|(c, s)| asm::default_eval(&ev, c).map(|sub| (sub, s.to_string())));
+    let (_, Value::Sketch(sk)) = (match &inner {
+        Some((sub, s)) => sub.top_level().into_iter().find(|(n, _)| n == s),
+        None => ev.top_level().into_iter().find(|(n, _)| n == id),
+    })?
+    else {
         return None;
     };
     let sk = sk.borrow();

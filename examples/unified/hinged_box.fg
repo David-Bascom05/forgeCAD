@@ -1,0 +1,31 @@
+# A hinged box in one file: two bodies, one joint. Naming a body in a joint makes it a
+# component, placed where it was modelled; the lid turns about the back edge.
+shared W = 80
+shared D = 60
+shared H = 40
+shared t = 3
+param hinge.open = 0deg
+param hinge.lo = 0deg
+param hinge.hi = 110deg
+
+properties(part_number: "BOX-1", description: "hinged box", material: "ABS")
+
+sketch plan(on: xy) {
+  o = rect(center: (0, 0), size: (W, D))
+}
+base = extrude(plan, H)
+cup = shell(t, open: base.end)
+sketch lp(on: base.end) {
+  o = rect(center: (0, 0), size: (W, D))
+}
+lid = extrude(lp, t, new: true)
+hp = plane(at: edges(between: (lid.start, lid.side(lp.o[2]))).center, normal: lp.o[2].dir)
+
+ground(base)
+hinge = revolute(lid.hp, base.hp, turn: open, limit: (lo, hi))
+
+expect valid
+expect interferences = 0
+expect mobility = 0
+expect z(lid) = 0 +- 0.001
+expect interferences = 0 at hinge.open = 90deg

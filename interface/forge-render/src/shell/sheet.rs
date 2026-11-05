@@ -1492,7 +1492,22 @@ impl SheetDlg {
 /// A call's arguments as written: positional ones as `#K`.
 pub fn call_args(src: &str, id: &str) -> Option<(String, Vec<(String, String)>)> {
     let prog = forge_lang::syntax::parse(src).ok()?;
-    prog.iter().find_map(|s| match &s.kind {
+    // a feature of a component (`peg.shank`): the statement inside its block
+    let (stmts, id) = match id.split_once('.').and_then(|(c, rest)| {
+        prog.iter().find_map(|s| match &s.kind {
+            StmtKind::Block {
+                kind: forge_lang::syntax::BlockKind::Component,
+                name,
+                body,
+                ..
+            } if name == c => Some((body.as_slice(), rest)),
+            _ => None,
+        })
+    }) {
+        Some(x) => x,
+        None => (prog.as_slice(), id),
+    };
+    stmts.iter().find_map(|s| match &s.kind {
         StmtKind::Assign { name, value } if name == id => match &value.kind {
             ExprKind::Call(f, args) => {
                 let text = |sp: forge_lang::syntax::Span| {

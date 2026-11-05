@@ -100,6 +100,8 @@ pub struct Cache {
     pub measured: Vec<(Rc<Stage>, crate::Measure)>,
     /// An assembly's loaded parts, solver and checker, kept between runs (`asm.rs`).
     pub asm: Option<Box<crate::asm::AsmCache>>,
+    /// Each inline component's own last run, by its name (`asm::component_block`).
+    pub comps: HashMap<String, Cache>,
     /// Work done outside the kernel's history (a sheet's builds and shop checks), by a key
     /// that holds everything it read.
     memo: HashMap<String, Rc<dyn Any>>,
@@ -319,6 +321,18 @@ impl Builder {
             kept: self.cache.kept,
             steps: self.steps,
             switches: self.switches,
+            comps: self.cache.comps,
+        }
+    }
+
+    /// This run's history and stages as a cache, the run going on (an `expect .. at` run of
+    /// the same document starts from them: only what its params change is rebuilt).
+    pub fn snapshot(&self) -> Cache {
+        Cache {
+            features: self.features.clone(),
+            ids: self.ids.clone(),
+            stages: self.stages.clone(),
+            ..Cache::default()
         }
     }
 

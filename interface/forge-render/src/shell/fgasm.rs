@@ -205,6 +205,14 @@ fn std_designation(file: &str) -> Option<String> {
 /// A part type as a person reads it: `iso7380_m6x12` is "ISO 7380 M6×12", `cage_nut_m6` is
 /// "Cage nut M6".
 pub fn type_label(file: &str) -> String {
+    // a component of this file: `#peg(d=6,h=30)` is "peg (d=6, h=30)", `#lid` a body of it
+    if let Some(own) = file.strip_prefix('#') {
+        return match own.split_once('(') {
+            _ if file == forge_lang::asm::ROOT => "This file's bodies".into(),
+            Some((name, args)) => format!("{name} ({}", args.replace(',', ", ")),
+            None => format!("Body {own}"),
+        };
+    }
     if let Some(d) = std_designation(file) {
         return d.replace('x', "\u{d7}");
     }
@@ -609,6 +617,37 @@ impl AsmTree {
                 owner,
             );
         }
+        // this file's own features, as its part browser lists them: Fusion's timeline beside
+        // the components (a component of this file opens to its own share of them)
+        if owner.is_empty()
+            && let Some(Ok(feats)) = cx.feats.get(DOC)
+            && !feats.is_empty()
+        {
+            let f = self.push(
+                parent,
+                format!("{DOC}>f:"),
+                "Features".into(),
+                String::new(),
+                NodeKind::Feature,
+                "pattern",
+                owner,
+            );
+            let mut stack: Vec<usize> = vec![f];
+            for r in super::fg::tree_rows(feats) {
+                stack.truncate(r.depth + 1);
+                let kind = r.feat.map(|k| feats[k].kind.as_str());
+                let at = self.push(
+                    stack.last().copied(),
+                    format!("{DOC}>f:{}", r.key),
+                    r.label.clone(),
+                    kind.unwrap_or_default().to_string(),
+                    NodeKind::Feature,
+                    kind.map_or("pattern", super::panel::icon),
+                    owner,
+                );
+                stack.push(at);
+            }
+        }
         // Relationships: by kind, problems first
         let mine: Vec<usize> = (0..cx.links.len())
             .filter(|&k| cx.links[k].owner == owner)
@@ -894,6 +933,9 @@ pub fn feature_of(key: &str) -> Option<(&str, &str)> {
 /// The top row's key.
 pub const TOP: &str = "a:";
 
+/// This file's own features, as `part_feats` holds them for the browser's Features folder.
+pub const DOC: &str = "#doc";
+
 fn join(owner: &str, id: &str) -> String {
     if owner.is_empty() {
         id.to_string()
@@ -978,6 +1020,14 @@ pub struct AsmPanel {
     /// Each part file's features, by the file as the solve names it: read when one of its
     /// occurrences is first opened.
     pub part_feats: HashMap<String, PartFeats>,
+    /// This file's own features (its bodies', its components' as `peg.shank`): what an
+    /// in-file component's tree lists.
+    pub doc_feats: Vec<super::fg::FeatRow>,
+    /// Each body of this file and the features that made it.
+    pub body_chains: Vec<(String, Vec<String>)>,
+    /// A feature of an in-file component to edit in this file (Edit Feature), asked by an
+    /// in-place edit: the host opens its dialog.
+    pub host_edit: Option<String>,
     /// A part's feature edited in the assembly (Inventor's in-place edit).
     pub in_place: Option<super::asmpart::InPlace>,
     /// Where each relationship's two ends are, solved (`AsmOut::link_at`).
@@ -1500,6 +1550,8 @@ enum MenuAct {
     Edit(String),
     /// A part's feature, edited in the assembly.
     InPlace(String),
+    /// A placed call of a component of this file: its params (Edit Occurrence).
+    Occurrence(String),
 }
 
 const TOOLBAR_H: f32 = 34.0;
@@ -1878,6 +1930,15 @@ impl Shell {
                                 menu = Some(MenuAct::Open(n.key.clone()));
                                 ui.close();
                             }
+                            // a call of a component of this file: its own params
+                            let call = a
+                                .insts
+                                .iter()
+                                .any(|i| i.path == n.key && i.file.starts_with('#') && i.file.contains('('));
+                            if n.kind == NodeKind::Occ && call && item(ui, "Edit Occurrence…", "edit-feature") {
+                                menu = Some(MenuAct::Occurrence(n.key.clone()));
+                                ui.close();
+                            }
                             // what the file says of a top-level component
                             if let Some(i) = a.insts.iter().find(|i| i.path == n.key && !i.path.contains('.'))
                             {
@@ -2068,6 +2129,7 @@ impl Shell {
             }
             Some(MenuAct::Drive(l)) => a.drive = Some(l),
             Some(MenuAct::Ops(ops)) => pending.push(FgAct::AsmOps(ops)),
+            Some(MenuAct::Occurrence(id)) => pending.push(FgAct::EditFeature(id)),
             Some(MenuAct::Again(id)) => {
                 let file = a
                     .insts
@@ -2091,6 +2153,10 @@ impl Shell {
                 }
             }
             Some(MenuAct::InPlace(k)) => match a.edit_in_place(&k) {
+                // a component of this file: its feature's own Edit Feature, in this file
+                Ok(()) if a.host_edit.is_some() => {
+                    pending.extend(a.host_edit.take().map(FgAct::EditFeature));
+                }
                 Ok(()) => {
                     a.tool = None;
                     a.drive = None;
@@ -3088,6 +3154,71 @@ mod tests {
         let text = std::fs::read_to_string(dir.join("plate.fg")).unwrap();
         assert!(text.contains("shared t = 9"), "{text}");
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// One file holding bodies and components: each in-file component opens to its own tree
+    /// read from this file's features, and editing one edits this file (Edit Feature).
+    #[test]
+    fn in_file_components_open_to_their_trees_and_edit_this_file() {
+        let src = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../examples/unified/peg_board.fg"
+        ))
+        .unwrap();
+        let dir = std::path::PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/unified"));
+        let opts = forge_lang::Options {
+            dir: Some(dir.clone()),
+            ..Default::default()
+        };
+        let run = forge_lang::run(&src, opts, Default::default()).0;
+        assert!(run.ok());
+        let a = run.asm.as_ref().unwrap();
+        let rows: Vec<OccRow> = a
+            .occurrences
+            .iter()
+            .map(|o| OccRow {
+                path: o.0.clone(),
+                file: o.1.clone(),
+                drawn: true,
+            })
+            .collect();
+        let mut p = AsmPanel::default();
+        p.set_doc_feats(crate::fg::rows(&run, &src).0);
+        p.set_structure(
+            rows,
+            Some(dir),
+            a.insts.clone(),
+            a.links.clone(),
+            Flags::default(),
+        );
+        let kids = |p: &AsmPanel, k: &str| -> Vec<String> {
+            let n = p.tree.find(k).unwrap();
+            p.tree.nodes[n]
+                .kids
+                .iter()
+                .map(|&k| p.tree.nodes[k].key.clone())
+                .collect()
+        };
+        p.read_part("p1");
+        let k = kids(&p, "p1");
+        assert!(
+            k.ends_with(&["p1>o".to_string(), "p1>f:s".to_string(), "p1>f:shank".to_string()]),
+            "{k:?} {:?} {:?}",
+            p.occ.iter().map(|o| &o.file).collect::<Vec<_>>(),
+            p.part_feats.keys().collect::<Vec<_>>()
+        );
+        assert_eq!(p.tree.nodes[p.tree.find("p1").unwrap()].detail, "peg (d=6, h=30)");
+        p.read_part("board");
+        assert!(kids(&p, "board").contains(&"board>f:board".to_string()));
+        // the document's other features are no body's and no component's: the root has none here
+        // the file's own features beside the components, its sketches too
+        assert!(p.tree.find("#doc>f:plan").is_some());
+        assert!(p.tree.find("#doc>f:peg").is_none(), "a component is no feature row of its own here");
+        p.edit_in_place("#doc>f:board").unwrap();
+        assert_eq!(p.host_edit.take().as_deref(), Some("board"));
+        p.edit_in_place("p2>f:shank").unwrap();
+        assert_eq!(p.host_edit.as_deref(), Some("peg.shank"));
+        assert!(p.in_place.is_none());
     }
 
     /// Every joint and constraint has a glyph: the Relationships eye turns them all off, a kind's

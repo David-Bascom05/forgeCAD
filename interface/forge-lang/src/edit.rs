@@ -46,7 +46,7 @@ fn feature_stmt<'a>(prog: &'a [Stmt], id: &str) -> R<&'a Stmt> {
 
 /// The statements a feature is: its own params written directly above it, and its statement.
 /// Returns (first, statement) indices into `prog`.
-fn block(prog: &[Stmt], id: &str) -> R<(usize, usize)> {
+pub(crate) fn block(prog: &[Stmt], id: &str) -> R<(usize, usize)> {
     let s = feature_stmt(prog, id)?;
     let k = prog.iter().position(|x| std::ptr::eq(x, s)).expect("found");
     let mut j = k;
@@ -449,7 +449,219 @@ pub(crate) fn apply_with(src: &str, op: &Op, dim_of: &dyn Fn(&ParamKey) -> Optio
         return rename(src, from, to);
     }
     let prog = syntax::parse(src)?;
-    precheck(&prog, op, dim_of)?;
+
+    // a feature of a component its placements read from outside (`l1.plate` where l1 places
+    // lid): taking it away is refused, every reader named (R2)
+    if let Op::DeleteFeature { id } = op
+        && let Some((comp, feat)) = component_feature(&prog, id)
+    {
+        let readers = crate::refactor::occurrence_readers(&prog, &comp, &feat);
+        if !readers.is_empty() {
+            return Err(crate::asm::comp_error(
+                Span::default(),
+                crate::asm::CompProblem::StillReadBy {
+                    name: id.clone(),
+                    readers,
+                },
+            ));
+        }
+    }
+    apply_scoped(src, &prog, op, None, dim_of)
+}
+
+/// The op where its id is: inside a component (at any depth), the same op on its statements.
+fn apply_scoped(
+    src: &str,
+    prog: &[Stmt],
+    op: &Op,
+    end: Option<u32>,
+    dim_of: &dyn Fn(&ParamKey) -> Option<Dim>,
+) -> R<String> {
+    // a component's default (`SetArg {id: "cup", arg: "d"}`): its header, put in if missing
+    if let Op::SetArg { id, arg, text } = op
+        && let Some(k) = component(prog, id)
+    {
+        return crate::edit_ops::apply_component_arg(src, &prog[k], arg, text);
+    }
+    // a literal default's handle (`cup.d`): the same edit
+    if let Op::SetParam { param, value } = op
+        && let [c] = &param.owner[..]
+        && c.index.is_empty()
+        && let Some(k) = component(prog, &c.name)
+    {
+        return crate::edit_ops::apply_component_arg(src, &prog[k], &param.name, &value.text());
+    }
+    if let Some((k, inner)) = scoped(prog, op)? {
+        let StmtKind::Block { body, .. } = &prog[k].kind else {
+            unreachable!("a component")
+        };
+        // a component's own param dimensions are its evaluation's: not checked against the document's
+        return apply_scoped(src, body, &inner, Some(prog[k].span.hi - 1), &|_| None);
+    }
+    precheck(prog, op, dim_of)?;
+    apply_in(src, prog, op, end, dim_of)
+}
+
+/// Whether an op edits a component's header (its defaults), at any depth.
+fn on_header(prog: &[Stmt], op: &Op) -> bool {
+    let here = match op {
+        Op::SetArg { id, .. } => component(prog, id).is_some(),
+        Op::SetParam { param, .. } => {
+            matches!(&param.owner[..], [c] if c.index.is_empty() && component(prog, &c.name).is_some())
+        }
+        _ => false,
+    };
+    here || matches!(scoped(prog, op), Ok(Some((k, inner))) if match &prog[k].kind {
+        StmtKind::Block { body, .. } => on_header(body, &inner),
+        _ => false,
+    })
+}
+
+/// A component's feature an id names, at any depth (`box.lid.plate`: `lid`, `plate`).
+fn component_feature(prog: &[Stmt], id: &str) -> Option<(String, String)> {
+    let (head, rest) = id.split_once('.')?;
+    let k = component(prog, head)?;
+    let StmtKind::Block { body, .. } = &prog[k].kind else {
+        return None;
+    };
+    if let Some(inner) = component_feature(body, rest) {
+        return Some(inner);
+    }
+    let feat = rest.split(['.', '[']).next()?.to_string();
+    Some((head.to_string(), feat))
+}
+
+/// The top-level `component NAME(..) { .. }` named `name`.
+fn component(prog: &[Stmt], name: &str) -> Option<usize> {
+    prog.iter().position(|s| {
+        matches!(&s.kind, StmtKind::Block { kind: syntax::BlockKind::Component, name: n, .. } if n == name)
+    })
+}
+
+/// An id inside a component (`cup.body`): the component and the id within (`body`; `cup.` is
+/// its end).
+fn inner_id(prog: &[Stmt], id: &str) -> Option<(usize, Option<String>)> {
+    let (head, rest) = id.split_once('.')?;
+    let k = component(prog, head)?;
+    Some((k, (!rest.is_empty()).then(|| rest.to_string())))
+}
+
+/// An op on a component's statements, as the same op on its body: the component and the op
+/// with its ids taken inside. Ops naming two places must name one component.
+fn scoped(prog: &[Stmt], op: &Op) -> R<Option<(usize, Op)>> {
+    let inner = |id: &str| -> R<Option<(usize, String)>> {
+        match inner_id(prog, id) {
+            Some((k, Some(x))) => Ok(Some((k, x))),
+            Some((_, None)) => Err(Error::UnknownFeature { id: id.into() }),
+            None => Ok(None),
+        }
+    };
+    let owner = |o: &[Seg]| {
+        o.first()
+            .and_then(|f| component(prog, &f.name).filter(|_| o.len() > 1 || f.index.is_empty()))
+    };
+    let strip = |key: &ParamKey| ParamKey {
+        owner: key.owner[1..].to_vec(),
+        name: key.name.clone(),
+    };
+    let other = |k: usize, before: &Option<String>| -> R<Option<String>> {
+        match before {
+            None => Ok(None),
+            Some(b) => match inner_id(prog, b) {
+                Some((j, x)) if j == k => Ok(x),
+                _ => Err(Error::UnknownFeature { id: b.clone() }),
+            },
+        }
+    };
+    Ok(match op {
+        Op::DeleteFeature { id } => inner(id)?.map(|(k, id)| (k, Op::DeleteFeature { id })),
+        Op::ReplaceFeature { id, text } => inner(id)?.map(|(k, id)| {
+            (
+                k,
+                Op::ReplaceFeature {
+                    id,
+                    text: text.clone(),
+                },
+            )
+        }),
+        Op::SetArg { id, arg, text } => inner(id)?.map(|(k, id)| {
+            (
+                k,
+                Op::SetArg {
+                    id,
+                    arg: arg.clone(),
+                    text: text.clone(),
+                },
+            )
+        }),
+        Op::MoveFeature { id, before } => match inner(id)? {
+            Some((k, id)) => Some((
+                k,
+                Op::MoveFeature {
+                    id,
+                    before: other(k, before)?,
+                },
+            )),
+            None => None,
+        },
+        Op::AddFeature {
+            before: Some(b),
+            text,
+        } => inner_id(prog, b).map(|(k, x)| {
+            (
+                k,
+                Op::AddFeature {
+                    before: x,
+                    text: text.clone(),
+                },
+            )
+        }),
+        Op::SetParam { param, value } if param.owner.len() > 1 => owner(&param.owner).map(|k| {
+            (
+                k,
+                Op::SetParam {
+                    param: strip(param),
+                    value: *value,
+                },
+            )
+        }),
+        Op::AddLocalParam { feature, name, value } if feature.len() > 1 => owner(feature).map(|k| {
+            (
+                k,
+                Op::AddLocalParam {
+                    feature: feature[1..].to_vec(),
+                    name: name.clone(),
+                    value: *value,
+                },
+            )
+        }),
+        Op::LiftLiteral {
+            span,
+            name,
+            scope: Scope::Local(o),
+        } if o.len() > 1 => owner(o).map(|k| {
+            (
+                k,
+                Op::LiftLiteral {
+                    span: *span,
+                    name: name.clone(),
+                    scope: Scope::Local(o[1..].to_vec()),
+                },
+            )
+        }),
+        _ => None,
+    })
+}
+
+/// The op on `prog` (the document, or a component's statements ending at `end`, its `}`).
+fn apply_in(
+    src: &str,
+    prog: &[Stmt],
+    op: &Op,
+    end: Option<u32>,
+    dim_of: &dyn Fn(&ParamKey) -> Option<Dim>,
+) -> R<String> {
+    let prog = prog.to_vec();
     match op {
         Op::SetArg { id, arg, text } => crate::edit_ops::apply_set_arg(src, &prog, id, arg, text),
         Op::Rename { from, to } => crate::edit_ops::apply_rename(src, from, to),
@@ -522,14 +734,17 @@ pub(crate) fn apply_with(src: &str, op: &Op, dim_of: &dyn Fn(&ParamKey) -> Optio
                     let at = &prog[block(&prog, b)?.0];
                     Ok(splice(src, at.span.lo, at.span.lo, &body))
                 }
-                None => {
-                    let sep = if src.is_empty() || src.ends_with('\n') {
-                        ""
-                    } else {
-                        "\n"
-                    };
-                    Ok(format!("{src}{sep}{body}"))
-                }
+                None => match end {
+                    Some(e) => Ok(splice(src, e, e, &indented(&body))),
+                    None => {
+                        let sep = if src.is_empty() || src.ends_with('\n') {
+                            ""
+                        } else {
+                            "\n"
+                        };
+                        Ok(format!("{src}{sep}{body}"))
+                    }
+                },
             }
         }
         Op::DeleteFeature { id } => {
@@ -538,7 +753,17 @@ pub(crate) fn apply_with(src: &str, op: &Op, dim_of: &dyn Fn(&ParamKey) -> Optio
         }
         Op::ReplaceFeature { id, text } => {
             let (j, k) = block(&prog, id)?;
-            Ok(splice(src, prog[j].span.lo, prog[k].span.hi, text.trim_end()))
+            // inside a component: its later lines at the statement's own indent
+            let lo = prog[j].span.lo as usize;
+            let indent: String = src[src[..lo].rfind('\n').map_or(0, |n| n + 1)..lo]
+                .chars()
+                .take_while(|c| c.is_whitespace())
+                .collect();
+            let text = match end {
+                Some(_) if !indent.is_empty() => text.trim_end().replace('\n', &format!("\n{indent}")),
+                _ => text.trim_end().to_string(),
+            };
+            Ok(splice(src, prog[j].span.lo, prog[k].span.hi, &text))
         }
         Op::MoveFeature { id, before } => {
             let (j, k) = block(&prog, id)?;
@@ -549,7 +774,7 @@ pub(crate) fn apply_with(src: &str, op: &Op, dim_of: &dyn Fn(&ParamKey) -> Optio
             }
             let at = match before {
                 Some(b) => Some(prog[block(&prog, b)?.0].span.lo),
-                None => None,
+                None => end,
             };
             let removed = splice(src, lo0, hi0, "");
             let len = hi0 - lo0;
@@ -596,6 +821,11 @@ pub(crate) fn apply_with(src: &str, op: &Op, dim_of: &dyn Fn(&ParamKey) -> Optio
     }
 }
 
+/// Statements as a component's last lines: two spaces in, on a line of their own.
+fn indented(body: &str) -> String {
+    body.lines().map(|l| format!("  {l}\n")).collect()
+}
+
 fn lit_expr(l: &Literal) -> Expr {
     let num = |v: f64, u: Unit| Expr {
         kind: ExprKind::Num(v, u),
@@ -629,7 +859,27 @@ pub fn apply_ast(src: &str, op: &Op) -> R<Vec<Stmt>> {
         return syntax::parse(&apply(src, op)?);
     }
     let mut prog = syntax::parse(src)?;
-    precheck(&prog, op, &|k| param_dim(src, k))?;
+    // an edit of a component's header (its defaults), at any depth: the text's edit, read back
+    if on_header(&prog, op) {
+        return syntax::parse(&apply(src, op)?);
+    }
+    let dim_of = |k: &ParamKey| param_dim(src, k);
+    ast_scoped(&mut prog, op, &dim_of)?;
+    Ok(prog)
+}
+
+fn ast_scoped(prog: &mut Vec<Stmt>, op: &Op, dim_of: &dyn Fn(&ParamKey) -> Option<Dim>) -> R<()> {
+    if let Some((k, inner)) = scoped(prog, op)? {
+        let StmtKind::Block { body, .. } = &mut prog[k].kind else {
+            unreachable!("a component")
+        };
+        return ast_scoped(body, &inner, &|_| None);
+    }
+    precheck(prog, op, dim_of)?;
+    ast_in(prog, op)
+}
+
+fn ast_in(prog: &mut Vec<Stmt>, op: &Op) -> R<()> {
     let find_param = |prog: &[Stmt], key: &ParamKey| {
         prog.iter().position(|s| match &s.kind {
             StmtKind::Shared { name, .. } => key.owner.is_empty() && *name == key.name,
@@ -644,18 +894,18 @@ pub fn apply_ast(src: &str, op: &Op) -> R<Vec<Stmt>> {
         full: Span::default(),
     };
     match op {
-        Op::SetArg { id, arg, text } => crate::edit_ops::ast_set_arg(&mut prog, id, arg, text)?,
-        Op::Rename { from, to } => crate::edit_ops::ast_rename(&mut prog, from, to),
+        Op::SetArg { id, arg, text } => crate::edit_ops::ast_set_arg(prog, id, arg, text)?,
+        Op::Rename { from, to } => crate::edit_ops::ast_rename(prog, from, to),
         Op::SetProperty { .. } => unreachable!("parsed from its text above"),
         Op::SetParam { param, value } => {
-            let k = find_param(&prog, param).ok_or(Error::UnknownParam { param: param.clone() })?;
+            let k = find_param(prog, param).ok_or(Error::UnknownParam { param: param.clone() })?;
             match &mut prog[k].kind {
                 StmtKind::Shared { value: v, .. } | StmtKind::Param { value: v, .. } => *v = lit_expr(value),
                 _ => unreachable!("a param"),
             }
         }
         Op::AddLocalParam { feature, name, value } => {
-            let k = block(&prog, &feature[0].name)?.1;
+            let k = block(prog, &feature[0].name)?.1;
             prog.insert(
                 k,
                 blank(StmtKind::Param {
@@ -666,7 +916,7 @@ pub fn apply_ast(src: &str, op: &Op) -> R<Vec<Stmt>> {
             );
         }
         Op::MakeShared { param } => {
-            let k = find_param(&prog, param).ok_or(Error::UnknownParam { param: param.clone() })?;
+            let k = find_param(prog, param).ok_or(Error::UnknownParam { param: param.clone() })?;
             let v = rhs(&prog[k]).clone();
             prog[k].kind = StmtKind::Shared {
                 name: param.name.clone(),
@@ -674,7 +924,7 @@ pub fn apply_ast(src: &str, op: &Op) -> R<Vec<Stmt>> {
             };
         }
         Op::SplitInstance { id, param } => {
-            let k = find_param(&prog, param).ok_or(Error::UnknownParam { param: param.clone() })?;
+            let k = find_param(prog, param).ok_or(Error::UnknownParam { param: param.clone() })?;
             let v = rhs(&prog[k]).clone();
             prog.insert(
                 k + 1,
@@ -688,7 +938,7 @@ pub fn apply_ast(src: &str, op: &Op) -> R<Vec<Stmt>> {
         Op::AddFeature { before, text } => {
             let new = syntax::parse(text)?;
             let k = match before {
-                Some(b) => find_feat(&prog, b)?,
+                Some(b) => find_feat(prog, b)?,
                 None => prog.len(),
             };
             for (j, s) in new.into_iter().enumerate() {
@@ -696,18 +946,18 @@ pub fn apply_ast(src: &str, op: &Op) -> R<Vec<Stmt>> {
             }
         }
         Op::DeleteFeature { id } => {
-            let (j, k) = block(&prog, id)?;
+            let (j, k) = block(prog, id)?;
             prog.drain(j..=k);
         }
         Op::ReplaceFeature { id, text } => {
-            let (j, k) = block(&prog, id)?;
+            let (j, k) = block(prog, id)?;
             let new = syntax::parse(&format!("{}\n", text.trim_end()))?;
             prog.splice(j..=k, new);
         }
         Op::MoveFeature { id, before } => {
-            let (j, k) = block(&prog, id)?;
+            let (j, k) = block(prog, id)?;
             let at = match before {
-                Some(b) => Some(block(&prog, b)?.0),
+                Some(b) => Some(block(prog, b)?.0),
                 None => None,
             };
             let moved: Vec<Stmt> = prog.drain(j..=k).collect();
@@ -747,7 +997,7 @@ pub fn apply_ast(src: &str, op: &Op) -> R<Vec<Stmt>> {
             prog.insert(k, blank(def));
         }
     }
-    Ok(prog)
+    Ok(())
 }
 
 fn replace_num(s: &mut Stmt, at: Span, name: &str, found: &mut Option<(f64, Unit)>) {
@@ -987,8 +1237,14 @@ pub struct Reach {
 /// `apply`, then the edited document checked: an op whose result does not evaluate is refused
 /// with that run's first new typed error. With the edited text, what a SetParam reaches.
 pub fn apply_checked(src: &str, op: &Op) -> R<(String, Option<Reach>)> {
+    apply_checked_in(src, op, None)
+}
+
+/// `apply_checked` for a document in `dir`: the files it places are read for the reach (a
+/// `part(FILE, with: ..)` is a call whose values its params drive).
+pub fn apply_checked_in(src: &str, op: &Op, dir: Option<std::path::PathBuf>) -> R<(String, Option<Reach>)> {
     let text = apply(src, op)?;
-    let after = checked(src, &text)?;
+    let after = checked_in(src, &text, dir)?;
     let reach = match op {
         Op::SetParam { param, .. } => {
             // the param, and every param linked to it (transitively)
@@ -1008,14 +1264,17 @@ pub fn apply_checked(src: &str, op: &Op) -> R<(String, Option<Reach>)> {
             }
             let mut features = vec![];
             let mut values = 0;
-            for f in &after.feats {
+            // a component's features too, in every evaluation, named once by their definition
+            // ids (proof E2)
+            let comps = after.components.iter().flat_map(|c| &c.feats);
+            for f in after.feats.iter().chain(comps) {
                 let n = f
                     .dims
                     .iter()
                     .filter(|d| d.num.src.params().iter().any(|p| reach.contains(p)))
                     .count();
                 values += n;
-                if n > 0 || f.reads.iter().any(|p| reach.contains(p)) {
+                if (n > 0 || f.reads.iter().any(|p| reach.contains(p))) && !features.contains(&f.id) {
                     features.push(f.id.clone());
                 }
             }
@@ -1031,15 +1290,26 @@ pub fn apply_checked(src: &str, op: &Op) -> R<(String, Option<Reach>)> {
 }
 
 /// The edited text's run (evaluated, not built), or its first typed error the source hadn't.
-fn checked(src: &str, text: &str) -> R<crate::Run> {
+pub(crate) fn checked(src: &str, text: &str) -> R<crate::Run> {
+    checked_in(src, text, None)
+}
+
+pub(crate) fn checked_in(src: &str, text: &str, dir: Option<std::path::PathBuf>) -> R<crate::Run> {
     let opts = crate::Options {
         build: false,
+        dir,
         ..crate::Options::default()
     };
     let (before, _) = crate::run(src, opts.clone(), Default::default());
     let (after, _) = crate::run(text, opts, Default::default());
-    let old: Vec<&str> = before.errors.iter().map(Error::kind).collect();
-    if let Some(e) = after.errors.iter().find(|e| !old.contains(&e.kind())) {
+    // refused when it adds an error, of a kind already there too (proof: an IndexOut more is a
+    // new error, not the old one): counted by kind, spans move with the edit
+    let count = |r: &crate::Run, k: &str| r.errors.iter().filter(|e| e.kind() == k).count();
+    if let Some(e) = after
+        .errors
+        .iter()
+        .find(|e| count(&after, e.kind()) > count(&before, e.kind()))
+    {
         return Err(e.clone());
     }
     Ok(after)

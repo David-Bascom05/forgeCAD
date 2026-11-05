@@ -257,7 +257,7 @@ fn run_src(file: &str, src: &str, args: &[String], build: bool, o: &mut Output) 
     };
     let (run, _) = forge_lang::run(src, opts, Cache::default());
     let posed = run.asm.as_ref().and_then(forge_lang::asm::compound);
-    if let (Some(out), Some(body)) = (opt(args, "--render"), run.body.as_ref().or(posed.as_ref())) {
+    if let (Some(out), Some(body)) = (opt(args, "--render"), posed.as_ref().or(run.body.as_ref())) {
         let view = opt(args, "--view").unwrap_or("iso");
         let px = opt(args, "--px").and_then(|p| p.parse().ok()).unwrap_or(600);
         match forge_lang::render(body, view, px) {
@@ -486,11 +486,44 @@ fn main() -> ExitCode {
                     }
                 };
             }
+            // a refactor between this file and others: the document and the files it makes
+            if let Some(r) = Json::parse(&args[2])
+                .ok()
+                .and_then(|j| forge_lang::refactor::Refactor::from_json(&j))
+            {
+                let dir = dir_of(file).unwrap_or_default();
+                let read = |f: &str| std::fs::read_to_string(dir.join(f)).ok();
+                return match forge_lang::refactor::apply_checked(&src, &r, &read) {
+                    Ok(w) => {
+                        for (f, t) in &w.files {
+                            if let Err(e) = std::fs::write(dir.join(f), t) {
+                                eprintln!("{f}: {e}");
+                                return ExitCode::from(2);
+                            }
+                        }
+                        if let Err(e) = std::fs::write(file, &w.doc) {
+                            eprintln!("{file}: {e}");
+                            return ExitCode::from(2);
+                        }
+                        let files = Json::Arr(w.files.iter().map(|f| Json::Str(f.0.clone())).collect());
+                        print_json(&Json::obj(vec![
+                            ("ok", true.into()),
+                            ("op", r.json()),
+                            ("files", files),
+                        ]));
+                        run_file(file, &args[3..], false)
+                    }
+                    Err(e) => {
+                        print_json(&Json::obj(vec![("ok", false.into()), ("error", e.json(&src))]));
+                        ExitCode::from(1)
+                    }
+                };
+            }
             let Some(op) = Json::parse(&args[2]).ok().and_then(|j| Op::from_json(&j)) else {
                 eprintln!("not an op: {}", args[2]);
                 return ExitCode::from(2);
             };
-            match edit::apply_checked(&src, &op) {
+            match edit::apply_checked_in(&src, &op, dir_of(file)) {
                 Ok((new, reach)) => {
                     if let Err(e) = std::fs::write(file, &new) {
                         eprintln!("{file}: {e}");

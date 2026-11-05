@@ -422,6 +422,71 @@ impl Shell {
         self.fg = Some(fg);
     }
 
+    /// Edit Occurrence: the call's params as fields, OK writes the call (one SetArg).
+    pub(super) fn occ_dialog(&mut self, ctx: &egui::Context) {
+        let t = self.theme;
+        let Some(fg) = &mut self.fg else { return };
+        let Some(mut e) = fg.occ_edit.take() else { return };
+        let frame = egui::Frame::new()
+            .fill(t.surface)
+            .stroke(Stroke::new(1.0, t.line))
+            .corner_radius(6)
+            .inner_margin(12);
+        let v = self.view_rect;
+        let mut done = None;
+        let shown = egui::Window::new("Edit Occurrence")
+            .id(egui::Id::unique("fg-occ-edit"))
+            .title_bar(false)
+            .collapsible(false)
+            .resizable(false)
+            .default_pos(pos2(4.0, v.top() + 4.0))
+            .fixed_size(vec2(DIALOG_W, 0.0))
+            .frame(frame)
+            .constrain_to(super::dialog_area(ctx))
+            .show(ctx, |ui| {
+                ui.label(egui::RichText::new(format!("Edit Occurrence {}", e.occ)).font(semi(15.0)));
+                ui.label(
+                    egui::RichText::new(format!("of {}: empty fields take the default", e.component))
+                        .font(sans(12.0))
+                        .color(t.ink2),
+                );
+                for f in &mut e.fields {
+                    ui.horizontal(|ui| {
+                        ui.add_sized(
+                            vec2(90.0, 20.0),
+                            egui::Label::new(egui::RichText::new(&f.name).font(mono(12.0))),
+                        );
+                        ui.add(
+                            egui::TextEdit::singleline(&mut f.text)
+                                .hint_text(&f.default)
+                                .font(mono(12.0))
+                                .desired_width(DIALOG_W - 110.0),
+                        );
+                    });
+                }
+                ui.horizontal(|ui| {
+                    if ui.button("OK").clicked() {
+                        done = Some(true);
+                    }
+                    if ui.button("Cancel").clicked() {
+                        done = Some(false);
+                    }
+                });
+            });
+        if let Some(r) = shown {
+            self.view_blocks.push(r.response.rect);
+            self.places.push(("fg:occ-edit".into(), r.response.rect));
+        }
+        if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+            done = Some(false);
+        }
+        match done {
+            Some(true) => fg.out.push(FgAct::Apply(e.op())),
+            Some(false) => {}
+            None => fg.occ_edit = Some(e),
+        }
+    }
+
     pub(super) fn fg_dialog_body(
         ui: &mut egui::Ui,
         t: &super::theme::Theme,
@@ -443,6 +508,13 @@ impl Shell {
             Some(_) => format!("Edit {}", title(tool.kind)),
             None => title(tool.kind).to_string(),
         };
+        // a feature of a component's definition: every occurrence changes with it
+        let def = tool
+            .edit
+            .as_deref()
+            .and_then(|id| id.split_once('.'))
+            .map(|x| x.0)
+            .filter(|c| fg.feats.iter().any(|f| f.id == *c && f.kind == "component"));
         ui.painter().text(
             pos2(head.left() + 32.0, head.center().y),
             Align2::LEFT_CENTER,
@@ -461,6 +533,20 @@ impl Shell {
                 .interactive(tool.edit.is_none()),
         );
         places.push(("fg:tool:name".into(), name_at));
+        if let Some(c) = def {
+            let n = fg
+                .asm
+                .as_ref()
+                .map_or(0, |a| super::occedit::occurrences(&a.occ, c));
+            ui.label(
+                egui::RichText::new(format!(
+                    "Editing {c} ({}): every occurrence changes",
+                    super::fg::plural(n, "occurrence")
+                ))
+                .font(sans(12.0))
+                .color(t.ink2),
+            );
+        }
 
         // the choice that shapes the form first, as Inventor's big toggles
         let mut chose = None;

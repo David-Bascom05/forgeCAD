@@ -1,0 +1,44 @@
+# A mixed document: the board is a body modelled here, the pegs are one inline component
+# called with two sizes (two parts in the BOM), the knob is a part file.
+shared L = 120
+shared Wd = 60
+shared T = 8
+shared x1 = 30
+shared small = 6
+shared big = 10
+shared plen = 30
+shared gap = 0.2
+param lift.up = 4
+
+properties(part_number: "BOARD-1", description: "peg board", material: "6061-T6")
+
+sketch plan(on: xy) {
+  o = rect(center: (0, 0), size: (L, Wd))
+  h1 = circle((-x1, 0), (small + gap) / 2)
+  h2 = circle((x1, 0), (big + gap) / 2)
+}
+board = extrude(plan, T)
+hp1 = plane(at: plan.h1.center, normal: board.end.normal)
+hp2 = plane(at: plan.h2.center, normal: board.end.normal)
+
+component peg(d: 6, h: 30) {
+  sketch s(on: xy) {
+    c = circle((0, 0), d / 2)
+  }
+  shank = extrude(s, h)
+  properties(part_number: "PEG", material: "AISI 304")
+}
+p1 = part(peg(d: small, h: plen))
+p2 = part(peg(d: big, h: plen))
+k = part("knob.fg")
+
+ground(board)
+j1 = fastened(p1.shank.start, board.hp1, flip: true)
+lift = slider(p2.shank.start, board.hp2, along: up, flip: true)
+on_top = fastened(k.seat, p1.shank.end, flip: true)
+
+expect valid
+expect interferences = 0
+expect mobility = 0
+expect z(k) = plen
+expect z(p2) = 4

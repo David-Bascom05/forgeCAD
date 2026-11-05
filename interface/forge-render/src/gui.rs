@@ -3112,6 +3112,12 @@ impl Gui {
                     source: s.src.clone(),
                     ..Default::default()
                 });
+                // a file holding components opens on Assemble, a part on 3D Model; both are there
+                self.shell.tab = if crate::fg::is_assembly(&s.src) {
+                    crate::shell::ASM_TAB
+                } else {
+                    0
+                };
                 self.fg = Some(s);
                 self.fg_view = None;
                 self.fg_folded = None;
@@ -3211,6 +3217,8 @@ impl Gui {
             }
             if let Some(p) = &mut self.shell.fg {
                 p.summary = b.summary();
+                // a part that gained a component is an assembly now (and back)
+                p.assembly = b.asm.is_some();
                 p.feats = b.feats;
                 p.params = b.params;
                 p.issues = b.issues;
@@ -3227,6 +3235,8 @@ impl Gui {
                 && let Some(p) = &mut self.shell.fg
             {
                 let ap = p.asm.get_or_insert_with(Default::default);
+                ap.body_chains = a.body_chains.clone();
+                ap.set_doc_feats(p.feats.clone());
                 let dir = s
                     .path
                     .as_deref()
@@ -3764,6 +3774,12 @@ impl Gui {
     /// its kind, filled from its statement; what no dialog can hold is refused in the status bar.
     pub fn fg_edit_feature(&mut self, id: &str) {
         let Some(p) = &mut self.shell.fg else { return };
+        // an occurrence of a component of this file: its args, not the definition
+        if let Some(e) = crate::shell::occedit::OccEdit::open(&p.source, id) {
+            self.shell.status = format!("Edit Occurrence {id}: {}", e.call());
+            p.occ_edit = Some(e);
+            return;
+        }
         let Some(kind) = p.feats.iter().find(|f| f.id == id).map(|f| f.kind.clone()) else {
             return;
         };

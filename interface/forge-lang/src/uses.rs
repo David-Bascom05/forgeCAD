@@ -233,6 +233,23 @@ pub fn call(ev: &mut Eval, args: &[crate::syntax::Arg], span: Span) -> R<Value> 
     for p in &sub.shared {
         out.insert(p.key.name.clone(), driving(&p.value, &key(&p.key.name), span));
     }
+    // its components are not placed from here yet: named, so placing one says so (typed)
+    for s in &prog {
+        if let StmtKind::Block {
+            kind: crate::syntax::BlockKind::Component,
+            name,
+            ..
+        } = &s.kind
+        {
+            out.insert(
+                name.clone(),
+                Value::Asm(Rc::new(crate::asm::AsmVal::Foreign {
+                    name: name.clone(),
+                    file: file.clone(),
+                })),
+            );
+        }
+    }
     for (name, f) in &sub.fns {
         out.insert(
             name.clone(),

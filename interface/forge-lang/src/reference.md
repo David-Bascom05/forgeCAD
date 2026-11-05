@@ -28,7 +28,7 @@ expect volume = 11966 +- 0.1%
 `#` starts a comment. Numbers: `12`, `0.5`, `1e3`, with a unit `mm` or `deg`. A minus sign
 directly before a digit, where no value precedes it, is part of the number (`-1`, `(-1, 2)`);
 `a -1` and `a - 1` subtract. Strings: `"M6"`. Names: letters, digits, `_`. Keywords: `shared param
-fn for in if else return expect and or not true false sketch path at` (`at:` is still a keyword
+fn for in if else return expect and or not true false sketch path at component` (`at:` is still a keyword
 argument). A line break ends a statement,
 except inside `( )` and `[ ]`; `;` also ends one.
 
@@ -40,6 +40,7 @@ param FEATURE.NAME = EXPR           a param of one feature (and what it makes)
 param FEATURE[KEY].NAME = EXPR      that param for one loop instance only (SplitInstance writes it)
 NAME = EXPR                         a binding; when EXPR makes a feature, NAME is its id
 sketch NAME(on: PLANE, at: POINT) { ROWS }
+component NAME(p: DEFAULT, ..) { STATEMENTS }   a part as a function of its params (see Assemblies)
 path NAME(start: P) { SEGMENTS }    inside a sketch: a chain of segments
 for VAR in RANGE|MAP|LIST { .. }    for K, VAR in ..: K is the key (index or label)
 if COND { .. } else { .. }          `} else` on the same line
@@ -739,8 +740,10 @@ Dates are YYYY-MM-DD (`BadDate`); its numbers are no design numbers (no literals
 the part's. Names are forge-material's library (`kernel/forge-material/data/materials.toml`), by
 name or alias, ignoring case and punctuation; a project's `materials/*.toml` beside the file and
 the user's `~/.config/forgecad/materials/*.toml` are searched first. An unknown name is
-`UnknownMaterial` with the nearest names as fixes (SetProperty, or SetArg on a sheet). An
-assembly has no material (`MaterialInAssembly`): its parts' give its mass.
+`UnknownMaterial` with the nearest names as fixes (SetProperty, or SetArg on a sheet). A
+document with components but no body of its own has no use for a material
+(`MaterialInAssembly`): its parts' give its mass. A body component weighs by its own material,
+else the document's; a component of this document by its own `properties(material:)`.
 
 The part's physical properties (`fg run --json`: `physical`) are exact (the B-rep's mass
 integrals) times each body's density: mass (kg), volume, area, centre of gravity, the inertia
@@ -892,11 +895,65 @@ to the last digit is the lint `ExpectCopied`.
 
 ## Assemblies
 
-A file whose first line is `assembly` is an assembly document. Its statements make instances of
-part files and subassemblies, joints and loose constraints between their references, relations,
-fits and fit rules; it is solved by forge-asm (constraints between frames: trees placed in closed
-form, loops by Newton). Ids follow the rules above: `bolt = part(..)` inside `for k in 0..4` is
-`bolt[0]`..`bolt[3]`. Part features (`extrude`, `sketch`, ..) are refused here (`WrongDocument`).
+Any document may hold bodies, components and joints: a big multibody part with joints, an
+assembly of part files, or a mix. A first line `assembly` marks the file an assembly before it holds
+anything (an empty one, ready to place into); it refuses nothing. A
+document's statements may make instances of part files, subassemblies and components of its
+own, joints and loose constraints between their references, relations, fits and fit rules; it is
+solved by forge-asm (constraints between frames: trees placed in closed form, loops by Newton).
+Ids follow the rules above: `bolt = part(..)` inside `for k in 0..4` is `bolt[0]`..`bolt[3]`. A
+document that makes no component and no link is a part, run as before.
+
+```
+component peg(d: 6, h: 30) {                   # a part as a function of its params; places nothing
+  sketch s(on: xy) {
+    c = circle((0, 0), d / 2)
+  }
+  shank = extrude(s, h)
+  properties(part_number: "PEG", material: "AISI 304")
+}
+p1 = part(peg(d: small, h: len), at: (-30, 0, 8))    # an occurrence of a call
+p2 = part(peg, at: ..)                                # the defaults
+lid = extrude(lp, t, new: true)                       # a body of this document
+hinge = revolute(lid.hp, base.hp, turn: open)         # naming bodies makes them components
+```
+
+- **Components of this document:** `component NAME(p: DEFAULT, ..) { STATEMENTS }` (top level;
+  `ComponentNotTopLevel`) is a part of its own over this file's text: its own history and model
+  space, seeing the document's shared params, functions and component definitions written above
+  it, nothing else; its params read as values carrying the call's provenance (`peg(d: small)`:
+  `small` drives it); a param's default sees only shared params. `shared` inside is
+  `SharedInComponent`. A block may hold anything a document holds: bodies, components, joints; a
+  call that places or joins is a subassembly under its occurrence (`b1.l1`). Components placing
+  each other round are `ComponentCycle`; a run has one budget (`Fuel`). A call
+  `NAME(p: v)` is a part: equal values are the same part (one BOM row, file `#peg(d=6,h=30)`),
+  evaluated once per values and provenance. Its features are `peg.shank` (what edit ops name),
+  its references `OCC.NAME` evaluated inside it, as a file instance's are. Another occurrence's
+  geometry given as an argument (`lid(rim: b1.wall.end)`) is made in context: its frame where
+  that occurrence is written (never where the solve moves it), an input of the call.
+- **Other files:** `part(FILE, with: {p: v})` sets the file's shared params for that occurrence
+  (a part of its own, `mug.fg|with:p=v`; an unknown one `PartFile NoParam`); `t = use(FILE)`
+  then `part(t.cup(d: 3))` places a used file's component.
+- **Bodies as components:** a joint or constraint end whose first name is a body of this
+  document (`lid.end`, `slat[2].side(p.o[1])`) makes that body a component (`#lid`), placed where
+  it was made. The end is evaluated here, as written; a name that is not the body feature's own
+  (`lid.hp`, `lid.plane(at: .., normal: ..)`) is the document's, owned by the body. A face or edge
+  set belongs to the body holding it; any other end of the document is `NoComponent`. A body a
+  later boolean takes is `BodyGone`.
+- **Ground:** an occurrence is grounded only as written: `ground: true` on its placement, or the
+  statement `ground(X)` (a body component too). Nothing grounded is the warning `NoGround`: each
+  part starts where it is written, its freedoms free. The bodies no joint names are one
+  occurrence, `#root`, held where the document makes them.
+- **Expects:** part measures (`volume`, `valid`, ..) are of the document's model as made; the
+  assembly measures below of the solve; `x(lid)`, `z(lid)` take a body component.
+- A subassembly whose file has components of its own is refused for now (`PartFile`,
+  InFileComponents); `part()` of a file that places components is `PartFile` (use
+  `subassembly()`); a file holding only component definitions is a part.
+- **Refactors** (`fg edit F '{"op":"MakeComponent",..}'`, all or nothing): `MakeComponent
+  {statements, name}` (statements into a component placed where they were; `ReadsOutside`,
+  `StillReadBy` with every reader), `ExtractComponent {component, file}` (its own file, each call
+  `part(FILE, with: {..})`, shared params it reads passed, functions copied; `ReadOtherwise`,
+  `FileExists`), `InlineComponent {file, name}` (back, where it was; `NotInlinable`).
 
 ```
 assembly
@@ -1022,6 +1079,10 @@ SetArg {id, arg, text}              keyword argument arg of the call making id b
 SetProperty {key, text}             an argument of properties(..) set (null: taken out)
 Rename {from, to}                   a top-level name and every use of it renamed
 ```
+
+Inside a component: an id or param whose first name is a component (`peg.shank`, `peg.shank.d`)
+is the same op on its statements; `AddFeature {before: "peg."}` puts the statement at its end;
+`SetArg {id: "peg", arg: "d", text}` sets a param's default, or adds the param.
 
 A name a built-in also has is `ShadowsBuiltin`, with the fix Rename to `NAME_1`.
 

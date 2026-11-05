@@ -54,6 +54,7 @@ pub const NAMES: &[&str] = &[
     "fit_rule",
     "kind",
     "std",
+    "ground",
 ];
 
 /// Built-ins of a part file, for assemblies to use.
@@ -82,6 +83,9 @@ pub struct RefDef {
     pub inst: String,
     pub segs: Vec<Seg>,
     pub span: Span,
+    /// An end on a body of this document, worked out where it was written: in the document's
+    /// model space, the body's own (`segs` is then only its text).
+    pub local: Option<fa::Reference>,
 }
 
 #[derive(Clone, Debug)]
@@ -111,6 +115,24 @@ pub enum AsmVal {
     Pose(Frame),
     /// The word `full` (`min_engagement: full`).
     Full,
+    /// A component definition of this document.
+    Def(Rc<CompDef>),
+    /// A call of one: the part it makes (its key) and the evaluation it is (`Comp::eval_key`).
+    Call {
+        key: String,
+        eval: String,
+    },
+    /// A component of a used file (`t.cup`), placed from that file.
+    Foreign {
+        name: String,
+        file: String,
+    },
+    /// A call of one (`t.cup(d: 9)`): its params' values, by name.
+    ForeignCall {
+        name: String,
+        file: String,
+        args: Vec<(String, Literal)>,
+    },
 }
 
 impl AsmVal {
@@ -125,6 +147,9 @@ impl AsmVal {
             AsmVal::Kind(_) => Ty::AnchorKind,
             AsmVal::Pose(_) => Ty::Pose,
             AsmVal::Full => Ty::Word,
+            AsmVal::Def(_) | AsmVal::Call { .. } | AsmVal::Foreign { .. } | AsmVal::ForeignCall { .. } => {
+                Ty::Function
+            }
         }
     }
 }
@@ -136,7 +161,11 @@ fn asm(v: AsmVal) -> Value {
 #[derive(Clone, Debug)]
 pub struct InstDef {
     pub id: String,
+    /// A part file, or `#NAME` for a component of this document (`source` says which).
     pub file: String,
+    pub source: Source,
+    /// A call's evaluation (values and where each came from), for an inline component.
+    pub eval: Option<String>,
     pub body: Option<String>,
     pub pose: Frame,
     pub ground: bool,
@@ -144,6 +173,30 @@ pub struct InstDef {
     pub suppressed: bool,
     pub sub: bool,
     pub span: Span,
+}
+
+/// Where a component comes from.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Source {
+    /// A part file, a subassembly or a standard part.
+    File,
+    /// A `component NAME(..) { .. }` block of this document.
+    Inline,
+    /// A body of this document a joint or constraint names.
+    Body,
+    /// The bodies of this document no joint names, held where they are made.
+    Root,
+}
+
+impl Source {
+    pub fn name(self) -> &'static str {
+        match self {
+            Source::File => "file",
+            Source::Inline => "inline",
+            Source::Body => "body",
+            Source::Root => "root",
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -208,11 +261,258 @@ pub struct Doc {
     pub rules: Vec<RuleDef>,
     /// References expects measure (`expect x(rail.eia[0])`), resolved as joint ends are.
     pub probes: Vec<RefDef>,
+    /// In-file components whose `ground:` was left to the rule: grounded when nothing moves them.
+    pub auto_ground: BTreeSet<String>,
+    /// Occurrences `ground(X)` holds where they are written.
+    pub grounds: BTreeSet<String>,
+    /// The first line says `assembly`: an assembly before it holds anything.
+    pub declared: bool,
+    /// Part files placed another way than as they are, by their key (`mug.fg|with:d=70`):
+    /// their params set, or one of their components called.
+    pub variants: BTreeMap<String, Variant>,
+}
+
+/// A part file placed as something other than its default part.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Variant {
+    /// Its shared params set (`part(FILE, with: {d: 70})`).
+    With(Vec<(String, Literal)>),
+    /// One of its components called (`t.cup(d: 9)` of `t = use(FILE)`).
+    Component {
+        name: String,
+        args: Vec<(String, Literal)>,
+    },
+}
+
+impl Variant {
+    /// What it adds to the file's key: what makes it a part of its own in the BOM.
+    pub fn key(&self) -> String {
+        let args = |xs: &[(String, Literal)]| {
+            xs.iter()
+                .map(|(n, l)| format!("{n}={}", l.text()))
+                .collect::<Vec<_>>()
+                .join(",")
+        };
+        match self {
+            Variant::With(xs) => format!("with:{}", args(xs)),
+            Variant::Component { name, args: xs } => format!("{name}({})", args(xs)),
+        }
+    }
+}
+
+/// A number given across files (a `with:` value, a used file's component's argument), as it is
+/// written into that file.
+fn literal_of(v: &Value, span: Span) -> R<Literal> {
+    match v {
+        Value::Num(n) => Ok(Literal {
+            value: if n.dim == Dim::Angle {
+                n.v.to_degrees()
+            } else {
+                n.v
+            },
+            dim: if n.dim == Dim::Any { Dim::Length } else { n.dim },
+        }),
+        o => Err(wrong(span, "a number for another file's param", Ty::Num, o)),
+    }
+}
+
+/// The `with:` argument of a call, as written.
+fn with_arg(args: &[Arg]) -> Option<&Expr> {
+    args.iter()
+        .find(|a| a.name.as_ref().is_some_and(|n| n.0 == "with"))
+        .map(|a| &a.value)
+}
+
+fn with_text(src: &str, w: &Expr, name: &str) -> String {
+    match &w.kind {
+        ExprKind::Map(xs) => xs
+            .iter()
+            .find(|x| x.0 == name)
+            .map(|x| one_line(&src[x.1.span.lo as usize..x.1.span.hi as usize]))
+            .unwrap_or_default(),
+        _ => String::new(),
+    }
+}
+
+/// A file's text kept for the run's evaluations of it (each text once, for the process: an
+/// evaluation borrows its text as long as the document's).
+fn kept_text(text: String) -> &'static str {
+    use std::sync::{Mutex, OnceLock};
+    static TEXTS: OnceLock<Mutex<BTreeMap<u64, &'static str>>> = OnceLock::new();
+    let h = text_hash(&text);
+    let mut m = TEXTS.get_or_init(Default::default).lock().expect("texts");
+    m.entry(h).or_insert_with(|| Box::leak(text.into_boxed_str()))
+}
+
+/// `part(FILE, with: {..})` evaluated as a call of the file's default part: its shared params
+/// its params (given, or their defaults, a literal one its own handle `STEM.p`), its other
+/// statements the body, over the file's own text. Its features, the params it reads and observes
+/// are this document's report (the solve still loads the file). The evaluation's key, or None
+/// when the file is not one this can read (the loader then says why).
+fn file_call(ev: &mut Eval, file: &str, key: &str, given: &[(String, Value, String)]) -> Option<String> {
+    let path = locate(&ev.dir, &ev.root, file)?;
+    let text = kept_text(read_capped(&path)?);
+    let prog = crate::syntax::parse(text).ok()?;
+    let stem = std::path::Path::new(file)
+        .file_stem()
+        .map_or_else(|| file.to_string(), |s| s.to_string_lossy().to_string());
+    let traces: Vec<String> = given.iter().map(|g| format!("{}<-{}", g.0, g.2)).collect();
+    let eval_key = format!("{key}|{}", traces.join(","));
+    if ev.comps.iter().any(|c| c.eval_key == eval_key) {
+        return Some(eval_key);
+    }
+    let mut sub = Eval::new(
+        text,
+        ev.rules,
+        ev.b.building,
+        ev.b.cache.comps.remove(&eval_key).unwrap_or_default(),
+    );
+    sub.dir = path.parent().map(|p| p.to_path_buf());
+    sub.root = ev.root.clone();
+    sub.use_chain = ev.use_chain.clone();
+    sub.asm = Some(Doc::default());
+    sub.comp_path = format!("{}{stem}?/", ev.comp_path);
+    sub.total = ev.total.clone();
+    let mut body = vec![];
+    for st in &prog {
+        match &st.kind {
+            StmtKind::Shared { name, value } => {
+                let v = match given.iter().find(|g| &g.0 == name) {
+                    Some(g) => g.1.clone(),
+                    None => {
+                        let literal = matches!(value.kind, ExprKind::Num(..));
+                        match sub.expr(value) {
+                            Ok(Value::Num(x)) if literal => Value::Num(Num {
+                                src: Src::Driving(ParamKey {
+                                    owner: vec![Seg {
+                                        name: stem.clone(),
+                                        index: vec![],
+                                    }],
+                                    name: name.clone(),
+                                }),
+                                ..x
+                            }),
+                            Ok(v) => v,
+                            Err(_) => continue,
+                        }
+                    }
+                };
+                let _ = sub.bind_name(name, v, st.span);
+            }
+            StmtKind::Expr(e) if matches!(&e.kind, ExprKind::Name(n) if n == "assembly") => {}
+            _ => body.push(st.clone()),
+        }
+    }
+    sub.check_static(&body);
+    if !sub.errors.is_empty() {
+        sub.b.building = false;
+    }
+    sub.run(&body);
+    crate::sheet::finish(&mut sub);
+    // what it observes of this document's params is this document's (its own are its own)
+    let shared: BTreeSet<ParamKey> = ev.shared.iter().map(|p| p.key.clone()).collect();
+    for k in std::mem::take(&mut sub.observed) {
+        if shared.contains(&k) {
+            ev.observed.insert(k);
+        }
+    }
+    // its own errors are the file's (the loader reports them on the placement)
+    sub.errors.clear();
+    sub.warnings.clear();
+    ev.comps.push(Comp {
+        id: key.trim_start_matches('#').to_string(),
+        eval_key: eval_key.clone(),
+        def: stem,
+        ev: sub,
+        span: Span::default(),
+        sub: false,
+    });
+    Some(eval_key)
+}
+
+/// `t.cup(p: v, ..)` of a used file's component: the call, placed by `part(..)`.
+pub fn call_foreign(ev: &mut Eval, name: &str, file: &str, args: &[Arg], span: Span) -> R<Value> {
+    let mut out = vec![];
+    for a in args {
+        let Some((n, _)) = &a.name else {
+            return Err(Error::MissingArg {
+                span: a.value.span,
+                func: "component",
+                arg: "a param by name (`d: 80`)",
+            });
+        };
+        let v = ev.expr(&a.value)?;
+        out.push((n.clone(), literal_of(&v, a.value.span)?));
+    }
+    let _ = span;
+    Ok(asm(AsmVal::ForeignCall {
+        name: name.into(),
+        file: file.into(),
+        args: out,
+    }))
+}
+
+impl Doc {
+    /// No components or links: the document is a part.
+    pub fn is_empty(&self) -> bool {
+        !self.declared
+            && self.insts.is_empty()
+            && self.links.is_empty()
+            && self.relations.is_empty()
+            && self.fits.is_empty()
+            && self.rules.is_empty()
+    }
 }
 
 /// Whether a program declares itself an assembly: its first statement is the word `assembly`.
 pub fn declared(prog: &[crate::syntax::Stmt]) -> bool {
     matches!(prog.first().map(|s| &s.kind), Some(StmtKind::Expr(Expr { kind: ExprKind::Name(n), .. })) if n == "assembly")
+}
+
+/// Whether a program holds components or links (read from its text, not run): it is placed
+/// with `subassembly()`, not `part()`.
+pub fn has_components(prog: &[crate::syntax::Stmt]) -> bool {
+    const PLACES: &[&str] = &[
+        "part",
+        "subassembly",
+        "std",
+        "fastened",
+        "revolute",
+        "slider",
+        "cylindrical",
+        "pin_slot",
+        "planar",
+        "coincident",
+        "on_plane",
+        "on_line",
+        "mate",
+        "flush",
+        "concentric",
+        "insert",
+        "parallel",
+        "perpendicular",
+        "angle",
+        "distance",
+        "lock",
+        "gear",
+        "rack_pinion",
+        "screw",
+        "linear",
+        "fit",
+        "fit_rule",
+    ];
+    fn any(stmts: &[crate::syntax::Stmt]) -> bool {
+        // a component's definition places nothing: only placing it, or a joint, does
+        stmts.iter().any(|s| match &s.kind {
+            StmtKind::Assign { value: e, .. } | StmtKind::Expr(e) => {
+                matches!(&e.kind, ExprKind::Call(f, _) if matches!(&f.kind, ExprKind::Name(n) if PLACES.contains(&n.as_str())))
+            }
+            StmtKind::For { body, .. } => any(body),
+            StmtKind::If { then, other, .. } => any(then) || other.as_deref().is_some_and(any),
+            _ => false,
+        })
+    }
+    declared(prog) || any(prog)
 }
 
 pub fn constant(name: &str) -> Option<Value> {
@@ -348,6 +648,7 @@ fn reference(v: &Value, span: Span) -> R<RefDef> {
                 inst: id.clone(),
                 segs: vec![],
                 span,
+                local: None,
             }),
             AsmVal::Ref(r) => Ok(RefDef { span, ..r.clone() }),
             _ => Err(wrong(span, "a joint's end", Ty::Reference, v)),
@@ -409,37 +710,48 @@ fn pair(v: &Value, span: Span, dims: &[Dim], what: &'static str) -> R<(f64, f64)
 // ---- calls --------------------------------------------------------------------------------------
 
 /// The assembly and anchor built-ins; None for any other name, or for a name an assembly shares
-/// with a part built-in, called in a part.
+/// with a part built-in where the part's is meant (a sketch's constraint, the solid `ball`).
 pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> Option<R<Value>> {
-    let in_asm = ev.asm.is_some();
-    if NAMES.contains(&name) {
-        if in_asm {
-            return Some(asm_call(ev, name, args, span));
-        }
-        if crate::builtins::builtin(name).is_some() || crate::builtins::constant(name).is_some() {
-            return None;
-        }
-        return Some(Err(note(
-            span,
-            Issue::WrongDocument {
-                func: name,
-                assembly: true,
-            },
-        )));
-    }
     if PART_NAMES.contains(&name) {
-        if in_asm {
-            return Some(Err(note(
-                span,
-                Issue::WrongDocument {
-                    func: name,
-                    assembly: false,
-                },
-            )));
-        }
         return Some(part_call(ev, name, args, span));
     }
-    None
+    if !NAMES.contains(&name) {
+        return None;
+    }
+    let shared = crate::builtins::builtin(name).is_some() || crate::builtins::constant(name).is_some();
+    if shared && (ev.in_sketch() || (name == "ball" && !ball_joint(ev, args))) {
+        return None;
+    }
+    if ev.asm.is_some() {
+        return Some(asm_call(ev, name, args, span));
+    }
+    if shared {
+        return None;
+    }
+    // a component's own statements (or a part file a part() reads): no components or joints
+    Some(Err(note(
+        span,
+        Issue::Component(CompProblem::Nested { func: name }),
+    )))
+}
+
+/// `ball(a, b)` joins two references; `ball(POINT, r)` is the solid.
+fn ball_joint(ev: &mut Eval, args: &[Arg]) -> bool {
+    let named = |n: &str| args.iter().any(|a| a.name.as_ref().is_some_and(|x| x.0 == n));
+    if ["r", "cut", "keep", "new"].iter().any(|n| named(n)) {
+        return false;
+    }
+    if named("b") || named("flip") || named("suppressed") {
+        return true;
+    }
+    let Some(second) = args.get(1).filter(|a| a.name.is_none()) else {
+        return false;
+    };
+    let (e, w) = (ev.errors.len(), ev.warnings.len());
+    let v = ev.expr(&second.value);
+    ev.errors.truncate(e);
+    ev.warnings.truncate(w);
+    !matches!(v, Ok(Value::Num(_)))
 }
 
 fn doc<'a>(ev: &'a mut Eval<'_>) -> &'a mut Doc {
@@ -455,12 +767,94 @@ fn asm_call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
             let a = Args::bind(
                 ev,
                 name,
-                &["file", "body", "at", "ground", "reference", "suppressed"],
+                &["file", "body", "at", "ground", "reference", "suppressed", "with"],
                 args,
                 span,
             )?;
-            let file = match a.req("file")? {
-                Value::Str(s) => s.to_string(),
+            // a file's shared params set for this occurrence: `part("mug.fg", with: {d: 70})`
+            let with = match a.opt("with") {
+                None => vec![],
+                Some(Value::Map(m)) => {
+                    let mut out = vec![];
+                    for (k, v) in m.iter() {
+                        let Key::Label(n) = k else {
+                            return Err(wrong(
+                                a.span("with"),
+                                "a file's params by name",
+                                Ty::Map,
+                                &Value::Map(m.clone()),
+                            ));
+                        };
+                        out.push((n.clone(), literal_of(v, a.span("with"))?));
+                    }
+                    out
+                }
+                Some(o) => return Err(wrong(a.span("with"), "a file's params by name", Ty::Map, &o)),
+            };
+            // a file, a used file's component, or a call of a component of this document
+            let (file, source, eval) = match a.req("file")? {
+                // `#` starts a component's key: no file is named so
+                Value::Str(s) if s.starts_with('#') => {
+                    return Err(wrong(
+                        a.span("file"),
+                        "a part file (a name not starting with #)",
+                        Ty::Str,
+                        &Value::Str(s),
+                    ));
+                }
+                Value::Str(s) if with.is_empty() => (s.to_string(), Source::File, None),
+                Value::Str(s) => {
+                    let v = Variant::With(with.clone());
+                    let k = format!("{s}|{}", v.key());
+                    doc(ev).variants.insert(k.clone(), v);
+                    // the file as a call: its values' provenance and what it observes are this
+                    // document's, as an inline call's are (proof X1, X2)
+                    let given: Vec<(String, Value, String)> = match (a.opt("with"), with_arg(args)) {
+                        (Some(Value::Map(m)), Some(w)) => m
+                            .iter()
+                            .filter_map(|(key, v)| match key {
+                                Key::Label(n) => {
+                                    let t = with_text(ev.src, w, n);
+                                    Some((n.clone(), v.clone(), t))
+                                }
+                                _ => None,
+                            })
+                            .collect(),
+                        _ => vec![],
+                    };
+                    let eval = file_call(ev, &s, &k, &given);
+                    (k, Source::File, eval)
+                }
+                Value::Asm(x) if matches!(&*x, AsmVal::Foreign { .. } | AsmVal::ForeignCall { .. }) => {
+                    let (name, file, args) = match &*x {
+                        AsmVal::Foreign { name, file } => (name.clone(), file.clone(), vec![]),
+                        AsmVal::ForeignCall { name, file, args } => {
+                            (name.clone(), file.clone(), args.clone())
+                        }
+                        _ => unreachable!("matched"),
+                    };
+                    let v = Variant::Component { name, args };
+                    let k = format!("{file}|{}", v.key());
+                    doc(ev).variants.insert(k.clone(), v);
+                    (k, Source::File, None)
+                }
+                Value::Asm(x) if name == "part" && matches!(&*x, AsmVal::Def(_) | AsmVal::Call { .. }) => {
+                    let call = match &*x {
+                        AsmVal::Def(d) => call_def(ev, d, &[], a.span("file"))?,
+                        _ => Value::Asm(x.clone()),
+                    };
+                    let Value::Asm(c) = &call else {
+                        unreachable!("a call")
+                    };
+                    let AsmVal::Call { key, eval } = &**c else {
+                        unreachable!("a call")
+                    };
+                    (
+                        format!("#{}{key}", ev.comp_path),
+                        Source::Inline,
+                        Some(eval.clone()),
+                    )
+                }
                 o => return Err(wrong(a.span("file"), "a part file", Ty::Str, &o)),
             };
             let body = match a.opt("body") {
@@ -474,6 +868,7 @@ fn asm_call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
             };
             let (ground, reference, suppressed) =
                 (a.flag("ground")?, a.flag("reference")?, a.flag("suppressed")?);
+            let auto = source == Source::Inline && a.opt("ground").is_none();
             let id = ev.take_id(name, span)?;
             ev.record(
                 &id,
@@ -481,20 +876,44 @@ fn asm_call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
                 span,
                 vec![],
             );
+            let is_sub = eval
+                .as_ref()
+                .is_some_and(|e| ev.comps.iter().any(|c| &c.eval_key == e && c.sub));
             doc(ev).insts.push(InstDef {
                 id: id.clone(),
                 file,
+                source,
+                eval,
                 body,
                 pose,
                 ground,
                 reference,
                 suppressed,
-                sub: name == "subassembly",
+                sub: name == "subassembly" || is_sub,
                 span,
             });
+            if auto {
+                doc(ev).auto_ground.insert(id.clone());
+            }
             Ok(asm(AsmVal::Inst(id)))
         }
         "std" => std_part(ev, args, span),
+        // `ground(X)`: an occurrence, or a body of this document, held where it is written
+        "ground" => {
+            let (args, ends) = with_body_ends(ev, args)?;
+            let a = ev.with_bound(ends, |ev| Args::bind(ev, name, &["a"], &args, span))?;
+            let v = a.req("a")?;
+            let id = match &v {
+                Value::Asm(x) => match &**x {
+                    AsmVal::Inst(id) => id.clone(),
+                    AsmVal::Ref(r) if r.segs.is_empty() || r.local.is_some() => r.inst.clone(),
+                    _ => return Err(wrong(a.span("a"), "an occurrence or body", Ty::Instance, &v)),
+                },
+                o => return Err(wrong(a.span("a"), "an occurrence or body", Ty::Instance, o)),
+            };
+            doc(ev).grounds.insert(id);
+            Ok(Value::Bool(true))
+        }
         "pose" => {
             let a = Args::bind(ev, name, &["at", "z", "x", "rz"], args, span)?;
             let o = match a.opt("at") {
@@ -603,6 +1022,11 @@ fn asm_call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
 }
 
 fn joint(ev: &mut Eval, name: &'static str, kind: JointKind, args: &[Arg], span: Span) -> R<Value> {
+    let (args, ends) = with_body_ends(ev, args)?;
+    ev.with_bound(ends, |ev| joint_with(ev, name, kind, &args, span))
+}
+
+fn joint_with(ev: &mut Eval, name: &'static str, kind: JointKind, args: &[Arg], span: Span) -> R<Value> {
     let a = Args::bind(ev, name, joint_args(kind), args, span)?;
     let ra = reference(&a.req("a")?, a.span("a"))?;
     let rb = reference(&a.req("b")?, a.span("b"))?;
@@ -647,6 +1071,11 @@ fn joint(ev: &mut Eval, name: &'static str, kind: JointKind, args: &[Arg], span:
 }
 
 fn constraint(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Value> {
+    let (args, ends) = with_body_ends(ev, args)?;
+    ev.with_bound(ends, |ev| constraint_with(ev, name, &args, span))
+}
+
+fn constraint_with(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Value> {
     let names: &[&'static str] = match name {
         "on_plane" | "mate" | "flush" | "insert" => &["a", "b", "offset", "suppressed"],
         "concentric" | "parallel" => &["a", "b", "opposed", "suppressed"],
@@ -840,6 +1269,8 @@ fn std_part(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     doc(ev).insts.push(InstDef {
         id: id.clone(),
         file: crate::stdparts::key(&spec),
+        source: Source::File,
+        eval: None,
         body: None,
         pose,
         ground,
@@ -896,6 +1327,7 @@ pub fn member(a: &Rc<AsmVal>, name: &str, span: Span) -> R<Value> {
             inst: id.clone(),
             segs: vec![seg],
             span,
+            local: None,
         }))),
         AsmVal::Ref(r) => {
             let mut r = r.clone();
@@ -937,6 +1369,7 @@ pub fn part_call_on(a: &Rc<AsmVal>, text: String, span: Span) -> R<Value> {
             inst: id.clone(),
             segs: vec![seg],
             span,
+            local: None,
         }))),
         AsmVal::Ref(r) => {
             let mut r = r.clone();
@@ -1010,6 +1443,16 @@ pub enum FileProblem {
     Cyclic,
     NoBody {
         body: String,
+    },
+    /// A subassembly holding inline or body components (not yet placed from another file).
+    InFileComponents,
+    /// `with:` names a param the file has no shared param for.
+    NoParam {
+        param: String,
+    },
+    /// A used file has no component of this name.
+    NoComponent {
+        name: String,
     },
 }
 
@@ -1131,6 +1574,8 @@ pub enum Issue {
     AtPastLimit {
         limit: Box<Issue>,
     },
+    /// A component of this document written wrong.
+    Component(CompProblem),
 }
 
 /// Why an expect could not be measured.
@@ -1217,6 +1662,8 @@ impl Issue {
             Issue::IntendedContact { .. } => Level::Info,
             Issue::Inside { issue, .. } => issue.level(),
             Issue::AtPastLimit { .. } => Level::Warning,
+            // nothing grounded: each partition held at its least occurrence, its freedoms free
+            Issue::NoGround => Level::Warning,
             _ => Level::Error,
         }
     }
@@ -1246,6 +1693,7 @@ impl Issue {
             Issue::ExpectUnevaluable { .. } => "ExpectUnevaluable",
             Issue::Inside { issue, .. } => issue.kind(),
             Issue::AtPastLimit { .. } => "AtPastLimit",
+            Issue::Component(p) => p.kind(),
         }
     }
 }
@@ -1347,6 +1795,7 @@ fn names(xs: &[ItemName]) -> String {
 
 fn issue_text(i: &Issue) -> String {
     match i {
+        Issue::Component(p) => p.text(),
         Issue::WrongDocument { func, assembly: true } => {
             format!("{func} is for assembly documents (first line `assembly`)")
         }
@@ -1361,6 +1810,13 @@ fn issue_text(i: &Issue) -> String {
             FileProblem::WrongKind { assembly: false } => format!("{file} is a part: use part()"),
             FileProblem::Cyclic => format!("{file} contains itself"),
             FileProblem::NoBody { body } => format!("{file} has no body {body}"),
+            FileProblem::NoParam { param } => format!("{file} has no shared param {param} for with:"),
+            FileProblem::NoComponent { name } => format!("{file} has no component {name}"),
+            FileProblem::InFileComponents => {
+                format!(
+                    "{file} has components of its own (inline or bodies): not yet placeable as a subassembly"
+                )
+            }
         },
         Issue::BrokenAnchor {
             item,
@@ -1398,7 +1854,9 @@ fn issue_text(i: &Issue) -> String {
         Issue::Conflict { items, culprit, .. } => {
             format!("no pose meets all of {}; {culprit} is left out", names(items))
         }
-        Issue::NoGround => "nothing is grounded: each part keeps where it is written".into(),
+        Issue::NoGround => {
+            "nothing is grounded: each part starts where it is written and its freedoms are free (ground one: `ground: true`, `ground(X)`)".into()
+        }
         Issue::NotConverged { items, residual } => {
             format!("{} did not close (residual {residual:.3e})", names(items))
         }
@@ -1479,6 +1937,23 @@ fn issue_data(i: &Issue) -> Vec<(&'static str, Json)> {
     let s = |x: &str| Json::Str(x.into());
     let list = |xs: &[ItemName]| Json::Arr(xs.iter().map(ItemName::json).collect());
     match i {
+        Issue::Component(p) => match p {
+            CompProblem::Nested { func } => vec![("func", s(func))],
+            CompProblem::BodyGone { id } => vec![("id", s(id))],
+            CompProblem::NotYet { what } => vec![("what", s(what))],
+            CompProblem::ReadsOutside { name, reader } => vec![("name", s(name)), ("reader", s(reader))],
+            CompProblem::StillReadBy { name, readers } => vec![
+                ("name", s(name)),
+                ("readers", Json::Arr(readers.iter().map(|r| s(r)).collect())),
+            ],
+            CompProblem::ReadOtherwise { component, reader } => {
+                vec![("component", s(component)), ("reader", s(reader))]
+            }
+            CompProblem::FileExists { file } => vec![("file", s(file))],
+            CompProblem::NotInlinable { file, why } => vec![("file", s(file)), ("why", s(why))],
+            CompProblem::Cycle { a, b } => vec![("a", s(a)), ("b", s(b))],
+            _ => vec![],
+        },
         Issue::WrongDocument { func, assembly } => vec![("func", s(func)), ("assembly", (*assembly).into())],
         Issue::PartFile { file, problem } => vec![("file", s(file)), ("problem", s(&format!("{problem:?}")))],
         Issue::BrokenAnchor {
@@ -1638,6 +2113,12 @@ pub struct PartLoad {
     pub tooling: Option<Arc<forge_topo::Body>>,
 }
 
+/// A call's params' values and the trace of each.
+type Inputs = (Vec<(String, Value)>, Vec<String>);
+/// An in-file component's load, with the stage, text hash and questions it was made from.
+type InFile = (Rc<crate::build::Stage>, u64, Vec<String>, Arc<PartLoad>);
+/// A link's arguments with its body ends put in by name, and those names' values.
+type Ends = (Vec<Arg>, Vec<(String, Value)>);
 /// A part file's text hash and the references and bodies asked of it.
 /// A part file, its text hash, the references and bodies asked of it, the fence, and whether
 /// its threads are left cosmetic (a drawing's) and it is meshed (`Options::meshes`).
@@ -1656,6 +2137,9 @@ type SubLoad = (Doc, Vec<Error>);
 #[derive(Default)]
 pub struct AsmCache {
     parts: BTreeMap<PartKey, Arc<PartLoad>>,
+    /// This document's own components, by file key: the stage they were read from (kept, so
+    /// equal only while the build is), the text and questions, the load.
+    infile: BTreeMap<String, InFile>,
     subs: BTreeMap<(String, u64, Option<std::path::PathBuf>), Arc<SubLoad>>,
     last: Option<Live>,
     /// Parts runs on other threads build at once (`at` runs): each built by one of them only.
@@ -1746,11 +2230,32 @@ pub const LIMIT: u64 = 64 << 20;
 /// naming document's own directory, its real path a `.fg` file of at most `LIMIT` bytes under
 /// `fence` (the session's root) when there is one. Every refusal is the same None, so a client
 /// learns nothing of what exists outside.
+/// What a placement names: a component of this file by its key (`#box(w=40)`, which the solve
+/// finds among the document's evaluations, never on disk), else a part file as `locate` finds it.
+fn locate_part(
+    dir: &Option<std::path::PathBuf>,
+    fence: &Option<std::path::PathBuf>,
+    file: &str,
+) -> Option<std::path::PathBuf> {
+    if file.starts_with('#') {
+        return Some(std::path::PathBuf::from(file));
+    }
+    locate(dir, fence, file)
+}
+
 pub(crate) fn locate(
     dir: &Option<std::path::PathBuf>,
     fence: &Option<std::path::PathBuf>,
     file: &str,
 ) -> Option<std::path::PathBuf> {
+    // a component's key is no file: never read, never located as one
+    if file.starts_with('#') {
+        return None;
+    }
+    // a file placed another way (`mug.fg|with:..`): the file's own place
+    if let Some((path, _)) = file.split_once('|') {
+        return locate(dir, fence, path);
+    }
     let key = (dir.clone(), fence.clone(), file.to_string());
     let hit = LOCATED.with(|m| m.borrow().as_ref().and_then(|m| m.get(&key).cloned()));
     let found = hit.unwrap_or_else(|| {
@@ -1833,6 +2338,10 @@ fn locate_now(
 /// A located file's text, read no further than `LIMIT`.
 pub(crate) fn read_capped(p: &std::path::Path) -> Option<String> {
     use std::io::Read;
+    // a component's key is never a file to read
+    if p.to_str().is_none_or(|k| k.starts_with('#')) {
+        return None;
+    }
     if let Some(k) = p.to_str().filter(|k| k.starts_with(crate::stdparts::KEY)) {
         return crate::stdparts::text_of(k);
     }
@@ -1853,6 +2362,14 @@ fn unlocated(file: &str) -> String {
 }
 
 fn located(dir: &Option<std::path::PathBuf>, fence: &Option<std::path::PathBuf>, file: &str) -> String {
+    // a component of this document
+    if file.starts_with('#') {
+        return file.to_string();
+    }
+    // a file placed another way: its own place, the variant kept
+    if let Some((path, variant)) = file.split_once('|') {
+        return format!("{}|{variant}", located(dir, fence, path));
+    }
     locate(dir, fence, file).map_or_else(|| unlocated(file), |p| p.to_string_lossy().to_string())
 }
 
@@ -2015,7 +2532,7 @@ fn load_part_with(
             return out;
         }
     };
-    if declared(&prog) {
+    if has_components(&prog) {
         out.declared = true;
         drop(watch);
         return out;
@@ -2024,6 +2541,8 @@ fn load_part_with(
     ev.dir = dir;
     ev.root = fence;
     ev.cosmetic_threads = cosmetic;
+    // its component definitions are allowed (they place nothing)
+    ev.asm = Some(Doc::default());
     ev.check_static(&prog);
     if !ev.errors.is_empty() {
         ev.b.building = false;
@@ -2032,9 +2551,22 @@ fn load_part_with(
     out.threads = std::mem::take(&mut ev.threads);
     // a part's warnings stay with it: an assembly keeps none of them, so its shop rules go unasked
     crate::sheet::finish_with(&mut ev, false);
-    out.body = placed_body(&ev);
-    out.tooling = tooling_body(&ev).map(Arc::new);
-    out.summary = Arc::new(crate::props::PartSummary::of(&ev));
+    finish_load(&mut ev, &mut out, refs, bodies, mesh);
+    out.errors = std::mem::take(&mut ev.errors);
+    let read = watch.done();
+    out.ident = crate::store::key("part", |h| {
+        h.str(text);
+        h.u128(read.digest());
+    });
+    out
+}
+
+/// A part evaluated (a file's, or an inline component's): its body, summary, bodies asked for,
+/// declared anchors and kinds, the references asked for, and its interference mesh.
+fn finish_load(ev: &mut Eval, out: &mut PartLoad, refs: &[String], bodies: &[String], mesh: bool) {
+    out.body = placed_body(ev);
+    out.tooling = tooling_body(ev).map(Arc::new);
+    out.summary = Arc::new(crate::props::PartSummary::of(ev));
     if let Some(st) = ev.b.stages.last() {
         for name in bodies {
             if let Some(f) = ev.feats.iter().find(|f| &f.id == name)
@@ -2059,7 +2591,7 @@ fn load_part_with(
             }
             Value::Asm(a) => match &**a {
                 AsmVal::Anchor { reference, feature } => {
-                    let r = as_reference(&mut ev, reference.clone());
+                    let r = as_reference(ev, reference.clone());
                     out.refs.insert(
                         name.clone(),
                         r.ok_or(fa::AnchorFault::Degenerate { entity: name.clone() }),
@@ -2106,7 +2638,7 @@ fn load_part_with(
             ev.warnings.truncate(warnings);
         }
         if let Ok(v) = got {
-            match as_reference(&mut ev, v) {
+            match as_reference(ev, v) {
                 Some(x) => {
                     out.refs.insert(r.clone(), Ok(x));
                 }
@@ -2117,12 +2649,6 @@ fn load_part_with(
             }
         }
     }
-    out.errors = std::mem::take(&mut ev.errors);
-    let read = watch.done();
-    out.ident = crate::store::key("part", |h| {
-        h.str(text);
-        h.u128(read.digest());
-    });
     if mesh {
         out.mesh = out.body.as_ref().and_then(interference_mesh);
         out.body_meshes = out
@@ -2131,6 +2657,158 @@ fn load_part_with(
             .filter_map(|(n, b)| Some((n.clone(), interference_mesh(b)?)))
             .collect();
     }
+}
+
+/// A part file's text as a placement asks for it: its own place (`mug.fg|with:..` is
+/// `mug.fg`), the variant the document wrote, and the text with `with:`'s params set (Err: a param
+/// the file has not). The text is None where the file can't be read.
+fn variant_text<'d>(
+    d: &'d Doc,
+    dir: &Option<std::path::PathBuf>,
+    fence: &Option<std::path::PathBuf>,
+    file: &str,
+) -> Result<(String, Option<&'d Variant>, Option<String>), String> {
+    let path = file.split_once('|').map_or(file, |x| x.0).to_string();
+    let variant = d
+        .variants
+        .iter()
+        .find(|(k, _)| located(dir, fence, k) == *file)
+        .map(|x| x.1);
+    let text = if path.starts_with('?') {
+        None
+    } else {
+        read_capped(std::path::Path::new(&path))
+    };
+    let text = match (text, variant) {
+        (Some(mut t), Some(Variant::With(xs))) => {
+            for (n, l) in xs {
+                t = crate::edit::apply(
+                    &t,
+                    &Op::SetParam {
+                        param: ParamKey::shared(n),
+                        value: *l,
+                    },
+                )
+                .map_err(|_| n.clone())?;
+            }
+            Some(t)
+        }
+        (t, _) => t,
+    };
+    Ok((path, variant, text))
+}
+
+/// A part file loaded as its placement asks: its default part, or one of its components called.
+fn make_load(
+    text: &str,
+    path: &str,
+    variant: Option<&Variant>,
+    fence: &Option<std::path::PathBuf>,
+    refs: &[String],
+    bodies: &[String],
+    cosmetic: bool,
+    mesh: bool,
+) -> PartLoad {
+    let parent = std::path::Path::new(path).parent().map(|p| p.to_path_buf());
+    match variant {
+        Some(Variant::Component { name, args }) => {
+            load_component(text, parent, fence.clone(), name, args, refs, mesh)
+        }
+        _ => load_part_with(text, parent, fence.clone(), refs, bodies, mesh, cosmetic),
+    }
+}
+
+/// One component of a part file, called with `args` (the rest its defaults), as a part: its
+/// own evaluation over that file's text, the file's shared params and functions its scope.
+fn load_component(
+    text: &str,
+    dir: Option<std::path::PathBuf>,
+    fence: Option<std::path::PathBuf>,
+    name: &str,
+    args: &[(String, Literal)],
+    refs: &[String],
+    mesh: bool,
+) -> PartLoad {
+    let mut out = empty_load(&format!("{name}@{text}"));
+    out.hash = content_hash(&format!("{name}({args:?})\n{text}"));
+    let prog = match crate::syntax::parse(text) {
+        Ok(p) => p,
+        Err(e) => {
+            out.errors.push(e);
+            return out;
+        }
+    };
+    let mut ev = Eval::new(text, crate::eval::Rules::default(), false, Default::default());
+    ev.dir = dir;
+    ev.root = fence;
+    ev.asm = Some(Doc::default());
+    // its scope: the file's shared params, functions and uses, and the definition itself
+    let keep: Vec<crate::syntax::Stmt> = prog
+        .iter()
+        .filter(|s| match &s.kind {
+            StmtKind::Shared { .. } | StmtKind::Fn { .. } => true,
+            StmtKind::Assign { value, .. } => {
+                matches!(&value.kind, ExprKind::Call(f, _) if matches!(&f.kind, ExprKind::Name(n) if n == "use"))
+            }
+            StmtKind::Block {
+                kind: crate::syntax::BlockKind::Component,
+                name: n,
+                ..
+            } => n == name,
+            _ => false,
+        })
+        .cloned()
+        .collect();
+    ev.run(&keep);
+    let def = ev.top_level().into_iter().find_map(|(n, v)| match v {
+        Value::Asm(a) if n == name => match &*a {
+            AsmVal::Def(d) => Some(d.clone()),
+            _ => None,
+        },
+        _ => None,
+    });
+    let Some(def) = def else {
+        out.errors.push(note(
+            Span::default(),
+            Issue::PartFile {
+                file: name.into(),
+                problem: FileProblem::NoComponent { name: name.into() },
+            },
+        ));
+        return out;
+    };
+    let span = def.span;
+    let mut values = match call_values(&mut ev, &def, &[], span) {
+        Ok(v) => v,
+        Err(e) => {
+            out.errors.push(e);
+            return out;
+        }
+    };
+    for (n, l) in args {
+        match values.iter_mut().find(|v| v.0 == *n) {
+            Some(v) => {
+                let x = if l.dim == Dim::Angle {
+                    l.value.to_radians()
+                } else {
+                    l.value
+                };
+                v.1 = Value::Num(Num::konst(x, l.dim));
+            }
+            None => {
+                out.errors.push(Error::UnknownArg {
+                    span,
+                    func: "component",
+                    arg: n.clone(),
+                });
+                return out;
+            }
+        }
+    }
+    let mut sub = sub_eval(&ev, &def, &values, true, Default::default());
+    finish_load(&mut sub, &mut out, refs, &[], mesh);
+    out.errors = std::mem::take(&mut sub.errors);
+    out.errors.extend(std::mem::take(&mut ev.errors));
     out
 }
 
@@ -2238,6 +2916,10 @@ pub struct AsmOut {
     pub engagements: Vec<EngagementOut>,
     /// Every part and subassembly occurrence, in the order the documents make them.
     pub insts: Vec<InstOut>,
+    /// The top document's components, where each comes from (`insts`' top-level ones).
+    pub sources: Vec<(String, Source)>,
+    /// Each occurrence of a call of a component of this file, and the evaluation it is.
+    pub evals: Vec<(String, String)>,
     /// Every joint, constraint, relation, fit and fit rule, through subassemblies.
     pub links: Vec<LinkOut>,
     /// Where each of `links` is in the world, solved: a joint's or constraint's two ends' frames
@@ -2384,12 +3066,19 @@ fn build_doc(
     }
     // a reference's path through subassemblies to a part, and its name in that part
     let end = |r: &RefDef, want: &mut BTreeMap<String, (BTreeSet<String>, BTreeSet<String>)>| -> fa::End {
+        // on a body of this document: worked out where it was written
+        if let Some(l) = &r.local {
+            return fa::End {
+                path: vec![fa::InstanceId(hid(&r.inst))],
+                anchor: fa::AnchorRef::Local(*l),
+            };
+        }
         let mut path = vec![fa::InstanceId(hid(&r.inst))];
         let mut cur = d.insts.iter().find(|x| x.id == r.inst);
         let mut cur_dir = dir.clone();
         let mut segs: &[Seg] = &r.segs;
         while let Some(c) = cur.filter(|c| c.sub) {
-            let Some(file) = locate(&cur_dir, fence, &c.file) else {
+            let Some(file) = locate_part(&cur_dir, fence, &c.file) else {
                 break;
             };
             let Some(sub) = subs.get(&file.to_string_lossy().to_string()) else {
@@ -2401,7 +3090,10 @@ fn build_doc(
                 Some(x) => {
                     path.push(fa::InstanceId(hid(&x.id)));
                     cur = Some(x);
-                    cur_dir = file.parent().map(|p| p.to_path_buf());
+                    // an in-file subassembly's parts are found where the document's are
+                    if !c.file.starts_with('#') {
+                        cur_dir = file.parent().map(|p| p.to_path_buf());
+                    }
                     segs = &segs[1..];
                 }
                 None => break,
@@ -2529,8 +3221,11 @@ fn structure(
         }
     };
     let sub_of = |dir: &Option<std::path::PathBuf>, file: &str| {
-        let p = locate(dir, fence, file)?;
+        let p = locate_part(dir, fence, file)?;
         let s = subs.get(&p.to_string_lossy().to_string())?;
+        if file.starts_with('#') {
+            return Some((s, dir.clone()));
+        }
         Some((s, p.parent().map(|x| x.to_path_buf())))
     };
     for i in &d.insts {
@@ -2649,6 +3344,10 @@ pub fn finish(
     let Some(d) = ev.asm.take() else {
         return (None, cache);
     };
+    // a part: nothing to place or solve
+    if d.is_empty() {
+        return (None, cache);
+    }
     let mut cache = cache.unwrap_or_default();
     if !opts.build || !ev.errors.is_empty() {
         ev.asm = Some(d);
@@ -2656,6 +3355,14 @@ pub fn finish(
     }
     let _located = LocateScope::enter();
     crate::geomemo::recall();
+    let mut d = in_file(ev, d);
+    // each call's own components, nested: their documents by their evaluations' paths
+    let mut prepared: BTreeMap<String, Doc> = BTreeMap::new();
+    prepare_all(ev, &d, &mut prepared);
+    if !ev.errors.is_empty() {
+        ev.asm = Some(d);
+        return (None, Some(cache));
+    }
     let mut t = AsmTimings::default();
     let t0 = Instant::now();
     let dir = opts.dir.clone();
@@ -2669,6 +3376,32 @@ pub fn finish(
         vec![(d.clone(), dir.clone(), vec![])];
     while let Some((doc_, here, chain)) = stack.pop() {
         for i in doc_.insts.iter().filter(|i| i.sub) {
+            // a call of a component of this file that places or joins its own: its evaluation's
+            // document, ready to solve
+            if i.file.starts_with('#') {
+                let key = i.file.clone();
+                if chain.contains(&key) {
+                    ev.errors.push(note(
+                        i.span,
+                        Issue::PartFile {
+                            file: i.file.clone(),
+                            problem: FileProblem::Cyclic,
+                        },
+                    ));
+                    continue;
+                }
+                let path = format!("{}/", key.trim_start_matches('#'));
+                if !subs.contains_key(&key)
+                    && let Some(doc) = prepared.get(&path)
+                {
+                    let loaded = Arc::new((doc.clone(), vec![]));
+                    subs.insert(key.clone(), loaded.clone());
+                    let mut c = chain.clone();
+                    c.push(key);
+                    stack.push((loaded.0.clone(), here.clone(), c));
+                }
+                continue;
+            }
             let Some(p) = locate(&here, &fence, &i.file) else {
                 ev.errors.push(note(
                     i.span,
@@ -2708,7 +3441,7 @@ pub fn finish(
             let loaded = match cache.subs.get(&ck) {
                 Some(x) => x.clone(),
                 None => {
-                    let is_asm = crate::syntax::parse(&text).is_ok_and(|p| declared(&p));
+                    let is_asm = crate::syntax::parse(&text).is_ok_and(|p| has_components(&p));
                     if !is_asm {
                         ev.errors.push(note(
                             i.span,
@@ -2724,6 +3457,19 @@ pub fn finish(
                     x
                 }
             };
+            let own = |r: &RefDef| loaded.0.insts.iter().any(|x| x.id == r.inst);
+            if loaded.0.insts.iter().any(|x| x.source != Source::File)
+                || loaded.0.links.iter().any(|l| !own(&l.a) || !own(&l.b))
+            {
+                ev.errors.push(note(
+                    i.span,
+                    Issue::PartFile {
+                        file: i.file.clone(),
+                        problem: FileProblem::InFileComponents,
+                    },
+                ));
+                continue;
+            }
             if let Some(e) = loaded.1.first() {
                 ev.errors.push(note(
                     i.span,
@@ -2751,7 +3497,6 @@ pub fn finish(
     // the documents for forge-asm, and what each part file is asked for
     let mut want: BTreeMap<String, (BTreeSet<String>, BTreeSet<String>)> = BTreeMap::new();
     // the references expects measure, so the parts are asked for them
-    let mut d = d;
     for (k, s) in ev.expects.clone().iter().enumerate() {
         if let StmtKind::Expect { args, .. } = &s.kind {
             let mark = ev.enter_expect(k);
@@ -2771,7 +3516,11 @@ pub fn finish(
     // each subassembly's fit and rule names, for what its fits say when used from here
     let mut sub_fit_names: BTreeMap<fa::DocId, (Vec<String>, BTreeMap<u64, String>)> = BTreeMap::new();
     for (key, sub) in &subs {
-        let sdir = std::path::Path::new(key).parent().map(|p| p.to_path_buf());
+        let sdir = if key.starts_with('#') {
+            dir.clone()
+        } else {
+            std::path::Path::new(key).parent().map(|p| p.to_path_buf())
+        };
         let mut sn = Names::default();
         let a = build_doc(&sub.0, &dir, &fence, &sdir, &subs, &mut want, &mut sn);
         let doc = fa::DocId(short(&dir, key).into());
@@ -2821,10 +3570,11 @@ pub fn finish(
     // the parts not yet built, built on all cores first
     let mut missing: Vec<(PartKey, String)> = vec![];
     for (file, (refs, bodies)) in &want {
-        let Some(text) = (!file.starts_with('?'))
-            .then(|| read_capped(std::path::Path::new(file)))
-            .flatten()
-        else {
+        // this file's own components are its evaluations', never read
+        if file.starts_with('#') {
+            continue;
+        }
+        let Ok((_, _, Some(text))) = variant_text(&d, &dir, &fence, file) else {
             continue;
         };
         let ck = (
@@ -2844,16 +3594,13 @@ pub fn finish(
         let (ck, text) = &missing[i];
         let (file, _, refs, bodies, fence, (cosmetic, meshed)) = ck;
         let make = || {
-            let parent = std::path::Path::new(file).parent().map(|p| p.to_path_buf());
-            Arc::new(load_part_with(
-                text,
-                parent,
-                fence.clone(),
-                refs,
-                bodies,
-                *meshed,
-                *cosmetic,
-            ))
+            let path = file.split_once('|').map_or(file.as_str(), |x| x.0);
+            let variant = d
+                .variants
+                .iter()
+                .find(|(k, _)| located(&dir, fence, k) == *file)
+                .map(|x| x.1);
+            Arc::new(make_load(text, path, variant, fence, refs, bodies, *cosmetic, *meshed))
         };
         let Some(pool) = &pool else { return (make(), true) };
         let cell = pool
@@ -2888,47 +3635,59 @@ pub fn finish(
             },
             |i| i.file.clone(),
         );
-        let text = if file.starts_with('?') {
-            None
-        } else {
-            read_capped(std::path::Path::new(file))
-        };
-        let Some(text) = text else {
-            ev.errors.push(note(
-                span,
-                Issue::PartFile {
-                    file: shown,
-                    problem: FileProblem::Missing,
-                },
-            ));
-            continue;
-        };
         let refs: Vec<String> = refs.iter().cloned().collect();
         let bodies: Vec<String> = bodies.iter().cloned().collect();
-        let ck = (
-            file.clone(),
-            text_hash(&text),
-            refs.clone(),
-            bodies.clone(),
-            fence.clone(),
-            (opts.cosmetic_threads, opts.meshes),
-        );
-        let load = match cache.parts.get(&ck) {
-            Some(l) => l.clone(),
-            None => {
-                let parent = std::path::Path::new(file).parent().map(|p| p.to_path_buf());
-                let l = Arc::new(load_part_with(
-                    &text,
-                    parent,
-                    fence.clone(),
-                    &refs,
-                    &bodies,
-                    opts.meshes,
-                    opts.cosmetic_threads,
+        let load = if file.starts_with('#') {
+            infile_load(ev, &prepared, file, &refs, &mut cache)
+        } else {
+            let (path, variant, text) = match variant_text(&d, &dir, &fence, file) {
+                Ok(x) => x,
+                Err(n) => {
+                    ev.errors.push(note(
+                        span,
+                        Issue::PartFile {
+                            file: shown.clone(),
+                            problem: FileProblem::NoParam { param: n },
+                        },
+                    ));
+                    continue;
+                }
+            };
+            let Some(text) = text else {
+                ev.errors.push(note(
+                    span,
+                    Issue::PartFile {
+                        file: shown,
+                        problem: FileProblem::Missing,
+                    },
                 ));
-                cache.parts.insert(ck, l.clone());
-                t.built += 1;
-                l
+                continue;
+            };
+            let ck = (
+                file.clone(),
+                text_hash(&text),
+                refs.clone(),
+                bodies.clone(),
+                fence.clone(),
+                (opts.cosmetic_threads, opts.meshes),
+            );
+            match cache.parts.get(&ck) {
+                Some(l) => l.clone(),
+                None => {
+                    let l = Arc::new(make_load(
+                        &text,
+                        &path,
+                        variant,
+                        &fence,
+                        &refs,
+                        &bodies,
+                        opts.cosmetic_threads,
+                        opts.meshes,
+                    ));
+                    cache.parts.insert(ck, l.clone());
+                    t.built += 1;
+                    l
+                }
             }
         };
         loads.push(Arc::as_ptr(&load) as usize);
@@ -3186,6 +3945,12 @@ pub fn finish(
         ..AsmOut::default()
     };
     structure(&d, "", &dir, &fence, &subs, 0, &mut out.insts, &mut out.links);
+    out.sources = d.insts.iter().map(|i| (i.id.clone(), i.source)).collect();
+    out.evals = d
+        .insts
+        .iter()
+        .filter_map(|i| Some((i.id.clone(), i.eval.clone()?)))
+        .collect();
     for e in &rep.engagements {
         out.engagements.push(EngagementOut {
             a: path_name(&names, &e.a),
@@ -3356,6 +4121,8 @@ pub fn finish(
         ev.leave_expect(mark);
     }
     checker.prefetch_clearances(sol, &pairs, CLEARANCE_REACH);
+    // a document with a model of its own measures its part metrics there (`lib.rs`)
+    let own_model = ev.b.body().is_some();
     // the expects measured on this solve (all of them when probing for an `at` run)
     let mut direct: BTreeMap<usize, Result<f64, Issue>> = BTreeMap::new();
     for (k, s) in expects.iter().enumerate() {
@@ -3366,6 +4133,10 @@ pub fn finish(
             Some(ps) => ps.contains(&k),
             None => at.is_empty(),
         };
+        // a part measure (volume, valid, ..) is the document's model's (`lib.rs`)
+        if own_model && !METRICS.contains(&metric.as_str()) {
+            continue;
+        }
         if !wanted {
             continue;
         }
@@ -3397,7 +4168,7 @@ pub fn finish(
             let StmtKind::Expect { at, .. } = &s.kind else {
                 continue;
             };
-            if at.is_empty() {
+            if at.is_empty() || (own_model && !is_metric(s)) {
                 continue;
             }
             let mark = ev.enter_expect(k);
@@ -3455,6 +4226,7 @@ pub fn finish(
             };
             let mut kept = crate::build::Cache::default();
             kept.asm = Some(Box::new(AsmCache {
+                infile: Default::default(),
                 parts: parts.clone(),
                 subs: subs.clone(),
                 last: None,
@@ -3516,7 +4288,7 @@ pub fn finish(
             else {
                 break 'one;
             };
-            if opts.probe.is_some() {
+            if opts.probe.is_some() || (own_model && !is_metric(s)) {
                 break 'one;
             }
             let line = s.span.lines(ev.src).0;
@@ -3823,6 +4595,16 @@ impl Measure<'_> {
                 });
             }
         };
+        // a body of this document a joint made a component: its occurrence
+        if let Value::Feature(f) = &v
+            && self.names.inst.contains_key(&hid(&f.id))
+        {
+            let path = vec![fa::InstanceId(hid(&f.id))];
+            let pose = self.sol.pose(path[0]).ok_or(Unevaluable::NoReference {
+                reference: f.id.clone(),
+            })?;
+            return Ok((path, pose));
+        }
         let Value::Asm(a) = &v else {
             return Err(Unevaluable::NotAPlace { found: v.ty() });
         };
@@ -4360,6 +5142,25 @@ pub fn json(out: &AsmOut) -> Json {
     let t = &out.timings;
     let mut f = vec![
         (
+            "components",
+            Json::Arr(
+                out.insts
+                    .iter()
+                    .filter_map(|i| Some((i, out.sources.iter().find(|s| s.0 == i.path)?.1)))
+                    .map(|(i, src)| {
+                        Json::obj(vec![
+                            ("id", i.path.as_str().into()),
+                            ("source", src.name().into()),
+                            ("file", i.file.as_str().into()),
+                            ("subassembly", i.sub.into()),
+                            ("ground", i.ground.into()),
+                            ("suppressed", i.suppressed.into()),
+                        ])
+                    })
+                    .collect(),
+            ),
+        ),
+        (
             "instances",
             Json::Arr(
                 out.poses
@@ -4494,4 +5295,1186 @@ pub fn json(out: &AsmOut) -> Json {
 #[allow(dead_code)]
 fn unit_dir(v: Vec3) -> Option<UnitVec3> {
     v.normalize()
+}
+
+// ---- components of this document ----------------------------------------------------------------
+
+/// What goes wrong with a component of this document.
+#[derive(Clone, Debug, PartialEq)]
+pub enum CompProblem {
+    /// `component` inside a loop, function, sketch or another component.
+    NotTopLevel,
+    /// `shared` inside a component: the document's params are written at its top.
+    Shared,
+    /// A component, instance or joint inside a component (a subassembly is a file).
+    Nested { func: &'static str },
+    /// A joint end of this document no body or component holds.
+    NoComponent,
+    /// A body a joint names is gone by the end of the document (a later boolean took it).
+    BodyGone { id: String },
+    /// Designed, not built yet (the design's first merge leaves it out): said, typed.
+    NotYet { what: &'static str },
+    /// A refactor would leave a name unbound: what the moved statements read that stays behind.
+    ReadsOutside { name: String, reader: String },
+    /// A refactor would take away what statements left behind read: each reader.
+    StillReadBy { name: String, readers: Vec<String> },
+    /// A component's name read otherwise than placing it (`part(cup(..))`): not movable to a file.
+    ReadOtherwise { component: String, reader: String },
+    /// The file to write already exists.
+    FileExists { file: String },
+    /// A file not inlinable as written: why.
+    NotInlinable { file: String, why: String },
+    /// Components placing each other round (a placing b placing a, or a itself): no end (R1).
+    Cycle { a: String, b: String },
+}
+
+/// A component problem as an error, where it is.
+pub fn comp_error(span: Span, p: CompProblem) -> Error {
+    note(span, Issue::Component(p))
+}
+
+/// A construct the language will have but does not yet, refused typed.
+pub fn not_yet(what: &'static str, span: Span) -> Error {
+    note(span, Issue::Component(CompProblem::NotYet { what }))
+}
+
+impl CompProblem {
+    fn kind(&self) -> &'static str {
+        match self {
+            CompProblem::NotTopLevel => "ComponentNotTopLevel",
+            CompProblem::Shared => "SharedInComponent",
+            CompProblem::Nested { .. } => "InComponent",
+            CompProblem::NoComponent => "NoComponent",
+            CompProblem::BodyGone { .. } => "BodyGone",
+            CompProblem::NotYet { .. } => "NotYet",
+            CompProblem::ReadsOutside { .. } => "ReadsOutside",
+            CompProblem::StillReadBy { .. } => "StillReadBy",
+            CompProblem::ReadOtherwise { .. } => "ReadOtherwise",
+            CompProblem::FileExists { .. } => "FileExists",
+            CompProblem::NotInlinable { .. } => "NotInlinable",
+            CompProblem::Cycle { .. } => "ComponentCycle",
+        }
+    }
+    fn text(&self) -> String {
+        match self {
+            CompProblem::NotTopLevel => "a component is a statement of the document's top level".into(),
+            CompProblem::Shared => "shared params are the document's: write it above the component".into(),
+            CompProblem::Nested { func } => {
+                format!("{func} places or joins components: write it in the document, outside the component")
+            }
+            CompProblem::NoComponent => {
+                "this end lies on no body or component: start it with its component (`lid.NAME`)".into()
+            }
+            CompProblem::BodyGone { id } => format!("{id} is no body at the end of the document"),
+            CompProblem::ReadsOutside { name, reader } => {
+                format!("{reader} reads {name}, which would stay behind: move it too, or make it shared")
+            }
+            CompProblem::StillReadBy { name, readers } => {
+                format!("{name} is still read by {}", readers.join(", "))
+            }
+            CompProblem::ReadOtherwise { component, reader } => {
+                format!("{reader} reads {component} other than placing it (part({component}(..)))")
+            }
+            CompProblem::FileExists { file } => format!("{file} exists already: pick another name"),
+            CompProblem::NotInlinable { file, why } => format!("{file} can't be brought in: {why}"),
+            CompProblem::Cycle { a, b } => {
+                format!("{a} places {b}, which places {a}: a component may not place itself")
+            }
+            CompProblem::NotYet { what } => {
+                format!(
+                    "{what} is designed but not built yet: place a file (`part(FILE)`) or a component of this file"
+                )
+            }
+        }
+    }
+}
+
+/// An inline component's own evaluation: a part of its own over this document's text.
+pub struct Comp<'s> {
+    /// The part it makes (`cup(d=80,h=95)`): equal values, the same part.
+    pub id: String,
+    /// The part and where each value came from: evaluations are shared only when both agree,
+    /// so a param driving one call never stands for another's (proof-findings 3).
+    pub eval_key: String,
+    /// The definition's name.
+    pub def: String,
+    pub ev: Eval<'s>,
+    /// The `component` statement.
+    pub span: Span,
+    /// It places or joins components of its own: a subassembly.
+    pub sub: bool,
+}
+
+/// How deep components may place components (a cycle the static check misses stops here).
+pub const DEPTH: usize = 16;
+
+/// The key of the bodies no joint names, in an evaluation under `path`.
+pub fn root_key(path: &str) -> String {
+    if path.is_empty() {
+        ROOT.to_string()
+    } else {
+        format!("#{path}#root")
+    }
+}
+
+/// An inline component as a run reports it: its features and params named from outside
+/// (`lid.plate`, `lid.plate.d`), its iProperties.
+#[derive(Clone, Debug)]
+pub struct CompOut {
+    /// The part it makes (`peg(d=6,h=30)`).
+    pub id: String,
+    /// And where its values came from: one evaluation per part and inputs.
+    pub eval_key: String,
+    pub def: String,
+    pub span: Span,
+    pub feats: Vec<crate::eval::FeatInfo>,
+    pub locals: Vec<crate::eval::ParamInfo>,
+    pub props: crate::props::Props,
+}
+
+fn prefixed(id: &str, inner: &str) -> String {
+    format!("{id}.{inner}")
+}
+
+/// The inline components of a run, as `Run::components`.
+pub fn components(ev: &Eval) -> Vec<CompOut> {
+    ev.comps
+        .iter()
+        .map(|c| CompOut {
+            id: c.id.clone(),
+            eval_key: c.eval_key.clone(),
+            def: c.def.clone(),
+            span: c.span,
+            feats: c
+                .ev
+                .feats
+                .iter()
+                // definition ids: what edit ops address (`peg.shank`), the same for every call
+                .map(|f| crate::eval::FeatInfo {
+                    id: prefixed(&c.def, &f.id),
+                    ..f.clone()
+                })
+                .collect(),
+            locals: c
+                .ev
+                .locals
+                .iter()
+                .map(|p| {
+                    let mut p = p.clone();
+                    p.key.owner.insert(
+                        0,
+                        Seg {
+                            name: c.def.clone(),
+                            index: vec![],
+                        },
+                    );
+                    p
+                })
+                .collect(),
+            props: c.ev.props.clone(),
+        })
+        .collect()
+}
+
+/// Puts each inline component's kernel history back in the document's cache, for the next run.
+pub fn keep_comp_caches(ev: &mut Eval) {
+    for c in &mut ev.comps {
+        let b = std::mem::replace(&mut c.ev.b, crate::build::Builder::new(false, Default::default()));
+        ev.b.cache.comps.insert(c.eval_key.clone(), b.into_cache());
+    }
+}
+
+/// A `component NAME(p: DEFAULT, ..) { STATEMENTS }` definition: a part as a function of its
+/// params. It places nothing; `part(NAME(p: v))` does.
+#[derive(Clone, Debug)]
+pub struct CompDef {
+    pub name: String,
+    pub params: Vec<Arg>,
+    pub body: Rc<Vec<crate::syntax::Stmt>>,
+    pub span: Span,
+}
+
+/// `component NAME(p: DEFAULT, ..) { .. }`: defined here, its statements checked once with the
+/// defaults (built only where it is placed).
+pub fn component_block(
+    ev: &mut Eval,
+    s: &crate::syntax::Stmt,
+    name: &str,
+    args: &[Arg],
+    body: &[crate::syntax::Stmt],
+) -> R<()> {
+    if !ev.at_top() || ev.asm.is_none() {
+        return Err(note(s.span, Issue::Component(CompProblem::NotTopLevel)));
+    }
+    for a in args {
+        if a.name.is_none() {
+            return Err(Error::MissingArg {
+                span: a.value.span,
+                func: "component",
+                arg: "a param's name and default (`d: 80`)",
+            });
+        }
+    }
+    // a param named as a shared param would stand for it inside the functions the body calls
+    // (proof-findings 5): one name, one meaning
+    for a in args {
+        let (n, sp) = a.name.as_ref().expect("checked: named");
+        if let Some(p) = ev.shared.iter().find(|p| p.key.name == *n) {
+            return Err(Error::Rebind {
+                span: *sp,
+                name: n.clone(),
+                first: p.span,
+            });
+        }
+    }
+    for st in body {
+        if matches!(st.kind, StmtKind::Shared { .. }) {
+            ev.errors
+                .push(note(st.span, Issue::Component(CompProblem::Shared)));
+        }
+    }
+    let def = Rc::new(CompDef {
+        name: name.to_string(),
+        params: args.to_vec(),
+        body: Rc::new(
+            body.iter()
+                .filter(|st| !matches!(st.kind, StmtKind::Shared { .. }))
+                .cloned()
+                .collect(),
+        ),
+        span: s.span,
+    });
+    ev.ctx_pending(name, s.span);
+    let id = ev.take_id("component", s.span)?;
+    ev.record(&id, "component", s.span, vec![]);
+    // its statements' errors even where it is never placed: a check with the defaults
+    let values = call_values(ev, &def, &[], s.span)?;
+    // each default a param of the document's (`cup.d`): listed with its value, its handle (a
+    // literal is SetParam'd as SetArg on the definition) and whether it is structural
+    for ((n, v), a) in values.iter().zip(&def.params) {
+        ev.locals.push(crate::eval::ParamInfo {
+            key: ParamKey {
+                owner: vec![Seg {
+                    name: def.name.clone(),
+                    index: vec![],
+                }],
+                name: n.clone(),
+            },
+            span: a.name.as_ref().map_or(a.value.span, |x| x.1),
+            rhs: a.value.span,
+            value: match v {
+                Value::Num(x) => Value::Num(Num {
+                    dim: if x.dim == Dim::Any { Dim::Length } else { x.dim },
+                    ..x.clone()
+                }),
+                o => o.clone(),
+            },
+            links: {
+                let mut ls = BTreeSet::new();
+                if let Value::Num(x) = v
+                    && !matches!(x.src, Src::Driving(ref p) if p.owner.len() == 1 && p.owner[0].name == def.name)
+                {
+                    ls.extend(x.src.params());
+                }
+                ls
+            },
+            used: true,
+        });
+    }
+    let mut probe = sub_eval(ev, &def, &values, false, crate::build::Cache::default());
+    absorb(ev, &mut probe, &def, None);
+    ev.bind_name(name, asm(AsmVal::Def(def)), s.span)
+}
+
+/// Component `name` of the document evaluated with its defaults, as its definition checks it.
+pub fn default_eval<'s>(ev: &Eval<'s>, name: &str) -> Option<Eval<'s>> {
+    let def = ev.top_level().into_iter().find_map(|(n, v)| match v {
+        Value::Asm(a) if n == name => match &*a {
+            AsmVal::Def(d) => Some(d.clone()),
+            _ => None,
+        },
+        _ => None,
+    })?;
+    let mut host = ev.child(ev.b.building, Default::default());
+    let values = call_values(&mut host, &def, &[], def.span).ok()?;
+    Some(sub_eval(
+        ev,
+        &def,
+        &values,
+        ev.b.building,
+        crate::build::Cache::default(),
+    ))
+}
+
+/// A definition's params for a call: each argument given (evaluated here), else its default.
+fn call_values(ev: &mut Eval, def: &CompDef, args: &[Arg], span: Span) -> R<Vec<(String, Value)>> {
+    Ok(call_inputs(ev, def, args, span)?.0)
+}
+
+/// The params' values and traces: an argument as written here; a default as the definition
+/// writes it, evaluated with only the document's shared params and functions (proof E10: a
+/// default never sees a caller's names). A literal default is its own handle: the param
+/// `NAME.p`, set by SetArg on the definition (proof E6).
+fn call_inputs(ev: &mut Eval, def: &CompDef, args: &[Arg], span: Span) -> R<Inputs> {
+    for a in args {
+        let Some((n, sp)) = &a.name else {
+            return Err(Error::MissingArg {
+                span: a.value.span,
+                func: "component",
+                arg: "a param by name (`d: 80`)",
+            });
+        };
+        if !def
+            .params
+            .iter()
+            .any(|p| p.name.as_ref().is_some_and(|x| &x.0 == n))
+        {
+            return Err(Error::UnknownArg {
+                span: *sp,
+                func: "component",
+                arg: n.clone(),
+            });
+        }
+    }
+    let _ = span;
+    let text = |e: &Expr| one_line(ev.src.get(e.span.lo as usize..e.span.hi as usize).unwrap_or(""));
+    let (mut out, mut traces) = (vec![], vec![]);
+    for p in &def.params {
+        let n = &p.name.as_ref().expect("checked: named").0;
+        match args.iter().find(|a| a.name.as_ref().is_some_and(|x| &x.0 == n)) {
+            Some(a) => {
+                traces.push(text(&a.value));
+                let v = ev.expr(&a.value)?;
+                // another component's geometry, made in context: its frame where that occurrence
+                // is written (never where the solve puts it), an input like a number
+                let v = match &v {
+                    Value::Asm(x) if matches!(&**x, AsmVal::Ref(_) | AsmVal::Inst(_)) => {
+                        context_value(ev, x, a.value.span)?
+                    }
+                    _ => v,
+                };
+                out.push((n.clone(), v));
+            }
+            None => {
+                traces.push(format!("default {}", text(&p.value)));
+                let mut d = ev.child(false, Default::default());
+                let v = d.expr(&p.value)?;
+                let literal = matches!(p.value.kind, ExprKind::Num(..))
+                    || matches!(&p.value.kind, ExprKind::Neg(x) if matches!(x.kind, ExprKind::Num(..)));
+                let v = match v {
+                    Value::Num(x) if literal => Value::Num(Num {
+                        src: Src::Driving(ParamKey {
+                            owner: vec![Seg {
+                                name: def.name.clone(),
+                                index: vec![],
+                            }],
+                            name: n.clone(),
+                        }),
+                        ..x
+                    }),
+                    v => v,
+                };
+                out.push((n.clone(), v));
+            }
+        }
+    }
+    Ok((out, traces))
+}
+
+fn r9(x: f64) -> String {
+    crate::values::fmt((x * 1e9).round() / 1e9)
+}
+
+fn frame_text(f: &Frame) -> String {
+    let (o, x, z) = (f.origin, f.x().get(), f.z().get());
+    format!(
+        "frame({},{},{};{},{},{};{},{},{})",
+        r9(o.x),
+        r9(o.y),
+        r9(o.z),
+        r9(x.x),
+        r9(x.y),
+        r9(x.z),
+        r9(z.x),
+        r9(z.y),
+        r9(z.z)
+    )
+}
+
+/// A reference to another occurrence's geometry as a value here: an inline component's
+/// reference evaluated in its call, at its written pose; a file's not yet (typed).
+pub(crate) fn context_value(ev: &mut Eval, x: &Rc<AsmVal>, span: Span) -> R<Value> {
+    let (inst, segs) = match &**x {
+        AsmVal::Inst(i) => (i.clone(), vec![]),
+        AsmVal::Ref(r) => (r.inst.clone(), r.segs.clone()),
+        _ => unreachable!("a reference"),
+    };
+    let d = ev.asm.as_ref().ok_or_else(|| not_yet("a reference here", span))?;
+    let Some(i) = d.insts.iter().find(|i| i.id == inst).cloned() else {
+        return Err(not_yet("a reference to what is no occurrence here", span));
+    };
+    let Some(eval) = i.eval.clone() else {
+        return Err(not_yet(
+            "a reference into a part file's geometry, made in context",
+            span,
+        ));
+    };
+    let pose = i.pose;
+    let Some(c) = ev.comps.iter_mut().find(|c| c.eval_key == eval) else {
+        return Err(not_yet("a reference to a call not made", span));
+    };
+    let r = if segs.is_empty() {
+        fa::Reference::frame(Frame::WORLD)
+    } else {
+        let e = ref_expr(&segs);
+        let v = c.ev.expr(&e)?;
+        as_reference(&mut c.ev, v).ok_or(Error::WrongType {
+            span,
+            what: "a reference made in context",
+            want: Ty::Reference,
+            found: Ty::Unresolved,
+        })?
+    };
+    let f = pose.compose(&r.frame);
+    Ok(match r.kind {
+        fa::RefKind::Point => Value::Point(f.origin),
+        fa::RefKind::Axis => Value::Axis(f.origin, f.z()),
+        _ => Value::Plane(Rc::new(crate::eval::Plane {
+            frame: f,
+            world: None,
+        })),
+    })
+}
+
+/// A call's key: the definition and its params' values (`cup(d=80,h=95)`), what makes two
+/// calls the same part.
+fn call_key(def: &CompDef, values: &[(String, Value)]) -> String {
+    let show = |v: &Value| match v {
+        Value::Num(n) if n.dim == Dim::Angle => format!("{}deg", crate::values::fmt(n.v.to_degrees())),
+        Value::Num(n) => crate::values::fmt(n.v),
+        Value::Str(s) => format!("{s:?}"),
+        Value::Bool(b) => b.to_string(),
+        // a place given in context: to the kernel's tolerance, so equal places are one part
+        Value::Plane(p) => frame_text(&p.frame),
+        Value::Faces(f) if f.plane.is_some() => frame_text(f.plane.as_ref().expect("checked")),
+        Value::Axis(o, d) => {
+            let d = d.get();
+            format!(
+                "axis({},{},{};{},{},{})",
+                r9(o.x),
+                r9(o.y),
+                r9(o.z),
+                r9(d.x),
+                r9(d.y),
+                r9(d.z)
+            )
+        }
+        Value::Point(p) => format!("pt({},{},{})", r9(p.x), r9(p.y), r9(p.z)),
+        o => format!("{:?}", o.ty()),
+    };
+    let args: Vec<String> = values.iter().map(|(n, v)| format!("{n}={}", show(v))).collect();
+    format!("{}({})", def.name, args.join(","))
+}
+
+fn sub_eval<'s>(
+    ev: &Eval<'s>,
+    def: &CompDef,
+    values: &[(String, Value)],
+    building: bool,
+    cache: crate::build::Cache,
+) -> Eval<'s> {
+    sub_eval_at(
+        ev,
+        def,
+        values,
+        building,
+        cache,
+        format!("{}{}?/", ev.comp_path, def.name),
+    )
+}
+
+/// A component's evaluation under `path` (the calls it is under, its own key last): it may
+/// hold all a document does, placements and joints too (a subassembly then).
+fn sub_eval_at<'s>(
+    ev: &Eval<'s>,
+    def: &CompDef,
+    values: &[(String, Value)],
+    building: bool,
+    cache: crate::build::Cache,
+    path: String,
+) -> Eval<'s> {
+    let mut sub = ev.child(building, cache);
+    sub.comp_path = path;
+    sub.asm = Some(Doc::default());
+    for (n, v) in values {
+        if let Err(e) = sub.bind_name(n, v.clone(), def.span) {
+            sub.errors.push(e);
+        }
+    }
+    sub.check_static(&def.body);
+    if !sub.errors.is_empty() {
+        sub.b.building = false;
+    }
+    sub.run(&def.body);
+    crate::sheet::finish(&mut sub);
+    sub
+}
+
+/// What a component's evaluation says that is the document's: params it read, errors and
+/// warnings of its own statements.
+fn absorb(ev: &mut Eval, sub: &mut Eval, def: &CompDef, key: Option<&str>) {
+    for (k, p) in sub.shared.iter().enumerate() {
+        if p.used
+            && let Some(h) = ev.shared.get_mut(k)
+        {
+            h.used = true;
+        }
+    }
+    let shared: BTreeSet<ParamKey> = ev.shared.iter().map(|p| p.key.clone()).collect();
+    // a definition checked with its defaults places nothing: what it observed is no one's
+    // (proof E7); a call's is the document's
+    let observed = std::mem::take(&mut sub.observed);
+    // a component's own params (`cup.d`, a default's handle) are named as they are
+    let own = |k: &ParamKey| matches!(&k.owner[..], [o] if o.name == def.name);
+    for k in observed.into_iter().filter(|_| key.is_some()) {
+        if shared.contains(&k) || own(&k) {
+            ev.observed.insert(k);
+        } else if let Some(key) = key {
+            let mut k = k;
+            k.owner.insert(
+                0,
+                Seg {
+                    name: key.to_string(),
+                    index: vec![],
+                },
+            );
+            ev.observed.insert(k);
+        }
+    }
+    let span = def.span;
+    let inside = |sp: Option<Span>| sp.is_none_or(|x| x.lo >= span.lo && x.hi <= span.hi);
+    for e in std::mem::take(&mut sub.errors)
+        .into_iter()
+        .filter(|e| inside(e.span()))
+    {
+        if !ev
+            .errors
+            .iter()
+            .any(|x| x.kind() == e.kind() && x.span() == e.span())
+        {
+            ev.errors.push(e);
+        }
+    }
+    for w in std::mem::take(&mut sub.warnings) {
+        if matches!(&w, Warning::UnusedParam { span, .. } if !inside(Some(*span))) {
+            continue;
+        }
+        if !ev.warnings.contains(&w) {
+            ev.warnings.push(w);
+        }
+    }
+}
+
+/// `NAME(p: v, ..)` on a definition: the call, built once per key.
+pub fn call_def(ev: &mut Eval, def: &Rc<CompDef>, args: &[Arg], span: Span) -> R<Value> {
+    let (values, traces) = call_inputs(ev, def, args, span)?;
+    let key = call_key(def, &values);
+    // shared only by calls whose every input is the same trace (written the same, read from the
+    // same params the same way): a handle in one is then a handle in the other (proof E1)
+    let inputs: Vec<String> = values
+        .iter()
+        .zip(&traces)
+        .map(|((n, v), t)| {
+            let src = match v {
+                Value::Num(x) => match &x.src {
+                    Src::Const => String::new(),
+                    Src::Driving(p) => format!("={p}"),
+                    Src::Driven(ps) => format!(
+                        "~{}",
+                        ps.iter().map(|p| p.to_string()).collect::<Vec<_>>().join("+")
+                    ),
+                },
+                _ => String::new(),
+            };
+            format!("{n}<-{t}{src}")
+        })
+        .collect();
+    let eval_key = format!("{key}|{}", inputs.join(","));
+    if !ev.comps.iter().any(|c| c.eval_key == eval_key) {
+        let cache = ev.b.cache.comps.remove(&eval_key).unwrap_or_default();
+        // a placement cycle the static check could not see (through a function): refused, typed,
+        // never the evaluator's fuel (R1)
+        if ev.comp_path.split('/').filter(|x| !x.is_empty()).count() >= DEPTH {
+            return Err(comp_error(
+                span,
+                CompProblem::Cycle {
+                    a: def.name.clone(),
+                    b: def.name.clone(),
+                },
+            ));
+        }
+        // one budget for the run: a wide tree of calls ends in Fuel, not in the machine's memory
+        let (calls, comps) = ev.total.get();
+        if comps + 1 > crate::eval::TOTAL_COMPONENTS {
+            return Err(Error::Fuel {
+                span,
+                func: def.name.clone(),
+                budget: crate::eval::TOTAL_COMPONENTS,
+            });
+        }
+        ev.total.set((calls, comps + 1));
+        let path = format!("{}{key}/", ev.comp_path);
+        let mut sub = sub_eval_at(ev, def, &values, ev.b.building, cache, path);
+        absorb(ev, &mut sub, def, Some(&def.name));
+        let is_sub = sub
+            .asm
+            .as_ref()
+            .is_some_and(|d| !d.insts.is_empty() || !d.links.is_empty());
+        ev.comps.push(Comp {
+            id: key.clone(),
+            eval_key: eval_key.clone(),
+            def: def.name.clone(),
+            ev: sub,
+            span: def.span,
+            sub: is_sub,
+        });
+    }
+    Ok(asm(AsmVal::Call { key, eval: eval_key }))
+}
+
+/// The expression a joint end starts from: its first name, with that name's indices
+/// (`slat[2]` of `slat[2].side(p.o[1])`).
+fn root_expr(e: &Expr) -> &Expr {
+    match &e.kind {
+        ExprKind::Attr(o, _) => root_expr(o),
+        ExprKind::Call(f, _) => match &f.kind {
+            ExprKind::Attr(o, _) => root_expr(o),
+            _ => e,
+        },
+        ExprKind::Index(o, _) if matches!(o.kind, ExprKind::Name(_)) => e,
+        ExprKind::Index(o, _) => root_expr(o),
+        _ => e,
+    }
+}
+
+/// The end with its root taken off: `lid.hax` is `hax`, `lid.plane(at: ..)` is `plane(at: ..)`.
+fn strip_root(e: &Expr, root: &Expr) -> Option<Expr> {
+    let kind = match &e.kind {
+        ExprKind::Attr(o, n) if std::ptr::eq(&**o, root) => ExprKind::Name(n.clone()),
+        ExprKind::Attr(o, n) => ExprKind::Attr(Box::new(strip_root(o, root)?), n.clone()),
+        ExprKind::Call(f, args) => ExprKind::Call(Box::new(strip_root(f, root)?), args.clone()),
+        ExprKind::Index(o, i) => ExprKind::Index(Box::new(strip_root(o, root)?), i.clone()),
+        _ => return None,
+    };
+    Some(Expr { kind, span: e.span })
+}
+
+fn one_line(t: &str) -> String {
+    t.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// The body of this document a feature made, if it is one as the document stands.
+fn makes_body(ev: &Eval, idx: usize) -> bool {
+    ev.b.stages
+        .last()
+        .is_some_and(|st| st.solids.iter().any(|s| s.id == idx))
+}
+
+/// The body holding a face set's or edge set's first entity, by the feature that made it.
+fn owning_body(ev: &Eval, v: &Value) -> Option<String> {
+    let st = ev.b.stages.last()?;
+    let idx = match v {
+        Value::Faces(f) => {
+            let n = *f.names.first()?;
+            st.solids
+                .iter()
+                .find(|s| !crate::build::role_faces(&s.body, n).is_empty())?
+                .id
+        }
+        Value::Edges(es) => {
+            let n = *es.first()?;
+            st.solids
+                .iter()
+                .find(|s| s.body.edge_ids().any(|x| s.body.edge(x).name == n))?
+                .id
+        }
+        _ => return None,
+    };
+    ev.feats.iter().find(|f| f.idx == idx).map(|f| f.id.clone())
+}
+
+/// A joint end on a body of this document: the body becomes a component (where it was made),
+/// the end worked out here, in the document. None for an end of an instance or component.
+fn body_end(ev: &mut Eval, e: &Expr) -> R<Option<RefDef>> {
+    let root = root_expr(e);
+    let mark = (ev.errors.len(), ev.warnings.len());
+    let restore = |ev: &mut Eval| {
+        ev.errors.truncate(mark.0);
+        ev.warnings.truncate(mark.1);
+    };
+    let rv = ev.expr(root);
+    restore(ev);
+    if matches!(rv, Ok(Value::Asm(_))) {
+        return Ok(None);
+    }
+    let feat = match &rv {
+        Ok(Value::Feature(f)) => Some(f.clone()),
+        _ => None,
+    };
+    let root_body = feat
+        .as_ref()
+        .filter(|f| makes_body(ev, f.idx))
+        .map(|f| f.id.clone());
+    let tail = one_line(
+        ev.src[root.span.hi as usize..e.span.hi as usize]
+            .trim_start_matches(|c: char| c == '.' || c.is_whitespace()),
+    );
+    let value = match ev.expr(e) {
+        Ok(v) => v,
+        Err(err) => {
+            restore(ev);
+            let stripped = (root_body.is_some() || (!ev.b.building && feat.is_some()))
+                .then(|| strip_root(e, root))
+                .flatten();
+            match stripped.map(|x| ev.expr(&x)) {
+                Some(Ok(v)) => v,
+                _ => return Err(err),
+            }
+        }
+    };
+    // nothing built to say whose it is (`check`, or after a failure): still an end
+    if !ev.b.building && (feat.is_some() || matches!(value, Value::Unresolved)) {
+        return Ok(Some(RefDef {
+            inst: feat.map_or_else(String::new, |f| f.id.clone()),
+            segs: vec![],
+            span: e.span,
+            local: None,
+        }));
+    }
+    let (owner, text) = match root_body {
+        Some(b) => (b, tail),
+        None => match owning_body(ev, &value) {
+            Some(b) => (b, one_line(&ev.src[e.span.lo as usize..e.span.hi as usize])),
+            None => {
+                let geometric = matches!(
+                    value,
+                    Value::Plane(_)
+                        | Value::Axis(..)
+                        | Value::Point(_)
+                        | Value::Wired(_)
+                        | Value::Faces(_)
+                        | Value::Edges(_)
+                        | Value::Line(..)
+                        | Value::Ent(_)
+                );
+                if geometric {
+                    return Err(note(e.span, Issue::Component(CompProblem::NoComponent)));
+                }
+                return Ok(None);
+            }
+        },
+    };
+    // the body itself (`ground(base)`, `fastened(lid, base)`): its own frame, where it was made
+    let whole = std::ptr::eq(root, e) && matches!(value, Value::Feature(_));
+    let local = match whole {
+        true => fa::Reference::frame(Frame::WORLD),
+        false => as_reference(ev, value.clone())
+            .ok_or_else(|| wrong(e.span, "a joint's end", Ty::Reference, &value))?,
+    };
+    if !doc(ev).insts.iter().any(|i| i.id == owner) {
+        let span = ev.feats.iter().find(|f| f.id == owner).map_or(e.span, |f| f.span);
+        let file = format!("#{}{owner}", ev.comp_path);
+        doc(ev).insts.push(InstDef {
+            id: owner.clone(),
+            file,
+            source: Source::Body,
+            eval: None,
+            body: None,
+            pose: Frame::WORLD,
+            ground: false,
+            reference: false,
+            suppressed: false,
+            sub: false,
+            span,
+        });
+        doc(ev).auto_ground.insert(owner.clone());
+    }
+    Ok(Some(RefDef {
+        inst: owner,
+        segs: if text.is_empty() {
+            vec![]
+        } else {
+            vec![Seg {
+                name: text,
+                index: vec![],
+            }]
+        },
+        span: e.span,
+        local: Some(local),
+    }))
+}
+
+/// A link's arguments with its two ends on bodies of this document worked out (bound to names
+/// no source can write), so the rest reads them as any reference.
+fn with_body_ends(ev: &mut Eval, args: &[Arg]) -> R<Ends> {
+    let mut out = args.to_vec();
+    let mut bound = vec![];
+    let named = |n: &str| {
+        args.iter()
+            .position(|a| a.name.as_ref().is_some_and(|x| x.0 == n))
+    };
+    let positional: Vec<usize> = (0..args.len()).filter(|&k| args[k].name.is_none()).collect();
+    let a = named("a").or(positional.first().copied());
+    let b = named("b").or(positional.get(if named("a").is_some() { 0 } else { 1 }).copied());
+    for k in [a, b].into_iter().flatten() {
+        if let Some(r) = body_end(ev, &args[k].value)? {
+            let n = format!("end {k}");
+            out[k].value = Expr {
+                kind: ExprKind::Name(n.clone()),
+                span: args[k].value.span,
+            };
+            bound.push((n, asm(AsmVal::Ref(r))));
+        }
+    }
+    Ok((out, bound))
+}
+
+/// Whether an expect line measures the assembly (its solve, overlaps, poses).
+pub fn is_metric(s: &crate::syntax::Stmt) -> bool {
+    matches!(&s.kind, StmtKind::Expect { metric, .. } if METRICS.contains(&metric.as_str()))
+}
+
+/// The document's own components made ready to solve: each body a joint names still a body,
+/// the rule's grounds, and the bodies no joint names as one grounded occurrence, `#root`.
+fn in_file(ev: &mut Eval, mut d: Doc) -> Doc {
+    let solids = crate::props::solids(ev);
+    for i in d.insts.iter().filter(|i| i.source == Source::Body) {
+        if !solids.iter().any(|s| s.0 == i.id) {
+            ev.errors.push(note(
+                i.span,
+                Issue::Component(CompProblem::BodyGone { id: i.id.clone() }),
+            ));
+        }
+    }
+    // grounded only as written (`ground: true`, `ground(X)`): nothing grounded is a warning
+    for i in d.insts.iter_mut().filter(|i| d.grounds.contains(&i.id)) {
+        i.ground = true;
+    }
+    let loose = solids
+        .iter()
+        .any(|s| !d.insts.iter().any(|i| i.source == Source::Body && i.id == s.0));
+    if loose {
+        d.insts.push(InstDef {
+            id: ROOT.into(),
+            file: root_key(&ev.comp_path),
+            source: Source::Root,
+            eval: None,
+            body: None,
+            pose: Frame::WORLD,
+            ground: true,
+            reference: false,
+            suppressed: false,
+            sub: false,
+            span: Span { lo: 0, hi: 0 },
+        });
+    }
+    d
+}
+
+/// The occurrence of a document's bodies no joint names.
+pub const ROOT: &str = "#root";
+
+fn mesh_of(b: &forge_topo::Body) -> Option<Arc<PartMesh>> {
+    let q = forge_mesh::Quality {
+        chord: MESH_CHORD,
+        max_angle: forge_math::dmath::PI / 12.0,
+    };
+    forge_mesh::tessellate(b, &q)
+        .ok()
+        .map(|m| Arc::new(PartMesh::from_trimesh(&m, MESH_CHORD)))
+}
+
+/// A component of this document as a part: an inline one from its own evaluation, a body or the
+/// root's bodies from the document's. Kept while the build they are read from is.
+fn infile_load(
+    ev: &mut Eval,
+    prepared: &BTreeMap<String, Doc>,
+    key: &str,
+    refs: &[String],
+    cache: &mut AsmCache,
+) -> Arc<PartLoad> {
+    // the evaluation it is in: the calls its key is under (`#box(d=1)/lid(d=2)`)
+    let rest = key.trim_start_matches('#');
+    let path = match rest.rfind('/') {
+        Some(k) => &rest[..=k],
+        None => "",
+    };
+    let (Some(d), Some(owner)) = (prepared.get(path), owner_mut(ev, path)) else {
+        return Arc::new(empty_load(key));
+    };
+    infile_load_in(owner, d, key, refs, cache)
+}
+
+/// The evaluation under `path` (`box(d=1)/lid(d=2)/`), found through its calls.
+fn owner_mut<'a, 's>(ev: &'a mut Eval<'s>, path: &str) -> Option<&'a mut Eval<'s>> {
+    let Some((first, rest)) = path.split_once('/') else {
+        return Some(ev);
+    };
+    if first.is_empty() {
+        return Some(ev);
+    }
+    let c = ev.comps.iter_mut().find(|c| c.id == first)?;
+    owner_mut(&mut c.ev, rest)
+}
+
+/// Every evaluation with components of its own (the document's, and each call's that places
+/// or joins anything), by its path, its document made ready to solve.
+fn prepare_all(ev: &mut Eval, top: &Doc, out: &mut BTreeMap<String, Doc>) {
+    out.insert(ev.comp_path.clone(), top.clone());
+    let mut comps = std::mem::take(&mut ev.comps);
+    for c in comps.iter_mut().filter(|c| c.sub) {
+        let doc = c.ev.asm.clone().unwrap_or_default();
+        let doc = in_file(&mut c.ev, doc);
+        let errs = std::mem::take(&mut c.ev.errors);
+        ev.errors.extend(errs);
+        if !out.contains_key(&c.ev.comp_path) {
+            prepare_all(&mut c.ev, &doc, out);
+        }
+    }
+    ev.comps = comps;
+}
+
+fn infile_load_in(ev: &mut Eval, d: &Doc, key: &str, refs: &[String], cache: &mut AsmCache) -> Arc<PartLoad> {
+    let Some(inst) = d.insts.iter().find(|i| i.file == key) else {
+        return Arc::new(empty_load(key));
+    };
+    let rest = key.trim_start_matches('#');
+    let name = rest.rsplit('/').next().unwrap_or(rest).to_string();
+    let comp = ev.comps.iter().position(|c| c.id == name);
+    let stage = match (inst.source, comp) {
+        (Source::Inline, Some(k)) => ev.comps[k].ev.b.stages.last().cloned(),
+        _ => ev.b.stages.last().cloned(),
+    };
+    let text = match (inst.source, comp) {
+        (Source::Inline, Some(k)) => {
+            let sp = ev.comps[k].span;
+            text_hash(&format!("{}@{}", &ev.src[sp.lo as usize..sp.hi as usize], sp.lo))
+        }
+        _ => text_hash(ev.src),
+    };
+    if let (Some(st), Some((kst, kt, kr, l))) = (&stage, cache.infile.get(key))
+        && Rc::ptr_eq(st, kst)
+        && *kt == text
+        && kr == refs
+    {
+        return l.clone();
+    }
+    let mut out = empty_load(key);
+    out.hash = content_hash(&format!("{key}\n{}", ev.src));
+    match (inst.source, comp) {
+        (Source::Inline, Some(k)) => {
+            let mut comps = std::mem::take(&mut ev.comps);
+            finish_load(&mut comps[k].ev, &mut out, refs, &[], true);
+            ev.comps = comps;
+        }
+        (Source::Body | Source::Root, _) => {
+            let all = crate::props::solids(ev);
+            let body_ids: BTreeSet<&str> = d
+                .insts
+                .iter()
+                .filter(|i| i.source == Source::Body)
+                .map(|i| i.id.as_str())
+                .collect();
+            let mine: Vec<_> = all
+                .into_iter()
+                .filter(|s| {
+                    if inst.source == Source::Body {
+                        s.0 == name
+                    } else {
+                        !body_ids.contains(s.0.as_str())
+                    }
+                })
+                .collect();
+            let body = match &mine[..] {
+                [] => None,
+                [one] => Some(one.2.clone()),
+                many => {
+                    let mut b = forge_topo::Body::new();
+                    for s in many {
+                        b.append(&s.2);
+                    }
+                    Some(b)
+                }
+            };
+            // a body is a part of the document: its own material, not the document's numbers
+            let props = if inst.source == Source::Root {
+                ev.props.clone()
+            } else {
+                crate::props::Props {
+                    material: mine.first().and_then(|s| s.1.as_ref().map(|m| m.name.clone())),
+                    ..Default::default()
+                }
+            };
+            out.summary = Arc::new(crate::props::PartSummary::new(
+                props,
+                mine.into_iter().map(|(id, m, b)| (id, m, Arc::new(b))).collect(),
+            ));
+            out.mesh = body.as_ref().and_then(mesh_of);
+            out.body = body;
+        }
+        _ => {}
+    }
+    let l = Arc::new(out);
+    if let Some(st) = stage {
+        cache
+            .infile
+            .insert(key.to_string(), (st, text, refs.to_vec(), l.clone()));
+    }
+    l
+}
+
+fn empty_load(key: &str) -> PartLoad {
+    PartLoad {
+        hash: content_hash(key),
+        body: None,
+        refs: BTreeMap::new(),
+        features: vec![],
+        kinds: vec![],
+        errors: vec![],
+        mesh: None,
+        bodies: BTreeMap::new(),
+        summary: Default::default(),
+        declared: false,
+        body_meshes: BTreeMap::new(),
+        ident: 0,
+        threads: vec![],
+    }
+}
+
+/// Each body of the document and the features that made it, in the order made: those whose faces
+/// it holds (lineage through every boolean), and the sketches they were drawn from. What a body
+/// component's tree lists.
+pub fn body_chains(ev: &mut Eval) -> Vec<(String, Vec<String>)> {
+    let n = ev.b.built();
+    let Some(st) = ev.b.stages.last().cloned() else {
+        return vec![];
+    };
+    let origin = ev.b.origin(n);
+    let profiles: Vec<(usize, String)> = ev
+        .top_level()
+        .into_iter()
+        .filter_map(|(_, v)| match v {
+            Value::Feature(f) => f.prof.as_ref().map(|p| (f.idx, p.borrow().id.clone())),
+            _ => None,
+        })
+        .collect();
+    let mut out = vec![];
+    for s in &st.solids {
+        let Some(own) = ev.feats.iter().find(|f| f.idx == s.id) else {
+            continue;
+        };
+        let body = forge_model::finish(s.body.clone());
+        let mut made: BTreeSet<usize> = [s.id].into();
+        for f in body.face_ids() {
+            if let Some(ks) = origin.get(&body.face(f).name) {
+                made.extend(ks.iter().copied());
+            }
+        }
+        // another body's own making is that body's (a face it touches is joined across bodies)
+        for o in st.solids.iter().filter(|o| o.id != s.id) {
+            made.remove(&o.id);
+        }
+        let mut ids: BTreeSet<String> = ev
+            .feats
+            .iter()
+            .filter(|f| made.contains(&f.idx))
+            .map(|f| f.id.clone())
+            .collect();
+        for (k, sk) in &profiles {
+            if made.contains(k) {
+                ids.insert(sk.clone());
+            }
+        }
+        let ordered: Vec<String> = ev
+            .feats
+            .iter()
+            .filter(|f| ids.contains(&f.id))
+            .map(|f| f.id.clone())
+            .collect();
+        out.push((own.id.clone(), ordered));
+    }
+    out
+}
+
+/// Components placing each other round, found before anything runs (R1): each component block
+/// at any depth, the components its statements place or call; a cycle is `ComponentCycle`.
+pub fn cycle_check(prog: &[crate::syntax::Stmt], errors: &mut Vec<Error>) {
+    fn blocks<'a>(stmts: &'a [crate::syntax::Stmt], out: &mut Vec<&'a crate::syntax::Stmt>) {
+        for s in stmts {
+            if let StmtKind::Block {
+                kind: crate::syntax::BlockKind::Component,
+                body,
+                ..
+            } = &s.kind
+            {
+                out.push(s);
+                blocks(body, out);
+            }
+        }
+    }
+    let mut all = vec![];
+    blocks(prog, &mut all);
+    let names: BTreeSet<String> = all
+        .iter()
+        .filter_map(|s| match &s.kind {
+            StmtKind::Block { name, .. } => Some(name.clone()),
+            _ => None,
+        })
+        .collect();
+    let mut edges: BTreeMap<String, (Span, BTreeSet<String>)> = BTreeMap::new();
+    for s in &all {
+        let StmtKind::Block { name, body, .. } = &s.kind else {
+            continue;
+        };
+        let reads: BTreeSet<String> = body
+            .iter()
+            .filter(|b| {
+                !matches!(
+                    b.kind,
+                    StmtKind::Block {
+                        kind: crate::syntax::BlockKind::Component,
+                        ..
+                    }
+                )
+            })
+            .flat_map(crate::edit::mentions)
+            .filter(|n| names.contains(n))
+            .collect();
+        edges.insert(name.clone(), (s.span, reads));
+    }
+    let mut said = BTreeSet::new();
+    for (a, (span, _)) in &edges {
+        // depth first from a: a path back to a is a cycle
+        let mut todo: Vec<(String, String)> = edges[a].1.iter().map(|b| (b.clone(), b.clone())).collect();
+        let mut seen = BTreeSet::new();
+        while let Some((x, first)) = todo.pop() {
+            if &x == a {
+                if said.insert(a.clone()) {
+                    errors.push(comp_error(
+                        *span,
+                        CompProblem::Cycle {
+                            a: a.clone(),
+                            b: first,
+                        },
+                    ));
+                }
+                break;
+            }
+            if seen.insert(x.clone())
+                && let Some((_, next)) = edges.get(&x)
+            {
+                todo.extend(next.iter().map(|n| (n.clone(), first.clone())));
+            }
+        }
+    }
 }

@@ -1,0 +1,9 @@
+# A knob, a part file of its own: placed by peg_board.fg.
+shared r = 9
+shared h = 12
+properties(part_number: "KNOB-1", material: "ABS")
+sketch s(on: xy) {
+  c = circle((0, 0), r)
+}
+body = extrude(s, h)
+seat = anchor(body.start)

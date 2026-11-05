@@ -65,9 +65,25 @@ pub struct Tok {
     pub span: Span,
 }
 
-pub const KEYWORDS: [&str; 17] = [
-    "shared", "param", "fn", "for", "in", "if", "else", "return", "expect", "and", "or", "not", "true",
-    "false", "sketch", "path", "at",
+pub const KEYWORDS: [&str; 18] = [
+    "shared",
+    "param",
+    "fn",
+    "for",
+    "in",
+    "if",
+    "else",
+    "return",
+    "expect",
+    "and",
+    "or",
+    "not",
+    "true",
+    "false",
+    "sketch",
+    "path",
+    "at",
+    "component",
 ];
 
 pub const OPS: [&str; 26] = [
@@ -125,7 +141,7 @@ fn op_at(b: &[u8], i: usize) -> Option<usize> {
 }
 
 fn keyword(w: &str) -> Option<usize> {
-    if !(2..=6).contains(&w.len()) || !w.as_bytes()[0].is_ascii_lowercase() {
+    if !(2..=9).contains(&w.len()) || !w.as_bytes()[0].is_ascii_lowercase() {
         return None;
     }
     KEYWORDS.iter().position(|k| *k == w)
@@ -535,6 +551,8 @@ pub type ExpectCmp = (Cmp, Expr, Option<(Expr, bool)>);
 pub enum BlockKind {
     Sketch,
     Path,
+    /// `component NAME(at: ..) { statements }`: a part of its own, placed in this document.
+    Component,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1052,14 +1070,14 @@ impl Parser {
                 segs.reverse();
                 V::Segs(segs)
             }
-            P::StmtSketch | P::StmtPath => {
+            P::StmtSketch | P::StmtPath | P::StmtComponent => {
                 let mut args = list!(self, b + 3, V::Args);
                 args.reverse();
                 stmt!(StmtKind::Block {
-                    kind: if p == P::StmtSketch {
-                        BlockKind::Sketch
-                    } else {
-                        BlockKind::Path
+                    kind: match p {
+                        P::StmtSketch => BlockKind::Sketch,
+                        P::StmtPath => BlockKind::Path,
+                        _ => BlockKind::Component,
                     },
                     name: self.text(b + 1),
                     args,
@@ -1202,6 +1220,10 @@ impl Parser {
             // `at:` is a keyword argument as any other; `at` is a word only after an expect line
             P::ArgAt => V::Arg(Arg {
                 name: Some(("at".into(), self.tok(b).span)),
+                value: self.expr(b + 2),
+            }),
+            P::ArgComponent => V::Arg(Arg {
+                name: Some(("component".into(), self.tok(b).span)),
                 value: self.expr(b + 2),
             }),
             P::ArgExpr => {

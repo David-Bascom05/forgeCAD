@@ -349,6 +349,8 @@ pub struct FgPanel {
     pub params_open: bool,
     /// The Issues window is up, over the status bar.
     pub issues_list: bool,
+    /// Edit Occurrence: a placed component call's args.
+    pub occ_edit: Option<super::occedit::OccEdit>,
 }
 
 /// The tree of ids: `bolt[2]` under `bolt`, `lug.hub` under `lug`, in the order they were made.
@@ -1216,13 +1218,18 @@ impl Shell {
     }
 }
 
-/// A Forge file is an assembly: its first line that says anything is `assembly`. Plain text,
-/// so the browser asks it too.
+/// A Forge file is built and shown posed, as an assembly: it holds components or joints (an
+/// `assembly` first line is optional; a text that does not parse goes by that line). The browser
+/// asks it too.
 pub fn is_assembly(src: &str) -> bool {
-    src.lines()
-        .map(str::trim)
-        .find(|l| !l.is_empty() && !l.starts_with('#'))
-        .is_some_and(|l| l == "assembly")
+    match forge_lang::syntax::parse(src) {
+        Ok(p) => forge_lang::asm::has_components(&p),
+        Err(_) => src
+            .lines()
+            .map(str::trim)
+            .find(|l| !l.is_empty() && !l.starts_with('#'))
+            .is_some_and(|l| l == "assembly"),
+    }
 }
 
 #[cfg(test)]

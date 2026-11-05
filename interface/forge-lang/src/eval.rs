@@ -329,6 +329,16 @@ pub struct Eval<'s> {
     lib_call: Option<Span>,
     /// The document's `properties(..)` (`props.rs`).
     pub props: crate::props::Props,
+    /// The inline components' own evaluations, in the order the document makes them (`asm.rs`).
+    pub comps: Vec<crate::asm::Comp<'s>>,
+    /// Inside a component's call: the calls it is under (`box(d=1)/`), what its own in-file
+    /// components' keys start with; empty for the document.
+    pub comp_path: String,
+    /// The whole run's budget, shared by every evaluation it makes (each component's call, at
+    /// any depth): function calls, and component evaluations.
+    pub(crate) total: Rc<std::cell::Cell<(usize, usize)>>,
+    /// How deep in calls this evaluation starts (a component's, its caller's depth).
+    pub(crate) depth0: usize,
 }
 
 #[derive(Clone)]
@@ -344,6 +354,11 @@ pub type R<T> = Result<T, Error>;
 
 /// Function calls one top-level statement may make (recursion is allowed within it).
 pub const CALL_BUDGET: usize = 100_000;
+/// Function calls a whole run may make, its components' evaluations with it.
+pub const TOTAL_CALLS: usize = 1_000_000;
+/// Component evaluations a whole run may make (a wide tree of calls stops here, with Fuel).
+pub const TOTAL_COMPONENTS: usize = 2_000;
+
 /// How deep calls may nest (the evaluator's own stack is the limit).
 pub const DEPTH_BUDGET: usize = 128;
 
@@ -397,7 +412,39 @@ impl<'s> Eval<'s> {
             lib: None,
             lib_call: None,
             props: Default::default(),
+            comps: vec![],
+            comp_path: String::new(),
+            total: Default::default(),
+            depth0: 0,
         }
+    }
+
+    /// An evaluator for a part of this document (a component's call, its defaults, a check of
+    /// its definition) over the same text: the session's fence and every context a read of a
+    /// file obeys go with it (root, directory, the use chain, its used files), with the shared
+    /// params and functions it may see.
+    pub(crate) fn child(&self, building: bool, cache: Cache) -> Eval<'s> {
+        let mut c = Eval::new(self.src, self.rules, building, cache);
+        c.root = self.root.clone();
+        c.dir = self.dir.clone();
+        c.volumes = self.volumes;
+        c.use_chain = self.use_chain.clone();
+        c.use_files = self.use_files.clone();
+        c.libs = self.libs.clone();
+        c.shared = self.shared.clone();
+        c.fns = self.fns.clone();
+        c.comp_path = self.comp_path.clone();
+        c.total = self.total.clone();
+        c.depth0 = self.depth0 + self.ctx.in_fn;
+        // the component definitions above it, as functions are: a block may place them
+        for (n, (v, sp)) in &self.scopes[0] {
+            if let Value::Asm(a) = v
+                && matches!(&**a, crate::asm::AsmVal::Def(_))
+            {
+                c.scopes[0].insert(n.clone(), (v.clone(), *sp));
+            }
+        }
+        c
     }
 
     /// Puts back expect `k`'s local names; `leave_expect` with the mark takes them away again.
@@ -429,6 +476,31 @@ impl<'s> Eval<'s> {
                 None
             }
         }
+    }
+
+    /// The name a block statement gives the id it takes next (`take_id`).
+    pub(crate) fn ctx_pending(&mut self, name: &str, span: Span) {
+        self.ctx.pending = Some((name.into(), span));
+    }
+
+    pub(crate) fn bind_name(&mut self, name: &str, v: Value, span: Span) -> R<()> {
+        self.bind(name, v, span)
+    }
+
+    pub(crate) fn in_sketch(&self) -> bool {
+        self.sketch.is_some()
+    }
+
+    /// Evaluates `f` with `name` bound to `v` in a scope of its own (a name no source can write).
+    pub(crate) fn with_bound<T>(&mut self, names: Vec<(String, Value)>, f: impl FnOnce(&mut Self) -> T) -> T {
+        let mut sc = HashMap::new();
+        for (n, v) in names {
+            sc.insert(n, (v, Span { lo: 0, hi: 0 }));
+        }
+        self.scopes.push(sc);
+        let r = f(self);
+        self.scopes.pop();
+        r
     }
 
     /// At a document's top level: not in a function, loop, sketch or path.
@@ -471,6 +543,7 @@ impl<'s> Eval<'s> {
     /// Rules checked before evaluation: loose numbers, recursion.
     pub fn check_static(&mut self, prog: &[Stmt]) {
         crate::props::check_placement(prog, &mut self.errors);
+        crate::asm::cycle_check(prog, &mut self.errors);
         if self.rules.literals_in_params != Level::Off {
             for s in prog {
                 let owner = match &s.kind {
@@ -540,6 +613,11 @@ impl<'s> Eval<'s> {
             StmtKind::Return(e) | StmtKind::Expr(e) | StmtKind::Assign { value: e, .. } => {
                 self.literals_expr(e, false, owner)
             }
+            // its own evaluation lints its body; its `at:` is a written pose
+            StmtKind::Block {
+                kind: BlockKind::Component,
+                ..
+            } => {}
             StmtKind::Block { args, body, .. } => {
                 for a in args {
                     self.literals_expr(&a.value, false, owner);
@@ -738,6 +816,7 @@ impl<'s> Eval<'s> {
         let mut seen = std::collections::HashSet::new();
         self.errors.retain(|e| seen.insert((e.kind(), e.span())));
         self.expect_reads();
+        self.close_observed();
         for p in self.shared.iter().chain(&self.locals) {
             if !p.used {
                 self.warnings.push(Warning::UnusedParam {
@@ -854,6 +933,26 @@ impl<'s> Eval<'s> {
         }
         scope.insert(name.into(), (v, span));
         Ok(())
+    }
+
+    /// An observed param's definition is observed too: the params it is made of, through every
+    /// link (`m = n + 1` observed: `n` is structural as well).
+    fn close_observed(&mut self) {
+        let mut todo: Vec<ParamKey> = self.observed.iter().cloned().collect();
+        while let Some(k) = todo.pop() {
+            let links: Vec<ParamKey> = self
+                .shared
+                .iter()
+                .chain(&self.locals)
+                .filter(|p| p.key == k)
+                .flat_map(|p| p.links.iter().cloned())
+                .collect();
+            for l in links {
+                if self.observed.insert(l.clone()) {
+                    todo.push(l);
+                }
+            }
+        }
     }
 
     pub fn observe(&mut self, n: &Num) {
@@ -1103,6 +1202,7 @@ impl<'s> Eval<'s> {
             } => match kind {
                 BlockKind::Sketch => self.sketch_block(s, name, args, body),
                 BlockKind::Path => self.path_block(s, name, args, body),
+                BlockKind::Component => crate::asm::component_block(self, s, name, args, body),
             },
             StmtKind::Assign { name, value } => {
                 let saved = self.ctx.owner.clone();
@@ -1398,18 +1498,12 @@ impl<'s> Eval<'s> {
                     }
                 }
                 let (a0, b0) = (a.v.round() as i64, b.v.round() as i64 + i64::from(*inclusive));
-                let src = values::join_src(&a.src, &b.src);
+                // a range is control: its bounds are observed (however many times it runs, none
+                // too), its values constants, no data's provenance
+                self.observe(&a);
+                self.observe(&b);
                 let v = (a0..b0)
-                    .map(|k| {
-                        Value::Num(Num {
-                            v: k as f64,
-                            dim: Dim::Count,
-                            src: match &src {
-                                Src::Const => Src::Const,
-                                s => Src::Driven(s.params()),
-                            },
-                        })
-                    })
+                    .map(|k| Value::Num(Num::konst(k as f64, Dim::Count)))
                     .collect();
                 Ok(Value::List(Rc::new(v)))
             }
@@ -1528,14 +1622,8 @@ impl<'s> Eval<'s> {
                         index: k,
                         len: items.len(),
                     })?;
-                // an element of a list param read at a loop index: driven by that param
-                Ok(match (item, &iv.src) {
-                    (Value::Num(n), s) if !matches!(s, Src::Const) => Value::Num(Num {
-                        src: values::join_src(&n.src, s),
-                        ..n
-                    }),
-                    (x, _) => x,
-                })
+                // the element as it is: the index is control (observed above), not its data
+                Ok(item)
             }
             ExprKind::Attr(o, name) => self.attr(o, name, e.span),
             ExprKind::Call(f, args) => self.call(f, args, e.span),
@@ -1618,7 +1706,7 @@ impl<'s> Eval<'s> {
         // a call on an assembly's instance or reference (`yoke.plane(at: boss.end.center, normal:
         // boss.end.normal)`): the part's, its arguments evaluated in the part file
         if let ExprKind::Attr(o, _) = &f.kind
-            && self.asm.is_some()
+            && self.asm.as_ref().is_some_and(|d| !d.insts.is_empty())
             && let Value::Asm(a) = self.expr(o)?
         {
             let text: String = self.src[o.span.hi as usize..span.hi as usize]
@@ -1674,6 +1762,20 @@ impl<'s> Eval<'s> {
                 }
             }
             Value::Func(def) => self.call_fn(&def, args, span),
+            Value::Asm(a)
+                if matches!(
+                    &*a,
+                    crate::asm::AsmVal::Def(_) | crate::asm::AsmVal::Foreign { .. }
+                ) =>
+            {
+                match &*a {
+                    crate::asm::AsmVal::Def(d) => crate::asm::call_def(self, d, args, span),
+                    crate::asm::AsmVal::Foreign { name, file } => {
+                        crate::asm::call_foreign(self, &name.clone(), &file.clone(), args, span)
+                    }
+                    _ => unreachable!("matched"),
+                }
+            }
             Value::Unresolved => Ok(Value::Unresolved),
             o => Err(Error::NotCallable {
                 span: f.span,
@@ -1706,9 +1808,13 @@ impl<'s> Eval<'s> {
         span: Span,
         caller: Option<Rc<crate::uses::Lib>>,
     ) -> R<Value> {
-        // recursion is allowed; each top-level statement has a budget of calls
+        // recursion is allowed; each top-level statement has a budget of calls, and the whole run
+        // (every component's evaluation with it) one of its own
         self.calls += 1;
-        if self.calls > CALL_BUDGET || self.ctx.in_fn >= DEPTH_BUDGET {
+        let (calls, comps) = self.total.get();
+        self.total.set((calls + 1, comps));
+        if self.calls > CALL_BUDGET || calls + 1 > TOTAL_CALLS || self.depth0 + self.ctx.in_fn >= DEPTH_BUDGET
+        {
             return Err(Error::Fuel {
                 span,
                 func: def.name.clone(),
@@ -1872,9 +1978,6 @@ impl<'s> Eval<'s> {
         hid: u64,
         push: impl FnOnce(&mut crate::build::Builder) -> R<usize>,
     ) -> R<(usize, u64)> {
-        if self.asm.is_some() {
-            return Err(crate::asm::not_here(kind, span));
-        }
         let was_building = self.b.building;
         let r = push(&mut self.b);
         let idx = self.b.features.len() - 1;
@@ -2350,6 +2453,11 @@ fn locals_of(stmts: &[Stmt], top: bool, out: &mut Vec<(String, Span)>) {
             | StmtKind::Return(v)
             | StmtKind::Shared { value: v, .. }
             | StmtKind::Param { value: v, .. } => comp(v, out),
+            // a component's names are its own document's
+            StmtKind::Block {
+                kind: BlockKind::Component,
+                ..
+            } => {}
             StmtKind::Block { name, args, body, .. } => {
                 if !top {
                     out.push((name.clone(), s.span));

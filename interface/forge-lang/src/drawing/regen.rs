@@ -213,12 +213,37 @@ fn describe(path: &Path, file: &str) -> (String, String) {
     (number, desc)
 }
 
+/// One component of a run on its own, in its own space: a body (`lid`), a component's first
+/// call (`peg`), or a call by its key (`peg(d=6,h=30)`).
+fn component_model(run: &crate::Run, file: &str, name: &str) -> Option<Model> {
+    let a = run.asm.as_ref()?;
+    let (key, sum) = a
+        .part_docs
+        .iter()
+        .find(|(k, _)| k.as_str() == format!("#{name}"))
+        .or_else(|| {
+            a.part_docs
+                .iter()
+                .find(|(k, _)| k.starts_with(&format!("#{name}(")))
+        })?;
+    let bodies: Vec<_> = sum.solids.iter().map(|s| (s.2.clone(), Frame::WORLD)).collect();
+    let n = bodies.len();
+    Some(Model {
+        bodies,
+        paths: vec![String::new(); n],
+        files: vec![format!("{file}{key}"); n],
+        grounded: vec![],
+        threads: vec![Default::default(); n],
+    })
+}
+
 fn load(
     id: &str,
     file: &str,
     dir: &Path,
     pool: &Arc<crate::asm::PartPool>,
     wants: &Arc<crate::asm::Wants>,
+    component: Option<&str>,
 ) -> Result<ModelOut, String> {
     let path = dir.join(file);
     let src = std::fs::read_to_string(&path);
@@ -250,9 +275,12 @@ fn load(
         let e = &run.errors[0];
         return Err(format!("does not build: {}: {}", e.kind(), e.text()));
     }
-    let model = Model::of(&run).ok_or("has no solid")?;
+    let model = match component {
+        Some(c) => component_model(&run, file, c).ok_or_else(|| format!("has no component {c}"))?,
+        None => Model::of(&run).ok_or("has no solid")?,
+    };
     // the part as made: a sheet metal part's flat pattern is not part of it
-    let volume = if run.asm.is_none() {
+    let volume = if run.asm.is_none() || component.is_some() {
         model
             .bodies
             .first()
@@ -262,7 +290,7 @@ fn load(
         None
     };
     let base = path.parent().map(Path::to_path_buf).unwrap_or_default();
-    let bom = match &run.asm {
+    let bom = match run.asm.as_ref().filter(|_| component.is_none()) {
         Some(a) => a
             .bom
             .iter()
@@ -300,7 +328,8 @@ fn wants_of(file: &str, dir: &Path, pool: &Arc<crate::asm::PartPool>, wants: &Ar
     let Some(src) = crate::asm::read_capped(&path) else {
         return;
     };
-    if !crate::syntax::parse(&src).is_ok_and(|p| crate::asm::declared(&p)) {
+    // any file with components is one (an `assembly` first line is optional)
+    if !crate::syntax::parse(&src).is_ok_and(|p| crate::asm::has_components(&p)) {
         return;
     }
     let opts = crate::Options {
@@ -2740,11 +2769,13 @@ fn make_with(src: &str, dir: &Path, mut show: Option<&mut dyn FnMut(Shown)>) -> 
         parts: Default::default(),
     };
     // the models, each built on its own cores
-    let wanted: Vec<(&str, &str)> = d
+    let wanted: Vec<(&str, &str, Option<&str>)> = d
         .items
         .iter()
         .filter_map(|i| match &i.kind {
-            ItemKind::Model { path, .. } => Some((i.id.as_str(), path.as_str())),
+            ItemKind::Model { path, component, .. } => {
+                Some((i.id.as_str(), path.as_str(), component.as_deref()))
+            }
             _ => None,
         })
         .collect();
@@ -2756,7 +2787,7 @@ fn make_with(src: &str, dir: &Path, mut show: Option<&mut dyn FnMut(Shown)>) -> 
     let wants: Arc<crate::asm::Wants> = Arc::default();
     crate::par::map(wanted.len(), |k| wants_of(wanted[k].1, &ctx.dir, &pool, &wants));
     let mut loaded = crate::par::map(wanted.len(), |k| {
-        load(wanted[k].0, wanted[k].1, &ctx.dir, &pool, &wants)
+        load(wanted[k].0, wanted[k].1, &ctx.dir, &pool, &wants, wanted[k].2)
     })
     .into_iter();
     let part_loads = crate::asm::pool_files(&pool);

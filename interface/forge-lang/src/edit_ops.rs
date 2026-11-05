@@ -91,6 +91,31 @@ pub fn apply_set_arg(src: &str, prog: &[Stmt], id: &str, arg: &str, text: &str) 
     Ok(format!("{}{}{}", &src[..lo], new, &src[hi..]))
 }
 
+/// A component's param default (`component cup(d: 80)`): `arg`'s default becomes `text`, or
+/// `arg: text` is put in before the header's `)`.
+pub fn apply_component_arg(src: &str, s: &Stmt, arg: &str, text: &str) -> R<String> {
+    let StmtKind::Block { args, body, .. } = &s.kind else {
+        unreachable!("a component")
+    };
+    expr_of(text)?;
+    if let Some(a) = args.iter().find(|a| a.name.as_ref().is_some_and(|n| n.0 == arg)) {
+        let (lo, hi) = (a.value.span.lo as usize, a.value.span.hi as usize);
+        return Ok(format!("{}{}{}", &src[..lo], text, &src[hi..]));
+    }
+    // the header's `)`: the last before the body's `{`
+    let open = body.first().map_or(s.span.hi as usize, |b| b.span.lo as usize);
+    let head = &src[s.span.lo as usize..open];
+    let brace = head.rfind('{').unwrap_or(head.len());
+    let close = s.span.lo as usize
+        + head[..brace].rfind(')').ok_or(Error::UnknownArg {
+            span: s.span,
+            func: "SetArg",
+            arg: arg.into(),
+        })?;
+    let sep = if args.is_empty() { "" } else { ", " };
+    Ok(format!("{}{sep}{arg}: {text}{}", &src[..close], &src[close..]))
+}
+
 pub fn ast_set_arg(prog: &mut [Stmt], id: &str, arg: &str, text: &str) -> R<()> {
     let k = call_of(prog, id)?;
     let e = expr_of(text)?;

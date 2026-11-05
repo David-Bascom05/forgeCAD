@@ -21,6 +21,7 @@ stmt        := 'shared' ID '=' expr
              | 'expect' ID expargs expcmp expat
              | 'sketch' ID '(' args ')' block
              | 'path' ID '(' args ')' block
+             | 'component' ID '(' args ')' block
              | expr assigntail ;
 assigntail  := '=' expr | %empty ;
 
@@ -52,7 +53,7 @@ atpath      := ID keys pathrest ;
 
 args        := arg argsrest | %empty ;
 argsrest    := ',' args | %empty ;
-arg         := expr argkw | 'at' ':' expr ;
+arg         := expr argkw | 'at' ':' expr | 'component' ':' expr ;
 argkw       := ':' expr | %empty ;
 
 expr        := or ifpart ;

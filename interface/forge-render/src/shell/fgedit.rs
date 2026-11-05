@@ -309,10 +309,30 @@ fn field(p: &mut super::fgtool::ToolParam, text: &str, id: &str, src: &str) -> b
     }
 }
 
+/// Whether the document has a `component NAME(..) { .. }` block of this name.
+fn component_named(src: &str, name: &str) -> bool {
+    forge_lang::syntax::parse(src).is_ok_and(|p| {
+        p.iter().any(|s| {
+            matches!(&s.kind, forge_lang::syntax::StmtKind::Block {
+                kind: forge_lang::syntax::BlockKind::Component,
+                name: n,
+                ..
+            } if n == name)
+        })
+    })
+}
+
 impl FgTool {
     /// The tool's form for statement `id` as the part writes it, to edit it in its place.
     pub fn edit(id: &str, src: &str) -> Result<FgTool, ToolError> {
-        let Some((func, args)) = super::sheet::call_args(src, id) else {
+        // a feature of a component (`peg.shank`): its statement as the block writes it, edited
+        // there (ReplaceFeature by the full id)
+        let full = id;
+        let id = match id.split_once('.') {
+            Some((c, rest)) if component_named(src, c) => rest,
+            _ => id,
+        };
+        let Some((func, args)) = super::sheet::call_args(src, full) else {
             return Err(refuse(format!(
                 "{id} isn't written as one call, so no dialog holds it"
             )));
@@ -394,7 +414,8 @@ impl FgTool {
                 }
             }
         }
-        if let Some((_, t)) = best {
+        if let Some((_, mut t)) = best {
+            t.edit = Some(full.into());
             return Ok(t);
         }
         Err(refuse(if seen {
@@ -443,6 +464,30 @@ mod tests {
                 id: "plate".into(),
                 text: "param plate.d = 6\nplate = cut(plan.outline, sym(d))\n".into()
             }
+        );
+    }
+
+    #[test]
+    fn a_feature_of_a_component_reads_back_and_writes_in_its_block() {
+        let src = "shared plen = 30\ncomponent peg(d: 6, h: 30) {\n  sketch s(on: xy) {\n    c = circle((0, 0), d / 2)\n  }\n  shank = extrude(s, h)\n}\np = part(peg(h: plen))\n";
+        let e = read(src, "peg.shank");
+        assert_eq!(e.kind, "extrude");
+        // the component's param kept as written, not its default's number
+        assert_eq!(e.params[0].expr.as_deref(), Some("h"));
+        let op = e.op(e.text().unwrap());
+        let forge_lang::error::Op::ReplaceFeature { id, .. } = &op else {
+            panic!("{op:?}")
+        };
+        assert_eq!(id, "peg.shank");
+        let out = forge_lang::edit::apply(src, &op).unwrap();
+        assert!(
+            out.contains("  param shank.d = h\n  shank = extrude(s, d)\n}"),
+            "{out}"
+        );
+        assert!(
+            forge_lang::run(&out, Default::default(), Default::default())
+                .0
+                .ok()
         );
     }
 

@@ -1,0 +1,8 @@
+drawing
+# One component of peg_board.fg drawn on its own, and the whole board placed.
+peg = part("peg_board.fg", component: "peg(d=10,h=30)", material: "AISI 304")
+board = assembly("peg_board.fg")
+s1 = sheet("B", title: "PEG BOARD", number: "DWG-PB1", rev: "A", drawn: "D. BASCOM")
+top = base_view(board, sheet: s1, dir: "top", scale: 1.5, at: (130, 200))
+iso = projected(top, at: (320, 200), scale: 1)
+p = base_view(peg, sheet: s1, dir: "front", scale: 2, at: (120, 70))

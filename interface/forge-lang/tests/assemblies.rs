@@ -456,17 +456,18 @@ expect interferences = 0
 }
 
 #[test]
-fn part_built_ins_are_refused_in_an_assembly_and_back() {
+fn an_assembly_header_is_optional_and_part_features_build_under_it() {
     let d = mech_dir("wrongdoc");
     let r = run_in(
         &d,
         "assembly\nshared t = 4\nsketch plan(on: xy) {\n  c = circle((0, 0), t)\n}\nx = extrude(plan, t)\n",
     );
-    assert!(
-        r.errors.iter().any(|e| e.kind() == "WrongDocument"),
-        "{:?}",
-        errors(&r)
-    );
+    assert!(r.ok(), "{:?}", errors(&r));
+    // the header marks an assembly: its own body is the root's, held where it is made
+    let a = r.asm.as_ref().expect("declared an assembly");
+    assert_eq!(a.bom, vec![("#root".to_string(), 1)]);
+    assert!((r.measure.unwrap().volume - 16.0 * std::f64::consts::PI * 4.0).abs() < 1e-6);
+    // a joint between names that are nothing is still an error
     let r = run_in(&d, "j = revolute(a, b)\n");
     assert!(!r.ok());
 }
@@ -688,10 +689,23 @@ rule = fit_rule(external_thread, internal_thread, size: m)
          joint edit: run {edit_total:?}, re-check {recheck:.2} ms; drag: run {drag_total:?}, overlap {drag_overlap:.2} ms ({} candidates, {} cached)",
         o.candidates, o.cache_hits
     );
-    assert!(anchors < 10.0, "anchor check {anchors} ms");
-    assert!(recheck < 10.0, "re-check {recheck} ms");
-    assert!(overlap0 < 1000.0, "overlap cold {overlap0} ms");
-    assert!(drag_overlap < 50.0, "overlap after a drag {drag_overlap} ms");
+    // the work, not the clock (times are printed above: a loaded machine moves them, so they
+    // are no verdict): a drag re-tests only what the moved plate and its bolts can touch, the
+    // rest from the cache, and nothing needs the exact boolean
+    let cold_o = a.overlap.clone().unwrap();
+    println!("overlap work: cold {cold_o:?}; drag {o:?}");
+    assert_eq!(cold_o.exact_runs, 0, "{cold_o:?}");
+    assert_eq!(o.exact_runs, 0, "{o:?}");
+    assert!(
+        o.candidates * 100 <= cold_o.candidates,
+        "drag {o:?} cold {cold_o:?}"
+    );
+    assert!(
+        o.narrow_tests * 100 <= cold_o.narrow_tests,
+        "drag {o:?} cold {cold_o:?}"
+    );
+    assert!(o.cache_hits > 0, "{o:?}");
+    let _ = (anchors, recheck, overlap0, drag_overlap);
 }
 
 #[test]

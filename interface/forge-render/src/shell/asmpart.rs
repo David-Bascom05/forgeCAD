@@ -247,20 +247,123 @@ impl AsmPanel {
             return;
         }
         let file = o.file.clone();
-        let feats = read_feats(&file, self.dir.as_deref());
+        let feats = if file.starts_with('#') {
+            Ok(self.infile_feats(&file))
+        } else {
+            read_feats(&file, self.dir.as_deref())
+        };
         self.part_feats.insert(file, feats);
         self.remake_tree();
     }
 
-    /// A feature row's in-place edit: its dialog up, the rest of the assembly dimmed.
+    /// This file's features as an in-file component's tree: an inline component's (by its
+    /// definition, `peg.shank` shown as `shank`), a body's own feature, or the root's: every
+    /// feature of the file that is no component's and places nothing.
+    pub fn infile_feats(&self, file: &str) -> Vec<FeatRow> {
+        let own = file.trim_start_matches('#');
+        let placing = |k: &str| {
+            matches!(k, "component" | "instance" | "subassembly" | "fit" | "fit_rule")
+                || forge_lang::asm::NAMES.contains(&k)
+        };
+        let comps: Vec<&str> = self
+            .doc_feats
+            .iter()
+            .filter(|f| f.kind == "component")
+            .map(|f| f.id.as_str())
+            .collect();
+        let in_comp = |id: &str| id.split_once('.').is_some_and(|(c, _)| comps.contains(&c));
+        match own.split_once('(') {
+            Some((def, _)) => self
+                .doc_feats
+                .iter()
+                .filter_map(|f| {
+                    let rest = f.id.strip_prefix(def)?.strip_prefix('.')?;
+                    Some(FeatRow {
+                        id: rest.to_string(),
+                        ..f.clone()
+                    })
+                })
+                .collect(),
+            None if file == super::fgasm::DOC => self
+                .doc_feats
+                .iter()
+                .filter(|f| !placing(&f.kind) && !in_comp(&f.id))
+                .cloned()
+                .collect(),
+            None if file == forge_lang::asm::ROOT => {
+                let bodies: Vec<&str> = self
+                    .occ
+                    .iter()
+                    .filter(|o| {
+                        o.file.starts_with('#') && !o.file.contains('(') && o.file != forge_lang::asm::ROOT
+                    })
+                    .map(|o| o.path.as_str())
+                    .collect();
+                self.doc_feats
+                    .iter()
+                    .filter(|f| !placing(&f.kind) && !in_comp(&f.id) && !bodies.contains(&f.id.as_str()))
+                    .cloned()
+                    .collect()
+            }
+            // a body: every feature that made it, its sketches too
+            None => {
+                let chain = self.body_chains.iter().find(|c| c.0 == own).map(|c| &c.1);
+                self.doc_feats
+                    .iter()
+                    .filter(|f| chain.map_or(f.id == own, |c| c.contains(&f.id)))
+                    .cloned()
+                    .collect()
+            }
+        }
+    }
+
+    /// This file's features, the part trees of its in-file components read from them again.
+    pub fn set_doc_feats(&mut self, feats: Vec<FeatRow>) {
+        if feats == self.doc_feats {
+            return;
+        }
+        self.doc_feats = feats;
+        let mut stale: Vec<String> = self
+            .part_feats
+            .keys()
+            .filter(|f| f.starts_with('#'))
+            .cloned()
+            .collect();
+        if !stale.iter().any(|f| f == super::fgasm::DOC) {
+            stale.push(super::fgasm::DOC.into());
+        }
+        for f in &stale {
+            let rows = Ok(self.infile_feats(f));
+            self.part_feats.insert(f.clone(), rows);
+        }
+        if !stale.is_empty() {
+            self.remake_tree();
+        }
+    }
+
+    /// A feature row's in-place edit: its dialog up, the rest of the assembly dimmed. A
+    /// feature of a component of this file is this file's: the host edits it (`host_edit`).
     pub fn edit_in_place(&mut self, key: &str) -> Result<(), String> {
         let (occ, id) = super::fgasm::feature_of(key).ok_or("not a part's feature")?;
+        if occ == super::fgasm::DOC {
+            self.host_edit = Some(id.to_string());
+            self.selected = Some(key.to_string());
+            return Ok(());
+        }
         let file = self
             .occ
             .iter()
             .find(|o| o.path == occ)
             .map(|o| o.file.clone())
             .ok_or(format!("{occ}: no such occurrence"))?;
+        if let Some(own) = file.strip_prefix('#') {
+            self.host_edit = Some(match own.split_once('(') {
+                Some((def, _)) => format!("{def}.{id}"),
+                None => id.to_string(),
+            });
+            self.selected = Some(key.to_string());
+            return Ok(());
+        }
         let feats = match self.part_feats.get(&file) {
             Some(Ok(f)) => f.clone(),
             Some(Err(e)) => return Err(e.clone()),

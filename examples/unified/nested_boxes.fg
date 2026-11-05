@@ -1,0 +1,23 @@
+# Components inside components: a box component places its lid and joins it; the document
+# places two boxes, each its own subassembly (b1.l1, b2.l1).
+shared t = 3
+shared wide = 60
+component lid(w: 40) {
+  sketch s(on: xy) {
+    o = rect(center: (0, 0), size: (w, w))
+  }
+  plate = extrude(s, t)
+}
+component box(w: 40, h: 20) {
+  sketch s(on: xy) {
+    o = rect(center: (0, 0), size: (w, w))
+  }
+  base = extrude(s, h)
+  l1 = part(lid(w: w), at: (0, 0, h))
+  ground(base)
+  j = fastened(l1.plate.start, base.end, flip: true)
+}
+b1 = part(box, ground: true)
+b2 = part(box(w: wide), at: (200, 0, 0), ground: true)
+expect interferences = 0
+expect z(b2.l1) = 20
