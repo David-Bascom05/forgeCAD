@@ -107,7 +107,7 @@ fn table(path: &Path) -> Vec<BTreeMap<String, String>> {
 /// nodes along the window); `fine` doubles the nodes; `nh` swaps the law for a neo-Hookean one of
 /// the same small-strain shear (how much the law's shape matters). A token this solver lacks
 /// returns false (the row says "n/a").
-fn configure(p: &mut Process, cfg: &str, _mu: f64) -> bool {
+fn configure(p: &mut Process, cfg: &str, mu: f64) -> bool {
     cfg.replace('_', "+").split('+').all(|tok| match tok {
         "height" => true,
         "fine" => {
@@ -118,15 +118,90 @@ fn configure(p: &mut Process, cfg: &str, _mu: f64) -> bool {
             p.law = forge_thermo::Law::neo_hookean(p.law.shear());
             true
         }
+        // the 3-D distance field for contact, the sheet's middle t/2 off the tool
+        "dist" => {
+            p.surface = forge_thermo::Surface::Distance;
+            true
+        }
+        // bending as a plate; a membrane that wrinkles; Coulomb friction on the mould's top
+        "bend" => {
+            p.bending = true;
+            true
+        }
+        "wrinkle" => {
+            p.wrinkle = true;
+            true
+        }
+        // the vacuum drawn by volume, not pressure
+        "vol" => {
+            p.volume = true;
+            true
+        }
+        // by pressure till a step snaps, then by volume
+        "guard" => {
+            p.snap_guard = true;
+            true
+        }
+        "slide" => {
+            p.slide = Some(mu);
+            true
+        }
+        // the clamp's draw-in band, 20 mm, gripped at mu MPa
+        "clamp" => {
+            p.clamp = Some(forge_thermo::Clamp { band: 20.0, hold: mu });
+            true
+        }
+        t if t.starts_with("steps") => match t[5..].parse() {
+            Ok(n) => {
+                p.steps = n;
+                true
+            }
+            Err(_) => false,
+        },
         _ => false,
     })
 }
 
 /// What the case itself asks of the solver past the model: a plug (`plug = [radius, nose, edge,
-/// start, stroke]`, `plug_slip`) or an uneven sheet temperature (`heat_profile = [r, T, ..]`,
-/// `heat_wlf = [tref, c1, c2]`, `heat_temp`, `heat_power`). A solver without them: false ("n/a").
-fn case_options(_p: &mut Process, c: &Case) -> bool {
-    !c.contains_key("plug") && !c.contains_key("heat_profile")
+/// start, stroke]`, `plug_slip`, `plug_mu` for Coulomb friction) or an uneven sheet temperature
+/// (`heat_profile = [r, T, ..]`, `heat_wlf = [tref, c1, c2]`, `heat_temp`, `heat_power`).
+fn case_options(p: &mut Process, c: &Case) -> bool {
+    let plug = l(c, "plug");
+    if plug.len() == 5 {
+        p.plug = Some(forge_thermo::Plug {
+            at: None,
+            radius: plug[0],
+            nose: plug[1],
+            edge: plug[2],
+            start: plug[3],
+            stroke: plug[4],
+            steps: 40,
+            slip: b(c, "plug_slip"),
+            friction: c.contains_key("plug_mu").then(|| n(c, "plug_mu", 0.0)),
+        });
+    } else if c.contains_key("plug") {
+        return false;
+    }
+    let heat = l(c, "heat_profile");
+    if !heat.is_empty() {
+        let w = l(c, "heat_wlf");
+        if !heat.len().is_multiple_of(2) || w.len() != 3 {
+            return false;
+        }
+        p.heat = Some(forge_thermo::Heat {
+            at: None,
+            profile: heat.chunks(2).map(|x| (x[0], x[1])).collect(),
+            edge: None,
+            shift: forge_thermo::Shift::Wlf {
+                tref: w[0],
+                c1: w[1],
+                c2: w[2],
+            },
+            temp: n(c, "heat_temp", heat[1]),
+            power: n(c, "heat_power", 1.0),
+        });
+    }
+    true
 }
 
 /// The sheet's nodes at the start (the grid), from the first step.
@@ -419,19 +494,12 @@ fn pole_steps(st: &Stretch, p_end: f64) -> Vec<(f64, f64, f64)> {
     let (nx, _) = st.grid;
     let (ci, cj) = centre(st);
     let k = cj * (nx + 1) + ci;
-    // the load steps up to the forming pressure, evenly
-    let n = st.steps.iter().filter(|s| s.stage == "vacuum").count();
+    // the load steps up to the forming pressure, each at the pressure it stood at
+    let _ = p_end;
     st.steps
         .iter()
         .filter(|s| s.stage == "vacuum")
-        .enumerate()
-        .map(|(i, s)| {
-            (
-                p_end * (i + 1) as f64 / n as f64,
-                -(s.nodes[k][2] as f64),
-                s.ratio[k] as f64,
-            )
-        })
+        .map(|s| (s.pressure, -(s.nodes[k][2] as f64), s.ratio[k] as f64))
         .collect()
 }
 
@@ -503,7 +571,7 @@ fn score_ref_inflation(c: &Case, data: &Path, st: &Stretch, p_end: f64) -> Score
     sc
 }
 
-fn score_corner(c: &Case, data: &Path, st: &Stretch, p_end: f64) -> Score {
+fn score_corner(c: &Case, data: &Path, st: &Stretch, _p_end: f64) -> Score {
     let (d, t0, g) = (n(c, "d", 20.0), n(c, "t0", 1.0), n(c, "G", 0.5));
     let w = d / 2f64.sqrt();
     let rows = table(data);
@@ -526,8 +594,8 @@ fn score_corner(c: &Case, data: &Path, st: &Stretch, p_end: f64) -> Score {
     let mut sc = Score::default();
     let mut errs = vec![];
     let vac: Vec<&forge_thermo::Step> = st.steps.iter().filter(|s| s.stage == "vacuum").collect();
-    for (i, s) in vac.iter().enumerate() {
-        let p = p_end * (i + 1) as f64 / vac.len() as f64;
+    for s in vac.iter() {
+        let p = s.pressure;
         let pin = p * d / (g * t0);
         let r_ref = if pin < 0.380952 {
             Some(1.0)
@@ -558,7 +626,7 @@ fn score_corner(c: &Case, data: &Path, st: &Stretch, p_end: f64) -> Score {
             }
             let along = (x * x + (z + w).powi(2)).sqrt();
             if along >= 2.0 * r_end * d && along <= d {
-                we.push((last.ratio[kk] as f64 - (along / d).powf(k) / lc) * 100.0);
+                we.push((last.ratio[kk] as f64 - forge_math::dmath::powf(along / d, k) / lc) * 100.0);
             }
         }
         if !we.is_empty() {

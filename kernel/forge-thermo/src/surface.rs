@@ -181,6 +181,7 @@ mod tests {
                     .collect(),
                 ratio: vec![1.0; m],
                 stage: "sheet",
+                pressure: 0.0,
             }],
             grid: (n, n),
             tris,

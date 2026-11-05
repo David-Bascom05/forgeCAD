@@ -61,6 +61,13 @@ pub struct Process {
     /// The sheet's temperature over it (stage 3): each triangle's stiffness the law's at its own
     /// temperature by the polymer's shift (None: one temperature, the law's).
     pub heat: Option<Heat>,
+    /// The vacuum drawn by volume, not pressure (a female tool's): the air under the sheet taken
+    /// out in even parts, the pressure what it takes, so the sheet is followed past its free
+    /// bubble's limit point instead of snapping to the floor in one step (false: by pressure).
+    pub volume: bool,
+    /// Drawn by pressure till a step snaps (most of the free sheet meets the tool at once: past
+    /// the limit point), then by volume from the step before (off: by pressure throughout).
+    pub snap_guard: bool,
 }
 
 /// A sheet heated unevenly: its temperature `profile` (C) by distance from `at` on the trim plane
@@ -241,6 +248,8 @@ impl Default for Process {
             bending: false,
             plug: None,
             heat: None,
+            volume: false,
+            snap_guard: false,
         }
     }
 }
@@ -612,6 +621,9 @@ struct Sheet {
     /// they stood at the step's start.
     on_plug: Vec<Option<(Vec3, f64)>>,
     plug_anchor: Vec<Vec3>,
+    /// Drawn by volume: the volume under the sheet aimed at, the penalty's stiffness and the
+    /// pressure so far (an augmented Lagrangian).
+    volume: Option<(f64, f64, f64)>,
 }
 
 /// Sliding nodes carried off the tool's top (over the cavity) fall free.
@@ -718,6 +730,20 @@ impl Sheet {
                 }
             }
         }
+        if let Some((aim, stiff, lambda)) = self.volume {
+            let v = self.enclosed(x);
+            let d = v - aim;
+            e += lambda * d + 0.5 * stiff * d * d;
+            if let Some(g) = g.as_deref_mut() {
+                let p = lambda + stiff * d;
+                for t in &self.idx {
+                    let (a, b, c) = (x[t[0]], x[t[1]], x[t[2]]);
+                    g[t[0]] += b.cross(c) * (p / 6.0);
+                    g[t[1]] += c.cross(a) * (p / 6.0);
+                    g[t[2]] += a.cross(b) * (p / 6.0);
+                }
+            }
+        }
         for k in 0..x.len() {
             if let (true, Some(d)) = (self.slide[k], self.dir[k]) {
                 e += self.hold[k] * d.dot(x[k] - self.anchor[k]);
@@ -737,6 +763,14 @@ impl Sheet {
             }
         }
         Some(e)
+    }
+
+    /// The signed volume under the sheet (the pressure's work is p times it).
+    fn enclosed(&self, x: &[Vec3]) -> f64 {
+        self.idx
+            .iter()
+            .map(|t| x[t[0]].dot(x[t[1]].cross(x[t[2]])) / 6.0)
+            .sum()
     }
 
     /// The membrane's energy and the pressure's work, and their gradient at every node.
@@ -900,6 +934,8 @@ pub struct Step {
     pub nodes: Vec<[f32; 3]>,
     pub ratio: Vec<f32>,
     pub stage: &'static str,
+    /// The pressure the sheet stood at, MPa.
+    pub pressure: f64,
 }
 
 /// Where the move from `a` to `b` first comes within `reach` of the tool, if it does.
@@ -1213,6 +1249,7 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
         share: share.clone(),
         on_plug: vec![None; x.len()],
         plug_anchor: x.clone(),
+        volume: None,
         slide,
     };
     let mu = pr.law.shear().max(1e-9);
@@ -1234,15 +1271,16 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
     };
     let mut its = 0;
     let mut steps: Vec<Step> = vec![];
-    let mut snap = |x: &[Vec3], stage: &'static str| {
+    let mut snap = |x: &[Vec3], stage: &'static str, pressure: f64| {
         let (_, r) = ratios(&idx, &reference, x);
         steps.push(Step {
             nodes: x.iter().map(|p| [p.x as f32, p.y as f32, p.z as f32]).collect(),
             ratio: r.iter().map(|&v| v as f32).collect(),
             stage,
+            pressure,
         });
     };
-    snap(&x, "sheet");
+    snap(&x, "sheet", 0.0);
     if male {
         // the clamp comes down over the tool to the table
         let drop = 6;
@@ -1255,7 +1293,7 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
             let reach = reach_at(&x);
             its += step(&mut sheet, &tool, &mut x, 0.0, cap, tol, &reach, 150);
             release(&mut sheet, &tool, &x, 0.25 * spec.t);
-            snap(&x, "drape");
+            snap(&x, "drape", 0.0);
         }
     }
     if let (Some(plug), false) = (plug, male) {
@@ -1337,26 +1375,98 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
                     break;
                 }
             }
-            snap(&x, "plug");
+            snap(&x, "plug", 0.0);
         }
     }
+    // the vacuum by pressure, in even steps; on a female tool, a step in which most of the free
+    // sheet meets the tool at once is past the free bubble's limit point (no equilibrium till it
+    // lands: it would land in whatever order the minimiser took): taken back, and the vacuum drawn
+    // from there by volume, the cavity's volume (the height field's, below the trim plane) taken
+    // out in even parts, each held by an augmented Lagrangian, till the pressure it takes is the
+    // forming one (with `snap_guard`); `volume` draws it so from the start
     let loads = pr.steps.max(1);
-    for k in 1..=loads {
-        let p = pr.pressure * k as f64 / loads as f64;
-        sheet.hold = hold_at(p);
-        let reach = reach_at(&x);
-        its += step(&mut sheet, &tool, &mut x, p, cap, tol, &reach, 400);
-        release(&mut sheet, &tool, &x, 0.25 * spec.t);
-        snap(&x, "vacuum");
-    }
-    // a hot sheet held under the pressure creeps on until it meets the tool: an elastic sheet
-    // gets there only at a higher one, so the pressure is raised while some of the part is free
     let poly = polygon(&f.trim);
     let open = |sheet: &Sheet, x: &[Vec3]| {
         (0..x.len())
             .filter(|&k| sheet.free[k] && !sheet.slide[k] && inside(&poly, Point2::new(x[k].x, x[k].y)).0)
             .count()
     };
+    let mut by_volume = pr.volume && !male;
+    let (mut done, mut lambda) = (0, 0.0);
+    if !by_volume {
+        for k in 1..=loads {
+            let p = pr.pressure * k as f64 / loads as f64;
+            let kept = (
+                x.clone(),
+                sheet.free.clone(),
+                sheet.slide.clone(),
+                sheet.dir.clone(),
+                sheet.anchor.clone(),
+            );
+            let before = open(&sheet, &x);
+            sheet.hold = hold_at(p);
+            let reach = reach_at(&x);
+            its += step(&mut sheet, &tool, &mut x, p, cap, tol, &reach, 400);
+            release(&mut sheet, &tool, &x, 0.25 * spec.t);
+            if pr.snap_guard
+                && !male
+                && before > 0
+                && 5 * (before - open(&sheet, &x).min(before)) > 3 * before
+            {
+                (x, sheet.free, sheet.slide, sheet.dir, sheet.anchor) = kept;
+                by_volume = true;
+                lambda = pr.pressure * done as f64 / loads as f64;
+                break;
+            }
+            snap(&x, "vacuum", p);
+            done = k;
+        }
+    }
+    if by_volume {
+        let cavity: f64 = field
+            .z
+            .iter()
+            .filter(|z| !z.is_nan())
+            .map(|z| (-z).max(0.0))
+            .sum::<f64>()
+            * field.h
+            * field.h;
+        let parts = 2 * loads;
+        let each = cavity / parts as f64;
+        let stiff = pr.pressure / (0.05 * each).max(1e-9);
+        let base = sheet.enclosed(&x);
+        for k in 1..=parts {
+            let aim = base - each * k as f64;
+            for _ in 0..6 {
+                sheet.volume = Some((aim, stiff, lambda));
+                sheet.hold = hold_at(lambda.max(0.0));
+                let reach = reach_at(&x);
+                its += step(&mut sheet, &tool, &mut x, 0.0, cap, tol, &reach, 400);
+                release(&mut sheet, &tool, &x, 0.25 * spec.t);
+                let d = sheet.enclosed(&x) - aim;
+                lambda += stiff * d;
+                if d.abs() < 0.02 * each {
+                    break;
+                }
+            }
+            snap(&x, "vacuum", lambda.max(0.0));
+            if lambda >= pr.pressure {
+                break;
+            }
+        }
+        sheet.volume = None;
+        let from = (lambda / pr.pressure.max(1e-12)).clamp(0.0, 1.0);
+        for k in (1..=loads).filter(|&k| k as f64 / loads as f64 > from) {
+            let p = pr.pressure * k as f64 / loads as f64;
+            sheet.hold = hold_at(p);
+            let reach = reach_at(&x);
+            its += step(&mut sheet, &tool, &mut x, p, cap, tol, &reach, 400);
+            release(&mut sheet, &tool, &x, 0.25 * spec.t);
+            snap(&x, "vacuum", p);
+        }
+    }
+    // a hot sheet held under the pressure creeps on until it meets the tool: an elastic sheet
+    // gets there only at a higher one, so the pressure is raised while some of the part is free
     // until it is formed, or two raises in a row reach no more of it: it bridges there
     let mut p = pr.pressure;
     let (mut left, mut stalled) = (open(&sheet, &x), 0);
@@ -1366,7 +1476,7 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
         let reach = reach_at(&x);
         its += step(&mut sheet, &tool, &mut x, p, cap, tol, &reach, 200);
         release(&mut sheet, &tool, &x, 0.25 * spec.t);
-        snap(&x, "creep");
+        snap(&x, "creep", p);
         let now = open(&sheet, &x);
         stalled = if now < left { 0 } else { stalled + 1 };
         left = now;

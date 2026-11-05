@@ -175,7 +175,7 @@ fn get_f32s(i: &mut In) -> Option<Vec<f32>> {
         .collect()
 }
 
-const STAGES: [&str; 4] = ["sheet", "drape", "vacuum", "creep"];
+const STAGES: [&str; 5] = ["sheet", "drape", "plug", "vacuum", "creep"];
 
 fn write_stretch(o: &mut Out, s: &Stretch) {
     points(o, &s.nodes);
@@ -187,6 +187,7 @@ fn write_stretch(o: &mut Out, s: &Stretch) {
         );
         f32s(o, st.ratio.iter().copied());
         o.str(st.stage);
+        o.f64(st.pressure);
     }
     o.u64(s.grid.0 as u64);
     o.u64(s.grid.1 as u64);
@@ -215,10 +216,12 @@ fn read_stretch(i: &mut In) -> Option<Stretch> {
         }
         let ratio = get_f32s(i)?;
         let name = i.str()?;
+        let pressure = i.f64()?;
         steps.push(Step {
             nodes: flat.chunks(3).map(|c| [c[0], c[1], c[2]]).collect(),
             ratio,
             stage: STAGES.into_iter().find(|s| *s == name)?,
+            pressure,
         });
     }
     let grid = (usize::try_from(i.u64()?).ok()?, usize::try_from(i.u64()?).ok()?);
