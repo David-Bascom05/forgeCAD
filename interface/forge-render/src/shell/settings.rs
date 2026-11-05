@@ -28,6 +28,7 @@ pub const SECTIONS: &[(&str, SectionUi)] = &[
     ("Units", units),
     ("Keyboard", keyboard),
     ("Mouse", mouse),
+    ("Agent", super::agent_settings::settings_section),
 ];
 
 /// The tables the built-in sections own; any other in settings.toml is a registered section's.

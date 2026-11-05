@@ -1,7 +1,7 @@
 //! The Agent tab's settings: which backend runs the agent (Claude Code, or any OpenAI-compatible
-//! endpoint), its model, the endpoint's address. Kept in `agent.toml` beside `settings.toml`; an
-//! endpoint's API key lives in the OS keyring, never here. `section` is the Settings window's
-//! Agent tab and the Agent tab's own settings window both.
+//! endpoint), its model, the endpoint's address, the folders let in. Kept in settings.toml's
+//! `[agent]` table; an endpoint's API key lives in the OS keyring, never there. `settings_section`
+//! is the Settings window's Agent section (its one line in `settings::SECTIONS`).
 
 use super::theme::{Theme, medium, mono, sans};
 use egui::{RichText, Ui};
@@ -121,6 +121,94 @@ pub fn host_of(url: &str) -> String {
     rest.split('/').next().unwrap_or(rest).to_string()
 }
 
+// the key field's state and the keyring saves asked for, between the Settings window that
+// draws them and the host that runs them (the window's section is a plain fn of the settings)
+thread_local! {
+    static KEY: std::cell::RefCell<KeyField> = Default::default();
+    static ASKED: std::cell::RefCell<Vec<SettingsAct>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// The keyring saves the section asked for since last time.
+pub fn take_asked() -> Vec<SettingsAct> {
+    ASKED.with(|a| std::mem::take(&mut *a.borrow_mut()))
+}
+
+/// The key field, to read or set (whether the keyring holds a key, its last refusal).
+pub fn with_key<R>(f: impl FnOnce(&mut KeyField) -> R) -> R {
+    KEY.with(|k| f(&mut k.borrow_mut()))
+}
+
+const TABLE: &str = "agent";
+
+impl AgentSettings {
+    /// What settings.toml's `[agent]` table says, defaults for what it doesn't.
+    pub fn from_extra(t: &crate::bindings::Toml) -> AgentSettings {
+        let mut s = AgentSettings::default();
+        let get = |k: &str| t.get(TABLE, k).map(str::to_string);
+        if let Some(v) = get("backend") {
+            s.kind = if v == "openai" {
+                Kind::OpenAi
+            } else {
+                Kind::ClaudeCode
+            };
+        }
+        if let Some(v) = get("claude_model") {
+            s.claude_model = v;
+        }
+        if let Some(v) = get("base_url") {
+            s.base_url = v;
+        }
+        if let Some(v) = get("model") {
+            s.model = v;
+        }
+        // trusted.0, trusted.1, ...: one folder a key, never one string to split
+        s.trusted = (0..)
+            .map_while(|k| get(&format!("trusted.{k}")))
+            .filter(|d| trustable(d))
+            .collect();
+        s
+    }
+
+    /// The `[agent]` table, written whole.
+    pub fn write_extra(&self, t: &mut crate::bindings::Toml) {
+        t.entries.retain(|e| e.0 != TABLE);
+        let kind = match self.kind {
+            Kind::ClaudeCode => "claude-code",
+            Kind::OpenAi => "openai",
+        };
+        t.set(TABLE, "backend", kind);
+        t.set(TABLE, "claude_model", self.claude_model.clone());
+        t.set(TABLE, "base_url", self.base_url.clone());
+        t.set(TABLE, "model", self.model.clone());
+        for (k, d) in self.trusted.iter().filter(|d| trustable(d)).enumerate() {
+            t.set(TABLE, &format!("trusted.{k}"), d.clone());
+        }
+    }
+
+    /// The table's there: written by this, or an older agent.toml already moved in.
+    pub fn in_extra(t: &crate::bindings::Toml) -> bool {
+        t.entries.iter().any(|e| e.0 == TABLE)
+    }
+}
+
+/// The Settings window's Agent section.
+pub fn settings_section(
+    ui: &mut Ui,
+    t: &Theme,
+    s: &mut super::settings::Settings,
+    _w: &mut super::settings::Window,
+    _places: &mut Vec<(String, egui::Rect)>,
+) {
+    let mut a = AgentSettings::from_extra(&s.extra);
+    let acts = with_key(|k| section(ui, t, &mut a, k));
+    for act in acts {
+        match act {
+            SettingsAct::Changed => a.write_extra(&mut s.extra),
+            other => ASKED.with(|q| q.borrow_mut().push(other)),
+        }
+    }
+}
+
 /// A folder fit to trust: absolute, no control characters (a newline would be a second entry).
 pub fn trustable(dir: &str) -> bool {
     dir.starts_with('/') && !dir.chars().any(char::is_control)
@@ -194,6 +282,7 @@ pub fn section(ui: &mut Ui, t: &Theme, s: &mut AgentSettings, key: &mut KeyField
     ui.spacing_mut().item_spacing.y = 6.0;
     ui.label(RichText::new("Backend").font(medium(12.0)).color(t.ink2));
     ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 16.0;
         ui.radio_value(&mut s.kind, Kind::ClaudeCode, "Claude Code");
         ui.radio_value(&mut s.kind, Kind::OpenAi, "OpenAI-compatible");
     });
@@ -293,5 +382,34 @@ mod tests {
         };
         assert_eq!(AgentSettings::from_toml(&sneaky.to_toml()).trusted, ["/ok"]);
         assert!(!trustable("/a\nb") && !trustable("rel") && trustable("/home/x y"));
+    }
+
+    #[test]
+    fn settings_tomls_agent_table_round_trips_and_a_newline_adds_no_folder() {
+        let a = AgentSettings {
+            kind: Kind::OpenAi,
+            claude_model: "opus".into(),
+            base_url: "http://node1:8080/v1".into(),
+            model: "qwen3.6-35b-a3b".into(),
+            trusted: vec!["/mnt/usb/parts".into(), "/tmp/x y".into(), "/a\n/etc".into()],
+        };
+        let mut s = crate::shell::settings::Settings::default();
+        a.write_extra(&mut s.extra);
+        let text = s.to_toml();
+        assert!(text.contains("[agent]"), "{text}");
+        let back = crate::shell::settings::Settings::from_toml(&text);
+        let got = AgentSettings::from_extra(&back.extra);
+        assert_eq!(got.trusted, ["/mnt/usb/parts", "/tmp/x y"]);
+        assert_eq!(
+            AgentSettings {
+                trusted: vec![],
+                ..got
+            },
+            AgentSettings { trusted: vec![], ..a }
+        );
+        assert_eq!(
+            AgentSettings::from_extra(&Default::default()),
+            AgentSettings::default()
+        );
     }
 }

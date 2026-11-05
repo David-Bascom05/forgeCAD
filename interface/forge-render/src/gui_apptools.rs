@@ -4,7 +4,7 @@
 
 use super::Gui;
 use crate::agent::apptools::{AppCall, Reply};
-use crate::render::LineMode;
+use crate::render::VisualStyle;
 use crate::shell::fg::{FgAct, From};
 use crate::shell::thermo_ui::Analysis;
 use forge_agent::json::Json;
@@ -19,7 +19,7 @@ pub struct ViewSnap {
     body_hidden: bool,
     selected: Option<String>,
     overlays: crate::shell::Overlays,
-    lines: LineMode,
+    style: VisualStyle,
     section: bool,
     analysis: Analysis,
     camera: Option<crate::camera::Camera>,
@@ -59,7 +59,7 @@ impl Gui {
             body_hidden: p.is_some_and(|p| p.body_hidden),
             selected: p.and_then(|p| p.selected.clone()),
             overlays: self.shell.overlays(),
-            lines: self.shell.view.lines,
+            style: self.shell.view.style,
             section: self.shell.view.section,
             analysis: p.map_or(Analysis::None, |p| p.thermo.analysis),
             camera: self.view.as_ref().map(|v| v.nav.camera),
@@ -84,8 +84,8 @@ impl Gui {
             p.thermo.analysis = v.analysis;
         }
         *self.shell.overlays_mut() = v.overlays;
-        if self.shell.view.lines != v.lines {
-            self.shell.out.push(crate::shell::Action::Lines(v.lines));
+        if self.shell.view.style != v.style {
+            self.shell.out.push(crate::shell::Action::VisualStyle(v.style));
         }
         if self.shell.view.section != v.section {
             self.shell.out.push(crate::shell::Action::Section);
@@ -307,14 +307,12 @@ impl Gui {
                 Reply::ok(format!("View: {}", s(a, "view")))
             }
             "visual_style" => {
-                let m = match s(a, "edges") {
-                    "near" => LineMode::Near,
-                    "far" => LineMode::Far,
-                    "none" => LineMode::None,
-                    w => return Reply::err(format!("no edge style `{w}`")),
+                let w = s(a, "style");
+                let Some(m) = VisualStyle::ALL.iter().copied().find(|v| v.key() == w) else {
+                    return Reply::err(format!("no visual style `{w}`"));
                 };
-                self.shell.out.push(crate::shell::Action::Lines(m));
-                Reply::ok(format!("Edges: {}", s(a, "edges")))
+                self.shell.out.push(crate::shell::Action::VisualStyle(m));
+                Reply::ok(format!("Visual style: {}", m.name()))
             }
             "section" => {
                 let Some(on) = b(a, "on") else {

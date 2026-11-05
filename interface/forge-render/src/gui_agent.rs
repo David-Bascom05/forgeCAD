@@ -67,32 +67,49 @@ impl Gui {
     pub(crate) fn take_agent(&mut self) {
         if !self.agent.loaded {
             self.agent.loaded = true;
-            if let Some(text) = self
-                .agent
-                .settings_file
-                .clone()
-                .or_else(settings_path)
-                .and_then(|p| std::fs::read_to_string(p).ok())
+            // an agent.toml from before settings.toml's [agent] table: moved in once (the file kept)
+            if !AgentSettings::in_extra(&self.shell.settings.extra)
+                && let Some(text) = self
+                    .agent
+                    .settings_file
+                    .clone()
+                    .or_else(settings_path)
+                    .and_then(|p| std::fs::read_to_string(p).ok())
             {
-                self.shell.agent.settings = AgentSettings::from_toml(&text);
+                AgentSettings::from_toml(&text).write_extra(&mut self.shell.settings.extra);
             }
+        }
+        // settings.toml's [agent] table is the settings: the Settings window writes it
+        let now = AgentSettings::from_extra(&self.shell.settings.extra);
+        if now != self.shell.agent.settings {
+            if now.base_url != self.shell.agent.settings.base_url {
+                crate::shell::agent_settings::with_key(|k| k.stored = None);
+            }
+            self.shell.agent.settings = now;
+        }
+        for a in crate::shell::agent_settings::take_asked() {
+            self.shell.agent.out.push(AgentAct::Settings(a));
         }
         if let Some(r) = &self.agent.keyring
             && let Ok(got) = r.try_recv()
         {
             self.agent.keyring = None;
             match got {
-                Ok(s) => {
-                    self.shell.agent.key.stored = s;
-                    self.shell.agent.key.error = None;
-                }
-                Err(e) => self.shell.agent.key.error = Some(e),
+                Ok(s) => crate::shell::agent_settings::with_key(|k| {
+                    k.stored = s;
+                    k.error = None;
+                }),
+                Err(e) => crate::shell::agent_settings::with_key(|k| k.error = Some(e)),
             }
         }
         let a = &self.shell.agent;
-        if a.settings_open
+        let on_agent = crate::shell::settings::SECTIONS
+            .get(self.shell.prefs.tab)
+            .is_some_and(|x| x.0 == "Agent");
+        if self.shell.prefs.open
+            && on_agent
             && a.settings.kind == Kind::OpenAi
-            && a.key.stored.is_none()
+            && crate::shell::agent_settings::with_key(|k| k.stored.is_none())
             && self.agent.keyring.is_none()
         {
             let url = a.settings.base_url.clone();
@@ -202,13 +219,10 @@ impl Gui {
         }
     }
 
-    fn agent_save_settings(&self) {
-        if let Some(p) = self.agent.settings_file.clone().or_else(settings_path) {
-            if let Some(d) = p.parent() {
-                let _ = std::fs::create_dir_all(d);
-            }
-            let _ = std::fs::write(p, self.shell.agent.settings.to_toml());
-        }
+    /// Into settings.toml's [agent] table: the app saves it as it does every setting.
+    fn agent_save_settings(&mut self) {
+        let a = self.shell.agent.settings.clone();
+        a.write_extra(&mut self.shell.settings.extra);
     }
 
     /// A file's change in a turn taken back or put back: through the document when it's open;
@@ -401,7 +415,7 @@ impl Gui {
         }
         let settings = self.shell.agent.settings.clone();
         if let Some(why) = missing(&settings) {
-            self.shell.agent.settings_open = true;
+            self.shell.open_agent_settings();
             return fail(self, why.into(), None);
         }
         let want = (dir_of(&path), settings.clone());

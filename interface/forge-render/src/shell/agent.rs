@@ -2,7 +2,7 @@
 //! file, Cursor's agent panel in the browser's place. This keeps and draws the transcript; the
 //! host runs the backend (`crate::agent`) and does what `AgentAct`s ask.
 
-use super::agent_settings::{self, AgentSettings, KeyField, SettingsAct};
+use super::agent_settings::{self, AgentSettings, SettingsAct};
 use super::theme::{Theme, medium, mono, sans, semi};
 use super::{HEAD_H, Shell, icons};
 use egui::text::{LayoutJob, TextFormat};
@@ -147,8 +147,6 @@ pub struct AgentTab {
     /// The open file's name, for the context line.
     pub file: Option<String>,
     pub settings: AgentSettings,
-    pub key: KeyField,
-    pub settings_open: bool,
     pub switcher: bool,
     pub out: Vec<AgentAct>,
     /// Tool rows opened to show what they ran.
@@ -277,7 +275,7 @@ impl AgentTab {
     /// Esc stops a running agent when the tab's showing or its input has the keys.
     pub fn takes_escape(&mut self, ctx: &egui::Context) -> bool {
         let focused = ctx.memory(|m| m.has_focus(egui::Id::unique(INPUT_ID)));
-        if self.tab != SideTab::Agent || !(self.running || focused) || self.settings_open {
+        if self.tab != SideTab::Agent || !(self.running || focused) {
             return false;
         }
         ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Escape));
@@ -287,13 +285,6 @@ impl AgentTab {
             ctx.memory_mut(|m| m.surrender_focus(egui::Id::unique(INPUT_ID)));
         }
         true
-    }
-
-    /// The Settings window's Agent section: the registration hook for its tab.
-    pub fn settings_section(&mut self, ui: &mut Ui, t: &Theme) {
-        for a in agent_settings::section(ui, t, &mut self.settings, &mut self.key) {
-            self.out.push(AgentAct::Settings(a));
-        }
     }
 }
 
@@ -781,9 +772,6 @@ impl Shell {
         let chat = Rect::from_min_max(pos2(area.left(), top), pos2(area.right(), input.top()));
         self.agent_chat(ui, chat);
         self.agent_input(ui, input);
-        if self.agent.settings_open {
-            self.agent_settings_window(ui.ctx());
-        }
         if self.agent.running {
             ui.ctx()
                 .request_repaint_after(std::time::Duration::from_millis(120));
@@ -793,6 +781,7 @@ impl Shell {
     fn agent_switcher(&mut self, ctx: &egui::Context, under: Rect) {
         let t = self.theme;
         let mut close = false;
+        let mut open_settings = false;
         let mut rows: Vec<(&str, Rect)> = Vec::new();
         let area = egui::Area::new(egui::Id::unique("agent-switcher"))
             .order(egui::Order::Foreground)
@@ -826,7 +815,7 @@ impl Shell {
                             s.kind = agent_settings::Kind::OpenAi;
                             close = true;
                             if agent_settings::missing(s).is_some() {
-                                self.agent.settings_open = true;
+                                open_settings = true;
                             }
                         }
                         if self.agent.settings != before {
@@ -839,11 +828,14 @@ impl Shell {
                         );
                         rows.push(("agent:switch:settings", b.rect));
                         if b.clicked() {
-                            self.agent.settings_open = true;
+                            open_settings = true;
                             close = true;
                         }
                     });
             });
+        if open_settings {
+            self.open_agent_settings();
+        }
         let r = area.response.rect;
         self.note("agent:switcher", r);
         for (n, rr) in rows {
@@ -860,39 +852,11 @@ impl Shell {
         }
     }
 
-    fn agent_settings_window(&mut self, ctx: &egui::Context) {
-        let t = self.theme;
-        let mut close = false;
-        let mut places = Vec::new();
-        let resp = egui::Window::new("Agent settings")
-            .id(egui::Id::unique("agent-settings"))
-            .title_bar(false)
-            .collapsible(false)
-            .resizable(false)
-            .default_pos(pos2(self.side_w() + 40.0, 180.0))
-            .min_width(360.0)
-            .max_width(360.0)
-            .frame(super::fgasm::dialog_frame(&t))
-            .constrain_to(super::dialog_area(ctx))
-            .show(ctx, |ui| {
-                close = super::fgasm::dialog_head(
-                    ui,
-                    &t,
-                    "params",
-                    "Agent settings",
-                    "agent-settings",
-                    &mut places,
-                );
-                ui.add_space(6.0);
-                self.agent.settings_section(ui, &t);
-            });
-        self.places.extend(places);
-        if let Some(r) = resp {
-            self.note("agent:settings", r.response.rect);
-            self.view_blocks.push(r.response.rect);
-        }
-        if close {
-            self.agent.settings_open = false;
+    /// Manage > Settings, on its Agent section.
+    pub fn open_agent_settings(&mut self) {
+        self.prefs.open = true;
+        if let Some(k) = super::settings::SECTIONS.iter().position(|x| x.0 == "Agent") {
+            self.prefs.tab = k;
         }
     }
 

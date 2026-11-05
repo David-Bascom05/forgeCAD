@@ -410,9 +410,12 @@ fn in_the_app_a_turn_reloads_the_part_as_one_undo_step_and_the_tabs_keep_their_s
         .collect();
     assert_eq!(kinds, ["user", "tool", "tool", "agent", "diff"]);
     assert!(
-        std::fs::read_to_string(dir.join("agent.toml"))
-            .unwrap()
-            .contains("forgecad-agent-app")
+        h.gui
+            .shell
+            .settings
+            .extra
+            .get("agent", "trusted.0")
+            .is_some_and(|d| d.contains("forgecad-agent-app"))
     );
     // the diff's Undo is the app's one step back
     assert!(h.click("agent:undo:0:0"));
@@ -950,8 +953,8 @@ fn the_app_tools_work_the_rack_view_and_never_its_file() {
     assert_eq!(asm(&h).2, None);
 
     assert!(!app_call(&mut h, &tools, "set_view", r#"{"view":"front"}"#).error);
-    assert!(!app_call(&mut h, &tools, "visual_style", r#"{"edges":"none"}"#).error);
-    assert_eq!(h.gui.shell.view.lines, forge_render::render::LineMode::None);
+    assert!(!app_call(&mut h, &tools, "visual_style", r#"{"style":"shaded"}"#).error);
+    assert_eq!(h.gui.shell.view.style, forge_render::render::VisualStyle::Shaded);
     assert!(!app_call(&mut h, &tools, "section", r#"{"on":true}"#).error);
     assert!(h.gui.shell.view.section);
     assert!(!app_call(&mut h, &tools, "section", r#"{"on":false}"#).error);
@@ -1168,4 +1171,48 @@ fn a_closed_documents_build_thread_ends_and_exit_waits_for_the_rest() {
         "exit waited for the open one's"
     );
     drop(t);
+}
+
+#[test]
+fn the_agent_settings_live_in_the_settings_windows_agent_section() {
+    let Ok(mut h) = forge_render::gui::Headless::new((1400.0, 900.0), 1.0) else {
+        return;
+    };
+    let dir = scratch("settings");
+    std::fs::write(dir.join("plate.fg"), PART).unwrap();
+    // an agent.toml from before is moved into settings.toml's [agent] table once
+    std::fs::write(
+        dir.join("agent.toml"),
+        "backend = \"openai\"\nbase_url = \"http://node1:8080/v1\"\nmodel = \"qwen\"\n",
+    )
+    .unwrap();
+    h.gui.agent.settings_file = Some(dir.join("agent.toml"));
+    h.step();
+    h.gui.open(dir.join("plate.fg").to_str().unwrap());
+    h.settle();
+    assert_eq!(h.gui.shell.settings.extra.get("agent", "model"), Some("qwen"));
+    assert!(h.click("side:tab:Agent"));
+    h.step();
+    assert_eq!(h.gui.shell.agent.settings.label(), "node1:8080 · qwen");
+    // the Settings window writes the table; the tab follows
+    let mut a = h.gui.shell.agent.settings.clone();
+    a.kind = forge_render::shell::agent_settings::Kind::ClaudeCode;
+    a.claude_model = "sonnet".into();
+    a.write_extra(&mut h.gui.shell.settings.extra);
+    h.step();
+    h.step();
+    assert_eq!(h.gui.shell.agent.settings.label(), "Claude Code · sonnet");
+    // "Agent settings…" opens Manage > Settings on its Agent section
+    assert!(h.click("agent:switch"));
+    h.step();
+    assert!(h.click("agent:switch:settings"));
+    h.step();
+    h.step();
+    assert!(h.gui.shell.prefs.open);
+    assert_eq!(
+        forge_render::shell::settings::SECTIONS[h.gui.shell.prefs.tab].0,
+        "Agent"
+    );
+    drop(h);
+    let _ = std::fs::remove_dir_all(dir);
 }

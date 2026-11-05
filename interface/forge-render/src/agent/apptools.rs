@@ -148,9 +148,9 @@ pub const NAMES: &[(&str, &str, &str, &[&str])] = &[
     ),
     (
         "visual_style",
-        "Which edges draw: near (Inventor's default), far (all parts' edges), none (shaded only). One view step.",
-        r#"{"edges":{"type":"string","enum":["near","far","none"]}}"#,
-        &["edges"],
+        "The view's visual style, as the View tab's: realistic, shaded, shaded-edges (the default), shaded-hidden, wireframe, wireframe-hidden, wireframe-visible, monochrome, illustration. One view step.",
+        r#"{"style":{"type":"string","enum":["realistic","shaded","shaded-edges","shaded-hidden","wireframe","wireframe-hidden","wireframe-visible","monochrome","illustration"]}}"#,
+        &["style"],
     ),
     (
         "section",
