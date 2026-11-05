@@ -109,7 +109,39 @@ pub fn apply_checked(src: &str, name: &str, op: &DrawOp) -> Result<String, Refus
             item: name.to_string(),
         });
     };
-    let out = ops::apply_checked(&t, op)?;
+    // the op's own refusals (no such item, a name taken, not a call), as on a drawing file
+    let plain = ops::apply(&t, op)?;
+    let out = match op {
+        // its lines, indented as the block's are
+        DrawOp::AddItem { text } => {
+            let mut out = t.clone();
+            if !out.ends_with('\n') {
+                out.push('\n');
+            }
+            for l in text.trim_end().lines() {
+                out.push_str("  ");
+                out.push_str(l.trim_start());
+                out.push('\n');
+            }
+            out
+        }
+        // the statement's whole lines, its indent too: the next line as it was
+        DrawOp::DeleteItem { item } => {
+            let prog = syntax::parse(&t).map_err(|e| Refused::Breaks {
+                problem: doc::Problem::Syntax { message: e.text() },
+            })?;
+            let s = prog
+                .iter()
+                .find(|s| matches!(&s.kind, StmtKind::Assign { name, .. } if name == item))
+                .ok_or(Refused::NoItem { item: item.clone() })?;
+            // `span`, not `full`: full runs on to the next statement
+            let lo = t[..s.span.lo as usize].rfind('\n').map_or(0, |k| k + 1);
+            let hi = s.span.hi as usize;
+            let hi = t[hi..].find('\n').map_or(t.len(), |k| hi + k + 1);
+            format!("{}{}", &t[..lo], &t[hi..])
+        }
+        DrawOp::SetArg { .. } => plain,
+    };
     if out.get(..head) != Some(&t[..head]) {
         return Err(Refused::Breaks {
             problem: doc::Problem::Syntax {
@@ -117,24 +149,27 @@ pub fn apply_checked(src: &str, name: &str, op: &DrawOp) -> Result<String, Refus
             },
         });
     }
-    // the block's lines indented as written inside it
-    let mut body = String::new();
-    for (k, l) in out[head..].split_inclusive('\n').enumerate() {
-        // a line a delete left only its indent of
-        if k > 0 && l.trim().is_empty() && l != "\n" {
-            continue;
-        }
-        let fresh = !t[head..].contains(l.trim_end());
-        if k > 0 && fresh && !l.trim().is_empty() && !l.starts_with([' ', '\t']) {
-            body.push_str("  ");
-        }
-        body.push_str(l);
+    // checked as the block reads (`part()` is this document), not as a drawing file would read
+    // its text: there `part()` fails and hides what reads past it
+    let read = |x: &str| doc::read_with(x, Some(SELF)).errors;
+    let before = read(&t);
+    if let Some(e) = read(&out)
+        .iter()
+        .find(|e| !before.iter().any(|x| x.problem == e.problem))
+    {
+        return Err(Refused::Breaks {
+            problem: e.problem.clone(),
+        });
     }
+    let mut body = out[head..].to_string();
     if !body.ends_with('\n') {
         body.push('\n');
     }
     Ok(format!("{}{}{}", &src[..b.body.0], body, &src[b.body.1..]))
 }
+
+/// The document a block's checks read `part()` as: its own file, whatever its name.
+const SELF: &str = "this.fg";
 
 /// What `fg run --json` says of the blocks, without drawing them: each one's sheets, views (and
 /// the model each draws) and errors.

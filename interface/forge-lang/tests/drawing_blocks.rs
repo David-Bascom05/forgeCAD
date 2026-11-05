@@ -116,3 +116,39 @@ fn a_blocks_write_merges_into_unsaved_text_of_the_rest() {
     // nothing to merge: mine as it is
     assert_eq!(block::merge(&base, &mine, &base).as_deref(), Some(mine.as_str()));
 }
+
+/// An op whose result would not read is refused in a block as in a drawing file: deleting the
+/// sheet the views are on (`part()` reading as this document does not hide it).
+#[test]
+fn a_delete_a_later_item_reads_is_refused_in_a_block() {
+    let src = knob();
+    let e = block::apply_checked(&src, "dwg_knob", &DrawOp::DeleteItem { item: "s1".into() }).unwrap_err();
+    assert!(e.text().contains("no `s1`"), "{}", e.text());
+    let e = block::apply_checked(&src, "dwg_knob", &DrawOp::DeleteItem { item: "m".into() }).unwrap_err();
+    assert!(e.text().contains("no `m`"), "{}", e.text());
+    // a file's drawing refuses the same
+    let file = format!(
+        "drawing\n{}",
+        block::body(&src, "dwg_knob")
+            .unwrap()
+            .replace("part()", "part(\"knob.fg\")")
+    );
+    assert!(
+        forge_lang::drawing::ops::apply_checked(&file, &DrawOp::DeleteItem { item: "s1".into() }).is_err()
+    );
+}
+
+/// A delete takes the statement's whole lines and nothing else: every other line as it was.
+#[test]
+fn a_delete_in_a_block_leaves_the_other_lines_as_written() {
+    let src = knob();
+    let out = block::apply_checked(&src, "dwg_knob", &DrawOp::DeleteItem { item: "side".into() }).unwrap();
+    assert_eq!(out, src.replace("  side = projected(top, at: (200, 150))\n", ""));
+    let two = src.replace(
+        "  side = projected",
+        "  n1 = note(\"A\", sheet: s1, at: (1, 1))\n  side = projected",
+    );
+    let out = block::apply_checked(&two, "dwg_knob", &DrawOp::DeleteItem { item: "n1".into() }).unwrap();
+    assert_eq!(out, src);
+    assert!(out.contains("\n  side = projected") && !out.contains("    side"));
+}
