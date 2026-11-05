@@ -168,7 +168,12 @@ impl Geom2 {
                     if den.abs() <= 1e-300 {
                         break;
                     }
-                    t -= r.dot(d1) / den;
+                    let next = t - r.dot(d1) / den;
+                    // a step that changes nothing: every step after it would be the same one
+                    if next == t {
+                        break;
+                    }
+                    t = next;
                 }
                 t.clamp(t0, t1)
             }

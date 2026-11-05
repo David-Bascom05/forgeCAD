@@ -1125,34 +1125,38 @@ fn crossings(curves: &[Curve3], view: &View, chord: f64) -> Vec<Vec<f64>> {
     let touch = 1e-7 * size + 1e-7;
     let ends: Vec<Vec<(u32, f64)>> = forge_math::par::map(samples.len(), |c| {
         let ps = &samples[c].1;
-        let mut near = Vec::new();
         let mut got = Vec::new();
         for e in [ps[0], ps[ps.len() - 1]] {
             let r = chord + touch;
-            grid.near(
+            // a segment in two of the cells is seen twice: the same split twice, which the
+            // sort and dedup below make one
+            grid.each_near(
                 Point2::new(e.x - r, e.y - r),
                 Point2::new(e.x + r, e.y + r),
-                &mut near,
+                |k| {
+                    let bk = boxes[k as usize];
+                    if bk[2] < e.x - r || bk[0] > e.x + r || bk[3] < e.y - r || bk[1] > e.y + r {
+                        return;
+                    }
+                    let (ck, sk) = segs[k as usize];
+                    if ck as usize == c {
+                        return;
+                    }
+                    let (a, b) = seg(k as usize);
+                    let ab = b - a;
+                    let x = ((e - a).dot(ab) / ab.dot(ab).max(1e-300)).clamp(0.0, 1.0);
+                    if e.distance(a + ab * x) > r {
+                        return;
+                    }
+                    let ts = &samples[ck as usize].0;
+                    let guess = ts[sk as usize] + x * (ts[sk as usize + 1] - ts[sk as usize]);
+                    let path = &curves[ck as usize].path;
+                    let t = nearest_on_view(path, view, e, guess);
+                    if view.project(path.at(t)).distance(e) <= touch {
+                        got.push((ck, t));
+                    }
+                },
             );
-            for &k in &near {
-                let (ck, sk) = segs[k as usize];
-                if ck as usize == c {
-                    continue;
-                }
-                let (a, b) = seg(k as usize);
-                let ab = b - a;
-                let x = ((e - a).dot(ab) / ab.dot(ab).max(1e-300)).clamp(0.0, 1.0);
-                if e.distance(a + ab * x) > r {
-                    continue;
-                }
-                let ts = &samples[ck as usize].0;
-                let guess = ts[sk as usize] + x * (ts[sk as usize + 1] - ts[sk as usize]);
-                let path = &curves[ck as usize].path;
-                let t = nearest_on_view(path, view, e, guess);
-                if view.project(path.at(t)).distance(e) <= touch {
-                    got.push((ck, t));
-                }
-            }
         }
         got
     });
@@ -1184,7 +1188,12 @@ fn nearest_on_view(path: &Path3, view: &View, q: Point2, guess: f64) -> f64 {
         if den.abs() <= 1e-300 {
             break;
         }
-        t = (t - r.dot(d1) / den).clamp(lo, hi);
+        let next = (t - r.dot(d1) / den).clamp(lo, hi);
+        // a step that changes nothing: every step after it would be the same one
+        if next == t {
+            break;
+        }
+        t = next;
     }
     t
 }
@@ -1222,8 +1231,12 @@ fn refine(p: &Path3, q: &Path3, view: &View, ta: f64, tb: f64) -> (f64, f64) {
         // solve [da db] (x, y) = -r
         let x = -(r.cross(db)) / det;
         let y = -(da.cross(r)) / det;
-        a += x;
-        b += y;
+        let (na, nb) = (a + x, b + y);
+        // a step that changes nothing: every step after it would be the same one
+        if na == a && nb == b {
+            break;
+        }
+        (a, b) = (na, nb);
     }
     let ok = f(a, b).length() <= 1e-9 * (1.0 + view.project(p.at(a)).to_vec().length())
         && a >= pa.0
