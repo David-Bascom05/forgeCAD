@@ -795,7 +795,9 @@ fn an_assembly_reads_nothing_outside_its_root() {
             } else if file == "nowhere.fg" {
                 format!("{file}: no such file")
             } else {
-                format!("{file} is not a Forge file this reads (a plain .fg of text, at most 64 MB)")
+                format!(
+                    "{file} is not a Forge file this reads (a plain .fg of text that parses, at most 64 MB)"
+                )
             };
             assert_eq!(texts, vec![said], "{call}({file})");
             assert!(r.errors.iter().all(|e| e.kind() == "PartFile"));

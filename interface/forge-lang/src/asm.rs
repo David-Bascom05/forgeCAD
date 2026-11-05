@@ -1545,11 +1545,9 @@ impl ItemName {
 #[derive(Clone, Debug, PartialEq)]
 pub enum FileProblem {
     Missing,
-    /// There, but no Forge file: not a plain `.fg`, too big, not text, or it does not parse
-    /// (the line it stops at). None of its text is said.
-    NotForge {
-        line: Option<usize>,
-    },
+    /// There, but no Forge file: not a plain `.fg`, too big, not text, or it does not parse.
+    /// Nothing of it is said, nor anything worked out from it (a line, a length).
+    NotForge,
     /// There, but outside the project (or the session's root) once links are resolved.
     Outside,
     /// The file has errors of its own: how many, and the first's kind.
@@ -1924,11 +1922,8 @@ fn issue_text(i: &Issue) -> String {
         } => format!("{func} is for part files, not assemblies"),
         Issue::PartFile { file, problem } => match problem {
             FileProblem::Missing => format!("{file}: no such file"),
-            FileProblem::NotForge { line: Some(l) } => {
-                format!("{file} is not a Forge file this reads (it does not parse at line {l})")
-            }
-            FileProblem::NotForge { line: None } => {
-                format!("{file} is not a Forge file this reads (a plain .fg of text, at most 64 MB)")
+            FileProblem::NotForge => {
+                format!("{file} is not a Forge file this reads (a plain .fg of text that parses, at most 64 MB)")
             }
             FileProblem::Outside => format!("{file} is outside the session's root, not read"),
             FileProblem::Errors { count, first } => format!("{file}: {count} errors, the first {first}"),
@@ -2547,26 +2542,21 @@ fn not_located(
     }
     // something there the loader refused: not a plain .fg, or too big; read no further
     match dir.as_ref().map(|d| d.join(file)) {
-        Some(p) if std::fs::symlink_metadata(&p).is_ok() => FileProblem::NotForge { line: None },
+        Some(p) if std::fs::symlink_metadata(&p).is_ok() => FileProblem::NotForge,
         _ => FileProblem::Missing,
     }
 }
 
 /// A located file's text, read no further than `LIMIT`: only a plain file that is UTF-8 and
-/// parses as Forge (anything else is no Forge file, and none of its bytes go anywhere).
-pub(crate) fn read_capped(p: &std::path::Path) -> Option<String> {
-    read_fg(p).ok()
-}
-
-/// `read_capped`, or why not: the line a text that does not parse stops at (None: not a plain
-/// file, or not text).
-pub(crate) fn read_fg(p: &std::path::Path) -> Result<String, Option<usize>> {
+/// parses as Forge. Anything else is no Forge file: nothing of it goes anywhere, nor anything
+/// worked out from it (where it stops parsing, how long it is).
+pub fn read_capped(p: &std::path::Path) -> Option<String> {
     // a component's key is never a file to read
     if p.to_str().is_none_or(is_infile) {
-        return Err(None);
+        return None;
     }
     if let Some(k) = p.to_str().filter(|k| k.starts_with(crate::stdparts::KEY)) {
-        return crate::stdparts::text_of(k).ok_or(None);
+        return crate::stdparts::text_of(k);
     }
     // a link inside the fence is the file it names (the loaders' fence looked through it):
     // read as it is, a regular file, capped (deps::read_plain)
@@ -2577,21 +2567,17 @@ pub(crate) fn read_fg(p: &std::path::Path) -> Result<String, Option<usize>> {
     if let Some(d) = p.parent() {
         crate::deps::materials(Some(d));
     }
-    let s = String::from_utf8(bytes.ok_or(None)?).map_err(|_| None)?;
-    if let Err(e) = crate::syntax::parse(&s) {
-        return Err(Some(e.span().map_or(1, |sp| sp.lines(&s).0)));
-    }
-    Ok(s)
+    let s = String::from_utf8(bytes?).ok()?;
+    crate::syntax::parse(&s).ok()?;
+    Some(s)
 }
 
-/// Why a file located but did not read: not there, or there and no Forge file (where it stops).
+/// Why a file located but did not read: not there, or there and no Forge file.
 fn read_problem(p: &std::path::Path) -> FileProblem {
     if std::fs::symlink_metadata(p).is_err() {
         return FileProblem::Missing;
     }
-    FileProblem::NotForge {
-        line: read_fg(p).err().flatten(),
-    }
+    FileProblem::NotForge
 }
 
 /// The key of a file that could not be located: it reads as missing everywhere.
@@ -5722,7 +5708,26 @@ fn prefixed(id: &str, inner: &str) -> String {
 
 /// The inline components of a run, as `Run::components`.
 pub fn components(ev: &Eval) -> Vec<CompOut> {
-    ev.comps
+    let mut out = own_components(&ev.comps);
+    for c in &ev.comps {
+        nested_components(&c.ev, &mut out);
+    }
+    out
+}
+
+/// The calls inside a call's evaluation, at any depth (each evaluation once): a definition only
+/// called inside another's lists its features too.
+fn nested_components(ev: &Eval, out: &mut Vec<CompOut>) {
+    for c in &ev.comps {
+        if !out.iter().any(|o| o.eval_key == c.eval_key) {
+            out.extend(own_components(std::slice::from_ref(c)));
+        }
+        nested_components(&c.ev, out);
+    }
+}
+
+fn own_components(comps: &[Comp<'_>]) -> Vec<CompOut> {
+    comps
         .iter()
         .map(|c| CompOut {
             id: c.id.clone(),

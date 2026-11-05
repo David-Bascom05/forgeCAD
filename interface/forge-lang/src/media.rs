@@ -207,10 +207,7 @@ pub fn solid(dir: Option<&Path>, root: Option<&Path>, file: &str, span: Span) ->
         let imp = forge_step::import(data, &forge_step::Limits::default())
             .map_err(|_| FileProblem::Unreadable("not a model this reads".into()))?;
         if imp.solids.is_empty() {
-            return Err(FileProblem::Unreadable(format!(
-                "no solid this reads ({} refused)",
-                imp.refusals.len()
-            )));
+            return Err(FileProblem::Unreadable("no solid this reads".into()));
         }
         let mut body = Body::new();
         for s in &imp.solids {

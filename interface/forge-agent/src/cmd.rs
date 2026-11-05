@@ -170,7 +170,9 @@ fn font_file(
             .ok_or_else(|| format!("{name}: not a font file under the root")),
         (Some(_), _) => Err(format!("{name}: not a font file under the root")),
         (None, Some(r)) => {
-            parse(read(&r).map_err(|e| format!("{name}: {e}"))?).map_err(|e| format!("{name}: {e:?}"))
+            // what the font reader says of it would be its bytes: only that it is no font
+            parse(read(&r).map_err(|e| format!("{name}: {e}"))?)
+                .map_err(|_| format!("{name}: not a font file"))
         }
         (None, None) => Err(format!("{name}: no such .ttf or .otf font file")),
     }

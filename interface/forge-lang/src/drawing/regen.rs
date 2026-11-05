@@ -181,12 +181,14 @@ fn fail(problem: Problem, span: Span) -> DrawError {
 }
 
 /// A part file's first comment line, read as part number and description: `# RACK-101 post: ..`.
-fn describe(path: &Path, file: &str) -> (String, String) {
+fn describe(path: &Path, file: &str, root: Option<&Path>) -> (String, String) {
     let stem = Path::new(file)
         .file_stem()
         .map_or_else(|| file.to_string(), |s| s.to_string_lossy().into_owned());
-    // only a Forge file: its words are then its own part number and description
-    let Some(src) = crate::asm::read_capped(path) else {
+    // only inside the session's root (links resolved), and only a Forge file: its words are
+    // then its own part number and description
+    let inside = root.is_none_or(|r| std::fs::canonicalize(path).is_ok_and(|p| p.starts_with(r)));
+    let Some(src) = inside.then(|| crate::asm::read_capped(path)).flatten() else {
         return (stem, String::new());
     };
     let first = src
@@ -240,16 +242,22 @@ fn load(
     id: &str,
     file: &str,
     dir: &Path,
+    root: Option<&Path>,
     pool: &Arc<crate::asm::PartPool>,
     wants: &Arc<crate::asm::Wants>,
     component: Option<&str>,
 ) -> Result<ModelOut, String> {
     let path = dir.join(file);
+    // under a session's root: nothing outside it, as written or through a link
+    if crate::outside(Some(dir), root, file) {
+        return Err("is outside the session's root, not read".into());
+    }
     // a Forge file, or nothing of it said
-    let src = crate::asm::read_fg(&path).map_err(|line| match line {
-        _ if std::fs::symlink_metadata(&path).is_err() => "no such file".to_string(),
-        Some(l) => format!("is not a Forge file this reads (it does not parse at line {l})"),
-        None => "is not a Forge file this reads (a plain .fg of text, at most 64 MB)".to_string(),
+    let src = crate::asm::read_capped(&path).ok_or_else(|| match std::fs::symlink_metadata(&path) {
+        Err(_) => "no such file".to_string(),
+        Ok(_) => {
+            "is not a Forge file this reads (a plain .fg of text that parses, at most 64 MB)".to_string()
+        }
     })?;
     // a drawing shows the model's shape: its checks (overlap, expects) are its own report's
     let opts = crate::Options {
@@ -263,6 +271,8 @@ fn load(
         // its parts' meshes serve the overlap check and the expects, neither asked for here
         meshes: false,
         dir: path.parent().map(Path::to_path_buf),
+        // the model's own reads under the same root
+        root: root.map(Path::to_path_buf),
         ..crate::Options::default()
     };
     // the drawing's models share their parts' builds (a subassembly also drawn on its own)
@@ -297,12 +307,12 @@ fn load(
             .bom
             .iter()
             .map(|(f, n)| {
-                let (num, desc) = describe(&resolve(&base, &model, f), f);
+                let (num, desc) = describe(&resolve(&base, &model, f), f, root);
                 (f.clone(), *n, num, desc)
             })
             .collect(),
         None => {
-            let (num, desc) = describe(&path, file);
+            let (num, desc) = describe(&path, file, root);
             vec![(file.to_string(), 1, num, desc)]
         }
     };
@@ -325,7 +335,17 @@ fn load(
 
 /// What an assembly model asks of each part file, added to `wants`: its document run up to its
 /// parts, none of them built. A part model asks nothing.
-fn wants_of(file: &str, dir: &Path, pool: &Arc<crate::asm::PartPool>, wants: &Arc<crate::asm::Wants>) {
+fn wants_of(
+    file: &str,
+    dir: &Path,
+    root: Option<&Path>,
+    pool: &Arc<crate::asm::PartPool>,
+    wants: &Arc<crate::asm::Wants>,
+) {
+    // under a session's root: nothing outside it read, not even to ask what it wants
+    if crate::outside(Some(dir), root, file) {
+        return;
+    }
     let path = dir.join(file);
     let Some(src) = crate::asm::read_capped(&path) else {
         return;
@@ -343,6 +363,8 @@ fn wants_of(file: &str, dir: &Path, pool: &Arc<crate::asm::PartPool>, wants: &Ar
         cosmetic_threads: true,
         meshes: false,
         dir: path.parent().map(Path::to_path_buf),
+        // its own reads under the same root
+        root: root.map(Path::to_path_buf),
         ..crate::Options::default()
     };
     let mut cache = crate::build::Cache::default();
@@ -2662,7 +2684,13 @@ fn defaults(ctx: &Ctx, f: &mut forge_draw::sheet::Fields, sheet: usize, n_sheets
 
 /// Makes the drawing: `src` read, its models built (paths from `dir`), its sheets laid out.
 pub fn make(src: &str, dir: &Path) -> Drawing {
-    make_with(src, dir, None)
+    make_with(src, dir, None, None)
+}
+
+/// `make` for a session kept to `root` (`fg serve`, MCP): no model or part read outside it.
+pub fn make_in(src: &str, dir: &Path, root: Option<&Path>) -> Drawing {
+    let root = root.and_then(|r| std::fs::canonicalize(r).ok());
+    make_with(src, dir, root.as_deref(), None)
 }
 
 /// A drawing on its way: the sheets with the views made so far (or, `kept`, as the last make of
@@ -2696,7 +2724,7 @@ pub fn shown(src: &str, file: &Path, show: &mut dyn FnMut(Shown)) -> Drawing {
             kept: true,
         });
     }
-    let (d, from) = crate::kept::watched(&file, src, || make_with(src, &dir, Some(show)));
+    let (d, from) = crate::kept::watched(&file, src, || make_with(src, &dir, None, Some(show)));
     crate::kept::keep("drawing-pages", key, &from, &super::pagecode::write(&d.pages));
     d
 }
@@ -2758,7 +2786,7 @@ fn sheets_so_far(ctx: &Ctx) -> Vec<Page> {
     pages
 }
 
-fn make_with(src: &str, dir: &Path, mut show: Option<&mut dyn FnMut(Shown)>) -> Drawing {
+fn make_with(src: &str, dir: &Path, root: Option<&Path>, mut show: Option<&mut dyn FnMut(Shown)>) -> Drawing {
     let d = doc::read(src);
     let mut ctx = Ctx {
         dir: dir.to_path_buf(),
@@ -2787,9 +2815,9 @@ fn make_with(src: &str, dir: &Path, mut show: Option<&mut dyn FnMut(Shown)>) -> 
     // serves them all (the rack and the door drawn on its own ask the door's parts for different
     // references)
     let wants: Arc<crate::asm::Wants> = Arc::default();
-    crate::par::map(wanted.len(), |k| wants_of(wanted[k].1, &ctx.dir, &pool, &wants));
+    crate::par::map(wanted.len(), |k| wants_of(wanted[k].1, &ctx.dir, root, &pool, &wants));
     let mut loaded = crate::par::map(wanted.len(), |k| {
-        load(wanted[k].0, wanted[k].1, &ctx.dir, &pool, &wants, wanted[k].2)
+        load(wanted[k].0, wanted[k].1, &ctx.dir, root, &pool, &wants, wanted[k].2)
     })
     .into_iter();
     let part_loads = crate::asm::pool_files(&pool);
@@ -2807,8 +2835,14 @@ fn make_with(src: &str, dir: &Path, mut show: Option<&mut dyn FnMut(Shown)>) -> 
                     let name = material
                         .clone()
                         .or_else(|| m.sheet.as_ref().map(|s| s.0.clone()).filter(|n| !n.is_empty()));
-                    crate::deps::materials(Some(&ctx.dir));
-                    let libs = forge_material::Libraries::cached(Some(&ctx.dir));
+                    let libs = match root {
+                        // a session kept to its root reads no library file
+                        Some(_) => std::sync::Arc::new(forge_material::Libraries::builtin()),
+                        None => {
+                            crate::deps::materials(Some(&ctx.dir));
+                            forge_material::Libraries::cached(Some(&ctx.dir))
+                        }
+                    };
                     let found = name
                         .as_deref()
                         .and_then(|n| libs.find(n))

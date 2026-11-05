@@ -30,7 +30,11 @@ pub fn part_path(file: &str, dir: Option<&Path>) -> Option<PathBuf> {
 pub fn part_text(file: &str, dir: Option<&Path>) -> Result<String, String> {
     match part_path(file, dir) {
         None => forge_lang::stdparts::text_of(file).ok_or(format!("{file}: no such standard part")),
-        Some(p) => std::fs::read_to_string(&p).map_err(|e| format!("{}: {e}", p.display())),
+        // through forge-lang's checked reader: a Forge file, or nothing of it said
+        Some(p) => forge_lang::asm::read_capped(&p).ok_or_else(|| match std::fs::symlink_metadata(&p) {
+            Err(_) => format!("{file}: no such file"),
+            Ok(_) => format!("{file}: not a Forge file this reads"),
+        }),
     }
 }
 
@@ -53,6 +57,61 @@ pub fn read_feats(file: &str, dir: Option<&Path>) -> PartFeats {
     {
         let _ = run;
         Err("a part's features are listed in the desktop app".to_string())
+    }
+}
+
+/// An in-file component's rows from its file's features (`feats`): a call's (by its definition,
+/// the last of the calls it is under: `#box(w=40)/box.lid(w=40)` is `box.lid`, its `box.lid.plate`
+/// shown as `plate`), the document's own (`DOC`), the root's (every feature no component's and no
+/// body's of `bodies`), or a body's (the features `chains` say made it, else its own).
+pub fn infile_rows(
+    feats: &[FeatRow],
+    file: &str,
+    bodies: &[&str],
+    chains: &[(String, Vec<String>)],
+) -> Vec<FeatRow> {
+    let own = file.trim_start_matches('#');
+    let own = own.rsplit('/').next().unwrap_or(own);
+    let placing = |k: &str| {
+        matches!(k, "component" | "instance" | "subassembly" | "fit" | "fit_rule")
+            || forge_lang::asm::NAMES.contains(&k)
+    };
+    let comps: Vec<&str> = feats
+        .iter()
+        .filter(|f| f.kind == "component")
+        .map(|f| f.id.as_str())
+        .collect();
+    let in_comp = |id: &str| id.split_once('.').is_some_and(|(c, _)| comps.contains(&c));
+    match own.split_once('(') {
+        Some((def, _)) => feats
+            .iter()
+            .filter_map(|f| {
+                let rest = f.id.strip_prefix(def)?.strip_prefix('.')?;
+                Some(FeatRow {
+                    id: rest.to_string(),
+                    ..f.clone()
+                })
+            })
+            .collect(),
+        None if file == super::fgasm::DOC => feats
+            .iter()
+            .filter(|f| !placing(&f.kind) && !in_comp(&f.id))
+            .cloned()
+            .collect(),
+        None if file == forge_lang::asm::ROOT => feats
+            .iter()
+            .filter(|f| !placing(&f.kind) && !in_comp(&f.id) && !bodies.contains(&f.id.as_str()))
+            .cloned()
+            .collect(),
+        // a body: every feature that made it, its sketches too
+        None => {
+            let chain = chains.iter().find(|c| c.0 == own).map(|c| &c.1);
+            feats
+                .iter()
+                .filter(|f| chain.map_or(f.id == own, |c| c.contains(&f.id)))
+                .cloned()
+                .collect()
+        }
     }
 }
 
@@ -249,6 +308,12 @@ impl AsmPanel {
         let file = o.file.clone();
         let feats = if file.starts_with('#') {
             Ok(self.infile_feats(&file))
+        } else if let Some((owner, key)) = file.split_once("|#") {
+            // a component of a subassembly file: its rows from that file's own features
+            read_feats(owner, self.dir.as_deref()).map(|feats| {
+                let key = format!("#{key}");
+                infile_rows(&feats, &key, &[], &[])
+            })
         } else {
             read_feats(&file, self.dir.as_deref())
         };
@@ -260,61 +325,13 @@ impl AsmPanel {
     /// definition, `peg.shank` shown as `shank`), a body's own feature, or the root's: every
     /// feature of the file that is no component's and places nothing.
     pub fn infile_feats(&self, file: &str) -> Vec<FeatRow> {
-        let own = file.trim_start_matches('#');
-        let placing = |k: &str| {
-            matches!(k, "component" | "instance" | "subassembly" | "fit" | "fit_rule")
-                || forge_lang::asm::NAMES.contains(&k)
-        };
-        let comps: Vec<&str> = self
-            .doc_feats
+        let bodies: Vec<&str> = self
+            .occ
             .iter()
-            .filter(|f| f.kind == "component")
-            .map(|f| f.id.as_str())
+            .filter(|o| o.file.starts_with('#') && !o.file.contains('(') && o.file != forge_lang::asm::ROOT)
+            .map(|o| o.path.as_str())
             .collect();
-        let in_comp = |id: &str| id.split_once('.').is_some_and(|(c, _)| comps.contains(&c));
-        match own.split_once('(') {
-            Some((def, _)) => self
-                .doc_feats
-                .iter()
-                .filter_map(|f| {
-                    let rest = f.id.strip_prefix(def)?.strip_prefix('.')?;
-                    Some(FeatRow {
-                        id: rest.to_string(),
-                        ..f.clone()
-                    })
-                })
-                .collect(),
-            None if file == super::fgasm::DOC => self
-                .doc_feats
-                .iter()
-                .filter(|f| !placing(&f.kind) && !in_comp(&f.id))
-                .cloned()
-                .collect(),
-            None if file == forge_lang::asm::ROOT => {
-                let bodies: Vec<&str> = self
-                    .occ
-                    .iter()
-                    .filter(|o| {
-                        o.file.starts_with('#') && !o.file.contains('(') && o.file != forge_lang::asm::ROOT
-                    })
-                    .map(|o| o.path.as_str())
-                    .collect();
-                self.doc_feats
-                    .iter()
-                    .filter(|f| !placing(&f.kind) && !in_comp(&f.id) && !bodies.contains(&f.id.as_str()))
-                    .cloned()
-                    .collect()
-            }
-            // a body: every feature that made it, its sketches too
-            None => {
-                let chain = self.body_chains.iter().find(|c| c.0 == own).map(|c| &c.1);
-                self.doc_feats
-                    .iter()
-                    .filter(|f| chain.map_or(f.id == own, |c| c.contains(&f.id)))
-                    .cloned()
-                    .collect()
-            }
-        }
+        infile_rows(&self.doc_feats, file, &bodies, &self.body_chains)
     }
 
     /// This file's features, the part trees of its in-file components read from them again.

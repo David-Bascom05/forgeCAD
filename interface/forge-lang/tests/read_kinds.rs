@@ -112,7 +112,7 @@ fn no_loader_reads_another_kind_and_nothing_read_is_said() {
 }
 
 #[test]
-fn a_part_that_does_not_parse_is_refused_with_its_line_only() {
+fn a_part_that_does_not_parse_is_refused_with_nothing_of_it() {
     let d = dir("unparsed");
     std::fs::write(
         d.join("bad.fg"),
@@ -123,7 +123,11 @@ fn a_part_that_does_not_parse_is_refused_with_its_line_only() {
         let r = run_in(&d, src);
         let all = said(&r, src);
         assert!(!all.contains(CANARY), "{all}");
-        assert!(r.errors.iter().any(|e| e.text().contains("line 2")), "{all}");
+        // no detail worked out from it either: not where it stopped parsing
+        assert!(
+            !r.errors.is_empty() && !all.contains("line 2") && !all.contains("\"line\":2"),
+            "{all}"
+        );
     }
 }
 
@@ -182,4 +186,32 @@ fn a_session_root_still_fences() {
             .iter()
             .any(|e| e.text().contains("outside the session's root"))
     );
+}
+
+/// A drawing under a session's root reads no model outside it, nor any part its BOM names there.
+#[test]
+fn a_drawing_under_a_session_root_reads_nothing_outside_it() {
+    let d = dir("drawing-root");
+    let inside = d.join("in");
+    std::fs::create_dir_all(&inside).unwrap();
+    std::fs::write(d.join("out.fg"), format!("# {CANARY}-9 outside part\n{BODY}")).unwrap();
+    #[cfg(unix)]
+    {
+        let _ = std::fs::remove_file(inside.join("link.fg"));
+        std::os::unix::fs::symlink(d.join("out.fg"), inside.join("link.fg")).unwrap();
+    }
+    for model in ["../out.fg", "link.fg"] {
+        let src = format!(
+            "drawing\nm = part(\"{model}\")\ns1 = sheet(\"A4\")\ntop = base_view(m, sheet: s1, dir: \"top\", at: (100, 100))\n"
+        );
+        let dw = forge_lang::drawing::regen::make_in(&src, &inside, Some(&inside));
+        let all = format!("{}", forge_lang::drawing::regen::json(&dw, &src));
+        assert!(all.contains("outside the session's root"), "{model}: {all}");
+        assert!(!all.contains(CANARY), "{model}: {all}");
+        // with no root, the same drawing reads it (a Forge file)
+        let open = forge_lang::drawing::regen::make(&src, &inside);
+        assert!(
+            !format!("{}", forge_lang::drawing::regen::json(&open, &src)).contains("outside the session")
+        );
+    }
 }

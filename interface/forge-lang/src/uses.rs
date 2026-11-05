@@ -35,11 +35,7 @@ pub enum UseErr {
     Outside { span: Span, file: String },
     /// There, but no Forge file (not a plain `.fg` of text, too big, or it does not parse: the
     /// line it stops at): none of its text is said.
-    NotForge {
-        span: Span,
-        file: String,
-        line: Option<usize>,
-    },
+    NotForge { span: Span, file: String },
     /// The file uses, directly or through others, a file already being used. `chain`: the
     /// files being used, as each document named them.
     Cycle {
@@ -96,13 +92,10 @@ impl UseErr {
     pub fn text(&self) -> String {
         match self {
             UseErr::Outside { file, .. } => format!("use: {file} is outside the session's root, not read"),
-            UseErr::NotForge {
-                file, line: Some(l), ..
-            } => {
-                format!("use: {file} is not a Forge file this reads (it does not parse at line {l})")
-            }
-            UseErr::NotForge { file, line: None, .. } => {
-                format!("use: {file} is not a Forge file this reads (a plain .fg of text, at most 64 MB)")
+            UseErr::NotForge { file, .. } => {
+                format!(
+                    "use: {file} is not a Forge file this reads (a plain .fg of text that parses, at most 64 MB)"
+                )
             }
             UseErr::Missing { file, .. } => {
                 format!("use: no file {file} (a .fg beside this one, under the session's root)")
@@ -130,9 +123,7 @@ impl UseErr {
         let s = |x: &str| Json::Str(x.into());
         match self {
             UseErr::Missing { file, .. } | UseErr::Outside { file, .. } => vec![("file", s(file))],
-            UseErr::NotForge { file, line, .. } => {
-                vec![("file", s(file)), ("line", line.map_or(Json::Null, |l| l.into()))]
-            }
+            UseErr::NotForge { file, .. } => vec![("file", s(file))],
             UseErr::Cycle { file, chain, .. } => vec![
                 ("file", s(file)),
                 ("chain", Json::Arr(chain.iter().map(|c| s(c)).collect())),
@@ -213,11 +204,7 @@ pub fn call(ev: &mut Eval, args: &[crate::syntax::Arg], span: Span) -> R<Value> 
             .as_ref()
             .is_some_and(|d| std::fs::symlink_metadata(d.join(&file)).is_ok())
         {
-            return Err(err(UseErr::NotForge {
-                span,
-                file,
-                line: None,
-            }));
+            return Err(err(UseErr::NotForge { span, file }));
         }
         return Err(err(UseErr::Missing { span, file }));
     };
@@ -226,9 +213,8 @@ pub fn call(ev: &mut Eval, args: &[crate::syntax::Arg], span: Span) -> R<Value> 
         let chain = ev.use_files.clone();
         return Err(err(UseErr::Cycle { span, file, chain }));
     }
-    let text = match crate::asm::read_fg(&path) {
-        Ok(t) => t,
-        Err(line) => return Err(err(UseErr::NotForge { span, file, line })),
+    let Some(text) = crate::asm::read_capped(&path) else {
+        return Err(err(UseErr::NotForge { span, file }));
     };
     let lib = Rc::new(Lib {
         binding: binding.clone(),
