@@ -351,15 +351,12 @@ fn a_mixed_document_places_file_parts_too() {
 }
 
 #[test]
-fn a_subassembly_with_components_of_its_own_is_refused_for_now() {
+fn a_subassembly_with_components_of_its_own_places() {
     let d = dir("sub");
     std::fs::write(d.join("box.fg"), BOX).unwrap();
     let r = run_in(&d, "b = subassembly(\"box.fg\", ground: true)\n");
-    assert!(
-        errors(&r).iter().any(|e| e.contains("components of its own")),
-        "{:?}",
-        errors(&r)
-    );
+    assert!(r.ok(), "{:?}", errors(&r));
+    assert!(r.asm.as_ref().unwrap().bom.iter().all(|b| b.0.starts_with("box.fg|#")));
 }
 
 #[test]
@@ -593,4 +590,26 @@ fn reads_stay_inside_the_project() {
         "t = use(\"../hw/ok.fg\")\nsketch p(on: xy) {\n  c = circle((0, 0), t.s)\n}\nb = extrude(p, 1)\n",
     );
     assert!(r.ok(), "{}", text(&r));
+}
+
+#[test]
+fn a_file_with_components_of_its_own_places_as_a_subassembly() {
+    let d = dir("sub-infile");
+    let ex = concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/unified/");
+    for f in ["nested_boxes.fg", "hinged_box.fg"] {
+        std::fs::copy(format!("{ex}{f}"), d.join(f)).unwrap();
+    }
+    let src = "s1 = subassembly(\"nested_boxes.fg\", ground: true)\ns2 = subassembly(\"nested_boxes.fg\", at: (0, 400, 0), ground: true)\nh = subassembly(\"hinged_box.fg\", at: (-300, 0, 0), ground: true)\nexpect interferences = 0\nexpect z(s1.b2.l1) = 20\n";
+    let r = run_in(&d, src);
+    assert!(r.ok(), "{:?}", errors(&r));
+    let a = r.asm.as_ref().unwrap();
+    let bom: Vec<(&str, usize)> = a.bom.iter().map(|b| (b.0.as_str(), b.1)).collect();
+    // each call one row, by the file and its identity there, summed over every placement
+    assert!(bom.contains(&("nested_boxes.fg|#lid(w=40)", 2)), "{bom:?}");
+    assert!(bom.contains(&("nested_boxes.fg|#lid(w=60)", 2)), "{bom:?}");
+    assert!(bom.iter().any(|b| b.0.starts_with("hinged_box.fg|#lid")), "{bom:?}");
+    assert!(!bom.iter().any(|b| b.0.contains("/lid")), "{bom:?}");
+    // its own report: the parts' masses are found
+    let rows = forge_lang::props::bom_rows(a);
+    assert_eq!(rows.len(), bom.len());
 }

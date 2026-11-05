@@ -1560,8 +1560,6 @@ pub enum FileProblem {
     NoBody {
         body: String,
     },
-    /// A subassembly holding inline or body components (not yet placed from another file).
-    InFileComponents,
     /// `with:` names a param the file has no shared param for.
     NoParam {
         param: String,
@@ -1929,11 +1927,6 @@ fn issue_text(i: &Issue) -> String {
             FileProblem::NoBody { body } => format!("{file} has no body {body}"),
             FileProblem::NoParam { param } => format!("{file} has no shared param {param} for with:"),
             FileProblem::NoComponent { name } => format!("{file} has no component {name}"),
-            FileProblem::InFileComponents => {
-                format!(
-                    "{file} has components of its own (inline or bodies): not yet placeable as a subassembly"
-                )
-            }
         },
         Issue::BrokenAnchor {
             item,
@@ -2253,6 +2246,69 @@ type PartKey = (
 /// A subassembly document evaluated, and its errors.
 type SubLoad = (Doc, Vec<Error>);
 
+/// A subassembly file holding components of its own: its evaluation, built, and each call's
+/// document by its path, where its in-file parts are made (as this document's are here).
+struct FileEnv {
+    ev: Eval<'static>,
+    prepared: BTreeMap<String, Doc>,
+}
+
+/// A component of another file, placed through that file as a subassembly: `FILE|#KEY`, the
+/// file's own place and its key there (`#lid(w=40)`).
+fn nested_key(file: &str) -> Option<(&str, &str)> {
+    let k = file.find("|#")?;
+    Some((&file[..k], &file[k + 1..]))
+}
+
+/// A component of this document or of a subassembly file: made by an evaluation, never read.
+fn is_infile(file: &str) -> bool {
+    file.starts_with('#') || nested_key(file).is_some()
+}
+
+/// `text` evaluated as a document of its own and built: its document ready to solve, its
+/// in-file parts' evaluations, and its errors.
+fn file_env(text: &str, dir: Option<std::path::PathBuf>, fence: Option<std::path::PathBuf>) -> (FileEnv, Doc, Vec<Error>) {
+    let text = kept_text(text.to_string());
+    let mut ev = Eval::new(text, crate::eval::Rules::default(), true, Default::default());
+    ev.dir = dir;
+    ev.root = fence;
+    let prog = match crate::syntax::parse(text) {
+        Ok(p) => p,
+        Err(e) => {
+            let env = FileEnv {
+                ev,
+                prepared: BTreeMap::new(),
+            };
+            return (env, Doc::default(), vec![e]);
+        }
+    };
+    ev.asm = Some(Doc {
+        declared: declared(&prog),
+        ..Default::default()
+    });
+    ev.check_static(&prog);
+    if !ev.errors.is_empty() {
+        ev.b.building = false;
+    }
+    ev.run(&prog);
+    crate::sheet::finish(&mut ev);
+    let d = ev.asm.take().unwrap_or_default();
+    let d = in_file(&mut ev, d);
+    let mut prepared = BTreeMap::new();
+    prepare_all(&mut ev, &d, &mut prepared);
+    let errors = std::mem::take(&mut ev.errors);
+    (FileEnv { ev, prepared }, d, errors)
+}
+
+/// A subassembly file's document as placed from here: its own components named through it.
+fn namespaced(d: &Doc, file: &str) -> Doc {
+    let mut d = d.clone();
+    for i in d.insts.iter_mut().filter(|i| i.file.starts_with('#')) {
+        i.file = format!("{file}|{}", i.file);
+    }
+    d
+}
+
 /// Loaded documents and the last solve, kept across runs of one assembly.
 #[derive(Default)]
 pub struct AsmCache {
@@ -2366,7 +2422,7 @@ fn locate_part(
     fence: &Option<std::path::PathBuf>,
     file: &str,
 ) -> Option<std::path::PathBuf> {
-    if file.starts_with('#') {
+    if is_infile(file) {
         return Some(std::path::PathBuf::from(file));
     }
     locate(dir, fence, file)
@@ -2378,7 +2434,7 @@ pub(crate) fn locate(
     file: &str,
 ) -> Option<std::path::PathBuf> {
     // a component's key is no file: never read, never located as one
-    if file.starts_with('#') {
+    if is_infile(file) {
         return None;
     }
     // a file placed another way (`mug.fg|with:..`): the file's own place
@@ -2482,7 +2538,7 @@ fn not_located(
 pub(crate) fn read_capped(p: &std::path::Path) -> Option<String> {
     use std::io::Read;
     // a component's key is never a file to read
-    if p.to_str().is_none_or(|k| k.starts_with('#')) {
+    if p.to_str().is_none_or(is_infile) {
         return None;
     }
     if let Some(k) = p.to_str().filter(|k| k.starts_with(crate::stdparts::KEY)) {
@@ -2505,8 +2561,8 @@ fn unlocated(file: &str) -> String {
 }
 
 fn located(dir: &Option<std::path::PathBuf>, fence: &Option<std::path::PathBuf>, file: &str) -> String {
-    // a component of this document
-    if file.starts_with('#') {
+    // a component of this document, or of a subassembly file
+    if is_infile(file) {
         return file.to_string();
     }
     // a file placed another way: its own place, the variant kept
@@ -3218,7 +3274,7 @@ fn build_doc(
                     path.push(fa::InstanceId(hid(&x.id)));
                     cur = Some(x);
                     // an in-file subassembly's parts are found where the document's are
-                    if !c.file.starts_with('#') {
+                    if !is_infile(&c.file) {
                         cur_dir = file.parent().map(|p| p.to_path_buf());
                     }
                     segs = &segs[1..];
@@ -3350,7 +3406,7 @@ fn structure(
     let sub_of = |dir: &Option<std::path::PathBuf>, file: &str| {
         let p = locate_part(dir, fence, file)?;
         let s = subs.get(&p.to_string_lossy().to_string())?;
-        if file.starts_with('#') {
+        if is_infile(file) {
             return Some((s, dir.clone()));
         }
         Some((s, p.parent().map(|x| x.to_path_buf())))
@@ -3499,13 +3555,14 @@ pub fn finish(
 
     // subassemblies, depth first, each document once; a cycle is refused
     let mut subs: BTreeMap<String, Arc<SubLoad>> = BTreeMap::new();
+    let mut envs: BTreeMap<String, FileEnv> = BTreeMap::new();
     let mut stack: Vec<(Doc, Option<std::path::PathBuf>, Vec<String>)> =
         vec![(d.clone(), dir.clone(), vec![])];
     while let Some((doc_, here, chain)) = stack.pop() {
         for i in doc_.insts.iter().filter(|i| i.sub) {
             // a call of a component of this file that places or joins its own: its evaluation's
             // document, ready to solve
-            if i.file.starts_with('#') {
+            if is_infile(&i.file) {
                 let key = i.file.clone();
                 if chain.contains(&key) {
                     ev.errors.push(note(
@@ -3517,11 +3574,20 @@ pub fn finish(
                     ));
                     continue;
                 }
-                let path = format!("{}/", key.trim_start_matches('#'));
+                // of this document, or of the subassembly file it is placed through
+                let (rest, owner) = match nested_key(&key) {
+                    Some((f, r)) => (r, Some(f)),
+                    None => (key.as_str(), None),
+                };
+                let path = format!("{}/", rest.trim_start_matches('#'));
+                let found = match owner {
+                    Some(f) => envs.get(f).and_then(|e| e.prepared.get(&path)).map(|x| namespaced(x, f)),
+                    None => prepared.get(&path).cloned(),
+                };
                 if !subs.contains_key(&key)
-                    && let Some(doc) = prepared.get(&path)
+                    && let Some(doc) = found
                 {
-                    let loaded = Arc::new((doc.clone(), vec![]));
+                    let loaded = Arc::new((doc, vec![]));
                     subs.insert(key.clone(), loaded.clone());
                     let mut c = chain.clone();
                     c.push(key);
@@ -3584,19 +3650,18 @@ pub fn finish(
                     x
                 }
             };
+            // components of its own: the file evaluated and built as a document, its parts made
+            // there, named through it
             let own = |r: &RefDef| loaded.0.insts.iter().any(|x| x.id == r.inst);
-            if loaded.0.insts.iter().any(|x| x.source != Source::File)
+            let loaded = if loaded.0.insts.iter().any(|x| x.source != Source::File)
                 || loaded.0.links.iter().any(|l| !own(&l.a) || !own(&l.b))
             {
-                ev.errors.push(note(
-                    i.span,
-                    Issue::PartFile {
-                        file: i.file.clone(),
-                        problem: FileProblem::InFileComponents,
-                    },
-                ));
-                continue;
-            }
+                let (env, doc, errors) = file_env(&text, parent.clone(), fence.clone());
+                envs.insert(key.clone(), env);
+                Arc::new((namespaced(&doc, &key), errors))
+            } else {
+                loaded
+            };
             if let Some(e) = loaded.1.first() {
                 ev.errors.push(note(
                     i.span,
@@ -3643,10 +3708,10 @@ pub fn finish(
     // each subassembly's fit and rule names, for what its fits say when used from here
     let mut sub_fit_names: BTreeMap<fa::DocId, (Vec<String>, BTreeMap<u64, String>)> = BTreeMap::new();
     for (key, sub) in &subs {
-        let sdir = if key.starts_with('#') {
-            dir.clone()
-        } else {
-            std::path::Path::new(key).parent().map(|p| p.to_path_buf())
+        let sdir = match nested_key(key) {
+            _ if key.starts_with('#') => dir.clone(),
+            Some((file, _)) => std::path::Path::new(file).parent().map(|p| p.to_path_buf()),
+            None => std::path::Path::new(key).parent().map(|p| p.to_path_buf()),
         };
         let mut sn = Names::default();
         let a = build_doc(&sub.0, &dir, &fence, &sdir, &subs, &mut want, &mut sn);
@@ -3698,7 +3763,7 @@ pub fn finish(
     let mut missing: Vec<(PartKey, String)> = vec![];
     for (file, (refs, bodies)) in &want {
         // this file's own components are its evaluations', never read
-        if file.starts_with('#') {
+        if is_infile(file) {
             continue;
         }
         let Ok((_, _, Some(text))) = variant_text(&d, &dir, &fence, file) else {
@@ -3766,6 +3831,12 @@ pub fn finish(
         let bodies: Vec<String> = bodies.iter().cloned().collect();
         let load = if file.starts_with('#') {
             infile_load(ev, &prepared, file, &refs, &mut cache)
+        } else if let Some((owner, key)) = nested_key(file) {
+            // a subassembly file's own component: made by that file's evaluation
+            match envs.get_mut(owner) {
+                Some(FileEnv { ev: fe, prepared: fp }) => infile_load(fe, fp, key, &refs, &mut cache),
+                None => Arc::new(empty_load(file)),
+            }
         } else {
             let (path, variant, text) = match variant_text(&d, &dir, &fence, file) {
                 Ok(x) => x,
@@ -5557,6 +5628,10 @@ pub const DEPTH: usize = 16;
 /// definition and values (`#lid(w=40)`), whatever calls it is under; a body of a call is that
 /// call's (`#box(w=40)/base`); a file is itself.
 pub fn bom_key(doc: &str) -> String {
+    // a subassembly file's own component: that file's, by its identity there
+    if let Some((file, key)) = nested_key(doc) {
+        return format!("{file}|{}", bom_key(key));
+    }
     let Some(rest) = doc.strip_prefix('#') else {
         return doc.to_string();
     };

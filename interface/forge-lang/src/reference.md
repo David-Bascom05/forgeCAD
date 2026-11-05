@@ -946,9 +946,11 @@ hinge = revolute(lid.hp, base.hp, turn: open)         # naming bodies makes them
   occurrence, `#root`, held where the document makes them.
 - **Expects:** part measures (`volume`, `valid`, ..) are of the document's model as made; the
   assembly measures below of the solve; `x(lid)`, `z(lid)` take a body component.
-- A subassembly whose file has components of its own is refused for now (`PartFile`,
-  InFileComponents); `part()` of a file that places components is `PartFile` (use
-  `subassembly()`); a file holding only component definitions is a part.
+- `subassembly(FILE)` of a file with components of its own (inline calls, bodies): the file is
+  evaluated and built as a document, its parts made there and named through it
+  (`box.fg|#lid(w=40)`, one BOM row per call wherever it is placed); `part()` of a file that
+  places components is `PartFile` (use `subassembly()`); a file holding only component
+  definitions is a part.
 - **Refactors** (`fg edit F '{"op":"MakeComponent",..}'`, all or nothing): `MakeComponent
   {statements, name}` (statements into a component placed where they were; `ReadsOutside`,
   `StillReadBy` with every reader), `ExtractComponent {component, file}` (its own file, each call
