@@ -910,3 +910,39 @@ fn a_tall_male_block_webs_and_a_low_one_does_not() {
     assert!(found[1].squeezed_area > found[0].squeezed_area);
     assert!(found[0].folds.is_empty() && !found[1].folds.is_empty());
 }
+
+/// The sheet's sag before the vacuum (stage 2/3): hung under its weight to a depth, that shape
+/// made its rest shape (it flowed while it heated), then formed. Mean error of t0 for each depth
+/// on the Erdogan (180 C) and Karabeyoglu (150 C) cylinders and the Erdogan box (none, 20, 40,
+/// 60, 80 mm): cylinder 180 C 16.63 16.60 15.72 14.37 12.16; cylinder 150 C 12.44 12.21 13.82
+/// 16.20 19.75; box 180 C 12.43 12.49 11.02 8.73 32.76. The hotter sheet wants the deeper sag.
+#[test]
+fn a_sagged_sheet_forms_as_measured() {
+    let cyl = cavity(100.0, 100.0 - 1e-3, 100.0, 10.0);
+    let bx = box_cavity(150.0, 75.0, 10.0);
+    for (name, shape, t0, flange, temp, diagonal, upto) in [
+        ("erdogan2014_cylinder", &cyl, 2.5, 40.0, 180.0, false, 185.0),
+        ("karabeyoglu2017_cylinder", &cyl, 2.0, 40.0, 150.0, false, 185.0),
+        ("erdogan2014_box_axis", &bx, 2.0, 65.0, 180.0, false, 125.0),
+    ] {
+        let row: Vec<String> = [None, Some(20.0), Some(40.0), Some(60.0), Some(80.0)]
+            .iter()
+            .map(|&sag| {
+                let e = compare(
+                    name,
+                    Surface::Height,
+                    &|p: &mut Process| p.sag = sag,
+                    shape,
+                    t0,
+                    flange,
+                    "HIPS",
+                    temp,
+                    diagonal,
+                    upto,
+                );
+                format!("{sag:?} {:.2}", e * 100.0)
+            })
+            .collect();
+        eprintln!("SAG {name}: {}", row.join(" | "));
+    }
+}

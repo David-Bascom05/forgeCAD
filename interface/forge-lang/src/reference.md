@@ -784,7 +784,7 @@ thermoform(SHAPE, t: T, material: "ABS" | MATERIAL, from: "outer"|"wall"|"inner"
            vent: D | false, vents: [(x, y), ..], vent_pitch: P = 25, walls: true,
            temperature: C, pressure: ratio(MPa), bending: false,
            plug: "dry"|"lubricated", plug_stroke: L, plug_diameter: D = 42, plug_nose: R = 90,
-           plug_edge: R = 10, plug_start: H = 20, heat_edge: C)
+           plug_edge: R = 10, plug_start: H = 20, heat_edge: C, sag: D)
 ```
 
 - The process (with `walls`): `bending: true` lets the sheet bend as a plate of its thickness
@@ -795,6 +795,9 @@ thermoform(SHAPE, t: T, material: "ABS" | MATERIAL, from: "outer"|"wall"|"inner"
   `heat_edge:` the sheet's temperature at the window's nearer side, `temperature` at its middle,
   linear between: each part of the sheet as stiff as the material's temperature shift says
   (`thermo.wlf` or `thermo.arrhenius` on its record: ABS, HIPS); refused for a sheet without one.
+  `sag:` how far the hot sheet hangs under its weight before the vacuum (a female mould's, mm):
+  it is hung that deep and that shape taken as its own (it flowed while it heated), thinner
+  where it stretched.
 
 - `open:` the face the sheet meets the clamp at (`body.start`): the part leaves the mould away from
   it (male) or through it (female); left out, `pull` (default Z) says the way.

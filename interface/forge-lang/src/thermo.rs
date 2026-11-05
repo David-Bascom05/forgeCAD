@@ -1083,6 +1083,7 @@ const ARGS: &[&str] = &[
     "plug_stroke",
     "heat_edge",
     "plug_friction",
+    "sag",
 ];
 
 /// The materials a document finds: its project's library (materials/ beside it), the user's, then
@@ -1324,6 +1325,7 @@ fn thermoform(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
                     power: 1.0,
                 }),
             },
+            sag: a.num("sag", LEN)?.map(|n| n.v),
             ..ft::Process::default()
         }),
         Some(o) => return Err(wrong(a.span("walls"), "walls: true or false", Ty::Bool, &o)),

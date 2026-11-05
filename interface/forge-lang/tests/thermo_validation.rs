@@ -151,6 +151,13 @@ fn configure(p: &mut Process, cfg: &str, mu: f64) -> bool {
             p.clamp = Some(forge_thermo::Clamp { band: 20.0, hold: mu });
             true
         }
+        t if t.starts_with("sag") => match t[3..].parse() {
+            Ok(d) => {
+                p.sag = Some(d);
+                true
+            }
+            Err(_) => false,
+        },
         t if t.starts_with("steps") => match t[5..].parse() {
             Ok(n) => {
                 p.steps = n;

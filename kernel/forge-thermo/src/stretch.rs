@@ -68,6 +68,10 @@ pub struct Process {
     /// Drawn by pressure till a step snaps (most of the free sheet meets the tool at once: past
     /// the limit point), then by volume from the step before (off: by pressure throughout).
     pub snap_guard: bool,
+    /// The sheet's sag before the vacuum, mm (a female tool's): the hot sheet flowing down under
+    /// its weight while it heats, taken to that depth and left there free of stress (it flowed),
+    /// thinner where it stretched (None: flat to the vacuum).
+    pub sag: Option<f64>,
 }
 
 /// A sheet heated unevenly: its temperature `profile` (C) by distance from `at` on the trim plane
@@ -250,6 +254,7 @@ impl Default for Process {
             heat: None,
             volume: false,
             snap_guard: false,
+            sag: None,
         }
     }
 }
@@ -624,6 +629,8 @@ struct Sheet {
     /// Drawn by volume: the volume under the sheet aimed at, the penalty's stiffness and the
     /// pressure so far (an augmented Lagrangian).
     volume: Option<(f64, f64, f64)>,
+    /// A dead load down on each node, MPa over its share (the sag's).
+    gravity: f64,
 }
 
 /// Sliding nodes carried off the tool's top (over the cavity) fall free.
@@ -727,6 +734,14 @@ impl Sheet {
                     if let Some(g) = g.as_deref_mut() {
                         g[k] += d * h;
                     }
+                }
+            }
+        }
+        if self.gravity != 0.0 {
+            for k in 0..x.len() {
+                e += self.gravity * self.share[k] * x[k].z;
+                if let Some(g) = g.as_deref_mut() {
+                    g[k].z += self.gravity * self.share[k];
                 }
             }
         }
@@ -1250,6 +1265,7 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
         on_plug: vec![None; x.len()],
         plug_anchor: x.clone(),
         volume: None,
+        gravity: 0.0,
         slide,
     };
     let mu = pr.law.shear().max(1e-9);
@@ -1295,6 +1311,41 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
             release(&mut sheet, &tool, &x, 0.25 * spec.t);
             snap(&x, "drape", 0.0);
         }
+    }
+    if let (Some(depth), false) = (pr.sag, male) {
+        // its weight raised till the sheet hangs that deep, then the shape it hangs in made its
+        // own: each triangle's rest shape the sagged one, its material the same
+        let mut q = 1e-6 * mu;
+        for _ in 0..120 {
+            sheet.gravity = q;
+            let reach = reach_at(&x);
+            its += step(&mut sheet, &tool, &mut x, 0.0, cap, tol, &reach, 200);
+            if x.iter().map(|p| -p.z).fold(0.0, f64::max) >= depth {
+                break;
+            }
+            q *= 1.15;
+        }
+        sheet.gravity = 0.0;
+        for t in &mut sheet.tris {
+            let [a, b, c] = t.v.map(|i| x[i]);
+            let e1 = b - a;
+            let (l, n) = (e1.length(), e1.cross(c - a));
+            if l < 1e-12 || n.length() < 1e-12 {
+                continue;
+            }
+            let u = e1 * (1.0 / l);
+            let w = n.cross(u) * (1.0 / n.length());
+            let (bx, by) = ((c - a).dot(u), (c - a).dot(w));
+            let det = l * by;
+            t.dinv = [[by / det, -bx / det], [0.0, l / det]];
+        }
+        let hinged = if pr.bending {
+            hinges(&idx, &reference, pr.law.shear() * spec.t * spec.t * spec.t / 3.0)
+        } else {
+            vec![]
+        };
+        sheet.pool = Pool::new(&pr.law, &sheet.tris, pr.wrinkle, x.len(), hinged);
+        snap(&x, "sag", 0.0);
     }
     if let (Some(plug), false) = (plug, male) {
         // the plug comes down: what it touches sticks to it and goes down with it (or slides on

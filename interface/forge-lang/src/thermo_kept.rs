@@ -175,7 +175,7 @@ fn get_f32s(i: &mut In) -> Option<Vec<f32>> {
         .collect()
 }
 
-const STAGES: [&str; 5] = ["sheet", "drape", "plug", "vacuum", "creep"];
+const STAGES: [&str; 6] = ["sheet", "drape", "sag", "plug", "vacuum", "creep"];
 
 fn write_stretch(o: &mut Out, s: &Stretch) {
     points(o, &s.nodes);
