@@ -3131,6 +3131,8 @@ impl Gui {
         let flat_shown = self.shell.fg.as_ref().is_some_and(|p| p.flat);
         let mut inspect = None;
         let mut posed = None;
+        // the anchors a selection was of, and those of the body now
+        let mut renamed: Option<(Arc<crate::fg::AnchorView>, Arc<crate::fg::AnchorView>)> = None;
         for m in s.poll() {
             let b = match m {
                 crate::fg::Msg::Built(b) => *b,
@@ -3333,7 +3335,11 @@ impl Gui {
                     p.sketches = a.sketches.clone();
                 }
                 self.shell.sheet.edges = a.sheet_edges.iter().map(|e| e.0.clone()).collect();
-                self.fg_anchors = Some(a);
+                let old = self.fg_anchors.replace(a.clone());
+                // the first body before this one: what's selected is of it
+                if let Some(old) = old {
+                    renamed = Some((renamed.map_or(old, |r: (Arc<crate::fg::AnchorView>, _)| r.0), a));
+                }
             }
             if let Some(d) = &b.delta
                 && let Some(v) = &mut self.view
@@ -3351,6 +3357,11 @@ impl Gui {
                 self.fg_flat = b.flat;
                 changed = true;
             }
+        }
+        if let Some((old, new)) = renamed
+            && self.fg_asm.is_none()
+        {
+            self.reselect(&old, &new);
         }
         self.inspect_built(inspect);
         if let Some(p) = posed {
@@ -3374,6 +3385,36 @@ impl Gui {
         }
         if asm_moved {
             self.asm_show();
+        }
+    }
+
+    /// A part rebuilt: what's selected (in the view, and Measure's picks) is of the body before,
+    /// its faces and edges numbered as that one's were. Each is found again by its Forge name in
+    /// the new body, or dropped: never taken for whatever face now has its old number.
+    fn reselect(&mut self, old: &crate::fg::AnchorView, new: &crate::fg::AnchorView) {
+        let again = |e: Entity| crate::fg::same_entity(e, old, new);
+        if let Some(v) = &mut self.view {
+            let before = v.nav.selected.clone();
+            v.nav.selected = before.iter().filter_map(|&(pl, e)| again(e).map(|e| (pl, e))).collect();
+            v.nav.last_click = v.nav.last_click.and_then(|(pl, e)| again(e).map(|e| (pl, e)));
+            if v.nav.selected != before {
+                v.dirty = true;
+            }
+        }
+        if let Some(m) = &mut self.shell.inspect.measure {
+            use crate::shell::inspect::MPick;
+            let before = m.picks.len();
+            m.picks = std::mem::take(&mut m.picks)
+                .into_iter()
+                .filter_map(|p| match p {
+                    MPick::Ent(pl, e) => again(e).map(|e| MPick::Ent(pl, e)),
+                    p => Some(p),
+                })
+                .collect();
+            if m.picks.len() != before {
+                m.names.truncate(m.picks.len());
+            }
+            m.hover = None;
         }
     }
 

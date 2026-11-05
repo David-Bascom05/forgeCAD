@@ -5,7 +5,7 @@
 use crate::live::Mesher;
 use crate::livegpu::Delta;
 use crate::mesh::PartMesh;
-use crate::render::{self, Renderer, part_info};
+use crate::render::{self, Entity, Renderer, part_info};
 use crate::scene::{Placement, Scene};
 use crate::shell::fg::{DimRow, FeatRow, From, Issue, ParamRow, Severity, Status};
 use crate::tess;
@@ -170,12 +170,41 @@ impl Built {
 pub struct AnchorView {
     pub faces: Vec<Option<String>>,
     pub edges: Vec<Option<String>>,
+    /// Each face's and edge's own name in the body (the kernel's, which a rebuild keeps for the
+    /// same face whatever number it gets): what a selection is found again by.
+    pub face_names: Vec<forge_topo::Name>,
+    pub edge_names: Vec<forge_topo::Name>,
     /// How many faces each face anchor names.
     pub sizes: HashMap<String, usize>,
     pub planes: HashMap<String, forge_math::Frame>,
     pub sketches: Vec<forge_lang::anchors::SketchRefs>,
     /// Sheet edges a flange can stand on, with the part's edges (by index) each is.
     pub sheet_edges: Vec<(String, Vec<usize>)>,
+}
+
+/// An entity of the body `old` names, in the body `new` names: the one face or edge with the same
+/// name in both (the kernel's own, kept for the same face across a rebuild), else none (gone, or
+/// the name isn't one face's alone; a vertex isn't kept).
+pub fn same_entity(e: Entity, old: &AnchorView, new: &AnchorView) -> Option<Entity> {
+    fn one(list: &[forge_topo::Name], name: &forge_topo::Name) -> Option<u32> {
+        let mut at = list.iter().enumerate().filter(|(_, n)| *n == name).map(|(k, _)| k);
+        match (at.next(), at.next()) {
+            (Some(k), None) => Some(k as u32),
+            _ => None,
+        }
+    }
+    let (was, now, k) = match e {
+        Entity::Face(k) => (&old.face_names, &new.face_names, k),
+        Entity::Edge(k) => (&old.edge_names, &new.edge_names, k),
+        Entity::Vertex(_) => return None,
+    };
+    let name = was.get(k as usize)?;
+    one(was, name).filter(|&j| j == k)?;
+    let j = one(now, name)?;
+    Some(match e {
+        Entity::Face(_) => Entity::Face(j),
+        _ => Entity::Edge(j),
+    })
 }
 
 impl AnchorView {
@@ -194,6 +223,8 @@ impl AnchorView {
                 .map(|f| a.faces.get(&b.face(f).name).cloned())
                 .collect(),
             edges: edge_names.iter().map(|n| a.edges.get(n).cloned()).collect(),
+            face_names: b.face_ids().map(|f| b.face(f).name).collect(),
+            edge_names: edge_names.clone(),
             sizes: a.sizes.clone(),
             planes: a.planes.clone(),
             sketches: a.sketches.clone(),
