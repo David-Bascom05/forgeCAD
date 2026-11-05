@@ -273,7 +273,6 @@ fn key_part_file_content() {
 /// time put back (what `cp -p`, `rsync -t` or an editor that keeps times do). A key that holds the
 /// file's path, length and time and not its bytes serves the old font: `key_needs_file_content`.
 #[test]
-#[ignore = "F1b: a file is keyed by its path, length and time (media.rs), not its bytes"]
 fn key_part_file_content_same_stamp() {
     let other = PathBuf::from("/usr/share/fonts/truetype/bebasneue/BebasNeue-Regular.ttf");
     if !other.exists() {

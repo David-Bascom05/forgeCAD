@@ -578,10 +578,11 @@ impl Libraries {
         out
     }
 
-    /// `load`, kept while the library files are unchanged (their names, sizes and times).
+    /// `load`, kept while the library files are unchanged: their names and bytes, read each time
+    /// (never their sizes and times, which a replaced file can keep).
     pub fn cached(doc_dir: Option<&Path>) -> Arc<Libraries> {
-        type Stamp = (PathBuf, u64, Option<std::time::SystemTime>);
-        type Key = (Option<PathBuf>, Vec<Stamp>);
+        type Seen = (PathBuf, Option<Vec<u8>>);
+        type Key = (Option<PathBuf>, Vec<Seen>);
         type Cache = Mutex<Vec<(Key, Arc<Libraries>)>>;
         static CACHE: OnceLock<Cache> = OnceLock::new();
         let stamp = |d: Option<PathBuf>| {
@@ -589,12 +590,8 @@ impl Libraries {
                 .unwrap_or_default()
                 .into_iter()
                 .map(|f| {
-                    let m = std::fs::metadata(&f).ok();
-                    (
-                        f,
-                        m.as_ref().map_or(0, |m| m.len()),
-                        m.and_then(|m| m.modified().ok()),
-                    )
+                    let bytes = std::fs::read(&f).ok();
+                    (f, bytes)
                 })
                 .collect::<Vec<_>>()
         };

@@ -1,5 +1,5 @@
 //! Text (`text`) and imported solids (`import`, `entity`): the files they read are found beside
-//! the part file (`Options::dir`), read once and kept while unchanged.
+//! the part file (`Options::dir`), read each time and parsed again only when their bytes change.
 
 use crate::builtins::{Args, LEN, dim, not_in_sketch, plane_of, point_of, positive};
 use crate::error::{Error, Role};
@@ -14,11 +14,10 @@ use forge_topo::{Body, Name};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use std::time::SystemTime;
-
-type Stamp = (u64, Option<SystemTime>);
-/// Files read, by path: their size and time when read, and what they came to.
-type Cache<T> = Mutex<Option<HashMap<PathBuf, (Stamp, Arc<T>)>>>;
+/// Files read, by path: the bytes read and what they came to. A file is known by its bytes alone,
+/// never by its size and time: a file replaced with its time put back (`cp -p`, `rsync -t`, a
+/// checkout) is read anew.
+type Cache<T> = Mutex<Option<HashMap<PathBuf, (Arc<[u8]>, Arc<T>)>>>;
 
 static FONTS: Cache<forge_font::Font> = Mutex::new(None);
 static SOLIDS: Cache<Body> = Mutex::new(None);
@@ -30,13 +29,7 @@ const LIMIT: u64 = 64 << 20;
 
 /// A file beside the part file. Under a session root (`root`, canonical), nothing outside it is
 /// found: every such refusal is the same `Missing`.
-fn find(
-    dir: Option<&Path>,
-    root: Option<&Path>,
-    file: &str,
-    kinds: &[&str],
-    span: Span,
-) -> R<(PathBuf, Stamp)> {
+fn find(dir: Option<&Path>, root: Option<&Path>, file: &str, kinds: &[&str], span: Span) -> R<PathBuf> {
     let err = |problem| -> Error {
         FeatError::File {
             span,
@@ -57,13 +50,13 @@ fn find(
     let found = find_in(dir, root, file, span);
     // read only once the fence, kind and size let it through; else only whether it is there
     match &found {
-        Ok((p, _)) => crate::deps::file(p),
+        Ok(p) => crate::deps::file(p),
         Err(_) => crate::deps::looked(&dir.join(file)),
     }
     found
 }
 
-fn find_in(dir: &Path, root: Option<&Path>, file: &str, span: Span) -> R<(PathBuf, Stamp)> {
+fn find_in(dir: &Path, root: Option<&Path>, file: &str, span: Span) -> R<PathBuf> {
     let err = |problem| -> Error {
         FeatError::File {
             span,
@@ -86,34 +79,37 @@ fn find_in(dir: &Path, root: Option<&Path>, file: &str, span: Span) -> R<(PathBu
             LIMIT >> 20
         ))));
     }
-    Ok((p, (meta.len(), meta.modified().ok())))
+    Ok(p)
 }
 
 fn cached<T>(
     cache: &Cache<T>,
     path: PathBuf,
-    stamp: Stamp,
-    read: impl FnOnce(&Path) -> Result<T, String>,
+    parse: impl FnOnce(&[u8]) -> Result<T, String>,
 ) -> Result<Arc<T>, String> {
+    let data = crate::deps::read_plain(&path, LIMIT).map_err(|r| match r {
+        crate::deps::Refused::NotPlain => "not a regular file".to_string(),
+        crate::deps::Refused::TooBig(_) => format!("larger than {} MB", LIMIT >> 20),
+        crate::deps::Refused::Io(e) => e,
+    })?;
     if let Ok(c) = cache.lock()
-        && let Some((s, v)) = c.as_ref().and_then(|m| m.get(&path))
-        && *s == stamp
+        && let Some((b, v)) = c.as_ref().and_then(|m| m.get(&path))
+        && **b == data[..]
     {
         return Ok(v.clone());
     }
-    let v = Arc::new(read(&path)?);
+    let v = Arc::new(parse(&data)?);
     if let Ok(mut c) = cache.lock() {
         c.get_or_insert_with(HashMap::new)
-            .insert(path, (stamp, v.clone()));
+            .insert(path, (data.into(), v.clone()));
     }
     Ok(v)
 }
 
 pub fn font(dir: Option<&Path>, root: Option<&Path>, file: &str, span: Span) -> R<Arc<forge_font::Font>> {
-    let (p, stamp) = find(dir, root, file, FONT_KINDS, span)?;
-    cached(&FONTS, p, stamp, |p| {
-        let data = std::fs::read(p).map_err(|e| e.to_string())?;
-        forge_font::Font::parse(data).map_err(|e| format!("{e:?}"))
+    let p = find(dir, root, file, FONT_KINDS, span)?;
+    cached(&FONTS, p, |data| {
+        forge_font::Font::parse(data.to_vec()).map_err(|e| format!("{e:?}"))
     })
     .map_err(|why| {
         FeatError::File {
@@ -126,10 +122,9 @@ pub fn font(dir: Option<&Path>, root: Option<&Path>, file: &str, span: Span) -> 
 }
 
 pub fn solid(dir: Option<&Path>, root: Option<&Path>, file: &str, span: Span) -> R<Arc<Body>> {
-    let (p, stamp) = find(dir, root, file, SOLID_KINDS, span)?;
-    cached(&SOLIDS, p, stamp, |p| {
-        let data = std::fs::read(p).map_err(|e| e.to_string())?;
-        let imp = forge_step::import(&data, &forge_step::Limits::default()).map_err(|e| format!("{e}"))?;
+    let p = find(dir, root, file, SOLID_KINDS, span)?;
+    cached(&SOLIDS, p, |data| {
+        let imp = forge_step::import(data, &forge_step::Limits::default()).map_err(|e| format!("{e}"))?;
         if imp.solids.is_empty() {
             return Err(imp.refusals.first().map_or("no solid".into(), |x| {
                 format!("#{} {}: {}", x.entity, x.kind, x.why)

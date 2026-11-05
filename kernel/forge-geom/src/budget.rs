@@ -1,6 +1,6 @@
 //! How much work the reading of one thing from a file may take: a count of evaluations of a file's
 //! spline surfaces and of steps round a mesh's largest fans, the costs nothing else bounds. The same on every machine, so a file is
-//! refused or not alike everywhere. Off unless `begin` set it, and nothing made here counts.
+//! refused or not alike everywhere. Off unless a `scoped` budget lives, and nothing made here counts.
 
 use std::cell::Cell;
 
@@ -8,13 +8,13 @@ thread_local! {
     static LEFT: Cell<u64> = const { Cell::new(u64::MAX) };
 }
 
-/// From now on, `most` evaluations.
-pub fn begin(most: u64) {
+/// From now on, `most` evaluations: only through `scoped`, whose drop ends it.
+fn begin(most: u64) {
     LEFT.set(most);
 }
 
 /// No limit again.
-pub fn end() {
+fn end() {
     LEFT.set(u64::MAX);
 }
 
@@ -22,6 +22,7 @@ pub fn end() {
 /// panics leaves no limit behind for what runs next on its thread.
 pub struct Budget(());
 
+#[must_use = "the budget ends when this is dropped"]
 pub fn scoped(most: u64) -> Budget {
     begin(most);
     Budget(())
@@ -42,7 +43,7 @@ pub fn spend_many(n: u64) {
     LEFT.set(LEFT.get().saturating_sub(n));
 }
 
-/// Whether what `begin` allowed is gone: the caller stops and says so.
+/// Whether what `scoped` allowed is gone: the caller stops and says so.
 pub fn over() -> bool {
     LEFT.get() == 0
 }

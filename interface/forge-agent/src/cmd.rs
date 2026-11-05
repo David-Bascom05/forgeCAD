@@ -48,23 +48,15 @@ pub struct Session {
     parts: HashMap<String, Part>,
     /// Where files may be read from (serve and mcp); any `.fc` file when `None`.
     root: Option<std::path::PathBuf>,
-    /// Bodies read from STEP files, by path, with the file's length and time: reading is dear.
+    /// Bodies read from STEP files, by path, with the bytes they were read from: parsing is dear,
+    /// and a file is known by its bytes, never its length and time.
     imported: Imported,
     /// Whether `act` may write files (off unless asked for).
     writable: bool,
 }
 
 type Imported = std::sync::Arc<
-    std::sync::Mutex<
-        HashMap<
-            std::path::PathBuf,
-            (
-                u64,
-                Option<std::time::SystemTime>,
-                std::sync::Arc<forge_topo::Body>,
-            ),
-        >,
-    >,
+    std::sync::Mutex<HashMap<std::path::PathBuf, (std::sync::Arc<[u8]>, std::sync::Arc<forge_topo::Body>)>>,
 >;
 
 /// STEP files larger than this are refused unread.
@@ -100,14 +92,13 @@ fn import_file(
             STEP_LIMIT >> 20
         ));
     }
-    let stamp = (meta.len(), meta.modified().ok());
+    let data = std::fs::read(&r).map_err(|e| format!("{name}: {e}"))?;
     if let Ok(c) = cache.lock()
-        && let Some((n, t, b)) = c.get(&r)
-        && (*n, *t) == stamp
+        && let Some((d, b)) = c.get(&r)
+        && **d == data[..]
     {
         return Ok(b.clone());
     }
-    let data = std::fs::read(&r).map_err(|e| format!("{name}: {e}"))?;
     let imp =
         forge_step::import(&data, &forge_step::Limits::default()).map_err(|e| format!("{name}: {e}"))?;
     // as a part built here: what reads is imported, a solid that fails the check with the check's
@@ -132,7 +123,7 @@ fn import_file(
     }
     let body = std::sync::Arc::new(body);
     if let Ok(mut c) = cache.lock() {
-        c.insert(r, (stamp.0, stamp.1, body.clone()));
+        c.insert(r, (data.into(), body.clone()));
     }
     Ok(body)
 }

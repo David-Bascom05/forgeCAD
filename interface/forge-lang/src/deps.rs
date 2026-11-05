@@ -7,10 +7,8 @@
 
 use forge_math::hash::{Hash128, hash128};
 use std::cell::RefCell;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
-use std::time::SystemTime;
 
 /// What a path held when it was read or looked at.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -106,7 +104,7 @@ pub fn read(path: &Path, bytes: Option<&[u8]>) {
     }
 }
 
-/// A file a loader let through: its bytes now (hashed once per size and time, at most `LIMIT`
+/// A file a loader let through: its bytes now (hashed each time it is looked at, at most `LIMIT`
 /// of them, and only of a plain file).
 pub fn file(path: &Path) {
     if watching() {
@@ -177,55 +175,89 @@ fn listing(dir: &Path) -> u128 {
     h.finish()
 }
 
-type Stamp = (u64, Option<SystemTime>);
-static HASHED: Mutex<Option<HashMap<PathBuf, (Stamp, u128)>>> = Mutex::new(None);
+/// Why `read_plain` read nothing.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Refused {
+    /// Not there, or not a regular file by this name: a link, a folder, a device, or a file
+    /// swapped in between the look and the open.
+    NotPlain,
+    /// Longer than allowed: at least this many bytes.
+    TooBig(u64),
+    /// The read failed.
+    Io(String),
+}
 
-/// What a plain file holds now: its hash (once per size and time), read no further than `limit`.
-fn contents(path: &Path, limit: u64) -> Seen {
+/// O_NOFOLLOW and O_NONBLOCK (the values differ by platform): a name that is a link is not
+/// opened, and a pipe swapped in after the look does not hold the open.
+#[cfg(unix)]
+const NOFOLLOW: i32 = if cfg!(any(target_os = "macos", target_os = "ios", target_os = "freebsd")) {
+    0x100 | 0x4
+} else if cfg!(any(target_arch = "aarch64", target_arch = "arm")) {
+    0o100000 | 0o4000
+} else {
+    0o400000 | 0o4000
+};
+
+/// A regular file's bytes, at most `max` of them, the one way every loader reads a file: looked
+/// at without following a link, opened without following one, the file opened the one looked
+/// at (device and inode), and read no further than `max` (a file grown since is refused).
+pub fn read_plain(p: &Path, max: u64) -> Result<Vec<u8>, Refused> {
     use std::io::Read;
+    let checked = std::fs::symlink_metadata(p).map_err(|_| Refused::NotPlain)?;
+    if !checked.is_file() {
+        return Err(Refused::NotPlain);
+    }
+    if checked.len() > max {
+        return Err(Refused::TooBig(checked.len()));
+    }
+    let mut o = std::fs::OpenOptions::new();
+    o.read(true);
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::custom_flags(&mut o, NOFOLLOW);
+    let f = o.open(p).map_err(|_| Refused::NotPlain)?;
+    let held = f.metadata().map_err(|_| Refused::NotPlain)?;
+    if !held.is_file() {
+        return Err(Refused::NotPlain);
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        if (held.dev(), held.ino()) != (checked.dev(), checked.ino()) {
+            return Err(Refused::NotPlain);
+        }
+    }
+    let mut data = Vec::new();
+    f.take(max.saturating_add(1))
+        .read_to_end(&mut data)
+        .map_err(|e| Refused::Io(e.to_string()))?;
+    if data.len() as u64 > max {
+        return Err(Refused::TooBig(data.len() as u64));
+    }
+    Ok(data)
+}
+
+/// What a plain file holds now: its hash, read no further than `limit`. Read every time: a file is
+/// known by its bytes, never by its size and time (a file replaced with its time put back).
+fn contents(path: &Path, limit: u64) -> Seen {
     if path.file_name().is_some_and(|n| n == "*.toml") {
         return path.parent().map_or(Seen::Absent, |d| Seen::Bytes(listing(d)));
     }
-    let Ok(meta) = std::fs::metadata(path) else {
+    let Ok(meta) = std::fs::symlink_metadata(path) else {
         return presence(path);
     };
     if !meta.is_file() {
         return Seen::There;
     }
-    let time = meta.modified().ok();
-    let nanos = time
+    let nanos = meta
+        .modified()
+        .ok()
         .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
         .map_or(0, |d| d.as_nanos() as u64);
-    if meta.len() > limit {
-        return Seen::Big(meta.len(), nanos);
+    match read_plain(path, limit) {
+        Ok(data) => Seen::Bytes(hash128(&data)),
+        Err(Refused::TooBig(n)) => Seen::Big(n, nanos),
+        Err(_) => Seen::There,
     }
-    let stamp = (meta.len(), time);
-    let seen = HASHED
-        .lock()
-        .ok()
-        .and_then(|m| m.as_ref().and_then(|m| m.get(path).copied()));
-    if let Some((s, h)) = seen
-        && s == stamp
-        && stamp.1.is_some()
-    {
-        return Seen::Bytes(h);
-    }
-    let mut data = Vec::new();
-    let Ok(f) = std::fs::File::open(path) else {
-        return Seen::There;
-    };
-    if f.take(limit + 1).read_to_end(&mut data).is_err() {
-        return Seen::There;
-    }
-    if data.len() as u64 > limit {
-        return Seen::Big(data.len() as u64, nanos);
-    }
-    let h = hash128(&data);
-    if let Ok(mut m) = HASHED.lock() {
-        m.get_or_insert_with(Default::default)
-            .insert(path.to_path_buf(), (stamp, h));
-    }
-    Seen::Bytes(h)
 }
 
 /// What a path holds now, looked at as it was when recorded.
@@ -325,6 +357,58 @@ mod tests {
         assert!(all.current());
         std::fs::write(&a, "two").unwrap();
         assert!(!all.current(), "new bytes are a change");
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn a_file_replaced_with_its_time_put_back_is_a_change() {
+        let d = std::env::temp_dir().join(format!("forge-deps-stamp-{}", std::process::id()));
+        std::fs::create_dir_all(&d).unwrap();
+        let a = d.join("a.ttf");
+        let when = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_700_000_000);
+        let put = |bytes: &[u8]| {
+            std::fs::write(&a, bytes).unwrap();
+            std::fs::File::options()
+                .write(true)
+                .open(&a)
+                .unwrap()
+                .set_modified(when)
+                .unwrap();
+        };
+        put(b"one");
+        let w = watch();
+        file(&a);
+        let seen = w.done();
+        assert!(seen.current());
+        put(b"two");
+        assert!(!seen.current(), "same length and time, new bytes");
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_checked_reader_reads_only_a_plain_file_by_its_own_name() {
+        let d = std::env::temp_dir().join(format!("forge-deps-plain-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        let (a, link, pipe) = (d.join("a.ttf"), d.join("l.ttf"), d.join("p.ttf"));
+        std::fs::write(&a, b"12345").unwrap();
+        std::os::unix::fs::symlink(&a, &link).unwrap();
+        assert_eq!(read_plain(&a, 5), Ok(b"12345".to_vec()));
+        assert_eq!(read_plain(&a, 4), Err(Refused::TooBig(5)));
+        assert_eq!(
+            read_plain(&link, 100),
+            Err(Refused::NotPlain),
+            "a link is not followed"
+        );
+        assert_eq!(read_plain(&d, 100), Err(Refused::NotPlain));
+        assert_eq!(read_plain(&d.join("none"), 100), Err(Refused::NotPlain));
+        assert_eq!(read_plain(Path::new("/dev/zero"), 100), Err(Refused::NotPlain));
+        // a pipe: refused at the look, and never a read that waits for a writer
+        let made = std::process::Command::new("mkfifo").arg(&pipe).status();
+        if made.is_ok_and(|s| s.success()) {
+            assert_eq!(read_plain(&pipe, 100), Err(Refused::NotPlain));
+        }
         let _ = std::fs::remove_dir_all(&d);
     }
 

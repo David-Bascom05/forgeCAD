@@ -1143,9 +1143,10 @@ mod tests {
             })
             .collect();
         let lp: Vec<u32> = (0..n).collect();
-        forge_geom::budget::begin(0);
-        let got = triangulate_refined(&points, &[lp], &[], None);
-        forge_geom::budget::end();
+        let got = {
+            let _b = forge_geom::budget::scoped(0);
+            triangulate_refined(&points, &[lp], &[], None)
+        };
         assert!(matches!(got, Err(CdtError::Internal(_))), "{got:?}");
     }
 
