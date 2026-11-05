@@ -570,3 +570,41 @@ knob = extrude(t, r)
     let f = r.feats.iter().find(|f| f.id == "t").unwrap().frame.unwrap();
     assert!((f.origin.z - 25.0).abs() < 1e-9, "{:?}", f.origin);
 }
+
+/// Provenance through a used file's component: `t.cup(d: H)` reads H as `cup(d: H)` would.
+#[test]
+fn provenance_goes_through_a_used_component() {
+    let d = dir("use-call");
+    std::fs::write(
+        d.join("lib.fg"),
+        "shared W = 4\ncomponent cup(d: 9) {\n  sketch s(on: xy) {\n    o = circle((0, 0), 5)\n  }\n  b = extrude(s, d + W)\n}\n",
+    )
+    .unwrap();
+    let r = run_in(
+        &d,
+        "t = use(\"lib.fg\")\nshared H = 6\nc1 = part(t.cup(d: H), ground: true)\nc2 = part(t.cup(d: H), at: (20, 0, 0))\n",
+        true,
+    );
+    assert!(r.ok(), "{:?}", kinds(&r));
+    let comps: Vec<_> = r
+        .components
+        .iter()
+        .map(|c| {
+            (
+                c.id.as_str(),
+                c.feats.iter().map(|f| f.id.as_str()).collect::<Vec<_>>(),
+            )
+        })
+        .collect();
+    let uses = forge_lang::report::uses(&r);
+    assert_eq!(
+        uses.get(&ParamKey::shared("H")),
+        Some(&vec!["lib.cup.b".to_string()]),
+        "{comps:?} {uses:?}"
+    );
+    // a SetParam on H reaches the call's feature
+    let src = "t = use(\"lib.fg\")\nshared H = 6\nc = part(t.cup(d: H), ground: true)\n";
+    let (_, reach) = forge_lang::edit::apply_checked_in(src, &set("H", 4.0, Dim::Length), Some(d)).unwrap();
+    let reach = reach.unwrap();
+    assert!(reach.features.contains(&"lib.cup.b".to_string()), "{reach:?}");
+}

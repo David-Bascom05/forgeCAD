@@ -127,11 +127,13 @@ pub enum AsmVal {
         name: String,
         file: String,
     },
-    /// A call of one (`t.cup(d: 9)`): its params' values, by name.
+    /// A call of one (`t.cup(d: 9)`): its params' values, by name; and as given, with their
+    /// provenance and text (what the call reads of this document).
     ForeignCall {
         name: String,
         file: String,
         args: Vec<(String, Literal)>,
+        given: Vec<(String, Value, String)>,
     },
 }
 
@@ -430,9 +432,105 @@ fn file_call(ev: &mut Eval, file: &str, key: &str, given: &[(String, Value, Stri
     Some(eval_key)
 }
 
+/// What a used file's component sees: the file's shared params, functions and uses, and its
+/// own definition.
+fn component_scope(prog: &[crate::syntax::Stmt], name: &str) -> Vec<crate::syntax::Stmt> {
+    prog.iter()
+        .filter(|s| match &s.kind {
+            StmtKind::Shared { .. } | StmtKind::Fn { .. } => true,
+            StmtKind::Assign { value, .. } => {
+                matches!(&value.kind, ExprKind::Call(f, _) if matches!(&f.kind, ExprKind::Name(n) if n == "use"))
+            }
+            StmtKind::Block {
+                kind: crate::syntax::BlockKind::Component,
+                name: n,
+                ..
+            } => n == name,
+            _ => false,
+        })
+        .cloned()
+        .collect()
+}
+
+/// `part(t.cup(d: x))` evaluated here, over the used file's text: the values given keep their
+/// provenance (this document's params), the file's shared params are its own (`STEM.p`). Its features and what it reads are this document's report (the solve still
+/// loads it from the file). The evaluation's key, or None when the file is not one this reads
+/// (the loader then says why).
+fn foreign_call(
+    ev: &mut Eval,
+    file: &str,
+    name: &str,
+    key: &str,
+    given: &[(String, Value, String)],
+) -> Option<String> {
+    let path = locate(&ev.dir, &ev.root, file)?;
+    let text = kept_text(read_capped(&path)?);
+    let prog = crate::syntax::parse(text).ok()?;
+    let stem = std::path::Path::new(file)
+        .file_stem()
+        .map_or_else(|| file.to_string(), |s| s.to_string_lossy().to_string());
+    let traces: Vec<String> = given.iter().map(|g| format!("{}<-{}", g.0, g.2)).collect();
+    let eval_key = format!("{key}|{}", traces.join(","));
+    if ev.comps.iter().any(|c| c.eval_key == eval_key) {
+        return Some(eval_key);
+    }
+    let (calls, comps) = ev.total.get();
+    if comps + 1 > crate::eval::TOTAL_COMPONENTS {
+        return None;
+    }
+    ev.total.set((calls, comps + 1));
+    let mut scope = Eval::new(text, ev.rules, false, Default::default());
+    scope.dir = path.parent().map(|p| p.to_path_buf());
+    scope.root = ev.root.clone();
+    scope.use_chain = ev.use_chain.clone();
+    scope.asm = Some(Doc::default());
+    scope.total = ev.total.clone();
+    scope.run(&component_scope(&prog, name));
+    // the file's shared params are its own (`STEM.W`), never this document's of the same name
+    for p in scope.shared.iter_mut() {
+        p.key.owner = vec![Seg {
+            name: stem.clone(),
+            index: vec![],
+        }];
+    }
+    let def = scope.top_level().into_iter().find_map(|(n, v)| match v {
+        Value::Asm(a) if n == name => match &*a {
+            AsmVal::Def(d) => Some(d.clone()),
+            _ => None,
+        },
+        _ => None,
+    })?;
+    let mut values = call_values(&mut scope, &def, &[], def.span).ok()?;
+    for (n, v, _) in given {
+        values.iter_mut().find(|x| x.0 == *n)?.1 = v.clone();
+    }
+    let cache = ev.b.cache.comps.remove(&eval_key).unwrap_or_default();
+    let path = format!("{}{stem}.{name}?/", ev.comp_path);
+    let mut sub = sub_eval_at(&scope, &def, &values, ev.b.building, cache, path);
+    // what it observes of this document's params is this document's (its own are its own)
+    let shared: BTreeSet<ParamKey> = ev.shared.iter().map(|p| p.key.clone()).collect();
+    for k in std::mem::take(&mut sub.observed) {
+        if shared.contains(&k) {
+            ev.observed.insert(k);
+        }
+    }
+    // its own errors are the file's (the loader reports them on the placement)
+    sub.errors.clear();
+    sub.warnings.clear();
+    ev.comps.push(Comp {
+        id: key.trim_start_matches('#').to_string(),
+        eval_key: eval_key.clone(),
+        def: format!("{stem}.{name}"),
+        ev: sub,
+        span: Span::default(),
+        sub: false,
+    });
+    Some(eval_key)
+}
+
 /// `t.cup(p: v, ..)` of a used file's component: the call, placed by `part(..)`.
 pub fn call_foreign(ev: &mut Eval, name: &str, file: &str, args: &[Arg], span: Span) -> R<Value> {
-    let mut out = vec![];
+    let (mut out, mut given) = (vec![], vec![]);
     for a in args {
         let Some((n, _)) = &a.name else {
             return Err(Error::MissingArg {
@@ -443,12 +541,19 @@ pub fn call_foreign(ev: &mut Eval, name: &str, file: &str, args: &[Arg], span: S
         };
         let v = ev.expr(&a.value)?;
         out.push((n.clone(), literal_of(&v, a.value.span)?));
+        let t = one_line(
+            ev.src
+                .get(a.value.span.lo as usize..a.value.span.hi as usize)
+                .unwrap_or(""),
+        );
+        given.push((n.clone(), v, t));
     }
     let _ = span;
     Ok(asm(AsmVal::ForeignCall {
         name: name.into(),
         file: file.into(),
         args: out,
+        given,
     }))
 }
 
@@ -826,17 +931,26 @@ fn asm_call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
                     (k, Source::File, eval)
                 }
                 Value::Asm(x) if matches!(&*x, AsmVal::Foreign { .. } | AsmVal::ForeignCall { .. }) => {
-                    let (name, file, args) = match &*x {
-                        AsmVal::Foreign { name, file } => (name.clone(), file.clone(), vec![]),
-                        AsmVal::ForeignCall { name, file, args } => {
-                            (name.clone(), file.clone(), args.clone())
-                        }
+                    let (name, file, args, given) = match &*x {
+                        AsmVal::Foreign { name, file } => (name.clone(), file.clone(), vec![], vec![]),
+                        AsmVal::ForeignCall {
+                            name,
+                            file,
+                            args,
+                            given,
+                        } => (name.clone(), file.clone(), args.clone(), given.clone()),
                         _ => unreachable!("matched"),
                     };
-                    let v = Variant::Component { name, args };
+                    let v = Variant::Component {
+                        name: name.clone(),
+                        args,
+                    };
                     let k = format!("{file}|{}", v.key());
                     doc(ev).variants.insert(k.clone(), v);
-                    (k, Source::File, None)
+                    // the call evaluated here: its values' provenance and what it observes are
+                    // this document's, as a `with:` file's are
+                    let eval = foreign_call(ev, &file, &name, &k, &given);
+                    (k, Source::File, eval)
                 }
                 Value::Asm(x) if name == "part" && matches!(&*x, AsmVal::Def(_) | AsmVal::Call { .. }) => {
                     let call = match &*x {
@@ -2772,23 +2886,7 @@ fn load_component(
     ev.root = fence;
     ev.asm = Some(Doc::default());
     // its scope: the file's shared params, functions and uses, and the definition itself
-    let keep: Vec<crate::syntax::Stmt> = prog
-        .iter()
-        .filter(|s| match &s.kind {
-            StmtKind::Shared { .. } | StmtKind::Fn { .. } => true,
-            StmtKind::Assign { value, .. } => {
-                matches!(&value.kind, ExprKind::Call(f, _) if matches!(&f.kind, ExprKind::Name(n) if n == "use"))
-            }
-            StmtKind::Block {
-                kind: crate::syntax::BlockKind::Component,
-                name: n,
-                ..
-            } => n == name,
-            _ => false,
-        })
-        .cloned()
-        .collect();
-    ev.run(&keep);
+    ev.run(&component_scope(&prog, name));
     let def = ev.top_level().into_iter().find_map(|(n, v)| match v {
         Value::Asm(a) if n == name => match &*a {
             AsmVal::Def(d) => Some(d.clone()),
