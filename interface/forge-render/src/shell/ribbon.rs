@@ -1,10 +1,14 @@
 //! The ribbon's tabs, groups and buttons. A button with no action is drawn disabled: there are no
 //! buttons that pretend.
 
-use super::sketching::SkTool;
 use super::theme::sans;
 use super::{Action, FgCmd, RIBBON_H, Shell, TABS_H, TITLE_H, icons};
 use egui::{Align2, Rect, Sense, Stroke, Ui, pos2, vec2};
+
+mod sketch_tab;
+pub(super) mod tips;
+
+pub(super) use sketch_tab::close_drop;
 
 pub(super) struct Tool {
     pub(super) name: &'static str,
@@ -346,162 +350,8 @@ fn groups(s: &Shell) -> Vec<Group> {
         .collect(),
         super::SHEET_TAB => super::sheetui::sheet_groups(s),
         super::FLAT_TAB => super::sheetui::flat_groups(s),
-        1 => {
-            let on = s.sketch.as_ref().and_then(|m| m.tool);
-            let t = |name, icon, tool: SkTool| Tool {
-                name,
-                icon,
-                action: s.sketch_tool(tool),
-                on: on == Some(tool),
-            };
-            let gi = |name, big, small, icons| Group {
-                name,
-                big,
-                small,
-                icons,
-            };
-            let more = s.sketch.as_ref().map(|m| m.more.clone()).unwrap_or_default();
-            // a Forge sketch's spline goes through its points; control vertices are the .fc rows'
-            let cv = Tool {
-                name: "Spline CV",
-                icon: "splinecv",
-                action: if s.fg.is_some() {
-                    None
-                } else {
-                    s.sketch_tool(SkTool::SplineCv)
-                },
-                on: on == Some(SkTool::SplineCv),
-            };
-            let toggle = |name, icon, tool: SkTool, now: bool| Tool {
-                name,
-                icon,
-                action: s.sketch_tool(tool),
-                on: now,
-            };
-            vec![
-                gi(
-                    "Create",
-                    vec![
-                        t("Line", "line", SkTool::Line),
-                        t("Circle", "circle", SkTool::Circle),
-                        t("Arc", "arc", SkTool::Arc),
-                        t("Rectangle", "rectangle", SkTool::Rectangle),
-                        t("Slot", "slotcc", SkTool::SlotCC),
-                        t("Project Geometry", "project", SkTool::Project),
-                    ],
-                    vec![
-                        t("Spline", "spline", SkTool::Spline),
-                        t("Polygon", "polygon", SkTool::Polygon),
-                        t("Point", "point", SkTool::Point),
-                        t("Fillet", "skfillet", SkTool::SkFillet),
-                        t("Chamfer", "skchamfer", SkTool::SkChamfer),
-                        t("Text", "sktext", SkTool::Text),
-                    ],
-                    vec![
-                        cv,
-                        t("Ellipse", "ellipse", SkTool::Ellipse),
-                        t("Three Point Circle", "circle3", SkTool::Circle3),
-                        t("Tangent Circle", "circletan", SkTool::CircleTan),
-                        t("Three Point Arc", "arc3", SkTool::Arc3),
-                        t("Tangent Arc", "arctan", SkTool::ArcTan),
-                        t("Center Rectangle", "rectc", SkTool::RectCenter),
-                        t("Three Point Rectangle", "rect3", SkTool::Rect3),
-                        t("Overall Slot", "slot", SkTool::SlotOverall),
-                        t("Center Point Slot", "slot", SkTool::SlotCenter),
-                        t("Three Point Arc Slot", "slotarc", SkTool::SlotArc3),
-                        t("Center Point Arc Slot", "slotarc", SkTool::SlotArcCenter),
-                    ],
-                ),
-                g(
-                    "Modify",
-                    vec![],
-                    vec![
-                        t("Move", "move", SkTool::Move),
-                        t("Copy", "copy", SkTool::Copy),
-                        t("Rotate", "rotate", SkTool::Rotate),
-                        t("Trim", "trim", SkTool::Trim),
-                        t("Extend", "extend", SkTool::Extend),
-                        t("Split", "split", SkTool::Split),
-                        t("Scale", "scale", SkTool::Scale),
-                        t("Stretch", "stretch", SkTool::Stretch),
-                        t("Offset", "offset", SkTool::Offset),
-                    ],
-                ),
-                g(
-                    "Pattern",
-                    vec![],
-                    vec![
-                        t("Rectangular", "skrect", SkTool::RectPattern),
-                        t("Circular", "skcircular", SkTool::CircPattern),
-                        t("Mirror", "mirror", SkTool::Mirror),
-                    ],
-                ),
-                gi(
-                    "Constrain",
-                    vec![t("Dimension", "dim", SkTool::Dimension)],
-                    vec![],
-                    vec![
-                        t("Automatic Dimensions", "autodim", SkTool::AutoDim),
-                        t("Coincident", "coincident", SkTool::Coincident),
-                        t("Collinear", "collinear", SkTool::Collinear),
-                        t("Concentric", "concentric", SkTool::Concentric),
-                        t("Fix", "fix", SkTool::Fix),
-                        t("Parallel", "parallel", SkTool::Parallel),
-                        t("Perpendicular", "perp", SkTool::Perpendicular),
-                        t("Horizontal", "horizontal", SkTool::Horizontal),
-                        t("Vertical", "vertical", SkTool::Vertical),
-                        t("Tangent", "tangent", SkTool::Tangent),
-                        off("Smooth (G2)", "smooth"),
-                        t("Symmetric", "symmetric", SkTool::Symmetric),
-                        t("Equal", "equal", SkTool::Equal),
-                    ],
-                ),
-                g(
-                    "Format",
-                    vec![],
-                    vec![
-                        toggle(
-                            "Construction",
-                            "construction",
-                            SkTool::Construction,
-                            more.construction,
-                        ),
-                        toggle(
-                            "Constraints",
-                            "constrainshow",
-                            SkTool::ShowConstraints,
-                            !more.hide_glyphs,
-                        ),
-                        toggle("Freedom", "freedom", SkTool::ShowDof, more.show_dof),
-                    ],
-                ),
-                g(
-                    "View",
-                    vec![Tool {
-                        name: "Look At",
-                        icon: "lookat",
-                        action: s.sketch.as_ref().map(|_| Action::LookAt),
-                        on: false,
-                    }],
-                    vec![],
-                ),
-                g(
-                    "Exit",
-                    vec![Tool {
-                        name: "Finish Sketch",
-                        icon: "finish",
-                        action: s.sketch.as_ref().map(|_| Action::FinishSketch),
-                        on: false,
-                    }],
-                    vec![Tool {
-                        name: "Cancel",
-                        icon: "close",
-                        action: s.sketch.as_ref().map(|_| Action::CancelSketch),
-                        on: false,
-                    }],
-                ),
-            ]
-        }
+        // drawn by sketch_tab, its split buttons and dropdowns
+        1 => vec![],
         2 => inspect_groups(s),
         3 => vec![
             g(
@@ -591,12 +441,16 @@ fn groups(s: &Shell) -> Vec<Group> {
 fn why_off(name: &str) -> Option<&'static str> {
     Some(match name {
         "Decal" => "not yet: the kernel has no image projection onto faces",
-        "Spline CV" => "not in Forge parts yet: the language's spline runs through its points",
         "Smooth (G2)" => {
             "not yet: the sketch solver has no curvature tie at a joint (Tangent holds G1 meanwhile)"
         }
         _ => return None,
     })
+}
+
+/// The Sketch tab of a part (not a drawing's, an assembly's or another environment's).
+fn s_is_sketch_tab(s: &Shell) -> bool {
+    s.tab == 1 && s.drawing.is_none() && !s.is_asm()
 }
 
 const BIG_W: f32 = 54.0;
@@ -648,6 +502,9 @@ impl Shell {
         );
         p.hline(0.0..=w, y, Stroke::new(1.0, t.line));
         p.hline(0.0..=w, y + RIBBON_H - 0.5, Stroke::new(1.0, t.line));
+        if s_is_sketch_tab(self) {
+            return self.sketch_ribbon(ui, w);
+        }
         let mut gx = 0.0;
         let gs = groups(self);
         // too wide for the window: small buttons lose their words, as Inventor's ribbon shrinks
@@ -729,13 +586,8 @@ impl Shell {
         } else {
             Sense::hover()
         };
-        let resp = ui
-            .interact(r, ui.scope_id().with(("tool", self.tab, tool.name)), sense)
-            .on_hover_text(match (tool.action, why_off(tool.name)) {
-                (None, Some(why)) => format!("{}: {why}", tool.name),
-                (None, None) => format!("{}: coming", tool.name),
-                _ => tool.name.to_string(),
-            });
+        let resp = ui.interact(r, ui.scope_id().with(("tool", self.tab, tool.name)), sense);
+        let resp = self.tool_tip(resp, tool);
         resp.widget_info(|| {
             egui::WidgetInfo::selected(egui::Role::Button, tool.action.is_some(), tool.on, tool.name)
         });

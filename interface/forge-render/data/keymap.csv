@@ -21,3 +21,13 @@ sketch_undo,Undo a sketch step (in a sketch),In context,Ctrl+Z,context
 sketch_delete,Delete what's chosen (in a sketch),In context,Delete,context
 sheet_fit,Fit the sheet (in a drawing),In context,F,context
 sheet_delete,Delete what's chosen (in a drawing),In context,Delete,context
+sketch_line,Line (in a sketch),Sketch,L,context
+sketch_circle,Center Point Circle (in a sketch),Sketch,C,context
+sketch_rect,Two Point Rectangle (in a sketch),Sketch,R,context
+sketch_dimension,Dimension (in a sketch),Sketch,D,context
+sketch_trim,Trim (in a sketch),Sketch,X,context
+sketch_offset,Offset (in a sketch),Sketch,O,context
+sketch_project,Project Geometry (in a sketch),Sketch,P,context
+sketch_construction,Construction on or off (in a sketch),Sketch,Q,context
+sketch_point,Point (in a sketch),Sketch,Shift+P,context
+sketch_tab,Type the next value while drawing (in a sketch),In context,Tab,fixed

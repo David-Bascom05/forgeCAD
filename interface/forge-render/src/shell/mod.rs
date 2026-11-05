@@ -1338,7 +1338,9 @@ impl Shell {
             return;
         }
         ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
-        if self.menu_open() {
+        if ribbon::close_drop(ctx) {
+            // a ribbon dropdown shuts, and that's all
+        } else if self.menu_open() {
             self.file_menu = false;
             self.cube_menu = None;
             self.marking = None;

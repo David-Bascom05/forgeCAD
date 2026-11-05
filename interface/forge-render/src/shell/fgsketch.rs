@@ -5,6 +5,8 @@
 //! sketch. A row with no Forge form is refused, typed.
 
 mod edit;
+#[cfg(test)]
+mod variants;
 
 pub use edit::{Opened, open};
 
@@ -178,7 +180,7 @@ impl Out {
     fn rows_from(&mut self, rows: &[String], from: usize, kept: &[Vec<String>]) -> Result<(), ToolError> {
         // a new rect's own width and height: the dimensions on its sides, else as drawn
         let mut held: HashMap<(usize, usize), f64> = HashMap::new();
-        // a new circle's own radius: a dimension on it, else as drawn
+        // a new circle's own radius (an ellipse's minor axis): a dimension on it, else as drawn
         let mut radii: HashMap<String, f64> = HashMap::new();
         let mut counts: HashMap<char, usize> = HashMap::new();
         let mut circles = vec![];
@@ -193,6 +195,9 @@ impl Out {
                 }
                 if k >= from && t[0] == "circle" {
                     circles.push(format!("c{c}"));
+                }
+                if k >= from && t[0] == "ellipse" {
+                    circles.push(format!("e{c}"));
                 }
             }
             match t.first().map(String::as_str) {
@@ -312,15 +317,25 @@ impl Out {
             "ellipse" => {
                 let (c, k1) = o.point(rest, r)?;
                 let (m, k2) = o.point(&rest[k1..], r)?;
-                let b = num(rest.get(k1 + k2).ok_or(no_form(r))?, r)?;
+                // its minor axis: a dimension on it, else as drawn
+                let f = format!("e{}", o.fc.get(&'e').copied().unwrap_or(0) + 1);
+                let b = match radii.get(&f) {
+                    Some(&v) => v,
+                    None => num(rest.get(k1 + k2).ok_or(no_form(r))?, r)?,
+                };
                 let pb = o.param("b", b);
                 let n = o.entity('e');
                 o.rows
                     .push(format!("{n} = ellipse(center: {c}, major: {m}, b: {pb})"));
             }
-            "spline" => {
+            "spline" | "bspline" => {
                 let open = rest.last().is_some_and(|w| w == "open");
                 let pts = if open { &rest[..rest.len() - 1] } else { rest };
+                // control vertices: Forge's are cubic, or as cubic as few points allow
+                let (pts, degree) = match w.as_str() {
+                    "bspline" => (&pts[1..], Some(num(pts.first().ok_or(no_form(r))?, r)?)),
+                    _ => (pts, None),
+                };
                 let mut ps = vec![];
                 let mut k = 0;
                 while k < pts.len() {
@@ -328,11 +343,17 @@ impl Out {
                     ps.push(p);
                     k += used;
                 }
+                if let Some(d) = degree
+                    && d != 3.0_f64.min(ps.len() as f64 - 1.0 - f64::from(u8::from(!open)))
+                {
+                    return Err(no_form(r));
+                }
                 let n = o.entity('s');
                 o.rows.push(format!(
-                    "{n} = spline([{}], closed: {})",
+                    "{n} = spline([{}], closed: {}{})",
                     ps.join(", "),
-                    if open { "false" } else { "true" }
+                    if open { "false" } else { "true" },
+                    if degree.is_some() { ", cv: true" } else { "" }
                 ));
             }
             // a fixed rect holds its own corners square and its sides' lengths
@@ -412,7 +433,7 @@ impl Out {
                 }
                 _ => return Err(no_form(r)),
             },
-            // a circle holds its own radius
+            // a circle holds its own radius, an ellipse its minor axis
             "rad" | "dia" if rest.first().is_some_and(|c| radii.contains_key(c)) => {}
             "rad" | "dia" => {
                 let e = o.reference(rest.first().ok_or(no_form(r))?, false, r)?;

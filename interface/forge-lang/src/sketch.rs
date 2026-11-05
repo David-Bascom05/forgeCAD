@@ -205,6 +205,18 @@ impl Sk {
         Ok(e)
     }
 
+    /// A B-spline on control vertices: cubic, or of the degree its few points allow (closed, it
+    /// wraps, and takes two more points than its degree).
+    pub fn bspline(&mut self, pts: &[EntityId], closed: bool, name: Option<&str>, span: Span) -> R<EntityId> {
+        let degree = 3.min(pts.len().saturating_sub(1 + usize::from(closed))).max(1);
+        let e = self
+            .s
+            .add_bspline(degree, pts, None, None, closed)
+            .map_err(self.kerr(span))?;
+        self.named(e, name, span);
+        Ok(e)
+    }
+
     /// Segment names inside a helper: `outline.3`.
     fn sub(name: Option<&str>, k: usize) -> Option<String> {
         name.map(|n| format!("{n}.{k}"))

@@ -543,7 +543,16 @@ impl Shell {
         if ctx.egui_wants_keyboard_input() {
             return;
         }
+        // in a sketch its tools' keys are its own
+        let sketch_keys = if self.sketch.is_some() {
+            super::sketching::sketch_keys(self)
+        } else {
+            vec![]
+        };
         for (key, m) in keys {
+            if sketch_keys.iter().any(|k| k.1.matches(key, m)) {
+                continue;
+            }
             let Some(id) = self.settings.keys.command_for(&self.prefs.cmds, key, m) else {
                 continue;
             };

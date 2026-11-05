@@ -74,3 +74,31 @@ oval = extrude(s.e, 2)
     );
     assert!((v - std::f64::consts::PI * 10.0 * 4.0 * 2.0).abs() < 1e-6, "{v}");
 }
+
+#[test]
+fn a_control_vertex_spline_lies_inside_its_points_where_one_through_them_bulges_out() {
+    let square = |cv: &str| {
+        volume(&format!(
+            "sketch s(on: xy) {{
+  c = spline([(-10, -10), (0, -10), (10, -10), (10, 0), (10, 10), (0, 10), (-10, 10), (-10, 0)]{cv})
+}}
+blob = extrude(s.c, 1)
+"
+        ))
+    };
+    let (through, pulled) = (square(""), square(", cv: true"));
+    assert!(through > 400.0, "{through}");
+    assert!(pulled > 50.0 && pulled < 400.0, "{pulled}");
+    let r = forge_lang::run(
+        "sketch s(on: xy) {\n  c = spline([(0, 0), (5, 5), (10, 0)], cv: 1)\n}\n",
+        forge_lang::Options::default(),
+        Default::default(),
+    )
+    .0;
+    assert_eq!(
+        r.errors.first().map(|e| e.kind()),
+        Some("WrongType"),
+        "{:?}",
+        r.errors
+    );
+}

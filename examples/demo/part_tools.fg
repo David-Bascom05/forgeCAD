@@ -3,8 +3,14 @@ param sk1.x1 = -40
 param sk1.y2 = -30
 param sk1.w3 = 80
 param sk1.h4 = 60
+param sk1.x5 = 0
+param sk1.y6 = 0
 sketch sk1(on: xy) {
   r1 = rect(corner: (x1, y2), size: (w3, h4))
+  l5 = line(r1[0].a, r1[2].a, construction: true)
+  l6 = line(r1[1].a, r1[3].a, construction: true)
+  p1 = near(x5, y6)
+  midpoint(p1, l5)
 }
 param extrude1.d = 12
 extrude1 = extrude(sk1, d)
@@ -48,6 +54,7 @@ sketch sk3(on: extrude1.end) {
   tangent(l2, a1)
   tangent(l2, a2)
   tangent(l1, a2)
+  vertical(l1)
 }
 param extrude3.d = 4
 extrude3 = cut(sk3, d)

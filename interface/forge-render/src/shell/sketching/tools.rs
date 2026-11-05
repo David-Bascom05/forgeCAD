@@ -31,6 +31,8 @@ pub struct More {
     pub count: usize,
     /// A corner fillet's radius or chamfer's leg (unset: a fifth of the shorter side).
     pub size: f64,
+    /// Dimensions typed at a shape's earlier clicks, written with its rows.
+    pub dims: Vec<String>,
 }
 
 fn n(v: f64) -> String {
@@ -39,6 +41,17 @@ fn n(v: f64) -> String {
 
 fn pt(p: P) -> String {
     format!("{} {}", n(p.0), n(p.1))
+}
+
+fn exact_pt(p: P) -> String {
+    let e = |v: f64| {
+        if (v - tidy(v)).abs() < 1e-9 {
+            n(v)
+        } else {
+            v.to_string()
+        }
+    };
+    format!("{} {}", e(p.0), e(p.1))
 }
 
 fn sub(a: P, b: P) -> P {
@@ -80,11 +93,27 @@ fn cross_lines(p: P, u: P, q: P, v: P) -> Option<P> {
 fn points_wanted(t: SkTool) -> Option<usize> {
     Some(match t {
         SkTool::Circle3 | SkTool::Arc3 | SkTool::Rect3 | SkTool::Ellipse => 3,
+        SkTool::RectCenter3 | SkTool::EllipseAxis => 3,
         SkTool::SlotCenter | SkTool::SlotOverall | SkTool::SlotCC => 3,
         SkTool::SlotArc3 | SkTool::SlotArcCenter => 4,
-        SkTool::ArcTan | SkTool::RectCenter | SkTool::Polygon => 2,
+        SkTool::ArcTan | SkTool::RectCenter | SkTool::Polygon | SkTool::PolygonOut => 2,
+        SkTool::LineMid | SkTool::EllipseBox => 2,
         _ => return None,
     })
+}
+
+/// `hor` or `ver` for the line `l{k}` from a to b when it is drawn exactly level or plumb.
+fn level_row(a: P, b: P, k: usize) -> Option<String> {
+    let d = sub(b, a);
+    if len(d) < 1e-9 {
+        None
+    } else if d.1.abs() < 1e-9 {
+        Some(format!("hor l{k}"))
+    } else if d.0.abs() < 1e-9 {
+        Some(format!("ver l{k}"))
+    } else {
+        None
+    }
 }
 
 /// A shape's preview and rows from its points.
@@ -128,6 +157,26 @@ impl SketchMode {
         format!("{kind}{}", self.next_name(kind) + k)
     }
 
+    /// A centre rectangle's construction diagonals (its last four lines' corners) and its centre
+    /// point, tied to the middle of one: the point clicked, if it was one of the sketch's.
+    fn centre_rows(&self, s: &mut Shape, c: P, word: Option<&String>) {
+        let l0 = self.next_name('l');
+        s.rows.push(format!("line l{l0}.a l{}.a cons", l0 + 2));
+        s.rows.push(format!("line l{}.a l{}.a cons", l0 + 1, l0 + 3));
+        let mid = match word.filter(|w| !w.contains(' ')) {
+            Some(w) => w.clone(),
+            None => {
+                s.rows.push(format!("pt {}", pt(c)));
+                self.name_after('p', 0)
+            }
+        };
+        s.rows.push(format!("mid {mid} l{}", l0 + 4));
+        if let Some(q) = s.lines.get(..4).map(<[_]>::to_vec) {
+            s.lines.push((q[0].0, q[2].0));
+            s.lines.push((q[1].0, q[3].0));
+        }
+    }
+
     /// A point's word: the sketch's point there if one's within reach, else its numbers.
     fn word(&self, at: P, reach: f64) -> (String, P) {
         self.word_at(at, reach)
@@ -136,6 +185,9 @@ impl SketchMode {
     /// A shape tool's rows and preview from its points (the pointer's last).
     fn shape(&self, tool: SkTool, p: &[P], words: &[String]) -> Option<Shape> {
         let mut s = Shape::new();
+        // typed values place points exactly, not to the hundredth
+        let typed = self.fields.iter().any(|f| f.locked) || !self.more.dims.is_empty();
+        let pt = |q: P| if typed { exact_pt(q) } else { pt(q) };
         let w = |k: usize| words.get(k).cloned().unwrap_or_else(|| pt(p[k]));
         match tool {
             SkTool::Circle3 => {
@@ -198,6 +250,53 @@ impl SketchMode {
                 for i in 0..4 {
                     s.lines.push((q[i], q[(i + 1) % 4]));
                 }
+                self.centre_rows(&mut s, c, words.first());
+            }
+            SkTool::RectCenter3 => {
+                let (c, u) = (p[0], sub(p[1], p[0]));
+                let l = len(u);
+                if l < 1e-9 {
+                    return None;
+                }
+                let nrm = (-u.1 / l, u.0 / l);
+                let h = (p[2].0 - c.0) * nrm.0 + (p[2].1 - c.1) * nrm.1;
+                if h.abs() < 1e-9 {
+                    return None;
+                }
+                let at = |a: f64, b: f64| (c.0 + u.0 * a + nrm.0 * h * b, c.1 + u.1 * a + nrm.1 * h * b);
+                let q = [at(-1.0, -1.0), at(1.0, -1.0), at(1.0, 1.0), at(-1.0, 1.0)];
+                let l0 = self.next_name('l');
+                s.rows.push(format!(
+                    "poly {}",
+                    q.iter().map(|x| pt(*x)).collect::<Vec<_>>().join(" ")
+                ));
+                s.rows.push(format!("perp l{l0} l{}", l0 + 1));
+                s.rows.push(format!("par l{l0} l{}", l0 + 2));
+                s.rows.push(format!("par l{} l{}", l0 + 1, l0 + 3));
+                s.rows.extend(level_row(q[0], q[1], l0));
+                for i in 0..4 {
+                    s.lines.push((q[i], q[(i + 1) % 4]));
+                }
+                self.centre_rows(&mut s, c, words.first());
+            }
+            SkTool::LineMid => {
+                let (c, e) = (p[0], p[1]);
+                if dist(c, e) < 1e-9 {
+                    return None;
+                }
+                let a = (2.0 * c.0 - e.0, 2.0 * c.1 - e.1);
+                let l = self.next_name('l');
+                s.rows.push(format!("line {} {}", pt(a), w(1)));
+                s.rows.extend(level_row(a, e, l));
+                let mid = match words.first().filter(|x| !x.contains(' ')) {
+                    Some(x) => x.clone(),
+                    None => {
+                        s.rows.push(format!("pt {}", pt(c)));
+                        self.name_after('p', 0)
+                    }
+                };
+                s.rows.push(format!("mid {mid} l{l}"));
+                s.lines.push((a, e));
             }
             SkTool::Rect3 => {
                 let u = sub(p[1], p[0]);
@@ -218,6 +317,7 @@ impl SketchMode {
                 s.rows.push(format!("perp l{l0} l{}", l0 + 1));
                 s.rows.push(format!("par l{l0} l{}", l0 + 2));
                 s.rows.push(format!("par l{} l{}", l0 + 1, l0 + 3));
+                s.rows.extend(level_row(p[0], p[1], l0));
                 let q = [p[0], p[1], q2, q3];
                 for i in 0..4 {
                     s.lines.push((q[i], q[(i + 1) % 4]));
@@ -265,6 +365,7 @@ impl SketchMode {
                     format!("tan {l2} {a2}"),
                     format!("tan {l1} {a2}"),
                 ]);
+                s.rows.extend(level_row(a, b, self.next_name('l')));
                 s.lines.push((off(a, 1.0), off(b, 1.0)));
                 s.lines.push((off(b, -1.0), off(a, -1.0)));
                 s.arcs.push(arc_of(b, off(b, -1.0), off(b, 1.0), true));
@@ -312,7 +413,7 @@ impl SketchMode {
                 s.arcs.push(arc_of(c, ei, si, false));
                 s.arcs.push(arc_of(st, si, so, true));
             }
-            SkTool::Polygon => {
+            SkTool::Polygon | SkTool::PolygonOut => {
                 let sides = if self.more.count == 0 {
                     6
                 } else {
@@ -324,6 +425,13 @@ impl SketchMode {
                     return None;
                 }
                 let t0 = dmath::atan2(v.1 - c.1, v.0 - c.0);
+                // circumscribed: the click is a side's middle, the corners half a step either side
+                let half = core::f64::consts::PI / sides as f64;
+                let (r, t0) = if tool == SkTool::PolygonOut {
+                    (r / dmath::cos(half), t0 - half)
+                } else {
+                    (r, t0)
+                };
                 let q: Vec<P> = (0..sides)
                     .map(|k| {
                         let t = t0 + core::f64::consts::TAU * k as f64 / sides as f64;
@@ -341,15 +449,41 @@ impl SketchMode {
                     s.lines.push((q[i], q[(i + 1) % sides]));
                 }
             }
-            SkTool::Ellipse => {
-                let (c, m) = (p[0], p[1]);
+            SkTool::Ellipse | SkTool::EllipseAxis | SkTool::EllipseBox => {
+                let (c, m, b) = match tool {
+                    SkTool::Ellipse => {
+                        let u = sub(p[1], p[0]);
+                        let a = len(u);
+                        if a < 1e-9 {
+                            return None;
+                        }
+                        let b = ((p[2].0 - p[0].0) * -u.1 / a + (p[2].1 - p[0].1) * u.0 / a).abs();
+                        (p[0], p[1], b)
+                    }
+                    SkTool::EllipseAxis => {
+                        let c = ((p[0].0 + p[1].0) * 0.5, (p[0].1 + p[1].1) * 0.5);
+                        let u = sub(p[1], c);
+                        let a = len(u);
+                        if a < 1e-9 {
+                            return None;
+                        }
+                        let b = ((p[2].0 - c.0) * -u.1 / a + (p[2].1 - c.1) * u.0 / a).abs();
+                        (c, p[1], b)
+                    }
+                    _ => {
+                        let c = ((p[0].0 + p[1].0) * 0.5, (p[0].1 + p[1].1) * 0.5);
+                        let (hw, hh) = ((p[1].0 - c.0).abs(), (p[1].1 - c.1).abs());
+                        // the longer half is the major axis
+                        if hw >= hh {
+                            (c, (c.0 + hw, c.1), hh)
+                        } else {
+                            (c, (c.0, c.1 + hh), hw)
+                        }
+                    }
+                };
                 let u = sub(m, c);
                 let a = len(u);
-                if a < 1e-9 {
-                    return None;
-                }
-                let b = ((p[2].0 - c.0) * -u.1 / a + (p[2].1 - c.1) * u.0 / a).abs();
-                if b < 1e-9 {
+                if a < 1e-9 || b < 1e-9 {
                     return None;
                 }
                 s.rows.push(format!("ellipse {} {} {}", pt(c), pt(m), n(b)));
@@ -527,20 +661,24 @@ impl SketchMode {
         if let Some(want) = points_wanted(tool) {
             let mut p = self.pick_at.clone();
             let mut words = self.picks.clone();
-            let (w, q) = self.word(at, reach);
-            if q != at {
-                d.glyphs.push((Glyph::Coincident, q));
-            }
+            let (w, q, glyphs) = self.shape_pick(tool, at, reach);
+            d.glyphs.extend(glyphs);
             p.push(q);
             words.push(w);
+            d.values = self.shape_values(tool, &p);
             if p.len() == want {
                 if let Some(s) = self.shape(tool, &p, &words) {
                     d.rows = s.rows;
+                    d.rows.extend(self.more.dims.iter().cloned());
+                    d.rows.extend(self.shape_dims(tool, p.len() - 1));
                     d.lines = s.lines;
                     d.circle = s.circle;
                     d.arc = s.arcs.first().copied();
                     d.arcs = s.arcs.iter().skip(1).copied().collect();
                 }
+            } else if let Some(s) = self.shape_so_far(tool, &p) {
+                d.lines = s.lines;
+                d.circle = s.circle;
             } else {
                 for w in p.windows(2) {
                     d.lines.push((w[0], w[1]));
@@ -582,25 +720,308 @@ impl SketchMode {
         out
     }
 
+    /// A shape tool's next point with the pointer here: the sketch's point it's on, else where
+    /// the typed values put it, else level or plumb from the last point if it nearly is; with the
+    /// marks that say so.
+    fn shape_pick(&self, tool: SkTool, at: P, reach: f64) -> (String, P, Vec<(Glyph, P)>) {
+        let (w, q) = self.word(at, reach);
+        let stage = self.pick_at.len();
+        let fixed = (0..self.fields.len()).any(|k| self.fields[k].locked);
+        if !w.contains(' ') && !fixed {
+            return (w, q, vec![(Glyph::Coincident, q)]);
+        }
+        let mut q = at;
+        let mut glyphs = vec![];
+        let lock = |k: usize| self.locked(k, forge_doc::text::Want::Len);
+        let along = |from: P, to: P, l: f64| {
+            let u = sub(to, from);
+            let d = len(u).max(1e-9);
+            (from.0 + u.0 / d * l, from.1 + u.1 / d * l)
+        };
+        // the off-axis reach of the pointer from the line a-b, set to `v` on the same side
+        let off = |a: P, b: P, q: P, v: f64| {
+            let u = sub(b, a);
+            let d = len(u).max(1e-9);
+            let nrm = (-u.1 / d, u.0 / d);
+            let h = (q.0 - a.0) * nrm.0 + (q.1 - a.1) * nrm.1;
+            let s = if h < 0.0 { -1.0 } else { 1.0 };
+            (q.0 + nrm.0 * (s * v - h), q.1 + nrm.1 * (s * v - h))
+        };
+        let p = &self.pick_at;
+        match (tool, stage) {
+            (SkTool::LineMid, 1) => {
+                if let Some(a) = lock(1) {
+                    let r = a.to_radians();
+                    let l = dist(p[0], q).max(1e-9);
+                    q = (p[0].0 + l * dmath::cos(r), p[0].1 + l * dmath::sin(r));
+                }
+                if let Some(l) = lock(0) {
+                    q = along(p[0], q, l * 0.5);
+                }
+            }
+            (SkTool::RectCenter | SkTool::EllipseBox, 1) => {
+                let k = if tool == SkTool::RectCenter { 0.5 } else { 1.0 };
+                if let Some(wv) = lock(0) {
+                    q.0 = p[0].0 + (q.0 - p[0].0).signum() * wv * k;
+                }
+                if let Some(h) = lock(1) {
+                    q.1 = p[0].1 + (q.1 - p[0].1).signum() * h * k;
+                }
+            }
+            (SkTool::RectCenter3 | SkTool::SlotCenter, 1) => {
+                if let Some(l) = lock(0) {
+                    q = along(p[0], q, l * 0.5);
+                }
+            }
+            (SkTool::Rect3 | SkTool::EllipseAxis | SkTool::SlotCC | SkTool::SlotOverall, 1) => {
+                if let Some(l) = lock(0) {
+                    q = along(p[0], q, l);
+                }
+            }
+            (SkTool::Polygon | SkTool::PolygonOut | SkTool::Ellipse, 1) => {
+                if let Some(r) = lock(0) {
+                    q = along(p[0], q, r);
+                }
+            }
+            (SkTool::Rect3, 2) => {
+                if let Some(v) = lock(0) {
+                    q = off(p[0], p[1], q, v);
+                }
+            }
+            (SkTool::RectCenter3, 2) => {
+                if let Some(v) = lock(0) {
+                    q = off(p[0], p[1], q, v * 0.5);
+                }
+            }
+            (SkTool::Ellipse, 2) => {
+                if let Some(v) = lock(0) {
+                    q = off(p[0], p[1], q, v);
+                }
+            }
+            (SkTool::EllipseAxis, 2) => {
+                if let Some(v) = lock(0) {
+                    q = off(p[0], p[1], q, v);
+                }
+            }
+            (SkTool::SlotCC | SkTool::SlotOverall | SkTool::SlotCenter, 2) => {
+                if let Some(v) = lock(0) {
+                    let (a, b) = if tool == SkTool::SlotCenter {
+                        ((2.0 * p[0].0 - p[1].0, 2.0 * p[0].1 - p[1].1), p[1])
+                    } else {
+                        (p[0], p[1])
+                    };
+                    q = off(a, b, q, v * 0.5);
+                }
+            }
+            _ => {}
+        }
+        // a first side nearly level or plumb is made so, unless an angle was typed
+        let levels = matches!(
+            tool,
+            SkTool::LineMid
+                | SkTool::Rect3
+                | SkTool::RectCenter3
+                | SkTool::EllipseAxis
+                | SkTool::SlotCC
+                | SkTool::SlotOverall
+                | SkTool::SlotCenter
+        );
+        let angled = tool == SkTool::LineMid && lock(1).is_some();
+        if levels && stage == 1 && !angled {
+            let u = sub(q, p[0]);
+            let l = len(u);
+            if l > 1e-9 && (u.1 / l).abs() < super::INFER {
+                q = along(p[0], (q.0, p[0].1), l);
+                glyphs.push((Glyph::Horizontal, q));
+            } else if l > 1e-9 && (u.0 / l).abs() < super::INFER {
+                q = along(p[0], (p[0].0, q.1), l);
+                glyphs.push((Glyph::Vertical, q));
+            }
+        }
+        if fixed {
+            return (exact_pt(q), q, glyphs);
+        }
+        let q = (tidy(q.0), tidy(q.1));
+        (pt(q), q, glyphs)
+    }
+
+    /// What a shape's fields show with the pointer at its last point: each value and the
+    /// dimension it is.
+    fn shape_values(&self, tool: SkTool, p: &[P]) -> Vec<(f64, super::Measure)> {
+        use super::Measure::{Along, Round};
+        let way = |a: P, b: P| {
+            let u = sub(b, a);
+            let l = len(u).max(1e-9);
+            (u.0 / l, u.1 / l)
+        };
+        // the reach of q off the line a-b, and its foot
+        let off = |a: P, b: P, q: P| {
+            let d = way(a, b);
+            let t = (q.0 - a.0) * d.0 + (q.1 - a.1) * d.1;
+            let foot = (a.0 + d.0 * t, a.1 + d.1 * t);
+            (dist(foot, q), foot)
+        };
+        let stage = p.len() - 1;
+        match (tool, stage) {
+            (SkTool::LineMid, 1) => {
+                let a = (2.0 * p[0].0 - p[1].0, 2.0 * p[0].1 - p[1].1);
+                let ang = dmath::atan2(p[1].1 - p[0].1, p[1].0 - p[0].0);
+                vec![
+                    (dist(a, p[1]), Along(a, p[1], way(a, p[1]))),
+                    (
+                        ang.to_degrees(),
+                        super::Measure::Sweep(p[0], dist(p[0], p[1]) * 0.5, 0.0, ang),
+                    ),
+                ]
+            }
+            (SkTool::RectCenter | SkTool::EllipseBox, 1) => {
+                let (c, k) = (p[0], p[1]);
+                let (a, b) = if tool == SkTool::RectCenter {
+                    ((2.0 * c.0 - k.0, 2.0 * c.1 - k.1), k)
+                } else {
+                    (c, k)
+                };
+                let (x0, x1) = (a.0.min(b.0), a.0.max(b.0));
+                let (y0, y1) = (a.1.min(b.1), a.1.max(b.1));
+                vec![
+                    (x1 - x0, Along((x0, y0), (x1, y0), (1.0, 0.0))),
+                    (y1 - y0, Along((x1, y0), (x1, y1), (0.0, 1.0))),
+                ]
+            }
+            (SkTool::RectCenter3 | SkTool::SlotCenter, 1) => {
+                let a = (2.0 * p[0].0 - p[1].0, 2.0 * p[0].1 - p[1].1);
+                vec![(dist(a, p[1]), Along(a, p[1], way(a, p[1])))]
+            }
+            (SkTool::Rect3 | SkTool::EllipseAxis | SkTool::SlotCC | SkTool::SlotOverall, 1) => {
+                vec![(dist(p[0], p[1]), Along(p[0], p[1], way(p[0], p[1])))]
+            }
+            (SkTool::Polygon | SkTool::PolygonOut, 1) => {
+                vec![(dist(p[0], p[1]), Round(p[0], dist(p[0], p[1]), false))]
+            }
+            (SkTool::Ellipse, 1) => vec![(dist(p[0], p[1]), Along(p[0], p[1], way(p[0], p[1])))],
+            (SkTool::Rect3, 2) | (SkTool::Ellipse | SkTool::EllipseAxis, 2) => {
+                let (a, b) = if tool == SkTool::EllipseAxis {
+                    (((p[0].0 + p[1].0) * 0.5, (p[0].1 + p[1].1) * 0.5), p[1])
+                } else if tool == SkTool::Rect3 {
+                    (p[1], p[0])
+                } else {
+                    (p[0], p[1])
+                };
+                let (h, foot) = off(a, b, p[2]);
+                let base = if tool == SkTool::Rect3 { p[1] } else { a };
+                let top = (base.0 + p[2].0 - foot.0, base.1 + p[2].1 - foot.1);
+                vec![(h, Along(base, top, way(base, top)))]
+            }
+            (SkTool::RectCenter3, 2) => {
+                let (h, foot) = off(p[0], p[1], p[2]);
+                let u = (p[2].0 - foot.0, p[2].1 - foot.1);
+                let (a, b) = ((p[1].0 - u.0, p[1].1 - u.1), (p[1].0 + u.0, p[1].1 + u.1));
+                vec![(2.0 * h, Along(a, b, way(a, b)))]
+            }
+            (SkTool::SlotCC | SkTool::SlotOverall | SkTool::SlotCenter, 2) => {
+                let (a, b) = if tool == SkTool::SlotCenter {
+                    ((2.0 * p[0].0 - p[1].0, 2.0 * p[0].1 - p[1].1), p[1])
+                } else {
+                    (p[0], p[1])
+                };
+                let (h, foot) = off(a, b, p[2]);
+                let u = (p[2].0 - foot.0, p[2].1 - foot.1);
+                let (m0, m1) = ((b.0 - u.0, b.1 - u.1), (b.0 + u.0, b.1 + u.1));
+                vec![(2.0 * h, Along(m0, m1, way(m0, m1)))]
+            }
+            _ => vec![],
+        }
+    }
+
+    /// The dimensions the values typed at this stage write (those with a plain form).
+    fn shape_dims(&self, tool: SkTool, stage: usize) -> Vec<String> {
+        let typed = |k: usize| self.fields.get(k).filter(|f| f.locked).map(|f| self.file_of(f));
+        let l0 = self.next_name('l');
+        let half = |t: String| t.parse::<f64>().ok().map(|v| n(v / 2.0));
+        let mut out = vec![];
+        match (tool, stage) {
+            (SkTool::LineMid, 1) => out.extend(typed(0).map(|v| format!("dist l{l0} {v}"))),
+            (SkTool::RectCenter, 1) => {
+                out.extend(typed(0).map(|v| format!("hdist l{l0}.a l{l0}.b {v}")));
+                out.extend(typed(1).map(|v| format!("vdist l{0}.a l{0}.b {v}", l0 + 1)));
+            }
+            (SkTool::Rect3 | SkTool::RectCenter3 | SkTool::SlotCC, 1) => {
+                out.extend(typed(0).map(|v| format!("dist l{l0} {v}")));
+            }
+            (SkTool::Rect3 | SkTool::RectCenter3, 2) => {
+                out.extend(typed(0).map(|v| format!("dist l{} {v}", l0 + 1)));
+            }
+            (SkTool::Ellipse | SkTool::EllipseAxis, 2) => {
+                out.extend(typed(0).map(|v| format!("rad {} {v}", self.name_after('e', 0))));
+            }
+            (SkTool::SlotCC | SkTool::SlotOverall | SkTool::SlotCenter, 2) => {
+                out.extend(
+                    typed(0)
+                        .and_then(half)
+                        .map(|v| format!("rad {} {v}", self.name_after('a', 0))),
+                );
+            }
+            _ => {}
+        }
+        out
+    }
+
+    /// A shape's preview before its last click: what the points so far already say.
+    fn shape_so_far(&self, tool: SkTool, p: &[P]) -> Option<Shape> {
+        let mut s = Shape::new();
+        match (tool, p.len()) {
+            (SkTool::Ellipse | SkTool::EllipseAxis, 2) => {
+                let (c, m) = if tool == SkTool::Ellipse {
+                    (p[0], p[1])
+                } else {
+                    (((p[0].0 + p[1].0) * 0.5, (p[0].1 + p[1].1) * 0.5), p[1])
+                };
+                let a = (2.0 * c.0 - m.0, 2.0 * c.1 - m.1);
+                s.lines.push((a, m));
+            }
+            (SkTool::RectCenter3, 2) => {
+                let a = (2.0 * p[0].0 - p[1].0, 2.0 * p[0].1 - p[1].1);
+                s.lines.push((a, p[1]));
+            }
+            (SkTool::SlotCenter, 2) => {
+                let a = (2.0 * p[0].0 - p[1].0, 2.0 * p[0].1 - p[1].1);
+                s.lines.push((a, p[1]));
+            }
+            (SkTool::SlotCC | SkTool::SlotOverall | SkTool::Rect3, 2) => s.lines.push((p[0], p[1])),
+            _ => return None,
+        }
+        Some(s)
+    }
+
     /// A click for a tool beyond the first ones. True when it was one of them.
     pub(super) fn more_click(&mut self, tool: SkTool, at: P, reach: f64) -> bool {
         if let Some(want) = points_wanted(tool) {
-            let (w, q) = self.word(at, reach);
+            let (w, q, _) = self.shape_pick(tool, at, reach);
             if tool == SkTool::ArcTan && self.picks.is_empty() && self.leaving(&w).is_none() {
                 self.error = Some("a tangent arc starts at the end of a line or an arc".into());
                 return true;
             }
+            let stage = self.pick_at.len();
             self.picks.push(w);
             self.pick_at.push(q);
             if self.pick_at.len() == want {
                 let p = std::mem::take(&mut self.pick_at);
                 let words = std::mem::take(&mut self.picks);
-                match self.shape(tool, &p, &words) {
-                    Some(s) => {
+                let shape = self.shape(tool, &p, &words);
+                let mut dims = std::mem::take(&mut self.more.dims);
+                dims.extend(self.shape_dims(tool, stage));
+                self.fields.clear();
+                match shape {
+                    Some(mut s) => {
+                        s.rows.extend(dims);
                         self.add_all(s.rows);
                     }
                     None => self.error = Some("those points make no shape".into()),
                 }
+            } else {
+                let dims = self.shape_dims(tool, stage);
+                self.more.dims.extend(dims);
+                self.stage();
             }
             return true;
         }
@@ -754,7 +1175,7 @@ impl SketchMode {
         let rows: Vec<String> = rows
             .into_iter()
             .map(|r| {
-                if self.more.construction && r.starts_with("line ") {
+                if self.more.construction && r.starts_with("line ") && !r.ends_with(" cons") {
                     format!("{r} cons")
                 } else {
                     r
@@ -1544,6 +1965,55 @@ impl SkTool {
     /// What the status bar asks for, given how far it's got.
     pub fn prompt(self, picked: usize, chosen: usize, placing: bool) -> Option<&'static str> {
         Some(match self {
+            SkTool::Line => [
+                "Click the line's start",
+                "Click its end (Tab: type the length and angle); Esc ends the chain",
+            ][picked.min(1)],
+            SkTool::LineMid => [
+                "Click the line's middle",
+                "Click an end (Tab: type the length and angle)",
+            ][picked.min(1)],
+            SkTool::Circle => [
+                "Click the centre",
+                "Click a point on the circle (Tab: type the diameter)",
+            ][picked.min(1)],
+            SkTool::Arc => [
+                "Click the arc's centre",
+                "Click its start (Tab: type the radius)",
+                "Click its end (Tab: type the sweep)",
+            ][picked.min(2)],
+            SkTool::Rectangle => [
+                "Click a corner",
+                "Click the opposite corner (Tab: type the width and height)",
+            ][picked.min(1)],
+            SkTool::RectCenter3 => [
+                "Click the rectangle's centre",
+                "Click the middle of a side: its way and half its length (Tab: type the length)",
+                "Click to set the width (Tab: type it)",
+            ][picked.min(2)],
+            SkTool::PolygonOut => [
+                "Click the polygon's centre",
+                "Click the middle of a side (Tab: type the radius)",
+            ][picked.min(1)],
+            SkTool::EllipseAxis => [
+                "Click one end of the major axis",
+                "Click its other end (Tab: type the length)",
+                "Click to set the minor axis (Tab: type it)",
+            ][picked.min(2)],
+            SkTool::EllipseBox => [
+                "Click a corner of the box the ellipse fits",
+                "Click the opposite corner (Tab: type the width and height)",
+            ][picked.min(1)],
+            SkTool::Point => "Click to place a point",
+            SkTool::Spline => {
+                "Click points it passes through; Enter ends it, its first point again closes it"
+            }
+            SkTool::Dimension => "Click a line, circle or arc, or two of them; then type the value",
+            SkTool::Coincident => "Click two points",
+            SkTool::Parallel => "Click two lines",
+            SkTool::Perpendicular => "Click two lines",
+            SkTool::Tangent => "Click a line or curve, then the curve it touches",
+            SkTool::Project => "Click edges or faces of the part to project them",
             SkTool::Circle3 => [
                 "Click the first point on the circle",
                 "Click the second point",
@@ -1558,7 +2028,10 @@ impl SkTool {
                 "Click the end of a line or arc to leave tangent from",
                 "Click the arc's end",
             ][picked.min(1)],
-            SkTool::RectCenter => ["Click the rectangle's centre", "Click a corner"][picked.min(1)],
+            SkTool::RectCenter => [
+                "Click the rectangle's centre",
+                "Click a corner (Tab: type the width and height)",
+            ][picked.min(1)],
             SkTool::Rect3 => [
                 "Click the first corner",
                 "Click the second corner: the first side",
@@ -1566,15 +2039,17 @@ impl SkTool {
             ][picked.min(2)],
             SkTool::SlotCC => [
                 "Click the first arc's centre",
-                "Click the second arc's centre",
+                "Click the second arc's centre (Tab: type the length)",
+                "Click to set the width (Tab: type it)",
+            ][picked.min(2)],
+            SkTool::SlotOverall => [
+                "Click one end",
+                "Click the other end (Tab: type the length)",
                 "Click to set the width",
             ][picked.min(2)],
-            SkTool::SlotOverall => {
-                ["Click one end", "Click the other end", "Click to set the width"][picked.min(2)]
-            }
             SkTool::SlotCenter => [
                 "Click the slot's centre",
-                "Click an arc's centre",
+                "Click an arc's centre (Tab: type the length)",
                 "Click to set the width",
             ][picked.min(2)],
             SkTool::SlotArc3 => [
@@ -1589,7 +2064,10 @@ impl SkTool {
                 "Click its end",
                 "Click to set the width",
             ][picked.min(3)],
-            SkTool::Polygon => ["Click the polygon's centre", "Click a corner"][picked.min(1)],
+            SkTool::Polygon => [
+                "Click the polygon's centre",
+                "Click a corner (Tab: type the radius)",
+            ][picked.min(1)],
             SkTool::CircleTan => [
                 "Click the first line it touches",
                 "Click the second line",
@@ -1598,8 +2076,8 @@ impl SkTool {
             SkTool::SplineCv => "Click control vertices; Enter ends it, its first vertex again closes it",
             SkTool::Ellipse => [
                 "Click the centre",
-                "Click the end of the major axis",
-                "Click to set the minor axis",
+                "Click the end of the major axis (Tab: type its radius)",
+                "Click to set the minor axis (Tab: type it)",
             ][picked.min(2)],
             SkTool::SkFillet => "Click near a corner where two lines meet",
             SkTool::SkChamfer => "Click near a corner where two lines meet",
@@ -1700,10 +2178,20 @@ mod tests {
         m.set_tool(Some(SkTool::RectCenter));
         click_all(&mut m, &[(0.0, 0.0), (5.0, 3.0)]);
         assert_eq!(m.rows[0], "rect -5 -3 10 6");
+        // its centre a point tied to the middle of a construction diagonal
+        assert_eq!(
+            m.rows[1..5],
+            [
+                "line l1.a l3.a cons",
+                "line l2.a l4.a cons",
+                "pt 0 0",
+                "mid p1 l5"
+            ]
+        );
         m.set_tool(Some(SkTool::Rect3));
         click_all(&mut m, &[(20.0, 0.0), (30.0, 10.0), (25.0, 20.0)]);
-        assert!(m.rows[1].starts_with("poly 20 0 30 10 "), "{:?}", m.rows);
-        assert_eq!(m.rows[2], "perp l5 l6");
+        assert!(m.rows[5].starts_with("poly 20 0 30 10 "), "{:?}", m.rows);
+        assert_eq!(m.rows[6], "perp l7 l8");
         solves(&m);
     }
 
@@ -1714,7 +2202,9 @@ mod tests {
             m.set_tool(Some(t));
             click_all(&mut m, &[(0.0, 0.0), (20.0, 0.0), (10.0, 4.0)]);
             solves(&m);
-            assert_eq!(m.rows.len(), 8, "{t:?} {:?}", m.rows);
+            // drawn level, it's held so
+            assert_eq!(m.rows.len(), 9, "{t:?} {:?}", m.rows);
+            assert_eq!(m.rows[8], "hor l1");
             let s = m.solved.as_ref().unwrap();
             let p = sk::profile(s, None).expect("one closed loop");
             assert_eq!(p.loops.len(), 1, "{t:?}");

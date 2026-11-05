@@ -7,6 +7,7 @@ const USAGE: &str = "forge-app [PART | file.fc] [--size WxH] [--times]
   steps, in order: --click NAME --dclick NAME --rclick NAME --wait --type TEXT --key NAME (enter, escape, tab, backspace, or M, Ctrl+Z, F6...)
   --hover X Y (the view's pick there) --clickat X Y --drag X Y X2 Y2 --snap FILE.ppm --save
   --viewnow YAW PITCH --home --zoom F (the camera's distance times F) --new-drawing
+  --start-sketch (on XY) --rest NAME SECONDS (the pointer still on it, for its tooltip)
   [--present fifo|mailbox|immediate] [--run-for SECONDS] [--spin]
   [--bench]
 PART: a bench part or a .fc file. --times: input-to-present on exit. --shot: one frame, no window.
@@ -30,6 +31,9 @@ enum Step {
     Home,
     /// The camera's distance times this.
     Zoom(f32),
+    StartSketch,
+    /// The pointer held on a place this long (seconds).
+    Rest(String, f32),
 }
 
 struct Args {
@@ -104,6 +108,15 @@ fn args() -> Result<Args, String> {
             "--dclick" => a.steps.push(Step::DoubleClick(v()?)),
             "--wait" => a.steps.push(Step::Wait),
             "--new-drawing" => a.steps.push(Step::NewDrawing),
+            "--start-sketch" => a.steps.push(Step::StartSketch),
+            "--rest" => {
+                let name = v()?;
+                let secs = it
+                    .next()
+                    .and_then(|w| w.parse().ok())
+                    .ok_or("--rest takes NAME SECONDS")?;
+                a.steps.push(Step::Rest(name, secs));
+            }
             "--type" => a.steps.push(Step::Type(v()?)),
             "--key" => a.steps.push(Step::Key(v()?)),
             "--snap" => a.steps.push(Step::Snap(v()?)),
@@ -555,6 +568,43 @@ fn run() -> Result<(), String> {
                 for _ in 0..60 {
                     h.step();
                     std::thread::sleep(std::time::Duration::from_millis(10));
+                }
+                continue;
+            }
+            Step::StartSketch => {
+                if h.gui.fg.is_some() {
+                    // a Forge part's: as a click on its XY plane makes it
+                    use forge_render::shell::sketching::{SketchFor, SketchMode};
+                    let Some(forge_lang::eval::Value::Plane(p)) = forge_lang::builtins::constant("xy") else {
+                        return Err("no xy plane".into());
+                    };
+                    let mut m = SketchMode::new(SketchFor::New, "xy".into(), p.frame, Vec::new(), None);
+                    m.units = "mm";
+                    h.gui.shell.sketch = Some(m);
+                    h.gui.shell.tab = 1;
+                    h.step();
+                    h.gui.shell.out.push(forge_render::shell::Action::LookAt);
+                } else {
+                    h.gui.shell.origin_selected = Some(forge_render::origin::Item::XyPlane);
+                    h.gui.shell.out.push(forge_render::shell::Action::StartSketch);
+                }
+                h.until(|g| g.shell.sketch.is_some());
+                for _ in 0..60 {
+                    h.step();
+                    std::thread::sleep(std::time::Duration::from_millis(5));
+                }
+                for _ in 0..20 {
+                    h.step();
+                }
+                continue;
+            }
+            Step::Rest(name, secs) => {
+                let Some(r) = h.gui.shell.place(name) else {
+                    return Err(format!("nothing called {name}"));
+                };
+                h.move_to(r.center().x, r.center().y);
+                for _ in 0..(secs * 60.0) as usize {
+                    h.step();
                 }
                 continue;
             }

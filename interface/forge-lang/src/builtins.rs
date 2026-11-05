@@ -839,7 +839,25 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
         }
         "poly" | "spline" if ev.path_mut().is_none() || name == "poly" => {
             let sk = in_sketch(ev, name, span)?;
-            let a = Args::bind(ev, name, &["points", "closed"], args, span)?;
+            let keys: &[&str] = if name == "spline" {
+                &["points", "closed", "cv"]
+            } else {
+                &["points", "closed"]
+            };
+            let a = Args::bind(ev, name, keys, args, span)?;
+            // control vertices: a cubic B-spline the points pull, not one through them
+            let cv = match a.opt("cv") {
+                None => false,
+                Some(Value::Bool(b)) => b,
+                Some(o) => {
+                    return Err(Error::WrongType {
+                        span: a.span("cv"),
+                        what: "cv",
+                        want: Ty::Bool,
+                        found: o.ty(),
+                    });
+                }
+            };
             let closed = match a.opt("closed") {
                 None => true,
                 Some(Value::Bool(b)) => b,
@@ -881,7 +899,11 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
                 let mut s = sk.borrow_mut();
                 let ids = pts.iter().map(|&p| s.p2(p, span)).collect::<R<Vec<_>>>()?;
                 let nm = pending_name(ev, span);
-                let id = s.spline(&ids, closed, nm.as_deref(), span)?;
+                let id = if cv {
+                    s.bspline(&ids, closed, nm.as_deref(), span)?
+                } else {
+                    s.spline(&ids, closed, nm.as_deref(), span)?
+                };
                 drop(s);
                 Ok(mk_ent(&sk, id))
             }

@@ -428,7 +428,13 @@ impl Rd<'_> {
                 let first = self.fc.get(&'l').copied().unwrap_or(0) + 1;
                 let sides = ps.len() - usize::from(!closed);
                 let sn = if f == "spline" { Some(self.next('s')) } else { None };
-                row.push(w(f));
+                let cv = arg(args, 9, "cv").is_some_and(|c| matches!(c.kind, ExprKind::Bool(true)));
+                if cv {
+                    let degree = 3.min(ps.len().saturating_sub(1 + usize::from(closed))).max(1);
+                    row.extend([w("bspline"), w(&degree.to_string())]);
+                } else {
+                    row.push(w(f));
+                }
                 for (k, p) in ps.iter().enumerate() {
                     let me = match &sn {
                         Some(s) => format!("{s}.{k}"),

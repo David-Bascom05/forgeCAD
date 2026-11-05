@@ -1118,9 +1118,13 @@ fn box_gap_sq(b: &Box3, p: Point3) -> f64 {
 }
 
 fn insert_knot(u: &mut Vec<f64>, p: &mut Vec<H>, degree: usize, k: f64) {
-    // k lies in the span [u[s], u[s + 1])
+    // k lies in the span [u[s], u[s + 1]); the last knot of all, in the last span
     let s = u.partition_point(|&x| x <= k) - 1;
-    let s = s.min(p.len() - 1);
+    let s = if k >= u[u.len() - 1] {
+        s.min(p.len() - 1)
+    } else {
+        s
+    };
     let mult = u.iter().filter(|&&x| x == k).count();
     let mut q = Vec::with_capacity(p.len() + 1);
     q.extend_from_slice(&p[..=s - degree]);

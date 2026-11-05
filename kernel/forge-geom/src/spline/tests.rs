@@ -80,6 +80,29 @@ fn pieces_match_de_boor() {
 }
 
 #[test]
+fn unclamped_knots_match_de_boor_to_the_domain_end() {
+    // a periodic cubic's control polygon wrapped, uniform knots: it closes on itself
+    let mut r = Rng::new(11);
+    for p in 1..=4 {
+        let n = p + 2 + r.below(6);
+        let ring: Vec<Point3> = (0..n)
+            .map(|_| Point3::new(r.range(-9.0, 9.0), r.range(-9.0, 9.0), 0.0))
+            .collect();
+        let c: Vec<Point3> = (0..n + p).map(|i| ring[i % n]).collect();
+        let k: Vec<f64> = (0..n + 2 * p + 1).map(|i| i as f64).collect();
+        let w = vec![1.0; c.len()];
+        let s = Spline::from_nurbs(p, &k, &c, None).unwrap();
+        let (a, b) = s.ends();
+        assert!(a.distance(b) < 1e-9, "{p} {n}: {a:?} {b:?}");
+        for i in 0..=40 {
+            let t = p as f64 + n as f64 * i as f64 / 40.0;
+            let (x, y) = (s.point(t), de_boor(p, &k, &c, &w, t.min(k[c.len()] - 1e-12)));
+            assert!(x.distance(y) < 1e-6, "{p} {t} {x:?} {y:?}");
+        }
+    }
+}
+
+#[test]
 fn derivatives_match_differences() {
     let mut w = cubic();
     let e = Spline::ellipse(Point3::ORIGIN, Vec3::X * 5.0, Vec3::Y * 2.0, 0.3, 4.0).unwrap();

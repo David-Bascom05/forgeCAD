@@ -16,6 +16,8 @@ pub use tools::More;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SkTool {
     Line,
+    /// From its middle out to one end, the middle a point tied there.
+    LineMid,
     Circle,
     Arc,
     Rectangle,
@@ -36,6 +38,8 @@ pub enum SkTool {
     ArcTan,
     RectCenter,
     Rect3,
+    /// Centre, a side's middle (its way and half length), then the half width.
+    RectCenter3,
     SlotCC,
     SlotOverall,
     SlotCenter,
@@ -43,7 +47,13 @@ pub enum SkTool {
     SlotArcCenter,
     CircleTan,
     Polygon,
+    /// Its sides touch the circle clicked: the click is a side's middle.
+    PolygonOut,
     Ellipse,
+    /// The major axis's two ends, then the minor axis.
+    EllipseAxis,
+    /// Corner to corner of the box it fits, square to the sketch.
+    EllipseBox,
     SkFillet,
     SkChamfer,
     Text,
@@ -308,6 +318,33 @@ pub struct SketchMode {
     pub sources: HashMap<String, Result<Vec<sk::Refd>, String>>,
     /// The Modify tools' choice, the toggles, and text placed.
     pub more: More,
+}
+
+/// The sketcher's keys (the `sketch_*` rows of `data/keymap.csv`, as the settings have them):
+/// each command's tool and its key, Shift+ ones first (a key without Shift takes it held too).
+pub(super) fn sketch_keys(s: &Shell) -> Vec<(SkTool, crate::bindings::Chord)> {
+    let mut keys: Vec<(SkTool, crate::bindings::Chord)> = s
+        .prefs
+        .cmds
+        .iter()
+        .filter_map(|c| {
+            let tool = match c.id.as_str() {
+                "sketch_line" => SkTool::Line,
+                "sketch_circle" => SkTool::Circle,
+                "sketch_rect" => SkTool::Rectangle,
+                "sketch_dimension" => SkTool::Dimension,
+                "sketch_trim" => SkTool::Trim,
+                "sketch_offset" => SkTool::Offset,
+                "sketch_project" => SkTool::Project,
+                "sketch_construction" => SkTool::Construction,
+                "sketch_point" => SkTool::Point,
+                _ => return None,
+            };
+            Some((tool, s.settings.keys.get(c)?))
+        })
+        .collect();
+    keys.sort_by_key(|k| !k.1.shift);
+    keys
 }
 
 /// A `project` row's references, its words after the word.
@@ -724,6 +761,7 @@ impl SketchMode {
         self.asking_row = None;
         self.fields.clear();
         self.first_rows.clear();
+        self.more.dims.clear();
     }
 
     pub fn has_tool(&self) -> bool {
@@ -742,11 +780,14 @@ impl SketchMode {
     pub fn finish_spline(&mut self, closed: bool) {
         if self.picks.len() >= 2 {
             let open = if closed { "" } else { " open" };
-            // control vertices: a cubic B-spline once there are four, else the curve through
-            let word = if self.tool == Some(SkTool::SplineCv) && self.picks.len() > 3 {
-                "bspline 3"
+            // control vertices: a cubic B-spline, or as cubic as few points allow
+            let word = if self.tool == Some(SkTool::SplineCv) {
+                format!(
+                    "bspline {}",
+                    3.min(self.picks.len() - 1 - usize::from(closed)).max(1)
+                )
             } else {
-                "spline"
+                "spline".to_string()
             };
             let row = format!("{word} {}{open}", self.picks.join(" "));
             self.add(row);
@@ -769,6 +810,7 @@ impl SketchMode {
             self.asking_row = None;
             self.fields.clear();
             self.first_rows.clear();
+            self.more.dims.clear();
         } else {
             self.tool = None;
         }
@@ -918,6 +960,16 @@ impl SketchMode {
             (SkTool::Circle, 1) => vec![f("Diameter")],
             (SkTool::Arc, 1) => vec![f("Radius")],
             (SkTool::Arc, 2) => vec![f("Sweep")],
+            (SkTool::LineMid, 1) => vec![f("Length"), f("Angle")],
+            (SkTool::RectCenter | SkTool::EllipseBox, 1) => vec![f("Width"), f("Height")],
+            (SkTool::Rect3 | SkTool::RectCenter3, 1) => vec![f("Length")],
+            (SkTool::Rect3 | SkTool::RectCenter3, 2) => vec![f("Width")],
+            (SkTool::Polygon | SkTool::PolygonOut, 1) => vec![f("Radius")],
+            (SkTool::Ellipse, 1) => vec![f("Major")],
+            (SkTool::EllipseAxis, 1) => vec![f("Length")],
+            (SkTool::Ellipse | SkTool::EllipseAxis, 2) => vec![f("Minor")],
+            (SkTool::SlotCC | SkTool::SlotOverall | SkTool::SlotCenter, 1) => vec![f("Length")],
+            (SkTool::SlotCC | SkTool::SlotOverall | SkTool::SlotCenter, 2) => vec![f("Width")],
             _ => Vec::new(),
         }
     }
@@ -1064,8 +1116,8 @@ impl SketchMode {
                     .cloned()
                     .chain([format!("{} {}", at.0, at.1)])
                     .collect();
-                let row = if tool == SkTool::SplineCv && words.len() > 3 {
-                    format!("bspline 3 {} open", words.join(" "))
+                let row = if tool == SkTool::SplineCv {
+                    format!("bspline {} {} open", 3.min(words.len() - 1), words.join(" "))
                 } else {
                     format!("spline {} open", words.join(" "))
                 };
@@ -1935,8 +1987,11 @@ impl Shell {
             for (a, b) in &d.lines {
                 if let (Some(u), Some(v)) = (screen(*a), screen(*b)) {
                     p.line_segment([u, v], line);
-                    p.circle_filled(u, 2.5, ink);
-                    p.circle_filled(v, 2.5, ink);
+                    // ends are marked; a curve's short pieces are not
+                    if (u - v).length() > 16.0 {
+                        p.circle_filled(u, 2.5, ink);
+                        p.circle_filled(v, 2.5, ink);
+                    }
                 }
             }
             let round = |c: (f64, f64), r: f64, t0: f64, t1: f64| -> Vec<Pos2> {
@@ -2039,6 +2094,14 @@ impl Shell {
                     f.text = forge_doc::units::number_in(value, kind, units);
                 }
                 let id = egui::Id::unique("sketch-field").with(k);
+                // never under the pointer, where it would take the next click
+                let mut at_px = at_px;
+                let under = |c: Pos2| Rect::from_center_size(c, vec2(FIELD_W + 16.0, 40.0));
+                if let Some(o) = ctx.input(|i| i.pointer.hover_pos())
+                    && under(at_px).contains(o)
+                {
+                    at_px = o + vec2(0.0, if at_px.y > o.y { 34.0 } else { -34.0 });
+                }
                 egui::Area::new(id.with("area"))
                     .fixed_pos(at_px - vec2(FIELD_W * 0.5, 12.0))
                     .order(egui::Order::Foreground)
@@ -2239,6 +2302,19 @@ impl Shell {
         {
             m.undo();
         }
+        // a tool's key
+        if !ctx.egui_wants_keyboard_input() && self.modal_clear() && m.asking.is_none() {
+            for (tool, k) in sketch_keys(self) {
+                let mods = if k.shift {
+                    egui::Modifiers::SHIFT
+                } else {
+                    egui::Modifiers::NONE
+                };
+                if ctx.input_mut(|i| i.consume_key(mods, k.key)) {
+                    m.set_tool(Some(tool));
+                }
+            }
+        }
         // with no tool in hand a click chooses geometry, and Delete takes it out
         if m.tool.is_none() && self.modal_clear() {
             if let Some(at) = cursor
@@ -2289,7 +2365,7 @@ impl Shell {
     fn sketch_options(&mut self, ctx: &egui::Context, m: &mut SketchMode) {
         let t = self.theme;
         let what = match m.tool {
-            Some(SkTool::Polygon) => ("Sides", true, 6.0),
+            Some(SkTool::Polygon | SkTool::PolygonOut) => ("Sides", true, 6.0),
             Some(SkTool::RectPattern | SkTool::CircPattern) => ("Count", true, 3.0),
             Some(SkTool::SkFillet) => ("Radius", false, 0.0),
             Some(SkTool::SkChamfer) => ("Distance", false, 0.0),

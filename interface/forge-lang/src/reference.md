@@ -135,7 +135,9 @@ h = hull(ITEM, ITEM, ..)            convex outline, counter-clockwise: an item i
                                     Segments in order: for each item, its arc (discs only), then
                                     the line to the next item
 o = poly([P, ..], closed: true)     side k runs from point k to point k+1
-s = spline([P, ..], closed: true)   the cubic through the points
+s = spline([P, ..], closed: true)   the cubic through the points; cv: true, a B-spline the points
+                                    pull as its control vertices (cubic, lower with under four
+                                    points, or five closed)
 path o(start: P) {                  a chain: line(to: P, tangent: false), tarc(to: P)
   line(to: P)                       (an arc tangent to the segment before), spline(through:
   tarc(to: P)                       [P, ..], to: P, tangent: true), close()
