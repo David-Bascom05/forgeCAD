@@ -3,7 +3,7 @@
 //! data stay outside the repo (THERMO_VALIDATION_DATA, default ~/projects/forgecad-gate/thermo-fea/
 //! validation); without them the test says so and passes. Long: run with
 //! `cargo test --release -p forge-lang --test thermo_validation -- --ignored`.
-//! THERMO_CONFIGS (default "height,height_fine"; OPTION[_fine][_nh][:mu]), THERMO_CASES (id
+//! THERMO_CONFIGS (default "height,height_fine"; tokens joined by + or _, then :mu), THERMO_CASES (id
 //! prefixes, default all), THERMO_SCOREBOARD_LABEL (default "run") and
 //! THERMO_SCOREBOARD_OUT (default the data folder's ../scoreboard) steer it. Writes LABEL.csv,
 //! LABEL.json, LABEL.md and LABEL/profiles/CASE_CONFIG.csv there.
@@ -102,21 +102,24 @@ fn table(path: &Path) -> Vec<BTreeMap<String, String>> {
         .collect()
 }
 
-/// What the model is run with, past the language's own run: the solver's options.
-/// `height` is the language's default (the height field, 56 nodes along the window); `_fine`
-/// doubles the nodes; `_nh` swaps the law for a neo-Hookean one of the same small-strain shear
-/// (how much the law's shape matters). Options this solver lacks return false (the row: "n/a").
+/// What the model is run with, past the language's own run: the solver's options, as tokens
+/// joined by `+` (`_` is read as `+`). `height` is the language's default (the height field, 56
+/// nodes along the window); `fine` doubles the nodes; `nh` swaps the law for a neo-Hookean one of
+/// the same small-strain shear (how much the law's shape matters). A token this solver lacks
+/// returns false (the row says "n/a").
 fn configure(p: &mut Process, cfg: &str, _mu: f64) -> bool {
-    let mut base = cfg;
-    if let Some(b) = base.strip_suffix("_nh") {
-        p.law = forge_thermo::Law::neo_hookean(p.law.shear());
-        base = b;
-    }
-    if let Some(b) = base.strip_suffix("_fine") {
-        p.resolution *= 2;
-        base = b;
-    }
-    base == "height"
+    cfg.replace('_', "+").split('+').all(|tok| match tok {
+        "height" => true,
+        "fine" => {
+            p.resolution *= 2;
+            true
+        }
+        "nh" => {
+            p.law = forge_thermo::Law::neo_hookean(p.law.shear());
+            true
+        }
+        _ => false,
+    })
 }
 
 /// The sheet's nodes at the start (the grid), from the first step.
@@ -409,13 +412,15 @@ fn pole_steps(st: &Stretch, p_end: f64) -> Vec<(f64, f64, f64)> {
     let (nx, _) = st.grid;
     let (ci, cj) = centre(st);
     let k = cj * (nx + 1) + ci;
+    // the load steps up to the forming pressure, evenly
+    let n = st.steps.iter().filter(|s| s.stage == "vacuum").count();
     st.steps
         .iter()
         .filter(|s| s.stage == "vacuum")
         .enumerate()
         .map(|(i, s)| {
             (
-                p_end * (i + 1) as f64 / 10.0,
+                p_end * (i + 1) as f64 / n as f64,
                 -(s.nodes[k][2] as f64),
                 s.ratio[k] as f64,
             )
@@ -515,7 +520,7 @@ fn score_corner(c: &Case, data: &Path, st: &Stretch, p_end: f64) -> Score {
     let mut errs = vec![];
     let vac: Vec<&forge_thermo::Step> = st.steps.iter().filter(|s| s.stage == "vacuum").collect();
     for (i, s) in vac.iter().enumerate() {
-        let p = p_end * (i + 1) as f64 / 10.0;
+        let p = p_end * (i + 1) as f64 / vac.len() as f64;
         let pin = p * d / (g * t0);
         let r_ref = if pin < 0.380952 {
             Some(1.0)
