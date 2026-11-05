@@ -1,0 +1,8 @@
+# Analytic: flat circular membrane clamped at radius 50, t0 1, Mooney-Rivlin C1 0.227273, C2 0.022727 (C2/C1 0.1, G = 2(C1+C2) = 0.5) as Ogden (2C1, 2), (-2C2, -2), inflated to P = p a/(S t0) = 2.
+# Reference: s1_ref_inflation_mooney_rivlin_c2_c1_0p1.csv (Adkins & Rivlin, RK4, 7 digits). Notes: ref_inflation_mooney_rivlin.notes.md.
+sketch plan(on: xy) {
+  rim = circle((0, 0), 50)
+}
+cav = extrude(plan, -250)
+law = thermo_material("ref_inflation_mooney_rivlin", law: [(ratio(0.454545), ratio(2)), (ratio(-0.045455), ratio(-2))], law_temperature: 150)
+part = thermoform(cav, t: 1, material: law, tool: "female", flange: 10, shrink: ratio(0), vent: false, temperature: 150, pressure: ratio(0.02))

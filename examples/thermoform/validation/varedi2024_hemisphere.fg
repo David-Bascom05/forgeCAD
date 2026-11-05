@@ -1,0 +1,9 @@
+# Varedi, Buffel, Desplentere 2024, JMMP 8(2):49, CC BY: ABS 3 mm over a male hemisphere R125, 430 x 430 window,
+# mould 80 C, vacuum 77.7 kPa. Notes: varedi2024_hemisphere.notes.md.
+sketch half(on: xz) {
+  a = arc(center: (0, 0), from: (125, 0), to: (0, 125))
+  ax = line((0, 125), (0, 0))
+  foot = line((0, 0), (125, 0))
+}
+mould = revolve(half, axis: half.ax)
+part = thermoform(mould, t: 3, material: "ABS", tool: "male", from: "inner", flange: 85, margin: 5, shrink: ratio(0), vent: false, temperature: 136, pressure: ratio(0.0777))

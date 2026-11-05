@@ -1,0 +1,9 @@
+# Eksi & Karabeyoglu 2017, Proc. Univ. Ruse 56(2):30: ABS 5 mm, female hemisphere 100 x 50.
+# Assumptions: eksi2017_hemisphere.notes.md.
+sketch hemi(on: xz) {
+  a = arc(center: (0, 0), from: (50, 0), to: (0, -50), cw: true)
+  ax = line((0, -50), (0, 0))
+  top = line((0, 0), (50, 0))
+}
+cav = revolve(hemi, axis: hemi.ax)
+part = thermoform(cav, t: 5, material: "ABS", tool: "female", flange: 20, margin: 5, shrink: ratio(0), vent: false, temperature: 140, pressure: ratio(0.091))

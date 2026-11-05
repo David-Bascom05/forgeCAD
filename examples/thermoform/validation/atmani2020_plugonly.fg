@@ -1,0 +1,8 @@
+# Atmani et al. 2020, Mechanics & Industry 21:607: HIPS 1.1 mm plug-only test, Al plug d42 (R90 nose, R10 edges),
+# sheet clamped on a 90 mm window. Modelled as the sheet draped over the plug as a male tool. Notes: atmani2020_plugonly.notes.md.
+sketch plan(on: xy) {
+  c = circle((0, 0), 21)
+}
+plug = extrude(plan, 60)
+nose = fillet(edges(of: plug.end), 10)
+part = thermoform(plug, t: 1.1, material: "HIPS", tool: "male", from: "inner", flange: 19, margin: 5, shrink: ratio(0), vent: false, temperature: 130, pressure: ratio(0.000001))

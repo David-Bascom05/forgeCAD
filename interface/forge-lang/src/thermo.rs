@@ -70,6 +70,10 @@ pub struct ThermoOut {
     pub part_solid: usize,
     /// The feature that made the shape's body (the mould is in its place).
     pub shape: String,
+    /// The spec the part was formed with and the thickness model's process (None: `walls:
+    /// false`), so a harness can run the model again with other options.
+    pub spec: ft::Spec,
+    pub process: Option<ft::Process>,
 }
 
 /// The clamp's margin round the trim, each side, for the blank.
@@ -1572,6 +1576,8 @@ fn thermoform(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
                 mould_solid,
                 part_solid: solid,
                 shape: shape.id.clone(),
+                spec: spec.clone(),
+                process: walls.clone(),
             });
         }
     }

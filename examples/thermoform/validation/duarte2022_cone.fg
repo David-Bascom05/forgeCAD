@@ -1,0 +1,8 @@
+# Duarte et al. 2022, Int. Polym. Proc., DOI 10.1515/ipp-2022-4222: PS/HIPS 1 mm, 140 C, female truncated cone
+# top 130, base 110, depth 100, vacuum only. Assumptions: duarte2022_cone.notes.md.
+sketch plan(on: xy) {
+  rim = circle((0, 0), 65)
+}
+cav = extrude(plan, -100, taper: 5.710593deg)
+floor = fillet(edges(of: cav.end), 3)
+part = thermoform(cav, t: 1, material: "HIPS", tool: "female", flange: 50, shrink: ratio(0), vent: false, temperature: 140, pressure: ratio(0.09))

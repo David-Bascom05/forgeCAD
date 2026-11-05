@@ -1,0 +1,9 @@
+# Buntinx et al. 2014, Polymers 6:3019, CC BY: female tray 190 x 132 top, 10 deg walls, depth 75, floor R1;
+# plug + air. Compared on the mean wall only. Notes: buntinx2014_tray75.notes.md.
+sketch plan(on: xy) {
+  outline = hull(disc((-80.775476, -51.775476), 14.224524), disc((80.775476, -51.775476), 14.224524),
+                 disc((80.775476, 51.775476), 14.224524), disc((-80.775476, 51.775476), 14.224524))
+}
+cav = extrude(plan, -75, taper: 10deg)
+floor = fillet(edges(of: cav.end), 1)
+part = thermoform(cav, t: 0.8, material: "PP", tool: "female", flange: 15, shrink: ratio(0), vent: false, temperature: 155, pressure: ratio(0.4))

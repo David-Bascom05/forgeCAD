@@ -1,0 +1,8 @@
+# Eksi & Karabeyoglu 2017: ABS 5 mm, female cylinder (dimensions NOT printed; 100 x 50 assumed).
+# Assumptions: eksi2017_cylinder.notes.md.
+sketch plan(on: xy) {
+  rim = circle((0, 0), 50)
+}
+cav = extrude(plan, -50)
+floor = fillet(edges(of: cav.end), 6)
+part = thermoform(cav, t: 5, material: "ABS", tool: "female", flange: 20, margin: 5, shrink: ratio(0), vent: false, temperature: 140, pressure: ratio(0.091))

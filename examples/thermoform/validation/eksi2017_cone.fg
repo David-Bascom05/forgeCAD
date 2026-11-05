@@ -1,0 +1,8 @@
+# Eksi & Karabeyoglu 2017: ABS 5 mm, female cone opening 100, depth 50 (base not printed).
+# Assumptions: eksi2017_cone.notes.md.
+sketch plan(on: xy) {
+  rim = circle((0, 0), 50)
+}
+cav = extrude(plan, -50, taper: 12.952765deg)
+floor = fillet(edges(of: cav.end), 6)
+part = thermoform(cav, t: 5, material: "ABS", tool: "female", flange: 20, margin: 5, shrink: ratio(0), vent: false, temperature: 140, pressure: ratio(0.091))

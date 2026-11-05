@@ -1,0 +1,8 @@
+# Erdogan & Eksi 2014: HIPS 825E 2.0 mm, 180 C, female square box 150 x 150 x 75, vacuum only.
+# Assumptions: erdogan2014_box.notes.md.
+sketch plan(on: xy) {
+  outline = hull(disc((-65, -65), 10), disc((65, -65), 10), disc((65, 65), 10), disc((-65, 65), 10))
+}
+cav = extrude(plan, -75)
+floor = fillet(edges(of: cav.end), 10)
+part = thermoform(cav, t: 2, material: "HIPS", tool: "female", flange: 65, shrink: ratio(0), vent: false, temperature: 180, pressure: ratio(0.09))

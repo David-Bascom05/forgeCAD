@@ -1,0 +1,8 @@
+# Erchiqui et al. 2020, Polymers 12:2753, CC BY: free inflation of PMSQ-HDPE 1.5 mm, free radius 40, 130 C.
+# Pole height vs pressure (rising branch). Notes: erchiqui2020_bubble.notes.md.
+sketch plan(on: xy) {
+  rim = circle((0, 0), 40)
+}
+cav = extrude(plan, -160)
+law = thermo_material("erchiqui2020_bubble", law: [(ratio(0.71694), ratio(2))], law_temperature: 130)
+part = thermoform(cav, t: 1.5, material: law, tool: "female", flange: 10, shrink: ratio(0), vent: false, temperature: 130, pressure: ratio(0.04913))

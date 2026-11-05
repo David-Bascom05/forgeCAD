@@ -1,0 +1,8 @@
+# Analytic: flat circular membrane clamped at radius 50, t0 1, Ogden ABS (Erchiqui & Kandil Table 3), stress scale S = 1 MPa, inflated to P = p a/(S t0) = 0.648899.
+# Reference: s1_ref_inflation_ogden_abs_erchiqui_kandil.csv (Adkins & Rivlin, RK4, 7 digits). Notes: ref_inflation_ogden_abs.notes.md.
+sketch plan(on: xy) {
+  rim = circle((0, 0), 50)
+}
+cav = extrude(plan, -250)
+law = thermo_material("ref_inflation_ogden_abs", law: [(ratio(0.146913), ratio(0.52668)), (ratio(0.3661), ratio(1.91694)), (ratio(0.0293), ratio(-0.079))], law_temperature: 150)
+part = thermoform(cav, t: 1, material: law, tool: "female", flange: 10, shrink: ratio(0), vent: false, temperature: 150, pressure: ratio(0.012978))

@@ -1,0 +1,351 @@
+# Validation cases: each model here against a measured (or exact) file. `data` is a file name in the validation
+# data folder (~/projects/forgecad-gate/thermo-fea/validation, or THERMO_VALIDATION_DATA), or repo:PATH in this repo.
+# mode: arc (arc length from the centre along the cut), arc_edge (from the clamp edge), radial (horizontal distance
+# from the axis), index (point index mapped to arc length by index_map pairs), mean (the part's mean wall / t0),
+# bubble (pole height vs pressure), ref_inflation (H, t_pole vs P, exact), corner (fillet radius and wall, exact).
+# cut_deg: the cut's direction in the trim plane from x (0 = a grid row from the centre node, 45 = its diagonal).
+# filter: column=value selects rows. fold / fold_about: the data's s runs across the part and is folded.
+# The scoreboard harness: interface/forge-lang/tests/thermo_validation.rs.
+
+[[case]]
+id = "duarte2022_cone"
+model = "duarte2022_cone.fg"
+data = "repo:kernel/forge-thermo/data/benchmarks/duarte2022_cone.csv"
+mode = "arc"
+s_col = "s_mm"
+t_col = "t_mm"
+t0 = 1.0
+cut_deg = 0
+axisym = true
+how = "arc length from the bottom centre along a radial cut (grid row through the centre)"
+
+[[case]]
+id = "erdogan2014_cylinder"
+model = "erdogan2014_cylinder.fg"
+data = "repo:kernel/forge-thermo/data/benchmarks/erdogan2014_cylinder.csv"
+mode = "arc"
+s_col = "s_mm"
+t_col = "t_mm"
+t0 = 2.5
+cut_deg = 0
+axisym = true
+how = "arc length from base centre, radial cut"
+
+[[case]]
+id = "erdogan2014_cone"
+model = "erdogan2014_cone.fg"
+data = "s2_erdogan2014_cone_thickness.csv"
+mode = "arc"
+s_col = "s_mm"
+t_col = "t_mm"
+t0 = 2.0
+cut_deg = 0
+axisym = true
+how = "arc length from base centre, radial cut"
+
+[[case]]
+id = "erdogan2014_box_axis"
+model = "erdogan2014_box.fg"
+data = "repo:kernel/forge-thermo/data/benchmarks/erdogan2014_box_axis.csv"
+mode = "arc"
+s_col = "s_mm"
+t_col = "t_mm"
+t0 = 2.0
+cut_deg = 0
+axisym = false
+how = "arc length from floor centre along the x axis"
+
+[[case]]
+id = "erdogan2014_box_diagonal"
+model = "erdogan2014_box.fg"
+data = "repo:kernel/forge-thermo/data/benchmarks/erdogan2014_box_diagonal.csv"
+mode = "arc"
+s_col = "s_mm"
+t_col = "t_mm"
+t0 = 2.0
+cut_deg = 45
+axisym = false
+how = "arc length from floor centre along the diagonal"
+
+[[case]]
+id = "karabeyoglu2017_cone"
+model = "karabeyoglu2017_cone.fg"
+data = "s2_karabeyoglu2017_ps_cone_cyl_thickness.csv"
+filter = "part=cone"
+mode = "arc"
+s_col = "s_mm"
+t_col = "t_exp_mm"
+t0 = 2.0
+cut_deg = 0
+axisym = true
+how = "arc length from base centre, radial cut"
+
+[[case]]
+id = "karabeyoglu2017_cylinder"
+model = "karabeyoglu2017_cylinder.fg"
+data = "s2_karabeyoglu2017_ps_cone_cyl_thickness.csv"
+filter = "part=cylinder"
+mode = "arc"
+s_col = "s_mm"
+t_col = "t_exp_mm"
+t0 = 2.0
+cut_deg = 0
+axisym = true
+how = "arc length from base centre, radial cut"
+
+[[case]]
+id = "eksi2017_hemisphere"
+model = "eksi2017_hemisphere.fg"
+data = "s2_eksi2017_abs5mm_thickness.csv"
+filter = "part=hemisphere"
+mode = "index"
+s_col = "point"
+t_col = "t_exp_mm"
+t0 = 5.0
+cut_deg = 0
+axisym = true
+index_map = [1, 0, 20, 78.54]
+how = "point index mapped to arc length from the pole (1 -> 0, 20 -> rim)"
+
+[[case]]
+id = "eksi2017_cone"
+model = "eksi2017_cone.fg"
+data = "s2_eksi2017_abs5mm_thickness.csv"
+filter = "part=cone"
+mode = "index"
+s_col = "point"
+t_col = "t_exp_mm"
+t0 = 5.0
+cut_deg = 0
+axisym = true
+index_map = [1, 0, 10, 38.5, 22, 89.81]
+how = "point index mapped to arc length (1 centre, 10 base edge, 22 rim)"
+
+[[case]]
+id = "eksi2017_cylinder"
+model = "eksi2017_cylinder.fg"
+data = "s2_eksi2017_abs5mm_thickness.csv"
+filter = "part=cylinder"
+mode = "index"
+s_col = "point"
+t_col = "t_exp_mm"
+t0 = 5.0
+cut_deg = 0
+axisym = true
+index_map = [1, 0, 10, 50, 20, 100]
+how = "point index mapped to arc length (1 centre, 10 base edge ASSUMED, 20 rim)"
+
+[[case]]
+id = "atmani2020_plugonly_dry130"
+model = "atmani2020_plugonly.fg"
+data = "s2_atmani2020_plugonly_thickness.csv"
+mode = "arc_edge"
+s_col = "s_mm"
+t_col = "t_130C_dry_mm"
+t0 = 1.1
+cut_deg = 0
+axisym = false
+fold = true
+how = "arc length from the clamp (data folded about its midpoint), x axis"
+
+[[case]]
+id = "atmani2020_plugonly_lub130"
+model = "atmani2020_plugonly.fg"
+data = "s2_atmani2020_plugonly_thickness.csv"
+mode = "arc_edge"
+s_col = "s_mm"
+t_col = "t_130C_lub_mm"
+t0 = 1.1
+cut_deg = 0
+axisym = false
+fold = true
+how = "arc length from the clamp (data folded about its midpoint), x axis"
+
+[[case]]
+id = "atmani2020_plugonly_lub120"
+model = "atmani2020_plugonly.fg"
+data = "s2_atmani2020_plugonly_thickness.csv"
+mode = "arc_edge"
+s_col = "s_mm"
+t_col = "t_120C_lub_mm"
+t0 = 1.1
+cut_deg = 0
+axisym = false
+fold = true
+how = "arc length from the clamp (data folded about its midpoint), x axis"
+
+[[case]]
+id = "atmani2020_cup"
+model = "atmani2020_cup.fg"
+data = "s2_atmani2020_cup_thickness.csv"
+mode = "arc"
+s_col = "s_mm"
+t_col = "t_exp_mm"
+t0 = 1.1
+cut_deg = 0
+axisym = true
+fold_about = 100.0
+how = "arc length from bottom centre (data folded about s = 100)"
+
+[[case]]
+id = "varedi2024_hemisphere"
+model = "varedi2024_hemisphere.fg"
+data = "s3_varedi2024_thickness_fig13.csv"
+filter = "method=ultrasonic"
+mode = "radial"
+s_col = "y_mm"
+t_col = "t_mm"
+t0 = 3.0
+cut_deg = 90
+axisym = true
+how = "horizontal distance from the axis along y"
+
+[[case]]
+id = "buntinx2014_tray25"
+model = "buntinx2014_tray25.fg"
+data = "s2_buntinx2014_trays_mean_thickness.csv"
+filter = "tray=25"
+mode = "mean"
+s_col = "t0_um"
+t_col = "t_mean_um"
+t0 = 0.4
+cut_deg = 0
+axisym = false
+how = "mean wall over the part / t0, per table row"
+
+[[case]]
+id = "buntinx2014_tray50"
+model = "buntinx2014_tray50.fg"
+data = "s2_buntinx2014_trays_mean_thickness.csv"
+filter = "tray=50"
+mode = "mean"
+s_col = "t0_um"
+t_col = "t_mean_um"
+t0 = 0.4
+cut_deg = 0
+axisym = false
+how = "mean wall over the part / t0, per table row"
+
+[[case]]
+id = "buntinx2014_tray50R5"
+model = "buntinx2014_tray50R5.fg"
+data = "s2_buntinx2014_trays_mean_thickness.csv"
+filter = "tray=50R5"
+mode = "mean"
+s_col = "t0_um"
+t_col = "t_mean_um"
+t0 = 0.4
+cut_deg = 0
+axisym = false
+how = "mean wall over the part / t0, per table row"
+
+[[case]]
+id = "buntinx2014_tray75"
+model = "buntinx2014_tray75.fg"
+data = "s2_buntinx2014_trays_mean_thickness.csv"
+filter = "tray=75"
+mode = "mean"
+s_col = "t0_um"
+t_col = "t_mean_um"
+t0 = 0.8
+cut_deg = 0
+axisym = false
+how = "mean wall over the part / t0, per table row"
+
+[[case]]
+id = "erchiqui2003_bubble"
+model = "erchiqui2003_bubble.fg"
+data = "s1_erchiqui2003_abs_bubble.csv"
+mode = "bubble"
+s_col = "p_mpa"
+t_col = "h_m"
+h_scale = 1000.0
+t0 = 1.57
+a = 31.75
+cut_deg = 0
+axisym = true
+how = "pole height vs pressure at the 10 load steps"
+
+[[case]]
+id = "erchiqui2020_bubble"
+model = "erchiqui2020_bubble.fg"
+data = "s1_erchiqui2020_hdpe_pmsq_bubble.csv"
+mode = "bubble"
+s_col = "p_mpa"
+t_col = "h_cm"
+h_scale = 10.0
+t0 = 1.5
+a = 40.0
+cut_deg = 0
+axisym = true
+how = "pole height vs pressure at the 10 load steps"
+
+[[case]]
+id = "ref_inflation_neohookean"
+model = "ref_inflation_neohookean.fg"
+data = "s1_ref_inflation_neohookean.csv"
+mode = "ref_inflation"
+s_col = "P"
+t_col = "H"
+t0 = 1.0
+a = 50.0
+S = 0.5
+cut_deg = 0
+axisym = true
+how = "H and t_pole/t0 vs P at the 10 load steps"
+
+[[case]]
+id = "ref_inflation_mooney_rivlin"
+model = "ref_inflation_mooney_rivlin.fg"
+data = "s1_ref_inflation_mooney_rivlin_c2_c1_0p1.csv"
+mode = "ref_inflation"
+s_col = "P"
+t_col = "H"
+t0 = 1.0
+a = 50.0
+S = 0.5
+cut_deg = 0
+axisym = true
+how = "H and t_pole/t0 vs P at the 10 load steps"
+
+[[case]]
+id = "ref_inflation_ogden_abs"
+model = "ref_inflation_ogden_abs.fg"
+data = "s1_ref_inflation_ogden_abs_erchiqui_kandil.csv"
+mode = "ref_inflation"
+s_col = "P"
+t_col = "H"
+t0 = 1.0
+a = 50.0
+S = 1.0
+cut_deg = 0
+axisym = true
+how = "H and t_pole/t0 vs P at the 10 load steps"
+
+[[case]]
+id = "ref_inflation_ogden_hips"
+model = "ref_inflation_ogden_hips.fg"
+data = "s1_ref_inflation_ogden_hips_erchiqui_kandil.csv"
+mode = "ref_inflation"
+s_col = "P"
+t_col = "H"
+t0 = 1.0
+a = 50.0
+S = 1.0
+cut_deg = 0
+axisym = true
+how = "H and t_pole/t0 vs P at the 10 load steps"
+
+[[case]]
+id = "ref_corner_fill"
+model = "ref_corner_fill.fg"
+data = "s1_ref_corner_fill.csv"
+mode = "corner"
+s_col = "Pi"
+t_col = "R_over_d"
+t0 = 1.0
+d = 20.0
+G = 0.5
+cut_deg = 0
+axisym = false
+how = "R/d vs Pi at the load steps; wall t/t0 vs x/d at the end"

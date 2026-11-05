@@ -1,0 +1,8 @@
+# Analytic: plane-strain neo-Hookean strip pushed into a 90 deg corner, d = 20, t0 1, G 0.5, to Pi = p d/(G t0) = 3.
+# Reference: s1_ref_corner_fill.csv. A long V groove; the middle section is near plane strain. Notes: ref_corner_fill.notes.md.
+sketch v(on: xz) {
+  o = poly([(-14.142136, 0), (14.142136, 0), (0, -14.142136)])
+}
+groove = extrude(v.o, sym(100))
+law = thermo_material("corner-nh", law: [(ratio(0.5), ratio(2))], law_temperature: 150)
+part = thermoform(groove, t: 1, material: law, tool: "female", flange: 10, shrink: ratio(0), vent: false, temperature: 150, pressure: ratio(0.075))

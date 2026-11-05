@@ -1,0 +1,8 @@
+# Erchiqui & Gakwaya 2003, Rev. Eur. Elem. Finis 12(1):43: free inflation of ABS 1.57 mm, clamp radius 31.75, 143 C.
+# Pole height vs pressure. Notes: erchiqui2003_bubble.notes.md.
+sketch plan(on: xy) {
+  rim = circle((0, 0), 31.75)
+}
+cav = extrude(plan, -130)
+law = thermo_material("erchiqui2003_bubble", law: [(ratio(0.23959), ratio(2))], law_temperature: 143)
+part = thermoform(cav, t: 1.57, material: law, tool: "female", flange: 10, shrink: ratio(0), vent: false, temperature: 143, pressure: ratio(0.02257))

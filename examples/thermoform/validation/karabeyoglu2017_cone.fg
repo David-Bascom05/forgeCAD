@@ -1,0 +1,8 @@
+# Karabeyoglu, Eksi, Erdogan 2017, ASTRJ 11(3):139, CC BY: HIPS 825E 2.0 mm, ~150 C, female cone 200 x 100,
+# vacuum 720-730 mmHg, no plug. Assumptions: karabeyoglu2017_cone.notes.md.
+sketch plan(on: xy) {
+  rim = circle((0, 0), 100)
+}
+cav = extrude(plan, -100, taper: 14.036243deg)
+floor = fillet(edges(of: cav.end), 10)
+part = thermoform(cav, t: 2, material: "HIPS", tool: "female", flange: 40, shrink: ratio(0), vent: false, temperature: 150, pressure: ratio(0.096))
