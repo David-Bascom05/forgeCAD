@@ -1216,3 +1216,40 @@ fn the_agent_settings_live_in_the_settings_windows_agent_section() {
     drop(h);
     let _ = std::fs::remove_dir_all(dir);
 }
+
+#[test]
+fn settings_reset_all_keeps_the_agents_choices_and_trusted_folders() {
+    let Ok(mut h) = forge_render::gui::Headless::new((1400.0, 900.0), 1.0) else {
+        return;
+    };
+    let dir = scratch("reset");
+    std::fs::write(dir.join("plate.fg"), PART).unwrap();
+    h.step();
+    h.gui.open(dir.join("plate.fg").to_str().unwrap());
+    h.settle();
+    let a = forge_render::shell::agent_settings::AgentSettings {
+        kind: forge_render::shell::agent_settings::Kind::OpenAi,
+        model: "qwen".into(),
+        trusted: vec!["/mnt/usb/parts".into()],
+        ..Default::default()
+    };
+    a.write_extra(&mut h.gui.shell.settings.extra);
+    h.gui.shell.settings.dark = false;
+    h.gui.shell.open_agent_settings();
+    h.step();
+    h.step();
+    assert!(h.click("settings:reset-all"));
+    h.step();
+    h.step();
+    assert!(
+        h.gui.shell.settings.dark,
+        "the built-in sections are back to their defaults"
+    );
+    let kept = forge_render::shell::agent_settings::AgentSettings::from_extra(&h.gui.shell.settings.extra);
+    assert_eq!(
+        kept, a,
+        "Reset All keeps the agent's backend, model and trusted folders"
+    );
+    drop(h);
+    let _ = std::fs::remove_dir_all(dir);
+}

@@ -437,7 +437,12 @@ impl Shell {
                     let r = ui.button(egui::RichText::new("Reset All").font(sans(12.0)));
                     places.push(("settings:reset-all".into(), r.rect));
                     if r.clicked() {
-                        s = Settings::default();
+                        // the built-in sections' defaults back; a registered section's own table
+                        // (the Agent's backend, model, trusted folders) is its own, kept
+                        s = Settings {
+                            extra: std::mem::take(&mut s.extra),
+                            ..Settings::default()
+                        };
                         prefs.capture = None;
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
