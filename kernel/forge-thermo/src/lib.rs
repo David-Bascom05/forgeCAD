@@ -13,6 +13,7 @@ pub mod scale;
 pub mod sdf;
 pub mod simulated;
 pub mod stretch;
+pub mod surface;
 
 pub use build::{FormError, Formed, Report, Spec, Tool, analyse, form, plane_frame};
 pub use checks::{Violation, check};

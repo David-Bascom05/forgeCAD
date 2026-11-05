@@ -818,10 +818,15 @@ thermoform(SHAPE, t: T, material: "ABS" | MATERIAL, from: "outer"|"wall"|"inner"
   everywhere it is the modelled part to 0.2 %), `shrink` (the vendor's linear shrink, the mould's
   scale; and `band`, the shrink free contraction gives from where the part set, between its
   demould temperature and its glass transition, to 23 C: [low, high], for sheets with those on
-  record, null otherwise), `blank` (W, L, t, mass) and
+  record, null otherwise), `surface` (over the sheet on the mould: the largest principal stretch,
+  the largest areal stretch, the most uneven l1/l2), `blank` (W, L, t, mass) and
   `field`, how many points the wall is known at on the sheet on the mould inside the trim; `fg run F
   --json --field OUT.csv` writes them (x, y, z on the mould, wall, mm) and names the file, `--field
-  inline` puts them in the JSON.
+  inline` puts them in the JSON. `--print-art ART.ppm --print OUT.ppm` writes each thermoform's
+  distortion print: the flat sheet's image (a binary PPM, 0.5 mm a pixel, row 0 at the window's
+  least y) that forms into the artwork, ART spanning the trim's box seen along the pull; its
+  report's `print` names the file, its size, the window corner it starts at and how many pixels
+  land where the sheet bridges.
 
 The shop is data: the `thermo.*` values of the material library's records (kernel/forge-material;
 a project's materials/*.toml and the user's ~/.config/forgecad/materials/*.toml are searched

@@ -149,6 +149,22 @@ impl ThermoOut {
 }
 
 impl ThermoOut {
+    /// The flat sheet's print (distortion printing) that forms into `art`, an image spanning the
+    /// trim's box seen along the pull (row 0 at its least y), at `pixel` mm; None unformed.
+    pub fn print(&self, art: &Image, pixel: f64) -> Option<ft::surface::Print> {
+        let w = self.walls.as_ref()?;
+        let (lo, hi) = self.formed.report.trim_box;
+        let look = |x: f64, y: f64| {
+            let (u, v) = ((x - lo.x) / (hi.x - lo.x), (y - lo.y) / (hi.y - lo.y));
+            if !(0.0..1.0).contains(&u) || !(0.0..1.0).contains(&v) {
+                return None;
+            }
+            let (c, r) = ((u * art.width as f64) as usize, (v * art.height as f64) as usize);
+            art.rgb.get(r * art.width + c).copied()
+        };
+        ft::surface::print(w, &self.formed.frame, pixel, &look, [255; 3])
+    }
+
     pub fn json(&self) -> Json {
         let r = &self.formed.report;
         let (lo, hi) = r.trim_box;
@@ -257,6 +273,28 @@ impl ThermoOut {
             mass.push(("simulated_over_modelled", (s.mass.volume / m.volume).into()));
         }
         f.push(("mass", Json::obj(mass)));
+        // the surface's stretch (stage 4): over the sheet on the mould, the largest principal
+        // stretch, the largest areal stretch (1 / the thickness ratio) and the most uneven
+        if let Some(w) = &self.walls {
+            let sv = ft::surface::stretches(w, &self.formed.frame);
+            let on = |t: &[u32; 3]| t.iter().all(|&i| w.touched[i as usize]);
+            let (mut l1, mut area, mut uneven) = (0.0f64, 0.0f64, 1.0f64);
+            for (k, t) in w.tris.iter().enumerate() {
+                if on(t) {
+                    l1 = l1.max(sv.l1[k]);
+                    area = area.max(sv.l1[k] * sv.l2[k]);
+                    uneven = uneven.max(sv.l1[k] / sv.l2[k].max(1e-9));
+                }
+            }
+            f.push((
+                "surface",
+                Json::obj(vec![
+                    ("max_stretch", l1.into()),
+                    ("max_area_stretch", area.into()),
+                    ("max_anisotropy", uneven.into()),
+                ]),
+            ));
+        }
         // the part's shrink after forming: the vendor's figure, and the band free contraction
         // from where it set gives (amorphous sheets with a glass transition and demould on record)
         let m = forge_thermo::placeholder().material(&self.material).cloned();
@@ -1739,4 +1777,52 @@ fn nearest_face(f: &ft::Formed, shape: &Body, at: Point3) -> Option<forge_topo::
     }
     let (_, t) = best?;
     Some(shape.face(forge_topo::FaceId(f.mesh.face_of[t])).name)
+}
+
+/// An RGB image, row 0 first.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Image {
+    pub width: usize,
+    pub height: usize,
+    pub rgb: Vec<[u8; 3]>,
+}
+
+impl Image {
+    /// A binary PPM (P6, 8 bits).
+    pub fn from_ppm(b: &[u8]) -> Option<Image> {
+        let mut fields = vec![];
+        let mut at = 0;
+        while fields.len() < 4 {
+            while at < b.len() && b[at].is_ascii_whitespace() {
+                at += 1;
+            }
+            if b.get(at) == Some(&b'#') {
+                while at < b.len() && b[at] != b'\n' {
+                    at += 1;
+                }
+                continue;
+            }
+            let start = at;
+            while at < b.len() && !b[at].is_ascii_whitespace() {
+                at += 1;
+            }
+            fields.push(std::str::from_utf8(&b[start..at]).ok()?.to_string());
+        }
+        if fields[0] != "P6" || fields[3] != "255" {
+            return None;
+        }
+        let (width, height): (usize, usize) = (fields[1].parse().ok()?, fields[2].parse().ok()?);
+        let data = b.get(at + 1..at + 1 + width * height * 3)?;
+        Some(Image {
+            width,
+            height,
+            rgb: data.chunks(3).map(|c| [c[0], c[1], c[2]]).collect(),
+        })
+    }
+
+    pub fn to_ppm(&self) -> Vec<u8> {
+        let mut out = format!("P6\n{} {}\n255\n", self.width, self.height).into_bytes();
+        out.extend(self.rgb.iter().flatten());
+        out
+    }
 }

@@ -811,6 +811,32 @@ fn an_unevenly_heated_sheet_forms_as_measured() {
             at(&model, 120.0),
             err * 100.0
         );
+        if power == 0.0 {
+            // the surface's stretch (stage 4): Varedi's DIC, from first contact, 5.6 % at the pole
+            // and 72.8 % at the base's edge (the model's from the flat sheet, its drape included)
+            let sv = crate::surface::stretches(&st, &f.frame);
+            let near = |r0: f64, r1: f64| {
+                st.tris
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, t)| {
+                        let c = t.iter().fold(Vec3::ZERO, |s, &i| {
+                            s + (f.frame.point_to_local(st.nodes[i as usize]) - Point3::ORIGIN)
+                        }) * (1.0 / 3.0);
+                        let r = (c.x * c.x + c.y * c.y).sqrt();
+                        r >= r0 && r < r1 && t.iter().all(|&i| st.touched[i as usize])
+                    })
+                    .map(|(k, _)| sv.l1[k] - 1.0)
+                    .fold(0.0, f64::max)
+            };
+            let (pole, edge) = (near(0.0, 10.0), near(100.0, 125.0));
+            eprintln!(
+                "SURFACE strain, max principal: pole {:.1} % (measured 5.6), base edge {:.1} % (72.8)",
+                pole * 100.0,
+                edge * 100.0
+            );
+            assert!(edge > pole);
+        }
         let line: Vec<String> = data
             .iter()
             .map(|&(y, t)| format!("{y:.0}:{t:.2}/{:.2}", at(&model, y)))

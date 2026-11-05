@@ -277,11 +277,72 @@ fn run_src(file: &str, src: &str, args: &[String], build: bool, o: &mut Output) 
         if let Some(out) = opt(args, "--field") {
             put_fields(&mut j, &run, out);
         }
+        if let (Some(art), Some(out)) = (opt(args, "--print-art"), opt(args, "--print")) {
+            put_prints(&mut j, &run, art, out);
+        }
         o.json(&j);
     } else {
         o.stdout.push_str(&report::text(&run, src));
     }
     o.code = if run.ok() && wrote { 0 } else { 1 };
+}
+
+/// Each thermoform's distortion print of the artwork `art` (a PPM spanning the trim's box, seen
+/// along the pull) at 0.5 mm a pixel, written to `out` (or `out` less .ppm then -ID.ppm when there
+/// are several) and named in its report's `print`.
+fn put_prints(j: &mut Json, run: &forge_lang::Run, art: &str, out: &str) {
+    let Json::Obj(top) = j else { return };
+    let Some((_, Json::Arr(ts))) = top.iter_mut().find(|f| f.0 == "thermoforms") else {
+        return;
+    };
+    let image = std::fs::read(art)
+        .ok()
+        .and_then(|b| forge_lang::thermo::Image::from_ppm(&b));
+    let many = run.thermos.len() > 1;
+    for (t, o) in ts.iter_mut().zip(&run.thermos) {
+        let Json::Obj(f) = t else { continue };
+        let Some(image) = &image else {
+            f.push((
+                "print".into(),
+                Json::obj(vec![("error", format!("{art}: not a P6 PPM").into())]),
+            ));
+            continue;
+        };
+        let file = if many {
+            format!("{}-{}.ppm", out.trim_end_matches(".ppm"), o.id)
+        } else {
+            out.to_string()
+        };
+        let Some(p) = o.print(image, 0.5) else {
+            f.push((
+                "print".into(),
+                Json::obj(vec![("error", "no forming (walls: false)".into())]),
+            ));
+            continue;
+        };
+        let img = forge_lang::thermo::Image {
+            width: p.width,
+            height: p.height,
+            rgb: p.rgb.clone(),
+        };
+        let done = std::fs::write(&file, img.to_ppm());
+        f.push((
+            "print".into(),
+            Json::obj(vec![
+                (
+                    "file",
+                    match &done {
+                        Ok(()) => file.as_str().into(),
+                        Err(e) => format!("{file}: {e}").into(),
+                    },
+                ),
+                ("size_px", Json::Arr(vec![p.width.into(), p.height.into()])),
+                ("mm_per_px", p.pixel.into()),
+                ("corner", Json::Arr(vec![p.corner.0.into(), p.corner.1.into()])),
+                ("bridged_px", p.bridged.iter().filter(|b| **b).count().into()),
+            ]),
+        ));
+    }
 }
 
 /// Each thermoform's wall at each point, in its report's `field`: inline, or as CSV at `out` (or

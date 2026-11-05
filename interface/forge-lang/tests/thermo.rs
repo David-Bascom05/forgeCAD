@@ -327,3 +327,41 @@ fn the_shape_first_then_its_checks_reuses_the_stages() {
         assert_eq!(a.sim, b.sim);
     }
 }
+
+/// Distortion printing: the cover's flat sheet printed so it forms into a checkerboard over its
+/// trim box. The print is the window's size and carries the board's colours; the PPM reads back;
+/// the report gives the surface's stretches.
+#[test]
+fn a_cover_prints_an_artwork_that_forms_into_place() {
+    use forge_lang::thermo::Image;
+    let r = run(&src("cover"));
+    let o = r.thermos.first().expect("the cover's thermoform");
+    let n = 64;
+    let board = Image {
+        width: n,
+        height: n,
+        rgb: (0..n * n)
+            .map(|k| {
+                if (k / n / 8 + k % n / 8) % 2 == 0 {
+                    [0, 0, 0]
+                } else {
+                    [255, 255, 255]
+                }
+            })
+            .collect(),
+    };
+    let p = o.print(&board, 0.5).expect("a print");
+    assert!(p.width > 50 && p.height > 50);
+    assert_eq!(p.rgb.len(), p.width * p.height);
+    // some of the print is black, some white, some background (outside the trim's box)
+    for c in [[0, 0, 0], [255, 255, 255]] {
+        assert!(p.rgb.contains(&c), "{c:?}");
+    }
+    let back = Image::from_ppm(&board.to_ppm()).expect("reads back");
+    assert_eq!(back, board);
+    let j = o.json().to_string();
+    assert!(
+        j.contains("\"max_stretch\"") && j.contains("\"max_area_stretch\""),
+        "{j}"
+    );
+}
