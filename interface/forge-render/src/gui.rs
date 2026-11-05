@@ -3154,6 +3154,7 @@ impl Gui {
                 ap.mobility = a.mobility;
                 ap.bom = a.bom.clone();
                 ap.expects = a.expects.clone();
+                p.thermo.asm_files = a.thermo_files.clone();
                 if a.overlap.is_some() {
                     ap.overlap = a.overlap;
                     ap.checking = false;

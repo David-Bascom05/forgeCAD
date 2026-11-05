@@ -81,6 +81,8 @@ pub struct AsmView {
     /// Each top-level instance's pose: where a subassembly's origin is.
     pub poses: Vec<(String, forge_math::Frame)>,
     pub inspect: Arc<crate::gui::gui_inspect::InspectData>,
+    /// The part files with a thermoform, as the occurrences name them.
+    pub thermo_files: Vec<String>,
 }
 
 /// What one build gave: the panel's data, and the mesh when the part's shape changed.
@@ -319,6 +321,25 @@ fn sheet_report(j: &forge_agent::json::Json) -> Report {
 }
 
 /// The first sheet's flat solid (several sheets: each one's DXF, the first one shown).
+/// Each thermoform of a run as the app shows it: its row and what the view draws of it.
+pub fn thermo_views(run: &Run) -> Vec<(crate::shell::thermo::ThermoRow, crate::thermo_view::Gfx)> {
+    run.thermos
+        .iter()
+        .map(|o| {
+            let m = forge_thermo::placeholder().material(&o.material).cloned();
+            let draft = m.map_or(3.0, |m| {
+                let d = if o.tool == forge_thermo::Tool::Male {
+                    m.draft_male
+                } else {
+                    m.draft_female
+                };
+                d.to_degrees() as f32
+            });
+            crate::thermo_view::view(o, &run.solids, draft)
+        })
+        .collect()
+}
+
 fn flat_body(run: &Run) -> Option<forge_topo::Body> {
     run.sheets
         .iter()
@@ -919,22 +940,7 @@ fn work(
             flat,
             delta,
             sheets,
-            thermos: run
-                .thermos
-                .iter()
-                .map(|o| {
-                    let m = forge_thermo::placeholder().material(&o.material).cloned();
-                    let draft = m.map_or(3.0, |m| {
-                        let d = if o.tool == forge_thermo::Tool::Male {
-                            m.draft_male
-                        } else {
-                            m.draft_female
-                        };
-                        d.to_degrees() as f32
-                    });
-                    crate::thermo_view::view(o, &run.solids, draft)
-                })
-                .collect(),
+            thermos: thermo_views(&run),
             view,
             anchors,
             asm: None,
@@ -1132,6 +1138,12 @@ fn asm_view(
         links: out.links.clone(),
         link_at: out.link_at.clone(),
         poses: out.poses.clone(),
+        thermo_files: out
+            .part_docs
+            .iter()
+            .filter(|d| !d.1.thermos.is_empty())
+            .map(|d| d.0.clone())
+            .collect(),
         inspect: Arc::new(crate::gui::gui_inspect::InspectData {
             bodies: meshes.bodies.clone(),
             placed: exact.iter().map(|e| (e.0, e.1)).collect(),

@@ -791,6 +791,8 @@ pub struct PartSummary {
     pub props: Props,
     /// Each solid: the feature that made it, its material, its body.
     pub solids: Vec<(String, Option<Material>, std::sync::Arc<forge_topo::Body>)>,
+    /// Its thermoforms, by id.
+    pub thermos: Vec<String>,
     masses: std::sync::OnceLock<Result<Vec<MassProps>, String>>,
 }
 
@@ -802,6 +804,7 @@ impl PartSummary {
                 .into_iter()
                 .map(|(id, m, b)| (id, m, std::sync::Arc::new(b)))
                 .collect(),
+            thermos: ev.thermos.iter().map(|t| t.id.clone()).collect(),
             masses: Default::default(),
         }
     }

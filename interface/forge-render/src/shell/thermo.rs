@@ -115,7 +115,8 @@ impl Shell {
     /// The thickness map's legend and flags, and the step scrubber, over the view.
     pub(super) fn thermo_probes(&mut self, ctx: &egui::Context) {
         let Some(fg) = &mut self.fg else { return };
-        if fg.thermo.analysis != Analysis::Thickness || fg.thermos.is_empty() {
+        // an assembly's parts are drawn where they're placed: their maps are their own files'
+        if fg.thermo.analysis != Analysis::Thickness || fg.thermos.is_empty() || fg.asm.is_some() {
             return;
         }
         let Some((camera, size)) = self.camera else { return };

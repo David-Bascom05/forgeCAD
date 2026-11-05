@@ -97,6 +97,13 @@ pub struct ThermoUi {
     pub hover: Option<Body>,
     /// What the host marked in the view last (`picked`, `hover`).
     pub marked: Option<(Option<Body>, Option<Body>)>,
+    /// An assembly's part files with a thermoform, and the one whose results are up (the
+    /// selected occurrence's).
+    pub asm_files: Vec<String>,
+    pub asm_part: Option<String>,
+    /// Asked of the host: open this part file and run this there (an assembly edits its parts
+    /// in their own files).
+    pub want_open: Option<(String, Cmd)>,
 }
 
 /// One of a thermoform's bodies, as the browser has them.
@@ -362,13 +369,14 @@ pub fn convert_button(s: &Shell) -> Button {
 }
 
 impl Shell {
-    /// The part has a thermoform (or one is on its way): its tab shows.
+    /// The part has a thermoform (or one is on its way), or the assembly a part with one: its
+    /// tab shows.
     pub fn thermo_tab(&self) -> bool {
-        !self.is_asm()
-            && self
-                .fg
-                .as_ref()
-                .is_some_and(|f| f.thermo.converted || f.feats.iter().any(|x| x.kind == "thermoform"))
+        let Some(f) = self.fg.as_ref() else { return false };
+        if self.is_asm() {
+            return !f.thermo.asm_files.is_empty();
+        }
+        f.thermo.converted || f.feats.iter().any(|x| x.kind == "thermoform")
     }
 }
 
@@ -376,9 +384,12 @@ impl Shell {
 pub fn groups(s: &Shell) -> Vec<(&'static str, Vec<Button>, Vec<Button>)> {
     let fg = s.fg.as_ref();
     let has = fg.is_some_and(|f| !f.thermos.is_empty());
-    let modelled = fg
-        .and_then(|f| f.thermos.first())
-        .is_some_and(|r| r.simulated.is_some());
+    // an assembly's views are its parts' own: the part's state and colours are in its file
+    let asm = s.is_asm();
+    let modelled = !asm
+        && fg
+            .and_then(|f| f.thermos.first())
+            .is_some_and(|r| r.simulated.is_some());
     let ui = fg.map(|f| &f.thermo);
     let go = |c: Cmd, ok: bool| ok.then_some(Action::Fg(FgCmd::Thermo(c)));
     let on = |f: &dyn Fn(&ThermoUi) -> bool| ui.is_some_and(f);
@@ -440,7 +451,7 @@ pub fn groups(s: &Shell) -> Vec<(&'static str, Vec<Button>, Vec<Button>)> {
                 (
                     "Thickness Colours",
                     "draft",
-                    go(Cmd::Colours, has),
+                    go(Cmd::Colours, has && !asm),
                     on(&|u| u.analysis == Analysis::Thickness),
                 ),
             ],
@@ -476,6 +487,14 @@ impl FgPanel {
     }
 
     pub fn thermo_command(&mut self, c: Cmd) {
+        // in an assembly a part's thermoform is edited in the part's file
+        if self.asm.is_some()
+            && matches!(c, Cmd::Form | Cmd::Trim | Cmd::Plug | Cmd::Mould | Cmd::Vents)
+            && let Some(f) = &self.thermo.asm_part
+        {
+            self.thermo.want_open = Some((f.clone(), c));
+            return;
+        }
         let first = self.thermos.first().map(|r| r.id.clone());
         match c {
             Cmd::Convert => {
@@ -508,7 +527,7 @@ impl FgPanel {
             Cmd::Check => {
                 let u = &mut self.thermo;
                 u.check = !u.check;
-                if u.check && u.analysis == Analysis::None {
+                if u.check && u.analysis == Analysis::None && self.asm.is_none() {
                     u.analysis = Analysis::Thickness;
                 }
             }
@@ -1456,6 +1475,8 @@ impl Shell {
         };
         let v = self.view_rect;
         let w = CHECK_W;
+        // the panel is out of the shell while it draws: its own word on being an assembly
+        let asm = fg.asm.is_some();
         let mut close = false;
         let issues: Vec<(Severity, String, String)> = fg
             .issues
@@ -1528,112 +1549,114 @@ impl Shell {
                     w,
                     t.ink,
                 );
-                heading(ui, t, "Show on the part", w);
-                ui.horizontal(|ui| {
-                    ui.add_space(14.0);
-                    let mut k = match u.analysis {
-                        Analysis::Thickness => 0,
-                        Analysis::Draft => 1,
-                        Analysis::None => 2,
-                    };
-                    toggles(
-                        ui,
-                        t,
-                        &mut k,
-                        &["Thickness", "Draft & undercut", "Nothing"],
-                        "thermo:check:layer",
-                        places,
-                    );
-                    u.analysis = [Analysis::Thickness, Analysis::Draft, Analysis::None][k];
-                });
-                ui.horizontal(|ui| {
-                    ui.add_space(14.0);
-                    let mut k = usize::from(u.simulated);
-                    let can = r.simulated.is_some();
-                    ui.add_enabled_ui(can, |ui| {
+                if !asm {
+                    heading(ui, t, "Show on the part", w);
+                    ui.horizontal(|ui| {
+                        ui.add_space(14.0);
+                        let mut k = match u.analysis {
+                            Analysis::Thickness => 0,
+                            Analysis::Draft => 1,
+                            Analysis::None => 2,
+                        };
                         toggles(
                             ui,
                             t,
                             &mut k,
-                            &["Modelled", "Simulated wall"],
-                            "thermo:check:state",
+                            &["Thickness", "Draft & undercut", "Nothing"],
+                            "thermo:check:layer",
                             places,
                         );
+                        u.analysis = [Analysis::Thickness, Analysis::Draft, Analysis::None][k];
                     });
-                    u.simulated = can && k == 1;
-                });
-                heading(ui, t, "Probe", w);
-                ui.horizontal(|ui| {
-                    ui.add_space(14.0);
-                    let mut k = usize::from(u.probe);
-                    let was = k;
-                    toggles(
-                        ui,
-                        t,
-                        &mut k,
-                        &["Off", "Click the part"],
-                        "thermo:check:probe",
-                        places,
-                    );
-                    u.probe = k == 1;
-                    if u.probe && was == 0 {
-                        u.analysis = Analysis::Thickness;
+                    ui.horizontal(|ui| {
+                        ui.add_space(14.0);
+                        let mut k = usize::from(u.simulated);
+                        let can = r.simulated.is_some();
+                        ui.add_enabled_ui(can, |ui| {
+                            toggles(
+                                ui,
+                                t,
+                                &mut k,
+                                &["Modelled", "Simulated wall"],
+                                "thermo:check:state",
+                                places,
+                            );
+                        });
+                        u.simulated = can && k == 1;
+                    });
+                    heading(ui, t, "Probe", w);
+                    ui.horizontal(|ui| {
+                        ui.add_space(14.0);
+                        let mut k = usize::from(u.probe);
+                        let was = k;
+                        toggles(
+                            ui,
+                            t,
+                            &mut k,
+                            &["Off", "Click the part"],
+                            "thermo:check:probe",
+                            places,
+                        );
+                        u.probe = k == 1;
+                        if u.probe && was == 0 {
+                            u.analysis = Analysis::Thickness;
+                        }
+                        if !u.probes.is_empty()
+                            && button(ui, t, "Clear", false, "thermo:check:clear".into(), places)
+                        {
+                            u.probes.clear();
+                        }
+                    });
+                    for (k, (_, h)) in u.probes.iter().enumerate() {
+                        fact(
+                            ui,
+                            t,
+                            &format!("Probe {}", k + 1),
+                            &format!("{h:.2} mm"),
+                            w,
+                            t.ink,
+                        );
                     }
-                    if !u.probes.is_empty()
-                        && button(ui, t, "Clear", false, "thermo:check:clear".into(), places)
-                    {
-                        u.probes.clear();
-                    }
-                });
-                for (k, (_, h)) in u.probes.iter().enumerate() {
-                    fact(
-                        ui,
-                        t,
-                        &format!("Probe {}", k + 1),
-                        &format!("{h:.2} mm"),
-                        w,
-                        t.ink,
-                    );
+                    heading(ui, t, "Forming", w);
+                    ui.horizontal(|ui| {
+                        ui.add_space(14.0);
+                        if button(
+                            ui,
+                            t,
+                            if u.playing { "Pause" } else { "Play" },
+                            false,
+                            "thermo:check:play".into(),
+                            places,
+                        ) {
+                            u.playing = !u.playing;
+                            u.analysis = Analysis::Thickness;
+                        }
+                        let mut k = u.step.unwrap_or(n - 1).min(n - 1);
+                        ui.style_mut().visuals.selection.bg_fill = Color32::from_rgb(0x2f, 0x86, 0xd6);
+                        ui.spacing_mut().slider_width = 120.0;
+                        let s = ui.add(
+                            egui::Slider::new(&mut k, 0..=n - 1)
+                                .show_value(false)
+                                .trailing_fill(true),
+                        );
+                        ui.add_space(6.0);
+                        places.push(("thermo:check:step".into(), s.rect));
+                        if s.changed() {
+                            u.playing = false;
+                            u.analysis = Analysis::Thickness;
+                            u.step = (k + 1 < n).then_some(k);
+                        }
+                        ui.label(
+                            egui::RichText::new(format!(
+                                "{} / {n} · {}",
+                                k + 1,
+                                r.stages.get(k).copied().unwrap_or("")
+                            ))
+                            .font(mono(11.5))
+                            .color(t.ink2),
+                        );
+                    });
                 }
-                heading(ui, t, "Forming", w);
-                ui.horizontal(|ui| {
-                    ui.add_space(14.0);
-                    if button(
-                        ui,
-                        t,
-                        if u.playing { "Pause" } else { "Play" },
-                        false,
-                        "thermo:check:play".into(),
-                        places,
-                    ) {
-                        u.playing = !u.playing;
-                        u.analysis = Analysis::Thickness;
-                    }
-                    let mut k = u.step.unwrap_or(n - 1).min(n - 1);
-                    ui.style_mut().visuals.selection.bg_fill = Color32::from_rgb(0x2f, 0x86, 0xd6);
-                    ui.spacing_mut().slider_width = 120.0;
-                    let s = ui.add(
-                        egui::Slider::new(&mut k, 0..=n - 1)
-                            .show_value(false)
-                            .trailing_fill(true),
-                    );
-                    ui.add_space(6.0);
-                    places.push(("thermo:check:step".into(), s.rect));
-                    if s.changed() {
-                        u.playing = false;
-                        u.analysis = Analysis::Thickness;
-                        u.step = (k + 1 < n).then_some(k);
-                    }
-                    ui.label(
-                        egui::RichText::new(format!(
-                            "{} / {n} · {}",
-                            k + 1,
-                            r.stages.get(k).copied().unwrap_or("")
-                        ))
-                        .font(mono(11.5))
-                        .color(t.ink2),
-                    );
-                });
                 if let (Some(a), Some(b)) = (&r.modelled, &r.simulated) {
                     heading(ui, t, "Mass", w);
                     let kg = |m: &Masses| {
@@ -1652,49 +1675,52 @@ impl Shell {
                         t.ink,
                     );
                 }
-                heading(ui, t, "Checks", w);
-                let kinds = [
-                    "DraftTooLow",
-                    "Undercut",
-                    "RadiusTooTight",
-                    "DrawTooDeep",
-                    "Webbing",
-                    "ThinWall",
-                ];
-                let found = |k: &str| {
-                    issues
+                // an assembly has the part's numbers; its checks are the part's file's
+                if !asm {
+                    heading(ui, t, "Checks", w);
+                    let kinds = [
+                        "DraftTooLow",
+                        "Undercut",
+                        "RadiusTooTight",
+                        "DrawTooDeep",
+                        "Webbing",
+                        "ThinWall",
+                    ];
+                    let found = |k: &str| {
+                        issues
+                            .iter()
+                            .find(|i| i.1 == k || (k == "RadiusTooTight" && i.1 == "SharpEdge"))
+                    };
+                    let passed = kinds.iter().filter(|k| found(k).is_none()).count();
+                    let mut lines: Vec<(Color32, &str, String)> = kinds
                         .iter()
-                        .find(|i| i.1 == k || (k == "RadiusTooTight" && i.1 == "SharpEdge"))
-                };
-                let passed = kinds.iter().filter(|k| found(k).is_none()).count();
-                let mut lines: Vec<(Color32, &str, String)> = kinds
-                    .iter()
-                    .filter_map(|k| found(k))
-                    .map(|(sev, _, text)| {
-                        (
-                            if *sev == Severity::Error {
-                                t.error
-                            } else {
-                                super::fg::WARN
-                            },
-                            "warning",
-                            text.clone(),
-                        )
-                    })
-                    .collect();
-                if passed > 0 {
-                    let all = if passed == kinds.len() { "All" } else { "The other" };
-                    lines.push((
-                        green,
-                        "check",
-                        format!("{all} {passed} pass: draft, undercut, radii, draw, webbing, wall"),
-                    ));
-                }
-                for (c, icon, s) in lines {
-                    let g = ui.painter().layout(s, sans(11.0), c, w - 46.0);
-                    let (rr, _) = ui.allocate_exact_size(vec2(w, g.size().y + 3.0), Sense::hover());
-                    super::icons::draw(ui.painter(), rr.min + vec2(14.0, 0.0), 13.0, icon, 1.4, c);
-                    ui.painter().galley(rr.min + vec2(32.0, 0.0), g, c);
+                        .filter_map(|k| found(k))
+                        .map(|(sev, _, text)| {
+                            (
+                                if *sev == Severity::Error {
+                                    t.error
+                                } else {
+                                    super::fg::WARN
+                                },
+                                "warning",
+                                text.clone(),
+                            )
+                        })
+                        .collect();
+                    if passed > 0 {
+                        let all = if passed == kinds.len() { "All" } else { "The other" };
+                        lines.push((
+                            green,
+                            "check",
+                            format!("{all} {passed} pass: draft, undercut, radii, draw, webbing, wall"),
+                        ));
+                    }
+                    for (c, icon, s) in lines {
+                        let g = ui.painter().layout(s, sans(11.0), c, w - 46.0);
+                        let (rr, _) = ui.allocate_exact_size(vec2(w, g.size().y + 3.0), Sense::hover());
+                        super::icons::draw(ui.painter(), rr.min + vec2(14.0, 0.0), 13.0, icon, 1.4, c);
+                        ui.painter().galley(rr.min + vec2(32.0, 0.0), g, c);
+                    }
                 }
                 ui.add_space(6.0);
                 ui.horizontal(|ui| {
@@ -1702,7 +1728,8 @@ impl Shell {
                     if button(ui, t, "Export CSV…", false, "thermo:check:csv".into(), places) {
                         u.want_export = Some((r.id.clone(), Export::ThicknessCsv));
                     }
-                    if !issues.is_empty()
+                    if !asm
+                        && !issues.is_empty()
                         && button(ui, t, "Fixes…", false, "thermo:check:fixes".into(), places)
                     {
                         u.issues = !u.issues;

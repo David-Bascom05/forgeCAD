@@ -7,8 +7,16 @@ use std::sync::Mutex;
 /// Re-simulated fixes, as they come back: the fix's op as JSON text, and the thinnest wall.
 static RESIM: Mutex<Vec<(String, Option<f64>)>> = Mutex::new(Vec::new());
 
+/// An assembly's selected thermoformed part, run off the window's thread: its file, and its
+/// thermoforms' rows (None: running).
+static ASM_PART: Mutex<Option<(String, Option<Vec<crate::shell::thermo::ThermoRow>>)>> = Mutex::new(None);
+
+/// A thermoform command for a part opened from an assembly, run once its build is in.
+static AFTER_OPEN: Mutex<Option<crate::shell::thermo_ui::Cmd>> = Mutex::new(None);
+
 impl Gui {
     pub(super) fn thermo_host(&mut self) {
+        self.thermo_asm();
         let Some(p) = &mut self.shell.fg else { return };
         let dir = self
             .fg
@@ -96,6 +104,67 @@ impl Gui {
                 p.thermo.said = Some(said.clone());
             }
             self.shell.status = said;
+        }
+    }
+
+    /// In an assembly: the selected occurrence's part, if it has a thermoform, run for its rows;
+    /// an edit asked of it opens the part's file, and the command runs there.
+    fn thermo_asm(&mut self) {
+        let Some(p) = &mut self.shell.fg else { return };
+        if let Some((file, c)) = p.thermo.want_open.take() {
+            *AFTER_OPEN.lock().unwrap_or_else(|e| e.into_inner()) = Some(c);
+            self.open(&file);
+            return;
+        }
+        let Some(a) = &p.asm else {
+            // a part just opened from an assembly: the command, once its thermoform is in
+            if !p.thermos.is_empty()
+                && let Some(c) = AFTER_OPEN.lock().unwrap_or_else(|e| e.into_inner()).take()
+            {
+                p.thermo_command(c);
+            }
+            return;
+        };
+        let file = a
+            .selected
+            .as_ref()
+            .and_then(|k| a.occ_of(k).first().copied())
+            .map(|k| a.occ[k].file.clone())
+            .filter(|f| p.thermo.asm_files.contains(f))
+            .map(|f| match &a.dir {
+                Some(d) if !std::path::Path::new(&f).is_absolute() => d.join(&f).display().to_string(),
+                _ => f,
+            });
+        let mut got = ASM_PART.lock().unwrap_or_else(|e| e.into_inner());
+        if got.as_ref().map(|g| &g.0) != file.as_ref() {
+            *got = file.clone().map(|f| (f, None));
+            p.thermos.clear();
+            p.thermo.check = false;
+            if let Some(f) = file.clone() {
+                let waker = self.waker.clone();
+                std::thread::spawn(move || {
+                    let rows = std::fs::read_to_string(&f).ok().map(|text| {
+                        let opts = forge_lang::Options {
+                            dir: std::path::Path::new(&f).parent().map(|d| d.to_path_buf()),
+                            ..forge_lang::Options::default()
+                        };
+                        let run = forge_lang::run(&text, opts, Default::default()).0;
+                        crate::fg::thermo_views(&run).into_iter().map(|v| v.0).collect()
+                    });
+                    let mut got = ASM_PART.lock().unwrap_or_else(|e| e.into_inner());
+                    if let Some(g) = got.as_mut().filter(|g| g.0 == f) {
+                        g.1 = Some(rows.unwrap_or_default());
+                    }
+                    drop(got);
+                    waker();
+                });
+            }
+        }
+        p.thermo.asm_part = got.as_ref().map(|g| g.0.clone());
+        if let Some(rows) = got.as_ref().and_then(|g| g.1.as_ref())
+            && p.thermos != *rows
+        {
+            p.thermos = rows.clone();
         }
     }
 
