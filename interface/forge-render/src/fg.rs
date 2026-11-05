@@ -624,15 +624,34 @@ pub fn builders_running() -> usize {
     b.iter().filter(|x| x.0 == me).count()
 }
 
+/// What a build read, for the host's watch; a build that read nothing (all of it warm) leaves
+/// the last list. Only what forge-lang's loaders let through and read (or found missing):
+/// never a path they refused.
+fn note_deps(deps: &Reads, read: &forge_lang::deps::Deps) {
+    let files: Vec<std::path::PathBuf> = read
+        .0
+        .iter()
+        .filter(|(_, seen)| !matches!(seen, forge_lang::deps::Seen::There))
+        .map(|(p, _)| p.clone())
+        .collect();
+    if !files.is_empty() {
+        *deps.lock().unwrap_or_else(|e| e.into_inner()) = files;
+    }
+}
+
+/// The files a session's last build read: its parts, subassemblies, libraries, fonts, imports.
+pub type Reads = Arc<std::sync::Mutex<Vec<std::path::PathBuf>>>;
+
 fn work(
     dir: Option<std::path::PathBuf>,
     file: Option<String>,
-    jobs: Receiver<Job>,
-    gpus: Receiver<Gpu>,
+    deps: Reads,
+    // the texts to build, and a new GPU picture when one's asked for
+    (jobs, gpus): (Receiver<Job>, Receiver<Gpu>),
     out: Sender<Msg>,
     mut gpu: Option<Gpu>,
-    waker: Arc<dyn Fn() + Send + Sync>,
-    stop: Arc<AtomicBool>,
+    // the host's: woken when a result is in, and told to stop when the document closes
+    (waker, stop): (Arc<dyn Fn() + Send + Sync>, Arc<AtomicBool>),
 ) {
     let mut cache = Cache::default();
     let mut mesher = Mesher::default();
@@ -698,7 +717,9 @@ fn work(
                 expects: job.2,
                 ..Options::default()
             };
+            let watch = forge_lang::deps::watch();
             let (run, c) = forge_lang::run(&job.1, opts, std::mem::take(&mut cache));
+            note_deps(&deps, &watch.done());
             cache = c;
             if stop.load(Ordering::SeqCst) {
                 stopped(to_mesh, mesher_thread);
@@ -802,9 +823,11 @@ fn work(
             dir: dir.clone(),
             ..Options::default()
         };
-        let watch = opening.then(forge_lang::deps::watch);
+        let watch = forge_lang::deps::watch();
         let (run, c) = forge_lang::run(&job.1, opts, std::mem::take(&mut cache));
-        let read = watch.map(|w| w.done());
+        let all = watch.done();
+        note_deps(&deps, &all);
+        let read = opening.then_some(all);
         let anchors = run
             .anchors
             .as_ref()
@@ -1144,6 +1167,8 @@ pub struct Session {
     jobs: Sender<Job>,
     /// A new GPU picture asked for: the old one was let go to save memory.
     gpus: Sender<Gpu>,
+    /// What its last build read of the disk.
+    pub deps: Reads,
     built: Receiver<Msg>,
     /// The last text sent to the worker, and the last one back.
     pub seq: u64,
@@ -1188,6 +1213,7 @@ impl Session {
     ) -> Session {
         let (jobs, rx) = channel();
         let (gpus, gpu_rx) = channel();
+        let deps = Reads::default();
         let (tx, built) = channel();
         // fonts and imported files are found beside the part
         let dir = path
@@ -1198,8 +1224,8 @@ impl Session {
         let h = std::thread::Builder::new()
             .name("forge-fg".into())
             .spawn({
-                let file = path.clone();
-                move || work(dir, file, rx, gpu_rx, tx, gpu, waker, flag)
+                let (file, deps) = (path.clone(), deps.clone());
+                move || work(dir, file, deps, (rx, gpu_rx), tx, gpu, (waker, flag))
             })
             .expect("a thread");
         {
@@ -1216,6 +1242,7 @@ impl Session {
             tags: vec![],
             jobs,
             gpus,
+            deps,
             built,
             seq: 0,
             done: 0,

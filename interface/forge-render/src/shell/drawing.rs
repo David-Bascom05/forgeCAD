@@ -284,6 +284,8 @@ pub struct DrawingEnv {
     pub progress: Option<(usize, usize)>,
     started: std::time::Instant,
     previewing: bool,
+    /// The files its last make read (its models and theirs), for the host's watch.
+    pub deps: std::sync::Arc<std::sync::Mutex<Vec<std::path::PathBuf>>>,
     pub sheet: usize,
     /// Screen pixels per sheet millimetre; where the sheet's origin (lower left) is on screen.
     zoom: f32,
@@ -342,6 +344,7 @@ impl DrawingEnv {
             progress: None,
             started: std::time::Instant::now(),
             previewing: false,
+            deps: Default::default(),
             sheet: 0,
             zoom: 2.0,
             origin: pos2(0.0, 0.0),
@@ -391,10 +394,22 @@ impl DrawingEnv {
             .and_then(|p| p.parent().map(|d| d.to_path_buf()))
             .unwrap_or_default();
         let file = dir.join(std::path::Path::new(&self.path).file_name().unwrap_or_default());
+        let deps = self.deps.clone();
         std::thread::spawn(move || {
+            let watch = forge_lang::deps::watch();
             let d = regen::shown(&src, &file, &mut |s| {
                 let _ = send.send(Made::Part(s));
             });
+            let read: Vec<std::path::PathBuf> = watch
+                .done()
+                .0
+                .into_iter()
+                .filter(|(_, seen)| !matches!(seen, forge_lang::deps::Seen::There))
+                .map(|(p, _)| p)
+                .collect();
+            if !read.is_empty() {
+                *deps.lock().unwrap_or_else(|e| e.into_inner()) = read;
+            }
             let _ = send.send(Made::Done(d));
         });
         self.pending = Some(recv);

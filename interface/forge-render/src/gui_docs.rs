@@ -478,40 +478,32 @@ fn read_file(p: &Path, max: u64) -> Option<Vec<u8>> {
     Some(b)
 }
 
-/// A file as last seen: its length and when it was written.
-type Stamp = Option<(u64, std::time::SystemTime)>;
+/// A file as last seen: its length, when it was written, and its content's hash (two writes in
+/// one tick of the file clock, the same length, still differ); None: not there.
+type Seen = Option<(u64, std::time::SystemTime, u128)>;
 
-fn stamp(p: &Path) -> Stamp {
+/// Past this a file is told apart by its length and time alone.
+const HASH_MAX: u64 = 16 << 20;
+
+fn look(p: &Path) -> Seen {
     let m = std::fs::symlink_metadata(p).ok()?;
     if !m.is_file() {
         return None;
     }
-    Some((m.len(), m.modified().ok()?))
+    let hash = read_file(p, HASH_MAX).map_or(0, |b| crate::cache::hash(&[&b]));
+    Some((m.len(), m.modified().ok()?, hash))
 }
 
-/// How deep below an open document's folder its parts are looked for, and how many at most.
-const DEP_DEPTH: usize = 3;
-const DEP_MAX: usize = 2000;
-
-/// The .fg files in a folder and below it.
-fn fg_files(dir: &Path) -> Vec<PathBuf> {
-    let mut out = vec![];
-    let mut todo = vec![(dir.to_path_buf(), 0)];
-    while let Some((d, depth)) = todo.pop() {
-        let Ok(rd) = std::fs::read_dir(&d) else { continue };
-        for e in rd.flatten() {
-            let p = e.path();
-            let Ok(ft) = e.file_type() else { continue };
-            if ft.is_dir() && depth < DEP_DEPTH {
-                todo.push((p, depth + 1));
-            } else if ft.is_file() && p.extension().is_some_and(|x| x == "fg") {
-                out.push(p);
-                if out.len() >= DEP_MAX {
-                    return out;
-                }
-            }
-        }
-    }
+/// The .fg files in a folder (not below it): where an agent's new part shows up.
+fn fg_in(dir: &Path) -> Vec<PathBuf> {
+    let Ok(rd) = std::fs::read_dir(dir) else {
+        return vec![];
+    };
+    let mut out: Vec<PathBuf> = rd
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.extension().is_some_and(|x| x == "fg") && p.is_file())
+        .collect();
     out.sort();
     out
 }
@@ -520,35 +512,40 @@ fn folder_of(path: &str) -> Option<PathBuf> {
     std::fs::canonicalize(path).ok()?.parent().map(Path::to_path_buf)
 }
 
+/// What's watched: each open document's file and what its last build read, and the folders
+/// the documents are in.
+#[derive(Clone, Default, PartialEq)]
+struct Watched {
+    files: Vec<PathBuf>,
+    dirs: Vec<PathBuf>,
+}
+
+/// What it all looked like: each file, and each folder's .fg files.
+#[derive(Clone, Default, PartialEq)]
+struct Sight {
+    files: HashMap<PathBuf, Seen>,
+    dirs: HashMap<PathBuf, Vec<PathBuf>>,
+}
+
+fn sight(w: &Watched) -> Sight {
+    Sight {
+        files: w.files.iter().map(|p| (p.clone(), look(p))).collect(),
+        dirs: w.dirs.iter().map(|d| (d.clone(), fg_in(d))).collect(),
+    }
+}
+
 /// What the open documents read on disk, as last looked at; a thread that wakes the window when
 /// any of it changes.
 #[derive(Default)]
 pub struct Watch {
-    seen: HashMap<PathBuf, Stamp>,
-    /// The folders the last look was in.
-    looked: Vec<PathBuf>,
-    /// The folders looked in, shared with the thread.
-    dirs: Arc<std::sync::Mutex<Vec<PathBuf>>>,
+    seen: Sight,
+    /// What's watched, shared with the thread.
+    watched: Arc<std::sync::Mutex<Watched>>,
     /// The thread saw a change since the last look.
     changed: Arc<std::sync::atomic::AtomicBool>,
     started: bool,
-    /// An agent's turn is going on: a new .fg in any open document's folder opens in a tab.
+    /// An agent's turn is going on: a new .fg in an open document's folder opens in a tab.
     pub agent: bool,
-}
-
-/// What the thread compares: every .fg file under the folders, and its stamp.
-fn sweep(dirs: &[PathBuf]) -> Vec<(PathBuf, Stamp)> {
-    let mut all: Vec<(PathBuf, Stamp)> = dirs
-        .iter()
-        .flat_map(|d| fg_files(d))
-        .map(|p| {
-            let s = stamp(&p);
-            (p, s)
-        })
-        .collect();
-    all.sort_by(|a, b| a.0.cmp(&b.0));
-    all.dedup_by(|a, b| a.0 == b.0);
-    all
 }
 
 impl Watch {
@@ -558,22 +555,20 @@ impl Watch {
             return;
         }
         self.started = true;
-        let (dirs, changed) = (self.dirs.clone(), self.changed.clone());
+        let (watched, changed) = (self.watched.clone(), self.changed.clone());
         let _ = std::thread::Builder::new()
             .name("forge-watch".into())
             .spawn(move || {
-                let mut was: Option<Vec<(PathBuf, Stamp)>> = None;
+                let mut was: Option<(Watched, Sight)> = None;
                 loop {
                     std::thread::sleep(std::time::Duration::from_millis(500));
-                    let now = {
-                        let d = dirs.lock().unwrap_or_else(|e| e.into_inner()).clone();
-                        sweep(&d)
-                    };
-                    if was.as_ref().is_some_and(|w| *w != now) {
+                    let w = watched.lock().unwrap_or_else(|e| e.into_inner()).clone();
+                    let now = sight(&w);
+                    if was.as_ref().is_some_and(|(ww, s)| *ww == w && *s != now) {
                         changed.store(true, std::sync::atomic::Ordering::Relaxed);
                         waker();
                     }
-                    was = Some(now);
+                    was = Some((w, now));
                 }
             });
     }
@@ -590,24 +585,52 @@ impl Gui {
         self.watch.agent = on;
     }
 
-    /// What the open documents are in and read, on disk.
-    fn watched_dirs(&self) -> Vec<PathBuf> {
-        let mut d: Vec<PathBuf> = self
-            .docs
-            .iter()
-            .filter_map(|d| folder_of(d.path.as_deref()?))
-            .collect();
-        d.sort();
-        d.dedup();
-        d
+    /// A document's own file and what its last build read.
+    fn reads_of(&self, i: usize) -> Vec<PathBuf> {
+        let (fg, dwg) = if i == self.active {
+            (self.fg.as_ref(), self.shell.drawing.as_ref())
+        } else {
+            let Some(st) = self.docs[i].state.as_ref() else {
+                return vec![];
+            };
+            (st.gui.fg.as_ref(), st.shell.drawing.as_ref())
+        };
+        let mut out: Vec<PathBuf> = vec![];
+        if let Some(s) = fg {
+            out.extend(s.deps.lock().unwrap_or_else(|e| e.into_inner()).iter().cloned());
+        }
+        if let Some(d) = dwg {
+            out.extend(d.deps.lock().unwrap_or_else(|e| e.into_inner()).iter().cloned());
+        }
+        out
     }
 
-    /// The frame's look at the disk: only when the thread saw something change.
+    fn watched(&self) -> Watched {
+        let mut files: Vec<PathBuf> = vec![];
+        let mut dirs: Vec<PathBuf> = vec![];
+        for (i, d) in self.docs.iter().enumerate() {
+            if let Some(p) = d.path.as_deref() {
+                files.push(std::fs::canonicalize(p).unwrap_or_else(|_| p.into()));
+                dirs.extend(folder_of(p));
+            }
+            files.extend(self.reads_of(i));
+        }
+        files.sort();
+        files.dedup();
+        dirs.sort();
+        dirs.dedup();
+        Watched { files, dirs }
+    }
+
+    /// The frame's look at the disk: when the thread saw something change, or what's watched did.
     pub(super) fn watch_frame(&mut self) {
-        let dirs = self.watched_dirs();
-        // a folder not looked in yet: what's in it now is what's there, not new
-        let moved = dirs != self.watch.looked;
-        *self.watch.dirs.lock().unwrap_or_else(|e| e.into_inner()) = dirs;
+        let w = self.watched();
+        let moved = {
+            let mut shared = self.watch.watched.lock().unwrap_or_else(|e| e.into_inner());
+            let moved = *shared != w;
+            *shared = w;
+            moved
+        };
         if !self.docs.is_empty() {
             self.watch.start(self.waker.clone());
         }
@@ -622,24 +645,31 @@ impl Gui {
     }
 
     /// Looks at what the open documents read: a document changed on disk (and not here) reads
-    /// it again; an assembly or drawing whose parts changed builds again; a new .fg made in an
+    /// it again; one whose parts, models or imports changed builds again; a new .fg made in an
     /// agent's turn opens. The file watch calls this; so do saves, at once.
     pub fn check_files(&mut self) {
-        let dirs = self.watched_dirs();
-        let now: HashMap<PathBuf, Stamp> = sweep(&dirs).into_iter().collect();
-        let looked = std::mem::replace(&mut self.watch.looked, dirs);
-        let mut changed: Vec<PathBuf> = vec![];
-        let mut made: Vec<PathBuf> = vec![];
-        for (p, s) in &now {
-            match self.watch.seen.get(p) {
-                Some(was) if was == s => {}
-                Some(_) => changed.push(p.clone()),
-                // new in a folder looked in before: made since
-                None if looked.iter().any(|d| p.starts_with(d)) => made.push(p.clone()),
-                None => {}
-            }
-        }
-        self.watch.seen = now;
+        let w = self.watched();
+        let now = sight(&w);
+        let was = std::mem::replace(&mut self.watch.seen, now.clone());
+        // a file newly watched (a build read it first now) is what it is, not a change
+        let changed: Vec<PathBuf> = now
+            .files
+            .iter()
+            .filter(|(p, s)| was.files.get(*p).is_some_and(|old| old != *s))
+            .map(|(p, _)| p.clone())
+            .collect();
+        // new in a folder looked in before: made since
+        let mut made: Vec<PathBuf> = now
+            .dirs
+            .iter()
+            .filter_map(|(d, list)| Some((list, was.dirs.get(d)?)))
+            .flat_map(|(list, old)| {
+                list.iter()
+                    .filter(|p| !old.contains(p))
+                    .cloned()
+                    .collect::<Vec<_>>()
+            })
+            .collect();
         made.sort();
         for p in &changed {
             self.file_changed(p);
@@ -655,7 +685,8 @@ impl Gui {
         }
     }
 
-    /// One file changed on disk: the documents it is, or that read it, made again.
+    /// One file changed on disk: the document it is made again from it, and those that read it
+    /// built again.
     fn file_changed(&mut self, file: &Path) {
         let text = read_file(file, forge_lang::asm::LIMIT).and_then(|b| String::from_utf8(b).ok());
         for i in 0..self.docs.len() {
@@ -663,7 +694,7 @@ impl Gui {
                 continue;
             };
             let own = std::fs::canonicalize(&path).is_ok_and(|p| p == file);
-            let under = folder_of(&path).is_some_and(|d| file.starts_with(d));
+            let reads = !own && self.reads_of(i).iter().any(|r| r == file);
             let name = self.docs[i].title.clone();
             let (session, drawing, status) = self.doc_parts(i);
             if own {
@@ -685,9 +716,8 @@ impl Gui {
                 {
                     d.reload(text.clone());
                 }
-            } else if under {
-                // a part of an assembly, a drawing's model
-                if let Some(s) = session.filter(|s| crate::fg::is_assembly(&s.src)) {
+            } else if reads {
+                if let Some(s) = session {
                     s.rebuild();
                 } else if let Some(d) = drawing {
                     d.reload(d.src.clone());

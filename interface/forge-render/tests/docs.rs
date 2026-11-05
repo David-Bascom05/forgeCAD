@@ -403,3 +403,39 @@ fn what_follows_an_open_is_for_the_document_it_came_from() {
     assert!(!h.gui.documents()[0].dirty);
     assert_eq!(std::fs::read_to_string(&bar_f).unwrap(), bar(100.0));
 }
+
+#[test]
+fn only_what_a_document_read_builds_it_again() {
+    let Some(mut h) = headless() else { return };
+    let d = scratch("deps");
+    let [plate, bar_f, frame] = files(&d);
+    open_in(&mut h, &frame);
+    h.gui.check_files();
+    let seq = h.gui.fg.as_ref().unwrap().seq;
+    // the plate is beside it but not in it: left alone
+    std::fs::write(&plate, PLATE.replace("t = 6", "t = 60")).unwrap();
+    h.gui.check_files();
+    assert_eq!(h.gui.fg.as_ref().unwrap().seq, seq);
+    // the bar is in it: rewritten the same length at once, its content tells
+    std::fs::write(&bar_f, bar(101.0)).unwrap();
+    h.gui.check_files();
+    assert!(h.gui.fg.as_ref().unwrap().seq > seq);
+    ready(&mut h);
+}
+
+#[test]
+fn a_same_length_rewrite_is_seen() {
+    let Some(mut h) = headless() else { return };
+    let d = scratch("same");
+    let [plate, ..] = files(&d);
+    open_in(&mut h, &plate);
+    h.gui.check_files();
+    for v in ["7", "8", "9"] {
+        std::fs::write(&plate, PLATE.replace("t = 6", &format!("t = {v}"))).unwrap();
+        h.gui.check_files();
+        assert!(
+            h.gui.fg.as_ref().unwrap().src.contains(&format!("t = {v}")),
+            "{v}"
+        );
+    }
+}
