@@ -100,7 +100,10 @@ pub enum Edge {
 /// What the chrome was asked for. The host does it.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Action {
+    /// An untitled Forge part, in a tab.
     New,
+    /// An .fc part: the host asks where, and it opens in a tab.
+    NewFc,
     Open,
     Undo,
     Redo,
@@ -1581,6 +1584,7 @@ impl Shell {
             let model_open = self.fg.is_some() && self.drawing.is_none();
             let mut items = vec![
                 ("New", Some(Action::New)),
+                ("New .fc Part...", Some(Action::NewFc)),
                 ("New Sheet Metal", Some(Action::Sheet(sheet::SheetCmd::NewPart))),
                 ("Open...", Some(Action::Open)),
             ];

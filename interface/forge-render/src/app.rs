@@ -289,11 +289,11 @@ impl App {
                         let _ = proxy.send_event(());
                     });
                 }
-                Action::New | Action::Open | Action::Sheet(crate::shell::sheet::SheetCmd::NewPart) => {
+                Action::NewFc | Action::Open | Action::Sheet(crate::shell::sheet::SheetCmd::NewPart) => {
                     let (send, recv) = std::sync::mpsc::channel();
                     self.dialog = Some(recv);
                     let proxy = self.proxy.clone();
-                    let new = matches!(a, Action::New);
+                    let new = matches!(a, Action::NewFc);
                     let sheet = matches!(a, Action::Sheet(_));
                     std::thread::spawn(move || {
                         let chosen = if sheet {
@@ -314,11 +314,10 @@ impl App {
     }
 }
 
-/// The system's dialog for where a new part goes; it starts as an empty file.
+/// The system's dialog for where a new .fc part goes; it starts as an empty file.
 fn new_dialog() -> Option<String> {
     let f = rfd::FileDialog::new()
         .add_filter("Parts", &["fc"])
-        .add_filter("Forge parts", &["fg"])
         .set_file_name("Part.fc")
         .save_file()?;
     let f = if f.extension().is_some() {
