@@ -316,7 +316,7 @@ fn choice_row(
 
 /// What the dialog was asked to do this frame.
 #[derive(Clone, Copy, PartialEq)]
-enum Asked {
+pub(super) enum Asked {
     Nothing,
     Ok,
     Again,
@@ -398,7 +398,7 @@ impl Shell {
         self.fg = Some(fg);
     }
 
-    fn fg_dialog_body(
+    pub(super) fn fg_dialog_body(
         ui: &mut egui::Ui,
         t: &super::theme::Theme,
         fg: &super::fg::FgPanel,

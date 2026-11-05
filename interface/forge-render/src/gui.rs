@@ -3008,6 +3008,7 @@ impl Gui {
                     flags,
                 );
                 ap.poses = a.poses.clone();
+                ap.link_at = a.link_at.clone();
                 ap.grounded = a.grounded.clone();
                 ap.joints = a.joints.clone();
                 ap.mobility = a.mobility;
@@ -3283,6 +3284,8 @@ impl Gui {
         let (shown, picked) = (a.shown_mask(), a.picked_mask());
         let pastel = self.shell.view.pastel;
         let flagged = !a.highlight.is_empty();
+        // the two parts the relationship under the pointer ties
+        let tied: Vec<usize> = a.hover_link.map(|l| a.tied(l)).unwrap_or_default();
         for (i, o) in occ.iter().enumerate() {
             let Some(k) = o.placement else { continue };
             let top = o.path.split('.').next().unwrap_or(&o.path);
@@ -3298,8 +3301,12 @@ impl Gui {
             }
             scene.placements[k].tint = if picked.get(i).copied().unwrap_or(false) {
                 crate::fg::PICKED_TINT
+            } else if tied.contains(&i) {
+                crate::shell::asmglyph::TIED_TINT
             } else if flagged && a.flagged(&o.path) {
                 crate::fg::CLASH_TINT
+            } else if a.dimmed(i) {
+                crate::shell::asmglyph::DIM_TINT
             } else {
                 crate::palette::part_colour(&o.file, pastel)
             };

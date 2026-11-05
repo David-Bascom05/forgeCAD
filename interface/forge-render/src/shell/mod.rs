@@ -3,6 +3,8 @@
 //! desktop app and the browser share it. Buttons never change the document themselves: the host
 //! turns an action into a tool call.
 
+pub mod asmglyph;
+pub mod asmpart;
 pub mod asmtools;
 pub mod content;
 pub mod dialog;
@@ -185,6 +187,8 @@ pub enum FgCmd {
     FreeMove,
     FreeRotate,
     ContentCenter,
+    /// The joints' and constraints' glyphs in the view, on or off.
+    Relationships,
 }
 
 /// One row of the tree.
@@ -595,6 +599,11 @@ impl Shell {
             FgCmd::Bom => {
                 if let Some(a) = &mut fg.asm {
                     a.bom_open = !a.bom_open;
+                }
+            }
+            FgCmd::Relationships => {
+                if let Some(a) = &mut fg.asm {
+                    a.glyphs.hidden = !a.glyphs.hidden;
                 }
             }
             FgCmd::Explode => {

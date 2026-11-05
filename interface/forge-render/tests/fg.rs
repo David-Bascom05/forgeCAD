@@ -290,7 +290,8 @@ fn tree_actions_are_typed_ops_and_a_refusal_is_typed() {
     h.gui
         .fg_apply(Op::AddFeature {
             before: None,
-            text: "rim = chamfer(edges(of: dent, shape: \"circle\", crease: \"convex\"), t / n / n / n)".into(),
+            text: "rim = chamfer(edges(of: dent, shape: \"circle\", crease: \"convex\"), t / n / n / n)"
+                .into(),
         })
         .unwrap();
     h.step();

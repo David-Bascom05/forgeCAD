@@ -75,6 +75,8 @@ pub struct AsmView {
     /// Every occurrence and link through subassemblies, as the documents write them.
     pub insts: Vec<forge_lang::asm::InstOut>,
     pub links: Vec<forge_lang::asm::LinkOut>,
+    /// Where each link's two ends are in the world, solved.
+    pub link_at: Vec<[Option<forge_math::Frame>; 2]>,
     /// Each top-level instance's pose: where a subassembly's origin is.
     pub poses: Vec<(String, forge_math::Frame)>,
     pub inspect: Arc<crate::gui::gui_inspect::InspectData>,
@@ -921,6 +923,7 @@ fn asm_view(
         grounded: out.grounded.clone(),
         insts: out.insts.clone(),
         links: out.links.clone(),
+        link_at: out.link_at.clone(),
         poses: out.poses.clone(),
         inspect: Arc::new(crate::gui::gui_inspect::InspectData {
             bodies: meshes.bodies.clone(),

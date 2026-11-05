@@ -257,7 +257,11 @@ fn template(t: &mut FgTool, id: &str) -> Option<String> {
     for (k, w) in t.words.iter_mut().enumerate() {
         w.1 = format!("zzw{k}");
     }
-    let mut counts: Vec<usize> = t.slots.iter().map(|s| usize::from(!s.picks.is_empty() || !s.optional)).collect();
+    let mut counts: Vec<usize> = t
+        .slots
+        .iter()
+        .map(|s| usize::from(!s.picks.is_empty() || !s.optional))
+        .collect();
     for _ in 0..12 {
         for (k, s) in t.slots.iter_mut().enumerate() {
             s.picks = (0..counts[k]).map(|j| format!("zzs{k}_{j}")).collect();
@@ -309,7 +313,9 @@ impl FgTool {
     /// The tool's form for statement `id` as the part writes it, to edit it in its place.
     pub fn edit(id: &str, src: &str) -> Result<FgTool, ToolError> {
         let Some((func, args)) = super::sheet::call_args(src, id) else {
-            return Err(refuse(format!("{id} isn't written as one call, so no dialog holds it")));
+            return Err(refuse(format!(
+                "{id} isn't written as one call, so no dialog holds it"
+            )));
         };
         let mut seen = false;
         // of every reading, the one with the fewest values that aren't plain numbers: `sym(6)` is a
@@ -317,7 +323,9 @@ impl FgTool {
         let mut best: Option<(usize, FgTool)> = None;
         for kind in KINDS {
             for mut t in forms(kind) {
-                let Some(text) = template(&mut t, id) else { continue };
+                let Some(text) = template(&mut t, id) else {
+                    continue;
+                };
                 let Some((tf, targs)) = super::sheet::call_args(&text, id) else {
                     continue;
                 };
@@ -390,7 +398,9 @@ impl FgTool {
             return Ok(t);
         }
         Err(refuse(if seen {
-            format!("{id} = {func}(..) is written in a form its dialog doesn't write (only the .fg file's text holds it)")
+            format!(
+                "{id} = {func}(..) is written in a form its dialog doesn't write (only the .fg file's text holds it)"
+            )
         } else {
             format!("{func} has no dialog in the app yet")
         }))

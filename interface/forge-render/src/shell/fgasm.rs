@@ -55,6 +55,12 @@ pub enum NodeKind {
     /// One statement's occurrences in a loop: `stud_a ×4`.
     Pattern,
     Occ,
+    /// A part occurrence's own Origin folder and its items, as the part's browser has them.
+    PartOrigin,
+    PartOriginItem(usize),
+    /// One of a part occurrence's features (or a loop's group of them), its key
+    /// `<occurrence>>f:<feature>`.
+    Feature,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -359,6 +365,18 @@ impl AsmTree {
         links: &[LinkOut],
         flags: &Flags,
     ) -> AsmTree {
+        AsmTree::build_full(occ, dir, insts, links, flags, &HashMap::new())
+    }
+
+    /// With each part file's features read so far, under its occurrences.
+    pub fn build_full(
+        occ: &[OccRow],
+        dir: Option<&Path>,
+        insts: &[InstOut],
+        links: &[LinkOut],
+        flags: &Flags,
+        feats: &HashMap<String, PartFeats>,
+    ) -> AsmTree {
         let mut t = AsmTree {
             home: vec![usize::MAX; occ.len()],
             ..AsmTree::default()
@@ -440,6 +458,7 @@ impl AsmTree {
             holds: &holds,
             index: &index,
             flags,
+            feats,
         };
         let top = t.push(
             None,
@@ -715,7 +734,66 @@ impl AsmTree {
         }
         self.nodes[n].flag = cx.flags.occ.get(&i.path).copied();
         self.held(cx, n, &i.path);
+        // the file as the solve resolved it, which the features are read by
+        let file = cx.index.get(i.path.as_str()).map(|&k| cx.occ[k].file.as_str());
+        match file.and_then(|f| cx.feats.get(f)) {
+            Some(Ok(feats)) => self.part_rows(n, &i.path, feats, owner),
+            Some(Err(e)) => {
+                let k = self.push(
+                    Some(n),
+                    format!("{}>f:", i.path),
+                    "Features not read".into(),
+                    e.clone(),
+                    NodeKind::Feature,
+                    "warning",
+                    owner,
+                );
+                self.nodes[k].flag = Some(Flag::Warning);
+            }
+            None => {}
+        }
         n
+    }
+
+    /// A part occurrence's own tree under its row, as the part's browser has it: its Origin,
+    /// then its features in the order the file makes them, a loop's under its name.
+    fn part_rows(&mut self, n: usize, path: &str, feats: &[super::fg::FeatRow], owner: &str) {
+        let o = self.push(
+            Some(n),
+            format!("{path}>o"),
+            "Origin".into(),
+            String::new(),
+            NodeKind::PartOrigin,
+            "ucs",
+            owner,
+        );
+        for (k, item) in crate::origin::ITEMS.into_iter().enumerate() {
+            self.push(
+                Some(o),
+                format!("{path}>o:{k}"),
+                item.name().into(),
+                String::new(),
+                NodeKind::PartOriginItem(k),
+                item.icon(),
+                owner,
+            );
+        }
+        let mut stack: Vec<usize> = vec![n];
+        for r in super::fg::tree_rows(feats) {
+            stack.truncate(r.depth + 1);
+            let kind = r.feat.map(|f| feats[f].kind.as_str());
+            let at = self.push(
+                stack.last().copied(),
+                format!("{path}>f:{}", r.key),
+                r.label.clone(),
+                kind.unwrap_or_default().to_string(),
+                NodeKind::Feature,
+                kind.map_or("pattern", super::panel::icon),
+                owner,
+            );
+            self.nodes[at].occ = self.nodes[n].occ.clone();
+            stack.push(at);
+        }
     }
 
     /// Under a component: the relationships that hold it, problems first.
@@ -779,6 +857,15 @@ struct Cx<'a> {
     holds: &'a HashMap<String, Vec<usize>>,
     index: &'a HashMap<&'a str, usize>,
     flags: &'a Flags,
+    feats: &'a HashMap<String, PartFeats>,
+}
+
+/// A part file's features as its browser lists them, or why they couldn't be read.
+pub type PartFeats = Result<Vec<super::fg::FeatRow>, String>;
+
+/// The occurrence and feature a feature row's key names: `<occurrence>>f:<feature>`.
+pub fn feature_of(key: &str) -> Option<(&str, &str)> {
+    key.split_once(">f:")
 }
 
 /// The top row's key.
@@ -863,6 +950,17 @@ pub struct AsmPanel {
     pub moved: std::collections::BTreeMap<String, forge_math::Frame>,
     /// The browser row last clicked, and when: a second click soon on it is a double click.
     pub last_click: Option<(String, f64)>,
+    /// Each part file's features, by the file as the solve names it: read when one of its
+    /// occurrences is first opened.
+    pub part_feats: HashMap<String, PartFeats>,
+    /// A part's feature edited in the assembly (Inventor's in-place edit).
+    pub in_place: Option<super::asmpart::InPlace>,
+    /// Where each relationship's two ends are, solved (`AsmOut::link_at`).
+    pub link_at: Vec<[Option<forge_math::Frame>; 2]>,
+    /// The relationships' glyphs in the view: which are off.
+    pub glyphs: super::asmglyph::Glyphs,
+    /// The relationship under the pointer, in the view or on its browser row.
+    pub hover_link: Option<usize>,
 }
 
 /// Whether `path` is the row `key` or under it.
@@ -907,7 +1005,7 @@ impl AsmPanel {
             || flags != self.flags
             || self.tree.home.len() != occ.len()
         {
-            self.tree = AsmTree::build_with(&occ, dir.as_deref(), &insts, &links, &flags);
+            self.tree = AsmTree::build_full(&occ, dir.as_deref(), &insts, &links, &flags, &self.part_feats);
             self.occ = occ;
             self.dir = dir;
             self.insts = insts;
@@ -933,6 +1031,109 @@ impl AsmPanel {
             }
         }
         self.sync();
+    }
+
+    /// A relationship's Joint or Constrain dialog, filled from its statement.
+    pub fn edit_link(&mut self, source: &str, id: &str) -> Result<(), String> {
+        let mut f = super::asmtools::LinkForm::edit(source, id).ok_or(format!(
+            "{id}: made in a loop or a call; edit its statement in the file"
+        ))?;
+        // each end's occurrence: the longest path its reference starts with
+        for p in f.picks.iter_mut().flatten() {
+            p.occ = self
+                .insts
+                .iter()
+                .map(|i| i.path.as_str())
+                .filter(|i| p.reference.starts_with(&format!("{i}.")))
+                .max_by_key(|i| i.len())
+                .unwrap_or_default()
+                .to_string();
+        }
+        self.tool = Some(super::asmtools::AsmTool::Link(Box::new(f)));
+        self.drive = None;
+        self.in_place = None;
+        Ok(())
+    }
+
+    /// A Relationships row's eye: its glyphs' in the view (the folder all of them, a kind's
+    /// row its kind, a relationship's its own); None for other rows.
+    pub fn glyph_eye(&self, node: usize) -> Option<Eye> {
+        let n = &self.tree.nodes[node];
+        let g = &self.glyphs;
+        let one = |l: usize| {
+            let lk = &self.links[l];
+            super::asmglyph::drawn(lk) && g.shown(lk)
+        };
+        let drawn = |l: usize| super::asmglyph::drawn(&self.links[l]);
+        match n.kind {
+            NodeKind::Relationships => Some(if g.hidden { Eye::Hidden } else { Eye::Shown }),
+            NodeKind::LinkKind => {
+                let ls: Vec<usize> = n
+                    .kids
+                    .iter()
+                    .filter_map(|&c| match self.tree.nodes[c].kind {
+                        NodeKind::Link(l) => Some(l),
+                        _ => None,
+                    })
+                    .filter(|&l| drawn(l))
+                    .collect();
+                let on = ls.iter().filter(|&&l| one(l)).count();
+                (!ls.is_empty()).then_some(match on {
+                    0 => Eye::Hidden,
+                    x if x == ls.len() => Eye::Shown,
+                    _ => Eye::Some,
+                })
+            }
+            NodeKind::Link(l) if drawn(l) => Some(if one(l) { Eye::Shown } else { Eye::Hidden }),
+            _ => None,
+        }
+    }
+
+    pub fn flip_glyph_eye(&mut self, node: usize) {
+        let n = self.tree.nodes[node].clone();
+        match n.kind {
+            NodeKind::Relationships => self.glyphs.hidden = !self.glyphs.hidden,
+            NodeKind::LinkKind => {
+                if let Some(l) = n.kids.iter().find_map(|&c| match self.tree.nodes[c].kind {
+                    NodeKind::Link(l) => Some(l),
+                    _ => None,
+                }) {
+                    let lk = self.links[l].clone();
+                    self.glyphs.flip_kind(lk.family, &lk.kind);
+                    // a kind turned on shows each of its own again
+                    if !self
+                        .glyphs
+                        .kinds_off
+                        .contains(&super::asmglyph::kind_key(lk.family, &lk.kind))
+                    {
+                        for &c in &n.kids {
+                            if let NodeKind::Link(l) = self.tree.nodes[c].kind {
+                                let k = super::asmglyph::link_key(&self.links[l]);
+                                self.glyphs.off.remove(&k);
+                            }
+                        }
+                    }
+                }
+            }
+            NodeKind::Link(l) => {
+                let lk = self.links[l].clone();
+                self.glyphs.flip_link(&lk);
+            }
+            _ => {}
+        }
+    }
+
+    /// The browser made again from what it was made of (a part's features read since).
+    pub fn remake_tree(&mut self) {
+        self.tree = AsmTree::build_full(
+            &self.occ,
+            self.dir.as_deref(),
+            &self.insts,
+            &self.links,
+            &self.flags,
+            &self.part_feats,
+        );
+        self.kept = None;
     }
 
     fn sync(&mut self) {
@@ -1263,6 +1464,8 @@ enum MenuAct {
     Pattern(String),
     /// A relationship's dialog, filled from its statement.
     Edit(String),
+    /// A part's feature, edited in the assembly.
+    InPlace(String),
 }
 
 const TOOLBAR_H: f32 = 34.0;
@@ -1364,6 +1567,7 @@ impl Shell {
         let mut toggle = None;
         let mut eye = None;
         let mut menu: Option<MenuAct> = None;
+        let mut row_hover: Option<usize> = None;
         let mut child = ui.new_child(egui::UiBuilder::new().max_rect(list));
         let mut scroll = egui::ScrollArea::vertical()
             .id_salt("fg-asm-tree")
@@ -1397,14 +1601,24 @@ impl Shell {
                 let on = a.selected.as_deref() == Some(n.key.as_str());
                 resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::TreeItem, true, on, &n.label));
                 let p = ui.painter();
+                // a relationship lit in the view lights its rows too
+                let lit = matches!(n.kind, NodeKind::Link(l) if a.hover_link == Some(l));
                 if on {
                     p.rect_filled(r, 0.0, t.on);
                     p.rect_filled(Rect::from_min_size(r.min, vec2(2.0, super::ROW_H)), 0.0, t.focus);
-                } else if resp.hovered() {
+                } else if resp.hovered() || lit {
                     p.rect_filled(r, 0.0, t.hover);
                 }
+                if lit {
+                    p.rect_filled(
+                        Rect::from_min_size(r.min, vec2(2.0, super::ROW_H)),
+                        0.0,
+                        Color32::from_rgb(0x40, 0x9E, 0xF2),
+                    );
+                }
                 let x = r.left() + 10.0 + n.depth as f32 * INDENT;
-                if !n.kids.is_empty() {
+                // a part's own tree is read when its row first opens
+                if !n.kids.is_empty() || n.kind == NodeKind::Occ {
                     let arrow = Rect::from_center_size(pos2(x, r.center().y), vec2(16.0, super::ROW_H));
                     let ar = ui.interact(arrow, ui.scope_id().with(("asm-open", &n.key)), Sense::click());
                     super::fg::disclosure(
@@ -1424,12 +1638,14 @@ impl Shell {
                         n.kind,
                         NodeKind::Top | NodeKind::Occ | NodeKind::Pattern | NodeKind::Sub
                     );
+                // a relationship row's eye is its glyph's in the view
+                let glyph_eye = a.glyph_eye(k);
                 let state = if origin {
                     a.origin_eye(k, &top_origin)
                 } else if has_eye {
                     a.eye(k)
                 } else {
-                    Eye::Shown
+                    glyph_eye.unwrap_or(Eye::Shown)
                 };
                 let isolated_out =
                     !origin && has_eye && shown_mask.as_ref().is_some_and(|m| n.occ.iter().all(|&o| !m[o]));
@@ -1526,6 +1742,7 @@ impl Shell {
                     used = c.right();
                 }
                 // the detail where it fits, cut at its start if it doesn't
+                let has_eye = has_eye || glyph_eye.is_some();
                 let room = (if has_eye { eye_r.left() } else { r.right() - 8.0 }) - 6.0 - (used + 10.0);
                 if !n.detail.is_empty() && room > 30.0 {
                     let mut d = n.detail.clone();
@@ -1548,7 +1765,12 @@ impl Shell {
                 let mut eye_hit = false;
                 if has_eye {
                     let er = ui.interact(eye_r, ui.scope_id().with(("asm-eye", &n.key)), Sense::click());
-                    let tip = if state == Eye::Hidden { "Show" } else { "Hide" };
+                    let tip = match (glyph_eye.is_some(), state == Eye::Hidden) {
+                        (true, true) => "Show in the view",
+                        (true, false) => "Hide in the view",
+                        (false, true) => "Show",
+                        (false, false) => "Hide",
+                    };
                     let er = er.on_hover_text(tip);
                     let eink = match state {
                         _ if er.hovered() => t.ink,
@@ -1566,6 +1788,12 @@ impl Shell {
                     );
                     places.push((format!("asm:eye:{}", n.key), eye_r));
                     eye_hit = er.clicked();
+                }
+                // a relationship's row lights it in the view
+                if let NodeKind::Link(l) = n.kind
+                    && resp.hovered()
+                {
+                    row_hover = Some(l);
                 }
                 // what Inventor shows on hover: the file, what a relationship ties
                 let resp = resp.on_hover_ui_at_pointer(|ui| {
@@ -1671,6 +1899,10 @@ impl Shell {
                                 ui.close();
                             }
                         }
+                        NodeKind::Feature if item(ui, "Edit Feature", "edit-feature") => {
+                            menu = Some(MenuAct::InPlace(n.key.clone()));
+                            ui.close();
+                        }
                         _ => {}
                     }
                     if !n.kids.is_empty() && item(ui, if open { "Collapse" } else { "Expand" }, "expand") {
@@ -1690,6 +1922,10 @@ impl Shell {
                         }
                         NodeKind::Link(l) => menu = Some(MenuAct::Drive(l)),
                         NodeKind::Occ => menu = Some(MenuAct::Props(n.key.clone())),
+                        // Inventor's: a part's feature edited where it sits in the assembly
+                        NodeKind::Feature if feature_of(&n.key).is_some_and(|(_, f)| !f.is_empty()) => {
+                            menu = Some(MenuAct::InPlace(n.key.clone()))
+                        }
                         _ if !n.kids.is_empty() => {
                             toggle = Some((n.key.clone(), a.expanded.contains(&n.key)));
                         }
@@ -1702,15 +1938,18 @@ impl Shell {
             }
         });
         a.last_click = last.take();
+        a.glyphs.row = row_hover;
         // opened or shut: the row's key in or out (the top's means shut)
         if let Some((k, _)) = toggle
             && !a.expanded.remove(&k)
         {
+            a.read_part(&k);
             a.expanded.insert(k);
         }
         if let Some(k) = eye {
             let n = &a.tree.nodes[k];
             match n.kind {
+                NodeKind::Relationships | NodeKind::LinkKind | NodeKind::Link(_) => a.flip_glyph_eye(k),
                 NodeKind::Origin | NodeKind::OriginItem(_) => {
                     let ks: Vec<usize> = match n.kind {
                         NodeKind::OriginItem(i) => vec![i],
@@ -1773,27 +2012,22 @@ impl Shell {
                     dir: 0,
                 }));
             }
-            Some(MenuAct::Edit(id)) => match super::asmtools::LinkForm::edit(&source, &id) {
-                Some(mut f) => {
-                    // each end's occurrence: the longest path its reference starts with
-                    for p in f.picks.iter_mut().flatten() {
-                        p.occ = a
-                            .insts
-                            .iter()
-                            .map(|i| i.path.as_str())
-                            .filter(|i| p.reference.starts_with(&format!("{i}.")))
-                            .max_by_key(|i| i.len())
-                            .unwrap_or_default()
-                            .to_string();
-                    }
-                    a.tool = Some(super::asmtools::AsmTool::Link(Box::new(f)));
+            Some(MenuAct::Edit(id)) => {
+                if let Err(e) = a.edit_link(&source, &id) {
+                    self.status = e;
+                }
+            }
+            Some(MenuAct::InPlace(k)) => match a.edit_in_place(&k) {
+                Ok(()) => {
+                    a.tool = None;
                     a.drive = None;
+                    changed = true;
+                    self.status = format!("Editing in place: {}", k.replace(">f:", " › "));
                 }
-                None => {
-                    self.status = format!("{id}: made in a loop or a call; edit its statement in the file")
-                }
+                Err(e) => self.status = e,
             },
             Some(MenuAct::Expand(k)) if !a.expanded.remove(&k) => {
+                a.read_part(&k);
                 a.expanded.insert(k);
             }
             Some(MenuAct::Expand(_)) => {}
@@ -1881,7 +2115,38 @@ impl Shell {
         let mut blocks: Vec<Rect> = Vec::new();
         let feats = fg.feats.clone();
         let issues = fg.issues.clone();
+        let source = fg.source.clone();
         if let Some(a) = &mut fg.asm {
+            // the joints and constraints in the view; the one under the pointer lights its parts
+            let hit = self.asm_link_glyphs(ctx, a);
+            let lit = hit.hover.or(a.glyphs.row);
+            if lit != a.hover_link {
+                a.hover_link = lit;
+                out.push(FgAct::AsmShow);
+            }
+            if let Some(l) = hit.click.or(hit.double) {
+                let key = a.link_row_key(l);
+                let lk = &a.links[l];
+                for open in [
+                    format!("r:{}", lk.owner),
+                    format!("r:{}:{:?}:{}", lk.owner, lk.family, lk.kind),
+                ] {
+                    a.expanded.insert(open);
+                }
+                a.selected = Some(key.clone());
+                a.reveal = Some(key);
+                out.push(FgAct::AsmShow);
+            }
+            if let Some(l) = hit.double {
+                let id = a.links[l].id.clone();
+                if a.links[l].owner.is_empty() {
+                    if let Err(e) = a.edit_link(&source, &id) {
+                        self.status = e;
+                    }
+                } else {
+                    a.drive = Some(l);
+                }
+            }
             if a.drive.is_some() {
                 blocks.extend(Self::drive_window(ctx, &t, v, a, &feats, &mut out, &mut places));
             }
@@ -1904,6 +2169,9 @@ impl Shell {
             }
             if a.explode_open {
                 blocks.extend(Self::explode_window(ctx, &t, v, a, &mut places));
+            }
+            if a.in_place.is_some() {
+                blocks.extend(Self::in_place_window(ctx, &t, v, a, &mut out, &mut places));
             }
         }
         self.view_blocks.extend(blocks);
@@ -2661,5 +2929,115 @@ mod tests {
         ]);
         assert_eq!(f.links.get(&("kit".into(), "at_nut".into())), Some(&Flag::Error));
         assert_eq!(f.occ.get("bolt[0]"), Some(&Flag::Warning));
+    }
+
+    /// A part occurrence opens to the part's own tree, its Origin then its features as the part's
+    /// browser has them; a double click on one opens it in place, the rest of the assembly dimmed,
+    /// and OK writes the part's file.
+    #[test]
+    fn a_part_opens_to_its_features_and_edits_one_in_place() {
+        let dir = std::env::temp_dir().join(format!("fgasm-inplace-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let part = "shared t = 6\nsketch s(on: xy) {\n  r = rect(center: (0, 0), size: (40, 20))\n}\nplate = extrude(s, t)\n";
+        std::fs::write(dir.join("plate.fg"), part).unwrap();
+        let rows = vec![occ("a", "plate.fg"), occ("b", "plate.fg")];
+        // the file as the document writes it, the solve's resolved name on the occurrences
+        let insts = vec![
+            inst("a", "./plate.fg", false, true),
+            inst("b", "./plate.fg", false, false),
+        ];
+        let mut p = AsmPanel::default();
+        p.set_structure(rows, Some(dir.clone()), insts, vec![], Flags::default());
+        assert!(p.tree.find("a>f:plate").is_none());
+        p.read_part("a");
+        let n = p.tree.find("a").unwrap();
+        let kids: Vec<&str> = p.tree.nodes[n]
+            .kids
+            .iter()
+            .map(|&k| p.tree.nodes[k].key.as_str())
+            .collect();
+        assert_eq!(kids, ["a>o", "a>f:s", "a>f:plate"]);
+        assert_eq!(p.tree.nodes[p.tree.find("a>f:plate").unwrap()].detail, "extrude");
+        // the other occurrence of the file has it too, read once
+        assert!(p.tree.find("b>f:plate").is_some());
+        assert!(
+            p.edit_in_place("a>f:s").is_err(),
+            "a sketch is edited in its own window"
+        );
+        p.edit_in_place("a>f:plate").unwrap();
+        assert!(!p.dimmed(0) && p.dimmed(1));
+        let ip = p.in_place.as_mut().unwrap();
+        // the extrude's own tool dialog, filled from its statement: its distance as written
+        let tool = ip.tool.as_mut().expect("Extrude's form reads the statement back");
+        let d = tool
+            .params
+            .iter_mut()
+            .find(|q| q.text == "t")
+            .expect("the distance, as written");
+        d.text = "8".into();
+        assert!(ip.write().unwrap());
+        let text = std::fs::read_to_string(dir.join("plate.fg")).unwrap();
+        assert!(
+            text.contains("param plate.d = 8\nplate = extrude(s, d)"),
+            "{text}"
+        );
+        // a kind no tool writes: its dimensions, each set where it's written
+        ip.source = text;
+        ip.tool = None;
+        let f = ip
+            .fields
+            .iter_mut()
+            .find(|f| f.what == "depth")
+            .expect("the extrude's depth");
+        assert_eq!(
+            f.write,
+            super::super::asmpart::Write::Param(forge_lang::error::ParamKey::shared("t"))
+        );
+        f.text = "9".into();
+        assert!(ip.write().unwrap());
+        let text = std::fs::read_to_string(dir.join("plate.fg")).unwrap();
+        assert!(text.contains("shared t = 9"), "{text}");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// Every joint and constraint has a glyph: the Relationships eye turns them all off, a kind's
+    /// eye its kind, a row's its own; fits and fit rules have none.
+    #[test]
+    fn relationship_glyphs_turn_off_all_by_kind_or_one() {
+        let rows = vec![occ("base", "base.fg"), occ("arm", "arm.fg"), occ("pin", "pin.fg")];
+        let insts = vec![
+            inst("base", "base.fg", false, true),
+            inst("arm", "arm.fg", false, false),
+            inst("pin", "pin.fg", false, false),
+        ];
+        let links = vec![
+            link("", "j1", "revolute", "arm", "base"),
+            link("", "j2", "revolute", "pin", "arm"),
+            link("", "j3", "fastened", "pin", "base"),
+        ];
+        let mut p = AsmPanel::default();
+        p.set_structure(rows, None, insts, links, Flags::default());
+        let f = forge_math::Frame::WORLD;
+        p.link_at = vec![[Some(f), Some(f)]; 3];
+        let shown = |p: &AsmPanel| {
+            p.glyph_list()
+                .iter()
+                .map(|g| p.links[g.0].id.clone())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(shown(&p), ["j1", "j2", "j3"]);
+        let kind = p.tree.find("r::Joint:revolute").unwrap();
+        p.flip_glyph_eye(kind);
+        assert_eq!(shown(&p), ["j3"]);
+        assert_eq!(p.glyph_eye(kind), Some(Eye::Hidden));
+        p.flip_glyph_eye(kind);
+        let one = p.tree.find("l:1").unwrap();
+        p.flip_glyph_eye(one);
+        assert_eq!(shown(&p), ["j1", "j3"]);
+        assert_eq!(p.glyph_eye(kind), Some(Eye::Some));
+        p.flip_glyph_eye(p.tree.find("r:").unwrap());
+        assert!(shown(&p).is_empty());
+        // hovering j2 lights the pin and the arm
+        assert_eq!(p.tied(1), [1, 2]);
     }
 }

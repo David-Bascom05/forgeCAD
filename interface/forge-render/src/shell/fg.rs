@@ -102,7 +102,9 @@ pub(super) fn fold_head(
 /// A browser row's name typed in its place, all of it selected at first: Enter or a click away
 /// renames it everywhere, Esc leaves it.
 fn rename_edit(ui: &mut Ui, fg: &mut FgPanel, at: Rect, places: &mut Vec<(String, Rect)>) {
-    let Some((from, text)) = &mut fg.renaming else { return };
+    let Some((from, text)) = &mut fg.renaming else {
+        return;
+    };
     let id = egui::Id::unique(("fg-rename", from.as_str()));
     let resp = ui.put(
         at,

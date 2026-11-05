@@ -385,7 +385,11 @@ fn issues_are_a_count_in_the_status_bar_and_a_window_a_click_away() {
     open_in(&mut h, &f, 60);
     h.step();
     let p = h.gui.shell.fg.as_ref().unwrap();
-    assert!(p.issues.iter().any(|i| i.severity == forge_render::shell::fg::Severity::Error));
+    assert!(
+        p.issues
+            .iter()
+            .any(|i| i.severity == forge_render::shell::fg::Severity::Error)
+    );
     if !p.issues_list {
         assert!(h.click("fg:issues:status"));
         h.step();

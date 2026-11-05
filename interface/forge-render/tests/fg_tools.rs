@@ -662,7 +662,10 @@ fn a_double_click_on_a_feature_opens_its_dialog_filled_and_ok_replaces_it_in_pla
         h.gui.shell.status
     );
     let t = h.gui.shell.fg.as_ref().unwrap().tool.clone().unwrap();
-    assert_eq!((t.kind, t.edit.as_deref(), t.name.as_str()), ("extrude", Some("boss"), "boss"));
+    assert_eq!(
+        (t.kind, t.edit.as_deref(), t.name.as_str()),
+        ("extrude", Some("boss"), "boss")
+    );
     assert_eq!(picks(&h, "Profile"), ["marks.c"]);
     // its own param's value, in the field
     assert_eq!(t.params.iter().find(|p| p.name == "d").unwrap().text, "10");
@@ -686,5 +689,8 @@ fn a_double_click_on_a_feature_opens_its_dialog_filled_and_ok_replaces_it_in_pla
     let t = h.gui.shell.fg.as_ref().unwrap().tool.clone().unwrap();
     assert_eq!(t.params.iter().find(|p| p.name == "d").unwrap().text, "t");
     let (src, _) = ok(&mut h, "edit base");
-    assert!(src.contains("param base.d = t\nbase = extrude(plan, d)\n"), "{src}");
+    assert!(
+        src.contains("param base.d = t\nbase = extrude(plan, d)\n"),
+        "{src}"
+    );
 }

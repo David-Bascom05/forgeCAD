@@ -249,6 +249,10 @@ fn groups(s: &Shell) -> Vec<Group> {
             .collect();
     }
     let asm_explode = s.fg.as_ref().and_then(|f| f.asm.as_ref()).map(|a| a.explode_open);
+    let asm_glyphs =
+        s.fg.as_ref()
+            .and_then(|f| f.asm.as_ref())
+            .map(|a| !a.glyphs.hidden);
     let fg_open = s.fg.is_some();
     // the tools only a Forge part has a form for
     let fg_new = |name, icon, kind| Tool {
@@ -535,6 +539,12 @@ fn groups(s: &Shell) -> Vec<Group> {
                         icon: "combine",
                         action: asm_explode.map(|_| Action::Fg(FgCmd::Explode)),
                         on: asm_explode == Some(true),
+                    },
+                    Tool {
+                        name: "Relationships",
+                        icon: "relfolder",
+                        action: asm_glyphs.map(|_| Action::Fg(FgCmd::Relationships)),
+                        on: asm_glyphs == Some(true),
                     },
                 ],
                 vec![],
