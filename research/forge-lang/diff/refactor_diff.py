@@ -257,7 +257,7 @@ def check_fixed(fg, tmp, t):
     t.note("module" if any(e["kind"] == "UseFailed" for e in j["errors"]) else "module:use_cycle", "use_cycle", str(j["errors"]))
 
 
-KNOWN = {"extract-reach"}  # X1 (reach count), impl-proof-findings.md
+KNOWN: set = set()  # X1-X4 fixed on unified-doc-2 936d26d6
 
 
 def main():
