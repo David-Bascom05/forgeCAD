@@ -38,6 +38,8 @@ pub struct AppHost {
     pub undo: Vec<ViewSnap>,
     /// Pictures asked for: taken once the next frame's drawn.
     shots: Vec<std::sync::mpsc::Sender<Reply>>,
+    /// Measures asked for: answered when Measure has read them, or said late.
+    measures: Vec<(std::sync::mpsc::Sender<Reply>, std::time::Instant)>,
     /// The agent turned the view itself this turn: a driven joint leaves the camera alone.
     pub view_set: bool,
 }
@@ -128,6 +130,7 @@ impl Gui {
         for r in std::mem::take(&mut self.apps.shots) {
             let _ = r.send(self.screenshot());
         }
+        self.measures_read();
         let calls: Vec<AppCall> = self
             .agent
             .app_rx
@@ -135,6 +138,15 @@ impl Gui {
             .map(|r| r.try_iter().collect())
             .unwrap_or_default();
         for c in calls {
+            if c.name == "measure" {
+                match self.measure_start(&c.args) {
+                    Ok(()) => self.apps.measures.push((c.reply, std::time::Instant::now())),
+                    Err(r) => {
+                        let _ = c.reply.send(r);
+                    }
+                }
+                continue;
+            }
             if c.name == "screenshot" {
                 if let Some(v) = &mut self.view {
                     v.mark_dirty();
@@ -626,5 +638,155 @@ impl Gui {
         v.nav.camera = crate::nav::region_view_as(v.nav.camera, [1, -1, 1], &v.nav.orient);
         v.nav.fit_sphere(c, r * 2.0);
         v.mark_dirty();
+    }
+
+    /// A pick by name: an assembly's occurrence by its browser key, a part's face or edge by its
+    /// Forge anchor, the solid itself, or an origin plane.
+    fn measure_pick(&self, name: &str) -> Result<(crate::shell::inspect::MPick, String), String> {
+        use crate::render::Entity;
+        use crate::shell::inspect::MPick;
+        use forge_agent::measure::Free;
+        let plane = |n: [f64; 3]| {
+            Free::Plane(
+                forge_math::Point3::ORIGIN,
+                forge_math::Vec3::new(n[0], n[1], n[2]),
+            )
+        };
+        match name {
+            "xy" => {
+                return Ok((
+                    MPick::Free(plane([0.0, 0.0, 1.0]), "XY Plane".into()),
+                    name.into(),
+                ));
+            }
+            "xz" => {
+                return Ok((
+                    MPick::Free(plane([0.0, 1.0, 0.0]), "XZ Plane".into()),
+                    name.into(),
+                ));
+            }
+            "yz" => {
+                return Ok((
+                    MPick::Free(plane([1.0, 0.0, 0.0]), "YZ Plane".into()),
+                    name.into(),
+                ));
+            }
+            _ => {}
+        }
+        if let Some((occ, _)) = &self.fg_asm {
+            let o = occ.iter().find(|o| o.path == name).ok_or(format!(
+                "no occurrence `{name}` (see `tree`): an assembly measures whole occurrences"
+            ))?;
+            let pl = o
+                .placement
+                .ok_or(format!("`{name}` has nothing drawn to measure"))?;
+            return Ok((MPick::Whole(pl as u32), name.into()));
+        }
+        if name == "solid" || name == "body" {
+            return Ok((MPick::Whole(0), name.into()));
+        }
+        let a = self
+            .fg_anchors
+            .as_ref()
+            .ok_or("the part's anchors aren't found yet: try again")?;
+        if let Some(k) = a.faces.iter().position(|f| f.as_deref() == Some(name)) {
+            return Ok((MPick::Ent(0, Entity::Face(k as u32)), name.into()));
+        }
+        if let Some(k) = a.edges.iter().position(|f| f.as_deref() == Some(name)) {
+            return Ok((MPick::Ent(0, Entity::Edge(k as u32)), name.into()));
+        }
+        Err(format!(
+            "no face or edge named `{name}`: name a face (like extrude1.end), an edge (edges(between: (A, B))), the solid, or xy/xz/yz"
+        ))
+    }
+
+    /// Measure opened on two picks; the reading comes on a later frame.
+    fn measure_start(&mut self, a: &Json) -> Result<(), Reply> {
+        let (sa, sb) = (s(a, "a"), s(a, "b"));
+        if sa.is_empty() {
+            return Err(Reply::err("measure takes `a` (and `b` for between two)"));
+        }
+        let mut picks = vec![self.measure_pick(sa).map_err(Reply::err)?];
+        if !sb.is_empty() {
+            picks.push(self.measure_pick(sb).map_err(Reply::err)?);
+        }
+        if self.shell.inspect.measure.as_ref().is_none_or(|m| m.wall) {
+            self.shell.inspect.measure = None;
+            self.shell
+                .inspect_command(crate::shell::inspect::InspectCmd::Measure);
+        }
+        let m = self.shell.inspect.measure.as_mut().expect("Measure open");
+        m.restart();
+        for (p, _) in picks {
+            m.take(p);
+        }
+        Ok(())
+    }
+
+    /// Readings Measure has made for the agent's asks: what it reads and what it draws.
+    fn measures_read(&mut self) {
+        if self.apps.measures.is_empty() {
+            return;
+        }
+        let m = self.shell.inspect.measure.as_ref();
+        let got = match m.map(|m| (m.busy, &m.reading)) {
+            Some((false, Some(Ok(r)))) => Some(Ok(r.clone())),
+            Some((false, Some(Err(e)))) => Some(Err(e.clone())),
+            None => Some(Err("Measure was closed".into())),
+            _ => None,
+        };
+        let late = self
+            .apps
+            .measures
+            .iter()
+            .any(|(_, t)| t.elapsed().as_secs() >= 30);
+        let Some(got) = got.or(late.then(|| Err("Measure didn't read it in 30 s".to_string()))) else {
+            return;
+        };
+        let names = m.map(|m| m.names.join(" to ")).unwrap_or_default();
+        let reply = match got {
+            Err(e) => Reply::err(e),
+            Ok(r) => {
+                use forge_agent::measure::{Quantity, Shown};
+                let unit = |q: Quantity| match q.power() {
+                    0 => "°",
+                    2 => " mm²",
+                    3 => " mm³",
+                    4 => " kg",
+                    _ => " mm",
+                };
+                let mut t = format!("Measured {names}:");
+                for (q, v) in &r.values {
+                    t.push_str(&format!(
+                        "\n{}: {}{}",
+                        q.label(),
+                        forge_agent::short(*v),
+                        unit(*q)
+                    ));
+                }
+                let drawn: Vec<&str> = r
+                    .shown
+                    .iter()
+                    .map(|s| match s {
+                        Shown::Line(..) => "a dimension line",
+                        Shown::Angle(..) => "an angle",
+                        Shown::Face(..) => "the face tinted",
+                        Shown::Circle(..) => "the circle and its centre",
+                        Shown::Curve(..) => "the curve",
+                        Shown::Point(..) => "the point",
+                        Shown::Box(..) => "the body's box",
+                    })
+                    .collect();
+                t.push_str(&if drawn.is_empty() {
+                    "\nNothing drawn in the model".to_string()
+                } else {
+                    format!("\nDrawn in the model: {}", drawn.join(", "))
+                });
+                Reply::ok(t)
+            }
+        };
+        for (r, _) in std::mem::take(&mut self.apps.measures) {
+            let _ = r.send(reply.clone());
+        }
     }
 }

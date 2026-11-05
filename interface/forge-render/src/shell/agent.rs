@@ -504,6 +504,13 @@ pub fn tool_summary(name: &str, input: &Json) -> (String, String) {
         "return_to_design" => ("Put the joints back".into(), whole()),
         "keep_position" => ("Kept the position in the file".into(), whole()),
         "screenshot" => ("Looked at the view".into(), whole()),
+        "measure" => (
+            match s(input, "b") {
+                "" => format!("Measured {}", s(input, "a")),
+                b => format!("Measured {} to {b}", s(input, "a")),
+            },
+            whole(),
+        ),
         "undo_view" => ("Took back its last view step".into(), whole()),
         "fg_run" | "fg_check" => (format!("Built and checked {}", s(input, "file")), whole()),
         "fg_edit" => (format!("Applied an edit to {}", s(input, "file")), whole()),

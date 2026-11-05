@@ -1416,3 +1416,46 @@ fn a_file_open_in_another_tab_takes_the_agents_writes_as_one_step_and_its_undo_b
     drop(h);
     let _ = std::fs::remove_dir_all(dir);
 }
+
+#[test]
+fn the_measure_tool_reads_what_measure_reads_and_says_what_it_draws() {
+    let Ok(mut h) = forge_render::gui::Headless::new((1400.0, 900.0), 1.0) else {
+        return;
+    };
+    let dir = scratch("measure");
+    let plate = dir.join("plate.fg");
+    std::fs::write(&plate, PART).unwrap();
+    h.step();
+    h.gui.open(plate.to_str().unwrap());
+    assert!(wait(&mut h, |g| g.fg_anchors.is_some() && g.view.is_some()));
+    let (tools, rx) = forge_render::agent::apptools::AppTools::new(Arc::new(|| {}));
+    h.gui.agent.app_rx = Some(rx);
+    // the plate is 80 x 60 and 12 thick: its top and bottom faces 12 apart, the top 4800 mm²
+    let r = app_call(
+        &mut h,
+        &tools,
+        "measure",
+        r#"{"a":"extrude1.end","b":"extrude1.start"}"#,
+    );
+    assert!(!r.error, "{}", r.text);
+    assert!(r.text.contains("Minimum distance: 12 mm"), "{}", r.text);
+    assert!(
+        r.text.contains("Drawn in the model: a dimension line"),
+        "{}",
+        r.text
+    );
+    assert!(
+        h.gui.shell.inspect.measure.is_some(),
+        "Measure is open on the picks, as a person sees it"
+    );
+    let r = app_call(&mut h, &tools, "measure", r#"{"a":"extrude1.end"}"#);
+    assert!(!r.error && r.text.contains("Area: 4800 mm²"), "{}", r.text);
+    let r = app_call(&mut h, &tools, "measure", r#"{"a":"nope.end","b":"xy"}"#);
+    assert!(
+        r.error && r.text.contains("no face or edge named `nope.end`"),
+        "{}",
+        r.text
+    );
+    drop(h);
+    let _ = std::fs::remove_dir_all(dir);
+}

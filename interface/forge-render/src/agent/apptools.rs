@@ -171,6 +171,12 @@ pub const NAMES: &[(&str, &str, &str, &[&str])] = &[
         &[],
     ),
     (
+        "measure",
+        "Measure, as Inspect > Measure does: one pick (its length, area, radius..) or two (distance, angle, delta X/Y/Z..). A pick is a face or edge by its Forge anchor (extrude1.end, edges(between: (A, B))), `solid`, an origin plane (xy, xz, yz), or in an assembly an occurrence's browser key. Says the values and what it draws in the model.",
+        r#"{"a":{"type":"string"},"b":{"type":"string"}}"#,
+        &["a"],
+    ),
+    (
         "drive_joint",
         "Move a joint for a look, the file kept as it is: its driving value (degrees for a turn, mm for a slide). For 'open the door', 'move X', 'show it open'. One view step.",
         r#"{"joint":{"type":"string"},"value":{"type":"number"},"what":{"type":"string","description":"which of the joint's values, when it drives more than one"}}"#,
