@@ -6652,6 +6652,7 @@ fn empty_load(key: &str) -> PartLoad {
         body_meshes: BTreeMap::new(),
         ident: 0,
         threads: vec![],
+        tooling: None,
     }
 }
 

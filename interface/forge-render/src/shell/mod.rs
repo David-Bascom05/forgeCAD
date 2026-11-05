@@ -1145,16 +1145,13 @@ impl Shell {
             self.file_menu = !self.file_menu;
         }
         let mut x = 66.0;
-        let asm = self.is_asm();
         let drawing = self.drawing.is_some();
-        let asm = asm && !drawing;
         let order: Vec<usize> = if drawing {
             (0..drawing::TABS.len()).collect()
         } else {
             self.tab_order()
         };
         for k in order {
-            // a part opened as .fc has no thermoforms
             // the Model tab in an assembly too (one document); Thermoform where there is one
             if k == THERMO_TAB && !self.thermo_tab() {
                 continue;

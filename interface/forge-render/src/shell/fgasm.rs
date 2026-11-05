@@ -3241,6 +3241,7 @@ mod tests {
                 path: o.0.clone(),
                 file: o.1.clone(),
                 drawn: true,
+                tooling: false,
             })
             .collect();
         let mut p = AsmPanel::default();

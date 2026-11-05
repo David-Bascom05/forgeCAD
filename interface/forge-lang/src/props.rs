@@ -819,6 +819,7 @@ impl PartSummary {
         PartSummary {
             props,
             solids,
+            thermos: vec![],
             masses: Default::default(),
         }
     }
