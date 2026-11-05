@@ -50,6 +50,8 @@ pub struct Process {
     /// The membrane carries no compression, wrinkling instead (false: it resists it as a solid
     /// sheet would, the reference).
     pub wrinkle: bool,
+    /// Load steps up to the forming pressure.
+    pub steps: usize,
 }
 
 /// The clamp frame's grip on the sheet under it.
@@ -94,6 +96,7 @@ impl Default for Process {
             slide: None,
             clamp: None,
             wrinkle: false,
+            steps: 10,
         }
     }
 }
@@ -874,7 +877,7 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
             snap(&x, "drape");
         }
     }
-    let loads = 10;
+    let loads = pr.steps.max(1);
     for k in 1..=loads {
         let p = pr.pressure * k as f64 / loads as f64;
         sheet.hold = hold_at(p);

@@ -153,9 +153,7 @@ fn at(curve: &[(f64, f64)], s: f64) -> f64 {
 fn compare(
     name: &str,
     surface: Surface,
-    slide: Option<f64>,
-    clamp: Option<Clamp>,
-    wrinkle: bool,
+    tweak: &dyn Fn(&mut Process),
     shape: &Body,
     t0: f64,
     flange: f64,
@@ -181,15 +179,14 @@ fn compare(
     let f = analyse(shape, &spec).expect("analyses");
     let m = placeholder().material(mat).cloned().unwrap();
     let law = m.law_at(temp);
-    let pr = Process {
+    let mut pr = Process {
         law: law.law.clone(),
         pressure: 0.09,
         resolution: 80,
         surface,
-        slide,
-        clamp,
-        wrinkle,
+        ..Process::default()
     };
+    tweak(&mut pr);
     let st = stretch(&f, &spec, &pr);
     let model = along(&st, t0, diagonal);
     let data = measured(name);
@@ -232,9 +229,7 @@ fn erdogan_cylinder() {
     let e = compare(
         "erdogan2014_cylinder",
         Surface::Height,
-        None,
-        None,
-        false,
+        &|_| {},
         &shape,
         2.5,
         40.0,
@@ -252,9 +247,7 @@ fn erdogan_box() {
     let a = compare(
         "erdogan2014_box_axis",
         Surface::Height,
-        None,
-        None,
-        false,
+        &|_| {},
         &shape,
         2.0,
         65.0,
@@ -266,9 +259,7 @@ fn erdogan_box() {
     let d = compare(
         "erdogan2014_box_diagonal",
         Surface::Height,
-        None,
-        None,
-        false,
+        &|_| {},
         &shape,
         2.0,
         65.0,
@@ -286,9 +277,7 @@ fn duarte_cone() {
     let e = compare(
         "duarte2022_cone",
         Surface::Height,
-        None,
-        None,
-        false,
+        &|_| {},
         &shape,
         1.0,
         50.0,
@@ -316,9 +305,7 @@ fn the_distance_field_forms_the_measured_parts_as_well() {
         let h = compare(
             name,
             Surface::Height,
-            None,
-            None,
-            false,
+            &|_| {},
             shape,
             t0,
             flange,
@@ -330,9 +317,7 @@ fn the_distance_field_forms_the_measured_parts_as_well() {
         let d = compare(
             name,
             Surface::Distance,
-            None,
-            None,
-            false,
+            &|_| {},
             shape,
             t0,
             flange,
@@ -376,9 +361,11 @@ fn the_sheet_drawn_in_over_the_mould_top() {
             let e = compare(
                 name,
                 Surface::Height,
-                mu,
-                None,
-                false,
+                &|p: &mut Process| {
+                    p.slide = mu;
+                    p.clamp = None;
+                    p.wrinkle = false;
+                },
                 shape,
                 t0,
                 flange,
@@ -423,9 +410,11 @@ fn the_sheet_drawn_in_from_under_the_clamp() {
                 let e = compare(
                     name,
                     Surface::Height,
-                    mu,
-                    clamp,
-                    wrinkle,
+                    &|p: &mut Process| {
+                        p.slide = mu;
+                        p.clamp = clamp;
+                        p.wrinkle = wrinkle;
+                    },
                     shape,
                     t0,
                     flange,
@@ -440,4 +429,39 @@ fn the_sheet_drawn_in_from_under_the_clamp() {
         eprintln!("CLAMP {name}: {}", row.join(" | "));
         assert_eq!(row.len(), ways.len());
     }
+}
+
+/// A rate-independent membrane's wall does not depend on how stiff the sheet is, once its load
+/// steps are fine enough: the pressure only scales the stress. So a time-temperature shift of the
+/// modulus (WLF, Arrhenius) cannot move the forming; only the law's shape, or rate and time, can.
+/// The Erdogan cylinder with the HIPS law at a third, once and three times its stiffness: at 10
+/// steps the third is 4 % t0 off (12.2 against 16.6, the steps' path), at 160 all three agree.
+#[test]
+fn the_sheets_stiffness_does_not_move_a_converged_forming() {
+    let shape = cavity(100.0, 100.0 - 1e-3, 100.0, 10.0);
+    let run = |scale: f64, steps: usize| {
+        compare(
+            "erdogan2014_cylinder",
+            Surface::Height,
+            &|p: &mut Process| {
+                p.law.terms.iter_mut().for_each(|t| t.0 *= scale);
+                p.steps = steps;
+            },
+            &shape,
+            2.5,
+            40.0,
+            "HIPS",
+            180.0,
+            false,
+            185.0,
+        )
+    };
+    let fine: Vec<f64> = [0.3, 1.0, 3.0].iter().map(|&k| run(k, 160)).collect();
+    eprintln!("STIFF 160 steps: {fine:?}");
+    let spread = fine.iter().copied().fold(f64::NEG_INFINITY, f64::max)
+        - fine.iter().copied().fold(f64::INFINITY, f64::min);
+    assert!(
+        spread < 0.005,
+        "stiffness moves the converged forming by {spread} of t0"
+    );
 }
