@@ -397,6 +397,53 @@ struct Ctx {
     views: Vec<ViewOut>,
     errors: Vec<DrawError>,
     letters: usize,
+    /// Views' lines made ahead, all at once (`ahead`): taken by the view that asks the same.
+    drawn: std::collections::HashMap<DrawKey, (Vec<Piece>, Vec<Stroke>)>,
+}
+
+/// What a view's lines are made of: its direction, its options, and each body (by its `Arc`)
+/// where it stands.
+type DrawKey = ([u64; 9], bool, bool, Vec<(usize, [u64; 9])>);
+
+fn draw_key(insts: &[(Arc<Body>, Frame, usize)], view: &View, tangent: bool, hidden: bool) -> DrawKey {
+    let v = |u: forge_math::UnitVec3| {
+        let u = u.get();
+        [u.x, u.y, u.z]
+    };
+    let f = |f: &Frame| {
+        let (o, x, z) = (f.origin, f.x().get(), f.z().get());
+        [o.x, o.y, o.z, x.x, x.y, x.z, z.x, z.y, z.z].map(f64::to_bits)
+    };
+    let mut vb = [0u64; 9];
+    for (k, x) in [v(view.toward), v(view.right), v(view.up)]
+        .concat()
+        .into_iter()
+        .enumerate()
+    {
+        vb[k] = x.to_bits();
+    }
+    (
+        vb,
+        tangent,
+        hidden,
+        insts
+            .iter()
+            .map(|(b, p, _)| (Arc::as_ptr(b) as usize, f(p)))
+            .collect(),
+    )
+}
+
+/// A base or projected view's lines as the views pass will ask for them, worked out from the
+/// document alone; a wrong guess only costs the time, the view draws its own then.
+struct Plan {
+    id: String,
+    view: View,
+    insts: Vec<(Arc<Body>, Frame, usize)>,
+    model: usize,
+    tangent: bool,
+    hidden: bool,
+    sheet: usize,
+    at: Point2,
 }
 
 fn sheet_of(ctx: &Ctx, s: &Option<String>, parent: Option<&ViewOut>) -> usize {
@@ -407,6 +454,110 @@ fn sheet_of(ctx: &Ctx, s: &Option<String>, parent: Option<&ViewOut>) -> usize {
 }
 
 impl Ctx {
+    /// The base and projected views' hidden lines, all at once on every core.
+    fn ahead(&mut self, items: &[Item]) {
+        let mut plans: Vec<Plan> = Vec::new();
+        for item in items {
+            let ItemKind::View(def) = &item.kind else { continue };
+            let tangent = def.tangent.unwrap_or(false);
+            let plan = match &def.kind {
+                ViewKind::Base {
+                    model,
+                    toward,
+                    up,
+                    explode,
+                } => (|| {
+                    let m = self.model_of(model)?;
+                    let view = View::new(*toward, *up)?;
+                    let mo = &self.models[m].model;
+                    let offs = explode_offsets(mo, *explode);
+                    let insts: Vec<(Arc<Body>, Frame, usize)> = (0..mo.bodies.len())
+                        .filter(|&k| !def.hide.iter().any(|h| under(&mo.paths[k], h)))
+                        .map(|k| {
+                            let (b, pose) = &mo.bodies[k];
+                            (b.clone(), pose.with_origin(pose.origin + offs[k]), k)
+                        })
+                        .collect();
+                    let t = view.toward.get();
+                    let iso = t.x.abs() > 1e-9 && t.y.abs() > 1e-9 && t.z.abs() > 1e-9;
+                    let sheet = match &def.sheet {
+                        Some(id) => self.sheets.iter().position(|x| &x.0 == id).unwrap_or(0),
+                        None => 0,
+                    };
+                    Some(Plan {
+                        id: item.id.clone(),
+                        view,
+                        insts,
+                        model: m,
+                        tangent,
+                        hidden: def.hidden.unwrap_or(!iso),
+                        sheet,
+                        at: def.at,
+                    })
+                })(),
+                ViewKind::Projected { parent } => (|| {
+                    let p = plans.iter().find(|x| &x.id == parent)?;
+                    let third = self.sheets.get(p.sheet).is_none_or(|s| s.1.third_angle);
+                    let (dx, dy) = (def.at.x - p.at.x, def.at.y - p.at.y);
+                    let diagonal = dx.abs().min(dy.abs()) > 0.3 * dx.abs().max(dy.abs());
+                    let view = if diagonal {
+                        p.view.projected(dx, dy, third)?
+                    } else if dx.abs() >= dy.abs() {
+                        p.view.projected(dx, 0.0, third)?
+                    } else {
+                        p.view.projected(0.0, dy, third)?
+                    };
+                    let sheet = match &def.sheet {
+                        Some(id) => self.sheets.iter().position(|x| &x.0 == id).unwrap_or(0),
+                        None => p.sheet,
+                    };
+                    Some(Plan {
+                        id: item.id.clone(),
+                        view,
+                        insts: p.insts.clone(),
+                        model: p.model,
+                        tangent,
+                        hidden: def.hidden.unwrap_or(!diagonal),
+                        sheet,
+                        at: def.at,
+                    })
+                })(),
+                _ => None,
+            };
+            plans.extend(plan);
+        }
+        let models = &self.models;
+        let made = crate::par::map(plans.len(), |k| {
+            let p = &plans[k];
+            (
+                draw(&p.insts, &p.view, p.tangent, p.hidden),
+                thread_lines(&models[p.model].model, &p.insts, &p.view, p.hidden),
+            )
+        });
+        for (p, m) in plans.iter().zip(made) {
+            self.drawn
+                .insert(draw_key(&p.insts, &p.view, p.tangent, p.hidden), m);
+        }
+    }
+
+    /// A view's hidden lines and thread lines: made ahead, or now.
+    fn lines(
+        &mut self,
+        model: usize,
+        insts: &[(Arc<Body>, Frame, usize)],
+        view: &View,
+        tangent: bool,
+        hidden: bool,
+    ) -> (Vec<Piece>, Vec<Stroke>) {
+        if let Some(m) = self.drawn.remove(&draw_key(insts, view, tangent, hidden)) {
+            return m;
+        }
+        (
+            draw(insts, view, tangent, hidden),
+            thread_lines(&self.models[model].model, insts, view, hidden),
+        )
+    }
+
     fn next_letter(&mut self, given: &Option<String>) -> String {
         if let Some(l) = given {
             return l.clone();
@@ -446,8 +597,7 @@ impl Ctx {
                     && view.toward.get().y.abs() > 1e-9
                     && view.toward.get().z.abs() > 1e-9;
                 let hidden = def.hidden.unwrap_or(!iso);
-                let pieces = draw(&insts, &view, tangent, hidden);
-                let threads = thread_lines(mo, &insts, &view, hidden);
+                let (pieces, threads) = self.lines(m, &insts, &view, tangent, hidden);
                 let s = def.scale.unwrap_or(1.0);
                 let (lo, hi) = bounds(&pieces, &[]);
                 let c = lo.lerp(hi, 0.5);
@@ -482,8 +632,7 @@ impl Ctx {
                     p.view.projected(0.0, dy, third)?
                 };
                 let hidden = def.hidden.unwrap_or(!diagonal);
-                let pieces = draw(&p.insts, &view, tangent, hidden);
-                let threads = thread_lines(&self.models[p.model].model, &p.insts, &view, hidden);
+                let (pieces, threads) = self.lines(p.model, &p.insts, &view, tangent, hidden);
                 let s = def.scale.unwrap_or(p.scale);
                 let (lo, hi) = bounds(&pieces, &[]);
                 let c = lo.lerp(hi, 0.5);
@@ -2526,6 +2675,7 @@ fn make_with(src: &str, dir: &Path, mut show: Option<&mut dyn FnMut(Shown)>) -> 
         views: vec![],
         errors: d.errors.clone(),
         letters: 0,
+        drawn: Default::default(),
     };
     // the models, each built on its own cores
     let wanted: Vec<(&str, &str)> = d
@@ -2603,6 +2753,7 @@ fn make_with(src: &str, dir: &Path, mut show: Option<&mut dyn FnMut(Shown)>) -> 
             },
         ));
     }
+    ctx.ahead(&d.items);
     let views_total = d
         .items
         .iter()

@@ -76,4 +76,17 @@ impl Grid {
         out.sort_unstable();
         out.dedup();
     }
+
+    /// Whether any id in a cell the box meets is one `f` wants.
+    pub fn any_near(&self, lo: Point2, hi: Point2, f: impl Fn(u32) -> bool) -> bool {
+        let (x0, x1) = (
+            self.ix(lo.x, self.nx, self.lo.x),
+            self.ix(hi.x, self.nx, self.lo.x),
+        );
+        let (y0, y1) = (
+            self.ix(lo.y, self.ny, self.lo.y),
+            self.ix(hi.y, self.ny, self.lo.y),
+        );
+        (y0..=y1).any(|y| (x0..=x1).any(|x| self.cells[y * self.nx + x].iter().any(|&i| f(i))))
+    }
 }

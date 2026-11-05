@@ -16,6 +16,7 @@ pub mod poly;
 pub mod predicates;
 pub mod rng;
 pub mod tol;
+pub mod trace;
 pub mod vec;
 
 pub use frame::Frame;

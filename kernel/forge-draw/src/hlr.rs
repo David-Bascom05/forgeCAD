@@ -820,7 +820,12 @@ impl<'a> Scene<'a> {
 /// they cross on the view, each piece seen or hidden; a hidden piece lying on a seen one, and a
 /// second copy of one, are left out.
 pub fn hlr(insts: &[Instance], view: &View, opts: &Options) -> Vec<Piece> {
+    use forge_math::trace::span;
+    let _all = span("hlr");
+    let t = span("hlr scene");
     let scene = Scene::new(insts, *view);
+    drop(t);
+    let t = span("hlr curves");
     // each part's curves on a core of its own, put together in part order
     let per_inst: Vec<Vec<Curve3>> = forge_math::par::map(insts.len(), |i| {
         let mut curves: Vec<Curve3> = Vec::new();
@@ -857,7 +862,11 @@ pub fn hlr(insts: &[Instance], view: &View, opts: &Options) -> Vec<Piece> {
         curves
     });
     let curves: Vec<Curve3> = per_inst.into_iter().flatten().collect();
+    drop(t);
+    let t = span("hlr crossings");
     let splits = crossings(&curves, view, opts.chord);
+    drop(t);
+    let t = span("hlr visibility");
     let runs_of: Vec<Vec<(f64, f64, bool)>> = forge_math::par::map(curves.len(), |k| {
         let c = &curves[k];
         let mut runs: Vec<(f64, f64, bool)> = Vec::new();
@@ -882,6 +891,8 @@ pub fn hlr(insts: &[Instance], view: &View, opts: &Options) -> Vec<Piece> {
             pieces.push((k, curves[k].path.sub(a, b), vis));
         }
     }
+    drop(t);
+    let t = span("hlr unique");
     let geoms: Vec<Geom2> = pieces
         .iter()
         .map(|(_, p, _)| {
@@ -897,6 +908,7 @@ pub fn hlr(insts: &[Instance], view: &View, opts: &Options) -> Vec<Piece> {
     };
     let curve: Vec<usize> = pieces.iter().map(|p| p.0).collect();
     let kept = unique(&geoms, &curve, &order, opts.chord);
+    drop(t);
     let mut out = Vec::new();
     for (k, runs) in kept.into_iter().enumerate() {
         let c = &curves[pieces[k].0];
@@ -1283,6 +1295,42 @@ fn unique(geoms: &[Geom2], curve: &[usize], order: &[usize], chord: f64) -> Vec<
         }
         let mut near = Vec::new();
         let (ts, ps) = &samples[k];
+        // the earlier pieces of other curves that come within reach of this one: only they can
+        // cover it (a point of it is within `fine` of its chords), so the test below looks at them
+        // alone; none, and it is kept whole
+        let pad = 2.0 * fine;
+        // which of its chords an earlier piece of another curve comes within reach of: a point
+        // of the piece lies within `fine` of its chord, so it can be covered only on those
+        let mut marked = vec![false; ps.len().saturating_sub(1).max(1)];
+        let mut look = |i: usize, lo: Point2, hi: Point2| {
+            marked[i] = grid.any_near(
+                Point2::new(lo.x - pad, lo.y - pad),
+                Point2::new(hi.x + pad, hi.y + pad),
+                |s| {
+                    let (g, _) = segs[s as usize];
+                    curve[g as usize] != curve[k] && rank[g as usize] < rank[k]
+                },
+            );
+        };
+        if ps.len() == 1 {
+            look(0, ps[0], ps[0]);
+        }
+        for (i, w) in ps.windows(2).enumerate() {
+            let (a, b) = (w[0], w[1]);
+            look(
+                i,
+                Point2::new(a.x.min(b.x), a.y.min(b.y)),
+                Point2::new(a.x.max(b.x), a.y.max(b.y)),
+            );
+        }
+        let alone = !marked.iter().any(|m| *m);
+        if alone {
+            let (t0, t1) = geom.range();
+            return if t1 > t0 { vec![geom.sub(t0, t1)] } else { vec![] }
+                .into_iter()
+                .filter(|g| g.length() > 10.0 * tol)
+                .collect();
+        }
         let mut also = Vec::new();
         for (i, w) in ps.windows(2).enumerate() {
             let (a, b) = (w[0], w[1]);
@@ -1307,7 +1355,16 @@ fn unique(geoms: &[Geom2], curve: &[usize], order: &[usize], chord: f64) -> Vec<
                 }
             }
         }
+        let maybe = |t: f64| {
+            let i = ts.partition_point(|x| *x < t);
+            [i.wrapping_sub(1), i]
+                .iter()
+                .any(|&w| marked.get(w).is_some_and(|m| *m))
+        };
         let covered = |t: f64| {
+            if !maybe(t) {
+                return false;
+            }
             let q = geom.at(t);
             let Some(dir) = geom.tangent(t) else { return false };
             grid.at(q).iter().any(|&s| {
