@@ -1068,6 +1068,8 @@ pub struct Session {
     pub saved: String,
     undo: Vec<String>,
     redo: Vec<String>,
+    /// Steps made from outside (the Agent tab): the undo depth each made, its label and key.
+    tags: Vec<(usize, String, u64)>,
     jobs: Sender<Job>,
     built: Receiver<Msg>,
     /// The last text sent to the worker, and the last one back.
@@ -1121,6 +1123,7 @@ impl Session {
             src,
             undo: vec![],
             redo: vec![],
+            tags: vec![],
             jobs,
             built,
             seq: 0,
@@ -1229,7 +1232,37 @@ impl Session {
         let old = std::mem::replace(&mut self.src, text);
         self.undo.push(old);
         self.redo.clear();
+        self.tags.retain(|t| t.0 < self.undo.len());
         self.rebuild();
+    }
+
+    /// Text from outside the app's own edits, as one labelled undo step: a later text under the
+    /// same key, with nothing done between, joins that step. `on_disk`: the file holds it.
+    pub fn external(&mut self, text: String, label: &str, key: u64, on_disk: bool) {
+        if on_disk {
+            self.saved = text.clone();
+        }
+        if text == self.src {
+            return;
+        }
+        let joins = self
+            .tags
+            .last()
+            .is_some_and(|t| t.2 == key && t.0 == self.undo.len() && self.redo.is_empty());
+        if joins {
+            self.previewing = false;
+            self.src = text;
+            self.rebuild();
+        } else {
+            self.set_text(text);
+            self.tags.push((self.undo.len(), label.to_string(), key));
+        }
+    }
+
+    /// The label and key of the step Undo would take back, if it came from outside.
+    pub fn undo_tag(&self) -> Option<(&str, u64)> {
+        let t = self.tags.iter().rev().find(|t| t.0 == self.undo.len())?;
+        Some((&t.1, t.2))
     }
 
     pub fn undo(&mut self) -> bool {

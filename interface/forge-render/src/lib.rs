@@ -18,6 +18,8 @@ pub mod viewcube;
 pub mod viewer;
 
 #[cfg(not(target_arch = "wasm32"))]
+pub mod agent;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod app;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod asmshot;

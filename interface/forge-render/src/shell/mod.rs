@@ -3,6 +3,8 @@
 //! desktop app and the browser share it. Buttons never change the document themselves: the host
 //! turns an action into a tool call.
 
+pub mod agent;
+pub mod agent_settings;
 pub mod asmglyph;
 pub mod asmpart;
 pub mod asmtools;
@@ -406,6 +408,8 @@ pub struct Shell {
     /// What's set in Settings, and its window.
     pub settings: settings::Settings,
     pub prefs: settings::Window,
+    /// The left panel's Agent tab (`agent.rs`).
+    pub agent: agent::AgentTab,
 }
 
 impl Default for Shell {
@@ -471,6 +475,7 @@ impl Default for Shell {
             new_drawing: None,
             settings: Default::default(),
             prefs: Default::default(),
+            agent: Default::default(),
         }
     }
 }
@@ -1146,37 +1151,18 @@ impl Shell {
             .to_string();
         // an assembly's name is its browser's top row
         let name = if self.is_asm() { String::new() } else { name };
-        self.head(&p, side.top(), "Model", &name);
+        self.side_tabs(ui, side.top(), &name);
         let tree = Rect::from_min_max(pos2(0.0, side.top() + HEAD_H), pos2(side.right(), side.bottom()));
-        if self.fg.as_ref().is_some_and(|f| f.asm.is_some()) {
+        if self.agent.tab == agent::SideTab::Agent {
+            self.agent_ui(ui, tree);
+        } else if self.fg.as_ref().is_some_and(|f| f.asm.is_some()) {
             self.asm_tree(ui, tree);
         } else if self.fg.is_some() {
             self.fg_tree(ui, tree);
         } else {
             self.tree(ui, tree);
         }
-    }
-
-    fn head(&self, p: &egui::Painter, y: f32, left: &str, right: &str) {
-        let t = self.theme;
-        let w = self.side_w();
-        let h = Rect::from_min_size(pos2(0.0, y), vec2(w, HEAD_H));
-        p.rect_filled(h, 0.0, t.raised);
-        p.hline(0.0..=w, y + HEAD_H - 0.5, Stroke::new(1.0, t.line));
-        p.text(
-            pos2(10.0, y + HEAD_H * 0.5),
-            Align2::LEFT_CENTER,
-            left,
-            semi(12.0),
-            t.ink,
-        );
-        p.text(
-            pos2(w - 10.0, y + HEAD_H * 0.5),
-            Align2::RIGHT_CENTER,
-            right,
-            sans(12.0),
-            t.ink2,
-        );
+        self.agent_drag(ui);
     }
 
     /// A feature's fields, from the document as it stands.
@@ -1331,6 +1317,9 @@ impl Shell {
     /// Esc backs out one level, wherever one is: never two, and never none.
     fn escape_one_level(&mut self, ctx: &egui::Context) {
         if !ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+            return;
+        }
+        if self.agent.takes_escape(ctx) {
             return;
         }
         // these take it themselves, knowing what they had

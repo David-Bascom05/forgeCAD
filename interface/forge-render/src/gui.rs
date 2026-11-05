@@ -24,6 +24,8 @@ use std::sync::mpsc::{Receiver, channel};
 use winit::dpi::PhysicalPosition;
 use winit::event::{ElementState, MouseButton, WindowEvent};
 
+#[path = "gui_agent.rs"]
+pub mod gui_agent;
 #[path = "gui_asm.rs"]
 mod gui_asm;
 #[path = "gui_explode.rs"]
@@ -112,6 +114,8 @@ type PartAnchors = (String, Result<Vec<String>, String>);
 
 pub struct Gui {
     pub ctx: egui::Context,
+    /// The Agent tab's backend and its turns (`gui_agent.rs`).
+    pub agent: gui_agent::AgentHost,
     egui: egui_wgpu::Renderer,
     pub shell: Shell,
     device: wgpu::Device,
@@ -255,6 +259,7 @@ impl Gui {
         let warm = ctx.run_ui(warm_input, |ui| warm_shell.ui(ui));
         warm_shell.out.clear();
         Gui {
+            agent: Default::default(),
             ctx,
             egui,
             shell: Shell::default(),
@@ -1460,6 +1465,9 @@ impl Gui {
                 // a Forge part's document changes only by typed ops, from its browser and dialogs
                 match a {
                     Action::Undo => {
+                        if let Some((label, _)) = s.undo_tag() {
+                            self.shell.status = format!("Undid {label}");
+                        }
                         s.undo();
                         self.fg_text();
                         continue;
@@ -2140,6 +2148,7 @@ impl Gui {
         self.take_loaded();
         self.take_live();
         self.take_fg();
+        self.take_agent();
         self.take_extras(false);
         times.events = now_ms() - t0;
         let mut animating = false;
@@ -2176,6 +2185,7 @@ impl Gui {
         self.pixels_per_point = output.pixels_per_point;
         let host = self.apply();
         self.apply_fg();
+        self.agent_acts();
         self.save_settings();
         self.inspect_tick();
         self.sheet_frame();
