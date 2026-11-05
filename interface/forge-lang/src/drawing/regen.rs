@@ -148,6 +148,9 @@ pub struct Drawing {
     pub views: Vec<ViewOut>,
     pub items: Vec<ItemOut>,
     pub errors: Vec<DrawError>,
+    /// The part files its assemblies' parts were loaded from, one for each load made: a file
+    /// several models use, asked for different references, is loaded once for them all.
+    pub part_loads: Vec<String>,
 }
 
 impl Drawing {
@@ -210,7 +213,13 @@ fn describe(path: &Path, file: &str) -> (String, String) {
     (number, desc)
 }
 
-fn load(id: &str, file: &str, dir: &Path, pool: &Arc<crate::asm::PartPool>) -> Result<ModelOut, String> {
+fn load(
+    id: &str,
+    file: &str,
+    dir: &Path,
+    pool: &Arc<crate::asm::PartPool>,
+    wants: &Arc<crate::asm::Wants>,
+) -> Result<ModelOut, String> {
     let path = dir.join(file);
     let src = std::fs::read_to_string(&path);
     crate::deps::read(&path, src.as_ref().ok().map(|s| s.as_bytes()));
@@ -231,7 +240,11 @@ fn load(id: &str, file: &str, dir: &Path, pool: &Arc<crate::asm::PartPool>) -> R
     };
     // the drawing's models share their parts' builds (a subassembly also drawn on its own)
     let mut cache = crate::build::Cache::default();
-    cache.asm = Some(Box::new(crate::asm::AsmCache::with_pool(pool.clone())));
+    cache.asm = Some(Box::new(crate::asm::AsmCache::with_wants(
+        pool.clone(),
+        wants.clone(),
+        false,
+    )));
     let (run, _) = crate::run(&src, opts, cache);
     if !run.ok() {
         let e = &run.errors[0];
@@ -278,6 +291,36 @@ fn load(id: &str, file: &str, dir: &Path, pool: &Arc<crate::asm::PartPool>) -> R
         material: None,
         found: None,
     })
+}
+
+/// What an assembly model asks of each part file, added to `wants`: its document run up to its
+/// parts, none of them built. A part model asks nothing.
+fn wants_of(file: &str, dir: &Path, pool: &Arc<crate::asm::PartPool>, wants: &Arc<crate::asm::Wants>) {
+    let path = dir.join(file);
+    let Some(src) = crate::asm::read_capped(&path) else {
+        return;
+    };
+    if !crate::syntax::parse(&src).is_ok_and(|p| crate::asm::declared(&p)) {
+        return;
+    }
+    let opts = crate::Options {
+        build: true,
+        render: true,
+        overlap: false,
+        expects: false,
+        checks: false,
+        cosmetic_threads: true,
+        meshes: false,
+        dir: path.parent().map(Path::to_path_buf),
+        ..crate::Options::default()
+    };
+    let mut cache = crate::build::Cache::default();
+    cache.asm = Some(Box::new(crate::asm::AsmCache::with_wants(
+        pool.clone(),
+        wants.clone(),
+        true,
+    )));
+    let _ = crate::run(&src, opts, cache);
 }
 
 /// Where a part file of an assembly is: as written, from the assembly's directory or a
@@ -2637,6 +2680,7 @@ fn preview(src: &str, pages: Vec<Page>) -> Drawing {
         views: vec![],
         items: vec![],
         errors: vec![],
+        part_loads: vec![],
     }
 }
 
@@ -2706,8 +2750,16 @@ fn make_with(src: &str, dir: &Path, mut show: Option<&mut dyn FnMut(Shown)>) -> 
         .collect();
     let _sp = forge_math::trace::span("drawing models");
     let pool: Arc<crate::asm::PartPool> = Arc::default();
-    let mut loaded =
-        crate::par::map(wanted.len(), |k| load(wanted[k].0, wanted[k].1, &ctx.dir, &pool)).into_iter();
+    // first what every assembly asks of each part file, building nothing: then one load of a file
+    // serves them all (the rack and the door drawn on its own ask the door's parts for different
+    // references)
+    let wants: Arc<crate::asm::Wants> = Arc::default();
+    crate::par::map(wanted.len(), |k| wants_of(wanted[k].1, &ctx.dir, &pool, &wants));
+    let mut loaded = crate::par::map(wanted.len(), |k| {
+        load(wanted[k].0, wanted[k].1, &ctx.dir, &pool, &wants)
+    })
+    .into_iter();
+    let part_loads = crate::asm::pool_files(&pool);
     drop(_sp);
     for item in &d.items {
         match &item.kind {
@@ -3057,6 +3109,7 @@ fn make_with(src: &str, dir: &Path, mut show: Option<&mut dyn FnMut(Shown)>) -> 
         errors,
         models: ctx.models,
         doc: d,
+        part_loads,
     }
 }
 

@@ -1660,16 +1660,38 @@ pub struct AsmCache {
     last: Option<Live>,
     /// Parts runs on other threads build at once (`at` runs): each built by one of them only.
     pool: Option<Arc<PartPool>>,
+    /// What runs sharing a pool ask of each part file (`Wants`): collected by a first pass that
+    /// builds nothing, or taken by the real run, which asks each file it uses for all of it.
+    wants: Option<(Arc<Wants>, bool)>,
 }
+
+/// Each part file's references and bodies, over several documents' runs.
+/// The file of each part load `pool` holds, in key order: one for each load made through it.
+pub(crate) fn pool_files(pool: &PartPool) -> Vec<String> {
+    pool.lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .keys()
+        .map(|k| k.0.clone())
+        .collect()
+}
+
+pub(crate) type Wants = std::sync::Mutex<BTreeMap<String, (BTreeSet<String>, BTreeSet<String>)>>;
 
 pub(crate) type PartPool = std::sync::Mutex<BTreeMap<PartKey, Arc<std::sync::OnceLock<Arc<PartLoad>>>>>;
 
 impl AsmCache {
     /// Nothing loaded yet, its parts built through `pool`: runs on other threads sharing it
     /// build each part (by its whole key) once between them.
-    pub(crate) fn with_pool(pool: Arc<PartPool>) -> AsmCache {
+    /// Nothing loaded yet, its parts built through `pool` (runs on other threads sharing it build
+    /// each part, by its whole key, once between them), and what the runs sharing it want of each
+    /// part file: with `collect`, the run
+    /// only adds what it would ask to `wants` and builds nothing; without, it asks each part file
+    /// it uses for all `wants` holds of it, so runs asking one file for different references
+    /// make one load of it between them.
+    pub(crate) fn with_wants(pool: Arc<PartPool>, wants: Arc<Wants>, collect: bool) -> AsmCache {
         AsmCache {
             pool: Some(pool),
+            wants: Some((wants, collect)),
             ..AsmCache::default()
         }
     }
@@ -2763,6 +2785,32 @@ pub fn finish(
         catalog.assemblies.insert(doc, a);
     }
 
+    // what other runs sharing the pool ask of the same files: a first pass only says what it
+    // would ask; a run then asks each of its files for everything any of them asks
+    match &cache.wants {
+        Some((all, true)) => {
+            let mut all = all.lock().unwrap_or_else(|e| e.into_inner());
+            for (file, (refs, bodies)) in &want {
+                let e = all.entry(file.clone()).or_default();
+                e.0.extend(refs.iter().cloned());
+                e.1.extend(bodies.iter().cloned());
+            }
+            drop(all);
+            ev.asm = Some(d);
+            return (None, Some(cache));
+        }
+        Some((all, false)) => {
+            let all = all.lock().unwrap_or_else(|e| e.into_inner());
+            for (file, (refs, bodies)) in want.iter_mut() {
+                if let Some((r, b)) = all.get(file) {
+                    refs.extend(r.iter().cloned());
+                    bodies.extend(b.iter().cloned());
+                }
+            }
+        }
+        None => {}
+    }
+
     // parts: built once per text and question, by file
     let mut exact = BrepExact::default();
     let mut loads: Vec<usize> = vec![];
@@ -3411,6 +3459,7 @@ pub fn finish(
                 subs: subs.clone(),
                 last: None,
                 pool: Some(pool.clone()),
+                wants: None,
             }));
             let (run, _) = crate::run(text, o, kept);
             let built = run.asm.as_ref().map_or(0, |a| a.timings.built);

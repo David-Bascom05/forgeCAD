@@ -497,3 +497,24 @@ fn balloons_hidden_parts_in_a_section_numbered_by_the_first_view() {
         "{inside:?} -> {left:?}"
     );
 }
+
+/// A part file every model of a drawing uses is loaded once, though the models ask it for
+/// different references (the rack and the caster and door drawn on their own): the rack's general
+/// assembly loads each of its 68 part files once.
+#[test]
+fn each_part_file_of_a_drawing_is_loaded_once() {
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../examples/rack18u/drawings");
+    let src = std::fs::read_to_string(dir.join("rack_ga.fg")).expect("rack_ga.fg");
+    let d = regen::make(&src, &dir);
+    assert!(d.ok(), "{:?}", d.errors);
+    let mut files = d.part_loads.clone();
+    files.sort();
+    files.dedup();
+    assert_eq!(
+        d.part_loads.len(),
+        files.len(),
+        "a file loaded twice: {:?}",
+        d.part_loads
+    );
+    assert_eq!(files.len(), 68);
+}
