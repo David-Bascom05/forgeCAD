@@ -2487,8 +2487,16 @@ impl Gui {
                 world: &world,
                 behind: &behind,
             };
+            // a wall or draft map shows its colours as the legend has them: no occlusion over it
+            let ao = v.renderer.ao;
+            if self.shell.fg.as_ref().is_some_and(|p| {
+                p.thermo.analysis != crate::shell::thermo_ui::Analysis::None && !self.fg_walls.is_empty()
+            }) {
+                v.renderer.ao = false;
+            }
             v.renderer
                 .frame(&v.target.view, &mut v.scene, &v.nav.camera, overlay);
+            v.renderer.ao = ao;
             v.dirty = false;
             times.view_drawn = true;
         }

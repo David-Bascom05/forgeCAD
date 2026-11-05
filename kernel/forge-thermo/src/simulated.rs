@@ -28,6 +28,14 @@ pub struct Simulated {
     /// The wall at each vertex, mm, and its foot: the point on the tool side it stands off.
     pub wall: Vec<f64>,
     pub foot: Vec<Point3>,
+    /// The model's wall, unsmoothed, at each vertex's point of the modelled part: what the colours
+    /// show, the same on the modelled part and on this.
+    pub raw: Vec<f64>,
+    /// Each vertex's point of the model's sheet (its modelled point's nearest): where its colour
+    /// comes from.
+    pub sheet: Vec<Point3>,
+    /// Each vertex's point on the modelled part: the colours are looked up from it.
+    pub modelled: Vec<Point3>,
     /// The tool side's area, and the integral of the wall over the wall's middle surface (what
     /// the membrane conserves): the mesh's volume is within 0.5 % of it on formed parts.
     pub area: f64,
@@ -458,6 +466,9 @@ impl Builder {
         Simulated {
             foot: self.pos.iter().chain(&self.pos).copied().collect(),
             wall: self.wall.iter().chain(&self.wall).copied().collect(),
+            raw: self.wall.iter().chain(&self.wall).copied().collect(),
+            sheet: self.pos.iter().chain(&self.pos).copied().collect(),
+            modelled: self.pos.iter().chain(&self.pos).copied().collect(),
             mesh,
             area,
             sheet_volume,
@@ -538,7 +549,10 @@ pub struct WallField {
     pub volume: f64,
     pos: Vec<Point3>,
     tris: Vec<[u32; 3]>,
+    /// The wall smoothed (what the simulated part's shape is made from) and as the model gives it
+    /// (what its colours show).
     wall: Vec<f64>,
+    raw: Vec<f64>,
     cell: f64,
     cells: HashMap<(i64, i64, i64), Vec<u32>>,
 }
@@ -616,13 +630,23 @@ impl WallField {
             pos: pos.to_vec(),
             tris,
             wall,
+            raw: sim.wall.clone(),
             cell,
             cells,
         }
     }
 
-    /// The wall at `p`'s foot on the sheet, and the foot (None: no sheet within reach).
+    /// The wall at `p`'s foot on the sheet, smoothed, and the foot (None: no sheet within reach).
     pub fn at(&self, p: Point3) -> Option<(f64, Point3)> {
+        self.near(p, &self.wall)
+    }
+
+    /// The wall at `p`'s foot as the model gives it, unsmoothed: what the colours show.
+    pub fn raw_at(&self, p: Point3) -> Option<(f64, Point3)> {
+        self.near(p, &self.raw)
+    }
+
+    fn near(&self, p: Point3, wall: &[f64]) -> Option<(f64, Point3)> {
         let key = |v: f64| (v / self.cell).floor() as i64;
         let list = self.cells.get(&(key(p.x), key(p.y), key(p.z)))?;
         let mut best: Option<(f64, f64, Point3)> = None;
@@ -635,11 +659,7 @@ impl WallField {
             }
             let w = bary(q, a, b, c);
             let [i, j, l] = self.tris[k as usize].map(|i| i as usize);
-            best = Some((
-                d,
-                w[0] * self.wall[i] + w[1] * self.wall[j] + w[2] * self.wall[l],
-                q,
-            ));
+            best = Some((d, w[0] * wall[i] + w[1] * wall[j] + w[2] * wall[l], q));
         }
         best.map(|b| (b.1, b.2))
     }
@@ -871,8 +891,17 @@ pub(crate) fn built_on(
         }
         sheet_volume = f.volume;
     }
+    // the colours: the model's own wall at each point of the modelled part, as painted there
+    let (raw, sheet): (Vec<f64>, Vec<Point3>) = pos
+        .iter()
+        .zip(&wall)
+        .map(|(p, w)| field.and_then(|f| f.raw_at(*p)).unwrap_or((*w, *p)))
+        .unzip();
     Some(Simulated {
         wall: wall.iter().map(|w| w * k).collect(),
+        raw,
+        sheet,
+        modelled: pos.clone(),
         foot,
         mesh,
         area,

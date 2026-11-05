@@ -14,7 +14,8 @@ const DEPTH: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 const TIMERS: usize = 4;
 /// The view cube's triangles, at most (viewcube's test holds it under).
 const CUBE_BYTES: u64 = 24 * 3 * 4096;
-const WORLD_BYTES: u64 = 28 * 6 * 16384;
+// the view's own lines and marks, and a part's wall map on all its faces
+const WORLD_BYTES: u64 = 28 * 1_048_576;
 const HUD_CHARS: usize = 256;
 /// Characters per row of the overlay (render.wgsl).
 const HUD_COLUMNS: usize = 85;

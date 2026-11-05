@@ -4,7 +4,7 @@
 //! over the formed part's face.
 use crate::mesh::{Lod, PartMesh, SEGMENT, VERTEX};
 use crate::origin::WorldVert;
-use crate::shell::thermo::{DRAFT, Masses, ThermoRow, band};
+use crate::shell::thermo::{BANDS, DRAFT, Masses, ThermoRow, band};
 use crate::shell::thermo_ui::draft_class;
 use forge_lang::thermo::ThermoOut;
 use forge_math::{Point2, Point3, Vec3};
@@ -46,6 +46,8 @@ pub struct Gfx {
     /// The wall's range the colours span, mm, and where the model's thinnest and thickest are.
     pub range: (f64, f64),
     pub at: (Point3, Point3),
+    /// The sheet's thickness, mm.
+    pub t: f64,
 }
 
 /// A solid's faces and edges in the part's body.
@@ -55,8 +57,21 @@ pub struct Span {
     pub edges: std::ops::Range<u32>,
 }
 
+/// A legend colour (sRGB, as the legend paints it) for the view's linear target: the same colour
+/// on the screen, full strength, unlit.
+pub fn unlit(c: [f32; 3]) -> [f32; 4] {
+    let lin = |x: f32| {
+        if x <= 0.04045 {
+            x / 12.92
+        } else {
+            forge_math::dmath::powf(((x + 0.055) / 1.055) as f64, 2.4) as f32
+        }
+    };
+    [lin(c[0]), lin(c[1]), lin(c[2]), 1.0]
+}
+
 /// How far a wall map lies off the face it's painted on, mm: clear of it in depth, no gap seen.
-const LIFT: f64 = 0.03;
+const LIFT: f64 = 0.08;
 
 /// Faces numbered from here are no body's: a pick passes them by.
 pub const UNPICKED: u32 = 0x7000_0000;
@@ -74,7 +89,7 @@ impl Gfx {
             for p in tri {
                 out.push(WorldVert {
                     at: *p,
-                    colour: [c[0], c[1], c[2], 1.0],
+                    colour: unlit(c),
                 });
             }
         }
@@ -266,6 +281,7 @@ pub fn view(o: &ThermoOut, spans: &[forge_lang::build::Span], draft_min: f32) ->
         .collect();
     let (wlo, whi) = (w.min.0 * o.t, w.max.0 * o.t);
     gfx.range = (wlo, whi);
+    gfx.t = o.t;
     gfx.at = (w.min.1, w.max.1);
     for s in &w.steps {
         let mut n = vec![[0.0f32; 3]; s.nodes.len()];
@@ -307,7 +323,7 @@ pub fn view(o: &ThermoOut, spans: &[forge_lang::build::Span], draft_min: f32) ->
                         p[1] + q[1] / l * lift,
                         p[2] + q[2] / l * lift,
                     ],
-                    colour: [c[0], c[1], c[2], 1.0],
+                    colour: unlit(c),
                 });
             }
         }
@@ -321,29 +337,36 @@ pub fn view(o: &ThermoOut, spans: &[forge_lang::build::Span], draft_min: f32) ->
             .collect();
     }
     gfx.points = row.points.clone();
-    // the simulated part's free side, banded as the model's map is, a hair off it
-    if let Some(sim) = &o.sim {
+    // the simulated part's outside, banded as the legend is, by the model's own wall at each
+    // point of the modelled part it was moved from: the same colours as the modelled part's
+    if let (Some(sim), Some(field)) = (&o.sim, &o.field) {
         let m = &sim.mesh;
         for (k, tri) in m.triangles.iter().enumerate() {
             if m.face_of[k] == forge_thermo::simulated::TOOL_SIDE {
                 continue;
             }
-            let up = m
-                .triangle_normal(*tri)
-                .normalize()
-                .map_or(Vec3::ZERO, |u| u.get() * LIFT);
-            for &i in tri {
-                let h = sim.wall[i as usize];
-                let c = band(if whi > wlo {
-                    ((h - wlo) / (whi - wlo)) as f32
-                } else {
-                    0.5
-                });
-                gfx.sim_heat.push(WorldVert {
-                    at: f3(m.positions[i as usize] + up),
-                    colour: [c[0], c[1], c[2], 1.0],
-                });
-            }
+            let p = tri.map(|i| m.positions[i as usize]);
+            let q = tri.map(|i| sim.modelled[i as usize]);
+            painted(p, q, field, (wlo, whi), &mut gfx.sim_heat, &mut |_, _| {}, None);
+        }
+    }
+    // MIN and MAX on the simulated part: its outside's points whose sheet points are the model's
+    // thinnest and thickest (the modelled part's are found the same way when it is painted)
+    if let Some(sim) = &o.sim {
+        let m = &sim.mesh;
+        let outside = |i: usize| (m.positions[i] - sim.foot[i]).length() > 0.25 * o.t;
+        let at = |target: Point3| {
+            (0..m.positions.len())
+                .filter(|&i| outside(i))
+                .min_by(|a, b| {
+                    (sim.sheet[*a] - target)
+                        .length_sq()
+                        .total_cmp(&(sim.sheet[*b] - target).length_sq())
+                })
+                .map(|i| f3(m.positions[i]))
+        };
+        if let (Some(a), Some(b)) = (at(w.min.1), at(w.max.1)) {
+            gfx.sim_extremes = Some((a, b));
         }
     }
     let below = row.points.iter().filter(|p| (p.1 as f64) < limit * o.t).count();
@@ -609,77 +632,192 @@ impl Gfx {
         }
         self.heat_for = key;
         self.heat.clear();
-        self.extremes = None;
-        let (Some(field), Some(span), Some(l)) = (&self.field, &self.part_span, mesh.lods.first()) else {
+        // the level the view's mesh has at a twentieth of a millimetre (its finest is a hundredth:
+        // far more triangles than a map needs), the map lifted clear of its chord
+        let Some(l) = mesh.lods.iter().find(|l| l.chord >= 0.04).or(mesh.lods.first()) else {
             return;
         };
-        let (lo, hi) = self.range;
-        let colour = |h: f64| {
-            let c = band(if hi > lo {
-                ((h - lo) / (hi - lo)) as f32
-            } else {
-                0.5
-            });
-            [c[0], c[1], c[2], 1.0]
+        let (Some(field), Some(span)) = (&self.field, &self.part_span) else {
+            return;
         };
-        let mut at: std::collections::HashMap<u32, Option<(f64, Point3)>> = Default::default();
-        let (mut near_lo, mut near_hi) = ((f64::INFINITY, [0.0f32; 3]), (f64::INFINITY, [0.0f32; 3]));
+        // MIN and MAX: the outside's points whose sheet points are the model's thinnest and thickest
+        let (mut best_lo, mut best_hi) = ((f64::INFINITY, [0.0f32; 3]), (f64::INFINITY, [0.0f32; 3]));
+        let (target_lo, target_hi) = self.at;
+        // on the part's outside: well off the sheet (its side on the tool is within a quarter of t)
+        let off = 0.6 * self.t;
+        let mut mark = |p: Point3, foot: Point3| {
+            if (p - foot).length() > off {
+                for (best, target) in [(&mut best_lo, target_lo), (&mut best_hi, target_hi)] {
+                    let d = (foot - target).length_sq();
+                    if d < best.0 {
+                        *best = (d, f3(p));
+                    }
+                }
+            }
+        };
         let idx = |k: usize| u32::from_le_bytes(l.indices[k * 4..k * 4 + 4].try_into().expect("4 bytes"));
         for f in l.faces.iter().filter(|f| span.faces.contains(&f.face)) {
             for t in f.first_tri..f.first_tri + f.tris {
-                let v = [0, 1, 2].map(|k| idx(t as usize * 3 + k));
-                let p = v.map(|i| vertex_at(&l.vertices, i as usize));
-                let Some(n) = (p[1] - p[0]).cross(p[2] - p[0]).normalize() else {
-                    continue;
-                };
-                let walls = v.map(|i| {
-                    *at.entry(i)
-                        .or_insert_with(|| field.at(vertex_at(&l.vertices, i as usize)))
+                let p = [0, 1, 2].map(|k| vertex_at(&l.vertices, idx(t as usize * 3 + k) as usize));
+                painted(p, p, field, self.range, &mut self.heat, &mut mark, Some(self.t));
+            }
+        }
+        if best_lo.0.is_finite() && best_hi.0.is_finite() {
+            self.extremes = Some((best_lo.1, best_hi.1));
+        }
+    }
+}
+
+/// How long a side of a painted triangle is at most, mm: the wall is looked up at every corner, so a
+/// big flat face of the part shows the model's wall across it, its extremes too.
+const PAINT: f64 = 2.0;
+
+/// A triangle of a part (drawn at `p`, its colours looked up at `q`, its points on the modelled
+/// part) split into pieces at most `PAINT` across, each corner coloured by the model's own wall at
+/// its point of the sheet, banded as the legend is. `mark` sees each corner and its sheet point.
+pub fn painted(
+    p: [Point3; 3],
+    q: [Point3; 3],
+    field: &forge_thermo::WallField,
+    range: (f64, f64),
+    out: &mut Vec<WorldVert>,
+    mark: &mut dyn FnMut(Point3, Point3),
+    skip_under: Option<f64>,
+) {
+    let look = |x: Point3| field.raw_at(x);
+    let corners = q.map(look);
+    if corners.iter().all(|c| c.is_none()) {
+        return;
+    }
+    // the side on the tool is under the part: no colour there to see
+    if let Some(t) = skip_under
+        && (0..3).all(|k| corners[k].is_some_and(|f| (f.1 - q[k]).length() < 0.5 * t))
+    {
+        return;
+    }
+    for k in 0..3 {
+        if let Some((_, foot)) = corners[k] {
+            mark(p[k], foot);
+        }
+    }
+    // under the bands, the whole triangle in its middle's band: where halving left a hairline
+    // between pieces, it shows that, not the part
+    if let (Some(n), Some((wm, _))) = (
+        (p[1] - p[0]).cross(p[2] - p[0]).normalize(),
+        field.raw_at(q[0] + ((q[1] - q[0]) + (q[2] - q[0])) * (1.0 / 3.0)),
+    ) {
+        let c = unlit(band(if range.1 > range.0 {
+            ((wm - range.0) / (range.1 - range.0)) as f32
+        } else {
+            0.5
+        }));
+        for x in p {
+            out.push(WorldVert {
+                at: f3(x + n.get() * (0.6 * LIFT)),
+                colour: c,
+            });
+        }
+    }
+    split(p, q, corners, field, range, out, mark, 0);
+}
+
+/// One painted triangle: halved across its longest side till no side is over `PAINT`, the wall
+/// looked up at each new corner, then banded.
+#[allow(clippy::too_many_arguments)]
+fn split(
+    p: [Point3; 3],
+    q: [Point3; 3],
+    w: [Option<(f64, Point3)>; 3],
+    field: &forge_thermo::WallField,
+    range: (f64, f64),
+    out: &mut Vec<WorldVert>,
+    mark: &mut dyn FnMut(Point3, Point3),
+    depth: usize,
+) {
+    let len = |k: usize| (q[k] - q[(k + 1) % 3]).length();
+    let k = (0..3).max_by(|a, b| len(*a).total_cmp(&len(*b))).unwrap_or(0);
+    if len(k) <= PAINT || depth > 24 {
+        let known: Vec<f64> = w.iter().flatten().map(|x| x.0).collect();
+        if known.is_empty() {
+            return;
+        }
+        let fill = known.iter().sum::<f64>() / known.len() as f64;
+        banded(p, w.map(|x| x.map_or(fill, |x| x.0)), range, out);
+        return;
+    }
+    let (a, b) = (k, (k + 1) % 3);
+    let pm = p[a] + (p[b] - p[a]) * 0.5;
+    let qm = q[a] + (q[b] - q[a]) * 0.5;
+    let wm = field.raw_at(qm);
+    if let Some((_, foot)) = wm {
+        mark(pm, foot);
+    }
+    // the two halves: the middle in corner b's place, then in corner a's
+    for j in [b, a] {
+        let (mut pp, mut qq, mut ww) = (p, q, w);
+        pp[j] = pm;
+        qq[j] = qm;
+        ww[j] = wm;
+        split(pp, qq, ww, field, range, out, mark, depth + 1);
+    }
+}
+
+/// A triangle cut along the legend's band edges (ten bands from `range`'s thinnest to its
+/// thickest), each piece filled with its band's colour, a hair off the face: a contour plot, the
+/// value linear across the triangle, no colour blended across a band edge.
+pub fn banded(p: [Point3; 3], v: [f64; 3], range: (f64, f64), out: &mut Vec<WorldVert>) {
+    let Some(n) = (p[1] - p[0]).cross(p[2] - p[0]).normalize() else {
+        return;
+    };
+    let up = n.get() * LIFT;
+    let (lo, hi) = range;
+    let span = (hi - lo).max(1e-12);
+    let poly: Vec<(Point3, f64)> = (0..3).map(|k| (p[k], v[k])).collect();
+    let (vmin, vmax) = v.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |a, &x| {
+        (a.0.min(x), a.1.max(x))
+    });
+    // the band of a value: 0 the thickest's (as `band` reads it), 9 the thinnest's
+    let index = |x: f64| (((1.0 - ((x - lo) / span).clamp(0.0, 1.0)) * 10.0) as usize).min(9);
+    let (first, last) = (index(vmax), index(vmin));
+    for (k, c) in BANDS.iter().enumerate().take(last + 1).skip(first) {
+        // band k holds the values from lo + (9 - k) span / 10 to lo + (10 - k) span / 10
+        let (a, b) = (
+            lo + span * (9 - k) as f64 / 10.0,
+            lo + span * (10 - k) as f64 / 10.0,
+        );
+        let below = if k == 9 { f64::NEG_INFINITY } else { a };
+        let above = if k == 0 { f64::INFINITY } else { b };
+        let piece = clip_value(&clip_value(&poly, below, true), above, false);
+        if piece.len() < 3 {
+            continue;
+        }
+        for j in 1..piece.len() - 1 {
+            for q in [piece[0].0, piece[j].0, piece[j + 1].0] {
+                out.push(WorldVert {
+                    at: f3(q + up),
+                    colour: unlit(*c),
                 });
-                for k in 0..3 {
-                    // the outside stands off its foot along its face; it carries MIN and MAX
-                    let Some((_, foot)) = walls[k] else { continue };
-                    if (p[k] - foot).dot(n.get()) > 0.5 {
-                        for (best, target) in [(&mut near_lo, self.at.0), (&mut near_hi, self.at.1)] {
-                            let d = (foot - target).length();
-                            if d < best.0 {
-                                *best = (d, f3(p[k] + n.get() * LIFT));
-                            }
-                        }
-                    }
-                }
-                // a point the field has not near it takes its neighbours' wall, so no face is bare
-                let known: Vec<f64> = walls.iter().flatten().map(|w| w.0).collect();
-                let fill = known.iter().sum::<f64>() / known.len().max(1) as f64;
-                for k in 0..3 {
-                    let h = walls[k].map_or(if known.is_empty() { lo } else { fill }, |w| w.0);
-                    self.heat.push(WorldVert {
-                        at: f3(p[k] + n.get() * LIFT),
-                        colour: colour(h),
-                    });
-                }
-            }
-        }
-        if near_lo.0.is_finite() && near_hi.0.is_finite() {
-            self.extremes = Some((near_lo.1, near_hi.1));
-        }
-        if let (Some(m), Some(feet)) = (&self.sim_mesh, &self.sim_feet) {
-            let (mut a, mut b) = ((f64::INFINITY, [0.0f32; 3]), (f64::INFINITY, [0.0f32; 3]));
-            for (i, &foot) in feet.iter().enumerate() {
-                let top = m.positions[i];
-                if (top - foot).length() < 0.3 {
-                    continue;
-                }
-                for (best, target) in [(&mut a, self.at.0), (&mut b, self.at.1)] {
-                    let d = (foot - target).length();
-                    if d < best.0 {
-                        *best = (d, f3(top));
-                    }
-                }
-            }
-            if a.0.is_finite() {
-                self.sim_extremes = Some((a.1, b.1));
             }
         }
     }
+}
+
+/// The part of a polygon whose value is at least `edge` (`keep_above`) or at most it.
+fn clip_value(poly: &[(Point3, f64)], edge: f64, keep_above: bool) -> Vec<(Point3, f64)> {
+    if edge.is_infinite() {
+        return poly.to_vec();
+    }
+    let inside = |x: f64| if keep_above { x >= edge } else { x <= edge };
+    let mut out = vec![];
+    for k in 0..poly.len() {
+        let (a, b) = (poly[k], poly[(k + 1) % poly.len()]);
+        if inside(a.1) {
+            out.push(a);
+        }
+        if inside(a.1) != inside(b.1) {
+            let f = (edge - a.1) / (b.1 - a.1);
+            out.push((a.0 + (b.0 - a.0) * f, edge));
+        }
+    }
+    out
 }
