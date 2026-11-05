@@ -501,13 +501,20 @@ fn pole_steps(st: &Stretch, p_end: f64) -> Vec<(f64, f64, f64)> {
     let (nx, _) = st.grid;
     let (ci, cj) = centre(st);
     let k = cj * (nx + 1) + ci;
-    // the load steps up to the forming pressure, each at the pressure it stood at
+    // the load steps up to the forming pressure, each at the pressure it stood at, on the rising
+    // branch only (drawn by volume the pressure falls past the limit point, which a measured,
+    // pressure-driven bubble never reaches)
     let _ = p_end;
-    st.steps
+    let mut out: Vec<(f64, f64, f64)> = st
+        .steps
         .iter()
         .filter(|s| s.stage == "vacuum")
         .map(|s| (s.pressure, -(s.nodes[k][2] as f64), s.ratio[k] as f64))
-        .collect()
+        .collect();
+    if let Some(k) = out.windows(2).position(|w| w[1].0 < w[0].0) {
+        out.truncate(k + 1);
+    }
+    out
 }
 
 fn score_bubble(c: &Case, data: &Path, st: &Stretch, p_end: f64) -> Score {
@@ -740,7 +747,9 @@ fn scoreboard() {
                             (None, "n/a")
                         } else {
                             let fresh;
-                            let st: &Stretch = if Some(&p) == t.process.as_ref() {
+                            // THERMO_FRESH: solve every config here, for its cost
+                            let fresh_all = std::env::var_os("THERMO_FRESH").is_some();
+                            let st: &Stretch = if Some(&p) == t.process.as_ref() && !fresh_all {
                                 t.walls.as_deref().expect("walls")
                             } else {
                                 let at = std::time::Instant::now();
