@@ -312,6 +312,13 @@ impl Nav {
         self.drag.is_some()
     }
 
+    /// What's under the pointer by the last pick, chosen or not.
+    pub fn hover_hit(&self) -> Option<(u32, Entity)> {
+        self.hit
+            .filter(|_| self.hit_at.is_some() && self.drag.is_none())
+            .map(|h| (h.placement, h.entity))
+    }
+
     /// Where in the world the pointer last was on the part.
     pub fn hit_point(&self) -> Option<[f32; 3]> {
         self.hit.map(|h| h.point)

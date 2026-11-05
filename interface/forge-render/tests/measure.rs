@@ -127,6 +127,9 @@ fn reading(h: &mut Headless) -> forge_agent::measure::Reading {
             .as_ref()
             .is_some_and(|m| m.reading.is_some() && !m.busy)
     }));
+    // a frame to show it: its rows and marks on screen
+    h.step();
+    h.step();
     let m = h.gui.shell.inspect.measure.as_ref().unwrap();
     m.reading.clone().unwrap().unwrap()
 }
@@ -357,4 +360,204 @@ fn in_the_rack_occurrences_are_measured_where_they_stand() {
     let t = measured(&mut h, "base_pan/body", Some("top_pan/body"));
     close(value(&t, "Minimum distance"), 906.0 - hb - ht);
     close(value(&t, "Delta Z"), 906.0 - hb - ht);
+}
+
+fn place(h: &Headless, name: &str) -> egui::Rect {
+    h.gui
+        .shell
+        .place(name)
+        .unwrap_or_else(|| panic!("no {name} on screen"))
+}
+
+#[test]
+fn the_dimensions_stay_on_the_model_as_it_turns_and_sit_under_the_panel() {
+    use forge_agent::measure::Shown;
+    let Some(mut h) = open("marks") else { return };
+    measure(&mut h);
+    click(&mut h, TOP);
+    let r = reading(&mut h);
+    let centre = r
+        .shown
+        .iter()
+        .find_map(|s| match s {
+            Shown::Face(_, c) => Some(*c),
+            _ => None,
+        })
+        .expect("the face tinted");
+    let on_screen = |h: &Headless| {
+        let (cam, size) = h.gui.shell.camera.unwrap();
+        let p = cam
+            .pixel_of([centre.x as f32, centre.y as f32, centre.z as f32], size.0, size.1)
+            .unwrap();
+        let v = h.gui.shell.view_rect;
+        egui::pos2(v.min.x + p.0, v.min.y + p.1)
+    };
+    // the area's label stands off the face's middle by its leader, wherever the view turns
+    let before = place(&h, "measure:mark:Area");
+    let anchor = on_screen(&h);
+    assert!((before.center() - (anchor + egui::vec2(28.0, -28.0))).length() < 1.0);
+    // turned and moved off: the face's middle is the view's, so a turn alone hardly moves it
+    if let Some(v) = &mut h.gui.view {
+        v.nav.camera.yaw += 0.6;
+        v.nav.camera.pitch -= 0.2;
+        v.nav.camera.target[0] += 25.0;
+        v.mark_dirty();
+    }
+    h.step();
+    h.step();
+    let after = place(&h, "measure:mark:Area");
+    let anchor = on_screen(&h);
+    assert!((after.center() - before.center()).length() > 5.0, "the label didn't move with the view");
+    assert!((after.center() - (anchor + egui::vec2(28.0, -28.0))).length() < 1.0);
+    // the panel dragged over the label: the panel's what shows there
+    let bodies = place(&h, "measure:filter:Bodies");
+    let blank = egui::pos2(bodies.right() + 30.0, bodies.center().y);
+    // dragged by its own background (a label's text would take the drag to select itself)
+    let grip = blank;
+    let by = after.center() - blank;
+    h.move_to(grip.x, grip.y);
+    h.step();
+    h.button(true);
+    h.step();
+    for k in 1..=8 {
+        let p = grip + by * (k as f32 / 8.0);
+        h.move_to(p.x, p.y);
+        h.step();
+    }
+    h.button(false);
+    for _ in 0..4 {
+        h.step();
+    }
+    let label = place(&h, "measure:mark:Area").center();
+    let bodies = place(&h, "measure:filter:Bodies");
+    let blank = egui::pos2(bodies.right() + 30.0, bodies.center().y);
+    assert!((blank - label).length() < 3.0, "the panel didn't land on the label: {blank:?} {label:?}");
+    let px = h.gui_pixels();
+    let at = |p: egui::Pos2| px.at(p.x as usize, p.y as usize);
+    let s = h.gui.shell.theme.surface;
+    assert_eq!(at(label), [s.r(), s.g(), s.b()], "the label shows through the panel");
+}
+
+#[test]
+fn the_selection_priority_picks_faces_edges_points_or_whole_bodies() {
+    use forge_render::shell::inspect::{Filter, MPick};
+    let Some(mut h) = open("filter") else { return };
+    measure(&mut h);
+    let set = |h: &mut Headless, f: Filter| {
+        assert!(h.click(&format!("measure:filter:{}", f.word())));
+        h.step();
+        h.step();
+    };
+    let first = |h: &Headless| h.gui.shell.inspect.measure.as_ref().unwrap().picks.first().cloned();
+    set(&mut h, Filter::Edges);
+    click(&mut h, TOP);
+    assert!(matches!(first(&h), Some(MPick::Ent(_, Entity::Edge(_)))), "{:?}", first(&h));
+    assert!(reading(&mut h).get(forge_agent::measure::Quantity::Length).is_some());
+    set(&mut h, Filter::Points);
+    click(&mut h, TOP);
+    assert!(matches!(first(&h), Some(MPick::Ent(_, Entity::Vertex(_)))), "{:?}", first(&h));
+    // a click on an edge with faces first: the face of it turned to the eye
+    set(&mut h, Filter::Faces);
+    let (_, under) = hover(&mut h, [0.0, -30.0, 12.0]);
+    assert!(matches!(under, Some((_, Entity::Edge(_)))), "{under:?}");
+    // marked before it's clicked, as what it'll pick
+    let m = h.gui.shell.inspect.measure.as_ref().unwrap();
+    assert!(matches!(m.hover, Some(MPick::Ent(_, Entity::Face(_)))), "{:?}", m.hover);
+    click(&mut h, [0.0, -30.0, 12.0]);
+    assert!(matches!(first(&h), Some(MPick::Ent(_, Entity::Face(_)))));
+    set(&mut h, Filter::Bodies);
+    click(&mut h, TOP);
+    assert_eq!(first(&h), Some(MPick::Whole(0)));
+    let r = reading(&mut h);
+    assert!((r.get(forge_agent::measure::Quantity::SizeX).unwrap() - 80.0).abs() < 1e-6);
+}
+
+#[test]
+fn accumulate_adds_up_what_it_is_given() {
+    use forge_agent::measure::Quantity;
+    let Some(mut h) = open("accum") else { return };
+    measure(&mut h);
+    click(&mut h, BOSS_TOP);
+    let a = reading(&mut h).get(Quantity::Area).unwrap();
+    assert!(h.click("measure:add:Area"));
+    h.step();
+    // a click on nothing starts again; what's added up stays
+    let v = h.gui.shell.view_rect;
+    quick_click(&mut h, v.left() + 10.0, v.bottom() - 10.0);
+    assert!(picks(&h).is_empty());
+    click(&mut h, BOSS_TOP);
+    let _ = reading(&mut h);
+    assert!(h.click("measure:add:Area"));
+    h.step();
+    h.step();
+    let m = h.gui.shell.inspect.measure.as_ref().unwrap();
+    let total: f64 = m.accum.iter().filter(|x| x.0 == Quantity::Area).map(|x| x.1).sum();
+    assert!((total - 2.0 * a).abs() < 1e-9);
+    assert!(h.gui.shell.place("measure:accum:Areas").is_some());
+    assert!(h.click("measure:clear"));
+    h.step();
+    assert!(h.gui.shell.inspect.measure.as_ref().unwrap().accum.is_empty());
+}
+
+#[test]
+fn origin_items_from_the_browser_and_sketch_geometry_are_picked() {
+    use forge_agent::measure::{Free, Quantity};
+    use forge_render::shell::inspect::MPick;
+    let Some(mut h) = open("origin") else { return };
+    measure(&mut h);
+    // the XY plane chosen in the browser, then the boss's top: 20 apart
+    h.gui.shell.origin_selected = Some(forge_render::origin::Item::XyPlane);
+    h.step();
+    h.step();
+    assert!(matches!(
+        h.gui.shell.inspect.measure.as_ref().unwrap().picks.first(),
+        Some(MPick::Free(Free::Plane(..), _))
+    ));
+    click(&mut h, BOSS_TOP);
+    assert!((reading(&mut h).get(Quantity::Distance).unwrap() - 20.0).abs() < 1e-9);
+    // in a sketch on XY, a line of it
+    use forge_render::shell::sketching::{SketchFor, SketchMode};
+    let Some(forge_lang::eval::Value::Plane(p)) = forge_lang::builtins::constant("xy") else {
+        panic!("xy")
+    };
+    let mut m = SketchMode::new(SketchFor::New, "xy".into(), p.frame, vec!["line -60 -50 -20 -50".into()], None);
+    m.units = "mm";
+    h.gui.shell.sketch = Some(m);
+    h.gui.shell.tab = 1;
+    if let Some(me) = &mut h.gui.shell.inspect.measure {
+        me.restart();
+    }
+    for _ in 0..10 {
+        h.step();
+    }
+    let (cam, size) = h.gui.shell.camera.unwrap();
+    let on = cam.pixel_of([-40.0, -50.0, 0.0], size.0, size.1).unwrap();
+    let r = h.gui.shell.view_rect;
+    h.click_at(r.min.x + on.0, r.min.y + on.1);
+    for _ in 0..4 {
+        h.step();
+    }
+    let me = h.gui.shell.inspect.measure.as_ref().unwrap();
+    assert!(matches!(me.picks.first(), Some(MPick::Free(Free::Segment(..), _))), "{:?}", me.picks);
+    assert!((reading(&mut h).get(Quantity::Length).unwrap() - 40.0).abs() < 1e-9);
+}
+
+#[test]
+fn measuring_goes_on_across_the_tabs() {
+    let Some(mut h) = open("tabs") else { return };
+    measure(&mut h);
+    let a = click(&mut h, TOP);
+    let _ = reading(&mut h);
+    for tab in [0, 3, 2] {
+        h.gui.shell.tab = tab;
+        for _ in 0..3 {
+            h.step();
+        }
+        assert_eq!(picks(&h), vec![a], "tab {tab}");
+        assert!(h.gui.shell.inspect.measure.as_ref().unwrap().reading.is_some());
+    }
+    h.gui.shell.tab = 0;
+    h.step();
+    let b = click(&mut h, BOSS_TOP);
+    assert_eq!(picks(&h), vec![a, b]);
 }

@@ -572,12 +572,8 @@ impl Gui {
         let Some(m) = &self.shell.inspect.measure else { return };
         let filter = m.filter;
         let Some(v) = &self.view else { return };
-        let hover = v
-            .nav
-            .marks()
-            .into_iter()
-            .rfind(|k| !k.selected)
-            .map(|k| (k.placement, k.entity));
+        // what's under the pointer even when it's picked already: else the plane behind it shows
+        let hover = v.nav.hover_hit();
         let at = v.nav.hit_point();
         let pick = match hover {
             Some((pl, e)) => self.filtered(filter, pl, e, at),
