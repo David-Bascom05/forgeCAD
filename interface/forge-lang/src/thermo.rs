@@ -1305,7 +1305,18 @@ fn thermoform(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         None => None,
     };
     if let Some(mb) = shape_body {
-        let key = format!("thermoform {text} {}", body_key(&mb));
+        // the key names the shape by a hash of its points: the shape it was made for is kept
+        // beside it, and a different shape under the same name (another body whose points hash
+        // alike) takes a key of its own, so nothing made for one is served for the other
+        // the feature's own id too: the made part's names come from it
+        let mut key = format!("thermoform {text} {hid} {}", body_key(&mb));
+        let held =
+            ev.b.memo(format!("thermoform shape {key}"), || Rc::new(mb.clone()));
+        if *held != mb {
+            static OTHER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+            let n = OTHER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            key = format!("{key} other {n}");
+        }
         let built = match made {
             Some((m, _)) => ev.b.memo(key.clone(), || Some(m)),
             None => ev.b.memo(key.clone(), || {
