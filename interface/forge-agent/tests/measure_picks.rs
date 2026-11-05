@@ -280,7 +280,7 @@ fn a_whole_body_reads_its_volume_mass_and_box_where_it_stands() {
     let r = read(&w);
     assert!(near(r.get(Q::Volume), 120_000.0), "{r:?}");
     assert!((r.get(Q::Mass).unwrap() - 0.324).abs() < 1e-9);
-    assert!(near(r.get(Q::SizeX), 100.0) && near(r.get(Q::SizeY), 60.0) && near(r.get(Q::SizeZ), 20.0));
+    assert!(near(r.get(Q::SizeX), 100.0) && near(r.get(Q::SizeY), 60.0) && near(r.get(Q::SizeZ), 20.0), "{r:?}");
     // two bodies, one moved 150 along x: 50 apart
     let w2 = Target::Whole(Whole {
         body: &b,

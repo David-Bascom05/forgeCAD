@@ -1055,17 +1055,38 @@ pub fn read(t: &Target) -> Reading {
         }
         Target::Whole(w) => {
             let mut r = Reading::default();
-            let m = mass(w.mesh);
-            r.values.push((Quantity::Volume, m.volume));
+            // the body's own integrals, exact; the mesh's where the body's can't be had
+            let (volume, area) = match forge_topo::mass::mass(w.body) {
+                Ok(m) => (m.volume, m.area),
+                Err(_) => {
+                    let m = mass(w.mesh);
+                    (m.volume, m.area)
+                }
+            };
+            r.values.push((Quantity::Volume, volume));
             if let Some(rho) = w.density {
-                r.values.push((Quantity::Mass, m.volume * rho));
+                r.values.push((Quantity::Mass, volume * rho));
             }
-            r.values.push((Quantity::Area, m.area));
+            r.values.push((Quantity::Area, area));
             let (mut lo, mut hi) = (Point3::new(f64::MAX, f64::MAX, f64::MAX), Point3::new(f64::MIN, f64::MIN, f64::MIN));
-            for q in &w.mesh.positions {
-                let q = w.at.point_to_world(*q);
+            let mut hull = |q: Point3| {
                 lo = Point3::new(lo.x.min(q.x), lo.y.min(q.y), lo.z.min(q.z));
                 hi = Point3::new(hi.x.max(q.x), hi.y.max(q.y), hi.z.max(q.z));
+            };
+            // square to the world: the body's exact box, turned; else the mesh's in the world
+            let square = [w.at.x().get(), w.at.y().get(), w.at.z().get()]
+                .iter()
+                .all(|a| [a.x, a.y, a.z].iter().filter(|c| c.abs() > 1e-12).count() == 1);
+            let exact = body_box(w.body, w.mesh);
+            if square && exact.x.lo <= exact.x.hi {
+                for k in 0..8 {
+                    let pick = |i: forge_math::Interval, bit: usize| if k & bit == 0 { i.lo } else { i.hi };
+                    hull(w.at.point_to_world(Point3::new(pick(exact.x, 1), pick(exact.y, 2), pick(exact.z, 4))));
+                }
+            } else {
+                for q in &w.mesh.positions {
+                    hull(w.at.point_to_world(*q));
+                }
             }
             if lo.x <= hi.x {
                 r.values.extend([
@@ -1207,4 +1228,54 @@ pub fn normal_near(body: &Body, f: forge_topo::FaceId, q: Point3) -> Option<Vec3
     let face = body.face(f);
     let n = face.surface.normal(face.surface.project(q))?.get();
     Some(if face.same_sense { n } else { -n })
+}
+
+/// A body's box in its own space, exact where its edges are lines and circles (their ends and a
+/// circle's farthest points along each axis), and from dense samples along other curves; a
+/// sphere's or torus's bulge past its edges from its mesh, whose points are on it.
+fn body_box(b: &Body, mesh: &TriMesh) -> forge_math::Box3 {
+    use forge_geom::CurveGeom;
+    let mut out = forge_math::Box3::EMPTY;
+    let mut put = |q: Point3| out = out.hull(&forge_math::Box3::from_point(q));
+    for e in b.edge_ids() {
+        let x = b.edge(e);
+        put(b.vertex(x.start).point);
+        put(b.vertex(x.end).point);
+        match &x.curve {
+            Curve::Line(_) => {}
+            Curve::Circle(c) => {
+                let (u, v) = (c.frame.x().get(), c.frame.y().get());
+                for (ux, vx) in [(u.x, v.x), (u.y, v.y), (u.z, v.z)] {
+                    let t0 = dmath::atan2(vx, ux);
+                    for t in [t0, t0 + dmath::PI] {
+                        // the angle, wound into the edge's range
+                        let lo = x.range.lo;
+                        let t = lo + (t - lo).rem_euclid(dmath::TAU);
+                        if t <= x.range.hi + 1e-12 {
+                            put(x.curve.eval(t));
+                        }
+                    }
+                }
+            }
+            _ => {
+                for k in 0..=512 {
+                    let t = x.range.lo + (x.range.hi - x.range.lo) * k as f64 / 512.0;
+                    put(x.curve.eval(t));
+                }
+            }
+        }
+    }
+    let round: Vec<u32> = b
+        .face_ids()
+        .filter(|&f| matches!(b.face(f).surface, forge_geom::Surface::Sphere(_) | forge_geom::Surface::Torus(_)))
+        .map(|f| f.0)
+        .collect();
+    for (tri, f) in mesh.triangles.iter().zip(&mesh.face_of) {
+        if round.contains(f) {
+            for i in tri {
+                put(mesh.positions[*i as usize]);
+            }
+        }
+    }
+    out
 }

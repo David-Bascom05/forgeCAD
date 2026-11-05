@@ -236,3 +236,125 @@ fn a_rebuild_keeps_the_reading_on_screen_and_reads_it_again() {
     assert!((gap - 10.0).abs() < 1e-6, "{gap}");
     assert_eq!(blank, 0, "the reading went blank for {blank} frames");
 }
+
+/// A value of a `measure` answer, by its label, in mm (or mm², degrees).
+#[track_caller]
+fn value(text: &str, label: &str) -> f64 {
+    let line = text
+        .lines()
+        .find(|l| l.starts_with(&format!("{label}: ")))
+        .unwrap_or_else(|| panic!("no {label} in\n{text}"));
+    line[label.len() + 2..]
+        .split(|c: char| c == ' ' || c == '°')
+        .next()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or_else(|| panic!("{line}"))
+}
+
+fn measured(h: &mut Headless, a: &str, b: Option<&str>) -> String {
+    h.gui.measure(a, b).unwrap_or_else(|e| panic!("measure({a}, {b:?}): {e}"))
+}
+
+#[track_caller]
+fn close(got: f64, want: f64) {
+    // the panel's 3 places
+    assert!((got - want).abs() < 6e-4, "{got} != {want}");
+}
+
+#[test]
+fn every_kind_of_reading_on_the_demo_part_is_exact() {
+    use std::f64::consts::PI;
+    let Some(mut h) = open("exact") else { return };
+    // two faces: the base 12 thick, parallel
+    let t = measured(&mut h, "extrude1.end", Some("extrude1.start"));
+    close(value(&t, "Minimum distance"), 12.0);
+    close(value(&t, "Delta Z"), 12.0);
+    close(value(&t, "Angle"), 0.0);
+    // a face: the bottom, less the four 5 mm holes through it; its perimeter round them too
+    let t = measured(&mut h, "extrude1.start", None);
+    close(value(&t, "Area"), 4800.0 - 4.0 * PI * 2.5 * 2.5);
+    close(value(&t, "Perimeter"), 280.0 + 4.0 * PI * 5.0);
+    // the boss's top, inside its 2 mm round
+    let t = measured(&mut h, "extrude2.end", None);
+    close(value(&t, "Area"), PI * 100.0);
+    close(value(&t, "Perimeter"), 20.0 * PI);
+    // cylinders: the boss, and the counterbore 9 across, 3 deep
+    let t = measured(&mut h, "extrude2.side(sk2.c1)", None);
+    close(value(&t, "Diameter"), 24.0);
+    close(value(&t, "Area"), 2.0 * PI * 12.0 * 6.0);
+    let t = measured(&mut h, "hole1.bore", None);
+    close(value(&t, "Radius"), 4.5);
+    close(value(&t, "Area"), 2.0 * PI * 4.5 * 3.0);
+    // the counterbore's seat: a ring
+    close(value(&measured(&mut h, "hole1.seat", None), "Area"), PI * (4.5 * 4.5 - 2.5 * 2.5));
+    // an edge: the base's back bottom edge, and the loop round the bottom it's in
+    let back = "edges(between: (extrude1.side(sk1.r1[2]), extrude1.start))";
+    let front = "edges(between: (extrude1.side(sk1.r1[0]), extrude1.start))";
+    let t = measured(&mut h, back, None);
+    close(value(&t, "Length"), 80.0);
+    close(value(&t, "Loop length"), 280.0);
+    // two edges: 60 apart, the farthest ends 100 apart (80 by 60)
+    let t = measured(&mut h, back, Some(front));
+    close(value(&t, "Minimum distance"), 60.0);
+    close(value(&t, "Maximum distance"), 100.0);
+    // a side and the bottom: square
+    close(value(&measured(&mut h, "extrude1.side(sk1.r1[1])", Some("extrude1.start")), "Angle"), 90.0);
+    // origin items: the XY plane to the boss's top, the Z axis to the hole 20 off it
+    close(value(&measured(&mut h, "xy", Some("extrude2.end")), "Minimum distance"), 20.0);
+    let t = measured(&mut h, "z", Some("hole1.bore"));
+    close(value(&t, "Axis to axis"), 20.0);
+    close(value(&t, "Minimum distance"), 20.0 - 4.5);
+    // the whole body: its volume and area are the part's own, its box 80 by 60 by 20
+    let t = measured(&mut h, "body", None);
+    let dir = h.gui.fg.as_ref().unwrap().path.clone().unwrap();
+    let src = std::fs::read_to_string(&dir).unwrap();
+    let opts = forge_lang::Options {
+        dir: std::path::Path::new(&dir).parent().map(|d| d.to_path_buf()),
+        ..forge_lang::Options::default()
+    };
+    let run = forge_lang::run(&src, opts, Default::default()).0;
+    let whole = run.measure.as_ref().unwrap();
+    close(value(&t, "Volume"), whole.volume);
+    close(value(&t, "Area"), whole.area);
+    close(value(&t, "Box X"), 80.0);
+    close(value(&t, "Box Y"), 60.0);
+    close(value(&t, "Box Z"), 20.0);
+}
+
+#[test]
+fn in_the_rack_occurrences_are_measured_where_they_stand() {
+    let rack = concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/rack18u/asm/rack.fg");
+    let mut h = match Headless::new((1400.0, 900.0), 1.0) {
+        Ok(h) => h,
+        Err(e) => {
+            eprintln!("skipped: {e}");
+            return;
+        }
+    };
+    h.step();
+    h.gui.open(rack);
+    assert!(h.until(ready), "never ready: {}", h.gui.shell.status);
+    for _ in 0..10 {
+        h.step();
+    }
+    // the rails: 890 tall, 8 to 898 (SPEC 6.3), the same part each
+    for r in ["rail_lf", "rail_rr"] {
+        let t = measured(&mut h, &format!("{r}/body"), None);
+        close(value(&t, "Box Z"), 890.0);
+    }
+    // the rear right rail is the front left turned half round about the rack's middle (y 412.5)
+    let p = |t: &str| (value(t, "X"), value(t, "Y"), value(t, "Z"));
+    let lf = p(&measured(&mut h, "rail_lf/vertex:0", None));
+    let rr = p(&measured(&mut h, "rail_rr/vertex:0", None));
+    close(rr.0, -lf.0);
+    close(rr.1, 825.0 - lf.1);
+    close(rr.2, lf.2);
+    let t = measured(&mut h, "rail_lf/vertex:0", Some("rail_rr/vertex:0"));
+    close(value(&t, "Minimum distance"), ((rr.0 - lf.0).powi(2) + (rr.1 - lf.1).powi(2)).sqrt());
+    // the pans: the top pan's outer face at 906 (SPEC 5.2), so the gap is 906 less both pans
+    let hb = value(&measured(&mut h, "base_pan/body", None), "Box Z");
+    let ht = value(&measured(&mut h, "top_pan/body", None), "Box Z");
+    let t = measured(&mut h, "base_pan/body", Some("top_pan/body"));
+    close(value(&t, "Minimum distance"), 906.0 - hb - ht);
+    close(value(&t, "Delta Z"), 906.0 - hb - ht);
+}

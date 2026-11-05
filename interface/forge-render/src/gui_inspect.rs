@@ -678,3 +678,160 @@ fn origin_free(i: crate::origin::Item) -> MPick {
     };
     MPick::Free(f, i.name().to_string())
 }
+
+/// Measure as a tool for the in-app agent, in the shape the Agent tab's tool table takes (name,
+/// what it does, its JSON schema's properties, the required ones).
+pub const MEASURE_TOOL: (&str, &str, &str, &[&str]) = (
+    "measure",
+    "Measure the open part or assembly exactly, as the Measure command does: one thing (a face's area and perimeter, an edge's length, a radius, a point's place, a body's volume, mass and box) or two (minimum distance, deltas, centre to centre, angle). A thing is a face or edge by its Forge name (`extrude1.end`, `hole1.bore`), `face:N` / `edge:N` / `vertex:N` (the view's numbers), an origin item (`xy`, `xz`, `yz`, `x`, `y`, `z`, `origin`), `body` or an occurrence's name for a whole body, or `selected` for what's chosen in the view.",
+    r#"{"a":{"type":"string"},"b":{"type":"string"}}"#,
+    &["a"],
+);
+
+impl Gui {
+    /// What each placement is called, for `name/face:N` in `measure`.
+    pub fn measure_names(&self) -> Vec<String> {
+        self.inspector.data.as_ref().map_or(vec![], |d| d.names.clone())
+    }
+
+    /// A thing named for Measure: see `MEASURE_TOOL`.
+    fn measure_ref(&self, text: &str) -> Result<MPick, String> {
+        use crate::origin::Item;
+        let t = text.trim();
+        let origin = match t {
+            "xy" => Some(Item::XyPlane),
+            "xz" => Some(Item::XzPlane),
+            "yz" => Some(Item::YzPlane),
+            "x" => Some(Item::XAxis),
+            "y" => Some(Item::YAxis),
+            "z" => Some(Item::ZAxis),
+            "origin" => Some(Item::Center),
+            _ => None,
+        };
+        if let Some(i) = origin {
+            return Ok(origin_free(i));
+        }
+        let d = self.inspector.data.as_ref().ok_or("nothing is built to measure yet")?;
+        let (pl, rest) = match t.split_once('/').filter(|(occ, _)| d.names.iter().any(|n| n == occ)) {
+            // an occurrence's entity: `name/face:3`
+            Some((occ, r)) => (
+                d.names
+                    .iter()
+                    .position(|n| n == occ)
+                    .ok_or(format!("no occurrence `{occ}`"))? as u32,
+                r,
+            ),
+            None => (0, t),
+        };
+        let number = |w: &str| w.parse::<u32>().map_err(|_| format!("`{t}`: not a number after `:`"));
+        if let Some((kind, k)) = rest
+            .split_once(':')
+            .filter(|(k, _)| matches!(*k, "face" | "edge" | "vertex" | "body"))
+        {
+            let e = match kind {
+                "face" => Entity::Face(number(k)?),
+                "edge" => Entity::Edge(number(k)?),
+                "vertex" => Entity::Vertex(number(k)?),
+                _ => return Ok(MPick::Whole(number(k)?)),
+            };
+            self.picked(pl, e).ok_or(format!("`{t}` isn't there"))?;
+            return Ok(MPick::Ent(pl, e));
+        }
+        if rest == "body" {
+            return Ok(MPick::Whole(pl));
+        }
+        if let Some(k) = d.names.iter().position(|n| n == rest) {
+            return Ok(MPick::Whole(k as u32));
+        }
+        if rest == "selected" {
+            return Err("`selected` is one of two: say `selected` as a and leave b out, or `selected:1` and `selected:2`".into());
+        }
+        // a Forge name: the faces or edges anchors call so
+        let a = self.fg_anchors.as_ref().ok_or(format!("`{t}`: the part's names aren't found yet"))?;
+        if let Some(f) = a.faces.iter().position(|n| n.as_deref() == Some(rest)) {
+            return Ok(MPick::Ent(pl, Entity::Face(f as u32)));
+        }
+        if let Some(e) = a.edges.iter().position(|n| n.as_deref() == Some(rest)) {
+            return Ok(MPick::Ent(pl, Entity::Edge(e as u32)));
+        }
+        Err(format!("nothing called `{t}` to measure (try face:N, an origin plane, or body)"))
+    }
+
+    /// The agent's `measure(a, b)`: the reading in words, a value a line, in the panel's units
+    /// (Settings' when Measure isn't open). Works it out here and now.
+    pub fn measure(&mut self, a: &str, b: Option<&str>) -> Result<String, String> {
+        let chosen = self.shell.inspect.measure.as_ref().map(|m| m.picks.clone()).unwrap_or_else(|| {
+            self.view
+                .as_ref()
+                .map_or(vec![], |v| v.nav.selected.iter().map(|&(pl, e)| MPick::Ent(pl, e)).collect())
+        });
+        let one = |text: &str| -> Result<MPick, String> {
+            match text.trim() {
+                "selected" | "selected:1" => chosen.first().cloned().ok_or("nothing is selected".into()),
+                "selected:2" => chosen.get(1).cloned().ok_or("only one thing is selected".into()),
+                t => self.measure_ref(t),
+            }
+        };
+        let mut picks = vec![one(a)?];
+        if let Some(b) = b.filter(|b| !b.trim().is_empty()) {
+            picks.push(one(b)?);
+        }
+        let targets: Vec<(Tgt, String)> = picks
+            .iter()
+            .map(|p| self.target_of(p).ok_or(format!("{p:?} isn't there to measure")))
+            .collect::<Result<_, _>>()?;
+        let mut meshes: Vec<Option<Arc<TriMesh>>> = vec![];
+        for (t, _) in &targets {
+            meshes.push(match t {
+                Tgt::Ent((b, _, _)) | Tgt::Whole(b, _, _) => Some(Arc::new(
+                    forge_mesh::tessellate::tessellate_tolerant(b, &forge_mesh::Quality::default())
+                        .map_err(|e| forge_lang::error::words(&e))?,
+                )),
+                Tgt::Free(_) => None,
+            });
+        }
+        let ts: Vec<Target> = targets
+            .iter()
+            .zip(&meshes)
+            .map(|((t, _), m)| match (t, m) {
+                (Tgt::Ent((b, at, e)), Some(m)) => Target::Ent(Pick {
+                    body: b,
+                    mesh: m,
+                    at: *at,
+                    ent: *e,
+                }),
+                (Tgt::Whole(b, at, density), Some(m)) => Target::Whole(Whole {
+                    body: b,
+                    mesh: m,
+                    at: *at,
+                    density: *density,
+                }),
+                (Tgt::Free(f), _) => Target::Free(f.clone()),
+                _ => unreachable!("a body's mesh is made above"),
+            })
+            .collect();
+        let r = match &ts[..] {
+            [x] => read(x),
+            [x, y] => read_pair(x, y),
+            _ => Reading::default(),
+        };
+        let (unit, angle, n) = match &self.shell.inspect.measure {
+            Some(m) => (m.unit, m.angle, m.precision),
+            None => (self.shell.units, self.shell.settings.angle, self.shell.settings.decimals),
+        };
+        let mut out: Vec<String> = targets.iter().map(|t| t.1.clone()).collect();
+        out[0] = format!("Measured: {}", out.join(" and "));
+        out.truncate(1);
+        for (q, x) in &r.values {
+            out.push(format!(
+                "{}: {}",
+                q.label(),
+                crate::shell::inspect::shown(*q, *x, (unit, angle), n)
+            ));
+        }
+        if r.values.is_empty() {
+            out.push("nothing to measure between those".into());
+        }
+        Ok(out.join("\n"))
+    }
+}
