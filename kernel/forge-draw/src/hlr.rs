@@ -874,8 +874,7 @@ impl<'a> Scene<'a> {
 /// seen (no other body can come to have that address while it lives).
 #[derive(Default)]
 pub struct Parts {
-    curves:
-        std::sync::Mutex<std::collections::HashMap<CurveKey, std::sync::Arc<PartCurves>>>,
+    curves: std::sync::Mutex<std::collections::HashMap<CurveKey, std::sync::Arc<PartCurves>>>,
     covers: std::sync::Mutex<std::collections::HashMap<usize, std::sync::Arc<Local>>>,
     held: std::sync::Mutex<std::collections::HashMap<usize, std::sync::Arc<Body>>>,
 }
@@ -1161,15 +1160,13 @@ fn crossings(curves: &[Curve3], view: &View, chord: f64) -> Vec<Vec<f64>> {
         let ps = &samples[c as usize].1;
         (ps[s as usize], ps[s as usize + 1])
     };
-    let mut grid = Grid::new(lo, hi, segs.len());
-    for k in 0..segs.len() {
+    let grid = Grid::packed(lo, hi, segs.len(), |k| {
         let (a, b) = seg(k);
-        grid.insert(
-            k as u32,
+        (
             Point2::new(a.x.min(b.x), a.y.min(b.y)),
             Point2::new(a.x.max(b.x), a.y.max(b.y)),
-        );
-    }
+        )
+    });
     // each segment's box, side by side: the test most pairs fail, without going to the samples
     let boxes: Vec<[f64; 4]> = (0..segs.len())
         .map(|k| {
@@ -1433,16 +1430,15 @@ fn unique(geoms: &[Geom2], curve: &[usize], order: &[usize], chord: f64) -> Vec<
     for (r, &k) in order.iter().enumerate() {
         rank[k] = r;
     }
-    let mut grid = Grid::new(lo, hi, segs.len());
-    for (k, &(g, s)) in segs.iter().enumerate() {
+    let grid = Grid::packed(lo, hi, segs.len(), |k| {
+        let (g, s) = segs[k];
         let ps = &samples[g as usize].1;
         let (a, b) = (ps[s as usize], ps[s as usize + 1]);
-        grid.insert(
-            k as u32,
+        (
             Point2::new(a.x.min(b.x) - reach, a.y.min(b.y) - reach),
             Point2::new(a.x.max(b.x) + reach, a.y.max(b.y) + reach),
-        );
-    }
+        )
+    });
     // every piece's ends, so a run between two samples is not missed
     let mut ends = Grid::new(lo, hi, 2 * geoms.len());
     for (k, g) in geoms.iter().enumerate() {
