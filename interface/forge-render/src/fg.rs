@@ -27,8 +27,8 @@ pub type Gpu = (wgpu::Device, wgpu::Queue, wgpu::AdapterInfo);
 /// overlap check and its expects).
 pub type Job = (u64, String, bool);
 
-/// A joint value set by a drag: the joint's id, its freedom's word, the value (radians, mm).
-pub type Drive = (String, String, f64);
+// plain data, so the shell has it for the browser too
+pub use crate::shell::asmdrag::Drive;
 
 /// What the worker is given: a text to build, or drives set straight in the kept solve.
 #[derive(Clone)]

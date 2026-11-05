@@ -83,6 +83,9 @@ pub struct Grab {
     pub at_limit: bool,
 }
 
+/// A joint value set by a drag: the joint's id, its freedom's word, the value (radians, mm).
+pub type Drive = (String, String, f64);
+
 /// The transient pose: joint values and instance poses built in the file's place.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Posing {
@@ -94,7 +97,7 @@ pub struct Posing {
     /// The grab's plan is made (from a build that's up to date).
     pub planned: bool,
     /// Drives for the host to set straight in the kept solve (the Drive dialog's slider, held).
-    pub live: Vec<crate::fg::Drive>,
+    pub live: Vec<Drive>,
     /// Instances moved in the view only, till the pose's build comes.
     pub settling: Vec<String>,
     /// The status bar says the pose once its build is in (the build's own line would hide it).
