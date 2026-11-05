@@ -133,6 +133,17 @@ impl Geom2 {
         }
     }
 
+    /// `at` and `tangent` at once, from one sine and cosine (the same values each gives).
+    pub fn at_tangent(&self, t: f64) -> (Point2, Option<Vec2>) {
+        match self {
+            Geom2::Conic { c, u, v, .. } => {
+                let (s, co) = dmath::sin_cos(t);
+                (*c + *u * co + *v * s, (*v * co - *u * s).normalize())
+            }
+            _ => (self.at(t), self.tangent(t)),
+        }
+    }
+
     /// The unit direction of travel at `t`.
     pub fn tangent(&self, t: f64) -> Option<Vec2> {
         match self {

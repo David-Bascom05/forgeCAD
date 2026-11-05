@@ -1597,8 +1597,8 @@ fn unique(geoms: &[Geom2], curve: &[usize], order: &[usize], chord: f64) -> Vec<
             if !maybe(t) {
                 return false;
             }
-            let q = geom.at(t);
-            let Some(dir) = geom.tangent(t) else { return false };
+            let (q, dir) = geom.at_tangent(t);
+            let Some(dir) = dir else { return false };
             let test = |s: u32| {
                 let (g, i) = segs[s as usize];
                 if curve[g as usize] == curve[k] || rank[g as usize] > rank[k] {
@@ -1618,8 +1618,8 @@ fn unique(geoms: &[Geom2], curve: &[usize], order: &[usize], chord: f64) -> Vec<
                 let other = &geoms[g as usize];
                 let (t0, t1) = (ts[i as usize], ts[i as usize + 1]);
                 let at = other.nearest(q, t0 + x * (t1 - t0));
-                other.at(at).distance(q) <= tol
-                    && other.tangent(at).is_some_and(|d| d.cross(dir).abs() <= 0.05)
+                let (p, d) = other.at_tangent(at);
+                p.distance(q) <= tol && d.is_some_and(|d| d.cross(dir).abs() <= 0.05)
             };
             match &local {
                 // a point off the grid is within reach of none (the grid holds every grown box)
