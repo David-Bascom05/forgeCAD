@@ -756,6 +756,14 @@ impl Gui {
         }
         let under = self.origin_under();
         self.shell.origin_hover = under;
+        // Measure and a section's plane pick take the view's clicks: nothing else sees them
+        if self.shell.inspect.measure.is_some() || self.shell.inspect.pick_plane.is_some() {
+            if let Some(v) = &mut self.view {
+                v.clicks = v.nav.clicks;
+                v.clicked.clear();
+            }
+            return;
+        }
         if self.fg.is_some() {
             self.fg_picks(under);
             return;
@@ -1323,6 +1331,10 @@ impl Gui {
                         self.shell.marking = Some(egui::pos2(origin.x + from.0 / p, origin.y + from.1 / p))
                     }
                 }
+            }
+            // Measure picks one at a time: a window chooses nothing then
+            if self.shell.inspect.measure.is_some() {
+                v.nav.window = None;
             }
             if let Some((a, b)) = v.nav.window.take() {
                 v.dirty = true;

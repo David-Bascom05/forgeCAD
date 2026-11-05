@@ -63,6 +63,8 @@ pub struct Inspector {
     clicks: u32,
     open: bool,
     measured: Option<(Vec<(u32, Entity)>, bool)>,
+    /// The picks the last job was for, kept across a rebuild.
+    asked: Option<(Vec<(u32, Entity)>, bool)>,
     /// What the renderer was last given.
     cut: Option<crate::shell::inspect::Cut>,
 }
@@ -183,8 +185,30 @@ impl Gui {
                 s.want_physical = true;
             }
         }
+        // a pick the rebuilt part hasn't got, or one on a part whose topology changed, is gone:
+        // measuring starts again rather than read some other face by its old number
+        let was = self.inspector.data.take();
+        let kept = |pl: u32, e: Entity| {
+            let shape = |d: &InspectData| {
+                let &(mesh, _) = d.placed.get(pl as usize)?;
+                let b = d.bodies.get(mesh)?;
+                let n = match e {
+                    Entity::Face(i) => (i as usize) < b.faces.len(),
+                    Entity::Edge(i) => (i as usize) < b.edges.len(),
+                    Entity::Vertex(i) => (i as usize) < b.vertices.len(),
+                };
+                n.then_some((b.faces.len(), b.edges.len(), b.vertices.len()))
+            };
+            let now = shape(&d);
+            now.is_some() && was.as_ref().is_none_or(|w| shape(w) == now)
+        };
+        if let Some(m) = &mut self.shell.inspect.measure
+            && !m.picks.iter().all(|&(pl, e)| kept(pl, e))
+        {
+            m.restart();
+            self.inspector.asked = None;
+        }
         self.inspector.data = Some(d);
-        // what's picked may be gone
         self.inspector.measured = None;
     }
 
@@ -369,10 +393,15 @@ impl Gui {
         } else {
             Some(Job::Measure(id, got.into_iter().map(|g| g.0).collect()))
         };
+        // the same picks read again (the part rebuilt): the last reading stands till the new one
+        let again = self.inspector.asked.as_ref() == Some(&(picks.clone(), wall));
+        self.inspector.asked = Some((picks, wall));
         if let Some(m) = &mut self.shell.inspect.measure {
             m.names = names;
-            m.reading = None;
-            m.wall_at = None;
+            if !again {
+                m.reading = None;
+                m.wall_at = None;
+            }
             m.busy = job.is_some();
         }
         if let Some(j) = job {

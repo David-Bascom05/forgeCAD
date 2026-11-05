@@ -47,6 +47,16 @@ pub struct MeasurePanel {
     pub wall_at: Option<Result<(f64, Point3), String>>,
 }
 
+impl MeasurePanel {
+    /// A new measuring: nothing picked, nothing read.
+    pub fn restart(&mut self) {
+        self.picks.clear();
+        self.names.clear();
+        self.reading = None;
+        self.busy = false;
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SectionKind {
     Half,
@@ -423,9 +433,7 @@ impl Shell {
                     let r = ui.button(egui::RichText::new("Restart").font(sans(12.0)));
                     places.push(("measure:restart".into(), r.rect));
                     if r.clicked() {
-                        m.picks.clear();
-                        m.names.clear();
-                        m.reading = None;
+                        m.restart();
                     }
                 }
             });
@@ -585,12 +593,8 @@ impl Shell {
                 .map(|q| v.min + vec2(q.0, q.1) / ppp)
         };
         let t = self.theme;
-        let painter = ctx
-            .layer_painter(egui::LayerId::new(
-                egui::Order::Middle,
-                egui::Id::unique("inspect-marks"),
-            ))
-            .with_clip_rect(v);
+        // on the view's own layer: under every panel and dialog, over the picture
+        let painter = ctx.layer_painter(egui::LayerId::background()).with_clip_rect(v);
         let ink = Color32::from_rgb(0xFF, 0xD0, 0x40);
         let font = mono(12.0);
         let label = |at: Pos2, text: String| {

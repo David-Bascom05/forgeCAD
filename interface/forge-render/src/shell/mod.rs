@@ -1414,6 +1414,13 @@ impl Shell {
         {
             // a dragged pose: Return to Design
             self.status = asmdrag::command(p, false);
+        } else if let Some(m) = &mut self.inspect.measure {
+            // what's picked goes, then Measure
+            if m.picks.is_empty() {
+                self.inspect.measure = None;
+            } else {
+                m.restart();
+            }
         } else if let Some(m) = &mut self.sketch {
             if m.has_tool() {
                 m.escape();
