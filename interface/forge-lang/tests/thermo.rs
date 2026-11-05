@@ -272,3 +272,36 @@ fn a_cover_reports_its_verdict_its_two_masses_and_its_field() {
     let (bw, bl) = o.blank_size();
     assert!((o.blank().volume() - bw * bl * o.t).abs() < 1e-6 * bw * bl);
 }
+
+#[test]
+fn an_assembly_draws_a_formed_part_without_its_mould_and_keeps_the_mould_as_tooling() {
+    let dir = format!("{}/../../examples/thermoform", env!("CARGO_MANIFEST_DIR"));
+    let text = "assembly\n\nlid = part(\"cover.fg\", ground: true)\n";
+    let opts = Options {
+        dir: Some(dir.into()),
+        render: true,
+        ..Options::default()
+    };
+    let r = forge_lang::run(text, opts, Default::default()).0;
+    assert!(
+        r.errors.is_empty(),
+        "{:?}",
+        r.errors.iter().map(|e| e.kind()).collect::<Vec<_>>()
+    );
+    let a = r.asm.as_ref().expect("an assembly");
+    let part = run(&src("cover"));
+    let o = &part.thermos[0];
+    let faces = |id: usize| {
+        part.solids
+            .iter()
+            .find(|s| s.solid == id)
+            .map(|s| s.faces.len())
+            .unwrap()
+    };
+    // the occurrence draws the formed part alone; its mould is the tooling beside it
+    assert_eq!(a.draw.len(), 1);
+    assert_eq!(a.draw[0].0.faces.len(), faces(o.part_solid));
+    let tool = a.occ_tooling[0].as_ref().expect("the mould");
+    assert_eq!(tool.faces.len(), faces(o.mould_solid));
+    assert_eq!(a.interferences, 0);
+}

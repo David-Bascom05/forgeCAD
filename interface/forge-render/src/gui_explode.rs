@@ -73,6 +73,19 @@ impl Gui {
                 axis: a.tree.axis[k],
             };
             occ_of[pl] = k;
+            // a thermoformed part's mould goes with it
+            if let Some(m) = o.tooling {
+                items[m] = Item {
+                    rows: placed[m].1,
+                    local: self
+                        .fg_asm_boxes
+                        .get(placed[m].0)
+                        .copied()
+                        .unwrap_or(([0.0; 3], [0.0; 3])),
+                    ..items[pl].clone()
+                };
+                occ_of[m] = k;
+            }
         }
         Some((plan(&items), occ_of))
     }

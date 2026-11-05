@@ -21,6 +21,8 @@ pub struct OccRow {
     pub file: String,
     /// It has a solid to draw.
     pub drawn: bool,
+    /// Its part has a thermoform: its mould is tooling, drawn only when its row's eye says.
+    pub tooling: bool,
 }
 
 /// A problem on a row: Inventor's yellow and red.
@@ -61,6 +63,10 @@ pub enum NodeKind {
     /// One of a part occurrence's features (or a loop's group of them), its key
     /// `<occurrence>>f:<feature>`.
     Feature,
+    /// A thermoformed occurrence's bodies, under it: the formed part (the occurrence's own eye)
+    /// and its mould (tooling, hidden till shown).
+    FormedPart,
+    Mould,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -733,6 +739,22 @@ impl AsmTree {
             self.home[k] = n;
         }
         self.nodes[n].flag = cx.flags.occ.get(&i.path).copied();
+        if let Some(&k) = cx.index.get(i.path.as_str())
+            && cx.occ[k].tooling
+        {
+            for (key, label, kind, icon) in [
+                (
+                    format!("{}>formed", i.path),
+                    "Formed Part",
+                    NodeKind::FormedPart,
+                    "thicken",
+                ),
+                (format!("{}>mould", i.path), "Mould", NodeKind::Mould, "extrude"),
+            ] {
+                let b = self.push(Some(n), key, label.into(), String::new(), kind, icon, owner);
+                self.nodes[b].occ = vec![k];
+            }
+        }
         self.held(cx, n, &i.path);
         // the file as the solve resolved it, which the features are read by
         let file = cx.index.get(i.path.as_str()).map(|&k| cx.occ[k].file.as_str());
@@ -905,6 +927,8 @@ pub struct AsmPanel {
     pub selected: Option<String>,
     /// Hidden occurrences, by path: kept through a solve.
     pub hidden: HashSet<String>,
+    /// Thermoformed occurrences whose mould is shown, by path.
+    pub tooling: HashSet<String>,
     /// The same, by index: what the browser and the view read.
     hid: Vec<bool>,
     /// Only this row (and what's under it) shown.
@@ -1643,12 +1667,24 @@ impl Shell {
                 let has_eye = origin
                     || matches!(
                         n.kind,
-                        NodeKind::Top | NodeKind::Occ | NodeKind::Pattern | NodeKind::Sub
+                        NodeKind::Top
+                            | NodeKind::Occ
+                            | NodeKind::Pattern
+                            | NodeKind::Sub
+                            | NodeKind::FormedPart
+                            | NodeKind::Mould
                     );
                 // a relationship row's eye is its glyph's in the view
                 let glyph_eye = a.glyph_eye(k);
+                let mould_of = |n: &Node| n.key.trim_end_matches(">mould").to_string();
                 let state = if origin {
                     a.origin_eye(k, &top_origin)
+                } else if n.kind == NodeKind::Mould {
+                    if a.tooling.contains(&mould_of(n)) && a.eye(k) != Eye::Hidden {
+                        Eye::Shown
+                    } else {
+                        Eye::Hidden
+                    }
                 } else if has_eye {
                     a.eye(k)
                 } else {
@@ -1978,6 +2014,16 @@ impl Shell {
                             a.sub_origins.remove(&(at.clone(), i));
                         }
                     }
+                }
+                NodeKind::Mould => {
+                    let p = n.key.trim_end_matches(">mould").to_string();
+                    if !a.tooling.remove(&p) {
+                        a.tooling.insert(p);
+                    }
+                }
+                NodeKind::FormedPart => {
+                    let p = n.key.trim_end_matches(">formed").to_string();
+                    a.flip_eye(&p);
                 }
                 _ => {
                     let key = n.key.clone();
@@ -2783,6 +2829,7 @@ mod tests {
             path: p.into(),
             file: f.into(),
             drawn: true,
+            tooling: false,
         }
     }
 

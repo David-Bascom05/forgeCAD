@@ -1634,6 +1634,8 @@ pub struct PartLoad {
     pub ident: u128,
     /// Its threads left cosmetic, in its frame.
     pub threads: Vec<crate::holes::Cosmetic>,
+    /// Its thermoforms' moulds: tooling, drawn only when asked.
+    pub tooling: Option<Arc<forge_topo::Body>>,
 }
 
 /// A part file's text hash and the references and bodies asked of it.
@@ -1879,11 +1881,14 @@ fn placed_body(ev: &Eval) -> Option<forge_topo::Body> {
         .flat_map(|st| &st.unfolds)
         .filter_map(|u| ev.feats.iter().find(|f| f.id == u.id).map(|f| f.idx))
         .collect();
+    // a thermoform's mould is tooling: not drawn with the part it formed (`tooling_body` is it)
+    let moulds: Vec<usize> = ev.thermos.iter().map(|t| t.mould_solid).collect();
     let st = ev.b.stages.last()?;
-    if flats.is_empty() || !st.solids.iter().any(|s| flats.contains(&s.id)) {
+    let out = |s: &forge_model::Solid| flats.contains(&s.id) || moulds.contains(&s.id);
+    if !st.solids.iter().any(out) {
         return ev.b.body().cloned();
     }
-    let kept: Vec<&forge_model::Solid> = st.solids.iter().filter(|s| !flats.contains(&s.id)).collect();
+    let kept: Vec<&forge_model::Solid> = st.solids.iter().filter(|s| !out(s)).collect();
     match &kept[..] {
         [] => None,
         [one] => Some(forge_model::finish(one.body.clone())),
@@ -1895,6 +1900,22 @@ fn placed_body(ev: &Eval) -> Option<forge_topo::Body> {
             Some(all)
         }
     }
+}
+
+/// A part's thermoform moulds, the tooling `placed_body` leaves out.
+fn tooling_body(ev: &Eval) -> Option<forge_topo::Body> {
+    let st = ev.b.stages.last()?;
+    let mut all: Option<forge_topo::Body> = None;
+    for t in &ev.thermos {
+        if let Some(s) = st.solids.iter().find(|s| s.id == t.mould_solid) {
+            let b = forge_model::finish(s.body.clone());
+            match &mut all {
+                Some(a) => a.append(&b),
+                None => all = Some(b),
+            }
+        }
+    }
+    all
 }
 
 /// A part file's declared anchors (loops' too: `stud[2]`) as frames in the part's own space: a
@@ -1942,6 +1963,7 @@ fn load_part_with(
         body_meshes: BTreeMap::new(),
         ident: 0,
         threads: vec![],
+        tooling: None,
     };
     let watch = crate::deps::watch();
     let prog = match crate::syntax::parse(text) {
@@ -1968,6 +1990,7 @@ fn load_part_with(
     out.threads = std::mem::take(&mut ev.threads);
     crate::sheet::finish(&mut ev);
     out.body = placed_body(&ev);
+    out.tooling = tooling_body(&ev).map(Arc::new);
     out.summary = Arc::new(crate::props::PartSummary::of(&ev));
     if let Some(st) = ev.b.stages.last() {
         for name in bodies {
@@ -2182,6 +2205,8 @@ pub struct AsmOut {
     /// Each occurrence's body (0: the part as made, else a `body:` by its name's hash) and
     /// whether it is a reference (out of the BOM and the mass).
     pub occ_body: Vec<(u64, bool)>,
+    /// Each occurrence's part's thermoform moulds (tooling, not in `draw`), if it has any.
+    pub occ_tooling: Vec<Option<Arc<forge_topo::Body>>>,
 }
 
 /// A part or subassembly occurrence, as a browser lists it.
@@ -2721,6 +2746,7 @@ pub fn finish(
     let mut exact = BrepExact::default();
     let mut loads: Vec<usize> = vec![];
     let mut part_docs: BTreeMap<String, Arc<crate::props::PartSummary>> = BTreeMap::new();
+    let mut tooling: BTreeMap<String, Arc<forge_topo::Body>> = BTreeMap::new();
     let mut declared_kinds: BTreeSet<String> = BTreeSet::new();
     let mut threads_of: BTreeMap<(fa::DocId, u64), Arc<Vec<crate::holes::Cosmetic>>> = BTreeMap::new();
     // the parts not yet built, built on all cores first
@@ -2855,6 +2881,9 @@ pub fn finish(
         part_docs.insert(doc.0.to_string(), load.summary.clone());
         // a part's threads are on its own body, not on a named body it also has
         threads_of.insert((doc.clone(), 0), Arc::new(load.threads.clone()));
+        if let Some(t) = &load.tooling {
+            tooling.insert(doc.0.to_string(), t.clone());
+        }
         let mut entries: Vec<(u64, Option<forge_topo::Body>)> = vec![(0, load.body.clone())];
         for (name, b) in &load.bodies {
             entries.push((hid(name), Some(b.clone())));
@@ -3114,6 +3143,8 @@ pub fn finish(
         out.occurrences
             .push((occ_name(&o.path), o.part.doc.0.to_string(), o.pose));
         out.occ_body.push((o.part.body, o.reference));
+        out.occ_tooling
+            .push(tooling.get(&o.part.doc.0.to_string()).cloned());
         if !o.reference {
             *bom.entry(o.part.doc.0.to_string()).or_default() += 1;
         }

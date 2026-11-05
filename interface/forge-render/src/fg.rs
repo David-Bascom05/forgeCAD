@@ -44,6 +44,8 @@ pub struct Occ {
     pub path: String,
     pub file: String,
     pub placement: Option<usize>,
+    /// Its part's thermoform moulds, placed with it, drawn when their row's eye says.
+    pub tooling: Option<usize>,
 }
 
 /// An assembly's solve for the screen and the panel. Each distinct part is meshed once (by its
@@ -1020,8 +1022,24 @@ fn asm_view(
         // a failed assembly: the view stays as it was, its errors in the panel
         return (None, None);
     };
-    // each distinct body: an index into the meshes, meshing the new ones
-    let keys: Vec<u64> = out.parts.iter().map(|b| body_key(b)).collect();
+    // each distinct body: an index into the meshes, meshing the new ones (the parts', then the
+    // moulds of the thermoformed ones)
+    let mut bodies: Vec<Arc<forge_topo::Body>> = out.parts.clone();
+    let tool_of: Vec<Option<usize>> = out
+        .occ_tooling
+        .iter()
+        .map(|t| {
+            t.as_ref()
+                .map(|b| match bodies.iter().position(|x| Arc::ptr_eq(x, b)) {
+                    Some(k) => k,
+                    None => {
+                        bodies.push(b.clone());
+                        bodies.len() - 1
+                    }
+                })
+        })
+        .collect();
+    let keys: Vec<u64> = bodies.iter().map(|b| body_key(b)).collect();
     let mut fresh: Vec<(u64, usize)> = vec![];
     for (k, key) in keys.iter().enumerate() {
         if !meshes.by_key.contains_key(key) && !fresh.iter().any(|f| f.0 == *key) {
@@ -1038,8 +1056,7 @@ fn asm_view(
                         loop {
                             let i = at.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                             let Some(&(_, k)) = fresh.get(i) else { return got };
-                            let m =
-                                tess::build_part_coarse(&out.parts[k]).unwrap_or_else(|_| PartMesh::empty());
+                            let m = tess::build_part_coarse(&bodies[k]).unwrap_or_else(|_| PartMesh::empty());
                             got.push((i, m));
                         }
                     })
@@ -1055,7 +1072,7 @@ fn asm_view(
     };
     let mut new_meshes = vec![];
     for ((key, k), m) in fresh.iter().zip(made) {
-        meshes.bodies.push(out.parts[*k].clone());
+        meshes.bodies.push(bodies[*k].clone());
         meshes.by_key.insert(*key, meshes.all.len());
         new_meshes.push((meshes.all.len(), m.clone()));
         meshes.boxes.push(crate::explode::mesh_box(&m));
@@ -1064,9 +1081,13 @@ fn asm_view(
     let mut occ = vec![];
     let mut placed = vec![];
     let mut exact = vec![];
-    for ((path, file, pose), part) in out.occurrences.iter().zip(&out.occ_part) {
+    for (i, ((path, file, pose), part)) in out.occurrences.iter().zip(&out.occ_part).enumerate() {
         let placement = part.map(|k| {
             exact.push((meshes.by_key[&keys[k]], *pose, path.clone()));
+            placed.push((meshes.by_key[&keys[k]], rows_of(pose)));
+            placed.len() - 1
+        });
+        let tooling = tool_of.get(i).copied().flatten().map(|k| {
             placed.push((meshes.by_key[&keys[k]], rows_of(pose)));
             placed.len() - 1
         });
@@ -1074,6 +1095,7 @@ fn asm_view(
             path: path.clone(),
             file: file.clone(),
             placement,
+            tooling,
         });
     }
     let now: Vec<usize> = placed.iter().map(|p| p.0).collect();
@@ -1165,6 +1187,8 @@ fn asm_view(
 pub const PART_TINT: [f32; 4] = crate::palette::GREY;
 pub const PICKED_TINT: [f32; 4] = [0.95, 0.55, 0.15, 0.0];
 pub const CLASH_TINT: [f32; 4] = [0.90, 0.20, 0.20, 0.0];
+/// A mould's colour among the parts: tooling.
+pub const TOOL_TINT: [f32; 4] = [0.55, 0.58, 0.62, 0.0];
 
 /// A .fg part open in the app.
 pub struct Session {

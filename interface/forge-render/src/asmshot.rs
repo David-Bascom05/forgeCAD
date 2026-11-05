@@ -60,10 +60,12 @@ pub fn stage(path: &str) -> Result<AsmStage, String> {
         .occurrences
         .iter()
         .zip(&out.occ_part)
-        .map(|((p, f, _), part)| OccRow {
+        .zip(out.occ_tooling.iter().chain(std::iter::repeat(&None)))
+        .map(|(((p, f, _), part), tool)| OccRow {
             path: p.clone(),
             file: f.clone(),
             drawn: part.is_some(),
+            tooling: tool.is_some(),
         })
         .collect();
     let tree = AsmTree::build(&rows, dir.as_deref());

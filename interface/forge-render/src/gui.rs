@@ -3140,6 +3140,7 @@ impl Gui {
                             path: o.path.clone(),
                             file: o.file.clone(),
                             drawn: o.placement.is_some(),
+                            tooling: o.tooling.is_some(),
                         })
                         .collect(),
                     dir,
@@ -3430,6 +3431,15 @@ impl Gui {
         // the two parts the relationship under the pointer ties
         let tied: Vec<usize> = a.hover_link.map(|l| a.tied(l)).unwrap_or_default();
         for (i, o) in occ.iter().enumerate() {
+            // a thermoformed occurrence's mould: tooling, with it only when its row's eye says
+            if let Some(m) = o.tooling {
+                let on = shown.get(i).copied().unwrap_or(true) && a.tooling.contains(&o.path);
+                let rows = if on { placed[m].1 } else { NOWHERE };
+                if scene.rows_of(m) != rows {
+                    scene.set_rows(m, &rows);
+                }
+                scene.placements[m].tint = crate::fg::TOOL_TINT;
+            }
             let Some(k) = o.placement else { continue };
             let top = o.path.split('.').next().unwrap_or(&o.path);
             let rows = if !shown.get(i).copied().unwrap_or(true) {
