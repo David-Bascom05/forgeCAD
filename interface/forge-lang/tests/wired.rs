@@ -537,18 +537,24 @@ fn a_face_replaced_onto_a_work_plane() {
 // ---- text and imports -------------------------------------------------------------------------
 
 fn font_dir() -> std::path::PathBuf {
-    // wasi has no temp_dir or pid; its runner opens the whole filesystem
-    let d = if cfg!(target_os = "wasi") {
-        let t = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("clock");
-        std::path::PathBuf::from("/tmp").join(format!("forge-lang-wired-{}", t.as_nanos()))
-    } else {
-        std::env::temp_dir().join(format!("forge-lang-wired-{}", std::process::id()))
-    };
-    std::fs::create_dir_all(&d).expect("temp dir");
-    std::fs::write(d.join("block.ttf"), forge_agent::bench::font_bytes()).expect("font");
-    d
+    // made once for the whole run: tests on other threads read the font while one would be
+    // writing it again (a file is read whole each time, never kept by its size and time)
+    static DIR: std::sync::OnceLock<std::path::PathBuf> = std::sync::OnceLock::new();
+    DIR.get_or_init(|| {
+        // wasi has no temp_dir or pid; its runner opens the whole filesystem
+        let d = if cfg!(target_os = "wasi") {
+            let t = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("clock");
+            std::path::PathBuf::from("/tmp").join(format!("forge-lang-wired-{}", t.as_nanos()))
+        } else {
+            std::env::temp_dir().join(format!("forge-lang-wired-{}", std::process::id()))
+        };
+        std::fs::create_dir_all(&d).expect("temp dir");
+        std::fs::write(d.join("block.ttf"), forge_agent::bench::font_bytes()).expect("font");
+        d
+    })
+    .clone()
 }
 
 #[test]
