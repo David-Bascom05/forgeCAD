@@ -190,6 +190,9 @@ pub struct Gui {
     inspector: gui_inspect::Inspector,
     /// The open tool's statement last shown as a preview.
     fg_previewed: Option<String>,
+    /// The documents open, in their tabs; which is in the window.
+    docs: Vec<gui_docs::OpenDoc>,
+    active: usize,
 }
 
 fn view_camera(center: [f32; 3], radius: f32, parallel: bool, size: (u32, u32)) -> Camera {
@@ -309,6 +312,8 @@ impl Gui {
             body_rows: None,
             inspector: Default::default(),
             fg_previewed: None,
+            docs: Vec::new(),
+            active: 0,
         }
     }
 
@@ -350,21 +355,29 @@ impl Gui {
         self.loading.is_some()
     }
 
-    /// Opens a part in the background: the window never waits on the kernel.
+    /// Opens a part in a tab of its own, or brings up the tab it's in.
     pub fn open(&mut self, path: &str) {
+        self.open_document(path, true);
+    }
+
+    /// Opens a part into the active document, in the background: the window never waits on the
+    /// kernel. False if nothing could be opened.
+    fn load(&mut self, path: &str) -> bool {
         // a drawing opens in the Drawing environment
         if path.ends_with(".fg")
             && std::fs::read_to_string(path).is_ok_and(|s| forge_lang::drawing::is_drawing(&s))
         {
             match crate::shell::drawing::DrawingEnv::open(path) {
                 Ok(env) => self.shell.open_drawing(env),
-                Err(e) => self.shell.status = e,
+                Err(e) => {
+                    self.shell.status = e;
+                    return false;
+                }
             }
-            return;
+            return true;
         }
         if path.ends_with(".fg") {
-            self.open_fg(path);
-            return;
+            return self.open_fg(path);
         }
         self.fg = None;
         self.fg_view = None;
@@ -404,6 +417,7 @@ impl Gui {
             let _ = send.send(got);
             waker();
         });
+        true
     }
 
     fn take_loaded(&mut self) {
@@ -1455,6 +1469,15 @@ impl Gui {
                     }
                     continue;
                 }
+                Action::Doc(c) => {
+                    self.doc_cmd(c);
+                    continue;
+                }
+                // a drawing in its own tab: the tab closes
+                Action::CloseDrawing if self.fg.is_none() && !self.docs.is_empty() => {
+                    self.request_close(self.active);
+                    continue;
+                }
                 Action::CloseDrawing => {
                     self.shell.drawing = None;
                     self.shell.tab = 0;
@@ -2178,6 +2201,7 @@ impl Gui {
             self.shell.camera = Some((v.nav.camera, v.size));
         }
         let was_selected = self.shell.selected;
+        self.sync_tab();
         let shell = &mut self.shell;
         let mut output = self.ctx.run_ui(raw, |ui| shell.ui(ui));
         if self.shell.selected != was_selected
@@ -2194,6 +2218,8 @@ impl Gui {
         self.apply_fg();
         self.agent_acts();
         self.app_calls();
+        self.open_asked();
+        self.sync_tab();
         self.save_settings();
         self.inspect_tick();
         self.sheet_frame();
@@ -2947,7 +2973,7 @@ fn fc_only(a: Action) -> bool {
 
 impl Gui {
     /// Opens a Forge (.fg) part: its worker builds it at once, and keeps its stages warm after.
-    fn open_fg(&mut self, path: &str) {
+    fn open_fg(&mut self, path: &str) -> bool {
         let gpu = (self.device.clone(), self.queue.clone(), self.adapter.clone());
         let waker = self.waker.clone();
         let waker: Arc<dyn Fn() + Send + Sync> = Arc::new(move || waker());
@@ -2987,8 +3013,12 @@ impl Gui {
                 }
                 self.shell.name = name.clone();
                 self.shell.status = format!("Opening {name}");
+                true
             }
-            Err(why) => self.shell.status = why,
+            Err(why) => {
+                self.shell.status = why;
+                false
+            }
         }
     }
 

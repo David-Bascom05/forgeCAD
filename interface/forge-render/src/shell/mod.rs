@@ -174,6 +174,8 @@ pub enum Action {
     Key(settings::KeyCmd),
     /// Manage > Settings.
     Settings,
+    /// The document tabs' asks.
+    Doc(docs::DocCmd),
 }
 
 /// What the ribbon asks of a Forge file: Inventor's dialogs and commands.
@@ -411,6 +413,16 @@ pub struct Shell {
     pub prefs: settings::Window,
     /// The left panel's Agent tab (`agent.rs`).
     pub agent: agent::AgentTab,
+    /// The open documents' tabs, and which is in the window.
+    pub doc_tabs: Vec<docs::DocTab>,
+    pub active_doc: usize,
+    /// The tab whose changes aren't saved, being closed: Save, Don't Save or Cancel.
+    pub close_ask: Option<usize>,
+    /// Files to open in tabs of their own: a new drawing, a part from its assembly.
+    pub open_paths: Vec<String>,
+    /// How far the strip is scrolled; the tab being dragged.
+    doc_scroll: f32,
+    doc_drag: Option<usize>,
 }
 
 impl Default for Shell {
@@ -477,6 +489,12 @@ impl Default for Shell {
             settings: Default::default(),
             prefs: Default::default(),
             agent: Default::default(),
+            doc_tabs: Vec::new(),
+            active_doc: 0,
+            close_ask: None,
+            open_paths: Vec::new(),
+            doc_scroll: 0.0,
+            doc_drag: None,
         }
     }
 }
@@ -838,6 +856,7 @@ impl Shell {
         }
         self.places.clear();
         self.view_blocks.clear();
+        self.doc_keys(ui);
         let s = ctx.content_rect();
         let p = ui.painter().clone();
         p.rect_filled(s, 0.0, t.bg);
@@ -1195,6 +1214,7 @@ impl Shell {
     }
 
     fn docs_and_status(&mut self, ui: &mut Ui, s: Rect, bottom: f32) {
+        self.close_prompt(&ui.ctx().clone());
         let t = self.theme;
         let p = ui.painter().clone();
         p.rect_filled(
@@ -1203,7 +1223,12 @@ impl Shell {
             t.surface,
         );
         p.hline(0.0..=s.width(), bottom, Stroke::new(1.0, t.line));
-        if !self.name.is_empty() {
+        if !self.doc_tabs.is_empty() {
+            self.doc_strip(
+                ui,
+                Rect::from_min_size(pos2(0.0, bottom + 1.0), vec2(s.width(), DOCS_H - 1.0)),
+            );
+        } else if !self.name.is_empty() {
             let g = ui.fonts_mut(|f| f.layout_no_wrap(self.name.clone(), mono(12.0), t.ink));
             let d = Rect::from_min_size(pos2(8.0, bottom + 3.0), vec2(g.size().x + 24.0, 22.0));
             p.rect_filled(d, 3.0, t.raised);

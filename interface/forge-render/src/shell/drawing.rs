@@ -2761,10 +2761,13 @@ impl Shell {
         if ok {
             let nd = self.new_drawing.take().expect("the dialog is up");
             let size = forge_draw::sheet::SIZES[nd.size].0;
-            match new_drawing(&nd.model, size, if nd.iso { "ISO" } else { "ASME" })
-                .and_then(|p| DrawingEnv::open(&p))
-            {
-                Ok(env) => self.open_drawing(env),
+            match new_drawing(&nd.model, size, if nd.iso { "ISO" } else { "ASME" }) {
+                // in a tab of its own, the model's left as it was
+                Ok(p) if !self.doc_tabs.is_empty() => self.open_paths.push(p),
+                Ok(p) => match DrawingEnv::open(&p) {
+                    Ok(env) => self.open_drawing(env),
+                    Err(e) => self.status = format!("New Drawing: {e}"),
+                },
                 Err(e) => self.status = format!("New Drawing: {e}"),
             }
         }
