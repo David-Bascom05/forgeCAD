@@ -509,7 +509,10 @@ its actions and the Rust lexer, is run against the proven objects:
   instance index), and its tree equals the tree of the text printed from the oracle's tree with
   every operation bracketed (left-associated chains, right-associated `^`), spans aside. The
   lexer's pieces, kinds and lengths, or its error and span, equal the model's.
-- Result: no difference, on main and on de9bb4ee. Two AST quirks (P1, P2) are noted.
+- Result: no difference, on main and on de9bb4ee. On de9bb4ee also the long run, answer by
+  answer against Lean: 1303029 strings of up to 5 tokens, 70030 sentences and edits, 939931
+  lexer texts (about 18 minutes). Two AST quirks (P1, P2) are noted. `LL1/ImplUnifiedDoc.lean`
+  is de9bb4ee's generated file, kept until that branch merges.
 
 ### Evaluator and edit ops (`diff/`, `ScopedMore.lean`, `Counter/Qualify.lean`)
 

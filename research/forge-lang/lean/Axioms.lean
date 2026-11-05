@@ -78,3 +78,4 @@ open ForgeLang ForgeLang.Counter
 #print axioms ForgeLang.LL1.Lex.lex_lossless
 #print axioms ForgeLang.LL1.Lex.word_maximal
 #print axioms ForgeLang.LL1.Lex.num_literal
+#print axioms ForgeLang.LL1.ImplUnifiedDoc.table_choose
