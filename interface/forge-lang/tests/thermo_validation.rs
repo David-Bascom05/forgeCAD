@@ -595,7 +595,6 @@ fn scoreboard() {
         .collect();
     std::fs::create_dir_all(out.join(&label).join("profiles")).expect("scoreboard folder");
 
-    let mut models: BTreeMap<String, Model> = BTreeMap::new();
     let mut csv = String::from(
         "label,config,case,mode,n,mean_err_pct,max_err_pct,bias_pct,thin_err_pct,thin_loc_err_mm,drawin_excess_pct,status,cause,note\n",
     );
@@ -604,120 +603,139 @@ fn scoreboard() {
         "# Thermoforming scoreboard: {label}\n\nErrors in % of t0 unless the note says otherwise (bubbles: % of the clamp radius; corner: % of d). \
          pass: mean and |thin| <= 5 %, marginal <= 10 %, else fail. drawin: material the measured part holds over the model's, same span (axisymmetric cases).\n\n"
     );
-    for cfg in &configs {
+    // one model at a time, every option on it, then dropped (a run keeps every load step)
+    let mut found: Vec<(usize, usize, String, String, String)> = vec![];
+    let mut first = 0;
+    while first < list.len() {
+        let file = s(&list[first], "model").to_string();
+        let end = (first..list.len())
+            .find(|&k| s(&list[k], "model") != file)
+            .unwrap_or(list.len());
+        let m = {
+            let src = std::fs::read_to_string(dir.join(&file)).expect("model");
+            let opts = Options {
+                dir: Some(dir.clone()),
+                ..Options::default()
+            };
+            let run = forge_lang::run(&src, opts, Default::default()).0;
+            let female = run
+                .thermos
+                .first()
+                .is_some_and(|t| t.tool == forge_thermo::Tool::Female);
+            Model { run, female }
+        };
+        let m = &m;
+        for (ci, cfg) in configs.iter().enumerate() {
+            for (ii, c) in list.iter().enumerate().take(end).skip(first) {
+                let id = s(c, "id").to_string();
+                let d = s(c, "data");
+                let data_file = match d.strip_prefix("repo:") {
+                    Some(p) => repo.join(p),
+                    None => data.join(d),
+                };
+                let th: Option<&ThermoOut> = m.run.thermos.first().filter(|_| m.run.errors.is_empty());
+                // `slide:0.05` overrides the case's friction coefficient
+                let (opt, mu) = match cfg.split_once(':') {
+                    Some((o, m)) => (o, m.parse().expect("cfg:mu")),
+                    None => (cfg.as_str(), n(c, "mu", 0.3)),
+                };
+                let (sc, st_label) = match th.and_then(|t| Some((t, t.process.clone()?))) {
+                    None => (None, "build error"),
+                    Some((t, mut p)) => {
+                        if !configure(&mut p, opt, mu) {
+                            (None, "n/a")
+                        } else {
+                            let fresh;
+                            let st: &Stretch = if Some(&p) == t.process.as_ref() {
+                                t.walls.as_deref().expect("walls")
+                            } else {
+                                fresh = forge_thermo::stretch(&t.formed, &t.spec, &p);
+                                &fresh
+                            };
+                            let sc = match s(c, "mode") {
+                                "mean" => score_mean(c, &data_file, st),
+                                "bubble" => score_bubble(c, &data_file, st, p.pressure),
+                                "ref_inflation" => score_ref_inflation(c, &data_file, st, p.pressure),
+                                "corner" => score_corner(c, &data_file, st, p.pressure),
+                                _ => score_profile(c, &data_file, st, m.female),
+                            };
+                            // the sheet through the tool: the solver lost contact (a robustness fault)
+                            let floor = if m.female { t.formed.report.depth } else { 0.0 } + 2.0 * t.t;
+                            let blown = st.nodes.iter().filter(|p| p.z < -floor).count();
+                            let mut sc = sc;
+                            let status = if blown > 0 {
+                                sc.note = format!("BLOWN: {blown} nodes through the tool; {}", sc.note);
+                                "blown"
+                            } else {
+                                status(&sc)
+                            };
+                            (Some(sc), status)
+                        }
+                    }
+                };
+                let f = |x: Option<f64>| x.map_or(String::new(), |v| format!("{v:.2}"));
+                let cause = s(c, "cause");
+                let sc = sc.unwrap_or_default();
+                let csv_row = format!(
+                    "{label},{cfg},{id},{},{},{:.2},{:.2},{:.2},{},{},{},{st_label},\"{cause}\",\"{}\"\n",
+                    s(c, "mode"),
+                    sc.n,
+                    sc.mean,
+                    sc.max,
+                    sc.bias,
+                    f(sc.thin),
+                    f(sc.thin_loc),
+                    f(sc.drawin),
+                    sc.note
+                );
+                let jn = |x: Option<f64>| x.map_or("null".to_string(), |v| format!("{v:.4}"));
+                let json_row = format!(
+                    "{{\"label\":\"{label}\",\"config\":\"{cfg}\",\"case\":\"{id}\",\"mode\":\"{}\",\"n\":{},\"mean_err_pct\":{:.4},\"max_err_pct\":{:.4},\"bias_pct\":{:.4},\"thin_err_pct\":{},\"thin_loc_err_mm\":{},\"drawin_excess_pct\":{},\"status\":\"{st_label}\",\"cause\":\"{cause}\",\"note\":\"{}\"}}",
+                    s(c, "mode"),
+                    sc.n,
+                    sc.mean,
+                    sc.max,
+                    sc.bias,
+                    jn(sc.thin),
+                    jn(sc.thin_loc),
+                    jn(sc.drawin),
+                    sc.note.replace('"', "'")
+                );
+                let md_row = format!(
+                    "| {id} | {} | {:.1} | {:.1} | {:+.1} | {} | {} | {} | {st_label} | {cause} |\n",
+                    sc.n,
+                    sc.mean,
+                    sc.max,
+                    sc.bias,
+                    f(sc.thin),
+                    f(sc.thin_loc),
+                    f(sc.drawin)
+                );
+                if !sc.rows.is_empty() {
+                    let mut p = String::from("x,measured,model\n");
+                    for (x, a, b) in &sc.rows {
+                        p += &format!("{x:.4},{a:.5},{b:.5}\n");
+                    }
+                    std::fs::write(
+                        out.join(&label).join("profiles").join(format!("{id}_{cfg}.csv")),
+                        p,
+                    )
+                    .expect("profile");
+                }
+                found.push((ci, ii, csv_row, json_row, md_row));
+            }
+        }
+        first = end;
+    }
+    found.sort_by_key(|r| (r.0, r.1));
+    for (ci, cfg) in configs.iter().enumerate() {
         md += &format!(
             "## {cfg}\n\n| case | n | mean | max | bias | thin | thin loc mm | drawin | status | cause |\n|---|---|---|---|---|---|---|---|---|---|\n"
         );
-        for c in &list {
-            let id = s(c, "id").to_string();
-            let file = s(c, "model").to_string();
-            let m = models.entry(file.clone()).or_insert_with(|| {
-                let src = std::fs::read_to_string(dir.join(&file)).expect("model");
-                let opts = Options {
-                    dir: Some(dir.clone()),
-                    ..Options::default()
-                };
-                let run = forge_lang::run(&src, opts, Default::default()).0;
-                let female = run
-                    .thermos
-                    .first()
-                    .is_some_and(|t| t.tool == forge_thermo::Tool::Female);
-                Model { run, female }
-            });
-            let d = s(c, "data");
-            let data_file = match d.strip_prefix("repo:") {
-                Some(p) => repo.join(p),
-                None => data.join(d),
-            };
-            let th: Option<&ThermoOut> = m.run.thermos.first().filter(|_| m.run.errors.is_empty());
-            // `slide:0.05` overrides the case's friction coefficient
-            let (opt, mu) = match cfg.split_once(':') {
-                Some((o, m)) => (o, m.parse().expect("cfg:mu")),
-                None => (cfg.as_str(), n(c, "mu", 0.3)),
-            };
-            let (sc, st_label) = match th.and_then(|t| Some((t, t.process.clone()?))) {
-                None => (None, "build error"),
-                Some((t, mut p)) => {
-                    if !configure(&mut p, opt, mu) {
-                        (None, "n/a")
-                    } else {
-                        let fresh;
-                        let st: &Stretch = if Some(&p) == t.process.as_ref() {
-                            t.walls.as_deref().expect("walls")
-                        } else {
-                            fresh = forge_thermo::stretch(&t.formed, &t.spec, &p);
-                            &fresh
-                        };
-                        let sc = match s(c, "mode") {
-                            "mean" => score_mean(c, &data_file, st),
-                            "bubble" => score_bubble(c, &data_file, st, p.pressure),
-                            "ref_inflation" => score_ref_inflation(c, &data_file, st, p.pressure),
-                            "corner" => score_corner(c, &data_file, st, p.pressure),
-                            _ => score_profile(c, &data_file, st, m.female),
-                        };
-                        // the sheet through the tool: the solver lost contact (a robustness fault)
-                        let floor = if m.female { t.formed.report.depth } else { 0.0 } + 2.0 * t.t;
-                        let blown = st.nodes.iter().filter(|p| p.z < -floor).count();
-                        let mut sc = sc;
-                        let status = if blown > 0 {
-                            sc.note = format!("BLOWN: {blown} nodes through the tool; {}", sc.note);
-                            "blown"
-                        } else {
-                            status(&sc)
-                        };
-                        (Some(sc), status)
-                    }
-                }
-            };
-            let f = |x: Option<f64>| x.map_or(String::new(), |v| format!("{v:.2}"));
-            let cause = s(c, "cause");
-            let sc = sc.unwrap_or_default();
-            csv += &format!(
-                "{label},{cfg},{id},{},{},{:.2},{:.2},{:.2},{},{},{},{st_label},\"{cause}\",\"{}\"\n",
-                s(c, "mode"),
-                sc.n,
-                sc.mean,
-                sc.max,
-                sc.bias,
-                f(sc.thin),
-                f(sc.thin_loc),
-                f(sc.drawin),
-                sc.note
-            );
-            let jn = |x: Option<f64>| x.map_or("null".to_string(), |v| format!("{v:.4}"));
-            json.push(format!(
-                "{{\"label\":\"{label}\",\"config\":\"{cfg}\",\"case\":\"{id}\",\"mode\":\"{}\",\"n\":{},\"mean_err_pct\":{:.4},\"max_err_pct\":{:.4},\"bias_pct\":{:.4},\"thin_err_pct\":{},\"thin_loc_err_mm\":{},\"drawin_excess_pct\":{},\"status\":\"{st_label}\",\"cause\":\"{cause}\",\"note\":\"{}\"}}",
-                s(c, "mode"),
-                sc.n,
-                sc.mean,
-                sc.max,
-                sc.bias,
-                jn(sc.thin),
-                jn(sc.thin_loc),
-                jn(sc.drawin),
-                sc.note.replace('"', "'")
-            ));
-            md += &format!(
-                "| {id} | {} | {:.1} | {:.1} | {:+.1} | {} | {} | {} | {st_label} | {cause} |\n",
-                sc.n,
-                sc.mean,
-                sc.max,
-                sc.bias,
-                f(sc.thin),
-                f(sc.thin_loc),
-                f(sc.drawin)
-            );
-            if !sc.rows.is_empty() {
-                let mut p = String::from("x,measured,model\n");
-                for (x, a, b) in &sc.rows {
-                    p += &format!("{x:.4},{a:.5},{b:.5}\n");
-                }
-                std::fs::write(
-                    out.join(&label).join("profiles").join(format!("{id}_{cfg}.csv")),
-                    p,
-                )
-                .expect("profile");
-            }
+        for r in found.iter().filter(|r| r.0 == ci) {
+            csv += &r.2;
+            json.push(r.3.clone());
+            md += &r.4;
         }
         md += "\n";
     }
