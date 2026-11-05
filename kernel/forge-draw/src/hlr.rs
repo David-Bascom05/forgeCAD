@@ -1154,18 +1154,7 @@ fn crossings(curves: &[Curve3], view: &View, chord: f64) -> Vec<Vec<f64>> {
         let ps = ts.iter().map(|&t| view.project(c.path.at(t))).collect();
         (ts, ps)
     });
-    let mut segs: Vec<(u32, u32)> = Vec::new();
-    let mut lo = Point2::new(f64::INFINITY, f64::INFINITY);
-    let mut hi = Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY);
-    for (c, (_, ps)) in samples.iter().enumerate() {
-        for (s, p) in ps.iter().enumerate() {
-            lo = Point2::new(lo.x.min(p.x), lo.y.min(p.y));
-            hi = Point2::new(hi.x.max(p.x), hi.y.max(p.y));
-            if s + 1 < ps.len() {
-                segs.push((c as u32, s as u32));
-            }
-        }
-    }
+    let (segs, lo, hi) = seg_list(&samples);
     if segs.is_empty() {
         return curves
             .iter()
@@ -1188,17 +1177,15 @@ fn crossings(curves: &[Curve3], view: &View, chord: f64) -> Vec<Vec<f64>> {
         )
     });
     // each segment's box, side by side: the test most pairs fail, without going to the samples
-    let boxes: Vec<[f64; 4]> = forge_math::par::map(segs.len().div_ceil(16384), |r| {
+    let box_runs: Vec<Vec<[f64; 4]>> = forge_math::par::map(segs.len().div_ceil(16384), |r| {
         (r * 16384..((r + 1) * 16384).min(segs.len()))
             .map(|k| {
                 let (a, b) = seg(k);
                 [a.x.min(b.x), a.y.min(b.y), a.x.max(b.x), a.y.max(b.y)]
             })
             .collect::<Vec<_>>()
-    })
-    .into_iter()
-    .flatten()
-    .collect();
+    });
+    let boxes = |k: usize| box_runs[k / 16384][k % 16384];
     // every crossing, each pair of segments taken once: in the cell holding the low corner of
     // where their boxes meet, a run of cells to a core at a time (the splits are sorted below,
     // so the order they are found in does not matter)
@@ -1209,11 +1196,11 @@ fn crossings(curves: &[Curve3], view: &View, chord: f64) -> Vec<Vec<f64>> {
             let (cell, ids) = grid.cell_at(cell_k);
             for (x, &k) in ids.iter().enumerate() {
                 let k = k as usize;
-                let bk = boxes[k];
+                let bk = boxes(k);
                 let (a, b) = seg(k);
                 for &j in &ids[x + 1..] {
                     let j = j as usize;
-                    let bj = boxes[j];
+                    let bj = boxes(j);
                     if bj[2] < bk[0] || bj[0] > bk[2] || bj[3] < bk[1] || bj[1] > bk[3] {
                         continue;
                     }
@@ -1243,40 +1230,44 @@ fn crossings(curves: &[Curve3], view: &View, chord: f64) -> Vec<Vec<f64>> {
     // tangentially, so no crossing shows it): split the other there
     let size = (hi.x - lo.x).max(hi.y - lo.y).max(1.0);
     let touch = 1e-7 * size + 1e-7;
-    let ends: Vec<Vec<(u32, f64)>> = forge_math::par::map(samples.len(), |c| {
-        let ps = &samples[c].1;
+    // a run of curves at a time: few lists to make and let go of
+    const ENDS: usize = 512;
+    let ends: Vec<Vec<(u32, f64)>> = forge_math::par::map(samples.len().div_ceil(ENDS), |r| {
         let mut got = Vec::new();
-        for e in [ps[0], ps[ps.len() - 1]] {
-            let r = chord + touch;
-            // a segment in two of the cells is seen twice: the same split twice, which the
-            // sort and dedup below make one
-            grid.each_near(
-                Point2::new(e.x - r, e.y - r),
-                Point2::new(e.x + r, e.y + r),
-                |k| {
-                    let bk = boxes[k as usize];
-                    if bk[2] < e.x - r || bk[0] > e.x + r || bk[3] < e.y - r || bk[1] > e.y + r {
-                        return;
-                    }
-                    let (ck, sk) = segs[k as usize];
-                    if ck as usize == c {
-                        return;
-                    }
-                    let (a, b) = seg(k as usize);
-                    let ab = b - a;
-                    let x = ((e - a).dot(ab) / ab.dot(ab).max(1e-300)).clamp(0.0, 1.0);
-                    if e.distance(a + ab * x) > r {
-                        return;
-                    }
-                    let ts = &samples[ck as usize].0;
-                    let guess = ts[sk as usize] + x * (ts[sk as usize + 1] - ts[sk as usize]);
-                    let path = &curves[ck as usize].path;
-                    let t = nearest_on_view(path, view, e, guess);
-                    if view.project(path.at(t)).distance(e) <= touch {
-                        got.push((ck, t));
-                    }
-                },
-            );
+        for c in r * ENDS..((r + 1) * ENDS).min(samples.len()) {
+            let ps = &samples[c].1;
+            for e in [ps[0], ps[ps.len() - 1]] {
+                let r = chord + touch;
+                // a segment in two of the cells is seen twice: the same split twice, which the
+                // sort and dedup below make one
+                grid.each_near(
+                    Point2::new(e.x - r, e.y - r),
+                    Point2::new(e.x + r, e.y + r),
+                    |k| {
+                        let bk = boxes(k as usize);
+                        if bk[2] < e.x - r || bk[0] > e.x + r || bk[3] < e.y - r || bk[1] > e.y + r {
+                            return;
+                        }
+                        let (ck, sk) = segs[k as usize];
+                        if ck as usize == c {
+                            return;
+                        }
+                        let (a, b) = seg(k as usize);
+                        let ab = b - a;
+                        let x = ((e - a).dot(ab) / ab.dot(ab).max(1e-300)).clamp(0.0, 1.0);
+                        if e.distance(a + ab * x) > r {
+                            return;
+                        }
+                        let ts = &samples[ck as usize].0;
+                        let guess = ts[sk as usize] + x * (ts[sk as usize + 1] - ts[sk as usize]);
+                        let path = &curves[ck as usize].path;
+                        let t = nearest_on_view(path, view, e, guess);
+                        if view.project(path.at(t)).distance(e) <= touch {
+                            got.push((ck, t));
+                        }
+                    },
+                );
+            }
         }
         got
     });
@@ -1284,7 +1275,8 @@ fn crossings(curves: &[Curve3], view: &View, chord: f64) -> Vec<Vec<f64>> {
     // band of curves to each (a curve's splits are a set, so the order they come in is no matter)
     const BAND: usize = 512;
     let bands = curves.len().div_ceil(BAND);
-    let found: Vec<Vec<Vec<(u32, f64)>>> = forge_math::par::map(found.len() + ends.len(), |n| {
+    let end_runs = ends.len();
+    let found: Vec<Vec<Vec<(u32, f64)>>> = forge_math::par::map(found.len() + end_runs, |n| {
         let mut by: Vec<Vec<(u32, f64)>> = vec![Vec::new(); bands];
         let mut put = |c: u32, t: f64| by[c as usize / BAND].push((c, t));
         if n < found.len() {
@@ -1459,18 +1451,7 @@ fn unique(geoms: &[Geom2], curve: &[usize], order: &[usize], chord: f64) -> Vec<
         let ps = ts.iter().map(|&t| g.at(t)).collect();
         (ts, ps)
     });
-    let mut lo = Point2::new(f64::INFINITY, f64::INFINITY);
-    let mut hi = Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY);
-    let mut segs: Vec<(u32, u32)> = Vec::new();
-    for (g, (_, ps)) in samples.iter().enumerate() {
-        for (s, p) in ps.iter().enumerate() {
-            lo = Point2::new(lo.x.min(p.x), lo.y.min(p.y));
-            hi = Point2::new(hi.x.max(p.x), hi.y.max(p.y));
-            if s + 1 < ps.len() {
-                segs.push((g as u32, s as u32));
-            }
-        }
-    }
+    let (segs, lo, hi) = seg_list(&samples);
     if segs.is_empty() {
         return vec![Vec::new(); geoms.len()];
     }
@@ -1816,6 +1797,42 @@ fn near_segment(a: Point2, b: Point2, c: Point2, d: Point2, tol: f64) -> Option<
         }
     }
     (lo <= hi).then_some((lo, hi))
+}
+
+/// Every sampled curve's segments (its index, the segment's) in order, and the box of all its
+/// samples: runs of curves on all cores, put together in order (the box is a min and a max, the
+/// same whichever runs make it).
+fn seg_list(samples: &[(Vec<f64>, Vec<Point2>)]) -> (Vec<(u32, u32)>, Point2, Point2) {
+    const RUN: usize = 1024;
+    let parts = forge_math::par::map(samples.len().div_ceil(RUN), |r| {
+        let mut segs: Vec<(u32, u32)> = Vec::new();
+        let mut lo = Point2::new(f64::INFINITY, f64::INFINITY);
+        let mut hi = Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY);
+        let first = r * RUN;
+        for (i, (_, ps)) in samples[first..((r + 1) * RUN).min(samples.len())]
+            .iter()
+            .enumerate()
+        {
+            let c = first + i;
+            for (s, p) in ps.iter().enumerate() {
+                lo = Point2::new(lo.x.min(p.x), lo.y.min(p.y));
+                hi = Point2::new(hi.x.max(p.x), hi.y.max(p.y));
+                if s + 1 < ps.len() {
+                    segs.push((c as u32, s as u32));
+                }
+            }
+        }
+        (segs, lo, hi)
+    });
+    let mut segs = Vec::with_capacity(parts.iter().map(|p| p.0.len()).sum());
+    let mut lo = Point2::new(f64::INFINITY, f64::INFINITY);
+    let mut hi = Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY);
+    for (s, l, h) in parts {
+        segs.extend(s);
+        lo = Point2::new(lo.x.min(l.x), lo.y.min(l.y));
+        hi = Point2::new(hi.x.max(h.x), hi.y.max(h.y));
+    }
+    (segs, lo, hi)
 }
 
 #[cfg(test)]

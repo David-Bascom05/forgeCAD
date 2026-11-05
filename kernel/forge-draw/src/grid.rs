@@ -14,6 +14,13 @@ pub struct Grid {
 impl Grid {
     /// A grid over the box `lo..hi` sized for about `items` entries.
     pub fn new(lo: Point2, hi: Point2, items: usize) -> Grid {
+        let mut g = Grid::empty(lo, hi, items);
+        g.cells = vec![Vec::new(); g.nx * g.ny];
+        g
+    }
+
+    /// `new`'s size and cells, holding nothing yet (not even empty lists).
+    fn empty(lo: Point2, hi: Point2, items: usize) -> Grid {
         let (w, h) = ((hi.x - lo.x).max(1e-9), (hi.y - lo.y).max(1e-9));
         let n = (items.max(1) as f64).sqrt().clamp(1.0, 512.0);
         let cell = (w.max(h) / n).max(1e-9);
@@ -24,7 +31,7 @@ impl Grid {
             cell,
             nx,
             ny,
-            cells: vec![Vec::new(); nx * ny],
+            cells: Vec::new(),
             packed: None,
         }
     }
@@ -66,9 +73,8 @@ impl Grid {
         boxes: impl Fn(usize) -> (Point2, Point2) + Sync,
         id: impl Fn(usize) -> u32 + Sync,
     ) -> Grid {
-        let mut g = Grid::new(lo, hi, n);
+        let mut g = Grid::empty(lo, hi, n);
         let cells = g.nx * g.ny;
-        g.cells = Vec::new();
         const RUN: usize = 16384;
         let runs = n.div_ceil(RUN);
         let span = |g: &Grid, i: usize| {
@@ -122,28 +128,39 @@ impl Grid {
             }
             off
         });
-        let placed: Vec<Vec<(u32, u32)>> = forge_math::par::map(runs, |r| {
+        // each run's ids where they go, by band of cells; then each band's part of the array
+        // from every run's, in order (the bands are put end to end)
+        let placed: Vec<Vec<Vec<(u32, u32)>>> = forge_math::par::map(runs, |r| {
             let mut next: Vec<u32> = (0..cells)
                 .map(|k| offsets[k / BAND][r * BAND + k % BAND])
                 .collect();
-            let mut out = Vec::new();
+            let mut out: Vec<Vec<(u32, u32)>> = vec![Vec::new(); bands];
             for i in r * RUN..((r + 1) * RUN).min(n) {
                 let (x0, x1, y0, y1) = span(&g, i);
                 for y in y0..=y1 {
                     for x in x0..=x1 {
                         let k = y * g.nx + x;
-                        out.push((next[k], id(i)));
+                        out[k / BAND].push((next[k], id(i)));
                         next[k] += 1;
                     }
                 }
             }
             out
         });
-        let mut ids = vec![0u32; total as usize];
-        for run in placed {
-            for (slot, id) in run {
-                ids[slot as usize] = id;
+        let parts: Vec<Vec<u32>> = forge_math::par::map(bands, |b| {
+            let base = start[b * BAND];
+            let end = start[((b + 1) * BAND).min(cells)];
+            let mut v = vec![0u32; (end - base) as usize];
+            for run in &placed {
+                for &(slot, id) in &run[b] {
+                    v[(slot - base) as usize] = id;
+                }
             }
+            v
+        });
+        let mut ids = Vec::with_capacity(total as usize);
+        for p in parts {
+            ids.extend(p);
         }
         g.packed = Some((start, ids));
         g
