@@ -210,7 +210,7 @@ fn describe(path: &Path, file: &str) -> (String, String) {
     (number, desc)
 }
 
-fn load(id: &str, file: &str, dir: &Path) -> Result<ModelOut, String> {
+fn load(id: &str, file: &str, dir: &Path, pool: &Arc<crate::asm::PartPool>) -> Result<ModelOut, String> {
     let path = dir.join(file);
     let src = std::fs::read_to_string(&path);
     crate::deps::read(&path, src.as_ref().ok().map(|s| s.as_bytes()));
@@ -227,7 +227,10 @@ fn load(id: &str, file: &str, dir: &Path) -> Result<ModelOut, String> {
         dir: path.parent().map(Path::to_path_buf),
         ..crate::Options::default()
     };
-    let (run, _) = crate::run(&src, opts, crate::build::Cache::default());
+    // the drawing's models share their parts' builds (a subassembly also drawn on its own)
+    let mut cache = crate::build::Cache::default();
+    cache.asm = Some(Box::new(crate::asm::AsmCache::with_pool(pool.clone())));
+    let (run, _) = crate::run(&src, opts, cache);
     if !run.ok() {
         let e = &run.errors[0];
         return Err(format!("does not build: {}: {}", e.kind(), e.text()));
@@ -2687,7 +2690,9 @@ fn make_with(src: &str, dir: &Path, mut show: Option<&mut dyn FnMut(Shown)>) -> 
         })
         .collect();
     let _sp = forge_math::trace::span("drawing models");
-    let mut loaded = crate::par::map(wanted.len(), |k| load(wanted[k].0, wanted[k].1, &ctx.dir)).into_iter();
+    let pool: Arc<crate::asm::PartPool> = Arc::default();
+    let mut loaded =
+        crate::par::map(wanted.len(), |k| load(wanted[k].0, wanted[k].1, &ctx.dir, &pool)).into_iter();
     drop(_sp);
     for item in &d.items {
         match &item.kind {

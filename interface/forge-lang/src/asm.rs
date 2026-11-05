@@ -1662,7 +1662,18 @@ pub struct AsmCache {
     pool: Option<Arc<PartPool>>,
 }
 
-type PartPool = std::sync::Mutex<BTreeMap<PartKey, Arc<std::sync::OnceLock<Arc<PartLoad>>>>>;
+pub(crate) type PartPool = std::sync::Mutex<BTreeMap<PartKey, Arc<std::sync::OnceLock<Arc<PartLoad>>>>>;
+
+impl AsmCache {
+    /// Nothing loaded yet, its parts built through `pool`: runs on other threads sharing it
+    /// build each part (by its whole key) once between them.
+    pub(crate) fn with_pool(pool: Arc<PartPool>) -> AsmCache {
+        AsmCache {
+            pool: Some(pool),
+            ..AsmCache::default()
+        }
+    }
+}
 
 impl AsmCache {
     /// Joint values set straight in the kept solve, as a drag in the app sets them: `(joint id,
