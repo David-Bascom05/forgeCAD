@@ -415,7 +415,8 @@ fn file_call(ev: &mut Eval, file: &str, key: &str, given: &[(String, Value, Stri
         sub.b.building = false;
     }
     sub.run(&body);
-    crate::sheet::finish(&mut sub);
+    // its warnings are cleared below (the file's own): its shop rules go unasked
+    crate::sheet::finish_with(&mut sub, false);
     // what it observes of this document's params is this document's (its own are its own)
     let shared: BTreeSet<ParamKey> = ev.shared.iter().map(|p| p.key.clone()).collect();
     for k in std::mem::take(&mut sub.observed) {
@@ -511,7 +512,8 @@ fn foreign_call(
     }
     let cache = ev.b.cache.comps.remove(&eval_key).unwrap_or_default();
     let path = format!("{}{stem}.{name}?/", ev.comp_path);
-    let mut sub = sub_eval_at(&scope, &def, &values, ev.b.building, cache, path);
+    // its warnings are cleared below (the file's own): its shop rules go unasked
+    let mut sub = sub_eval_at(&scope, &def, &values, ev.b.building, cache, path, false);
     // what it observes of this document's params is this document's (its own are its own)
     let shared: BTreeSet<ParamKey> = ev.shared.iter().map(|p| p.key.clone()).collect();
     for k in std::mem::take(&mut sub.observed) {
@@ -2240,7 +2242,7 @@ pub struct PartLoad {
 /// A call's params' values and the trace of each.
 type Inputs = (Vec<(String, Value)>, Vec<String>);
 /// An in-file component's load, with the stage, text hash and questions it was made from.
-type InFile = (Rc<crate::build::Stage>, u64, Vec<String>, Arc<PartLoad>);
+type InFile = (Rc<crate::build::Stage>, u64, Vec<String>, bool, Arc<PartLoad>);
 /// A link's arguments with its body ends put in by name, and those names' values.
 type Ends = (Vec<Arg>, Vec<(String, Value)>);
 /// A part file's text hash and the references and bodies asked of it.
@@ -2306,7 +2308,8 @@ fn file_env(
         ev.b.building = false;
     }
     ev.run(&prog);
-    crate::sheet::finish(&mut ev);
+    // a subassembly file loaded into an assembly keeps no warnings of its own
+    crate::sheet::finish_with(&mut ev, false);
     let d = ev.asm.take().unwrap_or_default();
     let d = in_file(&mut ev, d);
     let mut prepared = BTreeMap::new();
@@ -2935,8 +2938,8 @@ fn make_load(
     fence: &Option<std::path::PathBuf>,
     refs: &[String],
     bodies: &[String],
-    cosmetic: bool,
-    mesh: bool,
+    // its threads left cosmetic, its interference meshes made: as the part key has them
+    (cosmetic, mesh): (bool, bool),
 ) -> PartLoad {
     let parent = std::path::Path::new(path).parent().map(|p| p.to_path_buf());
     match variant {
@@ -3018,7 +3021,8 @@ fn load_component(
             }
         }
     }
-    let mut sub = sub_eval(&ev, &def, &values, true, Default::default());
+    // a part loaded into an assembly: none of its warnings are kept
+    let mut sub = sub_eval(&ev, &def, &values, true, Default::default(), false);
     finish_load(&mut sub, &mut out, refs, &[], mesh);
     out.errors = std::mem::take(&mut sub.errors);
     out.errors.extend(std::mem::take(&mut ev.errors));
@@ -3825,7 +3829,15 @@ pub fn finish(
                 .iter()
                 .find(|(k, _)| located(&dir, fence, k) == *file)
                 .map(|x| x.1);
-            Arc::new(make_load(text, path, variant, fence, refs, bodies, *cosmetic, *meshed))
+            Arc::new(make_load(
+                text,
+                path,
+                variant,
+                fence,
+                refs,
+                bodies,
+                (*cosmetic, *meshed),
+            ))
         };
         let Some(pool) = &pool else { return (make(), true) };
         let cell = pool
@@ -3863,11 +3875,13 @@ pub fn finish(
         let refs: Vec<String> = refs.iter().cloned().collect();
         let bodies: Vec<String> = bodies.iter().cloned().collect();
         let load = if file.starts_with('#') {
-            infile_load(ev, &prepared, file, &refs, &mut cache)
+            infile_load(ev, &prepared, file, &refs, &mut cache, opts.meshes)
         } else if let Some((owner, key)) = nested_key(file) {
             // a subassembly file's own component: made by that file's evaluation
             match envs.get_mut(owner) {
-                Some(FileEnv { ev: fe, prepared: fp }) => infile_load(fe, fp, key, &refs, &mut cache),
+                Some(FileEnv { ev: fe, prepared: fp }) => {
+                    infile_load(fe, fp, key, &refs, &mut cache, opts.meshes)
+                }
                 None => Arc::new(empty_load(file)),
             }
         } else {
@@ -3912,8 +3926,7 @@ pub fn finish(
                         &fence,
                         &refs,
                         &bodies,
-                        opts.cosmetic_threads,
-                        opts.meshes,
+                        (opts.cosmetic_threads, opts.meshes),
                     ));
                     cache.parts.insert(ck, l.clone());
                     t.built += 1;
@@ -5890,7 +5903,7 @@ pub fn component_block(
             used: true,
         });
     }
-    let mut probe = sub_eval(ev, &def, &values, false, crate::build::Cache::default());
+    let mut probe = sub_eval(ev, &def, &values, false, crate::build::Cache::default(), true);
     absorb(ev, &mut probe, &def, None);
     ev.bind_name(name, asm(AsmVal::Def(def)), s.span)
 }
@@ -5912,6 +5925,7 @@ pub fn default_eval<'s>(ev: &Eval<'s>, name: &str) -> Option<Eval<'s>> {
         &values,
         ev.b.building,
         crate::build::Cache::default(),
+        true,
     ))
 }
 
@@ -6091,6 +6105,7 @@ fn sub_eval<'s>(
     values: &[(String, Value)],
     building: bool,
     cache: crate::build::Cache,
+    shop: bool,
 ) -> Eval<'s> {
     sub_eval_at(
         ev,
@@ -6099,6 +6114,7 @@ fn sub_eval<'s>(
         building,
         cache,
         format!("{}{}?/", ev.comp_path, def.name),
+        shop,
     )
 }
 
@@ -6111,6 +6127,7 @@ fn sub_eval_at<'s>(
     building: bool,
     cache: crate::build::Cache,
     path: String,
+    shop: bool,
 ) -> Eval<'s> {
     let mut sub = ev.child(building, cache);
     sub.comp_path = path;
@@ -6125,7 +6142,8 @@ fn sub_eval_at<'s>(
         sub.b.building = false;
     }
     sub.run(&def.body);
-    crate::sheet::finish(&mut sub);
+    // a call of this document keeps its shop warnings; another file's part loaded here, none
+    crate::sheet::finish_with(&mut sub, shop);
     sub
 }
 
@@ -6233,7 +6251,7 @@ pub fn call_def(ev: &mut Eval, def: &Rc<CompDef>, args: &[Arg], span: Span) -> R
         }
         ev.total.set((calls, comps + 1));
         let path = format!("{}{key}/", ev.comp_path);
-        let mut sub = sub_eval_at(ev, def, &values, ev.b.building, cache, path);
+        let mut sub = sub_eval_at(ev, def, &values, ev.b.building, cache, path, true);
         absorb(ev, &mut sub, def, Some(&def.name));
         let is_sub = sub
             .asm
@@ -6511,6 +6529,7 @@ fn infile_load(
     key: &str,
     refs: &[String],
     cache: &mut AsmCache,
+    mesh: bool,
 ) -> Arc<PartLoad> {
     // the evaluation it is in: the calls its key is under (`#box(d=1)/lid(d=2)`)
     let rest = key.trim_start_matches('#');
@@ -6521,7 +6540,7 @@ fn infile_load(
     let (Some(d), Some(owner)) = (prepared.get(path), owner_mut(ev, path)) else {
         return Arc::new(empty_load(key));
     };
-    infile_load_in(owner, d, key, refs, cache)
+    infile_load_in(owner, d, key, refs, cache, mesh)
 }
 
 /// The evaluation under `path` (`box(d=1)/lid(d=2)/`), found through its calls.
@@ -6553,7 +6572,15 @@ fn prepare_all(ev: &mut Eval, top: &Doc, out: &mut BTreeMap<String, Doc>) {
     ev.comps = comps;
 }
 
-fn infile_load_in(ev: &mut Eval, d: &Doc, key: &str, refs: &[String], cache: &mut AsmCache) -> Arc<PartLoad> {
+/// `mesh`: its interference meshes made (`Options::meshes`; a drawing's loads ask none).
+fn infile_load_in(
+    ev: &mut Eval,
+    d: &Doc,
+    key: &str,
+    refs: &[String],
+    cache: &mut AsmCache,
+    mesh: bool,
+) -> Arc<PartLoad> {
     let Some(inst) = d.insts.iter().find(|i| i.file == key) else {
         return Arc::new(empty_load(key));
     };
@@ -6571,10 +6598,11 @@ fn infile_load_in(ev: &mut Eval, d: &Doc, key: &str, refs: &[String], cache: &mu
         }
         _ => text_hash(ev.src),
     };
-    if let (Some(st), Some((kst, kt, kr, l))) = (&stage, cache.infile.get(key))
+    if let (Some(st), Some((kst, kt, kr, km, l))) = (&stage, cache.infile.get(key))
         && Rc::ptr_eq(st, kst)
         && *kt == text
         && kr == refs
+        && *km == mesh
     {
         return l.clone();
     }
@@ -6583,7 +6611,7 @@ fn infile_load_in(ev: &mut Eval, d: &Doc, key: &str, refs: &[String], cache: &mu
     match (inst.source, comp) {
         (Source::Inline, Some(k)) => {
             let mut comps = std::mem::take(&mut ev.comps);
-            finish_load(&mut comps[k].ev, &mut out, refs, &[], true);
+            finish_load(&mut comps[k].ev, &mut out, refs, &[], mesh);
             ev.comps = comps;
         }
         (Source::Body | Source::Root, _) => {
@@ -6628,7 +6656,9 @@ fn infile_load_in(ev: &mut Eval, d: &Doc, key: &str, refs: &[String], cache: &mu
                 props,
                 mine.into_iter().map(|(id, m, b)| (id, m, Arc::new(b))).collect(),
             ));
-            out.mesh = body.as_ref().and_then(mesh_of);
+            if mesh {
+                out.mesh = body.as_ref().and_then(mesh_of);
+            }
             out.body = body;
         }
         _ => {}
@@ -6637,7 +6667,7 @@ fn infile_load_in(ev: &mut Eval, d: &Doc, key: &str, refs: &[String], cache: &mu
     if let Some(st) = stage {
         cache
             .infile
-            .insert(key.to_string(), (st, text, refs.to_vec(), l.clone()));
+            .insert(key.to_string(), (st, text, refs.to_vec(), mesh, l.clone()));
     }
     l
 }

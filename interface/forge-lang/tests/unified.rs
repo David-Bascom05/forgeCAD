@@ -571,3 +571,27 @@ fn a_file_with_components_of_its_own_places_as_a_subassembly() {
     let rows = forge_lang::props::bom_rows(a);
     assert_eq!(rows.len(), bom.len());
 }
+
+/// A drawing's run makes no interference meshes, for this file's own components too; a run
+/// that needs them, sharing its cache, makes its own (whether it meshed is in the load's key): the
+/// overlap is still found.
+#[test]
+fn in_file_components_follow_options_meshes_in_their_key() {
+    let src = "component blk() {\n  sketch s(on: xy) {\n    r = rect(corner: (0, 0), size: (10, 10))\n  }\n  b = extrude(s, 10)\n}\na = part(blk(), ground: true)\nc = part(blk(), at: pose(at: (5, 0, 0)), ground: true)\n";
+    let opts = |meshes: bool| forge_lang::Options {
+        build: true,
+        meshes,
+        ..Default::default()
+    };
+    let (dry, cache) = forge_lang::run(src, opts(false), Default::default());
+    assert!(
+        dry.ok(),
+        "{:?}",
+        dry.errors.iter().map(|e| e.text()).collect::<Vec<_>>()
+    );
+    let (run, _) = forge_lang::run(src, opts(true), cache);
+    assert_eq!(run.asm.as_ref().unwrap().interferences, 1);
+    // and on its own, meshed from the start
+    let (fresh, _) = forge_lang::run(src, opts(true), Default::default());
+    assert_eq!(fresh.asm.as_ref().unwrap().interferences, 1);
+}
