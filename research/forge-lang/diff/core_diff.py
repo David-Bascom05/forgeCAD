@@ -757,7 +757,9 @@ STATIC = [
     ("diverge", {"m.fg": "shared w = 2\n" + "\n".join(SKETCH) + "\nfn f(n) {\n  return 0 if n == 0 else f(n - 1)\n}\ng = extrude(plan, w + f(-1))\n"},
      "m.fg", "Fuel", "Counter/Diverge.down_budget (fuel)"),
     ("nested_component", {"m.fg": "component a(d: 1) {\n  sketch s(on: xy) {\n    o = circle((0, 0), 5)\n  }\n  e = extrude(s, d)\n}\ncomponent b(d: 1) {\n  x = part(a)\n}\ny = part(b)\n"},
-     "m.fg", "InComponent", "Scoped.NoPlace: a block places no component (the scoped-op theorems use it)"),
+     "m.fg", "", "Nested.defs_congr_closed: round 2 retires NestedComponent; a block may place components"),
+    ("component_cycle", {"m.fg": "component a(d: 1) {\n  x = part(a)\n}\ny = part(a)\n"},
+     "m.fg", "ComponentCycle", "Counter/Nested.place_cycle_fuel: a self-placing component is a static typed error (R1)"),
     ("default_no_capture", {"m.fg": "shared w = 4\n" + "\n".join(SKETCH) + "\nd = w + 100\ncomponent cup(d: 80, h: d * 2) {\n  sketch s(on: xy) {\n    o = circle((0, 0), 5)\n  }\n  b = extrude(s, h)\n}\nc = part(cup(d: 50))\n"},
      "m.fg", "UnknownName", "ScopedMore.default_no_capture (unbound d); Rust: E10"),
     ("use_member_component", {"lib.fg": "shared W = 7\ncomponent cup(d: 9) {\n  sketch s(on: xy) {\n    o = circle((0, 0), 5)\n  }\n  b = extrude(s, d + W)\n}\n",
@@ -990,7 +992,7 @@ def run_all(cases, lean, a, exit_=True):
 # Differences that are filed findings (impl-proof-findings.md), or the mapping itself (`link`:
 # fg names a shared param whose value is an expression where the model names its sites;
 # `strict-list`: fg evaluates every element of a list, the model's `sel` only the chosen one).
-KNOWN = "link,strict-list,use_member_component"
+KNOWN = "link,strict-list"
 
 
 def main():

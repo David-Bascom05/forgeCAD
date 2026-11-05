@@ -204,6 +204,9 @@ FIXED = [
      {"op": "ExtractComponent", "component": "cup", "file": "cup.fg"}, "FileExists"),
     ("extract_read_otherwise", {"m.fg": "shared W = 4\ncomponent cup(d: 5) {\n  sketch s(on: xy) {\n    o = circle((0, 0), 5)\n  }\n  b = extrude(s, d + W)\n}\nc1 = part(cup)\nx = cup\n"},
      {"op": "ExtractComponent", "component": "cup", "file": "cup.fg"}, "refused"),
+    # Counter/Nested.nested_delete_dangles (R2): a placer's block reads the deleted feature
+    ("nested_still_read", {"m.fg": "component lid(d: 1) {\n  sketch s(on: xy) {\n    o = circle((0, 0), 5)\n  }\n  plate = extrude(s, d)\n}\ncomponent box(d: 1) {\n  lid1 = part(lid)\n  sketch t(on: lid1.plate.end) {\n    o = circle((0, 0), 2)\n  }\n  h = extrude(t, d)\n}\nbox1 = part(box)\n"},
+     {"op": "DeleteFeature", "id": "lid.plate"}, "StillReadBy"),
 ]
 
 # Files components: the used file's component and `with:` against the inline forms.
@@ -254,7 +257,7 @@ def check_fixed(fg, tmp, t):
     t.note("module" if any(e["kind"] == "UseFailed" for e in j["errors"]) else "module:use_cycle", "use_cycle", str(j["errors"]))
 
 
-KNOWN = {"extract-reach", "extract-structural", "inline-refused-unplaced", "inline-text-differs"}  # X1-X4, impl-proof-findings.md
+KNOWN = {"extract-reach"}  # X1 (reach count), impl-proof-findings.md
 
 
 def main():
