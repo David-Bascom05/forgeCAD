@@ -4,11 +4,11 @@
 //! the CSV), Make Mould (its settings and the exports). The browser holds the formed part, the
 //! mould and the blank, each with its eye; the formed part shows as modelled (t everywhere) or as
 //! simulated (the wall the model gives), its colours on or off in either. Every edit is a dialog.
-use crate::shell::placed::Placed;
 use super::fg::{FgAct, FgPanel, Severity};
 use super::theme::{Theme, medium, mono, sans, semi};
 use super::thermo::{Masses, ThermoRow, band, c32};
 use super::{Action, FgCmd, Shell};
+use crate::shell::placed::Placed;
 use egui::{Align2, Color32, Rect, Sense, Stroke, StrokeKind, Ui, pos2, vec2};
 use forge_lang::error::Op;
 
