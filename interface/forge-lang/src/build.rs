@@ -96,6 +96,107 @@ pub struct Cache {
     /// Work done outside the kernel's history (a sheet's builds and shop checks), by a key
     /// that holds everything it read.
     memo: HashMap<String, Rc<dyn Any>>,
+    /// Stages built before, by the whole history up to them (`Step`): an edit made and taken
+    /// back, or tried again, builds nothing.
+    kept: Kept,
+    /// The steps of the last run's history, by position (as `stages`).
+    steps: Vec<Option<Rc<Step>>>,
+}
+
+/// One step of a history: the step before it (by identity), and this one's feature as text with
+/// every literal (`{:?}`: shortest round-trip numbers, enum names) and its id. Two steps are
+/// equal exactly when they are the same object: a lookup compares the full key, no hash trusted.
+pub struct Step {
+    before: Option<Rc<Step>>,
+    text: String,
+    id: u64,
+}
+
+/// Stages by step, the least lately used dropped past `KEPT`.
+#[derive(Default)]
+struct Kept {
+    /// By a hash of the key (`bucket`), each entry the full key and its stage.
+    stages: HashMap<u128, Vec<(Rc<Step>, Rc<Stage>, u64)>>,
+    len: usize,
+    tick: u64,
+}
+
+/// How many stages a session keeps beyond its last run's.
+const KEPT: usize = 512;
+/// How many memo entries (`Builder::memo`) a session keeps beyond its last run's.
+const MEMO_KEPT: usize = 128;
+
+/// A step's text, None when it can't be keyed: its feature reads what its text does not hold (an
+/// imported file's body, a font), or a step before it could not be.
+fn keyed(steps: &[Option<Rc<Step>>], f: &Feature) -> Option<String> {
+    let reads_a_file = |f: &Feature| matches!(f, Feature::Import(_) | Feature::Text(_));
+    let inner = match f {
+        Feature::Body(b) => match &**b {
+            forge_model::BodyFeature::In { feature, .. } => reads_a_file(feature),
+            _ => false,
+        },
+        _ => false,
+    };
+    if steps.last().is_some_and(|s| s.is_none()) || reads_a_file(f) || inner {
+        return None;
+    }
+    Some(format!("{f:?}"))
+}
+
+fn bucket(before: &Option<Rc<Step>>, text: &str, id: u64) -> u128 {
+    let mut h = forge_math::hash::Hash128::new();
+    h.word(before.as_ref().map_or(0, |b| Rc::as_ptr(b) as usize as u64));
+    h.word(id);
+    h.str(text);
+    h.finish()
+}
+
+impl Kept {
+    /// The step and stage kept for exactly this key.
+    fn get(&mut self, before: &Option<Rc<Step>>, text: &str, id: u64) -> Option<(Rc<Step>, Rc<Stage>)> {
+        self.tick += 1;
+        let t = self.tick;
+        let e = self
+            .stages
+            .get_mut(&bucket(before, text, id))?
+            .iter_mut()
+            .find(|e| {
+                e.0.id == id
+                    && e.0.text == text
+                    && match (&e.0.before, before) {
+                        (None, None) => true,
+                        (Some(a), Some(b)) => Rc::ptr_eq(a, b),
+                        _ => false,
+                    }
+            })?;
+        e.2 = t;
+        Some((e.0.clone(), e.1.clone()))
+    }
+
+    fn put(&mut self, step: Rc<Step>, st: Rc<Stage>) {
+        self.tick += 1;
+        if self.len >= KEPT
+            && let Some((b, k)) = self
+                .stages
+                .iter()
+                .flat_map(|(b, v)| v.iter().enumerate().map(move |(k, e)| (*b, k, e.2)))
+                .min_by_key(|x| x.2)
+                .map(|x| (x.0, x.1))
+            && let Some(v) = self.stages.get_mut(&b)
+        {
+            v.swap_remove(k);
+            self.len -= 1;
+            if v.is_empty() {
+                self.stages.remove(&b);
+            }
+        }
+        let b = bucket(&step.before, &step.text, step.id);
+        let v = self.stages.entry(b).or_default();
+        if !v.iter().any(|e| Rc::ptr_eq(&e.0, &step)) {
+            v.push((step, st, self.tick));
+            self.len += 1;
+        }
+    }
 }
 
 pub struct Builder {
@@ -119,6 +220,9 @@ pub struct Builder {
     memo: HashMap<String, Rc<dyn Any>>,
     /// Memo entries worked out afresh this run.
     pub remade: usize,
+    /// The steps of this run's history so far, and whether they are all keyed: not after a step
+    /// that reads what its text does not hold (an imported file, a font).
+    steps: Vec<Option<Rc<Step>>>,
 }
 
 impl Builder {
@@ -137,6 +241,7 @@ impl Builder {
             reused: 0,
             memo: HashMap::new(),
             remade: 0,
+            steps: vec![],
         }
     }
 
@@ -162,13 +267,24 @@ impl Builder {
     }
 
     pub fn into_cache(self) -> Cache {
+        // this run's memo entries, and as many of the ones before it as there is room for: an edit
+        // taken back finds its work done
+        let mut memo = self.memo;
+        for (k, v) in self.cache.memo {
+            if memo.len() >= MEMO_KEPT {
+                break;
+            }
+            memo.entry(k).or_insert(v);
+        }
         Cache {
             features: self.features,
             ids: self.ids,
             stages: self.stages,
             measured: self.cache.measured,
             asm: self.cache.asm,
-            memo: self.memo,
+            memo,
+            kept: self.cache.kept,
+            steps: self.steps,
         }
     }
 
@@ -187,6 +303,7 @@ impl Builder {
     /// Adds a feature and, when building, builds it onto the part. Returns its index.
     pub fn push(&mut self, f: Feature, id: u64) -> Result<usize, RegenError> {
         let i = self.features.len();
+        let text = keyed(&self.steps, &f);
         self.features.push(f);
         self.ids.push(id);
         if !self.building {
@@ -199,9 +316,19 @@ impl Builder {
         {
             self.stages.push(st.clone());
             self.reused += 1;
+            let step = self.cache.steps.get(i).cloned().flatten();
+            self.steps.push(step);
             return Ok(i);
         }
         self.reuse = false;
+        if let Some(text) = &text
+            && let Some((step, st)) = self.cache.kept.get(&self.before(), text, id)
+        {
+            self.stages.push(st);
+            self.steps.push(Some(step));
+            self.reused += 1;
+            return Ok(i);
+        }
         if self.hosted
             && matches!(
                 self.features[i],
@@ -210,6 +337,7 @@ impl Builder {
             && let Some(last) = self.stages.last()
         {
             self.stages.push(last.clone());
+            self.keep(text, id);
             return Ok(i);
         }
         let before = self.stages.last().map(|s| s.solids.clone()).unwrap_or_default();
@@ -220,10 +348,12 @@ impl Builder {
         match r {
             Ok(solids) => {
                 self.stages.push(Rc::new(Stage::new(solids)));
+                self.keep(text, id);
                 Ok(i)
             }
             Err(e) => {
                 self.building = false;
+                self.steps.push(None);
                 Err(e)
             }
         }
@@ -238,6 +368,7 @@ impl Builder {
         make: impl FnOnce(&[Solid]) -> Result<Vec<Solid>, E>,
     ) -> Result<usize, E> {
         let i = self.features.len();
+        let text = keyed(&self.steps, &f);
         self.features.push(f);
         self.ids.push(id);
         self.hosted = true;
@@ -251,9 +382,19 @@ impl Builder {
         {
             self.stages.push(st.clone());
             self.reused += 1;
+            let step = self.cache.steps.get(i).cloned().flatten();
+            self.steps.push(step);
             return Ok(i);
         }
         self.reuse = false;
+        if let Some(text) = &text
+            && let Some((step, st)) = self.cache.kept.get(&self.before(), text, id)
+        {
+            self.stages.push(st);
+            self.steps.push(Some(step));
+            self.reused += 1;
+            return Ok(i);
+        }
         let before = self.stages.last().map(|s| s.solids.clone()).unwrap_or_default();
         let t = Instant::now();
         let r = make(&before);
@@ -262,13 +403,35 @@ impl Builder {
         match r {
             Ok(solids) => {
                 self.stages.push(Rc::new(Stage::new(solids)));
+                self.keep(text, id);
                 Ok(i)
             }
             Err(e) => {
                 self.building = false;
+                self.steps.push(None);
                 Err(e)
             }
         }
+    }
+
+    /// The step this run's history stands at: None at its start (and when it is not keyed).
+    fn before(&self) -> Option<Rc<Step>> {
+        self.steps.last().cloned().flatten()
+    }
+
+    /// Keeps the stage just made as this step's (`text` None: the step is not keyed).
+    fn keep(&mut self, text: Option<String>, id: u64) {
+        let step = text.map(|text| {
+            Rc::new(Step {
+                before: self.before(),
+                text,
+                id,
+            })
+        });
+        if let (Some(step), Some(st)) = (&step, self.stages.last()) {
+            self.cache.kept.put(step.clone(), st.clone());
+        }
+        self.steps.push(step);
     }
 
     pub fn history(&self) -> History<'_> {

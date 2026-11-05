@@ -126,17 +126,17 @@ impl Path3 {
         }
     }
 
-    fn placed(self, f: &Frame) -> Path3 {
+    fn placed(&self, f: &Frame) -> Path3 {
         match self {
-            Path3::Line(a, b) => Path3::Line(f.point_to_world(a), f.point_to_world(b)),
+            Path3::Line(a, b) => Path3::Line(f.point_to_world(*a), f.point_to_world(*b)),
             Path3::Conic { c, u, v, t0, t1 } => Path3::Conic {
-                c: f.point_to_world(c),
-                u: f.vec_to_world(u),
-                v: f.vec_to_world(v),
-                t0,
-                t1,
+                c: f.point_to_world(*c),
+                u: f.vec_to_world(*u),
+                v: f.vec_to_world(*v),
+                t0: *t0,
+                t1: *t1,
             },
-            Path3::Poly(p) => Path3::Poly(p.into_iter().map(|q| f.point_to_world(q)).collect()),
+            Path3::Poly(p) => Path3::Poly(p.iter().map(|q| f.point_to_world(*q)).collect()),
         }
     }
 
@@ -827,11 +827,35 @@ pub fn hlr(insts: &[Instance], view: &View, opts: &Options) -> Vec<Piece> {
     drop(t);
     let t = span("hlr curves");
     // each part's curves on a core of its own, put together in part order
-    let per_inst: Vec<Vec<Curve3>> = forge_math::par::map(insts.len(), |i| {
-        let mut curves: Vec<Curve3> = Vec::new();
+    // a part's edges and outlines in its own space depend on the part and the view's direction
+    // there alone: made once per such pair, placed at each occurrence
+    let keys: Vec<(usize, [u64; 3])> = insts
+        .iter()
+        .map(|inst| {
+            let d = inst.pose.vec_to_local(view.toward.get());
+            (
+                inst.body as *const Body as usize,
+                [d.x.to_bits(), d.y.to_bits(), d.z.to_bits()],
+            )
+        })
+        .collect();
+    let mut first: std::collections::HashMap<(usize, [u64; 3]), usize> = Default::default();
+    let mut slot = Vec::with_capacity(insts.len());
+    let mut reps: Vec<usize> = Vec::new();
+    for (i, k) in keys.iter().enumerate() {
+        let n = reps.len();
+        let s = *first.entry(*k).or_insert(n);
+        if s == n {
+            reps.push(i);
+        }
+        slot.push(s);
+    }
+    let local: Vec<Vec<(Source, Class, Path3)>> = forge_math::par::map(reps.len(), |r| {
+        let i = reps[r];
         let inst = &insts[i];
         let body = inst.body;
         let d = inst.pose.vec_to_local(view.toward.get());
+        let mut out = Vec::new();
         for e in body.edge_ids() {
             let edge = body.edge(e);
             let faces: Vec<FaceId> = edge.coedges.iter().map(|&c| body.coedge_face(c)).collect();
@@ -843,21 +867,19 @@ pub fn hlr(insts: &[Instance], view: &View, opts: &Options) -> Vec<Piece> {
             if class == Class::Tangent && !opts.tangent {
                 continue;
             }
-            let path = edge_path(body, e, opts.chord).placed(&inst.pose);
-            push_curve(&mut curves, view, i, Source::Edge(edge.name), class, path);
+            out.push((Source::Edge(edge.name), class, edge_path(body, e, opts.chord)));
         }
         for f in body.face_ids() {
             for path in outlines(body, &scene.idx[i], f, d, opts.chord) {
-                let path = path.placed(&inst.pose);
-                push_curve(
-                    &mut curves,
-                    view,
-                    i,
-                    Source::Outline(body.face(f).name),
-                    Class::Outline,
-                    path,
-                );
+                out.push((Source::Outline(body.face(f).name), Class::Outline, path));
             }
+        }
+        out
+    });
+    let per_inst: Vec<Vec<Curve3>> = forge_math::par::map(insts.len(), |i| {
+        let mut curves: Vec<Curve3> = Vec::new();
+        for (source, class, path) in &local[slot[i]] {
+            push_curve(&mut curves, view, i, *source, *class, path.placed(&insts[i].pose));
         }
         curves
     });
