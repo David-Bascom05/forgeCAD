@@ -2162,7 +2162,13 @@ impl Shell {
                     .find(|o| o.path == k || o.path.starts_with(&format!("{k}.")))
                     .map(|o| o.file.clone());
                 let sub = a.insts.iter().find(|i| i.path == k).map(|i| i.file.clone());
-                if let Some(f) = sub.or(file) {
+                // a component of this file is this file; a subassembly file's, that file
+                let f = sub.or(file).filter(|f| !f.starts_with('#'));
+                let f = f.map(|f| {
+                    f.split_once("|#")
+                        .map_or(f.clone(), |(owner, _)| owner.to_string())
+                });
+                if let Some(f) = f {
                     let at = a.dir.as_ref().map_or_else(|| f.clone().into(), |d| d.join(&f));
                     pending.push(FgAct::OpenFile(at.to_string_lossy().into_owned()));
                 }
