@@ -67,6 +67,11 @@ impl Drop for Watch {
     }
 }
 
+/// What this thread's watch has recorded so far (None: nothing is recording).
+pub fn so_far() -> Option<Deps> {
+    WATCHING.with(|w| w.borrow().last().cloned())
+}
+
 /// Whether anything is recording on this thread (so a caller can skip the hashing).
 pub fn watching() -> bool {
     WATCHING.with(|w| !w.borrow().is_empty())

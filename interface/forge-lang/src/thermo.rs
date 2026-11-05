@@ -1350,6 +1350,7 @@ fn thermoform(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
             let sim = st.as_ref().map(|w| {
                 let formed_key = format!("thermoform walls {key} {:?}", walls.as_ref().expect("formed"));
                 let key = format!("thermoform simulated 2 {key} {walls:?}");
+                let (key_of, src) = (format!("{key} {id}"), ev.src);
                 ev.b.memo(key, || {
                     let trim = ft::build::polygon(&f.trim);
                     let on = ft::OnTool {
@@ -1359,20 +1360,40 @@ fn thermoform(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
                     // the model's sheet, split once and put on the tool (within 0.25 % of its wall
                     // integral, about 0.1 s), then its wall carried onto the modelled part's own
                     // side on the tool, finely meshed, so the rounds are smooth (about 0.3 s)
-                    let sheet = ft::simulated_on(&f.frame, &trim, w, prep.t, &on, 1);
-                    let field = ft::WallField::of(&sheet, 3.0 * prep.t);
-                    // kept by the forming's inputs and the part as the simulated part reads it
-                    let part = ft::part_mesh(&f.part, 3.0).and_then(|pm| {
-                        let formed = crate::thermo_kept::stretch_key(&formed_key, &spec, &f);
-                        let disk = crate::thermo_kept::sim_key(&formed, &format!("{walls:?}"), prep.t, &pm);
-                        crate::thermo_kept::get_sim(&disk).or_else(|| {
-                            let part = ft::simulated_from(&pm, &f.frame, &on, &field, prep.t);
-                            if let Some(p) = &part {
-                                crate::thermo_kept::put_sim(&disk, p);
-                            }
-                            part
-                        })
+                    // kept by the forming's inputs and the part as the simulated part reads it;
+                    // an unchanged document finds that key, and the sheet, by its quick one
+                    let quick = crate::thermo_kept::quick_key(src, &key_of);
+                    let known = quick.as_ref().and_then(|q| {
+                        let (full, sheet) = crate::thermo_kept::get_quick(&q.0)?;
+                        Some((crate::thermo_kept::get_sim(&full)?, sheet))
                     });
+                    let (part, sheet, field) = match known {
+                        Some((part, sheet)) => {
+                            let field = ft::WallField::of(&sheet, 3.0 * prep.t);
+                            (Some(part), sheet, field)
+                        }
+                        None => {
+                            let sheet = ft::simulated_on(&f.frame, &trim, w, prep.t, &on, 1);
+                            let field = ft::WallField::of(&sheet, 3.0 * prep.t);
+                            let part = ft::part_mesh(&f.part, 3.0).and_then(|pm| {
+                                let formed = crate::thermo_kept::stretch_key(&formed_key, &spec, &f);
+                                let disk =
+                                    crate::thermo_kept::sim_key(&formed, &format!("{walls:?}"), prep.t, &pm);
+                                let part = crate::thermo_kept::get_sim(&disk).or_else(|| {
+                                    let part = ft::simulated_from(&pm, &f.frame, &on, &field, prep.t);
+                                    if let Some(p) = &part {
+                                        crate::thermo_kept::put_sim(&disk, p);
+                                    }
+                                    part
+                                });
+                                if let (Some(_), Some((q, read))) = (&part, &quick) {
+                                    crate::thermo_kept::put_quick(q, read, &disk, &sheet);
+                                }
+                                part
+                            });
+                            (part, sheet, field)
+                        }
+                    };
                     (Rc::new(part.unwrap_or(sheet)), Rc::new(field))
                 })
             });

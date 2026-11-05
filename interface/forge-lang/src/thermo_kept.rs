@@ -63,6 +63,38 @@ fn put(kind: &str, key: &[u8], o: Out) {
     store::put(kind, store::key(kind, |h| h.bytes(key)), &e.0);
 }
 
+/// A quick key: the whole document, the feature and the kernel, with the files the run had read
+/// by then. Under it is kept the full key of the simulated part: the run being a function of those,
+/// so is that key. Reopening an unchanged document finds its forming without working the full key
+/// out (the part's tessellation and normals); the full key's own entry is still compared whole.
+pub fn quick_key(src: &str, memo: &str) -> Option<(Vec<u8>, crate::deps::Deps)> {
+    let read = crate::deps::so_far()?;
+    let mut o = Out::default();
+    o.str(src);
+    o.str(memo);
+    Some((o.0, read))
+}
+
+/// The full key and the sheet kept under a quick key, while every file it was made from holds what
+/// it held.
+pub fn get_quick(key: &[u8]) -> Option<(Vec<u8>, Simulated)> {
+    let b = get("thermo-quick", key)?;
+    let mut i = In(&b);
+    let d = crate::deps::Deps::read(&mut i)?;
+    let full = i.bytes()?.to_vec();
+    let sheet = read_sim(&mut i)?;
+    d.current().then_some((full, sheet))
+}
+
+/// Keeps the full key of the simulated part, and the model's sheet on the tool, under a quick key.
+pub fn put_quick(key: &[u8], read: &crate::deps::Deps, full: &[u8], sheet: &Simulated) {
+    let mut o = Out::default();
+    read.write(&mut o);
+    o.bytes(full);
+    write_sim(&mut o, sheet);
+    put("thermo-quick", key, o);
+}
+
 pub fn get_stretch(key: &[u8]) -> Option<Stretch> {
     read_stretch(&mut In(&get("thermo-stretch", key)?))
 }
