@@ -170,6 +170,7 @@ impl Gui {
                 + p.eyes.values().filter(|v| **v).count() * 131
                 + p.eyes.len()
                 + usize::from(p.thermo.mould.is_some()) * 31
+                + p.thermo.view_key() * 1_000_003
                 + match p.thermo.analysis {
                     crate::shell::thermo_ui::Analysis::None => 0,
                     crate::shell::thermo_ui::Analysis::Draft => {
@@ -277,7 +278,10 @@ impl Gui {
                         .step
                         .unwrap_or(usize::MAX)
                         .min(g.steps.len().saturating_sub(1));
-                    if let Some(s) = g.steps.get(k) {
+                    if !p.thermo.show.part {
+                    } else if p.thermo.simulated && g.sim.is_some() && p.thermo.step.is_none() {
+                        out.extend_from_slice(&g.sim_heat);
+                    } else if let Some(s) = g.steps.get(k) {
                         out.extend_from_slice(s);
                     }
                 }

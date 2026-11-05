@@ -1,11 +1,10 @@
 //! A thermoform as the app shows it: its numbers, and over the view, while the Thickness
 //! analysis is on, the wall-thickness map's banded legend (thickest at the top, as analysis tools
-//! stack it) with the model and the law it read, MIN, MAX and probes pinned on the part, and the
-//! forming's steps on a scrubber at the view's foot.
+//! stack it) with the model and the law it read, and MIN, MAX and probes pinned on the part.
 use super::Shell;
 use super::theme::{mono, sans, semi};
 use super::thermo_ui::Analysis;
-use egui::{Align2, Color32, Pos2, Rect, Sense, Stroke, StrokeKind, pos2, vec2};
+use egui::{Align2, Color32, Pos2, Rect, Stroke, StrokeKind, pos2, vec2};
 
 /// One thermoform as the app shows it (made from forge-lang's report on the host's side).
 #[derive(Clone, Debug, PartialEq, Default)]
@@ -37,6 +36,24 @@ pub struct ThermoRow {
     pub stages: Vec<&'static str>,
     /// The sheet's points on the part (world) and the wall there, mm, at the last step.
     pub points: Vec<([f32; 3], f32)>,
+    /// The formed part's mass as modelled (t everywhere) and as simulated (the model's wall).
+    pub modelled: Option<Masses>,
+    pub simulated: Option<Masses>,
+    /// The material's density, kg/m3.
+    pub density: Option<f64>,
+    /// No wall under the limit and the sheet on the mould everywhere (None: no model).
+    pub passes: Option<bool>,
+    pub unformed: usize,
+}
+
+/// A body's mass properties: volume mm3, mass kg (None: no density), centre mm, inertia about it
+/// kg mm2 (None: no density).
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct Masses {
+    pub volume: f64,
+    pub mass: Option<f64>,
+    pub cog: [f64; 3],
+    pub inertia: Option<[[f64; 3]; 3]>,
 }
 
 /// The wall-thickness map's bands, thickest first.
@@ -102,18 +119,12 @@ impl Shell {
         let (t, view, ppp) = (self.theme, self.view_rect, ctx.pixels_per_point());
         let r = fg.thermos[0].clone();
         let n = r.stages.len().max(1);
-        // the steps play on their own
-        if fg.thermo.playing {
-            let now = ctx.input(|i| i.time);
-            let k = ((now * 8.0) as usize) % n;
-            fg.thermo.step = Some(k);
-            ctx.request_repaint_after(std::time::Duration::from_millis(60));
-        }
         let step = fg.thermo.step.unwrap_or(n - 1).min(n - 1);
-        let playing = fg.thermo.playing;
-        let mut places = vec![];
-        let mut scrub = None;
-        let mut play = false;
+        let sim = fg.thermo.simulated && r.simulated.is_some() && fg.thermo.step.is_none();
+        if !fg.thermo.show.part {
+            return;
+        }
+        let places: Vec<(String, Rect)> = vec![];
         let mut pin = None;
         let probe = fg.thermo.probe;
         let probes = fg.thermo.probes.clone();
@@ -132,7 +143,12 @@ impl Shell {
                     6.0,
                     t.bg.gamma_multiply(0.88),
                 );
-                p.text(pos2(x, y0), Align2::LEFT_TOP, "Wall thickness", semi(14.0), t.ink);
+                let what = if sim {
+                    "Wall thickness · simulated"
+                } else {
+                    "Wall thickness"
+                };
+                p.text(pos2(x, y0), Align2::LEFT_TOP, what, semi(14.0), t.ink);
                 p.text(
                     pos2(x, y0 + 22.0),
                     Align2::LEFT_TOP,
@@ -235,105 +251,11 @@ impl Shell {
                         }
                     }
                 }
-                // the scrubber: play, the step, the stages
-                let bar = Rect::from_min_max(
-                    pos2(view.min.x + 16.0, view.max.y - 44.0),
-                    pos2(view.max.x - 16.0, view.max.y - 12.0),
-                );
-                p.rect_filled(bar, 4.0, t.surface.gamma_multiply(0.92));
-                let pb = Rect::from_min_size(bar.min + vec2(8.0, 4.0), vec2(34.0, 24.0));
-                let resp = ui.interact(pb, ui.scope_id().with("thermo-play"), Sense::click());
-                p.rect_stroke(pb, 3.0, Stroke::new(1.0, t.line), StrokeKind::Inside);
-                let c = pb.center();
-                if playing {
-                    for dx in [-4.0, 2.0] {
-                        p.rect_filled(
-                            Rect::from_min_size(c + vec2(dx, -6.0), vec2(3.0, 12.0)),
-                            0.0,
-                            t.ink,
-                        );
-                    }
-                } else {
-                    p.add(egui::Shape::convex_polygon(
-                        vec![c + vec2(-4.0, -7.0), c + vec2(7.0, 0.0), c + vec2(-4.0, 7.0)],
-                        t.ink,
-                        Stroke::NONE,
-                    ));
-                }
-                places.push(("thermo:play".to_string(), pb));
-                if resp.clicked() {
-                    play = true;
-                }
-                p.text(
-                    pos2(pb.right() + 14.0, bar.center().y),
-                    Align2::LEFT_CENTER,
-                    "Step",
-                    sans(12.0),
-                    t.ink2,
-                );
-                let stages = stage_text(&r.stages);
-                let sg = p.layout_no_wrap(format!("{} / {n} · {stages}", step + 1), mono(12.0), t.ink);
-                let track = Rect::from_min_max(
-                    pos2(pb.right() + 56.0, bar.center().y - 3.0),
-                    pos2(bar.right() - sg.size().x - 24.0, bar.center().y + 3.0),
-                );
-                p.rect_filled(track, 3.0, t.line);
-                let f = if n > 1 { step as f32 / (n - 1) as f32 } else { 1.0 };
-                let knob = pos2(track.left() + track.width() * f, track.center().y);
-                let blue = Color32::from_rgb(0x2f, 0x86, 0xd6);
-                p.rect_filled(
-                    Rect::from_min_max(track.min, pos2(knob.x, track.max.y)),
-                    3.0,
-                    blue,
-                );
-                p.circle_filled(knob, 8.0, blue);
-                p.circle_stroke(knob, 8.0, Stroke::new(1.5, Color32::WHITE));
-                let hit = track.expand2(vec2(8.0, 10.0));
-                let drag = ui.interact(hit, ui.scope_id().with("thermo-scrub"), Sense::click_and_drag());
-                places.push(("thermo:scrub".to_string(), hit));
-                if (drag.dragged() || drag.clicked())
-                    && let Some(at) = drag.interact_pointer_pos()
-                {
-                    let f = ((at.x - track.left()) / track.width()).clamp(0.0, 1.0);
-                    scrub = Some((f * (n - 1) as f32).round() as usize);
-                }
-                p.galley(
-                    pos2(
-                        bar.right() - sg.size().x - 12.0,
-                        bar.center().y - sg.size().y / 2.0,
-                    ),
-                    sg,
-                    t.ink,
-                );
             });
         let fg = self.fg.as_mut().expect("taken above");
-        if play {
-            fg.thermo.playing = !fg.thermo.playing;
-        }
-        if let Some(k) = scrub {
-            fg.thermo.playing = false;
-            fg.thermo.step = Some(k);
-        }
         if let Some(q) = pin {
             fg.thermo.probes.push(q);
         }
         self.places.extend(places);
     }
-}
-
-/// The stages as step ranges: "drape 2–7 · vacuum 8–17 · creep 18–21".
-fn stage_text(stages: &[&'static str]) -> String {
-    let mut out: Vec<String> = vec![];
-    let mut k = 0;
-    while k < stages.len() {
-        let s = stages[k];
-        let start = k;
-        while k < stages.len() && stages[k] == s {
-            k += 1;
-        }
-        if s != "sheet" {
-            out.push(format!("{s} {}–{}", start + 1, k));
-        }
-    }
-    out.join(" · ")
 }

@@ -74,6 +74,13 @@ impl Gui {
             }
         }
         p.thermo.resim = RESIM.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        // the eyes or the state changed: the part's mesh again, from what's kept
+        let key = Some(p.thermo.view_key());
+        if p.thermo.drawn != key {
+            p.thermo.drawn = key;
+            self.fg_show();
+        }
+        let Some(p) = &mut self.shell.fg else { return };
         if let Some((id, e)) = p.thermo.want_export.take() {
             let said = self.thermo_export(&id, e);
             if let Some(p) = &mut self.shell.fg {
@@ -81,6 +88,32 @@ impl Gui {
             }
             self.shell.status = said;
         }
+    }
+
+    /// The part's mesh as the thermoform's eyes and state ask (None: as it is).
+    pub(super) fn thermo_compose(&self, full: &crate::mesh::PartMesh) -> Option<crate::mesh::PartMesh> {
+        let u = &self.shell.fg.as_ref()?.thermo;
+        let g = self.fg_walls.first()?;
+        let sim = u.simulated && g.sim.is_some();
+        let hide_part = !u.show.part || sim;
+        if !hide_part && u.show.mould && !u.show.blank {
+            return None;
+        }
+        let mut hide = vec![];
+        if hide_part {
+            hide.extend(g.part_span.as_ref());
+        }
+        if !u.show.mould {
+            hide.extend(g.mould_span.as_ref());
+        }
+        let mut extra = vec![];
+        if sim && u.show.part {
+            extra.extend(g.sim.as_ref());
+        }
+        if u.show.blank {
+            extra.push(&g.blank);
+        }
+        Some(crate::thermo_view::compose(full, &hide, &extra))
     }
 
     /// Writes an export beside the part's file; says what it wrote, or why not.
@@ -115,6 +148,13 @@ impl Gui {
                 forge_mesh::tessellate(&g.mould, &forge_mesh::Quality::default())
                     .map(|m| forge_mesh::stl::to_binary_stl(&m, &format!("{id} mould")))
                     .map_err(|e| forge_lang::error::words(&e)),
+            ),
+            Export::PartStl => (
+                format!("{stem}-{id}-part-simulated.stl"),
+                g.sim_mesh
+                    .as_ref()
+                    .map(|m| forge_mesh::stl::to_binary_stl(m, &format!("{id} simulated")))
+                    .ok_or_else(|| "no thickness model (walls: false)".to_string()),
             ),
             Export::TrimDxf => (format!("{stem}-{id}-trim.dxf"), Ok(dxf(&g.trim).into_bytes())),
             Export::ProcessPdf => (

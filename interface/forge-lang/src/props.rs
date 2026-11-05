@@ -736,7 +736,13 @@ pub fn solids(ev: &Eval) -> Vec<(String, Option<Material>, forge_topo::Body)> {
                 .iter()
                 .find(|x| x.id == id)
                 .and_then(|x| x.material.as_deref());
-            let m = own.or(sheet).and_then(find).or(part.clone());
+            // a formed part is of its sheet's material; its mould is tooling, of none
+            let formed = ev
+                .thermos
+                .iter()
+                .find(|x| x.part_solid == s.id)
+                .map(|x| x.material.as_str());
+            let m = own.or(sheet).or(formed).and_then(find).or(part.clone());
             (id, m, forge_model::finish(s.body.clone()))
         })
         .collect()

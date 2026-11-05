@@ -1,33 +1,36 @@
-//! The Thermoform tab: Convert to Thermoform, the Form dialog, the analyses (draft and undercut,
-//! wall thickness) with their legends over the view, the mould's settings and its exports, and the
-//! issues a click on the status bar opens. No panel stays open: each is a dialog or an overlay the
-//! tab's buttons bring up and put away, as Inventor's are.
+//! Thermoforming in the app, as Inventor would have it: Convert to Thermoform on the 3D Model tab,
+//! then a Thermoform tab (only while the part has one) of three steps: Edit Formed Part, Check
+//! Forming (one results window: the wall's map, its extremes, draft, probes, the forming played,
+//! the CSV), Make Mould (its settings and the exports). The browser holds the formed part, the
+//! mould and the blank, each with its eye; the formed part shows as modelled (t everywhere) or as
+//! simulated (the wall the model gives), its colours on or off in either. Every edit is a dialog.
 use super::fg::{FgAct, FgPanel, Severity};
 use super::theme::{Theme, medium, mono, sans, semi};
-use super::thermo::{ThermoRow, band, c32};
+use super::thermo::{Masses, ThermoRow, band, c32};
 use super::{Action, FgCmd, Shell};
 use egui::{Align2, Color32, Pos2, Rect, Sense, Stroke, StrokeKind, Ui, pos2, vec2};
 use forge_lang::error::Op;
 
-/// A Thermoform tab command.
+/// A thermoform command, from the ribbon, the browser or a dialog.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Cmd {
     Convert,
     Form,
     Trim,
     Plug,
-    Vents,
-    Draft,
-    Undercut,
-    Thickness,
-    Probe,
-    Animate,
+    Check,
     Mould,
-    Export,
-    ExportCsv,
-    Materials,
+    Vents,
+    /// The formed part as simulated, or as modelled.
+    Simulated,
+    /// The wall's colours on the part.
+    Colours,
+    ShowPart,
+    ShowMould,
+    ShowBlank,
 }
 
+/// What the part's faces are coloured by.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum Analysis {
     #[default]
@@ -36,16 +39,38 @@ pub enum Analysis {
     Thickness,
 }
 
-/// The tab's state: which dialog is up, which analysis shows, the step watched, the probes.
+/// What of the thermoform shows: its eyes in the browser.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Show {
+    pub part: bool,
+    pub mould: bool,
+    pub blank: bool,
+}
+
+impl Default for Show {
+    fn default() -> Self {
+        Show {
+            part: true,
+            mould: true,
+            blank: false,
+        }
+    }
+}
+
+/// The thermoform's dialogs and view: none of it is saved in the part.
 #[derive(Clone, Debug, Default)]
 pub struct ThermoUi {
     pub convert: Option<Convert>,
     pub form: Option<Form>,
     pub mould: Option<Mould>,
+    pub check: bool,
+    pub show: Show,
+    /// The formed part as the model leaves it, its wall rebuilt at the model's thickness.
+    pub simulated: bool,
     pub analysis: Analysis,
     /// The draft analysis's least draft, degrees (None: the material's for the mould).
     pub draft_min: Option<f32>,
-    /// The step of the thickness model shown (None: the last), and whether it plays.
+    /// The step of the forming shown (None: the last), and whether it plays.
     pub step: Option<usize>,
     pub playing: bool,
     pub probe: bool,
@@ -62,6 +87,20 @@ pub struct ThermoUi {
     pub said: Option<String>,
     /// A material opened from Convert's "…": its record, and where saving it writes.
     pub material: Option<forge_material::Material>,
+    /// Converted, the Thermoform tab is wanted before the build has the feature.
+    pub converted: bool,
+    /// What the host drew the part's mesh for last (`view_key`).
+    pub drawn: Option<usize>,
+}
+
+impl ThermoUi {
+    /// What the part's mesh depends on of this: its eyes and its state.
+    pub fn view_key(&self) -> usize {
+        usize::from(self.show.part)
+            | usize::from(self.show.mould) << 1
+            | usize::from(self.show.blank) << 2
+            | usize::from(self.simulated) << 3
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -69,6 +108,7 @@ pub enum Export {
     MouldStep,
     MouldStl,
     PartStep,
+    PartStl,
     TrimDxf,
     ProcessPdf,
     ThicknessCsv,
@@ -99,6 +139,14 @@ const FROM: [(&str, &str, &str); 3] = [
     ),
 ];
 const GAUGES: [f64; 10] = [0.5, 0.75, 1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 6.0];
+const PULLS: [(&str, &str); 6] = [
+    ("Z", "+Z (up)"),
+    ("-Z", "−Z"),
+    ("X", "+X"),
+    ("-X", "−X"),
+    ("Y", "+Y"),
+    ("-Y", "−Y"),
+];
 
 /// The Convert to Thermoform dialog.
 #[derive(Clone, Debug, PartialEq)]
@@ -113,7 +161,7 @@ pub struct Convert {
     pub temp: f64,
 }
 
-/// The Form dialog, on a thermoform: its arguments as written, edited.
+/// The Edit Formed Part dialog: the thermoform's arguments as written, edited.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Form {
     pub id: String,
@@ -122,7 +170,7 @@ pub struct Form {
     pub was: Vec<(String, String)>,
 }
 
-/// The mould's settings, on a thermoform.
+/// The Make Mould dialog.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Mould {
     pub id: String,
@@ -257,87 +305,119 @@ fn fmt(x: f64) -> String {
     s.trim_end_matches('0').trim_end_matches('.').to_string()
 }
 
+/// The solids Convert can take: each feature that made or changed one, last first.
+pub fn solid_feats(fg: &FgPanel) -> Vec<String> {
+    fg.feats
+        .iter()
+        .rev()
+        .filter(|f| {
+            !matches!(
+                f.kind.as_str(),
+                "sketch" | "plane" | "axis" | "point" | "param" | "thermoform" | "path" | "ucs"
+            ) && !f.id.contains('.')
+        })
+        .map(|f| f.id.clone())
+        .collect()
+}
+
 /// A ribbon button: its word, its icon, what it does (none: drawn disabled), whether it's on.
 pub type Button = (&'static str, &'static str, Option<Action>, bool);
 
-/// The ribbon's Thermoform tab: its groups, each with big and small buttons.
+/// The 3D Model tab's Convert to Thermoform.
+pub fn convert_button(s: &Shell) -> Button {
+    let fg = s.fg.as_ref();
+    (
+        "Convert to Thermoform",
+        "thicken",
+        fg.filter(|f| last_solid(f).is_some())
+            .map(|_| Action::Fg(FgCmd::Thermo(Cmd::Convert))),
+        fg.is_some_and(|f| f.thermo.convert.is_some()),
+    )
+}
+
+impl Shell {
+    /// The part has a thermoform (or one is on its way): its tab shows.
+    pub fn thermo_tab(&self) -> bool {
+        !self.is_asm()
+            && self
+                .fg
+                .as_ref()
+                .is_some_and(|f| f.thermo.converted || f.feats.iter().any(|x| x.kind == "thermoform"))
+    }
+}
+
+/// The ribbon's Thermoform tab: three steps, then the small things and the view.
 pub fn groups(s: &Shell) -> Vec<(&'static str, Vec<Button>, Vec<Button>)> {
     let fg = s.fg.as_ref();
     let has = fg.is_some_and(|f| !f.thermos.is_empty());
-    let solid = fg.is_some_and(|f| last_solid(f).is_some());
+    let modelled = fg
+        .and_then(|f| f.thermos.first())
+        .is_some_and(|r| r.simulated.is_some());
     let ui = fg.map(|f| &f.thermo);
     let go = |c: Cmd, ok: bool| ok.then_some(Action::Fg(FgCmd::Thermo(c)));
-    let on = |a: Analysis| ui.is_some_and(|u| u.analysis == a);
+    let on = |f: &dyn Fn(&ThermoUi) -> bool| ui.is_some_and(f);
     vec![
         (
-            "Thermoform",
-            vec![
-                (
-                    "Convert",
-                    "newsolid",
-                    go(Cmd::Convert, solid),
-                    ui.is_some_and(|u| u.convert.is_some()),
-                ),
-                (
-                    "Form",
-                    "shell",
-                    go(Cmd::Form, has),
-                    ui.is_some_and(|u| u.form.is_some()),
-                ),
-                ("Materials", "params", None, false),
-            ],
+            "Formed Part",
+            vec![(
+                "Edit Formed\u{a0}Part",
+                "thicken",
+                go(Cmd::Form, has),
+                on(&|u| u.form.as_ref().is_some_and(|f| f.tab == 0)),
+            )],
+            vec![],
+        ),
+        (
+            "Check",
+            vec![("Check Forming", "measure", go(Cmd::Check, has), on(&|u| u.check))],
+            vec![],
+        ),
+        (
+            "Mould",
+            vec![(
+                "Make Mould",
+                "extrude",
+                go(Cmd::Mould, has),
+                on(&|u| u.mould.is_some()),
+            )],
             vec![],
         ),
         (
             "Modify",
             vec![],
             vec![
-                ("Trim", "trim", go(Cmd::Trim, has), false),
-                ("Plug", "extrude", go(Cmd::Plug, has), false),
-                ("Cutout", "hole", None, false),
+                (
+                    "Trim",
+                    "trim",
+                    go(Cmd::Trim, has),
+                    on(&|u| u.form.as_ref().is_some_and(|f| f.tab == 1)),
+                ),
+                (
+                    "Plug",
+                    "extrude",
+                    go(Cmd::Plug, has),
+                    on(&|u| u.form.as_ref().is_some_and(|f| f.tab == 2)),
+                ),
                 ("Vents", "hole", go(Cmd::Vents, has), false),
             ],
         ),
         (
-            "Analyze",
-            vec![
-                ("Draft", "draft", go(Cmd::Draft, has), on(Analysis::Draft)),
-                (
-                    "Thickness",
-                    "measure",
-                    go(Cmd::Thickness, has),
-                    on(Analysis::Thickness),
-                ),
-            ],
-            vec![
-                ("Undercut", "draft", go(Cmd::Undercut, has), on(Analysis::Draft)),
-                (
-                    "Probe",
-                    "measure",
-                    go(Cmd::Probe, has),
-                    ui.is_some_and(|u| u.probe),
-                ),
-                (
-                    "Animate",
-                    "orbit",
-                    go(Cmd::Animate, has),
-                    ui.is_some_and(|u| u.playing),
-                ),
-                ("Export CSV", "save", go(Cmd::ExportCsv, has), false),
-            ],
-        ),
-        (
-            "Mould",
-            vec![
-                (
-                    "Mould",
-                    "extrude",
-                    go(Cmd::Mould, has),
-                    ui.is_some_and(|u| u.mould.is_some()),
-                ),
-                ("Export", "save", go(Cmd::Export, has), false),
-            ],
+            "Display",
             vec![],
+            vec![
+                (
+                    "Simulated Wall",
+                    "shell",
+                    go(Cmd::Simulated, modelled),
+                    on(&|u| u.simulated),
+                ),
+                (
+                    "Thickness Colours",
+                    "draft",
+                    go(Cmd::Colours, has),
+                    on(&|u| u.analysis == Analysis::Thickness),
+                ),
+            ],
         ),
     ]
 }
@@ -348,13 +428,33 @@ impl FgPanel {
         self.thermos.first()
     }
 
+    /// Edit Formed Part, on a tab: up, or onto that tab, or (asked again) away.
+    fn open_form(&mut self, tab: usize) {
+        let Some(id) = self.thermos.first().map(|r| r.id.clone()) else {
+            return;
+        };
+        match &mut self.thermo.form {
+            Some(f) if f.tab == tab => self.thermo.form = None,
+            Some(f) => f.tab = tab,
+            None => {
+                let args = args_of(&self.source, &id);
+                self.thermo.form = Some(Form {
+                    id,
+                    tab,
+                    was: args.clone(),
+                    args,
+                });
+                self.thermo.convert = None;
+            }
+        }
+    }
+
     pub fn thermo_command(&mut self, c: Cmd) {
         let first = self.thermos.first().map(|r| r.id.clone());
-        let u = &mut self.thermo;
         match c {
             Cmd::Convert => {
-                if u.convert.is_some() {
-                    u.convert = None;
+                if self.thermo.convert.is_some() {
+                    self.thermo.convert = None;
                     return;
                 }
                 let of = last_solid(self).unwrap_or_default();
@@ -376,29 +476,17 @@ impl FgPanel {
                     temp: m.normal,
                 });
             }
-            Cmd::Form | Cmd::Trim | Cmd::Plug => {
-                let Some(id) = first else { return };
-                let tab = match c {
-                    Cmd::Trim => 1,
-                    Cmd::Plug => 2,
-                    _ => 0,
-                };
-                match &mut self.thermo.form {
-                    Some(f) if f.tab == tab || c == Cmd::Form => self.thermo.form = None,
-                    Some(f) => f.tab = tab,
-                    None => {
-                        let args = args_of(&self.source, &id);
-                        self.thermo.form = Some(Form {
-                            id,
-                            tab,
-                            was: args.clone(),
-                            args,
-                        });
-                        self.thermo.convert = None;
-                    }
+            Cmd::Form => self.open_form(0),
+            Cmd::Trim => self.open_form(1),
+            Cmd::Plug => self.open_form(2),
+            Cmd::Check => {
+                let u = &mut self.thermo;
+                u.check = !u.check;
+                if u.check && u.analysis == Analysis::None {
+                    u.analysis = Analysis::Thickness;
                 }
             }
-            Cmd::Mould | Cmd::Vents | Cmd::Export => {
+            Cmd::Mould | Cmd::Vents => {
                 let Some(id) = first else { return };
                 if self.thermo.mould.is_some() && c == Cmd::Mould {
                     self.thermo.mould = None;
@@ -412,39 +500,18 @@ impl FgPanel {
                     made_by: 0,
                 });
             }
-            Cmd::Draft | Cmd::Undercut => {
-                u.analysis = if u.analysis == Analysis::Draft {
-                    Analysis::None
-                } else {
-                    Analysis::Draft
-                };
-            }
-            Cmd::Thickness => {
+            Cmd::Simulated => self.thermo.simulated = !self.thermo.simulated,
+            Cmd::Colours => {
+                let u = &mut self.thermo;
                 u.analysis = if u.analysis == Analysis::Thickness {
                     Analysis::None
                 } else {
                     Analysis::Thickness
                 };
-                u.step = None;
             }
-            Cmd::Probe => {
-                u.probe = !u.probe;
-                u.analysis = Analysis::Thickness;
-            }
-            Cmd::Animate => {
-                u.analysis = Analysis::Thickness;
-                u.playing = !u.playing;
-                if u.playing {
-                    u.step = Some(0);
-                }
-            }
-            Cmd::ExportCsv => {
-                if let Some(id) = first {
-                    u.want_export = Some((id, Export::ThicknessCsv));
-                }
-            }
-            // the Material Browser is the material library's (shell/materials.rs)
-            Cmd::Materials => {}
+            Cmd::ShowPart => self.thermo.show.part = !self.thermo.show.part,
+            Cmd::ShowMould => self.thermo.show.mould = !self.thermo.show.mould,
+            Cmd::ShowBlank => self.thermo.show.blank = !self.thermo.show.blank,
         }
     }
 }
@@ -678,15 +745,231 @@ fn cards(ui: &mut Ui, t: &Theme, now: &mut usize, places: &mut Vec<(String, Rect
 
 const DLG_W: f32 = 446.0;
 
+/// A dialog's head, Inventor's: the command's icon and name, a close cross. True when closed.
+fn head(
+    ui: &mut Ui,
+    t: &Theme,
+    icon: &str,
+    text: &str,
+    w: f32,
+    places: &mut Vec<(String, Rect)>,
+    key: &str,
+) -> bool {
+    let (r, _) = ui.allocate_exact_size(vec2(w, 40.0), Sense::hover());
+    let p = ui.painter();
+    super::icons::draw(
+        p,
+        pos2(r.left() + 12.0, r.center().y - 9.0),
+        18.0,
+        icon,
+        1.5,
+        t.ink,
+    );
+    p.text(
+        pos2(r.left() + 38.0, r.center().y),
+        Align2::LEFT_CENTER,
+        text,
+        semi(14.0),
+        t.ink,
+    );
+    p.hline(r.left()..=r.right(), r.bottom(), Stroke::new(1.0, t.line));
+    let x = Rect::from_center_size(pos2(r.right() - 20.0, r.center().y), vec2(22.0, 22.0));
+    let resp = ui.interact(x, ui.scope_id().with((key, "close")), Sense::click());
+    if resp.hovered() {
+        p.rect_filled(x, 3.0, t.hover);
+    }
+    p.text(x.center(), Align2::CENTER_CENTER, "×", sans(15.0), t.ink2);
+    places.push((format!("{key}:close"), x));
+    resp.clicked()
+}
+
+/// A dialog's tabs; `now` the one up.
+fn tabs(
+    ui: &mut Ui,
+    t: &Theme,
+    names: &[&str],
+    now: &mut usize,
+    w: f32,
+    places: &mut Vec<(String, Rect)>,
+    key: &str,
+) {
+    let (r, _) = ui.allocate_exact_size(vec2(w, 32.0), Sense::hover());
+    let mut x = r.left() + 6.0;
+    for (k, name) in names.iter().enumerate() {
+        let g = ui.painter().layout_no_wrap(name.to_string(), sans(13.0), t.ink);
+        let tab = Rect::from_min_size(pos2(x, r.top()), vec2(g.size().x + 26.0, 32.0));
+        let resp = ui.interact(tab, ui.scope_id().with((key, k)), Sense::click());
+        if *now == k {
+            ui.painter().rect_filled(tab, 0.0, t.raised);
+            ui.painter().hline(
+                tab.left()..=tab.right(),
+                tab.bottom() - 1.0,
+                Stroke::new(2.0, t.focus),
+            );
+        }
+        let ink = if *now == k { t.ink } else { t.ink2 };
+        ui.painter()
+            .galley(pos2(tab.left() + 13.0, tab.center().y - g.size().y / 2.0), g, ink);
+        places.push((format!("{key}:{k}"), tab));
+        if resp.clicked() {
+            *now = k;
+        }
+        x = tab.right();
+    }
+    ui.painter()
+        .hline(r.left()..=r.right(), r.bottom(), Stroke::new(1.0, t.line));
+}
+
+/// A section's heading inside a dialog.
+fn heading(ui: &mut Ui, t: &Theme, text: &str, w: f32) {
+    let (r, _) = ui.allocate_exact_size(vec2(w, 24.0), Sense::hover());
+    ui.painter().text(
+        pos2(r.left() + 14.0, r.bottom() - 6.0),
+        Align2::LEFT_BOTTOM,
+        text,
+        medium(13.0),
+        t.ink,
+    );
+}
+
+/// A value field: its words, the argument as written (a number or a parameter), its unit, and
+/// what it comes to.
+#[allow(clippy::too_many_arguments)]
+fn field(
+    ui: &mut Ui,
+    t: &Theme,
+    label: &str,
+    args: &mut Vec<(String, String)>,
+    key: &str,
+    hint: &str,
+    unit: &str,
+    w: f32,
+    places: &mut Vec<(String, Rect)>,
+) {
+    row(ui, t, label, w, 28.0, |ui| {
+        let mut s = arg(args, key).unwrap_or("").to_string();
+        let r = ui.add(
+            egui::TextEdit::singleline(&mut s)
+                .font(sans(13.0))
+                .hint_text(hint)
+                .desired_width(ui.available_width() - 44.0)
+                .margin(vec2(7.0, 5.0)),
+        );
+        places.push((format!("thermo:field:{key}"), r.rect));
+        ui.add_space(4.0);
+        ui.label(egui::RichText::new(unit).font(sans(12.0)).color(t.ink2));
+        set(args, key, s);
+    });
+}
+
+/// A choice among words, written quoted.
+#[allow(clippy::too_many_arguments)]
+fn choice(
+    ui: &mut Ui,
+    t: &Theme,
+    label: &str,
+    args: &mut Vec<(String, String)>,
+    key: &str,
+    words: &[(&str, &str)],
+    w: f32,
+    places: &mut Vec<(String, Rect)>,
+) {
+    row(ui, t, label, w, 28.0, |ui| {
+        let now = arg(args, key).unwrap_or("").trim_matches('"').to_string();
+        let mut k = words.iter().position(|x| x.0 == now).unwrap_or(0);
+        let r = egui::ComboBox::from_id_salt(("thermo-choice", key))
+            .selected_text(words[k].1)
+            .width(ui.available_width() - 6.0)
+            .show_ui(ui, |ui| {
+                for (j, (_, name)) in words.iter().enumerate() {
+                    ui.selectable_value(&mut k, j, *name);
+                }
+            });
+        places.push((format!("thermo:choice:{key}"), r.response.rect));
+        let was = arg(args, key).is_some();
+        if was || k != 0 {
+            let q = key != "pull";
+            set(
+                args,
+                key,
+                if q {
+                    format!("\"{}\"", words[k].0)
+                } else {
+                    words[k].0.to_string()
+                },
+            );
+        }
+    });
+}
+
+/// OK, Cancel and Apply, along the foot as Inventor's dialogs have them.
+fn foot(
+    ui: &mut Ui,
+    t: &Theme,
+    key: &str,
+    apply: bool,
+    places: &mut Vec<(String, Rect)>,
+) -> (bool, bool, bool) {
+    let (mut ok, mut cancel, mut ap) = (false, false, false);
+    ui.add_space(6.0);
+    ui.horizontal(|ui| {
+        ui.add_space(14.0);
+        ok = button(ui, t, "OK", true, format!("{key}:ok"), places);
+        cancel = button(ui, t, "Cancel", false, format!("{key}:cancel"), places);
+        if apply {
+            ap = button(ui, t, "Apply", false, format!("{key}:apply"), places);
+        }
+    });
+    ui.add_space(12.0);
+    (ok, cancel, ap)
+}
+
+fn note(ui: &mut Ui, text: &str, w: f32, ink: Color32) {
+    let g = ui.painter().layout(text.to_string(), sans(11.5), ink, w - 28.0);
+    let (r, _) = ui.allocate_exact_size(vec2(w, g.size().y + 4.0), Sense::hover());
+    ui.painter().galley(r.min + vec2(14.0, 2.0), g, ink);
+}
+
+/// A row of words and a value at the right, in the results.
+fn fact(ui: &mut Ui, t: &Theme, k: &str, v: &str, w: f32, ink: Color32) {
+    let (r, _) = ui.allocate_exact_size(vec2(w, 20.0), Sense::hover());
+    ui.painter().text(
+        pos2(r.left() + 14.0, r.center().y),
+        Align2::LEFT_CENTER,
+        k,
+        sans(12.0),
+        t.ink2,
+    );
+    ui.painter().text(
+        pos2(r.right() - 14.0, r.center().y),
+        Align2::RIGHT_CENTER,
+        v,
+        mono(12.0),
+        ink,
+    );
+}
+
+const FORM_W: f32 = 382.0;
+const CHECK_W: f32 = 340.0;
+
 impl Shell {
-    /// The Thermoform tab's dialogs, overlays and the issues opened from the status bar.
+    /// The thermoform's dialogs and windows, and the issues opened from the status bar.
     pub(super) fn thermo_ui(&mut self, ctx: &egui::Context) {
+        if self.tab == super::THERMO_TAB && !self.thermo_tab() {
+            self.tab = 0;
+        }
         let Some(mut fg) = self.fg.take() else { return };
+        if fg.feats.iter().any(|f| f.kind == "thermoform") {
+            fg.thermo.converted = false;
+        }
         let t = self.theme;
         let mut places = vec![];
-        self.convert_dialog(ctx, &t, &mut fg, &mut places);
+        if self.convert_dialog(ctx, &t, &mut fg, &mut places) {
+            self.tab = super::THERMO_TAB;
+        }
         self.form_dialog(ctx, &t, &mut fg, &mut places);
         self.mould_dialog(ctx, &t, &mut fg, &mut places);
+        self.check_window(ctx, &t, &mut fg, &mut places);
         self.thermo_issues(ctx, &t, &mut fg, &mut places);
         self.draft_legend(ctx, &t, &mut fg, &mut places);
         material_window(ctx, &t, &mut fg, &mut places);
@@ -694,69 +977,68 @@ impl Shell {
         self.fg = Some(fg);
     }
 
+    /// Convert to Thermoform: the shape, what it is, the mould's side, the sheet. True on OK.
     fn convert_dialog(
         &self,
         ctx: &egui::Context,
         t: &Theme,
         fg: &mut FgPanel,
         places: &mut Vec<(String, Rect)>,
-    ) {
+    ) -> bool {
         let Some(mut c) = fg.thermo.convert.take() else {
-            return;
+            return false;
         };
         let v = self.view_rect;
-        let mut close = false;
-        let mut ok = false;
+        let (mut ok, mut close) = (false, false);
         let mut open_material: Option<String> = None;
+        let solids = solid_feats(fg);
         egui::Window::new("Convert to Thermoform")
             .id(egui::Id::unique("thermo-convert"))
             .title_bar(false)
             .collapsible(false)
             .resizable(false)
-            .default_pos(pos2(v.right() - DLG_W - 140.0, v.top() + 60.0))
+            .default_pos(pos2(v.left() + 24.0, v.top() + 44.0))
             .fixed_size(vec2(DLG_W, 0.0))
             .frame(frame(t))
             .constrain_to(super::dialog_area(ctx))
             .show(ctx, |ui| {
                 ui.spacing_mut().item_spacing.y = 6.0;
-                close = title(ui, t, "Convert to Thermoform", DLG_W, places, "thermo:convert");
-                ui.add_space(4.0);
-                let (r, _) = ui.allocate_exact_size(vec2(DLG_W, 20.0), Sense::hover());
-                ui.painter().text(
-                    pos2(r.left() + 14.0, r.center().y),
-                    Align2::LEFT_CENTER,
-                    "What did you model?",
-                    sans(12.0),
-                    t.ink2,
+                close = head(
+                    ui,
+                    t,
+                    "thicken",
+                    "Convert to Thermoform",
+                    DLG_W,
+                    places,
+                    "thermo:convert",
                 );
+                heading(ui, t, "Shape", DLG_W);
+                row(ui, t, "Solid", DLG_W, 32.0, |ui| {
+                    let r = egui::ComboBox::from_id_salt("thermo-convert-solid")
+                        .selected_text(c.of.as_str())
+                        .width(ui.available_width() - 6.0)
+                        .show_ui(ui, |ui| {
+                            for s in &solids {
+                                ui.selectable_value(&mut c.of, s.clone(), s.as_str());
+                            }
+                        });
+                    places.push(("thermo:convert:solid".into(), r.response.rect));
+                });
                 cards(ui, t, &mut c.from, places);
-                row(ui, t, "Part", DLG_W, 32.0, |ui| {
-                    ui.label(egui::RichText::new(&c.of).font(mono(13.0)).color(t.ink));
-                });
-                row(ui, t, "Open face", DLG_W, 32.0, |ui| {
-                    let mut s = c.open.clone();
-                    let r = ui.add(
-                        egui::TextEdit::singleline(&mut s)
-                            .font(mono(13.0))
-                            .hint_text("the shape's foot (auto)")
-                            .desired_width(ui.available_width())
-                            .margin(vec2(7.0, 5.0)),
-                    );
-                    places.push(("thermo:convert:open".into(), r.rect));
-                    c.open = s;
-                });
+                heading(ui, t, "Mould", DLG_W);
                 row(ui, t, "Mould", DLG_W, 34.0, |ui| {
                     let mut k = usize::from(c.female);
                     toggles(
                         ui,
                         t,
                         &mut k,
-                        &["Male (inside on tool)", "Female"],
+                        &["Male (part over it)", "Female (part in it)"],
                         "thermo:convert:tool",
                         places,
                     );
                     c.female = k == 1;
                 });
+                heading(ui, t, "Sheet", DLG_W);
                 row(ui, t, "Material", DLG_W, 32.0, |ui| {
                     let label = fg
                         .thermo_materials
@@ -765,16 +1047,11 @@ impl Shell {
                         .map_or(c.material.clone(), |m| format!("{} · {}", m.name, short(&m.law)));
                     let r = egui::ComboBox::from_id_salt("thermo-material")
                         .selected_text(label)
-                        .width(ui.available_width() - 6.0)
+                        .width(ui.available_width() - 40.0)
                         .show_ui(ui, |ui| {
                             for m in &fg.thermo_materials {
-                                if ui
-                                    .selectable_label(
-                                        c.material == m.name,
-                                        format!("{} · {}", m.name, short(&m.law)),
-                                    )
-                                    .clicked()
-                                {
+                                let text = format!("{} · {}", m.name, short(&m.law));
+                                if ui.selectable_label(c.material == m.name, text).clicked() {
                                     c.material = m.name.clone();
                                     c.temp = m.normal;
                                 }
@@ -791,7 +1068,7 @@ impl Shell {
                     }
                 });
                 if c.from != 1 {
-                    row(ui, t, "Gauge t", DLG_W, 32.0, |ui| {
+                    row(ui, t, "Thickness", DLG_W, 32.0, |ui| {
                         let r = egui::ComboBox::from_id_salt("thermo-gauge")
                             .selected_text(format!("{} mm", fmt(c.t)))
                             .width(ui.available_width() - 6.0)
@@ -802,9 +1079,17 @@ impl Shell {
                             });
                         places.push(("thermo:convert:gauge".into(), r.response.rect));
                     });
+                } else {
+                    row(ui, t, "Thickness", DLG_W, 28.0, |ui| {
+                        ui.label(
+                            egui::RichText::new("the wall's own")
+                                .font(sans(13.0))
+                                .color(t.ink2),
+                        );
+                    });
                 }
                 let m = fg.thermo_materials.iter().find(|m| m.name == c.material).cloned();
-                row(ui, t, "Sheet temp", DLG_W, 32.0, |ui| {
+                row(ui, t, "Sheet temperature", DLG_W, 32.0, |ui| {
                     ui.add(
                         egui::DragValue::new(&mut c.temp)
                             .range(60.0..=300.0)
@@ -812,60 +1097,36 @@ impl Shell {
                             .suffix(" °C"),
                     );
                     if let Some(m) = &m {
-                        let fit = m
-                            .fitted
-                            .map_or(String::new(), |f| format!(" · law fitted at {} °C", fmt(f)));
                         ui.label(
-                            egui::RichText::new(format!(
-                                "window {}–{} °C{fit}",
-                                fmt(m.window.0),
-                                fmt(m.window.1)
-                            ))
-                            .font(sans(11.0))
-                            .color(t.ink2),
+                            egui::RichText::new(format!("forms {}–{} °C", fmt(m.window.0), fmt(m.window.1)))
+                                .font(sans(11.0))
+                                .color(t.ink2),
                         );
                     }
                 });
-                // the statement it adds, as it will read
-                let text = convert_text(fg, &c);
-                ui.add_space(4.0);
-                let (r, _) = ui.allocate_exact_size(vec2(DLG_W, 52.0), Sense::hover());
-                let b =
-                    Rect::from_min_max(pos2(r.left() + 14.0, r.top()), pos2(r.right() - 14.0, r.bottom()));
-                ui.painter().rect_filled(b, 3.0, t.field);
-                ui.painter()
-                    .rect_stroke(b, 3.0, Stroke::new(1.0, t.line), StrokeKind::Inside);
-                let g = ui
-                    .painter()
-                    .layout(text.trim().to_string(), mono(12.0), t.ink, b.width() - 16.0);
-                ui.painter().galley(b.min + vec2(8.0, 6.0), g, t.ink);
-                ui.add_space(6.0);
-                ui.horizontal(|ui| {
-                    ui.add_space(DLG_W - 14.0 - 72.0 * 2.0 - 10.0);
-                    if button(ui, t, "Cancel", false, "thermo:convert:cancel".into(), places) {
-                        close = true;
-                    }
-                    if button(ui, t, "OK", true, "thermo:convert:ok".into(), places) {
-                        ok = true;
-                    }
-                });
-                ui.add_space(12.0);
+                let (o, x, _) = foot(ui, t, "thermo:convert", false, places);
+                ok = o;
+                close |= x;
             });
         if let Some(name) = open_material {
             let libs = forge_material::Libraries::cached(None);
             fg.thermo.material = libs.find(&name).map(|x| x.1.clone());
         }
-        if ok {
+        if ok && !c.of.is_empty() {
             fg.out.push(FgAct::Apply(Op::AddFeature {
                 before: None,
                 text: convert_text(fg, &c),
             }));
-            fg.thermo.analysis = Analysis::Thickness;
-        } else if !close {
+            fg.thermo.converted = true;
+            return true;
+        }
+        if !close {
             fg.thermo.convert = Some(c);
         }
+        false
     }
 
+    /// Edit Formed Part: the thermoform's shape, sheet and trim, prefilled as written.
     fn form_dialog(
         &self,
         ctx: &egui::Context,
@@ -877,163 +1138,127 @@ impl Shell {
             return;
         };
         let v = self.view_rect;
-        let (mut close, mut ok) = (false, false);
+        let w = FORM_W;
+        let (mut ok, mut close, mut apply) = (false, false, false);
         let row_data = fg.thermos.iter().find(|r| r.id == f.id).cloned();
-        let issues: Vec<(Severity, String, String)> = fg
-            .issues
+        let materials: Vec<(String, String)> = fg
+            .thermo_materials
             .iter()
-            .filter(|i| i.feature.as_deref() == Some(f.id.as_str()))
-            .map(|i| (i.severity, i.kind.clone(), i.text.clone()))
+            .map(|m| (m.name.clone(), m.name.clone()))
             .collect();
-        egui::Window::new("Form")
+        let left = if fg.thermo.analysis == Analysis::None {
+            24.0
+        } else {
+            300.0
+        };
+        egui::Window::new("Edit Formed Part")
             .id(egui::Id::unique("thermo-form"))
             .title_bar(false)
             .collapsible(false)
             .resizable(false)
-            .default_pos(pos2(v.left() + 24.0, v.top() + 24.0))
-            .fixed_size(vec2(DLG_W - 64.0, 0.0))
+            .default_pos(pos2(v.left() + left, v.top() + 44.0))
+            .fixed_size(vec2(w, 0.0))
             .frame(frame(t))
             .constrain_to(super::dialog_area(ctx))
             .show(ctx, |ui| {
-                let w = DLG_W - 64.0;
                 ui.spacing_mut().item_spacing.y = 6.0;
-                close = title(ui, t, &format!("Form · {}", f.id), w, places, "thermo:form");
-                // the tabs
-                let (r, _) = ui.allocate_exact_size(vec2(w, 32.0), Sense::hover());
-                let mut x = r.left() + 6.0;
-                for (k, name) in ["Shape", "Trim", "Plug", "Mould"].iter().enumerate() {
-                    let g = ui.painter().layout_no_wrap(name.to_string(), sans(13.0), t.ink);
-                    let tab = Rect::from_min_size(pos2(x, r.top()), vec2(g.size().x + 26.0, 32.0));
-                    let resp = ui.interact(tab, ui.scope_id().with(("thermo-tab", k)), Sense::click());
-                    if f.tab == k {
-                        ui.painter().rect_filled(tab, 0.0, t.raised);
-                        ui.painter().hline(tab.left()..=tab.right(), tab.bottom() - 1.0, Stroke::new(2.0, t.focus));
-                    }
-                    ui.painter().galley(pos2(tab.left() + 13.0, tab.center().y - g.size().y / 2.0), g, if f.tab == k { t.ink } else { t.ink2 });
-                    places.push((format!("thermo:form:tab:{k}"), tab));
-                    if resp.clicked() {
-                        f.tab = k;
-                    }
-                    x = tab.right();
-                }
-                ui.painter().hline(r.left()..=r.right(), r.bottom(), Stroke::new(1.0, t.line));
-                ui.add_space(6.0);
+                close = head(ui, t, "thicken", &format!("Formed Part · {}", f.id), w, places, "thermo:form");
+                tabs(ui, t, &["Shape", "Trim", "Plug"], &mut f.tab, w, places, "thermo:form:tab");
+                ui.add_space(4.0);
                 let a = &mut f.args;
                 match f.tab {
                     0 => {
-                        row(ui, t, "Shape", w, 32.0, |ui| {
-                            ui.label(egui::RichText::new(arg(a, "shape").unwrap_or("")).font(mono(13.0)).color(t.ink));
+                        row(ui, t, "Shape", w, 30.0, |ui| {
+                            ui.label(egui::RichText::new(arg(a, "shape").unwrap_or("")).font(sans(13.0)).color(t.ink));
                         });
-                        row(ui, t, "Modelled as", w, 32.0, |ui| {
-                            let now = arg(a, "from").unwrap_or("\"outer\"").trim_matches('"').to_string();
-                            let mut k = FROM.iter().position(|x| x.0 == now).unwrap_or(0);
-                            let r = egui::ComboBox::from_id_salt("thermo-form-from")
-                                .selected_text(FROM[k].1)
-                                .width(ui.available_width() - 6.0)
-                                .show_ui(ui, |ui| {
-                                    for (j, (_, name, _)) in FROM.iter().enumerate() {
-                                        ui.selectable_value(&mut k, j, *name);
-                                    }
-                                });
-                            places.push(("thermo:form:from".into(), r.response.rect));
-                            set(a, "from", format!("\"{}\"", FROM[k].0));
-                        });
+                        let from: Vec<(&str, &str)> = FROM.iter().map(|x| (x.0, x.1)).collect();
+                        choice(ui, t, "Modelled as", a, "from", &from, w, places);
                         row(ui, t, "Mould", w, 34.0, |ui| {
                             let mut k = usize::from(arg(a, "tool") == Some("\"female\""));
                             toggles(ui, t, &mut k, &["Male", "Female"], "thermo:form:tool", places);
-                            set(a, "tool", if k == 1 { "\"female\"".into() } else { "\"male\"".into() });
+                            if k == 1 || arg(a, "tool").is_some() {
+                                set(a, "tool", if k == 1 { "\"female\"".into() } else { "\"male\"".into() });
+                            }
                         });
-                        for (label, key, hint) in [("Open face", "open", "the shape's foot"), ("Pull", "pull", "Z"), ("Sheet t", "t", "read from the wall"), ("Material", "material", "\"ABS\""), ("Sheet temp", "temperature", "the material's normal")] {
-                            row(ui, t, label, w, 32.0, |ui| {
-                                let mut s = arg(a, key).unwrap_or("").to_string();
-                                let r = ui.add(egui::TextEdit::singleline(&mut s).font(mono(13.0)).hint_text(hint).desired_width(ui.available_width()).margin(vec2(7.0, 5.0)));
-                                places.push((format!("thermo:form:{key}"), r.rect));
-                                set(a, key, s);
-                            });
+                        heading(ui, t, "Sheet", w);
+                        let m: Vec<(&str, &str)> = materials.iter().map(|x| (x.0.as_str(), x.1.as_str())).collect();
+                        if !m.is_empty() {
+                            choice(ui, t, "Material", a, "material", &m, w, places);
                         }
+                        // a parameter's name says what it comes to
+                        let tn = row_data.as_ref().map_or(String::new(), |r| format!("now {}", fmt(r.t)));
+                        let unit = match (arg(a, "t"), &row_data) {
+                            (Some(x), Some(r)) if x.trim().parse::<f64>().is_err() => format!("= {}", fmt(r.t)),
+                            _ => "mm".to_string(),
+                        };
+                        field(ui, t, "Thickness", a, "t", &tn, &unit, w, places);
+                        field(ui, t, "Temperature", a, "temperature", "the material's", "°C", w, places);
+                        choice(ui, t, "Pull", a, "pull", &PULLS, w, places);
                     }
                     1 => {
-                        for (label, key, hint) in [("Flange", "flange", "10"), ("Trim profile", "trim", "the shape's box + flange"), ("Sheet blank", "sheet", "(W, L): the trim and the clamp"), ("Pull", "pull", "Z")] {
-                            row(ui, t, label, w, 32.0, |ui| {
-                                let mut s = arg(a, key).unwrap_or("").to_string();
-                                let r = ui.add(egui::TextEdit::singleline(&mut s).font(mono(13.0)).hint_text(hint).desired_width(ui.available_width()).margin(vec2(7.0, 5.0)));
-                                places.push((format!("thermo:form:{key}"), r.rect));
-                                set(a, key, s);
-                            });
+                        field(ui, t, "Flange", a, "flange", "10", "mm", w, places);
+                        row(ui, t, "Trim outline", w, 28.0, |ui| {
+                            let text = if arg(a, "trim").is_some() { "a profile" } else { "the shape's box + flange" };
+                            ui.label(egui::RichText::new(text).font(sans(13.0)).color(t.ink2));
+                        });
+                        heading(ui, t, "Blank", w);
+                        let mut auto = arg(a, "sheet").is_none_or(str::is_empty);
+                        row(ui, t, "Size", w, 30.0, |ui| {
+                            let r = ui.checkbox(&mut auto, egui::RichText::new("The trim and the clamp's").font(sans(13.0)));
+                            places.push(("thermo:form:blank-auto".into(), r.rect));
+                        });
+                        if auto {
+                            set(a, "sheet", String::new());
+                        } else {
+                            let now = arg(a, "sheet").unwrap_or("").trim_matches(['(', ')']).to_string();
+                            let (mut bw, mut bl) = now.split_once(',').map_or((String::new(), String::new()), |(x, y)| (x.trim().into(), y.trim().into()));
+                            if bw.is_empty() {
+                                let (x, y) = row_data.as_ref().and_then(|r| r.facts.iter().find(|f| f.0 == "sheet used")).and_then(|f| {
+                                    let mut it = f.1.split('×').map(str::trim);
+                                    Some((it.next()?.to_string(), it.next()?.to_string()))
+                                }).unwrap_or(("200".into(), "150".into()));
+                                (bw, bl) = (x, y);
+                            }
+                            let mut pair = vec![("w".to_string(), bw), ("l".to_string(), bl)];
+                            field(ui, t, "Width", &mut pair, "w", "", "mm", w, places);
+                            field(ui, t, "Length", &mut pair, "l", "", "mm", w, places);
+                            set(a, "sheet", format!("({}, {})", pair[0].1, pair[1].1));
                         }
                     }
-                    2 => {
+                    _ => {
                         row(ui, t, "Plug assist", w, 32.0, |ui| {
                             ui.add_enabled(false, egui::Button::new(egui::RichText::new("Pick a plug body").font(sans(13.0))));
                         });
-                        let (r, _) = ui.allocate_exact_size(vec2(w, 40.0), Sense::hover());
-                        let g = ui.painter().layout("The thickness model has no plug yet: it forms by drape and vacuum. A plug is the next step of the model (a rigid tool the sheet sticks to).".into(), sans(11.0), t.ink2, w - 28.0);
-                        ui.painter().galley(r.min + vec2(14.0, 0.0), g, t.ink2);
-                    }
-                    _ => {
-                        for (label, key, hint) in [("Shrink", "shrink", "the material's"), ("Base height", "base", "10"), ("Base margin", "margin", "5"), ("Vent Ø", "vent", "the material's (≤ 0.5 t)"), ("Vent pitch", "vent_pitch", "25")] {
-                            row(ui, t, label, w, 32.0, |ui| {
-                                let mut s = arg(a, key).unwrap_or("").to_string();
-                                let r = ui.add(egui::TextEdit::singleline(&mut s).font(mono(13.0)).hint_text(hint).desired_width(ui.available_width()).margin(vec2(7.0, 5.0)));
-                                places.push((format!("thermo:form:{key}"), r.rect));
-                                set(a, key, s);
-                            });
-                        }
+                        note(
+                            ui,
+                            "The thickness model forms by drape and vacuum only. A plug (a rigid tool the sheet sticks to) is its next step.",
+                            w,
+                            t.ink2,
+                        );
                     }
                 }
-                // the checks as the part stands
-                ui.add_space(4.0);
-                let (r, _) = ui.allocate_exact_size(vec2(w, 18.0), Sense::hover());
-                ui.painter().text(pos2(r.left() + 14.0, r.center().y), Align2::LEFT_CENTER, "Live checks", sans(12.0), t.ink2);
-                let green = Color32::from_rgb(0x5c, 0xc0, 0x7a);
-                let mut lines: Vec<(Color32, &str, String)> = vec![];
-                for k in ["DraftTooLow", "Undercut", "RadiusTooTight", "DrawTooDeep", "Webbing", "ThinWall"] {
-                    match issues.iter().find(|i| i.1 == k || (k == "RadiusTooTight" && i.1 == "SharpEdge")) {
-                        Some((sev, _, text)) => lines.push((
-                            if *sev == Severity::Error { t.error } else { super::fg::WARN },
-                            "warning",
-                            text.clone(),
-                        )),
-                        None => lines.push((green, "check", ok_word(k, row_data.as_ref()))),
-                    }
-                }
-                for (c, icon, s) in lines {
-                    let g = ui.painter().layout(s, sans(11.0), c, w - 46.0);
-                    let (r, _) = ui.allocate_exact_size(vec2(w, g.size().y + 3.0), Sense::hover());
-                    super::icons::draw(ui.painter(), r.min + vec2(14.0, 0.0), 13.0, icon, 1.4, c);
-                    ui.painter().galley(r.min + vec2(32.0, 0.0), g, c);
-                }
-                ui.add_space(8.0);
-                ui.horizontal(|ui| {
-                    ui.add_space(w - 14.0 - 72.0 * 2.0 - 10.0);
-                    if button(ui, t, "Cancel", false, "thermo:form:cancel".into(), places) {
-                        close = true;
-                    }
-                    if button(ui, t, "OK", true, "thermo:form:ok".into(), places) {
-                        ok = true;
-                    }
-                });
-                ui.add_space(12.0);
+                let (o, x, ap) = foot(ui, t, "thermo:form", true, places);
+                ok = o;
+                close |= x;
+                apply = ap;
             });
-        // the section preview beside the dialog
-        if let Some(r) = &row_data {
-            section(
-                ctx,
-                t,
-                self.view_rect,
-                r,
-                f.args.iter().find(|a| a.0 == "flange").map(|a| a.1.as_str()),
-            );
+        if let Some(r) = &row_data
+            && f.tab == 1
+        {
+            section(ctx, t, self.view_rect, left + FORM_W, r, arg(&f.args, "flange"));
         }
-        if ok {
+        if ok || apply {
             for op in changes(&f.id, &f.was, &f.args) {
                 fg.out.push(FgAct::Apply(op));
             }
-        } else if !close {
+            f.was = f.args.clone();
+        }
+        if !(ok || close) {
             fg.thermo.form = Some(f);
         }
     }
 
+    /// Make Mould: what the mould is grown by, stands on, is vented with, and its exports.
     fn mould_dialog(
         &self,
         ctx: &egui::Context,
@@ -1045,60 +1270,48 @@ impl Shell {
             return;
         };
         let v = self.view_rect;
-        let w = 360.0;
-        let (mut close, mut apply) = (false, false);
+        let w = FORM_W;
+        let (mut ok, mut close, mut apply) = (false, false, false);
         let mut export = None;
-        let facts = fg
-            .thermos
-            .iter()
-            .find(|r| r.id == m.id)
-            .map(|r| r.facts.clone())
-            .unwrap_or_default();
-        egui::Window::new("Mould")
+        let r = fg.thermos.iter().find(|r| r.id == m.id).cloned();
+        let fact_of = |k: &str| {
+            r.as_ref()
+                .and_then(|r| r.facts.iter().find(|f| f.0 == k))
+                .map_or(String::new(), |f| f.1.clone())
+        };
+        let left = if fg.thermo.analysis == Analysis::None {
+            24.0
+        } else {
+            300.0
+        };
+        egui::Window::new("Make Mould")
             .id(egui::Id::unique("thermo-mould"))
             .title_bar(false)
             .collapsible(false)
             .resizable(false)
-            .default_pos(pos2(v.right() - w - 20.0, v.top() + 20.0))
+            .default_pos(pos2(v.left() + left, v.top() + 44.0))
             .fixed_size(vec2(w, 0.0))
             .frame(frame(t))
             .constrain_to(super::dialog_area(ctx))
             .show(ctx, |ui| {
-                ui.spacing_mut().item_spacing.y = 6.0;
-                close = title(ui, t, "Mould", w, places, "thermo:mould");
-                for (label, key, hint) in [
-                    ("Shrink", "shrink", "the material's"),
-                    ("Base height", "base", "10"),
-                    ("Base margin", "margin", "5 (≥ clamp)"),
-                    ("Vent Ø", "vent", "≤ 0.5 t"),
-                    ("Vent pitch", "vent_pitch", "25"),
-                ] {
-                    row(ui, t, label, w, 32.0, |ui| {
-                        let mut s = arg(&m.args, key).unwrap_or("").to_string();
-                        let r = ui.add(
-                            egui::TextEdit::singleline(&mut s)
-                                .font(mono(13.0))
-                                .hint_text(hint)
-                                .desired_width(ui.available_width())
-                                .margin(vec2(7.0, 5.0)),
-                        );
-                        places.push((format!("thermo:mould:{key}"), r.rect));
-                        set(&mut m.args, key, s);
-                    });
-                }
-                row(ui, t, "Vent placing", w, 32.0, |ui| {
-                    let auto = arg(&m.args, "vents").is_none_or(str::is_empty);
-                    ui.label(
-                        egui::RichText::new(if auto {
-                            "Auto: last contact + pitch"
-                        } else {
-                            "Given points"
-                        })
-                        .font(sans(13.0))
-                        .color(t.ink),
-                    );
-                });
-                row(ui, t, "Made by", w, 32.0, |ui| {
+                ui.spacing_mut().item_spacing.y = 3.0;
+                close = head(
+                    ui,
+                    t,
+                    "extrude",
+                    &format!("Make Mould · {}", m.id),
+                    w,
+                    places,
+                    "thermo:mould",
+                );
+                heading(ui, t, "Tool", w);
+                let shrink = r
+                    .as_ref()
+                    .map_or(String::new(), |r| format!("{}'s, {:.4}", r.material, r.shrink));
+                field(ui, t, "Shrink", &mut m.args, "shrink", &shrink, "", w, places);
+                field(ui, t, "Base height", &mut m.args, "base", "10", "mm", w, places);
+                field(ui, t, "Base margin", &mut m.args, "margin", "5", "mm", w, places);
+                row(ui, t, "Made by", w, 28.0, |ui| {
                     let r = egui::ComboBox::from_id_salt("thermo-made-by")
                         .selected_text(MADE_BY[m.made_by])
                         .width(ui.available_width() - 6.0)
@@ -1109,65 +1322,370 @@ impl Shell {
                         });
                     places.push(("thermo:mould:madeby".into(), r.response.rect));
                 });
-                for (k, v) in facts.iter().filter(|f| f.0 == "vents" || f.0 == "mould scale") {
-                    let k = if k == "vents" { "Vents" } else { "Mould scale" };
-                    row(ui, t, k, w, 24.0, |ui| {
-                        ui.label(egui::RichText::new(v).font(mono(12.0)).color(t.ink));
+                heading(ui, t, "Vents", w);
+                let mut on = arg(&m.args, "vent") != Some("false");
+                row(ui, t, "Vents", w, 30.0, |ui| {
+                    let r = ui.checkbox(
+                        &mut on,
+                        egui::RichText::new("Where the sheet arrives last").font(sans(13.0)),
+                    );
+                    places.push(("thermo:mould:vents".into(), r.rect));
+                });
+                if !on {
+                    set(&mut m.args, "vent", "false".into());
+                } else {
+                    if arg(&m.args, "vent") == Some("false") {
+                        set(&mut m.args, "vent", String::new());
+                    }
+                    field(
+                        ui,
+                        t,
+                        "Diameter",
+                        &mut m.args,
+                        "vent",
+                        "the material's",
+                        "mm",
+                        w,
+                        places,
+                    );
+                    field(ui, t, "Pitch", &mut m.args, "vent_pitch", "25", "mm", w, places);
+                }
+                fact(ui, t, "Vents", &fact_of("vents"), w, t.ink);
+                fact(ui, t, "Mould scale", &fact_of("mould scale"), w, t.ink);
+                heading(ui, t, "Export", w);
+                for pair in [
+                    [
+                        ("Mould · STEP", Export::MouldStep),
+                        ("Mould · STL", Export::MouldStl),
+                    ],
+                    [
+                        ("Part · STEP (modelled)", Export::PartStep),
+                        ("Part · STL (simulated)", Export::PartStl),
+                    ],
+                    [
+                        ("Trim line · DXF", Export::TrimDxf),
+                        ("Process sheet · PDF", Export::ProcessPdf),
+                    ],
+                ] {
+                    ui.horizontal(|ui| {
+                        ui.add_space(14.0);
+                        for (label, e) in pair {
+                            let b =
+                                egui::Button::new(egui::RichText::new(label).font(sans(12.5)).color(t.ink))
+                                    .fill(t.raised)
+                                    .stroke(Stroke::new(1.0, t.line))
+                                    .min_size(vec2((w - 34.0) / 2.0, 26.0));
+                            let r = ui.add(b);
+                            places.push((format!("thermo:export:{e:?}"), r.rect));
+                            if r.clicked() {
+                                export = Some(e);
+                            }
+                        }
                     });
                 }
-                ui.horizontal(|ui| {
-                    ui.add_space(w - 14.0 - 72.0);
-                    if button(ui, t, "Apply", true, "thermo:mould:apply".into(), places) {
-                        apply = true;
-                    }
-                });
-                ui.add_space(6.0);
-                let (r, _) = ui.allocate_exact_size(vec2(w, 30.0), Sense::hover());
-                ui.painter()
-                    .hline(r.left()..=r.right(), r.top(), Stroke::new(1.0, t.line));
-                ui.painter().text(
-                    pos2(r.left() + 14.0, r.center().y + 2.0),
-                    Align2::LEFT_CENTER,
-                    "Export",
-                    semi(14.0),
-                    t.ink,
-                );
-                for (label, e) in [
-                    ("Mould: STEP (for CAM)", Export::MouldStep),
-                    ("Mould: STL (print)", Export::MouldStl),
-                    ("Formed part: STEP", Export::PartStep),
-                    ("Trim line: DXF", Export::TrimDxf),
-                    (
-                        "Process sheet: PDF (material, gauge, temp, blank, vents, thickness)",
-                        Export::ProcessPdf,
-                    ),
-                ] {
-                    if wide(ui, t, label, w, false, format!("thermo:export:{e:?}"), places) {
-                        export = Some(e);
-                    }
-                }
                 if let Some(s) = &fg.thermo.said {
-                    let g = ui.painter().layout(s.clone(), sans(11.0), t.ink2, w - 28.0);
-                    let (r, _) = ui.allocate_exact_size(vec2(w, g.size().y + 4.0), Sense::hover());
-                    ui.painter().galley(r.min + vec2(14.0, 2.0), g, t.ink2);
+                    note(ui, s, w, t.ink2);
                 }
-                ui.add_space(12.0);
+                let (o, x, ap) = foot(ui, t, "thermo:mould", true, places);
+                ok = o;
+                close |= x;
+                apply = ap;
             });
         if let Some(e) = export {
             fg.thermo.want_export = Some((m.id.clone(), e));
-            fg.thermo.said = Some(format!("{}: {}", m.id, MADE_BY[m.made_by]));
         }
-        if apply {
+        if ok || apply {
             for op in changes(&m.id, &m.was, &m.args) {
                 fg.out.push(FgAct::Apply(op));
             }
             m.was = m.args.clone();
         }
-        if !close {
+        if !(ok || close) {
             fg.thermo.mould = Some(m);
         }
     }
 
+    /// Check Forming: the one results window. The verdict, the wall's extremes, what colours the
+    /// part, probes, the forming played, the two masses, the checks, the CSV.
+    fn check_window(
+        &self,
+        ctx: &egui::Context,
+        t: &Theme,
+        fg: &mut FgPanel,
+        places: &mut Vec<(String, Rect)>,
+    ) {
+        if !fg.thermo.check {
+            return;
+        }
+        let Some(r) = fg.thermos.first().cloned() else {
+            return;
+        };
+        let v = self.view_rect;
+        let w = CHECK_W;
+        let mut close = false;
+        let issues: Vec<(Severity, String, String)> = fg
+            .issues
+            .iter()
+            .filter(|i| i.feature.as_deref() == Some(r.id.as_str()))
+            .map(|i| (i.severity, i.kind.clone(), i.text.clone()))
+            .collect();
+        let green = Color32::from_rgb(0x5c, 0xc0, 0x7a);
+        let n = r.stages.len().max(1);
+        if fg.thermo.playing {
+            let k = ((ctx.input(|i| i.time) * 8.0) as usize) % n;
+            fg.thermo.step = Some(k);
+            ctx.request_repaint_after(std::time::Duration::from_millis(60));
+        }
+        let u = &mut fg.thermo;
+        egui::Window::new("Check Forming")
+            .id(egui::Id::unique("thermo-check"))
+            .title_bar(false)
+            .collapsible(false)
+            .resizable(false)
+            .default_pos(pos2(v.right() - w - 170.0, v.top() + 8.0))
+            .fixed_size(vec2(w, 0.0))
+            .frame(frame(t))
+            .constrain_to(super::dialog_area(ctx))
+            .show(ctx, |ui| {
+                ui.spacing_mut().item_spacing.y = 2.0;
+                close = head(
+                    ui,
+                    t,
+                    "measure",
+                    &format!("Check Forming · {}", r.id),
+                    w,
+                    places,
+                    "thermo:check",
+                );
+                let (ink, verdict) = match r.passes {
+                    Some(true) => (
+                        green,
+                        format!(
+                            "Forms: thinnest wall {:.2} mm, over the {:.2} mm limit",
+                            r.min.0, r.limit
+                        ),
+                    ),
+                    Some(false) if r.unformed > 0 => (
+                        super::fg::WARN,
+                        format!(
+                            "The sheet bridges at {} points: it never reaches the mould there",
+                            r.unformed
+                        ),
+                    ),
+                    Some(false) => (
+                        super::fg::WARN,
+                        format!("Too thin: {:.2} mm, under the {:.2} mm limit", r.min.0, r.limit),
+                    ),
+                    None => (t.ink2, "No thickness model (walls: false)".to_string()),
+                };
+                ui.add_space(4.0);
+                note(ui, &verdict, w, ink);
+                heading(ui, t, "Wall thickness", w);
+                fact(ui, t, "Thinnest (MIN)", &format!("{:.2} mm", r.min.0), w, t.ink);
+                fact(ui, t, "Thickest (MAX)", &format!("{:.2} mm", r.max.0), w, t.ink);
+                if let Some(m) = r.facts.iter().find(|f| f.0 == "mean wall") {
+                    fact(ui, t, "Mean (t / draw ratio)", &m.1, w, t.ink);
+                }
+                fact(
+                    ui,
+                    t,
+                    &format!("Limit ({})", r.material),
+                    &format!("{:.2} mm", r.limit),
+                    w,
+                    t.ink,
+                );
+                heading(ui, t, "Show on the part", w);
+                ui.horizontal(|ui| {
+                    ui.add_space(14.0);
+                    let mut k = match u.analysis {
+                        Analysis::Thickness => 0,
+                        Analysis::Draft => 1,
+                        Analysis::None => 2,
+                    };
+                    toggles(
+                        ui,
+                        t,
+                        &mut k,
+                        &["Thickness", "Draft & undercut", "Nothing"],
+                        "thermo:check:layer",
+                        places,
+                    );
+                    u.analysis = [Analysis::Thickness, Analysis::Draft, Analysis::None][k];
+                });
+                ui.horizontal(|ui| {
+                    ui.add_space(14.0);
+                    let mut k = usize::from(u.simulated);
+                    let can = r.simulated.is_some();
+                    ui.add_enabled_ui(can, |ui| {
+                        toggles(
+                            ui,
+                            t,
+                            &mut k,
+                            &["Modelled", "Simulated wall"],
+                            "thermo:check:state",
+                            places,
+                        );
+                    });
+                    u.simulated = can && k == 1;
+                });
+                heading(ui, t, "Probe", w);
+                ui.horizontal(|ui| {
+                    ui.add_space(14.0);
+                    let mut k = usize::from(u.probe);
+                    let was = k;
+                    toggles(
+                        ui,
+                        t,
+                        &mut k,
+                        &["Off", "Click the part"],
+                        "thermo:check:probe",
+                        places,
+                    );
+                    u.probe = k == 1;
+                    if u.probe && was == 0 {
+                        u.analysis = Analysis::Thickness;
+                    }
+                    if !u.probes.is_empty()
+                        && button(ui, t, "Clear", false, "thermo:check:clear".into(), places)
+                    {
+                        u.probes.clear();
+                    }
+                });
+                for (k, (_, h)) in u.probes.iter().enumerate() {
+                    fact(
+                        ui,
+                        t,
+                        &format!("Probe {}", k + 1),
+                        &format!("{h:.2} mm"),
+                        w,
+                        t.ink,
+                    );
+                }
+                heading(ui, t, "Forming", w);
+                ui.horizontal(|ui| {
+                    ui.add_space(14.0);
+                    if button(
+                        ui,
+                        t,
+                        if u.playing { "Pause" } else { "Play" },
+                        false,
+                        "thermo:check:play".into(),
+                        places,
+                    ) {
+                        u.playing = !u.playing;
+                        u.analysis = Analysis::Thickness;
+                    }
+                    let mut k = u.step.unwrap_or(n - 1).min(n - 1);
+                    ui.style_mut().visuals.selection.bg_fill = Color32::from_rgb(0x2f, 0x86, 0xd6);
+                    ui.spacing_mut().slider_width = 120.0;
+                    let s = ui.add(
+                        egui::Slider::new(&mut k, 0..=n - 1)
+                            .show_value(false)
+                            .trailing_fill(true),
+                    );
+                    ui.add_space(6.0);
+                    places.push(("thermo:check:step".into(), s.rect));
+                    if s.changed() {
+                        u.playing = false;
+                        u.analysis = Analysis::Thickness;
+                        u.step = (k + 1 < n).then_some(k);
+                    }
+                    ui.label(
+                        egui::RichText::new(format!(
+                            "{} / {n} · {}",
+                            k + 1,
+                            r.stages.get(k).copied().unwrap_or("")
+                        ))
+                        .font(mono(11.5))
+                        .color(t.ink2),
+                    );
+                });
+                if let (Some(a), Some(b)) = (&r.modelled, &r.simulated) {
+                    heading(ui, t, "Mass", w);
+                    let kg = |m: &Masses| {
+                        m.mass.map_or(format!("{:.0} mm³", m.volume), |x| {
+                            format!("{:.1} g", x * 1000.0)
+                        })
+                    };
+                    fact(ui, t, "Modelled (t everywhere)", &kg(a), w, t.ink);
+                    fact(ui, t, "Simulated (the model's wall)", &kg(b), w, t.ink);
+                    fact(
+                        ui,
+                        t,
+                        "Simulated / modelled",
+                        &format!("{:.0} %", 100.0 * b.volume / a.volume),
+                        w,
+                        t.ink,
+                    );
+                }
+                heading(ui, t, "Checks", w);
+                let kinds = [
+                    "DraftTooLow",
+                    "Undercut",
+                    "RadiusTooTight",
+                    "DrawTooDeep",
+                    "Webbing",
+                    "ThinWall",
+                ];
+                let found = |k: &str| {
+                    issues
+                        .iter()
+                        .find(|i| i.1 == k || (k == "RadiusTooTight" && i.1 == "SharpEdge"))
+                };
+                let passed = kinds.iter().filter(|k| found(k).is_none()).count();
+                let mut lines: Vec<(Color32, &str, String)> = kinds
+                    .iter()
+                    .filter_map(|k| found(k))
+                    .map(|(sev, _, text)| {
+                        (
+                            if *sev == Severity::Error {
+                                t.error
+                            } else {
+                                super::fg::WARN
+                            },
+                            "warning",
+                            text.clone(),
+                        )
+                    })
+                    .collect();
+                if passed > 0 {
+                    let all = if passed == kinds.len() { "All" } else { "The other" };
+                    lines.push((
+                        green,
+                        "check",
+                        format!("{all} {passed} pass: draft, undercut, radii, draw, webbing, wall"),
+                    ));
+                }
+                for (c, icon, s) in lines {
+                    let g = ui.painter().layout(s, sans(11.0), c, w - 46.0);
+                    let (rr, _) = ui.allocate_exact_size(vec2(w, g.size().y + 3.0), Sense::hover());
+                    super::icons::draw(ui.painter(), rr.min + vec2(14.0, 0.0), 13.0, icon, 1.4, c);
+                    ui.painter().galley(rr.min + vec2(32.0, 0.0), g, c);
+                }
+                ui.add_space(6.0);
+                ui.horizontal(|ui| {
+                    ui.add_space(14.0);
+                    if button(ui, t, "Export CSV…", false, "thermo:check:csv".into(), places) {
+                        u.want_export = Some((r.id.clone(), Export::ThicknessCsv));
+                    }
+                    if button(ui, t, "Close", false, "thermo:check:done".into(), places) {
+                        close = true;
+                    }
+                });
+                if let Some(s) = &u.said {
+                    note(ui, s, w, t.ink2);
+                }
+                ui.add_space(10.0);
+            });
+        if close {
+            fg.thermo.check = false;
+            fg.thermo.playing = false;
+            fg.thermo.probe = false;
+        }
+    }
+}
+
+impl Shell {
     /// The thermoform's issues, opened from the status bar: each with its fixes, a thin wall's
     /// each re-simulated.
     fn thermo_issues(
@@ -1544,30 +2062,14 @@ fn op_words(op: &Op) -> String {
     }
 }
 
-/// What a check says when it passes.
-fn ok_word(kind: &str, r: Option<&ThermoRow>) -> String {
-    let mat = r.map_or("", |r| r.material.as_str());
-    match kind {
-        "DraftTooLow" => format!(
-            "Draft at least {:.1}° on every wall ({mat})",
-            r.map_or(0.0, |r| r.draft_min)
-        ),
-        "Undercut" => format!("No undercuts along {}", r.map_or("the pull", |r| r.pull.as_str())),
-        "RadiusTooTight" | "SharpEdge" => "Every edge rounded enough for the sheet".into(),
-        "DrawTooDeep" => format!("Draw ratio within {mat}'s"),
-        "Webbing" => "No webbing between raised parts".into(),
-        _ => "Wall above the material's least".into(),
-    }
-}
-
 /// The section through the thermoform beside the Form dialog: the mould, the formed sheet, the
 /// clamp and the pull, from the model's own numbers.
-fn section(ctx: &egui::Context, t: &Theme, v: Rect, r: &ThermoRow, flange: Option<&str>) {
+fn section(ctx: &egui::Context, t: &Theme, v: Rect, right: f32, r: &ThermoRow, flange: Option<&str>) {
     if r.section.is_empty() {
         return;
     }
     let area = Rect::from_min_max(
-        pos2(v.left() + DLG_W + 40.0, v.top() + 40.0),
+        pos2(v.left() + right + 40.0, v.top() + 40.0),
         pos2(v.right() - 40.0, v.top() + 360.0),
     );
     if area.width() < 200.0 {
@@ -1677,90 +2179,243 @@ pub fn legend_colour(f: f32) -> Color32 {
     c32(band(f))
 }
 
-/// The browser's heading over a thermoform part's rows (none on a part without one).
-pub fn tree_heading(ui: &mut Ui, t: &Theme, fg: &FgPanel, w: f32, what: &str, note: &str) {
-    if fg.thermos.is_empty() {
-        return;
+/// A thermoform's row in the browser: a double click or Edit Feature opens Edit Formed Part, as
+/// Inventor's does; Check Forming and Make Mould are a right click away.
+pub fn feature_row(resp: &egui::Response, fg: &mut FgPanel, places: &mut Vec<(String, Rect)>, key: &str) {
+    if resp.double_clicked() {
+        fg.thermo.form = None;
+        fg.thermo_command(Cmd::Form);
     }
-    let (r, _) = ui.allocate_exact_size(vec2(w, 22.0), Sense::hover());
-    let g = ui.painter().layout_no_wrap(what.into(), sans(10.5), t.ink2);
-    let gw = g.size().x;
-    ui.painter()
-        .galley(pos2(r.left() + 14.0, r.center().y - g.size().y / 2.0), g, t.ink2);
-    ui.painter().text(
-        pos2(r.left() + 20.0 + gw, r.center().y),
-        Align2::LEFT_CENTER,
-        format!("({note})"),
-        sans(10.5),
-        t.ink2.gamma_multiply(0.8),
-    );
+    resp.context_menu(|ui| {
+        for (word, c) in [
+            ("Edit Feature", Cmd::Form),
+            ("Check Forming", Cmd::Check),
+            ("Make Mould", Cmd::Mould),
+        ] {
+            let b = ui.button(word);
+            places.push((format!("fg:menu:{word}:{key}"), b.rect));
+            if b.clicked() {
+                if c == Cmd::Form {
+                    fg.thermo.form = None;
+                }
+                fg.thermo_command(c);
+                ui.close();
+            }
+        }
+    });
 }
 
-/// What each thermoform generated, in the browser under the shape: the formed part, the mould,
-/// the blank; a click opens what shows it.
-pub fn tree_generated(ui: &mut Ui, t: &Theme, fg: &mut FgPanel, w: f32, places: &mut Vec<(String, Rect)>) {
-    if fg.thermos.is_empty() {
+/// Under a thermoform in the browser: the formed part, the mould and the blank, each with its eye.
+pub fn tree_children(
+    ui: &mut Ui,
+    t: &Theme,
+    fg: &mut FgPanel,
+    w: f32,
+    key: &str,
+    x0: f32,
+    places: &mut Vec<(String, Rect)>,
+) {
+    let Some(r) = fg.thermos.iter().find(|r| r.id == key).cloned() else {
         return;
-    }
-    ui.add_space(6.0);
-    tree_heading(ui, t, fg, w, "GENERATED", "from the shape");
-    let rows: Vec<(String, String, String, &'static str, Cmd)> = fg
-        .thermos
-        .iter()
-        .flat_map(|r| {
-            let fact = |k: &str| {
-                r.facts
-                    .iter()
-                    .find(|f| f.0 == k)
-                    .map_or(String::new(), |f| f.1.clone())
-            };
-            [
-                (
-                    r.id.clone(),
-                    "Formed part".to_string(),
-                    format!("{:.2} nominal", r.t),
-                    "thicken",
-                    Cmd::Thickness,
-                ),
-                (
-                    r.id.clone(),
-                    "Mould".to_string(),
-                    format!("+{:.2} % · {} vents", r.shrink * 100.0, fact("vents")),
-                    "extrude",
-                    Cmd::Mould,
-                ),
-                (
-                    r.id.clone(),
-                    "Blank".to_string(),
-                    fact("sheet used"),
-                    "rect",
-                    Cmd::Trim,
-                ),
-            ]
-        })
-        .collect();
-    for (id, name, note, icon, cmd) in rows {
-        let (r, resp) = ui.allocate_exact_size(vec2(w, super::ROW_H), Sense::click());
+    };
+    let fact = |k: &str| {
+        r.facts
+            .iter()
+            .find(|f| f.0 == k)
+            .map_or(String::new(), |f| f.1.clone())
+    };
+    let u = fg.thermo.clone();
+    let part_note = if u.simulated && r.simulated.is_some() {
+        format!("simulated {:.2}–{:.2}", r.min.0, r.max.0)
+    } else {
+        format!("modelled {:.2}", r.t)
+    };
+    let rows = [
+        (
+            "Formed Part",
+            "thicken",
+            part_note,
+            u.show.part,
+            Cmd::ShowPart,
+            Cmd::Form,
+        ),
+        (
+            "Mould",
+            "extrude",
+            format!(
+                "+{:.2} % · {} vents",
+                r.shrink * 100.0,
+                fact("vents").split(' ').next().unwrap_or("")
+            ),
+            u.show.mould,
+            Cmd::ShowMould,
+            Cmd::Mould,
+        ),
+        (
+            "Blank",
+            "rect",
+            fact("sheet used"),
+            u.show.blank,
+            Cmd::ShowBlank,
+            Cmd::Trim,
+        ),
+    ];
+    for (name, icon, note, shown, eye, edit) in rows {
+        let (rr, resp) = ui.allocate_exact_size(vec2(w, super::ROW_H), Sense::click());
         let p = ui.painter();
         if resp.hovered() {
-            p.rect_filled(r, 0.0, t.hover);
+            p.rect_filled(rr, 0.0, t.hover);
         }
-        super::icons::draw(p, pos2(r.left() + 20.0, r.top() + 5.0), 16.0, icon, 1.5, t.ink);
-        let g = p.layout_no_wrap(name.clone(), sans(13.0), t.ink);
+        let ink = if shown { t.ink } else { t.ink2.gamma_multiply(0.6) };
+        let x = rr.left() + x0 + 16.0;
+        super::icons::draw(p, pos2(x + 12.0, rr.top() + 5.0), 16.0, icon, 1.5, ink);
+        let g = p.layout_no_wrap(name.to_string(), sans(13.0), ink);
         let gw = g.size().x;
-        p.galley(pos2(r.left() + 42.0, r.center().y - g.size().y / 2.0), g, t.ink);
+        p.galley(pos2(x + 34.0, rr.center().y - g.size().y / 2.0), g, ink);
         p.text(
-            pos2(r.left() + 48.0 + gw, r.center().y),
+            pos2(x + 40.0 + gw, rr.center().y),
             Align2::LEFT_CENTER,
             note,
             sans(11.0),
             t.ink2,
         );
-        places.push((format!("fg:generated:{id}:{name}"), r));
-        if resp.clicked() {
-            fg.thermo_command(cmd);
+        if super::fg::row_eye(ui, t, rr, &format!("thermo-eye-{name}"), shown) {
+            fg.thermo_command(eye);
         }
+        places.push((format!("fg:eye:thermo:{name}"), super::fg::eye_rect(rr)));
+        places.push((format!("fg:row:thermo:{name}"), rr));
+        if resp.double_clicked() {
+            fg.thermo.form = None;
+            fg.thermo_command(edit);
+        }
+        resp.context_menu(|ui| {
+            let mut item = |word: &str, c: Cmd, fg: &mut FgPanel| {
+                let b = ui.button(word);
+                places.push((format!("fg:menu:{word}"), b.rect));
+                if b.clicked() {
+                    fg.thermo_command(c);
+                    ui.close();
+                }
+            };
+            if name == "Formed Part" {
+                if r.simulated.is_some() {
+                    item(
+                        if u.simulated {
+                            "Show Modelled"
+                        } else {
+                            "Show Simulated Wall"
+                        },
+                        Cmd::Simulated,
+                        fg,
+                    );
+                }
+                item(
+                    if u.analysis == Analysis::Thickness {
+                        "Hide Thickness Colours"
+                    } else {
+                        "Thickness Colours"
+                    },
+                    Cmd::Colours,
+                    fg,
+                );
+                item("Check Forming", Cmd::Check, fg);
+            } else if name == "Mould" {
+                item("Make Mould…", Cmd::Mould, fg);
+            } else {
+                item("Edit Blank…", Cmd::Trim, fg);
+            }
+        });
     }
+}
+
+/// iProperties' word on a formed part: its mass as modelled and as simulated, side by side.
+pub fn masses(ui: &mut Ui, t: &Theme, r: &ThermoRow, units: &str, places: &mut Vec<(String, Rect)>) {
+    let (Some(a), b) = (&r.modelled, &r.simulated) else {
+        return;
+    };
+    let unit: f64 = if matches!(units, "in" | "ft") { 25.4 } else { 1.0 };
+    let len = if unit == 1.0 { "mm" } else { "in" };
+    let both: Vec<&Masses> = std::iter::once(a).chain(b.iter()).collect();
+    ui.add_space(8.0);
+    ui.label(
+        egui::RichText::new(format!("Formed part · {} ({})", r.id, r.material))
+            .font(medium(12.0))
+            .color(t.ink),
+    );
+    let cell = |x: f64| {
+        if x.abs() >= 1e5 || (x != 0.0 && x.abs() < 1e-3) {
+            format!("{x:.4e}")
+        } else {
+            format!("{x:.4}")
+        }
+    };
+    let rows: Vec<(String, Vec<String>)> = vec![
+        (
+            "Mass".into(),
+            both.iter()
+                .map(|m| m.mass.map_or("no density".into(), |k| format!("{} kg", cell(k))))
+                .collect(),
+        ),
+        (
+            "CoG X Y Z".into(),
+            both.iter()
+                .map(|m| {
+                    m.cog
+                        .iter()
+                        .map(|c| {
+                            let x = (c / unit * 100.0).round() / 100.0;
+                            format!("{:.2}", if x == 0.0 { 0.0 } else { x })
+                        })
+                        .collect::<Vec<_>>()
+                        .join("  ")
+                })
+                .collect(),
+        ),
+        (
+            format!("Ixx Iyy Izz (kg {len}²)"),
+            both.iter()
+                .map(|m| {
+                    m.inertia.map_or("-".into(), |i| {
+                        (0..3)
+                            .map(|k| cell(i[k][k] / unit / unit))
+                            .collect::<Vec<_>>()
+                            .join("  ")
+                    })
+                })
+                .collect(),
+        ),
+    ];
+    egui::Grid::new("thermo-masses")
+        .num_columns(3)
+        .spacing(vec2(14.0, 3.0))
+        .show(ui, |ui| {
+            ui.label("");
+            for (h, tip) in [
+                (
+                    "Modelled",
+                    "t everywhere: the reference for joints, dimensions and drawings",
+                ),
+                (
+                    "Simulated",
+                    "the wall the thickness model gives, a mesh fitted from it",
+                ),
+            ]
+            .iter()
+            .take(both.len())
+            {
+                ui.label(egui::RichText::new(*h).font(medium(12.0)).color(t.ink2))
+                    .on_hover_text(*tip);
+            }
+            ui.end_row();
+            for (what, vals) in rows {
+                ui.label(egui::RichText::new(&what).font(sans(12.0)).color(t.ink2));
+                for v in vals {
+                    let rr = ui.label(egui::RichText::new(v).font(mono(12.0)).color(t.ink));
+                    places.push((format!("iprops:thermo:{what}"), rr.rect));
+                }
+                ui.end_row();
+            }
+        });
 }
 
 /// A material's thermoforming values, opened from Convert: the Material Browser's Thermoform tab

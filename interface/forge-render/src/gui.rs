@@ -1426,7 +1426,8 @@ impl Gui {
             v.renderer.pick_start(&mut v.scene, &v.nav.camera, px);
         }
         if let Some((px, hit, _)) = v.renderer.pick_poll(&v.scene)
-            && v.nav.on_pick(px, hit)
+            && v.nav
+                .on_pick(px, hit.filter(|h| !crate::thermo_view::unpicked(h)))
         {
             v.dirty = true;
             return true;
@@ -3915,6 +3916,8 @@ impl Gui {
         let Some(m) = (if flat { self.fg_flat.as_ref() } else { None }).or(self.fg_folded.as_ref()) else {
             return;
         };
+        let thermo = if flat { None } else { self.thermo_compose(m) };
+        let m = thermo.as_ref().unwrap_or(m);
         let chords: Vec<f32> = m.lods.iter().map(|x| x.chord).collect();
         if let Some(l) = &mut self.fg_view {
             l.renderer.set_parts(std::slice::from_ref(m));

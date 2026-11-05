@@ -14,6 +14,15 @@ use std::time::Instant;
 pub struct Stage {
     pub solids: Vec<Solid>,
     view: OnceCell<Body>,
+    spans: OnceCell<Vec<Span>>,
+}
+
+/// Where one solid's faces and edges are in the stage's joined body.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Span {
+    pub solid: usize,
+    pub faces: std::ops::Range<u32>,
+    pub edges: std::ops::Range<u32>,
 }
 
 impl Stage {
@@ -21,6 +30,7 @@ impl Stage {
         Stage {
             solids,
             view: OnceCell::new(),
+            spans: OnceCell::new(),
         }
     }
 
@@ -30,15 +40,31 @@ impl Stage {
             return None;
         }
         Some(self.view.get_or_init(|| {
-            if let [one] = &self.solids[..] {
-                return forge_model::finish(one.body.clone());
-            }
             let mut all = Body::new();
+            let mut spans = vec![];
             for s in &self.solids {
-                all.append(&forge_model::finish(s.body.clone()));
+                let one = forge_model::finish(s.body.clone());
+                let (f, e) = (all.faces.len() as u32, all.edges.len() as u32);
+                if self.solids.len() == 1 {
+                    all = one;
+                } else {
+                    all.append(&one);
+                }
+                spans.push(Span {
+                    solid: s.id,
+                    faces: f..all.faces.len() as u32,
+                    edges: e..all.edges.len() as u32,
+                });
             }
+            let _ = self.spans.set(spans);
             all
         }))
+    }
+
+    /// Each solid's faces and edges in `view()`'s body.
+    pub fn spans(&self) -> &[Span] {
+        let _ = self.view();
+        self.spans.get().map_or(&[], |s| &s[..])
     }
 
     /// The bodies as one, unfinished: the pieces each feature made, for lineage.

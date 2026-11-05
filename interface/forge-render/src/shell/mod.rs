@@ -1115,7 +1115,7 @@ impl Shell {
         };
         for k in order {
             // a part opened as .fc has no thermoforms
-            if (asm && k == 1) || (k == THERMO_TAB && (asm || self.fg.is_none())) {
+            if (asm && k == 1) || (k == THERMO_TAB && !self.thermo_tab()) {
                 continue;
             }
             let name = match k {

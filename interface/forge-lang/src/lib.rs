@@ -159,6 +159,8 @@ pub struct Run {
     pub thermos: Vec<thermo::ThermoOut>,
     /// The threads left unmodelled (`Options::cosmetic_threads`), in the part's frame.
     pub threads: Vec<holes::Cosmetic>,
+    /// Where each solid is in `body`: its faces and edges.
+    pub solids: Vec<build::Span>,
     /// An assembly's solve, checks and timings (`asm.rs`).
     pub asm: Option<asm::AsmOut>,
     /// With `Options::anchors`: the anchor text of each face and edge of the finished part.
@@ -204,6 +206,7 @@ pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
                     sheets: vec![],
                     thermos: vec![],
                     threads: vec![],
+                    solids: vec![],
                     asm: None,
                     anchors: None,
                     props: props::Props::default(),
@@ -284,6 +287,11 @@ pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
         sheets: sheet::outputs(&ev),
         thermos: std::mem::take(&mut ev.thermos),
         threads: std::mem::take(&mut ev.threads),
+        solids: if built_all {
+            ev.b.stages.last().map_or(vec![], |s| s.spans().to_vec())
+        } else {
+            vec![]
+        },
         asm: asm_out,
         anchors: None,
         props: std::mem::take(&mut ev.props),

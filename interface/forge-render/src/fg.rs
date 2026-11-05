@@ -924,15 +924,15 @@ fn work(
                 .iter()
                 .map(|o| {
                     let m = forge_thermo::placeholder().material(&o.material).cloned();
-                    let (wall, draft) = m.map_or((0.25, 3.0), |m| {
+                    let draft = m.map_or(3.0, |m| {
                         let d = if o.tool == forge_thermo::Tool::Male {
                             m.draft_male
                         } else {
                             m.draft_female
                         };
-                        (m.min_wall, d.to_degrees() as f32)
+                        d.to_degrees() as f32
                     });
-                    crate::thermo_view::view(o, wall, draft)
+                    crate::thermo_view::view(o, &run.solids, draft)
                 })
                 .collect(),
             view,

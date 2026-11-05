@@ -10,6 +10,7 @@ pub mod fit;
 pub mod material;
 pub mod prepare;
 pub mod scale;
+pub mod simulated;
 pub mod stretch;
 
 pub use build::{FormError, Formed, Report, Spec, Tool, analyse, form, plane_frame};
@@ -21,6 +22,7 @@ pub use material::{
 };
 pub use prepare::{Given, Prepared, prepare};
 pub use scale::{Unscalable, scaled};
+pub use simulated::{MeshMass, Simulated, blank, mesh_mass, simulated};
 pub use stretch::{Law, Process, Step, Stretch, stretch};
 
 #[cfg(test)]

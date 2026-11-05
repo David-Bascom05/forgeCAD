@@ -2,8 +2,9 @@
 //! the sheet's points for probing), the wall-thickness map at each step of the forming, and the
 //! draft analysis's triangles, all lifted off the mould by the sheet's thickness so they lie just
 //! over the formed part's face.
+use crate::mesh::{Lod, PartMesh, SEGMENT, VERTEX};
 use crate::origin::WorldVert;
-use crate::shell::thermo::{DRAFT, ThermoRow, band};
+use crate::shell::thermo::{DRAFT, Masses, ThermoRow, band};
 use crate::shell::thermo_ui::draft_class;
 use forge_lang::thermo::ThermoOut;
 use forge_math::{Point2, Point3, Vec3};
@@ -24,6 +25,29 @@ pub struct Gfx {
     pub vents: Vec<[f32; 3]>,
     /// The sheet's points on the part and the wall there, mm.
     pub points: Vec<([f32; 3], f32)>,
+    /// The simulated part (a mesh fitted from the model) and the blank, as the view draws them,
+    /// and the simulated part's wall map, just off its face.
+    pub sim: Option<Lod>,
+    pub sim_mesh: Option<forge_mesh::TriMesh>,
+    pub sim_heat: Vec<WorldVert>,
+    pub blank: Lod,
+    /// The formed part's and the mould's faces and edges in the part's body.
+    pub part_span: Option<Span>,
+    pub mould_span: Option<Span>,
+}
+
+/// A solid's faces and edges in the part's body.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Span {
+    pub faces: std::ops::Range<u32>,
+    pub edges: std::ops::Range<u32>,
+}
+
+/// Faces numbered from here are no body's: a pick passes them by.
+pub const UNPICKED: u32 = 0x7000_0000;
+
+pub fn unpicked(h: &crate::render::PickHit) -> bool {
+    matches!(h.entity, crate::render::Entity::Face(f) if f >= UNPICKED)
 }
 
 impl Gfx {
@@ -59,7 +83,8 @@ fn axis_word(d: Vec3) -> String {
 
 /// The row and the overlay of a thermoform; `limit` the material's least wall (a fraction of t)
 /// and `draft_min` its least draft for this mould, degrees.
-pub fn view(o: &ThermoOut, limit: f64, draft_min: f32) -> (ThermoRow, Gfx) {
+pub fn view(o: &ThermoOut, spans: &[forge_lang::build::Span], draft_min: f32) -> (ThermoRow, Gfx) {
+    let limit = o.min_wall;
     let f = &o.formed;
     let r = &f.report;
     let male = o.tool == forge_thermo::Tool::Male;
@@ -78,7 +103,22 @@ pub fn view(o: &ThermoOut, limit: f64, draft_min: f32) -> (ThermoRow, Gfx) {
             .collect(),
         // shown through the formed part: lifted off the mould past the sheet
         vents: r.vents.iter().map(|v| f3(*v + d * (o.t * 1.2 + 0.3))).collect(),
+        blank: crate::tess::lod_of_mesh(&o.blank(), UNPICKED + 8),
+        sim: o
+            .sim
+            .as_ref()
+            .map(|s| crate::tess::lod_of_mesh(&s.mesh, UNPICKED)),
+        sim_mesh: o.sim.as_ref().map(|s| s.mesh.clone()),
+        part_span: span_of(spans, o.part_solid),
+        mould_span: span_of(spans, o.mould_solid),
         ..Gfx::default()
+    };
+    let kg = o.density.map(|d| d * 1e-9);
+    let masses = |volume: f64, c: Point3, i: [[f64; 3]; 3]| Masses {
+        volume,
+        mass: kg.map(|k| k * volume),
+        cog: [c.x, c.y, c.z],
+        inertia: kg.map(|k| i.map(|r| r.map(|x| x * k))),
     };
     let mut face_min: Vec<f32> = vec![f32::INFINITY; f.open.len()];
     for &k in &f.contact {
@@ -164,6 +204,17 @@ pub fn view(o: &ThermoOut, limit: f64, draft_min: f32) -> (ThermoRow, Gfx) {
         section_part,
         base,
         limit: limit * o.t,
+        modelled: o
+            .modelled
+            .as_ref()
+            .map(|m| masses(m.volume, m.centroid, m.inertia)),
+        simulated: o
+            .sim
+            .as_ref()
+            .map(|s| masses(s.mass.volume, s.mass.centroid, s.mass.inertia)),
+        density: o.density,
+        passes: o.passes(),
+        unformed: o.walls.as_ref().map_or(0, |w| w.unformed.len()),
         ..ThermoRow::default()
     };
     let Some(w) = &o.walls else {
@@ -217,14 +268,14 @@ pub fn view(o: &ThermoOut, limit: f64, draft_min: f32) -> (ThermoRow, Gfx) {
         let mut tris = Vec::with_capacity(shown.len() * 3);
         for &k in &shown {
             let v = w.tris[k];
-            let mean = v.iter().map(|&i| s.ratio[i as usize]).sum::<f32>() / 3.0 * o.t as f32;
-            let fr = if whi > wlo {
-                ((mean as f64 - wlo) / (whi - wlo)) as f32
-            } else {
-                0.5
-            };
-            let c = band(fr);
             for &i in &v {
+                // each point its band, blended across the triangle
+                let h = s.ratio[i as usize] as f64 * o.t;
+                let c = band(if whi > wlo {
+                    ((h - wlo) / (whi - wlo)) as f32
+                } else {
+                    0.5
+                });
                 let q = n[i as usize];
                 let l = (q[0] * q[0] + q[1] * q[1] + q[2] * q[2]).sqrt().max(1e-12);
                 let p = s.nodes[i as usize];
@@ -248,6 +299,32 @@ pub fn view(o: &ThermoOut, limit: f64, draft_min: f32) -> (ThermoRow, Gfx) {
             .collect();
     }
     gfx.points = row.points.clone();
+    // the simulated part's free side, banded as the model's map is, a hair off it
+    if let Some(sim) = &o.sim {
+        let m = &sim.mesh;
+        let n = sim.wall.len();
+        for (k, tri) in m.triangles.iter().enumerate() {
+            if m.face_of[k] != forge_thermo::simulated::FREE_SIDE {
+                continue;
+            }
+            let up = m
+                .triangle_normal(*tri)
+                .normalize()
+                .map_or(Vec3::ZERO, |u| u.get() * 0.06);
+            for &i in tri {
+                let h = sim.wall[i as usize - n];
+                let c = band(if whi > wlo {
+                    ((h - wlo) / (whi - wlo)) as f32
+                } else {
+                    0.5
+                });
+                gfx.sim_heat.push(WorldVert {
+                    at: f3(m.positions[i as usize] + up),
+                    colour: [c[0], c[1], c[2], 1.0],
+                });
+            }
+        }
+    }
     let below = row.points.iter().filter(|p| (p.1 as f64) < limit * o.t).count();
     facts.push((
         "below limit".into(),
@@ -379,5 +456,88 @@ fn short_law(l: &forge_thermo::Law) -> String {
     match l.terms.len() {
         1 if l.terms[0].1 == 2.0 => format!("neo-Hookean G {:.2} MPa", l.terms[0].0),
         n => format!("Ogden {n}-term"),
+    }
+}
+
+fn span_of(spans: &[forge_lang::build::Span], solid: usize) -> Option<Span> {
+    spans.iter().find(|s| s.solid == solid).map(|s| Span {
+        faces: s.faces.clone(),
+        edges: s.edges.clone(),
+    })
+}
+
+fn f32_at(b: &[u8], at: usize) -> u32 {
+    u32::from_le_bytes(b[at..at + 4].try_into().expect("4 bytes"))
+}
+
+/// The part's mesh with some of its solids' faces and edges left out, and meshes no body has
+/// (the simulated part, the blank) put in: what the thermoform's eyes and state ask for. The faces
+/// kept keep their numbers, so a pick still finds the body's.
+pub fn compose(full: &PartMesh, hide: &[&Span], extra: &[&Lod]) -> PartMesh {
+    let gone_face = |f: u32| hide.iter().any(|s| s.faces.contains(&f));
+    let gone_edge = |e: u32| hide.iter().any(|s| s.edges.contains(&e));
+    let lods = full
+        .lods
+        .iter()
+        .map(|l| {
+            let mut out = Lod {
+                chord: l.chord,
+                vertices: l.vertices.clone(),
+                ..Lod::default()
+            };
+            let mut kept = std::collections::HashSet::new();
+            for f in l.faces.iter().filter(|f| !gone_face(f.face)) {
+                let first = (out.indices.len() / 12) as u32;
+                let (a, b) = (f.first_tri as usize * 12, (f.first_tri + f.tris) as usize * 12);
+                for k in (a..b).step_by(4) {
+                    let v = f32_at(&l.indices, k) as usize * VERTEX;
+                    kept.insert([0, 4, 8].map(|o| f32_at(&l.vertices, v + o)));
+                }
+                out.indices.extend_from_slice(&l.indices[a..b]);
+                out.faces.push(crate::mesh::FaceRange {
+                    first_tri: first,
+                    ..*f
+                });
+            }
+            for e in l.edges.iter().filter(|e| !gone_edge(e.edge)) {
+                let first = (out.segments.len() / SEGMENT) as u32;
+                out.segments.extend_from_slice(
+                    &l.segments[e.first as usize * SEGMENT..(e.first + e.count) as usize * SEGMENT],
+                );
+                out.edges.push(crate::mesh::EdgeRange { first, ..*e });
+            }
+            out.fins = (out.segments.len() / SEGMENT) as u32;
+            // a silhouette's line stays where both its ends are on a face kept
+            for k in l.fins as usize..l.segments.len() / SEGMENT {
+                let s = &l.segments[k * SEGMENT..(k + 1) * SEGMENT];
+                let end = |o: usize| [0, 4, 8].map(|j| f32_at(s, o + j));
+                if kept.contains(&end(0)) && kept.contains(&end(16)) {
+                    out.segments.extend_from_slice(s);
+                }
+            }
+            for x in extra {
+                let base = (out.vertices.len() / VERTEX) as u32;
+                let first = (out.indices.len() / 12) as u32;
+                out.vertices.extend_from_slice(&x.vertices);
+                for k in (0..x.indices.len()).step_by(4) {
+                    out.indices
+                        .extend_from_slice(&(f32_at(&x.indices, k) + base).to_le_bytes());
+                }
+                for f in &x.faces {
+                    out.faces.push(crate::mesh::FaceRange {
+                        first_tri: f.first_tri + first,
+                        first_vertex: f.first_vertex + base,
+                        ..*f
+                    });
+                }
+                out.segments.extend_from_slice(&x.segments);
+            }
+            out
+        })
+        .collect();
+    PartMesh {
+        center: full.center,
+        radius: full.radius,
+        lods,
     }
 }

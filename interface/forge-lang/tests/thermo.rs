@@ -222,3 +222,49 @@ fn the_three_ways_in_give_the_moulds_they_should() {
     );
     assert!((top(&inner) - 35.0 * k).abs() < 1e-6, "{}", top(&inner));
 }
+
+#[test]
+fn a_cover_reports_its_verdict_its_two_masses_and_its_field() {
+    let s = src("cover");
+    let r = built("cover", &s);
+    let o = &r.thermos[0];
+    let j = forge_agent::json::Json::parse(&forge_lang::report::json(&r, &s).to_string()).unwrap();
+    let t = match j.get("thermoforms") {
+        Some(forge_agent::json::Json::Arr(a)) => &a[0],
+        _ => panic!("no thermoforms"),
+    };
+    let num = |path: &[&str]| path.iter().try_fold(t, |j, k| j.get(k)).and_then(|x| x.num());
+    let w = o.walls.as_ref().unwrap();
+    assert_eq!(t.get("verdict").and_then(|v| v.str()), Some("pass"));
+    assert!((num(&["limit", "min_wall"]).unwrap() - o.limit()).abs() < 1e-3);
+    assert!(w.min.0 * o.t >= o.limit());
+    // HIPS: 1040 kg/m3; the modelled part at t, the simulated one thinner everywhere but the top
+    let d = num(&["mass", "density_kg_m3"]).unwrap();
+    assert_eq!(d, 1040.0);
+    let mm = num(&["mass", "modelled", "mass_kg"]).unwrap();
+    let ms = num(&["mass", "simulated", "mass_kg"]).unwrap();
+    let sim = o.sim.as_ref().unwrap();
+    assert!((ms - sim.mass.volume * d * 1e-9).abs() < 1e-3 * ms);
+    // the simulated mass is the wall integrated over the part, to 0.5 %
+    assert!((sim.mass.volume - sim.sheet_volume).abs() < 0.005 * sim.sheet_volume);
+    assert!(ms < mm && ms > 0.4 * mm, "{ms} {mm}");
+    // the field: every point on the part, inside the extremes
+    let field = o.field();
+    assert!(field.len() > 500);
+    assert!(
+        field
+            .iter()
+            .all(|(_, h)| *h >= w.min.0 * o.t - 1e-9 && *h <= w.max.0 * o.t + 1e-9)
+    );
+    // the run says where each solid's faces are: the part's and the mould's together are the body
+    let b = r.body.as_ref().unwrap();
+    let total: u32 = r.solids.iter().map(|x| x.faces.len() as u32).sum();
+    assert_eq!(total as usize, b.faces.len());
+    assert_eq!(b.dead, 0);
+    assert!(r.solids.iter().any(|x| x.solid == o.part_solid));
+    assert!(r.solids.iter().any(|x| x.solid == o.mould_solid));
+    // the blank: the trim's box and the clamp, t thick, closed
+    assert!(o.blank().open_edges().is_empty());
+    let (bw, bl) = o.blank_size();
+    assert!((o.blank().volume() - bw * bl * o.t).abs() < 1e-6 * bw * bl);
+}

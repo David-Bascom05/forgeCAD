@@ -292,3 +292,131 @@ fn a_wall_of_two_thicknesses_is_refused() {
     let e = prepare(&thick, Given::Wall, &spec(Tool::Male), 21).unwrap_err();
     assert!(matches!(e, FormError::WallNotUniform { .. }), "{e:?}");
 }
+
+/// A flat sheet `nx` by `ny` cells of `s`, its wall `h(x, y)` over t at each node.
+fn flat_sheet(nx: usize, ny: usize, s: f64, h: impl Fn(f64, f64) -> f64) -> Stretch {
+    let id = |i: usize, j: usize| (j * (nx + 1) + i) as u32;
+    let mut nodes = vec![];
+    for j in 0..=ny {
+        for i in 0..=nx {
+            nodes.push(forge_math::Point3::new(i as f64 * s, j as f64 * s, 0.0));
+        }
+    }
+    let mut tris = vec![];
+    for j in 0..ny {
+        for i in 0..nx {
+            tris.push([id(i, j), id(i + 1, j), id(i + 1, j + 1)]);
+            tris.push([id(i, j), id(i + 1, j + 1), id(i, j + 1)]);
+        }
+    }
+    let node_ratio: Vec<f64> = nodes.iter().map(|p| h(p.x, p.y)).collect();
+    Stretch {
+        touched: vec![true; nodes.len()],
+        ratio: vec![1.0; tris.len()],
+        node_ratio,
+        nodes,
+        steps: vec![],
+        grid: (nx, ny),
+        tris,
+        min: (1.0, forge_math::Point3::ORIGIN),
+        max: (1.0, forge_math::Point3::ORIGIN),
+        mean: 1.0,
+        unformed: vec![],
+        iterations: 0,
+    }
+}
+
+#[test]
+fn a_flat_sheet_trimmed_weighs_its_trim_times_its_wall() {
+    // the trim cuts across the grid's cells; the wall varies along x
+    let t = 2.0;
+    let st = flat_sheet(40, 30, 2.5, |x, _| 0.5 + 0.01 * x);
+    let trim = [
+        Point2::new(7.3, 6.1),
+        Point2::new(83.7, 6.1),
+        Point2::new(83.7, 61.9),
+        Point2::new(7.3, 61.9),
+    ];
+    let sim = simulated(&Frame::WORLD, &trim, &st, t);
+    assert!(
+        sim.mesh.open_edges().is_empty(),
+        "{:?}",
+        sim.mesh.open_edges().len()
+    );
+    let (w, l) = (83.7 - 7.3, 61.9 - 6.1);
+    let cx = (83.7 + 7.3) / 2.0;
+    let want = t * w * l * (0.5 + 0.01 * cx);
+    let rel = |a: f64, b: f64| (a - b).abs() / b.abs();
+    // a flat sheet: the volume exact; the integral over the wall's middle, which leans with the
+    // wall by 0.01 t / 2, longer by its square over 2
+    assert!(rel(sim.sheet_volume, want) < 1e-4, "{} {want}", sim.sheet_volume);
+    assert!(rel(sim.mass.volume, want) < 1e-9, "{} {want}", sim.mass.volume);
+    assert!(rel(sim.area, w * l) < 1e-9);
+    // uniform wall: a box's centre and inertia
+    let st = flat_sheet(40, 30, 2.5, |_, _| 1.0);
+    let sim = simulated(&Frame::WORLD, &trim, &st, t);
+    let v = w * l * t;
+    let c = sim.mass.centroid;
+    assert!(
+        (c.x - cx).abs() < 1e-9 && (c.y - 34.0).abs() < 1e-9 && (c.z - 1.0).abs() < 1e-9,
+        "{c:?}"
+    );
+    let i = sim.mass.inertia;
+    for (k, want) in [
+        v * (l * l + t * t) / 12.0,
+        v * (w * w + t * t) / 12.0,
+        v * (w * w + l * l) / 12.0,
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        assert!(rel(i[k][k], want) < 1e-9, "I{k}{k} {} {want}", i[k][k]);
+    }
+    assert!(i[0][1].abs() < 1e-6 * i[0][0]);
+}
+
+/// The simulated part of a form: its volume against the integral of its wall, the modelled
+/// part's volume, and the sheet the trim took.
+fn simulated_of(shape: &Body, s: &Spec) -> (Simulated, f64) {
+    let f = form(shape, s, 11).unwrap();
+    let st = stretch(&f, s, &Process::default());
+    let trim = build::polygon(&f.trim);
+    let sim = simulated(&f.frame, &trim, &st, s.t);
+    let modelled = forge_topo::mass::mass(&f.part).unwrap().volume;
+    (sim, modelled)
+}
+
+#[test]
+fn a_formed_part_simulated_weighs_the_integral_of_its_wall() {
+    let cup = {
+        let p = Profile {
+            plane: Frame::WORLD,
+            loops: vec![Profile::circle(Point2::new(0.0, 0.0), 30.0, 0)],
+        };
+        forge_ops::tapered(&p, -30.0, 3f64.to_radians(), 3)
+            .unwrap()
+            .remove(0)
+    };
+    for (name, shape, tool) in [
+        ("box", block(60.0, 40.0, 25.0, 6.0, 5.0), Tool::Male),
+        ("cover", block(120.0, 80.0, 35.0, 8.0, 5.0), Tool::Male),
+        ("cup", cup, Tool::Female),
+    ] {
+        let s = spec(tool);
+        let (sim, modelled) = simulated_of(&shape, &s);
+        let rel = (sim.mass.volume - sim.sheet_volume) / sim.sheet_volume;
+        eprintln!(
+            "{name}: volume {:.1} integral {:.1} rel {rel:.5} modelled {modelled:.1} ({:.3}) open {}",
+            sim.mass.volume,
+            sim.sheet_volume,
+            sim.mass.volume / modelled,
+            sim.mesh.open_edges().len()
+        );
+        assert!(sim.mesh.open_edges().is_empty(), "{name}");
+        // measured 0.10 to 0.24 %: the wall's curvature, second order in it
+        assert!(rel.abs() < 0.005, "{name}: {rel}");
+        // the sheet thins: well under the modelled wall's, and more than the sheet's least
+        let r = sim.mass.volume / modelled;
+        assert!((0.45..0.75).contains(&r), "{name}: {r}");
+    }
+}

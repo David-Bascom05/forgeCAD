@@ -8,7 +8,9 @@ use std::collections::HashMap;
 use std::io::{BufRead, Write};
 use std::process::ExitCode;
 
-const USAGE: &str = "fg run FILE [--json] [--render OUT.png] [--view iso|front|top|right|..] [--px N] [--dxf OUT.dxf] [--step OUT.step]
+const USAGE: &str = "fg run FILE [--json] [--render OUT.png] [--view iso|front|top|right|..] [--px N] [--dxf OUT.dxf] [--step OUT.step] [--field OUT.csv]
+                                --field: each thermoform's wall at each point as CSV; the JSON
+                                names the file in place of its points
 fg run DRAWING.fg [--pdf OUT] [--dxf OUT] [--svg OUT] [--refs VIEW]   a drawing: its sheets, report or a view's references
 fg check FILE [--json]          parse, static rules, types and dimensions; no kernel
 fg edit FILE 'OP' [--json]      apply a typed op (JSON, as errors' fixes give them), then check
@@ -270,12 +272,65 @@ fn run_src(file: &str, src: &str, args: &[String], build: bool, o: &mut Output) 
     if let Some(out) = opt(args, "--step") {
         wrote = write_step(&run, out, &stem(file), o);
     }
+    let fields = opt(args, "--field").map(|out| write_fields(&run, out));
     if flag(args, "--json") {
-        o.json(&report::json(&run, src));
+        let mut j = report::json(&run, src);
+        if let Some(files) = &fields {
+            point_fields(&mut j, files);
+        }
+        o.json(&j);
     } else {
         o.stdout.push_str(&report::text(&run, src));
     }
     o.code = if run.ok() && wrote { 0 } else { 1 };
+}
+
+/// Each thermoform's thickness field as CSV: at `out`, or `out` less .csv then -ID.csv when there
+/// are several. Returns each id's file, or why it wasn't written.
+fn write_fields(run: &forge_lang::Run, out: &str) -> Vec<(String, Result<String, String>)> {
+    let many = run.thermos.len() > 1;
+    run.thermos
+        .iter()
+        .map(|o| {
+            let file = if many {
+                format!("{}-{}.csv", out.trim_end_matches(".csv"), o.id)
+            } else {
+                out.to_string()
+            };
+            let r = std::fs::write(&file, o.field_csv())
+                .map(|_| file)
+                .map_err(|e| e.to_string());
+            (o.id.clone(), r)
+        })
+        .collect()
+}
+
+/// The report's fields named by their files in place of the points written there.
+fn point_fields(j: &mut Json, files: &[(String, Result<String, String>)]) {
+    let Json::Obj(top) = j else { return };
+    let Some((_, Json::Arr(ts))) = top.iter_mut().find(|f| f.0 == "thermoforms") else {
+        return;
+    };
+    for t in ts {
+        let id = t.get("id").and_then(Json::str).unwrap_or_default().to_string();
+        let Json::Obj(f) = t else { continue };
+        let Some((_, Json::Obj(field))) = f.iter_mut().find(|x| x.0 == "field") else {
+            continue;
+        };
+        let Some((_, got)) = files.iter().find(|x| x.0 == id) else {
+            continue;
+        };
+        let n = field.iter().find(|x| x.0 == "points").map_or(0, |x| match &x.1 {
+            Json::Arr(a) => a.len(),
+            _ => 0,
+        });
+        field.retain(|x| x.0 != "points");
+        field.push(("count".into(), n.into()));
+        match got {
+            Ok(file) => field.push(("csv".into(), file.as_str().into())),
+            Err(e) => field.push(("error".into(), e.as_str().into())),
+        }
+    }
 }
 
 fn view_file(file: &str, args: &[String]) -> ExitCode {

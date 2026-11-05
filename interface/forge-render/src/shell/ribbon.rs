@@ -336,14 +336,23 @@ fn groups(s: &Shell) -> Vec<Group> {
         .into_iter()
         // a Forge part has sheet metal: its own tab, as Inventor's Convert to Sheet Metal gives
         .chain((s.fg.is_some() && !s.sheet.env).then(|| {
+            let (name, icon, action, on) = super::thermo_ui::convert_button(s);
             g(
                 "Convert",
-                vec![go(
-                    "Convert to Sheet Metal",
-                    "smface",
-                    Action::Sheet(super::sheet::SheetCmd::Convert),
-                    false,
-                )],
+                vec![
+                    go(
+                        "Convert to Sheet Metal",
+                        "smface",
+                        Action::Sheet(super::sheet::SheetCmd::Convert),
+                        false,
+                    ),
+                    Tool {
+                        name,
+                        icon,
+                        action,
+                        on,
+                    },
+                ],
                 vec![],
             )
         }))

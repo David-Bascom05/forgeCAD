@@ -280,6 +280,81 @@ pub fn build_lod(body: &Body, q: &Quality) -> Result<Lod, TessError> {
     Ok(lod)
 }
 
+/// A mesh with no B-rep behind it (a model's fit): smooth within each of its patches (`face_of`),
+/// the patches' borders drawn as edges, its faces numbered from `face` (none of them a body's).
+/// Its lines are all past `fins`, so a pick never finds an edge of it.
+pub fn lod_of_mesh(m: &forge_mesh::TriMesh, face: u32) -> Lod {
+    let mut lod = Lod {
+        chord: 0.05,
+        ..Lod::default()
+    };
+    let patches = m.face_of.iter().copied().max().map_or(0, |x| x + 1);
+    let mut vertices = 0u32;
+    for patch in 0..patches {
+        let tris: Vec<usize> = (0..m.triangles.len())
+            .filter(|&t| m.face_of[t] == patch)
+            .collect();
+        if tris.is_empty() {
+            continue;
+        }
+        let mut n: HashMap<u32, Vec3> = HashMap::new();
+        for &t in &tris {
+            let tri = m.triangles[t];
+            let tn = m.triangle_normal(tri);
+            for v in tri {
+                *n.entry(v).or_insert(Vec3::new(0.0, 0.0, 0.0)) += tn;
+            }
+        }
+        let first_vertex = vertices;
+        let first_tri = (lod.indices.len() / 12) as u32;
+        let mut own: HashMap<u32, u32> = HashMap::new();
+        for &t in &tris {
+            for v in m.triangles[t] {
+                let i = *own.entry(v).or_insert_with(|| {
+                    point(&mut lod.vertices, m.positions[v as usize]);
+                    let u = n[&v].normalize().map_or(Vec3::new(0.0, 0.0, 1.0), |u| u.get());
+                    pair(&mut lod.vertices, oct(u));
+                    vertices += 1;
+                    vertices - 1
+                });
+                lod.indices.extend_from_slice(&i.to_le_bytes());
+            }
+        }
+        lod.faces.push(FaceRange {
+            face: face + patch,
+            first_tri,
+            tris: tris.len() as u32,
+            first_vertex,
+            vertices: vertices - first_vertex,
+        });
+    }
+    // the patches' borders always, and where the surface turns, for a silhouette
+    let mut sides: Vec<(u32, u32, usize)> = m
+        .triangles
+        .iter()
+        .enumerate()
+        .flat_map(|(t, &[a, b, c])| [(a, b), (b, c), (c, a)].map(|(x, y)| (x.min(y), x.max(y), t)))
+        .collect();
+    sides.sort_unstable();
+    for side in sides.chunk_by(|x, y| (x.0, x.1) == (y.0, y.1)) {
+        let [p, q] = side else { continue };
+        let (a, b) = (m.positions[p.0 as usize], m.positions[p.1 as usize]);
+        if m.face_of[p.2] != m.face_of[q.2] {
+            segment(&mut lod.segments, a, b, [ALWAYS, 0], [0, 0]);
+            continue;
+        }
+        let unit = |t: usize| m.triangle_normal(m.triangles[t]).normalize();
+        let (Some(x), Some(y)) = (unit(p.2), unit(q.2)) else {
+            continue;
+        };
+        if x.get().dot(y.get()) > FLAT_COS {
+            continue;
+        }
+        segment(&mut lod.segments, a, b, oct(x.get()), oct(y.get()));
+    }
+    lod
+}
+
 fn vec3_at(b: &[u8], at: usize) -> [f32; 3] {
     [0, 4, 8].map(|k| f32::from_le_bytes(b[at + k..at + k + 4].try_into().expect("4 bytes")))
 }

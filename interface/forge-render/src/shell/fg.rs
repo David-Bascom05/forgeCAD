@@ -648,7 +648,6 @@ impl Shell {
                     }
                 }
                 let mut hidden: Option<String> = None;
-                super::thermo_ui::tree_heading(ui, &t, &fg, area.width(), "SHAPE", "what you modelled");
                 for row in &rows {
                     if let Some(h) = &hidden {
                         if row.key.starts_with(h.as_str()) && row.key != *h {
@@ -817,11 +816,23 @@ impl Shell {
                         }
                     });
                     places.push((format!("fg:row:{}", row.key), r));
+                    if kind == Some("thermoform") {
+                        super::thermo_ui::feature_row(&resp, &mut fg, &mut places, &row.key);
+                        let x0 = x - r.left();
+                        super::thermo_ui::tree_children(
+                            ui,
+                            &t,
+                            &mut fg,
+                            area.width(),
+                            &row.key,
+                            x0,
+                            &mut places,
+                        );
+                    }
                     if row.group && !open {
                         hidden = Some(row.key.clone());
                     }
                 }
-                super::thermo_ui::tree_generated(ui, &t, &mut fg, area.width(), &mut places);
             });
         if let Some(k) = toggle
             && !fg.collapsed.remove(&k)

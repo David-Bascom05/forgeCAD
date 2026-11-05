@@ -808,7 +808,14 @@ thermoform(SHAPE, t: T, material: "ABS" | MATERIAL, from: "outer"|"wall"|"inner"
 - `fg run --json` lists each thermoform: depth, formed and opening areas, the areal draw ratio, the
   mean wall t / ADR, the largest linear draw ratio along a row or column, the trim's size, the
   mould's scale, the vents, and `walls`: min (mm) and where, max and where, mean, the points that
-  never reached the mould, the sheet's temperature and the law it read, with its source.
+  never reached the mould, the sheet's temperature and the law it read, with its source; `limit`
+  (the material's thinnest wall, mm, and as a fraction of t), `verdict` ("pass": no wall under the
+  limit and the sheet on the mould everywhere, else "warn"), `mass` (the material's density, and
+  for `modelled`, the part at t, and `simulated`, the wall rebuilt at the model's thickness at each
+  point: volume mm3, mass kg, cog mm, inertia about it kg mm2; its volume is within 0.5 % of
+  `wall_integral_mm3`, the wall integrated over its middle surface), `blank` (W, L, t, mass) and
+  `field`, the wall at each point of the sheet on the mould inside the trim (x, y, z on the mould,
+  wall, mm); `fg run F --json --field OUT.csv` writes the points to a file and names it instead.
 
 The shop is data: the `thermo.*` values of the material library's records (kernel/forge-material;
 a project's materials/*.toml and the user's ~/.config/forgecad/materials/*.toml are searched

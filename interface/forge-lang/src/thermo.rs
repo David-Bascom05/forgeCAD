@@ -54,6 +54,94 @@ pub struct ThermoOut {
     /// The sheet's temperature and the law the model read at it.
     pub temperature: f64,
     pub law: ft::LawAt,
+    /// The thinnest wall the material allows, over the sheet's.
+    pub min_wall: f64,
+    /// The material's density, kg/m3 (None: its record has none).
+    pub density: Option<f64>,
+    /// The blank asked for (None: the trim's box and the clamp's).
+    pub sheet: Option<(f64, f64)>,
+    /// The part as the thickness model leaves it, and the modelled part's exact mass, unit density.
+    pub sim: Option<Rc<ft::Simulated>>,
+    pub modelled: Option<forge_topo::mass::MassProps>,
+    /// The part's solids, by the id the stages give them: the mould's and the formed part's.
+    pub mould_solid: usize,
+    pub part_solid: usize,
+}
+
+/// The clamp's margin round the trim, each side, for the blank.
+const CLAMP: f64 = 25.0;
+
+impl ThermoOut {
+    /// The thinnest wall allowed, mm.
+    pub fn limit(&self) -> f64 {
+        self.min_wall * self.t
+    }
+
+    /// Passes: the thinnest wall at the limit or over, and the sheet reaching the tool everywhere.
+    pub fn passes(&self) -> Option<bool> {
+        let w = self.walls.as_ref()?;
+        Some(w.min.0 * self.t >= self.limit() && w.unformed.is_empty())
+    }
+
+    /// The blank, (W, L) on the trim plane's axes.
+    pub fn blank_size(&self) -> (f64, f64) {
+        let (lo, hi) = self.formed.report.trim_box;
+        self.sheet
+            .unwrap_or((hi.x - lo.x + 2.0 * CLAMP, hi.y - lo.y + 2.0 * CLAMP))
+    }
+
+    /// The blank where the sheet starts, before it is formed.
+    pub fn blank(&self) -> forge_mesh::TriMesh {
+        let f = &self.formed;
+        let (lo, hi) = f.report.trim_box;
+        let z = self
+            .walls
+            .as_ref()
+            .and_then(|w| w.steps.first())
+            .and_then(|s| s.nodes.first())
+            .map_or(0.0, |p| {
+                f.frame
+                    .point_to_local(Point3::new(p[0] as f64, p[1] as f64, p[2] as f64))
+                    .z
+            });
+        let mid = Point2::new(0.5 * (lo.x + hi.x), 0.5 * (lo.y + hi.y));
+        ft::blank(&f.frame, mid, self.blank_size(), z, self.t)
+    }
+
+    /// The wall at each point of the sheet on the part (inside the trim, on the tool): where
+    /// (world, the tool's side) and how thick, mm.
+    pub fn field(&self) -> Vec<(Point3, f64)> {
+        let Some(w) = &self.walls else { return vec![] };
+        let f = &self.formed;
+        let poly = ft::build::polygon(&f.trim);
+        (0..w.nodes.len())
+            .filter(|&k| {
+                let l = f.frame.point_to_local(w.nodes[k]);
+                w.touched[k] && ft::build::inside(&poly, Point2::new(l.x, l.y)).0
+            })
+            .map(|k| (w.nodes[k], w.node_ratio[k] * self.t))
+            .collect()
+    }
+
+    /// A mass, centre and inertia as JSON: the volume's mm3, kg, mm, kg mm2.
+    fn mass_json(&self, volume: f64, centroid: Point3, inertia: [[f64; 3]; 3]) -> Json {
+        let kg = self.density.map(|d| d * 1e-9);
+        let m = |k: f64| kg.map_or(Json::Null, |kg| (k * kg).into());
+        let rows = |f: &dyn Fn(f64) -> Json| {
+            Json::Arr(
+                inertia
+                    .iter()
+                    .map(|r| Json::Arr(r.iter().map(|x| f(*x)).collect()))
+                    .collect(),
+            )
+        };
+        Json::obj(vec![
+            ("volume_mm3", volume.into()),
+            ("mass_kg", m(volume)),
+            ("cog_mm", p3(centroid)),
+            ("inertia_kg_mm2", rows(&m)),
+        ])
+    }
 }
 
 impl ThermoOut {
@@ -135,7 +223,83 @@ impl ThermoOut {
             ),
         ];
         f.extend(walls);
+        f.push((
+            "limit",
+            Json::obj(vec![
+                ("min_wall", self.limit().into()),
+                ("min_wall_of_t", self.min_wall.into()),
+            ]),
+        ));
+        f.push((
+            "verdict",
+            match self.passes() {
+                Some(true) => "pass".into(),
+                Some(false) => "warn".into(),
+                None => "no model (walls: false)".into(),
+            },
+        ));
+        let mut mass = vec![("density_kg_m3", self.density.map_or(Json::Null, Json::from))];
+        if let Some(m) = &self.modelled {
+            mass.push(("modelled", self.mass_json(m.volume, m.centroid, m.inertia)));
+        }
+        if let Some(s) = &self.sim {
+            mass.push((
+                "simulated",
+                self.mass_json(s.mass.volume, s.mass.centroid, s.mass.inertia),
+            ));
+            mass.push(("wall_integral_mm3", s.sheet_volume.into()));
+        }
+        if let (Some(m), Some(s)) = (&self.modelled, &self.sim) {
+            mass.push(("simulated_over_modelled", (s.mass.volume / m.volume).into()));
+        }
+        f.push(("mass", Json::obj(mass)));
+        let (bw, bl) = self.blank_size();
+        f.push((
+            "blank",
+            Json::obj(vec![
+                ("size", Json::Arr(vec![bw.into(), bl.into()])),
+                ("t", self.t.into()),
+                (
+                    "mass_kg",
+                    self.density
+                        .map_or(Json::Null, |d| (bw * bl * self.t * d * 1e-9).into()),
+                ),
+            ]),
+        ));
+        if self.walls.is_some() {
+            let pts = self.field();
+            f.push((
+                "field",
+                Json::obj(vec![
+                    (
+                        "columns",
+                        Json::Arr(["x", "y", "z", "wall"].map(Json::from).to_vec()),
+                    ),
+                    ("unit", "mm".into()),
+                    ("at", "the sheet's side on the tool, inside the trim".into()),
+                    (
+                        "points",
+                        Json::Arr(
+                            pts.iter()
+                                .map(|(p, h)| {
+                                    Json::Arr(vec![p.x.into(), p.y.into(), p.z.into(), (*h).into()])
+                                })
+                                .collect(),
+                        ),
+                    ),
+                ]),
+            ));
+        }
         Json::obj(f)
+    }
+
+    /// The thickness field as CSV: x, y, z, wall, mm.
+    pub fn field_csv(&self) -> String {
+        let mut s = String::from("x_mm,y_mm,z_mm,wall_mm\n");
+        for (p, h) in self.field() {
+            s += &format!("{:.3},{:.3},{:.3},{:.4}\n", p.x, p.y, p.z, h);
+        }
+        s
     }
 }
 
@@ -1164,6 +1328,26 @@ fn thermoform(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
                 &shop,
                 &nums,
             );
+            // the part as the model leaves it, and the modelled one's mass, both kept with it
+            let sim = st.as_ref().map(|w| {
+                let key = format!("thermoform simulated {key} {walls:?}");
+                ev.b.memo(key, || {
+                    let trim = ft::build::polygon(&f.trim);
+                    Rc::new(ft::simulated(&f.frame, &trim, w, prep.t))
+                })
+            });
+            let modelled = ev.b.memo(format!("thermoform modelled {key}"), || {
+                forge_topo::mass::mass(&f.part).ok()
+            });
+            let mould_solid =
+                ev.b.stages
+                    .get(before_n.wrapping_sub(1))
+                    .and_then(|st| shape_of(&st.solids, shape.idx).map(|s| s.id))
+                    .unwrap_or(shape.idx);
+            let density = forge_material::Libraries::cached(ev.dir.as_deref())
+                .find(&m.name)
+                .map(|x| x.1.density)
+                .filter(|d| *d > 0.0);
             ev.thermos.push(ThermoOut {
                 id: id.clone(),
                 material: m.name.clone(),
@@ -1174,6 +1358,13 @@ fn thermoform(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
                 walls: st,
                 temperature,
                 law: m.law_at(temperature),
+                min_wall: m.min_wall,
+                density,
+                sheet,
+                sim,
+                modelled,
+                mould_solid,
+                part_solid: solid,
             });
         }
     }
