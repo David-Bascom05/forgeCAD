@@ -436,6 +436,8 @@ thermo.demould = 82
 source_thermo.demould = "Spartech, Extruded sheet and rollstock thermoforming information, rev. 7/2024, https://www.spartech.com/media/documents/SPA221015-Thermoforming-Data-Sheet.pdf; maximum demould temperature (high-impact ABS)"
 thermo.tg = 111
 source_thermo.tg = "Wang, Hopmann et al., Continuous Two-Domain Equations of State for the Description of the PVT Behavior of Polymers, Polymers 12(2):409 (2020), https://doi.org/10.3390/polym12020409; ABS transition temperature at atmospheric pressure, 111.2 C"
+thermo.wlf = [170, 5.8, 120.8]
+source_thermo.wlf = "Cha, Kim, Park, Go, Int. J. Adv. Manuf. Technol. 103:985-995 (2019), https://doi.org/10.1007/s00170-019-03408-8; WLF shift of ABS from oscillatory shear at 140-200 C: Tref 170 C, C1 5.8, C2 120.8 K"
 
 [[material]]
 name = "PC"
@@ -774,6 +776,8 @@ thermo.demould = 79
 source_thermo.demould = "Spartech, Extruded sheet and rollstock thermoforming information, rev. 7/2024, https://www.spartech.com/media/documents/SPA221015-Thermoforming-Data-Sheet.pdf; maximum demould temperature (HIPS)"
 thermo.tg = 105
 source_thermo.tg = "Atmani, Abbes F., Li, Batkam, Abbes B., Experimental investigation and constitutive modelling of the deformation behaviour of high impact polystyrene for plug-assisted thermoforming, Mechanics & Industry 21:607 (2020), https://doi.org/10.1051/meca/2020084; DMA loss-modulus peak at 1 Hz, about 105 C"
+thermo.arrhenius = 197
+source_thermo.arrhenius = "Atmani, Abbes F., Li, Batkam, Abbes B., Mechanics & Industry 21:607 (2020), https://doi.org/10.1051/meca/2020084; Arrhenius temperature dependence of the modulus, A_E = 23675 K (Ea = A_E R = 197 kJ/mol), fitted 100-140 C"
 
 [[material]]
 name = "PTFE"

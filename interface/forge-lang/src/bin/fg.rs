@@ -295,9 +295,11 @@ fn put_prints(j: &mut Json, run: &forge_lang::Run, art: &str, out: &str) {
     let Some((_, Json::Arr(ts))) = top.iter_mut().find(|f| f.0 == "thermoforms") else {
         return;
     };
+    // an image's top row is the trim's far edge, seen from above
     let image = std::fs::read(art)
         .ok()
-        .and_then(|b| forge_lang::thermo::Image::from_ppm(&b));
+        .and_then(|b| forge_lang::thermo::Image::from_ppm(&b))
+        .map(|i| i.flipped());
     let many = run.thermos.len() > 1;
     for (t, o) in ts.iter_mut().zip(&run.thermos) {
         let Json::Obj(f) = t else { continue };
@@ -324,7 +326,8 @@ fn put_prints(j: &mut Json, run: &forge_lang::Run, art: &str, out: &str) {
             width: p.width,
             height: p.height,
             rgb: p.rgb.clone(),
-        };
+        }
+        .flipped();
         let done = std::fs::write(&file, img.to_ppm());
         f.push((
             "print".into(),

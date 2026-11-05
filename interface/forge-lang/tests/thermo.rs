@@ -365,3 +365,31 @@ fn a_cover_prints_an_artwork_that_forms_into_place() {
         "{j}"
     );
 }
+
+/// The process options in the text: a plate's bending, a plug (dry or lubricated) driven in before
+/// the vacuum, and a sheet hotter in its middle than at its edge (by the material's temperature
+/// shift). Each forms, and moves the wall from the plain forming; uneven heating on a sheet with
+/// no shift on record is refused.
+#[test]
+fn the_process_options_form_and_move_the_wall() {
+    let base = src("cup");
+    let plain = run(&base);
+    let thinnest = |r: &Run| r.thermos[0].walls.as_ref().map(|w| w.min.0).expect("formed");
+    let with = |extra: &str, material: &str| {
+        base.replace(
+            "material: \"PETG\", tool: \"female\")",
+            &format!("material: \"{material}\", tool: \"female\"{extra})"),
+        )
+    };
+    for extra in [", bending: true", ", plug: \"dry\", plug_stroke: 40", ", plug: \"lubricated\", plug_stroke: 40"] {
+        let r = run(&with(extra, "PETG"));
+        assert!(r.ok(), "{extra}: {:?}", r.errors);
+        assert!((thinnest(&r) - thinnest(&plain)).abs() > 1e-6, "{extra} moved nothing");
+    }
+    let hips = run(&with("", "HIPS"));
+    let hot = run(&with(", heat_edge: 150", "HIPS"));
+    assert!(hot.ok(), "{:?}", hot.errors);
+    assert!((thinnest(&hot) - thinnest(&hips)).abs() > 1e-6);
+    let refused = run(&with(", heat_edge: 150", "PETG"));
+    assert!(!refused.ok());
+}

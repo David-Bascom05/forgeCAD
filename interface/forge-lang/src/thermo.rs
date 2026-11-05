@@ -152,17 +152,13 @@ impl ThermoOut {
     /// The flat sheet's print (distortion printing) that forms into `art`, an image spanning the
     /// trim's box seen along the pull (row 0 at its least y), at `pixel` mm; None unformed.
     pub fn print(&self, art: &Image, pixel: f64) -> Option<ft::surface::Print> {
-        let w = self.walls.as_ref()?;
-        let (lo, hi) = self.formed.report.trim_box;
-        let look = |x: f64, y: f64| {
-            let (u, v) = ((x - lo.x) / (hi.x - lo.x), (y - lo.y) / (hi.y - lo.y));
-            if !(0.0..1.0).contains(&u) || !(0.0..1.0).contains(&v) {
-                return None;
-            }
-            let (c, r) = ((u * art.width as f64) as usize, (v * art.height as f64) as usize);
-            art.rgb.get(r * art.width + c).copied()
-        };
-        ft::surface::print(w, &self.formed.frame, pixel, &look, [255; 3])
+        print_of(
+            self.walls.as_ref()?,
+            &self.formed.frame,
+            self.formed.report.trim_box,
+            art,
+            pixel,
+        )
     }
 
     pub fn json(&self) -> Json {
@@ -1074,6 +1070,14 @@ const ARGS: &[&str] = &[
     "walls",
     "pressure",
     "temperature",
+    "bending",
+    "plug",
+    "plug_diameter",
+    "plug_nose",
+    "plug_edge",
+    "plug_start",
+    "plug_stroke",
+    "heat_edge",
 ];
 
 /// The materials a document finds: its project's library (materials/ beside it), the user's, then
@@ -1266,6 +1270,54 @@ fn thermoform(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         None | Some(Value::Bool(true)) => Some(ft::Process {
             law: m.law_at(temperature).law,
             pressure: a.num("pressure", RATIO)?.map_or(0.09, |n| n.v),
+            bending: match a.opt("bending") {
+                None | Some(Value::Bool(false)) => false,
+                Some(Value::Bool(true)) => true,
+                Some(o) => return Err(wrong(a.span("bending"), "bending: true or false", Ty::Bool, &o)),
+            },
+            plug: match crate::wired::word(&a, "plug", &["dry", "lubricated"])? {
+                None => None,
+                Some(how) => {
+                    let len = |k: &'static str, or: f64| -> R<f64> { Ok(a.num(k, LEN)?.map_or(or, |n| n.v)) };
+                    Some(ft::Plug {
+                        at: None,
+                        radius: 0.5 * len("plug_diameter", 42.0)?,
+                        nose: len("plug_nose", 90.0)?,
+                        edge: len("plug_edge", 10.0)?,
+                        start: len("plug_start", 20.0)?,
+                        stroke: num_of(
+                            a.req("plug_stroke")?,
+                            LEN,
+                            a.span("plug_stroke"),
+                            "how far below the sheet the plug's tip goes",
+                        )?
+                        .v,
+                        steps: 40,
+                        slip: how == "lubricated",
+                    })
+                }
+            },
+            heat: match a.num("heat_edge", ANY)? {
+                None => None,
+                Some(n) => Some(ft::Heat {
+                    at: None,
+                    profile: vec![],
+                    edge: Some(n.v),
+                    shift: match m.shift {
+                        Some(s) => s,
+                        None => {
+                            return Err(wrong(
+                                a.span("heat_edge"),
+                                "a sheet with a temperature shift on record (thermo.wlf or thermo.arrhenius: ABS, HIPS)",
+                                Ty::Num,
+                                &Value::Num(n),
+                            ));
+                        }
+                    },
+                    temp: temperature,
+                    power: 1.0,
+                }),
+            },
             ..ft::Process::default()
         }),
         Some(o) => return Err(wrong(a.span("walls"), "walls: true or false", Ty::Bool, &o)),
@@ -1798,6 +1850,27 @@ fn nearest_face(f: &ft::Formed, shape: &Body, at: Point3) -> Option<forge_topo::
     Some(shape.face(forge_topo::FaceId(f.mesh.face_of[t])).name)
 }
 
+/// The distortion print of `w` (formed on the trim plane `frame`) that forms into `art`, an image
+/// spanning the trim's box `trim` seen along the pull (row 0 at its least y), at `pixel` mm.
+pub fn print_of(
+    w: &ft::Stretch,
+    frame: &forge_math::Frame,
+    trim: (Point2, Point2),
+    art: &Image,
+    pixel: f64,
+) -> Option<ft::surface::Print> {
+    let (lo, hi) = trim;
+    let look = |x: f64, y: f64| {
+        let (u, v) = ((x - lo.x) / (hi.x - lo.x), (y - lo.y) / (hi.y - lo.y));
+        if !(0.0..1.0).contains(&u) || !(0.0..1.0).contains(&v) {
+            return None;
+        }
+        let (c, r) = ((u * art.width as f64) as usize, (v * art.height as f64) as usize);
+        art.rgb.get(r * art.width + c).copied()
+    };
+    ft::surface::print(w, frame, pixel, &look, [255; 3])
+}
+
 /// An RGB image, row 0 first.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Image {
@@ -1837,6 +1910,16 @@ impl Image {
             height,
             rgb: data.chunks(3).map(|c| [c[0], c[1], c[2]]).collect(),
         })
+    }
+
+    /// Its rows the other way up: an image file's top row first to the trim plane's least y first.
+    pub fn flipped(&self) -> Image {
+        let rows: Vec<&[[u8; 3]]> = self.rgb.chunks(self.width.max(1)).rev().collect();
+        Image {
+            width: self.width,
+            height: self.height,
+            rgb: rows.concat(),
+        }
     }
 
     pub fn to_ppm(&self) -> Vec<u8> {

@@ -38,6 +38,10 @@ pub enum Analysis {
     None,
     Draft,
     Thickness,
+    /// The larger principal stretch over the sheet on the part.
+    Stretch,
+    /// Where the sheet gathers and folds onto itself.
+    Webbing,
 }
 
 /// What of the thermoform shows: its eyes in the browser.
@@ -146,6 +150,8 @@ pub enum Export {
     TrimDxf,
     ProcessPdf,
     ThicknessCsv,
+    /// The flat sheet's print that forms into an artwork (asks for the artwork).
+    DistortionPrint,
 }
 
 /// A material as Convert offers it: its name, its law's source, its forming window and normal
@@ -1222,7 +1228,7 @@ impl Shell {
             .show_placed(ctx, places, |ui, places| {
                 ui.spacing_mut().item_spacing.y = 6.0;
                 close = head(ui, t, "thicken", &format!("Formed Part · {}", f.id), w, places, "thermo:form");
-                tabs(ui, t, &["Shape", "Trim", "Plug"], &mut f.tab, w, places, "thermo:form:tab");
+                tabs(ui, t, &["Shape", "Trim", "Plug", "Advanced"], &mut f.tab, w, places, "thermo:form:tab");
                 ui.add_space(4.0);
                 let a = &mut f.args;
                 match f.tab {
@@ -1284,13 +1290,47 @@ impl Shell {
                             set(a, "sheet", format!("({}, {})", pair[0].1, pair[1].1));
                         }
                     }
+                    2 => {
+                        let modes = ["", "\"dry\"", "\"lubricated\""];
+                        row(ui, t, "Plug assist", w, 34.0, |ui| {
+                            let mut k = modes.iter().position(|m| arg(a, "plug").unwrap_or("") == *m).unwrap_or(0);
+                            toggles(ui, t, &mut k, &["None", "Dry", "Lubricated"], "thermo:form:plug", places);
+                            set(a, "plug", modes[k].to_string());
+                        });
+                        if arg(a, "plug").is_some_and(|p| !p.is_empty()) {
+                            field(ui, t, "Stroke", a, "plug_stroke", "below the sheet", "mm", w, places);
+                            field(ui, t, "Diameter", a, "plug_diameter", "42", "mm", w, places);
+                            field(ui, t, "Nose radius", a, "plug_nose", "90", "mm", w, places);
+                            field(ui, t, "Edge radius", a, "plug_edge", "10", "mm", w, places);
+                            field(ui, t, "Starts above", a, "plug_start", "20", "mm", w, places);
+                            note(
+                                ui,
+                                "A round plug at the trim's middle, driven in before the vacuum (a female mould's). Dry: the sheet sticks where it touches it; lubricated: it slides on it.",
+                                w,
+                                t.ink2,
+                            );
+                        } else {
+                            note(ui, "The sheet forms by the vacuum alone.", w, t.ink2);
+                        }
+                    }
                     _ => {
-                        row(ui, t, "Plug assist", w, 32.0, |ui| {
-                            ui.add_enabled(false, egui::Button::new(egui::RichText::new("Pick a plug body").font(sans(13.0))));
+                        heading(ui, t, "Bending", w);
+                        row(ui, t, "Sheet stiffness", w, 34.0, |ui| {
+                            let mut k = usize::from(arg(a, "bending") == Some("true"));
+                            toggles(ui, t, &mut k, &["Membrane", "Plate"], "thermo:form:bending", places);
+                            set(a, "bending", if k == 1 { "true".into() } else { String::new() });
                         });
                         note(
                             ui,
-                            "The thickness model forms by drape and vacuum only. A plug (a rigid tool the sheet sticks to) is its next step.",
+                            "Plate: the sheet also bends as a plate of its thickness (closer at tight rounds; forming takes about 5-15 % longer).",
+                            w,
+                            t.ink2,
+                        );
+                        heading(ui, t, "Uneven heating", w);
+                        field(ui, t, "Edge temperature", a, "heat_edge", "the same as the middle", "°C", w, places);
+                        note(
+                            ui,
+                            "The sheet at the temperature above in its middle and this at the window's edge, each part as stiff as the material's temperature shift says (ABS, HIPS).",
                             w,
                             t.ink2,
                         );
@@ -1419,6 +1459,10 @@ impl Shell {
                     [
                         ("Trim line · DXF", Export::TrimDxf),
                         ("Process sheet · PDF", Export::ProcessPdf),
+                    ],
+                    [
+                        ("Distortion print…", Export::DistortionPrint),
+                        ("Wall · CSV", Export::ThicknessCsv),
                     ],
                 ] {
                     ui.horizontal(|ui| {
@@ -1550,24 +1594,63 @@ impl Shell {
                     w,
                     t.ink,
                 );
+                if let Some([l1, area, uneven]) = r.stretch {
+                    heading(ui, t, "Stretch", w);
+                    fact(ui, t, "Most stretched (principal)", &format!("{l1:.2} ×"), w, t.ink);
+                    fact(ui, t, "Most stretched (area)", &format!("{area:.2} ×"), w, t.ink);
+                    fact(ui, t, "Most uneven (l1 / l2)", &format!("{uneven:.2}"), w, t.ink);
+                }
+                if let Some((gathered, folds)) = r.web {
+                    heading(ui, t, "Webbing", w);
+                    let ink = if folds > 0 { super::fg::WARN } else { t.ink };
+                    fact(ui, t, "Gathered (flat sheet)", &format!("{gathered:.0} mm²"), w, ink);
+                    fact(ui, t, "Folds onto itself", &format!("{folds}"), w, ink);
+                    if folds > 0 {
+                        note(
+                            ui,
+                            &format!("The sheet folds onto itself at {folds} points: webs likely (Webbing shows them)"),
+                            w,
+                            super::fg::WARN,
+                        );
+                    }
+                }
+                heading(ui, t, "Shrink", w);
+                fact(ui, t, "Mould scale (vendor)", &format!("{:.2} %", 100.0 * r.shrink), w, t.ink);
+                if !r.shrink_source.is_empty() {
+                    note(ui, &r.shrink_source, w, t.ink2);
+                }
+                if let Some((a, b)) = r.shrink_band {
+                    fact(
+                        ui,
+                        t,
+                        "Free contraction",
+                        &format!("{:.2}-{:.2} %", 100.0 * a, 100.0 * b),
+                        w,
+                        t.ink,
+                    );
+                    note(ui, &r.shrink_band_from, w, t.ink2);
+                }
                 if !asm {
                     heading(ui, t, "Show on the part", w);
                     ui.horizontal(|ui| {
                         ui.add_space(14.0);
-                        let mut k = match u.analysis {
-                            Analysis::Thickness => 0,
-                            Analysis::Draft => 1,
-                            Analysis::None => 2,
-                        };
+                        let layers = [
+                            Analysis::Thickness,
+                            Analysis::Stretch,
+                            Analysis::Webbing,
+                            Analysis::Draft,
+                            Analysis::None,
+                        ];
+                        let mut k = layers.iter().position(|a| *a == u.analysis).unwrap_or(4);
                         toggles(
                             ui,
                             t,
                             &mut k,
-                            &["Thickness", "Draft & undercut", "Nothing"],
+                            &["Thickness", "Stretch", "Webbing", "Draft", "Nothing"],
                             "thermo:check:layer",
                             places,
                         );
-                        u.analysis = [Analysis::Thickness, Analysis::Draft, Analysis::None][k];
+                        u.analysis = layers[k];
                     });
                     ui.horizontal(|ui| {
                         ui.add_space(14.0);

@@ -160,8 +160,8 @@ pub const NAMES: &[(&str, &str, &str, &[&str])] = &[
     ),
     (
         "thermo_view",
-        "A thermoformed part's view, as its browser rows and Thermoform tab set it: which bodies show (part = the formed part, mould, blank), the wall as simulated or as modelled, the analysis colours (none, draft, thickness), and Check Forming open or closed. Give only what changes. One view step.",
-        r#"{"analysis":{"type":"string","enum":["none","draft","thickness"]},"part":{"type":"boolean"},"mould":{"type":"boolean"},"blank":{"type":"boolean"},"simulated":{"type":"boolean"},"check":{"type":"boolean"}}"#,
+        "A thermoformed part's view, as its browser rows and Thermoform tab set it: which bodies show (part = the formed part, mould, blank), the wall as simulated or as modelled, the analysis colours (none, draft, thickness: the simulated wall's thickness, stretch: the larger principal stretch, webbing: where the sheet gathers and folds), and Check Forming open or closed. Give only what changes. One view step.",
+        r#"{"analysis":{"type":"string","enum":["none","draft","thickness","stretch","webbing"]},"part":{"type":"boolean"},"mould":{"type":"boolean"},"blank":{"type":"boolean"},"simulated":{"type":"boolean"},"check":{"type":"boolean"}}"#,
         &[],
     ),
     (

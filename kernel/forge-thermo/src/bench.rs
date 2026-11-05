@@ -664,7 +664,7 @@ fn a_plug_drives_the_sheet_as_measured() {
                 pressure: 0.0,
                 resolution: 100,
                 plug: Some(Plug {
-                    at: (0.0, 0.0),
+                    at: Some((0.0, 0.0)),
                     radius: 21.0,
                     nose: 90.0,
                     edge: 10.0,
@@ -781,7 +781,7 @@ fn an_unevenly_heated_sheet_forms_as_measured() {
             pressure: 0.0777,
             resolution: 100,
             heat: (power > 0.0).then(|| Heat {
-                at: (0.0, 0.0),
+                at: Some((0.0, 0.0)),
                 profile: profile.clone(),
                 shift: Shift::Wlf {
                     tref: 170.0,
@@ -790,6 +790,7 @@ fn an_unevenly_heated_sheet_forms_as_measured() {
                 },
                 temp: 140.0,
                 power,
+                edge: None,
             }),
             ..Process::default()
         };

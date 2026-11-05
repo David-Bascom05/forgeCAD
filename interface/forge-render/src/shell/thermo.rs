@@ -47,6 +47,15 @@ pub struct ThermoRow {
     /// The blank, (W, L) mm, and the feature whose body the mould took the place of.
     pub blank: (f64, f64),
     pub shape: String,
+    /// Over the sheet on the mould: the largest principal stretch, areal stretch and l1/l2.
+    pub stretch: Option<[f64; 3]>,
+    /// Where it webs: the flat sheet's area gathered, mm2, and the folds onto itself.
+    pub web: Option<(f64, usize)>,
+    /// The shrink free contraction gives (low, high), where it comes from, and the vendor
+    /// figure's source.
+    pub shrink_band: Option<(f64, f64)>,
+    pub shrink_band_from: String,
+    pub shrink_source: String,
 }
 
 /// A body's mass properties: volume mm3, mass kg (None: no density), centre mm, inertia about it
@@ -112,10 +121,61 @@ fn flag(p: &egui::Painter, at: Pos2, text: String, fill: Color32, ink: Color32, 
     p.galley(r.min + vec2(5.0, 4.0), g, ink);
 }
 
+/// The stretch map's legend: the larger principal stretch's bands, the most at the bottom (red).
+fn stretch_legend(ctx: &egui::Context, t: super::theme::Theme, view: Rect, top: f64) {
+    egui::Area::new(egui::Id::unique("thermo-stretch"))
+        .fixed_pos(view.min)
+        .order(egui::Order::Middle)
+        .interactable(false)
+        .show(ctx, |ui| {
+            let p = ui.painter().clone();
+            let (x, y0) = (view.min.x + 24.0, view.min.y + 56.0);
+            p.rect_filled(
+                Rect::from_min_size(pos2(x - 12.0, y0 - 12.0), vec2(220.0, 300.0)),
+                6.0,
+                t.bg.gamma_multiply(0.88),
+            );
+            p.text(
+                pos2(x, y0),
+                Align2::LEFT_TOP,
+                "Principal stretch",
+                semi(14.0),
+                t.ink,
+            );
+            p.text(
+                pos2(x, y0 + 22.0),
+                Align2::LEFT_TOP,
+                "the larger, × the flat sheet",
+                sans(11.0),
+                t.ink2,
+            );
+            let (bh, by) = (22.0, y0 + 46.0);
+            for (k, c) in BANDS.iter().enumerate() {
+                let sw = Rect::from_min_size(pos2(x, by + k as f32 * bh), vec2(26.0, bh));
+                p.rect_filled(sw, 0.0, c32(*c));
+                let v = 1.0 + (top - 1.0) * k as f64 / 9.0;
+                p.text(
+                    pos2(x + 34.0, sw.center().y),
+                    Align2::LEFT_CENTER,
+                    format!("{v:.2}{}", if k == 9 { " Max" } else { "" }),
+                    mono(12.0),
+                    t.ink,
+                );
+            }
+        });
+}
+
 impl Shell {
     /// The thickness map's legend and flags, and the step scrubber, over the view.
     pub(super) fn thermo_probes(&mut self, ctx: &egui::Context) {
         let Some(fg) = &mut self.fg else { return };
+        if fg.thermo.analysis == Analysis::Stretch && fg.asm.is_none() {
+            let (t, view) = (self.theme, self.view_rect);
+            if let Some([top, ..]) = fg.thermos.first().and_then(|r| r.stretch) {
+                stretch_legend(ctx, t, view, top);
+            }
+            return;
+        }
         // an assembly's parts are drawn where they're placed: their maps are their own files'
         if fg.thermo.analysis != Analysis::Thickness || fg.thermos.is_empty() || fg.asm.is_some() {
             return;

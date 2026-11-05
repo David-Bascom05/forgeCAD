@@ -180,6 +180,8 @@ impl Gui {
                     crate::shell::thermo_ui::Analysis::Thickness => {
                         104729 + p.thermo.step.unwrap_or(usize::MAX / 1024) * 11
                     }
+                    crate::shell::thermo_ui::Analysis::Stretch => 15485863,
+                    crate::shell::thermo_ui::Analysis::Webbing => 32452843,
                 }
         });
         let key = (
@@ -297,7 +299,13 @@ impl Gui {
                         .unwrap_or(3.0);
                     out.extend(g.draft_tris(min));
                 }
-                Analysis::None => {}
+                Analysis::Stretch if p.thermo.shows(crate::shell::thermo_ui::Body::Part) => {
+                    out.extend_from_slice(&g.stretch);
+                }
+                Analysis::Webbing if p.thermo.shows(crate::shell::thermo_ui::Body::Part) => {
+                    out.extend_from_slice(&g.web);
+                }
+                Analysis::None | Analysis::Stretch | Analysis::Webbing => {}
             }
             // the mould's vents while its dialog is up
             if p.thermo.mould.is_some() {

@@ -50,6 +50,8 @@ pub struct Material {
     pub tg: Option<f64>,
     pub demould: Option<f64>,
     pub cte: Option<f64>,
+    /// How the sheet's stiffness shifts with temperature (stage 3's uneven heating).
+    pub shift: Option<crate::stretch::Shift>,
     /// Fields that are guesses, by name: shown on every check that reads them.
     pub stand_in: Vec<&'static str>,
 }
@@ -176,7 +178,9 @@ impl FormShop {
 }
 
 /// The thermoforming keys a material record carries (`thermo.<key>`), as stand-in names.
-pub const KEYS: [&str; 18] = [
+pub const KEYS: [&str; 20] = [
+    "wlf",
+    "arrhenius",
     "tg",
     "demould",
     "window",
@@ -273,6 +277,18 @@ pub fn from_record(r: &forge_material::Material) -> Result<Option<Material>, Dat
         tg: one("tg").ok(),
         demould: one("demould").ok(),
         cte: r.cte.map(|c| c * 1e-6),
+        shift: match (nums("wlf"), one("arrhenius")) {
+            (Ok(w), _) if w.len() == 3 => Some(crate::stretch::Shift::Wlf {
+                tref: w[0],
+                c1: w[1],
+                c2: w[2],
+            }),
+            (_, Ok(ea)) => Some(crate::stretch::Shift::Arrhenius {
+                tref: one("law_temp").unwrap_or(0.5 * (window[0] + window[1])),
+                ea,
+            }),
+            _ => None,
+        },
         stand_in: KEYS
             .into_iter()
             .filter(|k| r.kind_of(&format!("thermo.{k}")) == Kind::StandIn)

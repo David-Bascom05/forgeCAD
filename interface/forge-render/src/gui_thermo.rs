@@ -286,6 +286,23 @@ impl Gui {
                 format!("{stem}-{id}-process.pdf"),
                 Ok(crate::thermo_view::process_pdf(&g.sheet)),
             ),
+            Export::DistortionPrint => {
+                let file = format!("{stem}-{id}-print.png");
+                let got = (|| {
+                    let src = g.print_src.as_ref().ok_or("no forming (walls: false)")?;
+                    let art = rfd::FileDialog::new()
+                        .set_title("The artwork, seen along the pull over the trim's box")
+                        .add_filter("Image", &["png", "ppm"])
+                        .pick_file()
+                        .ok_or("no artwork chosen")?;
+                    let bytes = std::fs::read(&art).map_err(|e| e.to_string())?;
+                    let image = read_image(&bytes).ok_or("not an 8-bit PNG or a binary PPM")?;
+                    let p = forge_lang::thermo::print_of(&src.0, &src.1, src.2, &image, 0.5)
+                        .ok_or("nothing to print")?;
+                    Ok::<_, String>(write_png(p.width, p.height, &p.rgb))
+                })();
+                (file, got.and_then(|b| b))
+            }
             Export::ThicknessCsv => {
                 let mut s = String::from("x_mm,y_mm,z_mm,wall_mm\n");
                 for (p, t) in &g.points {
@@ -312,4 +329,44 @@ fn dxf(pts: &[[f64; 3]]) -> String {
         );
     }
     s + "0\nENDSEC\n0\nEOF\n"
+}
+
+/// An artwork: an 8-bit PNG (RGB, RGBA, grey) or a binary PPM, row 0 at the trim box's least y
+/// (the image's top row, as it is seen from above with y up, is its far edge).
+fn read_image(b: &[u8]) -> Option<forge_lang::thermo::Image> {
+    if let Some(i) = forge_lang::thermo::Image::from_ppm(b) {
+        return Some(i.flipped());
+    }
+    let mut d = png::Decoder::new(std::io::Cursor::new(b));
+    d.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
+    let mut r = d.read_info().ok()?;
+    let mut buf = vec![0; r.output_buffer_size()?];
+    let info = r.next_frame(&mut buf).ok()?;
+    let n = info.color_type.samples();
+    let px: Vec<[u8; 3]> = buf[..info.buffer_size()]
+        .chunks(n)
+        .map(|c| if n >= 3 { [c[0], c[1], c[2]] } else { [c[0]; 3] })
+        .collect();
+    Some(
+        forge_lang::thermo::Image {
+            width: info.width as usize,
+            height: info.height as usize,
+            rgb: px,
+        }
+        .flipped(),
+    )
+}
+
+/// A print (row 0 at the window's least y) as a PNG, its top row the far edge.
+fn write_png(w: usize, h: usize, rgb: &[[u8; 3]]) -> Result<Vec<u8>, String> {
+    let mut out = vec![];
+    {
+        let mut e = png::Encoder::new(&mut out, w as u32, h as u32);
+        e.set_color(png::ColorType::Rgb);
+        e.set_depth(png::BitDepth::Eight);
+        let mut wr = e.write_header().map_err(|e| e.to_string())?;
+        let data: Vec<u8> = rgb.chunks(w).rev().flatten().flatten().copied().collect();
+        wr.write_image_data(&data).map_err(|e| e.to_string())?;
+    }
+    Ok(out)
 }

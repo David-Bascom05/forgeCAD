@@ -52,9 +52,19 @@ pub struct Gfx {
     pub at: (Point3, Point3),
     /// The sheet's thickness, mm.
     pub t: f64,
+    /// The principal stretch over the sheet on the part, banded (most stretch red), and its range;
+    /// the gathered triangles and the folds, marked.
+    pub stretch: Vec<WorldVert>,
+    pub stretch_range: (f64, f64),
+    pub web: Vec<WorldVert>,
+    /// What a distortion print is made from: the forming, its trim plane and the trim's box.
+    pub print_src: Option<std::sync::Arc<PrintSrc>>,
     /// What the workers have made and are making.
     pub made: std::sync::Arc<std::sync::Mutex<Made>>,
 }
+
+/// A forming, its trim plane and its trim's box: what a distortion print is made from.
+pub type PrintSrc = (forge_thermo::Stretch, forge_math::Frame, (Point2, Point2));
 
 /// Where MIN and MAX go.
 type Pins = ([f32; 3], [f32; 3]);
@@ -276,10 +286,22 @@ pub fn view(o: &ThermoOut, spans: &[forge_lang::build::Span], draft_min: f32) ->
         shape: o.shape.clone(),
         ..ThermoRow::default()
     };
+    // the shrink: the vendor's figure and its source, and free contraction's band
+    if let Some(m) = forge_thermo::placeholder().material(&o.material) {
+        row.shrink_band = m.shrink_band();
+        if let (Some(off), Some(tg)) = (m.demould, m.tg) {
+            row.shrink_band_from = format!("free contraction from {off:.0}-{tg:.0} °C to 23 °C");
+        }
+    }
+    row.shrink_source = forge_material::library()
+        .iter()
+        .find(|r| r.name.eq_ignore_ascii_case(&o.material))
+        .map_or(String::new(), |r| r.source_of("thermo.shrink").to_string());
     let Some(w) = &o.walls else {
         row.facts = facts;
         return (row, gfx);
     };
+    gfx.print_src = Some(std::sync::Arc::new(((**w).clone(), f.frame, r.trim_box)));
     let poly = forge_thermo::build::polygon(&f.trim);
     let inside = |p: [f32; 3]| {
         let l = f
@@ -390,6 +412,84 @@ pub fn view(o: &ThermoOut, spans: &[forge_lang::build::Span], draft_min: f32) ->
     ));
     facts.push(("unformed".into(), format!("{}", w.unformed.len())));
     row.facts = facts;
+    // the surface: each triangle over the part coloured by its larger principal stretch, the
+    // gathered ones and the folds marked, lifted as the thickness map is
+    let sv = forge_thermo::surface::stretches(w, &f.frame);
+    let on = |k: &usize| w.tris[*k].iter().all(|&i| w.touched[i as usize]);
+    let top = shown
+        .iter()
+        .filter(|k| on(k))
+        .map(|&k| sv.l1[k])
+        .fold(1.0f64, f64::max);
+    let area = shown
+        .iter()
+        .filter(|k| on(k))
+        .map(|&k| sv.l1[k] * sv.l2[k])
+        .fold(1.0f64, f64::max);
+    let uneven = shown
+        .iter()
+        .filter(|k| on(k))
+        .map(|&k| sv.l1[k] / sv.l2[k].max(1e-9))
+        .fold(1.0f64, f64::max);
+    row.stretch = Some([top, area, uneven]);
+    gfx.stretch_range = (1.0, top);
+    let web = forge_thermo::surface::webbing(w, &f.frame, o.t, 0.05);
+    row.web = Some((web.squeezed_area, web.folds.len()));
+    if let Some(s) = last {
+        let mut n = vec![Vec3::ZERO; s.nodes.len()];
+        let at = |i: u32| {
+            let p = s.nodes[i as usize];
+            Vec3::new(p[0] as f64, p[1] as f64, p[2] as f64)
+        };
+        for v in &w.tris {
+            let [a, b, c] = v.map(at);
+            let x = (b - a).cross(c - a);
+            v.iter().for_each(|&i| n[i as usize] += x);
+        }
+        let lifted = |i: u32| {
+            let u = n[i as usize].normalize().map_or(Vec3::ZERO, |u| u.get());
+            f3(Point3::ORIGIN + at(i) + u * lift as f64)
+        };
+        let squeezed: std::collections::HashSet<usize> = web.squeezed.iter().copied().collect();
+        let warn = unlit([0.95, 0.55, 0.10]);
+        for &k in &shown {
+            let span = (top - 1.0).max(1e-9);
+            let c = unlit(band(1.0 - ((sv.l1[k] - 1.0) / span) as f32));
+            for &i in &w.tris[k] {
+                gfx.stretch.push(WorldVert {
+                    at: lifted(i),
+                    colour: c,
+                });
+            }
+            if squeezed.contains(&k) {
+                for &i in &w.tris[k] {
+                    gfx.web.push(WorldVert {
+                        at: lifted(i),
+                        colour: warn,
+                    });
+                }
+            }
+        }
+        // each fold a small three-way cross, red
+        let red = unlit([0.86, 0.16, 0.16]);
+        let r = (2.0 * o.t).max(1.5);
+        for p in &web.folds {
+            for (u, v) in [(Vec3::X, Vec3::Y), (Vec3::Y, Vec3::Z), (Vec3::Z, Vec3::X)] {
+                let q = |a: f64, b: f64| f3(*p + u * (a * r) + v * (b * r));
+                gfx.web.extend(
+                    [
+                        q(-1.0, -1.0),
+                        q(1.0, -1.0),
+                        q(1.0, 1.0),
+                        q(-1.0, -1.0),
+                        q(1.0, 1.0),
+                        q(-1.0, 1.0),
+                    ]
+                    .map(|at| WorldVert { at, colour: red }),
+                );
+            }
+        }
+    }
     gfx.sheet = process_sheet(o, &row);
     row.min = (wlo, f3(w.min.1));
     row.max = (whi, f3(w.max.1));

@@ -782,8 +782,19 @@ thermoform(SHAPE, t: T, material: "ABS" | MATERIAL, from: "outer"|"wall"|"inner"
            tool: "male"|"female" = "male", open: FACES, pull: DIR = Z, trim: PROFILE, flange: W = 10,
            sheet: (W, L), shop: SHOP, shrink: ratio(S), base: B = 10, margin: M = 5,
            vent: D | false, vents: [(x, y), ..], vent_pitch: P = 25, walls: true,
-           temperature: C, pressure: ratio(MPa))
+           temperature: C, pressure: ratio(MPa), bending: false,
+           plug: "dry"|"lubricated", plug_stroke: L, plug_diameter: D = 42, plug_nose: R = 90,
+           plug_edge: R = 10, plug_start: H = 20, heat_edge: C)
 ```
+
+- The process (with `walls`): `bending: true` lets the sheet bend as a plate of its thickness
+  (D = G t^3 / 3) as well as stretch; slower (about 5-15 %), off by default. `plug:` a round plug
+  at the trim's middle (dome nose `plug_nose`, its edge rounded `plug_edge`, `plug_diameter`
+  across) driven from `plug_start` above the sheet to `plug_stroke` below it before the vacuum, a
+  female mould's; "dry": the sheet sticks where it touches it, "lubricated": it slides on it.
+  `heat_edge:` the sheet's temperature at the window's nearer side, `temperature` at its middle,
+  linear between: each part of the sheet as stiff as the material's temperature shift says
+  (`thermo.wlf` or `thermo.arrhenius` on its record: ABS, HIPS); refused for a sheet without one.
 
 - `open:` the face the sheet meets the clamp at (`body.start`): the part leaves the mould away from
   it (male) or through it (female); left out, `pull` (default Z) says the way.
@@ -825,8 +836,9 @@ thermoform(SHAPE, t: T, material: "ABS" | MATERIAL, from: "outer"|"wall"|"inner"
   `field`, how many points the wall is known at on the sheet on the mould inside the trim; `fg run F
   --json --field OUT.csv` writes them (x, y, z on the mould, wall, mm) and names the file, `--field
   inline` puts them in the JSON. `--print-art ART.ppm --print OUT.ppm` writes each thermoform's
-  distortion print: the flat sheet's image (a binary PPM, 0.5 mm a pixel, row 0 at the window's
-  least y) that forms into the artwork, ART spanning the trim's box seen along the pull; its
+  distortion print: the flat sheet's image (a binary PPM, 0.5 mm a pixel) that forms into the
+  artwork, ART spanning the trim's box seen along the pull (both images as seen from above, the
+  top row the far edge); its
   report's `print` names the file, its size, the window corner it starts at and how many pixels
   land where the sheet bridges.
 

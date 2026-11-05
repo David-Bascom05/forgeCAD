@@ -64,12 +64,14 @@ pub struct Process {
 }
 
 /// A sheet heated unevenly: its temperature `profile` (C) by distance from `at` on the trim plane
-/// (linear between, held past the ends), and how its stiffness follows: the law's at `temp`,
+/// (None: the trim's middle; linear between, held past the ends; empty, with `edge`: from `temp`
+/// at the middle to `edge` at the window's nearer side), and how its stiffness follows: the law's at `temp`,
 /// times the shift factor's ratio to `temp`'s to the `power` (1: as a viscosity, the flow regime).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Heat {
-    pub at: (f64, f64),
+    pub at: Option<(f64, f64)>,
     pub profile: Vec<(f64, f64)>,
+    pub edge: Option<f64>,
     pub shift: Shift,
     pub temp: f64,
     pub power: f64,
@@ -98,7 +100,8 @@ impl Shift {
 impl Heat {
     /// The temperature at a point of the trim plane.
     pub fn at_point(&self, x: f64, y: f64) -> f64 {
-        let r = ((x - self.at.0) * (x - self.at.0) + (y - self.at.1) * (y - self.at.1)).sqrt();
+        let at = self.at.unwrap_or((0.0, 0.0));
+        let r = ((x - at.0) * (x - at.0) + (y - at.1) * (y - at.1)).sqrt();
         let p = &self.profile;
         match (p.first(), p.last()) {
             (Some(a), _) if r <= a.0 => a.1,
@@ -119,12 +122,12 @@ impl Heat {
     }
 }
 /// A round plug: a dome nose of radius `nose` meeting its body of radius `radius` in a round of
-/// `edge`, its axis at `at` on the trim plane, driven from its tip `start` mm above the sheet to
+/// `edge`, its axis at `at` on the trim plane (None: the trim's middle), driven from its tip `start` mm above the sheet to
 /// `stroke` mm below it in `steps`. The sheet sticks where it touches it, or with `slip` slides on
 /// it (a lubricated plug).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Plug {
-    pub at: (f64, f64),
+    pub at: Option<(f64, f64)>,
     pub radius: f64,
     pub nose: f64,
     pub edge: f64,
@@ -156,7 +159,8 @@ impl Plug {
 
     /// How far a point is inside the plug (up from its face), and that depth's gradient.
     fn inside(&self, p: Vec3, tip: f64) -> Option<(f64, Vec3)> {
-        let (dx, dy) = (p.x - self.at.0, p.y - self.at.1);
+        let at = self.at.unwrap_or((0.0, 0.0));
+        let (dx, dy) = (p.x - at.0, p.y - at.1);
         let r = (dx * dx + dy * dy).sqrt();
         let (z, slope) = self.face(r, tip)?;
         let d = p.z - z;
@@ -1075,6 +1079,20 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
             }
         }
     }
+    // a plug and a heat map with no place of their own are at the trim's middle
+    let mid = (0.5 * (tlo.x + thi.x), 0.5 * (tlo.y + thi.y));
+    let plug = pr.plug.map(|mut p| {
+        p.at.get_or_insert(mid);
+        p
+    });
+    let heat = pr.heat.clone().map(|mut h| {
+        h.at.get_or_insert(mid);
+        if let (Some(edge), true) = (h.edge, h.profile.is_empty()) {
+            let side = (0.5 * (whi.x - wlo.x)).min(0.5 * (whi.y - wlo.y));
+            h.profile = vec![(0.0, h.temp), (side, edge)];
+        }
+        h
+    });
     let tris: Vec<Tri> = idx
         .iter()
         .map(|v| {
@@ -1087,7 +1105,7 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
                 vol: 0.5
                     * det
                     * spec.t
-                    * pr.heat.as_ref().map_or(1.0, |h| {
+                    * heat.as_ref().map_or(1.0, |h| {
                         let c = (p0 + p1 + p2) * (1.0 / 3.0);
                         h.factor(c.x, c.y)
                     }),
@@ -1208,7 +1226,7 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
             snap(&x, "drape");
         }
     }
-    if let (Some(plug), false) = (pr.plug, male) {
+    if let (Some(plug), false) = (plug, male) {
         // the plug comes down: what it touches sticks to it and goes down with it (or slides on
         // it, held off its face by a stiff spring), the rest drawn after
         let stiff = 1e3 * mu / spec.t;
@@ -1228,7 +1246,8 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
                 if !plug.slip {
                     for n in 0..x.len() {
                         if sheet.free[n] && !sheet.slide[n] && plug.inside(x[n], tip).is_some() {
-                            let (dx, dy) = (x[n].x - plug.at.0, x[n].y - plug.at.1);
+                            let at = plug.at.unwrap_or((0.0, 0.0));
+                            let (dx, dy) = (x[n].x - at.0, x[n].y - at.1);
                             let r = (dx * dx + dy * dy).sqrt();
                             x[n].z = plug.face(r, tip).map_or(x[n].z, |f| f.0);
                             sheet.free[n] = false;

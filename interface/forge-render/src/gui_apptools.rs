@@ -358,6 +358,8 @@ impl Gui {
                         "none" => Analysis::None,
                         "draft" => Analysis::Draft,
                         "thickness" => Analysis::Thickness,
+                        "stretch" => Analysis::Stretch,
+                        "webbing" => Analysis::Webbing,
                         w => return Reply::err(format!("no analysis `{w}`")),
                     };
                     said.push(format!("colours {w}"));
