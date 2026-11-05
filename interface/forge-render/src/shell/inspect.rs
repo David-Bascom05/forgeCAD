@@ -4,13 +4,13 @@
 //! dialog, whose fields leave as SetProperty ops. The host fills in what it works out
 //! (readings, physical properties, planes picked) and does the cutting.
 
-use crate::shell::placed::Placed;
 use super::Shell;
 use super::fg::FgAct;
 use super::fgasm::{dialog_frame, dialog_head};
 use super::materials::{button_at, clipped, section, tab_strip};
 use super::theme::{Theme, medium, mono, sans, semi};
 use crate::render::Entity;
+use crate::shell::placed::Placed;
 use egui::{Align2, Color32, Pos2, Rect, Sense, Stroke, Ui, pos2, vec2};
 use forge_agent::measure::{Free, Quantity, Reading};
 use forge_lang::error::Op;
@@ -886,52 +886,53 @@ impl Shell {
         let top = (v.top() + 12.0).max(area.top() + 4.0);
         let body = IPROPS_BODY.min(area.bottom() - top - 124.0).max(200.0);
         let at = pos2(v.left() + 40.0, top);
-        let r = Self::inspect_window(&title, "iprops", t, at, IPROPS_W).show_placed(ctx, places, |ui, places| {
-            let icon = if assembly { "subasm" } else { "part" };
-            close = dialog_head(ui, t, icon, &title, "iprops:close", places);
-            ui.add_space(6.0);
-            if tab_strip(ui, t, &PROP_TABS, &mut p.tab, "iprops:tab", places) && p.tab == 5 {
-                want = true;
-            }
-            // a solid bar: a long tab reads as one that scrolls
-            ui.spacing_mut().scroll = egui::style::ScrollStyle::solid();
-            egui::ScrollArea::vertical()
-                .id_salt(("iprops-body", p.tab))
-                .auto_shrink([false, false])
-                .min_scrolled_height(body)
-                .max_height(body)
-                .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded)
-                .show(ui, |ui| {
-                    ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
-                    match p.tab {
-                        0 => Self::general_tab(ui, t, &file, assembly, units, &contents, dirty),
-                        1..=3 => Self::fields_tab(ui, t, p, &doc, &file, ops, places),
-                        4 => Self::custom_tab(ui, t, p, &doc, ops, places),
-                        _ => {
-                            let mut states: Vec<(&str, &Physical)> = vec![];
-                            let got = physical.as_ref().map(|r| r.as_ref());
-                            if let Some(Ok(m)) = got {
-                                states.push(("Modeled", m));
-                                states.extend(more.iter().map(|(n, x)| (n.as_str(), x)));
+        let r =
+            Self::inspect_window(&title, "iprops", t, at, IPROPS_W).show_placed(ctx, places, |ui, places| {
+                let icon = if assembly { "subasm" } else { "part" };
+                close = dialog_head(ui, t, icon, &title, "iprops:close", places);
+                ui.add_space(6.0);
+                if tab_strip(ui, t, &PROP_TABS, &mut p.tab, "iprops:tab", places) && p.tab == 5 {
+                    want = true;
+                }
+                // a solid bar: a long tab reads as one that scrolls
+                ui.spacing_mut().scroll = egui::style::ScrollStyle::solid();
+                egui::ScrollArea::vertical()
+                    .id_salt(("iprops-body", p.tab))
+                    .auto_shrink([false, false])
+                    .min_scrolled_height(body)
+                    .max_height(body)
+                    .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded)
+                    .show(ui, |ui| {
+                        ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
+                        match p.tab {
+                            0 => Self::general_tab(ui, t, &file, assembly, units, &contents, dirty),
+                            1..=3 => Self::fields_tab(ui, t, p, &doc, &file, ops, places),
+                            4 => Self::custom_tab(ui, t, p, &doc, ops, places),
+                            _ => {
+                                let mut states: Vec<(&str, &Physical)> = vec![];
+                                let got = physical.as_ref().map(|r| r.as_ref());
+                                if let Some(Ok(m)) = got {
+                                    states.push(("Modeled", m));
+                                    states.extend(more.iter().map(|(n, x)| (n.as_str(), x)));
+                                }
+                                let (u, b) = Self::physical_tab(
+                                    ui,
+                                    t,
+                                    (assembly, dir.as_deref()),
+                                    &doc,
+                                    (got, &states),
+                                    busy,
+                                    units,
+                                    places,
+                                    ops,
+                                );
+                                want |= u;
+                                browse |= b;
                             }
-                            let (u, b) = Self::physical_tab(
-                                ui,
-                                t,
-                                (assembly, dir.as_deref()),
-                                &doc,
-                                (got, &states),
-                                busy,
-                                units,
-                                places,
-                                ops,
-                            );
-                            want |= u;
-                            browse |= b;
                         }
-                    }
-                    ui.add_space(8.0);
-                });
-        });
+                        ui.add_space(8.0);
+                    });
+            });
         let i = &mut self.inspect;
         i.want_physical |= want;
         if browse && i.browser.is_none() {

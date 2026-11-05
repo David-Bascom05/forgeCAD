@@ -3,9 +3,9 @@
 //! the drawing file (`forge_lang::drawing::ops`), checked before it is written; the sheet is made
 //! again from the file in the background, so the window never waits on the kernel.
 
-use crate::shell::placed::Placed;
 use super::theme::{mono, sans, semi};
 use super::{Action, Shell, icons};
+use crate::shell::placed::Placed;
 use egui::{Align2, Color32, Pos2, Rect, Sense, Shape, Stroke, StrokeKind, Ui, pos2, vec2};
 use forge_draw::page::text_width;
 use forge_draw::{Align, Geom2, Pen};

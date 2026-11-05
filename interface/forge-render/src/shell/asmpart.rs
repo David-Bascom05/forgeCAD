@@ -2,11 +2,11 @@
 //! features: the rest of the assembly dims, the feature's dialog opens over the view, and OK
 //! writes the edit back to the part's own file (the assembly then builds again).
 
-use crate::shell::placed::Placed;
 use super::Shell;
 use super::fg::{DimRow, FeatRow, FgAct, From, parse_value, short};
 use super::fgasm::{AsmPanel, PartFeats, dialog_head};
 use super::theme::{medium, mono, sans};
+use crate::shell::placed::Placed;
 use egui::{Rect, pos2};
 use forge_lang::error::{Literal, Op, ParamKey};
 use forge_lang::values::Dim;

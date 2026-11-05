@@ -2,9 +2,9 @@
 //! scrolls, and groups its fields in sections, in tabs where a kind has many. It says what the fields
 //! are; the host turns them into a tool call, previews it live and commits it on OK.
 
-use crate::shell::placed::Placed;
 use super::theme::{mono, sans, semi};
 use super::{Action, Shell, panel};
+use crate::shell::placed::Placed;
 use egui::{Align2, Color32, Rect, Sense, Stroke, pos2, vec2};
 use forge_doc::ItemId;
 
@@ -1799,15 +1799,7 @@ impl Shell {
                     match h.placing {
                         Placing::Concentric => {
                             let n = h.concentric.is_some() as usize;
-                            pick_row(
-                                ui,
-                                "Round edge",
-                                n,
-                                n == 0,
-                                "Pick a circular edge",
-                                &t,
-                                places,
-                            );
+                            pick_row(ui, "Round edge", n, n == 0, "Pick a circular edge", &t, places);
                         }
                         Placing::Linear => {
                             let face = h.linear.face.is_some() as usize;
@@ -2003,15 +1995,7 @@ impl Shell {
                     }
                     if h.termination == Termination::Surface {
                         let n = (!h.surface.is_empty()) as usize;
-                        pick_row(
-                            ui,
-                            "To face",
-                            n,
-                            n == 0,
-                            "Pick the face it stops at",
-                            &t,
-                            places,
-                        );
+                        pick_row(ui, "To face", n, n == 0, "Pick the face it stops at", &t, places);
                     }
                     if h.termination == Termination::Distance {
                         field_row(ui, "Depth", &mut h.depth, units, &t, places);

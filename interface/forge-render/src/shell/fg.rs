@@ -2,9 +2,9 @@
 //! the tools that edit them), the Parameters dialog, the Issues window with each issue's fixes. Like the rest of the shell it changes nothing itself: every
 //! edit leaves as a typed op in `out`, which the host applies through forge-lang.
 
-use crate::shell::placed::Placed;
 use super::theme::{medium, mono, sans, semi};
 use super::{Shell, icons, panel};
+use crate::shell::placed::Placed;
 use egui::{Align2, Color32, Rect, Sense, Stroke, Ui, pos2, vec2};
 use forge_lang::error::{Literal, Op, ParamKey, Scope, parse_path, path_text};
 use forge_lang::syntax::Seg;

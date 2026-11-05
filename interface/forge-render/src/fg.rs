@@ -187,7 +187,11 @@ pub struct AnchorView {
 /// the name isn't one face's alone; a vertex isn't kept).
 pub fn same_entity(e: Entity, old: &AnchorView, new: &AnchorView) -> Option<Entity> {
     fn one(list: &[forge_topo::Name], name: &forge_topo::Name) -> Option<u32> {
-        let mut at = list.iter().enumerate().filter(|(_, n)| *n == name).map(|(k, _)| k);
+        let mut at = list
+            .iter()
+            .enumerate()
+            .filter(|(_, n)| *n == name)
+            .map(|(k, _)| k);
         match (at.next(), at.next()) {
             (Some(k), None) => Some(k as u32),
             _ => None,

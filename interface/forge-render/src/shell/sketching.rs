@@ -1,9 +1,9 @@
 //! Sketch mode: draw on a plane with the solver behind every row. Each tool adds a row to the block a
 //! part file would hold; the rows solve here in-process, and Finish Sketch commits them as one call.
 
-use crate::shell::placed::Placed;
 use super::theme::{mono, sans};
 use super::{Action, Shell};
+use crate::shell::placed::Placed;
 use egui::{Color32, Pos2, Rect, Sense, Stroke, vec2};
 use forge_doc::text::{Want, tokens};
 use forge_doc::{Document, ItemId, expr, sketch as sk};

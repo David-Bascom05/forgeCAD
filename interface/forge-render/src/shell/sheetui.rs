@@ -3,7 +3,6 @@
 //! Sheet Metal Defaults and rules, the flat pattern's bend lines and extents over the view, its
 //! bend table and its DXF export.
 
-use crate::shell::placed::Placed;
 use super::fgasm::{dialog_frame, dialog_head};
 use super::fgtool::SlotKind;
 use super::ribbon::{Group, Tool};
@@ -13,6 +12,7 @@ use super::sheet::{
 };
 use super::theme::{medium, mono, sans, semi};
 use super::{Action, Shell, icons};
+use crate::shell::placed::Placed;
 use egui::{Align2, Color32, Rect, Sense, Stroke, StrokeKind, Ui, pos2, vec2};
 
 const DLG_W: f32 = 330.0;

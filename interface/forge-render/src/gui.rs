@@ -3395,7 +3395,10 @@ impl Gui {
         let again = |e: Entity| crate::fg::same_entity(e, old, new);
         if let Some(v) = &mut self.view {
             let before = v.nav.selected.clone();
-            v.nav.selected = before.iter().filter_map(|&(pl, e)| again(e).map(|e| (pl, e))).collect();
+            v.nav.selected = before
+                .iter()
+                .filter_map(|&(pl, e)| again(e).map(|e| (pl, e)))
+                .collect();
             v.nav.last_click = v.nav.last_click.and_then(|(pl, e)| again(e).map(|e| (pl, e)));
             if v.nav.selected != before {
                 v.dirty = true;

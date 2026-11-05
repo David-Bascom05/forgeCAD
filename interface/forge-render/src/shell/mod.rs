@@ -40,8 +40,8 @@ mod tree;
 mod visual_style;
 
 pub use crate::nav::NavTool;
-use crate::shell::placed::Placed;
 use crate::render::VisualStyle;
+use crate::shell::placed::Placed;
 use egui::{Align2, Color32, CornerRadius, Rect, Sense, Stroke, StrokeKind, Ui, pos2, vec2};
 use forge_doc::{Body, Document, ItemId};
 use theme::{Theme, medium, mono, sans, semi};

@@ -1,11 +1,11 @@
 //! The Sketch tab as Inventor lays it out: a shape's variants under one split button (its arrow
 //! drops them; the last one used becomes the face), the constraints each with its name.
 
-use crate::shell::placed::Placed;
 use super::super::sketching::SkTool;
 use super::super::theme::{mono, sans};
 use super::super::{Action, RIBBON_H, Shell, TABS_H, TITLE_H, icons};
 use super::{BIG_PAD, BIG_W, SMALL_H, Tool, big_label, tips};
+use crate::shell::placed::Placed;
 use egui::{Align2, Id, Rect, Sense, Stroke, Ui, pos2, vec2};
 
 /// A button whose arrow drops its variants; one variant and no toggles: a plain button.

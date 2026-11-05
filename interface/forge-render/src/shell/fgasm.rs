@@ -5,11 +5,11 @@
 //! What Inventor puts in dialogs is in dialogs here: Parameters, Drive, iProperties, Analyze
 //! Interference, the bill of materials, the explode controls.
 
-use crate::shell::placed::Placed;
 use super::Shell;
 use super::fg::{FgAct, From, Severity, short};
 use super::icons;
 use super::theme::{medium, mono, sans, semi};
+use crate::shell::placed::Placed;
 use egui::{Align2, Color32, Rect, Sense, Stroke, Ui, pos2, vec2};
 use forge_lang::asm::{ExpectOut, InstOut, Issue as AsmIssue, JointOut, LinkFamily, LinkOut};
 use forge_lang::error::{Literal, Op};
@@ -2286,8 +2286,10 @@ impl Shell {
         let l = a.drive?;
         let link = a.links.get(l)?.clone();
         let mut close = false;
-        let r =
-            Self::window("Drive", "drive", t, pos2(v.left() + 16.0, v.top() + 56.0), 340.0).show_placed(ctx, places, |ui, places| {
+        let r = Self::window("Drive", "drive", t, pos2(v.left() + 16.0, v.top() + 56.0), 340.0).show_placed(
+            ctx,
+            places,
+            |ui, places| {
                 close = dialog_head(
                     ui,
                     t,
@@ -2414,7 +2416,8 @@ impl Shell {
                         }
                     }
                 }
-            });
+            },
+        );
         if close {
             a.drive = None;
         }
@@ -2523,104 +2526,109 @@ impl Shell {
     ) -> Option<Rect> {
         let mut close = false;
         let at = pos2(v.right() - 476.0, v.top() + 56.0);
-        let r = Self::window("Analyze Interference", "interference", t, at, 440.0).show_placed(ctx, places, |ui, places| {
-            close = dialog_head(ui, t, "check", "Analyze Interference", "asm:interference", places);
-            ui.label(
-                egui::RichText::new("Every pair of parts, and every expect in the file.")
-                    .font(sans(12.0))
-                    .color(t.ink2),
-            );
-            ui.add_space(4.0);
-            match (a.overlap, a.checking) {
-                (_, true) => {
-                    ui.label(egui::RichText::new("Analyzing…").font(sans(12.0)).color(t.ink2));
-                }
-                (Some((n, c)), false) => {
-                    ui.horizontal(|ui| {
-                        ui.label(
-                            egui::RichText::new(format!(
-                                "{} · {}",
-                                super::fg::plural(n, "interference"),
-                                super::fg::plural(c, "intended contact")
-                            ))
-                            .font(medium(12.0))
-                            .color(if n > 0 { t.error } else { t.ink }),
-                        );
-                    });
-                }
-                (None, false) => {
-                    if Self::fg_button(ui, "Analyze", "asm:check".into(), places) {
-                        a.checking = true;
-                        out.push(FgAct::AsmCheck);
+        let r = Self::window("Analyze Interference", "interference", t, at, 440.0).show_placed(
+            ctx,
+            places,
+            |ui, places| {
+                close = dialog_head(ui, t, "check", "Analyze Interference", "asm:interference", places);
+                ui.label(
+                    egui::RichText::new("Every pair of parts, and every expect in the file.")
+                        .font(sans(12.0))
+                        .color(t.ink2),
+                );
+                ui.add_space(4.0);
+                match (a.overlap, a.checking) {
+                    (_, true) => {
+                        ui.label(egui::RichText::new("Analyzing…").font(sans(12.0)).color(t.ink2));
+                    }
+                    (Some((n, c)), false) => {
+                        ui.horizontal(|ui| {
+                            ui.label(
+                                egui::RichText::new(format!(
+                                    "{} · {}",
+                                    super::fg::plural(n, "interference"),
+                                    super::fg::plural(c, "intended contact")
+                                ))
+                                .font(medium(12.0))
+                                .color(if n > 0 { t.error } else { t.ink }),
+                            );
+                        });
+                    }
+                    (None, false) => {
+                        if Self::fg_button(ui, "Analyze", "asm:check".into(), places) {
+                            a.checking = true;
+                            out.push(FgAct::AsmCheck);
+                        }
                     }
                 }
-            }
-            let found: Vec<(usize, &super::fg::Issue)> = issues
-                .iter()
-                .enumerate()
-                .filter(|(_, i)| {
-                    matches!(
-                        i.asm.as_ref().map(innermost),
-                        Some(AsmIssue::Interference { .. } | AsmIssue::ShallowEngagement { .. })
-                    )
-                })
-                .collect();
-            if !found.is_empty() {
-                egui::ScrollArea::vertical()
-                    .id_salt("asm-interf")
-                    .auto_shrink([false, true])
-                    .max_height(220.0)
-                    .show(ui, |ui| {
-                        for (k, is) in found {
-                            ui.horizontal(|ui| {
-                                let r = ui.label(egui::RichText::new(&is.text).font(sans(11.0)).color(WARN));
-                                places.push((format!("asm:interf:{k}"), r.rect));
-                                if let Some(ai) = &is.asm {
-                                    Self::asm_show_on(ui, a, ai, k, out, places);
-                                }
-                            });
-                        }
-                    });
-            }
-            if !a.expects.is_empty() {
-                let fails = a.expects.iter().filter(|e| !e.ok).count();
-                let head = format!("Expects: {} of {} pass", a.expects.len() - fails, a.expects.len());
-                let open = *a.open.entry("expects").or_insert(fails > 0);
-                ui.add_space(4.0);
-                let r = super::fg::fold_head(ui, t, &head, open, if fails > 0 { t.error } else { t.ink });
-                places.push(("asm:expects".into(), r.rect));
-                if r.clicked() {
-                    a.open.insert("expects", !open);
-                }
-                if open {
+                let found: Vec<(usize, &super::fg::Issue)> = issues
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, i)| {
+                        matches!(
+                            i.asm.as_ref().map(innermost),
+                            Some(AsmIssue::Interference { .. } | AsmIssue::ShallowEngagement { .. })
+                        )
+                    })
+                    .collect();
+                if !found.is_empty() {
                     egui::ScrollArea::vertical()
-                        .id_salt("asm-expects")
+                        .id_salt("asm-interf")
                         .auto_shrink([false, true])
                         .max_height(220.0)
                         .show(ui, |ui| {
-                            for (k, e) in a.expects.iter().enumerate() {
-                                let m = e.measured.map_or("-".to_string(), short);
-                                let l = e.limit.map_or("-".to_string(), short);
-                                let r = ui.label(
-                                    egui::RichText::new(format!(
-                                        "{} line {}: {} {m} (limit {l})",
-                                        if e.ok { "pass" } else { "FAIL" },
-                                        e.line,
-                                        e.metric
-                                    ))
-                                    .font(mono(10.0))
-                                    .color(if e.ok {
-                                        t.ink2
-                                    } else {
-                                        t.error
-                                    }),
-                                );
-                                places.push((format!("asm:expect:{k}"), r.rect));
+                            for (k, is) in found {
+                                ui.horizontal(|ui| {
+                                    let r =
+                                        ui.label(egui::RichText::new(&is.text).font(sans(11.0)).color(WARN));
+                                    places.push((format!("asm:interf:{k}"), r.rect));
+                                    if let Some(ai) = &is.asm {
+                                        Self::asm_show_on(ui, a, ai, k, out, places);
+                                    }
+                                });
                             }
                         });
                 }
-            }
-        });
+                if !a.expects.is_empty() {
+                    let fails = a.expects.iter().filter(|e| !e.ok).count();
+                    let head = format!("Expects: {} of {} pass", a.expects.len() - fails, a.expects.len());
+                    let open = *a.open.entry("expects").or_insert(fails > 0);
+                    ui.add_space(4.0);
+                    let r = super::fg::fold_head(ui, t, &head, open, if fails > 0 { t.error } else { t.ink });
+                    places.push(("asm:expects".into(), r.rect));
+                    if r.clicked() {
+                        a.open.insert("expects", !open);
+                    }
+                    if open {
+                        egui::ScrollArea::vertical()
+                            .id_salt("asm-expects")
+                            .auto_shrink([false, true])
+                            .max_height(220.0)
+                            .show(ui, |ui| {
+                                for (k, e) in a.expects.iter().enumerate() {
+                                    let m = e.measured.map_or("-".to_string(), short);
+                                    let l = e.limit.map_or("-".to_string(), short);
+                                    let r = ui.label(
+                                        egui::RichText::new(format!(
+                                            "{} line {}: {} {m} (limit {l})",
+                                            if e.ok { "pass" } else { "FAIL" },
+                                            e.line,
+                                            e.metric
+                                        ))
+                                        .font(mono(10.0))
+                                        .color(if e.ok {
+                                            t.ink2
+                                        } else {
+                                            t.error
+                                        }),
+                                    );
+                                    places.push((format!("asm:expect:{k}"), r.rect));
+                                }
+                            });
+                    }
+                }
+            },
+        );
         if close {
             a.interference = false;
         }
@@ -2636,47 +2644,50 @@ impl Shell {
     ) -> Option<Rect> {
         let mut close = false;
         let at = pos2(v.center().x - 200.0, v.top() + 56.0);
-        let r = Self::window("Bill of Materials", "bom", t, at, 400.0).show_placed(ctx, places, |ui, places| {
-            close = dialog_head(ui, t, "rule", "Bill of Materials", "asm:bomwin", places);
-            let total: usize = a.bom.iter().map(|b| b.1).sum();
-            ui.label(
-                egui::RichText::new(format!("{} parts, {total} in all", a.bom.len()))
-                    .font(sans(12.0))
-                    .color(t.ink2),
-            );
-            ui.add_space(4.0);
-            egui::ScrollArea::vertical()
-                .auto_shrink([false, true])
-                .max_height(v.height() * 0.6)
-                .show(ui, |ui| {
-                    egui::Grid::new("asm-bom")
-                        .num_columns(3)
-                        .striped(true)
-                        .spacing(vec2(14.0, 3.0))
-                        .show(ui, |ui| {
-                            for h in ["Qty", "Part", "File"] {
-                                ui.label(egui::RichText::new(h).font(medium(11.0)).color(t.ink2));
-                            }
-                            ui.end_row();
-                            for (k, (file, n)) in a.bom.iter().enumerate() {
-                                ui.label(egui::RichText::new(n.to_string()).font(mono(11.0)).color(t.ink));
-                                let r = ui.label(
-                                    egui::RichText::new(type_label(file))
-                                        .font(sans(12.0))
-                                        .color(t.ink),
-                                );
-                                ui.label(
-                                    egui::RichText::new(part_word(file))
-                                        .font(mono(10.0))
-                                        .color(t.ink2),
-                                );
+        let r =
+            Self::window("Bill of Materials", "bom", t, at, 400.0).show_placed(ctx, places, |ui, places| {
+                close = dialog_head(ui, t, "rule", "Bill of Materials", "asm:bomwin", places);
+                let total: usize = a.bom.iter().map(|b| b.1).sum();
+                ui.label(
+                    egui::RichText::new(format!("{} parts, {total} in all", a.bom.len()))
+                        .font(sans(12.0))
+                        .color(t.ink2),
+                );
+                ui.add_space(4.0);
+                egui::ScrollArea::vertical()
+                    .auto_shrink([false, true])
+                    .max_height(v.height() * 0.6)
+                    .show(ui, |ui| {
+                        egui::Grid::new("asm-bom")
+                            .num_columns(3)
+                            .striped(true)
+                            .spacing(vec2(14.0, 3.0))
+                            .show(ui, |ui| {
+                                for h in ["Qty", "Part", "File"] {
+                                    ui.label(egui::RichText::new(h).font(medium(11.0)).color(t.ink2));
+                                }
                                 ui.end_row();
-                                places.push((format!("asm:bom:{}", part_word(file)), r.rect));
-                                let _ = k;
-                            }
-                        });
-                });
-        });
+                                for (k, (file, n)) in a.bom.iter().enumerate() {
+                                    ui.label(
+                                        egui::RichText::new(n.to_string()).font(mono(11.0)).color(t.ink),
+                                    );
+                                    let r = ui.label(
+                                        egui::RichText::new(type_label(file))
+                                            .font(sans(12.0))
+                                            .color(t.ink),
+                                    );
+                                    ui.label(
+                                        egui::RichText::new(part_word(file))
+                                            .font(mono(10.0))
+                                            .color(t.ink2),
+                                    );
+                                    ui.end_row();
+                                    places.push((format!("asm:bom:{}", part_word(file)), r.rect));
+                                    let _ = k;
+                                }
+                            });
+                    });
+            });
         if close {
             a.bom_open = false;
         }

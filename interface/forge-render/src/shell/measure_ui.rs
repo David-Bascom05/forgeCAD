@@ -3,11 +3,11 @@
 //! the results drawn in the model as dimensions (arrowed lines, angle arcs, tinted faces with
 //! their areas, circles with their diameters), all in the world, so they stay put as it turns.
 
-use crate::shell::placed::Placed;
 use super::Shell;
 use super::fgasm::dialog_head;
 use super::inspect::{Added, Filter, Follow, IntoField, MPick, panel_values, shown, shown_dual};
 use super::theme::{Theme, medium, mono, sans};
+use crate::shell::placed::Placed;
 use egui::{Color32, Pos2, Rect, Stroke, Ui, pos2, vec2};
 use forge_agent::measure::{Quantity, Shown};
 use forge_math::{Point3, Vec3, dmath};
@@ -89,392 +89,405 @@ impl Shell {
         let n = m.precision;
         // wider with a second unit beside every value
         let width = if m.dual.is_some() { 400.0 } else { 330.0 };
-        let r = Self::inspect_window(title, "measure", t, at, width).show_placed(ctx, places, |ui, places| {
-            close = dialog_head(ui, t, "measure", title, "measure:close", places);
-            if m.wall {
-                wall_rows(ui, t, m, places);
-                return;
-            }
-            // the selection priority: what a click takes
-            ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = 2.0;
-                for f in Filter::ALL {
-                    let on = m.filter == f;
-                    let r = ui.add(
-                        egui::Button::new(egui::RichText::new(f.word()).font(sans(11.0)).color(if on {
-                            t.on_ink
-                        } else {
-                            t.ink
-                        }))
-                        .fill(if on { t.on } else { t.surface })
-                        .small(),
-                    );
-                    places.push((format!("measure:filter:{}", f.word()), r.rect));
-                    if r.clicked() && !on {
-                        // as Inventor's: a new priority starts the measuring again
-                        m.filter = f;
-                        m.restart();
-                    }
+        let r =
+            Self::inspect_window(title, "measure", t, at, width).show_placed(ctx, places, |ui, places| {
+                close = dialog_head(ui, t, "measure", title, "measure:close", places);
+                if m.wall {
+                    wall_rows(ui, t, m, places);
+                    return;
                 }
-            });
-            ui.add_space(2.0);
-            for k in 0..m.picks.len().max(2) {
-                let name = m
-                    .names
-                    .get(k)
-                    .cloned()
-                    .unwrap_or_else(|| match (k, m.picks.len()) {
-                        (0, _) => "Pick anything: a face, edge, point, plane, body".into(),
-                        (1, 0) => String::new(),
-                        _ => "A second, to measure between".into(),
-                    });
+                // the selection priority: what a click takes
                 ui.horizontal(|ui| {
-                    ui.add_sized(
-                        vec2(70.0, 16.0),
-                        egui::Label::new(
-                            egui::RichText::new(format!("Selection {}", k + 1))
-                                .font(medium(11.0))
-                                .color(SET_INK[k.min(1)]),
-                        ),
-                    );
-                    let r = ui.label(egui::RichText::new(name).font(sans(11.0)).color(t.ink2));
-                    places.push((format!("measure:pick{}", k + 1), r.rect));
-                });
-            }
-            ui.add_space(4.0);
-            // the words' column, as wide as it's dragged
-            let col = if m.label_w > 0.0 { m.label_w } else { LABEL_W };
-            let dual = m.dual;
-            let text_of = |q: Quantity, x: f64| shown_dual(q, x, units, n, dual);
-            let frame = m
-                .ucs
-                .as_ref()
-                .and_then(|id| frames.iter().find(|f| &f.0 == id))
-                .map(|f| f.1);
-            // what the reading lists, worked out before the panel changes anything
-            let listed = match &m.reading {
-                Some(Ok(r)) => {
-                    let kinds: Vec<Follow> = Follow::ALL
-                        .into_iter()
-                        .filter(|f| r.get(f.quantity()).is_some())
-                        .collect();
-                    Some(Ok((
-                        panel_values(r, m.follow, frame.as_ref(), m.hide_delta),
-                        kinds,
-                    )))
-                }
-                Some(Err(e)) => Some(Err(e.clone())),
-                None => None,
-            };
-            let mut act = None;
-            match &listed {
-                Some(Ok((values, kinds))) => {
-                    // which distance the deltas follow, as Inventor's toggle
-                    if kinds.len() > 1 {
-                        ui.horizontal(|ui| {
-                            ui.spacing_mut().item_spacing.x = 2.0;
-                            ui.add_sized(
-                                vec2(col, 16.0),
-                                egui::Label::new(
-                                    egui::RichText::new("Delta follows")
-                                        .font(sans(11.0))
-                                        .color(t.ink2),
-                                ),
-                            );
-                            for f in kinds {
-                                let on = m.follow == *f;
-                                let r = ui.add(
-                                    egui::Button::new(
-                                        egui::RichText::new(f.word()).font(sans(10.0)).color(if on {
-                                            t.on_ink
-                                        } else {
-                                            t.ink
-                                        }),
-                                    )
-                                    .fill(if on { t.on } else { t.surface })
-                                    .small(),
-                                );
-                                places.push((format!("measure:follow:{}", f.word()), r.rect));
-                                if r.clicked() {
-                                    m.follow = *f;
-                                }
-                            }
-                        });
-                    }
-                    let top = ui.cursor().top();
-                    for (q, x) in values {
-                        let text = text_of(*q, *x);
-                        let focused = m.focus == Some(*q);
-                        // into a length field a length, into an angle field an angle
-                        let usable = match &m.into {
-                            Some((_, forge_doc::units::Kind::Angle)) => q.power() == 0,
-                            Some((_, forge_doc::units::Kind::Length)) => q.power() == 1,
-                            None => false,
-                        };
-                        match value_row(ui, t, q.label(), &text, adds_up(*q), focused, usable, col, places) {
-                            Row::Use => act = Some(Row::Use.with(*q, *x)),
-                            Row::None => {}
-                            Row::Add => act = Some(Row::Add.with(*q, *x)),
-                            Row::Sub => act = Some(Row::Sub.with(*q, *x)),
-                            Row::Focus => act = Some(Row::Focus.with(*q, *x)),
-                            Row::CopyAll => act = Some(Row::CopyAll.with(*q, *x)),
+                    ui.spacing_mut().item_spacing.x = 2.0;
+                    for f in Filter::ALL {
+                        let on = m.filter == f;
+                        let r = ui.add(
+                            egui::Button::new(egui::RichText::new(f.word()).font(sans(11.0)).color(if on {
+                                t.on_ink
+                            } else {
+                                t.ink
+                            }))
+                            .fill(if on { t.on } else { t.surface })
+                            .small(),
+                        );
+                        places.push((format!("measure:filter:{}", f.word()), r.rect));
+                        if r.clicked() && !on {
+                            // as Inventor's: a new priority starts the measuring again
+                            m.filter = f;
+                            m.restart();
                         }
                     }
-                    // between the words and the values: drag it to widen or narrow the words
-                    let left = ui.min_rect().left();
-                    let edge = Rect::from_min_max(
-                        pos2(left + col - 3.0, top),
-                        pos2(left + col + 3.0, ui.cursor().top().max(top + 4.0)),
-                    );
-                    let h = ui.interact(edge, ui.scope_id().with("measure-column"), egui::Sense::drag());
-                    places.push(("measure:column".into(), edge));
-                    if h.hovered() || h.dragged() {
-                        ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
-                        ui.painter().line_segment(
-                            [
-                                pos2(edge.center().x, edge.top()),
-                                pos2(edge.center().x, edge.bottom()),
-                            ],
-                            Stroke::new(1.0, t.ink2),
-                        );
-                    }
-                    if h.dragged() {
-                        m.label_w = (col + h.drag_delta().x).clamp(60.0, 220.0);
-                    }
-                    if values.is_empty() {
-                        ui.label(
-                            egui::RichText::new("Nothing to measure there")
-                                .font(sans(11.0))
-                                .color(t.ink2),
-                        );
-                    }
-                }
-                Some(Err(e)) => {
-                    ui.label(egui::RichText::new(e).font(sans(11.0)).color(t.error));
-                }
-                None if m.busy => {
-                    ui.label(egui::RichText::new("Measuring...").font(sans(11.0)).color(t.ink2));
-                }
-                None => {}
-            }
-            let what = m.names.join(" / ");
-            let mut copy_all = false;
-            match act {
-                Some((Row::Add, q, x)) => m.accum.push(Added { q, x, what }),
-                Some((Row::Sub, q, x)) => m.accum.push(Added { q, x: -x, what }),
-                Some((Row::Focus, q, _)) => {
-                    m.focus = if m.focus == Some(q) { None } else { Some(q) };
-                    // a distance clicked is the one the deltas follow
-                    if let Some(f) = Follow::ALL.into_iter().find(|f| f.quantity() == q) {
-                        m.follow = f;
-                    }
-                }
-                Some((Row::CopyAll, _, _)) => copy_all = true,
-                Some((Row::Use, _, x)) => m.used = Some(x),
-                _ => {}
-            }
-            // the running totals, a group a kind, each with what went into it
-            if !m.accum.is_empty() {
-                ui.add_space(4.0);
-                ui.separator();
-                ui.label(egui::RichText::new("Accumulated").font(medium(11.0)).color(t.ink));
-                let (mut drop_one, mut drop_kind) = (None, None);
-                for power in [1, 2, 3, 4, 0] {
-                    let of: Vec<usize> = (0..m.accum.len())
-                        .filter(|&i| m.accum[i].q.power() == power)
-                        .collect();
-                    if of.is_empty() {
-                        continue;
-                    }
-                    let q = group_quantity(power);
-                    let total = text_of(q, of.iter().map(|&i| m.accum[i].x).sum());
-                    let words = format!("{} ({})", kind_word(power), of.len());
+                });
+                ui.add_space(2.0);
+                for k in 0..m.picks.len().max(2) {
+                    let name = m
+                        .names
+                        .get(k)
+                        .cloned()
+                        .unwrap_or_else(|| match (k, m.picks.len()) {
+                            (0, _) => "Pick anything: a face, edge, point, plane, body".into(),
+                            (1, 0) => String::new(),
+                            _ => "A second, to measure between".into(),
+                        });
                     ui.horizontal(|ui| {
                         ui.add_sized(
-                            vec2(col, 16.0),
-                            egui::Label::new(egui::RichText::new(&words).font(medium(11.0)).color(t.ink)),
+                            vec2(70.0, 16.0),
+                            egui::Label::new(
+                                egui::RichText::new(format!("Selection {}", k + 1))
+                                    .font(medium(11.0))
+                                    .color(SET_INK[k.min(1)]),
+                            ),
                         );
-                        let r = ui.label(egui::RichText::new(&total).font(mono(12.0)).color(t.ink));
-                        places.push((format!("measure:accum:{}", kind_word(power)), r.rect));
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            let x = ui
-                                .small_button(egui::RichText::new("×").font(sans(11.0)))
-                                .on_hover_text("Delete the group");
-                            places.push((format!("measure:accum:drop:{}", kind_word(power)), x.rect));
-                            if x.clicked() {
-                                drop_kind = Some(power);
-                            }
-                        });
+                        let r = ui.label(egui::RichText::new(name).font(sans(11.0)).color(t.ink2));
+                        places.push((format!("measure:pick{}", k + 1), r.rect));
                     });
-                    for &i in &of {
-                        let a = &m.accum[i];
-                        ui.horizontal(|ui| {
-                            ui.add_space(10.0);
-                            ui.add_sized(
-                                vec2(col - 10.0, 14.0),
-                                egui::Label::new(egui::RichText::new(&a.what).font(sans(10.0)).color(t.ink2))
-                                    .truncate(),
+                }
+                ui.add_space(4.0);
+                // the words' column, as wide as it's dragged
+                let col = if m.label_w > 0.0 { m.label_w } else { LABEL_W };
+                let dual = m.dual;
+                let text_of = |q: Quantity, x: f64| shown_dual(q, x, units, n, dual);
+                let frame = m
+                    .ucs
+                    .as_ref()
+                    .and_then(|id| frames.iter().find(|f| &f.0 == id))
+                    .map(|f| f.1);
+                // what the reading lists, worked out before the panel changes anything
+                let listed = match &m.reading {
+                    Some(Ok(r)) => {
+                        let kinds: Vec<Follow> = Follow::ALL
+                            .into_iter()
+                            .filter(|f| r.get(f.quantity()).is_some())
+                            .collect();
+                        Some(Ok((
+                            panel_values(r, m.follow, frame.as_ref(), m.hide_delta),
+                            kinds,
+                        )))
+                    }
+                    Some(Err(e)) => Some(Err(e.clone())),
+                    None => None,
+                };
+                let mut act = None;
+                match &listed {
+                    Some(Ok((values, kinds))) => {
+                        // which distance the deltas follow, as Inventor's toggle
+                        if kinds.len() > 1 {
+                            ui.horizontal(|ui| {
+                                ui.spacing_mut().item_spacing.x = 2.0;
+                                ui.add_sized(
+                                    vec2(col, 16.0),
+                                    egui::Label::new(
+                                        egui::RichText::new("Delta follows")
+                                            .font(sans(11.0))
+                                            .color(t.ink2),
+                                    ),
+                                );
+                                for f in kinds {
+                                    let on = m.follow == *f;
+                                    let r = ui.add(
+                                        egui::Button::new(
+                                            egui::RichText::new(f.word()).font(sans(10.0)).color(if on {
+                                                t.on_ink
+                                            } else {
+                                                t.ink
+                                            }),
+                                        )
+                                        .fill(if on { t.on } else { t.surface })
+                                        .small(),
+                                    );
+                                    places.push((format!("measure:follow:{}", f.word()), r.rect));
+                                    if r.clicked() {
+                                        m.follow = *f;
+                                    }
+                                }
+                            });
+                        }
+                        let top = ui.cursor().top();
+                        for (q, x) in values {
+                            let text = text_of(*q, *x);
+                            let focused = m.focus == Some(*q);
+                            // into a length field a length, into an angle field an angle
+                            let usable = match &m.into {
+                                Some((_, forge_doc::units::Kind::Angle)) => q.power() == 0,
+                                Some((_, forge_doc::units::Kind::Length)) => q.power() == 1,
+                                None => false,
+                            };
+                            match value_row(
+                                ui,
+                                t,
+                                q.label(),
+                                &text,
+                                adds_up(*q),
+                                focused,
+                                usable,
+                                col,
+                                places,
+                            ) {
+                                Row::Use => act = Some(Row::Use.with(*q, *x)),
+                                Row::None => {}
+                                Row::Add => act = Some(Row::Add.with(*q, *x)),
+                                Row::Sub => act = Some(Row::Sub.with(*q, *x)),
+                                Row::Focus => act = Some(Row::Focus.with(*q, *x)),
+                                Row::CopyAll => act = Some(Row::CopyAll.with(*q, *x)),
+                            }
+                        }
+                        // between the words and the values: drag it to widen or narrow the words
+                        let left = ui.min_rect().left();
+                        let edge = Rect::from_min_max(
+                            pos2(left + col - 3.0, top),
+                            pos2(left + col + 3.0, ui.cursor().top().max(top + 4.0)),
+                        );
+                        let h = ui.interact(edge, ui.scope_id().with("measure-column"), egui::Sense::drag());
+                        places.push(("measure:column".into(), edge));
+                        if h.hovered() || h.dragged() {
+                            ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
+                            ui.painter().line_segment(
+                                [
+                                    pos2(edge.center().x, edge.top()),
+                                    pos2(edge.center().x, edge.bottom()),
+                                ],
+                                Stroke::new(1.0, t.ink2),
                             );
+                        }
+                        if h.dragged() {
+                            m.label_w = (col + h.drag_delta().x).clamp(60.0, 220.0);
+                        }
+                        if values.is_empty() {
                             ui.label(
-                                egui::RichText::new(text_of(a.q, a.x))
-                                    .font(mono(11.0))
+                                egui::RichText::new("Nothing to measure there")
+                                    .font(sans(11.0))
                                     .color(t.ink2),
                             );
+                        }
+                    }
+                    Some(Err(e)) => {
+                        ui.label(egui::RichText::new(e).font(sans(11.0)).color(t.error));
+                    }
+                    None if m.busy => {
+                        ui.label(egui::RichText::new("Measuring...").font(sans(11.0)).color(t.ink2));
+                    }
+                    None => {}
+                }
+                let what = m.names.join(" / ");
+                let mut copy_all = false;
+                match act {
+                    Some((Row::Add, q, x)) => m.accum.push(Added { q, x, what }),
+                    Some((Row::Sub, q, x)) => m.accum.push(Added { q, x: -x, what }),
+                    Some((Row::Focus, q, _)) => {
+                        m.focus = if m.focus == Some(q) { None } else { Some(q) };
+                        // a distance clicked is the one the deltas follow
+                        if let Some(f) = Follow::ALL.into_iter().find(|f| f.quantity() == q) {
+                            m.follow = f;
+                        }
+                    }
+                    Some((Row::CopyAll, _, _)) => copy_all = true,
+                    Some((Row::Use, _, x)) => m.used = Some(x),
+                    _ => {}
+                }
+                // the running totals, a group a kind, each with what went into it
+                if !m.accum.is_empty() {
+                    ui.add_space(4.0);
+                    ui.separator();
+                    ui.label(egui::RichText::new("Accumulated").font(medium(11.0)).color(t.ink));
+                    let (mut drop_one, mut drop_kind) = (None, None);
+                    for power in [1, 2, 3, 4, 0] {
+                        let of: Vec<usize> = (0..m.accum.len())
+                            .filter(|&i| m.accum[i].q.power() == power)
+                            .collect();
+                        if of.is_empty() {
+                            continue;
+                        }
+                        let q = group_quantity(power);
+                        let total = text_of(q, of.iter().map(|&i| m.accum[i].x).sum());
+                        let words = format!("{} ({})", kind_word(power), of.len());
+                        ui.horizontal(|ui| {
+                            ui.add_sized(
+                                vec2(col, 16.0),
+                                egui::Label::new(egui::RichText::new(&words).font(medium(11.0)).color(t.ink)),
+                            );
+                            let r = ui.label(egui::RichText::new(&total).font(mono(12.0)).color(t.ink));
+                            places.push((format!("measure:accum:{}", kind_word(power)), r.rect));
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                                 let x = ui
-                                    .small_button(egui::RichText::new("×").font(sans(10.0)))
-                                    .on_hover_text("Delete the value");
-                                places.push((format!("measure:accum:entry:{i}"), x.rect));
+                                    .small_button(egui::RichText::new("×").font(sans(11.0)))
+                                    .on_hover_text("Delete the group");
+                                places.push((format!("measure:accum:drop:{}", kind_word(power)), x.rect));
                                 if x.clicked() {
-                                    drop_one = Some(i);
+                                    drop_kind = Some(power);
                                 }
                             });
                         });
+                        for &i in &of {
+                            let a = &m.accum[i];
+                            ui.horizontal(|ui| {
+                                ui.add_space(10.0);
+                                ui.add_sized(
+                                    vec2(col - 10.0, 14.0),
+                                    egui::Label::new(
+                                        egui::RichText::new(&a.what).font(sans(10.0)).color(t.ink2),
+                                    )
+                                    .truncate(),
+                                );
+                                ui.label(
+                                    egui::RichText::new(text_of(a.q, a.x))
+                                        .font(mono(11.0))
+                                        .color(t.ink2),
+                                );
+                                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                    let x = ui
+                                        .small_button(egui::RichText::new("×").font(sans(10.0)))
+                                        .on_hover_text("Delete the value");
+                                    places.push((format!("measure:accum:entry:{i}"), x.rect));
+                                    if x.clicked() {
+                                        drop_one = Some(i);
+                                    }
+                                });
+                            });
+                        }
+                    }
+                    if let Some(i) = drop_one {
+                        m.accum.remove(i);
+                    }
+                    if let Some(p) = drop_kind {
+                        m.accum.retain(|a| a.q.power() != p);
+                    }
+                    let c = ui.small_button(egui::RichText::new("Clear totals").font(sans(10.0)));
+                    places.push(("measure:clear".into(), c.rect));
+                    if c.clicked() {
+                        m.accum.clear();
                     }
                 }
-                if let Some(i) = drop_one {
-                    m.accum.remove(i);
-                }
-                if let Some(p) = drop_kind {
-                    m.accum.retain(|a| a.q.power() != p);
-                }
-                let c = ui.small_button(egui::RichText::new("Clear totals").font(sans(10.0)));
-                places.push(("measure:clear".into(), c.rect));
-                if c.clicked() {
-                    m.accum.clear();
-                }
-            }
-            ui.add_space(6.0);
-            ui.horizontal(|ui| {
-                let all = ui.small_button(egui::RichText::new("Copy all").font(sans(11.0)));
-                places.push(("measure:copyall".into(), all.rect));
-                copy_all |= all.clicked();
-                let r = ui.small_button(egui::RichText::new("Restart").font(sans(11.0)));
-                places.push(("measure:restart".into(), r.rect));
-                if r.clicked() {
-                    m.restart();
-                }
-                let r = egui::ComboBox::from_id_salt("measure-precision")
-                    .selected_text(format!("{} dp", m.precision))
-                    .width(48.0)
-                    .show_ui(ui, |ui| {
-                        for p in 0..=6 {
-                            ui.selectable_value(&mut m.precision, p, format!("{p}"));
-                        }
-                    });
-                places.push(("measure:precision".into(), r.response.rect));
-                let r = egui::ComboBox::from_id_salt("measure-unit")
-                    .selected_text(m.unit)
-                    .width(40.0)
-                    .show_ui(ui, |ui| {
-                        for u in forge_doc::units::DOC_LENGTHS {
-                            ui.selectable_value(&mut m.unit, u, u);
-                        }
-                    });
-                places.push(("measure:unit".into(), r.response.rect));
-            });
-            if copy_all {
-                let mut text: Vec<String> = match &listed {
-                    Some(Ok((values, _))) => values
-                        .iter()
-                        .map(|(q, x)| format!("{}\t{}", q.label(), text_of(*q, *x)))
-                        .collect(),
-                    _ => vec![],
-                };
-                for power in [1, 2, 3, 4, 0] {
-                    let of: Vec<f64> = m
-                        .accum
-                        .iter()
-                        .filter(|a| a.q.power() == power)
-                        .map(|a| a.x)
-                        .collect();
-                    if !of.is_empty() {
-                        let total = text_of(group_quantity(power), of.iter().sum());
-                        text.push(format!("{} total\t{total}", kind_word(power)));
-                    }
-                }
-                ui.ctx().copy_text(text.join("\n"));
-            }
-            // Inventor's Advanced Settings: a second unit, the coordinate system, the deltas
-            let words = if m.advanced {
-                "Hide advanced settings"
-            } else {
-                "Advanced settings..."
-            };
-            let a = ui.add(
-                egui::Button::new(egui::RichText::new(words).font(sans(11.0)).color(t.ink2)).frame(false),
-            );
-            places.push(("measure:advanced".into(), a.rect));
-            if a.clicked() {
-                m.advanced = !m.advanced;
-            }
-            if m.advanced {
+                ui.add_space(6.0);
                 ui.horizontal(|ui| {
-                    ui.add_sized(
-                        vec2(col, 16.0),
-                        egui::Label::new(egui::RichText::new("Dual unit").font(sans(11.0)).color(t.ink2)),
-                    );
-                    let r = egui::ComboBox::from_id_salt("measure-dual")
-                        .selected_text(m.dual.unwrap_or("None"))
-                        .width(60.0)
+                    let all = ui.small_button(egui::RichText::new("Copy all").font(sans(11.0)));
+                    places.push(("measure:copyall".into(), all.rect));
+                    copy_all |= all.clicked();
+                    let r = ui.small_button(egui::RichText::new("Restart").font(sans(11.0)));
+                    places.push(("measure:restart".into(), r.rect));
+                    if r.clicked() {
+                        m.restart();
+                    }
+                    let r = egui::ComboBox::from_id_salt("measure-precision")
+                        .selected_text(format!("{} dp", m.precision))
+                        .width(48.0)
                         .show_ui(ui, |ui| {
-                            ui.selectable_value(&mut m.dual, None, "None");
+                            for p in 0..=6 {
+                                ui.selectable_value(&mut m.precision, p, format!("{p}"));
+                            }
+                        });
+                    places.push(("measure:precision".into(), r.response.rect));
+                    let r = egui::ComboBox::from_id_salt("measure-unit")
+                        .selected_text(m.unit)
+                        .width(40.0)
+                        .show_ui(ui, |ui| {
                             for u in forge_doc::units::DOC_LENGTHS {
-                                ui.selectable_value(&mut m.dual, Some(u), u);
+                                ui.selectable_value(&mut m.unit, u, u);
                             }
                         });
-                    places.push(("measure:dual".into(), r.response.rect));
+                    places.push(("measure:unit".into(), r.response.rect));
                 });
-                ui.horizontal(|ui| {
-                    ui.add_sized(
-                        vec2(col, 16.0),
-                        egui::Label::new(
-                            egui::RichText::new("Coordinate system")
-                                .font(sans(11.0))
-                                .color(t.ink2),
-                        ),
-                    );
-                    let r = egui::ComboBox::from_id_salt("measure-ucs")
-                        .selected_text(m.ucs.clone().unwrap_or("World".into()))
-                        .width(100.0)
-                        .show_ui(ui, |ui| {
-                            ui.selectable_value(&mut m.ucs, None, "World");
-                            for (id, _) in &frames {
-                                ui.selectable_value(&mut m.ucs, Some(id.clone()), id);
-                            }
-                        });
-                    places.push(("measure:ucs".into(), r.response.rect));
-                });
-                let mut loops = !m.no_loops;
-                let r = ui
-                    .checkbox(
-                        &mut loops,
-                        egui::RichText::new("Detect sketch loops").font(sans(11.0)),
-                    )
-                    .on_hover_text(
-                        "In a sketch, a click inside a closed region measures its area and perimeter",
-                    );
-                places.push(("measure:loops".into(), r.rect));
-                m.no_loops = !loops;
-                let mut show = !m.hide_delta;
-                let r = ui.checkbox(
-                    &mut show,
-                    egui::RichText::new("Show Delta X, Y, Z").font(sans(11.0)),
+                if copy_all {
+                    let mut text: Vec<String> = match &listed {
+                        Some(Ok((values, _))) => values
+                            .iter()
+                            .map(|(q, x)| format!("{}\t{}", q.label(), text_of(*q, *x)))
+                            .collect(),
+                        _ => vec![],
+                    };
+                    for power in [1, 2, 3, 4, 0] {
+                        let of: Vec<f64> = m
+                            .accum
+                            .iter()
+                            .filter(|a| a.q.power() == power)
+                            .map(|a| a.x)
+                            .collect();
+                        if !of.is_empty() {
+                            let total = text_of(group_quantity(power), of.iter().sum());
+                            text.push(format!("{} total\t{total}", kind_word(power)));
+                        }
+                    }
+                    ui.ctx().copy_text(text.join("\n"));
+                }
+                // Inventor's Advanced Settings: a second unit, the coordinate system, the deltas
+                let words = if m.advanced {
+                    "Hide advanced settings"
+                } else {
+                    "Advanced settings..."
+                };
+                let a = ui.add(
+                    egui::Button::new(egui::RichText::new(words).font(sans(11.0)).color(t.ink2)).frame(false),
                 );
-                places.push(("measure:delta".into(), r.rect));
-                m.hide_delta = !show;
-            }
-            ui.add(
-                egui::Label::new(
-                    egui::RichText::new(
-                        "Esc clears, Enter starts again. Shift on a third point: the angle at the second",
+                places.push(("measure:advanced".into(), a.rect));
+                if a.clicked() {
+                    m.advanced = !m.advanced;
+                }
+                if m.advanced {
+                    ui.horizontal(|ui| {
+                        ui.add_sized(
+                            vec2(col, 16.0),
+                            egui::Label::new(egui::RichText::new("Dual unit").font(sans(11.0)).color(t.ink2)),
+                        );
+                        let r = egui::ComboBox::from_id_salt("measure-dual")
+                            .selected_text(m.dual.unwrap_or("None"))
+                            .width(60.0)
+                            .show_ui(ui, |ui| {
+                                ui.selectable_value(&mut m.dual, None, "None");
+                                for u in forge_doc::units::DOC_LENGTHS {
+                                    ui.selectable_value(&mut m.dual, Some(u), u);
+                                }
+                            });
+                        places.push(("measure:dual".into(), r.response.rect));
+                    });
+                    ui.horizontal(|ui| {
+                        ui.add_sized(
+                            vec2(col, 16.0),
+                            egui::Label::new(
+                                egui::RichText::new("Coordinate system")
+                                    .font(sans(11.0))
+                                    .color(t.ink2),
+                            ),
+                        );
+                        let r = egui::ComboBox::from_id_salt("measure-ucs")
+                            .selected_text(m.ucs.clone().unwrap_or("World".into()))
+                            .width(100.0)
+                            .show_ui(ui, |ui| {
+                                ui.selectable_value(&mut m.ucs, None, "World");
+                                for (id, _) in &frames {
+                                    ui.selectable_value(&mut m.ucs, Some(id.clone()), id);
+                                }
+                            });
+                        places.push(("measure:ucs".into(), r.response.rect));
+                    });
+                    let mut loops = !m.no_loops;
+                    let r = ui
+                        .checkbox(
+                            &mut loops,
+                            egui::RichText::new("Detect sketch loops").font(sans(11.0)),
+                        )
+                        .on_hover_text(
+                            "In a sketch, a click inside a closed region measures its area and perimeter",
+                        );
+                    places.push(("measure:loops".into(), r.rect));
+                    m.no_loops = !loops;
+                    let mut show = !m.hide_delta;
+                    let r = ui.checkbox(
+                        &mut show,
+                        egui::RichText::new("Show Delta X, Y, Z").font(sans(11.0)),
+                    );
+                    places.push(("measure:delta".into(), r.rect));
+                    m.hide_delta = !show;
+                }
+                ui.add(
+                    egui::Label::new(
+                        egui::RichText::new(
+                            "Esc clears, Enter starts again. Shift on a third point: the angle at the second",
+                        )
+                        .font(sans(10.0))
+                        .color(t.ink2),
                     )
-                    .font(sans(10.0))
-                    .color(t.ink2),
-                )
-                .wrap(),
-            );
-        });
+                    .wrap(),
+                );
+            });
         // a value Use was pressed on: into the field, and Measure's done, as Inventor's
         let used = m.used.take().zip(m.into.clone());
         if let Some((x, (into, kind))) = used {

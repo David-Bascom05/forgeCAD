@@ -363,7 +363,10 @@ fn a_pick_asked_before_the_meshes_changed_gives_no_answer() {
     g.r.set_parts(&parts);
     assert_ne!(g.r.geometry(), g0);
     g.r.wait();
-    assert!(g.r.pick_poll(&g.scene).is_none(), "an answer of the meshes before");
+    assert!(
+        g.r.pick_poll(&g.scene).is_none(),
+        "an answer of the meshes before"
+    );
     assert!(!g.r.pick_busy(), "and it's done: the next is asked of these");
     // asked again: answered
     assert!(g.pick(px).is_some());

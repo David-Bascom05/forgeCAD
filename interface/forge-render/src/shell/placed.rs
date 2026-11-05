@@ -12,7 +12,12 @@ pub(crate) trait Placed: Sized {
     fn show_sizing<R>(self, ctx: &Context, add: impl FnOnce(&mut Ui) -> R) -> (Self::Out<R>, bool);
 
     /// Shown, keeping what it names in `places` only when it's drawn where it's seen.
-    fn show_placed<R>(self, ctx: &Context, places: &mut Places, add: impl FnOnce(&mut Ui, &mut Places) -> R) -> Self::Out<R> {
+    fn show_placed<R>(
+        self,
+        ctx: &Context,
+        places: &mut Places,
+        add: impl FnOnce(&mut Ui, &mut Places) -> R,
+    ) -> Self::Out<R> {
         let before = places.len();
         let (r, sizing) = self.show_sizing(ctx, |ui| add(ui, places));
         if sizing {

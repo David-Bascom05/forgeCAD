@@ -690,7 +690,6 @@ fn a_double_click_on_a_feature_opens_its_dialog_filled_and_ok_replaces_it_in_pla
     );
 }
 
-
 #[test]
 fn a_pick_made_before_a_build_lands_is_of_what_is_shown_after() {
     // the pointer on the top face, its pick answered against the plain block's mesh
@@ -717,5 +716,10 @@ fn a_pick_made_before_a_build_lands_is_of_what_is_shown_after() {
     for _ in 0..10 {
         h.step();
     }
-    assert_eq!(picks(&h, "Remove Faces"), ["base.end"], "status: {}", h.gui.shell.status);
+    assert_eq!(
+        picks(&h, "Remove Faces"),
+        ["base.end"],
+        "status: {}",
+        h.gui.shell.status
+    );
 }

@@ -4,12 +4,12 @@
 //! stand-in). Saved as forge-material's TOML in `~/.config/forgecad/materials/mine.toml` or the
 //! project's `materials/project.toml`; Assign to Part sets the part's material.
 
-use crate::shell::placed::Placed;
 use super::Shell;
 use super::fg::FgAct;
 use super::fgasm::dialog_frame;
 use super::icons;
 use super::theme::{Theme, medium, mono, sans, semi};
+use crate::shell::placed::Placed;
 use egui::{Align2, Color32, Painter, Pos2, Rect, Response, Sense, Stroke, StrokeKind, Ui, pos2, vec2};
 use forge_lang::error::Op;
 use forge_material::{Kind, Lib, Libraries, Material};

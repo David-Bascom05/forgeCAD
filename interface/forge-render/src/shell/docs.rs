@@ -3,6 +3,7 @@
 //! them changes; an idle one's is swapped out into a `ShellDoc`.
 
 use super::Shell;
+use crate::shell::placed::Placed;
 
 /// Splits a struct's fields into the document's and the app's. The document's go into `$doc`,
 /// swapped in and out whole; the app's stay. Every field must be named in one list or the other,
@@ -356,7 +357,8 @@ impl Shell {
         let title = d.title.clone();
         let mut answer: Option<Option<bool>> = None;
         let area = super::dialog_area(ctx);
-        egui::Window::new("Save changes?")
+        let placed_before = self.places.len();
+        let (_, sizing) = egui::Window::new("Save changes?")
             .id(egui::Id::unique("doc-close-ask"))
             .frame(super::fgasm::dialog_frame(&self.theme))
             .collapsible(false)
@@ -364,7 +366,7 @@ impl Shell {
             .order(egui::Order::Foreground)
             .default_pos(area.center() - egui::vec2(170.0, 50.0))
             .constrain_to(area)
-            .show(ctx, |ui| {
+            .show_sizing(ctx, |ui| {
                 ui.label(
                     egui::RichText::new(format!("Save changes to {title} before closing?"))
                         .font(super::theme::sans(13.0)),
@@ -383,6 +385,10 @@ impl Shell {
                     b(ui, "Cancel", "cancel", None);
                 });
             });
+        // what it named unseen, sizing itself, is off
+        if sizing {
+            self.places.truncate(placed_before);
+        }
         if ui_escape(ctx) {
             answer = Some(None);
         }

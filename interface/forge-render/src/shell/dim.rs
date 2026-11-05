@@ -1,10 +1,10 @@
 //! The selected feature's number on the model: an arrow along its real axis that drags in real
 //! millimetres, its value beside it in a field, and a clear word if a value can't build.
 
-use crate::shell::placed::Placed;
 use super::theme::mono;
 use super::{Action, Shell, icons, theme};
 use crate::camera::{Camera, dot};
+use crate::shell::placed::Placed;
 use egui::{Color32, Rect, Sense, Stroke, StrokeKind, pos2, vec2};
 use forge_agent::handles::Handle;
 use forge_agent::short;

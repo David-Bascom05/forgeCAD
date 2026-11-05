@@ -2,10 +2,10 @@
 //! left, the chosen category's families as pictures, and the chosen family's table (size, length,
 //! thread, grade) with the part's designation; Place writes `NAME = std(..)` into the assembly.
 
-use crate::shell::placed::Placed;
 use super::fgasm::{dialog_frame, dialog_head};
 use super::theme::{Theme, medium, mono, sans, semi};
 use super::{Shell, icons};
+use crate::shell::placed::Placed;
 use egui::{Color32, Rect, Sense, Stroke, StrokeKind, Ui, pos2, vec2};
 use forge_lang::error::Op;
 use forge_lang::stdparts::{Family, Spec, families, generate, key};
@@ -511,9 +511,7 @@ impl Shell {
                                 ui.label(egui::RichText::new("Size").font(medium(11.0)).color(t.ink2));
                                 let sizes: Vec<String> = f.sizes().iter().map(|s| s.to_string()).collect();
                                 let k = cc.size.as_ref().and_then(|s| sizes.iter().position(|x| x == s));
-                                if let Some(k) =
-                                    pick_list(ui, &t, "size", &sizes, k, jump, 190.0, places)
-                                {
+                                if let Some(k) = pick_list(ui, &t, "size", &sizes, k, jump, 190.0, places) {
                                     cc.size = Some(sizes[k].clone());
                                     cc.pick_length(f);
                                     cc.jump_length = true;
@@ -537,16 +535,9 @@ impl Shell {
                                     let words: Vec<String> =
                                         ls.iter().map(|l| forge_lang::values::fmt(*l)).collect();
                                     let k = cc.length.and_then(|l| ls.iter().position(|x| *x == l));
-                                    if let Some(k) = pick_list(
-                                        ui,
-                                        &t,
-                                        "length",
-                                        &words,
-                                        k,
-                                        jump_length,
-                                        190.0,
-                                        places,
-                                    ) {
+                                    if let Some(k) =
+                                        pick_list(ui, &t, "length", &words, k, jump_length, 190.0, places)
+                                    {
                                         cc.length = Some(ls[k]);
                                     }
                                 });

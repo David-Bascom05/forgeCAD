@@ -4,7 +4,6 @@
 //! once and is kept in `settings.toml` under `$XDG_CONFIG_HOME/forgecad`.
 
 use super::fgasm::{dialog_frame, dialog_head};
-use crate::shell::placed::Placed;
 use super::materials::{button_at, section};
 use super::theme::{Theme, medium, sans, semi};
 use super::{ASM_OVERLAYS, Action, OVERLAY_SWITCHES, Overlays, PART_OVERLAYS, Shell, theme};
@@ -13,6 +12,7 @@ use crate::bindings::{
     preset_map, presets,
 };
 use crate::render::{Backdrop, VisualStyle};
+use crate::shell::placed::Placed;
 use egui::{Color32, Rect, Stroke, StrokeKind, Ui, pos2, vec2};
 
 pub const ANGLES: [&str; 2] = ["deg", "rad"];
