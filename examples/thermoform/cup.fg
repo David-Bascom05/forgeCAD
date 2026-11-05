@@ -5,9 +5,9 @@ shared r = 32
 shared D = 75
 shared lean = 3deg
 shared rb = 6
-sketch plan(on: xy) {
+sketch footprint(on: xy) {
   rim = circle((0, 0), r)
 }
-cup = extrude(plan, -D, taper: lean)
+cup = extrude(footprint, -D, taper: lean)
 base = fillet(edges(of: cup.end), rb)
 part = thermoform(cup, t: t, material: "PETG", tool: "female")

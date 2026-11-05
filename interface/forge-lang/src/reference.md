@@ -769,10 +769,10 @@ flat face square to the pull at its foot (male) or its top (female), and that is
 
 ```
 shared t = 2
-sketch plan(on: xy) {
+sketch footprint(on: xy) {
   outline = rect(center: (0, 0), size: (120, 80))
 }
-body = extrude(plan, 35, taper: 5deg)
+body = extrude(footprint, 35, taper: 5deg)
 round = fillet(edges(of: body.end), 5)
 cover = thermoform(body, t: t, material: "HIPS")
 ```

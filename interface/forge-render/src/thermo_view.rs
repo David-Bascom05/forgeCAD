@@ -544,22 +544,23 @@ pub fn compose(full: &PartMesh, hide: &[&Span], extra: &[&Lod]) -> PartMesh {
     }
 }
 
-/// The browser's chosen body marked in the view, and the one under the pointer there lit.
+/// The body under the pointer in the browser, lit in the view.
 pub fn marks(u: &crate::shell::thermo_ui::ThermoUi, g: &Gfx) -> Vec<crate::render::Mark> {
     use crate::shell::thermo_ui::Body;
     let faces = |b: Body| -> std::ops::Range<u32> {
         match b {
-            Body::Part if !u.show.part => 0..0,
+            Body::Part if !u.shows(Body::Part) => 0..0,
             Body::Part if u.simulated && g.sim.is_some() => UNPICKED..UNPICKED + 3,
             Body::Part => g.part_span.as_ref().map_or(0..0, |s| s.faces.clone()),
-            Body::Mould if !u.show.mould => 0..0,
+            Body::Mould if !u.shows(Body::Mould) => 0..0,
             Body::Mould => g.mould_span.as_ref().map_or(0..0, |s| s.faces.clone()),
-            Body::Blank if !u.show.blank => 0..0,
+            Body::Blank if !u.shows(Body::Blank) => 0..0,
             Body::Blank => UNPICKED + 8..UNPICKED + 14,
         }
     };
+    // the body looked at shows alone: only the one under the pointer is lit
     let over = u.hover.filter(|h| Some(*h) != u.picked);
-    [(u.picked, true), (over, false)]
+    [(over, false)]
         .into_iter()
         .filter_map(|(b, selected)| b.map(|b| (faces(b), selected)))
         .flat_map(|(r, selected)| {

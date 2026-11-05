@@ -7,11 +7,11 @@ shared lean = 5deg
 shared r = 10
 shared rt = 6
 shared wall = 1.5
-sketch plan(on: xy) {
+sketch footprint(on: xy) {
   outline = hull(disc((r - W / 2, r - L / 2), r), disc((W / 2 - r, r - L / 2), r),
                  disc((W / 2 - r, L / 2 - r), r), disc((r - W / 2, L / 2 - r), r))
 }
-body = extrude(plan, H, taper: lean)
+body = extrude(footprint, H, taper: lean)
 round = fillet(edges(of: body.end), rt)
 skin = shell(wall, open: body.start)
 cover = thermoform(skin, from: "wall", material: "ABS")

@@ -278,7 +278,7 @@ impl Gui {
                         .step
                         .unwrap_or(usize::MAX)
                         .min(g.steps.len().saturating_sub(1));
-                    if !p.thermo.show.part {
+                    if !p.thermo.shows(crate::shell::thermo_ui::Body::Part) {
                     } else if p.thermo.simulated && g.sim.is_some() && p.thermo.step.is_none() {
                         out.extend_from_slice(&g.sim_heat);
                     } else if let Some(s) = g.steps.get(k) {

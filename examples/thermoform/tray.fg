@@ -11,11 +11,11 @@ shared pd = 15
 param pk.r = 22
 param pk.pitch = 60
 param part.lip = 12
-sketch plan(on: xy) {
+sketch footprint(on: xy) {
   outline = hull(disc((rc - W / 2, rc - L / 2), rc), disc((W / 2 - rc, rc - L / 2), rc),
                  disc((W / 2 - rc, L / 2 - rc), rc), disc((rc - W / 2, L / 2 - rc), rc))
 }
-tray = extrude(plan, -D, taper: lean)
+tray = extrude(footprint, -D, taper: lean)
 sketch pk(on: tray.end) {
   for i in 0..3 {
     c = circle(((i - 1) * pitch, 0), r)

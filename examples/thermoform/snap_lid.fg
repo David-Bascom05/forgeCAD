@@ -12,11 +12,11 @@ shared bead_h = 3
 param pk.pr = 6
 param pk.gap = 8
 param posts.ph = 14
-sketch plan(on: xy) {
+sketch footprint(on: xy) {
   outline = hull(disc((r - W / 2, r - L / 2), r), disc((W / 2 - r, r - L / 2), r),
                  disc((W / 2 - r, L / 2 - r), r), disc((r - W / 2, L / 2 - r), r))
 }
-body = extrude(plan, H, taper: lean)
+body = extrude(footprint, H, taper: lean)
 sketch rim(on: body.end) {
   o = hull(disc((r - W / 2, r - L / 2), r), disc((W / 2 - r, r - L / 2), r),
            disc((W / 2 - r, L / 2 - r), r), disc((r - W / 2, L / 2 - r), r))

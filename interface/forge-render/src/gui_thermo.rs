@@ -104,22 +104,23 @@ impl Gui {
         let u = &self.shell.fg.as_ref()?.thermo;
         let g = self.fg_walls.first()?;
         let sim = u.simulated && g.sim.is_some();
-        let hide_part = !u.show.part || sim;
-        if !hide_part && u.show.mould && !u.show.blank {
+        use crate::shell::thermo_ui::Body;
+        let hide_part = !u.shows(Body::Part) || sim;
+        if !hide_part && u.shows(Body::Mould) && !u.shows(Body::Blank) {
             return None;
         }
         let mut hide = vec![];
         if hide_part {
             hide.extend(g.part_span.as_ref());
         }
-        if !u.show.mould {
+        if !u.shows(Body::Mould) {
             hide.extend(g.mould_span.as_ref());
         }
         let mut extra = vec![];
-        if sim && u.show.part {
+        if sim && u.shows(Body::Part) {
             extra.extend(g.sim.as_ref());
         }
-        if u.show.blank {
+        if u.shows(Body::Blank) {
             extra.push(&g.blank);
         }
         Some(crate::thermo_view::compose(full, &hide, &extra))

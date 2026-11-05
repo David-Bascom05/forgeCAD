@@ -8,7 +8,7 @@ use super::fg::{FgAct, FgPanel, Severity};
 use super::theme::{Theme, medium, mono, sans, semi};
 use super::thermo::{Masses, ThermoRow, band, c32};
 use super::{Action, FgCmd, Shell};
-use egui::{Align2, Color32, Pos2, Rect, Sense, Stroke, StrokeKind, Ui, pos2, vec2};
+use egui::{Align2, Color32, Rect, Sense, Stroke, StrokeKind, Ui, pos2, vec2};
 use forge_lang::error::Op;
 
 /// A thermoform command, from the ribbon, the browser or a dialog.
@@ -91,12 +91,10 @@ pub struct ThermoUi {
     pub converted: bool,
     /// What the host drew the part's mesh for last (`view_key`).
     pub drawn: Option<usize>,
-    /// The body chosen in the browser, and the one under the pointer there: the formed part, the
-    /// mould, the blank.
+    /// The body looked at, chosen by its row in the browser (it shows alone, as sheet metal's
+    /// Folded Model and Flat Pattern rows switch), and the one under the pointer there.
     pub picked: Option<Body>,
     pub hover: Option<Body>,
-    /// The blank's numbers, opened from its row.
-    pub blank_info: bool,
     /// What the host marked in the view last (`picked`, `hover`).
     pub marked: Option<(Option<Body>, Option<Body>)>,
 }
@@ -112,10 +110,22 @@ pub enum Body {
 impl ThermoUi {
     /// What the part's mesh depends on of this: its eyes and its state.
     pub fn view_key(&self) -> usize {
-        usize::from(self.show.part)
-            | usize::from(self.show.mould) << 1
-            | usize::from(self.show.blank) << 2
+        usize::from(self.shows(Body::Part))
+            | usize::from(self.shows(Body::Mould)) << 1
+            | usize::from(self.shows(Body::Blank)) << 2
             | usize::from(self.simulated) << 3
+    }
+
+    /// Whether a body is on view: the one looked at alone, else as its eye says.
+    pub fn shows(&self, b: Body) -> bool {
+        match self.picked {
+            Some(p) => p == b,
+            None => match b {
+                Body::Part => self.show.part,
+                Body::Mould => self.show.mould,
+                Body::Blank => self.show.blank,
+            },
+        }
     }
 }
 
@@ -525,9 +535,19 @@ impl FgPanel {
                     Analysis::Thickness
                 };
             }
-            Cmd::ShowPart => self.thermo.show.part = !self.thermo.show.part,
-            Cmd::ShowMould => self.thermo.show.mould = !self.thermo.show.mould,
-            Cmd::ShowBlank => self.thermo.show.blank = !self.thermo.show.blank,
+            // an eye says what shows of them all again
+            Cmd::ShowPart => {
+                self.thermo.picked = None;
+                self.thermo.show.part = !self.thermo.show.part;
+            }
+            Cmd::ShowMould => {
+                self.thermo.picked = None;
+                self.thermo.show.mould = !self.thermo.show.mould;
+            }
+            Cmd::ShowBlank => {
+                self.thermo.picked = None;
+                self.thermo.show.blank = !self.thermo.show.blank;
+            }
         }
     }
 }
@@ -986,7 +1006,6 @@ impl Shell {
         self.form_dialog(ctx, &t, &mut fg, &mut places);
         self.mould_dialog(ctx, &t, &mut fg, &mut places);
         self.check_window(ctx, &t, &mut fg, &mut places);
-        self.blank_window(ctx, &t, &mut fg, &mut places);
         if fg.selected.is_some() {
             fg.thermo.picked = None;
         }
@@ -1262,11 +1281,6 @@ impl Shell {
                 close |= x;
                 apply = ap;
             });
-        if let Some(r) = &row_data
-            && f.tab == 1
-        {
-            section(ctx, t, self.view_rect, left + FORM_W, r, arg(&f.args, "flange"));
-        }
         if ok || apply {
             for op in changes(&f.id, &f.was, &f.args) {
                 fg.out.push(FgAct::Apply(op));
@@ -1422,70 +1436,6 @@ impl Shell {
         }
         if !(ok || close) {
             fg.thermo.mould = Some(m);
-        }
-    }
-
-    /// The blank: the sheet cut before forming, its size, gauge and mass.
-    fn blank_window(
-        &self,
-        ctx: &egui::Context,
-        t: &Theme,
-        fg: &mut FgPanel,
-        places: &mut Vec<(String, Rect)>,
-    ) {
-        if !fg.thermo.blank_info {
-            return;
-        }
-        let Some(r) = fg.thermos.first().cloned() else {
-            return;
-        };
-        let v = self.view_rect;
-        let w = 300.0;
-        let mut close = false;
-        let mut edit = false;
-        egui::Window::new("Blank")
-            .id(egui::Id::unique("thermo-blank"))
-            .title_bar(false)
-            .collapsible(false)
-            .resizable(false)
-            .default_pos(pos2(v.left() + 24.0, v.top() + 44.0))
-            .fixed_size(vec2(w, 0.0))
-            .frame(frame(t))
-            .constrain_to(super::dialog_area(ctx))
-            .show(ctx, |ui| {
-                ui.spacing_mut().item_spacing.y = 2.0;
-                close = head(
-                    ui,
-                    t,
-                    "rect",
-                    &format!("Blank · {}", r.id),
-                    w,
-                    places,
-                    "thermo:blank",
-                );
-                ui.add_space(4.0);
-                let (bw, bl) = r.blank;
-                fact(ui, t, "Size", &format!("{bw:.0} × {bl:.0} mm"), w, t.ink);
-                fact(ui, t, "Gauge", &format!("{:.2} mm", r.t), w, t.ink);
-                fact(ui, t, "Material", &r.material, w, t.ink);
-                let mass = r.density.map_or("no density".into(), |d| {
-                    format!("{:.1} g", bw * bl * r.t * d * 1e-6)
-                });
-                fact(ui, t, "Mass", &mass, w, t.ink);
-                ui.add_space(6.0);
-                ui.horizontal(|ui| {
-                    ui.add_space(14.0);
-                    edit = button(ui, t, "Edit Size…", false, "thermo:blank:edit".into(), places);
-                    close |= button(ui, t, "Close", false, "thermo:blank:done".into(), places);
-                });
-                ui.add_space(10.0);
-            });
-        if edit {
-            fg.thermo.form = None;
-            fg.thermo_command(Cmd::Trim);
-        }
-        if close || edit {
-            fg.thermo.blank_info = false;
         }
     }
 
@@ -2084,133 +2034,16 @@ fn op_words(op: &Op) -> String {
     }
 }
 
-/// The section through the thermoform beside the Form dialog: the mould, the formed sheet, the
-/// clamp and the pull, from the model's own numbers.
-fn section(ctx: &egui::Context, t: &Theme, v: Rect, right: f32, r: &ThermoRow, flange: Option<&str>) {
-    if r.section.is_empty() {
-        return;
-    }
-    let area = Rect::from_min_max(
-        pos2(v.left() + right + 40.0, v.top() + 40.0),
-        pos2(v.right() - 40.0, v.top() + 360.0),
-    );
-    if area.width() < 200.0 {
-        return;
-    }
-    egui::Area::new(egui::Id::unique("thermo-section"))
-        .fixed_pos(area.min)
-        .order(egui::Order::Middle)
-        .interactable(false)
-        .show(ctx, |ui| {
-            let p = ui.painter();
-            p.rect_filled(area.expand(16.0), 6.0, t.bg.gamma_multiply(0.96));
-            let (lo, hi) = r
-                .section
-                .iter()
-                .fold(([f32::MAX; 2], [f32::MIN; 2]), |(a, b), q| {
-                    (
-                        [a[0].min(q[0]), a[1].min(q[1] - r.base)],
-                        [b[0].max(q[0]), b[1].max(q[1] + r.t as f32)],
-                    )
-                });
-            let s = ((area.width() - 80.0) / (hi[0] - lo[0])).min((area.height() - 90.0) / (hi[1] - lo[1]));
-            let at = |q: [f32; 2]| {
-                pos2(
-                    area.center().x + (q[0] - (lo[0] + hi[0]) / 2.0) * s,
-                    area.bottom() - 40.0 - (q[1] - lo[1]) * s,
-                )
-            };
-            // the mould: its profile down to the base
-            let mut mould: Vec<Pos2> = r.section.iter().map(|q| at(*q)).collect();
-            let (a, b) = (r.section[0], r.section[r.section.len() - 1]);
-            mould.push(at([b[0], lo[1]]));
-            mould.push(at([a[0], lo[1]]));
-            let grey = Color32::from_rgb(0x7d, 0x87, 0x94);
-            p.add(egui::Shape::Path(egui::epaint::PathShape {
-                points: mould,
-                closed: true,
-                fill: grey,
-                stroke: Stroke::new(1.0, Color32::from_rgb(0x9a, 0xa4, 0xb0)).into(),
-            }));
-            let base = Rect::from_min_max(at([a[0], lo[1] + r.base * 0.999]), at([b[0], lo[1]]));
-            p.text(
-                base.center(),
-                Align2::CENTER_CENTER,
-                "Mould base (generated)",
-                sans(12.0),
-                t.ink,
-            );
-            // the formed sheet, t thick, off the mould
-            let gold = Color32::from_rgb(0xe0, 0xa8, 0x3a);
-            let sheet: Vec<Pos2> = r.section_part.iter().map(|q| at(*q)).collect();
-            p.add(egui::Shape::line(
-                sheet,
-                Stroke::new((r.t as f32 * s).max(3.0), gold),
-            ));
-            p.text(
-                at([hi[0], hi[1]]) + vec2(-4.0, -6.0),
-                Align2::RIGHT_BOTTOM,
-                format!("formed part, t = {}", fmt(r.t)),
-                sans(12.0),
-                gold,
-            );
-            let top = at([(lo[0] + hi[0]) / 2.0, hi[1]]);
-            p.arrow(
-                top + vec2(0.0, 6.0),
-                vec2(0.0, -40.0),
-                Stroke::new(1.5, Color32::from_rgb(0x7f, 0xb2, 0xec)),
-            );
-            p.text(
-                top + vec2(12.0, -30.0),
-                Align2::LEFT_CENTER,
-                format!("pull {}", r.pull),
-                sans(12.0),
-                Color32::from_rgb(0x7f, 0xb2, 0xec),
-            );
-            p.text(
-                at([(lo[0] + hi[0]) / 2.0, (lo[1] + hi[1]) / 2.0]),
-                Align2::CENTER_CENTER,
-                format!(
-                    "Mould = your shape {}, + {:.2} % shrink",
-                    if r.from == "outer" && !r.female {
-                        "− t"
-                    } else {
-                        ""
-                    },
-                    r.shrink * 100.0
-                ),
-                sans(12.0),
-                t.ink,
-            );
-            p.text(
-                pos2(area.center().x, area.bottom() - 10.0),
-                Align2::CENTER_CENTER,
-                format!(
-                    "Preview · section through {} · flange {}",
-                    r.id,
-                    flange.unwrap_or("10")
-                ),
-                sans(12.0),
-                t.ink2,
-            );
-        });
-}
-
 /// The banded legend's colour for a thickness between the range's ends.
 pub fn legend_colour(f: f32) -> Color32 {
     c32(band(f))
 }
 
-/// A thermoform's row in the browser: a double click or Edit Feature opens Edit Formed Part, as
-/// Inventor's does; Check Forming and Make Mould are a right click away.
+/// A thermoform's row in the browser: Edit…, Check Forming and Make Mould a right click away.
 pub fn feature_row(resp: &egui::Response, fg: &mut FgPanel, places: &mut Vec<(String, Rect)>, key: &str) {
-    if resp.double_clicked() {
-        fg.thermo.form = None;
-        fg.thermo_command(Cmd::Form);
-    }
     resp.context_menu(|ui| {
         for (word, c) in [
-            ("Edit Feature", Cmd::Form),
+            ("Edit…", Cmd::Form),
             ("Check Forming", Cmd::Check),
             ("Make Mould", Cmd::Mould),
         ] {
@@ -2227,8 +2060,9 @@ pub fn feature_row(resp: &egui::Response, fg: &mut FgPanel, places: &mut Vec<(St
     });
 }
 
-/// Under a thermoform in the browser: the formed part, the mould and the blank, each with its eye,
-/// clicked, hovered and opened as any row is. Returns the feature that made the body clicked.
+/// Under a thermoform in the browser: the formed part, the mould and the blank, each with its eye.
+/// A click shows that body alone, as sheet metal's Folded Model and Flat Pattern rows do; its
+/// tools are the ribbon's and the thermoform row's. Returns the feature that made the body clicked.
 pub fn tree_children(
     ui: &mut Ui,
     t: &Theme,
@@ -2285,7 +2119,7 @@ pub fn tree_children(
     if fg.thermo.hover.is_some() {
         fg.thermo.hover = None;
     }
-    for ((name, icon, note, shown, eye, edit), body) in
+    for ((name, icon, note, shown, eye, _), body) in
         rows.into_iter().zip([Body::Part, Body::Mould, Body::Blank])
     {
         let (rr, resp) = ui.allocate_exact_size(vec2(w, super::ROW_H), Sense::click());
@@ -2300,7 +2134,8 @@ pub fn tree_children(
         if resp.hovered() {
             fg.thermo.hover = Some(body);
         }
-        // a click chooses the body: marked in the view, and what a tool waiting for one takes
+        // a click looks at that body alone (again: at them all), and a tool waiting for a body
+        // takes it
         if resp.clicked() {
             fg.thermo.picked = if on { None } else { Some(body) };
             fg.selected = None;
@@ -2309,7 +2144,7 @@ pub fn tree_children(
                 _ => r.id.clone(),
             });
         }
-        let ink = match (on, shown) {
+        let ink = match (on, u.shows(body)) {
             (true, _) => t.on_ink,
             (_, true) => t.ink,
             _ => t.ink2.gamma_multiply(0.6),
@@ -2331,58 +2166,6 @@ pub fn tree_children(
         }
         places.push((format!("fg:eye:thermo:{name}"), super::fg::eye_rect(rr)));
         places.push((format!("fg:row:thermo:{name}"), rr));
-        if resp.double_clicked() {
-            fg.thermo.form = None;
-            fg.thermo.mould = None;
-            if body == Body::Blank {
-                fg.thermo.blank_info = true;
-            } else {
-                fg.thermo_command(edit);
-            }
-        }
-        resp.context_menu(|ui| {
-            let mut item = |word: &str, c: Cmd, fg: &mut FgPanel| {
-                let b = ui.button(word);
-                places.push((format!("fg:menu:{word}"), b.rect));
-                if b.clicked() {
-                    fg.thermo_command(c);
-                    ui.close();
-                }
-            };
-            if name == "Formed Part" {
-                if r.simulated.is_some() {
-                    item(
-                        if u.simulated {
-                            "Show Modelled"
-                        } else {
-                            "Show Simulated Wall"
-                        },
-                        Cmd::Simulated,
-                        fg,
-                    );
-                }
-                item(
-                    if u.analysis == Analysis::Thickness {
-                        "Hide Thickness Colours"
-                    } else {
-                        "Thickness Colours"
-                    },
-                    Cmd::Colours,
-                    fg,
-                );
-                item("Check Forming", Cmd::Check, fg);
-            } else if name == "Mould" {
-                item("Make Mould…", Cmd::Mould, fg);
-            } else {
-                item("Edit Blank Size…", Cmd::Trim, fg);
-                let b = ui.button("Blank…");
-                places.push(("fg:menu:Blank…".into(), b.rect));
-                if b.clicked() {
-                    fg.thermo.blank_info = true;
-                    ui.close();
-                }
-            }
-        });
     }
     chosen
 }

@@ -124,7 +124,7 @@ impl Shell {
         let n = r.stages.len().max(1);
         let step = fg.thermo.step.unwrap_or(n - 1).min(n - 1);
         let sim = fg.thermo.simulated && r.simulated.is_some() && fg.thermo.step.is_none();
-        if !fg.thermo.show.part {
+        if !fg.thermo.shows(super::thermo_ui::Body::Part) {
             return;
         }
         let places: Vec<(String, Rect)> = vec![];
