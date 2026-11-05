@@ -154,6 +154,8 @@ fn compare(
     name: &str,
     surface: Surface,
     slide: Option<f64>,
+    clamp: Option<Clamp>,
+    wrinkle: bool,
     shape: &Body,
     t0: f64,
     flange: f64,
@@ -185,6 +187,8 @@ fn compare(
         resolution: 80,
         surface,
         slide,
+        clamp,
+        wrinkle,
     };
     let st = stretch(&f, &spec, &pr);
     let model = along(&st, t0, diagonal);
@@ -229,6 +233,8 @@ fn erdogan_cylinder() {
         "erdogan2014_cylinder",
         Surface::Height,
         None,
+        None,
+        false,
         &shape,
         2.5,
         40.0,
@@ -247,6 +253,8 @@ fn erdogan_box() {
         "erdogan2014_box_axis",
         Surface::Height,
         None,
+        None,
+        false,
         &shape,
         2.0,
         65.0,
@@ -259,6 +267,8 @@ fn erdogan_box() {
         "erdogan2014_box_diagonal",
         Surface::Height,
         None,
+        None,
+        false,
         &shape,
         2.0,
         65.0,
@@ -277,6 +287,8 @@ fn duarte_cone() {
         "duarte2022_cone",
         Surface::Height,
         None,
+        None,
+        false,
         &shape,
         1.0,
         50.0,
@@ -305,6 +317,8 @@ fn the_distance_field_forms_the_measured_parts_as_well() {
             name,
             Surface::Height,
             None,
+            None,
+            false,
             shape,
             t0,
             flange,
@@ -317,6 +331,8 @@ fn the_distance_field_forms_the_measured_parts_as_well() {
             name,
             Surface::Distance,
             None,
+            None,
+            false,
             shape,
             t0,
             flange,
@@ -361,6 +377,8 @@ fn the_sheet_drawn_in_over_the_mould_top() {
                 name,
                 Surface::Height,
                 mu,
+                None,
+                false,
                 shape,
                 t0,
                 flange,
@@ -373,5 +391,53 @@ fn the_sheet_drawn_in_over_the_mould_top() {
         }
         eprintln!("DRAW {name}: {}", row.join(" | "));
         assert_eq!(row.len(), 5);
+    }
+}
+
+/// The clamp draw-in: the blank's outer band under the clamp frame slides in against the frame's
+/// grip (a shear stress, MPa), the sheet on the mould's top against Coulomb friction (mu times the
+/// vacuum), the membrane wrinkling rather than taking compression. The mean error of t0 for each.
+#[test]
+fn the_sheet_drawn_in_from_under_the_clamp() {
+    let cyl = cavity(100.0, 100.0 - 1e-3, 100.0, 10.0);
+    let bx = box_cavity(150.0, 75.0, 10.0);
+    let grip = |hold: f64| Some(Clamp { band: 20.0, hold });
+    // (mu on the mould's top, the clamp's grip, wrinkling)
+    let ways: [(Option<f64>, Option<Clamp>, bool); 6] = [
+        (None, None, false),
+        (None, None, true),
+        (Some(0.3), grip(0.3), true),
+        (Some(0.3), grip(0.03), true),
+        (Some(0.1), grip(0.01), true),
+        (Some(0.0), grip(0.0), true),
+    ];
+    for (name, shape, t0, flange, temp, diagonal, upto) in [
+        ("erdogan2014_cylinder", &cyl, 2.5, 40.0, 180.0, false, 185.0),
+        ("karabeyoglu2017_cylinder", &cyl, 2.0, 40.0, 150.0, false, 185.0),
+        ("erdogan2014_box_axis", &bx, 2.0, 65.0, 180.0, false, 125.0),
+        ("erdogan2014_box_diagonal", &bx, 2.0, 65.0, 180.0, true, 145.0),
+    ] {
+        let row: Vec<String> = ways
+            .iter()
+            .map(|&(mu, clamp, wrinkle)| {
+                let e = compare(
+                    name,
+                    Surface::Height,
+                    mu,
+                    clamp,
+                    wrinkle,
+                    shape,
+                    t0,
+                    flange,
+                    "HIPS",
+                    temp,
+                    diagonal,
+                    upto,
+                );
+                format!("{:.2}", e * 100.0)
+            })
+            .collect();
+        eprintln!("CLAMP {name}: {}", row.join(" | "));
+        assert_eq!(row.len(), ways.len());
     }
 }

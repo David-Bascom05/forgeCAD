@@ -43,6 +43,20 @@ pub struct Process {
     /// against Coulomb friction, this coefficient times the forming pressure pressing it there
     /// (None: it sticks where it lies, the reference).
     pub slide: Option<f64>,
+    /// The clamp draw-in (a female tool): the sheet under the clamp frame, the window's outer
+    /// `band` mm (the window is the blank), slides in against the shear stress `hold` (MPa) the
+    /// frame's grip holds it with (None: the window's edge is fixed, the reference).
+    pub clamp: Option<Clamp>,
+    /// The membrane carries no compression, wrinkling instead (false: it resists it as a solid
+    /// sheet would, the reference).
+    pub wrinkle: bool,
+}
+
+/// The clamp frame's grip on the sheet under it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Clamp {
+    pub band: f64,
+    pub hold: f64,
 }
 
 /// The tool as the contact reads it.
@@ -78,6 +92,8 @@ impl Default for Process {
             resolution: 56,
             surface: Surface::Height,
             slide: None,
+            clamp: None,
+            wrinkle: false,
         }
     }
 }
@@ -131,7 +147,10 @@ fn pw(x: f64, a: f64) -> f64 {
 
 /// Energy of one triangle and its gradient at its second and third corners (the first's is
 /// minus both), or None where it is turned inside out.
-fn element(law: &Law, t: &Tri, x: &[Vec3]) -> Option<(f64, Vec3, Vec3)> {
+/// With `wrinkle` the membrane carries no compression (tension-field theory): where its lesser
+/// stretch is under the width uniaxial tension leaves it, it wrinkles and holds that tension only;
+/// slack both ways, nothing.
+fn element(law: &Law, t: &Tri, x: &[Vec3], wrinkle: bool) -> Option<(f64, Vec3, Vec3)> {
     let (x0, x1, x2) = (x[t.v[0]], x[t.v[1]], x[t.v[2]]);
     let (e1, e2) = (x1 - x0, x2 - x0);
     let f0 = e1 * t.dinv[0][0] + e2 * t.dinv[1][0];
@@ -145,7 +164,17 @@ fn element(law: &Law, t: &Tri, x: &[Vec3]) -> Option<(f64, Vec3, Vec3)> {
     let disc = (half * half + b * b).sqrt();
     let s1 = 0.5 * (a + c) + disc;
     let s2 = det / s1;
-    let (l1, l2) = (s1.sqrt(), s2.sqrt());
+    let (l1, mut l2) = (s1.sqrt(), s2.sqrt());
+    let mut wrinkled = false;
+    if wrinkle {
+        if l1 <= 1.0 {
+            return Some((0.0, Vec3::ZERO, Vec3::ZERO));
+        }
+        let width = 1.0 / l1.sqrt();
+        if l2 < width {
+            (l2, wrinkled) = (width, true);
+        }
+    }
     let l3 = 1.0 / (l1 * l2);
     let mut w = 0.0;
     let (mut g1, mut g2) = (0.0, 0.0);
@@ -167,6 +196,9 @@ fn element(law: &Law, t: &Tri, x: &[Vec3]) -> Option<(f64, Vec3, Vec3)> {
         w += mu / al * (p1 + p2 + p3 - 3.0);
         g1 += mu * (p1 - p3) / l1;
         g2 += mu * (p2 - p3) / l2;
+    }
+    if wrinkled {
+        g2 = 0.0;
     }
     // S = sum (dW/dl_a / l_a) N_a N_a^T
     let (k1, k2) = (g1 / l1, g2 / l2);
@@ -209,6 +241,7 @@ type Part = (f64, Vec3, Vec3);
 
 struct Shared {
     law: Law,
+    wrinkle: bool,
     tris: Vec<Tri>,
     x: RwLock<Vec<Vec3>>,
     stop: AtomicBool,
@@ -226,7 +259,11 @@ impl Shared {
     fn run(&self, w: usize, x: &[Vec3]) {
         let mut o = self.out[w].lock().unwrap_or_else(|e| e.into_inner());
         o.clear();
-        o.extend(self.tris[self.share(w)].iter().map(|t| element(&self.law, t, x)));
+        o.extend(
+            self.tris[self.share(w)]
+                .iter()
+                .map(|t| element(&self.law, t, x, self.wrinkle)),
+        );
     }
 }
 
@@ -234,10 +271,11 @@ impl Pool {
     /// Below this many triangles a call is not worth sharing out.
     const MIN: usize = 1024;
 
-    fn new(law: &Law, tris: &[Tri]) -> Pool {
+    fn new(law: &Law, tris: &[Tri], wrinkle: bool) -> Pool {
         let n = forge_math::par::threads().min(tris.len() / 256).max(1);
         let shared = Arc::new(Shared {
             law: law.clone(),
+            wrinkle,
             tris: tris.to_vec(),
             x: RwLock::new(vec![]),
             stop: AtomicBool::new(false),
@@ -274,7 +312,7 @@ impl Pool {
         let s = &self.shared;
         if self.workers.is_empty() {
             for (k, t) in s.tris.iter().enumerate() {
-                f(k, element(&s.law, t, x)?);
+                f(k, element(&s.law, t, x, s.wrinkle)?);
             }
             return Some(());
         }
@@ -315,11 +353,13 @@ struct Sheet {
     tris: Vec<Tri>,
     idx: Vec<[usize; 3]>,
     free: Vec<bool>,
-    /// Nodes sliding on the tool's top: held to its plane, each against its friction force
-    /// (N) from where it stood at the load step's start.
+    /// Nodes held by friction (on the tool's top, under the clamp): held to their plane, each
+    /// stuck where it stood at the load step's start, or sliding along `dir` against its
+    /// friction force `hold` (N).
     slide: Vec<bool>,
     hold: Vec<f64>,
     anchor: Vec<Vec3>,
+    dir: Vec<Option<Vec3>>,
 }
 
 /// Sliding nodes carried off the tool's top (over the cavity) fall free.
@@ -331,9 +371,69 @@ fn release(sheet: &mut Sheet, tool: &Gap, x: &[Vec3], off: f64) {
     }
 }
 
-/// The friction's smoothing length, mm: below it the hold grows like a spring, past it it is the
-/// Coulomb force (the lagged, smoothed friction of an incremental potential).
-const SLIP: f64 = 0.02;
+/// The most rounds of a load step's active set.
+const ROUNDS: usize = 40;
+
+/// One load step with Coulomb friction, by its active set: every frictional node starts as it
+/// ended the last step (stuck at first);
+/// one whose pull (the membrane's and the pressure's force on it, in its plane) is over its hold
+/// slides along the pull against the hold, a sliding one whose pull falls under it sticks again,
+/// till none changes. Returns the iterations spent.
+#[allow(clippy::too_many_arguments)]
+fn step(
+    sheet: &mut Sheet,
+    field: &Gap,
+    x: &mut [Vec3],
+    p: f64,
+    step_cap: f64,
+    tol: f64,
+    reach: &[f64],
+    max_it: usize,
+) -> usize {
+    sheet.anchor.copy_from_slice(x);
+    // a node with no grip slides from the start (the direction does not matter, the friction
+    // being nothing); the rest as they ended the last step
+    for k in 0..x.len() {
+        if sheet.slide[k] && sheet.hold[k] <= 0.0 {
+            sheet.dir[k] = Some(Vec3::ZERO);
+        }
+    }
+    let mut its = 0;
+    // the sliding spreads a ring of nodes a round: as many rounds as it takes
+    for _ in 0..ROUNDS {
+        its += relax(sheet, field, x, p, step_cap, tol, reach, max_it);
+        if !sheet.slide.iter().any(|s| *s) {
+            break;
+        }
+        let mut g = vec![Vec3::ZERO; x.len()];
+        if sheet.membrane(x, p, &mut g).is_none() {
+            break;
+        }
+        let mut changed = false;
+        for k in 0..x.len() {
+            if !sheet.slide[k] {
+                continue;
+            }
+            let pull = Vec3::new(-g[k].x, -g[k].y, 0.0);
+            let now = if sheet.hold[k] <= 0.0 {
+                Some(Vec3::ZERO)
+            } else {
+                (pull.length() > sheet.hold[k]).then(|| pull * (1.0 / pull.length()))
+            };
+            if now.is_some() != sheet.dir[k].is_some() {
+                changed = true;
+            }
+            if now.is_none() && sheet.dir[k].is_some() {
+                sheet.anchor[k] = x[k];
+            }
+            sheet.dir[k] = now;
+        }
+        if !changed {
+            break;
+        }
+    }
+    its
+}
 
 impl Sheet {
     /// The membrane's energy plus the pressure's work (p times the signed volume under the
@@ -342,6 +442,38 @@ impl Sheet {
         if let Some(g) = g.as_deref_mut() {
             g.iter_mut().for_each(|v| *v = Vec3::ZERO);
         }
+        let mut e = match g.as_deref_mut() {
+            Some(g) => self.membrane(x, p, g)?,
+            None => {
+                let mut g = vec![Vec3::ZERO; x.len()];
+                self.membrane(x, p, &mut g)?
+            }
+        };
+        for k in 0..x.len() {
+            if let (true, Some(d)) = (self.slide[k], self.dir[k]) {
+                e += self.hold[k] * d.dot(x[k] - self.anchor[k]);
+                if let Some(g) = g.as_deref_mut() {
+                    g[k] += d * self.hold[k];
+                }
+            }
+        }
+        if let Some(g) = g {
+            for (k, (gi, &f)) in g.iter_mut().zip(&self.free).enumerate() {
+                if !f || (self.slide[k] && self.dir[k].is_none()) {
+                    *gi = Vec3::ZERO;
+                } else if self.slide[k] {
+                    // held to its plane
+                    gi.z = 0.0;
+                }
+            }
+        }
+        Some(e)
+    }
+
+    /// The membrane's energy and the pressure's work, and their gradient at every node.
+    fn membrane(&self, x: &[Vec3], p: f64, g: &mut [Vec3]) -> Option<f64> {
+        g.iter_mut().for_each(|v| *v = Vec3::ZERO);
+        let mut g = Some(g);
         let mut e = 0.0;
         self.pool.each(x, &mut |k, (w, ga, gb)| {
             let v = &self.idx[k];
@@ -362,27 +494,6 @@ impl Sheet {
                 }
             }
         })?;
-        for k in 0..x.len() {
-            if !self.slide[k] {
-                continue;
-            }
-            let d = Vec3::new(x[k].x - self.anchor[k].x, x[k].y - self.anchor[k].y, 0.0);
-            let l = (d.length_sq() + SLIP * SLIP).sqrt();
-            e += self.hold[k] * (l - SLIP);
-            if let Some(g) = g.as_deref_mut() {
-                g[k] += d * (self.hold[k] / l);
-            }
-        }
-        if let Some(g) = g {
-            for (k, (gi, &f)) in g.iter_mut().zip(&self.free).enumerate() {
-                if !f {
-                    *gi = Vec3::ZERO;
-                } else if self.slide[k] {
-                    // held to the tool's top
-                    gi.z = 0.0;
-                }
-            }
-        }
         Some(e)
     }
 }
@@ -587,6 +698,7 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
         Point2::new(tlo.x - m, tlo.y - m),
         Point2::new(thi.x + m, thi.y + m),
     );
+    let clamp = pr.clamp.filter(|_| !male);
     let field = Field::new(f.frame, wlo, whi, &f.mesh, &f.contact, male, |_| true);
     let sdf = (pr.surface == Surface::Distance).then(|| {
         // nodes half the sheet apart (a quarter of a millimetre to a millimetre), exact a sheet
@@ -609,8 +721,7 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
         None => Gap::Height(&field),
     };
     let (w, h) = (whi.x - wlo.x, whi.y - wlo.y);
-    let res = pr.resolution.clamp(8, 160);
-    let s = w.max(h) / res as f64;
+    let s = w.max(h) / pr.resolution.clamp(8, 160) as f64;
     let (nx, ny) = ((w / s).ceil() as usize, (h / s).ceil() as usize);
     let (sx, sy) = (w / nx as f64, h / ny as f64);
     let id = |i: usize, j: usize| j * (nx + 1) + i;
@@ -627,7 +738,7 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
         for i in 0..=nx {
             let k = id(i, j);
             x[k] = Vec3::new(wlo.x + i as f64 * sx, wlo.y + j as f64 * sy, z_start);
-            if i == 0 || j == 0 || i == nx || j == ny {
+            if clamp.is_none() && (i == 0 || j == 0 || i == nx || j == ny) {
                 free[k] = false;
             }
         }
@@ -664,7 +775,21 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
     // a female sheet lies on the tool's top round the cavity from the start: stuck there, or
     // sliding on it
     let mut slide = vec![false; x.len()];
+    // under the clamp (within its band of the window's edge): sliding against the grip
+    let gripped: Vec<bool> = x
+        .iter()
+        .map(|p| {
+            clamp.is_some_and(|c| {
+                let edge = (p.x - wlo.x).min(whi.x - p.x).min(p.y - wlo.y).min(whi.y - p.y);
+                edge <= c.band + 1e-9
+            })
+        })
+        .collect();
     for k in 0..x.len() {
+        if gripped[k] {
+            slide[k] = true;
+            continue;
+        }
         if free[k] && tool.at(x[k]) <= 0.0 {
             if pr.slide.is_some() {
                 slide[k] = true;
@@ -682,14 +807,28 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
                 .length();
         v.iter().for_each(|&k| share[k] += a / 3.0);
     }
-    let hold_at = |p: f64| -> Vec<f64> { share.iter().map(|a| pr.slide.unwrap_or(0.0) * p * a).collect() };
+    let grip = clamp.map_or(0.0, |c| c.hold);
+    let hold_at = |p: f64| -> Vec<f64> {
+        share
+            .iter()
+            .zip(&gripped)
+            .map(|(a, g)| {
+                if *g {
+                    grip * a
+                } else {
+                    pr.slide.unwrap_or(0.0) * p * a
+                }
+            })
+            .collect()
+    };
     let mut sheet = Sheet {
-        pool: Pool::new(&pr.law, &tris),
+        pool: Pool::new(&pr.law, &tris, pr.wrinkle),
         tris,
         idx: idx.clone(),
         free,
         hold: hold_at(0.0),
         anchor: x.clone(),
+        dir: vec![None; x.len()],
         slide,
     };
     let mu = pr.law.shear().max(1e-9);
@@ -728,10 +867,9 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
             for &k in &edge {
                 x[k].z = z;
             }
-            sheet.anchor.copy_from_slice(&x);
             sheet.hold = hold_at(0.0);
             let reach = reach_at(&x);
-            its += relax(&mut sheet, &tool, &mut x, 0.0, cap, tol, &reach, 150);
+            its += step(&mut sheet, &tool, &mut x, 0.0, cap, tol, &reach, 150);
             release(&mut sheet, &tool, &x, 0.25 * spec.t);
             snap(&x, "drape");
         }
@@ -739,10 +877,9 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
     let loads = 10;
     for k in 1..=loads {
         let p = pr.pressure * k as f64 / loads as f64;
-        sheet.anchor.copy_from_slice(&x);
         sheet.hold = hold_at(p);
         let reach = reach_at(&x);
-        its += relax(&mut sheet, &tool, &mut x, p, cap, tol, &reach, 400);
+        its += step(&mut sheet, &tool, &mut x, p, cap, tol, &reach, 400);
         release(&mut sheet, &tool, &x, 0.25 * spec.t);
         snap(&x, "vacuum");
     }
@@ -751,7 +888,7 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
     let poly = polygon(&f.trim);
     let open = |sheet: &Sheet, x: &[Vec3]| {
         (0..x.len())
-            .filter(|&k| sheet.free[k] && inside(&poly, Point2::new(x[k].x, x[k].y)).0)
+            .filter(|&k| sheet.free[k] && !sheet.slide[k] && inside(&poly, Point2::new(x[k].x, x[k].y)).0)
             .count()
     };
     // until it is formed, or two raises in a row reach no more of it: it bridges there
@@ -759,10 +896,9 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
     let (mut left, mut stalled) = (open(&sheet, &x), 0);
     while left > 0 && stalled < 2 && p < CREEP * pr.pressure {
         p *= 1.25;
-        sheet.anchor.copy_from_slice(&x);
         sheet.hold = hold_at(p);
         let reach = reach_at(&x);
-        its += relax(&mut sheet, &tool, &mut x, p, cap, tol, &reach, 200);
+        its += step(&mut sheet, &tool, &mut x, p, cap, tol, &reach, 200);
         release(&mut sheet, &tool, &x, 0.25 * spec.t);
         snap(&x, "creep");
         let now = open(&sheet, &x);
@@ -780,7 +916,7 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
     );
     // over the sheet on the tool: where it bridges it is said apart (`unformed`)
     for (k, &r) in node_ratio.iter().enumerate() {
-        if sheet.free[k] || !inside(&poly, Point2::new(x[k].x, x[k].y)).0 {
+        if (sheet.free[k] && !sheet.slide[k]) || !inside(&poly, Point2::new(x[k].x, x[k].y)).0 {
             continue;
         }
         if r < min.0 {
@@ -802,7 +938,12 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
             total += a / r;
         }
     }
-    let touched: Vec<bool> = sheet.free.iter().map(|f| !f).collect();
+    let touched: Vec<bool> = sheet
+        .free
+        .iter()
+        .zip(&sheet.slide)
+        .map(|(f, s)| !f || *s)
+        .collect();
     let unformed = (0..x.len())
         .filter(|&k| !touched[k] && inside(&poly, Point2::new(x[k].x, x[k].y)).0)
         .map(|k| world(x[k]))

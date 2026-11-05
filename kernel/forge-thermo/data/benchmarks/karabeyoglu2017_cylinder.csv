@@ -1,0 +1,43 @@
+# Karabeyoglu, Eksi, Erdogan, An experimental study on wall thickness distribution in thermoforming,
+# Adv. Sci. Technol. Res. J. 11(3):139-142 (2017), DOI 10.12913/22998624/71148, CC BY 4.0; Fig. 4 measured curve,
+# digitised from the figure's markers (+-0.015 mm). HIPS SABIC PS 825E, t0 2.0 mm, 300 x 300 blank, female vacuum
+# forming, no plug, sheet about 150 C. Mould: cylinder, opening 200 mm, depth 100 mm (as Erdogan & Eksi 2014's).
+# s: arc length from the base centre up the wall to the rim.
+s,t
+0,0.63
+5,0.63
+10,0.60
+15,0.60
+20,0.56
+25,0.53
+30,0.50
+35,0.47
+40,0.45
+45,0.43
+50,0.45
+55,0.46
+60,0.43
+65,0.43
+70,0.50
+75,0.47
+80,0.46
+85,0.43
+90,0.43
+100,0.46
+105,0.56
+110,0.60
+115,0.70
+120,0.77
+125,0.92
+130,1.02
+135,1.08
+140,1.16
+145,1.30
+150,1.42
+155,1.50
+160,1.57
+165,1.63
+170,1.71
+175,1.84
+180,1.94
+185,2.20
