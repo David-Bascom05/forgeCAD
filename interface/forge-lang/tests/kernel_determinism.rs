@@ -123,8 +123,10 @@ const PARTS: [&str; 4] = [
     "rack18u/frame/post.fg",
 ];
 
+/// A fresh directory for this run under cargo's test scratch (never the source tree: every file
+/// fg writes, the STEP and its `-flat` sibling, goes here).
 fn tmp() -> PathBuf {
-    let d = std::env::temp_dir().join(format!("kernel-det-{}", std::process::id()));
+    let d = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!("kernel-det-{}", std::process::id()));
     std::fs::create_dir_all(&d).expect("mkdir");
     d
 }
