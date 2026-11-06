@@ -36,7 +36,10 @@ fn out_dir(e: &Edge, fwd: bool) -> V2 {
     let (at, p) = if fwd {
         (e.c.start(), e.c.point(e.c.param_at_length(step).clamp(t0, t1)))
     } else {
-        (e.c.end(), e.c.point(e.c.param_at_length(len - step).clamp(t0, t1)))
+        (
+            e.c.end(),
+            e.c.point(e.c.param_at_length(len - step).clamp(t0, t1)),
+        )
     };
     (p - at).unit().unwrap_or(v2(1.0, 0.0))
 }
@@ -56,7 +59,11 @@ fn samples(c: &Curve, fwd: bool, out: &mut Vec<V2>) {
     };
     for k in 0..n {
         let f = k as f64 / n as f64;
-        let t = if fwd { t0 + (t1 - t0) * f } else { t1 - (t1 - t0) * f };
+        let t = if fwd {
+            t0 + (t1 - t0) * f
+        } else {
+            t1 - (t1 - t0) * f
+        };
         out.push(c.point(t));
     }
 }
@@ -199,14 +206,11 @@ impl Graph {
             let v = if cur.1 { e.v[1] } else { e.v[0] };
             // back along where we came from
             let r = out_dir(e, !cur.1);
-            let next = self.at[v]
-                .iter()
-                .copied()
-                .min_by(|a, b| {
-                    let da = cw_from(r, out_dir(&self.edges[a.0], a.1));
-                    let db = cw_from(r, out_dir(&self.edges[b.0], b.1));
-                    da.total_cmp(&db)
-                })?;
+            let next = self.at[v].iter().copied().min_by(|a, b| {
+                let da = cw_from(r, out_dir(&self.edges[a.0], a.1));
+                let db = cw_from(r, out_dir(&self.edges[b.0], b.1));
+                da.total_cmp(&db)
+            })?;
             if next == start {
                 return Some(out);
             }

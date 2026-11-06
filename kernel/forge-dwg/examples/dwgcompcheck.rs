@@ -8,7 +8,9 @@ fn main() {
     let buf = std::fs::read(&path).unwrap();
     let l = r2004::layout(&buf).unwrap();
     for s in &l.sections {
-        let Some(d) = r2004::section_data(&buf, &l, &s.name).unwrap() else { continue };
+        let Some(d) = r2004::section_data(&buf, &l, &s.name).unwrap() else {
+            continue;
+        };
         for (k, chunk) in d.chunks(0x7400).enumerate() {
             let mut p = chunk.to_vec();
             p.resize(0x7400, 0);

@@ -228,7 +228,12 @@ fn draw_annotate_copy_explode() {
     let t = add(&mut d, &mut hist, x);
     let x = make::mtext(&d, v2(300.0, 140.0), 60.0, 4.0, "two\\Plines");
     let mt = add(&mut d, &mut hist, x);
-    let fit = [v2(300.0, 200.0), v2(320.0, 230.0), v2(350.0, 190.0), v2(380.0, 220.0)];
+    let fit = [
+        v2(300.0, 200.0),
+        v2(320.0, 230.0),
+        v2(350.0, 190.0),
+        v2(380.0, 220.0),
+    ];
     let sp = add(&mut d, &mut hist, make::spline_through(&fit, false).unwrap());
     let pt = add(&mut d, &mut hist, make::point(v2(310.0, 110.0)));
     let st = Style::current(&d);
@@ -250,7 +255,16 @@ fn draw_annotate_copy_explode() {
     // a copy of the dimension moved up, and the hatch turned
     let dc = copy_entity(&mut d, &mut hist, dl).unwrap();
     assert!(transform(&mut d, &mut hist, dc, &Affine::translate(v2(0.0, 150.0)), false).unwrap());
-    assert!(transform(&mut d, &mut hist, hp, &Affine::rotate(v2(350.0, 50.0), 0.3), false).unwrap());
+    assert!(
+        transform(
+            &mut d,
+            &mut hist,
+            hp,
+            &Affine::rotate(v2(350.0, 50.0), 0.3),
+            false
+        )
+        .unwrap()
+    );
     // the drawing's polyline exploded
     let ex = explode_entity(&mut d, &mut hist, 0x9c).unwrap();
     assert_eq!(ex.len(), 2);
@@ -264,22 +278,35 @@ fn draw_annotate_copy_explode() {
     for h in [hs, hp, t, mt, sp, pt, dl, dd, dc] {
         assert_eq!(e.block_of(h), Some(ms), "{h:#x}");
     }
-    let Data::Hatch(x) = &e.objects[&hs].data else { panic!() };
+    let Data::Hatch(x) = &e.objects[&hs].data else {
+        panic!()
+    };
     assert!(x.solid && x.paths.len() == 2);
-    let Data::Text(x) = &e.objects[&t].data else { panic!() };
+    let Data::Text(x) = &e.objects[&t].data else {
+        panic!()
+    };
     assert_eq!(x.text.text(), "forgeCAD");
-    let Data::DimLinear(x) = &e.objects[&dl].data else { panic!() };
+    let Data::DimLinear(x) = &e.objects[&dl].data else {
+        panic!()
+    };
     assert!((x.dim.measurement - 100.0).abs() < 1e-9);
     let blk = super::commit::dim_block(&e, dl).unwrap();
     // lines (the dimension line maybe broken round its text), arrows, text, points
     assert!(super::commit::block_entities(&e, blk).len() >= 9);
     let blk2 = super::commit::dim_block(&e, dc).unwrap();
     assert_ne!(blk, blk2);
-    let Data::DimLinear(y) = &e.objects[&dc].data else { panic!() };
+    let Data::DimLinear(y) = &e.objects[&dc].data else {
+        panic!()
+    };
     assert!((y.pt10[1] - x.pt10[1] - 150.0).abs() < 1e-9);
     assert!(!e.objects.contains_key(&0x9c));
     // the scene draws them: the dimension's block, the hatches
-    let sc = crate::scene::build(&e, crate::scene::Space::Model, &crate::scene::BoxFont, &Default::default());
+    let sc = crate::scene::build(
+        &e,
+        crate::scene::Space::Model,
+        &crate::scene::BoxFont,
+        &Default::default(),
+    );
     for h in [hs, hp, dl, dd, dc, t] {
         assert!(sc.items.iter().any(|i| i.entity == h), "{h:#x} not drawn");
     }

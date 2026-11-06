@@ -12,7 +12,7 @@ fn main() {
     let at = map.iter().find(|m| m.0 == want).unwrap().1;
     let b = &s.objects;
     let (size, mut start) = read_ms(b, at).unwrap();
-    let mut endbit = 0;
+    let endbit;
     if s.ver >= Version::R2010 {
         let (h, q) = read_mc(b, start, false).unwrap();
         endbit = size as usize * 8 - h as usize;

@@ -150,14 +150,6 @@ impl Weight {
                 .unwrap_or(0) as u8,
         }
     }
-    pub(crate) fn from_code(c: u8) -> Weight {
-        match c {
-            29 => Weight::ByLayer,
-            30 => Weight::ByBlock,
-            k if (k as usize) < WEIGHTS.len() => Weight::Mm100(WEIGHTS[k as usize]),
-            _ => Weight::Default,
-        }
-    }
 }
 
 /// Text in the drawing's code page (Windows-1252): ASCII and Latin-1 as themselves, anything else
@@ -179,9 +171,4 @@ pub(crate) fn encode(s: &str) -> Vec<u8> {
         }
     }
     out
-}
-
-/// What `encode` wrote, as text (\U+XXXX escapes left as they are).
-pub(crate) fn decode(b: &[u8]) -> String {
-    b.iter().map(|&x| x as char).collect()
 }

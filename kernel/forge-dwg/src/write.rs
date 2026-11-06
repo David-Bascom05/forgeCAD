@@ -595,7 +595,7 @@ fn extents(doc: &Doc) -> ([f64; 2], [f64; 2]) {
                 add([c[0] + r, c[1] + r]);
             }
             Shape::Ellipse { c, major, .. } => {
-                let r = major[0].hypot(major[1]);
+                let r = (major[0] * major[0] + major[1] * major[1]).sqrt();
                 add([c[0] - r, c[1] - r]);
                 add([c[0] + r, c[1] + r]);
             }
@@ -1063,7 +1063,7 @@ fn assemble(
     preview.extend_from_slice(&SN_PREVIEW_END);
     let mut vars = header_vars(p, ext, doc.limits, layer0, &guid);
     // the header ends on a byte
-    while vars.len % 8 != 0 {
+    while !vars.len.is_multiple_of(8) {
         vars.b(false);
     }
     let header = section(&SN_HEADER, &vars.bytes, &SN_HEADER_END);
@@ -1234,7 +1234,7 @@ fn second_header(at: u32, sections: &[(u8, u32, u32)], aux_at: u32, aux_len: u32
         b.rc(k as u8);
         b.raw(&bytes[skip..]);
     }
-    while b.len % 8 != 0 {
+    while !b.len.is_multiple_of(8) {
         b.b(false);
     }
     // the size runs from itself to the end sentinel: these bytes, the CRC and 8 more

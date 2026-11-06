@@ -4,14 +4,14 @@
 
 use super::entity::{Flat, curve_of, transform_data, write_curve};
 use super::geom::Affine;
-use crate::io::Href;
-use crate::version::Version;
 use super::geom::V2;
 use super::snap::{SnapGeom, SnapItem};
 use crate::bits::{R, bad};
 use crate::edit::History;
 use crate::file::Drawing;
+use crate::io::Href;
 use crate::types::Data;
+use crate::version::Version;
 
 /// Adds an entity to the block `like` is in, with `like`'s properties (layer, colour, line
 /// type and scale, lineweight, plot style, material, visibility). Its handle.
@@ -213,7 +213,9 @@ pub fn copy_entity(d: &mut Drawing, hist: &mut History, h: u32) -> R<u32> {
         new_subs.clone()
     };
     for (&old, &new) in subs.iter().zip(&new_subs) {
-        let Some(mut so) = d.objects.get(&old).cloned() else { continue };
+        let Some(mut so) = d.objects.get(&old).cloned() else {
+            continue;
+        };
         so.handle = new;
         so.owner = Href::new(4, n);
         so.raw = None;
@@ -250,7 +252,11 @@ pub fn next_anonymous(d: &Drawing, kind: &str) -> u32 {
         .into_iter()
         .filter_map(|b| match d.objects.get(&b).map(|o| &o.data) {
             Some(Data::BlockHeader(bh)) => match d.objects.get(&bh.block.handle).map(|o| &o.data) {
-                Some(Data::Block(x)) => x.name.text().strip_prefix(kind).and_then(|k| k.parse::<u32>().ok()),
+                Some(Data::Block(x)) => x
+                    .name
+                    .text()
+                    .strip_prefix(kind)
+                    .and_then(|k| k.parse::<u32>().ok()),
                 _ => None,
             },
             _ => None,
@@ -271,7 +277,9 @@ fn copy_block(d: &mut Drawing, hist: &mut History, b: u32) -> R<u32> {
     let n = next_anonymous(d, &kind);
     let nb = d.add_block(hist, &format!("{kind}{n}"), true)?;
     for e in block_entities(d, b) {
-        let Some(o) = d.objects.get(&e).cloned() else { continue };
+        let Some(o) = d.objects.get(&e).cloned() else {
+            continue;
+        };
         let Some(ent) = o.ent.clone() else { continue };
         if matches!(o.data, Data::Block(_) | Data::EndBlk(_)) {
             continue;
@@ -356,7 +364,9 @@ pub fn explode_entity(d: &mut Drawing, hist: &mut History, h: u32) -> R<Vec<u32>
     let Some(o) = d.objects.get(&h).cloned() else {
         return Ok(vec![]);
     };
-    let Some(space) = d.block_of(h) else { return Ok(vec![]) };
+    let Some(space) = d.block_of(h) else {
+        return Ok(vec![]);
+    };
     let mut out = vec![];
     match &o.data {
         Data::LwPolyline(_) | Data::Polyline2d(_) => {
@@ -412,7 +422,9 @@ fn place_block(
             continue;
         }
         let Some(mut ent) = o.ent.clone() else { continue };
-        let Some(data) = mapped(d, e, m, false) else { continue };
+        let Some(data) = mapped(d, e, m, false) else {
+            continue;
+        };
         if ent.layer.handle == layer0 {
             ent.layer = src_ent.layer;
         }

@@ -74,7 +74,11 @@ pub fn spline_through(pts: &[V2], closed: bool) -> Option<Data> {
 pub enum Fill {
     Solid,
     /// A predefined pattern by name, turned and scaled.
-    Pattern { name: String, angle: f64, scale: f64 },
+    Pattern {
+        name: String,
+        angle: f64,
+        scale: f64,
+    },
 }
 
 /// The predefined patterns this knows: their definition lines at angle 0, scale 1 (acadiso's,
@@ -191,7 +195,10 @@ pub fn edge_curve(e: &HatchEdge) -> Option<Curve> {
 
 fn edge(c: &Curve) -> Vec<HatchEdge> {
     match c {
-        Curve::Line { a, b } => vec![HatchEdge::Line { a: a.arr(), b: b.arr() }],
+        Curve::Line { a, b } => vec![HatchEdge::Line {
+            a: a.arr(),
+            b: b.arr(),
+        }],
         Curve::Circle { c, r } => vec![HatchEdge::Arc {
             center: c.arr(),
             radius: *r,
