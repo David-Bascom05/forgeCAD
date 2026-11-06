@@ -14,6 +14,8 @@ pub mod dialog;
 pub mod dim;
 pub mod docs;
 pub mod drawing;
+pub mod dwgdoc;
+mod dwgdoc_ui;
 pub mod fg;
 pub mod fgasm;
 pub mod fgdialog;
@@ -178,6 +180,8 @@ pub enum Action {
     Sheet(sheet::SheetCmd),
     /// A drawing's ribbon command.
     Dwg(drawing::DwgCmd),
+    /// A DWG document's command, from its ribbon.
+    DwgDoc(dwgdoc::Cmd),
     /// File > New Drawing, from the open part or assembly; File > Close Drawing.
     NewDrawing,
     CloseDrawing,
@@ -426,6 +430,8 @@ pub struct Shell {
     pub drawing: Option<drawing::DrawingEnv>,
     /// File > New Drawing's dialog.
     pub new_drawing: Option<drawing::NewDrawing>,
+    /// A DWG file is open: AutoCAD's layout instead of the model's (`dwgdoc.rs`).
+    pub dwgdoc: Option<dwgdoc::DwgDoc>,
     /// What's set in Settings, and its window.
     pub settings: settings::Settings,
     pub prefs: settings::Window,
@@ -506,6 +512,7 @@ impl Default for Shell {
             inspect: Default::default(),
             drawing: None,
             new_drawing: None,
+            dwgdoc: None,
             settings: Default::default(),
             prefs: Default::default(),
             agent: Default::default(),
@@ -908,6 +915,11 @@ impl Shell {
         let s = ctx.content_rect();
         let p = ui.painter().clone();
         p.rect_filled(s, 0.0, t.bg);
+        if self.dwgdoc.is_some() {
+            self.dwgdoc_ui(ui);
+            self.settings_window(&ctx);
+            return;
+        }
         if self.drawing.is_some() {
             self.shortcuts(&ctx);
             self.drawing_ui(ui);
@@ -1146,7 +1158,10 @@ impl Shell {
         }
         let mut x = 66.0;
         let drawing = self.drawing.is_some();
-        let order: Vec<usize> = if drawing {
+        let dwg = self.dwgdoc.is_some();
+        let order: Vec<usize> = if dwg {
+            (0..dwgdoc::TABS.len()).collect()
+        } else if drawing {
             (0..drawing::TABS.len()).collect()
         } else {
             self.tab_order()
@@ -1157,6 +1172,7 @@ impl Shell {
                 continue;
             }
             let name = match k {
+                k if dwg => &dwgdoc::TABS[k],
                 k if drawing => &drawing::TABS[k],
                 SHEET_TAB => &"Sheet Metal",
                 THERMO_TAB => &"Thermoform",
@@ -1655,6 +1671,10 @@ impl Shell {
             items.push(("New Drawing...", model_open.then_some(Action::NewDrawing)));
             if self.drawing.is_some() {
                 items.push(("Close Drawing", Some(Action::CloseDrawing)));
+            }
+            if self.dwgdoc.is_some() {
+                items.push(("Save", Some(Action::DwgDoc(dwgdoc::Cmd::Run("QSAVE")))));
+                items.push(("Save As...", Some(Action::DwgDoc(dwgdoc::Cmd::Run("SAVEAS")))));
             }
             match menu_at(ctx, "file-menu", at, &t, &items, &mut self.places) {
                 MenuResult::Chose(a) => {

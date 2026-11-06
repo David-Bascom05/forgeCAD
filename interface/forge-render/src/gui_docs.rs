@@ -240,6 +240,15 @@ impl Gui {
 
     /// Where the host's dialog said an untitled document goes: written there, its tab named so.
     pub fn save_as(&mut self, path: &str) {
+        if let Some(d) = &mut self.shell.dwgdoc {
+            d.save_as(path);
+            self.shell.name = d.name.clone();
+            if let Some(o) = self.docs.get_mut(self.active) {
+                o.path = d.path.clone();
+            }
+            self.sync_tab();
+            return;
+        }
         let Some(s) = &mut self.fg else { return };
         s.path = Some(path.to_string());
         let name = name_of(path);
@@ -418,7 +427,9 @@ impl Gui {
                 d.title = self.shell.name.clone();
             }
             d.dirty = self.fg.as_ref().is_some_and(|s| s.dirty());
-            d.kind = if self.shell.drawing.is_some() {
+            d.kind = if self.shell.dwgdoc.is_some() {
+                DocKind::Dwg
+            } else if self.shell.drawing.is_some() {
                 DocKind::Drawing
             } else if self.shell.fg.as_ref().is_some_and(|p| p.assembly) {
                 DocKind::Assembly
