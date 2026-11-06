@@ -5,7 +5,7 @@ use forge_render::gui::Headless;
 const USAGE: &str = "forge-app [PART | file.fc] [--size WxH] [--times]
   [--shot FILE.ppm [--scale S] [--light] [--pastel] [--background floor|gradient|solid] [--settings FILE.toml] [--tab N] [--select NAME] [--click NAME].. [--rclick NAME].. [--wait] [--at X Y] [--sketch ROW;ROW..] [--edit NAME] [--draw TOOL X Y] [--view YAW PITCH] [--marking]]
   steps, in order: --click NAME --dclick NAME --rclick NAME --wait --type TEXT --key NAME (enter, escape, tab, backspace, or M, Ctrl+Z, F6...)
-  --hover X Y (the view's pick there) --clickat X Y --drag X Y X2 Y2 --snap FILE.ppm --save
+  --hover X Y (the view's pick there) --clickat X Y --drag X Y X2 Y2 --drag-hold X Y X2 Y2 (not let go) --snap FILE.ppm --save
   --viewnow YAW PITCH --home --zoom F (the camera's distance times F) --wheel X Y DY (scroll there) --new-drawing
   --start-sketch (on XY) --rest NAME SECONDS (the pointer still on it, for its tooltip)
   --open FILE (another document, in its own tab) --doc N (the Nth tab up)
@@ -29,6 +29,8 @@ enum Step {
     Hover(f32, f32),
     ClickAt(f32, f32),
     Drag(f32, f32, f32, f32),
+    /// A drag not let go: what's drawn while it goes on.
+    DragHold(f32, f32, f32, f32),
     Snap(String),
     Save,
     View(f32, f32),
@@ -146,8 +148,8 @@ fn args() -> Result<Args, String> {
                 let p: f32 = it.next().and_then(|w| w.parse().ok()).ok_or(USAGE)?;
                 a.steps.push(Step::View(y.to_radians(), p.to_radians()));
             }
-            "--hover" | "--clickat" | "--drag" => {
-                let n = if k == "--drag" { 4 } else { 2 };
+            "--hover" | "--clickat" | "--drag" | "--drag-hold" => {
+                let n = if k.starts_with("--drag") { 4 } else { 2 };
                 let mut xs = vec![];
                 for _ in 0..n {
                     xs.push(
@@ -159,7 +161,8 @@ fn args() -> Result<Args, String> {
                 a.steps.push(match k.as_str() {
                     "--hover" => Step::Hover(xs[0], xs[1]),
                     "--clickat" => Step::ClickAt(xs[0], xs[1]),
-                    _ => Step::Drag(xs[0], xs[1], xs[2], xs[3]),
+                    "--drag" => Step::Drag(xs[0], xs[1], xs[2], xs[3]),
+                    _ => Step::DragHold(xs[0], xs[1], xs[2], xs[3]),
                 });
             }
             "--at" => {
@@ -574,7 +577,7 @@ fn run() -> Result<(), String> {
                 }
                 continue;
             }
-            Step::Drag(x, y, x2, y2) => {
+            Step::Drag(x, y, x2, y2) | Step::DragHold(x, y, x2, y2) => {
                 hover(&mut h, *x, *y);
                 h.button(true);
                 h.step();
@@ -583,7 +586,9 @@ fn run() -> Result<(), String> {
                     h.move_to(x + (x2 - x) * t, y + (y2 - y) * t);
                     h.step();
                 }
-                h.button(false);
+                if matches!(step, Step::Drag(..)) {
+                    h.button(false);
+                }
                 for _ in 0..4 {
                     h.step();
                 }
