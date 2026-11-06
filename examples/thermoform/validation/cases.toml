@@ -199,8 +199,11 @@ cut_deg = 0
 axisym = true
 fold_about = 85.0
 plug = [21, 90, 10, 20, 60]
-how = "arc length from the centre (data folded about s = 85), a plug driven in"
-cause = "plug: sticking on the plug; stroke assumed"
+# Coulomb friction on the plug: Atmani 2020 Table 2, f(T) = 0.2 (1 + exp[-1040 (1/T - 1/107)]) at the plug-sheet
+# interface, the plug heated to the sheet's 130 C: f = 1.316 (s2_mat_friction_atmani2020.csv). Was sticking.
+plug_mu = 1.316
+how = "arc length from the centre (data folded about s = 85), a dry plug, Atmani's friction at 130 C"
+cause = "plug: Coulomb friction on the plug (Atmani f(T)); stroke 60 printed"
 
 [[case]]
 id = "atmani2020_plugonly_lub130_plug"
