@@ -42,7 +42,7 @@ pub struct Paint {
     pub rect: egui::Rect,
     /// A word a layer: bit 0 shown.
     pub layers: Words,
-    /// A word an item: bit 0 selected, bit 1 hovered.
+    /// A word an item: bit 0 selected, bit 1 hovered, bit 2 not drawn.
     pub flags: Words,
 }
 
@@ -75,7 +75,7 @@ struct Store {
 }
 
 /// How many scenes keep their buffers (tabs, spaces gone back to).
-const KEEP: usize = 3;
+const KEEP: usize = 4;
 
 fn pipes(device: &wgpu::Device, format: wgpu::TextureFormat) -> Pipes {
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {

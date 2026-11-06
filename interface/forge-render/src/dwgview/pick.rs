@@ -94,6 +94,36 @@ impl Grid {
     }
 }
 
+impl Grid {
+    /// Every segment filed in a cell the box lo..hi meets (some more than once); all of them
+    /// when the box is most of the grid.
+    pub fn in_box(&self, lo: [f32; 2], hi: [f32; 2], mut f: impl FnMut(u32)) {
+        let (x0, y0) = self.cell_of(lo);
+        let (x1, y1) = self.cell_of(hi);
+        if (x1 - x0 + 1) * (y1 - y0 + 1) > QUERY_CELLS * 16 {
+            (0..self.n as u32).for_each(f);
+            return;
+        }
+        for y in y0..=y1 {
+            for x in x0..=x1 {
+                let k = y * self.nx + x;
+                for &i in &self.ids[self.starts[k] as usize..self.starts[k + 1] as usize] {
+                    f(i);
+                }
+            }
+        }
+    }
+
+    /// Every segment filed in a cell the segment ab passes through (some more than once).
+    pub fn along(&self, a: [f32; 2], b: [f32; 2], mut f: impl FnMut(u32)) {
+        walk_cells(self.lo, self.cell, self.nx, self.ny, a, b, |k| {
+            for &i in &self.ids[self.starts[k] as usize..self.starts[k + 1] as usize] {
+                f(i);
+            }
+        });
+    }
+}
+
 fn cell_of(lo: [f32; 2], cell: f32, nx: usize, ny: usize, p: [f32; 2]) -> (usize, usize) {
     let c = |v: f32, lo: f32, n: usize| (((v - lo) / cell).floor().max(0.0) as usize).min(n - 1);
     (c(p[0], lo[0], nx), c(p[1], lo[1], ny))

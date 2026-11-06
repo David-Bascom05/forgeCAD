@@ -2,18 +2,20 @@
 //! ForgeCAD's parts, seen AutoCAD's way. The file as read (`forge_dwg::file::Drawing`), the
 //! space shown as a scene on the GPU (`crate::dwgview`), its layers' switches, the selection,
 //! the command line and its history. Every command, from a ribbon button or typed, goes through
-//! `run_command`; the editing ones say "not yet" for now. The window's layout is in
-//! `dwgdoc_ui.rs`.
+//! `run_command`; the drafting commands run as state machines (`dwgcmd.rs`) fed by typed
+//! input, picked points and selections, each one undo step. An edit redraws only what it
+//! changed: the space's scene as opened (`geom`) has the changed entities' items hidden, and
+//! they are drawn from a scene of their own (`delta`). The window's layout is in `dwgdoc_ui.rs`.
 
 use crate::dwgview::Geom;
 use crate::dwgview::gpu::Words;
 use forge_dwg::file::Drawing;
-use forge_dwg::io::{Color, Href};
 use forge_dwg::fonts::FontSet;
-use forge_dwg::scene::{Options, Scene, Space};
+use forge_dwg::io::{Color, Href};
+use forge_dwg::scene::{Options, Plan, Scene, Space};
 use forge_dwg::types::Data;
 use forge_dwg::version::Version;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::sync::Arc;
 
 /// The ribbon's tabs, AutoCAD's.
@@ -39,40 +41,40 @@ const fn c(name: &'static str, aliases: &'static [&'static str], works: bool) ->
 
 /// AutoCAD's commands and their aliases, as acad.pgp has them.
 pub const COMMANDS: &[Command] = &[
-    c("LINE", &["L"], false),
-    c("PLINE", &["PL"], false),
-    c("CIRCLE", &["C"], false),
-    c("ARC", &["A"], false),
-    c("RECTANG", &["REC", "RECTANGLE"], false),
-    c("POLYGON", &["POL"], false),
-    c("ELLIPSE", &["EL"], false),
-    c("SPLINE", &["SPL"], false),
-    c("HATCH", &["H", "BH"], false),
-    c("TEXT", &["T", "DT", "DTEXT"], false),
-    c("MTEXT", &["MT"], false),
-    c("DIM", &[], false),
-    c("DIMLINEAR", &["DLI"], false),
-    c("DIMALIGNED", &["DAL"], false),
+    c("LINE", &["L"], true),
+    c("PLINE", &["PL"], true),
+    c("CIRCLE", &["C"], true),
+    c("ARC", &["A"], true),
+    c("RECTANG", &["REC", "RECTANGLE"], true),
+    c("POLYGON", &["POL"], true),
+    c("ELLIPSE", &["EL"], true),
+    c("SPLINE", &["SPL"], true),
+    c("HATCH", &["H", "BH"], true),
+    c("TEXT", &["T", "DT", "DTEXT"], true),
+    c("MTEXT", &["MT"], true),
+    c("DIM", &[], true),
+    c("DIMLINEAR", &["DLI"], true),
+    c("DIMALIGNED", &["DAL"], true),
     c("DIMANGULAR", &["DAN"], false),
-    c("DIMRADIUS", &["DRA"], false),
-    c("DIMDIAMETER", &["DDI"], false),
+    c("DIMRADIUS", &["DRA"], true),
+    c("DIMDIAMETER", &["DDI"], true),
     c("LEADER", &["LE", "MLEADER", "MLD"], false),
     c("TABLE", &["TB"], false),
-    c("MOVE", &["M"], false),
-    c("COPY", &["CO", "CP"], false),
-    c("ROTATE", &["RO"], false),
-    c("MIRROR", &["MI"], false),
-    c("SCALE", &["SC"], false),
-    c("STRETCH", &["S"], false),
-    c("TRIM", &["TR"], false),
-    c("EXTEND", &["EX"], false),
-    c("OFFSET", &["O"], false),
-    c("FILLET", &["F"], false),
-    c("CHAMFER", &["CHA"], false),
-    c("ARRAY", &["AR"], false),
-    c("ERASE", &["E"], false),
-    c("EXPLODE", &["X"], false),
-    c("MATCHPROP", &["MA"], false),
+    c("MOVE", &["M"], true),
+    c("COPY", &["CO", "CP"], true),
+    c("ROTATE", &["RO"], true),
+    c("MIRROR", &["MI"], true),
+    c("SCALE", &["SC"], true),
+    c("STRETCH", &["S"], true),
+    c("TRIM", &["TR"], true),
+    c("EXTEND", &["EX"], true),
+    c("OFFSET", &["O"], true),
+    c("FILLET", &["F"], true),
+    c("CHAMFER", &["CHA"], true),
+    c("ARRAY", &["AR"], true),
+    c("ERASE", &["E"], true),
+    c("EXPLODE", &["X"], true),
+    c("MATCHPROP", &["MA"], true),
     c("INSERT", &["I"], false),
     c("BLOCK", &["B"], false),
     c("BEDIT", &["BE"], false),
@@ -82,6 +84,14 @@ pub const COMMANDS: &[Command] = &[
     c("PURGE", &["PU"], false),
     c("PLOT", &["PRINT"], false),
     c("EXPORTPDF", &[], false),
+    c("POINT", &["PO"], true),
+    c("DIMSCALE", &[], true),
+    c("BREAK", &["BR"], true),
+    c("JOIN", &["J"], true),
+    c("LENGTHEN", &["LEN"], true),
+    c("UNDO", &["U"], true),
+    c("REDO", &[], true),
+    c("OSNAP", &["OS", "DSETTINGS", "DS"], true),
     c("LAYER", &["LA"], true),
     c("PROPERTIES", &["PR", "CH", "MO"], true),
     c("ZOOM", &["Z"], true),
@@ -102,13 +112,14 @@ pub fn command_of(word: &str) -> Option<&'static Command> {
         .find(|c| c.name == w || c.aliases.contains(&w.as_str()))
 }
 
-/// The status bar's toggles, AutoCAD's: only LWT works yet.
-pub const TOGGLES: [(&str, &str); 6] = [
+/// The status bar's toggles, AutoCAD's.
+pub const TOGGLES: [(&str, &str); 7] = [
     ("SNAP", "Snap mode (F9)"),
     ("GRID", "Grid display (F7)"),
     ("ORTHO", "Ortho mode (F8)"),
     ("POLAR", "Polar tracking (F10)"),
-    ("OSNAP", "Object snap (F3)"),
+    ("OSNAP", "Object snap (F3); right-click for its settings"),
+    ("DYN", "Dynamic input (F12)"),
     ("LWT", "Show/hide lineweight"),
 ];
 
@@ -145,6 +156,23 @@ pub struct DwgDoc {
     /// Which: 0 Model, k the layout `layouts[k - 1]`.
     pub space: usize,
     pub geom: Arc<Geom>,
+    /// What edits changed, drawn over `geom` (whose items for them are hidden).
+    pub delta: Arc<Geom>,
+    /// The entities `geom` no longer draws (edited or erased since it was built).
+    pub hidden: Arc<HashSet<u32>>,
+    /// The entities `delta` draws.
+    pub edited: BTreeSet<u32>,
+    /// The scene's cut, for an edit's entities to match.
+    plan: Option<Plan>,
+    /// What each layer looked like when the scene was built (its colour, line type, weight).
+    layer_looks: HashMap<u32, LayerLook>,
+    dflags: Vec<u32>,
+    dflags_words: Words,
+    dlayer_words: Words,
+    /// The drafting state: the command running, the settings, undo.
+    pub ed: crate::shell::dwgcmd::Editor,
+    /// How long the last edit's redraw took (ms), and how many entities it drew.
+    pub last_sync: (f64, usize),
     /// How each space was last seen.
     views: HashMap<usize, View>,
     pub view: Option<View>,
@@ -170,6 +198,14 @@ pub struct DwgDoc {
     pub press: Option<Press>,
     /// Space held: the left button pans.
     pub space_pan: bool,
+    /// The left button panned while Space was held (so letting Space go repeats nothing).
+    pub space_panned: bool,
+    /// MTEXT's editor: what's typed.
+    pub mtext: String,
+    /// The Layers palette's chosen row (for Delete, Set current).
+    pub layer_sel: Option<u32>,
+    /// A Properties field being typed: its name and text.
+    pub prop_edit: Option<(String, String)>,
     pub show_layers: bool,
     pub show_props: bool,
     pub show_warnings: bool,
@@ -364,13 +400,28 @@ impl DwgDoc {
         let drawing = forge_dwg::file::read(bytes).map_err(|e| format!("{name}: {}", e.0))?;
         let layouts = layouts_of(&drawing);
         let scene = Arc::new(Scene::default());
+        let empty = || Words {
+            words: Arc::new(vec![]),
+            version: 0,
+            since: None,
+        };
         let mut d = DwgDoc {
             path,
             name: name.to_string(),
             drawing,
             layouts,
             space: 0,
-            geom: Arc::new(Geom::new(scene)),
+            geom: Arc::new(Geom::new(scene.clone())),
+            delta: Arc::new(Geom::new(scene)),
+            hidden: Arc::new(HashSet::new()),
+            edited: BTreeSet::new(),
+            plan: None,
+            layer_looks: HashMap::new(),
+            dflags: vec![],
+            dflags_words: empty(),
+            dlayer_words: empty(),
+            ed: Default::default(),
+            last_sync: (0.0, 0),
             views: HashMap::new(),
             view: None,
             layer_state: HashMap::new(),
@@ -397,6 +448,10 @@ impl DwgDoc {
             cursor: None,
             press: None,
             space_pan: false,
+            space_panned: false,
+            mtext: String::new(),
+            layer_sel: None,
+            prop_edit: None,
             show_layers: true,
             show_props: true,
             show_warnings: false,
@@ -452,18 +507,30 @@ impl DwgDoc {
 
     /// The scene of the space shown made again, and drawn from it.
     pub fn rebuild(&mut self) {
-        let scene = forge_dwg::scene::build(
-            &self.drawing,
-            self.space_of(self.space),
-            fonts(),
-            &Options::default(),
-        );
-        // a layer met for the first time takes the file's switches
+        let space = self.space_of(self.space);
+        let opts = scene_options();
+        let plan = forge_dwg::scene::plan(&self.drawing, space, fonts(), &opts);
+        let scene = forge_dwg::scene::build_planned(&self.drawing, space, fonts(), &opts, &plan);
+        self.plan = Some(plan);
+        self.layer_looks = self
+            .drawing
+            .objects
+            .iter()
+            .filter_map(|(h, o)| match &o.data {
+                Data::Layer(l) => Some((*h, layer_look(l))),
+                _ => None,
+            })
+            .collect();
+        // the layers' switches as the file has them
         for l in &scene.layers {
-            self.layer_state.entry(l.handle).or_insert((l.on, l.frozen));
+            self.layer_state.insert(l.handle, (l.on, l.frozen));
         }
         self.geom = Arc::new(Geom::new(Arc::new(scene)));
+        self.delta = Arc::new(Geom::new(Arc::new(Scene::default())));
+        self.hidden = Arc::new(HashSet::new());
+        self.edited.clear();
         self.flags = vec![0; self.geom.n_items()];
+        self.dflags = vec![];
         self.hover = None;
         self.selected.retain(|e| self.geom.by_entity.contains_key(e));
         for e in self.selected.clone() {
@@ -474,7 +541,186 @@ impl DwgDoc {
             version: self.flags_words.version + 1,
             since: None,
         };
+        self.dflags_words = Words {
+            words: Arc::new(vec![]),
+            version: self.dflags_words.version + 1,
+            since: None,
+        };
         self.layers_changed();
+    }
+
+    /// The block record of the space shown: model space, or the layout's paper space.
+    pub fn space_block(&self) -> u32 {
+        match self.space_of(self.space) {
+            Space::Model => self.drawing.model_space(),
+            Space::Layout(h) => match self.drawing.objects.get(&h).map(|o| &o.data) {
+                Some(Data::Layout(l)) => l.block.handle,
+                _ => self.drawing.paper_space(),
+            },
+        }
+    }
+
+    /// Redraws what an edit touched (objects by handle): the space's entities among them, or
+    /// the entity owning a touched vertex or attribute, drawn from the edit's own scene and
+    /// hidden in the first. A layer's switches follow its record; a layer's colour or line type
+    /// changed, or many entities, rebuild the whole scene.
+    pub fn sync(&mut self, touched: &[u32]) {
+        if touched.is_empty() {
+            return;
+        }
+        let t0 = crate::viewer::now_ms();
+        let space = self.space_block();
+        let mut ents: Vec<u32> = vec![];
+        let mut layers_moved = false;
+        let whole = false;
+        let mut restyled: Vec<(u32, LayerLook)> = vec![];
+        for &h in touched {
+            match self.drawing.objects.get(&h) {
+                None => {
+                    // erased: was it drawn?
+                    if self.geom.by_entity.contains_key(&h) || self.edited.contains(&h) {
+                        ents.push(h);
+                    }
+                }
+                Some(o) => {
+                    if let Data::Layer(l) = &o.data {
+                        let on = super::dwgprops::layer_on(l);
+                        let frozen = l.flags & 1 != 0;
+                        let was = self.layer_state.insert(h, (on, frozen));
+                        layers_moved |= was != Some((on, frozen));
+                        // its colour, line type or weight are in the items: what's on it again
+                        let look = layer_look(l);
+                        if let Some(old) = self.layer_looks.get(&h).copied()
+                            && old != look
+                        {
+                            restyled.push((h, old));
+                            self.layer_looks.insert(h, look);
+                        }
+                        continue;
+                    }
+                    if o.ent.is_none() {
+                        continue;
+                    }
+                    let top = match self.drawing.block_of(h) {
+                        Some(b) if b == space => Some(h),
+                        // a vertex, an attribute: its owner
+                        _ => match self.drawing.objects.get(&o.owner.handle) {
+                            Some(w) if w.ent.is_some() && self.drawing.block_of(o.owner.handle) == Some(space) => {
+                                Some(o.owner.handle)
+                            }
+                            _ => None,
+                        },
+                    };
+                    if let Some(t) = top {
+                        ents.push(t);
+                    }
+                }
+            }
+        }
+        if self.is_paper() || whole {
+            // a layout's viewports show model space: all of it again
+            self.rebuild();
+            self.last_sync = (crate::viewer::now_ms() - t0, self.geom.n_items());
+            return;
+        }
+        // a layer's look changed: its colour only, the items drawn in it recoloured in place;
+        // its line type or weight, everything drawn on it again
+        for (h, old) in restyled {
+            let Some(Data::Layer(l)) = self.drawing.objects.get(&h).map(|o| &o.data) else { continue };
+            let new = layer_look(l);
+            let Some(i) = self.geom.scene.layers.iter().position(|x| x.handle == h) else { continue };
+            if (old.2, old.3) == (new.2, new.3) {
+                let rgb = match l.color.rgb {
+                    Some(c) if c >> 24 == 0xC2 => [(c >> 16) as u8, (c >> 8) as u8, c as u8],
+                    _ => forge_dwg::scene::aci_rgb(super::dwgprops::layer_aci(l)),
+                };
+                self.geom = Arc::new(self.geom.recoloured(i, rgb));
+                // what the edits drew on it is drawn again below
+                for e in self.edited.iter() {
+                    ents.push(*e);
+                }
+                continue;
+            }
+            {
+                let mut last = u32::MAX;
+                for it in &self.geom.scene.items {
+                    if it.layer == i && it.entity != last {
+                        last = it.entity;
+                        ents.push(it.entity);
+                    }
+                }
+            }
+        }
+        ents.sort_unstable();
+        ents.dedup();
+        if ents.len() + self.edited.len() > 50_000 {
+            self.rebuild();
+            self.last_sync = (crate::viewer::now_ms() - t0, self.geom.n_items());
+            return;
+        }
+        let mut newly_hidden = vec![];
+        {
+            let hidden = Arc::make_mut(&mut self.hidden);
+            for &e in &ents {
+                if self.geom.by_entity.contains_key(&e) && hidden.insert(e) {
+                    newly_hidden.push(e);
+                }
+                let alive = self
+                    .drawing
+                    .objects
+                    .get(&e)
+                    .is_some_and(|o| o.ent.is_some() && self.drawing.block_of(e) == Some(space));
+                if alive {
+                    self.edited.insert(e);
+                } else {
+                    self.edited.remove(&e);
+                    self.selected.remove(&e);
+                }
+            }
+        }
+        if self.edited.len() > 50_000 {
+            self.rebuild();
+            self.last_sync = (crate::viewer::now_ms() - t0, self.geom.n_items());
+            return;
+        }
+        self.set_flags_many(&newly_hidden, 4, true);
+        if !ents.is_empty() {
+            let plan = self.plan.unwrap_or(Plan {
+                chord: 1e-3,
+                view_h: 100.0,
+            });
+            let hs: Vec<u32> = self.edited.iter().copied().collect();
+            let scene = forge_dwg::scene::build_some(
+                &self.drawing,
+                self.space_of(self.space),
+                &hs,
+                fonts(),
+                &scene_options(),
+                &plan,
+                self.geom.scene.extents,
+            );
+            for l in &scene.layers {
+                let on = l.on;
+                self.layer_state.entry(l.handle).or_insert((on, l.frozen));
+            }
+            self.delta = Arc::new(Geom::new(Arc::new(scene)));
+            self.dflags = vec![0; self.delta.n_items()];
+            for e in self.selected.clone() {
+                mark_in(&self.delta, &mut self.dflags, e, 1, true);
+            }
+            if let Some(h) = self.hover {
+                mark_in(&self.delta, &mut self.dflags, h, 2, true);
+            }
+            self.dflags_words = Words {
+                words: Arc::new(self.dflags.clone()),
+                version: self.dflags_words.version + 1,
+                since: None,
+            };
+        }
+        if layers_moved || !ents.is_empty() {
+            self.layers_changed();
+        }
+        self.last_sync = (crate::viewer::now_ms() - t0, self.edited.len());
     }
 
     /// Another space: its scene, and its view as left (fitted the first time).
@@ -496,8 +742,12 @@ impl DwgDoc {
 
     /// Is the scene's layer `i` shown: on and not frozen?
     pub fn layer_shown(&self, i: usize) -> bool {
-        self.geom
-            .scene
+        self.layer_shown_in(&self.geom, i)
+    }
+
+    /// Is a geometry's layer `i` shown?
+    pub fn layer_shown_in(&self, g: &Geom, i: usize) -> bool {
+        g.scene
             .layers
             .get(i)
             .and_then(|l| self.layer_state.get(&l.handle))
@@ -513,15 +763,25 @@ impl DwgDoc {
             version: self.layer_words.version + 1,
             since: None,
         };
+        let delta = self.delta.clone();
+        let dwords: Vec<u32> = (0..delta.scene.layers.len().max(1))
+            .map(|i| self.layer_shown_in(&delta, i) as u32)
+            .collect();
+        self.dlayer_words = Words {
+            words: Arc::new(dwords),
+            version: self.dlayer_words.version + 1,
+            since: None,
+        };
         // what's on a layer turned off can't stay chosen
         let gone: Vec<u32> = self
             .selected
             .iter()
             .copied()
             .filter(|e| {
-                self.geom.by_entity[e]
-                    .iter()
-                    .all(|&i| !self.layer_shown(self.geom.scene.items[i as usize].layer))
+                let (g, _) = self.drawn_in(*e);
+                g.by_entity
+                    .get(e)
+                    .is_none_or(|its| its.iter().all(|&i| !self.layer_shown_in(g, g.scene.items[i as usize].layer)))
             })
             .collect();
         for e in gone {
@@ -531,30 +791,17 @@ impl DwgDoc {
         self.flags_changed(0, self.flags.len() as u32);
     }
 
-    /// A layer's on or frozen switch flipped, by the scene's index.
-    pub fn flip_layer(&mut self, i: usize, frozen: bool) {
-        let Some(l) = self.geom.scene.layers.get(i) else {
-            return;
-        };
-        let s = self.layer_state.entry(l.handle).or_insert((l.on, l.frozen));
-        if frozen {
-            s.1 = !s.1;
+    /// Which geometry draws an entity now: the edits' (true) or the space's as built.
+    pub fn drawn_in(&self, e: u32) -> (&Geom, bool) {
+        if self.edited.contains(&e) {
+            (&self.delta, true)
         } else {
-            s.0 = !s.0;
+            (&self.geom, false)
         }
-        self.layers_changed();
     }
 
     fn mark(&mut self, entity: u32, bit: u32, on: bool) -> Option<(u32, u32)> {
-        let items = self.geom.by_entity.get(&entity)?;
-        let (mut lo, mut hi) = (u32::MAX, 0);
-        for &i in items {
-            let f = &mut self.flags[i as usize];
-            *f = if on { *f | bit } else { *f & !bit };
-            lo = lo.min(i);
-            hi = hi.max(i + 1);
-        }
-        Some((lo, hi))
+        mark_in(&self.geom, &mut self.flags, entity, bit, on)
     }
 
     /// The items' words from lo to hi changed: a new version for the GPU, with the range that
@@ -579,9 +826,47 @@ impl DwgDoc {
         out
     }
 
+    /// The edits' geometry's words.
+    pub fn delta_words(&mut self) -> (Words, Words) {
+        let out = (self.dlayer_words.clone(), self.dflags_words.clone());
+        self.dflags_words.since = None;
+        out
+    }
+
     fn set_flags(&mut self, entity: u32, bit: u32, on: bool) {
-        if let Some((lo, hi)) = self.mark(entity, bit, on) {
+        self.set_flags_many(&[entity], bit, on);
+    }
+
+    /// Marks or clears many entities' items, the words made again once for them all.
+    fn set_flags_many(&mut self, entities: &[u32], bit: u32, on: bool) {
+        let (mut lo, mut hi) = (u32::MAX, 0);
+        let (mut dlo, mut dhi) = (u32::MAX, 0);
+        let delta = self.delta.clone();
+        for &e in entities {
+            if let Some((a, b)) = self.mark(e, bit, on) {
+                lo = lo.min(a);
+                hi = hi.max(b);
+            }
+            if self.edited.contains(&e)
+                && let Some((a, b)) = mark_in(&delta, &mut self.dflags, e, bit, on)
+            {
+                dlo = dlo.min(a);
+                dhi = dhi.max(b);
+            }
+        }
+        if lo < hi {
             self.flags_changed(lo, hi);
+        }
+        if dlo < dhi {
+            let since = match self.dflags_words.since {
+                Some((from, a, b)) => (from, a.min(dlo), b.max(dhi)),
+                None => (self.dflags_words.version, dlo, dhi),
+            };
+            self.dflags_words = Words {
+                words: Arc::new(self.dflags.clone()),
+                version: self.dflags_words.version + 1,
+                since: Some(since),
+            };
         }
     }
 
@@ -600,16 +885,12 @@ impl DwgDoc {
 
     /// Chosen, or not.
     pub fn select(&mut self, entities: &[u32], add: bool) {
-        for &e in entities {
-            let changed = if add {
-                self.selected.insert(e)
-            } else {
-                self.selected.remove(&e)
-            };
-            if changed {
-                self.set_flags(e, 1, add);
-            }
-        }
+        let changed: Vec<u32> = entities
+            .iter()
+            .copied()
+            .filter(|&e| if add { self.selected.insert(e) } else { self.selected.remove(&e) })
+            .collect();
+        self.set_flags_many(&changed, 1, add);
     }
 
     pub fn clear_selection(&mut self) {
@@ -617,10 +898,23 @@ impl DwgDoc {
         self.select(&all, false);
     }
 
+    /// Chosen or not, by the user (not a command): the grips follow.
+    pub fn choose(&mut self, entities: &[u32], add: bool) {
+        self.select(entities, add);
+        self.refresh_grips();
+    }
+
     /// Everything shown in view: the space's extents, a little in from the canvas's edges.
     pub fn fit(&mut self, canvas: egui::Vec2) {
         let shown = |i: usize| self.layer_shown(i);
-        let ext = self.geom.shown_extents(&shown);
+        let dshown = |i: usize| self.layer_shown_in(&self.delta, i);
+        let ext = match (self.geom.shown_extents(&shown), self.delta.shown_extents(&dshown)) {
+            (Some(a), Some(b)) => Some((
+                [a.0[0].min(b.0[0]), a.0[1].min(b.0[1])],
+                [a.1[0].max(b.1[0]), a.1[1].max(b.1[1])],
+            )),
+            (a, b) => a.or(b),
+        };
         let ext = match (self.paper(), ext) {
             (Some((plo, phi)), Some((lo, hi))) => Some((
                 [plo[0].min(lo[0]), plo[1].min(lo[1])],
@@ -712,7 +1006,8 @@ impl DwgDoc {
                     }
                 }
                 let mut rows = vec![("General", "All".to_string(), format!("{n}"))];
-                rows.extend(kinds.into_iter().map(|(k, n)| ("General", k, n.to_string())));
+                rows.extend(self.common_props().into_iter().map(|(k, v)| ("General", k, v)));
+                rows.extend(kinds.into_iter().map(|(k, n)| ("Objects", k, n.to_string())));
                 rows
             }
         }
@@ -727,7 +1022,7 @@ impl DwgDoc {
             ("Drawing", "Objects".into(), d.objects.len().to_string()),
             ("Drawing", "Layers".into(), s.layers.len().to_string()),
             ("Drawing", "Space".into(), self.tab_names()[self.space].clone()),
-            ("Drawing", "Items drawn".into(), s.items.len().to_string()),
+            ("Drawing", "Items drawn".into(), (s.items.len() + self.delta.n_items()).to_string()),
         ];
         if let Some((lo, hi)) = s.extents {
             rows.push((
@@ -865,6 +1160,14 @@ impl DwgDoc {
                     geo(w, v);
                 }
             }
+            Data::Point(p) => {
+                for ((_, v), w) in xyz(p.at)
+                    .into_iter()
+                    .zip(["Position X", "Position Y", "Position Z"])
+                {
+                    geo(w, v);
+                }
+            }
             Data::Insert(i) => {
                 geo("Name", entry_name(d, i.block).unwrap_or_else(|| "?".into()));
                 for ((_, v), w) in xyz(i.at)
@@ -887,45 +1190,13 @@ impl DwgDoc {
         rows
     }
 
-    /// The layers panel's rows: name, colour, on, frozen, locked, line type, lineweight.
-    pub fn layer_rows(&self) -> Vec<LayerRow> {
-        let d = &self.drawing;
-        self.geom
-            .scene
-            .layers
-            .iter()
-            .enumerate()
-            .map(|(i, l)| {
-                let (on, frozen) = self
-                    .layer_state
-                    .get(&l.handle)
-                    .copied()
-                    .unwrap_or((l.on, l.frozen));
-                let (ltype, weight) = match d.objects.get(&l.handle).map(|o| &o.data) {
-                    Some(Data::Layer(x)) => (
-                        entry_name(d, x.ltype).unwrap_or_else(|| "Continuous".into()),
-                        lineweight_name(((x.flags as u16 >> 5) & 31) as u8),
-                    ),
-                    _ => ("Continuous".into(), "Default".into()),
-                };
-                LayerRow {
-                    index: i,
-                    name: l.name.clone(),
-                    rgb: l.rgb,
-                    on,
-                    frozen,
-                    locked: l.locked,
-                    plot: l.plot,
-                    ltype,
-                    weight,
-                }
-            })
-            .collect()
-    }
-
-    /// Runs a command by its name or alias, as typed or as a button asks. Editing commands are
-    /// not here yet: they say so.
+    /// Runs a command by its name or alias, as typed or as a button asks; while a drafting
+    /// command runs, what's typed is its input.
     pub fn run_command(&mut self, word: &str) -> Run {
+        if self.ed.active() {
+            self.typed_input(word);
+            return Run::Done;
+        }
         let word = word.trim();
         if word.is_empty() {
             // Enter on an empty line: the last command again
@@ -936,6 +1207,10 @@ impl DwgDoc {
         }
         if let Some(p) = self.pending.take() {
             return self.option(p, word);
+        }
+        // a button's command while another runs: that one called off first
+        if self.ed.active() {
+            self.cancel_command();
         }
         let Some(c) = command_of(word) else {
             self.say(format!("Command: {word}"));
@@ -954,7 +1229,23 @@ impl DwgDoc {
             ));
             return Run::Done;
         }
+        if crate::shell::dwgcmd::is_drafting(c.name) {
+            self.start_command(c.name);
+            return Run::Done;
+        }
         match c.name {
+            "UNDO" => {
+                self.undo();
+                Run::Done
+            }
+            "REDO" => {
+                self.redo();
+                Run::Done
+            }
+            "OSNAP" => {
+                self.ed.show_osnap = true;
+                Run::Done
+            }
             "LAYER" => {
                 self.show_layers = !self.show_layers;
                 Run::Done
@@ -1026,6 +1317,15 @@ impl DwgDoc {
 
     /// Esc: the command waiting called off, else the selection cleared.
     pub fn escape(&mut self) {
+        if self.ed.active() {
+            self.input.clear();
+            self.cancel_command();
+            self.press = None;
+            return;
+        }
+        if self.ed.grip_hot.is_some() || !self.ed.grips.is_empty() && self.selected.is_empty() {
+            self.ed.grip_hot = None;
+        }
         if self.pending.take().is_some() || !self.input.is_empty() {
             self.input.clear();
             self.say("*Cancel*");
@@ -1045,18 +1345,40 @@ pub enum Run {
     Open,
 }
 
-/// A row of the Layers panel.
-#[derive(Clone, Debug, PartialEq)]
-pub struct LayerRow {
-    pub index: usize,
-    pub name: String,
-    pub rgb: [u8; 3],
-    pub on: bool,
-    pub frozen: bool,
-    pub locked: bool,
-    pub plot: bool,
-    pub ltype: String,
-    pub weight: String,
+/// An entity's items in a geometry marked or cleared (`bit`): the range of items touched.
+fn mark_in(g: &Geom, flags: &mut [u32], entity: u32, bit: u32, on: bool) -> Option<(u32, u32)> {
+    let items = g.by_entity.get(&entity)?;
+    let (mut lo, mut hi) = (u32::MAX, 0);
+    for &i in items {
+        let f = flags.get_mut(i as usize)?;
+        *f = if on { *f | bit } else { *f & !bit };
+        lo = lo.min(i);
+        hi = hi.max(i + 1);
+    }
+    Some((lo, hi))
+}
+
+/// What of a layer the scene's items carry: its colour (index, true colour), line type and
+/// lineweight.
+type LayerLook = (i16, Option<u32>, u32, i16);
+
+fn layer_look(l: &forge_dwg::types::Layer) -> LayerLook {
+    (super::dwgprops::layer_aci(l), l.color.rgb, l.ltype.handle, (l.flags >> 5) & 31)
+}
+
+/// The scene the document draws: every layer's items (the layers switch in the shader).
+pub fn scene_options() -> Options {
+    Options {
+        all_layers: true,
+        ..Options::default()
+    }
+}
+
+/// The app's fonts, shared by every drawing (their glyphs are cached once): the built-in
+/// stand-ins for now; real SHX and TrueType files come from a fonts folder later.
+pub fn fonts() -> &'static FontSet {
+    static FONTS: std::sync::OnceLock<FontSet> = std::sync::OnceLock::new();
+    FONTS.get_or_init(FontSet::new)
 }
 
 #[cfg(test)]
@@ -1102,11 +1424,4 @@ mod tests {
         assert_eq!(colour_name(&Color::index(256)), "ByLayer");
         assert_eq!(colour_name(&Color::index(1)), "Red");
     }
-}
-
-/// The app's fonts, shared by every drawing (their glyphs are cached once): the built-in
-/// stand-ins for now; real SHX and TrueType files come from a fonts folder later.
-pub fn fonts() -> &'static FontSet {
-    static FONTS: std::sync::OnceLock<FontSet> = std::sync::OnceLock::new();
-    FONTS.get_or_init(FontSet::new)
 }

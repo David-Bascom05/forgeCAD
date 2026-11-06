@@ -31,15 +31,15 @@ pub struct Geom {
     pub n_lines: u32,
     pub fills: Vec<u8>,
     pub n_fill_verts: u32,
-    grid: Grid,
+    grid: Arc<Grid>,
     /// Each item's box, less the origin: lo x, lo y, hi x, hi y.
-    boxes: Vec<[f32; 4]>,
+    boxes: Arc<Vec<[f32; 4]>>,
     /// Item k's segments are instances `item_segs[k]..item_segs[k + 1]` of `lines`.
-    item_segs: Vec<u32>,
+    item_segs: Arc<Vec<u32>>,
     /// The fills' items, in drawing order.
-    fill_items: Vec<u32>,
+    fill_items: Arc<Vec<u32>>,
     /// Each entity's items.
-    pub by_entity: BTreeMap<u32, Vec<u32>>,
+    pub by_entity: Arc<BTreeMap<u32, Vec<u32>>>,
 }
 
 fn pack(rgb: [u8; 3]) -> u32 {
@@ -188,11 +188,48 @@ impl Geom {
             n_lines,
             fills,
             n_fill_verts,
-            grid,
-            boxes,
-            item_segs,
-            fill_items,
-            by_entity,
+            grid: Arc::new(grid),
+            boxes: Arc::new(boxes),
+            item_segs: Arc::new(item_segs),
+            fill_items: Arc::new(fill_items),
+            by_entity: Arc::new(by_entity),
+        }
+    }
+
+    /// The same geometry with what's drawn in layer `layer`'s colour (ByLayer) in `rgb` now:
+    /// a layer's colour changed without building its scene again. Its own id, for the GPU.
+    pub fn recoloured(&self, layer: usize, rgb: [u8; 3]) -> Geom {
+        let items = &self.scene.items;
+        let hit = |item: u32| items.get(item as usize).is_some_and(|it| it.by_layer && it.layer == layer);
+        let word = pack(rgb).to_le_bytes();
+        let mut lines = self.lines.clone();
+        for w in lines.as_chunks_mut::<LINE_BYTES>().0 {
+            let item = u32::from_le_bytes([w[28], w[29], w[30], w[31]]);
+            if hit(item) {
+                w[16..20].copy_from_slice(&word);
+            }
+        }
+        let mut fills = self.fills.clone();
+        for w in fills.as_chunks_mut::<FILL_BYTES>().0 {
+            let item = u32::from_le_bytes([w[16], w[17], w[18], w[19]]);
+            // a mask keeps its alpha 0 (the canvas's colour)
+            if hit(item) && w[11] != 0 {
+                w[8..12].copy_from_slice(&word);
+            }
+        }
+        Geom {
+            id: NEXT_ID.fetch_add(1, Ordering::Relaxed),
+            scene: self.scene.clone(),
+            origin: self.origin,
+            lines,
+            n_lines: self.n_lines,
+            fills,
+            n_fill_verts: self.n_fill_verts,
+            grid: self.grid.clone(),
+            boxes: self.boxes.clone(),
+            item_segs: self.item_segs.clone(),
+            fill_items: self.fill_items.clone(),
+            by_entity: self.by_entity.clone(),
         }
     }
 
@@ -207,9 +244,15 @@ impl Geom {
     /// The entity whose item is nearest the point (world units) within `tol`: a path's within
     /// reach first, else the fill on top that holds the point. `shown` says which layers count.
     pub fn pick(&self, p: [f64; 2], tol: f64, shown: &dyn Fn(usize) -> bool) -> Option<u32> {
+        self.pick_items(p, tol, &|i| shown(self.scene.items[i as usize].layer))
+            .map(|(e, _)| e)
+    }
+
+    /// `pick` with each item asked whether it counts: the entity and how far it is (twice `tol`
+    /// for a fill the point is in, so a path within reach of another geometry wins over it).
+    pub fn pick_items(&self, p: [f64; 2], tol: f64, ok: &dyn Fn(u32) -> bool) -> Option<(u32, f64)> {
         let q = self.local(p);
         let items = &self.scene.items;
-        let ok = |i: u32| shown(items[i as usize].layer);
         let r = tol as f32;
         let mut best: Option<(u32, f32)> = None;
         self.grid.near(q, r, |s| {
@@ -220,8 +263,8 @@ impl Geom {
                 best = Some((item, d));
             }
         });
-        if let Some((i, _)) = best {
-            return Some(items[i as usize].entity);
+        if let Some((i, d)) = best {
+            return Some((items[i as usize].entity, d as f64));
         }
         for &i in self.fill_items.iter().rev() {
             let b = self.boxes[i as usize];
@@ -231,10 +274,89 @@ impl Geom {
             if let Prim::Fill { rings } = &items[i as usize].prim
                 && inside(rings, p)
             {
-                return Some(items[i as usize].entity);
+                // a fill under the point counts after any path within reach
+                return Some((items[i as usize].entity, tol * 2.0));
             }
         }
         None
+    }
+
+    /// The entities with a segment within `r` of p (world units), each once, those whose items
+    /// `ok` passes.
+    pub fn near(&self, p: [f64; 2], r: f64, ok: &dyn Fn(u32) -> bool, out: &mut Vec<u32>) {
+        let q = self.local(p);
+        let rf = r as f32;
+        let start = out.len();
+        self.grid.near(q, rf, |s| {
+            let (item, (a, b)) = seg_of(&self.lines, s as usize);
+            if seg_dist(q, a, b) <= rf && ok(item) {
+                out.push(self.scene.items[item as usize].entity);
+            }
+        });
+        dedup_from(out, start);
+    }
+
+    /// The entities with a segment in the box a..b (world units), each once.
+    pub fn in_box(&self, a: [f64; 2], b: [f64; 2], ok: &dyn Fn(u32) -> bool, out: &mut Vec<u32>) {
+        let (qa, qb) = (self.local(a), self.local(b));
+        let r = [qa[0].min(qb[0]), qa[1].min(qb[1]), qa[0].max(qb[0]), qa[1].max(qb[1])];
+        let start = out.len();
+        self.grid.in_box([r[0], r[1]], [r[2], r[3]], |s| {
+            let (item, (a, b)) = seg_of(&self.lines, s as usize);
+            if seg_meets_box(a, b, r) && ok(item) {
+                out.push(self.scene.items[item as usize].entity);
+            }
+        });
+        dedup_from(out, start);
+    }
+
+    /// The entities with a segment in a cell the segment a..b passes (world units): what might
+    /// cross it.
+    pub fn along(&self, a: [f64; 2], b: [f64; 2], ok: &dyn Fn(u32) -> bool, out: &mut Vec<u32>) {
+        let start = out.len();
+        self.grid.along(self.local(a), self.local(b), |s| {
+            let (item, _) = seg_of(&self.lines, s as usize);
+            if ok(item) {
+                out.push(self.scene.items[item as usize].entity);
+            }
+        });
+        dedup_from(out, start);
+    }
+
+    /// An entity's segments as drawn (world units), at most `max`.
+    pub fn segments(&self, entity: u32, max: usize, out: &mut Vec<([f64; 2], [f64; 2])>) {
+        let Some(items) = self.by_entity.get(&entity) else { return };
+        let w = |p: [f32; 2]| [p[0] as f64 + self.origin[0], p[1] as f64 + self.origin[1]];
+        for &i in items {
+            let (s, e) = (self.item_segs[i as usize] as usize, self.item_segs[i as usize + 1] as usize);
+            for k in s..e {
+                if out.len() >= max {
+                    return;
+                }
+                let (_, (a, b)) = seg_of(&self.lines, k);
+                out.push((w(a), w(b)));
+            }
+        }
+    }
+
+    /// The box round an entity's items (world units).
+    pub fn entity_box(&self, entity: u32) -> Option<([f64; 2], [f64; 2])> {
+        let items = self.by_entity.get(&entity)?;
+        let mut lo = [f32::INFINITY; 2];
+        let mut hi = [f32::NEG_INFINITY; 2];
+        for &i in items {
+            let b = self.boxes[i as usize];
+            if b[0] <= b[2] {
+                lo = [lo[0].min(b[0]), lo[1].min(b[1])];
+                hi = [hi[0].max(b[2]), hi[1].max(b[3])];
+            }
+        }
+        (lo[0] <= hi[0]).then(|| {
+            (
+                [lo[0] as f64 + self.origin[0], lo[1] as f64 + self.origin[1]],
+                [hi[0] as f64 + self.origin[0], hi[1] as f64 + self.origin[1]],
+            )
+        })
     }
 
     /// AutoCAD's window (wholly inside the box) or crossing (inside or touching it) selection,
@@ -246,6 +368,18 @@ impl Geom {
         crossing: bool,
         shown: &dyn Fn(usize) -> bool,
     ) -> Vec<u32> {
+        self.select_box_where(a, b, crossing, shown, &|_| true)
+    }
+
+    /// `select_box` of the entities `keep` passes.
+    pub fn select_box_where(
+        &self,
+        a: [f64; 2],
+        b: [f64; 2],
+        crossing: bool,
+        shown: &dyn Fn(usize) -> bool,
+        keep: &dyn Fn(u32) -> bool,
+    ) -> Vec<u32> {
         let (qa, qb) = (self.local(a), self.local(b));
         let r = [
             qa[0].min(qb[0]),
@@ -255,7 +389,10 @@ impl Geom {
         ];
         let items = &self.scene.items;
         let mut out = vec![];
-        for (&e, its) in &self.by_entity {
+        for (&e, its) in self.by_entity.iter() {
+            if !keep(e) {
+                continue;
+            }
             let mut any_shown = false;
             let mut all_in = true;
             let mut touches = false;
@@ -319,7 +456,7 @@ impl Geom {
     pub fn shown_extents(&self, shown: &dyn Fn(usize) -> bool) -> Option<([f64; 2], [f64; 2])> {
         let mut lo = [f32::INFINITY; 2];
         let mut hi = [f32::NEG_INFINITY; 2];
-        for (it, b) in self.scene.items.iter().zip(&self.boxes) {
+        for (it, b) in self.scene.items.iter().zip(self.boxes.iter()) {
             if b[0] <= b[2] && shown(it.layer) {
                 lo = [lo[0].min(b[0]), lo[1].min(b[1])];
                 hi = [hi[0].max(b[2]), hi[1].max(b[3])];
@@ -332,6 +469,18 @@ impl Geom {
             )
         })
     }
+}
+
+fn dedup_from(out: &mut Vec<u32>, start: usize) {
+    out[start..].sort_unstable();
+    let mut k = start;
+    for i in start..out.len() {
+        if k == start || out[i] != out[k - 1] {
+            out[k] = out[i];
+            k += 1;
+        }
+    }
+    out.truncate(k);
 }
 
 /// Segment `i` of the instance bytes: its item, and its ends.
@@ -400,6 +549,7 @@ mod tests {
             layer,
             rgb: [255, 255, 255],
             weight: 0.0,
+            by_layer: false,
             prim: Prim::Path {
                 pts: pts.to_vec(),
                 closed: false,
@@ -433,6 +583,7 @@ mod tests {
                     layer: 0,
                     rgb: [255, 0, 0],
                     weight: 0.5,
+                    by_layer: false,
                     prim: Prim::Fill {
                         rings: vec![vec![
                             [1030.0, 1000.0],
@@ -505,6 +656,7 @@ mod tests {
                     layer: 0,
                     rgb: [255; 3],
                     weight: 0.25,
+                    by_layer: false,
                     prim: Prim::Path {
                         pts: vec![[x, y], [x + 8.0, y], [x + 8.0, y + 8.0], [x, y + 8.0]],
                         closed: true,
@@ -515,6 +667,7 @@ mod tests {
                     layer: 1,
                     rgb: [255, 0, 0],
                     weight: 0.0,
+                    by_layer: false,
                     prim: Prim::Fill {
                         rings: vec![vec![
                             [x + 3.0, y + 3.0],
