@@ -195,6 +195,10 @@ fn bench_drags_leave_no_trace() {
     });
 }
 
+/// Seeds of the first twelve whose fillets take 10 s to minutes to drag (seed 8's round a
+/// modelled thread): on the scoreboard (`history_drags_slow_fillets`), not in every run.
+const SLOW_FILLETS: [u64; 3] = [4, 5, 8];
+
 #[test]
 fn history_drags_leave_no_trace() {
     // DRAG_WARM_SEEDS=first,count for fresh ones
@@ -203,11 +207,26 @@ fn history_drags_leave_no_trace() {
         let a: u64 = a.parse().expect("first");
         (a..a + n.parse::<u64>().expect("count")).collect()
     });
-    let seeds: &[u64] = match () {
-        _ if !fresh.is_empty() => &fresh,
-        _ if few() == usize::MAX => &SEEDS,
-        _ => &SEEDS[..12],
+    let seeds: Vec<u64> = match () {
+        _ if !fresh.is_empty() => fresh,
+        _ if few() == usize::MAX => SEEDS.to_vec(),
+        _ => SEEDS[..12]
+            .iter()
+            .copied()
+            .filter(|s| !SLOW_FILLETS.contains(s))
+            .collect(),
     };
+    history_drags(&seeds);
+}
+
+/// The scoreboard's share of `history_drags_leave_no_trace`: the seeds with slow fillets.
+#[test]
+#[ignore = "long: the scoreboard; slow fillets, up to minutes a seed"]
+fn history_drags_slow_fillets() {
+    history_drags(&SLOW_FILLETS);
+}
+
+fn history_drags(seeds: &[u64]) {
     forge_model::suite::each(seeds, |&seed| {
         let src = run(seed, 12).src;
         let m = bench::model(&src);
@@ -283,9 +302,29 @@ fn last_digits_are_not_taken_for_the_value() {
 fn line_by_line_leaves_no_trace() {
     let srcs: Vec<String> = match std::env::var("DRAG_WARM_FILE") {
         Ok(p) => vec![std::fs::read_to_string(p).expect("the file")],
-        Err(_) => SEEDS[..6].iter().map(|&s| run(s, 12).src).collect(),
+        Err(_) => SEEDS[..6]
+            .iter()
+            .filter(|s| !SLOW_FILLETS.contains(s))
+            .map(|&s| run(s, 12).src)
+            .collect(),
     };
-    forge_model::suite::each(&srcs, |src| {
+    line_by_line(&srcs);
+}
+
+/// The scoreboard's share of `line_by_line_leaves_no_trace`: the first six seeds' slow ones.
+#[test]
+#[ignore = "long: the scoreboard; slow fillets, up to minutes a seed"]
+fn line_by_line_slow_fillets() {
+    let srcs: Vec<String> = SEEDS[..6]
+        .iter()
+        .filter(|s| SLOW_FILLETS.contains(s))
+        .map(|&s| run(s, 12).src)
+        .collect();
+    line_by_line(&srcs);
+}
+
+fn line_by_line(srcs: &[String]) {
+    forge_model::suite::each(srcs, |src| {
         let lines: Vec<&str> = src.lines().collect();
         let fonts = bench::model(src).fonts.clone();
         let prefixes: Vec<String> = (1..=lines.len()).map(|n| lines[..n].join("\n") + "\n").collect();
