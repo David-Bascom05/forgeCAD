@@ -6,10 +6,12 @@
 # A failing test fails at once, as does a binary that reports no result. Prints what `cargo test`
 # prints for fmerge's greps: `test NAME ... FAILED`, `test result:` lines, panics.
 #   tools/ci/native-tests.py [cargo test args..]     e.g. --workspace, or -p forge-model
-# BUDGET=2 LIMIT=5 JOBS=2 by default; SLOWEST=N lists the N slowest; SKIP="a b": --skip a --skip b.
+# BUDGET=2 LIMIT=5 JOBS=4 by default (JOBS=2 on a machine shared with other builds; FORGECAD_EACH
+# sets how many parts a suite sweep holds at once); SLOWEST=N lists the N slowest; SKIP="a b":
+# --skip a --skip b.
 import concurrent.futures, json, os, subprocess, sys, time
 
-JOBS = int(os.environ.get("JOBS", "2"))
+JOBS = int(os.environ.get("JOBS", "4"))
 BUDGET = float(os.environ.get("BUDGET", "2"))
 LIMIT = float(os.environ.get("LIMIT", "5"))
 SLOWEST = int(os.environ.get("SLOWEST", "10"))

@@ -19,7 +19,7 @@ pub const HOME_CORNER: [i8; 3] = [1, -1, 1];
 /// A press that moves less than this is a click (pixels).
 const CLICK_SLOP: f32 = 4.0;
 /// How long a view change animates (ms).
-const TRANSITION_MS: f64 = 280.0;
+pub const TRANSITION_MS: f64 = 280.0;
 const CUBE_MARGIN_PX: f32 = 8.0;
 /// A wheel step of the section, as a share of the view's distance.
 const SECTION_STEP: f32 = 0.01;

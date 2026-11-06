@@ -1197,7 +1197,7 @@ pub fn run(
     let batch = if cfg!(target_family = "wasm") {
         1
     } else {
-        forge_math::par::threads().min(crate::suite::EACH_AT_ONCE)
+        forge_math::par::threads().min(crate::suite::each_at_once())
     };
     while out.len() < cases && tries < 20 * cases {
         let mut drawn = Vec::with_capacity(batch);

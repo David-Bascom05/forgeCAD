@@ -190,17 +190,22 @@ fn cube_snaps(h: &mut Headless) {
         h.step();
         let at = cube_pixel(h, Hit::Region(region))
             .unwrap_or_else(|| panic!("{region:?} not on the cube from {from:?}"));
-        let t = std::time::Instant::now();
         h.click_at(at.0, at.1);
-        // animated: it's on its way, then there quickly
+        // animated, and there quickly: one transition of the view's own clock from wherever it
+        // is on its way (begun or not) ends it, however long a frame takes on a busy machine
+        {
+            let nav = &mut h.gui.view.as_mut().unwrap().nav;
+            let late = 1e12;
+            nav.tick(late);
+            nav.tick(late + forge_render::nav::TRANSITION_MS);
+            assert!(!nav.moving(), "{region:?}: still on its way after one transition");
+        }
         settle_camera(h);
-        let ms = t.elapsed().as_secs_f64() * 1e3;
         assert!(
             looks_from(&camera(h), region),
             "{region:?}: {:?}",
             camera(h).axes()
         );
-        assert!(ms < 2000.0, "{region:?} took {ms:.0} ms");
     }
     // a drag on the cube orbits, and doesn't snap
     let at = cube_pixel(h, Hit::Region([0, -1, 0])).or_else(|| cube_pixel(h, Hit::Region([1, -1, 0])));

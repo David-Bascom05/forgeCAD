@@ -110,7 +110,7 @@ const VERTICAL: Axis2 = Axis2 {
     dir: Vec2::Y,
 };
 
-/// `f` on every item, each on a thread of its own where there are threads, `EACH_AT_ONCE` at a
+/// `f` on every item, each on a thread of its own where there are threads, `each_at_once()` at a
 /// time (a sweep of the suite takes about its slowest part, not their sum, and holds no more
 /// parts at once than that), the answers in order. A panic comes back as the first panicking
 /// item's, as a loop's would.
@@ -120,7 +120,7 @@ pub fn each<T: Sync, R: Send>(items: &[T], f: impl Fn(&T) -> R + Sync) -> Vec<R>
     }
     let f = &f;
     let mut done = Vec::with_capacity(items.len());
-    for wave in items.chunks(EACH_AT_ONCE) {
+    for wave in items.chunks(each_at_once()) {
         std::thread::scope(|s| {
             let hs: Vec<_> = wave.iter().map(|x| s.spawn(move || f(x))).collect();
             done.extend(hs.into_iter().map(|h| h.join()));
@@ -131,9 +131,15 @@ pub fn each<T: Sync, R: Send>(items: &[T], f: impl Fn(&T) -> R + Sync) -> Vec<R>
         .collect()
 }
 
-/// How many of `each`'s items run at once: the suite runs many tests side by side already, and
-/// memory, not cores, is what a test machine runs out of.
-pub const EACH_AT_ONCE: usize = 4;
+/// How many of `each`'s items run at once: `FORGECAD_EACH` if set, else 4. The suite runs many
+/// tests side by side already, and on a shared machine memory, not cores, is what runs out.
+pub fn each_at_once() -> usize {
+    std::env::var("FORGECAD_EACH")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(4)
+        .max(1)
+}
 
 /// Every named benchmark part.
 pub fn parts() -> Vec<(&'static str, Part)> {
