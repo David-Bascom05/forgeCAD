@@ -83,7 +83,7 @@ impl Default for Entry {
     }
 }
 
-fn entry_io<S: Io>(e: &mut Entry, s: &mut S) -> R<()> {
+pub(crate) fn entry_io<S: Io>(e: &mut Entry, s: &mut S) -> R<()> {
     s.tv(&mut e.name)?;
     s.b(&mut e.referenced)?;
     // R2007+ files have no xref index here, though the spec lists it
