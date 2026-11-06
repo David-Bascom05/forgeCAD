@@ -1472,6 +1472,7 @@ mod tests {
             strs: (ver >= Version::R2007).then(|| BitReader::new(&w.strs.bytes, 0)),
             hdl: BitReader::new(&w.hdl.bytes, 0),
             base: 0,
+            data_end: usize::MAX,
         };
         let mut y = T::default();
         y.io(&mut r).unwrap();
