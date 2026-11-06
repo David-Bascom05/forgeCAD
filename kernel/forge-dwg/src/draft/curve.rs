@@ -863,8 +863,18 @@ impl Curve {
         }
     }
 
+    /// A box holding the curve, cheaper than `bbox` for splines (their control points') and
+    /// offset curves.
+    pub fn rough_bbox(&self) -> Bbox {
+        match self {
+            Curve::Spline(n) => n.hull_box(),
+            Curve::Offset(o) => o.base.rough_bbox().grow(o.d.abs()),
+            _ => self.bbox(),
+        }
+    }
+
     pub fn tol(&self) -> Tol {
-        Tol::of_box(&self.bbox())
+        Tol::of_box(&self.rough_bbox())
     }
 
     /// The closest point: (parameter, point). For rays and construction lines too.
