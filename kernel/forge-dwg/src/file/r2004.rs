@@ -351,130 +351,103 @@ mod tests {
     }
 }
 
-/// 4.7's LZ77: greedy matches found through a hash of the next three bytes.
+/// 4.7's LZ77: greedy matches found through a hash of the next three bytes, planned first and
+/// then encoded, so runs of literals the format can't say (1-3 at the start, 18 anywhere) are
+/// repaired before any byte is written.
 pub fn compress(src: &[u8]) -> Vec<u8> {
-    const MAX_CHAIN: usize = 64;
+    const MAX_CHAIN: usize = 32;
+    const NONE: u32 = u32::MAX;
     let n = src.len();
-    let mut out = Vec::with_capacity(n / 2 + 16);
-    let mut head = vec![usize::MAX; 1 << 15];
-    let mut prev = vec![usize::MAX; n];
-    let hash = |p: usize| -> usize {
-        ((src[p] as usize) << 10 ^ (src[p + 1] as usize) << 5 ^ src[p + 2] as usize) & 0x7FFF
-    };
-    let mut insert = |p: usize, head: &mut Vec<usize>, prev: &mut Vec<usize>| {
-        if p + 3 <= n {
-            let h = hash(p);
-            prev[p] = head[h];
-            head[h] = p;
+    // a far match (offset past 0x3FFF) of three needs the offset's high bit: 0x11 ends the stream
+    let far_ok = |len: usize, d: usize| d - 1 <= 0x3FFF || len >= 4 || (d - 1 - 0x3FFF) & 0x4000 != 0;
+    // a literal run before a match (or the stream's end): `first` is the stream's first run
+    let run_ok = |k: usize, first: bool| k != 18 && !(first && (1..=3).contains(&k));
+    let mut head = vec![NONE; 1 << 15];
+    let mut prev = vec![NONE; n];
+    let hash = |p: usize| ((src[p] as usize) << 10 ^ (src[p + 1] as usize) << 5 ^ src[p + 2] as usize) & 0x7FFF;
+    // (literal run start, match start, length, distance)
+    let mut plan: Vec<(usize, usize, usize, usize)> = vec![];
+    let (mut p, mut lit_start) = (0usize, 0usize);
+    let mut insert = |q: usize, head: &mut Vec<u32>, prev: &mut Vec<u32>| {
+        if q + 3 <= n {
+            let h = hash(q);
+            prev[q] = head[h];
+            head[h] = q as u32;
         }
     };
-    // the longest match at `p` this can encode: (length, distance)
-    let find = |p: usize, head: &Vec<usize>, prev: &Vec<usize>| -> (usize, usize) {
-        if p + 3 > n {
-            return (0, 0);
-        }
-        let mut best = (0, 0);
+    while p + 3 <= n {
+        let (mut best_len, mut best_d) = (0, 0);
         let mut c = head[hash(p)];
         let mut k = 0;
-        while c != usize::MAX && k < MAX_CHAIN {
-            let d = p - c;
+        while c != NONE && k < MAX_CHAIN {
+            let d = p - c as usize;
             if d > 0xBFFF {
                 break;
             }
-            let mut l = 0;
-            while p + l < n && src[c + l] == src[p + l] {
-                l += 1;
+            let (a, b) = (&src[c as usize..], &src[p..]);
+            let l = a.iter().zip(b).take_while(|(x, y)| x == y).count();
+            if l > best_len && l >= 3 && far_ok(l, d) {
+                best_len = l;
+                best_d = d;
             }
-            // far matches of three need the offset's high bit (op 0x11 ends the stream)
-            let ok = if d - 1 > 0x3FFF {
-                l >= 4 || (l == 3 && (d - 1 - 0x3FFF) & 0x4000 != 0)
-            } else {
-                l >= 3
-            };
-            if ok && l > best.0 {
-                best = (l, d);
-            }
-            c = prev[c];
+            c = prev[c as usize];
             k += 1;
         }
-        best
-    };
-    let mut lit_start = 0;
-    let mut p = 0;
-    // where the last match's opcode is, to put the next literal count in its low bits
+        if best_len == 0 || !run_ok(p - lit_start, plan.is_empty()) {
+            insert(p, &mut head, &mut prev);
+            p += 1;
+            continue;
+        }
+        plan.push((lit_start, p, best_len, best_d));
+        for q in p..p + best_len {
+            insert(q, &mut head, &mut prev);
+        }
+        p += best_len;
+        lit_start = p;
+    }
+    // the last run: 18 can't be said; shorten the last match, or fold it into the run
+    if n - lit_start == 18
+        && let Some(&(ls, mp, len, d)) = plan.last()
+    {
+        if len > 3 && far_ok(len - 1, d) {
+            plan.last_mut().unwrap().2 = len - 1;
+            lit_start = mp + len - 1;
+        } else {
+            plan.pop();
+            lit_start = ls;
+        }
+    }
+    let mut out = Vec::with_capacity(n / 2 + 16);
     let mut pending: Option<usize> = None;
-    let mut first = true;
-    let flush_literals = |out: &mut Vec<u8>, lits: &[u8], pending: Option<usize>, first: bool| {
+    let mut emit_run = |out: &mut Vec<u8>, lits: &[u8], pending: Option<usize>, first: bool| {
         let k = lits.len();
         match pending {
-            Some(at) if (1..=3).contains(&k) => {
-                out[at] |= k as u8;
-            }
+            Some(at) if (1..=3).contains(&k) => out[at] |= k as u8,
+            _ if k == 0 => {}
+            _ if k <= 17 => out.push((k - 3) as u8),
             _ => {
-                if k > 0 || first {
-                    if k == 0 {
-                        // nothing: the next byte (an opcode) has its high nibble set
-                    } else if k <= 0x0E + 3 {
-                        out.push((k - 3) as u8);
-                    } else {
-                        out.push(0);
-                        let mut r = k - 3 - 0x0F;
-                        while r > 0xFF {
-                            out.push(0);
-                            r -= 0xFF;
-                        }
-                        out.push(r as u8);
-                    }
+                let _ = first;
+                out.push(0);
+                let mut r = k - 3 - 0x0F;
+                while r > 0xFF {
+                    out.push(0);
+                    r -= 0xFF;
                 }
+                out.push(r as u8);
             }
         }
         out.extend_from_slice(lits);
     };
-    while p < n {
-        let (mut len, dist) = find(p, &head, &prev);
-        if len == 0 {
-            insert(p, &mut head, &mut prev);
-            p += 1;
-            continue;
-        }
-        let lits = p - lit_start;
-        // runs the encodings can't say: 1-3 literals at the very start, 18 after a match, or
-        // a long run ending in a zero step; turn the match's first byte into a literal
-        let bad_run = |k: usize, first: bool| -> bool {
-            (first && (1..=3).contains(&k)) || (k >= 4 && k - 3 > 0x0E && (k - 3 - 0x0F) % 0xFF == 0)
-        };
-        if bad_run(lits, first) {
-            insert(p, &mut head, &mut prev);
-            p += 1;
-            continue;
-        }
-        // lengths the long form can't say end in a zero step too
-        let far = dist - 1 > 0x3FFF;
-        let long_extra = |len: usize| -> Option<usize> {
-            if far {
-                if len > 9 { Some(len - 9) } else { None }
-            } else if len > 33 {
-                Some(len - 0x21)
-            } else {
-                None
-            }
-        };
-        if let Some(e) = long_extra(len)
-            && e > 0xFF
-            && (e - 0xFF) % 0xFF == 0
-        {
-            len -= 1;
-        }
-        flush_literals(&mut out, &src[lit_start..p], pending, first);
-        first = false;
-        // the match
+    for (i, &(ls, mp, len, dist)) in plan.iter().enumerate() {
+        emit_run(&mut out, &src[ls..mp], pending, i == 0);
         let off = dist - 1;
         let at;
-        if !far && off <= 0x3FF && len <= 14 {
+        if off <= 0x3FF && len <= 14 {
             at = out.len();
             out.push((((len + 1) << 4) | ((off & 3) << 2)) as u8);
             out.push((off >> 2) as u8);
         } else {
+            let far = off > 0x3FFF;
             let o = if far { (off - 0x3FFF) & 0x3FFF } else { off };
             if far {
                 let hi = if (off - 0x3FFF) & 0x4000 != 0 { 8 } else { 0 };
@@ -495,19 +468,14 @@ pub fn compress(src: &[u8]) -> Vec<u8> {
             out.push((o >> 6) as u8);
         }
         pending = Some(at);
-        for q in p..p + len {
-            insert(q, &mut head, &mut prev);
-        }
-        p += len;
-        lit_start = p;
     }
-    // a lone run of 1-3 literals can't be said: it is padded with zeros (readers cut pages to
-    // the section's size)
-    let mut tail = src[lit_start..n].to_vec();
-    if pending.is_none() && (1..=3).contains(&tail.len()) {
-        tail.resize(4, 0);
+    // the tail; with no match at all, a run of 1-3 or 18 is padded with zeros (readers cut pages
+    // to the section's size)
+    let mut tail = src[lit_start..].to_vec();
+    if plan.is_empty() && !run_ok(tail.len(), true) {
+        tail.resize(if tail.len() == 18 { 19 } else { 4 }, 0);
     }
-    flush_literals(&mut out, &tail, pending, first);
+    emit_run(&mut out, &tail, pending, plan.is_empty());
     out.push(0x11);
     out
 }
@@ -572,6 +540,23 @@ mod compress_tests {
         x.extend_from_slice(&y);
         x.extend(x.clone().iter().take(40000));
         round(&x);
+    }
+
+    #[test]
+    fn runs_the_format_cannot_say() {
+        // a match, then exactly 18 literals to the end (a real page ended so)
+        let mut a = b"abcabcabc".to_vec();
+        a.extend((0..18u8).map(|i| i.wrapping_mul(37) ^ 0xA5));
+        round(&a);
+        // every tail length after a match, and every first run before one
+        for k in 0..40usize {
+            let mut b = b"xyzxyzxyzxyz".to_vec();
+            b.extend((0..k).map(|i| (i * 53 + 7) as u8));
+            round(&b);
+            let mut c: Vec<u8> = (0..k).map(|i| (i * 71 + 3) as u8 | 0x80).collect();
+            c.extend_from_slice(b"qrsqrsqrsqrs");
+            round(&c);
+        }
     }
 }
 
