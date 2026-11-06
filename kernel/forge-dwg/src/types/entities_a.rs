@@ -386,7 +386,11 @@ impl Insert {
         s.bd3(&mut self.extrusion)?;
         s.b(&mut self.has_attribs)?;
         // the R2004+ count is there only when attributes follow (the spec has it always)
-        if self.has_attribs { self.attribs.count(s) } else { Ok(0) }
+        if self.has_attribs {
+            self.attribs.count(s)
+        } else {
+            Ok(0)
+        }
     }
     fn tail<S: Io>(&mut self, s: &mut S, n: i32) -> R<()> {
         s.h(&mut self.block)?;
@@ -1013,15 +1017,22 @@ pub struct Wireframe {
 /// REGION, 3DSOLID and BODY: ACIS data, a wireframe and silhouettes.
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct Acis {
-    /// None when the empty bit is set.
+    /// None when the empty bit is set. R2013+: not in the object (the data store section has
+    /// it), so always None.
     pub data: Option<AcisData>,
     pub wireframe: Option<Wireframe>,
     /// More ACIS data after the wireframe (the second empty bit 0).
     pub more: Option<AcisData>,
     /// R2007+.
     pub unknown: i32,
-    /// R2007+.
-    pub history: Href,
+    /// R2013+: a flag (DXF 290) and the revision GUID (DXF 2) as BL, BS, BS and 8 RC.
+    pub has_revision: bool,
+    pub guid1: i32,
+    pub guid2: i16,
+    pub guid3: i16,
+    pub guid4: [u8; 8],
+    /// R2013+: a BL after the GUID (0 in the samples).
+    pub unknown2: i32,
 }
 
 fn acis_opt<S: Io>(s: &mut S, d: &mut Option<AcisData>) -> R<()> {
@@ -1038,7 +1049,11 @@ fn acis_opt<S: Io>(s: &mut S, d: &mut Option<AcisData>) -> R<()> {
 
 impl Spec for Acis {
     fn io<S: Io>(&mut self, s: &mut S) -> R<()> {
-        acis_opt(s, &mut self.data)?;
+        // R2013+ files keep the ACIS data in the data store: no empty bit, no data (the spec
+        // has them in every version)
+        if s.ver() < Version::R2013 {
+            acis_opt(s, &mut self.data)?;
+        }
         let mut has = self.wireframe.is_some();
         s.b(&mut has)?;
         if S::READ {
@@ -1068,7 +1083,17 @@ impl Spec for Acis {
         acis_opt(s, &mut self.more)?;
         if s.ver() >= Version::R2007 {
             s.bl(&mut self.unknown)?;
-            s.h(&mut self.history)?;
+        }
+        if s.ver() >= Version::R2013 {
+            // not in the spec
+            s.b(&mut self.has_revision)?;
+            s.bl(&mut self.guid1)?;
+            s.bs(&mut self.guid2)?;
+            s.bs(&mut self.guid3)?;
+            for b in &mut self.guid4 {
+                s.rc(b)?;
+            }
+            s.bl(&mut self.unknown2)?;
         }
         Ok(())
     }
@@ -1080,7 +1105,11 @@ pub struct Region(pub Acis);
 
 /// 3DSOLID.
 #[derive(Clone, Debug, PartialEq, Default)]
-pub struct Solid3d(pub Acis);
+pub struct Solid3d {
+    pub acis: Acis,
+    /// R2007+: the history (hard owner). Only 3DSOLID has it; the spec gives it to all three.
+    pub history: Href,
+}
 
 /// BODY.
 #[derive(Clone, Debug, PartialEq, Default)]
@@ -1094,7 +1123,11 @@ impl Spec for Region {
 
 impl Spec for Solid3d {
     fn io<S: Io>(&mut self, s: &mut S) -> R<()> {
-        self.0.io(s)
+        self.acis.io(s)?;
+        if s.ver() >= Version::R2007 {
+            s.h(&mut self.history)?;
+        }
+        Ok(())
     }
 }
 
@@ -1472,7 +1505,7 @@ mod tests {
                 ver,
             );
             let acis = Acis {
-                data: Some(AcisData {
+                data: (ver < R2013).then(|| AcisData {
                     unknown: true,
                     version: 1,
                     blocks: vec![b"knn ".to_vec(), b"oo\n".to_vec()],
@@ -1497,9 +1530,23 @@ mod tests {
                     ..AcisData::default()
                 }),
                 unknown: 0,
-                history: if ver >= R2007 { h(5, 0x60) } else { Href::default() },
+                has_revision: ver >= R2013,
+                guid1: (ver >= R2013) as i32 * 0x7CF6_0000,
+                guid4: if ver >= R2013 {
+                    [1, 2, 3, 4, 5, 6, 7, 8]
+                } else {
+                    [0; 8]
+                },
+                ..Acis::default()
             };
             round(&Body(acis.clone()), ver);
+            round(
+                &Solid3d {
+                    acis: acis.clone(),
+                    history: if ver >= R2007 { h(3, 0x60) } else { Href::default() },
+                },
+                ver,
+            );
             round(
                 &Region(Acis {
                     data: None,
