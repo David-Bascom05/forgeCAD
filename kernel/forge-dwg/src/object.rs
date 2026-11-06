@@ -322,6 +322,7 @@ pub fn read_object(buf: &[u8], at: usize, ver: Version, classes: &Classes, cp: O
         strs,
         hdl: BitReader { d: obj, p: endbit },
         base: handle,
+        data_end,
     };
     let entity = classes.is_entity(type_code);
     let mut o = Object {

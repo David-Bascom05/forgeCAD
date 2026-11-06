@@ -87,6 +87,10 @@ pub trait Io {
     fn cmc(&mut self, v: &mut Color) -> R<()>;
     /// ENC: an entity's colour, R2004+ with flags (its book handle in the handle stream).
     fn enc(&mut self, v: &mut Color) -> R<()>;
+    /// The rest of the data stream as `n` bits, high first (a proxy's own data).
+    fn rest(&mut self, v: &mut Vec<u8>, n: &mut usize) -> R<()>;
+    /// Whether another handle can follow in the handle stream (a proxy's run to the end).
+    fn more_handles(&self) -> bool;
 
     fn rd2(&mut self, v: &mut [f64; 2]) -> R<()> {
         self.rd(&mut v[0])?;
@@ -149,6 +153,8 @@ pub struct Reader<'a> {
     pub hdl: BitReader<'a>,
     /// The handle relative references resolve against.
     pub base: u32,
+    /// Where the data stream ends (in bits).
+    pub data_end: usize,
 }
 
 /// Writes them.
@@ -353,6 +359,18 @@ impl Io for Reader<'_> {
         *v = c;
         Ok(())
     }
+    fn rest(&mut self, v: &mut Vec<u8>, n: &mut usize) -> R<()> {
+        *n = self.data_end.saturating_sub(self.data.p);
+        let mut w = BitWriter::new();
+        for _ in 0..*n {
+            w.bit(self.data.b()?);
+        }
+        *v = w.bytes;
+        Ok(())
+    }
+    fn more_handles(&self) -> bool {
+        self.hdl.p + 8 <= self.hdl.d.len() * 8
+    }
 }
 
 /// A TU: BS length in UTF-16 units, the units little-endian.
@@ -547,5 +565,17 @@ impl Io for Writer {
             self.data.bl(a as i32);
         }
         Ok(())
+    }
+    fn rest(&mut self, v: &mut Vec<u8>, n: &mut usize) -> R<()> {
+        if v.len() * 8 < *n {
+            return bad(format!("{n} bits in {} bytes", v.len()));
+        }
+        for k in 0..*n {
+            self.data.bit(v[k / 8] & (0x80 >> (k % 8)) != 0);
+        }
+        Ok(())
+    }
+    fn more_handles(&self) -> bool {
+        false
     }
 }
