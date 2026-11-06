@@ -2,6 +2,7 @@
 
 pub mod r2000;
 pub mod r2004;
+pub mod r2007;
 
 use crate::bits::{R, bad};
 use crate::object::Object;
@@ -79,7 +80,30 @@ pub fn sections(buf: &[u8]) -> R<Sections> {
     let codepage = u16::from_le_bytes([buf[0x13], buf[0x14]]);
     match ver {
         Version::R2000 => r2000::sections(buf),
-        Version::R2007 => bad("R2007 files are not read yet"),
+        Version::R2007 => {
+            let l = r2007::layout(buf)?;
+            let take = |name: &str| -> R<Vec<u8>> {
+                r2007::section_data(buf, &l, name)?.ok_or(crate::bits::Bad(format!("no {name} section")))
+            };
+            let main = ["AcDb:Header", "AcDb:Classes", "AcDb:Handles", "AcDb:AcDbObjects"];
+            let mut other = vec![];
+            for s in &l.sections {
+                if !s.name.is_empty() && !main.contains(&s.name.as_str()) {
+                    other.push((s.name.clone(), take(&s.name)?));
+                }
+            }
+            let [header, classes, handles, objects] = main.map(take);
+            Ok(Sections {
+                ver,
+                maint,
+                codepage,
+                header: header?,
+                classes: classes?,
+                handles: handles?,
+                objects: objects?,
+                other,
+            })
+        }
         _ => {
             let l = r2004::layout(buf)?;
             let mut take = |name: &str| -> R<Vec<u8>> {
