@@ -423,6 +423,9 @@ struct Shared {
     flipped: AtomicBool,
     /// The triangles a step can move (a corner free), the only ones checked.
     live: RwLock<Vec<bool>>,
+    /// On a female tool a sheet never goes past vertical, so creeping over the line is caught
+    /// (`turns`); a male tool's sheet may wrap under an edge.
+    female: bool,
 }
 
 /// A hinge's energy and what it adds to its four corners' gradient.
@@ -460,7 +463,7 @@ impl Shared {
             if live[k] {
                 let a = x[t.v[0]];
                 now[k] = (x[t.v[1]] - a).cross(x[t.v[2]] - a);
-                flipped |= check && turns(kept[k], now[k]);
+                flipped |= check && turns(kept[k], now[k], self.female);
             }
         }
         if flipped {
@@ -503,7 +506,7 @@ impl Pool {
     /// Below this many triangles a call is not worth sharing out.
     const MIN: usize = 1024;
 
-    fn new(law: &Law, tris: &[Tri], wrinkle: bool, nodes: usize, hinges: Vec<Hinge>) -> Pool {
+    fn new(law: &Law, tris: &[Tri], wrinkle: bool, nodes: usize, hinges: Vec<Hinge>, female: bool) -> Pool {
         let n = forge_math::par::threads().min(tris.len() / 256).max(1);
         let n = if n > 1 && tris.len() >= Self::MIN { n } else { 1 };
         let mut incident: Vec<Vec<(u32, u8)>> = vec![vec![]; if hinges.is_empty() { 0 } else { nodes }];
@@ -536,6 +539,7 @@ impl Pool {
             normals: (0..n).map(|_| Mutex::new((vec![], vec![]))).collect(),
             flipped: AtomicBool::new(false),
             live: RwLock::new(vec![]),
+            female,
         });
         let workers = if n > 1 {
             (1..n)
@@ -639,7 +643,7 @@ impl Pool {
             all[at]
                 .1
                 .get(k - s.share(at).start)
-                .is_some_and(|a| turns(*a, n(k)))
+                .is_some_and(|a| turns(*a, n(k), s.female))
         })
     }
 
@@ -653,7 +657,7 @@ impl Pool {
             let r = s.share(w);
             for (i, a) in m.1.iter().enumerate() {
                 let k = r.start + i;
-                if live.get(k).copied().unwrap_or(false) && turns(*a, n(k)) {
+                if live.get(k).copied().unwrap_or(false) && turns(*a, n(k), s.female) {
                     out.push(k);
                 }
             }
@@ -1109,16 +1113,17 @@ fn stops_turn(sheet: &Sheet, trial: &mut [Vec3], stops: &[(usize, Vec3)]) -> boo
 /// Whether a triangle of normal `a` turned over in a step to normal `b`: its normal past square
 /// to the one it had, or newly past 30 degrees beyond vertical (the sheet folding back over
 /// itself, where a sheet drawn onto a mould never goes; the pressure on a fold's under side would
-/// blow it up with nothing to stop it, a membrane having no contact with itself). One line both
-/// ways: a triangle creeping over it a step at a time is caught too.
+/// blow it up with nothing to stop it, a membrane having no contact with itself). On a female
+/// tool one line both ways, so a triangle creeping over it a step at a time is caught too; on a
+/// male one (where the sheet may wrap under an edge) only a step from under 17 degrees.
 #[inline]
-fn turns(a: Vec3, b: Vec3) -> bool {
+fn turns(a: Vec3, b: Vec3, female: bool) -> bool {
     let (a2, b2) = (a.length_sq(), b.length_sq());
     // a triangle already flat to nothing has no side to keep; no square roots or branches, for
     // the batch's vectorising
     let flat = a2 <= 1e-12 * (1.0 + a2);
     let past = (b.z < 0.0) & (b.z * b.z > 0.25 * b2);
-    let was = (a.z >= 0.0) | (a.z * a.z <= 0.25 * a2);
+    let was = (a.z >= 0.0) | (a.z * a.z <= if female { 0.25 } else { 0.09 } * a2);
     !flat & ((a.dot(b) < 0.0) | (past & was))
 }
 
@@ -1223,7 +1228,10 @@ fn relax(
         let Some(mut e2) = taken else {
             // no step without turning a triangle over (folding the sheet back over itself): the
             // fold's free corners stop where they are, as on a tool (the sheet meets itself
-            // there), and the rest goes on
+            // there), and the rest goes on; on a male tool, as before, it stops
+            if !sheet.pool.shared.female {
+                return it;
+            }
             let mut y = trial.clone();
             for &(i, c) in &stops {
                 y[i] = c;
@@ -1450,6 +1458,7 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
             } else {
                 vec![]
             },
+            !male,
         ),
         tris,
         idx: idx.clone(),
@@ -1554,7 +1563,7 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
         } else {
             vec![]
         };
-        sheet.pool = Pool::new(&pr.law, &sheet.tris, pr.wrinkle, x.len(), hinged);
+        sheet.pool = Pool::new(&pr.law, &sheet.tris, pr.wrinkle, x.len(), hinged, !male);
         snap(&x, "sag", 0.0);
     }
     if let (Some(plug), false) = (plug, male) {
