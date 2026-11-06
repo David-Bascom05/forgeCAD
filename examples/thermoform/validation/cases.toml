@@ -483,3 +483,32 @@ cut_deg = 0
 axisym = true
 index_map = [1, 0, 6, 37.5, 14.5, 89.04]
 how = "point index mapped to arc length (1 centre, 6 base edge, 14.5 rim, ASSUMED)"
+
+[[case]]
+id = "atmani2020_cup_d51"
+cause = "missing plug model; diameter 51 from the render"
+model = "atmani2020_cup_d51.fg"
+data = "s2_atmani2020_cup_thickness.csv"
+mode = "arc"
+s_col = "s_mm"
+t_col = "t_exp_mm"
+t0 = 1.1
+cut_deg = 0
+axisym = true
+fold_about = 100.0
+how = "arc length from bottom centre (data folded about s = 100)"
+
+[[case]]
+id = "atmani2020_cup_d51_plug"
+cause = "plug then air; diameter 51 from the render"
+model = "atmani2020_cup_d51.fg"
+data = "s2_atmani2020_cup_thickness.csv"
+mode = "arc"
+s_col = "s_mm"
+t_col = "t_exp_mm"
+t0 = 1.1
+cut_deg = 0
+axisym = true
+fold_about = 100.0
+how = "arc length from bottom centre (data folded about s = 100)"
+plug = [21, 90, 10, 20, 80]
