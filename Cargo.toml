@@ -20,6 +20,25 @@ many_single_char_names = "allow"
 [profile.test]
 opt-level = 1
 
+[profile.test.package.forge-math]
+opt-level = 3
+[profile.test.package.forge-geom]
+opt-level = 3
+[profile.test.package.forge-topo]
+opt-level = 3
+[profile.test.package.forge-bool]
+opt-level = 3
+[profile.test.package.forge-mesh]
+opt-level = 3
+[profile.test.package.forge-step]
+opt-level = 3
+[profile.test.package.forge-ops]
+opt-level = 3
+[profile.test.package.forge-model]
+opt-level = 3
+[profile.test.package.forge-sketch]
+opt-level = 3
+
 [profile.dev.package."*"]
 opt-level = 2
 
