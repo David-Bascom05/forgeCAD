@@ -87,4 +87,56 @@ Pz = Z - A * A.dot(Z)
 sub = {ax: sp.sqrt(1 - ay**2 - az**2)}
 check("|P z|^2 = 1 - (a . z)^2", sp.simplify((Pz.dot(Pz)).subs(sub)) - (1 - az**2))
 check("(P z) . e = -(a . e)(a . z)", (Pz.dot(E) + A.dot(E) * A.dot(Z)))
+# 7. a straight section against a coaxial round surface (a sphere centred on the axis, a ring torus
+#    about it): its meridian is a circle Q(th) = C + R (cos th, sin th) in (r, h). The section line
+#    n . (q - p0) = 0, carried to n . (q - p0 - m u) = 0 at angle u (m = (a, b)), holds Q(th) at
+#    u(th) = n . (Q(th) - p0) / (n . m): the curve is P(th) = O + e(u(th)) Q_r + z Q_h, smooth in th
+#    where u is not (the section tangent to the meridian turns the curve back in u, not in th).
+cr, chh, R, p0r, p0h, dr, dh = sp.symbols("c_r c_h R p0_r p0_h d_r d_h", real=True)
+th = sp.Symbol("theta", real=True)
+Q = sp.Matrix([cr + R * sp.cos(th), chh + R * sp.sin(th)])
+p0 = sp.Matrix([p0r, p0h])
+dd = sp.Matrix([dr, dh])
+n2 = sp.Matrix([-dh, dr])
+m2 = sp.Matrix([a, b])
+uth = n2.dot(Q - p0) / n2.dot(m2)
+sth = dd.dot(Q - p0 - m2 * uth) / dd.dot(dd)
+# the point at angle u(th) in its half plane is the section point at s, moved by the motion
+check("Q(th) = p0 + d s(th) + m u(th)", sp.simplify(p0 + dd * sth + m2 * uth - Q).norm())
+X = sp.Matrix([Q[0] * sp.cos(uth), Q[0] * sp.sin(uth), Q[1]])
+# on the screw surface: the section point at s, turned by u(th) and lifted by the motion
+S = sp.Matrix([(p0r + dr * sth + a * uth) * sp.cos(uth), (p0r + dr * sth + a * uth) * sp.sin(uth), p0h + dh * sth + b * uth])
+check("P(th) on the screw surface", sp.simplify(X - S).norm())
+# on the sphere centred at (0, c_h) on the axis, radius R
+check("P(th) on the sphere", sp.simplify((X[0]**2 + X[1]**2 + (X[2] - chh)**2 - R**2).subs(cr, 0)))
+# on the torus about the axis, major c_r, minor R
+rho = sp.sqrt(X[0]**2 + X[1]**2)
+check("P(th) on the torus (r > 0)", sp.simplify(((Q[0] - cr)**2 + (X[2] - chh)**2 - R**2)) )
+check("rho(P(th)) = Q_r", sp.simplify(rho**2 - Q[0]**2))
+# the derivatives the curve gives: u' = n . Q' / (n . m), u'' = n . Q'' / (n . m), and
+# P' = e' u' Q_r + e Q_r' + z Q_h',  P'' = (e'' u'^2 + e' u'') Q_r + 2 e' u' Q_r' + e Q_r'' + z Q_h''
+up = sp.diff(uth, th)
+upp = sp.diff(uth, th, 2)
+check("u' = n . Q' / (n . m)", sp.simplify(up - n2.dot(sp.diff(Q, th)) / n2.dot(m2)))
+check("u'' = n . Q'' / (n . m)", sp.simplify(upp - n2.dot(sp.diff(Q, th, 2)) / n2.dot(m2)))
+e = sp.Matrix([sp.cos(uth), sp.sin(uth), 0])
+ep = sp.Matrix([-sp.sin(uth), sp.cos(uth), 0])
+zz = sp.Matrix([0, 0, 1])
+Qp, Qpp = sp.diff(Q, th), sp.diff(Q, th, 2)
+P1 = ep * up * Q[0] + e * Qp[0] + zz * Qp[1]
+P2 = (-e * up**2 + ep * upp) * Q[0] + ep * (2 * up * Qp[0]) + e * Qpp[0] + zz * Qpp[1]
+check("P' as the code takes it", sp.simplify(sp.diff(X, th) - P1).norm())
+check("P'' as the code takes it", sp.simplify(sp.diff(X, th, 2) - P2).norm())
+# every limit on th (u in a range, s in a range, Q_r > 0) is alpha + beta cos th + gamma sin th >= 0,
+# so alpha + rho cos(th - phi) >= 0 with rho = |(beta, gamma)|, phi = atan2(gamma, beta): an arc of th
+al, be, ga = sp.symbols("alpha beta gamma", real=True)
+ph = sp.atan2(ga, be)
+rr = sp.sqrt(be**2 + ga**2)
+check("beta cos + gamma sin = rho cos(th - phi)", sp.simplify(sp.expand_trig(rr * sp.cos(th - ph)) - (be * sp.cos(th) + ga * sp.sin(th))))
+for name, f in [("u", uth), ("s", sth)]:
+    lin = sp.expand(f * 1)
+    rest = sp.simplify(lin - (lin.coeff(sp.cos(th)) * sp.cos(th) + lin.coeff(sp.sin(th)) * sp.sin(th)))
+    check(f"{name}(th) is alpha + beta cos th + gamma sin th", sp.diff(rest, th))
+# the bounds: |u'| <= R |n| / |n . m|, |P'|^2 = (u' Q_r)^2 + R^2, |P''| <= u'^2 Q_r + |u''| Q_r + 2 |u'| R + R
+check("|P'|^2 = (u' Q_r)^2 + R^2", sp.simplify(P1.dot(P1) - ((up * Q[0])**2 + R**2)))
 raise SystemExit(0 if ok else 1)
