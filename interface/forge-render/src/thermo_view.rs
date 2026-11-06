@@ -772,16 +772,15 @@ impl Gfx {
         let (field, range, made, waker) = (self.field.clone(), self.range, self.made.clone(), waker.clone());
         std::thread::spawn(move || {
             let lod = crate::tess::lod_of_mesh(&mesh, UNPICKED);
-            // the simulated part's outside, banded as the legend is, by the model's own wall at
-            // each point of the modelled part it was moved from: the modelled part's colours
+            // the simulated part all over (on the tool and off it), banded as the legend is, by the
+            // model's own wall at each point of the modelled part it was moved from: the modelled
+            // part's colours
             let mut heat = vec![];
             if let Some(field) = &field {
                 let tris: Vec<[(Point3, Point3); 3]> = mesh
                     .triangles
                     .iter()
-                    .zip(&mesh.face_of)
-                    .filter(|x| *x.1 != forge_thermo::simulated::TOOL_SIDE)
-                    .map(|x| x.0.map(|i| (mesh.positions[i as usize], modelled[i as usize])))
+                    .map(|x| x.map(|i| (mesh.positions[i as usize], modelled[i as usize])))
                     .collect();
                 paint_mesh(&tris, field, range, &mut heat, &mut |_, _| {});
             }
@@ -790,8 +789,8 @@ impl Gfx {
         });
     }
 
-    /// The formed part's faces of `mesh` (the view's own, finest level) coloured by the model's
-    /// wall at each point (at its foot on the sheet), banded as the legend is; and the points on
+    /// The formed part's faces of `mesh` (the view's own, finest level), both its sides, coloured by
+    /// the model's wall at each point (at its foot on the sheet), banded as the legend is; and the points on
     /// the part's outside over the model's thinnest and thickest: on a worker, once per mesh.
     pub fn want_heat(&mut self, mesh: &PartMesh, key: usize, waker: &crate::gui::Waker) {
         if self.heat_for == key {
@@ -801,9 +800,7 @@ impl Gfx {
         if m.heat_asked == Some(key) {
             return;
         }
-        let (Some(field), Some(span), Some(tool)) =
-            (self.field.clone(), self.part_span.clone(), self.tool.clone())
-        else {
+        let (Some(field), Some(span)) = (self.field.clone(), self.part_span.clone()) else {
             return;
         };
         // the level the view's mesh has at a twentieth of a millimetre (its finest is a
@@ -820,7 +817,7 @@ impl Gfx {
         m.heat_asked = Some(key);
         let (range, at, t, made, waker) = (self.range, self.at, self.t, self.made.clone(), waker.clone());
         std::thread::spawn(move || {
-            let (heat, ext) = paint(&l, &span, &field, &tool, range, at, t);
+            let (heat, ext) = paint(&l, &span, &field, range, at, t);
             let mut m = made.lock().unwrap_or_else(|e| e.into_inner());
             // a newer mesh asked meanwhile: this one is not kept
             if m.heat_asked == Some(key) {
@@ -840,11 +837,10 @@ impl Gfx {
 
     /// `want_heat` and `want_sim` done here and now (for tests and shots).
     pub fn made_now(&mut self, mesh: Option<&PartMesh>) {
-        if let (Some(mesh), Some(field), Some(span), Some(tool)) =
-            (mesh, &self.field, &self.part_span, &self.tool)
+        if let (Some(mesh), Some(field), Some(span)) = (mesh, &self.field, &self.part_span)
             && let Some(l) = mesh.lods.iter().find(|l| l.chord >= 0.04).or(mesh.lods.first())
         {
-            let (heat, ext) = paint(l, span, field, tool, self.range, self.at, self.t);
+            let (heat, ext) = paint(l, span, field, self.range, self.at, self.t);
             self.heat = heat;
             self.extremes = ext.or(self.extremes);
         }
@@ -861,12 +857,10 @@ impl Gfx {
 }
 
 /// `Gfx::want_heat`'s painting of level `l`.
-#[allow(clippy::too_many_arguments)]
 fn paint(
     l: &Lod,
     span: &Span,
     field: &forge_thermo::WallField,
-    tool: &forge_thermo::ToolSide,
     range: (f64, f64),
     at: (Point3, Point3),
     t: f64,
@@ -887,32 +881,14 @@ fn paint(
         }
     };
     let idx = |k: usize| u32::from_le_bytes(l.indices[k * 4..k * 4 + 4].try_into().expect("4 bytes"));
-    // a face on the tool's side (most of its area lies on the tool, or flat on the trim plane) is
-    // left bare, whole: each face is painted all over or not at all, so no edge of the map is
-    // ragged
-    let faces: Vec<&crate::mesh::FaceRange> =
-        l.faces.iter().filter(|f| span.faces.contains(&f.face)).collect();
-    let tris_of = |f: &crate::mesh::FaceRange| -> Vec<[Point3; 3]> {
-        (f.first_tri..f.first_tri + f.tris)
-            .map(|k| [0, 1, 2].map(|c| vertex_at(&l.vertices, idx(k as usize * 3 + c) as usize)))
-            .collect()
-    };
-    let bare = forge_math::par::map(faces.len(), |k| {
-        let (mut on, mut all) = (0.0, 0.0);
-        for p in tris_of(faces[k]) {
-            let a = (p[1] - p[0]).cross(p[2] - p[0]).length();
-            all += a;
-            if tool.has(p) {
-                on += a;
-            }
-        }
-        on > 0.5 * all
-    });
-    let tris: Vec<[(Point3, Point3); 3]> = faces
+    // every face of the part, the side on the tool as well as the free side: one mesh, so the map
+    // runs on round the rim with no edge
+    let tris: Vec<[(Point3, Point3); 3]> = l
+        .faces
         .iter()
-        .zip(&bare)
-        .filter(|x| !*x.1)
-        .flat_map(|x| tris_of(x.0))
+        .filter(|f| span.faces.contains(&f.face))
+        .flat_map(|f| f.first_tri..f.first_tri + f.tris)
+        .map(|k| [0, 1, 2].map(|c| vertex_at(&l.vertices, idx(k as usize * 3 + c) as usize)))
         .map(|p| p.map(|x| (x, x)))
         .collect();
     let mut heat = vec![];

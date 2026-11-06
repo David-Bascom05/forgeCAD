@@ -274,38 +274,14 @@ impl Gui {
         // a thermoform's analysis: the wall thickness at the step watched, or the drafts
         if let Some(g) = self.fg_walls.first() {
             use crate::shell::thermo_ui::Analysis;
-            match p.thermo.analysis {
-                Analysis::Thickness => {
-                    let k = p
-                        .thermo
-                        .step
-                        .unwrap_or(usize::MAX)
-                        .min(g.steps.len().saturating_sub(1));
-                    if !p.thermo.shows(crate::shell::thermo_ui::Body::Part) {
-                    } else if p.thermo.simulated && g.sim.is_some() && p.thermo.step.is_none() {
-                        out.extend_from_slice(&g.sim_heat);
-                    } else if !g.heat.is_empty() && p.thermo.step.is_none() {
-                        // on the part's own faces, every one of them
-                        out.extend_from_slice(&g.heat);
-                    } else if let Some(s) = g.steps.get(k) {
-                        out.extend_from_slice(s);
-                    }
-                }
-                Analysis::Draft => {
-                    let min = p
-                        .thermo
-                        .draft_min
-                        .or(p.thermos.first().map(|r| r.draft_min))
-                        .unwrap_or(3.0);
-                    out.extend(g.draft_tris(min));
-                }
-                Analysis::Stretch if p.thermo.shows(crate::shell::thermo_ui::Body::Part) => {
-                    out.extend_from_slice(&g.stretch);
-                }
-                Analysis::Webbing if p.thermo.shows(crate::shell::thermo_ui::Body::Part) => {
-                    out.extend_from_slice(&g.web);
-                }
-                Analysis::None | Analysis::Stretch | Analysis::Webbing => {}
+            // the wall's and the stretch's maps are kept on the GPU: `map_of`
+            if p.thermo.analysis == Analysis::Draft {
+                let min = p
+                    .thermo
+                    .draft_min
+                    .or(p.thermos.first().map(|r| r.draft_min))
+                    .unwrap_or(3.0);
+                out.extend(g.draft_tris(min));
             }
             // the mould's vents while its dialog is up
             if p.thermo.mould.is_some() {
@@ -321,4 +297,50 @@ impl Gui {
         self.explode_trails(&mut out);
         (out, behind)
     }
+}
+
+/// The map over the part the thermoform's analysis shows (the wall at the step watched, the
+/// stretch, the webbing), and which one it is: drawn from the GPU's own copy, written once.
+pub(super) fn map_of<'a>(
+    walls: &'a [crate::thermo_view::Gfx],
+    p: Option<&crate::shell::fg::FgPanel>,
+) -> (u64, &'a [WorldVert]) {
+    use crate::shell::thermo_ui::{Analysis, Body};
+    let (Some(g), Some(p)) = (walls.first(), p) else {
+        return (0, &[]);
+    };
+    let part = p.thermo.shows(Body::Part);
+    let map: &[WorldVert] = match p.thermo.analysis {
+        Analysis::Thickness if part => {
+            let k = p
+                .thermo
+                .step
+                .unwrap_or(usize::MAX)
+                .min(g.steps.len().saturating_sub(1));
+            if p.thermo.simulated && g.sim.is_some() && p.thermo.step.is_none() {
+                &g.sim_heat
+            } else if !g.heat.is_empty() && p.thermo.step.is_none() {
+                // on the part's own faces, every one of them, both sides
+                &g.heat
+            } else {
+                g.steps.get(k).map_or(&[], |s| &s[..])
+            }
+        }
+        Analysis::Stretch if part => &g.stretch,
+        Analysis::Webbing if part => &g.web,
+        _ => &[],
+    };
+    if map.is_empty() {
+        return (0, map);
+    }
+    // where it lives, how long it is and a few of its points: a map made again is another key
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    (map.as_ptr() as usize, map.len()).hash(&mut h);
+    for v in [map[0], map[map.len() / 2], map[map.len() - 1]] {
+        for x in v.at.iter().chain(&v.colour) {
+            x.to_bits().hash(&mut h);
+        }
+    }
+    (h.finish() | 1, map)
 }

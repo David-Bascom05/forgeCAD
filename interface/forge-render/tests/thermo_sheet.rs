@@ -156,16 +156,100 @@ fn the_paint_stands_off_every_face_at_a_hard_edge() {
     }
 }
 
-/// The modelled part's map covers each face off the tool whole, and none on it: a deep tray's
-/// walls (thinner than half a sheet, so its free side lies near the sheet's middle) and its flange's
-/// cut edge are painted all over, its side against the mould not at all.
-#[test]
-fn every_face_off_the_tool_is_painted_whole() {
+/// The paint's triangles, binned by their middles in 2 mm cells, to ask whether paint lies just
+/// off a part's triangle, on its own side.
+struct Painted(std::collections::HashMap<(i64, i64, i64), Vec<[forge_math::Point3; 3]>>);
+
+impl Painted {
+    fn of(tris: &[forge_render::origin::WorldVert]) -> Painted {
+        let mut m: std::collections::HashMap<_, Vec<_>> = Default::default();
+        for t in tris.chunks(3) {
+            let p = [0, 1, 2].map(|k| {
+                let a = t[k].at;
+                forge_math::Point3::new(a[0] as f64, a[1] as f64, a[2] as f64)
+            });
+            m.entry(Self::cell(middle(p))).or_default().push(p);
+        }
+        Painted(m)
+    }
+
+    fn cell(p: forge_math::Point3) -> (i64, i64, i64) {
+        let k = |v: f64| (v / 2.0).floor() as i64;
+        (k(p.x), k(p.y), k(p.z))
+    }
+
+    /// Whether paint lies over triangle `t`: its middle, lifted off it along its normal by the
+    /// paint's lift, is within 0.1 mm of a painted triangle (a corner's lift leans along its faces'
+    /// bisector). Paint on the wall's other side is a wall and two lifts away, 0.18 mm at least.
+    fn over(&self, t: [forge_math::Point3; 3]) -> bool {
+        let Some(n) = (t[1] - t[0]).cross(t[2] - t[0]).normalize() else {
+            return true;
+        };
+        let q = middle(t) + n.get() * 0.08;
+        let (x, y, z) = Self::cell(q);
+        (-1..=1).any(|i| {
+            (-1..=1).any(|j| {
+                (-1..=1).any(|k| {
+                    self.0
+                        .get(&(x + i, y + j, z + k))
+                        .is_some_and(|l| l.iter().any(|p| (closest(q, *p) - q).length() < 0.1))
+                })
+            })
+        })
+    }
+}
+
+/// The point of triangle `t` nearest `p`.
+fn closest(p: forge_math::Point3, t: [forge_math::Point3; 3]) -> forge_math::Point3 {
+    let [a, b, c] = t;
+    let (ab, ac, ap) = (b - a, c - a, p - a);
+    let (d1, d2) = (ab.dot(ap), ac.dot(ap));
+    if d1 <= 0.0 && d2 <= 0.0 {
+        return a;
+    }
+    let bp = p - b;
+    let (d3, d4) = (ab.dot(bp), ac.dot(bp));
+    if d3 >= 0.0 && d4 <= d3 {
+        return b;
+    }
+    let vc = d1 * d4 - d3 * d2;
+    if vc <= 0.0 && d1 >= 0.0 && d3 <= 0.0 {
+        return a + ab * (d1 / (d1 - d3));
+    }
+    let cp = p - c;
+    let (d5, d6) = (ab.dot(cp), ac.dot(cp));
+    if d6 >= 0.0 && d5 <= d6 {
+        return c;
+    }
+    let vb = d5 * d2 - d1 * d6;
+    if vb <= 0.0 && d2 >= 0.0 && d6 <= 0.0 {
+        return a + ac * (d2 / (d2 - d6));
+    }
+    let va = d3 * d6 - d5 * d4;
+    if va <= 0.0 && (d4 - d3) >= 0.0 && (d5 - d6) >= 0.0 {
+        return b + (c - b) * ((d4 - d3) / ((d4 - d3) + (d5 - d6)));
+    }
+    let d = 1.0 / (va + vb + vc);
+    a + ab * (vb * d) + ac * (vc * d)
+}
+
+fn middle(t: [forge_math::Point3; 3]) -> forge_math::Point3 {
+    forge_math::Point3::new(
+        (t[0].x + t[1].x + t[2].x) / 3.0,
+        (t[0].y + t[1].y + t[2].y) / 3.0,
+        (t[0].z + t[1].z + t[2].z) / 3.0,
+    )
+}
+
+/// Each face of a formed part's mesh, and whether it lies on the tool, with how many of its
+/// triangles have paint over them, of how many.
+fn modelled_cover(file: &str) -> Vec<(u32, bool, usize, usize)> {
     use forge_math::Point3;
     use forge_render::thermo_view::view;
-    let src = include_str!("../../../examples/thermoform/tray.fg");
-    let r = forge_lang::run(src, Default::default(), Default::default()).0;
-    let o = r.thermos.first().expect("the tray's thermoform");
+    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/thermoform/");
+    let src = std::fs::read_to_string(format!("{dir}{file}")).unwrap();
+    let r = forge_lang::run(&src, Default::default(), Default::default()).0;
+    let o = r.thermos.first().expect("the thermoform");
     let (_, mut gfx) = view(o, &r.solids, 3.0);
     let full = forge_render::tess::build_part(r.body.as_ref().unwrap()).unwrap();
     gfx.made_now(Some(&full));
@@ -180,48 +264,72 @@ fn every_face_off_the_tool_is_painted_whole() {
         Point3::new(f(0), f(4), f(8))
     };
     let idx = |k: usize| u32::from_le_bytes(l.indices[k * 4..k * 4 + 4].try_into().unwrap()) as usize;
-    let heat: Vec<Point3> = gfx
-        .heat
-        .chunks(3)
-        .map(|t| {
-            let c = |k: usize| (t[0].at[k] + t[1].at[k] + t[2].at[k]) as f64 / 3.0;
-            Point3::new(c(0), c(1), c(2))
+    let paint = Painted::of(&gfx.heat);
+    l.faces
+        .iter()
+        .filter(|f| span.faces.contains(&f.face))
+        .map(|f| {
+            let tris: Vec<[Point3; 3]> = (f.first_tri..f.first_tri + f.tris)
+                .map(|k| [0, 1, 2].map(|c| at(idx(k as usize * 3 + c))))
+                .collect();
+            let on = tris.iter().filter(|t| tool.has(**t)).count();
+            let covered = tris.iter().filter(|t| paint.over(**t)).count();
+            (f.face, 2 * on > tris.len(), covered, tris.len())
         })
-        .collect();
-    let (mut painted, mut bare) = (0, 0);
-    for f in l.faces.iter().filter(|f| span.faces.contains(&f.face)) {
-        let tris: Vec<[Point3; 3]> = (f.first_tri..f.first_tri + f.tris)
-            .map(|k| [0, 1, 2].map(|c| at(idx(k as usize * 3 + c))))
-            .collect();
-        let on = tris.iter().filter(|t| tool.has(**t)).count();
-        // every triangle of the face has paint over it, or none has
-        let covered = tris
-            .iter()
-            .filter(|t| {
-                let g = Point3::new(
-                    (t[0].x + t[1].x + t[2].x) / 3.0,
-                    (t[0].y + t[1].y + t[2].y) / 3.0,
-                    (t[0].z + t[1].z + t[2].z) / 3.0,
-                );
-                heat.iter().any(|h| (*h - g).length() < 1.5)
-            })
-            .count();
-        if 2 * on > tris.len() {
-            bare += 1;
-            assert!(
-                covered < tris.len(),
-                "face {} is on the tool yet painted all over",
-                f.face
-            );
-        } else {
-            painted += 1;
-            assert_eq!(
-                covered,
-                tris.len(),
-                "face {} is off the tool, painted in part",
-                f.face
-            );
+        .collect()
+}
+
+/// The modelled part's map covers every face whole, on the tool and off it: a deep tray's walls
+/// (thinner than half a sheet, so its free side lies near the sheet's middle), its flange's cut
+/// edge and its side against the mould are all painted all over.
+#[test]
+fn every_face_of_the_part_is_painted_whole() {
+    let faces = modelled_cover("tray.fg");
+    let (mut on, mut off) = (0, 0);
+    for (face, tool, covered, all) in faces {
+        assert_eq!(
+            covered, all,
+            "face {face} (on the tool: {tool}) is painted in part"
+        );
+        if tool { on += 1 } else { off += 1 }
+    }
+    assert!(on > 10 && off > 10, "{on} on the tool, {off} off it");
+}
+
+/// A cup drawn into a female mould shows its wall's colours inside and out: the modelled part's
+/// faces on the mould and its free ones, and the simulated part's sides on the tool and off it,
+/// every triangle with paint over it.
+#[test]
+fn a_cup_is_coloured_on_both_its_sides() {
+    use forge_render::thermo_view::view;
+    use forge_thermo::simulated::TOOL_SIDE;
+    let faces = modelled_cover("cup.fg");
+    assert!(faces.iter().any(|f| f.1) && faces.iter().any(|f| !f.1));
+    for (face, tool, covered, all) in &faces {
+        assert_eq!(
+            covered, all,
+            "modelled face {face} (on the tool: {tool}) painted in part"
+        );
+    }
+    let src = include_str!("../../../examples/thermoform/cup.fg");
+    let r = forge_lang::run(src, Default::default(), Default::default()).0;
+    let o = r.thermos.first().expect("the cup's thermoform");
+    let (_, mut gfx) = view(o, &r.solids, 3.0);
+    gfx.made_now(None);
+    let m = gfx.sim_mesh.clone().expect("the simulated cup");
+    let paint = Painted::of(&gfx.sim_heat);
+    let (mut sides, mut bare) = ([0usize; 2], [0usize; 2]);
+    for (t, f) in m.triangles.iter().zip(&m.face_of) {
+        let k = usize::from(*f == TOOL_SIDE);
+        sides[k] += 1;
+        if !paint.over(t.map(|i| m.positions[i as usize])) {
+            bare[k] += 1;
         }
     }
-    assert!(painted > 10 && bare > 10, "{painted} painted, {bare} bare");
+    assert!(sides[0] > 100 && sides[1] > 100, "{sides:?}");
+    assert_eq!(
+        bare,
+        [0, 0],
+        "simulated triangles bare, off the tool and on it, of {sides:?}"
+    );
 }

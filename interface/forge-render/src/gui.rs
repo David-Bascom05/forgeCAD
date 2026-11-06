@@ -2555,6 +2555,8 @@ impl Gui {
             }) {
                 v.renderer.ao = false;
             }
+            let (key, map) = gui_overlay::map_of(&self.fg_walls, self.shell.fg.as_ref());
+            v.renderer.set_map(key, map);
             v.renderer
                 .frame(&v.target.view, &mut v.scene, &v.nav.camera, overlay);
             v.renderer.ao = ao;

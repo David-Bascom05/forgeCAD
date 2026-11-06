@@ -314,6 +314,11 @@ pub struct Renderer {
     world: wgpu::RenderPipeline,
     world_behind: wgpu::RenderPipeline,
     world_verts: wgpu::Buffer,
+    /// A map over the part (a thermoform's wall), drawn as the world's triangles are: kept on the
+    /// GPU, written again only when it changes.
+    map_verts: wgpu::Buffer,
+    map_count: u32,
+    map_key: u64,
     /// The view's background colour (its top, for a gradient), and the view cube's colours: linear.
     pub back_colour: [f32; 3],
     /// The background, lighting and ground, the same for every kind of document.
@@ -915,6 +920,12 @@ impl Renderer {
             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
+        let map_verts = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("map"),
+            size: 28 * 1024,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
         let pick_surface = pipeline(
             ("surface_pick_vs", "pick_fs"),
             &pick_buffers,
@@ -1284,6 +1295,9 @@ impl Renderer {
             world,
             world_behind,
             world_verts,
+            map_verts,
+            map_count: 0,
+            map_key: 0,
             back_colour: crate::viewcube::rgb(0x12171D),
             // the app sets the person's; a renderer on its own (tests, shots) draws the flat colour
             look: Look::default(),
@@ -2177,6 +2191,35 @@ impl Renderer {
         [(lo[0] + hi[0]) * 0.5, (lo[1] + hi[1]) * 0.5, half.max(1e-3), z]
     }
 
+    /// The map over the part, the world's triangles drawn every frame till another is set; `key`
+    /// says which map it is, so the same one isn't written again.
+    pub fn set_map(&mut self, key: u64, verts: &[crate::origin::WorldVert]) {
+        if key == self.map_key {
+            return;
+        }
+        self.map_key = key;
+        let need = (verts.len() * 28) as u64;
+        if need > self.map_verts.size() {
+            self.map_verts = self.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("map"),
+                size: need.next_power_of_two().min(WORLD_MAX),
+                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+        }
+        let n = verts.len().min((self.map_verts.size() / 28) as usize);
+        self.map_count = n as u32;
+        if n > 0 {
+            let mut b = Vec::with_capacity(n * 28);
+            for v in &verts[..n] {
+                for x in v.at.iter().chain(&v.colour) {
+                    b.extend_from_slice(&x.to_le_bytes());
+                }
+            }
+            self.queue.write_buffer(&self.map_verts, 0, &b);
+        }
+    }
+
     /// Reads back any GPU times the GPU has finished.
     fn read_timers(&mut self) {
         for t in &mut self.timers {
@@ -2643,6 +2686,11 @@ impl Renderer {
                 pass.set_bind_group(0, &self.binds, &[]);
             }
             self.draw_marks(&mut pass, scene, overlay.marks);
+            if self.map_count > 0 {
+                pass.set_pipeline(&self.world);
+                pass.set_vertex_buffer(0, self.map_verts.slice(..));
+                pass.draw(0..self.map_count, 0..1);
+            }
             if world_count > 0 {
                 pass.set_pipeline(&self.world);
                 pass.set_vertex_buffer(0, self.world_verts.slice(..));
