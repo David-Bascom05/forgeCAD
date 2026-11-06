@@ -113,7 +113,33 @@ impl Geom {
                         }
                     }
                 }
-                Prim::Fill { rings } => {
+                Prim::Segments { pts } => {
+                    let mut it2 = pts.chunks_exact(2);
+                    for ab in &mut it2 {
+                        if !(ab.iter().all(|p| p[0].is_finite() && p[1].is_finite())) {
+                            continue;
+                        }
+                        let (a, b) = (local(ab[0]), local(ab[1]));
+                        grow(a);
+                        grow(b);
+                        put(
+                            &mut lines,
+                            &[
+                                a[0].to_bits(),
+                                a[1].to_bits(),
+                                b[0].to_bits(),
+                                b[1].to_bits(),
+                                rgb,
+                                it.weight.to_bits(),
+                                layer,
+                                item,
+                            ],
+                        );
+                    }
+                }
+                Prim::Fill { rings } | Prim::Mask { rings } => {
+                    // a mask is drawn in the canvas's colour: alpha 0 says so to the shader
+                    let rgb = if matches!(it.prim, Prim::Mask { .. }) { rgb & 0x00FF_FFFF } else { rgb };
                     fill_items.push(item);
                     rings.iter().flatten().for_each(|&p| {
                         if p[0].is_finite() && p[1].is_finite() {
