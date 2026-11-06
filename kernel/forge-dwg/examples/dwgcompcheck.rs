@@ -1,8 +1,10 @@
-//! Compresses every page of every section of a file and checks it decompresses back. `dwgcompcheck FILE`
+//! Compresses every page of every section of a file and checks it decompresses back; a page that
+//! doesn't is written to BAD_OUT. `dwgcompcheck FILE [BAD_OUT]`
 use forge_dwg::file::r2004;
 
 fn main() {
     let path = std::env::args().nth(1).unwrap();
+    let bad_out = std::env::args().nth(2).unwrap_or_else(|| "badpage.bin".into());
     let buf = std::fs::read(&path).unwrap();
     let l = r2004::layout(&buf).unwrap();
     for s in &l.sections {
@@ -16,12 +18,12 @@ fn main() {
                 Ok(x) => {
                     let at = x.iter().zip(&p).position(|(a, b)| a != b);
                     println!("{} page {k}: differs at {at:?} (len {})", s.name, x.len());
-                    std::fs::write(format!("/tmp/claude-1000/-home-david-bascom/58bdb4d8-e033-4a46-9734-ef5f0f817aa9/scratchpad/badpage.bin"), &p).unwrap();
+                    std::fs::write(&bad_out, &p).unwrap();
                     return;
                 }
                 Err(e) => {
                     println!("{} page {k}: {}", s.name, e.0);
-                    std::fs::write(format!("/tmp/claude-1000/-home-david-bascom/58bdb4d8-e033-4a46-9734-ef5f0f817aa9/scratchpad/badpage.bin"), &p).unwrap();
+                    std::fs::write(&bad_out, &p).unwrap();
                     return;
                 }
             }
