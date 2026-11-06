@@ -68,6 +68,10 @@ pub enum NodeKind {
     /// and its mould (tooling, hidden till shown).
     FormedPart,
     Mould,
+    /// A wire harness (its eye: its tubes), and its folders and items: connectors, segments
+    /// (with the wires through each), wires. Keys `h:<harness>`, `h:<harness>:s:<segment>`, ..
+    Harness,
+    HarnessItem,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -946,6 +950,12 @@ fn join(owner: &str, id: &str) -> String {
 
 #[derive(Default)]
 pub struct AsmPanel {
+    /// The document's wire harnesses, routed; each tube's placement (harness, segment,
+    /// placement); the harnesses whose tubes are hidden; what the problems flag, by row key.
+    pub harnesses: Vec<forge_lang::harness::HarnessOut>,
+    pub harness_placed: Vec<(usize, usize, usize)>,
+    pub harness_hidden: HashSet<String>,
+    pub harness_flags: HashMap<String, Flag>,
     pub occ: Vec<OccRow>,
     /// The browser's rows, made again when the solve or its problems change.
     pub tree: AsmTree,
@@ -1107,6 +1117,7 @@ impl AsmPanel {
             || self.tree.home.len() != occ.len()
         {
             self.tree = AsmTree::build_full(&occ, dir.as_deref(), &insts, &links, &flags, &self.part_feats);
+            self.tree.harness_rows(&self.harnesses, &self.harness_flags);
             self.occ = occ;
             self.dir = dir;
             self.insts = insts;
@@ -1234,7 +1245,60 @@ impl AsmPanel {
             &self.flags,
             &self.part_feats,
         );
+        self.tree.harness_rows(&self.harnesses, &self.harness_flags);
         self.kept = None;
+    }
+
+    /// The routed harnesses and their problems: the browser's Harness branch made again when
+    /// they changed.
+    pub fn set_harnesses(
+        &mut self,
+        hs: Vec<forge_lang::harness::HarnessOut>,
+        placed: Vec<(usize, usize, usize)>,
+        issues: &[super::fg::Issue],
+    ) {
+        self.harness_placed = placed;
+        let flags = harness_flags(&hs, issues);
+        let same = |a: &forge_lang::harness::HarnessOut, b: &forge_lang::harness::HarnessOut| {
+            a.id == b.id && a.connectors == b.connectors && a.segments == b.segments && a.wires == b.wires
+        };
+        if hs.len() != self.harnesses.len()
+            || hs.iter().zip(&self.harnesses).any(|(a, b)| !same(a, b))
+            || flags != self.harness_flags
+        {
+            self.harnesses = hs;
+            self.harness_flags = flags;
+            self.remake_tree();
+        } else {
+            self.harnesses = hs;
+        }
+    }
+
+    /// The segments a selected harness row lights: a segment's own, a wire's path, a harness's
+    /// all; by (harness, segment).
+    pub fn harness_lit(&self) -> Vec<(usize, usize)> {
+        let Some(key) = self.selected.as_deref().and_then(|k| k.strip_prefix("h:")) else {
+            return vec![];
+        };
+        let mut out = vec![];
+        for (h, ho) in self.harnesses.iter().enumerate() {
+            let Some(rest) = key.strip_prefix(ho.id.as_str()) else {
+                continue;
+            };
+            let seg = |n: &str| ho.segments.iter().position(|s| s.name == n);
+            let parts: Vec<&str> = rest.trim_start_matches(':').split(':').collect();
+            match parts.as_slice() {
+                [""] => out.extend((0..ho.segments.len()).map(|k| (h, k))),
+                ["s", name, ..] => out.extend(seg(name).map(|k| (h, k))),
+                ["w", name] => {
+                    if let Some(w) = ho.wires.iter().find(|w| w.name == *name) {
+                        out.extend(w.path.iter().filter_map(|n| seg(n)).map(|k| (h, k)));
+                    }
+                }
+                _ => {}
+            }
+        }
+        out
     }
 
     fn sync(&mut self) {
@@ -1527,6 +1591,148 @@ pub fn issue_flags(issues: &[super::fg::Issue]) -> Flags {
     f
 }
 
+/// The harness rows a problem flags, by key: a bend's segment, a kink's or a missing path's wire.
+pub fn harness_flags(
+    hs: &[forge_lang::harness::HarnessOut],
+    issues: &[super::fg::Issue],
+) -> HashMap<String, Flag> {
+    use forge_lang::harness::HarnessProblem as P;
+    let mut out: HashMap<String, Flag> = HashMap::new();
+    for is in issues {
+        let Some(AsmIssue::Harness(p)) = &is.asm else {
+            continue;
+        };
+        let flag = if is.severity == Severity::Error {
+            Flag::Error
+        } else {
+            Flag::Warning
+        };
+        let key = match p {
+            P::BendTooTight { harness, segment, .. } | P::SegmentEmpty { harness, segment } => {
+                format!("h:{harness}:s:{segment}")
+            }
+            P::KinkAtNode { harness, wire, .. }
+            | P::NoPath { harness, wire, .. }
+            | P::PathBroken { harness, wire, .. } => format!("h:{harness}:w:{wire}"),
+            P::PinUnknown {
+                harness, connector, ..
+            }
+            | P::NoExitNode { harness, connector } => {
+                format!("h:{harness}:c:{connector}")
+            }
+            P::BrokenRef { harness, .. } => format!("h:{harness}"),
+            _ => continue,
+        };
+        if hs.iter().any(|h| key.starts_with(&format!("h:{}", h.id))) && !matches!(p, P::SegmentEmpty { .. })
+        {
+            let e = out.entry(key).or_insert(flag);
+            *e = (*e).max(flag);
+        }
+    }
+    out
+}
+
+impl AsmTree {
+    /// The Harness branch under the top: each harness, its connectors, its segments (the wires
+    /// through each beneath it) and its wires.
+    pub fn harness_rows(&mut self, hs: &[forge_lang::harness::HarnessOut], flags: &HashMap<String, Flag>) {
+        let Some(&top) = self.roots.first() else { return };
+        let mm = |x: f64| super::fg::short((x * 10.0).round() / 10.0);
+        for h in hs {
+            let base = format!("h:{}", h.id);
+            let routed = h.wires.iter().filter(|w| w.routed.is_some()).count();
+            let detail = if routed == h.wires.len() {
+                format!("{} wires", h.wires.len())
+            } else {
+                format!("{routed} of {} wires routed", h.wires.len())
+            };
+            let hn = self.push(
+                Some(top),
+                base.clone(),
+                h.id.clone(),
+                detail,
+                NodeKind::Harness,
+                "harness",
+                "",
+            );
+            let folder = |t: &mut AsmTree, k: &str, label: &str, n: usize| {
+                t.push(
+                    Some(hn),
+                    format!("{base}:{k}"),
+                    label.into(),
+                    n.to_string(),
+                    NodeKind::HarnessItem,
+                    "open",
+                    "",
+                )
+            };
+            let cf = folder(self, "c", "Connectors", h.connectors.len());
+            for c in &h.connectors {
+                self.push(
+                    Some(cf),
+                    format!("{base}:c:{}", c.name),
+                    c.name.clone(),
+                    format!("{} · {} pins", c.face, c.pins.len()),
+                    NodeKind::HarnessItem,
+                    "connector",
+                    "",
+                );
+            }
+            let sf = folder(self, "s", "Segments", h.segments.len());
+            for sg in &h.segments {
+                let sk = format!("{base}:s:{}", sg.name);
+                let n = self.push(
+                    Some(sf),
+                    sk.clone(),
+                    sg.name.clone(),
+                    format!("Ø{} · R{} · {} mm", mm(sg.d), mm(sg.r_min), mm(sg.length)),
+                    NodeKind::HarnessItem,
+                    "sweep",
+                    "",
+                );
+                for w in &sg.wires {
+                    self.push(
+                        Some(n),
+                        format!("{sk}:{w}"),
+                        w.clone(),
+                        String::new(),
+                        NodeKind::HarnessItem,
+                        "wire",
+                        "",
+                    );
+                }
+            }
+            let wf = folder(self, "w", "Wires", h.wires.len());
+            for w in &h.wires {
+                let detail = match &w.routed {
+                    Some(o) => format!("{} → {} · {} · {} mm", w.from, w.to, w.ty, mm(o.length)),
+                    None => format!("{} → {} · not routed", w.from, w.to),
+                };
+                self.push(
+                    Some(wf),
+                    format!("{base}:w:{}", w.name),
+                    w.name.clone(),
+                    detail,
+                    NodeKind::HarnessItem,
+                    "wire",
+                    "",
+                );
+            }
+            for (k, f) in flags {
+                if let Some(&n) = self.by_key.get(k) {
+                    self.nodes[n].flag = self.nodes[n].flag.max(Some(*f));
+                }
+            }
+            // a problem shows on the rows above it
+            for k in (hn..self.nodes.len()).rev() {
+                if let (Some(f), Some(p)) = (self.nodes[k].flag, self.nodes[k].parent) {
+                    self.nodes[p].flag = self.nodes[p].flag.max(Some(f));
+                }
+            }
+        }
+    }
+}
+
 /// What an assembly issue names, to highlight: occurrences and items.
 pub fn named(issue: &AsmIssue) -> (Vec<String>, Vec<String>) {
     match issue {
@@ -1754,12 +1960,19 @@ impl Shell {
                             | NodeKind::Sub
                             | NodeKind::FormedPart
                             | NodeKind::Mould
+                            | NodeKind::Harness
                     );
                 // a relationship row's eye is its glyph's in the view
                 let glyph_eye = a.glyph_eye(k);
                 let mould_of = |n: &Node| n.key.trim_end_matches(">mould").to_string();
                 let state = if origin {
                     a.origin_eye(k, &top_origin)
+                } else if n.kind == NodeKind::Harness {
+                    if a.harness_hidden.contains(n.key.trim_start_matches("h:")) {
+                        Eye::Hidden
+                    } else {
+                        Eye::Shown
+                    }
                 } else if n.kind == NodeKind::Mould {
                     if a.tooling.contains(&mould_of(n)) && a.eye(k) != Eye::Hidden {
                         Eye::Shown
@@ -2166,6 +2379,12 @@ impl Shell {
                 NodeKind::FormedPart => {
                     let p = n.key.trim_end_matches(">formed").to_string();
                     a.flip_eye(&p);
+                }
+                NodeKind::Harness => {
+                    let h = n.key.trim_start_matches("h:").to_string();
+                    if !a.harness_hidden.remove(&h) {
+                        a.harness_hidden.insert(h);
+                    }
                 }
                 _ => {
                     let key = n.key.clone();

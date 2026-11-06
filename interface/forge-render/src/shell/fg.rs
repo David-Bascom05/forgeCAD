@@ -335,6 +335,8 @@ pub struct FgPanel {
     pub thermos: Vec<super::thermo::ThermoRow>,
     /// The Thermoform tab's dialogs and analyses, and the materials Convert offers.
     pub thermo: super::thermo_ui::ThermoUi,
+    /// The Harness tab's dialog (harness_ui.rs).
+    pub harness: super::harness_ui::HarnessUi,
     pub thermo_materials: Vec<super::thermo_ui::MaterialRow>,
     /// The flat pattern is what's shown.
     pub flat: bool,

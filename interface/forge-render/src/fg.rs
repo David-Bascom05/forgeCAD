@@ -97,6 +97,10 @@ pub struct AsmView {
     pub thermo_files: Vec<String>,
     /// Each body of the file and the features that made it (a body component's tree).
     pub body_chains: Vec<(String, Vec<String>)>,
+    /// The wire harnesses, routed (tubes in the world).
+    pub harnesses: Vec<forge_lang::harness::HarnessOut>,
+    /// Each tube's placement: (harness, segment, placement).
+    pub harness_placed: Vec<(usize, usize, usize)>,
 }
 
 /// What one build gave: the panel's data, and the mesh when the part's shape changed.
@@ -1187,6 +1191,16 @@ fn asm_view(
                 })
         })
         .collect();
+    // the harnesses' tubes, each placed where it is (they are made in the world)
+    let mut tubes: Vec<(usize, usize, usize)> = vec![];
+    for (h, ho) in out.harnesses.iter().enumerate() {
+        for (sg, ts) in ho.tubes.iter().enumerate() {
+            for b in ts {
+                bodies.push(b.clone());
+                tubes.push((h, sg, bodies.len() - 1));
+            }
+        }
+    }
     let keys: Vec<u64> = bodies.iter().map(|b| body_key(b)).collect();
     let mut fresh: Vec<(u64, usize)> = vec![];
     for (k, key) in keys.iter().enumerate() {
@@ -1245,6 +1259,11 @@ fn asm_view(
             placement,
             tooling,
         });
+    }
+    let mut harness_placed = vec![];
+    for (h, sg, k) in tubes {
+        placed.push((meshes.by_key[&keys[k]], rows_of(&forge_math::Frame::WORLD)));
+        harness_placed.push((h, sg, placed.len() - 1));
     }
     let now: Vec<usize> = placed.iter().map(|p| p.0).collect();
     let restage = shape.as_ref() != Some(&now) || gpu.is_some();
@@ -1309,6 +1328,8 @@ fn asm_view(
         links: out.links.clone(),
         link_at: out.link_at.clone(),
         poses: out.poses.clone(),
+        harnesses: out.harnesses.clone(),
+        harness_placed,
         thermo_files: out
             .part_docs
             .iter()
@@ -1334,6 +1355,8 @@ fn asm_view(
 
 /// A part's colour in an assembly, and a selected one's.
 pub const PART_TINT: [f32; 4] = crate::palette::GREY;
+/// A harness's tubes: a wire bundle's dark sleeve.
+pub const HARNESS_TINT: [f32; 4] = [0.22, 0.23, 0.26, 0.0];
 pub const PICKED_TINT: [f32; 4] = [0.95, 0.55, 0.15, 0.0];
 pub const CLASH_TINT: [f32; 4] = [0.90, 0.20, 0.20, 0.0];
 /// A mould's colour among the parts: tooling.

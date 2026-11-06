@@ -262,6 +262,24 @@ fn groups(s: &Shell) -> Vec<Group> {
             .collect();
     }
     let v = s.view;
+    if s.tab == super::HARNESS_TAB {
+        return super::harness_ui::groups(s)
+            .into_iter()
+            .map(|(name, big, small)| {
+                let tool = |(name, icon, action, on)| Tool {
+                    name,
+                    icon,
+                    action,
+                    on,
+                };
+                g(
+                    name,
+                    big.into_iter().map(tool).collect(),
+                    small.into_iter().map(tool).collect(),
+                )
+            })
+            .collect();
+    }
     if (s.is_asm() || s.tab == super::ASM_TAB)
         && let Some(gs) = asm_groups(s)
     {

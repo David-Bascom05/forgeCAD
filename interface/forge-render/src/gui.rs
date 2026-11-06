@@ -3423,6 +3423,7 @@ impl Gui {
             {
                 let ap = p.asm.get_or_insert_with(Default::default);
                 ap.body_chains = a.body_chains.clone();
+                ap.set_harnesses(a.harnesses.clone(), a.harness_placed.clone(), &p.issues);
                 ap.set_doc_feats(p.feats.clone());
                 let dir = s
                     .path
@@ -3480,10 +3481,11 @@ impl Gui {
                 // an assembly's own line says it all: no part summary ("nothing built") above it
                 p.summary.clear();
                 self.shell.status = format!(
-                    "{} occurrences · {} parts · DOF {}",
+                    "{} occurrences · {} parts · DOF {}{}",
                     ap.occ.len(),
                     ap.bom.len(),
-                    ap.mobility
+                    ap.mobility,
+                    crate::shell::harness_ui::status(&ap.harnesses, &p.issues)
                 );
                 self.fg_asm = Some((a.occ.clone(), a.placed.clone()));
                 self.fg_asm_boxes = a.boxes.clone();
@@ -3827,6 +3829,24 @@ impl Gui {
                 crate::shell::asmglyph::DIM_TINT
             } else {
                 crate::palette::part_colour(&o.file, pastel)
+            };
+        }
+        // the harnesses' tubes: their eye, and the selected rows' segments lit
+        let lit = a.harness_lit();
+        for &(h, sg, m) in &a.harness_placed {
+            let Some(ho) = a.harnesses.get(h) else { continue };
+            let rows = if a.harness_hidden.contains(&ho.id) {
+                NOWHERE
+            } else {
+                placed[m].1
+            };
+            if scene.rows_of(m) != rows {
+                scene.set_rows(m, &rows);
+            }
+            scene.placements[m].tint = if lit.contains(&(h, sg)) {
+                crate::fg::PICKED_TINT
+            } else {
+                crate::fg::HARNESS_TINT
             };
         }
         renderer.set_tints(scene);

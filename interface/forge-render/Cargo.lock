@@ -1084,6 +1084,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-harness"
+version = "0.1.0"
+dependencies = [
+ "forge-geom",
+ "forge-math",
+ "forge-ops",
+ "forge-topo",
+]
+
+[[package]]
 name = "forge-lang"
 version = "0.1.0"
 dependencies = [
@@ -1093,6 +1103,7 @@ dependencies = [
  "forge-draw",
  "forge-font",
  "forge-geom",
+ "forge-harness",
  "forge-material",
  "forge-math",
  "forge-mesh",

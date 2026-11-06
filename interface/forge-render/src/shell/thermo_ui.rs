@@ -580,7 +580,7 @@ impl FgPanel {
 
 // ---- the look: a dialog's frame, rows, buttons ----
 
-fn frame(t: &Theme) -> egui::Frame {
+pub(super) fn frame(t: &Theme) -> egui::Frame {
     egui::Frame::new()
         .fill(t.surface)
         .stroke(Stroke::new(1.0, t.line))
@@ -617,7 +617,14 @@ fn title(ui: &mut Ui, t: &Theme, text: &str, w: f32, places: &mut Vec<(String, R
 }
 
 /// A labelled row; the widget is laid out in the row's right part.
-fn row<R>(ui: &mut Ui, t: &Theme, label: &str, w: f32, h: f32, add: impl FnOnce(&mut Ui) -> R) -> R {
+pub(super) fn row<R>(
+    ui: &mut Ui,
+    t: &Theme,
+    label: &str,
+    w: f32,
+    h: f32,
+    add: impl FnOnce(&mut Ui) -> R,
+) -> R {
     let (r, _) = ui.allocate_exact_size(vec2(w, h), Sense::hover());
     ui.painter().text(
         pos2(r.left() + 14.0, r.center().y),
@@ -639,7 +646,7 @@ fn row<R>(ui: &mut Ui, t: &Theme, label: &str, w: f32, h: f32, add: impl FnOnce(
 }
 
 /// A button as the dialogs have them; `strong` is the OK one.
-fn button(
+pub(super) fn button(
     ui: &mut Ui,
     t: &Theme,
     text: &str,
@@ -805,10 +812,10 @@ fn cards(ui: &mut Ui, t: &Theme, now: &mut usize, places: &mut Vec<(String, Rect
     }
 }
 
-const DLG_W: f32 = 446.0;
+pub(super) const DLG_W: f32 = 446.0;
 
 /// A dialog's head, Inventor's: the command's icon and name, a close cross. True when closed.
-fn head(
+pub(super) fn head(
     ui: &mut Ui,
     t: &Theme,
     icon: &str,
@@ -846,7 +853,7 @@ fn head(
 }
 
 /// A dialog's tabs; `now` the one up.
-fn tabs(
+pub(super) fn tabs(
     ui: &mut Ui,
     t: &Theme,
     names: &[&str],
@@ -883,7 +890,7 @@ fn tabs(
 }
 
 /// A section's heading inside a dialog.
-fn heading(ui: &mut Ui, t: &Theme, text: &str, w: f32) {
+pub(super) fn heading(ui: &mut Ui, t: &Theme, text: &str, w: f32) {
     let (r, _) = ui.allocate_exact_size(vec2(w, 24.0), Sense::hover());
     ui.painter().text(
         pos2(r.left() + 14.0, r.bottom() - 6.0),
@@ -965,7 +972,7 @@ fn choice(
 }
 
 /// OK, Cancel and Apply, along the foot as Inventor's dialogs have them.
-fn foot(
+pub(super) fn foot(
     ui: &mut Ui,
     t: &Theme,
     key: &str,
@@ -986,14 +993,14 @@ fn foot(
     (ok, cancel, ap)
 }
 
-fn note(ui: &mut Ui, text: &str, w: f32, ink: Color32) {
+pub(super) fn note(ui: &mut Ui, text: &str, w: f32, ink: Color32) {
     let g = ui.painter().layout(text.to_string(), sans(11.5), ink, w - 28.0);
     let (r, _) = ui.allocate_exact_size(vec2(w, g.size().y + 4.0), Sense::hover());
     ui.painter().galley(r.min + vec2(14.0, 2.0), g, ink);
 }
 
 /// A row of words and a value at the right, in the results.
-fn fact(ui: &mut Ui, t: &Theme, k: &str, v: &str, w: f32, ink: Color32) {
+pub(super) fn fact(ui: &mut Ui, t: &Theme, k: &str, v: &str, w: f32, ink: Color32) {
     let (r, _) = ui.allocate_exact_size(vec2(w, 20.0), Sense::hover());
     ui.painter().text(
         pos2(r.left() + 14.0, r.center().y),

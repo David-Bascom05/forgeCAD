@@ -28,6 +28,7 @@ pub mod fgdialog;
 mod fgedit;
 pub mod fgsketch;
 pub mod fgtool;
+pub mod harness_ui;
 pub mod icons;
 pub mod inspect;
 pub mod markup;
@@ -65,6 +66,8 @@ pub const THERMO_TAB: usize = 7;
 /// Assemble: a Forge file's, beside 3D Model, whatever the file holds (any file may hold
 /// components and joints).
 pub const ASM_TAB: usize = 8;
+/// An assembly's Harness tab: after Assemble.
+pub const HARNESS_TAB: usize = 9;
 
 const TITLE_H: f32 = 36.0;
 const TABS_H: f32 = 34.0;
@@ -209,6 +212,8 @@ pub enum Action {
 pub enum FgCmd {
     /// The Thermoform tab's.
     Thermo(thermo_ui::Cmd),
+    /// The Harness tab's.
+    Harness(harness_ui::Cmd),
     Parameters,
     Interference,
     Bom,
@@ -660,6 +665,7 @@ impl Shell {
         let Some(fg) = &mut self.fg else { return };
         match c {
             FgCmd::Thermo(c) => fg.thermo_command(c),
+            FgCmd::Harness(c) => fg.harness_command(c),
             FgCmd::Parameters => fg.params_open = !fg.params_open,
             FgCmd::Interference => {
                 if let Some(a) = &mut fg.asm {
@@ -971,6 +977,7 @@ impl Shell {
         self.dim_ui(&ctx);
         self.thermo_probes(&ctx);
         self.thermo_ui(&ctx);
+        self.harness_ui(&ctx);
         self.dialog_ui(&ctx);
         self.fg_dialog(&ctx);
         self.occ_dialog(&ctx);
@@ -1180,6 +1187,9 @@ impl Shell {
             if k == THERMO_TAB && !self.thermo_tab() {
                 continue;
             }
+            if k == HARNESS_TAB && !self.harness_tab() {
+                continue;
+            }
             let name = match k {
                 k if dwg => &dwgdoc::TABS[k],
                 k if drawing => &drawing::TABS[k],
@@ -1187,6 +1197,7 @@ impl Shell {
                 THERMO_TAB => &"Thermoform",
                 FLAT_TAB => &"Flat Pattern",
                 ASM_TAB => &"Assemble",
+                HARNESS_TAB => &"Harness",
                 k => &TABS[k],
             };
             let on = k == self.tab;
@@ -1234,7 +1245,7 @@ impl Shell {
         } else if fg && self.sheet.env {
             vec![SHEET_TAB, 0, 1, ASM_TAB, 2, 3, 4]
         } else if self.fg.is_some() {
-            vec![0, 1, ASM_TAB, THERMO_TAB, 2, 3, 4]
+            vec![0, 1, ASM_TAB, HARNESS_TAB, THERMO_TAB, 2, 3, 4]
         } else {
             vec![0, 1, THERMO_TAB, 2, 3, 4]
         }
