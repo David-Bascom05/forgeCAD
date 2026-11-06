@@ -44,6 +44,15 @@ positive-semi-definite one on the shipped code.
   no FMA). At 56 nodes (8.9k coordinates) 61 M multiply-adds a factor, 14 ms.
 - A step the cap shortens is far from equilibrium: the next takes the last factor (a chord step,
   the coordinates stopped since left out), up to 8 in a row.
+- A trust radius (at most the cap): halved while the energy falls less than a quarter of what the
+  Newton model -(a - a^2/2) g.d says, doubled back while it falls over three quarters. A flat,
+  untensioned sheet's stiffness grows cubically as it moves, so the model overshoots there.
+- With no pressure on the sheet (the drape, the sag, the plug) part of it can hang slack, its
+  Newton step 1e2-1e6 times the radius, and the whole step shrinks to nothing (the lubricated
+  Atmani plug: 3699 iterations, every plug step at its cap). There the step is damped
+  (Levenberg-Marquardt, lambda = the furthest slack node's |g| over ten radii), the damping cut
+  tenfold on each step the model predicts well: 1112 iterations, mean error 12.9 (converged L-BFGS
+  12.2, 129 672 iterations). Damping the steps under pressure too costs the falling cup 3.6x.
 
 ## Measured (Varedi heat, 56 nodes, loaded machine)
 

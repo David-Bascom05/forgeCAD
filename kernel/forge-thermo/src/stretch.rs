@@ -751,6 +751,9 @@ struct Solver {
     /// it since.
     factored: bool,
     age: usize,
+    /// The damping the factor was made with, and the mean diagonal entry it is of.
+    damp: f64,
+    mean: f64,
 }
 
 impl Solver {
@@ -780,6 +783,8 @@ impl Solver {
             chol: Chol::default(),
             factored: false,
             age: 0,
+            damp: 0.0,
+            mean: 0.0,
         }
     }
 }
@@ -953,7 +958,7 @@ impl Sheet {
     /// rank-one term by Sherman-Morrison. With `reuse`, the last factor where it still covers
     /// every coordinate that moves (a chord step: the coordinates stopped since left out). None:
     /// no factor.
-    fn newton(&mut self, x: &[Vec3], p: f64, g: &[Vec3], reuse: bool) -> Option<Vec<Vec3>> {
+    fn newton(&mut self, x: &[Vec3], p: f64, g: &[Vec3], reuse: bool, damp: f64) -> Option<Vec<Vec3>> {
         let mask: Vec<u8> = (0..x.len())
             .map(|k| {
                 if !self.free[k] || (self.slide[k] && self.dir[k].is_none()) {
@@ -982,11 +987,12 @@ impl Sheet {
         }
         let sh = &self.pool.shared;
         let s = &mut self.solver;
-        if reuse && s.factored && s.age < 8 && s.chol.covers(&mask) {
+        if reuse && s.factored && s.age < 8 && s.damp == damp && s.chol.covers(&mask) {
             s.age += 1;
         } else {
             s.factored = false;
             s.age = 0;
+            s.damp = damp;
             s.chol.pattern(&mask, &s.order, &s.m);
             if s.chol.dofs().is_empty() {
                 return Some(vec![Vec3::ZERO; x.len()]);
@@ -1043,13 +1049,16 @@ impl Sheet {
                     add_pair(&mut s.press, at[6], at[2], &skew(x[v[1]], f));
                 }
             }
-            let diag = s
-                .chol
-                .dofs()
-                .iter()
-                .map(|&(u, c)| s.m.val[s.m.at(u as usize, u as usize)][4 * c as usize].abs())
-                .fold(0.0, f64::max);
-            let shift = 1e-10 * diag.max(1e-300);
+            let (mut diag, mut sum) = (0.0f64, 0.0);
+            for &(u, c) in s.chol.dofs() {
+                let v = s.m.val[s.m.at(u as usize, u as usize)][4 * c as usize].abs();
+                diag = diag.max(v);
+                sum += v;
+            }
+            // Levenberg-Marquardt: `damp` of the mean diagonal entry on each
+            let mean = sum / s.chol.dofs().len() as f64;
+            s.mean = mean;
+            let shift = (1e-10 * diag).max(damp * mean).max(1e-300);
             s.factored = (q != 0.0 && s.chol.factor(&s.m.val, Some(&s.press), shift))
                 || s.chol.factor(&s.m.val, None, shift)
                 || s.chol.factor(&s.m.val, None, 1e4 * shift);
@@ -1397,20 +1406,46 @@ fn relax(
     let mut trial = x.to_vec();
     // the last step was the cap's (far from equilibrium): the next may take the last factor
     let mut chord = false;
+    // how far a node may move this step: the cap, halved while the energy falls much less than
+    // the Newton step's model says (a slack sheet's stiffness grows as it moves), regrown after
+    let mut radius = step_cap;
+    // with no pressure on it (the drape, the sag, the plug) a part of the sheet may hang slack:
+    // there the Newton step is damped (Levenberg-Marquardt) while it goes far past the radius,
+    // the slack part's step would otherwise shrink everyone's to nothing
+    let mut damp = 0.0;
+    let loaded = p != 0.0 || sheet.volume.is_some();
     for it in 0..max_it {
         let gmax = g.iter().map(|v| v.length()).fold(0.0, f64::max);
         if gmax <= tol {
             return it;
         }
-        let mut d = sheet.newton(x, p, &g, chord).unwrap_or_default();
-        let mut slope = dot(&d, &g);
-        if d.is_empty() || slope.is_nan() || slope >= 0.0 {
-            d = g.iter().map(|v| -*v * (step_cap / gmax)).collect();
+        let (mut d, mut slope);
+        let mut tries = 0;
+        loop {
+            d = sheet.newton(x, p, &g, chord, damp).unwrap_or_default();
             slope = dot(&d, &g);
+            if d.is_empty() || slope.is_nan() || slope >= 0.0 {
+                d = g.iter().map(|v| -*v * (step_cap / gmax)).collect();
+                slope = dot(&d, &g);
+                break;
+            }
+            let far = d.iter().map(|v| v.length()).fold(0.0, f64::max);
+            if far <= 20.0 * radius || loaded || tries >= 4 {
+                break;
+            }
+            // a node of no stiffness moves g / lambda: lambda to hold the furthest to ten radii
+            let need = d
+                .iter()
+                .zip(&g)
+                .filter(|(v, _)| v.length() > 20.0 * radius)
+                .map(|(_, f)| f.length() / (10.0 * radius))
+                .fold(0.0, f64::max);
+            damp = (need / sheet.solver.mean.max(1e-300)).max(10.0 * damp).max(1e-6);
+            tries += 1;
         }
-        // no node moves more than the cap in one step
+        // no node moves more than the radius (at most the cap) in one step
         let dmax = d.iter().map(|v| v.length()).fold(0.0, f64::max);
-        let mut a = if dmax > step_cap { step_cap / dmax } else { 1.0 };
+        let mut a = if dmax > radius { radius / dmax } else { 1.0 };
         chord = dmax > step_cap;
         let mut taken = None;
         let mut stops: Vec<(usize, Vec3)> = vec![];
@@ -1478,6 +1513,19 @@ fn relax(
             e = v;
             continue;
         };
+        // the Newton model's fall over the step a d, -(a - a^2 / 2) slope (H d = -g), against the
+        // energy's
+        let model = -(a - 0.5 * a * a) * slope;
+        let ratio = (e - e2) / model.max(1e-300);
+        let reached = a * dmax >= 0.99 * radius;
+        if ratio < 0.25 {
+            radius = (0.5 * a * dmax).max(1e-3 * step_cap);
+        } else if ratio > 0.75 && reached {
+            radius = (2.0 * radius).min(step_cap);
+        }
+        if ratio > 0.75 {
+            damp = if damp <= 1e-6 { 0.0 } else { 0.1 * damp };
+        }
         let stopped = !stops.is_empty();
         for &(i, c) in &stops {
             trial[i] = c;
