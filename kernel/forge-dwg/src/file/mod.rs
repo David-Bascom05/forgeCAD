@@ -1,6 +1,7 @@
 //! Whole files: the containers each version keeps its sections in, and the drawing they hold.
 
 pub mod r2000;
+pub mod r2004;
 
 use crate::bits::{R, bad};
 use crate::object::Object;
@@ -52,13 +53,72 @@ impl Drawing {
     }
 }
 
-/// Reads a DWG file, any version.
-pub fn read(buf: &[u8]) -> R<Drawing> {
-    let Some(v) = buf.get(0..6).and_then(Version::from_magic) else {
+/// A file's sections, out of their container: what every version has the same way.
+pub struct Sections {
+    pub ver: Version,
+    pub maint: u8,
+    pub codepage: u16,
+    /// The header variables and classes sections, sentinels and all.
+    pub header: Vec<u8>,
+    pub classes: Vec<u8>,
+    /// The object map's bytes.
+    pub handles: Vec<u8>,
+    /// Where the objects are: the whole file before R2004 (map offsets are file offsets), the
+    /// AcDb:AcDbObjects section since.
+    pub objects: Vec<u8>,
+    /// The other sections, by name, as stored.
+    pub other: Vec<(String, Vec<u8>)>,
+}
+
+/// Takes a file's sections out of its container.
+pub fn sections(buf: &[u8]) -> R<Sections> {
+    let Some(ver) = buf.get(0..6).and_then(Version::from_magic) else {
         return bad("not a DWG file this reads (AC1015..AC1032)");
     };
-    match v {
-        Version::R2000 => r2000::read(buf),
-        _ => bad(format!("{v:?} files are not read yet")),
+    let maint = buf[11];
+    let codepage = u16::from_le_bytes([buf[0x13], buf[0x14]]);
+    match ver {
+        Version::R2000 => r2000::sections(buf),
+        Version::R2007 => bad("R2007 files are not read yet"),
+        _ => {
+            let l = r2004::layout(buf)?;
+            let mut take = |name: &str| -> R<Vec<u8>> {
+                r2004::section_data(buf, &l, name)?.ok_or(crate::bits::Bad(format!("no {name} section")))
+            };
+            let header = take("AcDb:Header")?;
+            let classes = take("AcDb:Classes")?;
+            let handles = take("AcDb:Handles")?;
+            let objects = take("AcDb:AcDbObjects")?;
+            let mut other = vec![];
+            for s in &l.sections {
+                if !["AcDb:Header", "AcDb:Classes", "AcDb:Handles", "AcDb:AcDbObjects"].contains(&s.name.as_str()) {
+                    other.push((s.name.clone(), take(&s.name)?));
+                }
+            }
+            Ok(Sections { ver, maint, codepage, header, classes, handles, objects, other })
+        }
     }
+}
+
+/// Reads a DWG file, any version.
+pub fn read(buf: &[u8]) -> R<Drawing> {
+    let s = sections(buf)?;
+    let classes = r2000::classes(&s.classes, s.ver, s.maint)?;
+    let mut d = Drawing {
+        version: Some(s.ver),
+        maint: s.maint,
+        codepage: s.codepage,
+        header: s.header,
+        classes,
+        other: s.other,
+        ..Drawing::default()
+    };
+    let list = d.class_list();
+    let cl = crate::object::Classes { list: &list };
+    for (handle, at) in r2000::read_map(&s.handles, 0, s.handles.len())? {
+        let o = crate::object::read_object(&s.objects, at, s.ver, &cl, None)
+            .map_err(|e| crate::bits::Bad(format!("{handle:#x}: {}", e.0)))?;
+        d.objects.insert(handle, o);
+    }
+    Ok(d)
 }

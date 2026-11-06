@@ -349,8 +349,19 @@ impl Spec for Spline {
         s.bl(&mut self.degree)?;
         let mut nfit = self.fit.len() as i32;
         let (mut nk, mut nc) = (self.knots.len() as i32, self.points.len() as i32);
-        let fit = self.scenario & 2 != 0;
-        let ctrl = self.scenario & 1 != 0;
+        // R2013+: the stored scenario is overruled by the flags: fit points by method 1, control
+        // points by a custom (15) knot parameterization
+        let mut scenario = self.scenario;
+        if s.ver() >= Version::R2013 {
+            if self.flags1 & 1 != 0 {
+                scenario = 2;
+            }
+            if self.knot_param == 15 {
+                scenario = 1;
+            }
+        }
+        let fit = scenario & 2 != 0;
+        let ctrl = scenario & 1 != 0;
         if fit {
             s.bd(&mut self.fit_tol)?;
             s.bd3(&mut self.begin_tangent)?;
