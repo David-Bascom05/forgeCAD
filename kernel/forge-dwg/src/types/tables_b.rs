@@ -55,6 +55,8 @@ pub struct MLeaderStyle {
     pub attach_direction: i16,
     pub top_attach: i16,
     pub bottom_attach: i16,
+    /// R2013+ (not in the spec): leaders extend to the text.
+    pub extend_to_text: bool,
 }
 
 impl Spec for MLeaderStyle {
@@ -108,6 +110,10 @@ impl Spec for MLeaderStyle {
             s.bs(&mut self.attach_direction)?;
             s.bs(&mut self.top_attach)?;
             s.bs(&mut self.bottom_attach)?;
+        }
+        // R2013+ files have one more bit, which the spec does not list
+        if v >= Version::R2013 {
+            s.b(&mut self.extend_to_text)?;
         }
         Ok(())
     }
@@ -303,8 +309,9 @@ pub struct TableStyleCells {
     pub unknown_h: Href,
     /// The "Table" cell style.
     pub table: NamedCellStyle,
-    /// Data, title and header.
-    pub styles: Vec<NamedCellStyle>,
+    /// Title, header and data (the spec says data, title, header), each after its id: the files
+    /// store the id before the cell style as well as after it, which the spec does not list.
+    pub styles: Vec<(i32, NamedCellStyle)>,
 }
 
 #[derive(Clone, Debug, PartialEq, Default)]
@@ -334,7 +341,10 @@ impl Spec for TableStyle {
             s.bl(&mut c.unknown3)?;
             s.h(&mut c.unknown_h)?;
             named_cell_style_io(s, &mut c.table)?;
-            return s.list(&mut c.styles, named_cell_style_io);
+            return s.list(&mut c.styles, |s, x| {
+                s.bl(&mut x.0)?;
+                named_cell_style_io(s, &mut x.1)
+            });
         }
         s.tv(&mut self.description)?;
         s.bs(&mut self.flow)?;
@@ -422,9 +432,10 @@ impl Spec for TableGeometry {
     }
 }
 
-/// A table value (20.4.99): a number, text, date, point or object, with its format.
+/// A table value (20.4.99): a number, text, date, point or object, with its format. (objects_b has
+/// a `Value` for FIELD too; this one reads R2007+ string values from the data stream.)
 #[derive(Clone, Debug, PartialEq, Default)]
-pub struct Value {
+pub struct CellValue {
     /// R2007+: 1 the value is kGeneral (and no data is stored).
     pub flags: i32,
     /// 0 unknown, 1 long, 2 double, 4 string, 8 date, 16 point, 32 3D point, 64 object,
@@ -443,7 +454,7 @@ pub struct Value {
     pub value_text: Str,
 }
 
-pub fn value_io<S: Io>(s: &mut S, x: &mut Value) -> R<()> {
+pub fn cell_value_io<S: Io>(s: &mut S, x: &mut CellValue) -> R<()> {
     let v = s.ver();
     if v >= Version::R2007 {
         s.bl(&mut x.flags)?;
@@ -453,6 +464,17 @@ pub fn value_io<S: Io>(s: &mut S, x: &mut Value) -> R<()> {
         match x.data_type {
             0 | 1 => s.bl(&mut x.long)?,
             2 => s.bd(&mut x.double)?,
+            // R2007+ keeps the string in the data stream: BL byte count, UTF-16 with its NUL
+            4 if v >= Version::R2007 => {
+                let mut b: Vec<u8> = x.text.wide().iter().flat_map(|u| u.to_le_bytes()).collect();
+                let mut n = b.len() as i32;
+                s.bl(&mut n)?;
+                if n % 2 != 0 {
+                    return crate::bits::bad(format!("string value of {n} bytes"));
+                }
+                s.bytes(&mut b, n.max(0) as usize)?;
+                x.text = Str::Wide(b.chunks(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect());
+            }
             4 => s.tv(&mut x.text)?,
             64 => s.h(&mut x.object)?,
             8 | 16 | 32 | 512 => {
@@ -475,7 +497,7 @@ pub fn value_io<S: Io>(s: &mut S, x: &mut Value) -> R<()> {
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct CustomItem {
     pub name: Str,
-    pub value: Value,
+    pub value: CellValue,
 }
 
 /// Custom data: a 32-bit value and the key/value items.
@@ -489,7 +511,7 @@ fn custom_io<S: Io>(s: &mut S, c: &mut Custom) -> R<()> {
     s.bl(&mut c.data)?;
     s.list(&mut c.items, |s, it| {
         s.tv(&mut it.name)?;
-        value_io(s, &mut it.value)
+        cell_value_io(s, &mut it.value)
     })
 }
 
@@ -516,7 +538,7 @@ pub struct CellAttr {
 pub struct CellContent {
     /// 0 unknown, 1 value, 2 field, 4 block.
     pub kind: i32,
-    pub value: Value,
+    pub value: CellValue,
     /// The field or block record.
     pub object: Href,
     pub attrs: Vec<CellAttr>,
@@ -587,7 +609,7 @@ fn cell_io<S: Io>(s: &mut S, c: &mut Cell) -> R<()> {
     s.list(&mut c.contents, |s, k| {
         s.bl(&mut k.kind)?;
         match k.kind {
-            1 => value_io(s, &mut k.value)?,
+            1 => cell_value_io(s, &mut k.value)?,
             2 | 4 => s.h(&mut k.object)?,
             _ => {}
         }
@@ -997,17 +1019,20 @@ impl Spec for MLeader {
         s.bd(&mut self.block_rotation)?;
         s.bs(&mut self.attach_type)?;
         s.b(&mut self.annotative)?;
-        // The spec marks these "-R2007"; R2000 files have them.
         s.list(&mut self.arrows, |s, a| {
             s.b(&mut a.0)?;
             s.h(&mut a.1)
         })?;
-        s.list(&mut self.labels, |s, l| {
-            s.h(&mut l.attdef)?;
-            s.tv(&mut l.text)?;
-            s.bs(&mut l.ui_index)?;
-            s.bd(&mut l.width)
-        })?;
+        // The spec marks the arrows and labels "-R2007"; the arrows are in every version, the
+        // labels only before R2010.
+        if v < Version::R2010 {
+            s.list(&mut self.labels, |s, l| {
+                s.h(&mut l.attdef)?;
+                s.tv(&mut l.text)?;
+                s.bs(&mut l.ui_index)?;
+                s.bd(&mut l.width)
+            })?;
+        }
         s.b(&mut self.text_dir_negative)?;
         s.bs(&mut self.ipe_align)?;
         s.bs(&mut self.justification)?;
@@ -1072,7 +1097,7 @@ pub struct TableCell {
     pub overrides: Option<CellOverrides>,
     /// R2007+.
     pub unknown: i32,
-    pub value: Value,
+    pub value: CellValue,
 }
 
 /// The whole table's overrides of its style, until R21.
@@ -1129,7 +1154,8 @@ pub struct RowRange {
     pub end: i32,
 }
 
-/// R2010+ ACAD_TABLE: the content inline, and the breaks.
+/// R2010+ ACAD_TABLE after the INSERT fields and handles (which the spec leaves out there): the
+/// content inline, and the breaks.
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct TableR24 {
     pub unknown_rc: u8,
@@ -1147,7 +1173,7 @@ pub struct TableR24 {
 }
 
 /// ACAD_TABLE (20.4.96): an INSERT of the table's anonymous block with the cells, until R21; the
-/// table content inline since (`r24`).
+/// INSERT part then the table content inline since (`r24`; no `style` or cells then).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Table {
     pub insert: [f64; 3],
@@ -1170,6 +1196,7 @@ pub struct Table {
     /// R2000 and before: the first and last attribute; R2004+ all of them.
     pub attribs: Vec<Href>,
     pub seqend: Href,
+    /// Until R21 (the content holds it since).
     pub style: Href,
     pub r24: Box<TableR24>,
 }
@@ -1341,7 +1368,7 @@ fn table_cell_io<S: Io>(s: &mut S, c: &mut TableCell) -> R<()> {
     }
     if s.ver() >= Version::R2007 {
         s.bl(&mut c.unknown)?;
-        value_io(s, &mut c.value)?;
+        cell_value_io(s, &mut c.value)?;
     }
     Ok(())
 }
@@ -1409,16 +1436,14 @@ fn table_r24_io<S: Io>(s: &mut S, t: &mut TableR24) -> R<()> {
 impl Spec for Table {
     fn io<S: Io>(&mut self, s: &mut S) -> R<()> {
         let v = s.ver();
-        if v >= Version::R2010 {
-            return table_r24_io(s, &mut self.r24);
-        }
         s.bd3(&mut self.insert)?;
         scale_io(s, &mut self.scale)?;
         s.bd(&mut self.rotation)?;
         s.bd3(&mut self.extrusion)?;
         s.b(&mut self.has_attribs)?;
         let mut owned = self.attribs.len() as i32;
-        if v >= Version::R2004 {
+        // the spec stores the count whenever R2004+; it is there only with attributes
+        if v >= Version::R2004 && self.has_attribs {
             s.bl(&mut owned)?;
         }
         s.h(&mut self.block)?;
@@ -1428,6 +1453,9 @@ impl Spec for Table {
             s.h(&mut self.seqend)?;
         } else if S::READ {
             self.attribs.clear();
+        }
+        if v >= Version::R2010 {
+            return table_r24_io(s, &mut self.r24);
         }
         s.h(&mut self.style)?;
         s.bs(&mut self.flags)?;
@@ -1500,11 +1528,11 @@ mod tests {
         }
     }
 
-    fn value(v: Version) -> Value {
-        let mut x = Value {
+    fn value(v: Version) -> CellValue {
+        let mut x = CellValue {
             data_type: 4,
             text: st("12.5", v),
-            ..Value::default()
+            ..CellValue::default()
         };
         if v >= Version::R2007 {
             x.unit_type = 1;
@@ -1693,7 +1721,7 @@ mod tests {
             value: if v >= Version::R2007 {
                 value(v)
             } else {
-                Value::default()
+                CellValue::default()
             },
             ..TableCell::default()
         };
@@ -1709,10 +1737,10 @@ mod tests {
                 attdef: h(0x21),
             }],
             object: h(0x20),
-            value: Value {
+            value: CellValue {
                 format: st("", v),
                 value_text: st("", v),
-                ..Value::default()
+                ..CellValue::default()
             },
             ..TableCell::default()
         };
@@ -1869,6 +1897,9 @@ mod tests {
             m.top_attach = 9;
             m.bottom_attach = 10;
         }
+        if v >= Version::R2010 {
+            m.labels.clear();
+        }
         if v >= Version::R2013 {
             m.extend_to_text = true;
         }
@@ -1928,6 +1959,7 @@ mod tests {
             m.top_attach = 9;
             m.bottom_attach = 9;
         }
+        m.extend_to_text = v >= Version::R2013;
         m
     }
 
@@ -1939,9 +1971,9 @@ mod tests {
                     unknown_h: h(0x90),
                     table: named(v, 4, "Table"),
                     styles: vec![
-                        named(v, 3, "_DATA"),
-                        named(v, 1, "_TITLE"),
-                        named(v, 2, "_HEADER"),
+                        (1, named(v, 1, "_TITLE")),
+                        (2, named(v, 2, "_HEADER")),
+                        (3, named(v, 3, "_DATA")),
                     ],
                     ..TableStyleCells::default()
                 }),
