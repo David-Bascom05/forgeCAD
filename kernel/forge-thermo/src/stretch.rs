@@ -1699,6 +1699,10 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
                     let reach = reach_at(&x);
                     its += step(&mut sheet, &tool, &mut x, q, cap, tol, &reach, its_at(400));
                     release(&mut sheet, &tool, &x, 0.25 * spec.t);
+                    // capped: the attempt is taken again in halves whatever its other parts do
+                    if sheet.capped && parts < 16 {
+                        break;
+                    }
                 }
                 if !sheet.capped || parts >= 16 {
                     break;
