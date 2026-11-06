@@ -116,6 +116,11 @@ fn split(
 
 const NONE: u32 = u32::MAX;
 
+/// The work (multiply-adds) a factor must hold before its subtrees go on threads: about a sheet
+/// of 100 nodes across. Below it the threads' start and their waits for the slowest cost more
+/// than they save on a loaded machine (a 56-node cover's test 8 s on one thread, 26 s on all).
+const SHARED: f64 = 3e8;
+
 /// A subtree to factor: its supernodes lo..=hi and their panels.
 type Job<'a> = (usize, usize, &'a mut [f64]);
 
@@ -464,7 +469,7 @@ impl Chol {
             .map(|s| work[s])
             .sum();
         let mut open: Vec<usize> = (0..ns).filter(|&s| self.sup[s].parent == NONE).collect();
-        if threads > 1 && total > 2e6 {
+        if threads > 1 && total > SHARED {
             while open.len() < 4 * threads {
                 let Some((i, &s)) = open
                     .iter()
@@ -485,7 +490,7 @@ impl Chol {
         let mut mine = vec![false; ns];
         self.tasks.clear();
         // one thread (the browser's), or a factor too small to share: all in order
-        if threads <= 1 || total <= 2e6 {
+        if threads <= 1 || total <= SHARED {
             open.clear();
         }
         for &s in &open {
@@ -999,7 +1004,7 @@ mod tests {
     /// large enough to be shared out over threads.
     #[test]
     fn the_factor_solves_a_grids_system() {
-        let n = 60;
+        let n = 120;
         let id = |i: usize, j: usize| j * (n + 1) + i;
         let mut tris = vec![];
         for j in 0..n {
