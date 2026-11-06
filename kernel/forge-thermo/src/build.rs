@@ -86,6 +86,13 @@ pub enum FormError {
     /// sheet is thick (`Collapses`) or its walls meet.
     Offset(ShellError),
     Mesh,
+    /// A plug driven to the cavity's floor: its tip `stroke` below the sheet, with the sheet under
+    /// it, reaches past `room`, the most it may go (the cavity's depth less the sheet's
+    /// thickness); the sheet would be pressed through the mould.
+    PlugReachesFloor {
+        stroke: f64,
+        room: f64,
+    },
 }
 
 /// What a build reports: the numbers a shop reads, and every check reads.

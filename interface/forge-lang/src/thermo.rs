@@ -451,6 +451,7 @@ impl ThermoErr {
                 E::Mesh => "ThermoMesh",
                 E::NotAWall => "NotAWall",
                 E::WallNotUniform { .. } => "WallNotUniform",
+                E::PlugReachesFloor { .. } => "PlugReachesFloor",
             },
         }
     }
@@ -484,6 +485,16 @@ impl ThermoErr {
                 id: id.clone(),
                 arg: "from".into(),
                 text: "\"outer\"".into(),
+            }],
+            ThermoErr::Kernel {
+                id,
+                error: ft::FormError::PlugReachesFloor { room, .. },
+                ..
+            } => vec![Op::SetArg {
+                id: id.clone(),
+                arg: "plug_stroke".into(),
+                // a sheet's thickness short of the floor, to a tenth of a millimetre
+                text: crate::values::fmt((0.9 * room * 10.0).floor() / 10.0),
             }],
             ThermoErr::UnknownMaterial { id, known, .. } => known
                 .iter()
@@ -554,6 +565,12 @@ impl ThermoErr {
                 E::Extrude(e) => format!("{id}: the trim or mould outline: {e:?}"),
                 E::Bool(e) => format!("{id}: the kernel's boolean refused: {e:?}"),
                 E::Mesh => format!("{id}: the shape could not be meshed"),
+                E::PlugReachesFloor { stroke, room } => format!(
+                    "{id}: the plug goes {} below the sheet, and the cavity holds at most {} under it with the \
+                     sheet's thickness: it would press the sheet into the floor",
+                    mm(*stroke),
+                    mm(*room)
+                ),
             },
         }
     }
@@ -580,6 +597,10 @@ impl ThermoErr {
                 if let ft::FormError::TrimCutsShape { at, clear } = error {
                     d.push(("at", p3(*at)));
                     d.push(("clear", (*clear).into()));
+                }
+                if let ft::FormError::PlugReachesFloor { stroke, room } = error {
+                    d.push(("stroke", (*stroke).into()));
+                    d.push(("room", (*room).into()));
                 }
                 if let ft::FormError::WallNotUniform { t, min, max } = error {
                     d.push(("t", (*t).into()));
@@ -1397,6 +1418,9 @@ fn thermoform(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
                     failed = Some((s.body.clone(), prep.clone(), spec.clone()));
                     err(e)
                 })?;
+                if let Some(plug) = walls.as_ref().and_then(|w| w.plug.as_ref()) {
+                    ft::plug_fits(&f, &spec, plug).map_err(err)?;
+                }
                 let mut out: Vec<Solid> = before.iter().filter(|x| x.id != s.id).cloned().collect();
                 out.push(Solid {
                     id: s.id,

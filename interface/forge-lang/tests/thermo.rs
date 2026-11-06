@@ -168,6 +168,31 @@ fn refusals_are_typed_with_fixes() {
     assert_eq!(e.fixes().len(), 1);
 }
 
+/// A plug driven past the cavity's floor (the cup is 75 deep, its sheet 1 thick) is refused, typed,
+/// with a stroke that fits as the fix; one that stops short forms.
+#[test]
+fn a_plug_driven_into_the_floor_is_refused() {
+    let base = src("cup");
+    let with = |stroke: f64| {
+        base.replace(
+            "material: \"PETG\", tool: \"female\")",
+            &format!("material: \"PETG\", tool: \"female\", plug: \"dry\", plug_stroke: {stroke})"),
+        )
+    };
+    let deep = with(80.0);
+    let r = run(&deep);
+    let e = r.errors.first().expect("refused");
+    assert_eq!(
+        e.kind(),
+        "PlugReachesFloor",
+        "{}",
+        forge_lang::report::text(&r, &deep)
+    );
+    let fix = e.fixes();
+    assert_eq!(fix.len(), 1);
+    assert!(run(&with(60.0)).ok());
+}
+
 #[test]
 fn the_shop_reads_gauges_and_the_sheet() {
     let s = src("cover").replace(

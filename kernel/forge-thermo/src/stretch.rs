@@ -6,7 +6,7 @@
 //! (newton.rs); a point whose step carries it into the tool stops where it crossed. The thickness
 //! is t0 times the area the sheet had over the area it has. Isothermal, no friction slip, no plug: an estimate under a
 //! stated model, best at saying where the sheet is thinnest. Design: research/thermoform/.
-use crate::build::{Formed, Spec, Tool, inside, polygon};
+use crate::build::{FormError, Formed, Spec, Tool, inside, polygon};
 use crate::field::Field;
 use crate::newton::{Blocks, Chol};
 use forge_math::{Point2, Point3, Vec3, dmath};
@@ -1605,6 +1605,20 @@ fn relax(
     }
     sheet.capped = true;
     max_it
+}
+
+/// Whether a plug's travel stays off a female mould's floor: its tip's stroke below the sheet,
+/// with the sheet's thickness under it, short of the cavity's depth (its deepest: a plug over a
+/// raised floor is not caught). A male mould takes no plug.
+pub fn plug_fits(f: &Formed, spec: &Spec, plug: &Plug) -> Result<(), FormError> {
+    let room = f.report.depth - spec.t;
+    if spec.tool == Tool::Female && plug.stroke >= room {
+        return Err(FormError::PlugReachesFloor {
+            stroke: plug.stroke,
+            room,
+        });
+    }
+    Ok(())
 }
 
 /// The thickness the sheet comes to over the tool `f` formed with `spec` under `pr`.

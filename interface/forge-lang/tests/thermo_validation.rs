@@ -745,6 +745,12 @@ fn scoreboard() {
                     Some((t, mut p)) => {
                         if !configure(&mut p, opt, mu) || !case_options(&mut p, c) {
                             (None, "n/a")
+                        } else if p
+                            .plug
+                            .is_some_and(|plug| forge_thermo::plug_fits(&t.formed, &t.spec, &plug).is_err())
+                        {
+                            // the forming refuses a plug driven into the floor, as the language does
+                            (None, "refused")
                         } else {
                             let fresh;
                             // THERMO_FRESH: solve every config here, for its cost

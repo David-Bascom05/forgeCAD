@@ -29,7 +29,7 @@ pub use simulated::{
     MeshMass, OnTool, PartMesh, Simulated, ToolSide, WallField, blank, mesh_mass, part_mesh, simulated,
     simulated_from, simulated_on, simulated_part,
 };
-pub use stretch::{Clamp, Heat, Law, Plug, Process, Shift, Step, Stretch, Surface, stretch};
+pub use stretch::{Clamp, Heat, Law, Plug, Process, Shift, Step, Stretch, Surface, plug_fits, stretch};
 
 #[cfg(test)]
 mod bench;
