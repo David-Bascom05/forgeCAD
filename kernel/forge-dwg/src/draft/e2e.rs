@@ -183,3 +183,106 @@ fn trim_offset_fillet_a_real_drawing() {
     assert_eq!(d.objects[&0x6a].data, orig.objects[&0x6a].data);
     assert!(matches!(d.objects[&circle_h].data, Data::Circle(_)));
 }
+
+/// New entities of every kind the draw commands make, a dimension with its block, a copy and an
+/// explode, written and read back. `FORGE_DWG_E2E_OUT=DIR` keeps the file (for the ODA
+/// converter).
+#[test]
+fn draw_annotate_copy_explode() {
+    use super::boundary;
+    use super::commit::{copy_entity, explode_entity, transform};
+    use super::dim::{self, Kind, Style};
+    use super::entity::to_data;
+    use super::make::{self, Fill};
+    let orig = load();
+    let mut d = orig.clone();
+    let mut hist = History::default();
+    hist.begin();
+    let ms = d.model_space();
+    let layer = d.layer("0").unwrap();
+    let add = |d: &mut Drawing, hist: &mut History, x: Data| d.add_entity(hist, ms, layer, x).unwrap();
+    // a square of lines and a circle island in it, hatched round a point between them
+    let sq = [v2(300.0, 0.0), v2(400.0, 0.0), v2(400.0, 100.0), v2(300.0, 100.0)];
+    let mut curves = vec![];
+    for k in 0..4 {
+        let c = Curve::line(sq[k], sq[(k + 1) % 4]);
+        add(&mut d, &mut hist, to_data(&c, 0.0).unwrap());
+        curves.push(c);
+    }
+    let circle = Curve::circle(v2(350.0, 50.0), 20.0);
+    add(&mut d, &mut hist, to_data(&circle, 0.0).unwrap());
+    curves.push(circle);
+    let b = boundary::find(&curves, v2(310.0, 10.0), 1e-9).unwrap();
+    assert_eq!(b.islands.len(), 1);
+    let x = make::hatch(&d, &b, &Fill::Solid).unwrap();
+    let hs = add(&mut d, &mut hist, x);
+    let inner = boundary::find(&curves, v2(350.0, 50.0), 1e-9).unwrap();
+    let fill = Fill::Pattern {
+        name: "ANSI31".into(),
+        angle: 0.0,
+        scale: 1.0,
+    };
+    let x = make::hatch(&d, &inner, &fill).unwrap();
+    let hp = add(&mut d, &mut hist, x);
+    let x = make::text(&d, v2(300.0, 120.0), 5.0, 0.0, "forgeCAD");
+    let t = add(&mut d, &mut hist, x);
+    let x = make::mtext(&d, v2(300.0, 140.0), 60.0, 4.0, "two\\Plines");
+    let mt = add(&mut d, &mut hist, x);
+    let fit = [v2(300.0, 200.0), v2(320.0, 230.0), v2(350.0, 190.0), v2(380.0, 220.0)];
+    let sp = add(&mut d, &mut hist, make::spline_through(&fit, false).unwrap());
+    let pt = add(&mut d, &mut hist, make::point(v2(310.0, 110.0)));
+    let st = Style::current(&d);
+    let lin = Kind::Linear {
+        p1: sq[0],
+        p2: sq[1],
+        at: v2(350.0, -20.0),
+        angle: 0.0,
+    };
+    let m = dim::make(&d, &st, lin).unwrap();
+    let dl = dim::add(&mut d, &mut hist, ms, layer, m).unwrap();
+    let dia = Kind::Diameter {
+        c: v2(350.0, 50.0),
+        r: 20.0,
+        at: v2(380.0, 70.0),
+    };
+    let m = dim::make(&d, &st, dia).unwrap();
+    let dd = dim::add(&mut d, &mut hist, ms, layer, m).unwrap();
+    // a copy of the dimension moved up, and the hatch turned
+    let dc = copy_entity(&mut d, &mut hist, dl).unwrap();
+    assert!(transform(&mut d, &mut hist, dc, &Affine::translate(v2(0.0, 150.0)), false).unwrap());
+    assert!(transform(&mut d, &mut hist, hp, &Affine::rotate(v2(350.0, 50.0), 0.3), false).unwrap());
+    // the drawing's polyline exploded
+    let ex = explode_entity(&mut d, &mut hist, 0x9c).unwrap();
+    assert_eq!(ex.len(), 2);
+    hist.end();
+
+    let out = file::write(&d).unwrap();
+    if let Ok(dir) = std::env::var("FORGE_DWG_E2E_OUT") {
+        std::fs::write(format!("{dir}/draw_annotate.dwg"), &out).unwrap();
+    }
+    let e = file::read(&out).unwrap();
+    for h in [hs, hp, t, mt, sp, pt, dl, dd, dc] {
+        assert_eq!(e.block_of(h), Some(ms), "{h:#x}");
+    }
+    let Data::Hatch(x) = &e.objects[&hs].data else { panic!() };
+    assert!(x.solid && x.paths.len() == 2);
+    let Data::Text(x) = &e.objects[&t].data else { panic!() };
+    assert_eq!(x.text.text(), "forgeCAD");
+    let Data::DimLinear(x) = &e.objects[&dl].data else { panic!() };
+    assert!((x.dim.measurement - 100.0).abs() < 1e-9);
+    let blk = super::commit::dim_block(&e, dl).unwrap();
+    // lines (the dimension line maybe broken round its text), arrows, text, points
+    assert!(super::commit::block_entities(&e, blk).len() >= 9);
+    let blk2 = super::commit::dim_block(&e, dc).unwrap();
+    assert_ne!(blk, blk2);
+    let Data::DimLinear(y) = &e.objects[&dc].data else { panic!() };
+    assert!((y.pt10[1] - x.pt10[1] - 150.0).abs() < 1e-9);
+    assert!(!e.objects.contains_key(&0x9c));
+    // the scene draws them: the dimension's block, the hatches
+    let sc = crate::scene::build(&e, crate::scene::Space::Model, &crate::scene::BoxFont, &Default::default());
+    for h in [hs, hp, dl, dd, dc, t] {
+        assert!(sc.items.iter().any(|i| i.entity == h), "{h:#x} not drawn");
+    }
+    assert!(hist.undo(&mut d));
+    assert!(d.objects.keys().eq(orig.objects.keys()));
+}

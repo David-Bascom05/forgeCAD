@@ -108,12 +108,27 @@ pub struct Options {
     /// The largest gap between a curve and its chords, in world units (0: chosen from the
     /// drawing's extents).
     pub chord: f64,
+    /// Build what is on layers that are off or frozen too (each item still says its layer), for
+    /// a viewer that switches layers itself.
+    pub all_layers: bool,
 }
 
 impl Default for Options {
     fn default() -> Options {
-        Options { chord: 0.0 }
+        Options {
+            chord: 0.0,
+            all_layers: false,
+        }
     }
+}
+
+/// How a space's scene is cut, chosen once from the whole space: the chord tolerance and the
+/// drawing's height (for point sizes). An edit's entities are built to the same plan as the
+/// rest, so they match.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Plan {
+    pub chord: f64,
+    pub view_h: f64,
 }
 
 impl Scene {
@@ -151,4 +166,29 @@ impl Scene {
 /// out of `extents`.
 pub fn build(d: &Drawing, space: Space, fonts: &dyn Fonts, opts: &Options) -> Scene {
     build::build(d, space, fonts, opts)
+}
+
+/// The plan `build` cuts a space to.
+pub fn plan(d: &Drawing, space: Space, fonts: &dyn Fonts, opts: &Options) -> Plan {
+    build::plan(d, space, fonts, opts)
+}
+
+/// `build` to a given plan.
+pub fn build_planned(d: &Drawing, space: Space, fonts: &dyn Fonts, opts: &Options, plan: &Plan) -> Scene {
+    build::build_planned(d, space, fonts, opts, plan)
+}
+
+/// Some of a space's own entities, as `build` would draw them (to `plan`): what an edit changed,
+/// for a viewer that draws them over the rest. Model space, or a layout's paper space entities
+/// (not what its viewports show). Rays are cut to `ext` and beyond, as the whole space's are.
+pub fn build_some(
+    d: &Drawing,
+    space: Space,
+    handles: &[u32],
+    fonts: &dyn Fonts,
+    opts: &Options,
+    plan: &Plan,
+    ext: Option<([f64; 2], [f64; 2])>,
+) -> Scene {
+    build::build_some(d, space, handles, fonts, opts, plan, ext)
 }
