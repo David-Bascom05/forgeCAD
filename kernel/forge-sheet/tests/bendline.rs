@@ -347,7 +347,9 @@ fn refusals_are_typed() {
 #[test]
 fn fuzz_bend_lines() {
     let mut rng = Rng::new(0xbe7d);
-    let (mut built, mut refused) = (0, 0);
+    let mut refused = 0;
+    // the bends drawn and made in turn, then built side by side
+    let mut sheets = vec![];
     for _ in 0..300 {
         let (l, w) = (rng.range(40.0, 150.0), rng.range(10.0, 60.0));
         let x = rng.range(-5.0, l + 5.0);
@@ -377,8 +379,12 @@ fn fuzz_bend_lines() {
             Err(e) => panic!("{e:?}"),
             Ok(()) => {}
         }
+        sheets.push((l, x, angle, r, at, s));
+    }
+    forge_math::par::map(sheets.len(), |i| {
+        let (l, x, angle, r, at, s) = &sheets[i];
         for map in [Map::Folded, Map::Flat] {
-            match build_with(&s, map) {
+            match build_with(s, map) {
                 Ok(b) => checked(&b.body),
                 Err(
                     SheetError::WallTooShort { .. }
@@ -396,8 +402,8 @@ fn fuzz_bend_lines() {
                 Err(e) => panic!("{map:?} x {x} l {l} angle {angle} r {r} {at:?}: {e:?}"),
             }
         }
-        built += 1;
-    }
+    });
+    let built = sheets.len();
     println!("{built} built, {refused} refused");
     assert!(built >= 150, "{built} built, {refused} refused");
 }

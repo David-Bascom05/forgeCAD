@@ -23,7 +23,7 @@ fn every_kind_has_a_maker() {
 
 /// Every seed fails only in kinds history_known.txt lists (a line there matches any failure
 /// whose kind holds it), and every line there still matches a failure: the list only shrinks.
-/// The seeds run on four threads.
+/// The seeds run on up to eight threads (each seed's run is a function of the seed alone).
 #[test]
 #[cfg_attr(target_family = "wasm", ignore = "a kernel panic aborts the wasm run")]
 fn random_histories() {
@@ -35,7 +35,10 @@ fn random_histories() {
         .collect();
     let next = std::sync::atomic::AtomicUsize::new(0);
     let runs: Vec<(u64, forge_agent::history::Run)> = std::thread::scope(|s| {
-        let workers: Vec<_> = (0..4)
+        let threads = std::thread::available_parallelism()
+            .map_or(4, |n| n.get())
+            .clamp(4, 8);
+        let workers: Vec<_> = (0..threads)
             .map(|_| {
                 s.spawn(|| {
                     let mut out = Vec::new();

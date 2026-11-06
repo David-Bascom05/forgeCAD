@@ -428,8 +428,10 @@ fn round_trip(sheet: &Sheet, fold: &Built, flat: &Built, t: f64) {
 #[test]
 fn fuzz_hems() {
     let mut rng = Rng::new(0x04e3);
-    let (mut built, mut refused, mut clashes) = (0, 0, 0);
-    let mut slowest = 0.0f64;
+    let mut refused = 0;
+    // the sheets drawn and hemmed in turn (the draws follow what a flange or hem refuses), then
+    // built side by side
+    let mut sheets = vec![];
     for seed in 0..200 {
         let t = rng.range(0.5, 2.5);
         let k = rng.range(0.3, 0.5);
@@ -483,17 +485,19 @@ fn fuzz_hems() {
             }
             Err(e) => panic!("seed {seed}: {e:?}"),
         }
+        sheets.push((seed, t, kind, leg, wall, s));
+    }
+    // per sheet: whether it clashed, else how long its builds took
+    let outcomes = forge_math::par::map(sheets.len(), |i| {
+        let (seed, t, kind, leg, wall, s) = &sheets[i];
         let at = Instant::now();
-        let f = match build_with(&s, Map::Folded) {
+        let f = match build_with(s, Map::Folded) {
             Ok(f) => f,
-            Err(SheetError::FoldedClash { .. }) => {
-                clashes += 1;
-                continue;
-            }
+            Err(SheetError::FoldedClash { .. }) => return None,
             Err(e) => panic!("seed {seed} {kind:?}: {e:?}"),
         };
-        let l = build_with(&s, Map::Flat).unwrap_or_else(|e| panic!("seed {seed}: {e:?}"));
-        slowest = slowest.max(at.elapsed().as_secs_f64());
+        let l = build_with(s, Map::Flat).unwrap_or_else(|e| panic!("seed {seed}: {e:?}"));
+        let took = at.elapsed().as_secs_f64();
         let ok = |b: &Body| forge_topo::check::check(b).is_empty();
         assert!(
             ok(&f.body) && ok(&l.body),
@@ -502,9 +506,12 @@ fn fuzz_hems() {
         );
         checked(&f.body);
         checked(&l.body);
-        round_trip(&s, &f, &l, t);
-        built += 1;
-    }
+        round_trip(s, &f, &l, *t);
+        Some(took)
+    });
+    let clashes = outcomes.iter().filter(|o| o.is_none()).count();
+    let built = outcomes.len() - clashes;
+    let slowest = outcomes.iter().flatten().fold(0.0f64, |a, &b| a.max(b));
     println!(
         "{built} built, {refused} refused, {clashes} clashes; slowest {:.0} us",
         slowest * 1e6

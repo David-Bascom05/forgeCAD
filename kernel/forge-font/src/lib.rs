@@ -650,16 +650,19 @@ mod tests {
                 }
             }
         };
-        for cut in (0..base.len()).step_by(13) {
-            probe(base[..cut].to_vec());
-        }
+        // every file made first (the draws), then each probed on its own
+        let mut files: Vec<Vec<u8>> = (0..base.len())
+            .step_by(13)
+            .map(|cut| base[..cut].to_vec())
+            .collect();
         for _ in 0..300 {
             let mut d = base.clone();
             for _ in 0..1 + r.below(8) {
                 let k = r.below(d.len());
                 d[k] = if r.bool() { 0xff } else { r.below(256) as u8 };
             }
-            probe(d);
+            files.push(d);
         }
+        forge_math::par::map(files.len(), |i| probe(files[i].clone()));
     }
 }

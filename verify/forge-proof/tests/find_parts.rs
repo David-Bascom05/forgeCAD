@@ -22,7 +22,10 @@ fn no_part_does_worse() {
     std::panic::set_hook(Box::new(|_| {}));
     let next = AtomicUsize::new(0);
     let worse: Vec<String> = std::thread::scope(|s| {
-        let workers: Vec<_> = (0..2)
+        let threads = std::thread::available_parallelism()
+            .map_or(2, |n| n.get())
+            .clamp(2, 4);
+        let workers: Vec<_> = (0..threads)
             .map(|_| {
                 s.spawn(|| {
                     let mut out = Vec::new();

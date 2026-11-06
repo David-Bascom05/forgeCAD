@@ -822,25 +822,34 @@ mod tests {
             fold: 1.0,
             ..Audit::default()
         };
-        let (mut cases, mut thin, mut split_ok) = (0, 0, 0);
-        for case in 0..100u64 {
-            let n = 3 + (case % 3) as usize;
-            let az: Vec<f64> = (0..n)
-                .map(|i| (i as f64 + rng.range(-0.15, 0.15)) * TAU / n as f64)
-                .collect();
-            // pyramids, and from four edges saddles of alternating heights
-            let saddle = n >= 4 && case % 2 == 1;
-            let h: Vec<f64> = (0..n)
-                .map(|i| {
-                    if saddle && i % 2 == 1 {
-                        rng.range(0.2, 0.8)
-                    } else {
-                        -rng.range(0.4, 1.5)
-                    }
-                })
-                .collect();
-            let radii: Vec<f64> = (0..n).map(|_| rng.range(0.5, 2.0)).collect();
-            for c in [cone(&az, &h, &radii), flipped(&az, &h, &radii)] {
+        // the corners drawn in turn, then each checked on its own (a check takes no draws)
+        type Drawn = (u64, usize, Vec<f64>, Vec<f64>, Vec<f64>);
+        let drawn: Vec<Drawn> = (0..100u64)
+            .map(|case| {
+                let n = 3 + (case % 3) as usize;
+                let az: Vec<f64> = (0..n)
+                    .map(|i| (i as f64 + rng.range(-0.15, 0.15)) * TAU / n as f64)
+                    .collect();
+                // pyramids, and from four edges saddles of alternating heights
+                let saddle = n >= 4 && case % 2 == 1;
+                let h: Vec<f64> = (0..n)
+                    .map(|i| {
+                        if saddle && i % 2 == 1 {
+                            rng.range(0.2, 0.8)
+                        } else {
+                            -rng.range(0.4, 1.5)
+                        }
+                    })
+                    .collect();
+                let radii: Vec<f64> = (0..n).map(|_| rng.range(0.5, 2.0)).collect();
+                (case, n, az, h, radii)
+            })
+            .collect();
+        // each corner both ways: (thin, the patch's audit, the split's, convex count)
+        let checked = forge_math::par::map(drawn.len(), |i| {
+            let (case, n, az, h, radii) = &drawn[i];
+            let (case, n) = (*case, *n);
+            [cone(az, h, radii), flipped(az, h, radii)].map(|c| {
                 let k = kinds(&c);
                 let what = format!("case {case} n {n} convex {k:?}");
                 let b = build(&c);
@@ -849,24 +858,27 @@ mod tests {
                 let (lo, hi) = len
                     .iter()
                     .fold((f64::INFINITY, 0.0f64), |(a, b), &l| (a.min(l), b.max(l)));
-                // a nearly flat edge's section
-                if lo < 0.05 * hi {
-                    thin += 1;
-                }
                 // one patch does
                 let (a, pieces) = check_hole(&b.sides, &what, 2000 + case, false).expect("built");
                 assert_eq!(pieces, 1, "{what}");
-                worst.boundary = worst.boundary.max(a.boundary);
-                worst.normal = worst.normal.max(a.normal);
-                worst.fold = worst.fold.min(a.fold);
                 // and so do the pieces of the split it falls back to
-                if let Some((a, _)) = check_hole(&b.sides, &what, 2000 + case, true) {
-                    worst.normal = worst.normal.max(a.normal);
-                    split_ok += 1;
-                }
-                cases += 1;
-                seen.insert((n, k.iter().filter(|&&x| x).count()));
+                let split = check_hole(&b.sides, &what, 2000 + case, true).map(|(a, _)| a);
+                // a nearly flat edge's section
+                (lo < 0.05 * hi, a, split, (n, k.iter().filter(|&&x| x).count()))
+            })
+        });
+        let (mut cases, mut thin, mut split_ok) = (0, 0, 0);
+        for (is_thin, a, split, kind) in checked.into_iter().flatten() {
+            thin += usize::from(is_thin);
+            worst.boundary = worst.boundary.max(a.boundary);
+            worst.normal = worst.normal.max(a.normal);
+            worst.fold = worst.fold.min(a.fold);
+            if let Some(a) = split {
+                worst.normal = worst.normal.max(a.normal);
+                split_ok += 1;
             }
+            cases += 1;
+            seen.insert(kind);
         }
         eprintln!("{cases} cases, {thin} thin, {split_ok} split, worst {worst:?}");
         assert!(

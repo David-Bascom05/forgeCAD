@@ -1270,6 +1270,8 @@ mod tests {
         // Brute force: sample the line densely, count crossings of the surface by
         // the sign of (point - nearest).normal; compare with the crossing hits.
         let mut r = Rng::new(302);
+        // the lines drawn in turn, then each counted on its own (a count takes no draws)
+        let mut cases = vec![];
         for _ in 0..400 {
             for s in rand_surfaces(&mut r) {
                 if matches!(s, Surface::Cone(_)) {
@@ -1280,31 +1282,35 @@ mod tests {
                     LineSurface::Hits(h) => h,
                     LineSurface::OnSurface => continue,
                 };
-                let side = |t: f64| {
-                    let q = line.eval(t);
-                    let uv = s.project(q);
-                    let n = s.normal(uv).unwrap();
-                    n.dot(q - s.eval(uv))
-                };
-                let (lo, hi) = (-200.0, 200.0);
-                let n = 40_000;
-                let mut count = 0;
-                let mut prev = side(lo);
-                for i in 1..=n {
-                    let t = lo + (hi - lo) * i as f64 / n as f64;
-                    let cur = side(t);
-                    if (prev < 0.0) != (cur < 0.0) && (prev.abs() > 1e-6 || cur.abs() > 1e-6) {
-                        count += 1;
-                    }
-                    prev = cur;
-                }
-                let crossings = found
-                    .iter()
-                    .filter(|h| h.contact == Contact::Crossing && h.t > lo && h.t < hi)
-                    .count();
-                assert_eq!(crossings, count, "{s:?} {line:?} {found:?}");
+                cases.push((s, line, found));
             }
         }
+        forge_math::par::map(cases.len(), |i| {
+            let (s, line, found) = &cases[i];
+            let side = |t: f64| {
+                let q = line.eval(t);
+                let uv = s.project(q);
+                let n = s.normal(uv).unwrap();
+                n.dot(q - s.eval(uv))
+            };
+            let (lo, hi) = (-200.0, 200.0);
+            let n = 40_000;
+            let mut count = 0;
+            let mut prev = side(lo);
+            for i in 1..=n {
+                let t = lo + (hi - lo) * i as f64 / n as f64;
+                let cur = side(t);
+                if (prev < 0.0) != (cur < 0.0) && (prev.abs() > 1e-6 || cur.abs() > 1e-6) {
+                    count += 1;
+                }
+                prev = cur;
+            }
+            let crossings = found
+                .iter()
+                .filter(|h| h.contact == Contact::Crossing && h.t > lo && h.t < hi)
+                .count();
+            assert_eq!(crossings, count, "{s:?} {line:?} {found:?}");
+        });
     }
 
     #[test]

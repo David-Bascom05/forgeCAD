@@ -394,61 +394,62 @@ fn refusals_are_typed() {
 #[test]
 fn fuzz_random_profiles() {
     let mut rng = Rng::new(0xc0_7012);
-    let (mut built, mut refused, mut clashes) = (0, 0, 0);
-    let mut worst_time = 0.0f64;
-    for seed in 0..250 {
-        let t = rng.range(0.5, 3.0);
-        let k = rng.range(0.25, 0.5);
-        let g = gauge(t, rng.range(0.5, 2.0) * t, k);
-        let n = 2 + rng.below(4);
-        let mut moves = vec![];
-        for i in 0..n {
-            let len = rng.range(8.0, 40.0);
-            let th = if i + 1 == n {
-                0.0
-            } else {
-                rng.range(0.15, 2.8) * if rng.bool() { 1.0 } else { -1.0 }
-            };
-            let r = if rng.bool() {
-                Some(rng.range(1.2, 4.0) * t)
-            } else {
-                None
-            };
-            moves.push((len, th, r));
-        }
-        let hand = if rng.bool() { Hand::Left } else { Hand::Right };
-        let w = rng.range(5.0, 40.0);
-        let prof = profile(
-            Point2::new(rng.range(-5.0, 5.0), 0.0),
-            rng.range(-3.0, 3.0),
-            &moves,
-        );
-        let s = match Sheet::contour(FeatureId(9), g.clone(), Frame::WORLD, &prof, w, hand, 0.0) {
+    // the cases drawn in turn, then built side by side (a build takes nothing from the draws)
+    let cases: Vec<_> = (0..250)
+        .map(|seed| {
+            let t = rng.range(0.5, 3.0);
+            let k = rng.range(0.25, 0.5);
+            let g = gauge(t, rng.range(0.5, 2.0) * t, k);
+            let n = 2 + rng.below(4);
+            let mut moves = vec![];
+            for i in 0..n {
+                let len = rng.range(8.0, 40.0);
+                let th = if i + 1 == n {
+                    0.0
+                } else {
+                    rng.range(0.15, 2.8) * if rng.bool() { 1.0 } else { -1.0 }
+                };
+                let r = if rng.bool() {
+                    Some(rng.range(1.2, 4.0) * t)
+                } else {
+                    None
+                };
+                moves.push((len, th, r));
+            }
+            let hand = if rng.bool() { Hand::Left } else { Hand::Right };
+            let w = rng.range(5.0, 40.0);
+            let prof = profile(
+                Point2::new(rng.range(-5.0, 5.0), 0.0),
+                rng.range(-3.0, 3.0),
+                &moves,
+            );
+            (seed, t, k, g, moves, hand, w, prof)
+        })
+        .collect();
+    // per case: refused, clashed, or built in this long
+    let outcomes = forge_math::par::map(cases.len(), |i| {
+        let (seed, t, k, g, moves, hand, w, prof) = &cases[i];
+        let (seed, t, k, hand, w) = (*seed, *t, *k, *hand, *w);
+        let s = match Sheet::contour(FeatureId(9), g.clone(), Frame::WORLD, prof, w, hand, 0.0) {
             Ok((s, _)) => s,
             Err(SheetError::Contour {
                 why: ContourError::WallTooShort { .. } | ContourError::RadiusBelowMin { .. },
                 ..
             })
-            | Err(SheetError::WallTooShort { .. }) => {
-                refused += 1;
-                continue;
-            }
+            | Err(SheetError::WallTooShort { .. }) => return (1, 0, None),
             Err(e) => panic!("seed {seed}: {e:?}"),
         };
         let at = Instant::now();
         let fold = match build_with(&s, Map::Folded) {
             Ok(b) => b,
-            Err(SheetError::FoldedClash { .. }) => {
-                clashes += 1;
-                continue;
-            }
+            Err(SheetError::FoldedClash { .. }) => return (0, 1, None),
             Err(e) => panic!("seed {seed}: {e:?}"),
         };
         let flat = build_with(&s, Map::Flat).unwrap();
-        worst_time = worst_time.max(at.elapsed().as_secs_f64());
+        let took = at.elapsed().as_secs_f64();
         checked(&fold.body);
         checked(&flat.body);
-        let e = closed(&g, k, &moves, hand, w);
+        let e = closed(g, k, moves, hand, w);
         let ((vf, ef), (vl, el)) = (volume(&fold.body), volume(&flat.body));
         assert!(
             (vf - e.v_fold).abs() <= ef + 1e-9 * e.v_fold,
@@ -461,8 +462,12 @@ fn fuzz_random_profiles() {
             e.v_flat
         );
         round_trip(&s, &fold, &flat, t);
-        built += 1;
-    }
+        (0, 0, Some(took))
+    });
+    let refused: usize = outcomes.iter().map(|o| o.0).sum();
+    let clashes: usize = outcomes.iter().map(|o| o.1).sum();
+    let built = outcomes.iter().filter(|o| o.2.is_some()).count();
+    let worst_time = outcomes.iter().filter_map(|o| o.2).fold(0.0f64, f64::max);
     println!(
         "{built} built, {refused} refused, {clashes} clash; slowest fold+flat {:.0} us",
         worst_time * 1e6

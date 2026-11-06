@@ -67,16 +67,23 @@ fn texts() -> Vec<String> {
 
 #[test]
 fn lexing_is_deterministic() {
-    for src in texts() {
-        let a = syntax::lex(&src);
-        assert_eq!(a, syntax::lex(&src), "{src:?}");
-        // and on another thread (wasi has none)
-        if !cfg!(target_os = "wasi") {
-            let b = std::thread::scope(|s| s.spawn(|| syntax::lex(&src)).join().expect("thread"));
-            assert_eq!(a, b, "{src:?}");
+    let srcs = texts();
+    // every text lexed again on another thread (wasi has none)
+    let other: Option<Vec<_>> = (!cfg!(target_os = "wasi")).then(|| {
+        std::thread::scope(|s| {
+            s.spawn(|| srcs.iter().map(|src| syntax::lex(src)).collect())
+                .join()
+                .expect("thread")
+        })
+    });
+    for (k, src) in srcs.iter().enumerate() {
+        let a = syntax::lex(src);
+        assert_eq!(a, syntax::lex(src), "{src:?}");
+        if let Some(other) = &other {
+            assert_eq!(a, other[k], "{src:?}");
         }
         // keeping the trivia does not change the tokens
-        assert_eq!(a, syntax::lex_lossless(&src).map(|(t, _)| t), "{src:?}");
+        assert_eq!(a, syntax::lex_lossless(src).map(|(t, _)| t), "{src:?}");
     }
 }
 
