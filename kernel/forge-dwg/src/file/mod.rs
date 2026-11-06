@@ -55,6 +55,8 @@ pub struct Drawing {
     pub objects: BTreeMap<u32, Object>,
     /// The other sections, as read.
     pub other: Vec<Extra>,
+    /// What didn't decode (those objects are kept as read).
+    pub warnings: Vec<String>,
 }
 
 impl Drawing {
@@ -152,8 +154,11 @@ pub fn read(buf: &[u8]) -> R<Drawing> {
     let list = d.class_list();
     let cl = crate::object::Classes { list: &list };
     for (handle, at) in r2000::read_map(&s.handles, 0, s.handles.len())? {
-        let o = crate::object::read_object(&s.objects, at, s.ver, &cl, None)
+        let (o, warn) = crate::object::read_object_lenient(&s.objects, at, s.ver, &cl)
             .map_err(|e| crate::bits::Bad(format!("{handle:#x}: {}", e.0)))?;
+        if let Some(w) = warn {
+            d.warnings.push(format!("{handle:#x} ({}): {w}", cl.name(o.type_code).unwrap_or("?")));
+        }
         d.objects.insert(handle, o);
     }
     Ok(d)
@@ -163,6 +168,7 @@ pub fn read(buf: &[u8]) -> R<Drawing> {
 pub fn write(d: &Drawing) -> R<Vec<u8>> {
     match d.ver() {
         Version::R2000 => r2000::write(d),
-        v => bad(format!("{v:?} files are not written yet")),
+        Version::R2007 => bad("R2007 files are not written yet"),
+        _ => r2004::write(d),
     }
 }

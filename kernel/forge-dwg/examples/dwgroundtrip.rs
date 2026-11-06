@@ -13,6 +13,9 @@ fn main() {
                 continue;
             }
         };
+        if !d.warnings.is_empty() {
+            println!("{name}: {} objects kept raw (first: {})", d.warnings.len(), d.warnings[0]);
+        }
         let bytes = match forge_dwg::file::write(&d) {
             Ok(b) => b,
             Err(e) => {
