@@ -122,8 +122,18 @@ pub fn mass_rel(body: &Body, rel: f64) -> Result<MassProps, MassError> {
     let (mut t, mut e) = ([0.0; NF], [0.0; NF]);
     let mut faces = Vec::new();
     let mut loosest = (FaceId(0), 0.0f64);
-    for f in body.face_ids() {
-        let (v, er) = face_integrals(body, f, c, size, rel).map_err(|why| MassError { face: f, why })?;
+    // each face's integrals on all cores, summed in face order: the same sums as one by one; one
+    // by one, in order, under a budget (it is spent face after face on this thread) or for a few
+    // faces (not worth the threads)
+    let ids: Vec<FaceId> = body.face_ids().collect();
+    let one = |k: usize| face_integrals(body, ids[k], c, size, rel);
+    let each: Box<dyn Iterator<Item = _>> = if forge_geom::budget::left() == u64::MAX && ids.len() >= 8 {
+        Box::new(forge_math::par::map(ids.len(), one).into_iter())
+    } else {
+        Box::new((0..ids.len()).map(one))
+    };
+    for (&f, got) in ids.iter().zip(each) {
+        let (v, er) = got.map_err(|why| MassError { face: f, why })?;
         for k in 0..NF {
             t[k] += v[k];
             e[k] += er[k];
