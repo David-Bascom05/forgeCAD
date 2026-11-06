@@ -117,7 +117,7 @@ pub fn sections(buf: &[u8]) -> R<Sections> {
             let mut other = vec![];
             for s in &l.sections {
                 if !s.name.is_empty() && !main.contains(&s.name.as_str()) {
-                    other.push((s.name.clone(), take(&s.name)?));
+                    other.push(Extra { name: s.name.clone(), data: take(&s.name)?, ..Extra::default() });
                 }
             }
             let [header, classes, handles, objects] = main.map(take);
@@ -130,6 +130,7 @@ pub fn sections(buf: &[u8]) -> R<Sections> {
                 handles: handles?,
                 objects: objects?,
                 other,
+                file_header: buf[..0x80.min(buf.len())].to_vec(),
             })
         }
         _ => {
