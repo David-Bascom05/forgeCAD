@@ -1378,6 +1378,10 @@ fn turns(a: Vec3, b: Vec3, female: bool) -> bool {
     !flat & ((a.dot(b) < 0.0) | (past & was))
 }
 
+/// The L-BFGS iterations a relaxing starts with before Newton's: measured, the trays, the boxes
+/// and the Mooney-Rivlin bubble take fewer instructions so than by Newton from the start.
+const QUASI: usize = 30;
+
 /// Minimises the sheet's energy at pressure `p` over its free nodes, stopping each node that
 /// crosses into the tool where it crosses. Returns the iterations spent.
 #[allow(clippy::too_many_arguments)]
@@ -1414,39 +1418,77 @@ fn relax(
     // the slack part's step would otherwise shrink everyone's to nothing
     let mut damp = 0.0;
     let loaded = p != 0.0 || sheet.volume.is_some();
+    // a step a few L-BFGS iterations settle (most of a mild part's) costs less so than one
+    // factor: the first QUASI are L-BFGS (6 pairs kept), Newton after; the plug's steps (its
+    // stiff spring) go to Newton at once
+    let (mut ss, mut ys): (Vec<Vec<Vec3>>, Vec<Vec<Vec3>>) = (vec![], vec![]);
     for it in 0..max_it {
         let gmax = g.iter().map(|v| v.length()).fold(0.0, f64::max);
         if gmax <= tol {
             return it;
         }
+        let quasi = sheet.plug.is_none() && it < QUASI;
         let (mut d, mut slope);
         let mut tries = 0;
-        loop {
-            d = sheet.newton(x, p, &g, chord, damp).unwrap_or_default();
+        if quasi {
+            let mut q = g.clone();
+            let mut al = vec![0.0; ss.len()];
+            for k in (0..ss.len()).rev() {
+                let rho = 1.0 / dot(&ys[k], &ss[k]);
+                al[k] = rho * dot(&ss[k], &q);
+                for (qi, yi) in q.iter_mut().zip(&ys[k]) {
+                    *qi -= *yi * al[k];
+                }
+            }
+            let gamma = match (ss.last(), ys.last()) {
+                (Some(s), Some(y)) => dot(s, y) / dot(y, y),
+                _ => step_cap / gmax,
+            };
+            q.iter_mut().for_each(|v| *v = *v * gamma);
+            for k in 0..ss.len() {
+                let rho = 1.0 / dot(&ys[k], &ss[k]);
+                let beta = rho * dot(&ys[k], &q);
+                for (qi, si) in q.iter_mut().zip(&ss[k]) {
+                    *qi += *si * (al[k] - beta);
+                }
+            }
+            d = q.iter().map(|v| -*v).collect::<Vec<Vec3>>();
             slope = dot(&d, &g);
-            if d.is_empty() || slope.is_nan() || slope >= 0.0 {
+            if slope.is_nan() || slope >= 0.0 {
                 d = g.iter().map(|v| -*v * (step_cap / gmax)).collect();
                 slope = dot(&d, &g);
-                break;
+                ss.clear();
+                ys.clear();
             }
-            let far = d.iter().map(|v| v.length()).fold(0.0, f64::max);
-            if far <= 20.0 * radius || loaded || tries >= 4 {
-                break;
+        } else {
+            loop {
+                d = sheet.newton(x, p, &g, chord, damp).unwrap_or_default();
+                slope = dot(&d, &g);
+                if d.is_empty() || slope.is_nan() || slope >= 0.0 {
+                    d = g.iter().map(|v| -*v * (step_cap / gmax)).collect();
+                    slope = dot(&d, &g);
+                    break;
+                }
+                let far = d.iter().map(|v| v.length()).fold(0.0, f64::max);
+                if far <= 20.0 * radius || loaded || tries >= 4 {
+                    break;
+                }
+                // a node of no stiffness moves g / lambda: lambda to hold the furthest to ten radii
+                let need = d
+                    .iter()
+                    .zip(&g)
+                    .filter(|(v, _)| v.length() > 20.0 * radius)
+                    .map(|(_, f)| f.length() / (10.0 * radius))
+                    .fold(0.0, f64::max);
+                damp = (need / sheet.solver.mean.max(1e-300)).max(10.0 * damp).max(1e-6);
+                tries += 1;
             }
-            // a node of no stiffness moves g / lambda: lambda to hold the furthest to ten radii
-            let need = d
-                .iter()
-                .zip(&g)
-                .filter(|(v, _)| v.length() > 20.0 * radius)
-                .map(|(_, f)| f.length() / (10.0 * radius))
-                .fold(0.0, f64::max);
-            damp = (need / sheet.solver.mean.max(1e-300)).max(10.0 * damp).max(1e-6);
-            tries += 1;
         }
         // no node moves more than the radius (at most the cap) in one step
         let dmax = d.iter().map(|v| v.length()).fold(0.0, f64::max);
-        let mut a = if dmax > radius { radius / dmax } else { 1.0 };
-        chord = dmax > step_cap;
+        let reach_now = if quasi { step_cap } else { radius };
+        let mut a = if dmax > reach_now { reach_now / dmax } else { 1.0 };
+        chord = !quasi && dmax > step_cap;
         let mut taken = None;
         let mut stops: Vec<(usize, Vec3)> = vec![];
         for _ in 0..30 {
@@ -1511,6 +1553,8 @@ fn relax(
             };
             sheet.pool.keep();
             e = v;
+            ss.clear();
+            ys.clear();
             continue;
         };
         // the Newton model's fall over the step a d, -(a - a^2 / 2) slope (H d = -g), against the
@@ -1522,12 +1566,12 @@ fn relax(
         } else {
             1.0
         };
-        if ratio < 0.25 {
+        if !quasi && ratio < 0.25 {
             radius = (0.5 * a * dmax).max(1e-3 * step_cap);
-        } else if ratio > 0.75 {
+        } else if !quasi && ratio > 0.75 {
             radius = (2.0 * radius).min(step_cap);
         }
-        if ratio > 0.75 {
+        if !quasi && ratio > 0.75 {
             damp = if damp <= 1e-6 { 0.0 } else { 0.1 * damp };
         }
         let stopped = !stops.is_empty();
@@ -1539,6 +1583,19 @@ fn relax(
             match sheet.energy(&trial, p, Some(&mut g2)) {
                 Some(v) => e2 = v,
                 None => return it,
+            }
+            ss.clear();
+            ys.clear();
+        } else if quasi {
+            ss.push((0..n).map(|i| trial[i] - x[i]).collect());
+            ys.push((0..n).map(|i| g2[i] - g[i]).collect());
+            if ss.len() > 6 {
+                ss.remove(0);
+                ys.remove(0);
+            }
+            if dot(ys.last().expect("pushed"), ss.last().expect("pushed")) <= 0.0 {
+                ss.clear();
+                ys.clear();
             }
         }
         x.copy_from_slice(&trial);

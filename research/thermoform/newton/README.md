@@ -62,3 +62,15 @@ L-BFGS as shipped: 14991 iterations, 22 s; every drape step stopped at its 150-i
 error 8.00. The two converged solvers differ by where the sticking contact lands within a load
 step (the minimiser's path); refining the drape 6 -> 24 -> 96 steps brings them together:
 Newton 8.00 / 8.28 / 8.63, L-BFGS 8.43 / 8.54 / 8.52.
+
+## Where L-BFGS still wins: the first iterations of a step
+
+Single-thread instruction counts (`perf stat -e instructions:u`, FORGECAD_THREADS=1,
+FORGECAD_CACHE=off, whole scoreboard run of the case at 56 nodes): pure Newton was slower on the
+Buntinx trays (0.87-0.97x), the Erdogan box (0.89x) and the Mooney-Rivlin bubble (0.73x), where
+a load step settles in a few cheap L-BFGS iterations and one factor costs more. Each relaxing now
+starts with up to 30 L-BFGS iterations (6 pairs) and turns to Newton after; the plug's steps go to
+Newton at once (an L-BFGS start there undid the damping: 2094 iterations against 1019). Mooney-
+Rivlin 70.6 -> 55.3 G, the box 31.2 -> 30.1 G; the trays' solve stays about 0.8 G over L-BFGS's
+(1.8 G of a 52 G run, the rest the simulated part).
+
