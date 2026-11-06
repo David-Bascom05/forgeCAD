@@ -800,9 +800,12 @@ impl Spline {
         take(range.hi, &mut best);
         // the nearest box's seeds bound the answer; a piece whose box lies clearly past that bound
         // holds no seed that could win or tie, so skipping it leaves the same seed winning
+        // (an end piece carried on past the curve's end leaves its box: no bound there)
+        let gap =
+            |i: usize, s0: f64, s1: f64| (s0 >= 0.0 && s1 <= 1.0).then(|| box_gap_sq(&self.boxes[i], p));
         let mut nearest = (f64::INFINITY, None);
-        for (i, ..) in self.over(range) {
-            let g = box_gap_sq(&self.boxes[i], p);
+        for (i, s0, s1) in self.over(range) {
+            let Some(g) = gap(i, s0, s1) else { continue };
             if g < nearest.0 {
                 nearest = (g, Some(i));
             }
@@ -815,8 +818,8 @@ impl Spline {
         }
         let bound = bound * (1.0 + 1e-9) + 1e-300;
         // the joints too: a foot exactly at one is no sign change inside either piece
-        for (i, ..) in self.over(range) {
-            if box_gap_sq(&self.boxes[i], p) > bound {
+        for (i, s0, s1) in self.over(range) {
+            if gap(i, s0, s1).is_some_and(|g| g > bound) {
                 continue;
             }
             for t in seeds(i) {
