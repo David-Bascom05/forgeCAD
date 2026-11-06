@@ -1,10 +1,12 @@
 //! Each object type's own fields (chapter 20.4), one description for reading and writing.
 
 mod entities;
+mod entities_b;
 mod objects;
 mod tables;
 
 pub use entities::*;
+pub use entities_b::*;
 pub use objects::*;
 pub use tables::*;
 
@@ -70,11 +72,22 @@ data! {
         Arc = 17,
         Circle = 18,
         Line = 19,
+        DimOrdinate = 20,
+        DimLinear = 21,
+        DimAligned = 22,
+        DimAng3Pt = 23,
+        DimAng2Ln = 24,
+        DimRadius = 25,
+        DimDiameter = 26,
         Point = 27,
         Solid = 31,
         Ellipse = 35,
         Spline = 36,
         Dictionary = 42,
+        MText = 44,
+        Leader = 45,
+        Tolerance = 46,
+        MLine = 47,
         BlockControl = 48,
         BlockHeader = 49,
         LayerControl = 50,
@@ -94,16 +107,26 @@ data! {
         VxControl = 70,
         MlineStyle = 73,
         LwPolyline = 77,
+        Hatch = 78,
         Placeholder = 80,
         Layout = 82,
     }
     only_classes {
         DictionaryWdflt,
+        ArcDimension,
+        LargeRadialDimension,
+        Image,
+        Wipeout,
     }
     classes {
         "ACDBDICTIONARYWDFLT" => DictionaryWdflt,
         "ACDBPLACEHOLDER" => Placeholder,
+        "ARC_DIMENSION" => ArcDimension,
+        "HATCH" => Hatch,
+        "IMAGE" => Image,
+        "LARGE_RADIAL_DIMENSION" => LargeRadialDimension,
         "LAYOUT" => Layout,
         "LWPOLYLINE" => LwPolyline,
+        "WIPEOUT" => Wipeout,
     }
 }
