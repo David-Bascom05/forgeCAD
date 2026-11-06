@@ -91,6 +91,15 @@ pub trait Io {
     fn rest(&mut self, v: &mut Vec<u8>, n: &mut usize) -> R<()>;
     /// Whether another handle can follow in the handle stream (a proxy's run to the end).
     fn more_handles(&self) -> bool;
+    /// Reading: the bits left in the data stream (the few fields that run to its end). Writing:
+    /// None.
+    fn data_left(&self) -> Option<usize> {
+        None
+    }
+    /// Reading: the bits left in the handle stream, its padding included. Writing: None.
+    fn hdl_left(&self) -> Option<usize> {
+        None
+    }
 
     fn rd2(&mut self, v: &mut [f64; 2]) -> R<()> {
         self.rd(&mut v[0])?;
@@ -199,6 +208,12 @@ impl Io for Reader<'_> {
     const READ: bool = true;
     fn ver(&self) -> Version {
         self.ver
+    }
+    fn data_left(&self) -> Option<usize> {
+        Some(self.data_end.saturating_sub(self.data.p))
+    }
+    fn hdl_left(&self) -> Option<usize> {
+        Some((self.hdl.d.len() * 8).saturating_sub(self.hdl.p))
     }
     fn b(&mut self, v: &mut bool) -> R<()> {
         *v = self.data.b()?;

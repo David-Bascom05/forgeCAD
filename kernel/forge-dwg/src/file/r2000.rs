@@ -60,9 +60,9 @@ pub fn classes(sec: &[u8], ver: Version, maint: u8) -> R<Vec<Class>> {
         // the size in bits (counted from itself), then the classes, their strings at the end
         let bits = rl(data, 0)? as usize;
         let (strs, end) = string_stream(data, bits)?;
-        (Reader { ver, data: BitReader::new(data, 4), strs, hdl: BitReader::new(data, 0), base: 0 }, end)
+        (Reader { ver, data: BitReader::new(data, 4), strs, hdl: BitReader::new(data, 0), base: 0, data_end: end }, end)
     } else {
-        (Reader { ver, data: BitReader::new(data, 0), strs: None, hdl: BitReader::new(data, 0), base: 0 }, data.len() * 8)
+        (Reader { ver, data: BitReader::new(data, 0), strs: None, hdl: BitReader::new(data, 0), base: 0, data_end: data.len() * 8 }, data.len() * 8)
     };
     if ver >= Version::R2004 {
         let (mut max, mut z, mut t) = (0i16, 0u8, false);

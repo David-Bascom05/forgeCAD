@@ -4,12 +4,14 @@ mod entities;
 mod entities_a;
 mod entities_b;
 mod objects;
+mod objects_b;
 mod tables;
 
 pub use entities::*;
 pub use entities_a::*;
 pub use entities_b::*;
 pub use objects::*;
+pub use objects_b::*;
 pub use tables::*;
 
 use crate::bits::R;
@@ -122,7 +124,9 @@ data! {
         LtypeControl = 56,
         Ltype = 57,
         ViewControl = 60,
+        View = 61,
         UcsControl = 62,
+        Ucs = 63,
         VportControl = 64,
         Vport = 65,
         AppIdControl = 66,
@@ -130,10 +134,13 @@ data! {
         DimStyleControl = 68,
         DimStyle = 69,
         VxControl = 70,
+        Vx = 71,
+        Group = 72,
         MlineStyle = 73,
         Ole2Frame = 74,
         LwPolyline = 77,
         Hatch = 78,
+        Xrecord = 79,
         Placeholder = 80,
         Layout = 82,
         ProxyEntity = 498,
@@ -145,6 +152,21 @@ data! {
         LargeRadialDimension,
         Image,
         Wipeout,
+        DictionaryVar,
+        Scale,
+        IdBuffer,
+        LayerIndex,
+        SpatialFilter,
+        SpatialIndex,
+        SortEntsTable,
+        ImageDef,
+        ImageDefReactor,
+        RasterVariables,
+        WipeoutVariables,
+        Field,
+        FieldList,
+        GeoData,
+        PlotSettings,
     }
     classes {
         "ACAD_PROXY_ENTITY" => ProxyEntity,
@@ -155,6 +177,22 @@ data! {
         "HATCH" => Hatch,
         "IMAGE" => Image,
         "LARGE_RADIAL_DIMENSION" => LargeRadialDimension,
+        "DICTIONARYVAR" => DictionaryVar,
+        "FIELD" => Field,
+        "FIELDLIST" => FieldList,
+        "GEODATA" => GeoData,
+        "IDBUFFER" => IdBuffer,
+        "IMAGEDEF" => ImageDef,
+        "IMAGEDEF_REACTOR" => ImageDefReactor,
+        "LAYER_INDEX" => LayerIndex,
+        "PLOTSETTINGS" => PlotSettings,
+        "RASTERVARIABLES" => RasterVariables,
+        "SCALE" => Scale,
+        "SORTENTSTABLE" => SortEntsTable,
+        "SPATIAL_FILTER" => SpatialFilter,
+        "SPATIAL_INDEX" => SpatialIndex,
+        "WIPEOUTVARIABLES" => WipeoutVariables,
+        "XRECORD" => Xrecord,
         "LAYOUT" => Layout,
         "LWPOLYLINE" => LwPolyline,
         "WIPEOUT" => Wipeout,

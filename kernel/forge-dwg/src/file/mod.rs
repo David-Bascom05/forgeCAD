@@ -82,7 +82,7 @@ pub fn sections(buf: &[u8]) -> R<Sections> {
         Version::R2007 => bad("R2007 files are not read yet"),
         _ => {
             let l = r2004::layout(buf)?;
-            let mut take = |name: &str| -> R<Vec<u8>> {
+            let take = |name: &str| -> R<Vec<u8>> {
                 r2004::section_data(buf, &l, name)?.ok_or(crate::bits::Bad(format!("no {name} section")))
             };
             let header = take("AcDb:Header")?;
