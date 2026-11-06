@@ -51,6 +51,7 @@ pub enum DwgCmd {
     PartsList,
     ExportPdf,
     ExportDxf,
+    ExportDwg,
     Fit,
     Update,
     NewSheet,
@@ -89,6 +90,7 @@ impl DwgCmd {
             DwgCmd::PartsList => "Parts List",
             DwgCmd::ExportPdf => "Export PDF",
             DwgCmd::ExportDxf => "Export DXF",
+            DwgCmd::ExportDwg => "Export DWG",
             DwgCmd::Fit => "Zoom All",
             DwgCmd::Update => "Update",
             DwgCmd::NewSheet => "New Sheet",
@@ -788,8 +790,8 @@ impl DrawingEnv {
         self.pts.clear();
         self.message.clear();
         match c {
-            DwgCmd::ExportPdf | DwgCmd::ExportDxf => {
-                self.export(c == DwgCmd::ExportPdf);
+            DwgCmd::ExportPdf | DwgCmd::ExportDxf | DwgCmd::ExportDwg => {
+                self.export(c);
                 return;
             }
             DwgCmd::Update => {
@@ -854,21 +856,24 @@ impl DrawingEnv {
         }
     }
 
-    fn export(&mut self, pdf: bool) {
+    fn export(&mut self, c: DwgCmd) {
         let Some(d) = &self.made else { return };
         let stem = self.path.strip_suffix(".fg").unwrap_or(&self.path).to_string();
-        let res = if pdf {
+        let res = if c == DwgCmd::ExportPdf {
             let out = format!("{stem}.pdf");
             std::fs::write(&out, forge_draw::pdf::pdf(&d.pages)).map(|_| out)
         } else {
+            let ext = if c == DwgCmd::ExportDwg { "dwg" } else { "dxf" };
             let mut last = Ok(String::new());
             for (k, p) in d.pages.iter().enumerate() {
                 let out = if d.pages.len() > 1 {
-                    format!("{stem}-{}.dxf", k + 1)
+                    format!("{stem}-{}.{ext}", k + 1)
                 } else {
-                    format!("{stem}.dxf")
+                    format!("{stem}.{ext}")
                 };
-                last = std::fs::write(&out, forge_draw::dxf::dxf(p)).map(|_| out);
+                let bytes =
+                    if ext == "dwg" { forge_draw::dwg::dwg(p) } else { forge_draw::dxf::dxf(p).into_bytes() };
+                last = std::fs::write(&out, bytes).map(|_| out);
             }
             last
         };
@@ -1536,7 +1541,7 @@ impl Shell {
             _ => vec![
                 (
                     "Export",
-                    vec![(ExportPdf, "export"), (ExportDxf, "export")],
+                    vec![(ExportPdf, "export"), (ExportDxf, "export"), (ExportDwg, "export")],
                     vec![],
                 ),
                 ("Update", vec![(Update, "check"), (Fit, "fit")], vec![]),

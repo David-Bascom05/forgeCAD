@@ -155,7 +155,7 @@ pub(super) fn flat_groups(s: &Shell) -> Vec<Group> {
             "Manage",
             vec![
                 tool("Bend Table", SheetCmd::BendTable, u.bend_table),
-                tool("Save Copy As DXF", SheetCmd::ExportDxf, u.dxf_open.is_some()),
+                tool("Save Copy As DXF/DWG", SheetCmd::ExportDxf, u.dxf_open.is_some()),
             ],
             vec![],
         ),
@@ -1158,7 +1158,7 @@ impl Shell {
             ctx,
             "sheet:dxf",
             "dxf",
-            "Flat Pattern DXF Export Options",
+            "Flat Pattern DXF/DWG Export Options",
             (pos2(v.left() + 16.0, v.top() + 48.0), 480.0),
             |ui, places| {
                 ui.horizontal(|ui| {
@@ -1170,12 +1170,17 @@ impl Shell {
                     }
                 });
                 ui.horizontal(|ui| {
-                    label(ui, &t, "Version");
-                    ui.label(
-                        egui::RichText::new("AutoCAD 2000 DXF, mm")
-                            .font(sans(12.0))
-                            .color(t.ink),
-                    );
+                    label(ui, &t, "Format");
+                    // the file's extension says which
+                    let dwg = c.path.to_lowercase().ends_with(".dwg");
+                    for (name, want) in [("AutoCAD 2000 DXF, mm", false), ("AutoCAD 2000 DWG, mm", true)] {
+                        if ui.selectable_label(dwg == want, egui::RichText::new(name).font(sans(12.0))).clicked()
+                            && dwg != want
+                        {
+                            let stem = c.path.rsplit_once('.').map_or(c.path.clone(), |(s, _)| s.to_string());
+                            c.path = format!("{stem}.{}", if want { "dwg" } else { "dxf" });
+                        }
+                    }
                 });
                 section(ui, &t, "Layers");
                 egui::Grid::new("dxf-layers")

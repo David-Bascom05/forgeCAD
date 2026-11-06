@@ -310,6 +310,27 @@ fn num(rest: &[(i32, String)], code: i32) -> f64 {
 }
 
 #[test]
+fn dwg_reads_back_with_what_the_dxf_has() {
+    // the same pattern as DWG: the same lines and circles on the same layers
+    let r = clean("holes");
+    let d = forge_dwg::file::read(&r.sheets[0].dwg().expect("a pattern")).expect("a DWG");
+    assert!(d.warnings.is_empty());
+    let layer = |o: &forge_dwg::object::Object| {
+        let h = o.ent.as_ref().map_or(0, |e| e.layer.handle);
+        match d.objects.get(&h).map(|l| &l.data) {
+            Some(forge_dwg::types::Data::Layer(l)) => l.entry.name.text(),
+            _ => String::new(),
+        }
+    };
+    let count = |k: &str, l: &str| {
+        d.objects.values().filter(|o| o.is_entity() && o.data.name() == k && layer(o) == l).count()
+    };
+    assert_eq!(count("Line", "CUT"), 4);
+    assert_eq!(count("Circle", "CUT"), 3);
+    assert_eq!(count("Line", "BEND"), 1);
+}
+
+#[test]
 fn dxf_reads_back_as_the_flat() {
     // the holes part: lines and circles; a hole across the bend shows whole on the flat
     let r = clean("holes");

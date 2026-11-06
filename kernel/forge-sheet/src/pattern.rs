@@ -652,3 +652,202 @@ fn bounds(p: &Pattern) -> (Point2, Point2) {
     }
     (lo, hi)
 }
+
+/// `dxf_noted` as an AutoCAD R2000 DWG.
+pub fn dwg_noted(p: &Pattern, part: &str) -> Vec<u8> {
+    dwg_layered(p, Some(part), &DxfLayers::default())
+}
+
+/// `dxf_layered` as an AutoCAD R2000 DWG: the same layers, curves (lines, arcs, circles and the
+/// trims' own NURBS, exactly), notes, hits and forms, written natively by forge-dwg.
+pub fn dwg_layered(p: &Pattern, part: Option<&str>, l: &DxfLayers) -> Vec<u8> {
+    use forge_dwg::{Doc, Entity, HAlign, Layer, Shape, Weight};
+    let notes = part.filter(|_| l.notes.is_some());
+    let pt = |q: Point2| [q.x, q.y];
+    let mut layers = vec![Layer {
+        name: "0".into(),
+        colour: 7,
+        line_type: "Continuous".into(),
+        weight: Weight::Default,
+    }];
+    let asked = [
+        (&l.outer, 7, true),
+        (&l.inner, 7, true),
+        (&l.bend_up, 1, true),
+        (&l.bend_down, 1, true),
+        (&l.tangent, 8, true),
+        (&l.punch, 5, true),
+        (&l.form, 6, !p.forms.is_empty()),
+        (&l.notes, 3, notes.is_some()),
+    ];
+    for (name, colour, want) in asked {
+        if let Some(n) = name.as_deref().filter(|_| want)
+            && !layers.iter().any(|x| x.name == n)
+        {
+            layers.push(Layer {
+                name: n.into(),
+                colour,
+                line_type: "Continuous".into(),
+                weight: Weight::Default,
+            });
+        }
+    }
+    let mut ents: Vec<Entity> = vec![];
+    let mut curve = |c: &Curve2, layer: &str, ents: &mut Vec<Entity>| {
+        let shape = match c {
+            Curve2::Line { a, b } => Shape::Line { a: pt(*a), b: pt(*b) },
+            Curve2::Arc { c, r, start, sweep } => {
+                if sweep.abs() >= dmath::TAU * (1.0 - 1e-12) {
+                    Shape::Circle { c: pt(*c), r: *r }
+                } else {
+                    let (lo, hi) = if *sweep > 0.0 {
+                        (*start, start + sweep)
+                    } else {
+                        (start + sweep, *start)
+                    };
+                    Shape::Arc {
+                        c: pt(*c),
+                        r: *r,
+                        start: lo,
+                        end: hi,
+                    }
+                }
+            }
+            Curve2::Spline {
+                degree,
+                knots,
+                points,
+                weights,
+            } => Shape::Spline {
+                degree: *degree as u32,
+                knots: knots.clone(),
+                points: points.iter().map(|q| pt(*q)).collect(),
+                weights: weights.clone(),
+            },
+        };
+        ents.push(Entity {
+            layer: layer.into(),
+            shape,
+        });
+    };
+    let outer = outer_contour(p);
+    for (k, cs) in p.contours.iter().enumerate() {
+        if let Some(layer) = if Some(k) == outer { &l.outer } else { &l.inner } {
+            for c in cs {
+                curve(c, layer, &mut ents);
+            }
+        }
+    }
+    for b in &p.bends {
+        if let Some(layer) = if b.angle >= 0.0 { &l.bend_up } else { &l.bend_down } {
+            curve(&Curve2::Line { a: b.a, b: b.b }, layer, &mut ents);
+        }
+    }
+    if let Some(layer) = &l.tangent {
+        for b in &p.bends {
+            for (a, e) in tangent_lines(b) {
+                curve(&Curve2::Line { a, b: e }, layer, &mut ents);
+            }
+        }
+    }
+    let notes_layer = l.notes.as_deref().unwrap_or(NOTES_LAYER);
+    let text = |s: String, at: Point2, rad: f64, h: f64, layer: &str| Entity {
+        layer: layer.into(),
+        shape: Shape::Text {
+            at: pt(at),
+            h,
+            angle: rad,
+            align: HAlign::Left,
+            text: s,
+        },
+    };
+    if let Some(part) = notes {
+        for b in &p.bends {
+            // along the line, read left to right, a little off it (as the DXF has it)
+            let d = b.b - b.a;
+            let mut ang = dmath::atan2(d.y, d.x);
+            if ang > dmath::PI / 2.0 + 1e-9 {
+                ang -= dmath::PI;
+            } else if ang <= -dmath::PI / 2.0 + 1e-9 {
+                ang += dmath::PI;
+            }
+            let (s, c) = dmath::sin_cos(ang);
+            let mid = b.a + d * 0.5;
+            let at = Point2::new(mid.x - s * NOTE_H * 0.5, mid.y + c * NOTE_H * 0.5);
+            ents.push(text(bend_note(b), at, ang, NOTE_H, notes_layer));
+        }
+        let (lo, _) = bounds(p);
+        ents.push(text(
+            part.to_string(),
+            Point2::new(lo.x, lo.y - 2.0 * NOTE_H),
+            0.0,
+            NOTE_H,
+            notes_layer,
+        ));
+    }
+    for layer in &l.punch {
+        for h in &p.hits {
+            ents.push(Entity {
+                layer: layer.clone(),
+                shape: Shape::Point { at: pt(h.at) },
+            });
+            ents.push(text(h.tool.clone(), h.at, h.angle, 1.0, layer));
+        }
+    }
+    if let Some(layer) = l.form.as_ref().filter(|_| !p.forms.is_empty()) {
+        for f in &p.forms {
+            let way = if f.up { "UP" } else { "DOWN" };
+            ents.push(Entity {
+                layer: layer.clone(),
+                shape: Shape::Point { at: pt(f.at) },
+            });
+            ents.push(text(format!("{} {way}", f.tool), f.at, f.angle, 1.0, layer));
+        }
+    }
+    let (lo, hi) = bounds(p);
+    forge_dwg::write(&Doc {
+        layers,
+        line_types: vec![],
+        entities: ents,
+        limits: ([lo.x, lo.y], [hi.x, hi.y]),
+        font: "txt".into(),
+    })
+}
+
+#[cfg(test)]
+mod dwg_tests {
+    use super::*;
+
+    #[test]
+    fn a_pattern_reads_back_as_dwg() {
+        let p = Pattern {
+            contours: vec![vec![
+                Curve2::Line {
+                    a: Point2::new(0.0, 0.0),
+                    b: Point2::new(100.0, 0.0),
+                },
+                Curve2::Arc {
+                    c: Point2::new(100.0, 10.0),
+                    r: 10.0,
+                    start: -dmath::PI / 2.0,
+                    sweep: dmath::PI,
+                },
+                Curve2::Line {
+                    a: Point2::new(100.0, 20.0),
+                    b: Point2::new(0.0, 0.0),
+                },
+            ]],
+            ..Pattern::default()
+        };
+        let d = forge_dwg::file::read(&dwg_noted(&p, "BRACKET")).unwrap();
+        assert!(d.warnings.is_empty());
+        assert!(d.layer("CUT").is_some() && d.layer("BEND_NOTES").is_some());
+        let n = |k: &str| {
+            d.objects
+                .values()
+                .filter(|o| o.is_entity() && o.data.name() == k)
+                .count()
+        };
+        assert_eq!((n("Line"), n("Arc"), n("Text")), (2, 1, 1));
+    }
+}

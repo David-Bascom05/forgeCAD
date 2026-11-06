@@ -239,7 +239,11 @@ impl Gui {
                 form,
                 notes,
             };
-            let text = forge_sheet::dxf_layered(p, Some(&s.note), &layers);
+            let text = if c.path.to_lowercase().ends_with(".dwg") {
+                forge_sheet::dwg_layered(p, Some(&s.note), &layers)
+            } else {
+                forge_sheet::dxf_layered(p, Some(&s.note), &layers).into_bytes()
+            };
             // a bare name goes beside the part
             let path = std::path::Path::new(&c.path);
             let out = if path.is_absolute() {
