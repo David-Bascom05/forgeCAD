@@ -1327,6 +1327,26 @@ fn assembly_asks(f: &File<'_>, reader: &Reader<'_>) -> usize {
     asks + used.values().map(|&k| k - 1).sum::<usize>()
 }
 
+/// The first n chars of x's Debug text, stopping there (a spline's whole text is megabytes).
+fn debug_head(x: &impl std::fmt::Debug, n: usize) -> String {
+    struct Head(String, usize);
+    impl std::fmt::Write for Head {
+        fn write_str(&mut self, s: &str) -> std::fmt::Result {
+            for c in s.chars() {
+                if self.1 == 0 {
+                    return Err(std::fmt::Error);
+                }
+                self.0.push(c);
+                self.1 -= 1;
+            }
+            Ok(())
+        }
+    }
+    let mut h = Head(String::new(), n);
+    let _ = std::fmt::write(&mut h, format_args!("{x:?}"));
+    h.0
+}
+
 /// How far a file's geometry misses itself, before anything is changed.
 fn measure_gaps(proto: &Proto, stats: &mut Stats) {
     for fa in &proto.faces {
@@ -1343,8 +1363,8 @@ fn measure_gaps(proto: &Proto, stats: &mut Stats) {
             let kind = |s: &str| s.split(['(', ' ']).next().unwrap_or("").to_string();
             let key = format!(
                 "{}/{}",
-                kind(&format!("{:?}", e.curve).chars().take(12).collect::<String>()),
-                kind(&format!("{:?}", fa.surface).chars().take(12).collect::<String>())
+                kind(&debug_head(&e.curve, 12)),
+                kind(&debug_head(&fa.surface, 12))
             );
             let en = stats.pairs.entry(key).or_insert((0, 0, 0.0));
             en.0 += 1;
