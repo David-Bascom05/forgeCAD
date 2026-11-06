@@ -1053,6 +1053,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-dwg"
+version = "0.1.0"
+dependencies = [
+ "forge-math",
+]
+
+[[package]]
 name = "forge-font"
 version = "0.1.0"
 dependencies = [
@@ -1149,6 +1156,7 @@ dependencies = [
  "forge-agent",
  "forge-doc",
  "forge-draw",
+ "forge-dwg",
  "forge-geom",
  "forge-lang",
  "forge-material",
