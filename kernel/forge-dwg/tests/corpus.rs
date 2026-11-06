@@ -98,3 +98,50 @@ fn written_bytes_are_the_same_on_every_target() {
     }
     assert_eq!(got, want);
 }
+
+#[test]
+fn edits_write_and_undo() {
+    use forge_dwg::edit::History;
+    use forge_dwg::types::{Circle, Line};
+    for v in VERSIONS {
+        let orig = file::read(&load(v)).unwrap();
+        let mut d = orig.clone();
+        let mut hist = History::default();
+        hist.begin();
+        let layer = d.add_layer(&mut hist, "FORGE_EDIT", 1).unwrap();
+        let ms = d.model_space();
+        let l = d
+            .add_entity(&mut hist, ms, layer, Data::Line(Line { end: [10.0, 20.0, 0.0], ..Line::default() }))
+            .unwrap();
+        d.add_entity(&mut hist, ms, layer, Data::Circle(Circle { radius: 3.0, ..Circle::default() })).unwrap();
+        let victim = *d
+            .objects
+            .iter()
+            .find(|(h, o)| **h != l && matches!(o.data, Data::Line(_)) && d.block_of(**h) == Some(ms))
+            .unwrap()
+            .0;
+        d.erase(&mut hist, victim).unwrap();
+        hist.end();
+        let lines = |d: &file::Drawing| d.objects.values().filter(|o| matches!(o.data, Data::Line(_))).count();
+        match file::write(&d) {
+            Ok(out) => {
+                let e = file::read(&out).unwrap();
+                assert_eq!(lines(&e), lines(&orig), "{v}: one line in, one out");
+                assert!(e.layer("forge_edit").is_some(), "{v}");
+                assert!(!e.objects.contains_key(&victim), "{v}");
+                // the space lists exactly its entities
+                if let Some(Data::BlockHeader(bh)) = e.objects.get(&ms).map(|o| &o.data)
+                    && !bh.owned.is_empty()
+                {
+                    assert!(bh.owned.iter().all(|h| e.objects.contains_key(&h.handle)), "{v}");
+                }
+            }
+            Err(x) if v == "2007" && x.0.contains("not written yet") => {}
+            Err(x) => panic!("{v}: {}", x.0),
+        }
+        assert!(hist.undo(&mut d));
+        assert!(d.objects.keys().eq(orig.objects.keys()) && d.header == orig.header, "{v} undo");
+        assert!(hist.redo(&mut d));
+        assert!(d.objects.contains_key(&l) && !d.objects.contains_key(&victim), "{v} redo");
+    }
+}

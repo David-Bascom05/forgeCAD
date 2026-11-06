@@ -58,6 +58,13 @@ macro_rules! data {
                     Data::Raw(_) => Ok(()),
                 }
             }
+            /// The fixed type number, when the type has one.
+            pub fn fixed_code(&self) -> Option<u16> {
+                match self {
+                    $(Data::$fv(_) => Some($code),)*
+                    _ => None,
+                }
+            }
             /// The type's DXF-ish name, for reports.
             pub fn name(&self) -> String {
                 match self {
