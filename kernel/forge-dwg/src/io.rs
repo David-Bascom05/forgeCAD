@@ -87,6 +87,15 @@ pub trait Io {
     fn cmc(&mut self, v: &mut Color) -> R<()>;
     /// ENC: an entity's colour, R2004+ with flags (its book handle in the handle stream).
     fn enc(&mut self, v: &mut Color) -> R<()>;
+    /// Reading: the bits left in the data stream (the few fields that run to its end). Writing:
+    /// None.
+    fn data_left(&self) -> Option<usize> {
+        None
+    }
+    /// Reading: the bits left in the handle stream, its padding included. Writing: None.
+    fn hdl_left(&self) -> Option<usize> {
+        None
+    }
 
     fn rd2(&mut self, v: &mut [f64; 2]) -> R<()> {
         self.rd(&mut v[0])?;
@@ -149,6 +158,8 @@ pub struct Reader<'a> {
     pub hdl: BitReader<'a>,
     /// The handle relative references resolve against.
     pub base: u32,
+    /// Where the data stream ends (the string stream or the handles start).
+    pub data_end: usize,
 }
 
 /// Writes them.
@@ -193,6 +204,12 @@ impl Io for Reader<'_> {
     const READ: bool = true;
     fn ver(&self) -> Version {
         self.ver
+    }
+    fn data_left(&self) -> Option<usize> {
+        Some(self.data_end.saturating_sub(self.data.p))
+    }
+    fn hdl_left(&self) -> Option<usize> {
+        Some((self.hdl.d.len() * 8).saturating_sub(self.hdl.p))
     }
     fn b(&mut self, v: &mut bool) -> R<()> {
         *v = self.data.b()?;
