@@ -55,7 +55,7 @@ impl Dxf {
 }
 
 /// The line types the pens use: name, description, pattern (mm; negative a gap, 0 a dot).
-fn line_types() -> Vec<(&'static str, &'static str, Vec<f64>)> {
+pub(crate) fn line_types() -> Vec<(&'static str, &'static str, Vec<f64>)> {
     let pat = |p: Pen| -> Vec<f64> {
         p.dashes()
             .iter()
@@ -70,7 +70,7 @@ fn line_types() -> Vec<(&'static str, &'static str, Vec<f64>)> {
     ]
 }
 
-fn line_type(p: Pen) -> &'static str {
+pub(crate) fn line_type(p: Pen) -> &'static str {
     match p {
         Pen::Hidden => "HIDDEN",
         Pen::Center | Pen::Cut => "CENTER",
@@ -80,7 +80,7 @@ fn line_type(p: Pen) -> &'static str {
 }
 
 /// AutoCAD colour index per pen.
-fn colour(p: Pen) -> &'static str {
+pub(crate) fn colour(p: Pen) -> &'static str {
     match p {
         Pen::Visible | Pen::Border => "7",
         Pen::Hidden => "8",
@@ -94,7 +94,7 @@ fn colour(p: Pen) -> &'static str {
 }
 
 /// Lineweight in hundredths of a mm.
-fn weight(p: Pen) -> String {
+pub(crate) fn weight(p: Pen) -> String {
     ((p.width() * 100.0).round() as i64).to_string()
 }
 
@@ -354,7 +354,7 @@ pub fn dxf(p: &Page) -> String {
 }
 
 /// AutoCAD's control codes for the drawing signs: %%c diameter, %%d degree, %%p plus-minus.
-fn dxf_text(s: &str) -> String {
+pub(crate) fn dxf_text(s: &str) -> String {
     s.replace(['\u{2300}', '\u{d8}'], "%%c")
         .replace('\u{b0}', "%%d")
         .replace('\u{b1}', "%%p")

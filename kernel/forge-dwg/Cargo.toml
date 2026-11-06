@@ -1,0 +1,14 @@
+[package]
+name = "forge-dwg"
+description = "AutoCAD R2000 (AC1015) DWG for the ForgeCAD kernel: 2D drawings written natively, and read back"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+forge-font = { path = "../forge-font" }
+forge-math = { path = "../forge-math" }
+
+[lints]
+workspace = true

@@ -30,6 +30,7 @@ forge-draw = { path = "../../kernel/forge-draw" }
 
 [dev-dependencies]
 forge-bool = { path = "../../kernel/forge-bool" }
+forge-dwg = { path = "../../kernel/forge-dwg" }
 
 [lints]
 workspace = true

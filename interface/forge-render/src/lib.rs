@@ -4,6 +4,7 @@
 pub mod bench;
 pub mod bindings;
 pub mod camera;
+pub mod dwgview;
 pub mod explode;
 pub mod livegpu;
 pub mod look;
@@ -45,3 +46,5 @@ pub mod tess;
 pub mod thermo_view;
 #[cfg(target_arch = "wasm32")]
 mod web;
+#[cfg(target_arch = "wasm32")]
+mod webdwg;

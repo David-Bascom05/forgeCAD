@@ -11,6 +11,7 @@ forge-math = { path = "../forge-math" }
 forge-geom = { path = "../forge-geom" }
 forge-topo = { path = "../forge-topo" }
 forge-ops = { path = "../forge-ops" }
+forge-dwg = { path = "../forge-dwg" }
 
 # forge-bool only as the trims' test oracle (the flat prism, Option B)
 [dev-dependencies]

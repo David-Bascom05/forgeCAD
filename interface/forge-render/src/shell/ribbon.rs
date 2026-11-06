@@ -219,6 +219,27 @@ fn groups(s: &Shell) -> Vec<Group> {
         small,
         icons: vec![],
     };
+    if let Some(d) = &s.dwgdoc {
+        // AutoCAD's: every command through the one entry point, those not here yet saying so
+        let tool = |(name, icon, cmd): (&'static str, &'static str, &'static str)| {
+            go(
+                name,
+                icon,
+                Action::DwgDoc(super::dwgdoc::Cmd::Run(cmd)),
+                super::dwgdoc_ui::tool_on(d, cmd),
+            )
+        };
+        return super::dwgdoc_ui::groups(s.tab)
+            .into_iter()
+            .map(|(name, big, small)| {
+                g(
+                    name,
+                    big.into_iter().map(tool).collect(),
+                    small.into_iter().map(tool).collect(),
+                )
+            })
+            .collect();
+    }
     if let Some(env) = &s.drawing {
         // the Drawing environment's: a tool it has not got is drawn off
         let tool = |(c, icon): (super::drawing::DwgCmd, &'static str)| {
@@ -469,7 +490,7 @@ fn why_off(name: &str) -> Option<&'static str> {
 
 /// The Sketch tab of a part (not a drawing's, an assembly's or another environment's).
 fn s_is_sketch_tab(s: &Shell) -> bool {
-    s.tab == 1 && s.drawing.is_none() && !s.is_asm()
+    s.tab == 1 && s.drawing.is_none() && s.dwgdoc.is_none() && !s.is_asm()
 }
 
 const BIG_W: f32 = 54.0;
@@ -553,6 +574,14 @@ impl Shell {
                     .x
                     + 16.0,
             );
+            // a DWG's Layers group: room for its current-layer dropdown (dwgdoc_ui draws it)
+            let width = if self.dwgdoc.is_some() && g.name == "Layers" {
+                let slot = Rect::from_min_size(pos2(gx + width, y + 10.0), vec2(200.0, 26.0));
+                self.places.push(("dwg:ribbon:layer".into(), slot));
+                width + 210.0
+            } else {
+                width
+            };
             let mut x = gx + 6.0;
             for (tool, w) in g.big.iter().zip(&bigs) {
                 if tool.name == super::visual_style::BUTTON {

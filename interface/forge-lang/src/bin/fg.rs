@@ -8,10 +8,10 @@ use std::collections::HashMap;
 use std::io::{BufRead, Write};
 use std::process::ExitCode;
 
-const USAGE: &str = "fg run FILE [--json] [--render OUT.png] [--view iso|front|top|right|..] [--px N] [--dxf OUT.dxf] [--step OUT.step] [--field OUT.csv|inline]
+const USAGE: &str = "fg run FILE [--json] [--render OUT.png] [--view iso|front|top|right|..] [--px N] [--dxf OUT.dxf] [--dwg OUT.dwg] [--step OUT.step] [--field OUT.csv|inline]
                                 --field: each thermoform's wall at each point, as CSV (the JSON
                                 names the file) or inline in the JSON; left out, only its count
-fg run DRAWING.fg [--pdf OUT] [--dxf OUT] [--svg OUT] [--refs VIEW]   a drawing: its sheets, report or a view's references
+fg run DRAWING.fg [--pdf OUT] [--dxf OUT] [--dwg OUT] [--svg OUT] [--refs VIEW]   a drawing: its sheets, report or a view's references
 fg check FILE [--json]          parse, static rules, types and dimensions; no kernel
 fg edit FILE 'OP' [--json]      apply a typed op (JSON, as errors' fixes give them), then check
 fg handles FILE                 the editable handles: every param, its value and dimension
@@ -127,12 +127,17 @@ impl Output {
     }
 }
 
-/// Each sheet's flat pattern as DXF: OUT itself for one sheet, OUT with `-<id>` before its
-/// extension for each of several.
+/// Each sheet's flat pattern as DXF (or DWG): OUT itself for one sheet, OUT with `-<id>` before
+/// its extension for each of several.
 fn write_dxf(run: &forge_lang::Run, out: &str, o: &mut Output) {
+    write_flat(run, out, o, false)
+}
+
+fn write_flat(run: &forge_lang::Run, out: &str, o: &mut Output, dwg: bool) {
+    let flag = if dwg { "--dwg" } else { "--dxf" };
     let many = run.sheets.len() > 1;
     if run.sheets.is_empty() {
-        o.err("--dxf: the part has no sheet");
+        o.err(format!("{flag}: the part has no sheet"));
     }
     for s in &run.sheets {
         let path = if many {
@@ -143,9 +148,10 @@ fn write_dxf(run: &forge_lang::Run, out: &str, o: &mut Output) {
         } else {
             out.to_string()
         };
-        match s.dxf() {
-            Ok(text) => o.write(path, text),
-            Err(e) => o.err(format!("--dxf {}: the sheet is refused: {e:?}", s.id)),
+        let made = if dwg { s.dwg() } else { s.dxf().map(String::into_bytes) };
+        match made {
+            Ok(bytes) => o.write(path, bytes),
+            Err(e) => o.err(format!("{flag} {}: the sheet is refused: {e:?}", s.id)),
         }
     }
 }
@@ -216,6 +222,9 @@ fn run_drawing(file: &str, src: &str, args: &[String], o: &mut Output) {
         if let Some(out) = opt(args, "--dxf") {
             o.write(per_sheet(out, k), forge_draw::dxf::dxf(p));
         }
+        if let Some(out) = opt(args, "--dwg") {
+            o.write(per_sheet(out, k), forge_draw::dwg::dwg(p));
+        }
     }
     if let Some(view) = opt(args, "--refs") {
         match forge_lang::drawing::regen::refs(&d, view) {
@@ -283,6 +292,9 @@ fn run_src(file: &str, src: &str, args: &[String], build: bool, o: &mut Output) 
     }
     if let Some(out) = opt(args, "--dxf") {
         write_dxf(&run, out, o);
+    }
+    if let Some(out) = opt(args, "--dwg") {
+        write_flat(&run, out, o, true);
     }
     let mut wrote = true;
     if let Some(out) = opt(args, "--step") {

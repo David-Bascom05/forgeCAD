@@ -257,6 +257,7 @@ fn command(cmd: &str, argv: &[String]) -> ExitCode {
     if let Some(png) = &r.png {
         let ext = match cmd {
             "export" if a.words.first().is_some_and(|w| w == "dxf") => "dxf",
+            "export" if a.words.first().is_some_and(|w| w == "dwg") => "dwg",
             "export" => "step",
             _ => "png",
         };

@@ -343,29 +343,31 @@ impl Session {
     /// bytes.
     fn export(&mut self, a: &Args) -> Result<Reply, String> {
         let (run, _) = self.built(&a.file)?;
-        if a.words.first().is_some_and(|w| w == "dxf") {
+        if let Some(fmt) = a.words.first().filter(|w| *w == "dxf" || *w == "dwg") {
+            let dwg = fmt == "dwg";
             let s = match a.words.get(1) {
                 Some(id) => run.sheets.iter().find(|s| s.id == *id),
                 None if run.sheets.len() <= 1 => run.sheets.first(),
                 None => {
                     let ids: Vec<&str> = run.sheets.iter().map(|s| s.id.as_str()).collect();
                     return Err(format!(
-                        "several sheets: export F dxf ID, one of {}",
+                        "several sheets: export F {fmt} ID, one of {}",
                         ids.join(" ")
                     ));
                 }
             }
             .ok_or("the part has no such sheet")?;
-            let text = s.dxf().map_err(|e| format!("{}: no flat pattern: {e:?}", s.id))?;
+            let bytes = if dwg { s.dwg() } else { s.dxf().map(String::into_bytes) }
+                .map_err(|e| format!("{}: no flat pattern: {e:?}", s.id))?;
             return Ok(Reply {
                 ok: true,
-                text: format!("{} flat pattern, {} bytes of DXF", s.id, text.len()),
+                text: format!("{} flat pattern, {} bytes of {}", s.id, bytes.len(), fmt.to_uppercase()),
                 json: Json::obj(vec![
                     ("ok", true.into()),
                     ("sheet", s.id.as_str().into()),
-                    ("bytes", text.len().into()),
+                    ("bytes", bytes.len().into()),
                 ]),
-                png: Some(text.into_bytes()),
+                png: Some(bytes),
             });
         }
         let mut opt = forge_step::Options::default();

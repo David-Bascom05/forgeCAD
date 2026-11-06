@@ -2,6 +2,7 @@
 //! borders and title blocks, dimensions, and their PDF, DXF and SVG.
 
 pub mod annot;
+pub mod dwg;
 pub mod dxf;
 pub mod fits;
 pub mod gdt;
