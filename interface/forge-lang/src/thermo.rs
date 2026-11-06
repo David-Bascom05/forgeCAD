@@ -1547,9 +1547,20 @@ fn thermoform(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
                 Some((s, f)) => (Some(s), Some(f)),
                 None => (None, None),
             };
-            let modelled = ev.b.memo(format!("thermoform modelled {key}"), || {
-                forge_topo::mass::mass(&f.part).ok()
-            });
+            // with the checks, worked out after the run beside the part's own measure (lib.rs)
+            let modelled_key = format!("thermoform modelled {key}");
+            let kept =
+                ev.b.memo_kept::<Option<forge_topo::mass::MassProps>>(&modelled_key);
+            let modelled = match (kept, &mut ev.masses_owed) {
+                (Some(m), _) => m,
+                (None, Some(owed)) => {
+                    if ev.checks {
+                        owed.push((ev.thermos.len(), modelled_key, f.part.clone()));
+                    }
+                    None
+                }
+                (None, None) => ev.b.memo(modelled_key, || forge_topo::mass::mass(&f.part).ok()),
+            };
             let mould_solid =
                 ev.b.stages
                     .get(before_n.wrapping_sub(1))
