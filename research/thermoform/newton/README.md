@@ -63,14 +63,23 @@ error 8.00. The two converged solvers differ by where the sticking contact lands
 step (the minimiser's path); refining the drape 6 -> 24 -> 96 steps brings them together:
 Newton 8.00 / 8.28 / 8.63, L-BFGS 8.43 / 8.54 / 8.52.
 
-## Where L-BFGS still wins: the first iterations of a step
+## Where L-BFGS still wins: the steps it settles fast
 
 Single-thread instruction counts (`perf stat -e instructions:u`, FORGECAD_THREADS=1,
-FORGECAD_CACHE=off, whole scoreboard run of the case at 56 nodes): pure Newton was slower on the
-Buntinx trays (0.87-0.97x), the Erdogan box (0.89x) and the Mooney-Rivlin bubble (0.73x), where
-a load step settles in a few cheap L-BFGS iterations and one factor costs more. Each relaxing now
-starts with up to 30 L-BFGS iterations (6 pairs) and turns to Newton after; the plug's steps go to
-Newton at once (an L-BFGS start there undid the damping: 2094 iterations against 1019). Mooney-
-Rivlin 70.6 -> 55.3 G, the box 31.2 -> 30.1 G; the trays' solve stays about 0.8 G over L-BFGS's
-(1.8 G of a 52 G run, the rest the simulated part).
+FORGECAD_CACHE=off, whole scoreboard run of the case at 56 nodes). Pure Newton was slower on the
+Buntinx trays (0.87-0.97x), the Erdogan box (0.89x) and the Mooney-Rivlin bubble (0.73x): a step
+L-BFGS settles in a few iterations, or a sheet falling to the tool (every step at the cap, the
+gradient flat till it lands: tray50's p = 0.04 step, 98 iterations), costs less without factors.
+A fixed L-BFGS start (10, 30, 60 iterations) left the trays 1-9 % slow or cost the Varedi and
+Eksi parts.
 
+Each relaxing now stays in L-BFGS (6 pairs) while its least gradient halves every 5 iterations,
+a window holding a step over half the cap not counted, and turns to Newton from the first window
+that does not; the plug's steps go to Newton at once (an L-BFGS start there undid the damping:
+2094 iterations against 1019). L-BFGS run through this code with the hand-off off gives the old
+solver's results and instructions to the digit. Measured: the trays and Duarte's cone exactly
+L-BFGS's; no case slower; 3156 -> 1788 G over the scoreboard.
+
+A Newton step that a triangle's turning still rejects after 12 halvings is taken as no step, so
+the fold's corners are held, as a gradient step's are (after a long fall into the Atmani cup the
+Newton direction drove a creeping fold and crept on at 1e-10 of a step; the cup 156 -> 72 G).
