@@ -212,6 +212,11 @@ fn view_camera(center: [f32; 3], radius: f32, parallel: bool, size: (u32, u32)) 
     c
 }
 
+/// A .dwg file, by its name.
+pub fn is_dwg(path: &str) -> bool {
+    path.to_ascii_lowercase().ends_with(".dwg")
+}
+
 fn name_of(path: &str) -> String {
     let n = path.rsplit('/').next().unwrap_or(path);
     if n.ends_with(".fc") || n.ends_with(".fg") {
@@ -264,7 +269,10 @@ impl Gui {
         }));
         let ctx = egui::Context::default();
         ctx.set_fonts(crate::shell::theme::fonts());
-        let egui = egui_wgpu::Renderer::new(&device, format, egui_wgpu::RendererOptions::default());
+        let mut egui = egui_wgpu::Renderer::new(&device, format, egui_wgpu::RendererOptions::default());
+        // a DWG document's canvas draws in egui's pass: its pipelines take egui's format
+        egui.callback_resources
+            .insert(crate::dwgview::gpu::Target(format));
         // the type's first layout takes 40 ms or so: before the first frame, not in it
         let mut warm_shell = Shell::default();
         let mut warm_input = egui::RawInput::default();
@@ -374,6 +382,17 @@ impl Gui {
     /// Opens a part into the active document, in the background: the window never waits on the
     /// kernel. False if nothing could be opened.
     fn load(&mut self, path: &str) -> bool {
+        // a DWG file: AutoCAD's layout, its own tab
+        if is_dwg(path) {
+            match crate::shell::dwgdoc::DwgDoc::open(path) {
+                Ok(d) => self.shell.open_dwg(d),
+                Err(e) => {
+                    self.shell.status = e;
+                    return false;
+                }
+            }
+            return true;
+        }
         // a drawing opens in the Drawing environment
         if path.ends_with(".fg")
             && std::fs::read_to_string(path).is_ok_and(|s| forge_lang::drawing::is_drawing(&s))
@@ -2872,7 +2891,8 @@ impl Headless {
         for _ in 0..20_000 {
             self.step();
             let fg_built = self.gui.fg.as_ref().is_some_and(|s| s.seq > 0 && s.done == s.seq);
-            let drawn = self.gui.shell.drawing.as_ref().is_some_and(|d| !d.busy);
+            let drawn =
+                self.gui.shell.drawing.as_ref().is_some_and(|d| !d.busy) || self.gui.shell.dwgdoc.is_some();
             if !self.gui.loading() && (self.gui.shell.doc.is_some() || fg_built || drawn) {
                 break;
             }
