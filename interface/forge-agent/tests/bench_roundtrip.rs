@@ -18,7 +18,9 @@ fn round_trip(name: &str) {
         for b in &back.solids {
             let p = forge_topo::check(&b.body);
             assert!(p.is_empty(), "{name}: {p:?}");
-            let m = forge_topo::mass::mass(&b.body).unwrap_or_else(|e| panic!("{name}: {e:?}"));
+            // to a millionth, a thousand times finer than the check below (to a billionth, a file's
+            // splines took most of a minute a part)
+            let m = forge_topo::mass::mass_rel(&b.body, 1e-6).unwrap_or_else(|e| panic!("{name}: {e:?}"));
             (v, a) = (v + m.volume, a + m.area);
         }
         assert!(
