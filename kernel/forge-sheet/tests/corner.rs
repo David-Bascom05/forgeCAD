@@ -488,13 +488,15 @@ fn trim_to_bend_parts_the_zones_by_a_kerf() {
     for th in [90f64, 80.0] {
         let s = boxed_at(Some(CornerKind::TrimToBend), th.to_radians());
         for map in [Map::Folded, Map::Flat] {
-            let t0 = std::time::Instant::now();
+            let q0 = forge_sheet::build::check_questions();
             let b = build_with(&s, map).unwrap_or_else(|e| panic!("{th} {map:?}: {e:?}"));
-            let took = t0.elapsed().as_secs_f64();
+            let asked = forge_sheet::build::check_questions() - q0;
             assert!(b.warnings.is_empty(), "{th} {map:?}: {:?}", b.warnings);
             let p = forge_topo::check::check(&b.body);
             assert!(p.is_empty(), "{p:?}");
-            assert!(took < 0.05, "{th} {map:?}: {took} s");
+            // quickly: the checks ask nothing of the kerfed zones (a clash hunt asks hundreds, as
+            // over the leaning flanges in overlap.rs); questions, unlike time, are load-free
+            assert!(asked <= 16, "{th} {map:?}: {asked} questions");
         }
     }
 }

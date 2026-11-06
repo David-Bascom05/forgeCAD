@@ -253,13 +253,28 @@ fn fuzz_against_the_exact_overlap() {
     assert!(overlapped > 30 && clear > 30);
 }
 
+/// The most questions each case's checks may ask: about twice what they ask now, at least 16. The
+/// walls of the L, U, box and tray stand clear of each other's boxes, so their checks ask none.
+const QUESTIONS: [(&str, Map, u64); 10] = [
+    ("L", Map::Folded, 16),
+    ("L", Map::Flat, 16),
+    ("U", Map::Folded, 16),
+    ("U", Map::Flat, 16),
+    ("box", Map::Folded, 16),
+    ("box", Map::Flat, 16),
+    ("tray", Map::Folded, 16),
+    ("tray", Map::Flat, 16),
+    ("leaning", Map::Folded, 872),
+    ("leaning", Map::Flat, 872),
+];
+
 #[test]
 fn the_checks_cost_microseconds() {
     // both checks run on every build: an L, a U, a box whose walls meet at the corners (the
     // builder trims them apart), the same tray standing inside its edges as Forge makes it, and
     // flanges leaning over a notch's bottom edge (straight edges near a wall's boundary: decided
-    // exactly, not halved down to the tolerance). Each well under a millisecond a build: the
-    // least of five batches, so a busy machine does not fail it
+    // exactly, not halved down to the tolerance). Held to the geometric questions they ask, a
+    // cost no busy machine moves (each was well under a millisecond a build); the time is printed
     let g = Gauge {
         thickness: 2.0,
         radius: 2.0,
@@ -302,18 +317,24 @@ fn the_checks_cost_microseconds() {
                 "{name} {map:?}: {:?}",
                 built.err()
             );
+            let q0 = forge_sheet::build::check_questions();
+            let _ = std::hint::black_box(build_with(s, map));
+            let asked = forge_sheet::build::check_questions() - q0;
             let n = 20;
-            let us = (0..5)
-                .map(|_| {
-                    let t0 = std::time::Instant::now();
-                    for _ in 0..n {
-                        let _ = std::hint::black_box(build_with(s, map));
-                    }
-                    t0.elapsed().as_secs_f64() * 1e6 / n as f64
-                })
-                .fold(f64::INFINITY, f64::min);
-            println!("{name} {map:?}: {us:.1} us a build");
-            assert!(us < 1000.0, "{name} {map:?}: {us:.1} us a build");
+            let t0 = std::time::Instant::now();
+            for _ in 0..n {
+                let _ = std::hint::black_box(build_with(s, map));
+            }
+            let us = t0.elapsed().as_secs_f64() * 1e6 / n as f64;
+            println!("{name} {map:?}: {asked} questions, {us:.1} us a build");
+            let most = QUESTIONS
+                .iter()
+                .find(|q| q.0 == *name && q.1 == map)
+                .map_or(0, |q| q.2);
+            assert!(
+                asked <= most,
+                "{name} {map:?}: {asked} questions, more than {most}"
+            );
         }
     }
     let _ = WallId(0);

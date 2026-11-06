@@ -1997,6 +1997,7 @@ impl<'a> Strips<'a> {
                 if a == b || joined[a * ns + b] || !boxes[a].overlaps(&boxes[b]) {
                     continue;
                 }
+                asked();
                 let reach = |bx: &forge_math::Box3| self.may_reach(b, bx, flat[b], limit);
                 // a hem's zone and its own walls meet by design along its tangent lines: points
                 // there (within a margin along the zone) are not clashes
@@ -2129,6 +2130,7 @@ impl<'a> Strips<'a> {
     /// within `TOL` of plane strip `b`'s material, if one is: halving, a part dropped once its box
     /// cannot reach `b` or its middle is farther than the box is wide (distance is 1-Lipschitz).
     fn touch(&self, a: usize, b: usize, flat_b: (Point2, Point2)) -> Option<Point3> {
+        asked();
         let t = self.t;
         let geo = self.strips[a].folded;
         // a curve halved while its box may reach b and its middle is near enough; a piece whose
@@ -2196,6 +2198,7 @@ impl<'a> Strips<'a> {
     /// thickness less the limit, then that part in the plane: an end inside the region, or the
     /// region's boundary within slack of it. Strips not plane, and splines, may.
     fn may_enter(&self, s: usize, p0: Point3, p1: Point3, limit: f64, slack: f64) -> bool {
+        asked();
         let Geo::Plane(f) = self.strips[s].folded else {
             return true;
         };
@@ -2240,6 +2243,7 @@ impl<'a> Strips<'a> {
     /// the part of it within the sheet's thickness (grown by tol), then that part in the plane
     /// against the region: inside it, or within tol of one of its boundary pieces.
     fn segment_touch(&self, s: usize, p0: Point3, p1: Point3, tol: f64) -> Option<Point3> {
+        asked();
         let Geo::Plane(f) = self.strips[s].folded else {
             return None;
         };
@@ -2303,6 +2307,7 @@ impl<'a> Strips<'a> {
     /// shrunk by the most the development stretches on the way (arc length at `rn` against half
     /// the point's radius), no more than half that radius.
     fn distance_below(&self, s: usize, p: Point3) -> f64 {
+        asked();
         match self.strips[s].folded {
             Geo::Plane(_) => self.distance(s, p),
             Geo::Round {
@@ -2344,6 +2349,7 @@ impl<'a> Strips<'a> {
 
     /// How far a point is from plane strip `s`'s material (0 inside it).
     fn distance(&self, s: usize, p: Point3) -> f64 {
+        asked();
         let Geo::Plane(f) = self.strips[s].folded else {
             return f64::INFINITY;
         };
@@ -2647,6 +2653,7 @@ impl Strips<'_> {
     /// Whether a box may hold a point deeper than `limit` in strip `s`'s thickness, over its region's
     /// box `flat`: rigorous, from the box's corners in the strip's own terms.
     fn may_reach(&self, s: usize, bx: &forge_math::Box3, flat: (Point2, Point2), limit: f64) -> bool {
+        asked();
         let t = self.t;
         let corners = [0, 1, 2, 3, 4, 5, 6, 7].map(|k| {
             Point3::new(
@@ -2755,6 +2762,10 @@ impl Strips<'_> {
             .collect();
         // area of A inside loop x (counter-clockwise), and a point where it enters
         let inside = |a: &[ProfileLoop], x: &ProfileLoop| -> Result<(f64, Point2), RegionError> {
+            // (two subtractions, each about as dear as the segments it cuts)
+            for _ in 0..2 * (a.iter().map(|l| l.segments.len()).sum::<usize>() + x.segments.len()) {
+                asked();
+            }
             let whole = subtract(a, &[])?.area();
             let off = 1u64 << 40;
             let cut = ProfileLoop::new(x.segments.iter().map(|(g, k)| (g.clone(), k + off)).collect());
@@ -2928,6 +2939,7 @@ impl Strips<'_> {
     /// How deep `p` lies in strip `s`'s material, through its thickness; None outside (or, in a
     /// bend zone, within `margin` of its tangent lines along it).
     fn inside(&self, s: usize, p: Point3, margin: f64) -> Option<f64> {
+        asked();
         let t = self.t;
         let (q, w) = match self.strips[s].folded {
             Geo::Plane(f) => {
@@ -4061,4 +4073,18 @@ fn skin(g: &Geo, w: f64, top: bool) -> (Surface, bool) {
             top == (sigma < 0.0),
         ),
     }
+}
+
+thread_local! {
+    static ASKED: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+fn asked() {
+    ASKED.set(ASKED.get() + 1);
+}
+
+/// How many geometric questions the overlap and clash checks have asked on this thread: a cost
+/// that does not change with the machine's load, for tests that hold the checks to it.
+pub fn check_questions() -> u64 {
+    ASKED.get()
 }
