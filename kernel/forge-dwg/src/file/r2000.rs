@@ -1,6 +1,8 @@
 //! R13-R15 files (chapter 3): sections at addresses the file header lists.
 
-use super::{Class, Drawing};
+use super::{Class, Sections};
+use crate::bits::Bad;
+use crate::io::{Io, Reader};
 use crate::bits::{BitReader, R, bad, crc16, read_mc};
 use crate::object::{Classes, read_object};
 use crate::str::Str;
@@ -36,39 +38,87 @@ fn sentinel_section<'a>(buf: &'a [u8], at: usize, sn: &[u8; 16], what: &str) -> 
     Ok(data)
 }
 
-pub fn read_classes(data: &[u8], ver: Version) -> R<Vec<Class>> {
-    let mut r = BitReader::new(data, 0);
-    let mut out = vec![];
-    // R2004+: max class number, two zero bytes and a bit first
-    if ver >= Version::R2004 {
-        r.bs()?;
-        r.rc()?;
-        r.rc()?;
-        r.b()?;
+/// The classes section (chapter 10): sentinel, size, the classes, CRC.
+pub fn classes(sec: &[u8], ver: Version, maint: u8) -> R<Vec<Class>> {
+    if sec.get(0..16) != Some(&SN_CLASSES[..]) {
+        return bad("classes: no sentinel");
     }
-    while r.p + 8 * 2 < data.len() * 8 {
-        let mut c = Class {
-            number: r.bs()?,
-            flags: r.bs()?,
-            ..Class::default()
-        };
-        if ver >= Version::R2007 {
-            return bad("R2007 classes need the string stream");
-        }
-        c.app = Str::Cp(r.t()?);
-        c.cpp = Str::Cp(r.t()?);
-        c.dxf = Str::Cp(r.t()?);
-        c.zombie = r.b()?;
-        c.item = r.bs()?;
-        if ver >= Version::R2004 {
-            c.count = r.bl()?;
-            c.dwg_version = r.bs()?;
-            c.maint_version = r.bs()?;
-            c.unknown = [r.bl()?, r.bl()?];
-        }
+    let size = rl(sec, 16)? as usize;
+    let mut at = 20;
+    // the size's high half: R2010 and R2013 with a maintenance version above 3, R2018 always
+    if (ver >= Version::R2010 && maint > 3) || ver >= Version::R2018 {
+        at += 4;
+    }
+    let Some(data) = sec.get(at..at + size) else {
+        return bad("classes: past the end");
+    };
+    let crc = u16::from_le_bytes([sec[at + size], sec[at + size + 1]]);
+    if crc16(0xC0C1, &sec[16..at + size]) != crc {
+        return bad("classes: CRC");
+    }
+    let (mut r, end) = if ver >= Version::R2007 {
+        // the size in bits (counted from itself), then the classes, their strings at the end
+        let bits = rl(data, 0)? as usize;
+        let (strs, end) = string_stream(data, bits)?;
+        (Reader { ver, data: BitReader::new(data, 4), strs, hdl: BitReader::new(data, 0), base: 0 }, end)
+    } else {
+        (Reader { ver, data: BitReader::new(data, 0), strs: None, hdl: BitReader::new(data, 0), base: 0 }, data.len() * 8)
+    };
+    if ver >= Version::R2004 {
+        let (mut max, mut z, mut t) = (0i16, 0u8, false);
+        r.bs(&mut max)?;
+        r.rc(&mut z)?;
+        r.rc(&mut z)?;
+        r.b(&mut t)?;
+    }
+    let mut out = vec![];
+    // to the end of the data (less a few bits of padding)
+    while r.data.p + 18 < end {
+        let mut c = Class::default();
+        class_io(&mut c, &mut r)?;
         out.push(c);
     }
     Ok(out)
+}
+
+/// One class's fields.
+pub fn class_io<S: Io>(c: &mut Class, s: &mut S) -> R<()> {
+    s.bs(&mut c.number)?;
+    s.bs(&mut c.flags)?;
+    s.tv(&mut c.app)?;
+    s.tv(&mut c.cpp)?;
+    s.tv(&mut c.dxf)?;
+    s.b(&mut c.zombie)?;
+    s.bs(&mut c.item)?;
+    if s.ver() >= Version::R2004 {
+        s.bl(&mut c.count)?;
+        s.bs(&mut c.dwg_version)?;
+        s.bs(&mut c.maint_version)?;
+        s.bl(&mut c.unknown[0])?;
+        s.bl(&mut c.unknown[1])?;
+    }
+    Ok(())
+}
+
+/// R2007+: a stream of `bits` bits whose last is the string stream's presence: the strings'
+/// reader, and where the data before them ends.
+pub fn string_stream(d: &[u8], bits: usize) -> R<(Option<BitReader<'_>>, usize)> {
+    if bits == 0 {
+        return Ok((None, 0));
+    }
+    let mut b = BitReader { d, p: bits - 1 };
+    if !b.b()? {
+        return Ok((None, bits - 1));
+    }
+    let mut at = bits - 1 - 16;
+    let mut n = BitReader { d, p: at }.rs()? as usize;
+    if n & 0x8000 != 0 {
+        at -= 16;
+        let hi = BitReader { d, p: at }.rs()? as usize;
+        n = (n & 0x7FFF) | (hi << 15);
+    }
+    let start = at.checked_sub(n).ok_or(crate::bits::Bad("string stream size".into()))?;
+    Ok((Some(BitReader { d, p: start }), start))
 }
 
 /// The object map (chapter 23): (handle, file offset) pairs.
@@ -103,8 +153,8 @@ pub fn read_map(buf: &[u8], at: usize, len: usize) -> R<Vec<(u32, usize)>> {
     Ok(out)
 }
 
-pub fn read(buf: &[u8]) -> R<Drawing> {
-    let ver = Version::R2000;
+/// The sections at the addresses the file header gives.
+pub fn sections(buf: &[u8]) -> R<Sections> {
     let n = rl(buf, 0x15)? as usize;
     let mut recs = vec![None; 6];
     for k in 0..n {
@@ -119,23 +169,23 @@ pub fn read(buf: &[u8]) -> R<Drawing> {
     let (Some(h), Some(c), Some(m)) = (recs[0], recs[1], recs[2]) else {
         return bad("missing header, classes or object map");
     };
-    let header = sentinel_section(buf, h.0, &SN_HEADER, "header")?.to_vec();
-    let classes = read_classes(sentinel_section(buf, c.0, &SN_CLASSES, "classes")?, ver)?;
-    let mut d = Drawing {
-        version: Some(ver),
+    let get = |(a, n): (usize, usize)| buf.get(a..a + n).map(|s| s.to_vec()).ok_or(Bad("section past the end".into()));
+    let mut other = vec![];
+    for (k, name) in [(3, "ObjFreeSpace"), (4, "Template"), (5, "AuxHeader")] {
+        if let Some(r) = recs[k] {
+            other.push((name.to_string(), get(r)?));
+        }
+    }
+    Ok(Sections {
+        ver: Version::R2000,
         maint: buf[11],
         codepage: u16::from_le_bytes([buf[0x13], buf[0x14]]),
-        header,
-        classes,
-        ..Drawing::default()
-    };
-    let list = d.class_list();
-    let cl = Classes { list: &list };
-    for (handle, at) in read_map(buf, m.0, m.1)? {
-        let o = read_object(buf, at, ver, &cl, None).map_err(|e| crate::bits::Bad(format!("{handle:#x}: {}", e.0)))?;
-        d.objects.insert(handle, o);
-    }
-    Ok(d)
+        header: get(h)?,
+        classes: get(c)?,
+        handles: get(m)?,
+        objects: buf.to_vec(),
+        other,
+    })
 }
 
 /// The object map and the classes, without reading the objects (for tools).
@@ -152,13 +202,22 @@ pub fn read_shell(buf: &[u8]) -> R<(Vec<(u32, usize)>, Vec<(String, bool)>)> {
     let (Some(c), Some(m)) = (recs[1], recs[2]) else {
         return bad("missing classes or object map");
     };
-    let classes = read_classes(sentinel_section(buf, c.0, &SN_CLASSES, "classes")?, Version::R2000)?;
+    let classes = classes(&buf[c.0..c.0 + c.1], Version::R2000, buf[11])?;
     let list = classes.iter().map(|c| (c.dxf.text(), c.item == 0x1F2)).collect();
     Ok((read_map(buf, m.0, m.1)?, list))
 }
 
 /// An object's type number, read from its start.
-pub fn peek_type(buf: &[u8], at: usize) -> R<u16> {
-    let (_, start) = crate::bits::read_ms(buf, at)?;
+pub fn peek_type(buf: &[u8], at: usize, ver: Version) -> R<u16> {
+    let (_, mut start) = crate::bits::read_ms(buf, at)?;
+    if ver >= Version::R2010 {
+        start = crate::bits::read_mc(buf, start, false)?.1;
+        let mut r = BitReader::new(buf, start);
+        return Ok(match r.bb()? {
+            0 => r.rc()? as u16,
+            1 => r.rc()? as u16 + 0x1F0,
+            _ => r.rs()?,
+        });
+    }
     Ok(BitReader::new(buf, start).bs()? as u16)
 }

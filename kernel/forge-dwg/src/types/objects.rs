@@ -207,7 +207,8 @@ impl Spec for Layout {
         s.bd3(&mut self.extmax)?;
         let mut nvp = self.viewports.len() as i32;
         if v >= Version::R2004 {
-            s.rl(&mut nvp)?;
+            // a BL, though the spec says RL
+            s.bl(&mut nvp)?;
             s.h(&mut self.plot.view)?;
         }
         if v >= Version::R2007 {

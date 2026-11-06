@@ -86,7 +86,10 @@ impl Default for Entry {
 fn entry_io<S: Io>(e: &mut Entry, s: &mut S) -> R<()> {
     s.tv(&mut e.name)?;
     s.b(&mut e.referenced)?;
-    s.bs(&mut e.xref_index)?;
+    // R2007+ files have no xref index here, though the spec lists it
+    if s.ver() < Version::R2007 {
+        s.bs(&mut e.xref_index)?;
+    }
     s.b(&mut e.xdep)
 }
 
@@ -185,6 +188,8 @@ pub struct Layer {
     pub plotstyle: Href,
     pub material: Href,
     pub ltype: Href,
+    /// R2013+: a further hard pointer, null in every file seen.
+    pub unknown: Href,
 }
 
 impl Spec for Layer {
@@ -197,7 +202,11 @@ impl Spec for Layer {
         if s.ver() >= Version::R2007 {
             s.h(&mut self.material)?;
         }
-        s.h(&mut self.ltype)
+        s.h(&mut self.ltype)?;
+        if s.ver() >= Version::R2013 {
+            s.h(&mut self.unknown)?;
+        }
+        Ok(())
     }
 }
 

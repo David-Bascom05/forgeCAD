@@ -223,8 +223,8 @@ impl Io for Reader<'_> {
         Ok(())
     }
     fn bll(&mut self, v: &mut u64) -> R<()> {
-        let mut n = 0u8;
-        self.b3(&mut n)?;
+        // three bits of byte count, then the bytes, low first (the spec's 3B reading is wrong)
+        let n = self.data.bits(3)? as u32;
         let mut x = 0u64;
         for k in 0..n {
             x |= (self.data.rc()? as u64) << (8 * k);
@@ -435,13 +435,11 @@ impl Io for Writer {
         Ok(())
     }
     fn bll(&mut self, v: &mut u64) -> R<()> {
-        // a 3B byte count (0, 2, 6 or 7), then the bytes, low first
-        let need = 8 - v.leading_zeros() / 8;
-        let mut n = [0u8, 2, 6, 7].into_iter().find(|&n| n as u32 >= need).unwrap_or(7);
-        if need == 8 {
+        let n = (8 - v.leading_zeros() / 8).min(7);
+        if *v >> (8 * n) != 0 {
             return bad("BLL wider than 7 bytes");
         }
-        self.b3(&mut n)?;
+        self.data.bits(3, n as u64);
         for k in 0..n {
             self.data.rc((*v >> (8 * k)) as u8);
         }
