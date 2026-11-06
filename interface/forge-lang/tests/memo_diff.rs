@@ -158,28 +158,39 @@ fn every_version_of_an_edit_walk_is_a_fresh_build() {
         8
     };
     let mut rng = Rng(0x6d65_6d6f_0000_0001);
-    let mut bad = vec![];
-    for path in examples() {
+    // the walks drawn in turn (the draws take the text alone), then each walked on its own thread
+    let walks: Vec<(std::path::PathBuf, Vec<String>)> = examples()
+        .into_iter()
+        .map(|path| {
+            let first = std::fs::read_to_string(&path).expect("read");
+            let mut versions = vec![first.clone()];
+            let mut src = first;
+            for k in 0..steps {
+                // now and then an edit taken back: a version from before, served from the memo
+                src = if k % 3 == 2 {
+                    versions[rng.below(versions.len())].clone()
+                } else {
+                    mutate(&src, &mut rng).unwrap_or(src)
+                };
+                versions.push(src.clone());
+            }
+            (path, versions)
+        })
+        .collect();
+    let bad: Vec<String> = forge_model::suite::each(&walks, |(path, versions)| {
         let dir = path.parent().expect("a dir");
-        let first = std::fs::read_to_string(&path).expect("read");
-        let mut versions = vec![first.clone()];
         let mut cache = Cache::default();
-        let mut src = first;
-        for k in 0..steps {
-            // now and then an edit taken back: a version from before, served from the memo
-            src = if k % 3 == 2 {
-                versions[rng.below(versions.len())].clone()
-            } else {
-                mutate(&src, &mut rng).unwrap_or(src)
-            };
-            versions.push(src.clone());
-            let (d, c) = agree(&src, dir, cache);
+        let mut bad = vec![];
+        for (k, src) in versions[1..].iter().enumerate() {
+            let (d, c) = agree(src, dir, cache);
             cache = c;
             if let Some(d) = d {
                 bad.push(format!("{} step {k}: {d}", path.display()));
             }
         }
-    }
+        bad
+    })
+    .concat();
     assert!(
         bad.is_empty(),
         "the memo served a build a fresh build does not make:\n{}",
@@ -328,10 +339,12 @@ fn key_part_backend_and_threads() {
     let fg = env!("CARGO_BIN_EXE_fg");
     let tmp = std::env::temp_dir().join(format!("memo-diff-{}", std::process::id()));
     std::fs::create_dir_all(&tmp).expect("mkdir");
-    let mut bad = vec![];
-    for path in examples() {
+    let examples: Vec<(usize, PathBuf)> = examples().into_iter().enumerate().collect();
+    let bad = forge_model::suite::each(&examples, |(i, path)| {
+        let mut bad = vec![];
         let out = |envs: &[(&str, &str)], tag: &str| {
-            let step = tmp.join(format!("{tag}.step"));
+            // each example's files its own: they run side by side
+            let step = tmp.join(format!("{i}-{tag}.step"));
             let mut c = std::process::Command::new(fg);
             c.args(["run", path.to_str().expect("utf8"), "--json", "--step"])
                 .arg(&step);
@@ -365,7 +378,9 @@ fn key_part_backend_and_threads() {
                 bad.push(format!("{}: {what} differs", path.display()));
             }
         }
-    }
+        bad
+    })
+    .concat();
     assert!(
         bad.is_empty(),
         "a fresh build depends on how it is run:\n{}",

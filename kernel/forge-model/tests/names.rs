@@ -213,7 +213,8 @@ fn face(b: &Body, n: Name) -> Option<String> {
 /// (as above).
 #[test]
 fn every_regen_entry_point_names_alike() {
-    for (name, part) in suite::parts() {
+    suite::each(&suite::parts(), |(name, part)| {
+        let name = *name;
         let one = |s: Vec<forge_model::Solid>| {
             assert_eq!(s.len(), 1, "{name}");
             names(&s[0].body.compact())
@@ -244,5 +245,5 @@ fn every_regen_entry_point_names_alike() {
         if ["sweep", "loft"].contains(&name) {
             assert_eq!(seq, nary, "{name}");
         }
-    }
+    });
 }

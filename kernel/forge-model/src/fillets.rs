@@ -1522,10 +1522,11 @@ mod tests {
     fn random_fillets() {
         use forge_math::rng::Rng;
         use forge_ops::{FilletEdge, fillet};
-        let mut ok = 0;
-        for seed in 1..=150u64 {
+        // each seed its own draws, so each on its own thread
+        let seeds: Vec<u64> = (1..=150).collect();
+        let built = crate::suite::each(&seeds, |&seed| {
             let Ok(body) = crate::suite::fuzz(seed, 4).regenerate() else {
-                continue;
+                return false;
             };
             let mut r = Rng::new(seed * 7919);
             let edges: Vec<_> = body.edge_ids().collect();
@@ -1546,14 +1547,15 @@ mod tests {
                 }
             }
             let Ok(b) = fillet(&body, &pick, 999) else {
-                continue;
+                return false;
             };
             let problems = forge_topo::check(&b);
             assert!(problems.is_empty(), "seed {seed}: {problems:?}");
             let mesh = tessellate(&b, &Quality::default()).unwrap_or_else(|e| panic!("seed {seed}: {e:?}"));
             assert!(mesh.open_edges().is_empty(), "seed {seed}: open mesh");
-            ok += 1;
-        }
+            true
+        });
+        let ok = built.iter().filter(|&&b| b).count();
         // seam picks are refused as smooth and adjacent picks as corners; the rest build
         assert!(ok >= 70, "only {ok} of 150 built");
     }

@@ -98,14 +98,14 @@ fn imprint_matches_the_general_boolean() {
     let on_tools = taken() - before;
     torture::part(221).regenerate().expect("torture regenerates");
     let on_torture = taken() - before - on_tools;
-    for name in suite::NAMES {
-        let _ = suite::part(name).map(|p| p.regenerate());
-    }
+    // the rest only for the check's own asserts, so side by side (the counts are taken above)
+    let mut rest: Vec<forge_model::Part> = suite::NAMES.iter().filter_map(|n| suite::part(n)).collect();
     // where the general boolean cuts at a box an arc in a turned frame makes wide: a cap's over an
     // edge of a face clear of the tool (11), faces only the tool's arcs' boxes reach (14)
-    for seed in [11, 14] {
-        let _ = suite::fuzz(seed, 80).regenerate();
-    }
+    rest.extend([11, 14].map(|seed| suite::fuzz(seed, 80)));
+    suite::each(&rest, |p| {
+        let _ = p.regenerate();
+    });
     set_mode(Mode::Off);
     assert_eq!(on_tools, 9, "the tools part's booleans not all taken");
     assert!(

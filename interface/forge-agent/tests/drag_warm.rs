@@ -122,6 +122,8 @@ fn cold(src: &str, fonts: &Fonts) -> String {
 fn holds(what: &str, srcs: &[String], fonts: &Fonts) {
     let mut m = Model::default();
     m.fonts = fonts.clone();
+    // a walk comes back to its start: a source built cold once is that source's cold build
+    let mut colds: std::collections::HashMap<&str, String> = std::collections::HashMap::new();
     for (k, s) in srcs.iter().enumerate() {
         let warm = match catch_unwind(AssertUnwindSafe(|| m.update(s))) {
             Ok(_) => outcome(&m),
@@ -132,7 +134,7 @@ fn holds(what: &str, srcs: &[String], fonts: &Fonts) {
             m = Model::default();
             m.fonts = fonts.clone();
         }
-        let c = cold(s, fonts);
+        let c = colds.entry(s).or_insert_with(|| cold(s, fonts)).clone();
         assert!(warm == c, "{what} step {k}: warm {warm} cold {c}\n{s}");
     }
     eprintln!("held {what}: {} steps", srcs.len());
@@ -179,7 +181,7 @@ fn few() -> usize {
 
 #[test]
 fn bench_drags_leave_no_trace() {
-    for name in bench::NAMES {
+    forge_model::suite::each(&bench::NAMES, |name| {
         let mut p = Part::of(bench::model(bench::src(name).expect("a bench part")));
         let fonts = p.model.fonts.clone();
         let dims = p.dims();
@@ -190,7 +192,7 @@ fn bench_drags_leave_no_trace() {
             holds(&format!("{name} {}", d.name), &srcs, &fonts);
             p = Part::of(bench::model(bench::src(name).unwrap()));
         }
-    }
+    });
 }
 
 #[test]
@@ -206,7 +208,7 @@ fn history_drags_leave_no_trace() {
         _ if few() == usize::MAX => &SEEDS,
         _ => &SEEDS[..12],
     };
-    for &seed in seeds {
+    forge_model::suite::each(seeds, |&seed| {
         let src = run(seed, 12).src;
         let m = bench::model(&src);
         let mut p = Part::of(m);
@@ -219,7 +221,7 @@ fn history_drags_leave_no_trace() {
             let m = bench::model(&src);
             p = Part::of(m);
         }
-    }
+    });
 }
 
 /// With hardly anything kept, what is kept and forgotten changes no answer.
@@ -283,9 +285,9 @@ fn line_by_line_leaves_no_trace() {
         Ok(p) => vec![std::fs::read_to_string(p).expect("the file")],
         Err(_) => SEEDS[..6].iter().map(|&s| run(s, 12).src).collect(),
     };
-    for src in srcs {
+    forge_model::suite::each(&srcs, |src| {
         let lines: Vec<&str> = src.lines().collect();
-        let fonts = bench::model(&src).fonts.clone();
+        let fonts = bench::model(src).fonts.clone();
         let prefixes: Vec<String> = (1..=lines.len()).map(|n| lines[..n].join("\n") + "\n").collect();
         holds("line by line", &prefixes, &fonts);
         let mut m = Model::default();
@@ -302,5 +304,5 @@ fn line_by_line_leaves_no_trace() {
                 );
             }
         }
-    }
+    });
 }

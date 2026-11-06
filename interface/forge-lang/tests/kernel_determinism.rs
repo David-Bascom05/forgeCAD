@@ -213,10 +213,8 @@ fn every_op_kind_is_the_same_however_it_is_run() {
 #[test]
 fn every_example_part_is_the_same_however_it_is_run() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples");
-    let mut bad = vec![];
-    for p in PARTS {
-        bad.extend(same_five_ways(&root.join(p)));
-    }
+    // (each part's files are its own, by its name)
+    let bad = forge_model::suite::each(&PARTS, |p| same_five_ways(&root.join(p))).concat();
     assert!(
         bad.is_empty(),
         "a part depends on how it is run:\n{}",

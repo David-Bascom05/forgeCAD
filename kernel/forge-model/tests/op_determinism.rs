@@ -62,8 +62,8 @@ fn nary_is_the_same_on_every_backend() {
             "did not open: Gpu runs on the CPU"
         }
     );
-    let mut bad = vec![];
-    for (name, part) in parts() {
+    let bad: Vec<String> = suite::each(&parts(), |(name, part)| {
+        let mut bad = vec![];
         let base = bits(&part.regenerate_nary_on(1, Backend::Cpu));
         for (threads, backend, what) in [
             (4, Backend::Cpu, "cpu, 4 threads"),
@@ -78,7 +78,9 @@ fn nary_is_the_same_on_every_backend() {
         if bits(&part.regenerate_nary_on(1, Backend::Cpu)) != base {
             bad.push(format!("{name}: cpu again differs"));
         }
-    }
+        bad
+    })
+    .concat();
     assert!(
         bad.is_empty(),
         "the n-ary regen depends on its backend:\n{}",
@@ -86,30 +88,37 @@ fn nary_is_the_same_on_every_backend() {
     );
 }
 
-/// A regen on a fresh thread, and on a thread where `spoil` ran and panicked first.
-fn fresh_and_spoiled(part: &Part, spoil: fn()) -> (u64, u64) {
+type Built = (String, Part, Result<forge_topo::Body, forge_model::RegenError>);
+
+/// Every part built once, each on a thread of its own with nothing spoiled: the fresh side of
+/// both audits below.
+fn fresh() -> &'static [Built] {
+    static FRESH: std::sync::OnceLock<Vec<Built>> = std::sync::OnceLock::new();
+    FRESH.get_or_init(|| {
+        let ps = parts();
+        let built = suite::each(&ps, |(_, p)| p.regenerate());
+        ps.into_iter().zip(built).map(|((n, p), b)| (n, p, b)).collect()
+    })
+}
+
+/// A regen on a thread where `spoil` ran and panicked first.
+fn spoiled(part: &Part, spoil: fn()) -> u64 {
     // resume_unwind: a panic without the hook's message
-    let p1 = part.clone();
-    let fresh = std::thread::spawn(move || bits(&p1.regenerate()))
-        .join()
-        .expect("fresh");
     let p2 = part.clone();
-    let spoiled = std::thread::spawn(move || {
+    std::thread::spawn(move || {
         let _ = std::panic::catch_unwind(spoil);
         bits(&p2.regenerate())
     })
     .join()
-    .expect("spoiled");
-    (fresh, spoiled)
+    .expect("spoiled")
 }
 
 /// Audit item 3: a STEP read sets the work budget and a panic inside it leaves it set; mass
 /// properties (what a fillet's retries and thermo accept or refuse by) on that thread then fail.
 #[test]
 fn after_a_caught_panic_the_work_budget_is_back() {
-    let mut bad = vec![];
-    for (name, part) in parts() {
-        let Ok(body) = part.regenerate() else { continue };
+    let bad: Vec<String> = suite::each(fresh(), |(name, _, body)| {
+        let Ok(body) = body.clone() else { return None };
         let mass = |b: &forge_topo::Body| {
             let m = forge_topo::mass::mass(b).map(|m| m.volume.to_bits());
             let t = forge_mesh::tessellate(b, &forge_mesh::Quality::default()).map(|m| m.triangles.len());
@@ -126,10 +135,11 @@ fn after_a_caught_panic_the_work_budget_is_back() {
         })
         .join()
         .expect("spoiled");
-        if fresh != spoiled {
-            bad.push(format!("{name}: {fresh} vs {spoiled}"));
-        }
-    }
+        (fresh != spoiled).then(|| format!("{name}: {fresh} vs {spoiled}"))
+    })
+    .into_iter()
+    .flatten()
+    .collect();
     assert!(
         bad.is_empty(),
         "mass after a panic in a budgeted read differs:\n{}",
@@ -141,16 +151,16 @@ fn after_a_caught_panic_the_work_budget_is_back() {
 /// one switch outside forge-bool (`ABSORB_HAIR_ROOTS`) stands for them.
 #[test]
 fn after_a_caught_panic_the_boolean_switches_are_back() {
-    let mut bad = vec![];
-    for (name, part) in parts() {
-        let (a, b) = fresh_and_spoiled(&part, || {
+    let bad: Vec<String> = suite::each(fresh(), |(name, part, body)| {
+        let b = spoiled(part, || {
             forge_geom::intersect::ABSORB_HAIR_ROOTS.with(|k| k.set(true));
             std::panic::resume_unwind(Box::new("a retry cut short"));
         });
-        if a != b {
-            bad.push(name);
-        }
-    }
+        (bits(body) != b).then(|| name.clone())
+    })
+    .into_iter()
+    .flatten()
+    .collect();
     assert!(
         bad.is_empty(),
         "a regen after a panic in a boolean retry differs: {bad:?}"

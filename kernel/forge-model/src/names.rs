@@ -1189,39 +1189,65 @@ pub fn run(
     let mut r = Rng::new(seed);
     let mut out = Vec::with_capacity(cases);
     let mut tries = 0;
+    // a prefix drawn again is the body built before: a regen is a function of the features
+    let mut built: std::collections::HashMap<(usize, usize), Option<std::sync::Arc<Body>>> =
+        std::collections::HashMap::new();
+    // the draws take r alone and a check takes none of it, so a batch drawn ahead, checked
+    // together and taken in order is what one at a time gives
+    let batch = if cfg!(target_family = "wasm") {
+        1
+    } else {
+        forge_math::par::threads().min(crate::suite::EACH_AT_ONCE)
+    };
     while out.len() < cases && tries < 20 * cases {
-        tries += 1;
-        let (name, part) = &corpus[r.below(corpus.len())];
-        let fs = &part.features;
-        let stops: Vec<usize> = (1..fs.len())
-            .filter(|&i| !stored_refs(&fs[i]).is_empty())
-            .collect();
-        let before = if !stops.is_empty() && r.bool() {
-            stops[r.below(stops.len())]
-        } else {
-            fs.len()
-        };
-        let Ok(b0) = regen(&fs[..before], None) else {
-            continue;
-        };
-        let Some(edit) = random_edit(part, before, &b0, big, &mut r) else {
-            continue;
-        };
-        let mut want: Vec<(Kind, Name)> = fs.get(before).map(stored_refs).unwrap_or_default();
-        let all = ents(&b0);
-        for _ in 0..refs.min(all.len()) {
-            let e = all[r.below(all.len())];
-            want.push((e.1, e.2));
+        let mut drawn = Vec::with_capacity(batch);
+        while drawn.len() < batch && tries < 20 * cases {
+            tries += 1;
+            let k = r.below(corpus.len());
+            let (name, part) = &corpus[k];
+            let fs = &part.features;
+            let stops: Vec<usize> = (1..fs.len())
+                .filter(|&i| !stored_refs(&fs[i]).is_empty())
+                .collect();
+            let before = if !stops.is_empty() && r.bool() {
+                stops[r.below(stops.len())]
+            } else {
+                fs.len()
+            };
+            let b0 = built
+                .entry((k, before))
+                .or_insert_with(|| regen(&fs[..before], None).ok().map(std::sync::Arc::new));
+            let Some(b0) = b0.clone() else {
+                continue;
+            };
+            let Some(edit) = random_edit(part, before, &b0, big, &mut r) else {
+                continue;
+            };
+            let mut want: Vec<(Kind, Name)> = fs.get(before).map(stored_refs).unwrap_or_default();
+            let all = ents(&b0);
+            for _ in 0..refs.min(all.len()) {
+                let e = all[r.below(all.len())];
+                want.push((e.1, e.2));
+            }
+            want.sort();
+            want.dedup();
+            drawn.push((name, part, before, b0, edit, want));
         }
-        want.sort();
-        want.dedup();
-        if let Some(outcome) = check(part, before, &b0, &edit, steps, &want) {
-            out.push(Case {
-                part: name.clone(),
-                before,
-                edit,
-                outcome,
-            });
+        let outcomes: Vec<Option<Outcome>> = forge_math::par::map(drawn.len(), |i| {
+            let (_, part, before, b0, edit, want) = &drawn[i];
+            check(part, *before, b0, edit, steps, want)
+        });
+        for ((name, _, before, _, edit, _), outcome) in drawn.into_iter().zip(outcomes) {
+            if out.len() < cases
+                && let Some(outcome) = outcome
+            {
+                out.push(Case {
+                    part: name.clone(),
+                    before,
+                    edit,
+                    outcome,
+                });
+            }
         }
     }
     out

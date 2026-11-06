@@ -5,7 +5,7 @@ use forge_model::{suite, torture};
 fn nary_matches_sequential_on_the_suite() {
     let mut parts = suite::parts();
     parts.push(("torture", torture::part(221)));
-    for (name, part) in parts {
+    suite::each(&parts, |&(name, ref part)| {
         let seq = part.regenerate().expect("sequential regen");
         let nary = part.regenerate_nary(4).expect("n-ary regen");
         assert!(
@@ -24,12 +24,12 @@ fn nary_matches_sequential_on_the_suite() {
         );
         // coincident faces: the one there first is kept, and keeps a later face's imprint
         assert_eq!(nary.face_ids().count(), seq.face_ids().count(), "{name}: faces");
-    }
+    });
 }
 
 #[test]
 fn nary_matches_sequential_on_fuzz() {
-    for seed in [1, 2, 5, 10, 20, 103] {
+    suite::each(&[1, 2, 5, 10, 20, 103], |&seed| {
         let part = suite::fuzz(seed, 80);
         let nary = part.regenerate_nary(4).expect("n-ary regen");
         assert!(forge_topo::check(&nary).is_empty(), "seed {seed}");
@@ -38,7 +38,7 @@ fn nary_matches_sequential_on_fuzz() {
             part.regenerate().expect("sequential regen").face_ids().count(),
             "seed {seed}"
         );
-    }
+    });
 }
 
 /// Cut points at x = 0.0 and x = -0.0 fell in two slabs of the vertex clustering that compared
@@ -61,7 +61,7 @@ fn fuzz11_signed_zero_cut_points() {
 fn nary_bits_do_not_depend_on_threads() {
     let mut parts = suite::parts();
     parts.push(("torture", torture::part(221)));
-    for (name, part) in parts {
+    suite::each(&parts, |&(name, ref part)| {
         let bits = |threads: usize| {
             let mut h = forge_math::hash::BitHasher::new();
             match part.regenerate_nary(threads) {
@@ -82,7 +82,7 @@ fn nary_bits_do_not_depend_on_threads() {
         let one = bits(1);
         assert_eq!(bits(2), one, "{name}: 2 threads");
         assert_eq!(bits(4), one, "{name}: 4 threads");
-    }
+    });
 }
 
 /// The auto regen takes the sequential path for a short history and the n-ary one for a long.

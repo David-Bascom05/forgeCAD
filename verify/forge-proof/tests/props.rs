@@ -10,15 +10,16 @@ fn fuzz() -> Vec<(String, Part)> {
 }
 
 fn holds(prop: &str, f: props::Property, parts: &[(String, Part)]) {
-    for (i, (name, part)) in parts.iter().enumerate() {
-        let seed = i as u64 + 1;
+    let seeded: Vec<(u64, &(String, Part))> =
+        parts.iter().enumerate().map(|(i, p)| (i as u64 + 1, p)).collect();
+    suite::each(&seeded, |&(seed, (name, part))| {
         if let Some(hit) = f(part, seed) {
             panic!(
                 "{prop} fails on {name} (seed {seed}): {}: {}",
                 hit.kind, hit.detail
             );
         }
-    }
+    });
 }
 
 #[test]

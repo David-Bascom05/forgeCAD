@@ -543,12 +543,13 @@ mod tests {
             Vec3::X,
         )
         .expect("frame");
-        for part in [
+        let parts = [
             suite::mixed(),
             suite::shaft(),
             suite::fuzz(3, 40),
             torture::part(60),
-        ] {
+        ];
+        suite::each(&parts, |part| {
             let b = part.regenerate_nary(4).expect("regen");
             let v = volume(&b);
             for m in [
@@ -565,7 +566,7 @@ mod tests {
                 let vc = volume(&c);
                 assert!((vc - v).abs() <= 1e-9 * v, "{m:?}: volume {vc} vs {v}");
             }
-        }
+        });
     }
 
     /// A reflected part turn's analytic solid agrees with its reflected B-rep.

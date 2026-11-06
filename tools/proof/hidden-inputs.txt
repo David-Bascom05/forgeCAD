@@ -172,6 +172,7 @@ speed (lazy field or constant table)  @ forge-model/src/lib.rs|lazy|let index = 
 speed (a counter, stats only)  @ forge-model/src/lib.rs|static|static NAME_FALLBACKS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 speed (a counter, stats only)  @ forge-model/src/lib.rs|thread_local|thread_local! {
 no-output (results and errors put back in index order)  @ forge-model/src/lib.rs|threads|let done: Vec<Vec<Built>> = std::thread::scope(|s| {
+no-output (looked up by key, never iterated)  @ forge-model/src/names.rs|hash-order|let mut built: std::collections::HashMap<(usize, usize), Option<std::sync::Arc<Body>>> =
 no-output (no iteration order reaches an output; audit)  @ forge-model/src/splitface.rs|hash-order|leave: &HashMap<VertexId, Use>,
 no-output (no iteration order reaches an output; audit)  @ forge-model/src/splitface.rs|hash-order|let mut cuts: HashMap<EdgeId, Vec<(f64, VertexId)>> = HashMap::new();
 no-output (no iteration order reaches an output; audit)  @ forge-model/src/splitface.rs|hash-order|let mut from: HashMap<VertexId, Vec<usize>> = HashMap::new();
@@ -181,6 +182,7 @@ no-output (no iteration order reaches an output; audit)  @ forge-model/src/split
 no-output (no iteration order reaches an output; audit)  @ forge-model/src/splitface.rs|hash-order|let mut vert: HashMap<usize, VertexId> = HashMap::new();
 no-output (no iteration order reaches an output; audit)  @ forge-model/src/splitface.rs|hash-order|pieces: &HashMap<EdgeId, Vec<EdgeId>>,
 no-output (constant tables or print switches)  @ forge-model/src/standard.rs|static|pub static SCREWS: &[Screw] = &[
+no-output (results and panics put back in item order)  @ forge-model/src/suite.rs|threads|std::thread::scope(|s| {
 speed (cache answering a function of its own key)  @ forge-model/src/swept.rs|static|static BUILT: std::cell::RefCell<Vec<(u64, String, Tool)>> = const { std::cell::RefCell::new(Vec::new()) };
 speed (cache answering a function of its own key)  @ forge-model/src/swept.rs|static|static BUILT_MOST: std::cell::Cell<usize> = const { std::cell::Cell::new(64) };
 speed (cache answering a function of its own key)  @ forge-model/src/swept.rs|static|static SEEN: std::cell::RefCell<Vec<(Feature, Option<Box3>)>> = const { std::cell::RefCell::new(Vec::new()) };

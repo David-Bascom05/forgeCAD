@@ -136,8 +136,8 @@ fn check(parts: Vec<(String, Part)>, chords: &[f64]) {
 }
 
 fn check_at(parts: Vec<(String, Part)>, qs: &[Quality]) {
-    let mut bad = Vec::new();
-    for (name, part) in parts {
+    let bad = suite::each(&parts, |(name, part)| {
+        let mut bad = Vec::new();
         let b = part.regenerate().expect("regenerates");
         for &q in qs {
             let chord = q.chord;
@@ -150,7 +150,9 @@ fn check_at(parts: Vec<(String, Part)>, qs: &[Quality]) {
                 Err(e) => bad.push(format!("{name} at {chord}: {e:?}")),
             }
         }
-    }
+        bad
+    })
+    .concat();
     assert!(bad.is_empty(), "{}", bad.join("\n"));
 }
 
@@ -212,8 +214,8 @@ fn shape_bounds_hold() {
     parts.extend(fillets::variable_cases().into_iter().map(|c| c.1));
     let mut rng = forge_math::rng::Rng::new(7);
     let (mut faces, mut boxes) = (0, 0);
-    for part in parts {
-        let b = part.regenerate().expect("regenerates");
+    // built side by side; the boxes are drawn in turn, as before
+    for b in suite::each(&parts, |p| p.regenerate().expect("regenerates")) {
         for f in b.face_ids() {
             let Surface::Procedural(pr) = &b.face(f).surface else {
                 continue;

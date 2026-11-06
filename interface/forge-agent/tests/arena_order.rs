@@ -83,7 +83,7 @@ fn reversed(b: &forge_topo::Body) -> forge_topo::Body {
 
 #[test]
 fn names_do_not_follow_arena_order() {
-    for part in bench::NAMES {
+    forge_model::suite::each(&bench::NAMES, |part| {
         let m = bench::model(bench::src(part).expect("a bench part"));
         let ids: Vec<u64> = m.lines.iter().map(|l| l.id).collect();
         for i in 0..m.built() {
@@ -102,5 +102,5 @@ fn names_do_not_follow_arena_order() {
                 panic!("{part} line {i} {}: {why}", m.kinds[i]);
             }
         }
-    }
+    });
 }
