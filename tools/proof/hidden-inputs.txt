@@ -242,6 +242,7 @@ no-output (powi: small integer exponents, same bits native and wasm; ban-list it
 no-output (no iteration order reaches an output; audit)  @ forge-sheet/src/region.rs|hash-order|type Map<K, V> = HashMap<K, V, std::hash::BuildHasherDefault<Mix>>;
 no-output (FFI buffer or a local identity of one object)  @ forge-sheet/src/region.rs|pointer|let x_is_spline = matches!(x, Piece::Spline { s: q, .. } if Arc::ptr_eq(q, s));
 no-output (test code)  @ forge-thermo/src/bench.rs|env|let path = format!("{}/data/benchmarks/{name}.csv", env!("CARGO_MANIFEST_DIR"));
+no-output (the Newton factor's subtrees on their own threads: each supernode's arithmetic fixed by the pattern, the same whatever the thread count or order; joined before the top)  @ forge-thermo/src/newton.rs|threads|std::thread::scope(|sc| {
 no-output (looked up by key only: get, entry; nodes() sums counts, an integer)  @ forge-thermo/src/sdf.rs|hash-order|bricks: HashMap<(i32, i32, i32), Box<[f32; B * B * B]>>,
 no-output (looked up by key only: get, entry; each cell's list in triangle order)  @ forge-thermo/src/sdf.rs|hash-order|cells: HashMap<(i64, i64, i64), Vec<u32>>,
 no-output (looked up by key only; each key's sum added in triangle order)  @ forge-thermo/src/sdf.rs|hash-order|edge_normal: HashMap<(u32, u32), Vec3>,

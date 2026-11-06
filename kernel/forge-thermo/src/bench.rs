@@ -523,8 +523,8 @@ fn v_groove(d: f64, len: f64) -> Body {
 /// lambda_c = 1.1107, whatever the pressure it ends at. Here a long groove (plane strain in its
 /// middle), the sheet stuck on the mould's top at the groove's edges. Mean and worst error of
 /// t/t0 on the walls (three nodes from the corner, two from the clamp's edge), printed and bounded.
-/// Measured, mean / worst of t/t0: 80 nodes across the window and 10 steps 0.33 / 1.04 %; 160 and
-/// 10, 0.44 / 1.64 %; 160 and 100, 0.35 / 1.39 %; R/d 0.018 (the pressure raised till the corner
+/// Measured, mean / worst of t/t0: 80 nodes across the window and 10 steps 0.32 / 0.93 %; 160 and
+/// 10, 0.24 / 1.10 %; 160 and 100, 0.25 / 1.11 %; R/d 0.018 (the pressure raised till the corner
 /// is full).
 #[test]
 #[ignore = "needs the fine sheet (160 nodes; coarser ones miss the closed form): cargo test --release -p forge-thermo -- --ignored, or the scoreboard's ref_corner_fill"]
@@ -602,10 +602,11 @@ fn the_membrane_fills_a_corner_as_the_closed_form_says() {
         );
         radius.push(r);
         if bending {
-            // a plate cannot follow the corner as tight as a membrane: its radius is larger, and
-            // the wall it lays down away from the corner is the membrane's
+            // a plate cannot follow the corner tighter than a membrane, and the wall it lays down
+            // away from the corner is the membrane's (at 160 nodes, the pressure raised till the
+            // corner is full, both reach the node at the corner: the same radius to rounding)
             assert!(
-                r > radius[1],
+                r >= radius[1] - 1e-9 * d,
                 "bending radius {r} vs the membrane's {}",
                 radius[1]
             );
@@ -910,9 +911,12 @@ fn male_block(a: f64, h: f64, rf: f64) -> Body {
 }
 
 /// Webbing (stage 2g): a tall male block webs at its corners (Formech's rule: a male part over
-/// about as tall as it is wide), a low one does not. Squeezed area and folds for each: 15 mm
-/// tall, 72 triangles squeezed (144 mm2), no fold; 90 mm, 187 (374 mm2), 94 folds.
-/// 40 nodes along the window: quick enough for every test run.
+/// about as tall as it is wide), a low one does not: the tall one folds onto itself, the low one
+/// nowhere. Squeezed area and folds for each, 80 nodes along the window: 15 mm tall, 64 triangles
+/// squeezed (128 mm2), no fold; 90 mm, 48 (96 mm2), 70 folds. The squeezed area is no test between
+/// them: with the drape in 24 or 96 steps (either minimiser, run to equilibrium) it is 96 and
+/// 112-124 mm2, the tall block's gathered material folding instead. 40 nodes along the window:
+/// quick enough for every test run.
 #[test]
 fn a_tall_male_block_webs_and_a_low_one_does_not() {
     blocks_web(40);
@@ -959,8 +963,7 @@ fn blocks_web(res: usize) {
         );
         found.push(w);
     }
-    assert!(found[1].squeezed_area > found[0].squeezed_area);
-    assert!(found[0].folds.is_empty() && !found[1].folds.is_empty());
+    assert!(found[0].folds.is_empty() && found[1].folds.len() >= 20);
 }
 
 /// The sheet's sag before the vacuum (stage 2/3): hung under its weight to a depth, that shape

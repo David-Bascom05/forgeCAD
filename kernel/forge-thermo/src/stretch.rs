@@ -2,12 +2,13 @@
 //! (Ogden; neo-Hookean is one term of exponent 2), clamped round the window, draped over a male
 //! tool as the clamp comes down and drawn onto the tool by the pressure, each point stopping where
 //! it first touches (sticking contact, the rule every forming model keeps). Each load step is an
-//! equilibrium found by L-BFGS on the membrane's energy plus the pressure's work; a point whose
-//! step carries it into the tool stops where it crossed. The thickness is t0 times the area the
-//! sheet had over the area it has. Isothermal, no friction slip, no plug: an estimate under a
+//! equilibrium found by projected Newton on the membrane's energy plus the pressure's work
+//! (newton.rs); a point whose step carries it into the tool stops where it crossed. The thickness
+//! is t0 times the area the sheet had over the area it has. Isothermal, no friction slip, no plug: an estimate under a
 //! stated model, best at saying where the sheet is thinnest. Design: research/thermoform/.
 use crate::build::{Formed, Spec, Tool, inside, polygon};
 use crate::field::Field;
+use crate::newton::{Blocks, Chol};
 use forge_math::{Point2, Point3, Vec3, dmath};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -279,7 +280,7 @@ pub struct Stretch {
     pub mean: f64,
     /// Points inside the trim the sheet never reached (it bridges there).
     pub unformed: Vec<Point3>,
-    /// L-BFGS iterations spent, all steps.
+    /// Newton iterations spent, all steps.
     pub iterations: usize,
 }
 
@@ -733,6 +734,84 @@ struct Sheet {
     around: Vec<Vec<u32>>,
     /// Whether a relaxing since this was cleared ran out of iterations short of equilibrium.
     capped: bool,
+    solver: Solver,
+}
+
+/// The Newton step's matrix on the nodes' blocks (the membrane's and the pressure's apart, so the
+/// pressure can be left out where it makes the sum indefinite), each triangle's and hinge's
+/// blocks in it, the nodes' order and the factor.
+struct Solver {
+    m: Blocks,
+    press: Vec<[f64; 9]>,
+    tri_at: Vec<[u32; 9]>,
+    hinge_at: Vec<[u32; 16]>,
+    order: Vec<u32>,
+    chol: Chol,
+    /// Whether `chol` holds a factor (of the matrix at some earlier step), and the steps taken on
+    /// it since.
+    factored: bool,
+    age: usize,
+}
+
+impl Solver {
+    fn new(idx: &[[usize; 3]], hinges: &[Hinge], reference: &[Vec3]) -> Solver {
+        let groups: Vec<&[usize]> = idx
+            .iter()
+            .map(|t| &t[..])
+            .chain(hinges.iter().map(|h| &h.v[..]))
+            .collect();
+        let m = Blocks::new(reference.len(), &groups);
+        let tri_at = idx
+            .iter()
+            .map(|t| std::array::from_fn(|k| m.at(t[k / 3], t[k % 3]) as u32))
+            .collect();
+        let hinge_at = hinges
+            .iter()
+            .map(|h| std::array::from_fn(|k| m.at(h.v[k / 4], h.v[k % 4]) as u32))
+            .collect();
+        let at: Vec<[f64; 2]> = reference.iter().map(|p| [p.x, p.y]).collect();
+        let order = crate::newton::dissect(&at, &m);
+        Solver {
+            press: vec![[0.0; 9]; m.val.len()],
+            m,
+            tri_at,
+            hinge_at,
+            order,
+            chol: Chol::default(),
+            factored: false,
+            age: 0,
+        }
+    }
+}
+
+/// a b^T, row-major.
+fn outer(a: Vec3, b: Vec3) -> [f64; 9] {
+    [
+        a.x * b.x,
+        a.x * b.y,
+        a.x * b.z,
+        a.y * b.x,
+        a.y * b.y,
+        a.y * b.z,
+        a.z * b.x,
+        a.z * b.y,
+        a.z * b.z,
+    ]
+}
+
+/// Adds a symmetric block pair: `h` to (a, b), its transpose to (b, a).
+fn add_pair(val: &mut [[f64; 9]], ab: u32, ba: u32, h: &[f64; 9]) {
+    for (o, v) in val[ab as usize].iter_mut().zip(h) {
+        *o += v;
+    }
+    if ab != ba {
+        let o = &mut val[ba as usize];
+        for i in 0..3 {
+            for j in 0..3 {
+                o[3 * j + i] += h[3 * i + j];
+            }
+        }
+    }
 }
 
 /// Sliding nodes carried off the tool's top (over the cavity) fall free.
@@ -868,6 +947,143 @@ impl Sheet {
         Some(e)
     }
 
+    /// The Newton step at `x` (gradient `g`): H d = -g on the coordinates that move, H the
+    /// membrane's projected Hessian, the hinges' and the plug's spring's first-order terms, and
+    /// the pressure's while the sum stays positive definite; drawn by volume, the penalty's
+    /// rank-one term by Sherman-Morrison. With `reuse`, the last factor where it still covers
+    /// every coordinate that moves (a chord step: the coordinates stopped since left out). None:
+    /// no factor.
+    fn newton(&mut self, x: &[Vec3], p: f64, g: &[Vec3], reuse: bool) -> Option<Vec<Vec3>> {
+        let mask: Vec<u8> = (0..x.len())
+            .map(|k| {
+                if !self.free[k] || (self.slide[k] && self.dir[k].is_none()) {
+                    0
+                } else if self.slide[k] {
+                    0b011
+                } else {
+                    0b111
+                }
+            })
+            .collect();
+        // drawn by volume: its gradient, and the multiplier the pressure's term takes
+        let mut q = p;
+        let mut dv = vec![];
+        if let Some((aim, stiff, lambda)) = self.volume {
+            dv = vec![Vec3::ZERO; x.len()];
+            let mut vol = 0.0;
+            for v in &self.idx {
+                let (a, b, c) = (x[v[0]], x[v[1]], x[v[2]]);
+                vol += a.dot(b.cross(c)) / 6.0;
+                dv[v[0]] += b.cross(c) * (1.0 / 6.0);
+                dv[v[1]] += c.cross(a) * (1.0 / 6.0);
+                dv[v[2]] += a.cross(b) * (1.0 / 6.0);
+            }
+            q += lambda + stiff * (vol - aim);
+        }
+        let sh = &self.pool.shared;
+        let s = &mut self.solver;
+        if reuse && s.factored && s.age < 8 && s.chol.covers(&mask) {
+            s.age += 1;
+        } else {
+            s.factored = false;
+            s.age = 0;
+            s.chol.pattern(&mask, &s.order, &s.m);
+            if s.chol.dofs().is_empty() {
+                return Some(vec![Vec3::ZERO; x.len()]);
+            }
+            s.m.val.iter_mut().for_each(|b| *b = [0.0; 9]);
+            for (t, at) in self.tris.iter().zip(&s.tri_at) {
+                let h = crate::newton::element(&sh.law, t.v.map(|i| x[i]), t.dinv, t.vol, sh.wrinkle)?;
+                let mut k = 0;
+                for v in 0..3 {
+                    for w in v..3 {
+                        add_pair(&mut s.m.val, at[3 * v + w], at[3 * w + v], &h[k]);
+                        k += 1;
+                    }
+                }
+            }
+            for (h, at) in sh.hinges.iter().zip(&s.hinge_at) {
+                // 2 k (1 - cos theta): 2 k cos theta grad theta grad theta^T, its first-order term
+                let Some((d, cos)) = turn(h, x) else { continue };
+                let c = 2.0 * h.k * cos.max(0.0);
+                for v in 0..4 {
+                    for w in v..4 {
+                        add_pair(&mut s.m.val, at[4 * v + w], at[4 * w + v], &outer(d[v] * c, d[w]));
+                    }
+                }
+            }
+            if let Some((plug, tip, stiff)) = self.plug.filter(|p| p.0.slip || p.0.friction.is_some()) {
+                for (k, p) in x.iter().enumerate() {
+                    if let (true, Some((_, n))) = (self.free[k], plug.inside(*p, tip)) {
+                        let at = s.m.at(k, k) as u32;
+                        add_pair(&mut s.m.val, at, at, &outer(n * (stiff * self.share[k]), n));
+                    }
+                }
+            }
+            // the pressure's work's: H_ab = -q/6 [c]x, and cyclic
+            if q != 0.0 {
+                s.press.iter_mut().for_each(|b| *b = [0.0; 9]);
+                let skew = |c: Vec3, f: f64| {
+                    [
+                        0.0,
+                        -c.z * f,
+                        c.y * f,
+                        c.z * f,
+                        0.0,
+                        -c.x * f,
+                        -c.y * f,
+                        c.x * f,
+                        0.0,
+                    ]
+                };
+                for (v, at) in self.idx.iter().zip(&s.tri_at) {
+                    let f = -q / 6.0;
+                    add_pair(&mut s.press, at[1], at[3], &skew(x[v[2]], f));
+                    add_pair(&mut s.press, at[5], at[7], &skew(x[v[0]], f));
+                    add_pair(&mut s.press, at[6], at[2], &skew(x[v[1]], f));
+                }
+            }
+            let diag = s
+                .chol
+                .dofs()
+                .iter()
+                .map(|&(u, c)| s.m.val[s.m.at(u as usize, u as usize)][4 * c as usize].abs())
+                .fold(0.0, f64::max);
+            let shift = 1e-10 * diag.max(1e-300);
+            s.factored = (q != 0.0 && s.chol.factor(&s.m.val, Some(&s.press), shift))
+                || s.chol.factor(&s.m.val, None, shift)
+                || s.chol.factor(&s.m.val, None, 1e4 * shift);
+            if !s.factored {
+                return None;
+            }
+        }
+        let dofs = s.chol.dofs();
+        let on = |u: u32, c: u8| mask[u as usize] >> c & 1 == 1;
+        let pick = |v: &[Vec3]| -> Vec<f64> {
+            dofs.iter()
+                .map(|&(u, c)| if on(u, c) { v[u as usize][c as usize] } else { 0.0 })
+                .collect()
+        };
+        let mut b: Vec<f64> = pick(g).iter().map(|v| -v).collect();
+        s.chol.solve(&mut b);
+        if let Some((_, stiff, _)) = self.volume {
+            let u = pick(&dv);
+            let mut w = u.clone();
+            s.chol.solve(&mut w);
+            let ub: f64 = u.iter().zip(&b).map(|(a, b)| a * b).sum();
+            let uw: f64 = u.iter().zip(&w).map(|(a, b)| a * b).sum();
+            let f = stiff * ub / (1.0 + stiff * uw);
+            b.iter_mut().zip(&w).for_each(|(bi, wi)| *bi -= f * wi);
+        }
+        let mut d = vec![[0.0; 3]; x.len()];
+        for (&(u, c), v) in dofs.iter().zip(&b) {
+            if on(u, c) {
+                d[u as usize][c as usize] = *v;
+            }
+        }
+        Some(d.iter().map(|v| Vec3::new(v[0], v[1], v[2])).collect())
+    }
+
     /// The signed volume under the sheet (the pressure's work is p times it).
     fn enclosed(&self, x: &[Vec3]) -> f64 {
         self.idx
@@ -993,6 +1209,32 @@ fn bend(h: &Hinge, x: &[Vec3]) -> Bend {
             -(m2 * (el * w)),
         ],
     )
+}
+
+/// A hinge's turn's gradient at its corners and the turn's cosine (`bend`'s terms without the
+/// 2 k sin theta).
+fn turn(h: &Hinge, x: &[Vec3]) -> Option<([Vec3; 4], f64)> {
+    let [a, b, c, d] = h.v.map(|i| x[i]);
+    let e = b - a;
+    let el = e.length();
+    let n1 = (a - c).cross(b - c);
+    let n2 = (b - d).cross(a - d);
+    let (q1, q2) = (n1.length_sq(), n2.length_sq());
+    if el < 1e-12 || q1 < 1e-24 || q2 < 1e-24 {
+        return None;
+    }
+    let cos = n1.dot(n2) / (q1 * q2).sqrt();
+    let (m1, m2) = (n1 * (1.0 / q1), n2 * (1.0 / q2));
+    let ehat = e * (1.0 / el);
+    Some((
+        [
+            m1 * (b - c).dot(ehat) + m2 * (b - d).dot(ehat),
+            -(m1 * (a - c).dot(ehat) + m2 * (a - d).dot(ehat)),
+            -(m1 * el),
+            -(m2 * el),
+        ],
+        cos,
+    ))
 }
 
 #[cfg(test)]
@@ -1140,7 +1382,6 @@ fn relax(
     reach: &[f64],
     max_it: usize,
 ) -> usize {
-    const M: usize = 6;
     let n = x.len();
     let mut g = vec![Vec3::ZERO; n];
     let moves = |k: usize| sheet.free[k] && !(sheet.slide[k] && sheet.dir[k].is_none());
@@ -1151,48 +1392,26 @@ fn relax(
         return 0;
     };
     sheet.pool.keep();
-    let (mut ss, mut ys): (Vec<Vec<Vec3>>, Vec<Vec<Vec3>>) = (vec![], vec![]);
     let dot = |a: &[Vec3], b: &[Vec3]| a.iter().zip(b).map(|(u, v)| u.dot(*v)).sum::<f64>();
     let mut g2 = vec![Vec3::ZERO; n];
     let mut trial = x.to_vec();
+    // the last step was the cap's (far from equilibrium): the next may take the last factor
+    let mut chord = false;
     for it in 0..max_it {
         let gmax = g.iter().map(|v| v.length()).fold(0.0, f64::max);
         if gmax <= tol {
             return it;
         }
-        // two-loop recursion
-        let mut q = g.clone();
-        let mut al = vec![0.0; ss.len()];
-        for k in (0..ss.len()).rev() {
-            let rho = 1.0 / dot(&ys[k], &ss[k]);
-            al[k] = rho * dot(&ss[k], &q);
-            for (qi, yi) in q.iter_mut().zip(&ys[k]) {
-                *qi -= *yi * al[k];
-            }
-        }
-        let gamma = match (ss.last(), ys.last()) {
-            (Some(s), Some(y)) => dot(s, y) / dot(y, y),
-            _ => step_cap / gmax,
-        };
-        q.iter_mut().for_each(|v| *v = *v * gamma);
-        for k in 0..ss.len() {
-            let rho = 1.0 / dot(&ys[k], &ss[k]);
-            let beta = rho * dot(&ys[k], &q);
-            for (qi, si) in q.iter_mut().zip(&ss[k]) {
-                *qi += *si * (al[k] - beta);
-            }
-        }
-        let mut d: Vec<Vec3> = q.iter().map(|v| -*v).collect();
+        let mut d = sheet.newton(x, p, &g, chord).unwrap_or_default();
         let mut slope = dot(&d, &g);
-        if slope.is_nan() || slope >= 0.0 {
+        if d.is_empty() || slope.is_nan() || slope >= 0.0 {
             d = g.iter().map(|v| -*v * (step_cap / gmax)).collect();
             slope = dot(&d, &g);
-            ss.clear();
-            ys.clear();
         }
         // no node moves more than the cap in one step
         let dmax = d.iter().map(|v| v.length()).fold(0.0, f64::max);
         let mut a = if dmax > step_cap { step_cap / dmax } else { 1.0 };
+        chord = dmax > step_cap;
         let mut taken = None;
         let mut stops: Vec<(usize, Vec3)> = vec![];
         for _ in 0..30 {
@@ -1257,8 +1476,6 @@ fn relax(
             };
             sheet.pool.keep();
             e = v;
-            ss.clear();
-            ys.clear();
             continue;
         };
         let stopped = !stops.is_empty();
@@ -1270,19 +1487,6 @@ fn relax(
             match sheet.energy(&trial, p, Some(&mut g2)) {
                 Some(v) => e2 = v,
                 None => return it,
-            }
-            ss.clear();
-            ys.clear();
-        } else {
-            ss.push((0..n).map(|i| trial[i] - x[i]).collect());
-            ys.push((0..n).map(|i| g2[i] - g[i]).collect());
-            if ss.len() > M {
-                ss.remove(0);
-                ys.remove(0);
-            }
-            if dot(ys.last().expect("pushed"), ss.last().expect("pushed")) <= 0.0 {
-                ss.clear();
-                ys.clear();
             }
         }
         x.copy_from_slice(&trial);
@@ -1474,6 +1678,15 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
         dv: Default::default(),
         gravity: 0.0,
         capped: false,
+        solver: Solver::new(
+            &idx,
+            &if pr.bending {
+                hinges(&idx, &reference, pr.law.shear() * spec.t * spec.t * spec.t / 3.0)
+            } else {
+                vec![]
+            },
+            &reference,
+        ),
         around: {
             let mut a = vec![vec![]; x.len()];
             for (k, t) in idx.iter().enumerate() {

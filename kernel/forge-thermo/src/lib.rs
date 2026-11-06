@@ -8,6 +8,7 @@ pub mod checks;
 pub mod field;
 pub mod fit;
 pub mod material;
+mod newton;
 pub mod prepare;
 pub mod scale;
 pub mod sdf;
