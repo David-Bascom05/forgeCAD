@@ -1270,6 +1270,7 @@ mod tests {
                     ds_binary: false,
                     ent: None,
                     data,
+                    trailing: vec![],
                     raw: None,
                 };
                 let name = o.data.name();

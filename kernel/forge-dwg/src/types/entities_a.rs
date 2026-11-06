@@ -385,8 +385,8 @@ impl Insert {
         s.bd(&mut self.rotation)?;
         s.bd3(&mut self.extrusion)?;
         s.b(&mut self.has_attribs)?;
-        // the spec has the R2004+ count whether or not attributes follow
-        self.attribs.count(s)
+        // the R2004+ count is there only when attributes follow (the spec has it always)
+        if self.has_attribs { self.attribs.count(s) } else { Ok(0) }
     }
     fn tail<S: Io>(&mut self, s: &mut S, n: i32) -> R<()> {
         s.h(&mut self.block)?;
