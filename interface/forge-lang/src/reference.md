@@ -1094,14 +1094,22 @@ harness loom(slack: ratio(0.03), round_up: 5, insert: 4) {
 - `segment(A, B, via: [REF..], k:, bend_k:, wall:, covering:, loop:, d:)`: a run of the network,
   its centreline lines and tangent arcs through the vias (a directed end leaves along its
   direction for `lead`, the segment's minimum radius by default).
-- `wire(FROM, TO, type:, through: [SEG..], colour:)`: from pin to pin; without `through:` the
-  shortest chain (Dijkstra on the segments' polyline lengths).
+- `wire(FROM, TO, type:, through: [SEG..], colour:)` (or `color:`): from pin to pin; without
+  `through:` the shortest chain (Dijkstra on the segments' polyline lengths). The colour is an
+  IEC 60757 code (`RD`, `BK`, `GN/YE` ..) or a word; it, else the type's, else a palette colour by
+  the wire's name, is what the wire is drawn in.
+- Drawn, every wire is its own tube: in each segment a slot of the wires' circle packing (larger
+  first, each where it least grows the bundle; `d_pack` in the report), carried along the
+  centreline in its rotation-minimising frame; at a node it moves smoothly to its slot in the next
+  segment; at each end a breakout of two tangent arcs from the bundle's start to its pin, into the
+  pin by its insertion (3 mm drawn at most). A breakout tighter than the wire's `min_bend` is the
+  warning `BreakoutTooTight` (move the exit node out). A covered segment is drawn with its sleeve.
 - Each segment's bundle: one wire is its own OD, two or more max(sqrt(K Σd²), d₁ + d₂), plus 2 ×
   wall; its minimum radius max(bend_k × D, each wire's min_bend). Every corner is an arc of that
   radius, or the tightest that fits with the warning `BendTooTight` (segment, corner, needed, got).
   A wire's length: (stubs + centrelines + service loops) × (1 + slack) + insertion at both pins,
   rounded up to `round_up`.
-- Warnings: `BendTooTight`, `KinkAtNode` (a wire turning through a free node: the angle and which
+- Warnings: `BendTooTight`, `BreakoutTooTight`, `KinkAtNode` (a wire turning through a free node: the angle and which
   way; add `along:`), `NoPath`, `PathBroken`, `NoInsulationOd`; information `SegmentEmpty`; errors
   `PinUnknown`, `NoExitNode`, `HarnessBrokenRef`, `UnknownWireType`, `WireRowBad`,
   `HarnessOccurrences`, `HarnessFile` (inside a placed file, with its line), `HarnessNotTopLevel`.

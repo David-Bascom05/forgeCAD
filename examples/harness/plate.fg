@@ -1,27 +1,36 @@
-# The plate the connectors sit on: a seat for each (z up) and a clip on a post between them.
-shared L = 220
-shared W = 140
+# The plate the connectors sit on: a seat for each (z up) and a clip on each of two posts (z up, x along the run).
+shared L = 320
+shared W = 200
 shared t = 5
 shared post = 8
-shared post_h = 30
-shared cx = -85
-shared m1x = 80
-shared m1y = 45
-shared m2x = 70
-shared m2y = -50
+shared post_h = 60
+shared cx = -130
+shared ax = 30
+shared ay = 75
+shared bx = 130
+shared by = 60
+shared sx = 130
+shared sy = -60
+shared p1x = -30
+shared p2x = 60
 properties(part_number: "PLT-1", description: "base plate", material: "6061-T6")
 sketch plan(on: xy) {
   outline = rect(center: (0, 0), size: (L, W))
 }
 base = extrude(plan, t)
 sketch pp(on: base.end) {
-  c = circle((0, 0), post / 2)
+  c1 = circle((p1x, 0), post / 2)
+  c2 = circle((p2x, 0), post / 2)
   ctrl = pt(cx, 0)
-  m1 = pt(m1x, m1y)
-  m2 = pt(m2x, m2y)
+  ma = pt(ax, ay)
+  mb = pt(bx, by)
+  sn = pt(sx, sy)
 }
-stand = extrude(pp, post_h)
+post1 = extrude(pp.c1, post_h)
+post2 = extrude(pp.c2, post_h)
 ctrl_seat = anchor(plane(at: pp.ctrl, normal: base.end.normal, x: plan.outline[0].dir))
-m1_seat = anchor(plane(at: pp.m1, normal: base.end.normal, x: plan.outline[0].dir))
-m2_seat = anchor(plane(at: pp.m2, normal: base.end.normal, x: plan.outline[0].dir))
-clip = anchor(plane(at: stand.end.center, normal: stand.end.normal, x: plan.outline[0].dir))
+ma_seat = anchor(plane(at: pp.ma, normal: base.end.normal, x: plan.outline[0].dir))
+mb_seat = anchor(plane(at: pp.mb, normal: base.end.normal, x: plan.outline[0].dir))
+sn_seat = anchor(plane(at: pp.sn, normal: base.end.normal, x: plan.outline[0].dir))
+clip1 = anchor(plane(at: post1.end.center, normal: base.end.normal, x: plan.outline[0].dir))
+clip2 = anchor(plane(at: post2.end.center, normal: base.end.normal, x: plan.outline[0].dir))

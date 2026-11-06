@@ -3831,11 +3831,22 @@ impl Gui {
                 crate::palette::part_colour(&o.file, pastel)
             };
         }
-        // the harnesses' tubes: their eye, and the selected rows' segments lit
+        // the harnesses' wires and sleeves: their eyes, each wire its colour, the selected rows lit
         let lit = a.harness_lit();
-        for &(h, sg, m) in &a.harness_placed {
+        for &(h, piece, m) in &a.harness_placed {
             let Some(ho) = a.harnesses.get(h) else { continue };
-            let rows = if a.harness_hidden.contains(&ho.id) {
+            let (shown, tint) = match piece {
+                crate::fg::HarnessPiece::Wire(w) => {
+                    let wo = &ho.wires[w];
+                    let c = forge_lang::harness::rgb(&wo.colour, &wo.name);
+                    (true, [c[0], c[1], c[2], 0.0])
+                }
+                crate::fg::HarnessPiece::Sleeve(sg) => (
+                    !a.sleeve_hidden(&ho.id, &ho.segments[sg].name),
+                    crate::fg::HARNESS_TINT,
+                ),
+            };
+            let rows = if a.harness_hidden.contains(&ho.id) || !shown {
                 NOWHERE
             } else {
                 placed[m].1
@@ -3843,10 +3854,10 @@ impl Gui {
             if scene.rows_of(m) != rows {
                 scene.set_rows(m, &rows);
             }
-            scene.placements[m].tint = if lit.contains(&(h, sg)) {
+            scene.placements[m].tint = if lit.contains(&(h, piece)) {
                 crate::fg::PICKED_TINT
             } else {
-                crate::fg::HARNESS_TINT
+                tint
             };
         }
         renderer.set_tints(scene);

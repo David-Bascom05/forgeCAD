@@ -12,6 +12,7 @@
 //! The maths is checked in research/harness/derive.py.
 
 pub mod tube;
+pub mod wires;
 
 use forge_math::{Point3, UnitVec3, dmath};
 use forge_ops::sweep::PathSeg;

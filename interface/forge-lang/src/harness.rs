@@ -223,6 +223,15 @@ pub enum HarnessProblem {
         needed: f64,
         got: f64,
     },
+    /// A wire's breakout from its bundle to its pin bends tighter than the wire may: the exit
+    /// node is too near the connector for how far the pin is off the bundle.
+    BreakoutTooTight {
+        harness: String,
+        wire: String,
+        connector: String,
+        needed: f64,
+        got: f64,
+    },
     /// A wire turns through a node with no `along:` (radians), toward a direction.
     KinkAtNode {
         harness: String,
@@ -310,6 +319,7 @@ impl HarnessProblem {
     pub fn level(&self) -> Level {
         match self {
             HarnessProblem::BendTooTight { .. }
+            | HarnessProblem::BreakoutTooTight { .. }
             | HarnessProblem::KinkAtNode { .. }
             | HarnessProblem::NoInsulationOd { .. }
             | HarnessProblem::NoPath { .. }
@@ -324,6 +334,7 @@ impl HarnessProblem {
             HarnessProblem::NotTopLevel => "HarnessNotTopLevel",
             HarnessProblem::BendTooTight { .. } => "BendTooTight",
             HarnessProblem::KinkAtNode { .. } => "KinkAtNode",
+            HarnessProblem::BreakoutTooTight { .. } => "BreakoutTooTight",
             HarnessProblem::NoPath { .. } => "NoPath",
             HarnessProblem::PathBroken { .. } => "PathBroken",
             HarnessProblem::PinUnknown { .. } => "PinUnknown",
@@ -365,6 +376,17 @@ impl HarnessProblem {
                 fmt(*needed),
                 fmt(*got),
                 fmt(*got)
+            ),
+            HarnessProblem::BreakoutTooTight {
+                harness,
+                wire,
+                connector,
+                needed,
+                got,
+            } => format!(
+                "{harness}.{wire} bends {} mm from the bundle to its pin on {connector}, under its {} mm (move the exit node out)",
+                fmt((got * 100.0).round() / 100.0),
+                fmt(*needed)
             ),
             HarnessProblem::KinkAtNode {
                 harness,
@@ -453,6 +475,19 @@ impl HarnessProblem {
                 ("segment", s(segment)),
                 ("corner", (*corner).into()),
                 ("at", p3(*at)),
+                ("needed", (*needed).into()),
+                ("got", (*got).into()),
+            ],
+            HarnessProblem::BreakoutTooTight {
+                harness,
+                wire,
+                connector,
+                needed,
+                got,
+            } => vec![
+                ("harness", s(harness)),
+                ("wire", s(wire)),
+                ("connector", s(connector)),
                 ("needed", (*needed).into()),
                 ("got", (*got).into()),
             ],
@@ -973,7 +1008,7 @@ fn wire_type(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     let a = Args::bind(
         ev,
         "wire_type",
-        &["name", "awg", "od", "min_bend", "colour", "source"],
+        &["name", "awg", "od", "min_bend", "colour", "source", "color"],
         args,
         span,
     )?;
@@ -1018,6 +1053,7 @@ fn wire_type(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
             .or(row.as_ref().and_then(|r| r.min_bend))
             .unwrap_or(0.0),
         colour: text(&a, "colour")?
+            .or(text(&a, "color")?)
             .or(row.as_ref().map(|r| r.colour.clone()))
             .unwrap_or_default(),
         source,
@@ -1198,7 +1234,7 @@ fn wire(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     let a = Args::bind(
         ev,
         "wire",
-        &["from", "to", "type", "through", "colour"],
+        &["from", "to", "type", "through", "colour", "color"],
         args,
         span,
     )?;
@@ -1235,7 +1271,7 @@ fn wire(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         }
     };
     let id = ev.take_id("wire", span)?;
-    let colour = text(&a, "colour")?;
+    let colour = text(&a, "colour")?.or(text(&a, "color")?);
     let (h, d) = current(ev);
     d.wires.push(WireDef {
         id,
@@ -1394,6 +1430,54 @@ fn csv_field(s: &str) -> String {
 
 // ---- after the solve ----------------------------------------------------------------------------
 
+/// How far a drawn wire goes into its pin, at most (mm).
+const MAX_IN: f64 = 3.0;
+
+/// A wire's colour as drawn: its code (IEC 60757 letters, `GN/YE` by its first) or English word,
+/// else one of a palette by its name, so wires without one still tell apart.
+pub fn rgb(colour: &str, name: &str) -> [f32; 3] {
+    let c = colour
+        .split(['/', '-', ' '])
+        .next()
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    let known = match c.as_str() {
+        "bk" | "black" => Some([0.08, 0.08, 0.09]),
+        "bn" | "brown" => Some([0.45, 0.26, 0.12]),
+        "rd" | "red" => Some([0.80, 0.10, 0.10]),
+        "og" | "orange" => Some([0.95, 0.50, 0.08]),
+        "ye" | "yellow" => Some([0.95, 0.85, 0.15]),
+        "gn" | "green" => Some([0.10, 0.60, 0.20]),
+        "bu" | "blue" => Some([0.12, 0.32, 0.85]),
+        "vt" | "violet" | "purple" => Some([0.52, 0.22, 0.75]),
+        "gy" | "grey" | "gray" => Some([0.55, 0.55, 0.57]),
+        "wh" | "white" => Some([0.93, 0.93, 0.92]),
+        "pk" | "pink" => Some([0.96, 0.55, 0.70]),
+        "gd" | "gold" => Some([0.83, 0.68, 0.22]),
+        "tq" | "turquoise" => Some([0.10, 0.75, 0.75]),
+        "sr" | "silver" => Some([0.75, 0.76, 0.78]),
+        _ => None,
+    };
+    known.unwrap_or_else(|| {
+        const PALETTE: [[f32; 3]; 10] = [
+            [0.85, 0.37, 0.01],
+            [0.46, 0.44, 0.70],
+            [0.11, 0.62, 0.47],
+            [0.91, 0.16, 0.54],
+            [0.40, 0.65, 0.12],
+            [0.90, 0.67, 0.01],
+            [0.65, 0.46, 0.11],
+            [0.12, 0.47, 0.71],
+            [0.89, 0.10, 0.11],
+            [0.42, 0.24, 0.60],
+        ];
+        let h = name
+            .bytes()
+            .fold(0u32, |h, b| h.wrapping_mul(31).wrapping_add(u32::from(b)));
+        PALETTE[h as usize % PALETTE.len()]
+    })
+}
+
 /// A routed harness, for the report, the browser and the CSV export.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct HarnessOut {
@@ -1405,10 +1489,11 @@ pub struct HarnessOut {
     pub wires: Vec<WireOut>,
     /// Wires by type and coverings by name: total length (mm); connectors: count.
     pub bom: Vec<BomRow>,
-    /// The tubes, in world space, one list per segment.
+    /// Each covered segment's sleeve, in world space (none for a bare segment), by segment.
     pub tubes: Vec<Vec<Arc<forge_topo::Body>>>,
-    /// Each wire's pin-to-node stubs, as world lines (for drawing thin).
-    pub stubs: Vec<[Point3; 2]>,
+    /// Each wire's own centreline, pin to pin, in world space, and its radius (by wire; none
+    /// where it has no path).
+    pub paths: Vec<Option<(Vec<Point3>, f64)>>,
     /// Where each statement is, by item id (`loom.W1`).
     pub spans: Vec<(String, Span)>,
 }
@@ -1440,6 +1525,8 @@ pub struct SegOut {
     pub r_least: Option<f64>,
     pub wires: Vec<String>,
     pub covering: Option<String>,
+    /// The diameter the wires' packing takes (the rule's `d` may be less, or more).
+    pub d_pack: f64,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -1729,11 +1816,32 @@ fn route_one(
         };
         push(ev, span, p);
     }
-    report(&mut out, d, &net, &r, tubes);
+    for (k, end, got) in report(&mut out, d, &net, &r, tubes) {
+        let w = &d.wires[k];
+        let pin = if end == 0 { &w.from } else { &w.to };
+        push(
+            ev,
+            w.span,
+            HarnessProblem::BreakoutTooTight {
+                harness: d.id.clone(),
+                wire: local(&w.id),
+                connector: local(&d.connectors[pin.conn].id),
+                needed: d.types[w.ty].min_bend,
+                got,
+            },
+        );
+    }
     out
 }
 
-fn report(out: &mut HarnessOut, d: &HarnessDef, net: &fh::Network, r: &fh::Routed, tubes: bool) {
+/// The report; and each breakout tighter than its wire's own radius: (wire, end 0 or 1, radius).
+fn report(
+    out: &mut HarnessOut,
+    d: &HarnessDef,
+    net: &fh::Network,
+    r: &fh::Routed,
+    tubes: bool,
+) -> Vec<(usize, usize, f64)> {
     let local = |id: &str| d.local(id).to_string();
     out.connectors = d
         .connectors
@@ -1771,6 +1879,7 @@ fn report(out: &mut HarnessOut, d: &HarnessDef, net: &fh::Network, r: &fh::Route
             r_least: o.corners.iter().map(|c| c.got).reduce(f64::min),
             wires: o.wires.iter().map(|&w| net.wires[w].id.clone()).collect(),
             covering: s.covering.clone(),
+            d_pack: 0.0,
         })
         .collect();
     out.wires = d
@@ -1823,16 +1932,6 @@ fn report(out: &mut HarnessOut, d: &HarnessDef, net: &fh::Network, r: &fh::Route
         );
     }
     out.bom = bom;
-    out.stubs = net
-        .wires
-        .iter()
-        .flat_map(|w| {
-            [w.from, w.to].map(|e| {
-                let c = &net.connectors[e.connector];
-                [c.pins[e.pin].1, net.nodes[c.exit].at]
-            })
-        })
-        .collect();
     out.spans = d
         .connectors
         .iter()
@@ -1842,19 +1941,42 @@ fn report(out: &mut HarnessOut, d: &HarnessDef, net: &fh::Network, r: &fh::Route
         .chain(d.wires.iter().map(|w| (w.id.clone(), w.span)))
         .chain(d.types.iter().map(|t| (t.id.clone(), t.span)))
         .collect();
+    let slots = fh::wires::slots(net, r);
+    for (s, sl) in out.segments.iter_mut().zip(&slots) {
+        s.d_pack = sl.d;
+    }
+    let paths = fh::wires::paths(net, r, &slots, MAX_IN);
+    let mut tight = vec![];
+    for (k, p) in paths.iter().enumerate() {
+        let need = net.types[net.wires[k].ty].min_bend;
+        for (end, got) in p.iter().flat_map(|p| p.breakout.iter().enumerate()) {
+            if let Some(got) = got
+                && *got < need * (1.0 - 1e-9)
+            {
+                tight.push((k, end, *got));
+            }
+        }
+    }
     if tubes {
+        // each wire its own, a covered segment's sleeve round its wires
+        out.paths = paths.into_iter().map(|p| p.map(|w| (w.points, w.r))).collect();
         out.tubes = r
             .segments
             .iter()
             .enumerate()
             .map(|(k, s)| {
-                fh::tube::tube(&s.pieces, s.d, crate::asm::hid(&d.segments[k].id))
+                if d.segments[k].covering.is_none() {
+                    return vec![];
+                }
+                let od = s.d.max(slots[k].d + 2.0 * d.segments[k].wall);
+                fh::tube::tube(&s.pieces, od, crate::asm::hid(&d.segments[k].id))
                     .into_iter()
                     .map(Arc::new)
                     .collect()
             })
             .collect();
     }
+    tight
 }
 
 // ---- JSON and CSV -------------------------------------------------------------------------------
@@ -1911,6 +2033,7 @@ pub fn json(h: &HarnessOut) -> Json {
                             ("d", g.d.into()),
                             ("r_min", g.r_min.into()),
                             ("r_least", opt(g.r_least)),
+                            ("d_pack", g.d_pack.into()),
                             ("wires", strs(&g.wires)),
                             ("covering", g.covering.as_deref().map_or(Json::Null, s)),
                         ])

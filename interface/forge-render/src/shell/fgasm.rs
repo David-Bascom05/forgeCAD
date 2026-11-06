@@ -953,7 +953,7 @@ pub struct AsmPanel {
     /// The document's wire harnesses, routed; each tube's placement (harness, segment,
     /// placement); the harnesses whose tubes are hidden; what the problems flag, by row key.
     pub harnesses: Vec<forge_lang::harness::HarnessOut>,
-    pub harness_placed: Vec<(usize, usize, usize)>,
+    pub harness_placed: Vec<(usize, crate::fg::HarnessPiece, usize)>,
     pub harness_hidden: HashSet<String>,
     pub harness_flags: HashMap<String, Flag>,
     pub occ: Vec<OccRow>,
@@ -1254,7 +1254,7 @@ impl AsmPanel {
     pub fn set_harnesses(
         &mut self,
         hs: Vec<forge_lang::harness::HarnessOut>,
-        placed: Vec<(usize, usize, usize)>,
+        placed: Vec<(usize, crate::fg::HarnessPiece, usize)>,
         issues: &[super::fg::Issue],
     ) {
         self.harness_placed = placed;
@@ -1274,9 +1274,10 @@ impl AsmPanel {
         }
     }
 
-    /// The segments a selected harness row lights: a segment's own, a wire's path, a harness's
-    /// all; by (harness, segment).
-    pub fn harness_lit(&self) -> Vec<(usize, usize)> {
+    /// The pieces a selected harness row lights: a segment's wires and sleeve, a wire, a
+    /// harness's all; by (harness, piece).
+    pub fn harness_lit(&self) -> Vec<(usize, crate::fg::HarnessPiece)> {
+        use crate::fg::HarnessPiece as P;
         let Some(key) = self.selected.as_deref().and_then(|k| k.strip_prefix("h:")) else {
             return vec![];
         };
@@ -1285,20 +1286,47 @@ impl AsmPanel {
             let Some(rest) = key.strip_prefix(ho.id.as_str()) else {
                 continue;
             };
-            let seg = |n: &str| ho.segments.iter().position(|s| s.name == n);
+            let wire = |n: &str| ho.wires.iter().position(|w| w.name == n);
             let parts: Vec<&str> = rest.trim_start_matches(':').split(':').collect();
             match parts.as_slice() {
-                [""] => out.extend((0..ho.segments.len()).map(|k| (h, k))),
-                ["s", name, ..] => out.extend(seg(name).map(|k| (h, k))),
-                ["w", name] => {
-                    if let Some(w) = ho.wires.iter().find(|w| w.name == *name) {
-                        out.extend(w.path.iter().filter_map(|n| seg(n)).map(|k| (h, k)));
+                [""] => {
+                    out.extend((0..ho.wires.len()).map(|k| (h, P::Wire(k))));
+                    out.extend((0..ho.segments.len()).map(|k| (h, P::Sleeve(k))));
+                }
+                ["s", name] => {
+                    if let Some(k) = ho.segments.iter().position(|s| s.name == *name) {
+                        out.push((h, P::Sleeve(k)));
+                        out.extend(
+                            ho.segments[k]
+                                .wires
+                                .iter()
+                                .filter_map(|w| wire(w))
+                                .map(|w| (h, P::Wire(w))),
+                        );
                     }
                 }
+                ["s", _, w] | ["w", w] => out.extend(wire(w).map(|k| (h, P::Wire(k)))),
                 _ => {}
             }
         }
         out
+    }
+
+    /// A covered segment's row (`h:<harness>:s:<segment>`): its harness and segment.
+    pub fn covered_row(&self, key: &str) -> Option<(String, String)> {
+        let rest = key.strip_prefix("h:")?;
+        self.harnesses.iter().find_map(|h| {
+            let seg = rest.strip_prefix(h.id.as_str())?.strip_prefix(":s:")?;
+            h.segments
+                .iter()
+                .any(|s| s.name == seg && s.covering.is_some())
+                .then(|| (h.id.clone(), seg.to_string()))
+        })
+    }
+
+    /// Whether a covered segment's sleeve is hidden (its row's eye), by harness and segment.
+    pub fn sleeve_hidden(&self, h: &str, seg: &str) -> bool {
+        self.harness_hidden.contains(&format!("{h}:s:{seg}"))
     }
 
     fn sync(&mut self) {
@@ -1685,7 +1713,10 @@ impl AsmTree {
                     Some(sf),
                     sk.clone(),
                     sg.name.clone(),
-                    format!("Ø{} · R{} · {} mm", mm(sg.d), mm(sg.r_min), mm(sg.length)),
+                    match &sg.covering {
+                        Some(c) => format!("{c} · Ø{} · R{} · {} mm", mm(sg.d), mm(sg.r_min), mm(sg.length)),
+                        None => format!("Ø{} · R{} · {} mm", mm(sg.d), mm(sg.r_min), mm(sg.length)),
+                    },
                     NodeKind::HarnessItem,
                     "sweep",
                     "",
@@ -1705,8 +1736,15 @@ impl AsmTree {
             let wf = folder(self, "w", "Wires", h.wires.len());
             for w in &h.wires {
                 let detail = match &w.routed {
-                    Some(o) => format!("{} → {} · {} · {} mm", w.from, w.to, w.ty, mm(o.length)),
-                    None => format!("{} → {} · not routed", w.from, w.to),
+                    Some(o) => format!(
+                        "{} · {} → {} · {} · {} mm",
+                        w.colour,
+                        w.from,
+                        w.to,
+                        w.ty,
+                        mm(o.length)
+                    ),
+                    None => format!("{} · {} → {} · not routed", w.colour, w.from, w.to),
                 };
                 self.push(
                     Some(wf),
@@ -1952,6 +1990,7 @@ impl Shell {
                 }
                 let origin = matches!(n.kind, NodeKind::Origin | NodeKind::OriginItem(_));
                 let has_eye = origin
+                    || (n.kind == NodeKind::HarnessItem && a.covered_row(&n.key).is_some())
                     || matches!(
                         n.kind,
                         NodeKind::Top
@@ -1967,6 +2006,14 @@ impl Shell {
                 let mould_of = |n: &Node| n.key.trim_end_matches(">mould").to_string();
                 let state = if origin {
                     a.origin_eye(k, &top_origin)
+                } else if n.kind == NodeKind::HarnessItem && a.covered_row(&n.key).is_some() {
+                    if a.covered_row(&n.key)
+                        .is_some_and(|(h, sg)| a.sleeve_hidden(&h, &sg))
+                    {
+                        Eye::Hidden
+                    } else {
+                        Eye::Shown
+                    }
                 } else if n.kind == NodeKind::Harness {
                     if a.harness_hidden.contains(n.key.trim_start_matches("h:")) {
                         Eye::Hidden
@@ -2379,6 +2426,14 @@ impl Shell {
                 NodeKind::FormedPart => {
                     let p = n.key.trim_end_matches(">formed").to_string();
                     a.flip_eye(&p);
+                }
+                NodeKind::HarnessItem => {
+                    if let Some((h, sg)) = a.covered_row(&n.key) {
+                        let k = format!("{h}:s:{sg}");
+                        if !a.harness_hidden.remove(&k) {
+                            a.harness_hidden.insert(k);
+                        }
+                    }
                 }
                 NodeKind::Harness => {
                     let h = n.key.trim_start_matches("h:").to_string();

@@ -510,6 +510,55 @@ fn build_part_from(body: &Body, first: usize) -> Result<PartMesh, TessError> {
     Ok(PartMesh { center, radius, lods })
 }
 
+/// A wire's tube (forge-harness's mesh) as a part: one level, one face, no edges.
+pub fn tube_part(m: &forge_harness::wires::TubeMesh) -> PartMesh {
+    let mut lod = Lod {
+        chord: 0.05,
+        ..Lod::default()
+    };
+    for (p, n) in m.positions.iter().zip(&m.normals) {
+        point(&mut lod.vertices, *p);
+        pair(&mut lod.vertices, oct(*n));
+    }
+    for t in &m.triangles {
+        for v in t {
+            lod.indices.extend_from_slice(&v.to_le_bytes());
+        }
+    }
+    lod.faces.push(FaceRange {
+        face: 0,
+        first_tri: 0,
+        tris: m.triangles.len() as u32,
+        first_vertex: 0,
+        vertices: m.positions.len() as u32,
+    });
+    let (mut lo, mut hi) = ([f32::MAX; 3], [f32::MIN; 3]);
+    for p in &m.positions {
+        for (k, v) in [p.x, p.y, p.z].into_iter().enumerate() {
+            lo[k] = lo[k].min(v as f32);
+            hi[k] = hi[k].max(v as f32);
+        }
+    }
+    let center = [0, 1, 2].map(|k| (lo[k] + hi[k]) * 0.5);
+    let radius = m
+        .positions
+        .iter()
+        .map(|p| {
+            [p.x, p.y, p.z]
+                .iter()
+                .enumerate()
+                .map(|(k, v)| (*v as f32 - center[k]).powi(2))
+                .sum::<f32>()
+        })
+        .fold(0.0f32, f32::max)
+        .sqrt();
+    PartMesh {
+        center,
+        radius,
+        lods: vec![lod],
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

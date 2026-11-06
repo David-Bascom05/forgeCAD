@@ -86,22 +86,37 @@ fn the_harness_shows_in_the_tab_the_browser_the_view_and_the_status_bar() {
         assert!(asm(&h).tree.find(key).is_some(), "no row {key}");
     }
     let trunk = asm(&h).tree.find("h:loom:s:trunk").unwrap();
-    assert_eq!(asm(&h).tree.nodes[trunk].kids.len(), 8);
-    assert!(asm(&h).tree.nodes[trunk].detail.starts_with("Ø4.8 · R14.3"));
-    // the tubes are placed, one or more a segment
-    let placed = asm(&h).harness_placed.clone();
-    assert!(placed.len() >= 3, "{placed:?}");
+    assert_eq!(asm(&h).tree.nodes[trunk].kids.len(), 14);
     assert!(
-        h.gui.shell.status.contains("8 wires routed"),
+        asm(&h).tree.nodes[trunk]
+            .detail
+            .starts_with("PET braid 8 · Ø8.6 · R25.8"),
+        "{}",
+        asm(&h).tree.nodes[trunk].detail
+    );
+    // each wire its own tube, in its colour; the braided trunk's sleeve
+    use forge_render::fg::HarnessPiece as P;
+    let placed = asm(&h).harness_placed.clone();
+    assert_eq!(placed.iter().filter(|p| matches!(p.1, P::Wire(_))).count(), 14);
+    assert!(placed.iter().any(|p| p.1 == P::Sleeve(0)));
+    assert!(placed.iter().all(|p| !matches!(p.1, P::Sleeve(k) if k > 0)));
+    assert!(
+        h.gui.shell.status.contains("14 wires routed"),
         "{}",
         h.gui.shell.status
     );
-    // a segment's row lights its tubes
-    asm_select(&mut h, "h:loom:s:up");
-    let view = h.gui.view.as_ref().unwrap();
-    for &(_, sg, m) in &placed {
-        let lit = view.scene.placements[m].tint == forge_render::fg::PICKED_TINT;
-        assert_eq!(lit, sg == 1, "segment {sg}");
+    let tint = |h: &Headless, piece: P| {
+        let m = placed.iter().find(|p| p.1 == piece).unwrap().2;
+        h.gui.view.as_ref().unwrap().scene.placements[m].tint
+    };
+    let red = forge_lang::harness::rgb("RD", "W1");
+    assert_eq!(tint(&h, P::Wire(0)), [red[0], red[1], red[2], 0.0]);
+    assert_ne!(tint(&h, P::Wire(0)), tint(&h, P::Wire(1)));
+    // a segment's row lights its wires
+    asm_select(&mut h, "h:loom:s:to_a");
+    for k in 0..14 {
+        let lit = tint(&h, P::Wire(k)) == forge_render::fg::PICKED_TINT;
+        assert_eq!(lit, k < 4, "wire {k}");
     }
     // the harness's eye hides its tubes
     h.gui
@@ -151,21 +166,21 @@ fn add_wire_writes_its_line_in_the_harness_and_it_routes() {
         else {
             panic!("no Add Wire dialog: {:?}", p.harness.dialog)
         };
-        assert_eq!(name, "W9");
+        assert_eq!(name, "W15");
         *from = "J1".into();
-        *from_pin = "8".into();
-        *to = "J3".into();
-        *to_pin = "3".into();
-        *ty = "w26".into();
+        *from_pin = "14".into();
+        *to = "J4".into();
+        *to_pin = "6".into();
+        *ty = "s26".into();
     }
     h.step();
     assert!(h.click("harness:dialog:ok"), "no OK");
     h.step();
     settle(&mut h);
     let src = h.gui.fg.as_ref().unwrap().src.clone();
-    assert!(src.contains("  W9 = wire(J1[8], J3[3], type: w26)\n}"), "{src}");
+    assert!(src.contains("  W15 = wire(J1[14], J4[6], type: s26)\n}"), "{src}");
     let w = &asm(&h).harnesses[0].wires;
-    assert_eq!(w.len(), 9);
-    assert_eq!(w[8].path, ["trunk", "down"]);
+    assert_eq!(w.len(), 15);
+    assert_eq!(w[14].path, ["trunk", "span", "to_s"]);
     assert!(h.gui.shell.fg.as_ref().unwrap().harness.dialog.is_none());
 }

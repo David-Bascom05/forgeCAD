@@ -1171,6 +1171,7 @@ dependencies = [
  "forge-draw",
  "forge-dwg",
  "forge-geom",
+ "forge-harness",
  "forge-lang",
  "forge-material",
  "forge-math",

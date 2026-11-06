@@ -28,6 +28,7 @@ egui-wgpu = { version = "=0.37.0", default-features = false }
 forge-doc = { path = "../forge-doc" }
 forge-agent = { path = "../forge-agent" }
 forge-lang = { path = "../forge-lang" }
+forge-harness = { path = "../../kernel/forge-harness" }
 forge-draw = { path = "../../kernel/forge-draw" }
 # DWG files: read, shown as a scene, written back (pure Rust, in the browser too)
 forge-dwg = { path = "../../kernel/forge-dwg" }

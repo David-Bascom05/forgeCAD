@@ -1,25 +1,38 @@
 # The robot of robot.fg, its loom placed from loom.fg: the file names the occurrences it wires,
 # this placement gives them.
-shared out = 10
-shared rise = 12
+shared out = 20
+shared out_ctrl = 30
+shared rise = 6
+shared od18 = 2.4
 shared od22 = 1.6
 shared od26 = 1.1
-shared bend22 = 5
+shared bend18 = 12
+shared bend22 = 6
+shared bend26 = 4
+shared g18 = 18
 shared g22 = 22
 shared g26 = 26
+shared braid = 0.4
 shared slack = ratio(0.03)
 shared step = 5
 shared seat_in = 4
-shared plug = count(4)
+shared n_ctrl = count(14)
+shared n_motor = count(4)
+shared n_sens = count(6)
+shared wide = 3.5
+shared hole_big = 2.8
+shared hole_small = 1.4
 
 plate = part("plate.fg", ground: true)
-ctrl = part("header.fg")
-m1 = part("header.fg", with: {n: plug})
-m2 = part("header.fg", with: {n: plug})
+ctrl = part("header.fg", with: {n: n_ctrl, pitch: wide, hd: hole_big})
+ma = part("header.fg", with: {n: n_motor, pitch: wide, hd: hole_big})
+mb = part("header.fg", with: {n: n_motor, pitch: wide, hd: hole_big})
+sn = part("header.fg", with: {n: n_sens, hd: hole_small})
 on_ctrl = fastened(ctrl.seat, plate.ctrl_seat, flip: true)
-on_m1 = fastened(m1.seat, plate.m1_seat, flip: true)
-on_m2 = fastened(m2.seat, plate.m2_seat, flip: true)
+on_ma = fastened(ma.seat, plate.ma_seat, flip: true)
+on_mb = fastened(mb.seat, plate.mb_seat, flip: true)
+on_sn = fastened(sn.seat, plate.sn_seat, flip: true)
 
-loom = subassembly("loom.fg", ctrl: ctrl, m1: m1, m2: m2, plate: plate)
+loom = subassembly("loom.fg", ctrl: ctrl, ma: ma, mb: mb, sn: sn, plate: plate)
 
 expect mobility = 0

@@ -67,33 +67,36 @@ fn the_example_routes_with_every_term_and_no_notes() {
     assert!(r.errors.is_empty(), "{:?}", errors(&r));
     assert!(problems(&r).is_empty(), "{:?}", problems(&r));
     let h = loom(&r);
-    assert_eq!(h.connectors.len(), 3);
-    assert_eq!(h.wires.len(), 8);
+    assert_eq!(h.connectors.len(), 4);
+    assert_eq!(h.wires.len(), 14);
     let trunk = &h.segments[0];
-    assert_eq!(trunk.wires.len(), 8);
-    // four 1.6 and four 1.1 wires: sqrt(1.5 (4 1.6^2 + 4 1.1^2))
-    let d_trunk = (1.5f64 * (4.0 * 1.6 * 1.6 + 4.0 * 1.1 * 1.1)).sqrt();
-    assert!((trunk.d - d_trunk).abs() < 1e-12);
+    assert_eq!(trunk.wires.len(), 14);
+    // four 2.4, four 1.6 and six 1.1 wires: sqrt(1.5 sum d^2), and the braid's wall each side
+    let d_trunk = (1.5f64 * (4.0 * 2.4 * 2.4 + 4.0 * 1.6 * 1.6 + 6.0 * 1.1 * 1.1)).sqrt() + 2.0 * 0.4;
+    assert!((trunk.d - d_trunk).abs() < 1e-12, "{}", trunk.d);
     assert!((trunk.r_min - 3.0 * d_trunk).abs() < 1e-12);
+    // the wires packed: wider than the rule's bundle on the motor branches, never under it on the trunk
+    assert!(trunk.d_pack > 7.0 && trunk.d_pack < trunk.d);
     for w in &h.wires {
         let o = w.routed.as_ref().expect("routed");
-        assert_eq!(w.path.len(), 2, "{}", w.name);
         assert_eq!(o.length % 5.0, 0.0);
         assert!(o.length >= o.exact && o.exact - o.route - o.slack - o.insertion < 1e-9);
         assert_eq!(o.insertion, 8.0);
     }
-    assert!(h.wires[..4].iter().all(|w| w.path == ["trunk", "up"]));
-    assert!(h.wires[4..].iter().all(|w| w.path == ["trunk", "down"]));
-    // the BOM: wire by type, the three connectors
-    assert_eq!(h.bom.len(), 5);
-    let w22: f64 = h
+    assert!(h.wires[..4].iter().all(|w| w.path == ["trunk", "to_a"]));
+    assert!(h.wires[4..8].iter().all(|w| w.path == ["trunk", "span", "to_b"]));
+    assert!(h.wires[8..].iter().all(|w| w.path == ["trunk", "span", "to_s"]));
+    // the BOM: wire by type, the braid by length, the four connectors
+    assert_eq!(h.bom.len(), 8);
+    let p18: f64 = h
         .wires
         .iter()
-        .filter(|w| w.ty == "w22")
+        .filter(|w| w.ty == "p18")
         .map(|w| w.routed.as_ref().unwrap().length)
         .sum();
-    assert_eq!(h.bom[0].item, "wire w22");
-    assert_eq!(h.bom[0].qty, w22);
+    assert_eq!(h.bom[0].item, "wire p18");
+    assert_eq!(h.bom[0].qty, p18);
+    assert_eq!(h.bom[3].item, "covering PET braid 8");
 }
 
 #[test]
@@ -114,7 +117,7 @@ fn a_harness_file_alone_says_it_is_placed() {
     let r = run_in(&d, LOOM);
     assert!(r.errors.is_empty(), "{:?}", errors(&r));
     assert!(
-        matches!(&problems(&r)[..], [HarnessProblem::PlacedOnly { occurrences }] if occurrences.len() == 4)
+        matches!(&problems(&r)[..], [HarnessProblem::PlacedOnly { occurrences }] if occurrences.len() == 5)
     );
 }
 
@@ -137,8 +140,8 @@ fn a_corner_too_tight_builds_and_warns_with_the_radii() {
     let d = dir("tight");
     // the controller's exit with too short a lead for the turn off it
     let src = ROBOT.replace(
-        "n1 = node(J1, out: out)",
-        "n1 = node(J1, out: out, lead: seat_in)",
+        "n1 = node(J1, out: out_ctrl)",
+        "n1 = node(J1, out: out_ctrl, lead: seat_in)",
     );
     let r = run_in(&d, &src);
     assert!(r.errors.is_empty(), "{:?}", errors(&r));
@@ -164,8 +167,8 @@ fn a_corner_too_tight_builds_and_warns_with_the_radii() {
 fn a_turn_through_a_free_node_says_how_far_and_which_way() {
     let d = dir("kink");
     let src = ROBOT.replace(
-        "hub = node(plate.clip, off: rise, along: \"x\")",
-        "hub = node(plate.clip, off: rise)",
+        "hub1 = node(plate.clip1, off: rise, along: \"x\")",
+        "hub1 = node(plate.clip1, off: rise)",
     );
     let r = run_in(&d, &src);
     let kinks: Vec<_> = problems(&r)
@@ -181,11 +184,14 @@ fn a_turn_through_a_free_node_says_how_far_and_which_way() {
             _ => None,
         })
         .collect();
-    assert_eq!(kinks.len(), 8, "{kinks:?}");
-    for (node, _, angle, toward) in &kinks {
-        assert_eq!(node, "hub");
-        assert!(*angle > 0.1 && *angle < 3.0);
+    // the four wires turning off to the first motor turn hard there
+    let hard: Vec<_> = kinks.iter().filter(|k| k.2 > 0.1).collect();
+    assert_eq!(hard.len(), 4, "{kinks:?}");
+    for (node, wire, angle, toward) in &kinks {
+        assert_eq!(node, "hub1");
+        assert!(*angle < 3.0);
         assert!((toward.length() - 1.0).abs() < 1e-12);
+        let _ = wire;
     }
     let text = r
         .warnings
@@ -196,7 +202,7 @@ fn a_turn_through_a_free_node_says_how_far_and_which_way() {
             _ => unreachable!(),
         })
         .unwrap();
-    assert!(text.contains("deg at loom.hub toward"), "{text}");
+    assert!(text.contains("deg at loom.hub1 toward"), "{text}");
     assert!(text.contains("add along:"), "{text}");
 }
 
@@ -231,7 +237,7 @@ fn a_connector_with_no_exit_node_is_typed() {
     let d = dir("exit");
     let src = ROBOT
         .replace("  n3 = node(J3, out: out)\n", "")
-        .replace("  down = segment(hub, n3)\n", "");
+        .replace("  to_b = segment(hub2, n3)\n", "");
     let r = run_in(&d, &src);
     assert!(
         problems(&r)
@@ -243,14 +249,14 @@ fn a_connector_with_no_exit_node_is_typed() {
 #[test]
 fn a_wire_no_segment_reaches_is_typed_and_the_rest_route() {
     let d = dir("nopath");
-    let src = ROBOT.replace("  down = segment(hub, n3)\n", "");
+    let src = ROBOT.replace("  to_s = segment(hub2, n4)\n", "");
     let r = run_in(&d, &src);
     let no: Vec<_> = problems(&r)
         .into_iter()
         .filter(|p| matches!(p, HarnessProblem::NoPath { .. }))
         .collect();
-    assert_eq!(no.len(), 4);
-    assert!(loom(&r).wires[..4].iter().all(|w| w.routed.is_some()));
+    assert_eq!(no.len(), 6);
+    assert!(loom(&r).wires[..8].iter().all(|w| w.routed.is_some()));
 }
 
 #[test]
@@ -260,13 +266,13 @@ fn routes_follow_the_parts_they_are_on() {
     // the plug's seat moved along x: its exit node, and the branch to it, go with it
     let moved = ROBOT.replace(
         "plate = part(\"plate.fg\", ground: true)",
-        "plate = part(\"plate.fg\", ground: true, with: {m1x: 60})",
+        "plate = part(\"plate.fg\", ground: true, with: {ax: 10})",
     );
     let b = run_in(&d, &moved);
     assert!(b.errors.is_empty(), "{:?}", errors(&b));
     let n = |r: &Run| loom(r).nodes.iter().find(|n| n.name == "n2").unwrap().at;
-    assert!((n(&a).x - 80.0).abs() < 1e-9 && (n(&b).x - 60.0).abs() < 1e-9);
-    assert!(loom(&b).segments[1].length < loom(&a).segments[1].length);
+    assert!((n(&a).x - 30.0).abs() < 1e-9 && (n(&b).x - 10.0).abs() < 1e-9);
+    assert!(loom(&b).segments[2].length < loom(&a).segments[2].length);
 }
 
 #[test]
@@ -276,21 +282,21 @@ fn wire_types_come_from_the_library_with_their_source() {
     let _ = std::fs::create_dir_all(&lib);
     std::fs::write(
         lib.join("shop.csv"),
-        "name,awg,mm2,od,min_bend,colour,source\nT22-RD,22,,1.55,6,RD,test row\n",
+        "name,awg,mm2,od,min_bend,colour,source\nT22-WH,22,,1.55,6,WH,test row\n",
     )
     .unwrap();
     let src = ROBOT.replace(
-        "w22 = wire_type(awg: g22, od: od22, min_bend: bend22, colour: \"RD\", source: \"example values, not a datasheet\")",
-        "w22 = wire_type(\"T22-RD\")",
+        "s22 = wire_type(awg: g22, od: od22, min_bend: bend22, colour: \"WH\", source: \"example values, not a datasheet\")",
+        "s22 = wire_type(\"T22-WH\")",
     );
     let r = run_in(&d, &src);
     assert!(r.errors.is_empty(), "{:?}", errors(&r));
-    assert_eq!(loom(&r).wires[0].od, 1.55);
-    let unknown = run_in(&d, &src.replace("\"T22-RD\"", "\"T20\""));
+    assert_eq!(loom(&r).wires[2].od, 1.55);
+    let unknown = run_in(&d, &src.replace("\"T22-WH\"", "\"T20\""));
     assert!(problems(&unknown).iter().any(
-        |p| matches!(p, HarnessProblem::UnknownWireType { name, known } if name == "T20" && known == &["T22-RD"])
+        |p| matches!(p, HarnessProblem::UnknownWireType { name, known } if name == "T20" && known == &["T22-WH"])
     ));
-    std::fs::write(lib.join("shop.csv"), "T22-RD,22,,1.55,6,RD,\n").unwrap();
+    std::fs::write(lib.join("shop.csv"), "T22-WH,22,,1.55,6,WH,\n").unwrap();
     let unsourced = run_in(&d, &src);
     assert!(
         problems(&unsourced)
@@ -304,8 +310,8 @@ fn wire_types_come_from_the_library_with_their_source() {
 fn a_gauge_with_no_od_uses_the_conductor_and_says_so() {
     let d = dir("od");
     let src = ROBOT.replace(
-        "w26 = wire_type(awg: g26, od: od26, colour: \"BK\"",
-        "w26 = wire_type(awg: g26, colour: \"BK\"",
+        "s26 = wire_type(awg: g26, od: od26, min_bend: bend26",
+        "s26 = wire_type(awg: g26, min_bend: bend26",
     );
     let r = run_in(&d, &src);
     let c = problems(&r)
@@ -316,7 +322,7 @@ fn a_gauge_with_no_od_uses_the_conductor_and_says_so() {
         })
         .expect("NoInsulationOd");
     assert!((c - forge_harness::awg_d(26.0)).abs() < 1e-15);
-    assert_eq!(loom(&r).wires[2].od, c);
+    assert_eq!(loom(&r).wires[8].od, c);
 }
 
 #[test]
@@ -325,10 +331,10 @@ fn the_wire_list_goes_out_and_back_in_unchanged_and_a_change_is_a_diff() {
     let r = run_in(&d, ROBOT);
     let csv = harness::export_csv(loom(&r));
     assert!(csv.starts_with("id,from,to,type,colour,path,route"));
-    assert_eq!(csv.lines().count(), 9);
+    assert_eq!(csv.lines().count(), 15);
     let (ops, diff) = harness::import(ROBOT, "loom", &csv, Some(loom(&r))).unwrap();
     assert!(ops.is_empty() && diff == Default::default(), "{ops:?} {diff:?}");
-    // W8 moves to another pin, W9 is new, W1 is gone
+    // W8 moves to another pin, W15 is new, W1 is gone
     let edited: String = csv
         .lines()
         .filter(|l| !l.starts_with("W1,"))
@@ -339,29 +345,34 @@ fn the_wire_list_goes_out_and_back_in_unchanged_and_a_change_is_a_diff() {
                 l.to_string()
             }
         })
-        .chain(["W9,J1.8,J3.4,w26,BK,trunk;down".to_string()])
+        .chain(["W15,J1.14,J4.6,s26,VT,trunk;span;to_s".to_string()])
         .collect::<Vec<_>>()
         .join("\n");
     let (ops, diff) = harness::import(ROBOT, "loom", &edited, Some(loom(&r))).unwrap();
-    assert_eq!(diff.added, ["W9"]);
+    assert_eq!(diff.added, ["W15"]);
     assert_eq!(diff.removed, ["W1"]);
     assert_eq!(
         diff.changed,
         vec![("W8".to_string(), vec![("to", "J3.4".into(), "J3.3".into())])]
     );
-    assert_eq!(diff.text(), "+ W9\n- W1\n~ W8 to: J3.4 -> J3.3\n");
+    assert_eq!(diff.text(), "+ W15\n- W1\n~ W8 to: J3.4 -> J3.3\n");
     let mut src = ROBOT.to_string();
     for op in &ops {
         src = forge_lang::edit::apply(&src, op).unwrap_or_else(|e| panic!("{op:?}: {}", e.text()));
     }
-    assert!(src.contains("  W9 = wire(J1[8], J3[4], type: w26, through: [trunk, down], colour: \"BK\")\n"));
-    assert!(src.contains("W8 = wire(J1[8], J3[3], type: w26"));
+    assert!(
+        src.contains(
+            "  W15 = wire(J1[14], J4[6], type: s26, through: [trunk, span, to_s], colour: \"VT\")\n"
+        ),
+        "{src}"
+    );
+    assert!(src.contains("W8 = wire(J1[8], J3[3], type: s22"));
     assert!(!src.contains("W1 ="));
     let after = run_in(&d, &src);
     assert!(after.errors.is_empty(), "{:?}", errors(&after));
     let h = loom(&after);
-    assert_eq!(h.wires.len(), 8);
-    assert_eq!(h.wires.last().unwrap().path, ["trunk", "down"]);
+    assert_eq!(h.wires.len(), 14);
+    assert_eq!(h.wires.last().unwrap().path, ["trunk", "span", "to_s"]);
     // and the new list is what it now holds
     let (ops, _) = harness::import(&src, "loom", &edited, Some(loom(&after))).unwrap();
     assert!(ops.is_empty(), "{ops:?}");
@@ -384,13 +395,13 @@ fn route_wires_writes_the_chosen_paths_and_clears_them() {
     let d = dir("route");
     let r = run_in(&d, ROBOT);
     let ops = harness::route_ops(ROBOT, loom(&r), true).unwrap();
-    assert_eq!(ops.len(), 8);
+    assert_eq!(ops.len(), 14);
     let mut src = ROBOT.to_string();
     for op in &ops {
         src = forge_lang::edit::apply(&src, op).unwrap_or_else(|e| panic!("{op:?}: {}", e.text()));
     }
     assert!(
-        src.contains("  W1 = wire(J1[1], J2[1], type: w22, through: [trunk, up])\n"),
+        src.contains("  W1 = wire(J1[1], J2[1], type: p18, through: [trunk, to_a], colour: \"RD\")\n"),
         "{src}"
     );
     let pinned = run_in(&d, &src);

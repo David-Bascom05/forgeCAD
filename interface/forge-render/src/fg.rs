@@ -99,8 +99,8 @@ pub struct AsmView {
     pub body_chains: Vec<(String, Vec<String>)>,
     /// The wire harnesses, routed (tubes in the world).
     pub harnesses: Vec<forge_lang::harness::HarnessOut>,
-    /// Each tube's placement: (harness, segment, placement).
-    pub harness_placed: Vec<(usize, usize, usize)>,
+    /// Each harness piece's placement: (harness, piece, placement).
+    pub harness_placed: Vec<(usize, HarnessPiece, usize)>,
 }
 
 /// What one build gave: the panel's data, and the mesh when the part's shape changed.
@@ -1146,6 +1146,27 @@ pub struct AsmMeshes {
     pub boxes: Vec<crate::explode::Aabb>,
 }
 
+/// A harness's piece in the view: a wire's tube, or a covered segment's sleeve.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HarnessPiece {
+    Wire(usize),
+    Sleeve(usize),
+}
+
+/// Sides of a wire's tube.
+const WIRE_SIDES: usize = 10;
+
+/// A wire tube's content: its centreline and radius.
+fn wire_key(pts: &[forge_math::Point3], r: f64) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    r.to_bits().hash(&mut h);
+    for p in pts {
+        [p.x, p.y, p.z].map(f64::to_bits).hash(&mut h);
+    }
+    h.finish() | 1 << 63
+}
+
 /// A body's content, cheaply: every vertex's place and every face's name.
 fn body_key(b: &forge_topo::Body) -> u64 {
     use std::hash::{Hash, Hasher};
@@ -1191,7 +1212,7 @@ fn asm_view(
                 })
         })
         .collect();
-    // the harnesses' tubes, each placed where it is (they are made in the world)
+    // the harnesses' covered segments' sleeves, each placed where it is (made in the world)
     let mut tubes: Vec<(usize, usize, usize)> = vec![];
     for (h, ho) in out.harnesses.iter().enumerate() {
         for (sg, ts) in ho.tubes.iter().enumerate() {
@@ -1263,7 +1284,29 @@ fn asm_view(
     let mut harness_placed = vec![];
     for (h, sg, k) in tubes {
         placed.push((meshes.by_key[&keys[k]], rows_of(&forge_math::Frame::WORLD)));
-        harness_placed.push((h, sg, placed.len() - 1));
+        harness_placed.push((h, HarnessPiece::Sleeve(sg), placed.len() - 1));
+    }
+    // and every wire its own tube, meshed straight from its centreline
+    for (h, ho) in out.harnesses.iter().enumerate() {
+        for (w, path) in ho.paths.iter().enumerate() {
+            let Some((pts, r)) = path else { continue };
+            let key = wire_key(pts, *r);
+            let m = match meshes.by_key.get(&key) {
+                Some(&m) => m,
+                None => {
+                    let part = crate::tess::tube_part(&forge_harness::wires::tube_mesh(pts, *r, WIRE_SIDES));
+                    let m = meshes.all.len();
+                    meshes.bodies.push(Arc::new(forge_topo::Body::default()));
+                    meshes.by_key.insert(key, m);
+                    new_meshes.push((m, part.clone()));
+                    meshes.boxes.push(crate::explode::mesh_box(&part));
+                    meshes.all.push(part);
+                    m
+                }
+            };
+            placed.push((m, rows_of(&forge_math::Frame::WORLD)));
+            harness_placed.push((h, HarnessPiece::Wire(w), placed.len() - 1));
+        }
     }
     let now: Vec<usize> = placed.iter().map(|p| p.0).collect();
     let restage = shape.as_ref() != Some(&now) || gpu.is_some();
