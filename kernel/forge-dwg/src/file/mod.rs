@@ -40,6 +40,10 @@ pub struct Extra {
     pub compressed: u32,
     pub encrypted: u32,
     pub unknown: u32,
+    /// R2007: its hash code and encoding (1 plain, 4 RS coded and compressed); its page size,
+    /// encryption and unknown value are in the fields above.
+    pub hash: u32,
+    pub encoding: u32,
 }
 
 /// A drawing: its version, header variables, classes and objects, and the file's other sections
@@ -117,7 +121,21 @@ pub fn sections(buf: &[u8]) -> R<Sections> {
             let mut other = vec![];
             for s in &l.sections {
                 if !s.name.is_empty() && !main.contains(&s.name.as_str()) {
-                    other.push(Extra { name: s.name.clone(), data: take(&s.name)?, ..Extra::default() });
+                    let mut data = take(&s.name)?;
+                    if let Some(at) = l.section_address(&s.name).filter(|_| s.name == "AcDb:Preview") {
+                        // kept with addresses from the section's start
+                        r2000::relocate_preview(&mut data, -(at as i64))?;
+                    }
+                    other.push(Extra {
+                        name: s.name.clone(),
+                        data,
+                        max_page: s.max_size as u32,
+                        encrypted: s.encryption as u32,
+                        unknown: s.unknown as u32,
+                        hash: s.hash as u32,
+                        encoding: s.encoding as u32,
+                        ..Extra::default()
+                    });
                 }
             }
             let [header, classes, handles, objects] = main.map(take);
@@ -152,6 +170,7 @@ pub fn sections(buf: &[u8]) -> R<Sections> {
                         compressed: s.compressed,
                         encrypted: s.encrypted,
                         unknown: s.unknown,
+                        ..Extra::default()
                     });
                 }
             }
@@ -193,7 +212,7 @@ pub fn read(buf: &[u8]) -> R<Drawing> {
 pub fn write(d: &Drawing) -> R<Vec<u8>> {
     match d.ver() {
         Version::R2000 => r2000::write(d),
-        Version::R2007 => bad("R2007 files are not written yet"),
+        Version::R2007 => r2007::write(d),
         _ => r2004::write(d),
     }
 }
