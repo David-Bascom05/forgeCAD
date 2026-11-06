@@ -3429,7 +3429,14 @@ impl Gui {
             if let Some(p) = &mut self.shell.fg {
                 p.thermos = rows;
             }
-            self.fg_walls = walls;
+            // the last forming's meshes and maps let go off the window's thread: freeing them
+            // here held up a frame (a fifth of a second on the cup)
+            let old = std::mem::replace(&mut self.fg_walls, walls);
+            if !old.is_empty() {
+                let _ = std::thread::Builder::new()
+                    .name("fg-walls-free".into())
+                    .spawn(move || drop(old));
+            }
             if let Some(a) = b.anchors {
                 if let Some(p) = &mut self.shell.fg {
                     p.sketches = a.sketches.clone();
