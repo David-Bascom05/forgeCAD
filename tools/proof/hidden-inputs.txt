@@ -81,7 +81,8 @@ speed (lazy field or constant table)  @ forge-geom/src/blend.rs|lazy|smooth: Onc
 speed (lazy field or constant table)  @ forge-geom/src/blend.rs|lazy|smooth: OnceLock<Option<(Curve, Arc<ChordCurve>)>>,
 speed (lazy field or constant table)  @ forge-geom/src/blend.rs|lazy|smooth: OnceLock<Option<Surface>>,
 speed (lazy field or constant table)  @ forge-geom/src/blend.rs|lazy|use std::sync::{Arc, Mutex, OnceLock};
-speed (cache answering a function of its own key)  @ forge-geom/src/blend.rs|static|static SEEN: Box<[Seen; 256]> = Box::new(  x 2
+speed (cache answering a function of its own key)  @ forge-geom/src/blend.rs|static|static SEEN: Box<[Seen; 256]> = Box::new(
+speed (cache answering a function of its own key)  @ forge-geom/src/blend.rs|static|static SEEN: Box<[Seen]> = (0..1usize << BITS)
 speed (cache answering a function of its own key)  @ forge-geom/src/blend.rs|thread_local|thread_local! {  x 2
 no-output (a read's limit, held by budget::scoped and cleared when it goes, unwinding too; a_read_that_panics_leaves_no_limit_behind)  @ forge-geom/src/budget.rs|static|static LEFT: Cell<u64> = const { Cell::new(u64::MAX) };
 no-output (a read's limit, held by budget::scoped and cleared when it goes, unwinding too; a_read_that_panics_leaves_no_limit_behind)  @ forge-geom/src/budget.rs|thread_local|thread_local! {

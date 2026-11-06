@@ -7,7 +7,7 @@
 
 use crate::curve::{Circle, Curve, CurveDeriv, CurveGeom, Domain1, Line, ProcCurve, ProceduralCurve};
 use crate::intersect::{SurfaceSurface, plane_surface};
-use crate::screw::{fresh_id, seen_slot};
+use crate::screw::{fresh_id, seen_slot, seen_slot_of};
 use crate::smooth::ChordCurve;
 use crate::surface::{Cylinder, Domain2, Plane, Proc, Procedural, SurfDeriv, Surface, SurfaceGeom, Torus};
 use crate::varblend::VarBlend;
@@ -102,14 +102,15 @@ impl Offset {
     /// and the value at p once something has asked for it.
     fn at(&self, p: Point3, value: bool) -> Option<(f64, Vec3)> {
         type Seen = std::cell::Cell<(u64, [u64; 3], Point2, Vec3, f64)>;
+        const BITS: u32 = 14;
         thread_local! {
             // on the heap, and made on first use, as `remembered`'s
-            static SEEN: Box<[Seen; 256]> = Box::new(
-                [const { std::cell::Cell::new((0, [0; 3], Point2::new(0.0, 0.0), Vec3::ZERO, f64::NAN)) }; 256],
-            );
+            static SEEN: Box<[Seen]> = (0..1usize << BITS)
+                .map(|_| std::cell::Cell::new((0, [0; 3], Point2::new(0.0, 0.0), Vec3::ZERO, f64::NAN)))
+                .collect();
         }
         let key = [p.x.to_bits(), p.y.to_bits(), p.z.to_bits()];
-        let slot = seen_slot(self.id, key);
+        let slot = seen_slot_of(self.id, key, BITS);
         let (k, q, mut uv, mut n, mut f) = SEEN.with(|s| s[slot].get());
         if k != self.id || q != key {
             uv = self.base.project(p);

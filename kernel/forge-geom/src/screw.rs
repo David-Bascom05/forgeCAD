@@ -1100,9 +1100,14 @@ pub(crate) fn normal_turn(d: &SurfDeriv, p: Point3, v: Vec3) -> Option<Vec3> {
 
 /// Which of 256 slots a query on surface `id` at the point with these coordinate bits goes in.
 pub(crate) fn seen_slot(id: u64, key: [u64; 3]) -> usize {
+    seen_slot_of(id, key, 8)
+}
+
+/// `seen_slot` in a table of 2^bits.
+pub(crate) fn seen_slot_of(id: u64, key: [u64; 3], bits: u32) -> usize {
     let mix =
         (key[0] ^ key[1].rotate_left(21) ^ key[2].rotate_left(42) ^ id).wrapping_mul(0x9e37_79b9_7f4a_7c15);
-    (mix >> 56) as usize
+    (mix >> (64 - bits)) as usize
 }
 
 /// The implicit value and gradient of surface `id` at p, solved by `solve` unless this thread
