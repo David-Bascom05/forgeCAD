@@ -11,7 +11,6 @@ pub mod header;
 pub mod io;
 pub mod object;
 pub mod scene;
-mod scene_build;
 pub mod str;
 pub mod types;
 pub mod version;
