@@ -2,8 +2,8 @@
 
 use super::{Class, Drawing, Extra, Sections};
 use crate::bits::Bad;
-use crate::io::{Io, Reader};
 use crate::bits::{BitReader, BitWriter, R, bad, crc16, read_mc};
+use crate::io::{Io, Reader};
 use crate::object::{Classes, read_object};
 use crate::str::Str;
 use crate::version::Version;
@@ -60,9 +60,29 @@ pub fn classes(sec: &[u8], ver: Version, maint: u8) -> R<Vec<Class>> {
         // the size in bits (counted from itself), then the classes, their strings at the end
         let bits = rl(data, 0)? as usize;
         let (strs, end) = string_stream(data, bits)?;
-        (Reader { ver, data: BitReader::new(data, 4), strs, hdl: BitReader::new(data, 0), base: 0, data_end: end }, end)
+        (
+            Reader {
+                ver,
+                data: BitReader::new(data, 4),
+                strs,
+                hdl: BitReader::new(data, 0),
+                base: 0,
+                data_end: end,
+            },
+            end,
+        )
     } else {
-        (Reader { ver, data: BitReader::new(data, 0), strs: None, hdl: BitReader::new(data, 0), base: 0, data_end: data.len() * 8 }, data.len() * 8)
+        (
+            Reader {
+                ver,
+                data: BitReader::new(data, 0),
+                strs: None,
+                hdl: BitReader::new(data, 0),
+                base: 0,
+                data_end: data.len() * 8,
+            },
+            data.len() * 8,
+        )
     };
     if ver >= Version::R2004 {
         let (mut max, mut z, mut t) = (0i16, 0u8, false);
@@ -117,7 +137,9 @@ pub fn string_stream(d: &[u8], bits: usize) -> R<(Option<BitReader<'_>>, usize)>
         let hi = BitReader { d, p: at }.rs()? as usize;
         n = (n & 0x7FFF) | (hi << 15);
     }
-    let start = at.checked_sub(n).ok_or(crate::bits::Bad("string stream size".into()))?;
+    let start = at
+        .checked_sub(n)
+        .ok_or(crate::bits::Bad("string stream size".into()))?;
     Ok((Some(BitReader { d, p: start }), start))
 }
 
@@ -169,11 +191,19 @@ pub fn sections(buf: &[u8]) -> R<Sections> {
     let (Some(h), Some(c), Some(m)) = (recs[0], recs[1], recs[2]) else {
         return bad("missing header, classes or object map");
     };
-    let get = |(a, n): (usize, usize)| buf.get(a..a + n).map(|s| s.to_vec()).ok_or(Bad("section past the end".into()));
+    let get = |(a, n): (usize, usize)| {
+        buf.get(a..a + n)
+            .map(|s| s.to_vec())
+            .ok_or(Bad("section past the end".into()))
+    };
     let mut other = vec![];
     for (k, name) in [(3, "ObjFreeSpace"), (4, "Template"), (5, "AuxHeader")] {
         if let Some(r) = recs[k] {
-            other.push(Extra { name: name.to_string(), data: get(r)?, ..Extra::default() });
+            other.push(Extra {
+                name: name.to_string(),
+                data: get(r)?,
+                ..Extra::default()
+            });
         }
     }
     // the preview, at the image seeker: sentinel, size, its entries and data, sentinel
@@ -183,7 +213,11 @@ pub fn sections(buf: &[u8]) -> R<Sections> {
         let mut p = get((seeker, 16 + 4 + n + 16))?;
         // its data addresses, relative to the sentinel from here on
         relocate_preview(&mut p, -(seeker as i64))?;
-        other.push(Extra { name: "Preview".into(), data: p, ..Extra::default() });
+        other.push(Extra {
+            name: "Preview".into(),
+            data: p,
+            ..Extra::default()
+        });
     }
     Ok(Sections {
         ver: Version::R2000,
@@ -367,7 +401,11 @@ pub fn write_objects(d: &Drawing, base: usize) -> R<(Vec<u8>, Vec<(u32, u64)>)> 
 /// a new one.
 pub fn aux_header(d: &Drawing) -> Vec<u8> {
     let seed = d.handseed();
-    if let Some(a) = d.extra("AuxHeader").or(d.extra("AcDb:AuxHeader")).filter(|a| a.data.len() >= 0x5F) {
+    if let Some(a) = d
+        .extra("AuxHeader")
+        .or(d.extra("AcDb:AuxHeader"))
+        .filter(|a| a.data.len() >= 0x5F)
+    {
         let mut a = a.data.clone();
         // the seed sits after 0x3F bytes of fixed fields and the two dates
         a[0x4F..0x53].copy_from_slice(&(if seed < 0x7FFF_FFFF { seed } else { 0xFFFF_FFFF }).to_le_bytes());

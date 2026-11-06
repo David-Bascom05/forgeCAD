@@ -34,7 +34,11 @@ fn main() {
     let bs = |b: &[u8]| b.iter().map(|x| format!("{x:08b}")).collect::<String>();
     let (x, y) = (bs(&r[sr..]), bs(&b[sb..]));
     let first = x.chars().zip(y.chars()).take(n).position(|(p, q)| p != q);
-    println!("orig {} bits, new {} bits ({n} meaningful), first difference at bit {first:?}", x.len(), y.len());
+    println!(
+        "orig {} bits, new {} bits ({n} meaningful), first difference at bit {first:?}",
+        x.len(),
+        y.len()
+    );
     if let Some(k) = first {
         let lo = k.saturating_sub(24);
         println!("orig ..{}", &x[lo..(k + 64).min(x.len())]);

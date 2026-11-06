@@ -66,7 +66,10 @@ impl Drawing {
     }
     /// (DXF name, makes entities) per class, for typing objects.
     pub fn class_list(&self) -> Vec<(String, bool)> {
-        self.classes.iter().map(|c| (c.dxf.text(), c.item == 0x1F2)).collect()
+        self.classes
+            .iter()
+            .map(|c| (c.dxf.text(), c.item == 0x1F2))
+            .collect()
     }
     pub fn extra(&self, name: &str) -> Option<&Extra> {
         self.other.iter().find(|e| e.name == name)
@@ -117,7 +120,11 @@ pub fn sections(buf: &[u8]) -> R<Sections> {
             let mut other = vec![];
             for s in &l.sections {
                 if !s.name.is_empty() && !main.contains(&s.name.as_str()) {
-                    other.push(Extra { name: s.name.clone(), data: take(&s.name)?, ..Extra::default() });
+                    other.push(Extra {
+                        name: s.name.clone(),
+                        data: take(&s.name)?,
+                        ..Extra::default()
+                    });
                 }
             }
             let [header, classes, handles, objects] = main.map(take);
@@ -144,7 +151,9 @@ pub fn sections(buf: &[u8]) -> R<Sections> {
             let objects = take("AcDb:AcDbObjects")?;
             let mut other = vec![];
             for s in &l.sections {
-                if !["AcDb:Header", "AcDb:Classes", "AcDb:Handles", "AcDb:AcDbObjects"].contains(&s.name.as_str()) {
+                if !["AcDb:Header", "AcDb:Classes", "AcDb:Handles", "AcDb:AcDbObjects"]
+                    .contains(&s.name.as_str())
+                {
                     other.push(Extra {
                         name: s.name.clone(),
                         data: take(&s.name)?,
@@ -156,7 +165,17 @@ pub fn sections(buf: &[u8]) -> R<Sections> {
                 }
             }
             let file_header = buf[..0x80.min(buf.len())].to_vec();
-            Ok(Sections { ver, maint, codepage, header, classes, handles, objects, other, file_header })
+            Ok(Sections {
+                ver,
+                maint,
+                codepage,
+                header,
+                classes,
+                handles,
+                objects,
+                other,
+                file_header,
+            })
         }
     }
 }
@@ -182,7 +201,10 @@ pub fn read(buf: &[u8]) -> R<Drawing> {
         let (o, warn) = crate::object::read_object_lenient(&s.objects, at, s.ver, &cl)
             .map_err(|e| crate::bits::Bad(format!("{handle:#x}: {}", e.0)))?;
         if let Some(w) = warn {
-            d.warnings.push(format!("{handle:#x} ({}): {w}", cl.name(o.type_code).unwrap_or("?")));
+            d.warnings.push(format!(
+                "{handle:#x} ({}): {w}",
+                cl.name(o.type_code).unwrap_or("?")
+            ));
         }
         d.objects.insert(handle, o);
     }

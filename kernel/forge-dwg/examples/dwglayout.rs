@@ -8,13 +8,33 @@ fn main() {
     let l = r2004::layout(&buf).unwrap();
     let h = &l.header;
     println!("header data: {:02x?}", &h.raw[0x0C..0x6C]);
-    println!("{h:#x?}", h = (h.last_page_id, h.last_page_end, h.second_header_addr, h.gap_amount, h.page_amount, h.page_map_id, h.page_map_addr, h.section_map_id, h.page_array_size, h.gap_array_size));
+    println!(
+        "{h:#x?}",
+        h = (
+            h.last_page_id,
+            h.last_page_end,
+            h.second_header_addr,
+            h.gap_amount,
+            h.page_amount,
+            h.page_map_id,
+            h.page_map_addr,
+            h.section_map_id,
+            h.page_array_size,
+            h.gap_array_size
+        )
+    );
     for p in &l.pages {
         println!("  page {:3} at {:#8x} size {:#x}", p.0, p.1, p.2);
     }
     for s in &l.sections {
-        println!("  section {:24} id {:2} size {:#x} max {:#x} unk {:#x} comp {} enc {} pages {:?}", s.name, s.id, s.size, s.max_page, s.unknown, s.compressed, s.encrypted, s.pages);
+        println!(
+            "  section {:24} id {:2} size {:#x} max {:#x} unk {:#x} comp {} enc {} pages {:?}",
+            s.name, s.id, s.size, s.max_page, s.unknown, s.compressed, s.encrypted, s.pages
+        );
     }
     let sh = h.second_header_addr as usize;
-    println!("at second header addr {sh:#x}: {:02x?}", &buf[sh..(sh + 0x80).min(buf.len())]);
+    println!(
+        "at second header addr {sh:#x}: {:02x?}",
+        &buf[sh..(sh + 0x80).min(buf.len())]
+    );
 }

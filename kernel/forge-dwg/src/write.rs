@@ -356,7 +356,10 @@ pub fn write(doc: &Doc) -> Vec<u8> {
         o.hs.h(HARD_PTR, NORMAL); // the default
         o
     });
-    put(PLOTSETTINGS_DICT, dictionary(PLOTSETTINGS_DICT, NAMED_OBJECTS, &[]));
+    put(
+        PLOTSETTINGS_DICT,
+        dictionary(PLOTSETTINGS_DICT, NAMED_OBJECTS, &[]),
+    );
     put(
         LAYOUT_DICT,
         dictionary(
@@ -408,7 +411,10 @@ pub fn write(doc: &Doc) -> Vec<u8> {
     };
     put(LT_BYBLOCK, ltype(LT_BYBLOCK, "ByBlock", "", &[]));
     put(LT_BYLAYER, ltype(LT_BYLAYER, "ByLayer", "", &[]));
-    put(LT_CONTINUOUS, ltype(LT_CONTINUOUS, "Continuous", "Solid line", &[]));
+    put(
+        LT_CONTINUOUS,
+        ltype(LT_CONTINUOUS, "Continuous", "Solid line", &[]),
+    );
     for (h, t) in &p.line_types {
         put(*h, ltype(*h, &t.name, &t.description, &t.pattern));
     }
@@ -513,7 +519,14 @@ pub fn write(doc: &Doc) -> Vec<u8> {
     let first = p.entities.first().map_or(0, |e| e.0);
     let last = p.entities.last().map_or(0, |e| e.0);
     for (rec, name, block, end, layout, paper) in [
-        (MODEL_SPACE, "*Model_Space", MS_BLOCK, MS_ENDBLK, LAYOUT_MODEL, false),
+        (
+            MODEL_SPACE,
+            "*Model_Space",
+            MS_BLOCK,
+            MS_ENDBLK,
+            LAYOUT_MODEL,
+            false,
+        ),
         (PAPER_SPACE, "*Paper_Space", PS_BLOCK, PS_ENDBLK, LAYOUT_1, true),
     ] {
         let mut o = Obj::object(T_BLOCK_HEADER, rec, BLOCK_CTRL, false);
@@ -832,7 +845,13 @@ fn dim_vars(d: &mut BitWriter) {
 }
 
 /// The header variables (chapter 9, R2000), in their order.
-fn header_vars(p: &Plan, (lo, hi): ([f64; 2], [f64; 2]), limits: ([f64; 2], [f64; 2]), layer0: u32, guid: &str) -> BitWriter {
+fn header_vars(
+    p: &Plan,
+    (lo, hi): ([f64; 2], [f64; 2]),
+    limits: ([f64; 2], [f64; 2]),
+    layer0: u32,
+    guid: &str,
+) -> BitWriter {
     let mut d = BitWriter::new();
     d.bd(412148564080.0);
     d.bd(1.0);
@@ -853,14 +872,16 @@ fn header_vars(p: &Plan, (lo, hi): ([f64; 2], [f64; 2]), limits: ([f64; 2], [f64
     // PROXYGRAPHICS TREEDEPTH LUNITS LUPREC AUNITS AUPREC ATTMODE PDMODE USERI1-5 SPLINESEGS SURFU
     // SURFV SURFTYPE SURFTAB1 SURFTAB2 SPLINETYPE SHADEDGE SHADEDIF UNITMODE MAXACTVP ISOLINES
     // CMLJUST TEXTQLTY
-    for v in [1, 3020, 2, 4, 0, 0, 1, 0, 0, 0, 0, 0, 0, 8, 6, 6, 6, 6, 6, 6, 3, 70, 0, 64, 4, 0, 50] {
+    for v in [
+        1, 3020, 2, 4, 0, 0, 1, 0, 0, 0, 0, 0, 0, 8, 6, 6, 6, 6, 6, 6, 3, 70, 0, 64, 4, 0, 50,
+    ] {
         d.bs(v);
     }
     // LTSCALE TEXTSIZE TRACEWID SKETCHINC FILLETRAD THICKNESS ANGBASE PDSIZE PLINEWID USERR1-5
     // CHAMFERA-D FACETRES CMLSCALE CELTSCALE
     for v in [
-        1.0, 2.5, 0.05, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.5,
-        1.0, 1.0,
+        1.0, 2.5, 0.05, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.5, 1.0,
+        1.0,
     ] {
         d.bd(v);
     }
@@ -1087,7 +1108,13 @@ fn assemble(
         (2, map_at as u32, map.len() as u32),
         (3, free_at as u32, free.len() as u32),
     ];
-    let second = second_header(second_at as u32, &sections, aux_at as u32, aux.len() as u32, p.seed);
+    let second = second_header(
+        second_at as u32,
+        &sections,
+        aux_at as u32,
+        aux.len() as u32,
+        p.seed,
+    );
     let template_at = second_at + second.len();
     let template = [0u8, 0, 1, 0]; // no description; MEASUREMENT metric
 

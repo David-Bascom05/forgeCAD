@@ -15,8 +15,24 @@ fn main() {
         let m = r2000::write_map(&sorted);
         let first = |a: &[u8], b: &[u8]| a.iter().zip(b).position(|(x, y)| x != y);
         println!("== {path}");
-        println!("  header  {} vs {} first diff {:?}", h.len(), s.header.len(), first(&h, &s.header));
-        println!("  classes {} vs {} first diff {:?}", c.len(), s.classes.len(), first(&c, &s.classes));
-        println!("  map     {} vs {} first diff {:?} (map sorted: {})", m.len(), s.handles.len(), first(&m, &s.handles), locs == sorted);
+        println!(
+            "  header  {} vs {} first diff {:?}",
+            h.len(),
+            s.header.len(),
+            first(&h, &s.header)
+        );
+        println!(
+            "  classes {} vs {} first diff {:?}",
+            c.len(),
+            s.classes.len(),
+            first(&c, &s.classes)
+        );
+        println!(
+            "  map     {} vs {} first diff {:?} (map sorted: {})",
+            m.len(),
+            s.handles.len(),
+            first(&m, &s.handles),
+            locs == sorted
+        );
     }
 }

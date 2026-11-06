@@ -418,7 +418,11 @@ pub fn header_io<S: Io>(h: &mut Header, s: &mut S) -> R<()> {
             .map(|x| (x.0, Val::empty(x.1)))
             .collect();
     }
-    let tys: Vec<Ty> = VARS.iter().filter(|x| (x.2..=x.3).contains(&ver)).map(|x| x.1).collect();
+    let tys: Vec<Ty> = VARS
+        .iter()
+        .filter(|x| (x.2..=x.3).contains(&ver))
+        .map(|x| x.1)
+        .collect();
     if tys.len() != h.vars.len() {
         return bad("header variables for another version");
     }

@@ -409,7 +409,17 @@ impl Spec for DimStyle {
         let d = &mut self.vars;
         s.tv(&mut d.post)?;
         s.tv(&mut d.apost)?;
-        for x in [&mut d.scale, &mut d.asz, &mut d.exo, &mut d.dli, &mut d.exe, &mut d.rnd, &mut d.dle, &mut d.tp, &mut d.tm] {
+        for x in [
+            &mut d.scale,
+            &mut d.asz,
+            &mut d.exo,
+            &mut d.dli,
+            &mut d.exe,
+            &mut d.rnd,
+            &mut d.dle,
+            &mut d.tp,
+            &mut d.tm,
+        ] {
             s.bd(x)?;
         }
         if v >= Version::R2007 {
@@ -418,7 +428,9 @@ impl Spec for DimStyle {
             s.bs(&mut d.tfill)?;
             s.cmc(&mut d.tfillclr)?;
         }
-        for x in [&mut d.tol, &mut d.lim, &mut d.tih, &mut d.toh, &mut d.se1, &mut d.se2] {
+        for x in [
+            &mut d.tol, &mut d.lim, &mut d.tih, &mut d.toh, &mut d.se1, &mut d.se2,
+        ] {
             s.b(x)?;
         }
         for x in [&mut d.tad, &mut d.zin, &mut d.azin] {
@@ -427,7 +439,17 @@ impl Spec for DimStyle {
         if v >= Version::R2007 {
             s.bs(&mut d.arcsym)?;
         }
-        for x in [&mut d.txt, &mut d.cen, &mut d.tsz, &mut d.altf, &mut d.lfac, &mut d.tvp, &mut d.tfac, &mut d.gap, &mut d.altrnd] {
+        for x in [
+            &mut d.txt,
+            &mut d.cen,
+            &mut d.tsz,
+            &mut d.altf,
+            &mut d.lfac,
+            &mut d.tvp,
+            &mut d.tfac,
+            &mut d.gap,
+            &mut d.altrnd,
+        ] {
             s.bd(x)?;
         }
         s.b(&mut d.alt)?;
@@ -439,8 +461,17 @@ impl Spec for DimStyle {
             s.cmc(c)?;
         }
         for x in [
-            &mut d.adec, &mut d.dec, &mut d.tdec, &mut d.altu, &mut d.alttd, &mut d.aunit, &mut d.frac, &mut d.lunit,
-            &mut d.dsep, &mut d.tmove, &mut d.just,
+            &mut d.adec,
+            &mut d.dec,
+            &mut d.tdec,
+            &mut d.altu,
+            &mut d.alttd,
+            &mut d.aunit,
+            &mut d.frac,
+            &mut d.lunit,
+            &mut d.dsep,
+            &mut d.tmove,
+            &mut d.just,
         ] {
             s.bs(x)?;
         }
@@ -465,7 +496,13 @@ impl Spec for DimStyle {
         s.bs(&mut d.lwe)?;
         s.b(&mut self.flag0)?;
         s.h(&mut self.entry.xref_block)?;
-        for h in [&mut self.txsty, &mut self.ldrblk, &mut self.blk, &mut self.blk1, &mut self.blk2] {
+        for h in [
+            &mut self.txsty,
+            &mut self.ldrblk,
+            &mut self.blk,
+            &mut self.blk1,
+            &mut self.blk2,
+        ] {
             s.h(h)?;
         }
         if v >= Version::R2007 {

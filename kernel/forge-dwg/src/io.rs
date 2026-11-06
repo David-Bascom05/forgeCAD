@@ -3,7 +3,7 @@
 //! fields go to three streams: the data, the strings (R2007 on: Unicode text kept at the end of
 //! the data) and the handles.
 
-use crate::bits::{BitReader, BitWriter, Bad, R, bad};
+use crate::bits::{Bad, BitReader, BitWriter, R, bad};
 use crate::str::Str;
 use crate::version::Version;
 
@@ -136,7 +136,12 @@ pub trait Io {
         self.items(v, n, &mut f)
     }
     /// `n` items (a count read earlier), each walked by `f`.
-    fn items<T: Default>(&mut self, v: &mut Vec<T>, n: i32, f: &mut impl FnMut(&mut Self, &mut T) -> R<()>) -> R<()> {
+    fn items<T: Default>(
+        &mut self,
+        v: &mut Vec<T>,
+        n: i32,
+        f: &mut impl FnMut(&mut Self, &mut T) -> R<()>,
+    ) -> R<()> {
         if Self::READ {
             if !(0..=10_000_000).contains(&n) {
                 return bad(format!("count {n}"));
@@ -569,7 +574,8 @@ impl Io for Writer {
             self.data.bs(v.index);
             return Ok(());
         }
-        let flags = (v.rgb.is_some() as u16) << 7 | (v.book.is_some() as u16) << 6 | (v.alpha.is_some() as u16) << 5;
+        let flags =
+            (v.rgb.is_some() as u16) << 7 | (v.book.is_some() as u16) << 6 | (v.alpha.is_some() as u16) << 5;
         self.data.bs(((flags << 8) | (v.index as u16 & 0x1FF)) as i16);
         if let Some(rgb) = v.rgb {
             self.data.bl(rgb as i32);

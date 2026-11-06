@@ -269,7 +269,12 @@ pub fn read_object(buf: &[u8], at: usize, ver: Version, classes: &Classes, cp: O
 
 /// Reads an object; when its type's fields don't decode, it is kept raw (its common part read,
 /// or nothing past its handle when even that fails) and the error comes back with it.
-pub fn read_object_lenient(buf: &[u8], at: usize, ver: Version, classes: &Classes) -> R<(Object, Option<String>)> {
+pub fn read_object_lenient(
+    buf: &[u8],
+    at: usize,
+    ver: Version,
+    classes: &Classes,
+) -> R<(Object, Option<String>)> {
     match read_object_as(buf, at, ver, classes, false) {
         Ok(o) => Ok((o, None)),
         Err(e) => match read_object_as(buf, at, ver, classes, true) {
@@ -342,7 +347,9 @@ fn read_object_as(buf: &[u8], at: usize, ver: Version, classes: &Classes, raw: b
         d.bs()? as u16
     };
     let endbit = match hsize {
-        Some(h) => (size as usize * 8).checked_sub(h).ok_or(crate::bits::Bad("handle stream size".into()))?,
+        Some(h) => (size as usize * 8)
+            .checked_sub(h)
+            .ok_or(crate::bits::Bad("handle stream size".into()))?,
         None => d.rl()? as usize,
     };
     let (code, handle) = d.h()?;
@@ -353,7 +360,10 @@ fn read_object_as(buf: &[u8], at: usize, ver: Version, classes: &Classes, raw: b
     let mut strs = None;
     let mut data_end = endbit;
     if ver >= Version::R2007 {
-        let mut b = BitReader { d: obj, p: endbit - 1 };
+        let mut b = BitReader {
+            d: obj,
+            p: endbit - 1,
+        };
         data_end = endbit - 1;
         if b.b()? {
             let mut at = endbit - 1 - 16;
@@ -365,7 +375,9 @@ fn read_object_as(buf: &[u8], at: usize, ver: Version, classes: &Classes, raw: b
                 let hi = r.rs()? as usize;
                 n = (n & 0x7FFF) | (hi << 15);
             }
-            let s = at.checked_sub(n).ok_or(crate::bits::Bad("string stream size".into()))?;
+            let s = at
+                .checked_sub(n)
+                .ok_or(crate::bits::Bad("string stream size".into()))?;
             strs = Some(BitReader { d: obj, p: s });
             data_end = s;
         }
@@ -388,7 +400,11 @@ fn read_object_as(buf: &[u8], at: usize, ver: Version, classes: &Classes, raw: b
         xdic: Some(Href::default()),
         ds_binary: false,
         ent: entity.then(EntCommon::default),
-        data: if raw { Data::Raw(type_code) } else { Data::of(type_code, classes) },
+        data: if raw {
+            Data::Raw(type_code)
+        } else {
+            Data::of(type_code, classes)
+        },
         trailing: vec![],
         raw: Some(buf[at..end + 2].to_vec()),
     };
@@ -404,10 +420,16 @@ fn read_object_as(buf: &[u8], at: usize, ver: Version, classes: &Classes, raw: b
         }
     }
     if r.data.p > data_end {
-        return bad(format!("object {handle:#x} type {type_code}: data overran by {} bits", r.data.p - data_end));
+        return bad(format!(
+            "object {handle:#x} type {type_code}: data overran by {} bits",
+            r.data.p - data_end
+        ));
     }
     if r.data.p != data_end && !matches!(o.data, Data::Raw(_)) {
-        return bad(format!("object {handle:#x} type {type_code}: {} data bits left", data_end - r.data.p));
+        return bad(format!(
+            "object {handle:#x} type {type_code}: {} data bits left",
+            data_end - r.data.p
+        ));
     }
     if r.hdl.p > obj.len() * 8 {
         return bad(format!("object {handle:#x}: handles overran"));

@@ -19,7 +19,11 @@ impl Default for Str {
 impl Str {
     /// For a version: code-page bytes (Windows-1252, other characters as \U+XXXX) or UTF-16.
     pub fn new(s: &str, wide: bool) -> Str {
-        if wide { Str::Wide(s.encode_utf16().collect()) } else { Str::Cp(encode_1252(s)) }
+        if wide {
+            Str::Wide(s.encode_utf16().collect())
+        } else {
+            Str::Cp(encode_1252(s))
+        }
     }
     pub fn is_empty(&self) -> bool {
         match self {
@@ -62,13 +66,19 @@ impl std::fmt::Display for Str {
 const HIGH: [char; 32] = [
     '\u{20AC}', '\u{81}', '\u{201A}', '\u{192}', '\u{201E}', '\u{2026}', '\u{2020}', '\u{2021}', '\u{2C6}',
     '\u{2030}', '\u{160}', '\u{2039}', '\u{152}', '\u{8D}', '\u{17D}', '\u{8F}', '\u{90}', '\u{2018}',
-    '\u{2019}', '\u{201C}', '\u{201D}', '\u{2022}', '\u{2013}', '\u{2014}', '\u{2DC}', '\u{2122}',
-    '\u{161}', '\u{203A}', '\u{153}', '\u{9D}', '\u{17E}', '\u{178}',
+    '\u{2019}', '\u{201C}', '\u{201D}', '\u{2022}', '\u{2013}', '\u{2014}', '\u{2DC}', '\u{2122}', '\u{161}',
+    '\u{203A}', '\u{153}', '\u{9D}', '\u{17E}', '\u{178}',
 ];
 
 pub fn decode_1252(b: &[u8]) -> String {
     b.iter()
-        .map(|&x| if (0x80..0xA0).contains(&x) { HIGH[x as usize - 0x80] } else { x as char })
+        .map(|&x| {
+            if (0x80..0xA0).contains(&x) {
+                HIGH[x as usize - 0x80]
+            } else {
+                x as char
+            }
+        })
         .collect()
 }
 
@@ -99,7 +109,8 @@ fn unescape(s: &str) -> String {
     let cs: Vec<char> = s.chars().collect();
     let mut k = 0;
     while k < cs.len() {
-        if cs[k] == '\\' && k + 6 < cs.len() + 1 && cs.get(k + 1) == Some(&'U') && cs.get(k + 2) == Some(&'+') {
+        if cs[k] == '\\' && k + 6 < cs.len() + 1 && cs.get(k + 1) == Some(&'U') && cs.get(k + 2) == Some(&'+')
+        {
             let hex: String = cs[k + 3..(k + 7).min(cs.len())].iter().collect();
             if hex.len() == 4
                 && let Ok(u) = u16::from_str_radix(&hex, 16)
