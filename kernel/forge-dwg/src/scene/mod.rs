@@ -4,6 +4,15 @@
 //!
 //! The builder is deterministic (forge-math's trig), so a scene is the same on every target.
 
+mod build;
+mod color;
+mod geom;
+mod hatch;
+mod ltype;
+mod text;
+
+pub use color::aci_rgb;
+
 use crate::file::Drawing;
 
 /// Which space to show.
@@ -54,6 +63,12 @@ pub enum Prim {
     Path { pts: Vec<[f64; 2]>, closed: bool },
     /// Filled rings, even-odd.
     Fill { rings: Vec<Vec<[f64; 2]>> },
+    /// Separate straight segments, each consecutive pair of points one (a line type's dashes
+    /// along a path, a hatch's pattern lines): many short lines as one item.
+    Segments { pts: Vec<[f64; 2]> },
+    /// Filled rings, even-odd, in the canvas's background colour whatever `Item::rgb` says: a
+    /// WIPEOUT, or an MTEXT's background mask. It hides what was drawn before it.
+    Mask { rings: Vec<Vec<[f64; 2]>> },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -106,22 +121,34 @@ impl Scene {
         let mut lo = [f64::INFINITY; 2];
         let mut hi = [f64::NEG_INFINITY; 2];
         let mut add = |p: &[f64; 2]| {
-            for k in 0..2 {
-                lo[k] = lo[k].min(p[k]);
-                hi[k] = hi[k].max(p[k]);
+            if p[0] < lo[0] {
+                lo[0] = p[0];
+            }
+            if p[0] > hi[0] {
+                hi[0] = p[0];
+            }
+            if p[1] < lo[1] {
+                lo[1] = p[1];
+            }
+            if p[1] > hi[1] {
+                hi[1] = p[1];
             }
         };
         for it in &self.items {
             match &it.prim {
-                Prim::Path { pts, .. } => pts.iter().for_each(&mut add),
-                Prim::Fill { rings } => rings.iter().flatten().for_each(&mut add),
+                Prim::Path { pts, .. } | Prim::Segments { pts } => pts.iter().for_each(&mut add),
+                Prim::Fill { rings } | Prim::Mask { rings } => rings.iter().flatten().for_each(&mut add),
             }
         }
         self.extents = (lo[0] <= hi[0]).then_some((lo, hi));
     }
 }
 
-/// The space's scene. (A first cut: see the builder's module for what it covers.)
+/// The space's scene, as AutoCAD shows it in plan: every entity type it can draw (blocks
+/// expanded, dimensions, leaders, hatches, text and the rest), colours, line types and
+/// lineweights resolved, layers off or frozen left out; a layout with model space through its
+/// viewports. Rays and construction lines are cut to a box well beyond everything else and left
+/// out of `extents`.
 pub fn build(d: &Drawing, space: Space, fonts: &dyn Fonts, opts: &Options) -> Scene {
-    crate::scene_build::build(d, space, fonts, opts)
+    build::build(d, space, fonts, opts)
 }
