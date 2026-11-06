@@ -289,12 +289,18 @@ impl App {
                     self.save_as = Some(recv);
                     let proxy = self.proxy.clone();
                     let name = l.gui.shell.name.clone();
+                    // a DWG document's Save As writes a .dwg in its own version
+                    let (kind, ext) = if l.gui.shell.dwgdoc.is_some() {
+                        ("DWG drawings", "dwg")
+                    } else {
+                        ("Forge parts", "fg")
+                    };
                     std::thread::spawn(move || {
                         let chosen = rfd::FileDialog::new()
-                            .add_filter("Forge parts", &["fg"])
+                            .add_filter(kind, &[ext])
                             .set_file_name(name)
                             .save_file()
-                            .map(|f| f.with_extension("fg").to_string_lossy().into_owned());
+                            .map(|f| f.with_extension(ext).to_string_lossy().into_owned());
                         let _ = send.send(chosen);
                         let _ = proxy.send_event(());
                     });
@@ -354,8 +360,9 @@ fn new_sheet_dialog() -> Option<String> {
 /// The system's file dialog.
 fn open_dialog() -> Option<String> {
     let f = rfd::FileDialog::new()
-        .add_filter("Parts", &["fc", "fg"])
+        .add_filter("Parts and drawings", &["fc", "fg", "dwg", "DWG"])
         .add_filter("Forge parts", &["fg"])
+        .add_filter("DWG drawings", &["dwg", "DWG"])
         .pick_file()?;
     Some(f.to_string_lossy().into_owned())
 }
@@ -479,6 +486,11 @@ impl ApplicationHandler for App {
                 redraw = true;
             }
             WindowEvent::ModifiersChanged(m) => self.mods = m.state(),
+            // a file dropped on the window opens in its tab, as File > Open would
+            WindowEvent::DroppedFile(path) => {
+                l.gui.open(&path.to_string_lossy());
+                redraw = true;
+            }
             WindowEvent::KeyboardInput { event, .. }
                 if matches!(event.physical_key, PhysicalKey::Code(c)
                     if l.gui.held_key(c, event.state == ElementState::Pressed)) => {}

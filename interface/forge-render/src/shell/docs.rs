@@ -77,6 +77,7 @@ per_doc!(
         inspect: super::inspect::Inspect,
         drawing: Option<super::drawing::DrawingEnv>,
         new_drawing: Option<super::drawing::NewDrawing>,
+        dwgdoc: Option<super::dwgdoc::DwgDoc>,
     ],
     app [
         theme, view, out, view_rect, places, cube_menu, cube_menu_fresh, cube_region, marking,
@@ -140,6 +141,7 @@ impl ShellDoc {
             inspect: Default::default(),
             drawing: None,
             new_drawing: None,
+            dwgdoc: None,
         }
     }
 }
@@ -151,6 +153,8 @@ pub enum DocKind {
     Part,
     Assembly,
     Drawing,
+    /// A DWG file.
+    Dwg,
 }
 
 /// A tab in the strip along the bottom.
@@ -272,6 +276,7 @@ impl Shell {
                 DocKind::Part => "part",
                 DocKind::Assembly => "subasm",
                 DocKind::Drawing => "dwgbase",
+                DocKind::Dwg => "polyline",
             };
             let ink = if active { t.ink } else { t.ink2 };
             super::icons::draw(
