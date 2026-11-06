@@ -11,7 +11,12 @@ fn main() {
             let data = &buf[addr + 32..addr + 32 + size as usize];
             if s.compressed == 2 {
                 let d = r2004::decompress(data, 0x10000).unwrap();
-                println!("{:20} page {page:2} start {start:#7x} comp {size:5} -> {:5} bytes; tail {:02x?}", s.name, d.len(), &d[d.len().saturating_sub(8)..]);
+                println!(
+                    "{:20} page {page:2} start {start:#7x} comp {size:5} -> {:5} bytes; tail {:02x?}",
+                    s.name,
+                    d.len(),
+                    &d[d.len().saturating_sub(8)..]
+                );
             }
         }
     }

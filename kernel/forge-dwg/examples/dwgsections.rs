@@ -16,12 +16,24 @@ fn main() {
                 continue;
             }
         };
-        println!("  {} pages, page map {} at {:#x}, section map {}", l.pages.len(), l.header.page_map_id, l.header.page_map_addr, l.header.section_map_id);
+        println!(
+            "  {} pages, page map {} at {:#x}, section map {}",
+            l.pages.len(),
+            l.header.page_map_id,
+            l.header.page_map_addr,
+            l.header.section_map_id
+        );
         for s in &l.sections {
             let d = r2004::section_data(&buf, &l, &s.name);
             println!(
                 "  {:22} size {:7} pages {:2} max {:#x} comp {} enc {} id {} -> {}",
-                s.name, s.size, s.pages.len(), s.max_page, s.compressed, s.encrypted, s.id,
+                s.name,
+                s.size,
+                s.pages.len(),
+                s.max_page,
+                s.compressed,
+                s.encrypted,
+                s.id,
                 match d {
                     Ok(Some(d)) => format!("{} bytes, starts {:02x?}", d.len(), &d[..d.len().min(16)]),
                     Ok(None) => "none".into(),

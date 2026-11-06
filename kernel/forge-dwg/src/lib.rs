@@ -8,6 +8,8 @@ pub mod file;
 pub mod header;
 pub mod io;
 pub mod object;
+pub mod scene;
+mod scene_build;
 pub mod str;
 pub mod types;
 pub mod version;
@@ -164,7 +166,14 @@ pub(crate) fn encode(s: &str) -> Vec<u8> {
         match c as u32 {
             u @ (0..0x80 | 0xA0..0x100) => out.push(u as u8),
             u if u <= 0xFFFF => out.extend_from_slice(format!("\\U+{u:04X}").as_bytes()),
-            u => out.extend_from_slice(format!("\\U+{:04X}\\U+{:04X}", 0xD800 + ((u - 0x10000) >> 10), 0xDC00 + ((u - 0x10000) & 0x3FF)).as_bytes()),
+            u => out.extend_from_slice(
+                format!(
+                    "\\U+{:04X}\\U+{:04X}",
+                    0xD800 + ((u - 0x10000) >> 10),
+                    0xDC00 + ((u - 0x10000) & 0x3FF)
+                )
+                .as_bytes(),
+            ),
         }
     }
     out

@@ -310,7 +310,11 @@ impl<'a> BitReader<'a> {
         self.bytes(n as usize)
     }
     pub fn be(&mut self) -> R<[f64; 3]> {
-        if self.b()? { Ok([0.0, 0.0, 1.0]) } else { self.bd3() }
+        if self.b()? {
+            Ok([0.0, 0.0, 1.0])
+        } else {
+            self.bd3()
+        }
     }
     pub fn bt(&mut self) -> R<f64> {
         if self.b()? { Ok(0.0) } else { self.bd() }
@@ -489,7 +493,13 @@ mod tests {
             w.bs(v);
         }
         let s: String = (0..w.len)
-            .map(|k| if w.bytes[k / 8] & (0x80 >> (k % 8)) != 0 { '1' } else { '0' })
+            .map(|k| {
+                if w.bytes[k / 8] & (0x80 >> (k % 8)) != 0 {
+                    '1'
+                } else {
+                    '0'
+                }
+            })
             .collect();
         assert_eq!(s, "0000000001000000011011010000111110");
     }

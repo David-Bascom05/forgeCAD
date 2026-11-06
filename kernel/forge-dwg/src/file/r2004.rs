@@ -173,7 +173,11 @@ pub fn decompress(src: &[u8], size: usize) -> R<Vec<u8>> {
             }
             0x40..=0xFF => {
                 let b = byte(&mut p)? as usize;
-                (((op & 0xF0) >> 4) as usize - 1, (b << 2) | ((op & 0x0C) >> 2) as usize, (op & 3) as usize)
+                (
+                    ((op & 0xF0) >> 4) as usize - 1,
+                    (b << 2) | ((op & 0x0C) >> 2) as usize,
+                    (op & 3) as usize,
+                )
             }
             _ => return bad(format!("compression opcode {op:#x}")),
         };
@@ -276,12 +280,17 @@ pub fn layout(buf: &[u8]) -> R<Layout> {
         s.name = name.iter().take_while(|&&b| b != 0).map(|&b| b as char).collect();
         at += 0x60;
         for _ in 0..count {
-            s.pages.push((u32_at(&smap, at)?, u32_at(&smap, at + 4)?, u64_at(&smap, at + 8)?));
+            s.pages
+                .push((u32_at(&smap, at)?, u32_at(&smap, at + 4)?, u64_at(&smap, at + 8)?));
             at += 16;
         }
         sections.push(s);
     }
-    Ok(Layout { header: h, pages, sections })
+    Ok(Layout {
+        header: h,
+        pages,
+        sections,
+    })
 }
 
 /// A data section's bytes: its pages unmasked, decompressed and laid end to end.
@@ -317,7 +326,11 @@ pub fn section_data(buf: &[u8], l: &Layout, name: &str) -> R<Option<Vec<u8>>> {
         if u32_at(&hdr, 0x1C)? != dsum || u32_at(&hdr, 0x18)? != checksum(dsum, &h0) {
             return bad(format!("{name}: page {page} checksum"));
         }
-        let page_bytes = if s.compressed == 2 { decompress(data, s.max_page as usize)? } else { data.to_vec() };
+        let page_bytes = if s.compressed == 2 {
+            decompress(data, s.max_page as usize)?
+        } else {
+            data.to_vec()
+        };
         let start = start as usize;
         let n = page_bytes.len().min(out.len().saturating_sub(start));
         out[start..start + n].copy_from_slice(&page_bytes[..n]);
@@ -373,7 +386,11 @@ pub fn compress(src: &[u8]) -> Vec<u8> {
                 l += 1;
             }
             // far matches of three need the offset's high bit (op 0x11 ends the stream)
-            let ok = if d - 1 > 0x3FFF { l >= 4 || (l == 3 && (d - 1 - 0x3FFF) & 0x4000 != 0) } else { l >= 3 };
+            let ok = if d - 1 > 0x3FFF {
+                l >= 4 || (l == 3 && (d - 1 - 0x3FFF) & 0x4000 != 0)
+            } else {
+                l >= 3
+            };
             if ok && l > best.0 {
                 best = (l, d);
             }
@@ -515,7 +532,11 @@ pub fn crc32(seed: u32, data: &[u8]) -> u32 {
     for &b in data {
         c ^= b as u32;
         for _ in 0..8 {
-            c = if c & 1 != 0 { (c >> 1) ^ 0xEDB8_8320 } else { c >> 1 };
+            c = if c & 1 != 0 {
+                (c >> 1) ^ 0xEDB8_8320
+            } else {
+                c >> 1
+            };
         }
     }
     !c
@@ -624,7 +645,10 @@ pub fn write(d: &super::Drawing) -> R<Vec<u8>> {
     objects.extend_from_slice(&objs);
     let mut contents: Vec<Content> = vec![];
     let core = |name: &str, data: Vec<u8>| (name.to_string(), data, 0x7400u32, 2u32, 0u32, 1u32);
-    contents.push(core("AcDb:Header", crate::header::write_header(&d.header, ver, d.maint)?));
+    contents.push(core(
+        "AcDb:Header",
+        crate::header::write_header(&d.header, ver, d.maint)?,
+    ));
     contents.push(core("AcDb:Classes", write_classes(&d.classes, ver, d.maint)?));
     contents.push(core("AcDb:Handles", write_map(&locs)));
     contents.push(core("AcDb:AcDbObjects", objects));
@@ -634,7 +658,11 @@ pub fn write(d: &super::Drawing) -> R<Vec<u8>> {
         if e.name == "AcDb:ObjFreeSpace" && data.len() >= 8 {
             data[4..8].copy_from_slice(&(locs.len() as u32).to_le_bytes());
         }
-        let (mp, c, enc, u) = if e.max_page == 0 { (0x7400, 2, 0, 1) } else { (e.max_page, e.compressed, e.encrypted, e.unknown) };
+        let (mp, c, enc, u) = if e.max_page == 0 {
+            (0x7400, 2, 0, 1)
+        } else {
+            (e.max_page, e.compressed, e.encrypted, e.unknown)
+        };
         contents.push((e.name.clone(), data, mp, c, enc, u));
     }
     container(d.ver(), d.maint, d.codepage, &d.file_header, &contents)
@@ -644,7 +672,13 @@ pub fn write(d: &super::Drawing) -> R<Vec<u8>> {
 pub type Content = (String, Vec<u8>, u32, u32, u32, u32);
 
 /// Lays sections out as an R2004-container file.
-pub fn container(ver: crate::version::Version, maint: u8, codepage: u16, file_header: &[u8], contents: &[Content]) -> R<Vec<u8>> {
+pub fn container(
+    ver: crate::version::Version,
+    maint: u8,
+    codepage: u16,
+    file_header: &[u8],
+    contents: &[Content],
+) -> R<Vec<u8>> {
     let known = |n: &str| MAP_ORDER.contains(&n);
     // the section map's order and ids
     let mut map_names: Vec<String> = vec!["".into()];
@@ -712,7 +746,8 @@ pub fn container(ver: crate::version::Version, maint: u8, codepage: u16, file_he
             hdr[0x18..0x1C].copy_from_slice(&hsum.to_le_bytes());
             let mask = 0x4164_536Bu32 ^ addr as u32;
             for j in 0..8 {
-                let v = u32::from_le_bytes([hdr[4 * j], hdr[4 * j + 1], hdr[4 * j + 2], hdr[4 * j + 3]]) ^ mask;
+                let v =
+                    u32::from_le_bytes([hdr[4 * j], hdr[4 * j + 1], hdr[4 * j + 2], hdr[4 * j + 3]]) ^ mask;
                 file.extend_from_slice(&v.to_le_bytes());
             }
             let mut page = payload.clone();
@@ -812,7 +847,12 @@ pub fn container(ver: crate::version::Version, maint: u8, codepage: u16, file_he
     fh[0..6].copy_from_slice(ver.magic());
     fh[0x0B] = maint;
     fh[0x13..0x15].copy_from_slice(&codepage.to_le_bytes());
-    let addr_of = |n: &str| first_page_addr.iter().find(|p| p.0 == n).map_or(0, |p| p.1 as u32 + 0x20);
+    let addr_of = |n: &str| {
+        first_page_addr
+            .iter()
+            .find(|p| p.0 == n)
+            .map_or(0, |p| p.1 as u32 + 0x20)
+    };
     fh[0x0D..0x11].copy_from_slice(&addr_of("AcDb:Preview").to_le_bytes());
     fh[0x20..0x24].copy_from_slice(&addr_of("AcDb:SummaryInfo").to_le_bytes());
     fh[0x24..0x28].copy_from_slice(&addr_of("AcDb:VBAProject").to_le_bytes());

@@ -29,14 +29,18 @@ fn every_object_decodes_and_encodes_back() {
         let map = file::r2000::read_map(&s.handles, 0, s.handles.len()).unwrap();
         let mut decoded = 0;
         for (h, at) in map {
-            let o = read_object(&s.objects, at, s.ver, &cl, None).unwrap_or_else(|e| panic!("{v} {h:#x}: {}", e.0));
+            let o = read_object(&s.objects, at, s.ver, &cl, None)
+                .unwrap_or_else(|e| panic!("{v} {h:#x}: {}", e.0));
             if matches!(o.data, Data::Raw(_)) {
                 continue;
             }
             let mut fresh = o.clone();
             fresh.raw = None;
             let (b, n) = encode_object(&fresh, s.ver).unwrap();
-            assert!(same_bits(&b, o.raw.as_ref().unwrap(), n), "{v} {h:#x} re-encodes differently");
+            assert!(
+                same_bits(&b, o.raw.as_ref().unwrap(), n),
+                "{v} {h:#x} re-encodes differently"
+            );
             decoded += 1;
         }
         assert!(decoded > 150, "{v}: {decoded} decoded");
@@ -58,14 +62,19 @@ fn files_write_and_read_back() {
         assert_eq!(d.classes, e.classes, "{v} classes");
         assert_eq!(d.objects.len(), e.objects.len(), "{v}");
         for ((h, a), (_, b)) in d.objects.iter().zip(&e.objects) {
-            assert!(a.data == b.data && a.ent == b.ent && a.handle == b.handle, "{v} {h:#x}");
+            assert!(
+                a.data == b.data && a.ent == b.ent && a.handle == b.handle,
+                "{v} {h:#x}"
+            );
         }
     }
 }
 
 /// FNV-1a.
 fn hash(b: &[u8]) -> u64 {
-    b.iter().fold(0xCBF2_9CE4_8422_2325, |h, &x| (h ^ x as u64).wrapping_mul(0x0100_0000_01B3))
+    b.iter().fold(0xCBF2_9CE4_8422_2325, |h, &x| {
+        (h ^ x as u64).wrapping_mul(0x0100_0000_01B3)
+    })
 }
 
 #[test]
@@ -80,7 +89,11 @@ fn written_bytes_are_the_same_on_every_target() {
     let got = all.join(" ");
     let want = include_str!("data/written.hashes").trim();
     if std::env::var("DWG_BLESS").is_ok() {
-        std::fs::write(format!("{}/tests/data/written.hashes", env!("CARGO_MANIFEST_DIR")), &got).unwrap();
+        std::fs::write(
+            format!("{}/tests/data/written.hashes", env!("CARGO_MANIFEST_DIR")),
+            &got,
+        )
+        .unwrap();
         return;
     }
     assert_eq!(got, want);

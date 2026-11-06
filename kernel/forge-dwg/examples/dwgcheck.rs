@@ -49,7 +49,11 @@ fn main() {
                         Ok((b, n)) if same_bits(&b, o.raw.as_ref().unwrap(), n) => e.1 += 1,
                         Ok((b, _)) => {
                             if e.2.len() < 2 && !matches!(o.data, forge_dwg::types::Data::Raw(_)) {
-                                e.2.push(format!("{h:#x}: re-encoded {} vs {} bytes", b.len(), o.raw.as_ref().unwrap().len()));
+                                e.2.push(format!(
+                                    "{h:#x}: re-encoded {} vs {} bytes",
+                                    b.len(),
+                                    o.raw.as_ref().unwrap().len()
+                                ));
                             }
                         }
                         Err(x) => e.2.push(format!("{h:#x}: encode: {}", x.0)),

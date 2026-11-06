@@ -18,9 +18,25 @@ fn main() {
                 let at = if has_hi_size(s.ver, s.maint) { 24 } else { 20 };
                 let size = u32::from_le_bytes(s.header[16..20].try_into().unwrap()) as usize;
                 let orig = &s.header[at..at + size];
-                let same = orig.len() >= b.len() && (0..n).all(|k| (orig[k / 8] ^ b[k / 8]) & (0x80 >> (k % 8)) == 0);
-                println!("{} vars, re-encoded {} ({} vs {} bytes)", h.vars.len(), if same { "SAME" } else { "DIFFERENT" }, b.len(), orig.len());
-                for name in ["HANDSEED", "EXTMIN", "EXTMAX", "INSUNITS", "CLAYER", "FINGERPRINTGUID", "PROJECTNAME", "unknown_bs4"] {
+                let same = orig.len() >= b.len()
+                    && (0..n).all(|k| (orig[k / 8] ^ b[k / 8]) & (0x80 >> (k % 8)) == 0);
+                println!(
+                    "{} vars, re-encoded {} ({} vs {} bytes)",
+                    h.vars.len(),
+                    if same { "SAME" } else { "DIFFERENT" },
+                    b.len(),
+                    orig.len()
+                );
+                for name in [
+                    "HANDSEED",
+                    "EXTMIN",
+                    "EXTMAX",
+                    "INSUNITS",
+                    "CLAYER",
+                    "FINGERPRINTGUID",
+                    "PROJECTNAME",
+                    "unknown_bs4",
+                ] {
                     if let Some(v) = h.get(name) {
                         println!("    {name} = {v:?}");
                     }

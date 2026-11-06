@@ -29,10 +29,25 @@ fn main() {
     } else {
         r.bs().unwrap() as u16
     };
-    let endbit = if s.ver >= Version::R2010 { size as usize * 8 - hsize } else { r.rl().unwrap() as usize };
+    let endbit = if s.ver >= Version::R2010 {
+        size as usize * 8 - hsize
+    } else {
+        r.rl().unwrap() as usize
+    };
     let h = r.h().unwrap();
-    println!("type {t} handle {h:?} size {size} endbit {endbit} hsize {hsize} data from bit {}", r.p);
-    let bits: String = (r.p..endbit).map(|k| if obj[k / 8] & (0x80 >> (k % 8)) != 0 { '1' } else { '0' }).collect();
+    println!(
+        "type {t} handle {h:?} size {size} endbit {endbit} hsize {hsize} data from bit {}",
+        r.p
+    );
+    let bits: String = (r.p..endbit)
+        .map(|k| {
+            if obj[k / 8] & (0x80 >> (k % 8)) != 0 {
+                '1'
+            } else {
+                '0'
+            }
+        })
+        .collect();
     for (k, c) in bits.as_bytes().chunks(64).enumerate() {
         println!("{:5} {}", r.p + 64 * k, std::str::from_utf8(c).unwrap());
     }
