@@ -1,10 +1,12 @@
 //! Each object type's own fields (chapter 20.4), one description for reading and writing.
 
 mod entities;
+mod entities_a;
 mod objects;
 mod tables;
 
 pub use entities::*;
+pub use entities_a::*;
 pub use objects::*;
 pub use tables::*;
 
@@ -65,15 +67,38 @@ macro_rules! data {
 data! {
     fixed {
         Text = 1,
+        Attrib = 2,
+        AttDef = 3,
         Block = 4,
         EndBlk = 5,
+        SeqEnd = 6,
+        Insert = 7,
+        MInsert = 8,
+        Vertex2d = 10,
+        Vertex3d = 11,
+        VertexMesh = 12,
+        VertexPface = 13,
+        VertexPfaceFace = 14,
+        Polyline2d = 15,
+        Polyline3d = 16,
         Arc = 17,
         Circle = 18,
         Line = 19,
         Point = 27,
+        Face3d = 28,
+        PolylinePface = 29,
+        PolylineMesh = 30,
         Solid = 31,
+        Trace = 32,
+        Shape = 33,
+        Viewport = 34,
         Ellipse = 35,
         Spline = 36,
+        Region = 37,
+        Solid3d = 38,
+        Body = 39,
+        Ray = 40,
+        Xline = 41,
         Dictionary = 42,
         BlockControl = 48,
         BlockHeader = 49,
@@ -93,14 +118,19 @@ data! {
         DimStyle = 69,
         VxControl = 70,
         MlineStyle = 73,
+        Ole2Frame = 74,
         LwPolyline = 77,
         Placeholder = 80,
         Layout = 82,
+        ProxyEntity = 498,
+        ProxyObject = 499,
     }
     only_classes {
         DictionaryWdflt,
     }
     classes {
+        "ACAD_PROXY_ENTITY" => ProxyEntity,
+        "ACAD_PROXY_OBJECT" => ProxyObject,
         "ACDBDICTIONARYWDFLT" => DictionaryWdflt,
         "ACDBPLACEHOLDER" => Placeholder,
         "LAYOUT" => Layout,
