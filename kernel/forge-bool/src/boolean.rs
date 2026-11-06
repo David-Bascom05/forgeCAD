@@ -454,10 +454,28 @@ pub(crate) fn refuse_strays(body: &Body, first: usize) -> R<()> {
 /// point per face (research/boolean-check: caught every dropped curve and no false alarm on 1777 booleans).
 #[cfg(debug_assertions)]
 fn faces_survive(a: &Body, b: &Body, op: Op, r: &Body) {
-    // (one `check` faults is reported already)
-    if !forge_topo::check(r).is_empty() {
-        return;
+    // (one `check` faults is reported already; that check, over the whole result after every
+    // boolean, cost most of a test's regen, so it is asked only where a point would fail or the
+    // asking panics)
+    let asked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| survivors(a, b, op, r)));
+    match asked {
+        Ok(None) => {}
+        Ok(Some(msg)) => {
+            if forge_topo::check(r).is_empty() {
+                panic!("{msg}");
+            }
+        }
+        Err(e) => {
+            if forge_topo::check(r).is_empty() {
+                std::panic::resume_unwind(e);
+            }
+        }
     }
+}
+
+/// The first face point of an operand the result does not hold as the op says, as its message.
+#[cfg(debug_assertions)]
+fn survivors(a: &Body, b: &Body, op: Op, r: &Body) -> Option<String> {
     let (ia, ib, ir) = (Index::new(a), Index::new(b), Index::new(r));
     for (first, body, own, other) in [(true, a, &ia, &ib), (false, b, &ib, &ia)] {
         for f in body.face_ids() {
@@ -474,12 +492,14 @@ fn faces_survive(a: &Body, b: &Body, op: Op, r: &Body) {
             };
             // (a point its own body does not hold on the face is no evidence: a loop's inner side can miss)
             let got = ir.classify(p);
-            assert!(
-                got == want || own.classify(p) != Where::On,
-                "{op:?}: a point of a face of an operand at {p:?} is {got:?} in the result, not {want:?}"
-            );
+            if !(got == want || own.classify(p) != Where::On) {
+                return Some(format!(
+                    "{op:?}: a point of a face of an operand at {p:?} is {got:?} in the result, not {want:?}"
+                ));
+            }
         }
     }
+    None
 }
 
 /// `boolean_into` with the tool as its entities (`forge_ops::extrude_unlinked`): the Body is
