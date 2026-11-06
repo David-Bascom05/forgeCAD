@@ -642,8 +642,15 @@ fn modelled_threads_mate_only_where_they_match() {
         let out = r.asm.expect("an assembly");
         (out.interferences, out.intended)
     };
-    assert_eq!(interferences(true, "M6", 0.0), (0, 1));
-    assert_eq!(interferences(false, "M6", 0.0), (1, 0));
-    assert_eq!(interferences(true, "M5", 0.0), (1, 0));
-    assert_eq!(interferences(true, "M6", 0.3), (1, 0));
+    // four assemblies, each its own run, side by side
+    let cases = [
+        ((true, "M6", 0.0), (0, 1)),
+        ((false, "M6", 0.0), (1, 0)),
+        ((true, "M5", 0.0), (1, 0)),
+        ((true, "M6", 0.3), (1, 0)),
+    ];
+    let got = forge_model::suite::each(&cases, |&((rule, nut, off), _)| interferences(rule, nut, off));
+    for ((case, want), got) in cases.iter().zip(got) {
+        assert_eq!(got, *want, "{case:?}");
+    }
 }
