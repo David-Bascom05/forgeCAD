@@ -80,6 +80,8 @@ pub struct Item {
     pub rgb: [u8; 3],
     /// Millimetres; 0 the thinnest line.
     pub weight: f32,
+    /// Its colour is its layer's (ByLayer, resolved): a viewer can recolour it with the layer.
+    pub by_layer: bool,
     pub prim: Prim,
 }
 

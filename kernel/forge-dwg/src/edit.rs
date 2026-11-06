@@ -124,12 +124,37 @@ impl Drawing {
     pub fn paper_space(&self) -> u32 {
         self.header.handle("BLOCK_RECORD_PAPER_SPACE").unwrap_or(0)
     }
-    /// A layer by name (case-insensitive, as AutoCAD compares them).
+    /// A layer by name (case-insensitive, as AutoCAD compares them): from the layer table's
+    /// entries, else every object.
     pub fn layer(&self, name: &str) -> Option<u32> {
-        self.objects.iter().find_map(|(h, o)| match &o.data {
-            Data::Layer(l) if l.entry.name.text().eq_ignore_ascii_case(name) => Some(*h),
-            _ => None,
-        })
+        let is = |o: &Object| matches!(&o.data, Data::Layer(l) if l.entry.name.text().eq_ignore_ascii_case(name));
+        if let Some(Data::LayerControl(c)) = self
+            .header
+            .handle("LAYER_CONTROL")
+            .and_then(|h| self.objects.get(&h))
+            .map(|o| &o.data)
+        {
+            return c.0.entries.iter().map(|x| x.handle).find(|h| self.objects.get(h).is_some_and(is));
+        }
+        self.objects.iter().find_map(|(h, o)| is(o).then_some(*h))
+    }
+
+    /// The block table's records.
+    pub fn block_records(&self) -> Vec<u32> {
+        match self
+            .header
+            .handle("BLOCK_CONTROL")
+            .and_then(|h| self.objects.get(&h))
+            .map(|o| &o.data)
+        {
+            Some(Data::BlockControl(c)) => c.0.entries.iter().chain(&c.0.extra).map(|x| x.handle).collect(),
+            _ => self
+                .objects
+                .iter()
+                .filter(|(_, o)| matches!(o.data, Data::BlockHeader(_)))
+                .map(|(h, _)| *h)
+                .collect(),
+        }
     }
     /// The type number for an object's data: its fixed number, or its class's (`dxf`).
     pub fn type_code(&self, data: &Data, dxf: &str) -> R<u16> {
@@ -289,6 +314,44 @@ impl Drawing {
         }
         hist.save(self, h);
         self.objects.remove(&h);
+        Ok(())
+    }
+
+    /// Erases many entities at once: R2004 on, each block's list of entities filtered once
+    /// (not once an entity); R2000's linked lists one by one.
+    pub fn erase_many(&mut self, hist: &mut History, hs: &[u32]) -> R<()> {
+        if self.ver() < Version::R2004 {
+            for &h in hs {
+                self.erase(hist, h)?;
+            }
+            return Ok(());
+        }
+        let mut by_block: BTreeMap<u32, std::collections::HashSet<u32>> = BTreeMap::new();
+        for &h in hs {
+            match self.block_of(h) {
+                Some(b) => {
+                    by_block.entry(b).or_default().insert(h);
+                }
+                None => return bad(format!("{h:#x} is not an entity")),
+            }
+        }
+        for (block, set) in &by_block {
+            hist.save(self, *block);
+            if let Some(o) = self.objects.get_mut(block) {
+                o.raw = None;
+                if let Data::BlockHeader(bh) = &mut o.data {
+                    bh.owned.retain(|x| !set.contains(&x.handle));
+                }
+            }
+        }
+        for &h in hs {
+            for sub in self.owned_by(h) {
+                hist.save(self, sub);
+                self.objects.remove(&sub);
+            }
+            hist.save(self, h);
+            self.objects.remove(&h);
+        }
         Ok(())
     }
 

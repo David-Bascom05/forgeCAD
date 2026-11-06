@@ -246,10 +246,13 @@ pub fn copy_entity(d: &mut Drawing, hist: &mut History, h: u32) -> R<u32> {
 
 /// The next free number for an anonymous block of a kind ("*D", "*U").
 pub fn next_anonymous(d: &Drawing, kind: &str) -> u32 {
-    d.objects
-        .values()
-        .filter_map(|o| match &o.data {
-            Data::Block(x) => x.name.text().strip_prefix(kind).and_then(|k| k.parse::<u32>().ok()),
+    d.block_records()
+        .into_iter()
+        .filter_map(|b| match d.objects.get(&b).map(|o| &o.data) {
+            Some(Data::BlockHeader(bh)) => match d.objects.get(&bh.block.handle).map(|o| &o.data) {
+                Some(Data::Block(x)) => x.name.text().strip_prefix(kind).and_then(|k| k.parse::<u32>().ok()),
+                _ => None,
+            },
             _ => None,
         })
         .max()

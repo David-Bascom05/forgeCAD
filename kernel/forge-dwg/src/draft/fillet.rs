@@ -219,6 +219,39 @@ pub fn fillet(a: &Curve, pick_a: V2, b: &Curve, pick_b: V2, r: f64) -> Option<Co
             added: Some(arc),
         });
     }
+    if let (Car::Lin { p: p1, u: u1 }, Car::Lin { p: p2, u: u2 }) = (ca, cb) {
+        // two lines: the picks say which side of their corner each keeps (a pick may be where
+        // the fillet will cut, as AutoCAD's may)
+        let (s, _) = super::curve::line_line(p1, u1, p2, u2)?;
+        let x = p1 + u1 * s;
+        let ka = side_of_corner(&pa, x, u1, pick_a, tol)?;
+        let kb = side_of_corner(&pb, x, u2, pick_b, tol)?;
+        let th = dmath::acos_clamped(ka.dot(kb));
+        if th <= 1e-9 || th >= PI - 1e-9 {
+            return None;
+        }
+        // the centre where the lines' offsets toward the kept sides meet; the tangent points
+        // its feet
+        let na_ = if u1.perp().dot(kb) >= 0.0 { u1.perp() } else { -u1.perp() };
+        let nb_ = if u2.perp().dot(ka) >= 0.0 { u2.perp() } else { -u2.perp() };
+        let (t, _) = super::curve::line_line(p1 + na_ * r, u1, p2 + nb_ * r, u2)?;
+        let c = p1 + na_ * r + u1 * t;
+        let (ta, tb) = (ca.foot(c), cb.foot(c));
+        let d = ta.dist(x);
+        let na = keep_from(&pa, x, ta, ka, d, tol)?;
+        let nb = keep_from(&pb, x, tb, kb, d, tol)?;
+        let arc = Arc {
+            c,
+            r,
+            start: (ta - c).angle(),
+            sweep: wrap_pi((tb - c).angle() - (ta - c).angle()),
+        };
+        return Some(Corner {
+            a: put_back(na, at_a, tol)?,
+            b: put_back(nb, at_b, tol)?,
+            added: Some(Curve::Arc(arc)),
+        });
+    }
     // centres: where the carriers' offsets meet
     let mut best: Option<(f64, Curve, Curve, Arc)> = None;
     for oa in ca.offsets(r) {
@@ -266,6 +299,31 @@ pub fn fillet(a: &Curve, pick_a: V2, b: &Curve, pick_b: V2, r: f64) -> Option<Co
         b: put_back(nb, at_b, tol)?,
         added: Some(Curve::Arc(arc)),
     })
+}
+
+/// The way from a corner `x` along a line (direction `u`) that a pick keeps: toward the pick,
+/// or, picked at the corner itself, toward the line's far end.
+fn side_of_corner(line: &Curve, x: V2, u: V2, pick: V2, tol: f64) -> Option<V2> {
+    let s = (pick - x).dot(u);
+    if s.abs() > tol {
+        return Some(if s > 0.0 { u } else { -u });
+    }
+    let far = [line.start(), line.end()]
+        .into_iter()
+        .max_by(|a, b| a.dist(x).total_cmp(&b.dist(x)))?;
+    Some(if (far - x).dot(u) >= 0.0 { u } else { -u })
+}
+
+/// A line from `t` (`d` from the corner `x` along `k`) on to its end that way: cut back, or run on
+/// when it stops short of `t`. None when nothing of it lies that way past `t`.
+fn keep_from(line: &Curve, x: V2, t: V2, k: V2, d: f64, tol: f64) -> Option<Curve> {
+    let far = [line.start(), line.end()]
+        .into_iter()
+        .max_by(|a, b| (*a - x).dot(k).total_cmp(&(*b - x).dot(k)))?;
+    if (far - x).dot(k) <= d + tol {
+        return None;
+    }
+    cut_to(line, t, far)
 }
 
 /// The cut curve still holds the pick (its foot on the original's carrier), and a line still
@@ -388,11 +446,9 @@ pub fn chamfer(a: &Curve, pick_a: V2, b: &Curve, pick_b: V2, how: Chamfer) -> Op
         return None;
     }
     let (qa, qb) = (x + ka * d1, x + kb * d2);
-    let na = cut_to(&pa, qa, pick_a)?;
-    let nb = cut_to(&pb, qb, pick_b)?;
-    if !holds(&pa, &na, pick_a, tol) || !holds(&pb, &nb, pick_b, tol) {
-        return None;
-    }
+    // each kept from its chamfer point on, the way its pick says (a pick may be in the part cut)
+    let na = keep_from(&pa, x, qa, ka, d1, tol)?;
+    let nb = keep_from(&pb, x, qb, kb, d2, tol)?;
     let added = (qa.dist(qb) > tol).then_some(Curve::Line { a: qa, b: qb });
     Some(Corner {
         a: put_back(na, at_a, tol)?,
@@ -666,5 +722,21 @@ mod tests {
         let l = Curve::line(v2(0.0, 15.0), v2(5.0, 15.0));
         let f = fillet(&open, v2(10.0, 8.0), &l, v2(2.0, 15.0), 1.0).unwrap();
         assert!(close(f.a.end(), v2(10.0, 14.0)) && close(f.b.end(), v2(9.0, 15.0)));
+    }
+
+    #[test]
+    fn a_pick_where_the_fillet_cuts() {
+        // the top line picked between the corner and where the arc will meet it (AutoCAD keeps
+        // that side of the corner all the same), the side line picked just off it
+        let a = Curve::line(v2(176.0, 150.0), v2(176.0, 186.0));
+        let b = Curve::line(v2(224.00004, 186.0), v2(175.99996, 186.0));
+        let k = fillet(&a, v2(175.68, 167.45), &b, v2(190.98, 185.92), 15.0).unwrap();
+        let Some(Curve::Arc(arc)) = &k.added else { panic!() };
+        assert!(arc.c.dist(v2(191.0, 171.0)) < 1e-9 && (arc.r - 15.0).abs() < 1e-12);
+        assert!(k.a.end().dist(v2(176.0, 171.0)) < 1e-9, "{:?}", k.a);
+        assert!(k.b.end().dist(v2(191.0, 186.0)) < 1e-9 || k.b.start().dist(v2(191.0, 186.0)) < 1e-9, "{:?}", k.b);
+        // and a chamfer picked inside its distances
+        let c = chamfer(&a, v2(176.0, 184.0), &b, v2(178.0, 186.0), Chamfer::Distances(5.0, 5.0)).unwrap();
+        assert!(c.a.end().dist(v2(176.0, 181.0)) < 1e-9, "{:?}", c.a);
     }
 }
