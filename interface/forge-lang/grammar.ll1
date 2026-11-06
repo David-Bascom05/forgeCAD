@@ -23,10 +23,12 @@ stmt        := 'shared' ID '=' expr
              | 'path' ID '(' args ')' block
              | 'component' ID '(' args ')' block
              | 'drawing' drawtail
+             | 'harness' harntail
              | expr assigntail ;
 assigntail  := '=' expr | %empty ;
 drawtail    := ID dargs block | %empty ;
 dargs       := '(' args ')' | %empty ;
+harntail    := ID dargs block | '(' args ')' ;
 
 path        := ID keys pathrest ;
 pathrest    := '.' ID keys pathrest | %empty ;

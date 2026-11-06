@@ -1,0 +1,26 @@
+harness(ctrl, m1, m2, plate, slack: slack, round_up: step, insert: seat_in)
+# The controller loom as a file of its own: robot_loom.fg places it with the occurrences it wires.
+w22 = wire_type(awg: g22, od: od22, min_bend: bend22, colour: "RD", source: "example values, not a datasheet")
+w26 = wire_type(awg: g26, od: od26, colour: "BK", source: "example values, not a datasheet")
+
+J1 = connector(ctrl.face, pins: ctrl.pin)
+J2 = connector(m1.face, pins: m1.pin)
+J3 = connector(m2.face, pins: m2.pin)
+
+n1 = node(J1, out: out)
+hub = node(plate.clip, off: rise, along: "x")
+n2 = node(J2, out: out)
+n3 = node(J3, out: out)
+
+trunk = segment(n1, hub)
+up = segment(hub, n2)
+down = segment(hub, n3)
+
+W1 = wire(J1[1], J2[1], type: w22)
+W2 = wire(J1[2], J2[2], type: w22)
+W3 = wire(J1[3], J2[3], type: w26)
+W4 = wire(J1[4], J2[4], type: w26)
+W5 = wire(J1[5], J3[1], type: w22)
+W6 = wire(J1[6], J3[2], type: w22)
+W7 = wire(J1[7], J3[3], type: w26)
+W8 = wire(J1[8], J3[4], type: w26)

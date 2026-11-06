@@ -311,6 +311,8 @@ pub struct Eval<'s> {
     /// measure (`run` does; any other evaluation works it out in place): each one's place in
     /// `thermos`, its memo key and the part.
     pub masses_owed: Option<Vec<(usize, String, forge_topo::Body)>>,
+    /// The harness block being evaluated, by its index in the document's (`harness.rs`).
+    pub harness: Option<usize>,
     /// Threads drawn as standards draw them (`Options::cosmetic_threads`): not modelled, only
     /// recorded, so a drawing's hidden-line pass sees the plain envelope.
     pub cosmetic_threads: bool,
@@ -406,6 +408,7 @@ impl<'s> Eval<'s> {
             sheets: Default::default(),
             thermos: vec![],
             masses_owed: None,
+            harness: None,
             cosmetic_threads: false,
             threads: vec![],
             dir: None,
@@ -505,6 +508,31 @@ impl<'s> Eval<'s> {
         self.scopes.push(sc);
         let r = f(self);
         self.scopes.pop();
+        r
+    }
+
+    /// Evaluates `f` in a block's own scope, its ids under `name` (`loom.W1`), `bound` seen first.
+    pub(crate) fn in_block<T>(
+        &mut self,
+        name: &str,
+        bound: Vec<(String, Value)>,
+        f: impl FnOnce(&mut Self) -> T,
+    ) -> T {
+        let saved = self.ctx.prefix.clone();
+        self.ctx.prefix.push(Seg {
+            name: name.into(),
+            index: vec![],
+        });
+        let mut sc = HashMap::new();
+        for (n, v) in bound {
+            sc.insert(n, (v, Span { lo: 0, hi: 0 }));
+        }
+        self.scopes.push(sc);
+        self.scopes.push(HashMap::new());
+        let r = f(self);
+        self.scopes.pop();
+        self.scopes.pop();
+        self.ctx.prefix = saved;
         r
     }
 
@@ -1210,6 +1238,7 @@ impl<'s> Eval<'s> {
                 BlockKind::Component => crate::asm::component_block(self, s, name, args, body),
                 // a drawing of this document: drawn only when asked (`drawing::block`)
                 BlockKind::Drawing => Ok(()),
+                BlockKind::Harness => crate::harness::block(self, s, name, args, body),
             },
             StmtKind::Assign { name, value } => {
                 let saved = self.ctx.owner.clone();
@@ -1365,6 +1394,9 @@ impl<'s> Eval<'s> {
         }
         if let Some(b) = crate::builtins::builtin(name) {
             return Ok(Value::Builtin(b));
+        }
+        if let Some(v) = crate::harness::constant(self, name) {
+            return Ok(v);
         }
         if let Some(k) = self.locals.iter().position(|p| p.key.name == name) {
             let err = self.out_of_scope(self.locals[k].key.clone(), span);

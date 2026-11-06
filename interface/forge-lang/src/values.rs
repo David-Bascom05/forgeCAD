@@ -304,6 +304,7 @@ pub enum Ty {
     Anchor,
     AnchorKind,
     Pose,
+    Harness,
 }
 
 pub fn fmt(x: f64) -> String {

@@ -1,0 +1,25 @@
+# The robot of robot.fg, its loom placed from loom.fg: the file names the occurrences it wires,
+# this placement gives them.
+shared out = 10
+shared rise = 12
+shared od22 = 1.6
+shared od26 = 1.1
+shared bend22 = 5
+shared g22 = 22
+shared g26 = 26
+shared slack = ratio(0.03)
+shared step = 5
+shared seat_in = 4
+shared plug = count(4)
+
+plate = part("plate.fg", ground: true)
+ctrl = part("header.fg")
+m1 = part("header.fg", with: {n: plug})
+m2 = part("header.fg", with: {n: plug})
+on_ctrl = fastened(ctrl.seat, plate.ctrl_seat, flip: true)
+on_m1 = fastened(m1.seat, plate.m1_seat, flip: true)
+on_m2 = fastened(m2.seat, plate.m2_seat, flip: true)
+
+loom = subassembly("loom.fg", ctrl: ctrl, m1: m1, m2: m2, plate: plate)
+
+expect mobility = 0

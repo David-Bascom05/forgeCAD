@@ -1054,6 +1054,63 @@ expect clearance(arm, post) >= 2 at crank.turn = 90deg
   `fg run --render` draws the posed assembly; `fg serve` keeps the solve, so a drive edit
   re-solves only its partition and re-tests only what moved.
 
+## Harnesses
+
+A wire harness is written in an assembly, or in a file of its own that an assembly places. Every
+place in it is a reference on the assembly's parts (an anchor, a role name, a face or edge through
+a part expression), worked out after the solve: routes follow the parts.
+
+```
+harness loom(slack: ratio(0.03), round_up: 5, insert: 4) {
+  w22 = wire_type(awg: 22, od: 1.6, min_bend: 5, colour: "RD", source: "datasheet rev C")
+  w26 = wire_type("T26-BK")                      # a wire library row
+  J1 = connector(ctrl.face, pins: ctrl.pin)      # face anchor (z: where wires leave); pins: pin[1]..
+  J2 = connector(m1.face, pins: {a: m1.pa, b: m1.pb})
+  n1 = node(J1, out: 10)                         # the connector's exit node, 10 out along its z
+  hub = node(plate.clip, off: 12, along: "x")    # routes pass through along the anchor's x
+  n2 = node(J2, out: 10)
+  trunk = segment(n1, hub)
+  up = segment(hub, n2, via: [frame.corner], covering: "PET braid 6", wall: 0.5, loop: 40)
+  W1 = wire(J1[1], J2.a, type: w22)               # through the shortest chain of segments
+  W2 = wire(J1[2], J2.b, type: w26, through: [trunk, up])
+}
+```
+
+- `harness NAME(bend_k: 3, k: 1.5, slack: ratio(0), round_up: 0, lead: L, insert: 0, empty_d: 2)`:
+  ids inside are `loom.W1`; edit ops reach them as a component's (`AddFeature {before: "loom."}`).
+- A file whose first line is `harness(ctrl, m1, plate, slack: ..)` is a harness of its own: the
+  names are the occurrences it wires; `loom = subassembly("loom.fg", ctrl: ctrl, m1: m1, plate:
+  plate)` places it, evaluated in the placing document (its shared params too). Run alone it is
+  `HarnessPlacedOnly` (information).
+- `wire_type(NAME, awg:, od:, min_bend:, colour:, source:)`: NAME a row of the wire library
+  (CSV `name,awg,mm2,od,min_bend,colour,source` in the project's `wires/*.csv`, then
+  `~/.config/forgecad/wires/*.csv`; a row with no source is refused, `WireRowUnsourced`);
+  arguments override it. No tables are shipped. With a gauge and no OD, the conductor's diameter
+  (0.127 mm × 92^((36 − awg)/39)) is used, `NoInsulationOd`.
+- `connector(FACE, pins: REF | {key: REF, ..}, insert: L)`; a pin is `J1[3]` or `J1.a`.
+  `node(J, out: L)` is its exit node (directed along the face's z); `node(REF, off: L, along:
+  "x"|"y"|"z", lead: L)` any other: `off` along the reference's z, `along` the axis every route
+  passes through it along (a clip). A node with no direction is a free corner.
+- `segment(A, B, via: [REF..], k:, bend_k:, wall:, covering:, loop:, d:)`: a run of the network,
+  its centreline lines and tangent arcs through the vias (a directed end leaves along its
+  direction for `lead`, the segment's minimum radius by default).
+- `wire(FROM, TO, type:, through: [SEG..], colour:)`: from pin to pin; without `through:` the
+  shortest chain (Dijkstra on the segments' polyline lengths).
+- Each segment's bundle: one wire is its own OD, two or more max(sqrt(K Σd²), d₁ + d₂), plus 2 ×
+  wall; its minimum radius max(bend_k × D, each wire's min_bend). Every corner is an arc of that
+  radius, or the tightest that fits with the warning `BendTooTight` (segment, corner, needed, got).
+  A wire's length: (stubs + centrelines + service loops) × (1 + slack) + insertion at both pins,
+  rounded up to `round_up`.
+- Warnings: `BendTooTight`, `KinkAtNode` (a wire turning through a free node: the angle and which
+  way; add `along:`), `NoPath`, `PathBroken`, `NoInsulationOd`; information `SegmentEmpty`; errors
+  `PinUnknown`, `NoExitNode`, `HarnessBrokenRef`, `UnknownWireType`, `WireRowBad`,
+  `HarnessOccurrences`, `HarnessFile` (inside a placed file, with its line), `HarnessNotTopLevel`.
+- `fg run --json` gives `assembly.harnesses`: connectors and pins, nodes, segments (length, D,
+  R_min, tightest radius, wires), wires (path, every length term) and the BOM (wire by type,
+  coverings by length, connectors). `fg harness F.fg [--harness NAME] [--csv OUT|-] [--import
+  LIST.csv [--apply]]`: the report, the wire list (`id,from,to,type,colour,path` and the lengths),
+  or a list's import: the diff by wire id and the edit ops, written with `--apply`.
+
 ## Rules
 
 | rule | level | what |

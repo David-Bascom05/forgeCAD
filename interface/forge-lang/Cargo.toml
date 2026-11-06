@@ -20,6 +20,7 @@ forge-model = { path = "../../kernel/forge-model" }
 forge-sketch = { path = "../../kernel/forge-sketch" }
 forge-sheet = { path = "../../kernel/forge-sheet" }
 forge-thermo = { path = "../../kernel/forge-thermo" }
+forge-harness = { path = "../../kernel/forge-harness" }
 forge-material = { path = "../../kernel/forge-material" }
 forge-agent = { path = "../forge-agent" }
 forge-font = { path = "../../kernel/forge-font" }

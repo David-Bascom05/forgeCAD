@@ -151,6 +151,16 @@ impl PathSeg {
 /// plane, square to it, keeping the profile square to the path. `feature` is the history id the
 /// names derive from (see `skin`).
 pub fn sweep(profile: &crate::Profile, path: &[PathSeg], feature: u64) -> Result<Body, SweepError> {
+    let body = sweep_unchecked(profile, path, feature)?;
+    if path.len() > 1 && crate::selfx::crossing(&body, &vec![true; body.faces.len()]).is_some() {
+        return Err(SweepError::SelfIntersecting);
+    }
+    Ok(body)
+}
+
+/// A sweep whose caller knows the path keeps the solid clear of itself (a wire harness's tube,
+/// whose bends are no tighter than the tube): the same body, without the self-intersection test.
+pub fn sweep_unchecked(profile: &crate::Profile, path: &[PathSeg], feature: u64) -> Result<Body, SweepError> {
     let (prep, stretches) = stretches(profile, path)?;
     let segs: Vec<Segment> = prep.segments().cloned().collect();
     let mut planes: Vec<Frame> = stretches.iter().map(|s| s.plane()).collect();
@@ -226,7 +236,7 @@ pub fn sweep(profile: &crate::Profile, path: &[PathSeg], feature: u64) -> Result
             }
         }
     }
-    let body = Skin {
+    Ok(Skin {
         loops: prep.loop_sizes(),
         keys: prep.keys,
         planes,
@@ -235,11 +245,7 @@ pub fn sweep(profile: &crate::Profile, path: &[PathSeg], feature: u64) -> Result
         walls,
         apex: [false; 2],
     }
-    .build(Name::feature(feature));
-    if path.len() > 1 && crate::selfx::crossing(&body, &vec![true; body.faces.len()]).is_some() {
-        return Err(SweepError::SelfIntersecting);
-    }
-    Ok(body)
+    .build(Name::feature(feature)))
 }
 
 /// One stretch of a sweep: the profile's plane where it starts (z along the path), and how it

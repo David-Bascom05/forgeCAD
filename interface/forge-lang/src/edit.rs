@@ -534,7 +534,7 @@ fn component_feature(prog: &[Stmt], id: &str) -> Option<(String, String)> {
 /// The top-level `component NAME(..) { .. }` named `name`.
 fn component(prog: &[Stmt], name: &str) -> Option<usize> {
     prog.iter().position(|s| {
-        matches!(&s.kind, StmtKind::Block { kind: syntax::BlockKind::Component, name: n, .. } if n == name)
+        matches!(&s.kind, StmtKind::Block { kind: syntax::BlockKind::Component | syntax::BlockKind::Harness, name: n, .. } if n == name)
     })
 }
 

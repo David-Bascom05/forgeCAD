@@ -138,6 +138,8 @@ pub enum AsmVal {
         args: Vec<(String, Literal)>,
         given: Vec<(String, Value, String)>,
     },
+    /// A harness or one of its items (`harness.rs`).
+    Harness(crate::harness::HVal),
 }
 
 impl AsmVal {
@@ -151,6 +153,7 @@ impl AsmVal {
             AsmVal::Anchor { .. } => Ty::Anchor,
             AsmVal::Kind(_) => Ty::AnchorKind,
             AsmVal::Pose(_) => Ty::Pose,
+            AsmVal::Harness(_) => Ty::Harness,
             AsmVal::Full => Ty::Word,
             AsmVal::Def(_) | AsmVal::Call { .. } | AsmVal::Foreign { .. } | AsmVal::ForeignCall { .. } => {
                 Ty::Function
@@ -275,6 +278,8 @@ pub struct Doc {
     /// Part files placed another way than as they are, by their key (`mug.fg|with:d=70`):
     /// their params set, or one of their components called.
     pub variants: BTreeMap<String, Variant>,
+    /// The document's wire harnesses, as written (`harness.rs`).
+    pub harnesses: Vec<crate::harness::HarnessDef>,
 }
 
 /// A part file placed as something other than its default part.
@@ -342,7 +347,7 @@ fn with_text(src: &str, w: &Expr, name: &str) -> String {
 /// A file's text kept for the run's evaluations of it (each text once, for the process: an
 /// evaluation borrows its text as long as the document's). Found by the text itself, never by a
 /// hash of it: two texts are never one.
-fn kept_text(text: String) -> &'static str {
+pub(crate) fn kept_text(text: String) -> &'static str {
     use std::sync::{Mutex, OnceLock};
     static TEXTS: OnceLock<Mutex<std::collections::BTreeSet<&'static str>>> = OnceLock::new();
     let mut m = TEXTS.get_or_init(Default::default).lock().expect("texts");
@@ -576,6 +581,7 @@ impl Doc {
             && self.relations.is_empty()
             && self.fits.is_empty()
             && self.rules.is_empty()
+            && self.harnesses.is_empty()
     }
 }
 
@@ -623,6 +629,10 @@ pub fn has_components(prog: &[crate::syntax::Stmt]) -> bool {
                 matches!(&e.kind, ExprKind::Call(f, _) if matches!(&f.kind, ExprKind::Name(n) if PLACES.contains(&n.as_str())))
             }
             StmtKind::For { body, .. } => any(body),
+            StmtKind::Block {
+                kind: crate::syntax::BlockKind::Harness,
+                ..
+            } => true,
             StmtKind::If { then, other, .. } => any(then) || other.as_deref().is_some_and(any),
             _ => false,
         })
@@ -878,6 +888,7 @@ fn asm_call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
         return joint(ev, name, kind, args, span);
     }
     match name {
+        "subassembly" if let Some(r) = crate::harness::place(ev, args, span) => r,
         "part" | "subassembly" => {
             let a = Args::bind(
                 ev,
@@ -1459,6 +1470,9 @@ pub fn member(a: &Rc<AsmVal>, name: &str, span: Span) -> R<Value> {
             r.span = span;
             Ok(asm(AsmVal::Ref(r)))
         }
+        AsmVal::Harness(crate::harness::HVal::Connector { h, k, pins }) => {
+            Ok(crate::harness::pin_of(*h, *k, pins, Key::Label(name.into())))
+        }
         AsmVal::Link { id, joint: Some(k) } => freedom_words(*k)
             .iter()
             .find(|w| w.0 == name)
@@ -1510,6 +1524,9 @@ pub fn part_call_on(a: &Rc<AsmVal>, text: String, span: Span) -> R<Value> {
 
 pub fn index(a: &Rc<AsmVal>, k: i64, span: Span) -> R<Value> {
     match &**a {
+        AsmVal::Harness(crate::harness::HVal::Connector { h, k: c, pins }) => {
+            Ok(crate::harness::pin_of(*h, *c, pins, Key::Ix(k)))
+        }
         AsmVal::Ref(r) => {
             let mut r = r.clone();
             if let Some(last) = r.segs.last_mut() {
@@ -1703,6 +1720,8 @@ pub enum Issue {
     },
     /// A component of this document written wrong.
     Component(CompProblem),
+    /// A wire harness's problem (`harness.rs`).
+    Harness(crate::harness::HarnessProblem),
 }
 
 /// Why an expect could not be measured.
@@ -1796,6 +1815,7 @@ impl Issue {
             | Issue::PartChanged { .. } => Level::Warning,
             Issue::IntendedContact { .. } => Level::Info,
             Issue::Inside { issue, .. } => issue.level(),
+            Issue::Harness(p) => p.level(),
             Issue::AtPastLimit { .. } => Level::Warning,
             // nothing grounded: each partition held at its least occurrence, its freedoms free
             Issue::NoGround => Level::Warning,
@@ -1829,6 +1849,7 @@ impl Issue {
             Issue::Inside { issue, .. } => issue.kind(),
             Issue::AtPastLimit { .. } => "AtPastLimit",
             Issue::Component(p) => p.kind(),
+            Issue::Harness(p) => p.kind(),
         }
     }
 }
@@ -1866,6 +1887,7 @@ impl AsmNote {
                 before: None,
                 text: format!("fit_{} = fit({a}, {b})", valid_name(&format!("{a}_{b}"))),
             }],
+            Issue::Harness(p) => p.fixes(),
             _ => vec![],
         }
     }
@@ -1931,6 +1953,7 @@ fn names(xs: &[ItemName]) -> String {
 fn issue_text(i: &Issue) -> String {
     match i {
         Issue::Component(p) => p.text(),
+        Issue::Harness(p) => p.text(),
         Issue::WrongDocument { func, assembly: true } => {
             format!("{func} is for assembly documents (first line `assembly`)")
         }
@@ -2071,6 +2094,7 @@ fn issue_data(i: &Issue) -> Vec<(&'static str, Json)> {
     let s = |x: &str| Json::Str(x.into());
     let list = |xs: &[ItemName]| Json::Arr(xs.iter().map(ItemName::json).collect());
     match i {
+        Issue::Harness(p) => p.data(),
         Issue::Component(p) => match p {
             CompProblem::Nested { func } => vec![("func", s(func))],
             CompProblem::BodyGone { id } => vec![("id", s(id))],
@@ -3197,6 +3221,8 @@ pub struct AsmOut {
     /// With `Options::comp_anchors`: each occurrence's part file's anchors (an in-file component's
     /// are `Run::comp_anchors`).
     pub occ_anchors: Vec<Option<Arc<crate::anchors::Anchors>>>,
+    /// The document's wire harnesses, routed on the solved assembly.
+    pub harnesses: Vec<crate::harness::HarnessOut>,
 }
 
 /// A part or subassembly occurrence, as a browser lists it.
@@ -4344,6 +4370,44 @@ pub fn finish(
             _ => [None, None],
         })
         .collect();
+    if !d.harnesses.is_empty() {
+        let parts = checker.parts().clone();
+        let place = |r: &RefDef| -> Option<(Frame, Option<&fa::PartInfo>, fa::AnchorRef)> {
+            let (_, end) = names
+                .probe
+                .iter()
+                .find(|(p, _)| p.inst == r.inst && p.segs == r.segs && p.local == r.local)?;
+            match sol.occurrences.iter().find(|o| o.path == end.path) {
+                Some(o) => Some((o.pose, fa::Parts::part(&*parts, &o.part), end.anchor.clone())),
+                None if end.path.len() == 1 => Some((sol.pose(end.path[0])?, None, end.anchor.clone())),
+                None => None,
+            }
+        };
+        let at = |r: &RefDef| -> Option<Frame> {
+            let (pose, info, anchor) = place(r)?;
+            match anchor {
+                fa::AnchorRef::Local(l) => Some(pose.compose(&l.frame)),
+                fa::AnchorRef::Named(n) => match info?.refs.get(&n) {
+                    Some(Ok(rf)) => Some(pose.compose(&rf.frame)),
+                    _ => None,
+                },
+            }
+        };
+        // the names the part does give, of those this run asked of it
+        let refs_of = |r: &RefDef| -> Vec<String> {
+            place(r)
+                .and_then(|(_, info, _)| info)
+                .map(|i| {
+                    i.refs
+                        .iter()
+                        .filter(|x| x.1.is_ok())
+                        .map(|x| x.0.clone())
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+        out.harnesses = crate::harness::finish(ev, &d.harnesses, &at, &refs_of, opts.render);
+    }
     out.hashes = sol
         .hashes
         .iter()
@@ -5597,6 +5661,12 @@ pub fn json(out: &AsmOut) -> Json {
                 .collect(),
         ),
     ));
+    if !out.harnesses.is_empty() {
+        f.push((
+            "harnesses",
+            Json::Arr(out.harnesses.iter().map(crate::harness::json).collect()),
+        ));
+    }
     if let Some(o) = &out.overlap {
         f.push((
             "overlap",

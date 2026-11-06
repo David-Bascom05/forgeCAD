@@ -13,7 +13,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-const CRATES: [&str; 10] = [
+const CRATES: [&str; 11] = [
     "forge-geom",
     "forge-topo",
     "forge-bool",
@@ -24,6 +24,7 @@ const CRATES: [&str; 10] = [
     "forge-math",
     "forge-gpu",
     "forge-mesh",
+    "forge-harness",
 ];
 
 /// What to look for, by name; a line can match several.

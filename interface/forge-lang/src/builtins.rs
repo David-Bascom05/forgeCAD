@@ -924,6 +924,7 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
         "use" => crate::uses::call(ev, args, span),
         n if crate::sheet::BUILTINS.contains(&n) => crate::sheet::call(ev, name, args, span),
         n if crate::thermo::BUILTINS.contains(&n) => crate::thermo::call(ev, name, args, span),
+        n if crate::harness::BUILTINS.contains(&n) => crate::harness::call(ev, name, args, span),
         "revolve" => revolve(ev, args, span),
         "fillet" => crate::fillets::fillet(ev, args, span),
         "chamfer" => finish(ev, name, args, span),

@@ -96,20 +96,40 @@ for name, u in [("principal normal", N), ("axis", Z)]:
     check(f"arc frame: {name} turns only toward the tangent", twist == sp.zeros(3, 1))
 check("a line translates the frame: no twist", True)
 
-# 5. Bundle diameter: pi D^2 / 4 = K sum(pi d^2 / 4), so D = sqrt(K sum d^2), never under max d.
+# 5. Bundle diameter (coordinator, 2026-11-06, for David): one wire is D = d; from two up,
+# D = max(sqrt(K sum d^2), d1 + d2), d1 and d2 the two largest, K = 1.5. Covering walls go on top.
 K = sp.Rational(3, 2)
 d = sp.symbols("d", positive=True)
-D = lambda ds, K=K: sp.Max(sp.sqrt(K * sum(x**2 for x in ds)), *ds)
-check("one wire: the formula gives sqrt(1.5) d = 1.22 d (over the wire itself)",
-      sp.simplify(D([d]) - sp.sqrt(K) * d) == 0)
+
+
+def bundle(ds, K=K):
+    if len(ds) == 1:
+        return ds[0]
+    big = sorted(ds, key=lambda x: float(x.subs(d, 1)) if hasattr(x, "subs") else float(x))[-2:]
+    return sp.Max(sp.sqrt(K * sum(x**2 for x in ds)), big[0] + big[1])
+
+
+check("one wire: D = d", bundle([d]) == d)
+check("two equal wires: D = 2d exactly", sp.simplify(bundle([d, d]) - 2 * d) == 0)
+three = sp.simplify(bundle([d, d, d]) / d)
+check("three equal wires: sqrt(4.5) d = 2.121 d, under packed 1 + 2/sqrt(3) = 2.155 d by 1.6 %",
+      sp.simplify(three - sp.sqrt(sp.Rational(9, 2))) == 0
+      and abs(float(three) / float(1 + 2 / sp.sqrt(3)) - 1) < 0.017)
+# never under the two largest side by side, nor under the largest alone
+random.seed(11)
+floor_ok = True
+for _ in range(500):
+    ds = [sp.Rational(random.randint(5, 60), 10) for _ in range(random.randint(2, 12))]
+    D = bundle(ds)
+    top = sorted(ds)[-2:]
+    floor_ok &= D >= top[0] + top[1] and D >= max(ds) and D >= sp.sqrt(K * sum(x**2 for x in ds))
+check("D >= d1 + d2 >= max d, and >= sqrt(K sum d^2) (500 random bundles)", floor_ok)
 # Glenair's count factor F(n) for equal wires, D = d F(n); K = F^2 / n (prior-art.md 3.1)
 glenair = {4: 2.4, 7: 3.0, 10: 4.0, 20: 5.6, 50: 8.5, 100: 12.2, 300: 21.0}
 ks = {n: f * f / n for n, f in glenair.items()}
 check("Glenair's table gives K in 1.44..1.60 for n >= 4 but 7", all(1.43 < k < 1.61 for n, k in ks.items() if n != 7))
 check("n = 7 is the hexagon: K = 9/7 = 1.29", abs(ks[7] - 9 / 7) < 1e-12)
-# two equal wires: true enclosing circle 2d, the formula sqrt(3) d (13 % under). Recorded, not changed:
-print("     note: n=2 equal wires: sqrt(1.5*2) d = %.3f d against 2 d packed" % float(sp.sqrt(3)))
-# minimum bend radius: max(3 D, each wire's own)
+# minimum bend radius: max(bend_k D, each wire's own)
 
 # 6. AWG conductor diameter (ASTM B258's defining formula): d(n) = 0.127 mm * 92^((36 - n)/39).
 awg = lambda n: sp.Rational(127, 1000) * sp.Integer(92) ** (sp.Rational(36 - n, 39))

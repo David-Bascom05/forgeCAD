@@ -1,0 +1,24 @@
+# A pin header: n pins in a row on its top face, `pitch` apart. Its anchors: `face` (the top, z out
+# of it: where wires leave), `pin[1]`..`pin[n]` on it, and `seat` (its bottom, z down).
+shared n = count(8)
+shared pitch = 2.54
+shared w = 8
+shared h = 10
+shared edge = 2
+properties(part_number: "HDR-1", description: "pin header", material: "PA66")
+sketch plan(on: xy) {
+  outline = rect(center: (0, 0), size: (pitch * n + edge, w))
+  o = pt(0, 0)
+}
+body = extrude(plan, h)
+sketch top(on: body.end) {
+  c = pt(0, 0)
+  for k in 1..=n {
+    p = pt(pitch * (2 * k - n - 1) / 2, 0)
+  }
+}
+face = anchor(plane(at: top.c, normal: body.end.normal, x: plan.outline[0].dir))
+seat = anchor(plane(at: plan.o, normal: body.start.normal, x: plan.outline[0].dir))
+for k in 1..=n {
+  pin = anchor(plane(at: top.p[k], normal: body.end.normal, x: plan.outline[0].dir))
+}

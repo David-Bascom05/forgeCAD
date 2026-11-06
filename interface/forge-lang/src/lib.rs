@@ -20,6 +20,7 @@ pub mod export;
 pub mod feat_error;
 pub mod fillets;
 pub mod geomemo;
+pub mod harness;
 pub mod holes;
 pub mod kept;
 pub mod media;
@@ -259,6 +260,15 @@ pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
         declared: asm::declared(&prog),
         ..Default::default()
     });
+    // a harness file is evaluated where an assembly places it, with the occurrences it is given
+    let placed_only = harness::header(&prog).map(|(names, _)| names);
+    let prog = match &placed_only {
+        Some(names) => {
+            harness::placed_only(&mut ev, prog[0].span, names);
+            vec![]
+        }
+        None => prog,
+    };
     let t1 = Instant::now();
     ev.check_static(&prog);
     timings.check_ms = t1.elapsed().as_secs_f64() * 1e3;

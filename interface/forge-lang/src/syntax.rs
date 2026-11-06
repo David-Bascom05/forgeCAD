@@ -65,7 +65,7 @@ pub struct Tok {
     pub span: Span,
 }
 
-pub const KEYWORDS: [&str; 19] = [
+pub const KEYWORDS: [&str; 20] = [
     "shared",
     "param",
     "fn",
@@ -85,6 +85,7 @@ pub const KEYWORDS: [&str; 19] = [
     "at",
     "component",
     "drawing",
+    "harness",
 ];
 
 pub const OPS: [&str; 26] = [
@@ -557,6 +558,8 @@ pub enum BlockKind {
     /// `drawing NAME(..) { statements }`: a drawing of this document, in the drawing language;
     /// the model's evaluation skips it.
     Drawing,
+    /// `harness NAME(..) { statements }`: a wire harness in this assembly (see `harness.rs`).
+    Harness,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1116,6 +1119,43 @@ impl Parser {
                 V::Draw(Box::new((self.text(b), args, list!(self, b + 2, V::Stmts))))
             }
             P::DargsLparen => self.take(b + 1),
+            // `harness NAME(..) { .. }`, or a harness file's first line `harness(a, b, ..)`: the
+            // occurrences the placing assembly passes in
+            P::StmtHarness => {
+                let at = self.tok(b).span;
+                match self.take(b + 1) {
+                    V::Draw(d) => {
+                        let (name, args, body) = *d;
+                        stmt!(StmtKind::Block {
+                            kind: BlockKind::Harness,
+                            name,
+                            args,
+                            body,
+                        })
+                    }
+                    V::Args(args) => stmt!(StmtKind::Expr(Expr {
+                        kind: ExprKind::Call(
+                            Box::new(Expr {
+                                kind: ExprKind::Name("harness".into()),
+                                span: at,
+                            }),
+                            args,
+                        ),
+                        span: at,
+                    })),
+                    _ => unreachable!("rule action and grammar.ll1 disagree"),
+                }
+            }
+            P::HarntailId => {
+                let mut args = list!(self, b + 1, V::Args);
+                args.reverse();
+                V::Draw(Box::new((self.text(b), args, list!(self, b + 2, V::Stmts))))
+            }
+            P::HarntailLparen => {
+                let mut args = list!(self, b + 1, V::Args);
+                args.reverse();
+                V::Args(args)
+            }
             P::StmtExpr => {
                 let e = self.expr(b);
                 stmt!(match self.take(b + 1) {

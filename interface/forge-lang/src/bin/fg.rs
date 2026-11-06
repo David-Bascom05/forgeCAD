@@ -464,6 +464,129 @@ fn view_file(file: &str, args: &[String]) -> ExitCode {
     ExitCode::SUCCESS
 }
 
+/// `fg harness F.fg [--harness NAME] [--csv OUT|-] [--import LIST.csv [--apply]]`: a harness's
+/// report (JSON), its wire list as CSV, or a wire list's import: the diff and the edit ops, and
+/// with `--apply` the ops written (all or nothing) into the file the harness is written in.
+fn harness_cmd(file: &str, args: &[String]) -> ExitCode {
+    let src = match read(file) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("{e}");
+            return ExitCode::from(2);
+        }
+    };
+    let opts = Options {
+        dir: dir_of(file),
+        ..Options::default()
+    };
+    let (run, _) = forge_lang::run(&src, opts, Default::default());
+    let hs = run.asm.as_ref().map(|a| a.harnesses.clone()).unwrap_or_default();
+    let h = match opt(args, "--harness") {
+        Some(n) => hs.iter().find(|h| h.id == n),
+        None => hs.first(),
+    };
+    let Some(h) = h else {
+        let names: Vec<&str> = hs.iter().map(|h| h.id.as_str()).collect();
+        eprintln!("{file}: no such harness (it has: {})", names.join(", "));
+        for e in &run.errors {
+            eprintln!("{}", e.text());
+        }
+        return ExitCode::from(1);
+    };
+    if let Some(out) = opt(args, "--csv") {
+        let csv = forge_lang::harness::export_csv(h);
+        if out == "-" {
+            print!("{csv}");
+        } else if let Err(e) = std::fs::write(out, csv) {
+            eprintln!("{out}: {e}");
+            return ExitCode::from(2);
+        }
+        return ExitCode::SUCCESS;
+    }
+    let Some(list) = opt(args, "--import") else {
+        print_json(&forge_lang::harness::json(h));
+        return ExitCode::SUCCESS;
+    };
+    let csv = match read(list) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("{e}");
+            return ExitCode::from(2);
+        }
+    };
+    // a harness placed from a file of its own is written there
+    let target = match &h.file {
+        Some(f) => dir_of(file)
+            .unwrap_or_default()
+            .join(f)
+            .to_string_lossy()
+            .to_string(),
+        None => file.to_string(),
+    };
+    let text = if target == file {
+        src.clone()
+    } else {
+        read(&target).unwrap_or_default()
+    };
+    let (ops, diff) = match forge_lang::harness::import(&text, &h.id, &csv, Some(h)) {
+        Ok(x) => x,
+        Err(e) => {
+            print_json(&Json::obj(vec![("ok", false.into()), ("error", e.into())]));
+            return ExitCode::from(1);
+        }
+    };
+    let strs = |xs: &[String]| Json::Arr(xs.iter().map(|x| Json::Str(x.clone())).collect());
+    let changed = Json::Arr(
+        diff.changed
+            .iter()
+            .map(|(w, fs)| {
+                Json::obj(vec![
+                    ("wire", w.as_str().into()),
+                    (
+                        "fields",
+                        Json::Arr(
+                            fs.iter()
+                                .map(|(f, a, b)| {
+                                    Json::obj(vec![
+                                        ("field", (*f).into()),
+                                        ("was", a.as_str().into()),
+                                        ("now", b.as_str().into()),
+                                    ])
+                                })
+                                .collect(),
+                        ),
+                    ),
+                ])
+            })
+            .collect(),
+    );
+    let mut f = vec![
+        ("ok", true.into()),
+        ("file", target.as_str().into()),
+        ("added", strs(&diff.added)),
+        ("removed", strs(&diff.removed)),
+        ("changed", changed),
+        ("ops", Json::Arr(ops.iter().map(|o| o.json()).collect())),
+    ];
+    if flag(args, "--apply") && !ops.is_empty() {
+        match edit::apply_all_checked(&text, &ops) {
+            Ok(new) => {
+                if let Err(e) = std::fs::write(&target, new) {
+                    eprintln!("{target}: {e}");
+                    return ExitCode::from(2);
+                }
+                f.push(("applied", true.into()));
+            }
+            Err(e) => {
+                print_json(&Json::obj(vec![("ok", false.into()), ("error", e.text().into())]));
+                return ExitCode::from(1);
+            }
+        }
+    }
+    print_json(&Json::obj(f));
+    ExitCode::SUCCESS
+}
+
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {
@@ -471,6 +594,7 @@ fn main() -> ExitCode {
         Some("check") if args.len() >= 2 => run_file(&args[1], &args[2..], false),
         Some("view") if args.len() >= 2 => view_file(&args[1], &args[2..]),
         Some("std") => std_cmd(&args[1..]),
+        Some("harness") if args.len() >= 2 => harness_cmd(&args[1], &args[2..]),
         Some("reference") => {
             print!("{}", forge_lang::REFERENCE);
             ExitCode::SUCCESS

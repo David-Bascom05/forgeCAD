@@ -1,0 +1,27 @@
+# The plate the connectors sit on: a seat for each (z up) and a clip on a post between them.
+shared L = 220
+shared W = 140
+shared t = 5
+shared post = 8
+shared post_h = 30
+shared cx = -85
+shared m1x = 80
+shared m1y = 45
+shared m2x = 70
+shared m2y = -50
+properties(part_number: "PLT-1", description: "base plate", material: "6061-T6")
+sketch plan(on: xy) {
+  outline = rect(center: (0, 0), size: (L, W))
+}
+base = extrude(plan, t)
+sketch pp(on: base.end) {
+  c = circle((0, 0), post / 2)
+  ctrl = pt(cx, 0)
+  m1 = pt(m1x, m1y)
+  m2 = pt(m2x, m2y)
+}
+stand = extrude(pp, post_h)
+ctrl_seat = anchor(plane(at: pp.ctrl, normal: base.end.normal, x: plan.outline[0].dir))
+m1_seat = anchor(plane(at: pp.m1, normal: base.end.normal, x: plan.outline[0].dir))
+m2_seat = anchor(plane(at: pp.m2, normal: base.end.normal, x: plan.outline[0].dir))
+clip = anchor(plane(at: stand.end.center, normal: stand.end.normal, x: plan.outline[0].dir))
