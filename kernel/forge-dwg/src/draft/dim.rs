@@ -327,16 +327,8 @@ fn radial(d: &Drawing, st: &Style, c: V2, r: f64, at: V2, dia: bool) -> Option<M
 /// Puts a made dimension into `space` on `layer`: its "*D" block (pieces on layer 0 by block,
 /// definition points on DEFPOINTS), then the DIMENSION referring to it. Its handle.
 pub fn add(d: &mut Drawing, hist: &mut History, space: u32, layer: u32, m: Made) -> R<u32> {
-    let n = d
-        .objects
-        .values()
-        .filter_map(|o| match &o.data {
-            Data::Block(b) => b.name.text().strip_prefix("*D").and_then(|k| k.parse::<u32>().ok()),
-            _ => None,
-        })
-        .max()
-        .unwrap_or(0);
-    let block = d.add_block(hist, &format!("*D{}", n + 1), true)?;
+    let n = super::commit::next_anonymous(d, "*D");
+    let block = d.add_block(hist, &format!("*D{n}"), true)?;
     let zero = d.layer("0").unwrap_or(layer);
     let defpoints = match d.layer("DEFPOINTS") {
         Some(h) => h,

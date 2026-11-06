@@ -2155,6 +2155,7 @@ impl<'a> B<'a> {
             Col::Layer(Lay::At(i)) => self.linfo[i].rgb,
             _ => [255; 3],
         };
+        let by_layer = q.col == Col::Layer(Lay::At(li));
         let weight = match q.wt {
             Wt::Mm(w) => w,
             Wt::Layer(Lay::At(i)) => self.linfo[i].wt,
@@ -2201,6 +2202,7 @@ impl<'a> B<'a> {
                 layer: li,
                 rgb,
                 weight,
+                by_layer,
                 prim,
             })
         };
@@ -2461,6 +2463,7 @@ impl<'a> B<'a> {
                     layer: r.layer,
                     rgb: r.rgb,
                     weight: r.weight,
+                    by_layer: false,
                     prim: Prim::Path {
                         pts: vec![p(t0), p(t1)],
                         closed: false,
