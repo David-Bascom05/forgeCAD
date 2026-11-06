@@ -112,6 +112,7 @@ dependencies = [
 name = "forge-dwg"
 version = "0.1.0"
 dependencies = [
+ "forge-font",
  "forge-math",
 ]
 

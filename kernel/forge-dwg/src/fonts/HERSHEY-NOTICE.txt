@@ -1,0 +1,43 @@
+hershey.bin: the Hershey fonts' glyph data
+
+hershey.bin holds the glyphs of twenty faces of the Hershey fonts (rowmans, rowmand,
+rowmant, timesr, timesi, timesib, scripts, scriptc, gothiceng, gothicger, gothicita,
+greeks, greekc, cyrillic, mathlow, mathupp, astrology, meteorology, music and symbolic),
+packed by `cargo run -p forge-dwg --example dwgfonts -- pack JHF_DIR hershey.bin`.
+
+The data comes from the Usenet distribution of the Hershey fonts (comp.sources.unix,
+1986), in the .jhf files that Jeff Epler published at
+http://emergent.unpythonic.net/software/hershey, as kept in
+https://github.com/kamalmostafa/hershey-fonts (directory hershey-fonts/, whose COPYING
+puts the .jhf files under the terms below; the GPL in that repository covers only its
+library code, which is not used here). Only the glyph data was taken: no code.
+
+The distribution's terms of use, which allow this conversion:
+
+    This distribution of the Hershey Fonts may be used by anyone for any purpose,
+    commercial or otherwise, providing that:
+        1. The following acknowledgements must be distributed with the font data:
+            - The Hershey Fonts were originally created by Dr. A. V. Hershey while
+              working at the U. S. National Bureau of Standards.
+            - The format of the Font data in this distribution was originally
+              created by
+                  James Hurt
+                  Cognition, Inc.
+                  900 Technology Park Drive
+                  Billerica, MA 01821
+                  (mit-eddie!ci-dandelion!hurt)
+        2. The font data in this distribution may be converted into any other format
+           *EXCEPT* the format distributed by the U.S. NTIS (which organization holds
+           the rights to the distribution and use of the font data in that particular
+           format). Not that anybody would really *want* to use their format... each
+           point is described in eight bytes as "xxx yyy:", where xxx and yyy are the
+           coordinate values as ASCII numbers.
+
+Acknowledgements, as asked:
+    - The Hershey Fonts were originally created by Dr. A. V. Hershey while working at
+      the U. S. National Bureau of Standards.
+    - The format of the Font data in this distribution was originally created by
+      James Hurt, Cognition, Inc., 900 Technology Park Drive, Billerica, MA 01821
+      (mit-eddie!ci-dandelion!hurt).
+
+hershey.bin is not in the NTIS format.
