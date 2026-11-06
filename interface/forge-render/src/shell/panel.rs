@@ -683,10 +683,11 @@ mod tests {
 
     fn parts() -> Vec<(String, String)> {
         let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
-        let mut out = Vec::new();
-        for seed in 0..40u64 {
-            out.push((format!("fuzz {seed}"), forge_agent::history::run(seed, 10).src));
-        }
+        // each history its own seed's, so made side by side
+        let seeds: Vec<u64> = (0..40).collect();
+        let mut out: Vec<(String, String)> = forge_model::suite::each(&seeds, |&seed| {
+            (format!("fuzz {seed}"), forge_agent::history::run(seed, 10).src)
+        });
         for dir in [
             "tools/bench-parts",
             "interface/forge-agent/tests/parts",
@@ -728,38 +729,39 @@ mod tests {
 
     #[test]
     fn a_derived_sketch_builds_the_same_part_to_the_bit() {
-        let (mut bad, mut good, mut done_all, mut left_all) = (Vec::new(), 0, 0, 0);
-        for (name, src) in parts() {
-            let mut a = forge_agent::model::Model::new(&src);
+        // each part on its own: (derived, left inline, equal, what differs)
+        let each = forge_model::suite::each(&parts(), |(name, src)| {
+            let mut a = forge_agent::model::Model::new(src);
             if a.error.is_some() {
-                continue;
+                return (0, 0, false, None);
             }
-            let (part, done, left, failed) = with_sketches(&src);
-            done_all += done;
-            left_all += left;
+            let (part, done, left, failed) = with_sketches(src);
             if let Some(why) = failed {
-                bad.push(format!("{name}: {why}"));
-                continue;
+                return (done, left, false, Some(format!("{name}: {why}")));
             }
             if done == 0 {
-                continue;
+                return (done, left, false, None);
             }
             let mut b = part.model;
             let (x, y) = (shape(&mut a), shape(&mut b));
             if x == y {
-                good += 1;
-            } else {
-                bad.push(format!(
-                    "{name}: faces {} vs {}, names same {}, volume {} vs {}, vertices same {}",
-                    x.0.len(),
-                    y.0.len(),
-                    x.0 == y.0,
-                    f64::from_bits(x.2),
-                    f64::from_bits(y.2),
-                    x.1 == y.1
-                ));
+                return (done, left, true, None);
             }
-        }
+            let why = format!(
+                "{name}: faces {} vs {}, names same {}, volume {} vs {}, vertices same {}",
+                x.0.len(),
+                y.0.len(),
+                x.0 == y.0,
+                f64::from_bits(x.2),
+                f64::from_bits(y.2),
+                x.1 == y.1
+            );
+            (done, left, false, Some(why))
+        });
+        let done_all: usize = each.iter().map(|e| e.0).sum();
+        let left_all: usize = each.iter().map(|e| e.1).sum();
+        let good = each.iter().filter(|e| e.2).count();
+        let bad: Vec<String> = each.into_iter().filter_map(|e| e.3).collect();
         eprintln!("parts equal {good}; profiles derived {done_all}, left inline {left_all}");
         assert!(done_all > 100, "{done_all}");
         // which lines differ, one at a time

@@ -750,7 +750,10 @@ fn file_part(text: &str) -> Option<(Headless, std::path::PathBuf)> {
     h.step();
     h.gui.open(file.to_str().unwrap());
     h.settle();
-    h.until(|g| g.view.as_ref().is_some_and(|v| !v.facts.face_item.is_empty()));
+    // its faces drawn, where it has any (an empty part or one of sketches alone has none)
+    if forge_agent::model::Model::new(text).body().is_some() {
+        h.until(|g| g.view.as_ref().is_some_and(|v| !v.facts.face_item.is_empty()));
+    }
     step_some(&mut h);
     Some((h, file))
 }

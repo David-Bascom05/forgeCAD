@@ -16,7 +16,10 @@ fn open(text: &str, tag: &str) -> Option<(Headless, std::path::PathBuf)> {
     h.step();
     h.gui.open(file.to_str().unwrap());
     h.settle();
-    h.until(|g| g.view.as_ref().is_some_and(|v| !v.facts.face_item.is_empty()));
+    // its faces drawn, where it has any (a part of sketches alone has none to wait for)
+    if Model::new(text).body().is_some() {
+        h.until(|g| g.view.as_ref().is_some_and(|v| !v.facts.face_item.is_empty()));
+    }
     for _ in 0..3 {
         h.step();
     }
