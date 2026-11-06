@@ -202,7 +202,7 @@ fn read_spline(s: &types::Spline) -> Result<Flat, NotEditable> {
         .fold(0.0, f64::max);
     let z = flat_z(s.points.iter().chain(&s.fit).map(|p| p[2]), size)?;
     let p = s.degree.max(1) as usize;
-    if !s.points.is_empty() && s.knots.len() >= s.points.len() + p + 1 {
+    if !s.points.is_empty() && s.knots.len() > s.points.len() + p {
         let mut ctrl: Vec<V2> = s.points.iter().map(|&q| V2::from(q)).collect();
         let mut knots = s.knots.clone();
         let mut weights = (s.weighted && s.weights.len() == ctrl.len()).then(|| s.weights.clone());
@@ -875,7 +875,7 @@ mod tests {
             weighted: true,
             knots: vec![0.0, 0.0, 0.0, 1.0, 1.0, 1.0],
             points: vec![[0.0, 0.0, 0.0], [1.0, 1.0, 0.0], [2.0, 0.0, 0.0]],
-            weights: vec![1.0, 0.7071, 1.0],
+            weights: vec![1.0, 0.75, 1.0],
             ..types::Spline::default()
         });
         let c = from_entity(&s).unwrap();

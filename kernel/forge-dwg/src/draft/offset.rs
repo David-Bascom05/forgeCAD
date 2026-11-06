@@ -11,7 +11,7 @@ use super::intersect::{Ext, intersect_tol};
 /// Which side of a curve a point is: +1 left of its direction, -1 right, 0 on it.
 pub fn side_of(c: &Curve, p: V2) -> f64 {
     let (t, q) = c.closest_unbounded(p);
-    let tol = Tol::of_box(&c.bbox().union(Bbox::of([p]))).lin;
+    let tol = Tol::of_box(&c.rough_bbox().union(Bbox::of([p]))).lin;
     if q.dist(p) <= tol {
         return 0.0;
     }

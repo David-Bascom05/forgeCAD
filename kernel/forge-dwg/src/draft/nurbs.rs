@@ -33,68 +33,6 @@ fn hlerp(a: H, b: H, t: f64) -> H {
     ]
 }
 
-/// One rational Bezier piece of a curve: parameters `u0..u1` and homogeneous control points.
-#[derive(Clone, Debug)]
-pub(crate) struct Bez {
-    pub u0: f64,
-    pub u1: f64,
-    pub h: Vec<H>,
-}
-
-impl Bez {
-    pub fn pts(&self) -> impl Iterator<Item = V2> + '_ {
-        self.h.iter().map(|&h| dehom(h))
-    }
-    pub fn bbox(&self) -> Bbox {
-        Bbox::of(self.pts())
-    }
-    /// The two halves at the middle (de Casteljau).
-    pub fn halve(&self) -> (Bez, Bez) {
-        let n = self.h.len();
-        let mut a = Vec::with_capacity(n);
-        let mut b = vec![[0.0; 3]; n];
-        let mut work = self.h.clone();
-        a.push(work[0]);
-        b[n - 1] = work[n - 1];
-        for k in 1..n {
-            for i in 0..n - k {
-                work[i] = hlerp(work[i], work[i + 1], 0.5);
-            }
-            a.push(work[0]);
-            b[n - 1 - k] = work[n - 1 - k];
-        }
-        let um = 0.5 * (self.u0 + self.u1);
-        (
-            Bez {
-                u0: self.u0,
-                u1: um,
-                h: a,
-            },
-            Bez {
-                u0: um,
-                u1: self.u1,
-                h: b,
-            },
-        )
-    }
-    /// How far the control polygon strays from its chord.
-    pub fn flatness(&self) -> f64 {
-        let p: Vec<V2> = self.pts().collect();
-        let (a, b) = (p[0], p[p.len() - 1]);
-        let d = b - a;
-        let l = d.len();
-        p.iter()
-            .map(|&q| {
-                if l > 0.0 {
-                    (q - a).cross(d).abs() / l
-                } else {
-                    q.dist(a)
-                }
-            })
-            .fold(0.0, f64::max)
-    }
-}
-
 impl Nurbs {
     pub fn n(&self) -> usize {
         self.ctrl.len()
@@ -240,6 +178,7 @@ impl Nurbs {
     }
 
     /// The point and its first two derivatives at `u`.
+    #[allow(clippy::needless_range_loop)]
     pub fn derivs(&self, u: f64) -> (V2, V2, V2) {
         let p = self.degree;
         let span = self.span(u);
@@ -404,33 +343,6 @@ impl Nurbs {
             ctrl: self.ctrl.iter().map(|&p| m.apply(p)).collect(),
             ..self.clone()
         }
-    }
-
-    /// The curve's Bezier pieces, in order.
-    pub(crate) fn beziers(&self) -> Vec<Bez> {
-        let p = self.degree;
-        let mut c = self.clamped();
-        let (a, b) = c.domain();
-        let inner: Vec<f64> = {
-            let mut v: Vec<f64> = c.knots.iter().copied().filter(|&k| k > a && k < b).collect();
-            v.dedup();
-            v
-        };
-        for &u in &inner {
-            let m = c.mult(u).min(p);
-            c = c.insert(u, p - m);
-        }
-        let mut out = vec![];
-        let mut i = 0;
-        let mut u0 = a;
-        for &u in inner.iter().chain(std::iter::once(&b)) {
-            let h: Vec<H> = (i..=i + p).map(|j| c.hpt(j)).collect();
-            out.push(Bez { u0, u1: u, h });
-            // a knot of multiplicity p shares one control point between pieces
-            i += p;
-            u0 = u;
-        }
-        out
     }
 
     /// The control points' box: holds the curve (weights positive).
@@ -645,6 +557,7 @@ fn scale_for(param: Param, total: f64, m: usize) -> f64 {
 }
 
 /// Gaussian elimination with partial pivoting.
+#[allow(clippy::needless_range_loop)]
 fn solve_dense(mut a: Vec<Vec<f64>>, mut b: Vec<V2>) -> Option<Vec<V2>> {
     let n = b.len();
     for col in 0..n {
@@ -668,7 +581,7 @@ fn solve_dense(mut a: Vec<Vec<f64>>, mut b: Vec<V2>) -> Option<Vec<V2>> {
     for r in (0..n).rev() {
         let mut s = b[r];
         for c in r + 1..n {
-            s = s - x[c] * a[r][c];
+            s -= x[c] * a[r][c];
         }
         x[r] = s / a[r][r];
     }
@@ -725,11 +638,6 @@ mod tests {
         }
         let r = c.reversed();
         assert!(r.point(0.5).dist(c.point(1.5)) < 1e-12);
-        let bz = c.beziers();
-        assert_eq!(bz.len(), 2);
-        let (h0, _) = bz[0].halve();
-        assert!(h0.pts().next().unwrap().dist(c.point(0.0)) < 1e-12);
-        assert!(h0.pts().last().unwrap().dist(c.point(0.5)) < 1e-12);
     }
 
     #[test]

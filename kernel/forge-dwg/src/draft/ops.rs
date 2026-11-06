@@ -6,7 +6,7 @@ use super::intersect::{Ext, intersect_tol};
 use super::nurbs::Nurbs;
 
 fn tol_of(cs: &[&Curve]) -> f64 {
-    let b = cs.iter().fold(Bbox::EMPTY, |b, c| b.union(c.bbox()));
+    let b = cs.iter().fold(Bbox::EMPTY, |b, c| b.union(c.rough_bbox()));
     Tol::of_box(&b).lin
 }
 
@@ -14,8 +14,13 @@ fn tol_of(cs: &[&Curve]) -> f64 {
 /// `extend_edges`, AutoCAD's EDGEMODE 1): crossings, touches and the ends of shared stretches.
 pub fn cut_params(obj: &Curve, edges: &[Curve], extend_edges: bool) -> Vec<f64> {
     let mut ts = vec![];
+    let ob = obj.rough_bbox();
     for e in edges {
-        let tol = tol_of(&[obj, e]);
+        let eb = e.rough_bbox();
+        let tol = Tol::of_box(&ob.union(eb)).lin;
+        if !extend_edges && !ob.grow(tol).overlaps(&eb) {
+            continue;
+        }
         let ext = if extend_edges { Ext::B } else { Ext::None };
         let h = intersect_tol(obj, e, ext, tol);
         for x in h.points {
@@ -60,12 +65,7 @@ pub fn trim(obj: &Curve, edges: &[Curve], pick: V2, extend_edges: bool) -> Optio
         if ts.len() < 2 {
             return None;
         }
-        let before = ts
-            .iter()
-            .copied()
-            .filter(|&t| t < tp)
-            .next_back()
-            .unwrap_or(ts[ts.len() - 1]);
+        let before = ts.iter().copied().rfind(|&t| t < tp).unwrap_or(ts[ts.len() - 1]);
         let after = ts.iter().copied().find(|&t| t > tp).unwrap_or(ts[0]);
         return Some(obj.sub(after, before).into_iter().collect());
     }
@@ -73,7 +73,7 @@ pub fn trim(obj: &Curve, edges: &[Curve], pick: V2, extend_edges: bool) -> Optio
     ts.retain(|&t| {
         (lo.is_infinite() || t > lo + ptol(obj, lo, tol)) && (hi.is_infinite() || t < hi - ptol(obj, hi, tol))
     });
-    let before = ts.iter().copied().filter(|&t| t < tp).next_back();
+    let before = ts.iter().copied().rfind(|&t| t < tp);
     let after = ts.iter().copied().find(|&t| t > tp);
     if before.is_none() && after.is_none() {
         return None;
@@ -352,7 +352,7 @@ pub struct Joined {
 /// a million of their size) into polylines. Every input is in exactly one result; one that joins
 /// nothing comes back as it was.
 pub fn join(curves: &[Curve], tol: Option<f64>) -> Vec<Joined> {
-    let bb = curves.iter().fold(Bbox::EMPTY, |b, c| b.union(c.bbox()));
+    let bb = curves.iter().fold(Bbox::EMPTY, |b, c| b.union(c.rough_bbox()));
     let tol = tol.unwrap_or_else(|| (bb.size() * 1e-6).max(Tol::of_box(&bb).lin));
     let mut used = vec![false; curves.len()];
     let mut out = vec![];

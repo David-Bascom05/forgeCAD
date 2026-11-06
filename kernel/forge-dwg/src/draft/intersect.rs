@@ -212,15 +212,18 @@ impl Piece<'_> {
             Shape::Lin { d, .. } => d.len(),
             Shape::Circ { r, .. } => r,
             Shape::Ell(e) => e.b().max(1e-300),
-            Shape::Num(c) => {
-                let (lo, hi) = c.domain();
-                (c.length() / (hi - lo)).max(1e-300)
-            }
+            Shape::Num(_) => 1.0,
+        }
+    }
+    fn speed_at(&self, u: f64) -> f64 {
+        match self.shape {
+            Shape::Num(c) => c.deriv(u.clamp(self.lo, self.hi)).len().max(1e-300),
+            _ => self.speed(),
         }
     }
     /// Whether u is on the piece (Some(true)), on its extension (Some(false)), or neither.
     fn classify(&self, u: f64, tol: f64) -> Option<bool> {
-        let e = tol / self.speed();
+        let e = tol / self.speed_at(u);
         if u >= self.lo - e && u <= self.hi + e {
             Some(true)
         } else if (u < self.lo && self.ext_lo) || (u > self.hi && self.ext_hi) {
@@ -500,6 +503,8 @@ fn numeric_numeric(a: &Curve, b: &Curve, tol: f64) -> Vec<Raw> {
     let (pb, db) = chords(b);
     let grow = da + db + tol;
     let mut out: Vec<Raw> = vec![];
+    // a bound on the work where the curves run together (partly coincident)
+    let mut budget = 4 * (pa.len() + pb.len());
     for i in 0..pa.len().saturating_sub(1) {
         let ba = Bbox::of([pa[i].1, pa[i + 1].1]).grow(grow);
         for j in 0..pb.len().saturating_sub(1) {
@@ -507,6 +512,10 @@ fn numeric_numeric(a: &Curve, b: &Curve, tol: f64) -> Vec<Raw> {
             if !ba.overlaps(&bb) {
                 continue;
             }
+            if budget == 0 {
+                return out;
+            }
+            budget -= 1;
             // start at the chords' crossing (or their middles)
             let (s0, t0) =
                 match super::curve::line_line(pa[i].1, pa[i + 1].1 - pa[i].1, pb[j].1, pb[j + 1].1 - pb[j].1)
@@ -679,12 +688,23 @@ fn point_of(p: &Piece, u: f64) -> V2 {
 /// Where `a` and `b` meet. With `ext`, also where their extensions do (those hits have `on_a` or
 /// `on_b` false). Sorted by `ta`.
 pub fn intersect(a: &Curve, b: &Curve, ext: Ext) -> Hits {
-    let tol = Tol::of_box(&a.bbox().union(b.bbox())).lin;
+    let tol = Tol::of_box(&a.rough_bbox().union(b.rough_bbox())).lin;
     intersect_tol(a, b, ext, tol)
 }
 
 /// `intersect` with an explicit length tolerance.
 pub fn intersect_tol(a: &Curve, b: &Curve, ext: Ext, tol: f64) -> Hits {
+    if a == b && matches!(a, Curve::Spline(_) | Curve::Offset(_)) {
+        // the same numeric curve: all of it is shared
+        let (lo, hi) = a.domain();
+        return Hits {
+            points: vec![],
+            overlaps: vec![Overlap {
+                a: (lo, hi),
+                b: (lo, hi),
+            }],
+        };
+    }
     let pa = pieces(a, ext.a());
     let pb = pieces(b, ext.b());
     let mut out = Hits::default();
@@ -770,7 +790,7 @@ fn near_t(x: f64, y: f64, c: &Curve) -> bool {
 
 /// The points where curves meet, for many curves at once (each pair once, on the curves).
 pub fn intersect_all(curves: &[Curve]) -> Vec<(usize, usize, Hit)> {
-    let boxes: Vec<Bbox> = curves.iter().map(|c| c.bbox()).collect();
+    let boxes: Vec<Bbox> = curves.iter().map(|c| c.rough_bbox()).collect();
     let mut out = vec![];
     for i in 0..curves.len() {
         for j in i + 1..curves.len() {
