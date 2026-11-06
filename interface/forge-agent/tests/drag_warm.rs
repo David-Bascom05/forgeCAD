@@ -97,7 +97,7 @@ fn digest(b: &Body) -> u64 {
 /// What a model holds after an update: its error, or all of its part.
 fn outcome(m: &Model) -> String {
     match (&m.error, m.body()) {
-        (Some(e), _) => format!("error at {:?}: {}", m.features.len(), e.msg),
+        (Some(e), _) => format!("error at {:?}: {}", m.features.len(), e.message()),
         (None, Some(b)) => format!("{} features {:x}", m.features.len(), digest(b)),
         (None, None) => "nothing".to_string(),
     }

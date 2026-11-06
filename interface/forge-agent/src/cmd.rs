@@ -443,7 +443,7 @@ impl Session {
                 } else {
                     String::new()
                 };
-                text.push_str(&format!("error line {}: {}", line.no, f.msg));
+                text.push_str(&format!("error line {}: {}", line.no, f.message()));
                 if !echo.is_empty() {
                     text.push_str(&format!("\n  {echo}"));
                 }
@@ -803,7 +803,11 @@ impl Session {
                 .join("\n")
         };
         if let Some(f) = &m.error {
-            text.push_str(&format!("\nline {} does not build: {}", m.lines[f.at].no, f.msg));
+            text.push_str(&format!(
+                "\nline {} does not build: {}",
+                m.lines[f.at].no,
+                f.message()
+            ));
         }
         // what a file's body leaves undone: said, not failed
         let warned = crate::model::tangled(m.solids_after(m.built()));

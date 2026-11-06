@@ -710,7 +710,7 @@ impl Part {
         }
         if let Some(f) = &self.model.error {
             let no = self.model.lines[f.at].no;
-            text.push_str(&format!("; line {no} still fails: {}", f.msg));
+            text.push_str(&format!("; line {no} still fails: {}", f.message()));
         }
         let doc = &self.model.doc;
         Done {
@@ -781,7 +781,7 @@ impl Part {
             Some(t) => format!("try: {t}"),
             None => format!("hint: {}", f.hint),
         };
-        format!("{place}\n{}\n{tail}\nnothing applied", f.msg)
+        format!("{place}\n{}\n{tail}\nnothing applied", f.message())
     }
 
     /// A selector that picked nothing on a line this commit touched.

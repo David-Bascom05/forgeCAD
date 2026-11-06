@@ -140,8 +140,44 @@ pub struct Saved {
 pub struct Failure {
     /// Index into `lines`.
     pub at: usize,
+    /// What went wrong. For a finishing feature refused as too big, `message` adds the size it
+    /// does build at.
     pub msg: String,
     pub hint: String,
+    /// What finding that size needs, and the size once found: rebuilt smaller up to nine times,
+    /// so only when the message is read, not on every update.
+    size: Option<Arc<SizeAsk>>,
+}
+
+/// A refused finishing feature, to be built smaller: the lines up to it, their ids and the solids
+/// before it.
+struct SizeAsk {
+    features: Vec<Feature>,
+    ids: Vec<u64>,
+    before: Option<Arc<Stage>>,
+    error: RegenError,
+    note: OnceLock<String>,
+}
+
+impl std::fmt::Debug for SizeAsk {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("SizeAsk")
+    }
+}
+
+impl Failure {
+    /// The whole message: `msg`, and for a finishing feature refused as too big the size it does
+    /// build at (worked out on the first read, the same however often it is read).
+    pub fn message(&self) -> String {
+        let Some(ask) = &self.size else {
+            return self.msg.clone();
+        };
+        let note = ask.note.get_or_init(|| {
+            let before = ask.before.as_ref().map_or(&[][..], |s| &s.solids[..]);
+            size_limit(&ask.features, &ask.ids, before, &ask.error)
+        });
+        format!("{}{note}", self.msg)
+    }
 }
 
 impl Default for Model {
@@ -480,7 +516,8 @@ impl Model {
         self.kinds.truncate(keep);
         self.picks.get_mut().retain(|p| p.0 < keep);
         self.lines = new;
-        self.error = None;
+        // a refusal met again, its lines, ids and the part before it the same, keeps its size found
+        let mut old_size = self.error.take().and_then(|f| f.size);
         self.refused = None;
         self.rebuilt = 0;
         self.kernel_ms = 0.0;
@@ -585,13 +622,29 @@ impl Model {
                         Some(b) => with_handles(&msg, b),
                         None => msg,
                     };
-                    let before = if i == 0 {
-                        &[][..]
-                    } else {
-                        &self.stages[i - 1].solids[..]
+                    let before = (i > 0).then(|| self.stages[i - 1].clone());
+                    let same = |a: &SizeAsk| {
+                        a.features == self.features
+                            && a.ids == ids[..=i]
+                            && match (&a.before, &before) {
+                                (Some(x), Some(y)) => Arc::ptr_eq(x, y),
+                                (x, y) => x.is_none() && y.is_none(),
+                            }
                     };
-                    let msg = msg + &size_limit(&self.features, &ids[..=i], before, &e);
+                    let ask = match old_size.take() {
+                        Some(a) if same(&a) => a,
+                        _ => Arc::new(SizeAsk {
+                            features: self.features.clone(),
+                            ids: ids[..=i].to_vec(),
+                            before,
+                            error: e,
+                            note: OnceLock::new(),
+                        }),
+                    };
                     self.fail(i, msg, hint);
+                    if let Some(f) = &mut self.error {
+                        f.size = Some(ask);
+                    }
                     break;
                 }
             }
@@ -628,7 +681,12 @@ impl Model {
         self.features.truncate(at);
         self.labels.truncate(at);
         self.kinds.truncate(at);
-        self.error = Some(Failure { at, msg, hint });
+        self.error = Some(Failure {
+            at,
+            msg,
+            hint,
+            size: None,
+        });
     }
 
     /// Bodies a line took whole: (its line number, the line number that made the body). A cut

@@ -34,7 +34,7 @@ pub fn body(part: &str) -> Result<forge_topo::Body, String> {
         }
     };
     if let Some(e) = &model.error {
-        return Err(format!("{part}: line {}: {}", model.lines[e.at].no, e.msg));
+        return Err(format!("{part}: line {}: {}", model.lines[e.at].no, e.message()));
     }
     model.body().cloned().ok_or(format!("{part}: nothing built"))
 }
@@ -57,7 +57,7 @@ pub fn tool_part(part: &str) -> Result<forge_agent::tools::Part, String> {
         None => Session::default().take_part(part)?,
     };
     if let Some(e) = &p.model.error {
-        return Err(format!("{part}: line {}: {}", p.model.lines[e.at].no, e.msg));
+        return Err(format!("{part}: line {}: {}", p.model.lines[e.at].no, e.message()));
     }
     Ok(p)
 }

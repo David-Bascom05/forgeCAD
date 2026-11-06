@@ -45,7 +45,7 @@ impl State {
             }
             let m = model.as_ref().expect("just made");
             if let Some(f) = &m.error {
-                return Err(Fail::Stop(esc(&f.msg)));
+                return Err(Fail::Stop(esc(&f.message())));
             }
             Ok(m.body().map(dump).unwrap_or_default())
         }));
