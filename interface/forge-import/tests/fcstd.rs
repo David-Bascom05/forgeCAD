@@ -5,22 +5,33 @@ use forge_import::fcstd::translate;
 
 /// A zip of stored members (no CRC: the reader does not check one).
 fn zip(members: &[(&str, &str)]) -> Vec<u8> {
+    zip_with(members, false)
+}
+
+/// A zip of stored or deflated members.
+fn zip_with(members: &[(&str, &str)], deflated: bool) -> Vec<u8> {
     let (mut out, mut dir) = (vec![], vec![]);
     let le16 = |v: &mut Vec<u8>, x: usize| v.extend_from_slice(&(x as u16).to_le_bytes());
     let le32 = |v: &mut Vec<u8>, x: usize| v.extend_from_slice(&(x as u32).to_le_bytes());
     for (name, data) in members {
         let off = out.len();
+        let method = if deflated { 8 } else { 0 };
+        let body = if deflated {
+            forge_git::zlib::deflate(data.as_bytes())
+        } else {
+            data.as_bytes().to_vec()
+        };
         le32(&mut out, 0x0403_4b50);
-        out.extend_from_slice(&[20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
-        le32(&mut out, data.len());
+        out.extend_from_slice(&[20, 0, 0, 0, method, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+        le32(&mut out, body.len());
         le32(&mut out, data.len());
         le16(&mut out, name.len());
         le16(&mut out, 0);
         out.extend_from_slice(name.as_bytes());
-        out.extend_from_slice(data.as_bytes());
+        out.extend_from_slice(&body);
         le32(&mut dir, 0x0201_4b50);
-        dir.extend_from_slice(&[20, 0, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
-        le32(&mut dir, data.len());
+        dir.extend_from_slice(&[20, 0, 20, 0, 0, 0, method, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+        le32(&mut dir, body.len());
         le32(&mut dir, data.len());
         le16(&mut dir, name.len());
         dir.extend_from_slice(&[0; 12]);
@@ -125,13 +136,26 @@ fn body(tip: &str, group: &[&str]) -> Obj {
     )
 }
 
+/// The document's zip, stored; its deflated twin must read the same.
 fn file(d: String) -> Vec<u8> {
-    zip(&[
-        ("Document.xml", &d),
+    let members = [
+        ("Document.xml", d.as_str()),
         ("PadShape.brp", EDGE),
         ("PocketShape.brp", EDGE),
         ("FilletShape.brp", EDGE),
-    ])
+    ];
+    let stored = zip_with(&members, false);
+    let deflated = zip_with(&members, true);
+    assert!(deflated.len() < stored.len());
+    let read = |z: &[u8]| {
+        translate(z).map(|bs| {
+            bs.iter()
+                .map(|b| (b.status().to_string(), b.fc.clone(), format!("{:?}", b.fail)))
+                .collect::<Vec<_>>()
+        })
+    };
+    assert_eq!(read(&stored), read(&deflated));
+    stored
 }
 
 fn only(data: &[u8]) -> String {

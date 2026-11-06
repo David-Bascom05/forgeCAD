@@ -13,7 +13,7 @@ forge-topo = { path = "../../kernel/forge-topo" }
 forge-geom = { path = "../../kernel/forge-geom" }
 forge-agent = { path = "../forge-agent" }
 # a .FCStd is a zip of deflated XML and .brp files
-miniz_oxide = { version = "=0.8.9", default-features = false, features = ["with-alloc"] }
+forge-git = { path = "../../kernel/forge-git" }
 roxmltree = { version = "=0.20.0", default-features = false, features = ["std"] }
 
 [lints]

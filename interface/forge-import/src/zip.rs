@@ -79,7 +79,7 @@ impl<'a> Zip<'a> {
         let raw = d.get(start..start.checked_add(csize)?)?;
         let out = match method {
             0 => raw.to_vec(),
-            8 => miniz_oxide::inflate::decompress_to_vec_with_limit(raw, size).ok()?,
+            8 => forge_git::zlib::inflate(raw, size).ok()?,
             _ => return None,
         };
         (out.len() == size).then_some(out)
