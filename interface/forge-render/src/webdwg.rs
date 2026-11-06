@@ -48,6 +48,8 @@ struct Ui {
     events: Vec<egui::Event>,
     modifiers: egui::Modifiers,
     pointer: egui::Pos2,
+    /// The last frame's shell, in ms.
+    ui_ms: f64,
 }
 
 impl Ui {
@@ -65,6 +67,7 @@ impl Ui {
             events: vec![],
             modifiers: Default::default(),
             pointer: egui::Pos2::ZERO,
+            ui_ms: 0.0,
         }
     }
 
@@ -105,7 +108,9 @@ impl Ui {
             ..Default::default()
         };
         let shell = &mut self.shell;
+        let t = now_ms();
         let mut out = self.ctx.run_ui(raw, |ui| shell.ui(ui));
+        self.ui_ms = now_ms() - t;
         self.asks();
         let prims = self
             .ctx
@@ -553,9 +558,22 @@ pub async fn dwg_offscreen(
         });
         ui.frame(&view, size, 1.0);
     }
-    let t1 = now_ms();
-    ui.frame(&view, size, 1.0);
-    say(&format!("forge-render: a frame in {:.1} ms", now_ms() - t1));
+    // the pan of a drag, ten frames of it
+    let (mut all, mut shell) = (0.0, 0.0);
+    for k in 0..10 {
+        if let Some(v) = ui.shell.dwgdoc.as_mut().and_then(|d| d.view.as_mut()) {
+            v.center[0] += (k as f64 - 4.5) / v.scale;
+        }
+        let t1 = now_ms();
+        ui.frame(&view, size, 1.0);
+        all += now_ms() - t1;
+        shell += ui.ui_ms;
+    }
+    say(&format!(
+        "forge-render: a frame in {:.1} ms, the shell's part {:.1} ms (mean of 10)",
+        all / 10.0,
+        shell / 10.0
+    ));
     let row = (width * 4).div_ceil(256) * 256;
     let buffer = device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("read back"),
