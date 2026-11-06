@@ -116,6 +116,9 @@ fn split(
 
 const NONE: u32 = u32::MAX;
 
+/// A subtree to factor: its supernodes lo..=hi and their panels.
+type Job<'a> = (usize, usize, &'a mut [f64]);
+
 /// A sparse Cholesky of a `Blocks` matrix over the coordinates that move: multifrontal, by
 /// supernodes (runs of columns with one pattern), each a dense panel.
 #[derive(Default)]
@@ -533,19 +536,31 @@ impl Chol {
             at = to;
             jobs.push((lo, hi, mine));
         }
-        let roots: Vec<Option<Vec<f64>>> = if jobs.len() > 1 {
+        // the tasks dealt round to the threads, each thread's in turn
+        let threads = forge_math::par::threads().min(8).min(jobs.len()).max(1);
+        let mut hands: Vec<Vec<(usize, Job)>> = (0..threads).map(|_| vec![]).collect();
+        for (i, job) in jobs.into_iter().enumerate() {
+            hands[i % threads].push((i, job));
+        }
+        let mut roots: Vec<Option<Vec<f64>>> = vec![None; self.tasks.len()];
+        let run = |hand: Vec<(usize, Job)>| {
+            hand.into_iter()
+                .map(|(i, (lo, hi, mine))| (i, cx.subtree(lo, hi, mine, n)))
+                .collect::<Vec<_>>()
+        };
+        let done: Vec<(usize, Option<Vec<f64>>)> = if threads > 1 {
             std::thread::scope(|sc| {
-                let run: Vec<_> = jobs
-                    .into_iter()
-                    .map(|(lo, hi, mine)| sc.spawn(move || cx.subtree(lo, hi, mine, n)))
-                    .collect();
-                run.into_iter().map(|h| h.join().unwrap_or(None)).collect()
+                let hs: Vec<_> = hands.into_iter().map(|h| sc.spawn(move || run(h))).collect();
+                hs.into_iter()
+                    .flat_map(|h| h.join().unwrap_or_default())
+                    .collect()
             })
         } else {
-            jobs.into_iter()
-                .map(|(lo, hi, mine)| cx.subtree(lo, hi, mine, n))
-                .collect()
+            hands.into_iter().flat_map(run).collect()
         };
+        for (i, u) in done {
+            roots[i] = u;
+        }
         for (&(_, hi), u) in self.tasks.iter().zip(roots) {
             match u {
                 Some(u) => update[hi] = u,
