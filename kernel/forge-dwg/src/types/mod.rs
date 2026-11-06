@@ -3,10 +3,12 @@
 mod entities;
 mod objects;
 mod tables;
+mod tables_b;
 
 pub use entities::*;
 pub use objects::*;
 pub use tables::*;
+pub use tables_b::*;
 
 use crate::bits::R;
 use crate::io::Io;
@@ -99,11 +101,25 @@ data! {
     }
     only_classes {
         DictionaryWdflt,
+        CellStyleMap,
+        MLeader,
+        MLeaderStyle,
+        Table,
+        TableContent,
+        TableGeometry,
+        TableStyle,
     }
     classes {
         "ACDBDICTIONARYWDFLT" => DictionaryWdflt,
         "ACDBPLACEHOLDER" => Placeholder,
         "LAYOUT" => Layout,
         "LWPOLYLINE" => LwPolyline,
+        "ACAD_TABLE" => Table,
+        "CELLSTYLEMAP" => CellStyleMap,
+        "MLEADERSTYLE" => MLeaderStyle,
+        "MULTILEADER" => MLeader,
+        "TABLECONTENT" => TableContent,
+        "TABLEGEOMETRY" => TableGeometry,
+        "TABLESTYLE" => TableStyle,
     }
 }
