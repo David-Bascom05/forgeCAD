@@ -49,4 +49,4 @@ and `fixes`, each fix an op. Change a .fg part with `edit F` and an op (or `ops`
 sent back as a fix gives it: `{"op":"SetParam","param":"t","value":{"value":3,"dim":"Length"}}`,
 AddLocalParam, MakeShared, SplitInstance, AddFeature, DeleteFeature, MoveFeature, LiftLiteral.
 A refusal is a typed error, and nothing is written. `query F params|features|stat|check`;
-`export F dxf [SHEET]` is a sheet's flat pattern.
+`export F dxf [SHEET]` is a sheet's flat pattern (`export F dwg [SHEET]` the same as DWG).

@@ -34,8 +34,8 @@ pub use graph::{Corner, CornerKind, Cut, Gauge, Joint, JointKind, Position, Shee
 pub use hardware::{Hardware, HardwareKind, Mount, Source, placeholder_catalogue};
 pub use hem::{GAP_FLOOR, HemError, HemJoint, HemKind, HemName, HemRow, HemSpec, HemTable};
 pub use pattern::{
-    BendLine, Curve2, DxfLayers, NOTES_LAYER, Pattern, bend_note, dxf, dxf_layered, dxf_noted, outer_contour,
-    tangent_lines,
+    BendLine, Curve2, DxfLayers, NOTES_LAYER, Pattern, bend_note, dwg_layered, dwg_noted, dxf, dxf_layered,
+    dxf_noted, outer_contour, tangent_lines,
 };
 pub use punch::{CLUSTER_MAX, Hit, Punch, PunchError, PunchRules, PunchViolation, Tool, ToolShape};
 pub use relief::{

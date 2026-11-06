@@ -463,7 +463,11 @@ pub fn write(doc: &Doc) -> Vec<u8> {
     put(DIMSTYLE_STD, {
         let mut o = Obj::object(T_DIMSTYLE, DIMSTYLE_STD, DIMSTYLE_CTRL, false);
         o.entry(b"Standard");
+        o.data.t(b""); // DIMPOST
+        o.data.t(b""); // DIMAPOST
         dim_vars(&mut o.data);
+        o.data.bs(-2); // DIMLWD byblock (a record has these here; the header after its handles)
+        o.data.bs(-2); // DIMLWE
         o.data.b(false); // the 70 group's 1 bit
         o.hs.h(HARD_PTR, 0); // xref block
         o.hs.h(HARD_PTR, STYLE_STD); // DIMTXSTY

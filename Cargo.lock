@@ -101,6 +101,7 @@ name = "forge-draw"
 version = "0.1.0"
 dependencies = [
  "forge-bool",
+ "forge-dwg",
  "forge-geom",
  "forge-math",
  "forge-mesh",
@@ -160,6 +161,7 @@ dependencies = [
  "forge-bool",
  "forge-doc",
  "forge-draw",
+ "forge-dwg",
  "forge-font",
  "forge-geom",
  "forge-material",
@@ -240,6 +242,7 @@ name = "forge-sheet"
 version = "0.1.0"
 dependencies = [
  "forge-bool",
+ "forge-dwg",
  "forge-geom",
  "forge-math",
  "forge-mesh",
