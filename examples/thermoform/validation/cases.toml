@@ -264,7 +264,9 @@ cut_deg = 0
 axisym = true
 fold_about = 100.0
 how = "arc length from bottom centre (data folded about s = 100)"
-plug = [21, 90, 10, 20, 80]
+# Plug: tip 20 mm above the sheet, an 80 mm stroke (Atmani 2020 p.10 sec. 5.3, s2_atmani2020_process.toml), so it ends
+# 60 mm below the sheet: 89 % of the 67.5 mm depth, the paper's fraction drawn by the plug. Was 80 below (through the floor).
+plug = [21, 90, 10, 20, 60]
 
 [[case]]
 id = "varedi2024_hemisphere"
@@ -514,4 +516,6 @@ cut_deg = 0
 axisym = true
 fold_about = 100.0
 how = "arc length from bottom centre (data folded about s = 100)"
-plug = [21, 90, 10, 20, 80]
+# Plug: tip 20 mm above the sheet, an 80 mm stroke (Atmani 2020 p.10 sec. 5.3, s2_atmani2020_process.toml), so it ends
+# 60 mm below the sheet: 89 % of the 67.5 mm depth, the paper's fraction drawn by the plug. Was 80 below (through the floor).
+plug = [21, 90, 10, 20, 60]
