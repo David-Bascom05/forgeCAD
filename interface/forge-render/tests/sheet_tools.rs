@@ -332,7 +332,7 @@ fn a_sheet_metal_part_made_with_the_tools_then_flat_and_its_dxf() {
     click(&mut h, "tool:Bend Table");
     shot(&mut h, "13-bend-table");
     click(&mut h, "tool:Bend Table");
-    click(&mut h, "tool:Save Copy As DXF");
+    click(&mut h, "tool:Save Copy As DXF/DWG");
     // tangent lines too
     click(&mut h, "sheet:dxf:on:4");
     shot(&mut h, "14-dxf");

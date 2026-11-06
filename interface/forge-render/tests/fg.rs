@@ -402,7 +402,7 @@ fn a_sheet_part_shows_flat_and_exports_its_dxf() {
     let flat = h.gui.view.as_ref().unwrap().scene.bounds();
     assert!(flat.1 > folded.1, "flat radius {} vs folded {}", flat.1, folded.1);
     // the flat pattern as DXF beside the part, from the ribbon
-    for name in ["tool:Save Copy As DXF", "sheet:dxf:ok"] {
+    for name in ["tool:Save Copy As DXF/DWG", "sheet:dxf:ok"] {
         h.step();
         assert!(h.click(name), "no {name}");
         h.step();
