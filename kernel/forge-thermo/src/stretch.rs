@@ -1515,12 +1515,16 @@ fn relax(
         };
         // the Newton model's fall over the step a d, -(a - a^2 / 2) slope (H d = -g), against the
         // energy's
+        // (a fall within the energy's rounding says nothing of the model)
         let model = -(a - 0.5 * a * a) * slope;
-        let ratio = (e - e2) / model.max(1e-300);
-        let reached = a * dmax >= 0.99 * radius;
+        let ratio = if model > 1e-10 * e.abs() {
+            (e - e2) / model
+        } else {
+            1.0
+        };
         if ratio < 0.25 {
             radius = (0.5 * a * dmax).max(1e-3 * step_cap);
-        } else if ratio > 0.75 && reached {
+        } else if ratio > 0.75 {
             radius = (2.0 * radius).min(step_cap);
         }
         if ratio > 0.75 {
