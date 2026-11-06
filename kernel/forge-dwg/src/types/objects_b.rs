@@ -689,6 +689,17 @@ pub fn value_io<S: Io>(s: &mut S, x: &mut Value) -> R<()> {
         match x.data_type {
             0 | 1 => s.bl(&mut x.long)?,
             2 => s.bd(&mut x.real)?,
+            // R2007+ keeps the string in the data stream: BL byte count, UTF-16 with its NUL
+            4 if v >= Version::R2007 => {
+                let mut b: Vec<u8> = x.text.wide().iter().flat_map(|u| u.to_le_bytes()).collect();
+                let mut n = b.len() as i32;
+                s.bl(&mut n)?;
+                if n < 0 || n % 2 != 0 {
+                    return bad(format!("string value of {n} bytes"));
+                }
+                s.bytes(&mut b, n as usize)?;
+                x.text = Str::Wide(b.chunks(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect());
+            }
             4 => s.tv(&mut x.text)?,
             8 | 512 => {
                 let mut n = x.bytes.len() as i32;
