@@ -201,6 +201,11 @@ fn system_page(buf: &[u8], at: usize, kind: u32) -> R<Vec<u8>> {
     let Some(data) = buf.get(at + 0x14..at + 0x14 + comp) else {
         return bad("system page past the end");
     };
+    let mut h0 = buf[at..at + 0x14].to_vec();
+    h0[0x10..0x14].copy_from_slice(&[0; 4]);
+    if checksum(checksum(0, &h0), data) != u32_at(buf, at + 0x10)? {
+        return bad(format!("system page at {at:#x}: checksum"));
+    }
     if u32_at(buf, at + 12)? == 2 {
         let mut d = decompress(data, size)?;
         d.truncate(size);
@@ -303,6 +308,13 @@ pub fn section_data(buf: &[u8], l: &Layout, name: &str) -> R<Option<Vec<u8>>> {
         let Some(data) = buf.get(at + 32..at + 32 + size as usize) else {
             return bad(format!("{name}: page data past the end"));
         };
+        // the data's checksum, then the header's from it (the header's own field zeroed)
+        let dsum = checksum(0, data);
+        let mut h0 = hdr;
+        h0[0x18..0x1C].copy_from_slice(&[0; 4]);
+        if u32_at(&hdr, 0x1C)? != dsum || u32_at(&hdr, 0x18)? != checksum(dsum, &h0) {
+            return bad(format!("{name}: page {page} checksum"));
+        }
         let page_bytes = if s.compressed == 2 { decompress(data, s.max_page as usize)? } else { data.to_vec() };
         let start = start as usize;
         let n = page_bytes.len().min(out.len().saturating_sub(start));
@@ -322,4 +334,479 @@ mod tests {
         // the spec's listing drops a row: its last line is at 0x50
         assert_eq!(&m[0x50..0x58], &[0xAD, 0x4F, 0x14, 0xF2, 0x44, 0x40, 0x66, 0xD0]);
     }
+}
+
+/// 4.7's LZ77: greedy matches found through a hash of the next three bytes.
+pub fn compress(src: &[u8]) -> Vec<u8> {
+    const MAX_CHAIN: usize = 64;
+    let n = src.len();
+    let mut out = Vec::with_capacity(n / 2 + 16);
+    let mut head = vec![usize::MAX; 1 << 15];
+    let mut prev = vec![usize::MAX; n];
+    let hash = |p: usize| -> usize {
+        ((src[p] as usize) << 10 ^ (src[p + 1] as usize) << 5 ^ src[p + 2] as usize) & 0x7FFF
+    };
+    let mut insert = |p: usize, head: &mut Vec<usize>, prev: &mut Vec<usize>| {
+        if p + 3 <= n {
+            let h = hash(p);
+            prev[p] = head[h];
+            head[h] = p;
+        }
+    };
+    // the longest match at `p` this can encode: (length, distance)
+    let find = |p: usize, head: &Vec<usize>, prev: &Vec<usize>| -> (usize, usize) {
+        if p + 3 > n {
+            return (0, 0);
+        }
+        let mut best = (0, 0);
+        let mut c = head[hash(p)];
+        let mut k = 0;
+        while c != usize::MAX && k < MAX_CHAIN {
+            let d = p - c;
+            if d > 0x7FFF {
+                break;
+            }
+            let mut l = 0;
+            while p + l < n && src[c + l] == src[p + l] {
+                l += 1;
+            }
+            // far matches need at least 4
+            let ok = if d - 1 > 0x3FFF { l >= 4 } else { l >= 3 };
+            if ok && l > best.0 {
+                best = (l, d);
+            }
+            c = prev[c];
+            k += 1;
+        }
+        best
+    };
+    let mut lit_start = 0;
+    let mut p = 0;
+    // where the last match's opcode is, to put the next literal count in its low bits
+    let mut pending: Option<usize> = None;
+    let mut first = true;
+    let flush_literals = |out: &mut Vec<u8>, lits: &[u8], pending: Option<usize>, first: bool| {
+        let k = lits.len();
+        match pending {
+            Some(at) if (1..=3).contains(&k) => {
+                out[at] |= k as u8;
+            }
+            _ => {
+                if k > 0 || first {
+                    if k == 0 {
+                        // nothing: the next byte (an opcode) has its high nibble set
+                    } else if k <= 0x0E + 3 {
+                        out.push((k - 3) as u8);
+                    } else {
+                        out.push(0);
+                        let mut r = k - 3 - 0x0F;
+                        while r > 0xFF {
+                            out.push(0);
+                            r -= 0xFF;
+                        }
+                        out.push(r as u8);
+                    }
+                }
+            }
+        }
+        out.extend_from_slice(lits);
+    };
+    while p < n {
+        let (mut len, dist) = find(p, &head, &prev);
+        if len == 0 {
+            insert(p, &mut head, &mut prev);
+            p += 1;
+            continue;
+        }
+        let lits = p - lit_start;
+        // runs the encodings can't say: 1-3 literals at the very start, 18 after a match, or
+        // a long run ending in a zero step; turn the match's first byte into a literal
+        let bad_run = |k: usize, first: bool| -> bool {
+            (first && (1..=3).contains(&k)) || (k >= 4 && k - 3 > 0x0E && (k - 3 - 0x0F) % 0xFF == 0)
+        };
+        if bad_run(lits, first) {
+            insert(p, &mut head, &mut prev);
+            p += 1;
+            continue;
+        }
+        // lengths the long form can't say end in a zero step too
+        let far = dist - 1 > 0x3FFF;
+        let long_extra = |len: usize| -> Option<usize> {
+            if far {
+                if len >= 10 && len > 17 { Some(len - 9) } else { None }
+            } else if len > 33 {
+                Some(len - 0x21)
+            } else {
+                None
+            }
+        };
+        if let Some(e) = long_extra(len)
+            && e > 0xFF
+            && (e - 0xFF) % 0xFF == 0
+        {
+            len -= 1;
+        }
+        flush_literals(&mut out, &src[lit_start..p], pending, first);
+        first = false;
+        // the match
+        let off = dist - 1;
+        let at;
+        if !far && off <= 0x3FF && len <= 14 {
+            at = out.len();
+            out.push((((len + 1) << 4) | ((off & 3) << 2)) as u8);
+            out.push((off >> 2) as u8);
+        } else {
+            let o = if far { off - 0x3FFF } else { off };
+            if far {
+                if len <= 17 {
+                    out.push(0x10 | (len - 2) as u8);
+                } else {
+                    out.push(0x10);
+                    long_len(&mut out, len - 9);
+                }
+            } else if len <= 33 {
+                out.push((len + 0x1E) as u8);
+            } else {
+                out.push(0x20);
+                long_len(&mut out, len - 0x21);
+            }
+            at = out.len();
+            out.push(((o & 0x3F) << 2) as u8);
+            out.push((o >> 6) as u8);
+        }
+        pending = Some(at);
+        for q in p..p + len {
+            insert(q, &mut head, &mut prev);
+        }
+        p += len;
+        lit_start = p;
+    }
+    // a lone run of 1-3 literals can't be said: it is padded with zeros (readers cut pages to
+    // the section's size)
+    let mut tail = src[lit_start..n].to_vec();
+    if pending.is_none() && (1..=3).contains(&tail.len()) {
+        tail.resize(4, 0);
+    }
+    flush_literals(&mut out, &tail, pending, first);
+    out.push(0x11);
+    out
+}
+
+fn long_len(out: &mut Vec<u8>, v: usize) {
+    if v <= 0xFF {
+        out.push(v as u8);
+        return;
+    }
+    out.push(0);
+    let mut r = v - 0xFF;
+    while r > 0xFF {
+        out.push(0);
+        r -= 0xFF;
+    }
+    out.push(r as u8);
+}
+
+/// CRC-32 (2.14.2) from `seed`.
+pub fn crc32(seed: u32, data: &[u8]) -> u32 {
+    let mut c = !seed;
+    for &b in data {
+        c ^= b as u32;
+        for _ in 0..8 {
+            c = if c & 1 != 0 { (c >> 1) ^ 0xEDB8_8320 } else { c >> 1 };
+        }
+    }
+    !c
+}
+
+#[cfg(test)]
+mod compress_tests {
+    use super::*;
+
+    fn round(src: &[u8]) {
+        let c = compress(src);
+        let d = decompress(&c, src.len()).unwrap();
+        assert_eq!(&d[..src.len()], src, "{} bytes", src.len());
+        assert!(d.len() <= src.len().max(4));
+    }
+
+    #[test]
+    fn compresses_and_reads_back() {
+        round(b"");
+        round(b"a");
+        round(b"abc");
+        round(b"abcabcabcabcabcabc");
+        round(&[0u8; 5000]);
+        let mut x: Vec<u8> = (0..70000u32).map(|i| (i * 7 % 251) as u8).collect();
+        round(&x);
+        // runs of literals of every length between repeats, and far repeats
+        let mut y = vec![];
+        for k in 0..600usize {
+            y.extend((0..k).map(|i| (i * 31 + k * 17) as u8 ^ 0x5A));
+            y.extend_from_slice(b"repeat-me-please");
+        }
+        round(&y);
+        x.extend_from_slice(&y);
+        x.extend(x.clone().iter().take(40000));
+        round(&x);
+    }
+}
+
+/// The section map's order: the empty section, sections this doesn't know (as read), then the
+/// rest as AutoCAD orders them. Ids count down from the last.
+const MAP_ORDER: [&str; 15] = [
+    "AcDb:Security",
+    "AcDb:FileDepList",
+    "AcDb:VBAProject",
+    "AcDb:AppInfo",
+    "AcDb:Preview",
+    "AcDb:SummaryInfo",
+    "AcDb:RevHistory",
+    "AcDb:AcDbObjects",
+    "AcDb:ObjFreeSpace",
+    "AcDb:Template",
+    "AcDb:Handles",
+    "AcDb:Classes",
+    "AcDb:AuxHeader",
+    "AcDb:Header",
+    "",
+];
+
+/// The order pages are laid in the file.
+const STREAM_ORDER: [&str; 14] = [
+    "AcDb:SummaryInfo",
+    "AcDb:Preview",
+    "AcDb:VBAProject",
+    "AcDb:AppInfo",
+    "AcDb:FileDepList",
+    "AcDb:RevHistory",
+    "AcDb:Security",
+    "",
+    "AcDb:AcDbObjects",
+    "AcDb:ObjFreeSpace",
+    "AcDb:Template",
+    "AcDb:Handles",
+    "AcDb:Classes",
+    "AcDb:AuxHeader",
+];
+
+/// A system page (4.3): header and compressed data, padded to a 0x20 boundary.
+fn system_page_bytes(kind: u32, data: &[u8]) -> Vec<u8> {
+    let c = compress(data);
+    let mut h = vec![];
+    for v in [kind, data.len() as u32, c.len() as u32, 2, 0] {
+        h.extend_from_slice(&v.to_le_bytes());
+    }
+    let sum = checksum(checksum(0, &h), &c);
+    h[0x10..0x14].copy_from_slice(&sum.to_le_bytes());
+    h.extend_from_slice(&c);
+    h
+}
+
+fn pad_to_0x20(page: &mut Vec<u8>) {
+    let m = magic();
+    let mut k = 0;
+    while page.len() % 0x20 != 0 {
+        page.push(m[k % m.len()]);
+        k += 1;
+    }
+}
+
+/// An R2004-container file (R2004, R2010, R2013, R2018).
+pub fn write(d: &super::Drawing) -> R<Vec<u8>> {
+    use super::r2000::{aux_header, write_classes, write_map, write_objects};
+    let ver = d.ver();
+    // the sections' contents
+    let (objs, locs) = write_objects(d, 4)?;
+    let mut objects = 0x0DCAu32.to_le_bytes().to_vec();
+    objects.extend_from_slice(&objs);
+    let mut contents: Vec<(String, Vec<u8>, u32, u32, u32, u32)> = vec![];
+    let core = |name: &str, data: Vec<u8>| (name.to_string(), data, 0x7400u32, 2u32, 0u32, 1u32);
+    contents.push(core("AcDb:Header", crate::header::write_header(&d.header, ver, d.maint)?));
+    contents.push(core("AcDb:Classes", write_classes(&d.classes, ver, d.maint)?));
+    contents.push(core("AcDb:Handles", write_map(&locs)));
+    contents.push(core("AcDb:AcDbObjects", objects));
+    contents.push(core("AcDb:AuxHeader", aux_header(d)));
+    for e in &d.other {
+        let mut data = e.data.clone();
+        if e.name == "AcDb:ObjFreeSpace" && data.len() >= 8 {
+            data[4..8].copy_from_slice(&(locs.len() as u32).to_le_bytes());
+        }
+        let (mp, c, enc, u) = if e.max_page == 0 { (0x7400, 2, 0, 1) } else { (e.max_page, e.compressed, e.encrypted, e.unknown) };
+        contents.push((e.name.clone(), data, mp, c, enc, u));
+    }
+    let known = |n: &str| MAP_ORDER.contains(&n);
+    // the section map's order and ids
+    let mut map_names: Vec<String> = vec!["".into()];
+    map_names.extend(contents.iter().filter(|c| !known(&c.0)).map(|c| c.0.clone()));
+    for n in MAP_ORDER.iter().filter(|n| !n.is_empty()) {
+        if contents.iter().any(|c| c.0 == *n) {
+            map_names.push(n.to_string());
+        }
+    }
+    let ids: Vec<(String, u32)> = map_names
+        .iter()
+        .enumerate()
+        .map(|(k, n)| (n.clone(), if k == 0 { 0 } else { (map_names.len() - k) as u32 }))
+        .collect();
+    // the pages, in stream order
+    let mut stream: Vec<String> = vec![];
+    for n in STREAM_ORDER {
+        if n.is_empty() {
+            // sections this doesn't know go before the objects
+            stream.extend(contents.iter().filter(|c| !known(&c.0)).map(|c| c.0.clone()));
+        } else if contents.iter().any(|c| c.0 == n) {
+            stream.push(n.to_string());
+        }
+    }
+    stream.push("AcDb:Header".into());
+    let mut file = vec![0u8; 0x100];
+    let mut page_map: Vec<(i32, u32)> = vec![];
+    // (name, page number, data size, start offset)
+    let mut section_pages: Vec<(String, u32, u32, u64)> = vec![];
+    let mut first_page_addr: Vec<(String, usize)> = vec![];
+    for name in &stream {
+        let Some(c) = contents.iter().find(|c| &c.0 == name) else {
+            continue;
+        };
+        let (_, data, max_page, compressed, _, _) = c;
+        let id = ids.iter().find(|i| &i.0 == name).map_or(0, |i| i.1);
+        for (k, chunk) in data.chunks(*max_page as usize).enumerate() {
+            let addr = file.len();
+            if k == 0 {
+                first_page_addr.push((name.clone(), addr));
+            }
+            let number = page_map.len() as u32 + 1;
+            let payload = if *compressed == 2 {
+                compress(chunk)
+            } else {
+                let mut p = chunk.to_vec();
+                p.resize(*max_page as usize, 0);
+                p
+            };
+            let start = (k * *max_page as usize) as u64;
+            let mut hdr = vec![];
+            for v in [0x4163_043Bu32, id, payload.len() as u32, 0] {
+                hdr.extend_from_slice(&v.to_le_bytes());
+            }
+            hdr.extend_from_slice(&start.to_le_bytes());
+            hdr.extend_from_slice(&[0; 8]);
+            let size = (32 + payload.len()).div_ceil(0x20) * 0x20;
+            hdr[0x0C..0x10].copy_from_slice(&(size as u32).to_le_bytes());
+            let dsum = checksum(0, &payload);
+            hdr[0x1C..0x20].copy_from_slice(&dsum.to_le_bytes());
+            let hsum = checksum(dsum, &hdr);
+            hdr[0x18..0x1C].copy_from_slice(&hsum.to_le_bytes());
+            let mask = 0x4164_536Bu32 ^ addr as u32;
+            for j in 0..8 {
+                let v = u32::from_le_bytes([hdr[4 * j], hdr[4 * j + 1], hdr[4 * j + 2], hdr[4 * j + 3]]) ^ mask;
+                file.extend_from_slice(&v.to_le_bytes());
+            }
+            let mut page = payload.clone();
+            page.splice(0..0, std::iter::empty());
+            file.extend_from_slice(&page);
+            while (file.len() - addr) % 0x20 != 0 {
+                file.push(magic()[(file.len() - addr) % 0x100]);
+            }
+            page_map.push((number as i32, (file.len() - addr) as u32));
+            section_pages.push((name.clone(), number, payload.len() as u32, start));
+        }
+    }
+    let data_pages = page_map.len() as u32;
+    let smap_id = data_pages + 2;
+    let pmap_id = data_pages + 4;
+    // the section map
+    let mut sm = vec![];
+    let n = map_names.len() as u32;
+    for v in [n, 2, 0x7400, 0, n] {
+        sm.extend_from_slice(&v.to_le_bytes());
+    }
+    for name in &map_names {
+        let (size, mp, comp, enc, unk) = match contents.iter().find(|c| &c.0 == name) {
+            Some(c) => (c.1.len() as u64, c.2, c.3, c.4, c.5),
+            None => (0, 0x7400, 2, 0, 1),
+        };
+        let pages: Vec<_> = section_pages.iter().filter(|p| &p.0 == name).collect();
+        sm.extend_from_slice(&size.to_le_bytes());
+        sm.extend_from_slice(&(pages.len() as u32).to_le_bytes());
+        sm.extend_from_slice(&mp.to_le_bytes());
+        sm.extend_from_slice(&unk.to_le_bytes());
+        sm.extend_from_slice(&comp.to_le_bytes());
+        sm.extend_from_slice(&ids.iter().find(|i| &i.0 == name).map_or(0, |i| i.1).to_le_bytes());
+        sm.extend_from_slice(&enc.to_le_bytes());
+        let mut nm = [0u8; 64];
+        nm[..name.len().min(63)].copy_from_slice(&name.as_bytes()[..name.len().min(63)]);
+        sm.extend_from_slice(&nm);
+        for p in pages {
+            sm.extend_from_slice(&p.1.to_le_bytes());
+            sm.extend_from_slice(&p.2.to_le_bytes());
+            sm.extend_from_slice(&p.3.to_le_bytes());
+        }
+    }
+    let smap_at = file.len();
+    let mut smap = system_page_bytes(0x4163_003B, &sm);
+    pad_to_0x20(&mut smap);
+    file.extend_from_slice(&smap);
+    page_map.push((smap_id as i32, smap.len() as u32));
+    let _ = smap_at;
+    // the page map lists itself: settle its size first
+    let pmap_at = file.len();
+    let mut size = 0x20u32;
+    let pmap = loop {
+        let mut pm = vec![];
+        for &(num, sz) in page_map.iter().chain(std::iter::once(&(pmap_id as i32, size))) {
+            pm.extend_from_slice(&num.to_le_bytes());
+            pm.extend_from_slice(&sz.to_le_bytes());
+        }
+        let mut page = system_page_bytes(0x4163_0E3B, &pm);
+        pad_to_0x20(&mut page);
+        if page.len() as u32 <= size {
+            page.resize(size as usize, 0);
+            break page;
+        }
+        size = page.len() as u32;
+    };
+    file.extend_from_slice(&pmap);
+    let second_at = file.len();
+    // the file header data
+    let mut hd = vec![0u8; 0x6C];
+    hd[0..12].copy_from_slice(b"AcFssFcAJMB\0");
+    let put32 = |hd: &mut Vec<u8>, at: usize, v: u32| hd[at..at + 4].copy_from_slice(&v.to_le_bytes());
+    let put64 = |hd: &mut Vec<u8>, at: usize, v: u64| hd[at..at + 8].copy_from_slice(&v.to_le_bytes());
+    put32(&mut hd, 0x10, 0x6C);
+    put32(&mut hd, 0x14, 0x04);
+    put32(&mut hd, 0x24, 1);
+    put32(&mut hd, 0x28, pmap_id);
+    put64(&mut hd, 0x2C, (second_at - 0x100) as u64);
+    put64(&mut hd, 0x34, second_at as u64);
+    put32(&mut hd, 0x3C, 0);
+    put32(&mut hd, 0x40, page_map.len() as u32 + 1);
+    put32(&mut hd, 0x44, 0x20);
+    put32(&mut hd, 0x48, 0x80);
+    put32(&mut hd, 0x4C, 0x40);
+    put32(&mut hd, 0x50, pmap_id);
+    put64(&mut hd, 0x54, (pmap_at - 0x100) as u64);
+    put32(&mut hd, 0x5C, smap_id);
+    put32(&mut hd, 0x60, pmap_id);
+    put32(&mut hd, 0x64, 0);
+    let crc = crc32(0, &hd);
+    put32(&mut hd, 0x68, crc);
+    let m = magic();
+    let enc: Vec<u8> = hd.iter().zip(m.iter()).map(|(a, b)| a ^ b).collect();
+    // the file's first 0x100 bytes
+    let mut fh = d.file_header.clone();
+    fh.resize(0x80, 0);
+    fh[0..6].copy_from_slice(ver.magic());
+    fh[0x0B] = d.maint;
+    fh[0x13..0x15].copy_from_slice(&d.codepage.to_le_bytes());
+    let addr_of = |n: &str| first_page_addr.iter().find(|p| p.0 == n).map_or(0, |p| p.1 as u32 + 0x20);
+    fh[0x0D..0x11].copy_from_slice(&addr_of("AcDb:Preview").to_le_bytes());
+    fh[0x20..0x24].copy_from_slice(&addr_of("AcDb:SummaryInfo").to_le_bytes());
+    fh[0x24..0x28].copy_from_slice(&addr_of("AcDb:VBAProject").to_le_bytes());
+    fh[0x28..0x2C].copy_from_slice(&0x80u32.to_le_bytes());
+    fh[0x2C..0x30].copy_from_slice(&addr_of("AcDb:AppInfo").to_le_bytes());
+    file[0..0x80].copy_from_slice(&fh);
+    file[0x80..0xEC].copy_from_slice(&enc);
+    file[0xEC..0x100].copy_from_slice(&m[0xEC..0x100]);
+    file.extend_from_slice(&enc);
+    Ok(file)
 }

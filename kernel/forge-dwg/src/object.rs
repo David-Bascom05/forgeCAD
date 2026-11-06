@@ -264,6 +264,57 @@ pub fn body_io<S: Io>(s: &mut S, o: &mut Object) -> R<()> {
 /// Reads the object at `at` in `buf` (its MS size first).
 pub fn read_object(buf: &[u8], at: usize, ver: Version, classes: &Classes, cp: Option<()>) -> R<Object> {
     let _ = cp;
+    read_object_as(buf, at, ver, classes, false)
+}
+
+/// Reads an object; when its type's fields don't decode, it is kept raw (its common part read,
+/// or nothing past its handle when even that fails) and the error comes back with it.
+pub fn read_object_lenient(buf: &[u8], at: usize, ver: Version, classes: &Classes) -> R<(Object, Option<String>)> {
+    match read_object_as(buf, at, ver, classes, false) {
+        Ok(o) => Ok((o, None)),
+        Err(e) => match read_object_as(buf, at, ver, classes, true) {
+            Ok(o) => Ok((o, Some(e.0))),
+            Err(_) => {
+                let (size, start) = read_ms(buf, at)?;
+                let mut q = start;
+                if ver >= Version::R2010 {
+                    q = read_mc(buf, start, false)?.1;
+                }
+                let end = q + size as usize + 2;
+                let mut d = BitReader::new(buf, q);
+                let t = if ver >= Version::R2010 {
+                    match d.bb()? {
+                        0 => d.rc()? as u16,
+                        1 => d.rc()? as u16 + 0x1F0,
+                        _ => d.rs()?,
+                    }
+                } else {
+                    d.bs()? as u16
+                };
+                if ver < Version::R2010 {
+                    d.rl()?;
+                }
+                let (_, handle) = d.h()?;
+                let o = Object {
+                    handle,
+                    type_code: t,
+                    eed: vec![],
+                    owner: Href::default(),
+                    reactors: vec![],
+                    xdic: None,
+                    ds_binary: false,
+                    ent: None,
+                    data: Data::Raw(t),
+                    trailing: vec![],
+                    raw: buf.get(at..end).map(|b| b.to_vec()),
+                };
+                Ok((o, Some(e.0)))
+            }
+        },
+    }
+}
+
+fn read_object_as(buf: &[u8], at: usize, ver: Version, classes: &Classes, raw: bool) -> R<Object> {
     let (size, mut start) = read_ms(buf, at)?;
     let mut hsize = None;
     if ver >= Version::R2010 {
@@ -337,7 +388,7 @@ pub fn read_object(buf: &[u8], at: usize, ver: Version, classes: &Classes, cp: O
         xdic: Some(Href::default()),
         ds_binary: false,
         ent: entity.then(EntCommon::default),
-        data: Data::of(type_code, classes),
+        data: if raw { Data::Raw(type_code) } else { Data::of(type_code, classes) },
         trailing: vec![],
         raw: Some(buf[at..end + 2].to_vec()),
     };
