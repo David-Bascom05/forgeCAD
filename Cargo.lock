@@ -132,6 +132,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-git"
+version = "0.1.0"
+
+[[package]]
 name = "forge-gpu"
 version = "0.1.0"
 dependencies = [
