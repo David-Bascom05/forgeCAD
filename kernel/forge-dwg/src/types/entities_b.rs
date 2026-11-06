@@ -1093,6 +1093,7 @@ mod tests {
                     ..EntCommon::default()
                 }),
                 data: make(ver),
+                trailing: vec![],
                 raw: None,
             };
             let (bytes, _) = encode_object(&o, ver).unwrap();

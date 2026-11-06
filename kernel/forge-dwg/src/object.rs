@@ -84,6 +84,9 @@ pub struct Object {
     pub ds_binary: bool,
     pub ent: Option<EntCommon>,
     pub data: Data,
+    /// Handles left in the handle stream after everything the type names (an unknown field some
+    /// files have, e.g. a null after some SEQENDs' layer), written back after them.
+    pub trailing: Vec<Href>,
     /// The object as read (MS to CRC). Written back as is while `data` and the rest are
     /// unchanged: clear it (or use `Object::touch`) after an edit.
     pub raw: Option<Vec<u8>>,
@@ -335,9 +338,20 @@ pub fn read_object(buf: &[u8], at: usize, ver: Version, classes: &Classes, cp: O
         ds_binary: false,
         ent: entity.then(EntCommon::default),
         data: Data::of(type_code, classes),
+        trailing: vec![],
         raw: Some(buf[at..end + 2].to_vec()),
     };
     body_io(&mut r, &mut o)?;
+    // whole handles before the end (padding is under a byte); a raw object's are its own
+    if !matches!(o.data, Data::Raw(_)) {
+        while obj.len() * 8 >= r.hdl.p + 8 {
+            let mut h = Href::default();
+            if r.h(&mut h).is_err() {
+                break;
+            }
+            o.trailing.push(h);
+        }
+    }
     if r.data.p > data_end {
         return bad(format!("object {handle:#x} type {type_code}: data overran by {} bits", r.data.p - data_end));
     }
@@ -385,6 +399,9 @@ pub fn encode_object(o: &Object, ver: Version) -> R<(Vec<u8>, usize)> {
     }
     w.data.h(0, o.handle);
     body_io(&mut w, &mut o)?;
+    for h in &mut o.trailing.clone() {
+        w.h(h)?;
+    }
     let mut data = w.data;
     if ver >= Version::R2007 {
         let has = w.strs.len > 0;
