@@ -19,6 +19,8 @@ pub struct Solid {
     pub entity: u32,
     pub name: String,
     pub body: Body,
+    /// The body's integrals as the read worked them out to check it (to 1e-6), where it could.
+    pub mass: Option<forge_topo::mass::MassProps>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -1215,7 +1217,7 @@ const TOO_LONG: &str = "its surfaces would take too long to measure";
 /// file's geometry the integrals can go wrong with nothing to show for it, `research/step/README.md`),
 /// or one of them cannot be worked out. Such a body is imported with the warning, not refused; only a
 /// budget run out refuses it.
-fn measures_agree(body: &Body) -> Result<Option<String>, String> {
+fn measures_agree(body: &Body) -> Result<(Option<String>, Option<forge_topo::mass::MassProps>), String> {
     let m = forge_topo::mass::mass_rel(body, 1e-6);
     if forge_geom::budget::over() {
         return Err(TOO_LONG.into());
@@ -1223,12 +1225,21 @@ fn measures_agree(body: &Body) -> Result<Option<String>, String> {
     let m = match m {
         Ok(m) => m,
         Err(e) => {
-            return Ok(Some(format!(
-                "its volume cannot be worked out ({}), so nothing it measures is checked",
-                e.why
-            )));
+            return Ok((
+                Some(format!(
+                    "its volume cannot be worked out ({}), so nothing it measures is checked",
+                    e.why
+                )),
+                None,
+            ));
         }
     };
+    let warning = mesh_agrees(body, &m)?;
+    Ok((warning, Some(m)))
+}
+
+/// `measures_agree` past the integrals: the mesh's volume and area against them.
+fn mesh_agrees(body: &Body, m: &forge_topo::mass::MassProps) -> Result<Option<String>, String> {
     let mesh_at = |chord: f64| {
         forge_mesh::tessellate::tessellate_tolerant(
             body,
@@ -1374,8 +1385,8 @@ fn measure_gaps(proto: &Proto, stats: &mut Stats) {
     }
 }
 
-/// From a read file's topology to a body: seams, edges tightened, checked; healing and the check on
-/// one budget. `uncertainty`: what the file says of itself.
+/// From a read file's topology to a body, and its integrals where the check worked them out: seams,
+/// edges tightened, checked; healing and the check on one budget. `uncertainty`: what the file says of itself.
 /// Whether every shell but the largest bounds negative volume.
 fn voids_inward(body: &Body) -> bool {
     let v: Vec<f64> = (0..body.shells.len())
@@ -1390,7 +1401,7 @@ pub(crate) fn finish(
     uncertainty: f64,
     lim: &Limits,
     stats: &mut Stats,
-) -> Result<Body, String> {
+) -> Result<(Body, Option<forge_topo::mass::MassProps>), String> {
     if proto.faces.is_empty() {
         return Err("a solid with no faces".into());
     }
@@ -1407,8 +1418,9 @@ pub(crate) fn finish(
     record_deviations(&mut body, stats);
     let agree = measures_agree(&body);
     drop(budget);
-    body.unverified = agree?;
-    Ok(body)
+    let (unverified, mass) = agree?;
+    body.unverified = unverified;
+    Ok((body, mass))
 }
 
 /// Reads a whole file. Parts that cannot be read become refusals; the others are returned.
@@ -1512,18 +1524,21 @@ fn read_file(text: &[u8], lim: &Limits, only_measure: bool) -> Result<Imported, 
                     }
                     let done = finish(proto, u.uncertainty, lim, &mut stats);
                     // files differ on what a void's .F. turns: a void must bound negative volume
-                    if void_flip && f.name(&r) == "BREP_WITH_VOIDS" && !done.as_ref().is_ok_and(voids_inward)
+                    if void_flip
+                        && f.name(&r) == "BREP_WITH_VOIDS"
+                        && !done.as_ref().is_ok_and(|(b, _)| voids_inward(b))
                     {
                         void_flip = false;
                         continue;
                     }
                     match done {
-                        Ok(mut body) => {
+                        Ok((mut body, mass)) => {
                             body.unplaced = stats.assembly > 0;
                             solids.push(Solid {
                                 entity: id,
                                 name,
                                 body,
+                                mass,
                             })
                         }
                         Err(why) => refusals.push(Refusal {

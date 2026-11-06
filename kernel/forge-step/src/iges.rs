@@ -638,10 +638,11 @@ pub fn import(text: &[u8], lim: &Limits) -> Result<Imported, ImportError> {
         stats.vertex_off_curve = stats.vertex_off_curve.max(s.vertex_off_curve);
         match built {
             Ok(()) => match finish(proto, f.resolution, lim, &mut stats) {
-                Ok(body) => solids.push(Solid {
+                Ok((body, mass)) => solids.push(Solid {
                     entity: *id as u32,
                     name: String::new(),
                     body,
+                    mass,
                 }),
                 Err(why) => refusals.push(Refusal {
                     entity: *id as u32,
