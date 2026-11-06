@@ -150,15 +150,17 @@ pub fn decompress(src: &[u8], size: usize) -> R<Vec<u8>> {
     loop {
         let op = byte(&mut p)?;
         let (count, offset, lit) = match op {
-            0x10 => {
-                let c = long_len(&mut p)? + 9;
-                let (o, l) = two_byte(&mut p)?;
-                (c, o + 0x3FFF, l)
-            }
             0x11 => break,
-            0x12..=0x1F => {
+            // far: bit 3 is the offset's 0x4000, the low three bits the count less two (0: a long
+            // count less nine follows); the spec's 4.7 has these wrong
+            0x10..=0x1F => {
+                let c = match op & 7 {
+                    0 => long_len(&mut p)? + 9,
+                    k => k as usize + 2,
+                };
+                let hi = ((op & 8) as usize) << 11;
                 let (o, l) = two_byte(&mut p)?;
-                ((op & 0x0F) as usize + 2, o + 0x3FFF, l)
+                (c, (hi | o) + 0x3FFF, l)
             }
             0x20 => {
                 let c = long_len(&mut p)? + 0x21;
@@ -363,15 +365,15 @@ pub fn compress(src: &[u8]) -> Vec<u8> {
         let mut k = 0;
         while c != usize::MAX && k < MAX_CHAIN {
             let d = p - c;
-            if d > 0x7FFF {
+            if d > 0xBFFF {
                 break;
             }
             let mut l = 0;
             while p + l < n && src[c + l] == src[p + l] {
                 l += 1;
             }
-            // far matches need at least 4
-            let ok = if d - 1 > 0x3FFF { l >= 4 } else { l >= 3 };
+            // far matches of three need the offset's high bit (op 0x11 ends the stream)
+            let ok = if d - 1 > 0x3FFF { l >= 4 || (l == 3 && (d - 1 - 0x3FFF) & 0x4000 != 0) } else { l >= 3 };
             if ok && l > best.0 {
                 best = (l, d);
             }
@@ -433,7 +435,7 @@ pub fn compress(src: &[u8]) -> Vec<u8> {
         let far = dist - 1 > 0x3FFF;
         let long_extra = |len: usize| -> Option<usize> {
             if far {
-                if len >= 10 && len > 17 { Some(len - 9) } else { None }
+                if len > 9 { Some(len - 9) } else { None }
             } else if len > 33 {
                 Some(len - 0x21)
             } else {
@@ -456,12 +458,13 @@ pub fn compress(src: &[u8]) -> Vec<u8> {
             out.push((((len + 1) << 4) | ((off & 3) << 2)) as u8);
             out.push((off >> 2) as u8);
         } else {
-            let o = if far { off - 0x3FFF } else { off };
+            let o = if far { (off - 0x3FFF) & 0x3FFF } else { off };
             if far {
-                if len <= 17 {
-                    out.push(0x10 | (len - 2) as u8);
+                let hi = if (off - 0x3FFF) & 0x4000 != 0 { 8 } else { 0 };
+                if len <= 9 {
+                    out.push(0x10 | hi | (len - 2) as u8);
                 } else {
-                    out.push(0x10);
+                    out.push(0x10 | hi);
                     long_len(&mut out, len - 9);
                 }
             } else if len <= 33 {
@@ -619,14 +622,14 @@ pub fn write(d: &super::Drawing) -> R<Vec<u8>> {
     let (objs, locs) = write_objects(d, 4)?;
     let mut objects = 0x0DCAu32.to_le_bytes().to_vec();
     objects.extend_from_slice(&objs);
-    let mut contents: Vec<(String, Vec<u8>, u32, u32, u32, u32)> = vec![];
+    let mut contents: Vec<Content> = vec![];
     let core = |name: &str, data: Vec<u8>| (name.to_string(), data, 0x7400u32, 2u32, 0u32, 1u32);
     contents.push(core("AcDb:Header", crate::header::write_header(&d.header, ver, d.maint)?));
     contents.push(core("AcDb:Classes", write_classes(&d.classes, ver, d.maint)?));
     contents.push(core("AcDb:Handles", write_map(&locs)));
     contents.push(core("AcDb:AcDbObjects", objects));
     contents.push(core("AcDb:AuxHeader", aux_header(d)));
-    for e in &d.other {
+    for e in d.other.iter().filter(|e| e.name != "AcDb:AuxHeader") {
         let mut data = e.data.clone();
         if e.name == "AcDb:ObjFreeSpace" && data.len() >= 8 {
             data[4..8].copy_from_slice(&(locs.len() as u32).to_le_bytes());
@@ -634,6 +637,14 @@ pub fn write(d: &super::Drawing) -> R<Vec<u8>> {
         let (mp, c, enc, u) = if e.max_page == 0 { (0x7400, 2, 0, 1) } else { (e.max_page, e.compressed, e.encrypted, e.unknown) };
         contents.push((e.name.clone(), data, mp, c, enc, u));
     }
+    container(d.ver(), d.maint, d.codepage, &d.file_header, &contents)
+}
+
+/// (name, data, page size, compressed, encrypted, unknown) for each section.
+pub type Content = (String, Vec<u8>, u32, u32, u32, u32);
+
+/// Lays sections out as an R2004-container file.
+pub fn container(ver: crate::version::Version, maint: u8, codepage: u16, file_header: &[u8], contents: &[Content]) -> R<Vec<u8>> {
     let known = |n: &str| MAP_ORDER.contains(&n);
     // the section map's order and ids
     let mut map_names: Vec<String> = vec!["".into()];
@@ -676,8 +687,11 @@ pub fn write(d: &super::Drawing) -> R<Vec<u8>> {
                 first_page_addr.push((name.clone(), addr));
             }
             let number = page_map.len() as u32 + 1;
+            // every page holds a whole page's bytes, the last padded with zeros (readers expect it)
             let payload = if *compressed == 2 {
-                compress(chunk)
+                let mut p = chunk.to_vec();
+                p.resize(*max_page as usize, 0);
+                compress(&p)
             } else {
                 let mut p = chunk.to_vec();
                 p.resize(*max_page as usize, 0);
@@ -793,11 +807,11 @@ pub fn write(d: &super::Drawing) -> R<Vec<u8>> {
     let m = magic();
     let enc: Vec<u8> = hd.iter().zip(m.iter()).map(|(a, b)| a ^ b).collect();
     // the file's first 0x100 bytes
-    let mut fh = d.file_header.clone();
+    let mut fh = file_header.to_vec();
     fh.resize(0x80, 0);
     fh[0..6].copy_from_slice(ver.magic());
-    fh[0x0B] = d.maint;
-    fh[0x13..0x15].copy_from_slice(&d.codepage.to_le_bytes());
+    fh[0x0B] = maint;
+    fh[0x13..0x15].copy_from_slice(&codepage.to_le_bytes());
     let addr_of = |n: &str| first_page_addr.iter().find(|p| p.0 == n).map_or(0, |p| p.1 as u32 + 0x20);
     fh[0x0D..0x11].copy_from_slice(&addr_of("AcDb:Preview").to_le_bytes());
     fh[0x20..0x24].copy_from_slice(&addr_of("AcDb:SummaryInfo").to_le_bytes());

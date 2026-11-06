@@ -367,7 +367,7 @@ pub fn write_objects(d: &Drawing, base: usize) -> R<(Vec<u8>, Vec<(u32, u64)>)> 
 /// a new one.
 pub fn aux_header(d: &Drawing) -> Vec<u8> {
     let seed = d.handseed();
-    if let Some(a) = d.extra("AuxHeader").filter(|a| a.data.len() >= 0x5F) {
+    if let Some(a) = d.extra("AuxHeader").or(d.extra("AcDb:AuxHeader")).filter(|a| a.data.len() >= 0x5F) {
         let mut a = a.data.clone();
         // the seed sits after 0x3F bytes of fixed fields and the two dates
         a[0x4F..0x53].copy_from_slice(&(if seed < 0x7FFF_FFFF { seed } else { 0xFFFF_FFFF }).to_le_bytes());
