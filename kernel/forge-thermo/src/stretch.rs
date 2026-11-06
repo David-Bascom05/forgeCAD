@@ -751,6 +751,9 @@ struct Solver {
     /// it since.
     factored: bool,
     age: usize,
+    /// Whether the last step's matrix was the whole Hessian (projected), fresh: the only steps
+    /// whose model the trust radius is judged by.
+    exact: bool,
     /// The damping the factor was made with, and the mean diagonal entry it is of.
     damp: f64,
     mean: f64,
@@ -785,6 +788,7 @@ impl Solver {
             age: 0,
             damp: 0.0,
             mean: 0.0,
+            exact: false,
         }
     }
 }
@@ -989,6 +993,7 @@ impl Sheet {
         let s = &mut self.solver;
         if reuse && s.factored && s.age < 8 && s.damp == damp && s.chol.covers(&mask) {
             s.age += 1;
+            s.exact = false;
         } else {
             s.factored = false;
             s.age = 0;
@@ -1059,9 +1064,11 @@ impl Sheet {
             let mean = sum / s.chol.dofs().len() as f64;
             s.mean = mean;
             let shift = (1e-10 * diag).max(damp * mean).max(1e-300);
-            s.factored = (q != 0.0 && s.chol.factor(&s.m.val, Some(&s.press), shift))
-                || s.chol.factor(&s.m.val, None, shift)
-                || s.chol.factor(&s.m.val, None, 1e4 * shift);
+            let pressed = q != 0.0 && s.chol.factor(&s.m.val, Some(&s.press), shift);
+            s.factored =
+                pressed || s.chol.factor(&s.m.val, None, shift) || s.chol.factor(&s.m.val, None, 1e4 * shift);
+            // the step's model is the energy's when nothing was left out of the matrix
+            s.exact = pressed || q == 0.0;
             if !s.factored {
                 return None;
             }
@@ -1378,9 +1385,10 @@ fn turns(a: Vec3, b: Vec3, female: bool) -> bool {
     !flat & ((a.dot(b) < 0.0) | (past & was))
 }
 
-/// The L-BFGS iterations a relaxing starts with before Newton's: measured, the trays, the boxes
-/// and the Mooney-Rivlin bubble take fewer instructions so than by Newton from the start.
-const QUASI: usize = 30;
+/// The window over which L-BFGS must halve the gradient to go on (measured, single-thread
+/// instructions: the Buntinx trays and Duarte's cone settle in L-BFGS at its cost exactly, the
+/// Varedi, Eksi and bubble steps go to Newton at 1.4-3.7x fewer).
+const STALL: usize = 5;
 
 /// Minimises the sheet's energy at pressure `p` over its free nodes, stopping each node that
 /// crosses into the tool where it crosses. Returns the iterations spent.
@@ -1418,16 +1426,25 @@ fn relax(
     // the slack part's step would otherwise shrink everyone's to nothing
     let mut damp = 0.0;
     let loaded = p != 0.0 || sheet.volume.is_some();
-    // a step a few L-BFGS iterations settle (most of a mild part's) costs less so than one
-    // factor: the first QUASI are L-BFGS (6 pairs kept), Newton after; the plug's steps (its
-    // stiff spring) go to Newton at once
+    // a step L-BFGS settles fast (most of a mild part's) costs less so than by factors: L-BFGS
+    // (6 pairs kept) while it halves the gradient every STALL iterations, Newton from the first
+    // window it does not; a window with a long step (over half the cap) does not count (the
+    // sheet falling to the tool: its gradient says nothing till it lands, and Newton falls no
+    // faster); the plug's steps (its stiff spring) go to Newton at once
     let (mut ss, mut ys): (Vec<Vec<Vec3>>, Vec<Vec<Vec3>>) = (vec![], vec![]);
+    let mut quasi = sheet.plug.is_none();
+    // the least gradient so far at each iteration
+    let mut least: Vec<f64> = vec![];
+    let mut fell = 0;
     for it in 0..max_it {
         let gmax = g.iter().map(|v| v.length()).fold(0.0, f64::max);
         if gmax <= tol {
             return it;
         }
-        let quasi = sheet.plug.is_none() && it < QUASI;
+        least.push(least.last().map_or(gmax, |l: &f64| l.min(gmax)));
+        if quasi && it >= fell + STALL && least[it] > 0.5 * least[it - STALL] {
+            quasi = false;
+        }
         let (mut d, mut slope);
         let mut tries = 0;
         if quasi {
@@ -1491,7 +1508,7 @@ fn relax(
         chord = !quasi && dmax > step_cap;
         let mut taken = None;
         let mut stops: Vec<(usize, Vec3)> = vec![];
-        for _ in 0..30 {
+        for h in 0..30 {
             for i in 0..n {
                 trial[i] = x[i] + d[i] * a;
             }
@@ -1511,12 +1528,18 @@ fn relax(
             // blow-outs, where a stop held one corner back while the others went on)
             // (the energy checks the step's normals against the last state's; the few triangles
             // at a stop are checked here, at their stops)
-            if let Some(e2) = sheet.energy(&trial, p, Some(&mut g2))
+            let fell = sheet.energy(&trial, p, Some(&mut g2));
+            let turned = sheet.pool.flipped() || stops_turn(sheet, &mut trial, &stops);
+            if let Some(e2) = fell
                 && e2 <= e + 1e-4 * a * slope
-                && !sheet.pool.flipped()
-                && !stops_turn(sheet, &mut trial, &stops)
+                && !turned
             {
                 taken = Some(e2);
+                break;
+            }
+            // a Newton step that turns a triangle over however short it is drives the fold (a
+            // gradient step would not): held as no step, the fold's corners then stop
+            if !quasi && turned && h >= 12 {
                 break;
             }
             a *= 0.5;
@@ -1560,13 +1583,18 @@ fn relax(
         // the Newton model's fall over the step a d, -(a - a^2 / 2) slope (H d = -g), against the
         // energy's
         // (a fall within the energy's rounding says nothing of the model)
+        if quasi && a * dmax > 0.5 * step_cap {
+            fell = it + 1;
+        }
         let model = -(a - 0.5 * a * a) * slope;
         let ratio = if model > 1e-10 * e.abs() {
             (e - e2) / model
         } else {
             1.0
         };
-        if !quasi && ratio < 0.25 {
+        // (a reused factor's or one without the pressure's step is no Newton model's)
+        let judged = !quasi && sheet.solver.exact;
+        if judged && ratio < 0.25 {
             radius = (0.5 * a * dmax).max(1e-3 * step_cap);
         } else if !quasi && ratio > 0.75 {
             radius = (2.0 * radius).min(step_cap);
