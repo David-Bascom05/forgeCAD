@@ -549,7 +549,8 @@ impl Spec for Leader {
         s.bd(&mut self.box_width)?;
         s.b(&mut self.hook_on_x)?;
         s.b(&mut self.arrowhead)?;
-        if s.ver() >= Version::R2000 {
+        // gone by R2018 (a real file's data ends at the arrowhead bit); from R2007 is a guess
+        if s.ver() < Version::R2007 {
             s.bs(&mut self.unknown_bs)?;
             s.b(&mut self.unknown_b1)?;
             s.b(&mut self.unknown_b2)?;
