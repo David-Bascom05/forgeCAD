@@ -725,9 +725,85 @@ pub fn transform_data(d: &Data, m: &Affine, mirrtext: bool) -> Option<Data> {
                 p.end_width *= k;
             }
         }
+        Data::Hatch(h) => {
+            if ocs_map(h.extrusion).ok()?.0 != Affine::IDENTITY {
+                return None;
+            }
+            for path in &mut h.paths {
+                if path.flag & 2 != 0 {
+                    if sim.is_none() && path.vertices.iter().any(|v| v[2] != 0.0) {
+                        return None;
+                    }
+                    for v in &mut path.vertices {
+                        let q = m.apply(v2(v[0], v[1]));
+                        *v = [q.x, q.y, if m.is_reflection() { -v[2] } else { v[2] }];
+                    }
+                } else {
+                    let mut edges = vec![];
+                    for e in &path.edges {
+                        let c = super::make::edge_curve(e)?.transformed(m)?;
+                        edges.extend(super::make::edges_of(&c));
+                    }
+                    path.edges = edges;
+                }
+            }
+            for sd in &mut h.seeds {
+                *sd = m.apply(V2::from(*sd)).arr();
+            }
+            let k = sim.unwrap_or(1.0);
+            for l in &mut h.lines {
+                l.angle = wrap(m.vec(V2::polar(l.angle, 1.0)).angle());
+                l.base = m.apply(V2::from(l.base)).arr();
+                l.offset = m.vec(V2::from(l.offset)).arr();
+                l.dashes.iter_mut().for_each(|x| *x *= k);
+            }
+            h.angle = wrap(m.vec(V2::polar(h.angle, 1.0)).angle());
+            h.scale *= k;
+        }
+        Data::DimLinear(x) => {
+            let k = sim?;
+            map_dim(&mut x.dim, m, k);
+            for p in [&mut x.pt13, &mut x.pt14, &mut x.pt10] {
+                map_p3(p, m);
+            }
+            x.rotation = wrap(m.vec(V2::polar(x.rotation, 1.0)).angle());
+        }
+        Data::DimAligned(x) => {
+            let k = sim?;
+            map_dim(&mut x.dim, m, k);
+            for p in [&mut x.pt13, &mut x.pt14, &mut x.pt10] {
+                map_p3(p, m);
+            }
+        }
+        Data::DimRadius(x) => {
+            let k = sim?;
+            map_dim(&mut x.dim, m, k);
+            for p in [&mut x.pt10, &mut x.pt15] {
+                map_p3(p, m);
+            }
+        }
+        Data::DimDiameter(x) => {
+            let k = sim?;
+            map_dim(&mut x.dim, m, k);
+            for p in [&mut x.pt10, &mut x.pt15] {
+                map_p3(p, m);
+            }
+        }
         _ => return None,
     }
     Some(out)
+}
+
+fn map_p3(p: &mut [f64; 3], m: &Affine) {
+    let q = m.apply(V2::from(*p));
+    p[0] = q.x;
+    p[1] = q.y;
+}
+
+/// A dimension's own points after a similarity of scale `k` (its block is mapped apart).
+fn map_dim(d: &mut types::DimCommon, m: &Affine, k: f64) {
+    d.text_mid = m.apply(V2::from(d.text_mid)).arr();
+    d.measurement *= k;
 }
 
 fn map_insert(i: &mut types::Insert, m: &Affine) -> Option<()> {

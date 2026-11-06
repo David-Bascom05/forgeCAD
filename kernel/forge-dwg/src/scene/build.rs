@@ -308,7 +308,7 @@ fn pow2(e: i32) -> f64 {
 }
 
 impl<'a> B<'a> {
-    fn new(d: &'a Drawing, fonts: &'a dyn Fonts, fine: bool, chord: f64) -> B<'a> {
+    fn new(d: &'a Drawing, fonts: &'a dyn Fonts, fine: bool, chord: f64, all: bool) -> B<'a> {
         let ms = d.header.handle("BLOCK_RECORD_MODEL_SPACE").unwrap_or(0);
         let ps = d.header.handle("BLOCK_RECORD_PAPER_SPACE").unwrap_or(0);
         let mut b = B {
@@ -446,7 +446,7 @@ impl<'a> B<'a> {
                     _ => Lt::Solid,
                 };
                 b.linfo.push(LayerInfo {
-                    visible: on && !frozen,
+                    visible: all || (on && !frozen),
                     rgb,
                     wt: weight_mm(((l.flags >> 5) & 31) as i32).unwrap_or(DEFAULT_WEIGHT),
                     lt,
@@ -2527,13 +2527,13 @@ fn layout_limits(d: &Drawing, space: Space) -> Option<f64> {
     None
 }
 
-pub fn build(d: &Drawing, space: Space, fonts: &dyn Fonts, opts: &Options) -> Scene {
+pub fn plan(d: &Drawing, space: Space, fonts: &dyn Fonts, opts: &Options) -> super::Plan {
     // a rough pass (no text shaping, patterns or dashes) for the extents, which the chord
     // tolerance and point sizes go by
     let ext = match stored_extents(d, space) {
         Some(e) => Some(e),
         None => {
-            let mut rough = B::new(d, fonts, false, f64::INFINITY);
+            let mut rough = B::new(d, fonts, false, f64::INFINITY, opts.all_layers);
             rough.run(space);
             rough.scene().extents
         }
@@ -2545,10 +2545,75 @@ pub fn build(d: &Drawing, space: Space, fonts: &dyn Fonts, opts: &Options) -> Sc
         .or_else(|| layout_limits(d, space))
         .unwrap_or(100.0);
     let chord = if opts.chord > 0.0 { opts.chord } else { side * 1e-4 };
-    let mut b = B::new(d, fonts, true, chord);
-    b.view_h = size.map(|s| s.1).filter(|s| *s > 0.0).unwrap_or(side);
+    super::Plan {
+        chord,
+        view_h: size.map(|s| s.1).filter(|s| *s > 0.0).unwrap_or(side),
+    }
+}
+
+pub fn build_planned(d: &Drawing, space: Space, fonts: &dyn Fonts, opts: &Options, plan: &super::Plan) -> Scene {
+    let mut b = B::new(d, fonts, true, plan.chord, opts.all_layers);
+    b.view_h = plan.view_h;
     b.run(space);
     b.scene()
+}
+
+pub fn build(d: &Drawing, space: Space, fonts: &dyn Fonts, opts: &Options) -> Scene {
+    let p = plan(d, space, fonts, opts);
+    build_planned(d, space, fonts, opts, &p)
+}
+
+pub fn build_some(
+    d: &Drawing,
+    space: Space,
+    handles: &[u32],
+    fonts: &dyn Fonts,
+    opts: &Options,
+    plan: &super::Plan,
+    ext: Option<(P2, P2)>,
+) -> Scene {
+    let mut b = B::new(d, fonts, true, plan.chord, opts.all_layers);
+    b.view_h = plan.view_h;
+    if let Some((lo, hi)) = ext {
+        b.ext = [lo[0], lo[1], hi[0], hi[1]];
+    }
+    let block = match space {
+        Space::Model => b.ms,
+        Space::Layout(h) => match b.obj(h) {
+            Some(Object {
+                data: Data::Layout(l),
+                ..
+            }) => l.block.handle,
+            _ => b.ps,
+        },
+    };
+    let mut hs: Vec<u32> = handles.to_vec();
+    hs.sort_unstable();
+    hs.dedup();
+    let ents: Vec<&Object> = hs
+        .iter()
+        .filter_map(|h| b.obj(*h))
+        .filter(|o| match &o.ent {
+            Some(e) => match e.entmode {
+                2 => block == b.ms,
+                1 => block == b.ps,
+                _ => o.owner.handle == block,
+            },
+            None => false,
+        })
+        .collect();
+    let v = View {
+        m: Mat::ID,
+        ltk: 1.0,
+        clip: None,
+        frozen: vec![],
+    };
+    b.top(&ents, &v);
+    let mut s = b.scene();
+    if ext.is_some() {
+        s.grow_extents();
+    }
+    s
 }
 
 #[cfg(test)]

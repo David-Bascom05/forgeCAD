@@ -68,6 +68,22 @@ impl History {
         }
         back
     }
+    /// Is a change open (between `begin` and `end`)?
+    pub fn is_open(&self) -> bool {
+        self.open.is_some()
+    }
+    /// The objects the open change has touched so far.
+    pub fn touched(&self) -> Vec<u32> {
+        self.open.as_ref().map_or_else(Vec::new, |c| c.objects.keys().copied().collect())
+    }
+    /// The objects the last undone change (the top of `redo`) touched: what an undo changed.
+    pub fn last_undone(&self) -> Vec<u32> {
+        self.redo.last().map_or_else(Vec::new, |c| c.objects.keys().copied().collect())
+    }
+    /// The objects the last done change (the top of `undo`) touched: what a redo changed.
+    pub fn last_done(&self) -> Vec<u32> {
+        self.undo.last().map_or_else(Vec::new, |c| c.objects.keys().copied().collect())
+    }
     pub fn undo(&mut self, d: &mut Drawing) -> bool {
         self.end();
         match self.undo.pop() {
@@ -359,6 +375,113 @@ impl Drawing {
         hist.save(self, h);
         self.objects.insert(h, o);
         Ok(h)
+    }
+
+    /// Adds a block definition: its BLOCK_HEADER in the block table, its BLOCK and ENDBLK, base
+    /// point at the origin, no entities yet (`add_entity` puts them in). An anonymous one's name
+    /// is its kind ("*D" a dimension's, "*X" a hatch's, "*U" others), as AutoCAD stores them.
+    /// The block record's handle.
+    pub fn add_block(&mut self, hist: &mut History, name: &str, anonymous: bool) -> R<u32> {
+        let Some(ctrl) = self.header.handle("BLOCK_CONTROL") else {
+            return bad("no block table");
+        };
+        let ver = self.ver();
+        let ms = self.model_space();
+        let (bh0, blk0, end0) = match self.objects.get(&ms) {
+            Some(o @ Object {
+                data: Data::BlockHeader(bh),
+                ..
+            }) => (o.clone(), bh.block.handle, bh.endblk.handle),
+            _ => return bad("no model space to copy"),
+        };
+        let (Some(blk0), Some(end0)) = (self.objects.get(&blk0).cloned(), self.objects.get(&end0).cloned()) else {
+            return bad("model space has no BLOCK/ENDBLK to copy");
+        };
+        let layer0 = self.layer("0").unwrap_or(0);
+        let h = self.new_handle(hist);
+        let hb = self.new_handle(hist);
+        let he = self.new_handle(hist);
+        let stored = if anonymous && ver >= Version::R2004 {
+            name.trim_end_matches(|c: char| c.is_ascii_digit()).to_string()
+        } else {
+            name.to_string()
+        };
+        let mut bh = Object {
+            handle: h,
+            owner: Href::new(4, ctrl),
+            raw: None,
+            reactors: vec![],
+            eed: vec![],
+            trailing: vec![],
+            xdic: if ver < Version::R2004 { Some(Href::new(3, 0)) } else { None },
+            ..bh0
+        };
+        if let Data::BlockHeader(b) = &mut bh.data {
+            *b = crate::types::BlockHeader {
+                entry: crate::types::Entry {
+                    name: self.s(&stored),
+                    ..Default::default()
+                },
+                anonymous,
+                explodable: true,
+                block: Href::new(3, hb),
+                endblk: Href::new(3, he),
+                first: Href::new(4, 0),
+                last: Href::new(4, 0),
+                layout: Href::new(5, 0),
+                ..Default::default()
+            };
+        }
+        let ent = |o: &Object| {
+            let mut e = o.ent.clone().unwrap_or_default();
+            e.entmode = 0;
+            e.layer = Href::new(5, layer0);
+            e.color = Color::index(256);
+            e.nolinks = ver >= Version::R2004;
+            e.prev = Href::new(4, 0);
+            e.next = Href::new(4, 0);
+            e
+        };
+        let block = Object {
+            handle: hb,
+            owner: Href::new(4, h),
+            ent: Some(ent(&blk0)),
+            data: Data::Block(crate::types::Block { name: self.s(name) }),
+            raw: None,
+            reactors: vec![],
+            eed: vec![],
+            trailing: vec![],
+            xdic: if ver < Version::R2004 { Some(Href::new(3, 0)) } else { None },
+            ..blk0
+        };
+        let endblk = Object {
+            handle: he,
+            owner: Href::new(4, h),
+            ent: Some(ent(&end0)),
+            raw: None,
+            reactors: vec![],
+            eed: vec![],
+            trailing: vec![],
+            xdic: if ver < Version::R2004 { Some(Href::new(3, 0)) } else { None },
+            ..end0
+        };
+        hist.save(self, ctrl);
+        if let Some(o) = self.objects.get_mut(&ctrl) {
+            o.raw = None;
+            if let Data::BlockControl(c) = &mut o.data {
+                c.0.entries.push(Href::new(2, h));
+            }
+        }
+        for o in [bh, block, endblk] {
+            hist.save(self, o.handle);
+            self.objects.insert(o.handle, o);
+        }
+        Ok(h)
+    }
+
+    /// The text style, dimension style and layer new objects get: TEXTSTYLE, DIMSTYLE, CLAYER.
+    pub fn current(&self, var: &str) -> Option<u32> {
+        self.header.handle(var).filter(|h| self.objects.contains_key(h))
     }
 
     /// Changes an object through `f`, keeping it for undo and marking it edited.
