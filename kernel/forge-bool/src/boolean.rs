@@ -423,15 +423,17 @@ pub fn boolean(a: &Body, b: &Body, op: Op, feature: u64) -> R<Body> {
 /// as tombstones until `Body::compact`. Names do not depend on `_feature`: what the boolean makes
 /// is named by what meets there, as the n-ary boolean names it.
 pub fn boolean_into(target: &mut Body, b: &Body, op: Op, _feature: u64) -> R<()> {
+    // (uncompacted, so the faces a boolean leaves alone keep what was worked out of them, as the
+    // target does from one boolean to the next: a face's drawing is the cost of the check)
     #[cfg(debug_assertions)]
-    let before = target.compact();
+    let before = target.clone();
     if !imprinted(target, b, || std::borrow::Cow::Borrowed(b), op) {
         let first = target.edges.len();
         general(target, b, op)?;
         refuse_strays(target, first)?;
     }
     #[cfg(debug_assertions)]
-    faces_survive(&before, b, op, &target.compact());
+    faces_survive(&before, b, op, target);
     Ok(())
 }
 
@@ -461,12 +463,12 @@ fn faces_survive(a: &Body, b: &Body, op: Op, r: &Body) {
     match asked {
         Ok(None) => {}
         Ok(Some(msg)) => {
-            if forge_topo::check(r).is_empty() {
+            if forge_topo::check(&r.compact()).is_empty() {
                 panic!("{msg}");
             }
         }
         Err(e) => {
-            if forge_topo::check(r).is_empty() {
+            if forge_topo::check(&r.compact()).is_empty() {
                 std::panic::resume_unwind(e);
             }
         }
