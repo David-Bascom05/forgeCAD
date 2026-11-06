@@ -17,6 +17,8 @@ fg edit FILE 'OP' [--json]      apply a typed op (JSON, as errors' fixes give th
 fg handles FILE                 the editable handles: every param, its value and dimension
 fg serve                        JSON lines on stdin: {\"cmd\":\"run\"|\"check\",\"file\":F[,\"checks\":false]}; stages kept per file
 fg reference                    the language reference
+fg query FILE QUERY.. [--json]  numbers from the built part or assembly: holes, section x|y|z=V,
+                                aligned, gap A B, interference, frame SKETCH, faces (`fg query F help`)
 fg view FILE [--view front,top,..] [--tangent] [--chord MM] [--pdf OUT] [--svg OUT] [--points]
                                 a part's or assembly's exact hidden-line views: lengths by class (JSON), pages
 fg std [FAMILY [SIZE [LENGTH]]] [--thread cosmetic] [--grade G] [--sheet T] [-o OUT.fg]
@@ -472,6 +474,31 @@ fn main() -> ExitCode {
         Some("reference") => {
             print!("{}", forge_lang::REFERENCE);
             ExitCode::SUCCESS
+        }
+        Some("query") if args.len() >= 3 => {
+            let json = flag(&args[2..], "--json");
+            let words: Vec<&str> = args[2..]
+                .iter()
+                .map(String::as_str)
+                .filter(|a| *a != "--json")
+                .collect();
+            if words == ["help"] {
+                println!("{}", forge_lang::query::HELP);
+                return ExitCode::SUCCESS;
+            }
+            let a = forge_lang::query::ask_file(std::path::Path::new(&args[1]), None, &words.join(" "));
+            if json {
+                let mut s = String::new();
+                a.json.write(&mut s);
+                println!("{s}");
+            } else {
+                print!("{}", a.text);
+            }
+            if a.ok {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::from(1)
+            }
         }
         Some("handles") if args.len() >= 2 => {
             let src = match read(&args[1]) {

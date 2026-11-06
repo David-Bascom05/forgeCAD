@@ -1,0 +1,8 @@
+assembly
+# LT-100 tray in its RF-20 rack face: the ears 0.2 off the tray's walls, each ear's two holes on the
+# axes of the wall's. The rack face's front skin is 25 in front of the tray's floor front edge.
+shared gap = 0.2
+shared t = 1.5
+tray = part("load_tray.fg", ground: true)
+rack = part("rack_face.fg", ground: true, at: pose(at: (-(t + gap), -25, -20), z: (0, -1, 0), x: (1, 0, 0)))
+expect interferences = 0

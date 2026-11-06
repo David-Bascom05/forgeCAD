@@ -6,6 +6,7 @@ pub mod cmd;
 #[cfg(test)]
 mod doc_tests;
 pub mod facemesh;
+pub mod features;
 #[cfg(test)]
 mod fillet_repros;
 pub mod handles;

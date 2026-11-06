@@ -1,0 +1,15 @@
+# LT-100's left wall with its holes at the right wall's numbers: the wall's y runs from the rear, so
+# they land mirrored (y 95 and 35) and miss the rack face's ears (`aligned` in tray_misread_asm.fg).
+shared t = 1.5
+shared r = 1.5
+shared k = ratio(0.42)
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (160, 120))
+}
+tray = sheet(plan, t: t, r: r, bend: kfactor(k))
+left = flange(tray.edge(plan.outline[3]), height: 60)
+sketch lh(on: left.top) {
+  a = circle((40, 25), 2.1)
+  b = circle((40, 85), 2.1)
+}
+left_holes = cutout(lh, wall: left)

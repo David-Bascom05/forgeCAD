@@ -27,6 +27,7 @@ pub mod par;
 pub mod patterns;
 pub mod project;
 pub mod props;
+pub mod query;
 pub mod refactor;
 pub mod report;
 pub mod shapes;
@@ -84,6 +85,8 @@ pub struct Options {
     /// drawing, which asks for neither), a part loads without them, and a run that needs them
     /// does not share its loads (the setting is in their key).
     pub meshes: bool,
+    /// Expressions evaluated on the finished part, each answered in `Run::asked` (`query.rs`).
+    pub asks: Vec<String>,
 }
 
 impl Default for Options {
@@ -103,6 +106,7 @@ impl Default for Options {
             checks: true,
             cosmetic_threads: false,
             meshes: true,
+            asks: vec![],
         }
     }
 }
@@ -182,6 +186,8 @@ pub struct Run {
     pub components: Vec<asm::CompOut>,
     /// A document with components: each body and the features that made it (`asm::body_chains`).
     pub body_chains: Vec<(String, Vec<String>)>,
+    /// `Options::asks`, each with what it evaluated to.
+    pub asked: Vec<(String, anchors::Asked)>,
 }
 
 impl Run {
@@ -227,6 +233,7 @@ pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
                     physical: None,
                     components: vec![],
                     body_chains: vec![],
+                    asked: vec![],
                 },
                 cache,
             );
@@ -373,6 +380,7 @@ pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
         physical,
         components: vec![],
         body_chains: vec![],
+        asked: vec![],
     };
     let mut run = run;
     // a sheet that names no stock is the part's material
@@ -385,6 +393,11 @@ pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
         let body = run.body.clone();
         run.anchors = Some(anchors::find(&mut ev, body.as_ref()));
     }
+    run.asked = opts
+        .asks
+        .iter()
+        .map(|t| (t.clone(), anchors::ask(&mut ev, t)))
+        .collect();
     run.components = asm::components(&ev);
     run.body_chains = chains;
     asm::keep_comp_caches(&mut ev);

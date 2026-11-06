@@ -70,6 +70,34 @@ fn eval_text(ev: &mut Eval, text: &str) -> Option<Value> {
     v
 }
 
+/// What an expression asked of the finished part (`Options::asks`) evaluated to.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Asked {
+    Plane(forge_math::Frame),
+    /// Faces by name, and their plane when they lie in one.
+    Faces(Vec<Name>, Option<forge_math::Frame>),
+    Edges(Vec<Name>),
+    Point(forge_math::Point3),
+    Axis(forge_math::Point3, forge_math::Vec3),
+    /// Something else: its type's name.
+    Other(String),
+    /// It did not evaluate.
+    Nothing,
+}
+
+pub fn ask(ev: &mut Eval, text: &str) -> Asked {
+    match eval_text(ev, text) {
+        None => Asked::Nothing,
+        Some(Value::Plane(p)) => Asked::Plane(p.frame),
+        Some(Value::Faces(f)) => Asked::Faces(f.names.clone(), f.plane),
+        Some(Value::Edges(e)) => Asked::Edges(e.to_vec()),
+        Some(Value::Point(p)) => Asked::Point(p),
+        Some(Value::Axis(o, d)) | Some(Value::Line(o, d, _)) => Asked::Axis(o, d.get()),
+        Some(Value::Sketch(s)) => Asked::Plane(s.borrow().frame),
+        Some(v) => Asked::Other(format!("{:?}", v.ty())),
+    }
+}
+
 fn face_names(v: &Value) -> Option<Vec<Name>> {
     match v {
         Value::Faces(fs) if !fs.names.is_empty() => Some(fs.names.clone()),

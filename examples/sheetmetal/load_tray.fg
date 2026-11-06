@@ -1,0 +1,54 @@
+# LT-100 load tray, 1.5 steel: a floor with four holes, two side walls with a return lip each and
+# two holes, a rear wall, and a front tab bent down with one hole.
+# frame: the floor's top skin on xy, x across, y front to back; side walls on x = 0 and x = W.
+shared t = 1.5
+shared r = 1.5
+shared k = ratio(0.42)
+shared W = 160                  # across the side walls, outside
+shared D = 120                  # floor depth
+shared H = 60                   # side walls, outside
+shared Hr = 40                  # rear wall
+shared lip = 12                 # return lips
+shared tab_w = 40
+shared tab_l = 18
+shared tab_h = 15
+shared d_floor = 5
+shared d_wall = 4.2
+shared e = 20                   # floor holes in from each edge
+shared wh = 40                  # wall holes: up from the mold line, along the wall
+shared wy0 = 25
+shared wy1 = 85
+
+sketch plan(on: xy) {
+  outline = poly([(0, 0), (W / 2 - tab_w / 2, 0), (W / 2 - tab_w / 2, -tab_l), (W / 2 + tab_w / 2, -tab_l),
+                  (W / 2 + tab_w / 2, 0), (W, 0), (W, D), (0, D)])
+  for c in {a: (e, e), b: (W - e, e), c: (W - e, D - e), d: (e, D - e)} {
+    h = circle((c[0], c[1]), d_floor / 2)
+  }
+}
+tray = sheet(plan, t: t, r: r, bend: kfactor(k))
+right = flange(tray.edge(plan.outline[5]), height: H)
+left = flange(tray.edge(plan.outline[7]), height: H)
+rear = flange(tray.edge(plan.outline[6]), height: Hr, position: "outside")
+right_lip = flange(right.tip, height: lip)
+left_lip = flange(left.tip, height: lip)
+tab = flange(tray.edge(plan.outline[2]), height: tab_h, side: "down")
+
+sketch rh(on: right.top) {
+  a = circle((wh, wy0), d_wall / 2)
+  b = circle((wh, wy1), d_wall / 2)
+}
+right_holes = cutout(rh, wall: right)
+# the left wall's y runs from the rear (`fg query load_tray.fg frame lh`): its holes count back
+sketch lh(on: left.top) {
+  a = circle((wh, D - wy0), d_wall / 2)
+  b = circle((wh, D - wy1), d_wall / 2)
+}
+left_holes = cutout(lh, wall: left)
+sketch th(on: tab.top) {
+  c = circle((tab_h / 2, tab_w / 2), d_wall / 2)
+}
+tab_hole = cutout(th, wall: tab)
+
+expect bodies = 1
+expect valid

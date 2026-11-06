@@ -1,0 +1,8 @@
+assembly
+# The rack face placed 0.7 too far to +x: its left ear runs 0.5 into the tray's left wall (the gap
+# -0.5). The clash is the ear's straight run over the wall's (y 0..95) and over the wall's two bends,
+# less the two holes they share. `fg query tray_clash.fg interference` says where and which faces.
+shared gap = -0.5
+shared t = 1.5
+tray = part("../load_tray.fg", ground: true)
+rack = part("../rack_face.fg", ground: true, at: pose(at: (-(t + gap), -25, -20), z: (0, -1, 0), x: (1, 0, 0)))

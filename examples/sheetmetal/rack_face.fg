@@ -1,0 +1,36 @@
+# RF-20 rack face, 1.5 steel: a plate with an ear turned back off each side; the load tray hangs
+# between the ears on four screws. Frame: the plate's front skin on xy, x across, y up; the ears
+# run to -z.
+shared t = 1.5
+shared r = 1.5
+shared k = ratio(0.42)
+shared gap = 0.2                # each ear's inner face to the tray's wall
+shared tray_w = 160             # the tray, across its walls
+shared Wf = tray_w + 2 * (gap + t)
+shared Hp = 100
+shared Le = 120
+shared d_ear = 4.2
+shared eh = 60                  # ear holes: up the plate
+shared e0 = 50                  # and back from the plate along the ear
+shared e1 = 110
+
+sketch front(on: xy) {
+  outline = rect(corner: (0, 0), size: (Wf, Hp))
+}
+plate = sheet(front, t: t, r: r, bend: kfactor(k))
+right_ear = flange(plate.edge(front.outline[1]), height: Le, side: "down")
+left_ear = flange(plate.edge(front.outline[3]), height: Le, side: "down")
+# each ear's y runs its own way (`fg query rack_face.fg frame left_ear.top`): the left counts down
+sketch rh(on: right_ear.top) {
+  a = circle((e0, eh), d_ear / 2)
+  b = circle((e1, eh), d_ear / 2)
+}
+right_holes = cutout(rh, wall: right_ear)
+sketch lh(on: left_ear.top) {
+  a = circle((e0, Hp - eh), d_ear / 2)
+  b = circle((e1, Hp - eh), d_ear / 2)
+}
+left_holes = cutout(lh, wall: left_ear)
+
+expect bodies = 1
+expect valid
