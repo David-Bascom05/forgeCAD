@@ -149,6 +149,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-history"
+version = "0.1.0"
+dependencies = [
+ "forge-agent",
+ "forge-git",
+]
+
+[[package]]
 name = "forge-import"
 version = "0.1.0"
 dependencies = [
