@@ -5,6 +5,7 @@
 
 pub mod bits;
 pub mod file;
+pub mod header;
 pub mod io;
 pub mod object;
 pub mod str;
