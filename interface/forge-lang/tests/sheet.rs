@@ -323,7 +323,10 @@ fn dwg_reads_back_with_what_the_dxf_has() {
         }
     };
     let count = |k: &str, l: &str| {
-        d.objects.values().filter(|o| o.is_entity() && o.data.name() == k && layer(o) == l).count()
+        d.objects
+            .values()
+            .filter(|o| o.is_entity() && o.data.name() == k && layer(o) == l)
+            .count()
     };
     assert_eq!(count("Line", "CUT"), 4);
     assert_eq!(count("Circle", "CUT"), 3);

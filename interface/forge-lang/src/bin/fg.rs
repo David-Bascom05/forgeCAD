@@ -148,7 +148,11 @@ fn write_flat(run: &forge_lang::Run, out: &str, o: &mut Output, dwg: bool) {
         } else {
             out.to_string()
         };
-        let made = if dwg { s.dwg() } else { s.dxf().map(String::into_bytes) };
+        let made = if dwg {
+            s.dwg()
+        } else {
+            s.dxf().map(String::into_bytes)
+        };
         match made {
             Ok(bytes) => o.write(path, bytes),
             Err(e) => o.err(format!("{flag} {}: the sheet is refused: {e:?}", s.id)),

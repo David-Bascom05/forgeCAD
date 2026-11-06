@@ -4416,7 +4416,11 @@ impl SheetOut {
 
     /// The flat pattern as an AutoCAD R2000 DWG, with what `dxf` puts in it.
     pub fn dwg(&self) -> Result<Vec<u8>, SheetError> {
-        Ok(fs::dwg_layered(&self.pattern()?, Some(&self.note()), &fs::DxfLayers::default()))
+        Ok(fs::dwg_layered(
+            &self.pattern()?,
+            Some(&self.note()),
+            &fs::DxfLayers::default(),
+        ))
     }
 
     /// The drawing's part note: the part, its material, its thickness and its bend rule.

@@ -693,7 +693,7 @@ pub fn dwg_layered(p: &Pattern, part: Option<&str>, l: &DxfLayers) -> Vec<u8> {
         }
     }
     let mut ents: Vec<Entity> = vec![];
-    let mut curve = |c: &Curve2, layer: &str, ents: &mut Vec<Entity>| {
+    let curve = |c: &Curve2, layer: &str, ents: &mut Vec<Entity>| {
         let shape = match c {
             Curve2::Line { a, b } => Shape::Line { a: pt(*a), b: pt(*b) },
             Curve2::Arc { c, r, start, sweep } => {
@@ -785,7 +785,7 @@ pub fn dwg_layered(p: &Pattern, part: Option<&str>, l: &DxfLayers) -> Vec<u8> {
             notes_layer,
         ));
     }
-    for layer in &l.punch {
+    if let Some(layer) = &l.punch {
         for h in &p.hits {
             ents.push(Entity {
                 layer: layer.clone(),

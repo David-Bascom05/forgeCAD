@@ -357,11 +357,20 @@ impl Session {
                 }
             }
             .ok_or("the part has no such sheet")?;
-            let bytes = if dwg { s.dwg() } else { s.dxf().map(String::into_bytes) }
-                .map_err(|e| format!("{}: no flat pattern: {e:?}", s.id))?;
+            let bytes = if dwg {
+                s.dwg()
+            } else {
+                s.dxf().map(String::into_bytes)
+            }
+            .map_err(|e| format!("{}: no flat pattern: {e:?}", s.id))?;
             return Ok(Reply {
                 ok: true,
-                text: format!("{} flat pattern, {} bytes of {}", s.id, bytes.len(), fmt.to_uppercase()),
+                text: format!(
+                    "{} flat pattern, {} bytes of {}",
+                    s.id,
+                    bytes.len(),
+                    fmt.to_uppercase()
+                ),
                 json: Json::obj(vec![
                     ("ok", true.into()),
                     ("sheet", s.id.as_str().into()),

@@ -114,8 +114,8 @@ impl Geom {
                     }
                 }
                 Prim::Segments { pts } => {
-                    let mut it2 = pts.chunks_exact(2);
-                    for ab in &mut it2 {
+                    let (pairs, _) = pts.as_chunks::<2>();
+                    for ab in pairs {
                         if !(ab.iter().all(|p| p[0].is_finite() && p[1].is_finite())) {
                             continue;
                         }
