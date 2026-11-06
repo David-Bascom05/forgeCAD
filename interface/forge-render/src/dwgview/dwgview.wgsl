@@ -44,7 +44,15 @@ fn colour(rgb: u32, f: u32) -> vec4<f32> {
     if (f & 2u) != 0u {
         return u.hovered;
     }
-    var c = unpack4x8unorm(rgb).rgb;
+    let c4 = unpack4x8unorm(rgb);
+    // a mask (wipeout, text background): the canvas's own colour (model: dwgdoc_ui's MODEL_BG)
+    if c4.a < 0.5 {
+        if u.paper != 0u {
+            return vec4<f32>(1.0, 1.0, 1.0, 1.0);
+        }
+        return vec4<f32>(0.1059, 0.1294, 0.1608, 1.0);
+    }
+    var c = c4.rgb;
     if u.paper != 0u && all(c > vec3<f32>(0.99)) {
         c = vec3<f32>(0.0);
     }

@@ -9,7 +9,8 @@ use crate::dwgview::Geom;
 use crate::dwgview::gpu::Words;
 use forge_dwg::file::Drawing;
 use forge_dwg::io::{Color, Href};
-use forge_dwg::scene::{BoxFont, Options, Scene, Space};
+use forge_dwg::fonts::FontSet;
+use forge_dwg::scene::{Options, Scene, Space};
 use forge_dwg::types::Data;
 use forge_dwg::version::Version;
 use std::collections::{BTreeSet, HashMap};
@@ -454,7 +455,7 @@ impl DwgDoc {
         let scene = forge_dwg::scene::build(
             &self.drawing,
             self.space_of(self.space),
-            &BoxFont,
+            fonts(),
             &Options::default(),
         );
         // a layer met for the first time takes the file's switches
@@ -1101,4 +1102,11 @@ mod tests {
         assert_eq!(colour_name(&Color::index(256)), "ByLayer");
         assert_eq!(colour_name(&Color::index(1)), "Red");
     }
+}
+
+/// The app's fonts, shared by every drawing (their glyphs are cached once): the built-in
+/// stand-ins for now; real SHX and TrueType files come from a fonts folder later.
+pub fn fonts() -> &'static FontSet {
+    static FONTS: std::sync::OnceLock<FontSet> = std::sync::OnceLock::new();
+    FONTS.get_or_init(FontSet::new)
 }
