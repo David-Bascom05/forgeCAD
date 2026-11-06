@@ -1342,8 +1342,8 @@ fn table_cell_io<S: Io>(s: &mut S, c: &mut TableCell) -> R<()> {
     s.bd(&mut c.rotation)?;
     s.h(&mut c.object)?;
     match c.kind {
-        // the text only when the cell has no 344 object
-        1 if c.object.is_null() => s.tv(&mut c.text)?,
+        // the text only when the cell has no 344 object, and before R2007 (its value has it since)
+        1 if c.object.is_null() && s.ver() < Version::R2007 => s.tv(&mut c.text)?,
         2 => {
             s.bd(&mut c.block_scale)?;
             s.b(&mut c.has_attrs)?;
@@ -1702,7 +1702,7 @@ mod tests {
             kind: 1,
             merged_width: 1,
             merged_height: 1,
-            text: st("abc", v),
+            text: if v < Version::R2007 { st("abc", v) } else { Str::default() },
             object: Href::NULL_HARD,
             overrides: Some(CellOverrides {
                 flags: 0x3_FFFF,
