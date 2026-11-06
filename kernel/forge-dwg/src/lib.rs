@@ -4,6 +4,7 @@
 //! Open Design Specification for .dwg files. `read` reads such a file back.
 
 pub mod bits;
+pub mod draft;
 pub mod edit;
 pub mod file;
 pub mod header;
