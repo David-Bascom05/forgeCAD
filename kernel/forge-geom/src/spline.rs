@@ -792,14 +792,36 @@ impl Spline {
                 *best = (d, t);
             }
         };
+        let seeds = |i: usize| {
+            let (a, b) = (self.breaks[i].max(range.lo), self.breaks[i + 1].min(range.hi));
+            [a, 0.5 * (a + b), b]
+        };
         take(range.lo, &mut best);
         take(range.hi, &mut best);
+        // the nearest box's seeds bound the answer; a piece whose box lies clearly past that bound
+        // holds no seed that could win or tie, so skipping it leaves the same seed winning
+        let mut nearest = (f64::INFINITY, None);
+        for (i, ..) in self.over(range) {
+            let g = box_gap_sq(&self.boxes[i], p);
+            if g < nearest.0 {
+                nearest = (g, Some(i));
+            }
+        }
+        let mut bound = best.0;
+        if let Some(i) = nearest.1 {
+            for t in seeds(i) {
+                bound = bound.min(self.point(t).distance_sq(p));
+            }
+        }
+        let bound = bound * (1.0 + 1e-9) + 1e-300;
         // the joints too: a foot exactly at one is no sign change inside either piece
         for (i, ..) in self.over(range) {
-            let (a, b) = (self.breaks[i].max(range.lo), self.breaks[i + 1].min(range.hi));
-            take(a, &mut best);
-            take(0.5 * (a + b), &mut best);
-            take(b, &mut best);
+            if box_gap_sq(&self.boxes[i], p) > bound {
+                continue;
+            }
+            for t in seeds(i) {
+                take(t, &mut best);
+            }
         }
         let (mut u, mut v) = ([0.0; WORK], [0.0; WORK]);
         let mut cuts = [0.0; WORK];
