@@ -7,6 +7,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+forge-font = { path = "../forge-font" }
 forge-math = { path = "../forge-math" }
 
 [lints]

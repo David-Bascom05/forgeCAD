@@ -6,6 +6,7 @@
 pub mod bits;
 pub mod edit;
 pub mod file;
+pub mod fonts;
 pub mod header;
 pub mod io;
 pub mod object;
