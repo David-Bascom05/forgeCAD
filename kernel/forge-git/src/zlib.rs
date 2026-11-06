@@ -434,6 +434,24 @@ pub fn deflate_zlib(data: &[u8]) -> Vec<u8> {
     o.out
 }
 
+/// `data` as a raw DEFLATE stream (no zlib wrapper: zip members, gzip bodies).
+pub fn deflate(data: &[u8]) -> Vec<u8> {
+    let mut o = BitOut {
+        out: vec![],
+        acc: 0,
+        n: 0,
+    };
+    deflate_raw(data, &mut o);
+    o.out
+}
+
+/// A raw DEFLATE stream's output, at most `cap` bytes.
+pub fn inflate(data: &[u8], cap: usize) -> Result<Vec<u8>, InflateError> {
+    let mut out = Vec::new();
+    inflate_into(data, cap, &mut out)?;
+    Ok(out)
+}
+
 fn hash3(d: &[u8], i: usize) -> usize {
     let v = (d[i] as u32) | ((d[i + 1] as u32) << 8) | ((d[i + 2] as u32) << 16);
     (v.wrapping_mul(0x9E37_79B1) >> (32 - HBITS)) as usize

@@ -302,3 +302,34 @@ fn gitignore_rules() {
         assert_eq!(o.success(), want, "git on {p}");
     }
 }
+
+#[test]
+fn git_inflates_our_large_objects() {
+    let w = tmp("large");
+    git(&w, &["init", "-q", "-b", "main"]);
+    let r = Repo::discover(&w).unwrap();
+    let mut s = 0x1234_5678_u64;
+    let mut rnd = || {
+        s ^= s << 13;
+        s ^= s >> 7;
+        s ^= s << 17;
+        s
+    };
+    let text: Vec<u8> = (0..400_000)
+        .map(|_| b"extrude fillet 12.5\n"[(rnd() % 20) as usize])
+        .collect();
+    let noise: Vec<u8> = (0..150_000).map(|_| rnd() as u8).collect();
+    let runs: Vec<u8> = (0..300_000).map(|i| (i / 1000) as u8).collect();
+    for data in [text, noise, runs] {
+        let id = r.odb.write(Kind::Blob, &data).unwrap();
+        let o = Command::new("git")
+            .arg("-C")
+            .arg(&w)
+            .args(["cat-file", "blob", &id.hex()])
+            .output()
+            .unwrap();
+        assert!(o.status.success());
+        assert_eq!(o.stdout, data);
+    }
+    git(&w, &["fsck", "--strict"]);
+}
