@@ -375,6 +375,11 @@ fn the_process_options_form_and_move_the_wall() {
     let base = src("cup");
     let plain = run(&base);
     let thinnest = |r: &Run| r.thermos[0].walls.as_ref().map(|w| w.min.0).expect("formed");
+    // the thinnest point may be one that stuck at the same place either way: the wall's mean too
+    let moved = |a: &Run, b: &Run| {
+        let mean = |r: &Run| r.thermos[0].walls.as_ref().map(|w| w.mean).expect("formed");
+        (thinnest(a) - thinnest(b)).abs() > 1e-6 || (mean(a) - mean(b)).abs() > 1e-6
+    };
     let with = |extra: &str, material: &str| {
         base.replace(
             "material: \"PETG\", tool: \"female\")",
@@ -388,15 +393,12 @@ fn the_process_options_form_and_move_the_wall() {
     ] {
         let r = run(&with(extra, "PETG"));
         assert!(r.ok(), "{extra}: {:?}", r.errors);
-        assert!(
-            (thinnest(&r) - thinnest(&plain)).abs() > 1e-6,
-            "{extra} moved nothing"
-        );
+        assert!(moved(&r, &plain), "{extra} moved nothing");
     }
     let hips = run(&with("", "HIPS"));
     let hot = run(&with(", heat_edge: 150", "HIPS"));
     assert!(hot.ok(), "{:?}", hot.errors);
-    assert!((thinnest(&hot) - thinnest(&hips)).abs() > 1e-6);
+    assert!(moved(&hot, &hips));
     let refused = run(&with(", heat_edge: 150", "PETG"));
     assert!(!refused.ok());
 }
