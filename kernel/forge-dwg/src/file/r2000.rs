@@ -112,8 +112,17 @@ pub fn class_io<S: Io>(c: &mut Class, s: &mut S) -> R<()> {
     s.bs(&mut c.item)?;
     if s.ver() >= Version::R2004 {
         s.bl(&mut c.count)?;
-        s.bs(&mut c.dwg_version)?;
-        s.bs(&mut c.maint_version)?;
+        if s.ver() >= Version::R2007 {
+            // BLs from R2007 (the same bits as R2004's BSs for small values)
+            let (mut a, mut b) = (c.dwg_version as i32, c.maint_version as i32);
+            s.bl(&mut a)?;
+            s.bl(&mut b)?;
+            c.dwg_version = a as i16;
+            c.maint_version = b as i16;
+        } else {
+            s.bs(&mut c.dwg_version)?;
+            s.bs(&mut c.maint_version)?;
+        }
         s.bl(&mut c.unknown[0])?;
         s.bl(&mut c.unknown[1])?;
     }
