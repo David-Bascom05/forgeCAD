@@ -6,6 +6,7 @@ mod entities_b;
 mod objects;
 mod objects_b;
 mod tables;
+mod tables_b;
 
 pub use entities::*;
 pub use entities_a::*;
@@ -13,6 +14,7 @@ pub use entities_b::*;
 pub use objects::*;
 pub use objects_b::*;
 pub use tables::*;
+pub use tables_b::*;
 
 use crate::bits::R;
 use crate::io::Io;
@@ -167,6 +169,13 @@ data! {
         FieldList,
         GeoData,
         PlotSettings,
+        CellStyleMap,
+        MLeader,
+        MLeaderStyle,
+        Table,
+        TableContent,
+        TableGeometry,
+        TableStyle,
     }
     classes {
         "ACAD_PROXY_ENTITY" => ProxyEntity,
@@ -196,5 +205,12 @@ data! {
         "LAYOUT" => Layout,
         "LWPOLYLINE" => LwPolyline,
         "WIPEOUT" => Wipeout,
+        "ACAD_TABLE" => Table,
+        "CELLSTYLEMAP" => CellStyleMap,
+        "MLEADERSTYLE" => MLeaderStyle,
+        "MULTILEADER" => MLeader,
+        "TABLECONTENT" => TableContent,
+        "TABLEGEOMETRY" => TableGeometry,
+        "TABLESTYLE" => TableStyle,
     }
 }
