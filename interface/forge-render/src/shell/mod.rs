@@ -14,8 +14,14 @@ pub mod dialog;
 pub mod dim;
 pub mod docs;
 pub mod drawing;
+pub mod dwgcmd;
+pub mod dwgcmds;
+#[cfg(test)]
+mod dwgcmd_tests;
 pub mod dwgdoc;
+mod dwgdoc_edit_ui;
 mod dwgdoc_ui;
+pub mod dwgprops;
 pub mod fg;
 pub mod fgasm;
 pub mod fgdialog;

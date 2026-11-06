@@ -574,6 +574,14 @@ impl Shell {
                     .x
                     + 16.0,
             );
+            // a DWG's Layers group: room for its current-layer dropdown (dwgdoc_ui draws it)
+            let width = if self.dwgdoc.is_some() && g.name == "Layers" {
+                let slot = Rect::from_min_size(pos2(gx + width, y + 10.0), vec2(200.0, 26.0));
+                self.places.push(("dwg:ribbon:layer".into(), slot));
+                width + 210.0
+            } else {
+                width
+            };
             let mut x = gx + 6.0;
             for (tool, w) in g.big.iter().zip(&bigs) {
                 if tool.name == super::visual_style::BUTTON {

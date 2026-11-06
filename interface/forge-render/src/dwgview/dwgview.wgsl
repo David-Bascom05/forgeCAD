@@ -21,7 +21,8 @@ struct U {
 @group(0) @binding(0) var<uniform> u: U;
 // bit 0: the layer is shown (on and thawed)
 @group(0) @binding(1) var<storage, read> layers: array<u32>;
-// bit 0: the item's entity is selected; bit 1: under the pointer
+// bit 0: the item's entity is selected; bit 1: under the pointer; bit 2: gone (edited since:
+// drawn from the edit's own scene, or erased)
 @group(0) @binding(2) var<storage, read> flags: array<u32>;
 
 struct Out {
@@ -85,6 +86,9 @@ fn vs_line(
         return hidden();
     }
     let f = flags[item];
+    if (f & 4u) != 0u {
+        return hidden();
+    }
     var w = 1.0;
     if u.lw > 0.0 {
         w = max(1.0, round(weight * u.lw));
@@ -129,9 +133,13 @@ fn vs_fill(
     if (layers[layer] & 1u) == 0u {
         return hidden();
     }
+    let f = flags[item];
+    if (f & 4u) != 0u {
+        return hidden();
+    }
     var o: Out;
     o.pos = clip(to_px(p));
-    o.colour = colour(rgb, flags[item]);
+    o.colour = colour(rgb, f);
     return o;
 }
 

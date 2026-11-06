@@ -2,9 +2,14 @@
 //! Insert, Annotate, View, Manage and Output tabs; the Properties palette on the left and the
 //! Layers palette on the right; the canvas; the command line docked under it; the Model and
 //! layout tabs with the cursor's coordinates and the drafting toggles; the document tabs and the
-//! status bar.
+//! status bar. The canvas feeds the drafting commands (`dwgcmd.rs`) its clicks, windows and the
+//! cursor; the palettes and the ribbon's layer dropdown edit the drawing (`dwgprops.rs`); what
+//! the commands draw over the canvas is in `dwgdoc_edit_ui.rs`.
 
+use super::dwgcmd::{Inp, want};
 use super::dwgdoc::{Cmd, DwgDoc, Press, Run, TOGGLES, View};
+use super::dwgprops::Switch;
+use forge_dwg::draft::V2;
 use super::theme::{mono, sans, semi};
 use super::{Action, Shell, icons};
 use crate::dwgview::gpu::{Look, Paint};
@@ -175,7 +180,7 @@ pub(super) fn tool_on(d: &DwgDoc, cmd: &str) -> bool {
     }
 }
 
-fn to_world(v: &View, canvas: Rect, p: Pos2) -> [f64; 2] {
+pub(super) fn to_world(v: &View, canvas: Rect, p: Pos2) -> [f64; 2] {
     let c = canvas.center();
     [
         v.center[0] + (p.x - c.x) as f64 / v.scale,
@@ -183,7 +188,7 @@ fn to_world(v: &View, canvas: Rect, p: Pos2) -> [f64; 2] {
     ]
 }
 
-fn to_screen(v: &View, canvas: Rect, w: [f64; 2]) -> Pos2 {
+pub(super) fn to_screen(v: &View, canvas: Rect, w: [f64; 2]) -> Pos2 {
     let c = canvas.center();
     pos2(
         c.x + ((w[0] - v.center[0]) * v.scale) as f32,
@@ -230,6 +235,7 @@ impl Shell {
         self.tabs_row(ui, s.width());
         self.dwg_keys(&ctx);
         self.ribbon(ui, s.width());
+        self.dwg_layer_dropdown(ui);
         self.dwg_canvas(ui, canvas);
         if props {
             self.dwg_props(ui, Rect::from_min_max(pos2(0.0, top), pos2(left, model_y)));
@@ -244,6 +250,8 @@ impl Shell {
         );
         self.dwg_bottom(ui, s, bars);
         self.dwg_warnings(&ctx);
+        self.dwg_osnap_window(&ctx);
+        self.dwg_mtext_window(&ctx);
         self.resize_edges(ui, s);
         self.menus(&ctx);
         // the ribbon's and the File menu's commands are the document's own
@@ -258,7 +266,7 @@ impl Shell {
         self.out.retain(|a| !matches!(a, Action::DwgDoc(_)));
         for c in asked {
             match c {
-                Cmd::Run(name) => self.dwg_run(name),
+                Cmd::Run(name) => self.dwg_button(name),
             }
         }
         let _ = t;
@@ -282,6 +290,16 @@ impl Shell {
         }
     }
 
+    /// A ribbon button's command: the one running called off first.
+    pub(super) fn dwg_button(&mut self, name: &str) {
+        if let Some(d) = &mut self.dwgdoc
+            && d.ed.active()
+        {
+            d.cancel_command();
+        }
+        self.dwg_run(name);
+    }
+
     /// The keyboard goes to the command line whenever nothing else holds it, as AutoCAD's does.
     fn dwg_keys(&mut self, ctx: &egui::Context) {
         if ctx.egui_wants_keyboard_input() {
@@ -293,14 +311,34 @@ impl Shell {
         let mut toggles = vec![];
         let mut escape = false;
         let mut save = false;
+        let mut undo = None;
         {
             let Some(d) = &mut self.dwgdoc else { return };
-            d.space_pan = space_held && d.input.is_empty();
+            let active = d.ed.active();
+            let wants_text = d.ed.prompt.as_ref().is_some_and(|p| p.wants(want::TEXT));
+            // Space pans (held, the left button dragging) only with no command running
+            d.space_pan = space_held && d.input.is_empty() && !active;
             for e in &events {
                 match e {
-                    egui::Event::Text(s) if s != " " && !s.chars().any(char::is_control) => {
+                    egui::Event::Text(s) if s == " " => {
+                        if wants_text {
+                            d.input.push(' ');
+                        }
+                    }
+                    egui::Event::Text(s) if !s.chars().any(char::is_control) => {
                         d.input.push_str(s);
                         d.recall = None;
+                    }
+                    egui::Event::Key {
+                        key: egui::Key::Space,
+                        pressed: false,
+                        ..
+                    } => {
+                        // Space let go with no pan, no command: the last command again
+                        if !active && !wants_text && d.input.is_empty() && !d.space_panned {
+                            submit = Some(String::new());
+                        }
+                        d.space_panned = false;
                     }
                     egui::Event::Key {
                         key,
@@ -311,16 +349,21 @@ impl Shell {
                         use egui::Key as K;
                         match key {
                             K::S if modifiers.command => save = true,
+                            K::Z if modifiers.command => undo = Some(true),
+                            K::Y if modifiers.command => undo = Some(false),
                             K::Num1 if modifiers.command => {
                                 d.show_props = !d.show_props;
                             }
                             K::Enter => submit = Some(std::mem::take(&mut d.input)),
-                            K::Space if !d.input.is_empty() => submit = Some(std::mem::take(&mut d.input)),
+                            // Space is Enter for a command (but a space in its text)
+                            K::Space if !wants_text && (active || !d.input.is_empty()) => {
+                                submit = Some(std::mem::take(&mut d.input))
+                            }
                             K::Backspace => {
                                 d.input.pop();
                             }
                             K::Escape => escape = true,
-                            K::Delete if d.input.is_empty() && !d.selected.is_empty() => {
+                            K::Delete if d.input.is_empty() && !d.selected.is_empty() && !active => {
                                 submit = Some("ERASE".into());
                             }
                             K::ArrowUp | K::ArrowDown if !d.typed.is_empty() => {
@@ -339,6 +382,7 @@ impl Shell {
                             K::F8 => toggles.push("ORTHO"),
                             K::F9 => toggles.push("SNAP"),
                             K::F10 => toggles.push("POLAR"),
+                            K::F12 => toggles.push("DYN"),
                             _ => {}
                         }
                     }
@@ -351,17 +395,22 @@ impl Shell {
                 self.file_menu = false;
             } else if let Some(d) = &mut self.dwgdoc {
                 d.escape();
+                d.refresh_grips();
             }
         }
         if save {
             self.dwg_run("QSAVE");
+        }
+        if let (Some(u), Some(d)) = (undo, &mut self.dwgdoc) {
+            d.say(if u { "Command: U" } else { "Command: REDO" });
+            if u { d.undo() } else { d.redo() }
         }
         for name in toggles {
             self.dwg_toggle(name);
         }
         if let Some(line) = submit {
             if let Some(d) = &mut self.dwgdoc {
-                if !line.trim().is_empty() {
+                if !line.trim().is_empty() && !d.ed.active() {
                     d.typed.push(line.trim().to_string());
                 }
                 d.recall = None;
@@ -372,13 +421,59 @@ impl Shell {
 
     fn dwg_toggle(&mut self, name: &str) {
         let Some(d) = &mut self.dwgdoc else { return };
-        if name == "LWT" {
-            d.lwt = !d.lwt;
-            d.say(format!("<Lineweight {}>", if d.lwt { "on" } else { "off" }));
-        } else {
-            d.say(format!(
-                "<{name}> not yet: drafting aids come with the editing commands"
-            ));
+        let st = &mut d.ed.set;
+        let (word, on) = match name {
+            "LWT" => {
+                d.lwt = !d.lwt;
+                ("Lineweight", d.lwt)
+            }
+            "SNAP" => {
+                st.snap = !st.snap;
+                ("Snap", st.snap)
+            }
+            "GRID" => {
+                st.grid = !st.grid;
+                ("Grid", st.grid)
+            }
+            "ORTHO" => {
+                st.ortho = !st.ortho;
+                if st.ortho {
+                    st.polar = false;
+                }
+                ("Ortho", st.ortho)
+            }
+            "POLAR" => {
+                st.polar = !st.polar;
+                if st.polar {
+                    st.ortho = false;
+                }
+                ("Polar", st.polar)
+            }
+            "OSNAP" => {
+                st.osnap = !st.osnap;
+                ("Osnap", st.osnap)
+            }
+            "DYN" => {
+                st.dyn_input = !st.dyn_input;
+                ("Dynamic Input", st.dyn_input)
+            }
+            _ => return,
+        };
+        d.say(format!("<{word} {}>", if on { "on" } else { "off" }));
+    }
+
+    /// Is a status toggle on?
+    fn dwg_toggle_on(d: &DwgDoc, name: &str) -> bool {
+        let st = &d.ed.set;
+        match name {
+            "LWT" => d.lwt,
+            "SNAP" => st.snap,
+            "GRID" => st.grid,
+            "ORTHO" => st.ortho,
+            "POLAR" => st.polar,
+            "OSNAP" => st.osnap,
+            "DYN" => st.dyn_input,
+            _ => false,
         }
     }
 
@@ -416,6 +511,9 @@ impl Shell {
             let dl = resp.drag_delta();
             v.center[0] -= dl.x as f64 / v.scale;
             v.center[1] += dl.y as f64 / v.scale;
+            if d.space_pan {
+                d.space_panned = true;
+            }
         }
         d.view = Some(v);
         if resp.double_clicked_by(egui::PointerButton::Middle) {
@@ -431,25 +529,40 @@ impl Shell {
             p.rect_filled(r.translate(vec2(4.0, 4.0)), 0.0, Color32::from_black_alpha(90));
             p.rect_filled(r, 0.0, Color32::WHITE);
         }
-        let (layers, flags) = d.words();
         let px_per_mm = 96.0 / 25.4;
+        let look = Look {
+            center: v.center,
+            scale: v.scale,
+            lw_per_mm: if d.lwt { px_per_mm } else { 0.0 },
+            paper,
+            selected: if paper { SELECT_PAPER } else { SELECT },
+            hovered: HOVER,
+        };
+        let (layers, flags) = d.words();
         p.add(egui_wgpu::Callback::new_paint_callback(
             canvas,
             Paint {
                 geom: d.geom.clone(),
-                look: Look {
-                    center: v.center,
-                    scale: v.scale,
-                    lw_per_mm: if d.lwt { px_per_mm } else { 0.0 },
-                    paper,
-                    selected: if paper { SELECT_PAPER } else { SELECT },
-                    hovered: HOVER,
-                },
+                look,
                 rect: canvas,
                 layers,
                 flags,
             },
         ));
+        // what edits changed, over the rest
+        if d.delta.n_items() > 0 {
+            let (layers, flags) = d.delta_words();
+            p.add(egui_wgpu::Callback::new_paint_callback(
+                canvas,
+                Paint {
+                    geom: d.delta.clone(),
+                    look,
+                    rect: canvas,
+                    layers,
+                    flags,
+                },
+            ));
+        }
 
         // what's under the pointer, the press and the window
         let ink = if paper {
@@ -459,13 +572,18 @@ impl Shell {
         };
         let hover = resp.hover_pos().filter(|_| !panning);
         d.cursor = resp.hover_pos().map(|hp| to_world(&v, canvas, hp));
-        let tol = PICKBOX as f64 / v.scale;
         let shift = ui.input(|i| i.modifiers.shift);
-        let geom = d.geom.clone();
-        let pick = |d: &DwgDoc, at: Pos2| {
-            let shown = |l: usize| d.layer_shown(l);
-            geom.pick(to_world(&v, canvas, at), tol, &shown)
-        };
+        d.ed.shift = shift;
+        if let Some(hp) = hover {
+            let w = V2::from(to_world(&v, canvas, hp));
+            if d.ed.raw != Some(w) || d.ed.px != v.scale {
+                d.hover(w, v.scale);
+            }
+        }
+        let tol = PICKBOX as f64 / v.scale;
+        let prompt = d.ed.prompt.clone();
+        let selecting = prompt.as_ref().is_none_or(|p| p.wants(want::SEL) || p.wants(want::PICK));
+        let pick = |d: &DwgDoc, at: Pos2| d.viewq().pick(V2::from(to_world(&v, canvas, at)), tol);
         if resp.drag_started_by(egui::PointerButton::Primary)
             && !d.space_pan
             && let Some(at) = resp.interact_pointer_pos()
@@ -480,17 +598,25 @@ impl Shell {
         let pointer = ui.input(|i| i.pointer.interact_pos());
         let mut window_now = None;
         if let (Some(pr), Some(now)) = (d.press, pointer) {
-            if (now - pr.at).length() > DRAG_PT {
+            if (now - pr.at).length() > DRAG_PT && selecting {
                 window_now = Some((pr.at, now));
             }
             if resp.drag_stopped_by(egui::PointerButton::Primary) || !ui.input(|i| i.pointer.primary_down()) {
                 d.press = None;
                 if let Some((a, b)) = window_now {
                     let crossing = b.x < a.x;
-                    let shown = |l: usize| d.layer_shown(l);
-                    let got =
-                        geom.select_box(to_world(&v, canvas, a), to_world(&v, canvas, b), crossing, &shown);
-                    d.select(&got, !shift);
+                    let (wa, wb) = (V2::from(to_world(&v, canvas, a)), V2::from(to_world(&v, canvas, b)));
+                    if d.ed.active() {
+                        d.window(wa, wb, crossing);
+                    } else {
+                        let got: Vec<u32> = d
+                            .viewq()
+                            .select_box(wa, wb, crossing)
+                            .into_iter()
+                            .filter(|h| !d.locked(*h))
+                            .collect();
+                        d.choose(&got, !shift);
+                    }
                     window_now = None;
                 }
             }
@@ -499,17 +625,29 @@ impl Shell {
             && !d.space_pan
             && let Some(at) = resp.interact_pointer_pos()
         {
-            match pick(d, at) {
-                Some(e) => {
-                    let chosen = d.selected.contains(&e);
-                    d.select(&[e], !(shift && chosen));
+            let w = V2::from(to_world(&v, canvas, at));
+            if d.ed.active() {
+                d.click(w, shift);
+            } else if !d.click(w, shift) {
+                match pick(d, at).filter(|h| !d.locked(*h)) {
+                    Some(e) => {
+                        let chosen = d.selected.contains(&e);
+                        d.choose(&[e], !(shift && chosen));
+                    }
+                    None if !shift => {
+                        d.clear_selection();
+                        d.refresh_grips();
+                    }
+                    None => {}
                 }
-                None if !shift => d.clear_selection(),
-                None => {}
             }
         }
+        // a right click: Enter, as AutoCAD's (with no shortcut menu here)
+        if resp.clicked_by(egui::PointerButton::Secondary) && d.ed.active() {
+            d.enter();
+        }
         let over = match (hover, window_now) {
-            (Some(hp), None) => pick(d, hp),
+            (Some(hp), None) if selecting => pick(d, hp),
             _ => None,
         };
         d.set_hover(over);
@@ -523,16 +661,11 @@ impl Shell {
                 dashed_rect(&p, r, Stroke::new(1.0, CROSSING));
             }
         }
+        let wants_point = prompt.as_ref().is_some_and(|p| p.wants(want::POINT));
+        let pick_only = prompt.as_ref().is_some_and(|p| !p.wants(want::POINT));
 
         // the UCS icon, lower left
         let o = pos2(canvas.left() + 22.0, canvas.bottom() - 22.0);
-        let ucs = if paper {
-            Color32::from_gray(30)
-        } else {
-            Color32::from_gray(200)
-        };
-        let ucs_ink = if paper { Color32::from_gray(235) } else { ucs };
-        let _ = ucs_ink;
         p.line_segment(
             [o, o + vec2(34.0, 0.0)],
             Stroke::new(1.5, Color32::from_rgb(0xE0, 0x55, 0x4A)),
@@ -562,30 +695,46 @@ impl Shell {
             StrokeKind::Middle,
         );
 
-        // AutoCAD's crosshairs and pickbox in place of the pointer
+        // the drafting overlay: rubber band, grips, snaps, tracking, dynamic input
+        let has_doc = self.dwgdoc.is_some();
+        if has_doc {
+            self.dwg_overlay(&p, canvas, &v, paper, hover);
+        }
+        let Some(d) = &mut self.dwgdoc else { return };
+
+        // AutoCAD's crosshairs and pickbox in place of the pointer: the crosshairs where a
+        // point is wanted, the pickbox alone where an object is
         if let Some(hp) = resp.hover_pos() {
             if !panning {
                 ctx.set_cursor_icon(egui::CursorIcon::None);
                 let ink = if paper { Color32::from_gray(25) } else { ink };
                 let st = Stroke::new(1.0, ink);
-                let at = pos2(hp.x.round() + 0.5, hp.y.round() + 0.5);
-                p.line_segment([at - vec2(CROSSHAIR, 0.0), at - vec2(PICKBOX, 0.0)], st);
-                p.line_segment([at + vec2(PICKBOX, 0.0), at + vec2(CROSSHAIR, 0.0)], st);
-                p.line_segment([at - vec2(0.0, CROSSHAIR), at - vec2(0.0, PICKBOX)], st);
-                p.line_segment([at + vec2(0.0, PICKBOX), at + vec2(0.0, CROSSHAIR)], st);
-                p.rect_stroke(
-                    Rect::from_center_size(at, vec2(PICKBOX * 2.0, PICKBOX * 2.0)),
-                    0.0,
-                    st,
-                    StrokeKind::Middle,
-                );
+                // the crosshairs on the snapped point
+                let at = match (wants_point, d.ed.cursor) {
+                    (true, Some(c)) if d.ed.track.is_some() => to_screen(&v, canvas, c.arr()),
+                    _ => hp,
+                };
+                let at = pos2(at.x.round() + 0.5, at.y.round() + 0.5);
+                let gap = if wants_point { 0.0 } else { PICKBOX };
+                if !pick_only {
+                    p.line_segment([at - vec2(CROSSHAIR, 0.0), at - vec2(gap, 0.0)], st);
+                    p.line_segment([at + vec2(gap, 0.0), at + vec2(CROSSHAIR, 0.0)], st);
+                    p.line_segment([at - vec2(0.0, CROSSHAIR), at - vec2(0.0, gap)], st);
+                    p.line_segment([at + vec2(0.0, gap), at + vec2(0.0, CROSSHAIR)], st);
+                }
+                if !wants_point || pick_only {
+                    p.rect_stroke(
+                        Rect::from_center_size(at, vec2(PICKBOX * 2.0, PICKBOX * 2.0)),
+                        0.0,
+                        st,
+                        StrokeKind::Middle,
+                    );
+                }
             } else {
                 ctx.set_cursor_icon(egui::CursorIcon::Grabbing);
             }
         }
-        if !d.geom.scene.items.is_empty() || paper {
-            // nothing to say
-        } else {
+        if d.geom.scene.items.is_empty() && d.delta.n_items() == 0 && !paper {
             p.text(
                 canvas.center(),
                 Align2::CENTER_CENTER,
@@ -631,7 +780,7 @@ impl Shell {
     }
 
     /// The Properties palette: the selection's type, layer, colour, line type, lineweight and
-    /// geometry, read only for now.
+    /// geometry; a field that can change is clicked to type it, or picked from its list.
     fn dwg_props(&mut self, ui: &mut Ui, r: Rect) {
         let t = self.theme;
         let p = ui.painter().clone();
@@ -644,6 +793,13 @@ impl Shell {
         }
         let Some(d) = &self.dwgdoc else { return };
         let rows = d.properties();
+        let editable: Vec<bool> = rows.iter().map(|(_, k, _)| d.prop_editable(k)).collect();
+        let choices: Vec<Option<Vec<String>>> = rows
+            .iter()
+            .zip(&editable)
+            .map(|((_, k, _), e)| if *e { d.prop_choices(k) } else { None })
+            .collect();
+        let mut editing = d.prop_edit.clone();
         let what = match d.selected.len() {
             0 => "No selection".to_string(),
             1 => rows.first().map_or_else(String::new, |r| r.2.clone()),
@@ -672,6 +828,9 @@ impl Shell {
         let body = Rect::from_min_max(pos2(r.left(), bar.bottom() + 6.0), r.max);
         let split = r.width() * 0.4;
         let mut placed = vec![];
+        let mut commit: Option<(String, String)> = None;
+        let mut start: Option<(String, String)> = None;
+        let mut cancel = false;
         ui.scope_builder(egui::UiBuilder::new().max_rect(body), |ui| {
             egui::ScrollArea::vertical()
                 .id_salt("dwg-props")
@@ -679,7 +838,7 @@ impl Shell {
                 .show(ui, |ui| {
                     let w = body.width();
                     let mut group = "";
-                    for (g, k, v) in &rows {
+                    for (i, (g, k, v)) in rows.iter().enumerate() {
                         if *g != group {
                             group = g;
                             let (rr, _) = ui.allocate_exact_size(vec2(w, 24.0), Sense::hover());
@@ -692,8 +851,10 @@ impl Shell {
                                 t.ink,
                             );
                         }
-                        let (rr, resp) = ui.allocate_exact_size(vec2(w, 22.0), Sense::hover());
-                        let pp = ui.painter();
+                        let can = editable[i];
+                        let sense = if can { Sense::click() } else { Sense::hover() };
+                        let (rr, resp) = ui.allocate_exact_size(vec2(w, 22.0), sense);
+                        let pp = ui.painter().clone();
                         if resp.hovered() {
                             pp.rect_filled(rr, 0.0, t.hover);
                         }
@@ -710,16 +871,54 @@ impl Shell {
                             Align2::LEFT_CENTER,
                             k,
                             sans(12.0),
-                            t.ink2,
+                            if can { t.ink } else { t.ink2 },
                         );
                         pp.vline(rr.left() + split, rr.y_range(), Stroke::new(1.0, t.line));
-                        pp.with_clip_rect(val_r).text(
-                            pos2(val_r.left(), rr.center().y),
-                            Align2::LEFT_CENTER,
-                            v,
-                            mono(12.0),
-                            t.ink,
-                        );
+                        let typing = editing.as_ref().is_some_and(|e| e.0 == *k);
+                        if typing {
+                            let buf = &mut editing.as_mut().expect("typing").1;
+                            let te = ui.put(
+                                val_r.shrink2(vec2(0.0, 1.0)),
+                                egui::TextEdit::singleline(buf).font(mono(12.0)),
+                            );
+                            if !te.has_focus() && !te.lost_focus() {
+                                te.request_focus();
+                            }
+                            if te.lost_focus() {
+                                if ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                                    commit = Some((k.clone(), buf.clone()));
+                                } else {
+                                    cancel = true;
+                                }
+                            }
+                            placed.push((format!("dwg:propedit:{k}"), val_r));
+                        } else if let Some(cs) = &choices[i] {
+                            ui.scope_builder(egui::UiBuilder::new().max_rect(val_r), |ui| {
+                                egui::ComboBox::from_id_salt(("dwg-prop", k.as_str()))
+                                    .width(val_r.width() - 4.0)
+                                    .selected_text(egui::RichText::new(v).font(mono(12.0)))
+                                    .show_ui(ui, |ui| {
+                                        for c in cs {
+                                            let it = ui.selectable_label(c == v, c);
+                                            placed.push((format!("dwg:propchoice:{k}:{c}"), it.rect));
+                                            if it.clicked() {
+                                                commit = Some((k.clone(), c.clone()));
+                                            }
+                                        }
+                                    });
+                            });
+                        } else {
+                            pp.with_clip_rect(val_r).text(
+                                pos2(val_r.left(), rr.center().y),
+                                Align2::LEFT_CENTER,
+                                v,
+                                mono(12.0),
+                                t.ink,
+                            );
+                            if can && resp.clicked() {
+                                start = Some((k.clone(), v.trim_end_matches('\u{b0}').to_string()));
+                            }
+                        }
                         pp.hline(
                             rr.x_range(),
                             rr.bottom() - 0.5,
@@ -733,10 +932,24 @@ impl Shell {
                 });
         });
         self.places.extend(placed);
+        let Some(d) = &mut self.dwgdoc else { return };
+        if let Some((k, v)) = commit {
+            d.prop_edit = None;
+            if let Err(e) = d.set_prop(&k, &v) {
+                d.say(format!("Can't set {k}: {e}"));
+            }
+        } else if cancel {
+            d.prop_edit = None;
+        } else if let Some(s) = start {
+            d.prop_edit = Some(s);
+        } else if editing.is_some() {
+            d.prop_edit = editing;
+        }
     }
 
-    /// The Layers palette: each layer's on and freeze switches (shown here only, not written),
-    /// its lock, colour, line type and lineweight.
+    /// The Layers palette: each layer's on, freeze and lock switches and its colour (each a
+    /// change to the drawing, undoable), its line type; New, Delete and Set current; a double
+    /// click makes a layer current.
     fn dwg_layers(&mut self, ui: &mut Ui, r: Rect) {
         let t = self.theme;
         let p = ui.painter().clone();
@@ -749,11 +962,36 @@ impl Shell {
         }
         let Some(d) = &self.dwgdoc else { return };
         let rows = d.layer_rows();
-        // the columns' heads
-        let cols = Rect::from_min_size(
+        let chosen = d.layer_sel;
+        // the tools: new, delete, current
+        let tools_r = Rect::from_min_size(
             pos2(r.left() + 1.0, r.top() + super::HEAD_H + 1.0),
-            vec2(r.width() - 1.0, 22.0),
+            vec2(r.width() - 1.0, 28.0),
         );
+        let mut act: Option<&str> = None;
+        let mut placed = vec![];
+        let mut x = tools_r.left() + 6.0;
+        for (word, icon, key) in [
+            ("New layer", "new", "new"),
+            ("Delete layer", "delete", "delete"),
+            ("Set current", "check", "current"),
+        ] {
+            let b = Rect::from_min_size(pos2(x, tools_r.top() + 4.0), vec2(22.0, 22.0));
+            let resp = ui
+                .interact(b, ui.scope_id().with(("dwg-layer-tool", key)), Sense::click())
+                .on_hover_text(word);
+            if resp.hovered() {
+                p.rect_filled(b, 3.0, t.hover);
+            }
+            icons::draw(&p, pos2(b.left() + 3.0, b.top() + 3.0), 16.0, icon, 1.4, t.ink);
+            placed.push((format!("dwg:layertool:{key}"), b));
+            if resp.clicked() {
+                act = Some(key);
+            }
+            x += 26.0;
+        }
+        // the columns' heads
+        let cols = Rect::from_min_size(pos2(r.left() + 1.0, tools_r.bottom()), vec2(r.width() - 1.0, 22.0));
         p.rect_filled(cols, 0.0, t.raised);
         let x0 = cols.left();
         for (x, word) in [
@@ -772,8 +1010,10 @@ impl Shell {
             );
         }
         let body = Rect::from_min_max(pos2(r.left() + 1.0, cols.bottom()), r.max);
-        let mut flips = vec![];
-        let mut placed = vec![];
+        let mut flips: Vec<(u32, Switch)> = vec![];
+        let mut colour: Option<(u32, i16)> = None;
+        let mut pick_row = None;
+        let mut make_current = None;
         ui.scope_builder(egui::UiBuilder::new().max_rect(body), |ui| {
             egui::ScrollArea::vertical()
                 .id_salt("dwg-layers")
@@ -781,71 +1021,86 @@ impl Shell {
                 .show(ui, |ui| {
                     let w = body.width();
                     for row in &rows {
-                        let (rr, resp) = ui.allocate_exact_size(vec2(w, 24.0), Sense::hover());
+                        let (rr, resp) = ui.allocate_exact_size(vec2(w, 24.0), Sense::click());
                         let pp = ui.painter().clone();
-                        if resp.hovered() {
+                        if chosen == Some(row.handle) {
+                            pp.rect_filled(rr, 0.0, t.on.gamma_multiply(0.35));
+                        } else if resp.hovered() {
                             pp.rect_filled(rr, 0.0, t.hover);
+                        }
+                        if resp.double_clicked() {
+                            make_current = Some(row.handle);
+                        } else if resp.clicked() {
+                            pick_row = Some(row.handle);
                         }
                         let dim = !(row.on && !row.frozen);
                         let ink = if dim { t.ink2 } else { t.ink };
-                        let mut switch =
-                            |k: usize, icon: &str, tip: &str, name: &str, click: Option<bool>| {
-                                let b = Rect::from_min_size(
-                                    pos2(rr.left() + 6.0 + k as f32 * 24.0, rr.top() + 2.0),
-                                    vec2(20.0, 20.0),
-                                );
-                                let sense = if click.is_some() {
-                                    Sense::click()
-                                } else {
-                                    Sense::hover()
-                                };
-                                let br = ui
-                                    .interact(b, ui.scope_id().with((name, row.index)), sense)
-                                    .on_hover_text(tip);
-                                if br.hovered() && click.is_some() {
-                                    pp.rect_filled(b, 3.0, t.raised);
-                                }
-                                icons::draw(&pp, pos2(b.left() + 2.0, b.top() + 2.0), 16.0, icon, 1.4, ink);
-                                placed.push((format!("dwg:layer:{name}:{}", row.name), b));
-                                if br.clicked()
-                                    && let Some(f) = click
-                                {
-                                    flips.push((row.index, f));
-                                }
-                            };
+                        let mut switch = |k: usize, icon: &str, tip: &str, name: &str, which: Switch| {
+                            let b = Rect::from_min_size(
+                                pos2(rr.left() + 6.0 + k as f32 * 24.0, rr.top() + 2.0),
+                                vec2(20.0, 20.0),
+                            );
+                            let br = ui
+                                .interact(b, ui.scope_id().with((name, row.handle)), Sense::click())
+                                .on_hover_text(tip);
+                            if br.hovered() {
+                                pp.rect_filled(b, 3.0, t.raised);
+                            }
+                            icons::draw(&pp, pos2(b.left() + 2.0, b.top() + 2.0), 16.0, icon, 1.4, ink);
+                            placed.push((format!("dwg:layer:{name}:{}", row.name), b));
+                            if br.clicked() {
+                                flips.push((row.handle, which));
+                            }
+                        };
                         switch(
                             0,
                             if row.on { "eye" } else { "hide" },
-                            if row.on {
-                                "On: click to turn off"
-                            } else {
-                                "Off: click to turn on"
-                            },
+                            if row.on { "On: click to turn off" } else { "Off: click to turn on" },
                             "on",
-                            Some(false),
+                            Switch::On,
                         );
                         switch(
                             1,
                             if row.frozen { "freeze" } else { "sun" },
-                            if row.frozen {
-                                "Frozen: click to thaw"
-                            } else {
-                                "Thawed: click to freeze"
-                            },
+                            if row.frozen { "Frozen: click to thaw" } else { "Thawed: click to freeze" },
                             "freeze",
-                            Some(true),
+                            Switch::Freeze,
                         );
                         switch(
                             2,
                             if row.locked { "lock" } else { "unlock" },
-                            if row.locked { "Locked" } else { "Unlocked" },
+                            if row.locked { "Locked: click to unlock" } else { "Unlocked: click to lock" },
                             "lock",
-                            None,
+                            Switch::Lock,
                         );
-                        let sw = Rect::from_min_size(
-                            pos2(rr.left() + 78.0, rr.center().y - 6.0),
-                            vec2(12.0, 12.0),
-                        );
+                        // the colour: a swatch that picks another
+                        let sw = Rect::from_min_size(pos2(rr.left() + 78.0, rr.center().y - 6.0), vec2(12.0, 12.0));
+                        {
+                            let id = ui.make_persistent_id(("dwg-layer-colour", row.handle));
+                            let sr = ui
+                                .interact(sw, id.with("swatch"), Sense::click())
+                                .on_hover_text(format!("Color {}: click to change", row.aci));
+                            egui::Popup::menu(&sr).id(id).show(|ui| {
+                                ui.label(egui::RichText::new("Layer colour").font(sans(11.0)));
+                                for line in [[1i16, 2, 3, 4, 5, 6, 7], [8, 9, 250, 251, 252, 253, 254]] {
+                                    ui.horizontal(|ui| {
+                                        for c in line {
+                                            let rgb = forge_dwg::scene::aci_rgb(c);
+                                            let (cr, cresp) = ui.allocate_exact_size(vec2(18.0, 18.0), Sense::click());
+                                            ui.painter().rect_filled(cr, 2.0, Color32::from_rgb(rgb[0], rgb[1], rgb[2]));
+                                            if cresp.hovered() {
+                                                ui.painter().rect_stroke(cr, 2.0, Stroke::new(1.5, t.ink), StrokeKind::Outside);
+                                            }
+                                            placed.push((format!("dwg:layercolour:{}:{c}", row.name), cr));
+                                            if cresp.on_hover_text(format!("{c}")).clicked() {
+                                                colour = Some((row.handle, c));
+                                            }
+                                        }
+                                    });
+                                }
+                            });
+                            placed.push((format!("dwg:layer:colour:{}", row.name), sw));
+                        }
                         pp.rect_filled(sw, 2.0, Color32::from_rgb(row.rgb[0], row.rgb[1], row.rgb[2]));
                         pp.rect_stroke(
                             sw,
@@ -857,11 +1112,12 @@ impl Shell {
                             pos2(sw.right() + 8.0, rr.top()),
                             pos2(rr.right() - 100.0, rr.bottom()),
                         );
+                        let label = if row.current { format!("{}  (current)", row.name) } else { row.name.clone() };
                         pp.with_clip_rect(name_r).text(
                             pos2(name_r.left(), rr.center().y),
                             Align2::LEFT_CENTER,
-                            &row.name,
-                            sans(12.0),
+                            label,
+                            if row.current { semi(12.0) } else { sans(12.0) },
                             ink,
                         );
                         pp.with_clip_rect(Rect::from_min_max(pos2(rr.right() - 96.0, rr.top()), rr.max))
@@ -872,8 +1128,9 @@ impl Shell {
                                 sans(11.0),
                                 t.ink2,
                             );
+                        placed.push((format!("dwg:layerrow:{}", row.name), rr));
                         resp.on_hover_text(format!(
-                            "{}\nLinetype {}\nLineweight {}\n{}",
+                            "{}\nLinetype {}\nLineweight {}\n{}\nDouble-click to make it current",
                             row.name,
                             row.ltype,
                             row.weight,
@@ -883,10 +1140,39 @@ impl Shell {
                 });
         });
         self.places.extend(placed);
-        if let Some(d) = &mut self.dwgdoc {
-            for (i, frozen) in flips {
-                d.flip_layer(i, frozen);
+        let Some(d) = &mut self.dwgdoc else { return };
+        for (h, which) in flips {
+            let _ = d.layer_switch(h, which);
+        }
+        if let Some((h, c)) = colour {
+            let _ = d.layer_colour(h, c);
+        }
+        if let Some(h) = pick_row {
+            d.layer_sel = Some(h);
+        }
+        if let Some(h) = make_current {
+            d.layer_sel = Some(h);
+            let _ = d.set_current_layer(h);
+        }
+        match act {
+            Some("new") => {
+                if let Ok(h) = d.new_layer() {
+                    d.layer_sel = Some(h);
+                }
             }
+            Some("delete") => {
+                if let Some(h) = d.layer_sel
+                    && d.delete_layer(h).is_ok()
+                {
+                    d.layer_sel = None;
+                }
+            }
+            Some("current") => {
+                if let Some(h) = d.layer_sel {
+                    let _ = d.set_current_layer(h);
+                }
+            }
+            _ => {}
         }
     }
 
@@ -929,33 +1215,67 @@ impl Shell {
             1.5,
             t.ink2,
         );
-        let prompt = match d.pending {
-            Some(c) => format!("{c} "),
-            None => String::new(),
-        };
-        let shown = if d.input.is_empty() && d.pending.is_none() {
-            None
-        } else {
-            Some(format!("{prompt}{}", d.input))
-        };
         let tx = input.left() + 26.0;
-        match shown {
-            Some(s) => {
-                let g = ui.fonts_mut(|f| f.layout_no_wrap(s, mono(12.0), t.ink));
-                let w = g.size().x;
-                p.with_clip_rect(input)
-                    .galley(pos2(tx, input.center().y - g.size().y * 0.5), g, t.ink);
-                p.vline(tx + w + 1.0, input.y_range().shrink(4.0), Stroke::new(1.0, t.ink));
+        let mut x = tx;
+        let cy = input.center().y;
+        let mut clicked: Option<&'static str> = None;
+        let mut pieces: Vec<(String, Option<&'static str>)> = vec![];
+        if let Some(pr) = &d.ed.prompt {
+            pieces.push((format!("{} {}", d.ed.name, pr.text), None));
+            if !pr.opts.is_empty() {
+                pieces.push((" [".into(), None));
+                for (k, o) in pr.opts.iter().enumerate() {
+                    if k > 0 {
+                        pieces.push(("/".into(), None));
+                    }
+                    pieces.push((o.to_string(), Some(*o)));
+                }
+                pieces.push(("]".into(), None));
             }
-            None => {
-                p.text(
-                    pos2(tx, input.center().y),
-                    Align2::LEFT_CENTER,
-                    "Type a command",
-                    mono(12.0),
-                    t.ink2.gamma_multiply(0.7),
-                );
+            if let Some(df) = &pr.dflt {
+                pieces.push((format!(" <{df}>"), None));
             }
+            pieces.push((": ".into(), None));
+        } else if let Some(c) = d.pending {
+            pieces.push((format!("{c} "), None));
+        }
+        let mut placed = vec![];
+        for (text, opt) in &pieces {
+            let col = if opt.is_some() { t.focus } else { t.ink2 };
+            let g = ui.fonts_mut(|f| f.layout_no_wrap(text.clone(), mono(12.0), col));
+            let w = g.size().x;
+            let rr = Rect::from_min_size(pos2(x, cy - g.size().y * 0.5), g.size());
+            if let Some(o) = opt {
+                let resp = ui.interact(rr, ui.scope_id().with(("dwg-opt", *o)), Sense::click());
+                if resp.hovered() {
+                    p.rect_filled(rr.expand(1.0), 2.0, t.hover);
+                }
+                if resp.clicked() {
+                    clicked = Some(*o);
+                }
+                placed.push((format!("dwg:option:{o}"), rr));
+            }
+            p.with_clip_rect(input).galley(rr.min, g, col);
+            x += w;
+        }
+        if pieces.is_empty() && d.input.is_empty() {
+            p.text(
+                pos2(tx, cy),
+                Align2::LEFT_CENTER,
+                "Type a command",
+                mono(12.0),
+                t.ink2.gamma_multiply(0.7),
+            );
+        } else {
+            let g = ui.fonts_mut(|f| f.layout_no_wrap(d.input.clone(), mono(12.0), t.ink));
+            let w = g.size().x;
+            p.with_clip_rect(input).galley(pos2(x, cy - g.size().y * 0.5), g, t.ink);
+            p.vline(x + w + 1.0, input.y_range().shrink(4.0), Stroke::new(1.0, t.ink));
+        }
+        self.places.extend(placed);
+        if let (Some(o), Some(d)) = (clicked, &mut self.dwgdoc) {
+            d.say(o.to_string());
+            d.feed(Inp::Key(o));
         }
         self.places.push(("dwg:command".into(), input));
     }
@@ -969,7 +1289,6 @@ impl Shell {
         let Some(d) = &self.dwgdoc else { return };
         let names = d.tab_names();
         let space = d.space;
-        let lwt = d.lwt;
         let paper = d.is_paper();
         let cursor = d.cursor;
         let mut x = r.left() + 8.0;
@@ -1016,6 +1335,7 @@ impl Shell {
         // the toggles, right to left, and the coordinates before them
         let mut rx = r.right() - 8.0;
         let mut flip = None;
+        let mut show_osnap = false;
         for (name, tip) in TOGGLES.iter().rev() {
             let w = ui
                 .fonts_mut(|f| f.layout_no_wrap(name.to_string(), semi(11.0), t.ink))
@@ -1023,8 +1343,8 @@ impl Shell {
                 .x
                 + 14.0;
             let b = Rect::from_min_max(pos2(rx - w, r.top() + 4.0), pos2(rx, r.bottom() - 4.0));
-            let works = *name == "LWT";
-            let on = works && lwt;
+            let works = true;
+            let on = self.dwgdoc.as_ref().is_some_and(|d| Self::dwg_toggle_on(d, name));
             let resp = ui
                 .interact(b, ui.scope_id().with(("dwg-toggle", *name)), Sense::click())
                 .on_hover_text(if works {
@@ -1053,6 +1373,9 @@ impl Shell {
             self.places.push((format!("dwg:toggle:{name}"), b));
             if resp.clicked() {
                 flip = Some(*name);
+            }
+            if resp.secondary_clicked() && *name == "OSNAP" {
+                show_osnap = true;
             }
             rx -= w + 2.0;
         }
@@ -1087,6 +1410,9 @@ impl Shell {
         }
         if let Some(name) = flip {
             self.dwg_toggle(name);
+        }
+        if show_osnap && let Some(d) = &mut self.dwgdoc {
+            d.ed.show_osnap = true;
         }
     }
 
@@ -1127,14 +1453,18 @@ impl Shell {
             Color32::WHITE,
         );
         let n = d.drawing.warnings.len();
+        let edit = match d.ed.times.last() {
+            Some((what, ms)) => format!(" · {what} {ms:.1} ms"),
+            None => String::new(),
+        };
         let words = format!(
-            "{} · {} items",
+            "{}{edit} · {} items",
             if n == 0 {
                 "all objects decoded".to_string()
             } else {
                 format!("{n} kept as read")
             },
-            d.geom.scene.items.len()
+            d.geom.scene.items.len() + d.delta.n_items()
         );
         let g = ui.fonts_mut(|f| f.layout_no_wrap(words.clone(), sans(12.0), Color32::WHITE));
         let r = Rect::from_min_max(
