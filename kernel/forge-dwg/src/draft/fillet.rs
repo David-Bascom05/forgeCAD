@@ -232,8 +232,16 @@ pub fn fillet(a: &Curve, pick_a: V2, b: &Curve, pick_b: V2, r: f64) -> Option<Co
         }
         // the centre where the lines' offsets toward the kept sides meet; the tangent points
         // its feet
-        let na_ = if u1.perp().dot(kb) >= 0.0 { u1.perp() } else { -u1.perp() };
-        let nb_ = if u2.perp().dot(ka) >= 0.0 { u2.perp() } else { -u2.perp() };
+        let na_ = if u1.perp().dot(kb) >= 0.0 {
+            u1.perp()
+        } else {
+            -u1.perp()
+        };
+        let nb_ = if u2.perp().dot(ka) >= 0.0 {
+            u2.perp()
+        } else {
+            -u2.perp()
+        };
         let (t, _) = super::curve::line_line(p1 + na_ * r, u1, p2 + nb_ * r, u2)?;
         let c = p1 + na_ * r + u1 * t;
         let (ta, tb) = (ca.foot(c), cb.foot(c));
@@ -734,9 +742,20 @@ mod tests {
         let Some(Curve::Arc(arc)) = &k.added else { panic!() };
         assert!(arc.c.dist(v2(191.0, 171.0)) < 1e-9 && (arc.r - 15.0).abs() < 1e-12);
         assert!(k.a.end().dist(v2(176.0, 171.0)) < 1e-9, "{:?}", k.a);
-        assert!(k.b.end().dist(v2(191.0, 186.0)) < 1e-9 || k.b.start().dist(v2(191.0, 186.0)) < 1e-9, "{:?}", k.b);
+        assert!(
+            k.b.end().dist(v2(191.0, 186.0)) < 1e-9 || k.b.start().dist(v2(191.0, 186.0)) < 1e-9,
+            "{:?}",
+            k.b
+        );
         // and a chamfer picked inside its distances
-        let c = chamfer(&a, v2(176.0, 184.0), &b, v2(178.0, 186.0), Chamfer::Distances(5.0, 5.0)).unwrap();
+        let c = chamfer(
+            &a,
+            v2(176.0, 184.0),
+            &b,
+            v2(178.0, 186.0),
+            Chamfer::Distances(5.0, 5.0),
+        )
+        .unwrap();
         assert!(c.a.end().dist(v2(176.0, 181.0)) < 1e-9, "{:?}", c.a);
     }
 }

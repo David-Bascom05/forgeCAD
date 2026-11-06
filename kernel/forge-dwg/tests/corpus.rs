@@ -111,9 +111,26 @@ fn edits_write_and_undo() {
         let layer = d.add_layer(&mut hist, "FORGE_EDIT", 1).unwrap();
         let ms = d.model_space();
         let l = d
-            .add_entity(&mut hist, ms, layer, Data::Line(Line { end: [10.0, 20.0, 0.0], ..Line::default() }))
+            .add_entity(
+                &mut hist,
+                ms,
+                layer,
+                Data::Line(Line {
+                    end: [10.0, 20.0, 0.0],
+                    ..Line::default()
+                }),
+            )
             .unwrap();
-        d.add_entity(&mut hist, ms, layer, Data::Circle(Circle { radius: 3.0, ..Circle::default() })).unwrap();
+        d.add_entity(
+            &mut hist,
+            ms,
+            layer,
+            Data::Circle(Circle {
+                radius: 3.0,
+                ..Circle::default()
+            }),
+        )
+        .unwrap();
         let victim = *d
             .objects
             .iter()
@@ -122,7 +139,12 @@ fn edits_write_and_undo() {
             .0;
         d.erase(&mut hist, victim).unwrap();
         hist.end();
-        let lines = |d: &file::Drawing| d.objects.values().filter(|o| matches!(o.data, Data::Line(_))).count();
+        let lines = |d: &file::Drawing| {
+            d.objects
+                .values()
+                .filter(|o| matches!(o.data, Data::Line(_)))
+                .count()
+        };
         match file::write(&d) {
             Ok(out) => {
                 let e = file::read(&out).unwrap();
@@ -140,8 +162,14 @@ fn edits_write_and_undo() {
             Err(x) => panic!("{v}: {}", x.0),
         }
         assert!(hist.undo(&mut d));
-        assert!(d.objects.keys().eq(orig.objects.keys()) && d.header == orig.header, "{v} undo");
+        assert!(
+            d.objects.keys().eq(orig.objects.keys()) && d.header == orig.header,
+            "{v} undo"
+        );
         assert!(hist.redo(&mut d));
-        assert!(d.objects.contains_key(&l) && !d.objects.contains_key(&victim), "{v} redo");
+        assert!(
+            d.objects.contains_key(&l) && !d.objects.contains_key(&victim),
+            "{v} redo"
+        );
     }
 }

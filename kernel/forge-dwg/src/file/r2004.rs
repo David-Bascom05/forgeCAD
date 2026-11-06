@@ -364,11 +364,12 @@ pub fn compress(src: &[u8]) -> Vec<u8> {
     let run_ok = |k: usize, first: bool| k != 18 && !(first && (1..=3).contains(&k));
     let mut head = vec![NONE; 1 << 15];
     let mut prev = vec![NONE; n];
-    let hash = |p: usize| ((src[p] as usize) << 10 ^ (src[p + 1] as usize) << 5 ^ src[p + 2] as usize) & 0x7FFF;
+    let hash =
+        |p: usize| ((src[p] as usize) << 10 ^ (src[p + 1] as usize) << 5 ^ src[p + 2] as usize) & 0x7FFF;
     // (literal run start, match start, length, distance)
     let mut plan: Vec<(usize, usize, usize, usize)> = vec![];
     let (mut p, mut lit_start) = (0usize, 0usize);
-    let mut insert = |q: usize, head: &mut Vec<u32>, prev: &mut Vec<u32>| {
+    let insert = |q: usize, head: &mut Vec<u32>, prev: &mut Vec<u32>| {
         if q + 3 <= n {
             let h = hash(q);
             prev[q] = head[h];
@@ -419,7 +420,7 @@ pub fn compress(src: &[u8]) -> Vec<u8> {
     }
     let mut out = Vec::with_capacity(n / 2 + 16);
     let mut pending: Option<usize> = None;
-    let mut emit_run = |out: &mut Vec<u8>, lits: &[u8], pending: Option<usize>, first: bool| {
+    let emit_run = |out: &mut Vec<u8>, lits: &[u8], pending: Option<usize>, first: bool| {
         let k = lits.len();
         match pending {
             Some(at) if (1..=3).contains(&k) => out[at] |= k as u8,
@@ -614,7 +615,7 @@ fn system_page_bytes(kind: u32, data: &[u8]) -> Vec<u8> {
 fn pad_to_0x20(page: &mut Vec<u8>) {
     let m = magic();
     let mut k = 0;
-    while page.len() % 0x20 != 0 {
+    while !page.len().is_multiple_of(0x20) {
         page.push(m[k % m.len()]);
         k += 1;
     }
@@ -738,7 +739,7 @@ pub fn container(
             let mut page = payload.clone();
             page.splice(0..0, std::iter::empty());
             file.extend_from_slice(&page);
-            while (file.len() - addr) % 0x20 != 0 {
+            while !(file.len() - addr).is_multiple_of(0x20) {
                 file.push(magic()[(file.len() - addr) % 0x100]);
             }
             page_map.push((number as i32, (file.len() - addr) as u32));

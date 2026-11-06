@@ -12,11 +12,21 @@ fn main() {
     let d = forge_dwg::file::read(&buf).unwrap();
     let t_read = t.elapsed();
     let t = Instant::now();
-    let sc = forge_dwg::scene::build(&d, forge_dwg::scene::Space::Model, &forge_dwg::scene::BoxFont, &Default::default());
+    let sc = forge_dwg::scene::build(
+        &d,
+        forge_dwg::scene::Space::Model,
+        &forge_dwg::scene::BoxFont,
+        &Default::default(),
+    );
     let t_scene = t.elapsed();
     let t = Instant::now();
     let out = forge_dwg::file::write(&d).unwrap();
     let t_write = t.elapsed();
-    println!("file read {t_io:?}; container+decompress {t_sec:?} ({} MB objects); full read {t_read:?} ({} objects); scene {t_scene:?} ({} items); write {t_write:?} ({} MB)",
-        s.objects.len() / 1_000_000, d.objects.len(), sc.items.len(), out.len() / 1_000_000);
+    println!(
+        "file read {t_io:?}; container+decompress {t_sec:?} ({} MB objects); full read {t_read:?} ({} objects); scene {t_scene:?} ({} items); write {t_write:?} ({} MB)",
+        s.objects.len() / 1_000_000,
+        d.objects.len(),
+        sc.items.len(),
+        out.len() / 1_000_000
+    );
 }

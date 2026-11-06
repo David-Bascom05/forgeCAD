@@ -74,15 +74,21 @@ impl History {
     }
     /// The objects the open change has touched so far.
     pub fn touched(&self) -> Vec<u32> {
-        self.open.as_ref().map_or_else(Vec::new, |c| c.objects.keys().copied().collect())
+        self.open
+            .as_ref()
+            .map_or_else(Vec::new, |c| c.objects.keys().copied().collect())
     }
     /// The objects the last undone change (the top of `redo`) touched: what an undo changed.
     pub fn last_undone(&self) -> Vec<u32> {
-        self.redo.last().map_or_else(Vec::new, |c| c.objects.keys().copied().collect())
+        self.redo
+            .last()
+            .map_or_else(Vec::new, |c| c.objects.keys().copied().collect())
     }
     /// The objects the last done change (the top of `undo`) touched: what a redo changed.
     pub fn last_done(&self) -> Vec<u32> {
-        self.undo.last().map_or_else(Vec::new, |c| c.objects.keys().copied().collect())
+        self.undo
+            .last()
+            .map_or_else(Vec::new, |c| c.objects.keys().copied().collect())
     }
     pub fn undo(&mut self, d: &mut Drawing) -> bool {
         self.end();
@@ -112,7 +118,9 @@ impl Drawing {
     /// A new handle: the seed, which moves on.
     pub fn new_handle(&mut self, hist: &mut History) -> u32 {
         hist.save_header(self);
-        let h = self.handseed().max(self.objects.keys().max().map_or(1, |m| m + 1));
+        let h = self
+            .handseed()
+            .max(self.objects.keys().max().map_or(1, |m| m + 1));
         if let Some(Val::H(x)) = self.header.get_mut("HANDSEED") {
             x.handle = h + 1;
         }
@@ -127,14 +135,20 @@ impl Drawing {
     /// A layer by name (case-insensitive, as AutoCAD compares them): from the layer table's
     /// entries, else every object.
     pub fn layer(&self, name: &str) -> Option<u32> {
-        let is = |o: &Object| matches!(&o.data, Data::Layer(l) if l.entry.name.text().eq_ignore_ascii_case(name));
+        let is =
+            |o: &Object| matches!(&o.data, Data::Layer(l) if l.entry.name.text().eq_ignore_ascii_case(name));
         if let Some(Data::LayerControl(c)) = self
             .header
             .handle("LAYER_CONTROL")
             .and_then(|h| self.objects.get(&h))
             .map(|o| &o.data)
         {
-            return c.0.entries.iter().map(|x| x.handle).find(|h| self.objects.get(h).is_some_and(is));
+            return c
+                .0
+                .entries
+                .iter()
+                .map(|x| x.handle)
+                .find(|h| self.objects.get(h).is_some_and(is));
         }
         self.objects.iter().find_map(|(h, o)| is(o).then_some(*h))
     }
@@ -223,7 +237,11 @@ impl Drawing {
             eed: vec![],
             owner: Href::new(4, block),
             reactors: vec![],
-            xdic: if ver < Version::R2004 { Some(Href::new(3, 0)) } else { None },
+            xdic: if ver < Version::R2004 {
+                Some(Href::new(3, 0))
+            } else {
+                None
+            },
             ds_binary: false,
             ent: Some(ent),
             data,
@@ -276,7 +294,11 @@ impl Drawing {
         };
         let ver = self.ver();
         hist.save(self, block);
-        let (prev, next) = if ver < Version::R2004 { self.links(h) } else { (0, 0) };
+        let (prev, next) = if ver < Version::R2004 {
+            self.links(h)
+        } else {
+            (0, 0)
+        };
         // the block's ends have no neighbour on that side
         let (prev, next) = match self.objects.get(&block).map(|o| &o.data) {
             Some(Data::BlockHeader(bh)) => (
@@ -358,7 +380,9 @@ impl Drawing {
     /// The sub-entities an entity owns: an insert's attributes, a polyline's vertices, and their
     /// SEQEND.
     pub fn owned_by(&self, h: u32) -> Vec<u32> {
-        let Some(o) = self.objects.get(&h) else { return vec![] };
+        let Some(o) = self.objects.get(&h) else {
+            return vec![];
+        };
         let owned = match &o.data {
             Data::Insert(i) if i.has_attribs => Some(&i.attribs),
             Data::MInsert(i) if i.insert.has_attribs => Some(&i.insert.attribs),
@@ -378,7 +402,11 @@ impl Drawing {
                 if x == ow.last.handle {
                     break;
                 }
-                x = self.objects.get(&x).and_then(|o| o.ent.as_ref()).map_or(0, |e| e.next.handle);
+                x = self
+                    .objects
+                    .get(&x)
+                    .and_then(|o| o.ent.as_ref())
+                    .map_or(0, |e| e.next.handle);
             }
         }
         if ow.seqend.handle != 0 {
@@ -408,7 +436,10 @@ impl Drawing {
         l.entry.name = self.s(name);
         l.entry.xref_index = 0;
         l.entry.xdep = false;
-        l.color = Color { index: aci, ..l.color.clone() };
+        l.color = Color {
+            index: aci,
+            ..l.color.clone()
+        };
         if let Some(rgb) = &mut l.color.rgb {
             *rgb = 0xC300_0000 | aci as u32;
         }
@@ -428,7 +459,11 @@ impl Drawing {
             eed: vec![],
             owner: Href::new(4, ctrl),
             reactors: vec![],
-            xdic: if ver < Version::R2004 { Some(Href::new(3, 0)) } else { None },
+            xdic: if ver < Version::R2004 {
+                Some(Href::new(3, 0))
+            } else {
+                None
+            },
             ds_binary: false,
             ent: None,
             data: Data::Layer(l),
@@ -451,13 +486,16 @@ impl Drawing {
         let ver = self.ver();
         let ms = self.model_space();
         let (bh0, blk0, end0) = match self.objects.get(&ms) {
-            Some(o @ Object {
-                data: Data::BlockHeader(bh),
-                ..
-            }) => (o.clone(), bh.block.handle, bh.endblk.handle),
+            Some(
+                o @ Object {
+                    data: Data::BlockHeader(bh),
+                    ..
+                },
+            ) => (o.clone(), bh.block.handle, bh.endblk.handle),
             _ => return bad("no model space to copy"),
         };
-        let (Some(blk0), Some(end0)) = (self.objects.get(&blk0).cloned(), self.objects.get(&end0).cloned()) else {
+        let (Some(blk0), Some(end0)) = (self.objects.get(&blk0).cloned(), self.objects.get(&end0).cloned())
+        else {
             return bad("model space has no BLOCK/ENDBLK to copy");
         };
         let layer0 = self.layer("0").unwrap_or(0);
@@ -476,7 +514,11 @@ impl Drawing {
             reactors: vec![],
             eed: vec![],
             trailing: vec![],
-            xdic: if ver < Version::R2004 { Some(Href::new(3, 0)) } else { None },
+            xdic: if ver < Version::R2004 {
+                Some(Href::new(3, 0))
+            } else {
+                None
+            },
             ..bh0
         };
         if let Data::BlockHeader(b) = &mut bh.data {
@@ -514,7 +556,11 @@ impl Drawing {
             reactors: vec![],
             eed: vec![],
             trailing: vec![],
-            xdic: if ver < Version::R2004 { Some(Href::new(3, 0)) } else { None },
+            xdic: if ver < Version::R2004 {
+                Some(Href::new(3, 0))
+            } else {
+                None
+            },
             ..blk0
         };
         let endblk = Object {
@@ -525,7 +571,11 @@ impl Drawing {
             reactors: vec![],
             eed: vec![],
             trailing: vec![],
-            xdic: if ver < Version::R2004 { Some(Href::new(3, 0)) } else { None },
+            xdic: if ver < Version::R2004 {
+                Some(Href::new(3, 0))
+            } else {
+                None
+            },
             ..end0
         };
         hist.save(self, ctrl);

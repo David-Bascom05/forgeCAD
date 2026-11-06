@@ -2554,7 +2554,13 @@ pub fn plan(d: &Drawing, space: Space, fonts: &dyn Fonts, opts: &Options) -> sup
     }
 }
 
-pub fn build_planned(d: &Drawing, space: Space, fonts: &dyn Fonts, opts: &Options, plan: &super::Plan) -> Scene {
+pub fn build_planned(
+    d: &Drawing,
+    space: Space,
+    fonts: &dyn Fonts,
+    opts: &Options,
+    plan: &super::Plan,
+) -> Scene {
     let mut b = B::new(d, fonts, true, plan.chord, opts.all_layers);
     b.view_h = plan.view_h;
     b.run(space);

@@ -79,13 +79,23 @@ pub fn grips(d: &Data) -> Vec<Grip> {
             v
         }
         Curve::Poly(p) => {
-            let mut v: Vec<Grip> = p.pts.iter().enumerate().map(|(k, q)| g(*q, Role::Vertex(k))).collect();
+            let mut v: Vec<Grip> = p
+                .pts
+                .iter()
+                .enumerate()
+                .map(|(k, q)| g(*q, Role::Vertex(k)))
+                .collect();
             for k in 0..p.nseg() {
                 v.push(g(p.seg(k).point(0.5), Role::SegMid(k)));
             }
             v
         }
-        Curve::Spline(n) => n.ctrl.iter().enumerate().map(|(k, q)| g(*q, Role::Vertex(k))).collect(),
+        Curve::Spline(n) => n
+            .ctrl
+            .iter()
+            .enumerate()
+            .map(|(k, q)| g(*q, Role::Vertex(k)))
+            .collect(),
         Curve::Ray { at, .. } | Curve::Xline { at, .. } => vec![g(*at, Role::Insertion)],
         Curve::Offset(_) => vec![],
     }
@@ -166,9 +176,15 @@ mod tests {
         let gs = grips(&d);
         assert_eq!(gs.len(), 3);
         let e = drag(&d, Role::End, v2(10.0, 0.0), v2(10.0, 5.0)).unwrap();
-        assert_eq!(read_entity(&e).unwrap().curve, Curve::line(v2(0.0, 0.0), v2(10.0, 5.0)));
+        assert_eq!(
+            read_entity(&e).unwrap().curve,
+            Curve::line(v2(0.0, 0.0), v2(10.0, 5.0))
+        );
         let m = drag(&d, Role::Mid, v2(5.0, 0.0), v2(5.0, 1.0)).unwrap();
-        assert_eq!(read_entity(&m).unwrap().curve, Curve::line(v2(0.0, 1.0), v2(10.0, 1.0)));
+        assert_eq!(
+            read_entity(&m).unwrap().curve,
+            Curve::line(v2(0.0, 1.0), v2(10.0, 1.0))
+        );
     }
 
     #[test]

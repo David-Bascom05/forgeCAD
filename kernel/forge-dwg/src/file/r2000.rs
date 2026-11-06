@@ -4,15 +4,10 @@ use super::{Class, Drawing, Extra, Sections};
 use crate::bits::Bad;
 use crate::bits::{BitReader, BitWriter, R, bad, crc16, read_mc};
 use crate::io::{Io, Reader};
-use crate::object::{Classes, read_object};
-use crate::str::Str;
 use crate::version::Version;
 
 const SN_CLASSES: [u8; 16] = [
     0x8D, 0xA1, 0xC4, 0xB8, 0xC4, 0xA9, 0xF8, 0xC5, 0xC0, 0xDC, 0xF4, 0x5F, 0xE7, 0xCF, 0xB6, 0x8A,
-];
-const SN_HEADER: [u8; 16] = [
-    0xCF, 0x7B, 0x1F, 0x23, 0xFD, 0xDE, 0x38, 0xA9, 0x5F, 0x7C, 0x68, 0xB8, 0x4E, 0x6D, 0x33, 0x5F,
 ];
 
 fn rl(buf: &[u8], at: usize) -> R<u32> {
@@ -20,22 +15,6 @@ fn rl(buf: &[u8], at: usize) -> R<u32> {
         Some(b) => Ok(u32::from_le_bytes([b[0], b[1], b[2], b[3]])),
         None => bad("past the end"),
     }
-}
-
-/// A sentinel-wrapped section's data, its CRC checked.
-fn sentinel_section<'a>(buf: &'a [u8], at: usize, sn: &[u8; 16], what: &str) -> R<&'a [u8]> {
-    if buf.get(at..at + 16) != Some(&sn[..]) {
-        return bad(format!("{what}: no sentinel at {at:#x}"));
-    }
-    let n = rl(buf, at + 16)? as usize;
-    let Some(data) = buf.get(at + 20..at + 20 + n) else {
-        return bad(format!("{what}: past the end"));
-    };
-    let crc = u16::from_le_bytes([buf[at + 20 + n], buf[at + 21 + n]]);
-    if crc16(0xC0C1, &buf[at + 16..at + 20 + n]) != crc {
-        return bad(format!("{what}: CRC"));
-    }
-    Ok(data)
 }
 
 /// The classes section (chapter 10): sentinel, size, the classes, CRC.
@@ -152,6 +131,11 @@ pub fn string_stream(d: &[u8], bits: usize) -> R<(Option<BitReader<'_>>, usize)>
     Ok((Some(BitReader { d, p: start }), start))
 }
 
+/// (handle, offset) per object, as the object map has them.
+pub type ObjectMap = Vec<(u32, usize)>;
+/// (handle, offset) per object written.
+pub type Locations = Vec<(u32, u64)>;
+
 /// The object map (chapter 23): (handle, file offset) pairs.
 pub fn read_map(buf: &[u8], at: usize, len: usize) -> R<Vec<(u32, usize)>> {
     let mut out = vec![];
@@ -187,7 +171,7 @@ pub fn read_map(buf: &[u8], at: usize, len: usize) -> R<Vec<(u32, usize)>> {
 /// The sections at the addresses the file header gives.
 pub fn sections(buf: &[u8]) -> R<Sections> {
     let n = rl(buf, 0x15)? as usize;
-    let mut recs = vec![None; 6];
+    let mut recs = [None; 6];
     for k in 0..n {
         let at = 0x19 + 9 * k;
         let Some(&nr) = buf.get(at) else {
@@ -242,9 +226,9 @@ pub fn sections(buf: &[u8]) -> R<Sections> {
 }
 
 /// The object map and the classes, without reading the objects (for tools).
-pub fn read_shell(buf: &[u8]) -> R<(Vec<(u32, usize)>, Vec<(String, bool)>)> {
+pub fn read_shell(buf: &[u8]) -> R<(ObjectMap, Vec<(String, bool)>)> {
     let n = rl(buf, 0x15)? as usize;
-    let mut recs = vec![None; 6];
+    let mut recs = [None; 6];
     for k in 0..n {
         let at = 0x19 + 9 * k;
         let nr = buf[at] as usize;
@@ -395,7 +379,7 @@ pub fn write_map(locs: &[(u32, u64)]) -> Vec<u8> {
 }
 
 /// The objects one after another from `base`, and the map of where each went.
-pub fn write_objects(d: &Drawing, base: usize) -> R<(Vec<u8>, Vec<(u32, u64)>)> {
+pub fn write_objects(d: &Drawing, base: usize) -> R<(Vec<u8>, Locations)> {
     let ver = d.ver();
     let mut out = vec![];
     let mut locs = vec![];
@@ -515,7 +499,7 @@ fn second_header(d: &Drawing, at: u32, sections: &[(u8, u32, u32)]) -> Vec<u8> {
         b.rc(k as u8);
         b.raw(&bytes[skip..]);
     }
-    while b.len % 8 != 0 {
+    while !b.len.is_multiple_of(8) {
         b.b(false);
     }
     let size = (b.bytes.len() + 2 + 8) as u32;

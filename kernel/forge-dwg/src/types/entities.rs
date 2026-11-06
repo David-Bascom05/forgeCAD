@@ -424,13 +424,13 @@ impl Spec for LwPolyline {
     fn io<S: Io>(&mut self, s: &mut S) -> R<()> {
         if !S::READ {
             self.flag &= !(4 | 8 | 2 | 1 | 16 | 32 | 1024);
-            self.flag |= (self.const_width != 0.0) as i16 * 4
-                | (self.elevation != 0.0) as i16 * 8
-                | (self.thickness != 0.0) as i16 * 2
+            self.flag |= ((self.const_width != 0.0) as i16 * 4)
+                | ((self.elevation != 0.0) as i16 * 8)
+                | ((self.thickness != 0.0) as i16 * 2)
                 | (self.normal != UP && self.normal != [0.0; 3]) as i16
-                | (!self.bulges.is_empty()) as i16 * 16
-                | (!self.widths.is_empty()) as i16 * 32
-                | (!self.ids.is_empty() && s.ver() >= Version::R2010) as i16 * 1024;
+                | ((!self.bulges.is_empty()) as i16 * 16)
+                | ((!self.widths.is_empty()) as i16 * 32)
+                | ((!self.ids.is_empty() && s.ver() >= Version::R2010) as i16 * 1024);
         }
         s.bs(&mut self.flag)?;
         let f = self.flag;

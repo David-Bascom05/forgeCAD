@@ -12,7 +12,14 @@ fn main() {
     let data = &sec[24..24 + size];
     let bits = u32::from_le_bytes(data[0..4].try_into().unwrap()) as usize;
     let (strs, end) = r2000::string_stream(data, bits).unwrap();
-    let mut r = Reader { ver, data: BitReader::new(data, 4), strs, hdl: BitReader::new(data, 0), base: 0, data_end: end };
+    let mut r = Reader {
+        ver,
+        data: BitReader::new(data, 4),
+        strs,
+        hdl: BitReader::new(data, 0),
+        base: 0,
+        data_end: end,
+    };
     let (mut max, mut z, mut t) = (0i16, 0u8, false);
     r.bs(&mut max).unwrap();
     r.rc(&mut z).unwrap();
@@ -31,7 +38,11 @@ fn main() {
                 }
             }
             Err(e) => {
-                println!("{n} at {p}: {} (last ok above); strs at {:?}", e.0, r.strs.as_ref().map(|s| s.p));
+                println!(
+                    "{n} at {p}: {} (last ok above); strs at {:?}",
+                    e.0,
+                    r.strs.as_ref().map(|s| s.p)
+                );
                 break;
             }
         }

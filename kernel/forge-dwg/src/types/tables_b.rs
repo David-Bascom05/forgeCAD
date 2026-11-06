@@ -1702,7 +1702,11 @@ mod tests {
             kind: 1,
             merged_width: 1,
             merged_height: 1,
-            text: if v < Version::R2007 { st("abc", v) } else { Str::default() },
+            text: if v < Version::R2007 {
+                st("abc", v)
+            } else {
+                Str::default()
+            },
             object: Href::NULL_HARD,
             overrides: Some(CellOverrides {
                 flags: 0x3_FFFF,

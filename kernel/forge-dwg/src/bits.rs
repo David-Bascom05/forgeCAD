@@ -14,7 +14,7 @@ impl BitWriter {
         BitWriter::default()
     }
     pub fn bit(&mut self, b: bool) {
-        if self.len % 8 == 0 {
+        if self.len.is_multiple_of(8) {
             self.bytes.push(0);
         }
         if b {
@@ -30,7 +30,7 @@ impl BitWriter {
         }
     }
     pub fn raw(&mut self, bytes: &[u8]) {
-        if self.len % 8 == 0 {
+        if self.len.is_multiple_of(8) {
             self.bytes.extend_from_slice(bytes);
             self.len += 8 * bytes.len();
         } else {

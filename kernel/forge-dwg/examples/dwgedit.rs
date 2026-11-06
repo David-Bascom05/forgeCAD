@@ -9,9 +9,17 @@ fn main() {
     hist.begin();
     let layer = d.add_layer(&mut hist, "FORGE_EDIT", 1).unwrap();
     let ms = d.model_space();
-    let line = Line { start: [-50.0, -50.0, 0.0], end: [123.456, 78.9, 0.0], ..Line::default() };
+    let line = Line {
+        start: [-50.0, -50.0, 0.0],
+        end: [123.456, 78.9, 0.0],
+        ..Line::default()
+    };
     let l = d.add_entity(&mut hist, ms, layer, Data::Line(line)).unwrap();
-    let c = Circle { center: [-25.0, 40.0, 0.0], radius: 12.5, ..Circle::default() };
+    let c = Circle {
+        center: [-25.0, 40.0, 0.0],
+        radius: 12.5,
+        ..Circle::default()
+    };
     let ci = d.add_entity(&mut hist, ms, layer, Data::Circle(c)).unwrap();
     // erase the first model-space line there was
     let victim = d
