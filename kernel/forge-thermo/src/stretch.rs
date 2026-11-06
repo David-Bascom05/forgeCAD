@@ -643,6 +643,24 @@ impl Pool {
         })
     }
 
+    /// The checked triangles that turn over from the kept, with normals `n(k)`.
+    fn turned(&self, n: impl Fn(usize) -> Vec3) -> Vec<usize> {
+        let s = &self.shared;
+        let live = s.live.read().unwrap_or_else(|e| e.into_inner());
+        let mut out = vec![];
+        for (w, m) in s.normals.iter().enumerate() {
+            let m = m.lock().unwrap_or_else(|e| e.into_inner());
+            let r = s.share(w);
+            for (i, a) in m.1.iter().enumerate() {
+                let k = r.start + i;
+                if live.get(k).copied().unwrap_or(false) && turns(*a, n(k)) {
+                    out.push(k);
+                }
+            }
+        }
+        out
+    }
+
     /// The hinges' energy at the `x` of the last `each`, summed in hinge order, and their
     /// gradient added into `g`, each node's sum gathered in hinge order.
     fn bends(&self, g: &mut [Vec3]) -> f64 {
@@ -709,6 +727,8 @@ struct Sheet {
     gravity: f64,
     /// Each node's triangles.
     around: Vec<Vec<u32>>,
+    /// Whether a relaxing since this was cleared ran out of iterations short of equilibrium.
+    capped: bool,
 }
 
 /// Sliding nodes carried off the tool's top (over the cavity) fall free.
@@ -1087,9 +1107,10 @@ fn stops_turn(sheet: &Sheet, trial: &mut [Vec3], stops: &[(usize, Vec3)]) -> boo
 }
 
 /// Whether a triangle of normal `a` turned over in a step to normal `b`: its normal past square
-/// to the one it had, or in one step from under 17 to past 30 degrees beyond vertical (the sheet
-/// folding back over itself, where a sheet drawn onto a mould never goes; the pressure on a fold's
-/// under side would blow it up with nothing to stop it, a membrane having no contact with itself).
+/// to the one it had, or newly past 30 degrees beyond vertical (the sheet folding back over
+/// itself, where a sheet drawn onto a mould never goes; the pressure on a fold's under side would
+/// blow it up with nothing to stop it, a membrane having no contact with itself). One line both
+/// ways: a triangle creeping over it a step at a time is caught too.
 #[inline]
 fn turns(a: Vec3, b: Vec3) -> bool {
     let (a2, b2) = (a.length_sq(), b.length_sq());
@@ -1097,7 +1118,7 @@ fn turns(a: Vec3, b: Vec3) -> bool {
     // the batch's vectorising
     let flat = a2 <= 1e-12 * (1.0 + a2);
     let past = (b.z < 0.0) & (b.z * b.z > 0.25 * b2);
-    let was = (a.z >= 0.0) | (a.z * a.z <= 0.09 * a2);
+    let was = (a.z >= 0.0) | (a.z * a.z <= 0.25 * a2);
     !flat & ((a.dot(b) < 0.0) | (past & was))
 }
 
@@ -1199,7 +1220,39 @@ fn relax(
             }
             a *= 0.5;
         }
-        let Some(mut e2) = taken else { return it };
+        let Some(mut e2) = taken else {
+            // no step without turning a triangle over (folding the sheet back over itself): the
+            // fold's free corners stop where they are, as on a tool (the sheet meets itself
+            // there), and the rest goes on
+            let mut y = trial.clone();
+            for &(i, c) in &stops {
+                y[i] = c;
+            }
+            let fold = sheet.pool.turned(|k| {
+                let t = sheet.idx[k];
+                (y[t[1]] - y[t[0]]).cross(y[t[2]] - y[t[0]])
+            });
+            let mut held = false;
+            for k in fold {
+                for i in sheet.idx[k] {
+                    if sheet.free[i] && !sheet.slide[i] {
+                        sheet.free[i] = false;
+                        held = true;
+                    }
+                }
+            }
+            if !held {
+                return it;
+            }
+            let Some(v) = sheet.energy(x, p, Some(&mut g)) else {
+                return it;
+            };
+            sheet.pool.keep();
+            e = v;
+            ss.clear();
+            ys.clear();
+            continue;
+        };
         let stopped = !stops.is_empty();
         for &(i, c) in &stops {
             trial[i] = c;
@@ -1229,6 +1282,7 @@ fn relax(
         sheet.pool.keep();
         e = e2;
     }
+    sheet.capped = true;
     max_it
 }
 
@@ -1410,6 +1464,7 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
         volume: None,
         dv: Default::default(),
         gravity: 0.0,
+        capped: false,
         around: {
             let mut a = vec![vec![]; x.len()];
             for (k, t) in idx.iter().enumerate() {
@@ -1622,10 +1677,26 @@ pub fn stretch(f: &Formed, spec: &Spec, pr: &Process) -> Stretch {
             );
             let before = open(&sheet, &x);
             let v0 = sheet.enclosed(&x);
-            sheet.hold = hold_at(p);
-            let reach = reach_at(&x);
-            its += step(&mut sheet, &tool, &mut x, p, cap, tol, &reach, its_at(400));
-            release(&mut sheet, &tool, &x, 0.25 * spec.t);
+            // a load step whose relaxing runs out of iterations short of equilibrium is taken
+            // again in halves: the next step would start from a state that is not one (the fine
+            // meshes' first step, then their blow-outs)
+            let from = pr.pressure * (k - 1) as f64 / loads as f64;
+            let mut parts = 1;
+            loop {
+                sheet.capped = false;
+                for j in 1..=parts {
+                    let q = from + (p - from) * j as f64 / parts as f64;
+                    sheet.hold = hold_at(q);
+                    let reach = reach_at(&x);
+                    its += step(&mut sheet, &tool, &mut x, q, cap, tol, &reach, its_at(400));
+                    release(&mut sheet, &tool, &x, 0.25 * spec.t);
+                }
+                if !sheet.capped || parts >= 16 {
+                    break;
+                }
+                (x, sheet.free, sheet.slide, sheet.dir, sheet.anchor) = kept.clone();
+                parts *= 2;
+            }
             // a snap: most of the free sheet on the tool at once, or most of the cavity's air out
             // in one step (no equilibrium in between: past the limit point)
             if k == 1 {
