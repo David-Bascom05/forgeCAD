@@ -89,6 +89,14 @@ impl Stage {
     }
 }
 
+impl Cache {
+    /// The kernel features the run sent, in order, and the id each is named by: the part as
+    /// `forge_model` regenerates it on its own (`Part::regenerate_solids_ids`).
+    pub fn history(&self) -> (&[Feature], &[u64]) {
+        (&self.features, &self.ids)
+    }
+}
+
 /// The last run's history and stages, for reuse.
 #[derive(Default)]
 pub struct Cache {
