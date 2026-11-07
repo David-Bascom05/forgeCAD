@@ -31,23 +31,59 @@ impl IEntry {
 
     /// An entry for a file just written, its stat taken now.
     pub fn from_file(path: &str, file: &Path, mode: u32, id: Oid) -> Result<IEntry, Error> {
-        use std::os::unix::fs::MetadataExt;
         let m = std::fs::symlink_metadata(file)?;
+        let s = stat(&m);
         Ok(IEntry {
-            ctime: (m.ctime() as u32, m.ctime_nsec() as u32),
-            mtime: (m.mtime() as u32, m.mtime_nsec() as u32),
-            dev: m.dev() as u32,
-            ino: m.ino() as u32,
+            ctime: (s[0], s[1]),
+            mtime: (s[2], s[3]),
+            dev: s[4],
+            ino: s[5],
             mode,
-            uid: m.uid(),
-            gid: m.gid(),
-            size: m.size() as u32,
+            uid: s[6],
+            gid: s[7],
+            size: m.len() as u32,
             id,
             flags: path.len().min(0xfff) as u16,
             ext_flags: None,
             path: path.as_bytes().to_vec(),
         })
     }
+}
+
+/// ctime, mtime (seconds and nanoseconds), dev, ino, uid, gid, as the index keeps them.
+#[cfg(unix)]
+fn stat(m: &std::fs::Metadata) -> [u32; 8] {
+    use std::os::unix::fs::MetadataExt;
+    [
+        m.ctime() as u32,
+        m.ctime_nsec() as u32,
+        m.mtime() as u32,
+        m.mtime_nsec() as u32,
+        m.dev() as u32,
+        m.ino() as u32,
+        m.uid(),
+        m.gid(),
+    ]
+}
+
+/// Where the platform has no such stat: only the time (git then checks the content).
+#[cfg(not(unix))]
+fn stat(m: &std::fs::Metadata) -> [u32; 8] {
+    let t = m
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .unwrap_or_default();
+    [
+        t.as_secs() as u32,
+        t.subsec_nanos(),
+        t.as_secs() as u32,
+        t.subsec_nanos(),
+        0,
+        0,
+        0,
+        0,
+    ]
 }
 
 #[derive(Clone, Debug)]

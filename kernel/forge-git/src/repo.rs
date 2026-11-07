@@ -271,9 +271,7 @@ impl Repo {
                 let t = std::fs::read_link(&file)?;
                 (MODE_LINK, t.to_string_lossy().as_bytes().to_vec())
             } else if meta.is_file() {
-                use std::os::unix::fs::PermissionsExt;
-                let exec = meta.permissions().mode() & 0o111 != 0
-                    && self.config.bool("core.filemode") != Some(false);
+                let exec = executable(&meta) && self.config.bool("core.filemode") != Some(false);
                 (if exec { MODE_EXEC } else { MODE_FILE }, std::fs::read(&file)?)
             } else {
                 return Err(Error::NoPath(p.clone()));
@@ -362,4 +360,16 @@ impl Repo {
         }
         Tag::parse(self.hash, &o.data).map(Some)
     }
+}
+
+#[cfg(unix)]
+fn executable(m: &std::fs::Metadata) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    m.permissions().mode() & 0o111 != 0
+}
+
+/// No execute bit where the platform keeps none (the browser's WASI).
+#[cfg(not(unix))]
+fn executable(_: &std::fs::Metadata) -> bool {
+    false
 }

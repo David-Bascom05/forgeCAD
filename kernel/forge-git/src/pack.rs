@@ -7,7 +7,6 @@ use crate::hash::{HashKind, Oid};
 use crate::object::Kind;
 use crate::zlib;
 use std::fs::File;
-use std::os::unix::fs::FileExt;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
@@ -72,7 +71,7 @@ impl Pack {
         let file = File::open(&path)?;
         let len = file.metadata()?.len();
         let mut head = [0u8; 12];
-        file.read_exact_at(&mut head, 0)?;
+        read_at(&file, &mut head, 0)?;
         if &head[..4] != b"PACK" || !matches!(be32(&head, 4)?, 2 | 3) || be32(&head, 8)? as usize != n {
             return Err(Error::Corrupt("pack header"));
         }
@@ -155,7 +154,7 @@ impl Pack {
         }
         let span = (end - off) as usize;
         let mut d = vec![0u8; span];
-        self.file.read_exact_at(&mut d, off)?;
+        read_at(&self.file, &mut d, off)?;
         let mut i = 0;
         let c = d[0];
         let t = (c >> 4) & 7;
@@ -212,6 +211,21 @@ impl Pack {
             }
         }
     }
+}
+
+#[cfg(unix)]
+fn read_at(f: &File, buf: &mut [u8], off: u64) -> std::io::Result<()> {
+    use std::os::unix::fs::FileExt;
+    f.read_exact_at(buf, off)
+}
+
+/// Elsewhere (the browser's WASI): a handle of its own, moved to the place and read.
+#[cfg(not(unix))]
+fn read_at(f: &File, buf: &mut [u8], off: u64) -> std::io::Result<()> {
+    use std::io::{Read, Seek, SeekFrom};
+    let mut f = f.try_clone()?;
+    f.seek(SeekFrom::Start(off))?;
+    f.read_exact(buf)
 }
 
 fn varint(d: &[u8], i: &mut usize) -> Result<usize, Error> {
