@@ -72,7 +72,7 @@ fn the_example_routes_with_every_term_and_no_notes() {
         let HarnessProblem::WireClash { with, at, .. } = p else {
             panic!("{p:?}");
         };
-        assert!(with.starts_with('W'), "a wire runs into {with}");
+        assert!(with.starts_with('W'), "a wire runs into {with} at {at:?}");
         let near = h.nodes.iter().any(|n| n.at.distance(at) < 3.0 * 8.6 + 40.0);
         assert!(near, "a clash along a run at {at:?}");
     }
@@ -85,7 +85,12 @@ fn the_example_routes_with_every_term_and_no_notes() {
     assert!((trunk.d - d_trunk).abs() < 1e-12, "{}", trunk.d);
     assert!((trunk.r_min - 3.0 * d_trunk).abs() < 1e-12);
     // the wires packed: wider than the rule's bundle on the motor branches, never under it on the trunk
-    assert!(trunk.d_pack > 7.0 && trunk.d_pack < trunk.d);
+    assert!(
+        trunk.d_pack > 7.0 && trunk.d_pack < trunk.d,
+        "{} {}",
+        trunk.d_pack,
+        trunk.d
+    );
     for w in &h.wires {
         let o = w.routed.as_ref().expect("routed");
         assert_eq!(o.length % 5.0, 0.0);
@@ -477,4 +482,34 @@ fn a_library_row_carries_every_field_by_its_header() {
     assert!(harness::ohm_km(&rows[0].spec).is_none());
     let bad = harness::parse_library("lib.csv", "name,gauge,source\nX,18,r\n");
     assert!(matches!(bad, Err(HarnessProblem::WireRowBad { .. })));
+}
+
+#[test]
+fn two_wires_on_one_pin_are_typed_and_a_cable_routes_with_its_assembly_length() {
+    let d = dir("pin-taken");
+    let src = ROBOT.replace(
+        "  W14 = wire(J1[14], J4[6], type: s26, colour: \"VT\")\n",
+        "  W14 = wire(J1[14], J4[6], type: s26, colour: \"VT\")\n  W15 = wire(J1[14], J4[6], type: p18)\n",
+    );
+    let r = run_in(&d, &src);
+    let ps = problems(&r);
+    assert!(
+        ps.iter().any(
+            |p| matches!(p, HarnessProblem::PinTaken { connector, pin, wires, .. }
+            if connector == "J1" && pin == "14" && wires == &["W14".to_string(), "W15".to_string()])
+        ),
+        "{ps:?}"
+    );
+    let h = &r.asm.as_ref().unwrap().harnesses[1];
+    assert_eq!(h.id, "power");
+    let c = h.wires.iter().find(|w| w.name == "C1").expect("the cable");
+    assert_eq!((c.from.as_str(), c.to.as_str()), ("P1", "P2"));
+    assert!(c.routed.is_some());
+    assert!(
+        h.bom
+            .iter()
+            .any(|b| b.item.starts_with("cable assembly pow") && b.qty == 1.0),
+        "{:?}",
+        h.bom
+    );
 }

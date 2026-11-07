@@ -1,6 +1,6 @@
 # A controller wired to two motor plugs and a sensor: a braided trunk to a clip, a branch to the
 # first motor, on to a second clip, branches to the second motor and the sensor; 14 wires of three
-# gauges. The harness is written in this file; robot_loom.fg places the same harness from a file
+# gauges; and a second harness, a bought power cable assembly between two plugs. The harness is written in this file; robot_loom.fg places the same harness from a file
 # of its own (loom.fg).
 shared out = 20
 shared out_ctrl = 45
@@ -31,16 +31,27 @@ shared n_sens = count(6)
 shared wide = 3.5
 shared hole_big = 2.8
 shared hole_small = 1.4
+shared n_pow = count(2)
+shared pow_pitch = 7
+shared od_pow = 6
+shared bend_pow = 30
+shared len_pow = 250
+shared out_pow = 15
+shared at_face = 0
 
 plate = part("plate.fg", ground: true)
 ctrl = part("header.fg", with: {n: n_ctrl, pitch: wide, hd: hole_big})
 ma = part("header.fg", with: {n: n_motor, pitch: wide, hd: hole_big})
 mb = part("header.fg", with: {n: n_motor, pitch: wide, hd: hole_big})
 sn = part("header.fg", with: {n: n_sens, hd: hole_small})
+pa = part("header.fg", with: {n: n_pow, pitch: pow_pitch, hd: hole_big})
+pb = part("header.fg", with: {n: n_pow, pitch: pow_pitch, hd: hole_big})
 on_ctrl = fastened(ctrl.seat, plate.ctrl_seat, flip: true)
 on_ma = fastened(ma.seat, plate.ma_seat, flip: true)
 on_mb = fastened(mb.seat, plate.mb_seat, flip: true)
 on_sn = fastened(sn.seat, plate.sn_seat, flip: true)
+on_pa = fastened(pa.seat, plate.pa_seat, flip: true)
+on_pb = fastened(pb.seat, plate.pb_seat, flip: true)
 
 harness loom(slack: slack, round_up: step, insert: seat_in) {
   p18 = wire_type(awg: g18, od: od18, min_bend: bend18, colour: "RD", conductor: "Cu", strands: n18, insulation: "PVC", temp: t105, volts: v600, spec: "UL 1015", spec_tag: "UL1015", source: "example values, not a datasheet")
@@ -79,6 +90,16 @@ harness loom(slack: slack, round_up: step, insert: seat_in) {
   W12 = wire(J1[12], J4[4], type: s26, colour: "GN")
   W13 = wire(J1[13], J4[5], type: s26, colour: "GN/YE")
   W14 = wire(J1[14], J4[6], type: s26, colour: "VT")
+}
+
+harness power(slack: slack, round_up: step) {
+  pow = cable_type(od: od_pow, min_bend: bend_pow, colour: "BK", conductors: "2x 14 AWG RD/BK", insulation: "PVC", length: len_pow, maker: "example", mpn: "PWR-250", source: "example values, not a datasheet")
+  P1 = connector(pa.face, pins: pa.pin, insert: at_face)
+  P2 = connector(pb.face, pins: pb.pin, insert: at_face)
+  np1 = node(P1, out: out_pow)
+  np2 = node(P2, out: out_pow)
+  run = segment(np1, np2)
+  C1 = cable(P1, P2, type: pow)
 }
 
 expect mobility = 0

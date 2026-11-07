@@ -97,11 +97,15 @@ fn the_harness_shows_in_the_tab_the_browser_the_view_and_the_status_bar() {
     // each wire its own tube, in its colour; the braided trunk's sleeve
     use forge_render::fg::HarnessPiece as P;
     let placed = asm(&h).harness_placed.clone();
-    assert_eq!(placed.iter().filter(|p| matches!(p.1, P::Wire(_))).count(), 14);
+    assert_eq!(
+        placed.iter().filter(|p| matches!(p.1, P::Wire(_))).count(),
+        15,
+        "the loom's 14 and the power cable"
+    );
     assert!(placed.iter().any(|p| p.1 == P::Sleeve(0)));
     assert!(placed.iter().all(|p| !matches!(p.1, P::Sleeve(k) if k > 0)));
     assert!(
-        h.gui.shell.status.contains("14 wires routed"),
+        h.gui.shell.status.contains("15 wires routed"),
         "{}",
         h.gui.shell.status
     );
@@ -118,8 +122,9 @@ fn the_harness_shows_in_the_tab_the_browser_the_view_and_the_status_bar() {
         let lit = tint(&h, P::Wire(k)) == forge_render::fg::PICKED_TINT;
         assert_eq!(lit, k < 4, "wire {k}");
     }
-    // the harness's eye hides its tubes
-    h.gui
+    // the harnesses' eyes hide their tubes (the loom's, and the power cable's)
+    let hidden = &mut h
+        .gui
         .shell
         .fg
         .as_mut()
@@ -127,8 +132,9 @@ fn the_harness_shows_in_the_tab_the_browser_the_view_and_the_status_bar() {
         .asm
         .as_mut()
         .unwrap()
-        .harness_hidden
-        .insert("loom".into());
+        .harness_hidden;
+    hidden.insert("loom".into());
+    hidden.insert("power".into());
     h.gui.asm_show();
     let view = h.gui.view.as_ref().unwrap();
     assert!(
@@ -147,7 +153,14 @@ fn asm_select(h: &mut Headless, key: &str) {
 #[test]
 fn add_wire_writes_its_line_in_the_harness_and_it_routes() {
     let d = scratch("wire");
-    let Some(mut h) = open(&d.join("robot.fg")) else {
+    // a header two pins longer, and a sensor plug too: pins with no wire yet
+    let robot = d.join("robot.fg");
+    let src = std::fs::read_to_string(&robot).unwrap();
+    let src = src
+        .replace("shared n_ctrl = count(14)", "shared n_ctrl = count(16)")
+        .replace("shared n_sens = count(6)", "shared n_sens = count(8)");
+    std::fs::write(&robot, src).unwrap();
+    let Some(mut h) = open(&robot) else {
         return;
     };
     h.gui.shell.fg_command(FgCmd::Harness(Cmd::Wire));
@@ -155,32 +168,53 @@ fn add_wire_writes_its_line_in_the_harness_and_it_routes() {
     {
         let p = h.gui.shell.fg.as_mut().unwrap();
         let Some(Dialog::Wire {
-            name,
-            from,
-            from_pin,
-            to,
-            to_pin,
-            ty,
-            ..
+            name, from, to, ty, ..
         }) = &mut p.harness.dialog
         else {
             panic!("no Add Wire dialog: {:?}", p.harness.dialog)
         };
         assert_eq!(name, "W15");
-        *from = "J1".into();
-        *from_pin = "14".into();
-        *to = "J4".into();
-        *to_pin = "6".into();
+        // its ends offered at the first pins no wire is on yet
+        assert_eq!((from.as_str(), to.as_str()), ("J1", "J4"));
         *ty = "s26".into();
     }
+    let (f, t) = match &h.gui.shell.fg.as_ref().unwrap().harness.dialog {
+        Some(Dialog::Wire {
+            from,
+            from_pin,
+            to,
+            to_pin,
+            ..
+        }) => (format!("{from}.{from_pin}"), format!("{to}.{to_pin}")),
+        _ => unreachable!(),
+    };
+    let before: Vec<(String, Vec<String>)> = asm(&h).harnesses[0]
+        .wires
+        .iter()
+        .map(|w| (w.from.clone(), w.path.clone()))
+        .collect();
+    let ends: Vec<String> = asm(&h).harnesses[0]
+        .wires
+        .iter()
+        .flat_map(|w| [w.from.clone(), w.to.clone()])
+        .collect();
+    assert!(
+        !ends.contains(&f) && !ends.contains(&t),
+        "{f} or {t} has a wire on it already"
+    );
     h.step();
     assert!(h.click("harness:dialog:ok"), "no OK");
     h.step();
     settle(&mut h);
     let src = h.gui.fg.as_ref().unwrap().src.clone();
-    assert!(src.contains("  W15 = wire(J1[14], J4[6], type: s26)\n}"), "{src}");
+    assert!(src.contains("  W15 = wire("), "{src}");
     let w = &asm(&h).harnesses[0].wires;
     assert_eq!(w.len(), 15);
-    assert_eq!(w[14].path, ["trunk", "span", "to_s"]);
+    assert_eq!((w[14].from.as_str(), w[14].to.as_str()), (f.as_str(), t.as_str()));
+    assert!(w[14].routed.is_some(), "the new wire routes");
+    // the others keep the ways they took
+    for (a, b) in before.iter().zip(w) {
+        assert_eq!(a.1, b.path);
+    }
     assert!(h.gui.shell.fg.as_ref().unwrap().harness.dialog.is_none());
 }

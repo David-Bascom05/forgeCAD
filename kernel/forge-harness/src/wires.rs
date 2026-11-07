@@ -312,92 +312,103 @@ pub fn slots(net: &Network, routed: &Routed) -> Vec<Slots> {
         }
         let far = 1 - near;
         // where each wire is wanted at an end, in this segment's frame there
-        let want = |e: usize, out: &[Option<Slots>]| -> std::collections::BTreeMap<usize, [f64; 2]> {
-            let node = end_node(k, e);
-            let (at, t, u) = end_frame(k, e);
-            let v = t.cross(u.get());
-            let flat = |d: Vec3| [d.dot(u.get()), d.dot(v)];
-            let mut m = std::collections::BTreeMap::new();
-            if let Some(c) = net.connectors.iter().position(|c| c.exit == node) {
+        let want =
+            |e: usize, out: &[Option<Slots>]| -> (std::collections::BTreeMap<usize, [f64; 2]>, Option<f64>) {
+                let node = end_node(k, e);
+                let (at, t, u) = end_frame(k, e);
+                let v = t.cross(u.get());
+                let flat = |d: Vec3| [d.dot(u.get()), d.dot(v)];
+                let mut m = std::collections::BTreeMap::new();
+                if let Some(c) = net.connectors.iter().position(|c| c.exit == node) {
+                    // drawn in by the spread of all the connector's pins, wired or not: the same for
+                    // every wire list on it, so adding a wire does not redraw the others
+                    let span = net.connectors[c]
+                        .pins
+                        .iter()
+                        .map(|p| {
+                            let f = flat(p.1 - at);
+                            (f[0] * f[0] + f[1] * f[1]).sqrt()
+                        })
+                        .fold(0.0, f64::max);
+                    for &w in &seg.wires {
+                        let wr = &net.wires[w];
+                        if let Some(pe) = [wr.from, wr.to].into_iter().find(|x| x.connector == c) {
+                            m.insert(w, flat(net.connectors[c].pins[pe.pin].1 - at));
+                        }
+                    }
+                    return (m, Some(span));
+                }
+
+                let mut turns: Vec<(usize, Option<[f64; 2]>)> = vec![];
                 for &w in &seg.wires {
-                    let wr = &net.wires[w];
-                    if let Some(pe) = [wr.from, wr.to].into_iter().find(|x| x.connector == c) {
-                        m.insert(w, flat(net.connectors[c].pins[pe.pin].1 - at));
+                    let Some(o) = &routed.wires[w] else { continue };
+                    let Some(i) = o.path.iter().position(|x| x.0 == k) else {
+                        continue;
+                    };
+                    let fwd = o.path[i].1;
+                    let next = if (e == 1) == fwd {
+                        o.path.get(i + 1)
+                    } else {
+                        i.checked_sub(1).and_then(|j| o.path.get(j))
+                    };
+                    let Some(&(n, _)) = next else { continue };
+                    let ne = usize::from(net.segments[n].a != node);
+                    // its slot in a segment placed already, as it meets this one
+                    if let Some(Some(sl)) = out.get(n)
+                        && let Some(slot) = sl.at.iter().find(|x| x.wire == w)
+                    {
+                        let (_, nt, nu) = end_frame(n, ne);
+                        let nv = nt.cross(nu.get());
+                        let c = rot(slot.at, if ne == 0 { 0.0 } else { sl.roll });
+                        m.insert(w, flat(nu.get() * c[0] + nv * c[1]));
+                        continue;
                     }
+                    // else the way the next segment turns off, past its straight
+                    let lead = routed.segments[n].straight[ne];
+                    let np = &fr[n].0;
+                    let mut acc = 0.0;
+                    let mut prev: Option<Point3> = None;
+                    let mut aim = None;
+                    let it: Box<dyn Iterator<Item = &(Point3, UnitVec3)>> = if ne == 0 {
+                        Box::new(np.iter())
+                    } else {
+                        Box::new(np.iter().rev())
+                    };
+                    for q in it {
+                        if let Some(pq) = prev {
+                            acc += pq.distance(q.0);
+                        }
+                        prev = Some(q.0);
+                        if acc > lead + LOOK_PAST {
+                            aim = Some(q.0);
+                            break;
+                        }
+                    }
+                    let dir = aim.map(|a_| flat(a_ - at)).and_then(|f| {
+                        let l = (f[0] * f[0] + f[1] * f[1]).sqrt();
+                        (l > 1e-6).then(|| [f[0] / l * TURN_OUT, f[1] / l * TURN_OUT])
+                    });
+                    turns.push((w, dir));
                 }
-                return m;
-            }
-            let rad = bundle_radius(net, &seg.wires).max(0.1);
-            let mut turns: Vec<(usize, Option<[f64; 2]>)> = vec![];
-            for &w in &seg.wires {
-                let Some(o) = &routed.wires[w] else { continue };
-                let Some(i) = o.path.iter().position(|x| x.0 == k) else {
-                    continue;
-                };
-                let fwd = o.path[i].1;
-                let next = if (e == 1) == fwd {
-                    o.path.get(i + 1)
+                // a wire running straight on keeps clear of those turning off
+                let off: Vec<[f64; 2]> = turns.iter().filter_map(|x| x.1).collect();
+                let away = if off.is_empty() {
+                    [0.0, 0.0]
                 } else {
-                    i.checked_sub(1).and_then(|j| o.path.get(j))
+                    let n = off.len() as f64;
+                    let c = [
+                        off.iter().map(|x| x[0]).sum::<f64>() / n,
+                        off.iter().map(|x| x[1]).sum::<f64>() / n,
+                    ];
+                    let l = (c[0] * c[0] + c[1] * c[1]).sqrt().max(1e-9);
+                    [-c[0] / l * TURN_OUT, -c[1] / l * TURN_OUT]
                 };
-                let Some(&(n, _)) = next else { continue };
-                let ne = usize::from(net.segments[n].a != node);
-                // its slot in a segment placed already, as it meets this one
-                if let Some(Some(sl)) = out.get(n)
-                    && let Some(slot) = sl.at.iter().find(|x| x.wire == w)
-                {
-                    let (_, nt, nu) = end_frame(n, ne);
-                    let nv = nt.cross(nu.get());
-                    let c = rot(slot.at, if ne == 0 { 0.0 } else { sl.roll });
-                    m.insert(w, flat(nu.get() * c[0] + nv * c[1]));
-                    continue;
+                for (w, d) in turns {
+                    m.insert(w, d.unwrap_or(away));
                 }
-                // else the way the next segment turns off, past its straight
-                let lead = routed.segments[n].straight[ne];
-                let np = &fr[n].0;
-                let mut acc = 0.0;
-                let mut prev: Option<Point3> = None;
-                let mut aim = None;
-                let it: Box<dyn Iterator<Item = &(Point3, UnitVec3)>> = if ne == 0 {
-                    Box::new(np.iter())
-                } else {
-                    Box::new(np.iter().rev())
-                };
-                for q in it {
-                    if let Some(pq) = prev {
-                        acc += pq.distance(q.0);
-                    }
-                    prev = Some(q.0);
-                    if acc > lead + 2.0 * rad + 5.0 {
-                        aim = Some(q.0);
-                        break;
-                    }
-                }
-                let dir = aim.map(|a_| flat(a_ - at)).and_then(|f| {
-                    let l = (f[0] * f[0] + f[1] * f[1]).sqrt();
-                    (l > 1e-6).then(|| [f[0] / l * rad, f[1] / l * rad])
-                });
-                turns.push((w, dir));
-            }
-            // a wire running straight on keeps clear of those turning off
-            let off: Vec<[f64; 2]> = turns.iter().filter_map(|x| x.1).collect();
-            let away = if off.is_empty() {
-                [0.0, 0.0]
-            } else {
-                let n = off.len() as f64;
-                let c = [
-                    off.iter().map(|x| x[0]).sum::<f64>() / n,
-                    off.iter().map(|x| x[1]).sum::<f64>() / n,
-                ];
-                let l = (c[0] * c[0] + c[1] * c[1]).sqrt().max(1e-9);
-                [-c[0] / l * rad, -c[1] / l * rad]
+                (m, None)
             };
-            for (w, d) in turns {
-                m.insert(w, d.unwrap_or(away));
-            }
-            m
-        };
-        let (wn, wf) = (want(near, &out), want(far, &out));
+        let ((wn, pin_n), (wf, pin_f)) = (want(near, &out), want(far, &out));
         // items: a group's wires packed together, or a wire alone
         let mut items: Vec<Item> = vec![];
         let mut done = vec![];
@@ -429,71 +440,77 @@ pub fn slots(net: &Network, routed: &Routed) -> Vec<Slots> {
                 ]
             })
         };
-        let radii: Vec<f64> = items.iter().map(|i| i.1).collect();
-        // every item already placed in the segments it comes from (a branch of a bundle): kept
-        // where it was, the lot centred and drawn together, so the wires move in as one
-        let inherited: Option<Vec<[f64; 2]>> = items.iter().map(|it| mean(&wn, &it.0)).collect();
-        let from_pins = net.connectors.iter().any(|c| c.exit == end_node(k, near));
-        let (at, d) = match inherited {
-            Some(ps) if !from_pins => compact(&ps, &radii),
-            _ => pack(&radii),
-        };
-        // matched at the near end (least squares: moving in, the wires do not cross) ..
-        let cost: Vec<Vec<f64>> = items
-            .iter()
-            .map(|it| {
-                let t = mean(&wn, &it.0);
-                at.iter()
-                    .map(|c| t.map_or(0.0, |t| sq(c[0] - t[0]) + sq(c[1] - t[1])))
-                    .collect()
-            })
-            .collect();
-        let mut place = assign(&cost);
-        // .. then the turn at the far end that best faces them where they go (2D Procrustes);
-        // and the places chosen again for both ends at once, each end's wants scaled to the
-        // bundle, a few times over
-        let face = |place: &[usize]| {
-            let (mut sx, mut sy) = (0.0, 0.0);
-            for (i, it) in items.iter().enumerate() {
-                if let Some(t) = mean(&wf, &it.0) {
-                    let c = at[place[i]];
-                    sx += c[0] * t[0] + c[1] * t[1];
-                    sy += c[0] * t[1] - c[1] * t[0];
-                }
-            }
-            if sx.abs() + sy.abs() > 1e-12 {
-                dmath::atan2(sy, sx)
-            } else {
-                0.0
-            }
-        };
-        let mut turn = face(&place);
-        {
-            let span = |m: &std::collections::BTreeMap<usize, [f64; 2]>| {
+        // each item placed in turn, in the order the wires are written, where it is best clear of
+        // those before it: a wire added later never moves one written before it (the bundle grows).
+        // Wanted at each end: its pin there (drawn in to the bundle's scale), its slot in the
+        // bundle it branches from, or out toward where it turns off
+        // each end's wants drawn in to the round bundle these items pack into (never pushed out):
+        // a header's pins 45 mm across still make a bundle a few mm round
+        let packed = pack(&items.iter().map(|i| i.1).collect::<Vec<_>>()).1 / 2.0;
+        let fit = |m: &std::collections::BTreeMap<usize, [f64; 2]>, pins: Option<f64>| {
+            let span = pins.unwrap_or_else(|| {
                 m.values()
                     .map(|t| (t[0] * t[0] + t[1] * t[1]).sqrt())
                     .fold(0.0, f64::max)
-                    .max(1e-9)
-            };
-            let (sn, sf) = (d / 2.0 / span(&wn), d / 2.0 / span(&wf));
-            for _ in 0..3 {
-                let cost: Vec<Vec<f64>> = items
-                    .iter()
-                    .map(|it| {
-                        let (tn, tf) = (mean(&wn, &it.0), mean(&wf, &it.0));
-                        at.iter()
-                            .map(|c| {
-                                let r_ = rot(*c, turn);
-                                tn.map_or(0.0, |t| sq(c[0] - t[0] * sn) + sq(c[1] - t[1] * sn))
-                                    + tf.map_or(0.0, |t| sq(r_[0] - t[0] * sf) + sq(r_[1] - t[1] * sf))
-                            })
-                            .collect()
-                    })
-                    .collect();
-                place = assign(&cost);
-                turn = face(&place);
+            });
+            if span > packed { packed / span } else { 1.0 }
+        };
+        let (fn_, ff) = (fit(&wn, pin_n), fit(&wf, pin_f));
+        let scale = |e: usize, t: [f64; 2]| {
+            let f = if e == near { fn_ } else { ff };
+            [t[0] * f, t[1] * f]
+        };
+        let at = place_in_order(&items, |i| {
+            [
+                mean(&wn, &items[i].0).map(|t| scale(near, t)),
+                mean(&wf, &items[i].0).map(|t| scale(far, t)),
+            ]
+            .into_iter()
+            .flatten()
+            .collect()
+        });
+        // then the tight round bundle these items pack into, each item to the place of its size
+        // nearest where it was put: the bundle as round as before, the order kept
+        let radii: Vec<f64> = items.iter().map(|i| i.1).collect();
+        let (tight, d) = pack(&radii);
+        let mid = [
+            at.iter().map(|c| c[0]).sum::<f64>() / at.len().max(1) as f64,
+            at.iter().map(|c| c[1]).sum::<f64>() / at.len().max(1) as f64,
+        ];
+        let rel: Vec<[f64; 2]> = at.iter().map(|c| [c[0] - mid[0], c[1] - mid[1]]).collect();
+        // matched, then the packing turned to face them best (2D Procrustes), a few times over
+        let mut spin = 0.0;
+        let mut to: Vec<usize> = (0..items.len()).collect();
+        for _ in 0..4 {
+            let placed: Vec<[f64; 2]> = tight.iter().map(|c| rot(*c, spin)).collect();
+            let cost: Vec<Vec<f64>> = (0..items.len())
+                .map(|i| {
+                    (0..items.len())
+                        .map(|j| {
+                            let off = if (radii[i] - radii[j]).abs() > 1e-9 {
+                                1e9
+                            } else {
+                                0.0
+                            };
+                            off + sq(rel[i][0] - placed[j][0]) + sq(rel[i][1] - placed[j][1])
+                        })
+                        .collect()
+                })
+                .collect();
+            to = assign(&cost);
+            let (mut sx, mut sy) = (0.0, 0.0);
+            for (i, &j) in to.iter().enumerate() {
+                let (c, t) = (tight[j], rel[i]);
+                sx += c[0] * t[0] + c[1] * t[1];
+                sy += c[0] * t[1] - c[1] * t[0];
+            }
+            if sx.abs() + sy.abs() > 1e-12 {
+                spin = dmath::atan2(sy, sx);
             }
         }
+        let at: Vec<[f64; 2]> = to.iter().map(|&j| rot(tight[j], spin)).collect();
+        let place: Vec<usize> = (0..items.len()).collect();
+        let turn = 0.0;
         let mut slots = vec![];
         for (i, item) in items.iter().enumerate() {
             let c = at[place[i]];
@@ -532,6 +549,69 @@ pub fn slots(net: &Network, routed: &Routed) -> Vec<Slots> {
         .collect()
 }
 
+/// How far out a wire turning off a bundle is wanted (mm), and how hard every wire is drawn
+/// toward the centreline.
+const TURN_OUT: f64 = 2.0;
+const PULL: f64 = 0.05;
+/// How far past its next segment's straight a turning wire looks for where it goes (mm).
+const LOOK_PAST: f64 = 10.0;
+
+/// Items placed one by one in their order, each where the sum of its squared distances to the
+/// places it is wanted (and a pull to the centreline) is least among the places clear of those
+/// before it: its best, touching one placed item (48 ways round it), or touching two. An item's
+/// place depends only on those before it.
+fn place_in_order(items: &[Item], want: impl Fn(usize) -> Vec<[f64; 2]>) -> Vec<[f64; 2]> {
+    let mut at: Vec<[f64; 2]> = vec![];
+    for (i, it) in items.iter().enumerate() {
+        let r = it.1;
+        let ts = want(i);
+        let cost = |p: [f64; 2]| {
+            ts.iter().map(|t| sq(p[0] - t[0]) + sq(p[1] - t[1])).sum::<f64>()
+                + PULL * (p[0] * p[0] + p[1] * p[1])
+        };
+        let n = ts.len() as f64 + PULL;
+        let best = [
+            ts.iter().map(|t| t[0]).sum::<f64>() / n,
+            ts.iter().map(|t| t[1]).sum::<f64>() / n,
+        ];
+        let clear = |p: [f64; 2]| {
+            at.iter().zip(items).all(|(c, o)| {
+                let (dx, dy) = (p[0] - c[0], p[1] - c[1]);
+                dx * dx + dy * dy >= sq(r + o.1) - 1e-9
+            })
+        };
+        let mut cands = vec![best];
+        for (j, c) in at.iter().enumerate() {
+            let rr = r + items[j].1 + 1e-7;
+            for q in 0..48 {
+                let (sn, cs) = dmath::sin_cos(std::f64::consts::TAU * q as f64 / 48.0);
+                cands.push([c[0] + rr * cs, c[1] + rr * sn]);
+            }
+            for (l, e) in at.iter().enumerate().skip(j + 1) {
+                let re = r + items[l].1 + 1e-7;
+                let (dx, dy) = (e[0] - c[0], e[1] - c[1]);
+                let dd = dx * dx + dy * dy;
+                let dist = dd.sqrt();
+                if dist < 1e-12 || dist > rr + re {
+                    continue;
+                }
+                let a = (rr * rr - re * re + dd) / (2.0 * dist);
+                let h = (rr * rr - a * a).max(0.0).sqrt();
+                let m = [c[0] + a * dx / dist, c[1] + a * dy / dist];
+                cands.push([m[0] - h * dy / dist, m[1] + h * dx / dist]);
+                cands.push([m[0] + h * dy / dist, m[1] - h * dx / dist]);
+            }
+        }
+        let p = cands
+            .into_iter()
+            .filter(|p| clear(*p))
+            .min_by(|a, b| cost(*a).total_cmp(&cost(*b)))
+            .unwrap_or(best);
+        at.push(p);
+    }
+    at
+}
+
 /// Circles where they are, centred on their middle and drawn in toward it, each in turn (nearest
 /// first) by small steps while it stays clear of the rest: a branch of a bundle closing up. Each
 /// circle's centre, by index, and the enclosing diameter.
@@ -548,7 +628,7 @@ pub fn compact(at: &[[f64; 2]], r: &[f64]) -> (Vec<[f64; 2]>, f64) {
     let clear = |p: &[[f64; 2]], i: usize, c: [f64; 2]| {
         (0..p.len()).all(|j| j == i || (sq(c[0] - p[j][0]) + sq(c[1] - p[j][1])).sqrt() >= r[i] + r[j] - 1e-9)
     };
-    for _ in 0..40 {
+    for _ in 0..200 {
         let mut order: Vec<usize> = (0..n).collect();
         order.sort_by(|&a, &b| {
             let d = |i: usize| (p[i][0] * p[i][0] + p[i][1] * p[i][1]).sqrt();
@@ -560,11 +640,22 @@ pub fn compact(at: &[[f64; 2]], r: &[f64]) -> (Vec<[f64; 2]>, f64) {
             if d <= 1e-9 {
                 continue;
             }
-            let step = d.min(r[i] * 0.25);
-            let c = [p[i][0] - p[i][0] / d * step, p[i][1] - p[i][1] / d * step];
-            if clear(&p, i, c) {
-                p[i] = c;
-                moved = true;
+            // straight in, else sliding a little round as it goes in; a smaller step where the
+            // larger is blocked
+            let mut step = d.min(r[i] * 0.25);
+            'try_: while step > r[i] * 0.01 {
+                for a in [0.0, 0.35, -0.35, 0.7, -0.7] {
+                    let (sn, cs) = dmath::sin_cos(a);
+                    let (ux, uy) = (p[i][0] / d, p[i][1] / d);
+                    let (mx, my) = (ux * cs - uy * sn, ux * sn + uy * cs);
+                    let c = [p[i][0] - mx * step, p[i][1] - my * step];
+                    if sq(c[0]) + sq(c[1]) < sq(d) - 1e-12 && clear(&p, i, c) {
+                        p[i] = c;
+                        moved = true;
+                        break 'try_;
+                    }
+                }
+                step *= 0.5;
             }
         }
         if !moved {
@@ -575,11 +666,6 @@ pub fn compact(at: &[[f64; 2]], r: &[f64]) -> (Vec<[f64; 2]>, f64) {
         .map(|i| (p[i][0] * p[i][0] + p[i][1] * p[i][1]).sqrt() + r[i])
         .fold(0.0, f64::max);
     (p, 2.0 * reach)
-}
-
-/// Half the packing diameter of a segment's wires, roughly: its rule's.
-fn bundle_radius(net: &Network, wires: &[usize]) -> f64 {
-    crate::bundle_d(&crate::item_ods(net, wires), 1.5) / 2.0
 }
 
 /// The least-cost assignment of rows to columns of a square cost matrix (Hungarian, O(n^3));

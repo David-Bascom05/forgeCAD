@@ -18,7 +18,16 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 /// The built-ins of a harness block, known only inside one.
-pub const BUILTINS: &[&str] = &["wire_type", "connector", "node", "segment", "wire", "twist"];
+pub const BUILTINS: &[&str] = &[
+    "wire_type",
+    "cable_type",
+    "connector",
+    "node",
+    "segment",
+    "wire",
+    "cable",
+    "twist",
+];
 
 /// Cable ties' pitch when the harness gives none (mm).
 pub const TIE_PITCH: f64 = 100.0;
@@ -75,6 +84,18 @@ fn hv(v: HVal) -> Value {
     Value::Asm(Rc::new(AsmVal::Harness(v)))
 }
 
+/// The most pins under one name a connector lists (`ctrl.pin[1]`..), wired or not.
+pub const MAX_PINS: i64 = 64;
+
+/// `r[k]`: pin `k` of the anchors under one name.
+fn indexed(r: &RefDef, k: i64) -> RefDef {
+    let mut r = r.clone();
+    if let Some(last) = r.segs.last_mut() {
+        last.index.push(Key::Ix(k));
+    }
+    r
+}
+
 /// `J1[3]` or `J1.a`: the connector's pin of that key.
 pub fn pin_of(h: usize, conn: usize, pins: &Pins, key: Key) -> Value {
     let text = key.to_string();
@@ -129,6 +150,8 @@ pub struct TypeDef {
     pub source: String,
     /// Everything else it is specified by (`SPEC`), as given.
     pub spec: std::collections::BTreeMap<String, SpecVal>,
+    /// Made by `cable_type`: drawn and listed as a cable.
+    pub cable: bool,
     pub span: Span,
 }
 
@@ -175,6 +198,9 @@ pub const SPEC: &[(&str, &str, bool)] = &[
     ("min_bend", "Ratings", true),
     ("spec", "Ratings", false),
     ("spec_tag", "Ratings", false),
+    ("conductors", "Cable", false),
+    ("shield", "Cable", false),
+    ("length", "Cable", true),
     ("maker", "Part numbers", false),
     ("mpn", "Part numbers", false),
     ("part_number", "Part numbers", false),
@@ -335,6 +361,20 @@ pub enum HarnessProblem {
         needed: f64,
         got: f64,
     },
+    /// A pin more wires end at than it takes (one, for now): they are drawn on top of each other.
+    PinTaken {
+        harness: String,
+        connector: String,
+        pin: String,
+        wires: Vec<String>,
+    },
+    /// A bought cable assembly shorter than its route needs.
+    CableTooShort {
+        harness: String,
+        cable: String,
+        needed: f64,
+        length: f64,
+    },
     /// A wire running through another wire or a part.
     WireClash {
         harness: String,
@@ -437,6 +477,8 @@ impl HarnessProblem {
             HarnessProblem::BendTooTight { .. }
             | HarnessProblem::BreakoutTooTight { .. }
             | HarnessProblem::WireClash { .. }
+            | HarnessProblem::CableTooShort { .. }
+            | HarnessProblem::PinTaken { .. }
             | HarnessProblem::GroupSplit { .. }
             | HarnessProblem::KinkAtNode { .. }
             | HarnessProblem::NoInsulationOd { .. }
@@ -454,6 +496,8 @@ impl HarnessProblem {
             HarnessProblem::KinkAtNode { .. } => "KinkAtNode",
             HarnessProblem::BreakoutTooTight { .. } => "BreakoutTooTight",
             HarnessProblem::WireClash { .. } => "WireClash",
+            HarnessProblem::CableTooShort { .. } => "CableTooShort",
+            HarnessProblem::PinTaken { .. } => "PinTaken",
             HarnessProblem::GroupSplit { .. } => "GroupSplit",
             HarnessProblem::NoPath { .. } => "NoPath",
             HarnessProblem::PathBroken { .. } => "PathBroken",
@@ -496,6 +540,26 @@ impl HarnessProblem {
                 fmt(*needed),
                 fmt(*got),
                 fmt(*got)
+            ),
+            HarnessProblem::PinTaken {
+                harness,
+                connector,
+                pin,
+                wires,
+            } => format!(
+                "{harness}.{connector} pin {pin} has {} wires on it ({}); a pin takes one",
+                wires.len(),
+                wires.join(", ")
+            ),
+            HarnessProblem::CableTooShort {
+                harness,
+                cable,
+                needed,
+                length,
+            } => format!(
+                "{harness}.{cable} needs {} mm, its assembly is {} mm",
+                fmt(needed.round()),
+                fmt(*length)
             ),
             HarnessProblem::WireClash { harness, wire, with, at } => format!(
                 "{harness}.{wire} runs into {with} at ({}, {}, {})",
@@ -621,6 +685,28 @@ impl HarnessProblem {
             HarnessProblem::GroupSplit { harness, group, wire } => {
                 vec![("harness", s(harness)), ("group", s(group)), ("wire", s(wire))]
             }
+            HarnessProblem::PinTaken {
+                harness,
+                connector,
+                pin,
+                wires,
+            } => vec![
+                ("harness", s(harness)),
+                ("connector", s(connector)),
+                ("pin", s(pin)),
+                ("wires", s(&wires.join(","))),
+            ],
+            HarnessProblem::CableTooShort {
+                harness,
+                cable,
+                needed,
+                length,
+            } => vec![
+                ("harness", s(harness)),
+                ("cable", s(cable)),
+                ("needed", (*needed).into()),
+                ("length", (*length).into()),
+            ],
             HarnessProblem::BreakoutTooTight {
                 harness,
                 wire,
@@ -1144,6 +1230,8 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
     }
     match name {
         "wire_type" => wire_type(ev, args, span),
+        "cable_type" => cable_type(ev, args, span),
+        "cable" => cable(ev, args, span),
         "connector" => connector(ev, args, span),
         "node" => node(ev, args, span),
         "segment" => segment(ev, args, span),
@@ -1215,11 +1303,99 @@ fn wire_type(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         colour: spec.get("colour").map(SpecVal::text).unwrap_or_default(),
         source,
         spec,
+        cable: false,
         span,
     };
     let (h, d) = current(ev);
     d.types.push(t);
     Ok(hv(HVal::WireType(h, d.types.len() - 1)))
+}
+
+/// A cable: a wire type whose insulation is its jacket, its conductors words (`4x 28 AWG`), and,
+/// for a bought assembly, its length.
+fn cable_type(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
+    let v = wire_type(ev, args, span)?;
+    let (_, d) = current(ev);
+    if let Some(t) = d.types.last_mut() {
+        t.cable = true;
+    }
+    Ok(v)
+}
+
+/// What a type is: a cable (made by `cable_type`, or with conductors), else a wire.
+pub fn is_cable(spec: &[(String, String)]) -> bool {
+    spec.iter()
+        .any(|x| x.0 == "conductors" || (x.0 == "kind" && x.1 == "cable"))
+}
+
+/// A cable's end: a connector (its face), or one of its pins.
+fn cable_end(ev: &mut Eval, v: &Value, span: Span) -> R<PinDef> {
+    if let Some(HVal::Connector { k, .. }) = hval(v).cloned() {
+        let (_, d) = current(ev);
+        let r = d.connectors[k].face.clone();
+        return Ok(PinDef {
+            conn: k,
+            key: String::new(),
+            r,
+        });
+    }
+    pin_def(ev, v, span)
+}
+
+fn cable(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
+    let a = Args::bind(
+        ev,
+        "cable",
+        &["from", "to", "type", "through", "colour", "color"],
+        args,
+        span,
+    )?;
+    let from = cable_end(ev, &a.req("from")?, a.span("from"))?;
+    let to = cable_end(ev, &a.req("to")?, a.span("to"))?;
+    let ty = want_h(
+        &a.req("type")?,
+        a.span("type"),
+        "a cable's type: a cable_type",
+        |h| match h {
+            HVal::WireType(_, k) => Some(*k),
+            _ => None,
+        },
+    )?;
+    let path = match a.opt("through") {
+        None => None,
+        Some(Value::List(xs)) => Some(
+            xs.iter()
+                .map(|x| {
+                    want_h(x, a.span("through"), "through: segments", |h| match h {
+                        HVal::Segment(_, k) => Some(*k),
+                        _ => None,
+                    })
+                })
+                .collect::<R<Vec<usize>>>()?,
+        ),
+        Some(o) => {
+            return Err(Error::WrongType {
+                span: a.span("through"),
+                what: "through: a list of segments",
+                want: Ty::List,
+                found: o.ty(),
+            });
+        }
+    };
+    let id = ev.take_id("cable", span)?;
+    let colour = text(&a, "colour")?.or(text(&a, "color")?);
+    let (h, d) = current(ev);
+    d.wires.push(WireDef {
+        id,
+        ty,
+        from,
+        to,
+        path,
+        colour,
+        current: None,
+        span,
+    });
+    Ok(hv(HVal::Wire(h, d.wires.len() - 1)))
 }
 
 fn connector(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
@@ -1246,6 +1422,10 @@ fn connector(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
             // the name alone is no place: only its pins are worked out
             let d = ev.asm.as_mut().expect("an assembly");
             d.probes.retain(|p| p != &r);
+            // every pin it may have asked of the part, wired or not: the ones it has are listed
+            for k in 1..=MAX_PINS {
+                probe(ev, &indexed(&r, k));
+            }
             Pins::Prefix(r)
         }
     };
@@ -1795,6 +1975,9 @@ pub struct ConnOut {
     pub name: String,
     pub face: String,
     pub pins: Vec<String>,
+    /// Each pin's point, by `pins`' order, and the node wires leave it by.
+    pub pin_at: Vec<Point3>,
+    pub exit: String,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -1986,7 +2169,7 @@ fn route_one(
             min_bend: t.min_bend,
         })
         .collect();
-    // each connector's pins: the ones its wires use, in the order first used
+    // each connector's pins: the ones its wires use, in the order first used (then the rest)
     let mut pins: Vec<Vec<(String, Point3)>> = vec![vec![]; d.connectors.len()];
     let mut ends = vec![];
     for w in &d.wires {
@@ -2038,6 +2221,22 @@ fn route_one(
         let from = end(ev, &w.from);
         let to = end(ev, &w.to);
         ends.push((from, to));
+    }
+    // then the pins no wire uses, after those that do (their order kept): Add Wire offers them,
+    // and a bundle drawn in from a header is drawn by all its pins' spread
+    for (c, list) in d.connectors.iter().zip(pins.iter_mut()) {
+        let all: Vec<(String, RefDef)> = match &*c.pins {
+            Pins::Map(m) => m.clone(),
+            Pins::Prefix(r) => (1..=MAX_PINS).map(|k| (k.to_string(), indexed(r, k))).collect(),
+        };
+        for (key, r) in all {
+            if list.iter().any(|x| x.0 == key) {
+                continue;
+            }
+            if let Some(f) = world(&r) {
+                list.push((key, f.origin));
+            }
+        }
     }
     let exits: Vec<Option<usize>> = (0..d.connectors.len())
         .map(|k| d.nodes.iter().position(|n| n.at == NodeAt::Connector(k)))
@@ -2165,6 +2364,46 @@ fn route_one(
         push(ev, span, p);
     }
     let (tight, clashes) = report(&mut out, d, &net, &r, parts, tubes);
+    // a pin with more than one wire on it (a cable's end is the connector's face, not a pin)
+    let mut on_pin: std::collections::BTreeMap<(usize, String), Vec<usize>> = Default::default();
+    for (k, w) in d.wires.iter().enumerate() {
+        for e in [&w.from, &w.to] {
+            if !e.key.is_empty() {
+                on_pin.entry((e.conn, e.key.clone())).or_default().push(k);
+            }
+        }
+    }
+    for ((c, pin), ws) in on_pin {
+        if ws.len() > 1 {
+            push(
+                ev,
+                d.wires[ws[1]].span,
+                HarnessProblem::PinTaken {
+                    harness: d.id.clone(),
+                    connector: local(&d.connectors[c].id),
+                    pin,
+                    wires: ws.iter().map(|&k| local(&d.wires[k].id)).collect(),
+                },
+            );
+        }
+    }
+    for (w, o) in d.wires.iter().zip(&r.wires) {
+        let have = d.types[w.ty].spec.get("length").and_then(SpecVal::num);
+        if let (Some(have), Some(o)) = (have, o)
+            && o.length > have
+        {
+            push(
+                ev,
+                w.span,
+                HarnessProblem::CableTooShort {
+                    harness: d.id.clone(),
+                    cable: local(&w.id),
+                    needed: o.length,
+                    length: have,
+                },
+            );
+        }
+    }
     for (a, with, at) in clashes {
         push(
             ev,
@@ -2195,6 +2434,15 @@ fn route_one(
     out
 }
 
+/// A wire's end as words: `J1.3`, or the connector alone for a cable's.
+fn end_text(conn: &str, key: &str) -> String {
+    if key.is_empty() {
+        conn.to_string()
+    } else {
+        format!("{conn}.{key}")
+    }
+}
+
 /// The report; each breakout tighter than its wire's own radius (wire, end 0 or 1, radius); and
 /// each wire running into another wire or a part (wire, what, where).
 #[allow(clippy::type_complexity)]
@@ -2215,6 +2463,8 @@ fn report(
             name: local(&c.id),
             face: ref_text(&c.face),
             pins: n.pins.iter().map(|p| p.0.clone()).collect(),
+            pin_at: n.pins.iter().map(|p| p.1).collect(),
+            exit: net.nodes[n.exit].id.clone(),
         })
         .collect();
     out.nodes = net
@@ -2254,8 +2504,8 @@ fn report(
             let t = &d.types[w.ty];
             WireOut {
                 name: local(&w.id),
-                from: format!("{}.{}", local(&d.connectors[w.from.conn].id), w.from.key),
-                to: format!("{}.{}", local(&d.connectors[w.to.conn].id), w.to.key),
+                from: end_text(&local(&d.connectors[w.from.conn].id), &w.from.key),
+                to: end_text(&local(&d.connectors[w.to.conn].id), &w.to.key),
                 ty: local(&t.id),
                 colour: w.colour.clone().unwrap_or_else(|| t.colour.clone()),
                 od: t.od,
@@ -2287,6 +2537,7 @@ fn report(
                 spec: SPEC
                     .iter()
                     .filter_map(|f| Some((f.0.to_string(), t.spec.get(f.0)?.text())))
+                    .chain(t.cable.then(|| ("kind".to_string(), "cable".to_string())))
                     .collect(),
                 ohm_km: r.map(|x| x.0),
                 ohm_worked: r.is_some_and(|x| x.1),
@@ -2315,7 +2566,19 @@ fn report(
             let part = t.map_or(["", "", ""], |t| {
                 [t.get("maker"), t.get("mpn"), t.get("part_number")]
             });
-            add(format!("wire {} {}", w.ty, w.colour), o.length, "mm", part);
+            let cable = t.is_some_and(|t| is_cable(&t.spec));
+            let bought = t.and_then(|t| t.get("length").parse::<f64>().ok());
+            match (cable, bought) {
+                // a bought assembly: one line each, its length in its name
+                (_, Some(l)) => add(
+                    format!("cable assembly {} ({} mm)", w.ty, fmt(l)),
+                    1.0,
+                    "each",
+                    part,
+                ),
+                (true, None) => add(format!("cable {} {}", w.ty, w.colour), o.length, "mm", part),
+                _ => add(format!("wire {} {}", w.ty, w.colour), o.length, "mm", part),
+            }
         }
     }
     for s in &out.segments {

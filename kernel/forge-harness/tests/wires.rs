@@ -228,3 +228,43 @@ fn wires_through_each_other_are_found() {
     assert!(c[0].2.distance(p(5.0, 0.0, 0.15)) < 1e-9);
     assert!(wires::clashes(&[Some(a), Some(clear)], 0.1).is_empty());
 }
+
+#[test]
+fn a_wire_added_keeps_the_slots_of_those_before_it() {
+    // a free pin on each header, there before the wire is added to it
+    let mut before = net(4);
+    let (j1, j2) = (before.connectors[0].pins.len(), before.connectors[1].pins.len());
+    before.connectors[0]
+        .pins
+        .push(("9".into(), p(2.54 * 4.5, 0.0, 10.0)));
+    before.connectors[1]
+        .pins
+        .push(("5".into(), p(300.0 + 2.54 * 2.5, 80.0, 10.0)));
+    let mut after = before.clone();
+    after.wires.push(Wire {
+        id: "W8".into(),
+        ty: 2,
+        from: End {
+            connector: 0,
+            pin: j1,
+        },
+        to: End {
+            connector: 1,
+            pin: j2,
+        },
+        path: None,
+    });
+    let (sa, sb) = (slots(&before, &route(&before)), slots(&after, &route(&after)));
+    for (a, b) in sa.iter().zip(&sb) {
+        for s in &a.at {
+            let t = b.at.iter().find(|x| x.wire == s.wire).expect("still there");
+            // near where it was: the bundle packs round again around one more wire, but each
+            // keeps its side of it (packed afresh and matched to the pins, they moved up to 4.4 mm)
+            let moved = ((s.at[0] - t.at[0]) * (s.at[0] - t.at[0])
+                + (s.at[1] - t.at[1]) * (s.at[1] - t.at[1]))
+                .sqrt();
+            assert!(moved < 2.0, "wire {} moved {moved} mm", s.wire);
+        }
+    }
+    assert!(sb[0].at.iter().any(|x| x.wire == 8), "the new wire has a slot");
+}

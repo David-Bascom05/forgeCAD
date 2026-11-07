@@ -231,6 +231,18 @@ fn names(h: &HarnessOut) -> (Vec<String>, Vec<String>, Vec<String>, Vec<String>)
     (conns, nodes, segs, types)
 }
 
+/// Connector `c`'s first pin no wire of `h` ends at.
+fn free_pin(h: &HarnessOut, c: &str) -> Option<String> {
+    let conn = h.connectors.iter().find(|x| x.name == c)?;
+    conn.pins
+        .iter()
+        .find(|p| {
+            let at = format!("{c}.{p}");
+            !h.wires.iter().any(|w| w.from == at || w.to == at)
+        })
+        .cloned()
+}
+
 /// The first name `stem1`, `stem2`, .. no item has.
 fn next_name(stem: &str, taken: &[String]) -> String {
     (1..)
@@ -294,13 +306,29 @@ impl FgPanel {
             }
             Cmd::Wire => {
                 let (conns, _, _, types) = first.map(names).unwrap_or_default();
+                // the first connectors with a pin no wire is on yet, and those pins: a new wire
+                // lands beside the others, not on top of one
+                let free: Vec<(String, String)> = first
+                    .map(|h| {
+                        conns
+                            .iter()
+                            .filter_map(|c| free_pin(h, c).map(|p| (c.clone(), p)))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                let end = |i: usize| {
+                    free.get(i)
+                        .cloned()
+                        .unwrap_or_else(|| (conns.get(i).cloned().unwrap_or_default(), "1".into()))
+                };
+                let ((from, from_pin), (to, to_pin)) = (end(0), end(1));
                 Dialog::Wire {
                     h,
                     name: next_name("W", &taken),
-                    from: conns.first().cloned().unwrap_or_default(),
-                    from_pin: "1".into(),
-                    to: conns.get(1).cloned().unwrap_or_default(),
-                    to_pin: "1".into(),
+                    from,
+                    from_pin,
+                    to,
+                    to_pin,
                     ty: types.first().cloned().unwrap_or_default(),
                     colour: Default::default(),
                 }
@@ -695,7 +723,10 @@ impl Shell {
             Dialog::Library { .. } => ("Wire Library", "folder"),
         };
         let mut problem: Option<String> = None;
-        let wide = matches!(d, Dialog::WireType { .. } | Dialog::Library { .. } | Dialog::Wire { .. });
+        let wide = matches!(
+            d,
+            Dialog::WireType { .. } | Dialog::Library { .. } | Dialog::Wire { .. }
+        );
         if wide {
             let (o, x, r) = super::harness_look::wide(ctx, &t, v, title, icon, &mut d, &hs, &mut places);
             ok |= o;
@@ -705,177 +736,177 @@ impl Shell {
             }
         }
         if !wide {
-        egui::Window::new(title)
-            .id(egui::Id::unique(title))
-            .title_bar(false)
-            .collapsible(false)
-            .resizable(false)
-            .default_pos(pos2(v.left() + 24.0, v.top() + 44.0))
-            .fixed_size(vec2(DLG_W, 0.0))
-            .frame(frame(&t))
-            .constrain_to(super::dialog_area(ctx))
-            .show_placed(ctx, &mut places, |ui, places| {
-                ui.spacing_mut().item_spacing.y = 6.0;
-                close = head(ui, &t, icon, title, DLG_W, places, "harness:dialog");
-                let h_of = |k: usize| hs.get(k);
-                let in_file = |k: usize| h_of(k).and_then(|h| h.file.clone());
-                match &mut d {
-                    Dialog::Create {
-                        name,
-                        slack,
-                        round_up,
-                    } => {
-                        line_edit(ui, &t, "Name", name, "loom", "name", places);
-                        line_edit(ui, &t, "Slack", slack, "0.03", "slack", places);
-                        line_edit(ui, &t, "Round up to (mm)", round_up, "5", "round", places);
-                    }
-                    Dialog::Connector {
-                        h,
-                        tab,
-                        name,
-                        inst,
-                        face,
-                        pins,
-                        out,
-                    } => {
-                        harness_pick(ui, &t, h, &hs, places);
-                        tabs(ui, &t, &["Connector", "Pin"], tab, DLG_W, places, "harness:conn");
-                        line_edit(ui, &t, "Name", name, "J1", "conn-name", places);
-                        pick(ui, &t, "Component", inst, &insts, "conn-inst", places);
-                        line_edit(ui, &t, "Anchor", face, "face", "conn-face", places);
-                        if *tab == 0 {
-                            line_edit(ui, &t, "Pins (anchors)", pins, "pin", "conn-pins", places);
+            egui::Window::new(title)
+                .id(egui::Id::unique(title))
+                .title_bar(false)
+                .collapsible(false)
+                .resizable(false)
+                .default_pos(pos2(v.left() + 24.0, v.top() + 44.0))
+                .fixed_size(vec2(DLG_W, 0.0))
+                .frame(frame(&t))
+                .constrain_to(super::dialog_area(ctx))
+                .show_placed(ctx, &mut places, |ui, places| {
+                    ui.spacing_mut().item_spacing.y = 6.0;
+                    close = head(ui, &t, icon, title, DLG_W, places, "harness:dialog");
+                    let h_of = |k: usize| hs.get(k);
+                    let in_file = |k: usize| h_of(k).and_then(|h| h.file.clone());
+                    match &mut d {
+                        Dialog::Create {
+                            name,
+                            slack,
+                            round_up,
+                        } => {
+                            line_edit(ui, &t, "Name", name, "loom", "name", places);
+                            line_edit(ui, &t, "Slack", slack, "0.03", "slack", places);
+                            line_edit(ui, &t, "Round up to (mm)", round_up, "5", "round", places);
                         }
-                        line_edit(ui, &t, "Exit (mm out)", out, "10", "conn-out", places);
-                        if let Some(f) = in_file(*h) {
-                            note(ui, &format!("written in {f}"), DLG_W, t.ink2);
+                        Dialog::Connector {
+                            h,
+                            tab,
+                            name,
+                            inst,
+                            face,
+                            pins,
+                            out,
+                        } => {
+                            harness_pick(ui, &t, h, &hs, places);
+                            tabs(ui, &t, &["Connector", "Pin"], tab, DLG_W, places, "harness:conn");
+                            line_edit(ui, &t, "Name", name, "J1", "conn-name", places);
+                            pick(ui, &t, "Component", inst, &insts, "conn-inst", places);
+                            line_edit(ui, &t, "Anchor", face, "face", "conn-face", places);
+                            if *tab == 0 {
+                                line_edit(ui, &t, "Pins (anchors)", pins, "pin", "conn-pins", places);
+                            }
+                            line_edit(ui, &t, "Exit (mm out)", out, "10", "conn-out", places);
+                            if let Some(f) = in_file(*h) {
+                                note(ui, &format!("written in {f}"), DLG_W, t.ink2);
+                            }
                         }
-                    }
-                    Dialog::Segment {
-                        h,
-                        from,
-                        to,
-                        via,
-                        node,
-                        at,
-                        off,
-                        along,
-                    } => {
-                        harness_pick(ui, &t, h, &hs, places);
-                        let mut nodes = h_of(*h).map(|x| names(x).1).unwrap_or_default();
-                        if !node.trim().is_empty() {
-                            nodes.push(node.trim().to_string());
-                        }
-                        pick(ui, &t, "From node", from, &nodes, "seg-from", places);
-                        pick(ui, &t, "To node", to, &nodes, "seg-to", places);
-                        line_edit(
-                            ui,
-                            &t,
-                            "Via (anchors)",
+                        Dialog::Segment {
+                            h,
+                            from,
+                            to,
                             via,
-                            "frame.corner_a, frame.corner_b",
-                            "seg-via",
-                            places,
-                        );
-                        heading(ui, &t, "New node", DLG_W);
-                        line_edit(ui, &t, "Name", node, "clip1", "node-name", places);
-                        line_edit(ui, &t, "At (anchor)", at, "plate.clip", "node-at", places);
-                        line_edit(ui, &t, "Offset (mm)", off, "0", "node-off", places);
-                        let axes = vec![String::new(), "x".into(), "y".into(), "z".into()];
-                        pick(ui, &t, "Along", along, &axes, "node-along", places);
-                    }
-                    Dialog::Wire { .. } | Dialog::WireType { .. } | Dialog::Library { .. } => {}
-                    Dialog::Route { h } => {
-                        harness_pick(ui, &t, h, &hs, places);
-                        if let Some(ho) = h_of(*h) {
-                            for w in &ho.wires {
-                                let path = if w.routed.is_some() {
-                                    w.path.join(" › ")
-                                } else {
-                                    "no path".into()
-                                };
-                                let mark = if w.given { "written" } else { "shortest" };
-                                note(ui, &format!("{}  {}  ({mark})", w.name, path), DLG_W, t.ink);
+                            node,
+                            at,
+                            off,
+                            along,
+                        } => {
+                            harness_pick(ui, &t, h, &hs, places);
+                            let mut nodes = h_of(*h).map(|x| names(x).1).unwrap_or_default();
+                            if !node.trim().is_empty() {
+                                nodes.push(node.trim().to_string());
                             }
-                        }
-                        ui.horizontal(|ui| {
-                            ui.add_space(14.0);
-                            if super::thermo_ui::button(
+                            pick(ui, &t, "From node", from, &nodes, "seg-from", places);
+                            pick(ui, &t, "To node", to, &nodes, "seg-to", places);
+                            line_edit(
                                 ui,
                                 &t,
-                                "Write Paths",
-                                false,
-                                "harness:route:pin".into(),
+                                "Via (anchors)",
+                                via,
+                                "frame.corner_a, frame.corner_b",
+                                "seg-via",
                                 places,
-                            ) {
-                                apply = true;
-                            }
-                            if super::thermo_ui::button(
-                                ui,
-                                &t,
-                                "Clear Paths",
-                                false,
-                                "harness:route:clear".into(),
-                                places,
-                            ) {
-                                ok = true;
-                            }
-                        });
-                    }
-                    Dialog::Import { h, path, preview } => {
-                        harness_pick(ui, &t, h, &hs, places);
-                        line_edit(
-                            ui,
-                            &t,
-                            "Wire list (CSV)",
-                            path,
-                            "wires.csv",
-                            "import-path",
-                            places,
-                        );
-                        if super::thermo_ui::button(
-                            ui,
-                            &t,
-                            "Preview",
-                            false,
-                            "harness:import:preview".into(),
-                            places,
-                        ) {
-                            *preview = Some(import_preview(&fg, &source, &hs, *h, path));
+                            );
+                            heading(ui, &t, "New node", DLG_W);
+                            line_edit(ui, &t, "Name", node, "clip1", "node-name", places);
+                            line_edit(ui, &t, "At (anchor)", at, "plate.clip", "node-at", places);
+                            line_edit(ui, &t, "Offset (mm)", off, "0", "node-off", places);
+                            let axes = vec![String::new(), "x".into(), "y".into(), "z".into()];
+                            pick(ui, &t, "Along", along, &axes, "node-along", places);
                         }
-                        match preview {
-                            Some(Ok((ops, diff))) if ops.is_empty() => {
-                                let _ = diff;
-                                note(ui, "the list is what the harness holds", DLG_W, t.ink2)
-                            }
-                            Some(Ok((_, diff))) => {
-                                for l in diff.text().lines() {
-                                    note(ui, l, DLG_W, t.ink);
+                        Dialog::Wire { .. } | Dialog::WireType { .. } | Dialog::Library { .. } => {}
+                        Dialog::Route { h } => {
+                            harness_pick(ui, &t, h, &hs, places);
+                            if let Some(ho) = h_of(*h) {
+                                for w in &ho.wires {
+                                    let path = if w.routed.is_some() {
+                                        w.path.join(" › ")
+                                    } else {
+                                        "no path".into()
+                                    };
+                                    let mark = if w.given { "written" } else { "shortest" };
+                                    note(ui, &format!("{}  {}  ({mark})", w.name, path), DLG_W, t.ink);
                                 }
                             }
-                            Some(Err(e)) => note(ui, e, DLG_W, t.error),
-                            None => {}
+                            ui.horizontal(|ui| {
+                                ui.add_space(14.0);
+                                if super::thermo_ui::button(
+                                    ui,
+                                    &t,
+                                    "Write Paths",
+                                    false,
+                                    "harness:route:pin".into(),
+                                    places,
+                                ) {
+                                    apply = true;
+                                }
+                                if super::thermo_ui::button(
+                                    ui,
+                                    &t,
+                                    "Clear Paths",
+                                    false,
+                                    "harness:route:clear".into(),
+                                    places,
+                                ) {
+                                    ok = true;
+                                }
+                            });
+                        }
+                        Dialog::Import { h, path, preview } => {
+                            harness_pick(ui, &t, h, &hs, places);
+                            line_edit(
+                                ui,
+                                &t,
+                                "Wire list (CSV)",
+                                path,
+                                "wires.csv",
+                                "import-path",
+                                places,
+                            );
+                            if super::thermo_ui::button(
+                                ui,
+                                &t,
+                                "Preview",
+                                false,
+                                "harness:import:preview".into(),
+                                places,
+                            ) {
+                                *preview = Some(import_preview(&fg, &source, &hs, *h, path));
+                            }
+                            match preview {
+                                Some(Ok((ops, diff))) if ops.is_empty() => {
+                                    let _ = diff;
+                                    note(ui, "the list is what the harness holds", DLG_W, t.ink2)
+                                }
+                                Some(Ok((_, diff))) => {
+                                    for l in diff.text().lines() {
+                                        note(ui, l, DLG_W, t.ink);
+                                    }
+                                }
+                                Some(Err(e)) => note(ui, e, DLG_W, t.error),
+                                None => {}
+                            }
+                        }
+                        Dialog::Export { h, path, done } => {
+                            harness_pick(ui, &t, h, &hs, places);
+                            line_edit(ui, &t, "File (CSV)", path, "wires.csv", "export-path", places);
+                            match done {
+                                Some(Ok(p)) => note(ui, &format!("written: {p}"), DLG_W, t.ink2),
+                                Some(Err(e)) => note(ui, e, DLG_W, t.error),
+                                None => {}
+                            }
                         }
                     }
-                    Dialog::Export { h, path, done } => {
-                        harness_pick(ui, &t, h, &hs, places);
-                        line_edit(ui, &t, "File (CSV)", path, "wires.csv", "export-path", places);
-                        match done {
-                            Some(Ok(p)) => note(ui, &format!("written: {p}"), DLG_W, t.ink2),
-                            Some(Err(e)) => note(ui, e, DLG_W, t.error),
-                            None => {}
-                        }
+                    if let Some(p) = &problem {
+                        note(ui, p, DLG_W, t.error);
                     }
-                }
-                if let Some(p) = &problem {
-                    note(ui, p, DLG_W, t.error);
-                }
-                if !matches!(d, Dialog::Route { .. }) {
-                    let (o, x, _) = foot(ui, &t, "harness:dialog", false, places);
-                    ok |= o;
-                    close |= x;
-                }
-            });
+                    if !matches!(d, Dialog::Route { .. }) {
+                        let (o, x, _) = foot(ui, &t, "harness:dialog", false, places);
+                        ok |= o;
+                        close |= x;
+                    }
+                });
         }
         let keep = match (&mut d, ok || apply) {
             (_, false) => !close,
@@ -1047,7 +1078,10 @@ pub fn wire_type_call(fields: &[(String, String)]) -> Result<String, String> {
             continue;
         };
         // a number, a param's name or an expression as written; words quoted unless they are
-        let name = v.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '.') && !v.starts_with(|c: char| c.is_ascii_digit());
+        let name = v
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '.')
+            && !v.starts_with(|c: char| c.is_ascii_digit());
         if num {
             if v.parse::<f64>().is_err() && !name && !v.contains(['(', '+', '*', '/', '-']) {
                 return Err(format!("{} is not a number", label_of(k)));
@@ -1073,14 +1107,18 @@ pub fn wire_type_call(fields: &[(String, String)]) -> Result<String, String> {
 pub fn locate(p: &HarnessProblem) -> Option<(String, Option<[f64; 3]>)> {
     let pt = |q: &forge_math::Point3| Some([q.x, q.y, q.z]);
     match p {
-        HarnessProblem::WireClash { harness, wire, at, .. } => Some((format!("h:{harness}:w:{wire}"), pt(at))),
-        HarnessProblem::BendTooTight { harness, segment, at, .. } => {
-            Some((format!("h:{harness}:s:{segment}"), pt(at)))
-        }
+        HarnessProblem::WireClash {
+            harness, wire, at, ..
+        } => Some((format!("h:{harness}:w:{wire}"), pt(at))),
+        HarnessProblem::BendTooTight {
+            harness, segment, at, ..
+        } => Some((format!("h:{harness}:s:{segment}"), pt(at))),
         HarnessProblem::KinkAtNode { harness, wire, .. }
         | HarnessProblem::NoPath { harness, wire, .. }
         | HarnessProblem::PathBroken { harness, wire, .. }
-        | HarnessProblem::BreakoutTooTight { harness, wire, .. } => Some((format!("h:{harness}:w:{wire}"), None)),
+        | HarnessProblem::BreakoutTooTight { harness, wire, .. } => {
+            Some((format!("h:{harness}:w:{wire}"), None))
+        }
         HarnessProblem::SegmentEmpty { harness, segment } => Some((format!("h:{harness}:s:{segment}"), None)),
         _ => None,
     }

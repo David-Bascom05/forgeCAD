@@ -13,6 +13,10 @@ shared sx = 130
 shared sy = -60
 shared p1x = -30
 shared p2x = 60
+shared pax = -120
+shared pay = -75
+shared pbx = 20
+shared pby = -80
 properties(part_number: "PLT-1", description: "base plate", material: "6061-T6")
 sketch plan(on: xy) {
   outline = rect(center: (0, 0), size: (L, W))
@@ -25,6 +29,8 @@ sketch pp(on: base.end) {
   ma = pt(ax, ay)
   mb = pt(bx, by)
   sn = pt(sx, sy)
+  pa = pt(pax, pay)
+  pb = pt(pbx, pby)
 }
 post1 = extrude(pp.c1, post_h)
 post2 = extrude(pp.c2, post_h)
@@ -34,3 +40,5 @@ mb_seat = anchor(plane(at: pp.mb, normal: base.end.normal, x: plan.outline[0].di
 sn_seat = anchor(plane(at: pp.sn, normal: base.end.normal, x: plan.outline[0].dir))
 clip1 = anchor(plane(at: post1.end.center, normal: base.end.normal, x: plan.outline[0].dir))
 clip2 = anchor(plane(at: post2.end.center, normal: base.end.normal, x: plan.outline[0].dir))
+pa_seat = anchor(plane(at: pp.pa, normal: base.end.normal, x: plan.outline[0].dir))
+pb_seat = anchor(plane(at: pp.pb, normal: base.end.normal, x: plan.outline[0].dir))
