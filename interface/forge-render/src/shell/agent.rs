@@ -125,6 +125,8 @@ pub enum AgentAct {
     ShowMarkup(usize),
     Stop,
     NewChat,
+    ListConversations,
+    ResumeConversation(String),
     /// A turn's change taken back, or put back.
     Undo(usize, usize),
     Redo(usize, usize),
@@ -156,6 +158,10 @@ pub struct AgentTab {
     pub project: Option<String>,
     pub settings: AgentSettings,
     pub switcher: bool,
+    pub resume_open: bool,
+    pub resume_filter: String,
+    pub resume_error: Option<String>,
+    pub saved_chats: Vec<crate::agent::conversations::Summary>,
     pub out: Vec<AgentAct>,
     /// Tool rows opened to show what they ran.
     pub open: std::collections::HashSet<String>,
@@ -254,6 +260,23 @@ impl AgentTab {
     /// The input as a message: sent, if there's anything to send and nothing running.
     pub fn send(&mut self) {
         let text = self.input.trim().to_string();
+        if !self.running {
+            if text == "/resume" {
+                self.input.clear();
+                self.out.push(AgentAct::ListConversations);
+                return;
+            }
+            if let Some(id) = text.strip_prefix("/resume ") {
+                self.input.clear();
+                self.out.push(AgentAct::ResumeConversation(id.trim().into()));
+                return;
+            }
+            if text == "/new" {
+                self.input.clear();
+                self.new_chat();
+                return;
+            }
+        }
         self.markup.commit_text();
         let markup = !self.markup.marks.is_empty();
         if (text.is_empty() && !markup) || self.running {
@@ -273,7 +296,25 @@ impl AgentTab {
         self.out.push(AgentAct::Send { text, refs, markup });
     }
 
+    pub fn restore_entries(&mut self, entries: Vec<Entry>) {
+        self.entries = entries;
+        self.input.clear();
+        self.refs.clear();
+        self.thumbs.clear();
+        self.open.clear();
+        self.running = false;
+        self.problem = None;
+        self.pending = None;
+        self.trust_ask = None;
+        self.markup = Default::default();
+        self.resume_open = false;
+        self.resume_error = None;
+    }
+
     pub fn new_chat(&mut self) {
+        if self.running {
+            return;
+        }
         self.entries.clear();
         self.thumbs.clear();
         self.markup.shown = None;
@@ -827,7 +868,7 @@ impl Shell {
         let bar = Rect::from_min_size(area.min, vec2(w, BAR_H));
         let label = self.agent.settings.label();
         let g = ui.fonts_mut(|f| f.layout_no_wrap(label.clone(), medium(12.0), t.ink));
-        let bw = (g.size().x + 30.0).min(w - 2.0 * PAD);
+        let bw = (g.size().x + 30.0).min((w - 2.0 * PAD - 58.0).max(40.0));
         let br = Rect::from_min_size(pos2(bar.left() + PAD - 4.0, bar.top() + 4.0), vec2(bw, 22.0));
         let resp = ui.interact(br, ui.scope_id().with("agent-switch"), Sense::click());
         resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, &label));
@@ -851,6 +892,27 @@ impl Shell {
         if self.agent.switcher {
             self.agent_switcher(ui.ctx(), br);
         }
+
+        let chats = Rect::from_min_size(pos2(bar.right() - PAD - 48.0, bar.top() + 4.0), vec2(48.0, 22.0));
+        let response = ui
+            .interact(chats, ui.scope_id().with("agent-resume"), Sense::click())
+            .on_hover_text("Resume a saved conversation (/resume)");
+        response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, !self.agent.running, "Chats"));
+        if response.hovered() {
+            p.rect_filled(chats, 4.0, t.hover);
+        }
+        p.text(
+            chats.center(),
+            Align2::CENTER_CENTER,
+            "Chats",
+            sans(12.0),
+            if self.agent.running { t.ink2 } else { t.ink },
+        );
+        self.note("agent:resume", chats);
+        if response.clicked() && !self.agent.running {
+            self.agent.out.push(AgentAct::ListConversations);
+        }
+        self.agent_resume_picker(ui.ctx());
 
         // what it's working on
         let ctx_y = bar.bottom();
@@ -891,6 +953,84 @@ impl Shell {
         if self.agent.running {
             ui.ctx()
                 .request_repaint_after(std::time::Duration::from_millis(120));
+        }
+    }
+
+    fn agent_resume_picker(&mut self, ctx: &egui::Context) {
+        if !self.agent.resume_open {
+            return;
+        }
+        let mut open = true;
+        let mut selected = None;
+        let mut new = false;
+        let mut places = Vec::new();
+        let theme = self.theme;
+        egui::Window::new("Resume conversation")
+            .id(egui::Id::unique("agent-resume-window"))
+            .open(&mut open)
+            .default_size(vec2(480.0, 360.0))
+            .show(ctx, |ui| {
+                ui.label(self.agent.project.as_deref().unwrap_or("Current project"));
+                let search = ui.add(
+                    egui::TextEdit::singleline(&mut self.agent.resume_filter)
+                        .hint_text("Search conversations")
+                        .desired_width(f32::INFINITY),
+                );
+                places.push(("agent:resume:search".into(), search.rect));
+                if let Some(error) = &self.agent.resume_error {
+                    ui.colored_label(theme.error, error);
+                }
+                ui.separator();
+                egui::ScrollArea::vertical()
+                    .id_salt("saved-chats")
+                    .max_height(260.0)
+                    .show(ui, |ui| {
+                        if self.agent.saved_chats.is_empty() {
+                            ui.label("No saved conversations for this project yet.");
+                        }
+                        let filter = self.agent.resume_filter.to_lowercase();
+                        for chat in &self.agent.saved_chats {
+                            if !format!("{} {}", chat.title, chat.backend)
+                                .to_lowercase()
+                                .contains(&filter)
+                            {
+                                continue;
+                            }
+                            let age = (forge_history::now() as u64).saturating_sub(chat.updated);
+                            let age = if age < 60 {
+                                "just now".into()
+                            } else if age < 3600 {
+                                format!("{} min ago", age / 60)
+                            } else if age < 86400 {
+                                format!("{} h ago", age / 3600)
+                            } else {
+                                format!("{} days ago", age / 86400)
+                            };
+                            let button = ui.add_sized(
+                                vec2(ui.available_width(), 48.0),
+                                egui::Button::new(format!("{}\n{} · {}", chat.title, chat.backend, age)),
+                            );
+                            places.push((format!("agent:resume:{}", chat.id), button.rect));
+                            if button.clicked() {
+                                selected = Some(chat.id.clone());
+                            }
+                        }
+                    });
+                ui.separator();
+                let button = ui.button("New conversation");
+                places.push(("agent:resume:new".into(), button.rect));
+                if button.clicked() {
+                    new = true;
+                }
+            });
+        self.agent.resume_open = open;
+        self.places.extend(places);
+        if let Some(id) = selected {
+            self.agent.out.push(AgentAct::ResumeConversation(id));
+        }
+        if new {
+            self.agent.resume_open = false;
+            self.agent.new_chat();
         }
     }
 

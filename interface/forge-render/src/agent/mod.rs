@@ -6,6 +6,7 @@
 pub mod apptools;
 pub mod claude;
 pub mod codex;
+pub mod conversations;
 pub mod keys;
 pub mod mcp;
 pub mod openai;

@@ -29,6 +29,13 @@ pub struct AgentHost {
     pub cwd: Option<PathBuf>,
     /// Captured launch folder, used for project conversations before any document is open.
     pub project_dir: Option<PathBuf>,
+    /// Local conversation storage override (tests and portable installations).
+    pub conversations_dir: Option<PathBuf>,
+    chat: Option<crate::agent::conversations::Conversation>,
+    endpoint_history: Option<std::sync::Arc<std::sync::Mutex<Vec<forge_agent::json::Json>>>>,
+    last_saved: Option<std::time::Instant>,
+    save_error: Option<String>,
+    resumed: bool,
     /// `agent.toml`, unless a test says otherwise.
     pub settings_file: Option<PathBuf>,
     /// The app tools' calls, to the frame's thread; the way to them, for the backends.
@@ -37,6 +44,41 @@ pub struct AgentHost {
     /// CLI agents' MCP server: this app's socket and the `forge-app` that bridges to it.
     mcp: Option<String>,
     pub mcp_exe: Option<PathBuf>,
+}
+
+impl AgentHost {
+    fn conversation_dir(&self) -> Option<PathBuf> {
+        self.conversations_dir
+            .clone()
+            .or_else(|| {
+                self.settings_file
+                    .as_ref()
+                    .and_then(|p| p.parent())
+                    .map(|p| p.join(".conversations"))
+            })
+            .or_else(crate::agent::conversations::default_dir)
+    }
+    fn flush_conversation(&mut self) -> Result<(), String> {
+        if self.chat.is_none() {
+            return Ok(());
+        }
+        let base = self
+            .conversation_dir()
+            .ok_or("No local conversation storage directory is available")?;
+        let chat = self.chat.as_mut().expect("chat");
+        chat.session = self.session.as_ref().and_then(|s| s.lock().ok()?.clone());
+        if let Some(history) = &self.endpoint_history {
+            chat.history = history.lock().map_err(|e| e.to_string())?.clone();
+        }
+        chat.save(&base)?;
+        self.last_saved = Some(std::time::Instant::now());
+        Ok(())
+    }
+}
+impl Drop for AgentHost {
+    fn drop(&mut self) {
+        let _ = self.flush_conversation();
+    }
 }
 
 fn settings_path() -> Option<PathBuf> {
@@ -77,7 +119,12 @@ impl Gui {
                 AgentSettings::from_toml(&text).write_extra(&mut self.shell.settings.extra);
             }
         }
-        self.shell.agent.project = self.agent_root().map(|p| p.display().to_string());
+        let project = self.agent_root().map(|p| p.display().to_string());
+        if project != self.shell.agent.project {
+            self.shell.agent.resume_open = false;
+            self.shell.agent.saved_chats.clear();
+        }
+        self.shell.agent.project = project;
         // settings.toml's [agent] table is the settings: the Settings window writes it
         let now = AgentSettings::from_extra(&self.shell.settings.extra);
         if now != self.shell.agent.settings {
@@ -120,6 +167,8 @@ impl Gui {
             .as_ref()
             .map(|r| r.try_iter().collect())
             .unwrap_or_default();
+        let changed = !got.is_empty();
+        let terminal = got.iter().any(crate::agent::conversations::terminal);
         for e in got {
             match e {
                 Event::FileChanged { path, before, text } => self.agent_file(path, before, text),
@@ -130,6 +179,9 @@ impl Gui {
                 }
                 e => self.shell.agent.take(e),
             }
+        }
+        if changed {
+            self.agent_capture_conversation(terminal);
         }
     }
 
@@ -247,6 +299,117 @@ impl Gui {
         });
     }
 
+    fn agent_capture_conversation(&mut self, force: bool) {
+        let Some(chat) = self.agent.chat.as_mut() else {
+            return;
+        };
+        chat.entries = self.shell.agent.entries.clone();
+        if let Some((_, settings)) = &self.agent.made_for {
+            chat.settings = settings.clone();
+        }
+        chat.settings.trusted.clear();
+        chat.updated = forge_history::now() as u64;
+        chat.interrupted = self.shell.agent.running;
+        if force || self.agent.last_saved.is_none_or(|t| t.elapsed().as_secs() >= 1) {
+            if let Err(error) = self.agent.flush_conversation() {
+                if self.agent.save_error.as_ref() != Some(&error) {
+                    self.shell.agent.take(Event::Note {
+                        text: format!("Couldn't save this conversation: {error}"),
+                        error: true,
+                    });
+                    self.agent.save_error = Some(error);
+                }
+            } else {
+                self.agent.save_error = None;
+            }
+        }
+    }
+
+    fn agent_list_conversations(&mut self) {
+        if self.agent_busy() {
+            return;
+        }
+        self.agent_capture_conversation(true);
+        self.shell.agent.resume_open = true;
+        self.shell.agent.resume_error = None;
+        let got = (|| {
+            let root = self.agent_root().ok_or("No project folder")?;
+            let base = self
+                .agent
+                .conversation_dir()
+                .ok_or("No conversation storage directory")?;
+            crate::agent::conversations::import_codex(&base, &root)?;
+            crate::agent::conversations::list(&base, &root)
+        })();
+        match got {
+            Ok(list) => self.shell.agent.saved_chats = list,
+            Err(e) => {
+                self.shell.agent.saved_chats.clear();
+                self.shell.agent.resume_error = Some(e);
+            }
+        }
+    }
+
+    fn agent_resume_conversation(&mut self, id: &str) {
+        if self.agent_busy() {
+            return;
+        }
+        self.shell.agent.resume_open = true;
+        let got = (|| {
+            let root = self.agent_root().ok_or("No project folder")?;
+            let base = self
+                .agent
+                .conversation_dir()
+                .ok_or("No conversation storage directory")?;
+            crate::agent::conversations::load(&base, &root, id)
+        })();
+        let mut chat = match got {
+            Ok(c) => c,
+            Err(e) => {
+                self.shell.agent.resume_error = Some(e);
+                return;
+            }
+        };
+        let same = self.agent.chat.as_ref().is_some_and(|c| c.id == chat.id);
+        if same
+            && self
+                .agent
+                .chat
+                .as_ref()
+                .is_some_and(|c| c.generation == chat.generation)
+        {
+            self.shell.agent.resume_open = false;
+            return;
+        }
+        if !same && let Err(e) = self.agent.flush_conversation() {
+            self.shell.agent.resume_error = Some(e);
+            return;
+        }
+        let trusted = self.shell.agent.settings.trusted.clone();
+        let interrupted = chat.interrupted;
+        self.agent_reset();
+        self.shell.agent.restore_entries(chat.entries.clone());
+        chat.settings.trusted = trusted;
+        self.shell.agent.settings = chat.settings.clone();
+        self.agent_save_settings();
+        self.agent.made_for = Some((chat.project.clone(), chat.settings.clone()));
+        self.agent.project_dir = Some(PathBuf::from(&chat.project));
+        self.agent.session = Some(std::sync::Arc::new(std::sync::Mutex::new(chat.session.clone())));
+        self.agent.endpoint_history = Some(std::sync::Arc::new(std::sync::Mutex::new(chat.history.clone())));
+        self.agent.resumed = true;
+        self.shell.agent.take(Event::Note {
+            text: if interrupted {
+                "Resumed an interrupted conversation. Project files are unchanged by resuming."
+            } else {
+                "Resumed conversation. Past changes are summaries; use Versions to restore a design."
+            }
+            .into(),
+            error: false,
+        });
+        self.agent.chat = Some(chat);
+        self.agent_capture_conversation(true);
+    }
+
     fn agent_reset(&mut self) {
         self.agent.backend = None;
         self.agent.rx = None;
@@ -254,6 +417,11 @@ impl Gui {
         self.agent.session = None;
         self.agent.told = None;
         self.agent.turns = Turns::default();
+        self.agent.chat = None;
+        self.agent.endpoint_history = None;
+        self.agent.last_saved = None;
+        self.agent.save_error = None;
+        self.agent.resumed = false;
     }
 
     /// The turn's changes, a diff for each file it changed or made.
@@ -432,7 +600,17 @@ impl Gui {
                         });
                     }
                 }
-                AgentAct::NewChat => self.agent_reset(),
+                AgentAct::ListConversations => self.agent_list_conversations(),
+                AgentAct::ResumeConversation(id) => self.agent_resume_conversation(&id),
+                AgentAct::NewChat => {
+                    if let Err(error) = self.agent.flush_conversation() {
+                        self.shell.agent.take(Event::Note {
+                            text: format!("Couldn't save the previous conversation: {error}"),
+                            error: true,
+                        });
+                    }
+                    self.agent_reset();
+                }
                 AgentAct::Undo(k, i) | AgentAct::Redo(k, i) => {
                     let undo = matches!(a, AgentAct::Undo(..));
                     match self.agent_flip(k, i, undo) {
@@ -457,6 +635,7 @@ impl Gui {
                         }
                         Err(e) => self.shell.agent.take(Event::Note { text: e, error: true }),
                     }
+                    self.agent_capture_conversation(true);
                 }
                 AgentAct::Settings(SettingsAct::Changed) => self.agent_save_settings(),
                 AgentAct::Settings(SettingsAct::SaveKey { url, key }) => {
@@ -507,8 +686,38 @@ impl Gui {
             self.shell.open_agent_settings();
             return fail(self, why.into(), None);
         }
+        let new_context = self.agent.chat.as_ref().is_some_and(|chat| {
+            chat.project != dir
+                || chat.settings.kind != settings.kind
+                || (settings.kind == Kind::OpenAi && chat.settings.base_url != settings.base_url)
+        });
+        if new_context {
+            if let Err(e) = self.agent.flush_conversation() {
+                return fail(
+                    self,
+                    format!("Couldn't save the previous conversation: {e}"),
+                    None,
+                );
+            }
+            let user = self
+                .shell
+                .agent
+                .entries
+                .last()
+                .filter(|e| matches!(e, Entry::User { .. }))
+                .cloned();
+            self.agent_reset();
+            self.shell.agent.restore_entries(user.into_iter().collect());
+            self.shell.agent.running = true;
+        }
+        if self.agent.chat.is_none() {
+            match crate::agent::conversations::Conversation::new(&root, &settings, text) {
+                Ok(chat) => self.agent.chat = Some(chat),
+                Err(e) => return fail(self, e, None),
+            }
+        }
         let want = (dir.clone(), settings.clone());
-        if self.agent.made_for.as_ref() != Some(&want) {
+        if self.agent.backend.is_none() || self.agent.made_for.as_ref() != Some(&want) {
             let was = self.agent.made_for.take();
             let carry = match &was {
                 Some((d, w))
@@ -552,11 +761,18 @@ impl Gui {
         if let Some(t) = &self.agent.app_tools {
             t.set_dir(Path::new(&dir));
         }
+        if self.agent.resumed {
+            msg = format!(
+                "(This conversation was resumed. Inspect the current project before editing; files may have changed. Current context: {path}.)\n\n{msg}"
+            );
+            self.agent.resumed = false;
+        }
         // the turn's on: a .fg it makes beside an open document opens in a tab
         self.agent_turn(true);
         if let Some(b) = &mut self.agent.backend {
             b.send(msg, picture);
         }
+        self.agent_capture_conversation(true);
     }
 
     fn agent_make(&mut self, file: &Path, s: &AgentSettings, session: Option<String>) {
@@ -566,7 +782,17 @@ impl Gui {
             tx,
             wake: self.waker.clone(),
         };
-        let system = system_prompt(file);
+        let mut system = system_prompt(file);
+        if self.agent.resumed
+            && session.is_none()
+            && s.kind != Kind::OpenAi
+            && let Some(chat) = &self.agent.chat
+        {
+            let context: String = chat.context().chars().take(64000).collect();
+            system.push_str(&format!(
+                "\nSaved conversation context (the original CLI session id is unavailable):\n{context}"
+            ));
+        }
         if self.agent.app_tools.is_none() {
             let (tools, rx) = crate::agent::apptools::AppTools::new(self.waker.clone());
             self.agent.app_rx = Some(rx);
@@ -624,17 +850,24 @@ impl Gui {
                 self.agent.session = Some(c.session.clone());
                 Box::new(c)
             }
-            Kind::OpenAi => Box::new(OpenAi::new(
-                openai::Config {
-                    base_url: s.base_url.clone(),
-                    model: s.model.clone(),
-                    file: file.to_path_buf(),
-                    system,
-                    key: None,
-                    apps: self.agent.app_tools.clone(),
-                },
-                out,
-            )),
+            Kind::OpenAi => {
+                let mut backend = OpenAi::new(
+                    openai::Config {
+                        base_url: s.base_url.clone(),
+                        model: s.model.clone(),
+                        file: file.to_path_buf(),
+                        system,
+                        key: None,
+                        apps: self.agent.app_tools.clone(),
+                    },
+                    out,
+                );
+                if let Some(history) = &self.agent.endpoint_history {
+                    backend.restore_history(history.lock().expect("history").clone());
+                }
+                self.agent.endpoint_history = Some(backend.history_handle());
+                Box::new(backend)
+            }
         });
     }
 }

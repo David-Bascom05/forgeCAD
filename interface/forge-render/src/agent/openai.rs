@@ -110,6 +110,13 @@ fn http_error(status: u16, body: &str) -> String {
 }
 
 impl OpenAi {
+    pub fn history_handle(&self) -> Arc<Mutex<Vec<Json>>> {
+        self.history.clone()
+    }
+    pub fn restore_history(&mut self, history: Vec<Json>) {
+        *self.history.lock().expect("history") = super::conversations::complete_history(history);
+    }
+
     pub fn new(cfg: Config, out: Out) -> OpenAi {
         let root = super::project::root(&cfg.file);
         OpenAi {

@@ -140,6 +140,22 @@ build errors or a paused history. Git identity must be configured for saves.
 For example: “Create parts/, assemblies/ and docs/, then put a bracket in
 parts/bracket.fg”; “Create a version called First fit”; or “Compare v1 to current.”
 
+Agent conversations are saved locally per project under
+`~/.local/state/forgecad/conversations` (or `$XDG_STATE_HOME/forgecad/conversations`),
+separately from Git history. Type `/resume` or click **Chats** in the Agent tab
+to search previous conversations, then select one to restore its transcript,
+backend/model, and agent session. `/new` starts another conversation; `/resume ID`
+selects a known conversation directly. Codex and Claude continue their native
+sessions; OpenAI-compatible endpoints restore their saved message history and
+use the endpoint's existing keyring credentials. Existing ForgeCAD Codex logs
+with a matching project marker are also imported read-only when the picker opens.
+
+Resuming a conversation does not change project files or replay tool calls. Past
+file changes appear as summaries; use Versions to restore a design. Saved markup
+appears as a text annotation rather than an interactive thumbnail. Older Claude
+and endpoint conversations that predate this storage are not imported. Keep the
+project at the same path to use its conversation list.
+
 ## License
 
 MPL-2.0.
