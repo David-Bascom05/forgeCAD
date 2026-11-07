@@ -242,3 +242,33 @@ fn ten_thousand_saves_open_at_once() {
     eprintln!("{n} saves: cold {cold:.2?}, cached {warm:.2?}");
     assert!(warm.as_millis() < 50, "{warm:?}");
 }
+
+/// One changed file saved in a project of a thousand: the commit, its objects synced, the
+/// branch moved and the index kept in step.
+#[test]
+#[ignore]
+fn a_save_takes_milliseconds() {
+    let w = tmp("speed");
+    let h = History::turn_on(&w).unwrap();
+    std::fs::create_dir_all(w.join("parts")).unwrap();
+    let mut all = vec![];
+    for i in 0..1000 {
+        let p = format!("parts/p{i}.fg");
+        std::fs::write(w.join(&p), format!("w = {i}\n")).unwrap();
+        all.push(p);
+    }
+    h.repo.commit_paths(&all, "all", &who(1)).unwrap();
+    let f = w.join("parts/p500.fg");
+    let mut times = vec![];
+    for i in 0..30 {
+        std::fs::write(&f, format!("w = {}\n", 1000 + i)).unwrap();
+        let t = std::time::Instant::now();
+        let s = h.save_as(&f, &[], "p500: saved", None, &who(2 + i)).unwrap();
+        times.push(t.elapsed().as_secs_f64() * 1e3);
+        assert!(matches!(s, Saved::New(_)));
+    }
+    times.sort_by(|a, b| a.total_cmp(b));
+    eprintln!("save: median {:.2} ms, worst {:.2} ms", times[15], times[29]);
+    git(&w, &["fsck", "--strict", "--no-dangling"]);
+    assert_eq!(git(&w, &["status", "--porcelain"]), "");
+}
