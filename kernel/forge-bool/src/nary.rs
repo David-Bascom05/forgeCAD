@@ -953,7 +953,9 @@ fn nary_body(
                 let imprints_before = out.imprints.len();
                 let mut whole = true;
                 for (curve, contact) in curves {
-                    if contact == Contact::Touching {
+                    if contact == Contact::Touching
+                        && !crate::boolean::through_smooth_edge([a, b], [ia, ib], [fa, fb], &curve)
+                    {
                         whole = false;
                         continue;
                     }

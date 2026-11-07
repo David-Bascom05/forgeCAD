@@ -449,6 +449,8 @@ fn conic_quadric(f: &Frame, a: f64, b: f64, range: Interval, s: &Surface) -> Opt
     // around t = 0 and around t = pi and keep each half's own roots
     let mut ts: Vec<(f64, Contact)> = Vec::new();
     let mut turns: Vec<f64> = Vec::new();
+    // Q's coefficients in tau itself (those of phi = 0)
+    let mut k = [0.0; 6];
     // the implicit's gradient along the conic, so how far a value within LINEAR of the surface can be
     // from zero (times 4 for the 1 + u^2 squared multiplied through below)
     let lip = if matches!(s, Surface::Plane(_)) {
@@ -471,6 +473,9 @@ fn conic_quadric(f: &Frame, a: f64, b: f64, range: Interval, s: &Surface) -> Opt
         let k5 = ey.dot(my);
         if [k0, k1, k2, k3, k4, k5].iter().all(|v| *v == 0.0) {
             return Some(CurveSurface::OnSurface);
+        }
+        if phi == 0.0 {
+            k = [k0, k1, k2, k3, k4, k5];
         }
         // c = (1 - u^2) / w, s = 2u / w, w = 1 + u^2; multiplied through by w^2
         let poly = [
@@ -520,7 +525,32 @@ fn conic_quadric(f: &Frame, a: f64, b: f64, range: Interval, s: &Surface) -> Opt
     // may keep it off zero, and then no root says so
     let near = |t: f64| s.distance(curve.eval(t)) <= tol::LINEAR;
     let apart = |x: f64, t: f64| dmath::wrap_tau(x - t + dmath::PI) - dmath::PI;
+    // Q's derivatives: research/tangent-cuts/. A half's end within the
+    // slack is no turn, and a touch there would sit a long way along a shallow one (tangent circles)
+    let polish = |t0: f64| {
+        let mut t = t0;
+        for _ in 0..8 {
+            let (sn, cs) = dmath::sin_cos(t);
+            let (cc, sc) = (cs * cs - sn * sn, 2.0 * sn * cs);
+            let d1 = -k[1] * sn + k[2] * cs + (k[5] - k[3]) * sc + k[4] * cc;
+            let d2 = -k[1] * cs - k[2] * sn + 2.0 * (k[5] - k[3]) * cc - 2.0 * k[4] * sc;
+            let next = t - d1 / d2;
+            if !next.is_finite() || (next - t0).abs() > 0.05 {
+                return t0;
+            }
+            if next == t {
+                break;
+            }
+            t = next;
+        }
+        if near(t) && near_between(&near, t0, t) {
+            t
+        } else {
+            t0
+        }
+    };
     for t0 in turns {
+        let t0 = polish(t0);
         let t = range.lo + dmath::wrap_tau(t0 - range.lo);
         if t > range.hi + 1e-12 {
             continue;
@@ -893,8 +923,9 @@ pub fn plane_cylinder(p: &Plane, c: &Cylinder) -> SurfaceSurface {
         }
     }
     let center = axis_hit(p, c.frame.origin, a).expect("checked not parallel");
-    // A circle when the ellipse's two axes differ by less than LINEAR.
-    if r * (1.0 / cos - 1.0) <= tol::LINEAR {
+    // research/tangent-cuts/: a circle only when the axes differ by rounding, as an edge
+    // crossing the curve at a shallow angle is crossed many times further along
+    if 1.0 / cos - 1.0 <= 1e-12 {
         let frame = Frame::from_z(center, n);
         return SurfaceSurface::Curves(vec![(
             Curve::Circle(Circle { frame, radius: r }),
@@ -1178,6 +1209,67 @@ mod tests {
             curve_surface(&c, range, &Surface::Plane(Plane::new(f))),
             CurveSurface::Hits(vec![])
         );
+    }
+
+    /// Circles in a plane a hair from tangent, one against the other's cylinder, the touch at a quarter
+    /// turn (where the half-turn solves meet): one touch, at the closest approach. The halves' ends
+    /// were taken for turns, 1e-4 along from it, and a boolean got two vertices there.
+    #[test]
+    fn a_touch_where_the_halves_meet_is_at_the_closest_approach() {
+        let range = Interval::new(0.0, dmath::TAU);
+        let at = |x: f64, y: f64| Frame::from_z(Point3::new(x, y, 0.0), Vec3::Z.normalize().unwrap());
+        for e in [1e-4, 1e-3, 3e-3] {
+            for y in [9.0, -9.0] {
+                let (big, small) = ((e, 0.0, 8.0), (0.0, y, 1.0));
+                for (c, s) in [(big, small), (small, big)] {
+                    let curve = Curve::Circle(Circle {
+                        frame: at(c.0, c.1),
+                        radius: c.2,
+                    });
+                    let cyl = Surface::Cylinder(Cylinder {
+                        frame: at(s.0, s.1),
+                        radius: s.2,
+                    });
+                    // on the curve, towards the cylinder's axis
+                    let (dx, dy) = (s.0 - c.0, s.1 - c.1);
+                    let d = (dx * dx + dy * dy).sqrt();
+                    let want = Point3::new(c.0 + c.2 * dx / d, c.1 + c.2 * dy / d, 0.0);
+                    for absorb in [false, true] {
+                        let old = ABSORB_HAIR_ROOTS.with(|k| k.replace(absorb));
+                        let got = curve_surface(&curve, range, &cyl);
+                        ABSORB_HAIR_ROOTS.with(|k| k.set(old));
+                        let CurveSurface::Hits(h) = got else {
+                            panic!("hits expected");
+                        };
+                        assert_eq!(h.len(), 1, "{e} {y} {absorb}: {h:?}");
+                        assert!(h[0].point.distance(want) < 1e-7, "{e} {y} {absorb}: {h:?}");
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_nearly_perpendicular_cylinder_section_keeps_its_ellipse() {
+        let cyl = Cylinder {
+            frame: Frame::WORLD,
+            radius: 10.0,
+        };
+        let normal = Vec3::new(0.001, 0.0, 1.0).normalize().unwrap();
+        let plane = Plane::new(Frame::from_z(Point3::ORIGIN, normal));
+        let SurfaceSurface::Curves(cs) = plane_cylinder(&plane, &cyl) else {
+            panic!("a section");
+        };
+        assert!(matches!(cs[0].0, Curve::Ellipse(_)), "{cs:?}");
+        for i in 0..32 {
+            let p = cs[0].0.eval(dmath::TAU * i as f64 / 32.0);
+            assert!(plane.signed_distance(p).abs() < 1e-12);
+            assert!((p.x * p.x + p.y * p.y - 100.0).abs() < 1e-10);
+        }
+        let SurfaceSurface::Curves(cs) = plane_cylinder(&Plane::new(Frame::WORLD), &cyl) else {
+            panic!("a section");
+        };
+        assert!(matches!(cs[0].0, Curve::Circle(_)));
     }
 
     fn hits(r: LineSurface) -> Vec<LineHit> {

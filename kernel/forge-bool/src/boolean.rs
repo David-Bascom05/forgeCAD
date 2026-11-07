@@ -1037,8 +1037,10 @@ fn plan_once(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
                 branches_meet(&curves),
             ];
             for (curve, contact) in curves {
-                // surfaces that only touch along a curve cross nowhere: no face splits there
-                if contact == Contact::Touching {
+                // A touch on a smooth boundary may cross the solid: research/tangent-cuts/.
+                if contact == Contact::Touching
+                    && !through_smooth_edge(bodies, [&index[0], &index[1]], [fa, fb], &curve)
+                {
                     continue;
                 }
                 let pair_name = root
@@ -3907,6 +3909,93 @@ pub(crate) fn rolls_off(body: &Body, f: FaceId, other: &Surface) -> bool {
             let normal = |h: FaceId| body.face_normal(h, body.face(h).surface.project(p));
             matches!((normal(f), normal(g)), (Some(x), Some(y)) if x.cross(y).length() <= 1e-6)
         })
+}
+
+/// A curve along which two faces touch, lying on an edge of one where its neighbour is tangent too
+/// (a wall running smoothly into a round): the other face, curving between the two, can pass from
+/// inside to outside right there, and then the edge must split it.
+pub(crate) fn through_smooth_edge(
+    bodies: [&Body; 2],
+    index: [&Index; 2],
+    faces: [FaceId; 2],
+    curve: &Curve,
+) -> bool {
+    let d = curve.domain();
+    let range = match d.period {
+        Some(p) => Interval::new(d.lo, d.lo + p),
+        None => Interval::new(d.lo.max(-1e9), d.hi.min(1e9)),
+    };
+    let on = |p: Point3| {
+        // Cheap lower bounds reject distant edges before projection; keep slack for rounding.
+        match curve {
+            Curve::Line(l)
+                if (p - l.origin).cross(l.dir.get()).length_sq() > 4.0 * tol::LINEAR * tol::LINEAR =>
+            {
+                return false;
+            }
+            Curve::Circle(c) => {
+                let q = c.frame.point_to_local(p);
+                if q.z.abs() > 2.0 * tol::LINEAR
+                    || ((q.x * q.x + q.y * q.y).sqrt() - c.radius).abs() > 2.0 * tol::LINEAR
+                {
+                    return false;
+                }
+            }
+            _ => {}
+        }
+        curve.eval(curve.closest(p, range)).distance(p) <= tol::LINEAR
+    };
+    (0..2).any(|k| {
+        let (body, f) = (bodies[k], faces[k]);
+        let (other, g) = (bodies[1 - k], faces[1 - k]);
+        let os = &other.face(g).surface;
+        let bounds = index[1 - k].face_box(g).grow(tol::LINEAR);
+        body.face(f)
+            .loops
+            .iter()
+            .flat_map(|&l| body.lp(l).coedges())
+            .any(|c| {
+                let e = body.edge(body.coedge(c).edge);
+                let Some(h) = body.partner(c).map(|o| body.coedge_face(o)) else {
+                    return false;
+                };
+                if h == f {
+                    return false;
+                }
+                let m = e.curve.eval(e.range.mid());
+                if !bounds.contains(m) {
+                    return false;
+                }
+                let normal = |x: FaceId| body.face_normal(x, body.face(x).surface.project(m));
+                if !on(m)
+                    || !matches!((normal(f), normal(h)), (Some(a), Some(b)) if a.cross(b).length() <= 1e-6)
+                    || !(on(e.curve.eval(e.range.lo)) && on(e.curve.eval(e.range.hi)))
+                    || index[1 - k].point_in_face(g, m) != Where::Inside
+                {
+                    return false;
+                }
+                // either side of the edge on the other face, further out until the body tells them apart
+                let uv = os.project(m);
+                let (Some(n), d) = (os.normal(uv), e.curve.deriv(e.range.mid()).d1) else {
+                    return false;
+                };
+                let Some(w) = n.cross(d).normalize() else {
+                    return false;
+                };
+                let size = index[1 - k].face_box(g).diagonal();
+                [1e-3, 1e-2, 5e-2].iter().any(|&x| {
+                    let side = |s: f64| {
+                        let q = os.eval(os.project(m + w * (s * x * size)));
+                        (index[1 - k].point_in_face(g, q) == Where::Inside).then(|| index[k].classify(q))
+                    };
+                    matches!(
+                        (side(1.0), side(-1.0)),
+                        (Some(Where::Inside), Some(Where::Outside))
+                            | (Some(Where::Outside), Some(Where::Inside))
+                    )
+                })
+            })
+    })
 }
 
 /// The surface that meets face `f`'s surface along the edge of coedge `c`:

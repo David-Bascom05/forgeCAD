@@ -1164,3 +1164,66 @@ fn a_loop_traced_closed_on_the_way_back_is_not_run_round_twice() {
     // OpenCascade reads the exported solid at 245091.55
     assert!((a - 245091.54).abs() < 0.05, "{a}");
 }
+
+/// A cut a hair off tangent to two pillars under a plate: where the cut's circle and each pillar's
+/// touch, the halves of the conic solve gave two more vertices 1e-4 along the tangent, and the
+/// plate's face split crossed itself.
+#[test]
+fn a_cut_a_hair_off_tangent_to_two_pillars() {
+    let pi = std::f64::consts::PI;
+    for e in ["0", "0.0001", "0.001", "0.013", "0.05"] {
+        let src = format!(
+            "extrude 1 circle 0 0 10
+extrude 5 -xy at 0 9 0 circle 0 0 1
+extrude 5 -xy at 0 -9 0 circle 0 0 1
+extrude cut 1 at {e} 0 0 circle 0 0 8
+"
+        );
+        builds(&src);
+        let v = forge_topo::mass::mass(Model::new(&src).body().expect("a body"))
+            .expect("mass")
+            .volume;
+        // a gap under LINEAR (at 0.013) is a touch: the sliver under it, 4e-5, may count
+        assert!((v - 46.0 * pi).abs() < 1e-4, "{e}: {v}");
+    }
+}
+
+/// A plate with a half-round notch whose arc leaves the side wall in a cusp, and a cylinder through
+/// the cusp, tangent to both: it runs inside the plate on the wall's side and outside past the
+/// notch, so the cusp's edge must split it (refused as "inconsistent classification").
+#[test]
+fn a_cylinder_through_a_cusp_tangent_to_both_sides() {
+    let pi = std::f64::consts::PI;
+    let plate =
+        "extrude 0.12 loop arc 0.2 0 0.2 180 -180 line 0.4 0 0.4 0.5 line 0.4 0.5 0 0.5 line 0 0.5 0 0\n";
+    let r: f64 = 0.25;
+    let area = 0.2 - 0.02 * pi;
+    // the circle over the plate: its upper half less the segment past x = 0.4, less the notch inside it
+    let d = 0.4 - r;
+    let segment = r * r * forge_math::dmath::acos(d / r) - d * (r * r - d * d).sqrt();
+    let over = pi * r * r / 2.0 - segment / 2.0 - 0.02 * pi;
+    let disk = pi * r * r;
+    for (tool, want) in [
+        ("extrude add 0.12 circle 0.25 0 0.25", 0.12 * (area + disk - over)),
+        (
+            "extrude add 0.2 circle 0.25 0 0.25",
+            0.12 * (area + disk - over) + 0.08 * disk,
+        ),
+        (
+            "extrude add 0.1 at 0 0 0.01 circle 0.25 0 0.25",
+            0.12 * area + 0.1 * (disk - over),
+        ),
+        ("extrude cut 0.1 circle 0.25 0 0.25", 0.12 * area - 0.1 * over),
+        (
+            "extrude cut 0.1 at 0 0 0.01 circle 0.25 0 0.25",
+            0.12 * area - 0.1 * over,
+        ),
+    ] {
+        let src = format!("{plate}{tool}\n");
+        builds(&src);
+        let v = forge_topo::mass::mass(Model::new(&src).body().expect("a body"))
+            .expect("mass")
+            .volume;
+        assert!((v - want).abs() < 1e-9, "{tool}: {v} vs {want}");
+    }
+}
