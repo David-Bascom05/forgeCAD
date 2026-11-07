@@ -26,6 +26,7 @@ pub mod kept;
 pub mod media;
 pub mod par;
 pub mod patterns;
+pub mod pins;
 pub mod project;
 pub mod props;
 pub mod query;

@@ -893,10 +893,25 @@ fn asm_call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
             let a = Args::bind(
                 ev,
                 name,
-                &["file", "body", "at", "ground", "reference", "suppressed", "with"],
+                &[
+                    "file",
+                    "body",
+                    "at",
+                    "ground",
+                    "reference",
+                    "suppressed",
+                    "with",
+                    "version",
+                ],
                 args,
                 span,
             )?;
+            // a part file pinned to one of its named versions: `part("bracket.fg", version: 3)`
+            let pinned = match a.opt("version") {
+                None => None,
+                Some(Value::Num(n)) if n.v >= 1.0 && n.v.fract() == 0.0 && n.v < 1e9 => Some(n.v as u32),
+                Some(o) => return Err(wrong(a.span("version"), "a named version's number", Ty::Num, &o)),
+            };
             // a file's shared params set for this occurrence: `part("mug.fg", with: {d: 70})`
             let with = match a.opt("with") {
                 None => vec![],
@@ -918,7 +933,32 @@ fn asm_call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
                 Some(o) => return Err(wrong(a.span("with"), "a file's params by name", Ty::Map, &o)),
             };
             // a file, a used file's component, or a call of a component of this document
-            let (file, source, eval) = match a.req("file")? {
+            let file_arg = match (a.req("file")?, pinned) {
+                (Value::Str(s), Some(n)) if !s.starts_with('#') => {
+                    let dir = ev.dir.clone().unwrap_or_default();
+                    match crate::pins::pin(&dir, &s, n) {
+                        Ok(p) => Value::Str(p.to_string_lossy().to_string().into()),
+                        Err(e) => {
+                            return Err(note(
+                                a.span("version"),
+                                Issue::PartFile {
+                                    file: s.to_string(),
+                                    problem: match e {
+                                        crate::pins::PinError::NoHistory => FileProblem::NoHistory,
+                                        crate::pins::PinError::Outside => FileProblem::Outside,
+                                        crate::pins::PinError::NoVersion { newest } => {
+                                            FileProblem::NoVersion { version: n, newest }
+                                        }
+                                    },
+                                },
+                            ));
+                        }
+                    }
+                }
+                (v, Some(_)) => return Err(wrong(a.span("version"), "a part file to pin", Ty::Str, &v)),
+                (v, None) => v,
+            };
+            let (file, source, eval) = match file_arg {
                 // `#` starts a component's key: no file is named so
                 Value::Str(s) if s.starts_with('#') => {
                     return Err(wrong(
@@ -1598,6 +1638,13 @@ pub enum FileProblem {
     NoComponent {
         name: String,
     },
+    /// `version:` given, but the file's folder keeps no history.
+    NoHistory,
+    /// `version:` names no named version of the file; the newest there is.
+    NoVersion {
+        version: u32,
+        newest: Option<u32>,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -1974,6 +2021,14 @@ fn issue_text(i: &Issue) -> String {
             FileProblem::NoBody { body } => format!("{file} has no body {body}"),
             FileProblem::NoParam { param } => format!("{file} has no shared param {param} for with:"),
             FileProblem::NoComponent { name } => format!("{file} has no component {name}"),
+            FileProblem::NoHistory => format!("{file} has no versions: its folder keeps no history"),
+            FileProblem::NoVersion {
+                version,
+                newest: Some(m),
+            } => format!("{file} has no version {version} (the newest is {m})"),
+            FileProblem::NoVersion { version, newest: None } => {
+                format!("{file} has no version {version} (it has no named versions)")
+            }
         },
         Issue::BrokenAnchor {
             item,
@@ -2496,6 +2551,21 @@ pub(crate) fn locate(
     if let Some((path, _)) = variant_split(file) {
         return locate(dir, fence, path);
     }
+    // a pinned file, or a file a pinned document names: read from its save, never the disk
+    if crate::pins::is_pinned(file)
+        || dir
+            .as_ref()
+            .is_some_and(|d| crate::pins::is_pinned(&d.to_string_lossy()))
+    {
+        let p = match dir {
+            Some(d) => d.join(file),
+            None => std::path::PathBuf::from(file),
+        };
+        if p.extension().is_none_or(|x| x != "fg") {
+            return None;
+        }
+        return crate::pins::locate(&p);
+    }
     let key = (dir.clone(), fence.clone(), file.to_string());
     let hit = LOCATED.with(|m| m.borrow().as_ref().and_then(|m| m.get(&key).cloned()));
     let found = hit.unwrap_or_else(|| {
@@ -2602,6 +2672,11 @@ pub fn read_capped(p: &std::path::Path) -> Option<String> {
     }
     if let Some(k) = p.to_str().filter(|k| k.starts_with(crate::stdparts::KEY)) {
         return crate::stdparts::text_of(k);
+    }
+    if p.to_str().is_some_and(crate::pins::is_pinned) {
+        let s = crate::pins::read(p).filter(|s| s.len() as u64 <= LIMIT)?;
+        crate::syntax::parse(&s).ok()?;
+        return Some(s);
     }
     // a link inside the fence is the file it names (the loaders' fence looked through it):
     // read as it is, a regular file, capped (deps::read_plain)
