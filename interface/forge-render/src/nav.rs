@@ -143,6 +143,34 @@ pub fn region_view_as(camera: Camera, region: [i8; 3], orient: &Orient) -> Camer
     c
 }
 
+/// A parallel view held to what it shows: centred on the box's corners as seen and as big as they
+/// reach across the window, not the sphere round the box (a flat part is a third of its sphere
+/// seen from above). A perspective view, or no box, as it was.
+pub fn fit_box(mut c: Camera, b: Option<crate::explode::Aabb>, size: (u32, u32)) -> Camera {
+    let Some((lo, hi)) = b else { return c };
+    if !c.parallel || size.0 == 0 || size.1 == 0 {
+        return c;
+    }
+    let (_, right, up) = c.axes();
+    let (mut x0, mut x1, mut y0, mut y1) = (f32::MAX, f32::MIN, f32::MAX, f32::MIN);
+    for k in 0..8 {
+        let p = [0, 1, 2].map(|i| if k >> i & 1 == 1 { hi[i] } else { lo[i] });
+        let (x, y) = (dot(p, right), dot(p, up));
+        (x0, x1, y0, y1) = (x0.min(x), x1.max(x), y0.min(y), y1.max(y));
+    }
+    let mid = [0, 1, 2].map(|i| (lo[i] + hi[i]) * 0.5);
+    // the box's middle moved, in the view's plane, to the middle of its corners as seen
+    let (dx, dy) = ((x0 + x1) * 0.5 - dot(mid, right), (y0 + y1) * 0.5 - dot(mid, up));
+    c.target = [0, 1, 2].map(|i| mid[i] + right[i] * dx + up[i] * dy);
+    let aspect = size.0 as f32 / size.1 as f32;
+    let half = ((y1 - y0) * 0.5).max((x1 - x0) * 0.5 / aspect) * FIT_MARGIN;
+    c.fovy = (half / c.dist).atan() * 2.0;
+    c
+}
+
+/// Room round a fitted view's contents.
+const FIT_MARGIN: f32 = 1.08;
+
 /// Square on to a plane, looking along `-z`, with the cube's words upright: the top of the part up,
 /// or looking straight down or up it, as the cube's own view of TOP or BOTTOM.
 pub fn sheet_view(camera: Camera, z: [f32; 3], orient: &Orient) -> Camera {
@@ -706,7 +734,10 @@ impl Nav {
 
     pub fn fit_all(&mut self, scene: &Scene) {
         let (c, r) = scene.bounds();
-        self.fit_sphere(c, r);
+        let mut to = self.camera;
+        to.target = c;
+        to.fit_to(r, self.size.0, self.size.1);
+        self.go_to(fit_box(to, scene.shown_box(), self.size));
     }
 
     pub fn fit_sphere(&mut self, center: [f32; 3], radius: f32) {
@@ -726,7 +757,7 @@ impl Nav {
                 to.set_parallel(true, r);
             }
             to.fit_to(r, self.size.0, self.size.1);
-            to
+            fit_box(to, scene.shown_box(), self.size)
         });
         self.go_to(to);
     }

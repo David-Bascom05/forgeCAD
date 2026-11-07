@@ -4406,7 +4406,21 @@ pub fn finish(
                 })
                 .unwrap_or_default()
         };
-        out.harnesses = crate::harness::finish(ev, &d.harnesses, &at, &refs_of, opts.render);
+        // the parts the wires may run into, where they are
+        let placed: Vec<crate::harness::Placed> = sol
+            .occurrences
+            .iter()
+            .filter(|o| !o.reference)
+            .filter_map(|o| {
+                let body = checker.exact().bodies.get(&(o.part.doc.clone(), o.part.body))?;
+                Some(crate::harness::Placed {
+                    name: path_name(&names, &o.path),
+                    body: Arc::new(body.clone()),
+                    pose: o.pose,
+                })
+            })
+            .collect();
+        out.harnesses = crate::harness::finish(ev, &d.harnesses, &at, &refs_of, &placed, opts.render);
     }
     out.hashes = sol
         .hashes

@@ -3,8 +3,7 @@
 # gauges. The harness is written in this file; robot_loom.fg places the same harness from a file
 # of its own (loom.fg).
 shared out = 20
-shared out_ctrl = 30
-shared rise = 6
+shared out_ctrl = 45
 shared od18 = 2.4
 shared od22 = 1.6
 shared od26 = 1.1
@@ -46,8 +45,8 @@ harness loom(slack: slack, round_up: step, insert: seat_in) {
   J4 = connector(sn.face, pins: sn.pin)
 
   n1 = node(J1, out: out_ctrl)
-  hub1 = node(plate.clip1, off: rise, along: "x")
-  hub2 = node(plate.clip2, off: rise, along: "x")
+  hub1 = node(plate.clip1, along: "x", clip: true)
+  hub2 = node(plate.clip2, along: "x", clip: true)
   n2 = node(J2, out: out)
   n3 = node(J3, out: out)
   n4 = node(J4, out: out)

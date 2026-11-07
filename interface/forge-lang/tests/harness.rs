@@ -65,8 +65,17 @@ fn the_example_routes_with_every_term_and_no_notes() {
     let d = dir("example");
     let r = run_in(&d, ROBOT);
     assert!(r.errors.is_empty(), "{:?}", errors(&r));
-    assert!(problems(&r).is_empty(), "{:?}", problems(&r));
+    // no wire runs into a part; where wires still pass through each other it is only where they
+    // change places (a breakout, a branch), never along a bundle's run
     let h = loom(&r);
+    for p in problems(&r) {
+        let HarnessProblem::WireClash { with, at, .. } = p else {
+            panic!("{p:?}");
+        };
+        assert!(with.starts_with('W'), "a wire runs into {with}");
+        let near = h.nodes.iter().any(|n| n.at.distance(at) < 3.0 * 8.6 + 40.0);
+        assert!(near, "a clash along a run at {at:?}");
+    }
     assert_eq!(h.connectors.len(), 4);
     assert_eq!(h.wires.len(), 14);
     let trunk = &h.segments[0];
@@ -167,8 +176,8 @@ fn a_corner_too_tight_builds_and_warns_with_the_radii() {
 fn a_turn_through_a_free_node_says_how_far_and_which_way() {
     let d = dir("kink");
     let src = ROBOT.replace(
-        "hub1 = node(plate.clip1, off: rise, along: \"x\")",
-        "hub1 = node(plate.clip1, off: rise)",
+        "hub1 = node(plate.clip1, along: \"x\", clip: true)",
+        "hub1 = node(plate.clip1, clip: true)",
     );
     let r = run_in(&d, &src);
     let kinks: Vec<_> = problems(&r)

@@ -3845,6 +3845,8 @@ impl Gui {
                     !a.sleeve_hidden(&ho.id, &ho.segments[sg].name),
                     crate::fg::HARNESS_TINT,
                 ),
+                crate::fg::HarnessPiece::Ties => (true, crate::fg::TIE_TINT),
+                crate::fg::HarnessPiece::Clips => (true, crate::fg::CLIP_TINT),
             };
             let rows = if a.harness_hidden.contains(&ho.id) || !shown {
                 NOWHERE

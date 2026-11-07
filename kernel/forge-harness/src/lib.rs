@@ -27,7 +27,22 @@ pub struct Node {
     /// How far a route runs straight off a directed node before its first corner; None: the
     /// segment's minimum radius (room for a quarter turn).
     pub lead: Option<f64>,
+    /// A clip seated at `at`, standing along this: the bundle runs through it, its axis the
+    /// clip's base, its wall and half the thickest bundle through the node out along it.
+    pub clip: Option<UnitVec3>,
 }
+
+/// Wires that run together as one: a twisted pair (or more), turning about their middle once
+/// every `lay` along the run.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Group {
+    pub id: String,
+    pub wires: Vec<usize>,
+    pub lay: f64,
+}
+
+/// A clip's wall and the room it leaves round its bundle (mm).
+pub const CLIP_WALL: f64 = 1.2;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Segment {
@@ -110,6 +125,7 @@ pub struct Network {
     pub types: Vec<WireType>,
     pub connectors: Vec<Connector>,
     pub wires: Vec<Wire>,
+    pub groups: Vec<Group>,
     pub settings: Settings,
 }
 
@@ -136,6 +152,8 @@ pub struct SegmentOut {
     pub corners: Vec<Corner>,
     /// The centreline's direction at a and at b, along a to b.
     pub tangents: [Option<UnitVec3>; 2],
+    /// How far it runs straight off each end before its first corner.
+    pub straight: [f64; 2],
 }
 
 /// A routed wire's length, term by term.
@@ -186,10 +204,31 @@ pub enum Note {
     SegmentEmpty {
         segment: usize,
     },
+    /// A group's wire does not run between the same connectors as the group's first: routed on
+    /// its own.
+    GroupSplit {
+        group: usize,
+        wire: usize,
+    },
+}
+
+/// A clip as built: where its bundle's centre is, the bundle's direction there, the way the
+/// clip stands, the bundle's diameter it holds and where it is seated.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ClipOut {
+    pub node: usize,
+    pub at: Point3,
+    pub axis: UnitVec3,
+    pub seat: UnitVec3,
+    pub d: f64,
+    pub base: Point3,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Routed {
+    /// Each node where it ends up (a clip's: lifted to hold its bundle).
+    pub nodes_at: Vec<Point3>,
+    pub clips: Vec<ClipOut>,
     pub segments: Vec<SegmentOut>,
     /// By wire; None where it has no path.
     pub wires: Vec<Option<WireOut>>,
@@ -311,8 +350,8 @@ fn walk(net: &Network, segs: &[usize], from: usize, to: usize) -> Result<Vec<(us
 
 /// The polyline a segment's centreline rounds: node a, its lead point, the vias, node b's lead
 /// point, node b; repeated points dropped.
-fn polyline(net: &Network, s: &Segment, r_min: f64) -> Vec<Point3> {
-    let (a, b) = (&net.nodes[s.a], &net.nodes[s.b]);
+fn polyline(nodes: &[Node], s: &Segment, r_min: f64) -> Vec<Point3> {
+    let (a, b) = (&nodes[s.a], &nodes[s.b]);
     let lead = |n: &Node, toward: Point3| {
         n.dir.map(|d| {
             let sign = if d.dot(toward - n.at) < 0.0 { -1.0 } else { 1.0 };
@@ -427,6 +466,36 @@ pub fn route(net: &Network) -> Routed {
         };
         paths.push(p);
     }
+    // a group runs as one: its wires on its first's path, where they join the same connectors
+    let exits = |w: &Wire| {
+        let (a, b) = (
+            net.connectors[w.from.connector].exit,
+            net.connectors[w.to.connector].exit,
+        );
+        (a.min(b), a.max(b))
+    };
+    for (g, grp) in net.groups.iter().enumerate() {
+        let Some(&lead) = grp.wires.first() else { continue };
+        let (from_lead, lead_path) = (
+            net.connectors[net.wires[lead].from.connector].exit,
+            paths[lead].clone(),
+        );
+        for &w in &grp.wires[1..] {
+            if exits(&net.wires[w]) != exits(&net.wires[lead]) {
+                notes.push(Note::GroupSplit { group: g, wire: w });
+                continue;
+            }
+            // the same chain, run the other way when the wire starts at the lead's far end
+            let same_way = net.connectors[net.wires[w].from.connector].exit == from_lead;
+            paths[w] = lead_path.clone().map(|p| {
+                if same_way {
+                    p
+                } else {
+                    p.into_iter().rev().map(|(s, f)| (s, !f)).collect()
+                }
+            });
+        }
+    }
     let mut through: Vec<Vec<usize>> = vec![vec![]; net.segments.len()];
     for (k, p) in paths.iter().enumerate() {
         for &(s, _) in p.iter().flatten() {
@@ -435,10 +504,11 @@ pub fn route(net: &Network) -> Routed {
             }
         }
     }
-    let mut segments = Vec::with_capacity(net.segments.len());
+    // each segment's bundle: a group one item of its wires packed
+    let mut sizes: Vec<(Vec<usize>, f64, f64)> = Vec::with_capacity(net.segments.len());
     for (k, s) in net.segments.iter().enumerate() {
         let wires = std::mem::take(&mut through[k]);
-        let ods: Vec<f64> = wires.iter().map(|&w| net.types[net.wires[w].ty].od).collect();
+        let ods = item_ods(net, &wires);
         let d = match s.d {
             Some(d) => d,
             None if wires.is_empty() => {
@@ -451,7 +521,27 @@ pub fn route(net: &Network) -> Routed {
             .iter()
             .map(|&w| net.types[net.wires[w].ty].min_bend)
             .fold(s.bend_k * d, f64::max);
-        let pts = polyline(net, s, r_min);
+        sizes.push((wires, d, r_min));
+    }
+    // clips lifted to hold the thickest bundle through them
+    let mut nodes = net.nodes.clone();
+    let mut clips = vec![];
+    for (k, n) in net.nodes.iter().enumerate() {
+        let Some(seat) = n.clip else { continue };
+        let d = net
+            .segments
+            .iter()
+            .zip(&sizes)
+            .filter(|(s, _)| s.a == k || s.b == k)
+            .map(|(_, z)| z.1)
+            .fold(0.0, f64::max);
+        nodes[k].at = n.at + seat.get() * (CLIP_WALL + d / 2.0);
+        clips.push((k, seat, d));
+    }
+    let mut segments = Vec::with_capacity(net.segments.len());
+    for (k, s) in net.segments.iter().enumerate() {
+        let (wires, d, r_min) = std::mem::take(&mut sizes[k]);
+        let pts = polyline(&nodes, s, r_min);
         let (pieces, length, corners) = centreline(&pts, r_min);
         for (c, corner) in corners.iter().enumerate() {
             if corner.got < corner.needed * (1.0 - 1e-9) {
@@ -470,6 +560,11 @@ pub fn route(net: &Network) -> Routed {
                 .checked_sub(2)
                 .and_then(|i| (pts[i + 1] - pts[i]).normalize()),
         ];
+        let line_len = |p: Option<&PathSeg>| match p {
+            Some(PathSeg::Line { a, b }) => a.distance(*b),
+            _ => 0.0,
+        };
+        let straight = [line_len(pieces.first()), line_len(pieces.last())];
         segments.push(SegmentOut {
             wires,
             d,
@@ -478,6 +573,7 @@ pub fn route(net: &Network) -> Routed {
             length,
             corners,
             tangents,
+            straight,
         });
     }
     let st = &net.settings;
@@ -541,9 +637,57 @@ pub fn route(net: &Network) -> Routed {
             length,
         }));
     }
+    let clips = clips
+        .into_iter()
+        .filter_map(|(k, seat, d)| {
+            // the bundle's way through: its segments' tangent at the node
+            let axis = segments.iter().zip(&net.segments).find_map(|(o, s)| {
+                if s.a == k {
+                    o.tangents[0]
+                } else if s.b == k {
+                    o.tangents[1]
+                } else {
+                    None
+                }
+            })?;
+            Some(ClipOut {
+                node: k,
+                at: nodes[k].at,
+                axis,
+                seat,
+                d,
+                base: net.nodes[k].at,
+            })
+        })
+        .collect();
     Routed {
+        nodes_at: nodes.iter().map(|n| n.at).collect(),
+        clips,
         segments,
         wires,
         notes,
     }
+}
+
+/// The diameters a segment's bundle is made of: a wire's own, or a group's packed.
+pub fn item_ods(net: &Network, wires: &[usize]) -> Vec<f64> {
+    let mut out = vec![];
+    let mut done = vec![];
+    for &w in wires {
+        match net.groups.iter().position(|g| g.wires.contains(&w)) {
+            Some(g) if !done.contains(&g) => {
+                done.push(g);
+                let r: Vec<f64> = net.groups[g]
+                    .wires
+                    .iter()
+                    .filter(|x| wires.contains(x))
+                    .map(|&x| net.types[net.wires[x].ty].od / 2.0)
+                    .collect();
+                out.push(wires::pack(&r).1);
+            }
+            Some(_) => {}
+            None => out.push(net.types[net.wires[w].ty].od),
+        }
+    }
+    out
 }

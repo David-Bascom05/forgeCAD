@@ -1,8 +1,7 @@
 # The robot of robot.fg, its loom placed from loom.fg: the file names the occurrences it wires,
 # this placement gives them.
 shared out = 20
-shared out_ctrl = 30
-shared rise = 6
+shared out_ctrl = 45
 shared od18 = 2.4
 shared od22 = 1.6
 shared od26 = 1.1

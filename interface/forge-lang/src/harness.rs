@@ -18,7 +18,10 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 /// The built-ins of a harness block, known only inside one.
-pub const BUILTINS: &[&str] = &["wire_type", "connector", "node", "segment", "wire"];
+pub const BUILTINS: &[&str] = &["wire_type", "connector", "node", "segment", "wire", "twist"];
+
+/// Cable ties' pitch when the harness gives none (mm).
+pub const TIE_PITCH: f64 = 100.0;
 
 /// Wire-list CSV columns, in order.
 pub const CSV_COLUMNS: &[&str] = &["id", "from", "to", "type", "colour", "path"];
@@ -112,6 +115,8 @@ pub struct Settings {
     pub lead: Option<f64>,
     pub insert: f64,
     pub empty_d: f64,
+    /// Cable ties every this far along a bare bundle (0: none).
+    pub ties: f64,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -149,6 +154,17 @@ pub struct NodeDef {
     /// The reference's axis routes pass along (a connector's: its z).
     pub along: Option<usize>,
     pub lead: Option<f64>,
+    /// A clip on the reference: the bundle held through it, lifted off it by the clip.
+    pub clip: bool,
+    pub span: Span,
+}
+
+/// Wires twisted together (`twist(W3, W4, lay: 25)`).
+#[derive(Clone, Debug, PartialEq)]
+pub struct GroupDef {
+    pub id: String,
+    pub wires: Vec<usize>,
+    pub lay: f64,
     pub span: Span,
 }
 
@@ -197,6 +213,7 @@ pub struct HarnessDef {
     pub nodes: Vec<NodeDef>,
     pub segments: Vec<SegDef>,
     pub wires: Vec<WireDef>,
+    pub groups: Vec<GroupDef>,
 }
 
 impl HarnessDef {
@@ -231,6 +248,19 @@ pub enum HarnessProblem {
         connector: String,
         needed: f64,
         got: f64,
+    },
+    /// A wire running through another wire or a part.
+    WireClash {
+        harness: String,
+        wire: String,
+        with: String,
+        at: Point3,
+    },
+    /// A twisted group's wire does not join the same connectors as the group's first.
+    GroupSplit {
+        harness: String,
+        group: String,
+        wire: String,
     },
     /// A wire turns through a node with no `along:` (radians), toward a direction.
     KinkAtNode {
@@ -320,6 +350,8 @@ impl HarnessProblem {
         match self {
             HarnessProblem::BendTooTight { .. }
             | HarnessProblem::BreakoutTooTight { .. }
+            | HarnessProblem::WireClash { .. }
+            | HarnessProblem::GroupSplit { .. }
             | HarnessProblem::KinkAtNode { .. }
             | HarnessProblem::NoInsulationOd { .. }
             | HarnessProblem::NoPath { .. }
@@ -335,6 +367,8 @@ impl HarnessProblem {
             HarnessProblem::BendTooTight { .. } => "BendTooTight",
             HarnessProblem::KinkAtNode { .. } => "KinkAtNode",
             HarnessProblem::BreakoutTooTight { .. } => "BreakoutTooTight",
+            HarnessProblem::WireClash { .. } => "WireClash",
+            HarnessProblem::GroupSplit { .. } => "GroupSplit",
             HarnessProblem::NoPath { .. } => "NoPath",
             HarnessProblem::PathBroken { .. } => "PathBroken",
             HarnessProblem::PinUnknown { .. } => "PinUnknown",
@@ -376,6 +410,15 @@ impl HarnessProblem {
                 fmt(*needed),
                 fmt(*got),
                 fmt(*got)
+            ),
+            HarnessProblem::WireClash { harness, wire, with, at } => format!(
+                "{harness}.{wire} runs into {with} at ({}, {}, {})",
+                fmt((at.x * 10.0).round() / 10.0),
+                fmt((at.y * 10.0).round() / 10.0),
+                fmt((at.z * 10.0).round() / 10.0)
+            ),
+            HarnessProblem::GroupSplit { harness, group, wire } => format!(
+                "{harness}.{group}: {wire} does not join the same connectors as the group's first wire; routed on its own"
             ),
             HarnessProblem::BreakoutTooTight {
                 harness,
@@ -478,6 +521,20 @@ impl HarnessProblem {
                 ("needed", (*needed).into()),
                 ("got", (*got).into()),
             ],
+            HarnessProblem::WireClash {
+                harness,
+                wire,
+                with,
+                at,
+            } => vec![
+                ("harness", s(harness)),
+                ("wire", s(wire)),
+                ("with", s(with)),
+                ("at", p3(*at)),
+            ],
+            HarnessProblem::GroupSplit { harness, group, wire } => {
+                vec![("harness", s(harness)), ("group", s(group)), ("wire", s(wire))]
+            }
             HarnessProblem::BreakoutTooTight {
                 harness,
                 wire,
@@ -723,7 +780,9 @@ fn settings(ev: &mut Eval, args: &[Arg], span: Span) -> R<Settings> {
     let a = Args::bind(
         ev,
         "harness",
-        &["bend_k", "k", "slack", "round_up", "lead", "insert", "empty_d"],
+        &[
+            "bend_k", "k", "slack", "round_up", "lead", "insert", "empty_d", "ties",
+        ],
         args,
         span,
     )?;
@@ -735,6 +794,7 @@ fn settings(ev: &mut Eval, args: &[Arg], span: Span) -> R<Settings> {
         lead: len(&a, "lead")?,
         insert: len(&a, "insert")?.unwrap_or(0.0),
         empty_d: len(&a, "empty_d")?.unwrap_or(2.0),
+        ties: len(&a, "ties")?.unwrap_or(TIE_PITCH),
     })
 }
 
@@ -765,6 +825,7 @@ fn evaluate(
         nodes: vec![],
         segments: vec![],
         wires: vec![],
+        groups: vec![],
     });
     let h = harnesses(ev).len() - 1;
     ev.harness = Some(h);
@@ -1000,6 +1061,7 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
         "connector" => connector(ev, args, span),
         "node" => node(ev, args, span),
         "segment" => segment(ev, args, span),
+        "twist" => twist(ev, args, span),
         _ => wire(ev, args, span),
     }
 }
@@ -1125,7 +1187,13 @@ fn axis(a: &Args, k: &'static str) -> R<Option<usize>> {
 }
 
 fn node(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
-    let a = Args::bind(ev, "node", &["at", "off", "out", "along", "lead"], args, span)?;
+    let a = Args::bind(
+        ev,
+        "node",
+        &["at", "off", "out", "along", "lead", "clip"],
+        args,
+        span,
+    )?;
     let at_v = a.req("at")?;
     let (at, off, along) = match hval(&at_v) {
         Some(HVal::Connector { k, .. }) => (NodeAt::Connector(*k), len(&a, "out")?.unwrap_or(0.0), Some(2)),
@@ -1136,6 +1204,7 @@ fn node(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     };
     let id = ev.take_id("node", span)?;
     let lead = len(&a, "lead")?;
+    let clip = a.flag("clip")?;
     let (h, d) = current(ev);
     d.nodes.push(NodeDef {
         id,
@@ -1143,9 +1212,53 @@ fn node(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         off,
         along,
         lead,
+        clip,
         span,
     });
     Ok(hv(HVal::Node(h, d.nodes.len() - 1)))
+}
+
+/// `twist(W1, W2, .., lay: L)`: wires run together, turned once every lay.
+fn twist(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
+    let mut wires = vec![];
+    let mut lay = None;
+    for a in args {
+        match &a.name {
+            Some((n, sp)) if n == "lay" => {
+                lay = Some(crate::builtins::num_of(ev.expr(&a.value)?, LEN, *sp, "lay")?.v);
+            }
+            Some((n, sp)) => {
+                return Err(Error::UnknownArg {
+                    span: *sp,
+                    func: "twist",
+                    arg: n.clone(),
+                });
+            }
+            None => {
+                let v = ev.expr(&a.value)?;
+                wires.push(want_h(&v, a.value.span, "a twist's wires", |h| match h {
+                    HVal::Wire(_, k) => Some(*k),
+                    _ => None,
+                })?);
+            }
+        }
+    }
+    if wires.len() < 2 {
+        return Err(Error::MissingArg {
+            span,
+            func: "twist",
+            arg: "two wires or more",
+        });
+    }
+    let id = ev.take_id("twist", span)?;
+    let (_, d) = current(ev);
+    d.groups.push(GroupDef {
+        id,
+        wires,
+        lay: lay.unwrap_or(0.0),
+        span,
+    });
+    Ok(Value::Unresolved)
 }
 
 fn segment(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
@@ -1494,6 +1607,9 @@ pub struct HarnessOut {
     /// Each wire's own centreline, pin to pin, in world space, and its radius (by wire; none
     /// where it has no path).
     pub paths: Vec<Option<(Vec<Point3>, f64)>>,
+    /// The cable ties round the bare bundles, and the clips (drawn).
+    pub ties: Vec<fh::wires::Tie>,
+    pub clips: Vec<fh::ClipOut>,
     /// Where each statement is, by item id (`loom.W1`).
     pub spans: Vec<(String, Span)>,
 }
@@ -1557,11 +1673,19 @@ pub fn finish(
     defs: &[HarnessDef],
     world: &dyn Fn(&RefDef) -> Option<Frame>,
     refs_of: &dyn Fn(&RefDef) -> Vec<String>,
+    parts: &[Placed],
     tubes: bool,
 ) -> Vec<HarnessOut> {
     defs.iter()
-        .map(|d| route_one(ev, d, world, refs_of, tubes))
+        .map(|d| route_one(ev, d, world, refs_of, parts, tubes))
         .collect()
+}
+
+/// A part occurrence the wires may run into: its name, solid and pose.
+pub struct Placed {
+    pub name: String,
+    pub body: Arc<forge_topo::Body>,
+    pub pose: Frame,
 }
 
 fn ref_text(r: &RefDef) -> String {
@@ -1578,6 +1702,7 @@ fn route_one(
     d: &HarnessDef,
     world: &dyn Fn(&RefDef) -> Option<Frame>,
     refs_of: &dyn Fn(&RefDef) -> Vec<String>,
+    parts: &[Placed],
     tubes: bool,
 ) -> HarnessOut {
     let st = &d.settings;
@@ -1622,9 +1747,14 @@ fn route_one(
         });
         nodes.push(fh::Node {
             id: d.local(&n.id).into(),
-            at: f.origin + f.z().get() * n.off,
+            at: if n.clip {
+                f.origin
+            } else {
+                f.origin + f.z().get() * n.off
+            },
             dir,
             lead: n.lead.or(st.lead),
+            clip: n.clip.then(|| f.z()),
         });
     }
     let mut segments = vec![];
@@ -1744,6 +1874,15 @@ fn route_one(
         types,
         connectors,
         wires,
+        groups: d
+            .groups
+            .iter()
+            .map(|g| fh::Group {
+                id: d.local(&g.id).into(),
+                wires: g.wires.clone(),
+                lay: g.lay,
+            })
+            .collect(),
         settings: fh::Settings {
             slack: st.slack,
             round_up: st.round_up,
@@ -1806,6 +1945,14 @@ fn route_one(
                     at,
                 },
             ),
+            fh::Note::GroupSplit { group, wire } => (
+                d.groups[group].span,
+                HarnessProblem::GroupSplit {
+                    harness: d.id.clone(),
+                    group: local(&d.groups[group].id),
+                    wire: local(&d.wires[wire].id),
+                },
+            ),
             fh::Note::SegmentEmpty { segment } => (
                 d.segments[segment].span,
                 HarnessProblem::SegmentEmpty {
@@ -1816,7 +1963,20 @@ fn route_one(
         };
         push(ev, span, p);
     }
-    for (k, end, got) in report(&mut out, d, &net, &r, tubes) {
+    let (tight, clashes) = report(&mut out, d, &net, &r, parts, tubes);
+    for (a, with, at) in clashes {
+        push(
+            ev,
+            d.wires[a].span,
+            HarnessProblem::WireClash {
+                harness: d.id.clone(),
+                wire: local(&d.wires[a].id),
+                with,
+                at,
+            },
+        );
+    }
+    for (k, end, got) in tight {
         let w = &d.wires[k];
         let pin = if end == 0 { &w.from } else { &w.to };
         push(
@@ -1834,14 +1994,17 @@ fn route_one(
     out
 }
 
-/// The report; and each breakout tighter than its wire's own radius: (wire, end 0 or 1, radius).
+/// The report; each breakout tighter than its wire's own radius (wire, end 0 or 1, radius); and
+/// each wire running into another wire or a part (wire, what, where).
+#[allow(clippy::type_complexity)]
 fn report(
     out: &mut HarnessOut,
     d: &HarnessDef,
     net: &fh::Network,
     r: &fh::Routed,
+    parts: &[Placed],
     tubes: bool,
-) -> Vec<(usize, usize, f64)> {
+) -> (Vec<(usize, usize, f64)>, Vec<(usize, String, Point3)>) {
     let local = |id: &str| d.local(id).to_string();
     out.connectors = d
         .connectors
@@ -1859,7 +2022,7 @@ fn report(
         .enumerate()
         .map(|(k, n)| NodeOut {
             name: n.id.clone(),
-            at: n.at,
+            at: r.nodes_at.get(k).copied().unwrap_or(n.at),
             directed: n.dir.is_some(),
             degree: net.segments.iter().filter(|s| s.a == k).count()
                 + net.segments.iter().filter(|s| s.b == k).count(),
@@ -1957,7 +2120,10 @@ fn report(
             }
         }
     }
+    let clashes = wire_clashes(net, &paths, parts);
     if tubes {
+        out.ties = fh::wires::ties(net, r, &slots, d.settings.ties);
+        out.clips = r.clips.clone();
         // each wire its own, a covered segment's sleeve round its wires
         out.paths = paths.into_iter().map(|p| p.map(|w| (w.points, w.r))).collect();
         out.tubes = r
@@ -1976,7 +2142,74 @@ fn report(
             })
             .collect();
     }
-    tight
+    (tight, clashes)
+}
+
+/// How far into another wire a wire may run before it clashes (mm): drawing's rounding, a
+/// packing's touches.
+const CLASH_TOL: f64 = 0.1;
+
+/// Wires through each other, and wires through parts: a part's solid holding the wire's centre
+/// or a point three quarters out on its tube (a wire in its own pin's hole is in air).
+fn wire_clashes(
+    net: &fh::Network,
+    paths: &[Option<fh::wires::WirePath>],
+    parts: &[Placed],
+) -> Vec<(usize, String, Point3)> {
+    let mut out: Vec<(usize, String, Point3)> = fh::wires::clashes(paths, CLASH_TOL)
+        .into_iter()
+        .map(|(a, b, at)| (a, net.wires[b].id.clone(), at))
+        .collect();
+    let boxes: Vec<forge_math::Box3> = parts
+        .iter()
+        .map(|p| {
+            let b = p
+                .body
+                .face_ids()
+                .fold(forge_math::Box3::EMPTY, |b, f| b.hull(&p.body.face_box(f)));
+            let corner = |k: usize| {
+                Point3::new(
+                    if k & 1 == 0 { b.x.lo } else { b.x.hi },
+                    if k & 2 == 0 { b.y.lo } else { b.y.hi },
+                    if k & 4 == 0 { b.z.lo } else { b.z.hi },
+                )
+            };
+            forge_math::Box3::from_points((0..8).map(|k| p.pose.point_to_world(corner(k))))
+        })
+        .collect();
+    let index: Vec<forge_bool::Index> = parts.iter().map(|p| forge_bool::Index::new(&p.body)).collect();
+    for (w, path) in paths.iter().enumerate() {
+        let Some(path) = path else { continue };
+        let mut hit: Option<(usize, Point3)> = None;
+        'pts: for seg in path.points.windows(2) {
+            let n = (seg[0].distance(seg[1]).ceil() as usize).max(1);
+            let t = (seg[1] - seg[0]).normalize();
+            for i in 0..=n {
+                let c = seg[0] + (seg[1] - seg[0]) * (i as f64 / n as f64);
+                for (k, b) in boxes.iter().enumerate() {
+                    if !b.grow(path.r).contains(c) {
+                        continue;
+                    }
+                    let mut probe = vec![c];
+                    if let Some(t) = t {
+                        let u = t.any_perpendicular().get();
+                        let v = t.cross(u);
+                        probe.extend([u, -u, v, -v].map(|q| c + q * (0.75 * path.r)));
+                    }
+                    for q in probe {
+                        if index[k].classify(parts[k].pose.point_to_local(q)) == forge_bool::Where::Inside {
+                            hit = Some((k, q));
+                            break 'pts;
+                        }
+                    }
+                }
+            }
+        }
+        if let Some((k, at)) = hit {
+            out.push((w, parts[k].name.clone(), at));
+        }
+    }
+    out
 }
 
 // ---- JSON and CSV -------------------------------------------------------------------------------

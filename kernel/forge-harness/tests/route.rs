@@ -12,6 +12,7 @@ fn node(id: &str, at: Point3, dir: Option<UnitVec3>) -> Node {
         at,
         dir,
         lead: None,
+        clip: None,
     }
 }
 
@@ -82,6 +83,7 @@ fn elbow(r_wire: f64) -> Network {
             conn("J2", 1, p(50.0, 55.0, 0.0), 1),
         ],
         wires: vec![wire("W1", (0, 0), (1, 0))],
+        groups: vec![],
         settings: Settings::default(),
     }
 }
@@ -194,6 +196,7 @@ fn branched(directed_branch: bool) -> Network {
             wire("W4", (0, 3), (2, 1)),
             wire("W5", (0, 4), (2, 2)),
         ],
+        groups: vec![],
         settings: Settings {
             slack: 0.03,
             round_up: 5.0,

@@ -47,6 +47,7 @@ fn net(n: usize) -> Network {
         at,
         dir,
         lead: None,
+        clip: None,
     };
     let seg = |a, b| Segment {
         id: format!("{a}-{b}"),
@@ -108,6 +109,7 @@ fn net(n: usize) -> Network {
                 path: None,
             })
             .collect(),
+        groups: vec![],
         settings: Settings::default(),
     }
 }
@@ -181,4 +183,48 @@ fn a_hundred_wires_route_and_mesh_in_milliseconds() {
     );
     assert_eq!(ws.iter().flatten().count(), 100);
     assert!(ms(t0, t4) < 2000.0);
+}
+
+#[test]
+fn a_clip_holds_its_bundle_and_ties_ring_the_bare_runs() {
+    let mut n = net(6);
+    // the hub a clip seated on a post top, standing up
+    n.nodes[1].at = p(150.0, 0.0, 40.0);
+    n.nodes[1].clip = Some(UnitVec3::Z);
+    let r = route(&n);
+    let d = (0..3).map(|k| r.segments[k].d).fold(0.0, f64::max);
+    assert!((r.nodes_at[1].z - (40.0 + CLIP_WALL + d / 2.0)).abs() < 1e-12);
+    assert_eq!(r.clips.len(), 1);
+    assert_eq!(r.clips[0].base, p(150.0, 0.0, 40.0));
+    let sl = slots(&n, &r);
+    let ties = wires::ties(&n, &r, &sl, 50.0);
+    // every bare segment has ties, none closer than a tie's width
+    assert!(ties.len() >= 6, "{}", ties.len());
+    for t in &ties {
+        assert!(t.d > 2.0);
+    }
+    assert!(wires::ties(&n, &r, &sl, 0.0).is_empty());
+}
+
+#[test]
+fn wires_through_each_other_are_found() {
+    let a = wires::WirePath {
+        points: vec![p(0.0, 0.0, 0.0), p(10.0, 0.0, 0.0)],
+        r: 0.5,
+        breakout: [None, None],
+    };
+    let b = wires::WirePath {
+        points: vec![p(5.0, -5.0, 0.3), p(5.0, 5.0, 0.3)],
+        r: 0.5,
+        breakout: [None, None],
+    };
+    let clear = wires::WirePath {
+        points: vec![p(5.0, -5.0, 1.2), p(5.0, 5.0, 1.2)],
+        r: 0.5,
+        breakout: [None, None],
+    };
+    let c = wires::clashes(&[Some(a.clone()), Some(b)], 0.1);
+    assert_eq!(c.len(), 1);
+    assert!(c[0].2.distance(p(5.0, 0.0, 0.15)) < 1e-9);
+    assert!(wires::clashes(&[Some(a), Some(clear)], 0.1).is_empty());
 }

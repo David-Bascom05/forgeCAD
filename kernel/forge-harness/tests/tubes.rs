@@ -26,12 +26,14 @@ fn zigzag(n: usize, r_wire: f64) -> Network {
                 at: p(0.0, 0.0, 0.0),
                 dir: Some(UnitVec3::X),
                 lead: Some(8.0),
+                clip: None,
             },
             Node {
                 id: "b".into(),
                 at: end,
                 dir: Some(UnitVec3::X),
                 lead: Some(8.0),
+                clip: None,
             },
         ],
         segments: vec![Segment {
@@ -75,6 +77,7 @@ fn zigzag(n: usize, r_wire: f64) -> Network {
                 path: None,
             })
             .collect(),
+        groups: vec![],
         settings: Settings::default(),
     }
 }

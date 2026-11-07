@@ -1151,6 +1151,9 @@ pub struct AsmMeshes {
 pub enum HarnessPiece {
     Wire(usize),
     Sleeve(usize),
+    /// All of a harness's cable ties, and all its clips.
+    Ties,
+    Clips,
 }
 
 /// Sides of a wire's tube.
@@ -1286,24 +1289,67 @@ fn asm_view(
         placed.push((meshes.by_key[&keys[k]], rows_of(&forge_math::Frame::WORLD)));
         harness_placed.push((h, HarnessPiece::Sleeve(sg), placed.len() - 1));
     }
-    // and every wire its own tube, meshed straight from its centreline
+    // and every wire its own tube, meshed straight from its centreline; the ties and clips
+    let mut mesh_once = |key: u64, make: &dyn Fn() -> forge_harness::wires::TubeMesh| -> usize {
+        match meshes.by_key.get(&key) {
+            Some(&m) => m,
+            None => {
+                let part = crate::tess::tube_part(&make());
+                let m = meshes.all.len();
+                meshes.bodies.push(Arc::new(forge_topo::Body::default()));
+                meshes.by_key.insert(key, m);
+                new_meshes.push((m, part.clone()));
+                meshes.boxes.push(crate::explode::mesh_box(&part));
+                meshes.all.push(part);
+                m
+            }
+        }
+    };
+    for (h, ho) in out.harnesses.iter().enumerate() {
+        let extras = [
+            (
+                HarnessPiece::Ties,
+                ho.ties
+                    .iter()
+                    .map(|t| [t.at.x, t.at.y, t.at.z, t.d])
+                    .collect::<Vec<_>>(),
+            ),
+            (
+                HarnessPiece::Clips,
+                ho.clips.iter().map(|c| [c.at.x, c.at.y, c.at.z, c.d]).collect(),
+            ),
+        ];
+        for (piece, sig) in extras {
+            if sig.is_empty() {
+                continue;
+            }
+            let key = {
+                use std::hash::{Hash, Hasher};
+                let mut hh = std::collections::hash_map::DefaultHasher::new();
+                (piece == HarnessPiece::Ties).hash(&mut hh);
+                for v in sig.iter().flatten() {
+                    v.to_bits().hash(&mut hh);
+                }
+                hh.finish()
+            };
+            let m = match piece {
+                HarnessPiece::Ties => mesh_once(key, &|| forge_harness::wires::ties_mesh(&ho.ties)),
+                _ => mesh_once(key, &|| {
+                    forge_harness::wires::merge(
+                        ho.clips.iter().map(forge_harness::wires::clip_mesh).collect(),
+                    )
+                }),
+            };
+            placed.push((m, rows_of(&forge_math::Frame::WORLD)));
+            harness_placed.push((h, piece, placed.len() - 1));
+        }
+    }
     for (h, ho) in out.harnesses.iter().enumerate() {
         for (w, path) in ho.paths.iter().enumerate() {
             let Some((pts, r)) = path else { continue };
-            let key = wire_key(pts, *r);
-            let m = match meshes.by_key.get(&key) {
-                Some(&m) => m,
-                None => {
-                    let part = crate::tess::tube_part(&forge_harness::wires::tube_mesh(pts, *r, WIRE_SIDES));
-                    let m = meshes.all.len();
-                    meshes.bodies.push(Arc::new(forge_topo::Body::default()));
-                    meshes.by_key.insert(key, m);
-                    new_meshes.push((m, part.clone()));
-                    meshes.boxes.push(crate::explode::mesh_box(&part));
-                    meshes.all.push(part);
-                    m
-                }
-            };
+            let m = mesh_once(wire_key(pts, *r), &|| {
+                forge_harness::wires::tube_mesh(pts, *r, WIRE_SIDES)
+            });
             placed.push((m, rows_of(&forge_math::Frame::WORLD)));
             harness_placed.push((h, HarnessPiece::Wire(w), placed.len() - 1));
         }
@@ -1400,6 +1446,9 @@ fn asm_view(
 pub const PART_TINT: [f32; 4] = crate::palette::GREY;
 /// A harness's tubes: a wire bundle's dark sleeve.
 pub const HARNESS_TINT: [f32; 4] = [0.22, 0.23, 0.26, 0.0];
+/// Cable ties (black nylon) and clips (grey nylon).
+pub const TIE_TINT: [f32; 4] = [0.07, 0.07, 0.08, 0.0];
+pub const CLIP_TINT: [f32; 4] = [0.40, 0.42, 0.45, 0.0];
 pub const PICKED_TINT: [f32; 4] = [0.95, 0.55, 0.15, 0.0];
 pub const CLASH_TINT: [f32; 4] = [0.90, 0.20, 0.20, 0.0];
 /// A mould's colour among the parts: tooling.

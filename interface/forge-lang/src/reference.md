@@ -1076,7 +1076,9 @@ harness loom(slack: ratio(0.03), round_up: 5, insert: 4) {
 }
 ```
 
-- `harness NAME(bend_k: 3, k: 1.5, slack: ratio(0), round_up: 0, lead: L, insert: 0, empty_d: 2)`:
+- `harness NAME(bend_k: 3, k: 1.5, slack: ratio(0), round_up: 0, lead: L, insert: 0, empty_d: 2,
+  ties: 100)`: `ties` the cable ties' pitch along bare bundles (0: none; ties also sit where the
+  wires settle beside a branch and a breakout);
   ids inside are `loom.W1`; edit ops reach them as a component's (`AddFeature {before: "loom."}`).
 - A file whose first line is `harness(ctrl, m1, plate, slack: ..)` is a harness of its own: the
   names are the occurrences it wires; `loom = subassembly("loom.fg", ctrl: ctrl, m1: m1, plate:
@@ -1090,7 +1092,11 @@ harness loom(slack: ratio(0.03), round_up: 5, insert: 4) {
 - `connector(FACE, pins: REF | {key: REF, ..}, insert: L)`; a pin is `J1[3]` or `J1.a`.
   `node(J, out: L)` is its exit node (directed along the face's z); `node(REF, off: L, along:
   "x"|"y"|"z", lead: L)` any other: `off` along the reference's z, `along` the axis every route
-  passes through it along (a clip). A node with no direction is a free corner.
+  passes through it along (a clip). A node with no direction is a free corner. `clip: true`: a
+  clip seated on the reference (its z up), the bundle held through it, lifted by the clip's wall
+  and half the thickest bundle through the node; drawn as a band round the bundle on a saddle.
+- `twist(W1, W2, .., lay: L)`: wires run as one, turning once every `lay`; packed together in each
+  bundle; a wire not joining the same connectors as the first is `GroupSplit`.
 - `segment(A, B, via: [REF..], k:, bend_k:, wall:, covering:, loop:, d:)`: a run of the network,
   its centreline lines and tangent arcs through the vias (a directed end leaves along its
   direction for `lead`, the segment's minimum radius by default).
@@ -1109,7 +1115,11 @@ harness loom(slack: ratio(0.03), round_up: 5, insert: 4) {
   radius, or the tightest that fits with the warning `BendTooTight` (segment, corner, needed, got).
   A wire's length: (stubs + centrelines + service loops) × (1 + slack) + insertion at both pins,
   rounded up to `round_up`.
-- Warnings: `BendTooTight`, `BreakoutTooTight`, `KinkAtNode` (a wire turning through a free node: the angle and which
+- Every wire is checked against every other and against every part's solid: `WireClash` (the
+  wire, what it runs into, where). Wires change slots without passing through each other along a
+  bundle (each packing turns rigidly along its run, and a branch keeps its wires' places and
+  closes up); where they still pass, at a breakout or a branch, it is said.
+- Warnings: `BendTooTight`, `BreakoutTooTight`, `WireClash`, `GroupSplit`, `KinkAtNode` (a wire turning through a free node: the angle and which
   way; add `along:`), `NoPath`, `PathBroken`, `NoInsulationOd`; information `SegmentEmpty`; errors
   `PinUnknown`, `NoExitNode`, `HarnessBrokenRef`, `UnknownWireType`, `WireRowBad`,
   `HarnessOccurrences`, `HarnessFile` (inside a placed file, with its line), `HarnessNotTopLevel`.
