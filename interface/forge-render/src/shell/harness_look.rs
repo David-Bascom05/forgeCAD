@@ -189,10 +189,14 @@ pub fn header(ui: &mut Ui, t: &Theme, s: &Section, title: &str, sub: &str, pills
     cross_section(&p, t, pic, s, true);
     let x = pic.right() + 12.0;
     p.text(pos2(x, r.top() + 34.0), Align2::LEFT_CENTER, title, semi(18.0), t.ink);
-    let sub_r = Rect::from_min_max(pos2(x, r.top() + 50.0), pos2(r.right() - 14.0, r.top() + 72.0));
-    clipped(ui, sub_r, sub, sans(12.5), t.ink2, "harness-head-sub");
+    // the spec line wraps (two lines at most), the pills go under it
+    let mut job = egui::text::LayoutJob::simple(sub.to_string(), sans(12.5), t.ink2, r.right() - 14.0 - x);
+    job.wrap.max_rows = 2;
+    let g = ui.fonts_mut(|f| f.layout_job(job));
+    let sub_h = g.size().y;
+    p.galley(pos2(x, r.top() + 52.0), g, t.ink2);
     let mut px = x;
-    let mut py = r.top() + 92.0;
+    let mut py = r.top() + 52.0 + sub_h + 20.0;
     for pl in pills.iter().filter(|x| !x.is_empty()) {
         let g = p.layout_no_wrap(pl.clone(), medium(10.5), t.on_ink);
         if px + g.size().x + 20.0 > r.right() - 10.0 {
@@ -483,9 +487,9 @@ fn worked(fields: &[(String, String)]) -> (Option<f64>, Option<f64>) {
 fn line_of(get: &dyn Fn(&str) -> String) -> String {
     let mut w = vec![];
     if !get("awg").is_empty() {
-        w.push(format!("{} AWG", get("awg")));
+        w.push(format!("{}\u{a0}AWG", get("awg")));
     } else if !get("mm2").is_empty() {
-        w.push(format!("{} mm²", get("mm2")));
+        w.push(format!("{}\u{a0}mm²", get("mm2")));
     }
     for k in ["conductor", "insulation", "spec"] {
         if !get(k).is_empty() {
@@ -493,7 +497,7 @@ fn line_of(get: &dyn Fn(&str) -> String) -> String {
         }
     }
     if !get("od").is_empty() {
-        w.push(format!("Ø{} mm", get("od")));
+        w.push(format!("Ø{}\u{a0}mm", get("od")));
     }
     w.join("  ·  ")
 }
@@ -580,6 +584,18 @@ pub fn wide(
                     _ => {}
                 }
             });
+            // the body fades into the footer: more below, not a row cut in half
+            if !matches!(d, Dialog::Library { .. }) {
+                for k in 0..24 {
+                    let f = k as f32 / 24.0;
+                    let y = body.bottom() - 24.0 + k as f32;
+                    p.rect_filled(
+                        Rect::from_min_max(pos2(body.left(), y), pos2(body.right() - 10.0, y + 1.0)),
+                        0.0,
+                        t.surface.gamma_multiply(f * f),
+                    );
+                }
+            }
             let words = match d {
                 Dialog::WireType { editing: true, .. } => "Save",
                 Dialog::WireType { .. } => "Create",
@@ -721,7 +737,7 @@ fn wire_type_body(
                     }
                 }
             }
-            ui.add_space(12.0);
+            ui.add_space(48.0);
         });
 }
 
@@ -1119,7 +1135,7 @@ fn wire_body(ui: &mut Ui, t: &Theme, d: &mut Dialog, hs: &[HarnessOut], places: 
             colour_grid(ui, t, "Base", &mut colour[0], true, "wire-c0");
             colour_grid(ui, t, "Tracer", &mut colour[1], true, "wire-c1");
             colour_grid(ui, t, "Second tracer", &mut colour[2], true, "wire-c2");
-            ui.add_space(12.0);
+            ui.add_space(48.0);
         });
 }
 
