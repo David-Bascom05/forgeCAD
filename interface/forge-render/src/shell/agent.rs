@@ -871,6 +871,13 @@ impl Shell {
                             s.kind = agent_settings::Kind::ClaudeCode;
                             close = true;
                         }
+                        other.kind = agent_settings::Kind::Codex;
+                        let c = ui.radio(s.kind == agent_settings::Kind::Codex, other.label());
+                        rows.push(("agent:switch:codex", c.rect));
+                        if c.clicked() {
+                            s.kind = agent_settings::Kind::Codex;
+                            close = true;
+                        }
                         let o = ui.radio(s.kind == agent_settings::Kind::OpenAi, openai);
                         rows.push(("agent:switch:openai", o.rect));
                         if o.clicked() {

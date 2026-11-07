@@ -108,6 +108,15 @@ sh web/build.sh OUT                                 # the browser page and the b
 Built meshes are cached in `~/.cache/forgecad/mesh`, by content hash of the part file and the
 kernel's sources. Nothing else reads that cache; kernel benchmarks never see it.
 
+## In-app agents
+
+In the Agent tab, click the agent name and select Claude Code, Codex, or an
+OpenAI-compatible endpoint. Codex uses the `codex` CLI on `PATH` and its existing
+login (`codex login`); no API key is required in ForgeCAD. Its optional model is
+set in Agent settings; leave it blank for the CLI default. ForgeCAD starts Codex
+with its own app tools and isolated configuration, keeps the conversation across
+messages, and reloads its file changes into the document's undo history.
+
 ## License
 
 MPL-2.0.

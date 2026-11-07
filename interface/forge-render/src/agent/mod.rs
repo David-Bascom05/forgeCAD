@@ -1,10 +1,11 @@
 //! The Agent tab's backends, each on its own threads, saying what happens as `Event`s: Claude
-//! Code run headless (`claude.rs`), or any OpenAI-compatible endpoint driven by ForgeCAD's own
+//! Code (`claude.rs`) or Codex (`codex.rs`) run headless, or an OpenAI-compatible endpoint driven by ForgeCAD's own
 //! loop and tools (`openai.rs`, `tools.rs`). `Turns` makes what an agent writes to the open file
 //! one undo step a turn.
 
 pub mod apptools;
 pub mod claude;
+pub mod codex;
 pub mod keys;
 pub mod mcp;
 pub mod openai;

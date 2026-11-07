@@ -17,14 +17,14 @@ pub struct AgentHost {
     rx: Option<Receiver<Event>>,
     /// What the backend was made for: the folder, the settings.
     made_for: Option<(String, AgentSettings)>,
-    /// Claude Code's session, carried to a new process when only the model changed.
+    /// CLI agent session, carried to a new process when only the model changed.
     session: Option<std::sync::Arc<std::sync::Mutex<Option<String>>>>,
     pub turns: Turns,
     /// The document the agent was last told is open.
     told: Option<String>,
     loaded: bool,
     keyring: Option<Receiver<Result<Option<bool>, String>>>,
-    /// `claude`, and where it runs, unless a test says otherwise.
+    /// CLI program override, and where it runs, unless a test says otherwise.
     pub program: Option<String>,
     pub cwd: Option<PathBuf>,
     /// `agent.toml`, unless a test says otherwise.
@@ -32,7 +32,7 @@ pub struct AgentHost {
     /// The app tools' calls, to the frame's thread; the way to them, for the backends.
     pub app_rx: Option<Receiver<crate::agent::apptools::AppCall>>,
     app_tools: Option<crate::agent::apptools::AppTools>,
-    /// Claude Code's MCP server: this app's socket and the `forge-app` that bridges to it.
+    /// CLI agents' MCP server: this app's socket and the `forge-app` that bridges to it.
     mcp: Option<String>,
     pub mcp_exe: Option<PathBuf>,
 }
@@ -474,7 +474,9 @@ impl Gui {
             let was = self.agent.made_for.take();
             let carry = match &was {
                 Some((d, w))
-                    if *d == want.0 && w.kind == Kind::ClaudeCode && settings.kind == Kind::ClaudeCode =>
+                    if *d == want.0
+                        && w.kind == settings.kind
+                        && matches!(settings.kind, Kind::ClaudeCode | Kind::Codex) =>
                 {
                     self.agent.session.as_ref().and_then(|s| s.lock().ok()?.clone())
                 }
@@ -553,6 +555,22 @@ impl Gui {
                     claude::Config {
                         program: self.agent.program.clone().unwrap_or_else(|| "claude".into()),
                         model: s.claude_model.clone(),
+                        file: file.to_path_buf(),
+                        system,
+                        cwd: self.agent.cwd.clone().unwrap_or_else(claude::clean_cwd),
+                        mcp: self.agent.mcp.clone(),
+                    },
+                    out,
+                    session,
+                );
+                self.agent.session = Some(c.session.clone());
+                Box::new(c)
+            }
+            Kind::Codex => {
+                let c = crate::agent::codex::Codex::new(
+                    claude::Config {
+                        program: self.agent.program.clone().unwrap_or_else(|| "codex".into()),
+                        model: s.codex_model.clone(),
                         file: file.to_path_buf(),
                         system,
                         cwd: self.agent.cwd.clone().unwrap_or_else(claude::clean_cwd),

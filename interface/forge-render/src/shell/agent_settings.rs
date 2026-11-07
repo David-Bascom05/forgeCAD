@@ -1,4 +1,4 @@
-//! The Agent tab's settings: which backend runs the agent (Claude Code, or any OpenAI-compatible
+//! The Agent tab's settings: which backend runs the agent (Claude Code, Codex, or an OpenAI-compatible
 //! endpoint), its model, the endpoint's address, the folders let in. Kept in settings.toml's
 //! `[agent]` table; an endpoint's API key lives in the OS keyring, never there. `settings_section`
 //! is the Settings window's Agent section (its one line in `settings::SECTIONS`).
@@ -10,6 +10,7 @@ use egui::{RichText, Ui};
 pub enum Kind {
     #[default]
     ClaudeCode,
+    Codex,
     OpenAi,
 }
 
@@ -18,6 +19,8 @@ pub struct AgentSettings {
     pub kind: Kind,
     /// `--model` for Claude Code: an alias or a full id; empty for Claude Code's own default.
     pub claude_model: String,
+    /// Empty selects the Codex CLI default.
+    pub codex_model: String,
     /// An OpenAI-compatible endpoint: its base (up to `/v1`) and model id.
     pub base_url: String,
     pub model: String,
@@ -30,6 +33,7 @@ impl Default for AgentSettings {
         AgentSettings {
             kind: Kind::ClaudeCode,
             claude_model: String::new(),
+            codex_model: String::new(),
             base_url: "http://localhost:8080/v1".into(),
             model: String::new(),
             trusted: Vec::new(),
@@ -63,6 +67,10 @@ impl AgentSettings {
                 "" => "Claude Code".into(),
                 m => format!("Claude Code · {m}"),
             },
+            Kind::Codex => match self.codex_model.trim() {
+                "" => "Codex".into(),
+                m => format!("Codex · {m}"),
+            },
             Kind::OpenAi => {
                 let host = host_of(&self.base_url);
                 match self.model.trim() {
@@ -76,13 +84,15 @@ impl AgentSettings {
     pub fn to_toml(&self) -> String {
         let kind = match self.kind {
             Kind::ClaudeCode => "claude-code",
+            Kind::Codex => "codex",
             Kind::OpenAi => "openai",
         };
         let trusted: Vec<String> = self.trusted.iter().map(|t| quote(t)).collect();
         format!(
-            "backend = {}\nclaude_model = {}\nbase_url = {}\nmodel = {}\ntrusted = [{}]\n",
+            "backend = {}\nclaude_model = {}\ncodex_model = {}\nbase_url = {}\nmodel = {}\ntrusted = [{}]\n",
             quote(kind),
             quote(&self.claude_model),
+            quote(&self.codex_model),
             quote(&self.base_url),
             quote(&self.model),
             trusted.join(", ")
@@ -99,13 +109,14 @@ impl AgentSettings {
             let v = unquote(v.trim());
             match k.trim() {
                 "backend" => {
-                    s.kind = if v == "openai" {
-                        Kind::OpenAi
-                    } else {
-                        Kind::ClaudeCode
+                    s.kind = match v.as_str() {
+                        "openai" => Kind::OpenAi,
+                        "codex" => Kind::Codex,
+                        _ => Kind::ClaudeCode,
                     }
                 }
                 "claude_model" => s.claude_model = v,
+                "codex_model" => s.codex_model = v,
                 "base_url" => s.base_url = v,
                 "model" => s.model = v,
                 "trusted" => s.trusted = strings(line.split_once('=').map_or("", |x| x.1)),
@@ -146,14 +157,17 @@ impl AgentSettings {
         let mut s = AgentSettings::default();
         let get = |k: &str| t.get(TABLE, k).map(str::to_string);
         if let Some(v) = get("backend") {
-            s.kind = if v == "openai" {
-                Kind::OpenAi
-            } else {
-                Kind::ClaudeCode
+            s.kind = match v.as_str() {
+                "openai" => Kind::OpenAi,
+                "codex" => Kind::Codex,
+                _ => Kind::ClaudeCode,
             };
         }
         if let Some(v) = get("claude_model") {
             s.claude_model = v;
+        }
+        if let Some(v) = get("codex_model") {
+            s.codex_model = v;
         }
         if let Some(v) = get("base_url") {
             s.base_url = v;
@@ -174,10 +188,12 @@ impl AgentSettings {
         t.entries.retain(|e| e.0 != TABLE);
         let kind = match self.kind {
             Kind::ClaudeCode => "claude-code",
+            Kind::Codex => "codex",
             Kind::OpenAi => "openai",
         };
         t.set(TABLE, "backend", kind);
         t.set(TABLE, "claude_model", self.claude_model.clone());
+        t.set(TABLE, "codex_model", self.codex_model.clone());
         t.set(TABLE, "base_url", self.base_url.clone());
         t.set(TABLE, "model", self.model.clone());
         for (k, d) in self.trusted.iter().filter(|d| trustable(d)).enumerate() {
@@ -284,6 +300,7 @@ pub fn section(ui: &mut Ui, t: &Theme, s: &mut AgentSettings, key: &mut KeyField
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 16.0;
         ui.radio_value(&mut s.kind, Kind::ClaudeCode, "Claude Code");
+        ui.radio_value(&mut s.kind, Kind::Codex, "Codex");
         ui.radio_value(&mut s.kind, Kind::OpenAi, "OpenAI-compatible");
     });
     ui.add_space(4.0);
@@ -300,6 +317,14 @@ pub fn section(ui: &mut Ui, t: &Theme, s: &mut AgentSettings, key: &mut KeyField
         Kind::ClaudeCode => {
             field(ui, "Model", &mut s.claude_model, "Claude Code's default")
                 .on_hover_text("Passed as --model: an alias (opus, sonnet, haiku) or a full model id");
+        }
+        Kind::Codex => {
+            field(ui, "Model", &mut s.codex_model, "Codex default");
+            ui.label(
+                RichText::new("Uses your Codex CLI login. Sign in with: codex login")
+                    .font(sans(12.0))
+                    .color(t.ink2),
+            );
         }
         Kind::OpenAi => {
             field(ui, "Base URL", &mut s.base_url, "https://api.openai.com/v1");
@@ -351,7 +376,7 @@ pub fn section(ui: &mut Ui, t: &Theme, s: &mut AgentSettings, key: &mut KeyField
 /// The OpenAI-compatible endpoint can't run without these.
 pub fn missing(s: &AgentSettings) -> Option<&'static str> {
     match s.kind {
-        Kind::ClaudeCode => None,
+        Kind::ClaudeCode | Kind::Codex => None,
         Kind::OpenAi if s.base_url.trim().is_empty() => Some("Set the endpoint's base URL in Agent settings"),
         Kind::OpenAi if s.model.trim().is_empty() => Some("Set a model for the endpoint in Agent settings"),
         Kind::OpenAi => None,
@@ -367,6 +392,7 @@ mod tests {
         let s = AgentSettings {
             kind: Kind::OpenAi,
             claude_model: "opus".into(),
+            codex_model: String::new(),
             base_url: "http://node1:8080/v1".into(),
             model: "qwen \"3.6\"".into(),
             trusted: vec!["/mnt/usb/parts".into(), "/tmp/x, \"y\"".into()],
@@ -389,6 +415,7 @@ mod tests {
         let a = AgentSettings {
             kind: Kind::OpenAi,
             claude_model: "opus".into(),
+            codex_model: String::new(),
             base_url: "http://node1:8080/v1".into(),
             model: "qwen3.6-35b-a3b".into(),
             trusted: vec!["/mnt/usb/parts".into(), "/tmp/x y".into(), "/a\n/etc".into()],
