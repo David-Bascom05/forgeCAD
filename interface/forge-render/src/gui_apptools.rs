@@ -38,6 +38,8 @@ pub struct AppHost {
     pub undo: Vec<ViewSnap>,
     /// Pictures asked for: taken once the next frame's drawn.
     shots: Vec<std::sync::mpsc::Sender<Reply>>,
+    /// Pictures of a drawing's sheet: the window's view area, taken after this frame's drawn.
+    pub(super) window_shots: Vec<std::sync::mpsc::Sender<Reply>>,
     /// Measures asked for: answered when Measure has read them, or said late.
     measures: Vec<(std::sync::mpsc::Sender<Reply>, std::time::Instant)>,
     /// The agent turned the view itself this turn: a driven joint leaves the camera alone.
@@ -151,7 +153,12 @@ impl Gui {
                 if let Some(v) = &mut self.view {
                     v.mark_dirty();
                 }
-                self.apps.shots.push(c.reply);
+                // a drawing's sheet is the window's, taken as the frame draws it
+                if self.shell.drawing.is_some() || self.view.is_none() {
+                    self.apps.window_shots.push(c.reply);
+                } else {
+                    self.apps.shots.push(c.reply);
+                }
                 self.ctx.request_repaint();
                 continue;
             }
@@ -313,6 +320,16 @@ impl Gui {
                 None => "Nothing is selected".into(),
             }),
             "set_view" => {
+                // a drawing's sheet: fitted to the window, its only view
+                if let Some(d) = &mut self.shell.drawing {
+                    return match s(a, "view") {
+                        "fit" | "home" => {
+                            d.refit();
+                            Reply::ok("The sheet, fitted")
+                        }
+                        w => Reply::err(format!("a drawing has no view `{w}`: only fit")),
+                    };
+                }
                 let Some(v) = &mut self.view else {
                     return Reply::err("nothing is in view");
                 };

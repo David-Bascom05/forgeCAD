@@ -167,6 +167,14 @@ pub fn call(name: &str, args: &Json, file: &Path) -> (String, bool) {
 
 /// The part built and checked, as `fg run` reports it.
 pub fn check(text: &str, file: &Path) -> String {
+    // a drawing: made as the app makes it, its views, annotations and problems
+    if forge_lang::drawing::is_drawing(text) {
+        let dir = file.parent().unwrap_or(Path::new("."));
+        let d = forge_lang::drawing::regen::make_in(text, dir, Some(dir));
+        let mut s = String::new();
+        forge_lang::drawing::regen::json(&d, text).write(&mut s);
+        return s;
+    }
     let opts = forge_lang::Options {
         build: true,
         dir: file.parent().map(|d| d.to_path_buf()),
@@ -222,6 +230,7 @@ pub fn fg_call(name: &str, args: &Json, dir: &Path) -> (String, bool) {
                 );
                 if a.ok { Ok(a.text) } else { Err(a.text) }
             }
+            "fg_check" if forge_lang::drawing::is_drawing(&text) => Ok(check(&text, &f)),
             "fg_check" => {
                 let opts = forge_lang::Options {
                     build: false,

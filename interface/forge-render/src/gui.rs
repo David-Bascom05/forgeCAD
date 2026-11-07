@@ -38,6 +38,8 @@ pub mod gui_docs;
 mod gui_explode;
 #[path = "gui_inspect.rs"]
 pub mod gui_inspect;
+#[path = "gui_markup.rs"]
+pub mod gui_markup;
 #[path = "gui_overlay.rs"]
 mod gui_overlay;
 #[path = "gui_sheet.rs"]
@@ -151,6 +153,15 @@ pub struct Gui {
     after_sketch: Option<&'static str>,
     /// When the right button went down in the view, for its menu to show if it stays down.
     mark_held: Option<f64>,
+    /// A message with marks, sent once the frame showing them is drawn.
+    markup_job: Option<(String, Vec<String>)>,
+    /// A message with marks taken, waiting on its names; an assembly's occurrences' own names,
+    /// by the text they were found for, and the thread finding them.
+    markup_wait: Option<Box<gui_markup::Waiting>>,
+    markup_occ: Option<(u64, Arc<gui_markup::OccNames>)>,
+    markup_occ_rx: Option<(u64, Receiver<gui_markup::OccNames>)>,
+    /// The window's format, for a picture of it drawn again.
+    format: wgpu::TextureFormat,
     /// A sketch's plane has been asked for.
     sketch_for: Option<(String, SketchFor, Vec<String>)>,
     /// What the `project` rows of the sketch being opened come to.
@@ -313,6 +324,11 @@ impl Gui {
             sketch_sources: Default::default(),
             after_sketch: None,
             mark_held: None,
+            markup_job: None,
+            markup_wait: None,
+            markup_occ: None,
+            markup_occ_rx: None,
+            format,
             fg: None,
             fg_view: None,
             fg_folded: None,
@@ -1282,18 +1298,22 @@ impl Gui {
     pub fn view_event(&mut self, event: &WindowEvent) {
         // a press decides from where the pointer is now: a menu may have closed, a dialog gone, since
         // it last moved
+        let marking = self.shell.agent.markup.on;
         if let WindowEvent::MouseInput {
             state: ElementState::Pressed,
             device_id,
-            ..
+            button,
         } = event
             && !self.captured
+            && !(marking && *button == MouseButton::Left)
             && let Some(position) = self.pointer_px
         {
             let device_id = *device_id;
             let over = self.view_is_at(position);
             let was = std::mem::replace(&mut self.over_view, over);
             if over && !was {
+                // marking, the view has the pointer only while this button's held
+                self.captured |= marking;
                 let moved = WindowEvent::CursorMoved { device_id, position };
                 self.over_view = true;
                 self.view_event(&moved);
@@ -1306,6 +1326,9 @@ impl Gui {
             }
             _ => false,
         };
+        // marking: the left button is the pen's and nothing is lit under it; the wheel and the
+        // other buttons still move the view
+        let over_now = over_now && !(marking && !self.captured);
         let Some(v) = &mut self.view else { return };
         let p = self.pixels_per_point;
         let origin = self.shell.view_rect.min;
@@ -1334,6 +1357,35 @@ impl Gui {
             WindowEvent::CursorLeft { .. } => {
                 self.over_view = false;
                 self.captured = false;
+                Some(event.clone())
+            }
+            WindowEvent::MouseInput {
+                button: MouseButton::Left,
+                state: ElementState::Pressed,
+                ..
+            } if marking => None,
+            WindowEvent::MouseInput {
+                state: ElementState::Released,
+                device_id,
+                ..
+            } if marking && self.captured => {
+                self.captured = false;
+                self.over_view = false;
+                if v.nav.event(event) {
+                    v.dirty = true;
+                }
+                Some(WindowEvent::CursorLeft {
+                    device_id: *device_id,
+                })
+            }
+            WindowEvent::MouseWheel { .. }
+                if marking
+                    && self.pointer_px.is_some_and(|q| {
+                        self.shell
+                            .view_rect
+                            .contains(egui::pos2(q.x as f32 / p, q.y as f32 / p))
+                    }) =>
+            {
                 Some(event.clone())
             }
             WindowEvent::MouseInput {
@@ -1449,7 +1501,7 @@ impl Gui {
                 self.fg_save();
                 return None;
             }
-            KeyCmd::Rename | KeyCmd::Delete => return None,
+            KeyCmd::Rename | KeyCmd::Delete | KeyCmd::Markup => return None,
             KeyCmd::FitSelected => K::KeyF,
             KeyCmd::Section => K::KeyS,
             KeyCmd::Explode => K::KeyE,
@@ -2310,6 +2362,8 @@ impl Gui {
         let host = self.apply();
         self.apply_fg();
         self.agent_acts();
+        self.markup_names();
+        self.markup_ready();
         self.app_calls();
         self.docs_asked();
         self.open_asked();
@@ -2656,6 +2710,12 @@ impl Gui {
             self.egui.render(&mut pass, &prims, &sd);
         }
         self.queue.submit(more.into_iter().chain([enc.finish()]));
+        if let Some(job) = self.markup_job.take() {
+            self.markup_send(job, &prims, &sd);
+        }
+        if !self.apps.window_shots.is_empty() {
+            self.window_shot(&prims, &sd);
+        }
         for id in &output.textures_delta.free {
             self.egui.free_texture(id);
         }
@@ -3037,6 +3097,15 @@ impl Headless {
 
     pub fn text(&mut self, s: &str) {
         self.pending.push(egui::Event::Text(s.to_string()));
+    }
+
+    /// Ctrl+C and Ctrl+X, as the window turns them into egui's own events.
+    pub fn copy(&mut self) {
+        self.pending.push(egui::Event::Copy);
+    }
+
+    pub fn cut(&mut self) {
+        self.pending.push(egui::Event::Cut);
     }
 
     /// Where `name` is drawn, a few frames given for it to be: a panel just opened is named once

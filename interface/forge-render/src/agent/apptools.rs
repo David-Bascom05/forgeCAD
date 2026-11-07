@@ -214,7 +214,7 @@ pub const NAMES: &[(&str, &str, &str, &[&str])] = &[
     ),
     (
         "fg_run",
-        "Build a .fg file in the open document's folder and report its errors, warnings and measures (as `fg run`). `file` is its name in the folder.",
+        "Build a .fg file in the open document's folder and report its errors, warnings and measures (as `fg run`); a drawing: its views, annotations and problems. `file` is its name in the folder.",
         r#"{"file":{"type":"string"}}"#,
         &["file"],
     ),

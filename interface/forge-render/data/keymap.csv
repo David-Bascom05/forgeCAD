@@ -15,6 +15,7 @@ section,"Section: across x, y, z, off",View,S,
 explode,Explode or bring together,View,E,
 lines,"Next visual style",View,L,
 ao,Ambient occlusion,View,O,
+markup,Markup for the agent,View,K,
 escape,Back out one level,Fixed,Escape,fixed
 ok,OK in a dialog,Fixed,Enter,fixed
 sketch_undo,Undo a sketch step (in a sketch),In context,Ctrl+Z,context

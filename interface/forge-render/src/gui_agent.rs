@@ -340,7 +340,13 @@ impl Gui {
         let acts = std::mem::take(&mut self.shell.agent.out);
         for a in acts {
             match a {
-                AgentAct::Send { text, refs } => self.agent_send(&text, &refs),
+                AgentAct::Send {
+                    text,
+                    refs,
+                    markup: true,
+                } => self.markup_job = Some((text, refs)),
+                AgentAct::Send { text, refs, .. } => self.agent_send(&text, &refs, None),
+                AgentAct::ShowMarkup(k) => self.markup_show(k),
                 AgentAct::Trust { dir, yes } => {
                     self.shell.agent.trust_ask = None;
                     let pending = self.shell.agent.pending.take();
@@ -355,8 +361,8 @@ impl Gui {
                     } else if yes {
                         self.shell.agent.settings.trusted.push(dir);
                         self.agent_save_settings();
-                        if let Some((text, refs)) = pending {
-                            self.agent_send(&text, &refs);
+                        if let Some((text, refs, picture)) = pending {
+                            self.agent_send(&text, &refs, picture);
                         }
                     } else {
                         self.shell.agent.take(Event::Done {
@@ -418,7 +424,7 @@ impl Gui {
         }
     }
 
-    fn agent_send(&mut self, text: &str, refs: &[String]) {
+    pub(crate) fn agent_send(&mut self, text: &str, refs: &[String], picture: Option<Vec<u8>>) {
         let fail = |g: &mut Gui, text: String, fix: Option<String>| {
             g.shell.agent.take(Event::Problem { text, fix });
         };
@@ -438,7 +444,7 @@ impl Gui {
             .unwrap_or_default();
         if !trusted(&dir, &self.shell.agent.settings.trusted) {
             self.shell.agent.trust_ask = Some(dir);
-            self.shell.agent.pending = Some((text.to_string(), refs.to_vec()));
+            self.shell.agent.pending = Some((text.to_string(), refs.to_vec(), picture));
             return;
         }
         // the agent reads the file: what's on screen is what it gets
@@ -505,7 +511,7 @@ impl Gui {
         // the turn's on: a .fg it makes beside an open document opens in a tab
         self.agent_turn(true);
         if let Some(b) = &mut self.agent.backend {
-            b.send(msg);
+            b.send(msg, picture);
         }
     }
 

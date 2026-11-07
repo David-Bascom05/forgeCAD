@@ -33,8 +33,8 @@ impl Out {
 }
 
 pub trait Backend: Send {
-    /// A message from the person: a new turn.
-    fn send(&mut self, prompt: String);
+    /// A message from the person, and a picture with it (PNG): a new turn.
+    fn send(&mut self, prompt: String, picture: Option<Vec<u8>>);
     /// Stop the turn that's running; it ends with `Done { stopped: true }`.
     fn stop(&mut self);
     /// The document open in the app now, in the same folder.

@@ -260,6 +260,34 @@ pub struct PickHit {
     pub depth: f32,
 }
 
+/// The view's ids, a pixel each: its placement (0 for none, else one more) and its face, or its
+/// segment with `SELECTED_BIT`, whose edge is kept by `edges`.
+pub struct ViewIds {
+    pub w: usize,
+    pub h: usize,
+    raw: Vec<(u32, u32)>,
+    edges: std::collections::HashMap<(u32, u32), Entity>,
+}
+
+impl ViewIds {
+    /// The placement and entity at a pixel, if anything's drawn there.
+    pub fn at(&self, x: usize, y: usize) -> Option<(u32, Entity)> {
+        if x >= self.w || y >= self.h {
+            return None;
+        }
+        let (pl, id) = self.raw[y * self.w + x];
+        if pl == 0 {
+            return None;
+        }
+        let e = if id & SELECTED_BIT != 0 {
+            self.edges[&(pl, id)]
+        } else {
+            Entity::Face(id)
+        };
+        Some((pl - 1, e))
+    }
+}
+
 struct PickState {
     id: wgpu::Texture,
     id_view: wgpu::TextureView,
@@ -1597,6 +1625,26 @@ impl Renderer {
         lo: (f32, f32),
         hi: (f32, f32),
     ) -> Vec<(Entity, u32, u32)> {
+        let ids = self.view_ids(scene, camera);
+        let mut counts: std::collections::HashMap<Entity, (u32, u32)> = Default::default();
+        for y in 0..ids.h {
+            for x in 0..ids.w {
+                let Some((_, e)) = ids.at(x, y) else { continue };
+                let (px, py) = (x as f32 + 0.5, y as f32 + 0.5);
+                let c = counts.entry(e).or_default();
+                if px >= lo.0 && px <= hi.0 && py >= lo.1 && py <= hi.1 {
+                    c.0 += 1;
+                } else {
+                    c.1 += 1;
+                }
+            }
+        }
+        counts.into_iter().map(|(e, c)| (e, c.0, c.1)).collect()
+    }
+
+    /// The placement and entity under each pixel of the whole view. Draws them and waits, so for a
+    /// window let go or a message sent, not for a frame.
+    pub fn view_ids(&mut self, scene: &mut Scene, camera: &Camera) -> ViewIds {
         let (w, h) = self.size;
         let view = camera.view_window(w, h, (w as f32 * 0.5, h as f32 * 0.5), (w as f32, h as f32));
         scene.cull(&view, self.lod_px, self.section, self.section2);
@@ -1706,32 +1754,28 @@ impl Renderer {
         let _ = self.device.poll(wgpu::PollType::wait_indefinitely());
         let ids = read.slice(..).get_mapped_range().expect("it's been waited for");
         let word = |at: usize| u32::from_le_bytes(ids[at..at + 4].try_into().expect("4 bytes"));
-        let mut counts: std::collections::HashMap<Entity, (u32, u32)> = Default::default();
+        let mut raw = Vec::with_capacity((w * h) as usize);
+        let mut kinds: std::collections::HashMap<(u32, u32), Entity> = Default::default();
         for y in 0..h as usize {
             for x in 0..w as usize {
                 let at = y * row as usize + x * 8;
-                if word(at) == 0 {
-                    continue;
-                }
-                let placement = word(at) - 1;
-                let raw = word(at + 4);
-                let e = if raw & SELECTED_BIT != 0 {
-                    self.edge_of_segment(scene, placement, raw & !SELECTED_BIT)
-                } else {
-                    Entity::Face(raw)
-                };
-                let (px, py) = (x as f32 + 0.5, y as f32 + 0.5);
-                let c = counts.entry(e).or_default();
-                if px >= lo.0 && px <= hi.0 && py >= lo.1 && py <= hi.1 {
-                    c.0 += 1;
-                } else {
-                    c.1 += 1;
+                let (pl, id) = (word(at), word(at + 4));
+                raw.push((pl, id));
+                if pl != 0 && id & SELECTED_BIT != 0 {
+                    kinds
+                        .entry((pl, id))
+                        .or_insert_with(|| self.edge_of_segment(scene, pl - 1, id & !SELECTED_BIT));
                 }
             }
         }
         drop(ids);
         read.unmap();
-        counts.into_iter().map(|(e, c)| (e, c.0, c.1)).collect()
+        ViewIds {
+            w: w as usize,
+            h: h as usize,
+            raw,
+            edges: kinds,
+        }
     }
 
     fn edge_of_segment(&self, scene: &Scene, placement: u32, segment: u32) -> Entity {

@@ -2,6 +2,7 @@
 //! conflicts and limits with their typed fixes, ids under edits, `expect .. at`, and the
 //! 5,000-instance targets measured through `run`.
 
+use forge_lang::deps::Seen;
 use forge_lang::edit::apply;
 use forge_lang::error::{Error, Op, ParamKey, Warning};
 use forge_lang::{Options, Run};
@@ -1507,4 +1508,91 @@ fn a_statement_is_replaced_in_its_place_with_its_params() {
         )
         .is_err()
     );
+}
+
+#[test]
+fn each_in_file_component_call_is_named_as_it_names_itself() {
+    let src = "shared t = 3
+component lid(w: 40) {
+  sketch s(on: xy) {
+    o = rect(center: (0, 0), size: (w, w))
+  }
+  plate = extrude(s, t)
+}
+component box(w: 40) {
+  sketch s(on: xy) {
+    o = rect(center: (0, 0), size: (w, w))
+  }
+  base = extrude(s, 20)
+  l1 = part(lid(w: w), at: (0, 0, 20))
+  ground(base)
+  j = fastened(l1.plate.start, base.end, flip: true)
+}
+b1 = part(box, ground: true)
+b2 = part(box(w: 60), at: (200, 0, 0), ground: true)
+";
+    let opts = Options {
+        comp_anchors: true,
+        render: true,
+        ..Options::default()
+    };
+    let run = forge_lang::run(src, opts, Default::default()).0;
+    let asm = run.asm.as_ref().expect("an assembly");
+    let files: Vec<&str> = run.comp_anchors.iter().map(|c| c.0.as_str()).collect();
+    // every occurrence of a call is found, under its own file, its faces named by its own anchors
+    for (path, file, _) in &asm.occurrences {
+        let found = run.comp_anchors.iter().find(|c| c.0 == *file).or_else(|| {
+            let parent = file.rsplit_once('/')?.0;
+            run.comp_anchors.iter().find(|c| c.0 == parent)
+        });
+        let (_, a) = found.unwrap_or_else(|| panic!("{path} ({file}) not in {files:?}"));
+        let words: Vec<&String> = a.faces.values().collect();
+        let want = if path.ends_with("l1") { "plate." } else { "base." };
+        assert!(words.iter().any(|w| w.starts_with(want)), "{path}: {words:?}");
+    }
+    assert!(!Options::default().comp_anchors && run.anchors.is_none());
+}
+
+#[test]
+fn a_part_files_anchors_come_from_its_load_and_never_from_outside_the_root() {
+    let d = dir("occ-anchors");
+    let inner = d.join("inner");
+    std::fs::create_dir_all(&inner).unwrap();
+    let plate = "sketch s(on: xy) {\n  o = rect(center: (0, 0), size: (40, 40))\n}\np = extrude(s, 5)\n";
+    write(&inner, "plate.fg", plate);
+    write(&d, "outside.fg", plate);
+    let opts = || Options {
+        dir: Some(inner.clone()),
+        root: Some(inner.clone()),
+        comp_anchors: true,
+        render: true,
+        ..Options::default()
+    };
+    // the part inside: named face by face as it names itself
+    let inside = "assembly\na = part(\"plate.fg\", ground: true)\n";
+    let run = forge_lang::run(inside, opts(), Default::default()).0;
+    let asm = run.asm.as_ref().expect("an assembly");
+    let named = asm.occ_anchors[0].as_ref().expect("its anchors");
+    assert!(named.faces.values().any(|w| w.starts_with("p.")), "{named:?}");
+    // one outside the root: refused, never read, never named
+    let src = format!("{inside}b = part(\"../outside.fg\", at: (100, 0, 0), ground: true)\n");
+    let watch = forge_lang::deps::watch();
+    let run = forge_lang::run(&src, opts(), Default::default()).0;
+    let read = watch.done();
+    let outside = d.join("outside.fg").canonicalize().unwrap();
+    assert!(
+        !read.0.iter().any(|(p, s)| {
+            p.canonicalize().ok().as_ref() == Some(&outside) && !matches!(s, Seen::Absent | Seen::There)
+        }),
+        "{read:?}"
+    );
+    if let Some(asm) = &run.asm {
+        assert!(
+            asm.occurrences
+                .iter()
+                .zip(&asm.occ_anchors)
+                .all(|(o, a)| o.0 != "b" || a.is_none())
+        );
+    }
+    assert!(!errors(&run).is_empty());
 }

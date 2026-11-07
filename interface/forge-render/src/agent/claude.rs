@@ -399,12 +399,30 @@ impl ClaudeCode {
 }
 
 impl Backend for ClaudeCode {
-    fn send(&mut self, prompt: String) {
+    fn send(&mut self, prompt: String, picture: Option<Vec<u8>>) {
+        // a picture goes first, as an image block the message reads after
+        let content = match picture {
+            None => prompt.into(),
+            Some(png) => Json::Arr(vec![
+                Json::obj(vec![
+                    ("type", "image".into()),
+                    (
+                        "source",
+                        Json::obj(vec![
+                            ("type", "base64".into()),
+                            ("media_type", "image/png".into()),
+                            ("data", super::apptools::base64(&png).into()),
+                        ]),
+                    ),
+                ]),
+                Json::obj(vec![("type", "text".into()), ("text", prompt.into())]),
+            ]),
+        };
         let msg = Json::obj(vec![
             ("type", "user".into()),
             (
                 "message",
-                Json::obj(vec![("role", "user".into()), ("content", prompt.into())]),
+                Json::obj(vec![("role", "user".into()), ("content", content)]),
             ),
         ]);
         self.busy.store(true, Ordering::SeqCst);

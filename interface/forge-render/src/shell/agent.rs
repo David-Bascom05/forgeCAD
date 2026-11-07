@@ -80,6 +80,8 @@ pub enum Entry {
     User {
         text: String,
         refs: Vec<String>,
+        /// What was drawn for it, once the host has sent it.
+        markup: Option<super::markup::Sent>,
     },
     Agent {
         text: String,
@@ -112,10 +114,14 @@ pub enum Entry {
 /// What the tab asks of the host.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AgentAct {
+    /// `markup`: the marks go too, the host sending once the frame with them is drawn.
     Send {
         text: String,
         refs: Vec<String>,
+        markup: bool,
     },
+    /// A sent message's marks shown again: its entry, the camera they were drawn over put back.
+    ShowMarkup(usize),
     Stop,
     NewChat,
     /// A turn's change taken back, or put back.
@@ -155,7 +161,10 @@ pub struct AgentTab {
     pub selection: Option<String>,
     /// A folder outside the projects tree, asked about once; the message waiting on it.
     pub trust_ask: Option<String>,
-    pub pending: Option<(String, Vec<String>)>,
+    pub pending: Option<(String, Vec<String>, Option<Vec<u8>>)>,
+    pub markup: super::markup::Markup,
+    /// Each sent markup's thumbnail, by its entry.
+    thumbs: std::collections::HashMap<usize, egui::TextureHandle>,
 }
 
 pub const INPUT_ID: &str = "agent-input";
@@ -243,22 +252,29 @@ impl AgentTab {
     /// The input as a message: sent, if there's anything to send and nothing running.
     pub fn send(&mut self) {
         let text = self.input.trim().to_string();
-        if text.is_empty() || self.running {
+        self.markup.commit_text();
+        let markup = !self.markup.marks.is_empty();
+        if (text.is_empty() && !markup) || self.running {
             return;
         }
         let refs = std::mem::take(&mut self.refs);
         self.entries.push(Entry::User {
             text: text.clone(),
             refs: refs.clone(),
+            markup: None,
         });
         self.input.clear();
         self.problem = None;
         self.running = true;
-        self.out.push(AgentAct::Send { text, refs });
+        self.markup.shown = None;
+        self.markup.sending = markup;
+        self.out.push(AgentAct::Send { text, refs, markup });
     }
 
     pub fn new_chat(&mut self) {
         self.entries.clear();
+        self.thumbs.clear();
+        self.markup.shown = None;
         self.refs.clear();
         self.running = false;
         self.problem = None;
@@ -556,6 +572,44 @@ fn rich(text: &str, width: f32, ink: Color32, code_ink: Color32) -> LayoutJob {
         }
     }
     job
+}
+
+/// A reply cut into prose and fenced code blocks, in order: `(is code, text)`.
+fn segments(text: &str) -> Vec<(bool, &str)> {
+    let mut out = Vec::new();
+    let mut rest = text;
+    while let Some(open) = rest.find("```") {
+        let before = rest[..open].trim_end_matches('\n');
+        if !before.trim().is_empty() {
+            out.push((false, before));
+        }
+        // the fence's own line (its language) is not code
+        let body = &rest[open + 3..];
+        let body = body.find('\n').map_or("", |n| &body[n + 1..]);
+        match body.find("```") {
+            Some(close) => {
+                out.push((true, body[..close].trim_end_matches('\n')));
+                let after = &body[close + 3..];
+                rest = after.find('\n').map_or("", |n| &after[n + 1..]);
+            }
+            // still streaming in: the code so far
+            None => {
+                out.push((true, body.trim_end_matches('\n')));
+                rest = "";
+            }
+        }
+    }
+    if !rest.trim().is_empty() {
+        out.push((false, rest.trim_start_matches('\n')));
+    }
+    out
+}
+
+/// Laid-out text put where it goes, selectable: a drag across messages, a double click on a
+/// word, Ctrl+C.
+fn selectable(ui: &mut Ui, at: egui::Pos2, g: std::sync::Arc<egui::Galley>) {
+    let r = Rect::from_min_size(at, g.size());
+    ui.put(r, egui::Label::new(egui::WidgetText::Galley(g)).selectable(true));
 }
 
 fn plain_job(text: &str, font: FontId, ink: Color32, width: f32) -> LayoutJob {
@@ -881,6 +935,17 @@ impl Shell {
         } else {
             Color32::from_rgb(0x24, 0x3B, 0x63)
         };
+        for (k, e) in self.agent.entries.iter().enumerate() {
+            if let Entry::User { markup: Some(m), .. } = e
+                && !self.agent.thumbs.contains_key(&k)
+            {
+                let img = egui::ColorImage::from_rgba_unmultiplied([m.thumb.w, m.thumb.h], &m.thumb.rgba);
+                let tex =
+                    ui.ctx()
+                        .load_texture(format!("agent-markup-{k}"), img, egui::TextureOptions::LINEAR);
+                self.agent.thumbs.insert(k, tex);
+            }
+        }
         let a = &self.agent;
         egui::ScrollArea::vertical()
             .id_salt("agent-chat")
@@ -906,20 +971,52 @@ impl Shell {
                 }
                 for (k, e) in a.entries.iter().enumerate() {
                     match e {
-                        Entry::User { text, refs } => {
+                        Entry::User { text, refs, markup } => {
                             ui.add_space(6.0);
                             let g = ui.fonts_mut(|f| {
                                 f.layout_job(plain_job(text, sans(13.0), t.ink, inner - 16.0))
                             });
                             let chip_h = if refs.is_empty() { 0.0 } else { 22.0 };
-                            let (r, _) =
-                                ui.allocate_exact_size(vec2(w, g.size().y + 14.0 + chip_h), Sense::hover());
+                            let thumb = markup.as_ref().zip(a.thumbs.get(&k)).map(|(m, tex)| {
+                                let s = ((inner - 16.0) / m.thumb.w as f32).min(96.0 / m.thumb.h as f32);
+                                (tex.id(), vec2(m.thumb.w as f32 * s, m.thumb.h as f32 * s))
+                            });
+                            let thumb_h = thumb.map_or(0.0, |t| t.1.y + 6.0);
+                            let text_h = if text.is_empty() { -4.0 } else { g.size().y };
+                            let (r, _) = ui.allocate_exact_size(
+                                vec2(w, text_h + 14.0 + chip_h + thumb_h),
+                                Sense::hover(),
+                            );
                             let card = Rect::from_min_max(pos2(PAD, r.top()), pos2(w - PAD, r.bottom()));
                             ui.painter().rect_filled(card, 6.0, t.raised);
                             ui.painter()
                                 .rect_stroke(card, 6.0, Stroke::new(1.0, t.line), StrokeKind::Inside);
-                            ui.painter()
-                                .galley(pos2(card.left() + 8.0, card.top() + 7.0), g, t.ink);
+                            selectable(ui, pos2(card.left() + 8.0, card.top() + 7.0), g);
+                            if let Some((tex, size)) = thumb {
+                                let tr = Rect::from_min_size(
+                                    pos2(card.left() + 8.0, card.top() + 10.0 + text_h),
+                                    size,
+                                );
+                                let resp = ui
+                                    .interact(tr, ui.scope_id().with(("agent-markup", k)), Sense::click())
+                                    .on_hover_text("Show these marks over the view");
+                                let whole = Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0));
+                                ui.painter().image(tex, tr, whole, Color32::WHITE);
+                                let lit = resp.hovered() || a.markup.shown == Some(k);
+                                ui.painter().rect_stroke(
+                                    tr,
+                                    3.0,
+                                    Stroke::new(
+                                        if lit { 1.5 } else { 1.0 },
+                                        if lit { t.focus } else { t.line },
+                                    ),
+                                    StrokeKind::Outside,
+                                );
+                                if resp.clicked() {
+                                    acts.push(AgentAct::ShowMarkup(k));
+                                }
+                                places.push((format!("agent:markup:{k}"), tr));
+                            }
                             if !refs.is_empty() {
                                 let mut x = card.left() + 8.0;
                                 for id in refs {
@@ -938,9 +1035,54 @@ impl Shell {
                             ui.add_space(6.0);
                         }
                         Entry::Agent { text } => {
-                            let g = ui.fonts_mut(|f| f.layout_job(rich(text, inner, t.ink, code_ink)));
-                            let (r, _) = ui.allocate_exact_size(vec2(w, g.size().y + 10.0), Sense::hover());
-                            ui.painter().galley(pos2(PAD, r.top() + 5.0), g, t.ink);
+                            let top = ui.cursor().top();
+                            for (j, (code, part)) in segments(text).into_iter().enumerate() {
+                                if !code {
+                                    let g =
+                                        ui.fonts_mut(|f| f.layout_job(rich(part, inner, t.ink, code_ink)));
+                                    let (r, _) =
+                                        ui.allocate_exact_size(vec2(w, g.size().y + 10.0), Sense::hover());
+                                    selectable(ui, pos2(PAD, r.top() + 5.0), g);
+                                    continue;
+                                }
+                                // a code block: its own card, a copy button on it
+                                let g = ui.fonts_mut(|f| {
+                                    f.layout_job(plain_job(part, mono(12.0), code_ink, inner - 16.0))
+                                });
+                                let (r, _) =
+                                    ui.allocate_exact_size(vec2(w, g.size().y + 16.0), Sense::hover());
+                                let card = Rect::from_min_max(
+                                    pos2(PAD, r.top() + 2.0),
+                                    pos2(w - PAD, r.bottom() - 2.0),
+                                );
+                                ui.painter().rect_filled(card, 4.0, t.field);
+                                selectable(ui, pos2(card.left() + 8.0, card.top() + 6.0), g);
+                                let br = Rect::from_min_size(
+                                    pos2(card.right() - 44.0, card.top() + 3.0),
+                                    vec2(40.0, 18.0),
+                                );
+                                let resp = ui
+                                    .interact(br, ui.scope_id().with(("agent-code", k, j)), Sense::click())
+                                    .on_hover_text("Copy the code");
+                                resp.widget_info(|| {
+                                    egui::WidgetInfo::labeled(egui::Role::Button, true, "Copy")
+                                });
+                                if resp.hovered() {
+                                    ui.painter().rect_filled(br, 3.0, t.hover);
+                                }
+                                ui.painter().text(
+                                    br.center(),
+                                    Align2::CENTER_CENTER,
+                                    "Copy",
+                                    sans(11.0),
+                                    t.ink2,
+                                );
+                                if resp.clicked() {
+                                    ui.ctx().copy_text(part.to_string());
+                                }
+                                places.push((format!("agent:code:{k}:{j}"), br));
+                            }
+                            let r = Rect::from_min_max(pos2(0.0, top), pos2(w, ui.cursor().top()));
                             places.push((format!("agent:reply:{k}"), r));
                         }
                         Entry::Tool {
@@ -1007,8 +1149,7 @@ impl Shell {
                                     pos2(w - PAD, r.bottom() - 3.0),
                                 );
                                 ui.painter().rect_filled(card, 4.0, t.field);
-                                ui.painter()
-                                    .galley(pos2(card.left() + 6.0, card.top() + 4.0), g, t.ink2);
+                                selectable(ui, pos2(card.left() + 6.0, card.top() + 4.0), g);
                             }
                         }
                         Entry::Diff {
@@ -1154,7 +1295,7 @@ impl Shell {
                             let ink = if *error { t.error } else { t.ink2 };
                             let g = ui.fonts_mut(|f| f.layout_job(plain_job(text, sans(12.0), ink, inner)));
                             let (r, _) = ui.allocate_exact_size(vec2(w, g.size().y + 8.0), Sense::hover());
-                            ui.painter().galley(pos2(PAD, r.top() + 4.0), g, ink);
+                            selectable(ui, pos2(PAD, r.top() + 4.0), g);
                             places.push((format!("agent:note:{k}"), r));
                         }
                     }
@@ -1202,7 +1343,17 @@ impl Shell {
             }
         }
         self.places.extend(places);
-        self.agent.out.extend(acts);
+        for a in acts {
+            // the thumbnail again hides its marks
+            if let AgentAct::ShowMarkup(k) = a {
+                if self.agent.markup.shown == Some(k) {
+                    self.agent.markup.shown = None;
+                    continue;
+                }
+                self.agent.markup.shown = Some(k);
+            }
+            self.agent.out.push(a);
+        }
     }
 
     fn agent_input(&mut self, ui: &mut Ui, area: Rect) {
@@ -1314,10 +1465,42 @@ impl Shell {
             self.agent.attach(&s);
         }
 
+        // markup: drawn on the window, sent with the message
+        let mr = Rect::from_min_size(pos2(ar.right() + 2.0, row_y), vec2(24.0, 22.0));
+        let marks = self.agent.markup.marks.len();
+        let tip = match marks {
+            0 => "Markup: draw on the window for the agent (K)".to_string(),
+            n => format!(
+                "Markup: {n} mark{} go with the message (K)",
+                if n == 1 { "" } else { "s" }
+            ),
+        };
+        let m_resp = ui
+            .interact(mr, ui.scope_id().with("agent-markup"), Sense::click())
+            .on_hover_text(tip);
+        m_resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, "Markup"));
+        if self.agent.markup.on {
+            p.rect_filled(mr, 4.0, t.on);
+        } else if m_resp.hovered() {
+            p.rect_filled(mr, 4.0, t.hover);
+        }
+        icons::draw(&p, mr.center() - vec2(8.0, 8.0), 16.0, "markup", 1.5, t.ink);
+        if marks > 0 {
+            p.circle_filled(
+                pos2(mr.right() - 3.0, mr.top() + 3.0),
+                3.5,
+                super::markup::INKS[0].1,
+            );
+        }
+        self.note("agent:markup", mr);
+        if m_resp.clicked() {
+            self.agent.markup.toggle();
+        }
+
         let running = self.agent.running;
         let word = if running { "Stop" } else { "Send" };
         let sr = Rect::from_min_size(pos2(box_r.right() - 58.0, row_y), vec2(52.0, 22.0));
-        let can = running || (enabled && !self.agent.input.trim().is_empty());
+        let can = running || (enabled && (!self.agent.input.trim().is_empty() || marks > 0));
         let s_resp = ui.interact(sr, ui.scope_id().with("agent-send"), Sense::click());
         s_resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, can, word));
         let fill = if running {
@@ -1464,6 +1647,21 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_reply_is_cut_into_prose_and_its_code_blocks() {
+        let s = segments("Set it.\n```fg\nparam d = 14\nparam e = 2\n```\nDone.\n```\nhalf");
+        assert_eq!(
+            s,
+            vec![
+                (false, "Set it."),
+                (true, "param d = 14\nparam e = 2"),
+                (false, "Done."),
+                (true, "half"),
+            ]
+        );
+        assert_eq!(segments("plain"), vec![(false, "plain")]);
+    }
+
+    #[test]
     fn diff_cuts_unchanged_runs() {
         let old = "a\nb\nc\nd\ne\nf\ng\nh\n";
         let new = "a\nb\nc\nd\nE\nf\ng\nh\n";
@@ -1497,7 +1695,8 @@ mod tests {
             a.out,
             vec![AgentAct::Send {
                 text: "make it thicker".into(),
-                refs: vec!["extrude1.end".into()]
+                refs: vec!["extrude1.end".into()],
+                markup: false,
             }]
         );
         a.take(Event::Text("I'll ".into()));

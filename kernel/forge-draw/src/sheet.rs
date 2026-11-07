@@ -135,31 +135,64 @@ pub fn format(page: &mut Page, f: &Fields, third_angle: bool) {
     title_block(page, f, Point2::new(i1.x - TITLE_W, i0.y), third_angle);
 }
 
+/// The title block's cells, rows from the top (title; number, rev, size; material, scale, sheet;
+/// drawn, date, tolerance, mass, symbol): each one's label and width (mm), "" the symbol's.
+const CELLS: [&[(&str, f64)]; 4] = [
+    &[("TITLE", 135.0), ("COMPANY", 45.0)],
+    &[("DWG NO", 110.0), ("REV", 25.0), ("SIZE", 45.0)],
+    &[("MATERIAL", 110.0), ("SCALE", 35.0), ("SHEET", 35.0)],
+    &[
+        ("DRAWN", 40.0),
+        ("DATE", 30.0),
+        ("UNLESS NOTED", 45.0),
+        ("MASS", 30.0),
+        ("", 35.0),
+    ],
+];
+
+/// The title block's cell at `q` (sheet mm) on a `w` × `h` sheet: its label ("" the projection
+/// symbol's) and its box.
+pub fn title_cell(w: f64, h: f64, q: Point2) -> Option<(&'static str, Point2, Point2)> {
+    let (i0, i1) = inside(w, h);
+    let at = Point2::new(i1.x - TITLE_W, i0.y);
+    if q.x < at.x || q.x > at.x + TITLE_W || q.y < at.y || q.y > at.y + TITLE_H {
+        return None;
+    }
+    let r = TITLE_H / 4.0;
+    let k = (((at.y + TITLE_H - q.y) / r) as usize).min(3);
+    let y0 = at.y + TITLE_H - r * (k + 1) as f64;
+    let mut x = at.x;
+    for &(label, cw) in CELLS[k] {
+        if q.x <= x + cw {
+            return Some((label, Point2::new(x, y0), Point2::new(x + cw, y0 + r)));
+        }
+        x += cw;
+    }
+    None
+}
+
 /// The title block with its lower left corner at `at`.
 fn title_block(page: &mut Page, f: &Fields, at: Point2, third_angle: bool) {
     let r = TITLE_H / 4.0;
     rect(page, Pen::Border, at, at + Vec2::new(TITLE_W, TITLE_H));
-    // rows from the top: title; number, rev, size; material, scale, sheet; drawn, date, mass, symbol
-    let rows: [&[(&str, &str, f64)]; 4] = [
-        &[("TITLE", &f.title, 135.0), ("COMPANY", &f.company, 45.0)],
-        &[
-            ("DWG NO", &f.number, 110.0),
-            ("REV", &f.rev, 25.0),
-            ("SIZE", &f.size, 45.0),
-        ],
-        &[
-            ("MATERIAL", &f.material, 110.0),
-            ("SCALE", &f.scale, 35.0),
-            ("SHEET", &f.sheet, 35.0),
-        ],
-        &[
-            ("DRAWN", &f.drawn, 40.0),
-            ("DATE", &f.date, 30.0),
-            ("UNLESS NOTED", &f.tolerance, 45.0),
-            ("MASS", &f.mass, 30.0),
-            ("", "", 35.0),
-        ],
-    ];
+    let value = |label: &str| -> &str {
+        match label {
+            "TITLE" => &f.title,
+            "COMPANY" => &f.company,
+            "DWG NO" => &f.number,
+            "REV" => &f.rev,
+            "SIZE" => &f.size,
+            "MATERIAL" => &f.material,
+            "SCALE" => &f.scale,
+            "SHEET" => &f.sheet,
+            "DRAWN" => &f.drawn,
+            "DATE" => &f.date,
+            "UNLESS NOTED" => &f.tolerance,
+            "MASS" => &f.mass,
+            _ => "",
+        }
+    };
+    let rows = CELLS.map(|row| row.iter().map(|&(l, w)| (l, value(l), w)).collect::<Vec<_>>());
     for (k, row) in rows.iter().enumerate() {
         let y0 = at.y + TITLE_H - r * (k + 1) as f64;
         if k > 0 {

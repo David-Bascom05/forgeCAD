@@ -30,6 +30,7 @@ pub mod fgsketch;
 pub mod fgtool;
 pub mod icons;
 pub mod inspect;
+pub mod markup;
 pub mod materials;
 mod measure_ui;
 pub mod occedit;
@@ -931,6 +932,7 @@ impl Shell {
             self.drawing_ui(ui);
             self.new_drawing_window(&ctx);
             self.settings_window(&ctx);
+            self.markup_ui(ui);
             return;
         }
 
@@ -985,6 +987,7 @@ impl Shell {
         self.menus(&ctx);
         self.settings_window(&ctx);
         self.new_drawing_window(&ctx);
+        self.markup_ui(ui);
     }
 
     /// The cube's words, painted on its faces: each glyph's corners go through the face's own
@@ -1321,6 +1324,41 @@ impl Shell {
             sans(12.0),
             Color32::WHITE,
         );
+        // markup for the agent, on or off
+        let mr = Rect::from_min_size(
+            pos2(s.width() - 330.0, st.top() + 2.0),
+            vec2(78.0, STATUS_H - 4.0),
+        );
+        let m_resp = ui
+            .interact(mr, ui.scope_id().with("status-markup"), Sense::click())
+            .on_hover_text("Draw on the window for the agent (K)");
+        m_resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, "Markup"));
+        if self.agent.markup.on || m_resp.hovered() {
+            p.rect_filled(
+                mr,
+                3.0,
+                Color32::from_white_alpha(if self.agent.markup.on { 48 } else { 28 }),
+            );
+        }
+        icons::draw(
+            &p,
+            pos2(mr.left() + 4.0, mr.center().y - 7.0),
+            14.0,
+            "markup",
+            1.4,
+            Color32::WHITE,
+        );
+        p.text(
+            pos2(mr.left() + 22.0, mr.center().y),
+            Align2::LEFT_CENTER,
+            "Markup",
+            sans(12.0),
+            Color32::WHITE,
+        );
+        self.note("status:markup", mr);
+        if m_resp.clicked() {
+            self.agent.markup.toggle();
+        }
         // a Forge file's issues a click away (an assembly's timings on hover): its checks, a
         // shop's rules, each with its fixes, in the Issues window
         let asm = self.is_asm();
@@ -1420,7 +1458,7 @@ impl Shell {
         if !ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
             return;
         }
-        if self.agent.takes_escape(ctx) {
+        if self.markup_escape(ctx) || self.agent.takes_escape(ctx) {
             return;
         }
         // these take it themselves, knowing what they had

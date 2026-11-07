@@ -2248,6 +2248,8 @@ pub struct PartLoad {
     pub threads: Vec<crate::holes::Cosmetic>,
     /// Its thermoforms' moulds: tooling, drawn only when asked.
     pub tooling: Option<Arc<forge_topo::Body>>,
+    /// Its anchors, when asked for (`Options::comp_anchors`): its faces named as it names them.
+    pub anchors: Option<Arc<crate::anchors::Anchors>>,
 }
 
 /// A call's params' values and the trace of each.
@@ -2265,7 +2267,7 @@ type PartKey = (
     Vec<String>,
     Vec<String>,
     Option<std::path::PathBuf>,
-    (bool, bool),
+    (bool, bool, bool),
 );
 /// A subassembly document evaluated, and its errors.
 type SubLoad = (Doc, Vec<Error>);
@@ -2715,6 +2717,21 @@ fn placed_body(ev: &Eval) -> Option<forge_topo::Body> {
     }
 }
 
+/// Each in-file component call's anchors, found on its own evaluation, by the occurrence file an
+/// assembly names its parts with (`#lid`, `#box(w=60)/lid(w=60)`), calls inside calls too.
+pub fn comp_anchors(comps: &mut [Comp]) -> Vec<(String, crate::anchors::Anchors)> {
+    let mut out = Vec::new();
+    for c in comps {
+        let file = format!("#{}", c.ev.comp_path.trim_end_matches('/'));
+        let body = placed_body(&c.ev);
+        if body.is_some() {
+            out.push((file, crate::anchors::find(&mut c.ev, body.as_ref())));
+        }
+        out.extend(comp_anchors(&mut c.ev.comps));
+    }
+    out
+}
+
 /// A part's thermoform moulds, the tooling `placed_body` leaves out.
 fn tooling_body(ev: &Eval) -> Option<forge_topo::Body> {
     let st = ev.b.stages.last()?;
@@ -2734,7 +2751,7 @@ fn tooling_body(ev: &Eval) -> Option<forge_topo::Body> {
 /// A part file's declared anchors (loops' too: `stud[2]`) as frames in the part's own space: a
 /// plane's frame, an axis's along its z, a point's at its origin. What the app draws them by.
 pub fn part_anchors(text: &str, dir: Option<std::path::PathBuf>) -> Vec<(String, Frame)> {
-    let p = load_part_with(text, dir, None, &[], &[], false, false);
+    let p = load_part_with(text, dir, None, &[], &[], false, (false, false));
     p.refs
         .into_iter()
         .filter_map(|(n, r)| r.ok().map(|r| (n, r.frame)))
@@ -2748,7 +2765,8 @@ fn load_part_with(
     refs: &[String],
     bodies: &[String],
     mesh: bool,
-    cosmetic: bool,
+    // its threads left cosmetic; its anchors found
+    (cosmetic, anchors): (bool, bool),
 ) -> PartLoad {
     let hash = content_hash(text);
     let mut out = PartLoad {
@@ -2766,6 +2784,7 @@ fn load_part_with(
         ident: 0,
         threads: vec![],
         tooling: None,
+        anchors: None,
     };
     let watch = crate::deps::watch();
     let prog = match crate::syntax::parse(text) {
@@ -2795,6 +2814,9 @@ fn load_part_with(
     // a part's warnings stay with it: an assembly keeps none of them, so its shop rules go unasked
     crate::sheet::finish_with(&mut ev, false);
     finish_load(&mut ev, &mut out, refs, bodies, mesh);
+    if anchors {
+        out.anchors = Some(Arc::new(crate::anchors::find(&mut ev, out.body.as_ref())));
+    }
     out.errors = std::mem::take(&mut ev.errors);
     let read = watch.done();
     out.ident = crate::store::key("part", |h| {
@@ -2949,15 +2971,24 @@ fn make_load(
     fence: &Option<std::path::PathBuf>,
     refs: &[String],
     bodies: &[String],
-    // its threads left cosmetic, its interference meshes made: as the part key has them
-    (cosmetic, mesh): (bool, bool),
+    // its threads left cosmetic, its interference meshes made, its anchors found: as the part
+    // key has them
+    (cosmetic, mesh, anchors): (bool, bool, bool),
 ) -> PartLoad {
     let parent = std::path::Path::new(path).parent().map(|p| p.to_path_buf());
     match variant {
         Some(Variant::Component { name, args }) => {
-            load_component(text, parent, fence.clone(), name, args, refs, mesh)
+            load_component(text, parent, fence.clone(), name, args, refs, (mesh, anchors))
         }
-        _ => load_part_with(text, parent, fence.clone(), refs, bodies, mesh, cosmetic),
+        _ => load_part_with(
+            text,
+            parent,
+            fence.clone(),
+            refs,
+            bodies,
+            mesh,
+            (cosmetic, anchors),
+        ),
     }
 }
 
@@ -2970,7 +3001,7 @@ fn load_component(
     name: &str,
     args: &[(String, Literal)],
     refs: &[String],
-    mesh: bool,
+    (mesh, anchors): (bool, bool),
 ) -> PartLoad {
     let mut out = empty_load(&format!("{name}@{text}"));
     out.hash = content_hash(&format!("{name}({args:?})\n{text}"));
@@ -3035,6 +3066,9 @@ fn load_component(
     // a part loaded into an assembly: none of its warnings are kept
     let mut sub = sub_eval(&ev, &def, &values, true, Default::default(), false);
     finish_load(&mut sub, &mut out, refs, &[], mesh);
+    if anchors {
+        out.anchors = Some(Arc::new(crate::anchors::find(&mut sub, out.body.as_ref())));
+    }
     out.errors = std::mem::take(&mut sub.errors);
     out.errors.extend(std::mem::take(&mut ev.errors));
     out
@@ -3160,6 +3194,9 @@ pub struct AsmOut {
     pub occ_body: Vec<(u64, bool)>,
     /// Each occurrence's part's thermoform moulds (tooling, not in `draw`), if it has any.
     pub occ_tooling: Vec<Option<Arc<forge_topo::Body>>>,
+    /// With `Options::comp_anchors`: each occurrence's part file's anchors (an in-file component's
+    /// are `Run::comp_anchors`).
+    pub occ_anchors: Vec<Option<Arc<crate::anchors::Anchors>>>,
 }
 
 /// A part or subassembly occurrence, as a browser lists it.
@@ -3807,6 +3844,7 @@ pub fn finish(
     let mut loads: Vec<usize> = vec![];
     let mut part_docs: BTreeMap<String, Arc<crate::props::PartSummary>> = BTreeMap::new();
     let mut tooling: BTreeMap<String, Arc<forge_topo::Body>> = BTreeMap::new();
+    let mut anchors_of: BTreeMap<String, Arc<crate::anchors::Anchors>> = BTreeMap::new();
     let mut declared_kinds: BTreeSet<String> = BTreeSet::new();
     let mut threads_of: BTreeMap<(fa::DocId, u64), Arc<Vec<crate::holes::Cosmetic>>> = BTreeMap::new();
     // the parts not yet built, built on all cores first
@@ -3825,7 +3863,7 @@ pub fn finish(
             refs.iter().cloned().collect(),
             bodies.iter().cloned().collect(),
             fence.clone(),
-            (opts.cosmetic_threads, opts.meshes),
+            (opts.cosmetic_threads, opts.meshes, opts.comp_anchors),
         );
         if !cache.parts.contains_key(&ck) && !missing.iter().any(|m| m.0 == ck) {
             missing.push((ck, text));
@@ -3834,7 +3872,7 @@ pub fn finish(
     let pool = cache.pool.clone();
     let built = crate::par::map(missing.len(), |i| {
         let (ck, text) = &missing[i];
-        let (file, _, refs, bodies, fence, (cosmetic, meshed)) = ck;
+        let (file, _, refs, bodies, fence, (cosmetic, meshed, named)) = ck;
         let make = || {
             let path = variant_split(file).map_or(file.as_str(), |x| x.0);
             let variant = d
@@ -3849,7 +3887,7 @@ pub fn finish(
                 fence,
                 refs,
                 bodies,
-                (*cosmetic, *meshed),
+                (*cosmetic, *meshed, *named),
             ))
         };
         let Some(pool) = &pool else { return (make(), true) };
@@ -3927,7 +3965,7 @@ pub fn finish(
                 refs.clone(),
                 bodies.clone(),
                 fence.clone(),
-                (opts.cosmetic_threads, opts.meshes),
+                (opts.cosmetic_threads, opts.meshes, opts.comp_anchors),
             );
             match cache.parts.get(&ck) {
                 Some(l) => l.clone(),
@@ -3939,7 +3977,7 @@ pub fn finish(
                         &fence,
                         &refs,
                         &bodies,
-                        (opts.cosmetic_threads, opts.meshes),
+                        (opts.cosmetic_threads, opts.meshes, opts.comp_anchors),
                     ));
                     cache.parts.insert(ck, l.clone());
                     t.built += 1;
@@ -3981,6 +4019,9 @@ pub fn finish(
         threads_of.insert((doc.clone(), 0), Arc::new(load.threads.clone()));
         if let Some(t) = &load.tooling {
             tooling.insert(doc.0.to_string(), t.clone());
+        }
+        if let Some(a) = &load.anchors {
+            anchors_of.insert(doc.0.to_string(), a.clone());
         }
         let mut entries: Vec<(u64, Option<forge_topo::Body>)> = vec![(0, load.body.clone())];
         for (name, b) in &load.bodies {
@@ -4249,6 +4290,8 @@ pub fn finish(
         out.occ_body.push((o.part.body, o.reference));
         out.occ_tooling
             .push(tooling.get(&o.part.doc.0.to_string()).cloned());
+        out.occ_anchors
+            .push(anchors_of.get(&o.part.doc.0.to_string()).cloned());
         if !o.reference {
             *bom.entry(bom_key(&o.part.doc.0)).or_default() += 1;
         }
@@ -6716,6 +6759,7 @@ fn empty_load(key: &str) -> PartLoad {
         ident: 0,
         threads: vec![],
         tooling: None,
+        anchors: None,
     }
 }
 

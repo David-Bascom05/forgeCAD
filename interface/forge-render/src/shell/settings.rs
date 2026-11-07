@@ -881,6 +881,7 @@ impl Shell {
                         Action::Delete(sel)
                     });
                 }
+                KeyCmd::Markup => self.agent.markup.toggle(),
                 c => self.out.push(Action::Key(c)),
             }
         }
@@ -904,6 +905,7 @@ pub enum KeyCmd {
     Explode,
     Lines,
     Ao,
+    Markup,
 }
 
 impl KeyCmd {
@@ -923,6 +925,7 @@ impl KeyCmd {
             "explode" => KeyCmd::Explode,
             "lines" => KeyCmd::Lines,
             "ao" => KeyCmd::Ao,
+            "markup" => KeyCmd::Markup,
             _ => return None,
         })
     }

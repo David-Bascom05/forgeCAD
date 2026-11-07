@@ -222,7 +222,7 @@ fn an_openai_compatible_endpoint_edits_the_file_through_its_tools() {
         },
         out,
     );
-    b.send("make the base plate 10 mm thicker".into());
+    b.send("make the base plate 10 mm thicker".into(), None);
     let mut evs = Vec::new();
     while let Ok(e) = rx.recv_timeout(std::time::Duration::from_secs(60)) {
         let done = matches!(e, Event::Done { .. });
@@ -569,11 +569,14 @@ fn a_hostile_folders_hooks_mcp_and_bash_never_run() {
         },
         None,
     );
-    c.send(format!(
-        "Two steps. 1) Run the shell command: touch {}  2) Set extrude1.d to 14 in {}.",
-        out.join("PWNED_BASH").display(),
-        file.display()
-    ));
+    c.send(
+        format!(
+            "Two steps. 1) Run the shell command: touch {}  2) Set extrude1.d to 14 in {}.",
+            out.join("PWNED_BASH").display(),
+            file.display()
+        ),
+        None,
+    );
     let mut evs = Vec::new();
     while let Ok(e) = rx.recv_timeout(std::time::Duration::from_secs(240)) {
         let done = matches!(e, Event::Done { .. } | Event::Problem { .. });
@@ -1456,6 +1459,67 @@ fn the_measure_tool_reads_what_measure_reads_and_says_what_it_draws() {
         "{}",
         r.text
     );
+    drop(h);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+fn copied(out: &forge_render::gui::FrameOut) -> Option<String> {
+    out.platform.commands.iter().find_map(|c| match c {
+        egui::OutputCommand::CopyText(t) => Some(t.clone()),
+        _ => None,
+    })
+}
+
+#[test]
+fn the_chat_and_the_message_box_select_copy_and_cut() {
+    let Ok(mut h) = forge_render::gui::Headless::new((1200.0, 800.0), 1.0) else {
+        return;
+    };
+    let dir = scratch("select");
+    let file = dir.join("plate.fg");
+    std::fs::write(&file, PART).unwrap();
+    h.step();
+    h.gui.open(file.to_str().unwrap());
+    h.settle();
+    assert!(h.click("side:tab:Agent"));
+    h.step();
+    h.gui.shell.agent.entries.push(Entry::Agent {
+        text: "Set the depth to fourteen.\n```\nparam extrude1.d = 14\n```\nDone.".into(),
+    });
+    h.step();
+    h.step();
+    // a code block's own copy button
+    assert!(h.click("agent:code:0:1"));
+    let out = h.step();
+    assert_eq!(copied(&out).as_deref(), Some("param extrude1.d = 14"));
+    // a drag across the reply's first line, then Ctrl+C
+    let r = h.placed("agent:reply:0").unwrap();
+    let y = r.top() + 12.0;
+    h.move_to(r.left() + 11.0, y);
+    h.step();
+    h.button(true);
+    h.step();
+    for x in [60.0, 120.0, 200.0, 260.0] {
+        h.move_to(r.left() + x, y);
+        h.step();
+    }
+    h.button(false);
+    h.step();
+    h.copy();
+    let out = h.step();
+    let got = copied(&out).unwrap_or_default();
+    assert!(got.starts_with("Set the depth"), "{got:?}");
+    // the message box: everything selected and cut
+    assert!(h.click("agent:input"));
+    h.step();
+    h.text("make it thicker");
+    h.step();
+    h.key_with(egui::Key::A, egui::Modifiers::COMMAND);
+    h.step();
+    h.cut();
+    let out = h.step();
+    assert_eq!(copied(&out).as_deref(), Some("make it thicker"));
+    assert!(h.gui.shell.agent.input.is_empty());
     drop(h);
     let _ = std::fs::remove_dir_all(dir);
 }

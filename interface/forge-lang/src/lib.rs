@@ -87,6 +87,9 @@ pub struct Options {
     pub meshes: bool,
     /// Expressions evaluated on the finished part, each answered in `Run::asked` (`query.rs`).
     pub asks: Vec<String>,
+    /// An assembly: each in-file component call's anchors too (`Run::comp_anchors`), for a UI
+    /// naming a face of an occurrence as its component names it.
+    pub comp_anchors: bool,
 }
 
 impl Default for Options {
@@ -107,6 +110,7 @@ impl Default for Options {
             cosmetic_threads: false,
             meshes: true,
             asks: vec![],
+            comp_anchors: false,
         }
     }
 }
@@ -178,6 +182,9 @@ pub struct Run {
     pub asm: Option<asm::AsmOut>,
     /// With `Options::anchors`: the anchor text of each face and edge of the finished part.
     pub anchors: Option<anchors::Anchors>,
+    /// With `Options::comp_anchors`: each in-file component call's anchors, by the occurrence
+    /// file the assembly names it with (`#lid`, `#box(w=60)/lid(w=60)`).
+    pub comp_anchors: Vec<(String, anchors::Anchors)>,
     /// The document's iProperties (`props.rs`).
     pub props: props::Props,
     /// A part's mass, centre of gravity and inertia from its solids' materials.
@@ -229,6 +236,7 @@ pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
                     stage: 0,
                     asm: None,
                     anchors: None,
+                    comp_anchors: vec![],
                     props: props::Props::default(),
                     physical: None,
                     components: vec![],
@@ -376,6 +384,7 @@ pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
         stage: if built_all { ev.b.stage_id() } else { 0 },
         asm: asm_out,
         anchors: None,
+        comp_anchors: vec![],
         props: std::mem::take(&mut ev.props),
         physical,
         components: vec![],
@@ -398,6 +407,9 @@ pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
         .iter()
         .map(|t| (t.clone(), anchors::ask(&mut ev, t)))
         .collect();
+    if opts.comp_anchors {
+        run.comp_anchors = asm::comp_anchors(&mut ev.comps);
+    }
     run.components = asm::components(&ev);
     run.body_chains = chains;
     asm::keep_comp_caches(&mut ev);

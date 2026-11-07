@@ -737,6 +737,115 @@ impl DrawingEnv {
         best.map(|b| b.1)
     }
 
+    /// Fitted to the canvas again on the next frame.
+    pub fn refit(&mut self) {
+        self.fitted = false;
+    }
+
+    /// Where a window point is on the sheet, in mm.
+    pub fn sheet_mm(&self, p: Pos2) -> (f64, f64) {
+        let q = self.to_sheet(p);
+        (q.x, q.y)
+    }
+
+    /// An annotation by its id, as the agent names it: its kind, id and value.
+    fn item_words(&self, id: &str) -> Option<String> {
+        let i = self.made.as_ref()?.items.iter().find(|i| i.id == id)?;
+        let kind = match i.kind {
+            "note" => "note",
+            "parts_list" => "parts list",
+            "balloon" => "balloon",
+            k if i.value.is_some() => return Some(format!("dimension `{}` ({k}) '{}'", i.id, num(i.value?))),
+            k => k,
+        };
+        Some(format!("{kind} `{}`", i.id))
+    }
+
+    /// A view by its id, with its kind: `view \`A\` (section)`.
+    fn view_words(&self, id: &str) -> String {
+        match self.views().into_iter().find(|v| v.id == id) {
+            Some(v) => format!("view `{id}` ({})", v.kind),
+            None => format!("view `{id}`"),
+        }
+    }
+
+    /// What's at a window point on the sheet, as the agent names it: an annotation; a model edge
+    /// (or a face's outline) within `reach` points, with its part, occurrence and view, and the
+    /// dimension or note nearest it; a title block field; else the view.
+    pub fn markup_at(&self, p: Pos2, reach: f32) -> Option<String> {
+        let q = self.to_sheet(p);
+        let d = self.made.as_ref()?;
+        // an annotation by its text (a dimension's box holds its leaders and extension lines,
+        // over other things); one without text by its box
+        let on = |i: &&regen::ItemOut| {
+            let (lo, hi) = if i.half.x > 0.0 {
+                (i.anchor - i.half, i.anchor + i.half)
+            } else {
+                (i.lo, i.hi)
+            };
+            q.x >= lo.x - 1.5 && q.x <= hi.x + 1.5 && q.y >= lo.y - 1.5 && q.y <= hi.y + 1.5
+        };
+        if let Some(i) = d
+            .items
+            .iter()
+            .filter(|i| {
+                i.sheet == self.sheet
+                    && !matches!(i.kind, "base" | "projected" | "section" | "detail" | "flat")
+            })
+            .find(on)
+        {
+            return self.item_words(&i.id);
+        }
+        let z = self.zoom.max(0.05) as f64;
+        if let Some(e) = self.pick_edge(q, reach.max(3.0) as f64 / z) {
+            let v = self.views().into_iter().find(|v| v.id == e.view);
+            let mut s = format!("{} `{}`", e.kind, e.text);
+            if let (Some((_, r)), Some(v)) = (e.geom.as_ref().and_then(|g| g.circle()), v) {
+                s.push_str(&format!(" (Ø{})", num(2.0 * r / v.scale.max(1e-9))));
+            }
+            if let Some(m) = v.and_then(|v| d.models.get(v.model)) {
+                s.push_str(&format!(" of part `{}`", m.file));
+            }
+            if !e.occ.is_empty() {
+                s.push_str(&format!(", occurrence `{}`", e.occ));
+            }
+            s.push_str(&format!(" in {}", self.view_words(&e.view)));
+            // the annotation it's beside, within 10 mm of the sheet
+            let near = d
+                .items
+                .iter()
+                .filter(|i| {
+                    i.sheet == self.sheet
+                        && !matches!(i.kind, "base" | "projected" | "section" | "detail" | "flat")
+                })
+                .map(|i| (i.anchor.distance(q), i))
+                .filter(|x| x.0 < 10.0)
+                .min_by(|a, b| a.0.total_cmp(&b.0));
+            if let Some(w) = near.and_then(|(_, i)| self.item_words(&i.id)) {
+                s.push_str(&format!(", near {w}"));
+            }
+            return Some(s);
+        }
+        if let Some(page) = d.pages.get(self.sheet)
+            && let Some((label, lo, hi)) = forge_draw::sheet::title_cell(page.w, page.h, q)
+        {
+            if label.is_empty() {
+                return Some("the title block's projection symbol".into());
+            }
+            let value = page
+                .texts
+                .iter()
+                .filter(|t| {
+                    t.text != label && t.at.x >= lo.x && t.at.x <= hi.x && t.at.y >= lo.y && t.at.y <= hi.y
+                })
+                .map(|t| t.text.as_str())
+                .next()
+                .unwrap_or("");
+            return Some(format!("title block field {label} '{value}'"));
+        }
+        self.view_at(q).map(|v| self.view_words(&v))
+    }
+
     /// The annotation (not a view) whose box holds `q`.
     fn item_at(&self, q: Point2) -> Option<String> {
         let d = self.made.as_ref()?;

@@ -120,18 +120,31 @@ impl OpenAi {
 }
 
 impl Backend for OpenAi {
-    fn send(&mut self, prompt: String) {
+    fn send(&mut self, prompt: String, picture: Option<Vec<u8>>) {
         if self.busy.swap(true, Ordering::SeqCst) {
             return;
         }
         self.stop.store(false, Ordering::SeqCst);
+        let content = match picture {
+            None => prompt.into(),
+            Some(png) => Json::Arr(vec![
+                Json::obj(vec![("type", "text".into()), ("text", prompt.into())]),
+                Json::obj(vec![
+                    ("type", "image_url".into()),
+                    (
+                        "image_url",
+                        Json::obj(vec![(
+                            "url",
+                            format!("data:image/png;base64,{}", super::apptools::base64(&png)).into(),
+                        )]),
+                    ),
+                ]),
+            ]),
+        };
         self.history
             .lock()
             .expect("no panics while held")
-            .push(Json::obj(vec![
-                ("role", "user".into()),
-                ("content", prompt.into()),
-            ]));
+            .push(Json::obj(vec![("role", "user".into()), ("content", content)]));
         let (cfg, out, history, stop, busy) = (
             self.cfg.clone(),
             self.out.clone(),
