@@ -9,6 +9,7 @@ const USAGE: &str = "forge-app [PART | file.fc] [--size WxH] [--times]
   --viewnow YAW PITCH --home --zoom F (the camera's distance times F) --wheel X Y DY (scroll there) --new-drawing
   --start-sketch (on XY) --rest NAME SECONDS (the pointer still on it, for its tooltip)
   --open FILE (another document, in its own tab) --doc N (the Nth tab up)
+  --sleep SECONDS (frames that long by the clock) --keydown KEY --keyup KEY (a key held over frames)
   [--present fifo|mailbox|immediate] [--run-for SECONDS] [--spin]
   [--bench]
 PART: a bench part or a .fc file. --times: input-to-present on exit. --shot: one frame, no window.
@@ -42,6 +43,11 @@ enum Step {
     StartSketch,
     /// The pointer held on a place this long (seconds).
     Rest(String, f32),
+    /// Frames for this long by the clock (a WAV heard, an agent's reply).
+    Sleep(f32),
+    /// A key going down, or coming up, alone (a key held to talk).
+    KeyDown(String),
+    KeyUp(String),
 }
 
 struct Args {
@@ -133,6 +139,11 @@ fn args() -> Result<Args, String> {
             "--doc" => a.steps.push(Step::Doc(v()?.parse().map_err(|_| "--doc N")?)),
             "--type" => a.steps.push(Step::Type(v()?)),
             "--key" => a.steps.push(Step::Key(v()?)),
+            "--sleep" => a
+                .steps
+                .push(Step::Sleep(v()?.parse().map_err(|_| "--sleep SECONDS")?)),
+            "--keydown" => a.steps.push(Step::KeyDown(v()?)),
+            "--keyup" => a.steps.push(Step::KeyUp(v()?)),
             "--snap" => a.steps.push(Step::Snap(v()?)),
             "--save" => a.steps.push(Step::Save),
             "--home" => a.steps.push(Step::Home),
@@ -565,6 +576,28 @@ fn run() -> Result<(), String> {
             }
             Step::Hover(x, y) => {
                 hover(&mut h, *x, *y);
+                continue;
+            }
+            Step::Sleep(secs) => {
+                let t = std::time::Instant::now();
+                while t.elapsed().as_secs_f32() < *secs {
+                    h.step();
+                    std::thread::sleep(std::time::Duration::from_millis(8));
+                }
+                continue;
+            }
+            Step::KeyDown(k) | Step::KeyUp(k) => {
+                let Some(c) = forge_render::bindings::Chord::parse(k) else {
+                    return Err(format!("no key {k}"));
+                };
+                let mut m = egui::Modifiers::NONE;
+                m.ctrl = c.ctrl;
+                m.command = c.ctrl;
+                m.shift = c.shift;
+                m.alt = c.alt;
+                h.key_event(c.key, m, matches!(step, Step::KeyDown(_)));
+                h.step();
+                h.step();
                 continue;
             }
             Step::ClickAt(x, y) => {

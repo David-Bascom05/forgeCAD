@@ -1,0 +1,17 @@
+[package]
+name = "forge-speech"
+description = "Speech to text for ForgeCAD's Agent tab: a process of its own, holding the model and the microphone"
+version = "0.1.0"
+edition = "2024"
+license = "MPL-2.0"
+repository = "https://code.commonty.org/david/ForgeCAD"
+
+# its own workspace (the root excludes it): the one crate that calls C, at run time (dlopen)
+[workspace]
+
+[[bin]]
+name = "forge-speech"
+path = "src/main.rs"
+
+[profile.dev.package."*"]
+opt-level = 2

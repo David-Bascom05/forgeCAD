@@ -2,7 +2,7 @@
 resolver = "3"
 members = ["kernel/*", "interface/*", "verify/*"]
 # its own workspace, so wgpu never enters a kernel build or this Cargo.lock
-exclude = ["interface/forge-render"]
+exclude = ["interface/forge-render", "interface/forge-speech"]
 
 [workspace.package]
 version = "0.1.0"

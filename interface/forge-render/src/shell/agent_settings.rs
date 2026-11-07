@@ -26,6 +26,11 @@ pub struct AgentSettings {
     pub model: String,
     /// Folders outside ~/projects the agent was let into.
     pub trusted: Vec<String>,
+    /// The key that talks to the agent, if one's set; held, or pressed to start and stop.
+    pub speech_key: Option<crate::bindings::Chord>,
+    pub speech_mode: super::voice::KeyMode,
+    /// What's said is sent when it's done, not left in the box to edit.
+    pub speech_send: bool,
 }
 
 impl Default for AgentSettings {
@@ -37,6 +42,9 @@ impl Default for AgentSettings {
             base_url: "http://localhost:8080/v1".into(),
             model: String::new(),
             trusted: Vec::new(),
+            speech_key: None,
+            speech_mode: super::voice::KeyMode::Hold,
+            speech_send: false,
         }
     }
 }
@@ -180,6 +188,12 @@ impl AgentSettings {
             .map_while(|k| get(&format!("trusted.{k}")))
             .filter(|d| trustable(d))
             .collect();
+        s.speech_key = get("speech_key").and_then(|k| crate::bindings::Chord::parse(&k));
+        s.speech_mode = match get("speech_mode").as_deref() {
+            Some("toggle") => super::voice::KeyMode::Toggle,
+            _ => super::voice::KeyMode::Hold,
+        };
+        s.speech_send = get("speech_send").as_deref() == Some("true");
         s
     }
 
@@ -199,6 +213,19 @@ impl AgentSettings {
         for (k, d) in self.trusted.iter().filter(|d| trustable(d)).enumerate() {
             t.set(TABLE, &format!("trusted.{k}"), d.clone());
         }
+        if let Some(k) = self.speech_key {
+            t.set(TABLE, "speech_key", k.to_string());
+        }
+        let mode = match self.speech_mode {
+            super::voice::KeyMode::Hold => "hold",
+            super::voice::KeyMode::Toggle => "toggle",
+        };
+        t.set(TABLE, "speech_mode", mode);
+        t.set(
+            TABLE,
+            "speech_send",
+            if self.speech_send { "true" } else { "false" },
+        );
     }
 
     /// The table's there: written by this, or an older agent.toml already moved in.
@@ -364,6 +391,7 @@ pub fn section(ui: &mut Ui, t: &Theme, s: &mut AgentSettings, key: &mut KeyField
             }
         }
     }
+    speech(ui, t, s);
     if *s != was {
         out.push(SettingsAct::Changed);
         if s.base_url != was.base_url {
@@ -371,6 +399,63 @@ pub fn section(ui: &mut Ui, t: &Theme, s: &mut AgentSettings, key: &mut KeyField
         }
     }
     out
+}
+
+thread_local! {
+    static CAPTURING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Speech: the key that talks, how it works, and whether what's said is sent.
+fn speech(ui: &mut Ui, t: &Theme, s: &mut AgentSettings) {
+    use super::voice::KeyMode;
+    ui.add_space(10.0);
+    ui.label(RichText::new("Speech").font(medium(12.0)).color(t.ink2));
+    ui.horizontal(|ui| {
+        ui.label(RichText::new("Key").font(sans(12.0)).color(t.ink2));
+        let capturing = CAPTURING.with(|c| c.get());
+        let words = match (capturing, s.speech_key) {
+            (true, _) => "Press a key…".to_string(),
+            (false, Some(k)) => k.to_string(),
+            (false, None) => "None".to_string(),
+        };
+        let b =
+            ui.add(egui::Button::new(RichText::new(words).font(mono(12.0))).min_size(egui::vec2(120.0, 0.0)));
+        if b.clicked() {
+            CAPTURING.with(|c| c.set(!capturing));
+        }
+        if capturing {
+            let got = ui.input_mut(|i| {
+                let k = i.events.iter().find_map(|e| match e {
+                    egui::Event::Key {
+                        key,
+                        pressed: true,
+                        modifiers,
+                        ..
+                    } => Some((*key, *modifiers)),
+                    _ => None,
+                });
+                if k.is_some() {
+                    i.events.clear();
+                }
+                k
+            });
+            if let Some((k, m)) = got {
+                CAPTURING.with(|c| c.set(false));
+                if k != egui::Key::Escape {
+                    s.speech_key = Some(crate::bindings::Chord::from_event(k, m));
+                }
+            }
+        }
+        if s.speech_key.is_some() && ui.button("Clear").clicked() {
+            s.speech_key = None;
+        }
+    });
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 16.0;
+        ui.radio_value(&mut s.speech_mode, KeyMode::Hold, "Hold to talk");
+        ui.radio_value(&mut s.speech_mode, KeyMode::Toggle, "Press to start and stop");
+    });
+    ui.checkbox(&mut s.speech_send, "Send when done");
 }
 
 /// The OpenAI-compatible endpoint can't run without these.
@@ -396,6 +481,7 @@ mod tests {
             base_url: "http://node1:8080/v1".into(),
             model: "qwen \"3.6\"".into(),
             trusted: vec!["/mnt/usb/parts".into(), "/tmp/x, \"y\"".into()],
+            ..AgentSettings::default()
         };
         assert_eq!(AgentSettings::from_toml(&s.to_toml()), s);
         assert_eq!(s.label(), "node1:8080 · qwen \"3.6\"");
@@ -419,6 +505,9 @@ mod tests {
             base_url: "http://node1:8080/v1".into(),
             model: "qwen3.6-35b-a3b".into(),
             trusted: vec!["/mnt/usb/parts".into(), "/tmp/x y".into(), "/a\n/etc".into()],
+            speech_key: crate::bindings::Chord::parse("Ctrl+Space"),
+            speech_mode: crate::shell::voice::KeyMode::Toggle,
+            speech_send: true,
         };
         let mut s = crate::shell::settings::Settings::default();
         a.write_extra(&mut s.extra);

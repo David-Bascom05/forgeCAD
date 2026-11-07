@@ -173,6 +173,8 @@ pub struct AgentTab {
     pub markup: super::markup::Markup,
     /// Each sent markup's thumbnail, by its entry.
     thumbs: std::collections::HashMap<usize, egui::TextureHandle>,
+    /// Talking instead of typing (`voice.rs`).
+    pub voice: super::voice::Voice,
 }
 
 pub const INPUT_ID: &str = "agent-input";
@@ -333,6 +335,11 @@ impl AgentTab {
 
     /// Esc stops a running agent when the tab's showing or its input has the keys.
     pub fn takes_escape(&mut self, ctx: &egui::Context) -> bool {
+        if self.voice.busy() {
+            ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Escape));
+            self.voice.out.push(super::voice::VoiceAct::Cancel);
+            return true;
+        }
         let focused = ctx.memory(|m| m.has_focus(egui::Id::unique(INPUT_ID)));
         if self.tab != SideTab::Agent || !(self.running || focused) {
             return false;
@@ -1784,6 +1791,8 @@ impl Shell {
             if can { Color32::WHITE } else { t.ink2 },
         );
         self.note("agent:send", sr);
+        let mic = Rect::from_min_size(pos2(sr.left() - 30.0, row_y), vec2(24.0, 22.0));
+        self.mic_button(ui, mic, !running);
         if s_resp.clicked() && can {
             if running {
                 self.agent.out.push(AgentAct::Stop);

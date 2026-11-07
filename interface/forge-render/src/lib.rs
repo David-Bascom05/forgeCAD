@@ -41,6 +41,8 @@ pub mod load;
 pub mod measure;
 pub mod snaps;
 #[cfg(not(target_arch = "wasm32"))]
+pub mod speech;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod tess;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod thermo_view;

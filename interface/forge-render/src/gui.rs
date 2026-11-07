@@ -44,6 +44,8 @@ pub mod gui_markup;
 mod gui_overlay;
 #[path = "gui_sheet.rs"]
 mod gui_sheet;
+#[path = "gui_speech.rs"]
+pub mod gui_speech;
 #[path = "gui_thermo.rs"]
 mod gui_thermo;
 #[path = "gui_versions.rs"]
@@ -129,6 +131,8 @@ pub struct Gui {
     pub agent: gui_agent::AgentHost,
     /// The agent's app tools' view steps and driven joints (`gui_apptools.rs`).
     pub apps: gui_apptools::AppHost,
+    /// The Agent tab's speech (`gui_speech.rs`).
+    pub speech: gui_speech::SpeechHost,
     egui: egui_wgpu::Renderer,
     pub shell: Shell,
     device: wgpu::Device,
@@ -306,6 +310,7 @@ impl Gui {
             vers: Default::default(),
             agent: Default::default(),
             apps: Default::default(),
+            speech: Default::default(),
             ctx,
             egui,
             shell: Shell::default(),
@@ -2349,6 +2354,7 @@ impl Gui {
         self.take_live();
         self.take_fg();
         self.take_agent();
+        self.take_speech();
         self.take_extras(false);
         times.events = now_ms() - t0;
         let mut animating = false;
@@ -2390,6 +2396,7 @@ impl Gui {
         self.agent_acts();
         self.markup_names();
         self.markup_ready();
+        self.speech_acts();
         self.app_calls();
         self.docs_asked();
         self.open_asked();
@@ -3142,6 +3149,17 @@ impl Headless {
     /// A key press and release.
     pub fn key(&mut self, key: egui::Key) {
         self.key_with(key, Default::default());
+    }
+
+    /// A key going down, or coming up, alone: a key held over frames.
+    pub fn key_event(&mut self, key: egui::Key, modifiers: egui::Modifiers, pressed: bool) {
+        self.pending.push(egui::Event::Key {
+            key,
+            physical_key: None,
+            pressed,
+            repeat: false,
+            modifiers,
+        });
     }
 
     pub fn key_with(&mut self, key: egui::Key, modifiers: egui::Modifiers) {

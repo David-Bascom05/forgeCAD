@@ -51,6 +51,7 @@ pub mod thermo_ui;
 mod tree;
 pub mod versions;
 mod visual_style;
+pub mod voice;
 
 pub use crate::nav::NavTool;
 use crate::render::VisualStyle;
@@ -931,6 +932,7 @@ impl Shell {
         self.places.clear();
         self.view_blocks.clear();
         self.doc_keys(ui);
+        self.voice_keys(&ctx);
         let s = ctx.content_rect();
         let p = ui.painter().clone();
         p.rect_filled(s, 0.0, t.bg);
@@ -1338,8 +1340,9 @@ impl Shell {
         }
         let st = Rect::from_min_size(pos2(0.0, bottom + DOCS_H), vec2(s.width(), STATUS_H));
         p.rect_filled(st, 0.0, t.bar);
+        let x = self.voice_status(ui, 6.0, st);
         let said = p.text(
-            pos2(10.0, st.center().y),
+            pos2(x + 4.0, st.center().y),
             Align2::LEFT_CENTER,
             if self.status.is_empty() && self.unshown {
                 "This part built but some of it can't be drawn: fix or delete what the tree marks"
