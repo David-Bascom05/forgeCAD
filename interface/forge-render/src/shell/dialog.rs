@@ -47,6 +47,10 @@ pub struct Dialog {
     pub hole: Option<HoleChoice>,
     /// A rib's other side has been tried by itself; or the person has chosen.
     pub side_settled: bool,
+    /// The newest preview the worker has answered (`seq` when it is back).
+    pub answered: u64,
+    /// OK pressed while a rib was still finding its side: it applies once the side is found.
+    pub ok_pending: bool,
     /// The selections still to come after the one taking clicks.
     pub queue: Vec<(String, &'static str)>,
     /// A revolve goes all the way round, or by its angle this way.
@@ -435,6 +439,8 @@ impl Dialog {
             pick: pick.map(|(l, why)| (l.to_string(), why)),
             queue,
             side_settled: false,
+            answered: 0,
+            ok_pending: false,
             thread: ThreadChoice::default(),
             hole: None,
             sent: None,
@@ -473,6 +479,8 @@ impl Dialog {
             again: false,
             queue: Vec::new(),
             side_settled: false,
+            answered: 0,
+            ok_pending: false,
             thread: ThreadChoice::default(),
             hole: None,
             full: true,
@@ -553,6 +561,14 @@ impl Dialog {
         f.1 = rest;
         self.extent = extent;
         self.toward = toward;
+    }
+
+    /// A rib still finding its side by itself: its side not settled and its preview not back.
+    pub fn finding_side(&self) -> bool {
+        self.kind == "rib"
+            && !self.side_settled
+            && !self.waiting_for_pick()
+            && (self.seq == 0 || self.answered != self.seq)
     }
 
     /// A rib refused on the side it started on, with nobody having chosen: the other side's
@@ -2275,7 +2291,7 @@ impl Shell {
                     ui.painter().galley(r.min + vec2(7.0, 4.0), g, Color32::WHITE);
                 }
                 ui.add_space(4.0);
-                let can_ok = d.error.is_none() && !d.waiting_for_pick() && !d.awaiting;
+                let can_ok = d.error.is_none() && !d.waiting_for_pick() && !d.awaiting && !d.ok_pending;
                 ui.horizontal(|ui| {
                     let new = matches!(d.target, DialogTarget::New(_));
                     if new {

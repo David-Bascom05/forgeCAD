@@ -235,13 +235,8 @@ fn a_part_that_cannot_open_says_why_and_the_app_goes_on() {
     };
     h.step();
     h.gui.open("/nonexistent/x.fc");
-    for _ in 0..2000 {
-        h.step();
-        if !h.gui.loading() {
-            break;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(1));
-    }
+    // the loader's answer (not a count of frames)
+    assert!(h.until(|g| !g.loading()), "the load never answered");
     assert!(h.gui.shell.status.contains("x.fc"), "{}", h.gui.shell.status);
     assert!(h.gui.view.is_none());
 }

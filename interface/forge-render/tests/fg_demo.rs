@@ -249,10 +249,8 @@ fn the_demo_part_is_built_with_the_ribbons_tools() {
         v.nav.home(&v.scene);
         v.mark_dirty();
     }
-    for _ in 0..80 {
-        h.step();
-        std::thread::sleep(std::time::Duration::from_millis(5));
-    }
+    // home reached before the picture
+    h.until(|g| g.view.as_ref().is_some_and(|v| !v.nav.moving()));
     shot(&mut h, "model-demo-11-done");
 
     let src = std::fs::read_to_string(&file).unwrap();

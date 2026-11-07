@@ -41,10 +41,12 @@ fn point_at(h: &mut Headless, world: [f32; 3]) {
     h.button(true);
     h.step();
     h.button(false);
-    for _ in 0..30 {
-        h.step();
-        std::thread::sleep(std::time::Duration::from_millis(5));
-    }
+    // what the click picked, and what that asked of the worker, back
+    assert!(
+        h.settle_worker(),
+        "the pick's answer never came: {}",
+        h.gui.shell.status
+    );
 }
 
 fn field(h: &mut Headless, label: &str, text: &str) {
@@ -657,10 +659,8 @@ fn to_next(part: &str, tag: &str, cut: bool, back: bool) -> (Result<f64, String>
         let d = g.shell.dialog.as_ref().unwrap();
         d.sent.as_deref() == Some(want.as_str()) && d.seq > 0
     });
-    for _ in 0..100 {
-        h.step();
-        std::thread::sleep(std::time::Duration::from_millis(5));
-    }
+    // the preview's answer, error or not, back from the worker (not a count of frames)
+    assert!(h.settle_worker(), "{line}: the preview never came back");
     let d = h.gui.shell.dialog.as_ref().unwrap();
     if let Some(e) = &d.error {
         return (Err(e.clone()), line);
@@ -1200,6 +1200,46 @@ const CORNER_X: &str =
 const CORNER_Y: &str =
     "floor: extrude 10 rect -30 -30 60 60\nwall: extrude 40 xy at 0 0 10 rect -30 20 60 10\n";
 
+/// OK pressed while a rib is still finding its side (the path just taken, its preview not back)
+/// holds, greyed, and applies once the side is found: neither dropped nor applied on a side
+/// refused.
+#[test]
+fn ok_while_a_rib_finds_its_side_applies_on_the_side_found() {
+    let wedge = 0.5 * 40.0 * 30.0 * 2.0;
+    for (sketch, tag) in [
+        ("xz\n  line -20 40 20 10", "rib-ok-a"),
+        ("xz\n  line 20 10 -20 40", "rib-ok-b"),
+    ] {
+        let part = format!("{CORNER_X}sk1: sketch {sketch}\nend\n");
+        let Some((mut h, file)) = open(&part, tag) else {
+            return;
+        };
+        let was = built(&file, "before");
+        button(&mut h, "Rib");
+        let (cam, size) = h.gui.shell.camera.unwrap();
+        let on = cam.pixel_of([0.0, 0.0, 25.0], size.0, size.1).unwrap();
+        let r = h.gui.shell.view_rect;
+        h.move_to(r.min.x + on.0, r.min.y + on.1);
+        assert!(h.settle_hover(), "{tag}: the pointer's pick never came");
+        h.button(true);
+        h.step();
+        h.button(false);
+        // OK in the very frame the click takes the path: its side's preview goes after it, so
+        // nothing of the search can be back yet
+        h.gui.shell.out.push(Action::DialogOk);
+        h.step();
+        let d = h.gui.shell.dialog.as_ref().expect("still open");
+        assert!(d.ok_pending, "{tag}: OK mid-search not held: {d:?}");
+        assert!(
+            h.until(|g| g.shell.dialog.is_none()),
+            "{tag}: OK pressed mid-search was dropped: {:?}",
+            h.gui.shell.dialog
+        );
+        let added = built(&file, tag) - was;
+        assert!((added - wedge).abs() < 1e-6, "{tag}: {added} {wedge}");
+    }
+}
+
 #[test]
 fn a_rib_fills_the_corner_it_crosses_whichever_way_its_line_was_drawn() {
     // a wedge of 40 by 30 over a corner, 2 thick: its area over the corner's 1200 mm3
@@ -1459,10 +1499,8 @@ fn a_fillet_takes_only_the_edge_picked_unless_told_to_follow_the_chain() {
             let d = g.shell.dialog.as_ref().unwrap();
             d.sent.as_deref() == Some(want.as_str()) && d.seq > 0
         });
-        for _ in 0..100 {
-            h.step();
-            std::thread::sleep(std::time::Duration::from_millis(5));
-        }
+        // the preview's answer, error or not, back from the worker (not a count of frames)
+        assert!(h.settle_worker(), "{tag}: the preview never came back");
         if let Some(e) = h.gui.shell.dialog.as_ref().unwrap().error.clone() {
             return Some(Err(e));
         }

@@ -250,22 +250,17 @@ fn a_rebuild_keeps_the_reading_on_screen_and_reads_it_again() {
             },
         })
         .unwrap();
-    let mut blank = 0;
-    for _ in 0..2000 {
-        h.step();
-        let m = h.gui.shell.inspect.measure.as_ref().unwrap();
+    // the new reading waited for (not a count of frames), every frame on the way looked at
+    let blank = std::cell::Cell::new(0);
+    h.until(|g| {
+        let m = g.shell.inspect.measure.as_ref().unwrap();
         if m.reading.is_none() {
-            blank += 1;
+            blank.set(blank.get() + 1);
         }
-        if let Some(Ok(r)) = &m.reading
-            && !m.busy
-            && r.get(forge_agent::measure::Quantity::Distance)
-                .is_some_and(|d| (d - 10.0).abs() < 1e-6)
-        {
-            break;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(2));
-    }
+        matches!(&m.reading, Some(Ok(r)) if !m.busy
+            && r.get(forge_agent::measure::Quantity::Distance).is_some_and(|d| (d - 10.0).abs() < 1e-6))
+    });
+    let blank = blank.get();
     let after = reading(&mut h);
     let gap = after.get(forge_agent::measure::Quantity::Distance).unwrap();
     assert!((gap - 10.0).abs() < 1e-6, "{gap}");

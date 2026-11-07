@@ -111,6 +111,8 @@ struct Slot<T> {
     /// Values overtaken before they started.
     dropped: u64,
     stop: bool,
+    /// The worker is on a job or a value.
+    working: bool,
 }
 
 /// A feature that left the part failing a validity rule.
@@ -216,6 +218,7 @@ impl<T: Send + 'static> Live<T> {
                 ready: VecDeque::new(),
                 dropped: 0,
                 stop: false,
+                working: false,
             }),
             wake: Condvar::new(),
             ready: Mutex::new(None),
@@ -313,6 +316,12 @@ impl<T: Send + 'static> Live<T> {
         self.shared.wake.notify_one();
     }
 
+    /// Nothing asked is still out: no job or value waiting or under way, and every answer taken.
+    pub fn idle(&self) -> bool {
+        let s = self.shared.slot.lock().expect("the worker is alive");
+        !s.working && s.jobs.is_empty() && s.want.is_none() && s.ready.is_empty()
+    }
+
     /// What is ready, oldest first.
     pub fn poll(&mut self) -> Vec<Event<T>> {
         let mut s = self.shared.slot.lock().expect("the worker is alive");
@@ -400,14 +409,17 @@ fn run<T: Send + 'static>(
     loop {
         let next = {
             let mut s = shared.slot.lock().expect("the UI is alive");
+            s.working = false;
             loop {
                 if s.stop {
                     break Next::Stop;
                 }
                 if let Some(j) = s.jobs.pop_front() {
+                    s.working = true;
                     break Next::Job(j);
                 }
                 if let Some((seq, op)) = s.want.take() {
+                    s.working = true;
                     break Next::Value(seq, op);
                 }
                 s = shared.wake.wait(s).expect("the UI is alive");

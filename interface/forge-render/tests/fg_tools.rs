@@ -700,11 +700,8 @@ fn a_pick_made_before_a_build_lands_is_of_what_is_shown_after() {
     let on = cam.pixel_of([5.0, 30.0, 20.0], size.0, size.1).unwrap();
     let r = h.gui.shell.view_rect;
     h.move_to(r.min.x + on.0, r.min.y + on.1);
-    for _ in 0..40 {
-        h.step();
-        std::thread::sleep(std::time::Duration::from_millis(5));
-    }
-    assert!(!h.gui.view.as_ref().unwrap().nav.pick_pending());
+    // the pointer's pick read (not a count of frames)
+    assert!(h.until(|g| g.view.as_ref().is_some_and(|v| !v.nav.pick_pending())));
     // Shell opened without the pointer moving: its preview (a hollow block, other faces) lands
     h.gui.fg_open_tool("shell");
     let seq = h.gui.fg.as_ref().unwrap().seq;

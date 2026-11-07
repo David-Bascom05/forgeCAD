@@ -647,14 +647,23 @@ impl Gui {
                     {
                         e.error = f.failure.clone();
                     }
+                    let mut ok_now = false;
                     if let Some(d) = &mut self.shell.dialog
                         && d.seq == f.seq
                     {
                         d.error = f.failure.as_deref().map(crate::shell::panel::plain_error);
+                        d.answered = f.seq;
                         // which side fills isn't for a person to find by getting it wrong
                         if d.error.is_some() && d.try_other_side() {
                             d.seq = 0;
+                        } else if d.ok_pending {
+                            // the side found: the OK pressed while it was being looked for
+                            d.ok_pending = false;
+                            ok_now = d.error.is_none();
                         }
+                    }
+                    if ok_now {
+                        self.shell.out.push(Action::DialogOk);
                     }
                     if let Some(Out::Delta(d)) = f.out {
                         v.renderer.live_apply(part, &d);
@@ -2009,6 +2018,13 @@ impl Gui {
 
     /// OK: the same call commits; the dialog waits for the answer.
     fn dialog_ok(&mut self) {
+        // a rib still finding its side: OK holds (the button greyed) and applies once it is found
+        if let Some(d) = &mut self.shell.dialog
+            && d.finding_side()
+        {
+            d.ok_pending = true;
+            return;
+        }
         let Some(call) = self.dialog_call() else { return };
         let Some(v) = &mut self.view else { return };
         let Some(d) = &mut self.shell.dialog else { return };
@@ -3048,6 +3064,16 @@ impl Headless {
             std::thread::sleep(std::time::Duration::from_millis(1));
         }
         false
+    }
+
+    /// Frames until the part's worker has answered everything asked of it, and the answers are
+    /// taken: what a dialog's preview or a pick sent comes back before a test looks.
+    pub fn settle_worker(&mut self) -> bool {
+        self.until(|g| {
+            g.view
+                .as_ref()
+                .is_none_or(|v| v.live.as_ref().is_none_or(|l| l.idle()))
+        })
     }
 
     /// Frames until what's under the pointer is known for the part as it is now: the Forge
