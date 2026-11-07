@@ -633,6 +633,17 @@ fn selectable(ui: &mut Ui, at: egui::Pos2, g: std::sync::Arc<egui::Galley>) {
     ui.put(r, egui::Label::new(egui::WidgetText::Galley(g)).selectable(true));
 }
 
+/// The same wrapping and line spacing for composer measurement and editing.
+fn input_galley(ui: &Ui, text: &str, width: f32) -> std::sync::Arc<egui::Galley> {
+    let row_height = ui.fonts_mut(|f| f.row_height(&sans(13.0))) + ui.spacing().extra_text_line_spacing;
+    let mut job = plain_job(text, sans(13.0), ui.visuals().text_color(), width);
+    job.keep_trailing_whitespace = true;
+    for section in &mut job.sections {
+        section.format.line_height = Some(row_height);
+    }
+    ui.fonts_mut(|f| f.layout_job(job))
+}
+
 fn plain_job(text: &str, font: FontId, ink: Color32, width: f32) -> LayoutJob {
     let mut job = LayoutJob::single_section(
         text.to_string(),
@@ -863,10 +874,16 @@ impl Shell {
         let top = ctx_y + 20.0;
         p.hline(0.0..=w, top - 0.5, Stroke::new(1.0, t.line));
 
-        // the input's height follows its lines
-        let lines = self.agent.input.lines().count().max(1) + usize::from(self.agent.input.ends_with('\n'));
+        // Measure wrapped rows at the editor's width, including pasted paragraphs.
         let chips = if self.agent.refs.is_empty() { 0.0 } else { 26.0 };
-        let input_h = (lines.min(8) as f32 * 17.0 + 44.0 + chips).max(78.0 + chips);
+        let text_width = (w - 2.0 * (PAD - 2.0) - 8.0).max(24.0);
+        let row_height = ui.fonts_mut(|f| f.row_height(&sans(13.0))) + ui.spacing().extra_text_line_spacing;
+        let available = (area.bottom() - top).max(0.0);
+        let max_input = (8.0 * row_height + 44.0 + chips)
+            .min((available * 0.6).max(78.0 + chips))
+            .min(available);
+        let text_height = input_galley(ui, &self.agent.input, text_width).size().y;
+        let input_h = (text_height + 44.0 + chips).max(78.0 + chips).min(max_input);
         let input = Rect::from_min_max(pos2(area.left(), area.bottom() - input_h), area.max);
         let chat = Rect::from_min_max(pos2(area.left(), top), pos2(area.right(), input.top()));
         self.agent_chat(ui, chat);
@@ -1441,7 +1458,9 @@ impl Shell {
             }
             y += 26.0;
         }
-        let send = focused && ui.input(|i| i.key_pressed(Key::Enter) && !i.modifiers.shift);
+        let send = focused && ui.input(|i| i.events.iter().any(|event| {
+            matches!(event, egui::Event::Key { key: Key::Enter, pressed: true, modifiers, .. } if !modifiers.shift)
+        }));
         if send {
             ui.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Enter));
         }
@@ -1450,21 +1469,42 @@ impl Shell {
             pos2(box_r.right() - 4.0, box_r.bottom() - 28.0),
         );
         let mut child = ui.new_child(egui::UiBuilder::new().max_rect(text_r));
+        child.set_clip_rect(text_r.intersect(ui.clip_rect()));
         let hint = if self.agent.running {
             "Esc stops the agent"
         } else {
             "Ask the agent"
         };
-        let resp = child.add(
-            egui::TextEdit::multiline(&mut self.agent.input)
-                .id(id)
-                .font(sans(13.0))
-                .frame(egui::Frame::NONE)
-                .hint_text(hint)
-                .return_key(egui::KeyboardShortcut::new(Modifiers::SHIFT, Key::Enter))
-                .desired_width(text_r.width())
-                .desired_rows(1),
+        let mut layouter =
+            |ui: &Ui, text: &dyn egui::TextBuffer, width: f32| input_galley(ui, text.as_str(), width);
+        let scroll = egui::ScrollArea::vertical()
+            .id_salt("agent-input-scroll")
+            .max_height(text_r.height())
+            .min_scrolled_height(0.0)
+            .auto_shrink([false, false])
+            .show(&mut child, |ui| {
+                ui.add(
+                    egui::TextEdit::multiline(&mut self.agent.input)
+                        .id(id)
+                        .font(sans(13.0))
+                        .frame(egui::Frame::NONE)
+                        .margin(0.0)
+                        .hint_text(hint)
+                        .layouter(&mut layouter)
+                        .return_key(egui::KeyboardShortcut::new(Modifiers::SHIFT, Key::Enter))
+                        .desired_width(ui.available_width())
+                        .desired_rows(1),
+                )
+            });
+        let resp = scroll.inner;
+        self.note("agent:input:viewport", scroll.inner_rect);
+        self.note(
+            "agent:input:content",
+            Rect::from_min_size(scroll.inner_rect.min, scroll.content_size),
         );
+        if resp.changed() {
+            ui.ctx().request_repaint();
+        }
         self.note("agent:input", text_r);
         if ui.input(|i| i.pointer.primary_clicked())
             && ui

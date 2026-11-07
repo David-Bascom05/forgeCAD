@@ -1523,3 +1523,97 @@ fn the_chat_and_the_message_box_select_copy_and_cut() {
     drop(h);
     let _ = std::fs::remove_dir_all(dir);
 }
+
+#[test]
+fn the_message_box_grows_for_wrapped_text_then_scrolls_without_overlapping_controls() {
+    let Ok(mut h) = forge_render::gui::Headless::new((1200.0, 800.0), 1.0) else {
+        return;
+    };
+    h.step();
+    assert!(h.click("side:tab:Agent"));
+    h.step();
+    h.step();
+    let initial = h.placed("agent:input").unwrap();
+    assert!(h.click("agent:input"));
+    h.step();
+    let paragraph = "The telescope mount needs space for the motors and cable routing. ".repeat(5);
+    assert!(!paragraph.contains('\n'));
+    h.text(&paragraph);
+    h.step();
+    h.step();
+    let grown = h.placed("agent:input").unwrap();
+    assert!(
+        grown.height() > initial.height() + 15.0,
+        "wrapped text grows: {initial:?} -> {grown:?}"
+    );
+    assert!(grown.top() < initial.top(), "composer grows upward");
+    let send = h.placed("agent:send").unwrap();
+    let viewport = h.placed("agent:input:viewport").unwrap();
+    assert!(
+        viewport.bottom() <= send.top(),
+        "text never overlaps Send: {viewport:?}, {send:?}"
+    );
+    let long = "More details about the mount and its bearings, gears, and clearances. ".repeat(100);
+    h.text(&long);
+    h.step();
+    h.step();
+    let capped = h.placed("agent:input").unwrap();
+    let content = h.placed("agent:input:content").unwrap();
+    let viewport = h.placed("agent:input:viewport").unwrap();
+    let send = h.placed("agent:send").unwrap();
+    let attach = h.placed("agent:attach").unwrap();
+    assert!(
+        content.height() > viewport.height() * 2.0,
+        "long messages scroll inside the composer"
+    );
+    assert!(capped.height() < 250.0, "height remains bounded: {capped:?}");
+    assert!(viewport.bottom() <= send.top() && viewport.bottom() <= attach.top());
+    assert!(
+        h.gui.shell.agent.input.ends_with(&long),
+        "overflow text is preserved"
+    );
+    h.key_with(egui::Key::A, egui::Modifiers::COMMAND);
+    h.step();
+    h.cut();
+    h.step();
+    h.step();
+    assert!(h.gui.shell.agent.input.is_empty());
+    assert!(
+        (h.placed("agent:input").unwrap().height() - initial.height()).abs() < 1.0,
+        "composer shrinks after clearing"
+    );
+}
+
+#[test]
+fn the_message_box_keeps_newlines_and_attachments_above_its_controls() {
+    let Ok(mut h) = forge_render::gui::Headless::new((1000.0, 600.0), 1.0) else {
+        return;
+    };
+    h.step();
+    assert!(h.click("side:tab:Agent"));
+    h.step();
+    h.gui.shell.agent.attach("base");
+    h.step();
+    let initial = h.placed("agent:input").unwrap();
+    assert!(h.click("agent:input"));
+    h.step();
+    for line in 0..5 {
+        h.text("Check the telescope mount");
+        h.step();
+        if line < 4 {
+            h.key_with(egui::Key::Enter, egui::Modifiers::SHIFT);
+            h.step();
+        }
+    }
+    h.step();
+    assert_eq!(h.gui.shell.agent.input.lines().count(), 5);
+    assert!(
+        !h.gui.shell.agent.running,
+        "Shift+Enter adds a line without sending"
+    );
+    let viewport = h.placed("agent:input:viewport").unwrap();
+    assert!(h.placed("agent:input").unwrap().height() > initial.height());
+    assert!(h.placed("agent:ref:base").unwrap().bottom() <= viewport.top());
+    assert!(viewport.bottom() <= h.placed("agent:send").unwrap().top());
+    assert!(viewport.bottom() <= h.placed("agent:markup").unwrap().top());
+}
