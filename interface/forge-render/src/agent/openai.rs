@@ -17,6 +17,7 @@ pub struct Config {
     /// Up to and including `/v1`.
     pub base_url: String,
     pub model: String,
+    /// Open document, or a project directory before the first document is created.
     pub file: PathBuf,
     pub system: String,
     /// A key given outright (tests); else the keyring's for the URL.
@@ -27,6 +28,7 @@ pub struct Config {
 
 pub struct OpenAi {
     cfg: Arc<Config>,
+    root: PathBuf,
     out: Out,
     history: Arc<Mutex<Vec<Json>>>,
     stop: Arc<AtomicBool>,
@@ -109,8 +111,10 @@ fn http_error(status: u16, body: &str) -> String {
 
 impl OpenAi {
     pub fn new(cfg: Config, out: Out) -> OpenAi {
+        let root = super::project::root(&cfg.file);
         OpenAi {
             cfg: Arc::new(cfg),
+            root,
             out,
             history: Arc::new(Mutex::new(Vec::new())),
             stop: Arc::new(AtomicBool::new(false)),
@@ -152,10 +156,11 @@ impl Backend for OpenAi {
             self.stop.clone(),
             self.busy.clone(),
         );
+        let root = self.root.clone();
         std::thread::Builder::new()
             .name("agent-openai".into())
             .spawn(move || {
-                let done = turn(&cfg, &out, &history, &stop);
+                let done = turn(&cfg, &out, &history, &stop, &root);
                 busy.store(false, Ordering::SeqCst);
                 out.send(done);
             })
@@ -174,7 +179,13 @@ impl Backend for OpenAi {
 }
 
 /// A turn: replies and tool calls until a reply calls none. Its end, as the event to send.
-fn turn(cfg: &Config, out: &Out, history: &Mutex<Vec<Json>>, stop: &AtomicBool) -> Event {
+fn turn(
+    cfg: &Config,
+    out: &Out,
+    history: &Mutex<Vec<Json>>,
+    stop: &AtomicBool,
+    root: &std::path::Path,
+) -> Event {
     let key = match &cfg.key {
         Some(k) => Some(k.clone()),
         None => match super::keys::get(&cfg.base_url) {
@@ -195,7 +206,7 @@ fn turn(cfg: &Config, out: &Out, history: &Mutex<Vec<Json>>, stop: &AtomicBool) 
             .build(),
     );
     let url = format!("{}/chat/completions", cfg.base_url.trim().trim_end_matches('/'));
-    let mut watch = Watch::new(&super::project::root(&cfg.file));
+    let mut watch = Watch::new(root);
     let stopped = Event::Done {
         error: None,
         stopped: true,
@@ -210,9 +221,13 @@ fn turn(cfg: &Config, out: &Out, history: &Mutex<Vec<Json>>, stop: &AtomicBool) 
             ("model", cfg.model.trim().into()),
             ("messages", Json::Arr(messages)),
             ("tools", {
-                let mut t = match tools::specs() {
-                    Json::Arr(a) => a,
-                    _ => vec![],
+                let mut t = if cfg.file.is_dir() {
+                    vec![]
+                } else {
+                    match tools::specs() {
+                        Json::Arr(a) => a,
+                        _ => vec![],
+                    }
                 };
                 if cfg.apps.is_some() {
                     t.extend(super::apptools::openai_specs());
@@ -376,6 +391,11 @@ fn turn(cfg: &Config, out: &Out, history: &Mutex<Vec<Json>>, stop: &AtomicBool) 
                 let r = app.call(t, args.clone());
                 picture = r.png;
                 (r.text, r.error)
+            } else if cfg.file.is_dir() {
+                (
+                    "No document is open; use the project tools to work in the project folder".into(),
+                    true,
+                )
             } else {
                 tools::call(&name, &args, &cfg.file)
             };

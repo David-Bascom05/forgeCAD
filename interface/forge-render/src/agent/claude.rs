@@ -182,6 +182,7 @@ pub struct Config {
     pub program: String,
     /// `--model`; empty for Claude Code's default.
     pub model: String,
+    /// Open document, or a project directory before the first document is created.
     pub file: PathBuf,
     pub system: String,
     /// Where it runs: a folder of ForgeCAD's own, never the part's.
@@ -202,6 +203,7 @@ pub fn clean_cwd() -> PathBuf {
 
 pub struct ClaudeCode {
     cfg: Config,
+    root: PathBuf,
     out: Out,
     child: Option<Child>,
     stdin: Option<ChildStdin>,
@@ -216,9 +218,11 @@ pub struct ClaudeCode {
 
 impl ClaudeCode {
     pub fn new(cfg: Config, out: Out, session: Option<String>) -> ClaudeCode {
-        let watch = Arc::new(Mutex::new(Watch::new(&super::project::root(&cfg.file))));
+        let root = super::project::root(&cfg.file);
+        let watch = Arc::new(Mutex::new(Watch::new(&root)));
         ClaudeCode {
             cfg,
+            root,
             watch,
             out,
             child: None,
@@ -234,7 +238,7 @@ impl ClaudeCode {
     /// settings, so no project hooks), only ForgeCAD's MCP server, no Bash, and in `dontAsk`
     /// mode only what's allowed here runs: the folder's files, and the app's tools (fg among them).
     pub fn args(&self) -> Vec<String> {
-        let dir = super::project::root(&self.cfg.file).display().to_string();
+        let dir = self.root.display().to_string();
         let mut a: Vec<String> = [
             "-p",
             "--output-format",
@@ -398,7 +402,7 @@ impl ClaudeCode {
 
 impl Backend for ClaudeCode {
     fn send(&mut self, prompt: String, picture: Option<Vec<u8>>) {
-        *self.watch.lock().expect("watch") = Watch::new(&super::project::root(&self.cfg.file));
+        *self.watch.lock().expect("watch") = Watch::new(&self.root);
         // a picture goes first, as an image block the message reads after
         let content = match picture {
             None => prompt.into(),

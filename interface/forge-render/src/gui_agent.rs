@@ -27,6 +27,8 @@ pub struct AgentHost {
     /// CLI program override, and where it runs, unless a test says otherwise.
     pub program: Option<String>,
     pub cwd: Option<PathBuf>,
+    /// Captured launch folder, used for project conversations before any document is open.
+    pub project_dir: Option<PathBuf>,
     /// `agent.toml`, unless a test says otherwise.
     pub settings_file: Option<PathBuf>,
     /// The app tools' calls, to the frame's thread; the way to them, for the backends.
@@ -60,6 +62,9 @@ impl Gui {
     pub(crate) fn take_agent(&mut self) {
         if !self.agent.loaded {
             self.agent.loaded = true;
+            if self.agent.project_dir.is_none() {
+                self.agent.project_dir = std::env::current_dir().ok();
+            }
             // an agent.toml from before settings.toml's [agent] table: moved in once (the file kept)
             if !AgentSettings::in_extra(&self.shell.settings.extra)
                 && let Some(text) = self
@@ -72,6 +77,7 @@ impl Gui {
                 AgentSettings::from_toml(&text).write_extra(&mut self.shell.settings.extra);
             }
         }
+        self.shell.agent.project = self.agent_root().map(|p| p.display().to_string());
         // settings.toml's [agent] table is the settings: the Settings window writes it
         let now = AgentSettings::from_extra(&self.shell.settings.extra);
         if now != self.shell.agent.settings {
@@ -196,6 +202,29 @@ impl Gui {
         if let Some(b) = &mut self.agent.backend {
             b.set_file(Path::new(path));
         }
+    }
+
+    fn agent_root(&self) -> Option<PathBuf> {
+        if let Some(file) = self.agent_path() {
+            let file = Path::new(&file);
+            if forge_history::History::open(file).is_none()
+                && let Some((root, _)) = &self.agent.made_for
+                && file.starts_with(root)
+            {
+                return Some(PathBuf::from(root));
+            }
+            return Some(crate::agent::project::root(file));
+        }
+        self.agent
+            .made_for
+            .as_ref()
+            .map(|(p, _)| PathBuf::from(p))
+            .or_else(|| {
+                self.agent
+                    .project_dir
+                    .as_ref()
+                    .map(|p| crate::agent::project::root(p))
+            })
     }
 
     /// The file the agent works on: the drawing open, else the part or assembly.
@@ -442,25 +471,21 @@ impl Gui {
         let fail = |g: &mut Gui, text: String, fix: Option<String>| {
             g.shell.agent.take(Event::Problem { text, fix });
         };
-        let Some(path) = self.agent_path() else {
-            let why = if self.fg.is_some() {
-                "Save the part to a file first: the agent works on the file"
-            } else {
-                "Open a Forge part first"
-            };
-            return fail(self, why.into(), None);
+        let document = self.agent_path();
+        let Some(root) = self.agent_root() else {
+            return fail(self, "Couldn't determine the project folder".into(), None);
         };
-        // a folder outside the projects tree is trusted once, by asking
-        let dir = crate::agent::project::root(Path::new(&path))
-            .display()
-            .to_string();
+        let dir = root.display().to_string();
+        // A directory is an explicit project-only context, never a fabricated part file.
+        let path = document.clone().unwrap_or_else(|| dir.clone());
         if !trusted(&dir, &self.shell.agent.settings.trusted) {
             self.shell.agent.trust_ask = Some(dir);
             self.shell.agent.pending = Some((text.to_string(), refs.to_vec(), picture));
             return;
         }
         // the agent reads the file: what's on screen is what it gets
-        if self.shell.drawing.is_none()
+        if document.is_some()
+            && self.shell.drawing.is_none()
             && let Some(s) = &mut self.fg
             && s.dirty()
         {
@@ -514,7 +539,11 @@ impl Gui {
         self.apps.view_set = false;
         let mut msg = prompt(text, refs);
         if self.agent.told.as_deref() != Some(path.as_str()) {
-            msg = format!("(The open file is now {path}.)\n\n{msg}");
+            msg = if document.is_some() {
+                format!("(The open file is now {path}.)\n\n{msg}")
+            } else {
+                format!("(No document is open. The project folder is {dir}.)\n\n{msg}")
+            };
             self.agent.told = Some(path.clone());
             if let Some(b) = &mut self.agent.backend {
                 b.set_file(Path::new(&path));

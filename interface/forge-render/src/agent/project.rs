@@ -5,7 +5,13 @@ use std::path::{Component, Path, PathBuf};
 pub fn root(file: &Path) -> PathBuf {
     forge_history::History::open(file)
         .map(|h| h.work().to_path_buf())
-        .unwrap_or_else(|| file.parent().unwrap_or(Path::new(".")).to_path_buf())
+        .unwrap_or_else(|| {
+            if file.is_dir() {
+                file.to_path_buf()
+            } else {
+                file.parent().unwrap_or(Path::new(".")).to_path_buf()
+            }
+        })
 }
 
 fn permitted(name: &str) -> bool {

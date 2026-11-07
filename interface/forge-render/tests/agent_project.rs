@@ -585,3 +585,233 @@ fn an_agent_turn_refreshes_a_release_badge_even_without_file_edits() {
     drop(view);
     std::fs::remove_dir_all(root).unwrap();
 }
+
+#[test]
+fn empty_projects_can_chat_then_create_the_first_part_without_resetting_the_conversation() {
+    use forge_render::shell::{
+        agent::Entry,
+        agent_settings::{AgentSettings, Kind},
+    };
+    use std::os::unix::fs::PermissionsExt;
+    for with_git in [false, true] {
+        let Ok(mut view) = forge_render::gui::Headless::new((1400.0, 900.0), 1.0) else {
+            return;
+        };
+        let root = scratch();
+        let _history = with_git.then(|| init(&root));
+        let program = root.join("fake-codex");
+        let script = format!(
+            r#"#!/bin/sh
+cat > prompt.txt
+printf '%s\n' "$@" >> arguments.txt
+printf '{{"type":"thread.started","thread_id":"project-chat"}}\n'
+if [ -f chatted ]; then
+    mkdir -p ../parts
+    cat > ../parts/first.fg <<'PART'
+{PART}
+PART
+else
+    touch chatted
+fi
+printf '{{"type":"item.completed","item":{{"id":"m","type":"agent_message","text":"We can work on this project."}}}}\n'
+printf '{{"type":"turn.completed","usage":{{}}}}\n'
+"#
+        );
+        std::fs::write(&program, script).unwrap();
+        std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o755)).unwrap();
+        view.gui.agent.project_dir = Some(root.clone());
+        view.gui.agent.program = Some(program.display().to_string());
+        view.gui.agent.cwd = Some(root.join(".agent-run"));
+        view.gui.agent.settings_file = Some(root.join("unused-agent.toml"));
+        view.step();
+        AgentSettings {
+            kind: Kind::Codex,
+            trusted: vec![root.display().to_string()],
+            ..Default::default()
+        }
+        .write_extra(&mut view.gui.shell.settings.extra);
+        view.step();
+        assert!(view.gui.agent_path().is_none());
+        assert_eq!(view.gui.shell.agent.project.as_deref(), root.to_str());
+        assert!(view.click("side:tab:Agent"));
+        view.step();
+        for (turn, message) in [
+            "Let's discuss the telescope design",
+            "Create the first part in parts/first.fg",
+            "Describe the project folder",
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            assert!(view.click("agent:input"));
+            view.step();
+            view.text(message);
+            view.step();
+            assert_eq!(
+                view.gui.shell.agent.input, message,
+                "input enabled without a part"
+            );
+            assert!(view.click("agent:send"));
+            let started = std::time::Instant::now();
+            loop {
+                view.step();
+                let replies = view
+                    .gui
+                    .shell
+                    .agent
+                    .entries
+                    .iter()
+                    .filter(|e| matches!(e, Entry::Agent { .. }))
+                    .count();
+                if !view.gui.shell.agent.running && replies > turn {
+                    break;
+                }
+                assert!(
+                    started.elapsed().as_secs() < 60,
+                    "turn {turn} failed: {:?}",
+                    view.gui.shell.agent.entries
+                );
+                std::thread::sleep(std::time::Duration::from_millis(2));
+            }
+            assert!(view.gui.shell.agent.problem.is_none());
+            if turn == 0 {
+                assert!(
+                    view.gui.agent_path().is_none(),
+                    "chat doesn't fabricate a document"
+                );
+                assert!(
+                    !project::files(&root)
+                        .iter()
+                        .any(|p| p.extension().is_some_and(|e| e == "fg"))
+                );
+                assert!(view.gui.agent.turns.done.is_empty());
+            } else {
+                assert_eq!(
+                    view.gui.agent_path().as_deref(),
+                    root.join("parts/first.fg").to_str()
+                );
+            }
+            assert_eq!(view.gui.shell.agent.project.as_deref(), root.to_str());
+        }
+        let arguments = std::fs::read_to_string(root.join(".agent-run/arguments.txt")).unwrap();
+        assert_eq!(arguments.lines().filter(|s| *s == "resume").count(), 2);
+        assert_eq!(
+            arguments.lines().filter(|s| *s == root.to_str().unwrap()).count(),
+            3,
+            "project boundary stays at the launch folder"
+        );
+        assert!(
+            !view
+                .gui
+                .shell
+                .agent
+                .entries
+                .iter()
+                .any(|e| matches!(e,Entry::Note{text,..} if text.contains("new conversation")))
+        );
+        drop(view);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+}
+
+#[test]
+fn directory_context_uses_the_directory_and_a_project_prompt_without_a_fake_document() {
+    let root = scratch();
+    assert_eq!(project::root(&root), root);
+    let prompt = forge_render::agent::system_prompt(&root);
+    assert!(prompt.contains("No saved CAD document is open"));
+    assert!(prompt.contains("Do not require the user to open or save a part"));
+    assert!(!prompt.contains("The open file is"));
+    assert!(project::files(&root).is_empty());
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+#[ignore = "uses installed Codex and the user's model access"]
+fn codex_live_can_discuss_an_empty_project_in_the_app_without_an_open_part() {
+    use forge_render::shell::{
+        agent::Entry,
+        agent_settings::{AgentSettings, Kind},
+    };
+    let Ok(mut view) = forge_render::gui::Headless::new((1400.0, 900.0), 1.0) else {
+        return;
+    };
+    let root = scratch();
+    let _history = init(&root);
+    view.gui.agent.project_dir = Some(root.clone());
+    view.gui.agent.cwd = Some(root.join(".agent-run"));
+    view.gui.agent.settings_file = Some(root.join("unused-agent.toml"));
+    view.gui.agent.mcp_exe = Some(PathBuf::from(env!("CARGO_BIN_EXE_forge-app")));
+    view.step();
+    AgentSettings {
+        kind: Kind::Codex,
+        trusted: vec![root.display().to_string()],
+        ..Default::default()
+    }
+    .write_extra(&mut view.gui.shell.settings.extra);
+    view.step();
+    assert!(view.gui.agent_path().is_none());
+    assert!(view.click("side:tab:Agent"));
+    view.step();
+    assert!(view.click("agent:input"));
+    view.step();
+    view.text("This is an empty telescope project. Call project_info to inspect the project, then suggest a first mechanical design step in one sentence. Discuss only; do not create or edit any files.");
+    view.step();
+    assert!(view.click("agent:send"));
+    let started = std::time::Instant::now();
+    loop {
+        view.step();
+        if !view.gui.shell.agent.running {
+            break;
+        }
+        assert!(
+            started.elapsed().as_secs() < 120,
+            "live chat completes: {:?}",
+            view.gui.shell.agent.entries
+        );
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    assert!(
+        view.gui.shell.agent.problem.is_none(),
+        "{:?}",
+        view.gui.shell.agent.problem
+    );
+    assert!(
+        view.gui
+            .shell
+            .agent
+            .entries
+            .iter()
+            .any(|e| matches!(e,Entry::Agent{text} if !text.trim().is_empty())),
+        "{:?}",
+        view.gui.shell.agent.entries
+    );
+    assert!(
+        view.gui
+            .shell
+            .agent
+            .entries
+            .iter()
+            .any(|e| matches!(e,Entry::Tool{name,..} if name.contains("project_info"))),
+        "{:?}",
+        view.gui.shell.agent.entries
+    );
+    assert!(
+        !view
+            .gui
+            .shell
+            .agent
+            .entries
+            .iter()
+            .any(|e| matches!(e, Entry::Note { error: true, .. })),
+        "{:?}",
+        view.gui.shell.agent.entries
+    );
+    assert!(view.gui.agent_path().is_none());
+    assert!(
+        project::files(&root).is_empty(),
+        "discussion mustn't fabricate a part"
+    );
+    drop(view);
+    std::fs::remove_dir_all(root).unwrap();
+}

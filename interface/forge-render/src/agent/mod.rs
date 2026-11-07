@@ -94,7 +94,14 @@ impl Watch {
 
 /// What the agent is told it is, appended to its own system prompt.
 pub fn system_prompt(file: &Path) -> String {
-    let f = file.display();
+    let context = if file.is_dir() {
+        "No saved CAD document is open. You can discuss the project, organize folders, and create the first document when requested. Do not require the user to open or save a part before talking.".to_string()
+    } else {
+        format!(
+            "The open file is {}, a Forge (.fg) part, assembly or drawing.",
+            file.display()
+        )
+    };
     let dir = project::root(file).display().to_string();
     let check = "Check your work with the app's fg tools (fg_run builds a file and lists its errors and warnings, \
                  fg_check checks without building, fg_edit applies a typed edit op as the errors' fixes give them, \
@@ -102,8 +109,8 @@ pub fn system_prompt(file: &Path) -> String {
                  each takes `file`, a .fg file's project-relative path. Use the app tools instead of shell commands.";
     format!(
         "You are ForgeCAD's in-app agent, in the Agent tab beside the browser. \
-         The open file is {f}, a Forge (.fg) part, assembly or drawing. \
-         Make the change asked by editing that file in place; the app reloads it as you write and shows your change as one undo step. \
+         {context} \
+         When a document is open, make the change asked by editing that file in place; the app reloads it as you write and shows your change as one undo step. \
          The project root is {dir}. All app file paths are relative to this root, including files in nested directories. A new .fg file is opened when you write it. Use project_enable_history only if the user asks to turn history on; never invent a name or email. \
          Use project_info, project_read, project_write and project_mkdir to inspect and organize parts/, assemblies/, drawings/ and docs/ when asked. Existing project_write calls require the exact previous text in old. You may also use your file editing tools; don't make scratch copies (any you need go in a hidden .name.fg there). \
          The person may switch the open file between messages; a message then says which file is open now. \

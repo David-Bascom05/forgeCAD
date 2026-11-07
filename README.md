@@ -117,9 +117,11 @@ set in Agent settings; leave it blank for the CLI default. ForgeCAD starts Codex
 with its own app tools and isolated configuration, keeps the conversation across
 messages, and reloads its file changes into the document's undo history.
 
-All three backends share project and version tools. The repository containing the
-open document is the project root; without a repository, its containing folder
-is used. Agents can create folders and read/write `.fg`, `.md`, `.txt`, and `.csv`
+All three backends share project and version tools. No open part is required to
+chat: launch `forgecad` from a project folder to discuss or set up an empty project.
+The Agent tab shows the project folder and opens the first part when it is created.
+The repository containing an open document is the project root; without a
+repository, its containing folder is used. Agents can create folders and read/write `.fg`, `.md`, `.txt`, and `.csv`
 files across the project, list history, create named versions, compare, restore,
 list releases, issue requested releases, and regenerate release exports. New
 files create their parent folders. Existing-file writes require the exact old

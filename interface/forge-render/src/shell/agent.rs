@@ -153,6 +153,7 @@ pub struct AgentTab {
     pub problem: Option<Problem>,
     /// The open file's name, for the context line.
     pub file: Option<String>,
+    pub project: Option<String>,
     pub settings: AgentSettings,
     pub switcher: bool,
     pub out: Vec<AgentAct>,
@@ -807,8 +808,7 @@ impl Shell {
         let drawing = self.drawing.as_ref().map(|d| d.name());
         self.agent.file = drawing
             .or_else(|| self.fg.as_ref().map(|f| base(&f.file).to_string()))
-            .filter(|f| !f.is_empty())
-            .or_else(|| (!self.name.is_empty()).then(|| self.name.clone()));
+            .filter(|f| !f.is_empty());
         let p = ui.painter().clone();
         let w = area.width();
 
@@ -845,7 +845,7 @@ impl Shell {
         let ctx_y = bar.bottom();
         let on = match &self.agent.file {
             Some(f) => f.clone(),
-            None => "no file open".into(),
+            None => self.agent.project.clone().unwrap_or_else(|| "project".into()),
         };
         p.text(
             pos2(PAD, ctx_y + 9.0),
@@ -1007,7 +1007,7 @@ impl Shell {
                         Some(f) if self.fg.is_some() || self.drawing.is_some() => {
                             format!("Ask for a change to {f}")
                         }
-                        _ => "Open a Forge part to work on it with the agent".into(),
+                        _ => "Ask about this project, organize its folders, or create your first part".into(),
                     };
                     let g = ui.fonts_mut(|f| f.layout_job(plain_job(&what, sans(13.0), t.ink2, inner)));
                     let (r, _) = ui.allocate_exact_size(vec2(w, g.size().y + 16.0), Sense::hover());
@@ -1455,9 +1455,7 @@ impl Shell {
         } else {
             "Ask the agent"
         };
-        let enabled = self.fg.is_some() || self.drawing.is_some();
-        let resp = child.add_enabled(
-            enabled,
+        let resp = child.add(
             egui::TextEdit::multiline(&mut self.agent.input)
                 .id(id)
                 .font(sans(13.0))
@@ -1472,11 +1470,10 @@ impl Shell {
             && ui
                 .input(|i| i.pointer.interact_pos())
                 .is_some_and(|q| box_r.contains(q) && !text_r.contains(q))
-            && enabled
         {
             resp.request_focus();
         }
-        if send && enabled {
+        if send {
             self.agent.send();
         }
 
@@ -1544,7 +1541,7 @@ impl Shell {
         let running = self.agent.running;
         let word = if running { "Stop" } else { "Send" };
         let sr = Rect::from_min_size(pos2(box_r.right() - 58.0, row_y), vec2(52.0, 22.0));
-        let can = running || (enabled && (!self.agent.input.trim().is_empty() || marks > 0));
+        let can = running || !self.agent.input.trim().is_empty() || marks > 0;
         let s_resp = ui.interact(sr, ui.scope_id().with("agent-send"), Sense::click());
         s_resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, can, word));
         let fill = if running {
