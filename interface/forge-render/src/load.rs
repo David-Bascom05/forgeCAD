@@ -57,7 +57,11 @@ pub fn tool_part(part: &str) -> Result<forge_agent::tools::Part, String> {
         None => Session::default().take_part(part)?,
     };
     if let Some(e) = &p.model.error {
-        return Err(format!("{part}: line {}: {}", p.model.lines[e.at].no, e.message()));
+        return Err(format!(
+            "{part}: line {}: {}",
+            p.model.lines[e.at].no,
+            e.message()
+        ));
     }
     Ok(p)
 }
