@@ -199,6 +199,13 @@ pub fn restore(file: &Path, to: &str, agent: Option<&str>) -> Result<Json, Strin
         .ok_or("restore needs a version or a save, not current")?;
     let mut paths = vec![rel.clone()];
     paths.extend(followed(&h, &rel, &at));
+    // what is on disk now is kept first: a restore never loses work that was never saved
+    for p in &paths {
+        let f = h.abs(p);
+        if f.is_file() {
+            let _ = save(&f, "saved before restore", agent);
+        }
+    }
     let label = match h
         .versions(Some(&rel))
         .map_err(|e| e.to_string())?
