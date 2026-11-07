@@ -24,12 +24,19 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 const RATE: usize = 16_000;
-/// The models looked for, best first.
+/// The models looked for on a GPU, best first: turbo q5_0 is q8_0's accuracy in less memory.
 const MODELS: [&str; 4] = [
-    "ggml-large-v3-turbo-q8_0.bin",
     "ggml-large-v3-turbo-q5_0.bin",
+    "ggml-large-v3-turbo-q8_0.bin",
     "ggml-small.en.bin",
     "ggml-base.en.bin",
+];
+/// On the CPU turbo is too slow to wait for: the small models first.
+const CPU_MODELS: [&str; 4] = [
+    "ggml-small.en.bin",
+    "ggml-base.en.bin",
+    "ggml-large-v3-turbo-q5_0.bin",
+    "ggml-large-v3-turbo-q8_0.bin",
 ];
 /// How often what's heard so far is decoded again while listening.
 const PARTIAL_EVERY: Duration = Duration::from_millis(400);
@@ -45,7 +52,7 @@ fn dir() -> PathBuf {
     cache.join("forgecad").join("speech")
 }
 
-fn model(d: &Path) -> Result<PathBuf, String> {
+fn model(d: &Path, gpu: bool) -> Result<PathBuf, String> {
     if let Some(m) = std::env::var_os("FORGECAD_SPEECH_MODEL") {
         let m = PathBuf::from(m);
         let m = if m.is_absolute() { m } else { d.join(m) };
@@ -55,7 +62,7 @@ fn model(d: &Path) -> Result<PathBuf, String> {
             Err(format!("no model at {}", m.display()))
         };
     }
-    MODELS
+    (if gpu { MODELS } else { CPU_MODELS })
         .iter()
         .map(|m| d.join(m))
         .find(|m| m.is_file())
@@ -64,13 +71,30 @@ fn model(d: &Path) -> Result<PathBuf, String> {
 
 fn check() -> Result<(), String> {
     let d = dir();
-    for (name, needed) in whisper::LIBS {
-        if needed && !d.join("lib").join(name).is_file() {
-            return Err(format!("no speech library in {}", d.join("lib").display()));
-        }
+    let has = |l: &str| {
+        whisper::LIBS
+            .iter()
+            .all(|(name, needed)| !needed || d.join(l).join(name).is_file())
+    };
+    if !has("lib") && !has("lib-cpu") {
+        return Err(format!("no speech library in {}", d.join("lib").display()));
     }
-    model(&d)?;
+    model(&d, true)?;
     Ok(())
+}
+
+/// whisper.cpp's GPU build from `lib/`; where that can't run (no CUDA driver, no device), its
+/// CPU build from `lib-cpu/`, with a model the CPU decodes in time.
+fn open_engine(d: &Path, threads: i32) -> Result<whisper::Whisper, String> {
+    let gpu = whisper::Whisper::load(&d.join("lib"), &|gpu| model(d, gpu), threads);
+    match gpu {
+        Ok(w) => Ok(w),
+        Err(e) if d.join("lib-cpu").is_dir() => {
+            whisper::Whisper::load(&d.join("lib-cpu"), &|gpu| model(d, gpu), threads)
+                .map_err(|e2| format!("{e}; the CPU build: {e2}"))
+        }
+        Err(e) => Err(e),
+    }
 }
 
 /// A line out, whole (the threads share stdout).
@@ -186,7 +210,7 @@ fn engine(
     let d = dir();
     let t0 = Instant::now();
     let threads = std::thread::available_parallelism().map_or(4, |n| n.get().min(8)) as i32;
-    let mut w = match model(&d).and_then(|m| whisper::Whisper::load(&d.join("lib"), &m, threads)) {
+    let mut w = match open_engine(&d, threads) {
         Ok(w) => w,
         Err(e) => {
             out.say("error", &[&e]);
@@ -411,7 +435,7 @@ fn bench(list: &str, prompt: Option<&str>) -> Result<(), String> {
     let d = dir();
     let t0 = Instant::now();
     let threads = std::thread::available_parallelism().map_or(4, |n| n.get().min(8)) as i32;
-    let mut w = whisper::Whisper::load(&d.join("lib"), &model(&d)?, threads)?;
+    let mut w = open_engine(&d, threads)?;
     let load = t0.elapsed().as_secs_f64();
     let never = AtomicBool::new(false);
     let t1 = Instant::now();

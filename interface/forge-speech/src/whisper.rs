@@ -146,7 +146,12 @@ pub const LIBS: [(&str, bool); 6] = [
 ];
 
 impl Whisper {
-    pub fn load(lib_dir: &std::path::Path, model: &std::path::Path, threads: i32) -> Result<Whisper, String> {
+    /// The libraries in `lib_dir`, and the model `pick` names for a GPU (true) or the CPU.
+    pub fn load(
+        lib_dir: &std::path::Path,
+        pick: &dyn Fn(bool) -> Result<std::path::PathBuf, String>,
+        threads: i32,
+    ) -> Result<Whisper, String> {
         let mut libs = Vec::new();
         let mut gpu = None;
         for (name, needed) in LIBS {
@@ -157,12 +162,21 @@ impl Whisper {
                 }
                 continue;
             }
-            libs.push(Lib::open(&p.display().to_string())?);
-            if name.contains("cuda") {
+            let lib = Lib::open(&p.display().to_string())?;
+            // a GPU's library with no GPU behind it (no device, a driver too old) counts as none
+            let count = |sym: &str| -> i32 {
+                // SAFETY: ggml-cuda.h's and ggml-vulkan.h's device counts: int (void)
+                unsafe { lib.get::<unsafe extern "C" fn() -> c_int>(sym).map_or(0, |f| f()) }
+            };
+            if name.contains("cuda") && count("ggml_backend_cuda_get_device_count") > 0 {
                 gpu = Some("CUDA");
-            } else if name.contains("vulkan") && gpu.is_none() {
+            } else if name.contains("vulkan")
+                && gpu.is_none()
+                && count("ggml_backend_vk_get_device_count") > 0
+            {
                 gpu = Some("Vulkan");
             }
+            libs.push(lib);
         }
         let w = libs.last().expect("libwhisper");
         // SAFETY: the signatures are whisper.h's
@@ -210,6 +224,8 @@ impl Whisper {
         }
         // SAFETY: a no-op logger; whisper.cpp's own log would go to stderr
         unsafe { log_set(Some(quiet), std::ptr::null_mut()) };
+        let model = pick(gpu.is_some())?;
+        let model = model.as_path();
         cp.use_gpu = gpu.is_some();
         cp.flash_attn = gpu.is_some();
         let path = CString::new(model.display().to_string()).map_err(|_| "a NUL in the path")?;
