@@ -226,6 +226,8 @@ pub async fn bench_offscreen(
         let overlay = Overlay {
             hud: Some(&hud),
             cube: Some((crate::nav::Nav::new(cam, size, 1.0).cube_place(), None)),
+            face_colours: &[],
+            face_ghosts: &[],
             marks: &[],
             world: &[],
             behind: &[],

@@ -1076,6 +1076,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-git"
+version = "0.1.0"
+
+[[package]]
 name = "forge-gpu"
 version = "0.1.0"
 dependencies = [
@@ -1094,6 +1098,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-history"
+version = "0.1.0"
+dependencies = [
+ "forge-agent",
+ "forge-git",
+]
+
+[[package]]
 name = "forge-lang"
 version = "0.1.0"
 dependencies = [
@@ -1104,7 +1116,9 @@ dependencies = [
  "forge-draw",
  "forge-font",
  "forge-geom",
+ "forge-git",
  "forge-harness",
+ "forge-history",
  "forge-material",
  "forge-math",
  "forge-mesh",
@@ -1172,7 +1186,9 @@ dependencies = [
  "forge-draw",
  "forge-dwg",
  "forge-geom",
+ "forge-git",
  "forge-harness",
+ "forge-history",
  "forge-lang",
  "forge-material",
  "forge-math",

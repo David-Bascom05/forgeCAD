@@ -654,6 +654,13 @@ fn face_mark_exact_vs(@location(0) p: vec3f, @location(2) at: u32) -> ExactMark 
     return ExactMark(g.view_proj * vec4f(w, 1.0), mark_colour(at));
 }
 
+// a face in a colour of its own (a list the frame gives), on the surface's very triangles
+@vertex
+fn face_colour_vs(@location(0) p: vec3f, @location(2) at: u32, @location(3) c: vec4f) -> ExactMark {
+    let w = place(placements[at & PLACE_BITS], p);
+    return ExactMark(g.view_proj * vec4f(w, 1.0), c);
+}
+
 @fragment
 fn exact_mark_fs(in: ExactMark) -> @location(0) vec4f {
     return in.colour;

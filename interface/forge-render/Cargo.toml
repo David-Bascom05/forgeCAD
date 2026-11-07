@@ -29,6 +29,8 @@ forge-doc = { path = "../forge-doc" }
 forge-agent = { path = "../forge-agent" }
 forge-lang = { path = "../forge-lang" }
 forge-harness = { path = "../../kernel/forge-harness" }
+forge-history = { path = "../forge-history" }
+forge-git = { path = "../../kernel/forge-git" }
 forge-draw = { path = "../../kernel/forge-draw" }
 # DWG files: read, shown as a scene, written back (pure Rust, in the browser too)
 forge-dwg = { path = "../../kernel/forge-dwg" }

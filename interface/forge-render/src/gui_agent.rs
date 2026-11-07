@@ -127,6 +127,10 @@ impl Gui {
                 Event::Done { .. } | Event::Problem { .. } => {
                     self.shell.agent.take(e);
                     self.agent_turn_over();
+                    // what the agent left in the file is a save of its own, marked as its
+                    if let Some(p) = self.fg.as_ref().and_then(|s| s.path.clone()) {
+                        self.versions_saved(&p, Some("agent"));
+                    }
                 }
                 e => self.shell.agent.take(e),
             }

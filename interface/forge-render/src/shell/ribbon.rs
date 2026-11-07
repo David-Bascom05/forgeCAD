@@ -487,6 +487,45 @@ fn groups(s: &Shell) -> Vec<Group> {
                 vec![],
             ),
             g(
+                "Versions",
+                vec![
+                    Tool {
+                        name: "Create Version",
+                        icon: "save",
+                        action: fg_open.then_some(Action::Versions(super::versions::VersionsCmd::Create)),
+                        on: false,
+                    },
+                    Tool {
+                        name: "Versions",
+                        icon: "folder",
+                        action: fg_open.then_some(Action::Versions(super::versions::VersionsCmd::Show)),
+                        on: s.agent.tab == super::agent::SideTab::Versions,
+                    },
+                ],
+                vec![
+                    Tool {
+                        name: "Compare",
+                        icon: "measure",
+                        action: fg_open
+                            .then_some(Action::Versions(super::versions::VersionsCmd::CompareCurrent)),
+                        on: s.versions.comparing.is_some(),
+                    },
+                    Tool {
+                        name: "Release",
+                        icon: "file",
+                        action: fg_open.then_some(Action::Versions(super::versions::VersionsCmd::Release)),
+                        on: false,
+                    },
+                    Tool {
+                        name: "Update All",
+                        icon: "redo",
+                        action: (fg_open && !s.versions.pins.is_empty())
+                            .then_some(Action::Versions(super::versions::VersionsCmd::UpdateAll)),
+                        on: false,
+                    },
+                ],
+            ),
+            g(
                 "Options",
                 vec![go("Settings", "options", Action::Settings, s.prefs.open)],
                 vec![],

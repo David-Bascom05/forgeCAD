@@ -46,6 +46,8 @@ mod gui_overlay;
 mod gui_sheet;
 #[path = "gui_thermo.rs"]
 mod gui_thermo;
+#[path = "gui_versions.rs"]
+pub mod gui_versions;
 
 pub type Waker = Arc<dyn Fn() + Send + Sync>;
 
@@ -121,6 +123,7 @@ pub type AsmPlaced = (Vec<crate::fg::Occ>, Vec<(usize, crate::scene::Rows)>);
 pub(crate) type PartAnchors = (String, Result<Vec<String>, String>);
 
 pub struct Gui {
+    pub vers: gui_versions::VersState,
     pub ctx: egui::Context,
     /// The Agent tab's backend and its turns (`gui_agent.rs`).
     pub agent: gui_agent::AgentHost,
@@ -300,6 +303,7 @@ impl Gui {
         let warm = ctx.run_ui(warm_input, |ui| warm_shell.ui(ui));
         warm_shell.out.clear();
         Gui {
+            vers: Default::default(),
             agent: Default::default(),
             apps: Default::default(),
             ctx,
@@ -1559,6 +1563,7 @@ impl Gui {
 
     /// The tool calls and view changes the chrome asked for; the window's things go to the host.
     fn apply(&mut self) -> Vec<Action> {
+        self.versions_frame();
         let mut host = Vec::new();
         for a in std::mem::take(&mut self.shell.out) {
             let a = match a {
@@ -1583,6 +1588,27 @@ impl Gui {
                 continue;
             }
             match a {
+                Action::Versions(c) => {
+                    use crate::shell::versions::{VersionsAct, VersionsCmd};
+                    let v = &mut self.shell.versions;
+                    if self.shell.agent.tab != crate::shell::agent::SideTab::Versions {
+                        self.shell.agent.tab = crate::shell::agent::SideTab::Versions;
+                        v.out.push(VersionsAct::Load);
+                    }
+                    match c {
+                        VersionsCmd::Show => {}
+                        VersionsCmd::Create => v.dialog = Some((String::new(), String::new())),
+                        VersionsCmd::Release => v.release = Some((String::new(), String::new(), false)),
+                        VersionsCmd::UpdateAll => v.out.push(VersionsAct::Update(None)),
+                        // the newest version against the working copy
+                        VersionsCmd::CompareCurrent => {
+                            if let Some(n) = v.nodes.iter().find(|n| n.n.is_some()) {
+                                v.out.push(VersionsAct::Compare(n.save.clone(), "current".into()));
+                            }
+                        }
+                    }
+                    continue;
+                }
                 Action::NewDrawing => {
                     match self.fg.as_ref().and_then(|s| s.path.clone()) {
                         Some(model) => {
@@ -2642,6 +2668,8 @@ impl Gui {
             let overlay = Overlay {
                 hud: None,
                 cube: Some((v.nav.cube_place(), v.nav.cube_hover)),
+                face_colours: &self.vers.colours,
+                face_ghosts: &self.vers.ghosts,
                 marks: &marks,
                 world: &world,
                 behind: &behind,
@@ -4475,10 +4503,15 @@ impl Gui {
             self.shell.out.push(Action::SaveAs);
             return;
         }
-        self.shell.status = match s.save() {
-            Ok(()) => format!("Saved {}", s.path.as_deref().unwrap_or("")),
-            Err(why) => why,
+        let saved = s.save();
+        let path = s.path.clone().unwrap_or_default();
+        self.shell.status = match &saved {
+            Ok(()) => format!("Saved {path}"),
+            Err(why) => why.clone(),
         };
+        if saved.is_ok() {
+            self.versions_saved(&path, None);
+        }
         self.fg_text();
         // the assemblies and drawings open that use it, at once
         self.check_files();

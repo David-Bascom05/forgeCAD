@@ -12,6 +12,7 @@ per_doc!(
     GuiDoc,
     [
         view: Option<View>,
+        vers: gui_versions::VersState,
         back_image_was: Option<String>,
         loading: Option<Receiver<Result<Loaded, String>>>,
         calls: Vec<Call>,

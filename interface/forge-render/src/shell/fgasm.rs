@@ -768,11 +768,17 @@ impl AsmTree {
     fn occ_row(&mut self, cx: &Cx, parent: usize, i: &InstOut) -> usize {
         let parent = (parent != usize::MAX).then_some(parent);
         let (owner, id) = split_path(&i.path);
+        // a part pinned to a version says which, and that a newer one is there
+        let label = match forge_lang::pins::badge(&i.file) {
+            Some((n, Some(m))) => format!("{} · v{n} · v{m} available", type_label(&i.file)),
+            Some((n, None)) => format!("{} · v{n}", type_label(&i.file)),
+            None => type_label(&i.file),
+        };
         let n = self.push(
             parent,
             i.path.clone(),
             id.into(),
-            type_label(&i.file),
+            label,
             NodeKind::Occ,
             "part",
             owner,

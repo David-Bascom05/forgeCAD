@@ -37,6 +37,7 @@ per_doc!(
     [
         tab: usize,
         name: String,
+        versions: super::versions::Versions,
         doc: Option<forge_doc::Document>,
         rows: Vec<super::Row>,
         failed: Option<(forge_doc::ItemId, String)>,
@@ -101,6 +102,7 @@ impl ShellDoc {
         ShellDoc {
             tab: 0,
             name: String::new(),
+            versions: Default::default(),
             doc: None,
             rows: vec![],
             failed: None,

@@ -181,6 +181,8 @@ impl Viewer {
         let overlay = Overlay {
             hud: Some(&hud),
             cube: Some((self.nav.cube_place(), self.nav.cube_hover)),
+            face_colours: &[],
+            face_ghosts: &[],
             marks: &marks,
             world: &[],
             behind: &[],

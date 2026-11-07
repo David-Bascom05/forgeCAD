@@ -322,6 +322,8 @@ fn headless(a: &Args, mut s: Stage) -> Result<(), String> {
             let overlay = Overlay {
                 hud: Some(&hud),
                 cube: Some((nav.cube_place(), None)),
+                face_colours: &[],
+                face_ghosts: &[],
                 marks: &marks,
                 world: &[],
                 behind: &[],
@@ -356,6 +358,8 @@ fn headless(a: &Args, mut s: Stage) -> Result<(), String> {
             let overlay = Overlay {
                 hud: Some(&hud),
                 cube: Some((place, None)),
+                face_colours: &[],
+                face_ghosts: &[],
                 marks: &[],
                 world: &[],
                 behind: &[],

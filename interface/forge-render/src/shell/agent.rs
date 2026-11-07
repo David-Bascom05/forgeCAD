@@ -14,6 +14,7 @@ pub enum SideTab {
     #[default]
     Model,
     Agent,
+    Versions,
 }
 
 /// What a backend says, in order, from its thread.
@@ -634,7 +635,11 @@ impl Shell {
         p.rect_filled(h, 0.0, t.raised);
         p.hline(0.0..=w, y + HEAD_H - 0.5, Stroke::new(1.0, t.line));
         let mut x = 4.0;
-        for (tab, word) in [(SideTab::Model, "Model"), (SideTab::Agent, "Agent")] {
+        for (tab, word) in [
+            (SideTab::Model, "Model"),
+            (SideTab::Agent, "Agent"),
+            (SideTab::Versions, "Versions"),
+        ] {
             let on = self.agent.tab == tab;
             let tw = ui
                 .fonts_mut(|f| f.layout_no_wrap(word.to_string(), semi(12.0), t.ink))
@@ -645,6 +650,9 @@ impl Shell {
             let resp = ui.interact(r, ui.scope_id().with(("side-tab", tab)), Sense::click());
             resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::Tab, true, on, word));
             if resp.clicked() {
+                if tab == SideTab::Versions && self.agent.tab != tab {
+                    self.versions.out.push(super::versions::VersionsAct::Load);
+                }
                 self.agent.tab = tab;
             }
             if on {

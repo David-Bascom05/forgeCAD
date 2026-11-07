@@ -49,6 +49,7 @@ pub mod thermo;
 pub mod thermo_material;
 pub mod thermo_ui;
 mod tree;
+pub mod versions;
 mod visual_style;
 
 pub use crate::nav::NavTool;
@@ -185,6 +186,8 @@ pub enum Action {
     DimCancel,
     /// A Forge file's ribbon command.
     Fg(FgCmd),
+    /// The Manage tab's Versions group: the Versions tab, opened at what was asked.
+    Versions(versions::VersionsCmd),
     /// Measure, Section, iProperties and the centre of gravity.
     Inspect(inspect::InspectCmd),
     /// A sheet metal command, from the Sheet Metal or Flat Pattern tab.
@@ -450,6 +453,7 @@ pub struct Shell {
     pub prefs: settings::Window,
     /// The left panel's Agent tab (`agent.rs`).
     pub agent: agent::AgentTab,
+    pub versions: versions::Versions,
     /// The open documents' tabs, and which is in the window.
     pub doc_tabs: Vec<docs::DocTab>,
     pub active_doc: usize,
@@ -529,6 +533,7 @@ impl Default for Shell {
             settings: Default::default(),
             prefs: Default::default(),
             agent: Default::default(),
+            versions: Default::default(),
             doc_tabs: Vec::new(),
             active_doc: 0,
             close_ask: None,
@@ -1264,10 +1269,17 @@ impl Shell {
             .to_string();
         // an assembly's name is its browser's top row
         let name = if self.is_asm() { String::new() } else { name };
+        let name = if self.versions.revision.is_empty() || name.is_empty() {
+            name
+        } else {
+            format!("{name} · Rev {}", self.versions.revision)
+        };
         self.side_tabs(ui, side.top(), side.width(), &name);
         let tree = Rect::from_min_max(pos2(0.0, side.top() + HEAD_H), pos2(side.right(), side.bottom()));
         if self.agent.tab == agent::SideTab::Agent {
             self.agent_ui(ui, tree);
+        } else if self.agent.tab == agent::SideTab::Versions {
+            self.versions_ui(ui, tree);
         } else if self.is_asm() && self.fg.as_ref().is_some_and(|f| f.asm.is_some()) {
             self.asm_tree(ui, tree);
         } else if self.fg.is_some() {
@@ -1303,6 +1315,7 @@ impl Shell {
 
     fn docs_and_status(&mut self, ui: &mut Ui, s: Rect, bottom: f32) {
         self.close_prompt(&ui.ctx().clone());
+        self.versions_dialogs(&ui.ctx().clone());
         let t = self.theme;
         let p = ui.painter().clone();
         p.rect_filled(
@@ -1370,6 +1383,10 @@ impl Shell {
         self.note("status:markup", mr);
         if m_resp.clicked() {
             self.agent.markup.toggle();
+        }
+        if self.versions.comparing.is_some() {
+            self.compare_status(ui, st);
+            return;
         }
         // a Forge file's issues a click away (an assembly's timings on hover): its checks, a
         // shop's rules, each with its fixes, in the Issues window

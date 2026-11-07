@@ -26,6 +26,8 @@ const TEXT_AT: usize = 64 + 16 + 16 + 3 * 16 + 16 + DOTS * 16 + 10 * 16;
 const DOTS: usize = 8;
 /// Picked faces and edges a frame can mark.
 const MARKS: usize = 256;
+/// The most faces one frame colours from a list (`Overlay::face_colours`).
+pub const FACE_COLOURS: usize = 1 << 15;
 const SELECTED_BIT: u32 = 1 << 31;
 /// A mark's placement's next bit: Measure's second selection.
 const SECOND_BIT: u32 = 1 << 30;
@@ -225,6 +227,12 @@ pub struct Overlay<'a> {
     pub cube: Option<(crate::viewcube::Place, Option<crate::viewcube::Hit>)>,
     /// What's hovered or selected, at most `MARKS` of them.
     pub marks: &'a [Mark],
+    /// Faces drawn in a colour of their own, over the surface (Compare's classes; any list a
+    /// mode needs), at most `FACE_COLOURS` of them; marks still draw over these.
+    pub face_colours: &'a [FaceColour],
+    /// Faces of ghost placements (`Scene::set_ghost`), drawn see-through over everything opaque
+    /// that is behind them: Compare's other side.
+    pub face_ghosts: &'a [FaceColour],
     /// Translucent triangles in the world: the part hides them where it's nearer.
     pub world: &'a [crate::origin::WorldVert],
     /// Drawn only where the part is nearer: what's behind it, seen dimly through.
@@ -247,6 +255,14 @@ pub struct Mark {
     pub selected: bool,
     /// Measure's second selection, drawn in its own colour.
     pub second: bool,
+}
+
+/// A face of a placement and the colour it is drawn in (straight alpha over the surface).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FaceColour {
+    pub placement: u32,
+    pub face: u32,
+    pub rgba: [u8; 4],
 }
 
 /// What was under a pixel.
@@ -369,6 +385,10 @@ pub struct Renderer {
     surface_hidden: wgpu::RenderPipeline,
     face_mark: wgpu::RenderPipeline,
     face_mark_exact: wgpu::RenderPipeline,
+    face_colour: wgpu::RenderPipeline,
+    face_ghost: wgpu::RenderPipeline,
+    face_colours: wgpu::Buffer,
+    face_ghosts: wgpu::Buffer,
     /// Marked edges over everything, after shading: a dark band, then the colour.
     edge_top: wgpu::RenderPipeline,
     edge_halo: wgpu::RenderPipeline,
@@ -749,6 +769,7 @@ impl Renderer {
             step_mode: wgpu::VertexStepMode::Vertex,
             attributes: &wgpu::vertex_attr_array![0 => Float32x3],
         };
+        let positions_at_c = positions_at.clone();
         let instance_2 = wgpu::VertexBufferLayout {
             array_stride: 4,
             step_mode: wgpu::VertexStepMode::Instance,
@@ -768,6 +789,14 @@ impl Renderer {
         let mark_buffers = [Some(positions_at.clone()), Some(instance_2.clone())];
         let pick_buffers = [Some(positions_at), Some(instance_2), Some(faces_at)];
         let line_buffers = [Some(instance_0)];
+        let colour_buffers = [
+            Some(positions_at_c.clone()),
+            Some(wgpu::VertexBufferLayout {
+                array_stride: 8,
+                step_mode: wgpu::VertexStepMode::Instance,
+                attributes: &wgpu::vertex_attr_array![2 => Uint32, 3 => Unorm8x4],
+            }),
+        ];
         let opaque = [Some(wgpu::ColorTargetState {
             format,
             blend: None,
@@ -987,6 +1016,23 @@ impl Renderer {
             msaa,
             &over,
         );
+        let face_colour = pipeline(
+            ("face_colour_vs", "exact_mark_fs"),
+            &colour_buffers,
+            back_culled,
+            &same_depth,
+            msaa,
+            &over,
+        );
+        let seen_not_kept = depth_state(false, wgpu::CompareFunction::LessEqual);
+        let face_ghost = pipeline(
+            ("face_colour_vs", "exact_mark_fs"),
+            &colour_buffers,
+            None,
+            &seen_not_kept,
+            msaa,
+            &over,
+        );
         let edge_top = pipeline(
             ("edge_mark_vs", "mark_fs"),
             &line_buffers,
@@ -1091,6 +1137,18 @@ impl Renderer {
         let marks = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("marks"),
             size: MARKS as u64 * 4,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let face_colours = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("face colours"),
+            size: FACE_COLOURS as u64 * 8,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let face_ghosts = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("face ghosts"),
+            size: FACE_COLOURS as u64 * 8,
             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -1342,6 +1400,10 @@ impl Renderer {
             surface_hidden,
             face_mark,
             face_mark_exact,
+            face_colour,
+            face_ghost,
+            face_colours,
+            face_ghosts,
             edge_top,
             edge_halo,
             dot,
@@ -2038,6 +2100,69 @@ impl Renderer {
     }
 
     /// Draws what's hovered and selected, over what's there.
+    /// Each listed face's own triangles in its colour: at the depth the surface drew them, or,
+    /// for a ghost placement's, see-through wherever nothing opaque is in front.
+    fn draw_face_list(
+        &self,
+        pass: &mut wgpu::RenderPass<'_>,
+        scene: &Scene,
+        list: &[FaceColour],
+        ghost: bool,
+    ) {
+        if list.is_empty() {
+            return;
+        }
+        pass.set_pipeline(if ghost {
+            &self.face_ghost
+        } else {
+            &self.face_colour
+        });
+        pass.set_vertex_buffer(
+            1,
+            if ghost {
+                &self.face_ghosts
+            } else {
+                &self.face_colours
+            }
+            .slice(..),
+        );
+        pass.set_vertex_buffer(0, self.vertices.slice(..));
+        pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint32);
+        let live = self.live_part();
+        let mut by_face: std::collections::HashMap<(u32, u32), std::collections::HashMap<u32, (u32, u32)>> =
+            std::collections::HashMap::new();
+        for (k, c) in list.iter().take(FACE_COLOURS).enumerate() {
+            let Some(pl) = scene.placements.get(c.placement as usize) else {
+                continue;
+            };
+            let part = pl.part;
+            if Some(part) == live {
+                continue;
+            }
+            // a ghost is in no draw: its finest level
+            let Some(lod) = scene.lod_on_screen(c.placement).or(ghost.then_some(0)) else {
+                continue;
+            };
+            let faces = by_face.entry((part, lod)).or_insert_with(|| {
+                self.index[part as usize][lod as usize]
+                    .faces
+                    .iter()
+                    .map(|r| (r.face, (r.first_tri, r.tris)))
+                    .collect()
+            });
+            let Some(&(first, tris)) = faces.get(&c.face) else {
+                continue;
+            };
+            let l = self.lods[part as usize][lod as usize];
+            let k = k as u32;
+            pass.draw_indexed(
+                l.first_index + first * 3..l.first_index + (first + tris) * 3,
+                l.base_vertex,
+                k..k + 1,
+            );
+        }
+    }
+
     fn draw_marks(&self, pass: &mut wgpu::RenderPass<'_>, scene: &Scene, marks: &[Mark]) {
         if marks.is_empty() {
             return;
@@ -2489,6 +2614,20 @@ impl Renderer {
         if !marked.is_empty() {
             self.queue.write_buffer(&self.marks, 0, marked.as_flattened());
         }
+        for (list, buf) in [
+            (overlay.face_colours, &self.face_colours),
+            (overlay.face_ghosts, &self.face_ghosts),
+        ] {
+            if list.is_empty() {
+                continue;
+            }
+            let mut fc = Vec::with_capacity(list.len().min(FACE_COLOURS) * 8);
+            for c in list.iter().take(FACE_COLOURS) {
+                fc.extend_from_slice(&c.placement.to_le_bytes());
+                fc.extend_from_slice(&c.rgba);
+            }
+            self.queue.write_buffer(buf, 0, &fc);
+        }
         self.queue.write_buffer(&self.globals, 0, &bytes);
 
         let uploaded = now_ms();
@@ -2729,6 +2868,10 @@ impl Renderer {
                 }
                 pass.set_bind_group(0, &self.binds, &[]);
             }
+            if self.style.occludes() {
+                self.draw_face_list(&mut pass, scene, overlay.face_colours, false);
+            }
+            self.draw_face_list(&mut pass, scene, overlay.face_ghosts, true);
             self.draw_marks(&mut pass, scene, overlay.marks);
             if self.map_count > 0 {
                 pass.set_pipeline(&self.world);

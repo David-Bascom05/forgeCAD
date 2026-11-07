@@ -53,6 +53,8 @@ pub struct Scene {
     boxes: Vec<crate::explode::Aabb>,
     /// Squashed to nothing (hidden): left out of every draw.
     gone: Vec<bool>,
+    /// Drawn only as a ghost (`Overlay::face_ghosts`): left out of the draws and picks.
+    ghost: Vec<bool>,
     /// Every placement's rows as the GPU holds them, and the bytes changed since the last upload.
     pub rows_bytes: Vec<u8>,
     dirty: Option<(usize, usize)>,
@@ -88,7 +90,7 @@ impl Scene {
         list.clear();
         draws.clear();
         let mut by_part: Vec<(u32, u32)> = (0..self.placements.len())
-            .filter(|&i| !self.gone[i])
+            .filter(|&i| !self.gone[i] && !self.ghost[i])
             .map(|i| (self.placements[i].part, i as u32))
             .collect();
         by_part.sort_unstable();
@@ -106,6 +108,13 @@ impl Scene {
 
     pub fn is_gone(&self, i: usize) -> bool {
         self.gone[i]
+    }
+
+    /// Shows a placement only as a ghost (its listed faces, see-through), or as itself again.
+    pub fn set_ghost(&mut self, i: usize, on: bool) {
+        if let Some(g) = self.ghost.get_mut(i) {
+            *g = on;
+        }
     }
 }
 
@@ -153,6 +162,7 @@ impl Scene {
             offset: vec![[0.0; 3]; n],
             boxes: Vec::new(),
             gone: placements.iter().map(|p| squashed(&p.rows)).collect(),
+            ghost: vec![false; placements.len()],
             placements,
             rows_bytes,
             dirty: None,
@@ -332,7 +342,7 @@ impl Scene {
             (Some(a), Some((b, true))) => away(a, x, y, z, r) || away(b, x, y, z, r),
         };
         for i in 0..self.x.len() {
-            if self.gone[i] {
+            if self.gone[i] || self.ghost[i] {
                 continue;
             }
             let (x, y, z, r) = (self.x[i], self.y[i], self.z[i], -self.r[i]);
