@@ -76,12 +76,16 @@ pub enum Dialog {
         name: String,
         fields: Vec<(String, String)>,
         editing: bool,
+        /// The type being edited as it was worked out: its name and values (a param's).
+        was: Option<forge_lang::harness::TypeOut>,
     },
-    /// The wire library: its rows, a search, and a filter by gauge, conductor or spec.
+    /// The wire library: its rows, a search, the conductor and insulation chips on, and the
+    /// column it is sorted by (and whether rising).
     Library {
         h: usize,
         search: String,
-        filter: usize,
+        chips: Vec<String>,
+        sort: (usize, bool),
         rows: Vec<forge_lang::harness::LibRow>,
         problem: Option<String>,
         picked: Option<usize>,
@@ -321,8 +325,13 @@ impl FgPanel {
                     Some(t) => Dialog::WireType {
                         h,
                         name: t.name.clone(),
-                        fields: t.spec.clone(),
+                        // as written (a param stays the param), else as worked out
+                        fields: first
+                            .filter(|h| h.file.is_none())
+                            .and_then(|h| forge_lang::harness::call_args(&self.source, &h.id, &t.name))
+                            .unwrap_or_else(|| t.spec.clone()),
                         editing: true,
+                        was: Some(t.clone()),
                     },
                     None => Dialog::WireType {
                         h,
@@ -334,6 +343,7 @@ impl FgPanel {
                         ),
                         fields: vec![("od".into(), String::new()), ("source".into(), String::new())],
                         editing: false,
+                        was: None,
                     },
                 }
             }
@@ -343,7 +353,8 @@ impl FgPanel {
                 Dialog::Library {
                     h,
                     search: String::new(),
-                    filter: 0,
+                    chips: vec![],
+                    sort: (1, true),
                     rows,
                     problem: bad.map(|p| p.text()),
                     picked: None,
@@ -576,13 +587,15 @@ pub fn dialog_ops(d: &Dialog, hs: &[HarnessOut]) -> Result<Vec<Op>, String> {
             name,
             fields,
             editing,
+            was,
         } => {
             let h = h(*k)?;
             let name = need(name, "a name")?;
             let line = format!("{name} = {}", wire_type_call(fields)?);
+            let old = was.as_ref().map_or(name.as_str(), |w| w.name.as_str());
             Ok(vec![if *editing {
                 Op::ReplaceFeature {
-                    id: format!("{}{name}", at_end(h).unwrap_or_default()),
+                    id: format!("{}{old}", at_end(h).unwrap_or_default()),
                     text: line,
                 }
             } else {
@@ -682,6 +695,16 @@ impl Shell {
             Dialog::Library { .. } => ("Wire Library", "folder"),
         };
         let mut problem: Option<String> = None;
+        let wide = matches!(d, Dialog::WireType { .. } | Dialog::Library { .. } | Dialog::Wire { .. });
+        if wide {
+            let (o, x, r) = super::harness_look::wide(ctx, &t, v, title, icon, &mut d, &hs, &mut places);
+            ok |= o;
+            close |= x;
+            if let Some(r) = r {
+                self.view_blocks.push(r);
+            }
+        }
+        if !wide {
         egui::Window::new(title)
             .id(egui::Id::unique(title))
             .title_bar(false)
@@ -761,101 +784,7 @@ impl Shell {
                         let axes = vec![String::new(), "x".into(), "y".into(), "z".into()];
                         pick(ui, &t, "Along", along, &axes, "node-along", places);
                     }
-                    Dialog::Wire {
-                        h,
-                        name,
-                        from,
-                        from_pin,
-                        to,
-                        to_pin,
-                        ty,
-                        colour,
-                    } => {
-                        harness_pick(ui, &t, h, &hs, places);
-                        let (conns, _, _, types) = h_of(*h).map(names).unwrap_or_default();
-                        line_edit(ui, &t, "Name", name, "W1", "wire-name", places);
-                        pick(ui, &t, "From connector", from, &conns, "wire-from", places);
-                        line_edit(ui, &t, "From pin", from_pin, "1", "wire-from-pin", places);
-                        pick(ui, &t, "To connector", to, &conns, "wire-to", places);
-                        line_edit(ui, &t, "To pin", to_pin, "1", "wire-to-pin", places);
-                        pick(ui, &t, "Wire type", ty, &types, "wire-type", places);
-                        let base_of_type = h_of(*h)
-                            .and_then(|x| x.types.iter().find(|y| y.name == *ty))
-                            .map(|y| y.get("colour").to_string())
-                            .unwrap_or_default();
-                        colour_rows(ui, &t, colour, &base_of_type, name, places);
-                    }
-                    Dialog::WireType { name, fields, editing, .. } => {
-                        line_edit(ui, &t, "Name", name, "wt1", "wt-name", places);
-                        let _ = editing;
-                        egui::ScrollArea::vertical()
-                            .max_height((v.height() - 160.0).max(240.0))
-                            .id_salt("harness-wt-rows")
-                            .show(ui, |ui| wire_type_rows(ui, &t, fields, places));
-                    }
-                    Dialog::Library {
-                        search,
-                        filter,
-                        rows,
-                        problem,
-                        picked,
-                        ..
-                    } => {
-                        line_edit(ui, &t, "Search", search, "name, gauge, conductor, spec, maker", "lib-search", places);
-                        let by = vec!["All".to_string(), "Gauge".into(), "Conductor".into(), "Spec".into()];
-                        let mut f = by[*filter].clone();
-                        pick(ui, &t, "Match in", &mut f, &by, "lib-filter", places);
-                        *filter = by.iter().position(|x| *x == f).unwrap_or(0);
-                        if let Some(p) = problem {
-                            note(ui, p, DLG_W, t.error);
-                        }
-                        let q = search.trim().to_lowercase();
-                        let keys: &[&str] = match *filter {
-                            1 => &["awg", "mm2"],
-                            2 => &["conductor", "insulation"],
-                            3 => &["spec", "spec_tag"],
-                            _ => &[],
-                        };
-                        let hit = |r: &forge_lang::harness::LibRow| {
-                            q.is_empty()
-                                || if keys.is_empty() {
-                                    r.name.to_lowercase().contains(&q)
-                                        || r.spec.values().any(|v| v.text().to_lowercase().contains(&q))
-                                } else {
-                                    keys.iter().any(|k| r.get(k).to_lowercase().contains(&q))
-                                }
-                        };
-                        egui::ScrollArea::vertical()
-                            .max_height(320.0)
-                            .min_scrolled_height(240.0)
-                            .auto_shrink([false, true])
-                            .id_salt("harness-lib-rows")
-                            .show(ui, |ui| {
-                                for (i, r) in rows.iter().enumerate().filter(|x| hit(x.1)) {
-                                    let words = format!(
-                                        "{}  {}{}  {}  {}  {}",
-                                        r.name,
-                                        if r.get("awg").is_empty() { r.get("mm2") + " mm²" } else { r.get("awg") + " AWG" },
-                                        "",
-                                        r.get("conductor"),
-                                        r.get("insulation"),
-                                        r.get("spec")
-                                    );
-                                    ui.horizontal(|ui| {
-                                        ui.add_space(14.0);
-                                        swatch(ui, &r.get("colour"), &r.name, 14.0);
-                                        let b = ui.selectable_label(*picked == Some(i), egui::RichText::new(words).font(sans(12.0)));
-                                        places.push((format!("harness:lib:{i}"), b.rect));
-                                        if b.clicked() {
-                                            *picked = Some(i);
-                                        }
-                                    });
-                                }
-                            });
-                        if rows.is_empty() {
-                            note(ui, "no wire library: wires/*.csv beside the document, or ~/.config/forgecad/wires/", DLG_W, t.ink2);
-                        }
-                    }
+                    Dialog::Wire { .. } | Dialog::WireType { .. } | Dialog::Library { .. } => {}
                     Dialog::Route { h } => {
                         harness_pick(ui, &t, h, &hs, places);
                         if let Some(ho) = h_of(*h) {
@@ -947,6 +876,7 @@ impl Shell {
                     close |= x;
                 }
             });
+        }
         let keep = match (&mut d, ok || apply) {
             (_, false) => !close,
             (Dialog::Route { h }, true) => {
@@ -1079,118 +1009,6 @@ fn colour_text(c: &[String; 3]) -> String {
         .join("/")
 }
 
-/// IEC 60757's colours, as the pickers offer them.
-const CODES: [&str; 15] = [
-    "", "BK", "BN", "RD", "OG", "YE", "GN", "BU", "VT", "GY", "WH", "PK", "GD", "TQ", "SR",
-];
-
-/// A wire's colour as a round swatch: its base, a stripe for each tracer.
-fn swatch(ui: &mut egui::Ui, code: &str, name: &str, size: f32) {
-    let (r, _) = ui.allocate_exact_size(vec2(size, size), egui::Sense::hover());
-    let p = ui.painter();
-    let c32 = |c: [f32; 3]| {
-        egui::Color32::from_rgb((c[0] * 255.0) as u8, (c[1] * 255.0) as u8, (c[2] * 255.0) as u8)
-    };
-    let codes = forge_lang::harness::colour_codes(code);
-    p.circle_filled(r.center(), size / 2.0, c32(forge_lang::harness::rgb(code, name)));
-    for (k, s) in codes.iter().skip(1).enumerate() {
-        let x = r.center().x + (k as f32 - 0.5 * (codes.len() as f32 - 2.0)) * size * 0.28;
-        p.line_segment(
-            [pos2(x, r.top() + 2.0), pos2(x, r.bottom() - 2.0)],
-            egui::Stroke::new(size * 0.18, c32(forge_lang::harness::rgb(s, name))),
-        );
-    }
-    p.circle_stroke(
-        r.center(),
-        size / 2.0,
-        egui::Stroke::new(1.0, egui::Color32::from_gray(90)),
-    );
-}
-
-/// The colour pickers: base and two tracer stripes, with the live swatch.
-fn colour_rows(
-    ui: &mut egui::Ui,
-    t: &Theme,
-    c: &mut [String; 3],
-    of_type: &str,
-    name: &str,
-    places: &mut Vec<(String, Rect)>,
-) {
-    let codes: Vec<String> = CODES.iter().map(|x| x.to_string()).collect();
-    for (k, label) in ["Colour", "Stripe", "Second stripe"].iter().enumerate() {
-        pick(
-            ui,
-            t,
-            label,
-            &mut c[k],
-            &codes,
-            &format!("wire-colour-{k}"),
-            places,
-        );
-    }
-    let code = colour_text(c);
-    let shown = if code.is_empty() {
-        of_type.to_string()
-    } else {
-        code
-    };
-    row(ui, t, "Looks", DLG_W, 30.0, |ui| {
-        swatch(ui, &shown, name, 22.0);
-        ui.label(
-            egui::RichText::new(if shown.is_empty() {
-                "palette".to_string()
-            } else {
-                shown.clone()
-            })
-            .font(sans(12.0)),
-        );
-    });
-}
-
-/// The Wire Type dialog's fields, by `SPEC`'s groups, and the live swatch.
-fn wire_type_rows(
-    ui: &mut egui::Ui,
-    t: &Theme,
-    fields: &mut Vec<(String, String)>,
-    places: &mut Vec<(String, Rect)>,
-) {
-    let mut group = "";
-    for &(k, g, num) in forge_lang::harness::SPEC {
-        if g != group {
-            heading(ui, t, g, DLG_W);
-            group = g;
-        }
-        let mut v = fields
-            .iter()
-            .find(|x| x.0 == k)
-            .map(|x| x.1.clone())
-            .unwrap_or_default();
-        let hint = match k {
-            "conductor" => "Cu, tinned Cu, Al, CCA",
-            "insulation" => "PVC, XLPE, PTFE, silicone, TPE, PE",
-            "spec" => "UL 1007, SAE J1128 TXL, ISO 6722, MIL-W-22759",
-            "colour" => "RD, WH/BU, GN-YE, #3060c0",
-            "od" => "needed",
-            _ if num => "",
-            _ => "",
-        };
-        line_edit(ui, t, &label_of(k), &mut v, hint, &format!("wt-{k}"), places);
-        match fields.iter_mut().find(|x| x.0 == k) {
-            Some(f) => f.1 = v,
-            None if !v.is_empty() => fields.push((k.to_string(), v)),
-            None => {}
-        }
-        if k == "colour" {
-            let c = fields
-                .iter()
-                .find(|x| x.0 == "colour")
-                .map(|x| x.1.clone())
-                .unwrap_or_default();
-            row(ui, t, "Looks", DLG_W, 30.0, |ui| swatch(ui, &c, "", 22.0));
-        }
-    }
-}
-
 /// A field's words in a dialog or a report.
 pub fn label_of(k: &str) -> String {
     match k {
@@ -1228,9 +1046,14 @@ pub fn wire_type_call(fields: &[(String, String)]) -> Result<String, String> {
         else {
             continue;
         };
+        // a number, a param's name or an expression as written; words quoted unless they are
+        let name = v.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '.') && !v.starts_with(|c: char| c.is_ascii_digit());
         if num {
-            v.parse::<f64>()
-                .map_err(|_| format!("{} is not a number", label_of(k)))?;
+            if v.parse::<f64>().is_err() && !name && !v.contains(['(', '+', '*', '/', '-']) {
+                return Err(format!("{} is not a number", label_of(k)));
+            }
+            args.push(format!("{k}: {v}"));
+        } else if v.starts_with('"') && v.ends_with('"') && v.len() >= 2 {
             args.push(format!("{k}: {v}"));
         } else {
             args.push(format!("{k}: \"{}\"", v.replace('"', "")));
@@ -1244,6 +1067,23 @@ pub fn wire_type_call(fields: &[(String, String)]) -> Result<String, String> {
         return Err("a source is needed".into());
     }
     Ok(format!("wire_type({})", args.join(", ")))
+}
+
+/// Where a harness problem is: the row it names, and the point (if it has one).
+pub fn locate(p: &HarnessProblem) -> Option<(String, Option<[f64; 3]>)> {
+    let pt = |q: &forge_math::Point3| Some([q.x, q.y, q.z]);
+    match p {
+        HarnessProblem::WireClash { harness, wire, at, .. } => Some((format!("h:{harness}:w:{wire}"), pt(at))),
+        HarnessProblem::BendTooTight { harness, segment, at, .. } => {
+            Some((format!("h:{harness}:s:{segment}"), pt(at)))
+        }
+        HarnessProblem::KinkAtNode { harness, wire, .. }
+        | HarnessProblem::NoPath { harness, wire, .. }
+        | HarnessProblem::PathBroken { harness, wire, .. }
+        | HarnessProblem::BreakoutTooTight { harness, wire, .. } => Some((format!("h:{harness}:w:{wire}"), None)),
+        HarnessProblem::SegmentEmpty { harness, segment } => Some((format!("h:{harness}:s:{segment}"), None)),
+        _ => None,
+    }
 }
 
 /// A harness item's properties, for the browser's properties window: its title and rows.
@@ -1481,5 +1321,22 @@ mod tests {
                 text: "harness loom(slack: ratio(0.03), round_up: 5) {\n}".into()
             }]
         );
+    }
+
+    #[test]
+    fn an_edited_wire_type_keeps_its_params_and_words() {
+        let f = |k: &str, v: &str| (k.to_string(), v.to_string());
+        let fields = vec![
+            f("awg", "g22"),
+            f("od", "od22"),
+            f("conductor", "\"Cu\""),
+            f("insulation", "PVC"),
+            f("source", "\"example\""),
+        ];
+        assert_eq!(
+            wire_type_call(&fields).unwrap(),
+            "wire_type(conductor: \"Cu\", awg: g22, insulation: \"PVC\", od: od22, source: \"example\")"
+        );
+        assert!(wire_type_call(&[f("od", "1.6")]).is_err(), "a source is needed");
     }
 }

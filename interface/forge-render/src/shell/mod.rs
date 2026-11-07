@@ -28,6 +28,7 @@ pub mod fgdialog;
 mod fgedit;
 pub mod fgsketch;
 pub mod fgtool;
+pub mod harness_look;
 pub mod harness_ui;
 pub mod icons;
 pub mod inspect;

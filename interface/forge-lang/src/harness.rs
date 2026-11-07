@@ -2815,6 +2815,30 @@ fn written_wires(src: &str, body: &[Stmt]) -> Vec<(CsvWire, Span)> {
     out
 }
 
+/// A harness statement's call's keyword arguments as written (`awg: g22`), by its name.
+pub fn call_args(src: &str, harness: &str, name: &str) -> Option<Vec<(String, String)>> {
+    let prog = crate::syntax::parse(src).ok()?;
+    let (_, body) = block_of(&prog, harness).ok()?;
+    body.iter().find_map(|s| {
+        let StmtKind::Assign { name: n, value } = &s.kind else {
+            return None;
+        };
+        let ExprKind::Call(_, args) = &value.kind else {
+            return None;
+        };
+        (n == name).then(|| {
+            args.iter()
+                .filter_map(|a| {
+                    let (k, _) = a.name.as_ref()?;
+                    let t = src.get(a.value.span.lo as usize..a.value.span.hi as usize)?;
+                    let k = if k == "color" { "colour" } else { k.as_str() };
+                    Some((k.to_string(), t.to_string()))
+                })
+                .collect()
+        })
+    })
+}
+
 /// A harness's statements in a document, and the prefix its ids take (none in a harness file).
 fn block_of<'a>(prog: &'a [Stmt], harness: &str) -> Result<(String, &'a [Stmt]), String> {
     match prog.iter().find_map(|s| match &s.kind {

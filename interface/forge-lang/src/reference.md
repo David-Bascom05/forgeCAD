@@ -1112,7 +1112,8 @@ harness loom(slack: ratio(0.03), round_up: 5, insert: 4) {
   `current` gives its voltage drop (its cut length times its type's ohm/km, times the current);
   without
   `through:` the shortest chain (Dijkstra on the segments' polyline lengths). The colour is an
-  IEC 60757 code (`RD`, `BK` ..) or a word, then up to two tracer stripes (`WH/BU`, `GN-YE`, or
+  IEC 60757 code (`RD`, `BK` ..) or a word, the first the base colour, then up to two tracer
+  stripes (`WH/BU` is white with a blue tracer; `GN-YE`, or
   DIN 47100's pairs written together, `WHGN`), or `#rrggbb`; it, else the type's, else a palette
   colour by the wire's name, is what the wire is drawn in, its tracers as helical bands.
 - Drawn, every wire is its own tube: in each segment a slot of the wires' circle packing (larger

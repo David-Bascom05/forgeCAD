@@ -2895,15 +2895,20 @@ impl Shell {
         // a harness row's: its wire, type or segment, every field
         if let Some((title, rows)) = super::harness_ui::item_props(&a.harnesses, &key) {
             let mut close = false;
+            let laid = !key.contains(":s:") || key.matches(':').count() > 3;
             let r = Self::window(
                 "Properties",
                 "props",
                 t,
                 pos2(v.left() + 16.0, v.top() + 56.0),
-                380.0,
+                if laid { 560.0 } else { 380.0 },
             )
             .show_placed(ctx, places, |ui, places| {
-                close = dialog_head(ui, t, "wire", &title, "asm:props", places);
+                close = dialog_head(ui, t, "wire", "Properties", "asm:props", places);
+                if laid && super::harness_look::props(ui, t, &a.harnesses, &key, v.height() - 120.0) {
+                    return;
+                }
+                let _ = &title;
                 egui::Grid::new("harness-props")
                     .num_columns(2)
                     .spacing(vec2(12.0, 4.0))
@@ -3348,6 +3353,19 @@ impl Shell {
         out: &mut Vec<FgAct>,
         places: &mut Vec<(String, Rect)>,
     ) {
+        // a harness's problem: the wire lit and the view turned to where it is
+        if let AsmIssue::Harness(p) = issue
+            && let Some((key, at)) = super::harness_ui::locate(p)
+        {
+            if Self::fg_button(ui, "Show", format!("asm:show:{k}"), places) {
+                a.selected = Some(key);
+                out.push(FgAct::AsmShow);
+                if let Some(at) = at {
+                    out.push(FgAct::Locate(at, 30.0));
+                }
+            }
+            return;
+        }
         let (occ, items) = named(issue);
         if occ.is_empty() && items.is_empty() {
             return;

@@ -234,6 +234,8 @@ pub enum FgAct {
     Refuse(super::fgtool::ToolError),
     /// An assembly's view changed (selection, hidden, isolated, highlighted): redraw its parts.
     AsmShow,
+    /// The view turned to a place: its middle and how far round it to show (mm).
+    Locate([f64; 3], f64),
     /// Run the assembly's overlap check.
     AsmCheck,
     /// Where the interferences are and what faces they touch.

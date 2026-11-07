@@ -3701,6 +3701,12 @@ impl Gui {
                 }
                 crate::shell::fg::FgAct::Refuse(e) => self.fg_refuse(e),
                 crate::shell::fg::FgAct::AsmShow => self.asm_show(),
+                crate::shell::fg::FgAct::Locate(c, r) => {
+                    if let Some(v) = &mut self.view {
+                        v.nav.fit_sphere(c.map(|x| x as f32), r as f32);
+                        v.mark_dirty();
+                    }
+                }
                 crate::shell::fg::FgAct::AsmCheck => {
                     if let Some(s) = &mut self.fg {
                         s.check_overlap();
