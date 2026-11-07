@@ -128,7 +128,7 @@ outside params, no world placement after the first sketch, no positional selecti
 
 All 15 bench parts are ported whole to `parts/bench/*.fg` (threads, text and body-targeted cuts
 included) and match their .fc parts exactly in volume, area, centroid and inertia
-(`tests/bench_ports.rs`, `tests/ports.rs`); `cargo run -p forge-lang --example benchparts bits`
+(`tests/bench_ports.rs`, `tests/ports.rs`); `cargo run -p forge-lang --example benchfg bits`
 hashes what each .fg run builds, for the bit gate (`tools/speed/bits.txt`).
 
 Timings (release, niced, the machine shared with other agents; median of 5 for cold):
