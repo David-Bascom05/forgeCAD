@@ -127,7 +127,91 @@ pub struct TypeDef {
     pub min_bend: f64,
     pub colour: String,
     pub source: String,
+    /// Everything else it is specified by (`SPEC`), as given.
+    pub spec: std::collections::BTreeMap<String, SpecVal>,
     pub span: Span,
+}
+
+/// A wire type's specification field: a number or words.
+#[derive(Clone, Debug, PartialEq)]
+pub enum SpecVal {
+    Num(f64),
+    Text(String),
+}
+
+impl SpecVal {
+    pub fn text(&self) -> String {
+        match self {
+            SpecVal::Num(v) => fmt(*v),
+            SpecVal::Text(t) => t.clone(),
+        }
+    }
+    pub fn num(&self) -> Option<f64> {
+        match self {
+            SpecVal::Num(v) => Some(*v),
+            SpecVal::Text(_) => None,
+        }
+    }
+}
+
+/// What a wire type may be specified by, in the order dialogs, reports and CSVs show it: its key,
+/// its group, and whether it is a number (lengths in mm, temperature in deg C, volts, ohm/km).
+/// Only the OD is needed (or a gauge to work one from); a spec or standard is words and a tag,
+/// never its tables.
+pub const SPEC: &[(&str, &str, bool)] = &[
+    ("conductor", "Conductor", false),
+    ("awg", "Conductor", true),
+    ("mm2", "Conductor", true),
+    ("strands", "Conductor", true),
+    ("strand_d", "Conductor", true),
+    ("conductor_d", "Conductor", true),
+    ("ohm_km", "Conductor", true),
+    ("insulation", "Insulation", false),
+    ("wall", "Insulation", true),
+    ("od", "Insulation", true),
+    ("colour", "Insulation", false),
+    ("temp", "Ratings", true),
+    ("volts", "Ratings", true),
+    ("min_bend", "Ratings", true),
+    ("spec", "Ratings", false),
+    ("spec_tag", "Ratings", false),
+    ("maker", "Part numbers", false),
+    ("mpn", "Part numbers", false),
+    ("part_number", "Part numbers", false),
+    ("source", "Source", false),
+];
+
+/// Resistivity at 20 deg C (ohm mm2 / m) of the conductor materials whose value is a published
+/// constant: annealed copper (IEC 60028's 1/58) and hard-drawn aluminium (IEC 60889). Tinned
+/// copper and CCA vary by maker: give ohm_km.
+fn resistivity(material: &str) -> Option<f64> {
+    match material.trim().to_ascii_lowercase().as_str() {
+        "cu" | "copper" | "bare cu" => Some(1.0 / 58.0),
+        "al" | "aluminium" | "aluminum" => Some(0.028264),
+        _ => None,
+    }
+}
+
+/// A wire type's resistance (ohm per km): as given, or from its cross-section and a conductor
+/// whose resistivity is a constant; and whether it was worked out.
+pub fn ohm_km(spec: &std::collections::BTreeMap<String, SpecVal>) -> Option<(f64, bool)> {
+    if let Some(v) = spec.get("ohm_km").and_then(SpecVal::num) {
+        return Some((v, false));
+    }
+    let rho = resistivity(
+        &spec
+            .get("conductor")
+            .map(SpecVal::text)
+            .unwrap_or_else(|| "cu".into()),
+    )?;
+    let area = spec.get("mm2").and_then(SpecVal::num).or_else(|| {
+        let d = spec
+            .get("conductor_d")
+            .and_then(SpecVal::num)
+            .or_else(|| spec.get("awg").and_then(SpecVal::num).map(fh::awg_d))?;
+        Some(std::f64::consts::PI / 4.0 * d * d)
+    })?;
+    (area > 0.0).then(|| (rho / area * 1000.0, true))
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -198,6 +282,8 @@ pub struct WireDef {
     pub to: PinDef,
     pub path: Option<Vec<usize>>,
     pub colour: Option<String>,
+    /// The current it carries (A), for its voltage drop.
+    pub current: Option<f64>,
     pub span: Span,
 }
 
@@ -1067,21 +1153,33 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
 }
 
 fn wire_type(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
-    let a = Args::bind(
-        ev,
-        "wire_type",
-        &["name", "awg", "od", "min_bend", "colour", "source", "color"],
-        args,
-        span,
-    )?;
+    let mut names: Vec<&'static str> = vec!["name", "color"];
+    names.extend(SPEC.iter().map(|f| f.0));
+    let a = Args::bind(ev, "wire_type", &names, args, span)?;
     let id = ev.take_id("wire_type", span)?;
     let row = match text(&a, "name")? {
         Some(n) => Some(library_row(ev, &n, a.span("name"))?),
         None => None,
     };
-    let awg = plain(&a, "awg")?.or(row.as_ref().and_then(|r| r.awg));
-    let conductor = awg.map(fh::awg_d);
-    let od = match len(&a, "od")?.or(row.as_ref().and_then(|r| r.od)) {
+    // the library row's fields, the arguments over them
+    let mut spec = row.as_ref().map(|r| r.spec.clone()).unwrap_or_default();
+    for &(k, _, num) in SPEC {
+        let given = if num {
+            a.num(k, &[Dim::Length, Dim::Ratio, Dim::Count])?
+                .map(|n| SpecVal::Num(n.v))
+        } else {
+            text(&a, k)?.map(SpecVal::Text)
+        };
+        if let Some(v) = given {
+            spec.insert(k.to_string(), v);
+        }
+    }
+    if let Some(c) = text(&a, "color")? {
+        spec.insert("colour".into(), SpecVal::Text(c));
+    }
+    let n = |k: &str| spec.get(k).and_then(SpecVal::num);
+    let conductor = n("conductor_d").or(n("awg").map(fh::awg_d));
+    let od = match n("od") {
         Some(od) => od,
         None => match conductor {
             Some(c) => {
@@ -1104,21 +1202,19 @@ fn wire_type(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
             }
         },
     };
-    let source = text(&a, "source")?
-        .or(row.as_ref().map(|r| format!("{} ({})", r.source, r.file)))
-        .unwrap_or_default();
+    let source = match (&row, spec.get("source")) {
+        (Some(r), Some(s_)) if a.opt("source").is_none() => format!("{} ({})", s_.text(), r.file),
+        (_, Some(s_)) => s_.text(),
+        _ => String::new(),
+    };
     let t = TypeDef {
         id,
         od,
         conductor,
-        min_bend: len(&a, "min_bend")?
-            .or(row.as_ref().and_then(|r| r.min_bend))
-            .unwrap_or(0.0),
-        colour: text(&a, "colour")?
-            .or(text(&a, "color")?)
-            .or(row.as_ref().map(|r| r.colour.clone()))
-            .unwrap_or_default(),
+        min_bend: n("min_bend").unwrap_or(0.0),
+        colour: spec.get("colour").map(SpecVal::text).unwrap_or_default(),
         source,
+        spec,
         span,
     };
     let (h, d) = current(ev);
@@ -1347,7 +1443,7 @@ fn wire(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     let a = Args::bind(
         ev,
         "wire",
-        &["from", "to", "type", "through", "colour", "color"],
+        &["from", "to", "type", "through", "colour", "color", "current"],
         args,
         span,
     )?;
@@ -1385,6 +1481,7 @@ fn wire(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     };
     let id = ev.take_id("wire", span)?;
     let colour = text(&a, "colour")?.or(text(&a, "color")?);
+    let amps = plain(&a, "current")?;
     let (h, d) = current(ev);
     d.wires.push(WireDef {
         id,
@@ -1393,6 +1490,7 @@ fn wire(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         to,
         path,
         colour,
+        current: amps,
         span,
     });
     Ok(hv(HVal::Wire(h, d.wires.len() - 1)))
@@ -1404,14 +1502,15 @@ fn wire(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
 #[derive(Clone, Debug, PartialEq)]
 pub struct LibRow {
     pub name: String,
-    pub awg: Option<f64>,
-    pub mm2: Option<f64>,
-    pub od: Option<f64>,
-    pub min_bend: Option<f64>,
-    pub colour: String,
-    pub source: String,
+    pub spec: std::collections::BTreeMap<String, SpecVal>,
     pub file: String,
     pub line: usize,
+}
+
+impl LibRow {
+    pub fn get(&self, k: &str) -> String {
+        self.spec.get(k).map(SpecVal::text).unwrap_or_default()
+    }
 }
 
 /// The library's files: the project's `wires/*.csv`, then the user's
@@ -1434,11 +1533,15 @@ pub fn library_files(dir: Option<&std::path::Path>) -> Vec<std::path::PathBuf> {
 
 /// A library file's rows; Err: the first bad row.
 pub fn parse_library(file: &str, text: &str) -> Result<Vec<LibRow>, HarnessProblem> {
+    // the columns by a header (`name` and any of SPEC's keys), else the first seven of them
+    const PLAIN: [&str; 7] = ["name", "awg", "mm2", "od", "min_bend", "colour", "source"];
+    let mut cols_of: Vec<String> = PLAIN.iter().map(|x| x.to_string()).collect();
     let mut rows = vec![];
+    let mut first = true;
     for (k, line) in text.lines().enumerate() {
         let n = k + 1;
         let cols = split_csv(line);
-        if cols.iter().all(|c| c.is_empty()) || cols[0].starts_with('#') || (k == 0 && cols[0] == "name") {
+        if cols.iter().all(|c| c.trim().is_empty()) || cols[0].starts_with('#') {
             continue;
         }
         let bad = |why: String| HarnessProblem::WireRowBad {
@@ -1446,43 +1549,79 @@ pub fn parse_library(file: &str, text: &str) -> Result<Vec<LibRow>, HarnessProbl
             line: n,
             why,
         };
-        if cols.len() != 7 {
+        if std::mem::take(&mut first) && cols[0].trim() == "name" {
+            cols_of = cols.iter().map(|c| c.trim().to_lowercase()).collect();
+            if let Some(u) = cols_of
+                .iter()
+                .find(|c| c.as_str() != "name" && !SPEC.iter().any(|f| f.0 == c.as_str()))
+            {
+                return Err(bad(format!("unknown column {u:?}")));
+            }
+            continue;
+        }
+        if cols.len() != cols_of.len() {
             return Err(bad(format!(
-                "{} columns, not 7 (name,awg,mm2,od,min_bend,colour,source)",
-                cols.len()
+                "{} columns, not {} ({})",
+                cols.len(),
+                cols_of.len(),
+                cols_of.join(",")
             )));
         }
-        let num = |i: usize, what: &str| -> Result<Option<f64>, HarnessProblem> {
-            let c = cols[i].trim();
-            if c.is_empty() {
-                return Ok(None);
+        let mut spec = std::collections::BTreeMap::new();
+        let mut name = String::new();
+        for (key, c) in cols_of.iter().zip(&cols) {
+            let c = c.trim();
+            if key == "name" {
+                name = c.to_string();
+                continue;
             }
-            c.parse::<f64>()
-                .ok()
-                .filter(|v| v.is_finite())
-                .map(Some)
-                .ok_or_else(|| bad(format!("{what} {c:?} is not a number")))
-        };
-        let row = LibRow {
-            name: cols[0].trim().into(),
-            awg: num(1, "awg")?,
-            mm2: num(2, "mm2")?,
-            od: num(3, "od")?,
-            min_bend: num(4, "min_bend")?,
-            colour: cols[5].trim().into(),
-            source: cols[6].trim().into(),
-            file: file.into(),
-            line: n,
-        };
-        if row.source.is_empty() {
+            if c.is_empty() {
+                continue;
+            }
+            let num = SPEC.iter().find(|f| f.0 == key.as_str()).is_some_and(|f| f.2);
+            let v = if num {
+                SpecVal::Num(
+                    c.parse::<f64>()
+                        .ok()
+                        .filter(|v| v.is_finite())
+                        .ok_or_else(|| bad(format!("{key} {c:?} is not a number")))?,
+                )
+            } else {
+                SpecVal::Text(c.to_string())
+            };
+            spec.insert(key.clone(), v);
+        }
+        if !spec.contains_key("source") {
             return Err(HarnessProblem::WireRowUnsourced {
                 file: file.into(),
                 line: n,
             });
         }
-        rows.push(row);
+        rows.push(LibRow {
+            name,
+            spec,
+            file: file.into(),
+            line: n,
+        });
     }
     Ok(rows)
+}
+
+/// Every row of the wire library beside a document, and the first bad file's problem.
+pub fn library(dir: Option<&std::path::Path>) -> (Vec<LibRow>, Option<HarnessProblem>) {
+    let mut out = vec![];
+    let mut bad = None;
+    for f in library_files(dir) {
+        let shown = f.to_string_lossy().to_string();
+        let Some(text) = read_text(&f) else { continue };
+        match parse_library(&shown, &text) {
+            Ok(rows) => out.extend(rows),
+            Err(p) => {
+                bad.get_or_insert(p);
+            }
+        }
+    }
+    (out, bad)
 }
 
 fn library_row(ev: &mut Eval, name: &str, span: Span) -> R<LibRow> {
@@ -1549,11 +1688,22 @@ const MAX_IN: f64 = 3.0;
 /// A wire's colour as drawn: its code (IEC 60757 letters, `GN/YE` by its first) or English word,
 /// else one of a palette by its name, so wires without one still tell apart.
 pub fn rgb(colour: &str, name: &str) -> [f32; 3] {
-    let c = colour
-        .split(['/', '-', ' '])
+    let c = colour_codes(colour)
+        .into_iter()
         .next()
-        .unwrap_or("")
+        .unwrap_or_default()
         .to_ascii_lowercase();
+    // a colour given as #rrggbb
+    if let Some(hex) = c.strip_prefix('#')
+        && hex.len() == 6
+        && let Ok(v) = u32::from_str_radix(hex, 16)
+    {
+        return [
+            (v >> 16) as f32 / 255.0,
+            ((v >> 8) & 255) as f32 / 255.0,
+            (v & 255) as f32 / 255.0,
+        ];
+    }
     let known = match c.as_str() {
         "bk" | "black" => Some([0.08, 0.08, 0.09]),
         "bn" | "brown" => Some([0.45, 0.26, 0.12]),
@@ -1591,6 +1741,30 @@ pub fn rgb(colour: &str, name: &str) -> [f32; 3] {
     })
 }
 
+/// A colour code's colours: base, then its tracer stripes (at most two). Codes are IEC 60757
+/// letters or words, split by `/`, `-` or a space (`WH/BU`, `GN-YE`), or written together as
+/// DIN 47100 writes its pairs (`WHGN`); `#rrggbb` is a colour of its own.
+pub fn colour_codes(code: &str) -> Vec<String> {
+    let mut out = vec![];
+    for part in code.split(['/', '-', ' ', '+']).filter(|p| !p.is_empty()) {
+        let letters = part.chars().all(|c| c.is_ascii_alphabetic());
+        if letters && part.len() > 2 && part.len() % 2 == 0 && rgb_known(&part[..2]) {
+            out.extend((0..part.len()).step_by(2).map(|i| part[i..i + 2].to_string()));
+        } else {
+            out.push(part.to_string());
+        }
+    }
+    out.truncate(3);
+    out
+}
+
+fn rgb_known(code: &str) -> bool {
+    matches!(
+        code.to_ascii_lowercase().as_str(),
+        "bk" | "bn" | "rd" | "og" | "ye" | "gn" | "bu" | "vt" | "gy" | "wh" | "pk" | "gd" | "tq" | "sr"
+    )
+}
+
 /// A routed harness, for the report, the browser and the CSV export.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct HarnessOut {
@@ -1602,6 +1776,8 @@ pub struct HarnessOut {
     pub wires: Vec<WireOut>,
     /// Wires by type and coverings by name: total length (mm); connectors: count.
     pub bom: Vec<BomRow>,
+    /// Its wire types, everything each is specified by.
+    pub types: Vec<TypeOut>,
     /// Each covered segment's sleeve, in world space (none for a bare segment), by segment.
     pub tubes: Vec<Vec<Arc<forge_topo::Body>>>,
     /// Each wire's own centreline, pin to pin, in world space, and its radius (by wire; none
@@ -1657,6 +1833,27 @@ pub struct WireOut {
     pub given: bool,
     pub path: Vec<String>,
     pub routed: Option<fh::WireOut>,
+    /// Its resistance (ohm) from its cut length and its type's ohm/km; the current it carries
+    /// (A) and the voltage it drops along it (V).
+    pub ohms: Option<f64>,
+    pub current: Option<f64>,
+    pub vdrop: Option<f64>,
+}
+
+/// A wire type as the report gives it: its name and every field it has (`SPEC`), and whether its
+/// ohm/km was worked out from its conductor.
+#[derive(Clone, Debug, PartialEq)]
+pub struct TypeOut {
+    pub name: String,
+    pub spec: Vec<(String, String)>,
+    pub ohm_km: Option<f64>,
+    pub ohm_worked: bool,
+}
+
+impl TypeOut {
+    pub fn get(&self, k: &str) -> &str {
+        self.spec.iter().find(|x| x.0 == k).map_or("", |x| x.1.as_str())
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -1664,6 +1861,10 @@ pub struct BomRow {
     pub item: String,
     pub qty: f64,
     pub unit: &'static str,
+    /// The maker, their part number and ours, where the item has them.
+    pub maker: String,
+    pub mpn: String,
+    pub part_number: String,
 }
 
 /// Every harness of the document, routed: frames from the solve (`world`, None: nothing there;
@@ -2063,24 +2264,63 @@ fn report(
                     .as_ref()
                     .map(|o| o.path.iter().map(|&(s, _)| net.segments[s].id.clone()).collect())
                     .unwrap_or_default(),
+                ohms: o
+                    .as_ref()
+                    .and_then(|o| ohm_km(&t.spec).map(|r| r.0 * o.length / 1e6)),
+                current: w.current,
+                vdrop: o.as_ref().and_then(|o| {
+                    let r = ohm_km(&t.spec)?.0 * o.length / 1e6;
+                    Some(r * w.current?)
+                }),
                 routed: o.clone(),
             }
         })
         .collect();
     // the BOM: wire by type (cut lengths summed), coverings by length, connectors
+    out.types = d
+        .types
+        .iter()
+        .map(|t| {
+            let r = ohm_km(&t.spec);
+            TypeOut {
+                name: local(&t.id),
+                spec: SPEC
+                    .iter()
+                    .filter_map(|f| Some((f.0.to_string(), t.spec.get(f.0)?.text())))
+                    .collect(),
+                ohm_km: r.map(|x| x.0),
+                ohm_worked: r.is_some_and(|x| x.1),
+            }
+        })
+        .collect();
     let mut bom: Vec<BomRow> = vec![];
-    let mut add = |item: String, qty: f64, unit: &'static str| match bom.iter_mut().find(|b| b.item == item) {
+    let mut add = |item: String, qty: f64, unit: &'static str, part: [&str; 3]| match bom
+        .iter_mut()
+        .find(|b| b.item == item)
+    {
         Some(b) => b.qty += qty,
-        None => bom.push(BomRow { item, qty, unit }),
+        None => bom.push(BomRow {
+            item,
+            qty,
+            unit,
+            maker: part[0].into(),
+            mpn: part[1].into(),
+            part_number: part[2].into(),
+        }),
     };
+    // wire by type and colour, what is ordered
     for w in &out.wires {
         if let Some(o) = &w.routed {
-            add(format!("wire {}", w.ty), o.length, "mm");
+            let t = out.types.iter().find(|t| t.name == w.ty);
+            let part = t.map_or(["", "", ""], |t| {
+                [t.get("maker"), t.get("mpn"), t.get("part_number")]
+            });
+            add(format!("wire {} {}", w.ty, w.colour), o.length, "mm", part);
         }
     }
     for s in &out.segments {
         if let Some(c) = &s.covering {
-            add(format!("covering {c}"), s.length, "mm");
+            add(format!("covering {c}"), s.length, "mm", ["", "", ""]);
         }
     }
     for c in &out.connectors {
@@ -2092,6 +2332,7 @@ fn report(
             ),
             1.0,
             "each",
+            ["", "", ""],
         );
     }
     out.bom = bom;
@@ -2290,6 +2531,9 @@ pub fn json(h: &HarnessOut) -> Json {
                             ("path_given", w.given.into()),
                             ("path", strs(&w.path)),
                             ("routed", w.routed.is_some().into()),
+                            ("ohms", opt(w.ohms)),
+                            ("current", opt(w.current)),
+                            ("vdrop", opt(w.vdrop)),
                         ];
                         if let Some(o) = &w.routed {
                             f.extend([
@@ -2308,6 +2552,24 @@ pub fn json(h: &HarnessOut) -> Json {
             ),
         ),
         (
+            "types",
+            Json::Arr(
+                h.types
+                    .iter()
+                    .map(|t| {
+                        let mut f: Vec<(&str, Json)> = vec![("name", s(&t.name))];
+                        for (k, v) in &t.spec {
+                            let key: &'static str = SPEC.iter().find(|x| x.0 == k).map_or("other", |x| x.0);
+                            f.push((key, s(v)));
+                        }
+                        f.push(("ohm_km", opt(t.ohm_km)));
+                        f.push(("ohm_km_worked", t.ohm_worked.into()));
+                        Json::obj(f)
+                    })
+                    .collect(),
+            ),
+        ),
+        (
             "bom",
             Json::Arr(
                 h.bom
@@ -2317,6 +2579,9 @@ pub fn json(h: &HarnessOut) -> Json {
                             ("item", s(&b.item)),
                             ("qty", b.qty.into()),
                             ("unit", s(b.unit)),
+                            ("maker", s(&b.maker)),
+                            ("mpn", s(&b.mpn)),
+                            ("part_number", s(&b.part_number)),
                         ])
                     })
                     .collect(),
@@ -2327,7 +2592,16 @@ pub fn json(h: &HarnessOut) -> Json {
 
 /// The wire list as CSV: the import's columns, then every length term.
 pub fn export_csv(h: &HarnessOut) -> String {
-    let mut out = String::from("id,from,to,type,colour,path,route,loops,slack,insertion,exact,length\n");
+    let r3 = |x: f64| fmt((x * 1000.0).round() / 1000.0);
+    let mut head: Vec<String> =
+        "id,from,to,type,colour,path,route,loops,slack,insertion,exact,length,ohms,current,vdrop"
+            .split(',')
+            .map(String::from)
+            .collect();
+    // the type's every field after, so one sheet orders and checks the wires
+    head.extend(SPEC.iter().map(|f| f.0.to_string()));
+    let mut out = head.join(",");
+    out.push('\n');
     for w in &h.wires {
         let path = if w.given { w.path.join(";") } else { String::new() };
         let mut row: Vec<String> = [&w.name, &w.from, &w.to, &w.ty, &w.colour, &path]
@@ -2335,13 +2609,32 @@ pub fn export_csv(h: &HarnessOut) -> String {
             .map(|x| csv_field(x))
             .collect();
         match &w.routed {
-            Some(o) => row.extend(
-                [o.route, o.loops, o.slack, o.insertion, o.exact, o.length]
-                    .iter()
-                    .map(|x| fmt((x * 1000.0).round() / 1000.0)),
-            ),
+            Some(o) => row.extend([o.route, o.loops, o.slack, o.insertion, o.exact, o.length].map(r3)),
             None => row.extend(std::iter::repeat_n(String::new(), 6)),
         }
+        row.extend(
+            [w.ohms, w.current, w.vdrop].map(|x| x.map(|v| fmt((v * 1e4).round() / 1e4)).unwrap_or_default()),
+        );
+        let t = h.types.iter().find(|t| t.name == w.ty);
+        row.extend(SPEC.iter().map(|f| csv_field(t.map_or("", |t| t.get(f.0)))));
+        out.push_str(&row.join(","));
+        out.push('\n');
+    }
+    out
+}
+
+/// The BOM as CSV: item, quantity, unit, maker, MPN, part number.
+pub fn bom_csv(h: &HarnessOut) -> String {
+    let mut out = String::from("item,qty,unit,maker,mpn,part_number\n");
+    for b in &h.bom {
+        let row = [
+            csv_field(&b.item),
+            fmt((b.qty * 1000.0).round() / 1000.0),
+            b.unit.to_string(),
+            csv_field(&b.maker),
+            csv_field(&b.mpn),
+            csv_field(&b.part_number),
+        ];
         out.push_str(&row.join(","));
         out.push('\n');
     }
@@ -2357,6 +2650,8 @@ pub struct CsvWire {
     pub ty: String,
     pub colour: String,
     pub path: Vec<String>,
+    /// Its other arguments as written (`current: i_motor`), kept when it is written again.
+    pub rest: Vec<String>,
 }
 
 /// A wire list's rows (the columns by their header, any order; extra columns ignored).
@@ -2390,6 +2685,7 @@ pub fn parse_wire_list(text: &str) -> Result<Vec<CsvWire>, String> {
                 .map(|x| x.trim().to_string())
                 .filter(|x| !x.is_empty())
                 .collect(),
+            rest: vec![],
         };
         for (what, v) in [("id", &w.id), ("from", &w.from), ("to", &w.to), ("type", &w.ty)] {
             if v.is_empty() {
@@ -2432,6 +2728,10 @@ fn wire_line(w: &CsvWire) -> Result<String, String> {
     }
     if !w.colour.is_empty() {
         t.push_str(&format!(", colour: \"{}\"", w.colour.replace('"', "")));
+    }
+    for r in &w.rest {
+        t.push_str(", ");
+        t.push_str(r);
     }
     t.push(')');
     Ok(t)
@@ -2493,6 +2793,7 @@ fn written_wires(src: &str, body: &[Stmt]) -> Vec<(CsvWire, Span)> {
             ty: String::new(),
             colour: String::new(),
             path: vec![],
+            rest: vec![],
         };
         for (k, a) in args.iter().enumerate() {
             match (a.name.as_ref().map(|x| x.0.as_str()), k) {
@@ -2505,6 +2806,7 @@ fn written_wires(src: &str, body: &[Stmt]) -> Vec<(CsvWire, Span)> {
                         w.path = xs.iter().map(txt).collect();
                     }
                 }
+                (Some(n), _) if n != "color" => w.rest.push(format!("{n}: {}", txt(&a.value))),
                 _ => {}
             }
         }

@@ -1084,10 +1084,18 @@ harness loom(slack: ratio(0.03), round_up: 5, insert: 4) {
   names are the occurrences it wires; `loom = subassembly("loom.fg", ctrl: ctrl, m1: m1, plate:
   plate)` places it, evaluated in the placing document (its shared params too). Run alone it is
   `HarnessPlacedOnly` (information).
-- `wire_type(NAME, awg:, od:, min_bend:, colour:, source:)`: NAME a row of the wire library
-  (CSV `name,awg,mm2,od,min_bend,colour,source` in the project's `wires/*.csv`, then
-  `~/.config/forgecad/wires/*.csv`; a row with no source is refused, `WireRowUnsourced`);
-  arguments override it. No tables are shipped. With a gauge and no OD, the conductor's diameter
+- `wire_type(NAME, ..)`: NAME a row of the wire library (CSV in the project's `wires/*.csv`, then
+  `~/.config/forgecad/wires/*.csv`, its columns by a header line: `name` and any of the fields
+  below; with no header `name,awg,mm2,od,min_bend,colour,source`; a row with no source is
+  refused, `WireRowUnsourced`); arguments override it. No tables are shipped. Its fields, every
+  one optional but the OD (or a gauge to work one from):
+  - conductor: `conductor` (Cu, tinned Cu, Al, CCA), `awg` or `mm2`, `strands`, `strand_d`,
+    `conductor_d`, `ohm_km` (else worked out from the cross-section for Cu (1/58 ohm mm2/m) and
+    Al (0.028264), the constants of IEC 60028 and 60889);
+  - insulation: `insulation` (PVC, XLPE, PTFE, silicone, TPE, PE ..), `wall`, `od`, `colour`;
+  - ratings: `temp` (deg C), `volts`, `min_bend`, `spec` (UL 1007, SAE J1128 TXL, ISO 6722 ..:
+    words only) and `spec_tag`;
+  - part numbers: `maker`, `mpn`, `part_number` (ours); and `source`. With a gauge and no OD, the conductor's diameter
   (0.127 mm × 92^((36 − awg)/39)) is used, `NoInsulationOd`.
 - `connector(FACE, pins: REF | {key: REF, ..}, insert: L)`; a pin is `J1[3]` or `J1.a`.
   `node(J, out: L)` is its exit node (directed along the face's z); `node(REF, off: L, along:
@@ -1100,10 +1108,13 @@ harness loom(slack: ratio(0.03), round_up: 5, insert: 4) {
 - `segment(A, B, via: [REF..], k:, bend_k:, wall:, covering:, loop:, d:)`: a run of the network,
   its centreline lines and tangent arcs through the vias (a directed end leaves along its
   direction for `lead`, the segment's minimum radius by default).
-- `wire(FROM, TO, type:, through: [SEG..], colour:)` (or `color:`): from pin to pin; without
+- `wire(FROM, TO, type:, through: [SEG..], colour:, current: A)` (or `color:`): from pin to pin;
+  `current` gives its voltage drop (its cut length times its type's ohm/km, times the current);
+  without
   `through:` the shortest chain (Dijkstra on the segments' polyline lengths). The colour is an
-  IEC 60757 code (`RD`, `BK`, `GN/YE` ..) or a word; it, else the type's, else a palette colour by
-  the wire's name, is what the wire is drawn in.
+  IEC 60757 code (`RD`, `BK` ..) or a word, then up to two tracer stripes (`WH/BU`, `GN-YE`, or
+  DIN 47100's pairs written together, `WHGN`), or `#rrggbb`; it, else the type's, else a palette
+  colour by the wire's name, is what the wire is drawn in, its tracers as helical bands.
 - Drawn, every wire is its own tube: in each segment a slot of the wires' circle packing (larger
   first, each where it least grows the bundle; `d_pack` in the report), carried along the
   centreline in its rotation-minimising frame; at a node it moves smoothly to its slot in the next
@@ -1127,7 +1138,9 @@ harness loom(slack: ratio(0.03), round_up: 5, insert: 4) {
   R_min, tightest radius, wires), wires (path, every length term) and the BOM (wire by type,
   coverings by length, connectors). `fg harness F.fg [--harness NAME] [--csv OUT|-] [--import
   LIST.csv [--apply]]`: the report, the wire list (`id,from,to,type,colour,path` and the lengths),
-  or a list's import: the diff by wire id and the edit ops, written with `--apply`.
+  or a list's import: the diff by wire id and the edit ops, written with `--apply`. The wire list
+  carries each wire's resistance, current and voltage drop and its type's every field; the BOM
+  lists wire by type and colour (what is ordered) with maker, MPN and our part number.
 
 ## Rules
 

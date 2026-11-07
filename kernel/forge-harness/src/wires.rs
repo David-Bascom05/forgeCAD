@@ -1163,3 +1163,65 @@ fn seg_seg(a: Point3, b: Point3, c: Point3, d: Point3) -> (f64, Point3) {
     let (p, q) = (a + u * s, c + v * t);
     (p.distance(q), p + (q - p) * 0.5)
 }
+
+/// A coloured stripe on a wire's tube: a band just proud of it, `half` radians either side of an
+/// angle that starts at `phase` and turns once every `pitch` along the wire (a helix; a pitch of 0
+/// runs it straight along).
+pub fn stripe_mesh(points: &[Point3], r: f64, phase: f64, half: f64, pitch: f64) -> TubeMesh {
+    let mut m = TubeMesh::default();
+    // a helix turns between points: points no further apart than a tenth of a turn's length
+    let step = if pitch > 0.0 { pitch / 36.0 } else { f64::INFINITY };
+    let mut dense: Vec<Point3> = vec![];
+    for w in points.windows(2) {
+        let n = ((w[0].distance(w[1]) / step).ceil() as usize).max(1);
+        for k in 0..n {
+            dense.push(w[0] + (w[1] - w[0]) * (k as f64 / n as f64));
+        }
+    }
+    dense.extend(points.last().copied());
+    let points = &dense[..];
+    let tan: Vec<(Point3, UnitVec3)> = (0..points.len())
+        .filter_map(|i| {
+            let a = points[i.saturating_sub(1)];
+            let b = points[(i + 1).min(points.len() - 1)];
+            Some((points[i], (b - a).normalize()?))
+        })
+        .collect();
+    if tan.len() < 2 {
+        return m;
+    }
+    let frames = rmf(&tan, forge_math::Frame::from_z(tan[0].0, tan[0].1).x());
+    const ACROSS: usize = 4;
+    // clear of the tube's facets (ten sides: their middles are 5 % in)
+    let rr = r * 1.06;
+    let mut along = 0.0;
+    for (i, ((p, t), u)) in tan.iter().zip(&frames).enumerate() {
+        if i > 0 {
+            along += p.distance(tan[i - 1].0);
+        }
+        let mid = phase
+            + if pitch > 0.0 {
+                dmath::TAU * along / pitch
+            } else {
+                0.0
+            };
+        let v = t.cross(u.get());
+        for k in 0..=ACROSS {
+            let a = mid - half + 2.0 * half * k as f64 / ACROSS as f64;
+            let (s, c) = dmath::sin_cos(a);
+            let n = u.get() * c + v * s;
+            m.positions.push(*p + n * rr);
+            m.normals.push(n);
+        }
+    }
+    let w = (ACROSS + 1) as u32;
+    for i in 0..tan.len() as u32 - 1 {
+        for k in 0..ACROSS as u32 {
+            let (a, b) = (i * w + k, i * w + k + 1);
+            let (c, d) = (a + w, b + w);
+            m.triangles.push([a, b, d]);
+            m.triangles.push([a, d, c]);
+        }
+    }
+    m
+}

@@ -13,6 +13,14 @@ shared bend26 = 4
 shared g18 = 18
 shared g22 = 22
 shared g26 = 26
+shared n18 = 16
+shared n22 = 7
+shared n26 = 7
+shared t105 = 105
+shared t80 = 80
+shared v600 = 600
+shared v300 = 300
+shared i_motor = 3
 shared braid = 0.4
 shared slack = ratio(0.03)
 shared step = 5
@@ -35,9 +43,9 @@ on_mb = fastened(mb.seat, plate.mb_seat, flip: true)
 on_sn = fastened(sn.seat, plate.sn_seat, flip: true)
 
 harness loom(slack: slack, round_up: step, insert: seat_in) {
-  p18 = wire_type(awg: g18, od: od18, min_bend: bend18, colour: "RD", source: "example values, not a datasheet")
-  s22 = wire_type(awg: g22, od: od22, min_bend: bend22, colour: "WH", source: "example values, not a datasheet")
-  s26 = wire_type(awg: g26, od: od26, min_bend: bend26, colour: "YE", source: "example values, not a datasheet")
+  p18 = wire_type(awg: g18, od: od18, min_bend: bend18, colour: "RD", conductor: "Cu", strands: n18, insulation: "PVC", temp: t105, volts: v600, spec: "UL 1015", spec_tag: "UL1015", source: "example values, not a datasheet")
+  s22 = wire_type(awg: g22, od: od22, min_bend: bend22, colour: "WH", conductor: "Cu", strands: n22, insulation: "PVC", temp: t80, volts: v300, spec: "UL 1007", spec_tag: "UL1007", source: "example values, not a datasheet")
+  s26 = wire_type(awg: g26, od: od26, min_bend: bend26, colour: "YE", conductor: "Cu", strands: n26, insulation: "PVC", temp: t80, volts: v300, spec: "UL 1007", spec_tag: "UL1007", source: "example values, not a datasheet")
 
   J1 = connector(ctrl.face, pins: ctrl.pin)
   J2 = connector(ma.face, pins: ma.pin)
@@ -57,19 +65,19 @@ harness loom(slack: slack, round_up: step, insert: seat_in) {
   to_b = segment(hub2, n3)
   to_s = segment(hub2, n4)
 
-  W1 = wire(J1[1], J2[1], type: p18, colour: "RD")
-  W2 = wire(J1[2], J2[2], type: p18, colour: "BK")
-  W3 = wire(J1[3], J2[3], type: s22, colour: "WH")
-  W4 = wire(J1[4], J2[4], type: s22, colour: "BU")
-  W5 = wire(J1[5], J3[1], type: p18, colour: "RD")
-  W6 = wire(J1[6], J3[2], type: p18, colour: "BK")
-  W7 = wire(J1[7], J3[3], type: s22, colour: "WH")
-  W8 = wire(J1[8], J3[4], type: s22, colour: "BU")
+  W1 = wire(J1[1], J2[1], type: p18, colour: "RD", current: i_motor)
+  W2 = wire(J1[2], J2[2], type: p18, colour: "BK", current: i_motor)
+  W3 = wire(J1[3], J2[3], type: s22, colour: "WH/BU")
+  W4 = wire(J1[4], J2[4], type: s22, colour: "BU/WH")
+  W5 = wire(J1[5], J3[1], type: p18, colour: "RD", current: i_motor)
+  W6 = wire(J1[6], J3[2], type: p18, colour: "BK", current: i_motor)
+  W7 = wire(J1[7], J3[3], type: s22, colour: "WH/OG")
+  W8 = wire(J1[8], J3[4], type: s22, colour: "OG/WH")
   W9 = wire(J1[9], J4[1], type: s26, colour: "RD")
   W10 = wire(J1[10], J4[2], type: s26, colour: "BK")
   W11 = wire(J1[11], J4[3], type: s26, colour: "YE")
   W12 = wire(J1[12], J4[4], type: s26, colour: "GN")
-  W13 = wire(J1[13], J4[5], type: s26, colour: "OG")
+  W13 = wire(J1[13], J4[5], type: s26, colour: "GN/YE")
   W14 = wire(J1[14], J4[6], type: s26, colour: "VT")
 }
 

@@ -109,6 +109,18 @@ pub const NAMES: &[(&str, &str, &str, &[&str])] = &[
         &[],
     ),
     (
+        "harness",
+        "The open assembly's wire harnesses as JSON: connectors and pins, nodes, segments (length, bundle and packed diameter, minimum bend), every wire (from, to, colour code, type, path, cut length and its terms, resistance, current, voltage drop), every wire type with all its fields (conductor, gauge or mm², strands, ohm/km, insulation, wall, OD, colour, temperature, voltage, spec and spec tag, maker, MPN, our part number, source) and the BOM. Edit them with fg_edit: wire_type(..), wire(.., colour:, current:) lines in the harness block.",
+        "{}",
+        &[],
+    ),
+    (
+        "wire_library",
+        "The wire library's rows beside the open document (its wires/*.csv, then ~/.config/forgecad/wires/*.csv): each row's name and fields. `search` keeps the rows any of whose fields has it. A row is used in .fg as wire_type(\"NAME\").",
+        r#"{"search":{"type":"string"}}"#,
+        &[],
+    ),
+    (
         "set_visibility",
         "Show or hide rows by id: occurrences (an assembly's), the part's solid (`solid`), sketches and work planes. One view step.",
         r#"{"ids":{"type":"array","items":{"type":"string"}},"visible":{"type":"boolean"}}"#,

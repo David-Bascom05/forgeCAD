@@ -199,6 +199,40 @@ impl Gui {
         let is_asm = self.shell.is_asm();
         match name {
             "tree" => self.app_tree(s(a, "filter"), b(a, "relationships").unwrap_or(false)),
+            "harness" => match self.shell.fg.as_ref().and_then(|p| p.asm.as_ref()) {
+                Some(asm) if !asm.harnesses.is_empty() => Reply::ok(
+                    Json::Arr(asm.harnesses.iter().map(forge_lang::harness::json).collect()).to_string(),
+                ),
+                _ => Reply::err("the open document has no harness"),
+            },
+            "wire_library" => {
+                let dir = self
+                    .shell
+                    .fg
+                    .as_ref()
+                    .and_then(|p| std::path::Path::new(&p.path).parent().map(|d| d.to_path_buf()));
+                let (rows, bad) = forge_lang::harness::library(dir.as_deref());
+                let q = s(a, "search").to_lowercase();
+                let rows: Vec<Json> = rows
+                    .iter()
+                    .filter(|r| {
+                        q.is_empty()
+                            || r.name.to_lowercase().contains(&q)
+                            || r.spec.values().any(|v| v.text().to_lowercase().contains(&q))
+                    })
+                    .map(|r| {
+                        let mut f: Vec<(String, Json)> = vec![("name".into(), Json::Str(r.name.clone()))];
+                        f.extend(r.spec.iter().map(|(k, v)| (k.clone(), Json::Str(v.text()))));
+                        f.push(("file".into(), Json::Str(r.file.clone())));
+                        Json::Obj(f)
+                    })
+                    .collect();
+                let mut out = vec![("rows".to_string(), Json::Arr(rows))];
+                if let Some(p) = bad {
+                    out.push(("problem".into(), Json::Str(p.text())));
+                }
+                Reply::ok(Json::Obj(out).to_string())
+            }
             "set_visibility" => {
                 let ids: Vec<String> = match a.get("ids") {
                     Some(Json::Arr(v)) => v.iter().filter_map(|x| x.str().map(str::to_string)).collect(),

@@ -464,7 +464,7 @@ fn view_file(file: &str, args: &[String]) -> ExitCode {
     ExitCode::SUCCESS
 }
 
-/// `fg harness F.fg [--harness NAME] [--csv OUT|-] [--import LIST.csv [--apply]]`: a harness's
+/// `fg harness F.fg [--harness NAME] [--csv OUT|-] [--bom OUT|-] [--import LIST.csv [--apply]]`: a harness's
 /// report (JSON), its wire list as CSV, or a wire list's import: the diff and the edit ops, and
 /// with `--apply` the ops written (all or nothing) into the file the harness is written in.
 fn harness_cmd(file: &str, args: &[String]) -> ExitCode {
@@ -495,6 +495,16 @@ fn harness_cmd(file: &str, args: &[String]) -> ExitCode {
     };
     if let Some(out) = opt(args, "--csv") {
         let csv = forge_lang::harness::export_csv(h);
+        if out == "-" {
+            print!("{csv}");
+        } else if let Err(e) = std::fs::write(out, csv) {
+            eprintln!("{out}: {e}");
+            return ExitCode::from(2);
+        }
+        return ExitCode::SUCCESS;
+    }
+    if let Some(out) = opt(args, "--bom") {
+        let csv = forge_lang::harness::bom_csv(h);
         if out == "-" {
             print!("{csv}");
         } else if let Err(e) = std::fs::write(out, csv) {

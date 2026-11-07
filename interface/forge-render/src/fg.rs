@@ -1154,6 +1154,8 @@ pub enum HarnessPiece {
     /// All of a harness's cable ties, and all its clips.
     Ties,
     Clips,
+    /// A wire's tracer stripe (its first or second).
+    Stripe(usize, usize),
 }
 
 /// Sides of a wire's tube.
@@ -1352,6 +1354,20 @@ fn asm_view(
             });
             placed.push((m, rows_of(&forge_math::Frame::WORLD)));
             harness_placed.push((h, HarnessPiece::Wire(w), placed.len() - 1));
+            // its tracers: helical bands, the second opposite the first, a turn every 12 ODs
+            let stripes = forge_lang::harness::colour_codes(&ho.wires[w].colour)
+                .len()
+                .saturating_sub(1);
+            for k in 0..stripes.min(2) {
+                let phase = k as f64 * std::f64::consts::PI;
+                let pitch = 24.0 * *r;
+                let key = wire_key(pts, *r + 1000.0 * (k + 1) as f64);
+                let m = mesh_once(key, &|| {
+                    forge_harness::wires::stripe_mesh(pts, *r, phase, 0.45, pitch)
+                });
+                placed.push((m, rows_of(&forge_math::Frame::WORLD)));
+                harness_placed.push((h, HarnessPiece::Stripe(w, k), placed.len() - 1));
+            }
         }
     }
     let now: Vec<usize> = placed.iter().map(|p| p.0).collect();

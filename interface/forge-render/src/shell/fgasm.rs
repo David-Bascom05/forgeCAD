@@ -1733,6 +1733,31 @@ impl AsmTree {
                     );
                 }
             }
+            let tf = folder(self, "t", "Wire types", h.types.len());
+            for ty in &h.types {
+                let g = |k: &str| ty.get(k).to_string();
+                let size = if !g("awg").is_empty() {
+                    format!("{} AWG", g("awg"))
+                } else if !g("mm2").is_empty() {
+                    format!("{} mm²", g("mm2"))
+                } else {
+                    format!("Ø{}", g("od"))
+                };
+                let detail = [size, g("conductor"), g("insulation"), g("spec")]
+                    .into_iter()
+                    .filter(|x| !x.is_empty())
+                    .collect::<Vec<_>>()
+                    .join(" · ");
+                self.push(
+                    Some(tf),
+                    format!("{base}:t:{}", ty.name),
+                    ty.name.clone(),
+                    detail,
+                    NodeKind::HarnessItem,
+                    "wire",
+                    "",
+                );
+            }
             let wf = folder(self, "w", "Wires", h.wires.len());
             for w in &h.wires {
                 let detail = match &w.routed {
@@ -2192,6 +2217,12 @@ impl Shell {
                         b.clicked()
                     };
                     match n.kind {
+                        NodeKind::HarnessItem if n.kids.is_empty() => {
+                            if item(ui, "Properties…", "props") {
+                                menu = Some(MenuAct::Props(n.key.clone()));
+                                ui.close();
+                            }
+                        }
                         NodeKind::Occ | NodeKind::Pattern | NodeKind::Sub => {
                             let vis = if state == Eye::Hidden {
                                 "Show"
@@ -2372,6 +2403,9 @@ impl Shell {
                         }
                         NodeKind::Link(l) => menu = Some(MenuAct::Drive(l)),
                         NodeKind::Occ => menu = Some(MenuAct::Props(n.key.clone())),
+                        NodeKind::HarnessItem if n.kids.is_empty() => {
+                            menu = Some(MenuAct::Props(n.key.clone()))
+                        }
                         // Inventor's: a part's feature edited where it sits in the assembly
                         NodeKind::Feature if feature_of(&n.key).is_some_and(|(_, f)| !f.is_empty()) => {
                             menu = Some(MenuAct::InPlace(n.key.clone()))
@@ -2858,6 +2892,34 @@ impl Shell {
         places: &mut Vec<(String, Rect)>,
     ) -> Option<Rect> {
         let key = a.props.clone()?;
+        // a harness row's: its wire, type or segment, every field
+        if let Some((title, rows)) = super::harness_ui::item_props(&a.harnesses, &key) {
+            let mut close = false;
+            let r = Self::window(
+                "Properties",
+                "props",
+                t,
+                pos2(v.left() + 16.0, v.top() + 56.0),
+                380.0,
+            )
+            .show_placed(ctx, places, |ui, places| {
+                close = dialog_head(ui, t, "wire", &title, "asm:props", places);
+                egui::Grid::new("harness-props")
+                    .num_columns(2)
+                    .spacing(vec2(12.0, 4.0))
+                    .show(ui, |ui| {
+                        for (k, val) in &rows {
+                            ui.label(egui::RichText::new(k).font(sans(12.0)).color(t.ink2));
+                            ui.label(egui::RichText::new(val).font(mono(11.0)).color(t.ink));
+                            ui.end_row();
+                        }
+                    });
+            });
+            if close {
+                a.props = None;
+            }
+            return r.map(|r| r.response.rect);
+        }
         let inst = a.insts.iter().find(|i| i.path == key).cloned();
         let file = inst
             .as_ref()

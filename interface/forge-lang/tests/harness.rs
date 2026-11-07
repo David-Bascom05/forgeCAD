@@ -95,17 +95,30 @@ fn the_example_routes_with_every_term_and_no_notes() {
     assert!(h.wires[..4].iter().all(|w| w.path == ["trunk", "to_a"]));
     assert!(h.wires[4..8].iter().all(|w| w.path == ["trunk", "span", "to_b"]));
     assert!(h.wires[8..].iter().all(|w| w.path == ["trunk", "span", "to_s"]));
-    // the BOM: wire by type, the braid by length, the four connectors
-    assert_eq!(h.bom.len(), 8);
-    let p18: f64 = h
+    // the BOM: wire by type and colour (what is ordered), the braid by length, the connectors
+    let p18_rd: f64 = h
         .wires
         .iter()
-        .filter(|w| w.ty == "p18")
+        .filter(|w| w.ty == "p18" && w.colour == "RD")
         .map(|w| w.routed.as_ref().unwrap().length)
         .sum();
-    assert_eq!(h.bom[0].item, "wire p18");
-    assert_eq!(h.bom[0].qty, p18);
-    assert_eq!(h.bom[3].item, "covering PET braid 8");
+    assert_eq!(h.bom[0].item, "wire p18 RD");
+    assert_eq!(h.bom[0].qty, p18_rd);
+    assert!(h.bom.iter().any(|b| b.item == "covering PET braid 8"));
+    assert_eq!(
+        h.bom.iter().filter(|b| b.item.starts_with("connector ")).count(),
+        4
+    );
+    // the spec: worked-out resistance, a voltage drop where a current is given
+    let p18 = h.types.iter().find(|t| t.name == "p18").unwrap();
+    assert_eq!(p18.get("spec"), "UL 1015");
+    let area = std::f64::consts::PI / 4.0 * forge_harness::awg_d(18.0).powi(2);
+    assert!((p18.ohm_km.unwrap() - 1000.0 / 58.0 / area).abs() < 1e-9 && p18.ohm_worked);
+    let w1 = &h.wires[0];
+    let len = w1.routed.as_ref().unwrap().length;
+    assert!((w1.ohms.unwrap() - p18.ohm_km.unwrap() * len / 1e6).abs() < 1e-12);
+    assert!((w1.vdrop.unwrap() - 3.0 * w1.ohms.unwrap()).abs() < 1e-12);
+    assert!(h.wires[2].vdrop.is_none());
 }
 
 #[test]
@@ -294,10 +307,11 @@ fn wire_types_come_from_the_library_with_their_source() {
         "name,awg,mm2,od,min_bend,colour,source\nT22-WH,22,,1.55,6,WH,test row\n",
     )
     .unwrap();
-    let src = ROBOT.replace(
-        "s22 = wire_type(awg: g22, od: od22, min_bend: bend22, colour: \"WH\", source: \"example values, not a datasheet\")",
-        "s22 = wire_type(\"T22-WH\")",
-    );
+    let line = ROBOT
+        .lines()
+        .find(|l| l.trim_start().starts_with("s22 = wire_type("))
+        .unwrap();
+    let src = ROBOT.replace(line, "  s22 = wire_type(\"T22-WH\")");
     let r = run_in(&d, &src);
     assert!(r.errors.is_empty(), "{:?}", errors(&r));
     assert_eq!(loom(&r).wires[2].od, 1.55);
@@ -410,7 +424,9 @@ fn route_wires_writes_the_chosen_paths_and_clears_them() {
         src = forge_lang::edit::apply(&src, op).unwrap_or_else(|e| panic!("{op:?}: {}", e.text()));
     }
     assert!(
-        src.contains("  W1 = wire(J1[1], J2[1], type: p18, through: [trunk, to_a], colour: \"RD\")\n"),
+        src.contains(
+            "  W1 = wire(J1[1], J2[1], type: p18, through: [trunk, to_a], colour: \"RD\", current: i_motor)\n"
+        ),
         "{src}"
     );
     let pinned = run_in(&d, &src);
@@ -435,4 +451,30 @@ fn route_wires_writes_the_chosen_paths_and_clears_them() {
         src = forge_lang::edit::apply(&src, op).unwrap();
     }
     assert_eq!(src, ROBOT);
+}
+
+#[test]
+fn colour_codes_read_base_and_stripes_in_any_writing() {
+    assert_eq!(harness::colour_codes("WH/BU"), ["WH", "BU"]);
+    assert_eq!(harness::colour_codes("GN-YE"), ["GN", "YE"]);
+    assert_eq!(harness::colour_codes("WHGN"), ["WH", "GN"]);
+    assert_eq!(harness::colour_codes("RD/WH/BK/YE"), ["RD", "WH", "BK"]);
+    assert_eq!(harness::colour_codes("#3060c0"), ["#3060c0"]);
+    let c = harness::rgb("#3060c0", "W1");
+    assert!((c[0] - 0x30 as f32 / 255.0).abs() < 1e-6 && (c[2] - 0xc0 as f32 / 255.0).abs() < 1e-6);
+    assert_eq!(harness::rgb("WH/BU", "W1"), harness::rgb("WH", "W9"));
+}
+
+#[test]
+fn a_library_row_carries_every_field_by_its_header() {
+    let csv = "name,awg,conductor,strands,insulation,od,temp,volts,spec,spec_tag,maker,mpn,source\n\
+               T18,18,tinned Cu,16,XLPE,2.1,125,600,SAE J1128 TXL,TXL,ExampleCo,EX-18,test row\n";
+    let rows = harness::parse_library("lib.csv", csv).unwrap();
+    assert_eq!(rows[0].get("insulation"), "XLPE");
+    assert_eq!(rows[0].get("spec"), "SAE J1128 TXL");
+    assert_eq!(rows[0].spec.get("od").and_then(|v| v.num()), Some(2.1));
+    // tinned copper's resistivity is the maker's: none worked out
+    assert!(harness::ohm_km(&rows[0].spec).is_none());
+    let bad = harness::parse_library("lib.csv", "name,gauge,source\nX,18,r\n");
+    assert!(matches!(bad, Err(HarnessProblem::WireRowBad { .. })));
 }

@@ -3845,6 +3845,12 @@ impl Gui {
                     !a.sleeve_hidden(&ho.id, &ho.segments[sg].name),
                     crate::fg::HARNESS_TINT,
                 ),
+                crate::fg::HarnessPiece::Stripe(w, k) => {
+                    let wo = &ho.wires[w];
+                    let codes = forge_lang::harness::colour_codes(&wo.colour);
+                    let c = forge_lang::harness::rgb(codes.get(k + 1).map_or("", |s| s.as_str()), &wo.name);
+                    (true, [c[0], c[1], c[2], 0.0])
+                }
                 crate::fg::HarnessPiece::Ties => (true, crate::fg::TIE_TINT),
                 crate::fg::HarnessPiece::Clips => (true, crate::fg::CLIP_TINT),
             };
@@ -3856,7 +3862,11 @@ impl Gui {
             if scene.rows_of(m) != rows {
                 scene.set_rows(m, &rows);
             }
-            scene.placements[m].tint = if lit.contains(&(h, piece)) {
+            let lit_piece = match piece {
+                crate::fg::HarnessPiece::Stripe(w, _) => crate::fg::HarnessPiece::Wire(w),
+                p => p,
+            };
+            scene.placements[m].tint = if lit.contains(&(h, lit_piece)) {
                 crate::fg::PICKED_TINT
             } else {
                 tint
