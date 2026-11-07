@@ -222,7 +222,7 @@ pub fn value_row(ui: &mut Ui, t: &Theme, label: &str, value: &str, unit: &str, c
     let r = field(ui, t, label, 26.0);
     let p = ui.painter().clone();
     // numbers and paths (the arrow is in the mono face) in mono, words in the text face
-    let font = if value.parse::<f64>().is_ok() || value.contains('→') { mono(12.0) } else { sans(12.5) };
+    let font = if value.parse::<f64>().is_ok() || value.contains('›') { mono(12.0) } else { sans(12.5) };
     let g = p.layout_no_wrap(value.to_string(), font, t.ink);
     let gw = g.size().x;
     p.galley(pos2(r.left(), r.center().y - g.size().y / 2.0), g, t.ink);
@@ -1184,7 +1184,7 @@ pub fn props(ui: &mut Ui, t: &Theme, hs: &[HarnessOut], key: &str, max_h: f32) -
                     heading(ui, t, "Connection");
                     value_row(ui, t, "From", &w.from, "", None);
                     value_row(ui, t, "To", &w.to, "", None);
-                    value_row(ui, t, "Path", &w.path.join(" → "), "", if w.given { None } else { Some("shortest") });
+                    value_row(ui, t, "Path", &w.path.join(" › "), "", if w.given { None } else { Some("shortest") });
                     if let Some(o) = &w.routed {
                         heading(ui, t, "Cut length");
                         length_bar(
