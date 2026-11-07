@@ -48,7 +48,11 @@ impl Section {
             strands: num("strands"),
             strand_d: num("strand_d"),
             conductor: get("conductor"),
-            colour: if colour.is_empty() { get("colour") } else { colour.to_string() },
+            colour: if colour.is_empty() {
+                get("colour")
+            } else {
+                colour.to_string()
+            },
             name: name.to_string(),
         }
     }
@@ -129,7 +133,9 @@ pub fn cross_section(p: &Painter, t: &Theme, r: Rect, s: &Section, callouts: boo
     }
     // the conductor and its strands
     let metal = match s.conductor.to_ascii_lowercase().as_str() {
-        x if x.contains("tin") || x.contains("al") || x.contains("silver") => Color32::from_rgb(0xC9, 0xCC, 0xD1),
+        x if x.contains("tin") || x.contains("al") || x.contains("silver") => {
+            Color32::from_rgb(0xC9, 0xCC, 0xD1)
+        }
         _ => Color32::from_rgb(0xC9, 0x7A, 0x3E),
     };
     p.circle_filled(c, rc, mix(metal, Color32::BLACK, 0.45));
@@ -139,7 +145,11 @@ pub fn cross_section(p: &Painter, t: &Theme, r: Rect, s: &Section, callouts: boo
         let at = c + vec2(x, y) * rc;
         let rr = (sr * rc).max(0.8);
         p.circle_filled(at, rr, metal);
-        p.circle_filled(at - vec2(rr * 0.25, rr * 0.25), rr * 0.45, mix(metal, Color32::WHITE, 0.35));
+        p.circle_filled(
+            at - vec2(rr * 0.25, rr * 0.25),
+            rr * 0.45,
+            mix(metal, Color32::WHITE, 0.35),
+        );
     }
     p.circle_stroke(c, ro, Stroke::new(1.0, mix(base, Color32::BLACK, 0.45)));
     if !callouts {
@@ -154,7 +164,10 @@ pub fn cross_section(p: &Painter, t: &Theme, r: Rect, s: &Section, callouts: boo
     for (q, s_) in [(a, 1.0f32), (b, -1.0)] {
         p.line_segment([q, q + vec2(5.0 * s_, -3.0)], st);
         p.line_segment([q, q + vec2(5.0 * s_, 3.0)], st);
-        p.line_segment([q - vec2(0.0, 6.0), pos2(q.x, c.y + ro * 0.2)], Stroke::new(0.5, ink.gamma_multiply(0.6)));
+        p.line_segment(
+            [q - vec2(0.0, 6.0), pos2(q.x, c.y + ro * 0.2)],
+            Stroke::new(0.5, ink.gamma_multiply(0.6)),
+        );
     }
     p.text(
         pos2(c.x, y + 10.0),
@@ -188,7 +201,13 @@ pub fn header(ui: &mut Ui, t: &Theme, s: &Section, title: &str, sub: &str, pills
     let pic = Rect::from_min_size(r.min + vec2(14.0, 6.0), vec2(176.0, 138.0));
     cross_section(&p, t, pic, s, true);
     let x = pic.right() + 12.0;
-    p.text(pos2(x, r.top() + 34.0), Align2::LEFT_CENTER, title, semi(18.0), t.ink);
+    p.text(
+        pos2(x, r.top() + 34.0),
+        Align2::LEFT_CENTER,
+        title,
+        semi(18.0),
+        t.ink,
+    );
     // the spec line wraps (two lines at most), the pills go under it
     let mut job = egui::text::LayoutJob::simple(sub.to_string(), sans(12.5), t.ink2, r.right() - 14.0 - x);
     job.wrap.max_rows = 2;
@@ -203,7 +222,14 @@ pub fn header(ui: &mut Ui, t: &Theme, s: &Section, title: &str, sub: &str, pills
             px = x;
             py += 24.0;
         }
-        let rr = pill(&p, pos2(px, py), false, pl, t.on_ink, t.on_ink.gamma_multiply(0.12));
+        let rr = pill(
+            &p,
+            pos2(px, py),
+            false,
+            pl,
+            t.on_ink,
+            t.on_ink.gamma_multiply(0.12),
+        );
         px = rr.right() + 6.0;
     }
 }
@@ -212,9 +238,17 @@ pub fn header(ui: &mut Ui, t: &Theme, s: &Section, title: &str, sub: &str, pills
 pub fn field(ui: &mut Ui, t: &Theme, label: &str, h: f32) -> Rect {
     let w = ui.available_width();
     let (r, _) = ui.allocate_exact_size(vec2(w, h), Sense::hover());
-    ui.painter()
-        .text(pos2(r.left() + 16.0, r.center().y), Align2::LEFT_CENTER, label, sans(12.5), t.ink2);
-    Rect::from_min_max(pos2(r.left() + 168.0, r.top() + 2.0), pos2(r.right() - 16.0, r.bottom() - 2.0))
+    ui.painter().text(
+        pos2(r.left() + 16.0, r.center().y),
+        Align2::LEFT_CENTER,
+        label,
+        sans(12.5),
+        t.ink2,
+    );
+    Rect::from_min_max(
+        pos2(r.left() + 168.0, r.top() + 2.0),
+        pos2(r.right() - 16.0, r.bottom() - 2.0),
+    )
 }
 
 /// A read-only value with its unit muted after it, and where it came from as a chip.
@@ -222,7 +256,11 @@ pub fn value_row(ui: &mut Ui, t: &Theme, label: &str, value: &str, unit: &str, c
     let r = field(ui, t, label, 26.0);
     let p = ui.painter().clone();
     // numbers and paths (the arrow is in the mono face) in mono, words in the text face
-    let font = if value.parse::<f64>().is_ok() || value.contains('›') { mono(12.0) } else { sans(12.5) };
+    let font = if value.parse::<f64>().is_ok() || value.contains('›') {
+        mono(12.0)
+    } else {
+        sans(12.5)
+    };
     let g = p.layout_no_wrap(value.to_string(), font, t.ink);
     let gw = g.size().x;
     p.galley(pos2(r.left(), r.center().y - g.size().y / 2.0), g, t.ink);
@@ -239,9 +277,20 @@ pub fn value_row(ui: &mut Ui, t: &Theme, label: &str, value: &str, unit: &str, c
 }
 
 /// A text field with its unit muted at its right end; its rect.
-pub fn edit_row(ui: &mut Ui, t: &Theme, label: &str, v: &mut String, unit: &str, hint: &str, key: &str) -> Rect {
+pub fn edit_row(
+    ui: &mut Ui,
+    t: &Theme,
+    label: &str,
+    v: &mut String,
+    unit: &str,
+    hint: &str,
+    key: &str,
+) -> Rect {
     let r = field(ui, t, label, 30.0);
-    let box_r = Rect::from_min_max(r.min, pos2(r.right() - if unit.is_empty() { 0.0 } else { 56.0 }, r.max.y));
+    let box_r = Rect::from_min_max(
+        r.min,
+        pos2(r.right() - if unit.is_empty() { 0.0 } else { 56.0 }, r.max.y),
+    );
     ui.put(
         box_r,
         egui::TextEdit::singleline(v)
@@ -251,8 +300,13 @@ pub fn edit_row(ui: &mut Ui, t: &Theme, label: &str, v: &mut String, unit: &str,
             .id_salt(("harness-field", key)),
     );
     if !unit.is_empty() {
-        ui.painter()
-            .text(pos2(r.right() - 50.0, r.center().y), Align2::LEFT_CENTER, unit, sans(11.5), t.ink2);
+        ui.painter().text(
+            pos2(r.right() - 50.0, r.center().y),
+            Align2::LEFT_CENTER,
+            unit,
+            sans(11.5),
+            t.ink2,
+        );
     }
     box_r
 }
@@ -297,10 +351,18 @@ pub fn length_bar(ui: &mut Ui, t: &Theme, parts: &[(&str, f64)], total: f64) {
     let w = ui.available_width();
     let (r, _) = ui.allocate_exact_size(vec2(w, 58.0), Sense::hover());
     let p = ui.painter().clone();
-    let bar = Rect::from_min_max(pos2(r.left() + 16.0, r.top() + 6.0), pos2(r.right() - 16.0, r.top() + 22.0));
+    let bar = Rect::from_min_max(
+        pos2(r.left() + 16.0, r.top() + 6.0),
+        pos2(r.right() - 16.0, r.top() + 22.0),
+    );
     p.rect_filled(bar, 4.0, t.hover);
     let sum: f64 = parts.iter().map(|x| x.1).sum::<f64>().max(total).max(1e-9);
-    let cols = [t.accent, Color32::from_rgb(0x4C, 0x8B, 0xD8), Color32::from_rgb(0xE0, 0xA0, 0x30), Color32::from_rgb(0xA0, 0x6C, 0xD5)];
+    let cols = [
+        t.accent,
+        Color32::from_rgb(0x4C, 0x8B, 0xD8),
+        Color32::from_rgb(0xE0, 0xA0, 0x30),
+        Color32::from_rgb(0xA0, 0x6C, 0xD5),
+    ];
     let mut x = bar.left();
     for (k, (_, v)) in parts.iter().enumerate() {
         let wv = (*v / sum) as f32 * bar.width();
@@ -316,7 +378,11 @@ pub fn length_bar(ui: &mut Ui, t: &Theme, parts: &[(&str, f64)], total: f64) {
         if *v <= 0.0 {
             continue;
         }
-        p.rect_filled(Rect::from_min_size(pos2(lx, r.top() + 33.0), vec2(9.0, 9.0)), 2.0, cols[k % cols.len()]);
+        p.rect_filled(
+            Rect::from_min_size(pos2(lx, r.top() + 33.0), vec2(9.0, 9.0)),
+            2.0,
+            cols[k % cols.len()],
+        );
         let text = format!("{name} {}", super::fg::short((v * 10.0).round() / 10.0));
         let g = p.layout_no_wrap(text, sans(11.0), t.ink2);
         let gw = g.size().x;
@@ -355,7 +421,9 @@ pub fn colour_grid(ui: &mut Ui, t: &Theme, label: &str, now: &mut String, none: 
     let r = field(ui, t, label, 34.0);
     let words = Rect::from_min_max(pos2(r.left() - 152.0, r.top()), pos2(r.left() - 8.0, r.bottom()));
     ui.interact(words, ui.scope_id().with((key, "words")), Sense::hover())
-        .on_hover_text("IEC 60757: the base colour first, then its tracers. WH/BU is white with a blue tracer.");
+        .on_hover_text(
+            "IEC 60757: the base colour first, then its tracers. WH/BU is white with a blue tracer.",
+        );
     let p = ui.painter().clone();
     let mut changed = false;
     let size = 22.0;
@@ -368,18 +436,30 @@ pub fn colour_grid(ui: &mut Ui, t: &Theme, label: &str, now: &mut String, none: 
     cells.extend(IEC.iter().copied());
     for (code, word) in cells {
         let cell = Rect::from_min_size(pos2(x, r.center().y - size / 2.0), vec2(size, size));
-        let resp = ui.interact(cell, ui.scope_id().with((key, code)), Sense::click()).on_hover_text(if code.is_empty() {
-            "no tracer".to_string()
-        } else {
-            format!("{code} {word}")
-        });
+        let resp = ui
+            .interact(cell, ui.scope_id().with((key, code)), Sense::click())
+            .on_hover_text(if code.is_empty() {
+                "no tracer".to_string()
+            } else {
+                format!("{code} {word}")
+            });
         if code.is_empty() {
             p.circle_stroke(cell.center(), size / 2.0 - 1.0, Stroke::new(1.0, t.ink2));
-            p.line_segment([cell.left_bottom() + vec2(5.0, -5.0), cell.right_top() + vec2(-5.0, 5.0)], Stroke::new(1.0, t.ink2));
+            p.line_segment(
+                [
+                    cell.left_bottom() + vec2(5.0, -5.0),
+                    cell.right_top() + vec2(-5.0, 5.0),
+                ],
+                Stroke::new(1.0, t.ink2),
+            );
         } else {
             let c = c32(forge_lang::harness::rgb(code, ""));
             p.circle_filled(cell.center(), size / 2.0 - 1.0, c);
-            p.circle_stroke(cell.center(), size / 2.0 - 1.0, Stroke::new(1.0, mix(c, Color32::BLACK, 0.35)));
+            p.circle_stroke(
+                cell.center(),
+                size / 2.0 - 1.0,
+                Stroke::new(1.0, mix(c, Color32::BLACK, 0.35)),
+            );
         }
         if now.eq_ignore_ascii_case(code) {
             p.circle_stroke(cell.center(), size / 2.0 + 2.0, Stroke::new(2.0, t.focus));
@@ -408,7 +488,10 @@ pub fn side_view(p: &Painter, r: Rect, colour: &str, name: &str) {
     p.rect_filled(body, h / 2.0, base);
     // shading: lighter along the top
     p.rect_filled(
-        Rect::from_min_max(body.min + vec2(h / 2.0, h * 0.12), pos2(body.right() - h / 2.0, body.top() + h * 0.3)),
+        Rect::from_min_max(
+            body.min + vec2(h / 2.0, h * 0.12),
+            pos2(body.right() - h / 2.0, body.top() + h * 0.3),
+        ),
         2.0,
         mix(base, Color32::WHITE, 0.25),
     );
@@ -423,7 +506,12 @@ pub fn side_view(p: &Painter, r: Rect, colour: &str, name: &str) {
             x += pitch;
         }
     }
-    p.rect_stroke(body, h / 2.0, Stroke::new(1.0, mix(base, Color32::BLACK, 0.4)), StrokeKind::Inside);
+    p.rect_stroke(
+        body,
+        h / 2.0,
+        Stroke::new(1.0, mix(base, Color32::BLACK, 0.4)),
+        StrokeKind::Inside,
+    );
 }
 
 /// A section heading, as the app's dialogs have them.
@@ -535,7 +623,9 @@ pub fn wide(
     let area = super::dialog_area(ctx);
     let want: f32 = match d {
         Dialog::WireType { .. } => 820.0,
-        Dialog::Library { rows, .. } => HEAD + FOOT + 84.0 + 30.0 + 132.0 + 32.0 * rows.len().clamp(5, 12) as f32,
+        Dialog::Library { rows, .. } => {
+            HEAD + FOOT + 84.0 + 30.0 + 132.0 + 32.0 * rows.len().clamp(5, 12) as f32
+        }
         _ => 676.0,
     };
     let h = want.min(area.height() - 16.0).max(420.0);
@@ -570,7 +660,9 @@ pub fn wide(
             ui.scope_builder(UiBuilder::new().max_rect(body), |ui| {
                 ui.set_clip_rect(body.intersect(ui.clip_rect()));
                 match d {
-                    Dialog::WireType { name, fields, was, .. } => wire_type_body(ui, t, name, fields, was.as_ref(), places),
+                    Dialog::WireType {
+                        name, fields, was, ..
+                    } => wire_type_body(ui, t, name, fields, was.as_ref(), places),
                     Dialog::Library {
                         search,
                         chips,
@@ -616,7 +708,9 @@ pub fn wide(
             if let Dialog::WireType { fields, .. } = d {
                 let missing = ["od", "source"]
                     .iter()
-                    .filter(|k| get_of(fields)(k).is_empty() && !(**k == "od" && !get_of(fields)("awg").is_empty()))
+                    .filter(|k| {
+                        get_of(fields)(k).is_empty() && !(**k == "od" && !get_of(fields)("awg").is_empty())
+                    })
                     .map(|k| if *k == "od" { "an OD or gauge" } else { "a source" })
                     .collect::<Vec<_>>();
                 if !missing.is_empty() {
@@ -639,7 +733,11 @@ fn resolved(fields: &[(String, String)], was: Option<&TypeOut>) -> Vec<(String, 
     forge_lang::harness::SPEC
         .iter()
         .filter_map(|&(k, _, num)| {
-            let f = fields.iter().find(|x| x.0 == k).map(|x| bare(&x.1)).unwrap_or_default();
+            let f = fields
+                .iter()
+                .find(|x| x.0 == k)
+                .map(|x| bare(&x.1))
+                .unwrap_or_default();
             let v = if f.is_empty() || !num || f.parse::<f64>().is_ok() {
                 f
             } else {
@@ -662,16 +760,26 @@ fn wire_type_body(
     {
         let get = get_of(&values);
         let s = Section::of(&get, "", name);
-        let pills: Vec<String> = ["spec_tag", "mpn", "part_number"].iter().map(|k| get(k)).collect();
+        let pills: Vec<String> = ["spec_tag", "mpn", "part_number"]
+            .iter()
+            .map(|k| get(k))
+            .collect();
         header(ui, t, &s, name, &line_of(&get), &pills);
     }
     let (ohm, area) = worked(&values);
-    let set = |fields: &mut Vec<(String, String)>, k: &str, v: String| match fields.iter_mut().find(|x| x.0 == k) {
-        Some(f) => f.1 = v,
-        None if !v.is_empty() => fields.push((k.to_string(), v)),
-        None => {}
+    let set =
+        |fields: &mut Vec<(String, String)>, k: &str, v: String| match fields.iter_mut().find(|x| x.0 == k) {
+            Some(f) => f.1 = v,
+            None if !v.is_empty() => fields.push((k.to_string(), v)),
+            None => {}
+        };
+    let val = |k: &str, fields: &Vec<(String, String)>| {
+        fields
+            .iter()
+            .find(|x| x.0 == k)
+            .map(|x| x.1.clone())
+            .unwrap_or_default()
     };
-    let val = |k: &str, fields: &Vec<(String, String)>| fields.iter().find(|x| x.0 == k).map(|x| x.1.clone()).unwrap_or_default();
     egui::ScrollArea::vertical()
         .id_salt("harness-wt-body")
         .auto_shrink([false, false])
@@ -699,15 +807,28 @@ fn wire_type_body(
                         let a = colour_grid(ui, t, "Colour", &mut c[0], true, "wt-c0");
                         let b = colour_grid(ui, t, "Tracer", &mut c[1], true, "wt-c1");
                         if a || b {
-                            edited = c.iter().filter(|x| !x.is_empty()).cloned().collect::<Vec<_>>().join("/");
+                            edited = c
+                                .iter()
+                                .filter(|x| !x.is_empty())
+                                .cloned()
+                                .collect::<Vec<_>>()
+                                .join("/");
                         }
                     }
                     _ => {
                         let (label, unit, hint) = field_words(k);
                         let r = edit_row(ui, t, label, &mut edited, unit, hint, k);
                         // a param or expression: what it is now, at the field's right
-                        let now = values.iter().find(|x| x.0 == k).map(|x| x.1.clone()).unwrap_or_default();
-                        if !edited.is_empty() && edited.parse::<f64>().is_err() && !now.is_empty() && now != edited {
+                        let now = values
+                            .iter()
+                            .find(|x| x.0 == k)
+                            .map(|x| x.1.clone())
+                            .unwrap_or_default();
+                        if !edited.is_empty()
+                            && edited.parse::<f64>().is_err()
+                            && !now.is_empty()
+                            && now != edited
+                        {
                             ui.painter().text(
                                 pos2(r.right() - 8.0, r.center().y),
                                 Align2::RIGHT_CENTER,
@@ -723,17 +844,32 @@ fn wire_type_body(
                     set(fields, k, edited);
                 }
                 if k == "min_bend" && val("min_bend", fields).trim().is_empty() {
-                    let od = values.iter().find(|x| x.0 == "od").and_then(|x| x.1.parse::<f64>().ok());
+                    let od = values
+                        .iter()
+                        .find(|x| x.0 == "od")
+                        .and_then(|x| x.1.parse::<f64>().ok());
                     if let Some(od) = od {
                         computed(ui, t, "", &format!("{} mm", super::fg::short(3.0 * od)), "3 × OD");
                     }
                 }
                 if k == "ohm_km" && val("ohm_km", fields).trim().is_empty() {
                     if let Some(o) = ohm {
-                        computed(ui, t, "", &format!("{} ohm/km", super::fg::short((o * 100.0).round() / 100.0)), "from cross-section");
+                        computed(
+                            ui,
+                            t,
+                            "",
+                            &format!("{} ohm/km", super::fg::short((o * 100.0).round() / 100.0)),
+                            "from cross-section",
+                        );
                     }
                     if let Some(a) = area.filter(|_| val("mm2", fields).trim().is_empty()) {
-                        computed(ui, t, "", &format!("{} mm²", super::fg::short((a * 1000.0).round() / 1000.0)), "conductor area");
+                        computed(
+                            ui,
+                            t,
+                            "",
+                            &format!("{} mm²", super::fg::short((a * 1000.0).round() / 1000.0)),
+                            "conductor area",
+                        );
                     }
                 }
             }
@@ -808,8 +944,23 @@ fn library_body(
         let g = p.layout_no_wrap(w.clone(), medium(11.5), if on { t.on_ink } else { t.ink2 });
         let cr = Rect::from_min_size(pos2(x, cy - 12.0), vec2(g.size().x + 22.0, 24.0));
         let resp = ui.interact(cr, ui.scope_id().with(("chip", w)), Sense::click());
-        p.rect_filled(cr, 12.0, if on { t.on } else if resp.hovered() { t.hover } else { t.surface });
-        p.rect_stroke(cr, 12.0, Stroke::new(1.0, if on { t.on_ink } else { t.line }), StrokeKind::Inside);
+        p.rect_filled(
+            cr,
+            12.0,
+            if on {
+                t.on
+            } else if resp.hovered() {
+                t.hover
+            } else {
+                t.surface
+            },
+        );
+        p.rect_stroke(
+            cr,
+            12.0,
+            Stroke::new(1.0, if on { t.on_ink } else { t.line }),
+            StrokeKind::Inside,
+        );
         p.galley(pos2(cr.left() + 11.0, cr.center().y - g.size().y / 2.0), g, t.ink);
         if resp.clicked() {
             if on {
@@ -823,7 +974,13 @@ fn library_body(
     if !chips.is_empty() {
         let cr = Rect::from_min_size(pos2(x + 4.0, cy - 12.0), vec2(48.0, 24.0));
         let resp = ui.interact(cr, ui.scope_id().with("chips-clear"), Sense::click());
-        p.text(cr.center(), Align2::CENTER_CENTER, "Clear", sans(11.5), if resp.hovered() { t.ink } else { t.ink2 });
+        p.text(
+            cr.center(),
+            Align2::CENTER_CENTER,
+            "Clear",
+            sans(11.5),
+            if resp.hovered() { t.ink } else { t.ink2 },
+        );
         if resp.clicked() {
             chips.clear();
         }
@@ -832,21 +989,35 @@ fn library_body(
     let mut shown: Vec<usize> = (0..rows.len())
         .filter(|&i| {
             let r = &rows[i];
-            let hit = q.is_empty() || r.name.to_lowercase().contains(&q) || r.spec.values().any(|v| v.text().to_lowercase().contains(&q));
-            let chip = chips.iter().all(|c| r.get("conductor") == *c || r.get("insulation") == *c);
+            let hit = q.is_empty()
+                || r.name.to_lowercase().contains(&q)
+                || r.spec.values().any(|v| v.text().to_lowercase().contains(&q));
+            let chip = chips
+                .iter()
+                .all(|c| r.get("conductor") == *c || r.get("insulation") == *c);
             hit && chip
         })
         .collect();
     // columns: swatch, name, gauge, conductor, insulation, OD, spec
-    let cols: [(&str, f32); 7] = [("", 36.0), ("Name", 150.0), ("Gauge", 84.0), ("Conductor", 92.0), ("Insulation", 82.0), ("OD", 54.0), ("Spec", 0.0)];
+    let cols: [(&str, f32); 7] = [
+        ("", 36.0),
+        ("Name", 150.0),
+        ("Gauge", 84.0),
+        ("Conductor", 92.0),
+        ("Insulation", 82.0),
+        ("OD", 54.0),
+        ("Spec", 0.0),
+    ];
     let gauge_key = |r: &LibRow| {
         r.get("mm2")
             .parse::<f64>()
             .ok()
-            .or_else(|| r.get("awg").parse::<f64>().ok().map(|a| {
-                let d = forge_harness::awg_d(a);
-                std::f64::consts::PI * d * d / 4.0
-            }))
+            .or_else(|| {
+                r.get("awg").parse::<f64>().ok().map(|a| {
+                    let d = forge_harness::awg_d(a);
+                    std::f64::consts::PI * d * d / 4.0
+                })
+            })
             .unwrap_or(0.0)
     };
     let (col, up) = *sort;
@@ -856,7 +1027,11 @@ fn library_body(
             2 => gauge_key(ra).total_cmp(&gauge_key(rb)),
             3 => ra.get("conductor").cmp(&rb.get("conductor")),
             4 => ra.get("insulation").cmp(&rb.get("insulation")),
-            5 => ra.get("od").parse::<f64>().unwrap_or(0.0).total_cmp(&rb.get("od").parse::<f64>().unwrap_or(0.0)),
+            5 => ra
+                .get("od")
+                .parse::<f64>()
+                .unwrap_or(0.0)
+                .total_cmp(&rb.get("od").parse::<f64>().unwrap_or(0.0)),
             6 => ra.get("spec").cmp(&rb.get("spec")),
             _ => ra.name.cmp(&rb.name),
         };
@@ -876,7 +1051,17 @@ fn library_body(
             let ink = if col == k || resp.hovered() { t.ink } else { t.ink2 };
             let right = k == 5;
             let tx = if right { cr.right() - 6.0 } else { cr.left() + 6.0 };
-            let at = p.text(pos2(tx, cr.center().y), if right { Align2::RIGHT_CENTER } else { Align2::LEFT_CENTER }, name.to_uppercase(), semi(10.5), ink);
+            let at = p.text(
+                pos2(tx, cr.center().y),
+                if right {
+                    Align2::RIGHT_CENTER
+                } else {
+                    Align2::LEFT_CENTER
+                },
+                name.to_uppercase(),
+                semi(10.5),
+                ink,
+            );
             if col == k {
                 let ax = if right { at.left() - 9.0 } else { at.right() + 5.0 };
                 let c = pos2(ax + 3.0, cr.center().y);
@@ -893,7 +1078,10 @@ fn library_body(
         }
         x += w;
     }
-    let list = Rect::from_min_max(pos2(area.left(), hr.bottom()), pos2(area.right(), area.bottom() - preview_h));
+    let list = Rect::from_min_max(
+        pos2(area.left(), hr.bottom()),
+        pos2(area.right(), area.bottom() - preview_h),
+    );
     let mut use_now = false;
     ui.scope_builder(UiBuilder::new().max_rect(list), |ui| {
         egui::ScrollArea::vertical()
@@ -920,7 +1108,8 @@ fn library_body(
                         Rect::from_min_size(pos2(x + 6.0, rr.top()), vec2(w - 12.0, rr.height()))
                     };
                     let sw = cell(0);
-                    let mini = Rect::from_center_size(pos2(sw.left() + 12.0, rr.center().y), vec2(24.0, 24.0));
+                    let mini =
+                        Rect::from_center_size(pos2(sw.left() + 12.0, rr.center().y), vec2(24.0, 24.0));
                     let sec = Section::of(&|k: &str| r.get(k), "", &r.name);
                     cross_section(&p, t, mini, &sec, false);
                     clipped(ui, cell(1), &r.name, medium(12.5), t.ink, &format!("lib-n{i}"));
@@ -932,15 +1121,46 @@ fn library_body(
                         String::new()
                     };
                     if !gauge.is_empty() {
-                        pill(ui.painter(), pos2(cell(2).left(), rr.center().y), false, &gauge, t.ink, t.hover);
+                        pill(
+                            ui.painter(),
+                            pos2(cell(2).left(), rr.center().y),
+                            false,
+                            &gauge,
+                            t.ink,
+                            t.hover,
+                        );
                     }
-                    clipped(ui, cell(3), &r.get("conductor"), sans(12.0), t.ink, &format!("lib-c{i}"));
-                    clipped(ui, cell(4), &r.get("insulation"), sans(12.0), t.ink, &format!("lib-i{i}"));
+                    clipped(
+                        ui,
+                        cell(3),
+                        &r.get("conductor"),
+                        sans(12.0),
+                        t.ink,
+                        &format!("lib-c{i}"),
+                    );
+                    clipped(
+                        ui,
+                        cell(4),
+                        &r.get("insulation"),
+                        sans(12.0),
+                        t.ink,
+                        &format!("lib-i{i}"),
+                    );
                     let od = r.get("od");
                     if !od.is_empty() {
-                        ui.painter().text(pos2(cell(5).right(), rr.center().y), Align2::RIGHT_CENTER, &od, mono(11.5), t.ink);
+                        ui.painter().text(
+                            pos2(cell(5).right(), rr.center().y),
+                            Align2::RIGHT_CENTER,
+                            &od,
+                            mono(11.5),
+                            t.ink,
+                        );
                     }
-                    let spec = [r.get("spec"), r.get("maker")].into_iter().filter(|x| !x.is_empty()).collect::<Vec<_>>().join("  ·  ");
+                    let spec = [r.get("spec"), r.get("maker")]
+                        .into_iter()
+                        .filter(|x| !x.is_empty())
+                        .collect::<Vec<_>>()
+                        .join("  ·  ");
                     clipped(ui, cell(6), &spec, sans(12.0), t.ink2, &format!("lib-s{i}"));
                     places.push((format!("harness:lib:{i}"), rr));
                     if resp.clicked() {
@@ -954,9 +1174,23 @@ fn library_body(
                 if shown.is_empty() {
                     ui.add_space(24.0);
                     ui.vertical_centered(|ui| {
-                        ui.label(egui::RichText::new(if rows.is_empty() { "No wire library found" } else { "Nothing matches" }).font(sans(13.0)).color(t.ink2));
+                        ui.label(
+                            egui::RichText::new(if rows.is_empty() {
+                                "No wire library found"
+                            } else {
+                                "Nothing matches"
+                            })
+                            .font(sans(13.0))
+                            .color(t.ink2),
+                        );
                         if rows.is_empty() {
-                            ui.label(egui::RichText::new("wires/*.csv beside the document, or ~/.config/forgecad/wires/").font(mono(11.0)).color(t.ink2));
+                            ui.label(
+                                egui::RichText::new(
+                                    "wires/*.csv beside the document, or ~/.config/forgecad/wires/",
+                                )
+                                .font(mono(11.0))
+                                .color(t.ink2),
+                            );
                         }
                     });
                 }
@@ -967,41 +1201,90 @@ fn library_body(
     p.rect_filled(pv, 0.0, t.raised);
     p.hline(pv.x_range(), pv.top() + 0.5, Stroke::new(1.0, t.line));
     if let Some(e) = problem {
-        p.text(pos2(pv.left() + 16.0, pv.top() + 16.0), Align2::LEFT_CENTER, e, sans(12.0), t.error);
+        p.text(
+            pos2(pv.left() + 16.0, pv.top() + 16.0),
+            Align2::LEFT_CENTER,
+            e,
+            sans(12.0),
+            t.error,
+        );
     }
     match picked.and_then(|i| rows.get(i)) {
         Some(r) => {
             let get = |k: &str| r.get(k);
             let sec = Section::of(&get, "", &r.name);
-            cross_section(&p, t, Rect::from_min_size(pv.min + vec2(14.0, 6.0), vec2(150.0, 122.0)), &sec, true);
+            cross_section(
+                &p,
+                t,
+                Rect::from_min_size(pv.min + vec2(14.0, 6.0), vec2(150.0, 122.0)),
+                &sec,
+                true,
+            );
             let x = pv.left() + 180.0;
-            p.text(pos2(x, pv.top() + 26.0), Align2::LEFT_CENTER, &r.name, semi(16.0), t.ink);
-            p.text(pos2(x, pv.top() + 50.0), Align2::LEFT_CENTER, line_of(&get), sans(12.0), t.ink2);
+            p.text(
+                pos2(x, pv.top() + 26.0),
+                Align2::LEFT_CENTER,
+                &r.name,
+                semi(16.0),
+                t.ink,
+            );
+            p.text(
+                pos2(x, pv.top() + 50.0),
+                Align2::LEFT_CENTER,
+                line_of(&get),
+                sans(12.0),
+                t.ink2,
+            );
             let mut lines = vec![];
-            let parts = [get("maker"), get("mpn")].into_iter().filter(|x| !x.is_empty()).collect::<Vec<_>>().join(" ");
+            let parts = [get("maker"), get("mpn")]
+                .into_iter()
+                .filter(|x| !x.is_empty())
+                .collect::<Vec<_>>()
+                .join(" ");
             if !parts.is_empty() {
                 lines.push(parts);
             }
-            let rating = [
-                (get("temp"), "°C"),
-                (get("volts"), "V"),
-            ]
-            .into_iter()
-            .filter(|x| !x.0.is_empty())
-            .map(|(v, u)| format!("{v} {u}"))
-            .collect::<Vec<_>>()
-            .join(" · ");
+            let rating = [(get("temp"), "°C"), (get("volts"), "V")]
+                .into_iter()
+                .filter(|x| !x.0.is_empty())
+                .map(|(v, u)| format!("{v} {u}"))
+                .collect::<Vec<_>>()
+                .join(" · ");
             if !rating.is_empty() {
                 lines.push(rating);
             }
             for (k, l) in lines.iter().enumerate() {
-                p.text(pos2(x, pv.top() + 74.0 + 20.0 * k as f32), Align2::LEFT_CENTER, l, sans(12.0), t.ink);
+                p.text(
+                    pos2(x, pv.top() + 74.0 + 20.0 * k as f32),
+                    Align2::LEFT_CENTER,
+                    l,
+                    sans(12.0),
+                    t.ink,
+                );
             }
-            let from = format!("{}:{}", std::path::Path::new(&r.file).file_name().map_or(String::new(), |f| f.to_string_lossy().to_string()), r.line);
-            p.text(pos2(pv.right() - 16.0, pv.bottom() - 14.0), Align2::RIGHT_CENTER, from, mono(10.5), t.ink2);
+            let from = format!(
+                "{}:{}",
+                std::path::Path::new(&r.file)
+                    .file_name()
+                    .map_or(String::new(), |f| f.to_string_lossy().to_string()),
+                r.line
+            );
+            p.text(
+                pos2(pv.right() - 16.0, pv.bottom() - 14.0),
+                Align2::RIGHT_CENTER,
+                from,
+                mono(10.5),
+                t.ink2,
+            );
         }
         None => {
-            p.text(pv.center(), Align2::CENTER_CENTER, format!("{} wire types", shown.len()), sans(12.5), t.ink2);
+            p.text(
+                pv.center(),
+                Align2::CENTER_CENTER,
+                format!("{} wire types", shown.len()),
+                sans(12.5),
+                t.ink2,
+            );
         }
     }
     use_now
@@ -1024,8 +1307,17 @@ fn wire_body(ui: &mut Ui, t: &Theme, d: &mut Dialog, hs: &[HarnessOut], places: 
     let Some(ho) = hs.get(*h) else { return };
     let tyo: Option<&TypeOut> = ho.types.iter().find(|x| x.name == *ty);
     let code = {
-        let c = colour.iter().map(|x| x.trim()).filter(|x| !x.is_empty()).collect::<Vec<_>>().join("/");
-        if c.is_empty() { tyo.map(|x| bare(x.get("colour"))).unwrap_or_default() } else { c }
+        let c = colour
+            .iter()
+            .map(|x| x.trim())
+            .filter(|x| !x.is_empty())
+            .collect::<Vec<_>>()
+            .join("/");
+        if c.is_empty() {
+            tyo.map(|x| bare(x.get("colour"))).unwrap_or_default()
+        } else {
+            c
+        }
     };
     // the preview: the wire from the side and its section
     let area = ui.max_rect();
@@ -1035,9 +1327,29 @@ fn wire_body(ui: &mut Ui, t: &Theme, d: &mut Dialog, hs: &[HarnessOut], places: 
     p.hline(pv.x_range(), pv.bottom() - 0.5, Stroke::new(1.0, t.line));
     let tget = |k: &str| tyo.map(|x| bare(x.get(k))).unwrap_or_default();
     let sec = Section::of(&tget, &code, name);
-    cross_section(&p, t, Rect::from_min_size(pv.min + vec2(14.0, 9.0), vec2(100.0, 100.0)), &sec, false);
-    side_view(&p, Rect::from_min_max(pos2(pv.left() + 124.0, pv.top() + 58.0), pos2(pv.right() - 14.0, pv.bottom() - 8.0)), &code, name);
-    p.text(pos2(pv.left() + 134.0, pv.top() + 22.0), Align2::LEFT_CENTER, name.as_str(), semi(16.0), t.ink);
+    cross_section(
+        &p,
+        t,
+        Rect::from_min_size(pv.min + vec2(14.0, 9.0), vec2(100.0, 100.0)),
+        &sec,
+        false,
+    );
+    side_view(
+        &p,
+        Rect::from_min_max(
+            pos2(pv.left() + 124.0, pv.top() + 58.0),
+            pos2(pv.right() - 14.0, pv.bottom() - 8.0),
+        ),
+        &code,
+        name,
+    );
+    p.text(
+        pos2(pv.left() + 134.0, pv.top() + 22.0),
+        Align2::LEFT_CENTER,
+        name.as_str(),
+        semi(16.0),
+        t.ink,
+    );
     let mut sub = vec![];
     if !code.is_empty() {
         sub.push(code.clone());
@@ -1049,7 +1361,13 @@ fn wire_body(ui: &mut Ui, t: &Theme, d: &mut Dialog, hs: &[HarnessOut], places: 
     if !l.is_empty() {
         sub.push(l);
     }
-    p.text(pos2(pv.left() + 134.0, pv.top() + 42.0), Align2::LEFT_CENTER, sub.join("  ·  "), sans(12.0), t.ink2);
+    p.text(
+        pos2(pv.left() + 134.0, pv.top() + 42.0),
+        Align2::LEFT_CENTER,
+        sub.join("  ·  "),
+        sans(12.0),
+        t.ink2,
+    );
     ui.allocate_rect(pv, Sense::hover());
     egui::ScrollArea::vertical()
         .id_salt("harness-wire-body")
@@ -1065,65 +1383,171 @@ fn wire_body(ui: &mut Ui, t: &Theme, d: &mut Dialog, hs: &[HarnessOut], places: 
             let (er, _) = ui.allocate_exact_size(vec2(w, 92.0), Sense::hover());
             let half = (er.width() - 16.0 * 2.0 - 12.0) / 2.0;
             let conns: Vec<&forge_lang::harness::ConnOut> = ho.connectors.iter().collect();
-            for (k, (label, c, pin)) in [("From", &mut *from, &mut *from_pin), ("To", &mut *to, &mut *to_pin)].into_iter().enumerate() {
-                let card = Rect::from_min_size(pos2(er.left() + 16.0 + k as f32 * (half + 12.0), er.top()), vec2(half, er.height()));
+            for (k, (label, c, pin)) in [
+                ("From", &mut *from, &mut *from_pin),
+                ("To", &mut *to, &mut *to_pin),
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                let card = Rect::from_min_size(
+                    pos2(er.left() + 16.0 + k as f32 * (half + 12.0), er.top()),
+                    vec2(half, er.height()),
+                );
                 let pa = ui.painter();
                 pa.rect_filled(card, 6.0, t.raised);
                 pa.rect_stroke(card, 6.0, Stroke::new(1.0, t.line), StrokeKind::Inside);
-                pa.text(card.left_top() + vec2(12.0, 14.0), Align2::LEFT_CENTER, label.to_uppercase(), semi(10.5), t.ink2);
-                let pins: Vec<String> = conns.iter().find(|x| x.name == *c).map(|x| x.pins.clone()).unwrap_or_default();
+                pa.text(
+                    card.left_top() + vec2(12.0, 14.0),
+                    Align2::LEFT_CENTER,
+                    label.to_uppercase(),
+                    semi(10.5),
+                    t.ink2,
+                );
+                let pins: Vec<String> = conns
+                    .iter()
+                    .find(|x| x.name == *c)
+                    .map(|x| x.pins.clone())
+                    .unwrap_or_default();
                 if !pins.is_empty() {
-                    pa.text(card.right_top() + vec2(-12.0, 14.0), Align2::RIGHT_CENTER, format!("{} pins", pins.len()), sans(11.0), t.ink2);
+                    pa.text(
+                        card.right_top() + vec2(-12.0, 14.0),
+                        Align2::RIGHT_CENTER,
+                        format!("{} pins", pins.len()),
+                        sans(11.0),
+                        t.ink2,
+                    );
                 }
-                let cr = Rect::from_min_size(card.left_top() + vec2(12.0, 30.0), vec2(card.width() - 24.0 - 96.0, 28.0));
+                let cr = Rect::from_min_size(
+                    card.left_top() + vec2(12.0, 30.0),
+                    vec2(card.width() - 24.0 - 96.0, 28.0),
+                );
                 let mut cui = ui.new_child(UiBuilder::new().max_rect(cr));
                 let rr = egui::ComboBox::from_id_salt(("harness-end", k))
                     .selected_text(egui::RichText::new(c.as_str()).font(medium(13.0)))
                     .width(cr.width())
                     .show_ui(&mut cui, |ui| {
                         for x in &conns {
-                            ui.selectable_value(c, x.name.clone(), format!("{}   {}", x.name, x.face));
+                            if ui
+                                .selectable_value(c, x.name.clone(), format!("{}   {}", x.name, x.face))
+                                .clicked()
+                            {
+                                // a connector picked: its first pin no wire is on yet
+                                let on = |p: &str| {
+                                    ho.wires.iter().any(|w| {
+                                        w.from == format!("{}.{p}", x.name)
+                                            || w.to == format!("{}.{p}", x.name)
+                                    })
+                                };
+                                if let Some(f) = x.pins.iter().find(|p| !on(p)).or(x.pins.first()) {
+                                    *pin = f.clone();
+                                }
+                            }
                         }
                     });
-                places.push((format!("harness:wire-{}", if k == 0 { "from" } else { "to" }), rr.response.rect));
+                places.push((
+                    format!("harness:wire-{}", if k == 0 { "from" } else { "to" }),
+                    rr.response.rect,
+                ));
                 let pr = Rect::from_min_size(pos2(cr.right() + 8.0, cr.top()), vec2(88.0, 28.0));
                 let mut pui = ui.new_child(UiBuilder::new().max_rect(pr));
                 if pins.is_empty() {
-                    pui.add(egui::TextEdit::singleline(pin).font(mono(12.5)).desired_width(pr.width()).margin(vec2(7.0, 5.0)));
+                    pui.add(
+                        egui::TextEdit::singleline(pin)
+                            .font(mono(12.5))
+                            .desired_width(pr.width())
+                            .margin(vec2(7.0, 5.0)),
+                    );
                 } else {
                     egui::ComboBox::from_id_salt(("harness-pin", k))
                         .selected_text(egui::RichText::new(format!("pin {pin}")).font(mono(12.0)))
-                .wrap_mode(egui::TextWrapMode::Extend)
+                        .wrap_mode(egui::TextWrapMode::Extend)
                         .width(pr.width())
                         .height(300.0)
                         .show_ui(&mut pui, |ui| {
                             for x in &pins {
-                                ui.selectable_value(pin, x.clone(), format!("pin {x}"));
+                                // a pin a wire already ends at: named, and dimmed
+                                let at = format!("{c}.{x}");
+                                let on: Vec<&str> = ho
+                                    .wires
+                                    .iter()
+                                    .filter(|w| w.from == at || w.to == at)
+                                    .map(|w| w.name.as_str())
+                                    .collect();
+                                let label = if on.is_empty() {
+                                    egui::RichText::new(format!("pin {x}")).font(mono(12.0))
+                                } else {
+                                    egui::RichText::new(format!("pin {x}  {}", on.join(", ")))
+                                        .font(mono(12.0))
+                                        .color(t.ink2)
+                                };
+                                ui.selectable_value(pin, x.clone(), label);
                             }
                         });
                 }
-                let face = conns.iter().find(|x| x.name == *c).map(|x| x.face.clone()).unwrap_or_default();
-                ui.painter().text(card.left_bottom() + vec2(12.0, -14.0), Align2::LEFT_CENTER, face, mono(10.5), t.ink2);
+                let face = conns
+                    .iter()
+                    .find(|x| x.name == *c)
+                    .map(|x| x.face.clone())
+                    .unwrap_or_default();
+                ui.painter().text(
+                    card.left_bottom() + vec2(12.0, -14.0),
+                    Align2::LEFT_CENTER,
+                    face,
+                    mono(10.5),
+                    t.ink2,
+                );
+                let at = format!("{c}.{pin}");
+                if let Some(w) = ho.wires.iter().find(|w| w.from == at || w.to == at) {
+                    ui.painter().text(
+                        card.right_bottom() + vec2(-12.0, -14.0),
+                        Align2::RIGHT_CENTER,
+                        format!("{} is on this pin", w.name),
+                        sans(11.0),
+                        t.error,
+                    );
+                }
             }
             heading(ui, t, "Type");
             let r = field(ui, t, "Wire type", 30.0);
             let mut tui = ui.new_child(UiBuilder::new().max_rect(r));
-            let shown = tyo.map(|x| format!("{}    {}", x.name, line_of(&|k: &str| bare(x.get(k))))).unwrap_or_else(|| ty.clone());
+            let shown = tyo
+                .map(|x| format!("{}    {}", x.name, line_of(&|k: &str| bare(x.get(k)))))
+                .unwrap_or_else(|| ty.clone());
             let rr = egui::ComboBox::from_id_salt("harness-wire-type")
                 .selected_text(egui::RichText::new(shown).font(sans(12.5)))
                 .width(r.width())
                 .show_ui(&mut tui, |ui| {
                     for x in &ho.types {
-                        let (row, resp) = ui.allocate_exact_size(vec2(r.width() - 12.0, 28.0), Sense::click());
+                        let (row, resp) =
+                            ui.allocate_exact_size(vec2(r.width() - 12.0, 28.0), Sense::click());
                         if *ty == x.name {
                             ui.painter().rect_filled(row, 4.0, t.on);
                         } else if resp.hovered() {
                             ui.painter().rect_filled(row, 4.0, t.hover);
                         }
                         let s = Section::of(&|k: &str| bare(x.get(k)), "", &x.name);
-                        cross_section(ui.painter(), t, Rect::from_center_size(pos2(row.left() + 16.0, row.center().y), vec2(22.0, 22.0)), &s, false);
-                        ui.painter().text(pos2(row.left() + 34.0, row.center().y), Align2::LEFT_CENTER, &x.name, medium(12.5), t.ink);
-                        ui.painter().text(pos2(row.left() + 90.0, row.center().y), Align2::LEFT_CENTER, line_of(&|k: &str| bare(x.get(k))), sans(11.5), t.ink2);
+                        cross_section(
+                            ui.painter(),
+                            t,
+                            Rect::from_center_size(pos2(row.left() + 16.0, row.center().y), vec2(22.0, 22.0)),
+                            &s,
+                            false,
+                        );
+                        ui.painter().text(
+                            pos2(row.left() + 34.0, row.center().y),
+                            Align2::LEFT_CENTER,
+                            &x.name,
+                            medium(12.5),
+                            t.ink,
+                        );
+                        ui.painter().text(
+                            pos2(row.left() + 90.0, row.center().y),
+                            Align2::LEFT_CENTER,
+                            line_of(&|k: &str| bare(x.get(k))),
+                            sans(11.5),
+                            t.ink2,
+                        );
                         if resp.clicked() {
                             *ty = x.name.clone();
                             ui.close();
@@ -1141,13 +1565,19 @@ fn wire_body(ui: &mut Ui, t: &Theme, d: &mut Dialog, hs: &[HarnessOut], places: 
 
 /// A wire's or a wire type's properties, laid out; false for anything else.
 pub fn props(ui: &mut Ui, t: &Theme, hs: &[HarnessOut], key: &str, max_h: f32) -> bool {
-    let Some(rest) = key.strip_prefix("h:") else { return false };
+    let Some(rest) = key.strip_prefix("h:") else {
+        return false;
+    };
     for h in hs {
-        let Some(k) = rest.strip_prefix(&format!("{}:", h.id)) else { continue };
+        let Some(k) = rest.strip_prefix(&format!("{}:", h.id)) else {
+            continue;
+        };
         let parts: Vec<&str> = k.split(':').collect();
         let (wire, ty) = match parts.as_slice() {
             ["w", w] | ["s", _, w] => {
-                let Some(wo) = h.wires.iter().find(|x| x.name == *w) else { return false };
+                let Some(wo) = h.wires.iter().find(|x| x.name == *w) else {
+                    return false;
+                };
                 (Some(wo), h.types.iter().find(|x| x.name == wo.ty))
             }
             ["t", n] => (None, h.types.iter().find(|x| x.name == *n)),
@@ -1155,7 +1585,10 @@ pub fn props(ui: &mut Ui, t: &Theme, hs: &[HarnessOut], key: &str, max_h: f32) -
         };
         let get = |k: &str| ty.map(|x| bare(x.get(k))).unwrap_or_default();
         let colour = wire.map(|w| w.colour.clone()).unwrap_or_default();
-        let name = wire.map_or_else(|| ty.map(|x| x.name.clone()).unwrap_or_default(), |w| w.name.clone());
+        let name = wire.map_or_else(
+            || ty.map(|x| x.name.clone()).unwrap_or_default(),
+            |w| w.name.clone(),
+        );
         let mut sec = Section::of(&get, &colour, &name);
         if let Some(w) = wire {
             sec.od = w.od;
@@ -1171,8 +1604,18 @@ pub fn props(ui: &mut Ui, t: &Theme, hs: &[HarnessOut], key: &str, max_h: f32) -
         if !l.is_empty() {
             sub.push(l);
         }
-        let pills: Vec<String> = ["spec_tag", "mpn", "part_number"].iter().map(|k| get(k)).collect();
-        header(ui, t, &sec, &format!("{}.{}", h.id, name), &sub.join("  ·  "), &pills);
+        let pills: Vec<String> = ["spec_tag", "mpn", "part_number"]
+            .iter()
+            .map(|k| get(k))
+            .collect();
+        header(
+            ui,
+            t,
+            &sec,
+            &format!("{}.{}", h.id, name),
+            &sub.join("  ·  "),
+            &pills,
+        );
         let out = egui::ScrollArea::vertical()
             .id_salt("harness-props-body")
             .max_height(max_h - 150.0)
@@ -1184,26 +1627,52 @@ pub fn props(ui: &mut Ui, t: &Theme, hs: &[HarnessOut], key: &str, max_h: f32) -
                     heading(ui, t, "Connection");
                     value_row(ui, t, "From", &w.from, "", None);
                     value_row(ui, t, "To", &w.to, "", None);
-                    value_row(ui, t, "Path", &w.path.join(" › "), "", if w.given { None } else { Some("shortest") });
+                    value_row(
+                        ui,
+                        t,
+                        "Path",
+                        &w.path.join(" › "),
+                        "",
+                        if w.given { None } else { Some("shortest") },
+                    );
                     if let Some(o) = &w.routed {
                         heading(ui, t, "Cut length");
                         length_bar(
                             ui,
                             t,
-                            &[("route", o.route), ("loops", o.loops), ("slack", o.slack), ("insertion", o.insertion)],
+                            &[
+                                ("route", o.route),
+                                ("loops", o.loops),
+                                ("slack", o.slack),
+                                ("insertion", o.insertion),
+                            ],
                             o.length,
                         );
                     }
                     if w.ohms.is_some() || w.current.is_some() {
                         heading(ui, t, "Electrical");
                         if let Some(r) = w.ohms {
-                            value_row(ui, t, "Resistance", &super::fg::short((r * 10000.0).round() / 10000.0), "ohm", None);
+                            value_row(
+                                ui,
+                                t,
+                                "Resistance",
+                                &super::fg::short((r * 10000.0).round() / 10000.0),
+                                "ohm",
+                                None,
+                            );
                         }
                         if let Some(i) = w.current {
                             value_row(ui, t, "Current", &super::fg::short(i), "A", None);
                         }
                         if let Some(v) = w.vdrop {
-                            value_row(ui, t, "Voltage drop", &super::fg::short((v * 1000.0).round() / 1000.0), "V", None);
+                            value_row(
+                                ui,
+                                t,
+                                "Voltage drop",
+                                &super::fg::short((v * 1000.0).round() / 1000.0),
+                                "V",
+                                None,
+                            );
                         }
                     }
                 }
@@ -1228,13 +1697,38 @@ pub fn props(ui: &mut Ui, t: &Theme, hs: &[HarnessOut], key: &str, max_h: f32) -
                         };
                         if derived {
                             if let Some(o) = ty.ohm_km {
-                                value_row(ui, t, label, &super::fg::short((o * 100.0).round() / 100.0), unit, Some("from cross-section"));
+                                value_row(
+                                    ui,
+                                    t,
+                                    label,
+                                    &super::fg::short((o * 100.0).round() / 100.0),
+                                    unit,
+                                    Some("from cross-section"),
+                                );
                             }
                         } else if k == "colour" {
                             let r = field(ui, t, label, 26.0);
-                            let s = Section { od: 1.0, conductor_d: Some(0.5), colour: v.clone(), name: name.clone(), ..Default::default() };
-                            cross_section(ui.painter(), t, Rect::from_center_size(pos2(r.left() + 9.0, r.center().y), vec2(18.0, 18.0)), &s, false);
-                            ui.painter().text(pos2(r.left() + 24.0, r.center().y), Align2::LEFT_CENTER, &v, mono(12.0), t.ink);
+                            let s = Section {
+                                od: 1.0,
+                                conductor_d: Some(0.5),
+                                colour: v.clone(),
+                                name: name.clone(),
+                                ..Default::default()
+                            };
+                            cross_section(
+                                ui.painter(),
+                                t,
+                                Rect::from_center_size(pos2(r.left() + 9.0, r.center().y), vec2(18.0, 18.0)),
+                                &s,
+                                false,
+                            );
+                            ui.painter().text(
+                                pos2(r.left() + 24.0, r.center().y),
+                                Align2::LEFT_CENTER,
+                                &v,
+                                mono(12.0),
+                                t.ink,
+                            );
                         } else if k == "source" {
                             let r = field(ui, t, label, 26.0);
                             clipped(ui, r, &v, sans(12.0), t.ink, "props-source");
@@ -1246,7 +1740,8 @@ pub fn props(ui: &mut Ui, t: &Theme, hs: &[HarnessOut], key: &str, max_h: f32) -
                 ui.add_space(10.0);
             });
         let tall = out.content_size.y + 150.0;
-        ui.ctx().data_mut(|d| d.insert_temp(egui::Id::unique("harness-props-h"), tall));
+        ui.ctx()
+            .data_mut(|d| d.insert_temp(egui::Id::unique("harness-props-h"), tall));
         return true;
     }
     false
