@@ -3013,7 +3013,7 @@ impl Headless {
         let mut rgb = Vec::with_capacity((w * h * 3) as usize);
         for y in 0..h {
             let line = &data[(y * row) as usize..][..(w * 4) as usize];
-            for px in line.chunks_exact(4) {
+            for px in line.as_chunks::<4>().0 {
                 rgb.extend_from_slice(&px[..3]);
             }
         }
