@@ -579,7 +579,7 @@ impl Shell {
                     let (mark, ink) = match d.change {
                         "added" => ("+", ADDED),
                         "removed" => ("-", REMOVED),
-                        "moved" => ("↕", t.ink2),
+                        "moved" => ("~", t.ink2),
                         _ => ("≠", CHANGED),
                     };
                     ui.horizontal(|ui| {

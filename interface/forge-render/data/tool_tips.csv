@@ -120,6 +120,11 @@ tools,Parameters,"The part's parameters: names, values and what they drive",
 tools,Save,Write the part to its file,save
 tools,Open,Open a part or assembly,open
 tools,Settings,"Theme, colours, units, mouse and keyboard shortcuts",
+tools,Create Version,"Save the document and mark it as its next named version, with a name and notes",
+tools,Versions,"The document's versions and saves, and the parts it places",
+tools,Compare,The newest version against the part as it is now: changed faces and the volume added and removed,
+tools,Release,"Release the document as its next revision: a named version and its STEP, kept outside the history",
+tools,Update All,Every pinned part to its newest version,
 tools,mm,Show lengths in millimetres,
 tools,cm,Show lengths in centimetres,
 tools,m,Show lengths in metres,
