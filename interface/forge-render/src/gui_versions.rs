@@ -12,7 +12,7 @@ use forge_history::History;
 use forge_lang::compare::{self, Change};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::{Receiver, Sender, channel};
+use std::sync::mpsc::{Receiver, channel};
 
 /// A Compare (or an Open) built, ready to show.
 pub struct Ready {
@@ -23,6 +23,7 @@ pub struct Ready {
     pub target_cls: Vec<Change>,
     pub rows: Vec<DiffRow>,
     pub counts: String,
+    pub volume: Option<(f64, f64)>,
     /// Only one side, shown as it is (Open).
     pub single: bool,
 }
@@ -36,12 +37,11 @@ struct Taken {
 #[derive(Default)]
 pub struct VersState {
     ready: Option<Receiver<Result<Ready, String>>>,
-    thumbs: Option<Receiver<(String, egui::ColorImage)>>,
-    asked: HashSet<String>,
+
     shown: Option<Ready>,
     taken: Option<Taken>,
     /// The slider when the colours were last made, and those colours.
-    made_at: Option<f32>,
+    made_at: Option<(f32, Option<usize>)>,
     /// The file whose released revision the browser shows.
     rev_of: Option<String>,
     pub colours: Vec<FaceColour>,
@@ -60,12 +60,20 @@ fn rows_of(c: &compare::Comparison) -> Vec<DiffRow> {
         ("Occurrences", &c.occurrences),
     ] {
         for x in items.iter().filter(|x| x.change != Change::Same) {
+            let summary = match group {
+                "Occurrences" => match x.change {
+                    Change::Changed => "placed differently".to_string(),
+                    c => c.word().to_string(),
+                },
+                _ => x.summary(),
+            };
             out.push(DiffRow {
                 group,
                 name: x.name.clone(),
                 change: x.change.word(),
-                old: x.old.clone().unwrap_or_default(),
-                new: x.new.clone().unwrap_or_default(),
+                kind: x.kind.clone(),
+                summary,
+                faces: x.faces.clone(),
             });
         }
     }
@@ -92,22 +100,22 @@ fn build(file: PathBuf, a: String, b: String, single: bool) -> Result<Ready, Str
             target_cls: vec![],
             rows: vec![],
             counts: String::new(),
+            volume: None,
             single: true,
         });
     }
     let c = compare::between(&h, &rel, &a, &b)?;
     let rows = rows_of(&c);
+    let mut volume = None;
     let (meshes, base_cls, target_cls, counts) = match (&c.base.run.body, &c.target.run.body, &c.faces) {
         (Some(x), Some(y), Some(f)) => {
-            let vol = compare::volume(x, y)
-                .map(|v| format!(" · +{:.1} / −{:.1} mm³", v.added, v.removed))
-                .unwrap_or_default();
+            volume = compare::volume(x, y).ok().map(|v| (v.added, v.removed));
             (
                 vec![mesh(y), mesh(x)],
                 f.base.clone(),
                 f.target.clone(),
                 format!(
-                    "{} changed · {} added · {} removed{vol}",
+                    "{} changed · {} added · {} removed faces",
                     f.changed, f.added, f.removed
                 ),
             )
@@ -122,6 +130,7 @@ fn build(file: PathBuf, a: String, b: String, single: bool) -> Result<Ready, Str
         target_cls,
         rows,
         counts,
+        volume,
         single: false,
     })
 }
@@ -206,61 +215,6 @@ impl Gui {
             .map(|(src, p)| pinned_rows(src, Path::new(p)))
             .unwrap_or_default();
         v.note.clear();
-        self.vers_thumbs(&file);
-    }
-
-    /// Thumbnails of the versions shown that have none yet, drawn on a thread.
-    fn vers_thumbs(&mut self, file: &Path) {
-        let want: Vec<(String, String)> = self
-            .shell
-            .versions
-            .nodes
-            .iter()
-            .filter(|n| !n.save.is_empty() && !self.vers.asked.contains(&n.save))
-            .map(|n| (n.save.clone(), n.path.clone()))
-            .collect();
-        if want.is_empty() {
-            return;
-        }
-        for w in &want {
-            self.vers.asked.insert(w.0.clone());
-        }
-        let (tx, rx): (Sender<(String, egui::ColorImage)>, _) = channel();
-        self.vers.thumbs = Some(rx);
-        let file = file.to_path_buf();
-        let waker = self.waker.clone();
-        std::thread::spawn(move || {
-            let Some(h) = History::open(&file) else { return };
-            for (save, path) in want {
-                let Some(id) = forge_git::Oid::from_hex(h.repo.hash, &save) else {
-                    continue;
-                };
-                let Ok(side) = compare::build_at(&h, &path, Some(&id), "thumb") else {
-                    continue;
-                };
-                let Some(body) = side.run.body.as_ref() else {
-                    continue;
-                };
-                let mut cache = forge_agent::facemesh::Cache::default();
-                let m = forge_agent::facemesh::join(&cache.faces(body));
-                let Ok(p) = forge_agent::render::picture(body, &m, "iso", 64, &[]) else {
-                    continue;
-                };
-                let bg = p.px.first().copied();
-                let mut px = Vec::with_capacity(p.w * p.h * 4);
-                for &i in &p.px {
-                    let [r, g, b] = p.palette[i as usize];
-                    px.extend_from_slice(&[r, g, b, if Some(i) == bg { 0 } else { 255 }]);
-                }
-                if tx
-                    .send((save, egui::ColorImage::from_rgba_unmultiplied([p.w, p.h], &px)))
-                    .is_err()
-                {
-                    return;
-                }
-                waker();
-            }
-        });
     }
 
     /// Each frame: what the tab asked, and what the threads have finished.
@@ -277,14 +231,7 @@ impl Gui {
         for a in std::mem::take(&mut self.shell.versions.out) {
             self.vers_act(a);
         }
-        if let Some(rx) = &self.vers.thumbs {
-            while let Ok((save, img)) = rx.try_recv() {
-                let tex = self
-                    .ctx
-                    .load_texture(format!("version-{save}"), img, egui::TextureOptions::LINEAR);
-                self.shell.versions.thumbs.insert(save, tex);
-            }
-        }
+
         if let Some(rx) = &self.vers.ready
             && let Ok(got) = rx.try_recv()
         {
@@ -297,7 +244,7 @@ impl Gui {
                 }
             }
         }
-        let s = self.shell.versions.slider;
+        let s = (self.shell.versions.slider, self.shell.versions.focus);
         if self.vers.shown.is_some() && self.vers.made_at != Some(s) {
             self.vers_colours();
         }
@@ -452,6 +399,8 @@ impl Gui {
         self.shell.versions.comparing = Some((r.base.clone(), r.target.clone()));
         self.shell.versions.diff = r.rows.clone();
         self.shell.versions.counts = r.counts.clone();
+        self.shell.versions.volume = r.volume;
+        self.shell.versions.focus = None;
         self.shell.versions.single = r.single;
         self.shell.versions.slider = 1.0;
         self.shell.status = if r.single {
@@ -514,8 +463,19 @@ impl Gui {
     /// The faces' colours for the slider where it is: the side it leans to solid and coloured,
     /// the other a ghost of its changed faces, strongest midway.
     fn vers_colours(&mut self) {
+        let focus = self.shell.versions.focus;
+        self.vers.made_at = Some((self.shell.versions.slider, focus));
         let s = self.shell.versions.slider.clamp(0.0, 1.0);
-        self.vers.made_at = Some(s);
+        let lit: Vec<usize> = focus
+            .and_then(|i| self.shell.versions.diff.get(i))
+            .map(|d| {
+                if s >= 0.5 {
+                    d.faces.1.clone()
+                } else {
+                    d.faces.0.clone()
+                }
+            })
+            .unwrap_or_default();
         self.vers.colours.clear();
         self.vers.ghosts.clear();
         let Some(r) = &self.vers.shown else { return };
@@ -540,7 +500,17 @@ impl Gui {
         } else {
             (1, 0, &r.base_cls, &r.target_cls)
         };
+        for &i in &lit {
+            self.vers.colours.push(FaceColour {
+                placement: solid,
+                face: i as u32,
+                rgba: [0x4C, 0x9A, 0xFF, 235],
+            });
+        }
         for (i, c) in sc.iter().enumerate() {
+            if lit.contains(&i) {
+                continue;
+            }
             if let Some(col) = class(*c) {
                 self.vers.colours.push(FaceColour {
                     placement: solid,
@@ -569,6 +539,8 @@ impl Gui {
         self.shell.versions.comparing = None;
         self.shell.versions.diff.clear();
         self.shell.versions.counts.clear();
+        self.shell.versions.volume = None;
+        self.shell.versions.focus = None;
         self.vers.shown = None;
         self.vers.colours.clear();
         self.vers.ghosts.clear();

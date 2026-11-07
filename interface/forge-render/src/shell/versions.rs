@@ -3,10 +3,10 @@
 //! Compare and Copy ID; Create Version and Release at the top; and, while comparing, what
 //! changed in features and parameters. The host fills it and does what `VersionsAct`s ask.
 
-use super::Shell;
+use super::{Shell, icons};
 use super::theme::{Theme, mono, sans, semi};
 use egui::{Align2, Color32, Rect, Sense, Stroke, Ui, pos2, vec2};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::path::PathBuf;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -40,8 +40,12 @@ pub struct DiffRow {
     pub group: &'static str,
     pub name: String,
     pub change: &'static str,
-    pub old: String,
-    pub new: String,
+    /// The feature's kind, for its icon (None: a parameter or occurrence).
+    pub kind: Option<String>,
+    /// What a person reads: `Hole Ø8 added`, `40 to 50 mm`.
+    pub summary: String,
+    /// The faces it made, by place in the base's and the target's bodies.
+    pub faces: (Vec<usize>, Vec<usize>),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -112,6 +116,12 @@ pub struct Versions {
     pub diff: Vec<DiffRow>,
     /// Compare's counts for the status bar, and its Base to Target slider (0 base, 1 target).
     pub counts: String,
+    /// Material added and removed, mm³ (None: no volume).
+    pub volume: Option<(f64, f64)>,
+    /// The Compare row whose faces are lit in the view.
+    pub focus: Option<usize>,
+    /// The saves between versions are listed too.
+    pub show_saves: bool,
     pub slider: f32,
     /// Open: one save shown as it is, not a Compare.
     pub single: bool,
@@ -120,7 +130,6 @@ pub struct Versions {
     /// The open assembly's pinned parts with a newer version: instance, file, pinned, newest.
     pub pins: Vec<(String, String, u32, u32)>,
     pub note: String,
-    pub thumbs: HashMap<String, egui::TextureHandle>,
     pub out: Vec<VersionsAct>,
 }
 
@@ -155,20 +164,39 @@ pub fn date(t: i64) -> String {
     format!("{y:04}-{m:02}-{d:02} {:02}:{:02}", secs / 3600, secs / 60 % 60)
 }
 
-const ROW: f32 = 54.0;
-const SAVE_ROW: f32 = 34.0;
-const LANE_X: f32 = 18.0;
-const THUMB: f32 = 40.0;
+const ROW: f32 = 44.0;
+const SAVE_ROW: f32 = 30.0;
+/// The selected row's context bar, under its text.
+const BAR: f32 = 30.0;
+const LANE_X: f32 = 14.0;
+const TEXT_X: f32 = 30.0;
+const NODE_R: f32 = 5.0;
 
 /// Colours of Compare's classes, in either theme.
 pub const ADDED: Color32 = Color32::from_rgb(0x3F, 0xB9, 0x6B);
 pub const REMOVED: Color32 = Color32::from_rgb(0xE0, 0x4F, 0x4F);
 pub const CHANGED: Color32 = Color32::from_rgb(0xE8, 0xA3, 0x2E);
 
+/// The feature kinds with an icon of their own.
+const KIND_ICONS: &[&str] = &[
+    "sketch", "extrude", "revolve", "sweep", "loft", "coil", "rib", "hole", "fillet", "chamfer", "shell",
+    "draft", "thread", "plane", "axis", "point", "mirror", "thicken", "split", "move", "text",
+];
+
+fn class_colour(change: &str, t: &Theme) -> Color32 {
+    match change {
+        "added" => ADDED,
+        "removed" => REMOVED,
+        "changed" => CHANGED,
+        _ => t.ink2,
+    }
+}
+
 impl Shell {
     pub(super) fn versions_ui(&mut self, ui: &mut Ui, r: Rect) {
         let t = self.theme;
-        let mut child = ui.new_child(egui::UiBuilder::new().max_rect(r.shrink2(vec2(8.0, 6.0))));
+        let inner = r.shrink2(vec2(8.0, 6.0));
+        let mut child = ui.new_child(egui::UiBuilder::new().max_rect(inner));
         let ui = &mut child;
         if self.versions.off {
             ui.add_space(6.0);
@@ -186,19 +214,19 @@ impl Shell {
             return;
         }
         self.versions_top(ui);
-        ui.add_space(4.0);
-        let list_h = if self.versions.comparing.is_some() {
-            (ui.available_height() * 0.55).max(120.0)
+        let comparing = self.versions.comparing.is_some();
+        // the graph takes what the Compare panel, docked below it, leaves
+        let panel = if comparing {
+            (ui.available_height() * 0.5).max(180.0)
         } else {
-            ui.available_height() - 40.0
+            0.0
         };
         egui::ScrollArea::vertical()
             .id_salt("versions-graph")
-            .max_height(list_h)
+            .max_height((ui.available_height() - panel).max(80.0))
             .auto_shrink([false, false])
             .show(ui, |ui| self.versions_graph(ui));
-        self.versions_actions(ui);
-        if self.versions.comparing.is_some() {
+        if comparing {
             self.versions_diff(ui);
         }
         if !self.versions.note.is_empty() {
@@ -210,6 +238,7 @@ impl Shell {
         }
     }
 
+    /// The header bar: Create Version and Release, the filter, Show saves, the document picked.
     fn versions_top(&mut self, ui: &mut Ui) {
         let t = self.theme;
         ui.horizontal(|ui| {
@@ -224,33 +253,11 @@ impl Shell {
                 self.versions.release = Some((String::new(), String::new(), false));
             }
         });
-        let pins = self.versions.pins.clone();
-        for (inst, file, n, m) in &pins {
-            ui.horizontal(|ui| {
-                ui.label(
-                    egui::RichText::new(format!("{inst}  {file} v{n} · v{m} available"))
-                        .font(sans(12.0))
-                        .color(t.ink),
-                );
-                let b = ui.button(egui::RichText::new("Update").font(sans(12.0)));
-                self.places.push((format!("versions:update:{inst}"), b.rect));
-                if b.clicked() {
-                    self.versions.out.push(VersionsAct::Update(Some(inst.clone())));
-                }
-            });
-        }
-        if pins.len() > 1 {
-            let b = ui.button(egui::RichText::new("Update All").font(sans(12.0)));
-            self.places.push(("versions:update-all".into(), b.rect));
-            if b.clicked() {
-                self.versions.out.push(VersionsAct::Update(None));
-            }
-        }
         ui.add_space(4.0);
         ui.horizontal(|ui| {
             for (f, word) in [
                 (Filter::Part, "This part"),
-                (Filter::Project, "Whole project"),
+                (Filter::Project, "Project"),
                 (Filter::Releases, "Releases"),
             ] {
                 let on = self.versions.filter == f;
@@ -261,6 +268,12 @@ impl Shell {
                     self.versions.out.push(VersionsAct::Load);
                 }
             }
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let mut on = self.versions.show_saves;
+                let b = ui.checkbox(&mut on, egui::RichText::new("Show saves").font(sans(12.0)));
+                self.places.push(("versions:show-saves".into(), b.rect));
+                self.versions.show_saves = on;
+            });
         });
         if self.versions.docs.len() > 1 {
             let shown = self.versions.doc.as_ref().map_or(String::new(), |d| d.0.clone());
@@ -282,167 +295,156 @@ impl Shell {
                 self.versions.out.push(VersionsAct::Show(p));
             }
         }
+        let pins = self.versions.pins.clone();
+        for (inst, file, n, m) in &pins {
+            ui.horizontal(|ui| {
+                ui.label(
+                    egui::RichText::new(format!("{inst}: {file} v{n}, v{m} available"))
+                        .font(sans(12.0))
+                        .color(t.ink),
+                );
+                let b = ui.small_button(egui::RichText::new("Update").font(sans(11.0)));
+                self.places.push((format!("versions:update:{inst}"), b.rect));
+                if b.clicked() {
+                    self.versions.out.push(VersionsAct::Update(Some(inst.clone())));
+                }
+            });
+        }
+        ui.add_space(4.0);
+        let y = ui.cursor().top();
+        ui.painter()
+            .hline(ui.max_rect().x_range(), y, Stroke::new(1.0, t.line));
+        ui.add_space(2.0);
     }
 
     fn versions_graph(&mut self, ui: &mut Ui) {
         let t = self.theme;
         let nodes = self.versions.nodes.clone();
+        let show_saves = self.versions.show_saves;
         let w = ui.available_width();
         let p = ui.painter().clone();
+        let lane = Stroke::new(1.5, t.line);
+        let mut rows = 0;
         for (k, n) in nodes.iter().enumerate() {
+            // only the work since the newest version, when there is some and saves are shown
+            if n.n.is_none() && !show_saves {
+                continue;
+            }
             let key = if n.save.is_empty() {
                 "current".to_string()
             } else {
                 n.save.clone()
             };
-            let (r, resp) = ui.allocate_exact_size(vec2(w, ROW), Sense::click());
             let sel = self.versions.sel.as_deref() == Some(key.as_str());
+            let h = if sel && n.n.is_some() { ROW + BAR } else { ROW };
+            let (r, resp) = ui.allocate_exact_size(vec2(w, h), Sense::click());
             if sel {
-                p.rect_filled(r, 3.0, t.selection);
+                p.rect_filled(r, 4.0, t.selection);
             } else if resp.hovered() {
-                p.rect_filled(r, 3.0, t.hover);
+                p.rect_filled(r, 4.0, t.hover);
             }
-            // the lane: through every node, a dot for a version, a ring for the work since
             let cx = r.left() + LANE_X;
-            let top = if k == 0 { r.center().y } else { r.top() };
-            p.vline(cx, top..=r.bottom(), Stroke::new(2.0, t.line));
-            if n.n.is_some() {
-                p.circle_filled(
-                    pos2(cx, r.center().y),
-                    6.0,
-                    if n.revision.is_some() { t.focus } else { t.accent },
-                );
-            } else {
-                p.circle_stroke(pos2(cx, r.center().y), 5.0, Stroke::new(2.0, t.ink2));
-            }
-            // its thumbnail (the work since the newest version has none of its own)
-            let th = Rect::from_min_size(
-                pos2(r.left() + 34.0, r.center().y - THUMB / 2.0),
-                vec2(THUMB, THUMB),
+            let cy = r.top() + ROW / 2.0;
+            let first = rows == 0;
+            let last = k + 1 == nodes.len() && !(show_saves && !n.saves.is_empty());
+            p.vline(
+                cx,
+                (if first { cy } else { r.top() })..=(if last { cy } else { r.bottom() }),
+                lane,
             );
-            if !n.save.is_empty() {
-                p.rect_filled(th, 3.0, t.raised);
+            match (&n.revision, n.n) {
+                (Some(_), _) => {
+                    p.circle_filled(pos2(cx, cy), NODE_R + 1.0, t.surface);
+                    p.circle_filled(pos2(cx, cy), NODE_R, t.focus);
+                }
+                (None, Some(_)) => {
+                    p.circle_filled(pos2(cx, cy), NODE_R + 1.0, t.surface);
+                    p.circle_filled(pos2(cx, cy), NODE_R, t.accent);
+                }
+                _ => {
+                    p.circle_filled(pos2(cx, cy), NODE_R, t.surface);
+                    p.circle_stroke(pos2(cx, cy), NODE_R - 0.75, Stroke::new(1.5, t.ink2));
+                }
             }
-            if let Some(tex) = self.versions.thumbs.get(&key) {
-                p.image(
-                    tex.id(),
-                    th,
-                    Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)),
-                    Color32::WHITE,
+            let x = r.left() + TEXT_X;
+            // the revision badge in one column at the right
+            let right = r.right() - 8.0;
+            if let Some(rev) = &n.revision {
+                let g = ui.fonts_mut(|f| f.layout_no_wrap(rev.clone(), semi(11.0), Color32::from_gray(20)));
+                let bw = g.size().x + 10.0;
+                let b = Rect::from_min_size(pos2(right - bw, r.top() + 7.0), vec2(bw, 17.0));
+                p.rect_filled(b, 3.0, t.focus);
+                p.galley(
+                    pos2(b.left() + 5.0, b.center().y - g.size().y / 2.0),
+                    g,
+                    Color32::from_gray(20),
                 );
             }
-            let x = th.right() + 8.0;
             let mut title = n.title.clone();
-            if self.versions.filter == Filter::Project && !n.path.is_empty() && n.n.is_some() {
-                title = format!("{title}  {}", n.path);
+            if self.versions.filter == Filter::Project && n.n.is_some() && !n.path.is_empty() {
+                title = format!("{title}  ·  {}", n.path);
             }
             p.text(
-                pos2(x, r.top() + 6.0),
+                pos2(x, r.top() + 7.0),
                 Align2::LEFT_TOP,
                 &title,
                 semi(13.0),
                 t.ink,
             );
-            if let Some(rev) = &n.revision {
-                let g = ui.fonts_mut(|f| f.layout_no_wrap(title.clone(), semi(13.0), t.ink));
-                let b = Rect::from_min_size(pos2(x + g.size().x + 6.0, r.top() + 6.0), vec2(18.0, 16.0));
-                p.rect_filled(b, 3.0, t.focus);
-                p.text(
-                    b.center(),
-                    Align2::CENTER_CENTER,
-                    rev,
-                    semi(11.0),
-                    Color32::from_gray(20),
-                );
-            }
             let who = if n.agent {
                 format!("{} (agent)", n.author)
             } else {
                 n.author.clone()
             };
-            let meta = if n.time > 0 {
+            let mut meta = if n.time > 0 {
                 format!("{who} · {}", date(n.time))
             } else {
                 who
             };
+            if !n.notes.is_empty() {
+                meta = format!("{meta} · {}", one_line(&n.notes, 40));
+            }
             p.text(
-                pos2(x, r.top() + 24.0),
+                pos2(x, r.top() + 25.0),
                 Align2::LEFT_TOP,
                 meta,
                 sans(11.0),
                 t.ink2,
             );
-            if !n.notes.is_empty() {
-                let line = n.notes.lines().next().unwrap_or("");
-                p.text(
-                    pos2(x, r.top() + 38.0),
-                    Align2::LEFT_TOP,
-                    line,
-                    sans(11.0),
-                    t.ink2,
-                );
-            }
             self.places.push((format!("versions:row:{}", n.title), r));
             if resp.clicked() {
                 self.versions_pick(&key);
             }
-            if resp.double_clicked() && !n.save.is_empty() {
-                self.versions.out.push(VersionsAct::Open(n.save.clone()));
+            if sel && n.n.is_some() {
+                let bar = Rect::from_min_max(
+                    pos2(x - 4.0, r.top() + ROW),
+                    pos2(r.right() - 6.0, r.bottom() - 4.0),
+                );
+                self.versions_bar(ui, bar, &key);
             }
-            // its saves, folded
-            if n.saves.is_empty() {
+            rows += 1;
+            if !show_saves {
                 continue;
             }
-            let opened = self.versions.open.contains(&key);
-            let (fr, fresp) = ui.allocate_exact_size(vec2(w, 20.0), Sense::click());
-            p.vline(cx, fr.y_range(), Stroke::new(2.0, t.line));
-            let word = format!(
-                "{} save{}",
-                n.saves.len(),
-                if n.saves.len() == 1 { "" } else { "s" }
-            );
-            let ink = if fresp.hovered() { t.ink } else { t.ink2 };
-            // a small triangle: right while folded, down when open
-            let c = pos2(r.left() + 38.0, fr.center().y);
-            let tri = if opened {
-                vec![c + vec2(-3.5, -2.0), c + vec2(3.5, -2.0), c + vec2(0.0, 2.5)]
-            } else {
-                vec![c + vec2(-2.0, -3.5), c + vec2(-2.0, 3.5), c + vec2(2.5, 0.0)]
-            };
-            p.add(egui::Shape::convex_polygon(tri, ink, Stroke::NONE));
-            p.text(
-                pos2(r.left() + 46.0, fr.center().y),
-                Align2::LEFT_CENTER,
-                word,
-                sans(11.0),
-                ink,
-            );
-            self.places.push((format!("versions:saves:{}", n.title), fr));
-            if fresp.clicked() {
-                if opened {
-                    self.versions.open.remove(&key);
-                } else {
-                    self.versions.open.insert(key.clone());
-                }
-            }
-            if !opened {
-                continue;
-            }
-            for s in &n.saves {
+            for (j, s) in n.saves.iter().enumerate() {
                 let (sr, sresp) = ui.allocate_exact_size(vec2(w, SAVE_ROW), Sense::click());
                 let ssel = self.versions.sel.as_deref() == Some(s.save.as_str());
                 if ssel {
-                    p.rect_filled(sr, 3.0, t.selection);
+                    p.rect_filled(sr, 4.0, t.selection);
                 } else if sresp.hovered() {
-                    p.rect_filled(sr, 3.0, t.hover);
+                    p.rect_filled(sr, 4.0, t.hover);
                 }
-                p.vline(cx, sr.y_range(), Stroke::new(2.0, t.line));
+                let end = k + 1 == nodes.len() && j + 1 == n.saves.len();
+                p.vline(
+                    cx,
+                    sr.top()..=(if end { sr.center().y } else { sr.bottom() }),
+                    lane,
+                );
                 p.circle_filled(pos2(cx, sr.center().y), 2.5, t.ink2);
-                let x = r.left() + 34.0;
                 p.text(
                     pos2(x, sr.top() + 3.0),
                     Align2::LEFT_TOP,
-                    &s.summary,
+                    one_line(&s.summary, 44),
                     sans(12.0),
                     t.ink,
                 );
@@ -452,10 +454,10 @@ impl Shell {
                     s.author.clone()
                 };
                 p.text(
-                    pos2(x, sr.top() + 18.0),
+                    pos2(x, sr.top() + 17.0),
                     Align2::LEFT_TOP,
-                    format!("{who} · {} · {}", date(s.time), &s.save[..s.save.len().min(7)]),
-                    sans(11.0),
+                    format!("{who} · {}", date(s.time)),
+                    sans(10.5),
                     t.ink2,
                 );
                 self.places
@@ -465,11 +467,84 @@ impl Shell {
                 }
             }
         }
-        if nodes.is_empty() {
+        if rows == 0 {
+            ui.add_space(6.0);
+            let word = if nodes.is_empty() {
+                "No saves yet."
+            } else {
+                "No named versions yet."
+            };
+            ui.label(egui::RichText::new(word).font(sans(12.0)).color(t.ink2));
+        }
+    }
+
+    /// The selected version's actions: icon buttons with tooltips, the rest in a menu.
+    fn versions_bar(&mut self, ui: &mut Ui, bar: Rect, key: &str) {
+        let mut child = ui.new_child(
+            egui::UiBuilder::new()
+                .max_rect(bar)
+                .layout(egui::Layout::left_to_right(egui::Align::Center)),
+        );
+        let ui = &mut child;
+        let k = key.to_string();
+        for (icon, tip, name, act) in [
+            (
+                "open",
+                "Open this version, read-only",
+                "open",
+                VersionsAct::Open(k.clone()),
+            ),
+            (
+                "undo",
+                "Restore: save this version again as the newest",
+                "restore",
+                VersionsAct::Restore(k.clone()),
+            ),
+            (
+                "measure",
+                "Compare with the part as it is now",
+                "compare-current",
+                VersionsAct::Compare(k.clone(), "current".into()),
+            ),
+        ] {
+            let (r, resp) = ui.allocate_exact_size(vec2(26.0, 24.0), Sense::click());
+            let resp = resp.on_hover_text(tip);
+            if resp.hovered() {
+                ui.painter().rect_filled(r, 4.0, self.theme.hover);
+            }
+            icons::draw(
+                ui.painter(),
+                r.center() - vec2(8.0, 8.0),
+                16.0,
+                icon,
+                1.5,
+                self.theme.ink,
+            );
+            self.places.push((format!("versions:{name}"), r));
+            if resp.clicked() {
+                self.versions.out.push(act);
+            }
+        }
+        let m = ui.menu_button(egui::RichText::new("···").font(semi(13.0)), |ui| {
+            let r = ui.button("Compare with…");
+            self.places.push(("versions:compare-with".into(), r.rect));
+            if r.clicked() {
+                self.versions.first = Some(k.clone());
+                ui.close();
+            }
+            let r = ui.button("Copy ID");
+            self.places.push(("versions:copy-id".into(), r.rect));
+            if r.clicked() {
+                self.versions.out.push(VersionsAct::CopyId(k.clone()));
+                ui.close();
+            }
+        });
+        self.places.push(("versions:more".into(), m.response.rect));
+        if self.versions.first.is_some() {
             ui.label(
-                egui::RichText::new("No saves yet.")
-                    .font(sans(12.0))
-                    .color(t.ink2),
+                egui::RichText::new("pick the other version")
+                    .font(sans(11.0))
+                    .color(self.theme.ink2),
             );
         }
     }
@@ -481,128 +556,137 @@ impl Shell {
                     .out
                     .push(VersionsAct::Compare(first, key.to_string()));
             }
-            self.versions.sel = Some(key.to_string());
-            return;
         }
         self.versions.sel = Some(key.to_string());
     }
 
-    fn versions_actions(&mut self, ui: &mut Ui) {
-        let t = self.theme;
-        let Some(sel) = self.versions.sel.clone() else {
-            return;
-        };
-        ui.add_space(4.0);
-        ui.horizontal_wrapped(|ui| {
-            let mut b = |ui: &mut Ui, word: &str, name: &str, act: Option<VersionsAct>| {
-                let enabled = act.is_some();
-                let r = ui.add_enabled(
-                    enabled,
-                    egui::Button::new(egui::RichText::new(word).font(sans(12.0))),
-                );
-                self.places.push((format!("versions:{name}"), r.rect));
-                if r.clicked()
-                    && let Some(a) = act
-                {
-                    self.versions.out.push(a);
-                }
-            };
-            let saved = sel != "current";
-            b(ui, "Open", "open", saved.then(|| VersionsAct::Open(sel.clone())));
-            b(
-                ui,
-                "Restore",
-                "restore",
-                saved.then(|| VersionsAct::Restore(sel.clone())),
-            );
-            b(
-                ui,
-                "Compare with current",
-                "compare-current",
-                saved.then(|| VersionsAct::Compare(sel.clone(), "current".into())),
-            );
-            b(
-                ui,
-                "Copy ID",
-                "copy-id",
-                saved.then(|| VersionsAct::CopyId(sel.clone())),
-            );
-            let r = ui.add(
-                egui::Button::new(egui::RichText::new("Compare with…").font(sans(12.0)))
-                    .selected(self.versions.first.is_some()),
-            );
-            self.places.push(("versions:compare-with".into(), r.rect));
-            if r.clicked() {
-                self.versions.first = if self.versions.first.is_some() {
-                    None
-                } else {
-                    Some(sel.clone())
-                };
-            }
-        });
-        if self.versions.first.is_some() {
-            ui.label(
-                egui::RichText::new("Pick the other side")
-                    .font(sans(11.0))
-                    .color(t.ink2),
-            );
-        }
-    }
-
+    /// The Compare panel, docked under the graph: what was compared, the material added and
+    /// removed, and each change as a person says it; a row lights its faces in the view.
     fn versions_diff(&mut self, ui: &mut Ui) {
         let t = self.theme;
         let Some((a, b)) = self.versions.comparing.clone() else {
             return;
         };
-        ui.separator();
+        ui.add_space(2.0);
+        let y = ui.cursor().top();
+        ui.painter()
+            .hline(ui.max_rect().x_range(), y, Stroke::new(1.0, t.line));
+        ui.add_space(6.0);
         let (la, lb) = (self.versions.label_of(&a), self.versions.label_of(&b));
-        ui.label(
-            egui::RichText::new(format!("Compare {la} to {lb}"))
-                .font(semi(12.0))
-                .color(t.ink),
-        );
-        let r = ui.button(egui::RichText::new("End Compare").font(sans(12.0)));
-        self.places.push(("versions:end-compare".into(), r.rect));
-        if r.clicked() {
-            self.versions.out.push(VersionsAct::EndCompare);
+        ui.horizontal(|ui| {
+            ui.label(
+                egui::RichText::new(format!("{la}  to  {lb}"))
+                    .font(semi(12.0))
+                    .color(t.ink),
+            );
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let r = ui.small_button(egui::RichText::new("End").font(sans(11.0)));
+                self.places.push(("versions:end-compare".into(), r.rect));
+                if r.on_hover_text("Back to the model").clicked() {
+                    self.versions.out.push(VersionsAct::EndCompare);
+                }
+            });
+        });
+        if let Some((add, rem)) = self.versions.volume {
+            let w = ui.available_width();
+            let most = add.max(rem).max(1e-9);
+            for (v, c, sign, name) in [(add, ADDED, "+", "added"), (rem, REMOVED, "−", "removed")] {
+                let (r, _) = ui.allocate_exact_size(vec2(w, 18.0), Sense::hover());
+                let p = ui.painter();
+                let track =
+                    Rect::from_min_size(pos2(r.left() + 64.0, r.center().y - 4.0), vec2(w - 150.0, 8.0));
+                p.rect_filled(track, 4.0, t.raised);
+                let fill =
+                    Rect::from_min_size(track.min, vec2((track.width() * (v / most) as f32).max(2.0), 8.0));
+                p.rect_filled(fill, 4.0, c);
+                p.text(
+                    pos2(r.left(), r.center().y),
+                    Align2::LEFT_CENTER,
+                    name,
+                    sans(11.0),
+                    t.ink2,
+                );
+                p.text(
+                    pos2(r.right(), r.center().y),
+                    Align2::RIGHT_CENTER,
+                    format!("{sign}{v:.1} mm³"),
+                    mono(11.0),
+                    t.ink,
+                );
+            }
+            ui.add_space(4.0);
         }
+        let rows = self.versions.diff.clone();
         egui::ScrollArea::vertical()
             .id_salt("versions-diff")
             .auto_shrink([false, false])
             .show(ui, |ui| {
+                let w = ui.available_width();
                 let mut group = "";
-                for d in &self.versions.diff {
+                for (i, d) in rows.iter().enumerate() {
                     if d.group != group {
                         group = d.group;
+                        ui.add_space(4.0);
                         ui.label(egui::RichText::new(group).font(semi(11.0)).color(t.ink2));
                     }
-                    let (mark, ink) = match d.change {
-                        "added" => ("+", ADDED),
-                        "removed" => ("-", REMOVED),
-                        "moved" => ("~", t.ink2),
-                        _ => ("≠", CHANGED),
+                    let (r, resp) = ui.allocate_exact_size(vec2(w, 28.0), Sense::click());
+                    let on = self.versions.focus == Some(i);
+                    let p = ui.painter();
+                    if on {
+                        p.rect_filled(r, 4.0, t.selection);
+                    } else if resp.hovered() {
+                        p.rect_filled(r, 4.0, t.hover);
+                    }
+                    let icon = match (&d.kind, d.group) {
+                        (Some(k), _) if KIND_ICONS.contains(&k.as_str()) => k.as_str(),
+                        (Some(_), _) => "sketchnode",
+                        (None, "Parameters") => "param",
+                        _ => "file",
                     };
-                    ui.horizontal(|ui| {
-                        ui.spacing_mut().item_spacing.x = 8.0;
-                        ui.label(egui::RichText::new(mark).font(mono(12.0)).color(ink));
-                        ui.label(egui::RichText::new(&d.name).font(mono(12.0)).color(t.ink));
-                        let what = match (d.old.is_empty(), d.new.is_empty()) {
-                            (false, false) if d.change == "changed" => format!("{} to {}", d.old, d.new),
-                            (true, false) => d.new.clone(),
-                            (false, _) => d.old.clone(),
-                            _ => String::new(),
-                        };
-                        ui.add(
-                            egui::Label::new(
-                                egui::RichText::new(one_line(&what, 60))
-                                    .font(mono(11.0))
-                                    .color(t.ink2),
-                            )
-                            .truncate(),
-                        );
+                    icons::draw(
+                        p,
+                        pos2(r.left() + 4.0, r.center().y - 8.0),
+                        16.0,
+                        icon,
+                        1.4,
+                        t.ink2,
+                    );
+                    let g = ui.fonts_mut(|f| f.layout_no_wrap(d.name.clone(), semi(12.0), t.ink));
+                    let nx = r.left() + 26.0;
+                    let name_w = g.size().x;
+                    p.galley(pos2(nx, r.center().y - g.size().y / 2.0), g, t.ink);
+                    // the change, as a coloured chip at the right
+                    let c = class_colour(d.change, &t);
+                    let cg = ui.fonts_mut(|f| f.layout_no_wrap(d.change.to_string(), sans(10.5), c));
+                    let cw = cg.size().x + 12.0;
+                    let chip =
+                        Rect::from_min_size(pos2(r.right() - cw - 4.0, r.center().y - 9.0), vec2(cw, 18.0));
+                    p.rect_filled(chip, 9.0, c.gamma_multiply(0.18));
+                    p.galley(
+                        pos2(chip.left() + 6.0, chip.center().y - cg.size().y / 2.0),
+                        cg,
+                        c,
+                    );
+                    let room = (chip.left() - nx - name_w - 18.0).max(0.0);
+                    let sg = ui.fonts_mut(|f| {
+                        let mut job =
+                            egui::text::LayoutJob::simple_singleline(d.summary.clone(), sans(11.5), t.ink2);
+                        job.wrap.max_width = room;
+                        job.wrap.max_rows = 1;
+                        job.wrap.break_anywhere = true;
+                        f.layout_job(job)
                     });
+                    p.galley(
+                        pos2(nx + name_w + 10.0, r.center().y - sg.size().y / 2.0),
+                        sg,
+                        t.ink2,
+                    );
+                    self.places.push((format!("versions:diff:{}", d.name), r));
+                    if resp.on_hover_text(&d.summary).clicked() {
+                        self.versions.focus = if on { None } else { Some(i) };
+                    }
                 }
-                if self.versions.diff.is_empty() {
+                if rows.is_empty() {
                     ui.label(
                         egui::RichText::new("No feature or parameter changed.")
                             .font(sans(12.0))

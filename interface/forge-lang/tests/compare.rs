@@ -7,6 +7,28 @@ use forge_history::History;
 use forge_lang::compare::{self, Change};
 use std::path::PathBuf;
 
+#[test]
+fn edits_are_said_shortly() {
+    let d = compare::deltas(
+        "sketch plan(on: xy) {\n  outline = rect(corner: (0, 0), size: (w, 30))\n}",
+        "sketch plan(on: xy) {\n  outline = rect(corner: (0, 0), size: (w, 36))\n}",
+    );
+    assert_eq!(
+        d,
+        [(
+            "outline size".to_string(),
+            "(w, 30)".to_string(),
+            "(w, 36)".to_string()
+        )]
+    );
+    let d = compare::deltas("base = extrude(plan, 10)", "base = extrude(plan, 12)");
+    assert_eq!(
+        d,
+        [("argument 2".to_string(), "10".to_string(), "12".to_string())]
+    );
+    assert_eq!(compare::title("sheet_flange"), "Sheet flange");
+}
+
 fn who(t: i64) -> Sig {
     Sig {
         name: "David Bascom".into(),
@@ -57,7 +79,15 @@ fn a_hole_between_two_versions() {
     let feat = |n: &str| c.features.iter().find(|x| x.name == n).map(|x| x.change);
     assert_eq!(feat("hole1"), Some(Change::Added));
     assert_eq!(feat("base"), Some(Change::Same));
+    let hole = c.features.iter().find(|x| x.name == "hole1").unwrap();
+    assert_eq!(hole.summary(), "Hole Ø6 added");
+    assert!(
+        !hole.faces.1.is_empty() && hole.faces.0.is_empty(),
+        "{:?}",
+        hole.faces
+    );
     let w = c.params.iter().find(|p| p.name == "w").unwrap();
+    assert_eq!(w.summary(), "40 to 45 mm");
     assert_eq!(
         (w.change, w.old.as_deref(), w.new.as_deref()),
         (Change::Changed, Some("40"), Some("45"))
