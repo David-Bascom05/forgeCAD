@@ -217,14 +217,9 @@ fn undo_is_a_tool_call_and_the_calls_replay_on_a_fresh_part() {
     h.step();
     h.step();
     assert_eq!(h.gui.calls, vec![Call::Undo]);
-    // nothing to undo on a fresh file: it says so, and the document stands
-    for _ in 0..200 {
-        h.step();
-        if !h.gui.shell.status.is_empty() {
-            break;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(2));
-    }
+    // nothing to undo on a fresh file: it says so, and the document stands (the worker's answer
+    // waited for, not 200 frames: on a busy machine it came after them)
+    h.until(|g| !g.shell.status.is_empty());
     assert!(
         h.gui.shell.status.contains("nothing to undo"),
         "{}",
