@@ -83,7 +83,7 @@ pub struct Inspector {
     /// What the renderer was last given.
     cut: Option<crate::shell::inspect::Cut>,
     /// The section's outline being worked out (`fg query F section ..`).
-    outline: Option<Receiver<Result<String, String>>>,
+    outline: Option<Receiver<Result<(String, crate::shell::inspect::Outline), String>>>,
 }
 
 fn ent(e: Entity) -> Ent {
@@ -519,7 +519,11 @@ impl Gui {
                             p[0], p[1], p[2], n[0], n[1], n[2]
                         );
                         let a = forge_lang::query::ask(&src, dir, None, &q);
-                        if a.ok { Ok(a.text) } else { Err(a.text) }
+                        if a.ok {
+                            Ok((a.text, outline(&a.json)))
+                        } else {
+                            Err(a.text)
+                        }
                     }
                 };
                 let _ = send.send(got);
@@ -530,9 +534,9 @@ impl Gui {
             && let Ok(got) = r.try_recv()
         {
             self.inspector.outline = None;
-            self.shell.inspect.outline = Some(got.map(|text| {
-                self.ctx.copy_text(text.clone());
-                format!("Copied: {}", text.lines().next().unwrap_or(""))
+            self.shell.inspect.outline = Some(got.map(|(text, o)| {
+                self.ctx.copy_text(text);
+                o
             }));
         }
         if std::mem::take(&mut self.shell.inspect.want_physical) {
@@ -943,4 +947,41 @@ impl Gui {
         }
         Ok(out.join("\n"))
     }
+}
+
+/// A section answer's numbers for the Section View: loops by kind, area, extent.
+fn outline(j: &forge_agent::json::Json) -> crate::shell::inspect::Outline {
+    use forge_agent::json::Json;
+    let mut o = crate::shell::inspect::Outline {
+        outlines: 0,
+        holes: 0,
+        area: j.get("area").and_then(Json::num).unwrap_or(0.0),
+        lo: [f64::INFINITY; 3],
+        hi: [f64::NEG_INFINITY; 3],
+    };
+    if let Some(Json::Arr(ls)) = j.get("loops") {
+        for l in ls {
+            match l.get("kind").and_then(Json::str) {
+                Some("hole") => o.holes += 1,
+                _ => o.outlines += 1,
+            }
+            for (k, far) in [("min", false), ("max", true)] {
+                if let Some(Json::Arr(p)) = l.get(k) {
+                    for (i, x) in p.iter().take(3).enumerate() {
+                        let v = x.num().unwrap_or(0.0);
+                        if far {
+                            o.hi[i] = o.hi[i].max(v);
+                        } else {
+                            o.lo[i] = o.lo[i].min(v);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if o.outlines + o.holes == 0 {
+        o.lo = [0.0; 3];
+        o.hi = [0.0; 3];
+    }
+    o
 }

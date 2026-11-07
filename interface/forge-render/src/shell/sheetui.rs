@@ -87,7 +87,7 @@ pub(super) fn sheet_groups(s: &Shell) -> Vec<Group> {
                     SheetCmd::CornerRelief,
                     on(SheetCmd::CornerRelief),
                 ),
-                coming("Corner Round", "fillet"),
+                tool("Corner Round", SheetCmd::CornerRound, on(SheetCmd::CornerRound)),
                 coming("Corner Chamfer", "chamfer"),
                 coming("Rip", "rip"),
                 tool("Unfold", SheetCmd::Unfold, on(SheetCmd::Unfold)),

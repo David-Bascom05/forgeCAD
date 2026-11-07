@@ -172,8 +172,11 @@ pub struct Gui {
     pub fg_asm: Option<AsmPlaced>,
     /// A part's anchors being found, for the instance chosen.
     fg_asm_anchors: Option<Receiver<PartAnchors>>,
-    /// The interferences located (`AsmLocate`), found off the frame's thread.
-    fg_asm_located: Option<Receiver<Result<Vec<String>, String>>>,
+    /// The interferences located (`AsmLocate`), found off the frame's thread, and the clash
+    /// zoomed to's faces, marked.
+    fg_asm_located: Option<Receiver<Result<Vec<crate::shell::fgasm::Located>, String>>>,
+    fg_located_marks: Vec<Mark>,
+    fg_located_box: Option<([f32; 3], [f32; 3])>,
     /// The camera to keep when an assembly's view is made again.
     fg_keep_camera: Option<Camera>,
     /// The GPU refused something: said once, and no more views are drawn.
@@ -321,6 +324,8 @@ impl Gui {
             fg_asm: None,
             fg_asm_anchors: None,
             fg_asm_located: None,
+            fg_located_marks: Vec::new(),
+            fg_located_box: None,
             fg_keep_camera: None,
             gpu_failed,
             extras: Default::default(),
@@ -2512,6 +2517,7 @@ impl Gui {
                         .filter(|m| !m.selected && !quiet)
                         .collect(),
                 };
+                m.extend(self.fg_located_marks.iter().copied());
                 // with a dialog up the picks are what's marked
                 if self.shell.dialog.is_some() {
                     m.extend(v.nav.selected.iter().map(|&(placement, entity)| Mark {
@@ -3248,8 +3254,13 @@ impl Gui {
             && let Ok(got) = r.try_recv()
         {
             self.fg_asm_located = None;
+            let first = got.as_ref().is_ok_and(|f| !f.is_empty());
             if let Some(a) = self.shell.fg.as_mut().and_then(|p| p.asm.as_mut()) {
                 a.located = Some(Some(got));
+            }
+            // Locate goes to the first clash
+            if first {
+                self.asm_zoom(0);
             }
         }
         let mut asm_moved = false;
@@ -3354,6 +3365,8 @@ impl Gui {
                 // a rebuild may have moved them: located again on asking
                 if !matches!(ap.located, Some(None)) {
                     ap.located = None;
+                    self.fg_located_marks.clear();
+                    self.fg_located_box = None;
                 }
                 let tm = &a.timings;
                 ap.timings = format!(
@@ -3598,6 +3611,7 @@ impl Gui {
                 }
                 crate::shell::fg::FgAct::AsmAnchors(file) => self.asm_anchors(file),
                 crate::shell::fg::FgAct::AsmLocate => self.asm_locate(),
+                crate::shell::fg::FgAct::AsmZoom(k) => self.asm_zoom(k),
                 a @ (crate::shell::fg::FgAct::AsmOps(_)
                 | crate::shell::fg::FgAct::AsmPreview(_)
                 | crate::shell::fg::FgAct::AsmPlace { .. }
@@ -3732,19 +3746,58 @@ impl Gui {
         let dir = path
             .as_deref()
             .and_then(|p| std::path::Path::new(p).parent().map(|d| d.to_path_buf()));
+        let data = self.inspector.data.clone();
         let (send, recv) = channel();
         self.fg_asm_located = Some(recv);
         let waker = self.waker.clone();
         std::thread::spawn(move || {
-            let a = forge_lang::query::ask(&src, dir, None, "interference");
-            let got = if a.ok {
-                Ok(a.text.lines().skip(1).map(|l| l.trim().to_string()).collect())
-            } else {
-                Err(a.text)
-            };
-            let _ = send.send(got);
+            let _ = send.send(locate(&src, dir, data.as_deref()));
             waker();
         });
+    }
+
+    /// The view fitted round located clash `k`, its faces marked: each part's in its colour.
+    fn asm_zoom(&mut self, k: usize) {
+        let Some(Some(Ok(found))) = self
+            .shell
+            .fg
+            .as_ref()
+            .and_then(|p| p.asm.as_ref())
+            .and_then(|a| a.located.clone())
+        else {
+            return;
+        };
+        let Some(c) = found.get(k) else { return };
+        self.fg_located_marks = c
+            .marks
+            .iter()
+            .map(|&(placement, f, second)| Mark {
+                placement,
+                entity: Entity::Face(f),
+                selected: true,
+                second,
+            })
+            .collect();
+        let centre = c.centre.map(|x| x as f32);
+        self.fg_located_box = Some((c.lo.map(|x| x as f32), c.hi.map(|x| x as f32)));
+        let r = (0..3)
+            .map(|i| (c.hi[i] - c.lo[i]) * (c.hi[i] - c.lo[i]))
+            .sum::<f64>()
+            .sqrt() as f32
+            / 2.0;
+        if let Some(v) = &mut self.view {
+            // looking across the clash's thinnest way, from the side of the model it is on
+            let k = (0..3)
+                .min_by(|&i, &j| (c.hi[i] - c.lo[i]).total_cmp(&(c.hi[j] - c.lo[j])))
+                .unwrap_or(2);
+            let (mid, _) = v.scene.bounds();
+            // a three-quarter view from that side, the clash's box drawn through the parts
+            let mut side = [1i8, -1, 1];
+            side[k] = if (c.centre[k] as f32) < mid[k] { -1 } else { 1 };
+            v.nav.camera = crate::nav::region_view_as(v.nav.camera, side, &v.nav.orient);
+            v.nav.fit_sphere(centre, (r * 1.3).max(2.0));
+            v.mark_dirty();
+        }
     }
 
     fn asm_anchors(&mut self, file: String) {
@@ -4304,4 +4357,65 @@ fn statement_names(prog: &[forge_lang::syntax::Stmt], out: &mut Vec<String>) {
             _ => {}
         }
     }
+}
+
+/// Each interference's place and faces by the query the CLI and the agent ask, and its faces in
+/// the view's own bodies (`data`'s placements, named by occurrence) for marking.
+fn locate(
+    src: &str,
+    dir: Option<std::path::PathBuf>,
+    data: Option<&crate::gui::gui_inspect::InspectData>,
+) -> Result<Vec<crate::shell::fgasm::Located>, String> {
+    use forge_agent::json::Json;
+    let a = forge_lang::query::ask(src, dir, None, "interference");
+    if !a.ok {
+        return Err(a.text);
+    }
+    let v3 = |j: &Json, k: &str| -> [f64; 3] {
+        match j.get(k) {
+            Some(Json::Arr(x)) if x.len() == 3 => [0, 1, 2].map(|i| x[i].num().unwrap_or(0.0)),
+            _ => [0.0; 3],
+        }
+    };
+    let names = |j: &Json, k: &str| -> Vec<String> {
+        match j.get(k) {
+            Some(Json::Arr(x)) => x.iter().filter_map(|n| n.str().map(String::from)).collect(),
+            _ => vec![],
+        }
+    };
+    let Some(Json::Arr(list)) = a.json.get("interferences") else {
+        return Ok(vec![]);
+    };
+    let mut out = Vec::new();
+    for j in list {
+        let (pa, pb) = (
+            j.get("a").and_then(Json::str).unwrap_or("").to_string(),
+            j.get("b").and_then(Json::str).unwrap_or("").to_string(),
+        );
+        let mut marks = Vec::new();
+        if let Some(d) = data {
+            let at = |p: &str| -> Vec<usize> { (0..d.names.len()).filter(|&i| d.names[i] == p).collect() };
+            for x in at(&pa) {
+                for y in at(&pb) {
+                    let ((bx, fx), (by, fy)) = (d.placed[x], d.placed[y]);
+                    if let Ok(Some(c)) = forge_lang::query::clash_at(&d.bodies[bx], &fx, &d.bodies[by], &fy) {
+                        marks.extend(c.faces_a.iter().map(|f| (x as u32, f.0, false)));
+                        marks.extend(c.faces_b.iter().map(|f| (y as u32, f.0, true)));
+                    }
+                }
+            }
+        }
+        out.push(crate::shell::fgasm::Located {
+            volume: j.get("volume").and_then(Json::num).unwrap_or(0.0),
+            centre: v3(j, "centre"),
+            lo: v3(j, "min"),
+            hi: v3(j, "max"),
+            faces_a: names(j, "faces_a"),
+            faces_b: names(j, "faces_b"),
+            a: pa,
+            b: pb,
+            marks,
+        });
+    }
+    Ok(out)
 }

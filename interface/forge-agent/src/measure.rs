@@ -596,8 +596,14 @@ pub fn read_one(p: &Pick) -> Reading {
                     if rad > 0.0 && sweep < dmath::TAU * (1.0 - 1e-9) {
                         r.values.push((Quantity::Angle, sweep * 180.0 / dmath::PI));
                     }
-                    r.values
-                        .extend([(Quantity::X, c.x), (Quantity::Y, c.y), (Quantity::Z, c.z)]);
+                    r.values.extend([
+                        (Quantity::X, c.x),
+                        (Quantity::Y, c.y),
+                        (Quantity::Z, c.z),
+                        (Quantity::AxisX, z.x),
+                        (Quantity::AxisY, z.y),
+                        (Quantity::AxisZ, z.z),
+                    ]);
                     r.shown.push(Shown::Circle(c, z, rad));
                 }
                 Geom::Segment(s, e) => r.shown.push(Shown::Line(s, e, Quantity::Length)),

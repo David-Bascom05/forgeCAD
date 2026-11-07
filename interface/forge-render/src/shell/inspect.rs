@@ -334,10 +334,21 @@ pub struct Inspect {
     /// The section's outline asked for (plane 1's point and normal), and what came back: its
     /// first line, the whole put on the clipboard.
     pub want_outline: Option<([f64; 3], [f64; 3])>,
-    pub outline: Option<Result<String, String>>,
+    pub outline: Option<Result<Outline, String>>,
     /// The model's middle and reach in the world, for drawing planes.
     pub bounds: ([f32; 3], f32),
     pub browser: Option<super::materials::Browser>,
+}
+
+/// A section's numbers, as Copy Outline put them on the clipboard: its loops (outlines and
+/// holes), the material's area and the section's extent in the world.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Outline {
+    pub outlines: usize,
+    pub holes: usize,
+    pub area: f64,
+    pub lo: [f64; 3],
+    pub hi: [f64; 3],
 }
 
 /// The folder a document is in: where its project's materials are.
@@ -701,16 +712,48 @@ impl Shell {
                     let (n, p) = s.planes[0].at();
                     want_outline = Some((p, n));
                 }
-                match &outline {
-                    Some(Ok(line)) => {
-                        ui.label(egui::RichText::new(line).font(sans(11.0)).color(t.ink2));
-                    }
-                    Some(Err(e)) => {
-                        ui.label(egui::RichText::new(e).font(sans(11.0)).color(t.error));
-                    }
-                    None => {}
+                if matches!(outline, Some(Ok(_))) {
+                    ui.add_space(6.0);
+                    ui.label(egui::RichText::new("Copied").font(sans(11.0)).color(t.ink2));
                 }
             });
+            match &outline {
+                Some(Ok(o)) => {
+                    let col = 64.0;
+                    let row = |ui: &mut Ui, what: &str, value: String, unit: &str| {
+                        ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing.x = 4.0;
+                            ui.add_sized(
+                                vec2(col, 16.0),
+                                egui::Label::new(egui::RichText::new(what).font(sans(11.0)).color(t.ink2)),
+                            );
+                            ui.label(egui::RichText::new(value).font(mono(12.0)).color(t.ink));
+                            ui.label(egui::RichText::new(unit).font(sans(10.0)).color(t.ink2));
+                        });
+                    };
+                    let loops = format!(
+                        "outline{} · {} hole{}",
+                        if o.outlines == 1 { "" } else { "s" },
+                        o.holes,
+                        if o.holes == 1 { "" } else { "s" }
+                    );
+                    row(ui, "Loops", o.outlines.to_string(), &loops);
+                    row(ui, "Area", format!("{:.3}", o.area), "mm²");
+                    super::measure_ui::coord_table(
+                        ui,
+                        t,
+                        col,
+                        "mm",
+                        &[("Min", o.lo, true), ("Max", o.hi, true)],
+                        3,
+                        places,
+                    );
+                }
+                Some(Err(e)) => {
+                    ui.label(egui::RichText::new(e).font(sans(11.0)).color(t.error));
+                }
+                None => {}
+            }
             ui.add_space(8.0);
             ui.horizontal(|ui| {
                 let r = ui.button(egui::RichText::new("OK").font(sans(12.0)));

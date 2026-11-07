@@ -1040,7 +1040,28 @@ pub struct AsmPanel {
     pub posing: super::asmdrag::Posing,
     /// Where each interference is and the faces it touches (`fg query F interference`), once
     /// asked: none while it's found.
-    pub located: Option<Option<Result<Vec<String>, String>>>,
+    pub located: Option<Option<Result<Vec<Located>, String>>>,
+}
+
+/// Each side of a clash, as Measure's two selections are drawn.
+const SIDE_INK: [egui::Color32; 2] = [
+    egui::Color32::from_rgb(0xF0, 0x90, 0x30),
+    egui::Color32::from_rgb(0x40, 0xC8, 0x90),
+];
+
+/// A clash found by Locate: its pair, volume, centre and box (world, mm), the faces of each
+/// part it touches by name, and those faces as the view's marks (placement, face, which side).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Located {
+    pub a: String,
+    pub b: String,
+    pub volume: f64,
+    pub centre: [f64; 3],
+    pub lo: [f64; 3],
+    pub hi: [f64; 3],
+    pub faces_a: Vec<String>,
+    pub faces_b: Vec<String>,
+    pub marks: Vec<(u32, u32, bool)>,
 }
 
 /// Whether `path` is the row `key` or under it.
@@ -2730,15 +2751,16 @@ impl Shell {
                     Some(None) => {
                         ui.label(egui::RichText::new("Locating…").font(sans(11.0)).color(t.ink2));
                     }
-                    Some(Some(Ok(lines))) => {
+                    Some(Some(Ok(found))) => {
                         egui::ScrollArea::vertical()
                             .id_salt("asm-located")
                             .auto_shrink([false, true])
-                            .max_height(180.0)
+                            .max_height(320.0)
                             .show(ui, |ui| {
-                                for (k, l) in lines.iter().enumerate() {
-                                    let r = ui.label(egui::RichText::new(l).font(mono(10.0)).color(t.ink));
-                                    places.push((format!("asm:located:{k}"), r.rect));
+                                for (k, c) in found.iter().enumerate() {
+                                    if Self::located_card(ui, t, c, k, places) {
+                                        out.push(FgAct::AsmZoom(k));
+                                    }
                                 }
                             });
                     }
@@ -2791,6 +2813,80 @@ impl Shell {
             a.interference = false;
         }
         r.map(|r| r.response.rect)
+    }
+
+    /// One clash: its pair and a Zoom (the view fits it, its faces marked in each part's
+    /// selection colour), its volume, centre and box as a table, and its faces by part.
+    fn located_card(
+        ui: &mut Ui,
+        t: &super::theme::Theme,
+        c: &Located,
+        k: usize,
+        places: &mut Vec<(String, Rect)>,
+    ) -> bool {
+        let mut zoom = false;
+        ui.add_space(4.0);
+        egui::Frame::new()
+            .fill(t.surface)
+            .stroke(Stroke::new(1.0, t.ink2.gamma_multiply(0.25)))
+            .corner_radius(4.0)
+            .inner_margin(egui::Margin::same(8))
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(
+                        egui::RichText::new(format!("{}  ×  {}", c.a, c.b))
+                            .font(medium(12.0))
+                            .color(t.ink),
+                    );
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        zoom = Self::fg_button(ui, "Zoom", format!("asm:zoom:{k}"), places);
+                    });
+                });
+                let col = 64.0;
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 4.0;
+                    ui.add_sized(
+                        vec2(col, 16.0),
+                        egui::Label::new(egui::RichText::new("Volume").font(sans(11.0)).color(t.ink2)),
+                    );
+                    ui.label(
+                        egui::RichText::new(format!("{:.3}", c.volume))
+                            .font(mono(12.0))
+                            .color(t.ink),
+                    );
+                    ui.label(egui::RichText::new("mm³").font(sans(10.0)).color(t.ink2));
+                });
+                super::measure_ui::coord_table(
+                    ui,
+                    t,
+                    col,
+                    "mm",
+                    &[
+                        ("Centre", c.centre, true),
+                        ("Min", c.lo, true),
+                        ("Max", c.hi, true),
+                    ],
+                    3,
+                    places,
+                );
+                for (who, faces, ink) in [(&c.a, &c.faces_a, SIDE_INK[0]), (&c.b, &c.faces_b, SIDE_INK[1])] {
+                    ui.horizontal_top(|ui| {
+                        ui.add_sized(
+                            vec2(col, 14.0),
+                            egui::Label::new(egui::RichText::new(who.as_str()).font(sans(11.0)).color(ink)),
+                        );
+                        ui.vertical(|ui| {
+                            for f in faces {
+                                let short = f.strip_prefix(&format!("{who}/")).unwrap_or(f);
+                                ui.label(egui::RichText::new(short).font(mono(10.0)).color(t.ink));
+                            }
+                        });
+                    });
+                }
+            });
+        let r = ui.min_rect();
+        places.push((format!("asm:located:{k}"), r));
+        zoom
     }
 
     fn bom_window(

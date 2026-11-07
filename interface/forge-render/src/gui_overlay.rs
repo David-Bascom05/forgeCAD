@@ -294,6 +294,41 @@ impl Gui {
                 }
             }
         }
+        // a located clash's box, seen through the parts that hide it
+        if let Some((lo, hi)) = self.fg_located_box {
+            let c = |k: usize| {
+                [
+                    if k & 1 == 0 { lo[0] } else { hi[0] },
+                    if k & 2 == 0 { lo[1] } else { hi[1] },
+                    if k & 4 == 0 { lo[2] } else { hi[2] },
+                ]
+            };
+            let red = [0.93, 0.27, 0.22, 1.0];
+            for (a, b) in [
+                (0, 1),
+                (2, 3),
+                (4, 5),
+                (6, 7),
+                (0, 2),
+                (1, 3),
+                (4, 6),
+                (5, 7),
+                (0, 4),
+                (1, 5),
+                (2, 6),
+                (3, 7),
+            ] {
+                crate::origin::polyline(&[c(a), c(b)], px * 2.0, red, cam, size, &mut out);
+                crate::origin::polyline(
+                    &[c(a), c(b)],
+                    px * 2.0,
+                    [red[0], red[1], red[2], 0.6],
+                    cam,
+                    size,
+                    &mut behind,
+                );
+            }
+        }
         self.explode_trails(&mut out);
         (out, behind)
     }

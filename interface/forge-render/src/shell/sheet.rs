@@ -30,6 +30,7 @@ pub enum SheetCmd {
     Cut,
     CornerSeam,
     CornerRelief,
+    CornerRound,
     Punch,
     Hardware,
     Unfold,
@@ -57,6 +58,7 @@ pub fn cmd_of_kind(kind: &str) -> Option<SheetCmd> {
         "cutout" => SheetCmd::Cut,
         "seam" => SheetCmd::CornerSeam,
         "corner_relief" => SheetCmd::CornerRelief,
+        "corner_round" => SheetCmd::CornerRound,
         "punch" | "form" => SheetCmd::Punch,
         "pem" => SheetCmd::Hardware,
         "unfold" => SheetCmd::Unfold,
@@ -80,6 +82,7 @@ pub fn title(c: SheetCmd) -> (&'static str, &'static str) {
         SheetCmd::Cut => ("Cut", "cut"),
         SheetCmd::CornerSeam => ("Corner Seam", "seam"),
         SheetCmd::CornerRelief => ("Corner Relief", "corner"),
+        SheetCmd::CornerRound => ("Corner Round", "round"),
         SheetCmd::Punch => ("PunchTool", "punch"),
         SheetCmd::Hardware => ("Insert Hardware", "pem"),
         SheetCmd::Unfold => ("Unfold", "flat"),
@@ -99,6 +102,7 @@ pub fn icon(c: SheetCmd) -> &'static str {
         SheetCmd::Cut => "smcut",
         SheetCmd::CornerSeam => "cornerseam",
         SheetCmd::CornerRelief => "cornerrelief",
+        SheetCmd::CornerRound => "fillet",
         SheetCmd::Punch => "punch",
         SheetCmd::Hardware => "pem",
         SheetCmd::Unfold => "unfold",
@@ -863,6 +867,11 @@ impl SheetDlg {
                 vec!["#0"],
                 vec![num("", "gap", "Below the part by", 0, "", len)],
             ),
+            SheetCmd::CornerRound => (
+                vec![slot("Sheet", K::Feature)],
+                vec!["#0"],
+                vec![num("r", "r", "Radius", 0, "3", len)],
+            ),
             _ => return None,
         };
         let base = title(cmd).1;
@@ -1303,6 +1312,10 @@ impl SheetDlg {
                 kw.push(format!("at: {}", self.at_text(n)?));
                 kw.push(format!("wall: {}", pick("Face")?));
                 "pem"
+            }
+            SheetCmd::CornerRound => {
+                pos.push(pick("Sheet")?);
+                "corner_round"
             }
             SheetCmd::Unfold => {
                 let s = pick("Sheet")?;
@@ -2189,6 +2202,13 @@ up = flange(base.edge(plan.outline[1]), height: h)
             ),
             "{text}"
         );
+
+        let mut d = new(SheetCmd::CornerRound, L);
+        d.take(Ok("base".into()));
+        d.set("r", "4");
+        let text = apply(L, &ops(&d, L));
+        assert!(text.contains("round1 = corner_round(base, r: r)"), "{text}");
+        assert!(text.contains("param round1.r = 4"), "{text}");
 
         let mut d = new(SheetCmd::Unfold, L);
         d.take(Ok("base".into()));

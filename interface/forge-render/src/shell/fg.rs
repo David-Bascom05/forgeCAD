@@ -238,6 +238,8 @@ pub enum FgAct {
     AsmCheck,
     /// Where the interferences are and what faces they touch.
     AsmLocate,
+    /// The view fitted to a located clash, its faces marked.
+    AsmZoom(usize),
     /// A part file's anchors, for the instance chosen.
     AsmAnchors(String),
     /// An assembly's edit as one undo step: a dialog's OK, a menu's Delete.

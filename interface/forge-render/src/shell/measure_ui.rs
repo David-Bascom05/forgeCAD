@@ -211,7 +211,32 @@ impl Shell {
                             });
                         }
                         let top = ui.cursor().top();
-                        for (q, x) in values {
+                        // a hole's centre and axis: one table, not six rows
+                        let axis = [Quantity::AxisX, Quantity::AxisY, Quantity::AxisZ];
+                        let get = |q: Quantity| values.iter().find(|v| v.0 == q).map(|v| v.1);
+                        let hole = axis.iter().all(|q| get(*q).is_some());
+                        if hole {
+                            let at = [Quantity::X, Quantity::Y, Quantity::Z].map(|q| get(q).unwrap_or(0.0));
+                            let dir = axis.map(|q| get(q).unwrap_or(0.0));
+                            coord_table(
+                                ui,
+                                t,
+                                col,
+                                units.0,
+                                &[("Centre", at, true), ("Axis", dir, false)],
+                                n,
+                                places,
+                            );
+                        }
+                        let values: Vec<&(Quantity, f64)> = values
+                            .iter()
+                            .filter(|v| {
+                                !hole
+                                    || !matches!(v.0, Quantity::X | Quantity::Y | Quantity::Z)
+                                        && !axis.contains(&v.0)
+                            })
+                            .collect();
+                        for &(q, x) in &values {
                             let text = text_of(*q, *x);
                             let focused = m.focus == Some(*q);
                             // into a length field a length, into an angle field an angle
@@ -834,10 +859,30 @@ fn value_row(
         if w.clicked() {
             out = Row::Focus;
         }
-        let r = ui.add(
-            egui::Label::new(egui::RichText::new(value).font(mono(12.0)).color(t.ink))
-                .sense(egui::Sense::click()),
+        // the number in ink, its unit muted after it
+        let (num, unit) = split_unit(value);
+        let mut job = egui::text::LayoutJob::default();
+        job.append(
+            num,
+            0.0,
+            egui::TextFormat {
+                font_id: mono(12.0),
+                color: t.ink,
+                ..Default::default()
+            },
         );
+        if !unit.is_empty() {
+            job.append(
+                unit,
+                4.0,
+                egui::TextFormat {
+                    font_id: sans(11.0),
+                    color: t.ink2,
+                    ..Default::default()
+                },
+            );
+        }
+        let r = ui.add(egui::Label::new(job).sense(egui::Sense::click()));
         places.push((format!("measure:value:{what}"), r.rect));
         if r.clicked() {
             out = Row::Focus;
@@ -1189,4 +1234,86 @@ fn free_shape(
             ]);
         }
     }
+}
+
+/// A value as `shown` writes it, split into its number and its unit (and any second unit).
+pub(super) fn split_unit(value: &str) -> (&str, &str) {
+    match value.find(|c: char| !(c.is_ascii_digit() || matches!(c, '-' | '.' | '+' | 'e' | 'E'))) {
+        Some(k) => (value[..k].trim_end(), value[k..].trim_start()),
+        None => (value, ""),
+    }
+}
+
+/// Points and directions as a table: a column each for X, Y, Z in mono, the unit muted beside
+/// the row's name, and a Copy for the row (`x, y, z`).
+pub(super) fn coord_table(
+    ui: &mut Ui,
+    t: &Theme,
+    col: f32,
+    unit: &str,
+    rows: &[(&str, [f64; 3], bool)],
+    places_n: usize,
+    places: &mut Vec<(String, Rect)>,
+) {
+    let cell = 74.0;
+    ui.horizontal(|ui| {
+        ui.add_sized(vec2(col, 14.0), egui::Label::new(""));
+        for h in ["X", "Y", "Z"] {
+            ui.add_sized(
+                vec2(cell, 14.0),
+                egui::Label::new(egui::RichText::new(h).font(medium(10.0)).color(t.ink2)),
+            );
+        }
+    });
+    for (name, v, length) in rows {
+        ui.horizontal(|ui| {
+            let mut job = egui::text::LayoutJob::default();
+            job.append(
+                name,
+                0.0,
+                egui::TextFormat {
+                    font_id: sans(11.0),
+                    color: t.ink2,
+                    ..Default::default()
+                },
+            );
+            if *length {
+                job.append(
+                    unit,
+                    4.0,
+                    egui::TextFormat {
+                        font_id: sans(10.0),
+                        color: t.ink2.gamma_multiply(0.7),
+                        ..Default::default()
+                    },
+                );
+            }
+            ui.add_sized(vec2(col, 16.0), egui::Label::new(job));
+            // a length in the panel's unit, a direction as it is
+            let texts = v.map(|x| {
+                if *length {
+                    split_unit(&shown(Quantity::Length, x, (unit, "deg"), places_n))
+                        .0
+                        .to_string()
+                } else {
+                    format!("{x:.4}")
+                }
+            });
+            for (k, x) in texts.iter().enumerate() {
+                let r = ui.add_sized(
+                    vec2(cell, 16.0),
+                    egui::Label::new(egui::RichText::new(x).font(mono(12.0)).color(t.ink)),
+                );
+                places.push((format!("measure:{name}:{}", ["x", "y", "z"][k]), r.rect));
+            }
+            let c = ui
+                .add(egui::Button::new(egui::RichText::new("Copy").font(sans(10.0))).small())
+                .on_hover_text("Copy x, y, z");
+            places.push((format!("measure:copy:{name}"), c.rect));
+            if c.clicked() {
+                ui.ctx().copy_text(texts.join(", "));
+            }
+        });
+    }
+    ui.add_space(2.0);
 }

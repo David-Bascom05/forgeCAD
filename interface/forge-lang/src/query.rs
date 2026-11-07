@@ -429,10 +429,12 @@ fn scene(src: &str, dir: Option<PathBuf>, root: Option<PathBuf>, req: &Request) 
         let k = match index.get(&file) {
             Some(&k) => k,
             None => {
-                // the solve names a file as its document wrote it: beside the assembly
+                // the solve names a part file below the top document's folder from there (else
+                // whole), a variant (`|with:..`) by its file: the same lineage, so the same names
+                let plain = file.split_once('|').map_or(file.as_str(), |x| x.0);
                 let p = match &dir {
-                    Some(d) if Path::new(&file).is_relative() => d.join(&file),
-                    _ => PathBuf::from(&file),
+                    Some(d) if Path::new(plain).is_relative() => d.join(plain),
+                    _ => PathBuf::from(plain),
                 };
                 let p = p.as_path();
                 let part_run = std::fs::read_to_string(p).ok().map(|text| {
@@ -1532,4 +1534,13 @@ fn curve_points(c: &forge_sheet::Curve2) -> Vec<forge_math::Point2> {
             vec![a, b]
         }
     }
+}
+
+/// Where two placed bodies clash, in the world: `features::clash` of their rigid copies.
+pub fn clash_at(a: &Body, pa: &Frame, b: &Body, pb: &Frame) -> Result<Option<features::Clash>, String> {
+    let (x, y) = (
+        forge_asm::check::rigid_copy(a, pa),
+        forge_asm::check::rigid_copy(b, pb),
+    );
+    features::clash(&x, &y)
 }

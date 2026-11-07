@@ -326,3 +326,50 @@ fn a_vendor_step_is_read_like_a_part() {
     assert_eq!(l.len(), 1);
     assert!((n(&j, "area") - 40.0 * 1.2).abs() < 1e-6);
 }
+
+#[test]
+fn a_part_placed_through_a_subassembly_keeps_its_anchor_names() {
+    // top/top.fg places ../kit/kit.fg, outside its own folder, which places kit/plate.fg beside
+    // itself, once as it is and once through `with:` (a variant, named by its file)
+    let d = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("query-sub");
+    std::fs::create_dir_all(d.join("top")).unwrap();
+    std::fs::create_dir_all(d.join("kit")).unwrap();
+    std::fs::write(
+        d.join("kit/plate.fg"),
+        "shared t = 4
+shared w = 40
+shared r = 2.5
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (w, w))
+}
+plate = extrude(plan, t)
+sketch hs(on: plate.end) {
+  c = circle((w / 2, w / 2), r)
+}
+bore = cut(hs, thru)
+",
+    )
+    .unwrap();
+    std::fs::write(
+        d.join("kit/kit.fg"),
+        "assembly\nshared z = 10\nshared r2 = 1.5\na = part(\"plate.fg\", ground: true)\nb = part(\"plate.fg\", with: {r: r2}, ground: true, at: pose(at: (0, 0, z)))\n",
+    )
+    .unwrap();
+    std::fs::write(
+        d.join("top/top.fg"),
+        "assembly\nshared x = 100\nkit = subassembly(\"../kit/kit.fg\", ground: true, at: pose(at: (x, 0, 0)))\n",
+    )
+    .unwrap();
+    let a = ask_file(&d.join("top/top.fg"), None, "holes");
+    assert!(a.ok, "{}", a.text);
+    let h = arr(&a.json, "holes");
+    assert_eq!(h.len(), 2, "{}", a.text);
+    for x in h {
+        let name = x.get("name").and_then(Json::str).unwrap();
+        assert!(name.ends_with("/bore.faces") || name.contains("/bore."), "{name}");
+        assert!(!name.contains('@') && !name.contains("hole["), "{name}");
+    }
+    // in hole order: the lower first, the other 10 up
+    assert!(close(v3(&h[0], "centre"), [120.0, 20.0, 2.0]), "{}", h[0]);
+    assert!(close(v3(&h[1], "centre"), [120.0, 20.0, 12.0]), "{}", h[1]);
+}
