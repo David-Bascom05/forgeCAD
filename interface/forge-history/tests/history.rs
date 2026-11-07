@@ -272,3 +272,57 @@ fn a_save_takes_milliseconds() {
     git(&w, &["fsck", "--strict", "--no-dangling"]);
     assert_eq!(git(&w, &["status", "--porcelain"]), "");
 }
+
+#[test]
+fn a_group_save_commits_only_its_files_and_preserves_other_staged_work() {
+    let root = tmp("agent-group");
+    let mut h = History::turn_on(&root).unwrap();
+    h.set_identity("Group Test", "group@example.com").unwrap();
+    std::fs::create_dir(root.join("parts")).unwrap();
+    for name in ["parts/a.fg", "parts/b.fg", "other.txt"] {
+        std::fs::write(root.join(name), "before").unwrap();
+    }
+    h.save_group(
+        &[
+            root.join("parts/a.fg"),
+            root.join("parts/b.fg"),
+            root.join("other.txt"),
+        ],
+        "Baseline",
+        None,
+    )
+    .unwrap();
+    std::fs::write(root.join("other.txt"), "staged unrelated edit").unwrap();
+    git(&root, &["add", "other.txt"]);
+    for name in ["parts/a.fg", "parts/b.fg"] {
+        std::fs::write(root.join(name), "after").unwrap();
+    }
+    let Saved::New(id) = h
+        .save_group(
+            &[root.join("parts/a.fg"), root.join("parts/b.fg")],
+            "Agent changed two parts",
+            Some("codex"),
+        )
+        .unwrap()
+    else {
+        panic!("one commit")
+    };
+    assert_eq!(h.repo.file_at(&id, "parts/a.fg").unwrap().unwrap(), b"after");
+    assert_eq!(h.repo.file_at(&id, "parts/b.fg").unwrap().unwrap(), b"after");
+    assert_eq!(h.repo.file_at(&id, "other.txt").unwrap().unwrap(), b"before");
+    assert_eq!(
+        git(&root, &["diff", "--cached", "--name-only"]).trim(),
+        "other.txt"
+    );
+    assert_eq!(h.log().unwrap()[0].agent.as_deref(), Some("codex"));
+    assert_eq!(
+        h.save_group(
+            &[root.join("parts/a.fg"), root.join("parts/b.fg")],
+            "Again",
+            Some("codex")
+        )
+        .unwrap(),
+        Saved::Unchanged
+    );
+    std::fs::remove_dir_all(root).unwrap();
+}

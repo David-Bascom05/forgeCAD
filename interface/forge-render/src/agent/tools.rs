@@ -170,7 +170,8 @@ pub fn check(text: &str, file: &Path) -> String {
     // a drawing: made as the app makes it, its views, annotations and problems
     if forge_lang::drawing::is_drawing(text) {
         let dir = file.parent().unwrap_or(Path::new("."));
-        let d = forge_lang::drawing::regen::make_in(text, dir, Some(dir));
+        let root = super::project::root(file);
+        let d = forge_lang::drawing::regen::make_in(text, dir, Some(&root));
         let mut s = String::new();
         forge_lang::drawing::regen::json(&d, text).write(&mut s);
         return s;
@@ -178,6 +179,7 @@ pub fn check(text: &str, file: &Path) -> String {
     let opts = forge_lang::Options {
         build: true,
         dir: file.parent().map(|d| d.to_path_buf()),
+        root: Some(super::project::root(file)),
         ..forge_lang::Options::default()
     };
     let (run, _) = forge_lang::run(text, opts, Default::default());
@@ -198,6 +200,7 @@ pub fn in_folder(dir: &Path, name: &str) -> Result<std::path::PathBuf, String> {
             "`{name}` isn't a .fg file name in the folder (no `..`, no absolute path, no flags)"
         ));
     }
+    super::project::path(dir, name, true)?;
     let root = std::fs::canonicalize(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let full = std::fs::canonicalize(root.join(p)).map_err(|e| format!("{name}: {e}"))?;
     if !full.starts_with(&root) {
@@ -235,6 +238,7 @@ pub fn fg_call(name: &str, args: &Json, dir: &Path) -> (String, bool) {
                 let opts = forge_lang::Options {
                     build: false,
                     dir: f.parent().map(|d| d.to_path_buf()),
+                    root: Some(dir.to_path_buf()),
                     ..forge_lang::Options::default()
                 };
                 let (run, _) = forge_lang::run(&text, opts, Default::default());

@@ -50,13 +50,6 @@ fn name_of(path: &str) -> String {
         .map_or_else(|| path.to_string(), |n| n.to_string_lossy().to_string())
 }
 
-fn dir_of(path: &str) -> String {
-    Path::new(path)
-        .parent()
-        .map(|d| d.display().to_string())
-        .unwrap_or_default()
-}
-
 impl Gui {
     /// A turn's running (not waiting to be let into a folder).
     pub fn agent_busy(&self) -> bool {
@@ -127,10 +120,7 @@ impl Gui {
                 Event::Done { .. } | Event::Problem { .. } => {
                     self.shell.agent.take(e);
                     self.agent_turn_over();
-                    // what the agent left in the file is a save of its own, marked as its
-                    if let Some(p) = self.fg.as_ref().and_then(|s| s.path.clone()) {
-                        self.versions_saved(&p, Some("agent"));
-                    }
+                    self.versions_changed();
                 }
                 e => self.shell.agent.take(e),
             }
@@ -243,6 +233,24 @@ impl Gui {
         let Some((turn, files)) = self.agent.turns.finish() else {
             return;
         };
+        let record = &self.agent.turns.done[turn];
+        let paths: Vec<PathBuf> = record.files.iter().map(|f| PathBuf::from(&f.path)).collect();
+        if let Some(first) = paths.first()
+            && let Some(history) = forge_history::History::open(first)
+        {
+            match history.save_group(&paths, &record.label, Some("agent")) {
+                Ok(forge_history::Saved::Paused(why)) => self.shell.agent.take(Event::Note {
+                    text: format!("Changes are on disk; history is paused: {why:?}"),
+                    error: true,
+                }),
+                Err(e) => self.shell.agent.take(Event::Note {
+                    text: format!("Changes are on disk; couldn't save history: {e}"),
+                    error: true,
+                }),
+                _ => {}
+            }
+            forge_lang::pins::forget();
+        }
         for (index, lines) in files {
             let f = &self.agent.turns.done[turn].files[index];
             let (added, removed) = counts(&lines);
@@ -309,7 +317,9 @@ impl Gui {
                 }
                 std::fs::rename(&from, &f.path).map_err(|e| format!("{}: {e}", from.display()))?;
                 set(self, None);
-                self.agent_open(&f.path);
+                if f.path.ends_with(".fg") {
+                    self.agent_open(&f.path);
+                }
             }
             return Ok(());
         }
@@ -441,11 +451,9 @@ impl Gui {
             return fail(self, why.into(), None);
         };
         // a folder outside the projects tree is trusted once, by asking
-        let dir = Path::new(&path)
-            .parent()
-            .and_then(|d| d.canonicalize().ok())
-            .map(|d| d.display().to_string())
-            .unwrap_or_default();
+        let dir = crate::agent::project::root(Path::new(&path))
+            .display()
+            .to_string();
         if !trusted(&dir, &self.shell.agent.settings.trusted) {
             self.shell.agent.trust_ask = Some(dir);
             self.shell.agent.pending = Some((text.to_string(), refs.to_vec(), picture));
@@ -460,6 +468,7 @@ impl Gui {
                 return fail(self, format!("Couldn't save the part for the agent: {e}"), None);
             }
             self.fg_text();
+            self.versions_saved(&path, None);
             self.shell.agent.take(Event::Note {
                 text: format!(
                     "Saved your unsaved edits to {} first: the agent works on the file",
@@ -473,7 +482,7 @@ impl Gui {
             self.shell.open_agent_settings();
             return fail(self, why.into(), None);
         }
-        let want = (dir_of(&path), settings.clone());
+        let want = (dir.clone(), settings.clone());
         if self.agent.made_for.as_ref() != Some(&want) {
             let was = self.agent.made_for.take();
             let carry = match &was {
@@ -511,8 +520,8 @@ impl Gui {
                 b.set_file(Path::new(&path));
             }
         }
-        if let (Some(t), Some(d)) = (&self.agent.app_tools, Path::new(&path).parent()) {
-            t.set_dir(d);
+        if let Some(t) = &self.agent.app_tools {
+            t.set_dir(Path::new(&dir));
         }
         // the turn's on: a .fg it makes beside an open document opens in a tab
         self.agent_turn(true);

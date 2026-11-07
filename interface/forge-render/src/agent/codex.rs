@@ -134,14 +134,7 @@ impl Codex {
         .into_iter()
         .map(str::to_string)
         .collect();
-        args.push(
-            self.cfg
-                .file
-                .parent()
-                .unwrap_or(Path::new("."))
-                .display()
-                .to_string(),
-        );
+        args.push(super::project::root(&self.cfg.file).display().to_string());
         args.extend([
             "-c".into(),
             format!("developer_instructions={}", Json::from(self.cfg.system.clone())),
@@ -194,7 +187,7 @@ impl Codex {
         clean_env(&mut command);
         // An app-launched Codex is its own session, not a child turn of this coding agent.
         command.env_remove("CODEX_THREAD_ID");
-        let mut watch = Watch::new(self.cfg.file.parent().unwrap_or(Path::new(".")));
+        let mut watch = Watch::new(&super::project::root(&self.cfg.file));
         let child = command.spawn();
         let mut child = match child {
             Ok(c) => c,

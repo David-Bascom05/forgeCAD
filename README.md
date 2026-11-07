@@ -117,6 +117,27 @@ set in Agent settings; leave it blank for the CLI default. ForgeCAD starts Codex
 with its own app tools and isolated configuration, keeps the conversation across
 messages, and reloads its file changes into the document's undo history.
 
+All three backends share project and version tools. The repository containing the
+open document is the project root; without a repository, its containing folder
+is used. Agents can create folders and read/write `.fg`, `.md`, `.txt`, and `.csv`
+files across the project, list history, create named versions, compare, restore,
+list releases, issue requested releases, and regenerate release exports. New
+files create their parent folders. Existing-file writes require the exact old
+text, so stale edits are refused.
+
+Changed source files are tracked recursively (up to 500 files, 4 MiB each),
+excluding hidden paths, symlinks, Git-ignored files, and generated folders such as
+`releases/` and `exports/`. A completed turn records its changed files together
+as one Git save when history is enabled; pre-existing unrelated edits are kept
+out. Named versions and releases checkpoint the turn before capturing it.
+The agent is instructed to create versions, restore, enable history, and issue
+releases only when asked; release and history-initialization tools additionally
+require `confirmed: true`. Release creation builds the saved design and refuses
+build errors or a paused history. Git identity must be configured for saves.
+
+For example: “Create parts/, assemblies/ and docs/, then put a bracket in
+parts/bracket.fg”; “Create a version called First fit”; or “Compare v1 to current.”
+
 ## License
 
 MPL-2.0.

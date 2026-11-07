@@ -238,6 +238,49 @@ impl History {
         }
     }
 
+    /// Save an explicit set of changed project files as one commit, preserving unrelated work.
+    pub fn save_group(&self, files: &[PathBuf], summary: &str, agent: Option<&str>) -> Result<Saved, Error> {
+        let Some(who) = self.who() else {
+            return Ok(Saved::Paused(Paused::NeedsIdentity));
+        };
+        let mut ignore = forge_git::ignore::Ignore::new(
+            self.work(),
+            &self.repo.git_dir,
+            self.repo
+                .config
+                .get("core.excludesfile")
+                .map(|p| forge_git::config::expand(p, None)),
+        );
+        let mut paths = Vec::new();
+        for file in files {
+            let rel = self.rel(file)?;
+            if file.is_file() && !ignore.ignored(&rel, false) && !paths.contains(&rel) {
+                paths.push(rel);
+            }
+        }
+        if paths.is_empty() {
+            return Ok(Saved::Unchanged);
+        }
+        let mut msg = format!(
+            "{}\n\n{TRAILER_SAVE}: 1\n",
+            summary.lines().next().unwrap_or("Agent changes")
+        );
+        if let Some(agent) = agent {
+            msg.push_str(&format!("{TRAILER_AGENT}: {agent}\n"));
+        }
+        match self.repo.commit_paths(&paths, &msg, &who) {
+            Ok(Some(c)) => {
+                cache::appended(self, &c.id, c.parent, &who, &msg, &c.changed);
+                Ok(Saved::New(c.id))
+            }
+            Ok(None) => Ok(Saved::Unchanged),
+            Err(Error::Busy(w)) => Ok(Saved::Paused(Paused::Busy(w.to_string()))),
+            Err(Error::Detached) => Ok(Saved::Paused(Paused::Busy("detached".into()))),
+            Err(Error::Locked(_)) | Err(Error::RefMoved(_)) => Ok(Saved::Paused(Paused::Locked)),
+            Err(e) => Err(e),
+        }
+    }
+
     /// Every save reachable from HEAD, newest first (from the cache, brought up to date).
     pub fn log(&self) -> Result<Vec<Rec>, Error> {
         cache::log(self)

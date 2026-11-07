@@ -555,6 +555,16 @@ impl Gui {
     }
 
     /// A save made from the app: its history's save too (the file is on disk already).
+    /// Agent tools can change tags without changing document text. Refresh the graph, pins,
+    /// and revision badge after such a turn as well as after file edits.
+    pub fn versions_changed(&mut self) {
+        self.vers.rev_of = None;
+        forge_lang::pins::forget();
+        if self.shell.agent.tab == crate::shell::agent::SideTab::Versions {
+            self.vers_load();
+        }
+    }
+
     pub fn versions_saved(&mut self, file: &str, agent: Option<&str>) {
         let f = Path::new(file);
         if History::open(f).is_none() {

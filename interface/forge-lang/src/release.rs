@@ -253,7 +253,7 @@ pub fn release(
     }
     let h = History::open(file).ok_or_else(|| format!("{} keeps no history", file.display()))?;
     let rel = h.rel(file).map_err(|e| e.to_string())?;
-    let _ = crate::vtools::save(file, "saved", agent);
+    crate::vtools::save(file, "saved", agent)?;
     let prev = current(&h, &rel);
     let rev = next_revision(prev.as_ref().map(|p| p.revision.as_str()), numeric);
     let head = h

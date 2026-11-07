@@ -195,7 +195,7 @@ fn turn(cfg: &Config, out: &Out, history: &Mutex<Vec<Json>>, stop: &AtomicBool) 
             .build(),
     );
     let url = format!("{}/chat/completions", cfg.base_url.trim().trim_end_matches('/'));
-    let mut watch = Watch::new(cfg.file.parent().unwrap_or(std::path::Path::new(".")));
+    let mut watch = Watch::new(&super::project::root(&cfg.file));
     let stopped = Event::Done {
         error: None,
         stopped: true,

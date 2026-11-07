@@ -211,12 +211,15 @@ pub struct ClaudeCode {
     /// A turn's running: the process ending now ends it with an error.
     busy: Arc<AtomicBool>,
     stops: u64,
+    watch: Arc<Mutex<Watch>>,
 }
 
 impl ClaudeCode {
     pub fn new(cfg: Config, out: Out, session: Option<String>) -> ClaudeCode {
+        let watch = Arc::new(Mutex::new(Watch::new(&super::project::root(&cfg.file))));
         ClaudeCode {
             cfg,
+            watch,
             out,
             child: None,
             stdin: None,
@@ -231,12 +234,7 @@ impl ClaudeCode {
     /// settings, so no project hooks), only ForgeCAD's MCP server, no Bash, and in `dontAsk`
     /// mode only what's allowed here runs: the folder's files, and the app's tools (fg among them).
     pub fn args(&self) -> Vec<String> {
-        let dir = self
-            .cfg
-            .file
-            .parent()
-            .map(|d| d.display().to_string())
-            .unwrap_or_default();
+        let dir = super::project::root(&self.cfg.file).display().to_string();
         let mut a: Vec<String> = [
             "-p",
             "--output-format",
@@ -302,7 +300,7 @@ impl ClaudeCode {
             .stderr(Stdio::piped());
         clean_env(&mut c);
         // the folder as it is before the agent can touch it: a write in its first moment is a change
-        let mut watch = Watch::new(self.cfg.file.parent().unwrap_or(std::path::Path::new(".")));
+        let watch = self.watch.clone();
         let mut child = c.spawn().map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
                 Event::Problem {
@@ -352,7 +350,7 @@ impl ClaudeCode {
                     for e in parser.line(&line) {
                         let after = matches!(e, Event::ToolDone { .. } | Event::Done { .. });
                         if after {
-                            for c in watch.check() {
+                            for c in watch.lock().expect("watch").check() {
                                 out.send(c);
                             }
                         }
@@ -366,7 +364,7 @@ impl ClaudeCode {
                     }
                 }
                 *alive.lock().expect("no panics while held") = false;
-                for c in watch.check() {
+                for c in watch.lock().expect("watch").check() {
                     out.send(c);
                 }
                 if !busy.swap(false, Ordering::SeqCst) {
@@ -400,6 +398,7 @@ impl ClaudeCode {
 
 impl Backend for ClaudeCode {
     fn send(&mut self, prompt: String, picture: Option<Vec<u8>>) {
+        *self.watch.lock().expect("watch") = Watch::new(&super::project::root(&self.cfg.file));
         // a picture goes first, as an image block the message reads after
         let content = match picture {
             None => prompt.into(),

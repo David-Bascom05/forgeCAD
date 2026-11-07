@@ -46,6 +46,9 @@ pub struct AppTools {
     wake: Waker,
     /// The open document's folder: where the fg tools may look.
     dir: std::sync::Arc<std::sync::Mutex<Option<std::path::PathBuf>>>,
+    changes: std::sync::Arc<
+        std::sync::Mutex<Option<(super::Watch, std::collections::BTreeSet<std::path::PathBuf>)>>,
+    >,
 }
 
 impl AppTools {
@@ -56,6 +59,7 @@ impl AppTools {
                 tx,
                 wake,
                 dir: Default::default(),
+                changes: Default::default(),
             },
             rx,
         )
@@ -63,12 +67,57 @@ impl AppTools {
 
     pub fn set_dir(&self, dir: &std::path::Path) {
         *self.dir.lock().expect("no panics while held") = Some(dir.to_path_buf());
+        *self.changes.lock().expect("changes") = Some((super::Watch::new(dir), Default::default()));
+    }
+
+    fn checkpoint(&self, dir: &std::path::Path) -> Result<(), String> {
+        let Some(history) = forge_history::History::open(dir) else {
+            return Ok(());
+        };
+        let mut changes = self.changes.lock().expect("changes");
+        let Some((watch, paths)) = changes.as_mut() else {
+            return Ok(());
+        };
+        for event in watch.check() {
+            if let super::Event::FileChanged { path, .. } = event {
+                paths.insert(path.into());
+            }
+        }
+        let files: Vec<_> = paths.iter().cloned().collect();
+        match history
+            .save_group(&files, "Agent changes", Some("agent"))
+            .map_err(|e| e.to_string())?
+        {
+            forge_history::Saved::Paused(why) => Err(format!("History is paused: {why:?}")),
+            _ => {
+                paths.clear();
+                Ok(())
+            }
+        }
     }
 
     /// Runs a tool on the frame's thread and waits for its answer (a picture takes a frame).
     pub fn call(&self, name: &str, args: Json) -> Reply {
         if !NAMES.iter().any(|n| n.0 == name) {
             return Reply::err(format!("no app tool `{name}`"));
+        }
+        if name.starts_with("project_") || super::project::is_version(name) {
+            let Some(dir) = self.dir.lock().expect("directory").clone() else {
+                return Reply::err("no document is open");
+            };
+            // Checkpoint the entire turn before a version or release freezes its dependencies.
+            if matches!(name, "fg_create_version" | "fg_release") {
+                if name == "fg_release" && args.get("confirmed") != Some(&Json::Bool(true)) {
+                    return Reply::err("Release requires confirmed=true after an explicit user request");
+                }
+                if let Err(e) = self.checkpoint(&dir) {
+                    return Reply::err(e);
+                }
+            }
+            return match super::project::call(name, &args, &dir) {
+                Ok(j) => Reply::ok(j.to_string()),
+                Err(e) => Reply::err(e),
+            };
         }
         // the fg tools build on the caller's thread, never the frame's
         if name.starts_with("fg_") {
@@ -208,7 +257,7 @@ pub const NAMES: &[(&str, &str, &str, &[&str])] = &[
     ),
     (
         "open_document",
-        "Open another .fg file in the folder in the app (absolute path).",
+        "Open another .fg file in the project in the app (absolute path).",
         r#"{"path":{"type":"string"}}"#,
         &["path"],
     ),
@@ -226,35 +275,113 @@ pub const NAMES: &[(&str, &str, &str, &[&str])] = &[
     ),
     (
         "fg_run",
-        "Build a .fg file in the open document's folder and report its errors, warnings and measures (as `fg run`); a drawing: its views, annotations and problems. `file` is its name in the folder.",
+        "Build a .fg file in the project root or a subfolder and report its errors, warnings and measures (as `fg run`); a drawing: its views, annotations and problems. `file` is its name in the project.",
         r#"{"file":{"type":"string"}}"#,
         &["file"],
     ),
     (
         "fg_check",
-        "Parse and check a .fg file in the folder without building it: rules, types, dimensions.",
+        "Parse and check a .fg file in the project without building it: rules, types, dimensions.",
         r#"{"file":{"type":"string"}}"#,
         &["file"],
     ),
     (
         "fg_edit",
-        "Apply a typed Forge edit op (as the check's fixes give them) to a .fg file in the folder, then build and check it; refused if the result wouldn't check.",
+        "Apply a typed Forge edit op (as the check's fixes give them) to a .fg file in the project, then build and check it; refused if the result wouldn't check.",
         r#"{"file":{"type":"string"},"op":{"type":"object"}}"#,
         &["file", "op"],
     ),
     (
         "fg_handles",
-        "Every parameter of a .fg file in the folder: its value and dimension.",
+        "Every parameter of a .fg file in the project: its value and dimension.",
         r#"{"file":{"type":"string"}}"#,
         &["file"],
     ),
     (
         "fg_query",
-        "Numbers from a .fg part or assembly in the folder, built: `holes` (each hole's centre, axis, diameter), `section z=67` (the outline at a plane, as lines and arcs), `aligned` (holes of different parts on one axis; `aligned A B` for two), `gap A B` (between two faces), `interference` (where parts clash, the faces involved), `frame SKETCH` (where a sketch on a sheet wall lands, folded and on the flat), `faces` (every face's name). Assembly coordinates, `in OCC` for a part's; names in an assembly are OCC/NAME.",
+        "Numbers from a .fg part or assembly in the project, built: `holes` (each hole's centre, axis, diameter), `section z=67` (the outline at a plane, as lines and arcs), `aligned` (holes of different parts on one axis; `aligned A B` for two), `gap A B` (between two faces), `interference` (where parts clash, the faces involved), `frame SKETCH` (where a sketch on a sheet wall lands, folded and on the flat), `faces` (every face's name). Assembly coordinates, `in OCC` for a part's; names in an assembly are OCC/NAME.",
         r#"{"file":{"type":"string"},"query":{"type":"string"}}"#,
         &["file", "query"],
     ),
     ("fg_reference", "The Forge language reference.", "{}", &[]),
+    (
+        "project_info",
+        "The project root, whether history is enabled, and up to 500 source files recursively. Paths for every file tool are relative to this root. Git metadata, hidden paths, links and generated exports are excluded.",
+        "{}",
+        &[],
+    ),
+    (
+        "project_enable_history",
+        "ONLY when asked to turn on history: initialize Git history in the current project folder (existing repositories are reused). confirmed must be true. Optional name and email must both be supplied and must be the user's own identity.",
+        r#"{"confirmed":{"type":"boolean","const":true},"name":{"type":"string"},"email":{"type":"string"}}"#,
+        &["confirmed"],
+    ),
+    (
+        "project_mkdir",
+        "Create project subdirectories, such as parts, assemblies, drawings or docs. Never creates a Git repository.",
+        r#"{"path":{"type":"string"}}"#,
+        &["path"],
+    ),
+    (
+        "project_read",
+        "Read a project .fg, .md, .txt or .csv file, including nested folders.",
+        r#"{"file":{"type":"string"}}"#,
+        &["file"],
+    ),
+    (
+        "project_write",
+        "Create a project source file, making its parent folders if needed, or update an existing file. For an existing file old must be its complete exact previous text from project_read; a mismatch is refused. Changes appear in the turn's diff and undo.",
+        r#"{"file":{"type":"string"},"text":{"type":"string"},"old":{"type":"string"}}"#,
+        &["file", "text"],
+    ),
+    (
+        "fg_versions",
+        "List a document's named versions.",
+        r#"{"file":{"type":"string"}}"#,
+        &["file"],
+    ),
+    (
+        "fg_history",
+        "List a document's saves, or the whole project's with all=true. Read-only.",
+        r#"{"file":{"type":"string"},"all":{"type":"boolean"},"limit":{"type":"integer","minimum":1,"maximum":1000}}"#,
+        &["file"],
+    ),
+    (
+        "fg_create_version",
+        "When requested, save the turn's changes and create a named version using the same history implementation as the UI.",
+        r#"{"file":{"type":"string"},"name":{"type":"string"},"notes":{"type":"string"}}"#,
+        &["file", "name"],
+    ),
+    (
+        "fg_compare",
+        "Compare two named versions, save ids, or current; optional exact added/removed volume. Read-only.",
+        r#"{"file":{"type":"string"},"base":{"type":"string"},"target":{"type":"string"},"volume":{"type":"boolean"}}"#,
+        &["file", "base", "target"],
+    ),
+    (
+        "fg_restore",
+        "Only when requested: restore a saved version (v3 or save id), including an assembly's followed parts, through a new save. History is preserved.",
+        r#"{"file":{"type":"string"},"to":{"type":"string"}}"#,
+        &["file", "to"],
+    ),
+    (
+        "fg_releases",
+        "List a document's released revisions and export records. Read-only.",
+        r#"{"file":{"type":"string"}}"#,
+        &["file"],
+    ),
+    (
+        "fg_release",
+        "Issue a release ONLY when explicitly requested by the user, after validating the designs. Requires the user's reason and confirmed=true. Never invent an approver. Checkpoints this turn, then uses the UI's release implementation to create a revision, STEP/BOM exports and hashes. Ordinary edits do not need a release.",
+        r#"{"file":{"type":"string"},"reason":{"type":"string"},"approver":{"type":"string"},"numeric":{"type":"boolean"},"confirmed":{"type":"boolean","const":true}}"#,
+        &["file", "reason", "confirmed"],
+    ),
+    (
+        "fg_regenerate_release",
+        "Regenerate a released revision's exports and verify their hashes, using the existing release implementation.",
+        r#"{"file":{"type":"string"},"revision":{"type":"string"}}"#,
+        &["file", "revision"],
+    ),
 ];
 
 /// The tools as JSON Schema objects: `(name, description, inputSchema)`.
@@ -282,8 +409,6 @@ pub fn schemas() -> Vec<(String, String, Json)> {
 pub fn openai_specs() -> Vec<Json> {
     schemas()
         .into_iter()
-        // its own file tools do the fg work
-        .filter(|(name, _, _)| !name.starts_with("fg_"))
         .map(|(name, what, schema)| {
             Json::obj(vec![
                 ("type", "function".into()),
