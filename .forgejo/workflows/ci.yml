@@ -179,7 +179,7 @@ jobs:
           cargo build --release -p forge-model --example oracle
           # every feature kind: the suite, finishing ops, fillets, face edits, part files, and the real parts once they land
           sets=suite,torture,finishing,fillets,edits,models,fuzz:20
-          if [ -d tools/bench-parts ]; then sets=$sets,dir:tools/bench-parts; fi
+          sets=$sets,fgdir:interface/forge-lang/parts/bench
           THREADS=2 REPS=1 target/release/examples/oracle $sets > parts.json
       - name: oracle gate (disagreements outside tools/occt/known.txt fail)
         run: |

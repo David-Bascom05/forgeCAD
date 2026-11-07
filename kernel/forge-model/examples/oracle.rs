@@ -1,8 +1,8 @@
 //! Exports part histories and our results as JSON for the OpenCascade oracle (tools/occt/oracle.py).
 //! cargo run --release -p forge-model --example oracle -- [sets] > parts.json
 //! env: THREADS, REPS, CHORD (mesh chord for volume), ONLY=name, PREFIXES=k, KEEP=i,j,.., LITERAL (print each part as Rust to stderr)
-//! sets: comma separated from suite, torture, finishing, fillets, edits, models, fuzz:N, fc:FILE, dir:DIR
-//! (every .fc file in it), adv:N (seeds per family), degen; default suite,torture,fuzz:20
+//! sets: comma separated from suite, torture, finishing, fillets, edits, models, fuzz:N, fc:FILE, dir:DIR, fg:FILE, fgdir:DIR
+//! (every .fc file in it; fgdir: every .fg file), adv:N (seeds per family), degen; default suite,torture,fuzz:20
 //!
 //! Every feature kind has an arm in `export` (the match is exhaustive, so a new kind does not
 //! build until it has one). OCCT replays each with its own operation: tools from the feature's
@@ -990,7 +990,7 @@ struct Exported {
     loose: Vec<&'static str>,
 }
 
-fn export_part(part: &Part) -> Exported {
+fn export_part(part: &Part, ids: Option<&[u64]>) -> Exported {
     let mut out = Exported {
         features: Vec::new(),
         cut: None,
@@ -1034,7 +1034,7 @@ fn export_part(part: &Part) -> Exported {
                 | Feature::Edit(_)
         );
         let before = (picks && !solids.is_empty()).then(|| Before::new(&solids));
-        match export(History::new(&plain, None), i, before.as_ref()) {
+        match export(History::new(&plain, ids), i, before.as_ref()) {
             Ok(Step::Json(j, loose)) => {
                 let on = on[i].as_ref().map_or(String::new(), |b| format!("\"in\":{b},"));
                 out.features.push(format!("{{\"i\":{i},{on}{}", &j[1..]));
@@ -1049,7 +1049,7 @@ fn export_part(part: &Part) -> Exported {
             }
         }
         match catch_unwind(AssertUnwindSafe(|| {
-            forge_model::step_solids(History::new(&part.features, None), i, std::mem::take(&mut solids))
+            forge_model::step_solids(History::new(&part.features, ids), i, std::mem::take(&mut solids))
         })) {
             Ok(Ok(b)) => solids = b,
             _ => {
@@ -1228,6 +1228,39 @@ fn fc(path: &std::path::Path) -> (String, Part) {
     (name, Part { features })
 }
 
+/// A .fg part as its run sends it to the kernel: its features and the ids they are named by
+/// (the bench font beside it, for text).
+fn fg(path: &std::path::Path) -> (String, Part, Vec<u64>) {
+    let src = std::fs::read_to_string(path).expect("a part file");
+    let dir = std::env::temp_dir().join(format!("forge-oracle-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("temp dir");
+    std::fs::write(
+        dir.join(forge_agent::bench::FONT),
+        forge_agent::bench::font_bytes(),
+    )
+    .expect("font");
+    for e in std::fs::read_dir(path.parent().expect("a folder"))
+        .expect("its folder")
+        .flatten()
+    {
+        let p = e.path();
+        if p.extension().is_some_and(|x| x != "fg") && p.is_file() {
+            let _ = std::fs::copy(&p, dir.join(e.file_name()));
+        }
+    }
+    let opts = forge_lang::Options {
+        dir: Some(dir),
+        ..forge_lang::Options::default()
+    };
+    let (run, cache) = forge_lang::run(&src, opts, Default::default());
+    assert!(run.errors.is_empty(), "{}: {:?}", path.display(), run.errors);
+    let name = path
+        .file_stem()
+        .map_or("fg".into(), |s| s.to_string_lossy().into_owned());
+    let (f, ids) = cache.history();
+    (name, Part { features: f.to_vec() }, ids.to_vec())
+}
+
 /// Part files for what only they write: parameters and sketches, work features, standard
 /// holes, patterns along paths and at points, and parts of several bodies.
 const MODELS: [(&str, &str); 3] = [
@@ -1268,7 +1301,12 @@ combine cut base lid keep
     ),
 ];
 
-fn sets(sets: &str) -> Vec<(String, Part)> {
+/// A .fg part's feature ids, by part name.
+type FgIds = std::collections::HashMap<String, Vec<u64>>;
+
+/// The parts of each set, and the ids a .fg part's features are named by (by part name).
+fn sets_ids(sets: &str) -> (Vec<(String, Part)>, FgIds) {
+    let mut fg_ids = std::collections::HashMap::new();
     let mut parts: Vec<(String, Part)> = Vec::new();
     let named = |v: Vec<(&'static str, Part, Option<f64>)>| v.into_iter().map(|(n, p, _)| (n.to_string(), p));
     for set in sets.split(',') {
@@ -1290,6 +1328,24 @@ fn sets(sets: &str) -> Vec<(String, Part)> {
             })),
             "fuzz" => parts.extend((1..=n).map(|s| (format!("fuzz{s}"), suite::fuzz(s, 80)))),
             "fc" => parts.push(fc(std::path::Path::new(arg))),
+            "fg" => {
+                let (n, p, ids) = fg(std::path::Path::new(arg));
+                fg_ids.insert(n.clone(), ids);
+                parts.push((n, p));
+            }
+            "fgdir" => {
+                let mut files: Vec<_> = std::fs::read_dir(arg)
+                    .expect("a directory of part files")
+                    .filter_map(|e| e.ok().map(|e| e.path()))
+                    .filter(|p| p.extension().is_some_and(|x| x == "fg"))
+                    .collect();
+                files.sort();
+                for f in &files {
+                    let (n, p, ids) = fg(f);
+                    fg_ids.insert(n.clone(), ids);
+                    parts.push((n, p));
+                }
+            }
             "dir" => {
                 let mut files: Vec<_> = std::fs::read_dir(arg)
                     .expect("a directory of part files")
@@ -1319,7 +1375,7 @@ fn sets(sets: &str) -> Vec<(String, Part)> {
             _ => panic!("unknown set {name}"),
         }
     }
-    parts
+    (parts, fg_ids)
 }
 
 fn main() {
@@ -1332,7 +1388,7 @@ fn main() {
     let which = std::env::args()
         .nth(1)
         .unwrap_or_else(|| "suite,torture,fuzz:20".into());
-    let mut parts = sets(&which);
+    let (mut parts, fg_ids) = sets_ids(&which);
     // the fillet cases name their edges as the sequential regen does; the n-ary regen may split
     // and name edges otherwise, so it gets the same edges picked again (as fillets.rs checks it)
     let repick: Vec<&str> = if which.split(',').any(|s| s == "fillets") {
@@ -1366,7 +1422,13 @@ fn main() {
     println!("{{\"threads\":{threads},\"parts\":[");
     let mut first = true;
     for (name, mut part) in parts {
-        let ex = export_part(&part);
+        // a .fg part's features are named by its ids (from its syntax); a prefix takes theirs
+        let ids: Option<Vec<u64>> = fg_ids
+            .get(name.split('#').next().unwrap_or(&name))
+            .filter(|_| std::env::var_os("KEEP").is_none())
+            .map(|v| v[..part.features.len().min(v.len())].to_vec());
+        let ids = ids.as_deref();
+        let ex = export_part(&part, ids);
         if let Some((k, why)) = ex.cut {
             eprintln!("{name}: cut at feature {k} of {}: {why}", part.features.len());
             part.features.truncate(k);
@@ -1381,7 +1443,7 @@ fn main() {
         }
         // one body: the single-body regens (what the app runs); several: every body
         let seq = run(reps, chord, || {
-            one_or_all(part.regenerate(), || part.regenerate_solids())
+            one_or_all(part.regenerate_ids(ids), || part.regenerate_solids_ids(ids))
         });
         let npart = match part.features.last() {
             Some(Feature::Fillet { .. }) if repick.contains(&name.as_str()) => {
@@ -1402,12 +1464,20 @@ fn main() {
             _ => part.clone(),
         };
         let nary1 = run(1, chord, || {
-            one_or_all(npart.regenerate_nary(1), || npart.regenerate_nary_solids(1))
+            if ids.is_some() {
+                npart.regenerate_nary_solids_ids(1, ids)
+            } else {
+                one_or_all(npart.regenerate_nary(1), || npart.regenerate_nary_solids(1))
+            }
         });
         let nary = run(reps, chord, || {
-            one_or_all(npart.regenerate_nary(threads), || {
-                npart.regenerate_nary_solids(threads)
-            })
+            if ids.is_some() {
+                npart.regenerate_nary_solids_ids(threads, ids)
+            } else {
+                one_or_all(npart.regenerate_nary(threads), || {
+                    npart.regenerate_nary_solids(threads)
+                })
+            }
         });
         let cut = ex.cut.map_or("null".into(), |(k, why)| {
             format!("{{\"at\":{k},\"why\":{why:?}}}")
@@ -1478,7 +1548,7 @@ mod tests {
     /// build, and a part in these sets to pass.
     #[test]
     fn every_kind_reaches_the_oracle() {
-        let parts = sets("suite,finishing,fillets,edits,models");
+        let parts = sets_ids("suite,finishing,fillets,edits,models").0;
         let mut seen: Vec<&str> = Vec::new();
         for (name, p) in &parts {
             for (i, f) in p.features.iter().enumerate() {
@@ -1487,9 +1557,12 @@ mod tests {
                     continue;
                 }
                 // the shortest history that has it
-                let ex = export_part(&Part {
-                    features: p.features[..=i].to_vec(),
-                });
+                let ex = export_part(
+                    &Part {
+                        features: p.features[..=i].to_vec(),
+                    },
+                    None,
+                );
                 match ex.cut {
                     // a case of the kind OCCT has no operation for (a face fillet across a strip
                     // face): another part must export it

@@ -17,6 +17,7 @@ forge-sketch = { path = "../forge-sketch" }
 forge-font = { path = "../forge-font" }
 
 [dev-dependencies]
+forge-lang = { path = "../../interface/forge-lang" }
 forge-mesh = { path = "../forge-mesh" }
 # part files (selectors, parameters, sketches) for the OpenCascade oracle's parts and the
 # whole-kernel history generator (examples/shrink)

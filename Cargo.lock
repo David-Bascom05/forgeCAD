@@ -226,6 +226,7 @@ dependencies = [
  "forge-font",
  "forge-geom",
  "forge-gpu",
+ "forge-lang",
  "forge-math",
  "forge-mesh",
  "forge-ops",
