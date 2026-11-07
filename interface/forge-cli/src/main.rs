@@ -13,7 +13,9 @@ use std::time::Instant;
 
 fn usage() -> ExitCode {
     eprintln!(
-        "usage: forgecad act|query|measure|render|build|check|diff|export FILE [ARGS] [--json] [--base N] [--at FEAT] [--labels SEL] [--px N] [-o OUT]\n       \
+        "usage: forgecad [open [FILE | APP_ARGS...]]   (open the native app)\n       \
+         forgecad update [INSTALL_ROOT]   (install latest main)\n       \
+         forgecad act|query|measure|render|build|check|diff|export FILE [ARGS] [--json] [--base N] [--at FEAT] [--labels SEL] [--px N] [-o OUT]\n       \
          forgecad edit FILE.fg 'OP'..   (typed ops, as a .fg part's fixes give them; build|check|query|measure|render|export take .fg too; export F.fg dxf [SHEET])\n       \
          forgecad help [TOPIC]\n       \
          forgecad serve | mcp [--root DIR] [--writable]   (JSON-RPC / MCP on stdio, .fc and .fg files under DIR, default .; act only if --writable)\n       \
@@ -104,9 +106,37 @@ fn holed_ring() -> Profile {
     }
 }
 
+fn open_app(args: &[String]) -> ExitCode {
+    run_installed("forge-app", args)
+}
+
+fn run_installed(name: &str, args: &[String]) -> ExitCode {
+    // Installed together, so opening the app never depends on the working directory.
+    let app = match std::env::current_exe() {
+        Ok(exe) => exe.with_file_name(format!("{name}{}", std::env::consts::EXE_SUFFIX)),
+        Err(e) => {
+            eprintln!("forgecad: cannot locate the installed app: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    match std::process::Command::new(&app).args(args).status() {
+        Ok(status) => ExitCode::from(status.code().unwrap_or(1) as u8),
+        Err(e) => {
+            eprintln!(
+                "forgecad: cannot open {}: {e}\nInstall both binaries with tools/install.sh.",
+                app.display()
+            );
+            ExitCode::FAILURE
+        }
+    }
+}
+
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().collect();
     match args.get(1).map(String::as_str) {
+        None => open_app(&[]),
+        Some("open") => open_app(&args[2..]),
+        Some("update") => run_installed("forgecad-update", &args[2..]),
         Some("demo") if args.len() >= 3 => demo(&args),
         Some("preview") if args.len() >= 3 => preview(&args[2]),
         Some(m @ ("serve" | "mcp")) => {

@@ -54,6 +54,31 @@ The repository is split by what a thing is:
 
 ## Building
 
+To install the native app and command-line tools from this checkout:
+
+```sh
+tools/install.sh                       # installs in ~/.cargo/bin (or $CARGO_HOME/bin)
+forgecad                               # open the native app from any directory
+forgecad open /path/to/part.fg          # open a part (relative paths work too)
+forgecad open --help                    # app options
+forgecad help                          # command-line modeling tools
+forgecad update                        # fetch latest main and reinstall
+```
+
+The installer builds release binaries with the pinned Rust toolchain. Keep the install
+directory on `PATH`; optionally pass a different install root, such as
+`tools/install.sh "$HOME/.local"`. Run it again to update. The app is also available
+directly as `forge-app`. Remove `forgecad` and `forge-app` from that root's `bin`
+directory to uninstall.
+
+`forgecad update` (also `forgecad-update`, or `tools/update.sh` from the checkout)
+clones the latest `main` into a temporary directory and reinstalls into the same
+installation root. Local changes and branches are left alone. Git access to
+`ssh://forgejo@git.commonty.org/david/ForgeCAD.git` is required; set
+`FORGECAD_REPOSITORY` to use a different remote. Updates include changes merged
+to `main`; rerun `tools/install.sh` to install local changes instead. Remove
+`forgecad-update` as well when uninstalling.
+
 ```
 cargo test --workspace                              # native
 cargo test --workspace --target wasm32-wasip1       # wasm, run under Node's WASI
