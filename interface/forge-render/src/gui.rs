@@ -2976,6 +2976,50 @@ impl Headless {
         )
     }
 
+    /// The whole window as last drawn, as a PNG: what a person would see.
+    pub fn png(&self) -> Result<Vec<u8>, String> {
+        let (w, h) = self.px();
+        let row = (w * 4).div_ceil(256) * 256;
+        let buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("window out"),
+            size: u64::from(row) * u64::from(h),
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+        let mut enc = self.device.create_command_encoder(&Default::default());
+        enc.copy_texture_to_buffer(
+            self.texture.as_image_copy(),
+            wgpu::TexelCopyBufferInfo {
+                buffer: &buffer,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(row),
+                    rows_per_image: Some(h),
+                },
+            },
+            wgpu::Extent3d {
+                width: w,
+                height: h,
+                depth_or_array_layers: 1,
+            },
+        );
+        self.queue.submit([enc.finish()]);
+        buffer.slice(..).map_async(wgpu::MapMode::Read, |_| {});
+        let _ = self.device.poll(wgpu::PollType::wait_indefinitely());
+        let data = buffer
+            .slice(..)
+            .get_mapped_range()
+            .map_err(|e| format!("{e:?}"))?;
+        let mut rgb = Vec::with_capacity((w * h * 3) as usize);
+        for y in 0..h {
+            let line = &data[(y * row) as usize..][..(w * 4) as usize];
+            for px in line.chunks_exact(4) {
+                rgb.extend_from_slice(&px[..3]);
+            }
+        }
+        crate::agent::apptools::png(w, h, &rgb)
+    }
+
     /// One frame with what's been queued; waits for the GPU, so a time is a real one.
     pub fn step(&mut self) -> FrameOut {
         self.gui.ctx.set_pixels_per_point(self.scale);

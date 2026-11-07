@@ -3,8 +3,8 @@
 //! Compare and Copy ID; Create Version and Release at the top; and, while comparing, what
 //! changed in features and parameters. The host fills it and does what `VersionsAct`s ask.
 
-use super::{Shell, icons};
 use super::theme::{Theme, mono, sans, semi};
+use super::{Shell, icons};
 use egui::{Align2, Color32, Rect, Sense, Stroke, Ui, pos2, vec2};
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -122,6 +122,8 @@ pub struct Versions {
     pub focus: Option<usize>,
     /// The saves between versions are listed too.
     pub show_saves: bool,
+    /// What the two sides of the Compare are called, as the rows picked name them.
+    pub labels: Option<(String, String)>,
     pub slider: f32,
     /// Open: one save shown as it is, not a Compare.
     pub single: bool,
@@ -139,6 +141,16 @@ impl Versions {
         if key == "current" {
             return "current".into();
         }
+        let mut parts = key.splitn(3, '@');
+        let (save, n, path) = (parts.next().unwrap_or(key), parts.next(), parts.next());
+        if let (Some(n), Some(path)) = (n, path)
+            && let Some(node) = self.nodes.iter().find(|x| {
+                x.save == save && x.n.map(|v| v.to_string()).as_deref() == Some(n) && x.path == path
+            })
+        {
+            return node.title.clone();
+        }
+        let key = save;
         match self.nodes.iter().find(|n| n.save == key && n.n.is_some()) {
             Some(n) => n.title.clone(),
             None => short(key),
@@ -164,8 +176,27 @@ pub fn date(t: i64) -> String {
     format!("{y:04}-{m:02}-{d:02} {:02}:{:02}", secs / 3600, secs / 60 % 60)
 }
 
+/// `text` on one line, cut with an ellipsis to fit `width`.
+fn elided(
+    ui: &Ui,
+    text: &str,
+    font: egui::FontId,
+    colour: Color32,
+    width: f32,
+) -> std::sync::Arc<egui::Galley> {
+    let mut job =
+        egui::text::LayoutJob::single_section(text.to_string(), egui::TextFormat::simple(font, colour));
+    job.wrap = egui::text::TextWrapping {
+        max_width: width.max(10.0),
+        max_rows: 1,
+        break_anywhere: true,
+        overflow_character: Some('…'),
+    };
+    ui.fonts_mut(|f| f.layout_job(job))
+}
+
 const ROW: f32 = 44.0;
-const SAVE_ROW: f32 = 30.0;
+const SAVE_ROW: f32 = 26.0;
 /// The selected row's context bar, under its text.
 const BAR: f32 = 30.0;
 const LANE_X: f32 = 14.0;
@@ -252,6 +283,12 @@ impl Shell {
             if b.clicked() {
                 self.versions.release = Some((String::new(), String::new(), false));
             }
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let mut on = self.versions.show_saves;
+                let b = ui.checkbox(&mut on, egui::RichText::new("Saves").font(sans(12.0)));
+                self.places.push(("versions:show-saves".into(), b.rect));
+                self.versions.show_saves = on;
+            });
         });
         ui.add_space(4.0);
         ui.horizontal(|ui| {
@@ -268,12 +305,6 @@ impl Shell {
                     self.versions.out.push(VersionsAct::Load);
                 }
             }
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let mut on = self.versions.show_saves;
-                let b = ui.checkbox(&mut on, egui::RichText::new("Show saves").font(sans(12.0)));
-                self.places.push(("versions:show-saves".into(), b.rect));
-                self.versions.show_saves = on;
-            });
         });
         if self.versions.docs.len() > 1 {
             let shown = self.versions.doc.as_ref().map_or(String::new(), |d| d.0.clone());
@@ -323,7 +354,7 @@ impl Shell {
         let show_saves = self.versions.show_saves;
         let w = ui.available_width();
         let p = ui.painter().clone();
-        let lane = Stroke::new(1.5, t.line);
+        let lane = Stroke::new(2.0, t.ink2.gamma_multiply(0.45));
         let mut rows = 0;
         for (k, n) in nodes.iter().enumerate() {
             // only the work since the newest version, when there is some and saves are shown
@@ -335,7 +366,12 @@ impl Shell {
             } else {
                 n.save.clone()
             };
-            let sel = self.versions.sel.as_deref() == Some(key.as_str());
+            // a version is picked as itself: two versions of one save are two rows
+            let pick = match n.n {
+                Some(v) => format!("{key}@{v}@{}", n.path),
+                None => key.clone(),
+            };
+            let sel = self.versions.sel.as_deref() == Some(pick.as_str());
             let h = if sel && n.n.is_some() { ROW + BAR } else { ROW };
             let (r, resp) = ui.allocate_exact_size(vec2(w, h), Sense::click());
             if sel {
@@ -384,11 +420,10 @@ impl Shell {
             if self.versions.filter == Filter::Project && n.n.is_some() && !n.path.is_empty() {
                 title = format!("{title}  ·  {}", n.path);
             }
-            p.text(
+            let badge = if n.revision.is_some() { 30.0 } else { 0.0 };
+            p.galley(
                 pos2(x, r.top() + 7.0),
-                Align2::LEFT_TOP,
-                &title,
-                semi(13.0),
+                elided(ui, &title, semi(13.0), t.ink, right - x - badge),
                 t.ink,
             );
             let who = if n.agent {
@@ -404,23 +439,21 @@ impl Shell {
             if !n.notes.is_empty() {
                 meta = format!("{meta} · {}", one_line(&n.notes, 40));
             }
-            p.text(
+            p.galley(
                 pos2(x, r.top() + 25.0),
-                Align2::LEFT_TOP,
-                meta,
-                sans(11.0),
+                elided(ui, &meta, sans(11.0), t.ink2, right - x),
                 t.ink2,
             );
             self.places.push((format!("versions:row:{}", n.title), r));
             if resp.clicked() {
-                self.versions_pick(&key);
+                self.versions_pick(&pick);
             }
             if sel && n.n.is_some() {
                 let bar = Rect::from_min_max(
                     pos2(x - 4.0, r.top() + ROW),
                     pos2(r.right() - 6.0, r.bottom() - 4.0),
                 );
-                self.versions_bar(ui, bar, &key);
+                self.versions_bar(ui, bar, &key, &pick);
             }
             rows += 1;
             if !show_saves {
@@ -440,26 +473,34 @@ impl Shell {
                     sr.top()..=(if end { sr.center().y } else { sr.bottom() }),
                     lane,
                 );
-                p.circle_filled(pos2(cx, sr.center().y), 2.5, t.ink2);
-                p.text(
-                    pos2(x, sr.top() + 3.0),
-                    Align2::LEFT_TOP,
-                    one_line(&s.summary, 44),
-                    sans(12.0),
-                    t.ink,
-                );
-                let who = if s.agent {
-                    format!("{} (agent)", s.author)
-                } else {
-                    s.author.clone()
-                };
-                p.text(
-                    pos2(x, sr.top() + 17.0),
-                    Align2::LEFT_TOP,
-                    format!("{who} · {}", date(s.time)),
-                    sans(10.5),
+                p.circle_filled(pos2(cx, sr.center().y), 3.0, t.ink2);
+                // one line: what the save did (its file said once, in the filter), and when
+                let when = date(s.time);
+                let when = when.split_once(' ').map_or(when.clone(), |(d, hm)| {
+                    if Some(d) == date(n.time).split_once(' ').map(|x| x.0) {
+                        hm.to_string()
+                    } else {
+                        when.clone()
+                    }
+                });
+                let when = if s.agent { format!("agent · {when}") } else { when };
+                let tg = elided(ui, &when, sans(10.5), t.ink2, 140.0);
+                let tw = tg.size().x;
+                p.galley(
+                    pos2(sr.right() - 8.0 - tw, sr.center().y - tg.size().y / 2.0),
+                    tg,
                     t.ink2,
                 );
+                let what = s.summary.lines().next().unwrap_or_default();
+                let what = what.split_once(": ").map_or(what, |(f, rest)| {
+                    if !f.contains(' ') && f.contains('.') {
+                        rest
+                    } else {
+                        what
+                    }
+                });
+                let g = elided(ui, what, sans(12.0), t.ink, sr.right() - 16.0 - tw - x);
+                p.galley(pos2(x, sr.center().y - g.size().y / 2.0), g, t.ink);
                 self.places
                     .push((format!("versions:save:{}", &s.save[..s.save.len().min(8)]), sr));
                 if sresp.clicked() {
@@ -479,7 +520,7 @@ impl Shell {
     }
 
     /// The selected version's actions: icon buttons with tooltips, the rest in a menu.
-    fn versions_bar(&mut self, ui: &mut Ui, bar: Rect, key: &str) {
+    fn versions_bar(&mut self, ui: &mut Ui, bar: Rect, key: &str, pick: &str) {
         let mut child = ui.new_child(
             egui::UiBuilder::new()
                 .max_rect(bar)
@@ -522,6 +563,9 @@ impl Shell {
             );
             self.places.push((format!("versions:{name}"), r));
             if resp.clicked() {
+                if matches!(act, VersionsAct::Compare(..)) {
+                    self.versions.labels = Some((self.versions.label_of(pick), "current".into()));
+                }
                 self.versions.out.push(act);
             }
         }
@@ -529,7 +573,7 @@ impl Shell {
             let r = ui.button("Compare with…");
             self.places.push(("versions:compare-with".into(), r.rect));
             if r.clicked() {
-                self.versions.first = Some(k.clone());
+                self.versions.first = Some(pick.to_string());
                 ui.close();
             }
             let r = ui.button("Copy ID");
@@ -550,12 +594,14 @@ impl Shell {
     }
 
     fn versions_pick(&mut self, key: &str) {
-        if let Some(first) = self.versions.first.take() {
-            if first != key {
-                self.versions
-                    .out
-                    .push(VersionsAct::Compare(first, key.to_string()));
-            }
+        if let Some(first) = self.versions.first.take()
+            && first != key
+        {
+            let save = |k: &str| k.split('@').next().unwrap_or(k).to_string();
+            self.versions.labels = Some((self.versions.label_of(&first), self.versions.label_of(key)));
+            self.versions
+                .out
+                .push(VersionsAct::Compare(save(&first), save(key)));
         }
         self.versions.sel = Some(key.to_string());
     }
@@ -572,7 +618,11 @@ impl Shell {
         ui.painter()
             .hline(ui.max_rect().x_range(), y, Stroke::new(1.0, t.line));
         ui.add_space(6.0);
-        let (la, lb) = (self.versions.label_of(&a), self.versions.label_of(&b));
+        let (la, lb) = self
+            .versions
+            .labels
+            .clone()
+            .unwrap_or_else(|| (self.versions.label_of(&a), self.versions.label_of(&b)));
         ui.horizontal(|ui| {
             ui.label(
                 egui::RichText::new(format!("{la}  to  {lb}"))
