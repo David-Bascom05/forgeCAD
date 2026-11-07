@@ -199,11 +199,16 @@ fn a_wav_heard_by_forge_speech_lands_in_the_box() {
         && g.speech_checked()));
     assert!(h.click("agent:mic"));
     assert!(wait(&mut h, |g| g.shell.agent.voice.state == VoiceState::Listening));
+    // the view turning all the while, each frame timed: it has to keep 60 fps while the model works
+    let mut listening = Vec::new();
     let t = std::time::Instant::now();
     let mut partials = 0;
     let mut last = String::new();
     while t.elapsed().as_secs_f64() < secs + 0.3 {
+        h.gui.turn_view();
+        let f = std::time::Instant::now();
         h.step();
+        listening.push(f.elapsed().as_secs_f64() * 1e3);
         if h.gui.shell.agent.input != last {
             last = h.gui.shell.agent.input.clone();
             partials += 1;
@@ -213,6 +218,29 @@ fn a_wav_heard_by_forge_speech_lands_in_the_box() {
     assert!(h.click("agent:mic"));
     assert!(wait(&mut h, |g| g.shell.agent.voice.state == VoiceState::Idle));
     let ms = h.gui.shell.agent.voice.last_ms.unwrap();
+    let mut warm = Vec::new();
+    for _ in 0..300 {
+        h.gui.turn_view();
+        let f = std::time::Instant::now();
+        h.step();
+        warm.push(f.elapsed().as_secs_f64() * 1e3);
+    }
+    let q = |v: &mut Vec<f64>| {
+        v.sort_by(f64::total_cmp);
+        let at = |p: f64| v[((v.len() - 1) as f64 * p) as usize];
+        format!(
+            "p50 {:.1} p95 {:.1} max {:.1} ms over {}",
+            at(0.5),
+            at(0.95),
+            at(1.0),
+            v.len()
+        )
+    };
+    eprintln!(
+        "frames while listening: {}; with the model warm and idle: {}",
+        q(&mut listening),
+        q(&mut warm)
+    );
     eprintln!(
         "heard {:?} ({partials} partials), {ms:.0} ms after stop, {:?}",
         h.gui.shell.agent.input, h.gui.shell.agent.voice.engine
