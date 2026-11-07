@@ -473,6 +473,18 @@ impl Session {
             }
         }
         std::fs::write(&p, &text).map_err(|_| format!("{}: cannot write", a.file))?;
+        // an agent's edit is a save of its own, where the folder keeps history
+        let kinds: Vec<String> = done
+            .iter()
+            .filter_map(|j| {
+                j.get("op")
+                    .and_then(|o| o.get("op"))
+                    .and_then(|k| k.str())
+                    .map(String::from)
+            })
+            .collect();
+        let who = std::env::var("FORGECAD_AGENT").unwrap_or_else(|_| "agent".into());
+        let _ = forge_lang::vtools::save(&p, &kinds.join(", "), Some(&who));
         let run = self.run_src(&p, &text, true);
         let mut r = Self::report(&run, &text);
         obj_push(&mut r.json, "applied", Json::Arr(done));

@@ -16,7 +16,7 @@ type Tool = (
     &'static [(&'static str, &'static str)],
 );
 
-const TOOLS: [Tool; 6] = [
+const TOOLS: [Tool; 14] = [
     (
         "act",
         "Change a .fc part: newline-separated lines, all applied or none. A .fg part: edit.",
@@ -73,6 +73,72 @@ const TOOLS: [Tool; 6] = [
         0,
         &[("topic", "a feature or topic")],
     ),
+    (
+        "versions",
+        "A file's named versions as JSON: n, name, notes, save, author, agent.",
+        1,
+        &[("file", "path")],
+    ),
+    (
+        "history",
+        "A file's saves, newest first (all: the whole project's), as JSON; versions marked.",
+        1,
+        &[
+            ("file", "path"),
+            ("all", "\"true\" for every file's saves"),
+            ("limit", "at most this many"),
+        ],
+    ),
+    (
+        "create_version",
+        "Save the file and mark it as its next named version (writable sessions only).",
+        2,
+        &[
+            ("file", "path"),
+            ("name", "the version's name"),
+            ("notes", "what changed"),
+        ],
+    ),
+    (
+        "restore",
+        "Restore the file (an assembly: and the parts it follows) as a version or save was, as a new save.",
+        2,
+        &[("file", "path"), ("to", "v3, or a save id")],
+    ),
+    (
+        "compare",
+        "What changed between two states of a file: features, params, faces by name, volume.",
+        3,
+        &[
+            ("file", "path"),
+            ("a", "base: v3, a save id, or current"),
+            ("b", "target: v3, a save id, or current"),
+            ("volume", "\"true\" for the exact added and removed volume"),
+        ],
+    ),
+    (
+        "release",
+        "Release the file as its next revision: a named version, exports outside history, a release record.",
+        2,
+        &[
+            ("file", "path"),
+            ("reason", "why"),
+            ("approver", "who approved it"),
+            ("numeric", "\"true\" for a numeric pre-release revision"),
+        ],
+    ),
+    (
+        "releases",
+        "A file's releases: part number, revision, reason, approver, kernel, export hashes.",
+        1,
+        &[("file", "path")],
+    ),
+    (
+        "regenerate_release",
+        "Rebuild a release's files from its record and check every hash (drift on another kernel).",
+        2,
+        &[("file", "path"), ("rev", "the revision, e.g. B")],
+    ),
 ];
 
 fn args(p: &Json) -> Args {
@@ -112,6 +178,7 @@ pub fn run(mcp: bool, root: &str, writable: bool) -> ExitCode {
     };
     let mut session = Session::rooted(root.clone()).writable(writable);
     let mut forge = fg::Session::new(Some(root.clone()), writable);
+    let _ = FENCE.set((root.clone(), writable));
     let stdin = std::io::stdin();
     let mut out = std::io::stdout().lock();
     for line in stdin.lock().lines() {
@@ -160,8 +227,86 @@ fn result(id: Json, r: Json) -> Json {
     Json::obj(vec![("jsonrpc", "2.0".into()), ("id", id), ("result", r)])
 }
 
+/// The session's root and whether it may write, for the version tools.
+static FENCE: std::sync::OnceLock<(std::path::PathBuf, bool)> = std::sync::OnceLock::new();
+
+const VERSION_TOOLS: &[&str] = &[
+    "versions",
+    "history",
+    "create_version",
+    "restore",
+    "compare",
+    "release",
+    "releases",
+    "regenerate_release",
+];
+
+/// A version tool: the file inside the root, writes only where the session writes.
+fn version_tool(name: &str, p: &Json) -> Reply {
+    let s = |k: &str| p.get(k).and_then(Json::str).map(str::to_string);
+    let fail = |msg: String| Reply {
+        ok: false,
+        text: format!("error: {msg}"),
+        json: Json::obj(vec![("ok", false.into()), ("error", msg.into())]),
+        png: None,
+    };
+    let Some((root, writable)) = FENCE.get() else {
+        return fail("no session root".into());
+    };
+    let file = s("file").unwrap_or_default();
+    let path = root.join(&file);
+    let inside = path
+        .parent()
+        .and_then(|d| std::fs::canonicalize(d).ok())
+        .is_some_and(|d| d.starts_with(root));
+    if !inside {
+        return fail(format!("{file} is outside the session's root"));
+    }
+    if !writable
+        && matches!(
+            name,
+            "create_version" | "restore" | "release" | "regenerate_release"
+        )
+    {
+        return fail(format!(
+            "{name} writes: the session is read-only (serve --writable)"
+        ));
+    }
+    let mut a = vec![path.to_string_lossy().to_string()];
+    for k in ["name", "notes", "to", "a", "b", "reason", "rev"] {
+        if let Some(v) = s(k) {
+            a.push(v);
+        }
+    }
+    for k in ["all", "volume", "numeric"] {
+        if s(k).as_deref() == Some("true") || p.get(k).is_some_and(|v| matches!(v, Json::Bool(true))) {
+            a.push(format!("--{k}"));
+        }
+    }
+    for k in ["approver", "limit"] {
+        if let Some(v) = s(k).or_else(|| p.get(k).and_then(Json::num).map(|n| n.to_string())) {
+            a.push(format!("--{k}"));
+            a.push(v);
+        }
+    }
+    let agent = std::env::var("FORGECAD_AGENT").unwrap_or_else(|_| "agent".into());
+    match forge_lang::vtools::call(name, &a, Some(&agent)) {
+        Some(Ok(j)) => Reply {
+            ok: true,
+            text: j.to_string(),
+            json: j,
+            png: None,
+        },
+        Some(Err(e)) => fail(e),
+        None => fail(format!("no tool {name}")),
+    }
+}
+
 /// A tool call, to the .fc or the .fg session by the file's kind.
 fn call(session: &mut Session, forge: &mut fg::Session, name: &str, p: &Json) -> Reply {
+    if VERSION_TOOLS.contains(&name) {
+        return version_tool(name, p);
+    }
     let a = args(p);
     if name == "help" && matches!(a.file.as_str(), "forge" | "fg" | ".fg") {
         return Reply {

@@ -2671,6 +2671,12 @@ fn defaults(ctx: &Ctx, f: &mut forge_draw::sheet::Fields, sheet: usize, n_sheets
         if f.scale.is_empty() {
             f.scale = forge_draw::sheet::scale_text(v.scale);
         }
+        // the revision is the release's: the newest released revision of the model's file
+        if f.rev.is_empty()
+            && let Some(r) = crate::release::revision_of(Path::new(&mo.file))
+        {
+            f.rev = r;
+        }
     }
     if f.mass.is_empty()
         && let Some(m) = first_view.and_then(|v| ctx.models[v.model].mass())

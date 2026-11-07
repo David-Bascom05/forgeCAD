@@ -25,6 +25,7 @@ forge-bool = { path = "../../kernel/forge-bool" }
 forge-material = { path = "../../kernel/forge-material" }
 forge-agent = { path = "../forge-agent" }
 forge-git = { path = "../../kernel/forge-git" }
+forge-bool = { path = "../../kernel/forge-bool" }
 forge-history = { path = "../forge-history" }
 forge-font = { path = "../../kernel/forge-font" }
 forge-step = { path = "../../kernel/forge-step" }

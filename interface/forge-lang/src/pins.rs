@@ -93,7 +93,7 @@ pub fn path_of(pin: &Pin) -> PathBuf {
 }
 
 pub fn is_pinned(p: &str) -> bool {
-    p.contains(&format!("/{MARK}"))
+    p.starts_with(MARK) || p.contains(&format!("/{MARK}"))
 }
 
 /// `file` (as the document beside `dir` names it) pinned to its version `n`.
@@ -172,4 +172,16 @@ pub fn locate(p: &Path) -> Option<PathBuf> {
 pub fn newest(dir: &Path, file: &str) -> Option<u32> {
     let (h, rel) = place(dir, file).ok()?;
     h.newest(&rel).ok()?.map(|v| v.n)
+}
+
+/// A pinned file's version, and the newest named version when there is a newer one: the
+/// assembly browser's `v3 · v5 available`.
+pub fn badge(file: &str) -> Option<(u32, Option<u32>)> {
+    let p = parse(Path::new(file))?;
+    if p.n == 0 {
+        return None;
+    }
+    let h = history(&p.work)?;
+    let newest = h.newest(&p.rel).ok()??.n;
+    Some((p.n, (newest > p.n).then_some(newest)))
 }

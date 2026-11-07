@@ -18,6 +18,8 @@ fn usage() -> ExitCode {
          forgecad act|query|measure|render|build|check|diff|export FILE [ARGS] [--json] [--base N] [--at FEAT] [--labels SEL] [--px N] [-o OUT]\n       \
          forgecad edit FILE.fg 'OP'..   (typed ops, as a .fg part's fixes give them; build|check|query|measure|render|export take .fg too; export F.fg dxf [SHEET])\n       \
          forgecad help [TOPIC]\n       \
+         forgecad versions F | history F [--all] | create_version F NAME [NOTES] | restore F v3|SAVE | compare F A B [--volume]\n       \
+         forgecad release F REASON [--approver NAME] [--numeric] | releases F | regenerate_release F REV   (JSON; FORGECAD_AGENT names an agent)\n       \
          forgecad serve | mcp [--root DIR] [--writable]   (JSON-RPC / MCP on stdio, .fc and .fg files under DIR, default .; act only if --writable)\n       \
          forgecad import FILE.FCStd [-o DIR] [--json]   (each body a part file DIR/<file>.<body>.fc)\n       \
          forgecad demo <out.stl> [chord-mm] | preview <out.json>\nformat and selectors: AGENTS.md, forgecad help"
@@ -137,6 +139,27 @@ fn main() -> ExitCode {
         None => open_app(&[]),
         Some("open") => open_app(&args[2..]),
         Some("update") => run_installed("forgecad-update", &args[2..]),
+        Some(
+            t @ ("versions" | "history" | "create_version" | "restore" | "compare" | "release" | "releases"
+            | "regenerate_release"),
+        ) => {
+            let agent = std::env::var("FORGECAD_AGENT").ok();
+            match forge_lang::vtools::call(t, &args[2..], agent.as_deref()) {
+                Some(Ok(j)) => {
+                    println!("{j}");
+                    ExitCode::SUCCESS
+                }
+                Some(Err(e)) => {
+                    let j = forge_agent::json::Json::obj(vec![
+                        ("ok", false.into()),
+                        ("error", forge_agent::json::Json::Str(e)),
+                    ]);
+                    println!("{j}");
+                    ExitCode::from(1)
+                }
+                None => usage(),
+            }
+        }
         Some("demo") if args.len() >= 3 => demo(&args),
         Some("preview") if args.len() >= 3 => preview(&args[2]),
         Some(m @ ("serve" | "mcp")) => {
