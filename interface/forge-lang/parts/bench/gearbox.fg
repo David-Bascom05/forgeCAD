@@ -1,6 +1,6 @@
 # Two-stage gearbox housing, lower half: cast, split on the shaft plane z = h. Input,
 # intermediate and output shafts run along y in half bores on the split face. Hand port of
-# tools/bench-parts/gearbox.fc, its thread lines left out (lane fg-holes).
+# tools/bench-parts/gearbox.fc.
 
 shared L = 240
 shared W = 130
@@ -115,7 +115,8 @@ sketch hole1_sk(on: top) {
   c = pt(0 - L / 2 - fw / 2, W / 2 + fw / 2)
   e = pt(L / 2 + fw / 2, W / 2 + fw / 2)
 }
-hole1 = hole(at: hole1_sk.points, d: d, depth: depth)
+hole1 = hole(at: hole1_sk.points, d: d, depth: depth, thread: "M10x1.5")
+hole1_thread = thread(hole: hole1, length: "full")
 param hole2.d = 11
 sketch hole2_sk(on: top) {
   a = pt(0 - L / 2 - fw / 2, 0)
@@ -200,7 +201,8 @@ param drain_sk.x = L / 2 - 30
 sketch drain_sk(on: foot.plane) {
   p = pt(x, 0)
 }
-drain = hole(at: drain_sk.p, d: d, depth: t, flip: true)
+drain = hole(at: drain_sk.p, d: d, depth: t, flip: true, thread: "M16x1.5")
+drain_thread = thread(hole: drain, length: "full")
 
 # breather / filler boss high on the input end
 param breather_sk.r = 12
@@ -217,6 +219,6 @@ param bhole.depth = 20
 sketch bhole_sk(on: offset(west, bhx)) {
   p = pt(0, 0 - bz)
 }
-bhole = hole(at: bhole_sk.p, d: d, depth: depth)
+bhole = hole(at: bhole_sk.p, d: d, depth: depth, thread: "M12x1.75")
 param broot.r = 3
 broot = fillet(edges(between: (breather, box), crease: "concave"), r)

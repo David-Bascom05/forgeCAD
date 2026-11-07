@@ -1,0 +1,71 @@
+# Belt guard (tools/bench-parts/guard.fc), hand port: the belt's envelope round two pulleys
+# drawn as a solid (a hull of the two discs: its lines held tangent by the solver), grown by the
+# running clearance with offset_faces, its top edges rounded for the sheet's bend.
+# The sheet is a body of its own: louvres and tabs made as bodies and subtracted from or
+# joined to it, its holes made in it alone (`bodies: guard`).
+
+shared r1 = 62
+shared r2 = 38
+shared d = 240
+shared h = 50
+shared gap = 6
+shared t = 1.5
+param bend.r = 5
+
+sketch plan(on: xy) {
+  big = pt(0, 0)
+  small = pt(d, 0)
+  outline = hull(disc(big, r1), disc(small, r2))
+}
+env = extrude(plan, h)
+grown = offset_faces(env.faces, gap)
+bend = fillet(edges(of: env.end, crease: "convex"), r)
+guard = thicken(env.end + env.side(plan.outline) + bend.faces, t, new: true)
+# louvres: four rounded slots 8 by 50 (corners r 3), 30 apart, cut 10 down into the sheet's top
+shared lz = h + gap + 5
+shared lx = 70
+shared lw = 8
+shared ll = 50
+shared lr = 3
+shared ld = 10
+param louvres.n = count(4)
+param louvres.step = 30
+sketch lsk(on: offset(plan.plane, lz)) {
+  path o(start: (lx - lw / 2 + lr, 0 - ll / 2)) {
+    line(to: (lx + lw / 2 - lr, 0 - ll / 2))
+    tarc(to: (lx + lw / 2, lr - ll / 2))
+    line(to: (lx + lw / 2, ll / 2 - lr))
+    tarc(to: (lx + lw / 2 - lr, ll / 2))
+    line(to: (lx - lw / 2 + lr, ll / 2))
+    tarc(to: (lx - lw / 2, ll / 2 - lr))
+    line(to: (lx - lw / 2, lr - ll / 2))
+    tarc(to: (lx - lw / 2 + lr, 0 - ll / 2))
+  }
+  xl = line((0, 0), (1, 0), construction: true)
+}
+louvre = extrude(lsk.o, 0 - ld, new: true)
+louvres = pattern(of: louvre, layout: lin(along: lsk.xl.dir, n: n, step: step), bodies: louvre)
+vents = subtract(guard, tools: louvre)
+# a sight hole over the small pulley, 30 across and 10 deep
+param sight.d = 30
+param sight.depth = 10
+sketch ssk(on: offset(plan.plane, lz)) {
+  p = pt(d, 0)
+}
+sight = hole(at: ssk.p, d: d, depth: depth, bodies: guard)
+# a mounting tab at the open back off each pulley's end, joined to the sheet
+shared tw = 20
+sketch tsk(on: offset(plan.plane, 0 - gap)) {
+  a = rect(corner: (0 - r1 - gap - tw, 0 - tw / 2), size: (tw - t / 2, tw))
+  b = rect(corner: (d + r2 + gap + t / 2, 0 - tw / 2), size: (tw, tw))
+}
+tab = extrude(tsk.a, t, new: true)
+tab2 = extrude(tsk.b, t, new: true)
+tabbed = union(guard, tools: [tab, tab2])
+# a screw hole through each tab
+param th.d = 5.5
+sketch hsk(on: offset(plan.plane, t - gap)) {
+  p = pt(0 - r1 - gap - tw / 2, 0)
+  q = pt(d + r2 + gap + tw / 2, 0)
+}
+th = hole(at: hsk.points, d: d, depth: thru, bodies: guard)

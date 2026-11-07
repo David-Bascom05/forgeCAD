@@ -84,3 +84,12 @@ for i in 0..nk {
   }
   knurl = cut(ksk, dn)
 }
+# the M12 screw thread, cut 36 down the shaft from the collar's underside, its start chamfered
+shared zt = 58
+shared lt = 36
+screw = thread(on: offset(fl.plane, zt), spec: "M12", length: lt, chamfer: true)
+# the maker's mark raised round the band, wrapped on the knob's rim
+shared zm = 92
+shared hm = 4
+shared dm = 0.5
+mark = text("FORGECAD", font: "block.ttf", size: hm, depth: dm, on: offset(fl.plane, zm), wrap: rk)

@@ -133,3 +133,23 @@ fn bracket() {
 fn crank() {
     parity("crank", &[]);
 }
+
+#[test]
+fn jack() {
+    parity("jack", &[]);
+}
+
+#[test]
+fn gearbox() {
+    parity("gearbox", &[]);
+}
+
+#[test]
+fn guard() {
+    parity("guard", &[]);
+}
+
+#[test]
+fn frame() {
+    parity("frame", &[]);
+}

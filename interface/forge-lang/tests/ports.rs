@@ -59,50 +59,19 @@ fn manifold_matches_its_fc_version() {
     parity("manifold", 687248.8, 209, 484);
 }
 
-// Bench parts (tools/bench-parts), lane fg-shapes. Against the .fc built with the lines that wait
-// on other lanes taken out: jack without its modeled thread and text (fg-holes); quadarm whole
-// (its root hole's cosmetic thread changes nothing measured).
-
-#[test]
-fn bench_jack_matches_its_fc_version_less_thread_and_text() {
-    parity("bench_jack", 54989.1, 166, 478);
-}
+// Bench parts (tools/bench-parts) against their .fc volumes, faces and edges, whole.
 
 #[test]
 fn bench_quadarm_matches_its_fc_version() {
-    parity("bench_quadarm", 19376.0, 73, 167);
+    parity("bench/quadarm", 19376.0, 73, 167);
 }
-
-// volute whole (its two holes' cosmetic threads change nothing measured), manifold whole.
 
 #[test]
 fn bench_volute_matches_its_fc_version() {
-    parity("bench_volute", 802514.1, 70, 165);
+    parity("bench/volute", 802514.1, 70, 165);
 }
 
 #[test]
 fn bench_manifold_matches_its_fc_version() {
-    parity("bench_manifold", 884334.5, 78, 192);
-}
-
-// guard without the lines that work `in guard` (louvre, sight hole, tabs, their holes: bodies, lane
-// fg-holes): the envelope and the sheet as a body of its own, each valid.
-
-#[test]
-fn bench_guard_matches_its_fc_version_less_its_body_targeted_cuts() {
-    parity_bodies("bench_guard", 2442097.7, 29, 60, 2);
-}
-
-// gearbox less its modeled and cosmetic threads (fg-holes).
-
-#[test]
-fn bench_gearbox_matches_its_fc_version_less_threads() {
-    parity("bench_gearbox", 1000499.5, 159, 449);
-}
-
-// frame less its BSA cups and hanger thread and the cosmetic threads (fg-holes). (Two edges
-// short until the kernel's unify stopped keeping seams by name: then the count followed ids.)
-#[test]
-fn bench_frame_matches_its_fc_version_less_threads() {
-    parity("bench_frame", 423092.7, 129, 366);
+    parity("bench/manifold", 884334.5, 78, 192);
 }

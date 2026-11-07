@@ -1,7 +1,6 @@
 # Road bicycle frame, 56 cm, as one part: hollow tubes mitred by the booleans, a tapered head
 # tube with headset seats, stays to flat dropouts with a derailleur hanger, bridges, bottle
-# bosses, a slotted seat clamp, cable ports. Hand port of tools/bench-parts/frame.fc, its thread
-# lines (the BSA cups, the hanger's and bosses' threads) left out (lane fg-holes). Every plane
+# bosses, a slotted seat clamp, cable ports. Hand port of tools/bench-parts/frame.fc. Every plane
 # comes from the side sketch: tube planes from its points and directions, the stays' from points
 # on planes offset from it.
 
@@ -296,6 +295,10 @@ sketch bbore_sk(on: offset(side.plane, bbw / 2)) {
   p = pt(0, 0)
 }
 bbore = hole(at: bbore_sk.p, d: d, depth: bbw)
+# the BSA cups' threads, 1.370-24, 16 into each end of the shell; the drive side's left-handed
+shared bsa_l = 16
+bsa_far = thread(on: offset(side.plane, 0 - bbw / 2), spec: "1.370-24", internal: true, length: bsa_l, flip: true, chamfer: true)
+bsa_near = thread(on: offset(side.plane, bbw / 2), spec: "1.370-24", internal: true, length: bsa_l, left: true, chamfer: true)
 fn bore(pl, r, d) {
   sketch s(on: pl) {
     c = circle((0, 0), r)
@@ -343,7 +346,8 @@ param hhole_sk.dz = 20
 sketch hhole_sk(on: offset(side.plane, dropy)) {
   p = pt(ax - dx, az - dz)
 }
-hhole = hole(at: hhole_sk.p, d: d, depth: depth)
+hhole = hole(at: hhole_sk.p, d: d, depth: depth, thread: "M10x1")
+hhole_thread = thread(hole: hhole, length: "full")
 
 # binder slot through the clamp, its bolt hole across the lug
 param binder.depth = 26
@@ -371,14 +375,14 @@ sketch dbh_sk(on: dbh_pl) {
   a = pt(0, 0)
   b = pt(boss_pitch, 0)
 }
-dbh = hole(at: [dbh_sk.a, dbh_sk.b], d: bh_d, depth: bh_depth)
+dbh = hole(at: [dbh_sk.a, dbh_sk.b], d: bh_d, depth: bh_depth, thread: "M5x0.8")
 sbh_pl = tplane(sboss_at * sux0 + sboss_h * suz0, sboss_at * suz0 - sboss_h * sux0, suz0, 0 - sux0,
                 0 - sux0, 0 - suz0)
 sketch sbh_sk(on: sbh_pl) {
   a = pt(0, 0)
   b = pt(0 - boss_pitch, 0)
 }
-sbh = hole(at: [sbh_sk.a, sbh_sk.b], d: bh_d, depth: bh_depth)
+sbh = hole(at: [sbh_sk.a, sbh_sk.b], d: bh_d, depth: bh_depth, thread: "M5x0.8")
 shared port_d = 6
 shared port_depth = 4
 shared port_up = 110

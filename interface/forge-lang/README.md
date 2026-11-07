@@ -126,22 +126,10 @@ outside params, no world placement after the first sketch, no positional selecti
 | bracket | 183449.2 | 183449.24 | 137 | 316 | 32 |
 | manifold | 687248.8 | 687248.76 | 209 | 484 | 46 |
 
-Bench parts (tools/bench-parts, lane fg-shapes, `parts/bench_*.fg`), against the .fc less the
-lines that wait on other lanes (threads, text, `in BODY`); patterns are loops. Cold `fg run` is
-the process, median of 5; warm is an unchanged rerun in `fg serve`.
-
-| part | left out | .fc volume | Forge volume | faces | edges | cold | warm |
-|---|---|---|---|---|---|---|---|
-| jack | thread, text | 54989.1 | 54989.12 | 166 | 478 | 70 ms | 1.9 ms |
-| quadarm | (nothing measured) | 19376 | 19375.96 | 73 | 167 | 12 ms | 1.0 ms |
-| volute | (cosmetic threads) | 802514.1 | 802514.14 | 70 | 165 | 109 ms | 3.2 ms |
-| manifold | nothing | 884334.5 | 884334.47 | 78 | 192 | 49 ms | 3.0 ms |
-| guard | cuts `in guard` | 2442097.7 | 2442097.69 | 29 | 60 | 9 ms | 0.1 ms |
-| gearbox | threads | 1000499.5 | 1000499.54 | 159 | 449 | 52 ms | 6.4 ms |
-| frame | threads | 423092.7 | 423092.68 | 129 | 366 | 75 ms | 3.6 ms |
-
-Frame matches exactly since forge-bool's unify keeps seams by where edges lie; it once kept them
-by name, and the edge count followed feature ids (two edges apart from the .fc).
+All 15 bench parts are ported whole to `parts/bench/*.fg` (threads, text and body-targeted cuts
+included) and match their .fc parts exactly in volume, area, centroid and inertia
+(`tests/bench_ports.rs`, `tests/ports.rs`); `cargo run -p forge-lang --example benchparts bits`
+hashes what each .fg run builds, for the bit gate (`tools/speed/bits.txt`).
 
 Timings (release, niced, the machine shared with other agents; median of 5 for cold):
 
