@@ -1175,22 +1175,22 @@ fn rib_on(base: &str, sketch: &str, at: [f32; 3], tag: &str) -> f64 {
     );
     point_at(&mut h, at);
     settle(&mut h);
-    // the side's found by itself; it settles on what builds
-    let mut last = String::new();
-    for _ in 0..600 {
-        h.step();
-        std::thread::sleep(std::time::Duration::from_millis(5));
-        let d = h.gui.shell.dialog.as_ref().unwrap();
+    // the side's found by itself; it settles on what builds (waited for by what the dialog says,
+    // not a count of frames: on a busy machine the search outlasted 600 of them and OK came
+    // in the middle of it)
+    let last = std::cell::RefCell::new(String::new());
+    let settled = h.until(|g| {
+        let d = g.shell.dialog.as_ref().unwrap();
         let now = d.line();
-        if now == last
+        let same = *last.borrow() == now;
+        let done = same
             && d.sent.as_deref() == Some(now.as_str())
             && d.seq > 0
-            && d.side_settled | d.error.is_none()
-        {
-            break;
-        }
-        last = now;
-    }
+            && d.side_settled | d.error.is_none();
+        *last.borrow_mut() = now;
+        done
+    });
+    assert!(settled, "{tag}: the side never settled: {:?}", h.gui.shell.dialog);
     ok(&mut h, tag);
     built(&file, tag) - was
 }
