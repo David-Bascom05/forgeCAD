@@ -515,6 +515,137 @@ fn pieces(
     }
 }
 
+/// A thin flat run of a body, as a bracket's tab or a sheet's wall: two planar faces facing
+/// apart, `thickness` between them, the first the one whose normal is `normal`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Plate {
+    pub faces: [FaceId; 2],
+    pub normal: Vec3,
+    pub thickness: f64,
+    /// The first face's area and the middle of the two faces' overlap, halfway through.
+    pub area: f64,
+    pub centre: Point3,
+    pub lo: Point3,
+    pub hi: Point3,
+}
+
+/// The body's plates: each planar face paired with the nearest planar face facing it across the
+/// material, when that spacing is at most `max_t` and under a fifth of the faces' overlap's
+/// least extent. In a fixed order (centre x, y, z).
+pub fn plates(body: &Body, max_t: f64) -> Vec<Plate> {
+    let planes: Vec<(FaceId, Point3, Vec3, forge_math::Box3)> = body
+        .face_ids()
+        .filter_map(|f| {
+            let n = crate::select::plane_normal(body, f)?;
+            let Surface::Plane(p) = &body.face(f).surface else {
+                return None;
+            };
+            Some((f, p.frame.origin, n, tight_box(body, f)))
+        })
+        .collect();
+    let mut used = vec![false; planes.len()];
+    let mut out = Vec::new();
+    for i in 0..planes.len() {
+        if used[i] {
+            continue;
+        }
+        let (f, o, n, bi) = &planes[i];
+        let mut best: Option<(f64, usize, forge_math::Box3)> = None;
+        for (j, (_, o2, n2, bj)) in planes.iter().enumerate() {
+            if j == i || used[j] || n.dot(*n2) > -1.0 + 1e-9 {
+                continue;
+            }
+            // across the material: g lies behind f's outward normal
+            let d = (*o - *o2).dot(*n);
+            if d <= 1e-9 || d > max_t {
+                continue;
+            }
+            // the two faces seen along the normal must overlap
+            let lap = forge_math::Box3 {
+                x: forge_math::Interval {
+                    lo: bi.x.lo.max(bj.x.lo),
+                    hi: bi.x.hi.min(bj.x.hi),
+                },
+                y: forge_math::Interval {
+                    lo: bi.y.lo.max(bj.y.lo),
+                    hi: bi.y.hi.min(bj.y.hi),
+                },
+                z: forge_math::Interval {
+                    lo: bi.z.lo.max(bj.z.lo),
+                    hi: bi.z.hi.min(bj.z.hi),
+                },
+            };
+            let ext = |k: usize| {
+                let iv = [lap.x, lap.y, lap.z][k];
+                let e = (iv.hi - iv.lo).max(0.0);
+                // along the normal the boxes are apart by d: that axis does not count
+                if [n.x, n.y, n.z][k].abs() > 0.5 {
+                    f64::INFINITY
+                } else {
+                    e
+                }
+            };
+            let least = ext(0).min(ext(1)).min(ext(2));
+            let flat = [lap.x, lap.y, lap.z]
+                .iter()
+                .zip([n.x, n.y, n.z])
+                .all(|(iv, c)| c.abs() > 0.5 || iv.hi > iv.lo);
+            if !flat || least < 5.0 * d {
+                continue;
+            }
+            if best.as_ref().is_none_or(|b| d < b.0) {
+                best = Some((d, j, lap));
+            }
+        }
+        let Some((d, j, lap)) = best else { continue };
+        used[i] = true;
+        used[j] = true;
+        let mid = Point3::new(
+            (lap.x.lo + lap.x.hi) / 2.0,
+            (lap.y.lo + lap.y.hi) / 2.0,
+            (lap.z.lo + lap.z.hi) / 2.0,
+        );
+        // halfway through: off f's plane by half the thickness
+        let centre = mid - *n * ((mid - *o).dot(*n) + d / 2.0);
+        let area = forge_topo::mass::face_area(body, *f).unwrap_or(0.0);
+        let (lo, hi) = (
+            Point3::new(
+                bi.x.lo.min(planes[j].3.x.lo),
+                bi.y.lo.min(planes[j].3.y.lo),
+                bi.z.lo.min(planes[j].3.z.lo),
+            ),
+            Point3::new(
+                bi.x.hi.max(planes[j].3.x.hi),
+                bi.y.hi.max(planes[j].3.y.hi),
+                bi.z.hi.max(planes[j].3.z.hi),
+            ),
+        );
+        out.push(Plate {
+            faces: [*f, planes[j].0],
+            normal: *n,
+            thickness: d,
+            area,
+            centre,
+            lo,
+            hi,
+        });
+    }
+    let key = |p: &Plate| [p.centre.x, p.centre.y, p.centre.z].map(|v| (v * 1e6).round() as i64);
+    out.sort_by_key(key);
+    out
+}
+
+/// A face's box from its edges' own points (a face's box is padded).
+fn tight_box(body: &Body, f: FaceId) -> forge_math::Box3 {
+    let mut b = forge_math::Box3::EMPTY;
+    for e in edges_of_face(body, f) {
+        for p in body.edge_points(e, 8) {
+            b = b.hull(&forge_math::Box3::from_point(p));
+        }
+    }
+    b
+}
+
 /// Where two bodies (in one frame) share volume: how much, where, and which faces of each bound it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Clash {

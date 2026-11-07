@@ -516,6 +516,7 @@ pub fn tool_summary(name: &str, input: &Json) -> (String, String) {
         "fg_edit" => (format!("Applied an edit to {}", s(input, "file")), whole()),
         "fg_handles" => (format!("Listed the parameters of {}", s(input, "file")), whole()),
         "fg_reference" => ("Read the Forge reference".into(), whole()),
+        "fg_query" | "query" => (format!("Asked {}", s(input, "query")), whole()),
         _ => (name.to_string(), whole()),
     }
 }

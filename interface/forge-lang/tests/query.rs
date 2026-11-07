@@ -257,3 +257,72 @@ fn a_query_that_names_nothing_is_a_typed_refusal() {
         assert_eq!(got, Some(kind), "{q}: {}", a.text);
     }
 }
+
+fn run(f: &str) -> forge_lang::Run {
+    let p = ex(f);
+    let src = std::fs::read_to_string(&p).expect("the example");
+    let opts = forge_lang::Options {
+        dir: p.parent().map(|d| d.to_path_buf()),
+        ..forge_lang::Options::default()
+    };
+    forge_lang::run(&src, opts, Default::default()).0
+}
+
+#[test]
+fn an_assemblys_expects_check_gaps_and_shared_axes() {
+    let r = run("tray_asm.fg");
+    let a = r.asm.as_ref().expect("an assembly");
+    let got: Vec<(&str, f64)> = a
+        .expects
+        .iter()
+        .map(|e| (e.metric.as_str(), e.measured.expect("measured")))
+        .collect();
+    assert!(a.expects.iter().all(|e| e.ok), "{got:?}");
+    assert!(
+        got.iter()
+            .filter(|g| g.0 == "gap")
+            .all(|g| (g.1 - 0.2).abs() < 1e-9),
+        "{got:?}"
+    );
+    assert!(
+        got.iter()
+            .filter(|g| g.0.starts_with("axis_"))
+            .all(|g| g.1.abs() < 1e-9)
+    );
+    // the misread wall: its first hole 70 off the ear's (y 95 against 25)
+    let r = run("probes/tray_misread_asm.fg");
+    let e = &r.asm.as_ref().expect("an assembly").expects[0];
+    assert!(!e.ok && (e.measured.expect("measured") - 70.0).abs() < 1e-9);
+    // a part's own count of round holes
+    let r = run("load_tray.fg");
+    assert!(
+        r.expects.iter().all(|e| e.ok) && r.errors.is_empty(),
+        "{:?}",
+        r.errors
+    );
+}
+
+#[test]
+fn a_vendor_step_is_read_like_a_part() {
+    // vendor/bracket.step, made from bracket_src.fg: a 1.2 L bracket, two 3.5 holes on a 24 pitch
+    // in its 40 x 30 foot, one 4.5 hole 12.5 up its upright at y 28.8..30
+    let j = ask("vendor/vendor.fg", "holes");
+    let h = arr(&j, "holes");
+    assert_eq!(h.len(), 3);
+    assert!(close(v3(&h[0], "centre"), [8.0, 15.0, -0.6]) && n(&h[0], "d") == 3.5);
+    assert!(close(v3(&h[1], "centre"), [32.0, 15.0, -0.6]));
+    assert!(close(v3(&h[2], "centre"), [20.0, 29.4, 12.5]) && close(v3(&h[2], "axis"), [0.0, 1.0, 0.0]));
+    let j = ask("vendor/vendor.fg", "tabs");
+    let t = arr(&j, "tabs");
+    assert_eq!(t.len(), 2, "{j}");
+    for x in t {
+        assert!((n(x, "thickness") - 1.2).abs() < 1e-9);
+    }
+    let holes: Vec<usize> = t.iter().map(|x| arr(x, "holes").len()).collect();
+    assert!(holes.contains(&2) && holes.contains(&1), "{holes:?}");
+    // a section square to the upright, 10 above the foot: one strip 40 by 1.2
+    let j = ask("vendor/vendor.fg", "section z=10");
+    let l = arr(&j, "loops");
+    assert_eq!(l.len(), 1);
+    assert!((n(&j, "area") - 40.0 * 1.2).abs() < 1e-6);
+}

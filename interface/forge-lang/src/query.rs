@@ -57,6 +57,13 @@ pub enum Query {
     Faces {
         of: Option<String>,
     },
+    /// Whether each sheet unfolds to one flat blank, and what would stop it.
+    Unfold,
+    /// Thin flat runs (a bracket's tabs, a sheet's walls) at most `t` thick, with their holes.
+    Tabs {
+        of: Option<String>,
+        t: f64,
+    },
 }
 
 /// A query and the frame its answer is in (`in OCC`: that occurrence's part frame).
@@ -67,7 +74,7 @@ pub struct Request {
 }
 
 pub const HELP: &str = "holes [of OCC] [d D] | section x|y|z=V [of OCC] | section at X Y Z normal NX NY NZ [of OCC] | \
-aligned [HOLE HOLE] [tol T] | gap FACE FACE | interference [OCC OCC] | frame SKETCH|PLANE [of OCC] | faces [of OCC]; \
+aligned [HOLE HOLE] [tol T] | gap FACE FACE | interference [OCC OCC] | frame SKETCH|PLANE [of OCC] | faces [of OCC] | tabs [of OCC] [t MAX] | unfold; \
 any of them `in OCC` for that part's frame. In an assembly a name is OCC/NAME.";
 
 fn num(w: Option<&String>, what: &str) -> Result<f64, String> {
@@ -131,6 +138,7 @@ pub fn parse(text: &str) -> Result<Request, String> {
     };
     let d = take("d")?;
     let tol = take("tol")?;
+    let thick = take("t")?;
     let head = w.first().map(String::as_str).unwrap_or("");
     let rest: Vec<String> = w.iter().skip(1).cloned().collect();
     let pair = |r: &[String]| -> Result<Option<(String, String)>, String> {
@@ -188,6 +196,11 @@ pub fn parse(text: &str) -> Result<Request, String> {
             _ => return Err("frame takes a sketch or a plane (`frame rh`, `frame right.top`)".into()),
         },
         "faces" if rest.is_empty() => Query::Faces { of },
+        "unfold" if rest.is_empty() => Query::Unfold,
+        "tabs" if rest.is_empty() => Query::Tabs {
+            of,
+            t: thick.unwrap_or(10.0),
+        },
         _ => return Err(format!("not a query: '{text}'. {HELP}")),
     };
     Ok(Request { q, local })
@@ -301,6 +314,9 @@ pub fn ask(src: &str, dir: Option<PathBuf>, root: Option<PathBuf>, text: &str) -
         Ok(r) => r,
         Err(e) => return Answer::err(qe("Query", e)),
     };
+    if req.q == Query::Unfold {
+        return unfold(src, dir, root);
+    }
     match scene(src, dir, root, &req).and_then(|s| answer(&s, &req)) {
         Ok(a) => a,
         Err(e) => Answer::err(e),
@@ -413,7 +429,12 @@ fn scene(src: &str, dir: Option<PathBuf>, root: Option<PathBuf>, req: &Request) 
         let k = match index.get(&file) {
             Some(&k) => k,
             None => {
-                let p = Path::new(&file);
+                // the solve names a file as its document wrote it: beside the assembly
+                let p = match &dir {
+                    Some(d) if Path::new(&file).is_relative() => d.join(&file),
+                    _ => PathBuf::from(&file),
+                };
+                let p = p.as_path();
                 let part_run = std::fs::read_to_string(p).ok().map(|text| {
                     let o = part_opts(
                         p.parent().map(Path::to_path_buf),
@@ -1237,6 +1258,82 @@ fn answer(s: &Scene, req: &Request) -> Result<Answer, QueryError> {
             fields.push(("query", "faces".into()));
             fields.push(("faces", Json::Arr(list)));
         }
+        Query::Unfold => unreachable!("answered before the scene"),
+        Query::Tabs { of, t } => {
+            let mut list = Vec::new();
+            for k in s.filter(of)? {
+                let it = &s.items[k];
+                let part = &s.parts[it.part];
+                let back = to.compose(&it.pose);
+                for (i, p) in features::plates(&it.body, *t).iter().enumerate() {
+                    // its holes: square to it, their middles between its two faces' boxes
+                    let holes: Vec<&(String, Hole)> = part
+                        .holes
+                        .iter()
+                        .filter(|(_, h)| {
+                            h.axis.cross(p.normal).length() < 1e-9
+                                && [h.centre.x, h.centre.y, h.centre.z]
+                                    .iter()
+                                    .zip([p.lo.x, p.lo.y, p.lo.z].iter().zip([p.hi.x, p.hi.y, p.hi.z]))
+                                    .all(|(c, (lo, hi))| *c >= lo - 1e-6 && *c <= hi + 1e-6)
+                        })
+                        .collect();
+                    let name = s.full(it, &format!("tab[{i}]"));
+                    let faces = p.faces.map(|f| s.full(it, &face_name(&it.body, part, f)));
+                    let c = back.point_to_world(p.centre);
+                    let n = back.vec_to_world(p.normal);
+                    text.push_str(&format!(
+                        "{name}  t {}  centre {}  normal {}  area {}  {} holes  ({}, {})\n",
+                        sh(p.thickness),
+                        pts(c),
+                        pts(Point3::ORIGIN + n),
+                        sh(p.area),
+                        holes.len(),
+                        faces[0],
+                        faces[1]
+                    ));
+                    for (hn, h) in &holes {
+                        let (hc, _) = hole_at(it, h, &to);
+                        text.push_str(&format!(
+                            "  {}  d {}  centre {}\n",
+                            s.full(it, hn),
+                            sh(2.0 * h.radius),
+                            pts(hc)
+                        ));
+                    }
+                    let (lo, hi) = (back.point_to_world(p.lo), back.point_to_world(p.hi));
+                    list.push(Json::obj(vec![
+                        ("name", name.into()),
+                        ("occurrence", it.occ.as_str().into()),
+                        ("thickness", r9(p.thickness).into()),
+                        ("centre", pt(c)),
+                        ("normal", vt(n)),
+                        ("area", r9(p.area).into()),
+                        (
+                            "min",
+                            pt(Point3::new(lo.x.min(hi.x), lo.y.min(hi.y), lo.z.min(hi.z))),
+                        ),
+                        (
+                            "max",
+                            pt(Point3::new(lo.x.max(hi.x), lo.y.max(hi.y), lo.z.max(hi.z))),
+                        ),
+                        ("faces", Json::Arr(faces.into_iter().map(Json::from).collect())),
+                        (
+                            "holes",
+                            Json::Arr(
+                                holes
+                                    .iter()
+                                    .map(|(hn, h)| hole_json(s.full(it, hn), &it.occ, it, h, &to))
+                                    .collect(),
+                            ),
+                        ),
+                    ]));
+                }
+            }
+            text.insert_str(0, &format!("{} tabs ({frame_name} frame)\n", list.len()));
+            fields.push(("query", "tabs".into()));
+            fields.push(("tabs", Json::Arr(list)));
+        }
     }
     fields.push(("frame", frame_name.as_str().into()));
     Ok(Answer {
@@ -1321,4 +1418,118 @@ fn on_sheet(part: &Part, f: &Frame) -> Option<OnSheet> {
         }
     }
     best.map(|b| b.1)
+}
+
+/// Each sheet's flat: unfolded to one blank or not, its size, and the warnings that stop it
+/// (flat overlaps and touches, the sheet cut apart), each with its fixes: before an `unfold` or
+/// a DXF is asked for and refused.
+fn unfold(src: &str, dir: Option<PathBuf>, root: Option<PathBuf>) -> Answer {
+    let opts = Options {
+        dir,
+        root,
+        ..Options::default()
+    };
+    let (run, _) = crate::run(src, opts, Default::default());
+    if run.sheets.is_empty() {
+        return Answer::err(match run.errors.first() {
+            Some(e) => qe(
+                "NotBuilt",
+                format!("the part did not build: {}: {}", e.kind(), e.text()),
+            ),
+            None => qe("NoSheet", "the part has no sheet"),
+        });
+    }
+    let stops = |k: &str| k.starts_with("Flat") || k == "SheetSplit";
+    let mut sheets = Vec::new();
+    let mut text = String::new();
+    for sh in &run.sheets {
+        let mut j = vec![("sheet", Json::from(sh.id.as_str()))];
+        match sh.pattern() {
+            Ok(p) => {
+                let (mut lo, mut hi) = ([f64::INFINITY; 2], [f64::NEG_INFINITY; 2]);
+                for c in p.contours.iter().flatten() {
+                    for q in curve_points(c) {
+                        lo = [lo[0].min(q.x), lo[1].min(q.y)];
+                        hi = [hi[0].max(q.x), hi[1].max(q.y)];
+                    }
+                }
+                text.push_str(&format!(
+                    "{}: unfolds, blank {} x {}, {} bends\n",
+                    sh.id,
+                    sh_(hi[0] - lo[0]),
+                    sh_(hi[1] - lo[1]),
+                    p.bends.len()
+                ));
+                j.push(("unfolds", true.into()));
+                j.push((
+                    "size",
+                    Json::Arr(vec![r9(hi[0] - lo[0]).into(), r9(hi[1] - lo[1]).into()]),
+                ));
+                j.push(("bends", p.bends.len().into()));
+            }
+            Err(e) => {
+                let why = format!("{e:?}");
+                let why = why.split([' ', '{', '(']).next().unwrap_or("").to_string();
+                text.push_str(&format!("{}: does not unfold: {why}\n", sh.id));
+                j.push(("unfolds", false.into()));
+                j.push(("why", why.into()));
+            }
+        }
+        sheets.push(Json::obj(j));
+    }
+    let mut warn = Vec::new();
+    for w in &run.warnings {
+        let j = w.json(src);
+        let k = j.get("kind").and_then(Json::str).unwrap_or("").to_string();
+        if stops(&k) {
+            text.push_str(&format!(
+                "{k}: {}\n",
+                j.get("text").and_then(Json::str).unwrap_or("")
+            ));
+            warn.push(j);
+        }
+    }
+    for e in &run.errors {
+        let j = e.json(src);
+        let k = j.get("kind").and_then(Json::str).unwrap_or("").to_string();
+        if stops(&k) {
+            text.push_str(&format!(
+                "{k}: {}\n",
+                j.get("text").and_then(Json::str).unwrap_or("")
+            ));
+            warn.push(j);
+        }
+    }
+    let ok = warn.is_empty() && sheets.iter().all(|s| s.get("unfolds") == Some(&Json::Bool(true)));
+    Answer {
+        ok: true,
+        text,
+        json: Json::obj(vec![
+            ("ok", true.into()),
+            ("query", "unfold".into()),
+            ("unfolds", ok.into()),
+            ("sheets", Json::Arr(sheets)),
+            ("stops", Json::Arr(warn)),
+        ]),
+    }
+}
+
+fn sh_(v: f64) -> String {
+    sh(v)
+}
+
+fn curve_points(c: &forge_sheet::Curve2) -> Vec<forge_math::Point2> {
+    match c {
+        forge_sheet::Curve2::Arc { c, r, start, sweep } => (0..=32)
+            .map(|k| {
+                let (s, co) = dmath::sin_cos(start + sweep * k as f64 / 32.0);
+                forge_math::Point2::new(c.x + r * co, c.y + r * s)
+            })
+            .collect(),
+        forge_sheet::Curve2::Spline { points, .. } => points.clone(),
+        l => {
+            let (a, b) = l.ends();
+            vec![a, b]
+        }
+    }
 }

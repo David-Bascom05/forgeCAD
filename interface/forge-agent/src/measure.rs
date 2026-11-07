@@ -278,6 +278,10 @@ pub enum Quantity {
     SizeX,
     SizeY,
     SizeZ,
+    /// A round face's axis, as a unit direction.
+    AxisX,
+    AxisY,
+    AxisZ,
 }
 
 impl Quantity {
@@ -305,12 +309,17 @@ impl Quantity {
             Quantity::SizeX => "Box X",
             Quantity::SizeY => "Box Y",
             Quantity::SizeZ => "Box Z",
+            Quantity::AxisX => "Axis X",
+            Quantity::AxisY => "Axis Y",
+            Quantity::AxisZ => "Axis Z",
         }
     }
 
-    /// What it measures: a length (1), an area (2), a volume (3), an angle (0), a mass (4).
+    /// What it measures: a length (1), an area (2), a volume (3), an angle (0), a mass (4), a
+    /// direction (5, no unit).
     pub fn power(self) -> u8 {
         match self {
+            Quantity::AxisX | Quantity::AxisY | Quantity::AxisZ => 5,
             Quantity::Angle => 0,
             Quantity::Area => 2,
             Quantity::Volume => 3,
@@ -615,6 +624,18 @@ pub fn read_one(p: &Pick) -> Reading {
                         .extend([(Quantity::Radius, rad), (Quantity::Diameter, 2.0 * rad)]);
                     if let Some((c, z)) = select::axis(b, p.ent) {
                         let c = at.point_to_world(c);
+                        // a hole's: its centre and axis, as the holes query gives them
+                        if let Some(z) = z {
+                            let z = at.vec_to_world(z);
+                            r.values.extend([
+                                (Quantity::X, c.x),
+                                (Quantity::Y, c.y),
+                                (Quantity::Z, c.z),
+                                (Quantity::AxisX, z.x),
+                                (Quantity::AxisY, z.y),
+                                (Quantity::AxisZ, z.z),
+                            ]);
+                        }
                         let z = z.map_or(Vec3::Z, |z| at.vec_to_world(z));
                         r.shown.push(Shown::Circle(c, z, rad));
                     }

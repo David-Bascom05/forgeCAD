@@ -331,6 +331,10 @@ pub struct Inspect {
     pub physical_more: Vec<(String, Physical)>,
     /// The host is asked to work the physical properties out (again).
     pub want_physical: bool,
+    /// The section's outline asked for (plane 1's point and normal), and what came back: its
+    /// first line, the whole put on the clipboard.
+    pub want_outline: Option<([f64; 3], [f64; 3])>,
+    pub outline: Option<Result<String, String>>,
     /// The model's middle and reach in the world, for drawing planes.
     pub bounds: ([f32; 3], f32),
     pub browser: Option<super::materials::Browser>,
@@ -398,6 +402,15 @@ pub fn panel_values(
             Quantity::X => Some((q, p.map_or(x, |p| p.x))),
             Quantity::Y => Some((q, p.map_or(x, |p| p.y))),
             Quantity::Z => Some((q, p.map_or(x, |p| p.z))),
+            Quantity::AxisX | Quantity::AxisY | Quantity::AxisZ => {
+                let a = forge_math::Vec3::new(
+                    r.get(Quantity::AxisX).unwrap_or(0.0),
+                    r.get(Quantity::AxisY).unwrap_or(0.0),
+                    r.get(Quantity::AxisZ).unwrap_or(0.0),
+                );
+                let a = frame.map_or(a, |f| f.vec_to_local(a));
+                Some((q, [a.x, a.y, a.z][q as usize - Quantity::AxisX as usize]))
+            }
             _ => Some((q, x)),
         })
         .collect()
@@ -408,6 +421,7 @@ pub fn shown(q: Quantity, v: f64, (unit, angle): (&str, &str), places: usize) ->
     match q.power() {
         0 if angle == "rad" => format!("{:.places$} rad", v.to_radians()),
         0 => format!("{v:.places$}°"),
+        5 => format!("{v:.places$}"),
         2 => format!("{:.places$} {unit}²", v * per_unit(unit).powi(2)),
         3 => format!("{:.places$} {unit}³", v * per_unit(unit).powi(3)),
         4 if matches!(unit, "in" | "ft") => format!("{:.places$} lb", v / 0.453_592_37),
@@ -595,6 +609,8 @@ impl Shell {
         let reach = i.bounds.1.max(1.0) as f64;
         let mid = i.bounds.0.map(f64::from);
         let mut pick = i.pick_plane;
+        let mut want_outline = None;
+        let outline = i.outline.clone();
         let s = i.cut.as_mut()?;
         let r = Self::inspect_window(
             "Section View",
@@ -677,6 +693,24 @@ impl Shell {
                 });
                 places.push((format!("section:offset{}", k + 1), r.rect));
             }
+            ui.add_space(6.0);
+            ui.horizontal(|ui| {
+                let r = ui.button(egui::RichText::new("Copy Outline").font(sans(12.0)));
+                places.push(("section:outline".into(), r.rect));
+                if r.clicked() {
+                    let (n, p) = s.planes[0].at();
+                    want_outline = Some((p, n));
+                }
+                match &outline {
+                    Some(Ok(line)) => {
+                        ui.label(egui::RichText::new(line).font(sans(11.0)).color(t.ink2));
+                    }
+                    Some(Err(e)) => {
+                        ui.label(egui::RichText::new(e).font(sans(11.0)).color(t.error));
+                    }
+                    None => {}
+                }
+            });
             ui.add_space(8.0);
             ui.horizontal(|ui| {
                 let r = ui.button(egui::RichText::new("OK").font(sans(12.0)));
@@ -688,6 +722,10 @@ impl Shell {
             });
         });
         i.pick_plane = pick;
+        if want_outline.is_some() {
+            i.want_outline = want_outline;
+            i.outline = None;
+        }
         if end {
             i.cut = None;
             close = true;

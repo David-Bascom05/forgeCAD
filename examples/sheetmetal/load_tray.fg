@@ -1,5 +1,5 @@
 # LT-100 load tray, 1.5 steel: a floor with four holes, two side walls with a return lip each and
-# two holes, a rear wall, and a front tab bent down with one hole.
+# two holes, a rear wall, and a front tab bent down with one hole; free corners rounded R3.
 # frame: the floor's top skin on xy, x across, y front to back; side walls on x = 0 and x = W.
 shared t = 1.5
 shared r = 1.5
@@ -15,6 +15,7 @@ shared tab_h = 15
 shared d_floor = 5
 shared d_wall = 4.2
 shared e = 20                   # floor holes in from each edge
+shared r_corner = 3
 shared wh = 40                  # wall holes: up from the mold line, along the wall
 shared wy0 = 25
 shared wy1 = 85
@@ -33,6 +34,8 @@ rear = flange(tray.edge(plan.outline[6]), height: Hr, position: "outside")
 right_lip = flange(right.tip, height: lip)
 left_lip = flange(left.tip, height: lip)
 tab = flange(tray.edge(plan.outline[2]), height: tab_h, side: "down")
+# the free corners (the lips', the rear wall's and the tab's) rounded in the blank
+round = corner_round(tray, r: r_corner)
 
 sketch rh(on: right.top) {
   a = circle((wh, wy0), d_wall / 2)
@@ -51,4 +54,9 @@ sketch th(on: tab.top) {
 tab_hole = cutout(th, wall: tab)
 
 expect bodies = 1
+expect holes = 9
+# at z = 30: the side walls, back from the rear's open corners by t and the shop's 0.4, and the
+# rear wall between them
+shared corner_back = t + 0.4
+expect section_area(30) = t * (2 * (D - corner_back) + W - 2 * t) +- 1e-6
 expect valid

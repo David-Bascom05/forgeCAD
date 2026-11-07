@@ -228,6 +228,21 @@ impl Session {
             }
             _ => {}
         }
+        // numbers from the built part or assembly (`forge_lang::query`); `faces` alone, not a selector
+        let asks = matches!(
+            what,
+            "holes" | "section" | "aligned" | "gap" | "interference" | "frame"
+        ) || (what == "faces" && a.words.get(1).is_none_or(|w| w == "of" || w == "in"));
+        if asks {
+            let p = self.path(&a.file)?;
+            let r = forge_lang::query::ask_file(&p, self.root.clone(), &a.words.join(" "));
+            return Ok(Reply {
+                ok: r.ok,
+                text: r.text,
+                json: r.json,
+                png: None,
+            });
+        }
         if a.at.is_some() {
             return Err("--at: a .fg part is asked as it finished".into());
         }
@@ -559,5 +574,31 @@ mod tests {
         );
         assert_eq!(std::fs::read_to_string(&f).unwrap(), want);
         let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn the_numbers_queries_answer_through_query_and_selectors_still_select() {
+        let f =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/sheetmetal/tray_asm.fg");
+        let mut s = Session::new(None, false);
+        let a = Args {
+            file: f.to_string_lossy().into_owned(),
+            words: "gap rack/right_ear.bottom tray/right.bottom"
+                .split(' ')
+                .map(String::from)
+                .collect(),
+            ..Args::default()
+        };
+        let r = s.run("query", &a, &Json::Null);
+        assert!(r.ok, "{}", r.text);
+        assert!((r.json.get("gap").and_then(Json::num).unwrap() - 0.2).abs() < 1e-9);
+        let part = f.with_file_name("load_tray.fg");
+        let a = Args {
+            file: part.to_string_lossy().into_owned(),
+            words: vec!["faces".into(), "cyl".into()],
+            ..Args::default()
+        };
+        let r = s.run("query", &a, &Json::Null);
+        assert!(r.ok && r.json.get("found").is_some(), "{}", r.text);
     }
 }

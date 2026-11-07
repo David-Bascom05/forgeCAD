@@ -30,6 +30,7 @@ per_doc!(
         fg_anchors: Option<Arc<crate::fg::AnchorView>>,
         fg_asm: Option<AsmPlaced>,
         fg_asm_anchors: Option<Receiver<PartAnchors>>,
+        fg_asm_located: Option<Receiver<Result<Vec<String>, String>>>,
         fg_keep_camera: Option<Camera>,
         extras: gui_overlay::Extras,
         fg_asm_boxes: Vec<crate::explode::Aabb>,

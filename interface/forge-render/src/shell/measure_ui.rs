@@ -52,7 +52,15 @@ const SET_INK: [Color32; 2] = [
 fn adds_up(q: Quantity) -> bool {
     !matches!(
         q,
-        Quantity::X | Quantity::Y | Quantity::Z | Quantity::Dx | Quantity::Dy | Quantity::Dz
+        Quantity::X
+            | Quantity::Y
+            | Quantity::Z
+            | Quantity::Dx
+            | Quantity::Dy
+            | Quantity::Dz
+            | Quantity::AxisX
+            | Quantity::AxisY
+            | Quantity::AxisZ
     )
 }
 

@@ -236,6 +236,12 @@ pub const NAMES: &[(&str, &str, &str, &[&str])] = &[
         r#"{"file":{"type":"string"}}"#,
         &["file"],
     ),
+    (
+        "fg_query",
+        "Numbers from a .fg part or assembly in the folder, built: `holes` (each hole's centre, axis, diameter), `section z=67` (the outline at a plane, as lines and arcs), `aligned` (holes of different parts on one axis; `aligned A B` for two), `gap A B` (between two faces), `interference` (where parts clash, the faces involved), `frame SKETCH` (where a sketch on a sheet wall lands, folded and on the flat), `faces` (every face's name). Assembly coordinates, `in OCC` for a part's; names in an assembly are OCC/NAME.",
+        r#"{"file":{"type":"string"},"query":{"type":"string"}}"#,
+        &["file", "query"],
+    ),
     ("fg_reference", "The Forge language reference.", "{}", &[]),
 ];
 

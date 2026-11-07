@@ -236,6 +236,8 @@ pub enum FgAct {
     AsmShow,
     /// Run the assembly's overlap check.
     AsmCheck,
+    /// Where the interferences are and what faces they touch.
+    AsmLocate,
     /// A part file's anchors, for the instance chosen.
     AsmAnchors(String),
     /// An assembly's edit as one undo step: a dialog's OK, a menu's Delete.

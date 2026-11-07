@@ -811,6 +811,40 @@ pub(super) fn seam(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     Ok(op_value(si, &id, OpKind::Corner { a: ja, b: jb }))
 }
 
+/// `corner_round(S, r: R)`: the convex corners where two free edges of the sheet's walls meet
+/// (S a sheet: all its walls; a flange: its own) rounded to R in the blank (Inventor's Corner
+/// Round). A radius too big for an edge's half is `CornerRoundTooBig`, with the fix that fits.
+pub(super) fn corner_round(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
+    let id = ev.take_id("corner_round", span)?;
+    let a = Args::bind(ev, "corner_round", &["of", "r"], args, span)?;
+    if a.poisoned() {
+        return Ok(Value::Unresolved);
+    }
+    let v = a.req("of")?;
+    let op = op_of(&v, a.span("of"), "a sheet or a flange")?;
+    let walls = match op.kind {
+        OpKind::Base { .. } if op.on == On::Folded => None,
+        OpKind::Flange { wall, .. } if op.on == On::Folded => Some(vec![wall]),
+        _ => return Err(wrong(a.span("of"), "a sheet or a flange", Ty::Sheet, &v)),
+    };
+    let si = op.sheet;
+    not_unfolded(ev, si, &id, span)?;
+    let r = a.req_num("r", LEN)?;
+    let st = &mut ev.sheets.list[si];
+    if let Err(e) = st.sheet.round_corners(walls.as_deref(), r.v) {
+        let mut err = kernel_err(st, span, &id, e.clone());
+        if let (fs::SheetError::CornerRound { limit, .. }, Error::Sheet(x)) = (&e, &mut err)
+            && let SheetErr::Kernel { fixes, .. } = &mut **x
+            && let Some(fix) = set(&r, (limit * 1e3).floor() / 1e3)
+        {
+            fixes.push(fix);
+        }
+        return Err(err);
+    }
+    push_sheet_step(ev, si, &id, "corner_round", span, vec![dim("r", &r)])?;
+    Ok(op_value(si, &id, OpKind::Round))
+}
+
 // ---- punches ----------------------------------------------------------------------------------
 
 /// A tool written as a tuple: ("ID", "round", D) | ("ID", "obround", L, W) | ("ID", "square", S)

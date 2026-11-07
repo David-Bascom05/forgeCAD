@@ -1,0 +1,3 @@
+# A vendor's bracket as its STEP model comes: no history, only its B-rep. `fg query vendor.fg
+# holes`, `tabs`, `section z=10` read it as they read a ForgeCAD part.
+bracket = import("bracket.step")

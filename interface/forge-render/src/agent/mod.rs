@@ -109,7 +109,7 @@ pub fn system_prompt(file: &Path) -> String {
         .map_or_else(|| ".".into(), |d| d.display().to_string());
     let check = "Check your work with the app's fg tools (fg_run builds a file and lists its errors and warnings, \
                  fg_check checks without building, fg_edit applies a typed edit op as the errors' fixes give them, \
-                 fg_handles lists the parameters, fg_reference is the Forge language reference); \
+                 fg_handles lists the parameters, fg_query gives numbers (holes, sections, gaps, clashes, shared axes, sketch frames), fg_reference is the Forge language reference); \
                  each takes `file`, a .fg file's name in the folder. There's no shell.";
     format!(
         "You are ForgeCAD's in-app agent, in the Agent tab beside the browser. \

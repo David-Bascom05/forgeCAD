@@ -147,7 +147,8 @@ path o(start: P) {                  a chain: line(to: P, tangent: false), tarc(t
 ```
 
 A loop value (rect, slot, hull, poly, path) indexes its segments: `o[2]`, `o.segs`. Entity
-members: points `x y`; lines `a b dir`; arcs `center a b`; circles `center`.
+members: points `x y`; lines `a b dir`; arcs `center a b`; circles `center`; arcs and circles `axis` (through
+the centre, square to the sketch).
 
 Constraints (bare statements): `tangent(a, b)` (lines, arcs, circles, a spline's end),
 `coincident(p, q|line|circle)`, `horizontal(l)`, `vertical(l)`, `parallel(l, m)`,
@@ -537,6 +538,11 @@ cutout(PROFILE, wall: W, crosses_bend: false)
     A whole sketch cuts all its regions; lines, arcs, circles and splines. With a shop, a cut
     running across a bend is the violation CutCrossesBend (fix: crosses_bend: true, which makes
     it information).
+corner_round(S, r: R)
+    the convex corners where two free edges of a wall meet (neither carries a bend, hem or
+    seam) rounded to R, cut in the blank so the folded part has them: S a sheet (every wall) or
+    a flange (its own). Each edge gives each end at most half its length: more is
+    CornerRoundTooBig, with a SetParam fix to the largest R that fits.
 pattern(of: CUTOUT, layout: LAYOUT)
     the cutout repeated on its wall; a copy that leaves the wall's plane is PatternOffWall,
     other sheet features PatternOfSheet.
@@ -889,7 +895,8 @@ allowed; each top-level statement may make at most 100000 calls, nested at most 
 
 ## expect
 
-`expect volume|area = V +- T[%]`, `expect faces|edges|bodies = N`, `expect valid`. A failed line is
+`expect volume|area = V +- T[%]`, `expect faces|edges|bodies|holes = N` (holes: round holes of the
+finished part), `expect section_area(V) = A` (the material cut by the plane z = V), `expect valid`. A failed line is
 `ExpectFailed` with the measured value and the limit. An expect whose limit is the measured value
 to the last digit is the lint `ExpectCopied`.
 
@@ -1026,7 +1033,10 @@ expect clearance(arm, post) >= 2 at crank.turn = 90deg
   anchor with a fit feature (a thread runs `depth` along the anchor's z); `dowel = anchor_kind()`
   declares a kind of the part's own.
 - **Expect:** `interferences`, `interference(a, b)` (volume), `clearance(a, b)`, `distance(a, b)`
-  (origins), `x|y|z(a)`, `value(j.turn)`, `mobility`; `at P = V, ..` holds params for that line.
+  (origins), `x|y|z(a)`, `value(j.turn)`, `mobility`; `gap(a, b)` (two parallel planes' spacing,
+  `rack.ear.bottom`; else `NotParallel`), `axis_offset(a, b)` (b's axis origin off a's axis) and
+  `axis_angle(a, b)` (degrees) for holes on one axis (`tray.lh.a.axis`: a sketch circle's);
+  `at P = V, ..` holds params for that line.
   Wherever an instance goes, a reference does too (`x(rail.eia[0])`, `z(crank.bar.end)`): its
   frame in the world. A subassembly is all of its parts: `clearance(s, a)` is the least over
   them, `interference(s, a)` their summed volume. `interference(a, b)` is the solids' exact
@@ -1099,6 +1109,33 @@ An op fails only with a typed error: `UnknownParam`, `UnknownFeature`, `NotAStat
 instance made in a loop or call: edit its params, or SplitInstance), `NameTaken`, `EditDim` (the
 value's dimension is not the param's), or the edited document's own errors.
 
+## Queries
+
+`fg query FILE QUERY.. [--json]` (`forgecad query F.fg ..`, the agent's `fg_query`) builds the part
+or assembly and answers in numbers, typed JSON with `--json`, the same every run. Coordinates are
+the assembly's (a part alone: its own); `in OCC` gives an occurrence's part frame; mm, degrees.
+
+```
+holes [of OCC] [d D]           each round hole (B-rep cylinders, imports too): centre, axis, d, depth
+section x|y|z=V [of OCC]       the outline at a plane: loops of lines and arcs, areas, extents
+section at X Y Z normal NX NY NZ
+aligned [HOLE HOLE] [tol T]    holes of different parts on one axis; two: their offset and angle
+gap FACE FACE                  least distance face to face (parallel planes: their spacing)
+interference [OCC OCC]         each clash: volume, centre, box, and the faces of each part in it
+frame SKETCH|PLANE [of OCC]    a sketch's or plane's origin and axes, and on a sheet its wall and
+                               its origin and x on the flat
+faces [of OCC]                 every face's name, kind, centre, normal
+tabs [of OCC] [t MAX]          thin flat runs (two planar faces facing apart, at most MAX apart):
+                               thickness, centre, normal, area, their holes
+unfold                         whether each sheet unfolds to one blank, its size, and the
+                               warnings (FlatOverlap, FlatTouch, SheetSplit) that would stop it
+```
+
+Names are stable: a face's anchor text where the part's anchors name it, else its handle
+(`@f..`); a hole its wall's anchor text (`#k` where that names several), else `hole[k]`; in an
+assembly `OCC/NAME`. A name that resolves to nothing is a typed error (`NoSuchFace`,
+`NoSuchOccurrence`, `NotAFace`, `NotAPlane`, `NotAHole`).
+
 ## CLI
 
 ```
@@ -1110,4 +1147,5 @@ fg handles FILE
 fg serve                    JSON lines {"cmd":"run","file":F}: stages kept, so a rerun builds
                             only from the first feature that changed
 fg reference
+fg query FILE QUERY.. [--json]
 ```

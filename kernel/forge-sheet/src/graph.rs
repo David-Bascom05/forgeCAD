@@ -97,6 +97,9 @@ pub struct Cut {
     pub crosses_bend: bool,
 }
 
+/// The id bit of a corner round's arc in a wall's outline.
+pub const ROUND_ID: u64 = 1 << 62;
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct Sheet {
     pub feature: FeatureId,
@@ -182,6 +185,121 @@ impl Sheet {
             next_cut: 0,
         };
         Ok((sheet, id))
+    }
+
+    /// Rounds the convex corners where two free straight edges of a wall's outline meet (neither
+    /// carries a joint), radius `r`, in the wall's own coordinates: Inventor's Corner Round, cut
+    /// in the blank, so the folded part has it too. `walls`: these only, else every wall. Each
+    /// edge gives each of its ends at most half its length. The corners rounded, by wall.
+    pub fn round_corners(&mut self, walls: Option<&[WallId]>, r: f64) -> Result<usize, SheetError> {
+        if r.is_nan() || r <= tol::LINEAR {
+            return Err(SheetError::Radius {
+                feature: self.feature,
+                radius: r,
+                limit: tol::LINEAR,
+            });
+        }
+        let mut done = 0;
+        let feature = self.feature;
+        for k in 0..self.walls.len() {
+            let id = self.walls[k].id;
+            if walls.is_some_and(|ws| !ws.contains(&id)) {
+                continue;
+            }
+            let joined: Vec<u64> = self
+                .joints
+                .iter()
+                .filter_map(|j| {
+                    if j.a == id {
+                        Some(j.on_a)
+                    } else if j.b == id {
+                        Some(j.on_b)
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            let Some(l) = self.walls[k].outline.first() else {
+                continue;
+            };
+            let segs = &l.segments;
+            let n = segs.len();
+            let line = |i: usize| match segs[i % n].0 {
+                Segment::Line { a, b } if !joined.contains(&segs[i % n].1) => Some((a, b)),
+                _ => None,
+            };
+            // each corner (end of segment i, start of i + 1): its two points and arc, if rounded
+            let mut cut: Vec<Option<(Point2, Point2, Segment)>> = vec![None; n];
+            for (i, slot) in cut.iter_mut().enumerate() {
+                let (Some((a0, v)), Some((_, b1))) = (line(i), line(i + 1)) else {
+                    continue;
+                };
+                let (u, w) = (v - a0, b1 - v);
+                let (lu, lw) = (u.length(), w.length());
+                if lu <= tol::LINEAR || lw <= tol::LINEAR {
+                    continue;
+                }
+                let (u, w) = (u * (1.0 / lu), w * (1.0 / lw));
+                let (c, d) = (u.cross(w), u.dot(w));
+                // convex only: the outline runs counter-clockwise
+                if c <= 1e-9 {
+                    continue;
+                }
+                let turn = dmath::atan2(c, d);
+                let (s, co) = dmath::sin_cos(turn / 2.0);
+                let take = r * s / co;
+                let limit = 0.5 * lu.min(lw);
+                if take > limit + tol::LINEAR {
+                    return Err(SheetError::CornerRound {
+                        feature,
+                        wall: id,
+                        at: v,
+                        radius: r,
+                        limit: limit * co / s,
+                    });
+                }
+                let p1 = v - u * take;
+                let p2 = v + w * take;
+                let centre = p1 + Vec2::new(-u.y, u.x) * r;
+                let start = dmath::atan2(p1.y - centre.y, p1.x - centre.x);
+                *slot = Some((
+                    p1,
+                    p2,
+                    Segment::Arc {
+                        center: centre,
+                        radius: r,
+                        start,
+                        sweep: turn,
+                    },
+                ));
+            }
+            if cut.iter().all(Option::is_none) {
+                continue;
+            }
+            let mut out = Vec::with_capacity(n * 2);
+            for i in 0..n {
+                let (mut g, sid) = (segs[i].0.clone(), segs[i].1);
+                if let Segment::Line { a, b } = &mut g {
+                    if let Some((_, p2, _)) = cut[(i + n - 1) % n] {
+                        *a = p2;
+                    }
+                    if let Some((p1, _, _)) = cut[i] {
+                        *b = p1;
+                    }
+                }
+                out.push((g, sid));
+                if let Some((_, _, arc)) = &cut[i] {
+                    // an id of its own, from the two edges it joins
+                    out.push((
+                        arc.clone(),
+                        ROUND_ID | ((sid.rotate_left(20) ^ segs[(i + 1) % n].1) & (ROUND_ID - 1)),
+                    ));
+                    done += 1;
+                }
+            }
+            self.walls[k].outline[0].segments = out;
+        }
+        Ok(done)
     }
 
     pub fn wall(&self, id: WallId) -> Option<&Wall> {

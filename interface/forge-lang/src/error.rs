@@ -416,6 +416,10 @@ pub enum Metric {
     Valid,
     Mass,
     BboxSize,
+    /// Round holes in the finished part (`forge_agent::features::holes`).
+    Holes,
+    /// The material's area in a section at z = V (`forge_agent::features::section`).
+    SectionArea,
 }
 
 impl Metric {
@@ -429,6 +433,8 @@ impl Metric {
             Metric::Valid => "valid",
             Metric::Mass => "mass",
             Metric::BboxSize => "bbox",
+            Metric::Holes => "holes",
+            Metric::SectionArea => "section_area",
         }
     }
 }

@@ -1916,6 +1916,10 @@ pub fn member(ev: &mut Eval, v: Value, name: &str, span: Span) -> R<Value> {
                 ("a", Some(E::Line { a, .. } | E::Arc { start: a, .. })) => Ok(pt(a)),
                 ("b", Some(E::Line { b, .. } | E::Arc { end: b, .. })) => Ok(pt(b)),
                 ("center", Some(E::Circle { center, .. } | E::Arc { center, .. })) => Ok(pt(center)),
+                // through the centre, square to the sketch: a hole's axis, for an assembly's checks
+                ("axis", Some(E::Circle { center, .. } | E::Arc { center, .. })) => {
+                    Ok(Value::Axis(sk.frame.plane_point(sk.pos(center)), sk.frame.z()))
+                }
                 ("dir", Some(E::Line { a, b })) => {
                     let d = sk.pos(b) - sk.pos(a);
                     Ok(Value::Dir(sk.frame.vec_to_world(Vec3::new(d.x, d.y, 0.0))))

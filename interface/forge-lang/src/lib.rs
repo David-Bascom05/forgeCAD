@@ -523,7 +523,10 @@ fn measure(
 }
 
 fn expect(ev: &mut Eval, s: &syntax::Stmt, m: &Measure) -> Option<ExpectResult> {
-    let StmtKind::Expect { metric, cmp, .. } = &s.kind else {
+    let StmtKind::Expect {
+        metric, cmp, args, ..
+    } = &s.kind
+    else {
         return None;
     };
     let (metric, measured) = match metric.as_str() {
@@ -533,6 +536,25 @@ fn expect(ev: &mut Eval, s: &syntax::Stmt, m: &Measure) -> Option<ExpectResult> 
         "edges" => (Metric::Edges, m.edges as f64),
         "bodies" => (Metric::Bodies, m.bodies as f64),
         "valid" => (Metric::Valid, if m.problems == 0 { 1.0 } else { 0.0 }),
+        "holes" => (
+            Metric::Holes,
+            ev.b.body()
+                .map_or(0.0, |b| forge_agent::features::holes(b).len() as f64),
+        ),
+        // the material's area where the plane z = V cuts the part
+        "section_area" => {
+            let z = match args.first().map(|a| ev.expr(a)) {
+                Some(Ok(Value::Num(n))) => n.v,
+                _ => f64::NAN,
+            };
+            let at = forge_math::Frame::from_z(forge_math::Point3::new(0.0, 0.0, z), forge_math::UnitVec3::Z);
+            let area = match ev.b.body() {
+                Some(b) if z.is_finite() => forge_agent::features::section(b, &at)
+                    .map_or(f64::NAN, |ls| ls.iter().map(|l| l.area).sum()),
+                _ => f64::NAN,
+            };
+            (Metric::SectionArea, area)
+        }
         _ => {
             ev.errors.push(Error::UnknownMetric {
                 span: s.span,
@@ -611,7 +633,10 @@ fn expect(ev: &mut Eval, s: &syntax::Stmt, m: &Measure) -> Option<ExpectResult> 
 
 /// Measures that are real numbers (a copied count is just a count).
 fn metric_is_real(m: Metric) -> bool {
-    matches!(m, Metric::Volume | Metric::Area | Metric::Mass)
+    matches!(
+        m,
+        Metric::Volume | Metric::Area | Metric::Mass | Metric::SectionArea
+    )
 }
 
 /// A PNG of the finished part.

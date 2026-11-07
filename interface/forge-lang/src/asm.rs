@@ -74,6 +74,9 @@ pub const METRICS: &[&str] = &[
     "z",
     "value",
     "distance",
+    "gap",
+    "axis_offset",
+    "axis_angle",
 ];
 
 // ---- values -------------------------------------------------------------------------------------
@@ -1728,6 +1731,8 @@ pub enum Unevaluable {
     AtUnknownParam { param: String },
     /// An `at` value that is not a number.
     AtNotANumber { param: String },
+    /// `gap(a, b)` of planes that are not parallel, at this angle (degrees).
+    NotParallel { angle: f64 },
 }
 
 impl Unevaluable {
@@ -1754,6 +1759,12 @@ impl Unevaluable {
                 "at {param}: this document has no param {param} (a subassembly's drives are its own file's params, set in that file)"
             ),
             Unevaluable::AtNotANumber { param } => format!("at {param}: the value is not a number"),
+            Unevaluable::NotParallel { angle } => {
+                format!(
+                    "gap() takes two parallel planes; these are {} deg apart",
+                    forge_agent::short(*angle)
+                )
+            }
         }
     }
 }
@@ -4976,6 +4987,21 @@ impl Measure<'_> {
                     }
                 }
                 Ok(vol)
+            }
+            // two references' planes (z their normals) or axes (z along them), in the world
+            "gap" | "axis_offset" | "axis_angle" => {
+                let (_, fa_) = self.place(ev, args, 0).map_err(why)?;
+                let (_, fb) = self.place(ev, args, 1).map_err(why)?;
+                let (za, zb) = (fa_.z().get(), fb.z().get());
+                let angle =
+                    forge_math::dmath::acos(za.dot(zb).abs().clamp(0.0, 1.0)) * 180.0 / forge_math::dmath::PI;
+                let w = fb.origin - fa_.origin;
+                match metric {
+                    "axis_angle" => Ok(angle),
+                    "axis_offset" => Ok((w - za * w.dot(za)).length()),
+                    _ if za.cross(zb).length() > 1e-9 => Err(why(Unevaluable::NotParallel { angle })),
+                    _ => Ok(w.dot(za).abs()),
+                }
             }
             "x" | "y" | "z" => {
                 let (_, f) = self.place(ev, args, 0).map_err(why)?;

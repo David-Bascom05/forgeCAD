@@ -59,6 +59,12 @@ pub fn specs() -> Json {
             vec!["name", "text"],
         ),
         tool(
+            "query",
+            "Numbers from the open file, built: `holes`, `section z=67`, `aligned [A B]`, `gap A B`, `interference`, `frame SKETCH`, `faces`; assembly coordinates (`in OCC` for a part's), names in an assembly OCC/NAME.",
+            vec![("query", string("e.g. holes, section z=67, gap rack/ear.bottom tray/right.bottom"))],
+            vec!["query"],
+        ),
+        tool(
             "run_check",
             "Build the open file and report its errors, warnings and measures.",
             vec![],
@@ -142,6 +148,15 @@ pub fn call(name: &str, args: &Json, file: &Path) -> (String, bool) {
             Ok(format!("Made {name}.\n{}", check(text, &new)))
         })(),
         "run_check" => read().map(|t| check(&t, file)),
+        "query" => (|| {
+            let text = read()?;
+            let q = args
+                .get("query")
+                .and_then(Json::str)
+                .ok_or("query takes `query`")?;
+            let a = forge_lang::query::ask(&text, file.parent().map(|d| d.to_path_buf()), None, q);
+            if a.ok { Ok(a.text) } else { Err(a.text) }
+        })(),
         other => Err(format!("no tool `{other}`")),
     };
     match got {
@@ -194,6 +209,19 @@ pub fn fg_call(name: &str, args: &Json, dir: &Path) -> (String, bool) {
         let text = std::fs::read_to_string(&f).map_err(|e| format!("{}: {e}", f.display()))?;
         match name {
             "fg_run" => Ok(check(&text, &f)),
+            "fg_query" => {
+                let q = args
+                    .get("query")
+                    .and_then(Json::str)
+                    .ok_or("fg_query takes `query`")?;
+                let a = forge_lang::query::ask(
+                    &text,
+                    f.parent().map(|d| d.to_path_buf()),
+                    Some(dir.to_path_buf()),
+                    q,
+                );
+                if a.ok { Ok(a.text) } else { Err(a.text) }
+            }
             "fg_check" => {
                 let opts = forge_lang::Options {
                     build: false,
@@ -228,5 +256,36 @@ pub fn fg_call(name: &str, args: &Json, dir: &Path) -> (String, bool) {
     match got {
         Ok(s) => (s, false),
         Err(e) => (e, true),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_agent_asks_the_folders_files_for_numbers() {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/sheetmetal");
+        let args = Json::obj(vec![
+            ("file", "tray_asm.fg".into()),
+            (
+                "query",
+                "aligned tray/right_holes.faces#1 rack/right_holes.faces#0".into(),
+            ),
+        ]);
+        let (text, failed) = fg_call("fg_query", &args, &dir);
+        assert!(!failed && text.starts_with("coaxial"), "{text}");
+        let (text, failed) = call(
+            "query",
+            &Json::obj(vec![("query", "holes".into())]),
+            &dir.join("load_tray.fg"),
+        );
+        assert!(!failed && text.starts_with("9 holes"), "{text}");
+        let (_, failed) = fg_call(
+            "fg_query",
+            &Json::obj(vec![("file", "tray_asm.fg".into()), ("query", "gap".into())]),
+            &dir,
+        );
+        assert!(failed);
     }
 }

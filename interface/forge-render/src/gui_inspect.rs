@@ -82,6 +82,8 @@ pub struct Inspector {
     warmed: bool,
     /// What the renderer was last given.
     cut: Option<crate::shell::inspect::Cut>,
+    /// The section's outline being worked out (`fg query F section ..`).
+    outline: Option<Receiver<Result<String, String>>>,
 }
 
 fn ent(e: Entity) -> Ent {
@@ -500,6 +502,39 @@ impl Gui {
         self.measure_browser();
         self.measure_hover();
         self.inspect_measure();
+        if let Some((p, n)) = self.shell.inspect.want_outline.take() {
+            let doc = self.fg.as_ref().map(|s| (s.src.clone(), s.path.clone()));
+            let (send, recv) = channel();
+            self.inspector.outline = Some(recv);
+            let waker = self.waker.clone();
+            std::thread::spawn(move || {
+                let got = match doc {
+                    None => Err("Section numbers are a Forge (.fg) document's".to_string()),
+                    Some((src, path)) => {
+                        let dir = path
+                            .as_deref()
+                            .and_then(|f| std::path::Path::new(f).parent().map(|d| d.to_path_buf()));
+                        let q = format!(
+                            "section at {} {} {} normal {} {} {}",
+                            p[0], p[1], p[2], n[0], n[1], n[2]
+                        );
+                        let a = forge_lang::query::ask(&src, dir, None, &q);
+                        if a.ok { Ok(a.text) } else { Err(a.text) }
+                    }
+                };
+                let _ = send.send(got);
+                waker();
+            });
+        }
+        if let Some(r) = &self.inspector.outline
+            && let Ok(got) = r.try_recv()
+        {
+            self.inspector.outline = None;
+            self.shell.inspect.outline = Some(got.map(|text| {
+                self.ctx.copy_text(text.clone());
+                format!("Copied: {}", text.lines().next().unwrap_or(""))
+            }));
+        }
         if std::mem::take(&mut self.shell.inspect.want_physical) {
             let asm = self.inspector.data.as_ref().and_then(|d| d.asm.clone());
             match asm {

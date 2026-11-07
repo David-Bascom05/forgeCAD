@@ -47,6 +47,7 @@ pub const BUILTINS: &[&str] = &[
     "corner_relief",
     "constant_width_corner",
     "seam",
+    "corner_round",
     "punch",
     "form",
     "sketched_bend",
@@ -155,6 +156,8 @@ pub enum OpKind {
     Form {
         form: u32,
     },
+    /// A corner round's arcs, on every wall.
+    Round,
 }
 
 /// Which body an anchor reads: the folded one, or unfold `k`'s.
@@ -519,6 +522,9 @@ pub enum SheetErr {
         error: SheetError,
         names: Names,
         fixes: Vec<Op>,
+        /// What the refusal is about, by name and place in the part: said after the reason, and
+        /// its data.
+        context: Option<Box<Said>>,
     },
     /// A feature that is not sheet metal, in a part with a sheet (refused at first).
     OrdinaryOnSheet { span: Span, id: String, sheet: String },
@@ -616,9 +622,16 @@ impl SheetErr {
     pub fn text(&self) -> String {
         use SheetErr::*;
         match self {
-            Kernel { id, error, names, .. } => format!(
-                "{id}: the sheet is refused: {}",
-                feat::form_error_text(error, names).unwrap_or_else(|| kernel_text(error))
+            Kernel {
+                id,
+                error,
+                names,
+                context,
+                ..
+            } => format!(
+                "{id}: the sheet is refused: {}{}",
+                feat::form_error_text(error, names).unwrap_or_else(|| kernel_text(error)),
+                context.as_ref().map_or(String::new(), |c| format!("; {}", c.0))
             ),
             OrdinaryOnSheet { id, sheet, .. } => format!(
                 "{id} is not sheet metal, and the part has the sheet {sheet}: ordinary features on a sheet are refused"
@@ -661,9 +674,18 @@ impl SheetErr {
         use SheetErr::*;
         let s = |x: &str| Json::Str(x.into());
         match self {
-            Kernel { id, error, names, .. } => {
+            Kernel {
+                id,
+                error,
+                names,
+                context,
+                ..
+            } => {
                 let mut v = vec![("id", s(id))];
                 v.extend(kernel_data(error, names));
+                if let Some(c) = context {
+                    v.extend(c.1.iter().cloned());
+                }
                 v
             }
             OrdinaryOnSheet { id, sheet, .. } => vec![("id", s(id)), ("sheet", s(sheet))],
@@ -1395,6 +1417,7 @@ fn kernel_kind(e: &SheetError) -> &'static str {
         HardwareOffWall { .. } => "HardwareOffWall",
         ReliefExtendUnbuilt { .. } => "ReliefExtendUnbuilt",
         SheetSplit { .. } => "SheetSplit",
+        CornerRound { .. } => "CornerRoundTooBig",
         _ => unreachable!("the features' own, above"),
     }
 }
@@ -1472,6 +1495,13 @@ fn kernel_text(e: &SheetError) -> String {
         FoldedTouch { .. } => "folded, two walls touch with no gap (an edge on a face): no valid solid".into(),
         ReliefExtendUnbuilt { .. } => "the relief rule asks reliefs to extend for flat collisions: not built yet".into(),
         SheetSplit { .. } => "the cuts part the sheet in two".into(),
+        CornerRound { at, radius, limit, .. } => format!(
+            "a corner round of radius {} at ({}, {}) takes more than half an edge; it fits up to {}",
+            fm(*radius),
+            fm(at.x),
+            fm(at.y),
+            fm(*limit)
+        ),
         _ => unreachable!("the features' own, above"),
     }
 }
@@ -1779,6 +1809,18 @@ fn kernel_data(e: &SheetError, n: &Names) -> Vec<(&'static str, Json)> {
         HardwareOffWall { wall, at, .. } => vec![("wall", n.strip(Strip::Wall(*wall))), ("at", p2(*at))],
         FoldedTouch { a, b, at, .. } => vec![("a", n.strip(*a)), ("b", n.strip(*b)), ("at", p3(*at))],
         SheetSplit { a, b, .. } => vec![("a", n.strip(*a)), ("b", n.strip(*b))],
+        CornerRound {
+            wall,
+            at,
+            radius,
+            limit,
+            ..
+        } => vec![
+            ("wall", n.strip(Strip::Wall(*wall))),
+            ("at", p2(*at)),
+            ("radius", f(*radius)),
+            ("limit", f(*limit)),
+        ],
         _ => unreachable!("the features' own, above"),
     }
 }
@@ -1929,6 +1971,7 @@ fn kernel_error(fix: &FixCtx, names: Names, span: Span, id: &str, error: SheetEr
         error,
         names,
         fixes,
+        context: None,
     })
 }
 
@@ -1945,14 +1988,173 @@ fn kernel_err(st: &SheetState, span: Span, id: &str, error: SheetError) -> Error
         SheetError::FoldedTouch { a, b, .. } => touch_fixes(st, a, b, Map::Folded),
         _ => vec![],
     };
+    let (said, more) = match refusal_context(st, &error) {
+        Some((text, data, fixes)) => (Some(Box::new((text, data))), fixes),
+        None => (None, vec![]),
+    };
     match kernel_error(&st.fix, st.names(), span, id, error) {
         Error::Sheet(mut e) => {
-            if let SheetErr::Kernel { fixes, .. } = &mut *e {
+            if let SheetErr::Kernel { fixes, context, .. } = &mut *e {
                 fixes.extend(extra);
+                fixes.extend(more);
+                *context = said;
             }
             Error::Sheet(e)
         }
         o => o,
+    }
+}
+
+/// A refusal's words and data about where it is.
+type Said = (String, Vec<(&'static str, Json)>);
+
+type Context = (String, Vec<(&'static str, Json)>, Vec<Op>);
+
+/// A refusal's subject by its features' names and its place on the part as last built (a
+/// wall's own coordinates when it was not built yet), and for an unbuilt corner the relief that
+/// builds, as an op.
+fn refusal_context(st: &SheetState, error: &SheetError) -> Option<Context> {
+    let fm = crate::values::fmt;
+    let wall = |w: WallId| {
+        st.walls
+            .iter()
+            .find(|x| x.0 == w)
+            .map_or_else(|| format!("wall {}", w.0), |x| x.1.clone())
+    };
+    let joint = |j: JointId| {
+        st.joints
+            .iter()
+            .find(|x| x.0 == j)
+            .map_or_else(|| format!("joint {}", j.0), |x| x.1.clone())
+    };
+    // a point of a wall, in the folded part where that wall was built before
+    let world = |w: WallId, p: Point2| -> Option<Point3> {
+        let lay = &st.folded.as_ref()?.layout;
+        let wp = lay.walls.iter().find(|x| x.wall == w)?;
+        Some(wp.frame.point_to_world(Point3::new(p.x, p.y, 0.0)))
+    };
+    let p3 = |p: Point3| Json::Arr(vec![p.x.into(), p.y.into(), p.z.into()]);
+    let pt = |p: Point3| format!("({}, {}, {})", fm(p.x), fm(p.y), fm(p.z));
+    let s = |x: &str| Json::Str(x.into());
+    // the straight edge a joint turns off its first wall, end to end
+    let edge = |j: &fs::Joint| -> Option<(Point2, Point2)> {
+        let w = st.sheet.wall(j.a)?;
+        w.outline
+            .iter()
+            .flat_map(|l| &l.segments)
+            .find_map(|(g, id)| match g {
+                Segment::Line { a, b } if *id == j.on_a => Some((*a, *b)),
+                _ => None,
+            })
+    };
+    match error {
+        SheetError::Seam {
+            why: fs::SeamError::NotAFlange { joint: j },
+            ..
+        } => {
+            let jt = st.sheet.joint(*j)?;
+            let (name, parent) = (joint(*j), wall(jt.a));
+            let why = match jt.kind {
+                fs::JointKind::Hem(_) => "it is a hem".to_string(),
+                fs::JointKind::Rip { .. } => "it is a rip".to_string(),
+                fs::JointKind::Tangent => "it continues its wall".to_string(),
+                fs::JointKind::Bend { .. } => match st.sheet.wall(jt.b).and_then(|w| w.outline.first()) {
+                    Some(l) => {
+                        let arcs = l.segments.iter().any(|x| !matches!(x.0, Segment::Line { .. }));
+                        format!(
+                            "its outline has {} sides{}, not a rectangle off its edge",
+                            l.segments.len(),
+                            if arcs { " with curves" } else { "" }
+                        )
+                    }
+                    None => "it has no wall".to_string(),
+                },
+            };
+            let mut data = vec![("flange", s(&name)), ("wall", s(&parent)), ("why", s(&why))];
+            let mut text = format!("{name} is not a plain flange: {why}");
+            if let Some((a, b)) = edge(jt)
+                && let (Some(pa), Some(pb)) = (world(jt.a, a), world(jt.a, b))
+            {
+                text.push_str(&format!(
+                    "; it turns off {parent}'s edge {} to {}",
+                    pt(pa),
+                    pt(pb)
+                ));
+                data.push(("edge", Json::Arr(vec![p3(pa), p3(pb)])));
+            }
+            Some((text, data, vec![]))
+        }
+        SheetError::TangentMismatch {
+            joint: j, side, at, ..
+        } => {
+            let jt = st.sheet.joint(*j)?;
+            let w = if *side == fs::Side::A { jt.a } else { jt.b };
+            let (name, on) = (joint(*j), wall(w));
+            // `at` is in the bend's coordinates: across it, and along the mold line from its start
+            let mut text = format!(
+                "{on}'s edge meets {name}'s tangent line on {on}'s side {} along the bend from its start",
+                fm(at.y)
+            );
+            let mut data = vec![("flange", s(&name)), ("wall", s(&on)), ("along", Json::Num(at.y))];
+            if let Some((e0, e1)) = edge(jt) {
+                let d = e1 - e0;
+                let q = e0 + d * (at.y / d.length().max(1e-12));
+                if let Some(p) = world(jt.a, q) {
+                    text.push_str(&format!(", near {} on the part", pt(p)));
+                    data.push(("at_part", p3(p)));
+                }
+            }
+            Some((text, data, vec![]))
+        }
+        SheetError::CornerUnbuilt { joints: [a, b], .. } => {
+            let (ja, jb) = (st.sheet.joint(*a)?, st.sheet.joint(*b)?);
+            let (na, nb) = (joint(*a), joint(*b));
+            let mut text = format!("the corner where {na} and {nb} meet");
+            let mut data = vec![("flanges", Json::Arr(vec![s(&na), s(&nb)]))];
+            // the vertex the two edges share
+            if let (Some((p0, p1)), Some((q0, q1))) = (edge(ja), edge(jb)) {
+                let v = [(p1, q0), (q1, p0), (p0, q0), (p1, q1)]
+                    .into_iter()
+                    .find(|(x, y)| x.distance(*y) < 1e-6)
+                    .map(|x| x.0);
+                if let Some(p) = v.and_then(|v| world(ja.a, v)) {
+                    text.push_str(&format!(" at {}", pt(p)));
+                    data.push(("corner", p3(p)));
+                }
+            }
+            // the relief that builds: on the corner feature that asked, else the sheet's default
+            let mut tried = st.sheet.clone();
+            tried.set_corner(
+                *a,
+                *b,
+                fs::CornerKind::Circular {
+                    size: None,
+                    placement: fs::Placement::Intersection,
+                },
+            );
+            let mut fixes = vec![];
+            if fs::build_with(&tried, Map::Folded).is_ok() {
+                text.push_str(": a circular relief there builds (fix)");
+                let asked = st
+                    .corners
+                    .iter()
+                    .find(|c| (c.0 == *a && c.1 == *b) || (c.0 == *b && c.1 == *a));
+                fixes.push(match asked {
+                    Some(c) => Op::SetArg {
+                        id: c.2.clone(),
+                        arg: "#2".into(),
+                        text: "circular_relief()".into(),
+                    },
+                    None => Op::SetArg {
+                        id: st.id.clone(),
+                        arg: "corner".into(),
+                        text: "circular_relief()".into(),
+                    },
+                });
+            }
+            Some((text, data, fixes))
+        }
+        _ => None,
     }
 }
 
@@ -2393,6 +2595,7 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
             }))))
         }
         "seam" => feat::seam(ev, args, span),
+        "corner_round" => feat::corner_round(ev, args, span),
         "punch" => feat::punch(ev, args, span),
         "form" => feat::form(ev, args, span),
         "sketched_bend" => feat::sketched_bend(ev, args, span, false),
@@ -3654,6 +3857,21 @@ fn op_trims(st: &SheetState, op: &OpRef) -> Vec<TrimRef> {
             }
             v
         }
+        OpKind::Round => st
+            .sheet
+            .walls
+            .iter()
+            .flat_map(|wl| {
+                wl.outline
+                    .iter()
+                    .flat_map(|l| &l.segments)
+                    .filter(|x| x.1 & fs::ROUND_ID != 0)
+                    .map(|x| TrimRef::Outline {
+                        wall: wl.id,
+                        segment: x.1,
+                    })
+            })
+            .collect(),
         OpKind::Corner { a, b } => (0..4)
             .flat_map(|segment| {
                 [
@@ -3704,7 +3922,7 @@ fn op_strips(st: &SheetState, op: &OpRef) -> Vec<Strip> {
                 .chain(joints.into_iter().map(Strip::Bend))
                 .collect()
         }
-        OpKind::Cut { .. } | OpKind::Corner { .. } | OpKind::Form { .. } => vec![],
+        OpKind::Cut { .. } | OpKind::Corner { .. } | OpKind::Form { .. } | OpKind::Round => vec![],
     }
 }
 
@@ -3846,7 +4064,7 @@ fn op_member(ev: &mut Eval, op: &Rc<OpRef>, name: &str, span: Span) -> Option<R<
         OpKind::Base { wall } | OpKind::Flange { wall, .. } => Some(wall),
         // the contour's first wall's plane; its faces, every wall's
         OpKind::Contour { first, .. } => Some(first),
-        OpKind::Cut { .. } | OpKind::Corner { .. } | OpKind::Form { .. } => None,
+        OpKind::Cut { .. } | OpKind::Corner { .. } | OpKind::Form { .. } | OpKind::Round => None,
     };
     let walls = match op.kind {
         OpKind::Contour { .. } => feat::parts(st, op).0,

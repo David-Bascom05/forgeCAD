@@ -337,6 +337,15 @@ pub enum SheetError {
         joint: JointId,
         end: End,
     },
+    /// A corner round of `radius` at the corner `at` of `wall` (its own coordinates) needs more
+    /// of an edge than the edge has: the most it takes is `limit`.
+    CornerRound {
+        feature: FeatureId,
+        wall: WallId,
+        at: Point2,
+        radius: f64,
+        limit: f64,
+    },
     /// Cuts part the sheet: strip `b` (a piece of it) is no longer joined to `a`'s.
     SheetSplit {
         feature: FeatureId,

@@ -1038,6 +1038,9 @@ pub struct AsmPanel {
     pub hover_link: Option<usize>,
     /// A drag's transient pose (asmdrag.rs): built in the file's place till kept or returned.
     pub posing: super::asmdrag::Posing,
+    /// Where each interference is and the faces it touches (`fg query F interference`), once
+    /// asked: none while it's found.
+    pub located: Option<Option<Result<Vec<String>, String>>>,
 }
 
 /// Whether `path` is the row `key` or under it.
@@ -2679,6 +2682,13 @@ impl Shell {
                                 .font(medium(12.0))
                                 .color(if n > 0 { t.error } else { t.ink }),
                             );
+                            if n > 0
+                                && a.located.is_none()
+                                && Self::fg_button(ui, "Locate", "asm:locate".into(), places)
+                            {
+                                a.located = Some(None);
+                                out.push(FgAct::AsmLocate);
+                            }
                         });
                     }
                     (None, false) => {
@@ -2715,6 +2725,27 @@ impl Shell {
                                 });
                             }
                         });
+                }
+                match &a.located {
+                    Some(None) => {
+                        ui.label(egui::RichText::new("Locating…").font(sans(11.0)).color(t.ink2));
+                    }
+                    Some(Some(Ok(lines))) => {
+                        egui::ScrollArea::vertical()
+                            .id_salt("asm-located")
+                            .auto_shrink([false, true])
+                            .max_height(180.0)
+                            .show(ui, |ui| {
+                                for (k, l) in lines.iter().enumerate() {
+                                    let r = ui.label(egui::RichText::new(l).font(mono(10.0)).color(t.ink));
+                                    places.push((format!("asm:located:{k}"), r.rect));
+                                }
+                            });
+                    }
+                    Some(Some(Err(e))) => {
+                        ui.label(egui::RichText::new(e).font(sans(11.0)).color(t.error));
+                    }
+                    None => {}
                 }
                 if !a.expects.is_empty() {
                     let fails = a.expects.iter().filter(|e| !e.ok).count();

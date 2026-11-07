@@ -172,6 +172,8 @@ pub struct Gui {
     pub fg_asm: Option<AsmPlaced>,
     /// A part's anchors being found, for the instance chosen.
     fg_asm_anchors: Option<Receiver<PartAnchors>>,
+    /// The interferences located (`AsmLocate`), found off the frame's thread.
+    fg_asm_located: Option<Receiver<Result<Vec<String>, String>>>,
     /// The camera to keep when an assembly's view is made again.
     fg_keep_camera: Option<Camera>,
     /// The GPU refused something: said once, and no more views are drawn.
@@ -318,6 +320,7 @@ impl Gui {
             fg_anchors: None,
             fg_asm: None,
             fg_asm_anchors: None,
+            fg_asm_located: None,
             fg_keep_camera: None,
             gpu_failed,
             extras: Default::default(),
@@ -3241,6 +3244,14 @@ impl Gui {
                 a.anchors = Some(got);
             }
         }
+        if let Some(r) = &self.fg_asm_located
+            && let Ok(got) = r.try_recv()
+        {
+            self.fg_asm_located = None;
+            if let Some(a) = self.shell.fg.as_mut().and_then(|p| p.asm.as_mut()) {
+                a.located = Some(Some(got));
+            }
+        }
         let mut asm_moved = false;
         let Some(s) = &mut self.fg else { return };
         let mut changed = false;
@@ -3339,6 +3350,10 @@ impl Gui {
                 if a.overlap.is_some() {
                     ap.overlap = a.overlap;
                     ap.checking = false;
+                }
+                // a rebuild may have moved them: located again on asking
+                if !matches!(ap.located, Some(None)) {
+                    ap.located = None;
                 }
                 let tm = &a.timings;
                 ap.timings = format!(
@@ -3582,6 +3597,7 @@ impl Gui {
                     }
                 }
                 crate::shell::fg::FgAct::AsmAnchors(file) => self.asm_anchors(file),
+                crate::shell::fg::FgAct::AsmLocate => self.asm_locate(),
                 a @ (crate::shell::fg::FgAct::AsmOps(_)
                 | crate::shell::fg::FgAct::AsmPreview(_)
                 | crate::shell::fg::FgAct::AsmPlace { .. }
@@ -3709,6 +3725,28 @@ impl Gui {
     }
 
     /// A part file's anchors, found on a thread: the instance chosen shows them.
+    /// Each interference's place and faces, by the query the CLI and the agent ask.
+    fn asm_locate(&mut self) {
+        let Some(s) = &self.fg else { return };
+        let (src, path) = (s.src.clone(), s.path.clone());
+        let dir = path
+            .as_deref()
+            .and_then(|p| std::path::Path::new(p).parent().map(|d| d.to_path_buf()));
+        let (send, recv) = channel();
+        self.fg_asm_located = Some(recv);
+        let waker = self.waker.clone();
+        std::thread::spawn(move || {
+            let a = forge_lang::query::ask(&src, dir, None, "interference");
+            let got = if a.ok {
+                Ok(a.text.lines().skip(1).map(|l| l.trim().to_string()).collect())
+            } else {
+                Err(a.text)
+            };
+            let _ = send.send(got);
+            waker();
+        });
+    }
+
     fn asm_anchors(&mut self, file: String) {
         let dir = self
             .fg

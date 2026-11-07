@@ -30,7 +30,7 @@ pub use error::{
     Side, Strip, TrimCurveKind, TrimRef, Violation, WallId,
 };
 pub use form::{Form, FormError, FormMark, FormName, FormRules, FormShape, FormTool, FormViolation};
-pub use graph::{Corner, CornerKind, Cut, Gauge, Joint, JointKind, Position, Sheet, Wall};
+pub use graph::{Corner, CornerKind, Cut, Gauge, Joint, JointKind, Position, ROUND_ID, Sheet, Wall};
 pub use hardware::{Hardware, HardwareKind, Mount, Source, placeholder_catalogue};
 pub use hem::{GAP_FLOOR, HemError, HemJoint, HemKind, HemName, HemRow, HemSpec, HemTable};
 pub use pattern::{

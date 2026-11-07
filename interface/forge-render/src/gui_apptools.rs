@@ -753,6 +753,7 @@ impl Gui {
                     2 => " mm²",
                     3 => " mm³",
                     4 => " kg",
+                    5 => "",
                     _ => " mm",
                 };
                 let mut t = format!("Measured {names}:");

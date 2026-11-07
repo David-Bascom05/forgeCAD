@@ -1,0 +1,22 @@
+# The stand-in vendor model's source: an L bracket, 1.2 thick, its foot with two 3.5 holes on a
+# 24 pitch, its upright with one 4.5 hole. Exported once to bracket.step (`fg run bracket_src.fg
+# --step bracket.step`); vendor.fg reads the STEP as a vendor's model would come.
+shared t = 1.2
+shared w = 40
+shared d = 30
+shared h = 25
+shared pitch = 24
+shared d_foot = 3.5
+shared d_up = 4.5
+shared k = ratio(0.4)
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (w, d))
+  a = circle((w / 2 - pitch / 2, d / 2), d_foot / 2)
+  b = circle((w / 2 + pitch / 2, d / 2), d_foot / 2)
+}
+foot = sheet(plan, t: t, r: t, bend: kfactor(k))
+up = flange(foot.edge(plan.outline[2]), height: h)
+sketch uh(on: up.top) {
+  c = circle((h / 2, w / 2), d_up / 2)
+}
+up_hole = cutout(uh, wall: up)
