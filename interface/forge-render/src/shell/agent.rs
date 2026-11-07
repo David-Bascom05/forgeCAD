@@ -1224,18 +1224,58 @@ impl Shell {
                             undone,
                         } => {
                             ui.add_space(4.0);
-                            let shown = lines.len().min(60);
+                            let key = format!("diff:{turn}:{index}");
+                            let expanded = a.open.contains(&key);
+                            let shown = if expanded { lines.len().min(60) } else { 0 };
                             let more = lines.len() - shown;
-                            let h =
-                                26.0 + shown as f32 * DIFF_ROW + if more > 0 { DIFF_ROW } else { 0.0 } + 6.0;
+                            let h = if expanded {
+                                26.0 + shown as f32 * DIFF_ROW + if more > 0 { DIFF_ROW } else { 0.0 } + 6.0
+                            } else {
+                                32.0
+                            };
                             let (r, _) = ui.allocate_exact_size(vec2(w, h), Sense::hover());
                             let card = Rect::from_min_max(pos2(PAD, r.top()), pos2(w - PAD, r.bottom()));
                             let p = ui.painter().clone();
                             p.rect_filled(card, 5.0, t.field);
                             p.rect_stroke(card, 5.0, Stroke::new(1.0, t.line), StrokeKind::Inside);
                             let head = Rect::from_min_size(card.min, vec2(card.width(), 26.0));
+                            let toggle =
+                                Rect::from_min_max(head.min, pos2(head.right() - 56.0, head.bottom()));
+                            let toggle_resp = ui
+                                .interact(
+                                    toggle,
+                                    ui.scope_id().with(("agent-diff-toggle", *turn, *index)),
+                                    Sense::click(),
+                                )
+                                .on_hover_text(if expanded {
+                                    "Hide code changes"
+                                } else {
+                                    "Show code changes"
+                                });
+                            toggle_resp.widget_info(|| {
+                                egui::WidgetInfo::labeled(
+                                    egui::Role::Button,
+                                    true,
+                                    if expanded {
+                                        "Hide code changes"
+                                    } else {
+                                        "Show code changes"
+                                    },
+                                )
+                            });
+                            places.push((format!("agent:diff:toggle:{turn}:{index}"), toggle));
+                            if toggle_resp.clicked() {
+                                toggles.push(key);
+                            }
+                            p.text(
+                                pos2(head.left() + 7.0, head.center().y),
+                                Align2::LEFT_CENTER,
+                                if expanded { "▾" } else { "▸" },
+                                sans(12.0),
+                                t.ink2,
+                            );
                             let name = p.text(
-                                pos2(head.left() + 8.0, head.center().y),
+                                pos2(head.left() + 22.0, head.center().y),
                                 Align2::LEFT_CENTER,
                                 file,
                                 medium(12.0),
@@ -1289,6 +1329,10 @@ impl Shell {
                                 } else {
                                     AgentAct::Undo(*turn, *index)
                                 });
+                            }
+                            if !expanded {
+                                ui.add_space(4.0);
+                                continue;
                             }
                             p.hline(
                                 card.left()..=card.right(),
