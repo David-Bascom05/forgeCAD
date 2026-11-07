@@ -277,6 +277,15 @@ impl Nav {
         self.want_pick = Some(self.cursor);
     }
 
+    /// What's under the cursor is no longer known (the view moved under it): asked again, so
+    /// an answer always comes for where the pointer is.
+    fn view_changed(&mut self) {
+        self.hit_at = None;
+        if self.drag.is_none() && self.cube_hover.is_none() {
+            self.want_pick = Some(self.cursor);
+        }
+    }
+
     pub fn take_pick(&mut self) -> Option<(f32, f32)> {
         self.want_pick.take()
     }
@@ -694,7 +703,7 @@ impl Nav {
             && let Some((_, at)) = &mut self.section
         {
             *at += steps * self.camera.dist * SECTION_STEP;
-            self.hit_at = None;
+            self.view_changed();
             return true;
         }
         if !self.mouse.wheel_zooms {
@@ -783,7 +792,7 @@ impl Nav {
                     Some((1, _)) => Some((2, c[2])),
                     Some(_) => None,
                 };
-                self.hit_at = None;
+                self.view_changed();
             }
             KeyCode::KeyE => {
                 self.explode_to = 1.0 - self.explode_to;
@@ -812,7 +821,7 @@ impl Nav {
         } else {
             (self.explode_at - step).max(self.explode_to)
         };
-        self.hit_at = None;
+        self.view_changed();
         let u = self.explode_at;
         Some(u * u * (3.0 - 2.0 * u))
     }
@@ -880,9 +889,29 @@ impl Nav {
         if u >= 1.0 {
             self.camera = t.to;
             self.transition = None;
-            self.hit_at = None;
+            self.view_changed();
             return false;
         }
         true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The view moving under a still pointer (exploding, a camera move ending) asks again what's
+    /// under it: an answer that came before is not left standing, nor is no answer left waiting.
+    #[test]
+    fn the_view_moving_under_a_still_pointer_asks_again() {
+        let mut n = Nav::new(crate::camera::Camera::fit([0.0; 3], 10.0), (800, 600), 1.0);
+        n.moved_to((300.0, 300.0));
+        let px = n.take_pick().expect("a pick for where the pointer went");
+        n.on_pick(px, None);
+        assert!(!n.pick_pending());
+        n.explode_to = 1.0;
+        n.explode_tick(0.0);
+        assert!(n.pick_pending());
+        assert_eq!(n.take_pick(), Some((300.0, 300.0)), "asked again");
     }
 }
