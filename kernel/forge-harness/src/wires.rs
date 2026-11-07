@@ -77,12 +77,7 @@ pub fn pack(r: &[f64]) -> (Vec<[f64; 2]>, f64) {
     // toward the one reaching farthest while they shorten that reach, halved when they don't
     let worst = |x: [f64; 2]| {
         (0..r.len())
-            .map(|i| {
-                (
-                    ((at[i][0] - x[0]).powi(2) + (at[i][1] - x[1]).powi(2)).sqrt() + r[i],
-                    i,
-                )
-            })
+            .map(|i| ((sq(at[i][0] - x[0]) + sq(at[i][1] - x[1])).sqrt() + r[i], i))
             .fold(
                 (f64::NEG_INFINITY, 0),
                 |a, b| if b.0 > a.0 + 1e-15 { b } else { a },
@@ -449,7 +444,7 @@ pub fn slots(net: &Network, routed: &Routed) -> Vec<Slots> {
             .map(|it| {
                 let t = mean(&wn, &it.0);
                 at.iter()
-                    .map(|c| t.map_or(0.0, |t| (c[0] - t[0]).powi(2) + (c[1] - t[1]).powi(2)))
+                    .map(|c| t.map_or(0.0, |t| sq(c[0] - t[0]) + sq(c[1] - t[1])))
                     .collect()
             })
             .collect();
@@ -489,10 +484,8 @@ pub fn slots(net: &Network, routed: &Routed) -> Vec<Slots> {
                         at.iter()
                             .map(|c| {
                                 let r_ = rot(*c, turn);
-                                tn.map_or(0.0, |t| (c[0] - t[0] * sn).powi(2) + (c[1] - t[1] * sn).powi(2))
-                                    + tf.map_or(0.0, |t| {
-                                        (r_[0] - t[0] * sf).powi(2) + (r_[1] - t[1] * sf).powi(2)
-                                    })
+                                tn.map_or(0.0, |t| sq(c[0] - t[0] * sn) + sq(c[1] - t[1] * sn))
+                                    + tf.map_or(0.0, |t| sq(r_[0] - t[0] * sf) + sq(r_[1] - t[1] * sf))
                             })
                             .collect()
                     })
@@ -553,9 +546,7 @@ pub fn compact(at: &[[f64; 2]], r: &[f64]) -> (Vec<[f64; 2]>, f64) {
     ];
     let mut p: Vec<[f64; 2]> = at.iter().map(|c| [c[0] - m[0], c[1] - m[1]]).collect();
     let clear = |p: &[[f64; 2]], i: usize, c: [f64; 2]| {
-        (0..p.len()).all(|j| {
-            j == i || ((c[0] - p[j][0]).powi(2) + (c[1] - p[j][1]).powi(2)).sqrt() >= r[i] + r[j] - 1e-9
-        })
+        (0..p.len()).all(|j| j == i || (sq(c[0] - p[j][0]) + sq(c[1] - p[j][1])).sqrt() >= r[i] + r[j] - 1e-9)
     };
     for _ in 0..40 {
         let mut order: Vec<usize> = (0..n).collect();
@@ -1224,4 +1215,9 @@ pub fn stripe_mesh(points: &[Point3], r: f64, phase: f64, half: f64, pitch: f64)
         }
     }
     m
+}
+
+/// x squared, by one multiplication (no libm call, the same on every target).
+fn sq(x: f64) -> f64 {
+    x * x
 }
