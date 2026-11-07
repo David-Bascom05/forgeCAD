@@ -790,7 +790,7 @@ impl Shell {
                         if let Some(ho) = h_of(*h) {
                             for w in &ho.wires {
                                 let path = if w.routed.is_some() {
-                                    w.path.join(" → ")
+                                    w.path.join(" › ")
                                 } else {
                                     "no path".into()
                                 };
@@ -1126,7 +1126,7 @@ pub fn item_props(hs: &[HarnessOut], key: &str) -> Option<(String, Vec<(String, 
                     ("To".into(), wo.to.clone()),
                     ("Colour".into(), wo.colour.clone()),
                     ("Type".into(), wo.ty.clone()),
-                    ("Path".into(), wo.path.join(" → ")),
+                    ("Path".into(), wo.path.join(" › ")),
                 ];
                 if let Some(o) = &wo.routed {
                     out.push(("Cut length (mm)".into(), super::fg::short(o.length)));

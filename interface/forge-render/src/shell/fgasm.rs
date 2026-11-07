@@ -1762,14 +1762,14 @@ impl AsmTree {
             for w in &h.wires {
                 let detail = match &w.routed {
                     Some(o) => format!(
-                        "{} · {} → {} · {} · {} mm",
+                        "{} · {} › {} · {} · {} mm",
                         w.colour,
                         w.from,
                         w.to,
                         w.ty,
                         mm(o.length)
                     ),
-                    None => format!("{} · {} → {} · not routed", w.colour, w.from, w.to),
+                    None => format!("{} · {} › {} · not routed", w.colour, w.from, w.to),
                 };
                 self.push(
                     Some(wf),
