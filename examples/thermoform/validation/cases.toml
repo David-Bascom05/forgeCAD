@@ -127,7 +127,7 @@ t_col = "t_exp_mm"
 t0 = 5.0
 cut_deg = 0
 axisym = true
-index_map = [1, 0, 10, 38.5, 22, 89.81]
+index_map = [1, 0, 10, 37.5, 22, 89.04]
 how = "point index mapped to arc length (1 centre, 10 base edge, 22 rim)"
 
 [[case]]
@@ -198,7 +198,7 @@ t0 = 1.1
 cut_deg = 0
 axisym = true
 fold_about = 85.0
-plug = [21, 90, 10, 20, 55]
+plug = [21, 90, 10, 20, 60]
 how = "arc length from the centre (data folded about s = 85), a plug driven in"
 cause = "plug: sticking on the plug; stroke assumed"
 
@@ -213,7 +213,7 @@ t0 = 1.1
 cut_deg = 0
 axisym = true
 fold_about = 90.0
-plug = [21, 90, 10, 20, 55]
+plug = [21, 90, 10, 20, 60]
 plug_slip = true
 how = "arc length from the centre (data folded about s = 90), a lubricated plug"
 cause = "plug: sliding on the plug; stroke assumed"
@@ -229,7 +229,7 @@ t0 = 1.1
 cut_deg = 0
 axisym = true
 fold_about = 90.0
-plug = [21, 90, 10, 20, 55]
+plug = [21, 90, 10, 20, 60]
 plug_slip = true
 how = "arc length from the centre (data folded about s = 90), a lubricated plug, the 130 C law"
 cause = "plug + temperature: 120 C run with the 130 C law"
@@ -455,3 +455,60 @@ G = 0.5
 cut_deg = 0
 axisym = false
 how = "R/d vs Pi at the load steps; wall t/t0 vs x/d at the end"
+
+[[case]]
+id = "eksi2017b_hemisphere"
+cause = "temperature non-uniformity (120-150 C, modelled 135 C uniform); point spacing not printed"
+model = "eksi2017b_hemisphere.fg"
+data = "s2_eksi2017b_hips1p5_thickness.csv"
+mode = "index"
+s_col = "point"
+t_col = "t_hemi_vacuum_mm"
+t0 = 1.5
+cut_deg = 0
+axisym = true
+index_map = [1, 0, 14.5, 78.54]
+how = "point index mapped to arc length from the pole (1 -> 0, 14.5 -> rim, ASSUMED)"
+
+[[case]]
+id = "eksi2017b_cone"
+cause = "temperature non-uniformity (120-150 C, modelled 135 C uniform); point spacing not printed"
+model = "eksi2017b_cone.fg"
+data = "s2_eksi2017b_hips1p5_thickness.csv"
+mode = "index"
+s_col = "point"
+t_col = "t_cone_vacuum_mm"
+t0 = 1.5
+cut_deg = 0
+axisym = true
+index_map = [1, 0, 6, 37.5, 14.5, 89.04]
+how = "point index mapped to arc length (1 centre, 6 base edge, 14.5 rim, ASSUMED)"
+
+[[case]]
+id = "atmani2020_cup_d51"
+cause = "missing plug model; diameter 51 from the render"
+model = "atmani2020_cup_d51.fg"
+data = "s2_atmani2020_cup_thickness.csv"
+mode = "arc"
+s_col = "s_mm"
+t_col = "t_exp_mm"
+t0 = 1.1
+cut_deg = 0
+axisym = true
+fold_about = 100.0
+how = "arc length from bottom centre (data folded about s = 100)"
+
+[[case]]
+id = "atmani2020_cup_d51_plug"
+cause = "plug then air; diameter 51 from the render"
+model = "atmani2020_cup_d51.fg"
+data = "s2_atmani2020_cup_thickness.csv"
+mode = "arc"
+s_col = "s_mm"
+t_col = "t_exp_mm"
+t0 = 1.1
+cut_deg = 0
+axisym = true
+fold_about = 100.0
+how = "arc length from bottom centre (data folded about s = 100)"
+plug = [21, 90, 10, 20, 80]

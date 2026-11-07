@@ -162,6 +162,20 @@ fn compare(
     diagonal: bool,
     upto: f64,
 ) -> f64 {
+    let st = formed(surface, tweak, shape, t0, flange, mat, temp);
+    scored(name, &st, t0, diagonal, upto)
+}
+
+/// The female part `shape` formed in `mat` at `temp`, its sheet `t0` thick.
+fn formed(
+    surface: Surface,
+    tweak: &dyn Fn(&mut Process),
+    shape: &Body,
+    t0: f64,
+    flange: f64,
+    mat: &str,
+    temp: f64,
+) -> Stretch {
     let spec = Spec {
         tool: Tool::Female,
         pull: UnitVec3::Z,
@@ -187,15 +201,18 @@ fn compare(
         ..Process::default()
     };
     tweak(&mut pr);
-    let st = stretch(&f, &spec, &pr);
-    let model = along(&st, t0, diagonal);
+    eprintln!("\n({surface:?}): {mat} law {:?} ({})", law.law.terms, law.source);
+    stretch(&f, &spec, &pr)
+}
+
+/// The formed sheet `st` against the measured part `name` along its cut up to `upto`: the mean
+/// absolute error over t0.
+fn scored(name: &str, st: &Stretch, t0: f64, diagonal: bool, upto: f64) -> f64 {
+    let model = along(st, t0, diagonal);
     let data = measured(name);
     let mut err = 0.0;
     let mut n = 0;
-    eprintln!(
-        "\n{name} ({surface:?}): {mat} law {:?} ({})",
-        law.law.terms, law.source
-    );
+    eprintln!("{name}");
     eprintln!("  s     measured  model");
     let (mut mmin, mut pmin) = ((f64::INFINITY, 0.0), (f64::INFINITY, 0.0));
     for &(s, t) in data.iter().filter(|d| d.0 <= upto) {
@@ -244,30 +261,10 @@ fn erdogan_cylinder() {
 #[test]
 fn erdogan_box() {
     let shape = box_cavity(150.0, 75.0, 10.0);
-    let a = compare(
-        "erdogan2014_box_axis",
-        Surface::Height,
-        &|_| {},
-        &shape,
-        2.0,
-        65.0,
-        "HIPS",
-        180.0,
-        false,
-        125.0,
-    );
-    let d = compare(
-        "erdogan2014_box_diagonal",
-        Surface::Height,
-        &|_| {},
-        &shape,
-        2.0,
-        65.0,
-        "HIPS",
-        180.0,
-        true,
-        145.0,
-    );
+    // one forming, read along both cuts
+    let st = formed(Surface::Height, &|_| {}, &shape, 2.0, 65.0, "HIPS", 180.0);
+    let a = scored("erdogan2014_box_axis", &st, 2.0, false, 125.0);
+    let d = scored("erdogan2014_box_diagonal", &st, 2.0, true, 145.0);
     assert!(a < 0.15 && d < 0.15, "{a} {d}");
 }
 
@@ -291,8 +288,21 @@ fn duarte_cone() {
 
 /// The 3-D distance field against the height field on the measured parts: the same parts, the
 /// gap now along the surface's normal.
+/// One part (the cylinder, whose thick sheet gives the coarsest field) on a coarse sheet (30
+/// nodes along the window), quick enough for every test run.
 #[test]
 fn the_distance_field_forms_the_measured_parts_as_well() {
+    distance_field_as_well(30, &["erdogan2014_cylinder"]);
+}
+
+#[test]
+#[ignore = "full size: cargo test --release -p forge-thermo -- --ignored"]
+fn the_distance_field_forms_the_measured_parts_as_well_full() {
+    distance_field_as_well(80, &[]);
+}
+
+/// Over the parts named in `only` (none: all of them).
+fn distance_field_as_well(res: usize, only: &[&str]) {
     let cone = cavity(65.0, 55.0, 100.0, 3.0);
     let cyl = cavity(100.0, 100.0 - 1e-3, 100.0, 10.0);
     let bx = box_cavity(150.0, 75.0, 10.0);
@@ -302,10 +312,13 @@ fn the_distance_field_forms_the_measured_parts_as_well() {
         ("erdogan2014_box_axis", &bx, 2.0, 65.0, 180.0, false, 125.0),
         ("erdogan2014_box_diagonal", &bx, 2.0, 65.0, 180.0, true, 145.0),
     ] {
+        if !only.is_empty() && !only.contains(&name) {
+            continue;
+        }
         let h = compare(
             name,
             Surface::Height,
-            &|_| {},
+            &|p: &mut Process| p.resolution = res,
             shape,
             t0,
             flange,
@@ -317,7 +330,7 @@ fn the_distance_field_forms_the_measured_parts_as_well() {
         let d = compare(
             name,
             Surface::Distance,
-            &|_| {},
+            &|p: &mut Process| p.resolution = res,
             shape,
             t0,
             flange,
@@ -346,6 +359,7 @@ fn the_distance_field_forms_the_measured_parts_as_well() {
 /// error by at most 1.4 % t0, not under 8: the material they hold beyond the opening is not drawn
 /// over the mould's top (the clamp frame's own draw-in and pre-forming sag are what's left).
 #[test]
+#[ignore = "exploration printout; the thermo_validation scoreboard covers these cases"]
 fn the_sheet_drawn_in_over_the_mould_top() {
     let cone = cavity(65.0, 55.0, 100.0, 3.0);
     let cyl = cavity(100.0, 100.0 - 1e-3, 100.0, 10.0);
@@ -385,6 +399,7 @@ fn the_sheet_drawn_in_over_the_mould_top() {
 /// grip (a shear stress, MPa), the sheet on the mould's top against Coulomb friction (mu times the
 /// vacuum), the membrane wrinkling rather than taking compression. The mean error of t0 for each.
 #[test]
+#[ignore = "exploration printout; the thermo_validation scoreboard covers these cases"]
 fn the_sheet_drawn_in_from_under_the_clamp() {
     let cyl = cavity(100.0, 100.0 - 1e-3, 100.0, 10.0);
     let bx = box_cavity(150.0, 75.0, 10.0);
@@ -436,8 +451,19 @@ fn the_sheet_drawn_in_from_under_the_clamp() {
 /// modulus (WLF, Arrhenius) cannot move the forming; only the law's shape, or rate and time, can.
 /// The Erdogan cylinder with the HIPS law at a third, once and three times its stiffness: at 10
 /// steps the third is 4 % t0 off (12.2 against 16.6, the steps' path), at 160 all three agree.
+/// On a coarse sheet (30 nodes) in 40 load steps, quick enough for every test run.
 #[test]
 fn the_sheets_stiffness_does_not_move_a_converged_forming() {
+    stiffness_does_not_move(30, 40);
+}
+
+#[test]
+#[ignore = "full size: cargo test --release -p forge-thermo -- --ignored"]
+fn the_sheets_stiffness_does_not_move_a_converged_forming_full() {
+    stiffness_does_not_move(80, 160);
+}
+
+fn stiffness_does_not_move(res: usize, steps: usize) {
     let shape = cavity(100.0, 100.0 - 1e-3, 100.0, 10.0);
     let run = |scale: f64, steps: usize| {
         compare(
@@ -446,6 +472,7 @@ fn the_sheets_stiffness_does_not_move_a_converged_forming() {
             &|p: &mut Process| {
                 p.law.terms.iter_mut().for_each(|t| t.0 *= scale);
                 p.steps = steps;
+                p.resolution = res;
             },
             &shape,
             2.5,
@@ -456,8 +483,8 @@ fn the_sheets_stiffness_does_not_move_a_converged_forming() {
             185.0,
         )
     };
-    let fine: Vec<f64> = [0.3, 1.0, 3.0].iter().map(|&k| run(k, 160)).collect();
-    eprintln!("STIFF 160 steps: {fine:?}");
+    let fine: Vec<f64> = [0.3, 1.0, 3.0].iter().map(|&k| run(k, steps)).collect();
+    eprintln!("STIFF {steps} steps: {fine:?}");
     let spread = fine.iter().copied().fold(f64::NEG_INFINITY, f64::max)
         - fine.iter().copied().fold(f64::INFINITY, f64::min);
     assert!(
@@ -500,6 +527,7 @@ fn v_groove(d: f64, len: f64) -> Body {
 /// 10, 0.44 / 1.64 %; 160 and 100, 0.35 / 1.39 %; R/d 0.018 (the pressure raised till the corner
 /// is full).
 #[test]
+#[ignore = "needs the fine sheet (160 nodes; coarser ones miss the closed form): cargo test --release -p forge-thermo -- --ignored, or the scoreboard's ref_corner_fill"]
 fn the_membrane_fills_a_corner_as_the_closed_form_says() {
     let d = 20.0;
     let shape = v_groove(d, 120.0);
@@ -594,6 +622,7 @@ fn the_membrane_fills_a_corner_as_the_closed_form_says() {
 /// Bending (a plate D = G t^3 / 3 at the sheet's first thickness) against the membrane on the
 /// measured parts, mean error of t0 each.
 #[test]
+#[ignore = "exploration printout; the thermo_validation scoreboard covers these cases"]
 fn the_sheet_bends_as_a_plate_on_the_measured_parts() {
     let cone = cavity(65.0, 55.0, 100.0, 3.0);
     let cyl = cavity(100.0, 100.0 - 1e-3, 100.0, 10.0);
@@ -634,6 +663,7 @@ fn the_sheet_bends_as_a_plate_on_the_measured_parts() {
 /// measured section, clamp to clamp, is compared through its middle, each side's arc length scaled
 /// to the model's. Mean error of t0 for each.
 #[test]
+#[ignore = "exploration printout; the thermo_validation scoreboard covers these cases"]
 fn a_plug_drives_the_sheet_as_measured() {
     let shape = cavity(45.0, 45.0 - 1e-3, 150.0, 5.0);
     let spec = Spec {
@@ -750,8 +780,19 @@ fn dome(r: f64) -> Body {
 /// halves' mean), each triangle's stiffness the ABS law's (Erchiqui, 150 C) by ABS's WLF shift
 /// (Cha 2019: 170 C, 5.8, 120.8 K) to a power: 0 is one temperature, 1 the flow regime. The wall
 /// against the horizontal distance from the pole, mean error of t0.
+/// The even sheet alone, 30 nodes along the window: quick enough for every test run.
 #[test]
 fn an_unevenly_heated_sheet_forms_as_measured() {
+    heated(30, &[0.0]);
+}
+
+#[test]
+#[ignore = "full size: cargo test --release -p forge-thermo -- --ignored"]
+fn an_unevenly_heated_sheet_forms_as_measured_full() {
+    heated(100, &[0.0, 0.25, 0.5, 1.0]);
+}
+
+fn heated(res: usize, powers: &[f64]) {
     let shape = dome(125.0);
     let spec = Spec {
         tool: Tool::Male,
@@ -780,11 +821,11 @@ fn an_unevenly_heated_sheet_forms_as_measured() {
         (165.0, 127.3),
     ];
     let mut row = vec![];
-    for power in [0.0, 0.25, 0.5, 1.0] {
+    for &power in powers {
         let pr = Process {
             law: law.law.clone(),
             pressure: 0.0777,
-            resolution: 100,
+            resolution: res,
             heat: (power > 0.0).then(|| Heat {
                 at: Some((0.0, 0.0)),
                 profile: profile.clone(),
@@ -850,7 +891,7 @@ fn an_unevenly_heated_sheet_forms_as_measured() {
         eprintln!("  {}", line.join(" "));
         row.push(err);
     }
-    assert_eq!(row.len(), 4);
+    assert_eq!(row.len(), powers.len());
 }
 
 /// A male block standing on the trim plane, `a` square, `h` tall, its vertical edges rounded `rf`.
@@ -871,8 +912,19 @@ fn male_block(a: f64, h: f64, rf: f64) -> Body {
 /// Webbing (stage 2g): a tall male block webs at its corners (Formech's rule: a male part over
 /// about as tall as it is wide), a low one does not. Squeezed area and folds for each: 15 mm
 /// tall, 72 triangles squeezed (144 mm2), no fold; 90 mm, 187 (374 mm2), 94 folds.
+/// 40 nodes along the window: quick enough for every test run.
 #[test]
 fn a_tall_male_block_webs_and_a_low_one_does_not() {
+    blocks_web(40);
+}
+
+#[test]
+#[ignore = "full size: cargo test --release -p forge-thermo -- --ignored"]
+fn a_tall_male_block_webs_and_a_low_one_does_not_full() {
+    blocks_web(80);
+}
+
+fn blocks_web(res: usize) {
     let mut found = vec![];
     for h in [15.0, 90.0] {
         let shape = male_block(80.0, h, 5.0);
@@ -894,7 +946,7 @@ fn a_tall_male_block_webs_and_a_low_one_does_not() {
         let law = placeholder().material("HIPS").cloned().unwrap().law_at(160.0);
         let pr = Process {
             law: law.law,
-            resolution: 80,
+            resolution: res,
             ..Process::default()
         };
         let st = stretch(&f, &spec, &pr);
@@ -917,6 +969,7 @@ fn a_tall_male_block_webs_and_a_low_one_does_not() {
 /// 60, 80 mm): cylinder 180 C 16.63 16.60 15.72 14.37 12.16; cylinder 150 C 12.44 12.21 13.82
 /// 16.20 19.75; box 180 C 12.43 12.49 11.02 8.73 32.76. The hotter sheet wants the deeper sag.
 #[test]
+#[ignore = "exploration printout; the thermo_validation scoreboard covers these cases"]
 fn a_sagged_sheet_forms_as_measured() {
     let cyl = cavity(100.0, 100.0 - 1e-3, 100.0, 10.0);
     let bx = box_cavity(150.0, 75.0, 10.0);

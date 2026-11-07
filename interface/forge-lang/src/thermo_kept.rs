@@ -8,6 +8,10 @@
 use crate::store::{self, In, Out};
 use forge_math::Point3;
 use forge_thermo::{Formed, MeshMass, PartMesh, Simulated, Spec, Step, Stretch};
+use std::collections::BTreeSet;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{Sender, channel};
+use std::sync::{Condvar, Mutex, OnceLock};
 
 /// The bytes of all the forming reads: `memo` is the feature's memo text (its spec, material and
 /// process, printed exactly), `spec` the spec it forms with.
@@ -46,8 +50,78 @@ pub fn sim_key(stretch: &[u8], walls: &str, t: f64, part: &PartMesh) -> Vec<u8> 
 
 /// The entry's bytes after its key's, when the key it holds is `key`.
 fn get(kind: &str, key: &[u8]) -> Option<Vec<u8>> {
-    let b = store::get(kind, store::key(kind, |h| h.bytes(key)))?;
+    let id = store::key(kind, |h| h.bytes(key));
+    settled(id);
+    let b = store::get(kind, id)?;
     opened(&b, key).map(<[u8]>::to_vec)
+}
+
+/// Whether entries are written behind the run, on a thread of their own (the app's, where a
+/// thermoform's edit should not wait for its writing), not before `put_*` returns.
+static BEHIND: AtomicBool = AtomicBool::new(false);
+
+/// Entries being written behind, by their store key; a read of one waits for it.
+static WRITING: Mutex<BTreeSet<u128>> = Mutex::new(BTreeSet::new());
+static WRITTEN: Condvar = Condvar::new();
+
+type Job = Box<dyn FnOnce() + Send>;
+
+/// Writes the entries behind from now on (`on`), or before `put_*` returns.
+pub fn write_behind(on: bool) {
+    BEHIND.store(on, Ordering::Relaxed);
+}
+
+/// Waits while the entry `id` is being written behind.
+fn settled(id: u128) {
+    let mut w = WRITING.lock().unwrap_or_else(|e| e.into_inner());
+    while w.contains(&id) {
+        w = WRITTEN.wait(w).unwrap_or_else(|e| e.into_inner());
+    }
+}
+
+/// Keeps what `make` writes under `key`: now, or behind on the writer's thread, in the order
+/// asked.
+fn keep(kind: &'static str, key: &[u8], make: impl FnOnce(&mut Out) + Send + 'static) {
+    keep_with(BEHIND.load(Ordering::Relaxed), kind, key, make);
+}
+
+fn keep_with(behind: bool, kind: &'static str, key: &[u8], make: impl FnOnce(&mut Out) + Send + 'static) {
+    if !behind {
+        let mut o = Out::default();
+        make(&mut o);
+        put(kind, key, o);
+        return;
+    }
+    static WRITER: OnceLock<Mutex<Sender<Job>>> = OnceLock::new();
+    let id = store::key(kind, |h| h.bytes(key));
+    WRITING.lock().unwrap_or_else(|e| e.into_inner()).insert(id);
+    let key = key.to_vec();
+    let job: Job = Box::new(move || {
+        let mut o = Out::default();
+        make(&mut o);
+        put(kind, &key, o);
+        WRITING.lock().unwrap_or_else(|e| e.into_inner()).remove(&id);
+        WRITTEN.notify_all();
+    });
+    let sent = WRITER
+        .get_or_init(|| {
+            let (tx, rx) = channel::<Job>();
+            let ok = std::thread::Builder::new()
+                .name("thermo-kept".into())
+                .spawn(move || rx.into_iter().for_each(|job| job()))
+                .is_ok();
+            if !ok {
+                BEHIND.store(false, Ordering::Relaxed);
+            }
+            Mutex::new(tx)
+        })
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .send(job);
+    // no writer: written now
+    if let Err(e) = sent {
+        (e.0)();
+    }
 }
 
 /// An entry's payload, when the key it was kept under is `key` byte for byte.
@@ -88,11 +162,12 @@ pub fn get_quick(key: &[u8]) -> Option<(Vec<u8>, Simulated)> {
 
 /// Keeps the full key of the simulated part, and the model's sheet on the tool, under a quick key.
 pub fn put_quick(key: &[u8], read: &crate::deps::Deps, full: &[u8], sheet: &Simulated) {
-    let mut o = Out::default();
-    read.write(&mut o);
-    o.bytes(full);
-    write_sim(&mut o, sheet);
-    put("thermo-quick", key, o);
+    let (read, full, sheet) = (read.clone(), full.to_vec(), sheet.clone());
+    keep("thermo-quick", key, move |o| {
+        read.write(o);
+        o.bytes(&full);
+        write_sim(o, &sheet);
+    });
 }
 
 pub fn get_stretch(key: &[u8]) -> Option<Stretch> {
@@ -100,9 +175,8 @@ pub fn get_stretch(key: &[u8]) -> Option<Stretch> {
 }
 
 pub fn put_stretch(key: &[u8], s: &Stretch) {
-    let mut o = Out::default();
-    write_stretch(&mut o, s);
-    put("thermo-stretch", key, o);
+    let s = s.clone();
+    keep("thermo-stretch", key, move |o| write_stretch(o, &s));
 }
 
 pub fn get_sim(key: &[u8]) -> Option<Simulated> {
@@ -110,9 +184,8 @@ pub fn get_sim(key: &[u8]) -> Option<Simulated> {
 }
 
 pub fn put_sim(key: &[u8], s: &Simulated) {
-    let mut o = Out::default();
-    write_sim(&mut o, s);
-    put("thermo-sim", key, o);
+    let s = s.clone();
+    keep("thermo-sim", key, move |o| write_sim(o, &s));
 }
 
 fn point(o: &mut Out, p: Point3) {
@@ -334,5 +407,31 @@ mod tests {
         assert_eq!(opened(&e.0, b"the kez"), None);
         assert_eq!(opened(&e.0, b"the key and more"), None);
         assert_eq!(opened(&e.0[..3], b"the key"), None);
+    }
+
+    /// An entry written behind is read back whole straight after, the read waiting for it.
+    #[test]
+    fn an_entry_written_behind_is_read_at_once() {
+        if store::root().is_none() {
+            return;
+        }
+        let key = format!(
+            "written behind {} {:?}",
+            std::process::id(),
+            std::time::SystemTime::now()
+        );
+        for n in 0..5u64 {
+            let key = format!("{key} {n}");
+            let body: Vec<u8> = (0..20_000u64).flat_map(|i| (i * n).to_le_bytes()).collect();
+            let kept = body.clone();
+            keep_with(true, "thermo-stretch", key.as_bytes(), move |o| {
+                o.0.extend_from_slice(&kept)
+            });
+            assert_eq!(get("thermo-stretch", key.as_bytes()), Some(body));
+            store::forget(
+                "thermo-stretch",
+                store::key("thermo-stretch", |h| h.bytes(key.as_bytes())),
+            );
+        }
     }
 }

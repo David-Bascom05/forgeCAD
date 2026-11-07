@@ -3,6 +3,6 @@
 sketch plan(on: xy) {
   rim = circle((0, 0), 100)
 }
-cav = extrude(plan, -100)
-floor = fillet(edges(of: cav.end), 10)
+cav = extrude(plan, -100, taper: 4.9deg)
+floor = fillet(edges(of: cav.end), 14)
 part = thermoform(cav, t: 2, material: "HIPS", tool: "female", flange: 40, shrink: ratio(0), vent: false, temperature: 150, pressure: ratio(0.096))

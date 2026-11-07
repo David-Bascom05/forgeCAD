@@ -765,7 +765,13 @@ pub fn solids(ev: &Eval) -> Vec<(String, Option<Material>, forge_topo::Body)> {
 
 /// A built part's physical properties; `whole` is the finished body's own mass properties, used
 /// when the part is one solid. `bodies:` naming no solid is an error here.
-pub fn part_physical(ev: &mut Eval, whole: Option<&MassProps>) -> Option<Physical> {
+/// The part's physical properties: `whole` its mass when it is one solid, `each` each solid's
+/// (in `solids` order) if worked out already.
+pub fn part_physical(
+    ev: &mut Eval,
+    whole: Option<&MassProps>,
+    each: Option<Vec<Option<MassProps>>>,
+) -> Option<Physical> {
     let solids = solids(ev);
     for (id, _) in ev.props.bodies.clone() {
         if !solids.iter().any(|s| s.0 == id) {
@@ -781,10 +787,13 @@ pub fn part_physical(ev: &mut Eval, whole: Option<&MassProps>) -> Option<Physica
     let one = ev.b.stages.last().is_some_and(|st| st.solids.len() == 1);
     let masses: Vec<MassProps> = match whole {
         Some(w) if one => vec![w.clone()],
-        _ => solids
-            .iter()
-            .map(|s| forge_topo::mass::mass(&s.2).ok())
-            .collect::<Option<Vec<_>>>()?,
+        _ => match each {
+            Some(each) if each.len() == solids.len() => each.into_iter().collect::<Option<Vec<_>>>()?,
+            _ => solids
+                .iter()
+                .map(|s| forge_topo::mass::mass(&s.2).ok())
+                .collect::<Option<Vec<_>>>()?,
+        },
     };
     let pieces: Vec<Piece> = solids
         .iter()

@@ -307,6 +307,10 @@ pub struct Eval<'s> {
     pub sheets: crate::sheet::Sheets,
     /// The part's thermoforms (`thermo.rs`).
     pub thermos: Vec<crate::thermo::ThermoOut>,
+    /// Thermoforms' modelled parts whose mass is worked out after the run, beside the part's own
+    /// measure (`run` does; any other evaluation works it out in place): each one's place in
+    /// `thermos`, its memo key and the part.
+    pub masses_owed: Option<Vec<(usize, String, forge_topo::Body)>>,
     /// Threads drawn as standards draw them (`Options::cosmetic_threads`): not modelled, only
     /// recorded, so a drawing's hidden-line pass sees the plain envelope.
     pub cosmetic_threads: bool,
@@ -401,6 +405,7 @@ impl<'s> Eval<'s> {
             poisoned: false,
             sheets: Default::default(),
             thermos: vec![],
+            masses_owed: None,
             cosmetic_threads: false,
             threads: vec![],
             dir: None,

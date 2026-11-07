@@ -233,6 +233,7 @@ pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
         }
     };
     let mut ev = Eval::new(src, opts.rules, opts.build, cache);
+    ev.masses_owed = Some(vec![]);
     ev.volumes = opts.volumes;
     ev.checks = opts.checks;
     ev.cosmetic_threads = opts.cosmetic_threads;
@@ -264,11 +265,49 @@ pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
     timings.kernel_ms = ev.b.kernel_ms;
     let t3 = Instant::now();
     let built_all = opts.build && ev.errors.is_empty() && ev.b.built() == ev.b.features.len();
+    // the whole part's mass (its measure) and each solid's (its physical properties) worked out
+    // side by side, each as it is alone
+    let (whole_mass, solid_masses) = {
+        let checks = built_all && opts.checks;
+        let whole = (checks && ev.b.measured().is_none())
+            .then(|| ev.b.body())
+            .flatten();
+        let each = checks
+            && !assembly
+            && !(whole.is_some() && ev.b.stages.last().is_some_and(|st| st.solids.len() == 1));
+        let solids = if each { props::solids(&ev) } else { vec![] };
+        // a thermoform's modelled part too (`thermo.rs`)
+        let owed = ev.masses_owed.take().unwrap_or_default();
+        let mass = |b: &forge_topo::Body| forge_topo::mass::mass(b);
+        let each_mass =
+            || -> Option<Vec<_>> { each.then(|| solids.iter().map(|x| mass(&x.2).ok()).collect()) };
+        // under a budget (spent on this thread) one after another, as before
+        let (w, e, o) = if forge_geom::budget::left() == u64::MAX {
+            std::thread::scope(|s| {
+                let w = whole.map(|b| s.spawn(move || mass(b)));
+                let o: Vec<_> = owed.iter().map(|x| s.spawn(move || mass(&x.2).ok())).collect();
+                let e = each_mass();
+                (w.map(joined), e, o.into_iter().map(joined).collect::<Vec<_>>())
+            })
+        } else {
+            // in the order they were asked for: the modelled parts' in the run, then the rest
+            let o: Vec<_> = owed.iter().map(|x| mass(&x.2).ok()).collect();
+            let w = whole.map(mass);
+            (w, each_mass(), o)
+        };
+        for ((i, key, _), m) in owed.into_iter().zip(o) {
+            if let Some(t) = ev.thermos.get_mut(i) {
+                t.modelled = m.clone();
+            }
+            ev.b.memo_keep(key, m);
+        }
+        (w, e)
+    };
     let measure = match (built_all && opts.checks, ev.b.measured()) {
         (false, _) => None,
         (true, Some(m)) => Some(m),
         (true, None) => {
-            let m = measure(&mut ev);
+            let m = measure(&mut ev, whole_mass);
             if let Some(m) = &m {
                 ev.b.keep_measure(m.clone());
             }
@@ -290,7 +329,11 @@ pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
     timings.measure_ms = t3.elapsed().as_secs_f64() * 1e3;
     timings.total_ms = t0.elapsed().as_secs_f64() * 1e3;
     let physical = if built_all && opts.checks && !assembly {
-        props::part_physical(&mut ev, measure.as_ref().and_then(|m| m.mass.as_ref()))
+        props::part_physical(
+            &mut ev,
+            measure.as_ref().and_then(|m| m.mass.as_ref()),
+            solid_masses,
+        )
     } else {
         None
     };
@@ -431,11 +474,24 @@ pub fn sketch_view(src: &str, id: &str, opts: Options) -> Option<SketchView> {
     })
 }
 
-fn measure(ev: &mut Eval) -> Option<Measure> {
+/// A scoped thread's answer, its panic carried on.
+fn joined<T>(h: std::thread::ScopedJoinHandle<'_, T>) -> T {
+    h.join().unwrap_or_else(|p| std::panic::resume_unwind(p))
+}
+
+/// The finished part's measure; `mass`, its mass if worked out already.
+fn measure(
+    ev: &mut Eval,
+    mass: Option<Result<forge_topo::mass::MassProps, forge_topo::mass::MassError>>,
+) -> Option<Measure> {
     let invalid = validity::problems(ev);
     let body = ev.b.body()?;
     let solids = ev.b.stages.last().map_or(0, |s| s.solids.len());
-    let m = forge_topo::mass::mass(body).ok()?;
+    let m = match mass {
+        Some(m) => m,
+        None => forge_topo::mass::mass(body),
+    }
+    .ok()?;
     let bb = body
         .face_ids()
         .fold(forge_math::Box3::EMPTY, |b, f| b.hull(&body.face_box(f)));

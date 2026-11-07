@@ -301,6 +301,25 @@ impl Builder {
         t
     }
 
+    /// What `memo` keeps under `key`, if it does, without making it.
+    pub fn memo_kept<T: Clone + 'static>(&mut self, key: &str) -> Option<T> {
+        if let Some(v) = self.memo.get(key).and_then(|v| v.downcast_ref::<T>()) {
+            return Some(v.clone());
+        }
+        let v = self.cache.memo.remove(key)?;
+        let t = v.downcast_ref::<T>()?.clone();
+        self.memo.insert(key.to_string(), v);
+        Some(t)
+    }
+
+    /// Keeps `t` under `key`, as `memo` keeps what it made.
+    pub fn memo_keep<T: 'static>(&mut self, key: String, t: T) {
+        self.remade += 1;
+        if self.building {
+            self.memo.insert(key, Rc::new(t));
+        }
+    }
+
     pub fn into_cache(self) -> Cache {
         // this run's memo entries, and as many of the ones before it as there is room for: an edit
         // taken back finds its work done

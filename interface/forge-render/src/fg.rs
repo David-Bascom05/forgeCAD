@@ -750,6 +750,8 @@ fn work(
     // the host's: woken when a result is in, and told to stop when the document closes
     (waker, stop): (Arc<dyn Fn() + Send + Sync>, Arc<AtomicBool>),
 ) {
+    // a thermoform's forming and simulated part go to disk behind the edit, not before it shows
+    forge_lang::thermo_kept::write_behind(true);
     let mut cache = Cache::default();
     let mut mesher = Mesher::default();
     // an assembly's meshes by part content, and the placements' meshes last shown

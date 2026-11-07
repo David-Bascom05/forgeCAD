@@ -1,8 +1,8 @@
-# Erdogan & Eksi 2014: HIPS 825E 2.0 mm, 180 C, female cone opening 200, depth 100 (base ~150, UNVERIFIED).
+# Erdogan & Eksi 2014: HIPS 825E 2.0 mm, 180 C, female cone opening 200, depth 100 (base 146.4, DERIVED from the renders).
 # Assumptions: erdogan2014_cone.notes.md.
 sketch plan(on: xy) {
   rim = circle((0, 0), 100)
 }
-cav = extrude(plan, -100, taper: 14.036243deg)
-floor = fillet(edges(of: cav.end), 10)
+cav = extrude(plan, -100, taper: 15deg)
+floor = fillet(edges(of: cav.end), 12)
 part = thermoform(cav, t: 2, material: "HIPS", tool: "female", flange: 40, shrink: ratio(0), vent: false, temperature: 180, pressure: ratio(0.09))

@@ -6,6 +6,37 @@ use crate::stretch::Stretch;
 use forge_math::{Frame, Point2, Point3, Vec3};
 use forge_mesh::TriMesh;
 use std::collections::HashMap;
+use std::hash::{BuildHasherDefault, Hasher};
+
+/// A quick hash for the maps here, all looked up by key only (never iterated): which hash does
+/// not change what they answer.
+#[derive(Default)]
+struct Quick(u64);
+
+impl Hasher for Quick {
+    fn write(&mut self, bytes: &[u8]) {
+        for &b in bytes {
+            self.write_u64(b as u64);
+        }
+    }
+    fn write_u32(&mut self, i: u32) {
+        self.write_u64(i as u64);
+    }
+    fn write_i64(&mut self, i: i64) {
+        self.write_u64(i as u64);
+    }
+    fn write_usize(&mut self, i: usize) {
+        self.write_u64(i as u64);
+    }
+    fn write_u64(&mut self, i: u64) {
+        self.0 = (self.0.rotate_left(5) ^ i).wrapping_mul(0x51_7c_c1_b7_27_22_0a_95);
+    }
+    fn finish(&self) -> u64 {
+        self.0
+    }
+}
+
+type Fast = BuildHasherDefault<Quick>;
 
 /// Which side of the simulated wall a triangle is on (`TriMesh::face_of`).
 pub const TOOL_SIDE: u32 = 0;
@@ -117,7 +148,7 @@ impl Sheet {
     /// Each triangle in four, by its sides' middles: a middle touched where both its ends did.
     fn split(self) -> Sheet {
         let mut s = self;
-        let mut mid: HashMap<(u32, u32), u32> = HashMap::new();
+        let mut mid: HashMap<(u32, u32), u32, Fast> = HashMap::default();
         let mut tris = Vec::with_capacity(s.tris.len() * 4);
         for &[a, b, c] in &s.tris.clone() {
             let mut m = |x: u32, y: u32| -> u32 {
@@ -141,16 +172,20 @@ impl Sheet {
 pub(crate) struct Near<'a> {
     tool: &'a OnTool<'a>,
     cell: f64,
-    cells: HashMap<(i64, i64, i64), Vec<usize>>,
+    cells: HashMap<(i64, i64, i64), Vec<u32>, Fast>,
+    /// Each tool triangle's box, by its index in the mesh.
+    bounds: Vec<Bounds>,
 }
 
 impl<'a> Near<'a> {
     pub(crate) fn new(tool: &'a OnTool<'a>, reach: f64) -> Near<'a> {
         let cell = reach.max(0.5);
         let key = |v: f64| (v / cell).floor() as i64;
-        let mut cells: HashMap<(i64, i64, i64), Vec<usize>> = HashMap::new();
+        let mut cells: HashMap<(i64, i64, i64), Vec<u32>, Fast> = HashMap::default();
+        let mut boxes = vec![([0.0; 3], [0.0; 3]); tool.mesh.triangles.len()];
         for &k in tool.contact {
             let [a, b, c] = tool.mesh.triangles[k].map(|i| tool.mesh.positions[i as usize]);
+            boxes[k] = bounds(a, b, c);
             let lo = [
                 a.x.min(b.x).min(c.x),
                 a.y.min(b.y).min(c.y),
@@ -164,23 +199,32 @@ impl<'a> Near<'a> {
             for i in key(lo[0] - reach)..=key(hi[0] + reach) {
                 for j in key(lo[1] - reach)..=key(hi[1] + reach) {
                     for l in key(lo[2] - reach)..=key(hi[2] + reach) {
-                        cells.entry((i, j, l)).or_default().push(k);
+                        cells.entry((i, j, l)).or_default().push(k as u32);
                     }
                 }
             }
         }
-        Near { tool, cell, cells }
+        Near {
+            tool,
+            cell,
+            cells,
+            bounds: boxes,
+        }
     }
 
     pub(crate) fn nearest(&self, p: Point3) -> Option<Point3> {
         let key = |v: f64| (v / self.cell).floor() as i64;
         let list = self.cells.get(&(key(p.x), key(p.y), key(p.z)))?;
-        list.iter()
-            .map(|&k| {
-                let [a, b, c] = self.tool.mesh.triangles[k].map(|i| self.tool.mesh.positions[i as usize]);
-                closest(p, a, b, c)
-            })
-            .min_by(|x, y| (*x - p).length_sq().total_cmp(&(*y - p).length_sq()))
+        least(
+            list,
+            |k| below(p, &self.bounds[k as usize]),
+            |k| {
+                let [a, b, c] =
+                    self.tool.mesh.triangles[k as usize].map(|i| self.tool.mesh.positions[i as usize]);
+                let q = closest(p, a, b, c);
+                ((q - p).length_sq(), q)
+            },
+        )
     }
 }
 
@@ -193,7 +237,7 @@ pub struct ToolSide {
     on: f64,
     tris: Vec<[Point3; 3]>,
     cell: f64,
-    cells: HashMap<(i64, i64, i64), Vec<u32>>,
+    cells: HashMap<(i64, i64, i64), Vec<u32>, Fast>,
 }
 
 impl ToolSide {
@@ -205,7 +249,7 @@ impl ToolSide {
             .collect();
         let cell = (4.0 * on).max(0.5);
         let key = |v: f64| (v / cell).floor() as i64;
-        let mut cells: HashMap<(i64, i64, i64), Vec<u32>> = HashMap::new();
+        let mut cells: HashMap<(i64, i64, i64), Vec<u32>, Fast> = HashMap::default();
         for (k, [a, b, c]) in tris.iter().enumerate() {
             let lo = [
                 a.x.min(b.x).min(c.x),
@@ -255,6 +299,70 @@ impl ToolSide {
             })
         })
     }
+}
+
+/// `f` of each of `0..n` in order, on all cores a few thousand at a time (`par::map` takes them
+/// one at a time, which costs more than these small items).
+fn each<T: Send>(n: usize, f: impl Fn(usize) -> T + Sync) -> Vec<T> {
+    const CHUNK: usize = 2048;
+    forge_math::par::map(n.div_ceil(CHUNK), |c| {
+        (c * CHUNK..((c + 1) * CHUNK).min(n)).map(&f).collect::<Vec<T>>()
+    })
+    .into_iter()
+    .flatten()
+    .collect()
+}
+
+/// A triangle's box, for skipping triangles no nearer than one already found.
+type Bounds = ([f64; 3], [f64; 3]);
+
+fn bounds(a: Point3, b: Point3, c: Point3) -> Bounds {
+    (
+        [
+            a.x.min(b.x).min(c.x),
+            a.y.min(b.y).min(c.y),
+            a.z.min(b.z).min(c.z),
+        ],
+        [
+            a.x.max(b.x).max(c.x),
+            a.y.max(b.y).max(c.y),
+            a.z.max(b.z).max(c.z),
+        ],
+    )
+}
+
+/// The squared distance from `p` to a box: no point of the box is nearer.
+fn below(p: Point3, (lo, hi): &Bounds) -> f64 {
+    let d = |v: f64, l: f64, h: f64| {
+        if v < l {
+            l - v
+        } else if v > h {
+            v - h
+        } else {
+            0.0
+        }
+    };
+    let (x, y, z) = (d(p.x, lo[0], hi[0]), d(p.y, lo[1], hi[1]), d(p.z, lo[2], hi[2]));
+    x * x + y * y + z * z
+}
+
+/// Of the triangles `list` (by their place in it), the one whose `dist` from `p` is least, the
+/// first of equals: the same one as trying each in order, without trying those whose box is
+/// already farther than the best so far (a margin over rounding keeps that exact).
+fn least<R>(list: &[u32], bound: impl Fn(u32) -> f64, dist: impl Fn(u32) -> (f64, R)) -> Option<R> {
+    let first = (0..list.len()).min_by(|&a, &b| bound(list[a]).total_cmp(&bound(list[b])))?;
+    let (mut d, mut r) = dist(list[first]);
+    let mut at = first;
+    for (i, &k) in list.iter().enumerate() {
+        if i == first || bound(k) > d * (1.0 + 1e-9) {
+            continue;
+        }
+        let (e, s) = dist(k);
+        if e.total_cmp(&d).then(i.cmp(&at)).is_lt() {
+            (d, r, at) = (e, s, i);
+        }
+    }
+    Some(r)
 }
 
 /// The point of triangle abc nearest p (Ericson, Real-Time Collision Detection 5.1.5).
@@ -627,7 +735,8 @@ pub struct WallField {
     wall: Vec<f64>,
     raw: Vec<f64>,
     cell: f64,
-    cells: HashMap<(i64, i64, i64), Vec<u32>>,
+    cells: HashMap<(i64, i64, i64), Vec<u32>, Fast>,
+    bounds: Vec<Bounds>,
 }
 
 impl WallField {
@@ -644,9 +753,11 @@ impl WallField {
             .collect();
         let cell = reach.max(0.5);
         let key = |v: f64| (v / cell).floor() as i64;
-        let mut cells: HashMap<(i64, i64, i64), Vec<u32>> = HashMap::new();
+        let mut cells: HashMap<(i64, i64, i64), Vec<u32>, Fast> = HashMap::default();
+        let mut boxes = Vec::with_capacity(tris.len());
         for (k, t) in tris.iter().enumerate() {
             let [a, b, c] = t.map(|i| sim.mesh.positions[i as usize]);
+            boxes.push(bounds(a, b, c));
             let lo = [
                 a.x.min(b.x).min(c.x),
                 a.y.min(b.y).min(c.y),
@@ -706,6 +817,7 @@ impl WallField {
             raw: sim.wall.clone(),
             cell,
             cells,
+            bounds: boxes,
         }
     }
 
@@ -722,19 +834,19 @@ impl WallField {
     fn near(&self, p: Point3, wall: &[f64]) -> Option<(f64, Point3)> {
         let key = |v: f64| (v / self.cell).floor() as i64;
         let list = self.cells.get(&(key(p.x), key(p.y), key(p.z)))?;
-        let mut best: Option<(f64, f64, Point3)> = None;
-        for &k in list {
-            let [a, b, c] = self.tris[k as usize].map(|i| self.pos[i as usize]);
-            let q = closest(p, a, b, c);
-            let d = (q - p).length_sq();
-            if best.is_some_and(|x| x.0 <= d) {
-                continue;
-            }
-            let w = bary(q, a, b, c);
-            let [i, j, l] = self.tris[k as usize].map(|i| i as usize);
-            best = Some((d, w[0] * wall[i] + w[1] * wall[j] + w[2] * wall[l], q));
-        }
-        best.map(|b| (b.1, b.2))
+        let (k, q) = least(
+            list,
+            |k| below(p, &self.bounds[k as usize]),
+            |k| {
+                let [a, b, c] = self.tris[k as usize].map(|i| self.pos[i as usize]);
+                let q = closest(p, a, b, c);
+                ((q - p).length_sq(), (k, q))
+            },
+        )?;
+        let [a, b, c] = self.tris[k as usize].map(|i| self.pos[i as usize]);
+        let w = bary(q, a, b, c);
+        let [i, j, l] = self.tris[k as usize].map(|i| i as usize);
+        Some((w[0] * wall[i] + w[1] * wall[j] + w[2] * wall[l], q))
     }
 }
 
@@ -824,7 +936,7 @@ fn tessellated(part: &forge_topo::Body, h: f64, angle: f64) -> Option<PartMesh> 
     // one point where faces meet, and points closer than a twentieth of a millimetre one: the
     // slivers the tessellation leaves along a face's edge would turn over when moved
     let mut pos: Vec<Point3> = vec![];
-    let mut cells: HashMap<(i64, i64, i64), Vec<u32>> = HashMap::new();
+    let mut cells: HashMap<(i64, i64, i64), Vec<u32>, Fast> = HashMap::default();
     let key = |p: Point3| {
         (
             (p.x / WELD).floor() as i64,
@@ -859,7 +971,7 @@ fn tessellated(part: &forge_topo::Body, h: f64, angle: f64) -> Option<PartMesh> 
         .unzip();
     refine(&mut pos, &mut tris, &mut faces, h);
     // the exact surface's normal at each triangle's corners, on all cores in order
-    let normals = forge_math::par::map(tris.len(), |k| {
+    let normals = each(tris.len(), |k| {
         let [a, b, c] = tris[k].map(|i| pos[i as usize]);
         let near = (b - a).cross(c - a);
         tris[k].map(|i| face_normal(part, faces[k], pos[i as usize], near))
@@ -883,7 +995,7 @@ fn built_from(
     // the part's triangles on the tool's surface, or on the trim plane facing it (the flange's)
     let near = Near::new(tool, 2.0 * t);
     let on = 0.05 * t;
-    let is_side: Vec<bool> = forge_math::par::map(tris.len(), |k| {
+    let is_side: Vec<bool> = each(tris.len(), |k| {
         let [a, b, c] = tris[k].map(|i| pos[i as usize]);
         let g = Point3::ORIGIN
             + ((a - Point3::ORIGIN) + (b - Point3::ORIGIN) + (c - Point3::ORIGIN)) * (1.0 / 3.0);
@@ -906,13 +1018,16 @@ fn built_from(
     // modelled part is the side on the tool moved off it by t), and the wall there
     // the exact surface's normal at each point, of each face off the tool it is on
     let mut normal = vec![Vec3::ZERO; pos.len()];
-    let mut done: std::collections::HashSet<(u32, u32)> = Default::default();
+    // each point's faces counted once (a point has few)
+    let mut done: Vec<Vec<u32>> = vec![vec![]; pos.len()];
     for (k, (tri, s)) in tris.iter().zip(&is_side).enumerate() {
         if *s {
             continue;
         }
         for (c, &i) in tri.iter().enumerate() {
-            if done.insert((i, faces[k])) {
+            let seen = &mut done[i as usize];
+            if !seen.contains(&faces[k]) {
+                seen.push(faces[k]);
                 normal[i as usize] += pm.normals[k][c];
             }
         }
@@ -930,7 +1045,7 @@ fn built_from(
             }
         })
         .collect();
-    let wall: Vec<f64> = forge_math::par::map(foot.len(), |i| {
+    let wall: Vec<f64> = each(foot.len(), |i| {
         field.and_then(|f| f.at(foot[i])).map_or(t, |x| x.0)
     });
     // the modelled part is the side on the tool moved off it by t: moved by the wall instead
@@ -961,14 +1076,17 @@ fn built_from(
     }
     let smooth = |d: &mut Vec<Vec3>| {
         for _ in 0..MOVES {
-            let d0 = d.clone();
-            for (i, list) in nb.iter().enumerate() {
+            let d0 = std::mem::take(d);
+            *d = each(d0.len(), |i| {
+                let list = &nb[i];
                 if !on_side[i] && !list.is_empty() {
                     let mean =
                         list.iter().fold(Vec3::ZERO, |s, &j| s + d0[j as usize]) * (1.0 / list.len() as f64);
-                    d[i] = d0[i] * 0.5 + mean * 0.5;
+                    d0[i] * 0.5 + mean * 0.5
+                } else {
+                    d0[i]
                 }
-            }
+            });
         }
     };
     let place = |mesh: &mut TriMesh, k: f64| {
@@ -1012,7 +1130,7 @@ fn built_from(
         sheet_volume = f.volume;
     }
     // the colours: the model's own wall at each point of the modelled part, as painted there
-    let (raw, sheet): (Vec<f64>, Vec<Point3>) = forge_math::par::map(pos.len(), |i| {
+    let (raw, sheet): (Vec<f64>, Vec<Point3>) = each(pos.len(), |i| {
         field.and_then(|f| f.raw_at(pos[i])).unwrap_or((wall[i], pos[i]))
     })
     .into_iter()
@@ -1042,7 +1160,7 @@ fn refine(pos: &mut Vec<Point3>, tris: &mut Vec<[u32; 3]>, faces: &mut Vec<u32>,
     for _ in 0..12 {
         let len = |a: u32, b: u32, pos: &[Point3]| (pos[a as usize] - pos[b as usize]).length();
         let key = |a: u32, b: u32| (a.min(b), a.max(b));
-        let mut split: HashMap<(u32, u32), u32> = HashMap::new();
+        let mut split: HashMap<(u32, u32), u32, Fast> = HashMap::default();
         for &[a, b, c] in tris.iter() {
             let sides = [(a, b), (b, c), (c, a)];
             let (x, y) = sides

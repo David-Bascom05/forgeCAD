@@ -1,0 +1,9 @@
+# Eksi & Karabeyoglu 2017b, ASTRJ 11(2):198, DOI 10.12913/22998624/71147: HIPS 825E 1.5 mm, female hemisphere
+# 100 x 50 (the Ruse paper's mould), vacuum only. Assumptions: eksi2017b_hemisphere.notes.md.
+sketch hemi(on: xz) {
+  a = arc(center: (0, 0), from: (50, 0), to: (0, -50), cw: true)
+  ax = line((0, -50), (0, 0))
+  top = line((0, 0), (50, 0))
+}
+cav = revolve(hemi, axis: hemi.ax)
+part = thermoform(cav, t: 1.5, material: "HIPS", tool: "female", flange: 20, margin: 5, shrink: ratio(0), vent: false, temperature: 135, pressure: ratio(0.097))
