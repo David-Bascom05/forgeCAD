@@ -62,6 +62,8 @@ fn field(h: &mut Headless, label: &str, text: &str) {
 }
 
 fn ok(h: &mut Headless, what: &str) {
+    // the preview of the line as it stands back first: a seq from an earlier line is no answer
+    assert!(h.settle_worker(), "{what}: the worker never answered");
     assert!(
         h.until(|g| {
             let d = g.shell.dialog.as_ref().unwrap();
@@ -504,8 +506,18 @@ fn extrude_takes_its_extent_and_way_and_operation_from_toggles_and_plus_opens_an
     assert!((was - built(&file, "thru") - 25.0 * 20.0).abs() < 1e-6);
 }
 
+/// A click's or a field's effect laid out, and what it asked of the worker back: frames for the
+/// layout, then the worker waited for (ten frames alone came before a busy machine's answer).
 fn settle(h: &mut Headless) {
-    for _ in 0..10 {
+    for _ in 0..3 {
+        h.step();
+    }
+    assert!(
+        h.settle_worker(),
+        "the worker never answered: {}",
+        h.gui.shell.status
+    );
+    for _ in 0..3 {
         h.step();
     }
 }
