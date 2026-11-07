@@ -682,15 +682,25 @@ impl Shell {
         }
         if self.agent.tab == SideTab::Model {
             let room = w - x - 16.0;
-            let g = ui.fonts_mut(|f| f.layout_no_wrap(right.to_string(), sans(12.0), t.ink2));
-            if g.size().x <= room {
+            // the name and its released revision; where both don't fit, the revision alone
+            let rev = right.split_once(" · Rev ").map(|(_, r)| format!("Rev {r}"));
+            let fits = [
+                Some(right.to_string()),
+                rev,
+                Some(right.split(" · Rev ").next().unwrap_or("").to_string()),
+            ]
+            .into_iter()
+            .flatten()
+            .map(|s| ui.fonts_mut(|f| f.layout_no_wrap(s, sans(12.0), t.ink2)))
+            .find(|g| g.size().x <= room);
+            if let Some(g) = fits {
                 p.galley(
                     pos2(w - 10.0 - g.size().x, y + (HEAD_H - g.size().y) * 0.5),
                     g,
                     t.ink2,
                 );
             }
-        } else {
+        } else if self.agent.tab == SideTab::Agent {
             let r = Rect::from_min_size(pos2(w - 30.0, y + 3.0), vec2(24.0, 24.0));
             let resp = ui
                 .interact(r, ui.scope_id().with("agent-new"), Sense::click())
