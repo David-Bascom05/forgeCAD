@@ -139,7 +139,11 @@ impl Geom {
                 }
                 Prim::Fill { rings } | Prim::Mask { rings } => {
                     // a mask is drawn in the canvas's colour: alpha 0 says so to the shader
-                    let rgb = if matches!(it.prim, Prim::Mask { .. }) { rgb & 0x00FF_FFFF } else { rgb };
+                    let rgb = if matches!(it.prim, Prim::Mask { .. }) {
+                        rgb & 0x00FF_FFFF
+                    } else {
+                        rgb
+                    };
                     fill_items.push(item);
                     rings.iter().flatten().for_each(|&p| {
                         if p[0].is_finite() && p[1].is_finite() {
@@ -200,7 +204,11 @@ impl Geom {
     /// a layer's colour changed without building its scene again. Its own id, for the GPU.
     pub fn recoloured(&self, layer: usize, rgb: [u8; 3]) -> Geom {
         let items = &self.scene.items;
-        let hit = |item: u32| items.get(item as usize).is_some_and(|it| it.by_layer && it.layer == layer);
+        let hit = |item: u32| {
+            items
+                .get(item as usize)
+                .is_some_and(|it| it.by_layer && it.layer == layer)
+        };
         let word = pack(rgb).to_le_bytes();
         let mut lines = self.lines.clone();
         for w in lines.as_chunks_mut::<LINE_BYTES>().0 {
@@ -299,7 +307,12 @@ impl Geom {
     /// The entities with a segment in the box a..b (world units), each once.
     pub fn in_box(&self, a: [f64; 2], b: [f64; 2], ok: &dyn Fn(u32) -> bool, out: &mut Vec<u32>) {
         let (qa, qb) = (self.local(a), self.local(b));
-        let r = [qa[0].min(qb[0]), qa[1].min(qb[1]), qa[0].max(qb[0]), qa[1].max(qb[1])];
+        let r = [
+            qa[0].min(qb[0]),
+            qa[1].min(qb[1]),
+            qa[0].max(qb[0]),
+            qa[1].max(qb[1]),
+        ];
         let start = out.len();
         self.grid.in_box([r[0], r[1]], [r[2], r[3]], |s| {
             let (item, (a, b)) = seg_of(&self.lines, s as usize);
@@ -325,10 +338,15 @@ impl Geom {
 
     /// An entity's segments as drawn (world units), at most `max`.
     pub fn segments(&self, entity: u32, max: usize, out: &mut Vec<([f64; 2], [f64; 2])>) {
-        let Some(items) = self.by_entity.get(&entity) else { return };
+        let Some(items) = self.by_entity.get(&entity) else {
+            return;
+        };
         let w = |p: [f32; 2]| [p[0] as f64 + self.origin[0], p[1] as f64 + self.origin[1]];
         for &i in items {
-            let (s, e) = (self.item_segs[i as usize] as usize, self.item_segs[i as usize + 1] as usize);
+            let (s, e) = (
+                self.item_segs[i as usize] as usize,
+                self.item_segs[i as usize + 1] as usize,
+            );
             for k in s..e {
                 if out.len() >= max {
                     return;

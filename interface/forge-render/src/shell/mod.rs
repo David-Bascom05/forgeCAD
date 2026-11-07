@@ -15,9 +15,9 @@ pub mod dim;
 pub mod docs;
 pub mod drawing;
 pub mod dwgcmd;
-pub mod dwgcmds;
 #[cfg(test)]
 mod dwgcmd_tests;
+pub mod dwgcmds;
 pub mod dwgdoc;
 mod dwgdoc_edit_ui;
 mod dwgdoc_ui;

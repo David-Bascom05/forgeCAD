@@ -58,7 +58,12 @@ pub fn snap_marker(p: &egui::Painter, k: SnapKind, at: Pos2) {
             p.circle_stroke(at, s, st);
         }
         SnapKind::Quadrant => {
-            let pts = vec![at + vec2(0.0, -s), at + vec2(s, 0.0), at + vec2(0.0, s), at + vec2(-s, 0.0)];
+            let pts = vec![
+                at + vec2(0.0, -s),
+                at + vec2(s, 0.0),
+                at + vec2(0.0, s),
+                at + vec2(-s, 0.0),
+            ];
             p.add(Shape::closed_line(pts, st));
         }
         SnapKind::Intersection | SnapKind::ApparentIntersection => {
@@ -74,7 +79,12 @@ pub fn snap_marker(p: &egui::Painter, k: SnapKind, at: Pos2) {
             p.line_segment([at + vec2(-s * 0.7, s * 0.7), at + vec2(s * 0.7, -s * 0.7)], st);
         }
         SnapKind::Insertion => {
-            p.rect_stroke(Rect::from_min_size(at + vec2(-s, -s), vec2(s, s)), 0.0, st, StrokeKind::Middle);
+            p.rect_stroke(
+                Rect::from_min_size(at + vec2(-s, -s), vec2(s, s)),
+                0.0,
+                st,
+                StrokeKind::Middle,
+            );
             p.rect_stroke(Rect::from_min_size(at, vec2(s, s)), 0.0, st, StrokeKind::Middle);
         }
         SnapKind::Perpendicular => {
@@ -113,7 +123,12 @@ fn tip(p: &egui::Painter, at: Pos2, text: &str, fg: Color32, bg: Color32) -> Rec
     let g = p.layout_no_wrap(text.to_string(), sans(12.0), fg);
     let r = Rect::from_min_size(at, g.size() + vec2(10.0, 6.0));
     p.rect_filled(r, 3.0, bg);
-    p.rect_stroke(r, 3.0, Stroke::new(1.0, fg.gamma_multiply(0.5)), StrokeKind::Inside);
+    p.rect_stroke(
+        r,
+        3.0,
+        Stroke::new(1.0, fg.gamma_multiply(0.5)),
+        StrokeKind::Inside,
+    );
     p.galley(r.min + vec2(5.0, 3.0), g, fg);
     r
 }
@@ -145,14 +160,27 @@ fn curve_pts(c: &Curve, scale: f64) -> Vec<V2> {
             (len_px / 4.0).clamp(24.0, 512.0) as usize
         }
     };
-    (0..=n).map(|k| c.point(t0 + (t1 - t0) * k as f64 / n as f64)).collect()
+    (0..=n)
+        .map(|k| c.point(t0 + (t1 - t0) * k as f64 / n as f64))
+        .collect()
 }
 
 impl Shell {
     /// The drafting overlay on the canvas.
-    pub(super) fn dwg_overlay(&mut self, p: &egui::Painter, canvas: Rect, v: &View, paper: bool, hover: Option<Pos2>) {
+    pub(super) fn dwg_overlay(
+        &mut self,
+        p: &egui::Painter,
+        canvas: Rect,
+        v: &View,
+        paper: bool,
+        hover: Option<Pos2>,
+    ) {
         let Some(d) = &self.dwgdoc else { return };
-        let ink = if paper { Color32::from_gray(30) } else { Color32::from_gray(235) };
+        let ink = if paper {
+            Color32::from_gray(30)
+        } else {
+            Color32::from_gray(235)
+        };
         let scr = |w: V2| to_screen(v, canvas, w.arr());
         // the grid
         if d.ed.set.grid {
@@ -162,7 +190,11 @@ impl Shell {
             while ((hi[0] - lo[0]) / step) * ((hi[1] - lo[1]) / step) > 40_000.0 {
                 step *= 2.0;
             }
-            let dot = if paper { Color32::from_gray(160) } else { Color32::from_gray(80) };
+            let dot = if paper {
+                Color32::from_gray(160)
+            } else {
+                Color32::from_gray(80)
+            };
             let (x0, y0) = ((lo[0] / step).floor() as i64, (lo[1] / step).floor() as i64);
             let (x1, y1) = ((hi[0] / step).ceil() as i64, (hi[1] / step).ceil() as i64);
             for i in x0..=x1 {
@@ -184,7 +216,12 @@ impl Shell {
                     }
                 }
                 Ghost::Dashed(a, b) => {
-                    p.extend(Shape::dashed_line(&[scr(a), scr(b)], Stroke::new(1.0, ink.gamma_multiply(0.7)), 6.0, 4.0));
+                    p.extend(Shape::dashed_line(
+                        &[scr(a), scr(b)],
+                        Stroke::new(1.0, ink.gamma_multiply(0.7)),
+                        6.0,
+                        4.0,
+                    ));
                 }
                 Ghost::Text(at, h, s) => {
                     let size = (h * v.scale).clamp(6.0, 200.0) as f32;
@@ -209,7 +246,10 @@ impl Shell {
                         }
                         if !b.is_empty() {
                             let c = [b.min, v2(b.max.x, b.min.y), b.max, v2(b.min.x, b.max.y)];
-                            p.add(Shape::closed_line(c.iter().map(|w| scr(m.apply(*w))).collect(), band));
+                            p.add(Shape::closed_line(
+                                c.iter().map(|w| scr(m.apply(*w))).collect(),
+                                band,
+                            ));
                         }
                     } else {
                         for (a, b) in segs {
@@ -247,7 +287,11 @@ impl Shell {
                 snap_marker(p, s.kind, at);
                 if s.kind == SnapKind::Extension
                     && let Some(&h) = s.handles.first()
-                    && let Some(c) = d.drawing.objects.get(&h).and_then(|_| forge_dwg::draft::entity::curve_of(&d.drawing, h).ok())
+                    && let Some(c) = d
+                        .drawing
+                        .objects
+                        .get(&h)
+                        .and_then(|_| forge_dwg::draft::entity::curve_of(&d.drawing, h).ok())
                 {
                     let e = if c.curve.start().dist(s.point) < c.curve.end().dist(s.point) {
                         c.curve.start()
@@ -256,11 +300,18 @@ impl Shell {
                     };
                     p.extend(Shape::dotted_line(&[scr(e), at], TRACK, 6.0, 1.0));
                 }
-                tip(p, at + vec2(14.0, 12.0), snap_name(s.kind), Color32::WHITE, tip_bg);
+                tip(
+                    p,
+                    at + vec2(14.0, 12.0),
+                    snap_name(s.kind),
+                    Color32::WHITE,
+                    tip_bg,
+                );
             }
             Some(Track::Polar { base, angle }) => {
                 if let Some(c) = d.ed.cursor {
-                    let far = *base + V2::polar(*angle, (canvas.width() + canvas.height()) as f64 * 2.0 / v.scale);
+                    let far =
+                        *base + V2::polar(*angle, (canvas.width() + canvas.height()) as f64 * 2.0 / v.scale);
                     p.extend(Shape::dotted_line(&[scr(*base), scr(far)], TRACK, 6.0, 1.0));
                     let what = if d.ed.set.ortho { "Ortho" } else { "Polar" };
                     let a = angle.to_degrees().rem_euclid(360.0);
@@ -276,14 +327,30 @@ impl Shell {
             && let (Some(pr), Some(hp)) = (&d.ed.prompt, hover)
         {
             let line = pr.text.clone();
-            let typed = if d.input.is_empty() { String::new() } else { format!("  {}", d.input) };
-            let r = tip(p, hp + vec2(18.0, 26.0), &format!("{line}{typed}"), Color32::WHITE, tip_bg);
+            let typed = if d.input.is_empty() {
+                String::new()
+            } else {
+                format!("  {}", d.input)
+            };
+            let r = tip(
+                p,
+                hp + vec2(18.0, 26.0),
+                &format!("{line}{typed}"),
+                Color32::WHITE,
+                tip_bg,
+            );
             if let (Some(b), Some(c)) = (pr.base, d.ed.cursor)
                 && pr.wants(want::POINT)
                 && b.dist(c) > 0.0
             {
                 let a = (c - b).angle().to_degrees().rem_euclid(360.0);
-                tip(p, r.left_bottom() + vec2(0.0, 4.0), &format!("{:.4}   {a:.0}\u{b0}", b.dist(c)), Color32::from_gray(220), tip_bg);
+                tip(
+                    p,
+                    r.left_bottom() + vec2(0.0, 4.0),
+                    &format!("{:.4}   {a:.0}\u{b0}", b.dist(c)),
+                    Color32::from_gray(220),
+                    tip_bg,
+                );
             }
         }
     }
@@ -340,7 +407,10 @@ impl Shell {
                         .selected_text(format!("{cur}"))
                         .show_ui(ui, |ui| {
                             for a in [90.0, 45.0, 30.0, 22.5, 18.0, 15.0, 10.0, 5.0] {
-                                if ui.selectable_label((cur - a).abs() < 1e-9, format!("{a}")).clicked() {
+                                if ui
+                                    .selectable_label((cur - a).abs() < 1e-9, format!("{a}"))
+                                    .clicked()
+                                {
                                     s.polar_inc = f64::to_radians(a);
                                 }
                             }
@@ -414,13 +484,23 @@ impl Shell {
     /// The ribbon's layer dropdown: the current layer; a pick moves what's chosen to it, or
     /// makes it current.
     pub(super) fn dwg_layer_dropdown(&mut self, ui: &mut egui::Ui) {
-        let Some(slot) = self.places.iter().rev().find(|(k, _)| k == "dwg:ribbon:layer").map(|x| x.1) else {
+        let Some(slot) = self
+            .places
+            .iter()
+            .rev()
+            .find(|(k, _)| k == "dwg:ribbon:layer")
+            .map(|x| x.1)
+        else {
             return;
         };
         let t = self.theme;
         let Some(d) = &mut self.dwgdoc else { return };
         let rows = d.layer_rows();
-        let cur = rows.iter().find(|r| r.current).map(|r| r.name.clone()).unwrap_or_else(|| "0".into());
+        let cur = rows
+            .iter()
+            .find(|r| r.current)
+            .map(|r| r.name.clone())
+            .unwrap_or_else(|| "0".into());
         let shown = if d.selected.is_empty() {
             cur
         } else {
@@ -446,7 +526,11 @@ impl Shell {
                     for row in &rows {
                         let resp = ui.horizontal(|ui| {
                             let (sw, _) = ui.allocate_exact_size(vec2(12.0, 12.0), egui::Sense::hover());
-                            ui.painter().rect_filled(sw, 2.0, Color32::from_rgb(row.rgb[0], row.rgb[1], row.rgb[2]));
+                            ui.painter().rect_filled(
+                                sw,
+                                2.0,
+                                Color32::from_rgb(row.rgb[0], row.rgb[1], row.rgb[2]),
+                            );
                             ui.selectable_label(row.name == shown, &row.name)
                         });
                         place.push((format!("dwg:ribbon:layer:{}", row.name), resp.inner.rect));

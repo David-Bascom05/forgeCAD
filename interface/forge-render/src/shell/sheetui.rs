@@ -1174,10 +1174,15 @@ impl Shell {
                     // the file's extension says which
                     let dwg = c.path.to_lowercase().ends_with(".dwg");
                     for (name, want) in [("AutoCAD 2000 DXF, mm", false), ("AutoCAD 2000 DWG, mm", true)] {
-                        if ui.selectable_label(dwg == want, egui::RichText::new(name).font(sans(12.0))).clicked()
+                        if ui
+                            .selectable_label(dwg == want, egui::RichText::new(name).font(sans(12.0)))
+                            .clicked()
                             && dwg != want
                         {
-                            let stem = c.path.rsplit_once('.').map_or(c.path.clone(), |(s, _)| s.to_string());
+                            let stem = c
+                                .path
+                                .rsplit_once('.')
+                                .map_or(c.path.clone(), |(s, _)| s.to_string());
                             c.path = format!("{stem}.{}", if want { "dwg" } else { "dxf" });
                         }
                     }

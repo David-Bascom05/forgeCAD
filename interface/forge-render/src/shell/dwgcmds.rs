@@ -168,7 +168,11 @@ impl Command for LineCmd {
         match self.pts.last() {
             None => Prompt::new("Specify first point", want::POINT),
             Some(&b) => {
-                let opts: &[&str] = if self.segs.len() >= 2 { &["Close", "Undo"] } else { &["Undo"] };
+                let opts: &[&str] = if self.segs.len() >= 2 {
+                    &["Close", "Undo"]
+                } else {
+                    &["Undo"]
+                };
                 Prompt::new("Specify next point", want::POINT | want::ENTER)
                     .opts(opts)
                     .base(Some(b))
@@ -314,18 +318,18 @@ impl Command for PlineCmd {
             PlStage::WidthEnd(s) => Prompt::new("Specify ending width", want::NUM).dflt(n4(s)),
             PlStage::SecondPt => Prompt::new("Specify second point on arc", want::POINT).base(base),
             PlStage::ArcEnd(_) => Prompt::new("Specify end point of arc", want::POINT).base(base),
-            PlStage::Next if self.arc => {
-                Prompt::new("Specify endpoint of arc", want::POINT | want::ENTER)
-                    .opts(&["CLose", "Line", "Second pt", "Undo", "Width"])
-                    .base(base)
-            }
+            PlStage::Next if self.arc => Prompt::new("Specify endpoint of arc", want::POINT | want::ENTER)
+                .opts(&["CLose", "Line", "Second pt", "Undo", "Width"])
+                .base(base),
             PlStage::Next => {
                 let o: &[&str] = if self.pts.len() >= 3 {
                     &["Arc", "Close", "Undo", "Width"]
                 } else {
                     &["Arc", "Undo", "Width"]
                 };
-                Prompt::new("Specify next point", want::POINT | want::ENTER).opts(o).base(base)
+                Prompt::new("Specify next point", want::POINT | want::ENTER)
+                    .opts(o)
+                    .base(base)
             }
         }
     }
@@ -354,7 +358,9 @@ impl Command for PlineCmd {
                 Flow::More
             }
             (PlStage::ArcEnd(m), Inp::Point(e)) => {
-                let Some(&b) = self.pts.last() else { return Flow::More };
+                let Some(&b) = self.pts.last() else {
+                    return Flow::More;
+                };
                 match CArc::from_3_points(b, m, e) {
                     Some(a) => {
                         self.push(cx, e, a.bulge());
@@ -458,21 +464,31 @@ struct CircleCmd {
 impl Command for CircleCmd {
     fn prompt(&self) -> Prompt {
         match self.stage {
-            CStage::Center => Prompt::new("Specify center point for circle", want::POINT).opts(&["3P", "2P", "Ttr (tan tan radius)"]),
+            CStage::Center => Prompt::new("Specify center point for circle", want::POINT).opts(&[
+                "3P",
+                "2P",
+                "Ttr (tan tan radius)",
+            ]),
             CStage::Radius(c) => {
                 let p = Prompt::new("Specify radius of circle", want::POINT | want::NUM)
                     .opts(&["Diameter"])
                     .base(Some(c));
                 if self.r > 0.0 { p.dflt(n4(self.r)) } else { p }
             }
-            CStage::Diameter(c) => Prompt::new("Specify diameter of circle", want::POINT | want::NUM).base(Some(c)),
+            CStage::Diameter(c) => {
+                Prompt::new("Specify diameter of circle", want::POINT | want::NUM).base(Some(c))
+            }
             CStage::P2a => Prompt::new("Specify first end point of circle's diameter", want::POINT),
-            CStage::P2b(a) => Prompt::new("Specify second end point of circle's diameter", want::POINT).base(Some(a)),
+            CStage::P2b(a) => {
+                Prompt::new("Specify second end point of circle's diameter", want::POINT).base(Some(a))
+            }
             CStage::P3a => Prompt::new("Specify first point on circle", want::POINT),
             CStage::P3b(a) => Prompt::new("Specify second point on circle", want::POINT).base(Some(a)),
             CStage::P3c(_, b) => Prompt::new("Specify third point on circle", want::POINT).base(Some(b)),
             CStage::TtrA => Prompt::new("Specify point on object for first tangent of circle", want::PICK),
-            CStage::TtrB(..) => Prompt::new("Specify point on object for second tangent of circle", want::PICK),
+            CStage::TtrB(..) => {
+                Prompt::new("Specify point on object for second tangent of circle", want::PICK)
+            }
             CStage::TtrR(..) => {
                 let p = Prompt::new("Specify radius of circle", want::NUM);
                 if self.r > 0.0 { p.dflt(n4(self.r)) } else { p }
@@ -506,7 +522,9 @@ impl Command for CircleCmd {
             (CStage::Diameter(c), Inp::Point(p)) => return done(cx, Curve::circle(c, c.dist(p) / 2.0)),
             (CStage::Diameter(c), Inp::Num(d)) if d > 0.0 => return done(cx, Curve::circle(c, d / 2.0)),
             (CStage::P2a, Inp::Point(a)) => self.stage = CStage::P2b(a),
-            (CStage::P2b(a), Inp::Point(b)) if a != b => return done(cx, Curve::circle(a.mid(b), a.dist(b) / 2.0)),
+            (CStage::P2b(a), Inp::Point(b)) if a != b => {
+                return done(cx, Curve::circle(a.mid(b), a.dist(b) / 2.0));
+            }
             (CStage::P3a, Inp::Point(a)) => self.stage = CStage::P3b(a),
             (CStage::P3b(a), Inp::Point(b)) => self.stage = CStage::P3c(a, b),
             (CStage::P3c(a, b), Inp::Point(c)) => match CArc::from_3_points(a, b, c) {
@@ -543,7 +561,10 @@ impl Command for CircleCmd {
         match self.stage {
             CStage::Radius(c) => vec![Ghost::Curve(Curve::circle(c, c.dist(at).max(1e-12))), line(c, at)],
             CStage::Diameter(c) => vec![Ghost::Curve(Curve::circle(c, c.dist(at).max(1e-12) / 2.0))],
-            CStage::P2b(a) => vec![Ghost::Curve(Curve::circle(a.mid(at), a.dist(at).max(1e-12) / 2.0))],
+            CStage::P2b(a) => vec![Ghost::Curve(Curve::circle(
+                a.mid(at),
+                a.dist(at).max(1e-12) / 2.0,
+            ))],
             CStage::P3c(a, b) => CArc::from_3_points(a, b, at)
                 .map(|x| vec![Ghost::Curve(Curve::circle(x.c, x.r))])
                 .unwrap_or_default(),
@@ -732,7 +753,9 @@ impl Command for RectCmd {
     fn prompt(&self) -> Prompt {
         match self.stage {
             RStage::First => Prompt::new("Specify first corner point", want::POINT).opts(&["Fillet"]),
-            RStage::Fillet => Prompt::new("Specify fillet radius for rectangles", want::NUM).dflt(n4(self.fillet)),
+            RStage::Fillet => {
+                Prompt::new("Specify fillet radius for rectangles", want::NUM).dflt(n4(self.fillet))
+            }
             RStage::Other(a) => Prompt::new("Specify other corner point", want::POINT)
                 .opts(&["Dimensions"])
                 .base(Some(a)),
@@ -776,7 +799,9 @@ impl Command for RectCmd {
     }
     fn preview(&self, _: &Pv, at: V2) -> Vec<Ghost> {
         match self.stage {
-            RStage::Other(a) => rect_poly(a, at, self.fillet).map(|c| vec![Ghost::Curve(c)]).unwrap_or_default(),
+            RStage::Other(a) => rect_poly(a, at, self.fillet)
+                .map(|c| vec![Ghost::Curve(c)])
+                .unwrap_or_default(),
             _ => vec![],
         }
     }
@@ -802,7 +827,9 @@ struct PolygonCmd {
 }
 
 fn polygon(c: V2, n: usize, r: f64, a0: f64) -> Curve {
-    let pts: Vec<V2> = (0..n).map(|k| c + V2::polar(a0 + TAU * k as f64 / n as f64, r)).collect();
+    let pts: Vec<V2> = (0..n)
+        .map(|k| c + V2::polar(a0 + TAU * k as f64 / n as f64, r))
+        .collect();
     Curve::poly(&pts, &[], true)
 }
 
@@ -835,7 +862,9 @@ impl Command for PolygonCmd {
             PgStage::Kind(_) => Prompt::new("Enter an option", want::ENTER)
                 .opts(&["Inscribed in circle", "Circumscribed about circle"])
                 .dflt("I"),
-            PgStage::Radius(c, _) => Prompt::new("Specify radius of circle", want::POINT | want::NUM).base(Some(c)),
+            PgStage::Radius(c, _) => {
+                Prompt::new("Specify radius of circle", want::POINT | want::NUM).base(Some(c))
+            }
             PgStage::Edge1 => Prompt::new("Specify first endpoint of edge", want::POINT),
             PgStage::Edge2(a) => Prompt::new("Specify second endpoint of edge", want::POINT).base(Some(a)),
         }
@@ -869,7 +898,8 @@ impl Command for PolygonCmd {
             (PgStage::Edge2(a), Inp::Point(b)) if a != b => {
                 let n = self.sides(cx.set.polygon_sides);
                 let s = a.dist(b);
-                let apothem = s / (2.0 * (forge_math::dmath::sin(PI / n as f64) / forge_math::dmath::cos(PI / n as f64)));
+                let apothem = s
+                    / (2.0 * (forge_math::dmath::sin(PI / n as f64) / forge_math::dmath::cos(PI / n as f64)));
                 let u = (b - a) / s;
                 let c = a.mid(b) + u.perp() * apothem;
                 let r = s / (2.0 * forge_math::dmath::sin(PI / n as f64));
@@ -883,7 +913,13 @@ impl Command for PolygonCmd {
     fn preview(&self, pv: &Pv, at: V2) -> Vec<Ghost> {
         match self.stage {
             PgStage::Radius(c, ins) if at != c => {
-                vec![Ghost::Curve(self.shape(c, ins, Some(at), 0.0, self.sides(pv.set.polygon_sides)))]
+                vec![Ghost::Curve(self.shape(
+                    c,
+                    ins,
+                    Some(at),
+                    0.0,
+                    self.sides(pv.set.polygon_sides),
+                ))]
             }
             _ => vec![],
         }
@@ -939,11 +975,15 @@ fn ellipse_of(c: V2, major_end: V2, p: V2) -> Option<Ellipse> {
 impl Command for EllipseCmd {
     fn prompt(&self) -> Prompt {
         match self.stage {
-            EStage::Axis1 => Prompt::new("Specify axis endpoint of ellipse", want::POINT).opts(&["Arc", "Center"]),
+            EStage::Axis1 => {
+                Prompt::new("Specify axis endpoint of ellipse", want::POINT).opts(&["Arc", "Center"])
+            }
             EStage::Axis2(a) => Prompt::new("Specify other endpoint of axis", want::POINT).base(Some(a)),
             EStage::Center => Prompt::new("Specify center of ellipse", want::POINT),
             EStage::CAxis(c) => Prompt::new("Specify endpoint of axis", want::POINT).base(Some(c)),
-            EStage::Other(c, _) => Prompt::new("Specify distance to other axis", want::POINT | want::NUM).base(Some(c)),
+            EStage::Other(c, _) => {
+                Prompt::new("Specify distance to other axis", want::POINT | want::NUM).base(Some(c))
+            }
             EStage::Start(e) => Prompt::new("Specify start angle", want::POINT | want::NUM).base(Some(e.c)),
             EStage::End(e, _) => Prompt::new("Specify end angle", want::POINT | want::NUM).base(Some(e.c)),
         }
@@ -1036,7 +1076,9 @@ impl Command for SplineCmd {
     fn prompt(&self) -> Prompt {
         match self.pts.len() {
             0 => Prompt::new("Specify first point", want::POINT),
-            1 => Prompt::new("Enter next point", want::POINT).opts(&["Undo"]).base(self.pts.last().copied()),
+            1 => Prompt::new("Enter next point", want::POINT)
+                .opts(&["Undo"])
+                .base(self.pts.last().copied()),
             _ => Prompt::new("Enter next point", want::POINT | want::ENTER)
                 .opts(&["Close", "Undo"])
                 .base(self.pts.last().copied()),
@@ -1187,7 +1229,9 @@ impl Command for MTextCmd {
                 .opts(&["Height"])
                 .base(Some(a)),
             MStage::Height(_) => Prompt::new("Specify height", want::NUM),
-            MStage::Text(..) => Prompt::new("Enter the text (an empty line ends it)", want::TEXT | want::LINES),
+            MStage::Text(..) => {
+                Prompt::new("Enter the text (an empty line ends it)", want::TEXT | want::LINES)
+            }
         }
     }
     fn feed(&mut self, cx: &mut Cx, inp: Inp) -> Flow {
@@ -1200,7 +1244,10 @@ impl Command for MTextCmd {
             }
             (MStage::Other(a), Inp::Point(b)) => MStage::Text(a, b),
             (MStage::Text(a, b), Inp::Text(s)) => {
-                let body = s.trim_end_matches('\n').replace("\r\n", "\n").replace('\n', "\\P");
+                let body = s
+                    .trim_end_matches('\n')
+                    .replace("\r\n", "\n")
+                    .replace('\n', "\\P");
                 if !body.trim().is_empty() {
                     let top_left = v2(a.x.min(b.x), a.y.max(b.y));
                     let d = make::mtext(cx.d, top_left, (b.x - a.x).abs(), cx.set.text_h, &body);
@@ -1279,8 +1326,12 @@ pub fn find_boundary(d: &Drawing, q: &super::dwgcmd::ViewQ, p: V2) -> Option<bou
 impl Command for HatchCmd {
     fn prompt(&self) -> Prompt {
         match self.stage {
-            HStage::Pick => Prompt::new("Pick internal point", want::POINT | want::ENTER).opts(&["Pattern", "Scale", "Angle", "Undo"]),
-            HStage::Pattern => Prompt::new("Enter a pattern name (SOLID, ANSI31, ANSI32, ANSI37, LINE, NET)", want::TEXT),
+            HStage::Pick => Prompt::new("Pick internal point", want::POINT | want::ENTER)
+                .opts(&["Pattern", "Scale", "Angle", "Undo"]),
+            HStage::Pattern => Prompt::new(
+                "Enter a pattern name (SOLID, ANSI31, ANSI32, ANSI37, LINE, NET)",
+                want::TEXT,
+            ),
             HStage::Scale => Prompt::new("Specify a scale for the pattern", want::NUM),
             HStage::Angle => Prompt::new("Specify an angle for the pattern", want::NUM),
         }
@@ -1365,7 +1416,11 @@ fn dim_ghosts(m: &dim::Made) -> Vec<Ghost> {
             continue;
         }
         match d {
-            Data::MText(t) => out.push(Ghost::Text(V2::from(t.insert), t.text_height, t.text.text().replace("%%c", "\u{2205}"))),
+            Data::MText(t) => out.push(Ghost::Text(
+                V2::from(t.insert),
+                t.text_height,
+                t.text.text().replace("%%c", "\u{2205}"),
+            )),
             Data::Solid(s) => {
                 let p: Vec<V2> = s.corners[..3].iter().map(|c| V2::from(*c)).collect();
                 out.push(Ghost::Curve(Curve::poly(&p, &[], true)));
@@ -1412,7 +1467,11 @@ impl DimLinCmd {
             // outside the points' span across, inside it along: a vertical dimension
             let (x0, x1) = (p1.x.min(p2.x), p1.x.max(p2.x));
             let (y0, y1) = (p1.y.min(p2.y), p1.y.max(p2.y));
-            if (at.x < x0 || at.x > x1) && at.y >= y0 && at.y <= y1 { PI / 2.0 } else { 0.0 }
+            if (at.x < x0 || at.x > x1) && at.y >= y0 && at.y <= y1 {
+                PI / 2.0
+            } else {
+                0.0
+            }
         });
         DimKind::Linear { p1, p2, at, angle }
     }
@@ -1421,12 +1480,18 @@ impl DimLinCmd {
 impl Command for DimLinCmd {
     fn prompt(&self) -> Prompt {
         match self.stage {
-            DStage::P1 => Prompt::new("Specify first extension line origin", want::POINT).dflt("select object"),
+            DStage::P1 => {
+                Prompt::new("Specify first extension line origin", want::POINT).dflt("select object")
+            }
             DStage::Object => Prompt::new("Select object to dimension", want::PICK),
             DStage::P2(a) => Prompt::new("Specify second extension line origin", want::POINT).base(Some(a)),
             DStage::Loc(..) => {
                 let p = Prompt::new("Specify dimension line location", want::POINT);
-                if self.aligned { p } else { p.opts(&["Horizontal", "Vertical", "Rotated"]) }
+                if self.aligned {
+                    p
+                } else {
+                    p.opts(&["Horizontal", "Vertical", "Rotated"])
+                }
             }
             DStage::Angle(..) => Prompt::new("Specify angle of dimension line", want::NUM).dflt("0"),
         }
@@ -1476,7 +1541,9 @@ impl Command for DimLinCmd {
             DStage::P2(a) => vec![line(a, at)],
             DStage::Loc(a, b) => {
                 let st = DimStyle::current(pv.d);
-                dim::make(pv.d, &st, self.kind(a, b, at)).map(|m| dim_ghosts(&m)).unwrap_or_default()
+                dim::make(pv.d, &st, self.kind(a, b, at))
+                    .map(|m| dim_ghosts(&m))
+                    .unwrap_or_default()
             }
             _ => vec![],
         }
@@ -1500,7 +1567,11 @@ impl DimRadCmd {
         DimRadCmd { dia, circle: None }
     }
     fn kind(&self, c: V2, r: f64, at: V2) -> DimKind {
-        if self.dia { DimKind::Diameter { c, r, at } } else { DimKind::Radius { c, r, at } }
+        if self.dia {
+            DimKind::Diameter { c, r, at }
+        } else {
+            DimKind::Radius { c, r, at }
+        }
     }
 }
 
@@ -1540,7 +1611,9 @@ impl Command for DimRadCmd {
     fn preview(&self, pv: &Pv, at: V2) -> Vec<Ghost> {
         let Some((c, r)) = self.circle else { return vec![] };
         let st = DimStyle::current(pv.d);
-        dim::make(pv.d, &st, self.kind(c, r, at)).map(|m| dim_ghosts(&m)).unwrap_or_default()
+        dim::make(pv.d, &st, self.kind(c, r, at))
+            .map(|m| dim_ghosts(&m))
+            .unwrap_or_default()
     }
 }
 
@@ -1674,7 +1747,10 @@ impl XfCmd {
                 }
                 None => {
                     // text, blocks, points: moved when their insertion point is in the window
-                    let at = cx.d.objects.get(&h).and_then(|o| grip::grips(&o.data).first().map(|g| g.at));
+                    let at =
+                        cx.d.objects
+                            .get(&h)
+                            .and_then(|o| grip::grips(&o.data).first().map(|g| g.at));
                     if at.is_some_and(|p| w.contains(p)) {
                         apply(cx, &[h], &Affine::translate(d), false);
                     }
@@ -1707,9 +1783,9 @@ impl Command for XfCmd {
             XStage::Sel => Prompt::new(what, want::SEL),
             XStage::Base => match self.kind {
                 Xf::Mirror => Prompt::new("Specify first point of mirror line", want::POINT),
-                Xf::Move | Xf::Copy | Xf::Stretch => {
-                    Prompt::new("Specify base point", want::POINT).opts(&["Displacement"]).dflt("Displacement")
-                }
+                Xf::Move | Xf::Copy | Xf::Stretch => Prompt::new("Specify base point", want::POINT)
+                    .opts(&["Displacement"])
+                    .dflt("Displacement"),
                 _ => Prompt::new("Specify base point", want::POINT),
             },
             XStage::Displacement => Prompt::new("Specify displacement", want::POINT).dflt("0.0000, 0.0000"),
@@ -1731,15 +1807,27 @@ impl Command for XfCmd {
                 Xf::Mirror => Prompt::new("Specify second point of mirror line", want::POINT).base(Some(b)),
             },
             XStage::Ref1(b) => {
-                let w = if self.kind == Xf::Rotate { "Specify the reference angle" } else { "Specify reference length" };
-                Prompt::new(w, want::POINT | want::NUM).dflt(if self.kind == Xf::Rotate { "0" } else { "1.0000" }).base(Some(b))
+                let w = if self.kind == Xf::Rotate {
+                    "Specify the reference angle"
+                } else {
+                    "Specify reference length"
+                };
+                Prompt::new(w, want::POINT | want::NUM)
+                    .dflt(if self.kind == Xf::Rotate { "0" } else { "1.0000" })
+                    .base(Some(b))
             }
             XStage::Ref2(_, p) => Prompt::new("Specify second point", want::POINT).base(Some(p)),
             XStage::New(b, _) => {
-                let w = if self.kind == Xf::Rotate { "Specify the new angle" } else { "Specify new length" };
+                let w = if self.kind == Xf::Rotate {
+                    "Specify the new angle"
+                } else {
+                    "Specify new length"
+                };
                 Prompt::new(w, want::POINT | want::NUM).base(Some(b))
             }
-            XStage::Erase(..) => Prompt::new("Erase source objects?", want::ENTER).opts(&["Yes", "No"]).dflt("No"),
+            XStage::Erase(..) => Prompt::new("Erase source objects?", want::ENTER)
+                .opts(&["Yes", "No"])
+                .dflt("No"),
         }
     }
     fn feed(&mut self, cx: &mut Cx, inp: Inp) -> Flow {
@@ -1758,7 +1846,9 @@ impl Command for XfCmd {
                 self.stage = XStage::Second(b);
                 Flow::More
             }
-            (XStage::Base, Inp::Key(_) | Inp::Enter) if matches!(self.kind, Xf::Move | Xf::Copy | Xf::Stretch) => {
+            (XStage::Base, Inp::Key(_) | Inp::Enter)
+                if matches!(self.kind, Xf::Move | Xf::Copy | Xf::Stretch) =>
+            {
                 self.stage = XStage::Displacement;
                 Flow::More
             }
@@ -1828,7 +1918,11 @@ impl Command for XfCmd {
                 _ => Flow::Done,
             },
             (XStage::Ref1(b), Inp::Num(x)) => {
-                let r = if self.kind == Xf::Rotate { x.to_radians() } else { x };
+                let r = if self.kind == Xf::Rotate {
+                    x.to_radians()
+                } else {
+                    x
+                };
                 if self.kind == Xf::Scale && r <= 0.0 {
                     return Flow::Bad("Requires a positive number.".into());
                 }
@@ -1844,7 +1938,11 @@ impl Command for XfCmd {
                 Flow::More
             }
             (XStage::Ref2(b, p), Inp::Point(q)) => {
-                let r = if self.kind == Xf::Rotate { (q - p).angle() } else { p.dist(q) };
+                let r = if self.kind == Xf::Rotate {
+                    (q - p).angle()
+                } else {
+                    p.dist(q)
+                };
                 if self.kind == Xf::Scale && r <= 0.0 {
                     return Flow::Bad("Requires a positive length.".into());
                 }
@@ -1891,7 +1989,10 @@ impl Command for XfCmd {
                     }
                     v
                 }
-                _ => self.map(b, at).map(|m| vec![ents(m), line(b, at)]).unwrap_or_default(),
+                _ => self
+                    .map(b, at)
+                    .map(|m| vec![ents(m), line(b, at)])
+                    .unwrap_or_default(),
             },
             XStage::New(b, r) => {
                 let m = if self.kind == Xf::Rotate {
@@ -1906,7 +2007,6 @@ impl Command for XfCmd {
         }
     }
 }
-
 
 // ---- OFFSET
 
@@ -1999,7 +2099,10 @@ impl Command for OffsetCmd {
     }
     fn preview(&self, pv: &Pv, at: V2) -> Vec<Ghost> {
         match self.stage {
-            OStage::Side(h) => self.result(pv.d, pv.set, h, at).map(|c| vec![Ghost::Curve(c)]).unwrap_or_default(),
+            OStage::Side(h) => self
+                .result(pv.d, pv.set, h, at)
+                .map(|c| vec![Ghost::Curve(c)])
+                .unwrap_or_default(),
             OStage::Dist2(a) => vec![line(a, at)],
             _ => vec![],
         }
@@ -2022,12 +2125,17 @@ fn edges_for(d: &Drawing, q: &super::dwgcmd::ViewQ, h: u32) -> Vec<Curve> {
     }
     hs.sort_unstable();
     hs.dedup();
-    hs.into_iter().filter(|x| *x != h).filter_map(|x| curve(d, x)).collect()
+    hs.into_iter()
+        .filter(|x| *x != h)
+        .filter_map(|x| curve(d, x))
+        .collect()
 }
 
 /// The curves that might stop an extension of `c` from the end nearer `pick`.
 fn bounds_for(d: &Drawing, q: &super::dwgcmd::ViewQ, h: u32, c: &Curve, pick: V2) -> Vec<Curve> {
-    let Some((lo, hi)) = q.extents() else { return vec![] };
+    let Some((lo, hi)) = q.extents() else {
+        return vec![];
+    };
     let far = (hi - lo).len() * 2.0 + 1.0;
     let start = ops::near_start(c, pick);
     let (t0, t1) = c.domain();
@@ -2044,20 +2152,33 @@ fn bounds_for(d: &Drawing, q: &super::dwgcmd::ViewQ, h: u32, c: &Curve, pick: V2
         }
         _ => q.along(p, p + dir * far),
     };
-    hs.into_iter().filter(|x| *x != h).filter_map(|x| curve(d, x)).collect()
+    hs.into_iter()
+        .filter(|x| *x != h)
+        .filter_map(|x| curve(d, x))
+        .collect()
 }
 
 impl Command for TrimCmd {
     fn prompt(&self) -> Prompt {
         if self.extend {
-            Prompt::new("Select object to extend or shift-select to trim", want::PICK | want::ENTER)
+            Prompt::new(
+                "Select object to extend or shift-select to trim",
+                want::PICK | want::ENTER,
+            )
         } else {
-            Prompt::new("Select object to trim or shift-select to extend", want::PICK | want::ENTER)
+            Prompt::new(
+                "Select object to trim or shift-select to extend",
+                want::PICK | want::ENTER,
+            )
         }
     }
     fn feed(&mut self, cx: &mut Cx, inp: Inp) -> Flow {
         let Inp::Pick(h, p) = inp else {
-            return if inp == Inp::Enter { Flow::Done } else { Flow::Bad("Select an object.".into()) };
+            return if inp == Inp::Enter {
+                Flow::Done
+            } else {
+                Flow::Bad("Select an object.".into())
+            };
         };
         let Some(c) = curve(cx.d, h) else {
             return Flow::Bad("Cannot trim or extend that object.".into());
@@ -2123,7 +2244,11 @@ impl FilletCmd {
     }
     fn settings(&self, set: &super::dwgcmd::Settings) -> String {
         if self.chamfer {
-            format!("(TRIM mode) Current chamfer Dist1 = {}, Dist2 = {}", n4(set.chamfer.0), n4(set.chamfer.1))
+            format!(
+                "(TRIM mode) Current chamfer Dist1 = {}, Dist2 = {}",
+                n4(set.chamfer.0),
+                n4(set.chamfer.1)
+            )
         } else {
             format!("Current settings: Mode = TRIM, Radius = {}", n4(set.fillet_r))
         }
@@ -2176,7 +2301,14 @@ impl FilletCmd {
             fillet::fillet(&ca, pa, &cb, pb, r)
         };
         let Some(k) = k else {
-            return Flow::Bad(if self.chamfer { "Distance is too large." } else { "Radius is too large." }.into());
+            return Flow::Bad(
+                if self.chamfer {
+                    "Distance is too large."
+                } else {
+                    "Radius is too large."
+                }
+                .into(),
+            );
         };
         let added = k.added.clone();
         put(cx, a, &[k.a]);
@@ -2258,7 +2390,10 @@ impl Command for FilletCmd {
                 };
                 let n = np.pts.len().saturating_sub(p.pts.len());
                 put(cx, h, &[Curve::Poly(np)]);
-                cx.say(format!("{n} lines were {}", if self.chamfer { "chamfered" } else { "filleted" }));
+                cx.say(format!(
+                    "{n} lines were {}",
+                    if self.chamfer { "chamfered" } else { "filleted" }
+                ));
                 return self.next();
             }
             (FStage::First, Inp::Enter) => return Flow::Done,
@@ -2267,8 +2402,12 @@ impl Command for FilletCmd {
         Flow::More
     }
     fn preview(&self, pv: &Pv, at: V2) -> Vec<Ghost> {
-        let FStage::Second(a, pa) = self.stage else { return vec![] };
-        let Some(h) = pv.q.pick(at, pv.q.px * 5.0) else { return vec![] };
+        let FStage::Second(a, pa) = self.stage else {
+            return vec![];
+        };
+        let Some(h) = pv.q.pick(at, pv.q.px * 5.0) else {
+            return vec![];
+        };
         if h == a {
             return vec![];
         }
@@ -2334,8 +2473,14 @@ impl Command for BreakCmd {
                 Flow::More
             }
             (BStage::Second(h, p1), Inp::Point(p2)) => {
-                let Some(c) = curve(cx.d, h) else { return Flow::Done };
-                let r = if p1 == p2 { ops::break_at(&c, p1, None) } else { ops::break_at(&c, p1, Some(p2)) };
+                let Some(c) = curve(cx.d, h) else {
+                    return Flow::Done;
+                };
+                let r = if p1 == p2 {
+                    ops::break_at(&c, p1, None)
+                } else {
+                    ops::break_at(&c, p1, Some(p2))
+                };
                 match r {
                     Some(pieces) => {
                         put(cx, h, &pieces);
@@ -2396,7 +2541,9 @@ struct LengthenCmd {
 impl Command for LengthenCmd {
     fn prompt(&self) -> Prompt {
         match self.stage {
-            LStage::Measure => Prompt::new("Select an object to measure", want::PICK).opts(&["DElta", "Percent", "Total"]),
+            LStage::Measure => {
+                Prompt::new("Select an object to measure", want::PICK).opts(&["DElta", "Percent", "Total"])
+            }
             LStage::Delta => Prompt::new("Enter delta length", want::NUM),
             LStage::Percent => Prompt::new("Enter percentage length", want::NUM),
             LStage::Total => Prompt::new("Specify total length", want::NUM),
@@ -2429,12 +2576,14 @@ impl Command for LengthenCmd {
                 cx.set.lengthen = Lengthen::Total(x);
                 self.stage = LStage::Change;
             }
-            (LStage::Change, Inp::Pick(h, p)) => match curve(cx.d, h).and_then(|c| ops::lengthen(&c, p, cx.set.lengthen)) {
-                Some(n) => {
-                    put(cx, h, &[n]);
+            (LStage::Change, Inp::Pick(h, p)) => {
+                match curve(cx.d, h).and_then(|c| ops::lengthen(&c, p, cx.set.lengthen)) {
+                    Some(n) => {
+                        put(cx, h, &[n]);
+                    }
+                    None => cx.say("Cannot lengthen that object that way."),
                 }
-                None => cx.say("Cannot lengthen that object that way."),
-            },
+            }
             (_, Inp::Enter) => return Flow::Done,
             _ => return Flow::Bad("Invalid input.".into()),
         }
@@ -2485,12 +2634,20 @@ impl Command for ArrayCmd {
                 .dflt("Rectangular"),
             ArStage::Rows => Prompt::new("Enter the number of rows", want::NUM).dflt("3"),
             ArStage::Cols(_) => Prompt::new("Enter the number of columns", want::NUM).dflt("4"),
-            ArStage::RowSp(..) => Prompt::new("Specify the distance between rows", want::NUM).dflt(n4(self.size.1)),
-            ArStage::ColSp(..) => Prompt::new("Specify the distance between columns", want::NUM).dflt(n4(self.size.0)),
+            ArStage::RowSp(..) => {
+                Prompt::new("Specify the distance between rows", want::NUM).dflt(n4(self.size.1))
+            }
+            ArStage::ColSp(..) => {
+                Prompt::new("Specify the distance between columns", want::NUM).dflt(n4(self.size.0))
+            }
             ArStage::Center => Prompt::new("Specify center point of array", want::POINT),
             ArStage::Items(_) => Prompt::new("Enter number of items in the array", want::NUM).dflt("6"),
-            ArStage::Fill(..) => Prompt::new("Specify the angle to fill (+=ccw, -=cw)", want::NUM).dflt("360"),
-            ArStage::Rot(..) => Prompt::new("Rotate arrayed objects?", want::ENTER).opts(&["Yes", "No"]).dflt("Yes"),
+            ArStage::Fill(..) => {
+                Prompt::new("Specify the angle to fill (+=ccw, -=cw)", want::NUM).dflt("360")
+            }
+            ArStage::Rot(..) => Prompt::new("Rotate arrayed objects?", want::ENTER)
+                .opts(&["Yes", "No"])
+                .dflt("Yes"),
         }
     }
     fn feed(&mut self, cx: &mut Cx, inp: Inp) -> Flow {
@@ -2509,7 +2666,10 @@ impl Command for ArrayCmd {
                     min: V2::ZERO,
                     max: v2(1.0, 1.0),
                 });
-                self.size = (((b.max.x - b.min.x) * 1.5).max(1e-6), ((b.max.y - b.min.y) * 1.5).max(1e-6));
+                self.size = (
+                    ((b.max.x - b.min.x) * 1.5).max(1e-6),
+                    ((b.max.y - b.min.y) * 1.5).max(1e-6),
+                );
                 ArStage::Kind
             }
             (ArStage::Kind, Inp::Key("POlar")) => ArStage::Center,
@@ -2747,7 +2907,9 @@ impl Command for GripEdit {
                         return Flow::More;
                     }
                     for (h, data) in self.stretched(cx.d, p) {
-                        let same = cx.d.objects.get(&h).is_some_and(|o| std::mem::discriminant(&o.data) == std::mem::discriminant(&data));
+                        let same = cx.d.objects.get(&h).is_some_and(|o| {
+                            std::mem::discriminant(&o.data) == std::mem::discriminant(&data)
+                        });
                         if same {
                             let _ = cx.d.modify(cx.hist, h, |o| o.data = data);
                         } else {
@@ -2757,7 +2919,9 @@ impl Command for GripEdit {
                     cx.select_after = Some(self.sel.clone());
                     return Flow::Done;
                 }
-                let Some(m) = self.map(p) else { return Flow::Bad("Invalid point.".into()) };
+                let Some(m) = self.map(p) else {
+                    return Flow::Bad("Invalid point.".into());
+                };
                 apply(cx, &self.sel, &m, self.copy);
                 if self.copy {
                     return Flow::More;
@@ -2795,7 +2959,11 @@ impl Command for GripEdit {
             v.push(line(self.at, at));
             return v;
         }
-        let mut v: Vec<Ghost> = self.map(at).map(|m| Ghost::Ents(self.sel.clone(), m)).into_iter().collect();
+        let mut v: Vec<Ghost> = self
+            .map(at)
+            .map(|m| Ghost::Ents(self.sel.clone(), m))
+            .into_iter()
+            .collect();
         v.push(Ghost::Dashed(self.base, at));
         v
     }
@@ -2808,13 +2976,47 @@ mod tests {
     #[test]
     fn every_drafting_command_is_made() {
         for name in [
-            "LINE", "PLINE", "CIRCLE", "ARC", "RECTANG", "POLYGON", "ELLIPSE", "SPLINE", "POINT", "TEXT", "MTEXT",
-            "HATCH", "DIM", "DIMLINEAR", "DIMALIGNED", "DIMRADIUS", "DIMDIAMETER", "ERASE", "MOVE", "COPY",
-            "ROTATE", "SCALE", "MIRROR", "STRETCH", "OFFSET", "TRIM", "EXTEND", "FILLET", "CHAMFER", "BREAK",
-            "JOIN", "LENGTHEN", "ARRAY", "EXPLODE", "MATCHPROP",
+            "LINE",
+            "PLINE",
+            "CIRCLE",
+            "ARC",
+            "RECTANG",
+            "POLYGON",
+            "ELLIPSE",
+            "SPLINE",
+            "POINT",
+            "TEXT",
+            "MTEXT",
+            "HATCH",
+            "DIM",
+            "DIMLINEAR",
+            "DIMALIGNED",
+            "DIMRADIUS",
+            "DIMDIAMETER",
+            "ERASE",
+            "MOVE",
+            "COPY",
+            "ROTATE",
+            "SCALE",
+            "MIRROR",
+            "STRETCH",
+            "OFFSET",
+            "TRIM",
+            "EXTEND",
+            "FILLET",
+            "CHAMFER",
+            "BREAK",
+            "JOIN",
+            "LENGTHEN",
+            "ARRAY",
+            "EXPLODE",
+            "MATCHPROP",
         ] {
             assert!(make(name).is_some(), "{name}");
-            assert!(super::super::dwgdoc::command_of(name).is_some_and(|c| c.works), "{name}");
+            assert!(
+                super::super::dwgdoc::command_of(name).is_some_and(|c| c.works),
+                "{name}"
+            );
         }
     }
 

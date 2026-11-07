@@ -199,7 +199,10 @@ impl Default for Settings {
 pub enum Track {
     Snap(Snap),
     /// POLAR or ORTHO: along the ray from the base at this angle.
-    Polar { base: V2, angle: f64 },
+    Polar {
+        base: V2,
+        angle: f64,
+    },
     /// The grid's SNAP.
     Grid,
 }
@@ -246,7 +249,8 @@ impl ViewQ {
     pub fn in_box(&self, a: V2, b: V2) -> Vec<u32> {
         let mut out = vec![];
         self.base.in_box(a.arr(), b.arr(), &|i| self.ok_base(i), &mut out);
-        self.delta.in_box(a.arr(), b.arr(), &|i| self.ok_delta(i), &mut out);
+        self.delta
+            .in_box(a.arr(), b.arr(), &|i| self.ok_delta(i), &mut out);
         out.sort_unstable();
         out.dedup();
         out
@@ -254,7 +258,8 @@ impl ViewQ {
     pub fn along(&self, a: V2, b: V2) -> Vec<u32> {
         let mut out = vec![];
         self.base.along(a.arr(), b.arr(), &|i| self.ok_base(i), &mut out);
-        self.delta.along(a.arr(), b.arr(), &|i| self.ok_delta(i), &mut out);
+        self.delta
+            .along(a.arr(), b.arr(), &|i| self.ok_delta(i), &mut out);
         out.sort_unstable();
         out.dedup();
         out
@@ -273,7 +278,11 @@ impl ViewQ {
     }
     /// The geometry drawing an entity now.
     pub fn geom_of(&self, e: u32) -> &Geom {
-        if self.edited.contains(&e) { &self.delta } else { &self.base }
+        if self.edited.contains(&e) {
+            &self.delta
+        } else {
+            &self.base
+        }
     }
     /// An entity's segments as drawn.
     pub fn segments(&self, e: u32, max: usize, out: &mut Vec<([f64; 2], [f64; 2])>) {
@@ -424,7 +433,9 @@ pub fn n4(v: f64) -> String {
 impl DwgDoc {
     /// The view as commands query it.
     pub fn viewq(&self) -> ViewQ {
-        let base_shown = (0..self.geom.scene.layers.len()).map(|i| self.layer_shown(i)).collect();
+        let base_shown = (0..self.geom.scene.layers.len())
+            .map(|i| self.layer_shown(i))
+            .collect();
         let delta_shown = (0..self.delta.scene.layers.len())
             .map(|i| self.layer_shown_in(&self.delta, i))
             .collect();
@@ -453,7 +464,13 @@ impl DwgDoc {
 
     /// Is the entity's layer locked (it can be snapped to, not chosen)?
     pub fn locked(&self, h: u32) -> bool {
-        let Some(l) = self.drawing.objects.get(&h).and_then(|o| o.ent.as_ref()).map(|e| e.layer.handle) else {
+        let Some(l) = self
+            .drawing
+            .objects
+            .get(&h)
+            .and_then(|o| o.ent.as_ref())
+            .map(|e| e.layer.handle)
+        else {
             return false;
         };
         matches!(self.drawing.objects.get(&l).map(|o| &o.data), Some(forge_dwg::types::Data::Layer(x)) if x.flags & 8 != 0)
@@ -472,7 +489,12 @@ impl DwgDoc {
         self.refresh_prompt();
         // noun-verb: what was chosen before is the command's selection
         if self.ed.prompt.as_ref().is_some_and(|p| p.wants(want::SEL)) {
-            let chosen: Vec<u32> = self.selected.iter().copied().filter(|h| !self.locked(*h)).collect();
+            let chosen: Vec<u32> = self
+                .selected
+                .iter()
+                .copied()
+                .filter(|h| !self.locked(*h))
+                .collect();
             if !chosen.is_empty() {
                 self.ed.took_selection = true;
                 self.say(format!("{} found", chosen.len()));
@@ -526,7 +548,10 @@ impl DwgDoc {
         self.sync(&touched);
         let t2 = crate::viewer::now_ms();
         self.ed.time(format!("{} step", self.ed.name), t1 - t0);
-        self.ed.time(format!("{} redraw ({} entities)", self.ed.name, self.last_sync.1), t2 - t1);
+        self.ed.time(
+            format!("{} redraw ({} entities)", self.ed.name, self.last_sync.1),
+            t2 - t1,
+        );
         match flow {
             Flow::More => {
                 self.ed.cmd = Some(cmd);
@@ -873,7 +898,10 @@ impl DwgDoc {
                     // within a few pixels of the polar ray
                     if off <= px * 8.0 && d.dot(u) > 0.0 {
                         at = b + u * d.dot(u);
-                        self.ed.track = Some(Track::Polar { base: b, angle: snapped });
+                        self.ed.track = Some(Track::Polar {
+                            base: b,
+                            angle: snapped,
+                        });
                     }
                 }
             }

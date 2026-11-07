@@ -183,7 +183,11 @@ impl DwgDoc {
 
     /// A new layer, "Layer1" or the next free number, made current.
     pub fn new_layer(&mut self) -> Result<u32, String> {
-        let names: Vec<String> = self.layer_rows().iter().map(|r| r.name.to_ascii_lowercase()).collect();
+        let names: Vec<String> = self
+            .layer_rows()
+            .iter()
+            .map(|r| r.name.to_ascii_lowercase())
+            .collect();
         let name = (1..)
             .map(|k| format!("Layer{k}"))
             .find(|n| !names.contains(&n.to_ascii_lowercase()))
@@ -200,14 +204,23 @@ impl DwgDoc {
     /// Renames a layer (not 0 or DEFPOINTS).
     pub fn rename_layer(&mut self, h: u32, name: &str) -> Result<(), String> {
         let name = name.trim();
-        if name.is_empty() || name.contains(['<', '>', '/', '\\', '"', ':', ';', '?', '*', '|', ',', '=', '`']) {
+        if name.is_empty()
+            || name.contains(['<', '>', '/', '\\', '"', ':', ';', '?', '*', '|', ',', '=', '`'])
+        {
             return Err("Invalid layer name".into());
         }
         if self.drawing.layer(name).is_some_and(|x| x != h) {
             return Err(format!("A layer named \"{name}\" already exists"));
         }
-        let old = self.layer_rows().into_iter().find(|r| r.handle == h).map(|r| r.name);
-        if old.as_deref().is_some_and(|o| o == "0" || o.eq_ignore_ascii_case("defpoints")) {
+        let old = self
+            .layer_rows()
+            .into_iter()
+            .find(|r| r.handle == h)
+            .map(|r| r.name);
+        if old
+            .as_deref()
+            .is_some_and(|o| o == "0" || o.eq_ignore_ascii_case("defpoints"))
+        {
             return Err("Layer 0 and DEFPOINTS can't be renamed".into());
         }
         let s = self.drawing.s(name);
@@ -226,7 +239,10 @@ impl DwgDoc {
             return Err("No such layer".into());
         };
         if row.name == "0" || row.name.eq_ignore_ascii_case("defpoints") || row.current {
-            let why = format!("Layer \"{}\" can't be deleted (0, DEFPOINTS or current).", row.name);
+            let why = format!(
+                "Layer \"{}\" can't be deleted (0, DEFPOINTS or current).",
+                row.name
+            );
             self.say(why.clone());
             return Err(why);
         }
@@ -275,7 +291,12 @@ impl DwgDoc {
         if self.selected.is_empty() {
             return self.set_current_layer(h);
         }
-        let name = self.layer_rows().into_iter().find(|r| r.handle == h).map(|r| r.name).unwrap_or_default();
+        let name = self
+            .layer_rows()
+            .into_iter()
+            .find(|r| r.handle == h)
+            .map(|r| r.name)
+            .unwrap_or_default();
         self.set_prop("Layer", &name)
     }
 
@@ -284,14 +305,20 @@ impl DwgDoc {
         let d = &self.drawing;
         Some(match key {
             "Layer" => self.layer_rows().into_iter().map(|r| r.name).collect(),
-            "Color" => ["ByLayer", "ByBlock", "Red", "Yellow", "Green", "Cyan", "Blue", "Magenta", "White"]
-                .iter()
-                .map(|s| s.to_string())
-                .chain((8..=9).map(|k| k.to_string()))
-                .chain((250..=255).map(|k| k.to_string()))
-                .collect(),
+            "Color" => [
+                "ByLayer", "ByBlock", "Red", "Yellow", "Green", "Cyan", "Blue", "Magenta", "White",
+            ]
+            .iter()
+            .map(|s| s.to_string())
+            .chain((8..=9).map(|k| k.to_string()))
+            .chain((250..=255).map(|k| k.to_string()))
+            .collect(),
             "Linetype" => {
-                let mut v = vec!["ByLayer".to_string(), "ByBlock".to_string(), "Continuous".to_string()];
+                let mut v = vec![
+                    "ByLayer".to_string(),
+                    "ByBlock".to_string(),
+                    "Continuous".to_string(),
+                ];
                 for o in d.objects.values() {
                     if let Data::Ltype(l) = &o.data {
                         let n = l.entry.name.text();
@@ -314,7 +341,10 @@ impl DwgDoc {
 
     /// Can the Properties palette change this field of what's chosen?
     pub fn prop_editable(&self, key: &str) -> bool {
-        if matches!(key, "Color" | "Layer" | "Linetype" | "Linetype scale" | "Lineweight") {
+        if matches!(
+            key,
+            "Color" | "Layer" | "Linetype" | "Linetype scale" | "Lineweight"
+        ) {
             return !self.selected.is_empty();
         }
         if self.selected.len() != 1 {
@@ -324,12 +354,51 @@ impl DwgDoc {
             return false;
         };
         let keys: &[&str] = match &o.data {
-            Data::Line(_) => &["Start X", "Start Y", "Start Z", "End X", "End Y", "End Z", "Length", "Angle"],
-            Data::Circle(_) => &["Center X", "Center Y", "Center Z", "Radius", "Diameter", "Circumference", "Area"],
-            Data::Arc(_) => &["Center X", "Center Y", "Center Z", "Radius", "Start angle", "End angle"],
-            Data::Text(_) => &["Contents", "Height", "Rotation", "Width factor", "Position X", "Position Y"],
-            Data::MText(_) => &["Contents", "Text height", "Defined width", "Position X", "Position Y", "Position Z"],
-            Data::Insert(_) => &["Position X", "Position Y", "Position Z", "Scale X", "Scale Y", "Scale Z", "Rotation"],
+            Data::Line(_) => &[
+                "Start X", "Start Y", "Start Z", "End X", "End Y", "End Z", "Length", "Angle",
+            ],
+            Data::Circle(_) => &[
+                "Center X",
+                "Center Y",
+                "Center Z",
+                "Radius",
+                "Diameter",
+                "Circumference",
+                "Area",
+            ],
+            Data::Arc(_) => &[
+                "Center X",
+                "Center Y",
+                "Center Z",
+                "Radius",
+                "Start angle",
+                "End angle",
+            ],
+            Data::Text(_) => &[
+                "Contents",
+                "Height",
+                "Rotation",
+                "Width factor",
+                "Position X",
+                "Position Y",
+            ],
+            Data::MText(_) => &[
+                "Contents",
+                "Text height",
+                "Defined width",
+                "Position X",
+                "Position Y",
+                "Position Z",
+            ],
+            Data::Insert(_) => &[
+                "Position X",
+                "Position Y",
+                "Position Z",
+                "Scale X",
+                "Scale Y",
+                "Scale Z",
+                "Rotation",
+            ],
             Data::LwPolyline(_) => &["Vertex X", "Vertex Y", "Global width", "Elevation", "Closed"],
             Data::Point(_) => &["Position X", "Position Y", "Position Z"],
             _ => &[],
@@ -349,7 +418,10 @@ impl DwgDoc {
                 self.edit_ents(&sel, |e| e.color = Color::index(c))
             }
             "Layer" => {
-                let h = self.drawing.layer(value.trim()).ok_or_else(|| format!("No layer \"{value}\""))?;
+                let h = self
+                    .drawing
+                    .layer(value.trim())
+                    .ok_or_else(|| format!("No layer \"{value}\""))?;
                 self.edit_ents(&sel, |e| e.layer = Href::new(5, h))
             }
             "Linetype" => {
@@ -393,7 +465,12 @@ impl DwgDoc {
             }
             _ => {
                 let h = sel[0];
-                let data = self.drawing.objects.get(&h).map(|o| o.data.clone()).ok_or("gone")?;
+                let data = self
+                    .drawing
+                    .objects
+                    .get(&h)
+                    .map(|o| o.data.clone())
+                    .ok_or("gone")?;
                 let new = geometry_field(&self.drawing, data, key, value)?;
                 self.edit(|d, hist| d.modify(hist, h, |o| o.data = new))
             }
@@ -404,7 +481,11 @@ impl DwgDoc {
         r
     }
 
-    fn edit_ents(&mut self, sel: &[u32], f: impl Fn(&mut forge_dwg::object::EntCommon)) -> Result<(), String> {
+    fn edit_ents(
+        &mut self,
+        sel: &[u32],
+        f: impl Fn(&mut forge_dwg::object::EntCommon),
+    ) -> Result<(), String> {
         self.edit(|d, hist| {
             for &h in sel {
                 d.modify(hist, h, |o| {
@@ -420,12 +501,15 @@ impl DwgDoc {
     /// The General rows for several entities: a value they share, or *VARIES*.
     pub fn common_props(&self) -> Vec<(String, String)> {
         let d = &self.drawing;
-        let mut rows: Vec<(String, Vec<String>)> = ["Color", "Layer", "Linetype", "Linetype scale", "Lineweight"]
-            .iter()
-            .map(|k| (k.to_string(), vec![]))
-            .collect();
+        let mut rows: Vec<(String, Vec<String>)> =
+            ["Color", "Layer", "Linetype", "Linetype scale", "Lineweight"]
+                .iter()
+                .map(|k| (k.to_string(), vec![]))
+                .collect();
         for h in &self.selected {
-            let Some(e) = d.objects.get(h).and_then(|o| o.ent.as_ref()) else { continue };
+            let Some(e) = d.objects.get(h).and_then(|o| o.ent.as_ref()) else {
+                continue;
+            };
             let lt = match e.ltype_flags {
                 0 => "ByLayer".into(),
                 1 => "ByBlock".into(),
@@ -447,7 +531,11 @@ impl DwgDoc {
         }
         rows.into_iter()
             .map(|(k, v)| {
-                let s = if v.len() == 1 { v[0].clone() } else { "*VARIES*".into() };
+                let s = if v.len() == 1 {
+                    v[0].clone()
+                } else {
+                    "*VARIES*".into()
+                };
                 (k, s)
             })
             .collect()

@@ -871,8 +871,11 @@ impl DrawingEnv {
                 } else {
                     format!("{stem}.{ext}")
                 };
-                let bytes =
-                    if ext == "dwg" { forge_draw::dwg::dwg(p) } else { forge_draw::dxf::dxf(p).into_bytes() };
+                let bytes = if ext == "dwg" {
+                    forge_draw::dwg::dwg(p)
+                } else {
+                    forge_draw::dxf::dxf(p).into_bytes()
+                };
                 last = std::fs::write(&out, bytes).map(|_| out);
             }
             last
@@ -1541,7 +1544,11 @@ impl Shell {
             _ => vec![
                 (
                     "Export",
-                    vec![(ExportPdf, "export"), (ExportDxf, "export"), (ExportDwg, "export")],
+                    vec![
+                        (ExportPdf, "export"),
+                        (ExportDxf, "export"),
+                        (ExportDwg, "export"),
+                    ],
                     vec![],
                 ),
                 ("Update", vec![(Update, "check"), (Fit, "fit")], vec![]),

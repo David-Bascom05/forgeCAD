@@ -9,11 +9,11 @@
 use super::dwgcmd::{Inp, want};
 use super::dwgdoc::{Cmd, DwgDoc, Press, Run, TOGGLES, View};
 use super::dwgprops::Switch;
-use forge_dwg::draft::V2;
 use super::theme::{mono, sans, semi};
 use super::{Action, Shell, icons};
 use crate::dwgview::gpu::{Look, Paint};
 use egui::{Align2, Color32, CornerRadius, Pos2, Rect, Sense, Stroke, StrokeKind, Ui, pos2, vec2};
+use forge_dwg::draft::V2;
 
 /// The command line: its history lines and its input line.
 const CMD_LINES: usize = 3;
@@ -582,7 +582,9 @@ impl Shell {
         }
         let tol = PICKBOX as f64 / v.scale;
         let prompt = d.ed.prompt.clone();
-        let selecting = prompt.as_ref().is_none_or(|p| p.wants(want::SEL) || p.wants(want::PICK));
+        let selecting = prompt
+            .as_ref()
+            .is_none_or(|p| p.wants(want::SEL) || p.wants(want::PICK));
         let pick = |d: &DwgDoc, at: Pos2| d.viewq().pick(V2::from(to_world(&v, canvas, at)), tol);
         if resp.drag_started_by(egui::PointerButton::Primary)
             && !d.space_pan
@@ -605,7 +607,10 @@ impl Shell {
                 d.press = None;
                 if let Some((a, b)) = window_now {
                     let crossing = b.x < a.x;
-                    let (wa, wb) = (V2::from(to_world(&v, canvas, a)), V2::from(to_world(&v, canvas, b)));
+                    let (wa, wb) = (
+                        V2::from(to_world(&v, canvas, a)),
+                        V2::from(to_world(&v, canvas, b)),
+                    );
                     if d.ed.active() {
                         d.window(wa, wb, crossing);
                     } else {
@@ -991,7 +996,10 @@ impl Shell {
             x += 26.0;
         }
         // the columns' heads
-        let cols = Rect::from_min_size(pos2(r.left() + 1.0, tools_r.bottom()), vec2(r.width() - 1.0, 22.0));
+        let cols = Rect::from_min_size(
+            pos2(r.left() + 1.0, tools_r.bottom()),
+            vec2(r.width() - 1.0, 22.0),
+        );
         p.rect_filled(cols, 0.0, t.raised);
         let x0 = cols.left();
         for (x, word) in [
@@ -1055,26 +1063,41 @@ impl Shell {
                         switch(
                             0,
                             if row.on { "eye" } else { "hide" },
-                            if row.on { "On: click to turn off" } else { "Off: click to turn on" },
+                            if row.on {
+                                "On: click to turn off"
+                            } else {
+                                "Off: click to turn on"
+                            },
                             "on",
                             Switch::On,
                         );
                         switch(
                             1,
                             if row.frozen { "freeze" } else { "sun" },
-                            if row.frozen { "Frozen: click to thaw" } else { "Thawed: click to freeze" },
+                            if row.frozen {
+                                "Frozen: click to thaw"
+                            } else {
+                                "Thawed: click to freeze"
+                            },
                             "freeze",
                             Switch::Freeze,
                         );
                         switch(
                             2,
                             if row.locked { "lock" } else { "unlock" },
-                            if row.locked { "Locked: click to unlock" } else { "Unlocked: click to lock" },
+                            if row.locked {
+                                "Locked: click to unlock"
+                            } else {
+                                "Unlocked: click to lock"
+                            },
                             "lock",
                             Switch::Lock,
                         );
                         // the colour: a swatch that picks another
-                        let sw = Rect::from_min_size(pos2(rr.left() + 78.0, rr.center().y - 6.0), vec2(12.0, 12.0));
+                        let sw = Rect::from_min_size(
+                            pos2(rr.left() + 78.0, rr.center().y - 6.0),
+                            vec2(12.0, 12.0),
+                        );
                         {
                             let id = ui.make_persistent_id(("dwg-layer-colour", row.handle));
                             let sr = ui
@@ -1086,10 +1109,20 @@ impl Shell {
                                     ui.horizontal(|ui| {
                                         for c in line {
                                             let rgb = forge_dwg::scene::aci_rgb(c);
-                                            let (cr, cresp) = ui.allocate_exact_size(vec2(18.0, 18.0), Sense::click());
-                                            ui.painter().rect_filled(cr, 2.0, Color32::from_rgb(rgb[0], rgb[1], rgb[2]));
+                                            let (cr, cresp) =
+                                                ui.allocate_exact_size(vec2(18.0, 18.0), Sense::click());
+                                            ui.painter().rect_filled(
+                                                cr,
+                                                2.0,
+                                                Color32::from_rgb(rgb[0], rgb[1], rgb[2]),
+                                            );
                                             if cresp.hovered() {
-                                                ui.painter().rect_stroke(cr, 2.0, Stroke::new(1.5, t.ink), StrokeKind::Outside);
+                                                ui.painter().rect_stroke(
+                                                    cr,
+                                                    2.0,
+                                                    Stroke::new(1.5, t.ink),
+                                                    StrokeKind::Outside,
+                                                );
                                             }
                                             placed.push((format!("dwg:layercolour:{}:{c}", row.name), cr));
                                             if cresp.on_hover_text(format!("{c}")).clicked() {
@@ -1112,7 +1145,11 @@ impl Shell {
                             pos2(sw.right() + 8.0, rr.top()),
                             pos2(rr.right() - 100.0, rr.bottom()),
                         );
-                        let label = if row.current { format!("{}  (current)", row.name) } else { row.name.clone() };
+                        let label = if row.current {
+                            format!("{}  (current)", row.name)
+                        } else {
+                            row.name.clone()
+                        };
                         pp.with_clip_rect(name_r).text(
                             pos2(name_r.left(), rr.center().y),
                             Align2::LEFT_CENTER,
@@ -1269,7 +1306,8 @@ impl Shell {
         } else {
             let g = ui.fonts_mut(|f| f.layout_no_wrap(d.input.clone(), mono(12.0), t.ink));
             let w = g.size().x;
-            p.with_clip_rect(input).galley(pos2(x, cy - g.size().y * 0.5), g, t.ink);
+            p.with_clip_rect(input)
+                .galley(pos2(x, cy - g.size().y * 0.5), g, t.ink);
             p.vline(x + w + 1.0, input.y_range().shrink(4.0), Stroke::new(1.0, t.ink));
         }
         self.places.extend(placed);

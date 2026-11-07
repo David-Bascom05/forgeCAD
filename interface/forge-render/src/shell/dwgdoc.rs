@@ -605,7 +605,10 @@ impl DwgDoc {
                         Some(b) if b == space => Some(h),
                         // a vertex, an attribute: its owner
                         _ => match self.drawing.objects.get(&o.owner.handle) {
-                            Some(w) if w.ent.is_some() && self.drawing.block_of(o.owner.handle) == Some(space) => {
+                            Some(w)
+                                if w.ent.is_some()
+                                    && self.drawing.block_of(o.owner.handle) == Some(space) =>
+                            {
                                 Some(o.owner.handle)
                             }
                             _ => None,
@@ -626,9 +629,13 @@ impl DwgDoc {
         // a layer's look changed: its colour only, the items drawn in it recoloured in place;
         // its line type or weight, everything drawn on it again
         for (h, old) in restyled {
-            let Some(Data::Layer(l)) = self.drawing.objects.get(&h).map(|o| &o.data) else { continue };
+            let Some(Data::Layer(l)) = self.drawing.objects.get(&h).map(|o| &o.data) else {
+                continue;
+            };
             let new = layer_look(l);
-            let Some(i) = self.geom.scene.layers.iter().position(|x| x.handle == h) else { continue };
+            let Some(i) = self.geom.scene.layers.iter().position(|x| x.handle == h) else {
+                continue;
+            };
             if (old.2, old.3) == (new.2, new.3) {
                 let rgb = match l.color.rgb {
                     Some(c) if c >> 24 == 0xC2 => [(c >> 16) as u8, (c >> 8) as u8, c as u8],
@@ -779,9 +786,10 @@ impl DwgDoc {
             .copied()
             .filter(|e| {
                 let (g, _) = self.drawn_in(*e);
-                g.by_entity
-                    .get(e)
-                    .is_none_or(|its| its.iter().all(|&i| !self.layer_shown_in(g, g.scene.items[i as usize].layer)))
+                g.by_entity.get(e).is_none_or(|its| {
+                    its.iter()
+                        .all(|&i| !self.layer_shown_in(g, g.scene.items[i as usize].layer))
+                })
             })
             .collect();
         for e in gone {
@@ -888,7 +896,13 @@ impl DwgDoc {
         let changed: Vec<u32> = entities
             .iter()
             .copied()
-            .filter(|&e| if add { self.selected.insert(e) } else { self.selected.remove(&e) })
+            .filter(|&e| {
+                if add {
+                    self.selected.insert(e)
+                } else {
+                    self.selected.remove(&e)
+                }
+            })
             .collect();
         self.set_flags_many(&changed, 1, add);
     }
@@ -1022,7 +1036,11 @@ impl DwgDoc {
             ("Drawing", "Objects".into(), d.objects.len().to_string()),
             ("Drawing", "Layers".into(), s.layers.len().to_string()),
             ("Drawing", "Space".into(), self.tab_names()[self.space].clone()),
-            ("Drawing", "Items drawn".into(), (s.items.len() + self.delta.n_items()).to_string()),
+            (
+                "Drawing",
+                "Items drawn".into(),
+                (s.items.len() + self.delta.n_items()).to_string(),
+            ),
         ];
         if let Some((lo, hi)) = s.extents {
             rows.push((
@@ -1363,7 +1381,12 @@ fn mark_in(g: &Geom, flags: &mut [u32], entity: u32, bit: u32, on: bool) -> Opti
 type LayerLook = (i16, Option<u32>, u32, i16);
 
 fn layer_look(l: &forge_dwg::types::Layer) -> LayerLook {
-    (super::dwgprops::layer_aci(l), l.color.rgb, l.ltype.handle, (l.flags >> 5) & 31)
+    (
+        super::dwgprops::layer_aci(l),
+        l.color.rgb,
+        l.ltype.handle,
+        (l.flags >> 5) & 31,
+    )
 }
 
 /// The scene the document draws: every layer's items (the layers switch in the shader).

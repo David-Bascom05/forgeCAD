@@ -75,7 +75,9 @@ fn made(d: &DwgDoc, before: &BTreeSet<u32>) -> Vec<u32> {
     d.drawing
         .objects
         .iter()
-        .filter(|(h, o)| !before.contains(h) && o.ent.is_some() && d.drawing.block_of(**h) == Some(d.drawing.model_space()))
+        .filter(|(h, o)| {
+            !before.contains(h) && o.ent.is_some() && d.drawing.block_of(**h) == Some(d.drawing.model_space())
+        })
         .map(|(h, _)| *h)
         .collect()
 }
@@ -110,7 +112,19 @@ fn line_with_close_and_undo() {
     let mut d = doc();
     let orig = d.drawing.clone();
     let before = handles(&d);
-    run(&mut d, &[S::T("L"), S::T("0,0"), S::T("10,0"), S::T("@0,10"), S::T("@-10,0"), S::T("u"), S::T("@-10,0"), S::T("C")]);
+    run(
+        &mut d,
+        &[
+            S::T("L"),
+            S::T("0,0"),
+            S::T("10,0"),
+            S::T("@0,10"),
+            S::T("@-10,0"),
+            S::T("u"),
+            S::T("@-10,0"),
+            S::T("C"),
+        ],
+    );
     assert!(!d.ed.active());
     let new = made(&d, &before);
     assert_eq!(new.len(), 4, "{new:?}");
@@ -144,7 +158,9 @@ fn direct_distance_and_polar_input() {
     run(&mut d, &[S::T("25"), S::T("@10<90"), S::Enter]);
     let ls: Vec<Curve> = made(&d, &before).iter().map(|h| curve(&d, *h)).collect();
     assert!(ls.contains(&Curve::line(v2(0.0, 0.0), v2(25.0, 0.0))));
-    let Curve::Line { a, b } = ls.iter().find(|c| c.start() == v2(25.0, 0.0)).unwrap() else { panic!() };
+    let Curve::Line { a, b } = ls.iter().find(|c| c.start() == v2(25.0, 0.0)).unwrap() else {
+        panic!()
+    };
     assert!(a.dist(v2(25.0, 0.0)) < 1e-12 && b.dist(v2(25.0, 10.0)) < 1e-9);
 }
 
@@ -156,18 +172,63 @@ fn draw_commands() {
     run(
         &mut d,
         &[
-            S::T("C"), S::T("0,0"), S::T("5"),
-            S::T("CIRCLE"), S::T("2P"), S::T("20,0"), S::T("30,0"),
-            S::T("CIRCLE"), S::T("3P"), S::T("40,0"), S::T("50,10"), S::T("60,0"),
-            S::T("ARC"), S::T("0,20"), S::T("10,30"), S::T("20,20"),
-            S::T("ARC"), S::T("C"), S::T("50,50"), S::T("60,50"), S::T("A"), S::T("90"),
-            S::T("REC"), S::T("100,0"), S::T("120,10"),
-            S::T("POLYGON"), S::T("6"), S::T("150,0"), S::T("I"), S::T("10"),
-            S::T("ELLIPSE"), S::T("0,-50"), S::T("40,-50"), S::T("10"),
-            S::T("SPLINE"), S::T("0,-80"), S::T("10,-70"), S::T("20,-85"), S::T("30,-75"), S::Enter,
-            S::T("POINT"), S::T("5,-100"),
-            S::T("PL"), S::T("200,0"), S::T("210,0"), S::T("A"), S::T("210,10"), S::T("L"), S::T("200,10"), S::T("C"),
-            S::T("TEXT"), S::T("0,-120"), S::T("3"), S::T("0"), S::T("Hello there"), S::T("second line"), S::T(""),
+            S::T("C"),
+            S::T("0,0"),
+            S::T("5"),
+            S::T("CIRCLE"),
+            S::T("2P"),
+            S::T("20,0"),
+            S::T("30,0"),
+            S::T("CIRCLE"),
+            S::T("3P"),
+            S::T("40,0"),
+            S::T("50,10"),
+            S::T("60,0"),
+            S::T("ARC"),
+            S::T("0,20"),
+            S::T("10,30"),
+            S::T("20,20"),
+            S::T("ARC"),
+            S::T("C"),
+            S::T("50,50"),
+            S::T("60,50"),
+            S::T("A"),
+            S::T("90"),
+            S::T("REC"),
+            S::T("100,0"),
+            S::T("120,10"),
+            S::T("POLYGON"),
+            S::T("6"),
+            S::T("150,0"),
+            S::T("I"),
+            S::T("10"),
+            S::T("ELLIPSE"),
+            S::T("0,-50"),
+            S::T("40,-50"),
+            S::T("10"),
+            S::T("SPLINE"),
+            S::T("0,-80"),
+            S::T("10,-70"),
+            S::T("20,-85"),
+            S::T("30,-75"),
+            S::Enter,
+            S::T("POINT"),
+            S::T("5,-100"),
+            S::T("PL"),
+            S::T("200,0"),
+            S::T("210,0"),
+            S::T("A"),
+            S::T("210,10"),
+            S::T("L"),
+            S::T("200,10"),
+            S::T("C"),
+            S::T("TEXT"),
+            S::T("0,-120"),
+            S::T("3"),
+            S::T("0"),
+            S::T("Hello there"),
+            S::T("second line"),
+            S::T(""),
         ],
     );
     assert!(!d.ed.active(), "{:?}", d.history.last());
@@ -188,7 +249,9 @@ fn draw_commands() {
         .collect();
     assert!(circles.contains(&Curve::circle(v2(0.0, 0.0), 5.0)));
     assert!(circles.contains(&Curve::circle(v2(25.0, 0.0), 5.0)));
-    assert!(circles.iter().any(|c| matches!(c, Curve::Circle { c, r } if c.dist(v2(50.0, 0.0)) < 1e-9 && (r - 10.0).abs() < 1e-9)));
+    assert!(circles.iter().any(
+        |c| matches!(c, Curve::Circle { c, r } if c.dist(v2(50.0, 0.0)) < 1e-9 && (r - 10.0).abs() < 1e-9)
+    ));
     // the polyline with a tangent arc: a half circle bulge 1 from (210,0) to (210,10)
     let pl = new
         .iter()
@@ -207,7 +270,11 @@ fn draw_commands() {
             _ => None,
         })
         .expect("the hexagon");
-    assert!(hex.points.iter().all(|q| (V2::from(*q).dist(v2(150.0, 0.0)) - 10.0).abs() < 1e-9));
+    assert!(
+        hex.points
+            .iter()
+            .all(|q| (V2::from(*q).dist(v2(150.0, 0.0)) - 10.0).abs() < 1e-9)
+    );
     let texts: Vec<String> = new
         .iter()
         .filter_map(|h| match &d.drawing.objects[h].data {
@@ -233,15 +300,37 @@ fn mtext_hatch_and_dimensions() {
     run(
         &mut d,
         &[
-            S::T("H"), S::T("P"), S::T("SOLID"), S::C(200.0, 130.0), S::Enter,
-            S::T("HATCH"), S::T("P"), S::T("ANSI31"), S::C(100.0, 150.0), S::Enter,
-            S::T("DIMLINEAR"), S::T("176,114"), S::T("224,114"), S::T("200,100"),
-            S::T("DIMALIGNED"), S::T("176,114"), S::T("224,186"), S::T("230,140"),
-            S::T("DIMRADIUS"), S::C(136.0, 150.0), S::T("150,170"),
-            S::T("DIMDIAMETER"), S::C(64.0, 150.0), S::T("90,150"),
+            S::T("H"),
+            S::T("P"),
+            S::T("SOLID"),
+            S::C(200.0, 130.0),
+            S::Enter,
+            S::T("HATCH"),
+            S::T("P"),
+            S::T("ANSI31"),
+            S::C(100.0, 150.0),
+            S::Enter,
+            S::T("DIMLINEAR"),
+            S::T("176,114"),
+            S::T("224,114"),
+            S::T("200,100"),
+            S::T("DIMALIGNED"),
+            S::T("176,114"),
+            S::T("224,186"),
+            S::T("230,140"),
+            S::T("DIMRADIUS"),
+            S::C(136.0, 150.0),
+            S::T("150,170"),
+            S::T("DIMDIAMETER"),
+            S::C(64.0, 150.0),
+            S::T("90,150"),
         ],
     );
-    assert!(!d.ed.active(), "{:?}", &d.history[d.history.len().saturating_sub(4)..]);
+    assert!(
+        !d.ed.active(),
+        "{:?}",
+        &d.history[d.history.len().saturating_sub(4)..]
+    );
     let new = made(&d, &before);
     let kinds: Vec<String> = new.iter().map(|h| d.drawing.objects[h].data.name()).collect();
     let count = |k: &str| kinds.iter().filter(|x| *x == k).count();
@@ -278,7 +367,11 @@ fn mtext_hatch_and_dimensions() {
             _ => {}
         }
         // each is drawn
-        assert!(d.delta.by_entity.contains_key(h), "{h:#x} {}", d.drawing.objects[h].data.name());
+        assert!(
+            d.delta.by_entity.contains_key(h),
+            "{h:#x} {}",
+            d.drawing.objects[h].data.name()
+        );
     }
     let back = save_check(&d, "annotate");
     assert!(new.iter().all(|h| back.objects.contains_key(h)));
@@ -292,27 +385,77 @@ fn move_copy_rotate_scale_mirror() {
     // noun-verb: the circle chosen, then MOVE
     d.choose(&[0x69], true);
     run(&mut d, &[S::T("M"), S::T("0,0"), S::T("10,5")]);
-    let Curve::Circle { c, .. } = curve(&d, 0x69) else { panic!() };
+    let Curve::Circle { c, .. } = curve(&d, 0x69) else {
+        panic!()
+    };
     assert!(c.dist(v2(109.998_004_878_626_49, 155.0)) < 1e-9);
     assert!(d.hidden.contains(&0x69) && d.edited.contains(&0x69));
     // verb-noun: COPY, pick the line, Enter, two copies
     let before = handles(&d);
-    run(&mut d, &[S::T("CO"), S::C(224.0, 170.0), S::Enter, S::T("0,0"), S::T("100,0"), S::T("200,0"), S::Enter]);
+    run(
+        &mut d,
+        &[
+            S::T("CO"),
+            S::C(224.0, 170.0),
+            S::Enter,
+            S::T("0,0"),
+            S::T("100,0"),
+            S::T("200,0"),
+            S::Enter,
+        ],
+    );
     let copies = made(&d, &before);
     assert_eq!(copies.len(), 2);
     let xs: Vec<f64> = copies.iter().map(|h| curve(&d, *h).start().x).collect();
     assert!(xs.contains(&324.0) && xs.contains(&424.0), "{xs:?}");
     // ROTATE by a reference: the line 0x6e (horizontal) turned to 90
-    run(&mut d, &[S::T("RO"), S::C(200.0, 186.0), S::Enter, S::T("200,186"), S::T("R"), S::T("0"), S::T("90")]);
-    let Curve::Line { a, b } = curve(&d, 0x6e) else { panic!() };
-    assert!((a.x - 200.0).abs() < 1e-3 && (b.x - 200.0).abs() < 1e-3, "{a:?} {b:?}");
+    run(
+        &mut d,
+        &[
+            S::T("RO"),
+            S::C(200.0, 186.0),
+            S::Enter,
+            S::T("200,186"),
+            S::T("R"),
+            S::T("0"),
+            S::T("90"),
+        ],
+    );
+    let Curve::Line { a, b } = curve(&d, 0x6e) else {
+        panic!()
+    };
+    assert!(
+        (a.x - 200.0).abs() < 1e-3 && (b.x - 200.0).abs() < 1e-3,
+        "{a:?} {b:?}"
+    );
     // SCALE a text by 2 about its insertion
-    run(&mut d, &[S::T("SC"), S::W(30.0, 10.0, 34.0, 15.0), S::Enter, S::T("31.616666666666664,11.25"), S::T("2")]);
-    let Data::Text(t) = &d.drawing.objects[&0x70].data else { panic!() };
+    run(
+        &mut d,
+        &[
+            S::T("SC"),
+            S::W(30.0, 10.0, 34.0, 15.0),
+            S::Enter,
+            S::T("31.616666666666664,11.25"),
+            S::T("2"),
+        ],
+    );
+    let Data::Text(t) = &d.drawing.objects[&0x70].data else {
+        panic!()
+    };
     assert!((t.height - 5.0).abs() < 1e-12);
     // MIRROR the arc, keeping the source
     let before = handles(&d);
-    run(&mut d, &[S::T("MI"), S::C(24.0, 30.7), S::Enter, S::T("0,0"), S::T("0,10"), S::Enter]);
+    run(
+        &mut d,
+        &[
+            S::T("MI"),
+            S::C(24.0, 30.7),
+            S::Enter,
+            S::T("0,0"),
+            S::T("0,10"),
+            S::Enter,
+        ],
+    );
     let m = made(&d, &before);
     assert_eq!(m.len(), 1);
     let Curve::Arc(a) = curve(&d, m[0]) else { panic!() };
@@ -329,7 +472,16 @@ fn offset_trim_extend_fillet_chamfer() {
     let orig = d.drawing.clone();
     // OFFSET the rectangle's right side 5 outward
     let before = handles(&d);
-    run(&mut d, &[S::T("O"), S::T("5"), S::C(224.0, 170.0), S::T("240,170"), S::Enter]);
+    run(
+        &mut d,
+        &[
+            S::T("O"),
+            S::T("5"),
+            S::C(224.0, 170.0),
+            S::T("240,170"),
+            S::Enter,
+        ],
+    );
     let o = made(&d, &before);
     assert_eq!(o.len(), 1);
     assert_eq!(curve(&d, o[0]), Curve::line(v2(229.0, 150.0), v2(229.0, 186.0)));
@@ -343,26 +495,56 @@ fn offset_trim_extend_fillet_chamfer() {
         .map(|h| curve(&d, h))
         .collect();
     assert_eq!(pieces.len(), 2, "{pieces:?}");
-    assert!(pieces.iter().any(|c| c.end().dist(v2(64.0, 150.0)) < 1e-2 || c.start().dist(v2(64.0, 150.0)) < 1e-2));
+    assert!(
+        pieces
+            .iter()
+            .any(|c| c.end().dist(v2(64.0, 150.0)) < 1e-2 || c.start().dist(v2(64.0, 150.0)) < 1e-2)
+    );
     let _ = across;
     // TRIM the circle's top by the rectangle? no: trim the circle's left between the line's pieces
     // EXTEND: the offset line up to... the top edge is at 186 and the offset line ends at 186:
     // shorten it first with LENGTHEN, then EXTEND it back to the circle? Extend the bottom
     // right line (224, 150 -> 114) down: nothing below, says so; extend the offset line's
     // bottom to the rectangle's bottom line's extension: none either
-    run(&mut d, &[S::T("LEN"), S::T("DE"), S::T("-10"), S::C(229.0, 184.0), S::Enter]);
+    run(
+        &mut d,
+        &[S::T("LEN"), S::T("DE"), S::T("-10"), S::C(229.0, 184.0), S::Enter],
+    );
     assert_eq!(curve(&d, o[0]), Curve::line(v2(229.0, 150.0), v2(229.0, 176.0)));
     // a horizontal line at y = 200 above it, then EXTEND the offset line up to it
     run(&mut d, &[S::T("L"), S::T("150,200"), S::T("260,200"), S::Enter]);
     run(&mut d, &[S::T("EX"), S::C(229.0, 175.0), S::Enter]);
     assert_eq!(curve(&d, o[0]), Curve::line(v2(229.0, 150.0), v2(229.0, 200.0)));
     // FILLET the rectangle's top left corner, radius 5
-    run(&mut d, &[S::T("F"), S::T("R"), S::T("5"), S::C(176.0, 170.0), S::C(190.0, 186.0)]);
-    let Curve::Line { b, .. } = curve(&d, 0x6c) else { panic!() };
+    run(
+        &mut d,
+        &[
+            S::T("F"),
+            S::T("R"),
+            S::T("5"),
+            S::C(176.0, 170.0),
+            S::C(190.0, 186.0),
+        ],
+    );
+    let Curve::Line { b, .. } = curve(&d, 0x6c) else {
+        panic!()
+    };
     assert!(b.dist(v2(176.0, 181.0)) < 1e-6, "{b:?}");
     // CHAMFER the bottom right corner, 3 and 3
-    run(&mut d, &[S::T("CHA"), S::T("D"), S::T("3"), S::T("3"), S::C(224.0, 130.0), S::C(210.0, 114.0)]);
-    let Curve::Line { b, .. } = curve(&d, 0x6b) else { panic!() };
+    run(
+        &mut d,
+        &[
+            S::T("CHA"),
+            S::T("D"),
+            S::T("3"),
+            S::T("3"),
+            S::C(224.0, 130.0),
+            S::C(210.0, 114.0),
+        ],
+    );
+    let Curve::Line { b, .. } = curve(&d, 0x6b) else {
+        panic!()
+    };
     assert!(b.dist(v2(224.0, 117.0)) < 1e-6, "{b:?}");
     assert_eq!(d.ed.hist.undo.len(), 8);
     let _ = save_check(&d, "modify2");
@@ -379,21 +561,64 @@ fn break_join_stretch_array_explode_matchprop_erase() {
     let pieces = made(&d, &before);
     assert_eq!(pieces.len(), 1, "one piece added beside the one kept");
     // JOIN them back
-    run(&mut d, &[S::T("J"), S::C(185.0, 186.0), S::C(215.0, 186.0), S::Enter]);
+    run(
+        &mut d,
+        &[S::T("J"), S::C(185.0, 186.0), S::C(215.0, 186.0), S::Enter],
+    );
     assert!(!d.drawing.objects.contains_key(&pieces[0]) || !d.drawing.objects.contains_key(&0x6e));
     // STRETCH the rectangle's right side 10 right by a crossing round it
-    run(&mut d, &[S::T("S"), S::W(230.0, 100.0, 215.0, 200.0), S::Enter, S::T("0,0"), S::T("10,0")]);
-    let Curve::Line { a, b } = curve(&d, 0x6a) else { panic!() };
+    run(
+        &mut d,
+        &[
+            S::T("S"),
+            S::W(230.0, 100.0, 215.0, 200.0),
+            S::Enter,
+            S::T("0,0"),
+            S::T("10,0"),
+        ],
+    );
+    let Curve::Line { a, b } = curve(&d, 0x6a) else {
+        panic!()
+    };
     assert!((a.x - 234.0).abs() < 1e-9 && (b.x - 234.0).abs() < 1e-9);
-    let Curve::Line { a, .. } = curve(&d, 0x6f) else { panic!() };
-    assert!((a.x - 234.00004).abs() < 1e-6, "the bottom's right end went too: {a:?}");
+    let Curve::Line { a, .. } = curve(&d, 0x6f) else {
+        panic!()
+    };
+    assert!(
+        (a.x - 234.00004).abs() < 1e-6,
+        "the bottom's right end went too: {a:?}"
+    );
     // ARRAY the arc 2 rows by 3 columns
     let before = handles(&d);
-    run(&mut d, &[S::T("AR"), S::C(24.0, 30.7), S::Enter, S::T("R"), S::T("2"), S::T("3"), S::T("20"), S::T("30")]);
+    run(
+        &mut d,
+        &[
+            S::T("AR"),
+            S::C(24.0, 30.7),
+            S::Enter,
+            S::T("R"),
+            S::T("2"),
+            S::T("3"),
+            S::T("20"),
+            S::T("30"),
+        ],
+    );
     assert_eq!(made(&d, &before).len(), 5);
     // polar: 4 about the origin
     let before = handles(&d);
-    run(&mut d, &[S::T("AR"), S::C(24.0, 30.7), S::Enter, S::T("PO"), S::T("0,0"), S::T("4"), S::T("360"), S::T("Y")]);
+    run(
+        &mut d,
+        &[
+            S::T("AR"),
+            S::C(24.0, 30.7),
+            S::Enter,
+            S::T("PO"),
+            S::T("0,0"),
+            S::T("4"),
+            S::T("360"),
+            S::T("Y"),
+        ],
+    );
     assert_eq!(made(&d, &before).len(), 3);
     // EXPLODE the polyline
     let before = handles(&d);
@@ -402,7 +627,10 @@ fn break_join_stretch_array_explode_matchprop_erase() {
     assert!(!d.drawing.objects.contains_key(&0x9c));
     // MATCHPROP: the arc's layer onto the circle
     let arc_layer = d.drawing.objects[&0x9e].ent.as_ref().unwrap().layer;
-    run(&mut d, &[S::T("MA"), S::C(24.0, 30.7), S::C(136.0, 150.0), S::Enter]);
+    run(
+        &mut d,
+        &[S::T("MA"), S::C(24.0, 30.7), S::C(136.0, 150.0), S::Enter],
+    );
     assert_eq!(d.drawing.objects[&0x69].ent.as_ref().unwrap().layer, arc_layer);
     // ERASE by a window round the ellipse
     run(&mut d, &[S::T("E"), S::W(35.0, 45.0, 65.0, 75.0), S::Enter]);
@@ -456,7 +684,9 @@ fn properties_and_layers() {
     let orig = d.drawing.clone();
     d.choose(&[0x69], true);
     d.set_prop("Radius", "40").unwrap();
-    let Curve::Circle { r, .. } = curve(&d, 0x69) else { panic!() };
+    let Curve::Circle { r, .. } = curve(&d, 0x69) else {
+        panic!()
+    };
     assert_eq!(r, 40.0);
     d.set_prop("Color", "Red").unwrap();
     assert_eq!(d.drawing.objects[&0x69].ent.as_ref().unwrap().color.index, 1);
@@ -538,10 +768,13 @@ fn edit_timings() {
     }
     rows.push(("hover + object snap (mean of 200)".into(), ms(t) / 200.0));
     let snapped = matches!(d.ed.track, Some(super::dwgcmd::Track::Snap(_)));
-    eprintln!("last hover snapped: {snapped} ({:?})", d.ed.track.as_ref().map(|t| match t {
-        super::dwgcmd::Track::Snap(s) => format!("{:?}", s.kind),
-        _ => "tracking".into(),
-    }));
+    eprintln!(
+        "last hover snapped: {snapped} ({:?})",
+        d.ed.track.as_ref().map(|t| match t {
+            super::dwgcmd::Track::Snap(s) => format!("{:?}", s.kind),
+            _ => "tracking".into(),
+        })
+    );
     rows.push(("hover + object snap (worst)".into(), worst));
     let t = std::time::Instant::now();
     run(&mut d, &[S::T(&format!("{},{}", a.x, a.y))]);
@@ -564,13 +797,19 @@ fn edit_timings() {
     // MOVE one, noun-verb
     d.choose(&[l0], true);
     let t = std::time::Instant::now();
-    run(&mut d, &[S::T("M"), S::T("0,0"), S::T(&format!("{},{}", px * 10.0, 0.0))]);
+    run(
+        &mut d,
+        &[S::T("M"), S::T("0,0"), S::T(&format!("{},{}", px * 10.0, 0.0))],
+    );
     rows.push(("MOVE 1 entity".into(), ms(t)));
     // MOVE a thousand
     let many: Vec<u32> = lines.iter().copied().take(1000).collect();
     d.choose(&many, true);
     let t = std::time::Instant::now();
-    run(&mut d, &[S::T("M"), S::T("0,0"), S::T(&format!("{},{}", px * 10.0, 0.0))]);
+    run(
+        &mut d,
+        &[S::T("M"), S::T("0,0"), S::T(&format!("{},{}", px * 10.0, 0.0))],
+    );
     rows.push((format!("MOVE {} entities", many.len()), ms(t)));
     // a preview of them dragged: what the overlay draws
     d.choose(&many, true);
@@ -589,31 +828,84 @@ fn edit_timings() {
     // COPY, OFFSET, TRIM, FILLET
     d.choose(&[l0], true);
     let t = std::time::Instant::now();
-    run(&mut d, &[S::T("CO"), S::T("0,0"), S::T(&format!("0,{}", px * 20.0)), S::Enter]);
+    run(
+        &mut d,
+        &[
+            S::T("CO"),
+            S::T("0,0"),
+            S::T(&format!("0,{}", px * 20.0)),
+            S::Enter,
+        ],
+    );
     rows.push(("COPY 1 entity".into(), ms(t)));
     let c0 = curve(&d, l0);
     let mid = c0.start().mid(c0.end());
     let side = mid + (c0.end() - c0.start()).perp().unit_or_zero() * (px * 15.0);
     let t = std::time::Instant::now();
-    run(&mut d, &[S::T("O"), S::T(&format!("{}", px * 10.0)), S::C(mid.x, mid.y), S::T(&format!("{},{}", side.x, side.y)), S::Enter]);
+    run(
+        &mut d,
+        &[
+            S::T("O"),
+            S::T(&format!("{}", px * 10.0)),
+            S::C(mid.x, mid.y),
+            S::T(&format!("{},{}", side.x, side.y)),
+            S::Enter,
+        ],
+    );
     rows.push(("OFFSET a line".into(), ms(t)));
     let t = std::time::Instant::now();
     run(&mut d, &[S::T("TR"), S::C(mid.x, mid.y), S::Enter]);
     rows.push(("TRIM (quick mode) one pick".into(), ms(t)));
     // two lines of our own meeting, filleted
     let o = far + v2(px * 400.0, 0.0);
-    run(&mut d, &[S::T("L"), S::T(&format!("{},{}", o.x, o.y)), S::T(&format!("{},{}", o.x + px * 100.0, o.y)), S::T(&format!("{},{}", o.x + px * 100.0, o.y + px * 100.0)), S::Enter]);
+    run(
+        &mut d,
+        &[
+            S::T("L"),
+            S::T(&format!("{},{}", o.x, o.y)),
+            S::T(&format!("{},{}", o.x + px * 100.0, o.y)),
+            S::T(&format!("{},{}", o.x + px * 100.0, o.y + px * 100.0)),
+            S::Enter,
+        ],
+    );
     let t = std::time::Instant::now();
-    run(&mut d, &[S::T("F"), S::T("R"), S::T(&format!("{}", px * 20.0)), S::C(o.x + px * 50.0, o.y), S::C(o.x + px * 100.0, o.y + px * 50.0)]);
+    run(
+        &mut d,
+        &[
+            S::T("F"),
+            S::T("R"),
+            S::T(&format!("{}", px * 20.0)),
+            S::C(o.x + px * 50.0, o.y),
+            S::C(o.x + px * 100.0, o.y + px * 50.0),
+        ],
+    );
     rows.push(("FILLET two lines".into(), ms(t)));
     // a rectangle hatched, and a dimension
     let r0 = o + v2(px * 200.0, 0.0);
-    run(&mut d, &[S::T("REC"), S::T(&format!("{},{}", r0.x, r0.y)), S::T(&format!("{},{}", r0.x + px * 100.0, r0.y + px * 60.0))]);
+    run(
+        &mut d,
+        &[
+            S::T("REC"),
+            S::T(&format!("{},{}", r0.x, r0.y)),
+            S::T(&format!("{},{}", r0.x + px * 100.0, r0.y + px * 60.0)),
+        ],
+    );
     let t = std::time::Instant::now();
-    run(&mut d, &[S::T("H"), S::C(r0.x + px * 50.0, r0.y + px * 30.0), S::Enter]);
+    run(
+        &mut d,
+        &[S::T("H"), S::C(r0.x + px * 50.0, r0.y + px * 30.0), S::Enter],
+    );
     rows.push(("HATCH pick inside a rectangle".into(), ms(t)));
     let t = std::time::Instant::now();
-    run(&mut d, &[S::T("DLI"), S::T(&format!("{},{}", r0.x, r0.y)), S::T(&format!("{},{}", r0.x + px * 100.0, r0.y)), S::T(&format!("{},{}", r0.x + px * 50.0, r0.y - px * 20.0))]);
+    run(
+        &mut d,
+        &[
+            S::T("DLI"),
+            S::T(&format!("{},{}", r0.x, r0.y)),
+            S::T(&format!("{},{}", r0.x + px * 100.0, r0.y)),
+            S::T(&format!("{},{}", r0.x + px * 50.0, r0.y - px * 20.0)),
+        ],
+    );
     rows.push(("DIMLINEAR (dimension + its block)".into(), ms(t)));
     let t = std::time::Instant::now();
     d.undo();
@@ -628,7 +920,10 @@ fn edit_timings() {
     rows.push(("Properties: colour of 1 entity".into(), ms(t)));
     let layer = d.drawing.objects[&l0].ent.as_ref().unwrap().layer.handle;
     let look = |d: &DwgDoc| match &d.drawing.objects[&layer].data {
-        Data::Layer(l) => format!("{} {:?} {} {}", l.color.index, l.color.rgb, l.ltype.handle, l.flags),
+        Data::Layer(l) => format!(
+            "{} {:?} {} {}",
+            l.color.index, l.color.rgb, l.ltype.handle, l.flags
+        ),
         _ => String::new(),
     };
     eprintln!("layer before: {}", look(&d));
@@ -654,7 +949,10 @@ fn edit_timings() {
     let many: Vec<u32> = lines.iter().copied().skip(1000).take(10_000).collect();
     d.choose(&many, true);
     let t = std::time::Instant::now();
-    run(&mut d, &[S::T("M"), S::T("0,0"), S::T(&format!("{},{}", px * 10.0, 0.0))]);
+    run(
+        &mut d,
+        &[S::T("M"), S::T("0,0"), S::T(&format!("{},{}", px * 10.0, 0.0))],
+    );
     rows.push((format!("MOVE {} entities", many.len()), ms(t)));
     d.choose(&many, true);
     let t = std::time::Instant::now();
@@ -666,7 +964,10 @@ fn edit_timings() {
     let t = std::time::Instant::now();
     let out = d.bytes().unwrap();
     rows.push(("save (write the file)".into(), ms(t)));
-    eprintln!("\n{n_obj} objects, {n_items} items drawn, {} bytes written", out.len());
+    eprintln!(
+        "\n{n_obj} objects, {n_items} items drawn, {} bytes written",
+        out.len()
+    );
     eprintln!("| operation | ms |\n|---|---:|");
     for (k, v) in &rows {
         eprintln!("| {k} | {v:.2} |");
@@ -682,7 +983,16 @@ fn edit_timings() {
 fn fillet_picked_in_the_part_cut() {
     let mut d = doc();
     let before = handles(&d);
-    run(&mut d, &[S::T("F"), S::T("R"), S::T("15"), S::C(175.68, 167.45), S::C(190.98, 185.92)]);
+    run(
+        &mut d,
+        &[
+            S::T("F"),
+            S::T("R"),
+            S::T("15"),
+            S::C(175.68, 167.45),
+            S::C(190.98, 185.92),
+        ],
+    );
     assert!(!d.ed.active(), "{:?}", d.history.last());
     let arcs: Vec<Curve> = made(&d, &before).iter().map(|h| curve(&d, *h)).collect();
     assert!(matches!(arcs.as_slice(), [Curve::Arc(a)] if a.c.dist(v2(191.0, 171.0)) < 1e-6));
