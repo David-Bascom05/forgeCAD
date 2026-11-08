@@ -108,6 +108,31 @@ sh web/build.sh OUT                                 # the browser page and the b
 Built meshes are cached in `~/.cache/forgecad/mesh`, by content hash of the part file and the
 kernel's sources. Nothing else reads that cache; kernel benchmarks never see it.
 
+## Voice input
+
+The Agent tab's microphone button dictates into the message box. Click again to stop;
+review the text and press Send. Escape cancels dictation. No open part is required.
+In Settings → Agent, choose a speech shortcut and hold-to-talk or toggle mode.
+“Send when done” is optional and off by default. Dictation runs locally with Whisper;
+sending the resulting message uses your selected agent as usual.
+
+The installer and updater include `forge-speech`. Install its runtime and English model once:
+
+```sh
+forgecad-setup-speech cpu       # CPU, small.en
+forgecad-setup-speech cuda      # NVIDIA CUDA; also installs the CPU fallback
+forgecad-setup-speech vulkan    # Vulkan; also installs the CPU fallback
+```
+
+Setup requires Git, CMake, a C/C++ compiler, curl and sha256sum; GPU builds also need
+the corresponding development toolkit. It pins whisper.cpp to the helper's ABI and
+checks model SHA256 hashes. Linux microphone capture requires libasound.so.2 and a
+working ALSA default input. Restart ForgeCAD after setup. Models and libraries live in
+`$XDG_CACHE_HOME/forgecad/speech` (normally `~/.cache/forgecad/speech`);
+`FORGECAD_SPEECH_DIR` overrides that directory. `FORGECAD_SPEECH_MODEL` selects
+another compatible model. The first dictation loads and warms the model; later ones reuse it.
+Remove `forge-speech`, `forgecad-setup-speech` and the cache directory to uninstall voice.
+
 ## In-app agents
 
 In the Agent tab, click the agent name and select Claude Code, Codex, or an

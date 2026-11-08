@@ -174,7 +174,7 @@ impl Shell {
         if self.prefs.capture.is_some() || self.prefs.open {
             return;
         }
-        let enabled = self.fg.is_some() || self.drawing.is_some();
+        let enabled = !self.agent.running;
         let mode = self.agent.settings.speech_mode;
         let mut down = false;
         let mut up = false;
@@ -196,7 +196,7 @@ impl Shell {
                 }
                 // the text a chord's key would type (Space) isn't typed
                 egui::Event::Text(s)
-                    if chord.key == egui::Key::Space && s == " " && self.agent.voice.held =>
+                    if chord.key == egui::Key::Space && s == " " && (down || self.agent.voice.held) =>
                 {
                     false
                 }

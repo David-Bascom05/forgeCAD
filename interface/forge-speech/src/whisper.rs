@@ -201,10 +201,13 @@ impl Whisper {
                 w.get("whisper_version")?,
             )
         };
-        // SAFETY: the library's own default structs, read once; they're leaked (a few hundred bytes)
-        let (mut cp, mut fp) = unsafe { (*ctx_default(), *full_default(0)) };
-        let full_ctx;
+        // Check the version before reading structs whose layout is tied to this ABI.
         let ver = unsafe { CStr::from_ptr(version()).to_string_lossy().into_owned() };
+        if ver != "1.9.5" && ver != "1.9.5-dev" {
+            return Err(format!("unsupported whisper.cpp {ver}; expected 1.9.5"));
+        }
+        // SAFETY: version-checked default structs, read once (process-lifetime allocation).
+        let (mut cp, mut fp) = unsafe { (*ctx_default(), *full_default(0)) };
         let layout_ok = cp.use_gpu
             && cp.dtw_mem_size == 128 << 20
             && fp.n_max_text_ctx == 16384
@@ -247,7 +250,7 @@ impl Whisper {
             .ok()
             .and_then(|v| v.parse().ok())
             .unwrap_or(0.2);
-        full_ctx = !std::env::var("FORGECAD_SPEECH_CLIP_CTX").is_ok_and(|v| v == "1");
+        let full_ctx = !std::env::var("FORGECAD_SPEECH_CLIP_CTX").is_ok_and(|v| v == "1");
         fp.suppress_nst = true;
         let name = model.file_stem().map_or("whisper".into(), |s| {
             s.to_string_lossy().trim_start_matches("ggml-").to_string()

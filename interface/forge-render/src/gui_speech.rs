@@ -167,7 +167,10 @@ impl Gui {
     }
 
     fn speech_start(&mut self) {
-        if self.shell.agent.voice.busy() || self.shell.agent.voice.unavailable.is_some() {
+        if self.shell.agent.running
+            || self.shell.agent.voice.busy()
+            || self.shell.agent.voice.unavailable.is_some()
+        {
             return;
         }
         if self.speech.proc.is_none() {

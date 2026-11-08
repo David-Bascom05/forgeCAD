@@ -12,7 +12,10 @@ pub fn read(bytes: &[u8]) -> Result<Vec<f32>, String> {
     while k + 8 <= bytes.len() {
         let len = u32_at(k + 4) as usize;
         let body = k + 8;
-        let end = (body + len).min(bytes.len());
+        let end = body
+            .checked_add(len)
+            .filter(|end| *end <= bytes.len())
+            .ok_or("truncated WAV chunk")?;
         match &bytes[k..k + 4] {
             b"fmt " if len >= 16 => {
                 fmt = Some((
@@ -29,12 +32,17 @@ pub fn read(bytes: &[u8]) -> Result<Vec<f32>, String> {
     }
     let (format, channels, rate, bits) = fmt.ok_or("no fmt chunk")?;
     let data = data.ok_or("no data chunk")?;
-    let ch = channels.max(1) as usize;
+    if channels == 0 || rate == 0 {
+        return Err("WAV channels and sample rate must be positive".into());
+    }
+    let ch = channels as usize;
     let frames: Vec<f32> = match (format, bits) {
         (1, 16) => data
             .chunks_exact(2 * ch)
             .map(|f| {
-                f.chunks_exact(2)
+                f.as_chunks::<2>()
+                    .0
+                    .iter()
                     .map(|s| i16::from_le_bytes([s[0], s[1]]) as f32 / 32768.0)
                     .sum::<f32>()
                     / ch as f32
@@ -43,7 +51,9 @@ pub fn read(bytes: &[u8]) -> Result<Vec<f32>, String> {
         (3, 32) => data
             .chunks_exact(4 * ch)
             .map(|f| {
-                f.chunks_exact(4)
+                f.as_chunks::<4>()
+                    .0
+                    .iter()
                     .map(|s| f32::from_le_bytes([s[0], s[1], s[2], s[3]]))
                     .sum::<f32>()
                     / ch as f32
@@ -91,6 +101,16 @@ mod tests {
         o.extend((data.len() as u32).to_le_bytes());
         o.extend(data);
         o
+    }
+
+    #[test]
+    fn rejects_malformed_headers() {
+        assert!(read(&wav(0, 1, &[0])).is_err());
+        assert!(read(&wav(16_000, 0, &[0])).is_err());
+        let good = wav(16_000, 1, &[0]);
+        for end in 0..good.len() {
+            assert!(read(&good[..end]).is_err(), "accepted truncation at {end}");
+        }
     }
 
     #[test]

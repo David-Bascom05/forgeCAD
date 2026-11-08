@@ -385,11 +385,14 @@ impl Gui {
             self.shell.agent.resume_error = Some(e);
             return;
         }
-        let trusted = self.shell.agent.settings.trusted.clone();
+        let current = self.shell.agent.settings.clone();
         let interrupted = chat.interrupted;
         self.agent_reset();
         self.shell.agent.restore_entries(chat.entries.clone());
-        chat.settings.trusted = trusted;
+        chat.settings.trusted = current.trusted;
+        chat.settings.speech_key = current.speech_key;
+        chat.settings.speech_mode = current.speech_mode;
+        chat.settings.speech_send = current.speech_send;
         self.shell.agent.settings = chat.settings.clone();
         self.agent_save_settings();
         self.agent.made_for = Some((chat.project.clone(), chat.settings.clone()));

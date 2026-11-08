@@ -158,6 +158,33 @@ fn the_key_held_talks_and_with_send_when_done_it_is_sent() {
 }
 
 #[test]
+fn a_shortcut_dictates_without_an_open_part_and_new_chat_cancels_it() {
+    let Ok(mut h) = Headless::new((1400.0, 900.0), 1.0) else {
+        return;
+    };
+    let dir = scratch("empty");
+    h.gui.speech.exe = Some(fake(&dir));
+    h.gui.speech.wav = Some(dir.join("said.wav"));
+    let key = Chord::parse("F8").unwrap();
+    let settings = forge_render::shell::agent_settings::AgentSettings {
+        speech_key: Some(key),
+        ..Default::default()
+    };
+    settings.write_extra(&mut h.gui.shell.settings.extra);
+    h.step();
+    assert!(wait(&mut h, |g| g.speech_checked()));
+    h.key_event(key.key, Default::default(), true);
+    assert!(wait(&mut h, |g| !g.shell.agent.input.is_empty()));
+    assert_eq!(h.gui.shell.agent.voice.state, VoiceState::Listening);
+    h.gui.shell.agent.new_chat();
+    h.step();
+    assert_eq!(h.gui.shell.agent.voice.state, VoiceState::Idle);
+    assert_eq!(h.gui.shell.agent.input, "");
+    drop(h);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
 fn without_the_recogniser_the_button_says_speech_is_not_available() {
     let Ok(mut h) = Headless::new((1400.0, 900.0), 1.0) else {
         return;

@@ -26,7 +26,14 @@ git log -1 --format='Installing ForgeCAD main %h (%cs)'
 # Explicit commands also support main revisions predating tools/install.sh.
 cargo install --locked --path interface/forge-render --bin forge-app --root "$install_root" --force
 cargo install --locked --path interface/forge-cli --bin forgecad --root "$install_root" --force
+if [ -f interface/forge-speech/Cargo.toml ]; then
+    cargo install --locked --path interface/forge-speech --bin forge-speech --root "$install_root" --force
+fi
 if [ -f tools/update.sh ]; then
     install -m 755 tools/update.sh "$install_root/bin/forgecad-update"
 fi
 printf '\nUpdated ForgeCAD in %s/bin.\n' "$install_root"
+
+if [ -f tools/setup-speech.sh ]; then
+    install -m 755 tools/setup-speech.sh "$install_root/bin/forgecad-setup-speech"
+fi

@@ -281,7 +281,7 @@ impl AgentTab {
         }
         self.markup.commit_text();
         let markup = !self.markup.marks.is_empty();
-        if (text.is_empty() && !markup) || self.running {
+        if (text.is_empty() && !markup) || self.running || self.voice.busy() {
             return;
         }
         let refs = std::mem::take(&mut self.refs);
@@ -298,7 +298,15 @@ impl AgentTab {
         self.out.push(AgentAct::Send { text, refs, markup });
     }
 
+    fn cancel_dictation(&mut self) {
+        if self.voice.busy() {
+            self.voice.prefix.clear();
+            self.voice.out.push(super::voice::VoiceAct::Cancel);
+        }
+    }
+
     pub fn restore_entries(&mut self, entries: Vec<Entry>) {
+        self.cancel_dictation();
         self.entries = entries;
         self.input.clear();
         self.refs.clear();
@@ -317,6 +325,7 @@ impl AgentTab {
         if self.running {
             return;
         }
+        self.cancel_dictation();
         self.entries.clear();
         self.thumbs.clear();
         self.markup.shown = None;
@@ -1772,7 +1781,7 @@ impl Shell {
         let running = self.agent.running;
         let word = if running { "Stop" } else { "Send" };
         let sr = Rect::from_min_size(pos2(box_r.right() - 58.0, row_y), vec2(52.0, 22.0));
-        let can = running || !self.agent.input.trim().is_empty() || marks > 0;
+        let can = running || (!self.agent.voice.busy() && (!self.agent.input.trim().is_empty() || marks > 0));
         let s_resp = ui.interact(sr, ui.scope_id().with("agent-send"), Sense::click());
         s_resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, can, word));
         let fill = if running {

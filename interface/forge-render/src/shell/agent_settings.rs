@@ -97,13 +97,20 @@ impl AgentSettings {
         };
         let trusted: Vec<String> = self.trusted.iter().map(|t| quote(t)).collect();
         format!(
-            "backend = {}\nclaude_model = {}\ncodex_model = {}\nbase_url = {}\nmodel = {}\ntrusted = [{}]\n",
+            "backend = {}\nclaude_model = {}\ncodex_model = {}\nbase_url = {}\nmodel = {}\ntrusted = [{}]\nspeech_key = {}\nspeech_mode = {}\nspeech_send = {}\n",
             quote(kind),
             quote(&self.claude_model),
             quote(&self.codex_model),
             quote(&self.base_url),
             quote(&self.model),
-            trusted.join(", ")
+            trusted.join(", "),
+            quote(&self.speech_key.map(|k| k.to_string()).unwrap_or_default()),
+            quote(if self.speech_mode == super::voice::KeyMode::Toggle {
+                "toggle"
+            } else {
+                "hold"
+            }),
+            self.speech_send
         )
     }
 
@@ -127,6 +134,15 @@ impl AgentSettings {
                 "codex_model" => s.codex_model = v,
                 "base_url" => s.base_url = v,
                 "model" => s.model = v,
+                "speech_key" => s.speech_key = crate::bindings::Chord::parse(&v),
+                "speech_mode" => {
+                    s.speech_mode = if v == "toggle" {
+                        super::voice::KeyMode::Toggle
+                    } else {
+                        super::voice::KeyMode::Hold
+                    }
+                }
+                "speech_send" => s.speech_send = v == "true",
                 "trusted" => s.trusted = strings(line.split_once('=').map_or("", |x| x.1)),
                 _ => {}
             }
@@ -486,7 +502,7 @@ mod tests {
         assert_eq!(AgentSettings::from_toml(&s.to_toml()), s);
         assert_eq!(s.label(), "node1:8080 · qwen \"3.6\"");
         assert_eq!(AgentSettings::from_toml(""), AgentSettings::default());
-        assert!(!s.to_toml().contains("key"));
+        assert!(!s.to_toml().contains("api_key"));
         // a newline can't make a second entry: an untrustable path is dropped on reading
         let sneaky = AgentSettings {
             trusted: vec!["/ok".into(), "/a\n/etc".into()],
@@ -509,6 +525,9 @@ mod tests {
             speech_mode: crate::shell::voice::KeyMode::Toggle,
             speech_send: true,
         };
+        let mut clean = a.clone();
+        clean.trusted.retain(|d| trustable(d));
+        assert_eq!(AgentSettings::from_toml(&clean.to_toml()), clean);
         let mut s = crate::shell::settings::Settings::default();
         a.write_extra(&mut s.extra);
         let text = s.to_toml();
