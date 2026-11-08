@@ -3,6 +3,8 @@
 
 pub mod bench;
 pub mod cmd;
+#[cfg(unix)]
+pub mod chat_bridge;
 #[cfg(test)]
 mod doc_tests;
 pub mod facemesh;

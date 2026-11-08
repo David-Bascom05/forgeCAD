@@ -127,9 +127,10 @@ printf '{"type":"turn.completed","usage":{}}\n'
         })
     ));
     assert!(events.iter().any(|e| matches!(e, Event::FileChanged { before: Some(before), text, .. } if before == "before" && text == "after")));
-    assert_eq!(
-        std::fs::read_to_string(dir.join("clean cwd/prompt.txt")).unwrap(),
-        "Make a change"
+    assert!(
+        std::fs::read_to_string(dir.join("clean cwd/prompt.txt"))
+            .unwrap()
+            .ends_with("User request:\nMake a change")
     );
     assert_eq!(*b.session.lock().unwrap(), Some("saved-thread".into()));
     let args = b.args(None);
@@ -138,11 +139,18 @@ printf '{"type":"turn.completed","usage":{}}\n'
         args.iter()
             .any(|a| a.contains("mcp_servers.forgecad={command=\"/a path/forge-app\""))
     );
+    for flag in [
+        "--ignore-user-config",
+        "--sandbox",
+        "--dangerously-bypass-approvals-and-sandbox",
+    ] {
+        assert!(!args.iter().any(|arg| arg == flag), "{flag}");
+    }
     assert!(
-        args.iter()
-            .any(|a| a.contains("default_tools_approval_mode=\"approve\""))
+        !args
+            .iter()
+            .any(|arg| arg.starts_with("approval_policy=") || arg.contains("default_tools_approval_mode"))
     );
-    assert!(args.iter().any(|a| a == "--ignore-user-config"));
     assert!(
         std::fs::read_dir(dir.join("clean cwd")).unwrap().all(|p| p
             .unwrap()

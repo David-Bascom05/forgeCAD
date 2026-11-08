@@ -185,14 +185,13 @@ pub struct Config {
     /// Open document, or a project directory before the first document is created.
     pub file: PathBuf,
     pub system: String,
-    /// Where it runs: a folder of ForgeCAD's own, never the part's.
+    /// Project working directory; tests may provide an isolated directory.
     pub cwd: PathBuf,
-    /// The `--mcp-config` of the app's own tools; none: no MCP server at all.
+    /// Additional MCP configuration for the app tools.
     pub mcp: Option<String>,
 }
 
-/// Where Claude Code runs: empty and ForgeCAD's, so a downloaded project's `.claude/`,
-/// `.mcp.json` and `CLAUDE.md` never load; the part's folder comes in by `--add-dir`.
+/// Legacy working directory, retained for importing conversations from older installs.
 pub fn clean_cwd() -> PathBuf {
     let base = std::env::var_os("XDG_STATE_HOME")
         .map(PathBuf::from)
@@ -238,7 +237,6 @@ impl ClaudeCode {
     /// settings, so no project hooks), only ForgeCAD's MCP server, no Bash, and in `dontAsk`
     /// mode only what's allowed here runs: the folder's files, and the app's tools (fg among them).
     pub fn args(&self) -> Vec<String> {
-        let dir = self.root.display().to_string();
         let mut a: Vec<String> = [
             "-p",
             "--output-format",
@@ -247,33 +245,13 @@ impl ClaudeCode {
             "stream-json",
             "--verbose",
             "--include-partial-messages",
-            "--setting-sources",
-            "user",
-            "--strict-mcp-config",
-            "--permission-mode",
-            "dontAsk",
-            "--tools",
-            "Read,Edit,Write",
-            "--add-dir",
         ]
-        .iter()
-        .map(|s| s.to_string())
+        .into_iter()
+        .map(str::to_string)
         .collect();
-        a.push(dir.clone());
-        a.push("--mcp-config".into());
-        a.push(
-            self.cfg
-                .mcp
-                .clone()
-                .unwrap_or_else(|| r#"{"mcpServers":{}}"#.into()),
-        );
-        a.push("--allowedTools".into());
-        if self.cfg.mcp.is_some() {
-            a.push(format!("mcp__{}", super::mcp::SERVER));
-        }
-        // `//` starts an absolute path in a permission rule
-        for t in ["Read", "Edit", "Write"] {
-            a.push(format!("{t}(/{dir}/**)"));
+        // Add the app connection alongside the user's configured tools and permissions.
+        if let Some(mcp) = &self.cfg.mcp {
+            a.extend(["--mcp-config".into(), mcp.clone()]);
         }
         a.push("--append-system-prompt".into());
         a.push(self.cfg.system.clone());

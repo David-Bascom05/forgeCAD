@@ -592,6 +592,7 @@ impl Gui {
         let s = crate::shell::settings::load();
         self.shell.use_settings(s.clone());
         self.settings_was = Some(s);
+        self.start_agent_bridge();
     }
 
     fn save_settings(&mut self) {

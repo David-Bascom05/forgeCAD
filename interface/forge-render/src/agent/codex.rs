@@ -121,35 +121,18 @@ impl Codex {
     }
 
     pub fn args(&self, picture: Option<&Path>) -> Vec<String> {
-        let mut args: Vec<String> = [
-            "exec",
-            "--json",
-            "--skip-git-repo-check",
-            "--ignore-user-config",
-            "--color",
-            "never",
-            "--sandbox",
-            "workspace-write",
-            "-c",
-            "approval_policy=\"never\"",
-            "--add-dir",
-        ]
-        .into_iter()
-        .map(str::to_string)
-        .collect();
-        args.push(self.root.display().to_string());
-        args.extend([
-            "-c".into(),
-            format!("developer_instructions={}", Json::from(self.cfg.system.clone())),
-        ]);
-        // Only the app's own tools; the user's global MCP configuration is left untouched.
+        let mut args: Vec<String> = ["exec", "--json", "--skip-git-repo-check", "--color", "never"]
+            .into_iter()
+            .map(str::to_string)
+            .collect();
+        // Add ForgeCAD's tools to the user's normal CLI configuration.
         if let Some(mcp) = self.cfg.mcp.as_ref().and_then(|m| Json::parse(m).ok())
             && let Some(server) = mcp.get("mcpServers").and_then(|s| s.get(super::mcp::SERVER))
             && let (Some(command), Some(server_args)) = (server.get("command"), server.get("args"))
         {
             args.extend([
                 "-c".into(),
-                format!("mcp_servers.forgecad={{command={command},args={server_args},required=true,default_tools_approval_mode=\"approve\"}}"),
+                format!("mcp_servers.forgecad={{command={command},args={server_args},required=true}}"),
             ]);
         }
         if !self.cfg.model.trim().is_empty() {
@@ -204,6 +187,8 @@ impl Codex {
             }
         };
         let mut stdin = child.stdin.take().expect("piped");
+        // Supply app context without replacing the user's configured developer instructions.
+        let prompt = format!("{}\n\nUser request:\n{prompt}", self.cfg.system);
         if let Err(e) = stdin.write_all(prompt.as_bytes()) {
             let _ = child.kill();
             let _ = child.wait();

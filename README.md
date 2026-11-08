@@ -139,8 +139,18 @@ In the Agent tab, click the agent name and select Claude Code, Codex, or an
 OpenAI-compatible endpoint. Codex uses the `codex` CLI on `PATH` and its existing
 login (`codex login`); no API key is required in ForgeCAD. Its optional model is
 set in Agent settings; leave it blank for the CLI default. ForgeCAD starts Codex
-with its own app tools and isolated configuration, keeps the conversation across
+with its own app tools alongside your CLI configuration, keeps the conversation across
 messages, and reloads its file changes into the document's undo history.
+
+Claude Code and Codex run in the project directory with their normal user and
+project configuration, built-in tools, MCP servers, skills, hooks and permission
+rules. ForgeCAD adds CAD tools and document context without imposing a tool
+allowlist or overriding the CLI's sandbox or approval mode. Shell, web research
+and subagents are available according to the selected CLI and your configuration.
+These are non-interactive CLI sessions: actions needing an interactive approval
+may be refused by the CLI; configure permissions in the underlying CLI.
+ForgeCAD's Undo and version tracking cover supported project source files,
+not every external action performed by native tools.
 
 All three backends share project and version tools. No open part is required to
 chat: launch `forgecad` from a project folder to discuss or set up an empty project.
@@ -180,6 +190,30 @@ file changes appear as summaries; use Versions to restore a design. Saved markup
 appears as a text annotation rather than an interactive thumbnail. Older Claude
 and endpoint conversations that predate this storage are not imported. Keep the
 project at the same path to use its conversation list.
+
+## Terminal agents talking to the UI agent
+
+Every newly launched window publishes a local connection, even before its first chat.
+A terminal Claude Code or Codex agent can use its shell tool to run:
+
+```sh
+forgecad agent list
+forgecad agent send WINDOW 'Review the telescope mount and report clearance problems.'
+forgecad agent status WINDOW REQUEST
+```
+
+All replies are JSON. Pick WINDOW from the list, which includes the project and selected
+UI agent/model. Send returns a request ID; status returns queued, running, done or failed,
+plus the reply. Poll status until done or failed. Terminal Claude can address UI Codex,
+and terminal Codex can address UI Claude. The UI agent replies in its existing conversation;
+the terminal caller reads that same reply through status. A terminal's unsaved conversation
+is not automatically attached: include the relevant context in the message.
+
+Requests queue while the UI agent is busy, leave the user's draft intact, and are visibly
+labelled in the chat. A queued request fails if the window changes project or selected agent.
+Connections are private to the local user. Requests and replies last for the window's
+lifetime; the latest 128 records are retained, with at most 32 pending requests. Older
+running app versions need to be relaunched before they appear in the list.
 
 ## License
 

@@ -602,16 +602,18 @@ fn empty_projects_can_chat_then_create_the_first_part_without_resetting_the_conv
         let program = root.join("fake-codex");
         let script = format!(
             r#"#!/bin/sh
-cat > prompt.txt
-printf '%s\n' "$@" >> arguments.txt
+mkdir -p .agent-run
+pwd >> .agent-run/cwd.txt
+cat > .agent-run/prompt.txt
+printf '%s\n' "$@" >> .agent-run/arguments.txt
 printf '{{"type":"thread.started","thread_id":"project-chat"}}\n'
-if [ -f chatted ]; then
-    mkdir -p ../parts
-    cat > ../parts/first.fg <<'PART'
+if [ -f .agent-run/chatted ]; then
+    mkdir -p parts
+    cat > parts/first.fg <<'PART'
 {PART}
 PART
 else
-    touch chatted
+    touch .agent-run/chatted
 fi
 printf '{{"type":"item.completed","item":{{"id":"m","type":"agent_message","text":"We can work on this project."}}}}\n'
 printf '{{"type":"turn.completed","usage":{{}}}}\n'
@@ -621,7 +623,6 @@ printf '{{"type":"turn.completed","usage":{{}}}}\n'
         std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o755)).unwrap();
         view.gui.agent.project_dir = Some(root.clone());
         view.gui.agent.program = Some(program.display().to_string());
-        view.gui.agent.cwd = Some(root.join(".agent-run"));
         view.gui.agent.settings_file = Some(root.join("unused-agent.toml"));
         view.step();
         AgentSettings {
@@ -696,9 +697,13 @@ printf '{{"type":"turn.completed","usage":{{}}}}\n'
         let arguments = std::fs::read_to_string(root.join(".agent-run/arguments.txt")).unwrap();
         assert_eq!(arguments.lines().filter(|s| *s == "resume").count(), 2);
         assert_eq!(
-            arguments.lines().filter(|s| *s == root.to_str().unwrap()).count(),
+            std::fs::read_to_string(root.join(".agent-run/cwd.txt"))
+                .unwrap()
+                .lines()
+                .filter(|s| *s == root.to_str().unwrap())
+                .count(),
             3,
-            "project boundary stays at the launch folder"
+            "native agents run in the project across all turns"
         );
         assert!(
             !view

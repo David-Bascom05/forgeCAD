@@ -14,6 +14,7 @@ use std::time::Instant;
 fn usage() -> ExitCode {
     eprintln!(
         "usage: forgecad [open [FILE | APP_ARGS...]]   (open the native app)\n       \
+         forgecad agent list | send WINDOW MESSAGE | status WINDOW REQUEST\n       \
          forgecad update [INSTALL_ROOT]   (install latest main)\n       \
          forgecad act|query|measure|render|build|check|diff|export FILE [ARGS] [--json] [--base N] [--at FEAT] [--labels SEL] [--px N] [-o OUT]\n       \
          forgecad edit FILE.fg 'OP'..   (typed ops, as a .fg part's fixes give them; build|check|query|measure|render|export take .fg too; export F.fg dxf [SHEET])\n       \
@@ -138,6 +139,7 @@ fn main() -> ExitCode {
     match args.get(1).map(String::as_str) {
         None => open_app(&[]),
         Some("open") => open_app(&args[2..]),
+        Some("agent") => agent_bridge(&args[2..]),
         Some("update") => run_installed("forgecad-update", &args[2..]),
         Some(
             t @ ("versions" | "history" | "create_version" | "restore" | "compare" | "release" | "releases"
@@ -649,4 +651,40 @@ fn preview(path: &str) -> ExitCode {
     }
     println!("wrote {path}");
     ExitCode::SUCCESS
+}
+
+fn agent_bridge(args: &[String]) -> ExitCode {
+    use forge_agent::{chat_bridge, json::Json};
+    let result = match args.first().map(String::as_str) {
+        Some("list") if args.len() == 1 => chat_bridge::list(),
+        Some("send") if args.len() == 3 => chat_bridge::call(
+            &args[1],
+            Json::obj(vec![
+                ("method", "send".into()),
+                ("message", args[2].clone().into()),
+            ]),
+        ),
+        Some("status") if args.len() == 3 => chat_bridge::call(
+            &args[1],
+            Json::obj(vec![
+                ("method", "status".into()),
+                ("request", args[2].clone().into()),
+            ]),
+        ),
+        _ => Err("usage: forgecad agent list | send WINDOW MESSAGE | status WINDOW REQUEST".into()),
+    };
+    match result {
+        Ok(j) => {
+            println!("{j}");
+            if j.get("error").is_some() {
+                ExitCode::from(1)
+            } else {
+                ExitCode::SUCCESS
+            }
+        }
+        Err(e) => {
+            eprintln!("{e}");
+            ExitCode::from(1)
+        }
+    }
 }

@@ -13,6 +13,8 @@ use std::sync::mpsc::{Receiver, channel};
 
 #[derive(Default)]
 pub struct AgentHost {
+    pub bridge: Option<forge_agent::chat_bridge::Bridge>,
+    bridge_active: Option<(String, usize)>,
     backend: Option<Box<dyn Backend>>,
     rx: Option<Receiver<Event>>,
     /// What the backend was made for: the folder, the settings.
@@ -173,7 +175,15 @@ impl Gui {
             match e {
                 Event::FileChanged { path, before, text } => self.agent_file(path, before, text),
                 Event::Done { .. } | Event::Problem { .. } => {
+                    let error = match &e {
+                        Event::Done { error, stopped } => error
+                            .clone()
+                            .or_else(|| stopped.then(|| "Stopped in the UI".into())),
+                        Event::Problem { text, .. } => Some(text.clone()),
+                        _ => None,
+                    };
                     self.shell.agent.take(e);
+                    self.finish_bridge_request(error);
                     self.agent_turn_over();
                     self.versions_changed();
                 }
@@ -182,6 +192,82 @@ impl Gui {
         }
         if changed {
             self.agent_capture_conversation(terminal);
+        }
+        self.take_bridge_requests();
+    }
+
+    /// Publish a terminal connection for this window without starting a model session.
+    pub fn start_agent_bridge(&mut self) {
+        if self.agent.bridge.is_none() {
+            match forge_agent::chat_bridge::Bridge::start(self.waker.clone()) {
+                Ok(bridge) => self.agent.bridge = Some(bridge),
+                Err(e) => self.shell.status = format!("Agent connection: {e}"),
+            }
+        }
+    }
+
+    fn finish_bridge_request(&mut self, error: Option<String>) {
+        let Some((id, start)) = self.agent.bridge_active.take() else {
+            return;
+        };
+        let mut reply = self
+            .shell
+            .agent
+            .entries
+            .get(start..)
+            .unwrap_or_default()
+            .iter()
+            .filter_map(|e| match e {
+                Entry::Agent { text } => Some(text.as_str()),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        if let Some(e) = &error {
+            if !reply.is_empty() {
+                reply.push('\n');
+            }
+            reply.push_str(e);
+        }
+        if let Some(bridge) = &self.agent.bridge {
+            bridge.finish(&id, reply, error.is_some());
+        }
+    }
+
+    fn take_bridge_requests(&mut self) {
+        let Some(bridge) = &self.agent.bridge else { return };
+        let project = self
+            .agent_root()
+            .map(|p| p.display().to_string())
+            .unwrap_or_default();
+        let model = self.shell.agent.settings.label();
+        bridge.update(project.clone(), model.clone(), self.shell.agent.running);
+        if self.shell.agent.running
+            || self.shell.agent.voice.busy()
+            || self.shell.agent.trust_ask.is_some()
+            || self.agent.bridge_active.is_some()
+        {
+            return;
+        }
+        let Some(request) = bridge.next() else { return };
+        if request.project != project || request.model != model {
+            bridge.finish(&request.id, "The window's project or selected agent changed while this request was queued; send it again.".into(), true);
+            return;
+        }
+        let text = format!("[Terminal agent request {}]\n{}", request.id, request.message);
+        self.shell.agent.entries.push(Entry::User {
+            text: text.clone(),
+            refs: vec![],
+            markup: None,
+        });
+        self.shell.agent.problem = None;
+        self.shell.agent.running = true;
+        self.agent_send(&text, &[], None);
+        self.agent.bridge_active = Some((request.id, self.shell.agent.entries.len()));
+        if !self.shell.agent.running {
+            self.finish_bridge_request(Some(
+                "The UI agent could not start; see the window for details.".into(),
+            ));
         }
     }
 
@@ -414,6 +500,7 @@ impl Gui {
     }
 
     fn agent_reset(&mut self) {
+        self.finish_bridge_request(Some("Conversation reset in the UI".into()));
         self.agent.backend = None;
         self.agent.rx = None;
         self.agent.made_for = None;
@@ -660,7 +747,9 @@ impl Gui {
         let dir = root.display().to_string();
         // A directory is an explicit project-only context, never a fabricated part file.
         let path = document.clone().unwrap_or_else(|| dir.clone());
-        if !trusted(&dir, &self.shell.agent.settings.trusted) {
+        if self.shell.agent.settings.kind == Kind::OpenAi
+            && !trusted(&dir, &self.shell.agent.settings.trusted)
+        {
             self.shell.agent.trust_ask = Some(dir);
             self.shell.agent.pending = Some((text.to_string(), refs.to_vec(), picture));
             return;
@@ -786,6 +875,11 @@ impl Gui {
             wake: self.waker.clone(),
         };
         let mut system = system_prompt(file);
+        if let Some(bridge) = &self.agent.bridge {
+            system.push_str(&format!(
+                "\nThis UI window's terminal connection ID is {}. Terminal agents can use forgecad agent list/send/status to send requests and retrieve your replies. Reply normally to terminal requests. You may contact other windows with these commands, but never send a request to your own window and wait for it during your active turn: it would be queued behind you.", bridge.id
+            ));
+        }
         if self.agent.resumed
             && session.is_none()
             && s.kind != Kind::OpenAi
@@ -828,7 +922,11 @@ impl Gui {
                         model: s.claude_model.clone(),
                         file: file.to_path_buf(),
                         system,
-                        cwd: self.agent.cwd.clone().unwrap_or_else(claude::clean_cwd),
+                        cwd: self
+                            .agent
+                            .cwd
+                            .clone()
+                            .unwrap_or_else(|| crate::agent::project::root(file)),
                         mcp: self.agent.mcp.clone(),
                     },
                     out,
@@ -844,7 +942,11 @@ impl Gui {
                         model: s.codex_model.clone(),
                         file: file.to_path_buf(),
                         system,
-                        cwd: self.agent.cwd.clone().unwrap_or_else(claude::clean_cwd),
+                        cwd: self
+                            .agent
+                            .cwd
+                            .clone()
+                            .unwrap_or_else(|| crate::agent::project::root(file)),
                         mcp: self.agent.mcp.clone(),
                     },
                     out,
