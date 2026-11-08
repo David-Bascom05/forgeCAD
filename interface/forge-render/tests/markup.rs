@@ -65,11 +65,16 @@ fn stand_in(h: &mut forge_render::gui::Headless, dir: &std::path::Path) {
 fn sent(h: &mut forge_render::gui::Headless, dir: &std::path::Path) -> String {
     let t = std::time::Instant::now();
     let got = dir.join("got.json");
-    while !got.exists() && t.elapsed().as_secs() < 60 {
+    loop {
         h.step();
+        if let Ok(text) = std::fs::read_to_string(&got)
+            && forge_agent::json::Json::parse(&text).is_ok()
+        {
+            return text;
+        }
+        assert!(t.elapsed().as_secs() < 60, "markup message did not arrive");
         std::thread::sleep(std::time::Duration::from_millis(2));
     }
-    std::fs::read_to_string(&got).unwrap()
 }
 
 #[test]

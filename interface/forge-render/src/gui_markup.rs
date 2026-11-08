@@ -469,7 +469,6 @@ impl Gui {
         sd: &egui_wgpu::ScreenDescriptor,
     ) {
         let t0 = now_ms();
-        self.shell.agent.markup.sending = false;
         let marks = std::mem::take(&mut self.shell.agent.markup.marks);
         let ppp = sd.pixels_per_point;
         let [w, h] = sd.size_in_pixels.map(|v| v as usize);
@@ -539,6 +538,7 @@ impl Gui {
         }
         let t0 = now_ms();
         let mut w = *self.markup_wait.take().expect("checked");
+        self.shell.agent.markup.sending = false;
         let occ = self
             .markup_occ
             .as_ref()

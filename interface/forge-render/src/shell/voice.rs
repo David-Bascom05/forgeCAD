@@ -174,7 +174,6 @@ impl Shell {
         if self.prefs.capture.is_some() || self.prefs.open {
             return;
         }
-        let enabled = !self.agent.running;
         let mode = self.agent.settings.speech_mode;
         let mut down = false;
         let mut up = false;
@@ -204,7 +203,7 @@ impl Shell {
             })
         });
         let v = &mut self.agent.voice;
-        if down && enabled && v.unavailable.is_none() {
+        if down && v.unavailable.is_none() {
             match mode {
                 KeyMode::Hold if !v.held && v.state == VoiceState::Idle => {
                     v.held = true;

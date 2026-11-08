@@ -152,6 +152,12 @@ may be refused by the CLI; configure permissions in the underlying CLI.
 ForgeCAD's Undo and version tracking cover supported project source files,
 not every external action performed by native tools.
 
+Send and Enter remain available while the agent works. Follow-ups queue in order and
+run after the current turn, including attachments and voice dictation; the working
+indicator shows the queue count. Stop (or Escape) stops the current turn and cancels
+queued follow-ups. Changing the document, project or selected agent cancels queued messages
+rather than sending them to a different context.
+
 All three backends share project and version tools. No open part is required to
 chat: launch `forgecad` from a project folder to discuss or set up an empty project.
 The Agent tab shows the project folder and opens the first part when it is created.

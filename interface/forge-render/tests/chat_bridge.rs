@@ -124,3 +124,112 @@ fn queued_messages_do_not_follow_a_window_to_another_project() {
     drop(h);
     std::fs::remove_dir_all(root).unwrap();
 }
+
+#[test]
+fn followups_can_be_sent_while_working_and_run_in_order_without_stopping() {
+    for (kind, name) in [
+        (Kind::Codex, "followup-codex"),
+        (Kind::ClaudeCode, "followup-claude"),
+    ] {
+        let (mut h, root, _) = setup(kind, name);
+        let script = std::fs::read_to_string(root.join("agent")).unwrap()
+            .replace("import sys,json", "import sys,json,os,time\ndef gate():\n    with open('.requests','a') as f: f.write('turn\\n')\n    while os.path.exists('.hold'): time.sleep(0.01)")
+            .replace("    sys.stdin.read()", "    sys.stdin.read()\n    gate()")
+            .replace("    for line in sys.stdin:", "    for line in sys.stdin:\n        gate()");
+        std::fs::write(root.join("agent"), script).unwrap();
+        std::fs::write(root.join(".hold"), "").unwrap();
+        assert!(h.click("side:tab:Agent"));
+        h.gui.shell.agent.input = "First request".into();
+        h.step();
+        assert!(h.click("agent:send"));
+        let t = Instant::now();
+        while !root.join(".requests").exists() {
+            h.step();
+            assert!(t.elapsed() < Duration::from_secs(10));
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        for text in ["Second request", "Third request"] {
+            h.gui.shell.agent.input = text.into();
+            h.step();
+            assert!(h.gui.shell.place("agent:stop").is_some());
+            assert!(h.click("agent:send"));
+            h.step();
+            assert!(h.gui.shell.agent.input.is_empty());
+        }
+        assert!(h.gui.shell.agent.running);
+        assert_eq!(h.gui.shell.agent.queued, 2);
+        assert_eq!(
+            std::fs::read_to_string(root.join(".requests"))
+                .unwrap()
+                .lines()
+                .count(),
+            1
+        );
+        std::fs::remove_file(root.join(".hold")).unwrap();
+        let t = Instant::now();
+        loop {
+            h.step();
+            if !h.gui.shell.agent.running && h.gui.shell.agent.queued == 0 {
+                break;
+            }
+            assert!(t.elapsed() < Duration::from_secs(30));
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert_eq!(
+            std::fs::read_to_string(root.join(".requests"))
+                .unwrap()
+                .lines()
+                .count(),
+            3
+        );
+        assert_eq!(
+            h.gui
+                .shell
+                .agent
+                .entries
+                .iter()
+                .filter(|e| matches!(e, forge_render::shell::agent::Entry::Agent { .. }))
+                .count(),
+            3
+        );
+        if kind == Kind::Codex {
+            std::fs::write(root.join(".hold"), "").unwrap();
+            h.gui.shell.agent.input = "Work until stopped".into();
+            h.step();
+            assert!(h.click("agent:send"));
+            let t = Instant::now();
+            while std::fs::read_to_string(root.join(".requests"))
+                .unwrap()
+                .lines()
+                .count()
+                < 4
+            {
+                h.step();
+                assert!(t.elapsed() < Duration::from_secs(10));
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            h.gui.shell.agent.input = "Cancel this queued request".into();
+            h.step();
+            assert!(h.click("agent:send"));
+            h.step();
+            assert_eq!(h.gui.shell.agent.queued, 1);
+            assert!(h.click("agent:stop"));
+            let t = Instant::now();
+            while h.gui.shell.agent.running {
+                h.step();
+                assert!(t.elapsed() < Duration::from_secs(10));
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            assert_eq!(h.gui.shell.agent.queued, 0);
+            assert_eq!(
+                std::fs::read_to_string(root.join(".requests"))
+                    .unwrap()
+                    .lines()
+                    .count(),
+                4
+            );
+        }
+        drop(h);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+}

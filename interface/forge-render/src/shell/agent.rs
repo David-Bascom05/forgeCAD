@@ -152,6 +152,8 @@ pub struct AgentTab {
     /// Ids attached to the next message: a feature, face or occurrence.
     pub refs: Vec<String>,
     pub running: bool,
+    pub queued: usize,
+    reply_boundary: bool,
     pub problem: Option<Problem>,
     /// The open file's name, for the context line.
     pub file: Option<String>,
@@ -191,15 +193,18 @@ impl AgentTab {
     /// A backend's word, into the transcript.
     pub fn take(&mut self, e: Event) {
         match e {
-            Event::Text(s) => match self.entries.last_mut() {
-                Some(Entry::Agent { text }) => text.push_str(&s),
-                _ => {
-                    let s = s.trim_start_matches('\n').to_string();
-                    if !s.is_empty() {
-                        self.entries.push(Entry::Agent { text: s });
+            Event::Text(s) => {
+                match self.entries.last_mut() {
+                    Some(Entry::Agent { text }) if !self.reply_boundary => text.push_str(&s),
+                    _ => {
+                        let s = s.trim_start_matches('\n').to_string();
+                        if !s.is_empty() {
+                            self.entries.push(Entry::Agent { text: s });
+                        }
                     }
                 }
-            },
+                self.reply_boundary = false;
+            }
             Event::ToolStart { id, name } => self.entries.push(Entry::Tool {
                 summary: name.clone(),
                 id,
@@ -226,6 +231,7 @@ impl AgentTab {
             }
             Event::Note { text, error } => self.entries.push(Entry::Note { text, error }),
             Event::Done { error, stopped } => {
+                self.reply_boundary = true;
                 self.running = false;
                 for e in &mut self.entries {
                     if let Entry::Tool { state, .. } = e
@@ -259,7 +265,7 @@ impl AgentTab {
             .find(|e| matches!(e, Entry::Tool { id, .. } if id == want))
     }
 
-    /// The input as a message: sent, if there's anything to send and nothing running.
+    /// The input as a message: sent now or queued behind the active turn.
     pub fn send(&mut self) {
         let text = self.input.trim().to_string();
         if !self.running {
@@ -281,7 +287,11 @@ impl AgentTab {
         }
         self.markup.commit_text();
         let markup = !self.markup.marks.is_empty();
-        if (text.is_empty() && !markup) || self.running || self.voice.busy() {
+        if (text.is_empty() && !markup)
+            || self.voice.busy()
+            || self.markup.sending
+            || self.trust_ask.is_some()
+        {
             return;
         }
         let refs = std::mem::take(&mut self.refs);
@@ -1570,7 +1580,11 @@ impl Shell {
                     ui.painter().text(
                         pos2(PAD, r.center().y),
                         Align2::LEFT_CENTER,
-                        format!("Working{dots}"),
+                        if a.queued == 0 {
+                            format!("Working{dots}")
+                        } else {
+                            format!("Working{dots} · {} queued", a.queued)
+                        },
                         sans(12.0),
                         t.ink2,
                     );
@@ -1671,7 +1685,7 @@ impl Shell {
         let mut child = ui.new_child(egui::UiBuilder::new().max_rect(text_r));
         child.set_clip_rect(text_r.intersect(ui.clip_rect()));
         let hint = if self.agent.running {
-            "Esc stops the agent"
+            "Send a follow-up; it runs after this turn"
         } else {
             "Ask the agent"
         };
@@ -1779,14 +1793,15 @@ impl Shell {
         }
 
         let running = self.agent.running;
-        let word = if running { "Stop" } else { "Send" };
+        let word = "Send";
         let sr = Rect::from_min_size(pos2(box_r.right() - 58.0, row_y), vec2(52.0, 22.0));
-        let can = running || (!self.agent.voice.busy() && (!self.agent.input.trim().is_empty() || marks > 0));
+        let can = self.agent.trust_ask.is_none()
+            && !self.agent.voice.busy()
+            && !self.agent.markup.sending
+            && (!self.agent.input.trim().is_empty() || marks > 0);
         let s_resp = ui.interact(sr, ui.scope_id().with("agent-send"), Sense::click());
         s_resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, can, word));
-        let fill = if running {
-            t.error.gamma_multiply(if s_resp.hovered() { 0.9 } else { 0.7 })
-        } else if can {
+        let fill = if can {
             t.focus.gamma_multiply(if s_resp.hovered() { 1.0 } else { 0.85 })
         } else {
             t.raised
@@ -1800,14 +1815,33 @@ impl Shell {
             if can { Color32::WHITE } else { t.ink2 },
         );
         self.note("agent:send", sr);
-        let mic = Rect::from_min_size(pos2(sr.left() - 30.0, row_y), vec2(24.0, 22.0));
-        self.mic_button(ui, mic, !running);
-        if s_resp.clicked() && can {
-            if running {
+        let mut mic_right = sr.left();
+        if running {
+            let stop = Rect::from_min_size(pos2(sr.left() - 58.0, row_y), vec2(52.0, 22.0));
+            let response = ui.interact(stop, ui.scope_id().with("agent-stop"), Sense::click());
+            response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, "Stop"));
+            p.rect_filled(
+                stop,
+                4.0,
+                t.error.gamma_multiply(if response.hovered() { 0.9 } else { 0.7 }),
+            );
+            p.text(
+                stop.center(),
+                Align2::CENTER_CENTER,
+                "Stop",
+                medium(12.0),
+                Color32::WHITE,
+            );
+            self.note("agent:stop", stop);
+            if response.clicked() {
                 self.agent.out.push(AgentAct::Stop);
-            } else {
-                self.agent.send();
             }
+            mic_right = stop.left();
+        }
+        let mic = Rect::from_min_size(pos2(mic_right - 30.0, row_y), vec2(24.0, 22.0));
+        self.mic_button(ui, mic, true);
+        if s_resp.clicked() && can {
+            self.agent.send();
         }
     }
 }

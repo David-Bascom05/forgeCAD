@@ -11,11 +11,22 @@ use crate::shell::agent_settings::{AgentSettings, Kind, SettingsAct, missing};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, channel};
 
+struct Followup {
+    document: Option<String>,
+    text: String,
+    refs: Vec<String>,
+    picture: Option<Vec<u8>>,
+    project: Option<PathBuf>,
+    model: String,
+}
+
 #[derive(Default)]
 pub struct AgentHost {
     pub bridge: Option<forge_agent::chat_bridge::Bridge>,
     bridge_active: Option<(String, usize)>,
     backend: Option<Box<dyn Backend>>,
+    turn_active: bool,
+    followups: std::collections::VecDeque<Followup>,
     rx: Option<Receiver<Event>>,
     /// What the backend was made for: the folder, the settings.
     made_for: Option<(String, AgentSettings)>,
@@ -182,6 +193,7 @@ impl Gui {
                         Event::Problem { text, .. } => Some(text.clone()),
                         _ => None,
                     };
+                    self.agent.turn_active = false;
                     self.shell.agent.take(e);
                     self.finish_bridge_request(error);
                     self.agent_turn_over();
@@ -193,7 +205,51 @@ impl Gui {
         if changed {
             self.agent_capture_conversation(terminal);
         }
+        self.take_followups();
         self.take_bridge_requests();
+    }
+
+    fn take_followups(&mut self) {
+        self.shell.agent.queued = self.agent.followups.len();
+        if self.agent.turn_active
+            || self.shell.agent.running
+            || self.shell.agent.voice.busy()
+            || self.markup_job.is_some()
+            || self.markup_wait.is_some()
+        {
+            return;
+        }
+        let Some(next) = self.agent.followups.pop_front() else {
+            return;
+        };
+        self.shell.agent.queued = self.agent.followups.len();
+        if next.project != self.agent_root()
+            || next.model != self.shell.agent.settings.label()
+            || (next.document.is_some() && next.document != self.agent_path())
+        {
+            self.shell.agent.take(Event::Note {
+                text: "Queued message cancelled because the document, project or agent changed.".into(),
+                error: true,
+            });
+            return;
+        }
+        self.shell.agent.running = true;
+        self.agent_send(&next.text, &next.refs, next.picture);
+    }
+
+    fn cancel_followups(&mut self) {
+        self.markup_job = None;
+        self.markup_wait = None;
+        self.shell.agent.markup.sending = false;
+        let count = self.agent.followups.len();
+        self.agent.followups.clear();
+        self.shell.agent.queued = 0;
+        if count > 0 {
+            self.shell.agent.take(Event::Note {
+                text: format!("Cancelled {count} queued message(s)."),
+                error: false,
+            });
+        }
     }
 
     /// Publish a terminal connection for this window without starting a model session.
@@ -500,6 +556,8 @@ impl Gui {
     }
 
     fn agent_reset(&mut self) {
+        self.cancel_followups();
+        self.agent.turn_active = false;
         self.finish_bridge_request(Some("Conversation reset in the UI".into()));
         self.agent.backend = None;
         self.agent.rx = None;
@@ -673,6 +731,7 @@ impl Gui {
                     }
                 }
                 AgentAct::Stop if self.shell.agent.trust_ask.is_some() => {
+                    self.cancel_followups();
                     self.shell.agent.trust_ask = None;
                     self.shell.agent.pending = None;
                     self.shell.agent.take(Event::Done {
@@ -681,9 +740,11 @@ impl Gui {
                     });
                 }
                 AgentAct::Stop => {
+                    self.cancel_followups();
                     if let Some(b) = &mut self.agent.backend {
                         b.stop();
                     } else {
+                        self.agent.turn_active = false;
                         self.shell.agent.take(Event::Done {
                             error: None,
                             stopped: true,
@@ -737,6 +798,18 @@ impl Gui {
     }
 
     pub(crate) fn agent_send(&mut self, text: &str, refs: &[String], picture: Option<Vec<u8>>) {
+        if self.agent.turn_active {
+            self.agent.followups.push_back(Followup {
+                document: self.agent_path(),
+                text: text.into(),
+                refs: refs.to_vec(),
+                picture,
+                project: self.agent_root(),
+                model: self.shell.agent.settings.label(),
+            });
+            self.shell.agent.queued = self.agent.followups.len();
+            return;
+        }
         let fail = |g: &mut Gui, text: String, fix: Option<String>| {
             g.shell.agent.take(Event::Problem { text, fix });
         };
@@ -861,6 +934,8 @@ impl Gui {
         }
         // the turn's on: a .fg it makes beside an open document opens in a tab
         self.agent_turn(true);
+        self.agent.turn_active = true;
+        self.shell.agent.running = true;
         if let Some(b) = &mut self.agent.backend {
             b.send(msg, picture);
         }
