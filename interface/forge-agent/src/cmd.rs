@@ -1425,6 +1425,8 @@ combine cut base lid keep
     fn reads_only_part_files_under_the_root() {
         let dir = Dir::new("root");
         let inside = dir.file("p.fc", "extrude 5 rect 0 0 10 10\n");
+        // (linked to as a font on Unix below)
+        #[cfg_attr(not(unix), allow(unused_variables))]
         let key = dir.file("key.pem", "-----BEGIN PRIVATE KEY-----\n");
         let outside = Dir::new("outside");
         let away = outside.file("q.fc", "extrude 5 rect 0 0 10 10\n");
@@ -1604,6 +1606,8 @@ combine cut base lid keep
         let outside = Dir::new("fontout");
         std::fs::write(dir.0.join("f.ttf"), &font).expect("write");
         std::fs::write(outside.0.join("o.ttf"), &font).expect("write");
+        // (linked to as a font on Unix below)
+        #[cfg_attr(not(unix), allow(unused_variables))]
         let key = dir.file("key.pem", "-----BEGIN PRIVATE KEY-----\n");
         std::fs::create_dir_all(dir.0.join("d.ttf")).expect("dir");
         // a huge file costs nothing on disk: it is never read
@@ -1627,6 +1631,7 @@ combine cut base lid keep
             "../{}/o.ttf",
             outside.0.file_name().expect("name").to_string_lossy()
         );
+        #[cfg_attr(not(unix), allow(unused_mut))]
         let mut refused = vec![
             away.clone(),
             "key.pem".into(),

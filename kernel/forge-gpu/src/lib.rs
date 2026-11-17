@@ -36,18 +36,19 @@ const FILL: usize = 1 << 16;
 /// Points sent at a time (~120 MB on the device).
 const CHUNK: usize = 1 << 22;
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(target_os = "linux")]
 unsafe extern "C" {
     fn dlopen(name: *const c_char, flag: c_int) -> *mut c_void;
     fn dlsym(handle: *mut c_void, name: *const c_char) -> *mut c_void;
 }
 
-// no driver to open in a browser or a WASI runtime
-#[cfg(target_arch = "wasm32")]
+// the CUDA driver is opened on Linux only (libcuda.so.1); elsewhere (macOS, Windows, a
+// browser or WASI runtime) there is none, and the batch runs on the CPU
+#[cfg(not(target_os = "linux"))]
 unsafe fn dlopen(_: *const c_char, _: c_int) -> *mut c_void {
     std::ptr::null_mut()
 }
-#[cfg(target_arch = "wasm32")]
+#[cfg(not(target_os = "linux"))]
 unsafe fn dlsym(_: *mut c_void, _: *const c_char) -> *mut c_void {
     std::ptr::null_mut()
 }
@@ -654,7 +655,7 @@ static GPU: OnceLock<Option<Gpu>> = OnceLock::new();
 /// The process's GPU, opened at first use (~0.3 s); None where there is none.
 pub fn gpu() -> Option<&'static Gpu> {
     GPU.get_or_init(|| {
-        #[cfg(not(target_arch = "wasm32"))]
+        #[cfg(target_os = "linux")]
         // SAFETY: registers a plain extern "C" fn
         unsafe {
             atexit(hand_off);
@@ -664,7 +665,7 @@ pub fn gpu() -> Option<&'static Gpu> {
     .as_ref()
 }
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(target_os = "linux")]
 unsafe extern "C" {
     fn atexit(f: extern "C" fn()) -> c_int;
     fn fork() -> c_int;
@@ -677,7 +678,7 @@ unsafe extern "C" {
 /// At exit, hands the driver's files to a child that holds them until this process is gone and
 /// then exits: the kernel's teardown of the GPU context on their release (~0.1 s) happens in
 /// the child, after the process's exit, not before it. The child does nothing but wait.
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(target_os = "linux")]
 extern "C" fn hand_off() {
     let Ok(dir) = std::fs::read_dir("/proc/self/fd") else {
         return;
