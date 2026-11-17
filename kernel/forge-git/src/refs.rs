@@ -163,11 +163,15 @@ impl Refs {
                     stack.push(p);
                     continue;
                 }
+                // a ref's name is its path with `/` between the parts on every platform (on
+                // Windows the path's own separator is `\`)
                 let rel = p
                     .strip_prefix(&root)
                     .expect("under root")
-                    .to_string_lossy()
-                    .to_string();
+                    .components()
+                    .map(|c| c.as_os_str().to_string_lossy())
+                    .collect::<Vec<_>>()
+                    .join("/");
                 if !rel.starts_with(prefix) || rel.ends_with(".lock") {
                     continue;
                 }
@@ -241,7 +245,25 @@ pub fn exists(p: &Path) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::valid_name;
+    use super::{Refs, valid_name};
+
+    /// A loose ref in nested folders is listed by its `/` name on every platform (Windows paths
+    /// use `\`, and its tags went missing).
+    #[test]
+    fn nested_loose_refs_list_by_slash_names() {
+        let d = std::env::temp_dir().join(format!("forge-git-refs-{}", std::process::id()));
+        let tags = d.join("refs").join("tags").join("forgecad").join("v");
+        std::fs::create_dir_all(&tags).unwrap();
+        std::fs::write(tags.join("3"), format!("{}\n", "ab".repeat(20))).unwrap();
+        let r = Refs {
+            git_dir: d.clone(),
+            common: d.clone(),
+            hash: crate::HashKind::Sha1,
+        };
+        let got: Vec<String> = r.list("refs/tags/").unwrap().into_keys().collect();
+        assert_eq!(got, ["refs/tags/forgecad/v/3"]);
+        let _ = std::fs::remove_dir_all(&d);
+    }
 
     #[test]
     fn ref_names() {
