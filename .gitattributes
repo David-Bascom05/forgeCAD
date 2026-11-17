@@ -1,0 +1,3 @@
+# text files are LF on every platform (Windows checkouts too): sources read with include_str!,
+# fixtures and tools/speed/bits.txt are compared byte for byte
+* text=auto eol=lf
