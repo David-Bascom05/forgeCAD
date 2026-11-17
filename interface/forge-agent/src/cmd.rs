@@ -1019,8 +1019,31 @@ pub(crate) fn replace(path: &std::path::Path, src: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// `writable_file` where there are no Unix links or modes: a plain file at its own path, never
-/// a link to one.
+/// Windows: opened without following a link (a symlink or junction is opened as itself), and
+/// refused if what was opened is one, so the file checked is the file written.
+/// (Other targets without Unix modes, WASI: opened as is; the look before it refuses a link.)
+#[cfg(not(unix))]
+pub(crate) fn open_no_link(
+    o: &mut std::fs::OpenOptions,
+    path: &std::path::Path,
+) -> std::io::Result<std::fs::File> {
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::{MetadataExt, OpenOptionsExt};
+        const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
+        let f = o.custom_flags(FILE_FLAG_OPEN_REPARSE_POINT).open(path)?;
+        if f.metadata()?.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+            return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "a link"));
+        }
+        Ok(f)
+    }
+    #[cfg(not(windows))]
+    o.open(path)
+}
+
+/// `writable_file` on Windows: a plain file at its own path, never a link or junction to one.
+/// (Its hard links can't be counted without unsafe code: a second name is not refused here.)
 #[cfg(not(unix))]
 pub(crate) fn writable_file(path: &std::path::Path) -> Result<std::fs::Metadata, String> {
     let refused = || "not a plain file; not written".to_string();
@@ -1028,7 +1051,7 @@ pub(crate) fn writable_file(path: &std::path::Path) -> Result<std::fs::Metadata,
     if !looked.file_type().is_file() {
         return Err(refused());
     }
-    let f = std::fs::File::open(path).map_err(|_| refused())?;
+    let f = open_no_link(std::fs::OpenOptions::new().read(true), path).map_err(|_| refused())?;
     let held = f.metadata().map_err(|_| "cannot write".to_string())?;
     if !held.file_type().is_file() {
         return Err(refused());

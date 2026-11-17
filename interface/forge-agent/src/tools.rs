@@ -1388,7 +1388,7 @@ fn read_plain(path: &Path) -> Option<Vec<u8>> {
     if !std::fs::symlink_metadata(path).ok()?.is_file() {
         return None;
     }
-    let f = std::fs::File::open(path).ok()?;
+    let f = crate::cmd::open_no_link(std::fs::OpenOptions::new().read(true), path).ok()?;
     let held = f.metadata().ok()?;
     if !held.is_file() || held.len() > wire::LOG_LIMIT {
         return None;
@@ -1461,14 +1461,16 @@ fn append_entry(path: &Path, _: u32, e: &Entry) -> Result<u64, String> {
     if std::fs::symlink_metadata(path).is_ok_and(|m| !m.is_file()) {
         return Err(refused.into());
     }
-    let mut f = match std::fs::OpenOptions::new().read(true).write(true).open(path) {
+    let mut f = match crate::cmd::open_no_link(std::fs::OpenOptions::new().read(true).write(true), path) {
         Ok(f) => f,
-        Err(x) if x.kind() == ErrorKind::NotFound => std::fs::OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create_new(true)
-            .open(path)
-            .map_err(|_| "cannot write".to_string())?,
+        Err(x) if x.kind() == ErrorKind::NotFound => crate::cmd::open_no_link(
+            std::fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .create_new(true),
+            path,
+        )
+        .map_err(|_| "cannot write".to_string())?,
         Err(_) => return Err(refused.into()),
     };
     let held = f.metadata().map_err(cannot)?;
@@ -1510,9 +1512,7 @@ fn cut_log(path: &Path, to: u64) {
 
 #[cfg(not(unix))]
 fn cut_log(path: &Path, to: u64) {
-    if std::fs::symlink_metadata(path).is_ok_and(|m| m.is_file())
-        && let Ok(f) = std::fs::OpenOptions::new().write(true).open(path)
-    {
+    if let Ok(f) = crate::cmd::open_no_link(std::fs::OpenOptions::new().write(true), path) {
         let _ = f.set_len(to);
     }
 }

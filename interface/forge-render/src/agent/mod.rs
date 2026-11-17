@@ -322,7 +322,8 @@ pub fn program(name: &str) -> String {
     }
     let exts = std::env::var("PATHEXT").unwrap_or_else(|_| ".EXE;.CMD;.BAT".into());
     let dirs = std::env::var_os("PATH").unwrap_or_default();
-    for dir in std::env::split_paths(&dirs) {
+    // only absolute entries: a relative or empty one would search the current folder
+    for dir in std::env::split_paths(&dirs).filter(|d| d.is_absolute()) {
         for ext in exts.split(';').filter(|e| !e.is_empty()) {
             let p = dir.join(format!("{name}{}", ext.to_ascii_lowercase()));
             if p.is_file() {
