@@ -10,7 +10,10 @@
 //! Its files: `FORGECAD_SPEECH_DIR`, else ~/.cache/forgecad/speech: `lib/` (whisper.cpp's
 //! libraries) and the model, `FORGECAD_SPEECH_MODEL` or the first of `MODELS` there.
 
+#[cfg(not(any(target_os = "macos", windows)))]
 mod alsa;
+#[cfg(any(target_os = "macos", windows))]
+mod capture;
 mod dl;
 mod wav;
 mod whisper;
@@ -45,10 +48,7 @@ fn dir() -> PathBuf {
     if let Some(d) = std::env::var_os("FORGECAD_SPEECH_DIR") {
         return d.into();
     }
-    let cache = std::env::var_os("XDG_CACHE_HOME")
-        .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".cache")))
-        .unwrap_or_else(|| ".".into());
+    let cache = forge_dirs::cache().unwrap_or_else(|| ".".into());
     cache.join("forgecad").join("speech")
 }
 
@@ -286,11 +286,16 @@ fn feed(take: &Mutex<Take>, n: u64, out: &Out, chunk: &[f32], last_level: &mut I
 }
 
 fn listen_mic(n: u64, take: Arc<Mutex<Take>>, out: Out) {
+    #[cfg(not(any(target_os = "macos", windows)))]
     let alsa = match alsa::Alsa::load() {
         Ok(a) => a,
         Err(e) => return out.say("error", &[&e]),
     };
-    let mut mic = match alsa.mic(RATE as u32) {
+    #[cfg(not(any(target_os = "macos", windows)))]
+    let mic = alsa.mic(RATE as u32);
+    #[cfg(any(target_os = "macos", windows))]
+    let mic = capture::Mic::open(RATE as u32);
+    let mut mic = match mic {
         Ok(m) => m,
         Err(e) => return out.say("error", &[&e]),
     };

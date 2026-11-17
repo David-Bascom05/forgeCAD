@@ -9,9 +9,16 @@ repository = "https://code.commonty.org/david/ForgeCAD"
 # its own workspace (the root excludes it): the one crate that calls C, at run time (dlopen)
 [workspace]
 
+[dependencies]
+forge-dirs = { path = "../../kernel/forge-dirs" }
+
 [[bin]]
 name = "forge-speech"
 path = "src/main.rs"
 
 [profile.dev.package."*"]
 opt-level = 2
+
+# the microphone where ALSA isn't: CoreAudio on macOS, WASAPI on Windows
+[target.'cfg(any(target_os = "macos", windows))'.dependencies]
+cpal = "=0.18.2"

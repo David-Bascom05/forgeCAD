@@ -46,10 +46,11 @@ pub struct AppTools {
     wake: Waker,
     /// The open document's folder: where the fg tools may look.
     dir: std::sync::Arc<std::sync::Mutex<Option<std::path::PathBuf>>>,
-    changes: std::sync::Arc<
-        std::sync::Mutex<Option<(super::Watch, std::collections::BTreeSet<std::path::PathBuf>)>>,
-    >,
+    changes: std::sync::Arc<std::sync::Mutex<Option<Changes>>>,
 }
+
+/// The watch on the project's files, and the files it has seen change.
+type Changes = (super::Watch, std::collections::BTreeSet<std::path::PathBuf>);
 
 impl AppTools {
     pub fn new(wake: Waker) -> (AppTools, Receiver<AppCall>) {

@@ -18,9 +18,8 @@ pub fn hash(parts: &[&[u8]]) -> u128 {
 
 fn dir() -> Option<PathBuf> {
     let base = std::env::var_os("FORGE_RENDER_CACHE")
-        .or_else(|| std::env::var_os("XDG_CACHE_HOME"))
         .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".cache")))?;
+        .or_else(forge_dirs::cache)?;
     Some(base.join("forgecad").join("mesh"))
 }
 

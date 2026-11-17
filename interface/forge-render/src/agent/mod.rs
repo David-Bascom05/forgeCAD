@@ -312,6 +312,27 @@ pub fn trash_path(file: &Path) -> PathBuf {
 
 /// The environment a child `claude` starts with: this process's, less what marks a session
 /// inside another Claude Code (it would run unsaved, as a child).
+/// The program to start for a CLI named `name` (`claude`, `codex`), as the shell would find it.
+/// On Windows a bare name is looked up on PATH with each of PATHEXT's endings (`.exe`, then
+/// `.cmd` and `.bat`: npm installs `codex.cmd`), which `Command` alone would not do for a script;
+/// elsewhere, and for a path or a name not found, it is given as is.
+pub fn program(name: &str) -> String {
+    if !cfg!(windows) || name.contains(['/', '\\']) || std::path::Path::new(name).extension().is_some() {
+        return name.to_string();
+    }
+    let exts = std::env::var("PATHEXT").unwrap_or_else(|_| ".EXE;.CMD;.BAT".into());
+    let dirs = std::env::var_os("PATH").unwrap_or_default();
+    for dir in std::env::split_paths(&dirs) {
+        for ext in exts.split(';').filter(|e| !e.is_empty()) {
+            let p = dir.join(format!("{name}{}", ext.to_ascii_lowercase()));
+            if p.is_file() {
+                return p.display().to_string();
+            }
+        }
+    }
+    name.to_string()
+}
+
 pub fn clean_env(c: &mut std::process::Command) {
     // Drop only parent-session markers. Preserve user tool, provider and policy settings.
     for k in [

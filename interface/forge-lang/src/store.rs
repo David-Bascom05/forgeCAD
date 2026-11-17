@@ -28,11 +28,9 @@ pub fn root() -> Option<PathBuf> {
     if set.as_deref().is_some_and(|s| s == "off" || s.is_empty()) {
         return None;
     }
-    let base = set.map(PathBuf::from).or_else(|| {
-        std::env::var_os("XDG_CACHE_HOME")
-            .map(|d| PathBuf::from(d).join("forgecad"))
-            .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".cache").join("forgecad")))
-    })?;
+    let base = set
+        .map(PathBuf::from)
+        .or_else(|| forge_dirs::cache().map(|d| d.join("forgecad")))?;
     Some(base.join("results"))
 }
 

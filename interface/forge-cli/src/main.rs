@@ -113,6 +113,34 @@ fn open_app(args: &[String]) -> ExitCode {
     run_installed("forge-app", args)
 }
 
+/// `forgecad update`: the updater installed beside this program (a shell script, or on
+/// Windows a PowerShell one).
+fn update(args: &[String]) -> ExitCode {
+    if !cfg!(windows) {
+        return run_installed("forgecad-update", args);
+    }
+    let Ok(exe) = std::env::current_exe() else {
+        eprintln!("forgecad: cannot locate the installed updater");
+        return ExitCode::FAILURE;
+    };
+    let script = exe.with_file_name("forgecad-update.ps1");
+    let status = std::process::Command::new("powershell")
+        .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
+        .arg(&script)
+        .args(args)
+        .status();
+    match status {
+        Ok(s) => ExitCode::from(s.code().unwrap_or(1) as u8),
+        Err(e) => {
+            eprintln!(
+                "forgecad: cannot run {}: {e}\nInstall with tools\\install.ps1.",
+                script.display()
+            );
+            ExitCode::FAILURE
+        }
+    }
+}
+
 fn run_installed(name: &str, args: &[String]) -> ExitCode {
     // Installed together, so opening the app never depends on the working directory.
     let app = match std::env::current_exe() {
@@ -140,7 +168,7 @@ fn main() -> ExitCode {
         None => open_app(&[]),
         Some("open") => open_app(&args[2..]),
         Some("agent") => agent_bridge(&args[2..]),
-        Some("update") => run_installed("forgecad-update", &args[2..]),
+        Some("update") => update(&args[2..]),
         Some(
             t @ ("versions" | "history" | "create_version" | "restore" | "compare" | "release" | "releases"
             | "regenerate_release"),

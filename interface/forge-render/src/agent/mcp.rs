@@ -1,19 +1,23 @@
 //! ForgeCAD's MCP server for Claude Code: the app tools (`apptools.rs`) over JSON-RPC lines on
-//! a unix socket of this app's own (in `$XDG_RUNTIME_DIR`, the person's alone). Claude Code
-//! starts `forge-app --mcp-bridge SOCKET`, which carries its stdio to the socket.
+//! a private local connection of this app's own (`forge_agent::ipc`: a unix socket in the user's
+//! runtime folder; on Windows a token-checked loopback port). Claude Code starts
+//! `forge-app --mcp-bridge SOCKET`, which carries its stdio to it.
 
 use super::apptools::{AppTools, base64, schemas};
+use forge_agent::ipc;
 use forge_agent::json::Json;
 use std::io::{BufRead, BufReader, Write};
-use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
 
 pub const SERVER: &str = "forgecad";
 
 /// Where this app instance's socket goes.
 pub fn socket_path() -> PathBuf {
-    let dir = std::env::var_os("XDG_RUNTIME_DIR")
-        .map(PathBuf::from)
+    // the user's own runtime folder, made private; the temp folder (also the user's own on
+    // macOS and Windows) if there is none
+    let dir = forge_dirs::runtime()
+        .map(|d| d.join("forgecad-agent"))
+        .filter(|d| ipc::private_dir(d).is_ok())
         .unwrap_or_else(std::env::temp_dir);
     // one per app in the process, as a process may hold several (tests do)
     static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
@@ -33,15 +37,17 @@ pub fn serve(path: &Path, tools: AppTools) -> std::io::Result<()> {
         ));
         std::fs::rename(path, aside)?;
     }
-    let l = UnixListener::bind(path)?;
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
-    }
+    let l = ipc::Listener::bind(path)?;
     std::thread::Builder::new()
         .name("agent-mcp".into())
         .spawn(move || {
-            for s in l.incoming().map_while(Result::ok) {
+            loop {
+                let s = match l.accept() {
+                    Ok(s) => s,
+                    // a connection without the token (Windows): dropped, the next one heard
+                    Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => continue,
+                    Err(_) => break,
+                };
                 let tools = tools.clone();
                 let _ = std::thread::Builder::new()
                     .name("agent-mcp-conn".into())
@@ -51,7 +57,7 @@ pub fn serve(path: &Path, tools: AppTools) -> std::io::Result<()> {
     Ok(())
 }
 
-fn connection(s: UnixStream, tools: &AppTools) {
+fn connection(s: ipc::Stream, tools: &AppTools) {
     let Ok(mut w) = s.try_clone() else { return };
     for line in BufReader::new(s).lines().map_while(Result::ok) {
         if line.trim().is_empty() {
@@ -147,7 +153,7 @@ fn error(id: Json, code: i32, msg: &str) -> Json {
 
 /// `forge-app --mcp-bridge SOCKET`: stdin to the socket, the socket to stdout, until either ends.
 pub fn bridge(socket: &str) -> std::io::Result<()> {
-    let s = UnixStream::connect(socket)?;
+    let s = ipc::connect(Path::new(socket))?;
     let mut back = s.try_clone()?;
     let mut to = s;
     std::thread::spawn(move || {

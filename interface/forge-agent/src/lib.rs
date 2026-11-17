@@ -2,9 +2,8 @@
 //! their names, measuring, a small PNG renderer, and a session that regenerates incrementally.
 
 pub mod bench;
-pub mod cmd;
-#[cfg(unix)]
 pub mod chat_bridge;
+pub mod cmd;
 #[cfg(test)]
 mod doc_tests;
 pub mod facemesh;
@@ -14,6 +13,7 @@ mod fillet_repros;
 pub mod handles;
 pub mod help;
 pub mod history;
+pub mod ipc;
 pub mod json;
 pub mod live;
 pub mod measure;

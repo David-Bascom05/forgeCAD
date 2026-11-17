@@ -1,4 +1,6 @@
 //! Project-aware agent tools use the existing history and release implementation.
+// fake agent CLIs as shell scripts: Unix only
+#![cfg(unix)]
 use forge_agent::json::Json;
 use forge_render::agent::{Event, Watch, apptools::AppTools, project};
 use std::path::{Path, PathBuf};

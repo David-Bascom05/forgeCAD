@@ -13,7 +13,7 @@ impl Config {
     /// The global files then the repo's (later ones win).
     pub fn load(git_common: &Path, git_dir: &Path) -> Config {
         let mut c = Config::default();
-        let home = std::env::var_os("HOME").map(PathBuf::from);
+        let home = forge_dirs::home();
         if let Some(g) = std::env::var_os("GIT_CONFIG_GLOBAL") {
             c.read_file(Path::new(&g), 0);
         } else {
@@ -216,9 +216,9 @@ fn lower_ends(key: &str) -> String {
 
 pub fn expand(v: &str, base: Option<&Path>) -> PathBuf {
     if let Some(rest) = v.strip_prefix("~/")
-        && let Some(h) = std::env::var_os("HOME")
+        && let Some(h) = forge_dirs::home()
     {
-        return PathBuf::from(h).join(rest);
+        return h.join(rest);
     }
     let p = PathBuf::from(v);
     match base {

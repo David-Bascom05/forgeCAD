@@ -323,12 +323,11 @@ pub fn call(name: &str, args: &Json, root: &Path) -> Result<Json, String> {
             .into_iter()
             .filter_map(|(p, seen)| matches!(seen, forge_lang::deps::Seen::Bytes(_)).then_some(p))
             .collect();
-        match history
+        if let forge_history::Saved::Paused(why) = history
             .save(&f, &inputs, "Agent version checkpoint", Some("agent"))
             .map_err(|e| e.to_string())?
         {
-            forge_history::Saved::Paused(why) => return Err(format!("History is paused: {why:?}")),
-            _ => {}
+            return Err(format!("History is paused: {why:?}"));
         }
     }
     forge_lang::vtools::call(name.strip_prefix("fg_").unwrap_or(name), &values, Some("agent"))

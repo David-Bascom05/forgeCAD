@@ -1,3 +1,5 @@
+// fake agent CLIs as shell scripts: Unix only
+#![cfg(unix)]
 use forge_agent::{chat_bridge, json::Json};
 use forge_render::{
     gui::Headless,

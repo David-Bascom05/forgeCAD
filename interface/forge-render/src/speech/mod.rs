@@ -87,7 +87,9 @@ pub fn find() -> Option<PathBuf> {
         return p.is_file().then_some(p);
     }
     let exe = std::env::current_exe().ok()?;
-    let p = exe.parent()?.join("forge-speech");
+    let p = exe
+        .parent()?
+        .join(format!("forge-speech{}", std::env::consts::EXE_SUFFIX));
     p.is_file().then_some(p)
 }
 

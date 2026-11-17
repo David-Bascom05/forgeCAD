@@ -1383,8 +1383,19 @@ fn read_plain(path: &Path) -> Option<Vec<u8>> {
 }
 
 #[cfg(not(unix))]
-fn read_plain(_: &Path) -> Option<Vec<u8>> {
-    None
+fn read_plain(path: &Path) -> Option<Vec<u8>> {
+    use std::io::Read;
+    if !std::fs::symlink_metadata(path).ok()?.is_file() {
+        return None;
+    }
+    let f = std::fs::File::open(path).ok()?;
+    let held = f.metadata().ok()?;
+    if !held.is_file() || held.len() > wire::LOG_LIMIT {
+        return None;
+    }
+    let mut out = Vec::new();
+    f.take(wire::LOG_LIMIT).read_to_end(&mut out).ok()?;
+    Some(out)
 }
 
 /// One entry onto the log, which holds the part's text and so is as private as the part. Made if
@@ -1441,9 +1452,47 @@ fn append_entry(path: &Path, part_mode: u32, e: &Entry) -> Result<u64, String> {
     Ok(start)
 }
 
+/// `append_entry` without Unix modes or link counts: the log at its own path, never a link.
 #[cfg(not(unix))]
-fn append_entry(_: &Path, _: u32, _: &Entry) -> Result<u64, String> {
-    Err("writing part files needs a unix system".into())
+fn append_entry(path: &Path, _: u32, e: &Entry) -> Result<u64, String> {
+    use std::io::{ErrorKind, Read, Seek, Write};
+    let refused = "not an op log; move it away to go on";
+    let cannot = |_| "cannot write".to_string();
+    if std::fs::symlink_metadata(path).is_ok_and(|m| !m.is_file()) {
+        return Err(refused.into());
+    }
+    let mut f = match std::fs::OpenOptions::new().read(true).write(true).open(path) {
+        Ok(f) => f,
+        Err(x) if x.kind() == ErrorKind::NotFound => std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create_new(true)
+            .open(path)
+            .map_err(|_| "cannot write".to_string())?,
+        Err(_) => return Err(refused.into()),
+    };
+    let held = f.metadata().map_err(cannot)?;
+    if !held.is_file() || held.len() > wire::LOG_LIMIT {
+        return Err(refused.into());
+    }
+    let mut bytes = Vec::new();
+    f.read_to_end(&mut bytes).map_err(cannot)?;
+    let mut out = Vec::new();
+    let start = if bytes.is_empty() {
+        out = wire::log_header();
+        0
+    } else {
+        let (_, good) = wire::read_log(&bytes).ok_or(refused)?;
+        good as u64
+    };
+    wire::put_entry(&mut out, e);
+    f.set_len(start).map_err(cannot)?;
+    f.seek(std::io::SeekFrom::End(0)).map_err(cannot)?;
+    if f.write_all(&out).is_err() {
+        let _ = f.set_len(start);
+        return Err("cannot write".into());
+    }
+    Ok(start)
 }
 
 /// Takes the last entry back off the log.
@@ -1460,7 +1509,13 @@ fn cut_log(path: &Path, to: u64) {
 }
 
 #[cfg(not(unix))]
-fn cut_log(_: &Path, _: u64) {}
+fn cut_log(path: &Path, to: u64) {
+    if std::fs::symlink_metadata(path).is_ok_and(|m| m.is_file())
+        && let Ok(f) = std::fs::OpenOptions::new().write(true).open(path)
+    {
+        let _ = f.set_len(to);
+    }
+}
 
 #[cfg(unix)]
 fn mode_of(m: &std::fs::Metadata) -> u32 {

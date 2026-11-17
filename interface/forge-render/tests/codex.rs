@@ -1,4 +1,6 @@
 //! Codex's event stream, process lifecycle, saved settings, and the app's selector.
+// fake agent CLIs as shell scripts: Unix only
+#![cfg(unix)]
 use forge_render::agent::{
     Backend, Event, Out,
     claude::Config,

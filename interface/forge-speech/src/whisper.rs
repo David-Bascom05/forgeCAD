@@ -136,13 +136,34 @@ unsafe extern "C" fn aborted(flag: *mut c_void) -> bool {
 }
 
 /// The libraries in the order they need each other; the GPU's are there if built.
-pub const LIBS: [(&str, bool); 6] = [
+#[cfg(not(any(target_os = "macos", windows)))]
+pub const LIBS: &[(&str, bool)] = &[
     ("libggml-base.so", true),
     ("libggml-cpu.so", true),
     ("libggml-cuda.so", false),
     ("libggml-vulkan.so", false),
     ("libggml.so", true),
     ("libwhisper.so", true),
+];
+/// macOS: Metal (and Accelerate's BLAS) where the build made them.
+#[cfg(target_os = "macos")]
+pub const LIBS: &[(&str, bool)] = &[
+    ("libggml-base.dylib", true),
+    ("libggml-cpu.dylib", true),
+    ("libggml-blas.dylib", false),
+    ("libggml-metal.dylib", false),
+    ("libggml.dylib", true),
+    ("libwhisper.dylib", true),
+];
+/// Windows: an MSVC build's DLLs, which have no `lib` in front.
+#[cfg(windows)]
+pub const LIBS: &[(&str, bool)] = &[
+    ("ggml-base.dll", true),
+    ("ggml-cpu.dll", true),
+    ("ggml-cuda.dll", false),
+    ("ggml-vulkan.dll", false),
+    ("ggml.dll", true),
+    ("whisper.dll", true),
 ];
 
 impl Whisper {
@@ -154,7 +175,7 @@ impl Whisper {
     ) -> Result<Whisper, String> {
         let mut libs = Vec::new();
         let mut gpu = None;
-        for (name, needed) in LIBS {
+        for &(name, needed) in LIBS {
             let p = lib_dir.join(name);
             if !p.exists() {
                 if needed {
@@ -175,6 +196,9 @@ impl Whisper {
                 && count("ggml_backend_vk_get_device_count") > 0
             {
                 gpu = Some("Vulkan");
+            } else if name.contains("metal") {
+                // every Mac that runs this has a Metal GPU
+                gpu = Some("Metal");
             }
             libs.push(lib);
         }

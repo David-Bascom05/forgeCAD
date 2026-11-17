@@ -2,6 +2,8 @@
 //! the message box. A stand-in recogniser (a shell script saying the protocol's lines) is
 //! quick; the real one, `forge-speech` with its model, hears a WAV file (by hand: it needs the
 //! model, `FORGECAD_SPEECH` and `FORGECAD_SPEECH_TEST_WAV`).
+// a fake forge-speech as a shell script: Unix only
+#![cfg(unix)]
 
 use forge_render::bindings::Chord;
 use forge_render::gui::{Gui, Headless};

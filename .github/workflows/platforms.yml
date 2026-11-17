@@ -1,0 +1,64 @@
+# ForgeCAD on Windows and macOS: the app, CLI and speech built as users install them, and the
+# tests of everything with platform code. Linux is gated by the Forgejo CI and the merge gate.
+name: platforms
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    env:
+      CARGO_INCREMENTAL: 0
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
+    steps:
+      - uses: actions/checkout@v4
+      - name: toolchain (rust-toolchain.toml)
+        run: rustup show
+      - name: build the app, CLI and speech
+        shell: bash
+        run: |
+          cargo build --release --locked --manifest-path interface/forge-render/Cargo.toml --bin forge-app
+          cargo build --release --locked -p forge-cli --bin forgecad
+          cargo build --release --locked --manifest-path interface/forge-speech/Cargo.toml
+      - name: tests of the platform code
+        shell: bash
+        run: |
+          cargo test --locked -p forge-dirs -p forge-agent -p forge-git -p forge-material
+          cargo test --locked --manifest-path interface/forge-speech/Cargo.toml
+          cargo test --locked --manifest-path interface/forge-render/Cargo.toml --lib agent::
+      - name: the language and its bench parts
+        shell: bash
+        run: cargo test --locked -p forge-lang --test bench_ports --test ports --test harness
+      - name: the CLI builds and measures a part
+        shell: bash
+        run: |
+          bin=target/release/forgecad
+          "$bin" measure interface/forge-lang/parts/bench/hub.fg mass --json
+          "$bin" agent list
+
+  # the kernel's results bit for bit on another CPU and OS: informative until it holds
+  bits:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    continue-on-error: true
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: bits against tools/speed/bits.txt
+        shell: bash
+        run: |
+          cargo build --release --locked -p forge-model --example bits
+          cargo build --release --locked -p forge-lang --example benchfg
+          { target/release/examples/bits; target/release/examples/benchfg bits; } > bits-here.txt
+          diff tools/speed/bits.txt bits-here.txt

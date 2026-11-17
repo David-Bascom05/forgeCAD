@@ -31,9 +31,7 @@ pub struct Conversation {
 }
 
 pub fn default_dir() -> Option<PathBuf> {
-    let base = std::env::var_os("XDG_STATE_HOME")
-        .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/state")))?;
+    let base = forge_dirs::state()?;
     Some(base.join("forgecad/conversations"))
 }
 
@@ -75,18 +73,15 @@ fn read(path: &Path, max: u64) -> Result<Json, String> {
     Json::parse(&std::fs::read_to_string(path).map_err(|e| e.to_string())?).map_err(|e| e.to_string())
 }
 fn private_dir(path: &Path) -> Result<(), String> {
-    use std::os::unix::fs::PermissionsExt;
-    std::fs::create_dir_all(path).map_err(|e| e.to_string())?;
-    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700)).map_err(|e| e.to_string())
+    forge_agent::ipc::private_dir(path).map_err(|e| e.to_string())
 }
 fn write(path: &Path, value: &Json) -> Result<(), String> {
-    use std::os::unix::fs::PermissionsExt;
     let text = value.to_string();
     let mut lock = forge_git::fsutil::Lock::take(path).map_err(|e| e.to_string())?;
     lock.write(text.as_bytes())
         .and_then(|_| lock.commit())
         .map_err(|e| e.to_string())?;
-    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600)).map_err(|e| e.to_string())
+    forge_agent::ipc::private_file(path).map_err(|e| e.to_string())
 }
 
 impl Conversation {
@@ -175,8 +170,7 @@ impl Conversation {
             .and_then(|_| lock.commit())
             .map_err(|e| e.to_string())?;
         self.generation += 1;
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).map_err(|e| e.to_string())?;
+        forge_agent::ipc::private_file(&path).map_err(|e| e.to_string())?;
         write(
             &dir.join("summary.json"),
             &Json::obj(vec![
@@ -380,7 +374,7 @@ pub fn terminal(event: &Event) -> bool {
 pub fn import_codex(base: &Path, project: &Path) -> Result<usize, String> {
     let codex_home = std::env::var_os("CODEX_HOME")
         .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".codex")));
+        .or_else(|| forge_dirs::home().map(|h| h.join(".codex")));
     let Some(home) = codex_home else { return Ok(0) };
     import_codex_from(base, project, &home.join("sessions"), &super::claude::clean_cwd())
 }

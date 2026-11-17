@@ -95,9 +95,7 @@ impl Drop for AgentHost {
 }
 
 fn settings_path() -> Option<PathBuf> {
-    let base = std::env::var_os("XDG_CONFIG_HOME")
-        .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))?;
+    let base = forge_dirs::config()?;
     Some(base.join("forgecad").join("agent.toml"))
 }
 
@@ -993,7 +991,11 @@ impl Gui {
             Kind::ClaudeCode => {
                 let c = ClaudeCode::new(
                     claude::Config {
-                        program: self.agent.program.clone().unwrap_or_else(|| "claude".into()),
+                        program: self
+                            .agent
+                            .program
+                            .clone()
+                            .unwrap_or_else(|| crate::agent::program("claude")),
                         model: s.claude_model.clone(),
                         file: file.to_path_buf(),
                         system,
@@ -1013,7 +1015,11 @@ impl Gui {
             Kind::Codex => {
                 let c = crate::agent::codex::Codex::new(
                     claude::Config {
-                        program: self.agent.program.clone().unwrap_or_else(|| "codex".into()),
+                        program: self
+                            .agent
+                            .program
+                            .clone()
+                            .unwrap_or_else(|| crate::agent::program("codex")),
                         model: s.codex_model.clone(),
                         file: file.to_path_buf(),
                         system,

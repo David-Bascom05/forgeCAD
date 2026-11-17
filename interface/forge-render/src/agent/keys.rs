@@ -1,5 +1,6 @@
-//! An endpoint's API key in the OS keyring (the Secret Service), by its base URL. Called on the
-//! backend's or a short-lived thread: the keyring may block to unlock.
+//! An endpoint's API key in the OS keyring (the Secret Service, the Keychain or the Credential
+//! Manager), by its base URL. Called on the backend's or a short-lived thread: the keyring may
+//! block to unlock.
 
 use keyring_core::{Entry, Error};
 use std::sync::OnceLock;
@@ -10,8 +11,15 @@ fn entry(url: &str) -> Result<Entry, String> {
     static STORE: OnceLock<Result<(), String>> = OnceLock::new();
     STORE
         .get_or_init(|| {
-            let s = zbus_secret_service_keyring_store::Store::new().map_err(|e| format!("keyring: {e}"))?;
-            keyring_core::set_default_store(s);
+            // the platform's own: the Secret Service, the macOS Keychain, the Windows
+            // Credential Manager
+            #[cfg(target_os = "macos")]
+            let s = apple_native_keyring_store::keychain::Store::new();
+            #[cfg(windows)]
+            let s = windows_native_keyring_store::store::Store::new();
+            #[cfg(not(any(target_os = "macos", windows)))]
+            let s = zbus_secret_service_keyring_store::Store::new();
+            keyring_core::set_default_store(s.map_err(|e| format!("keyring: {e}"))?);
             Ok(())
         })
         .clone()?;

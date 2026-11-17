@@ -1,5 +1,7 @@
 //! Markup for the agent: marks drawn over the view go with the message as a picture and as the
 //! names of what they're on, and stay with the message in the chat.
+// fake agent CLIs as shell scripts: Unix only
+#![cfg(unix)]
 
 use forge_render::shell::agent::Entry;
 use forge_render::shell::markup::Tool;

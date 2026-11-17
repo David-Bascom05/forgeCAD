@@ -1433,11 +1433,12 @@ impl Shell {
                             if toggle_resp.clicked() {
                                 toggles.push(key);
                             }
-                            p.text(
-                                pos2(head.left() + 7.0, head.center().y),
-                                Align2::LEFT_CENTER,
-                                if expanded { "▾" } else { "▸" },
-                                sans(12.0),
+                            icons::draw(
+                                &p,
+                                pos2(head.left() + 5.0, head.center().y - 6.0),
+                                12.0,
+                                if expanded { "chevron" } else { "right" },
+                                1.5,
                                 t.ink2,
                             );
                             let name = p.text(

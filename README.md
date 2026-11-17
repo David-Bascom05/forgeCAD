@@ -71,6 +71,24 @@ directory on `PATH`; optionally pass a different install root, such as
 directly as `forge-app`. Remove `forgecad` and `forge-app` from that root's `bin`
 directory to uninstall.
 
+### macOS and Windows
+
+ForgeCAD runs on Linux, macOS (Apple silicon and Intel) and Windows 10 and later; the
+`platforms` workflow builds and tests it on macOS and Windows for every push to `main`.
+
+- **macOS:** `tools/install.sh`, as above (Rust from rustup; the Xcode command-line tools).
+  It also puts `ForgeCAD.app` in `~/Applications`, so Launchpad, Spotlight and the Dock open
+  it. Speech: `forgecad-setup-speech` builds whisper.cpp with Metal. Settings live in
+  `~/Library/Application Support/forgecad`, caches in `~/Library/Caches/forgecad`.
+- **Windows:** `powershell -ExecutionPolicy Bypass -File tools\install.ps1` (Rust from
+  rustup with the MSVC toolchain, and the Visual Studio Build Tools' C++ workload). It adds
+  a Start menu entry. `forgecad update` runs the PowerShell updater; speech:
+  `forgecad-setup-speech.ps1 [cpu|cuda|vulkan]` (needs CMake). Settings live in `%APPDATA%`,
+  caches and conversations in `%LOCALAPPDATA%`.
+
+API keys go in each platform's own keyring: the Secret Service, the macOS Keychain, the
+Windows Credential Manager.
+
 `forgecad update` (also `forgecad-update`, or `tools/update.sh` from the checkout)
 clones the latest `main` into a temporary directory and reinstalls into the same
 installation root. Local changes and branches are left alone. Git access to

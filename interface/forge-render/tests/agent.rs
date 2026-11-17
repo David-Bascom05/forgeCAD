@@ -3,6 +3,8 @@
 //! --include-partial-messages`, 2.1.318, paths and the session's settings trimmed), the
 //! OpenAI-compatible loop against a mock server, and an agent's writes to the open file as one
 //! undo step a turn, in the app.
+// fake agent CLIs as shell scripts: Unix only
+#![cfg(unix)]
 
 use forge_render::agent::claude::Parser;
 use forge_render::agent::openai::{Config, OpenAi};

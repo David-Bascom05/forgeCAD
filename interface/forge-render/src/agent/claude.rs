@@ -193,10 +193,7 @@ pub struct Config {
 
 /// Legacy working directory, retained for importing conversations from older installs.
 pub fn clean_cwd() -> PathBuf {
-    let base = std::env::var_os("XDG_STATE_HOME")
-        .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/state")))
-        .unwrap_or_else(std::env::temp_dir);
+    let base = forge_dirs::state().unwrap_or_else(std::env::temp_dir);
     base.join("forgecad").join("agent")
 }
 

@@ -1019,14 +1019,41 @@ pub(crate) fn replace(path: &std::path::Path, src: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// `writable_file` where there are no Unix links or modes: a plain file at its own path, never
+/// a link to one.
 #[cfg(not(unix))]
-pub(crate) fn writable_file(_: &std::path::Path) -> Result<std::fs::Metadata, String> {
-    Err("writing part files needs a unix system".into())
+pub(crate) fn writable_file(path: &std::path::Path) -> Result<std::fs::Metadata, String> {
+    let refused = || "not a plain file; not written".to_string();
+    let looked = std::fs::symlink_metadata(path).map_err(|_| "cannot write".to_string())?;
+    if !looked.file_type().is_file() {
+        return Err(refused());
+    }
+    let f = std::fs::File::open(path).map_err(|_| refused())?;
+    let held = f.metadata().map_err(|_| "cannot write".to_string())?;
+    if !held.file_type().is_file() {
+        return Err(refused());
+    }
+    Ok(held)
 }
 
+/// `replace` without Unix modes: a new file beside it, renamed over it (rename replaces).
 #[cfg(not(unix))]
-pub(crate) fn replace(_: &std::path::Path, _: &str) -> Result<(), String> {
-    Err("writing part files needs a unix system".into())
+pub(crate) fn replace(path: &std::path::Path, src: &str) -> Result<(), String> {
+    writable_file(path)?;
+    let dir = path.parent().ok_or("cannot write")?;
+    let name = path.file_name().ok_or("cannot write")?.to_string_lossy();
+    let tmp = dir.join(format!(".{name}.{}.tmp", std::process::id()));
+    let written = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&tmp)
+        .and_then(|mut t| std::io::Write::write_all(&mut t, src.as_bytes()).and_then(|_| t.sync_all()))
+        .and_then(|_| std::fs::rename(&tmp, path));
+    if written.is_err() {
+        let _ = std::fs::remove_file(&tmp);
+        return Err("cannot write".into());
+    }
+    Ok(())
 }
 
 /// A file named `.fc` is a part, however broken (only those are opened at all), unless its first

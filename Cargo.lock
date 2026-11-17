@@ -8,6 +8,7 @@ version = "0.1.0"
 dependencies = [
  "forge-asm",
  "forge-bool",
+ "forge-dirs",
  "forge-doc",
  "forge-font",
  "forge-geom",
@@ -78,6 +79,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-dirs"
+version = "0.1.0"
+
+[[package]]
 name = "forge-doc"
 version = "0.1.0"
 dependencies = [
@@ -128,6 +133,9 @@ dependencies = [
 [[package]]
 name = "forge-git"
 version = "0.1.0"
+dependencies = [
+ "forge-dirs",
+]
 
 [[package]]
 name = "forge-gpu"
@@ -176,6 +184,7 @@ dependencies = [
  "forge-agent",
  "forge-asm",
  "forge-bool",
+ "forge-dirs",
  "forge-doc",
  "forge-draw",
  "forge-dwg",
@@ -199,6 +208,9 @@ dependencies = [
 [[package]]
 name = "forge-material"
 version = "0.1.0"
+dependencies = [
+ "forge-dirs",
+]
 
 [[package]]
 name = "forge-math"

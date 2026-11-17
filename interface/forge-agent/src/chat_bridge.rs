@@ -1,8 +1,8 @@
 //! Local terminal-to-UI agent requests. One private socket per window; no model credentials.
+use crate::ipc;
 use crate::json::Json;
 use std::collections::VecDeque;
 use std::io::{BufRead, BufReader, Read, Write};
-use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::PathBuf;
 use std::sync::{
     Arc, Mutex,
@@ -37,11 +37,7 @@ pub struct Bridge {
     path: PathBuf,
 }
 fn directory() -> Result<PathBuf, String> {
-    let base = std::env::var_os("XDG_RUNTIME_DIR")
-        .map(PathBuf::from)
-        .or_else(|| std::env::var_os("XDG_STATE_HOME").map(PathBuf::from))
-        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/state")))
-        .ok_or("No user runtime directory")?;
+    let base = forge_dirs::runtime().ok_or("No user runtime directory")?;
     Ok(base.join("forgecad-chat"))
 }
 fn err(message: impl Into<String>) -> Json {
@@ -61,22 +57,13 @@ fn record(r: &Record) -> Json {
 }
 impl Bridge {
     pub fn start(wake: Arc<dyn Fn() + Send + Sync>) -> Result<Self, String> {
-        use std::os::unix::fs::PermissionsExt;
         static NEXT: AtomicU32 = AtomicU32::new(0);
         let dir = directory()?;
-        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700)).map_err(|e| e.to_string())?;
+        ipc::private_dir(&dir).map_err(|e| e.to_string())?;
         let id = format!("{}-{}", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed));
         let path = dir.join(format!("{id}.sock"));
-        // Only replace a stale socket after proving no listener owns it.
-        if path.exists() {
-            if UnixStream::connect(&path).is_ok() {
-                return Err("Window socket already active".into());
-            }
-            std::fs::remove_file(&path).map_err(|e| e.to_string())?;
-        }
-        let listener = UnixListener::bind(&path).map_err(|e| e.to_string())?;
-        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).map_err(|e| e.to_string())?;
+        // a stale socket is replaced only after proving no listener owns it
+        let listener = ipc::Listener::bind(&path).map_err(|e| e.to_string())?;
         listener.set_nonblocking(true).map_err(|e| e.to_string())?;
         let state = Arc::new(Mutex::new(State::default()));
         let stop = Arc::new(AtomicBool::new(false));
@@ -84,7 +71,7 @@ impl Bridge {
         std::thread::spawn(move || {
             while !done.load(Ordering::Relaxed) {
                 match listener.accept() {
-                    Ok((mut stream, _)) => {
+                    Ok(mut stream) => {
                         let (shared, wake, window) = (shared.clone(), wake.clone(), window.clone());
                         std::thread::spawn(move || {
                             let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
@@ -107,6 +94,8 @@ impl Bridge {
                     Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                         std::thread::sleep(Duration::from_millis(30))
                     }
+                    // a connection without the token (Windows): dropped, the next one heard
+                    Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {}
                     Err(_) => break,
                 }
             }
@@ -207,8 +196,7 @@ pub fn call(window: &str, request: Json) -> Result<Json, String> {
     if window.is_empty() || !window.bytes().all(|b| b.is_ascii_digit() || b == b'-') {
         return Err("Invalid window ID".into());
     }
-    let mut s =
-        UnixStream::connect(directory()?.join(format!("{window}.sock"))).map_err(|e| e.to_string())?;
+    let mut s = ipc::connect(&directory()?.join(format!("{window}.sock"))).map_err(|e| e.to_string())?;
     s.set_read_timeout(Some(Duration::from_secs(5)))
         .map_err(|e| e.to_string())?;
     s.set_write_timeout(Some(Duration::from_secs(5)))

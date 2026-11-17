@@ -1,4 +1,6 @@
 //! Saved project chats, native Codex import, and resume through the rendered Agent tab.
+// fake agent CLIs as shell scripts: Unix only
+#![cfg(unix)]
 use forge_agent::json::Json;
 use forge_render::agent::conversations::{self, Conversation};
 use forge_render::shell::{
@@ -28,7 +30,6 @@ fn settings() -> AgentSettings {
 
 #[test]
 fn chats_round_trip_locally_and_stay_scoped_to_their_project() {
-    use std::os::unix::fs::PermissionsExt;
     let project = scratch();
     let other = scratch();
     let storage = scratch();
@@ -99,10 +100,17 @@ fn chats_round_trip_locally_and_stay_scoped_to_their_project() {
         .unwrap()
         .path();
     let path = folder.join(&chat.id).join("chat.json");
-    assert_eq!(
-        std::fs::metadata(path).unwrap().permissions().mode() & 0o777,
-        0o600
-    );
+    // the user's alone (Unix modes; Windows keeps it in the user's own app-data folder)
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        assert_eq!(
+            std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+    }
+    #[cfg(not(unix))]
+    let _ = &path;
     assert!(
         std::fs::read_dir(&project).unwrap().next().is_none(),
         "no chat files enter the project"
@@ -141,7 +149,7 @@ fn endpoint_history_preserves_completed_tool_calls_and_drops_interrupted_groups(
     let result = j(r#"{"role":"tool","tool_call_id":"tool1","content":"ok"}"#);
     assert_eq!(
         conversations::complete_history(vec![prior.clone(), calls.clone()]),
-        [prior.clone()]
+        std::slice::from_ref(&prior)
     );
     let complete = vec![prior, calls, result];
     assert_eq!(conversations::complete_history(complete.clone()), complete);
@@ -155,7 +163,7 @@ fn old_codex_logs_are_imported_read_only_and_only_for_the_matching_project() {
     let native = scratch();
     let cwd = scratch();
     let write = |id: &str, root: &Path| {
-        let rows=vec![
+        let rows=[
             Json::obj(vec![("type","session_meta".into()),("payload",Json::obj(vec![("id",id.into()),("cwd",cwd.display().to_string().into())]))]),
             Json::obj(vec![("type","response_item".into()),("payload",Json::obj(vec![("role","developer".into()),("content",Json::Arr(vec![Json::obj(vec![("text",format!("You are ForgeCAD's in-app agent. The project root is {}. All app file paths are relative to this root.",root.display()).into())])]))]))]),
             Json::obj(vec![("type","response_item".into()),("payload",Json::obj(vec![("role","user".into()),("content",Json::Arr(vec![Json::obj(vec![("text","Build a telescope".into())])]))]))]),
@@ -236,6 +244,8 @@ fn wait(view: &mut forge_render::gui::Headless) {
     );
 }
 
+// a fake codex as a shell script: Unix only
+#[cfg(unix)]
 #[test]
 fn resume_picker_restores_the_transcript_and_native_session_after_reopening_the_app() {
     use std::os::unix::fs::PermissionsExt;
