@@ -175,7 +175,7 @@ whole quotient) and `mod(k, n)` (the remainder), so `xs[mod(k, 3)], ys[div(k, 3)
 ## Features
 
 ```
-extrude(PROFILE, d | sym(d) | two(f, b) | thru | thru_all | next | upto(FACES | WORKPLANE, offset),
+extrude(PROFILE, d | sym(d) | two(f, b) | thru | thru_all | next | upto(FACES | WORKPLANE | SKETCH, offset),
         taper: A, new: false)       adds (a new body for the first solid, or with new: true)
 cut(PROFILE, d | ...)               into the material: against the sketch normal
 intersect(PROFILE, extent)          keeps what lies inside
@@ -194,7 +194,8 @@ shell(t, open: FACES, out: false) hollow to walls t thick (out: outside the skin
 ```
 
 PROFILE: a sketch with one region, or one of its loops or closed entities (`S.outline`, `S.c`).
-A negative depth runs the other way. `taper:` takes a depth only: with `sym`, `two`, `thru`,
+A negative depth runs the other way. `upto(SKETCH)` ends on the sketch's plane (an edit
+moving the sketch moves the end); `offset` runs on past it (negative: short of it). `taper:` takes a depth only: with `sym`, `two`, `thru`,
 `thru_all`, `next` or `upto` it is `NotWith`; on an outline with a spline side it is
 `TaperOnCurve` (the kernel's draft has no exact leaning form for a free curve).
 
@@ -299,7 +300,7 @@ hole(at: POINT | [POINTS], d: D, depth: DEPTH, cbore: (D, depth), csink: (D, A),
      thread: "M36x2" | (size, pitch), flip: false, on: PLANE, bodies: BODIES)
 hole(at: .., screw: SIZE, convention: "iso"|"ansi", fit: "close"|"normal"|"loose"|"tap",
      seat: "cbore"|"csink", depth: DEPTH, point: A, ..)
-DEPTH: d | thru | next | upto(FACES | WORKPLANE, offset)
+DEPTH: d | thru | next | upto(FACES | WORKPLANE | SKETCH, offset)
 ```
 
 Drilled against the plane's normal (`flip: true`: with it), the mouth at each point, x along the
@@ -318,7 +319,7 @@ thread(hole: HOLE, length: L)                   the hole's recorded thread, at e
 thread(face: FACES, spec: SPEC, length: L, flip: false)   round a cylinder face (outside or in)
 thread(on: PLANE, at: POINT, spec: SPEC, internal: false, length: L, flip: false)   about an axis
        square to the plane through POINT (default its origin), into the material
-length: d | "full" | upto(FACES | WORKPLANE, offset);  left: false, chamfer: false, runout: false
+length: d | "full" | upto(FACES | WORKPLANE | SKETCH, offset);  left: false, chamfer: false, runout: false
 SPEC: "M6" | "M6x0.75" | "1/4-20" | (major, pitch)
 ```
 
@@ -390,7 +391,7 @@ bp = workpoint(meet: (bax, l.side(lsk.outline[5])))
 ## Bodies
 
 `new: true` on an extrude or revolve makes a body; a body is named by the feature that made it.
-`bodies: F | [F..] | "all"` on a hole, thread, pattern, text, import or split makes it
+`bodies: F | [F..] | "all"` on a hole, thread, pattern, text, import, split or thicken makes it
 act on those bodies, not the last made.
 
 ```

@@ -37,3 +37,27 @@ fn thicken_in_every_body() {
     assert!((v.0 - 2200.0).abs() < 1e-6, "{v:?}");
     assert_eq!((v.1, v.2, v.3), (12, 24, 2));
 }
+
+const UPTO: &str = "sketch s0(on: xy) {
+  r = rect(corner: (-20, -20), size: (40, 40))
+}
+b0 = extrude(s0, 5)
+sketch t(on: offset(xy, 30)) {
+  p = pt(0, 0)
+}
+sketch s(on: xy) {
+  r = rect(corner: (0, 0), size: (10, 10))
+}
+";
+
+/// `.fc` `extrude to s ..`, s a sketch: up to the sketch's plane (10500 mm3, 11 faces, 24
+/// edges), and `off -4` short of it (10100 mm3).
+#[test]
+fn up_to_a_sketch_plane() {
+    let v = shape(&format!("{UPTO}a = extrude(s, upto(t))\n"));
+    assert!((v.0 - 10500.0).abs() < 1e-6, "{v:?}");
+    assert_eq!((v.1, v.2, v.3), (11, 24, 1));
+    let v = shape(&format!("{UPTO}a = extrude(s, upto(t, -4))\n"));
+    assert!((v.0 - 10100.0).abs() < 1e-6, "{v:?}");
+    assert_eq!((v.1, v.2, v.3), (11, 24, 1));
+}

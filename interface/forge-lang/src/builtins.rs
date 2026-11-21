@@ -687,6 +687,8 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
                 Value::Wired(w) if w.plane().is_some() && w.work_ref().is_some() => Ok(Value::Extent(
                     ExtentV::UpToPlane(w.work_ref().expect("checked").feature, off),
                 )),
+                // a sketch's plane (.fc `to SKETCH`)
+                Value::Sketch(s) => Ok(Value::Extent(ExtentV::UpToPlane(s.borrow().idx, off))),
                 Value::Unresolved => Ok(Value::Unresolved),
                 o => Err(Error::WrongType {
                     span: a.span("face"),
