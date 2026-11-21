@@ -6,7 +6,7 @@ use super::{Action, Shell};
 use crate::shell::placed::Placed;
 use egui::{Color32, Pos2, Rect, Sense, Stroke, vec2};
 use forge_doc::text::{Want, tokens};
-use forge_doc::{Document, ItemId, expr, sketch as sk};
+use forge_doc::{expr, sketch as sk};
 use forge_math::{Frame, Point2};
 use forge_sketch::{Entity, Status};
 use std::collections::HashMap;
@@ -32,8 +32,6 @@ pub enum SkTool {
     Parallel,
     Perpendicular,
     Tangent,
-    /// Edges and faces clicked in the view become `project` rows.
-    Project,
     Circle3,
     Arc3,
     ArcTan,
@@ -265,13 +263,10 @@ const CIRCLE_STEPS: usize = 64;
 /// What Finish Sketch changes.
 #[derive(Clone, Debug, PartialEq)]
 pub enum SketchFor {
+    /// A new sketch block, added to the part.
     New,
-    /// A sketch already there.
-    Line(ItemId),
     /// A Forge part's sketch block, by its name.
     Forge(String),
-    /// A feature's inline profile, which becomes a named sketch line it reads, in one commit.
-    Inline(ItemId, String),
 }
 
 #[derive(Clone, Debug)]
@@ -315,8 +310,6 @@ pub struct SketchMode {
     first_rows: Vec<String>,
     /// Where the pointer last was on the plane: typing leaves it, the preview stays.
     cursor: Option<(f64, f64)>,
-    /// What each `project` row's references come to, from the worker that holds the part.
-    pub sources: HashMap<String, Result<Vec<sk::Refd>, String>>,
     /// The Modify tools' choice, the toggles, and text placed.
     pub more: More,
 }
@@ -336,7 +329,6 @@ pub(super) fn sketch_keys(s: &Shell) -> Vec<(SkTool, crate::bindings::Chord)> {
                 "sketch_dimension" => SkTool::Dimension,
                 "sketch_trim" => SkTool::Trim,
                 "sketch_offset" => SkTool::Offset,
-                "sketch_project" => SkTool::Project,
                 "sketch_construction" => SkTool::Construction,
                 "sketch_point" => SkTool::Point,
                 _ => return None,
@@ -346,18 +338,6 @@ pub(super) fn sketch_keys(s: &Shell) -> Vec<(SkTool, crate::bindings::Chord)> {
         .collect();
     keys.sort_by_key(|k| !k.1.shift);
     keys
-}
-
-/// A `project` row's references, its words after the word.
-pub fn project_refs(row: &str) -> Option<String> {
-    let t = tokens(row);
-    let (first, rest) = t.split_first()?;
-    let rest = rest.strip_suffix(&["cons".to_string()]).unwrap_or(rest);
-    let rest = match rest {
-        [refs @ .., w, _] if w == "approx" => refs,
-        _ => rest,
-    };
-    (first == "project").then(|| rest.join(" "))
 }
 
 /// A row added, for tests and the status bar.
@@ -390,22 +370,9 @@ fn num_of(params: &[(String, String)]) -> impl Fn(&str, Want) -> Result<f64, Str
 }
 
 impl SketchMode {
-    pub fn new(
-        edit: SketchFor,
-        head: String,
-        plane: Frame,
-        rows: Vec<String>,
-        doc: Option<&Document>,
-    ) -> SketchMode {
-        let params = doc.map_or(Vec::new(), |d| {
-            d.items
-                .iter()
-                .filter_map(|i| match &i.body {
-                    forge_doc::Body::Param { name, expr, .. } => Some((name.clone(), expr.clone())),
-                    _ => None,
-                })
-                .collect()
-        });
+    /// The sketch on `plane` with these rows; its numbers read through the params `set_params`
+    /// gives it.
+    pub fn new(edit: SketchFor, head: String, plane: Frame, rows: Vec<String>) -> SketchMode {
         let mut m = SketchMode {
             edit,
             head,
@@ -418,7 +385,6 @@ impl SketchMode {
             active: 0,
             first_rows: Vec::new(),
             cursor: None,
-            sources: HashMap::new(),
             rows,
             tool: None,
             picks: Vec::new(),
@@ -426,7 +392,7 @@ impl SketchMode {
             solved: None,
             error: None,
             asking: None,
-            params,
+            params: Vec::new(),
             units: "mm",
             would_pick: None,
             glyph_over: None,
@@ -438,10 +404,8 @@ impl SketchMode {
 
     fn build(&self, rows: &[String]) -> Result<forge_model::Sketch, String> {
         let toks: Vec<Vec<String>> = rows.iter().map(|r| tokens(r)).collect();
-        let src = |t: &[String]| match self.sources.get(&t.join(" ")) {
-            Some(got) => got.clone(),
-            None => Err("still reading the part".to_string()),
-        };
+        // a Forge sketch holds no geometry projected from the part
+        let src = |_: &[String]| Err("a Forge sketch has no projected geometry".to_string());
         sk::build_on(
             self.plane,
             toks,
@@ -449,53 +413,6 @@ impl SketchMode {
             &src,
             self.solved.as_ref(),
         )
-    }
-
-    /// Takes in what the rows it opened with project, and solves with them.
-    pub fn take_sources(&mut self, got: HashMap<String, Result<Vec<sk::Refd>, String>>) {
-        self.sources = got;
-        self.solve();
-    }
-
-    /// Writes a `project` row for what a click named, each source by its handle, leaving out what's
-    /// already projected. A source a sketch can't hold is refused here, the row not written.
-    pub fn project(&mut self, words: String, got: Result<Vec<sk::Refd>, String>) -> bool {
-        let refs = match got {
-            Ok(r) => r,
-            Err(e) => {
-                self.error = Some(e);
-                return false;
-            }
-        };
-        let have: Vec<String> = self
-            .rows
-            .iter()
-            .filter_map(|r| project_refs(r))
-            .flat_map(|r| tokens(&r))
-            .collect();
-        let fresh: Vec<(String, sk::Refd)> = tokens(&words)
-            .into_iter()
-            .zip(refs)
-            .filter(|(w, _)| !have.contains(w))
-            .collect();
-        if fresh.is_empty() {
-            return false;
-        }
-        // what has only a fitted image goes in a row of its own that says how near it is held
-        let (fitted, exact): (Vec<_>, Vec<_>) = fresh
-            .into_iter()
-            .partition(|f| f.1.sources.iter().any(|s| sk::needs_fit(&self.plane, &s.1)));
-        let mut ok = true;
-        for (part, tail) in [(exact, ""), (fitted, " approx 0.001")] {
-            if part.is_empty() {
-                continue;
-            }
-            let key = part.iter().map(|f| f.0.as_str()).collect::<Vec<_>>().join(" ");
-            self.sources
-                .insert(key.clone(), Ok(part.into_iter().map(|f| f.1).collect()));
-            ok &= self.add(format!("project {key}{tail}"));
-        }
-        ok
     }
 
     fn solve(&mut self) {
@@ -730,18 +647,6 @@ impl SketchMode {
             self.solved = None;
             self.solve();
         }
-    }
-
-    /// The block as a part file holds it.
-    pub fn block(&self) -> String {
-        let mut out = format!("sketch {}\n", self.head);
-        for r in &self.rows {
-            out.push_str("  ");
-            out.push_str(r);
-            out.push('\n');
-        }
-        out.push_str("end\n");
-        out
     }
 
     pub fn set_tool(&mut self, t: Option<SkTool>) {
@@ -1472,7 +1377,7 @@ impl SketchMode {
                     }
                 }
             }
-            SkTool::Dimension | SkTool::Project => {}
+            SkTool::Dimension => {}
             SkTool::Spline | SkTool::SplineCv => {
                 // its first point again closes it, once it has a shape
                 if self.pick_at.len() >= 3
@@ -2486,7 +2391,6 @@ impl Shell {
             Some(SkTool::Rectangle) => Some("Drawing a rectangle"),
             Some(SkTool::Circle) => Some("Drawing a circle"),
             Some(SkTool::Arc) => Some("Drawing an arc"),
-            Some(SkTool::Project) => Some("Click edges or faces to project them"),
             _ => None,
         };
         let asks = m.tool.and_then(|tool| {
@@ -2566,9 +2470,9 @@ impl Shell {
         self.view_blocks.push(r.response.rect);
     }
 
-    /// No menu or dialog is in the way of a click.
+    /// No menu is in the way of a click.
     fn modal_clear(&self) -> bool {
-        !self.menu_open() && self.dialog.is_none()
+        !self.menu_open()
     }
 
     /// The ribbon's sketch tools, as actions.
@@ -2635,103 +2539,7 @@ mod tests {
     use super::*;
 
     fn mode() -> SketchMode {
-        SketchMode::new(SketchFor::New, "xy".into(), Frame::default(), Vec::new(), None)
-    }
-
-    #[test]
-    fn a_click_a_sketch_cannot_hold_writes_no_row_and_says_why() {
-        use forge_geom::Line;
-        use forge_math::{Point3, Vec3};
-        use forge_topo::Name;
-        let mut m = mode();
-        // an axis lying along the plane: no ends to make a line of
-        let axis = sk::Source::Axis(Line {
-            origin: Point3::ORIGIN,
-            dir: Vec3::new(1.0, 0.0, 0.0).normalize().unwrap(),
-        });
-        let refd = sk::Refd {
-            sources: vec![(Name(1), axis)],
-            one: true,
-        };
-        assert!(!m.project("@e12345678".into(), Ok(vec![refd])));
-        assert!(m.rows.is_empty(), "{:?}", m.rows);
-        assert!(m.error.as_deref().unwrap().contains("no ends"), "{:?}", m.error);
-        assert!(!m.project("@e12345678".into(), Err("gone".into())));
-        assert_eq!(m.error.as_deref(), Some("gone"));
-    }
-
-    #[test]
-    fn a_tilted_circle_is_an_ellipse_and_a_general_curve_a_row_of_its_own_marked_approx() {
-        use forge_geom::{Circle, Curve, Parabola};
-        use forge_math::{Interval, Point3, Vec3};
-        use forge_topo::Name;
-        let mut m = mode();
-        let tilted = Frame::from_z(Point3::ORIGIN, Vec3::new(0.0, 1.0, 1.0).normalize().unwrap());
-        let start = tilted.plane_point(Point2::new(5.0, 0.0));
-        let rim = sk::Source::Edge {
-            curve: Curve::Circle(Circle {
-                frame: tilted,
-                radius: 5.0,
-            }),
-            range: Interval::new(0.0, core::f64::consts::TAU),
-            start,
-            end: start,
-            closed: true,
-        };
-        let par = Curve::Parabola(Parabola {
-            frame: Frame::default().with_origin(Point3::new(20.0, 0.0, 0.0)),
-            focal: 2.0,
-        });
-        let bent = sk::Source::Edge {
-            start: forge_geom::CurveGeom::eval(&par, -3.0),
-            end: forge_geom::CurveGeom::eval(&par, 3.0),
-            curve: par,
-            range: Interval::new(-3.0, 3.0),
-            closed: false,
-        };
-        let one = |s| sk::Refd {
-            sources: vec![(Name(1), s)],
-            one: true,
-        };
-        assert!(
-            m.project("@e1111aaaa @e2222bbbb".into(), Ok(vec![one(rim), one(bent)])),
-            "{:?}",
-            m.error
-        );
-        assert_eq!(m.rows, ["project @e1111aaaa", "project @e2222bbbb approx 0.001"]);
-        let s = m.solved.as_ref().unwrap();
-        let kinds: Vec<_> = s.names.iter().map(|n| s.solved.entity(n.1).unwrap()).collect();
-        assert!(
-            matches!(kinds[0], Entity::Ellipse { ends: None, .. }),
-            "{kinds:?}"
-        );
-        assert!(matches!(kinds[1], Entity::Spline { .. }), "{kinds:?}");
-    }
-
-    #[test]
-    fn what_a_face_row_projects_shows_but_is_not_offered_to_rows() {
-        use forge_math::Point3;
-        use forge_topo::Name;
-        let mut m = mode();
-        let line = sk::Source::Edge {
-            curve: forge_geom::Curve::Line(forge_geom::Line {
-                origin: Point3::ORIGIN,
-                dir: forge_math::Vec3::new(1.0, 0.0, 0.0).normalize().unwrap(),
-            }),
-            range: forge_math::Interval::new(0.0, 10.0),
-            start: Point3::ORIGIN,
-            end: Point3::new(10.0, 0.0, 0.0),
-            closed: false,
-        };
-        let refd = sk::Refd {
-            sources: vec![(Name(7), line)],
-            one: false,
-        };
-        m.sources.insert("@f12345678".into(), Ok(vec![refd]));
-        assert!(m.add("project @f12345678".into()), "{:?}", m.error);
-        assert_eq!(m.solved.as_ref().unwrap().names.len(), 1);
-        assert!(m.points().is_empty());
-        assert_eq!(m.entity_near((5.0, 0.0), 1.0, "l"), None);
+        SketchMode::new(SketchFor::New, "xy".into(), Frame::default(), Vec::new())
     }
 
     #[test]
@@ -2757,14 +2565,8 @@ mod tests {
 
     #[test]
     fn the_draft_is_the_entity_as_it_will_be_and_typed_values_lock_it_and_become_dimensions() {
-        let params = Document::parse("w = 30\n");
-        let mut m = SketchMode::new(
-            SketchFor::New,
-            "xy".into(),
-            Frame::default(),
-            Vec::new(),
-            Some(&params),
-        );
+        let mut m = mode();
+        m.set_params(vec![("w".into(), "30".into())]);
         // a line follows the pointer, with its length and angle live
         m.set_tool(Some(SkTool::Line));
         m.click((0.0, 0.0), 0.5);
@@ -3038,13 +2840,13 @@ mod tests {
 
     #[test]
     fn a_dimension_shows_as_written_and_a_change_to_it_drives_the_sketch() {
-        let params = Document::parse("w = 30\n");
         let rows = vec![
             "rect 0 0 w 20".to_string(),
             "hdist l1.a l1.b w".to_string(),
             "vdist l2.a l2.b 20".to_string(),
         ];
-        let mut m = SketchMode::new(SketchFor::New, "xy".into(), Frame::default(), rows, Some(&params));
+        let mut m = SketchMode::new(SketchFor::New, "xy".into(), Frame::default(), rows);
+        m.set_params(vec![("w".into(), "30".into())]);
         assert!(m.error.is_none(), "{:?}", m.error);
         assert!(m.unchanged());
         let d = m.dimensions();
@@ -3059,14 +2861,17 @@ mod tests {
     }
 
     #[test]
-    fn its_block_reads_as_a_sketch_a_part_can_extrude() {
+    fn its_forge_block_reads_as_a_sketch_a_part_can_extrude() {
         let mut m = mode();
         m.set_tool(Some(SkTool::Rectangle));
         m.click((0.0, 0.0), 0.5);
         m.click((30.0, 20.0), 0.5);
-        let src = format!("plate: {}extrude 5 plate\n", m.block());
-        let p = forge_agent::tools::Part::new(&src);
-        assert!(p.model.error.is_none(), "{:?}", p.model.error);
-        assert!((forge_agent::model::Model::new(&src).mass().unwrap().volume - 3000.0).abs() < 1e-6);
+        let block = crate::shell::fgsketch::block("plate", "xy", &m.rows).unwrap();
+        let src = format!("{block}slab = extrude(plate, 5)\n");
+        let (run, _) = forge_lang::run(&src, forge_lang::Options::default(), Default::default());
+        assert!(run.errors.is_empty(), "{src}\n{:?}", run.errors);
+        let body = run.body.expect("a solid");
+        let volume = forge_topo::mass::mass(&body).unwrap().volume;
+        assert!((volume - 3000.0).abs() < 1e-6, "{volume}");
     }
 }

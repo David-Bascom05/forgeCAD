@@ -230,7 +230,7 @@ pub enum FgAct {
     Save,
     /// A tool's statement: applied, and the tool closed if it was.
     Tool(Op),
-    /// What only an .fc part can do, asked of a Forge part: said, typed.
+    /// What a Forge part can't take: said, typed.
     Refuse(super::fgtool::ToolError),
     /// An assembly's view changed (selection, hidden, isolated, highlighted): redraw its parts.
     AsmShow,

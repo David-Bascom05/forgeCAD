@@ -6,7 +6,7 @@ use forge_render::shell::thermo::BANDS;
 use forge_render::shell::thermo_ui::Cmd;
 
 fn settled(g: &Gui) -> bool {
-    g.view.is_some() && g.fg.as_ref().is_some_and(|s| s.done == s.seq) && !g.is_loading()
+    g.view.is_some() && g.fg.as_ref().is_some_and(|s| s.done == s.seq) && !g.loading()
 }
 
 /// Whether a pixel within a ring round `at` is `want` (sRGB bytes) to within `tol`.

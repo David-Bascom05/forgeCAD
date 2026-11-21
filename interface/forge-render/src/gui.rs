@@ -3,22 +3,14 @@
 //! unless the host asks for a frame, and the host asks only when something changed.
 
 use crate::camera::Camera;
-use crate::live::{self, Out};
 use crate::nav::Nav;
 use crate::render::{self, Entity, Mark, Offscreen, Overlay, Renderer, part_info};
 use crate::scene::{Motion, Placement, Scene};
-use crate::shell::SketchChild;
-use crate::shell::dialog::{Dialog, DialogTarget};
-use crate::shell::dim::DimEdit;
 use crate::shell::settings::KeyCmd;
-use crate::shell::sketching::{SkTool, SketchFor, SketchMode, project_refs};
+use crate::shell::sketching::{SketchFor, SketchMode};
 use crate::shell::{Action, Shell};
 use crate::viewcube;
 use crate::viewer::now_ms;
-use forge_agent::handles::Facts;
-use forge_agent::live::{Event, Live};
-use forge_agent::short;
-use forge_agent::tools::{Call, Part, Target};
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, channel};
 use winit::dpi::PhysicalPosition;
@@ -61,15 +53,11 @@ pub(crate) struct Loaded {
     /// Its file, if it has one.
     file: Option<String>,
     name: String,
-    /// The .fc part its worker acts on; none for a Forge part, which `fg` builds.
-    part: Option<Part>,
     /// Nothing in it yet: the view holds the origin's planes whole.
     empty: bool,
     scene: Scene,
-    /// Its pipelines take tens of milliseconds to make: on the loader's thread, never in a frame.
+    /// Its pipelines take tens of milliseconds to make: on the build's thread, never in a frame.
     renderer: Renderer,
-    /// It built but can't be shown, and why.
-    unshown: Option<String>,
 }
 
 /// The part in view.
@@ -82,20 +70,12 @@ pub struct View {
     size: (u32, u32),
     /// Its picture is out of date.
     dirty: bool,
-    /// The .fc worker; none for a Forge (.fg) part, which `fg` builds.
-    pub live: Option<Live<Out>>,
     pub motion: Option<Motion>,
-    pub facts: Facts,
     /// What the view's click had selected, to see a new click by.
     clicked: Vec<(u32, Entity)>,
     clicks: u32,
     /// What of the origin was drawn last: its picture changes with this.
     origin_was: Vec<(crate::origin::Item, bool)>,
-    sketches_was: Vec<(usize, bool)>,
-    /// A dialog's result is what's on the screen.
-    previewing: bool,
-    /// A number's being dragged or has just been let go: the picture's the worker's, not the mesh's.
-    pub live_drag: bool,
 }
 
 /// A frame's times, in milliseconds.
@@ -139,15 +119,12 @@ pub struct Gui {
     queue: wgpu::Queue,
     adapter: wgpu::AdapterInfo,
     pub view: Option<View>,
-    loading: Option<Receiver<Result<Loaded, String>>>,
     waker: Waker,
     /// The view holds the pointer: a press began in it.
     captured: bool,
     over_view: bool,
     /// Where the pointer last was, in window pixels.
     pointer_px: Option<PhysicalPosition<f64>>,
-    /// Tool calls made, for replay.
-    pub calls: Vec<Call>,
     pixels_per_point: f32,
     /// The font atlas from before the first frame, still to go to the GPU.
     warm_textures: Option<egui::TexturesDelta>,
@@ -155,9 +132,6 @@ pub struct Gui {
     view_file: Option<String>,
     /// The window, in device pixels.
     target_px: (u32, u32),
-    tree_hover_was: Option<forge_doc::ItemId>,
-    /// A feature to open once the sketch just finished is in.
-    after_sketch: Option<&'static str>,
     /// When the right button went down in the view, for its menu to show if it stays down.
     mark_held: Option<f64>,
     /// A message with marks, sent once the frame showing them is drawn.
@@ -169,10 +143,6 @@ pub struct Gui {
     markup_occ_rx: Option<(u64, Receiver<gui_markup::OccNames>)>,
     /// The window's format, for a picture of it drawn again.
     format: wgpu::TextureFormat,
-    /// A sketch's plane has been asked for.
-    sketch_for: Option<(String, SketchFor, Vec<String>)>,
-    /// What the `project` rows of the sketch being opened come to.
-    sketch_sources: std::collections::HashMap<String, Result<Vec<forge_doc::sketch::Refd>, String>>,
     /// A Forge (.fg) part, and its first view waiting for the layout.
     pub fg: Option<crate::fg::Session>,
     fg_view: Option<Loaded>,
@@ -240,37 +210,15 @@ pub fn is_dwg(path: &str) -> bool {
     path.to_ascii_lowercase().ends_with(".dwg")
 }
 
+/// A file's name, as its tab and title show it.
 fn name_of(path: &str) -> String {
-    let n = path.rsplit('/').next().unwrap_or(path);
-    if n.ends_with(".fc") || n.ends_with(".fg") {
-        n.to_string()
-    } else {
-        format!("{n}.fc")
-    }
+    path.rsplit(['/', '\\']).next().unwrap_or(path).to_string()
 }
 
 impl View {
     pub fn mark_dirty(&mut self) {
         self.dirty = true;
     }
-}
-
-/// The line a sketch reads the part above: its own, or where a new one would go.
-fn place_of(shell: &Shell, edit: &SketchFor) -> Option<forge_doc::ItemId> {
-    match edit {
-        SketchFor::Line(id) | SketchFor::Inline(id, _) => Some(*id),
-        SketchFor::Forge(_) => None,
-        SketchFor::New => {
-            let (doc, end) = (shell.doc.as_ref()?, shell.end_at?);
-            let mut lines = doc.features().map(|i| i.id);
-            lines.find(|&i| i == end)?;
-            lines.next()
-        }
-    }
-}
-
-fn sketch_place(shell: &Shell) -> Option<forge_doc::ItemId> {
-    place_of(shell, &shell.sketch.as_ref()?.edit)
 }
 
 impl Gui {
@@ -318,20 +266,14 @@ impl Gui {
             queue,
             adapter,
             view: None,
-            loading: None,
             waker,
             captured: false,
             over_view: false,
             pointer_px: None,
-            calls: Vec::new(),
             pixels_per_point: 1.0,
             warm_textures: Some(warm.textures_delta),
             view_file: None,
             target_px: (1, 1),
-            tree_hover_was: None,
-            sketch_for: None,
-            sketch_sources: Default::default(),
-            after_sketch: None,
             mark_held: None,
             markup_job: None,
             markup_wait: None,
@@ -403,17 +345,13 @@ impl Gui {
         }
     }
 
-    pub fn is_loading(&self) -> bool {
-        self.loading.is_some()
-    }
-
     /// Opens a part in a tab of its own, or brings up the tab it's in.
     pub fn open(&mut self, path: &str) {
         self.open_document(path, true);
     }
 
     /// Opens a part into the active document, in the background: the window never waits on the
-    /// kernel. False if nothing could be opened.
+    /// kernel. A bench part's name opens its Forge port. False if nothing could be opened.
     fn load(&mut self, path: &str) -> bool {
         // a DWG file: AutoCAD's layout, its own tab
         if is_dwg(path) {
@@ -442,68 +380,22 @@ impl Gui {
         if path.ends_with(".fg") {
             return self.open_fg(path);
         }
-        self.fg = None;
-        self.fg_view = None;
-        self.shell.fg = None;
-        let (send, recv) = channel();
-        self.loading = Some(recv);
-        let (path, waker) = (path.to_string(), self.waker.clone());
-        self.shell.status = format!("Opening {}", name_of(&path));
-        let (device, queue, adapter) = (self.device.clone(), self.queue.clone(), self.adapter.clone());
-        std::thread::spawn(move || {
-            let got = (|| {
-                let (mesh, _) = crate::load::open(&path, true)?;
-                let part = crate::load::tool_part(&path)?;
-                let parts = [mesh];
-                let mut scene = Scene::new(&part_info(&parts), vec![Placement::at(0, [0.0; 3])]);
-                scene.set_explode(0.0);
-                let renderer = Renderer::new(
-                    device,
-                    queue,
-                    adapter,
-                    render::OFFSCREEN,
-                    (16, 16),
-                    &parts,
-                    &scene,
-                );
-                let unshown = crate::load::MESH_FAILED.with(|f| f.borrow_mut().take());
-                Ok(Loaded {
-                    file: path.ends_with(".fc").then(|| path.clone()),
-                    name: name_of(&path),
-                    empty: part.model.lines.is_empty(),
-                    part: Some(part),
-                    scene,
-                    renderer,
-                    unshown,
-                })
-            })();
-            let _ = send.send(got);
-            waker();
-        });
-        true
-    }
-
-    fn take_loaded(&mut self) {
-        // the view takes its size from the layout: nothing to allocate until there is one
-        if self.shell.view_rect.area() <= 0.0 {
-            return;
-        }
-        let Some(r) = &self.loading else { return };
-        let Ok(got) = r.try_recv() else { return };
-        self.loading = None;
-        let l = match got {
-            Ok(l) => l,
-            Err(why) => {
+        match crate::load::bench_file(path) {
+            Some(Ok(file)) => self.open_fg(&file),
+            Some(Err(why)) => {
                 self.shell.status = why;
-                return;
+                false
             }
-        };
-        self.show_loaded(l);
+            None => {
+                self.shell.status = format!("{path}: not a Forge part (.fg), a DWG file or a bench part");
+                false
+            }
+        }
     }
 
-    /// A part's view, its worker (for .fc) and its saved orientation.
+    /// A part's view and its saved orientation.
     fn show_loaded(&mut self, l: Loaded) {
-        self.shell.unshown = l.unshown.is_some();
+        self.shell.unshown = false;
         let (scene, mut renderer) = (l.scene, l.renderer);
         let (center, radius) = scene.bounds();
         let size = self.view_px();
@@ -521,18 +413,11 @@ impl Gui {
         let tex = self
             .egui
             .register_native_texture(&self.device, &raw, wgpu::FilterMode::Nearest);
-        let live = l.part.map(|p| {
-            let mut live = live::start(p);
-            let w = self.waker.clone();
-            live.on_ready(move || w());
-            live
-        });
         let mut nav = Nav::new(camera, size, self.pixels_per_point);
         nav.tool = self.shell.view.tool;
         if let Some(f) = &l.file {
             let path = format!("{f}.view");
-            let (orient, home, eyes) = Self::load_view(&path);
-            self.shell.sketch_eye = eyes;
+            let (orient, home) = Self::load_view(&path);
             nav.orient = orient;
             nav.home_view = home;
             // it opens where Home is
@@ -554,15 +439,10 @@ impl Gui {
             tex,
             size,
             dirty: true,
-            live,
             motion: None,
-            facts: Facts::default(),
             clicked: Vec::new(),
             clicks: 0,
             origin_was: Vec::new(),
-            sketches_was: Vec::new(),
-            previewing: false,
-            live_drag: false,
         });
         self.shell.view_tex = Some(tex);
         self.shell.name = l.name;
@@ -632,153 +512,6 @@ impl Gui {
         )
     }
 
-    /// What the worker has finished.
-    fn take_live(&mut self) {
-        let Some(v) = &mut self.view else { return };
-        let Some(l) = &mut v.live else { return };
-        let events = l.poll();
-        let part = v.scene.placements[0].part;
-        for e in events {
-            match e {
-                Event::Doc(d) => self.shell.set_doc(&d.src, d.version, d.failed),
-                Event::Done(d) => {
-                    // the reply's first line says it
-                    let first = d.text.lines().next().unwrap_or("").to_string();
-                    if let Some(dlg) = &mut self.shell.dialog
-                        && dlg.awaiting
-                    {
-                        dlg.awaiting = false;
-                        if d.ok {
-                            // + : the same kind again, from the start
-                            let again = match dlg.target {
-                                crate::shell::dialog::DialogTarget::New(kind) if dlg.again => Some(kind),
-                                _ => None,
-                            };
-                            self.shell.dialog = None;
-                            self.shell.out.extend(again.map(Action::NewFeature));
-                        } else {
-                            dlg.again = false;
-                            dlg.error = Some(d.text.lines().nth(1).unwrap_or(&first).to_string());
-                            self.calls.pop();
-                        }
-                    }
-                    if let Some(e) = &mut self.shell.dim {
-                        e.error = (!d.ok).then(|| d.text.lines().nth(1).unwrap_or(&first).to_string());
-                    }
-                    self.shell.status = first;
-                }
-                Event::Frame(f) => {
-                    if f.seq > 0
-                        && let Some(e) = &mut self.shell.dim
-                    {
-                        e.error = f.failure.clone();
-                    }
-                    let mut ok_now = false;
-                    if let Some(d) = &mut self.shell.dialog
-                        && d.seq == f.seq
-                    {
-                        d.error = f.failure.as_deref().map(crate::shell::panel::plain_error);
-                        d.answered = f.seq;
-                        // which side fills isn't for a person to find by getting it wrong
-                        if d.error.is_some() && d.try_other_side() {
-                            d.seq = 0;
-                        } else if d.ok_pending {
-                            // the side found: the OK pressed while it was being looked for
-                            d.ok_pending = false;
-                            ok_now = d.error.is_none();
-                        }
-                    }
-                    if ok_now {
-                        self.shell.out.push(Action::DialogOk);
-                    }
-                    if let Some(Out::Delta(d)) = f.out {
-                        v.renderer.live_apply(part, &d);
-                        if f.seq > 0 {
-                            v.renderer.live_show(true);
-                            v.scene.set_part(part, d.center, d.radius, vec![d.chord]);
-                            v.dirty = true;
-                        }
-                    }
-                }
-                Event::Final(out) => {
-                    if let Out::Whole(m) = out {
-                        self.shell.unshown = false;
-                        v.renderer.set_parts(std::slice::from_ref(&*m));
-                        let chords = m.lods.iter().map(|x| x.chord).collect();
-                        v.scene.set_part(part, m.center, m.radius, chords);
-                    }
-                    v.renderer.live_show(false);
-                    v.live_drag = false;
-                    v.dirty = true;
-                }
-                Event::Checking => {
-                    self.shell.checking_since.get_or_insert(now_ms());
-                }
-                Event::Checked(flags) => {
-                    self.shell.flags = flags;
-                    self.shell.checking_since = None;
-                }
-                Event::SketchPlane(head, got) => {
-                    let asked = self.sketch_for.take_if(|a| a.0 == head);
-                    match (got, asked) {
-                        (Ok(plane), Some((head, edit, rows))) => {
-                            let mut m = SketchMode::new(edit, head, plane, rows, self.shell.doc.as_ref());
-                            m.units = self.shell.units;
-                            if m.rows.iter().any(|r| project_refs(r).is_some()) {
-                                m.take_sources(std::mem::take(&mut self.sketch_sources));
-                            }
-                            self.shell.sketch = Some(m);
-                            self.shell.origin_selected = None;
-                            self.shell.tab = 1;
-                            self.shell.status.clear();
-                            // square on to it, as if drawing on a sheet
-                            look_at(v, plane);
-                        }
-                        (Err(why), Some(_)) => self.shell.status = why,
-                        _ => {}
-                    }
-                }
-                Event::SketchSources { adding: false, got } => {
-                    self.sketch_sources = got.into_iter().collect()
-                }
-                Event::SketchSources { adding: true, got } => {
-                    if let Some(m) = &mut self.shell.sketch {
-                        for (words, r) in got {
-                            m.project(words, r);
-                        }
-                    }
-                }
-                Event::Facts(f) => {
-                    if let Some(kind) = self.after_sketch.take() {
-                        self.shell.out.push(Action::NewFeature(kind));
-                    }
-                    v.dirty |= f.sketches != self.shell.sketch_shapes;
-                    v.facts = *f;
-                    self.shell.sketch_shapes = v.facts.sketches.clone();
-                    // what's marked for the selection reads these
-                    v.dirty |= self.shell.selected.is_some();
-                    if let Some(id) = self.shell.selected
-                        && self.shell.dim.as_ref().is_none_or(|e| !e.dragging)
-                    {
-                        let old = self.shell.dim.take();
-                        self.shell.dim = v
-                            .facts
-                            .handle(id)
-                            .cloned()
-                            .map(|h| DimEdit::in_units(h, self.shell.units));
-                        if let (Some(e), Some(old)) = (&mut self.shell.dim, old) {
-                            e.error = old.error;
-                            // what's being typed stays, whatever the part has just become
-                            if old.text != old.handle.text {
-                                e.text = old.text;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     /// What of the origin is under the pointer in the view: what's shown, any time it's the axes or
     /// the point; a plane only where the part isn't hit.
     fn origin_under(&self) -> Option<crate::origin::Item> {
@@ -790,9 +523,8 @@ impl Gui {
             .into_iter()
             .enumerate()
             .filter(|(k, i)| {
-                self.shell.origin_shown[*k]
-                    || self.shell.origin_selected == Some(*i)
-                    || (self.shell.rows.is_empty() && *k < 3)
+                // the origin's planes are always there to pick (a sketch's plane), shown or not
+                self.shell.origin_shown[*k] || self.shell.origin_selected == Some(*i) || *k < 3
             })
             .map(|(_, i)| i)
             .collect();
@@ -808,16 +540,11 @@ impl Gui {
         )
     }
 
-    /// A click in the view chooses a face's feature; a row of the tree chooses its faces. With a
-    /// dialog up, what's clicked goes to the field waiting for picks.
+    /// A click in the view: what Forge names it, for the tool waiting, the sketch being started,
+    /// Measure, or just shown.
     fn sync_selection(&mut self) {
         // in a sketch only the sketch answers the pointer; the model's for what's looked at
-        if self
-            .shell
-            .sketch
-            .as_ref()
-            .is_some_and(|m| m.tool != Some(SkTool::Project))
-        {
+        if self.shell.sketch.is_some() {
             self.shell.origin_hover = None;
             if let Some(v) = &mut self.view {
                 v.clicks = v.nav.clicks;
@@ -840,454 +567,7 @@ impl Gui {
             }
             return;
         }
-        if self.fg.is_some() {
-            self.fg_picks(under);
-            return;
-        }
-        if self.shell.sketch_pick {
-            let Some(v) = &mut self.view else { return };
-            let clicked = v.nav.clicks != v.clicks;
-            v.clicks = v.nav.clicks;
-            let face = v.nav.selected.iter().rev().find_map(|&(_, e)| match e {
-                Entity::Face(f) => v.facts.face_refs.get(f as usize).cloned(),
-                _ => None,
-            });
-            v.nav.selected.clear();
-            v.clicked.clear();
-            // a sketch chosen, here or in the tree: that's the one to edit
-            let sketch_row = |id: Option<forge_doc::ItemId>| {
-                id.filter(|id| self.shell.rows.iter().any(|r| r.id == *id && r.kind == "sketch"))
-            };
-            let picked_sketch = sketch_row(self.shell.selected)
-                .or_else(|| sketch_row(self.shell.sketch_hover.filter(|_| clicked)));
-            if self.shell.selected.take().is_some() && picked_sketch.is_none() {
-                self.shell.status =
-                    "That's a feature. Pick a plane, a planar face, or a sketch to edit".to_string();
-            }
-            if let Some(id) = picked_sketch {
-                self.shell.sketch_pick = false;
-                self.shell.selected = Some(id);
-                self.edit_sketch(id);
-                return;
-            }
-            let chosen = self.shell.origin_selected.take();
-            let plane = chosen.or(under.filter(|_| clicked)).filter(|i| {
-                matches!(
-                    i,
-                    crate::origin::Item::XyPlane
-                        | crate::origin::Item::XzPlane
-                        | crate::origin::Item::YzPlane
-                )
-            });
-            let on_face = face.filter(|_| clicked).map(|f| format!("on {f}"));
-            if let Some(h) = plane.map(|i| i.reference().to_string()).or(on_face) {
-                self.ask_plane(h, SketchFor::New, Vec::new());
-            }
-            return;
-        }
-        if self
-            .shell
-            .sketch
-            .as_ref()
-            .is_some_and(|m| m.tool == Some(SkTool::Project))
-        {
-            let at = sketch_place(&self.shell);
-            let Some(v) = &mut self.view else { return };
-            v.clicks = v.nav.clicks;
-            if v.nav.selected != v.clicked {
-                // a click's one, or all a window took
-                let refs: Vec<String> = v
-                    .nav
-                    .selected
-                    .iter()
-                    .filter_map(|&(_, e)| match e {
-                        Entity::Face(f) => v.facts.face_refs.get(f as usize).cloned(),
-                        Entity::Edge(x) => v.facts.edge_refs.get(x as usize).cloned(),
-                        Entity::Vertex(_) => None,
-                    })
-                    .collect();
-                v.nav.selected.clear();
-                v.clicked.clear();
-                if !refs.is_empty()
-                    && let Some(l) = &mut v.live
-                {
-                    l.sketch_sources(at, refs, true);
-                }
-                v.dirty = true;
-            }
-            return;
-        }
-        let origin_under = self.origin_under();
-        let Some(v) = &mut self.view else { return };
-        if let Some(d) = &mut self.shell.dialog {
-            // a revolve's axis from the origin's axes or a work axis, in the view or the tree
-            if d.kind == "revolve" && d.pick.as_ref().is_some_and(|p| p.0 == "Axis") {
-                use crate::origin::Item;
-                let clicked = v.nav.clicks != v.clicks;
-                let origin = match self.shell.origin_selected {
-                    Some(i @ (Item::XAxis | Item::YAxis | Item::ZAxis)) => Some(i),
-                    _ => origin_under
-                        .filter(|i| clicked && matches!(i, Item::XAxis | Item::YAxis | Item::ZAxis)),
-                };
-                let work = self
-                    .shell
-                    .selected
-                    .and_then(|id| v.facts.work_axes.iter().find(|w| w.0 == id))
-                    .map(|w| (w.1, w.2));
-                let line = match origin {
-                    Some(Item::XAxis) => Some(([0.0; 3], [1.0, 0.0, 0.0])),
-                    Some(Item::YAxis) => Some(([0.0; 3], [0.0, 1.0, 0.0])),
-                    Some(Item::ZAxis) => Some(([0.0; 3], [0.0, 0.0, 1.0])),
-                    _ => work,
-                };
-                if let Some((at, dir)) = line {
-                    let plane = crate::shell::dialog::profile_sketch(d).and_then(|o| {
-                        let id = self.shell.doc.as_ref()?.find(&o)?;
-                        self.shell
-                            .sketch_shapes
-                            .iter()
-                            .find(|x| x.item == Some(id))
-                            .map(|x| x.plane)
-                    });
-                    match plane.map(|pl| crate::shell::dialog::axis_in_plane(&pl, at, dir)) {
-                        Some(Ok(t)) => {
-                            d.error = None;
-                            d.take_pick("Axis", t);
-                        }
-                        Some(Err(why)) => d.error = Some(why),
-                        None => d.error = Some("Pick the profile first".to_string()),
-                    }
-                    self.shell.origin_selected = None;
-                    self.shell.selected = None;
-                    v.nav.selected.clear();
-                    v.clicked.clear();
-                    v.clicks = v.nav.clicks;
-                    v.dirty = true;
-                    return;
-                }
-            }
-            // a feature from the tree, for what takes features: exact where bodies overlap
-            let takes = d.pick.as_ref().map(|p| p.0.clone()).unwrap_or_default();
-            if matches!(takes.as_str(), "Features" | "Target" | "Tools")
-                && let Some(id) = self.shell.selected.take()
-                && let Some(name) = self.shell.doc.as_ref().and_then(|doc| doc.name(id))
-            {
-                if takes == "Target" {
-                    d.take_pick("Target", name);
-                } else {
-                    let had = d
-                        .fields
-                        .iter()
-                        .find(|f| f.0 == takes)
-                        .map_or(String::new(), |f| f.1.clone());
-                    let mut names: Vec<String> = had.split_whitespace().map(str::to_string).collect();
-                    match names.iter().position(|n| *n == name) {
-                        Some(k) => {
-                            names.remove(k);
-                        }
-                        None => names.push(name),
-                    }
-                    d.take_pick(&takes, names.join(" "));
-                }
-                v.dirty = true;
-            }
-            // a sketch from the tree, for a hole on points: all it has
-            if d.kind == "hole"
-                && d.hole
-                    .as_ref()
-                    .is_some_and(|h| h.placing == crate::shell::dialog::Placing::Sketch)
-                && let Some(id) = self.shell.selected.take()
-                && self.shell.rows.iter().any(|r| r.id == id && r.kind == "sketch")
-                && let Some(name) = self.shell.doc.as_ref().and_then(|doc| doc.name(id))
-                && let Some(shape) = self.shell.sketch_shapes.iter().find(|s| s.item == Some(id))
-            {
-                let (o, z): ([f64; 3], forge_math::Vec3) = {
-                    let o = shape.plane.origin;
-                    ([o.x, o.y, o.z], shape.plane.z().into())
-                };
-                let m = v.scene.bounds().0;
-                let toward =
-                    (m[0] as f64 - o[0]) * z.x + (m[1] as f64 - o[1]) * z.y + (m[2] as f64 - o[2]) * z.z;
-                let on = if toward > 0.0 { "on" } else { "-on" };
-                if let Some(f) = d.fields.iter_mut().find(|f| f.0 == "Points") {
-                    f.1 = format!("{on} {name} pts centers");
-                }
-                v.dirty = true;
-            }
-            if v.nav.selected != v.clicked {
-                v.clicked = v.nav.selected.clone();
-                // a face that's what it goes to, as a line names it
-                let names = |f: u32| -> Option<String> {
-                    let owner = v.facts.face_item.get(f as usize).copied().flatten()?;
-                    let name = self.shell.doc.as_ref()?.name(owner)?;
-                    Some(format!("{name} {}", v.facts.face_refs.get(f as usize)?))
-                };
-                let picked = v.clicked.last().map(|c| c.1);
-                // a straight edge of the part for a revolve's axis, where it lies in the sketch's plane
-                if d.kind == "revolve"
-                    && d.pick.as_ref().is_some_and(|p| p.0 == "Axis")
-                    && let Some(Entity::Edge(x)) = picked
-                {
-                    let plane = crate::shell::dialog::profile_sketch(d).and_then(|o| {
-                        let id = self.shell.doc.as_ref()?.find(&o)?;
-                        self.shell
-                            .sketch_shapes
-                            .iter()
-                            .find(|x| x.item == Some(id))
-                            .map(|x| x.plane)
-                    });
-                    let got = match (v.facts.edge_line.get(x as usize), plane) {
-                        (Some(Some((a, b))), Some(pl)) => crate::shell::dialog::axis_in_plane(
-                            &pl,
-                            *a,
-                            [b[0] - a[0], b[1] - a[1], b[2] - a[2]],
-                        ),
-                        (_, None) => Err("Pick the profile first".to_string()),
-                        _ => Err("The axis must be straight: pick a straight edge".to_string()),
-                    };
-                    match got {
-                        Ok(t) => {
-                            d.error = None;
-                            d.take_pick("Axis", t);
-                        }
-                        Err(why) => d.error = Some(why),
-                    }
-                    v.nav.selected.clear();
-                    v.clicked.clear();
-                    v.dirty = true;
-                    return;
-                }
-                let wants_surface = d.kind == "extrude" && d.extent == crate::shell::dialog::Extent::Surface;
-                const UNNAMED: &str = "No feature owns that face, so it can't be named here. Pick another.";
-                if wants_surface {
-                    if let Some(Entity::Face(f)) = picked {
-                        match names(f) {
-                            Some(t) => {
-                                d.surface = t;
-                                d.error = None;
-                            }
-                            None => d.error = Some(UNNAMED.to_string()),
-                        }
-                    }
-                    v.nav.selected.clear();
-                    v.clicked.clear();
-                    v.dirty = true;
-                    v.clicks = v.nav.clicks;
-                    return;
-                }
-                if let Some(h) = &mut d.hole {
-                    use crate::shell::dialog::{Placing, Termination};
-                    let mut took = false;
-                    // and again after one it couldn't reach
-                    if h.termination == Termination::Surface
-                        && (h.surface.is_empty() || d.error.is_some())
-                        && let Some(Entity::Face(f)) = picked
-                    {
-                        match names(f) {
-                            Some(t) => {
-                                h.surface = t;
-                                d.error = None;
-                            }
-                            None => d.error = Some(UNNAMED.to_string()),
-                        }
-                        took = true;
-                    }
-                    if !took {
-                        match (h.placing, picked) {
-                            (Placing::Concentric, Some(Entity::Edge(x))) => {
-                                if let Some(Some((c, n, _))) = v.facts.edge_round.get(x as usize) {
-                                    // its axis out of the part
-                                    let m = v.scene.bounds().0;
-                                    let side = (0..3).map(|k| (m[k] as f64 - c[k]) * n[k]).sum::<f64>();
-                                    let out = if side > 0.0 { n.map(|a| -a) } else { *n };
-                                    h.concentric = Some((*c, out));
-                                }
-                            }
-                            (Placing::Linear, Some(Entity::Face(f))) => {
-                                if let Some(Some(p)) = v.facts.face_plane.get(f as usize) {
-                                    h.linear.face = Some(*p);
-                                    h.linear.edges.clear();
-                                    if let Some(q) = v.nav.hit_point() {
-                                        h.linear.clicked = q.map(|a| a as f64);
-                                    }
-                                }
-                            }
-                            (Placing::Linear, Some(Entity::Edge(x))) => {
-                                if h.linear.face.is_some()
-                                    && let Some(Some(l)) = v.facts.edge_line.get(x as usize)
-                                {
-                                    if h.linear.edges.len() >= 2 {
-                                        h.linear.edges.remove(0);
-                                    }
-                                    h.linear.edges.push(*l);
-                                }
-                            }
-                            _ => {}
-                        }
-                    }
-                    if h.placing != Placing::Sketch || took {
-                        d.settle_hole();
-                        v.nav.selected.clear();
-                        v.clicked.clear();
-                        v.dirty = true;
-                        v.clicks = v.nav.clicks;
-                        return;
-                    }
-                }
-                // a field for edges takes edges, one for faces takes faces
-                let wants = d.pick.as_ref().map(|p| p.0.clone()).unwrap_or_default();
-                if d.kind == "thread" {
-                    // the cylinder picked, and what made it: a hole's thread is the hole's
-                    if let Some(&(_, Entity::Face(f))) = v.clicked.last()
-                        && let Some(Some(r)) = v.facts.face_radius.get(f as usize)
-                        && let Some(handle) = v.facts.face_refs.get(f as usize)
-                        && let Some(owner) = v.facts.face_item.get(f as usize).copied().flatten()
-                        && let Some(doc) = &self.shell.doc
-                        && let Some(name) = doc.name(owner)
-                    {
-                        let bore = v.facts.face_bore.get(f as usize).copied().unwrap_or(false);
-                        d.thread_on(format!("face {name} {handle}"), r * 2.0, bore);
-                    }
-                    v.dirty = true;
-                    v.clicks = v.nav.clicks;
-                    return;
-                }
-                // features by a face they made; references, on the part as it stands
-                if matches!(wants.as_str(), "Features" | "Target" | "Tools") {
-                    if let Some(&(_, Entity::Face(f))) = v.clicked.last()
-                        && let Some(owner) = v.facts.face_item.get(f as usize).copied().flatten()
-                        && let Some(doc) = &self.shell.doc
-                        && let Some(name) = doc.name(owner)
-                    {
-                        // where bodies overlap, a face shared on the view reads as the first's: a
-                        // body can't combine with itself, so it's the other's
-                        let target = d
-                            .fields
-                            .iter()
-                            .find(|f| f.0 == "Target")
-                            .map_or(String::new(), |f| f.1.clone());
-                        let name = if wants == "Tools" && name == target {
-                            self.shell
-                                .rows
-                                .iter()
-                                .filter(|r| {
-                                    r.line.contains(" new ")
-                                        || r.line.split_whitespace().nth(2) == Some("new")
-                                })
-                                .filter_map(|r| doc.name(r.id))
-                                .find(|n| *n != target)
-                                .unwrap_or(name)
-                        } else {
-                            name
-                        };
-                        if wants == "Target" {
-                            d.take_pick("Target", name);
-                        } else {
-                            let had = d
-                                .fields
-                                .iter()
-                                .find(|f| f.0 == wants)
-                                .map_or(String::new(), |f| f.1.clone());
-                            let mut names: Vec<String> = had.split_whitespace().map(str::to_string).collect();
-                            match names.iter().position(|n| *n == name) {
-                                Some(k) => {
-                                    names.remove(k);
-                                }
-                                None => names.push(name),
-                            }
-                            d.take_pick(&wants, names.join(" "));
-                        }
-                    }
-                    v.nav.selected.clear();
-                    v.clicked.clear();
-                    v.dirty = true;
-                    v.clicks = v.nav.clicks;
-                    return;
-                }
-                if matches!(d.kind.as_str(), "plane" | "axis" | "point") {
-                    let last = self
-                        .shell
-                        .rows
-                        .iter()
-                        .rev()
-                        .find(|r| {
-                            !r.suppressed && !matches!(r.kind.as_str(), "sketch" | "plane" | "axis" | "point")
-                        })
-                        .map(|r| r.id)
-                        .and_then(|id| self.shell.doc.as_ref().and_then(|doc| doc.name(id)));
-                    if let (Some(&(_, e)), Some(feat)) = (v.clicked.last(), last) {
-                        let text = match (d.kind.as_str(), e) {
-                            ("plane" | "axis", Entity::Face(f)) => {
-                                v.facts.face_refs.get(f as usize).map(|h| format!("{feat} {h}"))
-                            }
-                            ("axis", Entity::Edge(x)) => {
-                                v.facts.edge_refs.get(x as usize).map(|h| format!("{feat} {h}"))
-                            }
-                            ("point", Entity::Edge(x)) => v
-                                .facts
-                                .edge_refs
-                                .get(x as usize)
-                                .map(|h| format!("mid {feat} {h}")),
-                            ("point", Entity::Vertex(k)) => {
-                                v.facts.vertex_refs.get(k as usize).map(|h| format!("{feat} {h}"))
-                            }
-                            _ => None,
-                        };
-                        if let Some(text) = text {
-                            d.take_pick("Reference", text);
-                        }
-                    }
-                    v.dirty = true;
-                    v.clicks = v.nav.clicks;
-                    return;
-                }
-                let refs: Vec<String> = v
-                    .clicked
-                    .iter()
-                    .filter_map(|&(_, e)| match e {
-                        Entity::Face(f) if wants != "Edges" => v.facts.face_refs.get(f as usize).cloned(),
-                        Entity::Edge(x) if wants != "Faces" => v.facts.edge_refs.get(x as usize).cloned(),
-                        _ => None,
-                    })
-                    .collect();
-                d.picked(&refs);
-                v.dirty = true;
-            }
-            if v.nav.clicks != v.clicks {
-                v.clicks = v.nav.clicks;
-            }
-            return;
-        }
-        if v.nav.clicks != v.clicks {
-            v.clicks = v.nav.clicks;
-            if let Some(id) = self.shell.sketch_hover {
-                self.shell.selected = Some(id);
-                self.shell.origin_selected = None;
-                v.nav.selected.clear();
-                v.clicked.clear();
-                return;
-            }
-            if let Some(i) = under {
-                self.shell.origin_selected = Some(i);
-                self.shell.selected = None;
-                v.nav.selected.clear();
-            } else {
-                self.shell.origin_selected = None;
-            }
-        }
-        if v.nav.selected != v.clicked {
-            v.clicked = v.nav.selected.clone();
-            let owner = v.clicked.iter().rev().find_map(|&(_, e)| match e {
-                Entity::Face(f) => v.facts.face_item.get(f as usize).copied().flatten(),
-                _ => None,
-            });
-            self.shell.selected = owner;
-        }
-        let want = self.shell.selected;
-        if self.shell.dim.as_ref().map(|d| d.handle.item) != want {
-            self.shell.dim = want.and_then(|id| v.facts.handle(id).cloned()).map(DimEdit::new);
-            v.dirty = true;
-        }
+        self.fg_picks(under);
     }
 
     /// Is the view what's under this place, with nothing of the chrome over it?
@@ -1401,14 +681,7 @@ impl Gui {
             WindowEvent::MouseInput {
                 button: MouseButton::Left,
                 ..
-            } if self
-                .shell
-                .sketch
-                .as_ref()
-                .is_some_and(|m| m.tool.is_some_and(|t| t != SkTool::Project)) =>
-            {
-                None
-            }
+            } if self.shell.sketch.as_ref().is_some_and(|m| m.tool.is_some()) => None,
             WindowEvent::MouseInput { state, .. } => match state {
                 ElementState::Pressed if self.over_view => {
                     self.captured = true;
@@ -1448,12 +721,6 @@ impl Gui {
                 v.dirty = true;
                 let lo = (a.0.min(b.0), a.1.min(b.1));
                 let hi = (a.0.max(b.0), a.1.max(b.1));
-                let wants = self
-                    .shell
-                    .dialog
-                    .as_ref()
-                    .and_then(|d| d.pick.as_ref())
-                    .map_or(String::new(), |p| p.0.clone());
                 let camera = v.nav.camera;
                 // only what can be seen: right to left what shows in it, left to right what shows
                 // in it and nowhere else
@@ -1462,11 +729,7 @@ impl Gui {
                     .renderer
                     .seen_in_box(&mut v.scene, &camera, lo, hi)
                     .into_iter()
-                    .filter(|(e, _, _)| match e {
-                        Entity::Edge(_) => wants == "Edges",
-                        Entity::Face(_) => wants != "Edges",
-                        Entity::Vertex(_) => false,
-                    })
+                    .filter(|(e, _, _)| matches!(e, Entity::Face(_)))
                     .filter(|(_, inside, outside)| *inside > 0 && (crossing || *outside == 0))
                     .map(|f| f.0)
                     .collect();
@@ -1545,10 +808,7 @@ impl Gui {
             v.nav.geometry = g;
             v.nav.geometry_changed();
         }
-        // what a pick would read is the mesh from before the drag
-        if v.live_drag {
-            v.nav.take_pick();
-        } else if !v.renderer.pick_busy()
+        if !v.renderer.pick_busy()
             && let Some(px) = v.nav.take_pick()
         {
             v.renderer.pick_start(&mut v.scene, &v.nav.camera, px);
@@ -1712,44 +972,30 @@ impl Gui {
                         self.shell.inspect_command(c);
                         continue;
                     }
-                    // a Forge part's numbers are mm in its text: the unit is how they're shown
-                    Action::SetUnits(u) => {
-                        self.shell.units = u;
-                        if let Some(m) = &mut self.shell.inspect.measure {
-                            m.unit = u;
-                        }
-                        continue;
-                    }
-                    a if fc_only(a) => continue,
                     _ => {}
                 }
             }
             match a {
-                Action::Undo | Action::Redo => {
-                    let call = if a == Action::Undo { Call::Undo } else { Call::Redo };
-                    if let Some(v) = &mut self.view {
-                        self.calls.push(call.clone());
-                        if let Some(l) = &mut v.live {
-                            l.call(vec![call]);
-                        }
+                // nothing open to change
+                Action::Undo
+                | Action::Redo
+                | Action::NewFeature(_)
+                | Action::StartSketch
+                | Action::FinishSketch
+                | Action::DialogOk
+                | Action::DialogCancel => {}
+                // a Forge part's numbers are mm in its text: the unit is how they're shown
+                Action::SetUnits(u) => {
+                    self.shell.units = u;
+                    if let Some(m) = &mut self.shell.inspect.measure {
+                        m.unit = u;
                     }
                 }
                 Action::LookAt => {
-                    let plane = self.shell.sketch.as_ref().map(|m| m.plane).or_else(|| {
-                        let on = self.shell.selected;
-                        self.shell
-                            .sketch_shapes
-                            .iter()
-                            .find(|s| s.item == on)
-                            .map(|s| s.plane)
-                    });
+                    let plane = self.shell.sketch.as_ref().map(|m| m.plane);
                     if let (Some(plane), Some(v)) = (plane, &mut self.view) {
                         look_at(v, plane);
                     }
-                }
-                Action::SketchVisibility(id) => {
-                    self.shell.toggle_sketch(id);
-                    self.save_view();
                 }
                 Action::FitAll
                 | Action::Home
@@ -1763,7 +1009,6 @@ impl Gui {
                 | Action::Tool(_) => {
                     self.apply_view(a);
                 }
-                Action::StartSketch => self.start_sketch(),
                 Action::SketchTool(t) => {
                     if let Some(m) = &mut self.shell.sketch {
                         m.set_tool(Some(t));
@@ -1771,18 +1016,14 @@ impl Gui {
                 }
                 Action::CancelSketch => {
                     self.shell.sketch = None;
-                    self.shell.then_feature = None;
                     self.shell.tab = 0;
                     self.shell.status.clear();
                 }
-                Action::SetUnits(u) => self.set_units(u),
                 Action::CancelPick => {
                     self.shell.sketch_pick = false;
-                    self.shell.then_feature = None;
                     self.shell.status.clear();
                 }
                 Action::Deselect => {
-                    self.shell.selected = None;
                     self.shell.origin_selected = None;
                     if let Some(v) = &mut self.view {
                         v.nav.selected.clear();
@@ -1790,446 +1031,15 @@ impl Gui {
                         v.dirty = true;
                     }
                 }
-                Action::EditInline(id) => self.edit_inline(id),
-                Action::FinishSketch => self.finish_sketch(),
-                Action::Edit(id) if self.shell.rows.iter().any(|r| r.id == id && r.kind == "sketch") => {
-                    self.edit_sketch(id);
-                }
-                Action::Edit(id) => {
-                    self.shell.selected = Some(id);
-                    let (kind, title) = match self.shell.rows.iter().find(|r| r.id == id) {
-                        Some(r) => (r.kind.clone(), r.title.clone()),
-                        None => continue,
-                    };
-                    let fields = self.shell.fields_of(id);
-                    let names = self.param_names();
-                    self.shell.dialog =
-                        Some(Dialog::edit(id, &kind, title, fields).in_units(self.shell.units, names));
-                    if let Some(v) = &mut self.view {
-                        v.nav.selected.clear();
-                        v.clicked.clear();
-                    }
-                }
-                // a profile feature starts from a sketch: one there's no feature on, or a new one
-                Action::NewFeature(kind)
-                    if matches!(kind, "extrude" | "revolve") && self.free_sketch().is_none() =>
-                {
-                    self.shell.then_feature = Some(kind);
-                    self.start_sketch();
-                }
-                Action::NewFeature(kind) => {
-                    self.end_preview();
-                    let names = self.param_names();
-                    let mut d = Dialog::new_feature(kind).in_units(self.shell.units, names);
-                    if kind == "thread" {
-                        d.choose_thread(Some("ISO Metric"), None, None, None);
-                    }
-                    // with no sketch to place it on, it's placed on the part
-                    if self.shell.sketch_shapes.is_empty()
-                        && let Some(h) = &mut d.hole
-                    {
-                        h.placing = crate::shell::dialog::Placing::Linear;
-                    }
-                    if matches!(kind, "extrude" | "revolve")
-                        && let Some(name) = self.free_sketch()
-                    {
-                        let doc = self.shell.doc.as_ref();
-                        let regions = doc.and_then(|d| d.find(&name)).map_or(0, |id| {
-                            self.shell
-                                .sketch_shapes
-                                .iter()
-                                .find(|s| s.item == Some(id))
-                                .map_or(0, |s| s.regions.len())
-                        });
-                        // which of several is the person's to say
-                        if regions > 1 {
-                            d.on_sketch("");
-                            d.pick = Some(("Profile".to_string(), "Pick a closed region in the view"));
-                        } else {
-                            d.on_sketch(&name);
-                        }
-                    }
-                    self.shell.dialog = Some(d);
-                    if let Some(v) = &mut self.view {
-                        v.nav.selected.clear();
-                        v.clicked.clear();
-                    }
-                }
-                Action::DialogOk => self.dialog_ok(),
-                Action::DialogCancel => {
-                    self.end_preview();
-                    self.shell.dialog = None;
-                }
-                Action::StartRename(id) => self.shell.start_rename(id),
-                Action::Delete(item) => self.tool(Call::Delete { item }),
-                Action::Suppress(item) => self.tool(Call::Suppress { item }),
-                Action::Unsuppress(item) => self.tool(Call::Unsuppress { item }),
-                Action::Reorder(item, before) => self.tool(Call::Move { item, before }),
-                Action::EndAt(to) => {
-                    self.shell.end_at = to;
-                    if let Some(l) = self.view.as_mut().and_then(|v| v.live.as_mut()) {
-                        l.roll(to);
-                    }
-                }
-                Action::DimDrag(value) => self.dim_drag(value),
-                Action::DimCommit(value) => self.dim_commit(value),
-                Action::DimCancel => self.dim_cancel(),
                 Action::Fg(_) | Action::Inspect(_) => {}
                 Action::Sheet(c) if c != crate::shell::sheet::SheetCmd::NewPart => self.sheet_cmd(c),
                 other => host.push(other),
             }
         }
-        if let Some(text) = self.shell.dim_typed.take() {
-            self.dim_type(text);
-        }
-        if let Some((item, name)) = self.shell.renamed.take() {
-            self.tool(Call::Rename { item, name });
-        }
-        self.dialog_preview();
         host
     }
 
-    /// The sketch a new feature would read: the one chosen, else the last that nothing uses.
-    fn free_sketch(&self) -> Option<String> {
-        let doc = self.shell.doc.as_ref()?;
-        let name = |r: &crate::shell::Row| doc.name(r.id);
-        let used = |r: &crate::shell::Row| {
-            self.shell
-                .rows
-                .iter()
-                .any(|o| matches!(&o.sketch, Some(SketchChild::Line(id, _)) if *id == r.id))
-        };
-        let sketches = || self.shell.rows.iter().filter(|r| r.kind == "sketch");
-        sketches()
-            .find(|r| Some(r.id) == self.shell.selected)
-            .and_then(name)
-            .or_else(|| sketches().rfind(|r| !used(r)).and_then(name))
-    }
-
-    fn start_sketch(&mut self) {
-        // on what's chosen, if it's a plane
-        let head = self.shell.origin_selected.and_then(|i| match i {
-            crate::origin::Item::XyPlane | crate::origin::Item::XzPlane | crate::origin::Item::YzPlane => {
-                Some(i.reference().to_string())
-            }
-            _ => None,
-        });
-        match head {
-            Some(h) => self.ask_plane(h, SketchFor::New, Vec::new()),
-            None => {
-                self.shell.sketch_pick = true;
-                self.shell.selected = None;
-                self.shell.status =
-                    "Pick a plane, a planar face, or a sketch to edit. Esc cancels".to_string();
-            }
-        }
-    }
-
-    fn ask_plane(&mut self, head: String, edit: SketchFor, rows: Vec<String>) {
-        self.shell.sketch_pick = false;
-        let at = place_of(&self.shell, &edit);
-        let refs: Vec<String> = rows.iter().filter_map(|r| project_refs(r)).collect();
-        self.sketch_for = Some((head.clone(), edit, rows));
-        if let Some(v) = &mut self.view {
-            if !refs.is_empty()
-                && let Some(l) = &mut v.live
-            {
-                l.sketch_sources(at, refs, false);
-            }
-            if let Some(l) = &mut v.live {
-                l.sketch_plane(head);
-            }
-        }
-    }
-
-    /// A sketch from the tree: its own rows on its own plane.
-    fn edit_sketch(&mut self, id: forge_doc::ItemId) {
-        let Some(item) = self
-            .shell
-            .doc
-            .as_ref()
-            .and_then(|d| d.items.iter().find(|i| i.id == id))
-        else {
-            return;
-        };
-        let forge_doc::Body::Sketch { head, rows } = &item.body else {
-            return;
-        };
-        let head: Vec<&str> = head.iter().map(|a| a.text.as_str()).collect();
-        let rows: Vec<String> = rows
-            .iter()
-            .filter(|r| !r.args.is_empty())
-            .map(|r| r.args.join(" "))
-            .collect();
-        self.ask_plane(head.join(" "), SketchFor::Line(id), rows);
-    }
-
-    /// A feature's inline profile, in sketch mode: Finish writes it as a sketch line.
-    fn edit_inline(&mut self, id: forge_doc::ItemId) {
-        let Some(row) = self.shell.rows.iter().find(|r| r.id == id) else {
-            return;
-        };
-        let Some(SketchChild::Inline(p, _)) = &row.sketch else {
-            return;
-        };
-        let (head, rest, rows) = (p.head.clone(), p.rest.clone(), p.rows.clone());
-        self.ask_plane(head, SketchFor::Inline(id, rest), rows);
-    }
-
-    fn finish_sketch(&mut self) {
-        let Some(m) = self.shell.sketch.take() else { return };
-        // nothing drawn: nothing to keep
-        if m.is_new() && m.rows.is_empty() {
-            self.shell.then_feature = None;
-            self.shell.tab = 0;
-            self.shell.status.clear();
-            return;
-        }
-        // looked at and left as it was: nothing to commit
-        self.shell.status.clear();
-        if m.unchanged() && m.edit != SketchFor::New {
-            self.shell.tab = 0;
-            return;
-        }
-        let Some(mut doc) = self.shell.doc.clone() else {
-            return;
-        };
-        // a new sketch line goes above what reads it, or at the end-of-part marker
-        let marker = self.shell.end_at.and_then(|e| {
-            let k = doc.items.iter().position(|i| i.id == e)?;
-            Some(doc.items.get(k + 1)?.id)
-        });
-        let mut items = doc.read_items(&m.block());
-        let calls = match &m.edit {
-            SketchFor::Line(id) => {
-                let [item] = &mut items[..] else { return };
-                let Some(old) = doc.items.iter().find(|i| i.id == *id) else {
-                    return;
-                };
-                item.id = *id;
-                item.label = old.label.clone();
-                item.note = old.note.clone();
-                vec![Call::Edit { item: item.clone() }]
-            }
-            SketchFor::Inline(id, rest) => {
-                match crate::shell::panel::inline_calls(&doc, *id, &m.head, &m.rows, rest) {
-                    Some(calls) => calls,
-                    None => return,
-                }
-            }
-            SketchFor::New => vec![Call::Add {
-                before: marker,
-                items,
-            }],
-            SketchFor::Forge(_) => return,
-        };
-        if let Some(v) = &mut self.view {
-            self.calls.extend(calls.iter().cloned());
-            if let Some(l) = &mut v.live {
-                l.call(calls);
-            }
-        }
-        self.shell.tab = 0;
-        self.after_sketch = self.shell.then_feature.take();
-    }
-
-    /// What a dialog's fields now say, as a tool call.
-    fn dialog_call(&self) -> Option<Call> {
-        let d = self.shell.dialog.as_ref()?;
-        if d.waiting_for_pick() {
-            return None;
-        }
-        let mut doc = self.shell.doc.clone()?;
-        let mut items = doc.read_items(&d.line());
-        match d.target {
-            DialogTarget::Edit(id) => {
-                let [item] = &mut items[..] else { return None };
-                let old = doc.items.iter().find(|i| i.id == id)?;
-                item.id = id;
-                item.label = old.label.clone();
-                item.note = old.note.clone();
-                Some(Call::Edit { item: item.clone() })
-            }
-            DialogTarget::New(_) => {
-                // a new feature goes in at the end-of-part marker
-                let before = self.shell.end_at.and_then(|e| {
-                    let k = self.shell.doc.as_ref()?.items.iter().position(|i| i.id == e)?;
-                    Some(self.shell.doc.as_ref()?.items.get(k + 1)?.id)
-                });
-                Some(Call::Add { before, items })
-            }
-        }
-    }
-
-    /// Fields changed: the live result of what they say.
-    fn dialog_preview(&mut self) {
-        let Some(d) = &self.shell.dialog else { return };
-        let line = d.line();
-        if d.sent.as_deref() == Some(line.as_str()) || d.awaiting {
-            return;
-        }
-        let call = self.dialog_call();
-        let Some(v) = &mut self.view else { return };
-        let Some(d) = &mut self.shell.dialog else { return };
-        d.sent = Some(line);
-        d.error = None;
-        match call {
-            Some(call) => {
-                d.seq = v.live.as_mut().map_or(0, |l| l.preview(vec![call]));
-                v.previewing = true;
-            }
-            // nothing to show yet: what was shown goes
-            None if v.previewing => {
-                v.previewing = false;
-                if let Some(l) = &mut v.live {
-                    l.preview_end();
-                }
-            }
-            None => {}
-        }
-    }
-
-    fn end_preview(&mut self) {
-        if let Some(v) = &mut self.view
-            && v.previewing
-        {
-            v.previewing = false;
-            if let Some(l) = &mut v.live {
-                l.preview_end();
-            }
-        }
-    }
-
-    /// OK: the same call commits; the dialog waits for the answer.
-    fn dialog_ok(&mut self) {
-        // a rib still finding its side: OK holds (the button greyed) and applies once it is found
-        if let Some(d) = &mut self.shell.dialog
-            && d.finding_side()
-        {
-            d.ok_pending = true;
-            return;
-        }
-        let Some(call) = self.dialog_call() else { return };
-        let Some(v) = &mut self.view else { return };
-        let Some(d) = &mut self.shell.dialog else { return };
-        d.awaiting = true;
-        v.previewing = false;
-        self.calls.push(call.clone());
-        if let Some(l) = &mut v.live {
-            l.call(vec![call]);
-        }
-    }
-
-    fn param_names(&self) -> Vec<String> {
-        self.shell.doc.as_ref().map_or(Vec::new(), |d| {
-            d.items
-                .iter()
-                .filter_map(|i| match &i.body {
-                    forge_doc::Body::Param { name, .. } => Some(name.clone()),
-                    _ => None,
-                })
-                .collect()
-        })
-    }
-
-    /// The part reads in this unit: a comment on its first line, which nothing builds from.
-    fn set_units(&mut self, unit: &'static str) {
-        let Some(mut doc) = self.shell.doc.clone() else {
-            return;
-        };
-        let was = doc.items.iter().find(|i| {
-            matches!(i.body, forge_doc::Body::Blank)
-                && i.note
-                    .as_deref()
-                    .is_some_and(|n| n.starts_with(forge_doc::units::LINE))
-        });
-        let was = was.map(|i| i.id);
-        let first = doc.items.first().map(|i| i.id);
-        let items = doc.read_items(&format!("# {}{unit}", forge_doc::units::LINE));
-        let call = match (was, items.into_iter().next()) {
-            (Some(id), Some(mut item)) => {
-                item.id = id;
-                Call::Edit { item }
-            }
-            (None, Some(item)) => Call::Add {
-                before: first,
-                items: vec![item],
-            },
-            _ => return,
-        };
-        self.shell.units = unit;
-        self.tool(call);
-    }
-
-    /// A tool call for the worker, kept for replay.
-    fn tool(&mut self, call: Call) {
-        if let Some(v) = &mut self.view {
-            self.calls.push(call.clone());
-            if let Some(l) = &mut v.live {
-                l.call(vec![call]);
-            }
-        }
-    }
-
-    fn dim_drag(&mut self, value: f64) {
-        let (Some(v), Some(e)) = (&mut self.view, &mut self.shell.dim) else {
-            return;
-        };
-        e.value = value;
-        v.live_drag = true;
-        if let Some(l) = &mut v.live {
-            l.drag(e.handle.at.op(short(value)));
-        }
-    }
-
-    /// The tool call that sets this number: the same one an agent would send.
-    fn call_of(at: Target, value: String) -> Call {
-        match at {
-            Target::Param(item) => Call::SetParam { item, expr: value },
-            Target::Arg(item, arg) => Call::SetArg {
-                item,
-                arg,
-                text: value,
-            },
-            Target::Row(item, row) => Call::SetDim { item, row, value },
-        }
-    }
-
-    fn dim_commit(&mut self, value: f64) {
-        let (Some(v), Some(e)) = (&mut self.view, &mut self.shell.dim) else {
-            return;
-        };
-        e.dragging = false;
-        if let Some(l) = &mut v.live {
-            l.commit(e.handle.at.op(short(value)));
-        }
-        self.calls.push(Self::call_of(e.handle.at, short(value)));
-    }
-
-    fn dim_cancel(&mut self) {
-        let (Some(v), Some(e)) = (&mut self.view, &mut self.shell.dim) else {
-            return;
-        };
-        e.dragging = false;
-        e.value = e.handle.value;
-        e.error = None;
-        if let Some(l) = &mut v.live {
-            l.cancel();
-        }
-    }
-
-    fn dim_type(&mut self, text: String) {
-        let (Some(v), Some(e)) = (&mut self.view, &mut self.shell.dim) else {
-            return;
-        };
-        let call = Self::call_of(e.handle.at, text);
-        self.calls.push(call.clone());
-        if let Some(l) = &mut v.live {
-            l.call(vec![call]);
-        }
-    }
-
-    /// Home and the cube's names, beside the part in `PART.fc.view`: they're no part of what builds.
+    /// Home and the cube's names, beside the part in `PART.fg.view`: they're no part of what builds.
     fn save_view(&self) {
         let (Some(path), Some(v)) = (&self.view_file, &self.view) else {
             return;
@@ -2241,27 +1051,15 @@ impl Gui {
                 h.target[0], h.target[1], h.target[2], h.yaw, h.pitch, h.roll, h.dist, h.fovy, h.parallel
             ));
         }
-        let mut eyes: Vec<_> = self.shell.sketch_eye.iter().collect();
-        eyes.sort();
-        for (name, on) in eyes {
-            out.push_str(&format!("eye {name} {on}\n"));
-        }
         if let Err(why) = std::fs::write(path, out) {
             eprintln!("forge-app: can't keep the view beside the part: {why}");
         }
     }
 
     /// What's kept beside the part, if anything is: a file it can't read is one it doesn't have.
-    fn load_view(
-        path: &str,
-    ) -> (
-        crate::viewcube::Orient,
-        Option<Camera>,
-        std::collections::HashMap<String, bool>,
-    ) {
+    fn load_view(path: &str) -> (crate::viewcube::Orient, Option<Camera>) {
         let mut orient = crate::viewcube::Orient::default();
         let mut home = None;
-        let mut eyes = std::collections::HashMap::new();
         for line in std::fs::read_to_string(path).unwrap_or_default().lines() {
             match line.split_once(' ') {
                 Some(("orient", w)) => orient = crate::viewcube::Orient::from_words(w).unwrap_or(orient),
@@ -2280,15 +1078,10 @@ impl Gui {
                         });
                     }
                 }
-                Some(("eye", w)) => {
-                    if let Some((name, on)) = w.split_once(' ') {
-                        eyes.insert(name.to_string(), on == "true");
-                    }
-                }
                 _ => {}
             }
         }
-        (orient, home, eyes)
+        (orient, home)
     }
 
     fn apply_view(&mut self, a: Action) {
@@ -2351,8 +1144,6 @@ impl Gui {
             self.shell.view_tex = None;
         }
         self.watch_frame();
-        self.take_loaded();
-        self.take_live();
         self.take_fg();
         self.take_agent();
         self.take_speech();
@@ -2377,19 +1168,10 @@ impl Gui {
         if let Some(v) = &self.view {
             self.shell.camera = Some((v.nav.camera, v.size));
         }
-        let was_selected = self.shell.selected;
         self.sync_tab();
         let shell = &mut self.shell;
         let mut output = self.ctx.run_ui(raw, |ui| shell.ui(ui));
         self.asm_drag_cursor(&mut output.platform_output);
-        if self.shell.selected != was_selected
-            && let Some(v) = &mut self.view
-        {
-            // a row of the tree was chosen: the view's click no longer says
-            v.nav.selected.clear();
-            v.clicked.clear();
-            v.dirty = true;
-        }
         self.sync_selection();
         self.pixels_per_point = output.pixels_per_point;
         let host = self.apply();
@@ -2413,12 +1195,6 @@ impl Gui {
         self.body_eye();
         times.ui = now_ms() - t0;
 
-        if self.shell.tree_hover != self.tree_hover_was {
-            self.tree_hover_was = self.shell.tree_hover;
-            if let Some(v) = &mut self.view {
-                v.dirty = true;
-            }
-        }
         self.ask_extras();
         if self.extras_changed()
             && let Some(v) = &mut self.view
@@ -2458,13 +1234,6 @@ impl Gui {
                 }
                 None => self.mark_held = None,
             }
-        }
-        let sketches = self.shell.sketches_drawn();
-        if let Some(v) = &mut self.view
-            && v.sketches_was != sketches
-        {
-            v.sketches_was = sketches;
-            v.dirty = true;
         }
         let want_view = self.view_px();
         if let Some(v) = &mut self.view {
@@ -2570,47 +1339,9 @@ impl Gui {
                     world.extend(local);
                 }
             }
-            let mut behind = extra_behind;
-            {
-                let (t, px) = (self.shell.theme, self.pixels_per_point);
-                let rgba = |c: egui::Color32, a: f32| {
-                    let hex = (c.r() as u32) << 16 | (c.g() as u32) << 8 | c.b() as u32;
-                    let rgb = viewcube::rgb(hex);
-                    [rgb[0], rgb[1], rgb[2], a]
-                };
-                let (cam, size) = (&v.nav.camera, v.size);
-                for &(k, lit) in &v.sketches_was {
-                    let Some(s) = self.shell.sketch_shapes.get(k) else {
-                        continue;
-                    };
-                    let ink = if lit { t.focus } else { t.sketch };
-                    let wide = px * if lit { 3.0 } else { 2.25 };
-                    let dim = if lit { 0.5 } else { 0.18 };
-                    for (curve, faint) in &s.curves {
-                        let pts: Vec<[f32; 3]> = curve
-                            .iter()
-                            .map(|p| [p[0] as f32, p[1] as f32, p[2] as f32])
-                            .collect();
-                        let a = if *faint { 0.5 } else { 1.0 };
-                        crate::origin::polyline(&pts, wide, rgba(ink, a), cam, size, &mut world);
-                        crate::origin::polyline(&pts, wide, rgba(ink, a * dim), cam, size, &mut behind);
-                    }
-                    for p in &s.points {
-                        let at = [p[0] as f32, p[1] as f32, p[2] as f32];
-                        crate::origin::disc(at, px * 4.5, rgba(ink, 1.0), cam, size, &mut world);
-                        crate::origin::disc(at, px * 4.5, rgba(ink, dim), cam, size, &mut behind);
-                    }
-                }
-            }
-            let marks = if v.live_drag {
-                Vec::new()
-            } else {
-                let quiet = self
-                    .shell
-                    .sketch
-                    .as_ref()
-                    .is_some_and(|m| m.tool != Some(SkTool::Project))
-                    || self.shell.sketch_hover.is_some();
+            let behind = extra_behind;
+            let marks = {
+                let quiet = self.shell.sketch.is_some();
                 // measuring: what's picked and what a click would pick, as Measure takes them
                 let mut m: Vec<Mark> = match measuring {
                     Some(ms) if self.shell.sketch.is_none() => ms,
@@ -2622,55 +1353,9 @@ impl Gui {
                         .collect(),
                 };
                 m.extend(self.fg_located_marks.iter().copied());
-                // with a dialog up the picks are what's marked
-                if self.shell.dialog.is_some() {
-                    m.extend(v.nav.selected.iter().map(|&(placement, entity)| Mark {
-                        placement,
-                        entity,
-                        selected: true,
-                        second: false,
-                    }));
-                }
-                let of = self
-                    .shell
-                    .selected
-                    .filter(|_| self.shell.dialog.is_none())
-                    .map_or(Vec::new(), |id| v.facts.faces_of(id));
-                m.extend(of.into_iter().map(|f| Mark {
-                    placement: 0,
-                    entity: Entity::Face(f),
-                    selected: true,
-                    second: false,
-                }));
-                // what's at fault on a chosen feature: as it's named on the part shown
-                let at_fault: Vec<Entity> = self
-                    .shell
-                    .flags
-                    .iter()
-                    .filter(|f| Some(f.item) == self.shell.selected)
-                    .filter_map(|f| f.entity)
-                    .flat_map(|e| fault_marks(&v.facts, e))
-                    .collect();
-                m.extend(at_fault.into_iter().map(|entity| Mark {
-                    placement: 0,
-                    entity,
-                    selected: false,
-                    second: false,
-                }));
                 if let (Some(p), Some(g)) = (self.shell.fg.as_ref(), self.fg_walls.first()) {
                     m.extend(crate::thermo_view::marks(&p.thermo, g));
                 }
-                let over = self.shell.tree_hover.filter(|h| Some(*h) != self.shell.selected);
-                m.extend(
-                    over.map_or(Vec::new(), |id| v.facts.faces_of(id))
-                        .into_iter()
-                        .map(|f| Mark {
-                            placement: 0,
-                            entity: Entity::Face(f),
-                            selected: false,
-                            second: false,
-                        }),
-                );
                 m
             };
             let overlay = Overlay {
@@ -2767,9 +1452,6 @@ impl Gui {
         let again_in = if animating || self.mark_held.is_some() || self.view.as_ref().is_some_and(|v| v.dirty)
         {
             Some(std::time::Duration::ZERO)
-        } else if self.shell.checking_since.is_some() {
-            // to say so if it goes on
-            Some(delay.min(std::time::Duration::from_millis(200)))
         } else if delay == std::time::Duration::MAX {
             None
         } else {
@@ -2795,9 +1477,9 @@ impl Gui {
         self.view.as_ref().is_some_and(|v| v.dirty)
     }
 
-    /// Is a load or a worker job still out? Only tests and shots need to ask.
+    /// Is the Forge part's build still out? Only tests and shots need to ask.
     pub fn loading(&self) -> bool {
-        self.loading.is_some()
+        self.fg.as_ref().is_some_and(|s| s.done != s.seq)
     }
 }
 
@@ -2819,7 +1501,6 @@ fn look_at(v: &mut View, plane: forge_math::Frame) {
 /// How long the right button stays down before its menu shows, in ms.
 const MARK_SHOW_MS: f64 = 220.0;
 
-/// The entities of the part shown with the name a check gave: none if a later feature took it.
 /// A pick on placement `pl` of the posed view, as the document's model names it: an occurrence
 /// of its own bodies (`#root`, a body component) is the model's faces where it is posed; a call
 /// of a component or a part file is not this document's model to change.
@@ -2864,41 +1545,6 @@ fn posed_name(
         .cloned()
     })();
     name.ok_or(unnamed)
-}
-
-fn fault_marks(facts: &Facts, e: forge_topo::Entity) -> Vec<Entity> {
-    use forge_topo::Entity as T;
-    let find = |names: &[u64], n: u64| -> Vec<u32> {
-        names
-            .iter()
-            .enumerate()
-            .filter(|x| *x.1 == n)
-            .map(|x| x.0 as u32)
-            .collect()
-    };
-    match e {
-        T::Face(n) => find(&facts.face_names, n.0)
-            .into_iter()
-            .map(Entity::Face)
-            .collect(),
-        T::Edge(n) => find(&facts.edge_names, n.0)
-            .into_iter()
-            .map(Entity::Edge)
-            .collect(),
-        T::Vertex(n) => find(&facts.vertex_names, n.0)
-            .into_iter()
-            .map(Entity::Vertex)
-            .collect(),
-        T::Named(n) => {
-            let mut all: Vec<Entity> = find(&facts.face_names, n.0)
-                .into_iter()
-                .map(Entity::Face)
-                .collect();
-            all.extend(find(&facts.edge_names, n.0).into_iter().map(Entity::Edge));
-            all.extend(find(&facts.vertex_names, n.0).into_iter().map(Entity::Vertex));
-            all
-        }
-    }
 }
 
 /// A picture read back from the target.
@@ -3058,7 +1704,7 @@ impl Headless {
             let fg_built = self.gui.fg.as_ref().is_some_and(|s| s.seq > 0 && s.done == s.seq);
             let drawn =
                 self.gui.shell.drawing.as_ref().is_some_and(|d| !d.busy) || self.gui.shell.dwgdoc.is_some();
-            if !self.gui.loading() && (self.gui.shell.doc.is_some() || fg_built || drawn) {
+            if fg_built || drawn {
                 break;
             }
             std::thread::sleep(std::time::Duration::from_millis(1));
@@ -3227,13 +1873,9 @@ impl Headless {
     }
 
     /// Frames until the part's worker has answered everything asked of it, and the answers are
-    /// taken: what a dialog's preview or a pick sent comes back before a test looks.
+    /// taken: what a dialog's preview or an edit sent comes back before a test looks.
     pub fn settle_worker(&mut self) -> bool {
-        self.until(|g| {
-            g.view
-                .as_ref()
-                .is_none_or(|v| v.live.as_ref().is_none_or(|l| l.idle()))
-        })
+        self.until(|g| g.fg.as_ref().is_none_or(|s| s.done == s.seq))
     }
 
     /// Frames until what's under the pointer is known for the part as it is now: the Forge
@@ -3339,27 +1981,6 @@ impl Headless {
     }
 }
 
-/// What only an .fc part's worker can do (its dialogs, its tree's items, its dimensions on the
-/// model): a Forge part's edits are its browser's typed ops, its tools' forms, its sketches.
-fn fc_only(a: Action) -> bool {
-    matches!(
-        a,
-        Action::EditInline(_)
-            | Action::DialogOk
-            | Action::DialogCancel
-            | Action::Edit(_)
-            | Action::Delete(_)
-            | Action::Suppress(_)
-            | Action::Unsuppress(_)
-            | Action::Reorder(..)
-            | Action::EndAt(_)
-            | Action::StartRename(_)
-            | Action::DimDrag(_)
-            | Action::DimCommit(_)
-            | Action::DimCancel
-    )
-}
-
 impl Gui {
     /// Opens a Forge (.fg) part: its worker builds it at once, and keeps its stages warm after.
     fn open_fg(&mut self, path: &str) -> bool {
@@ -3391,17 +2012,9 @@ impl Gui {
                 self.fg_asm = None;
                 self.explode = Default::default();
                 self.fg_keep_camera = None;
-                self.loading = None;
                 self.view = None;
                 self.shell.view_tex = None;
-                self.shell.doc = None;
-                self.shell.rows.clear();
-                self.shell.selected = None;
-                self.shell.dialog = None;
-                self.shell.dim = None;
                 self.shell.sketch = None;
-                self.shell.sketch_shapes.clear();
-                self.shell.flags.clear();
                 self.shell.sheet = crate::shell::sheet::SheetUi::new();
                 if self.shell.tab > 4 {
                     self.shell.tab = 0;
@@ -3619,11 +2232,9 @@ impl Gui {
                     self.fg_view = Some(Loaded {
                         file: s.path.clone(),
                         name: name_of(s.path.as_deref().unwrap_or("part.fg")),
-                        part: None,
                         empty: false,
                         scene,
                         renderer,
-                        unshown: None,
                     });
                 }
             }
@@ -3636,11 +2247,9 @@ impl Gui {
                 self.fg_view = Some(Loaded {
                     file: s.path.clone(),
                     name: name_of(s.path.as_deref().unwrap_or("part.fg")),
-                    part: None,
                     empty: b.measure.is_none(),
                     scene,
                     renderer,
-                    unshown: None,
                 });
             }
             if let Some(p) = &mut self.shell.fg {
@@ -4321,7 +2930,7 @@ impl Gui {
                     };
                     match frame {
                         Some(plane) => {
-                            let mut m = SketchMode::new(SketchFor::New, t.clone(), plane, Vec::new(), None);
+                            let mut m = SketchMode::new(SketchFor::New, t.clone(), plane, Vec::new());
                             m.units = "mm";
                             self.shell.sketch = Some(m);
                             self.shell.sketch_pick = false;
@@ -4429,7 +3038,6 @@ impl Gui {
             id.to_string(),
             plane,
             o.rows.clone(),
-            None,
         );
         m.units = "mm";
         m.set_params(o.params.clone());

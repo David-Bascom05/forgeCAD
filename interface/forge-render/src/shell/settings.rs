@@ -870,13 +870,20 @@ impl Shell {
             };
             let Some(cmd) = KeyCmd::from_id(&id) else { continue };
             match cmd {
+                // the browser's chosen statement, as its menu's Rename and Delete
                 KeyCmd::Rename | KeyCmd::Delete => {
-                    let Some(sel) = self.selected else { continue };
-                    self.out.push(if cmd == KeyCmd::Rename {
-                        Action::StartRename(sel)
+                    let Some(p) = &mut self.fg else { continue };
+                    let stmts = super::fg::statements(&p.feats);
+                    let Some(key) = p.selected.clone().filter(|k| stmts.contains(k)) else {
+                        continue;
+                    };
+                    if cmd == KeyCmd::Rename {
+                        p.renaming = Some((key.clone(), key));
+                        p.rename_fresh = true;
                     } else {
-                        Action::Delete(sel)
-                    });
+                        let op = forge_lang::error::Op::DeleteFeature { id: key };
+                        p.out.push(super::fg::FgAct::Apply(op));
+                    }
                 }
                 KeyCmd::Markup => self.agent.markup.toggle(),
                 c => self.out.push(Action::Key(c)),

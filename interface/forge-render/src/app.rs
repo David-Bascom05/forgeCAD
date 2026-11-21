@@ -305,17 +305,14 @@ impl App {
                         let _ = proxy.send_event(());
                     });
                 }
-                Action::NewFc | Action::Open | Action::Sheet(crate::shell::sheet::SheetCmd::NewPart) => {
+                Action::Open | Action::Sheet(crate::shell::sheet::SheetCmd::NewPart) => {
                     let (send, recv) = std::sync::mpsc::channel();
                     self.dialog = Some(recv);
                     let proxy = self.proxy.clone();
-                    let new = matches!(a, Action::NewFc);
                     let sheet = matches!(a, Action::Sheet(_));
                     std::thread::spawn(move || {
                         let chosen = if sheet {
                             crate::app::new_sheet_dialog()
-                        } else if new {
-                            crate::app::new_dialog()
                         } else {
                             crate::app::open_dialog()
                         };
@@ -328,21 +325,6 @@ impl App {
         }
         l.gui.shell.view.maximized = l.window.is_maximized();
     }
-}
-
-/// The system's dialog for where a new .fc part goes; it starts as an empty file.
-fn new_dialog() -> Option<String> {
-    let f = rfd::FileDialog::new()
-        .add_filter("Parts", &["fc"])
-        .set_file_name("Part.fc")
-        .save_file()?;
-    let f = if f.extension().is_some() {
-        f
-    } else {
-        f.with_extension("fc")
-    };
-    std::fs::write(&f, "").ok()?;
-    Some(f.to_string_lossy().into_owned())
 }
 
 /// Where a new sheet metal part goes; it starts with its Sheet Metal Defaults.
@@ -360,7 +342,7 @@ fn new_sheet_dialog() -> Option<String> {
 /// The system's file dialog.
 fn open_dialog() -> Option<String> {
     let f = rfd::FileDialog::new()
-        .add_filter("Parts and drawings", &["fc", "fg", "dwg", "DWG"])
+        .add_filter("Parts and drawings", &["fg", "dwg", "DWG"])
         .add_filter("Forge parts", &["fg"])
         .add_filter("DWG drawings", &["dwg", "DWG"])
         .pick_file()?;

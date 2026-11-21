@@ -1,5 +1,5 @@
 //! A sketch drawn with the app's sketch tools, written as a Forge sketch block. The tools write
-//! rows in the .fc sketch form (`line P P`, `rect X Y W H`, `dist l1 20`); this turns them into
+//! rows in the sketcher's row form (`line P P`, `rect X Y W H`, `dist l1 20`); this turns them into
 //! Forge's (`l1 = line(near(x1, y2), near(x3, y4))`, `distance(l1, d5)`): points drawn are free
 //! guesses (`near`), as in the drawing; every number (guess, size, dimension) is a param of the
 //! sketch. A row with no Forge form is refused, typed.
@@ -18,10 +18,10 @@ struct Out {
     name: String,
     params: Vec<String>,
     rows: Vec<String>,
-    /// What each .fc entity name (`l1`, `c2`, `p1`) is in Forge.
+    /// What each row name (`l1`, `c2`, `p1`) is in Forge.
     names: HashMap<String, String>,
-    /// The .fc names made so far, by kind: `l3` is the third line.
-    fc: HashMap<char, usize>,
+    /// The row names made so far, by kind: `l3` is the third line.
+    named: HashMap<char, usize>,
     /// Forge names in use: a fresh one is the next free `{kind}{k}`.
     taken: HashSet<String>,
     /// Names a rewritten statement keeps, taken before fresh ones.
@@ -46,7 +46,7 @@ fn fmt(v: f64) -> String {
     super::fg::short(v)
 }
 
-/// The kinds of the .fc names a row makes, in order (`rect`: four lines).
+/// The kinds of the row names a row makes, in order (`rect`: four lines).
 pub(super) fn made(t: &[String]) -> Vec<char> {
     match t.first().map(String::as_str) {
         Some("pt") => vec!['p'],
@@ -76,7 +76,7 @@ impl Out {
             params: vec![],
             rows: vec![],
             names: HashMap::new(),
-            fc: HashMap::new(),
+            named: HashMap::new(),
             taken,
             keep: vec![],
             base: 0,
@@ -99,8 +99,8 @@ impl Out {
         n
     }
 
-    fn fc_next(&mut self, kind: char) -> String {
-        let c = self.fc.entry(kind).or_default();
+    fn row_next(&mut self, kind: char) -> String {
+        let c = self.named.entry(kind).or_default();
         *c += 1;
         format!("{kind}{c}")
     }
@@ -118,10 +118,10 @@ impl Out {
         n
     }
 
-    /// An entity row's own name: its .fc name, and the Forge one it's written as.
+    /// An entity row's own name: its row name, and the Forge one it's written as.
     fn entity(&mut self, kind: char) -> String {
-        let f = self.fc_next(kind);
-        // its .fc name, where Forge has no such name yet
+        let f = self.row_next(kind);
+        // its row name, where Forge has no such name yet
         let n = if self.keep.is_empty() && self.taken.insert(f.clone()) {
             f.clone()
         } else {
@@ -144,7 +144,7 @@ impl Out {
         Ok((self.reference(w, true, row)?, 1))
     }
 
-    /// An entity or a point by its .fc name: `l1`, `l1.a`, `c1` (as a point: its centre), `o`.
+    /// An entity or a point by its row name: `l1`, `l1.a`, `c1` (as a point: its centre), `o`.
     fn reference(&self, w: &str, as_point: bool, row: &str) -> Result<String, ToolError> {
         if w == "o" {
             return Ok("near(0, 0)".into());
@@ -230,7 +230,7 @@ impl Out {
                 let t = tokens(r);
                 let mut names = kept.get(k).into_iter().flatten();
                 for kind in made(&t) {
-                    let f = self.fc_next(kind);
+                    let f = self.row_next(kind);
                     if let Some(n) = names.next() {
                         self.names.insert(f, n.clone());
                     }
@@ -288,13 +288,13 @@ impl Out {
                 o.rows
                     .push(format!("{n} = rect(corner: ({px}, {py}), size: ({pw}, {ph}))"));
                 for side in 0..4 {
-                    let f = o.fc_next('l');
+                    let f = o.row_next('l');
                     o.names.insert(f, format!("{n}[{side}]"));
                 }
             }
             "circle" => {
                 let (c, at) = o.point(rest, r)?;
-                let f = format!("c{}", o.fc.get(&'c').copied().unwrap_or(0) + 1);
+                let f = format!("c{}", o.named.get(&'c').copied().unwrap_or(0) + 1);
                 let rr = match radii.get(&f) {
                     Some(&v) => v,
                     None => num(rest.get(at).ok_or(no_form(r))?, r)?,
@@ -318,7 +318,7 @@ impl Out {
                 let (c, k1) = o.point(rest, r)?;
                 let (m, k2) = o.point(&rest[k1..], r)?;
                 // its minor axis: a dimension on it, else as drawn
-                let f = format!("e{}", o.fc.get(&'e').copied().unwrap_or(0) + 1);
+                let f = format!("e{}", o.named.get(&'e').copied().unwrap_or(0) + 1);
                 let b = match radii.get(&f) {
                     Some(&v) => v,
                     None => num(rest.get(k1 + k2).ok_or(no_form(r))?, r)?,
@@ -406,7 +406,7 @@ impl Out {
                 }
                 let n = o.fresh('o');
                 for side in 0..ps.len() - usize::from(open) {
-                    let f = o.fc_next('l');
+                    let f = o.row_next('l');
                     o.names.insert(f, format!("{n}[{side}]"));
                 }
                 o.rows.push(format!(

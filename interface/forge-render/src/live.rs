@@ -1,22 +1,14 @@
-//! Live editing, natively: meshes each changed face for the GPU and drives a value through the
-//! worker in `forge_agent::live`. A drag draws a coarser level; the commit brings the full mesh.
+//! Live editing, natively: meshes each face a build changed for the GPU, keeping the rest where
+//! they are. A Forge part's edits go to the screen this way first; its whole mesh follows.
 
 use crate::livegpu::{Delta, FaceGpu};
-use crate::mesh::{PartMesh, VERTEX};
+use crate::mesh::VERTEX;
 use crate::tess;
 use forge_agent::facemesh;
-use forge_agent::live::{Live, Stage};
-use forge_agent::tools::Part;
 use forge_mesh::Quality;
 use forge_topo::{Body, FaceId};
 use std::collections::HashMap;
 use std::sync::Arc;
-
-/// What the worker hands the screen.
-pub enum Out {
-    Delta(Delta),
-    Whole(Box<PartMesh>),
-}
 
 /// Threads meshing changed faces, when enough have changed to be worth them.
 const THREADS: usize = 4;
@@ -156,40 +148,43 @@ fn mesh_all(body: &Body, faces: &[(FaceId, u64)], q: &Quality) -> Vec<(u64, Arc<
     })
 }
 
-/// The worker for this part: faces while dragging, the full mesh once committed.
-pub fn start(part: Part) -> Live<Out> {
-    let mut m = Mesher::default();
-    Live::start(part, move |body, stage| match stage {
-        Stage::Warm | Stage::Drag => Out::Delta(m.delta(body)),
-        Stage::Committed => match tess::build_part(body) {
-            Ok(mesh) => Out::Whole(Box::new(mesh)),
-            Err(_) => Out::Delta(Delta::default()),
-        },
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    /// A block with two holes through it, the first `d` across.
+    fn part(d: f64) -> Body {
+        let src = format!(
+            "sketch plan(on: xy) {{
+  outline = rect(corner: (-50, -50), size: (100, 100))
+}}
+base = extrude(plan, 20)
+sketch spots(on: base.end) {{
+  a = pt(-30, -30)
+  b = pt(30, 30)
+}}
+h1 = hole(at: spots.a, d: {d}, depth: thru)
+h2 = hole(at: spots.b, d: 8, depth: thru)
+"
+        );
+        let (run, _) = forge_lang::run(&src, forge_lang::Options::default(), Default::default());
+        assert!(run.errors.is_empty(), "{:?}", run.errors);
+        run.body.expect("a solid")
+    }
+
     #[test]
     fn only_the_faces_an_edit_reaches_are_meshed_again() {
-        let mut p = Part::new(
-            "base: extrude 20 rect -50 -50 100 100\nhole 8 -xy at -30 -30 20 thru\nhole 8 -xy at 30 30 20 thru\n",
-        );
         let mut m = Mesher::default();
-        let whole = m.delta(p.model.body().unwrap());
+        let whole = m.delta(&part(8.0));
         assert_eq!(whole.meshed, whole.faces);
         assert_eq!(whole.added.len(), whole.faces);
         assert!(whole.gone.is_empty());
         // the same part: nothing
-        let same = m.delta(p.model.body().unwrap());
+        let same = m.delta(&part(8.0));
         assert_eq!((same.meshed, same.added.len(), same.gone.len()), (0, 0, 0));
         // one hole wider: its wall, and the top and bottom it cuts; the block's sides and the other
         // hole's wall stay where they are
-        let d = p.dims().into_iter().find(|d| d.name == "hole2.1").unwrap();
-        p.drag(d.at.op("9".into())).unwrap();
-        let moved = m.delta(p.model.body().unwrap());
+        let moved = m.delta(&part(9.0));
         assert_eq!(moved.faces, whole.faces);
         assert!(moved.meshed <= 3, "{} of {}", moved.meshed, moved.faces);
         assert_eq!(moved.gone.len(), moved.added.len());
@@ -197,8 +192,13 @@ mod tests {
 
     #[test]
     fn every_edge_is_drawn_once() {
-        let p = Part::new("extrude 20 rect 0 0 100 100\n");
-        let d = Mesher::default().delta(p.model.body().unwrap());
+        let src = "sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (100, 100))
+}
+base = extrude(plan, 20)
+";
+        let (run, _) = forge_lang::run(src, forge_lang::Options::default(), Default::default());
+        let d = Mesher::default().delta(run.body.as_ref().expect("a solid"));
         let segs: usize = d
             .added
             .iter()
