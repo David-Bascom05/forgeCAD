@@ -449,6 +449,14 @@ impl ProfileLoop {
     pub fn new(segments: Vec<(Segment, u64)>) -> Self {
         ProfileLoop { segments }
     }
+    /// Whether the loop crosses or touches itself, as a profile refuses it: a knife edge, its
+    /// sides running within tolerance of each other into the cusp, does not.
+    pub fn crosses_itself(&self) -> bool {
+        // a lone circle is drawn as a convex polygon: it cannot cross itself
+        let circle = matches!(self.segments[..], [(Segment::Circle { .. }, _)]);
+        // (a knife edge's sides, samples of them, cross within tolerance)
+        !circle && crosses_itself(&self.outline()) && crosses_itself(&blunt_cusps(self).outline())
+    }
     /// Curves with corners cut there, each arc a face of its own (as Inventor shows them), and one
     /// closing on itself cut in two. The first piece keeps the segment's id.
     /// None where a curve stops being one (a cusp, a piece too short).
@@ -767,10 +775,7 @@ impl Profile {
             }
         }
         for (i, l) in self.loops.iter().enumerate() {
-            // a lone circle is drawn as a convex polygon: it cannot cross itself
-            let circle = matches!(l.segments[..], [(Segment::Circle { .. }, _)]);
-            // (a knife edge's sides, samples of them, cross within tolerance)
-            if !circle && crosses_itself(&l.outline()) && crosses_itself(&blunt_cusps(l).outline()) {
+            if l.crosses_itself() {
                 return Err(ProfileError::SelfIntersecting { loop_index: i });
             }
         }
