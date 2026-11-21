@@ -1,5 +1,8 @@
 # Parameters and sketches: design
 
+> Written for the `.fc` part file, now retired: parts are `.fg` (Forge) programs
+> (`interface/forge-lang`). Kept as the record of how the interface was designed.
+
 The `.fc` text is the parametric document. A `Part` is that text evaluated: every expression
 is replaced by its value and every sketch reference by the solved geometry when the line is
 read. So a parameter change regenerates exactly as if the new value had been typed in, and

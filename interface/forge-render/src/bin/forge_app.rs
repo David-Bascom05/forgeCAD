@@ -2,7 +2,7 @@
 
 use forge_render::gui::Headless;
 
-const USAGE: &str = "forge-app [PART | file.fc] [--size WxH] [--times]
+const USAGE: &str = "forge-app [PART | file.fg] [--size WxH] [--times]
   [--shot FILE.ppm [--scale S] [--light] [--pastel] [--background floor|gradient|solid] [--settings FILE.toml] [--tab N] [--select NAME] [--click NAME].. [--rclick NAME].. [--wait] [--at X Y] [--sketch ROW;ROW..] [--edit NAME] [--draw TOOL X Y] [--view YAW PITCH] [--marking]]
   steps, in order: --click NAME --dclick NAME --rclick NAME --wait --type TEXT --key NAME (enter, escape, tab, backspace, or M, Ctrl+Z, F6...)
   --hover X Y (the view's pick there) --clickat X Y --drag X Y X2 Y2 --drag-hold X Y X2 Y2 (not let go) --snap FILE.ppm --save
@@ -12,7 +12,7 @@ const USAGE: &str = "forge-app [PART | file.fc] [--size WxH] [--times]
   --sleep SECONDS (frames that long by the clock) --keydown KEY --keyup KEY (a key held over frames)
   [--present fifo|mailbox|immediate] [--run-for SECONDS] [--spin]
   [--bench]
-PART: a bench part or a .fc file. --times: input-to-present on exit. --shot: one frame, no window.
+PART: a bench part or a .fg file. --times: input-to-present on exit. --shot: one frame, no window.
 --bench: what clicks and frames cost, no window.";
 
 enum Step {

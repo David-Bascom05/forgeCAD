@@ -43,7 +43,7 @@ The repository is split by what a thing is:
 | `interface/` | what |
 |---|---|
 | `forge-doc` | the document model behind part files, its ops and their binary form |
-| `forge-agent` | the `.fc` part file, the tools, selectors, measuring, rendering, incremental sessions, the live loop |
+| `forge-agent` | the retired `.fc` part file (its engine still runs the bench parts and tests), the tools, selectors, measuring, rendering, incremental sessions, the live loop |
 | `forge-cli` | `forgecad act/query/measure/render/help`, `build/check/diff`, `serve`, `mcp` (see AGENTS.md) |
 | `forge-render` | the renderer, wgpu native and in the browser; its own workspace, built apart from the kernel |
 
@@ -113,7 +113,7 @@ The toolchain is pinned in `rust-toolchain.toml`; rustup installs it on first us
 `interface/forge-render` is its own workspace, so wgpu never enters the commands above. From there:
 
 ```
-cargo run --release -- gearbox                      # a bench part or a .fc path (`--help` lists keys and mouse)
+cargo run --release -- gearbox                      # a bench part or a .fg path (`--help` lists keys and mouse)
 cargo run --release -- --stress 5000                # the 15 bench parts placed 5,000 times
 cargo run --release -- --stress 5000 --bench        # a fixed orbit, frame times on stdout, no window (--window: with one)
 cargo run --release -- crank --dims                 # the numbers a part has

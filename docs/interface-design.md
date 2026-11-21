@@ -1,5 +1,8 @@
 # Interface design
 
+> Written for the `.fc` part file, now retired: parts are `.fg` (Forge) programs
+> (`interface/forge-lang`). Kept as the record of how the interface was designed.
+
 The kernel can build real parts. This is the plan for what sits on top of it: the app, the
 browser client, the host and the protocol between them. Status: agreed design; the renderer
 (`interface/forge-render`), the tools and op log (`forge_agent::tools`, `forge_doc::wire`) and the live

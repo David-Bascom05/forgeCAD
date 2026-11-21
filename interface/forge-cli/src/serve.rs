@@ -19,7 +19,7 @@ type Tool = (
 const TOOLS: [Tool; 14] = [
     (
         "act",
-        "Change a .fc part: newline-separated lines, all applied or none. A .fg part: edit.",
+        "Retired .fc parts only: newline-separated lines, all applied or none. A .fg part changes by edit.",
         2,
         &[
             ("file", "path"),
@@ -69,7 +69,7 @@ const TOOLS: [Tool; 14] = [
     ),
     (
         "help",
-        "The grammar of a feature or topic; none: the topics; forge: the .fg language",
+        "The .fg language: forge, all of it; a word, its sections (holes, sheet, queries); none: the sections",
         0,
         &[("topic", "a feature or topic")],
     ),
@@ -308,11 +308,12 @@ fn call(session: &mut Session, forge: &mut fg::Session, name: &str, p: &Json) ->
         return version_tool(name, p);
     }
     let a = args(p);
-    if name == "help" && matches!(a.file.as_str(), "forge" | "fg" | ".fg") {
+    if name == "help" {
+        let text = forge_lang::help(&a.file);
         return Reply {
             ok: true,
-            text: forge_lang::REFERENCE.to_string(),
-            json: Json::obj(vec![("ok", true.into()), ("text", forge_lang::REFERENCE.into())]),
+            json: Json::obj(vec![("ok", true.into()), ("text", text.as_str().into())]),
+            text,
             png: None,
         };
     }

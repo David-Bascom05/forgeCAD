@@ -441,15 +441,6 @@ fn a_same_length_rewrite_is_seen() {
 }
 
 #[test]
-fn a_new_fc_part_is_the_hosts_to_place() {
-    let Some(mut h) = headless() else { return };
-    h.gui.shell.out.push(forge_render::shell::Action::NewFc);
-    let out = h.step();
-    assert!(out.host.contains(&forge_render::shell::Action::NewFc));
-    assert!(h.gui.documents().is_empty());
-}
-
-#[test]
 fn the_watch_never_reads_a_device_a_link_out_or_a_huge_file() {
     let Some(mut h) = headless() else { return };
     let d = scratch("unsafe");

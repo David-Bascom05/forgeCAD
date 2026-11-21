@@ -16,14 +16,14 @@ fn usage() -> ExitCode {
         "usage: forgecad [open [FILE | APP_ARGS...]]   (open the native app)\n       \
          forgecad agent list | send WINDOW MESSAGE | status WINDOW REQUEST\n       \
          forgecad update [INSTALL_ROOT]   (install latest main)\n       \
-         forgecad act|query|measure|render|build|check|diff|export FILE [ARGS] [--json] [--base N] [--at FEAT] [--labels SEL] [--px N] [-o OUT]\n       \
-         forgecad edit FILE.fg 'OP'..   (typed ops, as a .fg part's fixes give them; build|check|query|measure|render|export take .fg too; export F.fg dxf [SHEET])\n       \
-         forgecad help [TOPIC]\n       \
+         forgecad build|check|query|measure|render|export FILE.fg [ARGS] [--json] [--at FEAT] [--labels SEL] [--px N] [-o OUT]\n       \
+         forgecad edit FILE.fg 'OP'..   (typed ops, as a part's fixes give them; export F.fg dxf [SHEET])\n       \
+         forgecad help [forge | WORD]   (the .fg language, or its sections on WORD)\n       \
          forgecad versions F | history F [--all] | create_version F NAME [NOTES] | restore F v3|SAVE | compare F A B [--volume]\n       \
          forgecad release F REASON [--approver NAME] [--numeric] | releases F | regenerate_release F REV   (JSON; FORGECAD_AGENT names an agent)\n       \
-         forgecad serve | mcp [--root DIR] [--writable]   (JSON-RPC / MCP on stdio, .fc and .fg files under DIR, default .; act only if --writable)\n       \
-         forgecad import FILE.FCStd [-o DIR] [--json]   (each body a part file DIR/<file>.<body>.fc)\n       \
-         forgecad demo <out.stl> [chord-mm] | preview <out.json>\nformat and selectors: AGENTS.md, forgecad help"
+         forgecad serve | mcp [--root DIR] [--writable]   (JSON-RPC / MCP on stdio, parts under DIR, default .; edits only if --writable)\n       \
+         forgecad import FILE.FCStd [-o DIR] [--json]   (each body a retired-format part file DIR/<file>.<body>.fc)\n       \
+         forgecad demo <out.stl> [chord-mm] | preview <out.json>\nthe language: AGENTS.md, forgecad help forge"
     );
     ExitCode::from(2)
 }
@@ -207,7 +207,7 @@ fn main() -> ExitCode {
         }
         Some("import") if args.len() >= 3 => import(&args[2..]),
         Some("help" | "--help" | "-h") => {
-            println!("{}", forge_agent::help::help(&args[2..].join(" ")));
+            println!("{}", forge_lang::help(&args[2..].join(" ")));
             ExitCode::SUCCESS
         }
         Some(c) if (COMMANDS.contains(&c) || c == "edit") && args.len() >= 3 => command(c, &args[2..]),

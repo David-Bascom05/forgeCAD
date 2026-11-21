@@ -1706,17 +1706,6 @@ combine cut base lid keep
         }
     }
 
-    /// The example AGENTS.md opens with builds, handles and all.
-    #[test]
-    fn the_agents_example_builds() {
-        let doc = include_str!("../../../AGENTS.md");
-        let dir = Dir::new("example");
-        let example = doc.split("```").nth(1).expect("an example block");
-        let f = dir.file("e.fc", example);
-        let r = Session::default().run("build", &args(&f, &[]));
-        assert!(r.ok, "{}", r.text);
-    }
-
     #[cfg(unix)]
     #[test]
     fn acts_write_the_file() {

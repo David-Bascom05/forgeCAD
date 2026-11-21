@@ -125,8 +125,6 @@ pub enum Edge {
 pub enum Action {
     /// An untitled Forge part, in a tab.
     New,
-    /// An .fc part: the host asks where, and it opens in a tab.
-    NewFc,
     Open,
     Undo,
     Redo,
@@ -1738,11 +1736,10 @@ impl Shell {
             let model_open = self.fg.is_some() && self.drawing.is_none();
             let mut items = vec![
                 ("New", Some(Action::New)),
-                ("New .fc Part...", Some(Action::NewFc)),
                 ("New Sheet Metal", Some(Action::Sheet(sheet::SheetCmd::NewPart))),
                 ("Open...", Some(Action::Open)),
             ];
-            // a Forge file is written when asked (Ctrl+S too); an .fc part with every act
+            // a Forge file is written when asked (Ctrl+S too)
             items.push(("Save", model_open.then_some(Action::Fg(FgCmd::Save))));
             items.push(("New Drawing...", model_open.then_some(Action::NewDrawing)));
             if self.drawing.is_some() {

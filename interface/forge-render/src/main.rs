@@ -13,7 +13,7 @@ use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::window::{Window, WindowId};
 
 const USAGE: &str =
-    "forge-render [PART | file.fc | file.fg] [--stress N] [--moving N] [--bench] [--hover] [--window] [--frames N]
+    "forge-render [PART | file.fg] [--stress N] [--moving N] [--bench] [--hover] [--window] [--frames N]
   [--size WxH] [--lod-px T] [--style realistic|shaded|shaded-edges|shaded-hidden|wireframe|wireframe-hidden|wireframe-visible|monochrome|illustration] [--no-ao] [--settings FILE.toml] [--section x|y|z] [--explode T] [--no-cache] [--shot FILE.ppm [--select X Y]..] [--yaw R --pitch R --dist X]
   An assembly .fg with --shot: [--explode T] [--view iso|front|back|left|right|top|bottom] [--trails] [--anim N]
   [--export FILE] [--levels] [--dims] [--drag-bench [--drag-parts A,B] [--ticks N]]
