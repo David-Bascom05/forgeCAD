@@ -1,0 +1,1246 @@
+# The fuzz corpus of research/check-local/fuzz/corpus.txt as Forge parts, one per seed: blocks with
+# drafts, face offsets, slabs, rounds, chamfers, holes, pockets, bosses and shells.
+# seed 0
+sketch s1(on: xy) {
+  r1 = rect(corner: (-40.3327, -29.554), size: (80.6653, 59.1079))
+}
+base = extrude(s1, 16.0937)
+dr2 = draft(base.side(s1.r1[0]), angle: 0.135297deg, neutral: xy)
+c3 = chamfer(edges(of: base.end), 3.36214041)
+c4 = chamfer(edges(of: base.end), 0.198566942)
+sketch d2(on: offset(xy, 8.04686)) {
+  p = pt(0, 0)
+}
+sketch s3(on: plane(at: d2.p, normal: Z, x: X)) {
+  r1 = rect(corner: (5.96315, -59.1079), size: (2.04943, 118.216))
+}
+p2 = cut(s3, -16.0937)
+sketch s4(on: xy) {
+  rr1 = hull(disc((-3.4029699999999994, -21.79981), 2.95949), disc((5.69965, -21.79981), 2.95949), disc((5.69965, -12.69719), 2.95949), disc((-3.4029699999999994, -12.69719), 2.95949))
+}
+p3 = cut(s4, -1.20391)
+c10 = chamfer(edges(of: p3, crease: "concave"), 0.610281044)
+# seed 1
+sketch s1(on: xy) {
+  r1 = rect(corner: (-19.0309, -31.5673), size: (38.0619, 63.1345))
+}
+base = extrude(s1, 24.3306)
+dr2 = draft(base.side(s1.r1[0]), angle: -0.054779deg, neutral: xy)
+o3 = offset_faces(base.side(s1.r1[2]), -0.599652459)
+o4 = offset_faces(base.side(s1.r1[3]), 0.729876423)
+c5 = chamfer(edges(of: base.end), 0.444620352)
+# seed 2
+sketch s1(on: xy) {
+  r1 = rect(corner: (-43.681, -33.8261), size: (87.3621, 67.6522))
+}
+base = extrude(s1, 7.35723)
+dr2 = draft(base.side(s1.r1[0]), angle: 4.02599deg, neutral: xy)
+o3 = offset_faces(base.side(s1.r1[1]), 0.659168667)
+o4 = offset_faces(base.side(s1.r1[1]), -0.4417393)
+t5 = thicken(base.side(s1.r1[0]), 21.3885061)
+# seed 3
+sketch s1(on: xy) {
+  r1 = rect(corner: (-22.1389, -24.7452), size: (44.2779, 49.4903))
+}
+base = extrude(s1, 14.8789)
+sketch d2(on: offset(xy, 14.8789)) {
+  p = pt(0, 0)
+}
+sketch s3(on: plane(at: d2.p, normal: Z, x: X)) {
+  c1 = circle((3.11715, 13.4884), 4.81539)
+}
+p0 = extrude(s3, 4.7257)
+c5 = chamfer(edges(of: p0.end), 0.452633026)
+o6 = offset_faces(base.side(s1.r1[3]), -0.536417459)
+# seed 4
+sketch s1(on: xy) {
+  r1 = rect(corner: (-22.0814, -14.8212), size: (44.1629, 29.6425))
+}
+base = extrude(s1, 15.5054)
+dr2 = draft(base.side(s1.r1[0]), angle: -5.20182deg, neutral: xy)
+sketch d2(on: offset(xy, 0)) {
+  p = pt(-8.18697, 0.724857)
+}
+sketch s3(on: plane(at: d2.p, normal: Z, x: X)) {
+  p = pt(0, 0)
+}
+hole1 = hole(at: s3.p, d: 2.19606, depth: thru, flip: true)
+sketch s4(on: xy) {
+  rr1 = hull(disc((4.89375, -9.43882), 2.92778), disc((14.353689999999999, -9.43882), 2.92778), disc((14.353689999999999, 0.02112000000000025), 2.92778), disc((4.89375, 0.02112000000000025), 2.92778))
+}
+p1 = cut(s4, -6.51191)
+c8 = chamfer(edges(of: p1, crease: "concave"), 0.225734152)
+# seed 5
+sketch s1(on: xy) {
+  r1 = rect(corner: (-33.6871, -29.1902), size: (67.3741, 58.3804))
+}
+base = extrude(s1, 25.0846)
+sketch s2(on: xy) {
+  rr1 = hull(disc((12.280683999999999, 7.733954), 0.487884), disc((18.293546, 7.733954), 0.487884), disc((18.293546, 13.746816), 0.487884), disc((12.280683999999999, 13.746816), 0.487884))
+}
+p0 = cut(s2, -11.3489)
+c4 = chamfer(edges(of: p0, crease: "concave"), 0.260272341)
+o5 = offset_faces(base.side(s1.r1[1]), -0.618145544)
+# seed 6
+sketch s1(on: xy) {
+  r1 = rect(corner: (-38.8002, -30.994), size: (77.6004, 61.9879))
+}
+base = extrude(s1, 17.6408)
+dr2 = draft(base.side(s1.r1[0]), angle: -5.99458deg, neutral: xy)
+r3 = fillet(edges(of: base, along: Z), 0.575614301)
+c4 = chamfer(edges(of: base.end), 0.595836685)
+c5 = chamfer(edges(of: base.end), 0.193148792)
+c6 = chamfer(edges(of: base.end), 0.76952392)
+c7 = chamfer(edges(of: base.end), 0.189956121)
+o8 = offset_faces(base.side(s1.r1[1]), -0.189768505)
+# seed 7
+sketch s1(on: xy) {
+  r1 = rect(corner: (-24.715, -15.8941), size: (49.43, 31.7882))
+}
+base = extrude(s1, 21.6224)
+dr2 = draft(base.side(s1.r1[3]), angle: 0.430584deg, neutral: xy)
+sketch d2(on: offset(xy, 10.8112)) {
+  p = pt(0, 0)
+}
+sketch s3(on: plane(at: d2.p, normal: Z, x: X)) {
+  r1 = rect(corner: (-17.6602, -3.82532), size: (4.83827, 4.83827))
+}
+p0 = cut(s3, -21.6224)
+c6 = chamfer(edges(of: p0), 0.110737463)
+o7 = offset_faces(base.side(s1.r1[1]), 5.20055465)
+sketch s4(on: plane(at: d2.p, normal: Z, x: X)) {
+  r1 = rect(corner: (-3.75518, -4.81504), size: (12.184, 12.184))
+}
+p2 = cut(s4, -21.6224)
+c10 = chamfer(edges(of: p2), 0.412225004)
+# seed 8
+sketch s1(on: xy) {
+  r1 = rect(corner: (-21.8012, -34.1516), size: (43.6024, 68.3033))
+}
+base = extrude(s1, 9.03194)
+r2 = fillet(edges(of: base, along: Z), 1.36604355)
+sketch d2(on: offset(xy, 9.03194)) {
+  p = pt(0, 0)
+}
+sketch s3(on: plane(at: d2.p, normal: Z, x: X)) {
+  c1 = circle((-1.18791, -2.13414), 4.9699)
+}
+p0 = extrude(s3, 11.0761)
+c6 = chamfer(edges(of: p0.end), 0.415314663)
+sketch d4(on: offset(xy, 4.51597)) {
+  p = pt(0, 0)
+}
+sketch s5(on: plane(at: d4.p, normal: Z, x: X)) {
+  r1 = rect(corner: (-6.88042, -8.63616), size: (14.9339, 14.9339))
+}
+p1 = cut(s5, -9.03194)
+c10 = chamfer(edges(of: p1), 0.13052696)
+# seed 9
+sketch s1(on: xy) {
+  r1 = rect(corner: (-28.8902, -20.8995), size: (57.7804, 41.799))
+}
+base = extrude(s1, 9.32495)
+r2 = fillet(edges(of: base, along: Z), 2.25973728)
+o3 = offset_faces(base.side(s1.r1[3]), -0.254707932)
+o4 = offset_faces(base.side(s1.r1[3]), 0.602177255)
+sh5 = shell(1.34318514, open: base.end)
+# seed 10
+sketch s1(on: xy) {
+  r1 = rect(corner: (-32.1421, -22.15), size: (64.2842, 44.3))
+}
+base = extrude(s1, 19.8742)
+dr2 = draft(base.side(s1.r1[3]), angle: 3.75986deg, neutral: xy)
+r3 = fillet(edges(of: base, along: Z), 2.21529954)
+o4 = offset_faces(base.side(s1.r1[0]), -0.637452349)
+sketch d2(on: offset(xy, 9.9371)) {
+  p = pt(0, 0)
+}
+sketch s3(on: plane(at: d2.p, normal: Z, x: X)) {
+  r1 = rect(corner: (-15.7291, -44.3), size: (2.64664, 88.6))
+}
+p1 = cut(s3, -19.8742)
+c8 = chamfer(edges(of: base.end), 0.722203371)
+c9 = chamfer(edges(of: base.end), 0.242006856)
+sh10 = shell(13.4442416, open: base.end)
+# seed 11
+sketch s1(on: xy) {
+  r1 = rect(corner: (-28.5714, -25.0949), size: (57.1428, 50.1898))
+}
+base = extrude(s1, 28.1811)
+sketch d2(on: offset(xy, 0)) {
+  p = pt(-12.0129, 0.398461)
+}
+sketch s3(on: plane(at: d2.p, normal: Z, x: X)) {
+  p = pt(0, 0)
+}
+hole1 = hole(at: s3.p, d: 3.46758, depth: thru, flip: true)
+sketch s4(on: xy) {
+  rr1 = hull(disc((-17.398854, -8.515044), 0.607146), disc((-13.525096000000001, -8.515044), 0.607146), disc((-13.525096000000001, -4.641286), 0.607146), disc((-17.398854, -4.641286), 0.607146))
+}
+p1 = cut(s4, -8.5923)
+c7 = chamfer(edges(of: p1, crease: "concave"), 0.580295322)
+sketch d5(on: offset(xy, 28.1811)) {
+  p = pt(0, 0)
+}
+sketch s6(on: plane(at: d5.p, normal: Z, x: X)) {
+  c1 = circle((12.6362, -14.6164), 2.21392)
+}
+p2 = extrude(s6, 8.39656)
+c11 = chamfer(edges(of: p2.end), 0.312090579)
+# seed 12
+sketch s1(on: xy) {
+  r1 = rect(corner: (-29.2371, -27.2931), size: (58.4742, 54.5863))
+}
+base = extrude(s1, 21.9939)
+dr2 = draft(base.side(s1.r1[0]), angle: -5.86967deg, neutral: xy)
+r3 = fillet(edges(of: base, along: Z), 3.33621808)
+sketch d2(on: offset(xy, 21.9939)) {
+  p = pt(0, 0)
+}
+sketch s3(on: plane(at: d2.p, normal: Z, x: X)) {
+  c1 = circle((18.6354, -4.81613), 4.03808)
+}
+p0 = extrude(s3, 3.52942)
+c7 = chamfer(edges(of: p0.end), 0.148506262)
+sketch s4(on: plane(at: d2.p, normal: Z, x: X)) {
+  c1 = circle((11.612, -15.0167), 7.51344)
+}
+p1 = extrude(s4, 3.8188)
+c10 = chamfer(edges(of: p1.end), 0.715363462)
+sketch d5(on: offset(xy, 0)) {
+  p = pt(18.3734, 1.4371)
+}
+sketch s6(on: plane(at: d5.p, normal: Z, x: X)) {
+  p = pt(0, 0)
+}
+hole1 = hole(at: s6.p, d: 4.3753, depth: thru, flip: true)
+# seed 13
+sketch s1(on: xy) {
+  r1 = rect(corner: (-22.7703, -27.9183), size: (45.5405, 55.8366))
+}
+base = extrude(s1, 22.418)
+r2 = fillet(edges(of: base, along: Z), 1.30695513)
+c3 = chamfer(edges(of: base.end), 4.0795642)
+c4 = chamfer(edges(of: base.end), 0.700905119)
+o5 = offset_faces(base.side(s1.r1[0]), 0.677599102)
+# seed 14
+sketch s1(on: xy) {
+  r1 = rect(corner: (-18.2049, -28.3082), size: (36.4097, 56.6163))
+}
+base = extrude(s1, 21.649)
+r2 = fillet(edges(of: base, along: Z), 1.3952143)
+sketch d2(on: offset(xy, 10.8245)) {
+  p = pt(0, 0)
+}
+sketch s3(on: plane(at: d2.p, normal: Z, x: X)) {
+  r1 = rect(corner: (-5.17314, 9.70902), size: (8.72572, 8.72572))
+}
+p0 = cut(s3, -21.649)
+c6 = chamfer(edges(of: p0), 0.532833223)
+sketch d4(on: offset(xy, 0)) {
+  p = pt(7.47251, -5.2589)
+}
+sketch s5(on: plane(at: d4.p, normal: Z, x: X)) {
+  p = pt(0, 0)
+}
+hole1 = hole(at: s5.p, d: 3.47782, depth: thru, flip: true)
+sketch s6(on: xy) {
+  rr1 = hull(disc((-11.356851, 3.114579), 0.522449), disc((-5.097789000000001, 3.114579), 0.522449), disc((-5.097789000000001, 9.373641000000001), 0.522449), disc((-11.356851, 9.373641000000001), 0.522449))
+}
+p2 = cut(s6, -7.22846)
+c12 = chamfer(edges(of: p2, crease: "concave"), 0.154085303)
+sketch s7(on: plane(at: d2.p, normal: Z, x: X)) {
+  r1 = rect(corner: (-6.96998, 13.8791), size: (9.26378, 9.26378))
+}
+p3 = cut(s7, -21.649)
+c15 = chamfer(edges(of: p3), 0.43717942)
+sh16 = shell(35.2421691, open: base.end)
+# seed 15
+sketch s1(on: xy) {
+  r1 = rect(corner: (-43.9573, -12.7622), size: (87.9145, 25.5245))
+}
+base = extrude(s1, 23.6638)
+dr2 = draft(base.side(s1.r1[1]), angle: 5.83607deg, neutral: xy)
+c3 = chamfer(edges(of: base.end), 0.397496658)
+c4 = chamfer(edges(of: base.end), 0.294225142)
+sketch d2(on: offset(xy, 11.8319)) {
+  p = pt(0, 0)
+}
+sketch s3(on: plane(at: d2.p, normal: Z, x: X)) {
+  r1 = rect(corner: (4.52171, -25.5245), size: (2.47642, 51.0489))
+}
+p2 = cut(s3, -23.6638)
+t8 = thicken(base.side(s1.r1[2]), 1.41028258)
+# seed 16
+sketch s1(on: xy) {
+  r1 = rect(corner: (-25.8457, -23.3108), size: (51.6914, 46.6216))
+}
+base = extrude(s1, 16.0069)
+r2 = fillet(edges(of: base, along: Z), 2.80196939)
+sketch d2(on: offset(xy, 0)) {
+  p = pt(-16.8814, -6.1527)
+}
+sketch s3(on: plane(at: d2.p, normal: Z, x: X)) {
+  p = pt(0, 0)
+}
+hole1 = hole(at: s3.p, d: 2.40623, depth: thru, flip: true)
+sketch d4(on: offset(xy, 16.0069)) {
+  p = pt(0, 0)
+}
+sketch s5(on: plane(at: d4.p, normal: Z, x: X)) {
+  c1 = circle((15.5653, 3.17363), 2.13309)
+}
+p1 = extrude(s5, 11.6058)
+c9 = chamfer(edges(of: p1.end), 0.680801458)
+sketch s6(on: plane(at: d4.p, normal: Z, x: X)) {
+  c1 = circle((-1.48911, 3.93949), 3.77735)
+}
+p2 = extrude(s6, 10.0439)
+c12 = chamfer(edges(of: p2.end), 0.373182819)
+t13 = thicken(base.side(s1.r1[3]), 0.423944488)
+# seed 17
+sketch s1(on: xy) {
+  r1 = rect(corner: (-30.6595, -30.6505), size: (61.319, 61.3011))
+}
+base = extrude(s1, 29.0519)
+dr2 = draft(base.side(s1.r1[3]), angle: 3.19329deg, neutral: xy)
+c3 = chamfer(edges(of: base.end), 0.653839104)
+sketch d2(on: offset(xy, 29.0519)) {
+  p = pt(0, 0)
+}
+sketch s3(on: plane(at: d2.p, normal: Z, x: X)) {
+  c1 = circle((20.3762, -17.892), 6.87565)
+}
+p1 = extrude(s3, 4.35824)
+c7 = chamfer(edges(of: p1.end), 0.463279815)
+c8 = chamfer(edges(of: base.end), 0.514685082)
+# seed 18
+sketch s1(on: xy) {
+  r1 = rect(corner: (-20.4379, -27.3822), size: (40.8759, 54.7644))
+}
+base = extrude(s1, 14.0294)
+dr2 = draft(base.side(s1.r1[3]), angle: -0.125816deg, neutral: xy)
+r3 = fillet(edges(of: base, along: Z), 2.1041579)
+sketch d2(on: offset(xy, 0)) {
+  p = pt(10.8794, -13.9467)
+}
+sketch s3(on: plane(at: d2.p, normal: Z, x: X)) {
+  p = pt(0, 0)
+}
+hole1 = hole(at: s3.p, d: 3.07958, depth: thru, flip: true)
+sketch d4(on: offset(xy, 14.0294)) {
+  p = pt(0, 0)
+}
+sketch s5(on: plane(at: d4.p, normal: Z, x: X)) {
+  c1 = circle((9.97223, 16.2113), 3.40735)
+}
+p1 = extrude(s5, 4.80203)
+c10 = chamfer(edges(of: p1.end), 0.429031964)
+o11 = offset_faces(base.side(s1.r1[3]), 0.572627772)
+sketch d6(on: offset(xy, 7.01472)) {
+  p = pt(0, 0)
+}
+sketch s7(on: plane(at: d6.p, normal: Z, x: X)) {
+  r1 = rect(corner: (-5.95898, -54.7644), size: (2.89377, 109.529))
+}
+p3 = cut(s7, -14.0294)
+# seed 19
+sketch s1(on: xy) {
+  r1 = rect(corner: (-35.3138, -30.1605), size: (70.6275, 60.321))
+}
+base = extrude(s1, 18.4912)
+r2 = fillet(edges(of: base, along: Z), 3.98885828)
+sketch d2(on: offset(xy, 9.24559)) {
+  p = pt(0, 0)
+}
+sketch s3(on: plane(at: d2.p, normal: Z, x: X)) {
+  r1 = rect(corner: (-26.281, -11.3522), size: (15.6161, 15.6161))
+}
+p0 = cut(s3, -18.4912)
+c6 = chamfer(edges(of: p0), 0.546544751)
+sketch s4(on: plane(at: d2.p, normal: Z, x: X)) {
+  r1 = rect(corner: (17.8521, -60.321), size: (1.85997, 120.642))
+}
+p1 = cut(s4, -18.4912)
+sketch s5(on: plane(at: d2.p, normal: Z, x: X)) {
+  r1 = rect(corner: (6.50634, 7.70061), size: (8.97325, 8.97325))
+}
+p2 = cut(s5, -18.4912)
+c11 = chamfer(edges(of: p2), 0.300073537)
+sketch d6(on: offset(xy, 0)) {
+  p = pt(7.45306, -8.08097)
+}
+sketch s7(on: plane(at: d6.p, normal: Z, x: X)) {
+  p = pt(0, 0)
+}
+hole1 = hole(at: s7.p, d: 4.49362, depth: thru, flip: true)
+# seed 20
+sketch s1(on: xy) {
+  r1 = rect(corner: (-42.1692, -27.9407), size: (84.3384, 55.8814))
+}
+base = extrude(s1, 24.3962)
+r2 = fillet(edges(of: base, along: Z), 2.72504054)
+sketch d2(on: offset(xy, 0)) {
+  p = pt(-26.5958, -3.47433)
+}
+sketch s3(on: plane(at: d2.p, normal: Z, x: X)) {
+  p = pt(0, 0)
+}
+hole1 = hole(at: s3.p, d: 1.47003, depth: thru, flip: true)
+sketch d4(on: offset(xy, 24.3962)) {
+  p = pt(0, 0)
+}
+sketch s5(on: plane(at: d4.p, normal: Z, x: X)) {
+  c1 = circle((-10.169, 16.7659), 4.6964)
+}
+p1 = extrude(s5, 4.79835)
+c9 = chamfer(edges(of: p1.end), 0.542865825)
+o10 = offset_faces(base.side(s1.r1[1]), -11.8909889)
+sh11 = shell(0.59658149, open: p1.end)
+# seed 21
+sketch s1(on: xy) {
+  r1 = rect(corner: (-19.9485, -28.0198), size: (39.897, 56.0395))
+}
+base = extrude(s1, 21.24)
+r2 = fillet(edges(of: base, along: Z), 3.27421675)
+sketch d2(on: offset(xy, 0)) {
+  p = pt(-12.9234, 16.1685)
+}
+sketch s3(on: plane(at: d2.p, normal: Z, x: X)) {
+  p = pt(0, 0)
+}
+hole1 = hole(at: s3.p, d: 2.74149, depth: thru, flip: true)
+sketch s4(on: xy) {
+  rr1 = hull(disc((5.93979, -11.87632), 1.52278), disc((9.68657, -11.87632), 1.52278), disc((9.68657, -8.12954), 1.52278), disc((5.93979, -8.12954), 1.52278))
+}
+p1 = cut(s4, -4.92098)
+c8 = chamfer(edges(of: p1, crease: "concave"), 0.363399901)
+# seed 22
+sketch s1(on: xy) {
+  r1 = rect(corner: (-43.7463, -15.6583), size: (87.4926, 31.3166))
+}
+base = extrude(s1, 6.56679)
+r2 = fillet(edges(of: base, along: Z), 0.922062221)
+sketch d2(on: offset(xy, 0)) {
+  p = pt(-13.4583, -9.40205)
+}
+sketch s3(on: plane(at: d2.p, normal: Z, x: X)) {
+  p = pt(0, 0)
+}
+hole1 = hole(at: s3.p, d: 4.71398, depth: thru, flip: true)
+sketch s4(on: xy) {
+  rr1 = hull(disc((18.470492, -2.864688), 0.810592), disc((31.935508, -2.864688), 0.810592), disc((31.935508, 10.600328000000001), 0.810592), disc((18.470492, 10.600328000000001), 0.810592))
+}
+p1 = cut(s4, -2.10642)
+c8 = chamfer(edges(of: p1, crease: "concave"), 0.373987097)
+sketch s5(on: xy) {
+  rr1 = hull(disc((0.27548000000000017, 4.588710000000001), 2.08821), disc((9.38646, 4.588710000000001), 2.08821), disc((9.38646, 13.69969), 2.08821), disc((0.27548000000000017, 13.69969), 2.08821))
+}
+p2 = cut(s5, -2.44388)
+c11 = chamfer(edges(of: p2, crease: "concave"), 0.721865066)
+sh12 = shell(1.09943351, open: base.end)
+# seed 23
+sketch s1(on: xy) {
+  r1 = rect(corner: (-42.746, -33.8436), size: (85.4919, 67.6873))
+}
+base = extrude(s1, 27.4184)
+dr2 = draft(base.side(s1.r1[0]), angle: 1.10433deg, neutral: xy)
+sketch d2(on: offset(xy, 13.7092)) {
+  p = pt(0, 0)
+}
+sketch s3(on: plane(at: d2.p, normal: Z, x: X)) {
+  r1 = rect(corner: (12.8782, -67.6873), size: (3.6558, 135.375))
+}
+p0 = cut(s3, -27.4184)
+sketch s4(on: xy) {
+  rr1 = hull(disc((-25.669900000000002, 18.5091), 1.7811), disc((-19.25321, 18.5091), 1.7811), disc((-19.25321, 24.925790000000003), 1.7811), disc((-25.669900000000002, 24.925790000000003), 1.7811))
+}
+p1 = cut(s4, -7.27148)
+c8 = chamfer(edges(of: p1, crease: "concave"), 0.137410444)
+c9 = chamfer(edges(of: base.end), 0.790913099)
+# seed 24
+sketch s1(on: xy) {
+  r1 = rect(corner: (-36.3703, -31.3955), size: (72.7406, 62.791))
+}
+base = extrude(s1, 10.3822)
+r2 = fillet(edges(of: base, along: Z), 2.84810356)
+sketch d2(on: offset(xy, 5.1911)) {
+  p = pt(0, 0)
+}
+sketch s3(on: plane(at: d2.p, normal: Z, x: X)) {
+  r1 = rect(corner: (6.23612, 6.48427), size: (9.29653, 9.29653))
+}
+p0 = cut(s3, -10.3822)
+c6 = chamfer(edges(of: p0), 3.36450165)
+c7 = chamfer(edges(of: base.end), 0.243016412)
+sketch s4(on: xy) {
+  rr1 = hull(disc((-25.34232, 1.5284470000000001), 1.25648), disc((-15.92618, 1.5284470000000001), 1.25648), disc((-15.92618, 10.944587), 1.25648), disc((-25.34232, 10.944587), 1.25648))
+}
+p2 = cut(s4, -4.83754)
+c10 = chamfer(edges(of: p2, crease: "concave"), 0.145246777)
+sketch s5(on: plane(at: d2.p, normal: Z, x: X)) {
+  r1 = rect(corner: (8.00778, -62.791), size: (3.50904, 125.582))
+}
+p3 = cut(s5, -10.3822)
+sh13 = shell(1.40204995, open: base.end)
+# seed 25
+sketch s1(on: xy) {
+  r1 = rect(corner: (-26.3089, -33.3527), size: (52.6177, 66.7055))
+}
+base = extrude(s1, 26.2427)
+dr2 = draft(base.side(s1.r1[3]), angle: 4.4605deg, neutral: xy)
+sketch d2(on: offset(xy, 13.1214)) {
+  p = pt(0, 0)
+}
+sketch s3(on: plane(at: d2.p, normal: Z, x: X)) {
+  r1 = rect(corner: (-18.8982, 0.301999), size: (5.15381, 5.15381))
+}
+p0 = cut(s3, -26.2427)
+c6 = chamfer(edges(of: p0), 0.459069125)
+sketch s4(on: plane(at: d2.p, normal: Z, x: X)) {
+  r1 = rect(corner: (11.3939, -66.7055), size: (2.33628, 133.411))
+}
+p1 = cut(s4, -26.2427)
+c9 = chamfer(edges(of: base.end), 0.267729187)
+sketch d5(on: offset(xy, 0)) {
+  p = pt(-14.9975, -4.29355)
+}
+sketch s6(on: plane(at: d5.p, normal: Z, x: X)) {
+  p = pt(0, 0)
+}
+hole1 = hole(at: s6.p, d: 1.44967, depth: thru, flip: true)
+# seed 26
+sketch s1(on: xy) {
+  r1 = rect(corner: (-37.4187, -17.0619), size: (74.8375, 34.1239))
+}
+base = extrude(s1, 10.9238)
+r2 = fillet(edges(of: base, along: Z), 3.2161501)
+o3 = offset_faces(base.side(s1.r1[1]), -0.231263425)
+c4 = chamfer(edges(of: base.end), 0.575636641)
+sketch s2(on: xy) {
+  rr1 = hull(disc((13.808480000000001, -2.5529800000000002), 1.66928), disc((20.58392, -2.5529800000000002), 1.66928), disc((20.58392, 4.22246), 1.66928), disc((13.808480000000001, 4.22246), 1.66928))
+}
+p2 = cut(s2, -2.80397)
+c7 = chamfer(edges(of: p2, crease: "concave"), 0.307490518)
+# seed 27
+sketch s1(on: xy) {
+  r1 = rect(corner: (-34.4549, -28.2808), size: (68.9098, 56.5616))
+}
+base = extrude(s1, 28.9691)
+dr2 = draft(base.side(s1.r1[0]), angle: -5.21557deg, neutral: xy)
+r3 = fillet(edges(of: base, along: Z), 3.35203038)
+sketch d2(on: offset(xy, 14.4846)) {
+  p = pt(0, 0)
+}
+sketch s3(on: plane(at: d2.p, normal: Z, x: X)) {
+  r1 = rect(corner: (-7.91255, -23.6708), size: (15.0137, 15.0137))
+}
+p0 = cut(s3, -28.9691)
+c7 = chamfer(edges(of: p0), 0.301090799)
+sketch s4(on: plane(at: d2.p, normal: Z, x: X)) {
+  r1 = rect(corner: (7.23683, -56.5616), size: (1.38529, 113.123))
+}
+p1 = cut(s4, -28.9691)
+sketch d5(on: offset(xy, 0)) {
+  p = pt(5.16566, -6.11498)
+}
+sketch s6(on: plane(at: d5.p, normal: Z, x: X)) {
+  p = pt(0, 0)
+}
+hole1 = hole(at: s6.p, d: 3.54113, depth: thru, flip: true)
+sh13 = shell(0.592646734, open: base.end)
+# seed 28
+sketch s1(on: xy) {
+  r1 = rect(corner: (-18.3887, -15.4442), size: (36.7774, 30.8883))
+}
+base = extrude(s1, 20.3343)
+dr2 = draft(base.side(s1.r1[0]), angle: -4.41004deg, neutral: xy)
+r3 = fillet(edges(of: base, along: Z), 1.00510581)
+o4 = offset_faces(base.side(s1.r1[2]), 0.304460848)
+c5 = chamfer(edges(of: base.end), 13.3664638)
+sketch d2(on: offset(xy, 10.1671)) {
+  p = pt(0, 0)
+}
+sketch s3(on: plane(at: d2.p, normal: Z, x: X)) {
+  r1 = rect(corner: (-1.35192, 4.73852), size: (6.4254, 6.4254))
+}
+p2 = cut(s3, -20.3343)
+c9 = chamfer(edges(of: p2), 12.4098673)
+sh10 = shell(1.28751722, open: base.end)
+# seed 29
+sketch s1(on: xy) {
+  r1 = rect(corner: (-31.4436, -20.2812), size: (62.8871, 40.5624))
+}
+base = extrude(s1, 26.2764)
+dr2 = draft(base.side(s1.r1[0]), angle: 0.12414deg, neutral: xy)
+r3 = fillet(edges(of: base, along: Z), 3.90850579)
+o4 = offset_faces(base.side(s1.r1[3]), 0.229572117)
+sketch d2(on: offset(xy, 26.2764)) {
+  p = pt(0, 0)
+}
+sketch s3(on: plane(at: d2.p, normal: Z, x: X)) {
+  c1 = circle((1.82919, -2.0976), 3.66965)
+}
+p1 = extrude(s3, 10.3688)
+c8 = chamfer(edges(of: p1.end), 0.407122758)
+o9 = offset_faces(base.side(s1.r1[3]), -0.651488817)
+# seed 30
+sketch s1(on: xy) {
+  r1 = rect(corner: (-31.1724, -19.0069), size: (62.3449, 38.0138))
+}
+base = extrude(s1, 6.72089)
+r2 = fillet(edges(of: base, along: Z), 1.40048941)
+sketch d2(on: offset(xy, 6.72089)) {
+  p = pt(0, 0)
+}
+sketch s3(on: plane(at: d2.p, normal: Z, x: X)) {
+  c1 = circle((20.3166, -0.974852), 7.96091)
+}
+p0 = extrude(s3, 3.23266)
+c6 = chamfer(edges(of: p0.end), 0.690568943)
+c7 = chamfer(edges(of: base.end), 0.561207925)
+c8 = chamfer(edges(of: base.end), 0.316583531)
+sh9 = shell(1.20054554, open: p0.end)
+# seed 31
+sketch s1(on: xy) {
+  r1 = rect(corner: (-15.3683, -15.029), size: (30.7367, 30.0579))
+}
+base = extrude(s1, 15.4281)
+r2 = fillet(edges(of: base, along: Z), 0.89355237)
+sketch d2(on: offset(xy, 15.4281)) {
+  p = pt(0, 0)
+}
+sketch s3(on: plane(at: d2.p, normal: Z, x: X)) {
+  c1 = circle((9.87088, -9.35572), 2.3637)
+}
+p0 = extrude(s3, 7.82096)
+c6 = chamfer(edges(of: p0.end), 0.368170554)
+sketch s4(on: plane(at: d2.p, normal: Z, x: X)) {
+  c1 = circle((-9.82823, 8.81303), 4.41767)
+}
+p1 = extrude(s4, 4.85335)
+c9 = chamfer(edges(of: p1.end), 0.487956739)
+sketch s5(on: xy) {
+  rr1 = hull(disc((0.9650699999999999, -5.3009), 2.35192), disc((8.213930000000001, -5.3009), 2.35192), disc((8.213930000000001, 1.9479600000000001), 2.35192), disc((0.9650699999999999, 1.9479600000000001), 2.35192))
+}
+p2 = cut(s5, -7.38035)
+c12 = chamfer(edges(of: p2, crease: "concave"), 0.232487577)
+sh13 = shell(0.770284653, open: p0.end)
+# seed 32
+sketch s1(on: xy) {
+  r1 = rect(corner: (-17.3227, -17.3064), size: (34.6453, 34.6128))
+}
+base = extrude(s1, 13.2751)
+r2 = fillet(edges(of: base, along: Z), 3.020842)
+sketch d2(on: offset(xy, 6.63754)) {
+  p = pt(0, 0)
+}
+sketch s3(on: plane(at: d2.p, normal: Z, x: X)) {
+  r1 = rect(corner: (7.92391, -34.6128), size: (1.79836, 69.2255))
+}
+p0 = cut(s3, -13.2751)
+sketch s4(on: xy) {
+  rr1 = hull(disc((-13.26756, 4.15402), 1.02214), disc((-9.79493, 4.15402), 1.02214), disc((-9.79493, 7.62665), 1.02214), disc((-13.26756, 7.62665), 1.02214))
+}
+p1 = cut(s4, -3.47959)
+c8 = chamfer(edges(of: p1, crease: "concave"), 0.287089626)
+sketch s5(on: plane(at: d2.p, normal: Z, x: X)) {
+  r1 = rect(corner: (-17.5325, -16.6177), size: (15.7329, 15.7329))
+}
+p2 = cut(s5, -13.2751)
+c11 = chamfer(edges(of: p2), 0.308185712)
+sketch s6(on: plane(at: d2.p, normal: Z, x: X)) {
+  r1 = rect(corner: (9.74245, -34.6128), size: (1.58386, 69.2255))
+}
+p3 = cut(s6, -13.2751)
+# seed 33
+sketch s1(on: xy) {
+  r1 = rect(corner: (-32.1099, -26.7252), size: (64.2197, 53.4505))
+}
+base = extrude(s1, 25.6081)
+dr2 = draft(base.side(s1.r1[2]), angle: 1.82232deg, neutral: xy)
+c3 = chamfer(edges(of: base.end), 0.52422852)
+sketch d2(on: offset(xy, 25.6081)) {
+  p = pt(0, 0)
+}
+sketch s3(on: plane(at: d2.p, normal: Z, x: X)) {
+  c1 = circle((13.4964, -7.82222), 3.91677)
+}
+p1 = extrude(s3, 4.05532)
+c7 = chamfer(edges(of: p1.end), 19.620425)
+c8 = chamfer(edges(of: base.end), 0.519968964)
+o9 = offset_faces(base.side(s1.r1[1]), -0.171555179)
+o10 = offset_faces(base.side(s1.r1[0]), 0.231881695)
+# seed 34
+sketch s1(on: xy) {
+  r1 = rect(corner: (-30.8681, -25.6793), size: (61.7361, 51.3586))
+}
+base = extrude(s1, 26.2398)
+c2 = chamfer(edges(of: base.end), 12.8662612)
+sketch d2(on: offset(xy, 13.1199)) {
+  p = pt(0, 0)
+}
+sketch s3(on: plane(at: d2.p, normal: Z, x: X)) {
+  r1 = rect(corner: (-15.9504, -2.87193), size: (13.3165, 13.3165))
+}
+p1 = cut(s3, -26.2398)
+c6 = chamfer(edges(of: p1), 0.271985546)
+c7 = chamfer(edges(of: base.end), 0.284976315)
+o8 = offset_faces(base.side(s1.r1[0]), 0.544637265)
+sh9 = shell(1.37937308, open: base.end)
+# seed 35
+sketch s1(on: xy) {
+  r1 = rect(corner: (-31.4608, -29.3872), size: (62.9217, 58.7743))
+}
+base = extrude(s1, 23.9354)
+r2 = fillet(edges(of: base, along: Z), 3.87950362)
+sketch d2(on: offset(xy, 11.9677)) {
+  p = pt(0, 0)
+}
+sketch s3(on: plane(at: d2.p, normal: Z, x: X)) {
+  r1 = rect(corner: (5.22679, 8.85064), size: (15.1692, 15.1692))
+}
+p0 = cut(s3, -23.9354)
+c6 = chamfer(edges(of: p0), 0.576722828)
+sketch s4(on: plane(at: d2.p, normal: Z, x: X)) {
+  r1 = rect(corner: (9.29906, -58.7743), size: (0.680522, 117.549))
+}
+p1 = cut(s4, -23.9354)
+sketch d5(on: offset(xy, 0)) {
+  p = pt(-11.1308, -6.85756)
+}
+sketch s6(on: plane(at: d5.p, normal: Z, x: X)) {
+  p = pt(0, 0)
+}
+hole1 = hole(at: s6.p, d: 1.76536, depth: thru, flip: true)
+c12 = chamfer(edges(of: base.end), 0.180058568)
+# seed 36
+sketch s1(on: xy) {
+  r1 = rect(corner: (-24.861, -34.6223), size: (49.722, 69.2446))
+}
+base = extrude(s1, 29.0219)
+o2 = offset_faces(base.side(s1.r1[0]), 0.274256707)
+sketch d2(on: offset(xy, 0)) {
+  p = pt(8.49629, -4.81772)
+}
+sketch s3(on: plane(at: d2.p, normal: Z, x: X)) {
+  p = pt(0, 0)
+}
+hole1 = hole(at: s3.p, d: 2.07592, depth: thru, flip: true)
+sh6 = shell(1.19405211, open: base.end)
+# seed 37
+sketch s1(on: xy) {
+  r1 = rect(corner: (-35.4601, -14.5611), size: (70.9203, 29.1221))
+}
+base = extrude(s1, 20.8276)
+sketch d2(on: offset(xy, 10.4138)) {
+  p = pt(0, 0)
+}
+sketch s3(on: plane(at: d2.p, normal: Z, x: X)) {
+  r1 = rect(corner: (1.02739, -7.70698), size: (10.3362, 10.3362))
+}
+p0 = cut(s3, -20.8276)
+c5 = chamfer(edges(of: p0), 0.317565803)
+sketch s4(on: xy) {
+  rr1 = hull(disc((19.862334, -3.9948460000000003), 0.362034), disc((24.871035999999997, -3.9948460000000003), 0.362034), disc((24.871035999999997, 1.013856), 0.362034), disc((19.862334, 1.013856), 0.362034))
+}
+p1 = cut(s4, -1.40243)
+c8 = chamfer(edges(of: p1, crease: "concave"), 0.334739591)
+# seed 38
+sketch s1(on: xy) {
+  r1 = rect(corner: (-34.1842, -22.153), size: (68.3684, 44.3059))
+}
+base = extrude(s1, 23.3832)
+dr2 = draft(base.side(s1.r1[3]), angle: 2.37435deg, neutral: xy)
+c3 = chamfer(edges(of: base.end), 0.870957673)
+o4 = offset_faces(base.side(s1.r1[3]), -0.107583338)
+sketch d2(on: offset(xy, 11.6916)) {
+  p = pt(0, 0)
+}
+sketch s3(on: plane(at: d2.p, normal: Z, x: X)) {
+  r1 = rect(corner: (-18.7474, -0.0576198), size: (14.7236, 14.7236))
+}
+p2 = cut(s3, -23.3832)
+c8 = chamfer(edges(of: p2), 6.79658602)
+t9 = thicken(base.side(s1.r1[0]), 0.57378408)
+# seed 39
+sketch s1(on: xy) {
+  r1 = rect(corner: (-21.2955, -21.1715), size: (42.5911, 42.3429))
+}
+base = extrude(s1, 10.6814)
+sketch s2(on: xy) {
+  rr1 = hull(disc((0.4350200000000002, 1.3566), 3.1709), disc((9.60002, 1.3566), 3.1709), disc((9.60002, 10.521600000000001), 3.1709), disc((0.4350200000000002, 10.521600000000001), 3.1709))
+}
+p0 = cut(s2, -1.9232)
+c4 = chamfer(edges(of: p0, crease: "concave"), 1.16373676)
+c5 = chamfer(edges(of: base.end), 0.171967627)
+sketch s3(on: xy) {
+  rr1 = hull(disc((-1.4669200000000004, -1.8297000000000003), 2.67332), disc((5.881039999999999, -1.8297000000000003), 2.67332), disc((5.881039999999999, 5.518259999999998), 2.67332), disc((-1.4669200000000004, 5.518259999999998), 2.67332))
+}
+p2 = cut(s3, -3.6549)
+c8 = chamfer(edges(of: p2, crease: "concave"), 0.412651231)
+c9 = chamfer(edges(of: base.end), 0.533991086)
+sh10 = shell(0.575099288, open: base.end)
+# seed 40
+sketch s1(on: xy) {
+  r1 = rect(corner: (-28.7582, -32.252), size: (57.5164, 64.5041))
+}
+base = extrude(s1, 6.76432)
+dr2 = draft(base.side(s1.r1[1]), angle: 5.54149deg, neutral: xy)
+sketch d2(on: offset(xy, 0)) {
+  p = pt(14.5612, -2.54738)
+}
+sketch s3(on: plane(at: d2.p, normal: Z, x: X)) {
+  p = pt(0, 0)
+}
+hole1 = hole(at: s3.p, d: 1.30308, depth: thru, flip: true)
+sketch s4(on: xy) {
+  rr1 = hull(disc((-21.19509, -17.11259), 1.94561), disc((-12.600909999999999, -17.11259), 1.94561), disc((-12.600909999999999, -8.51841), 1.94561), disc((-21.19509, -8.51841), 1.94561))
+}
+p1 = cut(s4, -1.00885)
+c8 = chamfer(edges(of: p1, crease: "concave"), 19.346358)
+c9 = chamfer(edges(of: base.end), 0.239981113)
+sketch d5(on: offset(xy, 0)) {
+  p = pt(7.49599, -8.97076)
+}
+sketch s6(on: plane(at: d5.p, normal: Z, x: X)) {
+  p = pt(0, 0)
+}
+hole2 = hole(at: s6.p, d: 4.02421, depth: thru, flip: true)
+# seed 41
+sketch s1(on: xy) {
+  r1 = rect(corner: (-26.4306, -17.6912), size: (52.8612, 35.3824))
+}
+base = extrude(s1, 9.98488)
+sketch s2(on: xy) {
+  rr1 = hull(disc((-2.4013500000000003, -7.0182), 2.11854), disc((6.141070000000001, -7.0182), 2.11854), disc((6.141070000000001, 1.524220000000001), 2.11854), disc((-2.4013500000000003, 1.524220000000001), 2.11854))
+}
+p0 = cut(s2, -4.00954)
+c4 = chamfer(edges(of: p0, crease: "concave"), 0.385606432)
+sketch s3(on: xy) {
+  rr1 = hull(disc((14.45328, -6.7335), 1.08378), disc((19.37588, -6.7335), 1.08378), disc((19.37588, -1.8109000000000002), 1.08378), disc((14.45328, -1.8109000000000002), 1.08378))
+}
+p1 = cut(s3, -1.03828)
+c7 = chamfer(edges(of: p1, crease: "concave"), 0.28319333)
+sketch s4(on: xy) {
+  rr1 = hull(disc((6.37678, 3.88446), 1.15399), disc((9.56885, 3.88446), 1.15399), disc((9.56885, 7.07653), 1.15399), disc((6.37678, 7.07653), 1.15399))
+}
+p2 = cut(s4, -1.05602)
+c10 = chamfer(edges(of: p2, crease: "concave"), 0.737003205)
+sketch d5(on: offset(xy, 0)) {
+  p = pt(-6.42087, 2.82823)
+}
+sketch s6(on: plane(at: d5.p, normal: Z, x: X)) {
+  p = pt(0, 0)
+}
+hole1 = hole(at: s6.p, d: 3.38954, depth: thru, flip: true)
+t14 = thicken(base.side(s1.r1[1]), 0.274587997)
+# seed 42
+sketch s1(on: xy) {
+  r1 = rect(corner: (-34.1828, -13.0627), size: (68.3656, 26.1255))
+}
+base = extrude(s1, 12.6007)
+dr2 = draft(base.side(s1.r1[2]), angle: 2.83765deg, neutral: xy)
+r3 = fillet(edges(of: base, along: Z), 0.82793324)
+sketch d2(on: offset(xy, 6.30035)) {
+  p = pt(0, 0)
+}
+sketch s3(on: plane(at: d2.p, normal: Z, x: X)) {
+  r1 = rect(corner: (9.84554, -26.1255), size: (2.56243, 52.251))
+}
+p0 = cut(s3, -12.6007)
+o7 = offset_faces(base.side(s1.r1[3]), -0.201051675)
+sketch s4(on: xy) {
+  rr1 = hull(disc((-8.98246, -5.273009999999999), 1.03194), disc((-3.8720900000000005, -5.273009999999999), 1.03194), disc((-3.8720900000000005, -0.16264000000000012), 1.03194), disc((-8.98246, -0.16264000000000012), 1.03194))
+}
+p2 = cut(s4, -4.7327)
+c10 = chamfer(edges(of: p2, crease: "concave"), 0.346048345)
+# seed 43
+sketch s1(on: xy) {
+  r1 = rect(corner: (-16.1566, -28.165), size: (32.3131, 56.3301))
+}
+base = extrude(s1, 9.4544)
+o2 = offset_faces(base.side(s1.r1[1]), -0.505951435)
+sketch d2(on: offset(xy, 4.7272)) {
+  p = pt(0, 0)
+}
+sketch s3(on: plane(at: d2.p, normal: Z, x: X)) {
+  r1 = rect(corner: (6.8982, -56.3301), size: (0.950465, 112.66))
+}
+p1 = cut(s3, -9.4544)
+t6 = thicken(base.side(s1.r1[1]), 0.553516805)
+# seed 44
+sketch s1(on: xy) {
+  r1 = rect(corner: (-27.2561, -24.6944), size: (54.5122, 49.3887))
+}
+base = extrude(s1, 26.6889)
+dr2 = draft(base.side(s1.r1[1]), angle: -3.29809deg, neutral: xy)
+r3 = fillet(edges(of: base, along: Z), 0.530819691)
+c4 = chamfer(edges(of: base.end), 20.386722)
+c5 = chamfer(edges(of: base.end), 15.4572259)
+sketch d2(on: offset(xy, 26.6889)) {
+  p = pt(0, 0)
+}
+sketch s3(on: plane(at: d2.p, normal: Z, x: X)) {
+  c1 = circle((-5.64924, -13.3082), 4.85664)
+}
+p2 = extrude(s3, 4.69734)
+c9 = chamfer(edges(of: p2.end), 0.261177017)
+sketch s4(on: xy) {
+  rr1 = hull(disc((3.2796700000000003, 7.39434), 1.58474), disc((9.34657, 7.39434), 1.58474), disc((9.34657, 13.46124), 1.58474), disc((3.2796700000000003, 13.46124), 1.58474))
+}
+p3 = cut(s4, -9.98696)
+c12 = chamfer(edges(of: p3, crease: "concave"), 0.627483736)
+sketch s5(on: plane(at: d2.p, normal: Z, x: X)) {
+  c1 = circle((4.74467, 2.96246), 5.24318)
+}
+p4 = extrude(s5, 7.35106)
+c15 = chamfer(edges(of: p4.end), 0.578794869)
+sh16 = shell(35.559785, open: p4.end)
+# seed 45
+sketch s1(on: xy) {
+  r1 = rect(corner: (-23.1563, -23.4806), size: (46.3125, 46.9613))
+}
+base = extrude(s1, 7.9651)
+r2 = fillet(edges(of: base, along: Z), 0.538626285)
+sketch d2(on: offset(xy, 3.98255)) {
+  p = pt(0, 0)
+}
+sketch s3(on: plane(at: d2.p, normal: Z, x: X)) {
+  r1 = rect(corner: (3.57883, -2.72043), size: (14.7895, 14.7895))
+}
+p0 = cut(s3, -7.9651)
+c6 = chamfer(edges(of: p0), 12.8850829)
+o7 = offset_faces(base.side(s1.r1[0]), 2.08667824)
+sketch s4(on: plane(at: d2.p, normal: Z, x: X)) {
+  r1 = rect(corner: (5.93097, 11.9226), size: (5.12506, 5.12506))
+}
+p2 = cut(s4, -7.9651)
+c10 = chamfer(edges(of: p2), 5.79330399)
+sketch d5(on: offset(xy, 7.9651)) {
+  p = pt(0, 0)
+}
+sketch s6(on: plane(at: d5.p, normal: Z, x: X)) {
+  c1 = circle((2.87626, -13.7795), 7.45767)
+}
+p3 = extrude(s6, 6.16209)
+c14 = chamfer(edges(of: p3.end), 0.111984378)
+sh15 = shell(1.28607505, open: p3.end)
+# seed 46
+sketch s1(on: xy) {
+  r1 = rect(corner: (-41.648, -21.4999), size: (83.2961, 42.9997))
+}
+base = extrude(s1, 20.1269)
+r2 = fillet(edges(of: base, along: Z), 2.30501049)
+sketch s2(on: xy) {
+  rr1 = hull(disc((14.378614, 2.443364), 0.981514), disc((17.069086, 2.443364), 0.981514), disc((17.069086, 5.1338360000000005), 0.981514), disc((14.378614, 5.1338360000000005), 0.981514))
+}
+p0 = cut(s2, -1.79481)
+c5 = chamfer(edges(of: p0, crease: "concave"), 0.729132786)
+sketch d3(on: offset(xy, 10.0634)) {
+  p = pt(0, 0)
+}
+sketch s4(on: plane(at: d3.p, normal: Z, x: X)) {
+  r1 = rect(corner: (26.3418, -42.9997), size: (3.40721, 85.9995))
+}
+p1 = cut(s4, -20.1269)
+t9 = thicken(base.side(s1.r1[0]), 1.0051112)
+# seed 47
+sketch s1(on: xy) {
+  r1 = rect(corner: (-25.5554, -22.1792), size: (51.1108, 44.3584))
+}
+base = extrude(s1, 16.8881)
+sketch d2(on: offset(xy, 8.44405)) {
+  p = pt(0, 0)
+}
+sketch s3(on: plane(at: d2.p, normal: Z, x: X)) {
+  r1 = rect(corner: (-2.01414, 2.7745), size: (11.9035, 11.9035))
+}
+p0 = cut(s3, -16.8881)
+c5 = chamfer(edges(of: p0), 15.1272714)
+sketch d4(on: offset(xy, 16.8881)) {
+  p = pt(0, 0)
+}
+sketch s5(on: plane(at: d4.p, normal: Z, x: X)) {
+  c1 = circle((14.2226, 11.7916), 5.40541)
+}
+p1 = extrude(s5, 5.13968)
+c9 = chamfer(edges(of: p1.end), 0.38744355)
+c10 = chamfer(edges(of: base.end), 0.714280588)
+c11 = chamfer(edges(of: base.end), 21.0803495)
+c12 = chamfer(edges(of: base.end), 0.343328387)
+t13 = thicken(base.side(s1.r1[1]), 0.829149846)
+# seed 48
+sketch s1(on: xy) {
+  r1 = rect(corner: (-31.4447, -15.4676), size: (62.8895, 30.9351))
+}
+base = extrude(s1, 23.0771)
+sketch d2(on: offset(xy, 11.5386)) {
+  p = pt(0, 0)
+}
+sketch s3(on: plane(at: d2.p, normal: Z, x: X)) {
+  r1 = rect(corner: (6.03883, -4.25069), size: (5.8557, 5.8557))
+}
+p0 = cut(s3, -23.0771)
+c5 = chamfer(edges(of: p0), 0.194607938)
+sketch s4(on: plane(at: d2.p, normal: Z, x: X)) {
+  r1 = rect(corner: (-11.8608, -30.9351), size: (2.85292, 61.8702))
+}
+p1 = cut(s4, -23.0771)
+c8 = chamfer(edges(of: base.end), 0.193978772)
+sh9 = shell(35.5053396, open: base.end)
+# seed 49
+sketch s1(on: xy) {
+  r1 = rect(corner: (-17.0065, -21.798), size: (34.013, 43.5959))
+}
+base = extrude(s1, 8.65211)
+sketch d2(on: offset(xy, 4.32606)) {
+  p = pt(0, 0)
+}
+sketch s3(on: plane(at: d2.p, normal: Z, x: X)) {
+  r1 = rect(corner: (4.07842, -43.5959), size: (3.06811, 87.1919))
+}
+p0 = cut(s3, -8.65211)
+c5 = chamfer(edges(of: base.end), 0.432061756)
+sh6 = shell(0.624521074, open: base.end)
+# seed 50
+sketch s1(on: xy) {
+  r1 = rect(corner: (-29.9261, -18.4889), size: (59.8522, 36.9778))
+}
+base = extrude(s1, 21.2979)
+dr2 = draft(base.side(s1.r1[3]), angle: -0.321977deg, neutral: xy)
+sketch d2(on: offset(xy, 10.6489)) {
+  p = pt(0, 0)
+}
+sketch s3(on: plane(at: d2.p, normal: Z, x: X)) {
+  r1 = rect(corner: (4.12047, -13.1445), size: (5.83981, 5.83981))
+}
+p0 = cut(s3, -21.2979)
+c6 = chamfer(edges(of: p0), 0.246055995)
+o7 = offset_faces(base.side(s1.r1[1]), 0.695004904)
+sketch s4(on: plane(at: d2.p, normal: Z, x: X)) {
+  r1 = rect(corner: (-11.0925, 2.75861), size: (9.21298, 9.21298))
+}
+p2 = cut(s4, -21.2979)
+c10 = chamfer(edges(of: p2), 0.309209851)
+sh11 = shell(0.952778161, open: base.end)
+# seed 51
+sketch s1(on: xy) {
+  r1 = rect(corner: (-22.3055, -23.7997), size: (44.6111, 47.5994))
+}
+base = extrude(s1, 9.8865)
+r2 = fillet(edges(of: base, along: Z), 2.43317024)
+o3 = offset_faces(base.side(s1.r1[2]), 0.104941947)
+c4 = chamfer(edges(of: base.end), 0.732829459)
+sketch s2(on: xy) {
+  rr1 = hull(disc((-4.78709, 7.7530600000000005), 1.87274), disc((1.10889, 7.7530600000000005), 1.87274), disc((1.10889, 13.64904), 1.87274), disc((-4.78709, 13.64904), 1.87274))
+}
+p2 = cut(s2, -4.88178)
+c7 = chamfer(edges(of: p2, crease: "concave"), 0.632374672)
+o8 = offset_faces(base.side(s1.r1[2]), 0.692520883)
+# seed 52
+sketch s1(on: xy) {
+  r1 = rect(corner: (-44.3506, -13.7268), size: (88.7013, 27.4535))
+}
+base = extrude(s1, 23.4159)
+o2 = offset_faces(base.side(s1.r1[0]), -0.72641595)
+sketch d2(on: offset(xy, 23.4159)) {
+  p = pt(0, 0)
+}
+sketch s3(on: plane(at: d2.p, normal: Z, x: X)) {
+  c1 = circle((-28.9105, -7.88157), 3.02176)
+}
+p1 = extrude(s3, 8.62572)
+c6 = chamfer(edges(of: p1.end), 0.424412009)
+o7 = offset_faces(base.side(s1.r1[2]), 0.672977906)
+o8 = offset_faces(base.side(s1.r1[1]), 0.231211814)
+sketch s4(on: plane(at: d2.p, normal: Z, x: X)) {
+  c1 = circle((13.2033, 4.79698), 2.52307)
+}
+p4 = extrude(s4, 5.76381)
+c11 = chamfer(edges(of: p4.end), 0.3790104)
+sh12 = shell(1.30801905, open: p1.end)
+# seed 53
+sketch s1(on: xy) {
+  r1 = rect(corner: (-33.5142, -32.5281), size: (67.0285, 65.0562))
+}
+base = extrude(s1, 16.9557)
+sketch s2(on: xy) {
+  rr1 = hull(disc((6.4611, 5.90175), 3.16092), disc((14.437459999999998, 5.90175), 3.16092), disc((14.437459999999998, 13.87811), 3.16092), disc((6.4611, 13.87811), 3.16092))
+}
+p0 = cut(s2, -7.77036)
+c4 = chamfer(edges(of: p0, crease: "concave"), 0.186037229)
+sketch d3(on: offset(xy, 0)) {
+  p = pt(-20.2479, -11.7487)
+}
+sketch s4(on: plane(at: d3.p, normal: Z, x: X)) {
+  p = pt(0, 0)
+}
+hole1 = hole(at: s4.p, d: 1.91354, depth: thru, flip: true)
+c8 = chamfer(edges(of: base.end), 0.434523669)
+o9 = offset_faces(base.side(s1.r1[3]), 0.743130365)
+# seed 54
+sketch s1(on: xy) {
+  r1 = rect(corner: (-42.4093, -15.5933), size: (84.8186, 31.1865))
+}
+base = extrude(s1, 19.3457)
+sketch d2(on: offset(xy, 19.3457)) {
+  p = pt(0, 0)
+}
+sketch s3(on: plane(at: d2.p, normal: Z, x: X)) {
+  c1 = circle((-15.8893, -3.53298), 6.38776)
+}
+p0 = extrude(s3, 9.51365)
+c5 = chamfer(edges(of: p0.end), 19.8043354)
+c6 = chamfer(edges(of: base.end), 0.195471514)
+sketch s4(on: xy) {
+  rr1 = hull(disc((25.380864, -0.19807099999999997), 0.222564), disc((29.380556000000002, -0.19807099999999997), 0.222564), disc((29.380556000000002, 3.801621), 0.222564), disc((25.380864, 3.801621), 0.222564))
+}
+p2 = cut(s4, -3.82212)
+c9 = chamfer(edges(of: p2, crease: "concave"), 0.210556018)
+sketch d5(on: offset(xy, 9.67284)) {
+  p = pt(0, 0)
+}
+sketch s6(on: plane(at: d5.p, normal: Z, x: X)) {
+  r1 = rect(corner: (-14.5463, -31.1865), size: (1.83164, 62.373))
+}
+p3 = cut(s6, -19.3457)
+sketch s7(on: xy) {
+  rr1 = hull(disc((-20.715909999999997, -3.7089499999999997), 1.02259), disc((-15.826899999999998, -3.7089499999999997), 1.02259), disc((-15.826899999999998, 1.18006), 1.02259), disc((-20.715909999999997, 1.18006), 1.02259))
+}
+p4 = cut(s7, -6.4335)
+c15 = chamfer(edges(of: p4, crease: "concave"), 0.728203353)
+t16 = thicken(base.side(s1.r1[3]), 0.917607793)
+# seed 55
+sketch s1(on: xy) {
+  r1 = rect(corner: (-17.7102, -33.8893), size: (35.4204, 67.7785))
+}
+base = extrude(s1, 9.59931)
+sketch d2(on: offset(xy, 4.79965)) {
+  p = pt(0, 0)
+}
+sketch s3(on: plane(at: d2.p, normal: Z, x: X)) {
+  r1 = rect(corner: (-4.67697, -67.7785), size: (2.39203, 135.557))
+}
+p0 = cut(s3, -9.59931)
+o5 = offset_faces(base.side(s1.r1[1]), -0.60242842)
+sketch d4(on: offset(xy, 9.59931)) {
+  p = pt(0, 0)
+}
+sketch s5(on: plane(at: d4.p, normal: Z, x: X)) {
+  c1 = circle((1.66118, 15.2685), 2.31492)
+}
+p2 = extrude(s5, 3.79724)
+c9 = chamfer(edges(of: p2.end), 0.378340487)
+t10 = thicken(base.side(s1.r1[0]), 1.27829038)
+# seed 56
+sketch s1(on: xy) {
+  r1 = rect(corner: (-43.9776, -25.0945), size: (87.9552, 50.189))
+}
+base = extrude(s1, 17.3681)
+c2 = chamfer(edges(of: base.end), 0.894225522)
+sketch d2(on: offset(xy, 0)) {
+  p = pt(15.1897, -9.67275)
+}
+sketch s3(on: plane(at: d2.p, normal: Z, x: X)) {
+  p = pt(0, 0)
+}
+hole1 = hole(at: s3.p, d: 4.54677, depth: thru, flip: true)
+sketch d4(on: offset(xy, 17.3681)) {
+  p = pt(0, 0)
+}
+sketch s5(on: plane(at: d4.p, normal: Z, x: X)) {
+  c1 = circle((-6.76367, -15.7143), 2.93379)
+}
+p2 = extrude(s5, 4.67905)
+c9 = chamfer(edges(of: p2.end), 0.462131278)
+sketch d6(on: offset(xy, 8.68406)) {
+  p = pt(0, 0)
+}
+sketch s7(on: plane(at: d6.p, normal: Z, x: X)) {
+  r1 = rect(corner: (6.49826, -18.5491), size: (12.0486, 12.0486))
+}
+p3 = cut(s7, -17.3681)
+c13 = chamfer(edges(of: p3), 0.353177402)
+c14 = chamfer(edges(of: base.end), 16.5814993)
+# seed 57
+sketch s1(on: xy) {
+  r1 = rect(corner: (-16.277, -25.7679), size: (32.5539, 51.5359))
+}
+base = extrude(s1, 6.46346)
+o2 = offset_faces(base.side(s1.r1[2]), 14.9772458)
+sketch d2(on: offset(xy, 0)) {
+  p = pt(1.00619, 10.7682)
+}
+sketch s3(on: plane(at: d2.p, normal: Z, x: X)) {
+  p = pt(0, 0)
+}
+hole1 = hole(at: s3.p, d: 3.41857, depth: thru, flip: true)
+o6 = offset_faces(base.side(s1.r1[2]), -0.214940331)
+sketch d4(on: offset(xy, 3.23173)) {
+  p = pt(0, 0)
+}
+sketch s5(on: plane(at: d4.p, normal: Z, x: X)) {
+  r1 = rect(corner: (-2.27177, -51.5359), size: (2.05998, 103.072))
+}
+p3 = cut(s5, -6.46346)
+# seed 58
+sketch s1(on: xy) {
+  r1 = rect(corner: (-32.4227, -17.1288), size: (64.8454, 34.2576))
+}
+base = extrude(s1, 21.4073)
+r2 = fillet(edges(of: base, along: Z), 2.07290866)
+sketch d2(on: offset(xy, 10.7036)) {
+  p = pt(0, 0)
+}
+sketch s3(on: plane(at: d2.p, normal: Z, x: X)) {
+  r1 = rect(corner: (15.6627, 2.42628), size: (9.02837, 9.02837))
+}
+p0 = cut(s3, -21.4073)
+c6 = chamfer(edges(of: p0), 4.04494095)
+sketch s4(on: plane(at: d2.p, normal: Z, x: X)) {
+  r1 = rect(corner: (-1.89283, -7.02412), size: (8.41399, 8.41399))
+}
+p1 = cut(s4, -21.4073)
+c9 = chamfer(edges(of: p1), 0.484412841)
+sketch d5(on: offset(xy, 21.4073)) {
+  p = pt(0, 0)
+}
+sketch s6(on: plane(at: d5.p, normal: Z, x: X)) {
+  c1 = circle((-13.6419, -4.71457), 3.03324)
+}
+p2 = extrude(s6, 9.85114)
+c13 = chamfer(edges(of: p2.end), 0.202175668)
+c14 = chamfer(edges(of: base.end), 0.644393385)
+# seed 59
+sketch s1(on: xy) {
+  r1 = rect(corner: (-21.7256, -33.4844), size: (43.4511, 66.9688))
+}
+base = extrude(s1, 28.6978)
+dr2 = draft(base.side(s1.r1[1]), angle: 4.163deg, neutral: xy)
+sketch d2(on: offset(xy, 0)) {
+  p = pt(-3.52643, 13.6865)
+}
+sketch s3(on: plane(at: d2.p, normal: Z, x: X)) {
+  p = pt(0, 0)
+}
+hole1 = hole(at: s3.p, d: 3.12979, depth: thru, flip: true)
+sketch d4(on: offset(xy, 14.3489)) {
+  p = pt(0, 0)
+}
+sketch s5(on: plane(at: d4.p, normal: Z, x: X)) {
+  r1 = rect(corner: (0.604228, -13.2104), size: (12.0368, 12.0368))
+}
+p1 = cut(s5, -28.6978)
+c9 = chamfer(edges(of: p1), 10.5379425)
+sketch s6(on: plane(at: d4.p, normal: Z, x: X)) {
+  r1 = rect(corner: (-14.4269, -16.1876), size: (4.99177, 4.99177))
+}
+p2 = cut(s6, -28.6978)
+c12 = chamfer(edges(of: p2), 0.126232962)
+sketch s7(on: plane(at: d4.p, normal: Z, x: X)) {
+  r1 = rect(corner: (0.0658933, 5.27638), size: (4.1562, 4.1562))
+}
+p3 = cut(s7, -28.6978)
+c15 = chamfer(edges(of: p3), 0.358924033)
+c16 = chamfer(edges(of: base.end), 0.220962143)

@@ -1,27 +1,31 @@
 //! `check_against` answers as `check` does. On real parts, every checked operation runs both ways; on
 //! one fault put into any one entity of a good body, the comparison must find it, so a rule left out
-//! or a comparison grown too loose fails here (research/check-local).
-use forge_agent::bench;
+//! or a comparison grown too loose fails here (research/check-local). The parts are Forge parts.
+mod common;
+mod kernel_util;
+
 use forge_geom::{CurveGeom, SurfaceGeom};
 use forge_math::{Frame, Vec3};
-use forge_model::Part;
 use forge_topo::{Body, Problem, check, check_against};
+use kernel_util::built;
 use std::collections::BTreeSet;
 
-fn resolved(src: &str) -> Option<Part> {
-    let m = bench::model(src);
-    m.error.is_none().then(|| Part {
-        features: m.features.clone(),
-    })
+const BODIES: &str = r#"sketch s(on: xy) {
+  r = rect(corner: (-30, -20), size: (60, 40))
 }
-
-const BODIES: &str = "base: extrude 12 rect -30 -20 60 40
-fillet 3 (edges of base along +z)
-chamfer 0.7 (edges of base top)
-boss: extrude add 6 at 0 0 12 circle -12 0 7
-chamfer 0.5 (edges of boss top)
-hole 8 at 10 5 0 thru
-";
+base = extrude(s, 12)
+round = fillet(edges(of: base, along: Z), 3)
+rim = chamfer(edges(of: base.end), 0.7)
+sketch b(on: base.end) {
+  c = circle((-12, 0), 7)
+}
+boss = extrude(b, 6)
+bossrim = chamfer(edges(of: boss.end), 0.5)
+sketch h(on: xy) {
+  p = pt(10, 5)
+}
+drill = hole(at: h.p, d: 8, depth: thru, flip: true)
+"#;
 
 fn kind(p: &Problem) -> String {
     format!("{p:?}")
@@ -46,16 +50,14 @@ fn same_answer(bad: &Body, good: &Body, what: &str, kinds: &mut BTreeSet<String>
     kinds.extend(full.iter().map(kind));
 }
 
-/// The stages of a part, compacted as a check compacts them.
+/// The stages of a part (its first body after each kernel feature that leaves one), compacted as
+/// a check compacts them.
 fn stages_of(src: &str) -> Vec<Body> {
-    let part = resolved(src).expect("resolves");
-    let h = forge_model::History::new(&part.features, None);
-    let (mut solids, mut out) = (Vec::new(), Vec::new());
-    for i in 0..part.features.len() {
-        solids = forge_model::step_solids(h, i, solids).expect("builds");
-        out.extend(solids.first().map(|s: &forge_model::Solid| s.body.compact()));
-    }
-    out
+    built(src)
+        .stages()
+        .iter()
+        .filter_map(|s| s.first().map(|s| s.body.compact()))
+        .collect()
 }
 
 #[test]
@@ -161,8 +163,6 @@ fn a_fault_in_any_one_entity_is_found() {
     }
 }
 
-/// The worker's check of each stage on the bench: none faults, and going on from a stage finds what going
-/// from the start does. A fault put into a stage is found at that stage.
 /// `good` with these faces, their edges and vertices moved.
 fn moved(good: &Body, faces: &[forge_topo::FaceId], by: Vec3) -> Body {
     let shift = Frame::WORLD.with_origin(Frame::WORLD.origin + by);
@@ -215,10 +215,22 @@ fn loops_that_cross_are_found() {
 #[test]
 fn a_kept_loop_inside_a_new_one_is_found() {
     let stages = stages_of(
-        "base: extrude 12 rect -60 -60 120 120
-hole 3 at 0 0 0 thru
-hole 12 at 30 0 0 thru
-",
+        r#"sketch s1(on: xy) {
+  r1 = rect(corner: (-60, -60), size: (120, 120))
+}
+base = extrude(s1, 12)
+sketch s2(on: xy) {
+  p = pt(0, 0)
+}
+hole1 = hole(at: s2.p, d: 3, depth: thru, flip: true)
+sketch d3(on: offset(xy, 0)) {
+  p = pt(30, 0)
+}
+sketch s4(on: plane(at: d3.p, normal: Z, x: X)) {
+  p = pt(0, 0)
+}
+hole2 = hole(at: s4.p, d: 12, depth: thru, flip: true)
+"#,
     );
     let (old, good) = (&stages[stages.len() - 2], &stages[stages.len() - 1]);
     let wall: Vec<_> = good
@@ -251,10 +263,25 @@ hole 12 at 30 0 0 thru
 #[test]
 fn unchanged_faces_in_changed_material_are_found() {
     let stages = stages_of(
-        "base: extrude 60 rect -60 -60 120 120
-big: extrude cut 20 at 0 0 20 rect -40 -40 30 30
-small: extrude cut 4 at 0 0 28 rect 25 25 4 4
-",
+        r#"sketch s1(on: xy) {
+  r1 = rect(corner: (-60, -60), size: (120, 120))
+}
+base = extrude(s1, 60)
+sketch d2(on: offset(xy, 20)) {
+  p = pt(0, 0)
+}
+sketch s3(on: plane(at: d2.p, normal: Z, x: X)) {
+  r1 = rect(corner: (-40, -40), size: (30, 30))
+}
+big = cut(s3, -20)
+sketch d4(on: offset(xy, 28)) {
+  p = pt(0, 0)
+}
+sketch s5(on: plane(at: d4.p, normal: Z, x: X)) {
+  r1 = rect(corner: (25, 25), size: (4, 4))
+}
+small = cut(s5, -4)
+"#,
     );
     let good = stages[stages.len() - 1].clone();
     assert_eq!(good.shells.len(), 3, "{:?}", good.shells.len());
@@ -278,10 +305,25 @@ small: extrude cut 4 at 0 0 28 rect 25 25 4 4
     assert!(kinds.contains("ShellsOverlap"), "{kinds:?}");
 
     let island = stages_of(
-        "base: extrude 60 rect -60 -60 120 120
-big: extrude cut 40 at 0 0 10 rect -40 -40 80 80
-isle: extrude add 10 at 0 0 25 rect -5 -5 10 10
-",
+        r#"sketch s1(on: xy) {
+  r1 = rect(corner: (-60, -60), size: (120, 120))
+}
+base = extrude(s1, 60)
+sketch d2(on: offset(xy, 10)) {
+  p = pt(0, 0)
+}
+sketch s3(on: plane(at: d2.p, normal: Z, x: X)) {
+  r1 = rect(corner: (-40, -40), size: (80, 80))
+}
+big = cut(s3, -40)
+sketch d4(on: offset(xy, 25)) {
+  p = pt(0, 0)
+}
+sketch s5(on: plane(at: d4.p, normal: Z, x: X)) {
+  r1 = rect(corner: (-5, -5), size: (10, 10))
+}
+isle = extrude(s5, 10)
+"#,
     );
     let good = island[island.len() - 1].clone();
     assert_eq!(good.shells.len(), 3, "{:?}", good.shells.len());
@@ -311,20 +353,73 @@ fn which_faces_are_compared_by_loop() {
         let s = stages_of(src);
         forge_topo::check::faces_by_loop(&s[s.len() - 1], &s[s.len() - 2])
     };
-    let block = "base: extrude 40 rect -60 -60 120 120\nhole 6 at -30 -30 0 thru\n";
     assert_eq!(
-        of(&format!("{block}hole 6 at 30 30 0 thru\n")),
+        of(r#"sketch s1(on: xy) {
+  r1 = rect(corner: (-60, -60), size: (120, 120))
+}
+base = extrude(s1, 40)
+sketch d2(on: offset(xy, 0)) {
+  p = pt(-30, -30)
+}
+sketch s3(on: plane(at: d2.p, normal: Z, x: X)) {
+  p = pt(0, 0)
+}
+hole1 = hole(at: s3.p, d: 6, depth: thru, flip: true)
+sketch d4(on: offset(xy, 0)) {
+  p = pt(30, 30)
+}
+sketch s5(on: plane(at: d4.p, normal: Z, x: X)) {
+  p = pt(0, 0)
+}
+hole2 = hole(at: s5.p, d: 6, depth: thru, flip: true)
+"#),
         2,
         "top and bottom"
     );
     // edges shorter than 2
-    assert_eq!(of(&format!("{block}hole 0.5 at 30 30 0 thru\n")), 0);
-    // through a round wall: not a plane
-    let rod = "base: extrude 80 circle 0 0 20\nc: extrude cut 80 z 1 0 0 x 0 1 0 at -40 0 20 circle 0 0 4\n";
     assert_eq!(
-        of(&format!(
-            "{rod}d: extrude cut 80 z 1 0 0 x 0 1 0 at -40 0 60 circle 0 0 4\n"
-        )),
+        of(r#"sketch s1(on: xy) {
+  r1 = rect(corner: (-60, -60), size: (120, 120))
+}
+base = extrude(s1, 40)
+sketch d2(on: offset(xy, 0)) {
+  p = pt(-30, -30)
+}
+sketch s3(on: plane(at: d2.p, normal: Z, x: X)) {
+  p = pt(0, 0)
+}
+hole1 = hole(at: s3.p, d: 6, depth: thru, flip: true)
+sketch d4(on: offset(xy, 0)) {
+  p = pt(30, 30)
+}
+sketch s5(on: plane(at: d4.p, normal: Z, x: X)) {
+  p = pt(0, 0)
+}
+hole2 = hole(at: s5.p, d: 0.5, depth: thru, flip: true)
+"#),
+        0
+    );
+    // through a round wall: not a plane
+    assert_eq!(
+        of(r#"sketch s1(on: xy) {
+  c1 = circle((0, 0), 20)
+}
+base = extrude(s1, 80)
+sketch d2(on: offset(xy, 20)) {
+  p = pt(-40, 0)
+}
+sketch s3(on: plane(at: d2.p, normal: X, x: Y)) {
+  c1 = circle((0, 0), 4)
+}
+c = cut(s3, -80)
+sketch d4(on: offset(xy, 60)) {
+  p = pt(-40, 0)
+}
+sketch s5(on: plane(at: d4.p, normal: X, x: Y)) {
+  c1 = circle((0, 0), 4)
+}
+d = cut(s5, -80)
+"#),
         0
     );
 }
@@ -333,11 +428,29 @@ fn which_faces_are_compared_by_loop() {
 #[test]
 fn a_shell_moved_is_found() {
     let stages = stages_of(
-        "base: extrude 30 rect -40 -40 80 80
-void: extrude cut 10 at 0 0 10 rect -10 -10 20 20
-void2: extrude cut 10 at 0 0 10 rect 20 20 10 10
-hole 4 at -30 -30 0 thru
-",
+        r#"sketch s1(on: xy) {
+  r1 = rect(corner: (-40, -40), size: (80, 80))
+}
+base = extrude(s1, 30)
+sketch d2(on: offset(xy, 10)) {
+  p = pt(0, 0)
+}
+sketch s3(on: plane(at: d2.p, normal: Z, x: X)) {
+  r1 = rect(corner: (-10, -10), size: (20, 20))
+}
+void1 = cut(s3, -10)
+sketch s4(on: plane(at: d2.p, normal: Z, x: X)) {
+  r1 = rect(corner: (20, 20), size: (10, 10))
+}
+void2 = cut(s4, -10)
+sketch d5(on: offset(xy, 0)) {
+  p = pt(-30, -30)
+}
+sketch s6(on: plane(at: d5.p, normal: Z, x: X)) {
+  p = pt(0, 0)
+}
+hole1 = hole(at: s6.p, d: 4, depth: thru, flip: true)
+"#,
     );
     let good = stages[stages.len() - 1].clone();
     assert!(good.shells.len() > 1, "{}", good.shells.len());
@@ -371,18 +484,25 @@ hole 4 at -30 -30 0 thru
     assert!(kinds.contains("ShellsOverlap"), "{kinds:?}");
 }
 
+/// The bench parts, built from their Forge files: the history the kernel regenerates.
+const BENCH: [(&str, &str); 5] = [
+    ("bracket", include_str!("../parts/bench/bracket.fg")),
+    ("clamp", include_str!("../parts/bench/clamp.fg")),
+    ("hub", include_str!("../parts/bench/hub.fg")),
+    ("insert", include_str!("../parts/bench/insert.fg")),
+    ("heatsink", include_str!("../parts/bench/heatsink.fg")),
+];
+
+/// The worker's check of each stage on the bench: none faults, and going on from a stage finds what going
+/// from the start does. A fault put into a stage is found at that stage.
 #[test]
 fn stages_of_the_bench_pass_and_a_fault_is_named() {
     use forge_model::verify::{Verdict, faults};
     let stop = std::sync::atomic::AtomicBool::new(false);
-    for name in ["bracket", "clamp", "hub", "insert", "heatsink"] {
-        let part = bench::part(name);
-        let h = forge_model::History::new(&part.features, None);
-        let mut stages: Vec<Vec<forge_model::Solid>> = Vec::new();
-        for i in 0..part.features.len() {
-            let before = stages.last().cloned().unwrap_or_default();
-            stages.push(forge_model::step_solids(h, i, before).expect("builds"));
-        }
+    for (name, src) in BENCH {
+        let mut stages = built(src).stages();
+        // the stages from the first solid on, as the worker holds them
+        stages.retain(|s| !s.is_empty());
         let of = |s: &[Vec<forge_model::Solid>], from| faults(s.iter().map(|x| &x[..]), from, &stop);
         assert_eq!(of(&stages, 0), Verdict::Done(vec![]), "{name}");
         let at = stages.len() - 1;
@@ -421,20 +541,21 @@ fn an_edge_held_to_less_than_it_was_is_measured_again() {
 }
 
 #[test]
-fn a_worker_can_hold_the_stages() {
-    fn across_threads<T: Send + Sync>() {}
-    across_threads::<std::sync::Arc<forge_agent::model::Stage>>();
-}
-
-#[test]
 fn both_ways_on_real_parts() {
     forge_topo::check::check_against_both_ways(true);
-    for name in ["bracket", "clamp", "hub", "insert"] {
-        bench::part(name).regenerate_solids().expect("builds");
+    for (_, src) in &BENCH[..4] {
+        built(src).seq().expect("builds");
     }
-    for src in include_str!("../../../research/check-local/fuzz/corpus.txt").split("# seed") {
-        if let Some(part) = resolved(src.split_once('\n').map_or("", |x| x.1)) {
-            let _ = part.regenerate_solids();
+    // the fuzz corpus: the seeds that build
+    for seed in include_str!("kernel_parts/check_local_corpus.txt")
+        .split("# seed")
+        .skip(1)
+    {
+        let src = seed.split_once('\n').map_or("", |x| x.1);
+        let (r, cache) = common::run(src);
+        if r.errors.is_empty() {
+            let (f, ids) = cache.history();
+            let _ = forge_model::Part { features: f.to_vec() }.regenerate_solids_ids(Some(ids));
         }
     }
     forge_topo::check::check_against_both_ways(false);
