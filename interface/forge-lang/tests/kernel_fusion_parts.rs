@@ -908,7 +908,6 @@ extrude1 = extrude(s1, 5)
 ///   extrude 2 z 0 1 0 x 1 0 0 at 0 0 0 loop arc 0 0 4.5 170 -160 line 4.431635 0.781417 7.878462 -18.610815 arc 0 -20 8 10 80 arc 0 -20 8 90 80 line -7.878462 -18.610815 -4.431635 0.781417 circle 0 0 2.25
 ///   extrude add 5 z 0 1 0 x 1 0 0 at 0 0 0 loop arc 0 -20 8 170 -80 arc 0 -20 8 90 -80 arc 0 -20 8 10 -200 circle 0 -20 4
 #[test]
-#[ignore = "gap: Forge refuses the scoop's sketch (SketchProfile: self intersection) where its sides meet the arcs as knife edges; .fc handed the loop to the kernel, which builds it"]
 fn disc_in_a_scoop_with_knife_edges() {
     builds(
         r#"sketch o(on: xy) {
@@ -939,7 +938,6 @@ extrude2 = extrude(s2, 5)
 ///   extrude 6 z 0 1 0 x 1 0 0 at 0 0 0 poly 0 -30 0 30 120 30 120 -30 circle 14 0 7 circle 106 0 7
 ///   extrude add 60 z 0 0 -1 x 1 0 0 at 0 0 30 loop arc 60 -28 34 40.320215 -260.64043 line 34.077037 -6 60 -6 line 60 -6 85.922963 -6 circle 60 -28 22
 #[test]
-#[ignore = "gap: Forge refuses a sketch whose hole touches its outline at a point (SketchProfile: self intersection); .fc handed it to the kernel, which builds it"]
 fn cap_whose_loops_touch_meshes() {
     builds(
         r#"sketch o(on: xy) {

@@ -129,22 +129,38 @@ l = line(a, b, construction: false) a, b: points or (x, y)
 a = arc(center: c, from: p, to: q, cw: false)
 c = circle(center, r)
 e = ellipse(center: P, major: P, b: r)   major: one end of the major axis; b: the semi-minor axis
+e = earc(center: P, major: P, b: r, from: P, to: Q, cw: false)   an arc of that ellipse, its
+                                    ends held on it, counter-clockwise from `from` to `to`
 r = rect(corner: (x, y) | center: (x, y), size: (w, h))   sides 0..3: bottom, right, top, left
 s = slot(a, b, r)
 h = hull(ITEM, ITEM, ..)            convex outline, counter-clockwise: an item is a point or
                                     disc(center, r); lines tangent to the discs, arcs round them.
                                     Segments in order: for each item, its arc (discs only), then
-                                    the line to the next item
+                                    the line to the next item (four discs of one r at a
+                                    rectangle's corners inset by r: a rounded rectangle)
 o = poly([P, ..], closed: true)     side k runs from point k to point k+1
 s = spline([P, ..], closed: true)   the cubic through the points; cv: true, a B-spline the points
                                     pull as its control vertices (cubic, lower with under four
-                                    points, or five closed)
+                                    points, or five closed); `degree: n`, `knots: [k, ..]`
+                                    (points + degree + 1 of them, never falling), `weights:
+                                    [w, ..]` (one a point) make it one on control vertices,
+                                    open (`cv` and `closed` follow: `cv: false` or `closed:
+                                    true` with them is `NotWith`); `start_slope: (dx, dy)`,
+                                    `end_slope: (dx, dy)` set the through-curve's slope at an
+                                    end (its rate along it, length counts), open
 path o(start: P) {                  a chain: line(to: P, tangent: false), tarc(to: P)
   line(to: P)                       (an arc tangent to the segment before), spline(through:
   tarc(to: P)                       [P, ..], to: P, tangent: true), close()
   close()
 }
 ```
+
+A sketch's regions are its loops, each hole inside its outline. Loops may touch, tangent or at a
+corner: what cannot exist is the solid, not the sketch, so the result decides (an extrude whose
+hole touches its outline is the kernel's `ZeroThickness`, saying where; a cut whose touch lies
+outside the part builds). A loop that crosses or touches itself, or two loops crossing or
+overlapping, is `SketchProfile` naming the two entities; a knife edge (a line leaving tangent
+along the arc it came on) is not a crossing.
 
 A loop value (rect, slot, hull, poly, path) indexes its segments: `o[2]`, `o.segs`. Entity
 members: points `x y`; lines `a b dir`; arcs `center a b`; circles `center`; arcs and circles `axis` (through

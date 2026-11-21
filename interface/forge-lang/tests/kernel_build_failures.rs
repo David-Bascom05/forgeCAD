@@ -554,7 +554,6 @@ extrude2 = extrude(s3, 10)
 ///   extrude 5 circle 0 0 40 circle 0 -30 10
 /// refused by the kernel as ZeroThickness at (0, -40, ..), on the line that made it.
 #[test]
-#[ignore = "gap: Forge refuses a sketch whose loops touch (SketchProfile: self intersection) before the kernel sees it; .fc handed it on and the kernel's refusal said where"]
 fn a_pinched_disc_says_where() {
     let e = refusal(
         r#"sketch s1(on: xy) {
@@ -574,7 +573,6 @@ extrude1 = extrude(s1, 5)
 ///   extrude 4 rect -60 -60 120 120 / the same cut                                       builds
 ///   extrude 4 rect -60 -60 120 120 / extrude add 6 at 0 0 4 circle 0 0 30 circle 0 -20 10   ZeroThickness
 #[test]
-#[ignore = "gap: Forge refuses a sketch whose loops touch (SketchProfile: self intersection); .fc let the kernel judge the result, which builds the cuts and refuses the boss"]
 fn a_touching_profile_is_judged_by_its_result() {
     let pi = forge_math::dmath::PI;
     let v = builds(

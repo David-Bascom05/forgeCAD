@@ -428,28 +428,44 @@ fn curve_hits(c: &forge_geom::spline::PlaneSpline, o: &Shape) -> Hit {
     }
 }
 
-/// No two segments may meet anywhere except at an end they share.
+/// Where loops meet away from the ends they share, which of them may: what cannot exist is the
+/// solid, not the sketch. A loop meeting itself is refused as a profile refuses it (a knife edge,
+/// sides meeting an arc tangentially in a cusp, is not); two loops are refused where they overlap
+/// or cross, a touch (tangent, or at a corner) left to the result to judge (an extrude pinched
+/// there is refused, a cut whose touch lies in empty space builds).
 fn check_crossings(loops: &[ProfileLoop]) -> Result<(), ExtractError> {
-    let all: Vec<(Segment, u64)> = loops.iter().flat_map(|l| l.segments.iter().cloned()).collect();
-    let shapes: Vec<Shape> = all.iter().map(|(s, _)| shape(s)).collect();
+    let all: Vec<(Segment, u64, usize)> = loops
+        .iter()
+        .enumerate()
+        .flat_map(|(k, l)| l.segments.iter().map(move |(s, id)| (s.clone(), *id, k)))
+        .collect();
+    let shapes: Vec<Shape> = all.iter().map(|(s, ..)| shape(s)).collect();
+    let mut meets_itself: Vec<Option<(u64, u64)>> = vec![None; loops.len()];
     for i in 0..all.len() {
         for j in i + 1..all.len() {
             let (si, sj) = (&all[i].0, &all[j].0);
-            let shared: Vec<Point2> = [si.start(), si.end()]
-                .into_iter()
-                .filter(|p| {
-                    [sj.start(), sj.end()]
-                        .iter()
-                        .any(|q| q.distance(*p) <= tol::LINEAR)
-                })
+            let ends = [si.start(), si.end(), sj.start(), sj.end()];
+            let shared: Vec<Point2> = ends[..2]
+                .iter()
+                .copied()
+                .filter(|p| ends[2..].iter().any(|q| q.distance(*p) <= tol::LINEAR))
                 .collect();
             // a tangent joint solved to ~1e-9 mm still splits into two roots up to sqrt(2 r delta) apart
             let near = 1e-6 + (2.0 * radius(&shapes[i]).max(radius(&shapes[j])) * 1e-8).sqrt();
+            let same = all[i].2 == all[j].2;
             let bad = match hits(&shapes[i], &shapes[j]) {
                 Hit::Overlap => true,
-                Hit::Points(ps) => ps.iter().any(|p| !shared.iter().any(|q| q.distance(*p) <= near)),
+                Hit::Points(ps) => ps.iter().any(|p| {
+                    !shared.iter().any(|q| q.distance(*p) <= near)
+                        && (same || crosses(&shapes[i], &shapes[j], *p, &ends, near))
+                }),
             };
-            if bad {
+            if !bad {
+                continue;
+            }
+            if same {
+                meets_itself[all[i].2].get_or_insert((all[i].1, all[j].1));
+            } else {
                 return Err(ExtractError::SelfIntersection {
                     a: EntityId(all[i].1),
                     b: EntityId(all[j].1),
@@ -457,5 +473,40 @@ fn check_crossings(loops: &[ProfileLoop]) -> Result<(), ExtractError> {
             }
         }
     }
+    for (l, m) in loops.iter().zip(meets_itself) {
+        if let Some((a, b)) = m
+            && l.crosses_itself()
+        {
+            return Err(ExtractError::SelfIntersection {
+                a: EntityId(a),
+                b: EntityId(b),
+            });
+        }
+    }
     Ok(())
+}
+
+/// Whether two shapes of different loops cross at `p`, where they meet: through each other at an
+/// angle, away from either one's ends. Meeting tangentially, or at a corner, is a touch.
+fn crosses(a: &Shape, b: &Shape, p: Point2, ends: &[Point2; 4], near: f64) -> bool {
+    if ends.iter().any(|e| e.distance(p) <= near) {
+        return false;
+    }
+    match (direction(a, p), direction(b, p)) {
+        (Some(u), Some(v)) => u.cross(v).abs() > 1e-3,
+        _ => false,
+    }
+}
+
+/// A shape's unit direction at a point on it.
+fn direction(s: &Shape, p: Point2) -> Option<forge_math::Vec2> {
+    match s {
+        Shape::Line(a, b) => (*b - *a).normalize(),
+        Shape::Arc { c, .. } => (p - *c).perp().normalize(),
+        Shape::Curve(e) => {
+            let c = &e.c;
+            let d = c.deriv(c.closest(forge_math::Point3::new(p.x, p.y, 0.0), c.domain()));
+            forge_math::Vec2::new(d.d1.x, d.d1.y).normalize()
+        }
+    }
 }
