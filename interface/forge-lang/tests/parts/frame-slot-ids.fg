@@ -1,0 +1,108 @@
+# The bench frame cut down to the chainstay, its bore, the dropout and the axle slot: the slot cut
+# joins the bore's cylinder pieces again, and which seam it kept followed the names.
+# Forge port of the part forge-agent's topology test read (from the bench frame).
+XZ = plane(at: xy.origin, normal: xz.normal, x: yz.normal)
+XZn = plane(at: xy.origin, normal: -xz.normal, x: yz.normal)
+shared csl = 410
+shared drop = 70
+shared sp = 130
+shared wall = 1
+# rear axle
+shared ax = 0 - sqrt(csl ^ 2 - drop ^ 2)
+shared az = drop
+# chainstay: from inside the shell wall straight back, then bent out round the tyre to the
+# dropout: two straights through a knee, the knee rounded cr
+shared c0x = -17.5
+shared c0y = 22
+shared c1x = ax + 6
+shared c1y = sp / 2 - 4
+shared cdx0 = c1x - c0x
+shared cdy0 = c1y - c0y
+shared cl = sqrt(cdx0 ^ 2 + cdy0 ^ 2 + az ^ 2)
+shared ch = sqrt(cdx0 ^ 2 + az ^ 2)
+shared cf = ratio(0.6)
+shared cdent = 5
+shared cr = 150
+# its plane: u along the chord, v square to it towards +y, n = u x v
+shared cux = cdx0 / cl
+shared cuy = cdy0 / cl
+shared cuz = az / cl
+shared cvx = 0 - cuy * cdx0 / ch
+shared cvy = ch / cl
+shared cvz = 0 - cuy * az / ch
+shared cnx = cuy * cvz - cuz * cvy
+shared cny = cuz * cvx - cux * cvz
+shared cnz = cux * cvy - cuy * cvx
+# the knee: the two straights' angles from the chord, the turn between
+shared ca1 = atan2(0 - cdent, cf * cl)
+shared ca2 = atan2(cdent, cl - cf * cl)
+shared ctn = ca2 - ca1
+shared ctg = cr * tan(ctn / 2)
+# the bend's centre
+shared ckx = c0x + cf * cl * cux - cdent * cvx
+shared cky = c0y + cf * cl * cuy - cdent * cvy
+shared ckz = cf * cl * cuz - cdent * cvz
+shared ccx = ckx - ctg * (cos(ca1) * cux + sin(ca1) * cvx) + cr * (cos(ca1) * cvx - sin(ca1) * cux)
+shared ccy = cky - ctg * (cos(ca1) * cuy + sin(ca1) * cvy) + cr * (cos(ca1) * cvy - sin(ca1) * cuy)
+shared ccz = ckz - ctg * (cos(ca1) * cuz + sin(ca1) * cvz) + cr * (cos(ca1) * cvz - sin(ca1) * cuz)
+shared tick = 10
+# the path's points in the stay's plane, from the bend's centre along u and v
+shared c0u = (c0x - ccx) * cux + (c0y - ccy) * cuy + (0 - ccz) * cuz
+shared c0v = (c0x - ccx) * cvx + (c0y - ccy) * cvy + (0 - ccz) * cvz
+shared c1u = (c1x - ccx) * cux + (c1y - ccy) * cuy + (az - ccz) * cuz
+shared c1v = (c1x - ccx) * cvx + (c1y - ccy) * cvy + (az - ccz) * cvz
+shared bore_in = 12
+
+sketch bbs(on: XZn) {
+  c = circle((0, 0), 21)
+}
+bb = extrude(bbs, sym(68))
+sketch pc(on: offset(XZ, 0 - ccy)) {
+  p = pt(ccx, ccz)
+}
+sketch pn(on: offset(XZ, 0 - ccy - tick * cny)) {
+  p = pt(ccx + tick * cnx, ccz + tick * cnz)
+}
+sketch pu(on: offset(XZ, 0 - ccy - tick * cuy)) {
+  p = pt(ccx + tick * cux, ccz + tick * cuz)
+}
+stay = plane(at: pc.p, normal: axis(pc.p, pn.p), x: axis(pc.p, pu.p))
+sketch rail(on: stay) {
+  s = pt(c0u, c0v)
+  a = pt(cr * cos(ca1 - 90deg), cr * sin(ca1 - 90deg))
+  b = pt(cr * cos(ca1 - 90deg + ctn), cr * sin(ca1 - 90deg + ctn))
+  e = pt(c1u, c1v)
+  l1 = line(s, a)
+  bend = arc(center: (0, 0), from: a, to: b)
+  l2 = line(b, e)
+}
+sketch cprof(on: plane(at: rail.s, normal: rail.l1.dir)) {
+  c = circle((0, 0), 8)
+}
+cs = sweep(cprof.c, along: [rail.l1, rail.bend, rail.l2])
+sketch dsk(on: offset(XZ, 0 - sp / 2 - 2)) {
+  o = poly([(ax - 14, az - 12), (ax + 34, az - 16), (ax + 38, az - 4), (ax + 24, az + 34), (ax + 8, az + 34), (ax - 14, az + 12)])
+}
+dropout = extrude(dsk, 6)
+sketch brail(on: stay) {
+  s = pt(c0u + bore_in * cos(ca1), c0v + bore_in * sin(ca1))
+  a = pt(cr * cos(ca1 - 90deg), cr * sin(ca1 - 90deg))
+  b = pt(cr * cos(ca1 - 90deg + ctn), cr * sin(ca1 - 90deg + ctn))
+  e = pt(c1u, c1v)
+  l1 = line(s, a)
+  bend = arc(center: (0, 0), from: a, to: b)
+  l2 = line(b, e)
+}
+sketch bprof(on: plane(at: brail.s, normal: brail.l1.dir)) {
+  c = circle((0, 0), 8 - wall)
+}
+csb = sweep(bprof.c, along: [brail.l1, brail.bend, brail.l2], cut: true)
+sketch ssk(on: XZ) {
+  path o(start: (ax - 5, az - 40)) {
+    line(to: (ax + 5, az - 40))
+    line(to: (ax + 5, az))
+    tarc(to: (ax - 5, az))
+    close()
+  }
+}
+axle = cut(ssk.o, thru_all)

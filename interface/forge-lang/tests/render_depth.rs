@@ -1,15 +1,23 @@
 //! The picture hides what is behind thin sheet at assembly scale: a 1.5 mm plate in a scene a
 //! metre across hides edges 0.5 to 5 mm behind it, at any picture size and from any side, and a
-//! face that touches a sheet from behind hides behind it.
-use forge_agent::history::model;
+//! face that touches a sheet from behind hides behind it. The parts are Forge parts.
+mod common;
+
 use forge_agent::render::{Picture, picture};
 use forge_math::{Frame, Point3, Vec3};
 use forge_topo::Body;
 
 fn part(src: &str) -> Body {
-    let m = model(src);
-    assert!(m.error.is_none(), "{src}: {:?}", m.error.map(|e| e.msg));
-    m.body().expect("a body").clone()
+    let (r, _) = common::run(src);
+    assert!(r.errors.is_empty(), "{}", forge_lang::report::text(&r, src));
+    r.body.expect("a body")
+}
+
+/// A slab `w` x `d` from (x, y) on the XY plane, `t` thick: sketch `s`, extrude `b`.
+fn slab(x: f64, y: f64, w: f64, d: f64, t: f64) -> String {
+    format!(
+        "sketch s(on: xy) {{\n  r = rect(corner: ({x:?}, {y:?}), size: ({w:?}, {d:?}))\n}}\nb = extrude(s, {t:?})\n"
+    )
 }
 
 /// `src` built, moved by (x, y, z).
@@ -66,12 +74,12 @@ fn block_edges(top: f64) -> Vec<Point3> {
 /// corner so the scene is a metre across.
 fn plate_over_block(gap: f64, plate: bool) -> Body {
     let mut parts = vec![
-        at("extrude 40 rect 450 450 100 100", 0.0, 0.0, -gap - 40.0),
-        at("extrude 5 rect 0 0 5 5", 1000.0, 1000.0, -100.0),
-        at("extrude 5 rect 0 0 5 5", -5.0, -5.0, -100.0),
+        at(&slab(450.0, 450.0, 100.0, 100.0, 40.0), 0.0, 0.0, -gap - 40.0),
+        at(&slab(0.0, 0.0, 5.0, 5.0, 5.0), 1000.0, 1000.0, -100.0),
+        at(&slab(0.0, 0.0, 5.0, 5.0, 5.0), -5.0, -5.0, -100.0),
     ];
     if plate {
-        parts.push(part("extrude 1.5 rect 300 300 400 400"));
+        parts.push(part(&slab(300.0, 300.0, 400.0, 400.0, 1.5)));
     }
     scene(&parts)
 }
@@ -115,13 +123,16 @@ fn edges_behind_a_thin_plate_stay_hidden() {
 #[test]
 fn a_face_touching_a_sheet_from_behind_stays_hidden() {
     let post = at(
-        "extrude 3 rect 450 450 100 100\nhole 10 -xy at 500 500 3 thru",
+        &format!(
+            "{}sketch h(on: b.end) {{\n  p = pt(500, 500)\n}}\nhole1 = hole(at: h.p, d: 10, depth: thru)\n",
+            slab(450.0, 450.0, 100.0, 100.0, 3.0)
+        ),
         0.0,
         0.0,
         -3.0,
     );
-    let panel = part("extrude 1.5 rect 300 300 400 400");
-    let far = at("extrude 5 rect 0 0 5 5", 1000.0, 1000.0, -100.0);
+    let panel = part(&slab(300.0, 300.0, 400.0, 400.0, 1.5));
+    let far = at(&slab(0.0, 0.0, 5.0, 5.0, 5.0), 1000.0, 1000.0, -100.0);
     let body = scene(&[post, panel, far]);
     let rim: Vec<Point3> = (0..16)
         .map(|i| {
@@ -149,8 +160,8 @@ fn a_face_touching_a_sheet_from_behind_stays_hidden() {
 /// and no pixel of either face speckles with the other's depth.
 #[test]
 fn flush_faces_side_by_side_draw_cleanly() {
-    let a = part("extrude 1.5 rect 0 0 500 1000");
-    let b = part("extrude 1.5 rect 500 0 500 1000");
+    let a = part(&slab(0.0, 0.0, 500.0, 1000.0, 1.5));
+    let b = part(&slab(500.0, 0.0, 500.0, 1000.0, 1.5));
     let body = scene(&[a, b]);
     for view in ["top", "iso"] {
         let pic = draw(&body, view, 1200);
