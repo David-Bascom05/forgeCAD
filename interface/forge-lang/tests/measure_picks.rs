@@ -1,6 +1,7 @@
 //! Measure on picks, as the app's Measure tool reads them: one entity (length, loop, radius,
 //! area, perimeter, a point), two on one body (gaps, centre to centre, axes, angles), and two on
-//! bodies placed apart (an assembly's occurrences).
+//! bodies placed apart (an assembly's occurrences). The parts are Forge parts.
+mod common;
 
 use forge_agent::measure::{Pick, Quantity as Q, read_one, read_two};
 use forge_agent::select::Ent;
@@ -10,8 +11,9 @@ use forge_mesh::{Quality, TriMesh};
 use forge_topo::Body;
 
 fn part(src: &str) -> (Body, TriMesh) {
-    let m = forge_agent::bench::model(src);
-    let b = m.body().expect("it builds").clone();
+    let (r, _) = common::run(src);
+    assert!(r.errors.is_empty(), "{}", forge_lang::report::text(&r, src));
+    let b = r.body.expect("it builds");
     let mesh = forge_mesh::tessellate(&b, &Quality::default()).unwrap();
     (b, mesh)
 }
@@ -60,8 +62,24 @@ fn near(a: Option<f64>, b: f64) -> bool {
     a.is_some_and(|a| (a - b).abs() < 1e-6)
 }
 
-const PLATE: &str =
-    "extrude 20 rect -50 -30 100 60\nhole 10 -xy at -20 0 20 thru\nhole 10 -xy at 20 0 20 thru";
+/// A block 100 x 60 x 20 on the origin, two holes of 10 through it at x = -20 and 20.
+const PLATE: &str = r#"sketch s(on: xy) {
+  r = rect(corner: (-50, -30), size: (100, 60))
+}
+b = extrude(s, 20)
+sketch h(on: b.end) {
+  p = pt(-20, 0)
+  q = pt(20, 0)
+}
+holes = hole(at: h.points, d: 10, depth: thru)
+"#;
+
+/// A block 100 x 60 x 20 on the origin.
+const BLOCK: &str = r#"sketch s(on: xy) {
+  r = rect(corner: (-50, -30), size: (100, 60))
+}
+b = extrude(s, 20)
+"#;
 
 #[test]
 fn one_pick_reads_its_own_sizes() {
@@ -246,7 +264,9 @@ fn the_maximum_distance_of_points_lines_and_circles_in_one_plane() {
 
 #[test]
 fn two_faces_at_an_angle_draw_it_at_their_common_edge_and_a_face_is_tinted() {
-    let (b, m) = part("extrude 20 poly 0 0 40 0 40 20 20 40 0 40");
+    let (b, m) = part(
+        "sketch s(on: xy) {\n  o = poly([(0, 0), (40, 0), (40, 20), (20, 40), (0, 40)])\n}\nb = extrude(s, 20)\n",
+    );
     let pick = |p| {
         Target::Ent(Pick {
             body: &b,
@@ -291,7 +311,7 @@ fn two_faces_at_an_angle_draw_it_at_their_common_edge_and_a_face_is_tinted() {
 
 #[test]
 fn a_whole_body_reads_its_volume_mass_and_box_where_it_stands() {
-    let (b, m) = part("extrude 20 rect -50 -30 100 60");
+    let (b, m) = part(BLOCK);
     let at = Frame::WORLD.with_origin(Point3::new(100.0, 0.0, 0.0));
     // aluminium: 2.7e-6 kg/mm³
     let w = Target::Whole(Whole {
@@ -320,7 +340,7 @@ fn a_whole_body_reads_its_volume_mass_and_box_where_it_stands() {
 
 #[test]
 fn an_arc_reads_its_sweep_and_a_circle_none() {
-    let (b, m) = part("extrude 20 rect -50 -30 100 60\nfillet 5 (edges along +z)\n");
+    let (b, m) = part(&format!("{BLOCK}round = fillet(edges(of: b, along: Z), 5)\n"));
     let pick = |ent| Pick {
         body: &b,
         mesh: &m,

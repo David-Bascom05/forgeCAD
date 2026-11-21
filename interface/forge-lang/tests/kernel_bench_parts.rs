@@ -1,26 +1,32 @@
-//! The real-part benchmarks build as the agent builds them, then regenerate from their
-//! resolved features seq and n-ary to valid, closed bodies; the resolved features
-//! print and parse back unchanged.
-use forge_agent::{bench, text};
-use forge_model::Feature;
+//! The real-part benchmarks' Forge ports (parts/bench) build, then regenerate from their
+//! features seq and n-ary to valid, closed bodies, n-ary naming everything by itself.
+mod common;
+
+use forge_model::Part;
+
+/// Bench part `name`'s Forge port, as the kernel takes it: its features and their ids.
+fn bench(name: &str) -> (Part, Vec<u64>) {
+    let path = format!("{}/parts/bench/{name}.fg", env!("CARGO_MANIFEST_DIR"));
+    let src = std::fs::read_to_string(&path).expect("part file");
+    let (r, cache) = common::run(&src);
+    assert!(
+        r.errors.is_empty(),
+        "{name}: {}",
+        forge_lang::report::text(&r, &src)
+    );
+    let (f, ids) = cache.history();
+    (Part { features: f.to_vec() }, ids.to_vec())
+}
 
 fn builds(name: &str) {
     forge_topo::check::check_against_both_ways(true);
-    let part = bench::part(name);
-    let mut back = text::parse(&text::print(&part)).unwrap_or_else(|(l, e)| panic!("{name}: line {l}: {e}"));
-    // text keeps only its font's name in the file
-    for (f, g) in back.features.iter_mut().zip(&part.features) {
-        if let (Feature::Text(t), Feature::Text(u)) = (f, g) {
-            t.font.font = u.font.font.clone();
-        }
-    }
-    assert!(back == part, "{name}: printed and parsed back differently");
+    let (part, ids) = bench(name);
     let seq = part
-        .regenerate_solids()
+        .regenerate_solids_ids(Some(&ids))
         .unwrap_or_else(|e| panic!("{name} seq: {e:?}"));
     let before = forge_model::nary_name_fallbacks();
     let nary = part
-        .regenerate_nary_solids(4)
+        .regenerate_nary_solids_ids(4, Some(&ids))
         .unwrap_or_else(|e| panic!("{name} nary: {e:?}"));
     assert_eq!(
         forge_model::nary_name_fallbacks(),
@@ -122,9 +128,20 @@ fn guard() {
 /// (the booleans read a face from its first loop), its holes after.
 #[test]
 fn fillet_keeps_outer_loop_first() {
-    let mut part = bench::part("crank");
-    part.features.truncate(16);
-    let b = part.regenerate().expect("builds");
+    let (mut part, ids) = bench("crank");
+    // up to the spindle boss's varying round
+    let at = part
+        .features
+        .iter()
+        .position(|f| match f {
+            forge_model::Feature::Fillet { edges, .. } => edges
+                .iter()
+                .any(|(_, r)| !matches!(r, forge_ops::Radius::Constant(_))),
+            _ => false,
+        })
+        .expect("a varying fillet");
+    part.features.truncate(at + 1);
+    let b = part.regenerate_ids(Some(&ids[..=at])).expect("builds");
     for f in b.face_ids() {
         let face = b.face(f);
         if face.loops.len() > 1 && matches!(face.surface, forge_geom::Surface::Plane(_)) {
