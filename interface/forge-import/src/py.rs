@@ -185,19 +185,6 @@ pub fn num(x: f64) -> String {
     trimmed(fixed(r, 10))
 }
 
-/// cadfs.fine: fifteen decimals.
-pub fn fine(x: f64) -> String {
-    trimmed(fixed(x, 15))
-}
-
-pub fn vtext(v: V3) -> String {
-    format!("{} {} {}", num(v.0), num(v.1), num(v.2))
-}
-
-pub fn vfine(v: V3) -> String {
-    format!("{} {} {}", fine(v.0), fine(v.1), fine(v.2))
-}
-
 /// `round(x, 4)` as a key: equal keys for equal rounded values.
 pub fn key4(x: f64) -> String {
     let s = fixed(x, 4);
@@ -240,7 +227,6 @@ mod tests {
         assert_eq!(num(-1e-11), "0");
         assert_eq!(num(0.00048828125), "0.0004882812");
         assert_eq!(num(-2.5), "-2.5");
-        assert_eq!(fine(0.1 + 0.2), "0.3");
         assert_eq!(f10(-1e-12), "-0.0000000000");
         assert_eq!(key4(-0.00001), "0.0000");
     }

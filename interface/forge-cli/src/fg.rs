@@ -1,9 +1,8 @@
-//! Forge (.fg) parts for agents: the same tools as .fc (build, check, query, measure, render,
-//! export, help) plus `edit`, which takes typed ops. Every reply is typed JSON: errors, warnings
+//! Forge (.fg) parts for agents: build, check, query, measure, render, export, and `edit`, which
+//! takes typed ops. Every reply is typed JSON: errors, warnings
 //! and lints with their spans and their fixes as ops, which `edit` takes back as they are. Each
 //! file's build stages are kept, so a rebuild starts at the first feature that changed.
 
-use forge_agent::cmd::{Args, Reply};
 use forge_agent::json::Json;
 use forge_agent::select::{self, Ent, View};
 use forge_agent::{facemesh, measure, render};
@@ -14,8 +13,29 @@ use forge_topo::Body;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-pub fn is_fg(file: &str) -> bool {
-    file.ends_with(".fg")
+/// The tools a part file takes, on the command line and over `serve`/`mcp`.
+pub const COMMANDS: [&str; 8] = [
+    "build", "check", "query", "measure", "render", "export", "edit", "diff",
+];
+
+/// A tool's arguments: the file, and its words (a selector, the refs to measure, the view, the
+/// ops).
+#[derive(Clone, Debug, Default)]
+pub struct Args {
+    pub file: String,
+    pub words: Vec<String>,
+    /// `render`: a selector whose entities are labelled.
+    pub labels: Option<String>,
+    /// `render`: the picture's long side.
+    pub px: Option<usize>,
+}
+
+/// A tool's answer: plain text, its typed JSON, and the bytes of a picture or a file.
+pub struct Reply {
+    pub ok: bool,
+    pub text: String,
+    pub json: Json,
+    pub png: Option<Vec<u8>>,
 }
 
 #[derive(Default)]
@@ -136,12 +156,11 @@ impl Session {
             "render" => self.render(a),
             "export" => self.export(a),
             "edit" => self.edit(a, params),
-            "act" => Err(format!(
-                "{}: a .fg part changes by typed ops: edit F OP (an op as errors' fixes give it)",
-                a.file
+            "diff" => self.diff(a),
+            _ => Err(format!(
+                "unknown command '{cmd}' ({}; a part changes by edit F OP)",
+                COMMANDS.join(" ")
             )),
-            "diff" => Err("diff takes .fc parts".into()),
-            _ => Err(format!("unknown command '{cmd}' for a .fg part")),
         };
         r.unwrap_or_else(fail)
     }
@@ -153,8 +172,8 @@ impl Session {
         })
     }
 
-    /// Selectors on the finished body: geometric filters; `of`/`between` features are .fc's
-    /// lineage, which a .fg part asks in its own selections (`edges(of: F, ..)`).
+    /// Selectors on the finished body: geometric filters. By feature (`of`, `between`), a part
+    /// asks in its own text (`edges(of: F, ..)`).
     fn select(body: &Body, sel: &str) -> Result<Vec<Ent>, String> {
         let origin = HashMap::new();
         let feat = |r: &str| -> Result<usize, String> {
@@ -191,7 +210,9 @@ impl Session {
         let what = a.words.first().map(String::as_str).unwrap_or("");
         match what {
             "stat" => return self.built(&a.file).map(|(run, src)| Self::report(&run, &src)),
-            "check" => return Ok(self.run("check", a, &Json::Null)),
+            // every feature's status as the part builds (its stages kept: right after a build this
+            // costs nothing); `check F` alone stops before the kernel
+            "check" => return self.built(&a.file).map(|(run, src)| Self::report(&run, &src)),
             "file" => {
                 let (_, src) = self.read(&a.file)?;
                 return Ok(Reply {
@@ -202,8 +223,8 @@ impl Session {
                 });
             }
             "handles" | "params" | "features" => {
-                let (p, src) = self.read(&a.file)?;
-                let run = self.run_src(&p, &src, false);
+                // built, so each feature's status is what it is, not "not built"
+                let (run, src) = self.built(&a.file)?;
                 let j = report::json(&run, &src);
                 let key = if what == "features" { "features" } else { "params" };
                 let list = j.get(key).cloned().unwrap_or(Json::Arr(vec![]));
@@ -243,9 +264,6 @@ impl Session {
                 png: None,
             });
         }
-        if a.at.is_some() {
-            return Err("--at: a .fg part is asked as it finished".into());
-        }
         let (run, _) = self.built(&a.file)?;
         let body = Self::body(&run)?;
         let ents = Self::select(body, &a.words.join(" "))?;
@@ -274,7 +292,12 @@ impl Session {
     fn measure(&mut self, a: &Args) -> Result<Reply, String> {
         let (run, _) = self.built(&a.file)?;
         let body = Self::body(&run)?;
-        let words: Vec<&str> = a.words.iter().map(String::as_str).collect();
+        let mut words: Vec<&str> = a.words.iter().map(String::as_str).collect();
+        // `exact`: every digit in the text, for checks finer than the reply's rounding
+        let exact = words.last() == Some(&"exact");
+        if exact {
+            words.pop();
+        }
         let mut cache = facemesh::Cache::default();
         let mesh = facemesh::join(&cache.faces(body));
         let pairs: Vec<(&str, f64)> = match words[..] {
@@ -303,11 +326,20 @@ impl Session {
             },
             [r] => measure::one(body, &mesh, Self::one(body, r)?),
             [r, s] => measure::between(body, &mesh, Self::one(body, r)?, Self::one(body, s)?),
-            _ => return Err("measure takes mass, wall, or one or two @handles / (selectors)".into()),
+            _ => return Err(
+                "measure takes mass, wall, or one or two @handles / (selectors), then exact for every digit"
+                    .into(),
+            ),
         };
         let text = pairs
             .iter()
-            .map(|(k, v)| format!("{k} {}", forge_agent::short(*v)))
+            .map(|(k, v)| {
+                if exact {
+                    format!("{k} {v:?}")
+                } else {
+                    format!("{k} {}", forge_agent::short(*v))
+                }
+            })
             .collect::<Vec<_>>()
             .join(" ");
         let mut j = vec![("ok", true.into())];
@@ -434,6 +466,48 @@ impl Session {
                 ("edges", e.edges.into()),
             ]),
             png: Some(e.text.into_bytes()),
+        })
+    }
+
+    /// What part B changed from part A: features and params added, removed and changed (with
+    /// what changed in each), faces by name, and with `volume` the exact volume added and
+    /// removed (`forge_lang::compare`, as `compare` gives it between two saves of one file).
+    fn diff(&mut self, a: &Args) -> Result<Reply, String> {
+        let Some(other) = a.words.first() else {
+            return Err("diff takes two parts: diff A B [volume]".into());
+        };
+        let side = |file: &str| -> Result<forge_lang::compare::Side, String> {
+            let (p, text) = self.read(file)?;
+            let opts = Options {
+                dir: p.parent().map(Path::to_path_buf),
+                root: self.root.clone(),
+                render: true,
+                anchors: true,
+                ..Options::default()
+            };
+            let (run, _) = forge_lang::run(&text, opts, Default::default());
+            Ok(forge_lang::compare::Side {
+                label: file.to_string(),
+                text,
+                run,
+            })
+        };
+        let c = forge_lang::compare::compare(side(&a.file)?, side(other)?);
+        let vol =
+            a.words
+                .iter()
+                .any(|w| w == "volume")
+                .then(|| match (&c.base.run.body, &c.target.run.body) {
+                    (Some(x), Some(y)) => forge_lang::compare::volume(x, y),
+                    _ => Err("a part did not build".into()),
+                });
+        let mut json = c.json(vol.as_ref());
+        obj_push(&mut json, "ok", true.into());
+        Ok(Reply {
+            ok: true,
+            text: json.to_string(),
+            json,
+            png: None,
         })
     }
 

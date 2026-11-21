@@ -2,7 +2,7 @@
 
 A typed, parametric part language for agents, evaluated natively: `.fg` source goes straight to
 `forge_model::Feature`s, each built by the kernel as it is made, so anchors and selections read
-the part as it stands. No `.fc` text is produced. `fg reference` (src/reference.md) is the full
+the part as it stands. `fg reference` (src/reference.md) is the full
 language; this page is the design as built, the results, and the gaps.
 
 ```
@@ -116,8 +116,8 @@ still reading `w`: the same numbers until the new param is edited, and then one 
 
 ## Results
 
-The three fair-test parts, ported by hand from their .fc versions (`parts/`), build with the
-.fc part's exact volume, face and edge counts, valid, with no errors or lints, and no number
+The three fair-test parts, ported by hand from their originals in the retired `.fc` format
+(`parts/`), build with the original's exact volume, face and edge counts, valid, with no errors or lints, and no number
 outside params, no world placement after the first sketch, no positional selection:
 
 | part | .fc volume | Forge volume | faces | edges | features |
@@ -127,8 +127,9 @@ outside params, no world placement after the first sketch, no positional selecti
 | manifold | 687248.8 | 687248.76 | 209 | 484 | 46 |
 
 All 15 bench parts are ported whole to `parts/bench/*.fg` (threads, text and body-targeted cuts
-included) and match their .fc parts exactly in volume, area, centroid and inertia
-(`tests/bench_ports.rs`, `tests/ports.rs`); `cargo run -p forge-lang --example benchfg bits`
+included) and matched their `.fc` originals exactly in volume, area, centroid and inertia; the tests
+(`tests/bench_ports.rs`, `tests/ports.rs`) hold each to the originals' recorded volume, faces,
+edges and bodies; `cargo run -p forge-lang --example benchfg bits`
 hashes what each .fg run builds, for the bit gate (`tools/speed/bits.txt`).
 
 Timings (release, niced, the machine shared with other agents; median of 5 for cold):
@@ -139,8 +140,8 @@ Timings (release, niced, the machine shared with other agents; median of 5 for c
 | bracket | 17 ms | 17 ms (kernel 9) | 1.7 ms | 5 ms (1 rebuilt) | 14 ms (31 rebuilt) |
 | manifold | 97 ms | 97 ms (kernel 26) | 7.6 ms | 69 ms (1 rebuilt) | 94 ms (45 rebuilt) |
 
-The holes lane's bench parts (tools/bench-parts, ported in parts/bench), against their .fc
-parts built and measured the same way (`tests/bench_ports.rs`), and their timings (release, niced,
+The holes lane's bench parts (ported in parts/bench), against the numbers their `.fc` originals
+built to, recorded (`tests/bench_ports.rs`), and their timings (release, niced,
 shared machine; cold the median of 5 `fg run` processes, warm from `fg serve`):
 
 | part | volume | faces | edges | bodies | cold | serve unchanged | last param edited |
@@ -154,7 +155,7 @@ shared machine; cold the median of 5 `fg run` processes, warm from `fg serve`):
 | insert | 293840.50 | 42 | 112 | 1 | 8 ms | 0.8 ms | |
 | crank | 116672.18 | 119 | 315 | 1 | 53 ms | 2.2 ms | 33 ms (1) |
 
-All eight match their .fc parts exactly (volume to 1e-6, faces, edges, bodies).
+All eight match their originals exactly (volume to 1e-6, faces, edges, bodies).
 
 Parse, static checks and evaluation take under 2 ms on every part. On the crank, measuring the
 finished part (exact mass properties of its blends and the validity check) takes 220 ms, which
@@ -254,14 +255,15 @@ The whole run of an edit (parse, evaluating 5,000 statements, the solve, the che
 130 ms; a cold run about 290 ms, of which loading the parts is 60 ms.
 ## In the app (fg-ui)
 
-`forge-render` opens `.fg` parts beside `.fc` ones. Every edit is a typed op through
+`forge-render` opens `.fg` parts. Every edit is a typed op through
 `edit::apply_checked`; a pick becomes the anchor text Forge names it by (`anchors.rs`: each face
 and edge of the finished part with the anchor the evaluator resolves back to it, e.g. `base.end`,
 `boss.side(top.c)`, `edges(between: (base.end, base.side(plan.outline[0])))`), never a coordinate
 or a hash; a pick no anchor names is the typed refusal `NoStableName`. Tests:
 `forge-render/tests/fg.rs`, `fg_tools.rs`, `fg_sheet.rs`.
 
-Every tool and command the app has for `.fc` parts, and what it does on a `.fg` part:
+Every tool and command the app had for the retired `.fc` parts, and what it does on a `.fg` part
+(the gaps: what `.fg` still lacks):
 
 | tool / command | .fc | .fg | how, on .fg |
 |---|---|---|---|

@@ -1,8 +1,9 @@
-//! Other systems' part histories as ForgeCAD part files. A file is read as data: nothing in it
-//! runs. Each body becomes one `.fc` history the kernel rebuilds, or says why it could not.
+//! Other systems' part histories as Forge (`.fg`) parts. A file is read as data: nothing in it
+//! runs. Each body becomes one Forge program that builds, or says why it could not.
 //!
-//! FreeCAD `.FCStd` is the first; the translation is the one tools/find-parts/recreate/freecad.py
-//! made, line for line.
+//! FreeCAD `.FCStd` is the first: each feature read as tools/find-parts/recreate/freecad.py reads
+//! it, written as Forge statements (a sketch and the feature it makes), a blend's edges named by
+//! Forge selections found on the part as built so far.
 
 pub mod arrangement;
 pub mod fcstd;
@@ -13,11 +14,11 @@ mod zip;
 /// Why a body did not translate whole.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Fail {
-    /// A form `.fc` has no line for.
+    /// A form Forge has no statement for, or this reader does not read.
     Unsupported(String),
     /// A reference this could not resolve against the part.
     Unresolved(String),
-    /// The kernel stopped on the lines so far.
+    /// The program so far did not build.
     Stop(String),
     /// Data this reader did not expect.
     Bug(String),
@@ -43,9 +44,9 @@ pub struct Body {
     pub features: Vec<String>,
     /// Splines read as fine polylines.
     pub approx: bool,
-    /// The part file: every line when it translated, the lines before the kernel stopped when
+    /// The part file: the whole program when it translated, the program as far as it built when
     /// `fail` is a Stop, none otherwise.
-    pub fc: Option<String>,
+    pub fg: Option<String>,
     pub fail: Option<Fail>,
 }
 

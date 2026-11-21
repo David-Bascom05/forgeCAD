@@ -1,125 +1,101 @@
 # Parameters and sketches: design
 
-> Written for the `.fc` part file, now retired: parts are `.fg` (Forge) programs
-> (`interface/forge-lang`). Kept as the record of how the interface was designed.
-
-The `.fc` text is the parametric document. A `Part` is that text evaluated: every expression
-is replaced by its value and every sketch reference by the solved geometry when the line is
-read. So a parameter change regenerates exactly as if the new value had been typed in, and
-`forge-model` keeps working on plain numbers (no regen cost, nothing for the kernel to learn).
+A part is a Forge (`.fg`) program (`interface/forge-lang`, the language in its
+`src/reference.md`). Evaluating it replaces every expression by its value and every sketch
+reference by the solved geometry, feature by feature. So a parameter change regenerates exactly as
+if the new value had been typed in, and `forge-model` keeps working on plain numbers (no regen
+cost, nothing for the kernel to learn).
 
 ## Parameters
 
 ```
-wall = 2                 # a line of its own; a history step that makes nothing
-d = wall*3 + 1 mm        # optional unit: mm | deg (none: a plain number)
-a = 30 deg
-extrude d rect 0 0 w/2 (h + wall)        # any number in any line may be an expression
+shared wall = 2              # read by any feature
+param boss.h = wall * 3 + 1  # a param of feature `boss`
+param boss.a = 30deg
+param bolts.n = count(4)
 ```
 
+- Numbers live in params; a loose number in a statement is the lint `LooseLiteral`, whose fix
+  (`LiftLiteral`) makes it one. Inside feature F's statement a bare name finds F's own param
+  first, then names in scope, then shared params.
 - Expressions: `+ - * / ^`, parentheses, `sqrt sin cos tan asin acos atan atan2 min max abs`,
-  `pi`. Trig takes degrees (the file's angle unit); inverse trig gives degrees, a `deg` value,
-  from a ratio (`atan2(y, x)`: the angle of the point x, y), so an arc through computed points
-  stays parametric. `^` takes a whole exponent, or 0.5. Hand-written recursive
-  descent over `f64`, trig through `forge_math::dmath`: bit-identical everywhere.
-- In a feature line an expression is one token (`w/2`) or a parenthesized one (`(h + wall)`);
-  a `(` token is a selector only if it starts with `faces|edges|verts`.
-- A name must be defined above its use, once. Unknown names, self reference and names defined
-  only below give errors naming the line. Define-before-use rules out cycles.
-- Units are checked, not converted: a `deg` value may only fill an angle, an `mm` value only a
-  length; mixing them in one expression is an error. Counts must come out whole.
-- Stored as `Feature::Param { name, expr (text), unit, value }`, printed back verbatim.
+  `pi`, `div mod` on counts. Trig takes angles (`30deg`) and gives ratios; inverse trig gives
+  angles. Arithmetic is `forge_math::dmath`: bit-identical everywhere.
+- Dimensions are checked, not converted: Length, Angle, Count, Ratio. A size is never a count;
+  mixing them otherwise is `DimMismatch`/`WrongDim`.
+- A name is bound once, above its use: rebinding is `Rebind`, so there are no cycles.
+- Every number records where it came from: driving (one param read by name, which `SetParam`
+  edits), driven (an expression of params), or const. A param whose value evaluation observed (a
+  loop bound, an index, a selection's filter) is structural: editing it re-runs evaluation.
 
 ## Sketches
 
 ```
-sk: sketch xy at 0 0 6          # FRAME, or `on REF` (a planar face: its plane, outward z)
-  rect 0 0 40 25                # l1..l4, corners shared, horizontal/vertical held
-  circle 20 12 4                # c1
-  arc l2.b 30 30 l3.a           # a1: centre, start, end (ccw; `cw`); points may be refs
-  line 0 -5 40 -5 cons          # l5, construction (not in profiles)
-  fix l1.a                      # constraints: fix co hor ver par perp tan eq conc mid sym
-  dist l1 w                     # dimensions: dist hdist vdist rad dia ang, valued by
-  dist c1 l1 (h/2)              #   any expression
-  dia c1 8
-end
+param base.w = 40
+param base.h = 25
+sketch base(on: xy) {
+  outline = rect(corner: (0, 0), size: (w, h))   # sides outline[0..3]
+  c = circle((w / 2, h / 2), 4)
+  l = line(near(0, -5), near(w, -5), construction: true)
+  horizontal(l)
+  distance(l.a, outline[0], 5)
+}
 ```
 
-- Entities are named by kind and count in the block: `p` points, `l` lines, `c` circles,
-  `a` arcs; their points `.a` start, `.b` end, `.c` centre (a bare circle/arc where a point is
-  wanted means its centre). `o` is the sketch origin, fixed.
-- The block is one history step, `Feature::Sketch` (its plane, rows as written, and the solved
-  `forge_sketch::Sketch`). It is solved from the coordinates as written every time it is read,
-  so a regen never depends on an earlier solve.
-- Downstream:
-  - `extrude 6 sk [E]`, `revolve sk [axis L] [E]`: anywhere LOOPS go, a sketch's one region,
-    or the region whose outside loop runs through entity E.
-  - FRAME `on sk [P]` / `-on sk [P]`: the sketch's plane (flipped), origin at point P; so
-    `hole 5 -on sk c1 thru` drills at a sketch circle's centre.
-  - PATH `sk [E]` (sweep, loft rails): the sketch's one chain of lines and arcs, or E's.
-- A sketch placed `on` a plane, sketch or face keeps that reference (`Sketch.on`), printed
-  back as written and re-resolved every time the line is read, so it follows its plane.
+- Entities are named by their binding (`base.c`, `base.outline[2]`); their members are points
+  (`l.a`, `l.b`, `c.center`), directions (`l.dir`) and axes. Coordinates written are fixed;
+  `near(x, y)` is a free point. Constraints are statements (`tangent`, `coincident`,
+  `horizontal`, `distance`, `radius`, `angle`, `symmetric`, ..); the solver is forge-sketch.
+- A sketch is one feature, solved from the coordinates as written every time it is evaluated,
+  so a regen never depends on an earlier solve. It sits on a world plane (the first feature
+  only), an anchor of the part (`boss.end`, `base.side(plan.outline[1])`), `offset(..)`,
+  `rotate(..)`, a work plane or `plane(at:, normal:, x:)`, and follows it through every edit.
+- Downstream, a profile is a sketch's one region or one of its loops or closed entities
+  (`extrude(base.c, t)`); a revolve's axis, a coil's, a path or a hole's points are its
+  entities.
 
 ## Projected geometry
 
-A `project REF..` row lays 3D geometry on the sketch's plane: edges, a face's boundary edges,
-vertices, work points. It is read from the part above the sketch every time the line is read, so
-it follows edits there, and each point it makes is `Fixed`, so it adds no freedom. Points within
-LINEAR are one point, so a loop's ends and a line drawn from one are shared, not near.
+`project(EDGES | FACES | POINT | AXIS, approx: TOL)` lays 3D geometry of the part as it stands on
+the sketch's plane, read afresh every run, so it follows edits there; each point it makes is
+fixed, so it adds no freedom.
 
-- Results count on their own (`j1`, `j2`..) whatever each comes to, so an edge turning end-on
-  can't renumber the lines drawn below it: a row still naming `j1` as a line fails instead.
-- A face or selector can give more or fewer curves after an edit, so its results have no names a
-  row can write; they still join profiles, and their faces take their names from the source edge.
-  The app expands a clicked face to its edges' handles, which rows can name.
 - Lines, circles and ellipses project exactly: a circle or ellipse is O + cos t A + sin t B in the
   plane (A, B its semi-axes laid flat), an ellipse whose axes are where |A cos t + B sin t| is
-  greatest and least, tan 2t = 2 A.B / (|A|^2 - |B|^2); an arc's ends are where the part has them,
-  its axes stretched the hair (at most 10 LINEAR) that puts both on it.
-- Any other curve has no exact image. It is refused unless the row ends `approx TOL`: then the
-  cubic through 4, 8, .. 512 equally spaced points of it, the first count whose distance from the
-  image both ways (three points a span, each against the nearest point of the other found by
-  search) is within TOL. The app writes such curves in a row of their own, `approx 0.001`, so a
-  fitted result is never silent.
-- A source an edit took away is an error at the sketch's line naming the row.
+  greatest and least, tan 2t = 2 A.B / (|A|^2 - |B|^2).
+- Any other curve has no exact image: it is `NeedsApprox` unless `approx: TOL` is given, then a
+  fitted cubic within TOL, so a fitted result is never silent. An axis projects only seen end-on
+  (`NoImage` otherwise).
+- One curve gives an entity, several a loop; a face gives its boundary.
 
 ## References
 
-Profile segments from a sketch carry ids from the entity's kind and count (`l3`, `c1`), not
-its position in the solver, so extruded faces and edges keep their names when dimensions
-change, and when entities of other kinds are added: fillets and chamfers downstream survive,
-the same as for features today.
+Faces and edges a sketch's entities make are named from the feature's id and the entity's
+binding, not from its position in the solver, so `boss.side(base.outline[1])` and selections
+of them (`edges(between: (a, b))`) keep naming the same faces when dimensions change and when
+entities are added: fillets and chamfers downstream survive.
 
 ## Diagnostics
 
-- Under-constrained is allowed: it solves from the coordinates as written, moving them as
-  little as possible. `forgecad check` reports each sketch's degrees of freedom.
-- A sketch that does not solve is an error on its line naming the conflicting rows
-  (`dist l1 40`, `dist l1 w`) and the redundant ones, with the hint to remove or change one.
-- Profiles that do not close, branch or cross name the entity: `the chain through l3 is open`.
-- Rank analysis runs only on failure or when asked, never on a regen that solves.
+- Under-constrained is allowed, the warning `UnderConstrained` with the freedom left: it solves
+  from the coordinates as written, moving them as little as possible.
+- A sketch that does not solve is `SketchConflict` naming the conflicting rows.
+- Every error and lint is typed (kind, span, data) with its fixes as edit ops.
 
 ## Incremental rebuilds
 
-A session reparses every line after a changed one; a line whose result equals the old one
-keeps its built stage as long as everything changed above it makes no solid (parameters,
-sketches). Changing `wall` rebuilds from the first line whose numbers change.
+A session keeps each feature's built stage; a rebuild starts at the first feature whose inputs
+changed. Editing a non-structural param re-reads the stored formulas without evaluating again.
 
-## The document (forge-doc)
+## The document
 
-The source of truth is `forge_doc::Document`: one item per line (parameters, sketches with
-their rows, feature lines with their arguments as written, blank and comment lines), each
-with an identity kept through edits. The `.fc` file is its print, and reads back to it. A
-feature reference (`sketch2`, `f4`, a label) records the item it named when the line was
-first evaluated and prints by that item's place, so it follows the item when lines are
-inserted, deleted or moved. Edits: set a parameter, set a dimension, set an argument (a value
-or reference), insert, delete, move. Evaluation is the part-file parser, line by line: the
-session rebuilds from the first line an edit changes, keeping later stages while lines read
-the same. The kernel still sees only `Feature`s of plain numbers.
+The source of truth is the `.fg` text. Edits are typed ops on it (`SetParam`, `AddFeature`,
+`ReplaceFeature`, `MoveFeature`, `Rename`, ..; `forge_lang::edit`), each replacing one span or
+inserting at one point, every other byte kept: a hand edit and an agent's edit are the same
+kind of change.
 
 ## Over-constrained
 
 As in Inventor, a constraint or dimension the rows above it already imply is an error, even
 when consistent: the solver finds it (ties met twice, or a row adding no rank to its group's
-Jacobian at the solution) and the message names the row and offers `ref`, a driven dimension
-that constrains nothing and shows its measured value in `check`.
+Jacobian at the solution) and names the row.
