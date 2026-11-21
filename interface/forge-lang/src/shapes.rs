@@ -1114,7 +1114,7 @@ fn thicken(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     let a = Args::bind(
         ev,
         "thicken",
-        &["faces", "t", "side", "cut", "keep", "new"],
+        &["faces", "t", "side", "cut", "keep", "new", "bodies"],
         args,
         span,
     )?;
@@ -1137,6 +1137,7 @@ fn thicken(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         side,
         op,
     });
+    let f = crate::bodies::wrap_in(ev, &a, f)?;
     let (idx, hid) = ev.push_feature(&id, "thicken", f, span, vec![dim("thickness", &t)])?;
     Ok(feat(id, "thicken", idx, hid, None))
 }
