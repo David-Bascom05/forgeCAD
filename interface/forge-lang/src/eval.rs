@@ -112,14 +112,17 @@ impl std::fmt::Debug for Ent {
 
 #[derive(Clone, Debug)]
 pub enum ExtentV {
-    Sym(f64),
-    Two(f64, f64),
+    /// In all, half each side: a length (extrude) or an angle (revolve).
+    Sym(crate::values::Num),
+    /// Forward and back: lengths or angles.
+    Two(crate::values::Num, crate::values::Num),
     Thru,
     ThruAll,
     Next,
-    UpTo(Rc<Faces>, f64),
+    /// Up to a face's surface, then an offset (a length, or an angle for a revolve).
+    UpTo(Rc<Faces>, crate::values::Num),
     /// Up to a work plane (its place in the history), then an offset.
-    UpToPlane(usize, f64),
+    UpToPlane(usize, crate::values::Num),
 }
 
 #[derive(Clone, Debug)]
@@ -1364,6 +1367,7 @@ impl<'s> Eval<'s> {
             return Err(Error::UnknownName {
                 span,
                 name: name.into(),
+                near: None,
             });
         }
         let here = self.ctx.owner.clone();
@@ -1403,9 +1407,26 @@ impl<'s> Eval<'s> {
             self.rule(self.rules.scoped_params, err)?;
             return Ok(self.param_num((false, k), span));
         }
+        // the nearest name in reach: bound, a param, a function, a built-in
+        let here = self.ctx.owner.clone();
+        let names = self
+            .scopes
+            .iter()
+            .flat_map(|s| s.keys().map(String::as_str))
+            .chain(self.shared.iter().map(|p| p.key.name.as_str()))
+            .chain(
+                self.locals
+                    .iter()
+                    .filter(|p| Self::visible(&p.key.owner, &here).is_some())
+                    .map(|p| p.key.name.as_str()),
+            )
+            .chain(self.fns.keys().map(String::as_str))
+            .chain(crate::builtins::BUILTINS.iter().copied())
+            .chain(crate::shapes::NAMES.iter().copied());
         Err(Error::UnknownName {
             span,
             name: name.into(),
+            near: crate::edit_ops::nearest(name, names),
         })
     }
 
@@ -2003,6 +2024,7 @@ impl<'s> Eval<'s> {
                 span,
                 id: id.into(),
                 error,
+                fit: None,
             })
         })
     }
@@ -2402,6 +2424,16 @@ pub fn arith(op: BinOp, x: &Value, y: &Value, span: Span, sa: Span, sb: Span) ->
             }
             Ok(Value::Edges(Rc::new(v)))
         }
+        // the first set less what the second holds (`.fc` picked one of several by place)
+        (Value::Faces(a), Value::Faces(b)) if op == BinOp::Sub => Ok(Value::Faces(Rc::new(Faces {
+            names: a.names.iter().copied().filter(|n| !b.names.contains(n)).collect(),
+            owner: a.owner.clone(),
+            role: crate::error::Role::Faces,
+            plane: None,
+        }))),
+        (Value::Edges(a), Value::Edges(b)) if op == BinOp::Sub => Ok(Value::Edges(Rc::new(
+            a.iter().copied().filter(|n| !b.contains(n)).collect(),
+        ))),
         (Value::Unresolved, _) | (_, Value::Unresolved) => Ok(Value::Unresolved),
         (Value::Num(_), o) => Err(wrong(sb, o)),
         (o, _) => Err(wrong(sa, o)),

@@ -3355,6 +3355,7 @@ pub fn pattern(
                 span,
                 id: id.clone(),
                 error,
+                fit: None,
             }
         })?;
     let st = &ev.sheets.list[si];

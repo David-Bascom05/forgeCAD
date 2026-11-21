@@ -11,7 +11,7 @@ use forge_agent::select;
 use forge_geom::{Curve, Surface};
 use forge_math::{Frame, Point2, Point3, UnitVec3, Vec2, Vec3, dmath};
 use forge_model::{Combine, Extent, Feature, Target, Toward, Turn};
-use forge_ops::{Axis2, ChamferCorner, ChamferSize, Radius};
+use forge_ops::{Axis2, ChamferCorner, ChamferSize};
 use forge_sketch::{Constraint, EntityId};
 use forge_topo::{Body, EdgeId, FaceId, Name};
 use std::cell::RefCell;
@@ -66,6 +66,8 @@ pub const BUILTINS: &[&str] = &[
     "concentric",
     "collinear",
     "symmetric",
+    "hdistance",
+    "vdistance",
     "extrude",
     "cut",
     "revolve",
@@ -277,6 +279,8 @@ pub(crate) fn dim(what: &'static str, n: &Num) -> Dimension {
 
 pub(crate) const LEN: &[Dim] = &[Dim::Length];
 pub(crate) const ANG: &[Dim] = &[Dim::Angle];
+/// A length (an extrude's extent) or an angle (a revolve's).
+pub(crate) const LEN_ANG: &[Dim] = &[Dim::Length, Dim::Angle];
 
 /// The sketch the call is inside, or a WrongPlace error.
 pub(crate) fn in_sketch(ev: &Eval, func: &'static str, span: Span) -> R<Rc<RefCell<Sk>>> {
@@ -666,22 +670,29 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
         }
         "sym" => {
             let a = Args::bind(ev, name, &["d"], args, span)?;
-            let d = a.req_num("d", LEN)?;
-            Ok(Value::Extent(ExtentV::Sym(positive(
-                &d,
-                a.span("d"),
-                "a symmetric extent",
-            )?)))
+            let d = a.req_num("d", LEN_ANG)?;
+            positive(&d, a.span("d"), "a symmetric extent")?;
+            Ok(Value::Extent(ExtentV::Sym(d)))
         }
         "two" => {
             let a = Args::bind(ev, name, &["forward", "back"], args, span)?;
-            let f = a.req_num("forward", LEN)?;
-            let b = a.req_num("back", LEN)?;
-            Ok(Value::Extent(ExtentV::Two(f.v, b.v)))
+            let f = a.req_num("forward", LEN_ANG)?;
+            let b = a.req_num("back", LEN_ANG)?;
+            if f.dim != b.dim && f.dim != Dim::Any && b.dim != Dim::Any {
+                return Err(Error::DimMismatch {
+                    span,
+                    op: "two",
+                    left: f.dim,
+                    right: b.dim,
+                });
+            }
+            Ok(Value::Extent(ExtentV::Two(f, b)))
         }
         "upto" => {
             let a = Args::bind(ev, name, &["face", "offset"], args, span)?;
-            let off = a.num("offset", LEN)?.map_or(0.0, |n| n.v);
+            let off = a
+                .num("offset", LEN_ANG)?
+                .unwrap_or_else(|| Num::konst(0.0, Dim::Any));
             match a.req("face")? {
                 Value::Faces(f) => Ok(Value::Extent(ExtentV::UpTo(f, off))),
                 Value::Wired(w) if w.plane().is_some() && w.work_ref().is_some() => Ok(Value::Extent(
@@ -917,9 +928,8 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
         }
         "spline" | "tarc" | "close" => path_seg(ev, name, args, span),
         "tangent" | "coincident" | "horizontal" | "vertical" | "parallel" | "perpendicular" | "equal"
-        | "midpoint" | "distance" | "radius" | "angle" | "fix" | "concentric" | "collinear" | "symmetric" => {
-            constraint(ev, name, args, span)
-        }
+        | "midpoint" | "distance" | "radius" | "angle" | "fix" | "concentric" | "collinear" | "symmetric"
+        | "hdistance" | "vdistance" => constraint(ev, name, args, span),
         "extrude" | "cut" | "intersect" => extrude(ev, name, args, span),
         "use" => crate::uses::call(ev, args, span),
         n if crate::sheet::BUILTINS.contains(&n) => crate::sheet::call(ev, name, args, span),
@@ -927,7 +937,7 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
         n if crate::harness::BUILTINS.contains(&n) => crate::harness::call(ev, name, args, span),
         "revolve" => revolve(ev, args, span),
         "fillet" => crate::fillets::fillet(ev, args, span),
-        "chamfer" => finish(ev, name, args, span),
+        "chamfer" => chamfer(ev, args, span),
         "shell" => shell(ev, args, span),
         "loft" => crate::shapes::loft(ev, args, span),
         "offset" => {
@@ -1266,6 +1276,18 @@ fn constraint(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<
             let v = a.req_num("c", ANG)?;
             Constraint::Angle(x.id, y.id, v.v)
         }
+        "hdistance" | "vdistance" => {
+            // b.x - a.x (b.y - a.y) is d, in the sketch's axes
+            let (x, y) = (ent("a")?, ent("b")?);
+            want(&x, EntKind::Point, a.span("a"))?;
+            want(&y, EntKind::Point, a.span("b"))?;
+            let v = a.req_num("c", LEN)?;
+            if name == "hdistance" {
+                Constraint::HorizontalDistance(x.id, y.id, v.v)
+            } else {
+                Constraint::VerticalDistance(x.id, y.id, v.v)
+            }
+        }
         _ => {
             // distance(a, b, d) between points, a point and a line; distance(line, d): its length
             let x = ent("a")?;
@@ -1338,9 +1360,16 @@ pub(crate) fn has_solid(ev: &Eval) -> bool {
 }
 
 fn extrude(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Value> {
+    use crate::feat_error::{Because, FeatError};
     not_in_sketch(ev, name, span)?;
     let id = ev.take_id(if name == "extrude" { "extrude" } else { "cut" }, span)?;
-    let a = Args::bind(ev, name, &["profile", "d", "taper", "new"], args, span)?;
+    let a = Args::bind(
+        ev,
+        name,
+        &["profile", "d", "taper", "new", "along", "flip", "bodies"],
+        args,
+        span,
+    )?;
     if a.poisoned() {
         return Ok(Value::Unresolved);
     }
@@ -1353,6 +1382,15 @@ fn extrude(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Val
                 arg: "taper",
                 with: "an extent other than a depth (a taper runs a set distance)",
             });
+        }
+        if a.opt("along").is_some() {
+            return Err(FeatError::Conflict {
+                span: a.span("along"),
+                func: name,
+                a: "taper",
+                b: "along",
+            }
+            .into());
         }
         let curved = profile.loops.iter().any(|l| {
             l.segments
@@ -1369,7 +1407,53 @@ fn extrude(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Val
     let cut = name == "cut";
     let mut dims = vec![];
     let sign = if cut { -1.0 } else { 1.0 };
-    let (extent, near, far) = match a.req("d")? {
+    // along: the walls run that way, the ends square to the sketch's normal
+    let along = a.opt("along").map(|v| dir_of(v, a.span("along"))).transpose()?;
+    // flip: thru and next run the other way (a depth runs the other way when negative)
+    let flip = a.flag("flip")?;
+    let d_val = a.req("d")?;
+    if flip && !matches!(d_val, Value::Extent(ExtentV::Thru | ExtentV::Next)) {
+        return Err(FeatError::NotApplicable {
+            span: a.span("flip"),
+            func: name,
+            arg: "flip",
+            because: Because::OtherForm,
+        }
+        .into());
+    }
+    if along.is_some()
+        && !matches!(
+            d_val,
+            Value::Num(_)
+                | Value::Extent(ExtentV::Sym(_) | ExtentV::Two(..) | ExtentV::Thru | ExtentV::ThruAll)
+        )
+    {
+        return Err(Error::NotWith {
+            span: a.span("along"),
+            func: name,
+            arg: "along",
+            with: "next or upto (a slanted extrude runs a set distance, or through)",
+        });
+    }
+    let len = |n: &Num, sp: Span, what: &'static str| num_of(Value::Num(n.clone()), LEN, sp, what);
+    // the kernel's slanted extent: forward along the normal, back against it (a cut's into the
+    // material, against the normal)
+    let slant = |f: f64, b: f64, dir: Vec3| {
+        if cut {
+            Extent::Along {
+                forward: b,
+                back: f,
+                dir,
+            }
+        } else {
+            Extent::Along {
+                forward: f,
+                back: b,
+                dir,
+            }
+        }
+    };
+    let (extent, near, far) = match d_val {
         Value::Num(n) => {
             let d = num_of(Value::Num(n.clone()), LEN, a.span("d"), "a depth")?;
             if d.v == 0.0 {
@@ -1381,8 +1465,8 @@ fn extrude(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Val
             }
             dims.push(dim("depth", &d));
             let dist = sign * d.v;
-            match a.num("taper", ANG)? {
-                Some(t) => {
+            match (a.num("taper", ANG)?, along) {
+                (Some(t), _) => {
                     dims.push(dim("taper", &t));
                     (
                         Extent::Tapered {
@@ -1393,46 +1477,84 @@ fn extrude(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Val
                         Some(dist),
                     )
                 }
-                None => (Extent::Distance(dist), 0.0, Some(dist)),
+                (None, Some(dir)) => {
+                    let (f, b) = if d.v > 0.0 { (d.v, 0.0) } else { (0.0, -d.v) };
+                    (slant(f, b, dir), dist.min(0.0), Some(dist.max(0.0)))
+                }
+                (None, None) => (Extent::Distance(dist), 0.0, Some(dist)),
             }
         }
         Value::Extent(x) => match x {
-            ExtentV::Sym(d) => (Extent::Symmetric(d), -d / 2.0, Some(d / 2.0)),
-            ExtentV::Two(f, b) => (
-                Extent::TwoSided {
-                    forward: sign * f,
-                    back: sign * b,
-                },
-                -sign * b,
-                Some(sign * f),
-            ),
-            ExtentV::Thru => (
-                Extent::Through(if cut { Toward::Back } else { Toward::Forward }),
-                0.0,
-                None,
-            ),
-            ExtentV::ThruAll => (Extent::Through(Toward::Both), 0.0, None),
-            ExtentV::Next => (Extent::ToNext { reverse: cut }, 0.0, None),
+            ExtentV::Sym(d) => {
+                let d = len(&d, a.span("d"), "a symmetric extent")?;
+                dims.push(dim("depth", &d));
+                let d = d.v;
+                match along {
+                    Some(dir) => (slant(d / 2.0, d / 2.0, dir), -d / 2.0, Some(d / 2.0)),
+                    None => (Extent::Symmetric(d), -d / 2.0, Some(d / 2.0)),
+                }
+            }
+            ExtentV::Two(f, b) => {
+                let f = len(&f, a.span("d"), "a forward extent")?;
+                let b = len(&b, a.span("d"), "a back extent")?;
+                dims.push(dim("forward", &f));
+                dims.push(dim("back", &b));
+                let (f, b) = (f.v, b.v);
+                match along {
+                    Some(dir) => (slant(f, b, dir), -sign * b, Some(sign * f)),
+                    // a cut's forward runs into the material, against the normal: it spans -f to
+                    // b along the normal, either way round (negative sizes, as written before,
+                    // run it the other way)
+                    None => (
+                        if cut {
+                            Extent::TwoSided {
+                                forward: (-f).max(b),
+                                back: -((-f).min(b)),
+                            }
+                        } else {
+                            Extent::TwoSided { forward: f, back: b }
+                        },
+                        -sign * b,
+                        Some(sign * f),
+                    ),
+                }
+            }
+            ExtentV::Thru | ExtentV::ThruAll => {
+                let toward = match (&x, cut != flip) {
+                    (ExtentV::ThruAll, _) => Toward::Both,
+                    (_, true) => Toward::Back,
+                    _ => Toward::Forward,
+                };
+                match along {
+                    Some(dir) => (Extent::ThroughAlong { toward, dir }, 0.0, None),
+                    None => (Extent::Through(toward), 0.0, None),
+                }
+            }
+            ExtentV::Next => (Extent::ToNext { reverse: cut != flip }, 0.0, None),
             ExtentV::UpTo(f, off) => {
+                let off = len(&off, a.span("d"), "an offset")?;
                 let feature = ev.feats.iter().find(|x| x.id == f.owner).map_or(0, |x| x.idx);
                 let name = f.names.first().copied().unwrap_or(Name::NONE);
                 (
                     Extent::To {
                         target: Target::Face { feature, name },
-                        offset: off,
+                        offset: off.v,
                     },
                     0.0,
                     None,
                 )
             }
-            ExtentV::UpToPlane(k, off) => (
-                Extent::To {
-                    target: Target::Plane(k),
-                    offset: off,
-                },
-                0.0,
-                None,
-            ),
+            ExtentV::UpToPlane(k, off) => {
+                let off = len(&off, a.span("d"), "an offset")?;
+                (
+                    Extent::To {
+                        target: Target::Plane(k),
+                        offset: off.v,
+                    },
+                    0.0,
+                    None,
+                )
+            }
         },
         Value::Unresolved => (Extent::Distance(1.0), 0.0, None),
         o => {
@@ -1450,7 +1572,7 @@ fn extrude(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Val
         _ if a.flag("new")? || !has_solid(ev) => Combine::New,
         _ => Combine::Add,
     };
-    let f = Feature::Extrude { profile, extent, op };
+    let f = crate::bodies::wrap_in(ev, &a, Feature::Extrude { profile, extent, op })?;
     let (idx, hid) = ev.push_feature(&id, "extrude", f, span, dims)?;
     let axis = single_circle_axis(&sk, &segs);
     Ok(Value::Feature(Rc::new(Feat {
@@ -1490,15 +1612,26 @@ fn revolve(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     let a = Args::bind(
         ev,
         "revolve",
-        &["profile", "axis", "angle", "cut", "new"],
+        &["profile", "axis", "angle", "cut", "keep", "new", "bodies"],
         args,
         span,
     )?;
     if a.poisoned() {
         return Ok(Value::Unresolved);
     }
-    let (sk, profile, _) = profile_of(ev, a.req("profile")?, a.span("profile"))?;
     let ax = ent_of(a.req("axis")?, a.span("axis"), EntKind::Line)?;
+    let mut profiled = profile_of(ev, a.req("profile")?, a.span("profile"));
+    // an axis drawn as a plain line (not construction) that is no side of the profile: the
+    // profile without it (as .fc's `axis L`)
+    if profiled.is_err() && ax.kind == EntKind::Line && !ax.sk.borrow().s.is_construction(ax.id) {
+        let _ = ax.sk.borrow_mut().s.set_construction(ax.id, true);
+        let again = profile_of(ev, a.req("profile")?, a.span("profile"));
+        let _ = ax.sk.borrow_mut().s.set_construction(ax.id, false);
+        if again.is_ok() {
+            profiled = again;
+        }
+    }
+    let (sk, profile, _) = profiled?;
     if !Rc::ptr_eq(&ax.sk, &sk) || ax.kind != EntKind::Line {
         return Err(Error::WrongEntity {
             span: a.span("axis"),
@@ -1514,30 +1647,71 @@ fn revolve(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         (s.pos(a), s.pos(b))
     };
     let mut dims = vec![];
-    let turn = match a.num("angle", ANG)? {
-        Some(t) => {
+    let ang = |n: &Num, what: &'static str| num_of(Value::Num(n.clone()), ANG, a.span("angle"), what);
+    // angle: A | sym(A) | two(A, B) | upto(FACES | WORKPLANE, offset: A)
+    let turn = match a.opt("angle") {
+        None => Turn::Angle(std::f64::consts::TAU),
+        Some(Value::Extent(ExtentV::Sym(t))) => {
+            let t = ang(&t, "a symmetric turn")?;
+            dims.push(dim("angle", &t));
+            Turn::Symmetric(t.v)
+        }
+        Some(Value::Extent(ExtentV::Two(f, b))) => {
+            let (f, b) = (ang(&f, "a forward turn")?, ang(&b, "a back turn")?);
+            dims.push(dim("forward", &f));
+            dims.push(dim("back", &b));
+            Turn::TwoSided {
+                forward: f.v,
+                back: b.v,
+            }
+        }
+        Some(Value::Extent(x @ (ExtentV::UpTo(..) | ExtentV::UpToPlane(..)))) => {
+            let off = match &x {
+                ExtentV::UpTo(_, o) | ExtentV::UpToPlane(_, o) => ang(o, "an offset turn")?,
+                _ => unreachable!("upto"),
+            };
+            let target = match x {
+                ExtentV::UpToPlane(k, _) => Target::Plane(k),
+                ExtentV::UpTo(f, _) => Target::Face {
+                    feature: ev.feats.iter().find(|y| y.id == f.owner).map_or(0, |y| y.idx),
+                    name: f.names.first().copied().unwrap_or(Name::NONE),
+                },
+                _ => unreachable!("upto"),
+            };
+            Turn::To {
+                target,
+                offset: off.v,
+            }
+        }
+        Some(Value::Extent(_)) => {
+            return Err(Error::WrongType {
+                span: a.span("angle"),
+                what: "a turn (an angle, sym(A), two(A, B) or upto(..))",
+                want: Ty::Num,
+                found: Ty::Extent,
+            });
+        }
+        Some(_) => {
+            let t = a.req_num("angle", ANG)?;
             dims.push(dim("angle", &t));
             Turn::Angle(t.v)
         }
-        None => Turn::Angle(std::f64::consts::TAU),
     };
-    let op = if a.flag("cut")? {
-        Combine::Cut
-    } else if a.flag("new")? || !has_solid(ev) {
-        Combine::New
-    } else {
-        Combine::Add
-    };
+    let op = crate::shapes::combine(ev, &a, "revolve")?;
     let axis2 = Axis2 {
         origin: pa,
         dir: pb - pa,
     };
-    let f = Feature::Revolve {
-        profile,
-        axis: axis2,
-        extent: turn,
-        op,
-    };
+    let f = crate::bodies::wrap_in(
+        ev,
+        &a,
+        Feature::Revolve {
+            profile,
+            axis: axis2,
+            extent: turn,
+            op,
+        },
+    )?;
     let (idx, hid) = ev.push_feature(&id, "revolve", f, span, dims)?;
     let (wa, wb) = {
         let s = sk.borrow();
@@ -1581,13 +1755,39 @@ pub(crate) fn edges_value(v: Value, span: Span) -> R<Option<Vec<Name>>> {
     }
 }
 
-fn finish(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Value> {
-    not_in_sketch(ev, name, span)?;
-    let id = ev.take_id(name, span)?;
-    let a = Args::bind(ev, name, &["edges", "r", "groups"], args, span)?;
+/// `chamfer(EDGES, d)`, or a two-sided size measured from one face of each edge:
+/// `chamfer(EDGES, d, d2: D, face: FACE)` (d along FACE, D along the other face) or
+/// `chamfer(EDGES, d, angle: A, face: FACE)` (d along FACE, the cut leaving it at A);
+/// `corner: "patch"|"point"` how three chamfers meet at a corner.
+fn chamfer(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
+    use crate::feat_error::{Because, FeatError};
+    const NAME: &str = "chamfer";
+    not_in_sketch(ev, NAME, span)?;
+    let id = ev.take_id(NAME, span)?;
+    // `r` and `groups`: what the call took when it shared fillet's arguments
+    let a = Args::bind(
+        ev,
+        NAME,
+        &["edges", "d", "d2", "angle", "face", "corner", "r", "groups"],
+        args,
+        span,
+    )?;
     let mut groups: Vec<(Value, Span, Num)> = vec![];
     if let Some(e) = a.opt("edges") {
-        groups.push((e, a.span("edges"), a.req_num("r", LEN)?));
+        let d = match (a.opt("d"), a.opt("r")) {
+            (Some(_), Some(_)) => {
+                return Err(FeatError::Conflict {
+                    span: a.span("r"),
+                    func: NAME,
+                    a: "d",
+                    b: "r",
+                }
+                .into());
+            }
+            (None, Some(_)) => a.req_num("r", LEN)?,
+            _ => a.req_num("d", LEN)?,
+        };
+        groups.push((e, a.span("edges"), d));
     }
     if let Some(g) = a.opt("groups") {
         let Value::List(xs) = g else {
@@ -1615,25 +1815,34 @@ fn finish(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Valu
             }
         }
     }
+    let Some(first) = groups.first().map(|g| g.2.clone()) else {
+        return Err(Error::MissingArg {
+            span,
+            func: NAME,
+            arg: "edges",
+        });
+    };
     let mut dims = vec![];
-    let mut edges: Vec<(Name, f64)> = vec![];
-    for (v, sp, r) in &groups {
-        positive(
-            r,
-            *sp,
-            if name == "fillet" {
-                "a fillet radius"
-            } else {
-                "a chamfer size"
-            },
-        )?;
-        dims.push(dim(if name == "fillet" { "radius" } else { "size" }, r));
+    let mut edges: Vec<Name> = vec![];
+    for (k, (v, sp, d)) in groups.iter().enumerate() {
+        positive(d, *sp, "a chamfer size")?;
+        // one size per chamfer feature in forge-model: groups of other sizes are two chamfers
+        if k > 0 && d.v != first.v {
+            return Err(FeatError::Conflict {
+                span: *sp,
+                func: NAME,
+                a: "groups",
+                b: "sizes",
+            }
+            .into());
+        }
+        dims.push(dim("size", d));
         match edges_value(v.clone(), *sp)? {
             Some(es) => {
                 if es.is_empty() && ev.b.building {
                     return Err(Error::EmptySelection { span: *sp });
                 }
-                edges.extend(es.into_iter().map(|e| (e, r.v)));
+                edges.extend(es);
             }
             // what an earlier error left unknown: nothing to build; with no error before, the
             // selection found nothing on the part
@@ -1642,26 +1851,102 @@ fn finish(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Valu
             None => {}
         }
     }
-    let f = if name == "fillet" {
-        Feature::Fillet {
-            edges: edges.iter().map(|(e, r)| (*e, Radius::Constant(*r))).collect(),
-            starts: vec![],
-            setbacks: vec![],
-            only: false,
+    let (d2, angle) = (a.num("d2", LEN)?, a.num("angle", ANG)?);
+    if d2.is_some() && angle.is_some() {
+        return Err(FeatError::Conflict {
+            span: a.span("angle"),
+            func: NAME,
+            a: "d2",
+            b: "angle",
         }
-    } else {
-        // one size per chamfer feature in forge-model: the first group's
-        let size = edges.first().map_or(1.0, |e| e.1);
-        Feature::Chamfer {
-            edges: edges.iter().map(|e| e.0).collect(),
-            size: ChamferSize::Equal(size),
-            corner: ChamferCorner::Patch,
+        .into());
+    }
+    if d2.is_some() || angle.is_some() {
+        if groups.len() > 1 || a.opt("groups").is_some() {
+            return Err(FeatError::NotApplicable {
+                span: a.span("groups"),
+                func: NAME,
+                arg: "groups",
+                because: Because::OtherForm,
+            }
+            .into());
+        }
+    } else if a.opt("face").is_some() {
+        // a reference face measures a two-sided size only
+        return Err(FeatError::NotApplicable {
+            span: a.span("face"),
+            func: NAME,
+            arg: "face",
+            because: Because::OtherForm,
+        }
+        .into());
+    }
+    let face = || -> R<Name> {
+        let names = match a.opt("face") {
+            None => {
+                return Err(Error::MissingArg {
+                    span,
+                    func: NAME,
+                    arg: "face",
+                });
+            }
+            Some(Value::Faces(f)) => f.names.clone(),
+            Some(Value::Unresolved) => vec![],
+            Some(o) => {
+                return Err(Error::WrongType {
+                    span: a.span("face"),
+                    what: "face",
+                    want: Ty::Faces,
+                    found: o.ty(),
+                });
+            }
+        };
+        match names[..] {
+            [n] => Ok(n),
+            _ if !ev.b.building || a.poisoned() => Ok(Name::NONE),
+            _ => Err(Error::OneFace {
+                span: a.span("face"),
+                what: "face",
+                count: names.len(),
+            }),
         }
     };
-    let (idx, hid) = ev.push_feature(&id, name, f, span, dims)?;
+    let size = match (d2, angle) {
+        (Some(d2), _) => {
+            positive(&d2, a.span("d2"), "a chamfer size")?;
+            dims.push(dim("size2", &d2));
+            ChamferSize::Distances {
+                face: face()?,
+                d1: first.v,
+                d2: d2.v,
+            }
+        }
+        (_, Some(angle)) => {
+            if !(angle.v > 0.0 && angle.v < std::f64::consts::PI) {
+                return Err(Error::BadValue {
+                    span: a.span("angle"),
+                    what: "a chamfer angle (in deg, between 0 and 180)",
+                    value: angle.v.to_degrees(),
+                });
+            }
+            dims.push(dim("angle", &angle));
+            ChamferSize::DistanceAngle {
+                face: face()?,
+                d: first.v,
+                angle: angle.v,
+            }
+        }
+        _ => ChamferSize::Equal(first.v),
+    };
+    let corner = match crate::wired::word(&a, "corner", &["patch", "point"])? {
+        Some("point") => ChamferCorner::Point,
+        _ => ChamferCorner::Patch,
+    };
+    let f = Feature::Chamfer { edges, size, corner };
+    let (idx, hid) = ev.push_feature(&id, NAME, f, span, dims)?;
     Ok(Value::Feature(Rc::new(Feat {
         id,
-        kind: name,
+        kind: NAME,
         idx,
         hid,
         shape: None,
@@ -2334,6 +2619,7 @@ fn selection(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<V
         name,
         &[
             "of", "between", "crease", "shape", "along", "normal", "r", "longer", "shorter", "extreme",
+            "r_below", "r_above", "touching", "body",
         ],
         args,
         span,
@@ -2374,7 +2660,7 @@ fn selection(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<V
         &a,
         "shape",
         &[
-            "line", "circle", "curve", "plane", "cyl", "cone", "sphere", "torus", "blend",
+            "line", "circle", "curve", "plane", "cyl", "cone", "sphere", "torus", "blend", "spline",
         ],
     )?;
     let along = a.opt("along").map(|v| dir_of(v, a.span("along"))).transpose()?;
@@ -2393,7 +2679,7 @@ fn selection(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<V
         };
         ev.rule(ev.rules.no_positional_selection, err)?;
     }
-    for k in ["r", "longer", "shorter"] {
+    for k in ["r", "longer", "shorter", "r_below", "r_above"] {
         if let Some(Value::Num(n)) = a.opt(k) {
             ev.observe(&n);
         }
@@ -2434,6 +2720,8 @@ fn selection(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<V
                     .is_some_and(|x| (x - r.v).abs() <= 1e-6 * r.v.max(1.0))
             });
         }
+        let more = more_filters(ev, &a)?;
+        fs.retain(|&f| more.keeps(body, select::Ent::Face(f)));
         if let Some(d) = extreme {
             let at = |f: FaceId| (centre(select::Ent::Face(f)) - Point3::ORIGIN).dot(d);
             let top = fs.iter().map(|&f| at(f)).fold(f64::NEG_INFINITY, f64::max);
@@ -2471,6 +2759,111 @@ fn selection(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<V
     let v = Value::Edges(Rc::new(es.iter().map(|&e| body.edge(e).name).collect()));
     let _ = (crease, shape, along, r, longer, shorter, extreme);
     filter_edges(ev, &a, v)
+}
+
+/// The selection filters faces and edges share beyond the first set: radius under or over a
+/// value (`r_below`, `r_above`), touching given faces or edges (`touching`: the faces and edges
+/// that share an edge or a vertex with them, as .fc's `on`), and in a body (`body: F`).
+struct More {
+    below: Option<f64>,
+    above: Option<f64>,
+    touching: Option<std::collections::HashSet<Name>>,
+    /// The chosen bodies' faces and edges.
+    body: Option<std::collections::HashSet<Name>>,
+}
+
+impl More {
+    fn keeps(&self, body: &Body, e: select::Ent) -> bool {
+        if let Some(keep) = &self.body {
+            let n = match e {
+                select::Ent::Face(f) => body.face(f).name,
+                select::Ent::Edge(g) => body.edge(g).name,
+                select::Ent::Vert(_) => return false,
+            };
+            if !keep.contains(&n) {
+                return false;
+            }
+        }
+        let r = || select::radius(body, e);
+        if self.below.is_some_and(|b| !r().is_some_and(|x| x < b)) {
+            return false;
+        }
+        if self.above.is_some_and(|b| !r().is_some_and(|x| x > b)) {
+            return false;
+        }
+        if let Some(t) = &self.touching {
+            let near = |x: select::Ent| match x {
+                select::Ent::Face(f) => t.contains(&body.face(f).name),
+                select::Ent::Edge(g) => t.contains(&body.edge(g).name),
+                select::Ent::Vert(_) => false,
+            };
+            // what the entity's own boundary and neighbours are
+            let verts = |g: EdgeId| [body.edge(g).start, body.edge(g).end];
+            let hit = match e {
+                select::Ent::Face(f) => select::edges_of_face(body, f).into_iter().any(|g| {
+                    near(select::Ent::Edge(g))
+                        || select::faces_of_edge(body, g)
+                            .into_iter()
+                            .any(|h| h != f && near(select::Ent::Face(h)))
+                }),
+                select::Ent::Edge(g) => {
+                    select::faces_of_edge(body, g)
+                        .into_iter()
+                        .any(|h| near(select::Ent::Face(h)))
+                        || body.edge_ids().any(|h| {
+                            h != g
+                                && near(select::Ent::Edge(h))
+                                && verts(h).iter().any(|v| verts(g).contains(v))
+                        })
+                }
+                select::Ent::Vert(_) => false,
+            };
+            if !hit {
+                return false;
+            }
+        }
+        true
+    }
+}
+
+fn more_filters(ev: &Eval, a: &Args) -> R<More> {
+    let names = |v: Value, sp: Span| -> R<Vec<Name>> {
+        match v {
+            Value::Faces(f) => Ok(f.names.clone()),
+            Value::Edges(e) => Ok(e.to_vec()),
+            o => Err(Error::WrongType {
+                span: sp,
+                what: "touching (faces or edges)",
+                want: Ty::Faces,
+                found: o.ty(),
+            }),
+        }
+    };
+    let mut more = More {
+        below: a.num("r_below", LEN)?.map(|n| n.v),
+        above: a.num("r_above", LEN)?.map(|n| n.v),
+        touching: a
+            .opt("touching")
+            .map(|v| names(v, a.span("touching")))
+            .transpose()?
+            .map(|v| v.into_iter().collect()),
+        body: None,
+    };
+    if let Some(v) = a.opt("body") {
+        let ids: Vec<usize> = feats_of(v, a.span("body"))?.iter().map(|f| f.idx).collect();
+        // the faces and edges in each chosen body's span of the joined body
+        let mut keep = std::collections::HashSet::new();
+        if let Some(stage) = ev.b.stages.last()
+            && let Some(b) = stage.view()
+        {
+            for s in stage.spans().iter().filter(|s| ids.contains(&s.solid)) {
+                keep.extend(s.faces.clone().map(|f| b.faces[f as usize].name));
+                keep.extend(s.edges.clone().map(|e| b.edges[e as usize].name));
+            }
+        }
+        more.body = Some(keep);
+    }
+    Ok(more)
 }
 
 fn filter_edges(ev: &mut Eval, a: &Args, v: Value) -> R<Value> {
@@ -2516,6 +2909,8 @@ fn filter_edges(ev: &mut Eval, a: &Args, v: Value) -> R<Value> {
     if let Some(l) = &shorter {
         es.retain(|&e| select::length(body, e) < l.v);
     }
+    let more = more_filters(ev, a)?;
+    es.retain(|&e| more.keeps(body, select::Ent::Edge(e)));
     if let Some(d) = extreme {
         let at = |e: EdgeId| (select::centre(body, select::Ent::Edge(e)) - Point3::ORIGIN).dot(d);
         let top = es.iter().map(|&e| at(e)).fold(f64::NEG_INFINITY, f64::max);
