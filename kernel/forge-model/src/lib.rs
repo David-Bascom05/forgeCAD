@@ -1677,12 +1677,34 @@ fn apply_fillet(
             Err(
                 e @ (FilletError::Overflow { .. } | FilletError::Corner { .. } | FilletError::Mitre { .. }),
             ) if opts.setbacks.is_empty() => e,
-            done => return done.map_err(|error| RegenError::Fillet { feature: i, error }),
+            // a round that would leave the part unsound is refused, never kept. Its counts tell at
+            // no cost (V - E + 2F - L odd, or above 2 a shell: a face pinched, a loop astray); only
+            // then is it checked where it differs from the part before it, to say what is wrong
+            Ok(done) if !euler_sound(&done) => {
+                let problems: Vec<_> = forge_topo::check_against(&done, &body)
+                    .into_iter()
+                    .filter(|p| !matches!(p, forge_topo::Problem::DuplicateName { .. }))
+                    .collect();
+                return Err(RegenError::Fillet {
+                    feature: i,
+                    error: FilletError::Invalid(problems),
+                });
+            }
+            Ok(done) => return Ok(done),
+            Err(error) => return Err(RegenError::Fillet { feature: i, error }),
         };
     overlapping_rounds(&body, &want, &opts, id).ok_or(RegenError::Fillet {
         feature: i,
         error: first,
     })
+}
+
+/// Whether a body's counts pass `check`'s Euler rule: V - E + 2F - L even and at most 2 a shell
+/// (a body with tombstones is not judged here).
+fn euler_sound(b: &Body) -> bool {
+    let value =
+        b.vertices.len() as i64 - b.edges.len() as i64 + 2 * b.faces.len() as i64 - b.loops.len() as i64;
+    b.dead > 0 || (value % 2 == 0 && value <= 2 * b.shells.len() as i64)
 }
 
 /// A point of a round face well within it: the middle of its loops in the surface's parameters
