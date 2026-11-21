@@ -551,7 +551,7 @@ fn font_dir() -> std::path::PathBuf {
             std::env::temp_dir().join(format!("forge-lang-wired-{}", std::process::id()))
         };
         std::fs::create_dir_all(&d).expect("temp dir");
-        std::fs::write(d.join("block.ttf"), forge_agent::bench::font_bytes()).expect("font");
+        std::fs::write(d.join("block.ttf"), forge_lang::bench::font_bytes()).expect("font");
         d
     })
     .clone()

@@ -1,0 +1,9 @@
+# left-hand external with run-out and chamfer
+param rodsk.r = 8
+sketch rodsk(on: xy) {
+  c = circle((0, 0), r)
+}
+param rod.h = 40
+rod = extrude(rodsk, h)
+param th.length = 24
+th = thread(on: rod.end, spec: "M16", length: length, left: true, chamfer: true, runout: true)

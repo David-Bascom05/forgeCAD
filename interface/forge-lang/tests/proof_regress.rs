@@ -304,7 +304,7 @@ fn a_component_default_keeps_the_sessions_fence() {
     std::fs::create_dir_all(&inside).unwrap();
     // a default reads no file (`use` must be bound, features named), so the reads are the
     // component's own statements: fenced as the document's are
-    std::fs::write(d.join("outside.ttf"), forge_agent::bench::font_bytes()).unwrap();
+    std::fs::write(d.join("outside.ttf"), forge_lang::bench::font_bytes()).unwrap();
     for path in ["/etc/passwd", "../outside.ttf"] {
         let src = format!(
             "component c(w: 4) {{\n  sketch s(on: xy) {{\n    o = circle((0, 0), w)\n  }}\n  b = extrude(s, w)\n  t = text(\"A\", font: \"{path}\", size: w, depth: w, on: b.end)\n}}\nx = part(c)\n"

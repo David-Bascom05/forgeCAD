@@ -171,6 +171,7 @@ dependencies = [
  "forge-agent",
  "forge-geom",
  "forge-git",
+ "forge-lang",
  "forge-math",
  "forge-step",
  "forge-topo",

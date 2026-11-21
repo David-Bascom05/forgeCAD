@@ -1,12 +1,10 @@
 # Interface design
 
-> Written for the `.fc` part file, now retired: parts are `.fg` (Forge) programs
-> (`interface/forge-lang`). Kept as the record of how the interface was designed.
-
 The kernel can build real parts. This is the plan for what sits on top of it: the app, the
 browser client, the host and the protocol between them. Status: agreed design; the renderer
-(`interface/forge-render`), the tools and op log (`forge_agent::tools`, `forge_doc::wire`) and the live
-loop (`forge_agent::live`, `forge_render::live`) are built.
+(`interface/forge-render`), the part language and its typed edit ops (`interface/forge-lang`:
+`forge_lang::edit`, saves and versions in `forge_lang::vtools`) and the live loop (`forge_render::live`)
+are built.
 
 The one rule: **no lag.** Where a choice trades anything against speed, speed wins. If an
 existing tool is too slow, we write our own, as we did with the kernel.
@@ -51,12 +49,14 @@ and so on.
 Agents join a live session as ordinary clients, so you watch their edits appear. Talking to an
 agent from inside the UI comes later.
 
-As built: `tools::Call` is the typed call; `Part::call` commits calls, `Part::act` commits the same
-calls as text lines, all or none. A commit appends one `wire::Entry` to `PART.fc.log`, the ops by
-stable id (with what undoes them, the file's hash, its face count and volume) and rewrites the `.fc`
-file; each op prints back as a text line. The first entry holds the file's text, as does an entry for
-a hand edit, where undo stops. The agent surface is five MCP tools (`act query measure render help`),
-replies are diffs, and the grammar is behind `help TOPIC`, so AGENTS.md stays short.
+As built: a part is a `.fg` program and an edit is a typed op on its text (`forge_lang::edit::Op`:
+`SetParam`, `AddFeature`, `ReplaceFeature`, `MoveFeature`, `Rename`, ..), each replacing one span or
+inserting at one point, every other byte kept. `edit` applies ops all or none and rebuilds from the
+first feature they changed; every error and lint the build reports is typed and carries its fixes as
+ops, which an agent sends back unchanged. Each edit is a save in the folder's history
+(`forge_lang::vtools`: versions, restore, compare, releases), as is a hand edit. The agent surface is
+the MCP tools (`query measure render edit help` and the version tools), replies are typed JSON, and
+the language is behind `help forge` (`help WORD` its sections), so AGENTS.md stays short.
 
 ## Live loop
 
@@ -64,7 +64,7 @@ A worker thread owns the part. The UI thread swaps the newest value into a slot 
 ready, and so never waits on the kernel; a value overtaken before it started is dropped. The worker
 rebuilds from the changed feature and meshes only the faces whose key changed (their name, surface
 and boundary: `facemesh::key`), at a level coarse enough for a drag. Each face has its own span of the
-GPU buffers, so an edit writes only its faces. Releasing commits one line and brings the full mesh back.
+GPU buffers, so an edit writes only its faces. Releasing commits one edit and brings the full mesh back.
 `forge-render --drag-bench` is the 16 ms benchmark: value set to frame done, for each bench part.
 
 ## Protocol
@@ -125,19 +125,18 @@ chrome over a wgpu subsurface can't promise one frame for both.
 
 ## Storage
 
-- Parts stay plain `.fc` text files: the most token-efficient form for agents, and readable and
-  diffable.
-- Speed comes from binary files beside them, the op log and the build cache, which agents never
+- Parts stay plain `.fg` text files: compact for agents, and readable and diffable.
+- Speed comes from what is kept beside them, the build stages and the cache, which agents never
   need to read.
-- The op log being append-only keeps every history option open (undo across sessions, scrubbing,
-  versions, branches). How versions look in the UI is not decided.
+- Every save is kept in the folder's history (versions, restore, compare, releases), so every
+  history option stays open (undo across sessions, scrubbing, branches).
 
 ## UI
 
 An Inventor-style layout: ribbon, browser tree, viewport, in Commonty's colours and type (Public Sans,
 IBM Plex Mono, bundled in `forge-render/fonts`). It holds to desktop standards, not a game UI's: text
 selection, caret, clipboard, IME, keyboard focus, tooltips, kinetic scrolling, context menus, fractional
-scales, system file dialogs. The `.fc` text stays in sync but isn't
+scales, system file dialogs. The `.fg` text stays in sync but isn't
 shown; it is for agents and files. Assemblies are in from the start and get optimized later.
 
 ## Dependencies

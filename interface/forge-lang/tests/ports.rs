@@ -1,5 +1,5 @@
-//! The fair test's three parts, ported by hand from their .fc versions
-//! (fastcad-lab/k/fair/fc/{crank,bracket,manifold}/model.fc): each builds, with the .fc part's
+//! The fair test's three parts, ported by hand from their originals in the retired format
+//! (fastcad-lab/k/fair/fc/{crank,bracket,manifold}): each builds, with the original's
 //! volume, face and edge counts, and no errors or lints.
 
 use forge_lang::{Options, Run};
@@ -30,7 +30,7 @@ fn parity_bodies(name: &str, volume: f64, faces: usize, edges: usize, bodies: us
         forge_lang::report::text(&r, &src)
     );
     let m = r.measure.as_ref().expect("measured");
-    // the .fc build reports volume to 0.1 mm3
+    // the originals' volumes were recorded to 0.1 mm3
     assert!(
         (m.volume - volume).abs() < 0.1,
         "{name}: volume {} vs {volume}",
@@ -59,7 +59,7 @@ fn manifold_matches_its_fc_version() {
     parity("manifold", 687248.8, 209, 484);
 }
 
-// Bench parts (tools/bench-parts) against their .fc volumes, faces and edges, whole.
+// Bench parts against the volumes, faces and edges their originals (the retired format) built to.
 
 #[test]
 fn bench_quadarm_matches_its_fc_version() {

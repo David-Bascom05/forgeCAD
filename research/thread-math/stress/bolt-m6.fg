@@ -1,0 +1,9 @@
+# plain short bolt
+param rodsk.r = 3
+sketch rodsk(on: xy) {
+  c = circle((0, 0), r)
+}
+param rod.h = 30
+rod = extrude(rodsk, h)
+param th.length = 18
+th = thread(on: rod.end, spec: "M6", length: length)
