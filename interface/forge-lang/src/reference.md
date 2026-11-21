@@ -391,8 +391,10 @@ bp = workpoint(meet: (bax, l.side(lsk.outline[5])))
 ## Bodies
 
 `new: true` on an extrude or revolve makes a body; a body is named by the feature that made it.
-`bodies: F | [F..] | "all"` on a hole, thread, pattern, text, import, split or thicken makes it
-act on those bodies, not the last made.
+`bodies: F | [F..] | "all"` on a hole, thread, pattern, text, import, split, thicken, draft or
+a face edit (offset_faces, move_faces, delete_faces, replace_face) makes it
+act on those bodies, not the last made (one naming faces acts by default on the bodies holding
+them; a body named that holds none of them is the kernel's MissingEdge).
 
 ```
 union(TARGET, tools: BODIES, keep: false)   subtract(..)   intersect(TARGET, tools: BODIES, ..)

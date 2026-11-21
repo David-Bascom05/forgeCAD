@@ -966,7 +966,7 @@ pub fn loft(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
 fn draft(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     not_in_sketch(ev, "draft", span)?;
     let id = ev.take_id("draft", span)?;
-    let a = Args::bind(ev, "draft", &["faces", "angle", "neutral"], args, span)?;
+    let a = Args::bind(ev, "draft", &["faces", "angle", "neutral", "bodies"], args, span)?;
     let faces = names_arg(&a, "faces")?;
     if faces.is_empty() && ev.b.building && !a.poisoned() {
         return Err(Error::EmptySelection {
@@ -980,6 +980,7 @@ fn draft(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         neutral,
         angle: angle.v,
     };
+    let f = crate::bodies::wrap_in(ev, &a, f)?;
     let (idx, hid) = ev.push_feature(&id, "draft", f, span, vec![dim("angle", &angle)])?;
     Ok(feat(id, "draft", idx, hid, None))
 }
@@ -987,7 +988,7 @@ fn draft(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
 fn offset_faces(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     not_in_sketch(ev, "offset_faces", span)?;
     let id = ev.take_id("offset_faces", span)?;
-    let a = Args::bind(ev, "offset_faces", &["faces", "d"], args, span)?;
+    let a = Args::bind(ev, "offset_faces", &["faces", "d", "bodies"], args, span)?;
     let faces = names_arg(&a, "faces")?;
     if faces.is_empty() && ev.b.building && !a.poisoned() {
         return Err(Error::EmptySelection {
@@ -996,6 +997,7 @@ fn offset_faces(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     }
     let d = a.req_num("d", LEN)?;
     let f = Feature::Edit(Edit::Offset { faces, distance: d.v });
+    let f = crate::bodies::wrap_in(ev, &a, f)?;
     let (idx, hid) = ev.push_feature(&id, "offset_faces", f, span, vec![dim("distance", &d)])?;
     Ok(feat(id, "offset_faces", idx, hid, None))
 }
@@ -1006,9 +1008,9 @@ fn direct(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Valu
     not_in_sketch(ev, name, span)?;
     let id = ev.take_id(name, span)?;
     let keys: &[&'static str] = match name {
-        "delete_faces" => &["faces"],
-        "replace_face" => &["face", "with"],
-        _ => &["faces", "along", "d", "about", "by"],
+        "delete_faces" => &["faces", "bodies"],
+        "replace_face" => &["face", "with", "bodies"],
+        _ => &["faces", "along", "d", "about", "by", "bodies"],
     };
     let a = Args::bind(ev, name, keys, args, span)?;
     let first = keys[0];
@@ -1096,7 +1098,8 @@ fn direct(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Valu
             Edit::Move { faces, motion }
         }
     };
-    let (idx, hid) = ev.push_feature(&id, name, Feature::Edit(edit), span, dims)?;
+    let f = crate::bodies::wrap_in(ev, &a, Feature::Edit(edit))?;
+    let (idx, hid) = ev.push_feature(&id, name, f, span, dims)?;
     Ok(feat(id, name, idx, hid, None))
 }
 
