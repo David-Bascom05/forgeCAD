@@ -900,6 +900,12 @@ finished part), `expect section_area(V) = A` (the material cut by the plane z = 
 `ExpectFailed` with the measured value and the limit. An expect whose limit is the measured value
 to the last digit is the lint `ExpectCopied`.
 
+The built part's measure (`fg run --json`: `part`) is its volume, area, centroid, faces, edges,
+bodies, validity and `bbox` (`[xlo, ylo, zlo, xhi, yhi, zhi]`). The box is tight, not a hull of
+the faces' bounds: the edges' own extremes (an arc's, not its circle's), widened by a face that
+bulges past them (a dome's top, a swept tube's crown), met to within 0.05 by meshing that face
+alone; it is worked out beside the mass properties, so a build waits for neither.
+
 ## Assemblies
 
 Any document may hold bodies, components and joints: a big multibody part with joints, an

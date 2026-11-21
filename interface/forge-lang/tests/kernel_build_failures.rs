@@ -1169,10 +1169,12 @@ bore = hole(at: top.p, d: 8, depth: thru)
 }
 
 /// The box an arc in a tilted plane reports is the arc's own, not the bound of it: a sweep over a
-/// long arc read 0.85 too tall (volume and area right all along).
+/// long arc read 0.85 too tall, and the part's box (a hull of its faces' bounds) 12 too tall
+/// (volume and area right all along). `Measure.bbox` is tight: the edges' own boxes, and the
+/// meshed points of a face that bulges past them (a dome's top).
 #[test]
 fn the_box_of_a_tilted_arc_is_tight() {
-    let b = built(
+    let m = common::holds(
         r#"sketch sec(on: xz) {
   c = circle((0, 0), 10)
 }
@@ -1187,23 +1189,16 @@ sketch rail(on: yz) {
 }
 tube = sweep(sec.c, along: rail.route)
 "#,
-    )
-    .body
-    .compact();
-    // the part's box as the app reads it: the mesh's points (a dome's top) and its edges' own boxes
-    let mesh = tessellate(&b, &Quality::default()).expect("meshes");
-    let mut z = mesh.positions.iter().map(|p| p.z).fold(f64::MIN, f64::max);
-    for e in b.edge_ids() {
-        let hi = match &b.edge(e).curve {
-            forge_geom::Curve::Line(_) => b.edge_box(e).z.hi,
-            forge_geom::Curve::Circle(c) => c.tight_box(b.edge(e).range).z.hi,
-            _ => b.edge_points(e, 64).iter().map(|p| p.z).fold(f64::MIN, f64::max),
-        };
-        z = z.max(hi);
-    }
+    );
     // the second arc's centre, up its radius, and the profile's
     let top = -12.453333233923 + 30.0 + 10.0;
-    assert!((z - top).abs() < 0.03, "{z} vs {top}");
+    assert!((m.bbox[5] - top).abs() < 0.03, "{:?} vs {top}", m.bbox);
+    // the profile's circle, x from -10 to 10
+    assert!(
+        (m.bbox[0] + 10.0).abs() < 1e-6 && (m.bbox[3] - 10.0).abs() < 1e-6,
+        "{:?}",
+        m.bbox
+    );
 }
 
 /// Equal crossing holes, the second's wall tangent to the first's cap: the curve touches the cap's rim
