@@ -3,6 +3,9 @@
 //! sign flipped), and on edits that are not a number's: wherever it patches the old tree, the
 //! tree is the one the new text parses to, spans and all; where it cannot, it says so and leaves
 //! the tree as it was.
+//!
+//! By default a sample: every 13th token of each file, two edits of each number, so the test run
+//! stays short. `FG_REPARSE_FULL=1` edits every token every way (some minutes).
 
 use forge_lang::syntax::{self, TokKind};
 
@@ -55,6 +58,7 @@ fn check(old: &str, new: &str, patched: &mut usize, refused: &mut usize) {
 
 #[test]
 fn a_number_edited_patches_to_the_parse_of_the_edit() {
+    let full = std::env::var_os("FG_REPARSE_FULL").is_some();
     let (mut patched, mut refused) = (0, 0);
     let files = fg_files();
     assert!(files.len() > 20, "{} .fg files", files.len());
@@ -64,7 +68,10 @@ fn a_number_edited_patches_to_the_parse_of_the_edit() {
         if syntax::parse(&src).is_err() {
             continue;
         }
-        for t in &toks {
+        for (k, t) in toks.iter().enumerate() {
+            if !full && k % 13 != 0 {
+                continue;
+            }
             let (lo, hi) = (t.span.lo as usize, t.span.hi as usize);
             let text = &src[lo..hi];
             let mut variants: Vec<String> = Vec::new();
@@ -82,6 +89,9 @@ fn a_number_edited_patches_to_the_parse_of_the_edit() {
                 variants.push(format!("{}{unit}", v * 1000.0 + 0.25));
                 variants.push(format!("{v}"));
                 variants.push(format!("{}{unit}", -v));
+                if !full {
+                    variants.truncate(2);
+                }
             } else {
                 // not a number: a space before the token, and a digit after it
                 variants.push(format!(" {text}"));
@@ -116,5 +126,8 @@ fn a_number_edited_patches_to_the_parse_of_the_edit() {
         }
         check(&src, &src, &mut patched, &mut refused);
     }
-    assert!(patched > 1000, "{patched} patched, {refused} refused");
+    assert!(
+        patched > if full { 1000 } else { 100 },
+        "{patched} patched, {refused} refused"
+    );
 }
