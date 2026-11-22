@@ -378,6 +378,12 @@ pub fn cross_sign(a: f64, b: f64, c: f64, d: f64) -> f64 {
     if det.abs() > CROSS_BOUND * (l.abs() + r.abs()) {
         return det;
     }
+    cross_sign_slow(a, b, c, d)
+}
+
+#[cold]
+#[inline(never)]
+fn cross_sign_slow(a: f64, b: f64, c: f64, d: f64) -> f64 {
     if !within(&[a, b, c, d], DEG2_LO, DEG2_HI) {
         return cross_big(a, b, c, d);
     }
@@ -400,6 +406,12 @@ pub fn dot3(u: Vec3, v: Vec3) -> f64 {
     if dot.abs() > DOT3_BOUND * (x.abs() + y.abs() + z.abs()) + SLACK {
         return dot;
     }
+    dot3_slow(u, v)
+}
+
+#[cold]
+#[inline(never)]
+fn dot3_slow(u: Vec3, v: Vec3) -> f64 {
     if !within(&[u.x, u.y, u.z, v.x, v.y, v.z], DEG2_LO, DEG2_HI) {
         return dot3_big(u, v);
     }
