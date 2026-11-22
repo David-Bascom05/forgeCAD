@@ -22,6 +22,54 @@ classes, fans, faces, edges) is the transitive closure of a decided relation, ne
 by distance. It has no retry: the two refusals that started the ladder are unreachable for every
 consistent ledger.
 
+## 1a. The fact kinds, from the algorithm's structure, and their completeness
+
+Any B-rep boolean of flat-faced solids must answer, for its inputs and nothing else:
+
+1. **To split:** where each face is cut. A face is cut by every carrier crossing it, so the
+   question is *which side of carrier class `j` a cell is on* (K2, `side`), and before that *which
+   carriers are one surface* (K1, `surface`). The pieces of a face are then the cells of its
+   carrier inside it: *is this facet inside this face* (K3, `pieces`).
+2. **To classify:** *is this cell inside this body*. Off the boundary it cannot change, so it is
+   asked once per flood class (K4, `inside`); everything else is propagated by K3 (being in body
+   `i` changes only across a piece of `i`).
+3. **To assemble and check the result:** *which cells are edges and vertices* round the pieces
+   (K5, `edges`/`verts`), so that the facets round each can be counted and their fans formed.
+
+These five are the core's whole input: `core : Ledger → Rule → Outcome` and `Ledger` holds K1–K5
+and the inputs' names, nothing else, so no other fact can be asked. **They are complete**: theorem
+(c) holds for *every* ledger exact for *any* snapped flat geometry (any number of carriers, faces
+and bodies, any configuration), so no configuration needs a further kind.
+
+Against decisions.md's list (a cross-check of what today's kernel asks, not the source):
+- *two faces one surface* is K1; *vertex on surface* is K2;
+- *point on edge*, *point at vertex*, *two cuts one vertex* and *curve along edge* are not
+  primitive: each is a comparison of K2 rows (`Decisions.ask`), so they cannot disagree with each
+  other or with K2 (the closure laws);
+- *touch or crossing* is dropped as a kind: the core never asks it. For planes a line meets a
+  carrier transversally or lies in it (a K2 answer), and a *body* touching another is decided by
+  the touch rule on K3–K5, not by a contact predicate. It stays in `Fact` only as a derived lookup
+  for the bridge's own use;
+- *point in face* (K3), *inside the body* (K4) and *cell dimension* (K5) are added: decisions.md
+  logs them as sites, not kinds, but the algorithm cannot run without them.
+
+## 1b. Generality of the theorems
+
+- No logged input, fuzz seed or test part appears in any definition or in the proof of (a)–(c).
+  They quantify over all ledgers (b), and over all carriers `ps : List Plane`, all solids
+  `A : Nat → Pred V3` and all exact ledgers for them (c).
+- Global correctness is never by listing configurations: (c) is `reg_kept` over the decomposition
+  of ℚ³ into the arrangement's full cells (`topeDecomp`, for any list of planes, built by induction
+  on the list as in `Flat`), and the flood is proven right by induction along the chain of
+  crossings joining a cell to its witness (`memb_eq`, `Conn.invariant`). Classes, fans and faces
+  are transitive closures, characterised by `cls_spec` for every list.
+- Local finite checks appear only where a step is about one cell: the face order `Cov.le`, a
+  facet's two sides, counting the result facets round one edge (`three_iff`), the fans round one
+  vertex. Each holds for every geometry giving those answers.
+- The six acceptance tests (§5 (d)) are instances, checked after the general theorems and only as
+  corollaries of them (`rung_covered`, `rung_exact`); the box ledgers' `decide` checks prove that
+  those instances are consistent, nothing more.
+
 ## 2. The ledger
 
 ### 2.1 The two primitive tables

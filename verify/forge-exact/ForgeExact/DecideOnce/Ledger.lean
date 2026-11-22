@@ -4,7 +4,11 @@ import ForgeExact.Snap
 /-!
 # The ledger: each fact decided once, every use a lookup
 
-**The fact kinds** (research/kernel-audit/decisions.md), as questions to the ledger (`Fact`):
+The core's input is five primitive kinds, derived from what a flat boolean must ask to split,
+classify and assemble (decide-once-spec.md §1a): the carrier class of a face, the side of a cell
+of a class (these two here), and facet-in-face, cell-in-body and cell dimension (the core's
+`Ledger`). decisions.md's kinds are a cross-check; here they are questions answered from the two
+tables below, so they cannot contradict each other (`Fact`):
 
 | kind | question | answered from |
 |---|---|---|
