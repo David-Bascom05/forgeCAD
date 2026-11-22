@@ -1478,6 +1478,16 @@ fn regen_text(e: &forge_model::RegenError) -> String {
         G::NotClosed { what, .. } => format!("{what} is gone, so the part is no closed solid"),
         G::MissingEdge { name, .. } => format!("the part has no edge {name:?}"),
         G::Bodies { count } => format!("the part ends as {count} bodies, not one"),
+        G::Body {
+            error: forge_model::BodyError::Pieces { pieces },
+            ..
+        } => format!(
+            "the end trim would leave the member in {pieces} pieces: trim it to what lies across its end"
+        ),
+        G::Body {
+            error: forge_model::BodyError::Unsupported(what),
+            ..
+        } => format!("{what} is not supported"),
         _ => words(e),
     }
 }

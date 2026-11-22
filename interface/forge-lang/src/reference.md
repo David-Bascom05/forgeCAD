@@ -1387,6 +1387,8 @@ tabs [of OCC] [t MAX]          thin flat runs (two planar faces facing apart, at
                                thickness, centre, normal, area, their holes
 unfold                         whether each sheet unfolds to one blank, its size, and the
                                warnings (FlatOverlap, FlatTouch, SheetSplit) that would stop it
+cutlist                        the weldment's cut list: identical members on one row (section,
+                               qty, length, overall, each end's cut angles, copes), then plates
 ```
 
 Names are stable: a face's anchor text where the part's anchors name it, else its handle

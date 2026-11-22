@@ -585,9 +585,16 @@ pub fn cutting(m: &MemberSpec, cuts: &[Vec<Cut>; 2]) -> Cutting {
     let ends = [0, 1].map(|s| {
         let t = if s == 0 { 0.0 } else { end_t };
         let (x, y, z) = m.axes(t);
+        // one plane given twice (a butt against two members' coplanar faces) is one cut
+        let same = |a: &Cut, b: &Cut| {
+            let (na, nb): (Vec3, Vec3) = (a.normal.into(), b.normal.into());
+            na.dot(nb) > 1.0 - 1e-12 && na.dot(b.point - a.point).abs() <= 1e-9
+        };
         cuts[s]
             .iter()
-            .map(|c| {
+            .enumerate()
+            .filter(|&(i, c)| !cuts[s][..i].iter().any(|b| same(b, c)))
+            .map(|(_, c)| {
                 let n: Vec3 = c.normal.into();
                 let along = n.dot(z).abs().min(1.0);
                 let angle = dmath::acos(along);

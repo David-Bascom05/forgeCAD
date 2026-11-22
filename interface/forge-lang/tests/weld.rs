@@ -170,11 +170,8 @@ fn three_members_at_a_node() {
     let leg = row(&rs, "f[2]");
     near(leg.cut.length, 280.0, 1e-9, "leg");
     near(leg.cut.overall.unwrap(), 280.0, 1e-9, "leg");
-    assert_eq!(
-        leg.cut.ends[0].len(),
-        2,
-        "the leg's top is cut by both rails' planes"
-    );
+    // cut by both rails' planes, one plane: one cut in the list
+    assert_eq!(leg.cut.ends[0].len(), 1);
     let b = solids(&src);
     near(extent(&b[2], 2), 280.0, 1e-6, "leg body");
     // members never overlap: the bodies' volumes add up to the part's
@@ -377,4 +374,21 @@ fn reference_example_builds() {
     let start = block.find("```\n").expect("an example") + 4;
     let end = block[start..].find("```").expect("closed") + start;
     common::holds(&block[start..end]);
+}
+
+#[test]
+fn examples_build_valid() {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/weldments");
+    let mut n = 0;
+    for e in std::fs::read_dir(&dir).expect("examples/weldments") {
+        let p = e.expect("an entry").path();
+        if p.extension().is_some_and(|x| x == "fg") {
+            let src = std::fs::read_to_string(&p).expect("readable");
+            let m = common::holds(&src);
+            assert!(m.bodies > 1, "{}", p.display());
+            assert!(!rows(&src).is_empty(), "{}", p.display());
+            n += 1;
+        }
+    }
+    assert!(n >= 3);
 }

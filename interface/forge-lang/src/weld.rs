@@ -747,7 +747,10 @@ fn overlaps(ev: &Eval, recs: &[MemberRec], nodes: &[forge_weld::Node], span: Spa
         for (i, &(a, _)) in n.members.iter().enumerate() {
             for &(b, _) in &n.members[i + 1..] {
                 let arc = |k: usize| matches!(recs[k].spec.path, Path::Arc { .. });
-                if !(arc(a) || arc(b)) {
+                // straight members are kept apart by the planes they are cut on; any two whose
+                // cuts include one plane from each side (a miter, an in-line joint) lie each in
+                // its own half-space: certified apart without a boolean
+                if !(arc(a) || arc(b)) || apart(&recs[a].cuts, &recs[b].cuts) {
                     continue;
                 }
                 let (Some(x), Some(y)) = (body(recs[a].idx), body(recs[b].idx)) else {
@@ -772,6 +775,18 @@ fn overlaps(ev: &Eval, recs: &[MemberRec], nodes: &[forge_weld::Node], span: Spa
         }
     }
     Ok(())
+}
+
+/// Whether two members' cuts hold a plane between them: a cut of one whose plane faces a cut of
+/// the other's, the other's kept side within this one's removed side.
+fn apart(a: &[Vec<Cut>; 2], b: &[Vec<Cut>; 2]) -> bool {
+    a.iter().flatten().any(|ca| {
+        let na: Vec3 = ca.normal.into();
+        b.iter().flatten().any(|cb| {
+            let nb: Vec3 = cb.normal.into();
+            na.dot(nb) < -1.0 + 1e-12 && na.dot(cb.point - ca.point) >= -1e-9
+        })
+    })
 }
 
 /// The member a value names: (frame, member) in the part's welds.
@@ -844,17 +859,32 @@ fn end_trim(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         }
         None => None,
     };
-    // a member, or another body: a cope (the member's envelope, or the body, taken away at one
-    // end); else a plane
-    let target_member = match &to {
-        Value::Feature(f) if f.kind == "member" => Some(member_of(ev, &to, to_span)?),
-        _ => None,
+    // members or other bodies: a cope (each member's envelope, each body, taken away at one end);
+    // else a plane
+    let mut solid_targets: Vec<Tgt> = vec![];
+    let feats: Vec<Value> = match &to {
+        Value::List(xs) => xs.iter().cloned().collect(),
+        v @ Value::Feature(_) => vec![v.clone()],
+        _ => vec![],
     };
-    let target_body = match &to {
-        Value::Feature(f) if f.kind != "member" => Some((f.idx, f.id.clone())),
-        _ => None,
-    };
-    if (target_member.is_some() || target_body.is_some()) && gap.is_some() {
+    for v in &feats {
+        match v {
+            Value::Feature(f) if f.kind == "member" => {
+                let (tf, tk) = member_of(ev, v, to_span)?;
+                solid_targets.push(Tgt::Member(tf, tk));
+            }
+            Value::Feature(f) => solid_targets.push(Tgt::Body(f.idx, f.id.clone())),
+            o => {
+                return Err(Error::WrongType {
+                    span: to_span,
+                    what: "to: members or bodies (a list), or a plane",
+                    want: Ty::Feature,
+                    found: o.ty(),
+                });
+            }
+        }
+    }
+    if !solid_targets.is_empty() && gap.is_some() {
         return Err(Error::NotWith {
             span: a.span("gap"),
             func: "end_trim",
@@ -870,40 +900,51 @@ fn end_trim(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         } else {
             format!("{id}[{n}]")
         };
-        if let Some((tf, tk)) = target_member {
-            let t = ev.welds.frames[tf].members[tk].clone();
-            let near = t.spec.path.point(t.spec.path.end_t() / 2.0);
-            let s = end.unwrap_or_else(|| nearer_to_path(&rec.spec, &t.spec.path));
-            let _ = near;
-            // the target's envelope, run on well past its ends, uncut
-            let run = 2.0 * (rec.spec.section.radius() + t.spec.section.radius());
-            let reach = match t.spec.path {
-                Path::Line { .. } => [run, run],
-                Path::Arc { .. } => [0.0, 0.0],
-            };
-            let env = kernel_member(&t.spec, &[vec![], vec![]], reach, true);
-            let trim = Trim {
-                member: rec.idx,
-                region: region(&rec.spec, s),
-                tools: vec![TrimTool::Envelope(Box::new(env))],
-            };
-            last = Some(push_trim(ev, &fid, trim, rec.idx, span, dims.clone())?);
-            ev.welds.frames[fi].members[k].copes[s].push(t.id.clone());
-        } else if let Some((bidx, bid)) = &target_body {
-            let s = match end {
-                Some(s) => s,
-                None => {
+        if let Some(first) = solid_targets.first() {
+            // the end nearer the first target
+            let s = match (end, first) {
+                (Some(s), _) => s,
+                (None, Tgt::Member(tf, tk)) => {
+                    nearer_to_path(&rec.spec, &ev.welds.frames[*tf].members[*tk].spec.path)
+                }
+                (None, Tgt::Body(bidx, _)) => {
                     let c = body_centre(ev, *bidx).unwrap_or(rec.spec.path.point(0.0));
                     nearer_end(&rec.spec, c)
                 }
             };
+            let mut tools = vec![];
+            let mut names = vec![];
+            for t in &solid_targets {
+                match t {
+                    Tgt::Member(tf, tk) => {
+                        let t = &ev.welds.frames[*tf].members[*tk];
+                        // the target's envelope, run on well past its ends, uncut
+                        let run = 2.0 * (rec.spec.section.radius() + t.spec.section.radius());
+                        let reach = match t.spec.path {
+                            Path::Line { .. } => [run, run],
+                            Path::Arc { .. } => [0.0, 0.0],
+                        };
+                        tools.push(TrimTool::Envelope(Box::new(kernel_member(
+                            &t.spec,
+                            &[vec![], vec![]],
+                            reach,
+                            true,
+                        ))));
+                        names.push(t.id.clone());
+                    }
+                    Tgt::Body(bidx, bid) => {
+                        tools.push(TrimTool::Body(*bidx));
+                        names.push(bid.clone());
+                    }
+                }
+            }
             let trim = Trim {
                 member: rec.idx,
                 region: region(&rec.spec, s),
-                tools: vec![TrimTool::Body(*bidx)],
+                tools,
             };
             last = Some(push_trim(ev, &fid, trim, rec.idx, span, dims.clone())?);
-            ev.welds.frames[fi].members[k].copes[s].push(bid.clone());
+            ev.welds.frames[fi].members[k].copes[s].extend(names);
         } else {
             let plane = plane_of(ev, to.clone(), to_span, "to")?;
             let s = end.unwrap_or_else(|| {
@@ -945,6 +986,12 @@ fn end_trim(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         }
     }
     Ok(last.unwrap_or(Value::Unresolved))
+}
+
+/// A solid an end trim copes to.
+enum Tgt {
+    Member(usize, usize),
+    Body(usize, String),
 }
 
 /// Which end of a member is nearer another path (its nearest end to any point of it).
@@ -1292,7 +1339,16 @@ pub fn cutlist(w: &Welds) -> Vec<CutRow> {
             let c = forge_weld::cutting(&m.spec, &m.cuts);
             let k = key(&c, &m.spec.section.name, &m.copes);
             match rows.iter_mut().find(|r| r.0 == k) {
-                Some(r) => r.1.members.push(m.id.clone()),
+                Some(r) => {
+                    r.1.members.push(m.id.clone());
+                    for s in 0..2 {
+                        for c in &m.copes[s] {
+                            if !r.1.copes[s].contains(c) {
+                                r.1.copes[s].push(c.clone());
+                            }
+                        }
+                    }
+                }
                 None => rows.push((
                     k,
                     CutRow {
