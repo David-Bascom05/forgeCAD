@@ -1,0 +1,252 @@
+FAIL	cap_over	union	2e-6	internal SplitCrossed	exact 1699.999750000 flat 1700.000000000
+FAIL	cap_over	union	2.1e-6	internal InconsistentClassification	exact 1699.999737500 flat 1700.000000000
+FAIL	cap_over	union	2.2e-6	internal InconsistentClassification	exact 1699.999725000 flat 1700.000000000
+FAIL	cap_over	union	2.3e-6	internal InconsistentClassification	exact 1699.999712500 flat 1700.000000000
+FAIL	cap_over	union	2.4e-6	internal InconsistentClassification	exact 1699.999700000 flat 1700.000000000
+FAIL	cap_over	union	2.5e-6	internal InconsistentClassification	exact 1699.999687500 flat 1700.000000000
+FAIL	cap_over	union	2.6e-6	internal InconsistentClassification	exact 1699.999675000 flat 1700.000000000
+FAIL	cap_over	union	2.7e-6	internal InconsistentClassification	exact 1699.999662500 flat 1700.000000000
+FAIL	cap_over	union	2.8e-6	internal InconsistentClassification	exact 1699.999650000 flat 1700.000000000
+FAIL	cap_over	union	2.9e-6	internal InconsistentClassification	exact 1699.999637500 flat 1700.000000000
+FAIL	cap_over	union	3e-6	internal InconsistentClassification	exact 1699.999625000 flat 1700.000000000
+FAIL	cap_over	union	3.1e-6	internal InconsistentClassification	exact 1699.999612500 flat 1700.000000000
+FAIL	cap_over	union	3.2e-6	internal InconsistentClassification	exact 1699.999600000 flat 1700.000000000
+FAIL	cap_over	union	3.3e-6	zero-thickness	exact 1699.999587500 flat 1700.000000000
+FAIL	cap_over	union	3.4e-6	zero-thickness	exact 1699.999575000 flat 1700.000000000
+FAIL	cap_over	union	3.5e-6	zero-thickness	exact 1699.999562500 flat 1700.000000000
+FAIL	cap_over	union	3.6e-6	zero-thickness	exact 1699.999550000 flat 1700.000000000
+FAIL	cap_over	union	3.7e-6	zero-thickness	exact 1699.999537500 flat 1700.000000000
+FAIL	cap_over	union	3.8e-6	zero-thickness	exact 1699.999525000 flat 1700.000000000
+FAIL	cap_over	union	3.9e-6	zero-thickness	exact 1699.999512500 flat 1700.000000000
+FAIL	cap_over	union	5e-6	zero-thickness	exact 1699.999375000 flat 1700.000000000
+FAIL	cap_over	union	7e-6	zero-thickness	exact 1699.999125000 flat 1700.000000000
+FAIL	cap_over	union	1e-5	zero-thickness	exact 1699.998750000 flat 1700.000000000
+FAIL	cap_over	union	1.5e-5	zero-thickness	exact 1699.998125000 flat 1700.000000000
+FAIL	cap_over	union	1.53e-5	zero-thickness	exact 1699.998087500 flat 1700.000000000
+FAIL	cap_over	union	1.56e-5	zero-thickness	exact 1699.998050000 flat 1700.000000000
+FAIL	cap_over	union	1.59e-5	zero-thickness	exact 1699.998012500 flat 1700.000000000
+FAIL	cap_over	union	1.62e-5	zero-thickness	exact 1699.997975000 flat 1700.000000000
+FAIL	cap_over	union	1.65e-5	zero-thickness	exact 1699.997937500 flat 1700.000000000
+FAIL	cap_over	union	1.68e-5	zero-thickness	exact 1699.997900000 flat 1700.000000000
+FAIL	cap_over	union	1.71e-5	zero-thickness	exact 1699.997862500 flat 1700.000000000
+FAIL	cap_over	union	1.74e-5	zero-thickness	exact 1699.997825000 flat 1700.000000000
+FAIL	cap_over	union	1.77e-5	zero-thickness	exact 1699.997787500 flat 1700.000000000
+FAIL	cap_over	union	1.8e-5	zero-thickness	exact 1699.997750000 flat 1700.000000000
+FAIL	cap_over	union	1.83e-5	zero-thickness	exact 1699.997712500 flat 1700.000000000
+FAIL	cap_over	union	1.86e-5	zero-thickness	exact 1699.997675000 flat 1700.000000000
+FAIL	cap_over	union	1.89e-5	zero-thickness	exact 1699.997637500 flat 1700.000000000
+FAIL	cap_over	union	1.92e-5	zero-thickness	exact 1699.997600000 flat 1700.000000000
+FAIL	cap_over	union	1.95e-5	zero-thickness	exact 1699.997562500 flat 1700.000000000
+FAIL	cap_over	union	1.951e-5	zero-thickness	exact 1699.997561250 flat 1700.000000000
+FAIL	cap_over	union	1.952e-5	zero-thickness	exact 1699.997560000 flat 1700.000000000
+FAIL	cap_over	union	1.953e-5	zero-thickness	exact 1699.997558750 flat 1700.000000000
+FAIL	cap_over	subtract	2e-6	internal SplitCrossed	exact 999.999750000 flat 1000.000000000
+FAIL	cap_over	subtract	2.1e-6	internal InconsistentClassification	exact 999.999737500 flat 1000.000000000
+FAIL	cap_over	subtract	2.2e-6	internal InconsistentClassification	exact 999.999725000 flat 1000.000000000
+FAIL	cap_over	subtract	2.3e-6	internal InconsistentClassification	exact 999.999712500 flat 1000.000000000
+FAIL	cap_over	subtract	2.4e-6	internal InconsistentClassification	exact 999.999700000 flat 1000.000000000
+FAIL	cap_over	subtract	2.5e-6	internal InconsistentClassification	exact 999.999687500 flat 1000.000000000
+FAIL	cap_over	subtract	2.6e-6	internal InconsistentClassification	exact 999.999675000 flat 1000.000000000
+FAIL	cap_over	subtract	2.7e-6	internal InconsistentClassification	exact 999.999662500 flat 1000.000000000
+FAIL	cap_over	subtract	2.8e-6	internal InconsistentClassification	exact 999.999650000 flat 1000.000000000
+FAIL	cap_over	subtract	2.9e-6	internal InconsistentClassification	exact 999.999637500 flat 1000.000000000
+FAIL	cap_over	subtract	3e-6	internal InconsistentClassification	exact 999.999625000 flat 1000.000000000
+FAIL	cap_over	subtract	3.1e-6	internal InconsistentClassification	exact 999.999612500 flat 1000.000000000
+FAIL	cap_over	subtract	3.2e-6	internal InconsistentClassification	exact 999.999600000 flat 1000.000000000
+FAIL	cap_over	subtract	3.3e-6	zero-thickness	exact 999.999587500 flat 1000.000000000
+FAIL	cap_over	subtract	3.4e-6	zero-thickness	exact 999.999575000 flat 1000.000000000
+FAIL	cap_over	subtract	3.5e-6	zero-thickness	exact 999.999562500 flat 1000.000000000
+FAIL	cap_over	subtract	3.6e-6	zero-thickness	exact 999.999550000 flat 1000.000000000
+FAIL	cap_over	subtract	3.7e-6	zero-thickness	exact 999.999537500 flat 1000.000000000
+FAIL	cap_over	subtract	3.8e-6	zero-thickness	exact 999.999525000 flat 1000.000000000
+FAIL	cap_over	subtract	3.9e-6	zero-thickness	exact 999.999512500 flat 1000.000000000
+FAIL	cap_over	subtract	5e-6	zero-thickness	exact 999.999375000 flat 1000.000000000
+FAIL	cap_over	subtract	7e-6	zero-thickness	exact 999.999125000 flat 1000.000000000
+FAIL	cap_over	subtract	1e-5	zero-thickness	exact 999.998750000 flat 1000.000000000
+FAIL	cap_over	subtract	1.5e-5	zero-thickness	exact 999.998125000 flat 1000.000000000
+FAIL	cap_over	subtract	1.53e-5	zero-thickness	exact 999.998087500 flat 1000.000000000
+FAIL	cap_over	subtract	1.56e-5	zero-thickness	exact 999.998050000 flat 1000.000000000
+FAIL	cap_over	subtract	1.59e-5	zero-thickness	exact 999.998012500 flat 1000.000000000
+FAIL	cap_over	subtract	1.62e-5	zero-thickness	exact 999.997975000 flat 1000.000000000
+FAIL	cap_over	subtract	1.65e-5	zero-thickness	exact 999.997937500 flat 1000.000000000
+FAIL	cap_over	subtract	1.68e-5	zero-thickness	exact 999.997900000 flat 1000.000000000
+FAIL	cap_over	subtract	1.71e-5	zero-thickness	exact 999.997862500 flat 1000.000000000
+FAIL	cap_over	subtract	1.74e-5	zero-thickness	exact 999.997825000 flat 1000.000000000
+FAIL	cap_over	subtract	1.77e-5	zero-thickness	exact 999.997787500 flat 1000.000000000
+FAIL	cap_over	subtract	1.8e-5	zero-thickness	exact 999.997750000 flat 1000.000000000
+FAIL	cap_over	subtract	1.83e-5	zero-thickness	exact 999.997712500 flat 1000.000000000
+FAIL	cap_over	subtract	1.86e-5	zero-thickness	exact 999.997675000 flat 1000.000000000
+FAIL	cap_over	subtract	1.89e-5	zero-thickness	exact 999.997637500 flat 1000.000000000
+FAIL	cap_over	subtract	1.92e-5	zero-thickness	exact 999.997600000 flat 1000.000000000
+FAIL	cap_over	subtract	1.95e-5	zero-thickness	exact 999.997562500 flat 1000.000000000
+FAIL	cap_over	subtract	1.951e-5	zero-thickness	exact 999.997561250 flat 1000.000000000
+FAIL	cap_over	subtract	1.952e-5	zero-thickness	exact 999.997560000 flat 1000.000000000
+FAIL	cap_over	subtract	1.953e-5	zero-thickness	exact 999.997558750 flat 1000.000000000
+FAIL	cap_over	intersect	2e-6	internal SplitCrossed	exact 0.000250000 flat 0.000000000
+FAIL	cap_over	intersect	2.1e-6	internal InconsistentClassification	exact 0.000262500 flat 0.000000000
+FAIL	cap_over	intersect	2.2e-6	internal InconsistentClassification	exact 0.000275000 flat 0.000000000
+FAIL	cap_over	intersect	2.3e-6	internal InconsistentClassification	exact 0.000287500 flat 0.000000000
+FAIL	cap_over	intersect	2.4e-6	internal InconsistentClassification	exact 0.000300000 flat 0.000000000
+FAIL	cap_over	intersect	2.5e-6	internal InconsistentClassification	exact 0.000312500 flat 0.000000000
+FAIL	cap_over	intersect	2.6e-6	internal InconsistentClassification	exact 0.000325000 flat 0.000000000
+FAIL	cap_over	intersect	2.7e-6	internal InconsistentClassification	exact 0.000337500 flat 0.000000000
+FAIL	cap_over	intersect	2.8e-6	internal InconsistentClassification	exact 0.000350000 flat 0.000000000
+FAIL	cap_over	intersect	2.9e-6	internal InconsistentClassification	exact 0.000362500 flat 0.000000000
+FAIL	cap_over	intersect	3e-6	internal InconsistentClassification	exact 0.000375000 flat 0.000000000
+FAIL	cap_over	intersect	3.1e-6	internal InconsistentClassification	exact 0.000387500 flat 0.000000000
+FAIL	cap_over	intersect	3.2e-6	internal InconsistentClassification	exact 0.000400000 flat 0.000000000
+FAIL	cap_over	intersect	3.3e-6	invalid EdgeUses	exact 0.000412500 flat 0.000000000
+FAIL	cap_over	intersect	3.4e-6	invalid EdgeUses	exact 0.000425000 flat 0.000000000
+FAIL	cap_over	intersect	3.5e-6	invalid EdgeUses	exact 0.000437500 flat 0.000000000
+FAIL	cap_over	intersect	3.6e-6	invalid EdgeUses	exact 0.000450000 flat 0.000000000
+FAIL	cap_over	intersect	3.7e-6	invalid EdgeUses	exact 0.000462500 flat 0.000000000
+FAIL	cap_over	intersect	3.8e-6	invalid EdgeUses	exact 0.000475000 flat 0.000000000
+FAIL	cap_over	intersect	3.9e-6	invalid EdgeUses	exact 0.000487500 flat 0.000000000
+FAIL	cap_over	intersect	5e-6	invalid EdgeUses	exact 0.000625000 flat 0.000000000
+FAIL	cap_over	intersect	7e-6	invalid EdgeUses	exact 0.000875000 flat 0.000000000
+FAIL	cap_over	intersect	1e-5	invalid EdgeUses	exact 0.001250000 flat 0.000000000
+FAIL	cap_over	intersect	1.5e-5	invalid EdgeUses	exact 0.001875000 flat 0.000000000
+FAIL	cap_over	intersect	1.53e-5	invalid EdgeUses	exact 0.001912500 flat 0.000000000
+FAIL	cap_over	intersect	1.56e-5	invalid EdgeUses	exact 0.001950000 flat 0.000000000
+FAIL	cap_over	intersect	1.59e-5	invalid EdgeUses	exact 0.001987500 flat 0.000000000
+FAIL	cap_over	intersect	1.62e-5	invalid EdgeUses	exact 0.002025000 flat 0.000000000
+FAIL	cap_over	intersect	1.65e-5	invalid EdgeUses	exact 0.002062500 flat 0.000000000
+FAIL	cap_over	intersect	1.68e-5	invalid EdgeUses	exact 0.002100000 flat 0.000000000
+FAIL	cap_over	intersect	1.71e-5	invalid EdgeUses	exact 0.002137500 flat 0.000000000
+FAIL	cap_over	intersect	1.74e-5	invalid EdgeUses	exact 0.002175000 flat 0.000000000
+FAIL	cap_over	intersect	1.77e-5	invalid EdgeUses	exact 0.002212500 flat 0.000000000
+FAIL	cap_over	intersect	1.8e-5	invalid EdgeUses	exact 0.002250000 flat 0.000000000
+FAIL	cap_over	intersect	1.83e-5	invalid EdgeUses	exact 0.002287500 flat 0.000000000
+FAIL	cap_over	intersect	1.86e-5	invalid EdgeUses	exact 0.002325000 flat 0.000000000
+FAIL	cap_over	intersect	1.89e-5	invalid EdgeUses	exact 0.002362500 flat 0.000000000
+FAIL	cap_over	intersect	1.92e-5	invalid EdgeUses	exact 0.002400000 flat 0.000000000
+FAIL	cap_over	intersect	1.95e-5	invalid EdgeUses	exact 0.002437500 flat 0.000000000
+FAIL	cap_over	intersect	1.951e-5	invalid EdgeUses	exact 0.002438750 flat 0.000000000
+FAIL	cap_over	intersect	1.952e-5	invalid EdgeUses	exact 0.002440000 flat 0.000000000
+FAIL	cap_over	intersect	1.953e-5	invalid EdgeUses	exact 0.002441250 flat 0.000000000
+FAIL	wall_over	union	2e-6	internal SplitCrossed	exact 2399.999750000 flat 2400.000000000
+FAIL	wall_over	union	2.1e-6	internal InconsistentClassification	exact 2399.999737500 flat 2400.000000000
+FAIL	wall_over	union	2.2e-6	internal InconsistentClassification	exact 2399.999725000 flat 2400.000000000
+FAIL	wall_over	union	2.3e-6	internal InconsistentClassification	exact 2399.999712500 flat 2400.000000000
+FAIL	wall_over	union	2.4e-6	internal InconsistentClassification	exact 2399.999700000 flat 2400.000000000
+FAIL	wall_over	union	2.5e-6	internal InconsistentClassification	exact 2399.999687500 flat 2400.000000000
+FAIL	wall_over	union	2.6e-6	internal InconsistentClassification	exact 2399.999675000 flat 2400.000000000
+FAIL	wall_over	union	2.7e-6	internal InconsistentClassification	exact 2399.999662500 flat 2400.000000000
+FAIL	wall_over	union	2.8e-6	internal InconsistentClassification	exact 2399.999650000 flat 2400.000000000
+FAIL	wall_over	union	2.9e-6	internal InconsistentClassification	exact 2399.999637500 flat 2400.000000000
+FAIL	wall_over	union	3e-6	internal InconsistentClassification	exact 2399.999625000 flat 2400.000000000
+FAIL	wall_over	union	3.1e-6	internal InconsistentClassification	exact 2399.999612500 flat 2400.000000000
+FAIL	wall_over	union	3.2e-6	internal InconsistentClassification	exact 2399.999600000 flat 2400.000000000
+FAIL	wall_over	union	3.3e-6	zero-thickness	exact 2399.999587500 flat 2400.000000000
+FAIL	wall_over	union	3.4e-6	zero-thickness	exact 2399.999575000 flat 2400.000000000
+FAIL	wall_over	union	3.5e-6	zero-thickness	exact 2399.999562500 flat 2400.000000000
+FAIL	wall_over	union	3.6e-6	zero-thickness	exact 2399.999550000 flat 2400.000000000
+FAIL	wall_over	union	3.7e-6	zero-thickness	exact 2399.999537500 flat 2400.000000000
+FAIL	wall_over	union	3.8e-6	zero-thickness	exact 2399.999525000 flat 2400.000000000
+FAIL	wall_over	union	3.9e-6	zero-thickness	exact 2399.999512500 flat 2400.000000000
+FAIL	wall_over	union	5e-6	zero-thickness	exact 2399.999375000 flat 2400.000000000
+FAIL	wall_over	union	7e-6	zero-thickness	exact 2399.999125000 flat 2400.000000000
+FAIL	wall_over	union	1e-5	zero-thickness	exact 2399.998750000 flat 2400.000000000
+FAIL	wall_over	union	1.5e-5	zero-thickness	exact 2399.998125000 flat 2400.000000000
+FAIL	wall_over	union	1.53e-5	zero-thickness	exact 2399.998087500 flat 2400.000000000
+FAIL	wall_over	union	1.56e-5	zero-thickness	exact 2399.998050000 flat 2400.000000000
+FAIL	wall_over	union	1.59e-5	zero-thickness	exact 2399.998012500 flat 2400.000000000
+FAIL	wall_over	union	1.62e-5	zero-thickness	exact 2399.997975000 flat 2400.000000000
+FAIL	wall_over	union	1.65e-5	zero-thickness	exact 2399.997937500 flat 2400.000000000
+FAIL	wall_over	union	1.68e-5	zero-thickness	exact 2399.997900000 flat 2400.000000000
+FAIL	wall_over	union	1.71e-5	zero-thickness	exact 2399.997862500 flat 2400.000000000
+FAIL	wall_over	union	1.74e-5	zero-thickness	exact 2399.997825000 flat 2400.000000000
+FAIL	wall_over	union	1.77e-5	zero-thickness	exact 2399.997787500 flat 2400.000000000
+FAIL	wall_over	union	1.8e-5	zero-thickness	exact 2399.997750000 flat 2400.000000000
+FAIL	wall_over	union	1.83e-5	zero-thickness	exact 2399.997712500 flat 2400.000000000
+FAIL	wall_over	union	1.86e-5	zero-thickness	exact 2399.997675000 flat 2400.000000000
+FAIL	wall_over	union	1.89e-5	zero-thickness	exact 2399.997637500 flat 2400.000000000
+FAIL	wall_over	union	1.92e-5	zero-thickness	exact 2399.997600000 flat 2400.000000000
+FAIL	wall_over	union	1.95e-5	zero-thickness	exact 2399.997562500 flat 2400.000000000
+FAIL	wall_over	union	1.951e-5	zero-thickness	exact 2399.997561250 flat 2400.000000000
+FAIL	wall_over	union	1.952e-5	zero-thickness	exact 2399.997560000 flat 2400.000000000
+FAIL	wall_over	union	1.953e-5	zero-thickness	exact 2399.997558750 flat 2400.000000000
+FAIL	wall_over	subtract	2e-6	internal SplitCrossed	exact 999.999750000 flat 1000.000000000
+FAIL	wall_over	subtract	2.1e-6	internal InconsistentClassification	exact 999.999737500 flat 1000.000000000
+FAIL	wall_over	subtract	2.2e-6	internal InconsistentClassification	exact 999.999725000 flat 1000.000000000
+FAIL	wall_over	subtract	2.3e-6	internal InconsistentClassification	exact 999.999712500 flat 1000.000000000
+FAIL	wall_over	subtract	2.4e-6	internal InconsistentClassification	exact 999.999700000 flat 1000.000000000
+FAIL	wall_over	subtract	2.5e-6	internal InconsistentClassification	exact 999.999687500 flat 1000.000000000
+FAIL	wall_over	subtract	2.6e-6	internal InconsistentClassification	exact 999.999675000 flat 1000.000000000
+FAIL	wall_over	subtract	2.7e-6	internal InconsistentClassification	exact 999.999662500 flat 1000.000000000
+FAIL	wall_over	subtract	2.8e-6	internal InconsistentClassification	exact 999.999650000 flat 1000.000000000
+FAIL	wall_over	subtract	2.9e-6	internal InconsistentClassification	exact 999.999637500 flat 1000.000000000
+FAIL	wall_over	subtract	3e-6	internal InconsistentClassification	exact 999.999625000 flat 1000.000000000
+FAIL	wall_over	subtract	3.1e-6	internal InconsistentClassification	exact 999.999612500 flat 1000.000000000
+FAIL	wall_over	subtract	3.2e-6	internal InconsistentClassification	exact 999.999600000 flat 1000.000000000
+FAIL	wall_over	subtract	3.3e-6	zero-thickness	exact 999.999587500 flat 1000.000000000
+FAIL	wall_over	subtract	3.4e-6	zero-thickness	exact 999.999575000 flat 1000.000000000
+FAIL	wall_over	subtract	3.5e-6	zero-thickness	exact 999.999562500 flat 1000.000000000
+FAIL	wall_over	subtract	3.6e-6	zero-thickness	exact 999.999550000 flat 1000.000000000
+FAIL	wall_over	subtract	3.7e-6	zero-thickness	exact 999.999537500 flat 1000.000000000
+FAIL	wall_over	subtract	3.8e-6	zero-thickness	exact 999.999525000 flat 1000.000000000
+FAIL	wall_over	subtract	3.9e-6	zero-thickness	exact 999.999512500 flat 1000.000000000
+FAIL	wall_over	subtract	5e-6	zero-thickness	exact 999.999375000 flat 1000.000000000
+FAIL	wall_over	subtract	7e-6	zero-thickness	exact 999.999125000 flat 1000.000000000
+FAIL	wall_over	subtract	1e-5	zero-thickness	exact 999.998750000 flat 1000.000000000
+FAIL	wall_over	subtract	1.5e-5	zero-thickness	exact 999.998125000 flat 1000.000000000
+FAIL	wall_over	subtract	1.53e-5	zero-thickness	exact 999.998087500 flat 1000.000000000
+FAIL	wall_over	subtract	1.56e-5	zero-thickness	exact 999.998050000 flat 1000.000000000
+FAIL	wall_over	subtract	1.59e-5	zero-thickness	exact 999.998012500 flat 1000.000000000
+FAIL	wall_over	subtract	1.62e-5	zero-thickness	exact 999.997975000 flat 1000.000000000
+FAIL	wall_over	subtract	1.65e-5	zero-thickness	exact 999.997937500 flat 1000.000000000
+FAIL	wall_over	subtract	1.68e-5	zero-thickness	exact 999.997900000 flat 1000.000000000
+FAIL	wall_over	subtract	1.71e-5	zero-thickness	exact 999.997862500 flat 1000.000000000
+FAIL	wall_over	subtract	1.74e-5	zero-thickness	exact 999.997825000 flat 1000.000000000
+FAIL	wall_over	subtract	1.77e-5	zero-thickness	exact 999.997787500 flat 1000.000000000
+FAIL	wall_over	subtract	1.8e-5	zero-thickness	exact 999.997750000 flat 1000.000000000
+FAIL	wall_over	subtract	1.83e-5	zero-thickness	exact 999.997712500 flat 1000.000000000
+FAIL	wall_over	subtract	1.86e-5	zero-thickness	exact 999.997675000 flat 1000.000000000
+FAIL	wall_over	subtract	1.89e-5	zero-thickness	exact 999.997637500 flat 1000.000000000
+FAIL	wall_over	subtract	1.92e-5	zero-thickness	exact 999.997600000 flat 1000.000000000
+FAIL	wall_over	subtract	1.95e-5	zero-thickness	exact 999.997562500 flat 1000.000000000
+FAIL	wall_over	subtract	1.951e-5	zero-thickness	exact 999.997561250 flat 1000.000000000
+FAIL	wall_over	subtract	1.952e-5	zero-thickness	exact 999.997560000 flat 1000.000000000
+FAIL	wall_over	subtract	1.953e-5	zero-thickness	exact 999.997558750 flat 1000.000000000
+FAIL	wall_over	intersect	2e-6	internal SplitCrossed	exact 0.000250000 flat 0.000000000
+FAIL	wall_over	intersect	2.1e-6	internal InconsistentClassification	exact 0.000262500 flat 0.000000000
+FAIL	wall_over	intersect	2.2e-6	internal InconsistentClassification	exact 0.000275000 flat 0.000000000
+FAIL	wall_over	intersect	2.3e-6	internal InconsistentClassification	exact 0.000287500 flat 0.000000000
+FAIL	wall_over	intersect	2.4e-6	internal InconsistentClassification	exact 0.000300000 flat 0.000000000
+FAIL	wall_over	intersect	2.5e-6	internal InconsistentClassification	exact 0.000312500 flat 0.000000000
+FAIL	wall_over	intersect	2.6e-6	internal InconsistentClassification	exact 0.000325000 flat 0.000000000
+FAIL	wall_over	intersect	2.7e-6	internal InconsistentClassification	exact 0.000337500 flat 0.000000000
+FAIL	wall_over	intersect	2.8e-6	internal InconsistentClassification	exact 0.000350000 flat 0.000000000
+FAIL	wall_over	intersect	2.9e-6	internal InconsistentClassification	exact 0.000362500 flat 0.000000000
+FAIL	wall_over	intersect	3e-6	internal InconsistentClassification	exact 0.000375000 flat 0.000000000
+FAIL	wall_over	intersect	3.1e-6	internal InconsistentClassification	exact 0.000387500 flat 0.000000000
+FAIL	wall_over	intersect	3.2e-6	internal InconsistentClassification	exact 0.000400000 flat 0.000000000
+FAIL	wall_over	intersect	3.3e-6	invalid EdgeUses	exact 0.000412500 flat 0.000000000
+FAIL	wall_over	intersect	3.4e-6	invalid EdgeUses	exact 0.000425000 flat 0.000000000
+FAIL	wall_over	intersect	3.5e-6	invalid EdgeUses	exact 0.000437500 flat 0.000000000
+FAIL	wall_over	intersect	3.6e-6	invalid EdgeUses	exact 0.000450000 flat 0.000000000
+FAIL	wall_over	intersect	3.7e-6	invalid EdgeUses	exact 0.000462500 flat 0.000000000
+FAIL	wall_over	intersect	3.8e-6	invalid EdgeUses	exact 0.000475000 flat 0.000000000
+FAIL	wall_over	intersect	3.9e-6	invalid EdgeUses	exact 0.000487500 flat 0.000000000
+FAIL	wall_over	intersect	5e-6	invalid EdgeUses	exact 0.000625000 flat 0.000000000
+FAIL	wall_over	intersect	7e-6	invalid EdgeUses	exact 0.000875000 flat 0.000000000
+FAIL	wall_over	intersect	1e-5	invalid EdgeUses	exact 0.001250000 flat 0.000000000
+FAIL	wall_over	intersect	1.5e-5	invalid EdgeUses	exact 0.001875000 flat 0.000000000
+FAIL	wall_over	intersect	1.53e-5	invalid EdgeUses	exact 0.001912500 flat 0.000000000
+FAIL	wall_over	intersect	1.56e-5	invalid EdgeUses	exact 0.001950000 flat 0.000000000
+FAIL	wall_over	intersect	1.59e-5	invalid EdgeUses	exact 0.001987500 flat 0.000000000
+FAIL	wall_over	intersect	1.62e-5	invalid EdgeUses	exact 0.002025000 flat 0.000000000
+FAIL	wall_over	intersect	1.65e-5	invalid EdgeUses	exact 0.002062500 flat 0.000000000
+FAIL	wall_over	intersect	1.68e-5	invalid EdgeUses	exact 0.002100000 flat 0.000000000
+FAIL	wall_over	intersect	1.71e-5	invalid EdgeUses	exact 0.002137500 flat 0.000000000
+FAIL	wall_over	intersect	1.74e-5	invalid EdgeUses	exact 0.002175000 flat 0.000000000
+FAIL	wall_over	intersect	1.77e-5	invalid EdgeUses	exact 0.002212500 flat 0.000000000
+FAIL	wall_over	intersect	1.8e-5	invalid EdgeUses	exact 0.002250000 flat 0.000000000
+FAIL	wall_over	intersect	1.83e-5	invalid EdgeUses	exact 0.002287500 flat 0.000000000
+FAIL	wall_over	intersect	1.86e-5	invalid EdgeUses	exact 0.002325000 flat 0.000000000
+FAIL	wall_over	intersect	1.89e-5	invalid EdgeUses	exact 0.002362500 flat 0.000000000
+FAIL	wall_over	intersect	1.92e-5	invalid EdgeUses	exact 0.002400000 flat 0.000000000
+FAIL	wall_over	intersect	1.95e-5	invalid EdgeUses	exact 0.002437500 flat 0.000000000
+FAIL	wall_over	intersect	1.951e-5	invalid EdgeUses	exact 0.002438750 flat 0.000000000
+FAIL	wall_over	intersect	1.952e-5	invalid EdgeUses	exact 0.002440000 flat 0.000000000
+FAIL	wall_over	intersect	1.953e-5	invalid EdgeUses	exact 0.002441250 flat 0.000000000
