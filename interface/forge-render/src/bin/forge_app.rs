@@ -378,7 +378,7 @@ fn bench(h: &mut Headless) {
     if let Some((key, v)) = a_length(h) {
         let mut set = Vec::new();
         for k in 0..60 {
-            let x = v * (1.0 + 0.02 * (k as f64 * 0.21).sin());
+            let x = v * (1.0 + 0.02 * forge_math::dmath::sin(k as f64 * 0.21));
             let t = now();
             if !set_length(h, &key, x) {
                 continue;

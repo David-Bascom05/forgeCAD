@@ -5,7 +5,7 @@ use crate::mesh::PartMesh;
 use crate::{cache, tess};
 use std::path::{Path, PathBuf};
 
-/// The bench parts: engineered parts, each a Forge file `forge-lang/parts/bench/NAME.fg`.
+/// The bench parts (`forge_lang::bench`), in the order the stress bench places them.
 pub const BENCH: [&str; 15] = [
     "gearbox", "volute", "crank", "valve", "heatsink", "quadarm", "conrod", "jack", "frame", "manifold",
     "bracket", "insert", "clamp", "hub", "guard",
@@ -13,18 +13,7 @@ pub const BENCH: [&str; 15] = [
 
 /// A bench part's Forge text.
 pub fn bench_src(name: &str) -> Option<&'static str> {
-    macro_rules! parts {
-        ($($n:literal),*) => {
-            match name {
-                $($n => include_str!(concat!("../../forge-lang/parts/bench/", $n, ".fg")),)*
-                _ => return None,
-            }
-        };
-    }
-    Some(parts!(
-        "gearbox", "volute", "crank", "valve", "heatsink", "quadarm", "conrod", "jack", "frame", "manifold",
-        "bracket", "insert", "clamp", "hub", "guard"
-    ))
+    forge_lang::bench::src(name)
 }
 
 /// Where the bench parts are written to be opened as files, with the block font their text is
@@ -43,12 +32,12 @@ pub fn bench_dir() -> Result<PathBuf, String> {
             write_if_changed(&dir.join(format!("{n}.fg")), src.as_bytes())?;
         }
         // the font is made by code, which the kernel hash follows: made only when that changed
-        let font = dir.join(forge_agent::bench::FONT);
-        let made = dir.join(format!("{}.made", forge_agent::bench::FONT));
+        let font = dir.join(forge_lang::bench::FONT);
+        let made = dir.join(format!("{}.made", forge_lang::bench::FONT));
         let key = env!("FORGE_KERNEL_HASH");
         let fresh = font.exists() && std::fs::read_to_string(&made).is_ok_and(|k| k == key);
         if !fresh {
-            write_if_changed(&font, &forge_agent::bench::font_bytes())?;
+            write_if_changed(&font, &forge_lang::bench::font_bytes())?;
             write_if_changed(&made, key.as_bytes())?;
         }
         Ok(dir)

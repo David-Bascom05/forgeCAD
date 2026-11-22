@@ -6,6 +6,7 @@
 
 pub mod anchors;
 pub mod asm;
+pub mod bench;
 pub mod bodies;
 pub mod build;
 pub mod builtins;
@@ -56,6 +57,76 @@ use std::time::Instant;
 use syntax::{Cmp, ExprKind, StmtKind};
 
 pub const REFERENCE: &str = include_str!("reference.md");
+
+/// The reference's `## ` sections: (heading, the section with its heading).
+fn sections() -> Vec<(&'static str, &'static str)> {
+    let starts: Vec<usize> = REFERENCE
+        .match_indices("\n## ")
+        .map(|(i, _)| i + 1)
+        .chain([REFERENCE.len()])
+        .collect();
+    starts
+        .windows(2)
+        .map(|w| {
+            let s = &REFERENCE[w[0]..w[1]];
+            let head = s[3..].lines().next().unwrap_or("");
+            (head, s.trim_end())
+        })
+        .collect()
+}
+
+/// `help TOPIC`: `forge` (or nothing named) the whole reference; a word, each section whose
+/// heading has it (`holes`, `sheet`, `patterns`, `queries`, `selectors`); none: the headings.
+pub fn help(topic: &str) -> String {
+    let topic = topic.trim().to_ascii_lowercase();
+    if matches!(topic.as_str(), "forge" | "fg" | ".fg" | "all") {
+        return REFERENCE.to_string();
+    }
+    let heads = || {
+        sections()
+            .iter()
+            .map(|(h, _)| h.to_string())
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    if topic.is_empty() {
+        return format!(
+            "help forge: the whole .fg language. help WORD: its sections whose heading has WORD:\n{}",
+            heads()
+        );
+    }
+    let mut out: Vec<&str> = Vec::new();
+    for t in topic.split_whitespace() {
+        // `selectors` and `selector` are the Selections section
+        let t = if t.starts_with("selector") {
+            "selections"
+        } else {
+            t
+        };
+        let stem = t.strip_suffix('s').unwrap_or(t);
+        let found: Vec<&str> = sections()
+            .into_iter()
+            .filter(|(h, _)| {
+                h.split(|c: char| !c.is_ascii_alphanumeric())
+                    .map(str::to_ascii_lowercase)
+                    .any(|w| w == t || w.strip_suffix('s').unwrap_or(&w) == stem)
+            })
+            .map(|(_, s)| s)
+            .collect();
+        if found.is_empty() {
+            return format!(
+                "no section on '{t}'. Sections: {}. help forge: all of it",
+                heads()
+            );
+        }
+        for s in found {
+            if !out.contains(&s) {
+                out.push(s);
+            }
+        }
+    }
+    out.join("\n\n")
+}
 
 #[derive(Clone, Debug)]
 pub struct Options {

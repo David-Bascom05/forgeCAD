@@ -244,9 +244,22 @@ fn an_agent_reads_a_lint_sends_its_fix_back_and_the_file_is_the_ops_edit() {
     let (err, r, image) = m.tool("render", vec![("file", f.into()), ("px", Json::Num(200.0))]);
     assert!(!err && image, "{r}");
 
-    // act is .fc's; edit is .fg's; help forge is the language
+    // every feature as built, not "not built": features and check build (the stages kept)
+    for q in ["features", "check"] {
+        let (err, r, _) = m.tool("query", vec![("file", f.into()), ("sel", q.into())]);
+        assert!(!err, "{q}: {r}");
+        let st: Vec<String> = arr(&r, "features").iter().map(|x| s(x, "status")).collect();
+        assert_eq!(st, ["ok"; 4], "{q}: {r}");
+    }
+    // a numbers question as one string
+    let (err, r, _) = m.tool("query", vec![("file", f.into()), ("sel", "section z=1".into())]);
+    assert!(!err, "{r}");
+
+    // a part changes by edit alone: no act, no tool for a retired format
+    let names: Vec<String> = arr(&tools, "tools").iter().map(|t| s(t, "name")).collect();
+    assert!(!names.iter().any(|n| n == "act" || n == "diff"), "{names:?}");
     let (err, r, _) = m.tool("act", vec![("file", f.into()), ("lines", "x".into())]);
-    assert!(err && s(&r, "error").contains("typed ops"), "{r}");
+    assert!(err && s(&r, "error").contains("edit F OP"), "{r}");
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -351,6 +364,62 @@ fn a_sheet_part_exports_its_fitted_edges_tight() {
         got.stats.pairs.keys().any(|k| k.contains("Procedural")),
         "{:?}",
         got.stats.pairs
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn the_build_summary_gives_its_measures_to_the_thousandth() {
+    let dir = scratch("summary");
+    let file = dir.join("plate.fg");
+    std::fs::write(&file, PLATE).unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_forgecad"))
+        .args(["build", file.to_str().unwrap()])
+        .output()
+        .unwrap();
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(out.status.success(), "{text}");
+    let part = text.lines().find(|l| l.starts_with("part: volume ")).unwrap();
+    let v = part.split(' ').nth(2).unwrap();
+    assert!(v.split('.').nth(1).is_none_or(|d| d.len() <= 3), "{part}");
+    let want = 60.0 * 60.0 * 6.0 - std::f64::consts::PI * 16.0 * 2.0;
+    assert!((v.parse::<f64>().unwrap() - want).abs() < 1e-3, "{part}");
+    // `exact`: every digit
+    let out = Command::new(env!("CARGO_BIN_EXE_forgecad"))
+        .args(["measure", file.to_str().unwrap(), "mass", "exact"])
+        .output()
+        .unwrap();
+    let text = String::from_utf8_lossy(&out.stdout);
+    let v: f64 = text.split(' ').nth(1).unwrap().parse().unwrap();
+    assert!((v - want).abs() < 1e-9 * want, "{text}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn diff_says_what_the_second_part_changed() {
+    let dir = scratch("diff");
+    let (a, b) = (dir.join("a.fg"), dir.join("b.fg"));
+    std::fs::write(&a, PLATE).unwrap();
+    std::fs::write(&b, PLATE.replace("shared t = 6", "shared t = 8")).unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_forgecad"))
+        .args([
+            "diff",
+            a.to_str().unwrap(),
+            b.to_str().unwrap(),
+            "volume",
+            "--json",
+        ])
+        .output()
+        .unwrap();
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(out.status.success(), "{text}");
+    let j = Json::parse(&text).unwrap();
+    let params = arr(&j, "params");
+    assert!(params.iter().any(|p| s(p, "name") == "t"), "{text}");
+    // the exact volume added and removed, or why the kernel could not split it so
+    assert!(
+        j.get("volume").is_some() || j.get("volume_error").is_some(),
+        "{text}"
     );
     let _ = std::fs::remove_dir_all(&dir);
 }

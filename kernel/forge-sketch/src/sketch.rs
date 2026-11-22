@@ -66,6 +66,8 @@ pub(crate) struct SplineRec {
     pub closed: bool,
     /// What a through-spline's start and end are tangent to.
     pub ties: [Option<EntityId>; 2],
+    /// A through-spline's start and end slopes as given (before what it is tangent to).
+    pub slopes: [Option<Vec2>; 2],
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -326,6 +328,7 @@ impl Sketch {
             kind,
             closed,
             ties: [None, None],
+            slopes: [None, None],
         });
         Ok(self.push(Entity::Spline {
             index: self.splines.len() - 1,
@@ -400,6 +403,32 @@ impl Sketch {
             .collect()
     }
 
+    /// Sets an open through-spline's slopes at its start and end (d/ds of the curve there, as
+    /// `PlaneSpline::through` takes them); None leaves an end as it was.
+    pub fn set_spline_slopes(
+        &mut self,
+        spline: EntityId,
+        from: Option<Vec2>,
+        to: Option<Vec2>,
+    ) -> Result<(), SketchError> {
+        let Entity::Spline { index } = self.rec(spline)?.kind else {
+            return Err(SketchError::WrongKind(spline));
+        };
+        let rec = &mut self.splines[index];
+        if !matches!(rec.kind, SplineKind::Through) || rec.closed {
+            return Err(SketchError::WrongKind(spline));
+        }
+        for (k, v) in [from, to].into_iter().enumerate() {
+            if let Some(v) = v {
+                if !(v.x.is_finite() && v.y.is_finite()) || v.length() == 0.0 {
+                    return Err(SketchError::BadValue);
+                }
+                rec.slopes[k] = Some(v);
+            }
+        }
+        Ok(())
+    }
+
     /// Makes a spline's end tangent to a line or arc at the end that lies on it. A through-spline
     /// has free end slopes, so this takes up no freedom of its points and adds no row (None); a
     /// control spline holds its first leg along the other curve.
@@ -462,8 +491,8 @@ impl Sketch {
                         if s.closed {
                             pts.push(pts[0]);
                         }
-                        let from = self.tie_slope(s, 0, &pts);
-                        let to = self.tie_slope(s, 1, &pts);
+                        let from = s.slopes[0].or_else(|| self.tie_slope(s, 0, &pts));
+                        let to = s.slopes[1].or_else(|| self.tie_slope(s, 1, &pts));
                         PlaneSpline::through(pts, from, to).map(Arc::new)
                     }
                     SplineKind::Control {

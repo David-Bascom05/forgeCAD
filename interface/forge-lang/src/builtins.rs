@@ -43,6 +43,7 @@ pub const BUILTINS: &[&str] = &[
     "arc",
     "circle",
     "ellipse",
+    "earc",
     "rect",
     "slot",
     "hull",
@@ -277,6 +278,120 @@ pub(crate) fn dim(what: &'static str, n: &Num) -> Dimension {
 
 pub(crate) const LEN: &[Dim] = &[Dim::Length];
 pub(crate) const ANG: &[Dim] = &[Dim::Angle];
+
+/// What makes a spline one on control vertices of a set degree, knots and weights.
+const CONTROL: [&str; 3] = ["degree", "knots", "weights"];
+
+/// A through-spline's end slopes as given.
+const SLOPES: [&str; 2] = ["start_slope", "end_slope"];
+
+/// A slope `(dx, dy)`: the curve's rate of change at its end, per unit along it.
+fn slope_arg(a: &Args, k: &'static str) -> R<Option<Vec2>> {
+    let Some(v) = a.opt(k) else {
+        return Ok(None);
+    };
+    let xy = match v {
+        Value::Tuple(xy) if xy.len() == 2 => xy,
+        o => {
+            return Err(Error::WrongType {
+                span: a.span(k),
+                what: k,
+                want: Ty::Vec2,
+                found: o.ty(),
+            });
+        }
+    };
+    let n = |x: &Value| num_of(x.clone(), &[Dim::Ratio, Dim::Count, Dim::Length], a.span(k), k).map(|n| n.v);
+    let d = Vec2::new(n(&xy[0])?, n(&xy[1])?);
+    if d.length() == 0.0 || !d.x.is_finite() || !d.y.is_finite() {
+        return Err(Error::BadValue {
+            span: a.span(k),
+            what: "a spline's end slope (0, 0)",
+            value: 0.0,
+        });
+    }
+    Ok(Some(d))
+}
+
+/// A control spline's weights, if given.
+type Weights = Option<Vec<f64>>;
+
+/// A control-vertex spline's `degree` (cubic, or less with too few points), `knots` (as many as
+/// the points and the degree and one more, never falling) and `weights` (one a point, positive).
+fn control_args(a: &Args, n: usize) -> R<(usize, Option<Vec<f64>>, Weights)> {
+    let degree = match a.num("degree", &[Dim::Count])? {
+        Some(d) => {
+            if d.v < 1.0 || d.v > forge_geom::spline::MAX_DEGREE as f64 || d.v >= n as f64 {
+                return Err(Error::BadValue {
+                    span: a.span("degree"),
+                    what: "a spline's degree (1 up to one less than its points)",
+                    value: d.v,
+                });
+            }
+            d.v as usize
+        }
+        None => 3.min(n.saturating_sub(1)).max(1),
+    };
+    let list = |k: &'static str| -> R<Option<Vec<f64>>> {
+        let Some(v) = a.opt(k) else {
+            return Ok(None);
+        };
+        let Value::List(xs) = v else {
+            return Err(Error::WrongType {
+                span: a.span(k),
+                what: k,
+                want: Ty::List,
+                found: v.ty(),
+            });
+        };
+        xs.iter()
+            .map(|x| num_of(x.clone(), &[Dim::Ratio, Dim::Count], a.span(k), k).map(|n| n.v))
+            .collect::<R<Vec<f64>>>()
+            .map(Some)
+    };
+    let knots = list("knots")?;
+    if let Some(k) = &knots {
+        if k.len() != n + degree + 1 {
+            return Err(Error::BadValue {
+                span: a.span("knots"),
+                what: "the number of knots (points + degree + 1)",
+                value: k.len() as f64,
+            });
+        }
+        if let Some(w) = k.windows(2).find(|w| w[1] < w[0]) {
+            return Err(Error::BadValue {
+                span: a.span("knots"),
+                what: "a knot below the one before it",
+                value: w[1],
+            });
+        }
+        if k[degree] >= k[n] {
+            return Err(Error::BadValue {
+                span: a.span("knots"),
+                what: "the span of the knots the curve runs over",
+                value: k[n] - k[degree],
+            });
+        }
+    }
+    let weights = list("weights")?;
+    if let Some(w) = &weights {
+        if w.len() != n {
+            return Err(Error::BadValue {
+                span: a.span("weights"),
+                what: "the number of weights (one a point)",
+                value: w.len() as f64,
+            });
+        }
+        if let Some(&x) = w.iter().find(|x| !(**x > 0.0 && x.is_finite())) {
+            return Err(Error::BadValue {
+                span: a.span("weights"),
+                what: "a weight",
+                value: x,
+            });
+        }
+    }
+    Ok((degree, knots, weights))
+}
 
 /// The sketch the call is inside, or a WrongPlace error.
 pub(crate) fn in_sketch(ev: &Eval, func: &'static str, span: Span) -> R<Rc<RefCell<Sk>>> {
@@ -768,6 +883,30 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
             drop(s);
             Ok(mk_ent(&sk, id))
         }
+        "earc" => {
+            let sk = in_sketch(ev, name, span)?;
+            let a = Args::bind(
+                ev,
+                name,
+                &["center", "major", "b", "from", "to", "cw"],
+                args,
+                span,
+            )?;
+            let c = p2_of(ev, a.req("center")?, a.span("center"))?;
+            let m = p2_of(ev, a.req("major")?, a.span("major"))?;
+            let b = a.req_num("b", LEN)?;
+            positive(&b, a.span("b"), "a semi-minor axis")?;
+            let f = p2_of(ev, a.req("from")?, a.span("from"))?;
+            let t = p2_of(ev, a.req("to")?, a.span("to"))?;
+            let cw = a.flag("cw")?;
+            let mut s = sk.borrow_mut();
+            let (c, m, f, t) = (s.p2(c, span)?, s.p2(m, span)?, s.p2(f, span)?, s.p2(t, span)?);
+            let nm = pending_name(ev, span);
+            let id = s.ellipse_arc(c, m, b.v, f, t, !cw, nm.as_deref(), span)?;
+            s.nums.push((id, "b", b.clone()));
+            drop(s);
+            Ok(mk_ent(&sk, id))
+        }
         // outside a sketch, rect is a bend relief
         "rect" if ev.sketch_ref().is_none() => crate::sheet::call(ev, name, args, span),
         "rect" => {
@@ -847,14 +986,50 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
         "poly" | "spline" if ev.path_mut().is_none() || name == "poly" => {
             let sk = in_sketch(ev, name, span)?;
             let keys: &[&str] = if name == "spline" {
-                &["points", "closed", "cv"]
+                &[
+                    "points",
+                    "closed",
+                    "cv",
+                    "degree",
+                    "knots",
+                    "weights",
+                    "start_slope",
+                    "end_slope",
+                ]
             } else {
                 &["points", "closed"]
             };
             let a = Args::bind(ev, name, keys, args, span)?;
-            // control vertices: a cubic B-spline the points pull, not one through them
+            // control vertices: a cubic B-spline the points pull, not one through them; a degree,
+            // knots or weights make it one, open. End slopes make one through them open.
+            let control = name == "spline" && CONTROL.iter().any(|k| a.opt(k).is_some());
+            let sloped = name == "spline" && SLOPES.iter().any(|k| a.opt(k).is_some());
+            let given = || {
+                CONTROL
+                    .into_iter()
+                    .chain(SLOPES)
+                    .find(|k| a.opt(k).is_some())
+                    .expect("one")
+            };
             let cv = match a.opt("cv") {
-                None => false,
+                None => control,
+                Some(Value::Bool(true)) if sloped => {
+                    let k = SLOPES.into_iter().find(|k| a.opt(k).is_some()).expect("one");
+                    return Err(Error::NotWith {
+                        span: a.span(k),
+                        func: "spline",
+                        arg: k,
+                        with: "cv: true",
+                    });
+                }
+                Some(Value::Bool(false)) if control => {
+                    return Err(Error::NotWith {
+                        span: a.span(given()),
+                        func: "spline",
+                        arg: given(),
+                        with: "cv: false",
+                    });
+                }
                 Some(Value::Bool(b)) => b,
                 Some(o) => {
                     return Err(Error::WrongType {
@@ -865,8 +1040,25 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
                     });
                 }
             };
+            if control && sloped {
+                let k = SLOPES.into_iter().find(|k| a.opt(k).is_some()).expect("one");
+                return Err(Error::NotWith {
+                    span: a.span(k),
+                    func: "spline",
+                    arg: k,
+                    with: CONTROL.into_iter().find(|k| a.opt(k).is_some()).expect("one"),
+                });
+            }
             let closed = match a.opt("closed") {
-                None => true,
+                None => !control && !sloped,
+                Some(Value::Bool(true)) if control || sloped => {
+                    return Err(Error::NotWith {
+                        span: a.span(given()),
+                        func: "spline",
+                        arg: given(),
+                        with: "closed: true",
+                    });
+                }
                 Some(Value::Bool(b)) => b,
                 Some(o) => {
                     return Err(Error::WrongType {
@@ -906,10 +1098,19 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
                 let mut s = sk.borrow_mut();
                 let ids = pts.iter().map(|&p| s.p2(p, span)).collect::<R<Vec<_>>>()?;
                 let nm = pending_name(ev, span);
-                let id = if cv {
+                let id = if control {
+                    let (degree, knots, weights) = control_args(&a, ids.len())?;
+                    s.bspline_on(&ids, degree, knots, weights, nm.as_deref(), span)?
+                } else if cv {
                     s.bspline(&ids, closed, nm.as_deref(), span)?
                 } else {
-                    s.spline(&ids, closed, nm.as_deref(), span)?
+                    let id = s.spline(&ids, closed, nm.as_deref(), span)?;
+                    if sloped {
+                        let from = slope_arg(&a, "start_slope")?;
+                        let to = slope_arg(&a, "end_slope")?;
+                        s.slopes(id, from, to, span)?;
+                    }
+                    id
                 };
                 drop(s);
                 Ok(mk_ent(&sk, id))

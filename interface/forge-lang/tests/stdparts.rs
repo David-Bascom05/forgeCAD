@@ -557,7 +557,7 @@ fn std_errors_are_typed_with_fixes() {
     }
 }
 
-/// The kernel's hole table (what `hole(screw: ..)` drills, in .fg and .fc parts alike) against
+/// The kernel's hole table (what `hole(screw: ..)` drills) against
 /// these tables: every difference is a row of resolutions/hole_sizes.csv saying why it stands.
 #[test]
 fn hole_sizes_agree_or_are_resolved() {

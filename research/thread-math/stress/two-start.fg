@@ -1,0 +1,30 @@
+# two-start: the same coil cut twice, half a pitch apart
+param plan.r = 10
+param plan.ax = 1
+sketch plan(on: xy) {
+  c = circle((0, 0), r)
+  xax = line((0, 0), (ax, 0), construction: true)
+}
+param rod.h = 40
+rod = extrude(plan.c, h)
+# each groove's section on the plane y = 0, the coil about the z axis from the section's z
+param s1.p = [(9, -1.5), (11, -1.9), (11, -0.1), (9, -0.5)]
+param s1.z0 = -1
+param s1.up = 1
+sketch s1(on: rotate(plan, about: plan.xax, by: 90deg)) {
+  tooth = poly([p[0], p[1], p[2], p[3]])
+  ax = line((0, z0), (0, z0 + up), construction: true)
+}
+param g1.pitch = 8
+param g1.turns = count(5)
+g1 = coil(s1.tooth, axis: s1.ax, pitch: pitch, turns: turns, cut: true)
+param s2.p = [(9, 2.5), (11, 2.1), (11, 3.9), (9, 3.5)]
+param s2.z0 = 3
+param s2.up = 1
+sketch s2(on: rotate(plan, about: plan.xax, by: 90deg)) {
+  tooth = poly([p[0], p[1], p[2], p[3]])
+  ax = line((0, z0), (0, z0 + up), construction: true)
+}
+param g2.pitch = 8
+param g2.turns = count(5)
+g2 = coil(s2.tooth, axis: s2.ax, pitch: pitch, turns: turns, cut: true)

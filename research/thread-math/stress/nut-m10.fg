@@ -1,0 +1,15 @@
+# plain nut in a block, chamfered
+shared w = 30
+sketch plan(on: xy) {
+  outline = rect(center: (0, 0), size: (w, w))
+}
+param b.h = 20
+b = extrude(plan, h)
+sketch top(on: b.end) {
+  c = pt(0, 0)
+}
+param hole1.d = 8.376
+param hole1.major = 10
+param hole1.pitch = 1.5
+hole1 = hole(at: top.c, d: d, depth: thru, thread: (major, pitch))
+thread1 = thread(hole: hole1, length: "full", chamfer: true)

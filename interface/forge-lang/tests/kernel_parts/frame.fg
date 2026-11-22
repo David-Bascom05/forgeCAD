@@ -1,0 +1,307 @@
+# Road bicycle frame, 56 cm, as one part: hollow tubes mitred by the booleans, a tapered head
+# tube with headset seats, a BSA threaded bottom bracket, lofted stays to flat dropouts with a
+# threaded derailleur hanger, bridges, bottle bosses, a slotted seat clamp, cable ports. An older
+# cut of the bench frame (lofted stays, the bottom bracket's joints rounded), its planes and points
+# worked out from the dimensions listed as comments here, every number as the kernel takes it.
+sketch o(on: xy) {
+  p = pt(0, 0)
+}
+# param reach = 385
+# param stack = 575
+# param hta = 73 deg
+# param sta = 73.5 deg
+# param htl = 160
+# param stl = 540
+# param csl = 410
+# param drop = 70
+# param sp = 130
+# param wall = 1
+# param hdx = cos(hta)
+# param hdz = -sin(hta)
+# param hbx = reach + htl*hdx
+# param hbz = stack + htl*hdz
+# param ax = -sqrt(csl^2 - drop^2)
+# param az = drop
+# param dtx = hbx - 45*hdx
+# param dtz = hbz - 45*hdz
+# param dtl = sqrt(dtx^2 + dtz^2)
+# param s1x = -(stl-45)*cos(sta)
+# param s1z = (stl-45)*sin(sta)
+# param h1x = reach + 25*hdx
+# param h1z = stack + 25*hdz
+# param ttl = sqrt((h1x-s1x)^2 + (h1z-s1z)^2)
+# param c0x = -17.5
+# param c0y = 22
+# param c1x = ax + 6
+# param c1y = sp/2 - 4
+# param csx = c1x - c0x
+# param csy = c1y - c0y
+# param csz = az
+# param cl = sqrt(csx^2 + csy^2 + csz^2)
+# param q0x = -(stl-80)*cos(sta)
+# param q0z = (stl-80)*sin(sta)
+# param q0y = 10
+# param q1x = ax + 10
+# param q1z = az + 14
+# param q1y = sp/2 - 4
+# param ssx = q1x - q0x
+# param ssy = q1y - q0y
+# param ssz = q1z - q0z
+# param sl = sqrt(ssx^2 + ssy^2 + ssz^2)
+sketch s1(on: plane(at: o.p, normal: Y, x: X)) {
+  c1 = circle((0, 0), 21)
+}
+bb = extrude(s1, sym(68))
+sketch d2(on: offset(xy, 0.958819734868193)) {
+  p = pt(-0.28401534470392276, 0)
+}
+sketch s3(on: plane(at: o.p, normal: axis(o.p, d2.p))) {
+  c1 = circle((0, 0), 15.9)
+}
+st = extrude(s3, 540)
+sketch d4(on: offset(xy, 0.7432144421279193)) {
+  p = pt(0.6690532811461923, 0)
+}
+sketch s5(on: plane(at: o.p, normal: axis(o.p, d4.p))) {
+  c1 = circle((0, 0), 17.5)
+}
+dt = extrude(s5, 625.6941828697841)
+sketch d6(on: offset(xy, 575)) {
+  p = pt(385, 0)
+}
+sketch s7(on: plane(at: d6.p, normal: -Y, x: X)) {
+  ax = line((0, 0), (0.29237170472273677, -0.9563047559630354), construction: true)
+  p1 = poly([(0, 0), (23.907618899075885, 7.309292618068419), (75.46861543452894, -144.23760981240355), (46.77947275563788, -153.00876095408566)])
+}
+ht = revolve(s7, axis: s7.ax)
+sketch d8(on: offset(xy, 474.61576875975555)) {
+  p = pt(-140.58759562844176, 0)
+}
+sketch d9(on: offset(xy, 0.14205569441596866)) {
+  p = pt(0.9898586665196183, 0)
+}
+sketch s10(on: plane(at: d8.p, normal: axis(o.p, d9.p))) {
+  c1 = circle((0, 0), 14.3)
+}
+tt = extrude(s10, 538.3565414648501)
+sketch d11(on: offset(xy, 0)) {
+  p = pt(-17.5, 22)
+}
+sketch d12(on: offset(xy, 0.1800288022243474)) {
+  p = pt(-0.9785342033173727, 0.10030176123927927)
+}
+sketch s13(on: plane(at: d11.p, normal: axis(o.p, d12.p))) {
+  c1 = circle((0, 0), 11)
+}
+sketch d14(on: offset(xy, 70)) {
+  p = pt(-397.9801975344831, 61)
+}
+sketch s15(on: plane(at: d14.p, normal: axis(o.p, d12.p))) {
+  c1 = circle((0, 0), 6.5)
+}
+cs = loft([s13, s15])
+sketch d16(on: offset(xy, 441.0570780393688)) {
+  p = pt(-130.64705856380448, 10)
+}
+sketch d17(on: offset(xy, -0.7995338403378934)) {
+  p = pt(-0.5896641429027897, 0.11420086133325894)
+}
+sketch s18(on: plane(at: d16.p, normal: axis(o.p, d17.p))) {
+  c1 = circle((0, 0), 8)
+}
+sketch d19(on: offset(xy, 84)) {
+  p = pt(-393.9801975344831, 61)
+}
+sketch s20(on: plane(at: d19.p, normal: axis(o.p, d17.p))) {
+  c1 = circle((0, 0), 6)
+}
+ss = loft([s18, s20])
+sketch d21(on: offset(xy, 0)) {
+  p = pt(0, 67)
+}
+sketch s22(on: plane(at: d21.p, normal: -Y, x: X)) {
+  p1 = poly([(-417.9801975344831, 58), (-369.9801975344831, 54), (-365.9801975344831, 66), (-379.9801975344831, 104), (-395.9801975344831, 104), (-417.9801975344831, 82)])
+}
+drop = extrude(s22, 6)
+stays = pattern(of: [cs, ss, drop], layout: mirror(on: xz))
+sketch d23(on: offset(xy, 362.50452087070767)) {
+  p = pt(-188.58034913735378, 0)
+}
+sketch s24(on: plane(at: d23.p, normal: Y, x: X)) {
+  c1 = circle((0, 0), 5)
+}
+bbr = extrude(s24, sym(42.44))
+sketch d25(on: offset(xy, 17.5)) {
+  p = pt(-112.62004938362078, 0)
+}
+sketch s26(on: plane(at: d25.p, normal: Y, x: X)) {
+  c1 = circle((0, 0), 6)
+}
+cbr = extrude(s26, sym(63.5))
+sketch d27(on: offset(xy, 0)) {
+  p = pt(0, -61)
+}
+sketch s28(on: plane(at: d27.p, normal: -Y, x: X)) {
+  p1 = poly([(-409.9801975344831, 56), (-415.9801975344831, 76), (-435.9801975344831, 60), (-433.9801975344831, 38), (-417.9801975344831, 36)])
+}
+hanger = extrude(s28, 6)
+sketch d29(on: offset(xy, 502.42154107093313)) {
+  p = pt(-148.8240406248555, 0)
+}
+sketch s30(on: plane(at: d29.p, normal: axis(o.p, d2.p))) {
+  c1 = circle((0, 0), 18.5)
+}
+collar = extrude(s30, 16)
+sketch s31(on: xz) {
+  p1 = poly([(-166.8985361290294, 510.62596745366085), (-178.4043729474477, 507.2177833172138), (-174.99618881100065, 495.71194649879544), (-163.49035199258233, 499.1201306352425)])
+}
+lug = extrude(s31, sym(14))
+sketch d32(on: offset(xy, 111.4821663191879)) {
+  p = pt(100.35799217192884, 0)
+}
+sketch d33(on: offset(xy, 0.6690532811461923)) {
+  p = pt(-0.7432144421279193, 0)
+}
+sketch s34(on: plane(at: d32.p, normal: axis(o.p, d33.p))) {
+  c1 = circle((0, 0), 4.5)
+}
+dboss = extrude(s34, 21)
+dbosses = pattern(of: dboss, layout: lin(along: s5.plane.normal, n: count(2), step: 64))
+sketch d35(on: offset(xy, 191.7639469736386)) {
+  p = pt(-56.80306894078455, 0)
+}
+sketch d36(on: offset(xy, 0.28401534470392276)) {
+  p = pt(0.958819734868193, 0)
+}
+sketch s37(on: plane(at: d35.p, normal: axis(o.p, d36.p))) {
+  c1 = circle((0, 0), 4.5)
+}
+sboss = extrude(s37, 19.5)
+sbosses = pattern(of: sboss, layout: lin(along: s3.plane.normal, n: count(2), step: 64))
+tt_st = fillet(edges(between: (tt, st), crease: "concave"), vary([(0, 3), (0.5, 4.5), (1, 3)]))
+cluster = fillet(edges(between: (st, bb), crease: "concave") + edges(between: (dt, bb), crease: "concave") + edges(between: (st, dt), crease: "concave"), 3)
+tt_ht = fillet(edges(between: (tt, ht), crease: "concave"), 3)
+dt_ht = fillet(edges(between: (dt, ht), crease: "concave"), 3)
+sketch d38(on: offset(xy, 0)) {
+  p = pt(0, -34)
+}
+sketch s39(on: plane(at: d38.p, normal: Y, x: X)) {
+  p = pt(0, 0)
+}
+bbore = hole(at: s39.p, d: 33.65, depth: 68, flip: true)
+bsa_near = thread(on: offset(xz, 34), spec: "1.370-24", internal: true, length: 16, left: true, chamfer: true)
+bsa_far = thread(on: offset(xz, -34), spec: "1.370-24", internal: true, length: 16, flip: true, chamfer: true)
+sketch s40(on: plane(at: o.p, normal: axis(o.p, d2.p))) {
+  c1 = circle((0, 0), 14.9)
+}
+stb = cut(s40, -541)
+sketch s41(on: plane(at: o.p, normal: axis(o.p, d4.p))) {
+  c1 = circle((0, 0), 16.5)
+}
+dtb = cut(s41, -625.6941828697841)
+sketch s42(on: plane(at: d8.p, normal: axis(o.p, d9.p))) {
+  c1 = circle((0, 0), 13.3)
+}
+ttb = cut(s42, -538.3565414648501)
+sketch s43(on: plane(at: d6.p, normal: -Y, x: X)) {
+  ax = line((0, 0), (0.29237170472273677, -0.9563047559630354), construction: true)
+  p1 = poly([(0, 0), (22.473161765131334, 6.870735060984314), (74.0341583005844, -144.67616736948767), (46.77947275563788, -153.00876095408566)])
+}
+htb = revolve(s43, axis: s43.ax, cut: true)
+sketch d44(on: offset(xy, -0.9563047559630354)) {
+  p = pt(0.29237170472273677, 0)
+}
+sketch s45(on: plane(at: d6.p, normal: axis(o.p, d44.p))) {
+  c1 = circle((0, 0), 24)
+}
+cut4 = cut(s45, -11)
+sketch d46(on: offset(xy, 421.9912390459143)) {
+  p = pt(431.77947275563787, 0)
+}
+sketch d47(on: offset(xy, 0.9563047559630354)) {
+  p = pt(-0.29237170472273677, 0)
+}
+sketch s48(on: plane(at: d46.p, normal: axis(o.p, d47.p))) {
+  c1 = circle((0, 0), 29)
+}
+cut5 = cut(s48, -11)
+sketch d49(on: offset(xy, 2.160345626692169)) {
+  p = pt(-29.242410439808474, 23.20362113487135)
+}
+sketch s50(on: plane(at: d49.p, normal: axis(o.p, d12.p))) {
+  c1 = circle((0, 0), 9.9)
+}
+sketch s51(on: plane(at: d14.p, normal: axis(o.p, d12.p))) {
+  c1 = circle((0, 0), 5.5)
+}
+csb = loft([s50, s51], cut: true)
+sketch s52(on: plane(at: d16.p, normal: axis(o.p, d17.p))) {
+  c1 = circle((0, 0), 7)
+}
+sketch s53(on: plane(at: d19.p, normal: axis(o.p, d17.p))) {
+  c1 = circle((0, 0), 5)
+}
+ssb = loft([s52, s53], cut: true)
+bores = pattern(of: [csb, ssb], layout: mirror(on: xz))
+sketch s54(on: xz) {
+  l1 = line((-408.9801975344831, 30), (-398.9801975344831, 30))
+  l2 = line((-398.9801975344831, 30), (-398.9801975344831, 70))
+  a3 = arc(center: (-403.9801975344831, 70), from: (-398.9801975344831, 70), to: (-408.9801975344831, 70))
+  l4 = line((-408.9801975344831, 70), (-408.9801975344831, 30))
+}
+axleslot = cut(s54, thru_all)
+sketch d55(on: offset(xy, 50)) {
+  p = pt(-425.9801975344831, -67)
+}
+sketch s56(on: plane(at: d55.p, normal: Y, x: X)) {
+  p = pt(0, 0)
+}
+hhole = hole(at: s56.p, d: 9, depth: 6, flip: true, thread: (10, 1))
+hthread = thread(hole: hhole, length: "full")
+sketch d57(on: offset(xy, 517.7626568288242)) {
+  p = pt(-153.3682861401183, 0)
+}
+sketch d58(on: offset(xy, -0.958819734868193)) {
+  p = pt(0.28401534470392276, 0)
+}
+sketch d59(on: offset(xy, -0.28401534470392276)) {
+  p = pt(-0.958819734868193, 0)
+}
+sketch s60(on: plane(at: d57.p, normal: axis(o.p, d58.p), x: axis(o.p, d59.p))) {
+  r1 = rect(corner: (0, -1.25), size: (32, 2.5))
+}
+cut7 = cut(s60, -26)
+sketch d61(on: offset(xy, 501.2513175064918)) {
+  p = pt(-170.3793317806072, -7)
+}
+sketch s62(on: plane(at: d61.p, normal: Y, x: X)) {
+  p = pt(0, 0)
+}
+hole3 = hole(at: s62.p, d: 5.5, depth: thru, flip: true)
+sketch d63(on: offset(xy, 125.53228522325793)) {
+  p = pt(84.75048888724254, 0)
+}
+sketch d64(on: offset(xy, -0.6690532811461923)) {
+  p = pt(0.7432144421279193, 0)
+}
+sketch s65(on: plane(at: d63.p, normal: axis(o.p, d64.p))) {
+  p = pt(0, 0)
+}
+dbh = hole(at: s65.p, d: 4.2, depth: 6, flip: true, thread: (5, 0.8))
+dbhs = pattern(of: dbh, layout: lin(along: s5.plane.normal, n: count(2), step: 64))
+sketch d66(on: offset(xy, 197.30224619536511)) {
+  p = pt(-38.10608411085478, 0)
+}
+sketch s67(on: plane(at: d66.p, normal: axis(o.p, d59.p))) {
+  p = pt(0, 0)
+}
+sbh = hole(at: s67.p, d: 4.2, depth: 6, flip: true, thread: (5, 0.8))
+sbhs = pattern(of: sbh, layout: lin(along: s3.plane.normal, n: count(2), step: 64))
+sketch d68(on: offset(xy, 383.2713644301798)) {
+  p = pt(345.02688511703354, -19)
+}
+sketch s69(on: plane(at: d68.p, normal: Y, x: X)) {
+  p = pt(0, 0)
+}
+port = hole(at: s69.p, d: 6, depth: 4, flip: true)
+ports = pattern(of: port, layout: mirror(on: xz))

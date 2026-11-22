@@ -144,8 +144,7 @@ fn targets(part: &mut Part) -> Result<Vec<(&'static str, String, Num)>, String> 
         .into_iter()
         .filter(|n| n.1.value != 0.0 && matches!(n.1.dim, Dim::Length | Dim::Angle))
         .collect();
-    let (shared, features): (Vec<&(String, Num)>, Vec<&(String, Num)>) =
-        all.iter().partition(|n| n.1.key.is_shared());
+    let (shared, features): (Vec<_>, Vec<_>) = all.iter().partition(|n| n.1.key.is_shared());
     let mut out = Vec::new();
     if let Some(n) = shared
         .iter()
