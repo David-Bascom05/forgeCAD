@@ -1,5 +1,6 @@
 import ForgeExact.DecideOnce.Boxes
 import ForgeExact.DecideOnce.Correct
+import ForgeExact.DecideOnce.Metric
 
 /-!
 # (d) The six retry-rung acceptance tests
@@ -217,5 +218,20 @@ theorem instances_covered :
 -- Face to face: one box, the contact dissolved (exact-comparison.md's "contact left imprinted").
 #guard (core (boxLedger 2 [⟨(0, 0, 0), (1, 1, 1)⟩, ⟨(1, 0, 0), (2, 1, 1)⟩]) uni).summary ==
   .ok 6 10 12 8
+
+/-! ## The metric ledger on two features (build-time checks) -/
+
+def outcomeM (L : Ledger) (rule : Rule) (thin enc : List Cov) : Summary := (L.coreM rule thin enc).summary
+
+-- A void inside a block, decided thinner than LINEAR and enclosed by the cut's faces: filled; the
+-- block is one box again.
+#guard outcomeM (boxLedger 3 [⟨(0, 0, 0), (3, 3, 3)⟩, ⟨(1, 1, 1), (2, 2, 2)⟩]) sub
+  [cov 3 (3, 3, 3)] [cov 3 (3, 3, 3)] == .ok 6 54 12 8
+-- Without the metric decision the void stays: twelve faces.
+#guard outcomeM (boxLedger 3 [⟨(0, 0, 0), (3, 3, 3)⟩, ⟨(1, 1, 1), (2, 2, 2)⟩]) sub [] [] == .ok 12 60 24 16
+-- A fin on a plate, decided thinner than LINEAR: its rim is material below and empty space round
+-- it, so it is refused at the fin.
+#guard outcomeM (boxLedger 3 [⟨(0, 0, 0), (3, 1, 1)⟩, ⟨(1, 0, 1), (2, 1, 2)⟩]) uni
+  [cov 3 (3, 1, 3)] [cov 3 (3, 1, 3)] == .zeroThickness (cov 3 (3, 1, 3))
 
 end ForgeExact.DecideOnce

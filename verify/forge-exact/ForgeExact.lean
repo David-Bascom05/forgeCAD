@@ -10,4 +10,5 @@ import ForgeExact.DecideOnce.Nef
 import ForgeExact.DecideOnce.Rungs
 import ForgeExact.Jordan
 import ForgeExact.DecideOnce.BRep
+import ForgeExact.DecideOnce.Metric
 import ForgeExact.Axioms

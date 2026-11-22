@@ -140,6 +140,15 @@ has exactly one zero. Its sides: `plus X` and `minus X` set that zero to `pos` /
    one side in `i` and one out. Else `InconsistentClassification`.
 4. **Keep.** `keep T = rule (i ↦ i < nb ∧ memb i T)`, tabled once per tope (`keepTab`); every later
    stage looks it up (`keepIn`).
+4b. **Collapse the sub-LINEAR features** (§6.1 step 3; `DecideOnce/Metric.lean`, `coreM`). The
+   metric ledger holds two more tables, decided once per side cell by the bridge: `thin` (the cell
+   is thinner than LINEAR) and `enclosed` (every facet of the cell is a piece). The thin cells fall
+   into features: classes under "adjacent across a facet" (`comp`). A feature's rim is the
+   non-thin cells adjacent to it (`rim`). If every feature's rim is kept alike and every cell of it
+   is enclosed, each thin cell takes its rim's keep (a feature with no rim keeps its own); the
+   keep table is replaced (`collapse`). Otherwise the first thin cell (in `topes` order) whose
+   feature is not so is refused `ZeroThickness` at that cell. With empty `thin` the stage is the
+   identity.
 5. **Assemble.** `result` = the facets whose two sides' keeps differ, in `facets` order.
    `orient φ` = `pos` if the minus side is kept (outward points to the dropped side), else `neg`.
 6. **Touch rule.** `around x` = the result facets `φ` with `le x φ`.
@@ -193,9 +202,14 @@ pub struct Ledger {                // built once, read-only to the core
     pub edges: Vec<CellId>,
     pub verts: Vec<CellId>,
 }
+pub struct MetricLedger {          // §6.1 step 3, built once, read-only
+    pub thin: Vec<CellId>,         // side cells thinner than LINEAR
+    pub enclosed: Vec<CellId>,     // side cells every facet of which is a piece
+}
 pub enum Rule { Union, Inter, Diff, Table(Vec<bool>) /* 2^nb rows for a history */ }
 
-pub fn core(l: &Ledger, rule: &Rule) -> Outcome;      // the whole of §3
+pub fn core(l: &Ledger, rule: &Rule, m: &MetricLedger) -> Outcome;   // the whole of §3 (coreM)
+fn collapse(l: &Ledger, kt: &KeepTab, m: &MetricLedger) -> Result<KeepTab, CellId>; // stage 4b
 fn unify(l: &Ledger, asm: &Assembled) -> Body;        // reads by reference, returns a fresh Body
 ```
 
@@ -267,6 +281,17 @@ snapped geometry's (carriers `ps`, solids `A`); hypotheses listed in §6. Then:
   flat-faced, with every face plane a carrier up to a nonzero scale. It rests on
   `Jordan.contains_const` (§6.1 below).
 
+**The metric ledger** (`Metric.lean`), for every ledger, keep table and metric tables:
+`collapse_local` (no cell that is not thin changes), `collapse_comp` (one feature, one keep),
+`collapse_uniform` (a thin cell takes its rim's keep), `collapse_idem` (collapsing again changes
+nothing), `collapse_subset` (the collapse only deletes result facets, never adds one),
+`collapse_refuse` (a refusal names a thin cell whose feature's rim is kept both ways or that is not
+enclosed), `coverageM` ((b) with the stage: empty, a valid body, a stated ZeroThickness at a
+non-manifold cell, or at a thin feature), `correct_off_thin` (for an exact ledger, a facet neither
+of whose sides is thin is in the collapsed result iff it is an exact boundary facet). Checked by
+`#guard`: a sub-LINEAR enclosed void in a block is filled (one box: 6 / 12 / 8, against 12 / 24 / 16
+without the stage); a sub-LINEAR fin on a plate is refused at the fin's cell.
+
 **(d) The six rescues** (`Rungs.lean`). `rung_covered`, `rung_exact`: any instance, under every
 consistent reading of the fact its rung flipped, falls under (b) with no retry, and the exact
 reading under (c). Flat instances, each a box ledger whose consistency is a kernel-checked
@@ -330,10 +355,14 @@ What the theorems do not claim:
 - That each output face is a disc, or the body's Euler characteristic: `Valid` is local
   (manifold at every edge and vertex, faces flat and partitioning the boundary). The global
   topology is the exact set's, by (c), but is not restated combinatorially.
-- §6.1 step 3, the output's sub-LINEAR features (edges shorter than LINEAR, slabs thinner than
-  LINEAR, reported with their locus): not in this core. It is a pass on the output that needs
-  metric facts; it should be a ledger of its own (each output edge's length against LINEAR,
-  decided once) and is the next piece to specify.
+- §6.1 step 3 is specified and its rule proven (stage 4b), but its two metric decisions are the
+  bridge's: `thin` must mean the cell lies within LINEAR of its boundary everywhere (its inradius
+  under LINEAR/2), and `enclosed` that every facet of the cell is a piece. Under those meanings a
+  collapsed feature moves the result by under LINEAR (each filled or removed point is within
+  LINEAR of the rim, which keeps its keep), which is the c·LINEAR slack of README §6; that metric
+  bound is stated, not proven in the Lean, which is combinatorial. Short *edges* (under LINEAR
+  between two vertex cells) are not collapsed: §6.1 step 2 collapses them before the boolean, and
+  after it they bound a thin cell, which the stage handles.
 - The kernel's split today is by the *other* body's carriers only; this spec splits each face at
   *every* carrier crossing it. Unify re-merges, so the faces are the same; the Rust must follow
   the spec (all carriers) for Aeneas equality.

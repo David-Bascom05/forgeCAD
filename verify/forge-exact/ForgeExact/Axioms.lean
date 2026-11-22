@@ -94,3 +94,12 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeExact.Jordan.contains_eq
   ForgeExact.Jordan.contains_const
   ForgeExact.DecideOnce.brep_compat
+  ForgeExact.DecideOnce.Ledger.coverageK
+  ForgeExact.DecideOnce.Ledger.collapse_local
+  ForgeExact.DecideOnce.Ledger.collapse_uniform
+  ForgeExact.DecideOnce.Ledger.collapse_refuse
+  ForgeExact.DecideOnce.Ledger.collapse_comp
+  ForgeExact.DecideOnce.Ledger.collapse_idem
+  ForgeExact.DecideOnce.Ledger.collapse_subset
+  ForgeExact.DecideOnce.Ledger.coverageM
+  ForgeExact.DecideOnce.correct_off_thin
