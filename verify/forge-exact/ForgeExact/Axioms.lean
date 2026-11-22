@@ -1,6 +1,7 @@
 import Lean
 import ForgeExact.Regular
 import ForgeExact.Flat
+import ForgeExact.SnapSym
 
 /-!
 # Only the standard axioms
@@ -33,3 +34,13 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeExact.Flat.HForm.den_iff_onSigns
   ForgeExact.Flat.flat_boolean
   ForgeExact.Flat.flat_bool
+  ForgeExact.Snap.tolEq_symm
+  ForgeExact.Snap.cls_spec
+  ForgeExact.Snap.rep_order
+  ForgeExact.Snap.rep_class
+  ForgeExact.Snap.onIn_class
+  ForgeExact.Snap.gap_carried
+  ForgeExact.Snap.vertexAt_on
+  ForgeExact.Snap.snap_result
+  ForgeExact.Snap.tolEq_sym
+  ForgeExact.Snap.rep_sym

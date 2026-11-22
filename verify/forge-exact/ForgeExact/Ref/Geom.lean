@@ -74,7 +74,7 @@ def meet3 (a b c : Plane) : Option V3 :=
 structure Box where
   lo : V3
   hi : V3
-  deriving Inhabited
+  deriving Inhabited, DecidableEq
 
 def Box.ofPoints (ps : Array V3) : Box :=
   ps.foldl (fun b p => ⟨⟨qmin b.lo.x p.x, qmin b.lo.y p.y, qmin b.lo.z p.z⟩,
