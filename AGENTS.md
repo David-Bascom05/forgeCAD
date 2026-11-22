@@ -37,10 +37,11 @@ Tools (CLI `forgecad TOOL F ..`, or MCP). Replies are typed JSON with `--json` o
 build F                     every feature's status and dims, then the part: volume, faces, valid
 check F                     the same, stopping before the kernel
 edit F 'OP'..               typed ops, all applied or none; replies with the build
+diff A B [volume]           what B changed from A: features, params, faces by name, volume
 query F params|features|stat|check
-query F SEL [--at FEAT]     @handles: `faces plane normal +z top`, `edges circle r=2.5`
+query F SEL                 @handles: `faces plane normal +z top`, `edges circle r=2.5`
 query F holes|aligned|interference|faces | section z=67 | gap A B | frame SKETCH
-measure F REF [REF] | mass | wall
+measure F REF [REF] | mass | wall [exact]
 render F [VIEW] [--labels SEL] [--px N] [-o F.png]
 export F [ap214|ap242] [tol MM] [-o F.step] | dxf [SHEET] | dwg [SHEET]
 help forge

@@ -129,22 +129,38 @@ l = line(a, b, construction: false) a, b: points or (x, y)
 a = arc(center: c, from: p, to: q, cw: false)
 c = circle(center, r)
 e = ellipse(center: P, major: P, b: r)   major: one end of the major axis; b: the semi-minor axis
+e = earc(center: P, major: P, b: r, from: P, to: Q, cw: false)   an arc of that ellipse, its
+                                    ends held on it, counter-clockwise from `from` to `to`
 r = rect(corner: (x, y) | center: (x, y), size: (w, h))   sides 0..3: bottom, right, top, left
 s = slot(a, b, r)
 h = hull(ITEM, ITEM, ..)            convex outline, counter-clockwise: an item is a point or
                                     disc(center, r); lines tangent to the discs, arcs round them.
                                     Segments in order: for each item, its arc (discs only), then
-                                    the line to the next item
+                                    the line to the next item (four discs of one r at a
+                                    rectangle's corners inset by r: a rounded rectangle)
 o = poly([P, ..], closed: true)     side k runs from point k to point k+1
 s = spline([P, ..], closed: true)   the cubic through the points; cv: true, a B-spline the points
                                     pull as its control vertices (cubic, lower with under four
-                                    points, or five closed)
+                                    points, or five closed); `degree: n`, `knots: [k, ..]`
+                                    (points + degree + 1 of them, never falling), `weights:
+                                    [w, ..]` (one a point) make it one on control vertices,
+                                    open (`cv` and `closed` follow: `cv: false` or `closed:
+                                    true` with them is `NotWith`); `start_slope: (dx, dy)`,
+                                    `end_slope: (dx, dy)` set the through-curve's slope at an
+                                    end (its rate along it, length counts), open
 path o(start: P) {                  a chain: line(to: P, tangent: false), tarc(to: P)
   line(to: P)                       (an arc tangent to the segment before), spline(through:
   tarc(to: P)                       [P, ..], to: P, tangent: true), close()
   close()
 }
 ```
+
+A sketch's regions are its loops, each hole inside its outline. Loops may touch, tangent or at a
+corner: what cannot exist is the solid, not the sketch, so the result decides (an extrude whose
+hole touches its outline is the kernel's `ZeroThickness`, saying where; a cut whose touch lies
+outside the part builds). A loop that crosses or touches itself, or two loops crossing or
+overlapping, is `SketchProfile` naming the two entities; a knife edge (a line leaving tangent
+along the arc it came on) is not a crossing.
 
 A loop value (rect, slot, hull, poly, path) indexes its segments: `o[2]`, `o.segs`. Entity
 members: points `x y`; lines `a b dir`; arcs `center a b`; circles `center`; arcs and circles `axis` (through
@@ -176,12 +192,12 @@ whole quotient) and `mod(k, n)` (the remainder), so `xs[mod(k, 3)], ys[div(k, 3)
 ## Features
 
 ```
-extrude(PROFILE, d | sym(d) | two(f, b) | thru | thru_all | next | upto(FACES | WORKPLANE, offset),
+extrude(PROFILE, d | sym(d) | two(f, b) | thru | thru_all | next | upto(FACES | WORKPLANE | SKETCH, offset),
         taper: A, along: DIR, flip: false, new: false, bodies: BODIES)
                                     adds (a new body for the first solid, or with new: true)
 cut(PROFILE, d | ...)               into the material: against the sketch normal
 intersect(PROFILE, extent)          keeps what lies inside
-revolve(PROFILE, axis: LINE, angle: A | sym(A) | two(A, B) | upto(FACES | WORKPLANE, offset: A),
+revolve(PROFILE, axis: LINE, angle: A | sym(A) | two(A, B) | upto(FACES | WORKPLANE | SKETCH, offset: A),
         cut|keep|new: true, bodies: BODIES)   LINE: a line of the same sketch (construction
                                     or not; a plain line that is no side of the profile is
                                     left out of it)
@@ -204,7 +220,8 @@ shell(t, open: FACES, out: false) hollow to walls t thick (out: outside the skin
 ```
 
 PROFILE: a sketch with one region, or one of its loops or closed entities (`S.outline`, `S.c`).
-A negative depth runs the other way. `taper:` takes a depth only: with `sym`, `two`, `thru`,
+A negative depth runs the other way. `upto(SKETCH)` ends on the sketch's plane (an edit
+moving the sketch moves the end); `offset` runs on past it (negative: short of it). `taper:` takes a depth only: with `sym`, `two`, `thru`,
 `thru_all`, `next` or `upto` it is `NotWith`; on an outline with a spline side it is
 `TaperOnCurve` (the kernel's draft has no exact leaning form for a free curve).
 `along: DIR` slants the walls that way (a depth, `sym`, `two`, `thru`, `thru_all`: each end
@@ -314,7 +331,7 @@ hole(at: POINT | [POINTS], d: D, depth: DEPTH, cbore: (D, depth), csink: (D, A),
      thread: "M36x2" | (size, pitch), flip: false, on: PLANE, bodies: BODIES)
 hole(at: .., screw: SIZE, convention: "iso"|"ansi", fit: "close"|"normal"|"loose"|"tap",
      seat: "cbore"|"csink", depth: DEPTH, point: A, ..)
-DEPTH: d | thru | next | upto(FACES | WORKPLANE, offset)
+DEPTH: d | thru | next | upto(FACES | WORKPLANE | SKETCH, offset)
 ```
 
 Drilled against the plane's normal (`flip: true`: with it), the mouth at each point, x along the
@@ -333,7 +350,7 @@ thread(hole: HOLE, length: L)                   the hole's recorded thread, at e
 thread(face: FACES, spec: SPEC, length: L, flip: false)   round a cylinder face (outside or in)
 thread(on: PLANE, at: POINT, spec: SPEC, internal: false, length: L, flip: false)   about an axis
        square to the plane through POINT (default its origin), into the material
-length: d | "full" | upto(FACES | WORKPLANE, offset);  left: false, chamfer: false, runout: false
+length: d | "full" | upto(FACES | WORKPLANE | SKETCH, offset);  left: false, chamfer: false, runout: false
 SPEC: "M6" | "M6x0.75" | "1/4-20" | (major, pitch)
 ```
 
@@ -406,9 +423,11 @@ bp = workpoint(meet: (bax, l.side(lsk.outline[5])))
 
 `new: true` on an extrude or revolve makes a body; a body is named by the feature that made it.
 `bodies: F | [F..] | "all"` on an extrude, cut, intersect, revolve, sweep, coil, loft, ball, rib,
-hole, thread, pattern, text, import or split makes it act on those bodies, not the last made.
-Features that name faces or edges (fillet, chamfer, shell, draft, the face edits) act on the
-bodies holding them.
+thicken, hole, thread, pattern, text, import or split makes it act on those bodies, not the last
+made. Features that name faces or edges (fillet, chamfer, shell, draft, the face edits) act on
+the bodies holding them; draft and the face edits (offset_faces, move_faces, delete_faces,
+replace_face) take `bodies:` too, and a body named that holds none of their faces is the
+kernel's MissingEdge.
 
 ```
 union(TARGET, tools: BODIES, keep: false)   subtract(..)   intersect(TARGET, tools: BODIES, ..)
@@ -921,6 +940,12 @@ allowed; each top-level statement may make at most 100000 calls, nested at most 
 finished part), `expect section_area(V) = A` (the material cut by the plane z = V), `expect valid`. A failed line is
 `ExpectFailed` with the measured value and the limit. An expect whose limit is the measured value
 to the last digit is the lint `ExpectCopied`.
+
+The built part's measure (`fg run --json`: `part`) is its volume, area, centroid, faces, edges,
+bodies, validity and `bbox` (`[xlo, ylo, zlo, xhi, yhi, zhi]`). The box is tight, not a hull of
+the faces' bounds: the edges' own extremes (an arc's, not its circle's), widened by a face that
+bulges past them (a dome's top, a swept tube's crown), met to within 0.05 by meshing that face
+alone; it is worked out beside the mass properties, so a build waits for neither.
 
 ## Assemblies
 

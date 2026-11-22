@@ -2,6 +2,14 @@
 
 use crate::eval::{ParamInfo, Status, Value};
 use crate::values::{Dim, Src, fmt};
+
+/// A measure to the thousandth, its trailing zeros dropped: `11730.013`, never the float's
+/// `11730.013000000001`.
+fn milli(x: f64) -> String {
+    let s = format!("{x:.3}");
+    let s = s.trim_end_matches('0').trim_end_matches('.');
+    if s == "-0" { "0".into() } else { s.into() }
+}
 use crate::{Run, error::ParamKey};
 use forge_agent::json::Json;
 use std::collections::BTreeMap;
@@ -336,11 +344,11 @@ pub fn text(run: &Run, src: &str) -> String {
     if let Some(m) = &run.measure {
         out.push_str(&format!(
             "part: volume {} mm3, area {} mm2, centroid {} {} {}, bodies {}, faces {}, edges {}, {}\n",
-            fmt((m.volume * 1000.0).round() / 1000.0),
-            fmt((m.area * 1000.0).round() / 1000.0),
-            fmt((m.centroid[0] * 1000.0).round() / 1000.0),
-            fmt((m.centroid[1] * 1000.0).round() / 1000.0),
-            fmt((m.centroid[2] * 1000.0).round() / 1000.0),
+            milli(m.volume),
+            milli(m.area),
+            milli(m.centroid[0]),
+            milli(m.centroid[1]),
+            milli(m.centroid[2]),
             m.bodies,
             m.faces,
             m.edges,

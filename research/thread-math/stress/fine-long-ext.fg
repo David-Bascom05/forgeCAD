@@ -1,0 +1,9 @@
+# long fine: 200 turns outside
+param rodsk.r = 10
+sketch rodsk(on: xy) {
+  c = circle((0, 0), r)
+}
+param rod.h = 110
+rod = extrude(rodsk, h)
+param th.length = 100
+th = thread(on: rod.end, spec: "M20x0.5", length: length)

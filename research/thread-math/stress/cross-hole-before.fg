@@ -1,0 +1,25 @@
+# a thread through a cross hole made first
+shared w = 30
+shared h = 40
+param plan.ay = 1
+sketch plan(on: xy) {
+  outline = rect(center: (0, 0), size: (w, w))
+  yax = line((0, 0), (0, ay), construction: true)
+}
+b = extrude(plan, h)
+# across, on the plane x = 0
+param crossing.z = 20
+param crossing.r = 2.5
+sketch crossing(on: rotate(plan, about: plan.yax, by: 90deg)) {
+  c = circle((0, z), r)
+}
+param crossbore.d = 40
+crossbore = cut(crossing, sym(d))
+sketch top(on: b.end) {
+  c = pt(0, 0)
+}
+param hole1.d = 10.106
+param hole1.major = 12
+param hole1.pitch = 1.75
+hole1 = hole(at: top.c, d: d, depth: thru, thread: (major, pitch))
+thread1 = thread(hole: hole1, length: "full")

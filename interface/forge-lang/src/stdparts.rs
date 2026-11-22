@@ -860,7 +860,7 @@ fn round(v: f64) -> f64 {
 }
 
 /// The hole sizes the hole feature drills (`hole(screw: ..)`), for a dialog to offer: the kernel's
-/// table (`forge_model::standard::SCREWS`), which `.fc` parts read too. `tables_hole` gives the
+/// table (`forge_model::standard::SCREWS`). `tables_hole` gives the
 /// same rows from these tables; `tests/stdparts.rs` holds the two together, every difference a
 /// row of `resolutions/hole_sizes.csv`.
 pub fn hole_screws() -> &'static [forge_model::standard::Screw] {

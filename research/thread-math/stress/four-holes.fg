@@ -1,0 +1,18 @@
+# a pattern of tapped holes
+shared w = 80
+sketch plan(on: xy) {
+  outline = rect(center: (0, 0), size: (w, w))
+}
+param b.t = 12
+b = extrude(plan, t)
+param top.a = 20
+sketch top(on: b.end) {
+  c = pt(-a, -a)
+}
+param h.d = 5
+param h.major = 6
+param h.pitch = 1
+h = hole(at: top.c, d: d, depth: thru, thread: (major, pitch))
+param hs.step = 40
+hs = pattern(of: h, layout: lin(along: plan.outline[0].dir, n: count(2), step: step, along2: plan.outline[1].dir, n2: count(2), step2: step))
+taps = thread(hole: h, length: "full", chamfer: true)
