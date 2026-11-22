@@ -26,7 +26,11 @@
 # parts' too, from any checkout, at any load. Each counted run is made alike:
 #   - the binaries are copied to a fresh mktemp directory, a path of the same length every time
 #     (ld.so's work, and argv, grow with the path);
-#   - `env -i` with a fixed PATH and HOME (the environment is copied onto the stack);
+#   - `env -i` with a fixed PATH and HOME (the environment is copied onto the stack), run from
+#     `/` (valgrind keeps its starting directory, and its length moves where the client's large
+#     blocks are mapped, so whether realloc can grow them in place);
+#   - the bench parts' sources copied beside the binaries (FORGE_BENCH_PARTS): read from a path
+#     of one length, not from the checkout;
 #   - tools/speed/fixedrandom.c preloaded: getrandom gives fixed bytes, so std's HashMap keys are
 #     the same every run (they move probe lengths, and with them the heap);
 #   - `taskset -c $GATE_CPU` (default 0): one CPU, so the kernel's thread pools
@@ -62,8 +66,9 @@ case $counter in
     exact=${GATE_EXACT:-1}
     count1() {
       if [ "$exact" = 1 ]; then
-        env -i PATH=/usr/bin:/bin HOME=/tmp LD_PRELOAD="$bin/fixedrandom.so" taskset -c "${GATE_CPU:-0}" setarch -R \
-          valgrind --fair-sched=yes --tool=callgrind --cache-sim=no --callgrind-out-file=/dev/null "$@"
+        (cd / && env -i PATH=/usr/bin:/bin HOME=/tmp LD_PRELOAD="$bin/fixedrandom.so" \
+          FORGE_BENCH_PARTS="$bin/parts" taskset -c "${GATE_CPU:-0}" setarch -R \
+          valgrind --fair-sched=yes --tool=callgrind --cache-sim=no --callgrind-out-file=/dev/null "$@")
       else
         valgrind --tool=callgrind --cache-sim=no --callgrind-out-file=/dev/null "$@"
       fi 2>&1 >/dev/null |
@@ -94,6 +99,8 @@ if [ "$counter" = callgrind ] && [ "$exact" = 1 ]; then
   gatedir=$(mktemp -d /tmp/forge-gate.XXXXXX)
   trap 'rm -rf "$gatedir"' EXIT
   cp "$bin/regen1" "$bin/bits" "$bin/benchparts" "$gatedir/"
+  mkdir "$gatedir/parts"
+  cp interface/forge-lang/parts/bench/*.fg "$gatedir/parts/"
   cc -O2 -shared -fPIC -o "$gatedir/fixedrandom.so" "$dir/fixedrandom.c"
   bin=$gatedir
 fi

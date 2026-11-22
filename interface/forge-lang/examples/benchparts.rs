@@ -58,7 +58,12 @@ fn bench(name: &str) -> (Part, Vec<u64>) {
 }
 
 fn source(name: &str) -> String {
-    let path = format!("{}/parts/bench/{name}.fg", env!("CARGO_MANIFEST_DIR"));
+    // (FORGE_BENCH_PARTS: the folder the speed gate copies them to, a path of one length from
+    // any checkout, so a count does not depend on where the checkout is)
+    let path = match std::env::var("FORGE_BENCH_PARTS") {
+        Ok(dir) => format!("{dir}/{name}.fg"),
+        Err(_) => format!("{}/parts/bench/{name}.fg", env!("CARGO_MANIFEST_DIR")),
+    };
     std::fs::read_to_string(&path).expect("a bench part")
 }
 
