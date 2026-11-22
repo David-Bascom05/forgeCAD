@@ -953,25 +953,6 @@ impl Body {
         fans
     }
 
-    /// Gives each fan past the first of those coedges `from` (all leaving vertex `v`) lie in a
-    /// vertex of its own at the same point: solids touching at a point stay manifold, as
-    /// Parasolid and ACIS keep them.
-    pub fn split_pinched(&mut self, v: VertexId, from: &[CoedgeId], prev: &mut Vec<CoedgeId>) {
-        for (k, fan) in self.fans(from, prev).iter().enumerate().skip(1) {
-            let old = self.vertices[v.index()].clone();
-            let nv = self.add_tolerant_vertex(old.point, old.tol, old.name.with(k as u64));
-            for &c in fan {
-                let (edge, forward) = (self.coedge(c).edge, self.coedge(c).forward);
-                let e = &mut self.edges[edge.index()];
-                if forward {
-                    e.start = nv;
-                } else {
-                    e.end = nv;
-                }
-            }
-        }
-    }
-
     /// The other use of the same edge.
     pub fn partner(&self, c: CoedgeId) -> Option<CoedgeId> {
         let e = self.edge(self.coedge(c).edge);
