@@ -461,10 +461,11 @@ impl Sk {
     /// Solves; conflicting rows are an error, freedom left is reported.
     pub fn finish(&mut self) -> R<()> {
         let rep = self.s.solve();
-        let an = self.s.analyze();
-        if !an.conflicting.is_empty() {
-            let rows = an
-                .conflicting
+        // freedom and conflicts only: the per-entity ranks `analyze` also works out cost more
+        // than the solve, and nothing here reads them
+        let (dof, conflicting) = self.s.freedom();
+        if !conflicting.is_empty() {
+            let rows = conflicting
                 .iter()
                 .filter_map(|c| self.cons.iter().find(|x| x.0 == *c).map(|x| x.1))
                 .collect();
@@ -481,7 +482,7 @@ impl Sk {
                 residual: rep.max_residual,
             });
         }
-        self.dof = an.dof;
+        self.dof = dof;
         self.solved = true;
         Ok(())
     }

@@ -697,6 +697,27 @@ impl Sketch {
         }
     }
 
+    /// `analyze`'s freedom left and conflicting constraints alone, without the per-entity and
+    /// per-constraint ranks (what a caller that names neither needs).
+    pub fn freedom(&self) -> (usize, Vec<ConstraintId>) {
+        let n = self.params.len();
+        let sys = self.system(&self.params);
+        let m = sys.r.len();
+        let blocks = Blocks::new(&sys, n);
+        let scale = (0..m)
+            .map(|i| sys.row(i).iter().fold(0.0f64, |s, e| s.max(e.1.abs())))
+            .fold(0.0f64, f64::max);
+        let base: usize = (0..blocks.cols.len())
+            .map(|b| blocks.rank(&sys, b, &[], &[], scale))
+            .sum();
+        let mut conflicting: Vec<ConstraintId> = (0..m)
+            .filter(|&i| sys.r[i].abs() > CONFLICT)
+            .filter_map(|i| sys.origin[i])
+            .collect();
+        conflicting.dedup();
+        (n - base, conflicting)
+    }
+
     /// True when every entity is fully constrained and nothing conflicts.
     pub fn is_fully_constrained(&self) -> bool {
         let a = self.analyze();
