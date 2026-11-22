@@ -4,6 +4,7 @@ import ForgeExact.Flat
 import ForgeExact.SnapSym
 import ForgeExact.RefFacts
 import ForgeExact.Alg.Sum
+import ForgeExact.Quad.Cert
 
 /-!
 # Only the standard axioms
@@ -64,3 +65,13 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeExact.Alg.ev_redCert
   ForgeExact.Alg.add_spec
   ForgeExact.Alg.mul_spec
+  ForgeExact.Quad.box_bound
+  ForgeExact.Quad.sign_nbhd
+  ForgeExact.Quad.escape
+  ForgeExact.Quad.wall_nowhereDense
+  ForgeExact.Quad.QForm.den_iff_onSigns
+  ForgeExact.Quad.quad_boolean
+  ForgeExact.Quad.member_off_wall
+  ForgeExact.Quad.member_box
+  ForgeExact.Quad.pairCheck_spec
+  ForgeExact.Quad.empty_of_patterns
