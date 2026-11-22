@@ -213,6 +213,13 @@ pub fn layout(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<
                     Value::Wired(w) if w.work_ref().is_some() && w.point().is_some() => {
                         at.push(At::Ref(w.work_ref().expect("checked")))
                     }
+                    // vertices of the part, each followed by the kernel
+                    Value::Verts(vs) => {
+                        for &v in vs.iter() {
+                            let one = Value::Verts(std::rc::Rc::new(vec![v]));
+                            at.push(At::Ref(crate::work::to_ref(ev, one, a.span("at"))?));
+                        }
+                    }
                     v => at.push(At::Xyz(point_of(ev, v.clone(), a.span("at"))?)),
                 }
             }

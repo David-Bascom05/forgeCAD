@@ -477,6 +477,10 @@ pub(crate) fn pos2(ev: &Eval, p: P2) -> Point2 {
 pub fn point_of(_ev: &Eval, v: Value, span: Span) -> R<Point3> {
     match v {
         Value::Point(p) => Ok(p),
+        Value::Verts(vs) => {
+            let n = crate::verts::one(&vs, span, "a vertex (one)")?;
+            crate::verts::point(_ev, n).ok_or(Error::EmptySelection { span })
+        }
         Value::Wired(ref w) if w.point().is_some() => Ok(w.point().expect("checked")),
         Value::Ent(e) => {
             let id = point_ent(&e, span)?;
