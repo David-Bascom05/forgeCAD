@@ -229,9 +229,6 @@ pub struct Cache {
     origins: Vec<Rc<Lineage>>,
     /// Each sketch's solve, by its id (`Sk::finish`).
     sketches: HashMap<String, Rc<crate::sketch::Solved>>,
-    /// The last run's text and its tree: the next run patches the tree where its text differs
-    /// only within one number (`syntax::reparse_number`), not parsing again.
-    pub(crate) parsed: Option<(String, Vec<crate::syntax::Stmt>)>,
 }
 
 /// The same step as one built before: equal features, and a file one reads (an import's body, a
@@ -491,7 +488,6 @@ impl Builder {
             comps: self.cache.comps,
             origins: self.origins,
             sketches: self.sketches,
-            parsed: None,
         }
     }
 

@@ -433,20 +433,10 @@ fn sum_masses(ms: &[forge_topo::mass::MassProps]) -> forge_topo::mass::MassProps
     }
 }
 
-fn run_once(src: &str, opts: Options, mut cache: Cache) -> (Run, Cache) {
+fn run_once(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
     let t0 = Instant::now();
     let mut timings = Timings::default();
-    // the run before's tree, patched where only a number changed (an edit of one dimension)
-    let prog = match cache.parsed.take() {
-        Some((was, mut prog)) => {
-            if syntax::reparse_number(&was, &mut prog, src) {
-                Ok(prog)
-            } else {
-                syntax::parse(src)
-            }
-        }
-        None => syntax::parse(src),
-    };
+    let prog = syntax::parse(src);
     timings.parse_ms = t0.elapsed().as_secs_f64() * 1e3;
     let prog = match prog {
         Ok(p) => p,
@@ -500,7 +490,6 @@ fn run_once(src: &str, opts: Options, mut cache: Cache) -> (Run, Cache) {
     });
     // a harness file is evaluated where an assembly places it, with the occurrences it is given
     let placed_only = harness::header(&prog).map(|(names, _)| names);
-    let keep_tree = placed_only.is_none();
     let prog = match &placed_only {
         Some(names) => {
             harness::placed_only(&mut ev, prog[0].span, names);
@@ -689,11 +678,7 @@ fn run_once(src: &str, opts: Options, mut cache: Cache) -> (Run, Cache) {
     run.components = asm::components(&ev);
     run.body_chains = chains;
     asm::keep_comp_caches(&mut ev);
-    let mut cache = ev.b.into_cache();
-    if keep_tree {
-        cache.parsed = Some((src.to_string(), prog));
-    }
-    (run, cache)
+    (run, ev.b.into_cache())
 }
 
 /// Where a run may read files: under the session's root if one is given (`fg serve`, MCP), else
