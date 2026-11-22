@@ -314,6 +314,18 @@ impl Fast {
         Err(self.stop(a as u16))
     }
 
+    /// `shift` of the lookahead itself, after TABLE picked a rule that starts with it.
+    #[inline]
+    fn take(&mut self) -> F<Span> {
+        if self.miss.is_none() {
+            let s = self.span();
+            self.k = (self.k + 1).min(self.toks.len() - 1);
+            self.la = self.las[self.k];
+            return Ok(s);
+        }
+        Err(self.stop(self.la as u16))
+    }
+
     /// An ID's text, taken out of its token.
     #[inline]
     fn id(&mut self) -> F<(String, Span)> {
@@ -375,10 +387,8 @@ impl Fast {
 
     #[inline]
     fn sep(&mut self, fk: u64) -> F<Span> {
-        match self.pick(SEP, fk)? {
-            P::SepNl => self.shift(t::NL),
-            _ => self.shift(t::SEMI),
-        }
+        self.pick(SEP, fk)?;
+        self.take()
     }
 
     fn stmt(&mut self, fk: u64) -> F<Stmt> {
@@ -819,7 +829,7 @@ impl Fast {
             if self.pick(ARGSREST, after(P::ArgsArg, 1, fk))? == P::ArgsrestEmpty {
                 break;
             }
-            self.shift(t::COMMA)?;
+            self.take()?;
         }
         Ok(args)
     }
@@ -877,7 +887,7 @@ impl Fast {
         let k_mul = after(P::AddMul, 0, k_add);
         let k_unary = after(P::MulUnary, 0, k_mul);
         let k_power = after(P::UnaryPower, 0, k_unary);
-        let a = self.postfix(after(P::PowerPostfix, 0, k_power))?;
+        let a = self.postfix_picked(after(P::PowerPostfix, 0, k_power))?;
         if self.miss.is_none() && TAILS_END >> (self.la & 63) & 1 == 1 {
             return Ok(a);
         }
@@ -899,7 +909,7 @@ impl Fast {
     #[inline]
     fn orrest(&mut self, fk: u64, mut a: Expr) -> F<Expr> {
         while self.pick(ORREST, fk)? == P::OrrestOr {
-            self.shift(t::OR)?;
+            self.take()?;
             let b = self.and(after(P::OrrestOr, 1, fk))?;
             a = Self::chain(a, BinOp::Or, b);
         }
@@ -915,7 +925,7 @@ impl Fast {
     #[inline]
     fn andrest(&mut self, fk: u64, mut a: Expr) -> F<Expr> {
         while self.pick(ANDREST, fk)? == P::AndrestAnd {
-            self.shift(t::AND)?;
+            self.take()?;
             let b = self.not(after(P::AndrestAnd, 1, fk))?;
             a = Self::chain(a, BinOp::And, b);
         }
@@ -930,7 +940,7 @@ impl Fast {
             let a = self.range(after(P::CmpRange, 0, fk))?;
             return self.cmprest(after(P::CmpRange, 1, fk), a);
         }
-        let s = self.shift(t::NOT)?;
+        let s = self.take()?;
         let e = self.not(after(P::NotNot, 1, fk))?;
         let span = s.to(e.span);
         Ok(Expr {
@@ -942,15 +952,15 @@ impl Fast {
     #[inline]
     fn cmprest(&mut self, fk: u64, mut a: Expr) -> F<Expr> {
         while self.pick(CMPREST, fk)? == P::CmprestRelop {
-            let (op, x) = match self.pick(RELOP, after(P::CmprestRelop, 0, fk))? {
-                P::RelopEqeq => (BinOp::Eq, t::EQEQ),
-                P::RelopNe => (BinOp::Ne, t::NE),
-                P::RelopLt => (BinOp::Lt, t::LT),
-                P::RelopLe => (BinOp::Le, t::LE),
-                P::RelopGt => (BinOp::Gt, t::GT),
-                _ => (BinOp::Ge, t::GE),
+            let op = match self.pick(RELOP, after(P::CmprestRelop, 0, fk))? {
+                P::RelopEqeq => BinOp::Eq,
+                P::RelopNe => BinOp::Ne,
+                P::RelopLt => BinOp::Lt,
+                P::RelopLe => BinOp::Le,
+                P::RelopGt => BinOp::Gt,
+                _ => BinOp::Ge,
             };
-            self.shift(x)?;
+            self.take()?;
             let b = self.range(after(P::CmprestRelop, 1, fk))?;
             a = Self::chain(a, op, b);
         }
@@ -971,7 +981,7 @@ impl Fast {
             P::RangetailDotdoteq => true,
             _ => return Ok(a),
         };
-        self.shift(if inclusive { t::DOTDOTEQ } else { t::DOTDOT })?;
+        self.take()?;
         let hi = self.add(after(P::RangetailDotdot, 1, fk))?;
         let span = a.span.to(hi.span);
         Ok(Expr {
@@ -994,12 +1004,12 @@ impl Fast {
     fn addrest(&mut self, fk: u64, mut a: Expr) -> F<Expr> {
         loop {
             let p = self.pick(ADDREST, fk)?;
-            let (op, x) = match p {
-                P::AddrestPlus => (BinOp::Add, t::PLUS),
-                P::AddrestMinus => (BinOp::Sub, t::MINUS),
+            let op = match p {
+                P::AddrestPlus => BinOp::Add,
+                P::AddrestMinus => BinOp::Sub,
                 _ => return Ok(a),
             };
-            self.shift(x)?;
+            self.take()?;
             let b = self.mul(after(P::AddrestPlus, 1, fk))?;
             a = Self::chain(a, op, b);
         }
@@ -1015,12 +1025,12 @@ impl Fast {
     fn mulrest(&mut self, fk: u64, mut a: Expr) -> F<Expr> {
         loop {
             let p = self.pick(MULREST, fk)?;
-            let (op, x) = match p {
-                P::MulrestStar => (BinOp::Mul, t::STAR),
-                P::MulrestSlash => (BinOp::Div, t::SLASH),
+            let op = match p {
+                P::MulrestStar => BinOp::Mul,
+                P::MulrestSlash => BinOp::Div,
                 _ => return Ok(a),
             };
-            self.shift(x)?;
+            self.take()?;
             let b = self.unary(after(P::MulrestStar, 1, fk))?;
             a = Self::chain(a, op, b);
         }
@@ -1034,7 +1044,7 @@ impl Fast {
             let a = self.postfix(after(P::PowerPostfix, 0, fk))?;
             return self.powtail(after(P::PowerPostfix, 1, fk), a);
         }
-        let s = self.shift(t::MINUS)?;
+        let s = self.take()?;
         let e = self.unary(after(P::UnaryMinus, 1, fk))?;
         let span = s.to(e.span);
         Ok(Expr {
@@ -1049,7 +1059,7 @@ impl Fast {
         if self.pick(POWTAIL, fk)? == P::PowtailEmpty {
             return Ok(a);
         }
-        self.shift(t::CARET)?;
+        self.take()?;
         let e = self.unary(after(P::PowtailCaret, 1, fk))?;
         let span = a.span.to(e.span);
         Ok(Expr {
@@ -1060,6 +1070,12 @@ impl Fast {
 
     fn postfix(&mut self, fk: u64) -> F<Expr> {
         self.pick(POSTFIX, fk)?;
+        self.postfix_picked(fk)
+    }
+
+    /// `postfix` once its one rule is picked: where TABLE has it for the lookahead, picking it
+    /// does nothing else (`or` checks that before it calls this).
+    fn postfix_picked(&mut self, fk: u64) -> F<Expr> {
         let mut a = self.atom(after(P::PostfixAtom, 0, fk))?;
         let fk = after(P::PostfixAtom, 1, fk);
         let lo = a.span.lo;
@@ -1067,18 +1083,18 @@ impl Fast {
             let q = self.pick(POSTREST, fk)?;
             let (kind, hi) = match q {
                 P::PostrestLparen => {
-                    self.shift(t::LPAREN)?;
+                    self.take()?;
                     let args = self.args(after(P::PostrestLparen, 1, fk))?;
                     let hi = self.shift(t::RPAREN)?.hi;
                     (ExprKind::Call(Box::new(a), args), hi)
                 }
                 P::PostrestDot => {
-                    self.shift(t::DOT)?;
+                    self.take()?;
                     let (n, s) = self.id()?;
                     (ExprKind::Attr(Box::new(a), n), s.hi)
                 }
                 P::PostrestLbrack => {
-                    self.shift(t::LBRACK)?;
+                    self.take()?;
                     let i = self.expr(after(P::PostrestLbrack, 1, fk))?;
                     let hi = self.shift(t::RBRACK)?.hi;
                     (ExprKind::Index(Box::new(a), Box::new(i)), hi)
@@ -1098,26 +1114,32 @@ impl Fast {
         let (x, k) = (self.k, self.k);
         let kind = match p {
             P::AtomNum => {
-                self.shift(t::NUM)?;
+                self.take()?;
                 match self.toks[x].kind {
                     TokKind::Num(v, u) => ExprKind::Num(v, u),
                     _ => ExprKind::Num(0.0, Unit::None),
                 }
             }
             P::AtomStr => {
-                self.shift(t::STR)?;
+                self.take()?;
                 match &mut self.toks[k].kind {
                     TokKind::Str(s) => ExprKind::Str(std::mem::take(s)),
                     _ => ExprKind::Str(String::new()),
                 }
             }
-            P::AtomId => ExprKind::Name(self.id()?.0),
+            P::AtomId => {
+                self.take()?;
+                match &mut self.toks[k].kind {
+                    TokKind::Id(s) => ExprKind::Name(std::mem::take(s)),
+                    _ => ExprKind::Name(String::new()),
+                }
+            }
             P::AtomTrue => {
-                self.shift(t::TRUE)?;
+                self.take()?;
                 ExprKind::Bool(true)
             }
             P::AtomFalse => {
-                self.shift(t::FALSE)?;
+                self.take()?;
                 ExprKind::Bool(false)
             }
             P::AtomLparen => return self.paren(fk),
@@ -1137,7 +1159,7 @@ impl Fast {
             if self.pick(TUPLEREST, fk1)? == P::TuplerestEmpty {
                 break;
             }
-            self.shift(t::COMMA)?;
+            self.take()?;
         }
         let hi = self.shift(t::RPAREN)?.hi;
         let span = Span { lo, hi };
