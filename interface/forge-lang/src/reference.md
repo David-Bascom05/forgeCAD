@@ -1215,7 +1215,8 @@ Dimension mixing, unknown names, wrong types, arity and index errors are type er
 Every error and lint is a typed record: `kind`, `span` (byte offsets, line, column), its data (the
 param, the measured value, the limit, ..), a `text` rendered from the data, and `fixes`: typed
 edit ops that would remove it. Warnings that are not lints: `UnderConstrained`, `UnusedParam`,
-`NoEffect` (a feature that changed nothing). A fillet, chamfer, shell or face fillet the kernel
+`NoEffect` (a feature that changed nothing: a check, so a run without checks, as a UI's first
+shows the shape, leaves it to the run with them). A fillet, chamfer, shell or face fillet the kernel
 refused (`Build`) whose size one param drives gets a SetParam fix to the largest value that builds
 (`fg run`, `fg edit`; `Options::fit_sizes`: a few rebuilds from that feature on, only when refused).
 

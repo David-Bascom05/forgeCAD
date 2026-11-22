@@ -80,14 +80,42 @@ impl Src {
             Src::Driven(s) => s.clone(),
         }
     }
+    /// Adds the params to `out`, copying only those it lacks.
+    pub fn add_to(&self, out: &mut BTreeSet<ParamKey>) {
+        let mut add = |p: &ParamKey| {
+            if !out.contains(p) {
+                out.insert(p.clone());
+            }
+        };
+        match self {
+            Src::Const => {}
+            Src::Driving(p) => add(p),
+            Src::Driven(s) => s.iter().for_each(add),
+        }
+    }
     fn join(a: &Src, b: &Src) -> Src {
-        let mut s = a.params();
-        s.extend(b.params());
-        if s.is_empty() { Src::Const } else { Src::Driven(s) }
+        // the params of either, as one set: built only where both hold some the other lacks
+        match (a, b) {
+            (Src::Const, x) | (x, Src::Const) => Src::derived(x),
+            (Src::Driving(p), Src::Driving(q)) if p == q => Src::derived(a),
+            (Src::Driven(s), Src::Driving(p)) | (Src::Driving(p), Src::Driven(s)) if s.contains(p) => {
+                Src::Driven(s.clone())
+            }
+            (Src::Driven(s), Src::Driven(t)) if s == t => Src::derived(a),
+            _ => {
+                let mut s = a.params();
+                s.extend(b.params());
+                if s.is_empty() { Src::Const } else { Src::Driven(s) }
+            }
+        }
     }
     fn derived(a: &Src) -> Src {
-        let s = a.params();
-        if s.is_empty() { Src::Const } else { Src::Driven(s) }
+        match a {
+            Src::Const => Src::Const,
+            Src::Driving(p) => Src::Driven([p.clone()].into()),
+            Src::Driven(s) if s.is_empty() => Src::Const,
+            Src::Driven(s) => Src::Driven(s.clone()),
+        }
     }
 }
 

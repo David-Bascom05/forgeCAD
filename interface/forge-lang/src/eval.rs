@@ -271,13 +271,38 @@ struct Ctx {
     top_stmt: Option<Span>,
 }
 
+/// The names a scope binds. Hashed by FNV-1a, not SipHash: a name is a few bytes, looked up in
+/// every scope out to the top at each use, and no one hostile writes them; nothing iterates a
+/// scope in an order that shows (what does sorts first).
+pub(crate) type Scope = HashMap<String, (Value, Span), std::hash::BuildHasherDefault<NameHasher>>;
+
+/// FNV-1a over a name's bytes (`Scope`).
+pub(crate) struct NameHasher(u64);
+
+impl Default for NameHasher {
+    fn default() -> NameHasher {
+        NameHasher(0xcbf2_9ce4_8422_2325)
+    }
+}
+
+impl std::hash::Hasher for NameHasher {
+    fn write(&mut self, bytes: &[u8]) {
+        for &b in bytes {
+            self.0 = (self.0 ^ b as u64).wrapping_mul(0x0100_0000_01b3);
+        }
+    }
+    fn finish(&self) -> u64 {
+        self.0
+    }
+}
+
 pub struct Eval<'s> {
     pub src: &'s str,
     pub rules: Rules,
     pub shared: Vec<ParamInfo>,
     pub locals: Vec<ParamInfo>,
     pub fns: HashMap<String, Rc<FnDef>>,
-    scopes: Vec<HashMap<String, (Value, Span)>>,
+    scopes: Vec<Scope>,
     pub b: Builder,
     pub feats: Vec<FeatInfo>,
     ids: HashMap<String, Span>,
@@ -289,7 +314,7 @@ pub struct Eval<'s> {
     path: Option<PathState>,
     pub expects: Vec<Stmt>,
     /// Each expect's local names where it stood (loop variables, a function's arguments).
-    expect_scopes: Vec<Vec<HashMap<String, (Value, Span)>>>,
+    expect_scopes: Vec<Vec<Scope>>,
     ret: Option<Value>,
     /// Inside a sketch: the name (with loop indices) the entity a call makes takes, and the call.
     pub ent_name: Option<(String, Span)>,
@@ -302,7 +327,8 @@ pub struct Eval<'s> {
     pub reads: BTreeSet<ParamKey>,
     /// Measure the part's volume after every feature.
     pub volumes: bool,
-    /// Run the slow checks (a thermoform's wall simulation); off, the shape alone.
+    /// Run the slow checks (a thermoform's wall simulation, what changed nothing); off, the
+    /// shape alone.
     pub checks: bool,
     /// Whether the built-in being called was given something unknown.
     pub poisoned: bool,
@@ -392,7 +418,7 @@ impl<'s> Eval<'s> {
             shared: vec![],
             locals: vec![],
             fns: HashMap::new(),
-            scopes: vec![HashMap::new()],
+            scopes: vec![Scope::default()],
             b: Builder::new(building, cache),
             feats: vec![],
             ids: HashMap::new(),
@@ -508,7 +534,7 @@ impl<'s> Eval<'s> {
 
     /// Evaluates `f` with `name` bound to `v` in a scope of its own (a name no source can write).
     pub(crate) fn with_bound<T>(&mut self, names: Vec<(String, Value)>, f: impl FnOnce(&mut Self) -> T) -> T {
-        let mut sc = HashMap::new();
+        let mut sc = Scope::default();
         for (n, v) in names {
             sc.insert(n, (v, Span { lo: 0, hi: 0 }));
         }
@@ -530,12 +556,12 @@ impl<'s> Eval<'s> {
             name: name.into(),
             index: vec![],
         });
-        let mut sc = HashMap::new();
+        let mut sc = Scope::default();
         for (n, v) in bound {
             sc.insert(n, (v, Span { lo: 0, hi: 0 }));
         }
         self.scopes.push(sc);
-        self.scopes.push(HashMap::new());
+        self.scopes.push(Scope::default());
         let r = f(self);
         self.scopes.pop();
         self.scopes.pop();
@@ -936,12 +962,12 @@ impl<'s> Eval<'s> {
                     first = Some(*f);
                 }
             }
-            let here = self.ctx.owner.clone();
+            let here = &self.ctx.owner;
             if let Some(p) = self
                 .shared
                 .iter()
                 .chain(&self.locals)
-                .find(|p| p.key.name == name && Self::visible(&p.key.owner, &here).is_some())
+                .find(|p| p.key.name == name && Self::visible(&p.key.owner, here).is_some())
             {
                 first = Some(p.span);
             }
@@ -996,13 +1022,11 @@ impl<'s> Eval<'s> {
     }
 
     pub fn observe(&mut self, n: &Num) {
-        self.observed.extend(n.src.params());
+        n.src.add_to(&mut self.observed);
     }
 
     pub fn observe_value(&mut self, v: &Value) {
-        let mut ps = BTreeSet::new();
-        collect_params(v, &mut ps);
-        self.observed.extend(ps);
+        collect_params(v, &mut self.observed);
     }
 
     /// A rule broken: an error, a lint, or nothing, as the rule's level says.
@@ -1147,7 +1171,7 @@ impl<'s> Eval<'s> {
                 }
                 let mut collected: Vec<Collected> = vec![];
                 for (key, item) in items {
-                    self.scopes.push(HashMap::new());
+                    self.scopes.push(Scope::default());
                     self.ctx.loops.push(key.clone());
                     let r = (|| {
                         match vars.len() {
@@ -1345,8 +1369,7 @@ impl<'s> Eval<'s> {
             &mut self.locals[which.1]
         };
         p.used = true;
-        let key = p.key.clone();
-        driving(&p.value, &key, span)
+        driving(&p.value, &p.key, span)
     }
 
     fn lookup(&mut self, name: &str, span: Span) -> R<Value> {
@@ -1374,13 +1397,13 @@ impl<'s> Eval<'s> {
                 near: None,
             });
         }
-        let here = self.ctx.owner.clone();
+        let here = &self.ctx.owner;
         let best = self
             .locals
             .iter()
             .enumerate()
             .filter(|(_, p)| p.key.name == name)
-            .filter_map(|(k, p)| Self::visible(&p.key.owner, &here).map(|s| (s, k)))
+            .filter_map(|(k, p)| Self::visible(&p.key.owner, here).map(|s| (s, k)))
             .max();
         if let Some((_, k)) = best {
             return Ok(self.param_num((false, k), span));
@@ -1513,7 +1536,7 @@ impl<'s> Eval<'s> {
                 let items = self.iterable(it, iter.span)?;
                 let mut out = vec![];
                 for (k, x) in items.into_iter().enumerate() {
-                    self.scopes.push(HashMap::new());
+                    self.scopes.push(Scope::default());
                     let r = (|| {
                         match vars.len() {
                             1 => self.bind(&vars[0], x, iter.span)?,
@@ -1944,7 +1967,7 @@ impl<'s> Eval<'s> {
                 max: def.params.len(),
             });
         }
-        let mut scope: HashMap<String, (Value, Span)> = HashMap::new();
+        let mut scope = Scope::default();
         for (k, a) in args.iter().enumerate() {
             let pname = match &a.name {
                 Some((n, nsp)) => {
@@ -2131,7 +2154,9 @@ impl<'s> Eval<'s> {
             last.fingerprint = Some(h.finish());
         }
         r?;
-        if status == Status::Ok && idx > 0 && self.no_effect(idx) {
+        // a check (it joins each stage's faces to compare them): a run without checks shows the
+        // shape first, and the run with them, every stage reused, says what changed nothing
+        if status == Status::Ok && idx > 0 && self.checks && self.no_effect(idx) {
             self.warnings.push(Warning::NoEffect { span, id: id.into() });
         }
         Ok((idx, hid))
@@ -2146,22 +2171,8 @@ impl<'s> Eval<'s> {
         let (a, b) = (&self.b.stages[n - 2], &self.b.stages[n - 1]);
         // the same faces by name, and as many edges: the feature changed nothing
         // (and the corners where they were: a draft or a face offset keeps every name)
-        let names = |s: &crate::build::Stage| -> Option<(Vec<u64>, usize, Vec<[i64; 3]>)> {
-            let b = s.view()?;
-            let mut v: Vec<u64> = b.face_ids().map(|f| b.face(f).name.0).collect();
-            v.sort_unstable();
-            let q = |x: f64| (x * 1e5).round() as i64;
-            let mut c: Vec<[i64; 3]> = b
-                .vertex_ids()
-                .map(|x| {
-                    let p = b.vertex(x).point;
-                    [q(p.x), q(p.y), q(p.z)]
-                })
-                .collect();
-            c.sort_unstable();
-            Some((v, b.edge_ids().count(), c))
-        };
-        matches!((names(a), names(b)), (Some(x), Some(y)) if x == y)
+        // (each stage's shape worked out once: the one before was the last feature's)
+        matches!((a.shape(), b.shape()), (Some(x), Some(y)) if x == y)
     }
 
     /// The first feature's id, if one exists (world placement is allowed only before it).
@@ -2218,7 +2229,7 @@ impl<'s> Eval<'s> {
         }
         let sk = Rc::new(RefCell::new(Sk::new(id.clone(), s.span, frame)));
         self.sketch = Some(sk.clone());
-        self.scopes.push(HashMap::new());
+        self.scopes.push(Scope::default());
         let mut r = Ok(());
         for b in body {
             r = self.stmt(b);
@@ -2235,7 +2246,11 @@ impl<'s> Eval<'s> {
             named.sort_by(|a, b| a.0.cmp(&b.0));
             skb.named = named;
         }
-        sk.borrow_mut().finish()?;
+        // solved again only if it changed since the run before
+        let was = self.b.solved_was(&id);
+        let (done, r) = sk.borrow_mut().finish(was);
+        self.b.keep_solved(id.clone(), done);
+        r?;
         if sk.borrow().free {
             let ps = sk.borrow().params.clone();
             self.observed.extend(ps);
@@ -2347,7 +2362,7 @@ pub(crate) fn driving(v: &Value, key: &ParamKey, span: Span) -> Value {
 
 pub fn collect_params(v: &Value, out: &mut BTreeSet<ParamKey>) {
     match v {
-        Value::Num(n) => out.extend(n.src.params()),
+        Value::Num(n) => n.src.add_to(out),
         Value::List(xs) | Value::Tuple(xs) => xs.iter().for_each(|x| collect_params(x, out)),
         Value::Map(m) => m.iter().for_each(|x| collect_params(&x.1, out)),
         Value::Sheet(s) => s.params(out),

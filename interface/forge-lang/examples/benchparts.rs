@@ -1,6 +1,11 @@
 //! The real-part benchmarks (parts/bench/*.fg), for the speed and bit gate:
 //!   benchparts resolve NAME        the part built from its .fg (evaluation, selections and the
-//!                                  kernel's own build): the cost `run` subtracts
+//!                                  kernel's own build) as the app builds it, without checks: the
+//!                                  cost `run` subtracts, and the cold build the gate holds
+//!   benchparts cli NAME            the same with the CLI's options (measures, checks)
+//!   benchparts edit NAME           resolve, then the part rebuilt from that run's cache after its
+//!                                  first param scaled by 1.01, as an edit in the app (the gate
+//!                                  holds both builds together)
 //!   benchparts run NAME MODE       resolve, then one more regen of its kernel features by the
 //!                                  kernel alone: seq | nary1 | naryN (the counted part)
 //!   benchparts bits                each part's exact result hashed, seq and nary 4
@@ -50,11 +55,38 @@ fn build(src: &str, dir: std::path::PathBuf) -> (Part, Vec<u64>, Vec<forge_lang:
 }
 
 fn bench(name: &str) -> (Part, Vec<u64>) {
-    let path = format!("{}/parts/bench/{name}.fg", env!("CARGO_MANIFEST_DIR"));
-    let src = std::fs::read_to_string(&path).expect("a bench part");
-    let (p, ids, errors) = build(&src, font_dir());
+    let (p, ids, errors) = build(&source(name), font_dir());
     assert!(errors.is_empty(), "{name}: {errors:?}");
     (p, ids)
+}
+
+fn source(name: &str) -> String {
+    let path = format!("{}/parts/bench/{name}.fg", env!("CARGO_MANIFEST_DIR"));
+    std::fs::read_to_string(&path).expect("a bench part")
+}
+
+/// The text with its first param's value scaled by 1.01: an edit of one dimension.
+fn edited(src: &str) -> String {
+    let mut out = String::with_capacity(src.len() + 8);
+    let mut done = false;
+    for line in src.split_inclusive('\n') {
+        let body = line.trim_end();
+        let head = body
+            .strip_prefix("shared ")
+            .or_else(|| body.strip_prefix("param "));
+        if !done
+            && let Some((_, v)) = head.and_then(|h| h.split_once(" = "))
+            && let Ok(x) = v.split('#').next().unwrap_or("").trim().parse::<f64>()
+        {
+            let prefix = &line[..line.find(" = ").expect("found") + 3];
+            out.push_str(&format!("{prefix}{}\n", x * 1.01));
+            done = true;
+            continue;
+        }
+        out.push_str(line);
+    }
+    assert!(done, "a param to edit");
+    out
 }
 
 fn regen(part: &Part, ids: &[u64], mode: &str) -> Result<Vec<Solid>, forge_model::RegenError> {
@@ -70,6 +102,28 @@ fn main() {
     match arg(0) {
         "resolve" => {
             std::hint::black_box(bench(arg(1)));
+        }
+        "cli" => {
+            let opts = forge_lang::Options {
+                dir: Some(font_dir()),
+                ..forge_lang::Options::default()
+            };
+            let (run, _) = forge_lang::run(&source(arg(1)), opts, Default::default());
+            assert!(run.errors.is_empty(), "{}: {:?}", arg(1), run.errors);
+            std::hint::black_box(run.measure.map(|m| m.volume));
+        }
+        "edit" => {
+            let src = source(arg(1));
+            let opts = forge_lang::Options {
+                dir: Some(font_dir()),
+                checks: false,
+                ..forge_lang::Options::default()
+            };
+            let (run, cache) = forge_lang::run(&src, opts.clone(), Default::default());
+            assert!(run.errors.is_empty(), "{}: {:?}", arg(1), run.errors);
+            let (run, _) = forge_lang::run(&edited(&src), opts, cache);
+            assert!(run.errors.is_empty(), "{} edited: {:?}", arg(1), run.errors);
+            std::hint::black_box(run.body.map(|b| b.faces.len()));
         }
         "run" => {
             let (part, ids) = bench(arg(1));
