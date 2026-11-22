@@ -62,7 +62,9 @@ Ops, as a reply's `fixes` give them; send a fix back unchanged:
 {"op":"Rename","from":"round","to":"blend"}
 ```
 Also AddLocalParam, MakeShared, SplitInstance, DeleteFeature, ReplaceFeature, MoveFeature,
-LiftLiteral, SetProperty. A refusal is a typed error and nothing is written. Errors and lints
+LiftLiteral, SetProperty; `{"op":"Undo"}` and `{"op":"Redo"}` step through the file's edits. A
+refusal is a typed error and nothing is written; a round too big comes back with a SetParam fix to
+the largest that builds. Errors and lints
 carry spans and `fixes`; a loose number is a lint with a LiftLiteral fix.
 
 A `.fg` file is plain text: write a new part whole, then `build` it; hand edits are fine. An
