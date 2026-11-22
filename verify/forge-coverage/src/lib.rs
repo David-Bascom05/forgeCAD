@@ -6,6 +6,7 @@
 //! `Coverage.Allen` lists them). A pattern is realised by putting each endpoint at ten times its rank.
 //! `exact` is the regularised boolean of the pattern computed on its cells; `kernel` runs
 //! `forge_bool::boolean` on the realisation; both give an `Outcome`.
+pub mod draft;
 pub mod tilt;
 
 use forge_bool::{BoolError, Op};

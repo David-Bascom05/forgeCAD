@@ -8,14 +8,13 @@ repository.workspace = true
 
 [dependencies]
 forge-math = { path = "../../kernel/forge-math" }
+forge-geom = { path = "../../kernel/forge-geom" }
 forge-topo = { path = "../../kernel/forge-topo" }
 forge-ops = { path = "../../kernel/forge-ops" }
 forge-bool = { path = "../../kernel/forge-bool" }
 forge-mesh = { path = "../../kernel/forge-mesh" }
+# draft.rs (G5 as a drafted part) and examples/scoreboard_corner.rs: forge-model's regen paths
+forge-model = { path = "../../kernel/forge-model" }
 
 [lints]
 workspace = true
-
-[dev-dependencies]
-# examples/scoreboard_corner.rs: the scoreboard's corner-touch part on forge-model's regen paths
-forge-model = { path = "../../kernel/forge-model" }
