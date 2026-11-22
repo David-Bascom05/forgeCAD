@@ -31,14 +31,18 @@ is one vertex because it is one covector, not because two distances were compare
    is not a piece of body `i` (being in `i` cannot change there), and each flood class is
    classified once, at its first member, by the ledger's witness (`inside`). `classifyOk` refuses
    `InconsistentClassification` if some piece of body `i` has both sides alike.
-4. **keep**: a cell is kept by the op's pointwise rule on its memberships.
+4. **keep**: a cell is kept by the op's pointwise rule on its memberships, decided once per side
+   cell into a table (`keepTab`) that every later stage looks up.
 5. **assemble** (`result`): the facets with exactly one side kept, facing the dropped side
    (`orient`).
 6. **touch rule**: more than two result facets round an edge, or more than one fan of result
    facets round a vertex, is `ZeroThickness` at that cell. Non-manifold results stay refused.
 7. **unify** (`unify`): result facets of one carrier and sense, joined across an edge where they
    are the only two, are one face. It reads the assembled facets by reference and writes a fresh
-   `Body`: faces in the order of their first facet, which is the input faces' arena order.
+   `Body`: faces in the order of their first facet, which is the input faces' arena order; edges
+   as straight runs between one pair of faces; vertices where three or more faces meet.
+
+The specification in prose, with the Rust interface: research/kernel-audit/decide-once-spec.md.
 
 There is no retry: the outcome type has none, and DecideOnce/Coverage.lean proves the two refusals
 that used to start the retry ladder (`SplitCrossed`, `InconsistentClassification`) unreachable for

@@ -208,4 +208,14 @@ theorem instances_covered :
   | .zeroThickness _ => true
   | _ => false
 
+-- Two cubes at a corner, united: non-manifold at the shared vertex (coverage.md's G1).
+#guard (core (boxLedger 2 [⟨(0, 0, 0), (1, 1, 1)⟩, ⟨(1, 1, 1), (2, 2, 2)⟩]) uni).summary ==
+  .zeroThickness (cov 2 (2, 2, 2))
+-- At an edge: refused at that edge cell.
+#guard (core (boxLedger 2 [⟨(0, 0, 0), (1, 1, 1)⟩, ⟨(1, 1, 0), (2, 2, 1)⟩]) uni).summary ==
+  .zeroThickness (cov 2 (2, 2, 1))
+-- Face to face: one box, the contact dissolved (exact-comparison.md's "contact left imprinted").
+#guard (core (boxLedger 2 [⟨(0, 0, 0), (1, 1, 1)⟩, ⟨(1, 0, 0), (2, 1, 1)⟩]) uni).summary ==
+  .ok 6 10 12 8
+
 end ForgeExact.DecideOnce
