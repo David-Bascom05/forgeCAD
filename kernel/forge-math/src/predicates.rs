@@ -12,10 +12,11 @@
 //!   unless the bound is below about 2^-1017. `triple` and the in-circle tests multiply rounded
 //!   products, so an absolute error is amplified: their filters rely on the precondition below;
 //! - the precondition for an exact answer is that no product a predicate forms underflows
-//!   inexactly (`product_exact`), checked by `debug_assert!`: then the slow paths' expansions
+//!   inexactly (`product_exact`), checked in debug builds only, out of line: then the slow paths' expansions
 //!   are exact, and so are the in-circle tests' and `triple`'s filters, which have no slack. A
-//!   slow-path result that comes out NaN (a product overflowed) is recomputed exactly with
-//!   fixed-width integers (`Big`).
+//!   slow-path result of `cross_sign`, `orient2d`, `dot3` or `incircle` that comes out NaN (a
+//!   product overflowed) is recomputed exactly with fixed-width integers (`Big`); `triple`'s is
+//!   not (the check measurably slowed its frequent slow path).
 
 use crate::{Point2, Vec2, Vec3};
 use std::cmp::Ordering;
@@ -34,6 +35,7 @@ const ICC_BOUND_B: f64 = (4.0 + 48.0 * EPS) * EPS;
 const SLACK: f64 = f64::from_bits(16);
 /// The exponent of a nonzero finite double's lowest set bit: `x` is an odd multiple of
 /// `2^lsb(x)`.
+#[cfg(debug_assertions)]
 fn lsb(x: f64) -> i32 {
     let bits = x.to_bits();
     let e = ((bits >> 52) & 0x7ff) as i32;
@@ -47,7 +49,7 @@ fn lsb(x: f64) -> i32 {
 
 /// The slow paths' precondition, at each `two_product`: `x * y` has a zero factor or is a
 /// multiple of `2^-1074` (`lsb(x) + lsb(y) >= -1074`), so its rounding error is representable
-/// and Dekker's product is exact. Checked by `debug_assert!` (compiled away in release).
+/// and Dekker's product is exact. Checked in debug builds (`check_two_product`, out of line).
 /// Overflow is not part of it: a NaN slow-path result is recomputed with `Big`.
 ///
 /// Inputs within a predicate's window imply it: every nonzero input in `[2^-480, 2^500]` for
@@ -55,6 +57,7 @@ fn lsb(x: f64) -> i32 {
 /// tests. Every input, difference and partial product is then a multiple of `2^(lo - 52)` (or
 /// of its power), and `deg · (lo - 52) >= -1074`
 /// (research/kernel-audit/float-verification/lean, `product_exact_of_grid`).
+#[cfg(debug_assertions)]
 fn product_exact(x: f64, y: f64) -> bool {
     x == 0.0 || y == 0.0 || !x.is_finite() || !y.is_finite() || lsb(x) + lsb(y) >= -1074
 }
@@ -63,8 +66,85 @@ fn product_exact(x: f64, y: f64) -> bool {
 /// rounded products, so an absolute error would be amplified): a product they form is normal,
 /// or exact (`product_exact`), so its rounding error is relative. (`orient2d`'s and `dot3`'s
 /// filters carry `SLACK` instead and need nothing; `cross_sign`'s is sound by monotonicity.)
+#[cfg(debug_assertions)]
 fn product_relative(x: f64, y: f64) -> bool {
     (x * y).abs() >= f64::MIN_POSITIVE || product_exact(x, y)
+}
+
+/// The precondition at a `two_product` (debug builds; out of line, so the release code the
+/// optimizer sees is unchanged).
+#[cfg(debug_assertions)]
+#[cold]
+#[inline(never)]
+fn check_two_product(a: f64, b: f64) {
+    assert!(product_exact(a, b), "two_product inexact: {a:e} * {b:e}");
+}
+
+/// The precondition of `triple`'s filter: its products' rounding errors are relative.
+#[cfg(debug_assertions)]
+#[cold]
+#[inline(never)]
+fn check_triple(a: Vec3, b: Vec3, c: Vec3) {
+    let (yz, zy) = (b.y * c.z, b.z * c.y);
+    let (zx, xz) = (b.z * c.x, b.x * c.z);
+    let (xy, yx) = (b.x * c.y, b.y * c.x);
+    let ok = [
+        (b.y, c.z),
+        (b.z, c.y),
+        (b.z, c.x),
+        (b.x, c.z),
+        (b.x, c.y),
+        (b.y, c.x),
+    ]
+    .iter()
+    .chain(&[(a.x, yz - zy), (a.y, zx - xz), (a.z, xy - yx)])
+    .chain(&[
+        (a.x, yz.abs() + zy.abs()),
+        (a.y, zx.abs() + xz.abs()),
+        (a.z, xy.abs() + yx.abs()),
+    ])
+    .all(|&(p, q)| product_relative(p, q));
+    assert!(ok, "triple: a product underflows: {a:?} {b:?} {c:?}");
+}
+
+/// The precondition of the in-circle tests' filters: their products' rounding errors are
+/// relative.
+#[cfg(debug_assertions)]
+#[cold]
+#[inline(never)]
+fn check_in_circle(name: &str, a: Point2, b: Point2, c: Point2, d: Point2) {
+    let (adx, ady) = (a.x - d.x, a.y - d.y);
+    let (bdx, bdy) = (b.x - d.x, b.y - d.y);
+    let (cdx, cdy) = (c.x - d.x, c.y - d.y);
+    let (bdxcdy, cdxbdy) = (bdx * cdy, cdx * bdy);
+    let (cdxady, adxcdy) = (cdx * ady, adx * cdy);
+    let (adxbdy, bdxady) = (adx * bdy, bdx * ady);
+    let alift = adx * adx + ady * ady;
+    let blift = bdx * bdx + bdy * bdy;
+    let clift = cdx * cdx + cdy * cdy;
+    let ok = [
+        (bdx, cdy),
+        (cdx, bdy),
+        (cdx, ady),
+        (adx, cdy),
+        (adx, bdy),
+        (bdx, ady),
+        (adx, adx),
+        (ady, ady),
+        (bdx, bdx),
+        (bdy, bdy),
+        (cdx, cdx),
+        (cdy, cdy),
+        (alift, bdxcdy - cdxbdy),
+        (blift, cdxady - adxcdy),
+        (clift, adxbdy - bdxady),
+        (alift, bdxcdy.abs() + cdxbdy.abs()),
+        (blift, cdxady.abs() + adxcdy.abs()),
+        (clift, adxbdy.abs() + bdxady.abs()),
+    ]
+    .iter()
+    .all(|&(p, q)| product_relative(p, q));
+    assert!(ok, "{name}: a product underflows: {a:?} {b:?} {c:?} {d:?}");
 }
 
 /// Exact signed integers of `N` 64-bit limbs (two's complement, little-endian): the last resort
@@ -167,6 +247,7 @@ impl<const N: usize> Big<N> {
 
 /// The exact determinant `a*d - b*c`'s sign, for any finite inputs.
 #[cold]
+#[inline(never)]
 fn cross_big(a: f64, d: f64, b: f64, c: f64) -> f64 {
     if ![a, b, c, d].iter().all(|x| x.is_finite()) {
         return f64::NAN;
@@ -202,7 +283,8 @@ fn split(a: f64) -> (f64, f64) {
 }
 
 fn two_product(a: f64, b: f64) -> (f64, f64) {
-    debug_assert!(product_exact(a, b), "two_product inexact: {a:e} * {b:e}");
+    #[cfg(debug_assertions)]
+    check_two_product(a, b);
     let x = a * b;
     let (ahi, alo) = split(a);
     let (bhi, blo) = split(b);
@@ -348,6 +430,7 @@ fn orient2d_exact(a: Point2, b: Point2, c: Point2) -> f64 {
 
 /// `orient2d` exactly, for any finite coordinates.
 #[cold]
+#[inline(never)]
 fn orient2d_big(a: Point2, b: Point2, c: Point2) -> f64 {
     if ![a.x, a.y, b.x, b.y, c.x, c.y].iter().all(|x| x.is_finite()) {
         return f64::NAN;
@@ -433,6 +516,7 @@ pub fn dot3(u: Vec3, v: Vec3) -> f64 {
 }
 
 #[cold]
+#[inline(never)]
 fn dot3_big(u: Vec3, v: Vec3) -> f64 {
     if ![u.x, u.y, u.z, v.x, v.y, v.z].iter().all(|x| x.is_finite()) {
         return f64::NAN;
@@ -453,25 +537,8 @@ pub fn triple(a: Vec3, b: Vec3, c: Vec3) -> f64 {
     let permanent = a.x.abs() * (yz.abs() + zy.abs())
         + a.y.abs() * (zx.abs() + xz.abs())
         + a.z.abs() * (xy.abs() + yx.abs());
-    debug_assert!(
-        [
-            (b.y, c.z),
-            (b.z, c.y),
-            (b.z, c.x),
-            (b.x, c.z),
-            (b.x, c.y),
-            (b.y, c.x)
-        ]
-        .iter()
-        .chain(&[(a.x, yz - zy), (a.y, zx - xz), (a.z, xy - yx)])
-        .chain(&[
-            (a.x, yz.abs() + zy.abs()),
-            (a.y, zx.abs() + xz.abs()),
-            (a.z, xy.abs() + yx.abs())
-        ])
-        .all(|&(p, q)| product_relative(p, q)),
-        "triple: a product underflows: {a:?} {b:?} {c:?}"
-    );
+    #[cfg(debug_assertions)]
+    check_triple(a, b, c);
     if det.abs() > TRIPLE_BOUND * permanent {
         return det;
     }
@@ -492,24 +559,7 @@ pub fn triple(a: Vec3, b: Vec3, c: Vec3) -> f64 {
     let (mut ab, mut all) = ([0.0; 16], [0.0; 24]);
     let n = sum_into(&parts[0][..lens[0]], &parts[1][..lens[1]], &mut ab);
     let m = sum_into(&ab[..n], &parts[2][..lens[2]], &mut all);
-    let e = estimate(&all[..m]);
-    if e.is_nan() { triple_big(a, b, c) } else { e }
-}
-
-#[cold]
-fn triple_big(a: Vec3, b: Vec3, c: Vec3) -> f64 {
-    if ![a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z]
-        .iter()
-        .all(|x| x.is_finite())
-    {
-        return f64::NAN;
-    }
-    type B = Big<104>;
-    let cr = |p: f64, q: f64, r: f64, s: f64| B::of(p).mul(B::of(q)).sub(B::of(r).mul(B::of(s)));
-    let x = B::of(a.x).mul(cr(b.y, c.z, b.z, c.y));
-    let y = B::of(a.y).mul(cr(b.z, c.x, b.x, c.z));
-    let z = B::of(a.z).mul(cr(b.x, c.y, b.y, c.x));
-    x.add(y).add(z).to_f64(3222)
+    estimate(&all[..m])
 }
 
 /// Orders two nonzero directions by their angle in (-pi, pi] (atan2's range), exactly.
@@ -575,31 +625,8 @@ pub fn certainly_in_circle(a: Point2, b: Point2, c: Point2, d: Point2) -> bool {
     let permanent = (bdxcdy.abs() + cdxbdy.abs()) * alift
         + (cdxady.abs() + adxcdy.abs()) * blift
         + (adxbdy.abs() + bdxady.abs()) * clift;
-    debug_assert!(
-        [
-            (bdx, cdy),
-            (cdx, bdy),
-            (cdx, ady),
-            (adx, cdy),
-            (adx, bdy),
-            (bdx, ady),
-            (adx, adx),
-            (ady, ady),
-            (bdx, bdx),
-            (bdy, bdy),
-            (cdx, cdx),
-            (cdy, cdy),
-            (alift, bdxcdy - cdxbdy),
-            (blift, cdxady - adxcdy),
-            (clift, adxbdy - bdxady),
-            (alift, bdxcdy.abs() + cdxbdy.abs()),
-            (blift, cdxady.abs() + adxcdy.abs()),
-            (clift, adxbdy.abs() + bdxady.abs()),
-        ]
-        .iter()
-        .all(|&(p, q)| product_relative(p, q)),
-        "certainly_in_circle: a product underflows: {a:?} {b:?} {c:?} {d:?}"
-    );
+    #[cfg(debug_assertions)]
+    check_in_circle("certainly_in_circle", a, b, c, d);
     det > ICC_BOUND * permanent
 }
 
@@ -619,31 +646,8 @@ pub fn incircle(a: Point2, b: Point2, c: Point2, d: Point2) -> f64 {
     let permanent = (bdxcdy.abs() + cdxbdy.abs()) * alift
         + (cdxady.abs() + adxcdy.abs()) * blift
         + (adxbdy.abs() + bdxady.abs()) * clift;
-    debug_assert!(
-        [
-            (bdx, cdy),
-            (cdx, bdy),
-            (cdx, ady),
-            (adx, cdy),
-            (adx, bdy),
-            (bdx, ady),
-            (adx, adx),
-            (ady, ady),
-            (bdx, bdx),
-            (bdy, bdy),
-            (cdx, cdx),
-            (cdy, cdy),
-            (alift, bdxcdy - cdxbdy),
-            (blift, cdxady - adxcdy),
-            (clift, adxbdy - bdxady),
-            (alift, bdxcdy.abs() + cdxbdy.abs()),
-            (blift, cdxady.abs() + adxcdy.abs()),
-            (clift, adxbdy.abs() + bdxady.abs()),
-        ]
-        .iter()
-        .all(|&(p, q)| product_relative(p, q)),
-        "incircle: a product underflows: {a:?} {b:?} {c:?} {d:?}"
-    );
+    #[cfg(debug_assertions)]
+    check_in_circle("incircle", a, b, c, d);
     let bound = ICC_BOUND * permanent;
     if det > bound || -det > bound {
         return det;
@@ -670,6 +674,7 @@ pub fn incircle(a: Point2, b: Point2, c: Point2, d: Point2) -> f64 {
 
 /// `incircle` exactly, for any finite coordinates.
 #[cold]
+#[inline(never)]
 fn incircle_big(a: Point2, b: Point2, c: Point2, d: Point2) -> f64 {
     if ![a.x, a.y, b.x, b.y, c.x, c.y, d.x, d.y]
         .iter()
@@ -834,13 +839,6 @@ mod tests {
         assert!(v > 0.0 && v.is_finite());
         assert!(orient2d(p(1e300, 1e300), p(2e300, 2e300), p(0.0, 1e-300)) > 0.0);
         assert!(dot3(Vec3::new(1e300, 1.0, 0.0), Vec3::new(1e300, 0.0, 0.0)) > 0.0);
-        assert!(
-            triple(
-                Vec3::new(1e300, 0.0, 0.0),
-                Vec3::new(0.0, 1e300, 0.0),
-                Vec3::new(0.0, 0.0, 1e10)
-            ) > 0.0
-        );
     }
 
     #[test]

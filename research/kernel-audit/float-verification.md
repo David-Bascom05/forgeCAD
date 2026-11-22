@@ -80,7 +80,22 @@ Independent check (`check_exact.py`, 200,000 cases per range, on the final kerne
 | 2^505 … 2^515, 2^520 … 2^1000 (overflow: the NaN fallback) | 0 |
 | 2^-540 … 2^-520 (underflow, outside the windows: unchecked) | 369,358 |
 
-Gates: the 5-run A/B speed gate is running.
+Gates, on the final code (`c9870b7` plus this commit):
+- **Speed:** measured with the deterministic exact gate from `claude/repo-review-mbdrlj-speed`
+  (`GATE_EXACT=1`: fixed environment, fixed HashMap seeds, one CPU, run from `/`). The same
+  binary gives the same count, so an A/B difference is cost, not noise. Base is the unmodified
+  commit, on an equal-length path.
+  - All 22 deterministic synthetic lines are at or below base, the largest change −40,223
+    instructions.
+  - The 75 bench lines are within −0.009% to +0.034% (47 slightly above).
+  - Bits identical.
+  - Two release changes were needed to get there. The NaN check in `triple`'s slow path cost
+    33k instructions on patterns, so `triple` has no NaN fallback. The precondition checks are
+    in out-of-line `#[cfg(debug_assertions)]` functions, so release MIR doesn't see them.
+- **Release tests:** forge-math, forge-geom, forge-bool, forge-model and forge-mesh, 431 passed,
+  0 failed.
+- **Bits:** identical to `tools/speed/bits.txt`, and native = wasm32-wasip1.
+- **fmt and clippy:** clean.
 
 ## What is proven
 
