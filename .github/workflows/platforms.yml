@@ -1,14 +1,14 @@
 # ForgeCAD on Windows and macOS: the app, CLI and speech built as users install them, and the
 # tests of everything with platform code. Linux is gated by the Forgejo CI and the merge gate.
 #
-# The work is split in three jobs per OS that run at once, each with its own Rust build cache
+# The work is split in four jobs per OS that run at once, each with its own Rust build cache
 # (Swatinem/rust-cache: ~/.cargo and the third-party crates in each workspace's target; this
 # repository's own crates are always rebuilt from the checkout). The commands, crates, profiles
 # and flags are the ones a single job ran before:
 #   app        forge-render's release build of forge-app (its own workspace and target)
 #   app-tests  forge-render's agent tests (its test profile, its own target)
-#   build      the CLI and speech release builds, the platform crates' and the language's tests,
-#              the CLI measuring a part
+#   build      the CLI and speech release builds, the CLI measuring a part
+#   tests      the platform crates', speech's and the language's tests (the test profile)
 name: platforms
 
 on:
@@ -32,9 +32,6 @@ jobs:
         with:
           # forge-git's tests read this repository's own history
           fetch-depth: 0
-      - name: Defender off the build (Windows)
-        if: runner.os == 'Windows'
-        uses: ./.github/actions/defender-exclude
       - name: toolchain (rust-toolchain.toml)
         run: rustup show
       - uses: Swatinem/rust-cache@v2
@@ -59,9 +56,6 @@ jobs:
         with:
           # forge-git's tests read this repository's own history
           fetch-depth: 0
-      - name: Defender off the build (Windows)
-        if: runner.os == 'Windows'
-        uses: ./.github/actions/defender-exclude
       - name: toolchain (rust-toolchain.toml)
         run: rustup show
       - uses: Swatinem/rust-cache@v2
@@ -87,9 +81,6 @@ jobs:
         with:
           # forge-git's tests read this repository's own history
           fetch-depth: 0
-      - name: Defender off the build (Windows)
-        if: runner.os == 'Windows'
-        uses: ./.github/actions/defender-exclude
       - name: toolchain (rust-toolchain.toml)
         run: rustup show
       - uses: Swatinem/rust-cache@v2
@@ -102,9 +93,37 @@ jobs:
         run: |
           cargo build --release --locked -p forge-cli --bin forgecad
           cargo build --release --locked --manifest-path interface/forge-speech/Cargo.toml
+      - name: the CLI builds and measures a part
+        shell: bash
+        run: |
+          bin=target/release/forgecad
+          "$bin" measure interface/forge-lang/parts/bench/hub.fg mass --json
+          "$bin" agent list
+
+  tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    env:
+      CARGO_INCREMENTAL: 0
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # forge-git's tests read this repository's own history
+          fetch-depth: 0
+      - name: toolchain (rust-toolchain.toml)
+        run: rustup show
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            . -> target
+            interface/forge-speech -> target
       - name: tests of the platform code
         # every check runs, so one failure does not hide the others
-        if: ${{ !cancelled() }}
         shell: bash
         run: |
           cargo test --locked --no-fail-fast -p forge-dirs -p forge-agent -p forge-git -p forge-material
@@ -113,13 +132,6 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: cargo test --locked -p forge-lang --test bench_ports --test ports --test harness --test fuzz --test kernel_history_repros
-      - name: the CLI builds and measures a part
-        if: ${{ !cancelled() }}
-        shell: bash
-        run: |
-          bin=target/release/forgecad
-          "$bin" measure interface/forge-lang/parts/bench/hub.fg mass --json
-          "$bin" agent list
 
   # the kernel's results bit for bit on another CPU and OS: informative until it holds
   bits:
@@ -132,9 +144,6 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
-      - name: Defender off the build (Windows)
-        if: runner.os == 'Windows'
-        uses: ./.github/actions/defender-exclude
       - name: toolchain (rust-toolchain.toml)
         run: rustup show
       - uses: Swatinem/rust-cache@v2
