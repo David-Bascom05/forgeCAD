@@ -2013,7 +2013,7 @@ impl SkTool {
             SkTool::Parallel => "Click two lines",
             SkTool::Perpendicular => "Click two lines",
             SkTool::Tangent => "Click a line or curve, then the curve it touches",
-            SkTool::Project => "Click edges or faces of the part to project them",
+
             SkTool::Circle3 => [
                 "Click the first point on the circle",
                 "Click the second point",
@@ -2135,7 +2135,7 @@ mod tests {
     use forge_math::Frame;
 
     fn mode() -> SketchMode {
-        SketchMode::new(SketchFor::New, "xy".into(), Frame::default(), Vec::new(), None)
+        SketchMode::new(SketchFor::New, "xy".into(), Frame::default(), Vec::new())
     }
 
     fn click_all(m: &mut SketchMode, pts: &[P]) {

@@ -132,10 +132,10 @@ mod tests {
 
     #[test]
     fn the_kernel_measures_the_picked_entities_exactly() {
-        let body = crate::load::body("crank").unwrap();
-        let _ = body;
-        let m = forge_agent::bench::model("extrude 20 rect -50 -30 100 60");
-        let body = m.body().unwrap().clone();
+        let src = "sketch s(on: xy) {\n  r = rect(corner: (-50, -30), size: (100, 60))\n}\nblock = extrude(s, 20)\n";
+        let (run, _) = forge_lang::run(src, forge_lang::Options::default(), Default::default());
+        assert!(run.errors.is_empty(), "{:?}", run.errors);
+        let body = run.body.unwrap();
         let mesh = forge_mesh::tessellate(&body, &Quality::default()).unwrap();
         // the top face
         let top = body

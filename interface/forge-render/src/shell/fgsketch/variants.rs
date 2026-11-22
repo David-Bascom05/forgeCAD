@@ -21,7 +21,7 @@ use Step::*;
 const REACH: f64 = 0.5;
 
 fn draw(steps: &[Step]) -> SketchMode {
-    let mut m = SketchMode::new(SketchFor::New, "xy".into(), Frame::default(), vec![], None);
+    let mut m = SketchMode::new(SketchFor::New, "xy".into(), Frame::default(), vec![]);
     for s in steps {
         match s {
             Click(p) => m.click(*p, REACH),
@@ -89,7 +89,6 @@ fn round_trip(name: &str, steps: &[Step], want: &[&str]) {
         "xy".into(),
         Frame::default(),
         o.rows.clone(),
-        None,
     );
     back.set_params(o.params.clone());
     assert!(

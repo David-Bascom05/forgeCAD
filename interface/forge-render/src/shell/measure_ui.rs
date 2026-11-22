@@ -73,7 +73,7 @@ impl Shell {
         places: &mut Vec<(String, Rect)>,
     ) -> Option<Rect> {
         let mut close = false;
-        let dialog_up = self.dialog.is_some() || self.fg.as_ref().is_some_and(|f| f.tool.is_some());
+        let dialog_up = self.fg.as_ref().is_some_and(|f| f.tool.is_some());
         let beside = self.inspect.measure.as_ref().is_some_and(|m| m.into.is_some()) && dialog_up;
         let at = if beside {
             pos2(v.left() + super::dialog::DIALOG_W + 56.0, v.top() + 16.0)
@@ -523,27 +523,16 @@ impl Shell {
             });
         // a value Use was pressed on: into the field, and Measure's done, as Inventor's
         let used = m.used.take().zip(m.into.clone());
-        if let Some((x, (into, kind))) = used {
-            match into {
-                IntoField::Dialog(label) => {
-                    if let Some(d) = &mut self.dialog
-                        && let Some(f) = d.fields.iter_mut().find(|f| f.0 == label)
-                    {
-                        f.1 = forge_doc::units::number_in(x, kind, d.units);
-                    }
-                }
-                // a tool's parameters are mm and degrees
-                IntoField::Param(name) => {
-                    if let Some(p) = self
-                        .fg
-                        .as_mut()
-                        .and_then(|f| f.tool.as_mut())
-                        .and_then(|t| t.params.iter_mut().find(|p| p.name == name))
-                    {
-                        p.text = plain_number(x);
-                        p.expr = None;
-                    }
-                }
+        // a tool's parameters are mm and degrees
+        if let Some((x, (IntoField::Param(name), _))) = used {
+            if let Some(p) = self
+                .fg
+                .as_mut()
+                .and_then(|f| f.tool.as_mut())
+                .and_then(|t| t.params.iter_mut().find(|p| p.name == name))
+            {
+                p.text = plain_number(x);
+                p.expr = None;
             }
             close = true;
         }

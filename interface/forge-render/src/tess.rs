@@ -562,10 +562,9 @@ pub fn tube_part(m: &forge_harness::wires::TubeMesh) -> PartMesh {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use forge_agent::bench;
 
     fn crank() -> Body {
-        bench::model(bench::src("crank").unwrap()).body().unwrap().clone()
+        crate::load::body("crank").unwrap()
     }
 
     #[test]
@@ -639,9 +638,10 @@ mod tests {
 
     #[test]
     fn a_cylinders_normals_point_straight_out_of_its_axis() {
-        let m = bench::model("extrude 10 circle 0 0 5");
-        assert!(m.error.is_none());
-        let l = build_lod(m.body().unwrap(), &Quality::default()).unwrap();
+        let src = "sketch s(on: xy) {\n  c = circle((0, 0), 5)\n}\nrod = extrude(s, 10)\n";
+        let (run, _) = forge_lang::run(src, forge_lang::Options::default(), Default::default());
+        assert!(run.errors.is_empty(), "{:?}", run.errors);
+        let l = build_lod(run.body.as_ref().unwrap(), &Quality::default()).unwrap();
         let mut side = 0;
         for at in (0..l.vertices.len()).step_by(VERTEX) {
             let p = vec3_at(&l.vertices, at);

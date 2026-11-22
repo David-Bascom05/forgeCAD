@@ -20,9 +20,9 @@ struct Rig {
 }
 
 fn rig(src: &str, placed: Vec<Placement>, camera: Camera) -> Option<Rig> {
-    let m = forge_agent::bench::model(src);
-    assert!(m.error.is_none(), "{:?}", m.error);
-    let body = m.body().unwrap().clone();
+    let (run, _) = forge_lang::run(src, forge_lang::Options::default(), Default::default());
+    assert!(run.errors.is_empty(), "{:?}", run.errors);
+    let body = run.body.unwrap();
     let parts = vec![forge_render::tess::build_part(&body).unwrap()];
     let scene = Scene::new(&part_info(&parts), placed);
     let instance = render::native_instance();
@@ -91,7 +91,8 @@ fn face_at(body: &Body, q: [f64; 3]) -> Vec<u32> {
         .collect()
 }
 
-const BOX: &str = "extrude 20 rect -50 -30 100 60";
+const BOX: &str =
+    "sketch s(on: xy) {\n  r = rect(corner: (-50, -30), size: (100, 60))\n}\nbox = extrude(s, 20)\n";
 
 /// A view from above with the +x, +y and +z faces of the box showing.
 fn from_above(radius: f32) -> Camera {
@@ -229,7 +230,8 @@ fn round_faces_and_their_circle_edges_are_told_apart() {
     let mut cam = Camera::fit([0.0, 0.0, 5.0], 40.0);
     cam.yaw = 0.3;
     cam.pitch = 0.7;
-    let Some(mut g) = rig("extrude 10 circle 0 0 20", vec![Placement::at(0, [0.0; 3])], cam) else {
+    let rod = "sketch s(on: xy) {\n  c = circle((0, 0), 20)\n}\nrod = extrude(s, 10)\n";
+    let Some(mut g) = rig(rod, vec![Placement::at(0, [0.0; 3])], cam) else {
         return;
     };
     let body = g.body.clone();

@@ -51,7 +51,7 @@ fn files(d: &Path) -> [PathBuf; 3] {
 }
 
 fn settled(g: &Gui) -> bool {
-    g.view.is_some() && g.fg.as_ref().is_some_and(|s| s.done == s.seq) && !g.is_loading()
+    g.view.is_some() && g.fg.as_ref().is_some_and(|s| s.done == s.seq) && !g.loading()
 }
 
 fn ready(h: &mut Headless) {
@@ -61,7 +61,7 @@ fn ready(h: &mut Headless) {
         h.gui.shell.name,
         h.gui.shell.status,
         h.gui.view.is_some(),
-        h.gui.is_loading()
+        h.gui.loading()
     );
     for _ in 0..3 {
         h.step();

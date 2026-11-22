@@ -1,69 +1,104 @@
-//! Opens parts: from the build cache, or built by the kernel and then cached.
+//! Opens parts: from the build cache, or built by forge-lang and then cached. A bench part opens
+//! by its name: its Forge port in `interface/forge-lang/parts/bench`.
 
 use crate::mesh::PartMesh;
 use crate::{cache, tess};
-use forge_agent::bench;
-use forge_agent::cmd::Session;
+use std::path::{Path, PathBuf};
+
+/// The bench parts (`forge_lang::bench`), in the order the stress bench places them.
+pub const BENCH: [&str; 15] = [
+    "gearbox", "volute", "crank", "valve", "heatsink", "quadarm", "conrod", "jack", "frame", "manifold",
+    "bracket", "insert", "clamp", "hub", "guard",
+];
+
+/// A bench part's Forge text.
+pub fn bench_src(name: &str) -> Option<&'static str> {
+    forge_lang::bench::src(name)
+}
+
+/// Where the bench parts are written to be opened as files, with the block font their text is
+/// cut in beside them: once a process, each file only if it isn't already what it should be.
+pub fn bench_dir() -> Result<PathBuf, String> {
+    static DIR: std::sync::OnceLock<Result<PathBuf, String>> = std::sync::OnceLock::new();
+    DIR.get_or_init(|| {
+        let base = std::env::var_os("FORGE_RENDER_CACHE")
+            .map(PathBuf::from)
+            .or_else(forge_dirs::cache)
+            .unwrap_or_else(std::env::temp_dir);
+        let dir = base.join("forgecad").join("bench");
+        std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+        for n in BENCH {
+            let src = bench_src(n).expect("a bench part");
+            write_if_changed(&dir.join(format!("{n}.fg")), src.as_bytes())?;
+        }
+        // the font is made by code, which the kernel hash follows: made only when that changed
+        let font = dir.join(forge_lang::bench::FONT);
+        let made = dir.join(format!("{}.made", forge_lang::bench::FONT));
+        let key = env!("FORGE_KERNEL_HASH");
+        let fresh = font.exists() && std::fs::read_to_string(&made).is_ok_and(|k| k == key);
+        if !fresh {
+            write_if_changed(&font, &forge_lang::bench::font_bytes())?;
+            write_if_changed(&made, key.as_bytes())?;
+        }
+        Ok(dir)
+    })
+    .clone()
+}
+
+// written whole and then moved into place, so a reader never sees half a file
+fn write_if_changed(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    if std::fs::read(path).is_ok_and(|b| b == bytes) {
+        return Ok(());
+    }
+    let tmp = path.with_extension(format!("{}.tmp", std::process::id()));
+    std::fs::write(&tmp, bytes)
+        .and_then(|_| std::fs::rename(&tmp, path))
+        .map_err(|e| {
+            let _ = std::fs::remove_file(&tmp);
+            format!("{}: {e}", path.display())
+        })
+}
+
+/// A bench part's file, by its name; none if it's no bench part's name.
+pub fn bench_file(name: &str) -> Option<Result<String, String>> {
+    bench_src(name)?;
+    Some(bench_dir().map(|d| d.join(format!("{name}.fg")).to_string_lossy().into_owned()))
+}
 
 /// The part's file text; a bench part's name or a path.
 pub fn source(part: &str) -> Result<String, String> {
-    match bench::src(part) {
+    match bench_src(part) {
         Some(s) => Ok(s.to_string()),
-        None if !part.ends_with(".fc") && !part.ends_with(".fg") => {
-            Err(format!("{part}: no bench part or .fc or .fg part file"))
-        }
+        None if !part.ends_with(".fg") => Err(format!("{part}: no bench part or .fg part file")),
         None => std::fs::read_to_string(part).map_err(|e| format!("{part}: {e}")),
     }
 }
 
-/// The part's body, built by the kernel: the one its mesh's entity numbers mean.
-pub fn body(part: &str) -> Result<forge_topo::Body, String> {
-    if part.ends_with(".fg") {
-        return fg_body(part);
+/// Where a part's fonts and imported files are found: beside it.
+fn dir_of(part: &str) -> Result<Option<PathBuf>, String> {
+    if bench_src(part).is_some() {
+        return bench_dir().map(Some);
     }
-    let bench_model;
-    let mut session;
-    let model = match bench::src(part) {
-        Some(src) => {
-            bench_model = bench::model(src);
-            &bench_model
-        }
-        None => {
-            session = Session::default();
-            session.model(part)?
-        }
-    };
-    if let Some(e) = &model.error {
-        return Err(format!("{part}: line {}: {}", model.lines[e.at].no, e.message()));
-    }
-    model.body().cloned().ok_or(format!("{part}: nothing built"))
+    Ok(Path::new(part).parent().map(Path::to_path_buf))
 }
 
-/// A Forge part's finished body, built by forge-lang; its first error if it doesn't build.
-fn fg_body(part: &str) -> Result<forge_topo::Body, String> {
+/// The part's finished body, built by forge-lang: the one its mesh's entity numbers mean; its
+/// first error if it doesn't build.
+pub fn body(part: &str) -> Result<forge_topo::Body, String> {
     let src = source(part)?;
-    let (run, _) = forge_lang::run(&src, forge_lang::Options::default(), Default::default());
+    // the shape only: its measures and expects are no part of its mesh
+    let opts = forge_lang::Options {
+        dir: dir_of(part)?,
+        checks: false,
+        expects: false,
+        ..forge_lang::Options::default()
+    };
+    let (run, _) = forge_lang::run(&src, opts, Default::default());
     if let Some(e) = run.errors.first() {
         let line = e.span().map_or(0, |s| s.lines(&src).0);
         return Err(format!("{part}: line {line}: {}: {}", e.kind(), e.text()));
     }
     run.body.ok_or(format!("{part}: nothing built"))
-}
-
-/// The part as tools act on it: a bench part in memory, a file with its commits going to the file.
-pub fn tool_part(part: &str) -> Result<forge_agent::tools::Part, String> {
-    let p = match bench::src(part) {
-        Some(src) => forge_agent::tools::Part::of(bench::model(src)),
-        None => Session::default().take_part(part)?,
-    };
-    if let Some(e) = &p.model.error {
-        return Err(format!(
-            "{part}: line {}: {}",
-            p.model.lines[e.at].no,
-            e.message()
-        ));
-    }
-    Ok(p)
 }
 
 fn build(part: &str) -> Result<PartMesh, String> {

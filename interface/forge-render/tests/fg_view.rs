@@ -67,7 +67,7 @@ for i in 0..3 {
 }
 
 fn settled(g: &Gui) -> bool {
-    g.view.is_some() && g.fg.as_ref().is_some_and(|s| s.done == s.seq) && !g.is_loading()
+    g.view.is_some() && g.fg.as_ref().is_some_and(|s| s.done == s.seq) && !g.loading()
 }
 
 fn open_in(h: &mut Headless, file: &Path, secs: u64) {
