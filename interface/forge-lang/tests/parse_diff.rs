@@ -278,6 +278,13 @@ impl Tally {
             self.answers.push((ws.join(" "), answer(&r)));
         }
         let mine = syntax::parse(src);
+        // the one-pass parser's answer is the table parser's, every span and error the same
+        let table = syntax::parse_table(src);
+        if format!("{mine:?}") != format!("{table:?}") {
+            self.mismatches.push(format!(
+                "the one-pass parser and the table parser differ on {src:?}:\n  one-pass {mine:?}\n  table    {table:?}"
+            ));
+        }
         match (&r, &mine) {
             (Some(t), Ok(stmts)) => {
                 self.sentences += 1;

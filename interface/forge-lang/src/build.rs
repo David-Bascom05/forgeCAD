@@ -2,7 +2,6 @@
 //! anchors and selections read the part as it stands. Stages are kept, and a session reuses
 //! the stages of a run whose features (and ids) are the same up to that point.
 
-use forge_agent::select::{self, Lineage};
 use forge_model::{Feature, History, RegenError, Solid, step_solids_finished};
 use forge_topo::{Body, FaceId, Name};
 use std::any::Any;
@@ -707,6 +706,50 @@ impl Builder {
     }
 }
 
+/// Which features made each face, by its name (as `forge_agent::select::Lineage`, hashed for
+/// names: they are hashes already, so a multiply spreads them; nothing iterates one).
+pub type Lineage = HashMap<Name, Vec<usize>, std::hash::BuildHasherDefault<NameMix>>;
+
+/// The hasher of `Lineage`.
+#[derive(Default)]
+pub struct NameMix(u64);
+
+impl std::hash::Hasher for NameMix {
+    fn write(&mut self, bytes: &[u8]) {
+        for &b in bytes {
+            self.0 = (self.0.rotate_left(8) ^ b as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15);
+        }
+    }
+    fn write_u64(&mut self, x: u64) {
+        self.0 = (self.0 ^ x).wrapping_mul(0x9e37_79b9_7f4a_7c15);
+    }
+    fn finish(&self) -> u64 {
+        self.0 ^ (self.0 >> 29)
+    }
+}
+
+/// `forge_agent::select::lineage` with nothing copied, into a `Lineage`: each face's making
+/// features after feature `i` built `body`, given those before. A face keeps its origin while its
+/// name lives; a new face on a face before's surface, overlapping it, is that face's.
+fn lineage(body: &Body, prev: Option<(&Body, &Lineage)>, i: usize) -> Lineage {
+    let mut out = Lineage::with_capacity_and_hasher(body.faces.len(), Default::default());
+    for f in body.face_ids() {
+        let face = body.face(f);
+        let o = prev.and_then(|(pb, po)| {
+            po.get(&face.name).cloned().or_else(|| {
+                // (the surfaces first: most differ, and a face's box is worked out only then)
+                pb.face_ids()
+                    .find(|&g| {
+                        pb.face(g).surface == face.surface && pb.face_box(g).overlaps(&body.face_box(f))
+                    })
+                    .and_then(|g| po.get(&pb.face(g).name).cloned())
+            })
+        });
+        out.insert(face.name, o.unwrap_or_else(|| vec![i]));
+    }
+    out
+}
+
 /// A run before's stages, and the lineages worked out for them, by position.
 type KeptLineage<'a> = (&'a [Rc<Stage>], &'a [Rc<Lineage>]);
 
@@ -738,8 +781,8 @@ fn origin_upto(
         }
         let prev = k.checked_sub(1).and_then(|j| stages[j].work());
         let o = match stages.get(k).and_then(|s| s.work()) {
-            None => HashMap::new(),
-            Some(b) => select::lineage(b, prev.map(|p| (p, &*origins[k - 1])), k, &HashMap::new()),
+            None => Lineage::default(),
+            Some(b) => lineage(b, prev.map(|p| (p, &*origins[k - 1])), k),
         };
         origins.push(Rc::new(o));
     }

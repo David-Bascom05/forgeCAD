@@ -179,6 +179,20 @@ fn main() {
                 }
             }
         }
+        "regen" => {
+            // one sequential regen, for counting under `--toggle-collect=*regenerate_solids*`:
+            // fg (its ids), fgpos (its features under positional ids, as .fc names them), fc
+            let name = arg(1);
+            let r = match arg(2) {
+                "fg" => {
+                    let (part, ids) = bench(name);
+                    part.regenerate_solids_ids(Some(&ids))
+                }
+                "fgpos" => bench(name).0.regenerate_solids(),
+                _ => forge_agent::bench::part(name).regenerate_solids(),
+            };
+            println!("{name} {} {:016x} {:?}", arg(2), bits_of(&r), shape_of(&r));
+        }
         "vsfc" => {
             // each part's .fg kernel result against its .fc part's (tools/bench-parts), regenerated
             // by the kernel alone: bits (as `bits` hashes them), volume, faces and edges
