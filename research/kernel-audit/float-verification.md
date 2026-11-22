@@ -58,21 +58,19 @@ cost up to +0.14% on the deterministic speed-gate lines.
      it now gives 0).
 
 **Does the precondition hold in practice?** I ran the release tests of forge-math, forge-geom,
-forge-bool and forge-model, and `FUZZ_SEEDS=150` of `examples/suite`, with every window check
-logging instead of asserting.
-- **The fuzz suite:** no violation, and 150/150 histories valid.
-- **The tests, outside forge-math's own deliberate out-of-window unit tests:**
-  - `certainly_in_circle` left its window 3,557 times (`spline.rs` 1,911, `edits.rs` 1,277,
-    `fillet_overflow.rs` 369);
-  - `orient2d`'s slow path left its window 12 times (`spline.rs`).
-- **The cause** is mesher uv coordinates that should be 0 but are numerical noise: `3.2e-167`,
-  `-5.9e-243`, `-1.4e-117`, and even the subnormal `-4.3e-322`, beside coordinates of 10 to 8700.
-  - With panicking asserts, `edits.rs::fuzz_edits` fails.
-  - The fast decisions on these inputs are still right: the differences are moderate, so no
-    product underflows.
-- **So the coordinate windows are sufficient but not necessary,** and in practice they are
-  violated. Restating the precondition, or snapping the noise at its source, is pending a
-  decision.
+forge-bool, forge-model and forge-mesh (431 tests), and `FUZZ_SEEDS=150` of `examples/suite`,
+with every precondition check logging instead of asserting.
+- **Coordinate windows (option 1):** violated, 3,557 times for `certainly_in_circle` and 12 for
+  `orient2d`'s slow path. The cause was mesher uv coordinates that are numerical noise for 0
+  (`3.2e-167`, `-5.9e-243`, even the subnormal `-4.3e-322`).
+- **Under the product precondition (B):** still 880 violations, all in `certainly_in_circle`.
+  Two noise coordinates' difference is itself tiny, and its square (a lift) underflows.
+- **With the noise snapped at its source (A):** `Layout::put` in `forge-mesh/src/tessellate.rs`,
+  which produces every uv point the triangulation sees, now turns a coordinate below `2^-200` in
+  magnitude into exactly 0. That is one comparison per coordinate. Result:
+  - **0 violations** outside forge-math's own deliberate counterexample test;
+  - 431 tests passed, and 150/150 fuzz histories valid;
+  - the bits of `tools/speed/bits.txt` are unchanged, every line, and native = wasm32-wasip1.
 
 Independent check (`check_exact.py`, 200,000 cases per range, on the final kernel):
 
