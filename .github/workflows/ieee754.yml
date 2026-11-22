@@ -1,0 +1,41 @@
+# The IEEE 754 model (verify/ieee754): its Lean proofs, the axioms check (a sorry or a non-standard
+# axiom fails the build), the executable, and a hardware comparison of a few hundred thousand
+# operations against this runner's f64/f32.
+name: ieee754
+
+on:
+  push:
+    branches: [main]
+    paths: ["verify/ieee754/**", ".github/workflows/ieee754.yml"]
+  pull_request:
+    paths: ["verify/ieee754/**", ".github/workflows/ieee754.yml"]
+  workflow_dispatch:
+
+jobs:
+  model:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: toolchain cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.elan
+          key: elan-${{ runner.os }}-${{ hashFiles('verify/ieee754/lean-toolchain') }}
+      - name: elan and the pinned toolchain
+        run: |
+          if [ ! -x "$HOME/.elan/bin/elan" ]; then
+            curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -o elan-init.sh
+            sh elan-init.sh -y --default-toolchain none
+          fi
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+          "$HOME/.elan/bin/elan" toolchain install "$(cat verify/ieee754/lean-toolchain)"
+      - name: prebuilt Mathlib
+        working-directory: verify/ieee754
+        run: lake exe cache get
+      - name: the proofs and the executable
+        working-directory: verify/ieee754
+        run: lake build
+      - name: the model against this CPU
+        working-directory: verify/ieee754/check
+        run: cargo run --release -- --n 30000
