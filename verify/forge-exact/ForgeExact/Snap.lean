@@ -7,9 +7,10 @@ The reference applies this to the dyadic inputs before the exact boolean. These 
 functions the executable runs.
 
 1. **Carriers** (`Carrier`: a face's plane, its box and its name). Two carriers are
-   tolerance-equal (`tolEq`) iff the region `R` where their faces' boxes, grown by LINEAR,
-   overlap is not empty and each plane is within LINEAR of the other at the projection onto it of
-   every corner of `R`. (The affine distance to `T` is largest over `S ∩ R` at a vertex, and the
+   tolerance-equal (`tolEq`) iff the region where their faces' boxes, grown by LINEAR, overlap is
+   not empty and each plane is within LINEAR of the other at the projection onto it of every
+   corner of `R`, the hull of those grown boxes (`extent`: over the overlap alone, two faces
+   meeting at an edge would always be equal). (The affine distance to `T` is largest over `S ∩ R` at a vertex, and the
    projected corners span a superset of `S ∩ R`: the test is conservative.)
 2. **Classes** (`cls`): the transitive closure of `tolEq` over the carriers, which is what a
    union–find over the decided pairs computes. `cls_spec`: a carrier is in `a`'s class iff it is
@@ -51,6 +52,15 @@ theorem _root_.ForgeExact.Ref.Box.inter_comm (a b : Box) : a.inter b = b.inter a
   simp only [Box.inter, qmax_comm a.lo.x, qmax_comm a.lo.y, qmax_comm a.lo.z,
     qmin_comm a.hi.x, qmin_comm a.hi.y, qmin_comm a.hi.z]
 
+/-- The least box holding both. -/
+def _root_.ForgeExact.Ref.Box.hull (a b : Box) : Box :=
+  ⟨⟨qmin a.lo.x b.lo.x, qmin a.lo.y b.lo.y, qmin a.lo.z b.lo.z⟩,
+   ⟨qmax a.hi.x b.hi.x, qmax a.hi.y b.hi.y, qmax a.hi.z b.hi.z⟩⟩
+
+theorem _root_.ForgeExact.Ref.Box.hull_comm (a b : Box) : a.hull b = b.hull a := by
+  simp only [Box.hull, qmax_comm a.hi.x, qmax_comm a.hi.y, qmax_comm a.hi.z,
+    qmin_comm a.lo.x, qmin_comm a.lo.y, qmin_comm a.lo.z]
+
 def _root_.ForgeExact.Ref.Box.nonempty (b : Box) : Bool := b.lo.x ≤ b.hi.x && b.lo.y ≤ b.hi.y && b.lo.z ≤ b.hi.z
 
 /-- The eight corners. -/
@@ -86,17 +96,27 @@ def near (S T : Plane) (R : Box) (d : Rat) : Bool := R.corners.all fun c => T.wi
 /-- Where two carriers' faces' boxes, grown by `l`, overlap. -/
 def region (l : Rat) (a b : Carrier) : Box := (a.box.grow l).inter (b.box.grow l)
 
-/-- Tolerance-equal: the region is not empty and each plane is within `l` of the other there. -/
+/-- Both faces' extent: the hull of their boxes, grown by `l`. The planes are compared over this,
+not over `region` alone: two faces meeting at an edge (at any angle) have a `region` that is a
+slab `2 l` across round that edge, over which each plane is within `l` of the other, so a test
+over `region` merges every face of a solid with its neighbours. Over the extent, two planes agree
+only if they are within `l` across both faces: parallel to within `l` over the faces' size. -/
+def extent (l : Rat) (a b : Carrier) : Box := (a.box.grow l).hull (b.box.grow l)
+
+/-- Tolerance-equal: the faces' region is not empty (they meet, to within `l`) and each plane is
+within `l` of the other over both faces' extent. -/
 def tolEq (l : Rat) (a b : Carrier) : Bool :=
-  (region l a b).nonempty && near a.plane b.plane (region l a b) l &&
-    near b.plane a.plane (region l a b) l
+  (region l a b).nonempty && near a.plane b.plane (extent l a b) l &&
+    near b.plane a.plane (extent l a b) l
 
 theorem region_comm (l : Rat) (a b : Carrier) : region l a b = region l b a := Box.inter_comm _ _
 
+theorem extent_comm (l : Rat) (a b : Carrier) : extent l a b = extent l b a := Box.hull_comm _ _
+
 theorem tolEq_symm (l : Rat) (a b : Carrier) : tolEq l a b = tolEq l b a := by
-  unfold tolEq; rw [region_comm]
-  cases (region l b a).nonempty <;> cases near a.plane b.plane (region l b a) l <;>
-    cases near b.plane a.plane (region l b a) l <;> rfl
+  unfold tolEq; rw [region_comm, extent_comm]
+  cases (region l b a).nonempty <;> cases near a.plane b.plane (extent l b a) l <;>
+    cases near b.plane a.plane (extent l b a) l <;> rfl
 
 /-! ## Classes: the transitive closure -/
 
@@ -379,17 +399,17 @@ theorem onIn_class (l : Rat) {cs : List Carrier} (hcs : cs.Nodup)
 
 /-! ## The spread cap -/
 
-/-- Every pair of a class whose region is not empty is within `k · l`. -/
+/-- Every pair of a class whose region is not empty is within `k · l` over their extent. -/
 def spreadOk (l k : Rat) (cs : List Carrier) : Bool :=
   cs.all fun a => (cls l cs a).all fun b =>
     !(region l a b).nonempty ||
-      (near a.plane b.plane (region l a b) (k * l) && near b.plane a.plane (region l a b) (k * l))
+      (near a.plane b.plane (extent l a b) (k * l) && near b.plane a.plane (extent l a b) (k * l))
 
 /-- **The gap is carried**: past the cap check, each carrier's own plane is within `k · l` of the
-representative's over their region, so the entities on it carry at most that tolerance. -/
+representative's over their extent, so the entities on it carry at most that tolerance. -/
 theorem gap_carried (l k : Rat) {cs : List Carrier} (hcs : cs.Nodup) (h : spreadOk l k cs = true)
     {a : Carrier} (ha : a ∈ cs) (hR : (region l a (rep l cs a)).nonempty = true) :
-    near a.plane (rep l cs a).plane (region l a (rep l cs a)) (k * l) = true := by
+    near a.plane (rep l cs a).plane (extent l a (rep l cs a)) (k * l) = true := by
   simp only [spreadOk, List.all_eq_true] at h
   have := h a ha (rep l cs a) ((cls_spec l hcs ha _).mpr (rep_mem l hcs ha))
   simp only [hR, Bool.not_true, Bool.false_or, Bool.and_eq_true] at this

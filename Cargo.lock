@@ -118,10 +118,12 @@ dependencies = [
 name = "forge-exact-fuzz"
 version = "0.1.0"
 dependencies = [
+ "forge-bool",
  "forge-geom",
  "forge-lang",
  "forge-math",
  "forge-model",
+ "forge-ops",
  "forge-proof",
  "forge-topo",
 ]

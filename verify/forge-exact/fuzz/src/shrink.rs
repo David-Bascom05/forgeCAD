@@ -54,6 +54,7 @@ pub fn shrink(reference: &mut Reference, case: &Case, path: &str, want: &Class) 
         (stmts.join("\n") + "\n", best)
     } else {
         let mut part = case.part.clone();
+        let mut kept: Vec<usize> = (0..part.features.len()).collect();
         let mut best = want.clone();
         let mut i = part.features.len();
         while i > 1 {
@@ -65,9 +66,16 @@ pub fn shrink(reference: &mut Reference, case: &Case, path: &str, want: &Class) 
             trial.features.remove(i);
             if let Some(c) = same(reference, &trial) {
                 part = trial;
+                kept.remove(i);
                 best = c;
             }
         }
-        (forge_model::adversarial::literal(&part), best)
+        (
+            format!(
+                "features kept: {kept:?}\n{}",
+                forge_model::adversarial::literal(&part)
+            ),
+            best,
+        )
     }
 }
