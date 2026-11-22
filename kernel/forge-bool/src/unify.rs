@@ -267,6 +267,11 @@ fn between_same(body: &Body, keys: &[(u8, f64)], e: EdgeId) -> bool {
     if ka.0 == 0 || ka.0 != kb.0 || (ka.1 - kb.1).abs() > 1e-3 {
         return false;
     }
+    // a ruling with one face round a cylinder or cone on both sides is its seam: passed over
+    // here, not walked round in `remove_edge` (every such face has one)
+    if a == b && ka.0 != 1 && matches!(x.curve, Curve::Line(_)) {
+        return false;
+    }
     let (fa, fb) = (body.face(a), body.face(b));
     // on one surface, facing the same way: a plane's outward normal is its z or -z; a cylinder's
     // natural normal points away from its axis whichever way its frame turns
