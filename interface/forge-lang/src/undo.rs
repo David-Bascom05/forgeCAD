@@ -125,6 +125,60 @@ pub fn step(file: &Path, step: Step) -> Result<String, String> {
     Ok(to.clone())
 }
 
+/// The undo and redo stacks the log holds for `file` as it reads `now`: each step's text, the
+/// oldest first (undo takes the last of `undos`, redo the last of `redos`). None when the log
+/// does not end on `now` (no log, or a hand edit since): there is nothing to step from.
+pub fn history(file: &Path, now: &str) -> Option<(Vec<String>, Vec<String>)> {
+    let log = read(file);
+    let at = match (log.undos.last(), log.redos.last()) {
+        (Some(&i), _) => &log.edits[i].after,
+        (None, Some(&i)) => &log.edits[i].before,
+        (None, None) => return None,
+    };
+    if at != now {
+        return None;
+    }
+    let undos = log.undos.iter().map(|&i| log.edits[i].before.clone()).collect();
+    let redos = log.redos.iter().map(|&i| log.edits[i].after.clone()).collect();
+    Some((undos, redos))
+}
+
+/// Writes the log of `file` anew to hold these stacks (as `history` gives them) about `now`, the
+/// text the file holds: an app's undo depth kept with the file, for `fg edit F Undo` and the
+/// next time it opens. No steps: no log.
+pub fn keep(file: &Path, undos: &[String], now: &str, redos: &[String]) -> std::io::Result<()> {
+    let path = log_path(file);
+    if undos.is_empty() && redos.is_empty() {
+        return match std::fs::remove_file(&path) {
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e),
+            _ => Ok(()),
+        };
+    }
+    let mut out = String::new();
+    let mut line = |j: Json| {
+        j.write(&mut out);
+        out.push('\n');
+    };
+    let doit = |before: &str, after: &str| {
+        Json::obj(vec![
+            ("kind", "do".into()),
+            ("before", before.into()),
+            ("after", after.into()),
+        ])
+    };
+    // the texts in order: the undone ones, now, then what redo puts back (the last redone first)
+    let mut texts: Vec<&str> = undos.iter().map(String::as_str).collect();
+    texts.push(now);
+    texts.extend(redos.iter().rev().map(String::as_str));
+    for w in texts.windows(2) {
+        line(doit(w[0], w[1]));
+    }
+    for _ in redos {
+        line(Json::obj(vec![("kind", "undo".into())]));
+    }
+    std::fs::write(path, out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -150,5 +204,26 @@ mod tests {
         std::fs::write(&f, "hand").expect("write");
         assert!(step(&f, Step::Undo).is_err());
         assert_eq!(std::fs::read_to_string(&f).expect("read"), "hand");
+    }
+
+    #[test]
+    fn an_apps_stacks_kept_are_the_stacks_read_back_and_the_clis_to_step() {
+        let dir = std::env::temp_dir().join(format!("forge-undo-keep-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("dir");
+        let f = dir.join("p.fg");
+        std::fs::write(&f, "c").expect("write");
+        let (undos, redos) = (
+            vec!["a".to_string(), "b".to_string()],
+            vec!["e".to_string(), "d".to_string()],
+        );
+        keep(&f, &undos, "c", &redos).expect("keep");
+        assert_eq!(history(&f, "c"), Some((undos, redos)));
+        // a hand edit since: nothing to step from
+        assert_eq!(history(&f, "x"), None);
+        assert_eq!(step(&f, Step::Redo).as_deref(), Ok("d"));
+        assert_eq!(step(&f, Step::Undo).as_deref(), Ok("c"));
+        assert_eq!(step(&f, Step::Undo).as_deref(), Ok("b"));
+        keep(&f, &[], "b", &[]).expect("keep");
+        assert!(!log_path(&f).exists());
     }
 }

@@ -25,7 +25,10 @@ expect volume = 11966 +- 0.1%
 
 ## Lexical
 
-`#` starts a comment. Numbers: `12`, `0.5`, `1e3`, with a unit `mm` or `deg`. A minus sign
+`#` starts a comment. A comment line `# units in` (or `cm`, `m`, `ft`, `mm`) is the part's
+own unit for people: the app shows lengths and takes bare numbers typed in it, converting to mm as
+it writes them; the text's numbers stay mm and nothing builds from the line. `#~ID ` starts a line
+`Suppress {id}` took out of the build. Numbers: `12`, `0.5`, `1e3`, with a unit `mm` or `deg`. A minus sign
 directly before a digit, where no value precedes it, is part of the number (`-1`, `(-1, 2)`);
 `a -1` and `a - 1` subtract. Strings: `"M6"`. Names: letters, digits, `_`. Keywords: `shared param
 fn for in if else return expect and or not true false sketch path at component` (`at:` is still a keyword
@@ -200,7 +203,9 @@ intersect(PROFILE, extent)          keeps what lies inside
 revolve(PROFILE, axis: LINE, angle: A | sym(A) | two(A, B) | upto(FACES | WORKPLANE | SKETCH, offset: A),
         cut|keep|new: true, bodies: BODIES)   LINE: a line of the same sketch (construction
                                     or not; a plain line that is no side of the profile is
-                                    left out of it)
+                                    left out of it), or an AXIS lying in its plane: a work
+                                    axis, `axis(E.start, E.end)` of a straight edge, `F.axis`,
+                                    or the origin's `X`, `Y`, `Z` (else `BadValue`)
 hole(..), thread(..)                see Holes and threads
 fillet(EDGES, R, from: POINT, setbacks: [(POINT, d) | (POINT, EDGES, d)], only: false)
 fillet(groups: [(EDGES, R) | (EDGES, R, POINT), ..], setbacks: .., only: false)
