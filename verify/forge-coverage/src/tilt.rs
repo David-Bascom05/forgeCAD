@@ -1,6 +1,7 @@
 //! Tilted planes: convex box-like solids one of whose faces is turned by theta off the other's face
 //! (examples/tilt_sweep.rs sweeps them), with the exact answer by convex clipping.
 use forge_bool::Op;
+use forge_math::dmath;
 use forge_math::{Frame, Point2, Point3, UnitVec3, Vec3};
 use forge_ops::extrude;
 use forge_ops::profile::{Profile, ProfileLoop, Segment};
@@ -124,7 +125,7 @@ impl Poly {
             let w = cross(n, u);
             cut.sort_by(|a, b| {
                 let (pa, pb) = (sub(*a, c), sub(*b, c));
-                f64::atan2(dot(pa, w), dot(pa, u)).total_cmp(&f64::atan2(dot(pb, w), dot(pb, u)))
+                dmath::atan2(dot(pa, w), dot(pa, u)).total_cmp(&dmath::atan2(dot(pb, w), dot(pb, u)))
             });
             cut.dedup_by(|a, b| dot(sub(*a, *b), sub(*a, *b)) < 1e-30);
             if cut.len() >= 3 {
@@ -212,7 +213,7 @@ fn cube() -> (Body, Poly) {
 
 /// The families: (A, B) at tilt theta (radians), each as a body and as the exact polyhedron.
 pub fn family(name: &str, th: f64) -> ((Body, Poly), (Body, Poly)) {
-    let (s, c) = (th.sin(), th.cos());
+    let (s, c) = dmath::sin_cos(th);
     match name {
         // B on A's top, its bottom turned about the line y = 5 in A's top face: half dips in
         "lid" => (
@@ -291,7 +292,10 @@ pub fn family(name: &str, th: f64) -> ((Body, Poly), (Body, Poly)) {
         // A a roof: its top two faces meeting at the ridge x = 5 at 2 theta from flat; B a block across
         // the ridge through A's top (the across `smooth` test at the ridge)
         "ridge" => {
-            let t = th.tan();
+            let t = {
+                let (s, c) = dmath::sin_cos(th);
+                s / c
+            };
             let a = prism(
                 &frame([0.0, 0.0, 0.0], [0.0, -1.0, 0.0], [1.0, 0.0, 0.0]),
                 &[

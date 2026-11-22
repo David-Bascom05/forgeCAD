@@ -297,20 +297,18 @@ pub fn manifold_octants(kept: impl Fn(usize) -> bool) -> bool {
     connected(true) && connected(false)
 }
 
+/// A box's extents: [min, max] on each axis.
+pub type Extents = [[f64; 2]; 3];
+
 /// The pattern's boxes with B's ends that coincide with one of A's moved by `delta` x LINEAR on
 /// `axes` (outwards on both of B's ends), as examples/box_band moves them; None if none moved.
-pub fn band_boxes(
-    p: &Pattern,
-    unit: f64,
-    delta: f64,
-    axes: &[usize],
-) -> Option<([[f64; 2]; 3], [[f64; 2]; 3])> {
+pub fn band_boxes(p: &Pattern, unit: f64, delta: f64, axes: &[usize]) -> Option<(Extents, Extents)> {
     let (a, mut b) = p.boxes(unit);
     let mut moved = false;
     for &k in axes {
-        for s in 0..2 {
-            if a[k].contains(&b[k][s]) {
-                b[k][s] += if s == 0 { -delta } else { delta } * forge_math::tol::LINEAR;
+        for (s, end) in b[k].iter_mut().enumerate() {
+            if a[k].contains(end) {
+                *end += if s == 0 { -delta } else { delta } * forge_math::tol::LINEAR;
                 moved = true;
             }
         }

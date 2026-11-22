@@ -25,9 +25,9 @@ fn main() {
     };
     let (ba, mut bb) = p.boxes(10.0);
     for &k in &axes {
-        for s in 0..2 {
-            if ba[k].contains(&bb[k][s]) {
-                bb[k][s] += if s == 0 { -dl * LINEAR } else { dl * LINEAR };
+        for (s, end) in bb[k].iter_mut().enumerate() {
+            if ba[k].contains(end) {
+                *end += if s == 0 { -dl * LINEAR } else { dl * LINEAR };
             }
         }
     }

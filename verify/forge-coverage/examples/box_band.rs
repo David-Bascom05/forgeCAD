@@ -36,9 +36,9 @@ fn main() {
             // and its high end alike: the pattern's coincidences all open or all close)
             let mut moved = false;
             for &k in &axes {
-                for s in 0..2 {
-                    if a[k].contains(&b[k][s]) {
-                        b[k][s] += if s == 0 { -dl * LINEAR } else { dl * LINEAR };
+                for (s, end) in b[k].iter_mut().enumerate() {
+                    if a[k].contains(end) {
+                        *end += if s == 0 { -dl * LINEAR } else { dl * LINEAR };
                         moved = true;
                     }
                 }
