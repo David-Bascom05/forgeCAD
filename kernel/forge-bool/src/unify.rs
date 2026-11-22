@@ -254,22 +254,21 @@ fn rename_wholes(body: &mut Body, faces: &[(u32, u32)], edges: &[(u32, u32)]) {
 const SAME: f64 = 0.5 * tol::LINEAR;
 
 /// Whether live edge `e` lies between two faces on one surface, facing the same way (`keys` as
-/// `unify` makes them); or has one face on both sides (a slit, a spur or a bridge between two of
-/// its loops, which bounds nothing; `remove_edge` keeps a seam the face needs to wrap round).
+/// `unify` makes them); or has one plane face on both sides: a slit, a spur or a bridge between
+/// two of its loops, which bounds nothing. (One face round a cylinder or cone on both sides is
+/// mostly its seam, which the face needs.)
 fn between_same(body: &Body, keys: &[(u8, f64)], e: EdgeId) -> bool {
     let x = body.edge(e);
     if !x.alive || x.coedges.len() != 2 {
         return false;
     }
     let (a, b) = (body.coedge_face(x.coedges[0]), body.coedge_face(x.coedges[1]));
+    if a == b {
+        return keys[a.index()].0 == 1 && !kept(body, x.name);
+    }
     let (ka, kb) = (keys[a.index()], keys[b.index()]);
     // (far looser than the test below: faces on one surface differ by tolerances here)
     if ka.0 == 0 || ka.0 != kb.0 || (ka.1 - kb.1).abs() > 1e-3 {
-        return false;
-    }
-    // a ruling with one face round a cylinder or cone on both sides is its seam: passed over
-    // here, not walked round in `remove_edge` (every such face has one)
-    if a == b && ka.0 != 1 && matches!(x.curve, Curve::Line(_)) {
         return false;
     }
     let (fa, fb) = (body.face(a), body.face(b));
@@ -306,28 +305,18 @@ fn between_same(body: &Body, keys: &[(u8, f64)], e: EdgeId) -> bool {
         }
         _ => false,
     };
-    // unless a feature split the face there on purpose
-    same && !body
-        .joins
-        .kept
-        .iter()
-        .any(|&k| x.name == k || x.name.is_piece_of(k))
+    same && !kept(body, x.name)
 }
 
-/// Whether the closed chain of edge uses `chain` goes round face `f`'s periodic surface. One
-/// through a singular point (a cone's apex) is taken to: round that point its turn is undefined,
-/// and a seam running to it (a pointed cone's) holds a chain there and back along it.
+/// Whether a feature split a face on purpose along the edge named `name`.
+fn kept(body: &Body, name: forge_topo::Name) -> bool {
+    body.joins.kept.iter().any(|&k| name == k || name.is_piece_of(k))
+}
+
+/// Whether the closed chain of edge uses `chain` goes round face `f`'s periodic surface.
 fn winds(body: &Body, f: FaceId, chain: &[(EdgeId, bool)]) -> bool {
     let s = &body.face(f).surface;
     let d = s.domain();
-    if chain.iter().any(|&(e, _)| {
-        let x = body.edge(e);
-        [x.start, x.end]
-            .iter()
-            .any(|&v| s.singular(s.project(body.vertex(v).point)))
-    }) {
-        return true;
-    }
     let mut pts: Vec<Point2> = Vec::new();
     for &(e, fwd) in chain {
         let x = body.edge(e);

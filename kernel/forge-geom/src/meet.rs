@@ -1193,6 +1193,8 @@ pub fn intersect(a: &Surface, b: &Surface, region: Box3) -> Option<SurfaceSurfac
     // the discriminant keeps its sign where two pairs of roots come at once (a tube's two sides, with
     // the axes in one plane, so the host symmetric about it): a root count that changes with no event
     // between is an event the sign test missed, a multiple one, found by the count
+    // (whether a chain must be kept off a second sheet: decided once, see `sheeted`)
+    let sheeted = sheeted(&eq.host) || sheeted(&other);
     let axes_meet = match (axis_of(&eq.host), axis_of(&other)) {
         (Some((p, a)), Some((q, b))) => {
             let n = a.get().cross(b.get());
@@ -1489,7 +1491,11 @@ pub fn intersect(a: &Surface, b: &Surface, region: Box3) -> Option<SurfaceSurfac
             }
         }
         let chain = kept;
-        let keep = chain.iter().filter(|&&q| on_nappes(&eq.host, &other, q)).count();
+        let keep = if sheeted {
+            chain.iter().filter(|&&q| on_nappes(&eq.host, &other, q)).count()
+        } else {
+            chain.len()
+        };
         if keep < chain.len() {
             if keep > 0 {
                 return None; // a loop through a cone's apex, or a spindle's
@@ -1562,6 +1568,18 @@ pub fn intersect(a: &Surface, b: &Surface, region: Box3) -> Option<SurfaceSurfac
 }
 
 /// False for a point on the mirror nappe of either surface's cone.
+/// Whether `s` has a second sheet `on_nappes` must keep a chain off (a cone's other nappe, a
+/// spindle's inner sheet). Asked once per chain, by variant: asked per point, the compiler
+/// hoists a spindle's test out of the loop and reads it from whatever lies in the unused bytes of
+/// another variant, so the loop taken (never its answer) followed stale memory.
+fn sheeted(s: &Surface) -> bool {
+    match s {
+        Surface::Cone(_) => true,
+        Surface::Torus(t) => t.is_spindle(),
+        _ => false,
+    }
+}
+
 fn on_nappes(host: &Surface, other: &Surface, p: Point3) -> bool {
     [host, other].iter().all(|s| match s {
         Surface::Cone(c) => c.frame.point_to_local(p).z >= c.apex_v() - tol::LINEAR,

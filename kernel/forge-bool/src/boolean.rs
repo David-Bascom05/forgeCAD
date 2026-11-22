@@ -2229,31 +2229,39 @@ pub(crate) fn local_class<T: PartialEq>(
 /// `e` leave `into`'s surface to one side of it: `body` only touches that surface along the
 /// edge, so the face's points either side of it lie alike outside (or inside) `body`. Decided by
 /// the sign of each face's direction into itself, square to the edge, against the surface's
-/// normal (in closed form, at the stretch's middle and quarters); a face along the surface there
-/// (tangent, or within the angular tolerance) says neither.
+/// normal, all in closed form (the surfaces' gradients, at the stretch's middle and quarters); a
+/// face along the surface there (tangent, or within the angular tolerance) says neither, and so
+/// does a surface with no closed form (no answer: the edge is imprinted).
 fn touches_along(body: &Body, e: EdgeId, range: Interval, other: &Body, into: FaceId) -> bool {
     let edge = body.edge(e);
     if edge.coedges.len() != 2 {
         return false;
     }
-    let across = &other.face(into).surface;
+    // a face's outward normal at a point on it, from its surface's gradient
+    let normal = |b: &Body, f: FaceId, p: Point3| -> Option<Vec3> {
+        let face = b.face(f);
+        if matches!(face.surface, Surface::Procedural(_)) {
+            return None;
+        }
+        let g = face.surface.gradient(p);
+        let l = g.length();
+        (l > 0.0).then(|| if face.same_sense { g / l } else { -g / l })
+    };
     let mut sign = 0.0;
     [0.25, 0.5, 0.75].iter().all(|&x| {
         let dv = edge.curve.deriv(range.lo + x * range.width());
-        let Some(n) = other.face_normal(into, across.project(dv.p)) else {
+        let (Some(n), len) = (normal(other, into, dv.p), dv.d1.length()) else {
             return false;
         };
-        let len = dv.d1.length();
         len > 0.0
             && edge.coedges.iter().all(|&c| {
-                let g = body.coedge_face(c);
-                let Some(ng) = body.face_normal(g, body.face(g).surface.project(dv.p)) else {
+                let Some(ng) = normal(body, body.coedge_face(c), dv.p) else {
                     return false;
                 };
                 let along = if body.coedge(c).forward { dv.d1 } else { -dv.d1 };
                 // (sine of the angle the face leaves the surface at: the face holds the edge, so
                 // its normal is square to it)
-                let s = ng.cross(along).dot(n.get()) / len;
+                let s = ng.cross(along).dot(n) / len;
                 if s.abs() <= tol::ANGULAR || s * sign < 0.0 {
                     return false;
                 }
