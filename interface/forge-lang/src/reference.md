@@ -792,6 +792,88 @@ OUT-<unfold>.step; for an assembly, its structure (one product per part, one use
 placed by the solve). `fg run --json` lists each sheet: thickness, radius, rule, and each bend's flange, angle, radius,
 allowance and setback.
 
+## Weldments
+
+Structural members along the segments of a layout: each segment a member, a standard or sketched
+section carried along it (an extrusion along a line, a revolve along an arc), cut on planes where
+members meet, each its own body. Exact: lines, arcs and planes; the cut list from the section.
+
+```
+shared W = 600
+shared D = 400
+shared H = 700
+sketch lay(on: xy) {
+  r = rect(corner: (0, 0), size: (W, D))
+  base = line((0, 0), (W, 0), construction: true)
+}
+top = members(lay.r, section: "SHS 40x40x3", corner: "miter", gap: 0.5)
+sketch side(on: rotate(lay.plane, about: lay.base, by: 90deg)) {
+  post = line((W / 2, 0), (W / 2, -H))
+}
+legs = members(side.post, section: "SHS 40x40x3")
+seat = end_trim(legs[0], to: top[0])
+foot = end_cap(legs[0], end: "end", t: 5)
+brace = corner_plate(top[0], top[1], size: 80, t: 5, chamfer: 10)
+```
+
+```
+members(LAYOUT, section: "SHS 40x40x3" | LOOP, align: "center", offset: (dx, dy), turn: A,
+        mirror: false, corner: "miter"|"butt", gap: G, corners: [(POINT, CORNER, G), ..],
+        rank: [k, ..])
+    one member per segment of LAYOUT (a sketch line, arc, loop or path, or a list of them from
+    any sketches: a layout in 3D), open or closed; member k is F[k], in the layout's order, a
+    feature and a body of its own (bodies:, of:, union, fillet, hole and export take it).
+end_trim(MEMBERS, to: FACE | WORKPLANE | SKETCH | MEMBER | BODY, gap: G, end: "start"|"end")
+    the member's end nearer the target cut: on a plane (gap short of it; the cut list follows),
+    or coped to a member's outline carried along its path (a round tube's saddle) or to a body,
+    the part of it beyond the member's middle; leaving the member in pieces is BodyError Pieces.
+    gap with a body or member is NotWith.
+end_cap(MEMBER, end: "start"|"end" = "end", t: T)
+    a plate of the section's outline, T thick, outside a square end: its own body
+    (CapOnSlantEnd on an end cut on the slant or coped).
+corner_plate(A, B, size: S, t: T, chamfer: C)
+    a triangular plate where members A and B meet at an angle, in the plane of their paths, T
+    thick about it: its corner where their inside faces meet, its legs S along each, the corner
+    cut back C (NoCorner where they share no node, or run in line).
+```
+
+- The member's frame: z along the path, y the layout sketch's normal, x = y × z (the path's left
+  in its sketch; inward round a counter-clockwise loop). The section's x and y are those.
+  `align` puts the section's pierce point on the path: `center` (its box's middle; the default
+  for the library), `centroid` (exact), `origin` (a sketched section's own origin, its default),
+  `top`, `bottom`, `left`, `right`, `top_left`, `top_right`, `bottom_left`, `bottom_right` (of
+  its box); `offset` moves the section from there; `turn` turns it about the path; `mirror`
+  flips its x.
+- Sections (`forge_weld::library`, sizes restated from the European tables): `SHS a x a x t`
+  and `RHS h x b x t` (EN 10219 cold-formed; corner radii outer 2t, inner t to t = 6; 2.5t,
+  1.5t to 10; 3t, 2t over; RHS stands on its longer side), `CHS d x t`, `L a x b x t` (EN
+  10056, root and toe radii; `L 50x5` for equal legs), `UPE n`, `IPE n` (EN 10365, parallel
+  flanges, root radii), `FB w x t`. An unknown designation is `UnknownSize`, with SetArg fixes to
+  the nearest sizes of its family. A sketched section is lines and arcs (`SectionCurve`
+  otherwise).
+- The rule at a node (where segment ends meet, or an end lies on another segment's middle): the
+  members there are ranked, members passing through first, then those in `rank`, then the rest
+  in layout order. The first two, if both end there, meet by the node's corner (`corners` sets
+  it at a node by its point): `miter` cuts both on the plane bisecting their directions, each
+  `gap / 2` back; `butt` runs the first on to the plane touching the second's outline on its
+  far side and stops the second on the plane touching the first's outline on its own side, `gap`
+  off it. Two meeting in line meet square. Every other member is butted to each member ranked
+  before it. A touching plane is the outline's support square to the member's axis: a box
+  section's face, a round one's tangent plane (`end_trim` to a member copes it instead).
+  Refusals: `ButtParallel`, `MiterTooSharp` (members folding back), `CrossingMembers` (two
+  passing through one node), `CutAlongMember`, `MemberCutAway` (the end cuts meet inside it),
+  `ArcTooTight` (an arc no larger than the section, or an end cut more than a quarter turn
+  round it), `MembersOverlap` (an arc member curving into another: such pairs are intersected;
+  straight members are kept apart by their cut planes by construction).
+- Anchors: `F[k].start`, `F[k].end`, a member's end faces (its cut planes' or the section's).
+- The cut list: `fg query F cutlist` (and `cutlist` in `fg run --json`): identical members on
+  one row (section, cut length, overall length and the cuts at each end, either way round):
+  `qty`, `members`, `length` (along the path between the end cuts), `overall` (long point to
+  long point along a straight member: exact from the section's outline), for an arc member its
+  `radius` and `arc` (degrees turned between the end cuts), each end's cuts (`angle` off square,
+  degrees, and `toward`: the direction in the section's x, y of the long point), copes by
+  target; then the plates (`end_cap`, `corner_plate`): thickness, area, the members they are on.
+
 ## iProperties and materials
 
 ```

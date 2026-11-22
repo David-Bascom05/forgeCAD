@@ -317,7 +317,11 @@ fn nearest(d: &str) -> Vec<String> {
             .filter_map(|p| p.trim().parse::<f64>().ok())
             .collect()
     };
-    let want = sizes(d);
+    let mut want = sizes(d);
+    // the short forms: SHS a x t and L a x t are a x a x t
+    if want.len() == 2 && (fam == "SHS" || fam == "L") {
+        want.insert(0, want[0]);
+    }
     let mut all: Vec<(f64, String)> = forge_weld::designations()
         .into_iter()
         .filter(|n| n.split(' ').next() == Some(fam.as_str()))
