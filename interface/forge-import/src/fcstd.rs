@@ -1211,6 +1211,8 @@ struct Tr<'d, 'a, 'i> {
     /// Features made, for fresh ids.
     made: usize,
     chain_rest: Vec<String>,
+    /// The feature ids written so far (`t3`, `m4x0`; not their `x1`, `_sk` kin), for `fresh`.
+    taken: HashSet<String>,
 }
 
 fn unsupported<T>(s: impl Into<String>) -> Result<T, Fail> {
@@ -1227,6 +1229,17 @@ fn ids(labels: &str) -> String {
 }
 
 impl Tr<'_, '_, '_> {
+    /// `id`, or with a suffix where a statement already has it: a Forge id is bound once, and a
+    /// feature stepped again (a chain two bodies of a Part tree share) makes its statements anew.
+    fn fresh(&self, id: String) -> String {
+        let (mut out, mut k) = (id.clone(), 0);
+        while self.taken.contains(&out) {
+            k += 1;
+            out = format!("{id}r{k}");
+        }
+        out
+    }
+
     /// The program so far.
     fn program(&self) -> String {
         let mut s = String::from(PRELUDE);
@@ -2243,7 +2256,7 @@ impl Tr<'_, '_, '_> {
     fn step(&mut self, name: &str) -> Result<(), Fail> {
         let d = self.doc;
         let t = d.ty(name).unwrap_or("").to_string();
-        let lab = format!("t{}", self.labels.len());
+        let lab = self.fresh(format!("t{}", self.labels.len()));
         if t == "PartDesign::FeatureBase" {
             // stands for its BaseFeature, which the chain has already built, moved by its own placement
             // (measured: a chain of clones composes them, and the base feature's own placement plays no part)
@@ -2318,7 +2331,8 @@ impl Tr<'_, '_, '_> {
                         let w = mt.map_or("None", last_word);
                         return unsupported(format!("a multi-transform with {w}"));
                     }
-                    let id = format!("m{}x{k}", self.labels.len());
+                    let id = self.fresh(format!("m{}x{k}", self.labels.len()));
+                    self.taken.insert(id.clone());
                     let b = self.transform(m, mt.unwrap_or(""), &src, &id)?;
                     self.blocks.push(b);
                     src += &format!(" {id}");
@@ -2345,6 +2359,7 @@ impl Tr<'_, '_, '_> {
         } else {
             // a feature of several statements (regions that do not touch): a pattern of it needs them all
             self.labels.insert(name.into(), ls.join(" "));
+            self.taken.insert(lab);
         }
         Ok(())
     }
@@ -2564,6 +2579,7 @@ fn body_of(doc: &Doc, b: &str) -> Body {
             tree: 0,
             made: 0,
             chain_rest: vec![],
+            taken: HashSet::new(),
         });
         t.run(&chain)
     })();
