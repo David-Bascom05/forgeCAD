@@ -86,6 +86,21 @@ fn the_parser_runs_the_generated_table() {
     }
 }
 
+/// table.rs's EMPTY is `Driver.emptyRule` on Impl.lean's grammar and NULLABLE: the first rule of
+/// the nonterminal whose right side can be empty. With TABLE (`Impl.table_choose`) and FIRST and
+/// NULLABLE (`Impl.certT`) it is all `Driver.run` reads, so `Driver.rd_eq_run` is about this table.
+#[test]
+fn the_empty_rules_are_the_lean_ones() {
+    use forge_lang::syntax::table;
+    let nullable = |s: u8| s >= table::NT_BASE && table::NULLABLE[(s - table::NT_BASE) as usize];
+    for a in 0..table::NN {
+        let lean = (0..table::LHS.len())
+            .find(|&r| table::LHS[r] as usize == a && table::RHS[r].iter().all(|&s| nullable(s)))
+            .map_or(table::NONE, |r| r as u8);
+        assert_eq!(table::EMPTY[a], lean, "nonterminal {a}");
+    }
+}
+
 /// The parser accepts the grammar's language: every random sentence of grammar.ll1 parses, or
 /// fails one of the checks the actions make beyond the grammar, never on syntax.
 #[test]

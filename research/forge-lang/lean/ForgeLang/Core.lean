@@ -29,12 +29,24 @@ abbrev Name := String
 here an abstract label. The document's literal table maps sites to numbers. -/
 abbrev Site := Nat
 
+/-- An arithmetic operator past `+` and `*`, unobserved: its result's trace is the operation. -/
+inductive AOp where
+  | sub | div | mod | pow
+  deriving DecidableEq, Repr
+
+def AOp.app : AOp → Int → Int → Int
+  | .sub, a, b => a - b
+  | .div, a, b => a / b
+  | .mod, a, b => a % b
+  | .pow, a, b => a ^ b.toNat
+
 /-- Provenance of a number. -/
 inductive Tr where
   | site : Site → Tr
   | const : Int → Tr
   | add : Tr → Tr → Tr
   | mul : Tr → Tr → Tr
+  | bin : AOp → Tr → Tr → Tr
   deriving DecidableEq, Repr
 
 namespace Tr
@@ -44,12 +56,14 @@ def den (σ : Site → Int) : Tr → Int
   | const c => c
   | add a b => a.den σ + b.den σ
   | mul a b => a.den σ * b.den σ
+  | bin o a b => o.app (a.den σ) (b.den σ)
 
 def sites : Tr → List Site
   | site s => [s]
   | const _ => []
   | add a b => a.sites ++ b.sites
   | mul a b => a.sites ++ b.sites
+  | bin _ a b => a.sites ++ b.sites
 
 /-- The edit handle: a value is editable exactly when it is one literal, untouched. -/
 def handle : Tr → Option Site
@@ -76,7 +90,12 @@ inductive Expr where
   | var : Name → Expr
   | add : Expr → Expr → Expr
   | mul : Expr → Expr → Expr
+  /-- `a - b`, `a / b`, `a % b`, `a ^ b`: arithmetic, not an observation. -/
+  | bin : AOp → Expr → Expr → Expr
   | eq : Expr → Expr → Expr
+  /-- `a < b`, observed as `==` is. With `==` it gives every comparison of the language (`<=`,
+  `>`, `>=`, `!=`) and `and`, `or`, `not` (`Compare.lean`). -/
+  | lt : Expr → Expr → Expr
   | ite : Expr → Expr → Expr → Expr
   /-- `[e0, e1, ...][k]`: a list param indexed by a loop variable. -/
   | sel : List Expr → Expr → Expr
@@ -193,10 +212,18 @@ def evalE : Nat → Defs → (Site → Int) → Env → Expr → R (Tr × Log)
       let (ta, la) ← evalE n D σ ρ a
       let (tb, lb) ← evalE n D σ ρ b
       .ok (.mul ta tb, la ++ lb)
+    | .bin o a b => do
+      let (ta, la) ← evalE n D σ ρ a
+      let (tb, lb) ← evalE n D σ ρ b
+      .ok (.bin o ta tb, la ++ lb)
     | .eq a b => do
       let (ta, la) ← evalE n D σ ρ a
       let (tb, lb) ← evalE n D σ ρ b
       .ok (.const (if ta.den σ = tb.den σ then 1 else 0), la ++ lb ++ obs D ta ++ obs D tb)
+    | .lt a b => do
+      let (ta, la) ← evalE n D σ ρ a
+      let (tb, lb) ← evalE n D σ ρ b
+      .ok (.const (if ta.den σ < tb.den σ then 1 else 0), la ++ lb ++ obs D ta ++ obs D tb)
     | .ite c a b => do
       let (tc, lc) ← evalE n D σ ρ c
       let (t, l) ← evalE n D σ ρ (if tc.den σ ≠ 0 then a else b)

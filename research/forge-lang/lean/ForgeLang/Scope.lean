@@ -35,10 +35,18 @@ def evalEL : Nat → Defs → (Site → Int) → Env → Env → Expr → R (Tr 
       let (ta, la) ← evalEL n D σ G ρ a
       let (tb, lb) ← evalEL n D σ G ρ b
       .ok (.mul ta tb, la ++ lb)
+    | .bin o a b => do
+      let (ta, la) ← evalEL n D σ G ρ a
+      let (tb, lb) ← evalEL n D σ G ρ b
+      .ok (.bin o ta tb, la ++ lb)
     | .eq a b => do
       let (ta, la) ← evalEL n D σ G ρ a
       let (tb, lb) ← evalEL n D σ G ρ b
       .ok (.const (if ta.den σ = tb.den σ then 1 else 0), la ++ lb ++ obs D ta ++ obs D tb)
+    | .lt a b => do
+      let (ta, la) ← evalEL n D σ G ρ a
+      let (tb, lb) ← evalEL n D σ G ρ b
+      .ok (.const (if ta.den σ < tb.den σ then 1 else 0), la ++ lb ++ obs D ta ++ obs D tb)
     | .ite c a b => do
       let (tc, lc) ← evalEL n D σ G ρ c
       let (t, l) ← evalEL n D σ G ρ (if tc.den σ ≠ 0 then a else b)
@@ -220,7 +228,10 @@ theorem scopeAt : ∀ n, ScopeAt n := by
         simp only [evalEL, evalE, lookupNum_agree (ag x (by simp [fvE]))]
       | ref x rel =>
         simp only [evalEL, evalE, lookupRef_agree (rel := rel) (ag x (by simp [fvE]))]
-      | add a b | mul a b | eq a b =>
+      | add a b | mul a b | eq a b | lt a b =>
+        simp only [evalEL, evalE]
+        rw [ih.e dok (agm ag) hG, ih.e dok (agm ag) hG]
+      | bin o a b =>
         simp only [evalEL, evalE]
         rw [ih.e dok (agm ag) hG, ih.e dok (agm ag) hG]
       | ite c a b =>

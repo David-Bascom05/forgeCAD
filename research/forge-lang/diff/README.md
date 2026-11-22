@@ -23,6 +23,24 @@ call-path ids), static rules (`comp_scope_differs`, `use_cycle`, `dead_param`, `
 caller name, `use` of a component), and cross-run cache keys (`key_needs_literals`,
 `key_needs_shared`, `key_needs_defs`) in one `fg serve` session, numbers and volume per version.
 
+Ops checked against the Lean equations of the second round (2026-11-22):
+
+- Suppress of each program's first feature: Lean computes the edited Doc itself (`suppDoc`, from
+  `Suppress.lean`'s `suppressAt`); fg's text without its `#~` lines must be that Doc's text, and
+  its run that Doc's model. Then Unsuppress: the text back byte for byte (`unsuppress_suppress`).
+- Undo after every applied op: the text before the op byte for byte and the original model
+  (`Undo.undo_write`); then Redo: the edited text again (`redo_undo`). An op that changed nothing
+  logs nothing: Undo is refused, as `write` says.
+- Respell: per program, a read that is always evaluated misspelt; the UnknownName's span respelt
+  gives the program's text byte for byte and its model (`Respell.lean`).
+- Comparisons, `and`, `or`, `not` and `-` (fixed case `comparisons`, `Compare.lean`): `<` and the
+  rest observe what the core's `lt` and `eq` observe.
+- fit_sizes: the fix offered for a too-large fillet builds (`Fit.fit_builds`).
+- `tests/core_diff.rs` checks `build::history_id` against `HistoryId.historyId`, and the colliding
+  pair `historyId_collides`.
+- Known findings: `suppress-line` (Suppress comments whole lines: `same_line_drops`) and
+  `respell-binder` (Respell renames a binder: `respell_binder_renames`).
+
 ## Mapping
 
 - A literal shared param (`shared w = 3`, `count(2)`) is a Lean site, and so is a component
@@ -39,7 +57,7 @@ caller name, `use` of a component), and cross-run cache keys (`key_needs_literal
 ## Run
 
 ```
-python3 core_diff.py test --fg PATH/fg            # the fixture (seed 1, 60 programs + fixed), ~3 s
+python3 core_diff.py test --fg PATH/fg            # the fixture (seed 1, 60 programs + fixed), ~15 s
 python3 core_diff.py fixture --seed 1 --count 60  # rewrite fixture/ (needs Lean: lake build first)
 python3 core_diff.py long --seed 2 --seeds 5 --count 150 --fg PATH/fg   # fresh seeds (needs Lean)
 ```

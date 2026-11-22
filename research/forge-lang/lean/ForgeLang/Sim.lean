@@ -32,6 +32,9 @@ theorem Tr.den_congr {σ σ' : Site → Int} : ∀ t : Tr, Agree σ σ' t.sites 
   | .mul a b, h => by
     simp only [Tr.sites, agree_append] at h
     simp only [Tr.den, Tr.den_congr a h.1, Tr.den_congr b h.2]
+  | .bin o a b, h => by
+    simp only [Tr.sites, agree_append] at h
+    simp only [Tr.den, Tr.den_congr a h.1, Tr.den_congr b h.2]
 
 /-- What the hypothesis of `Sim` buys at an observation point: the observed number is the same. -/
 theorem den_obs {D : Defs} {σ σ' : Site → Int} {t : Tr} (h : D.track = true ∨ ∀ s, σ s = σ' s)
@@ -88,7 +91,20 @@ theorem sim : ∀ n, Sim n := by
         cases h
         simp only [agree_append] at ag
         simp [evalE, ih.e htr ha ag.1 hm, ih.e htr hb ag.2 hm]
+      | bin o a b =>
+        simp only [evalE, bind_ok] at h
+        obtain ⟨⟨ta, la⟩, ha, ⟨tb, lb⟩, hb, h⟩ := h
+        cases h
+        simp only [agree_append] at ag
+        simp [evalE, ih.e htr ha ag.1 hm, ih.e htr hb ag.2 hm]
       | eq a b =>
+        simp only [evalE, bind_ok] at h
+        obtain ⟨⟨ta, la⟩, ha, ⟨tb, lb⟩, hb, h⟩ := h
+        cases h
+        simp only [agree_append] at ag
+        simp [evalE, ih.e htr ha ag.1.1.1 hm, ih.e htr hb ag.1.1.2 hm, den_obs htr ag.1.2,
+          den_obs (t := tb) htr ag.2]
+      | lt a b =>
         simp only [evalE, bind_ok] at h
         obtain ⟨⟨ta, la⟩, ha, ⟨tb, lb⟩, hb, h⟩ := h
         cases h

@@ -122,3 +122,17 @@ open ForgeLang ForgeLang.Counter
 #print axioms ForgeLang.Fence.output_through_parse
 #print axioms ForgeLang.Fence.canary
 #print axioms ForgeLang.Fence.line_leaks
+#print axioms ForgeLang.le_eval
+#print axioms ForgeLang.expect_obs
+#print axioms ForgeLang.suppress_complete
+#print axioms ForgeLang.unsuppress_suppress
+#print axioms ForgeLang.lines_eq_stmts
+#print axioms ForgeLang.respell_read_binders
+#print axioms ForgeLang.Undo.redo_undo
+#print axioms ForgeLang.Undo.history_keep
+#print axioms ForgeLang.Fit.fit_builds
+#print axioms ForgeLang.Fit.fit_near_max
+#print axioms ForgeLang.historyId_collides
+#print axioms ForgeLang.LL1.Driver.rd_eq_run
+#print axioms ForgeLang.LL1.Driver.rd_accepts_parse
+#print axioms ForgeLang.LL1.Impl.impl_rd_eq_run

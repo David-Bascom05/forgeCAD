@@ -6048,10 +6048,12 @@ impl<'n> Builder<'n> {
                     let trips = self.excursions(i, side, Interval::new(t0, t1))?;
                     // a closed concave round's spring off over a rim and back: notched here,
                     // which a cliff may round as the ball rolls
-                    if !trips.is_empty() && closed && !self.rolled[i].convex {
-                        if let Some(n) = self.notched {
-                            n.set(true);
-                        }
+                    if !trips.is_empty()
+                        && closed
+                        && !self.rolled[i].convex
+                        && let Some(n) = self.notched
+                    {
+                        n.set(true);
                     }
                     trips
                 };
