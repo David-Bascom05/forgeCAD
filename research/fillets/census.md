@@ -38,6 +38,8 @@ where they differ.
    cluster I checked (p00011's 3) is 0.0025 from a new face, and the mesh winding number sides with Index, so it is
    the STEP file's surface fit. Nothing hidden was found. On FreeCAD (33 wrong), WHUCAD (20) and CADFS (23)
    OCCT agrees with `Index` at every counted point: that fault is not what made them wrong.
+   The 305 disagreeing points of the 14 parts, with each side's answer, are in
+   oracle/index-misclass.tsv (regenerate the parts with fc_twin.py PIPE 0 200; their sha1 is listed).
 2. **A ball wider than the wall.** On a convex round the oracle keeps only what balls of radius r
    *lying inside the body before* cover. A CAD fillet needs the ball to touch only the two faces, so
    where the body is thinner than 2r near the edge the oracle removes material no fillet removes.
