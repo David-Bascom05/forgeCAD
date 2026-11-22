@@ -1304,11 +1304,12 @@ f2 = revolve(r.c, axis: r.ax)
 }
 
 /// Seed 0 of the .fg program generator at 12 groups: its last statement, an outside M6 thread on a
-/// block moved and turned, takes the kernel about four minutes (237 s, release build) before it
-/// builds. Cut down to the block, the move and the thread it is quick but refused (a boolean's
-/// inconsistent classification). Left out of the generator's seeds until it is fast.
+/// block moved and turned, its axis all but square to the block's side. The groove's flat past the
+/// cylinder spans the whole pitch, and its carried-on surface's track reached the next turn's end
+/// to end: the side's plane met it in loops touching tip to tip, and the trace ran on from turn to
+/// turn (a chain of 114404 points, four minutes; cut down, a stretch run twice and the boolean's
+/// classification inconsistent). The tracks now stay clear of each other: valid, in seconds.
 #[test]
-#[ignore = "a thread on a moved body takes the kernel four minutes"]
 fn slow_thread_after_a_moved_body() {
     let t = std::time::Instant::now();
     let v = judge(
@@ -1414,6 +1415,126 @@ sketch H15(on: offset(xy, 1.32)) {
 L10 = thread(on: plane(at: H15.p0, normal: axis(H14.p0, H14.p1)), at: H15.p0, spec: "M6", length: 18.43)
 "#,
     );
-    assert!(!matches!(v, Verdict::Fail(_)), "{v:?}");
-    assert!(t.elapsed().as_secs() < 30, "{:.0} s", t.elapsed().as_secs_f64());
+    assert!(matches!(v, Verdict::Ok), "{v:?}");
+    assert!(t.elapsed().as_secs() < 60, "{:.0} s", t.elapsed().as_secs_f64());
+}
+
+/// `slow_thread_after_a_moved_body` cut down to the block, the move and the thread: refused (an
+/// inconsistent classification) while the trace ran on from turn to turn.
+#[test]
+fn thread_all_but_square_to_a_moved_side() {
+    builds_valid(
+        r#"sketch S0(on: xy) {
+  o = rect(corner: (0, 0), size: (72.78, 100.81))
+}
+L0 = extrude(S0, 15.69)
+sketch H10(on: offset(xy, -21.4)) {
+  p0 = pt(-15.8, -96.39999999999999)
+}
+sketch H11(on: offset(xy, 0)) {
+  p0 = pt(0, 0)
+}
+sketch H12(on: offset(xy, 11.99)) {
+  p0 = pt(32.25, 55.67)
+}
+sketch H13(on: offset(xy, 21.99)) {
+  p0 = pt(32.25, 55.67)
+}
+L9 = movebody(of: L0, moves: [slide(along: axis(H11.p0, H10.p0), by: 40.37587893780147), spin(about: axis(H12.p0, H13.p0), by: 56.88deg)])
+sketch H14(on: offset(xy, 0)) {
+  p0 = pt(0, 0)
+  p1 = pt(54.6, 83.8)
+}
+sketch H15(on: offset(xy, 1.32)) {
+  p0 = pt(87.92, 60.13)
+}
+L10 = thread(on: plane(at: H15.p0, normal: axis(H14.p0, H14.p1)), at: H15.p0, spec: "M6", length: 18.43)
+"#,
+    );
+}
+
+/// An intersect whose tool misses the body it acts on (a half-disc slab well above a new body's
+/// cylinder: OCCT finds them disjoint too) takes that body whole, as a cut taking it does; the
+/// smooth loft after it then joins the body left, the first loft's. The n-ary regen ran the loft
+/// into the emptied body's run and made it a body of its own (2 bodies where the sequential regen
+/// makes 1): it now goes one at a time from a run with an intersect in it, as from one whose cuts
+/// may take it all. Both regens: one body of two lumps, 16 faces, 3329.046553799 mm^3 (OCCT reads
+/// its STEP as 2 solids of 3329.046554, valid). Seed 14 of the .fg generator, shrunk.
+#[test]
+fn an_intersect_that_takes_a_body_whole() {
+    let src = r#"sketch H0(on: offset(xy, 13.35)) {
+  p0 = pt(10.88, 0)
+}
+sketch H1(on: offset(xy, 27.38)) {
+  p0 = pt(10.88, 0)
+}
+sketch S1_0(on: plane(at: H0.p0, normal: Z)) {
+  o = rect(corner: (-2.32, -2.32), size: (4.64, 4.64))
+}
+sketch S1_1(on: plane(at: H1.p0, normal: Z)) {
+  o = rect(corner: (-8.24, -8.24), size: (16.48, 16.48))
+}
+L1 = loft([S1_0.o, S1_1.o])
+sketch H2(on: offset(xy, 0.06)) {
+  p0 = pt(62.15, 8.75)
+}
+sketch S2(on: plane(at: H2.p0, normal: -Z)) {
+  o = circle((0, 0), 6.4)
+}
+L2 = extrude(S2, upto(faces(of: L1, extreme: -X)), new: true)
+sketch H15(on: offset(xy, -19.900000000000002)) {
+  p0 = pt(51.9, -83.2)
+}
+sketch H16(on: offset(xy, 0)) {
+  p0 = pt(0, 0)
+}
+sketch H17(on: offset(xy, 24.86)) {
+  p0 = pt(65.24, 18.72)
+}
+sketch S10(on: plane(at: H17.p0, normal: axis(H16.p0, H15.p0))) {
+  l = line((-8.43, 0), (8.43, 0))
+  a = arc(center: (0, 0), from: (8.43, 0), to: (-8.43, 0))
+}
+L10 = intersect(S10, sym(10.84))
+sketch H18(on: offset(xy, 21.91)) {
+  p0 = pt(113.27, 8.02)
+}
+sketch H19(on: offset(xy, 34.53)) {
+  p0 = pt(113.27, 8.02)
+}
+sketch H20(on: offset(xy, 6.73)) {
+  p0 = pt(113.27, 8.02)
+}
+sketch S11_0(on: plane(at: H20.p0, normal: Z)) {
+  o = rect(corner: (-1.72, -1.72), size: (3.44, 3.44))
+}
+sketch S11_1(on: plane(at: H18.p0, normal: Z)) {
+  o = rect(corner: (-4.11, -4.11), size: (8.22, 8.22))
+}
+sketch S11_2(on: plane(at: H19.p0, normal: Z)) {
+  o = rect(corner: (-4.68, -4.68), size: (9.36, 9.36))
+}
+L11 = loft([S11_0.o, S11_1.o, S11_2.o], smooth: true)
+"#;
+    let b = seq_valid(src);
+    // the intersect left one body of the two
+    assert_eq!(b.solids_after(b.built()).len(), 1);
+    let part = b.part();
+    let seq = part.regenerate_solids_ids(Some(&b.ids)).expect("regenerates");
+    let nary = part
+        .regenerate_nary_solids_ids(1, Some(&b.ids))
+        .expect("regenerates n-ary");
+    for solids in [&seq, &nary] {
+        assert_eq!(solids.len(), 1, "one body: the intersect took the other whole");
+        let body = &solids[0].body;
+        assert!(
+            forge_topo::check(body).is_empty(),
+            "{:?}",
+            forge_topo::check(body)
+        );
+        assert_eq!(body.compact().faces.len(), 16);
+        let v = forge_topo::mass::mass(body).expect("mass").volume;
+        assert!((v - 3329.046553799).abs() < 1e-6, "{v}");
+    }
+    assert_eq!(judge(src), Verdict::Ok);
 }

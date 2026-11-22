@@ -10,6 +10,11 @@ repository.workspace = true
 name = "fg"
 path = "src/bin/fg.rs"
 
+# .fc against .fc's replacement, to be deleted with the .fc engine (tools/fcvsfg)
+[[example]]
+name = "fcvsfg"
+path = "../../tools/fcvsfg/fcvsfg.rs"
+
 [dependencies]
 forge-dirs = { path = "../../kernel/forge-dirs" }
 forge-math = { path = "../../kernel/forge-math" }

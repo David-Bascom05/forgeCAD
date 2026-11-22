@@ -4,7 +4,3 @@
 # booleans losing their way: a classification that floods inconsistently (the .fc list's
 # 'inconsistent classification'), on a hole and a rib here
 Internal(InconsistentClassification
-# the n-ary regen splitting a part the sequential one keeps whole: a smooth loft intersected with
-# a half-disc slab, beside a loft and a new body ended on its face (seed 14 since the generator
-# draws every .fc form; shrunk: loft, extrude upto(face) new, intersect sym, smooth loft)
-bodies, sequential

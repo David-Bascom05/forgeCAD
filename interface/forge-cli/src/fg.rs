@@ -297,11 +297,12 @@ impl Session {
         // own, past every feature's, added to the lineage of each face any of them made
         let mut groups: Vec<(String, usize)> = vec![];
         if toks.iter().any(|t| matches!(*t, "of" | "between" | "body")) {
-            origin = self
-                .caches
-                .get_mut(&st.path)
-                .ok_or("the part was not built")?
-                .origin(st.n);
+            origin = std::rc::Rc::unwrap_or_clone(
+                self.caches
+                    .get_mut(&st.path)
+                    .ok_or("the part was not built")?
+                    .origin(st.n),
+            );
             for t in &toks {
                 let set = feats_named(&st.feats, t);
                 if set.len() > 1 && !groups.iter().any(|g| g.0 == *t) {

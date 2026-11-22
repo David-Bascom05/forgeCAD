@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Whose fault is a built part that disagrees with the dataset? OpenCascade replays the same .fc.
+"""Whose fault is a built part that disagrees with the dataset? OpenCascade replays the same .fg (the oracle's export).
 
   $VENV/bin/python -I triage_wrong.py WRONG.json --export PARTS.json --results RESULTS.jsonl --truth TRUTH.jsonl --out OUT.jsonl
 
 ours-wrong   OCCT agrees with the dataset, we do not: a silent wrong answer, the most serious class.
-importer     OCCT agrees with us: both kernels read the .fc alike, so the .fc is not the source's part.
+importer     OCCT agrees with us: both kernels read the .fg alike, so the .fg is not the source's part.
 three-way    nobody agrees: needs Monte Carlo (tools/occt/montecarlo.py) before blaming anyone.
 no-opinion   OCCT could not build it, or the export cut the part short.
 """

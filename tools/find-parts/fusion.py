@@ -843,6 +843,10 @@ def write(steps):
         if st["kind"] == "combine":
             P.add(f"{P.name('u')} = union({st['into']}, tools: [{', '.join(st['tools'])}])")
             continue
+        if st["kind"] == "blend":
+            # a fillet or chamfer on edges named by lineage (histcad.py finds them)
+            P.add(f"{P.name('bl')} = {st['word']}({st['sel']}, {num(st['size'])})")
+            continue
         pl = P.plane(st["at"], st["z"], st["x"])
         sk = P.name("s")
         rows = [r for rs in st["rows"] for r in rs]
