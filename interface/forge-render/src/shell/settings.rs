@@ -631,12 +631,15 @@ impl Shell {
         let prefs = &mut self.prefs;
         let area = super::dialog_area(ctx);
         let h = WIN_H.min(area.height() - 16.0).max(400.0);
+        // centred, as a modal is, over a scrim that sets the app behind it back
         let at = pos2(
             area.center().x - WIN_W * 0.5,
-            (area.top() + 60.0)
+            (area.center().y - h * 0.5)
                 .min(area.bottom() - h - 8.0)
                 .max(area.top() + 4.0),
         );
+        ctx.layer_painter(egui::LayerId::background())
+            .rect_filled(ctx.content_rect(), 0.0, t.scrim);
         let r = egui::Window::new("Settings")
             .id(egui::Id::unique("settings-window"))
             .title_bar(false)
@@ -1110,7 +1113,7 @@ fn appearance(ui: &mut Ui, t: &Theme, s: &mut Settings, _: &mut Window, places: 
         s.dark = k == 1;
     }
     section(ui, t, "Part colours");
-    let items = [("Inventor grey", !s.pastel), ("A pastel per part", s.pastel)];
+    let items = [("Neutral grey", !s.pastel), ("A pastel per part", s.pastel)];
     if let Some(k) = cards(
         ui,
         t,

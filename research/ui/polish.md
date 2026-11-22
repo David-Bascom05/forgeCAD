@@ -153,3 +153,24 @@ New:
 - **Errors**: severity = icon + colour + word, never colour alone.
 - **Empty states**: a heading, one sentence, the primary action, at most two secondary.
 - **Hover**: `hover` fill on everything clickable; pointer cursor on custom-painted buttons.
+
+## Status
+
+Before/after pairs share names in `before/` and `after/`.
+
+| # | item | state |
+|---|---|---|
+| 1 | Empty state | done: `shell/empty.rs`; "No document open" in the browser (`01-empty`). Ribbon tools that need a document: not yet |
+| 2 | Spacing | done in every panel that uses `dialog_head` (Measure, Issues, inspect windows, asm dialogs); the global default is left at 0 because the hand-laid chrome depends on it |
+| 3 | One accent | done: `accent` is the primary blue; the ribbon/side tab rules and the active document tab use it; the tool dialog's OK is primary |
+| 4 | Issues rows | done (`12-error-issues`); the in-view "build failed" banner: not yet |
+| 5 | Type scale | tokens in `theme.rs`; panels move to them as they're touched |
+| 6 | One panel frame | done: `theme::panel_frame` behind `fgasm::dialog_frame`, the tool dialog and the mode bar; title row 28 px with a hover on ✕ |
+| 7 | Settings | done: scrim, centred, "Neutral grey" (`08`, `09`) |
+| 8 | Status bar | done: units chip, the issues chip always a chip |
+| 12 | Document tabs | done: sans 12, the accent rule on top of the active tab |
+| 9, 10, 11, 13 | | not yet |
+
+Known, not from this work: `cargo clippy --lib --target wasm32-unknown-unknown` fails at
+`errno` before reaching forge-render, through `zbus-secret-service-keyring-store` (not gated to
+native targets in Cargo.toml). The same happens on the base branch.
