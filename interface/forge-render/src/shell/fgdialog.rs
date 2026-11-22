@@ -6,7 +6,7 @@
 use super::dialog::{DIALOG_W, FIELD_AT, dropdown, heading, pick_row, text_toggles, toggle_row};
 use super::fg::FgAct;
 use super::fgtool::{FgTool, SlotKind as K};
-use super::theme::{mono, sans, semi};
+use super::theme::{medium, mono, sans, semi};
 use super::{Shell, panel};
 use crate::shell::placed::Placed;
 use egui::{Align2, Rect, Sense, Stroke, pos2, vec2};
@@ -738,27 +738,30 @@ impl Shell {
                 t.raised
             } else if ok {
                 if resp.hovered() {
-                    t.on.gamma_multiply(1.2)
+                    t.accent.gamma_multiply(1.15)
                 } else {
-                    t.on
+                    t.accent
                 }
             } else if resp.hovered() {
                 t.hover
             } else {
                 t.raised
             };
-            ui.painter().rect_filled(r, 4.0, fill);
-            ui.painter()
-                .rect_stroke(r, 4.0, Stroke::new(1.0, t.line), egui::StrokeKind::Inside);
+            let r1 = super::theme::R1;
+            ui.painter().rect_filled(r, r1, fill);
+            if !(ok && !held) {
+                ui.painter()
+                    .rect_stroke(r, r1, Stroke::new(1.0, t.line), egui::StrokeKind::Inside);
+            }
             ui.painter().text(
                 r.center(),
                 Align2::CENTER_CENTER,
                 word,
-                sans(13.0),
+                if ok && !held { medium(13.0) } else { sans(13.0) },
                 if held {
                     t.ink2
                 } else if ok {
-                    t.on_ink
+                    egui::Color32::WHITE
                 } else {
                     t.ink
                 },

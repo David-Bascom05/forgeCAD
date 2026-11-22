@@ -106,7 +106,7 @@ impl Shell {
                 }
                 // the selection priority: what a click takes
                 ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing.x = 2.0;
+                    ui.spacing_mut().item_spacing.x = super::theme::S1;
                     for f in Filter::ALL {
                         let on = m.filter == f;
                         let r = ui.add(

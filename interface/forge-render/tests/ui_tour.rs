@@ -31,7 +31,8 @@ fn settle(h: &mut Headless) {
 }
 
 fn shot(h: &mut Headless, name: &str) {
-    for _ in 0..3 {
+    // past a window's fade-in
+    for _ in 0..12 {
         h.step();
     }
     if let Ok(dir) = std::env::var("FORGE_UI_SHOTS") {
