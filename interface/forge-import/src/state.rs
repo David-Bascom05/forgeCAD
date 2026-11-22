@@ -26,6 +26,9 @@ pub struct State {
     src: String,
     body: Option<Body>,
     anchors: Option<Anchors>,
+    /// The patterns and holes of the part as `edges` last built it: their copies and places
+    /// (`P[k]`) name edges alike in all else apart.
+    placed: Vec<String>,
 }
 
 /// A message as it travels in JSON: quotes, backslashes, controls blanked.
@@ -98,9 +101,99 @@ impl State {
     pub fn edges(&mut self, src: &str) -> Result<Vec<Edge>, Fail> {
         let run = self.run(src, true, vec![])?;
         self.src = src.into();
+        self.placed = run
+            .feats
+            .iter()
+            .filter(|f| f.top_level && matches!(f.kind, "pattern" | "hole"))
+            .map(|f| f.id.clone())
+            .collect();
         self.anchors = run.anchors;
         self.body = run.body;
         Ok(self.body.as_ref().map(dump).unwrap_or_default())
+    }
+
+    /// Each face's pattern copies and hole places (`P[k]`), on the part as `edges` last built it.
+    fn places(&mut self) -> Result<HashMap<Name, Vec<String>>, Fail> {
+        let mut out: HashMap<Name, Vec<String>> = HashMap::new();
+        if self.placed.is_empty() {
+            return Ok(out);
+        }
+        let src = self.src.clone();
+        // a few places first, more where a pattern has them
+        let (mut from, mut upto) = (0, 16);
+        let mut left = self.placed.clone();
+        while !left.is_empty() {
+            let texts: Vec<String> = left
+                .iter()
+                .flat_map(|p| (from..upto).map(move |k| format!("{p}[{k}]")))
+                .collect();
+            let run = self.run(&src, false, texts)?;
+            let mut more = vec![];
+            for (t, a) in run.asked {
+                if let Asked::Faces(fs, _) = a {
+                    for f in fs {
+                        out.entry(f).or_default().push(t.clone());
+                    }
+                    if let Some(p) = t.strip_suffix(&format!("[{}]", upto - 1)) {
+                        more.push(p.to_string());
+                    }
+                }
+            }
+            left = more;
+            (from, upto) = (upto, upto * 4);
+        }
+        // a copy of one feature: that feature's anchors carried onto it (`P[k].end`), which tell
+        // apart faces alike within the copy
+        let mut count: HashMap<String, usize> = HashMap::new();
+        for t in out.values().flatten() {
+            if let Some((p, k)) = t.strip_suffix(']').and_then(|t| t.split_once('[')) {
+                let k: usize = k.parse().unwrap_or(0);
+                let c = count.entry(p.to_string()).or_default();
+                *c = (*c).max(k + 1);
+            }
+        }
+        let anchors = self.anchors.clone().unwrap_or_default();
+        let mut texts = vec![];
+        for line in src.lines() {
+            let Some((p, rest)) = line.split_once(" = pattern(of: ") else {
+                continue;
+            };
+            // `of: s` or `of: [s, t]`
+            let of = match rest.strip_prefix('[') {
+                Some(r) => r.split_once(']').map(|x| x.0),
+                None => rest.split_once(',').map(|x| x.0),
+            };
+            let Some(of) = of.filter(|_| count.contains_key(p)) else {
+                continue;
+            };
+            let mut own: Vec<&str> = vec![];
+            for s in of.split(", ") {
+                own.extend(
+                    anchors
+                        .faces
+                        .values()
+                        .filter_map(|a| a.strip_prefix(s).filter(|r| r.starts_with('.'))),
+                );
+            }
+            own.sort();
+            own.dedup();
+            for k in 1..count[p] {
+                for a in &own {
+                    texts.push(format!("{p}[{k}]{a}"));
+                }
+            }
+        }
+        if !texts.is_empty() {
+            let run = self.run(&src, false, texts)?;
+            for (t, a) in run.asked {
+                if let Asked::Faces(fs, _) = a {
+                    for f in fs {
+                        out.entry(f).or_default().push(t.clone());
+                    }
+                }
+            }
+        }
+        Ok(out)
     }
 
     /// What each text selects on the part as `edges` last built it.
@@ -134,6 +227,8 @@ impl State {
         };
         let ids: HashMap<Name, forge_topo::EdgeId> =
             body.edge_ids().map(|e| (body.edge(e).name, e)).collect();
+        // a pattern's copies (and a hole's places) are alike: each copy names its own
+        let places = self.places()?;
         // (probe text, final text, its params): each a candidate piece of the union, broadest first
         let mut cands: Vec<Cand> = vec![];
         let mut bases: Vec<String> = vec![];
@@ -175,6 +270,31 @@ impl State {
                 .map(|t| t.strip_suffix(')').unwrap_or(t).to_string())
                 .into_iter()
                 .collect();
+            // the copy or place holding a face of it: its edges, its crease, or where it meets the
+            // face on the other side
+            let fs: Vec<Name> = select::faces_of_edge(&body, e)
+                .iter()
+                .map(|&f| body.face(f).name)
+                .collect();
+            let crease = select::crease(&body, e).map(|c| format!(", crease: \"{c}\""));
+            for (i, f) in fs.iter().enumerate() {
+                for p in places.get(f).into_iter().flatten() {
+                    heads.push(format!("edges(of: {p}"));
+                    if let Some(c) = &crease {
+                        heads.push(format!("edges(of: {p}{c}"));
+                    }
+                    let other = fs.get(1 - i.min(1)).filter(|_| fs.len() == 2);
+                    let mut sides: Vec<String> = other
+                        .and_then(|g| anchors.faces.get(g))
+                        .cloned()
+                        .into_iter()
+                        .collect();
+                    sides.extend(other.and_then(|g| places.get(g)).into_iter().flatten().cloned());
+                    for q in sides.iter().filter(|q| *q != p) {
+                        heads.push(format!("edges(between: ({p}, {q})"));
+                    }
+                }
+            }
             heads.extend(feats.iter().map(|f| format!("edges(of: {f}")));
             for h in &heads {
                 for f in &filters {

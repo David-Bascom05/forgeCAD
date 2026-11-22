@@ -339,6 +339,10 @@ A pattern is one feature: copies of earlier features (`of:`) or of the whole par
 (`whole: true`), laid out by a layout value. The copies are named from the pattern's id and each
 copy's index, so changing a count keeps every surviving copy's names. The copies are the pattern's,
 not the copied feature's: `edges(of: peg)` is the original's alone, `of: [peg, pegs]` both.
+`P[k]` is copy k's faces (in the layout's order, rows first; `P[0]` the original), so an edge
+alike on every copy is named on one: `edges(of: pegs[2], crease: "convex")`,
+`edges(between: (pegs[2], base.end))`. A hole at several points indexes its places the same way
+(`bolt[1]`, in the order of its points).
 
 ```
 pattern(of: F | [F..], layout: LAYOUT, bodies: BODIES) | pattern(whole: true, layout: LAYOUT)
@@ -464,7 +468,8 @@ EDGES.center            of one edge: a circle's or arc's axis through its centre
 ```
 edges(of: F | [F..] | FACES, between: (A, B), crease: "concave"|"convex"|"smooth",
       shape: "line"|"circle"|"curve", along: DIR, r: R, longer: L, shorter: L)
-faces(of: F | [F..], shape: "plane"|"cyl"|"cone"|"sphere"|"torus"|"blend", normal: DIR, r: R)
+faces(of: F | [F..] | FACES, shape: "plane"|"cyl"|"cone"|"sphere"|"torus"|"blend", normal: DIR, r: R)
+P[k]  H[k]                          a pattern's copy k (0 the original), a hole's place k: faces
 EDGES + EDGES
 FACES + FACES                       one face set (a slab, an offset over several features' faces)
 ```

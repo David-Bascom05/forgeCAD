@@ -19,6 +19,7 @@ pub fn pattern(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         return Ok(Value::Unresolved);
     }
     let form = one_form(&a, "pattern", &["of", "whole"], span)?;
+    let mut copied = None;
     let of = if form == "whole" {
         if !a.flag("whole")? {
             return Err(crate::error::Error::BadValue {
@@ -34,7 +35,9 @@ pub fn pattern(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
             Value::Sheet(_) => Source::Body,
             v => {
                 let fs = crate::builtins::feats_of(v, a.span("of"))?;
-                Source::Features(fs.iter().map(|f| f.idx).collect())
+                let of = Source::Features(fs.iter().map(|f| f.idx).collect());
+                copied = Some(fs);
+                of
             }
         }
     };
@@ -65,6 +68,9 @@ pub fn pattern(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     }
     let f = crate::bodies::wrap_in(ev, &a, Feature::Pattern { of, layout })?;
     let (idx, hid) = ev.push_feature(&id, "pattern", f, span, dims)?;
+    if let Some(fs) = copied {
+        ev.copied.insert(hid, fs);
+    }
     Ok(feat(id, "pattern", idx, hid, None))
 }
 

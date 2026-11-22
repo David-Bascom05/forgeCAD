@@ -28,6 +28,11 @@ pub struct Args {
     pub labels: Option<String>,
     /// `render`: the picture's long side.
     pub px: Option<usize>,
+    /// `query`, `measure`, `render`: the part as it stood after this feature (its id).
+    pub at: Option<String>,
+    /// `edit`: the version (`version` in a reply) the ops were written against; refused if the
+    /// file has moved on.
+    pub base: Option<String>,
 }
 
 /// A tool's answer: plain text, its typed JSON, and the bytes of a picture or a file.
@@ -71,6 +76,51 @@ fn obj_push(j: &mut Json, k: &str, v: Json) {
     if let Json::Obj(f) = j {
         f.push((k.into(), v));
     }
+}
+
+/// A file's version: a hash of its text, which `edit --base` takes back.
+pub fn version(text: &str) -> String {
+    format!("{:016x}", forge_math::hash::hash128(text.as_bytes()) as u64)
+}
+
+/// The part a selector, measure or picture looks at: the finished part, or with `--at` the part
+/// as it stood after that feature; how many kernel features it holds, and the file it is of.
+struct Staged {
+    body: Body,
+    n: usize,
+    path: PathBuf,
+    /// Each built feature's id and kernel index, in the document's order.
+    feats: Vec<(String, usize)>,
+    /// Each solid's faces and edges in `body`, and the feature that made it.
+    spans: Vec<forge_lang::build::Span>,
+}
+
+/// The features an id names: itself, or every feature a call or loop of that name made
+/// (`lug` holds `lug.boss`, `bolt` holds `bolt[1]`). Their kernel indices.
+fn feats_named(feats: &[(String, usize)], name: &str) -> Vec<usize> {
+    let exact: Vec<usize> = feats.iter().filter(|f| f.0 == name).map(|f| f.1).collect();
+    if !exact.is_empty() {
+        return exact;
+    }
+    feats
+        .iter()
+        .filter(|f| {
+            f.0.strip_prefix(name)
+                .is_some_and(|r| r.starts_with('.') || r.starts_with('['))
+        })
+        .map(|f| f.1)
+        .collect()
+}
+
+fn no_feature(feats: &[(String, usize)], name: &str) -> String {
+    let mut ids: Vec<&str> = feats.iter().map(|f| f.0.as_str()).collect();
+    ids.dedup();
+    let more = if ids.len() > 30 { " .." } else { "" };
+    ids.truncate(30);
+    format!(
+        "'{name}' is no built feature of the part (features: {}{more})",
+        ids.join(" ")
+    )
 }
 
 impl Session {
@@ -125,9 +175,10 @@ impl Session {
         Ok((run, src))
     }
 
-    /// The run as the reply: the report, and each sheet's bends.
+    /// The run as the reply: the report, each sheet's bends, and the file's version.
     fn report(run: &Run, src: &str) -> Reply {
         let mut json = report::json(run, src);
+        obj_push(&mut json, "version", version(src).into());
         if !run.sheets.is_empty() {
             obj_push(
                 &mut json,
@@ -145,6 +196,12 @@ impl Session {
 
     /// `params` holds a tool's arguments as sent (an op may be an object, not text).
     pub fn run(&mut self, cmd: &str, a: &Args, params: &Json) -> Reply {
+        if a.at.is_some() && !matches!(cmd, "query" | "measure" | "render") {
+            return fail("--at goes with query, measure and render");
+        }
+        if a.base.is_some() && cmd != "edit" {
+            return fail("--base goes with edit");
+        }
         let r = match cmd {
             "build" => self.built(&a.file).map(|(run, src)| Self::report(&run, &src)),
             "check" => self.read(&a.file).map(|(p, src)| {
@@ -172,19 +229,116 @@ impl Session {
         })
     }
 
-    /// Selectors on the finished body: geometric filters. By feature (`of`, `between`), a part
-    /// asks in its own text (`edges(of: F, ..)`).
-    fn select(body: &Body, sel: &str) -> Result<Vec<Ent>, String> {
-        let origin = HashMap::new();
-        let feat = |r: &str| -> Result<usize, String> {
-            Err(format!(
-                "'{r}': on a .fg part, select by feature in the part's own text (edges(of: {r}, ..))"
-            ))
+    /// The part to look at: built, and with `--at FEAT` as it stood after that feature (the
+    /// last of what a call or loop of that name made), as far as the part built.
+    fn staged(&mut self, a: &Args) -> Result<Staged, String> {
+        let (run, _) = self.built(&a.file)?;
+        let path = self.path(&a.file)?;
+        let cache = self.caches.get(&path).ok_or("the part was not built")?;
+        let built = cache.built();
+        let feats: Vec<(String, usize)> = run
+            .feats
+            .iter()
+            .filter(|f| f.idx < built)
+            .map(|f| (f.id.clone(), f.idx))
+            .collect();
+        let Some(at) = &a.at else {
+            let spans = cache.spans_after(built).to_vec();
+            let body = match run.body {
+                Some(b) => b,
+                None => Self::body(&run)?.clone(),
+            };
+            return Ok(Staged {
+                body,
+                n: built,
+                path,
+                feats,
+                spans,
+            });
         };
-        let body_of = |_: Ent| None;
+        let Some(&last) = feats_named(&feats, at).iter().max() else {
+            // named, but not built: say where the part stops
+            if run.feats.iter().any(|f| f.id == *at) {
+                let stop = run
+                    .errors
+                    .first()
+                    .map_or(String::new(), |e| format!(": {}: {}", e.kind(), e.text()));
+                return Err(format!("'{at}' did not build{stop}"));
+            }
+            return Err(no_feature(&feats, at));
+        };
+        let body = cache
+            .body_after(last + 1)
+            .ok_or_else(|| format!("the part has no solid after '{at}'"))?
+            .clone();
+        Ok(Staged {
+            body,
+            n: last + 1,
+            path,
+            feats,
+            spans: cache.spans_after(last + 1).to_vec(),
+        })
+    }
+
+    /// A selector on the staged part. `of FEAT..` and `between FEAT FEAT` read which feature
+    /// made each face (by its id: a call's or loop's name takes all it made), as a part's own
+    /// `edges(of: ..)` does; a pattern's copies are the pattern's.
+    fn select(&mut self, st: &Staged, sel: &str) -> Result<Vec<Ent>, String> {
+        let toks: Vec<&str> = sel
+            .trim()
+            .trim_start_matches('(')
+            .trim_end_matches(')')
+            .split_whitespace()
+            .collect();
+        let mut origin = HashMap::new();
+        // a name for several features (a call, a loop) stands for them all: an index of its
+        // own, past every feature's, added to the lineage of each face any of them made
+        let mut groups: Vec<(String, usize)> = vec![];
+        if toks.iter().any(|t| matches!(*t, "of" | "between" | "body")) {
+            origin = self
+                .caches
+                .get_mut(&st.path)
+                .ok_or("the part was not built")?
+                .origin(st.n);
+            for t in &toks {
+                let set = feats_named(&st.feats, t);
+                if set.len() > 1 && !groups.iter().any(|g| g.0 == *t) {
+                    let id = usize::MAX / 2 + groups.len();
+                    for o in origin.values_mut() {
+                        if o.iter().any(|i| set.contains(i)) {
+                            o.push(id);
+                        }
+                    }
+                    groups.push((t.to_string(), id));
+                }
+            }
+        }
+        let feats = &st.feats;
+        let feat = |r: &str| -> Result<usize, String> {
+            if let Some(g) = groups.iter().find(|g| g.0 == r) {
+                return Ok(g.1);
+            }
+            match feats_named(feats, r)[..] {
+                [i] => Ok(i),
+                _ => Err(no_feature(feats, r)),
+            }
+        };
+        // the solid an entity is on, by the feature that made it (`body FEAT`)
+        let body = &st.body;
+        let span_of =
+            |f: forge_topo::FaceId| st.spans.iter().find(|s| s.faces.contains(&f.0)).map(|s| s.solid);
+        let body_of = |e: Ent| match e {
+            Ent::Face(f) => span_of(f),
+            Ent::Edge(x) => select::faces_of_edge(body, x).first().and_then(|&f| span_of(f)),
+            Ent::Vert(v) => body
+                .edge_ids()
+                .find(|&x| body.edge(x).start == v || body.edge(x).end == v)
+                .and_then(|x| select::faces_of_edge(body, x).first().copied())
+                .and_then(span_of),
+        };
         select::select(
             &View {
-                body,
+                body: &st.body,
                 origin: &origin,
                 feat: &feat,
                 body_of: &body_of,
@@ -193,11 +347,11 @@ impl Session {
         )
     }
 
-    fn one(body: &Body, r: &str) -> Result<Ent, String> {
+    fn one(&mut self, st: &Staged, r: &str) -> Result<Ent, String> {
         if r.starts_with('@') {
-            return select::by_handle(body, r);
+            return select::by_handle(&st.body, r);
         }
-        match Self::select(body, r)?[..] {
+        match self.select(st, r)?[..] {
             [e] => Ok(e),
             ref many => Err(format!(
                 "'{r}' selects {} entities; measure needs one",
@@ -208,6 +362,14 @@ impl Session {
 
     fn query(&mut self, a: &Args) -> Result<Reply, String> {
         let what = a.words.first().map(String::as_str).unwrap_or("");
+        if a.at.is_some()
+            && matches!(
+                what,
+                "stat" | "check" | "file" | "handles" | "params" | "features"
+            )
+        {
+            return Err("--at goes with a selector, measure and render".into());
+        }
         match what {
             "stat" => return self.built(&a.file).map(|(run, src)| Self::report(&run, &src)),
             // every feature's status as the part builds (its stages kept: right after a build this
@@ -217,7 +379,11 @@ impl Session {
                 let (_, src) = self.read(&a.file)?;
                 return Ok(Reply {
                     ok: true,
-                    json: Json::obj(vec![("ok", true.into()), ("text", src.as_str().into())]),
+                    json: Json::obj(vec![
+                        ("ok", true.into()),
+                        ("text", src.as_str().into()),
+                        ("version", version(&src).into()),
+                    ]),
                     text: src,
                     png: None,
                 });
@@ -250,11 +416,23 @@ impl Session {
             _ => {}
         }
         // numbers from the built part or assembly (`forge_lang::query`); `faces` alone, not a selector
+        // `faces of F ..` on a part, or where F is a feature, is a selector; `faces of OCC` an
+        // assembly's faces. With --at, `faces` alone is a selector too
+        let of_feature = what == "faces"
+            && a.words.get(1).is_some_and(|w| w == "of")
+            && a.words.get(2).is_some_and(|w| {
+                self.built(&a.file).is_ok_and(|(run, _)| {
+                    let ids: Vec<(String, usize)> = run.feats.iter().map(|f| (f.id.clone(), f.idx)).collect();
+                    run.asm.is_none() || !feats_named(&ids, w).is_empty()
+                })
+            });
         let asks = matches!(
             what,
             "holes" | "section" | "aligned" | "gap" | "interference" | "frame"
-        ) || (what == "faces" && a.words.get(1).is_none_or(|w| w == "of" || w == "in"));
-        if asks {
+        ) || (what == "faces"
+            && !of_feature
+            && a.words.get(1).map_or(a.at.is_none(), |w| w == "of" || w == "in"));
+        if asks && a.at.is_none() {
             let p = self.path(&a.file)?;
             let r = forge_lang::query::ask_file(&p, self.root.clone(), &a.words.join(" "));
             return Ok(Reply {
@@ -264,9 +442,12 @@ impl Session {
                 png: None,
             });
         }
-        let (run, _) = self.built(&a.file)?;
-        let body = Self::body(&run)?;
-        let ents = Self::select(body, &a.words.join(" "))?;
+        if asks {
+            return Err("--at goes with a selector, measure and render".into());
+        }
+        let st = self.staged(a)?;
+        let ents = self.select(&st, &a.words.join(" "))?;
+        let body = &st.body;
         let handles = select::handles(body);
         let mut list = Vec::new();
         let mut text = format!("{} found", ents.len());
@@ -290,8 +471,8 @@ impl Session {
     }
 
     fn measure(&mut self, a: &Args) -> Result<Reply, String> {
-        let (run, _) = self.built(&a.file)?;
-        let body = Self::body(&run)?;
+        let st = self.staged(a)?;
+        let body = &st.body;
         let mut words: Vec<&str> = a.words.iter().map(String::as_str).collect();
         // `exact`: every digit in the text, for checks finer than the reply's rounding
         let exact = words.last() == Some(&"exact");
@@ -324,8 +505,8 @@ impl Session {
                 Some((t, p)) => vec![("wall", t), ("x", p.x), ("y", p.y), ("z", p.z)],
                 None => return Err("no wall found".into()),
             },
-            [r] => measure::one(body, &mesh, Self::one(body, r)?),
-            [r, s] => measure::between(body, &mesh, Self::one(body, r)?, Self::one(body, s)?),
+            [r] => measure::one(body, &mesh, self.one(&st, r)?),
+            [r, s] => measure::between(body, &mesh, self.one(&st, r)?, self.one(&st, s)?),
             _ => return Err(
                 "measure takes mass, wall, or one or two @handles / (selectors), then exact for every digit"
                     .into(),
@@ -353,13 +534,13 @@ impl Session {
     }
 
     fn render(&mut self, a: &Args) -> Result<Reply, String> {
-        let (run, _) = self.built(&a.file)?;
-        let body = Self::body(&run)?;
+        let st = self.staged(a)?;
+        let body = &st.body;
         let view = a.words.first().map_or("iso", String::as_str);
         let mut labels = Vec::new();
         if let Some(sel) = &a.labels {
             let handles = select::handles(body);
-            for e in Self::select(body, sel)?.into_iter().take(40) {
+            for e in self.select(&st, sel)?.into_iter().take(40) {
                 let h = handles[&select::name(body, e)]
                     .trim_start_matches('@')
                     .to_string();
@@ -519,6 +700,30 @@ impl Session {
         }
         let ops = ops_of(a, params)?;
         let (p, src) = self.read(&a.file)?;
+        let now = version(&src);
+        if let Some(base) = a.base.as_deref().filter(|b| *b != now) {
+            let msg = format!(
+                "the file is at version {now}, not {base}: it changed since that reply; read it again (query F file) and send ops against {now}"
+            );
+            return Ok(Reply {
+                ok: false,
+                text: format!("error StaleBase: {msg}"),
+                json: Json::obj(vec![
+                    ("ok", false.into()),
+                    (
+                        "error",
+                        Json::obj(vec![
+                            ("kind", "StaleBase".into()),
+                            ("text", msg.into()),
+                            ("base", base.into()),
+                            ("version", now.as_str().into()),
+                        ]),
+                    ),
+                    ("version", now.as_str().into()),
+                ]),
+                png: None,
+            });
+        }
         let mut text = src.clone();
         let mut done = Vec::new();
         for (k, op) in ops.iter().enumerate() {
@@ -541,6 +746,7 @@ impl Session {
                     let mut r = typed(&e, &text);
                     obj_push(&mut r.json, "refused", k.into());
                     obj_push(&mut r.json, "op", op.json());
+                    obj_push(&mut r.json, "version", now.as_str().into());
                     r.text = format!("op {k} refused, nothing applied: {}", r.text);
                     return Ok(r);
                 }
