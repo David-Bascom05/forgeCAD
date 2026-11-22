@@ -189,6 +189,17 @@ each refuses at non-manifold, empty or a sliver (above). Their repros are remove
      carrier after `apply`.
    - Test: `touching_subtract_leaves_no_imprint` (meets/overlaps/overlaps subtract: V10 E15 F7
      where V8 E12 F6).
+   - **Fixed** (branch claude/repo-review-mbdrlj-fix-tidy). `forge_bool::boolean` hands its result
+     out unified. Unify decides "one surface" by the boolean's own `ssi::coincident` (it had its
+     own half-LINEAR test, which disagreed on near_tolerance pairs). Before a merge it also asks
+     that every edge of the face taken lies on the surface kept, as `check` asks
+     (`edge_off_face`): the cylinder test bounds axis and radius apart, and a run of faces each
+     within tolerance of the next is not within it of the one kept. The same pass joins, at a
+     vertex nothing else ends at, pieces of one periodic curve meeting across its start (an
+     ellipse's start moves under a mirror) and two traces of one branch (`IntCurve::spliced`:
+     the sequential regen traces apart what the n-ary one traces once). Families, boxes, band
+     and more: unmerged 10 450 → 0, agree 60 611 → 71 061, nothing else changed; the metamorphic
+     `mirror` and `backends: nary 1` redundant-vertex lines are gone.
 6. **The band on two and three axes refuses SplitCrossed.** This is 15 660 three-axis runs and
    5 184 two-axis runs: every δ in (LINEAR/√2, LINEAR], both signs, before and after the fixes.
    - Every plane reads coincident (|d| ≤ LINEAR), but B's corner, moved on two axes, is
