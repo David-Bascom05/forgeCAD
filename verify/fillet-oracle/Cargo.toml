@@ -1,0 +1,22 @@
+[package]
+name = "forge-fillet-oracle"
+description = "Tier A of the fillet reference: whether a point lies under an admissible ball (research/fillets/general-method.md §5.4), decided by branch and bound on 1-Lipschitz distances with error bounds"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+forge-math = { path = "../../kernel/forge-math" }
+
+[dev-dependencies]
+# the labeller builds parts and reads the kernel's results
+forge-geom = { path = "../../kernel/forge-geom" }
+forge-topo = { path = "../../kernel/forge-topo" }
+forge-bool = { path = "../../kernel/forge-bool" }
+forge-ops = { path = "../../kernel/forge-ops" }
+forge-model = { path = "../../kernel/forge-model" }
+forge-lang = { path = "../../interface/forge-lang" }
+
+[lints]
+workspace = true
