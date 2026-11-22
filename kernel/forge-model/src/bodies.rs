@@ -155,6 +155,23 @@ pub(crate) fn strip(features: &[Feature]) -> (Cow<'_, [Feature]>, Vec<Option<&Pi
     (Cow::Owned(plain), picks)
 }
 
+/// `strip`'s picks alone: each feature's, or none when no feature is wrapped.
+fn picks_of(features: &[Feature]) -> Vec<Option<&Pick>> {
+    fn pick(f: &Feature) -> Option<&Pick> {
+        match f {
+            Feature::Body(b) => match &**b {
+                BodyFeature::In { bodies, .. } => Some(bodies),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+    if !features.iter().any(|f| pick(f).is_some()) {
+        return vec![];
+    }
+    features.iter().map(pick).collect()
+}
+
 /// The one body, or how many there are.
 pub(crate) fn one(mut solids: Vec<Solid>) -> Result<Body, RegenError> {
     match solids.len() {
@@ -186,7 +203,44 @@ pub(crate) fn motion(steps: &[Step]) -> Motion {
 /// Feature `i` of a history applied to the bodies features `..i` left: `regenerate_solids`
 /// one feature at a time. Only `features[..=i]` is read.
 pub fn step_solids(features: History<'_>, i: usize, solids: Vec<Solid>) -> Result<Vec<Solid>, RegenError> {
-    let solids = step_unchecked(features, i, solids)?;
+    step_solids_finished(features, i, solids, None)
+}
+
+/// `step_solids` given the one solid it starts from already finished (`crate::finish`, by a caller
+/// that looked at the part): a feature that works on the finished part takes it as it is rather
+/// than finishing it again. The very same result: finishing is a function of the body alone.
+/// `finished` is ignored unless `solids` is one solid of a history of one body.
+pub fn step_solids_finished(
+    features: History<'_>,
+    i: usize,
+    solids: Vec<Solid>,
+    finished: Option<&Body>,
+) -> Result<Vec<Solid>, RegenError> {
+    step_solids_plain(features, None, i, solids, finished)
+}
+
+/// A feature as the steps read it: the one an `In` wraps, or itself.
+pub fn unwrapped(f: &Feature) -> Feature {
+    match f {
+        Feature::Body(b) => match &**b {
+            BodyFeature::In { feature, .. } => feature.clone(),
+            _ => f.clone(),
+        },
+        _ => f.clone(),
+    }
+}
+
+/// `step_solids_finished`, given `plain`: `unwrapped` of each of the first `i + 1` features,
+/// kept by a caller that steps through the history, so that a step need not unwrap every
+/// feature before it again.
+pub fn step_solids_plain(
+    features: History<'_>,
+    plain: Option<&[Feature]>,
+    i: usize,
+    solids: Vec<Solid>,
+    finished: Option<&Body>,
+) -> Result<Vec<Solid>, RegenError> {
+    let solids = step_unchecked(features, plain, i, solids, finished)?;
     let open = |s: &[Solid]| s.iter().find_map(|s| forge_topo::check::open_at(&s.body));
     let Some(what) = open(&solids) else {
         return Ok(solids);
@@ -205,18 +259,27 @@ pub fn step_solids(features: History<'_>, i: usize, solids: Vec<Solid>) -> Resul
     }
 }
 
-fn step_unchecked(features: History<'_>, i: usize, mut solids: Vec<Solid>) -> Result<Vec<Solid>, RegenError> {
+fn step_unchecked(
+    features: History<'_>,
+    given: Option<&[Feature]>,
+    i: usize,
+    mut solids: Vec<Solid>,
+    finished: Option<&Body>,
+) -> Result<Vec<Solid>, RegenError> {
     let upto = features.upto(i + 1);
     if !multi(&upto) {
         let id = upto.iter().rposition(starts).unwrap_or(0);
+        let finished = finished.filter(|_| solids.len() == 1);
         let body = solids.pop().map(|s| s.body);
         // (a caller stepping keeps the part so far itself: a copy only for what may need a retry, and
-        // no nesting: at worst the part once more with all its knife edges blunted)
+        // no nesting: at worst the part once more with all its knife edges blunted; each try
+        // starts from the same body, so from the same body finished)
         let tried = match crate::blunted(features, i) {
-            None => crate::step_plain(features, i, body),
-            Some(fs) => match crate::step_plain(features, i, body.clone()) {
+            None => crate::step_plain_finished(features, i, body, finished),
+            Some(fs) => match crate::step_plain_finished(features, i, body.clone(), finished) {
                 Err(e) if crate::lost_its_way(&e) => {
-                    crate::step_plain(History::new(&fs, features.ids), i, body).map_err(|_| e)
+                    crate::step_plain_finished(History::new(&fs, features.ids), i, body, finished)
+                        .map_err(|_| e)
                 }
                 r => r,
             },
@@ -230,7 +293,10 @@ fn step_unchecked(features: History<'_>, i: usize, mut solids: Vec<Solid>) -> Re
         };
         return Ok(one.map(|body| Solid { id, body }).into_iter().collect());
     }
-    let (plain, picks) = strip(&upto);
+    let (plain, picks) = match given {
+        Some(p) => (Cow::Borrowed(&p[..=i]), picks_of(&upto)),
+        None => strip(&upto),
+    };
     let plain = upto.on(&plain);
     let tried = match crate::blunted(plain, i) {
         None => apply_once(plain, &picks, i, solids),
@@ -687,7 +753,9 @@ fn body_feature(
             keep,
         } => {
             let t = find(solids, *target, i)?;
-            let mut body = solids[t].body.compact();
+            // both bodies finished parts: their arenas in order of name, so nothing the
+            // booleans make follows the order they were built in (docs/naming.md, Arena order)
+            let mut body = solids[t].body.clone().into_canonical();
             for (n, &id) in tools.iter().enumerate() {
                 if id == *target {
                     return Err(bad(BodyError::SameBody { id }));
@@ -697,7 +765,8 @@ fn body_feature(
                     renamed(&solids[k].body, |x| salted(x, "combine", me))
                 } else {
                     solids[k].body.clone()
-                };
+                }
+                .into_canonical();
                 body = boolean(&body, &tool, op_of(*op), bool_id(me, n as u64)).map_err(boolean_err(i))?;
             }
             solids[t].body = body;
@@ -1024,8 +1093,13 @@ pub(crate) fn nary(features: History<'_>, threads: usize) -> Result<Vec<Solid>, 
     }
 }
 
-/// Whether the cuts in a run can have left nothing: only if their boxes hull all it had.
+/// Whether the cuts in a run can have left nothing: only if their boxes hull all it had, or if
+/// it holds an intersect (whose tool may miss the body however the boxes lie: then the body is
+/// gone, as when a cut takes it whole, and a later add starts no body of its own).
 fn may_be_empty(run: &Run) -> bool {
+    if run.tools.iter().any(|t| t.1 == Op::Intersect) {
+        return true;
+    }
     let hull = |b: &Body, into: Box3| b.face_ids().fold(into, |x, f| x.hull(&b.face_box(f)));
     let (mut had, mut cuts) = (
         match &run.base {
@@ -1089,8 +1163,9 @@ fn nary_pass(features: History<'_>, threads: usize) -> Result<Vec<Solid>, RegenE
             _ => {
                 let ids: Vec<usize> = runs.iter().map(|r| r.id).collect();
                 let on = targets(&ids, p, i)?;
-                // a cut may have emptied a body, and then this add belongs to what is left, not to it
-                // (one run would make the tool a body of its own): `nary` goes one at a time
+                // a cut or an intersect may have emptied a body, and then this add belongs to what
+                // is left, not to it (one run would make the tool a body of its own): `nary` goes
+                // one at a time
                 if runs.len() > 1
                     && ts.iter().any(|t| op_of(t.1) == Op::Union)
                     && on.iter().any(|&k| may_be_empty(&runs[k]))

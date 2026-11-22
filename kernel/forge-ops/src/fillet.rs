@@ -137,6 +137,9 @@ pub enum FilletError {
 
 type R<T> = Result<T, FilletError>;
 
+#[path = "fillet_cliff.rs"]
+mod fillet_cliff;
+
 /// A filleted edge's blend and the curves it touches its faces along.
 #[derive(Clone)]
 struct Rolled {
@@ -241,14 +244,22 @@ pub struct FilletOptions {
     /// A tangent chain runs on only where the next edge is tangent to within LINEAR over the radius,
     /// not past a kink under half a degree. Asked when the chain carried past one has refused.
     pub straight: bool,
+    /// A closed round whose spring runs over a sharp rim of its face and back rests on the rim
+    /// between (`fillet_cliff`). Asked only after every other retry has refused.
+    pub cliff: bool,
+    /// With `cliff`: every seam of a round face beside a cliff moved to the middle of the stretch
+    /// the ball rolls on the faces, not only one in the cliff's way.
+    pub cliff_seams: bool,
 }
 
 /// The vertex each varying law of `edges` runs from. A run is the edges one varying radius was
 /// given to, side by side in `edges`; it is walked from its start, each edge from the end it is
 /// reached by. An edge given one of its ends starts there; the walk starts at the vertex given
 /// for one of the run's edges, else the run's free end lowest in x, then y, then z (a lone edge's
-/// lower end). A chain apart from the rest starts likewise, or is refused where a start was given.
-/// Geometric, never by name or the order given: renaming cannot turn a law round.
+/// lower end), else, a ring having no free end, its lowest vertex. A chain apart from the rest
+/// starts likewise, or is refused where a start was given. The walk goes on from the vertex it
+/// reached last, so a ring is walked one way round: from its start toward the lower of the two
+/// next vertices. Geometric, never by name or the order given: renaming cannot turn a law round.
 pub fn law_starts(
     body: &Body,
     edges: &[FilletEdge],
@@ -269,6 +280,24 @@ pub fn law_starts(
         } else {
             b
         }
+    };
+    // the walk's next edge: one at the vertex it reached last (at a ring's start, the one whose
+    // other end is lower), else the first at any vertex it has reached
+    let next_edge = |left: &[EdgeId], reached: &[VertexId]| -> Option<usize> {
+        let touches = |e: EdgeId, v: VertexId| ends(e).0 == v || ends(e).1 == v;
+        if let Some(&last) = reached.last() {
+            let other = |e: EdgeId| if ends(e).0 == last { ends(e).1 } else { ends(e).0 };
+            let here = (0..left.len()).filter(|&k| touches(left[k], last));
+            if let Some(k) = here.min_by(|&i, &j| {
+                below(
+                    body.vertex(other(left[i])).point,
+                    body.vertex(other(left[j])).point,
+                )
+            }) {
+                return Some(k);
+            }
+        }
+        left.iter().position(|&e| reached.iter().any(|&v| touches(e, v)))
     };
     let mut out = BTreeMap::new();
     let mut i = 0;
@@ -310,13 +339,12 @@ pub fn law_starts(
             }
         });
         loop {
-            while let Some(k) = left.iter().position(|&e| {
-                let (a, b) = ends(e);
-                reached.contains(&a) || reached.contains(&b)
-            }) {
+            while let Some(k) = next_edge(&left, &reached) {
                 let e = left.remove(k);
                 let (a, b) = ends(e);
-                let (v, w) = if reached.contains(&a) { (a, b) } else { (b, a) };
+                // reached by the end the walk got to last (a ring's closing edge has both)
+                let at = |v: VertexId| reached.iter().rposition(|&x| x == v);
+                let (v, w) = if at(a) >= at(b) { (a, b) } else { (b, a) };
                 out.insert(e, v);
                 reached.push(w);
             }
@@ -325,7 +353,12 @@ pub fn law_starts(
                 return Err(FilletError::BadRadius { edge: e });
             }
             // a chain apart from the rest, or a ring, whose free end or lowest vertex starts it
-            reached.push(free_end(&left).unwrap_or_else(|| lowest(e)));
+            reached.push(free_end(&left).unwrap_or_else(|| {
+                left.iter()
+                    .flat_map(|&e| [ends(e).0, ends(e).1])
+                    .min_by(|&v, &w| below(body.vertex(v).point, body.vertex(w).point))
+                    .unwrap_or_else(|| lowest(e))
+            }));
         }
     }
     Ok(out)
@@ -401,10 +434,25 @@ pub fn fillet_with(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, feat
     let _walk = Walk(WALK_LEFT.with(|w| w.replace(walk_tests(edges.len()))));
     let got = fillet_tried(body, edges, opts, feature);
     // carried past a kink and refused: as if it were not carried, the round ending at the kink
-    if got.is_err() && carries(body, edges, opts) {
-        return fillet_tried(body, edges, &straight_of(opts), feature);
+    let got = if got.is_err() && carries(body, edges, opts) {
+        fillet_tried(body, edges, &straight_of(opts), feature)
+    } else {
+        got
+    };
+    // every other way refused: a closed round may roll over a rim and back
+    match got {
+        Err(FilletError::Overflow { .. } | FilletError::Corner { .. } | FilletError::Mitre { .. })
+            if !opts.cliff && opts.setbacks.is_empty() =>
+        {
+            fillet_cliff::retry(body, edges, opts, feature).map_or(got, Ok)
+        }
+        // built, but its counts break the Euler rule (the caller refuses such a round): a closed
+        // round over a rim and back may stand resting on the rim instead
+        Ok(done) if !opts.cliff && opts.setbacks.is_empty() && !fillet_cliff::counts_sound(&done) => {
+            Ok(fillet_cliff::retry(body, edges, opts, feature).unwrap_or(done))
+        }
+        got => got,
     }
-    got
 }
 
 fn fillet_tried(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, feature: u64) -> R<Body> {
@@ -520,7 +568,8 @@ fn fillet_picked(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, featur
     let mut first = None;
     for _ in 0..4 {
         let on = work.as_ref().unwrap_or(body);
-        match fillet_on(on, edges, opts, feature) {
+        let notched = std::cell::Cell::new(false);
+        match fillet_on_noting(on, edges, opts, feature, Some(&notched)) {
             // the edge split in two, ids before it standing, its middle lies between the pieces
             Err(FilletError::SplitFirst { edge, at }) => {
                 let mut b = if on.dead > 0 { on.compact() } else { on.clone() };
@@ -530,6 +579,12 @@ fn fillet_picked(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, featur
             Err(e) => {
                 first = Some(first.unwrap_or(e));
                 break;
+            }
+            // a closed round notched where its spring runs over a rim and back: the round
+            // resting on the rim there instead, where it stands (the closing's shape), from the
+            // body as it came (not with a rim a notch split first)
+            Ok(done) if !opts.cliff && notched.get() => {
+                return Ok(fillet_cliff::retry(body, edges, opts, feature).unwrap_or(done));
             }
             ok => return ok,
         }
@@ -804,7 +859,19 @@ fn move_seam(b: &mut Body, f: FaceId) -> Option<()> {
     Some(())
 }
 
+/// `fillet_on`, and whether a closed concave round's spring was notched over a rim and back,
+/// told by setting `notched_out`.
 fn fillet_on(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, feature: u64) -> R<Body> {
+    fillet_on_noting(body, edges, opts, feature, None)
+}
+
+fn fillet_on_noting(
+    body: &Body,
+    edges: &[FilletEdge],
+    opts: &FilletOptions,
+    feature: u64,
+    notched_out: Option<&std::cell::Cell<bool>>,
+) -> R<Body> {
     if body.dead > 0 && (!opts.starts.is_empty() || !opts.setbacks.is_empty()) {
         // the options name this body's entities
         return Err(FilletError::NotAnEdge {
@@ -919,6 +986,8 @@ fn fillet_on(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, feature: u
         None => true,
     });
     let mut picks: BTreeMap<EdgeId, &Radius> = edges.iter().map(|f| (f.edge, &f.radius)).collect();
+    let mut cliff_rims: BTreeSet<EdgeId> = BTreeSet::new();
+    let mut cliffed: BTreeSet<EdgeId> = BTreeSet::new();
     // an edge whose ball moves onto a face beyond a smooth edge partway along is split there
     // and everything rolled again (rolling knew the old loops' coedges)
     for pass in 0.. {
@@ -947,7 +1016,7 @@ fn fillet_on(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, feature: u
             .collect();
         let jobs = lone.len() + chains.len();
         let rolled: Vec<R<Vec<Rolled>>> = par_map(jobs, |i| match lone.get(i) {
-            Some(&(e, r)) => roll(&body, e, r, root, opts.rims).map(|x| vec![x]),
+            Some(&(e, r)) => roll(&body, e, r, root, (opts.rims, cliffed.contains(&e))).map(|x| vec![x]),
             None => roll_chain(&body, &chains[i - lone.len()], i - lone.len(), &picks, root),
         });
         let mut by_edge: BTreeMap<EdgeId, Rolled> = BTreeMap::new();
@@ -978,10 +1047,34 @@ fn fillet_on(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, feature: u
             .values()
             .filter_map(|r| {
                 r.split
-                    .or_else(|| opts.rims.then(|| rim_split(&body, r)).flatten())
+                    .or_else(|| {
+                        // a cliff's pieces end where their springs reach the rim: split already
+                        (opts.rims && !cliffed.contains(&r.edge))
+                            .then(|| rim_split(&body, r))
+                            .flatten()
+                    })
                     .map(|u| (r.edge, u))
             })
             .collect();
+        // a cliff's try is the cliff's: with none to cut, the round is the other tries' to make
+        if opts.cliff && pass == 0 {
+            if fillet_cliff::split(
+                opts.cliff_seams,
+                &mut body,
+                &by_edge,
+                &mut all,
+                &mut picks,
+                (&mut cliff_rims, &mut cliffed),
+            )? {
+                continue;
+            }
+            return Err(FilletError::Overflow {
+                edge: edges.first().map_or(EdgeId(0), |f| f.edge),
+            });
+        }
+        if !cliffed.is_empty() {
+            fillet_cliff::clear(&body, &by_edge, &cliffed)?;
+        }
         if let (Some(&(edge, _)), 2) = (splits.first(), pass) {
             return Err(FilletError::Overflow { edge });
         }
@@ -996,6 +1089,8 @@ fn fillet_on(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, feature: u
             b.setbacks = opts.setbacks.clone();
             b.pivots = pivots;
             b.opening = opts.walk;
+            b.cliff_rims = cliff_rims;
+            b.notched = notched_out;
             return b.build();
         }
         for (e, u) in splits {
@@ -1674,7 +1769,7 @@ fn local(body: &Body, e: EdgeId, r: f64, t: f64) -> R<Local> {
 }
 
 /// The blend for one edge of constant radius r, from the faces on either side at its middle.
-fn roll(body: &Body, e: EdgeId, r: f64, root: Name, rims: bool) -> R<Rolled> {
+fn roll(body: &Body, e: EdgeId, r: f64, root: Name, (rims, cliffed): (bool, bool)) -> R<Rolled> {
     if e.index() >= body.edges.len() {
         return Err(FilletError::NotAnEdge { edge: e });
     }
@@ -1709,7 +1804,7 @@ fn roll(body: &Body, e: EdgeId, r: f64, root: Name, rims: bool) -> R<Rolled> {
     let (blend, springs, on_rim) = match over
         .iter()
         .all(Option::is_none)
-        .then(|| cliff(body, &l, &blend, &springs, r, (near, region, rims)))
+        .then(|| cliff(body, &l, &blend, &springs, r, (near, region, rims, cliffed)))
     {
         Some(Some((b, sp, s, lean))) => (b, sp, Some((s, lean))),
         _ => (blend, springs, None),
@@ -1859,7 +1954,7 @@ fn cliff(
     blend: &Blend,
     springs: &[Curve; 2],
     r: f64,
-    (near, region, rims): (Point3, Box3, bool),
+    (near, region, rims, cliffed): (Point3, Box3, bool, bool),
 ) -> Option<(Blend, [Curve; 2], usize, bool)> {
     let foot = |b: &Blend, c: &Curve| c.eval(spine_closest(&b.spine, l.p));
     for s in 0..2 {
@@ -1906,7 +2001,7 @@ fn cliff(
                         None => continue,
                     },
                 };
-                let Some(mut b) = Blend::new(other, &rail, l.sign[1 - s] * r, r, near, region) else {
+                let Some(b) = Blend::new(other, &rail, l.sign[1 - s] * r, r, near, region) else {
                     continue;
                 };
                 let (Some(on_keep), Some(on_rail)) = (b.spring(true), b.spring(false)) else {
@@ -1928,6 +2023,22 @@ fn cliff(
                 } else {
                     continue;
                 };
+                // (a cliff's own: the surface asked for the side the ball is on, from a point of
+                // that side, so a point of the rail, as near the far side, takes this one)
+                let (b, on_keep, on_rail) = match (cliffed, lean) {
+                    (true, false) => {
+                        let at = b.spine.eval(spine_closest(&b.spine, l.p));
+                        match Blend::new(other, &rail, l.sign[1 - s] * r, r, at, region) {
+                            Some(nb) => match (nb.spring(true), nb.spring(false)) {
+                                (Some(k), Some(q)) => (nb, k, q),
+                                _ => (b, on_keep, on_rail),
+                            },
+                            None => (b, on_keep, on_rail),
+                        }
+                    }
+                    _ => (b, on_keep, on_rail),
+                };
+                let mut b = b;
                 let springs = if s == 1 {
                     [on_keep, on_rail]
                 } else {
@@ -2734,7 +2845,7 @@ const BLEND_TESTS: u32 = 100;
 type UvLoops = Vec<forge_topo::uv::UvLoop>;
 
 #[derive(Clone)]
-struct Builder {
+struct Builder<'n> {
     body: Body,
     rolled: Vec<Rolled>,
     root: Name,
@@ -2788,6 +2899,11 @@ struct Builder {
     /// Blend and side whose spring lies on part of a far edge of its face: the face beyond has that
     /// stretch of the edge's place, and the blend's face meets it there.
     rim_sides: BTreeSet<(usize, usize)>,
+    /// Pieces of rims a closed round's ball rests on all along (`fillet_cliff`): its spring there
+    /// takes the piece's place.
+    cliff_rims: BTreeSet<EdgeId>,
+    /// Set where a closed concave round's spring was notched over a rim and back (`excursions`).
+    notched: Option<&'n std::cell::Cell<bool>>,
     /// Walks may pass over short blends whose far vertices would otherwise close first.
     opening: bool,
     /// An edge whose blend ran out beside a tangent chain going on unpicked.
@@ -2819,8 +2935,8 @@ struct Pivot {
     sections: [Option<EdgeId>; 2],
 }
 
-impl Builder {
-    fn new(body: Body, rolled: Vec<Rolled>, root: Name) -> Builder {
+impl<'n> Builder<'n> {
+    fn new(body: Body, rolled: Vec<Rolled>, root: Name) -> Builder<'n> {
         let which = rolled.iter().enumerate().map(|(i, r)| (r.edge, i)).collect();
         let mut pos = vec![0u32; body.coedges.len()];
         for l in body.loop_ids() {
@@ -2856,6 +2972,8 @@ impl Builder {
             unsure: false,
             gone_blends: BTreeSet::new(),
             rim_sides: BTreeSet::new(),
+            cliff_rims: BTreeSet::new(),
+            notched: None,
             opening: false,
             free_end: None,
             free_ends: false,
@@ -2988,6 +3106,11 @@ impl Builder {
         let first = self.rolled.first().map(|r| r.edge);
         self.collapse(no_width);
         let mut out = self.body.into_compact();
+        if !euler_sound(&out)
+            && let Some(b) = without_spurs(&out)
+        {
+            out = b;
+        }
         // new vertices sharing a name: a corner reached two ways, from pieces of one face. Which
         // should keep it nothing here can say stably, so such a corner refuses.
         let mut new: Vec<Name> = out
@@ -3062,6 +3185,16 @@ impl Builder {
             });
         }
         Ok(out)
+    }
+
+    /// Each coedge's position in its loop again, the loops changed.
+    fn repos(&mut self) {
+        self.pos = vec![0u32; self.body.coedges.len()];
+        for l in self.body.loop_ids() {
+            for (k, c) in self.body.lp(l).coedges().enumerate() {
+                self.pos[c.index()] = k as u32;
+            }
+        }
     }
 
     fn next_in_loop(&self, c: CoedgeId) -> CoedgeId {
@@ -4056,6 +4189,97 @@ impl Builder {
         Ok(())
     }
 
+    /// Ring edge `c` (arriving at `v`), a seam of the strip blends `ra` and `rb` swallow on sides `sa`
+    /// and `sb`, resting beyond its smooth edge g, and ending at a vertex of g: the seam of the face
+    /// rested on that carries it on from there, as its coedge arriving at that vertex, and the vertex.
+    fn seam_beyond(
+        &self,
+        c: CoedgeId,
+        ra: usize,
+        rb: usize,
+        sa: usize,
+        sb: usize,
+    ) -> Option<(CoedgeId, VertexId)> {
+        let (cf, g) = self.rolled[ra].over[sa]?;
+        if ra != rb && self.rolled[rb].over[sb] != Some((cf, g)) {
+            return None;
+        }
+        let b = self.rolled[ra].faces[sa];
+        let x = self.body.edge(self.body.coedge(c).edge);
+        if !x.coedges.iter().all(|&d| self.body.coedge_face(d) == b) {
+            return None;
+        }
+        let w = self.body.coedge_start(c);
+        let gx = self.body.edge(g);
+        if gx.start != w && gx.end != w {
+            return None;
+        }
+        self.body
+            .face(cf)
+            .loops
+            .iter()
+            .flat_map(|&l| self.body.lp(l).coedges())
+            .find(|&d| {
+                let y = self.body.coedge(d).edge;
+                y != g
+                    && self.body.coedge_end(d) == w
+                    && self
+                        .body
+                        .edge(y)
+                        .coedges
+                        .iter()
+                        .all(|&o| self.body.coedge_face(o) == cf)
+            })
+            .map(|d| (d, w))
+    }
+
+    /// Where blend `ri`'s side `s`, resting beyond smooth edge g, swallows the strip as far as a
+    /// vertex of g though its section at `v` is not on g: the far end of the strip's seam from `v`,
+    /// or g's one vertex when g is closed and the strip goes whole (all its edges g, its seams and
+    /// edges of blends resting beyond g).
+    fn strip_gone_to(&self, ri: usize, s: usize, v: VertexId) -> Option<VertexId> {
+        let o = self.rolled[ri].over[s]?;
+        let b = self.rolled[ri].faces[s];
+        let gx = self.body.edge(o.1);
+        let seam = |e: EdgeId| {
+            self.body
+                .edge(e)
+                .coedges
+                .iter()
+                .all(|&d| self.body.coedge_face(d) == b)
+        };
+        let edges = || {
+            self.body
+                .face(b)
+                .loops
+                .iter()
+                .flat_map(|&l| self.body.lp(l).coedges())
+        };
+        if let Some(w) = edges().find_map(|c| {
+            let x = self.body.edge(self.body.coedge(c).edge);
+            let w = if x.start == v {
+                x.end
+            } else if x.end == v {
+                x.start
+            } else {
+                return None;
+            };
+            (seam(self.body.coedge(c).edge) && (w == gx.start || w == gx.end)).then_some(w)
+        }) {
+            return Some(w);
+        }
+        (gx.start == gx.end
+            && edges().all(|c| {
+                let e = self.body.coedge(c).edge;
+                e == o.1
+                    || seam(e)
+                    || self
+                        .filleted(c)
+                        .is_some_and(|rj| self.rolled[rj].over[self.side(c)] == Some(o))
+            }))
+        .then_some(gx.start)
+    }
+
     /// Whether coedge `c` (arriving at a vertex) arrives at its edge's end rather than its start.
     fn arrives_at_end(&self, c: CoedgeId) -> bool {
         self.body.coedge(c).forward
@@ -4127,7 +4351,16 @@ impl Builder {
                 if !change && any.is_some() {
                     continue;
                 }
-                let t = crossing(&self.rolled[ra].springs[s], t0, &e.curve, e.range).ok_or(err.clone())?;
+                let t = match crossing(&self.rolled[ra].springs[s], t0, &e.curve, e.range) {
+                    Some(t) => t,
+                    // a seam of a strip swallowed: the section lies where the spring crosses the seam
+                    // that carries it on over the face rested on
+                    None => {
+                        let (d, _) = self.seam_beyond(c, ra, rb, s, s_b).ok_or(err.clone())?;
+                        let y = self.body.edge(self.body.coedge(d).edge);
+                        crossing(&self.rolled[ra].springs[s], t0, &y.curve, y.range).ok_or(err.clone())?
+                    }
+                };
                 if !change {
                     any = Some(t);
                     continue;
@@ -4173,6 +4406,10 @@ impl Builder {
                         self.g_ends.entry((ri, side)).or_default().push(GEnd::Cut(t, qv));
                     } else if gx.start == v || gx.end == v {
                         self.g_ends.entry((ri, side)).or_default().push(GEnd::Gone(v));
+                    } else if let Some(w) = self.strip_gone_to(ri, side, v) {
+                        // swallowed up to its own vertex, with the strip's seam reaching it
+                        self.g_ends.entry((ri, side)).or_default().push(GEnd::Gone(w));
+                        self.unsure = true;
                     } else {
                         return Err(err);
                     }
@@ -4209,9 +4446,23 @@ impl Builder {
                     continue;
                 }
                 let e = self.body.edge(self.body.coedge(c).edge);
-                let (curve, range, ename) = (e.curve.clone(), e.range, e.name.whole());
+                let (mut curve, mut range, mut ename) = (e.curve.clone(), e.range, e.name.whole());
                 // a variable blend's spring stops at the section: the crossing may be b's
-                let hit = crossing(&self.rolled[ra].springs[s_a], ta, &curve, range);
+                let mut hit = crossing(&self.rolled[ra].springs[s_a], ta, &curve, range);
+                // a swallowed strip's seam goes; the seam beyond, which carries it on, is cut instead
+                let mut c = c;
+                if hit.is_none()
+                    && !var
+                    && let Some((d, _)) = self.seam_beyond(c, ra, rb, s_a, s_b)
+                {
+                    let partner = self.body.partner(c).ok_or(err.clone())?;
+                    self.drop_all(&[c, partner], ea)?;
+                    self.unsure = true;
+                    c = d;
+                    let y = self.body.edge(self.body.coedge(d).edge);
+                    (curve, range, ename) = (y.curve.clone(), y.range, y.name.whole());
+                    hit = crossing(&self.rolled[ra].springs[s_a], ta, &curve, range);
+                }
                 if hit.is_none() && !var {
                     return Err(err);
                 }
@@ -5794,7 +6045,17 @@ impl Builder {
                 } else if over.is_some() {
                     return Err(FilletError::Overflow { edge: e });
                 } else {
-                    self.excursions(i, side, Interval::new(t0, t1))?
+                    let trips = self.excursions(i, side, Interval::new(t0, t1))?;
+                    // a closed concave round's spring off over a rim and back: notched here,
+                    // which a cliff may round as the ball rolls
+                    if !trips.is_empty()
+                        && closed
+                        && !self.rolled[i].convex
+                        && let Some(n) = self.notched
+                    {
+                        n.set(true);
+                    }
+                    trips
                 };
                 if let Some(list) = across {
                     // its stretches, turn about on the face and on the one across each seam
@@ -5928,6 +6189,51 @@ impl Builder {
                 (t - gx.range.lo).abs() * gx.curve.deriv(t).d1.length() <= tol::LINEAR
                     || (t - gx.range.hi).abs() * gx.curve.deriv(t).d1.length() <= tol::LINEAR
             };
+            // a rim the ball rests on along a stretch inside it: cut there, the spring the stretch
+            if self.cliff_rims.contains(&g) && !at_vertex(ts) && !at_vertex(te) {
+                let (lo, hi) = if ts < te { (ts, te) } else { (te, ts) };
+                let tm = gx.curve.closest(mid, gx.range);
+                if !(tm > lo && tm < hi) {
+                    return Err(err);
+                }
+                let (v_lo, v_hi) = if ts < te {
+                    (sp.start, sp.end)
+                } else {
+                    (sp.end, sp.start)
+                };
+                let beyond = self.body.partner(c).ok_or(err.clone())?;
+                let t_face = self.body.coedge_face(beyond);
+                let up = self.body.coedge(beyond).forward;
+                let middle = fillet_cliff::split_at(&mut self.body, g, lo, v_lo);
+                fillet_cliff::split_at(&mut self.body, middle, hi, v_hi);
+                self.drop_whole(middle);
+                // a round face between this closed rim and a round's closed edge no longer goes
+                // round: its seam between the two is no edge of anything now
+                if gx.start == gx.end {
+                    for k in fillet_cliff::seams_at(&self.body, f, gx.start) {
+                        let kx = self.body.edge(k);
+                        let far = if kx.start == gx.start { kx.end } else { kx.start };
+                        let rounded = self.rolled.iter().any(|ro| {
+                            let x = self.body.edge(ro.edge);
+                            x.start == far || x.end == far
+                        });
+                        if rounded {
+                            self.drop_whole(k);
+                        }
+                    }
+                }
+                self.extra
+                    .entry(t_face)
+                    .or_default()
+                    .push((piece, up == (ts < te)));
+                self.rechain.insert(t_face);
+                self.rechain.insert(f);
+                self.touched.insert(t_face);
+                self.touched.insert(f);
+                self.rim_sides.insert((i, s));
+                self.repos();
+                continue;
+            }
             // the whole of it: the face has no width there, and `collapse` takes it
             if at_vertex(ts) && at_vertex(te) {
                 continue;
@@ -6644,6 +6950,56 @@ impl Builder {
     }
 }
 
+/// Whether a body's counts pass `check`'s Euler rule: V - E + 2F - L even and at most 2 a shell.
+fn euler_sound(b: &Body) -> bool {
+    let value =
+        b.vertices.len() as i64 - b.edges.len() as i64 + 2 * b.faces.len() as i64 - b.loops.len() as i64;
+    value % 2 == 0 && value <= 2 * b.shells.len() as i64
+}
+
+/// A seam walked out and straight back along a loop (its two uses one after the other) bounds
+/// nothing: the face lies on both its sides. Left where a round took away all of a face round its
+/// seam but a strip either side (a boss's far end rounded over), it pinches the face at the seam's
+/// far vertex and the counts come out odd. The body with each such seam gone, the loop running on
+/// round the face over the seam with no edge there; None if there is none.
+fn without_spurs(b: &Body) -> Option<Body> {
+    let mut out = b.clone();
+    let mut any = false;
+    for f in b.face_ids() {
+        let seam = |e: EdgeId| b.edge(e).coedges.iter().all(|&c| b.coedge_face(c) == f);
+        for &l in &b.face(f).loops {
+            let mut uses: Vec<(EdgeId, bool)> = b
+                .lp(l)
+                .coedges()
+                .map(|c| (b.coedge(c).edge, b.coedge(c).forward))
+                .collect();
+            let n = uses.len();
+            drop_spurs(&mut uses, seam);
+            if uses.len() < n {
+                out.replace_loop(f, l, &uses);
+                any = true;
+            }
+        }
+    }
+    any.then(|| out.into_compact())
+}
+
+/// `uses` with each seam (as `seam` tells) walked out and straight back taken out.
+fn drop_spurs(uses: &mut Vec<(EdgeId, bool)>, seam: impl Fn(EdgeId) -> bool) {
+    let mut i = 0;
+    while uses.len() > 2 && i < uses.len() {
+        let j = (i + 1) % uses.len();
+        if uses[i].0 == uses[j].0 && uses[i].1 != uses[j].1 && seam(uses[i].0) {
+            let (a, b) = (i.max(j), i.min(j));
+            uses.remove(a);
+            uses.remove(b);
+            i = i.saturating_sub(1);
+        } else {
+            i += 1;
+        }
+    }
+}
+
 /// A spring over a seam: the seam's parameter, the blend, its side, the spring's parameter, the point.
 type SeamHit = (f64, usize, usize, f64, Point3);
 
@@ -6715,9 +7071,15 @@ pub(crate) fn chain_loops(body: &Body, uses: &[(EdgeId, bool)]) -> Vec<Vec<(Edge
         // back at the start with a way on still unused (a closed rim, and the seam leaving its
         // vertex): the loop goes on
         while at != start || (0..n).any(|j| !used[j] && ends(&uses[j]).0 == at) {
-            let Some(next) = (1..n)
-                .map(|k| (i + k) % n)
-                .find(|&j| !used[j] && ends(&uses[j]).0 == at)
+            // never straight back along the edge just walked (a seam left a spur), while there
+            // is another way on
+            let way = |j: usize| !used[j] && ends(&uses[j]).0 == at;
+            let back = |j: usize| uses[j].0 == uses[i].0 && uses[j].1 != uses[i].1;
+            let order = (1..n).map(|k| (i + k) % n);
+            let Some(next) = order
+                .clone()
+                .find(|&j| way(j) && !back(j))
+                .or_else(|| order.clone().find(|&j| way(j)))
             else {
                 break;
             };

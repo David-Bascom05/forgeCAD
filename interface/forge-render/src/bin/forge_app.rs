@@ -2,8 +2,8 @@
 
 use forge_render::gui::Headless;
 
-const USAGE: &str = "forge-app [PART | file.fc] [--size WxH] [--times]
-  [--shot FILE.ppm [--scale S] [--light] [--pastel] [--background floor|gradient|solid] [--settings FILE.toml] [--tab N] [--select NAME] [--click NAME].. [--rclick NAME].. [--wait] [--at X Y] [--sketch ROW;ROW..] [--edit NAME] [--draw TOOL X Y] [--view YAW PITCH] [--marking]]
+const USAGE: &str = "forge-app [PART | file.fg | file.dwg] [--size WxH] [--times]
+  [--shot FILE.ppm [--scale S] [--light] [--pastel] [--background floor|gradient|solid] [--settings FILE.toml] [--tab N] [--select NAME] [--click NAME].. [--rclick NAME].. [--wait] [--at X Y] [--sketch STATEMENT;STATEMENT..] [--edit NAME] [--draw TOOL X Y] [--view YAW PITCH] [--marking]]
   steps, in order: --click NAME --dclick NAME --rclick NAME --wait --type TEXT --key NAME (enter, escape, tab, backspace, or M, Ctrl+Z, F6...)
   --hover X Y (the view's pick there) --clickat X Y --drag X Y X2 Y2 --drag-hold X Y X2 Y2 (not let go) --snap FILE.ppm --save
   --viewnow YAW PITCH --home --zoom F (the camera's distance times F) --wheel X Y DY (scroll there) --new-drawing
@@ -12,7 +12,7 @@ const USAGE: &str = "forge-app [PART | file.fc] [--size WxH] [--times]
   --sleep SECONDS (frames that long by the clock) --keydown KEY --keyup KEY (a key held over frames)
   [--present fifo|mailbox|immediate] [--run-for SECONDS] [--spin]
   [--bench]
-PART: a bench part or a .fc file. --times: input-to-present on exit. --shot: one frame, no window.
+PART: a bench part (its Forge port) or a file. --times: input-to-present on exit. --shot: one frame, no window.
 --bench: what clicks and frames cost, no window.";
 
 enum Step {
@@ -213,11 +213,42 @@ fn pct(mut v: Vec<f64>, p: f64) -> f64 {
     v[((v.len() - 1) as f64 * p) as usize]
 }
 
+/// The open Forge part's first driving length, and its value: what a person drags or types.
+fn a_length(h: &Headless) -> Option<(forge_lang::error::ParamKey, f64)> {
+    let p = h.gui.shell.fg.as_ref()?;
+    p.params
+        .iter()
+        .filter(|r| r.driving() && r.used_by.len() > 1)
+        .chain(p.params.iter().filter(|r| r.driving()))
+        .find_map(|r| match r.value {
+            Some((v, forge_lang::values::Dim::Length)) if v > 0.0 => Some((r.key.clone(), v)),
+            _ => None,
+        })
+}
+
+/// Sets a param of the open Forge part, as its field does.
+fn set_length(h: &mut Headless, key: &forge_lang::error::ParamKey, value: f64) -> bool {
+    let op = forge_lang::error::Op::SetParam {
+        param: key.clone(),
+        value: forge_lang::error::Literal {
+            value,
+            dim: forge_lang::values::Dim::Length,
+        },
+    };
+    h.gui.fg_apply(op).is_ok()
+}
+
+/// The Forge part's build and its whole mesh are in.
+fn built(g: &forge_render::gui::Gui) -> bool {
+    g.fg.as_ref()
+        .is_some_and(|s| s.done == s.seq && s.whole >= s.changed)
+}
+
 fn bench(h: &mut Headless) {
     // opening another part: no frame waits for it, the one that takes it up is the worst
     h.gui.open("bracket");
     let (mut worst, start) = (0.0f64, std::time::Instant::now());
-    while h.gui.is_loading() && start.elapsed().as_secs() < 30 {
+    while h.gui.loading() && start.elapsed().as_secs() < 30 {
         let t = std::time::Instant::now();
         h.step();
         worst = worst.max(t.elapsed().as_secs_f64() * 1e3);
@@ -249,18 +280,13 @@ fn bench(h: &mut Headless) {
         for _ in 0..20 {
             h.step();
         }
-        let Some(id) = h
-            .gui
-            .shell
-            .rows
-            .iter()
-            .find(|r| r.kind == "extrude")
-            .map(|r| r.id)
-        else {
+        let Some((key, v)) = a_length(h) else {
             continue;
         };
         let start = std::time::Instant::now();
-        h.gui.shell.out.push(forge_render::shell::Action::Suppress(id));
+        if !set_length(h, &key, v * 1.02) {
+            continue;
+        }
         let (mut worst, mut ui, mut view, mut tess, mut draw) = (0.0f64, 0.0f64, 0.0f64, 0.0f64, 0.0f64);
         while start.elapsed().as_secs_f64() < 6.0 {
             let o = h.step();
@@ -304,9 +330,12 @@ fn bench(h: &mut Headless) {
     let names: Vec<String> = h
         .gui
         .shell
-        .rows
+        .fg
+        .as_ref()
+        .map(|p| forge_render::shell::fg::tree_rows(&p.feats))
+        .unwrap_or_default()
         .iter()
-        .map(|r| format!("tree:{}", r.name))
+        .map(|r| format!("fg:row:{}", r.key))
         .collect();
     let report = |what: &str, v: Vec<f64>| {
         println!(
@@ -345,54 +374,34 @@ fn bench(h: &mut Headless) {
         orbit.push(now() - t);
     }
     report("orbit frame, chrome and viewport, GPU done", orbit);
-    // a number dragged: the cursor moves, then the frame with the new shape
-    let draggable = h
-        .gui
-        .view
-        .as_ref()
-        .and_then(|v| v.facts.handles.iter().find(|d| d.draggable).map(|d| d.item));
-    let row = h
-        .gui
-        .shell
-        .rows
-        .iter()
-        .find(|r| Some(r.id) == draggable)
-        .map(|r| format!("tree:{}", r.name));
-    if let Some(name) = row {
-        h.click(&name);
-        h.until(|g| g.shell.dim.is_some());
-        h.step();
-        h.step();
-        if let Some(c) = h.gui.shell.place("dim:arrow").map(|r| r.center()) {
-            h.move_to(c.x, c.y);
-            h.step();
-            h.button(true);
-            h.step();
-            let mut drag = Vec::new();
-            for k in 0..120 {
-                let d = 40.0 * (k as f32 * 0.052).sin();
-                let was = h.gui.shell.dim.as_ref().map(|e| e.value);
-                let t = now();
-                h.move_to(c.x + d, c.y + d * 0.6);
-                let mut drawn = h.step().times.view_drawn;
-                if h.gui.shell.dim.as_ref().map(|e| e.value) == was {
-                    continue;
-                }
-                // a value that can't build draws no new shape
-                let failed = |h: &Headless| h.gui.shell.dim.as_ref().is_some_and(|e| e.error.is_some());
-                while !drawn && !failed(h) && now() - t < 2000.0 {
-                    std::thread::sleep(std::time::Duration::from_micros(200));
-                    drawn = h.step().times.view_drawn;
-                }
-                if drawn {
-                    drag.push(now() - t);
-                }
+    // a number set again and again, as a drag of its field would: each to the frame with its shape
+    if let Some((key, v)) = a_length(h) {
+        let mut set = Vec::new();
+        for k in 0..60 {
+            let x = v * (1.0 + 0.02 * forge_math::dmath::sin(k as f64 * 0.21));
+            let t = now();
+            if !set_length(h, &key, x) {
+                continue;
             }
-            report("drag a number: cursor to the frame with its shape", drag);
-            h.key(egui::Key::Escape);
-            h.step();
-            h.button(false);
-            h.until(|g| g.view.as_ref().is_some_and(|v| !v.live_drag));
+            let seq = h.gui.fg.as_ref().map_or(0, |s| s.seq);
+            // its shape on screen: the frame drawn after the faces it changed came
+            let mut shown = None;
+            while shown.is_none() && now() - t < 20_000.0 {
+                let changed = h.gui.fg.as_ref().is_some_and(|s| s.changed >= seq);
+                if h.step().times.view_drawn && changed {
+                    shown = Some(now() - t);
+                }
+                std::thread::sleep(std::time::Duration::from_micros(200));
+            }
+            set.extend(shown);
+            // the checks and the whole mesh after it, before the next value
+            while !built(&h.gui) && now() - t < 20_000.0 {
+                h.step();
+                std::thread::sleep(std::time::Duration::from_micros(200));
+            }
+        }
+        if !set.is_empty() {
+            report("set a number: the edit to the frame with its shape", set);
         }
     }
     let o = h.step();
@@ -403,7 +412,25 @@ fn bench(h: &mut Headless) {
     );
 }
 
-/// Frames until the Forge file's builds and checks are done, or a long while.
+/// A new sketch on the open Forge part's XY plane, as a click on the plane starts it, squared on.
+fn xy_sketch(h: &mut Headless) -> Result<(), String> {
+    use forge_render::shell::sketching::{SketchFor, SketchMode};
+    if h.gui.fg.is_none() {
+        return Err("no Forge part open to sketch on".into());
+    }
+    let Some(forge_lang::eval::Value::Plane(p)) = forge_lang::builtins::constant("xy") else {
+        return Err("no xy plane".into());
+    };
+    let mut m = SketchMode::new(SketchFor::New, "xy".into(), p.frame, Vec::new());
+    m.units = "mm";
+    h.gui.shell.sketch = Some(m);
+    h.gui.shell.tab = 1;
+    h.step();
+    h.gui.shell.out.push(forge_render::shell::Action::LookAt);
+    h.until(|g| g.shell.sketch.is_some());
+    Ok(())
+}
+
 /// The pointer to a place in the window, and frames till the view's pick there is back.
 fn hover(h: &mut Headless, x: f32, y: f32) {
     h.move_to(x, y);
@@ -677,23 +704,7 @@ fn run() -> Result<(), String> {
                 continue;
             }
             Step::StartSketch => {
-                if h.gui.fg.is_some() {
-                    // a Forge part's: as a click on its XY plane makes it
-                    use forge_render::shell::sketching::{SketchFor, SketchMode};
-                    let Some(forge_lang::eval::Value::Plane(p)) = forge_lang::builtins::constant("xy") else {
-                        return Err("no xy plane".into());
-                    };
-                    let mut m = SketchMode::new(SketchFor::New, "xy".into(), p.frame, Vec::new(), None);
-                    m.units = "mm";
-                    h.gui.shell.sketch = Some(m);
-                    h.gui.shell.tab = 1;
-                    h.step();
-                    h.gui.shell.out.push(forge_render::shell::Action::LookAt);
-                } else {
-                    h.gui.shell.origin_selected = Some(forge_render::origin::Item::XyPlane);
-                    h.gui.shell.out.push(forge_render::shell::Action::StartSketch);
-                }
-                h.until(|g| g.shell.sketch.is_some());
+                xy_sketch(&mut h)?;
                 for _ in 0..60 {
                     h.step();
                     std::thread::sleep(std::time::Duration::from_millis(5));
@@ -751,9 +762,9 @@ fn run() -> Result<(), String> {
         h.step();
     }
     if let Some(s) = &a.select
-        && !h.click(&format!("tree:{s}"))
+        && !h.click(&format!("fg:row:{s}"))
     {
-        return Err(format!("no tree row {s}"));
+        return Err(format!("no browser row {s}"));
     }
     h.step();
     h.step();
@@ -768,26 +779,29 @@ fn run() -> Result<(), String> {
         h.step();
     }
     if let Some(name) = &a.edit {
-        // a feature's sketch, in sketch mode
-        let id = h.gui.shell.rows.iter().find(|r| r.name == *name).map(|r| r.id);
-        let Some(id) = id else {
-            return Err(format!("no feature {name}"));
+        // a sketch block, in sketch mode
+        let Some(p) = &mut h.gui.shell.fg else {
+            return Err("no Forge part open".into());
         };
-        h.gui.shell.out.push(forge_render::shell::Action::EditInline(id));
+        if !p.feats.iter().any(|f| f.id == *name && f.kind == "sketch") {
+            return Err(format!("no sketch {name}"));
+        }
+        p.out
+            .push(forge_render::shell::fg::FgAct::EditSketch(name.clone()));
         h.until(|g| g.shell.sketch.is_some());
         for _ in 0..40 {
             h.step();
             std::thread::sleep(std::time::Duration::from_millis(10));
         }
     }
-    if let Some(rows) = &a.sketch {
-        // on the XY plane, with these rows
-        h.gui.shell.origin_selected = Some(forge_render::origin::Item::XyPlane);
-        h.gui.shell.out.push(forge_render::shell::Action::StartSketch);
-        h.until(|g| g.shell.sketch.is_some());
+    if let Some(text) = &a.sketch {
+        // on the XY plane, with these Forge sketch statements
+        let rows = forge_render::shell::fgsketch::read(&text.replace(';', "\n"))
+            .map_err(|e| format!("--sketch: {}", e.text()))?;
+        xy_sketch(&mut h)?;
         if let Some(m) = &mut h.gui.shell.sketch {
-            for r in rows.split(';').filter(|r| !r.trim().is_empty()) {
-                m.add(r.trim().to_string());
+            for r in rows {
+                m.add(r);
             }
         }
         for _ in 0..40 {

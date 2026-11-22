@@ -1,0 +1,21 @@
+# tapered thread: a tapered coil cut round a cone-ish boss
+param plan.r = 10
+param plan.ax = 1
+sketch plan(on: xy) {
+  c = circle((0, 0), r)
+  xax = line((0, 0), (ax, 0), construction: true)
+}
+param rod.h = 30
+rod = extrude(plan.c, h)
+# the groove's section on the plane y = 0; the coil about the z axis, from z = -1
+param section.p = [(9.2, -1), (11, -1.6), (11, -0.4)]
+param section.z0 = -1
+param section.up = 1
+sketch section(on: rotate(plan, about: plan.xax, by: 90deg)) {
+  tooth = poly([p[0], p[1], p[2]])
+  ax = line((0, z0), (0, z0 + up), construction: true)
+}
+param groove.pitch = 2
+param groove.turns = count(14)
+param groove.taper = 0.035deg
+groove = coil(section.tooth, axis: section.ax, pitch: pitch, turns: turns, taper: taper, cut: true)

@@ -14,7 +14,7 @@ class Exprs(unittest.TestCase):
     def test_reads_what_part_files_write(self):
         env = {"w": 40.0, "pi": math.pi}
         for text, want in (("w*3 + 1", 121.0), ("(w + 2)/2", 21.0), ("2^3", 8.0), ("-w", -40.0), ("sqrt(16)", 4.0),
-                           ("min(w, 3)", 3.0), ("sin(90)", 1.0), ("atan2(1, 1)", 45.0), ("pi", math.pi), ("1e3", 1000.0)):
+                           ("min(w, 3)", 3.0), ("sin(90)", 1.0), ("count(4)", 4.0), ("ratio(0.5)", 0.5), ("atan2(1, 1)", 45.0), ("pi", math.pi), ("1e3", 1000.0)):
             self.assertAlmostEqual(gens.expr_value(text, env), want, msg=text)
 
     def test_refuses_anything_else(self):
@@ -34,7 +34,8 @@ class Exprs(unittest.TestCase):
     def test_every_bench_parameter_still_reads(self):
         for name, src in gens.bench():
             lines = [l.split("#")[0].strip() for l in src.splitlines()]
-            want = sum(1 for l in lines if gens.PARAM.match(l))
+            ms = [gens.PARAM.match(l) for l in lines]
+            want = sum(1 for m in ms if m and not gens.DATA.search(m.group(3)) and "count(" not in m.group(3))
             self.assertEqual(len(gens.params(src)), want, name)
 
 

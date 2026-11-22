@@ -3,6 +3,8 @@
 //! the same geometry, finishing unchanged.
 
 use super::{block, open};
+use crate::shell::sketching::rows::dsl::*;
+use crate::shell::sketching::rows::{D, Row};
 use crate::shell::sketching::{SkTool, SketchFor, SketchMode};
 use forge_math::Frame;
 
@@ -21,7 +23,7 @@ use Step::*;
 const REACH: f64 = 0.5;
 
 fn draw(steps: &[Step]) -> SketchMode {
-    let mut m = SketchMode::new(SketchFor::New, "xy".into(), Frame::default(), vec![], None);
+    let mut m = SketchMode::new(SketchFor::New, "xy".into(), Frame::default(), vec![]);
     for s in steps {
         match s {
             Click(p) => m.click(*p, REACH),
@@ -62,16 +64,33 @@ fn same(a: &[(char, Vec<P>)], b: &[(char, Vec<P>)]) -> bool {
         })
 }
 
+/// A row a drawing is to have: this one or one that starts so (its lists may go on), or one whose
+/// Forge text starts so.
+enum W {
+    R(Row),
+    S(&'static str),
+}
+
+impl W {
+    fn is(&self, r: &Row) -> bool {
+        let text = r.to_string();
+        match self {
+            W::R(w) => text.starts_with(w.to_string().trim_end_matches([')', ']'])),
+            W::S(s) => text.starts_with(s),
+        }
+    }
+}
+
 /// Drawn as `steps`, with `want` among its rows: the Forge block checks, opens editable, solves to
 /// the same shapes and finishes with nothing to write.
-fn round_trip(name: &str, steps: &[Step], want: &[&str]) {
+fn round_trip(name: &str, steps: &[Step], want: &[W]) {
     let m = draw(steps);
     assert!(m.error.is_none(), "{name}: {:?}\n{:?}", m.error, m.rows);
     assert!(!m.rows.is_empty(), "{name}: drew nothing");
     for w in want {
         assert!(
-            m.rows.iter().any(|r| r.starts_with(w)),
-            "{name}: no `{w}` in {:#?}",
+            m.rows.iter().any(|r| w.is(r)),
+            "{name}: no row so in {:#?}",
             m.rows
         );
     }
@@ -89,7 +108,6 @@ fn round_trip(name: &str, steps: &[Step], want: &[&str]) {
         "xy".into(),
         Frame::default(),
         o.rows.clone(),
-        None,
     );
     back.set_params(o.params.clone());
     assert!(
@@ -118,12 +136,22 @@ fn lines_draw_chain_infer_and_read_back() {
             Click((20.0, 12.0)),
             Esc,
         ],
-        &["line 0 0 20 0", "hor l1", "line l1.b", "ver l2"],
+        &[
+            W::R(Row::Line(at("0", "0"), at("20", "0"))),
+            W::R(Row::Hor(vec![rf("l1")])),
+            W::S("line(l1.b"),
+            W::R(Row::Ver(vec![rf("l2")])),
+        ],
     );
     round_trip(
         "Midpoint Line",
         &[Tool(SkTool::LineMid), Click((5.0, 5.0)), Click((15.0, 5.3))],
-        &["line -5 5 15 5", "hor l1", "pt 5 5", "mid p1 l1"],
+        &[
+            W::R(Row::Line(at("-5", "5"), at("15", "5"))),
+            W::R(Row::Hor(vec![rf("l1")])),
+            W::R(Row::Pt(at("5", "5"))),
+            W::R(Row::Mid(rf("p1"), rf("l1"))),
+        ],
     );
     round_trip(
         "Midpoint Line, typed",
@@ -134,7 +162,11 @@ fn lines_draw_chain_infer_and_read_back() {
             Type(1, "30"),
             Click((10.0, 1.0)),
         ],
-        &["line ", "dist l1 30", "mid p1 l1"],
+        &[
+            W::S("line("),
+            W::R(Row::Dim(D::Dist, vec![rf("l1")], Some(v("30")))),
+            W::R(Row::Mid(rf("p1"), rf("l1"))),
+        ],
     );
     let m = draw(&[
         Tool(SkTool::LineMid),
@@ -144,7 +176,7 @@ fn lines_draw_chain_infer_and_read_back() {
         Click((10.0, 1.0)),
     ]);
     let s = m.solved.as_ref().unwrap();
-    let (a, b) = forge_doc::sketch::line(s, "l1").unwrap();
+    let (a, b) = crate::shell::sketching::rows::line(s, "l1").unwrap();
     assert!((((b.x - a.x).powi(2) + (b.y - a.y).powi(2)).sqrt() - 30.0).abs() < 1e-6);
     assert!((forge_math::dmath::atan2(b.y - a.y, b.x - a.x).to_degrees() - 30.0).abs() < 1e-6);
     assert!(
@@ -160,7 +192,10 @@ fn lines_draw_chain_infer_and_read_back() {
             Click((0.0, 0.0)),
             Click((0.0, 9.0)),
         ],
-        &["line 0 -9 0 9 cons", "ver l1"],
+        &[
+            W::R(Row::Line(at("0", "-9"), at("0", "9")).cons()),
+            W::R(Row::Ver(vec![rf("l1")])),
+        ],
     );
 }
 
@@ -174,7 +209,10 @@ fn circles_and_arcs_by_each_way() {
             Type(0, "12"),
             Click((5.0, 0.0)),
         ],
-        &["circle 0 0 6", "dia c1 12"],
+        &[
+            W::R(Row::Circle(at("0", "0"), v("6"))),
+            W::R(Row::Dim(D::Dia, vec![rf("c1")], Some(v("12")))),
+        ],
     );
     round_trip(
         "Three Point Circle",
@@ -184,7 +222,7 @@ fn circles_and_arcs_by_each_way() {
             Click((5.0, 0.0)),
             Click((0.0, 5.0)),
         ],
-        &["circle 0 0 5"],
+        &[W::R(Row::Circle(at("0", "0"), v("5")))],
     );
     round_trip(
         "Tangent Circle",
@@ -201,7 +239,12 @@ fn circles_and_arcs_by_each_way() {
             Click((15.0, 7.5)),
             Click((5.0, 7.5)),
         ],
-        &["circle ", "tan l1 c1", "tan l2 c1", "tan l3 c1"],
+        &[
+            W::S("circle("),
+            W::R(Row::Tan(rf("l1"), rf("c1"))),
+            W::R(Row::Tan(rf("l2"), rf("c1"))),
+            W::R(Row::Tan(rf("l3"), rf("c1"))),
+        ],
     );
     round_trip(
         "Three Point Arc",
@@ -211,7 +254,7 @@ fn circles_and_arcs_by_each_way() {
             Click((5.0, 0.0)),
             Click((0.0, 5.0)),
         ],
-        &["arc 0 0 -5 0 5 0 cw"],
+        &[W::R(Row::Arc(at("0", "0"), at("-5", "0"), at("5", "0"), true))],
     );
     round_trip(
         "Center Point Arc",
@@ -221,7 +264,7 @@ fn circles_and_arcs_by_each_way() {
             Click((5.0, 0.0)),
             Click((0.0, 5.0)),
         ],
-        &["arc 0 0 5 0"],
+        &[W::S("arc(center: near(0, 0), from: near(5, 0)")],
     );
     round_trip(
         "Tangent Arc",
@@ -235,7 +278,10 @@ fn circles_and_arcs_by_each_way() {
             Click((10.0, 0.0)),
             Click((10.0, 10.0)),
         ],
-        &["arc 10 5 l1.b 10 10", "tan l1 a1"],
+        &[
+            W::R(Row::Arc(at("10", "5"), pn("l1.b"), at("10", "10"), false)),
+            W::R(Row::Tan(rf("l1"), rf("a1"))),
+        ],
     );
 }
 
@@ -244,7 +290,7 @@ fn rectangles_two_and_three_point_by_corner_and_by_centre() {
     round_trip(
         "Two Point Rectangle",
         &[Tool(SkTool::Rectangle), Click((0.0, 0.0)), Click((30.0, 20.0))],
-        &["rect 0 0 30 20"],
+        &[W::R(Row::Rect(v("0"), v("0"), v("30"), v("20")))],
     );
     round_trip(
         "Three Point Rectangle",
@@ -254,17 +300,24 @@ fn rectangles_two_and_three_point_by_corner_and_by_centre() {
             Click((20.0, 0.3)),
             Click((12.0, 8.0)),
         ],
-        &["poly 0 0 20 0 20 8 0 8", "perp l1 l2", "hor l1"],
+        &[
+            W::R(Row::Poly(
+                vec![at("0", "0"), at("20", "0"), at("20", "8"), at("0", "8")],
+                false,
+            )),
+            W::R(Row::Perp(rf("l1"), rf("l2"))),
+            W::R(Row::Hor(vec![rf("l1")])),
+        ],
     );
     round_trip(
         "Two Point Center Rectangle",
         &[Tool(SkTool::RectCenter), Click((0.0, 0.0)), Click((15.0, 10.0))],
         &[
-            "rect -15 -10 30 20",
-            "line l1.a l3.a cons",
-            "line l2.a l4.a cons",
-            "pt 0 0",
-            "mid p1 l5",
+            W::R(Row::Rect(v("-15"), v("-10"), v("30"), v("20"))),
+            W::R(Row::Line(pn("l1.a"), pn("l3.a")).cons()),
+            W::R(Row::Line(pn("l2.a"), pn("l4.a")).cons()),
+            W::R(Row::Pt(at("0", "0"))),
+            W::R(Row::Mid(rf("p1"), rf("l5"))),
         ],
     );
     round_trip(
@@ -277,10 +330,10 @@ fn rectangles_two_and_three_point_by_corner_and_by_centre() {
             Click((9.0, 9.0)),
         ],
         &[
-            "rect -15 -3 40 16",
-            "hdist l1.a l1.b 40",
-            "vdist l2.a l2.b 16",
-            "mid p1 l5",
+            W::R(Row::Rect(v("-15"), v("-3"), v("40"), v("16"))),
+            W::R(Row::Dim(D::HDist, vec![rf("l1.a"), rf("l1.b")], Some(v("40")))),
+            W::R(Row::Dim(D::VDist, vec![rf("l2.a"), rf("l2.b")], Some(v("16")))),
+            W::R(Row::Mid(rf("p1"), rf("l5"))),
         ],
     );
     // its centre snapped to a point there: tied to that point
@@ -293,7 +346,10 @@ fn rectangles_two_and_three_point_by_corner_and_by_centre() {
             Click((2.1, 3.1)),
             Click((12.0, 9.0)),
         ],
-        &["rect -8 -3 20 12", "mid p1 l5"],
+        &[
+            W::R(Row::Rect(v("-8"), v("-3"), v("20"), v("12"))),
+            W::R(Row::Mid(rf("p1"), rf("l5"))),
+        ],
     );
     round_trip(
         "Three Point Center Rectangle",
@@ -303,7 +359,11 @@ fn rectangles_two_and_three_point_by_corner_and_by_centre() {
             Click((10.0, 10.0)),
             Click((-3.0, 3.0)),
         ],
-        &["poly ", "perp l1 l2", "mid p1 l5"],
+        &[
+            W::R(Row::Poly(vec![], false)),
+            W::R(Row::Perp(rf("l1"), rf("l2"))),
+            W::R(Row::Mid(rf("p1"), rf("l5"))),
+        ],
     );
     let m = draw(&[
         Tool(SkTool::RectCenter3),
@@ -314,12 +374,27 @@ fn rectangles_two_and_three_point_by_corner_and_by_centre() {
         Click((3.0, 4.0)),
     ]);
     assert!(
-        m.rows.iter().any(|r| r == "poly -15 -6 15 -6 15 6 -15 6"),
+        m.rows.iter().any(|r| *r
+            == Row::Poly(
+                vec![at("-15", "-6"), at("15", "-6"), at("15", "6"), at("-15", "6")],
+                false
+            )),
         "{:?}",
         m.rows
     );
-    assert!(m.rows.iter().any(|r| r == "dist l1 30") && m.rows.iter().any(|r| r == "dist l2 12"));
-    assert!(m.rows.iter().any(|r| r == "hor l1"), "{:?}", m.rows);
+    assert!(
+        m.rows
+            .iter()
+            .any(|r| *r == Row::Dim(D::Dist, vec![rf("l1")], Some(v("30"))))
+            && m.rows
+                .iter()
+                .any(|r| *r == Row::Dim(D::Dist, vec![rf("l2")], Some(v("12"))))
+    );
+    assert!(
+        m.rows.iter().any(|r| *r == Row::Hor(vec![rf("l1")])),
+        "{:?}",
+        m.rows
+    );
 }
 
 #[test]
@@ -354,10 +429,15 @@ fn every_slot() {
     for (tool, name, pts) in cases {
         let mut steps = vec![Tool(tool)];
         steps.extend(pts.iter().map(|p| Click(*p)));
-        let want: &[&str] = if matches!(tool, SkTool::SlotArc3 | SkTool::SlotArcCenter) {
-            &["arc ", "conc a1 a3"]
+        let want: &[W] = if matches!(tool, SkTool::SlotArc3 | SkTool::SlotArcCenter) {
+            &[W::S("arc("), W::R(Row::Conc(rf("a1"), rf("a3")))]
         } else {
-            &["line ", "arc ", "tan l1 a1", "hor l1"]
+            &[
+                W::S("line("),
+                W::S("arc("),
+                W::R(Row::Tan(rf("l1"), rf("a1"))),
+                W::R(Row::Hor(vec![rf("l1")])),
+            ]
         };
         round_trip(name, &steps, want);
     }
@@ -372,7 +452,11 @@ fn every_slot() {
             Type(0, "8"),
             Click((5.0, 9.0)),
         ],
-        &["line 0 4 25 4", "dist l1 25", "rad a1 4"],
+        &[
+            W::R(Row::Line(at("0", "4"), at("25", "4"))),
+            W::R(Row::Dim(D::Dist, vec![rf("l1")], Some(v("25")))),
+            W::R(Row::Dim(D::Rad, vec![rf("a1")], Some(v("4")))),
+        ],
     );
 }
 
@@ -380,13 +464,30 @@ fn every_slot() {
 fn splines_through_and_by_control_vertices() {
     let pts = [(0.0, 0.0), (10.0, 10.0), (20.0, 0.0), (30.0, 10.0)];
     for (tool, name, row) in [
-        (SkTool::Spline, "Spline Interpolation", "spline 0 0"),
-        (SkTool::SplineCv, "Spline Control Vertex", "bspline 3 0 0"),
+        (
+            SkTool::Spline,
+            "Spline Interpolation",
+            W::R(Row::Spline(vec![at("0", "0")], false)),
+        ),
+        // cubic, open
+        (
+            SkTool::SplineCv,
+            "Spline Control Vertex",
+            W::S("spline([near(0, 0), "),
+        ),
     ] {
         let mut steps = vec![Tool(tool)];
         steps.extend(pts.iter().map(|p| Click(*p)));
         steps.push(Enter);
         round_trip(name, &steps, &[row]);
+        if tool == SkTool::SplineCv {
+            let m = draw(&steps);
+            assert!(
+                matches!(&m.rows[0], Row::BSpline(d, _, true) if *d == v("3")),
+                "{:?}",
+                m.rows
+            );
+        }
     }
     let m = draw(&[
         Tool(SkTool::SplineCv),
@@ -395,7 +496,14 @@ fn splines_through_and_by_control_vertices() {
         Click((20.0, 0.0)),
         Enter,
     ]);
-    assert_eq!(m.rows, ["bspline 2 0 0 10 10 20 0 open"]);
+    assert_eq!(
+        m.rows,
+        [Row::BSpline(
+            v("2"),
+            vec![at("0", "0"), at("10", "10"), at("20", "0")],
+            true
+        )]
+    );
     let text = block("sk", "xy", &m.rows).unwrap();
     assert!(text.contains("closed: false, cv: true)"), "{text}");
 }
@@ -410,7 +518,7 @@ fn three_ellipses() {
             Click((10.0, 0.0)),
             Click((3.0, 4.0)),
         ],
-        &["ellipse 0 0 10 0 4"],
+        &[W::R(Row::Ellipse(at("0", "0"), at("10", "0"), v("4")))],
     );
     round_trip(
         "Axis Ellipse",
@@ -420,7 +528,7 @@ fn three_ellipses() {
             Click((10.0, 2.2)),
             Click((0.0, 6.0)),
         ],
-        &["ellipse 0 2 10 2 4"],
+        &[W::R(Row::Ellipse(at("0", "2"), at("10", "2"), v("4")))],
     );
     round_trip(
         "Axis Ellipse, typed",
@@ -432,18 +540,21 @@ fn three_ellipses() {
             Type(0, "5"),
             Click((3.0, 3.0)),
         ],
-        &["ellipse 0 12 0 24 5", "rad e1 5"],
+        &[
+            W::R(Row::Ellipse(at("0", "12"), at("0", "24"), v("5"))),
+            W::R(Row::Dim(D::Rad, vec![rf("e1")], Some(v("5")))),
+        ],
     );
     round_trip(
         "Bounding Box Ellipse",
         &[Tool(SkTool::EllipseBox), Click((0.0, 0.0)), Click((20.0, 10.0))],
-        &["ellipse 10 5 20 5 5"],
+        &[W::R(Row::Ellipse(at("10", "5"), at("20", "5"), v("5")))],
     );
     // a box taller than wide stands its major axis up
     round_trip(
         "Bounding Box Ellipse, tall",
         &[Tool(SkTool::EllipseBox), Click((0.0, 0.0)), Click((6.0, 20.0))],
-        &["ellipse 3 10 3 20 3"],
+        &[W::R(Row::Ellipse(at("3", "10"), at("3", "20"), v("3")))],
     );
 }
 
@@ -452,12 +563,15 @@ fn polygons_inscribed_and_circumscribed() {
     round_trip(
         "Inscribed Polygon",
         &[Tool(SkTool::Polygon), Click((0.0, 0.0)), Click((10.0, 0.0))],
-        &["poly 10 0 5 8.66", "eq l1 l2"],
+        &[
+            W::R(Row::Poly(vec![at("10", "0"), at("5", "8.66")], false)),
+            W::R(Row::Eq(vec![rf("l1"), rf("l2")])),
+        ],
     );
     let m = draw(&[Tool(SkTool::PolygonOut), Click((0.0, 0.0)), Click((10.0, 0.0))]);
     // the click is a side's middle: that side stands at x = 10, plumb
     let s = m.solved.as_ref().unwrap();
-    let (a, b) = forge_doc::sketch::line(s, "l1").unwrap();
+    let (a, b) = crate::shell::sketching::rows::line(s, "l1").unwrap();
     assert!(
         (a.x - 10.0).abs() < 1e-2 && (b.x - 10.0).abs() < 1e-2,
         "{a:?} {b:?}"
@@ -470,13 +584,20 @@ fn polygons_inscribed_and_circumscribed() {
             Type(0, "8"),
             Click((0.0, 3.0)),
         ],
-        &["poly ", "eq l1 l2"],
+        &[
+            W::R(Row::Poly(vec![], false)),
+            W::R(Row::Eq(vec![rf("l1"), rf("l2")])),
+        ],
     );
 }
 
 #[test]
 fn points_corners_and_text() {
-    round_trip("Point", &[Tool(SkTool::Point), Click((3.0, 4.0))], &["pt 3 4"]);
+    round_trip(
+        "Point",
+        &[Tool(SkTool::Point), Click((3.0, 4.0))],
+        &[W::R(Row::Pt(at("3", "4")))],
+    );
     for (tool, name) in [(SkTool::SkFillet, "Fillet"), (SkTool::SkChamfer, "Chamfer")] {
         round_trip(
             name,
@@ -490,7 +611,7 @@ fn points_corners_and_text() {
                 Tool(tool),
                 Click((19.0, 1.0)),
             ],
-            &["line "],
+            &[W::S("line(")],
         );
     }
 }

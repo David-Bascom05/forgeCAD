@@ -80,17 +80,21 @@ fn differ(a: &[u8], b: &[u8]) -> usize {
     a.iter().zip(b).filter(|(x, y)| x != y).count()
 }
 
-/// A part dragged is drawn from its faces in their own slots: about what its mesh draws, and a
-/// new value changes the picture, the worker's numbers coming back on the frame.
+/// A part changed is drawn from its faces in their own slots: about what its mesh draws, and a
+/// new value changes the picture, only the faces it reached meshed again.
 #[test]
-fn a_dragged_part_draws_from_its_faces_and_follows_the_value() {
-    use forge_agent::live::Event;
-    use forge_agent::tools::Part;
-    use forge_render::live::{self, Out};
-    let src = "w = 60\nbase: extrude 10 rect 0 0 w 40\nhole 8 -xy at 15 20 10 thru\nfillet 2 (edges of base along +z)\n";
-    let part = Part::new(src);
-    let dim = part.dims().into_iter().find(|d| d.name == "w").unwrap();
-    let mesh = forge_render::tess::build_part(part.model.body().unwrap()).unwrap();
+fn a_changed_part_draws_from_its_faces_and_follows_the_value() {
+    use forge_render::live::Mesher;
+    let body = |w: f64| {
+        let src = format!(
+            "shared w = {w}\nsketch plan(on: xy) {{\n  outline = rect(corner: (0, 0), size: (w, 40))\n}}\nbase = extrude(plan, 10)\n"
+        );
+        let (run, _) = forge_lang::run(&src, forge_lang::Options::default(), Default::default());
+        assert!(run.errors.is_empty(), "{:?}", run.errors);
+        run.body.expect("a solid")
+    };
+    let first = body(60.0);
+    let mesh = forge_render::tess::build_part(&first).unwrap();
     let parts = [mesh];
     let mut scene = Scene::new(&part_info(&parts), vec![Placement::at(0, [0.0; 3])]);
     let size = (320, 200);
@@ -110,27 +114,11 @@ fn a_dragged_part_draws_from_its_faces_and_follows_the_value() {
     r.wait();
     let whole = target.read_rgb(&r);
 
-    let mut l = live::start(part);
-    let next = |l: &mut forge_agent::live::Live<Out>, r: &mut Renderer, scene: &mut Scene, seq: u64| {
-        for _ in 0..20_000 {
-            for e in l.poll() {
-                if let Event::Frame(f) = e {
-                    assert!(f.failure.is_none(), "{:?}", f.failure);
-                    if let Some(Out::Delta(d)) = f.out {
-                        r.live_apply(0, &d);
-                        scene.set_part(0, d.center, d.radius, vec![d.chord]);
-                        if f.seq == seq {
-                            return d;
-                        }
-                    }
-                }
-            }
-            std::thread::sleep(std::time::Duration::from_millis(1));
-        }
-        panic!("the worker never answered");
-    };
-    let warm = next(&mut l, &mut r, &mut scene, 0);
+    let mut m = Mesher::default();
+    let warm = m.delta(&first);
     assert_eq!(warm.added.len(), warm.faces);
+    r.live_apply(0, &warm);
+    scene.set_part(0, warm.center, warm.radius, vec![warm.chord]);
     r.live_show(true);
     r.frame(&target.view, &mut scene, &cam, Overlay::default());
     r.wait();
@@ -141,10 +129,11 @@ fn a_dragged_part_draws_from_its_faces_and_follows_the_value() {
         "{a} pixels from the mesh, {b} from the faces"
     );
 
-    let seq = l.drag(dim.at.op("90".into()));
-    let moved = next(&mut l, &mut r, &mut scene, seq);
+    let moved = m.delta(&body(90.0));
     assert!(moved.meshed < moved.faces, "{} of {}", moved.meshed, moved.faces);
     assert!(moved.radius > warm.radius);
+    r.live_apply(0, &moved);
+    scene.set_part(0, moved.center, moved.radius, vec![moved.chord]);
     r.frame(&target.view, &mut scene, &cam, Overlay::default());
     r.wait();
     let after = target.read_rgb(&r);

@@ -29,7 +29,7 @@ forge-git = { path = "../../kernel/forge-git" }
 forge-history = { path = "../forge-history" }
 forge-font = { path = "../../kernel/forge-font" }
 forge-step = { path = "../../kernel/forge-step" }
-forge-doc = { path = "../forge-doc" }
+forge-units = { path = "../forge-units" }
 forge-asm = { path = "../../kernel/forge-asm" }
 forge-draw = { path = "../../kernel/forge-draw" }
 

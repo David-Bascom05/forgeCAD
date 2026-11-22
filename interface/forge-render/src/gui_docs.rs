@@ -14,13 +14,7 @@ per_doc!(
         view: Option<View>,
         vers: gui_versions::VersState,
         back_image_was: Option<String>,
-        loading: Option<Receiver<Result<Loaded, String>>>,
-        calls: Vec<Call>,
         view_file: Option<String>,
-        tree_hover_was: Option<forge_doc::ItemId>,
-        after_sketch: Option<&'static str>,
-        sketch_for: Option<(String, SketchFor, Vec<String>)>,
-        sketch_sources: std::collections::HashMap<String, Result<Vec<forge_doc::sketch::Refd>, String>>,
         fg: Option<crate::fg::Session>,
         fg_view: Option<Loaded>,
         fg_folded: Option<crate::mesh::PartMesh>,
@@ -42,6 +36,8 @@ per_doc!(
         body_rows: Option<crate::scene::Rows>,
         inspector: gui_inspect::Inspector,
         fg_previewed: Option<String>,
+        fg_marks_was: (Vec<u32>, Vec<crate::render::FaceColour>),
+        fg_then: Option<&'static str>,
     ],
     app [
         ctx, egui, shell, device, queue, adapter, waker, captured, over_view, pointer_px,
@@ -133,6 +129,12 @@ impl Gui {
     /// Opens a file in a tab of its own (or finds the tab it's already in), and brings it to the
     /// window if `activate`; the tab's index. What the agent calls for a file it made.
     pub fn open_document(&mut self, path: &str, activate: bool) -> Option<usize> {
+        // a bench part's name is its Forge port's file: the tab it's in, if it's open
+        let bench = match crate::load::bench_file(path) {
+            Some(Ok(file)) if !std::path::Path::new(path).exists() => Some(file),
+            _ => None,
+        };
+        let path = bench.as_deref().unwrap_or(path);
         let at = self.open_in(path, None, activate)?;
         // a .fg's drawing blocks: a tab each beside its model, Onshape's way
         if path.ends_with(".fg")
@@ -326,7 +328,6 @@ impl Gui {
     fn after_switch(&mut self) {
         let s = &mut self.shell;
         s.marking = None;
-        s.marking_row = None;
         s.window_box = None;
         s.cube_menu = None;
         s.close_ask = None;

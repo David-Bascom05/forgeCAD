@@ -164,6 +164,13 @@ pub enum Op {
     /// The argument `key` of the document's `properties(..)` becomes `text` (put in, and the
     /// statement made, where missing), or with no text is taken out.
     SetProperty { key: String, text: Option<String> },
+    /// The statement making `id`, its params, and every statement reading it out of the build,
+    /// their lines kept as comments `#~ID ..` (`.fc`'s suppress).
+    Suppress { id: String },
+    /// The lines `Suppress {id}` kept as comments put back.
+    Unsuppress { id: String },
+    /// The name at `span` (a misspelt one) written `to`.
+    Respell { span: Span, to: String },
 }
 
 impl Op {
@@ -220,6 +227,13 @@ impl Op {
                 ("op", "SetProperty".into()),
                 ("key", key.as_str().into()),
                 ("text", opt(text)),
+            ]),
+            Op::Suppress { id } => Json::obj(vec![("op", "Suppress".into()), ("id", id.as_str().into())]),
+            Op::Unsuppress { id } => Json::obj(vec![("op", "Unsuppress".into()), ("id", id.as_str().into())]),
+            Op::Respell { span, to } => Json::obj(vec![
+                ("op", "Respell".into()),
+                ("span", span_json(*span)),
+                ("to", to.as_str().into()),
             ]),
             Op::Rename { from, to } => Json::obj(vec![
                 ("op", "Rename".into()),
@@ -290,10 +304,22 @@ impl Op {
                 from: s("from")?,
                 to: s("to")?,
             },
+            "Suppress" => Op::Suppress { id: s("id")? },
+            "Unsuppress" => Op::Unsuppress { id: s("id")? },
             "MoveFeature" => Op::MoveFeature {
                 id: s("id")?,
                 before: s("before"),
             },
+            "Respell" => {
+                let sp = j.get("span")?;
+                Op::Respell {
+                    span: Span {
+                        lo: sp.get("lo")?.num()? as u32,
+                        hi: sp.get("hi")?.num()? as u32,
+                    },
+                    to: s("to")?,
+                }
+            }
             "LiftLiteral" => {
                 let sp = j.get("span")?;
                 let span = Span {
@@ -543,6 +569,8 @@ pub enum Error {
     UnknownName {
         span: Span,
         name: String,
+        /// The nearest name in reach (two edits or fewer), the fix's respelling.
+        near: Option<String>,
     },
     UnknownMember {
         span: Span,
@@ -643,6 +671,8 @@ pub enum Error {
         span: Span,
         id: String,
         error: forge_model::RegenError,
+        /// The largest value of the param driving a refused size that builds (`Options::fit_sizes`).
+        fit: Option<Box<(ParamKey, Literal)>>,
     },
     /// A role anchor whose faces the part no longer has.
     NoFace {
@@ -985,6 +1015,18 @@ impl Error {
             ],
             // what reads the entity goes too, or the edit keeps it
             EntityStillRead { reader, .. } => vec![Op::DeleteFeature { id: reader.clone() }],
+            // a size too big for where it goes: as large as builds (.fc's `try:`)
+            Build { fit: Some(fit), .. } => vec![Op::SetParam {
+                param: fit.0.clone(),
+                value: fit.1,
+            }],
+            // a misspelt name: the nearest in reach (.fc's `try:`)
+            UnknownName {
+                span, near: Some(n), ..
+            } if span.hi > span.lo => vec![Op::Respell {
+                span: *span,
+                to: n.clone(),
+            }],
             ShadowsBuiltin { name, .. } => vec![Op::Rename {
                 from: name.clone(),
                 to: format!("{name}_1"),

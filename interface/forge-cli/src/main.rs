@@ -1,7 +1,7 @@
 mod fg;
 mod serve;
 
-use forge_agent::cmd::{Args, COMMANDS, Session};
+use fg::{Args, COMMANDS};
 use forge_geom::{CurveGeom, SurfaceGeom};
 use forge_math::{Frame, Point2, Vec2, dmath};
 use forge_mesh::{Quality, TriMesh, tessellate, to_binary_stl};
@@ -16,14 +16,15 @@ fn usage() -> ExitCode {
         "usage: forgecad [open [FILE | APP_ARGS...]]   (open the native app)\n       \
          forgecad agent list | send WINDOW MESSAGE | status WINDOW REQUEST\n       \
          forgecad update [INSTALL_ROOT]   (install latest main)\n       \
-         forgecad act|query|measure|render|build|check|diff|export FILE [ARGS] [--json] [--base N] [--at FEAT] [--labels SEL] [--px N] [-o OUT]\n       \
-         forgecad edit FILE.fg 'OP'..   (typed ops, as a .fg part's fixes give them; build|check|query|measure|render|export take .fg too; export F.fg dxf [SHEET])\n       \
-         forgecad help [TOPIC]\n       \
+         forgecad build|check|query|measure|render|export FILE.fg [ARGS] [--json] [--labels SEL] [--px N] [--at FEAT] [-o OUT]\n       \
+         forgecad edit FILE.fg 'OP'.. [--base VERSION]   (typed ops, as a part's fixes give them; export F.fg dxf [SHEET])\n       \
+         forgecad diff A.fg B.fg [volume]   (what B changed from A: features, params, faces, volume)\n       \
+         forgecad help [forge | WORD]   (the .fg language, or its sections on WORD)\n       \
          forgecad versions F | history F [--all] | create_version F NAME [NOTES] | restore F v3|SAVE | compare F A B [--volume]\n       \
          forgecad release F REASON [--approver NAME] [--numeric] | releases F | regenerate_release F REV   (JSON; FORGECAD_AGENT names an agent)\n       \
-         forgecad serve | mcp [--root DIR] [--writable]   (JSON-RPC / MCP on stdio, .fc and .fg files under DIR, default .; act only if --writable)\n       \
-         forgecad import FILE.FCStd [-o DIR] [--json]   (each body a part file DIR/<file>.<body>.fc)\n       \
-         forgecad demo <out.stl> [chord-mm] | preview <out.json>\nformat and selectors: AGENTS.md, forgecad help"
+         forgecad serve | mcp [--root DIR] [--writable]   (JSON-RPC / MCP on stdio, parts under DIR, default .; edits only if --writable)\n       \
+         forgecad import FILE.FCStd [-o DIR] [--json]   (each body a part file DIR/<file>.<body>.fg)\n       \
+         forgecad demo <out.stl> [chord-mm] | preview <out.json>\nthe language: AGENTS.md, forgecad help forge"
     );
     ExitCode::from(2)
 }
@@ -207,10 +208,10 @@ fn main() -> ExitCode {
         }
         Some("import") if args.len() >= 3 => import(&args[2..]),
         Some("help" | "--help" | "-h") => {
-            println!("{}", forge_agent::help::help(&args[2..].join(" ")));
+            println!("{}", forge_lang::help(&args[2..].join(" ")));
             ExitCode::SUCCESS
         }
-        Some(c) if (COMMANDS.contains(&c) || c == "edit") && args.len() >= 3 => command(c, &args[2..]),
+        Some(c) if COMMANDS.contains(&c) && args.len() >= 3 => command(c, &args[2..]),
         _ => usage(),
     }
 }
@@ -265,8 +266,8 @@ fn import(argv: &[String]) -> ExitCode {
             eprintln!("{}: not in {dir}", out.display());
             return ExitCode::FAILURE;
         }
-        if let Some(fc) = &b.fc
-            && let Err(e) = std::fs::write(&out, fc)
+        if let Some(fg) = &b.fg
+            && let Err(e) = std::fs::write(&out, fg)
         {
             eprintln!("{}: {e}", out.display());
             return ExitCode::FAILURE;
@@ -281,7 +282,7 @@ fn import(argv: &[String]) -> ExitCode {
                 quoted(why),
                 b.approx
             );
-        } else if b.fc.is_some() {
+        } else if b.fg.is_some() {
             println!(
                 "{}: {} {}{}",
                 b.name,
@@ -310,32 +311,19 @@ fn command(cmd: &str, argv: &[String]) -> ExitCode {
     while let Some(w) = it.next() {
         match w.as_str() {
             "--json" => json = true,
-            "--at" => a.at = it.next().cloned(),
             "--labels" => a.labels = it.next().cloned(),
             "--px" => a.px = it.next().and_then(|p| p.parse().ok()),
-            "--base" => a.base = it.next().and_then(|p| p.parse().ok()),
+            "--at" => a.at = it.next().cloned(),
+            "--base" => a.base = it.next().cloned(),
             "-o" => out = it.next().cloned(),
             w if w.starts_with("--") => {
-                eprintln!("unknown option {w} (--json --base --at --labels --px -o)");
+                eprintln!("unknown option {w} (--json --labels --px --at --base -o)");
                 return ExitCode::from(2);
             }
             _ => a.words.push(w.clone()),
         }
     }
-    if cmd == "act" && a.words.is_empty() {
-        let mut lines = String::new();
-        if std::io::Read::read_to_string(&mut std::io::stdin(), &mut lines).is_ok() {
-            a.words.push(lines);
-        }
-    }
-    let r = if fg::is_fg(&a.file) {
-        fg::Session::new(None, true).run(cmd, &a, &forge_agent::json::Json::Null)
-    } else if cmd == "edit" {
-        eprintln!("edit takes .fg parts; a .fc part changes by act");
-        return ExitCode::from(2);
-    } else {
-        Session::default().writable(true).run(cmd, &a)
-    };
+    let r = fg::Session::new(None, true).run(cmd, &a, &forge_agent::json::Json::Null);
     let mut text = if json { r.json.to_string() } else { r.text };
     if let Some(png) = &r.png {
         let ext = match cmd {
@@ -344,7 +332,7 @@ fn command(cmd: &str, argv: &[String]) -> ExitCode {
             "export" => "step",
             _ => "png",
         };
-        let stem = a.file.trim_end_matches(".fc").trim_end_matches(".fg");
+        let stem = a.file.trim_end_matches(".fg");
         let path = out.unwrap_or_else(|| format!("{stem}.{ext}"));
         if let Err(e) = std::fs::write(&path, png) {
             eprintln!("writing {path}: {e}");

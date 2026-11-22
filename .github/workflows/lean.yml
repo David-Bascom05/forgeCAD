@@ -1,0 +1,110 @@
+# The Lean proofs: research/forge-lang (the language's editability and grammar), check-local and
+# drag-speed, each `lake build` on the pinned toolchain, then their axiom checks. A theorem that
+# no longer checks, a `sorry`, `native_decide` or any axiom past propext, Classical.choice and
+# Quot.sound fails the job. The toolchain (~/.elan) and each project's .lake are cached.
+name: lean
+
+on:
+  push:
+    branches: [main]
+    paths: ["research/**/*.lean", "research/**/lean-toolchain", "research/**/lakefile.toml",
+            "research/**/lake-manifest.json", "interface/forge-lang/grammar.ll1",
+            ".github/workflows/lean.yml"]
+  pull_request:
+    paths: ["research/**/*.lean", "research/**/lean-toolchain", "research/**/lakefile.toml",
+            "research/**/lake-manifest.json", "interface/forge-lang/grammar.ll1",
+            ".github/workflows/lean.yml"]
+  workflow_dispatch:
+
+jobs:
+  proofs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: toolchain cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.elan
+          key: elan-${{ runner.os }}-${{ hashFiles('research/forge-lang/lean/lean-toolchain', 'research/check-local/lean/lean-toolchain', 'research/drag-speed/lean/lean-toolchain') }}
+      - name: build cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            research/forge-lang/lean/.lake
+            research/check-local/lean/.lake
+            research/drag-speed/lean/.lake
+          key: lake-${{ runner.os }}-${{ hashFiles('research/**/lean-toolchain') }}-${{ hashFiles('research/forge-lang/lean/**/*.lean', 'research/check-local/lean/**/*.lean', 'research/drag-speed/lean/**/*.lean') }}
+          restore-keys: lake-${{ runner.os }}-${{ hashFiles('research/**/lean-toolchain') }}-
+      - name: elan and the pinned toolchain
+        run: |
+          if [ ! -x "$HOME/.elan/bin/elan" ]; then
+            curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -o elan-init.sh
+            sh elan-init.sh -y --default-toolchain none
+          fi
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+          for d in research/forge-lang/lean research/check-local/lean research/drag-speed/lean; do
+            "$HOME/.elan/bin/elan" toolchain install "$(cat $d/lean-toolchain)"
+          done
+      - name: forge-lang
+        working-directory: research/forge-lang/lean
+        run: |
+          # the two kernel `decide`s of the parser's grammar take ~8 GB each: one at a time
+          lake build ForgeLang.LL1.Impl
+          lake build ForgeLang.LL1.ImplUnifiedDoc
+          lake build
+          lake build fgparse fglex  # the oracles of tests/parse_diff.rs
+          lake env lean CheckAxioms.lean
+          lake env lean Axioms.lean | tee axioms.txt
+          ! grep -E "sorryAx|ofReduceBool" axioms.txt
+      - name: check-local
+        if: ${{ !cancelled() }}
+        working-directory: research/check-local/lean
+        run: |
+          lake build
+          lake env lean Axioms.lean | tee axioms.txt
+          ! grep -E "sorryAx|ofReduceBool" axioms.txt
+      - name: drag-speed
+        if: ${{ !cancelled() }}
+        working-directory: research/drag-speed/lean
+        run: |
+          lake build
+          lake env lean Axioms.lean | tee axioms.txt
+          ! grep -E "sorryAx|ofReduceBool" axioms.txt
+
+  # research/loft-ssi/derive/proofs and proofs-alt need Mathlib (v4.36.0-rc2), fetched with its
+  # build cache. Not built where this job was written (the Mathlib cache host was not reachable
+  # there), so informative until a run shows it green.
+  loft-ssi:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        dir: [research/loft-ssi/derive/proofs, research/loft-ssi/derive/proofs-alt]
+    steps:
+      - uses: actions/checkout@v4
+      - name: toolchain cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.elan
+          key: elan-${{ runner.os }}-${{ hashFiles(format('{0}/lean-toolchain', matrix.dir)) }}
+      - name: Mathlib cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ matrix.dir }}/.lake
+          key: lake-mathlib-${{ runner.os }}-${{ hashFiles(format('{0}/lakefile.toml', matrix.dir), format('{0}/lake-manifest.json', matrix.dir)) }}
+      - name: elan, the toolchain, Mathlib's build
+        working-directory: ${{ matrix.dir }}
+        run: |
+          if [ ! -x "$HOME/.elan/bin/elan" ]; then
+            curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -o elan-init.sh
+            sh elan-init.sh -y --default-toolchain none
+          fi
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+          "$HOME/.elan/bin/elan" toolchain install "$(cat lean-toolchain)"
+          "$HOME/.elan/bin/lake" exe cache get
+      - name: build
+        working-directory: ${{ matrix.dir }}
+        run: lake build

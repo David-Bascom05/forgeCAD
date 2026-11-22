@@ -1,55 +1,72 @@
 # Driving ForgeCAD
 
-A part is a `.fc` text file: its features, one a line, rebuilt top to bottom. Units mm, degrees.
-Change it with `act`; the reply says what happened. `help TOPIC..` has the full grammar of anything.
+A part is a `.fg` file, a Forge program: statements that make named features in order, each built
+as it is made. Units mm, angles `30deg`. `help forge` has the whole language.
 
 ```
-base: extrude 6 rect -30 -20 60 40          # first solid: 6 up from xy; rect X Y W H
-wall: extrude 6 xz at 0 20 0 rect -30 0 60 40
-hole 5 -xy at -20 -10 6 thru                # dia, frame (its z drills in), depth|thru
-pattern hole1 lin 1 0 0 3 20                # copy hole1: dir, count, step
-extrude cut 2 -xy at 0 5 6 circle 0 0 4     # op: add (default) cut keep new
-fillet 3 (edges between base wall concave)  # radius, then refs
-chamfer 1 @e78d2213f @e172f9490             # @handles come from `query`
-w = 40                                      # a parameter: any number below may be w/2, (w + 1)..
+shared L = 60                         # numbers live in params, nowhere else
+shared W = 30
+shared t = 6
+param top.r = 8                       # a param of feature `top`
+param top.hx = 10
+param bolt.d = 5
+param bolts.step = 40
+param round.r = 2
+
+sketch plan(on: xy) {                 # the first sketch may sit on a world plane
+  outline = rect(corner: (0, 0), size: (L, W))
+}
+base = extrude(plan, t)
+sketch top(on: base.end) {            # every later one sits on the part
+  c = circle((L / 2, W / 2), r)
+  h = pt(hx, W / 2)
+}
+boss = extrude(top.c, t)
+bolt = hole(at: top.h, d: d, depth: thru)
+bolts = pattern(of: bolt, layout: lin(along: plan.outline[0].dir, n: count(2), step: step))
+round = fillet(edges(of: boss, crease: "convex"), r)
 ```
 
-`at X Y Z` is a frame's origin, its z the extrude or drill direction: xy +z, xz -y, yz +x, -xy -z
-(`help frame`). Loops: rect circle rrect ellipse poly spline thru loop (`help loops`). `help` lists every topic:
-sketch, revolve, sweep, loft, coil, thread, text, import (a STEP, .brep or IGES file), shell, draft, rib, hole, pattern, bodies, ...
+Select in the part's own text: `edges(of: boss, crease: "convex")`, `edges(between: (a, b))`,
+anchors like `base.end`, `base.side(plan.outline[2])`, `hole.bore`; one copy of a pattern or one
+place of a hole: `edges(of: bolts[1], crease: "convex")`. Features: extrude cut revolve
+sweep loft coil thread hole fillet chamfer shell draft rib pattern, bodies, sheet metal, components
+and assemblies (`help forge`).
 
-Tools (CLI `forgecad TOOL F ..`, or MCP; lines on stdin if none given):
+Tools (CLI `forgecad TOOL F ..`, or MCP). Replies are typed JSON with `--json` or over MCP:
 ```
-act F 'LINE'.. [--base N]   all lines or none. Any .fc line goes on the end; also
-                            NAME = EXPR | before FEAT LINE | edit FEAT LINE | set FEAT K TEXT |
-                            dim SKETCH ROW VALUE | rm FEAT | mv FEAT FEAT2|end | suppress FEAT |
-                            unsuppress ID | rename FEAT NAME | undo | redo
-query F SEL [--at FEAT]     find entities, for handles: `edges of hole1`, `faces plane normal +z top`
-query F stat|file|check|dims|since N
-measure F REF [REF] | mass | wall
+build F                     every feature's status and dims, then the part: volume, faces, valid
+check F                     the same, stopping before the kernel
+edit F 'OP'.. [--base V]    typed ops, all applied or none; replies with the build and the
+                            file's `version`; with --base V, refused (StaleBase) unless still at V
+diff A B [volume]           what B changed from A: features, params, faces by name, volume
+query F params|features|stat|check
+query F SEL [--at FEAT]     @handles: `faces plane normal +z top`, `edges of boss convex`;
+                            --at: the part as it stood after that feature (measure, render too)
+query F holes|aligned|interference|faces | section z=67 | gap A B | frame SKETCH
+measure F REF [REF] | mass | wall [exact]
 render F [VIEW] [--labels SEL] [--px N] [-o F.png]
-export F [ap214|ap242] [tol MM] [-o F.step]
-help [TOPIC]
+export F [ap214|ap242] [tol MM] [-o F.step] | dxf [SHEET] | dwg [SHEET]
+help forge
 ```
-FEAT: a label, kind+count (`hole2`), `fN` (Nth line). REF: `@handle` or `(selector)`, in a line too.
-Selectors (`help selectors`): `faces|edges|verts`, then filters: plane cyl cone .. | line circle |
-convex concave | normal +z | along +x | r=3 | longer 5 | of FEAT | between FEAT FEAT | top bottom
-left right front back | near X Y Z.
+SEL: `faces|edges|verts`, then filters: plane cyl cone .. | line circle | convex concave |
+normal +z | along +x | r=3 | longer 5 | of FEAT | between FEAT FEAT | top bottom left right front
+back | near X Y Z.
+REF: `@handle` or `(selector)`.
 
-A reply is a diff: `ok v7; +4 faces, volume -120.4 mm3, valid; picked fillet1:4`. Check the counts.
-An error gives the line, the reason and, where it can, `try:` a replacement that builds; nothing
-was applied. A `.fc` file is plain text: hand edits are fine, `act` picks them up. New file: `act`
-on an empty `.fc` file.
+Ops, as a reply's `fixes` give them; send a fix back unchanged:
+```
+{"op":"SetParam","param":"t","value":{"value":3,"dim":"Length"}}
+{"op":"AddFeature","before":null,"text":"edge = chamfer(edges(of: base, along: Z), 1)"}
+{"op":"SetArg","id":"bolt","arg":"depth","text":"thru"}
+{"op":"Rename","from":"round","to":"blend"}
+```
+Also AddLocalParam, MakeShared, SplitInstance, DeleteFeature, ReplaceFeature, MoveFeature,
+LiftLiteral, SetProperty; `{"op":"Undo"}` and `{"op":"Redo"}` step through the file's edits. A
+refusal is a typed error and nothing is written; a round too big comes back with a SetParam fix to
+the largest that builds. Errors and lints
+carry spans and `fixes`; a loose number is a lint with a LiftLiteral fix.
 
-## Forge (.fg) parts
-
-A `.fg` file is a Forge part (`help forge` has the language). The same tools take it, and reply
-with typed JSON: features by id, params (driving, driven, structural), errors and lints with spans
-and `fixes`, each fix an op. Change a .fg part with `edit F` and an op (or `ops`, all or none),
-sent back as a fix gives it: `{"op":"SetParam","param":"t","value":{"value":3,"dim":"Length"}}`,
-AddLocalParam, MakeShared, SplitInstance, AddFeature, DeleteFeature, MoveFeature, LiftLiteral.
-A refusal is a typed error, and nothing is written. `query F params|features|stat|check`;
-numbers, in the assembly's frame (`in OCC` for a part's): `query F holes|aligned|interference|faces`,
-`section z=67`, `gap A B`, `frame SKETCH` (where a sketch on a sheet wall lands, folded and flat);
-an assembly's names are OCC/NAME (`fg query F help`).
-`export F dxf [SHEET]` is a sheet's flat pattern (`export F dwg [SHEET]` the same as DWG).
+A `.fg` file is plain text: write a new part whole, then `build` it; hand edits are fine. An
+assembly's names are OCC/NAME and its numbers are in its own frame (`in OCC` for a part's);
+`fg query F help` lists its queries.

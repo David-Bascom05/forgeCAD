@@ -140,3 +140,31 @@ fn a_side_faces_normal_checks_without_the_kernel() {
     let r = forge_lang::run(&src, opts, Default::default()).0;
     assert!(r.errors.is_empty(), "{:?}", r.errors);
 }
+
+#[test]
+fn each_features_faces_are_kept_by_its_id() {
+    let r = run(BOX);
+    let a = r.anchors.as_ref().unwrap();
+    let body = r.body.as_ref().unwrap();
+    let faces = body.face_ids().count();
+    // the boss's wall and top; the base's floor, walls and top round it
+    assert_eq!(a.role_faces["boss.faces"].len(), 2);
+    assert_eq!(a.role_faces["base.faces"].len() + 2, faces);
+    assert_eq!(a.role_faces["boss.end"].len(), 1);
+}
+
+#[test]
+fn rolled_back_the_part_is_as_it_stood_and_what_follows_is_not_built() {
+    let opts = Options {
+        until: Some("base".into()),
+        ..Options::default()
+    };
+    let r = forge_lang::run(BOX, opts, Default::default()).0;
+    assert!(r.ok(), "{:?}", r.errors);
+    let v = r.measure.as_ref().unwrap().volume;
+    assert!((v - 40.0 * 40.0 * 6.0).abs() < 1e-6, "{v}");
+    let boss = r.feats.iter().find(|f| f.id == "boss").unwrap();
+    assert_eq!(boss.status, forge_lang::eval::Status::NotBuilt);
+    let whole = run(BOX);
+    assert!(whole.measure.unwrap().volume > v);
+}

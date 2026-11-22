@@ -1,11 +1,11 @@
 //! cargo run --release -p forge-model --example shrink -- <suite part | fuzz seed | adversarial family>
 //! Shrinks a failing history to a minimal one and prints it as a literal.
-//!   shrink gen FROM TO [LEN]   whole-kernel random histories (forge_agent::gen), seeds FROM..TO:
+//!   shrink gen FROM TO [LEN]   whole-kernel random .fg programs (forge_lang::fuzz), seeds FROM..TO:
 //!                              what each kind did, and each kind of failure shrunk to a part file
 //!                              (NOSHRINK=1: as found)
-//!   shrink FILE.fc             a part file's failure, shrunk
-use forge_agent::history;
+//!   shrink FILE.fg             a part file's failure, shrunk
 use forge_geom::CurveGeom;
+use forge_lang::fuzz as history;
 use forge_model::{adversarial, suite};
 use std::collections::BTreeMap;
 
@@ -25,11 +25,11 @@ fn hunt(from: u64, to: u64, len: usize) {
         eprintln!("seed {seed}: {:.1} s", t.elapsed().as_secs_f64());
         if run.slowest.0 > 5.0 {
             eprintln!(
-                "seed {seed}: one line took {:.1} s:\n{}",
+                "seed {seed}: one statement took {:.1} s:\n{}",
                 run.slowest.0, run.slowest.1
             );
         }
-        lines += run.src.lines().count();
+        lines += history::statements(&run.src).len();
         for (k, why) in &run.tried {
             let e = kinds.entry(k).or_default();
             e.0 += 1;
@@ -42,26 +42,26 @@ fn hunt(from: u64, to: u64, len: usize) {
             eprintln!("seed {seed}: {what}");
             let e = fails.entry(what).or_insert((0, seed, src.clone()));
             e.0 += 1;
-            if src.lines().count() < e.2.lines().count() {
+            if src.len() < e.2.len() {
                 (e.1, e.2) = (seed, src);
             }
         }
     }
     let n = to - from;
     println!(
-        "{n} histories, {lines} lines built, {} failing, {:.1} s",
+        "{n} programs, {lines} statements, {} failing, {:.1} s",
         fails.values().map(|f| f.0).sum::<usize>(),
         t0.elapsed().as_secs_f64()
     );
     println!(
-        "\n{:<9} {:>6} {:>6}  refusals (most common)",
+        "\n{:<14} {:>6} {:>6}  refusals (most common)",
         "kind", "tried", "built"
     );
     for (k, (t, b, why)) in &kinds {
         let mut w: Vec<_> = why.iter().collect();
         w.sort_by(|a, b| b.1.cmp(a.1));
         let top: Vec<String> = w.iter().take(4).map(|(m, c)| format!("{c}x {m}")).collect();
-        println!("{k:<9} {t:>6} {b:>6}  {}", top.join(" | "));
+        println!("{k:<14} {t:>6} {b:>6}  {}", top.join(" | "));
     }
     // NOSHRINK: only the table
     let shrink = std::env::var_os("NOSHRINK").is_none();
@@ -72,9 +72,9 @@ fn hunt(from: u64, to: u64, len: usize) {
             src.clone()
         };
         println!(
-            "\n# {what}  ({hits} seeds, first {seed}; {} of {} lines)\n{small}",
-            small.lines().count(),
-            src.lines().count()
+            "\n# {what}  ({hits} seeds, first {seed}; {} of {} statements)\n{small}",
+            history::statements(&small).len(),
+            history::statements(src).len()
         );
     }
 }
@@ -85,7 +85,7 @@ fn main() {
     if arg == "gen" {
         return hunt(num(2, 0), num(3, 50), num(4, 30) as usize);
     }
-    if arg.ends_with(".fc") {
+    if arg.ends_with(".fg") {
         let src = std::fs::read_to_string(&arg).expect("a part file");
         let v = history::judge(&src);
         println!("# {v:?}");

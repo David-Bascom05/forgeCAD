@@ -1,17 +1,19 @@
-//! Sketch mode: draw on a plane with the solver behind every row. Each tool adds a row to the block a
-//! part file would hold; the rows solve here in-process, and Finish Sketch commits them as one call.
+//! Sketch mode: draw on a plane with the solver behind every row. Each tool adds a row of the
+//! sketcher's working form (`rows`); the rows solve here in-process, and Finish Sketch writes them
+//! as a Forge sketch block (`fgsketch`) in one edit.
 
 use super::theme::{mono, sans};
 use super::{Action, Shell};
 use crate::shell::placed::Placed;
 use egui::{Color32, Pos2, Rect, Sense, Stroke, vec2};
-use forge_doc::text::{Want, tokens};
-use forge_doc::{Document, ItemId, expr, sketch as sk};
 use forge_math::{Frame, Point2};
 use forge_sketch::{Entity, Status};
 use std::collections::HashMap;
 
+pub mod rows;
 mod tools;
+mod value;
+use rows::{self as sk, D, Pt, Ref, Row, V, Want};
 pub use tools::More;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -114,16 +116,26 @@ pub struct Draft {
     pub arc: Option<((f64, f64), f64, f64, f64)>,
     /// More arcs, as `arc` (a slot's second end).
     pub arcs: Vec<((f64, f64), f64, f64, f64)>,
-    pub rows: Vec<String>,
+    pub rows: Vec<Row>,
     pub glyphs: Vec<(Glyph, (f64, f64))>,
     /// Each field's live value and the dimension it is.
     pub values: Vec<(f64, Measure)>,
     /// A line chain goes on from here.
-    pub end: Option<(String, (f64, f64))>,
+    pub end: Option<(Pt, (f64, f64))>,
 }
 
-/// A point snapped to: its word, where it is, what it's tied by, the rows that needs.
-type Snap = (String, (f64, f64), Glyph, Vec<String>);
+/// A point snapped to: the point, where it is, what it's tied by, the rows that needs.
+type Snap = (Pt, (f64, f64), Glyph, Vec<Row>);
+
+/// A dimension's row without its value: what it sets, on what.
+pub type Dimmed = (D, Vec<Ref>);
+
+/// A dimension's words, as a place in the view names it (`distance(l1)`).
+pub fn dim_words(d: &Dimmed) -> String {
+    Row::Dim(d.0, d.1.clone(), Some(V::X(String::new())))
+        .to_string()
+        .replace(", )", ")")
+}
 
 /// How near an angle (radians, about 3 degrees) a line must be to be taken as level, plumb or
 /// parallel.
@@ -265,13 +277,10 @@ const CIRCLE_STEPS: usize = 64;
 /// What Finish Sketch changes.
 #[derive(Clone, Debug, PartialEq)]
 pub enum SketchFor {
+    /// A new sketch block, added to the part.
     New,
-    /// A sketch already there.
-    Line(ItemId),
     /// A Forge part's sketch block, by its name.
     Forge(String),
-    /// A feature's inline profile, which becomes a named sketch line it reads, in one commit.
-    Inline(ItemId, String),
 }
 
 #[derive(Clone, Debug)]
@@ -281,16 +290,16 @@ pub struct SketchMode {
     /// After `sketch`: a frame, or `on @f..`.
     pub head: String,
     pub plane: Frame,
-    pub rows: Vec<String>,
+    pub rows: Vec<Row>,
     pub tool: Option<SkTool>,
-    /// What's been clicked so far for the tool, each as a row's word(s).
-    picks: Vec<String>,
+    /// What's been clicked so far for the tool: the sketch's points and entities, or places.
+    picks: Vec<Pt>,
     /// Where those are, in the plane.
     pick_at: Vec<(f64, f64)>,
-    pub solved: Option<forge_model::Sketch>,
+    pub solved: Option<sk::Solved>,
     pub error: Option<String>,
     /// A dimension being given: the row without its value, where its field goes, the text.
-    pub asking: Option<(String, Pos2, String)>,
+    pub asking: Option<(Dimmed, Pos2, String)>,
     /// Numbers for `dist` and the like read through the part's parameters.
     params: Vec<(String, String)>,
     /// The length unit it's being read in.
@@ -298,9 +307,9 @@ pub struct SketchMode {
     /// What the constraint tool would pick, with the pointer where it is.
     pub would_pick: Option<String>,
     /// The constraint row whose mark the pointer's on.
-    pub glyph_over: Option<String>,
+    pub glyph_over: Option<usize>,
     /// The rows it opened with: nothing changed, nothing to commit.
-    opened: Vec<String>,
+    opened: Vec<Row>,
     /// Which opened row each of the first rows is (the rows after it are new).
     opened_at: Vec<usize>,
     /// A dimension's row being changed, when it's one already there.
@@ -312,10 +321,11 @@ pub struct SketchMode {
     /// The field that has the keyboard.
     pub active: usize,
     /// Rows a snapped first point needs written before the entity's.
-    first_rows: Vec<String>,
+    first_rows: Vec<Row>,
     /// Where the pointer last was on the plane: typing leaves it, the preview stays.
     cursor: Option<(f64, f64)>,
-    /// What each `project` row's references come to, from the worker that holds the part.
+    /// What each `project` row's references come to: the part's geometry for a pick, or the
+    /// image the block solved to for a sketch opened from it.
     pub sources: HashMap<String, Result<Vec<sk::Refd>, String>>,
     /// The Modify tools' choice, the toggles, and text placed.
     pub more: More,
@@ -348,39 +358,118 @@ pub(super) fn sketch_keys(s: &Shell) -> Vec<(SkTool, crate::bindings::Chord)> {
     keys
 }
 
-/// A `project` row's references, its words after the word.
-pub fn project_refs(row: &str) -> Option<String> {
-    let t = tokens(row);
-    let (first, rest) = t.split_first()?;
-    let rest = rest.strip_suffix(&["cons".to_string()]).unwrap_or(rest);
-    let rest = match rest {
-        [refs @ .., w, _] if w == "approx" => refs,
-        _ => rest,
-    };
-    (first == "project").then(|| rest.join(" "))
+/// What a `project` row projects (the Forge text its geometry is kept under).
+pub fn project_refs(row: &Row) -> Option<&str> {
+    match row.plain() {
+        Row::Project { of, .. } => Some(of),
+        _ => None,
+    }
 }
 
-/// A row added, for tests and the status bar.
+/// An edge of the part as a source to lay flat.
+fn edge_source(b: &forge_topo::Body, e: forge_topo::EdgeId) -> sk::Source {
+    let x = b.edge(e);
+    sk::Source::Edge {
+        curve: x.curve.clone(),
+        range: x.range,
+        start: b.vertex(x.start).point,
+        end: b.vertex(x.end).point,
+        closed: x.start == x.end,
+    }
+}
+
+/// What clicks on a Forge part project: each pick by the anchor Forge names it by (`edges(between:
+/// (a, b))`, `base.end`), one curve (rows may name it, `j1`) or several (a face's boundary), with
+/// the part's geometry each anchor holds as it stands.
+/// A pick with no stable Forge name is refused, typed.
+pub fn project_picks(
+    anchors: Option<&crate::fg::AnchorView>,
+    body: Option<&forge_topo::Body>,
+    picked: &[crate::render::Entity],
+) -> Result<Vec<(String, sk::Refd)>, String> {
+    use crate::render::Entity;
+    use forge_topo::{EdgeId, FaceId};
+    let (Some(a), Some(b)) = (anchors, body) else {
+        return Err("the part is still building: pick again when it's shown".into());
+    };
+    let unnamed = |what: &str| {
+        format!("NoStableName: this {what} has no stable Forge name to project it by; pick another")
+    };
+    let mut out: Vec<(String, sk::Refd)> = vec![];
+    for e in picked {
+        let (text, edges): (String, Vec<EdgeId>) = match *e {
+            Entity::Edge(x) => {
+                let t = a
+                    .edges
+                    .get(x as usize)
+                    .cloned()
+                    .flatten()
+                    .ok_or(unnamed("edge"))?;
+                // every edge the anchor names: Forge projects them all
+                let es = (0..a.edges.len())
+                    .filter(|&k| a.edges[k].as_deref() == Some(t.as_str()) && k < b.edges.len())
+                    .map(|k| EdgeId(k as u32))
+                    .collect();
+                (t, es)
+            }
+            Entity::Face(f) => {
+                let t = a
+                    .faces
+                    .get(f as usize)
+                    .cloned()
+                    .flatten()
+                    .ok_or(unnamed("face"))?;
+                let mut es: Vec<EdgeId> = vec![];
+                let mut names = vec![];
+                for k in (0..a.faces.len()).filter(|&k| a.faces[k].as_deref() == Some(t.as_str())) {
+                    if k >= b.faces.len() {
+                        continue;
+                    }
+                    for &l in &b.face(FaceId(k as u32)).loops {
+                        for c in b.lp(l).coedges() {
+                            let x = b.coedge(c).edge;
+                            if !names.contains(&b.edge(x).name) {
+                                names.push(b.edge(x).name);
+                                es.push(x);
+                            }
+                        }
+                    }
+                }
+                (t, es)
+            }
+            Entity::Vertex(_) => return Err(unnamed("vertex")),
+        };
+        if edges.is_empty() {
+            return Err(unnamed("pick"));
+        }
+        let one = edges.len() == 1;
+        let key = text;
+        if out.iter().any(|o| o.0 == key) {
+            continue;
+        }
+        let sources = edges
+            .iter()
+            .map(|&x| (b.edge(x).name, sk::Src::Model(edge_source(b, x))))
+            .collect();
+        out.push((key, sk::Refd { sources, one }));
+    }
+    Ok(out)
+}
+
+/// Forge's value of `text`, its names read through `env` (a param's text by its bare name).
+pub(super) fn value_of(text: &str, env: &dyn Fn(&str) -> Option<String>) -> Result<f64, String> {
+    value::eval(text, env).map(|v| v.v)
+}
+
+/// A row's number as its slot wants it: a number as written, or Forge's value of an expression over
+/// the block's params (`value::eval`). Rows write angles in degrees; out comes radians.
 fn num_of(params: &[(String, String)]) -> impl Fn(&str, Want) -> Result<f64, String> + '_ {
     move |t: &str, want: Want| {
-        let env = |name: &str| {
-            let (_, e) = params.iter().rev().find(|p| p.0 == name)?;
-            let v: f64 = e.parse().ok().or_else(|| {
-                let inner = |n: &str| {
-                    params
-                        .iter()
-                        .rev()
-                        .find(|p| p.0 == n)
-                        .and_then(|p| p.1.parse::<f64>().ok())
-                        .map(|v| (v, forge_model::Unit::None))
-                };
-                expr::eval(e, &inner).ok().map(|r| r.0)
-            })?;
-            Some((v, forge_model::Unit::None))
-        };
+        let env = |name: &str| params.iter().rev().find(|p| p.0 == name).map(|p| p.1.clone());
+        // an angle's value is in degrees, as the rows write one
         let v = match t.parse::<f64>() {
             Ok(v) => v,
-            Err(_) => expr::eval(t, &env)?.0,
+            Err(_) => value::eval(t, &env)?.v,
         };
         Ok(match want {
             Want::Angle => v * core::f64::consts::PI / 180.0,
@@ -390,22 +479,9 @@ fn num_of(params: &[(String, String)]) -> impl Fn(&str, Want) -> Result<f64, Str
 }
 
 impl SketchMode {
-    pub fn new(
-        edit: SketchFor,
-        head: String,
-        plane: Frame,
-        rows: Vec<String>,
-        doc: Option<&Document>,
-    ) -> SketchMode {
-        let params = doc.map_or(Vec::new(), |d| {
-            d.items
-                .iter()
-                .filter_map(|i| match &i.body {
-                    forge_doc::Body::Param { name, expr, .. } => Some((name.clone(), expr.clone())),
-                    _ => None,
-                })
-                .collect()
-        });
+    /// The sketch on `plane` with these rows; its numbers read through the params `set_params`
+    /// gives it.
+    pub fn new(edit: SketchFor, head: String, plane: Frame, rows: Vec<Row>) -> SketchMode {
         let mut m = SketchMode {
             edit,
             head,
@@ -426,7 +502,7 @@ impl SketchMode {
             solved: None,
             error: None,
             asking: None,
-            params,
+            params: Vec::new(),
             units: "mm",
             would_pick: None,
             glyph_over: None,
@@ -436,15 +512,14 @@ impl SketchMode {
         m
     }
 
-    fn build(&self, rows: &[String]) -> Result<forge_model::Sketch, String> {
-        let toks: Vec<Vec<String>> = rows.iter().map(|r| tokens(r)).collect();
-        let src = |t: &[String]| match self.sources.get(&t.join(" ")) {
+    fn build(&self, rows: &[Row]) -> Result<sk::Solved, String> {
+        let src = |t: &str| match self.sources.get(t) {
             Some(got) => got.clone(),
-            None => Err("still reading the part".to_string()),
+            None => Err(format!("nothing read for `project({t})`: project it again")),
         };
         sk::build_on(
             self.plane,
-            toks,
+            rows.to_vec(),
             &num_of(&self.params),
             &src,
             self.solved.as_ref(),
@@ -457,9 +532,10 @@ impl SketchMode {
         self.solve();
     }
 
-    /// Writes a `project` row for what a click named, each source by its handle, leaving out what's
-    /// already projected. A source a sketch can't hold is refused here, the row not written.
-    pub fn project(&mut self, words: String, got: Result<Vec<sk::Refd>, String>) -> bool {
+    /// Writes a `project` row for each reference a click named, leaving out what's already
+    /// projected; what has only a fitted image is held within 0.001 mm and says so (`approx`). A
+    /// source a sketch can't hold is refused here, its row not written.
+    pub fn project(&mut self, got: Result<Vec<(String, sk::Refd)>, String>) -> bool {
         let refs = match got {
             Ok(r) => r,
             Err(e) => {
@@ -470,30 +546,29 @@ impl SketchMode {
         let have: Vec<String> = self
             .rows
             .iter()
-            .filter_map(|r| project_refs(r))
-            .flat_map(|r| tokens(&r))
+            .filter_map(|r| project_refs(r).map(str::to_string))
             .collect();
-        let fresh: Vec<(String, sk::Refd)> = tokens(&words)
-            .into_iter()
-            .zip(refs)
-            .filter(|(w, _)| !have.contains(w))
-            .collect();
+        let fresh: Vec<(String, sk::Refd)> = refs.into_iter().filter(|(k, _)| !have.contains(k)).collect();
         if fresh.is_empty() {
             return false;
         }
-        // what has only a fitted image goes in a row of its own that says how near it is held
-        let (fitted, exact): (Vec<_>, Vec<_>) = fresh
-            .into_iter()
-            .partition(|f| f.1.sources.iter().any(|s| sk::needs_fit(&self.plane, &s.1)));
         let mut ok = true;
-        for (part, tail) in [(exact, ""), (fitted, " approx 0.001")] {
-            if part.is_empty() {
-                continue;
+        for (key, r) in fresh {
+            let fitted = r.sources.iter().any(|s| match &s.1 {
+                sk::Src::Model(m) => forge_sketch::project::needs_fit(&self.plane, m),
+                sk::Src::Laid(_) => false,
+            });
+            let many = !r.one;
+            self.sources.insert(key.clone(), Ok(vec![r]));
+            let row = Row::Project {
+                of: key.clone(),
+                many,
+                approx: fitted.then_some(V::N(0.001)),
+            };
+            if !self.add(row) {
+                self.sources.remove(&key);
+                ok = false;
             }
-            let key = part.iter().map(|f| f.0.as_str()).collect::<Vec<_>>().join(" ");
-            self.sources
-                .insert(key.clone(), Ok(part.into_iter().map(|f| f.1).collect()));
-            ok &= self.add(format!("project {key}{tail}"));
         }
         ok
     }
@@ -509,7 +584,7 @@ impl SketchMode {
     }
 
     /// Adds a row if the sketch still solves; if not, says why and leaves it as it was.
-    pub fn add(&mut self, row: String) -> bool {
+    pub fn add(&mut self, row: Row) -> bool {
         let mut next = self.rows.clone();
         next.push(row);
         match self.build(&next) {
@@ -532,7 +607,7 @@ impl SketchMode {
     }
 
     /// Replaces a row if the sketch still solves; if not, says why and leaves it as it was.
-    pub fn replace(&mut self, k: usize, row: String) -> bool {
+    pub fn replace(&mut self, k: usize, row: Row) -> bool {
         let mut next = self.rows.clone();
         next[k] = row;
         // from the rows as written, not from where the last solve left them
@@ -552,32 +627,33 @@ impl SketchMode {
         }
     }
 
-    /// The dimensions there are: the row's number, its words before the value, the value as written,
+    /// The dimensions there are: the row's number, what it sets on what, the value as written,
     /// and what it measures.
-    pub fn dimensions(&self) -> Vec<(usize, String, String, Measure)> {
+    pub fn dimensions(&self) -> Vec<(usize, Dimmed, V, Measure)> {
         let Some(s) = &self.solved else { return Vec::new() };
-        let at = |w: &str| -> Option<(f64, f64)> { sk::point(s, w).ok().map(|p| (p.x, p.y)) };
+        let at = |w: &Ref| -> Option<(f64, f64)> { sk::point(s, &w.to_string()).ok().map(|p| (p.x, p.y)) };
         let mut out = Vec::new();
         for (k, row) in self.rows.iter().enumerate() {
-            let t = tokens(row);
-            let Some((value, words)) = t.split_last() else {
+            let Some((d, words, value)) = row.dim() else {
                 continue;
             };
-            let measure = match words {
-                [w, a, b] if w == "hdist" => at(a).zip(at(b)).map(|(p, q)| Measure::Along(p, q, (1.0, 0.0))),
-                [w, a, b] if w == "vdist" => at(a).zip(at(b)).map(|(p, q)| Measure::Along(p, q, (0.0, 1.0))),
-                [w, a, b] if w == "dist" => at(a).zip(at(b)).map(|(p, q)| {
+            let measure = match (d, words) {
+                (D::HDist, [a, b]) => at(a).zip(at(b)).map(|(p, q)| Measure::Along(p, q, (1.0, 0.0))),
+                (D::VDist, [a, b]) => at(a).zip(at(b)).map(|(p, q)| Measure::Along(p, q, (0.0, 1.0))),
+                (D::Dist, [a, b]) => at(a).zip(at(b)).map(|(p, q)| {
                     let (dx, dy) = (q.0 - p.0, q.1 - p.1);
                     let l = (dx * dx + dy * dy).sqrt().max(1e-12);
                     Measure::Along(p, q, (dx / l, dy / l))
                 }),
-                [w, l] if w == "dist" => sk::line(s, l).ok().map(|(p, q)| {
+                (D::Dist, [l]) => sk::line(s, &l.to_string()).ok().map(|(p, q)| {
                     let (dx, dy) = (q.x - p.x, q.y - p.y);
                     let n = (dx * dx + dy * dy).sqrt().max(1e-12);
                     Measure::Along((p.x, p.y), (q.x, q.y), (dx / n, dy / n))
                 }),
-                [w, a, b] if w == "ang" => {
-                    let (Ok((a0, a1)), Ok((b0, b1))) = (sk::line(s, a), sk::line(s, b)) else {
+                (D::Ang, [a, b]) => {
+                    let (Ok((a0, a1)), Ok((b0, b1))) =
+                        (sk::line(s, &a.to_string()), sk::line(s, &b.to_string()))
+                    else {
                         continue;
                     };
                     // about where the two lines (or their run on) meet
@@ -595,15 +671,15 @@ impl SketchMode {
                     let r = ((u.0 * u.0 + u.1 * u.1).sqrt()).min((v.0 * v.0 + v.1 * v.1).sqrt()) * 0.6;
                     Some(Measure::Sweep(c, r, t0, t1))
                 }
-                [w, c] if w == "dia" || w == "rad" => s
+                (D::Dia | D::Rad, [c]) => s
                     .names
                     .iter()
-                    .find(|n| n.0 == *c)
-                    .and_then(|(_, id)| Some(Measure::Round(at(c)?, s.solved.radius(*id), w == "dia"))),
+                    .find(|n| n.0 == c.base)
+                    .and_then(|(_, id)| Some(Measure::Round(at(c)?, s.solved.radius(*id), d == D::Dia))),
                 _ => None,
             };
             if let Some(m) = measure {
-                out.push((k, words.join(" "), value.clone(), m));
+                out.push((k, (d, words.to_vec()), value.clone(), m));
             }
         }
         out
@@ -634,6 +710,7 @@ impl SketchMode {
     /// Chooses the geometry under the pointer (or lets it go again), for Delete.
     pub fn choose_at(&mut self, at: (f64, f64), reach: f64) {
         let (w, _) = self.word_at(at, reach);
+        let w = w.named().map(|r| r.to_string()).unwrap_or_default();
         let hit = if w.starts_with('p') && !w.contains(['.', ' ']) {
             Some(w)
         } else {
@@ -663,7 +740,7 @@ impl SketchMode {
             self.rows
                 .iter()
                 .map(|r| {
-                    super::fgsketch::made(&tokens(r))
+                    r.made()
                         .into_iter()
                         .map(|k| {
                             let c = counts.entry(k).or_default();
@@ -674,12 +751,11 @@ impl SketchMode {
                 })
                 .collect()
         };
-        let base = |t: &str| t.split('.').next().unwrap_or(t).to_string();
         loop {
             let dead: Vec<&String> = gone.iter().flat_map(|&k| &made[k]).collect();
             let more: Vec<usize> = (0..self.rows.len())
                 .filter(|k| !gone.contains(k))
-                .filter(|&k| tokens(&self.rows[k]).iter().any(|t| dead.contains(&&base(t))))
+                .filter(|&k| self.rows[k].refs().iter().any(|r| dead.contains(&&r.base)))
                 .collect();
             if more.is_empty() {
                 break;
@@ -699,17 +775,16 @@ impl SketchMode {
                 renamed.insert(n.clone(), format!("{kind}{c}"));
             }
         }
-        let rows: Vec<String> = (0..self.rows.len())
+        let rows: Vec<Row> = (0..self.rows.len())
             .filter(|k| !gone.contains(k))
             .map(|k| {
-                tokens(&self.rows[k])
-                    .iter()
-                    .map(|t| match t.split_once('.') {
-                        Some((b, rest)) if renamed.contains_key(b) => format!("{}.{rest}", renamed[b]),
-                        _ => renamed.get(t).cloned().unwrap_or_else(|| t.clone()),
-                    })
-                    .collect::<Vec<_>>()
-                    .join(" ")
+                let mut r = self.rows[k].clone();
+                for x in r.refs_mut() {
+                    if let Some(n) = renamed.get(&x.base) {
+                        x.base = n.clone();
+                    }
+                }
+                r
             })
             .collect();
         let n = self.opened_at.len().min(self.rows.len());
@@ -730,18 +805,6 @@ impl SketchMode {
             self.solved = None;
             self.solve();
         }
-    }
-
-    /// The block as a part file holds it.
-    pub fn block(&self) -> String {
-        let mut out = format!("sketch {}\n", self.head);
-        for r in &self.rows {
-            out.push_str("  ");
-            out.push_str(r);
-            out.push('\n');
-        }
-        out.push_str("end\n");
-        out
     }
 
     pub fn set_tool(&mut self, t: Option<SkTool>) {
@@ -780,17 +843,14 @@ impl SketchMode {
     /// A spline being drawn: ends it, open, if it has points enough.
     pub fn finish_spline(&mut self, closed: bool) {
         if self.picks.len() >= 2 {
-            let open = if closed { "" } else { " open" };
+            let pts = self.picks.clone();
             // control vertices: a cubic B-spline, or as cubic as few points allow
-            let word = if self.tool == Some(SkTool::SplineCv) {
-                format!(
-                    "bspline {}",
-                    3.min(self.picks.len() - 1 - usize::from(closed)).max(1)
-                )
+            let row = if self.tool == Some(SkTool::SplineCv) {
+                let degree = 3.min(self.picks.len() - 1 - usize::from(closed)).max(1);
+                Row::BSpline(V::N(degree as f64), pts, !closed)
             } else {
-                "spline".to_string()
+                Row::Spline(pts, !closed)
             };
-            let row = format!("{word} {}{open}", self.picks.join(" "));
             self.add(row);
         }
         self.picks.clear();
@@ -908,8 +968,8 @@ impl SketchMode {
         best.map(|b| b.1)
     }
 
-    /// A word for a place: a point of the sketch if one's within reach, otherwise its numbers.
-    fn word_at(&self, at: (f64, f64), reach: f64) -> (String, (f64, f64)) {
+    /// A pick at a place: a point of the sketch if one's within reach, otherwise the place.
+    fn word_at(&self, at: (f64, f64), reach: f64) -> (Pt, (f64, f64)) {
         let near = self
             .points()
             .into_iter()
@@ -917,12 +977,12 @@ impl SketchMode {
             .filter(|c| c.0 < reach)
             .min_by(|a, b| a.0.total_cmp(&b.0));
         match near {
-            Some((_, n, p)) => (n, p),
+            Some((_, n, p)) => (Pt::of(&n), p),
             None => {
                 let tidy = |v: f64| (v * 100.0).round() / 100.0;
                 let (x, y) = (tidy(at.0), tidy(at.1));
                 (
-                    format!("{} {}", forge_agent::short(x), forge_agent::short(y)),
+                    Pt::At(V::of(&forge_agent::short(x)), V::of(&forge_agent::short(y))),
                     (x, y),
                 )
             }
@@ -938,8 +998,8 @@ impl SketchMode {
     /// What's typed, as a row writes it.
     fn file_of(&self, f: &Field) -> String {
         let is_param = |w: &str| self.params.iter().any(|p| p.0 == w);
-        let kind = super::panel::field_kind(f.label).unwrap_or(forge_doc::units::Kind::Length);
-        forge_doc::units::field_file(&f.text, kind, self.units, &is_param)
+        let kind = super::panel::field_kind(f.label).unwrap_or(forge_lang::units::Kind::Length);
+        forge_lang::units::field_file(&f.text, kind, self.units, &is_param)
     }
 
     fn next_name(&self, kind: char) -> usize {
@@ -992,7 +1052,7 @@ impl SketchMode {
             .filter(|c| c.0 < reach)
             .min_by(|a, b| a.0.total_cmp(&b.0));
         if let Some((_, n, p)) = near {
-            return Some((n, p, Glyph::Coincident, Vec::new()));
+            return Some((Pt::of(&n), p, Glyph::Coincident, Vec::new()));
         }
         let s = self.solved.as_ref()?;
         let mid = s
@@ -1008,8 +1068,8 @@ impl SketchMode {
         let (l, m) = mid?;
         // the middle becomes a real point, tied to it, only when it's used
         let p = format!("p{}", self.next_name('p'));
-        let rows = vec![format!("pt {} {}", m.0, m.1), format!("mid {p} {l}")];
-        Some((p, m, Glyph::Midpoint, rows))
+        let rows = vec![Row::Pt(Pt::at(m.0, m.1)), Row::Mid(Ref::to(&p), Ref::to(&l))];
+        Some((Pt::of(&p), m, Glyph::Midpoint, rows))
     }
 
     /// A round thing's rim near this place that a line from `from` can leave tangent: its name and
@@ -1089,12 +1149,12 @@ impl SketchMode {
     pub fn draft(&self, at: (f64, f64), reach: f64) -> Draft {
         let mut d = Draft::default();
         let Some(tool) = self.tool else { return d };
-        let n = |v: f64| v.to_string();
+        let n = V::N;
         let snapped = self.snap(at, reach);
         if let Some((_, p, g, _)) = &snapped {
             d.glyphs.push((*g, *p));
         }
-        let point_of = |d: &mut Draft, free: (f64, f64)| -> (String, (f64, f64)) {
+        let point_of = |d: &mut Draft, free: (f64, f64)| -> (Pt, (f64, f64)) {
             match &snapped {
                 Some((w, p, _, rows)) => {
                     d.rows.extend(rows.iter().cloned());
@@ -1102,7 +1162,7 @@ impl SketchMode {
                 }
                 None => {
                     let p = (tidy(free.0), tidy(free.1));
-                    (format!("{} {}", n(p.0), n(p.1)), p)
+                    (Pt::At(n(p.0), n(p.1)), p)
                 }
             }
         };
@@ -1111,16 +1171,11 @@ impl SketchMode {
                 // the curve it'll be, through the pointer too
                 let mut pts = self.pick_at.clone();
                 pts.push(at);
-                let words: Vec<String> = self
-                    .picks
-                    .iter()
-                    .cloned()
-                    .chain([format!("{} {}", at.0, at.1)])
-                    .collect();
+                let words: Vec<Pt> = self.picks.iter().cloned().chain([Pt::at(at.0, at.1)]).collect();
                 let row = if tool == SkTool::SplineCv {
-                    format!("bspline {} {} open", 3.min(words.len() - 1), words.join(" "))
+                    Row::BSpline(V::N(3.min(words.len() - 1) as f64), words, true)
                 } else {
-                    format!("spline {} open", words.join(" "))
+                    Row::Spline(words, true)
                 };
                 let mut rows = self.rows.clone();
                 rows.push(row);
@@ -1144,8 +1199,8 @@ impl SketchMode {
             }
             (SkTool::Point, _) => {
                 let (w, p) = point_of(&mut d, at);
-                d.rows.push(format!("pt {w}"));
-                d.end = Some((String::new(), p));
+                d.rows.push(Row::Pt(w.clone()));
+                d.end = Some((w, p));
             }
             (SkTool::Line, 1) => {
                 let a = self.pick_at[0];
@@ -1167,7 +1222,7 @@ impl SketchMode {
                     length = (dx * dx + dy * dy).sqrt();
                     typed = true;
                     d.glyphs.push((Glyph::Tangent, *t));
-                    relation.push(format!("tan {line} {round}"));
+                    relation.push(Row::Tan(Ref::to(&line), Ref::to(round)));
                 } else if let Some(deg) = ang_on {
                     let r = deg * core::f64::consts::PI / 180.0;
                     (dx, dy) = (
@@ -1181,11 +1236,11 @@ impl SketchMode {
                     if unit.1.abs() < INFER {
                         dy = 0.0;
                         d.glyphs.push((Glyph::Horizontal, (a.0 + dx, a.1)));
-                        relation.push(format!("hor {line}"));
+                        relation.push(Row::Hor(vec![Ref::to(&line)]));
                     } else if unit.0.abs() < INFER {
                         dx = 0.0;
                         d.glyphs.push((Glyph::Vertical, (a.0, a.1 + dy)));
-                        relation.push(format!("ver {line}"));
+                        relation.push(Row::Ver(vec![Ref::to(&line)]));
                     } else {
                         for (o, w) in self.line_ways() {
                             let cross = unit.0 * w.1 - unit.1 * w.0;
@@ -1194,14 +1249,14 @@ impl SketchMode {
                                 let s = dx * w.0 + dy * w.1;
                                 (dx, dy) = (w.0 * s, w.1 * s);
                                 d.glyphs.push((Glyph::Parallel, (a.0 + dx, a.1 + dy)));
-                                relation.push(format!("par {line} {o}"));
+                                relation.push(Row::Par(Ref::to(&line), Ref::to(&o)));
                                 break;
                             }
                             if dot.abs() < INFER {
                                 let s = -dx * w.1 + dy * w.0;
                                 (dx, dy) = (-w.1 * s, w.0 * s);
                                 d.glyphs.push((Glyph::Perpendicular, (a.0 + dx, a.1 + dy)));
-                                relation.push(format!("perp {line} {o}"));
+                                relation.push(Row::Perp(Ref::to(&line), Ref::to(&o)));
                                 break;
                             }
                         }
@@ -1215,8 +1270,9 @@ impl SketchMode {
                 }
                 // from a tangent end, within a hair: tangent
                 if let Some(arc) = from
-                    .strip_suffix(".b")
-                    .or(from.strip_suffix(".a"))
+                    .named()
+                    .filter(|r| matches!(r.part, rows::Part::A | rows::Part::B))
+                    .map(|r| r.base.clone())
                     .filter(|w| w.starts_with(['a', 'j']))
                     && let Some(s) = &self.solved
                     && let Some((_, id)) = s.names.iter().find(|x| x.0 == arc)
@@ -1227,7 +1283,7 @@ impl SketchMode {
                     let r = (rx * rx + ry * ry).sqrt().max(1e-9);
                     if ((dx * rx + dy * ry) / (r * length.max(1e-9))).abs() < INFER {
                         d.glyphs.push((Glyph::Tangent, a));
-                        relation.push(format!("tan {line} {arc}"));
+                        relation.push(Row::Tan(Ref::to(&line), Ref::to(&arc)));
                     }
                 }
                 let end = (a.0 + dx, a.1 + dy);
@@ -1240,13 +1296,17 @@ impl SketchMode {
                     } else {
                         (tidy(end.0), tidy(end.1))
                     };
-                    (format!("{} {}", n(e.0), n(e.1)), e)
+                    (Pt::At(n(e.0), n(e.1)), e)
                 };
                 d.rows.extend(self.first_rows.iter().cloned());
-                d.rows.push(format!("line {from} {word}"));
+                d.rows.push(Row::Line(from, word));
                 d.rows.extend(relation);
                 if let Some(f) = self.fields.first().filter(|f| f.locked) {
-                    d.rows.push(format!("dist {line} {}", self.file_of(f)));
+                    d.rows.push(Row::Dim(
+                        D::Dist,
+                        vec![Ref::to(&line)],
+                        Some(V::of(&self.file_of(f))),
+                    ));
                 }
                 d.lines.push((a, end));
                 let way = (dx / length.max(1e-9), dy / length.max(1e-9));
@@ -1256,7 +1316,7 @@ impl SketchMode {
                     angle * 180.0 / core::f64::consts::PI,
                     Measure::Sweep(a, length * 0.5, 0.0, angle),
                 ));
-                d.end = Some((format!("{line}.b"), end));
+                d.end = Some((Pt::R(Ref::b(&line)), end));
             }
             (SkTool::Rectangle, 1) => {
                 let a = self.pick_at[0];
@@ -1271,8 +1331,8 @@ impl SketchMode {
                 let (x, y) = (a.0.min(b.0), a.1.min(b.1));
                 let l = self.next_name('l');
                 d.rows.extend(self.first_rows.iter().cloned());
-                d.rows.push(format!("rect {} {} {} {}", n(x), n(y), n(w), n(h)));
-                if !self.picks[0].contains(' ') {
+                d.rows.push(Row::Rect(n(x), n(y), n(w), n(h)));
+                if let Some(start) = self.picks[0].named() {
                     // the corner it started from is the point it snapped to
                     let corner = match (sx > 0.0, sy > 0.0) {
                         (true, true) => l,
@@ -1280,14 +1340,16 @@ impl SketchMode {
                         (false, false) => l + 2,
                         (true, false) => l + 3,
                     };
-                    d.rows.push(format!("co l{corner}.a {}", self.picks[0]));
+                    d.rows.push(Row::Co(Ref::a(&format!("l{corner}")), start.clone()));
                 }
+                let side = |k: usize| vec![Ref::a(&format!("l{k}")), Ref::b(&format!("l{k}"))];
                 if let Some(f) = self.fields.first().filter(|f| f.locked) {
-                    d.rows.push(format!("hdist l{l}.a l{l}.b {}", self.file_of(f)));
+                    d.rows
+                        .push(Row::Dim(D::HDist, side(l), Some(V::of(&self.file_of(f)))));
                 }
                 if let Some(f) = self.fields.get(1).filter(|f| f.locked) {
                     d.rows
-                        .push(format!("vdist l{0}.a l{0}.b {1}", l + 1, self.file_of(f)));
+                        .push(Row::Dim(D::VDist, side(l + 1), Some(V::of(&self.file_of(f)))));
                 }
                 let corners = [(x, y), (x + w, y), (x + w, y + h), (x, y + h)];
                 for k in 0..4 {
@@ -1296,7 +1358,7 @@ impl SketchMode {
                 d.values.push((w, Measure::Along((x, y), (x + w, y), (1.0, 0.0))));
                 d.values
                     .push((h, Measure::Along((x + w, y), (x + w, y + h), (0.0, 1.0))));
-                d.end = Some((String::new(), b));
+                d.end = Some((Pt::at(b.0, b.1), b));
             }
             (SkTool::Circle, 1) => {
                 let c = self.pick_at[0];
@@ -1307,13 +1369,17 @@ impl SketchMode {
                 );
                 let name = self.next_name('c');
                 d.rows.extend(self.first_rows.iter().cloned());
-                d.rows.push(format!("circle {} {}", self.picks[0], n(r)));
+                d.rows.push(Row::Circle(self.picks[0].clone(), n(r)));
                 if let Some(f) = self.fields.first().filter(|f| f.locked) {
-                    d.rows.push(format!("dia c{name} {}", self.file_of(f)));
+                    d.rows.push(Row::Dim(
+                        D::Dia,
+                        vec![Ref::to(&format!("c{name}"))],
+                        Some(V::of(&self.file_of(f))),
+                    ));
                 }
                 d.circle = Some((c, r));
                 d.values.push((r * 2.0, Measure::Round(c, r, true)));
-                d.end = Some((String::new(), c));
+                d.end = Some((Pt::at(c.0, c.1), c));
             }
             (SkTool::Arc, 1) => {
                 let c = self.pick_at[0];
@@ -1324,7 +1390,8 @@ impl SketchMode {
                 d.circle = Some((c, radius));
                 d.values.push((radius, Measure::Round(c, radius, false)));
                 let s = radius / r.max(1e-9);
-                d.end = Some((String::new(), (c.0 + rx * s, c.1 + ry * s)));
+                let e = (c.0 + rx * s, c.1 + ry * s);
+                d.end = Some((Pt::at(e.0, e.1), e));
             }
             (SkTool::Arc, 2) => {
                 let (c, st) = (self.pick_at[0], self.pick_at[1]);
@@ -1345,16 +1412,15 @@ impl SketchMode {
                 );
                 d.arc = Some((c, radius, t0, t1));
                 d.rows.extend(self.first_rows.iter().cloned());
-                d.rows.push(format!(
-                    "arc {} {} {} {}",
-                    self.picks[0],
-                    self.picks[1],
-                    n(end.0),
-                    n(end.1)
+                d.rows.push(Row::Arc(
+                    self.picks[0].clone(),
+                    self.picks[1].clone(),
+                    Pt::At(n(end.0), n(end.1)),
+                    false,
                 ));
                 d.values
                     .push(((t1 - t0) / deg, Measure::Sweep(c, radius * 1.15, t0, t1)));
-                d.end = Some((String::new(), end));
+                d.end = Some((Pt::at(end.0, end.1), end));
             }
             _ => self.more_draft(tool, at, reach, &mut d),
         }
@@ -1409,10 +1475,13 @@ impl SketchMode {
                         let d = self.draft(at, reach);
                         let Some((_, p)) = d.end else { return };
                         if let Some(f) = self.fields.first().filter(|f| f.locked) {
-                            self.first_rows
-                                .push(format!("rad a{} {}", self.next_name('a'), self.file_of(f)));
+                            self.first_rows.push(Row::Dim(
+                                D::Rad,
+                                vec![Ref::to(&format!("a{}", self.next_name('a')))],
+                                Some(V::of(&self.file_of(f))),
+                            ));
                         }
-                        self.picks.push(format!("{} {}", p.0, p.1));
+                        self.picks.push(Pt::at(p.0, p.1));
                         self.pick_at.push(p);
                     } else {
                         match self.snap(at, reach) {
@@ -1423,7 +1492,7 @@ impl SketchMode {
                             }
                             None => {
                                 let p = (tidy(at.0), tidy(at.1));
-                                self.picks.push(format!("{} {}", p.0, p.1));
+                                self.picks.push(Pt::at(p.0, p.1));
                                 self.pick_at.push(p);
                             }
                         }
@@ -1434,7 +1503,7 @@ impl SketchMode {
                 let d = self.draft(at, reach);
                 let end = d.end.clone();
                 // an arc's radius is written after its row
-                let trailing: Vec<String> = if tool == SkTool::Arc {
+                let trailing: Vec<Row> = if tool == SkTool::Arc {
                     std::mem::take(&mut self.first_rows)
                 } else {
                     self.first_rows.clear();
@@ -1459,14 +1528,17 @@ impl SketchMode {
             SkTool::Parallel | SkTool::Perpendicular | SkTool::Tangent => {
                 let kinds = if tool == SkTool::Tangent { "lcase" } else { "l" };
                 if let Some(e) = self.entity_near(at, reach, kinds) {
-                    self.picks.push(e);
+                    self.picks.push(Pt::of(&e));
                     if self.picks.len() == 2 {
-                        let word = match tool {
-                            SkTool::Parallel => "par",
-                            SkTool::Perpendicular => "perp",
-                            _ => "tan",
+                        let (a, b) = (
+                            self.picks[0].named().cloned().expect("an entity"),
+                            self.picks[1].named().cloned().expect("an entity"),
+                        );
+                        let row = match tool {
+                            SkTool::Parallel => Row::Par(a, b),
+                            SkTool::Perpendicular => Row::Perp(a, b),
+                            _ => Row::Tan(a, b),
                         };
-                        let row = format!("{word} {} {}", self.picks[0], self.picks[1]);
                         self.add(row);
                         self.picks.clear();
                     }
@@ -1494,19 +1566,23 @@ impl SketchMode {
 
     fn pick_two_points(&mut self, at: (f64, f64), reach: f64) {
         let (w, _) = self.word_at(at, reach);
-        if w.contains(' ') {
+        if w.named().is_none() {
             return;
         }
         self.picks.push(w);
         if self.picks.len() == 2 {
-            let row = format!("co {} {}", self.picks[0], self.picks[1]);
+            let (a, b) = (
+                self.picks[0].named().cloned().expect("a point"),
+                self.picks[1].named().cloned().expect("a point"),
+            );
+            let row = Row::Co(a, b);
             self.add(row);
             self.picks.clear();
         }
     }
 
     /// What a dimension here would be: the row without its value, and the value as it stands.
-    pub fn dimension_at(&self, at: (f64, f64), reach: f64) -> Option<(String, f64)> {
+    pub fn dimension_at(&self, at: (f64, f64), reach: f64) -> Option<(Dimmed, f64)> {
         let s = self.solved.as_ref()?;
         let e = self.entity_near(at, reach, "lcae")?;
         if let Some((_, id)) = s.names.iter().find(|n| n.0 == e)
@@ -1517,21 +1593,21 @@ impl SketchMode {
                 return None;
             };
             let lo = s.solved.params()[b];
-            return Some((format!("rad {e}"), lo));
+            return Some(((D::Rad, vec![Ref::to(&e)]), lo));
         }
         if e.starts_with('l') {
             let (p, q) = sk::line(s, &e).ok()?;
             Some((
-                format!("dist {e}"),
+                (D::Dist, vec![Ref::to(&e)]),
                 ((p.x - q.x).powi(2) + (p.y - q.y).powi(2)).sqrt(),
             ))
         } else {
             let (_, id) = s.names.iter().find(|n| n.0 == e)?;
             let r = s.solved.radius(*id);
             if e.starts_with('c') {
-                Some((format!("dia {e}"), r * 2.0))
+                Some(((D::Dia, vec![Ref::to(&e)]), r * 2.0))
             } else {
-                Some((format!("rad {e}"), r))
+                Some(((D::Rad, vec![Ref::to(&e)]), r))
             }
         }
     }
@@ -1541,7 +1617,7 @@ impl SketchMode {
         match self.tool? {
             SkTool::Coincident => {
                 let (w, _) = self.word_at(at, reach);
-                (!w.contains(' ')).then_some(w)
+                w.named().map(|r| r.to_string())
             }
             SkTool::Parallel | SkTool::Perpendicular => self.entity_near(at, reach, "l"),
             SkTool::Tangent => self.entity_near(at, reach, "lcase"),
@@ -1553,10 +1629,9 @@ impl SketchMode {
             SkTool::Symmetric if self.picks.len() >= 2 => self.entity_near(at, reach, "l"),
             SkTool::Fix | SkTool::Symmetric => {
                 let (w, _) = self.word_at(at, reach);
-                if w.contains(' ') {
-                    self.entity_near(at, reach, "lcas")
-                } else {
-                    Some(w)
+                match w.named() {
+                    Some(r) => Some(r.to_string()),
+                    None => self.entity_near(at, reach, "lcas"),
                 }
             }
             SkTool::Mirror if self.more.placing => self.entity_near(at, reach, "l"),
@@ -1568,8 +1643,8 @@ impl SketchMode {
     /// What Measure would take here: one of the sketch's points, else a curve.
     pub fn measure_word(&self, at: (f64, f64), reach: f64) -> Option<String> {
         let (w, _) = self.word_at(at, reach);
-        if !w.contains(' ') {
-            return Some(w);
+        if let Some(r) = w.named() {
+            return Some(r.to_string());
         }
         self.entity_near(at, reach, "lcasej")
     }
@@ -1732,31 +1807,32 @@ impl SketchMode {
         }
     }
 
-    /// The constraint rows that have a mark: the row, its icon, and the words it ties together.
-    pub fn glyph_rows(&self) -> Vec<(String, &'static str, Vec<String>)> {
+    /// The constraint rows that have a mark: the row's number, its icon, and the names it ties
+    /// together.
+    pub fn glyph_rows(&self) -> Vec<(usize, &'static str, Vec<String>)> {
         if self.more.hide_glyphs {
             return Vec::new();
         }
         self.rows
             .iter()
-            .filter_map(|r| {
-                let t = tokens(r);
-                let icon = match t.first()?.as_str() {
-                    "hor" => "minimize",
-                    "ver" => "axis",
-                    "par" => "parallel",
-                    "perp" => "perp",
-                    "tan" => "tangent",
-                    "co" => "coincident",
-                    "mid" => "point",
-                    "colin" => "collinear",
-                    "conc" => "concentric",
-                    "fix" => "fix",
-                    "sym" => "symmetric",
-                    "eq" => "equal",
+            .enumerate()
+            .filter_map(|(k, r)| {
+                let icon = match r {
+                    Row::Hor(_) => "minimize",
+                    Row::Ver(_) => "axis",
+                    Row::Par(..) => "parallel",
+                    Row::Perp(..) => "perp",
+                    Row::Tan(..) => "tangent",
+                    Row::Co(..) => "coincident",
+                    Row::Mid(..) => "point",
+                    Row::Colin(..) => "collinear",
+                    Row::Conc(..) => "concentric",
+                    Row::Fix(_) => "fix",
+                    Row::Sym(..) => "symmetric",
+                    Row::Eq(_) => "equal",
                     _ => return None,
                 };
-                Some((r.clone(), icon, t[1..].to_vec()))
+                Some((k, icon, r.refs().iter().map(|x| x.to_string()).collect()))
             })
             .collect()
     }
@@ -1774,7 +1850,7 @@ fn is_construction(m: &SketchMode, name: &str) -> bool {
     m.rows
         .iter()
         .enumerate()
-        .any(|(k, r)| r.ends_with(" cons") && m.row_of(name) == Some(k))
+        .any(|(k, r)| r.is_cons() && m.row_of(name) == Some(k))
 }
 
 impl Shell {
@@ -1922,7 +1998,7 @@ impl Shell {
                 } else {
                     (ink, line)
                 };
-                let line = if m.rows.iter().any(|r| r.ends_with(" cons")) && is_construction(&m, name) {
+                let line = if m.rows.iter().any(Row::is_cons) && is_construction(&m, name) {
                     Stroke::new(1.0, ink.gamma_multiply(0.6))
                 } else {
                     line
@@ -2015,6 +2091,7 @@ impl Shell {
         let mut stacked: std::collections::HashMap<String, usize> = Default::default();
         let mut glyph_over = None;
         for (row, icon, words) in &glyph_rows {
+            let row = *row;
             let Some(first) = words.first() else { continue };
             let pts = m.outline_of(first);
             let Some(mid) = pts.get(pts.len() / 2).copied().or(pts.first().copied()) else {
@@ -2032,15 +2109,20 @@ impl Shell {
             p.rect_filled(chip, 3.0, t.surface);
             p.rect_stroke(chip, 3.0, Stroke::new(1.0, t.line), egui::StrokeKind::Inside);
             super::icons::draw(&p, chip.min + vec2(2.0, 2.0), 14.0, icon, 1.25, t.ink);
-            self.places.push((format!("sketch:glyph:{row}"), chip));
+            self.places.push((format!("sketch:glyph:{}", m.rows[row]), chip));
             if hover_at.is_some_and(|at| chip.contains(at)) {
-                glyph_over = Some(row.clone());
+                glyph_over = Some(row);
                 for w in words {
                     mark(w, 3.0, t.focus);
                 }
             }
         }
-        for w in m.picks.iter().filter(|w| !w.contains(' ')).chain(&m.more.sel) {
+        let picked: Vec<String> = m
+            .picks
+            .iter()
+            .filter_map(|w| w.named().map(|r| r.to_string()))
+            .collect();
+        for w in picked.iter().chain(&m.more.sel) {
             mark(w, 3.0, t.focus);
         }
         // each entity that can still move, marked so, when asked
@@ -2202,9 +2284,9 @@ impl Shell {
                     continue;
                 };
                 let Some(at_px) = pen.draw(what) else { continue };
-                let kind = super::panel::field_kind(f.label).unwrap_or(forge_doc::units::Kind::Length);
+                let kind = super::panel::field_kind(f.label).unwrap_or(forge_lang::units::Kind::Length);
                 if !f.locked {
-                    f.text = forge_doc::units::number_in(value, kind, units);
+                    f.text = forge_lang::units::number_in(value, kind, units);
                 }
                 let id = egui::Id::unique("sketch-field").with(k);
                 // never under the pointer, where it would take the next click
@@ -2291,12 +2373,12 @@ impl Shell {
             if cursor.is_some() && ctx.input(|i| i.pointer.primary_clicked()) && self.modal_clear() {
                 if tool == SkTool::Dimension {
                     if let (Some((row, value)), Some(pos)) = (m.dimension_pick(at, reach), over) {
-                        let kind = if row.starts_with("ang") {
-                            forge_doc::units::Kind::Angle
+                        let kind = if row.0 == D::Ang {
+                            forge_lang::units::Kind::Angle
                         } else {
-                            forge_doc::units::Kind::Length
+                            forge_lang::units::Kind::Length
                         };
-                        let shown = forge_doc::units::number_in(value, kind, m.units);
+                        let shown = forge_lang::units::number_in(value, kind, m.units);
                         m.asking = Some((row, pos, shown));
                     }
                 } else {
@@ -2311,19 +2393,20 @@ impl Shell {
         let middle = m.middle();
         let values_of = m.params.clone();
         let doc_unit = m.units;
-        let shown_value = |text: &str, kind: forge_doc::units::Kind| {
-            if !forge_doc::units::is_bare(text)
+        let shown_value = |value: &V, kind: forge_lang::units::Kind| {
+            let text = &value.to_string();
+            if !forge_lang::units::is_bare(text)
                 && text.parse::<f64>().is_err()
                 && text.chars().any(|c| c.is_ascii_digit())
-                && forge_doc::units::to_person(text) != text
+                && forge_lang::units::to_person(text) != *text
             {
-                return forge_doc::units::to_person(text);
+                return forge_lang::units::to_person(text);
             }
             match num_of(&values_of)(text, Want::Len) {
                 Ok(v) => format!(
                     "{} {}",
-                    forge_doc::units::number_in(v, kind, doc_unit),
-                    forge_doc::units::unit_of(kind, doc_unit)
+                    forge_lang::units::number_in(v, kind, doc_unit),
+                    forge_lang::units::unit_of(kind, doc_unit)
                 ),
                 Err(_) => text.to_string(),
             }
@@ -2347,25 +2430,25 @@ impl Shell {
                     let Some(pos) = pen.draw(*what) else { continue };
                     let text = match what {
                         Measure::Round(_, _, true) => {
-                            format!("\u{D8}{}", shown_value(value, forge_doc::units::Kind::Length))
+                            format!("\u{D8}{}", shown_value(value, forge_lang::units::Kind::Length))
                         }
                         Measure::Round(_, _, false) => {
-                            format!("R{}", shown_value(value, forge_doc::units::Kind::Length))
+                            format!("R{}", shown_value(value, forge_lang::units::Kind::Length))
                         }
-                        Measure::Sweep(..) => shown_value(value, forge_doc::units::Kind::Angle),
-                        _ => shown_value(value, forge_doc::units::Kind::Length),
+                        Measure::Sweep(..) => shown_value(value, forge_lang::units::Kind::Angle),
+                        _ => shown_value(value, forge_lang::units::Kind::Length),
                     };
                     let g = ui.fonts_mut(|f| f.layout_no_wrap(text, mono(12.0), t.ink));
                     let r = Rect::from_center_size(pos, g.size() + vec2(10.0, 6.0));
                     let resp = ui.interact(r, ui.scope_id().with(("dim", *k)), Sense::click());
                     // the number's what's shown; what it's written as is here and in its field
-                    let resp = if value.parse::<f64>().is_err() {
-                        resp.on_hover_text(value)
+                    let resp = if value.num().is_none() {
+                        resp.on_hover_text(value.to_string())
                     } else {
                         resp
                     };
                     self.view_blocks.push(r);
-                    self.places.push((format!("sketch:dim:{words}"), r));
+                    self.places.push((format!("sketch:dim:{}", dim_words(words)), r));
                     p.rect_filled(r, 3.0, if resp.hovered() { t.on } else { t.surface });
                     p.galley(r.min + vec2(5.0, 3.0), g, t.ink);
                     if resp.clicked() {
@@ -2378,7 +2461,7 @@ impl Shell {
             self.places.truncate(placed_before);
         }
         if let Some((k, words, pos, value)) = ask_chip {
-            m.asking = Some((words, pos - vec2(12.0, -13.0), value));
+            m.asking = Some((words, pos - vec2(12.0, -13.0), value.to_string()));
             m.asking_row = Some(k);
         }
 
@@ -2403,14 +2486,14 @@ impl Shell {
                     f.request_focus();
                     self.places.push(("sketch:dim".to_string(), r));
                     if ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-                        let kind = if row.starts_with("ang") {
-                            forge_doc::units::Kind::Angle
+                        let kind = if row.0 == D::Ang {
+                            forge_lang::units::Kind::Angle
                         } else {
-                            forge_doc::units::Kind::Length
+                            forge_lang::units::Kind::Length
                         };
                         let is_param = |w: &str| values_of.iter().any(|p| p.0 == w);
-                        let file = forge_doc::units::field_file(text, kind, doc_unit, &is_param);
-                        asked = Some(format!("{row} {file}"));
+                        let file = forge_lang::units::field_file(text, kind, doc_unit, &is_param);
+                        asked = Some(Row::Dim(row.0, row.1.clone(), Some(V::of(&file))));
                     }
                 });
             // what it named unseen, sizing itself, is off
@@ -2566,9 +2649,9 @@ impl Shell {
         self.view_blocks.push(r.response.rect);
     }
 
-    /// No menu or dialog is in the way of a click.
+    /// No menu is in the way of a click.
     fn modal_clear(&self) -> bool {
-        !self.menu_open() && self.dialog.is_none()
+        !self.menu_open()
     }
 
     /// The ribbon's sketch tools, as actions.
@@ -2633,9 +2716,11 @@ fn inside_point(loops: &[Vec<Point2>]) -> Point2 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rows::Row;
+    use rows::dsl::*;
 
     fn mode() -> SketchMode {
-        SketchMode::new(SketchFor::New, "xy".into(), Frame::default(), Vec::new(), None)
+        SketchMode::new(SketchFor::New, "xy".into(), Frame::default(), Vec::new())
     }
 
     #[test]
@@ -2650,13 +2735,13 @@ mod tests {
             dir: Vec3::new(1.0, 0.0, 0.0).normalize().unwrap(),
         });
         let refd = sk::Refd {
-            sources: vec![(Name(1), axis)],
+            sources: vec![(Name(1), sk::Src::Model(axis))],
             one: true,
         };
-        assert!(!m.project("@e12345678".into(), Ok(vec![refd])));
+        assert!(!m.project(Ok(vec![("ax".into(), refd)])));
         assert!(m.rows.is_empty(), "{:?}", m.rows);
         assert!(m.error.as_deref().unwrap().contains("no ends"), "{:?}", m.error);
-        assert!(!m.project("@e12345678".into(), Err("gone".into())));
+        assert!(!m.project(Err("gone".into())));
         assert_eq!(m.error.as_deref(), Some("gone"));
     }
 
@@ -2690,15 +2775,29 @@ mod tests {
             closed: false,
         };
         let one = |s| sk::Refd {
-            sources: vec![(Name(1), s)],
+            sources: vec![(Name(1), sk::Src::Model(s))],
             one: true,
         };
         assert!(
-            m.project("@e1111aaaa @e2222bbbb".into(), Ok(vec![one(rim), one(bent)])),
+            m.project(Ok(vec![("rim".into(), one(rim)), ("bent".into(), one(bent))])),
             "{:?}",
             m.error
         );
-        assert_eq!(m.rows, ["project @e1111aaaa", "project @e2222bbbb approx 0.001"]);
+        assert_eq!(
+            m.rows,
+            [
+                Row::Project {
+                    of: "rim".into(),
+                    many: false,
+                    approx: None
+                },
+                Row::Project {
+                    of: "bent".into(),
+                    many: false,
+                    approx: Some(v("0.001"))
+                }
+            ]
+        );
         let s = m.solved.as_ref().unwrap();
         let kinds: Vec<_> = s.names.iter().map(|n| s.solved.entity(n.1).unwrap()).collect();
         assert!(
@@ -2706,6 +2805,13 @@ mod tests {
             "{kinds:?}"
         );
         assert!(matches!(kinds[1], Entity::Spline { .. }), "{kinds:?}");
+        // what's projected already is not again
+        let again = sk::Refd {
+            sources: vec![],
+            one: true,
+        };
+        assert!(!m.project(Ok(vec![("rim".into(), again)])));
+        assert_eq!(m.rows.len(), 2);
     }
 
     #[test]
@@ -2713,25 +2819,63 @@ mod tests {
         use forge_math::Point3;
         use forge_topo::Name;
         let mut m = mode();
-        let line = sk::Source::Edge {
+        let line = |a: Point3, b: Point3| sk::Source::Edge {
             curve: forge_geom::Curve::Line(forge_geom::Line {
-                origin: Point3::ORIGIN,
-                dir: forge_math::Vec3::new(1.0, 0.0, 0.0).normalize().unwrap(),
+                origin: a,
+                dir: (b - a).normalize().unwrap(),
             }),
-            range: forge_math::Interval::new(0.0, 10.0),
-            start: Point3::ORIGIN,
-            end: Point3::new(10.0, 0.0, 0.0),
+            range: forge_math::Interval::new(0.0, a.distance(b)),
+            start: a,
+            end: b,
             closed: false,
         };
         let refd = sk::Refd {
-            sources: vec![(Name(7), line)],
+            sources: vec![
+                (
+                    Name(7),
+                    sk::Src::Model(line(Point3::ORIGIN, Point3::new(10.0, 0.0, 0.0))),
+                ),
+                (
+                    Name(8),
+                    sk::Src::Model(line(Point3::new(10.0, 0.0, 0.0), Point3::new(10.0, 5.0, 0.0))),
+                ),
+            ],
             one: false,
         };
-        m.sources.insert("@f12345678".into(), Ok(vec![refd]));
-        assert!(m.add("project @f12345678".into()), "{:?}", m.error);
-        assert_eq!(m.solved.as_ref().unwrap().names.len(), 1);
+        m.sources.insert("base.end".into(), Ok(vec![refd]));
+        assert!(
+            m.add(Row::Project {
+                of: "base.end".into(),
+                many: true,
+                approx: None
+            }),
+            "{:?}",
+            m.error
+        );
+        assert_eq!(m.solved.as_ref().unwrap().names.len(), 2);
         assert!(m.points().is_empty());
         assert_eq!(m.entity_near((5.0, 0.0), 1.0, "l"), None);
+        // and a sketch opened from its block holds what the block solved to
+        let mut m = mode();
+        let laid = sk::Refd {
+            sources: vec![(
+                Name(1),
+                sk::Src::Laid(sk::Flat::Line(Point2::new(0.0, 0.0), Point2::new(4.0, 0.0))),
+            )],
+            one: true,
+        };
+        m.take_sources([("e".to_string(), Ok(vec![laid]))].into_iter().collect());
+        assert!(
+            m.add(Row::Project {
+                of: "e".into(),
+                many: false,
+                approx: None
+            }),
+            "{:?}",
+            m.error
+        );
+        assert!(m.add(Row::Line(pn("j1.b"), at("4", "6"))), "{:?}", m.error);
+        assert_eq!(sk::freedom(m.solved.as_ref().unwrap()).0, 2);
     }
 
     #[test]
@@ -2741,10 +2885,14 @@ mod tests {
         m.click((0.0, 0.0), 0.5);
         m.click((20.0, 0.3), 0.5);
         m.click((20.1, 10.0), 0.5);
-        assert_eq!(m.rows[0], "line 0 0 20 0");
-        assert!(m.rows.contains(&"hor l1".to_string()), "{:?}", m.rows);
-        assert!(m.rows.contains(&"line l1.b 20 10".to_string()), "{:?}", m.rows);
-        assert!(m.rows.contains(&"ver l2".to_string()), "{:?}", m.rows);
+        assert_eq!(m.rows[0], Row::Line(at("0", "0"), at("20", "0")));
+        assert!(m.rows.contains(&Row::Hor(vec![rf("l1")])), "{:?}", m.rows);
+        assert!(
+            m.rows.contains(&Row::Line(pn("l1.b"), at("20", "10"))),
+            "{:?}",
+            m.rows
+        );
+        assert!(m.rows.contains(&Row::Ver(vec![rf("l2")])), "{:?}", m.rows);
         let s = m.solved.as_ref().unwrap();
         let (a, b) = sk::line(s, "l1").unwrap();
         assert!((a.y - b.y).abs() < 1e-9, "the solver made it level: {a:?} {b:?}");
@@ -2757,14 +2905,8 @@ mod tests {
 
     #[test]
     fn the_draft_is_the_entity_as_it_will_be_and_typed_values_lock_it_and_become_dimensions() {
-        let params = Document::parse("w = 30\n");
-        let mut m = SketchMode::new(
-            SketchFor::New,
-            "xy".into(),
-            Frame::default(),
-            Vec::new(),
-            Some(&params),
-        );
+        let mut m = mode();
+        m.set_params(vec![("w".into(), "30".into())]);
         // a line follows the pointer, with its length and angle live
         m.set_tool(Some(SkTool::Line));
         m.click((0.0, 0.0), 0.5);
@@ -2781,10 +2923,14 @@ mod tests {
             ((end.0 * end.0 + end.1 * end.1).sqrt() - 30.0).abs() < 1e-9,
             "{end:?}"
         );
-        assert!(d.rows.contains(&"dist l1 w".to_string()), "{:?}", d.rows);
+        assert!(
+            d.rows.contains(&Row::Dim(D::Dist, vec![rf("l1")], Some(v("w")))),
+            "{:?}",
+            d.rows
+        );
         m.click((30.0, 40.0), 0.5);
         assert!(m.error.is_none(), "{:?}", m.error);
-        assert!(m.rows.contains(&"dist l1 w".to_string()));
+        assert!(m.rows.contains(&Row::Dim(D::Dist, vec![rf("l1")], Some(v("w")))));
         m.escape();
         m.escape();
 
@@ -2800,7 +2946,7 @@ mod tests {
         assert!(
             m.rows
                 .iter()
-                .any(|r| r.starts_with("vdist") && r.ends_with(" 12")),
+                .any(|r| matches!(r, Row::Dim(D::VDist, _, Some(x)) if x.num() == Some(12.0))),
             "{:?}",
             m.rows
         );
@@ -2813,8 +2959,18 @@ mod tests {
         m.fields[0].text = "8".into();
         m.fields[0].locked = true;
         m.click((205.0, 0.0), 0.5);
-        assert!(m.rows.contains(&"circle 200 0 4".to_string()), "{:?}", m.rows);
-        assert!(m.rows.iter().any(|r| r.starts_with("dia c1 8")), "{:?}", m.rows);
+        assert!(
+            m.rows.contains(&Row::Circle(at("200", "0"), v("4"))),
+            "{:?}",
+            m.rows
+        );
+        assert!(
+            m.rows.iter().any(
+                |r| matches!(r, Row::Dim(D::Dia, on, Some(x)) if *on == [rf("c1")] && x.num() == Some(8.0))
+            ),
+            "{:?}",
+            m.rows
+        );
 
         // an arc: its radius, then its sweep
         m.set_tool(Some(SkTool::Arc));
@@ -2829,13 +2985,13 @@ mod tests {
         assert!((r - 10.0).abs() < 1e-9 && ((t1 - t0) - core::f64::consts::FRAC_PI_2).abs() < 1e-9);
         m.click((300.0, 50.0), 0.5);
         assert!(m.error.is_none(), "{:?}", m.error);
-        assert!(m.rows.iter().any(|r| r.starts_with("arc ")), "{:?}", m.rows);
+        assert!(m.rows.iter().any(|r| matches!(r, Row::Arc(..))), "{:?}", m.rows);
     }
 
     #[test]
     fn it_infers_as_it_goes_and_applies_on_the_click() {
         let mut m = mode();
-        m.rows.push("line 0 0 30 40".into());
+        m.rows.push(Row::Line(at("0", "0"), at("30", "40")));
         m.solve();
         m.set_tool(Some(SkTool::Line));
         // from the line's far end, over its middle: tied to it, a real point
@@ -2843,7 +2999,7 @@ mod tests {
         let d = m.draft((15.1, 20.1), 0.5);
         assert!(d.glyphs.iter().any(|g| g.0 == Glyph::Midpoint), "{:?}", d.glyphs);
         m.click((15.1, 20.1), 0.5);
-        assert!(m.rows.contains(&"mid p1 l1".to_string()), "{:?}", m.rows);
+        assert!(m.rows.contains(&Row::Mid(rf("p1"), rf("l1"))), "{:?}", m.rows);
         assert!(m.error.is_none(), "{:?}", m.error);
         let (a, b) = sk::line(m.solved.as_ref().unwrap(), "l2").unwrap();
         let _ = a;
@@ -2862,7 +3018,7 @@ mod tests {
     #[test]
     fn a_line_near_a_rim_leaves_tangent_and_ends_on_it() {
         let mut m = mode();
-        m.rows.push("circle 50 0 10".into());
+        m.rows.push(Row::Circle(at("50", "0"), v("10")));
         m.solve();
         m.set_tool(Some(SkTool::Line));
         m.click((0.0, 0.0), 0.5);
@@ -2876,7 +3032,7 @@ mod tests {
         assert!(!d.glyphs.iter().any(|g| g.0 == Glyph::Tangent), "{:?}", d.glyphs);
         m.click((t.0 + 0.1, t.1 + 0.1), 0.5);
         assert!(m.error.is_none(), "{:?}", m.error);
-        assert!(m.rows.iter().any(|r| r.starts_with("tan ")), "{:?}", m.rows);
+        assert!(m.rows.iter().any(|r| matches!(r, Row::Tan(..))), "{:?}", m.rows);
         let s = m.solved.as_ref().unwrap();
         let line = s
             .names
@@ -2898,7 +3054,13 @@ mod tests {
         assert!(m.rows.is_empty(), "not till it's ended");
         m.enter(0.5);
         assert!(m.error.is_none(), "{:?}", m.error);
-        assert_eq!(m.rows, ["spline 0 0 10 5 20 0 open"]);
+        assert_eq!(
+            m.rows,
+            [Row::Spline(
+                vec![at("0", "0"), at("10", "5"), at("20", "0")],
+                true
+            )]
+        );
         // pointing at it finds it, for a tool that takes curves
         assert_eq!(m.entity_near((10.0, 5.0), 0.5, "s").as_deref(), Some("s1"));
         // while it's drawn it's the curve itself, not straight legs
@@ -2920,7 +3082,13 @@ mod tests {
             m.click(p, 0.5);
         }
         assert!(m.error.is_none(), "{:?}", m.error);
-        assert_eq!(m.rows, ["spline 0 0 10 0 10 10 0 10"]);
+        assert_eq!(
+            m.rows,
+            [Row::Spline(
+                vec![at("0", "0"), at("10", "0"), at("10", "10"), at("0", "10")],
+                false
+            )]
+        );
         let s = m.solved.as_ref().unwrap();
         assert_eq!(sk::regions(s).len(), 1);
         let (curves, _) = sk::drawing(s);
@@ -2930,22 +3098,22 @@ mod tests {
     #[test]
     fn a_tool_finds_an_ellipse_and_a_dimension_takes_its_minor_axis() {
         let mut m = mode();
-        m.rows.push("pt 0 0".into());
-        m.rows.push("pt 20 0".into());
-        m.rows.push("ellipse p1 p2 8".into());
+        m.rows.push(Row::Pt(at("0", "0")));
+        m.rows.push(Row::Pt(at("20", "0")));
+        m.rows.push(Row::Ellipse(pn("p1"), pn("p2"), v("8")));
         m.solve();
         assert!(m.error.is_none(), "{:?}", m.error);
         assert_eq!(m.entity_near((0.0, 8.0), 0.5, "e").as_deref(), Some("e1"));
-        let (row, v) = m.dimension_at((0.0, 8.0), 0.5).unwrap();
-        assert_eq!(row, "rad e1");
-        assert!((v - 8.0).abs() < 1e-6, "{v}");
+        let (row, val) = m.dimension_at((0.0, 8.0), 0.5).unwrap();
+        assert_eq!(row, (D::Rad, vec![rf("e1")]));
+        assert!((val - 8.0).abs() < 1e-6, "{val}");
         assert!(m.outline_of("e1").len() > 10);
     }
 
     #[test]
     fn a_midpoint_adds_nothing_to_a_sketch_until_it_is_used() {
         let mut m = mode();
-        m.rows.push("line 0 0 30 40".into());
+        m.rows.push(Row::Line(at("0", "0"), at("30", "40")));
         m.solve();
         let before = m.rows.clone();
         m.set_tool(Some(SkTool::Line));
@@ -3005,31 +3173,35 @@ mod tests {
         m.set_tool(Some(SkTool::Rectangle));
         m.click((10.0, 10.0), 0.5);
         m.click((-10.0, -5.0), 0.5);
-        assert_eq!(m.rows[0], "rect -10 -5 20 15");
+        assert_eq!(m.rows[0], Row::Rect(v("-10"), v("-5"), v("20"), v("15")));
         m.set_tool(Some(SkTool::Circle));
         m.click((0.0, 0.0), 0.5);
         m.click((3.0, 4.0), 0.5);
-        assert_eq!(m.rows[1], "circle 0 0 5");
+        assert_eq!(m.rows[1], Row::Circle(at("0", "0"), v("5")));
         m.set_tool(Some(SkTool::Point));
         // on the rectangle's first corner, within reach: its name
         m.click((-10.1, -5.1), 0.5);
-        assert!(m.rows[2].starts_with("pt l"), "{}", m.rows[2]);
+        assert!(
+            matches!(&m.rows[2], Row::Pt(Pt::R(r)) if r.base.starts_with('l')),
+            "{}",
+            m.rows[2]
+        );
         assert!(m.error.is_none());
     }
 
     #[test]
     fn a_dimension_drives_the_geometry_and_one_that_cannot_hold_is_refused_with_why() {
         let mut m = mode();
-        m.rows.push("circle 0 0 5".into());
+        m.rows.push(Row::Circle(at("0", "0"), v("5")));
         m.solve();
-        let (row, v) = m.dimension_at((5.0, 0.0), 0.5).unwrap();
-        assert_eq!((row.as_str(), v), ("dia c1", 10.0));
-        assert!(m.add("dia c1 16".into()));
+        let (row, val) = m.dimension_at((5.0, 0.0), 0.5).unwrap();
+        assert_eq!((row, val), ((D::Dia, vec![rf("c1")]), 10.0));
+        assert!(m.add(Row::Dim(D::Dia, vec![rf("c1")], Some(v("16")))));
         let s = m.solved.as_ref().unwrap();
         let id = s.names.iter().find(|n| n.0 == "c1").unwrap().1;
         assert!((s.solved.radius(id) - 8.0).abs() < 1e-9);
         // the same again at another size can't hold
-        assert!(!m.add("dia c1 20".into()));
+        assert!(!m.add(Row::Dim(D::Dia, vec![rf("c1")], Some(v("20")))));
         assert!(m.error.is_some());
         assert_eq!(m.rows.len(), 2, "the rows are as they were");
         m.undo();
@@ -3038,35 +3210,49 @@ mod tests {
 
     #[test]
     fn a_dimension_shows_as_written_and_a_change_to_it_drives_the_sketch() {
-        let params = Document::parse("w = 30\n");
         let rows = vec![
-            "rect 0 0 w 20".to_string(),
-            "hdist l1.a l1.b w".to_string(),
-            "vdist l2.a l2.b 20".to_string(),
+            Row::Rect(v("0"), v("0"), v("w"), v("20")),
+            Row::Dim(D::HDist, vec![rf("l1.a"), rf("l1.b")], Some(v("w"))),
+            Row::Dim(D::VDist, vec![rf("l2.a"), rf("l2.b")], Some(v("20"))),
         ];
-        let mut m = SketchMode::new(SketchFor::New, "xy".into(), Frame::default(), rows, Some(&params));
+        let mut m = SketchMode::new(SketchFor::New, "xy".into(), Frame::default(), rows);
+        m.set_params(vec![("w".into(), "30".into())]);
         assert!(m.error.is_none(), "{:?}", m.error);
         assert!(m.unchanged());
         let d = m.dimensions();
         assert_eq!(d.len(), 2);
-        assert_eq!(d[0].2, "w", "a parameter shows as itself");
-        assert!(m.replace(2, "vdist l2.a l2.b 25".into()), "{:?}", m.error);
+        assert_eq!(d[0].2, v("w"), "a parameter shows as itself");
+        assert!(
+            m.replace(2, Row::Dim(D::VDist, vec![rf("l2.a"), rf("l2.b")], Some(v("25")))),
+            "{:?}",
+            m.error
+        );
         let (p, q) = sk::line(m.solved.as_ref().unwrap(), "l2").unwrap();
         assert!((q.y - p.y - 25.0).abs() < 1e-9);
         assert!(!m.unchanged());
-        assert!(!m.replace(2, "vdist l2.a l2.b nope".into()));
-        assert_eq!(m.rows[2], "vdist l2.a l2.b 25", "a bad one changes nothing");
+        assert!(!m.replace(
+            2,
+            Row::Dim(D::VDist, vec![rf("l2.a"), rf("l2.b")], Some(v("nope")))
+        ));
+        assert_eq!(
+            m.rows[2],
+            Row::Dim(D::VDist, vec![rf("l2.a"), rf("l2.b")], Some(v("25"))),
+            "a bad one changes nothing"
+        );
     }
 
     #[test]
-    fn its_block_reads_as_a_sketch_a_part_can_extrude() {
+    fn its_forge_block_reads_as_a_sketch_a_part_can_extrude() {
         let mut m = mode();
         m.set_tool(Some(SkTool::Rectangle));
         m.click((0.0, 0.0), 0.5);
         m.click((30.0, 20.0), 0.5);
-        let src = format!("plate: {}extrude 5 plate\n", m.block());
-        let p = forge_agent::tools::Part::new(&src);
-        assert!(p.model.error.is_none(), "{:?}", p.model.error);
-        assert!((forge_agent::model::Model::new(&src).mass().unwrap().volume - 3000.0).abs() < 1e-6);
+        let block = crate::shell::fgsketch::block("plate", "xy", &m.rows).unwrap();
+        let src = format!("{block}slab = extrude(plate, 5)\n");
+        let (run, _) = forge_lang::run(&src, forge_lang::Options::default(), Default::default());
+        assert!(run.errors.is_empty(), "{src}\n{:?}", run.errors);
+        let body = run.body.expect("a solid");
+        let volume = forge_topo::mass::mass(&body).unwrap().volume;
+        assert!((volume - 3000.0).abs() < 1e-6, "{volume}");
     }
 }

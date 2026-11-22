@@ -7,6 +7,7 @@ use crate::syntax::Span;
 use forge_math::{Frame, Point2, Point3, Vec2};
 use forge_ops::Profile;
 use forge_sketch::{Constraint, ConstraintId, Entity, EntityId, Sketch};
+use std::rc::Rc;
 
 pub struct Sk {
     pub id: String,
@@ -35,6 +36,19 @@ pub struct Sk {
 }
 
 type R<T> = Result<T, Error>;
+
+/// A sketch's solve, kept for the next run (`Sk::finish`): the sketch as handed to the solver,
+/// as it came back, and what the solve found.
+pub struct Solved {
+    input: Sketch,
+    out: Sketch,
+    status: forge_sketch::Status,
+    residual: f64,
+    /// The freedom left: worked out only for a run with checks (its rank costs more than the
+    /// solve), then kept for the runs after.
+    dof: std::cell::Cell<Option<usize>>,
+    conflicting: Vec<ConstraintId>,
+}
 
 /// One item of a hull: a point (r = 0) or a disc, in counter-clockwise order.
 #[derive(Clone, Copy, Debug)]
@@ -180,6 +194,29 @@ impl Sk {
         Ok(e)
     }
 
+    /// An arc of the ellipse `ellipse(c, m, b)` from `a` to `b2`, its ends held on it,
+    /// counter-clockwise when `ccw`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn ellipse_arc(
+        &mut self,
+        c: EntityId,
+        m: EntityId,
+        b: f64,
+        from: EntityId,
+        to: EntityId,
+        ccw: bool,
+        name: Option<&str>,
+        span: Span,
+    ) -> R<EntityId> {
+        let e = self
+            .s
+            .add_ellipse_arc(c, m, b, from, to, ccw)
+            .map_err(self.kerr(span))?;
+        self.con(Constraint::EllipseMinor(e, b), span)?;
+        self.named(e, name, span);
+        Ok(e)
+    }
+
     /// A closed curve with no corners (a whole ellipse, a closed spline): a profile by itself.
     pub fn closed_curve(&self, e: EntityId) -> bool {
         matches!(self.s.entity(e), Some(Entity::Ellipse { ends: None, .. }))
@@ -212,6 +249,30 @@ impl Sk {
         let e = self
             .s
             .add_bspline(degree, pts, None, None, closed)
+            .map_err(self.kerr(span))?;
+        self.named(e, name, span);
+        Ok(e)
+    }
+
+    /// An open through-spline's slopes at its start and end, as given.
+    pub fn slopes(&mut self, e: EntityId, from: Option<Vec2>, to: Option<Vec2>, span: Span) -> R<()> {
+        self.s.set_spline_slopes(e, from, to).map_err(self.kerr(span))
+    }
+
+    /// A B-spline on control vertices of the degree given, open, on these knots and weights
+    /// (uniform clamped knots and weights 1 where not given).
+    pub fn bspline_on(
+        &mut self,
+        pts: &[EntityId],
+        degree: usize,
+        knots: Option<Vec<f64>>,
+        weights: Option<Vec<f64>>,
+        name: Option<&str>,
+        span: Span,
+    ) -> R<EntityId> {
+        let e = self
+            .s
+            .add_bspline(degree, pts, knots, weights, false)
             .map_err(self.kerr(span))?;
         self.named(e, name, span);
         Ok(e)
@@ -411,12 +472,49 @@ impl Sk {
         self.con(c, span).map(|_| ())
     }
 
-    /// Solves; conflicting rows are an error, freedom left is reported.
-    pub fn finish(&mut self) -> R<()> {
-        let rep = self.s.solve();
-        let an = self.s.analyze();
-        if !an.conflicting.is_empty() {
-            let rows = an
+    /// Solves; conflicting rows are an error, freedom left is reported. `was` is this sketch's
+    /// solve in the run before: taken as it is when the sketch is bit for bit what it solved
+    /// then (an edit elsewhere), so only a sketch that changed is solved again. What it solved
+    /// comes back with the outcome, for the next run. The freedom left (`dof`, an
+    /// UnderConstrained warning) is a check: without `checks` it is left 0 and not worked out.
+    pub fn finish(&mut self, was: Option<Rc<Solved>>, checks: bool) -> (Rc<Solved>, R<()>) {
+        let done = match was {
+            Some(w) if w.input.same_bits(&self.s) => {
+                self.s = w.out.clone();
+                w
+            }
+            _ => {
+                let input = self.s.clone();
+                let rep = self.s.solve();
+                // freedom and conflicts only: the per-entity ranks `analyze` also works out cost
+                // more than the solve, and nothing here reads them
+                let (dof, conflicting) = if checks {
+                    let (dof, c) = self.s.freedom();
+                    (Some(dof), c)
+                } else {
+                    (None, self.s.conflicting())
+                };
+                Rc::new(Solved {
+                    input,
+                    out: self.s.clone(),
+                    status: rep.status,
+                    residual: rep.max_residual,
+                    dof: std::cell::Cell::new(dof),
+                    conflicting,
+                })
+            }
+        };
+        // a solve kept from a run without checks: its freedom now (`out` is the sketch solved)
+        if checks && done.dof.get().is_none() {
+            done.dof.set(Some(done.out.freedom().0));
+        }
+        let r = self.outcome(&done);
+        (done, r)
+    }
+
+    fn outcome(&mut self, done: &Solved) -> R<()> {
+        if !done.conflicting.is_empty() {
+            let rows = done
                 .conflicting
                 .iter()
                 .filter_map(|c| self.cons.iter().find(|x| x.0 == *c).map(|x| x.1))
@@ -427,14 +525,14 @@ impl Sk {
                 rows,
             });
         }
-        if rep.status != forge_sketch::Status::Solved {
+        if done.status != forge_sketch::Status::Solved {
             return Err(Error::SketchNotSolved {
                 span: self.span,
                 sketch: self.id.clone(),
-                residual: rep.max_residual,
+                residual: done.residual,
             });
         }
-        self.dof = an.dof;
+        self.dof = done.dof.get().unwrap_or(0);
         self.solved = true;
         Ok(())
     }
@@ -476,7 +574,7 @@ impl Sk {
                         .iter()
                         .any(|g| ids.iter().any(|e| e.0 == g.1 & !PIECE))
                 })
-                .ok_or(Error::Regions {
+                .ok_or_else(|| Error::Regions {
                     span,
                     sketch: self.id.clone(),
                     count: 0,
@@ -519,18 +617,14 @@ impl Sk {
             plane: self.frame,
             on: None,
             at: None,
-            rows: vec![],
             solved: self.s.clone(),
-            driven: vec![],
             names: self
                 .ents
                 .iter()
                 .filter(|e| !e.1.starts_with('~'))
                 .map(|e| (e.1.clone(), e.0))
                 .collect(),
-            written: vec![],
-            dims: vec![],
-            driven_of: vec![],
+            note: Default::default(),
         }
     }
 }

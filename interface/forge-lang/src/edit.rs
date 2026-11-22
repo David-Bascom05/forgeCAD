@@ -359,7 +359,7 @@ fn precheck(prog: &[Stmt], op: &Op, dim_of: &dyn Fn(&ParamKey) -> Option<Dim>) -
         }
         Op::SetArg { id, text, .. } => crate::edit_ops::precheck_set_arg(prog, id, text),
         Op::Rename { from, to } => crate::edit_ops::precheck_rename(prog, from, to),
-        Op::SetProperty { .. } => Ok(()),
+        Op::SetProperty { .. } | Op::Suppress { .. } | Op::Unsuppress { .. } | Op::Respell { .. } => Ok(()),
         Op::AddFeature { before, text } => {
             let new = syntax::parse(text)?;
             let names = bound(&new);
@@ -423,6 +423,7 @@ fn rename(src: &str, from: &str, to: &str) -> R<String> {
         return Err(Error::UnknownName {
             span: crate::syntax::Span { lo: 0, hi: 0 },
             name: from.into(),
+            near: None,
         });
     }
     let mut out = String::with_capacity(src.len() + uses.len() * to.len());
@@ -448,7 +449,16 @@ pub(crate) fn apply_with(src: &str, op: &Op, dim_of: &dyn Fn(&ParamKey) -> Optio
     {
         return rename(src, from, to);
     }
+    if let Op::Respell { span, to } = op {
+        return crate::edit_ops::apply_respell(src, *span, to);
+    }
+    if let Op::Unsuppress { id } = op {
+        return crate::edit_ops::apply_unsuppress(src, id);
+    }
     let prog = syntax::parse(src)?;
+    if let Op::Suppress { id } = op {
+        return crate::edit_ops::apply_suppress(src, &prog, id);
+    }
 
     // a feature of a component its placements read from outside (`l1.plate` where l1 places
     // lid): taking it away is refused, every reader named (R2)
@@ -666,6 +676,9 @@ fn apply_in(
         Op::SetArg { id, arg, text } => crate::edit_ops::apply_set_arg(src, &prog, id, arg, text),
         Op::Rename { from, to } => crate::edit_ops::apply_rename(src, from, to),
         Op::SetProperty { key, text } => crate::props::apply_set(src, &prog, key, text.as_deref()),
+        Op::Suppress { id } => crate::edit_ops::apply_suppress(src, &prog, id),
+        Op::Unsuppress { id } => crate::edit_ops::apply_unsuppress(src, id),
+        Op::Respell { span, to } => crate::edit_ops::apply_respell(src, *span, to),
         Op::SetParam { param, value } => {
             let s = param_stmt(&prog, param).ok_or(Error::UnknownParam { param: param.clone() })?;
             if let Some(d) = dim_of(param)
@@ -855,7 +868,12 @@ fn lit_expr(l: &Literal) -> Expr {
 /// The same op on the syntax tree.
 pub fn apply_ast(src: &str, op: &Op) -> R<Vec<Stmt>> {
     let reserved = matches!(op, Op::Rename { from, .. } if syntax::RESERVED.contains(&from.as_str()));
-    if reserved || matches!(op, Op::SetProperty { .. }) {
+    if reserved
+        || matches!(
+            op,
+            Op::SetProperty { .. } | Op::Suppress { .. } | Op::Unsuppress { .. } | Op::Respell { .. }
+        )
+    {
         return syntax::parse(&apply(src, op)?);
     }
     let mut prog = syntax::parse(src)?;
@@ -896,7 +914,9 @@ fn ast_in(prog: &mut Vec<Stmt>, op: &Op) -> R<()> {
     match op {
         Op::SetArg { id, arg, text } => crate::edit_ops::ast_set_arg(prog, id, arg, text)?,
         Op::Rename { from, to } => crate::edit_ops::ast_rename(prog, from, to),
-        Op::SetProperty { .. } => unreachable!("parsed from its text above"),
+        Op::SetProperty { .. } | Op::Suppress { .. } | Op::Unsuppress { .. } | Op::Respell { .. } => {
+            unreachable!("parsed from its text above")
+        }
         Op::SetParam { param, value } => {
             let k = find_param(prog, param).ok_or(Error::UnknownParam { param: param.clone() })?;
             match &mut prog[k].kind {

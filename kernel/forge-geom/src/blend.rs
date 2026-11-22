@@ -629,6 +629,10 @@ fn spine_refine(spine: &Curve, p: Point3, mut t: f64) -> Option<f64> {
     None
 }
 
+/// How far along a spine resting on a rail (in its parameter, a traced chain's samples) Newton is
+/// trusted to stay on the side it starts on.
+const RAIL_STEP: f64 = 2.0;
+
 /// A rolling-ball blend between surfaces `a` and `b`: the ball centre runs on
 /// `a` offset by `da` and `b` offset by `db` (each +-radius along its natural normal).
 #[derive(Clone, Debug)]
@@ -1305,6 +1309,137 @@ impl Pipe {
             .map(|s| (s, self.near))
     }
 
+    /// `project`, before `rail_polish`.
+    fn project_far(&self, p: Point3) -> Point2 {
+        // a point of a rail stands as near the far side of a spine closed round that rail: the
+        // side this blend was asked for is the one
+        if let Some((rail, near)) = self.rail_side()
+            && rail.implicit(p).abs() <= tol::LINEAR
+        {
+            let from = spine_closest(&self.spine, near);
+            let held = |u: f64| {
+                let c = self.spine.eval(u);
+                ((p.distance(c) - self.radius).abs() <= tol::LINEAR).then_some((u, c))
+            };
+            let got = spine_refine(&self.spine, p, from).and_then(held);
+            if let Some(uv) = self.nearer_on_rail(p, from, got.map(|x| x.0)) {
+                return uv;
+            }
+            if let Some((u, c)) = got {
+                return self.across_at(p, u, c);
+            }
+        }
+        self.across(p, spine_closest(&self.spine, p))
+    }
+
+    /// p's parameters `uv` on a pipe resting on a rail, found off p: where the spine wraps round the
+    /// rail at about the radius, many spine points have p in their normal plane to within any
+    /// tolerance on that, and the one found can be off. A point of the rail is where the ball's foot
+    /// on it is p; any other where the pipe's point at the parameters is: either distance at its
+    /// least, by golden section about uv (the rail's foot moves slowly, so further either way).
+    fn rail_polish(&self, p: Point3, uv: Point2) -> Point2 {
+        let Some((rail, _)) = self.rail_side() else {
+            return uv;
+        };
+        let at = |uv: Point2| crate::surface::Procedural::deriv1(self, uv).p;
+        let off = at(uv).distance(p);
+        if off <= 1e-2 * tol::LINEAR {
+            return uv;
+        }
+        let d = if self.first == *rail {
+            self.d_first
+        } else {
+            self.d_second
+        };
+        let on_rail = rail.implicit(p).abs() <= tol::LINEAR;
+        let across = |u: f64| self.across_at(p, u, self.spine.eval(u));
+        let gap = |u: f64| {
+            if on_rail {
+                foot(rail, d, self.spine.eval(u)).distance(p)
+            } else {
+                at(across(u)).distance(p)
+            }
+        };
+        let w = 0.25 * RAIL_STEP;
+        let (mut lo, mut hi) = (uv.x - w, uv.x + w);
+        let phi = 0.618_033_988_749_894_8;
+        for _ in 0..80 {
+            let (a, b) = (hi - phi * (hi - lo), lo + phi * (hi - lo));
+            if gap(a) < gap(b) {
+                hi = b;
+            } else {
+                lo = a;
+            }
+        }
+        let polished = across(0.5 * (lo + hi));
+        if at(polished).distance(p) < off {
+            polished
+        } else {
+            uv
+        }
+    }
+
+    /// On a pipe resting on a rail, where Newton from `from` settled at `got` further on than
+    /// it is trusted to stay on its side (or did not settle), the parameters `rail_walk` finds when
+    /// they are nearer `from`. None: `got` stands.
+    fn nearer_on_rail(&self, p: Point3, from: f64, got: Option<f64>) -> Option<Point2> {
+        if self.rail_side().is_none() || got.is_some_and(|u| (u - from).abs() <= RAIL_STEP) {
+            return None;
+        }
+        let (u, uv) = self.rail_walk(p, from)?;
+        got.is_none_or(|g| (u - from).abs() < (g - from).abs() - RAIL_STEP)
+            .then_some(uv)
+    }
+
+    /// On a pipe resting on a rail, p's spine parameter and parameters searched outward from spine
+    /// parameter `from`, either way a step at a time: the nearest where p lies in the spine's
+    /// normal plane, the radius off. A spine closed round the rail has its far side as near p as
+    /// this one, so a search by distance alone can land there; walked from `from`, the side stays
+    /// the one asked for.
+    fn rail_walk(&self, p: Point3, from: f64) -> Option<(f64, Point2)> {
+        // where p's offset along the spine changes sign, nearest `from` first, p the radius off
+        let along = |u: f64| {
+            let d = self.spine.deriv(u);
+            (p - d.p).dot(d.d1)
+        };
+        let step = 0.125 * RAIL_STEP;
+        // a closed spine half way round either way, an open one 128 of its parameter
+        let reach = self.spine.domain().period.map_or(64.0 * RAIL_STEP, |p| 0.5 * p);
+        let n = (reach / step).ceil() as i32;
+        let mut prev = [(from, along(from)); 2];
+        for k in 1..=n {
+            for (side, dir) in [1.0, -1.0].into_iter().enumerate() {
+                let u = from + dir * step * k as f64;
+                let g = along(u);
+                let (pu, pg) = prev[side];
+                prev[side] = (u, g);
+                if pg * g > 0.0 || !(pg.is_finite() && g.is_finite()) {
+                    continue;
+                }
+                let (mut a, mut b, mut ga) = (pu, u, pg);
+                for _ in 0..60 {
+                    let m = 0.5 * (a + b);
+                    let gm = along(m);
+                    if gm * ga > 0.0 {
+                        (a, ga) = (m, gm);
+                    } else {
+                        b = m;
+                    }
+                }
+                // the chain's tangent is an interpolation: Newton on the exact one from there
+                let u = 0.5 * (a + b);
+                let u = spine_refine(&self.spine, p, u)
+                    .filter(|v| (v - u).abs() <= step)
+                    .unwrap_or(u);
+                let c = self.spine.eval(u);
+                if (p.distance(c) - self.radius).abs() <= tol::LINEAR {
+                    return Some((u, self.across_at(p, u, c)));
+                }
+            }
+        }
+        None
+    }
+
     /// Contact order is chosen so the natural normal points away from the spine.
     pub fn build(spine: Curve, a: Surface, b: Surface, da: f64, db: f64, near: Point3) -> Option<Proc> {
         let mut p = Pipe {
@@ -1592,33 +1727,55 @@ impl Procedural for Pipe {
         }
     }
     fn project(&self, p: Point3) -> Point2 {
-        // a point of a rail stands as near the far side of a spine closed round that rail: the
-        // side this blend was asked for is the one
-        if let Some((rail, near)) = self.rail_side()
-            && rail.implicit(p).abs() <= tol::LINEAR
-            && let Some(u) = spine_refine(&self.spine, p, spine_closest(&self.spine, near))
-        {
-            let c = self.spine.eval(u);
-            if (p.distance(c) - self.radius).abs() <= tol::LINEAR {
-                return self.across_at(p, u, c);
-            }
+        if self.rail_side().is_none() {
+            return self.across(p, spine_closest(&self.spine, p));
         }
-        self.across(p, spine_closest(&self.spine, p))
+        let uv = self.project_far(p);
+        self.rail_polish(p, uv)
     }
     /// From the spine at near's u, Newton to the spine point whose normal plane holds p, kept
     /// where p lies the radius from it (it is then on the pipe about there); else the search.
     fn project_near(&self, p: Point3, near: Point2) -> Point2 {
-        match spine_refine(&self.spine, p, near.x) {
+        if self.rail_side().is_none() {
+            return match spine_refine(&self.spine, p, near.x) {
+                Some(u) => {
+                    let c = self.spine.eval(u);
+                    if (p.distance(c) - self.radius).abs() <= tol::LINEAR {
+                        self.across_at(p, u, c)
+                    } else {
+                        self.project_far(p)
+                    }
+                }
+                None => self.project_far(p),
+            };
+        }
+        let uv = match spine_refine(&self.spine, p, near.x) {
             Some(u) => {
                 let c = self.spine.eval(u);
                 if (p.distance(c) - self.radius).abs() <= tol::LINEAR {
-                    self.across_at(p, u, c)
+                    self.nearer_on_rail(p, near.x, Some(u))
+                        .unwrap_or_else(|| self.across_at(p, u, c))
                 } else {
-                    self.project(p)
+                    self.nearer_on_rail(p, near.x, None)
+                        .unwrap_or_else(|| self.project_far(p))
                 }
             }
-            None => self.project(p),
+            None => self
+                .nearer_on_rail(p, near.x, None)
+                .unwrap_or_else(|| self.project_far(p)),
+        };
+        let uv = self.rail_polish(p, uv);
+        // started from a point of the rail on the far side's parameters (as near it as this
+        // side's), Newton follows the far side off the rail: the search from nothing is this side's
+        let at = |uv: Point2| crate::surface::Procedural::deriv1(self, uv).p.distance(p);
+        let off = at(uv);
+        if off > tol::LINEAR {
+            let fresh = self.rail_polish(p, self.project_far(p));
+            if at(fresh) < off {
+                return fresh;
+            }
         }
+        uv
     }
     fn bbox(&self, uv: Box2) -> Box3 {
         self.spine.bbox(uv.u).grow(self.radius)

@@ -77,7 +77,7 @@ fn feat(id: String, kind: &'static str, idx: usize, hid: u64, prof: Option<Rc<Re
 
 /// How a solid-making feature combines: `cut`, `keep` (intersect) or `new` (a body of its own),
 /// at most one; else it adds (a new body for the first solid).
-fn combine(ev: &Eval, a: &Args, func: &'static str) -> R<Combine> {
+pub(crate) fn combine(ev: &Eval, a: &Args, func: &'static str) -> R<Combine> {
     let flags = [
         ("cut", Combine::Cut),
         ("keep", Combine::Keep),
@@ -119,6 +119,25 @@ fn faces_arg(a: &Args, k: &'static str) -> R<Option<Rc<Faces>>> {
 
 fn names_arg(a: &Args, k: &'static str) -> R<Vec<Name>> {
     Ok(faces_arg(a, k)?.map(|f| f.names.clone()).unwrap_or_default())
+}
+
+/// A sweep's or coil's end (`upto:`): a face set, a work plane or a sketch's plane (`.fc`'s
+/// `to PLANE`); None when not given (or unknown after an earlier failure).
+fn end_arg(ev: &Eval, a: &Args, k: &'static str) -> R<Option<Target>> {
+    match a.opt(k) {
+        None | Some(Value::Unresolved) => Ok(None),
+        Some(Value::Faces(f)) => Ok(Some(target(ev, &f))),
+        Some(Value::Wired(w)) if w.plane().is_some() && w.work_ref().is_some() => {
+            Ok(Some(Target::Plane(w.work_ref().expect("checked").feature)))
+        }
+        Some(Value::Sketch(s)) => Ok(Some(Target::Plane(s.borrow().idx))),
+        Some(o) => Err(Error::WrongType {
+            span: a.span(k),
+            what: "upto (faces, a work plane or a sketch)",
+            want: Ty::Faces,
+            found: o.ty(),
+        }),
+    }
 }
 
 /// A face set's target for an end condition: the feature that made it and its first face's name.
@@ -281,7 +300,7 @@ fn sweep(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         ev,
         "sweep",
         &[
-            "profile", "along", "extend", "upto", "offset", "cut", "keep", "new",
+            "profile", "along", "extend", "upto", "offset", "cut", "keep", "new", "bodies",
         ],
         args,
         span,
@@ -292,7 +311,7 @@ fn sweep(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     let (sk, profile, _) = profile_of(ev, a.req("profile")?, a.span("profile"))?;
     let path = path_of(a.req("along")?, a.span("along"))?;
     let mut dims = vec![];
-    let ends = match (a.opt("extend"), faces_arg(&a, "upto")?) {
+    let ends = match (a.opt("extend"), end_arg(ev, &a, "upto")?) {
         (Some(_), Some(_)) => {
             return Err(Error::NotWith {
                 span: a.span("extend"),
@@ -322,7 +341,7 @@ fn sweep(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
                 dims.push(dim("offset", o));
             }
             PathEnds::To {
-                target: target(ev, &f),
+                target: f,
                 offset: off.map_or(0.0, |o| o.v),
             }
         }
@@ -345,6 +364,7 @@ fn sweep(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         ends,
         op,
     }));
+    let f = crate::bodies::wrap_in(ev, &a, f)?;
     let (idx, hid) = ev.push_feature(&id, "sweep", f, span, dims)?;
     Ok(feat(id, "sweep", idx, hid, Some(sk)))
 }
@@ -359,7 +379,7 @@ fn coil(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         "coil",
         &[
             "profile", "axis", "pitch", "turns", "height", "upto", "offset", "taper", "left", "cut", "keep",
-            "new",
+            "new", "bodies",
         ],
         args,
         span,
@@ -401,7 +421,7 @@ fn coil(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     let pitch = size("pitch", "pitch", &mut dims)?;
     let turns = size("turns", "turns", &mut dims)?;
     let height = size("height", "height", &mut dims)?;
-    let upto = faces_arg(&a, "upto")?;
+    let upto = end_arg(ev, &a, "upto")?;
     let csize = match (pitch, turns, height, upto) {
         (Some(p), None, None, Some(f)) => {
             let off = a.num("offset", LEN)?;
@@ -410,7 +430,7 @@ fn coil(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
             }
             CoilSize::To {
                 pitch: p.v,
-                target: target(ev, &f),
+                target: f,
                 offset: off.map_or(0.0, |o| o.v),
             }
         }
@@ -479,6 +499,7 @@ fn coil(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         handed,
         op,
     }));
+    let f = crate::bodies::wrap_in(ev, &a, f)?;
     let (idx, hid) = ev.push_feature(&id, "coil", f, span, dims)?;
     let (wa, wd) = {
         let s = sk.borrow();
@@ -783,6 +804,7 @@ pub fn loft(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         "loft",
         &[
             "profiles", "smooth", "start", "end", "align", "seams", "rails", "centre", "cut", "keep", "new",
+            "bodies",
         ],
         args,
         span,
@@ -957,6 +979,7 @@ pub fn loft(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         options,
         op,
     }));
+    let f = crate::bodies::wrap_in(ev, &a, f)?;
     let (idx, hid) = ev.push_feature(&id, "loft", f, span, dims)?;
     Ok(feat(id, "loft", idx, hid, sketches.into_iter().next()))
 }
@@ -966,7 +989,7 @@ pub fn loft(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
 fn draft(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     not_in_sketch(ev, "draft", span)?;
     let id = ev.take_id("draft", span)?;
-    let a = Args::bind(ev, "draft", &["faces", "angle", "neutral"], args, span)?;
+    let a = Args::bind(ev, "draft", &["faces", "angle", "neutral", "bodies"], args, span)?;
     let faces = names_arg(&a, "faces")?;
     if faces.is_empty() && ev.b.building && !a.poisoned() {
         return Err(Error::EmptySelection {
@@ -980,6 +1003,7 @@ fn draft(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         neutral,
         angle: angle.v,
     };
+    let f = crate::bodies::wrap_in(ev, &a, f)?;
     let (idx, hid) = ev.push_feature(&id, "draft", f, span, vec![dim("angle", &angle)])?;
     Ok(feat(id, "draft", idx, hid, None))
 }
@@ -987,7 +1011,7 @@ fn draft(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
 fn offset_faces(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     not_in_sketch(ev, "offset_faces", span)?;
     let id = ev.take_id("offset_faces", span)?;
-    let a = Args::bind(ev, "offset_faces", &["faces", "d"], args, span)?;
+    let a = Args::bind(ev, "offset_faces", &["faces", "d", "bodies"], args, span)?;
     let faces = names_arg(&a, "faces")?;
     if faces.is_empty() && ev.b.building && !a.poisoned() {
         return Err(Error::EmptySelection {
@@ -996,6 +1020,7 @@ fn offset_faces(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     }
     let d = a.req_num("d", LEN)?;
     let f = Feature::Edit(Edit::Offset { faces, distance: d.v });
+    let f = crate::bodies::wrap_in(ev, &a, f)?;
     let (idx, hid) = ev.push_feature(&id, "offset_faces", f, span, vec![dim("distance", &d)])?;
     Ok(feat(id, "offset_faces", idx, hid, None))
 }
@@ -1006,9 +1031,9 @@ fn direct(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Valu
     not_in_sketch(ev, name, span)?;
     let id = ev.take_id(name, span)?;
     let keys: &[&'static str] = match name {
-        "delete_faces" => &["faces"],
-        "replace_face" => &["face", "with"],
-        _ => &["faces", "along", "d", "about", "by"],
+        "delete_faces" => &["faces", "bodies"],
+        "replace_face" => &["face", "with", "bodies"],
+        _ => &["faces", "along", "d", "about", "by", "bodies"],
     };
     let a = Args::bind(ev, name, keys, args, span)?;
     let first = keys[0];
@@ -1096,7 +1121,8 @@ fn direct(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Valu
             Edit::Move { faces, motion }
         }
     };
-    let (idx, hid) = ev.push_feature(&id, name, Feature::Edit(edit), span, dims)?;
+    let f = crate::bodies::wrap_in(ev, &a, Feature::Edit(edit))?;
+    let (idx, hid) = ev.push_feature(&id, name, f, span, dims)?;
     Ok(feat(id, name, idx, hid, None))
 }
 
@@ -1114,7 +1140,7 @@ fn thicken(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     let a = Args::bind(
         ev,
         "thicken",
-        &["faces", "t", "side", "cut", "keep", "new"],
+        &["faces", "t", "side", "cut", "keep", "new", "bodies"],
         args,
         span,
     )?;
@@ -1137,6 +1163,7 @@ fn thicken(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         side,
         op,
     });
+    let f = crate::bodies::wrap_in(ev, &a, f)?;
     let (idx, hid) = ev.push_feature(&id, "thicken", f, span, vec![dim("thickness", &t)])?;
     Ok(feat(id, "thicken", idx, hid, None))
 }
@@ -1217,7 +1244,7 @@ fn rib(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     let a = Args::bind(
         ev,
         "rib",
-        &["along", "t", "side", "web", "flip", "draft"],
+        &["along", "t", "side", "web", "flip", "draft", "bodies"],
         args,
         span,
     )?;
@@ -1250,6 +1277,7 @@ fn rib(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         flip: a.flag("flip")?,
         draft,
     })));
+    let f = crate::bodies::wrap_in(ev, &a, f)?;
     let (idx, hid) = ev.push_feature(&id, "rib", f, span, dims)?;
     Ok(feat(id, "rib", idx, hid, None))
 }
@@ -1303,7 +1331,13 @@ fn fullround(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
 fn ball(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Value> {
     not_in_sketch(ev, name, span)?;
     let id = ev.take_id(name, span)?;
-    let a = Args::bind(ev, name, &["center", "r", "cut", "keep", "new"], args, span)?;
+    let a = Args::bind(
+        ev,
+        name,
+        &["center", "r", "cut", "keep", "new", "bodies"],
+        args,
+        span,
+    )?;
     if a.poisoned() {
         return Ok(Value::Unresolved);
     }
@@ -1323,6 +1357,7 @@ fn ball(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Value>
         radius: r.v,
         op,
     };
+    let f = crate::bodies::wrap_in(ev, &a, f)?;
     let (idx, hid) = ev.push_feature(&id, "ball", f, span, vec![dim("radius", &r)])?;
     Ok(Value::Feature(Rc::new(Feat {
         id,

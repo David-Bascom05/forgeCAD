@@ -14,7 +14,7 @@ and every feature that changes the part but a fillet, and a pattern's pass, work
 The fix: `apply_fillet` and the chamfer take edges sorted by name; `part_frame` takes the least-named
 face; a chamfer's corner starts from its least-named face. `tests/arena_order.rs` holds it.
 
-Rerun: copy `nameprobe.rs` to interface/forge-agent/examples/ on two checkouts, `nameprobe dump > F` on
+Rerun: copy `nameprobe.rs` to interface/forge-lang/examples/ on two checkouts (it builds the Forge bench parts), `nameprobe dump > F` on
 each, `python3 renames.py F_OLD F_NEW`; `cargo run --release -p forge-model --example namehunt -- 200 SEED`,
 also with `--inserts` and `--big`.
 

@@ -147,6 +147,15 @@ fn button(h: &mut Headless, tool: &str) {
     h.step();
 }
 
+/// The tool on a sketch a feature reads already: the button would start a new sketch (as `.fc`'s
+/// did with no sketch free), so the tool is opened as Edit Feature's would be, on that sketch.
+fn reuse(h: &mut Headless, kind: &'static str) {
+    h.gui.fg_open_tool(kind);
+    assert!(h.gui.shell.fg.as_ref().is_some_and(|p| p.tool.is_some()));
+    h.step();
+    h.step();
+}
+
 fn choose(h: &mut Headless, slot: &str, text: &str) {
     // the selection row first, as a person points at it, then what it takes
     assert!(h.click(&format!("fg:tool:slot:{slot}")), "no slot {slot}");
@@ -246,6 +255,63 @@ fn chamfer_cuts_two_edges_picked() {
     assert!(volume(&run) < base_volume() - 50.0);
 }
 
+/// Chamfer's three types: two distances and a distance with an angle measure from the face
+/// picked; the corner's choice is written; Edit Feature reads each back into its own type.
+#[test]
+fn chamfer_takes_two_distances_or_an_angle_from_a_face_and_its_corner() {
+    let Some((mut h, _)) = open(BLOCK, "chamfer-types") else {
+        return;
+    };
+    button(&mut h, "Chamfer");
+    assert!(h.click("fg:tool:choice:Type:Two Distances"));
+    h.step();
+    h.step();
+    point_at(&mut h, [30.0, 0.0, 20.0]);
+    assert_eq!(picks(&h, "Edges").len(), 1);
+    assert!(h.click("fg:tool:slot:Face"), "no Face slot");
+    h.step();
+    point_at(&mut h, [20.0, 20.0, 20.0]);
+    assert_eq!(picks(&h, "Face").len(), 1, "{:?}", picks(&h, "Face"));
+    assert!(h.click("fg:tool:choice:Corner:Point"));
+    h.step();
+    set(&mut h, "d2", "2");
+    let (src, run) = ok(&mut h, "chamfer two distances");
+    assert!(
+        src.contains(", d2: d2, face: ") && src.contains("corner: \"point\""),
+        "{src}"
+    );
+    // a 1 by 2 triangle along the 60 mm edge
+    let cut = base_volume() - volume(&run);
+    assert!((cut - 60.0).abs() < 1e-3, "{cut}\n{src}");
+    // read back as it was written
+    let id = h.gui.shell.fg.as_ref().unwrap().feats.last().unwrap().id.clone();
+    h.gui.fg_edit_feature(&id);
+    let t = h.gui.shell.fg.as_ref().unwrap().tool.clone().expect("its dialog");
+    assert_eq!(t.choice("Type"), "Two Distances");
+    assert_eq!(t.choice("Corner"), "Point");
+    assert_eq!(t.params.iter().find(|p| p.name == "d2").unwrap().text, "2");
+    h.gui.shell.fg.as_mut().unwrap().tool = None;
+    h.step();
+
+    // a distance and an angle, the corner patched
+    button(&mut h, "Chamfer");
+    assert!(h.click("fg:tool:choice:Type:Distance and Angle"));
+    h.step();
+    h.step();
+    point_at(&mut h, [0.0, 30.0, 20.0]);
+    assert!(h.click("fg:tool:slot:Face"));
+    h.step();
+    point_at(&mut h, [20.0, 20.0, 20.0]);
+    let (src, run) = ok(&mut h, "chamfer distance and angle");
+    assert!(
+        src.contains(", angle: ang, face: ") && !src.ends_with("\"point\")\n"),
+        "{src}"
+    );
+    let cut = base_volume() - 60.0 - volume(&run);
+    // a half-unit triangle along its 60 mm edge, less where it meets the first at their corner
+    assert!(cut > 29.0 && cut < 30.0 + 1e-3, "{cut}\n{src}");
+}
+
 #[test]
 fn shell_opens_the_face_picked() {
     let Some((mut h, _)) = open(PLAIN, "shell") else {
@@ -302,7 +368,7 @@ fn extrude_cuts_a_sketch_loop_chosen() {
     let Some((mut h, _)) = open(BLOCK, "extrude") else {
         return;
     };
-    button(&mut h, "Extrude");
+    reuse(&mut h, "extrude");
     choose(&mut h, "Profile", "marks.sq");
     set(&mut h, "d", "5");
     assert!(h.click("fg:tool:choice:Output:Cut"));
@@ -321,7 +387,7 @@ fn revolve_turns_a_loop_about_one_of_its_sides() {
     let Some((mut h, _)) = open(BLOCK, "revolve") else {
         return;
     };
-    button(&mut h, "Revolve");
+    reuse(&mut h, "revolve");
     choose(&mut h, "Profile", "marks.sq");
     choose(&mut h, "Axis", "marks.sq[3]");
     let (src, run) = ok(&mut h, "revolve");
@@ -474,7 +540,11 @@ fn a_sketch_drawn_on_a_face_is_written_in_forge_and_extruded() {
     point_at(&mut h, [2.0, 20.0, 20.0]);
     point_at(&mut h, [8.0, 30.0, 20.0]);
     let rows = h.gui.shell.sketch.as_ref().unwrap().rows.clone();
-    assert!(rows.iter().any(|r| r.starts_with("rect")), "{rows:?}");
+    assert!(
+        rows.iter()
+            .any(|r| matches!(r, forge_render::shell::sketching::rows::Row::Rect(..))),
+        "{rows:?}"
+    );
     h.gui.shell.out.push(Action::FinishSketch);
     h.step();
     assert!(
@@ -508,6 +578,93 @@ fn a_sketch_drawn_on_a_face_is_written_in_forge_and_extruded() {
         "{}",
         volume(&run)
     );
+}
+
+#[test]
+fn project_geometry_takes_edges_and_faces_clicked_and_writes_forge_project() {
+    use forge_render::shell::sketching::{SkTool, rows, rows::Row};
+    let Some((mut h, _)) = open(PLAIN, "project") else {
+        return;
+    };
+    assert!(h.click("tool:Start Sketch"));
+    h.step();
+    point_at(&mut h, [5.0, 30.0, 20.0]);
+    assert!(h.gui.shell.sketch.is_some(), "{}", h.gui.shell.status);
+    for _ in 0..3 {
+        h.step();
+    }
+    assert!(h.click("tool:Project Geometry"), "no Project Geometry button");
+    h.step();
+    assert_eq!(h.gui.shell.sketch.as_ref().unwrap().tool, Some(SkTool::Project));
+
+    // an edge: the top's front edge, by the anchor Forge names it by; a line rows may name
+    point_at(&mut h, [30.0, 0.0, 20.0]);
+    let m = h.gui.shell.sketch.as_ref().unwrap();
+    assert_eq!(
+        m.rows.len(),
+        1,
+        "{:?} {:?} {}",
+        m.rows,
+        m.error,
+        h.gui.shell.status
+    );
+    assert!(
+        matches!(&m.rows[0], Row::Project { of, many: false, .. } if of.starts_with("edges(between: ")),
+        "{:?}",
+        m.rows
+    );
+    let (a, b) = rows::line(m.solved.as_ref().unwrap(), "j1").unwrap();
+    assert!((a.distance(b) - 60.0).abs() < 1e-9, "{a:?} {b:?}");
+
+    // the face: its boundary, held; again, nothing more
+    point_at(&mut h, [30.0, 30.0, 20.0]);
+    let m = h.gui.shell.sketch.as_ref().unwrap();
+    assert_eq!(m.rows.len(), 2, "{:?} {:?}", m.rows, m.error);
+    assert_eq!(
+        m.rows[1],
+        Row::Project {
+            of: "base.end".into(),
+            many: true,
+            approx: None
+        }
+    );
+    assert!(m.error.is_none(), "{:?}", m.error);
+    assert_eq!(rows::freedom(m.solved.as_ref().unwrap()).0, 0);
+    point_at(&mut h, [30.0, 30.0, 20.0]);
+    assert_eq!(h.gui.shell.sketch.as_ref().unwrap().rows.len(), 2);
+
+    h.gui.shell.out.push(Action::FinishSketch);
+    h.step();
+    assert!(
+        h.gui.shell.sketch.is_none(),
+        "{:?}",
+        h.gui.shell.fg.as_ref().unwrap().refused
+    );
+    assert!(h.until(ready));
+    let src = h.gui.fg.as_ref().unwrap().src.clone();
+    assert!(src.contains("sk1_src1 = edges(between: "), "{src}");
+    assert!(src.contains("sk1_src2 = base.end\n"), "{src}");
+    assert!(
+        src.contains("  j1 = project(sk1_src1)\n  j2 = project(sk1_src2)\n"),
+        "{src}"
+    );
+    let run = forge_lang::run(&src, forge_lang::Options::default(), Default::default()).0;
+    assert!(run.errors.is_empty(), "{:?}\n{src}", run.errors);
+
+    // opened again, it reads what it projects from the part, unchanged
+    for _ in 0..3 {
+        h.step();
+    }
+    h.gui.fg_edit_feature("sk1");
+    let m = h.gui.shell.sketch.as_ref().expect("opened");
+    assert!(m.error.is_none(), "{:?} {}", m.error, h.gui.shell.status);
+    let project = |of: &str, many: bool| Row::Project {
+        of: of.into(),
+        many,
+        approx: None,
+    };
+    assert_eq!(m.rows, [project("sk1_src1", false), project("sk1_src2", true)]);
+    assert!(m.unchanged());
 }
 
 #[test]

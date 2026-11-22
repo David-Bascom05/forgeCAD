@@ -1,56 +1,72 @@
-//! The app with no window: its chrome and its view driven as a pointer would, on a real part.
+//! The app with no window: its chrome and its view driven as a pointer would, on real Forge
+//! parts: a bench part by its name, and parts written for a test.
 
-use forge_agent::tools::{Call, Part};
 use forge_render::gui::Headless;
-use forge_render::shell::{NavTool, TABS};
+use forge_render::shell::{Action, NavTool, TABS};
 use forge_render::viewcube::Hit;
+
+/// The Forge part's build and its whole mesh are in.
+fn built(g: &forge_render::gui::Gui) -> bool {
+    g.fg.as_ref()
+        .is_some_and(|s| s.done == s.seq && s.whole >= s.changed)
+        && g.view.is_some()
+}
 
 fn app() -> Option<Headless> {
     let mut h = Headless::new((1200.0, 800.0), 1.0).ok()?;
     h.step();
     h.gui.open("bracket");
-    h.settle();
+    assert!(h.until(built), "{}", h.gui.shell.status);
     h.step();
     h.step();
     Some(h)
 }
 
-fn src(name: &str) -> String {
-    forge_render::load::source(name).unwrap()
+fn step_some(h: &mut Headless) {
+    for _ in 0..4 {
+        h.step();
+    }
 }
 
-#[test]
-fn the_tree_shows_the_parts_real_features_and_a_click_selects_in_its_own_frame() {
-    let Some(mut h) = app() else { return };
-    let want = forge_doc::Document::parse(&src("bracket"));
-    let names: Vec<String> = want
-        .features()
-        .filter_map(|i| match i.body {
-            forge_doc::Body::Feature { .. } | forge_doc::Body::Sketch { .. } => want.name(i.id),
-            _ => None,
-        })
-        .collect();
-    let got: Vec<String> = h.gui.shell.rows.iter().map(|r| r.name.clone()).collect();
-    assert_eq!(got, names);
-    assert!(got.contains(&"boss".to_string()));
-    assert_eq!(h.gui.shell.name, "bracket.fc");
-    // the tree counts by kind; the file's labels are only in the tooltip's line
-    let titles: Vec<&str> = h.gui.shell.rows.iter().map(|r| r.title.as_str()).collect();
-    assert_eq!(
-        &titles[..5],
-        ["Extrude1", "Fillet1", "Fillet2", "Extrude2", "Axis1"]
-    );
-    assert!(
-        h.gui.shell.rows[3].line.starts_with("boss:"),
-        "{}",
-        h.gui.shell.rows[3].line
-    );
-
-    assert_eq!(h.gui.shell.selected, None);
-    assert!(h.click("tree:boss"));
+fn file_part(text: &str) -> Option<(Headless, std::path::PathBuf)> {
+    let dir = std::env::temp_dir().join(format!(
+        "fg-shell-{}-{:?}",
+        std::process::id(),
+        std::thread::current().id()
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("p.fg");
+    std::fs::write(&file, text).unwrap();
+    let mut h = Headless::new((1200.0, 800.0), 1.0).ok()?;
     h.step();
-    let id = h.gui.shell.rows.iter().find(|r| r.name == "boss").unwrap().id;
-    assert_eq!(h.gui.shell.selected, Some(id));
+    h.gui.open(file.to_str().unwrap());
+    assert!(h.until(built), "{}", h.gui.shell.status);
+    // its faces under the pointer: the anchors that name them are in
+    h.until(|g| g.fg_anchors.is_some());
+    step_some(&mut h);
+    Some((h, file))
+}
+
+/// A block 60 by 60 about the origin, 20 high.
+const BLOCK: &str = "sketch plan(on: xy) {
+  outline = rect(corner: (-30, -30), size: (60, 60))
+}
+base = extrude(plan, 20)
+";
+
+/// A new sketch on one of the origin's planes, squared on to it, as a click on the plane starts it.
+fn sketch_on(h: &mut Headless, plane: &str) {
+    use forge_render::shell::sketching::{SketchFor, SketchMode};
+    let Some(forge_lang::eval::Value::Plane(p)) = forge_lang::builtins::constant(plane) else {
+        panic!("{plane}")
+    };
+    let mut m = SketchMode::new(SketchFor::New, plane.into(), p.frame, Vec::new());
+    m.units = "mm";
+    h.gui.shell.sketch = Some(m);
+    h.gui.shell.tab = 1;
+    h.step();
+    h.gui.shell.out.push(Action::LookAt);
+    step_some(h);
 }
 
 #[test]
@@ -75,14 +91,19 @@ fn tabs_change_the_ribbon_and_only_what_works_is_enabled() {
         h.gui.shell.place("style:Wireframe").is_none(),
         "the list closes on a choice"
     );
-    // a disabled one is hover only
+    // a live one on 3D Model opens its Forge tool
     h.click("tab:3D Model");
     h.step();
     h.step();
-    let calls = h.gui.calls.len();
+    h.click("tool:Fillet");
+    step_some(&mut h);
+    let tool = h.gui.shell.fg.as_ref().unwrap().tool.as_ref().map(|t| t.kind);
+    assert_eq!(tool, Some("fillet"));
+    // Extrude with every sketch read already starts a sketch for its profile, as `.fc`'s did
+    h.gui.shell.fg.as_mut().unwrap().tool = None;
     h.click("tool:Extrude");
-    h.step();
-    assert_eq!(h.gui.calls.len(), calls);
+    step_some(&mut h);
+    assert!(h.gui.shell.sketch_pick, "{}", h.gui.shell.status);
 }
 
 #[test]
@@ -114,26 +135,6 @@ fn nothing_is_drawn_when_nothing_moves_and_chrome_hover_leaves_the_view_alone() 
     h.step();
     let hit = h.gui.view.as_ref().unwrap().nav.marks();
     assert!(!hit.is_empty(), "the part's under the middle of the view");
-}
-
-#[test]
-fn a_chosen_feature_with_its_arrow_and_field_up_still_goes_idle() {
-    let Some(mut h) = app() else { return };
-    h.click("tree:boss");
-    assert!(h.until(|g| g.shell.dim.is_some()));
-    // off anything with a tooltip
-    h.move_to(800.0, 790.0);
-    let mut frames = 0;
-    loop {
-        let o = h.step();
-        frames += 1;
-        if o.again_in.is_none() {
-            break;
-        }
-        assert!(frames < 200, "it never went idle: {:?}", o.again_in);
-        std::thread::sleep(std::time::Duration::from_millis(2));
-    }
-    assert!(!h.step().times.view_drawn);
 }
 
 #[test]
@@ -193,52 +194,20 @@ fn a_nav_tool_changes_what_the_left_button_does() {
 }
 
 #[test]
-fn undo_is_a_tool_call_and_the_calls_replay_on_a_fresh_part() {
-    // the same calls by hand on the part as the worker's, then through the buttons
-    let mut p = Part::new("w = 40\nbase: extrude 10 rect 0 0 w 30\n");
-    let base = p.model.doc.find("base").unwrap();
-    assert!(
-        p.call(
-            vec![Call::SetArg {
-                item: base,
-                arg: 0,
-                text: "12".into()
-            }],
-            None
-        )
-        .ok
-    );
-    assert!(p.call(vec![Call::Undo], None).ok);
-    assert!(p.model.src().contains("extrude 10"));
-
-    let Some(mut h) = app() else { return };
-    let was = h.gui.shell.rows.clone();
-    h.click("undo");
-    h.step();
-    h.step();
-    assert_eq!(h.gui.calls, vec![Call::Undo]);
-    // nothing to undo on a fresh file: it says so, and the document stands (the worker's answer
-    // waited for, not 200 frames: on a busy machine it came after them)
-    h.until(|g| !g.shell.status.is_empty());
-    assert!(
-        h.gui.shell.status.contains("nothing to undo"),
-        "{}",
-        h.gui.shell.status
-    );
-    assert_eq!(h.gui.shell.rows, was);
-}
-
-#[test]
 fn a_part_that_cannot_open_says_why_and_the_app_goes_on() {
     let Ok(mut h) = Headless::new((800.0, 600.0), 1.25) else {
         return;
     };
     h.step();
-    h.gui.open("/nonexistent/x.fc");
-    // the loader's answer (not a count of frames)
-    assert!(h.until(|g| !g.loading()), "the load never answered");
-    assert!(h.gui.shell.status.contains("x.fc"), "{}", h.gui.shell.status);
+    h.gui.open("/nonexistent/x.fg");
+    h.step();
+    assert!(h.gui.shell.status.contains("x.fg"), "{}", h.gui.shell.status);
     assert!(h.gui.view.is_none());
+    assert!(h.gui.documents().is_empty());
+    // what's no Forge part, DWG file or bench part says so too
+    h.gui.open("/nonexistent/x.step");
+    h.step();
+    assert!(h.gui.shell.status.contains("x.step"), "{}", h.gui.shell.status);
 }
 
 #[test]
@@ -291,421 +260,9 @@ fn at_a_fractional_scale_the_view_is_the_layouts_size_in_the_windows_pixels() {
     assert!(v.nav.size.0 <= 2400 && v.nav.size.1 <= 1350, "{:?}", v.nav.size);
 }
 
-fn title_of<'a>(h: &'a Headless, name: &str) -> &'a forge_render::shell::Row {
-    h.gui.shell.rows.iter().find(|r| r.name == name).unwrap()
-}
-
-fn source(h: &Headless) -> String {
-    h.gui.shell.doc.as_ref().unwrap().print()
-}
-
-#[test]
-fn choosing_a_feature_shows_its_number_and_a_drag_is_real_millimetres_along_the_arrow() {
-    let Some(mut h) = app() else { return };
-    assert!(h.click("tree:boss"));
-    assert!(h.until(|g| g.shell.dim.is_some()), "its number comes up");
-    h.step();
-    h.step();
-    let boss = title_of(&h, "boss").id;
-    let was = h.gui.shell.dim.as_ref().unwrap().clone();
-    assert_eq!(was.handle.item, boss);
-    assert_eq!(was.value, 30.0);
-    assert!(!h.gui.view.as_ref().unwrap().facts.faces_of(boss).is_empty());
-    let (grip, cam, size, origin) = {
-        let (c, s) = h.gui.shell.camera.unwrap();
-        (h.gui.shell.place("dim:arrow").unwrap(), c, s, was.handle.origin)
-    };
-    // 10 mm along the arrow, as the screen shows it
-    let v = h.gui.shell.view_rect;
-    let at = |mm: f64| {
-        let p = [0, 1, 2].map(|k| (origin[k] + was.handle.dir[k] * mm) as f32);
-        let px = cam.pixel_of(p, size.0, size.1).unwrap();
-        (v.left() + px.0, v.top() + px.1)
-    };
-    let (a, b) = (at(0.0), at(10.0));
-    let (dx, dy) = (b.0 - a.0, b.1 - a.1);
-    let c = grip.center();
-    h.move_to(c.x, c.y);
-    h.step();
-    h.button(true);
-    h.step();
-    h.move_to(c.x + dx * 0.5, c.y + dy * 0.5);
-    h.step();
-    h.move_to(c.x + dx, c.y + dy);
-    h.step();
-    assert!(h.until(|g| g.view.as_ref().unwrap().live_drag));
-    let live = h.gui.shell.dim.as_ref().unwrap().value;
-    assert!((live - 40.0).abs() < 0.6, "10 mm out gives 40, got {live}");
-    h.button(false);
-    assert!(
-        h.until(|g| !g.view.as_ref().unwrap().live_drag),
-        "the full part comes back"
-    );
-    assert!(
-        h.until(|g| g
-            .shell
-            .doc
-            .as_ref()
-            .unwrap()
-            .print()
-            .contains(&format!("boss: extrude {}", forge_agent::short(live)))),
-        "status {} calls {:?} dim {:?}",
-        h.gui.shell.status,
-        h.gui.calls,
-        h.gui.shell.dim
-    );
-    // the same tool call on a fresh part makes the same file
-    let calls = h.gui.calls.clone();
-    assert_eq!(calls.len(), 1, "{calls:?}");
-    let mut p = Part::new(&src("bracket"));
-    assert!(p.call(calls, None).ok);
-    assert_eq!(p.model.src(), source(&h));
-}
-
-#[test]
-fn escape_calls_a_drag_off_and_the_shape_goes_back() {
-    let Some(mut h) = app() else { return };
-    h.click("tree:boss");
-    assert!(h.until(|g| g.shell.dim.is_some()));
-    h.step();
-    h.step();
-    let before = source(&h);
-    let c = h.gui.shell.place("dim:arrow").unwrap().center();
-    h.move_to(c.x, c.y);
-    h.step();
-    h.button(true);
-    h.step();
-    h.move_to(c.x + 30.0, c.y - 30.0);
-    h.step();
-    assert!(h.gui.shell.dim.as_ref().unwrap().dragging);
-    h.key(egui::Key::Escape);
-    h.step();
-    h.button(false);
-    assert!(h.until(|g| !g.shell.dim.as_ref().unwrap().dragging));
-    h.until(|g| !g.view.as_ref().unwrap().live_drag);
-    assert_eq!(source(&h), before);
-    assert!(h.gui.calls.is_empty());
-    assert_eq!(h.gui.shell.dim.as_ref().unwrap().value, 30.0);
-}
-
-#[test]
-fn a_typed_value_commits_on_enter_and_one_that_cannot_build_says_so_at_the_dimension() {
-    let Some(mut h) = app() else { return };
-    h.click("tree:boss");
-    assert!(h.until(|g| g.shell.dim.is_some()));
-    h.step();
-    h.step();
-    let before = source(&h);
-    let f = h.gui.shell.place("dim:field").unwrap().center();
-    h.move_to(f.x, f.y);
-    h.step();
-    h.button(true);
-    h.step();
-    h.button(false);
-    h.step();
-    h.key(egui::Key::End);
-    h.step();
-    for _ in 0..4 {
-        h.key(egui::Key::Backspace);
-        h.step();
-    }
-    h.text("nope");
-    h.step();
-    h.key(egui::Key::Enter);
-    h.step();
-    assert!(
-        h.until(|g| g.shell.dim.as_ref().is_some_and(|d| d.error.is_some())),
-        "an error, at the dimension"
-    );
-    assert!(h.gui.shell.place("dim:error").is_some() || h.until(|g| g.shell.place("dim:error").is_some()));
-    assert_eq!(source(&h), before, "the last good part stands");
-    // then a good one
-    let f = h.gui.shell.place("dim:field").unwrap().center();
-    h.move_to(f.x, f.y);
-    h.step();
-    h.button(true);
-    h.step();
-    h.button(false);
-    h.step();
-    h.key(egui::Key::End);
-    h.step();
-    for _ in 0..4 {
-        h.key(egui::Key::Backspace);
-        h.step();
-    }
-    h.text("35");
-    h.step();
-    h.key(egui::Key::Enter);
-    h.step();
-    assert!(
-        h.until(|g| g.shell.doc.as_ref().unwrap().print().contains("boss: extrude 35")),
-        "{}",
-        source(&h)
-    );
-    assert!(h.until(|g| {
-        g.shell
-            .dim
-            .as_ref()
-            .is_some_and(|d| d.error.is_none() && d.handle.value == 35.0)
-    }));
-}
-
-#[test]
-fn clicking_a_face_chooses_the_feature_that_made_it() {
-    let Some(mut h) = app() else { return };
-    assert!(h.until(|g| !g.view.as_ref().unwrap().facts.face_item.is_empty()));
-    let v = h.gui.shell.view_rect;
-    h.move_to(v.center().x, v.center().y);
-    h.step();
-    h.step();
-    h.step();
-    let hit = h.gui.view.as_ref().unwrap().nav.marks();
-    assert!(!hit.is_empty());
-    let mid = v.center();
-    h.move_to(mid.x, mid.y);
-    h.step();
-    h.button(true);
-    h.step();
-    h.button(false);
-    assert!(
-        h.until(|g| g.shell.selected.is_some()),
-        "the face's feature is chosen"
-    );
-    let id = h.gui.shell.selected.unwrap();
-    assert!(!h.gui.view.as_ref().unwrap().facts.faces_of(id).is_empty());
-    // and Esc clears it
-    assert!(h.click("tree:boss"));
-    assert!(h.until(|g| g.shell.selected == Some(title_of_id(g, "boss"))));
-}
-
-fn title_of_id(g: &forge_render::gui::Gui, name: &str) -> forge_doc::ItemId {
-    g.shell.rows.iter().find(|r| r.name == name).unwrap().id
-}
-
-#[test]
-fn origin_opens_to_its_items_shows_them_by_the_eye_and_a_click_on_one_selects_it() {
-    use forge_render::origin::Item;
-    let Some(mut h) = app() else { return };
-    assert!(h.gui.shell.place("tree:XY Plane").is_none());
-    h.click("tree:Origin");
-    h.step();
-    h.step();
-    for name in [
-        "YZ Plane",
-        "XZ Plane",
-        "XY Plane",
-        "X Axis",
-        "Y Axis",
-        "Z Axis",
-        "Center Point",
-    ] {
-        assert!(h.gui.shell.place(&format!("tree:{name}")).is_some(), "{name}");
-    }
-    assert!(h.gui.shell.origin_drawn().is_empty(), "hidden by default");
-    // hovering one draws it, strongly, and only while hovering
-    let r = h.gui.shell.place("tree:XY Plane").unwrap().center();
-    h.move_to(r.x, r.y);
-    let first = h.step();
-    let o = h.step();
-    assert_eq!(h.gui.shell.origin_drawn(), vec![(Item::XyPlane, true)]);
-    assert!(first.times.view_drawn || o.times.view_drawn, "the view shows it");
-    // clicking selects it
-    h.click("tree:XY Plane");
-    h.step();
-    h.step();
-    assert_eq!(h.gui.shell.origin_selected, Some(Item::XyPlane));
-    assert_eq!(h.gui.shell.selected, None);
-    // the eye keeps it shown
-    h.click("tree:Z Axis:eye");
-    h.step();
-    h.step();
-    h.move_to(600.0, 400.0);
-    h.step();
-    h.step();
-    assert!(h.gui.shell.origin_drawn().contains(&(Item::ZAxis, false)));
-    h.click("tree:Origin:eye");
-    h.step();
-    h.step();
-    assert!(
-        h.gui.shell.origin_shown.iter().all(|s| !*s),
-        "the folder's eye hides them all"
-    );
-}
-
-#[test]
-fn selecting_shows_no_dialog_a_double_click_does_and_cancel_closes_it() {
-    let Some(mut h) = app() else { return };
-    h.click("tree:boss");
-    h.step();
-    h.step();
-    assert!(h.gui.shell.dialog.is_none() && h.gui.shell.place("dialog").is_none());
-    // the second click of a pair, at once
-    let r = h.gui.shell.place("tree:boss").unwrap().center();
-    h.move_to(r.x, r.y);
-    for _ in 0..2 {
-        h.button(true);
-        h.step();
-        h.button(false);
-        h.step();
-    }
-    h.step();
-    h.step();
-    assert!(h.gui.shell.dialog.is_some());
-    assert!(h.gui.shell.place("dialog").is_some());
-    h.key(egui::Key::Escape);
-    h.step();
-    h.step();
-    assert!(h.gui.shell.dialog.is_none());
-}
-
-fn step_some(h: &mut Headless) {
-    for _ in 0..3 {
-        h.step();
-    }
-}
-
-#[test]
-fn tree_operations_are_tool_calls_that_replay_on_a_fresh_part() {
-    let dir = std::env::temp_dir().join(format!("fc-tree-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
-    let file = dir.join("p.fc");
-    std::fs::write(
-        &file,
-        "base: extrude 20 rect 0 0 40 40\nh1: hole 5 -xy at 10 10 20 thru\nh2: hole 5 -xy at 30 30 20 thru\n",
-    )
-    .unwrap();
-    let Ok(mut h) = Headless::new((1200.0, 800.0), 1.0) else {
-        return;
-    };
-    h.step();
-    h.gui.open(file.to_str().unwrap());
-    h.settle();
-    step_some(&mut h);
-    let rows: Vec<String> = h.gui.shell.rows.iter().map(|r| r.title.clone()).collect();
-    assert_eq!(rows, ["Extrude1", "Hole1", "Hole2"]);
-
-    // the right-click menu suppresses
-    let c = h.gui.shell.place("tree:h1").unwrap().center();
-    h.right_drag((c.x, c.y), (c.x, c.y));
-    step_some(&mut h);
-    assert!(h.gui.shell.marking_row.is_some());
-    let id = title_of(&h, "h1").id;
-    h.key(egui::Key::Escape);
-    step_some(&mut h);
-    assert!(h.gui.shell.marking.is_none() && h.gui.shell.marking_row.is_none());
-    h.gui.shell.out.push(forge_render::shell::Action::Suppress(id));
-    assert!(h.until(|g| g.shell.rows.iter().any(|r| r.suppressed)));
-    let off = h.gui.shell.rows.iter().find(|r| r.suppressed).unwrap().clone();
-    assert_eq!(off.title, "Hole1", "it keeps its place in the tree");
-    // and back
-    h.gui
-        .shell
-        .out
-        .push(forge_render::shell::Action::Unsuppress(off.id));
-    assert!(h.until(|g| g.shell.rows.iter().all(|r| !r.suppressed)));
-
-    // rename by F2 and typing
-    let c = h.gui.shell.place("tree:h2").unwrap().center();
-    h.move_to(c.x, c.y);
-    h.step();
-    h.button(true);
-    h.step();
-    h.button(false);
-    step_some(&mut h);
-    h.key(egui::Key::F2);
-    step_some(&mut h);
-    h.text("X");
-    step_some(&mut h);
-    h.key(egui::Key::Enter);
-    assert!(
-        h.until(|g| g.shell.rows.iter().any(|r| r.title.contains('X'))),
-        "{:?}",
-        h.gui.calls
-    );
-    let renamed = h
-        .gui
-        .shell
-        .rows
-        .iter()
-        .find(|r| r.title.contains('X'))
-        .unwrap()
-        .clone();
-    assert!(renamed.title.len() > 1);
-
-    // drag a row: h2 above h1
-    let (from, to) = (
-        h.gui.shell.place("tree:h2").unwrap(),
-        h.gui.shell.place("tree:h1").unwrap(),
-    );
-    h.move_to(from.center().x, from.center().y);
-    h.step();
-    h.button(true);
-    h.step();
-    h.move_to(to.center().x, to.top() + 1.0);
-    step_some(&mut h);
-    h.button(false);
-    assert!(h.until(|g| g.shell.rows[1].name == "h2"), "{:?}", h.gui.calls);
-
-    // delete
-    let c = h.gui.shell.place("tree:h1").unwrap().center();
-    h.move_to(c.x, c.y);
-    h.step();
-    h.button(true);
-    h.step();
-    h.button(false);
-    step_some(&mut h);
-    h.key(egui::Key::Delete);
-    assert!(h.until(|g| g.shell.rows.len() == 2));
-
-    // all of it, the same on a fresh part
-    let on_disk = std::fs::read_to_string(&file).unwrap();
-    let mut p = Part::new(
-        "base: extrude 20 rect 0 0 40 40\nh1: hole 5 -xy at 10 10 20 thru\nh2: hole 5 -xy at 30 30 20 thru\n",
-    );
-    for c in h.gui.calls.clone() {
-        let d = p.call(vec![c.clone()], None);
-        assert!(d.ok, "{c:?}: {}", d.text);
-    }
-    assert_eq!(p.model.src(), on_disk);
-    let _ = std::fs::remove_dir_all(&dir);
-}
-
-#[test]
-fn the_end_of_part_marker_rolls_the_part_back_and_rows_below_it_dim() {
-    let Some(mut h) = app() else { return };
-    assert!(h.until(|g| !g.view.as_ref().unwrap().facts.face_item.is_empty()));
-    let full = h.gui.view.as_ref().unwrap().facts.face_item.len();
-    let m = h.gui.shell.place("tree:End of part").unwrap().center();
-    let to = h.gui.shell.place("tree:boss").unwrap();
-    h.move_to(m.x, m.y);
-    h.step();
-    h.button(true);
-    h.step();
-    h.move_to(to.center().x, to.top() + 1.0);
-    step_some(&mut h);
-    h.button(false);
-    let corner = title_of(&h, "corner").id;
-    assert!(
-        h.until(|g| g.shell.end_at == Some(corner)),
-        "{:?}",
-        h.gui.shell.end_at
-    );
-    assert!(
-        h.until(|g| {
-            let n = g.view.as_ref().unwrap().facts.face_item.len();
-            n > 0 && n < full
-        }),
-        "the part as of that feature"
-    );
-    // and forward again
-    h.gui.shell.out.push(forge_render::shell::Action::EndAt(None));
-    assert!(h.until(|g| g.view.as_ref().unwrap().facts.face_item.len() == full));
-}
-
 #[test]
 fn the_right_button_in_the_view_is_the_marking_menu() {
     let Some(mut h) = app() else { return };
-    assert!(h.until(|g| !g.view.as_ref().unwrap().facts.face_item.is_empty()));
     let v = h.gui.shell.view_rect;
     let c = (v.left() + 60.0, v.bottom() - 120.0);
     // a click brings it up, Esc takes it away, and nothing panned
@@ -718,300 +275,30 @@ fn the_right_button_in_the_view_is_the_marking_menu() {
     step_some(&mut h);
     assert!(h.gui.shell.marking.is_none());
     assert_eq!(h.gui.view.as_ref().unwrap().nav.camera, cam);
-    // a flick straight up chooses the top place without showing it: Undo
+    // a flick straight up chooses the top place without showing it: Undo, an edit taken back
+    let src = h.gui.fg.as_ref().unwrap().src.clone();
+    let p = h
+        .gui
+        .shell
+        .fg
+        .as_ref()
+        .unwrap()
+        .params
+        .iter()
+        .find(|p| p.driving())
+        .unwrap()
+        .clone();
+    let (v, dim) = p.value.unwrap();
+    let op = forge_lang::error::Op::SetParam {
+        param: p.key.clone(),
+        value: forge_lang::error::Literal { value: v + 1.0, dim },
+    };
+    h.gui.fg_apply(op).unwrap();
+    assert_ne!(h.gui.fg.as_ref().unwrap().src, src);
     h.right_drag(c, (c.0, c.1 - 80.0));
     step_some(&mut h);
     assert!(h.gui.shell.marking.is_none());
-    assert_eq!(h.gui.calls, vec![Call::Undo]);
-}
-
-use forge_render::shell::Action;
-
-fn file_part(text: &str) -> Option<(Headless, std::path::PathBuf)> {
-    let dir = std::env::temp_dir().join(format!(
-        "fc-dlg-{}-{:?}",
-        std::process::id(),
-        std::thread::current().id()
-    ));
-    std::fs::create_dir_all(&dir).unwrap();
-    let file = dir.join("p.fc");
-    std::fs::write(&file, text).unwrap();
-    let mut h = Headless::new((1200.0, 800.0), 1.0).ok()?;
-    h.step();
-    h.gui.open(file.to_str().unwrap());
-    h.settle();
-    // its faces drawn, where it has any (an empty part or one of sketches alone has none)
-    if forge_agent::model::Model::new(text).body().is_some() {
-        h.until(|g| g.view.as_ref().is_some_and(|v| !v.facts.face_item.is_empty()));
-    }
-    step_some(&mut h);
-    Some((h, file))
-}
-
-const BLOCK: &str = "base: extrude 20 rect -30 -30 60 60\n";
-
-fn set_field(h: &mut Headless, label: &str, text: &str) {
-    let d = h.gui.shell.dialog.as_mut().unwrap();
-    let f = d.fields.iter_mut().find(|f| f.0 == label).unwrap();
-    f.1 = text.to_string();
-}
-
-#[test]
-fn ribbon_buttons_make_features_through_a_dialog_with_a_live_result_and_ok_commits() {
-    let Some((mut h, file)) = file_part(BLOCK) else {
-        return;
-    };
-    h.gui.shell.out.push(Action::NewFeature("plane"));
-    assert!(h.until(|g| g.shell.dialog.is_some()));
-    h.gui.shell.dialog = None;
-    let mut d = forge_render::shell::dialog::Dialog::new_feature("hole");
-    d.pick = None;
-    d.fields = vec![
-        ("Diameter".into(), "5".into()),
-        ("Plane".into(), "-xy at 5 5 20".into()),
-        ("Depth".into(), "thru".into()),
-    ];
-    h.gui.shell.dialog = Some(d);
-    let v0 = h.gui.view.as_ref().unwrap().facts.face_item.len();
-    h.step();
-    assert!(h.until(
-        |g| g.shell.dialog.as_ref().unwrap().seq > 0 && g.shell.dialog.as_ref().unwrap().error.is_none()
-    ));
-    // nothing's in the file yet
-    assert!(!std::fs::read_to_string(&file).unwrap().contains("hole"));
-    h.gui.shell.out.push(Action::DialogOk);
-    assert!(h.until(|g| g.shell.dialog.is_none()), "{:?}", h.gui.shell.dialog);
-    assert!(h.until(|g| g.shell.rows.len() == 2));
-    assert!(
-        std::fs::read_to_string(&file)
-            .unwrap()
-            .contains("hole 5 -xy at 5 5 20 thru")
-    );
-    assert!(h.until(|g| g.view.as_ref().unwrap().facts.face_item.len() > v0));
-    assert_eq!(h.gui.shell.rows[1].title, "Hole1");
-    // the same call on a fresh part
-    let mut p = Part::new(BLOCK);
-    let want = std::fs::read_to_string(&file).unwrap();
-    for c in h.gui.calls.clone() {
-        assert!(p.call(vec![c], None).ok);
-    }
-    assert_eq!(p.model.src(), want);
-}
-
-#[test]
-fn a_fillet_waits_for_picks_takes_them_from_the_view_and_a_bad_value_says_so() {
-    let Some((mut h, file)) = file_part(BLOCK) else {
-        return;
-    };
-    h.click("tool:Fillet");
-    assert!(h.until(|g| g.shell.dialog.is_some()));
-    step_some(&mut h);
-    let d = h.gui.shell.dialog.as_ref().unwrap();
-    assert!(d.waiting_for_pick(), "it says what it wants");
-    assert_eq!(d.seq, 0, "and builds nothing yet");
-    // an edge picked in the view lands in the field, as the part file names it
-    let v = h.gui.view.as_mut().unwrap();
-    v.nav.selected = vec![(0, forge_render::render::Entity::Edge(0))];
-    v.mark_dirty();
-    h.step();
-    let d = h.gui.shell.dialog.as_ref().unwrap();
-    let edges = d.fields.iter().find(|f| f.0 == "Edges").unwrap().1.clone();
-    assert!(edges.starts_with("@e"), "{edges}");
-    assert!(h.until(|g| g.shell.dialog.as_ref().unwrap().seq > 0));
-    // too big: a clear word, and OK waits on it
-    set_field(&mut h, "Radius", "500");
-    h.step();
-    assert!(h.until(|g| g.shell.dialog.as_ref().unwrap().error.is_some()));
-    // a size that fits commits
-    set_field(&mut h, "Radius", "2");
-    h.step();
-    assert!(h.until(|g| {
-        let d = g.shell.dialog.as_ref().unwrap();
-        d.error.is_none() && d.sent.as_deref().is_some_and(|l| l.starts_with("fillet 2"))
-    }));
-    h.gui.shell.out.push(Action::DialogOk);
-    assert!(h.until(|g| g.shell.dialog.is_none()), "{:?}", h.gui.shell.dialog);
-    assert!(
-        std::fs::read_to_string(&file)
-            .unwrap()
-            .contains("fillet 2 only @e")
-    );
-}
-
-#[test]
-fn editing_a_feature_keeps_its_id_and_cancel_puts_all_back() {
-    let Some((mut h, file)) = file_part(BLOCK) else {
-        return;
-    };
-    let id = title_of(&h, "base").id;
-    h.gui.shell.out.push(Action::Edit(id));
-    assert!(h.until(|g| g.shell.dialog.is_some()));
-    step_some(&mut h);
-    let was = std::fs::read_to_string(&file).unwrap();
-    set_field(&mut h, "Distance", "33");
-    h.step();
-    assert!(h.until(|g| g.shell.dialog.as_ref().unwrap().seq > 0));
-    h.gui.shell.out.push(Action::DialogCancel);
-    assert!(h.until(|g| g.shell.dialog.is_none()));
-    assert_eq!(std::fs::read_to_string(&file).unwrap(), was);
-    // again, OK
-    h.gui.shell.out.push(Action::Edit(id));
-    assert!(h.until(|g| g.shell.dialog.is_some()));
-    step_some(&mut h);
-    set_field(&mut h, "Distance", "33");
-    h.step();
-    h.gui.shell.out.push(Action::DialogOk);
-    assert!(h.until(|g| g.shell.dialog.is_none()));
-    assert!(
-        std::fs::read_to_string(&file)
-            .unwrap()
-            .contains("base: extrude 33")
-    );
-    assert!(h.until(|g| g.shell.rows.first().is_some_and(|r| r.id == id)));
-}
-
-#[test]
-fn a_sketch_starts_on_a_plane_solves_as_it_goes_and_finish_commits_one_call_that_extrudes() {
-    use forge_render::shell::sketching::SkTool;
-    let Some((mut h, file)) = file_part(BLOCK) else {
-        return;
-    };
-    // nothing chosen: it waits for a pick, with the planes up
-    h.click("tool:Start Sketch");
-    step_some(&mut h);
-    assert!(h.gui.shell.sketch_pick);
-    h.key(egui::Key::Escape);
-    h.gui.shell.sketch_pick = false;
-    // on the XY plane, chosen from the tree
-    h.gui.shell.origin_selected = Some(forge_render::origin::Item::XyPlane);
-    h.gui.shell.out.push(Action::StartSketch);
-    assert!(h.until(|g| g.shell.sketch.is_some()), "{}", h.gui.shell.status);
-    assert_eq!(h.gui.shell.tab, 1, "the Sketch tab");
-    step_some(&mut h);
-    assert!(h.gui.shell.place("tool:Line").is_some());
-    // the camera comes square on
-    assert!(h.until(|g| {
-        let (f, _, _) = g.view.as_ref().unwrap().nav.camera.axes();
-        f[2] < -0.999
-    }));
-    // draw with real clicks: rectangle tool, two corners on the screen
-    h.gui.shell.out.push(Action::SketchTool(SkTool::Rectangle));
-    step_some(&mut h);
-    let v = h.gui.shell.view_rect;
-    let c = v.center();
-    for (x, y) in [(c.x - 60.0, c.y - 40.0), (c.x + 60.0, c.y + 40.0)] {
-        h.move_to(x, y);
-        step_some(&mut h);
-        h.button(true);
-        h.step();
-        h.button(false);
-        step_some(&mut h);
-    }
-    let m = h.gui.shell.sketch.as_ref().unwrap();
-    assert!(
-        m.rows.len() == 1 && m.rows[0].starts_with("rect "),
-        "{:?}",
-        m.rows
-    );
-    assert!(m.error.is_none(), "{:?}", m.error);
-    // the view stayed put while the tool had the button
-    h.gui.shell.out.push(Action::FinishSketch);
-    assert!(
-        h.until(|g| g.shell.rows.iter().any(|r| r.kind == "sketch")),
-        "{:?} {}",
-        h.gui.calls,
-        h.gui.shell.status
-    );
-    assert!(h.gui.shell.sketch.is_none());
-    let text = std::fs::read_to_string(&file).unwrap();
-    assert!(text.contains("sketch xy") && text.contains("rect "), "{text}");
-    // a replay makes the same file
-    let mut p = Part::new(BLOCK);
-    for c in h.gui.calls.clone() {
-        assert!(p.call(vec![c], None).ok);
-    }
-    assert_eq!(p.model.src(), text);
-}
-
-#[test]
-fn an_inline_profile_shows_as_the_features_sketch_and_editing_writes_it_as_a_line_in_one_commit() {
-    use forge_render::shell::SketchChild;
-    let text = "base: extrude 20 rect -30 -30 60 60\nf: fillet 2 (edges top along +x)\n";
-    let Some((mut h, file)) = file_part(text) else {
-        return;
-    };
-    assert!(matches!(
-        h.gui.shell.rows[0].sketch,
-        Some(SketchChild::Inline(..))
-    ));
-    let before = h.gui.view.as_ref().unwrap().facts.face_item.len();
-    h.click("tree:base:open");
-    step_some(&mut h);
-    assert!(h.gui.shell.place("tree:base:sketch").is_some());
-    let id = title_of(&h, "base").id;
-    h.gui.shell.out.push(Action::EditInline(id));
-    assert!(h.until(|g| g.shell.sketch.is_some()), "{}", h.gui.shell.status);
-    // looked at and left: it's as it was, and nothing's committed
-    h.gui.shell.out.push(Action::FinishSketch);
-    assert!(h.until(|g| g.shell.sketch.is_none()));
-    step_some(&mut h);
-    assert_eq!(std::fs::read_to_string(&file).unwrap().trim(), text.trim());
-    assert!(h.gui.calls.is_empty());
-    // with a change, it's written as a sketch line
-    h.gui.shell.out.push(Action::EditInline(id));
-    assert!(h.until(|g| g.shell.sketch.is_some()));
-    assert!(h.gui.shell.sketch.as_mut().unwrap().add("pt 1 1".into()));
-    h.gui.shell.out.push(Action::FinishSketch);
-    assert!(
-        h.until(|g| g.shell.rows.iter().any(|r| r.kind == "sketch")),
-        "{}",
-        h.gui.shell.status
-    );
-    let now = std::fs::read_to_string(&file).unwrap();
-    assert!(now.contains("sk1: id 3 sketch xy"), "{now}");
-    assert!(now.contains("base: id 1 extrude 20 sk1"), "{now}");
-    // the sketch sits under its feature, and the part's the same, downstream fillet and all
-    assert!(h.until(|g| g.shell.rows.iter().any(|r| r.kind == "sketch" && r.tucked)));
-    assert!(matches!(title_of(&h, "base").sketch, Some(SketchChild::Line(..))));
-    assert!(
-        h.until(|g| g.view.as_ref().unwrap().facts.face_item.len() == before),
-        "{}",
-        h.gui.shell.status
-    );
-    assert!(h.gui.shell.failed.is_none());
-    // one undo takes both lines back
-    h.gui.shell.out.push(Action::Undo);
-    assert!(h.until(|g| g.shell.rows.iter().all(|r| r.kind != "sketch")));
-    // but for the file's note that an id's been used, so it won't be handed out again
-    let back = std::fs::read_to_string(&file).unwrap();
-    let back: Vec<&str> = back.lines().filter(|l| !l.starts_with("next ")).collect();
-    assert_eq!(back.join("\n"), text.trim());
-}
-
-#[test]
-fn a_new_extrude_reads_a_sketch_and_with_none_starts_one_then_opens_on_it() {
-    use forge_render::shell::sketching::SkTool;
-    let Some((mut h, _)) = file_part(BLOCK) else {
-        return;
-    };
-    h.gui.shell.origin_selected = Some(forge_render::origin::Item::XyPlane);
-    h.click("tool:Extrude");
-    assert!(h.until(|g| g.shell.sketch.is_some()), "it starts a sketch");
-    h.gui.shell.out.push(Action::SketchTool(SkTool::Rectangle));
-    h.step();
-    let m = h.gui.shell.sketch.as_mut().unwrap();
-    assert!(m.add("rect 40 40 10 10".into()));
-    h.gui.shell.out.push(Action::FinishSketch);
-    assert!(h.until(|g| g.shell.dialog.is_some()), "then the dialog, on it");
-    let d = h.gui.shell.dialog.as_ref().unwrap();
-    let profile = d.fields.iter().find(|f| f.0 == "Profile").unwrap().1.clone();
-    assert!(profile.starts_with("sketch"), "{profile}");
-    h.step();
-    assert!(h.until(|g| g.shell.dialog.as_ref().unwrap().seq > 0));
-    assert!(h.until(|g| g.shell.dialog.as_ref().unwrap().error.is_none()));
-    h.gui.shell.out.push(Action::DialogOk);
-    assert!(h.until(|g| g.shell.dialog.is_none()), "{:?}", h.gui.shell.dialog);
-    assert!(h.until(|g| g.shell.rows.iter().filter(|r| r.kind == "extrude").count() == 2));
+    assert_eq!(h.gui.fg.as_ref().unwrap().src, src);
 }
 
 #[test]
@@ -1133,9 +420,7 @@ fn drawing_tabs_through_its_dimensions_from_the_start_and_typing_goes_in_the_act
     let Some((mut h, _)) = file_part(BLOCK) else {
         return;
     };
-    h.gui.shell.origin_selected = Some(forge_render::origin::Item::XyPlane);
-    h.gui.shell.out.push(Action::StartSketch);
-    assert!(h.until(|g| g.shell.sketch.is_some()));
+    sketch_on(&mut h, "xy");
     h.gui.shell.out.push(Action::SketchTool(SkTool::Rectangle));
     step_some(&mut h);
     let v = h.gui.shell.view_rect;
@@ -1172,14 +457,26 @@ fn drawing_tabs_through_its_dimensions_from_the_start_and_typing_goes_in_the_act
     step_some(&mut h);
     let m = h.gui.shell.sketch.as_ref().unwrap();
     assert!(
-        m.rows
-            .iter()
-            .any(|r| r.starts_with("hdist") && r.ends_with(" 25")),
+        m.rows.iter().any(|r| matches!(
+            r,
+            forge_render::shell::sketching::rows::Row::Dim(
+                forge_render::shell::sketching::rows::D::HDist,
+                _,
+                Some(v)
+            ) if v.num() == Some(25.0)
+        )),
         "{:?}",
         m.rows
     );
     assert!(
-        m.rows.iter().any(|r| r.starts_with("vdist") && r.ends_with(" 7")),
+        m.rows.iter().any(|r| matches!(
+            r,
+            forge_render::shell::sketching::rows::Row::Dim(
+                forge_render::shell::sketching::rows::D::VDist,
+                _,
+                Some(v)
+            ) if v.num() == Some(7.0)
+        )),
         "{:?}",
         m.rows
     );
@@ -1187,149 +484,11 @@ fn drawing_tabs_through_its_dimensions_from_the_start_and_typing_goes_in_the_act
 }
 
 #[test]
-fn origin_planes_show_in_an_empty_part_only_and_a_tree_plane_starts_a_sketch() {
-    use forge_render::origin::Item;
-    let mut s = forge_render::shell::Shell::default();
-    assert_eq!(s.origin_drawn().len(), 3, "an empty part shows them, to start on");
-    s.set_doc(BLOCK, 1, None);
-    assert!(
-        s.origin_drawn().is_empty(),
-        "once there's anything, they're hidden"
-    );
-    let Some((mut h, _)) = file_part(BLOCK) else {
-        return;
-    };
-    h.gui.shell.out.push(Action::StartSketch);
-    step_some(&mut h);
-    assert!(h.gui.shell.sketch_pick);
-    assert!(h.gui.shell.origin_drawn().is_empty(), "not forced on");
-    h.click("tree:Origin");
-    step_some(&mut h);
-    h.click("tree:XZ Plane");
-    assert!(h.until(|g| g.shell.sketch.is_some()), "{}", h.gui.shell.status);
-    assert_eq!(
-        h.gui.shell.sketch.as_ref().unwrap().head,
-        Item::XzPlane.reference()
-    );
-}
-
-#[test]
-fn a_new_part_starts_empty_with_its_planes_and_its_first_sketch_makes_a_solid() {
-    use forge_render::origin::Item;
-    let Some((mut h, path)) = file_part("") else {
-        return;
-    };
-    assert!(h.gui.shell.rows.is_empty());
-    assert_eq!(h.gui.shell.origin_drawn().len(), 3);
-    h.gui.shell.out.push(Action::StartSketch);
-    step_some(&mut h);
-    assert!(h.gui.shell.sketch_pick);
-    h.click("tree:Origin");
-    step_some(&mut h);
-    h.click("tree:XY Plane");
-    assert!(h.until(|g| g.shell.sketch.is_some()), "{}", h.gui.shell.status);
-    assert_eq!(
-        h.gui.shell.sketch.as_ref().unwrap().head,
-        Item::XyPlane.reference()
-    );
-    let m = h.gui.shell.sketch.as_mut().unwrap();
-    for r in [
-        "line 0 0 40 0",
-        "line l1.b 40 30",
-        "line l2.b 0 30",
-        "line l3.b l1.a",
-    ] {
-        assert!(m.add(r.to_string()), "{r}: {:?}", m.error);
-    }
-    step_some(&mut h);
-    h.gui.shell.out.push(Action::FinishSketch);
-    assert!(h.until(|g| !g.shell.rows.is_empty()), "{}", h.gui.shell.status);
-    // off the tree row it was chosen from
-    let c = h.gui.shell.view_rect.center();
-    h.move_to(c.x, c.y);
-    step_some(&mut h);
-    assert!(
-        h.gui.shell.origin_drawn().is_empty(),
-        "the planes go with the first feature"
-    );
-    let written = std::fs::read_to_string(&path).unwrap();
-    assert!(written.contains("sketch"), "{written}");
-}
-
-const TWO_SKETCHES: &str =
-    "sk1: sketch xy\n  rect 0 0 40 30\nend\nsk2: sketch xz\n  circle 0 0 15\nend\nbase: extrude 10 sk1\n";
-
-#[test]
-fn a_sketch_nothing_reads_shows_and_one_that_is_read_hides_till_its_eye_says() {
-    let Some((mut h, _)) = file_part(TWO_SKETCHES) else {
-        return;
-    };
-    let id = |h: &Headless, n: &str| h.gui.shell.doc.as_ref().unwrap().find(n).unwrap();
-    let (one, two) = (id(&h, "sk1"), id(&h, "sk2"));
-    assert_eq!(h.gui.shell.sketch_shapes.len(), 2);
-    assert!(!h.gui.shell.sketch_shown(one), "read by the extrude");
-    assert!(h.gui.shell.sketch_shown(two), "nothing reads it");
-    h.gui.shell.out.push(Action::SketchVisibility(one));
-    h.gui.shell.out.push(Action::SketchVisibility(two));
-    step_some(&mut h);
-    assert!(h.gui.shell.sketch_shown(one));
-    assert!(!h.gui.shell.sketch_shown(two));
-}
-
-#[test]
-fn pointing_at_a_sketch_in_the_view_chooses_it_and_a_face_under_it_does_not_light() {
-    let Some((mut h, _)) =
-        file_part("sk2: sketch xy\n  circle 60 60 15\nend\nbase: extrude 10 rect 0 0 120 30\n")
-    else {
-        return;
-    };
-    let (cam, size) = h.gui.shell.camera.unwrap();
-    let rect = h.gui.shell.view_rect;
-    let on = cam.pixel_of([75.0, 60.0, 0.0], size.0, size.1).unwrap();
-    h.move_to(rect.min.x + on.0, rect.min.y + on.1);
-    step_some(&mut h);
-    let id = h.gui.shell.doc.as_ref().unwrap().find("sk2").unwrap();
-    assert_eq!(h.gui.shell.sketch_hover, Some(id));
-    h.button(true);
-    h.step();
-    h.button(false);
-    step_some(&mut h);
-    assert_eq!(h.gui.shell.selected, Some(id));
-}
-
-#[test]
-fn extrude_picks_a_region_of_a_visible_sketch_in_the_view() {
-    let two = "sk1: sketch xy\n  rect 0 0 20 20\n  rect 40 0 20 20\nend\n";
-    let Some((mut h, _)) = file_part(two) else {
-        return;
-    };
-    h.gui.shell.out.push(Action::NewFeature("extrude"));
-    assert!(h.until(|g| g.shell.dialog.is_some()));
-    let (cam, size) = h.gui.shell.camera.unwrap();
-    let rect = h.gui.shell.view_rect;
-    let on = cam.pixel_of([50.0, 10.0, 0.0], size.0, size.1).unwrap();
-    h.move_to(rect.min.x + on.0, rect.min.y + on.1);
-    step_some(&mut h);
-    h.button(true);
-    h.step();
-    h.button(false);
-    step_some(&mut h);
-    let d = h.gui.shell.dialog.as_ref().unwrap();
-    let profile = d.fields.iter().find(|f| f.0 == "Profile").unwrap();
-    assert!(profile.1.starts_with("sk1 l"), "{profile:?}");
-    assert_ne!(profile.1, "sk1 l1", "the second, not the first");
-    assert!(d.error.is_none(), "{:?}", d.error);
-}
-
-#[test]
 fn in_a_sketch_faces_do_not_answer_the_pointer_and_orbiting_stays_put_until_look_at() {
     let Some((mut h, _)) = file_part(BLOCK) else {
         return;
     };
-    h.gui.shell.origin_selected = Some(forge_render::origin::Item::XyPlane);
-    h.gui.shell.out.push(Action::StartSketch);
-    assert!(h.until(|g| g.shell.sketch.is_some()));
-    h.gui.shell.tab = 1;
+    sketch_on(&mut h, "xy");
     for _ in 0..80 {
         h.step();
         std::thread::sleep(std::time::Duration::from_millis(10));
@@ -1377,12 +536,13 @@ fn esc(h: &mut Headless) {
 
 fn at_rest(h: &Headless) {
     let s = &h.gui.shell;
+    let p = s.fg.as_ref().unwrap();
     assert!(
-        !s.sketch_pick && s.sketch.is_none() && s.dialog.is_none() && !s.menu_open() && s.renaming.is_none(),
+        !s.sketch_pick && s.sketch.is_none() && p.tool.is_none() && !s.menu_open() && p.renaming.is_none(),
         "pick {} sketch {} dialog {} menu {}",
         s.sketch_pick,
         s.sketch.is_some(),
-        s.dialog.is_some(),
+        p.tool.is_some(),
         s.menu_open()
     );
 }
@@ -1390,10 +550,9 @@ fn at_rest(h: &Headless) {
 #[test]
 fn esc_backs_out_of_every_mode_one_level_at_a_time() {
     use forge_render::shell::sketching::SkTool;
-    let Some((mut h, _)) = file_part(TWO_SKETCHES) else {
+    let Some((mut h, _)) = file_part(BLOCK) else {
         return;
     };
-    let base = h.gui.shell.doc.as_ref().unwrap().find("base").unwrap();
     // picking a plane
     h.gui.shell.out.push(Action::StartSketch);
     step_some(&mut h);
@@ -1402,9 +561,7 @@ fn esc_backs_out_of_every_mode_one_level_at_a_time() {
     esc(&mut h);
     at_rest(&h);
     // in a sketch with a half-drawn line: the line, the tool, then the sketch
-    h.gui.shell.origin_selected = Some(forge_render::origin::Item::XyPlane);
-    h.gui.shell.out.push(Action::StartSketch);
-    assert!(h.until(|g| g.shell.sketch.is_some()));
+    sketch_on(&mut h, "xy");
     h.gui.shell.out.push(Action::SketchTool(SkTool::Line));
     step_some(&mut h);
     h.gui.shell.sketch.as_mut().unwrap().click((1.0, 1.0), 0.5);
@@ -1425,12 +582,7 @@ fn esc_backs_out_of_every_mode_one_level_at_a_time() {
     // a dialog; each menu; a rename; a selection
     h.gui.shell.out.push(Action::NewFeature("fillet"));
     step_some(&mut h);
-    assert!(h.gui.shell.dialog.is_some());
-    esc(&mut h);
-    at_rest(&h);
-    h.gui.shell.marking = Some(egui::pos2(400.0, 400.0));
-    h.gui.shell.marking_row = Some(base);
-    step_some(&mut h);
+    assert!(h.gui.shell.fg.as_ref().unwrap().tool.is_some());
     esc(&mut h);
     at_rest(&h);
     h.gui.shell.cube_menu = Some(egui::pos2(400.0, 400.0));
@@ -1445,85 +597,14 @@ fn esc_backs_out_of_every_mode_one_level_at_a_time() {
     step_some(&mut h);
     esc(&mut h);
     at_rest(&h);
-    h.gui.shell.out.push(Action::StartRename(base));
-    step_some(&mut h);
-    assert!(h.gui.shell.renaming.is_some());
-    esc(&mut h);
-    at_rest(&h);
-    h.gui.shell.selected = Some(base);
+    h.gui.shell.fg.as_mut().unwrap().renaming = Some(("base".into(), "base".into()));
     step_some(&mut h);
     esc(&mut h);
-    assert_eq!(h.gui.shell.selected, None);
-}
-
-#[test]
-fn picking_a_sketch_while_starting_one_opens_it_and_cancel_always_leaves() {
-    let Some((mut h, _)) = file_part(TWO_SKETCHES) else {
-        return;
-    };
-    h.gui.shell.out.push(Action::StartSketch);
-    step_some(&mut h);
-    assert!(h.gui.shell.sketch_pick);
-    // a feature isn't something to sketch on: still picking, and it says so
-    h.click("tree:base");
-    step_some(&mut h);
-    assert!(h.gui.shell.sketch_pick);
-    assert!(h.gui.shell.status.contains("feature"), "{}", h.gui.shell.status);
-    h.click("tree:sk2");
-    assert!(h.until(|g| g.shell.sketch.is_some()), "{}", h.gui.shell.status);
-    assert!(!h.gui.shell.sketch_pick);
-    assert!(!h.gui.shell.sketch.as_ref().unwrap().is_new());
-    h.click("mode:cancel");
-    step_some(&mut h);
     at_rest(&h);
-    // and a new sketch with nothing drawn leaves nothing behind
-    let n = h.gui.shell.rows.len();
     h.gui.shell.origin_selected = Some(forge_render::origin::Item::XyPlane);
-    h.gui.shell.out.push(Action::StartSketch);
-    assert!(h.until(|g| g.shell.sketch.is_some()));
-    h.click("mode:finish");
     step_some(&mut h);
-    at_rest(&h);
-    assert_eq!(h.gui.shell.rows.len(), n);
-}
-
-/// A chosen face's fill in the middle of the view, turned a little at a time: every pixel of a patch
-/// of it carries the fill, on a flat face and a curved one, whatever level of detail is showing.
-#[test]
-fn a_faces_fill_has_no_holes_as_the_view_turns() {
-    for (part, flat) in [(BLOCK, true), ("base: extrude 40 circle 0 0 30\n", false)] {
-        let Some((mut h, _)) = file_part(part) else {
-            return;
-        };
-        let id = h.gui.shell.doc.as_ref().unwrap().find("base").unwrap();
-        h.gui.shell.selected = Some(id);
-        for k in 0..24 {
-            let v = h.gui.view.as_mut().unwrap();
-            v.nav.camera.yaw = 0.3 + k as f32 * 0.17;
-            v.nav.camera.pitch = 0.5;
-            v.nav.camera.dist *= if k % 2 == 0 { 0.93 } else { 1.0 / 0.93 };
-            v.mark_dirty();
-            step_some(&mut h);
-            let img = h.gui_pixels();
-            let (w, c) = (h.gui.shell.camera.unwrap().1, h.gui.shell.view_rect);
-            let _ = w;
-            let (mid_x, mid_y) = (c.center().x as usize, c.center().y as usize);
-            let mut plain = 0;
-            for dy in 0..30 {
-                for dx in 0..30 {
-                    let p = img.at(mid_x - 15 + dx, mid_y - 15 + dy);
-                    // the chosen fill is warm: red well over blue, where bare metal is grey
-                    if (p[0] as i32) - (p[2] as i32) < 18 {
-                        plain += 1;
-                    }
-                }
-            }
-            assert_eq!(
-                plain, 0,
-                "flat {flat}, turn {k}: {plain} of 900 pixels without the fill"
-            );
-        }
-    }
+    esc(&mut h);
+    assert_eq!(h.gui.shell.origin_selected, None);
 }
 
 #[test]
@@ -1554,13 +635,19 @@ fn a_hover_mark_stays_on_every_frame_as_the_pointer_crosses_a_face() {
 #[test]
 fn a_constraint_tool_lights_what_it_would_pick_and_a_mark_lights_what_it_ties() {
     use forge_render::shell::sketching::SkTool;
-    let part = "sk1: sketch xy\n  line 0 0 40 0\n  line 0 20 40 20\n  par l1 l2\nend\n";
-    let Some((mut h, _)) = file_part(part) else {
+    let Some((mut h, _)) = file_part(BLOCK) else {
         return;
     };
-    let id = h.gui.shell.doc.as_ref().unwrap().find("sk1").unwrap();
-    h.gui.shell.out.push(Action::Edit(id));
-    assert!(h.until(|g| g.shell.sketch.is_some()));
+    sketch_on(&mut h, "xy");
+    let m = h.gui.shell.sketch.as_mut().unwrap();
+    use forge_render::shell::sketching::rows::{Pt, Ref, Row};
+    for r in [
+        Row::Line(Pt::at(0.0, 0.0), Pt::at(40.0, 0.0)),
+        Row::Line(Pt::at(0.0, 20.0), Pt::at(40.0, 20.0)),
+        Row::Par(Ref::to("l1"), Ref::to("l2")),
+    ] {
+        assert!(m.add(r.clone()), "{r}: {:?}", m.error);
+    }
     for _ in 0..80 {
         h.step();
         std::thread::sleep(std::time::Duration::from_millis(10));
@@ -1579,14 +666,11 @@ fn a_constraint_tool_lights_what_it_would_pick_and_a_mark_lights_what_it_ties() 
     let g = h
         .gui
         .shell
-        .place("sketch:glyph:par l1 l2")
+        .place("sketch:glyph:parallel(l1, l2)")
         .expect("the constraint's mark");
     h.move_to(g.center().x, g.center().y);
     step_some(&mut h);
-    assert_eq!(
-        h.gui.shell.sketch.as_ref().unwrap().glyph_over.as_deref(),
-        Some("par l1 l2")
-    );
+    assert_eq!(h.gui.shell.sketch.as_ref().unwrap().glyph_over, Some(2));
 }
 
 /// Words on the cube's faces toward the eye read left to right and upward.
@@ -1610,21 +694,12 @@ fn cube_words_upright(h: &Headless) {
 
 #[test]
 fn a_sketch_opens_with_the_cubes_words_upright_on_every_plane_and_a_face() {
-    use forge_render::origin::Item;
-    for plane in [
-        Some(Item::XyPlane),
-        Some(Item::XzPlane),
-        Some(Item::YzPlane),
-        None,
-    ] {
+    for plane in [Some("xy"), Some("xz"), Some("yz"), None] {
         let Some((mut h, _)) = file_part(BLOCK) else {
             return;
         };
         match plane {
-            Some(p) => {
-                h.gui.shell.origin_selected = Some(p);
-                h.gui.shell.out.push(Action::StartSketch);
-            }
+            Some(p) => sketch_on(&mut h, p),
             None => {
                 h.gui.shell.out.push(Action::StartSketch);
                 step_some(&mut h);
@@ -1650,79 +725,6 @@ fn a_sketch_opens_with_the_cubes_words_upright_on_every_plane_and_a_face() {
         }
         cube_words_upright(&h);
     }
-}
-
-fn eye_shows(h: &Headless, id: forge_doc::ItemId) -> bool {
-    let k = h
-        .gui
-        .shell
-        .sketch_shapes
-        .iter()
-        .position(|s| s.item == Some(id))
-        .unwrap();
-    h.gui.shell.sketches_drawn().iter().any(|d| d.0 == k)
-}
-
-#[test]
-fn a_sketch_read_by_features_shows_and_hides_by_its_eye_its_child_eye_and_its_menu() {
-    let Some(mut h) = app() else { return };
-    assert!(h.until(|g| !g.shell.sketch_shapes.is_empty()));
-    step_some(&mut h);
-    let row = h
-        .gui
-        .shell
-        .rows
-        .iter()
-        .find(|r| r.kind == "sketch")
-        .unwrap()
-        .clone();
-    assert!(
-        !h.gui.shell.sketch_shown(row.id),
-        "bracket's sketch is read: hidden"
-    );
-    // its own eye
-    h.move_to(0.0, 0.0);
-    step_some(&mut h);
-    assert!(!eye_shows(&h, row.id));
-    h.click(&format!("tree:{}:eye", row.name));
-    step_some(&mut h);
-    assert!(eye_shows(&h, row.id), "the eye shows it");
-    assert!(h.gui.shell.sketch_shown(row.id));
-    h.click(&format!("tree:{}:eye", row.name));
-    step_some(&mut h);
-    h.move_to(0.0, 0.0);
-    step_some(&mut h);
-    assert!(!eye_shows(&h, row.id), "and hides it");
-    // the menu's Visibility
-    let r = h.gui.shell.place(&format!("tree:{}", row.name)).unwrap();
-    h.right_drag((r.center().x, r.center().y), (r.center().x, r.center().y));
-    step_some(&mut h);
-    assert_eq!(h.gui.shell.marking_row, Some(row.id));
-    h.click("mark:Visibility");
-    step_some(&mut h);
-    assert!(h.gui.shell.sketch_shown(row.id), "from the menu");
-    assert!(h.gui.shell.marking.is_none());
-}
-
-#[test]
-fn a_sketch_shows_and_hides_by_the_eye_on_the_row_under_its_feature() {
-    let part = "sk1: sketch xy\n  rect 0 0 20 20\nend\nbase: extrude 10 sk1\n";
-    let Some((mut h, _)) = file_part(part) else {
-        return;
-    };
-    let id = h.gui.shell.doc.as_ref().unwrap().find("sk1").unwrap();
-    assert!(!h.gui.shell.sketch_shown(id));
-    h.click("tree:base:open");
-    step_some(&mut h);
-    h.click("tree:base:sketch:eye");
-    step_some(&mut h);
-    assert!(h.gui.shell.sketch_shown(id), "from under its feature");
-    assert!(eye_shows(&h, id));
-    h.click("tree:base:sketch:eye");
-    step_some(&mut h);
-    h.move_to(0.0, 0.0);
-    step_some(&mut h);
-    assert!(!eye_shows(&h, id));
 }
 
 #[test]
@@ -1793,11 +795,6 @@ fn the_marking_menu_fits_where_things_stand_and_takes_a_direction() {
     // on nothing, the part's commands; the rest in a list
     let (items, more) = h.gui.shell.marking_items();
     assert!(items.iter().any(|m| m.0 == "Start Sketch") && !more.is_empty());
-    let id = h.gui.shell.doc.as_ref().unwrap().find("base").unwrap();
-    // on a selection, what's about it
-    h.gui.shell.selected = Some(id);
-    assert!(h.gui.shell.marking_items().0.iter().any(|m| m.0 == "Delete"));
-    h.gui.shell.selected = None;
     // shown, a click in a wedge's direction takes it, well off its word
     let c = h.gui.shell.view_rect.center();
     h.gui.shell.marking = Some(c);
@@ -1814,11 +811,10 @@ fn the_marking_menu_fits_where_things_stand_and_takes_a_direction() {
     step_some(&mut h);
     h.click_at(c.x + 3.0, c.y + 3.0);
     step_some(&mut h);
-    assert!(h.gui.shell.marking.is_none() && h.gui.shell.dialog.is_none() && !h.gui.shell.sketch_pick);
+    let tool = h.gui.shell.fg.as_ref().unwrap().tool.is_some();
+    assert!(h.gui.shell.marking.is_none() && !tool && !h.gui.shell.sketch_pick);
     // in a sketch, its tools
-    h.gui.shell.origin_selected = Some(forge_render::origin::Item::XyPlane);
-    h.gui.shell.out.push(Action::StartSketch);
-    assert!(h.until(|g| g.shell.sketch.is_some()));
+    sketch_on(&mut h, "xy");
     let items = h.gui.shell.marking_items().0;
     assert!(
         items
@@ -1854,257 +850,6 @@ fn a_held_right_button_shows_its_menu_and_a_quick_flick_never_does() {
     h.key(egui::Key::Escape);
     step_some(&mut h);
     assert!(h.gui.shell.marking.is_none());
-}
-
-/// Where a point of the world is on the screen.
-fn screen_of(h: &Headless, p: [f32; 3]) -> (f32, f32) {
-    let (camera, size) = h.gui.shell.camera.unwrap();
-    let px = camera.pixel_of(p, size.0, size.1).unwrap();
-    let v = h.gui.shell.view_rect;
-    (v.min.x + px.0, v.min.y + px.1)
-}
-
-fn press_at(h: &mut Headless, at: (f32, f32)) {
-    h.move_to(at.0, at.1);
-    step_some(h);
-    h.button(true);
-    h.step();
-    h.button(false);
-    step_some(h);
-}
-
-#[test]
-fn project_geometry_takes_clicks_in_the_view_and_what_it_writes_is_the_files_and_extrudes() {
-    use forge_render::shell::sketching::SkTool;
-    let Some((mut h, file)) = file_part(BLOCK) else {
-        return;
-    };
-    h.gui.shell.origin_selected = Some(forge_render::origin::Item::XyPlane);
-    h.gui.shell.out.push(Action::StartSketch);
-    assert!(h.until(|g| g.shell.sketch.is_some()), "{}", h.gui.shell.status);
-    assert!(h.until(|g| g.view.as_ref().unwrap().nav.camera.axes().0[2] < -0.999));
-    step_some(&mut h);
-    assert!(h.gui.shell.place("tool:Project Geometry").is_some());
-    h.click("tool:Project Geometry");
-    assert!(h.until(|g| g.shell.sketch.as_ref().unwrap().tool == Some(SkTool::Project)));
-    step_some(&mut h);
-
-    // an edge: the top's right side
-    let edge = screen_of(&h, [30.0, 0.0, 20.0]);
-    press_at(&mut h, edge);
-    assert!(
-        h.until(|g| !g.shell.sketch.as_ref().unwrap().rows.is_empty()),
-        "{:?}",
-        h.gui.shell.sketch.as_ref().unwrap().error
-    );
-    let m = h.gui.shell.sketch.as_ref().unwrap();
-    assert_eq!(m.rows.len(), 1, "{:?}", m.rows);
-    assert!(m.rows[0].starts_with("project @e"), "{:?}", m.rows);
-    let s = m.solved.as_ref().unwrap();
-    assert_eq!(s.point("j1.a").unwrap().x, 30.0);
-    assert_eq!(s.point("j1.b").unwrap().x, 30.0);
-
-    // a face: its other three edges, each by its handle, the one that's there not again
-    let (cx, cy) = {
-        let c = h.gui.shell.view_rect.center();
-        (c.x, c.y)
-    };
-    press_at(&mut h, (cx, cy));
-    assert!(
-        h.until(|g| g.shell.sketch.as_ref().unwrap().rows.len() == 2),
-        "{:?}",
-        h.gui.shell.sketch.as_ref().unwrap().rows
-    );
-    let m = h.gui.shell.sketch.as_ref().unwrap();
-    assert_eq!(m.rows[1].split(' ').count(), 4, "{:?}", m.rows);
-    assert!(m.error.is_none(), "{:?}", m.error);
-    assert_eq!(forge_doc::sketch::freedom(m.solved.as_ref().unwrap()).0, 0);
-
-    // clicking it again adds nothing
-    press_at(&mut h, (cx, cy));
-    step_some(&mut h);
-    assert_eq!(h.gui.shell.sketch.as_ref().unwrap().rows.len(), 2);
-
-    // a new line drawn from a projected corner takes the point, not a place near it
-    h.gui.shell.out.push(Action::SketchTool(SkTool::Point));
-    step_some(&mut h);
-    let corner = screen_of(&h, [30.0, 30.0, 0.0]);
-    press_at(&mut h, corner);
-    let m = h.gui.shell.sketch.as_ref().unwrap();
-    assert!(
-        m.rows.last().unwrap().contains(".a") || m.rows.last().unwrap().contains(".b"),
-        "{:?}",
-        m.rows
-    );
-    h.gui.shell.sketch.as_mut().unwrap().undo();
-
-    h.gui.shell.out.push(Action::FinishSketch);
-    assert!(
-        h.until(|g| g.shell.rows.iter().any(|r| r.kind == "sketch")),
-        "{:?} {}",
-        h.gui.calls,
-        h.gui.shell.status
-    );
-    let text = std::fs::read_to_string(&file).unwrap();
-    assert!(text.contains("project @e"), "{text}");
-    // a replay makes the same file, and the profile extrudes to the block's outline
-    let mut p = Part::new(BLOCK);
-    for c in h.gui.calls.clone() {
-        assert!(p.call(vec![c], None).ok);
-    }
-    assert_eq!(p.model.src(), text);
-    let done = p.act("extrude new 5 sketch1", None);
-    assert!(done.ok, "{}", done.text);
-    assert_eq!(p.model.mass().unwrap().volume, 60.0 * 60.0 * 25.0);
-
-    // opened again from the tree, it reads what it projects from the part
-    let id = h.gui.shell.rows.iter().find(|r| r.kind == "sketch").unwrap().id;
-    h.gui.shell.out.push(Action::Edit(id));
-    assert!(h.until(|g| g.shell.sketch.is_some()), "{}", h.gui.shell.status);
-    let m = h.gui.shell.sketch.as_ref().unwrap();
-    assert!(m.error.is_none(), "{:?}", m.error);
-    assert_eq!(m.rows.len(), 2);
-    assert!(m.unchanged());
-}
-
-#[test]
-fn project_geometry_takes_what_a_window_holds_and_the_right_button_writes_nothing() {
-    use forge_render::shell::sketching::SkTool;
-    let Some((mut h, _)) = file_part(BLOCK) else {
-        return;
-    };
-    h.gui.shell.origin_selected = Some(forge_render::origin::Item::XyPlane);
-    h.gui.shell.out.push(Action::StartSketch);
-    assert!(h.until(|g| g.shell.sketch.is_some()), "{}", h.gui.shell.status);
-    assert!(h.until(|g| g.view.as_ref().unwrap().nav.camera.axes().0[2] < -0.999));
-    step_some(&mut h);
-    h.gui.shell.out.push(Action::SketchTool(SkTool::Project));
-    step_some(&mut h);
-    let c = h.gui.shell.view_rect.center();
-    h.move_to(c.x, c.y);
-    step_some(&mut h);
-    h.right_click_here();
-    step_some(&mut h);
-    assert!(h.gui.shell.marking.is_some());
-    h.key(egui::Key::Escape);
-    step_some(&mut h);
-    assert!(h.gui.shell.sketch.as_ref().unwrap().rows.is_empty());
-    assert_eq!(h.gui.shell.sketch.as_ref().unwrap().tool, Some(SkTool::Project));
-    // a left drag across the top: a window, right to left, and the top's outline comes in
-    h.move_to(c.x + 40.0, c.y + 40.0);
-    step_some(&mut h);
-    h.button(true);
-    h.step();
-    h.move_to(c.x - 40.0, c.y - 40.0);
-    step_some(&mut h);
-    h.button(false);
-    assert!(
-        h.until(|g| !g.shell.sketch.as_ref().unwrap().rows.is_empty()),
-        "{:?}",
-        h.gui.shell.sketch.as_ref().unwrap().error
-    );
-    let m = h.gui.shell.sketch.as_ref().unwrap();
-    assert!(m.error.is_none(), "{:?}", m.error);
-    assert_eq!(m.rows.len(), 1, "{:?}", m.rows);
-    assert_eq!(m.rows[0].split(' ').count(), 5, "{:?}", m.rows);
-}
-
-const FILLETED: &str = "base: extrude 20 rect -30 -30 60 60\nfillet 8 (edges along +z right front)\nfillet 4..8 (edges along +x top back)\nsk: sketch z 1 -1 2 at 0 0 40\n  pt 0 0\nend\nflat: sketch xy at 0 0 40\n  pt 0 0\nend\n";
-
-/// Opens sketch `name` from the tree with Project Geometry on.
-fn project_in(h: &mut Headless, name: &str) {
-    use forge_render::shell::sketching::SkTool;
-    let id = h.gui.shell.doc.as_ref().unwrap().find(name).unwrap();
-    h.gui.shell.out.push(Action::Edit(id));
-    assert!(h.until(|g| g.shell.sketch.is_some()), "{}", h.gui.shell.status);
-    for _ in 0..80 {
-        h.step();
-        std::thread::sleep(std::time::Duration::from_millis(5));
-    }
-    h.gui.shell.out.push(Action::SketchTool(SkTool::Project));
-    step_some(h);
-}
-
-#[test]
-fn project_geometry_takes_a_fillets_faces_tilted_and_parallel_exact_where_it_can_and_says_approx_where_not() {
-    let Some((mut h, file)) = file_part(FILLETED) else {
-        return;
-    };
-    let r8 = 8.0 * 0.5f32.sqrt();
-    // the round corner and the varying blend's middle, on a plane tilted from both
-    project_in(&mut h, "sk");
-    let corner = screen_of(&h, [22.0 + r8, -22.0 - r8, 10.0]);
-    press_at(&mut h, corner);
-    assert!(
-        h.until(|g| g.shell.sketch.as_ref().unwrap().rows.len() == 2),
-        "{:?} {:?}",
-        h.gui.shell.sketch.as_ref().unwrap().rows,
-        h.gui.shell.sketch.as_ref().unwrap().error
-    );
-    let m = h.gui.shell.sketch.as_ref().unwrap();
-    assert!(m.error.is_none(), "{:?}", m.error);
-    assert!(
-        !m.rows[1].contains("approx"),
-        "an exact face is written exact: {:?}",
-        m.rows
-    );
-    let s = m.solved.as_ref().unwrap();
-    let ellipses = s
-        .names
-        .iter()
-        .filter(|n| matches!(s.solved.entity(n.1), Some(forge_sketch::Entity::Ellipse { .. })))
-        .count();
-    assert_eq!(ellipses, 2, "{:?}", s.names);
-    let blend = screen_of(
-        &h,
-        [0.0, 30.0 - 6.0 + 6.0 * 0.5f32.sqrt(), 14.0 + 6.0 * 0.5f32.sqrt()],
-    );
-    press_at(&mut h, blend);
-    assert!(
-        h.until(|g| g.shell.sketch.as_ref().unwrap().rows.len() > 2),
-        "{:?} {:?}",
-        h.gui.shell.sketch.as_ref().unwrap().rows,
-        h.gui.shell.sketch.as_ref().unwrap().error
-    );
-    let m = h.gui.shell.sketch.as_ref().unwrap();
-    assert!(m.error.is_none(), "{:?}", m.error);
-    assert!(m.rows.iter().any(|r| r.ends_with("approx 0.001")), "{:?}", m.rows);
-    assert!(
-        m.rows
-            .iter()
-            .all(|r| !r.starts_with("project") || r.ends_with("approx 0.001") || !r.contains("approx"))
-    );
-    // only the sketch's own point is free
-    assert_eq!(
-        forge_doc::sketch::freedom(m.solved.as_ref().unwrap()),
-        (2, vec!["p1".to_string()])
-    );
-    h.gui.shell.out.push(Action::FinishSketch);
-    assert!(h.until(|g| g.shell.sketch.is_none()));
-    assert!(h.until(|_| std::fs::read_to_string(&file).unwrap().contains("approx 0.001")));
-
-    // parallel to the round: one exact arc
-    project_in(&mut h, "flat");
-    let corner = screen_of(&h, [22.0 + r8, -22.0 - r8, 20.0]);
-    press_at(&mut h, corner);
-    assert!(
-        h.until(|g| g.shell.sketch.as_ref().unwrap().rows.len() == 2),
-        "{:?}",
-        h.gui.shell.sketch.as_ref().unwrap().error
-    );
-    let s = h.gui.shell.sketch.as_ref().unwrap().solved.clone().unwrap();
-    let arc = s
-        .names
-        .iter()
-        .find(|n| matches!(s.solved.entity(n.1), Some(forge_sketch::Entity::Arc { .. })))
-        .unwrap();
-    assert_eq!(s.solved.radius(arc.1), 8.0);
-    h.gui.shell.out.push(Action::FinishSketch);
-    assert!(h.until(|g| g.shell.sketch.is_none()));
-    // what the app wrote builds the same in a fresh part
-    let text = std::fs::read_to_string(&file).unwrap();
-    let m = forge_agent::model::Model::new(&text);
-    assert!(m.error.is_none(), "{:?}\n{text}", m.error);
 }
 
 #[test]

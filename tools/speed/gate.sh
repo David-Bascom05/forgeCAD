@@ -3,39 +3,104 @@
 # path against a baseline (REGRESSED: more than 0.5% over it), and the hash of every regen's exact
 # result against tools/speed/bits.txt (CHANGED: expected only when geometry changes on purpose).
 # usage: tools/speed/gate.sh [baseline]    exit 1 regressed, 2 bits changed, 3 both
-#        tools/speed/gate.sh --save        rewrite tools/speed/baseline.txt and bits.txt
+#        tools/speed/gate.sh --save        rewrite the counter's baseline and bits.txt
+#
+# Two counters, each with its own baseline (their counts are not comparable with each other):
+#   GATE_COUNTER=perf       `perf stat -e instructions:u` on the normal release build (the
+#                           x86-64-v3 of .cargo/config.toml); baseline.txt. PERF=path picks the
+#                           perf binary.
+#   GATE_COUNTER=callgrind  `valgrind --tool=callgrind --cache-sim=no`, its Ir (instructions run,
+#                           user space); baseline-valgrind.txt. For machines with no hardware
+#                           counters (VMs: perf says `<not supported>`). Deterministic, about 30x
+#                           slower than native. Valgrind 3.22 cannot decode some AVX encodings
+#                           LLVM emits for x86-64-v3 (`vmovq xmm, xmm` as VEX 66 0F D6 with a
+#                           register operand: SIGILL in Ruled::new, so crank and jack nary1 died
+#                           after ~2M instructions), so this mode builds the same source for
+#                           x86-64-v2 (RUSTFLAGS, its own target dir: target/callgrind), which
+#                           valgrind runs whole. The normal build is untouched; the counts measure
+#                           the same kernel code, compiled without AVX.
+# Unset, perf is used when it counts instructions:u and callgrind otherwise. The callgrind gate
+# takes ~20 min on 4 busy cores. GATE_REPS=3 keeps the least of 3 counts, for a line near 0.5%.
 set -e
 dir=$(dirname "$0")
+perf=${PERF:-perf}
+counter=${GATE_COUNTER:-}
+if [ -z "$counter" ]; then
+  if "$perf" stat -x, -e instructions:u true 2>&1 >/dev/null | grep -q '^[0-9][0-9]*,'; then
+    counter=perf
+  else
+    counter=callgrind
+  fi
+fi
+target="${CARGO_TARGET_DIR:-$PWD/target}"
+case $counter in
+  perf)
+    baseline="$dir/baseline.txt"
+    count1() { "$perf" stat -x, -e instructions:u "$@" 2>&1 >/dev/null | awk -F, '/instructions/{print $1}'; }
+    ;;
+  callgrind)
+    baseline="$dir/baseline-valgrind.txt"
+    target="$target/callgrind"
+    export RUSTFLAGS="-C target-cpu=x86-64-v2"
+    count1() {
+      valgrind --tool=callgrind --cache-sim=no --callgrind-out-file=/dev/null "$@" 2>&1 >/dev/null |
+        awk '/Collected :/{n=$NF}/Process terminating/{bad=1}END{if(!bad&&n!="")print n}'
+    }
+    ;;
+  *) echo "GATE_COUNTER: perf or callgrind, not $counter" >&2; exit 64 ;;
+esac
+# the least of GATE_REPS counts (default 1): the bench parts' counts move by up to ~0.4% from run
+# to run (std HashMaps' random seeds, thread order), the synthetic parts' by a few instructions
+count() {
+  best=
+  for _ in $(seq "${GATE_REPS:-1}"); do
+    c=$(count1 "$@")
+    if [ -z "$c" ]; then return; fi
+    if [ -z "$best" ] || [ "$c" -lt "$best" ]; then best=$c; fi
+  done
+  echo "$best"
+}
+echo "counter: $counter (baseline $baseline)"
+export CARGO_TARGET_DIR="$target"
 cargo build -q --release -p forge-model --example regen1 --example bits
-cargo build -q --release -p forge-agent --example benchparts
-bin="${CARGO_TARGET_DIR:-$PWD/target}/release/examples"
+cargo build -q --release -p forge-lang --example benchparts
+bin="$target/release/examples"
 now=$(mktemp)
-fcs=$(mktemp -d)
 for p in torture plate shaft housing coplanar patterns mixed hole-grid tour upto upto-flat; do
   for m in seq nary1; do
-    n=$(perf stat -x, -e instructions:u "$bin/regen1" $p $m 2>&1 >/dev/null | awk -F, '/instructions/{print $1}')
+    n=$(count "$bin/regen1" $p $m)
     echo "$p $m ${n:-FAIL}" >> "$now"
   done
 done
-# the real parts (tools/bench-parts): selectors resolved first, uncounted
+# the real parts (interface/forge-lang/parts/bench/*.fg): the kernel's regen of the features each
+# part's .fg run sends, by the ids it names them with: the instructions of building the part and
+# regenerating it, less those of building it alone (the language and the first build, uncounted)
+# and the language with them, whole: `app` the cold build as the app makes it (no checks), `edit`
+# that build and the rebuild after one dimension changed, `cli` the cold build with the CLI's
+# checks: what the .fg front end costs on top of the kernel, held from growing
 for p in gearbox volute crank valve heatsink quadarm conrod jack frame manifold bracket insert clamp hub guard; do
-  "$bin/benchparts" resolve $p "$fcs/$p.fc"
+  base=$(count "$bin/benchparts" resolve $p)
+  echo "$p app ${base:-FAIL}" >> "$now"
+  for m in edit cli; do
+    n=$(count "$bin/benchparts" $m $p)
+    echo "$p $m ${n:-FAIL}" >> "$now"
+  done
   for m in seq nary1; do
-    n=$(perf stat -x, -e instructions:u "$bin/benchparts" run "$fcs/$p.fc" $m 2>&1 >/dev/null | awk -F, '/instructions/{print $1}')
+    n=$(count "$bin/benchparts" run $p $m)
+    if [ -n "$n" ] && [ -n "$base" ]; then n=$((n - base)); else n=; fi
     echo "$p $m ${n:-FAIL}" >> "$now"
   done
 done
-rm -rf "$fcs"
 bits() { "$bin/bits"; "$bin/benchparts" bits; }
 if [ "$1" = --save ]; then
-  mv "$now" "$dir/baseline.txt"
+  mv "$now" "$baseline"
   bits > "$dir/bits.txt"
-  echo "saved $dir/baseline.txt $dir/bits.txt"
+  echo "saved $baseline $dir/bits.txt"
   exit 0
 fi
 status=0
 awk 'NR==FNR{b[$1" "$2]=$3;next}{k=$1" "$2; o=b[k]; d=(o>0&&$3!="FAIL")?($3-o)*100/o:0; f=($3=="FAIL"||d>0.5)?"  REGRESSED":""; if(f!="")bad=1
-  printf "%-9s %-6s %14s  base %14s  %+6.2f%%%s\n",$1,$2,$3,o,d,f}END{exit bad}' "${1:-$dir/baseline.txt}" "$now" || status=1
+  printf "%-9s %-6s %14s  base %14s  %+6.2f%%%s\n",$1,$2,$3,o,d,f}END{exit bad}' "${1:-$baseline}" "$now" || status=1
 rm -f "$now"
 if bits | diff "$dir/bits.txt" - > /dev/null; then echo "bits: identical"; else
   echo "bits: CHANGED"; bits | diff "$dir/bits.txt" - | grep '^[<>]' || true; status=$((status | 2)); fi

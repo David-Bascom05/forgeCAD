@@ -51,7 +51,7 @@ fn files(d: &Path) -> [PathBuf; 3] {
 }
 
 fn settled(g: &Gui) -> bool {
-    g.view.is_some() && g.fg.as_ref().is_some_and(|s| s.done == s.seq) && !g.is_loading()
+    g.view.is_some() && g.fg.as_ref().is_some_and(|s| s.done == s.seq) && !g.loading()
 }
 
 fn ready(h: &mut Headless) {
@@ -61,7 +61,7 @@ fn ready(h: &mut Headless) {
         h.gui.shell.name,
         h.gui.shell.status,
         h.gui.view.is_some(),
-        h.gui.is_loading()
+        h.gui.loading()
     );
     for _ in 0..3 {
         h.step();
@@ -438,15 +438,6 @@ fn a_same_length_rewrite_is_seen() {
             "{v}"
         );
     }
-}
-
-#[test]
-fn a_new_fc_part_is_the_hosts_to_place() {
-    let Some(mut h) = headless() else { return };
-    h.gui.shell.out.push(forge_render::shell::Action::NewFc);
-    let out = h.step();
-    assert!(out.host.contains(&forge_render::shell::Action::NewFc));
-    assert!(h.gui.documents().is_empty());
 }
 
 #[test]

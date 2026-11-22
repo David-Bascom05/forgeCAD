@@ -3,23 +3,24 @@ import os
 from pathlib import Path
 import subprocess
 
-p = argparse.ArgumentParser(description='Compare instruction counts on resolved jack prefixes')
-p.add_argument('baseline', type=Path)
-p.add_argument('candidate', type=Path)
-p.add_argument('resolved_part', type=Path)
-p.add_argument('scratch', type=Path)
+p = argparse.ArgumentParser(description="Compare instruction counts on prefixes of the jack's kernel features")
+p.add_argument('baseline', type=Path, help='featcost built on the baseline (research/feature-costs)')
+p.add_argument('candidate', type=Path, help='featcost built on the candidate')
+p.add_argument('part', type=Path, help='the .fg part (interface/forge-lang/parts/bench/jack.fg)')
+p.add_argument('--prefixes', default='', help='kernel feature counts to regenerate, comma separated (default: all)')
 a = p.parse_args()
-a.scratch.mkdir(parents=True, exist_ok=True)
-lines = a.resolved_part.read_text().splitlines()
 env = dict(os.environ, FORGE_BATCH='cpu')
-for n in [10, 12, 13, 14, 15, 16, 17, 18]:
-    part = a.scratch / f'jack-prefix-{n}.fc'
-    part.write_text('\n'.join(lines[:n]) + '\n')
+listed = subprocess.run([str(a.baseline.resolve()), 'list', str(a.part.resolve())], env=env, capture_output=True, text=True, check=True)
+n_all = len(listed.stdout.splitlines())
+prefixes = [int(x) for x in a.prefixes.split(',') if x] or list(range(1, n_all + 1))
+for n in prefixes:
     counts = []
     for exe in [a.baseline, a.candidate]:
+        # featcost builds the whole program, then regenerates its first n kernel features: the build
+        # is the same on both sides, so the difference is the regen's
         r = subprocess.run(
             ['fbuild', 'perf', 'stat', '-x,', '-e', 'instructions:u',
-             str(exe.resolve()), 'run', str(part.resolve()), 'seq'],
+             str(exe.resolve()), 'run', str(a.part.resolve()), str(n), 'seq'],
             env=env, capture_output=True, text=True, check=True,
         )
         counts.append(next(int(s.split(',')[0]) for s in r.stderr.splitlines()

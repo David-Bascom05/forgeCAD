@@ -105,7 +105,6 @@ fn open_edit_a_param_rebuild_fix_and_save() {
     };
     let fg = h.gui.shell.fg.as_ref().unwrap();
     assert_eq!(h.gui.shell.name, "plate.fg");
-    assert!(h.gui.shell.doc.is_none() && h.gui.shell.rows.is_empty());
 
     // the tree is the ids: loops' instances under their names, a call's features under its own
     let tree: Vec<(String, usize)> = fg.tree().into_iter().map(|r| (r.key, r.depth)).collect();
@@ -309,7 +308,7 @@ fn tree_actions_are_typed_ops_and_a_refusal_is_typed() {
 }
 
 #[test]
-fn an_fc_part_still_opens_after_a_forge_part() {
+fn a_bench_part_opens_by_its_name_as_its_forge_port_after_a_forge_part() {
     let dir = scratch("both");
     let file = dir.join("plate.fg");
     std::fs::write(&file, PLATE).unwrap();
@@ -317,10 +316,24 @@ fn an_fc_part_still_opens_after_a_forge_part() {
         return;
     };
     h.gui.open("bracket");
-    h.settle();
-    assert!(h.until(|g| !g.shell.rows.is_empty() && g.view.as_ref().is_some_and(|v| v.live.is_some())));
-    assert!(h.gui.fg.is_none() && h.gui.shell.fg.is_none());
-    assert_eq!(h.gui.shell.name, "bracket.fc");
+    assert!(h.until(|g| built(g) && g.view.is_some() && g.shell.name == "bracket.fg"));
+    let p = h.gui.shell.fg.as_ref().expect("a Forge part");
+    assert!(
+        !p.feats.is_empty()
+            && p.issues
+                .iter()
+                .all(|i| i.severity != forge_render::shell::fg::Severity::Error)
+    );
+    assert_eq!(h.gui.documents().len(), 2, "a tab of its own");
+    // a name that's no bench part and no file says so, and the app goes on
+    h.gui.open("no-such-part");
+    h.step();
+    assert!(
+        h.gui.shell.status.contains("no-such-part"),
+        "{}",
+        h.gui.shell.status
+    );
+    assert_eq!(h.gui.documents().len(), 2);
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -419,7 +432,7 @@ fn a_sheet_part_shows_flat_and_exports_its_dxf() {
 }
 
 /// The browser opens parts as mesh files the native build exports (web/build.sh); a .fg part
-/// exports as an .fc one does, and reads back as the browser reads it. No GPU needed.
+/// exports, and reads back as the browser reads it. No GPU needed.
 #[test]
 fn a_forge_part_exports_the_mesh_the_browser_opens() {
     let part = concat!(env!("CARGO_MANIFEST_DIR"), "/../forge-lang/parts/bracket.fg");

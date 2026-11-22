@@ -70,7 +70,7 @@ fn e1_equal_values_from_different_traces_are_separate_evaluations() {
             .src
             .clone()
     };
-    assert_eq!(depth("d<-a="), Src::Driving(ParamKey::shared("a")));
+    assert_eq!(depth("d<-a="), Src::driving(ParamKey::shared("a")));
     assert!(matches!(depth("160 - a"), Src::Driven(_)));
 }
 
@@ -159,8 +159,8 @@ fn e5_an_index_or_a_loop_count_is_control_not_data() {
             .src
             .clone()
     };
-    assert_eq!(src_of("c"), Src::Driving(ParamKey::shared("u")));
-    assert_eq!(src_of("e[1]"), Src::Driving(ParamKey::shared("u")));
+    assert_eq!(src_of("c"), Src::driving(ParamKey::shared("u")));
+    assert_eq!(src_of("e[1]"), Src::driving(ParamKey::shared("u")));
     assert!(structural(&r, "k"));
 }
 
@@ -181,7 +181,7 @@ c1 = part(cup)
         owner: vec![forge_lang::edit::seg("cup")],
         name: "d".into(),
     };
-    assert_eq!(b.dims[0].num.src, Src::Driving(key.clone()));
+    assert_eq!(b.dims[0].num.src, Src::driving(key.clone()));
     let (text, _) = apply_checked(
         src,
         &Op::SetParam {
@@ -304,7 +304,7 @@ fn a_component_default_keeps_the_sessions_fence() {
     std::fs::create_dir_all(&inside).unwrap();
     // a default reads no file (`use` must be bound, features named), so the reads are the
     // component's own statements: fenced as the document's are
-    std::fs::write(d.join("outside.ttf"), forge_agent::bench::font_bytes()).unwrap();
+    std::fs::write(d.join("outside.ttf"), forge_lang::bench::font_bytes()).unwrap();
     for path in ["/etc/passwd", "../outside.ttf"] {
         let src = format!(
             "component c(w: 4) {{\n  sketch s(on: xy) {{\n    o = circle((0, 0), w)\n  }}\n  b = extrude(s, w)\n  t = text(\"A\", font: \"{path}\", size: w, depth: w, on: b.end)\n}}\nx = part(c)\n"

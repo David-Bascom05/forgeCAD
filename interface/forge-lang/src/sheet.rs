@@ -241,7 +241,7 @@ impl SheetVal {
         let d = |n: &Num| Num {
             v: n.v,
             dim: n.dim,
-            src: Src::Driven([key.clone()].into()),
+            src: Src::Driven(std::sync::Arc::new([key.clone()].into())),
         };
         let rule = |r: &RuleV| RuleV {
             rule: r.rule.clone(),
@@ -1834,7 +1834,7 @@ fn set(n: &Num, value: f64) -> Option<Op> {
         value
     };
     Some(Op::SetParam {
-        param: p.clone(),
+        param: (**p).clone(),
         value: Literal { value, dim: n.dim },
     })
 }
@@ -3355,6 +3355,7 @@ pub fn pattern(
                 span,
                 id: id.clone(),
                 error,
+                fit: None,
             }
         })?;
     let st = &ev.sheets.list[si];

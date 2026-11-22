@@ -666,6 +666,7 @@ pub fn apply_set(src: &str, prog: &[Stmt], key: &str, text: Option<&str>) -> R<S
             return Err(Error::UnknownName {
                 span: Span::default(),
                 name: n,
+                near: None,
             });
         }
     }
@@ -732,13 +733,24 @@ pub fn solids(ev: &Eval) -> Vec<(String, Option<Material>, forge_topo::Body)> {
         .flat_map(|s| &s.unfolds)
         .filter_map(|u| ev.feats.iter().find(|f| f.id == u.id).map(|f| f.idx))
         .collect();
-    let libs = libraries(ev);
-    let find = |n: &str| libs.find(n).map(|m| m.1.clone());
+    // the libraries read only when a material is named (loading them costs more than a part)
+    let libs = std::cell::OnceCell::new();
+    let find = |n: &str| libs.get_or_init(|| libraries(ev)).find(n).map(|m| m.1.clone());
     let part = ev.props.material.as_deref().and_then(find);
+    // each solid finished once for the stage (its view, validity) and shared here
+    let finished: Vec<forge_topo::Body> = if st.solids.len() > 1 {
+        st.finished().to_vec()
+    } else {
+        st.solids
+            .iter()
+            .map(|s| forge_model::finish(s.body.clone()))
+            .collect()
+    };
     st.solids
         .iter()
-        .filter(|s| !flats.contains(&s.id))
-        .map(|s| {
+        .zip(finished)
+        .filter(|(s, _)| !flats.contains(&s.id))
+        .map(|(s, body)| {
             let id = ev
                 .feats
                 .iter()
@@ -758,7 +770,7 @@ pub fn solids(ev: &Eval) -> Vec<(String, Option<Material>, forge_topo::Body)> {
                 .find(|x| x.part_solid == s.id)
                 .map(|x| x.material.as_str());
             let m = own.or(sheet).or(formed).and_then(find).or(part.clone());
-            (id, m, forge_model::finish(s.body.clone()))
+            (id, m, body)
         })
         .collect()
 }

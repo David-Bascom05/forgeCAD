@@ -160,7 +160,7 @@ fn measuring_feeds_no_other_pick_the_browser_or_a_feature_dialog() {
     assert!(matches!(e.1, Entity::Edge(_)), "{e:?}");
     assert_eq!(picks(&h), vec![e]);
     let p = h.gui.shell.fg.as_ref().unwrap();
-    assert!(p.picked.is_none() && h.gui.shell.selected.is_none() && h.gui.shell.dim.is_none());
+    assert!(p.picked.is_none());
     assert!(
         !h.gui.shell.status.starts_with("Picked"),
         "{}",
@@ -613,8 +613,10 @@ fn origin_items_from_the_browser_and_sketch_geometry_are_picked() {
         SketchFor::New,
         "xy".into(),
         p.frame,
-        vec!["line -60 -50 -20 -50".into()],
-        None,
+        vec![forge_render::shell::sketching::rows::Row::Line(
+            forge_render::shell::sketching::rows::Pt::at(-60.0, -50.0),
+            forge_render::shell::sketching::rows::Pt::at(-20.0, -50.0),
+        )],
     );
     m.units = "mm";
     h.gui.shell.sketch = Some(m);

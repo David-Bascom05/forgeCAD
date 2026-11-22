@@ -1,0 +1,336 @@
+# Road bicycle frame, 56 cm, as one part: hollow tubes mitred by the booleans, a tapered head
+# tube with headset seats, a BSA threaded bottom bracket, stays to flat dropouts with a
+# threaded derailleur hanger, bridges, bottle bosses, a slotted seat clamp, cable ports. Forge
+# port of the frame forge-agent's mesh test read: the bench frame's earlier form, its stays
+# straight lofts, its joints all brazed.
+
+shared reach = 385
+shared stack = 575
+shared hta = 73deg
+shared sta = 73.5deg
+shared htl = 160
+shared stl = 540
+shared csl = 410
+shared drp = 70
+shared sp = 130
+shared wall = 1
+# a datum unit: how far apart the points giving a direction lie
+shared k = 10
+# where a stay's sweep starts along it: at its first point
+shared from0 = 0
+# head tube top centre, its axis down along hd
+shared hdx = cos(hta)
+shared hdz = 0 - sin(hta)
+shared hbx = reach + htl * hdx
+shared hbz = stack + htl * hdz
+# rear axle
+shared ax = 0 - sqrt(csl ^ 2 - drp ^ 2)
+shared az = drp
+# down tube: bottom bracket to 45 up the head tube from its foot
+shared dtup = 45
+shared dtx = hbx - dtup * hdx
+shared dtz = hbz - dtup * hdz
+shared dtl = sqrt(dtx ^ 2 + dtz ^ 2)
+shared dux = dtx / dtl
+shared duz = dtz / dtl
+# top tube: 45 below the seat tube top to 25 below the head tube top
+shared ttdown = 45
+shared ttin = 25
+shared s1x = 0 - (stl - ttdown) * cos(sta)
+shared s1z = (stl - ttdown) * sin(sta)
+shared h1x = reach + ttin * hdx
+shared h1z = stack + ttin * hdz
+shared ttl = sqrt((h1x - s1x) ^ 2 + (h1z - s1z) ^ 2)
+shared tux = (h1x - s1x) / ttl
+shared tuz = (h1z - s1z) / ttl
+# seat tube direction
+shared sux0 = 0 - cos(sta)
+shared suz0 = sin(sta)
+# chainstays: from inside the shell wall, clear of the bore, to the dropout
+shared c0x = -17.5
+shared c0y = 22
+shared c1x = ax + 6
+shared c1y = sp / 2 - 4
+shared csx = c1x - c0x
+shared csy = c1y - c0y
+shared csz = az
+shared cl = sqrt(csx ^ 2 + csy ^ 2 + csz ^ 2)
+# seatstays: from the seat tube, 80 below its top, to the dropout
+shared qdown = 80
+shared q0x = 0 - (stl - qdown) * cos(sta)
+shared q0z = (stl - qdown) * sin(sta)
+shared q0y = 10
+shared q1x = ax + 10
+shared q1z = az + 14
+shared q1y = sp / 2 - 4
+shared ssx = q1x - q0x
+shared ssy = q1y - q0y
+shared ssz = q1z - q0z
+shared sl = sqrt(ssx ^ 2 + ssy ^ 2 + ssz ^ 2)
+
+# tube radii and lengths
+shared rbb = 21
+shared bbw = 68
+shared rst = 15.9
+shared rtt = 14.3
+shared rdt = 17.5
+shared htr0 = 25
+shared htr1 = 30
+
+sketch side(on: xz) {
+  bbc = circle((0, 0), rbb)
+}
+bb = extrude(side.bbc, sym(bbw))
+
+# a plane in the side plane's normal-free family: at (px, pz), its normal (a, b) and x (c, d)
+# in the side plane
+fn tplane(px, pz, a, b, c, d) {
+  sketch s(on: side.plane) {
+    o = pt(px, pz)
+    z = line(o, (px + k * a, pz + k * b), construction: true)
+    x = line(o, (px + k * c, pz + k * d), construction: true)
+  }
+  return plane(at: s.o, normal: s.z.dir, x: s.x.dir)
+}
+# a point anywhere: on a plane offset from the side plane
+fn at3(px, py, pz) {
+  sketch s(on: offset(side.plane, 0 - py)) {
+    o = pt(px, pz)
+  }
+  return s.o
+}
+# a plane at p, normal (zx, zy, zz), x (xx, xy, xz) all in space
+fn pl3(px, py, pz, zx, zy, zz, ex, ey, ez) {
+  o = at3(px, py, pz)
+  n = at3(px + k * zx, py + k * zy, pz + k * zz)
+  e = at3(px + k * ex, py + k * ey, pz + k * ez)
+  return plane(at: o, normal: axis(o, n), x: axis(o, e))
+}
+# a tube: a circle r on plane pl, extruded d
+fn tube(pl, r, d) {
+  sketch s(on: pl) {
+    c = circle((0, 0), r)
+  }
+  e = extrude(s.c, d)
+  return e
+}
+
+# a plane at p, square to (zx, zy, zz), its x as a plane's own
+fn pz3(px, py, pz, zx, zy, zz) {
+  o = at3(px, py, pz)
+  n = at3(px + k * zx, py + k * zy, pz + k * zz)
+  return plane(at: o, normal: axis(o, n))
+}
+# a straight stay: a loft of circles r0 at p0 to r1 at p1
+fn stay(p0x, p0y, p0z, p1x, p1y, p1z, r0, r1, len, cut) {
+  a = pz3(p0x, p0y, p0z, (p1x - p0x) / len, (p1y - p0y) / len, (p1z - p0z) / len)
+  b = pz3(p1x, p1y, p1z, (p1x - p0x) / len, (p1y - p0y) / len, (p1z - p0z) / len)
+  sketch s0(on: a) {
+    c = circle((0, 0), r0)
+  }
+  sketch s1(on: b) {
+    c = circle((0, 0), r1)
+  }
+  e = loft([s0.c, s1.c], cut: cut)
+  return e
+}
+
+# tubes, outside first; the booleans mitre them
+stpl = tplane(0, 0, sux0, suz0, 0 - suz0, sux0)
+st = tube(stpl, rst, stl)
+dtpl = tplane(0, 0, dux, duz, 0 - duz, dux)
+dt = tube(dtpl, rdt, dtl)
+htop = at3(reach, 0, stack)
+fn htprofile(r0, r1) {
+  return [(0, 0), (r0 * sin(hta), r0 * cos(hta)), (htl * hdx + r1 * sin(hta), htl * hdz + r1 * cos(hta)),
+          (htl * hdx, htl * hdz)]
+}
+sketch hts(on: side.plane, at: htop) {
+  ax0 = line((0, 0), (k * hdx, k * hdz), construction: true)
+  o = poly(htprofile(htr0, htr1))
+}
+ht = revolve(hts.o, axis: hts.ax0)
+ttpl = tplane(s1x, s1z, tux, tuz, 0 - tuz, tux)
+tt = tube(ttpl, rtt, ttl)
+
+cs = stay(c0x, c0y, 0, c1x, c1y, az, 11, 6.5, cl, false)
+ss = stay(q0x, q0y, q0z, q1x, q1y, q1z, 8, 6, sl, false)
+
+# flat dropouts
+shared drop_t = 6
+shared dropy = sp / 2 + 2
+# corners round the axle
+shared drop_pts = [(-14, -12), (34, -16), (38, -4), (24, 34), (8, 34), (-14, 12)]
+shared hang_pts = [(-6, -14), (-12, 6), (-32, -10), (-30, -32), (-14, -34)]
+fn dropout(on) {
+  sketch s(on: on) {
+    o = poly([(ax + q.x, az + q.y) for q in drop_pts])
+  }
+  return s
+}
+drop_sk = dropout(offset(side.plane, 0 - dropy))
+drop = extrude(drop_sk, drop_t)
+stays = pattern(of: [cs, ss, drop], layout: mirror(on: side.plane))
+
+# bridges, the drive-side hanger, the seat clamp and bottle bosses
+shared bbr_at = ratio(0.22)
+shared bbr_r = 5
+shared cbr_at = ratio(0.25)
+shared cbr_r = 6
+sketch bbr_sk(on: side.plane) {
+  c = circle((q0x + bbr_at * ssx, q0z + bbr_at * ssz), bbr_r)
+}
+bbr = extrude(bbr_sk.c, sym(2 * (q0y + bbr_at * ssy)))
+sketch cbr_sk(on: side.plane) {
+  c = circle((c0x + cbr_at * csx, cbr_at * csz), cbr_r)
+}
+cbr = extrude(cbr_sk.c, sym(2 * (c0y + cbr_at * csy)))
+param hanger.t = 6
+shared hangy = sp / 2 - 4
+sketch hanger_sk(on: offset(side.plane, hangy)) {
+  o = poly([(ax + q.x, az + q.y) for q in hang_pts])
+}
+hanger = extrude(hanger_sk, t)
+shared collar_l = 16
+shared collar_r = 18.5
+collar_pl = tplane(sux0 * (stl - collar_l), suz0 * (stl - collar_l), sux0, suz0, 0 - suz0, sux0)
+collar = tube(collar_pl, collar_r, collar_l)
+shared lug_w = 14
+shared lug_a = 3
+shared lug_b = 15
+shared lug_c = 15
+shared lug_d = 27
+sketch lug_sk(on: side.plane) {
+  o = poly([(sux0 * (stl - lug_a) - lug_c * sin(sta), suz0 * (stl - lug_a) - lug_c * cos(sta)),
+            (sux0 * (stl - lug_a) - lug_d * sin(sta), suz0 * (stl - lug_a) - lug_d * cos(sta)),
+            (sux0 * (stl - lug_b) - lug_d * sin(sta), suz0 * (stl - lug_b) - lug_d * cos(sta)),
+            (sux0 * (stl - lug_b) - lug_c * sin(sta), suz0 * (stl - lug_b) - lug_c * cos(sta))])
+}
+lug = extrude(lug_sk, sym(lug_w))
+shared boss_r = 4.5
+shared boss_pitch = 64
+shared dboss_at = 150
+shared dboss_h = 21
+shared sboss_at = 200
+shared sboss_h = 19.5
+dboss_pl = tplane(dboss_at * dux, dboss_at * duz, 0 - duz, dux, 0 - dux, 0 - duz)
+dboss = tube(dboss_pl, boss_r, dboss_h)
+dbosses = pattern(of: dboss, layout: lin(along: dtpl.normal, n: count(2), step: boss_pitch))
+sboss_pl = tplane(sboss_at * sux0, sboss_at * suz0, suz0, 0 - sux0, sux0, suz0)
+sboss = tube(sboss_pl, boss_r, sboss_h)
+sbosses = pattern(of: sboss, layout: lin(along: stpl.normal, n: count(2), step: boss_pitch))
+
+# brazed fillets at the joints
+shared braze = 3
+tt_st = fillet(edges(between: (tt, st), crease: "concave"), vary([(0, 3), (ratio(0.5), 4.5), (1, 3)]))
+bb_cluster = fillet(edges(between: (st, bb), crease: "concave") + edges(between: (dt, bb), crease: "concave") + edges(between: (st, dt), crease: "concave"), braze)
+tt_ht = fillet(edges(between: (tt, ht), crease: "concave"), braze)
+dt_ht = fillet(edges(between: (dt, ht), crease: "concave"), braze)
+
+# hollow: each tube bored to its wall, bores running into the tube they meet
+param bbore.d = 33.65
+sketch bbore_sk(on: offset(side.plane, bbw / 2)) {
+  p = pt(0, 0)
+}
+bbore = hole(at: bbore_sk.p, d: d, depth: bbw)
+# the BSA cups' threads, 1.370-24, 16 into each end of the shell; the drive side's left-handed
+shared bsa_l = 16
+bsa_far = thread(on: offset(side.plane, 0 - bbw / 2), spec: "1.370-24", internal: true, length: bsa_l, flip: true, chamfer: true)
+bsa_near = thread(on: offset(side.plane, bbw / 2), spec: "1.370-24", internal: true, length: bsa_l, left: true, chamfer: true)
+fn bore(pl, r, d) {
+  sketch s(on: pl) {
+    c = circle((0, 0), r)
+  }
+  e = cut(s.c, 0 - d)
+  return e
+}
+stb = bore(stpl, rst - wall, stl + 1)
+dtb = bore(dtpl, rdt - wall, dtl)
+ttb = bore(ttpl, rtt - wall, ttl)
+shared htbw = 1.5
+sketch htbs(on: side.plane, at: htop) {
+  ax0 = line((0, 0), (k * hdx, k * hdz), construction: true)
+  o = poly(htprofile(htr0 - htbw, htr1 - htbw))
+}
+htb = revolve(htbs.o, axis: htbs.ax0, cut: true)
+# headset bearing seats, 11 deep at each end
+shared seat_d = 11
+shared seat_r0 = 24
+shared seat_r1 = 29
+seat0_pl = tplane(reach, stack, hdx, hdz, 0 - hdz, hdx)
+seat0 = bore(seat0_pl, seat_r0, seat_d)
+seat1_pl = tplane(hbx, hbz, 0 - hdx, 0 - hdz, hdz, 0 - hdx)
+seat1 = bore(seat1_pl, seat_r1, seat_d)
+csb = stay(c0x + 12mm * csx / cl, c0y + 12mm * csy / cl, 12mm * csz / cl, c1x, c1y, az, 9.9, 5.5, cl, true)
+ssb = stay(q0x, q0y, q0z, q1x, q1y, q1z, 7, 5, sl, true)
+bores = pattern(of: [csb, ssb], layout: mirror(on: side.plane))
+
+# axle slots
+param slots_sk.w = 5
+param slots_sk.dep = 40
+sketch slots_sk(on: side.plane) {
+  path o(start: (ax - w, az - dep)) {
+    line(to: (ax + w, az - dep))
+    line(to: (ax + w, az))
+    tarc(to: (ax - w, az))
+    close()
+  }
+}
+slots = cut(slots_sk.o, thru_all)
+param hhole.d = 9
+param hhole.depth = 6
+param hhole_sk.dx = 22
+param hhole_sk.dz = 20
+sketch hhole_sk(on: offset(side.plane, dropy)) {
+  p = pt(ax - dx, az - dz)
+}
+hhole = hole(at: hhole_sk.p, d: d, depth: depth, thread: "M10x1")
+hhole_thread = thread(hole: hhole, length: "full")
+
+# binder slot through the clamp, its bolt hole across the lug
+param binder.depth = 26
+param binder_sk.slen = 32
+param binder_sk.w = 2.5
+binder_pl = tplane(sux0 * stl, suz0 * stl, 0 - sux0, 0 - suz0, 0 - suz0, sux0)
+sketch binder_sk(on: binder_pl) {
+  r = rect(corner: (0, 0 - w / 2), size: (slen, w))
+}
+binder = cut(binder_sk.r, 0 - depth)
+param clamp.d = 5.5
+param clamp_sk.down = 11
+param clamp_sk.off = 21
+param clamp_sk.y = 7
+sketch clamp_sk(on: offset(side.plane, y)) {
+  p = pt(sux0 * (stl - down) - off * sin(sta), suz0 * (stl - down) - off * cos(sta))
+}
+clamp = hole(at: clamp_sk.p, d: d, depth: thru)
+
+# bottle bosses tapped M5, cable ports each side of the down tube
+shared bh_d = 4.2
+shared bh_depth = 6
+dbh_pl = tplane(dboss_at * dux - dboss_h * duz, dboss_at * duz + dboss_h * dux, 0 - duz, dux, dux, duz)
+sketch dbh_sk(on: dbh_pl) {
+  a = pt(0, 0)
+  b = pt(boss_pitch, 0)
+}
+dbh = hole(at: [dbh_sk.a, dbh_sk.b], d: bh_d, depth: bh_depth, thread: "M5x0.8")
+sbh_pl = tplane(sboss_at * sux0 + sboss_h * suz0, sboss_at * suz0 - sboss_h * sux0, suz0, 0 - sux0,
+                0 - sux0, 0 - suz0)
+sketch sbh_sk(on: sbh_pl) {
+  a = pt(0, 0)
+  b = pt(0 - boss_pitch, 0)
+}
+sbh = hole(at: [sbh_sk.a, sbh_sk.b], d: bh_d, depth: bh_depth, thread: "M5x0.8")
+shared port_d = 6
+shared port_depth = 4
+shared port_up = 110
+shared port_y = 19
+sketch port_sk(on: offset(side.plane, port_y)) {
+  p = pt((dtl - port_up) * dux, (dtl - port_up) * duz)
+}
+port = hole(at: port_sk.p, d: port_d, depth: port_depth)
+port_m_pl = pl3((dtl - port_up) * dux, port_y, (dtl - port_up) * duz, 0, 1, 0, 1, 0, 0)
+sketch port_m_sk(on: port_m_pl) {
+  p = pt(0, 0)
+}
+port_m = hole(at: port_m_sk.p, d: port_d, depth: port_depth)

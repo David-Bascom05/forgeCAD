@@ -1,28 +1,16 @@
-//! ForgeCAD for agents: a plain-text part file, selectors that find entities without knowing
-//! their names, measuring, a small PNG renderer, and a session that regenerates incrementally.
+//! What the CLI, the app and the importers share about a built part: selectors that find
+//! entities without knowing their names, measuring, face meshes, a small PNG renderer, JSON
+//! replies, and the IPC and chat bridges.
 
-pub mod bench;
 pub mod chat_bridge;
-pub mod cmd;
-#[cfg(test)]
-mod doc_tests;
 pub mod facemesh;
 pub mod features;
-#[cfg(test)]
-mod fillet_repros;
-pub mod handles;
-pub mod help;
-pub mod history;
 pub mod ipc;
 pub mod json;
-pub mod live;
 pub mod measure;
-pub mod model;
 pub mod png;
 pub mod render;
 pub mod select;
-pub mod tools;
-pub use forge_doc::{expr, sketch, text};
 
 /// A number for people: a few decimals, trailing zeros dropped.
 pub fn short(x: f64) -> String {

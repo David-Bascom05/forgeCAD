@@ -52,7 +52,7 @@ def main():
     if a.only:
         ids = a.only.split(",")
     with cf.ThreadPoolExecutor(a.jobs) as ex:
-        res = list(ex.map(one, [(a.exe, os.path.join(a.parts, i + ".fc")) for i in ids]))
+        res = list(ex.map(one, [(a.exe, os.path.join(a.parts, i + ".fg")) for i in ids]))
     c, sigs = collections.Counter(), collections.Counter()
     with open(a.out, "w") as o:
         for i, r in zip(ids, res):

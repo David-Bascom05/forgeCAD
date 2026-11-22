@@ -1,4 +1,4 @@
-# Zero set of the exact F(s, sigma) for the volute vs the core shifted 8 up (vfx.fc): sign changes along
+# Zero set of the exact F(s, sigma) for the volute vs the core shifted 8 up (vfx.fg): sign changes along
 # sigma at fixed s, lifted to 3D and checked on both surfaces.
 import numpy as np
 from loft import Loft, volute_profiles, VOLUTE

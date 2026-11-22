@@ -17,6 +17,7 @@ def Tr.ren (θ : Site → Site) : Tr → Tr
   | .const c => .const c
   | .add a b => .add (a.ren θ) (b.ren θ)
   | .mul a b => .mul (a.ren θ) (b.ren θ)
+  | .bin o a b => .bin o (a.ren θ) (b.ren θ)
 
 def Model.ren (θ : Site → Site) (m : Model) : Model := m.map fun e => (e.1, e.2.ren θ)
 
@@ -32,12 +33,14 @@ theorem Tr.den_ren {θ : Site → Site} {σA σB : Site → Int} (hσ : ∀ s, �
   | .const _ => rfl
   | .add a b => by simp [Tr.ren, Tr.den, Tr.den_ren hσ a, Tr.den_ren hσ b]
   | .mul a b => by simp [Tr.ren, Tr.den, Tr.den_ren hσ a, Tr.den_ren hσ b]
+  | .bin o a b => by simp [Tr.ren, Tr.den, Tr.den_ren hσ a, Tr.den_ren hσ b]
 
 theorem Tr.sites_ren (θ : Site → Site) : ∀ t : Tr, (t.ren θ).sites = t.sites.map θ
   | .site _ => rfl
   | .const _ => rfl
   | .add a b => by simp [Tr.ren, Tr.sites, Tr.sites_ren θ a, Tr.sites_ren θ b]
   | .mul a b => by simp [Tr.ren, Tr.sites, Tr.sites_ren θ a, Tr.sites_ren θ b]
+  | .bin o a b => by simp [Tr.ren, Tr.sites, Tr.sites_ren θ a, Tr.sites_ren θ b]
 
 theorem obs_ren (D : Defs) (θ : Site → Site) (t : Tr) : obs D (t.ren θ) = (obs D t).map θ := by
   unfold obs; split <;> simp [Tr.sites_ren]
@@ -98,7 +101,8 @@ mutual
 def codeE : Expr → List Site
   | .lit s => [s]
   | .cst _ | .var _ | .ref _ _ => []
-  | .add a b | .mul a b | .eq a b => codeE a ++ codeE b
+  | .add a b | .mul a b | .eq a b | .lt a b => codeE a ++ codeE b
+  | .bin _ a b => codeE a ++ codeE b
   | .ite c a b => codeE c ++ codeE a ++ codeE b
   | .sel es k => codeEs es ++ codeE k
   | .call _ a => codeE a
@@ -242,7 +246,28 @@ theorem ren : ∀ {θ σA σB}, (∀ s, σB s = σA (θ s)) → ∀ (n : Nat), R
         obtain ⟨rfl, rfl⟩ := ea
         obtain ⟨rfl, rfl⟩ := eb
         exact ⟨_, by simp [evalE, ha', hb'] <;> rfl, by simp [Tr.ren]⟩
+      | bin o a b =>
+        simp only [evalE, bind_ok] at h
+        obtain ⟨⟨ta, la⟩, ha, ⟨tb, lb⟩, hb, h⟩ := h
+        cases h
+        obtain ⟨⟨ta', la'⟩, ha', ea⟩ := ih.e ha (fx fix fun s hs => by simp [codeE] at *; grind)
+        obtain ⟨⟨tb', lb'⟩, hb', eb⟩ := ih.e hb (fx fix fun s hs => by simp [codeE] at *; grind)
+        simp only [Prod.mk.injEq] at ea eb
+        obtain ⟨rfl, rfl⟩ := ea
+        obtain ⟨rfl, rfl⟩ := eb
+        exact ⟨_, by simp [evalE, ha', hb'] <;> rfl, by simp [Tr.ren]⟩
       | eq a b =>
+        simp only [evalE, bind_ok] at h
+        obtain ⟨⟨ta, la⟩, ha, ⟨tb, lb⟩, hb, h⟩ := h
+        cases h
+        obtain ⟨⟨ta', la'⟩, ha', ea⟩ := ih.e ha (fx fix fun s hs => by simp [codeE] at *; grind)
+        obtain ⟨⟨tb', lb'⟩, hb', eb⟩ := ih.e hb (fx fix fun s hs => by simp [codeE] at *; grind)
+        simp only [Prod.mk.injEq] at ea eb
+        obtain ⟨rfl, rfl⟩ := ea
+        obtain ⟨rfl, rfl⟩ := eb
+        exact ⟨_, by simp [evalE, ha', hb'] <;> rfl, by
+          simp [Tr.ren, Tr.den_ren hσ, obs_ren]⟩
+      | lt a b =>
         simp only [evalE, bind_ok] at h
         obtain ⟨⟨ta, la⟩, ha, ⟨tb, lb⟩, hb, h⟩ := h
         cases h

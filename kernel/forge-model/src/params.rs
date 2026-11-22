@@ -23,8 +23,8 @@ pub struct Param {
     pub value: f64,
 }
 
-/// A 2D sketch, solved: its rows (geometry, constraints and dimensions, each a row of tokens
-/// as written) and the solved geometry later features take profiles and points from.
+/// A 2D sketch, solved: the geometry later features take profiles and points from, and its
+/// entities' names.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Sketch {
     pub plane: Frame,
@@ -33,18 +33,61 @@ pub struct Sketch {
     pub on: Option<On>,
     /// The origin written after it (`at X Y Z`), if one was.
     pub at: Option<Point3>,
-    pub rows: Vec<Vec<String>>,
     pub solved: forge_sketch::Sketch,
-    /// Each driven dimension (`ref dist l1`): its row and the value it measures (mm, or radians
-    /// for an angle).
-    pub driven: Vec<(usize, f64)>,
     /// Each named entity (`l3`, `c1`, `o`) and its id in `solved`.
     pub names: Vec<(String, forge_sketch::EntityId)>,
-    /// What a re-read with only dimension values changed starts from instead of the rows:
-    /// the parameters as written, each dimension row's constraint, each driven row's entities.
-    pub written: Vec<f64>,
-    pub dims: Vec<(usize, forge_sketch::ConstraintId)>,
-    pub driven_of: Vec<(String, Vec<forge_sketch::EntityId>)>,
+    /// What the program that wrote the sketch keeps beside it, in its own form, to read it
+    /// back by; nothing here reads it.
+    pub note: Note,
+}
+
+/// A writer's own record of a sketch, kept with it and opaque to the kernel.
+#[derive(Clone, Default)]
+pub struct Note(pub Option<std::sync::Arc<dyn Record>>);
+
+/// What a note holds: any value that compares and prints.
+pub trait Record: std::any::Any + Send + Sync + std::fmt::Debug {
+    fn same_record(&self, o: &dyn Record) -> bool;
+    fn record_any(&self) -> &dyn std::any::Any;
+}
+
+impl<T: std::any::Any + Send + Sync + std::fmt::Debug + PartialEq> Record for T {
+    fn same_record(&self, o: &dyn Record) -> bool {
+        o.record_any().downcast_ref::<T>() == Some(self)
+    }
+    fn record_any(&self) -> &dyn std::any::Any {
+        self
+    }
+}
+
+impl Note {
+    pub fn new<T: Record>(t: T) -> Note {
+        Note(Some(std::sync::Arc::new(t)))
+    }
+
+    /// The record, if it is one of these.
+    pub fn get<T: std::any::Any>(&self) -> Option<&T> {
+        self.0.as_ref()?.record_any().downcast_ref()
+    }
+}
+
+impl std::fmt::Debug for Note {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match &self.0 {
+            Some(r) => write!(f, "Note({r:?})"),
+            None => f.write_str("Note"),
+        }
+    }
+}
+
+impl PartialEq for Note {
+    fn eq(&self, o: &Note) -> bool {
+        match (&self.0, &o.0) {
+            (None, None) => true,
+            (Some(a), Some(b)) => a.same_record(&**b),
+            _ => false,
+        }
+    }
 }
 
 /// A plane given by reference.

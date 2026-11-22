@@ -2,8 +2,10 @@
 
 A core calculus with every FastCAD-style feature switched on, the properties P1 to P6 stated over it
 in Lean 4, proofs under the weakest assumptions found, and a concrete counterexample for every
-assumption kept. Lean project: `lean/` (core Lean only, no Mathlib; `lake build` takes seconds, no
-`sorry`, axioms are only `propext`, `Classical.choice` and `Quot.sound`).
+assumption kept. Lean project: `lean/` (core Lean only, no Mathlib; `lake build` takes a few minutes,
+most of it the kernel `decide` of the parser's grammar; no `sorry`, axioms are only `propext`,
+`Classical.choice` and `Quot.sound`, checked for every theorem by `CheckAxioms.lean`; CI:
+`.github/workflows/lean.yml`).
 
 ## The answer in one screen
 
@@ -28,7 +30,8 @@ calculus and the theorems hold with them. A deterministic *evaluation order* is 
 
 ## The core calculus (`lean/ForgeLang/Core.lean`)
 
-- Expressions: literal (with a site), constant, variable, `+`, `*`, `==`, `c ? a : b`, list param
+- Expressions: literal (with a site), constant, variable, `+`, `*`, `-`, `/`, `%`, `^`, `==`, `<`
+  (round 3; the other comparisons and `and`, `or`, `not` are abbreviations), `c ? a : b`, list param
   indexed by a loop variable `[e0, e1][i]`, value-function call (recursive), feature reference
   `x.rel`, loop-instance reference `x[k].rel`.
 - Statements: `let`, `set` (mutable reassignment), `feat`, range loop `x = for i in 0..n {..}`,
@@ -575,6 +578,124 @@ an occurrence written above. Findings also in `forgecad-gate/unified-doc/proof-f
   visible reads, mentions). `nested_loop_delete_exact` is the concrete case. Poses are not in the
   core.
 
+## Round 3: checked again, the language as it is now, the one-pass parser (2026-11-22)
+
+### The existing proofs, re-checked
+
+On leanprover/lean4:v4.36.0-rc2 (the pinned toolchain), `lake build` builds every file and every
+theorem checks. `CheckAxioms.lean` (new) walks every theorem of every `ForgeLang` module, 2153 of
+them after this round, and fails unless each uses only `propext`, `Classical.choice` and
+`Quot.sound`: no `sorry`, no `native_decide` (`Lean.ofReduceBool`), no axiom of our own.
+`lake build` is not seconds: `LL1/Impl.lean` and `LL1/ImplUnifiedDoc.lean` run the LL(1) check
+by kernel `decide`, about 70 s and 8.5 GB each. CI (`.github/workflows/lean.yml`) builds them one
+at a time, then the rest, the parse oracles, `CheckAxioms.lean` and `Axioms.lean`, and the
+check-local and drag-speed proofs the same way.
+
+### What the language has that the calculus did not
+
+| Rust | Before | Now |
+|---|---|---|
+| `<`, `<=`, `>`, `>=`, `!=` | only `==` | `Expr.lt` in the core (observed like `==`); the rest are abbreviations (`Compare.lean`: `le_eval`, `gt_eval`, `ge_eval`, `ne_eval`). Every induction carries `lt`, so P1 to P5 hold with them |
+| `and`, `or`, `not` | none | abbreviations: `not` is `== 0`; `and`, `or` short-circuit as `binop` does, and observe nothing more (Rust's `Bool` has no provenance; a comparison observed already): `and_false`, `and_true`, `or_true`, `or_false`, `not_eval` |
+| `-`, `/`, `%`, `^`, unary `-` | only `+`, `*` | `Expr.bin`/`Tr.bin` (`AOp`: sub, div, mod, pow): unobserved arithmetic, sites carried, no handle (`neg_eval`). In every induction |
+| `expect` | none | `Stmt.expect c := ifs c [] []`: its comparison observed, no feature (`expect_obs`) |
+| `Suppress`, `Unsuppress` | none | `Suppress.lean`, below |
+| `Respell` | none | `Respell.lean`, below |
+| `Undo`, `Redo` | none | `Undo.lean`, below |
+| `Options::fit_sizes` | none | `Fit.lean`, below |
+| `build::history_id` | ids only | `HistoryId.lean`, below |
+| floats, units, division by zero | | not modelled: numbers are integers in the core |
+| `sketch`/`path` blocks, `param OWNER.x`, `fn` bodies with `return`, lists, maps, comprehensions, ranges with a start, multi-variable `for`, `harness`, `drawing` | | not modelled. Sketch blocks are features under a name (as `use`); the rest are values or outside the model |
+
+### The ops
+
+- **Suppress / Unsuppress.** `suppress_complete`: when the document evaluated and no function or
+  component body reads a name the closure binds, the suppressed document evaluates, to the old
+  model and log with exactly the closure's fragments removed, every other fragment (ids,
+  traces) unchanged. No dependency graph: the closure (`suppFrom`, the pass `apply_suppress`
+  makes) is closed under reads by construction. `unsuppress_suppress`: Unsuppress after Suppress
+  is the identity on the text, given what `apply_suppress` refuses (a line already tagged).
+  `lines_eq_stmts`: commenting lines is removing statements when each statement has a line.
+
+  | Assumption | Counterexample without it |
+  |---|---|
+  | One statement per line | `same_line_drops`; in fg, `a = extrude(plan, t); b = extrude(plan, 2 * t)` and Suppress `b` takes out `a` too, `ok: true`. **Finding**: `apply_suppress` comments from the line's start. Fix: refuse when another statement shares a line with one taken out, or split the line first |
+  | No function or component body reads a taken-out name | Not needed for soundness: the run is the typed error `unbound`, refused |
+
+- **Respell.** `respell_read_binders`: respelling reads keeps every binder, so every name id (P5);
+  `respell_text`: one splice, every other byte kept.
+
+  | Assumption | Counterexample without it |
+  |---|---|
+  | The span is a read | `respell_binder_renames`; in fg, Respell at `base`'s binder gives `plate = extrude(..)`, `ok: true`: a feature id changed by an op meant to fix a typo. **Finding**: `apply_respell` checks only that the bytes spell an identifier. Fix: refuse unless the span is an `UnknownName`'s, or a read |
+  | The span is a whole token | `respell_subtoken`; in fg, the span of `as` in `base` gives `bxe`. Same fix |
+
+  Also seen: for `tt` with `t` a shared param, the UnknownName's fix is `Respell` to the builtin
+  `pt` (both one edit away; ties go to the alphabetically first). Low severity.
+- **Undo / Redo.** `undo_write`: Undo right after an edit gives the text before it byte for byte
+  (so, by P1, the old model). `redo_undo`, `undo_redo`: each undoes the other and leaves the
+  stacks as they were, so an Undo loses nothing. `step_refused`: a hand edit since refuses the
+  step. `history_keep`: `keep` read back by `history` is the stacks given. An edit that changes
+  nothing is not logged, and Undo then takes back the edit before it.
+
+  | Assumption | Counterexample without it |
+  |---|---|
+  | The step checks the file holds the logged text | `unchecked_loses_edit` |
+
+- **fit_sizes.** `fit_builds`: the fix offered builds, for any kernel answer and any rounding.
+  `fit_near_max`: when the sizes that build are downward closed and the refused size fails, the
+  fix is within 1/4096 of the largest size that builds, and not above it. The fix is a SetParam,
+  so `setParam_roundtrip` and `setParam_ids` say what applying it does.
+
+  | Assumption | Counterexample without it |
+  |---|---|
+  | Downward-closed sizes (for "largest" only) | `fit_misses_larger`: the fix is a quarter of the size while 0.6875 of it builds |
+  | A deterministic kernel | without it the fix was checked on another run |
+  | Exact arithmetic | f64 is exact for these dyadic steps while the size has 20 bits of mantissa to spare; not modelled |
+
+- **history_id.** `historyId_stable`: the kernel name is a function of the id text, so every
+  theorem that keeps an id keeps the feature's kernel names. `historyId_collides`:
+  `qolagjaapenjgkgca` and `qpibohgembfgikgid` have one history id (found by a distinguished-point
+  search, about 2^31 hashes; `two_features_run`: a run with both has unique ids).
+
+  | Assumption | Counterexample without it |
+  |---|---|
+  | No two features of a part share a history id (not checked anywhere) | **Finding**: in fg, two extrudes with those names and `fillet(edges(of: qolagjaapenjgkgca, crease: "convex"), 1)` build with no error; the fillet rounds the other feature's edges too (31 faces and 11904.3 mm³ against 29 and 11925.3 with other names) and the part is `valid: false` with only `DuplicateName` problems. Fix: a typed error when two features of a run share a history id (one pass over the ids), or a wider name |
+
+`diff/core_diff.py` now checks each against Rust: Suppress (Lean computes the edited document
+with `suppressAt`) and Unsuppress, Undo and Redo after every applied op, Respell of a misspelt
+read, the comparisons and `-`, and fit_sizes; `tests/core_diff.rs` checks `history_id` against
+`historyId`. The two findings above are categories it knows (`suppress-line`,
+`respell-binder`). No other difference.
+
+### The one-pass parser (`LL1/Driver.lean`, `LL1/ImplDriver.lean`)
+
+- `run`: the table driver of `syntax.rs` (`Parser::run`, grammar part) as a stack machine over
+  TABLE, FIRST, NULLABLE and EMPTY, with its missed mode: after the first lookahead no rule takes,
+  table rules where there is one, else EMPTY, never a shift. Its error is the first miss's
+  position and expected set (FIRST of the stack to the first symbol that cannot be empty), the
+  nonterminals missed on the way (whence "end of statement" and "a value") and the symbol it
+  stopped on (`what(stop)`).
+- `rdS`/`rdF`: recursive descent from the same grammar, a function per symbol, with one inherited
+  value, `fk`: FIRST of what follows the call (FIRST of the rest of the rule, and the caller's
+  `fk` when that rest can be empty).
+- `rd_eq_run`: **the two are one function on every token string**: accepted, the same rules in
+  the same order; refused, the same error, position and expected set included. For any grammar
+  and tables, LL(1) or not. `rd_accepts_parse`: accepted with no miss is `parse`'s tree, so
+  `unambiguous`, `roundtrip` and `lossless` hold of it. `impl_rd_eq_run`, `impl_rd_accepts`: on
+  table.rs's grammar. `tests/grammar.rs`' `the_empty_rules_are_the_lean_ones` ties EMPTY to
+  `emptyRule`; `Impl.table_choose` ties TABLE to `choose`.
+- So a one-pass parser can produce every error the table parser does, with no second parse: it
+  needs `fk` (a 128-bit OR per call, constant per call site) and to go on in missed mode instead
+  of returning None. That is the refinement theorem for `src/syntax/fast.rs`.
+- Not proven: that `fast.rs` *is* `rdS`. Aeneas (Rust to Lean) could not be tried: OCaml's opam
+  and the Mathlib cache Aeneas's Lean library needs are blocked by this environment's network
+  policy. The Rust is tied to the model by `tests/parse_diff.rs` (accepted inputs: the same tree;
+  refused: fast.rs answers None and the table parser the error). Also not in the model: the
+  table driver's `chain` shortcuts and value stack, the action checks (a name before `=` or `:`,
+  positional after keyword, instance index, param owner), and `reserved_in`, which
+  `parse_table` runs before parsing.
+
 ## Verdicts on the hypotheses
 
 | Hypothesis | Verdict |
@@ -691,7 +812,11 @@ an occurrence written above. Findings also in `forgecad-gate/unified-doc/proof-f
   it.
 - P6 lexer properties (above). The core calculus's own printer (`Print.lean`) is not run
   through `LL1`: the real grammar is.
-- AddLocalParam and other ops not yet named.
+- AddLocalParam, LiftLiteral, SetProperty, MakeShared as Rust ops (the core has MakeShared), and
+  the ops on assemblies.
+- Floats, units and division by zero; sketch and path blocks, owner-scoped params, lists, maps
+  and comprehensions as values (round 3's table).
+- `fast.rs` against `Driver.rdS` (tested by `parse_diff`, not proven).
 - Features inside an `if` block are not referenceable after it (block scope in the core).
 - SetParam on a structural param is stable only at loop level (`count_prefix`), not as a statement
   about whole documents.
@@ -739,4 +864,13 @@ an occurrence written above. Findings also in `forgecad-gate/unified-doc/proof-f
 | `Counter/Nested.lean` | `nested_ids`, `context_*`, `place_cycle_fuel`, `nested_delete_dangles` |
 | `OpMemo.lean` | kernel-op memo: `memo_exact`, `memo_exact_iff`, `drop_ok_iff`, `hit_of_mem`, hashing (`verified_exact`), one counterexample per key part (findings: forgecad-gate/instant-load/op-memo-proof.md) |
 | `Axioms.lean` | `lake env lean Axioms.lean`: the axioms of every main theorem |
+| `CheckAxioms.lean` | `lake env lean CheckAxioms.lean`: every theorem of every module, only the three axioms |
+| `Compare.lean` | comparisons, `and`, `or`, `not`, `-`, `expect` as core abbreviations, with their equations |
+| `Suppress.lean` | `suppress_complete`, `unsuppress_suppress`, `lines_eq_stmts`, `same_line_drops` |
+| `Respell.lean` | `respell_read_binders`, `respell_text`, `respell_binder_renames`, `respell_subtoken` |
+| `Undo.lean` | `undo_write`, `redo_undo`, `undo_redo`, `step_refused`, `history_keep`, `unchecked_loses_edit` |
+| `Fit.lean` | `fit_builds`, `fit_near_max`, `fit_misses_larger` |
+| `HistoryId.lean` | `historyId_stable`, `historyId_collides`, `two_features_run` |
+| `LL1/Driver.lean` | the table driver and the recursive descent: `rd_eq_run`, `rd_accepts_parse` |
+| `LL1/ImplDriver.lean` | the same on table.rs's grammar |
 | `Counter/*.lean` | every counterexample named above, proven by evaluation (`rfl`/`decide`) or induction |

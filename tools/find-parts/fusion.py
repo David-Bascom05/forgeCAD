@@ -1,18 +1,23 @@
 #!/usr/bin/env python3
-"""Fusion 360 Gallery / DeepCAD sketch+extrude timelines as .fc part files.
+"""Fusion 360 Gallery / DeepCAD sketch+extrude timelines as .fg part files.
 
 Both datasets share one JSON form: entities (Sketch with profiles in sketch coordinates, a
 transform to world; ExtrudeFeature naming profiles, an operation, extents) and a sequence. The data
 stays out of the repo (see research/find-parts/README.md for the licences); run with python3 -I.
 
-  fusion.py FILE.json ... --out DIR [--mm SCALE]    write DIR/<stem>.fc, DIR/<stem>.json (truth)
+  fusion.py FILE.json ... --out DIR [--mm SCALE]    write DIR/<stem>.fg, DIR/<stem>.json (truth)
 
-Exact curves: lines, arcs, circles, ellipses and B-splines (their own data, marked curve).
+Exact curves: lines, arcs, circles, ellipses and B-splines (their own data, marked curve). Each extrude is
+a sketch on its frame (a plane through helper points: fgsrc) and the extrude, cut or intersect of it; the
+truth file also holds the steps as data ("steps": frames, extents, loops), which occt_replay.py builds.
 """
 import json
 import math
 import os
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import fgsrc
 
 MM = 10.0  # Fusion is in cm; DeepCAD, from Onshape, in metres (--mm 1000)
 EPS = 1e-6  # endpoint match in mm
@@ -420,52 +425,59 @@ def regions(profiles):
     return out
 
 
-def emit_ellipse(e, rev, f, whole):
-    """An ellipse or arc of one in frame f: its axes mapped, the angles running as they then do."""
+def pt2(p):
+    return f"({num(p[0])}, {num(p[1])})"
+
+
+def emit_ellipse(e, rev, f, whole, p=None, q=None):
+    """An ellipse, or an arc of one from p to q, in frame f: its axes mapped, the turn as it then runs."""
     ce, mx, my, A, B, a0, a1 = e.ell
     o, x, y = f(ce), f(add(ce, mx, 1.0)), f(add(ce, my, 1.0))
     xv, yv = (x[0] - o[0], x[1] - o[1]), (y[0] - o[0], y[1] - o[1])
-    rot = math.degrees(math.atan2(xv[1], xv[0]))
+    rot = math.atan2(xv[1], xv[0])
     sign = 1.0 if xv[0] * yv[1] - xv[1] * yv[0] > 0 else -1.0
+    major = f"({fine(o[0] + A * math.cos(rot))}, {fine(o[1] + A * math.sin(rot))})"
     if whole:
-        return f"ellipse {num(o[0])} {num(o[1])} {fine(A)} {fine(B)} {fine(rot)}"
-    st, sw = math.degrees(a0) * sign, math.degrees(a1 - a0) * sign
+        return f"ellipse(center: {pt2(o)}, major: {major}, b: {fine(B)})"
+    cw = (a1 - a0) * sign < 0
     if rev:
-        st, sw = st + sw, -sw
-    return f"ell {num(o[0])} {num(o[1])} {fine(A)} {fine(B)} {fine(rot)} {fine(st)} {fine(sw)}"
+        cw = not cw
+    return f"earc(center: {pt2(o)}, major: {major}, b: {fine(B)}, from: {p}, to: {q}, cw: {'true' if cw else 'false'})"
 
 
 def emit_spline(e, rev, f, p, q):
-    """B-spline data in frame f, its ends on the joints p and q."""
+    """B-spline data in frame f, its ends on the joints p and q (named points)."""
     d, k, cp, w = e.nurbs
     pts = [f(c) for c in cp]
     if rev:
         pts, k = pts[::-1], [k[0] + k[-1] - x for x in reversed(k)]
         w = w[::-1] if w else w
-    pts[0], pts[-1] = p, q
-    t = f"spline {d} " + " ".join(f"{fine(a)} {fine(b)}" for a, b in pts[:1] + pts[1:-1] + pts[-1:])
-    t += " knots " + " ".join(f"{x:.15f}" for x in k)
+    t = f"spline([{p}, " + ", ".join(f"({fine(a)}, {fine(b)})" for a, b in pts[1:-1]) + f", {q}], degree: {d}"
+    t += ", knots: [" + ", ".join(f"{x:.15f}" for x in k) + "]"
     if w and any(abs(x - 1.0) > 1e-12 for x in w):
-        t += " weights " + " ".join(f"{x:.15f}" for x in w)
-    return t
+        t += ", weights: [" + ", ".join(f"{x:.15f}" for x in w) + "]"
+    return t + ")"
 
 
-def emit_loop(loop, f):
-    """A loop's text in frame f (maps sketch points to the frame's x, y)."""
+def emit_loop(loop, f, tag):
+    """A loop in frame f (sketch points to the frame's x, y) as (.fg sketch rows, the loop as data for
+    occt_replay: ["circle", x, y, r] | ["poly", [[x, y]..]] | ["loop", [["line", ax, ay, bx, by] |
+    ["arc", cx, cy, r, a0, sweep] (degrees) | ["curve"]..]]). `tag` keeps its entities' names apart."""
     if len(loop) == 1 and loop[0][0].kind == "circle":
         e = loop[0][0]
         c = f(e.c)
-        return f"circle {num(c[0])} {num(c[1])} {num(e.r)}"
+        return [f"{tag} = circle({pt2(c)}, {num(e.r)})"], ["circle", c[0], c[1], e.r]
     if len(loop) == 1 and loop[0][0].kind == "ellipse" and math.dist(loop[0][0].a[:2], loop[0][0].b[:2]) < EPS:
-        return emit_ellipse(loop[0][0], False, f, True)
+        return [f"{tag} = " + emit_ellipse(loop[0][0], False, f, True)], ["loop", [["curve"]]]
     # the data's curve ends can be 1e-5 mm apart (Fusion's tolerance; DeepCAD keeps 8 decimals): as an
     # importer heals such gaps, curves meeting share one point and each arc is refit through its two
     ns = [(f(e.b if rev else e.a), f(e.a if rev else e.b)) for e, rev in loop]
     n = len(loop)
     joint = [tuple((ns[i - 1][1][k] + ns[i][0][k]) / 2 for k in (0, 1)) for i in range(n)]
-    parts = []
+    rows, segs, corners = [], [], []
     for i, (e, rev) in enumerate(loop):
         p, q = joint[i], joint[(i + 1) % n]
+        pn, qn = f"{tag}p{i}", f"{tag}p{(i + 1) % n}"
         if e.kind == "arc":
             sw = (-e.sweep if rev else e.sweep) * (-1 if f.flipped else 1)
             d = math.dist(p, q)
@@ -491,24 +503,27 @@ def emit_loop(loop, f):
                     dg -= 360
                 if abs(abs(sw) - 2 * math.pi) > 1e-6:
                     sw = math.radians(dg)
-            parts.append(f"arc {num(c[0])} {num(c[1])} {fine(r)} {fine(a0)} {fine(math.degrees(sw))}")
+            rows.append(f"{tag}s{i} = arc(center: ({fine(c[0])}, {fine(c[1])}), from: {pn}, to: {qn}, cw: {'true' if sw < 0 else 'false'})")
+            segs.append(["arc", c[0], c[1], r, a0, math.degrees(sw)])
         elif e.kind == "spline":
-            parts.append(emit_spline(e, rev, f, p, q))
+            rows.append(f"{tag}s{i} = " + emit_spline(e, rev, f, pn, qn))
+            segs.append(["curve"])
         elif e.kind == "ellipse":
-            parts.append(emit_ellipse(e, rev, f, False))
+            rows.append(f"{tag}s{i} = " + emit_ellipse(e, rev, f, False, pn, qn))
+            segs.append(["curve"])
         else:
             ps = list(map(f, e.sample(rev)))
             ps[0], ps[-1] = p, q
-            for a, b in zip(ps, ps[1:]):
-                parts.append(f"line {num(a[0])} {num(a[1])} {num(b[0])} {num(b[1])}")
+            rows.append(f"{tag}s{i} = line({pn}, {qn})")
+            segs.append(["line", p[0], p[1], q[0], q[1]])
+        corners.append(p)
     if all(e.kind == "line" for e, _ in loop):
-        pts = [x.split()[1:3] for x in parts]
-        return "poly " + " ".join(f"{x} {y}" for x, y in pts)
-    return "loop " + " ".join(parts)
+        return [f"{tag} = poly([{', '.join(pt2(c) for c in corners)}])"], ["poly", [list(c) for c in corners]]
+    return [f"{tag}p{i} = pt{pt2(c)}" for i, c in enumerate(corners)] + rows, ["loop", segs]
 
 
 class Frame:
-    """Sketch coordinates to the .fc frame's: the frame's x is the sketch's, its y may be flipped."""
+    """Sketch coordinates to the extrude frame's: the frame's x is the sketch's, its y may be flipped."""
 
     def __init__(self, X, Y, y):
         self.X, self.Y, self.y = X, Y, y
@@ -663,7 +678,8 @@ class Slab:
 
 
 def translate(d):
-    """(lines, notes) for a design; raises Unsupported."""
+    """(steps, notes) for a design; raises Unsupported. A step is an extrude (its frame, extents,
+    loops, op, the label of the body it makes or acts on) or a combine; `write` makes the .fg."""
     ents = d["entities"]
     seq = []
     for s in d["sequence"]:
@@ -746,13 +762,10 @@ def translate(d):
                     y = cross(z, X)
                     org = add(O, Z, lift + off + shift)
                     f2 = Frame(X, Y, y)
-                    frame = f"z {num(z[0])} {num(z[1])} {num(z[2])} x {num(X[0])} {num(X[1])} {num(X[2])} at {num(org[0])} {num(org[1])} {num(org[2])}"
-                    loops = " ".join(emit_loop(lp, f2) for lp in r)
-                    ext_txt = num(a) if b == 0 else f"two {num(a)} {num(b)}"
-                    if abs(ang) > 1e-9:
-                        # Fusion's negative taper leans in
-                        ext_txt += f" taper {fine(-math.degrees(ang))}"
-                    texts.append(f"extrude {{}}{ext_txt} {frame} {loops}")
+                    loops = [emit_loop(lp, f2, "o" if j == 0 else f"i{j}") for j, lp in enumerate(r)]
+                    # Fusion's negative taper leans in
+                    taper = -math.degrees(ang) if abs(ang) > 1e-9 else 0.0
+                    texts.append({"kind": "extrude", "z": z, "x": X, "at": org, "up": a, "down": b, "taper": taper, "rows": [x[0] for x in loops], "loops": [x[1] for x in loops]})
                 slab = Slab(r, O, X, Y, Z, lift + off + lo, lift + off + hi)
                 alive = set(label.values())
                 body = texts[0]
@@ -769,7 +782,7 @@ def translate(d):
                 apart = op == "new" and owner in label and not any(joined(r, o.r) for o, n in slabs if n == label[owner])
                 if apart or ((op == "new" or not made or op == "add") and owner not in label):
                     name = here = f"b{made}"
-                    lines.append(f"{name}: " + body.format("new " if made else ""))
+                    lines.append(dict(body, op="new" if made else "", label=name))
                     made += 1
                     slabs.append((slab, name))
                     if owner is not None and not apart:
@@ -779,14 +792,14 @@ def translate(d):
                         used.append(owner)
                     here = label[owner]
                     slabs.append((slab, here))
-                    lines.append(body.format("add ") + (f" in {label[owner]}" if len(alive) > 1 else ""))
+                    lines.append(dict(body, op="add", into=label[owner] if len(alive) > 1 else None))
                 else:
-                    lines.append(body.format(op + " ") + (" in all" if len(alive) > 1 else ""))
+                    lines.append(dict(body, op=op, into="all" if len(alive) > 1 else None))
                 for t in texts[1:]:
                     if here:
-                        lines.append(t.format("add ") + (f" in {here}" if len(set(label.values()) | {here}) > 1 else ""))
+                        lines.append(dict(t, op="add", into=here if len(set(label.values()) | {here}) > 1 else None))
                     else:
-                        lines.append(t.format(op + " ") + (" in all" if len(alive) > 1 else ""))
+                        lines.append(dict(t, op=op, into="all" if len(alive) > 1 else None))
         for x in fresh:
             if x in label:
                 continue
@@ -802,7 +815,7 @@ def translate(d):
             into = label[used[0]]
             gone = sorted({label[b] for b in label if b not in now} - {label[b] for b in now if b in label})
             if gone:
-                lines.append(f"combine add {into} " + " ".join(gone))
+                lines.append({"kind": "combine", "into": into, "tools": gone})
                 for b, n in label.items():
                     if n in gone:
                         label[b] = into
@@ -811,6 +824,58 @@ def translate(d):
         after.append(len(lines))
     notes = sorted(notes)
     return lines, notes + ["after:" + ",".join(map(str, after))]
+
+
+def extent_of(st, cut):
+    """An extrude step's extent as the call writes it (fgsrc.extent: a cut's depth runs into the part)."""
+    a, b = st["up"], st["down"]
+    ext = fgsrc.extent(a if b == 0 else ("two", a, b), cut)
+    if st["taper"]:
+        ext += f", taper: {fine(st['taper'])}deg"
+    return ext
+
+
+def write(steps):
+    """The steps as a .fg program: each extrude a sketch on its frame and the call; a body is named by
+    the step that made it (b0, b1..), and later steps act on it with `bodies:`."""
+    P = fgsrc.Part()
+    for st in steps:
+        if st["kind"] == "combine":
+            P.add(f"{P.name('u')} = union({st['into']}, tools: [{', '.join(st['tools'])}])")
+            continue
+        if st["kind"] == "blend":
+            # a fillet or chamfer on edges named by lineage (histcad.py finds them)
+            P.add(f"{P.name('bl')} = {st['word']}({st['sel']}, {num(st['size'])})")
+            continue
+        pl = P.plane(st["at"], st["z"], st["x"])
+        sk = P.name("s")
+        rows = [r for rs in st["rows"] for r in rs]
+        if st["kind"] == "revolve":
+            u, v, du, dv = st["axis"]
+            rows.append(f"ax = line(({num(u)}, {num(v)}), ({num(u + du)}, {num(v + dv)}), construction: true)")
+        P.add(f"sketch {sk}(on: {pl}) {{\n" + "\n".join("  " + r for r in rows) + "\n}")
+        op = st["op"]
+        if st["kind"] == "revolve":
+            args = [sk, f"axis: {sk}.ax"]
+            if abs(st["turn"] - 360) > 1e-9:
+                args.append(f"angle: {num(st['turn'])}deg")
+            args += {"": [], "new": ["new: true"], "add": [], "cut": ["cut: true"], "keep": ["keep: true"]}[op]
+            if st.get("into") == "all":
+                args.append('bodies: "all"')
+            elif st.get("into"):
+                args.append(f"bodies: [{st['into']}]")
+            P.add(f"{st.get('label') or P.name('r')} = revolve({', '.join(args)})")
+            continue
+        call = {"": "extrude", "new": "extrude", "add": "extrude", "cut": "cut", "keep": "intersect"}[op]
+        args = [sk, extent_of(st, op == "cut")]
+        if op == "new":
+            args.append("new: true")
+        if st.get("into") == "all":
+            args.append('bodies: "all"')
+        elif st.get("into"):
+            args.append(f"bodies: [{st['into']}]")
+        P.add(f"{st.get('label') or P.name('e')} = {call}({', '.join(args)})")
+    return P.text()
 
 
 def main():
@@ -828,11 +893,13 @@ def main():
         d = json.load(open(fn))
         truth = d.get("properties", {})
         try:
-            lines, notes = translate(d)
-            with open(os.path.join(out, stem + ".fc"), "w") as f:
-                f.write("\n".join(lines) + "\n")
+            steps, notes = translate(d)
+            with open(os.path.join(out, stem + ".fg"), "w") as f:
+                f.write(write(steps))
+            # the steps as data too, without their sketch rows: what occt_replay builds
+            data = [{k: v for k, v in st.items() if k != "rows"} for st in steps]
             with open(os.path.join(out, stem + ".json"), "w") as f:
-                json.dump({"notes": notes, "volume": (truth.get("volume") or 0) * MM**3, "area": (truth.get("area") or 0) * MM**2, "bodies": truth.get("body_count"), "bbox": truth.get("bounding_box")}, f)
+                json.dump({"notes": notes, "volume": (truth.get("volume") or 0) * MM**3, "area": (truth.get("area") or 0) * MM**2, "bodies": truth.get("body_count"), "bbox": truth.get("bounding_box"), "steps": data}, f)
             tally["ok"] = tally.get("ok", 0) + 1
         except (Unsupported, KeyError, IndexError, ZeroDivisionError, ValueError) as x:
             why = repr(x)[:60]

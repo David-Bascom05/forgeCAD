@@ -40,6 +40,7 @@ pub const NAMES: &[&str] = &[
     "project",
     "entity",
     "vary",
+    "verts",
 ];
 
 /// A wired value.
@@ -148,9 +149,11 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
         "project" => crate::project::project(ev, args, span),
         "entity" => crate::media::entity(ev, args, span),
         "vary" => crate::fillets::vary(ev, args, span),
+        "verts" => crate::verts::verts(ev, args, span),
         _ => Err(crate::error::Error::UnknownName {
             span,
             name: name.into(),
+            near: None,
         }),
     }
 }

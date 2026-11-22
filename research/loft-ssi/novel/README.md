@@ -5,23 +5,25 @@ Everything here reruns from this folder (numpy only, no sympy needed):
     python3 py/gap.py          # vf6 walls never meet: max elliptic radius 0.879
     python3 py/certify.py      # Bezier-hull SAT certifies all 72 span pairs of vf6, 5432 tests
     python3 py/pencil.py       # exact F(s, sigma); Res_j / q_j^4 is the same for every j
-    python3 py/vfx_scan.py     # F's zero set on vfx.fc (core raised 8 mm), lifted to 3D
+    python3 py/vfx_scan.py     # F's zero set on vfx.fg (core raised 8 mm), lifted to 3D
     python3 py/fcheck.py       # F roots lifted in closed form land on both surfaces (1e-13..1e-9)
 
 `py/loft.py` rebuilds forge-geom's smooth loft (natural spline, chord knots, circles split into two half
-arcs) as c(s), X(s), Y(s) cubics per span, for the volute benchmark (`repros/vf6.fc`) and for `vfx.fc`.
+arcs) as c(s), X(s), Y(s) cubics per span, for the volute benchmark (`repros/vf6`, a scratch part in the retired
+format at the time) and for `vfx.fg` (in that format then, ported with the same volume, faces and edges).
 
 The production form is `kernel/forge-geom/src/loftmeet.rs` (ideas 1-4, called from forge-bool's
 `ssi::surfaces_in` before the tracer, which stays the fallback). On loft-speed 5a0b79f, instructions per
-build: vf6 3.65 G -> 1.88 G, vfx 5.07 G -> 2.04 G, tools/bench-parts/volute.fc 10.03 G -> 5.79 G; the
+build: vf6 3.65 G -> 1.88 G, vfx 5.07 G -> 2.04 G, the volute bench part 10.03 G -> 5.79 G; the
 other eight bench parts unchanged; bench_parts and real_part_failures pass and fail exactly as before.
 
 `ring-prototype.patch` is the first Rust prototype, as a diff against `real-parts` (5505efe). Apply it to a
-scratch worktree, build forge-cli in release, then:
+scratch worktree, build forge-cli in release, then (that commit reads only the retired part format, so VF6 is
+vf6 as it was written then; today's tree has no vf6 part, and `forgecad build vfx.fg` builds the novel one):
 
-    NO_RING=1   forgecad build vf6.fc   # today's path
-                forgecad build vf6.fc   # + certificate
-    RING_MEET=1 forgecad build vf6.fc   # + certificate + closed-form marching
+    NO_RING=1   forgecad build VF6   # today's path
+                forgecad build VF6   # + certificate
+    RING_MEET=1 forgecad build VF6   # + certificate + closed-form marching
     (SSI_LOG=1 logs each traced or marched pair with its time)
 
 ## The ideas, and what happened to each
@@ -73,10 +75,10 @@ drew loops at 11.25 deg per chord, and the r78 arc's 0.37 mm sag cut across a 0.
 (fixed in 23ddd0a).
 
 ## Newton steps measured in the model, not in the parameters
-At first about 20 span x cylinder/plane pairs of tools/bench-parts/volute.fc fell back to the tracer
+At first about 20 span x cylinder/plane pairs of the volute bench part fell back to the tracer
 (~0.2 s). Each had a seed or a march step near the tube's inner or outer extreme (u = 0 or 1, where
 the cylinder only grazes the tube) that never converged. The minimum-norm step was taken in raw
 parameters, and a unit of u (half a turn, ~70 mm) weighs the same as a millimetre of v. So the step
 swung across the fold in u instead of walking down in v (30 iterations from Q = 17 to 13). Weighting by
 |S_u|^2, |S_v|^2 (the least move of the POINT) converges in a few steps: every pair is handled and
-volute.fc goes 5.64 G -> 4.76 G instructions.
+the volute bench part goes 5.64 G -> 4.76 G instructions.

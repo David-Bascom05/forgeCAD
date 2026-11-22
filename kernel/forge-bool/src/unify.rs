@@ -107,6 +107,13 @@ fn rename_wholes(body: &mut Body, faces: &[(u32, u32)], edges: &[(u32, u32)]) {
     let mask = (2 * np + 1).next_power_of_two() - 1;
     let mut slots = vec![(Name::NONE, Name::NONE); mask + 1];
     for &(p, w) in &body.joins.pieces {
+        // a piece recorded as its own whole (a region named again as it was named before, on a
+        // face a later boolean split again) says nothing of where it came from: taken as its
+        // whole, the lesser, it would cut the way back to the original short, where the n-ary
+        // regen, splitting the original once, reaches it
+        if p == w {
+            continue;
+        }
         let mut i = p.0 as usize & mask;
         while slots[i].0 != Name::NONE && slots[i].0 != p {
             i = (i + 1) & mask;

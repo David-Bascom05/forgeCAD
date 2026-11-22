@@ -2,7 +2,7 @@
 //! CPU-second, from the generators (standard parts, feature pairs, surface-pair configurations,
 //! sweeps of the bench parts). No part may do worse than ci-corpus.txt records; regenerate it with
 //! tools/find-parts/ci_pick.py. A part that now does better is printed, for the next regeneration.
-use forge_agent::history::{Verdict, judge};
+use forge_lang::fuzz::{Verdict, judge};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 #[test]

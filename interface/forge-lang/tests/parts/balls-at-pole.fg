@@ -1,0 +1,24 @@
+# balls whose seams meet at a sphere's pole: once failed to mesh (ConstraintsIntersect)
+# the balls' frames: z along +y, x along +x (each ball's frame is its centre's sketch's)
+XY = plane(at: xy.origin, normal: xy.normal, x: yz.normal)
+XZn = plane(at: xy.origin, normal: -xz.normal, x: yz.normal)
+sketch s(on: xy) {
+  r = rect(corner: (0, 0), size: (60, 40))
+}
+block = extrude(s, 10, new: true)
+sketch b1(on: offset(XZn, 38.3)) {
+  c = pt(28.3, -10)
+}
+ball1 = ball(b1.c, 5.9)
+sketch b2(on: offset(XZn, 32.44)) {
+  c = pt(28.29, -10)
+}
+ball2 = ball(b2.c, 2.93)
+sketch pin(on: offset(XY, -1)) {
+  c = circle((28.29, 32.44), 1)
+}
+bore = cut(pin, -20)
+sketch b3(on: offset(XZn, 34.7)) {
+  c = pt(31.3, -10)
+}
+ball3 = ball(b3.c, 3.9, cut: true)

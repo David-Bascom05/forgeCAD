@@ -19,7 +19,7 @@ fn walk(dir: &Path, files: &mut Vec<std::path::PathBuf>) {
 
 fn main() {
     let mut files = Vec::new();
-    for d in ["../../kernel", "../forge-agent/src", "../forge-doc/src", "src"] {
+    for d in ["../../kernel", "../forge-agent/src", "src"] {
         println!("cargo:rerun-if-changed={d}");
         walk(Path::new(d), &mut files);
     }
@@ -30,8 +30,9 @@ fn main() {
         "../../.cargo/config.toml",
         "../../.cargo/config",
     ] {
-        println!("cargo:rerun-if-changed={f}");
+        // only a file that exists: cargo counts a missing one as changed, every build
         if Path::new(f).exists() {
+            println!("cargo:rerun-if-changed={f}");
             files.push(f.into());
         }
     }

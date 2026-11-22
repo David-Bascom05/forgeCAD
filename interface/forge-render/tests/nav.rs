@@ -159,9 +159,11 @@ fn a_drag_starting_on_the_cube_orbits_and_lands_on_no_view() {
 
 fn block() -> Vec<PartMesh> {
     // a box 100 x 100 x 20, its top at z = 20
-    let m = forge_agent::bench::model("extrude 20 rect -50 -50 100 100");
-    assert!(m.error.is_none());
-    vec![forge_render::tess::build_part(m.body().unwrap()).unwrap()]
+    let src =
+        "sketch s(on: xy) {\n  r = rect(corner: (-50, -50), size: (100, 100))\n}\nbox = extrude(s, 20)\n";
+    let (run, _) = forge_lang::run(src, forge_lang::Options::default(), Default::default());
+    assert!(run.errors.is_empty(), "{:?}", run.errors);
+    vec![forge_render::tess::build_part(run.body.as_ref().unwrap()).unwrap()]
 }
 
 fn with_gpu(parts: &[PartMesh], scene: &Scene) -> Option<Renderer> {
