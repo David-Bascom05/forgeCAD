@@ -465,6 +465,23 @@ pub fn boolean_into(target: &mut Body, b: &Body, op: Op, _feature: u64) -> R<()>
     Ok(())
 }
 
+/// `$call`; under the decision log, with forge-geom's hair-root choices made in it handed to `$log`
+/// as `$h`. Off, it is `$call` alone, token for token (a `let` around it cost trim 0.2%).
+#[cfg(not(feature = "decisions"))]
+macro_rules! with_hairs {
+    ($call:expr, |$h:ident| $log:expr) => {
+        $call
+    };
+}
+#[cfg(feature = "decisions")]
+macro_rules! with_hairs {
+    ($call:expr, |$h:ident| $log:expr) => {{
+        let (r, $h) = forge_geom::intersect::hair_log::collect(|| $call);
+        $log;
+        r
+    }};
+}
+
 /// A result with an edge that leaves its face or crosses its face's boundary, seen only by looking
 /// closely at a traced curve that strays from its chain, is refused: it would not mesh.
 pub(crate) fn refuse_strays(body: &Body, first: usize) -> R<()> {
@@ -2525,21 +2542,16 @@ pub(crate) fn trim(
                     ));
                     CurveSurface::Hits(crossing_on_face(&curve, range, body, f, edge))
                 } else {
-                    #[cfg(feature = "decisions")]
-                    let (found, hairs) = forge_geom::intersect::hair_log::collect(|| {
-                        curve_surface_in(&curve, range, &across, near)
-                    });
-                    #[cfg(feature = "decisions")]
-                    log::hairs(
-                        [(bodies[0], faces[0]), (bodies[1], faces[1])],
-                        body,
-                        e,
-                        (&curve, range, &across),
-                        &hairs,
-                    );
-                    #[cfg(not(feature = "decisions"))]
-                    let found = curve_surface_in(&curve, range, &across, near);
-                    found
+                    with_hairs!(
+                        curve_surface_in(&curve, range, &across, near),
+                        |hairs| log::hairs(
+                            [(bodies[0], faces[0]), (bodies[1], faces[1])],
+                            body,
+                            e,
+                            (&curve, range, &across),
+                            &hairs,
+                        )
+                    )
                 };
                 decided!({
                     let sine = match (&curve, &edge.curve) {
