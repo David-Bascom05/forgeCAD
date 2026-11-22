@@ -96,3 +96,45 @@ fn cut_touching_along_an_edge_leaves_no_slit() {
 fn coincident_walls_1_blocks_build() {
     agrees(&family("coincident_walls", 1));
 }
+
+/// lang/28, shrunk: a box, a slanted 4-gon extruded to next and patterned 3 times, then a pocket
+/// cut. The pattern's third copy ends 4.8e-5 mm past the pocket's face (y 84.3), beyond the
+/// tolerance, so the cut leaves a sliver of it. The reference and the sequential regen agree:
+/// 230176.32 mm³, V36 E54 F24 S3. The n-ary regen took the pocket's face for one bounding nothing
+/// (its outer side tested only 10 LINEAR out, past the sliver), never crossed the copy's sides
+/// with it and refused NotClosed.
+#[test]
+fn nary_keeps_a_sliver_past_a_cuts_face() {
+    let src = "\
+sketch S0(on: xy) {
+  o = rect(corner: (0, 0), size: (74.39, 86.74))
+}
+L0 = extrude(S0, 34.72)
+sketch H0(on: offset(xy, 17.36)) {
+  p0 = pt(20.67, 0.83)
+}
+sketch S1(on: plane(at: H0.p0, normal: -Y)) {
+  o = poly([(3.86, 1.37), (-0.78, 4.48), (-4.8, -1.37), (-0.35, -3.93)])
+}
+L1 = extrude(S1, next, flip: true)
+sketch H2(on: offset(xy, 0)) {
+  p0 = pt(0, 0)
+  p1 = pt(-100, -5)
+}
+L3 = pattern(of: L1, layout: lin(along: axis(H2.p0, H2.p1), n: 3, step: 24.43))
+sketch H4(on: offset(xy, 15.15)) {
+  p0 = pt(-25.99, 84.3)
+}
+sketch S5(on: plane(at: H4.p0, normal: Y)) {
+  o = poly([(-14.56, -9.7), near(14.56, -9.7), near(14.56, 9.7), near(-14.56, 9.7)])
+  horizontal(o[0])
+  vertical(o[1])
+  horizontal(o[2])
+  vertical(o[3])
+  distance(o[1], 19.4)
+  distance(o[0], 29.11)
+}
+L5 = cut(S5, 5.71)
+";
+    agrees(&forge_lang::fuzz::build(src).part());
+}

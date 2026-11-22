@@ -95,6 +95,11 @@ fn par_map<T: Send>(n: usize, threads: usize, per: usize, f: impl Fn(usize) -> T
 /// How far clear of a tool's boundary a point must be for its analytic solid to answer.
 const SHAPE_MARGIN: f64 = tol::LINEAR;
 
+/// How far past a cut's plane (in LINEAR) its outer side is tested for material, `inert`: from
+/// beyond the face's own box (grown LINEAR) and SHAPE_MARGIN, so nothing on the face's plane to
+/// within the tolerance is seen, out to 10.
+const OUTER_SIDE: (f64, f64) = (3.0, 10.0);
+
 /// The part of `range` along which `c` may come within any of `boxes` (None: nowhere): for a
 /// traced curve, the span of its chain segments (each within its chord and sag of its ends) that
 /// meet one; for any other curve, the whole range.
@@ -681,12 +686,19 @@ fn nary_body(
         }
         *inert_at[k][f.index()].get_or_init(|| {
             let b = &index[k].boxes()[f.index()];
-            let out = pl.frame.z().get() * (if face.same_sense { 10.0 } else { -10.0 } * tol::LINEAR);
-            let off = forge_math::Box3 {
-                x: forge_math::Interval::new(b.x.lo + out.x, b.x.hi + out.x),
-                y: forge_math::Interval::new(b.y.lo + out.y, b.y.hi + out.y),
-                z: forge_math::Interval::new(b.z.lo + out.z, b.z.hi + out.z),
+            // the outer side all the way from just past the tolerance to 10 LINEAR off the face,
+            // not one box out there: a tool ending between is a sliver the face bounds, its end
+            // a plane apart from the face's (as the sequential regen has it, planes_coincident),
+            // the sliver's sides crossing the face (lang/28)
+            let sign = if face.same_sense { 1.0 } else { -1.0 };
+            let out = pl.frame.z().get() * (sign * tol::LINEAR);
+            let shifted = |d: f64| forge_math::Box3 {
+                x: forge_math::Interval::new(b.x.lo + d * out.x, b.x.hi + d * out.x),
+                y: forge_math::Interval::new(b.y.lo + d * out.y, b.y.hi + d * out.y),
+                z: forge_math::Interval::new(b.z.lo + d * out.z, b.z.hi + d * out.z),
             };
+            let (from, to) = OUTER_SIDE;
+            let off = shifted(from).hull(&shifted(to));
             let near = b.grow(tol::LINEAR);
             let after = |t: Side| &holders[holders.partition_point(|&h| h <= t)..];
             // how far the face reaches from an axis
@@ -737,7 +749,13 @@ fn nary_body(
                         && index[t].bbox.contains(Point3::new(off.x.hi, off.y.hi, off.z.hi))
                         && after(t).iter().all(|&h| !index[h].bbox.overlaps(&off))
                         && (sh[t].box_in(&off, SHAPE_MARGIN)
-                            || sh[t].plane_in(pl.frame.origin + out, pl.frame.z().get(), reach, SHAPE_MARGIN))
+                            || sh[t].plane_in(
+                                pl.frame.origin + out * (0.5 * (from + to)),
+                                pl.frame.z().get(),
+                                reach,
+                                // the plane mid-way, clear by half the band more: the whole band
+                                SHAPE_MARGIN + 0.5 * (to - from) * tol::LINEAR,
+                            ))
                 }))
                 && after(k).iter().all(|&t| !index[t].bbox.overlaps(&near))
         })
