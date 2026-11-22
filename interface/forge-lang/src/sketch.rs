@@ -28,7 +28,7 @@ pub struct Sk {
     pub idx: usize,
     /// Params its rows read, and whether the solver moves anything (a free point): then they
     /// are all observed, structural params.
-    pub params: std::collections::BTreeSet<crate::error::ParamKey>,
+    pub params: crate::values::Keys,
     pub free: bool,
     /// The numbers that placed and sized entities, by role ("x", "y" of a point or a circle's
     /// written centre, "r"), with where they came from: what fixes that move or resize set.

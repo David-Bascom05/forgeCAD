@@ -91,23 +91,50 @@ pub const BUILTINS: &[&str] = &[
 
 /// A built-in function's name, this module's or another's (shapes).
 pub fn builtin(name: &str) -> Option<&'static str> {
-    // every name looked up or bound asks: a map, not a walk of the lists
-    type Names = HashMap<&'static str, &'static str, std::hash::BuildHasherDefault<crate::eval::NameHasher>>;
+    names().get(name).and_then(|n| n.0)
+}
+
+/// Every built-in's name (Some, `builtin`'s) and every name `constant` knows (true), in one map:
+/// every name looked up or bound asks, so a map, not a walk of the lists.
+fn names() -> &'static HashMap<
+    &'static str,
+    (Option<&'static str>, bool),
+    std::hash::BuildHasherDefault<crate::eval::NameHasher>,
+> {
+    type Names = HashMap<
+        &'static str,
+        (Option<&'static str>, bool),
+        std::hash::BuildHasherDefault<crate::eval::NameHasher>,
+    >;
     static ALL: std::sync::OnceLock<Names> = std::sync::OnceLock::new();
     ALL.get_or_init(|| {
         let mut m = Names::default();
         for &b in BUILTINS.iter().chain(crate::shapes::NAMES) {
-            m.entry(b).or_insert(b);
+            m.entry(b).or_insert((Some(b), false));
+        }
+        for &c in CONSTANTS
+            .iter()
+            .chain(&MORE)
+            .chain(crate::sheet::BUILTINS)
+            .chain(crate::thermo::BUILTINS)
+            .chain(crate::wired::NAMES)
+            .chain(crate::sheet::CONSTANTS)
+        {
+            m.entry(c).or_insert((None, true)).1 = true;
         }
         m
     })
-    .get(name)
-    .copied()
 }
+
+/// `constant`'s own names (the lists it also answers for are named in `names`).
+const CONSTANTS: [&str; 10] = ["pi", "X", "Y", "Z", "xy", "xz", "yz", "thru", "thru_all", "next"];
 
 const MORE: [&str; 5] = ["axis", "sym", "two", "upto", "intersect"];
 
 pub fn constant(name: &str) -> Option<Value> {
+    if !names().get(name).is_some_and(|n| n.1) {
+        return None;
+    }
     let world = |n: &'static str, f: Frame| {
         Some(Value::Plane(Rc::new(Plane {
             frame: f,
@@ -176,9 +203,9 @@ impl Args {
             };
             let v = ev.expr(&a.value)?;
             if let Some(sk) = ev.sketch_ref() {
-                crate::eval::collect_params(&v, &mut sk.borrow_mut().params);
+                crate::eval::collect_keys(&v, &mut sk.borrow_mut().params);
             }
-            crate::eval::collect_params(&v, &mut ev.reads);
+            crate::eval::collect_keys(&v, &mut ev.reads);
             // an empty face set is unknown only after an earlier failure (or in `check`); on a
             // part built so far without one, it is a selection that found nothing
             let known_empty = ev.b.building && ev.errors.is_empty() && !unresolved_in(&v);
@@ -751,7 +778,7 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
                 v: dmath::atan2(y.v, x.v),
                 dim: Dim::Angle,
                 src: match src {
-                    Src::Driving(p) => Src::Driven(std::sync::Arc::new([(*p).clone()].into())),
+                    Src::Driving(p) => Src::Driven(std::sync::Arc::new([p.clone()].into())),
                     s => s,
                 },
             }))
@@ -792,7 +819,7 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
                             dim: Dim::Length,
                             src: match &src {
                                 Src::Const => Src::Const,
-                                s => Src::Driven(std::sync::Arc::new(s.params())),
+                                s => Src::Driven(std::sync::Arc::new(s.keys())),
                             },
                         })
                     };
@@ -3607,7 +3634,7 @@ fn lines(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Value
             let src = values::join_src(&s1, &s2);
             let src = match src {
                 Src::Const => Src::Const,
-                s => Src::Driven(std::sync::Arc::new(s.params())),
+                s => Src::Driven(std::sync::Arc::new(s.keys())),
             };
             let n = |v: f64| {
                 Value::Num(Num {
@@ -3625,4 +3652,15 @@ fn lines(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Value
 enum By {
     Feats(Vec<Rc<Feat>>),
     Faces(Vec<Name>),
+}
+
+#[cfg(test)]
+mod names_tests {
+    /// Each name the map says `constant` knows, it does.
+    #[test]
+    fn every_constant_name_is_a_constant() {
+        for (n, (_, c)) in super::names() {
+            assert!(!c || super::constant(n).is_some(), "{n}");
+        }
+    }
 }

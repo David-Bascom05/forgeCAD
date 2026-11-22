@@ -1294,7 +1294,7 @@ pub fn apply_checked_in(src: &str, op: &Op, dir: Option<std::path::PathBuf>) -> 
                     .filter(|d| d.num.src.params().iter().any(|p| reach.contains(p)))
                     .count();
                 values += n;
-                if (n > 0 || f.reads.iter().any(|p| reach.contains(p))) && !features.contains(&f.id) {
+                if (n > 0 || f.reads.iter().any(|p| reach.contains(&**p))) && !features.contains(&f.id) {
                     features.push(f.id.clone());
                 }
             }

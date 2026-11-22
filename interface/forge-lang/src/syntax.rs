@@ -217,6 +217,33 @@ pub fn lex_lossless(src: &str) -> Result<(Vec<Tok>, Vec<Trivia>), Error> {
     Ok((toks, trivia))
 }
 
+/// Each byte's class for the lexer's loops: a name's byte (letter, digit, `_`), a space (` `,
+/// tab, carriage return), a digit.
+const NAME_BYTE: u8 = 1;
+const SPACE_BYTE: u8 = 2;
+const DIGIT_BYTE: u8 = 4;
+const CLASS: [u8; 256] = {
+    let mut c = [0u8; 256];
+    let mut k = 0;
+    while k < 256 {
+        let b = k as u8;
+        if b.is_ascii_alphanumeric() || b == b'_' {
+            c[k] |= NAME_BYTE;
+        }
+        if b == b' ' || b == b'\t' || b == b'\r' {
+            c[k] |= SPACE_BYTE;
+        }
+        if b.is_ascii_digit() {
+            c[k] |= DIGIT_BYTE;
+        }
+        k += 1;
+    }
+    c
+};
+fn is(b: &[u8], i: usize, class: u8) -> bool {
+    b.get(i).is_some_and(|&x| CLASS[x as usize] & class != 0)
+}
+
 /// Lexes, and writes each token's terminal of grammar.ll1 to `la`.
 fn lex_into<const KEEP: bool>(
     src: &str,
@@ -254,7 +281,7 @@ fn lex_into<const KEEP: bool>(
         }
         if c == b' ' || c == b'\t' || c == b'\r' {
             let s = i;
-            while i < b.len() && matches!(b[i], b' ' | b'\t' | b'\r') {
+            while is(b, i, SPACE_BYTE) {
                 i += 1;
             }
             keep(TriviaKind::Space, s, i);
@@ -262,9 +289,8 @@ fn lex_into<const KEEP: bool>(
         }
         if c == b'#' {
             let s = i;
-            while i < b.len() && b[i] != b'\n' {
-                i += 1;
-            }
+            // (a comment runs to the line's end: found as the text's search for a byte finds it)
+            i = src[i..].find('\n').map_or(b.len(), |k| i + k);
             keep(TriviaKind::Comment, s, i);
             continue;
         }
@@ -280,7 +306,7 @@ fn lex_into<const KEEP: bool>(
             if neg {
                 i += 1;
             }
-            while i < b.len() && (b[i].is_ascii_digit() || (b[i] == b'.' && b.get(i + 1) != Some(&b'.'))) {
+            while is(b, i, DIGIT_BYTE) || (i < b.len() && b[i] == b'.' && b.get(i + 1) != Some(&b'.')) {
                 i += 1;
             }
             if i < b.len()
@@ -322,7 +348,7 @@ fn lex_into<const KEEP: bool>(
         }
         if c.is_ascii_alphabetic() || c == b'_' {
             let s = i;
-            while i < b.len() && (b[i].is_ascii_alphanumeric() || b[i] == b'_') {
+            while is(b, i, NAME_BYTE) {
                 i += 1;
             }
             let w = &src[s..i];
