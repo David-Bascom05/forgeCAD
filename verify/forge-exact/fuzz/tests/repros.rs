@@ -76,6 +76,10 @@ fn agrees(part: &Part) {
 /// of its own. Now a kept vertex counts its sides as a kept edge does (more than one fan of kept
 /// faces, as more than two kept faces at an edge, is material meeting itself) and refuses.
 #[test]
+#[cfg_attr(
+    not(feature = "reference"),
+    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
+)]
 fn cube_on_a_corner_vertex_is_non_manifold() {
     agrees(&degenerate("plane_plane/vertex_on_vertex/Add"));
 }
@@ -111,6 +115,10 @@ fn coincident_walls_1_blocks_build() {
 /// (its outer side tested only 10 LINEAR out, past the sliver), never crossed the copy's sides
 /// with it and refused NotClosed.
 #[test]
+#[cfg_attr(
+    not(feature = "reference"),
+    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
+)]
 fn nary_keeps_a_sliver_past_a_cuts_face() {
     let src = "\
 sketch S0(on: xy) {
@@ -149,6 +157,10 @@ L5 = cut(S5, 5.71)
 /// The stage coincident_walls 1 is refused at, judged alone: the reference says non-manifold along
 /// the line the kernel refuses at, and the kernel's refusal agrees.
 #[test]
+#[cfg_attr(
+    not(feature = "reference"),
+    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
+)]
 fn coincident_walls_1_stage_is_non_manifold() {
     let mut part = family("coincident_walls", 1);
     part.features.truncate(11);

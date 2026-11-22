@@ -11,6 +11,11 @@ repository.workspace = true
 name = "exact-fuzz"
 path = "src/main.rs"
 
+# The tests that ask the compiled Lean reference: built by `lake build` in verify/forge-exact, so
+# they run where that has happened (the forge-exact workflow), not in a plain `cargo test --workspace`
+[features]
+reference = []
+
 [dependencies]
 forge-math = { path = "../../../kernel/forge-math" }
 forge-geom = { path = "../../../kernel/forge-geom" }
