@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Discovery runs: each METHOD generates parts, judges them, dedupes failures by signature and
-shrinks each to a minimal .fc, keeping a ledger so methods compare by distinct failures per CPU-hour.
+shrinks each to a minimal .fg, keeping a ledger so methods compare by distinct failures per CPU-hour.
 
   fbuild python3 tools/find-parts/find.py METHOD --out RUN [--cpu SECONDS] [--seed N] [--jobs 4]
                                           [--no-shrink] [--from DIR]
 METHOD: fuzz swarm sweep enum matrix std mutate augment noise
---from DIR: extra real parts (.fc) for sweep and mutate. Runs stop at the CPU budget.
+--from DIR: extra real parts (.fg) for sweep and mutate. Runs stop at the CPU budget.
 """
 import itertools
 import json
@@ -22,7 +22,7 @@ import gens
 def read_dir(d):
     out = []
     for f in sorted(os.listdir(d)):
-        if f.endswith(".fc"):
+        if f.endswith(".fg"):
             with open(os.path.join(d, f)) as h:
                 out.append((f[:-3], h.read()))
     return out
@@ -93,7 +93,7 @@ def noise_run(book, parts, cpu, seed, jobs, out, shrink):
         print(book.n, book.counts, f"{book.cpu:.0f} cpu s", len(book.sigs), "sigs", len(jumps), "jumps", flush=True)
     for i, (n, src) in enumerate(jumps[:40]):
         mini, _ = fp.shrink(src, "", keep=lambda t: jump(t, seed)[2])
-        with open(os.path.join(out, "sigs", f"noise{i}.fc"), "w") as f:
+        with open(os.path.join(out, "sigs", f"noise{i}.fg"), "w") as f:
             f.write(f"# a part whose volume noise moves ({n}); moved with gens.perturb seed {seed}\n{mini}# noisy:\n# " + gens.perturb(mini, seed).replace("\n", "\n# ") + "\n")
     print(json.dumps(book.summary()))
     with open(os.path.join(out, "summary-noise.json"), "w") as f:
@@ -120,7 +120,7 @@ def main():
         rng = random.Random(a["seed"])
 
         def one(s):
-            # swarm: each history draws from a random third of the kinds
+            # swarm: each program draws from a random third of the kinds
             kinds = sum(1 << i for i in range(64) if rng.random() < 0.33) if method == "swarm" else None
             return s, fp.judge_gen(s, kinds=kinds)
 
