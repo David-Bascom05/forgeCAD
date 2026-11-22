@@ -5,7 +5,7 @@ records (Fusion: volume; DeepCAD: bounding box).
   realparts.py DIR --out RUN [--method NAME] [--no-shrink] [--tol 1e-3] [--every N] [--timeout S] [--correct FILE]
   realparts.py DIR --out RUN --shrink-only [--each N]
 
-DIR holds <stem>.fc and <stem>.json from fusion.py. A part counts as built when it regenerates,
+DIR holds <stem>.fg and <stem>.json from fusion.py. A part counts as built when it regenerates,
 every stage valid, meshes closed, and its volume is within --tol of the truth (1% for a part whose
 ellipses or splines became polylines).
 """
@@ -44,15 +44,15 @@ def shrink_smallest(d, out, each):
     by = {}
     for n, r in res.items():
         if r["v"] in ("fail", "refused", "timeout", "crash", "oom"):
-            by.setdefault(fp.sig_of(r), []).append((os.path.getsize(os.path.join(d, n + ".fc")), n))
+            by.setdefault(fp.sig_of(r), []).append((os.path.getsize(os.path.join(d, n + ".fg")), n))
 
     def one(job):
         s, k, n = job
-        path = os.path.join(out, "sigs", f"{fp.sig_id(s)}.{k}.fc")
+        path = os.path.join(out, "sigs", f"{fp.sig_id(s)}.{k}.fg")
         if os.path.exists(path):
             return
         # the part may have been fixed since: only shrink what still fails the same way
-        src = open(os.path.join(d, n + ".fc")).read()
+        src = open(os.path.join(d, n + ".fg")).read()
         if fp.sig_of(fp.judge_text(src, 30)) != s:
             return
         mini, probes = fp.shrink(src, s, timeout=30)
@@ -73,17 +73,17 @@ def main():
     book = fp.Book(opt("--out"), opt("--method", "realparts"))
     if "--shrink-only" in a:
         return shrink_smallest(d, opt("--out"), int(opt("--each", "2")))
-    names = sorted(n[:-3] for n in os.listdir(d) if n.endswith(".fc"))[:: int(opt("--every", "1"))]
+    names = sorted(n[:-3] for n in os.listdir(d) if n.endswith(".fg"))[:: int(opt("--every", "1"))]
 
     def one(n):
-        return n, fp.judge_file(os.path.join(d, n + ".fc"), float(opt("--timeout", "30")))
+        return n, fp.judge_file(os.path.join(d, n + ".fg"), float(opt("--timeout", "30")))
 
     res = {}
     for k, (n, r) in enumerate(fp.pool_map(one, names)):
         truth = json.load(open(os.path.join(d, n + ".json")))
         r = verdict(r, truth, tol)
         res[n] = r
-        book.add(n, r, open(os.path.join(d, n + ".fc")).read() if r["v"] != "ok" else None)
+        book.add(n, r, open(os.path.join(d, n + ".fg")).read() if r["v"] != "ok" else None)
         if k % 500 == 499:
             print(k + 1, book.counts, f"{book.cpu:.0f} cpu s", flush=True)
     with open(os.path.join(opt("--out"), "results.json"), "w") as f:

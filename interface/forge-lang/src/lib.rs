@@ -49,6 +49,7 @@ pub mod undo;
 pub mod uses;
 pub mod validity;
 pub mod values;
+pub mod verts;
 pub mod vtools;
 pub mod wired;
 pub mod work;
@@ -172,6 +173,10 @@ pub struct Options {
     /// A refused fillet, chamfer, shell or face fillet whose size a param drives: search for the
     /// largest value that builds, the error's fix (a few rebuilds from that feature on).
     pub fit_sizes: bool,
+    /// Rolled back: build only up to the top-level statement binding this name (a browser's end
+    /// of part marker); what follows is evaluated (its rows, its errors) but not built, and the
+    /// part is the one as it stood there.
+    pub until: Option<String>,
 }
 
 impl Default for Options {
@@ -194,6 +199,7 @@ impl Default for Options {
             asks: vec![],
             comp_anchors: false,
             fit_sizes: false,
+            until: None,
         }
     }
 }
@@ -472,6 +478,7 @@ fn run_once(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
     ev.volumes = opts.volumes;
     ev.checks = opts.checks;
     ev.cosmetic_threads = opts.cosmetic_threads;
+    ev.until = opts.until.clone();
     ev.dir = opts.dir.clone();
     ev.root = fence_of(&opts);
     // any document may hold components and joints (an `assembly` first line is optional)
@@ -508,7 +515,9 @@ fn run_once(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
     timings.eval_ms = t2.elapsed().as_secs_f64() * 1e3;
     timings.kernel_ms = ev.b.kernel_ms;
     let t3 = Instant::now();
-    let built_all = opts.build && ev.errors.is_empty() && ev.b.built() == ev.b.features.len();
+    // rolled back: everything up to the marker built is all there is to build
+    let made = ev.rolled.unwrap_or(ev.b.features.len());
+    let built_all = opts.build && ev.errors.is_empty() && ev.b.built() == made;
     // the whole part's mass (its measure) and each solid's (its physical properties) worked out
     // side by side, each as it is alone, and the part's tight box beside them
     let ((whole_mass, whole_box), solid_masses) = {

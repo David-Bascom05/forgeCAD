@@ -45,8 +45,8 @@ What to beat: seconds per thread, silent failures, and a default that tells user
 
 Instructions:u by prefix difference (`research/feature-costs`), `bench-baseline-seq.tsv`,
 `stress-baseline-*.tsv`. The 13 real threads cost 2621M of a 13607M bench, 2947M with what they
-leave later features. (`stress/` was `.fc` parts then; each is now a `.fg` part building to the same volume,
-faces and edges.) OCCT on `stress/` (`tools/occt/oracle.py`, chord 0.01): ours and OCCT's volume
+leave later features. (`stress/` was in the retired part format then; each is now a `.fg` part building to the same
+volume, faces and edges.) OCCT on `stress/` (`tools/occt/oracle.py`, chord 0.01): ours and OCCT's volume
 and area agree on all but two; `fine-long-ext` (200 turns) OCCT takes 166.8 s against our 305 ms,
 and disagrees by 1.6e-7 of the volume (1.6x the mesh's bound); `fine-long-int` OCCT times out at 200 s.
 `taper-runoff` failed on main ("face split crossed itself"): a tapered groove running off its rod.
@@ -138,7 +138,7 @@ which also says OCCT, not us, is off on `fine-long-ext`.
   search drops true touches (the closed form keeps them); where a turn ends the implicit jumps and
   the search's Lipschitz bound can lose a crossing beside it (the closed form does not).
 - `oracle_patch.py`: applied temporarily, compares every closed-form answer inside real regens.
-- `fuzz/gen.py`, `fuzz/compare.py`: random threaded parts on main's binary and this one, seq and
+- `fuzz/gen.py`, `fuzz/compare.py`: random threaded parts (.fg) on main's binary and this one, seq and
   n-ary 2. Found a real bug in the first version (the edge box `near` lost when a closed form
   declined) that no unit test had. Final: 1000 parts, 2000 runs, 0 worse; 11 runs fail on both.
 - `forge-proof`'s `meta` on 120 of those parts, each: main fails `ulp` on one, this on none; the first
@@ -171,8 +171,8 @@ and the first `misses` test's triangle bound (one line of triangle inequality).
 
 ```
 ~/laya/.venv/bin/python -I research/thread-math/derive.py
-cp research/feature-costs/featcost.rs interface/forge-agent/examples/   # not kept in examples
-fbuild cargo build --release -p forge-agent --example featcost
+cp research/feature-costs/featcost.rs interface/forge-lang/examples/   # not kept in examples
+fbuild cargo build --release -p forge-lang --example featcost
 python3 research/thread-math/volume_check.py target/release/forgecad DIR   # Pappus against two more turns
 python3 research/thread-math/fuzz/gen.py DIR 1 200
 python3 research/thread-math/fuzz/compare.py OLD_BIN NEW_BIN DIR

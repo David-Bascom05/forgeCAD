@@ -69,7 +69,7 @@ pub(crate) fn classify_pair(c: &crate::Curve, s: &Surface) -> String {
 }
 '''
 open(p,'w').write(s)
-p='interface/forge-agent/examples/featcost.rs'; s=open(p).read()
+p='interface/forge-lang/examples/featcost.rs'; s=open(p).read()
 s=s.replace("""match r {
                 Ok(s) => println""","""forge_geom::intersect::dump_stats();
             match r {

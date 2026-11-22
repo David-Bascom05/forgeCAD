@@ -1,15 +1,14 @@
 //! Per-feature cost, for instruction counting by prefix difference (research/feature-costs):
 //!   featcost sources                  every source: suite, fillet corpus, finishing, edits, bodies
-//!   featcost resolve NAME OUT         a bench part with its selectors resolved, as a part file
 //!   featcost list SRC                 index, kind label, size of each feature of SRC
 //!   featcost run SRC N MODE           regen of SRC's first N features: seq | nary1 (counted)
 //!   featcost post SRC WHAT            regen, then none | mesh | mass | check on each body
 //!   featcost info SRC MODE            bodies, faces, edges, problems, open mesh edges, volume, area
-//! SRC is a resolved .fc file or a source name.
-use forge_agent::{bench, text};
+//! SRC is a .fg part file (interface/forge-lang/parts/bench/*.fg) or a source name. A part file is
+//! built by forge-lang first, the whole program each time, so `run`'s prefixes all carry the same
+//! load and their differences are the kernel's regen alone.
 use forge_model::{BodyFeature, Edit, End, Extent, Feature, Head, Layout, Part, Source, Turn};
 use forge_model::{edits, fillets, finishing, names, suite, torture};
-use std::sync::Arc;
 
 fn sources() -> Vec<(String, Part)> {
     let mut v: Vec<(String, Part)> = vec![("torture".into(), torture::part(221))];
@@ -27,28 +26,42 @@ fn sources() -> Vec<(String, Part)> {
     v
 }
 
-fn load(src: &str) -> Part {
-    if src.ends_with(".fc") {
+/// A source's kernel features, and for a part file the ids its features are named from.
+fn load(src: &str) -> (Part, Option<Vec<u64>>) {
+    if src.ends_with(".fg") {
         let s = std::fs::read_to_string(src).expect("read");
-        let mut part = text::parse(&s).unwrap_or_else(|(l, e)| panic!("line {l}: {e}"));
-        let font = Arc::new(forge_font::Font::parse(bench::font_bytes()).expect("font"));
-        for f in &mut part.features {
-            if let Feature::Text(t) = f {
-                t.font.font = Some(font.clone());
-            }
+        // the kernel features the program made (a feature the kernel refused last, so the regen
+        // gives its error); the bench parts' text font beside the fuzz test font, in the folder
+        // fuzz's options build from
+        let fonts = forge_lang::fuzz::font_dir();
+        std::fs::write(fonts.join(forge_lang::bench::FONT), forge_lang::bench::font_bytes()).expect("font");
+        let b = forge_lang::fuzz::build(&s);
+        if let Some(e) = b.error()
+            && b.refused().is_none()
+        {
+            panic!("{src}: {}", forge_lang::fuzz::message(e));
         }
-        return part;
+        return (b.part(), Some(b.ids.clone()));
     }
     // only this part is built: the count is its regen's
-    match src {
-        "torture" => return torture::part(221),
-        "torture-2" => return suite::torture2(),
-        _ => {}
+    let part = match src {
+        "torture" => torture::part(221),
+        "torture-2" => suite::torture2(),
+        _ => match src.strip_prefix("suite/").and_then(suite::part) {
+            Some(p) => p,
+            None => sources().into_iter().find(|s| s.0 == src).expect("a source").1,
+        },
+    };
+    (part, None)
+}
+
+/// The regen of a source's features: seq, or naryN on N threads.
+fn regen(part: &Part, ids: &Option<Vec<u64>>, mode: &str) -> Result<Vec<forge_model::Solid>, forge_model::RegenError> {
+    let ids = ids.as_deref().map(|v| &v[..part.features.len().min(v.len())]);
+    match mode {
+        "seq" => part.regenerate_solids_ids(ids),
+        m => part.regenerate_nary_solids_ids(m[4..].parse().expect("naryN"), ids),
     }
-    if let Some(p) = src.strip_prefix("suite/").and_then(suite::part) {
-        return p;
-    }
-    sources().into_iter().find(|s| s.0 == src).expect("a source").1
 }
 
 fn op_name(f: impl std::fmt::Debug) -> String {
@@ -136,6 +149,7 @@ fn label(f: &Feature) -> (String, usize) {
             (format!("pattern.{s}.{l}"), n)
         }
         Feature::Plane(_) | Feature::Work(_) | Feature::Param(_) | Feature::Sketch(_) => ("none".into(), 0),
+        Feature::Import(_) => ("import".into(), 1),
         Feature::Sweep(s) => (
             format!("sweep.{}.{}", first_word(&s.ends), op_name(s.op)),
             s.path.len(),
@@ -182,41 +196,24 @@ fn main() {
                 println!("{n}");
             }
         }
-        "resolve" => std::fs::write(arg(2), text::print(&bench::part(arg(1)))).expect("write"),
-        // a part file with selectors, resolved (a generator's output); prints why not where not
-        "resolve-file" => {
-            let m = bench::model(&std::fs::read_to_string(arg(1)).expect("read"));
-            match &m.error {
-                Some(e) => println!("err {}", e.msg),
-                None => {
-                    let part = Part {
-                        features: m.features.clone(),
-                    };
-                    std::fs::write(arg(2), text::print(&part)).expect("write")
-                }
-            }
-        }
         "list" => {
-            for (i, f) in load(arg(1)).features.iter().enumerate() {
+            for (i, f) in load(arg(1)).0.features.iter().enumerate() {
                 let (l, n) = label(f);
                 println!("{i}\t{l}\t{n}");
             }
         }
         "run" => {
-            let mut part = load(arg(1));
+            let (mut part, ids) = load(arg(1));
             part.features.truncate(arg(2).parse().expect("N"));
-            let r = match arg(3) {
-                "seq" => part.regenerate_solids(),
-                m => part.regenerate_nary_solids(m[4..].parse().expect("naryN")),
-            };
+            let r = regen(&part, &ids, arg(3));
             match r {
                 Ok(s) => println!("ok {}", s.iter().map(|s| s.body.faces.len()).sum::<usize>()),
                 Err(e) => println!("err {}", first_word(e)),
             }
         }
         "post" => {
-            let part = load(arg(1));
-            let solids = part.regenerate_solids().expect("regen");
+            let (part, ids) = load(arg(1));
+            let solids = regen(&part, &ids, "seq").expect("regen");
             let q = forge_mesh::Quality::default();
             for s in &solids {
                 match arg(2) {
@@ -234,11 +231,8 @@ fn main() {
             }
         }
         "info" => {
-            let part = load(arg(1));
-            let r = match arg(2) {
-                "seq" => part.regenerate_solids(),
-                m => part.regenerate_nary_solids(m[4..].parse().expect("naryN")),
-            };
+            let (part, ids) = load(arg(1));
+            let r = regen(&part, &ids, arg(2));
             let solids = match r {
                 Ok(s) => s,
                 Err(e) => {

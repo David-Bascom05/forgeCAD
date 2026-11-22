@@ -90,6 +90,15 @@ fn button(h: &mut Headless, tool: &str) {
     h.step();
 }
 
+/// The tool on a sketch a feature reads already: the button would start a new sketch (as `.fc`'s
+/// did with no sketch free), so the tool is opened as Edit Feature's would be, on that sketch.
+fn reuse(h: &mut Headless, kind: &'static str) {
+    h.gui.fg_open_tool(kind);
+    assert!(h.gui.shell.fg.as_ref().is_some_and(|p| p.tool.is_some()));
+    h.step();
+    h.step();
+}
+
 fn click(h: &mut Headless, place: &str) {
     assert!(h.click(place), "no {place}");
     h.step();
@@ -476,7 +485,7 @@ fn fillet_by_type_and_hole_by_type() {
 #[test]
 fn extrude_symmetric_new_solid_and_through_all() {
     let Some(mut h) = open("extents") else { return };
-    button(&mut h, "Extrude");
+    reuse(&mut h, "extrude");
     choose(&mut h, "Profile", "marks.c");
     click(&mut h, "fg:tool:choice:Extents:Through All");
     click(&mut h, "fg:tool:choice:Output:Cut");
@@ -552,7 +561,7 @@ fn a_slot_constrained_and_text_on_a_face_become_forge_then_cut_and_emboss() {
         "{src}"
     );
     let embossed = volume(&run);
-    button(&mut h, "Extrude");
+    reuse(&mut h, "extrude");
     choose(&mut h, "Profile", "sk1");
     click(&mut h, "fg:tool:choice:Output:Cut");
     set(&mut h, "d", "2");

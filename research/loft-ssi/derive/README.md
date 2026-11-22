@@ -159,7 +159,7 @@ produce them is outside the count.
     proofs/                 Lean project (lakefile.toml, lean-toolchain, lake-manifest.json, Proofs/*.lean)
     cert.py                 reference implementation of the certificate (Bernstein-native, magnitude bounds)
     cert_count.py           its operation counts under Rounding.lean's model
-    volute.py               volute and core sections (tools/bench-parts/volute.fc), spline, F per span pair
+    volute.py               volute and core sections (interface/forge-lang/parts/bench/volute.fg), spline, F per span pair
     weights.py              SymPy: the spline weights' Bernstein coefficients
     fol.py, robust.py       power-basis prototype of R2 (box counts with and without a margin)
     subdiv.py, where.py     F (R1) subdivision on the volute: does not terminate on diagonal pairs, and where

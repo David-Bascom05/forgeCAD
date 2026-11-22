@@ -1,9 +1,9 @@
-"""Shared by every finder: judge .fc files in child processes, sign, dedupe, shrink, keep a ledger.
+"""Shared by every finder: judge .fg files in child processes, sign, dedupe, shrink, keep a ledger.
 
 Judging goes through verify/forge-proof/examples/judge (one process per part), so a hang, abort or
 stack overflow costs one case. Verdicts: ok, refused (a clear error), fail (kernel bug by
-history::classify), wrong (built, disagrees with a known truth), unread (the file did not parse:
-a generator's bug), timeout, crash, oom.
+forge_lang::fuzz::classify), wrong (built, disagrees with a known truth), unread (the language did
+not read the program: a generator's bug), timeout, crash, oom.
 """
 import concurrent.futures as cf
 import hashlib
@@ -19,7 +19,12 @@ import time
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 JUDGE = os.environ.get("JUDGE", os.path.join(ROOT, "target/release/examples/judge"))
 MEM = int(os.environ.get("FP_MEM_MB", "700")) * 1 << 20
-UNREAD = ("expected", "unexpected", "unknown", "no feature", "too soon", "a word the file uses")
+# forge_lang::fuzz's UNREAD: error kinds that say the program is not one the language reads
+UNREAD = ("Syntax", "ReservedWord", "UnknownName", "UnknownMember", "UnknownArg", "MissingArg", "TooManyArgs", "NotCallable",
+          "WrongType", "WrongDim", "DimMismatch", "NotWhole", "Rebind", "ShadowsBuiltin", "ShadowsTopLevel", "ParamTwice",
+          "DuplicateId", "IndexOut", "WrongPlace", "OtherSketch", "WrongEntity", "NotWith", "UnnamedFeature", "PositionalId",
+          "PositionalSelection", "LooseLiteral", "WorldAfterFirst", "ParamOutOfScope", "Forms", "Conflict", "NotApplicable",
+          "UnknownWord", "UnknownSize", "NotARef")
 
 
 def limits(cpu=None):
@@ -51,7 +56,7 @@ def judge_file(path, timeout=20.0, exe=None, env=None):
         return {"v": why, "sig": f"{why}: {s} {m.group(0) if m else ''}".strip(), "cpu": wall}
     r = json.loads(out)
     tail = r["sig"].split(": ", 1)[-1]
-    if r["v"] != "ok" and (tail.startswith(UNREAD) or "unknown parameter" in tail):
+    if r["v"] != "ok" and tail.startswith(UNREAD):
         r["v"] = "unread"
     if r["v"] == "fail" and r.get("loc"):
         r["sig"] += " @" + r["loc"]
@@ -59,7 +64,7 @@ def judge_file(path, timeout=20.0, exe=None, env=None):
 
 
 def judge_text(src, timeout=20.0):
-    with tempfile.NamedTemporaryFile("w", suffix=".fc", dir=os.environ.get("FP_TMP"), delete=True) as f:
+    with tempfile.NamedTemporaryFile("w", suffix=".fg", dir=os.environ.get("FP_TMP"), delete=True) as f:
         f.write(src)
         f.flush()
         return judge_file(f.name, timeout)
@@ -88,20 +93,17 @@ def pool_map(fn, items, jobs=4):
 
 
 def blocks(src):
-    """A part's droppable units: a line, or a sketch with its rows."""
-    out, cur = [], None
+    """A part's droppable units: its statements (a line, or a sketch or call running over lines)."""
+    out, cur, depth = [], [], 0
     for l in src.splitlines():
-        if not l.strip() or l.lstrip().startswith("#"):
+        if not cur and (not l.strip() or l.lstrip().startswith("#")):
             continue
-        if cur is not None:
-            cur.append(l)
-            if l.strip() == "end":
-                out.append("\n".join(cur))
-                cur = None
-        elif re.match(r"(\w+:\s*)?sketch\b", l):
-            cur = [l]
-        else:
-            out.append(l)
+        cur.append(l)
+        body = re.sub(r'"[^"]*"', "", l.split("#")[0])
+        depth += sum(body.count(c) for c in "{([") - sum(body.count(c) for c in "})]")
+        if depth <= 0:
+            out.append("\n".join(cur))
+            cur, depth = [], 0
     if cur:
         out.append("\n".join(cur))
     return out
@@ -147,16 +149,16 @@ def shrink(src, want, timeout=20.0, budget=250, seconds=120.0, keep=None):
             else:
                 end = start
         chunk //= 2
-    # selectors and whole loop terms a line can lose, then each number made plainer
+    # arguments and summed selections a statement can lose, then each number made plainer
     for i in range(len(bs)):
         k = 0
         while not spent():
             sp = spans(bs[i])
-            if k >= len(sp) or len(sp) < 2:
+            if k >= len(sp):
                 break
             a, b = sp[k]
             t = list(bs)
-            t[i] = (bs[i][:a].rstrip() + bs[i][b:]).strip()
+            t[i] = bs[i][:a].rstrip() + bs[i][b:]
             if same(t):
                 bs = t
             else:
@@ -182,15 +184,30 @@ def shrink(src, want, timeout=20.0, budget=250, seconds=120.0, keep=None):
     return "\n".join(bs) + "\n", n[0]
 
 
-def spans(line):
-    out, start = [], None
-    for i, c in enumerate(line):
-        if c == "(":
-            start = i
-        elif c == ")" and start is not None:
-            out.append((start, i + 1))
-            start = None
-    return out
+def spans(stmt):
+    """What a statement can lose and still read: an optional `, key: value` argument of a call, or one
+    term of a summed selection (`+ edges(..)`)."""
+    out = []
+    depth = 0
+    start = {}  # depth -> where the droppable piece open at that depth began
+    for i, c in enumerate(stmt):
+        if c in "([{":
+            depth += 1
+        elif c in ")]}":
+            if depth in start:
+                out.append((start.pop(depth), i))
+            depth -= 1
+        elif c == "," and depth >= 1:
+            if depth in start:
+                out.append((start.pop(depth), i))
+            # a keyword argument after the first: `, name: value`
+            if re.match(r",\s*\w+:\s", stmt[i:]):
+                start[depth] = i
+        elif c == "+" and depth >= 1 and re.match(r"\+\s*(edges|faces)\(", stmt[i:]):
+            if depth in start:
+                out.append((start.pop(depth), i))
+            start[depth] = i
+    return sorted(out)
 
 
 class Book:
@@ -215,15 +232,15 @@ class Book:
         if s and s not in self.sigs:
             self.sigs[s] = name
             if src is not None:
-                with open(os.path.join(self.out, "sigs", sig_id(s) + ".src.fc"), "w") as f:
+                with open(os.path.join(self.out, "sigs", sig_id(s) + ".src.fg"), "w") as f:
                     f.write(f"# {s}\n# first: {self.method} {name}\n{src}")
 
     def shrink_all(self, want=is_failure):
-        """Each failure signature's first repro, shrunk to a .fc beside it."""
+        """Each failure signature's first repro, shrunk to a .fg beside it."""
         for s in sorted(self.sigs):
             i = sig_id(s)
-            a = os.path.join(self.out, "sigs", i + ".src.fc")
-            b = os.path.join(self.out, "sigs", i + ".fc")
+            a = os.path.join(self.out, "sigs", i + ".src.fg")
+            b = os.path.join(self.out, "sigs", i + ".fg")
             if os.path.exists(b) or not os.path.exists(a):
                 continue
             if not want({"v": s.split(":")[0]}):
@@ -238,8 +255,8 @@ class Book:
 
 
 def judge_gen(seed, length=12, timeout=120.0, kinds=None):
-    """A random history (the baseline): its failures [(sig, src)] and CPU time; a hang is a failure."""
-    with tempfile.NamedTemporaryFile("r", suffix=".fc", dir=os.environ.get("FP_TMP")) as last:
+    """A random program (the baseline, forge_lang::fuzz): its failures [(sig, src)] and CPU time; a hang is a failure."""
+    with tempfile.NamedTemporaryFile("r", suffix=".fg", dir=os.environ.get("FP_TMP")) as last:
         env = dict(os.environ, HISTORY_LAST=last.name)
         p = subprocess.Popen([JUDGE, "gen", str(seed), str(length)] + ([str(kinds)] if kinds else []), stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, preexec_fn=limits, text=True, env=env)
         t = time.monotonic()

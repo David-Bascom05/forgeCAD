@@ -112,8 +112,12 @@ fn radius_of(v: Value, span: Span, dims: &mut Vec<Dimension>) -> R<Radius> {
     }
 }
 
-/// The part's vertex at a point (an anchor), by its name.
+/// The part's vertex a `verts(..)` selection found, or the one at a point (an anchor), by its
+/// name.
 fn vertex_at(ev: &mut Eval, v: Value, span: Span) -> R<Name> {
+    if let Value::Verts(vs) = &v {
+        return crate::verts::one(vs, span, "a vertex (one)");
+    }
     let p = point_of(ev, v, span)?;
     let Some(b) = ev.b.body() else {
         return Ok(Name::NONE);

@@ -24,7 +24,7 @@ def one(f):
     return out
 c = collections.Counter()
 with cf.ThreadPoolExecutor(4) as pool:
-    for res in pool.map(one, sorted(glob.glob(d + "/*.fc"))):
+    for res in pool.map(one, sorted(glob.glob(d + "/*.fg"))):
         for f, m, a, b in res:
             n = os.path.basename(f)
             c["runs"] += 1

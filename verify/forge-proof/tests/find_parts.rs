@@ -7,10 +7,6 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 #[test]
 #[cfg_attr(target_family = "wasm", ignore = "a kernel panic aborts the wasm run")]
-#[cfg_attr(
-    not(target_family = "wasm"),
-    ignore = "TODO(.fg move): ci-corpus.txt is still part files of the retired format; run again once tools/find-parts writes it as .fg"
-)]
 fn no_part_does_worse() {
     let corpus = include_str!("../../../tools/find-parts/ci-corpus.txt");
     let parts: Vec<(&str, &str, &str)> = corpus

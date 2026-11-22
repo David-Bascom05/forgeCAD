@@ -26,7 +26,7 @@ zooms at the cursor. Click selects, ctrl or shift + click adds; one or two selec
 measured. Home or F6 home, A fit all, F fit selection, Esc clear. View cube: click to go, drag to
 orbit. L the next visual style. O occlusion. S section x, y, z, off; ctrl + wheel moves it. E explode.
 
---dims lists the numbers a part has: its params. --drag-bench: sets a number of every bench part again and
+--dims lists the numbers a part has: its params, then each number written in a feature's call. --drag-bench: sets a number of every bench part again and
 again, value change to frame, headless.";
 
 struct Args {
