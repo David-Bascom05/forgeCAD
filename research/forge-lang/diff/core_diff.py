@@ -43,6 +43,12 @@ def fg_expr(e):
         return f"({fg_expr(e[1])} * {e[2]})"
     if k == "eq":
         return f"{fg_expr(e[1])} == {fg_expr(e[2])}"
+    if k in FG_OPS:
+        return f"({fg_expr(e[1])} {FG_OPS[k]} {fg_expr(e[2])})"
+    if k == "not":
+        return f"(not {fg_expr(e[1])})"
+    if k == "sub":
+        return f"({fg_expr(e[1])} - {fg_expr(e[2])})"
     if k == "ite":
         return f"({fg_expr(e[2])} if {fg_expr(e[1])} else {fg_expr(e[3])})"
     if k == "sel":
@@ -50,6 +56,10 @@ def fg_expr(e):
     if k == "call":
         return f"{e[1]}({fg_expr(e[2])})"
     raise ValueError(e)
+
+
+FG_OPS = {"lt": "<", "le": "<=", "gt": ">", "ge": ">=", "ne": "!=", "and": "and", "or": "or"}
+LEAN_OPS = {"le": "Expr.le", "gt": "Expr.gt", "ge": "Expr.ge", "ne": "Expr.ne", "and": "Expr.and", "or": "Expr.or"}
 
 
 def fg_stmts(ss, ind, sketch):
@@ -131,6 +141,14 @@ def lean_expr(e, sites):
         return f"(.mul {lean_expr(e[1], sites)} (.cst {e[2]}))"
     if k == "eq":
         return f"(.eq {lean_expr(e[1], sites)} {lean_expr(e[2], sites)})"
+    if k == "lt":
+        return f"(.lt {lean_expr(e[1], sites)} {lean_expr(e[2], sites)})"
+    if k in LEAN_OPS:
+        return f"({LEAN_OPS[k]} {lean_expr(e[1], sites)} {lean_expr(e[2], sites)})"
+    if k == "not":
+        return f"(Expr.not {lean_expr(e[1], sites)})"
+    if k == "sub":
+        return f"(.bin .sub {lean_expr(e[1], sites)} {lean_expr(e[2], sites)})"
     if k == "ite":
         return f"(.ite {lean_expr(e[1], sites)} {lean_expr(e[2], sites)} {lean_expr(e[3], sites)})"
     if k == "sel":
@@ -197,7 +215,7 @@ def lean_doc(doc):
             f"σ := fun s => {sig} }}")
 
 
-LEAN_HEAD = """import ForgeLang.Core
+LEAN_HEAD = """import ForgeLang
 open ForgeLang
 set_option linter.unusedVariables false
 
@@ -211,6 +229,14 @@ def errS : Err → String
   | .notFeature x => "notFeature " ++ x | .dangling x _ => "dangling " ++ x | .range => "range"
   | .noFn f => "noFn " ++ f | .dupId => "dupId" | .noComp c => "noComp " ++ c
   | .noParam c => "noParam " ++ c | .useCycle f => "useCycle " ++ f | .noFile f => "noFile " ++ f
+
+/-- `Suppress {id}` as Suppress.lean defines it: the closure taken out (`suppressAt`). -/
+def suppDoc (d : Doc) (id : String) : Doc :=
+  match d.body.findIdx? (fun s => s.binder == some id) with
+  | some k => match d.body[k]? with
+    | some s => { d with body := suppressAt s id (d.body.take k) (d.body.drop (k + 1)) }
+    | none => d
+  | none => d
 
 def js (xs : List String) : String := "[" ++ ",".intercalate xs ++ "]"
 def jq (s : String) : String := "\\"" ++ s ++ "\\""
@@ -447,6 +473,15 @@ def fixed_cases():
     d = D([("shared", "w", 4, "len"), ("use", "l1", "boss", ("p", "w")), ("use", "l2", "boss", ("mulc", ("p", "w"), 2))],
           procs={"boss": ("x", [("feat", "hub", ("v", "x"))])})
     out.append(("call_path_ids", d, []))
+    # Compare.lean: `<` observes both sides (the count is structural); `<=`, `>`, `>=`, `!=`,
+    # `and`, `or`, `not` are the core's abbreviations; `-` is unobserved arithmetic
+    d = D([("shared", "c", 1, "count"), ("shared", "five", 5, "len"), ("shared", "seven", 7, "len"),
+           ("feat", "a", ("ite", ("lt", ("p", "c"), ("c", 2)), ("p", "five"), ("p", "seven"))),
+           ("feat", "b", ("ite", ("and", ("le", ("p", "c"), ("c", 1)), ("ne", ("p", "c"), ("c", 0))),
+                          ("sub", ("p", "seven"), ("p", "five")), ("c", 1))),
+           ("feat", "g", ("ite", ("or", ("gt", ("p", "c"), ("c", 3)), ("not", ("ge", ("p", "c"), ("c", 1)))),
+                          ("c", 2), ("p", "seven")))])
+    out.append(("comparisons", d, [setp(d, "c", 0, "Count"), setp(d, "c", 3, "Count"), setp(d, "five", 4)]))
     return out
 
 
@@ -778,13 +813,77 @@ SERVE = [
 ]
 
 
+def fv_expr(e):
+    """Names an expression reads (Fv.lean's fvE: variables, not function names)."""
+    k = e[0]
+    if k in ("p", "v"):
+        return [e[1]]
+    if k == "c":
+        return []
+    if k == "call":
+        return fv_expr(e[2])
+    if k == "sel":
+        return [n for x in e[1] for n in fv_expr(x)] + fv_expr(e[2])
+    return [n for x in e[1:] if isinstance(x, tuple) for n in fv_expr(x)]
+
+
+def fv_stmt(s):
+    k = s[0]
+    if k in ("feat", "let", "link"):
+        return fv_expr(s[2])
+    if k == "shared":
+        return []
+    if k == "forN":
+        return fv_expr(s[3]) + [n for t in s[4] for n in fv_stmt(t)]
+    if k == "forK":
+        return [n for _, x in s[3] for n in fv_expr(x)] + [n for t in s[4] for n in fv_stmt(t)]
+    if k == "if":
+        return fv_expr(s[1]) + [n for t in s[2] + s[3] for n in fv_stmt(t)]
+    if k == "use":
+        return fv_expr(s[3])
+    if k == "occ":
+        return [n for _, x in s[3] for n in fv_expr(x)]
+    raise ValueError(s)
+
+
+def binder(s):
+    return None if s[0] == "if" else s[1]
+
+
+def suppressed(doc, x):
+    """Suppress.lean's `suppressAt` on the Python AST: the statement binding `x` and every later
+    one reading what the ones taken out bind."""
+    body = doc["body"]
+    k = next(i for i, s in enumerate(body) if binder(s) == x)
+    names = {x, binder(body[k])}
+    keep = body[:k]
+    for s in body[k + 1:]:
+        if any(n in names for n in fv_stmt(s)):
+            if binder(s):
+                names.add(binder(s))
+        else:
+            keep.append(s)
+    return dict(doc, body=keep)
+
+
+def suppress_ops(doc):
+    """Suppress of the first feature, as Lean computes it, then Unsuppress (the text back)."""
+    tops = [s[1] for s in doc["body"] if s[0] in ("feat", "use", "occ")]
+    if not tops:
+        return []
+    x = tops[0]
+    sup = {"op": "Suppress", "id": x}
+    return [(sup, suppressed(doc, x), f'suppDoc D0 "{x}"'),
+            ([sup, {"op": "Unsuppress", "id": x}], doc)]
+
+
 def all_cases(seed, count, fixed=True):
     """Every case: (key, doc, ops). The generated ones from the seed, then the fixed ones."""
     g = Gen(random.Random(seed))
     out = []
     for i in range(count):
         d = g.doc()
-        out.append((f"s{seed}c{i}", d, g.ops(d)))
+        out.append((f"s{seed}c{i}", d, g.ops(d) + suppress_ops(d)))
     if fixed:
         for name, d, ops in fixed_cases():
             out.append((f"fixed_{name}", d, ops))
@@ -800,8 +899,9 @@ def lean_file(cases):
     for key, d, ops in cases:
         lean.append(f"def d_{key} : Doc := {lean_doc(d)}")
         keys.append(key)
-        for k, (o, nd) in enumerate(ops):
-            lean.append(f"def d_{key}_{k} : Doc := {lean_doc(nd)}")
+        for k, op in enumerate(ops):
+            body = op[2].replace("D0", f"d_{key}") if len(op) > 2 else lean_doc(op[1])
+            lean.append(f"def d_{key}_{k} : Doc := {body}")
             keys.append(f"{key}_{k}")
     parts = [keys[i:i + 40] for i in range(0, len(keys), 40)]
     for n, ks in enumerate(parts):
@@ -867,17 +967,22 @@ def compare(cases, lean, fg, tmp, note):
         if not lean[key]["ok"]:
             # the document already fails: an op is refused only on a new kind of error
             continue
-        for k, (o, nd) in enumerate(ops):
+        for k, op in enumerate(ops):
+            o, nd = op[0], op[1]
             ek = f"{key}_{k}"
             p2 = os.path.join(tmp, ek + ".fg")
             with open(p2, "w") as f:
                 f.write(fgtext)
-            r = subprocess.run([fg, "edit", p2, json.dumps(o)], capture_output=True, text=True)
-            try:
-                res = json.loads(r.stdout.splitlines()[0])
-            except (json.JSONDecodeError, IndexError):
-                res = {"ok": False, "error": r.stderr.strip()}
-            le, opn = lean[ek], o["op"]
+            for log in (p2 + ".log",):
+                if os.path.exists(log):
+                    os.remove(log)
+            seq = o if isinstance(o, list) else [o]
+            for step in seq:
+                res = fg_edit(fg, p2, step)
+                if not res.get("ok"):
+                    break
+            o = seq[-1]
+            le, opn = lean[ek], "+".join(x["op"] for x in seq)
             note("ops", ek, "", "")
             if not res.get("ok"):
                 if le["ok"]:
@@ -893,10 +998,138 @@ def compare(cases, lean, fg, tmp, note):
                 continue
             new = open(p2).read()
             want = fg_doc(nd)
-            if norm(new) != norm(want):
+            if opn.endswith("Unsuppress"):
+                # Suppress.unsuppress_suppress: the text back byte for byte
+                if new != want:
+                    note(f"op-text:{opn}", ek, f"--- rust\n{new}--- want\n{want}", fgtext)
+            elif opn == "Suppress":
+                kept = [l for l in new.splitlines() if not l.startswith("#~")]
+                if norm("\n".join(kept)) != norm(want):
+                    note(f"op-text:{opn}", ek, f"{o}\n--- rust\n{new}--- want\n{want}", fgtext)
+            elif norm(new) != norm(want):
                 note(f"op-text:{opn}", ek, f"{o}\n--- rust\n{new}--- want\n{want}", fgtext)
             for cat, det in classify(nd, lean_view(nd, le), rust_view(fg_json(fg, p2, build))):
                 note(f"after-{opn}:{cat}", ek, det, new)
+            # Undo.undo_write, Undo.redo_undo: Undo gives the text before the last edit byte for
+            # byte, and so the model Lean gave it; Redo gives the edited text and model back
+            before = fgtext if len(seq) == 1 else None
+            res = fg_edit(fg, p2, {"op": "Undo"})
+            note("undo", ek, "", "")
+            if before == new:
+                # an edit that changed nothing is not logged (`write`): nothing to undo
+                if res.get("ok"):
+                    note(f"undo-unchanged:{opn}", ek, "Undo after an edit that changed nothing", new)
+                continue
+            if not res.get("ok"):
+                note(f"undo-refused:{opn}", ek, str(res.get("error")), new)
+                continue
+            back = open(p2).read()
+            if before is not None:
+                if back != before:
+                    note(f"undo-text:{opn}", ek, f"--- rust\n{back}--- want\n{before}", new)
+                for cat, det in classify(d, lean_view(d, lean[key]), rust_view(fg_json(fg, p2, build))):
+                    note(f"after-Undo:{cat}", ek, det, back)
+            res = fg_edit(fg, p2, {"op": "Redo"})
+            if not res.get("ok") or open(p2).read() != new:
+                note(f"redo-text:{opn}", ek, str(res.get("error")), back)
+
+
+def fg_edit(fg, path, op):
+    r = subprocess.run([fg, "edit", path, json.dumps(op)], capture_output=True, text=True)
+    try:
+        return json.loads(r.stdout.splitlines()[0])
+    except (json.JSONDecodeError, IndexError):
+        return {"ok": False, "error": r.stderr.strip()}
+
+
+def eager(e):
+    """The reads an expression always evaluates (outside branches, lists and calls), in order."""
+    if e[0] == "p":
+        return [e[1]]
+    if e[0] == "add":
+        return eager(e[1]) + eager(e[2])
+    if e[0] == "mulc":
+        return eager(e[1])
+    return []
+
+
+def compare_respell(cases, lean, fg, tmp, note):
+    """Respell.lean: an UnknownName's span respelt is a one-token edit, the text otherwise byte
+    for byte, and the program the model gave. Per program: the first feature reading a shared
+    length, its read misspelt; then the binder case (respell_binder_renames, a finding)."""
+    for key, d, _ in cases:
+        if key.startswith("serve_") or not lean[key]["ok"]:
+            continue
+        text = fg_doc(d)
+        lens = [s[1] for s in d["body"] if s[0] == "shared"]
+        feat = next((s for s in d["body"] if s[0] == "feat" and set(eager(s[2])) & set(lens)), None)
+        if not feat:
+            continue
+        w = next(n for n in eager(feat[2]) if n in lens)
+        line = next(l for l in text.splitlines() if l.startswith(f"{feat[1]} = extrude(plan, "))
+        at = text.index(line)
+        import re
+        m = re.search(rf"\b{w}\b", line[len(f"{feat[1]} = extrude(plan, "):])
+        lo = at + len(f"{feat[1]} = extrude(plan, ") + m.start()
+        typo = text[:lo] + w + "qq" + text[lo + len(w):]
+        path = os.path.join(tmp, f"respell_{key}.fg")
+        with open(path, "w") as f:
+            f.write(typo)
+        j = fg_json(fg, path, bool(d["comps"]))
+        spans = [e["span"] for e in j["errors"] if e["kind"] == "UnknownName"]
+        note("respell", key, "", "")
+        if not spans or spans[0]["lo"] != lo:
+            note("respell-span", key, f"want an UnknownName at {lo}, rust {j['errors'][:1]}", typo)
+            continue
+        res = fg_edit(fg, path, {"op": "Respell", "span": {"lo": lo, "hi": lo + len(w) + 2}, "to": w})
+        new = open(path).read()
+        if not res.get("ok") or new != text:
+            note("respell-text", key, f"{res}\n--- rust\n{new}--- want\n{text}", typo)
+            continue
+        for cat, det in classify(d, lean_view(d, lean[key]), rust_view(fg_json(fg, path, bool(d["comps"])))):
+            note(f"after-Respell:{cat}", key, det, new)
+    # Respell.respell_binder_renames: the op takes a binder too, and renames the feature
+    path = os.path.join(tmp, "respell_binder.fg")
+    text = "shared t = 6\n" + "\n".join(SKETCH) + "\nbase = extrude(plan, t)\n"
+    with open(path, "w") as f:
+        f.write(text)
+    lo = text.index("base =")
+    res = fg_edit(fg, path, {"op": "Respell", "span": {"lo": lo, "hi": lo + 4}, "to": "plate"})
+    note("respell", "binder", "", "")
+    if res.get("ok"):
+        note("respell-binder", "binder", "Respell at a binder renames the feature (base -> plate), not refused", text)
+
+
+def compare_suppress_line(fg, tmp, note):
+    """Suppress.same_line_drops: two statements on one line, Suppress the second."""
+    path = os.path.join(tmp, "suppress_line.fg")
+    text = "shared t = 6\n" + "\n".join(SKETCH) + "\na = extrude(plan, t); b = extrude(plan, 2 * t)\n"
+    with open(path, "w") as f:
+        f.write(text)
+    res = fg_edit(fg, path, {"op": "Suppress", "id": "b"})
+    ids = [x["id"] for x in fg_json(fg, path, False)["features"]]
+    note("suppress", "same_line", "", "")
+    if not res.get("ok") or "a" not in ids:
+        note("suppress-line", "same_line", f"Suppress b took out a as well: features {ids}", text)
+
+
+def compare_fit(fg, tmp, note):
+    """Fit.fit_builds: the size fit_sizes offers builds, and is below the refused one."""
+    path = os.path.join(tmp, "fit.fg")
+    text = "shared t = 6\nshared r = 5\n" + "\n".join(SKETCH) + "\nbase = extrude(plan, t)\nround = fillet(edges(of: base, crease: \"convex\"), r)\n"
+    with open(path, "w") as f:
+        f.write(text)
+    j = fg_json(fg, path, True)
+    fixes = [x for e in j["errors"] if e["kind"] == "Build" for x in e.get("fixes", []) if x["op"] == "SetParam"]
+    note("fit", "fillet", "", "")
+    if not fixes:
+        note("fit-none", "fillet", f"no fit: {j['errors']}", text)
+        return
+    v = fixes[0]["value"]["value"]
+    res = fg_edit(fg, path, fixes[0])
+    j2 = fg_json(fg, path, True)
+    if not (0 < v < 5) or not res.get("ok") or j2["errors"]:
+        note("fit-builds", "fillet", f"fix r = {v}: {res} {j2['errors']}", text)
 
 
 def compare_static(fg, tmp, note):
@@ -969,11 +1202,14 @@ def run_all(cases, lean, a, exit_=True):
         examples.setdefault(cat, (key, detail, text))
 
     compare(cases, lean, a.fg, tmp, note)
+    compare_respell(cases, lean, a.fg, tmp, note)
     if any(k.startswith("fixed_") for k, _, _ in cases):
         compare_static(a.fg, tmp, note)
+        compare_suppress_line(a.fg, tmp, note)
+        compare_fit(a.fg, tmp, note)
         compare_serve(lean, a.fg, tmp, note)
     known = set(a.known.split(","))
-    counts = {"programs", "ops", "static", "serve"}
+    counts = {"programs", "ops", "static", "serve", "undo", "respell", "suppress", "fit"}
     bad = sorted(k for k in tally if k not in counts and k.split(":")[-1] not in known)
     w = max(len(k) for k in tally)
     for k in sorted(tally):
@@ -991,8 +1227,10 @@ def run_all(cases, lean, a, exit_=True):
 
 # Differences that are filed findings (impl-proof-findings.md), or the mapping itself (`link`:
 # fg names a shared param whose value is an expression where the model names its sites;
-# `strict-list`: fg evaluates every element of a list, the model's `sel` only the chosen one).
-KNOWN = "link,strict-list"
+# `strict-list`: fg evaluates every element of a list, the model's `sel` only the chosen one;
+# `suppress-line`: Suppress comments whole lines (Suppress.same_line_drops); `respell-binder`:
+# Respell takes a binder's span and renames the feature (Respell.respell_binder_renames)).
+KNOWN = "link,strict-list,suppress-line,respell-binder"
 
 
 def main():

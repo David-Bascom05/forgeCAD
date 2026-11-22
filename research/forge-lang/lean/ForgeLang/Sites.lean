@@ -170,7 +170,18 @@ theorem sitesIn : ∀ n, SitesIn n := by
         simp only [evalE, bind_ok] at h
         obtain ⟨t', ht, h⟩ := h; cases h
         simpa using lookupRef_sites ht
-      | add a b | mul a b | eq a b =>
+      | add a b | mul a b | eq a b | lt a b =>
+        simp only [evalE, bind_ok] at h
+        obtain ⟨⟨ta, la⟩, ha, ⟨tb, lb⟩, hb, h⟩ := h
+        cases h
+        have A := ((ih.e ha).mono (C' := codeE a ++ codeE b) (by simp_all))
+        have B := ((ih.e hb).mono (C' := codeE a ++ codeE b) (by simp_all))
+        rw [allIn_append] at A B
+        obtain ⟨A1, A2⟩ := A; obtain ⟨B1, B2⟩ := B
+        have A' := A1.obs (D := D); have B' := B1.obs (D := D)
+        simp only [codeE, Tr.sites, allIn_append, List.append_assoc]
+        fin
+      | bin o a b =>
         simp only [evalE, bind_ok] at h
         obtain ⟨⟨ta, la⟩, ha, ⟨tb, lb⟩, hb, h⟩ := h
         cases h

@@ -20,6 +20,7 @@ def Tr.subst (θ : Site → Tr) : Tr → Tr
   | .const c => .const c
   | .add a b => .add (a.subst θ) (b.subst θ)
   | .mul a b => .mul (a.subst θ) (b.subst θ)
+  | .bin o a b => .bin o (a.subst θ) (b.subst θ)
 
 def Model.subst (θ : Site → Tr) (m : Model) : Model := m.map fun e => (e.1, e.2.subst θ)
 
@@ -48,12 +49,14 @@ theorem Tr.den_subst {θ : Site → Tr} {σA σB : Site → Int} (hσ : ∀ s, �
   | .const _ => rfl
   | .add a b => by simp [Tr.subst, Tr.den, Tr.den_subst hσ a, Tr.den_subst hσ b]
   | .mul a b => by simp [Tr.subst, Tr.den, Tr.den_subst hσ a, Tr.den_subst hσ b]
+  | .bin o a b => by simp [Tr.subst, Tr.den, Tr.den_subst hσ a, Tr.den_subst hσ b]
 
 theorem Tr.sites_subst (θ : Site → Tr) : ∀ t : Tr, (t.subst θ).sites = substLog θ t.sites
   | .site _ => by simp [Tr.subst, Tr.sites, substLog]
   | .const _ => rfl
   | .add a b => by simp [Tr.subst, Tr.sites, Tr.sites_subst θ a, Tr.sites_subst θ b, substLog]
   | .mul a b => by simp [Tr.subst, Tr.sites, Tr.sites_subst θ a, Tr.sites_subst θ b, substLog]
+  | .bin o a b => by simp [Tr.subst, Tr.sites, Tr.sites_subst θ a, Tr.sites_subst θ b, substLog]
 
 theorem substLog_append (θ : Site → Tr) (a b : Log) : substLog θ (a ++ b) = substLog θ a ++ substLog θ b := by
   simp [substLog]
@@ -154,7 +157,17 @@ theorem substEq {θ : Site → Tr} {σA σB : Site → Int} (hσ : ∀ s, σA s 
       | ref x rel =>
         simp only [evalE, lookupRef_subst]
         cases lookupRef ρ x rel <;> simp [fE, substLog]
-      | add a b | mul a b | eq a b =>
+      | add a b | mul a b | eq a b | lt a b =>
+        simp only [evalE]
+        rw [ih.e (fxt fix), ih.e (fxt fix)]
+        cases evalE n D σA ρ a with
+        | error e => rfl
+        | ok pa =>
+          cases evalE n D σA ρ b with
+          | error e => rfl
+          | ok pb =>
+            simp [fE, Tr.subst, substLog_append, obs_subst, Tr.den_subst hσ]
+      | bin o a b =>
         simp only [evalE]
         rw [ih.e (fxt fix), ih.e (fxt fix)]
         cases evalE n D σA ρ a with

@@ -57,3 +57,31 @@ fn refactors_agree_with_the_core_calculus() {
         String::from_utf8_lossy(&out.stderr)
     );
 }
+
+/// `build::history_id` against the Lean equation (research/forge-lang/lean/ForgeLang/HistoryId.lean:
+/// `historyId`, FNV-1a then `(h >> 1) | 1`). `historyId_collides` proves the value below for both
+/// names: two legal feature names with one kernel name, which nothing in a run checks.
+#[test]
+fn history_id_is_the_lean_equation() {
+    use forge_lang::build::history_id;
+    // the Lean function, word for word
+    let lean = |s: &str| {
+        let h = s.bytes().fold(0xcbf2_9ce4_8422_2325u128, |h, b| {
+            ((h ^ u128::from(b)) * 0x0100_0000_01b3) % (1u128 << 64)
+        });
+        ((h >> 1) | 1) as u64
+    };
+    for s in [
+        "",
+        "base",
+        "bolts[1]",
+        "box1.lid1.plate",
+        "e[lf]",
+        "hole[2,3].bore",
+    ] {
+        assert_eq!(history_id(s), lean(s), "{s}");
+    }
+    // HistoryId.historyId_collides, by `decide`
+    assert_eq!(history_id("qolagjaapenjgkgca"), 3_315_298_033_150_976_027);
+    assert_eq!(history_id("qpibohgembfgikgid"), 3_315_298_033_150_976_027);
+}
