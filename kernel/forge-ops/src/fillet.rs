@@ -1090,14 +1090,8 @@ fn fillet_on_noting(
             b.pivots = pivots;
             b.opening = opts.walk;
             b.cliff_rims = cliff_rims;
-            let notched = b.notched.clone();
-            let built = b.build();
-            if let Some(out) = notched_out
-                && notched.get()
-            {
-                out.set(true);
-            }
-            return built;
+            b.notched = notched_out;
+            return b.build();
         }
         for (e, u) in splits {
             let other = split_edge(&mut body, e, u);
@@ -2851,7 +2845,7 @@ const BLEND_TESTS: u32 = 100;
 type UvLoops = Vec<forge_topo::uv::UvLoop>;
 
 #[derive(Clone)]
-struct Builder {
+struct Builder<'n> {
     body: Body,
     rolled: Vec<Rolled>,
     root: Name,
@@ -2909,7 +2903,7 @@ struct Builder {
     /// takes the piece's place.
     cliff_rims: BTreeSet<EdgeId>,
     /// Set where a closed concave round's spring was notched over a rim and back (`excursions`).
-    notched: std::rc::Rc<std::cell::Cell<bool>>,
+    notched: Option<&'n std::cell::Cell<bool>>,
     /// Walks may pass over short blends whose far vertices would otherwise close first.
     opening: bool,
     /// An edge whose blend ran out beside a tangent chain going on unpicked.
@@ -2941,8 +2935,8 @@ struct Pivot {
     sections: [Option<EdgeId>; 2],
 }
 
-impl Builder {
-    fn new(body: Body, rolled: Vec<Rolled>, root: Name) -> Builder {
+impl<'n> Builder<'n> {
+    fn new(body: Body, rolled: Vec<Rolled>, root: Name) -> Builder<'n> {
         let which = rolled.iter().enumerate().map(|(i, r)| (r.edge, i)).collect();
         let mut pos = vec![0u32; body.coedges.len()];
         for l in body.loop_ids() {
@@ -2979,7 +2973,7 @@ impl Builder {
             gone_blends: BTreeSet::new(),
             rim_sides: BTreeSet::new(),
             cliff_rims: BTreeSet::new(),
-            notched: std::rc::Rc::new(std::cell::Cell::new(false)),
+            notched: None,
             opening: false,
             free_end: None,
             free_ends: false,
@@ -6055,7 +6049,9 @@ impl Builder {
                     // a closed concave round's spring off over a rim and back: notched here,
                     // which a cliff may round as the ball rolls
                     if !trips.is_empty() && closed && !self.rolled[i].convex {
-                        self.notched.set(true);
+                        if let Some(n) = self.notched {
+                            n.set(true);
+                        }
                     }
                     trips
                 };
