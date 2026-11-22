@@ -94,7 +94,7 @@ fn sketch(h: &mut Headless, on: &str, rows: &[&str]) {
             .get(&format!("{on}.plane"))
             .unwrap_or_else(|| panic!("no plane {on}")),
     };
-    let mut m = SketchMode::new(SketchFor::New, on.to_string(), plane, Vec::new(), None);
+    let mut m = SketchMode::new(SketchFor::New, on.to_string(), plane, Vec::new());
     m.units = "mm";
     for r in rows {
         m.add(r.to_string());

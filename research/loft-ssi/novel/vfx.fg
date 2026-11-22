@@ -1,0 +1,121 @@
+# a volute: a smooth loft of circles round the z axis, then out along y; the core cut from it
+# the sections stand on radial planes (normal (-sin a, cos a, 0), x along the radius)
+param plan.u = 1
+param plan.a60 = 60deg
+param plan.a110 = 110deg
+param plan.a160 = 160deg
+param plan.a210 = 210deg
+param plan.a260 = 260deg
+param plan.a310 = 310deg
+param plan.a360 = 360deg
+sketch plan(on: xy) {
+  r60 = line((0, 0), (u * cos(a60), u * sin(a60)), construction: true)
+  r110 = line((0, 0), (u * cos(a110), u * sin(a110)), construction: true)
+  r160 = line((0, 0), (u * cos(a160), u * sin(a160)), construction: true)
+  r210 = line((0, 0), (u * cos(a210), u * sin(a210)), construction: true)
+  r260 = line((0, 0), (u * cos(a260), u * sin(a260)), construction: true)
+  r310 = line((0, 0), (u * cos(a310), u * sin(a310)), construction: true)
+  r360 = line((0, 0), (u * cos(a360), u * sin(a360)), construction: true)
+}
+param v60.c0 = (87.17, 0)
+param v60.r = 16.67
+sketch v60(on: rotate(plan, about: plan.r60, by: -90deg)) {
+  c = circle(c0, r)
+}
+param v110.c0 = (89.81, 0)
+param v110.r = 18.89
+sketch v110(on: rotate(plan, about: plan.r110, by: -90deg)) {
+  c = circle(c0, r)
+}
+param v160.c0 = (92.44, 0)
+param v160.r = 21.11
+sketch v160(on: rotate(plan, about: plan.r160, by: -90deg)) {
+  c = circle(c0, r)
+}
+param v210.c0 = (95.08, 0)
+param v210.r = 23.33
+sketch v210(on: rotate(plan, about: plan.r210, by: -90deg)) {
+  c = circle(c0, r)
+}
+param v260.c0 = (97.72, 0)
+param v260.r = 25.56
+sketch v260(on: rotate(plan, about: plan.r260, by: -90deg)) {
+  c = circle(c0, r)
+}
+param v310.c0 = (100.4, 0)
+param v310.r = 27.78
+sketch v310(on: rotate(plan, about: plan.r310, by: -90deg)) {
+  c = circle(c0, r)
+}
+param v360.c0 = (103, 0)
+param v360.r = 30
+sketch v360(on: rotate(plan, about: plan.r360, by: -90deg)) {
+  c = circle(c0, r)
+}
+param vy55.off = 55
+param vy55.c0 = (103, 0)
+param vy55.r = 33.5
+sketch vy55(on: offset(rotate(plan, about: plan.r360, by: -90deg), off)) {
+  c = circle(c0, r)
+}
+param vy110.off = 110
+param vy110.c0 = (103, 0)
+param vy110.r = 37
+sketch vy110(on: offset(rotate(plan, about: plan.r360, by: -90deg), off)) {
+  c = circle(c0, r)
+}
+param k60.c0 = (87.17, -8)
+param k60.r = 11.67
+sketch k60(on: rotate(plan, about: plan.r60, by: -90deg)) {
+  c = circle(c0, r)
+}
+param k110.c0 = (89.81, -8)
+param k110.r = 13.89
+sketch k110(on: rotate(plan, about: plan.r110, by: -90deg)) {
+  c = circle(c0, r)
+}
+param k160.c0 = (92.44, -8)
+param k160.r = 16.11
+sketch k160(on: rotate(plan, about: plan.r160, by: -90deg)) {
+  c = circle(c0, r)
+}
+param k210.c0 = (95.08, -8)
+param k210.r = 18.33
+sketch k210(on: rotate(plan, about: plan.r210, by: -90deg)) {
+  c = circle(c0, r)
+}
+param k260.c0 = (97.72, -8)
+param k260.r = 20.56
+sketch k260(on: rotate(plan, about: plan.r260, by: -90deg)) {
+  c = circle(c0, r)
+}
+param k310.c0 = (100.4, -8)
+param k310.r = 22.78
+sketch k310(on: rotate(plan, about: plan.r310, by: -90deg)) {
+  c = circle(c0, r)
+}
+param k360.c0 = (103, -8)
+param k360.r = 25
+sketch k360(on: rotate(plan, about: plan.r360, by: -90deg)) {
+  c = circle(c0, r)
+}
+param ky55.off = 55
+param ky55.c0 = (103, -8)
+param ky55.r = 28.5
+sketch ky55(on: offset(rotate(plan, about: plan.r360, by: -90deg), off)) {
+  c = circle(c0, r)
+}
+param ky110.off = 110
+param ky110.c0 = (103, -8)
+param ky110.r = 32
+sketch ky110(on: offset(rotate(plan, about: plan.r360, by: -90deg), off)) {
+  c = circle(c0, r)
+}
+param ky125.off = 125
+param ky125.c0 = (103, -8)
+param ky125.r = 33
+sketch ky125(on: offset(rotate(plan, about: plan.r360, by: -90deg), off)) {
+  c = circle(c0, r)
+}
+volute = loft([v60.c, v110.c, v160.c, v210.c, v260.c, v310.c, v360.c, vy55.c, vy110.c], smooth: true)
+core = loft([k60.c, k110.c, k160.c, k210.c, k260.c, k310.c, k360.c, ky55.c, ky110.c, ky125.c], smooth: true, cut: true)

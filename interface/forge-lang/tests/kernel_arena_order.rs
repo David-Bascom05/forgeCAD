@@ -134,9 +134,9 @@ fn names_do_not_follow_arena_order() {
 }
 
 /// The guard's Forge port joins its tabs to the shell with a union of bodies, where the bench part
-/// added them in place: the union puts a vertex 1 ulp apart with the arenas reversed.
+/// added them in place: the union put a vertex 1 ulp apart with the arenas reversed, until a
+/// combine of bodies took both in order of name, as every other feature on a finished part does.
 #[test]
-#[ignore = "the union of bodies (guard's `tabbed`) places a vertex 1 ulp apart when its arenas are reversed"]
 fn guard_names_do_not_follow_arena_order() {
     holds("guard");
 }

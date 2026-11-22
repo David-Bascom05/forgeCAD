@@ -246,6 +246,63 @@ fn chamfer_cuts_two_edges_picked() {
     assert!(volume(&run) < base_volume() - 50.0);
 }
 
+/// Chamfer's three types: two distances and a distance with an angle measure from the face
+/// picked; the corner's choice is written; Edit Feature reads each back into its own type.
+#[test]
+fn chamfer_takes_two_distances_or_an_angle_from_a_face_and_its_corner() {
+    let Some((mut h, _)) = open(BLOCK, "chamfer-types") else {
+        return;
+    };
+    button(&mut h, "Chamfer");
+    assert!(h.click("fg:tool:choice:Type:Two Distances"));
+    h.step();
+    h.step();
+    point_at(&mut h, [30.0, 0.0, 20.0]);
+    assert_eq!(picks(&h, "Edges").len(), 1);
+    assert!(h.click("fg:tool:slot:Face"), "no Face slot");
+    h.step();
+    point_at(&mut h, [20.0, 20.0, 20.0]);
+    assert_eq!(picks(&h, "Face").len(), 1, "{:?}", picks(&h, "Face"));
+    assert!(h.click("fg:tool:choice:Corner:Point"));
+    h.step();
+    set(&mut h, "d2", "2");
+    let (src, run) = ok(&mut h, "chamfer two distances");
+    assert!(
+        src.contains(", d2: d2, face: ") && src.contains("corner: \"point\""),
+        "{src}"
+    );
+    // a 1 by 2 triangle along the 60 mm edge
+    let cut = base_volume() - volume(&run);
+    assert!((cut - 60.0).abs() < 1e-3, "{cut}\n{src}");
+    // read back as it was written
+    let id = h.gui.shell.fg.as_ref().unwrap().feats.last().unwrap().id.clone();
+    h.gui.fg_edit_feature(&id);
+    let t = h.gui.shell.fg.as_ref().unwrap().tool.clone().expect("its dialog");
+    assert_eq!(t.choice("Type"), "Two Distances");
+    assert_eq!(t.choice("Corner"), "Point");
+    assert_eq!(t.params.iter().find(|p| p.name == "d2").unwrap().text, "2");
+    h.gui.shell.fg.as_mut().unwrap().tool = None;
+    h.step();
+
+    // a distance and an angle, the corner patched
+    button(&mut h, "Chamfer");
+    assert!(h.click("fg:tool:choice:Type:Distance and Angle"));
+    h.step();
+    h.step();
+    point_at(&mut h, [0.0, 30.0, 20.0]);
+    assert!(h.click("fg:tool:slot:Face"));
+    h.step();
+    point_at(&mut h, [20.0, 20.0, 20.0]);
+    let (src, run) = ok(&mut h, "chamfer distance and angle");
+    assert!(
+        src.contains(", angle: ang, face: ") && !src.ends_with("\"point\")\n"),
+        "{src}"
+    );
+    let cut = base_volume() - 60.0 - volume(&run);
+    // a half-unit triangle along its 60 mm edge, less where it meets the first at their corner
+    assert!(cut > 29.0 && cut < 30.0 + 1e-3, "{cut}\n{src}");
+}
+
 #[test]
 fn shell_opens_the_face_picked() {
     let Some((mut h, _)) = open(PLAIN, "shell") else {

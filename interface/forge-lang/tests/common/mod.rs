@@ -9,9 +9,9 @@ use forge_lang::{Measure, Options, Run};
 pub fn run(src: &str) -> (Run, Cache) {
     let dir = std::env::temp_dir().join(format!("forge-lang-tests-{}", std::process::id()));
     std::fs::create_dir_all(&dir).expect("temp dir");
-    let font = dir.join(forge_agent::bench::FONT);
+    let font = dir.join(forge_lang::bench::FONT);
     if !font.exists() {
-        std::fs::write(&font, forge_agent::bench::font_bytes()).expect("font");
+        std::fs::write(&font, forge_lang::bench::font_bytes()).expect("font");
     }
     let opts = Options {
         dir: Some(dir),

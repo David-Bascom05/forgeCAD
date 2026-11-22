@@ -180,6 +180,29 @@ impl Sk {
         Ok(e)
     }
 
+    /// An arc of the ellipse `ellipse(c, m, b)` from `a` to `b2`, its ends held on it,
+    /// counter-clockwise when `ccw`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn ellipse_arc(
+        &mut self,
+        c: EntityId,
+        m: EntityId,
+        b: f64,
+        from: EntityId,
+        to: EntityId,
+        ccw: bool,
+        name: Option<&str>,
+        span: Span,
+    ) -> R<EntityId> {
+        let e = self
+            .s
+            .add_ellipse_arc(c, m, b, from, to, ccw)
+            .map_err(self.kerr(span))?;
+        self.con(Constraint::EllipseMinor(e, b), span)?;
+        self.named(e, name, span);
+        Ok(e)
+    }
+
     /// A closed curve with no corners (a whole ellipse, a closed spline): a profile by itself.
     pub fn closed_curve(&self, e: EntityId) -> bool {
         matches!(self.s.entity(e), Some(Entity::Ellipse { ends: None, .. }))
@@ -212,6 +235,30 @@ impl Sk {
         let e = self
             .s
             .add_bspline(degree, pts, None, None, closed)
+            .map_err(self.kerr(span))?;
+        self.named(e, name, span);
+        Ok(e)
+    }
+
+    /// An open through-spline's slopes at its start and end, as given.
+    pub fn slopes(&mut self, e: EntityId, from: Option<Vec2>, to: Option<Vec2>, span: Span) -> R<()> {
+        self.s.set_spline_slopes(e, from, to).map_err(self.kerr(span))
+    }
+
+    /// A B-spline on control vertices of the degree given, open, on these knots and weights
+    /// (uniform clamped knots and weights 1 where not given).
+    pub fn bspline_on(
+        &mut self,
+        pts: &[EntityId],
+        degree: usize,
+        knots: Option<Vec<f64>>,
+        weights: Option<Vec<f64>>,
+        name: Option<&str>,
+        span: Span,
+    ) -> R<EntityId> {
+        let e = self
+            .s
+            .add_bspline(degree, pts, knots, weights, false)
             .map_err(self.kerr(span))?;
         self.named(e, name, span);
         Ok(e)
@@ -414,10 +461,11 @@ impl Sk {
     /// Solves; conflicting rows are an error, freedom left is reported.
     pub fn finish(&mut self) -> R<()> {
         let rep = self.s.solve();
-        let an = self.s.analyze();
-        if !an.conflicting.is_empty() {
-            let rows = an
-                .conflicting
+        // freedom and conflicts only: the per-entity ranks `analyze` also works out cost more
+        // than the solve, and nothing here reads them
+        let (dof, conflicting) = self.s.freedom();
+        if !conflicting.is_empty() {
+            let rows = conflicting
                 .iter()
                 .filter_map(|c| self.cons.iter().find(|x| x.0 == *c).map(|x| x.1))
                 .collect();
@@ -434,7 +482,7 @@ impl Sk {
                 residual: rep.max_residual,
             });
         }
-        self.dof = an.dof;
+        self.dof = dof;
         self.solved = true;
         Ok(())
     }

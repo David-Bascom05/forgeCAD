@@ -29,10 +29,7 @@ pub fn part_colour(file: &str, pastel: bool) -> [f32; 4] {
         return GREY;
     }
     let name = file.rsplit(['/', '\\']).next().unwrap_or(file);
-    let name = name
-        .strip_suffix(".fg")
-        .or_else(|| name.strip_suffix(".fc"))
-        .unwrap_or(name);
+    let name = name.strip_suffix(".fg").unwrap_or(name);
     let mut h: u32 = 0x811c_9dc5;
     for b in name.bytes() {
         h = (h ^ b as u32).wrapping_mul(0x0100_0193);

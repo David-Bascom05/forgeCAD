@@ -1,8 +1,8 @@
 //! Exports part histories and our results as JSON for the OpenCascade oracle (tools/occt/oracle.py).
 //! cargo run --release -p forge-model --example oracle -- [sets] > parts.json
 //! env: THREADS, REPS, CHORD (mesh chord for volume), ONLY=name, PREFIXES=k, KEEP=i,j,.., LITERAL (print each part as Rust to stderr)
-//! sets: comma separated from suite, torture, finishing, fillets, edits, models, fuzz:N, fc:FILE, dir:DIR, fg:FILE, fgdir:DIR
-//! (every .fc file in it; fgdir: every .fg file), adv:N (seeds per family), degen; default suite,torture,fuzz:20
+//! sets: comma separated from suite, torture, finishing, fillets, edits, models, fuzz:N, fg:FILE,
+//! fgdir:DIR (every .fg file in it), adv:N (seeds per family), degen; default suite,torture,fuzz:20
 //!
 //! Every feature kind has an arm in `export` (the match is exhaustive, so a new kind does not
 //! build until it has one). OCCT replays each with its own operation: tools from the feature's
@@ -1215,19 +1215,6 @@ fn one_or_all(
     }
 }
 
-/// A part file as the agent's model reads it (selectors resolved, parameters evaluated).
-fn fc(path: &std::path::Path) -> (String, Part) {
-    let src = std::fs::read_to_string(path).expect("a part file");
-    let m = forge_agent::model::Model::new(&src);
-    let name = path
-        .file_stem()
-        .map_or("fc".into(), |s| s.to_string_lossy().into_owned());
-    // a refused line goes too: what OCCT makes of it is the test of the refusal
-    let mut features = m.features;
-    features.extend(m.refused);
-    (name, Part { features })
-}
-
 /// A .fg part as its run sends it to the kernel: its features and the ids they are named by
 /// (the bench font beside it, for text).
 fn fg(path: &std::path::Path) -> (String, Part, Vec<u64>) {
@@ -1261,45 +1248,106 @@ fn fg(path: &std::path::Path) -> (String, Part, Vec<u64>) {
     (name, Part { features: f.to_vec() }, ids.to_vec())
 }
 
-/// Part files for what only they write: parameters and sketches, work features, standard
-/// holes, patterns along paths and at points, and parts of several bodies.
+/// .fg parts for what only part files write: sketches, work features, standard holes,
+/// patterns along paths and at points, and parts of several bodies.
 const MODELS: [(&str, &str); 3] = [
     (
         "model-sketch",
-        "w = 20\ns: sketch xy\n  rect 0 0 w 10\nend\nb: extrude 5 s\n",
+        "shared w = 20
+sketch s(on: xy) {
+  o = rect(corner: (0, 0), size: (w, 10))
+}
+b = extrude(s, 5)
+",
     ),
     (
         "model-work",
-        "base: extrude 10 rect 0 0 60 40
-boss: extrude 8 at 50 30 10 circle 0 0 4
-top: plane off base (faces of base normal +z) 5
-ax: axis boss (faces cyl)
-c: point meet ax top
-mid: point mid base (edges of base along +x front top)
-ucs pts base (verts near 0 0 10) base (verts near 60 0 10) base (verts near 0 40 10)
-plane ang base (faces of base normal +z) base (edges of base along +x front top) 30
-extrude cut 2 on top at c circle 0 0 2
-h: hole M6 tap -xy at 10 10 10 thru
-hole M5 ansi close cbore -xy at 30 30 10 12
-pattern h pts 10 10 10 10 20 10 10 30 10
-pattern h path base (edges of base along +x front top) 3 15
-pattern hole2 path base (edges of base line top) 6 fit fixed
+        "sketch bs(on: xy) {
+  o = rect(corner: (0, 0), size: (60, 40))
+}
+base = extrude(bs, 10)
+sketch bk(on: base.end) {
+  c = circle((50, 30), 4)
+}
+boss = extrude(bk, 8)
+top = workplane(offset: base.end, d: 5)
+ax = workaxis(along: faces(of: boss, shape: \"cyl\"))
+cp = workpoint(meet: (ax, top))
+front = edges(of: base.end, along: X, extreme: -Y)
+midp = workpoint(mid: front)
+sketch corners(on: base.end) {
+  a = pt(0, 0)
+  b = pt(60, 0)
+  c = pt(0, 40)
+}
+frame = ucs(through: (corners.a, corners.b, corners.c))
+tilt = workplane(turn: base.end, about: front, by: 30deg)
+sketch cs(on: top, at: cp) {
+  c = circle((0, 0), 2)
+}
+pit = cut(cs, 2)
+sketch hp(on: base.end) {
+  a = pt(10, 10)
+  b = pt(30, 30)
+  c = pt(10, 20)
+  d = pt(10, 30)
+}
+h = hole(at: hp.a, screw: \"M6\", fit: \"tap\", depth: thru)
+hole2 = hole(at: hp.b, screw: \"M5\", convention: \"ansi\", fit: \"close\", seat: \"cbore\", depth: 12)
+row = pattern(of: h, layout: places(at: [hp.a, hp.c, hp.d]))
+run = pattern(of: h, layout: follow(curve: front, n: 3, step: 15))
+ring = pattern(of: hole2, layout: follow(curve: edges(of: base.end, along: Y, extreme: X), n: 6, fixed: true))
 ",
     ),
     (
         "model-bodies",
-        "base: extrude 10 rect 0 0 10 10
-lid: extrude new 4 at 0 0 8 rect 0 0 10 10
-extrude cut 12 at 5 5 -1 circle 0 0 2 in base
-fillet 1 (edges body lid top along +x)
-split plane at 0 0 10 in lid
-splitface (faces body base normal -y) by plane z 1 0 0 at 5 0 0
-spare: copybody by 30 0 0 in base
-movebody rot 0 0 0 0 0 1 90 in spare
-combine cut base lid keep
+        "sketch bs(on: xy) {
+  o = rect(corner: (0, 0), size: (10, 10))
+  m = pt(5, 0)
+  z0 = pt(0, 0)
+}
+base = extrude(bs, 10)
+sketch ls(on: offset(xy, 8)) {
+  o = rect(corner: (0, 0), size: (10, 10))
+  z1 = pt(0, 0)
+}
+lid = extrude(ls, 4, new: true)
+sketch hs(on: base.end) {
+  c = pt(5, 5)
+}
+bore = hole(at: hs.c, d: 4, depth: thru, bodies: base)
+round = fillet(edges(of: lid.end, along: X), 1)
+cap = split(by: offset(xy, 10), bodies: lid)
+parted = splitface(faces: faces(of: base, normal: -Y), by: plane(at: bs.m, normal: X))
+spare = copybody(of: base, moves: [slide(along: X, by: 30)])
+turned = movebody(of: spare, moves: [spin(about: axis(bs.z0, ls.z1), by: 90deg)])
+kept = combine(base, tools: lid, op: \"cut\", keep: true)
 ",
     ),
 ];
+
+/// A .fg part's kernel features and their ids, from its source (no files).
+fn fg_src(name: &str, src: &str) -> (Part, Vec<u64>) {
+    let (run, cache) = forge_lang::run(src, forge_lang::Options::default(), Default::default());
+    assert!(run.errors.is_empty(), "{name}: {:?}", run.errors);
+    let mut features = cache.history().0.to_vec();
+    let mut ids = cache.history().1.to_vec();
+    // the language sends the kernel no parameter (it evaluates them itself): the kernel's own
+    // param feature, a no-op, goes in here so every kind still reaches the oracle
+    if name == "model-sketch" {
+        features.insert(
+            0,
+            Feature::Param(Box::new(forge_model::Param {
+                name: "w".into(),
+                expr: "20".into(),
+                unit: forge_model::Unit::Mm,
+                value: 20.0,
+            })),
+        );
+        ids.insert(0, forge_lang::build::history_id("w"));
+    }
+    (Part { features }, ids)
+}
 
 /// A .fg part's feature ids, by part name.
 type FgIds = std::collections::HashMap<String, Vec<u64>>;
@@ -1321,13 +1369,14 @@ fn sets_ids(sets: &str) -> (Vec<(String, Part)>, FgIds) {
                 parts.extend(named(forge_model::fillets::cases()))
             }
             "edits" => parts.extend(named(forge_model::edits::parts())),
-            "models" => parts.extend(MODELS.iter().map(|(n, src)| {
-                let m = forge_agent::model::Model::new(src);
-                assert!(m.error.is_none(), "{n}: {:?}", m.error);
-                (n.to_string(), Part { features: m.features })
-            })),
+            "models" => {
+                for (n, src) in MODELS {
+                    let (p, ids) = fg_src(n, src);
+                    fg_ids.insert(n.to_string(), ids);
+                    parts.push((n.to_string(), p));
+                }
+            }
             "fuzz" => parts.extend((1..=n).map(|s| (format!("fuzz{s}"), suite::fuzz(s, 80)))),
-            "fc" => parts.push(fc(std::path::Path::new(arg))),
             "fg" => {
                 let (n, p, ids) = fg(std::path::Path::new(arg));
                 fg_ids.insert(n.clone(), ids);
@@ -1345,15 +1394,6 @@ fn sets_ids(sets: &str) -> (Vec<(String, Part)>, FgIds) {
                     fg_ids.insert(n.clone(), ids);
                     parts.push((n, p));
                 }
-            }
-            "dir" => {
-                let mut files: Vec<_> = std::fs::read_dir(arg)
-                    .expect("a directory of part files")
-                    .filter_map(|e| e.ok().map(|e| e.path()))
-                    .filter(|p| p.extension().is_some_and(|x| x == "fc"))
-                    .collect();
-                files.sort();
-                parts.extend(files.iter().map(|p| fc(p)));
             }
             "degen" => parts.extend(adversarial::degenerate_parts()),
             "splines" => {
@@ -1548,7 +1588,7 @@ mod tests {
     /// build, and a part in these sets to pass.
     #[test]
     fn every_kind_reaches_the_oracle() {
-        let parts = sets_ids("suite,finishing,fillets,edits,models").0;
+        let (parts, ids) = sets_ids("suite,finishing,fillets,edits,models");
         let mut seen: Vec<&str> = Vec::new();
         for (name, p) in &parts {
             for (i, f) in p.features.iter().enumerate() {
@@ -1561,7 +1601,7 @@ mod tests {
                     &Part {
                         features: p.features[..=i].to_vec(),
                     },
-                    None,
+                    ids.get(name).map(|v| &v[..=i]),
                 );
                 match ex.cut {
                     // a case of the kind OCCT has no operation for (a face fillet across a strip

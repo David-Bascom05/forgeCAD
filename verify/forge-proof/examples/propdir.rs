@@ -1,6 +1,6 @@
-//! One property over a directory of part files: propdir PROP DIR [FROM COUNT] [THREADS]
-use forge_agent::model::Model;
-use forge_model::Part;
+//! One property over a directory of .fg part files: propdir PROP DIR [FROM COUNT] [THREADS]
+//! The properties regenerate a part without the ids the language names its features by, so a
+//! part that names a face or edge (a fillet, a face edit) is skipped, said so.
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -14,7 +14,7 @@ fn main() {
     let mut files: Vec<_> = std::fs::read_dir(&a[0])
         .expect("a directory")
         .filter_map(|e| e.ok().map(|e| e.path()))
-        .filter(|p| p.extension().is_some_and(|x| x == "fc"))
+        .filter(|p| p.extension().is_some_and(|x| x == "fg"))
         .collect();
     files.sort();
     let from: usize = a.get(1).and_then(|s| s.parse().ok()).unwrap_or(0);
@@ -33,10 +33,13 @@ fn main() {
                         continue;
                     };
                     let got = std::panic::catch_unwind(|| {
-                        let m = Model::new(&src);
-                        let part = Part {
-                            features: m.features.clone(),
-                        };
+                        let part = forge_lang::fuzz::build(&src).part();
+                        // (named by position, as the properties regenerate it, it still builds)
+                        if part.regenerate_solids().is_err() {
+                            let _g = out.lock();
+                            println!("{} skipped: it names faces or edges by feature ids", f.display());
+                            return None;
+                        }
                         prop(&part, 1)
                     });
                     checked.fetch_add(1, Ordering::Relaxed);

@@ -15,6 +15,8 @@ use std::time::Instant;
 pub struct Stage {
     pub solids: Vec<Solid>,
     view: OnceCell<Body>,
+    /// Each solid finished (faces on one surface joined), when there are several.
+    finished: OnceCell<Vec<Body>>,
     spans: OnceCell<Vec<Span>>,
     /// Which stage this is, never another's: equal ids, the same stage (a kept one served again
     /// has its own).
@@ -35,6 +37,7 @@ impl Stage {
         Stage {
             solids,
             view: OnceCell::new(),
+            finished: OnceCell::new(),
             spans: OnceCell::new(),
             id: NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
         }
@@ -48,13 +51,16 @@ impl Stage {
         Some(self.view.get_or_init(|| {
             let mut all = Body::new();
             let mut spans = vec![];
-            for s in &self.solids {
-                let one = forge_model::finish(s.body.clone());
+            // one solid: finished into the view itself; several: each finished once, kept for
+            // what looks at them one by one (validity, each one's mass)
+            let several = self.solids.len() > 1;
+            let mut alone = (!several).then(|| forge_model::finish(self.solids[0].body.clone()));
+            let each: &[Body] = if several { self.finished() } else { &[] };
+            for (k, s) in self.solids.iter().enumerate() {
                 let (f, e) = (all.faces.len() as u32, all.edges.len() as u32);
-                if self.solids.len() == 1 {
-                    all = one;
-                } else {
-                    all.append(&one);
+                match alone.take() {
+                    Some(one) => all = one,
+                    None => all.append(&each[k]),
                 }
                 spans.push(Span {
                     solid: s.id,
@@ -73,8 +79,19 @@ impl Stage {
         self.spans.get().map_or(&[], |s| &s[..])
     }
 
+    /// Each solid finished, in order: worked out once for the view and whatever looks at the
+    /// solids one by one.
+    pub fn finished(&self) -> &[Body] {
+        self.finished.get_or_init(|| {
+            self.solids
+                .iter()
+                .map(|s| forge_model::finish(s.body.clone()))
+                .collect()
+        })
+    }
+
     /// The bodies as one, unfinished: the pieces each feature made, for lineage.
-    fn work(&self) -> Option<Body> {
+    pub(crate) fn work(&self) -> Option<Body> {
         match &self.solids[..] {
             [] => None,
             [one] => Some(one.body.clone()),
@@ -94,6 +111,36 @@ impl Cache {
     /// `forge_model` regenerates it on its own (`Part::regenerate_solids_ids`).
     pub fn history(&self) -> (&[Feature], &[u64]) {
         (&self.features, &self.ids)
+    }
+
+    /// The solids after each feature built, in order: the stages `history` stands at, for
+    /// checking every step (`fuzz.rs`).
+    pub fn stages(&self) -> impl Iterator<Item = &[Solid]> {
+        self.stages.iter().map(|s| &s.solids[..])
+    }
+
+    /// How many kernel features the last run built.
+    pub fn built(&self) -> usize {
+        self.stages.len()
+    }
+
+    /// The part as it stood after the first `n` kernel features, joined (`Stage::view`).
+    pub fn body_after(&self, n: usize) -> Option<&Body> {
+        n.checked_sub(1)
+            .and_then(|i| self.stages.get(i))
+            .and_then(|s| s.view())
+    }
+
+    /// Where each solid is in `body_after(n)`: its faces and edges, by the feature that made it.
+    pub fn spans_after(&self, n: usize) -> &[Span] {
+        n.checked_sub(1)
+            .and_then(|i| self.stages.get(i))
+            .map_or(&[], |s| s.spans())
+    }
+
+    /// Which feature made each face of `body_after(n)`, as a selection's `of` reads it.
+    pub fn origin(&mut self, n: usize) -> Lineage {
+        origin_upto(&self.stages, &mut self.origins, None, n)
     }
 }
 
@@ -120,6 +167,8 @@ pub struct Cache {
     steps: Vec<Option<Rc<Step>>>,
     /// The kernel's switches the last run's stages were built under (`forge_model::switches`).
     switches: String,
+    /// Each stage's lineage worked out so far (`Builder::origin`), by position (as `stages`).
+    origins: Vec<Lineage>,
 }
 
 /// The same step as one built before: equal features, and a file one reads (an import's body, a
@@ -349,6 +398,7 @@ impl Builder {
             steps: self.steps,
             switches: self.switches,
             comps: self.cache.comps,
+            origins: self.origins,
         }
     }
 
@@ -545,41 +595,62 @@ impl Builder {
 
     /// Which feature made each face of the part after `n` features, on the joined body.
     pub fn origin(&mut self, n: usize) -> Lineage {
-        while self.origins.len() < n {
-            let k = self.origins.len();
-            let work = |m: usize| {
-                m.checked_sub(1)
-                    .and_then(|j| self.stages.get(j))
-                    .and_then(|s| s.work())
-            };
-            let prev = work(k);
-            let o = match work(k + 1) {
-                None => HashMap::new(),
-                Some(b) => select::lineage(
-                    &b,
-                    prev.as_ref().map(|p| (p, &self.origins[k - 1])),
-                    k,
-                    &HashMap::new(),
-                ),
-            };
-            self.origins.push(o);
+        let kept = Some((&self.cache.stages[..], &self.cache.origins[..]));
+        origin_upto(&self.stages, &mut self.origins, kept, n)
+    }
+}
+
+/// Which feature made each face of the part after `n` of `stages`, on the joined body: each
+/// stage's lineage worked out once (`origins`), or taken from `kept` (stages and their lineages
+/// of a run before) where every stage up to it is the very one kept.
+fn origin_upto(
+    stages: &[Rc<Stage>],
+    origins: &mut Vec<Lineage>,
+    kept: Option<(&[Rc<Stage>], &[Lineage])>,
+    n: usize,
+) -> Lineage {
+    while origins.len() < n {
+        let k = origins.len();
+        let same = kept.and_then(|(ks, ko)| {
+            let o = ko.get(k)?;
+            (ks.len() > k && (0..=k).all(|j| Rc::ptr_eq(&ks[j], &stages[j]))).then(|| o.clone())
+        });
+        if let Some(o) = same {
+            origins.push(o);
+            continue;
         }
-        let Some(mut origin) = n.checked_sub(1).map(|i| self.origins[i].clone()) else {
-            return HashMap::new();
+        let work = |m: usize| {
+            m.checked_sub(1)
+                .and_then(|j| stages.get(j))
+                .and_then(|s| s.work())
         };
-        if let Some(b) = self.stages.get(n - 1).and_then(|s| s.view()) {
-            for &(piece, whole) in &b.joins.aliases {
-                if let Some(mut o) = origin.get(&piece).cloned() {
-                    let w = origin.entry(whole).or_default();
-                    o.append(w);
-                    o.sort_unstable();
-                    o.dedup();
-                    *w = o;
-                }
+        let prev = work(k);
+        let o = match work(k + 1) {
+            None => HashMap::new(),
+            Some(b) => select::lineage(
+                &b,
+                prev.as_ref().map(|p| (p, &origins[k - 1])),
+                k,
+                &HashMap::new(),
+            ),
+        };
+        origins.push(o);
+    }
+    let Some(mut origin) = n.checked_sub(1).map(|i| origins[i].clone()) else {
+        return HashMap::new();
+    };
+    if let Some(b) = stages.get(n - 1).and_then(|s| s.view()) {
+        for &(piece, whole) in &b.joins.aliases {
+            if let Some(mut o) = origin.get(&piece).cloned() {
+                let w = origin.entry(whole).or_default();
+                o.append(w);
+                o.sort_unstable();
+                o.dedup();
+                *w = o;
             }
         }
-        origin
     }
+    origin
 }
 
 /// The faces of `body` that are the face named `role`: itself, a piece of it, or the face it was

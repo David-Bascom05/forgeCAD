@@ -81,10 +81,9 @@ pub struct Added {
     pub what: String,
 }
 
-/// The field Measure was opened from: a dialog's, by its label, or a tool's parameter.
+/// The field Measure was opened from: a tool's parameter.
 #[derive(Clone, Debug, PartialEq)]
 pub enum IntoField {
-    Dialog(String),
     Param(&'static str),
 }
 
@@ -447,14 +446,6 @@ fn mass_unit(length: &str) -> &'static str {
 }
 
 impl Shell {
-    /// Measure opened from a dialog's value field: what it measures can go in the field.
-    pub fn measure_into(&mut self, label: &str) {
-        let Some(kind) = super::panel::field_kind(label) else {
-            return;
-        };
-        self.open_measure_into(IntoField::Dialog(label.to_string()), kind);
-    }
-
     /// Measure opened from a tool's parameter field (a length or an angle).
     pub fn measure_into_param(&mut self, name: &'static str) {
         use forge_lang::values::Dim;

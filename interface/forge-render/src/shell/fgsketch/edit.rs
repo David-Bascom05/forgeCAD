@@ -1,5 +1,5 @@
 //! A Forge sketch block opened in the sketcher, and written back in place. Each statement of the
-//! block reads as .fc rows (a fixed point gets its `fix`, a circle's radius and a rect's sides
+//! block reads as the sketcher's rows (a fixed point gets its `fix`, a circle's radius and a rect's sides
 //! their dimensions), and each number in them remembers where it is written: a param
 //! (`SetParam`), a number in the text (put back there), or an expression (driven: refused). At
 //! Finish only what changed is written: kept statements keep their bytes and their names, gone
@@ -35,7 +35,7 @@ struct Slot {
 struct St {
     span: Span,
     name: Option<String>,
-    /// The Forge names of what its row makes, in the order the row's .fc names are.
+    /// The Forge names of what its row makes, in the order the row names them.
     ents: Vec<String>,
 }
 
@@ -71,9 +71,9 @@ struct Rd<'a> {
     /// The params a bare name reads in the block: the block's own, then shared ones.
     params: &'a HashMap<String, (ParamKey, Dim)>,
     env: &'a [(String, String)],
-    /// Forge's name of an entity (`l1`, `r[2]`) to the .fc row word.
+    /// Forge's name of an entity (`l1`, `r[2]`) to the row's word.
     words: HashMap<String, String>,
-    fc: HashMap<char, usize>,
+    named: HashMap<char, usize>,
     rows: Vec<String>,
     of: Vec<RowOf>,
 }
@@ -201,7 +201,7 @@ impl Rd<'_> {
     }
 
     fn next(&mut self, kind: char) -> String {
-        let c = self.fc.entry(kind).or_default();
+        let c = self.named.entry(kind).or_default();
         *c += 1;
         format!("{kind}{c}")
     }
@@ -425,7 +425,7 @@ impl Rd<'_> {
                 if at.len() != ps.len() {
                     return unsupported();
                 }
-                let first = self.fc.get(&'l').copied().unwrap_or(0) + 1;
+                let first = self.named.get(&'l').copied().unwrap_or(0) + 1;
                 let sides = ps.len() - usize::from(!closed);
                 let sn = if f == "spline" { Some(self.next('s')) } else { None };
                 let cv = arg(args, 9, "cv").is_some_and(|c| matches!(c.kind, ExprKind::Bool(true)));
@@ -546,9 +546,9 @@ impl Rd<'_> {
             name: name.map(str::to_string),
             ents: ents.iter().map(|e| e.1.clone()).collect(),
         });
-        for (fc, fg) in ents {
+        for (named, fg) in ents {
             // a loop's sides are named by index; the loop itself has no single word
-            self.words.insert(fg, fc);
+            self.words.insert(fg, named);
         }
         self.push(st, true, row);
         for x in fixes {
@@ -691,7 +691,7 @@ pub fn open(src: &str, id: &str, dir: Option<std::path::PathBuf>) -> Result<Open
         params: &params,
         env: &env,
         words: HashMap::new(),
-        fc: HashMap::new(),
+        named: HashMap::new(),
         rows: vec![],
         of: vec![],
     };
@@ -749,12 +749,12 @@ fn canon(row: &str, names: &HashMap<String, String>) -> Vec<String> {
 }
 
 impl Opened {
-    /// The .fc name to Forge name of every entity the rows make, row `k < kept.len()` being
+    /// The row name to Forge name of every entity the rows make, row `k < kept.len()` being
     /// opened row `kept[k]`; new rows' entities have none yet.
     fn names(&self, rows: &[String], kept: &[usize]) -> (HashMap<String, String>, Vec<Vec<String>>) {
         let mut out = HashMap::new();
         let mut per = vec![];
-        let mut fc: HashMap<char, usize> = HashMap::new();
+        let mut named: HashMap<char, usize> = HashMap::new();
         for (k, r) in rows.iter().enumerate() {
             let of = kept.get(k).map(|&o| &self.of[o]);
             let ents: Vec<String> = match of {
@@ -762,7 +762,7 @@ impl Opened {
                 _ => vec![],
             };
             for (i, kind) in made(&tokens(r)).into_iter().enumerate() {
-                let c = fc.entry(kind).or_default();
+                let c = named.entry(kind).or_default();
                 *c += 1;
                 if let Some(n) = ents.get(i).filter(|n| !n.is_empty()) {
                     out.insert(format!("{kind}{c}"), n.clone());
@@ -925,7 +925,6 @@ mod tests {
             "xy".into(),
             forge_math::Frame::default(),
             o.rows.clone(),
-            None,
         );
         m.set_params(o.params.clone());
         m

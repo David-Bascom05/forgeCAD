@@ -129,7 +129,6 @@ pub(super) fn groups(s: &Shell) -> Vec<SkGroup> {
                         t("Center Point Arc Slot", "slotarcc", SkTool::SlotArcCenter),
                     ],
                 ),
-                one(t("Project Geometry", "project", SkTool::Project)),
             ],
             vec![
                 split(

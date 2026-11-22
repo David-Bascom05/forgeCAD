@@ -244,9 +244,22 @@ fn an_agent_reads_a_lint_sends_its_fix_back_and_the_file_is_the_ops_edit() {
     let (err, r, image) = m.tool("render", vec![("file", f.into()), ("px", Json::Num(200.0))]);
     assert!(!err && image, "{r}");
 
-    // act is .fc's; edit is .fg's; help forge is the language
+    // every feature as built, not "not built": features and check build (the stages kept)
+    for q in ["features", "check"] {
+        let (err, r, _) = m.tool("query", vec![("file", f.into()), ("sel", q.into())]);
+        assert!(!err, "{q}: {r}");
+        let st: Vec<String> = arr(&r, "features").iter().map(|x| s(x, "status")).collect();
+        assert_eq!(st, ["ok"; 4], "{q}: {r}");
+    }
+    // a numbers question as one string
+    let (err, r, _) = m.tool("query", vec![("file", f.into()), ("sel", "section z=1".into())]);
+    assert!(!err, "{r}");
+
+    // a part changes by edit alone: no act, no tool for a retired format
+    let names: Vec<String> = arr(&tools, "tools").iter().map(|t| s(t, "name")).collect();
+    assert!(!names.iter().any(|n| n == "act" || n == "diff"), "{names:?}");
     let (err, r, _) = m.tool("act", vec![("file", f.into()), ("lines", "x".into())]);
-    assert!(err && s(&r, "error").contains("typed ops"), "{r}");
+    assert!(err && s(&r, "error").contains("edit F OP"), "{r}");
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -352,5 +365,265 @@ fn a_sheet_part_exports_its_fitted_edges_tight() {
         "{:?}",
         got.stats.pairs
     );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn the_build_summary_gives_its_measures_to_the_thousandth() {
+    let dir = scratch("summary");
+    let file = dir.join("plate.fg");
+    std::fs::write(&file, PLATE).unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_forgecad"))
+        .args(["build", file.to_str().unwrap()])
+        .output()
+        .unwrap();
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(out.status.success(), "{text}");
+    let part = text.lines().find(|l| l.starts_with("part: volume ")).unwrap();
+    let v = part.split(' ').nth(2).unwrap();
+    assert!(v.split('.').nth(1).is_none_or(|d| d.len() <= 3), "{part}");
+    let want = 60.0 * 60.0 * 6.0 - std::f64::consts::PI * 16.0 * 2.0;
+    assert!((v.parse::<f64>().unwrap() - want).abs() < 1e-3, "{part}");
+    // `exact`: every digit
+    let out = Command::new(env!("CARGO_BIN_EXE_forgecad"))
+        .args(["measure", file.to_str().unwrap(), "mass", "exact"])
+        .output()
+        .unwrap();
+    let text = String::from_utf8_lossy(&out.stdout);
+    let v: f64 = text.split(' ').nth(1).unwrap().parse().unwrap();
+    assert!((v - want).abs() < 1e-9 * want, "{text}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn diff_says_what_the_second_part_changed() {
+    let dir = scratch("diff");
+    let (a, b) = (dir.join("a.fg"), dir.join("b.fg"));
+    std::fs::write(&a, PLATE).unwrap();
+    std::fs::write(&b, PLATE.replace("shared t = 6", "shared t = 8")).unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_forgecad"))
+        .args([
+            "diff",
+            a.to_str().unwrap(),
+            b.to_str().unwrap(),
+            "volume",
+            "--json",
+        ])
+        .output()
+        .unwrap();
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(out.status.success(), "{text}");
+    let j = Json::parse(&text).unwrap();
+    let params = arr(&j, "params");
+    assert!(params.iter().any(|p| s(p, "name") == "t"), "{text}");
+    // the exact volume added and removed, or why the kernel could not split it so
+    assert!(
+        j.get("volume").is_some() || j.get("volume_error").is_some(),
+        "{text}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A plate, a boss on it and a hole at two points made in a loop (`pin[a]`, `pin[b]`).
+const PINNED: &str = "shared L = 60
+shared t = 6
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (L, L))
+}
+base = extrude(plan, t)
+param top.r = 8
+param top.e = 10
+sketch top(on: base.end) {
+  c = circle((L / 2, L / 2), r)
+  p0 = pt(e, e)
+  p1 = pt(L - e, e)
+}
+param boss.h = 10
+boss = extrude(top.c, h)
+param pin.d = 4
+for k, p in {a: top.p0, b: top.p1} {
+  pin = hole(at: p, d: d, depth: thru)
+}
+";
+
+fn found(j: &Json) -> usize {
+    arr(j, "found").len()
+}
+
+#[test]
+fn query_measure_and_render_see_the_part_after_a_feature_and_select_by_feature() {
+    let dir = scratch("at");
+    let file = dir.join("pinned.fg");
+    std::fs::write(&file, PINNED).unwrap();
+    let f = file.to_str().unwrap();
+    let mut m = Server::start("mcp", &dir);
+    let q = |m: &mut Server, sel: &str, at: Option<&str>| {
+        let mut a = vec![("file", f.into()), ("sel", sel.into())];
+        if let Some(at) = at {
+            a.push(("at", at.into()));
+        }
+        m.tool("query", a)
+    };
+    // the finished part, and as it stood after the plate and after the boss
+    let (err, all, _) = q(&mut m, "faces plane", None);
+    assert!(!err, "{all}");
+    assert_eq!(found(&all), 7, "{all}");
+    let (_, plate, _) = q(&mut m, "faces", Some("base"));
+    assert_eq!(found(&plate), 6, "{plate}");
+    let (_, bossed, _) = q(&mut m, "faces plane normal +z top", Some("boss"));
+    assert_eq!(found(&bossed), 1, "{bossed}");
+    let (err, mass, _) = m.tool(
+        "measure",
+        vec![("file", f.into()), ("what", "mass".into()), ("at", "base".into())],
+    );
+    assert!(!err, "{mass}");
+    assert!((mass.get("volume").and_then(Json::num).unwrap() - 60.0 * 60.0 * 6.0).abs() < 1e-6);
+    let (err, pic, image) = m.tool(
+        "render",
+        vec![
+            ("file", f.into()),
+            ("at", "boss".into()),
+            ("labels", "faces of boss".into()),
+        ],
+    );
+    assert!(!err && image, "{pic}");
+    // by feature: one feature, a loop's features by their name, where two meet
+    let (_, boss, _) = q(&mut m, "faces of boss", None);
+    assert_eq!(found(&boss), 2, "{boss}");
+    let (_, pins, _) = q(&mut m, "faces of pin", None);
+    assert_eq!(found(&pins), 2, "{pins}");
+    let (_, one, _) = q(&mut m, "faces of pin[a]", None);
+    assert_eq!(found(&one), 1, "{one}");
+    let (_, seat, _) = q(&mut m, "edges between boss base concave", None);
+    assert_eq!(found(&seat), 1, "{seat}");
+    let (_, rims, _) = q(&mut m, "edges between pin base", None);
+    assert_eq!(found(&rims), 4, "{rims}");
+    let (_, rim, _) = q(&mut m, "edges of boss convex", Some("boss"));
+    assert_eq!(found(&rim), 1, "{rim}");
+    // a ref by feature measures
+    let (err, d, _) = m.tool(
+        "measure",
+        vec![
+            ("file", f.into()),
+            ("what", "(faces of boss plane)".into()),
+            ("to", "(faces of base plane normal -z)".into()),
+        ],
+    );
+    assert!(!err, "{d}");
+    assert!(
+        (d.get("distance").and_then(Json::num).unwrap() - 16.0).abs() < 1e-6,
+        "{d}"
+    );
+    // what is not a feature, or not built, says so
+    let (err, no, _) = q(&mut m, "faces", Some("nope"));
+    assert!(err && s(&no, "error").contains("'nope'"), "{no}");
+    let (err, no, _) = q(&mut m, "faces of nope", None);
+    assert!(err && s(&no, "error").contains("boss"), "{no}");
+    let (err, no, _) = q(&mut m, "stat", Some("base"));
+    assert!(err, "{no}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_round_too_big_comes_back_with_the_largest_that_builds_and_an_edit_undoes() {
+    let dir = scratch("fit");
+    let file = dir.join("plate.fg");
+    let big = format!("{PLATE}param round.r = 25\nround = fillet(edges(of: base.end), r)\n");
+    std::fs::write(&file, &big).unwrap();
+    let f = file.to_str().unwrap();
+    let mut m = Server::start("mcp", &dir);
+    let (err, r, _) = m.tool("build", vec![("file", f.into())]);
+    assert!(err, "{r}");
+    let e = arr(&r, "errors").into_iter().next().expect("refused");
+    let fix = arr(&e, "fixes")
+        .into_iter()
+        .next()
+        .unwrap_or_else(|| panic!("{e}"));
+    assert_eq!(s(&fix, "op"), "SetParam", "{fix}");
+    let v = fix
+        .get("value")
+        .and_then(|v| v.get("value"))
+        .and_then(Json::num)
+        .unwrap();
+    assert!(v > 0.0 && v < 25.0, "{fix}");
+    // the fix sent back builds
+    let (err, r, _) = m.tool("edit", vec![("file", f.into()), ("op", fix.clone())]);
+    assert!(!err, "{r}");
+    let fixed = std::fs::read_to_string(&file).unwrap();
+    assert_ne!(fixed, big);
+    // taken back, and put back again
+    let undo = Json::parse(r#"{"op":"Undo"}"#).unwrap();
+    let (err, r, _) = m.tool("edit", vec![("file", f.into()), ("op", undo)]);
+    assert!(err, "the round too big again: {r}");
+    assert_eq!(std::fs::read_to_string(&file).unwrap(), big);
+    let redo = Json::parse(r#"{"op":"Redo"}"#).unwrap();
+    let (err, r, _) = m.tool("edit", vec![("file", f.into()), ("op", redo.clone())]);
+    assert!(!err, "{r}");
+    assert_eq!(std::fs::read_to_string(&file).unwrap(), fixed);
+    // nothing left to redo: refused, nothing written
+    let (err, r, _) = m.tool("edit", vec![("file", f.into()), ("op", redo)]);
+    assert!(err && s(&r, "error").contains("redo"), "{r}");
+    assert_eq!(std::fs::read_to_string(&file).unwrap(), fixed);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn an_edit_against_a_version_the_file_has_moved_on_from_is_refused() {
+    let dir = scratch("base");
+    let file = dir.join("plate.fg");
+    std::fs::write(&file, PLATE).unwrap();
+    let f = file.to_str().unwrap();
+    let mut m = Server::start("mcp", &dir);
+    let (_, built, _) = m.tool("build", vec![("file", f.into())]);
+    let v0 = s(&built, "version");
+    assert_eq!(v0.len(), 16, "{built}");
+    let set = |d: f64| {
+        Json::parse(&format!(
+            r#"{{"op":"SetParam","param":"dent.depth","value":{{"value":{d},"dim":"Length"}}}}"#
+        ))
+        .unwrap()
+    };
+    // at the version the reply gave: applied, and the reply gives the new one
+    let (err, r, _) = m.tool(
+        "edit",
+        vec![("file", f.into()), ("op", set(3.0)), ("base", v0.as_str().into())],
+    );
+    assert!(!err, "{r}");
+    let v1 = s(&r, "version");
+    assert!(v1.len() == 16 && v1 != v0, "{r}");
+    let after = std::fs::read_to_string(&file).unwrap();
+    // the same version again: the file has moved on, so nothing is written
+    let (err, r, _) = m.tool(
+        "edit",
+        vec![("file", f.into()), ("op", set(1.0)), ("base", v0.as_str().into())],
+    );
+    assert!(err, "{r}");
+    let e = r.get("error").cloned().unwrap();
+    assert_eq!(s(&e, "kind"), "StaleBase", "{r}");
+    assert_eq!(s(&e, "version"), v1, "{r}");
+    assert_eq!(s(&r, "version"), v1, "{r}");
+    assert_eq!(std::fs::read_to_string(&file).unwrap(), after);
+    // the version it gave goes back: applied
+    let (err, r, _) = m.tool(
+        "edit",
+        vec![("file", f.into()), ("op", set(1.0)), ("base", v1.as_str().into())],
+    );
+    assert!(!err, "{r}");
+    // the file's text and its version, as query file gives them
+    let (_, q, _) = m.tool("query", vec![("file", f.into()), ("sel", "file".into())]);
+    assert_eq!(s(&q, "version"), s(&r, "version"));
+    // on the command line too
+    let out = Command::new(env!("CARGO_BIN_EXE_forgecad"))
+        .args(["edit", f, &set(2.0).to_string(), "--base", &v0, "--json"])
+        .output()
+        .unwrap();
+    assert!(!out.status.success());
+    assert!(String::from_utf8_lossy(&out.stdout).contains("StaleBase"));
+    let out = Command::new(env!("CARGO_BIN_EXE_forgecad"))
+        .args(["query", f, "faces", "--at", "base"])
+        .output()
+        .unwrap();
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(out.status.success() && text.starts_with("6 found"), "{text}");
     let _ = std::fs::remove_dir_all(&dir);
 }

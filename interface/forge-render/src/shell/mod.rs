@@ -11,7 +11,6 @@ pub mod asmpart;
 pub mod asmtools;
 pub mod content;
 pub mod dialog;
-pub mod dim;
 pub mod docs;
 pub mod drawing;
 pub mod dwgcmd;
@@ -42,7 +41,6 @@ mod ribbon;
 pub mod settings;
 pub mod sheet;
 mod sheetui;
-mod sketch3d;
 pub mod sketching;
 pub mod theme;
 pub mod thermo;
@@ -57,7 +55,6 @@ pub use crate::nav::NavTool;
 use crate::render::VisualStyle;
 use crate::shell::placed::Placed;
 use egui::{Align2, Color32, CornerRadius, Rect, Sense, Stroke, StrokeKind, Ui, pos2, vec2};
-use forge_doc::{Body, Document, ItemId};
 use theme::{Theme, medium, mono, sans, semi};
 
 pub const TABS: [&str; 5] = ["3D Model", "Sketch", "Inspect", "View", "Manage"];
@@ -74,8 +71,6 @@ pub const HARNESS_TAB: usize = 9;
 
 const TITLE_H: f32 = 36.0;
 const TABS_H: f32 = 34.0;
-/// How long a check goes on before the status bar says it's going on, in ms.
-const CHECK_SHOWS_MS: f64 = 500.0;
 /// A marking menu's dead zone, the ring its wedges light to, how far from it the pointer still
 /// chooses, and how far a flick must go.
 const DEAD_PT: f32 = 10.0;
@@ -129,10 +124,8 @@ pub enum Action {
     Undo,
     Redo,
     FitAll,
-    /// Square on to the sketch being drawn or the one chosen.
+    /// Square on to the sketch being drawn.
     LookAt,
-    /// A sketch's eye.
-    SketchVisibility(ItemId),
     /// The part reads in this length unit, from now on.
     SetUnits(&'static str),
     /// Back out of picking a plane.
@@ -160,8 +153,6 @@ pub enum Action {
     /// Start Sketch: on what's chosen, or wait for a plane or a planar face to be picked.
     StartSketch,
     SketchTool(sketching::SkTool),
-    /// A feature's inline profile, in sketch mode.
-    EditInline(ItemId),
     FinishSketch,
     CancelSketch,
     /// A ribbon button: a dialog for a new feature of this kind.
@@ -169,20 +160,6 @@ pub enum Action {
     /// A dialog ended: OK, or Cancel.
     DialogOk,
     DialogCancel,
-    /// What the tree and the marking menu ask of a feature.
-    Edit(ItemId),
-    Delete(ItemId),
-    Suppress(ItemId),
-    Unsuppress(ItemId),
-    /// Move it up to before this one, or to the end.
-    Reorder(ItemId, Option<ItemId>),
-    /// The end-of-part marker after this feature, or at the end.
-    EndAt(Option<ItemId>),
-    StartRename(ItemId),
-    /// A dragged number's new value; the drag ending there; the drag or edit called off.
-    DimDrag(f64),
-    DimCommit(f64),
-    DimCancel,
     /// A Forge file's ribbon command.
     Fg(FgCmd),
     /// The Manage tab's Versions group: the Versions tab, opened at what was asked.
@@ -237,33 +214,6 @@ pub enum FgCmd {
     ContentCenter,
     /// Show All of the joints' and constraints' glyphs in the view (else only those called for).
     Relationships,
-}
-
-/// One row of the tree.
-#[derive(Clone, Debug, PartialEq)]
-pub struct Row {
-    pub id: ItemId,
-    pub name: String,
-    pub kind: String,
-    pub icon: &'static str,
-    /// As the tree reads: the kind's word and its count, "Extrude2".
-    pub title: String,
-    /// Its line in the part file, label and all.
-    pub line: String,
-    /// Out of the build, kept as a comment.
-    pub suppressed: bool,
-    /// What it's made from: its sketch, shown under it.
-    pub sketch: Option<SketchChild>,
-    /// A sketch that feature rows carry: not shown at the top.
-    pub tucked: bool,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum SketchChild {
-    /// A `sketch` line, with its title.
-    Line(ItemId, String),
-    /// The profile's in the feature's own line.
-    Inline(panel::InlineProfile, String),
 }
 
 /// What the view shows, for the buttons that reflect it.
@@ -350,11 +300,6 @@ pub struct Shell {
     pub theme: Theme,
     pub tab: usize,
     pub name: String,
-    pub doc: Option<Document>,
-    pub rows: Vec<Row>,
-    pub failed: Option<(ItemId, String)>,
-    pub selected: Option<ItemId>,
-    pub version: u64,
     pub status: String,
     pub view: ViewState,
     pub out: Vec<Action>,
@@ -375,63 +320,31 @@ pub struct Shell {
     pub cube_place: Option<crate::viewcube::Place>,
     /// The view's camera and its size in device pixels, for what's drawn on the model.
     pub camera: Option<(crate::camera::Camera, (u32, u32))>,
-    /// The Origin folder's open; which of its items are always shown; which is hovered or selected.
-    pub origin_open: bool,
+    /// Which of the origin's items an assembly's Origin rows show; which is hovered or selected.
     pub origin_shown: [bool; 7],
     pub origin_hover: Option<crate::origin::Item>,
-    origin_tree_hover: Option<crate::origin::Item>,
     pub origin_selected: Option<crate::origin::Item>,
-    /// The feature whose faces the pointer's over in the tree.
-    pub tree_hover: Option<ItemId>,
-    /// The end-of-part marker: after this feature, or at the end.
-    pub end_at: Option<ItemId>,
-    /// A row's name being typed; a name typed, for the tool.
-    pub renaming: Option<(ItemId, String)>,
-    pub renamed: Option<(ItemId, String)>,
-    /// The tree's right-click menu: for this row, at this point.
-    /// What the model's sketches are, in 3D.
-    pub sketch_shapes: Vec<forge_agent::handles::SketchShape>,
-    /// Sketches told to show or hide, by name. Others show until something reads them.
-    pub sketch_eye: std::collections::HashMap<String, bool>,
-    /// The sketch under the pointer in the view.
-    pub sketch_hover: Option<ItemId>,
     /// It built but couldn't all be drawn.
     pub unshown: bool,
-    /// What the check found of the part: amber in the tree, counted in the status bar.
-    pub flags: Vec<forge_agent::live::Flag>,
-    /// A check's been going on since then.
-    pub checking_since: Option<f64>,
     /// The length unit the part reads in.
     pub units: &'static str,
     /// The part's middle: which way a hole faces in.
     pub part_middle: [f32; 3],
     /// The marking menu's up, centred here.
     pub marking: Option<egui::Pos2>,
-    /// It's for this row of the tree.
-    pub marking_row: Option<ItemId>,
     /// A selection window being dragged, on screen.
     pub window_box: Option<(egui::Pos2, egui::Pos2)>,
     /// Sketch mode.
     pub sketch: Option<sketching::SketchMode>,
     /// Waiting for a plane or a face to sketch on.
     pub sketch_pick: bool,
-    /// Feature rows opened to show their sketch.
-    pub open_rows: std::collections::HashSet<ItemId>,
-    /// A new feature waiting for the sketch being drawn.
-    pub then_feature: Option<&'static str>,
-    /// The feature dialog that's up.
-    pub dialog: Option<dialog::Dialog>,
-    /// The selected feature's number, on the model.
-    pub dim: Option<dim::DimEdit>,
     /// What's on the model and takes the pointer from the view.
     pub view_blocks: Vec<Rect>,
     /// The browser's width as dragged; None for the mode's default.
     pub side_px: Option<f32>,
     /// Place from Content Center: the standard parts library's dialog.
     pub content: content::ContentCenter,
-    /// What was typed for it, committed with Enter.
-    pub dim_typed: Option<String>,
-    /// A Forge (.fg) part is open: its browser and dialogs instead of the .fc ones.
+    /// A Forge (.fg) part is open: its browser and dialogs.
     pub fg: Option<fg::FgPanel>,
     /// The view's switches for parts and for assemblies: kept for the session, each kind its own.
     pub overlays: [Overlays; 2],
@@ -473,11 +386,6 @@ impl Default for Shell {
             theme: theme::DARK,
             tab: 0,
             name: String::new(),
-            doc: None,
-            rows: Vec::new(),
-            failed: None,
-            selected: None,
-            version: 0,
             status: String::new(),
             view: ViewState::default(),
             out: Vec::new(),
@@ -492,34 +400,17 @@ impl Default for Shell {
             camera: None,
             sketch: None,
             sketch_pick: false,
-            open_rows: Default::default(),
-            then_feature: None,
-            tree_hover: None,
-            end_at: None,
-            renaming: None,
-            renamed: None,
-            sketch_shapes: Vec::new(),
-            sketch_eye: Default::default(),
-            sketch_hover: None,
             unshown: false,
-            flags: Vec::new(),
-            checking_since: None,
             units: "mm",
             part_middle: [0.0; 3],
             marking: None,
-            marking_row: None,
             window_box: None,
-            origin_open: false,
             origin_shown: [false; 7],
             origin_hover: None,
-            origin_tree_hover: None,
             origin_selected: None,
-            dialog: None,
-            dim: None,
             view_blocks: Vec::new(),
             side_px: None,
             content: Default::default(),
-            dim_typed: None,
             fg: None,
             overlays: [PART_OVERLAYS, ASM_OVERLAYS],
             file_menu: false,
@@ -545,112 +436,6 @@ impl Default for Shell {
 }
 
 impl Shell {
-    /// The document is what this text says now.
-    pub fn set_doc(&mut self, src: &str, version: u64, failed: Option<(u64, String)>) {
-        let doc = Document::parse(src);
-        let mut counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
-        let sketch_names: Vec<(ItemId, String)> = doc
-            .items
-            .iter()
-            .filter(|i| matches!(i.body, Body::Sketch { .. }))
-            .filter_map(|i| Some((i.id, doc.name(i.id)?)))
-            .collect();
-        // who uses each sketch
-        let uses = |it: &forge_doc::Item, id: ItemId, name: &str| {
-            it.id != id && it.args().iter().any(|a| a.to == Some(id) || a.text == name)
-        };
-        self.rows = doc
-            .items
-            .iter()
-            .filter_map(|it| {
-                let note = it.note.as_deref();
-                let (kind, text, suppressed) = match &it.body {
-                    Body::Feature { kind, .. } => {
-                        (kind.clone(), doc.text_of(it.id).unwrap_or_default(), false)
-                    }
-                    Body::Sketch { .. } => (
-                        "sketch".to_string(),
-                        doc.text_of(it.id).unwrap_or_default(),
-                        false,
-                    ),
-                    Body::Blank => {
-                        let (_, line) = note.and_then(forge_agent::tools::suppressed)?;
-                        let words = forge_doc::text::tokens(line);
-                        let at = usize::from(words.first().is_some_and(|w| w.ends_with(':')));
-                        (words.get(at)?.clone(), line.to_string(), true)
-                    }
-                    _ => return None,
-                };
-                let word = panel::kind_word(&kind);
-                let count = counts.entry(word.clone()).or_default();
-                *count += 1;
-                let title = forge_agent::tools::display_name(note)
-                    .map_or_else(|| format!("{word}{count}"), str::to_string);
-                let n_users = |id: ItemId, name: &str| {
-                    doc.items
-                        .iter()
-                        .filter(|o| matches!(o.body, Body::Feature { .. }) && uses(o, id, name))
-                        .count()
-                };
-                let tucked = matches!(it.body, Body::Sketch { .. })
-                    && sketch_names
-                        .iter()
-                        .any(|(id, n)| *id == it.id && n_users(*id, n) == 1);
-                let used = sketch_names.iter().find(|(id, n)| uses(it, *id, n)).cloned();
-                let inline = match &it.body {
-                    Body::Feature { kind, args } => {
-                        let words: Vec<&str> = args.iter().map(|a| a.text.as_str()).collect();
-                        panel::inline_profile(kind, &words)
-                    }
-                    _ => None,
-                };
-                Some(Row {
-                    id: it.id,
-                    title,
-                    line: text.lines().next().unwrap_or("").to_string(),
-                    name: doc.name(it.id).unwrap_or_else(|| kind.clone()),
-                    icon: panel::icon(&kind),
-                    kind,
-                    suppressed,
-                    sketch: match (used, inline) {
-                        (Some((id, _)), _) => Some(SketchChild::Line(id, String::new())),
-                        (None, Some(p)) => Some(SketchChild::Inline(p, String::new())),
-                        _ => None,
-                    },
-                    tucked,
-                })
-            })
-            .collect();
-        // a child's title is its sketch's, in the count the tree shows
-        let mut inline_count = self.rows.iter().filter(|r| r.kind == "sketch").count();
-        let titles: Vec<(ItemId, String)> = self.rows.iter().map(|r| (r.id, r.title.clone())).collect();
-        for r in &mut self.rows {
-            match &mut r.sketch {
-                Some(SketchChild::Line(id, title)) => {
-                    *title = titles
-                        .iter()
-                        .find(|t| t.0 == *id)
-                        .map_or(String::new(), |t| t.1.clone());
-                }
-                Some(SketchChild::Inline(_, title)) => {
-                    inline_count += 1;
-                    *title = format!("Sketch{inline_count}");
-                }
-                None => {}
-            }
-        }
-        self.failed = failed.map(|(id, why)| (ItemId(id), why));
-        if self
-            .selected
-            .is_some_and(|s| !self.rows.iter().any(|r| r.id == s))
-        {
-            self.selected = None;
-        }
-        self.units = forge_doc::units::of_text(src);
-        self.doc = Some(doc);
-        self.version = version;
-    }
-
     /// A Forge assembly is open (known from its text, before its first solve).
     pub fn is_asm(&self) -> bool {
         self.fg.as_ref().is_some_and(|f| f.assembly)
@@ -780,46 +565,8 @@ impl Shell {
     /// under them for the rest.
     pub fn marking_items(&self) -> (Marks, Vec<Mark>) {
         const NONE: Mark = ("", "", None);
-        let row = |id: ItemId| -> (Marks, Vec<Mark>) {
-            let off = self.rows.iter().any(|r| r.id == id && r.suppressed);
-            let sketch = self.rows.iter().any(|r| r.id == id && r.kind == "sketch");
-            let mut more: Vec<Mark> = vec![(
-                "Move End of Part Here",
-                "end",
-                (!off).then_some(Action::EndAt(Some(id))),
-            )];
-            if sketch {
-                let word = if self.sketch_shown(id) { "Hide" } else { "Show" };
-                more.push(("Visibility", "eye", Some(Action::SketchVisibility(id))));
-                let _ = word;
-            }
-            (
-                [
-                    ("Edit Feature", "edit", (!off).then_some(Action::Edit(id))),
-                    NONE,
-                    ("Rename", "rename", (!off).then_some(Action::StartRename(id))),
-                    NONE,
-                    ("Delete", "delete", (!off).then_some(Action::Delete(id))),
-                    NONE,
-                    (
-                        if off { "Unsuppress" } else { "Suppress" },
-                        "hide",
-                        Some(if off {
-                            Action::Unsuppress(id)
-                        } else {
-                            Action::Suppress(id)
-                        }),
-                    ),
-                    NONE,
-                ],
-                more,
-            )
-        };
-        if let Some(id) = self.marking_row {
-            return row(id);
-        }
         // a Forge tool's dialog, as Inventor's: OK and Cancel under the right button too
-        if self.dialog.is_some() || self.fg.as_ref().is_some_and(|p| p.tool.is_some()) {
+        if self.fg.as_ref().is_some_and(|p| p.tool.is_some()) {
             return (
                 [
                     ("OK", "finish", Some(Action::DialogOk)),
@@ -879,12 +626,6 @@ impl Shell {
                 ],
                 Vec::new(),
             );
-        }
-        if let Some(id) = self.selected.filter(|s| self.rows.iter().any(|r| r.id == *s)) {
-            let (mut m, more) = row(id);
-            m[1] = ("Undo", "undo", Some(Action::Undo));
-            m[3] = ("Fit All", "fit", Some(Action::FitAll));
-            return (m, more);
         }
         (
             [
@@ -978,13 +719,10 @@ impl Shell {
         self.side_splitter(ui, side, s.width());
         self.docs_and_status(ui, s, bottom);
         self.navbar(&ctx);
-        self.sketches_ui(&ctx);
         self.window_ui(&ctx);
-        self.dim_ui(&ctx);
         self.thermo_probes(&ctx);
         self.thermo_ui(&ctx);
         self.harness_ui(&ctx);
-        self.dialog_ui(&ctx);
         self.fg_dialog(&ctx);
         self.occ_dialog(&ctx);
         self.asm_windows(&ctx);
@@ -1262,11 +1000,7 @@ impl Shell {
         let p = ui.painter().clone();
         p.rect_filled(side, 0.0, t.surface);
         p.vline(side.right(), side.y_range(), Stroke::new(1.0, t.line));
-        let name = self
-            .name
-            .trim_end_matches(".fc")
-            .trim_end_matches(".fg")
-            .to_string();
+        let name = self.name.trim_end_matches(".fg").to_string();
         // an assembly's name is its browser's top row
         let name = if self.is_asm() { String::new() } else { name };
         let name = if self.versions.revision.is_empty() || name.is_empty() {
@@ -1284,33 +1018,8 @@ impl Shell {
             self.asm_tree(ui, tree);
         } else if self.fg.is_some() {
             self.fg_tree(ui, tree);
-        } else {
-            self.tree(ui, tree);
         }
         self.agent_drag(ui);
-    }
-
-    /// A feature's fields, from the document as it stands.
-    pub fn fields_of(&self, id: ItemId) -> Vec<(String, String)> {
-        let Some(item) = self
-            .doc
-            .as_ref()
-            .and_then(|d| d.items.iter().find(|i| i.id == id))
-        else {
-            return Vec::new();
-        };
-        match &item.body {
-            Body::Feature { kind, args } => {
-                let words: Vec<&str> = args.iter().map(|a| a.text.as_str()).collect();
-                panel::fields(kind, &words)
-            }
-            Body::Sketch { rows, .. } => rows
-                .iter()
-                .filter(|r| r.args.first().is_none_or(|w| w != "ids"))
-                .filter_map(|r| panel::sketch_row(&r.args))
-                .collect(),
-            _ => Vec::new(),
-        }
     }
 
     fn docs_and_status(&mut self, ui: &mut Ui, s: Rect, bottom: f32) {
@@ -1454,30 +1163,10 @@ impl Shell {
             );
             return;
         }
-        // the check's word only if it's taking long: a quick one shouldn't flicker
-        let slow = self
-            .checking_since
-            .is_some_and(|t| crate::viewer::now_ms() - t > CHECK_SHOWS_MS);
-        let state = if self.failed.is_some() {
-            "error".to_string()
-        } else if !self.flags.is_empty() {
-            let n = self
-                .flags
-                .iter()
-                .map(|f| f.item)
-                .collect::<std::collections::HashSet<_>>()
-                .len();
-            format!("{n} warning{}", if n == 1 { "" } else { "s" })
-        } else if slow {
-            "checking".to_string()
-        } else {
-            "valid".to_string()
-        };
-        let right = format!("{state} | {}", self.units);
         p.text(
             pos2(s.width() - 10.0, st.center().y),
             Align2::RIGHT_CENTER,
-            right,
+            format!("| {}", self.units),
             mono(12.0),
             Color32::WHITE,
         );
@@ -1491,10 +1180,6 @@ impl Shell {
         if self.markup_escape(ctx) || self.agent.takes_escape(ctx) {
             return;
         }
-        // these take it themselves, knowing what they had
-        if self.dim.as_ref().is_some_and(|d| d.dragging) || self.dim_field_focused(ctx) {
-            return;
-        }
         ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
         if ribbon::close_drop(ctx) {
             // a ribbon dropdown shuts, and that's all
@@ -1502,13 +1187,8 @@ impl Shell {
             self.file_menu = false;
             self.cube_menu = None;
             self.marking = None;
-            self.marking_row = None;
-        } else if self.renaming.is_some() {
-            self.renaming = None;
         } else if let Some(p) = self.fg.as_mut().filter(|p| p.renaming.is_some()) {
             p.renaming = None;
-        } else if self.dialog.is_some() {
-            self.out.push(Action::DialogCancel);
         } else if let Some(p) = self.fg.as_mut().filter(|p| p.tool.is_some()) {
             p.tool = None;
             self.status.clear();
@@ -1536,16 +1216,9 @@ impl Shell {
             }
         } else if self.sketch_pick {
             self.out.push(Action::CancelPick);
-        } else if self.selected.is_some() || self.origin_selected.is_some() {
+        } else if self.origin_selected.is_some() {
             self.out.push(Action::Deselect);
         }
-    }
-
-    fn dim_field_focused(&self, ctx: &egui::Context) -> bool {
-        self.sketch.is_none()
-            && self.dialog.is_none()
-            && self.renaming.is_none()
-            && ctx.memory(|m| m.focused().is_some())
     }
 
     /// While a mode's waiting on something: what, and the way out, over the view.
@@ -1811,13 +1484,6 @@ impl Shell {
 }
 
 impl Shell {
-    pub fn start_rename(&mut self, id: ItemId) {
-        let title = self.rows.iter().find(|r| r.id == id).map(|r| r.title.clone());
-        if let Some(t) = title {
-            self.renaming = Some((id, t));
-        }
-    }
-
     /// The marking menu: eight wedges round the place it opened, each its word and icon on a chip,
     /// chosen by direction; a small dead zone in the middle; what's left over in a list below.
     fn marking_menu(&mut self, ctx: &egui::Context) {
@@ -1952,7 +1618,6 @@ impl Shell {
         }
         if closing {
             self.marking = None;
-            self.marking_row = None;
         }
     }
 

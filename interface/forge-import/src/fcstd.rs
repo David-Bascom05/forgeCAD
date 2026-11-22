@@ -1,15 +1,17 @@
-//! FreeCAD `.FCStd` PartDesign bodies (and the Part workbench solids they build on) as `.fc`
-//! histories. Document.xml is read as XML and each object's stored shape as an OpenCascade
+//! FreeCAD `.FCStd` PartDesign bodies (and the Part workbench solids they build on) as Forge
+//! (`.fg`) parts. Document.xml is read as XML and each object's stored shape as an OpenCascade
 //! `.brep`: a fillet's `EdgeN` is sampled from its base's stored shape and found on our part by
 //! position. Macros and scripts in the file are never touched.
 
 use crate::arrangement::{Arrangement, Ent, Kind, Shape, circle_from};
-use crate::py::{self, V2, V3, add, dot, neg, num, pmax, pmin, vfine, vtext};
+use crate::py::{self, V2, V3, add, dot, neg, num, pmax, pmin};
 use crate::state::{Edge, State};
 use crate::zip::Zip;
 use crate::{Body, Fail, bug};
+use forge_math::{Point3, Vec3};
+use forge_topo::Name;
 use roxmltree::Node;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 /// A stored edge's samples lie this close to ours (mm).
 const TOL: f64 = 2e-3;
@@ -590,90 +592,6 @@ fn wire_regions(a: &Arrangement, ents: &[Ent], wires: &[Vec<usize>]) -> Result<V
         .collect())
 }
 
-/// cadfs.loop_text: a loop of the arrangement as .fc loop text, y flipped if asked.
-fn loop_text(a: &Arrangement, lp: &[(usize, bool)], flip: bool) -> String {
-    let f = |p: V2| if flip { (p.0, -p.1) } else { p };
-    if lp.len() == 1 && a.pieces[lp[0].0].kind == Kind::Circle {
-        let p = &a.pieces[lp[0].0];
-        let c = f(p.c);
-        return format!("circle {} {} {}", num(c.0), num(c.1), num(p.r));
-    }
-    let mut parts = vec![];
-    for &(i, fwd) in lp {
-        let p = &a.pieces[i];
-        let (mut s, mut e) = (a.verts[p.va], a.verts[p.vb]);
-        if !fwd {
-            (s, e) = (e, s);
-        }
-        let (s, e) = (f(s), f(e));
-        match p.kind {
-            Kind::Arc => {
-                let (_, d) = p.sweep();
-                let d = (if fwd { d } else { -d }) * if flip { -1.0 } else { 1.0 };
-                let mut c = f(p.c);
-                // refit through the shared ends
-                let ch = py::dist2(s, e);
-                let mut r = p.r;
-                if ch > 1e-9 {
-                    r = pmax(r, ch / 2.0);
-                    let h = pmax(r * r - ch * ch / 4.0, 0.0).sqrt();
-                    let m = ((s.0 + e.0) / 2.0, (s.1 + e.1) / 2.0);
-                    let n = ((e.1 - s.1) / ch, (s.0 - e.0) / ch);
-                    let (c1, c2) = ((m.0 + h * n.0, m.1 + h * n.1), (m.0 - h * n.0, m.1 - h * n.1));
-                    c = if py::dist2(c1, c) <= py::dist2(c2, c) {
-                        c1
-                    } else {
-                        c2
-                    };
-                }
-                let a0 = py::degrees(py::atan2(s.1 - c.1, s.0 - c.0));
-                let a1 = py::degrees(py::atan2(e.1 - c.1, e.0 - c.0));
-                let mut dg = a1 - a0;
-                while d > 0.0 && dg <= 0.0 {
-                    dg += 360.0;
-                }
-                while d < 0.0 && dg >= 0.0 {
-                    dg -= 360.0;
-                }
-                parts.push(format!(
-                    "arc {} {} {} {} {}",
-                    num(c.0),
-                    num(c.1),
-                    num(r),
-                    py::f10(a0),
-                    py::f10(dg)
-                ));
-            }
-            Kind::Poly => {
-                let mut ps: Vec<V2> = p.pts.iter().map(|&q| f(q)).collect();
-                if !fwd {
-                    ps.reverse();
-                }
-                let n = ps.len();
-                ps[0] = s;
-                ps[n - 1] = e;
-                for w in ps.windows(2) {
-                    parts.push(format!(
-                        "line {} {} {} {}",
-                        num(w[0].0),
-                        num(w[0].1),
-                        num(w[1].0),
-                        num(w[1].1)
-                    ));
-                }
-            }
-            _ => parts.push(format!(
-                "line {} {} {} {}",
-                num(s.0),
-                num(s.1),
-                num(e.0),
-                num(e.1)
-            )),
-        }
-    }
-    format!("loop {}", parts.join(" "))
-}
-
 /// A stored edge: its curve's kind, samples, and samples without the root location.
 type Sampled = (&'static str, Vec<V3>, Option<Vec<V3>>);
 
@@ -795,7 +713,7 @@ fn line_or_circle(poly: &[V3]) -> bool {
 }
 
 /// Grows the picked edges along edges tangent where they meet.
-fn along_tangents(edges: &[Edge], picked: &mut BTreeMap<String, usize>) {
+fn along_tangents(edges: &[Edge], picked: &mut BTreeMap<Name, usize>) {
     let mut at: HashMap<usize, Vec<(usize, usize)>> = HashMap::new();
     for (i, e) in edges.iter().enumerate() {
         for (k, &v) in e.v.iter().enumerate() {
@@ -815,7 +733,7 @@ fn along_tangents(edges: &[Edge], picked: &mut BTreeMap<String, usize>) {
                 let Some(b) = ge.t[j] else { continue };
                 let cr = py::cross(t, b);
                 if dot(cr, cr).sqrt() < 1e-4 {
-                    picked.insert(ge.h.clone(), g);
+                    picked.insert(ge.h, g);
                     todo.push(g);
                 }
             }
@@ -1040,15 +958,258 @@ fn chain_of(doc: &Doc, body: &str) -> Result<Vec<String>, Fail> {
     Ok(out)
 }
 
+/// The program's first statement: the world plane every later placement is made from (a sketch
+/// with no rows: its plane, and its origin).
+const PRELUDE: &str = "sketch ref(on: xy) {\n}\n";
+
+/// A number as the program writes it, and as Forge reads it back.
+fn back(s: &str) -> f64 {
+    s.parse().unwrap_or(0.0)
+}
+
+fn v3(p: V3) -> Vec3 {
+    Vec3::new(p.0, p.1, p.2)
+}
+
+/// A plane in the program: its text (reading the sketch's param `d` where it is moved off the
+/// origin), the param's value, and the frame Forge makes of it.
+struct Placed {
+    on: String,
+    d: Option<String>,
+    frame: forge_math::Frame,
+}
+
+impl Placed {
+    /// A world point in the plane's own coordinates.
+    fn uv(&self, p: V3) -> V2 {
+        let d = Point3::new(p.0, p.1, p.2) - self.frame.origin;
+        (d.dot(self.frame.x().get()), d.dot(self.frame.y().get()))
+    }
+}
+
+/// A sketch being written: its points and radii as its own params, read by its rows.
+#[derive(Default)]
+struct Sk {
+    pts: Vec<String>,
+    radii: Vec<String>,
+    rows: Vec<String>,
+}
+
+impl Sk {
+    fn p(&mut self, q: V2) -> String {
+        let t = format!("({}, {})", num(q.0), num(q.1));
+        let i = match self.pts.iter().position(|x| *x == t) {
+            Some(i) => i,
+            None => {
+                self.pts.push(t);
+                self.pts.len() - 1
+            }
+        };
+        format!("p[{i}]")
+    }
+
+    /// A point with every digit (`p` writes ten decimals).
+    fn p_exact(&mut self, q: V2) -> String {
+        let z = |x: f64| if x == 0.0 { 0.0 } else { x };
+        self.pts.push(format!("({:?}, {:?})", z(q.0), z(q.1)));
+        format!("p[{}]", self.pts.len() - 1)
+    }
+
+    fn r(&mut self, r: f64) -> String {
+        let t = num(r);
+        let i = match self.radii.iter().position(|x| *x == t) {
+            Some(i) => i,
+            None => {
+                self.radii.push(t);
+                self.radii.len() - 1
+            }
+        };
+        format!("r[{i}]")
+    }
+
+    /// A row, named by its kind and place: `l3`, `a4`, `c0`.
+    fn row(&mut self, kind: &str, text: String) -> String {
+        let name = format!("{kind}{}", self.rows.len());
+        self.rows.push(format!("  {name} = {text}"));
+        name
+    }
+
+    /// The sketch's statement and its params.
+    fn block(&self, id: &str, at: &Placed) -> String {
+        let mut out = String::new();
+        if let Some(d) = &at.d {
+            out += &format!("param {id}.d = {d}\n");
+        }
+        if !self.pts.is_empty() {
+            out += &format!("param {id}.p = [{}]\n", self.pts.join(", "));
+        }
+        if !self.radii.is_empty() {
+            out += &format!("param {id}.r = [{}]\n", self.radii.join(", "));
+        }
+        out += &format!("sketch {id}(on: {}) {{\n", at.on);
+        for r in &self.rows {
+            out += r;
+            out.push('\n');
+        }
+        out + "}\n"
+    }
+
+    /// A loop of the arrangement, its points mapped into the plane by `to`; `turn` is -1 where
+    /// the mapping mirrors (the plane faces against the sketch's normal).
+    fn lp(&mut self, a: &Arrangement, lp: &[(usize, bool)], to: &dyn Fn(V2) -> V2, turn: f64) {
+        if lp.len() == 1 && a.pieces[lp[0].0].kind == Kind::Circle {
+            let p = &a.pieces[lp[0].0];
+            let (c, r) = (self.p(to(p.c)), self.r(p.r));
+            self.row("c", format!("circle({c}, {r})"));
+            return;
+        }
+        for &(i, fwd) in lp {
+            let p = &a.pieces[i];
+            let (mut s, mut e) = (a.verts[p.va], a.verts[p.vb]);
+            if !fwd {
+                (s, e) = (e, s);
+            }
+            match p.kind {
+                Kind::Arc => {
+                    let (_, d) = p.sweep();
+                    let d = if fwd { d } else { -d };
+                    let mut c = p.c;
+                    // refit through the shared ends
+                    let ch = py::dist2(s, e);
+                    if ch > 1e-9 {
+                        let r = pmax(p.r, ch / 2.0);
+                        let h = pmax(r * r - ch * ch / 4.0, 0.0).sqrt();
+                        let m = ((s.0 + e.0) / 2.0, (s.1 + e.1) / 2.0);
+                        let n = ((e.1 - s.1) / ch, (s.0 - e.0) / ch);
+                        let (c1, c2) = ((m.0 + h * n.0, m.1 + h * n.1), (m.0 - h * n.0, m.1 - h * n.1));
+                        c = if py::dist2(c1, c) <= py::dist2(c2, c) {
+                            c1
+                        } else {
+                            c2
+                        };
+                    }
+                    let (cq, f, t) = (to(c), self.p(to(s)), self.p(to(e)));
+                    // the ends as written: a centre rounded as they are can sit off their
+                    // bisector by more than the solver allows; then it is the exact centre
+                    // between the written ends, every digit written
+                    let r =
+                        |q: V2| -> V2 { (num(q.0).parse().unwrap_or(q.0), num(q.1).parse().unwrap_or(q.1)) };
+                    let (rs, re) = (r(to(s)), r(to(e)));
+                    let c = if (py::dist2(r(cq), rs) - py::dist2(r(cq), re)).abs() <= 1e-12 {
+                        self.p(cq)
+                    } else {
+                        let ch = py::dist2(rs, re);
+                        let rr = pmax(py::dist2(cq, rs), ch / 2.0);
+                        let h = pmax(rr * rr - ch * ch / 4.0, 0.0).sqrt();
+                        let m = ((rs.0 + re.0) / 2.0, (rs.1 + re.1) / 2.0);
+                        let n = ((re.1 - rs.1) / ch, (rs.0 - re.0) / ch);
+                        let (c1, c2) = ((m.0 + h * n.0, m.1 + h * n.1), (m.0 - h * n.0, m.1 - h * n.1));
+                        let x = if py::dist2(c1, cq) <= py::dist2(c2, cq) {
+                            c1
+                        } else {
+                            c2
+                        };
+                        self.p_exact(x)
+                    };
+                    let cw = if d * turn < 0.0 { ", cw: true" } else { "" };
+                    self.row("a", format!("arc(center: {c}, from: {f}, to: {t}{cw})"));
+                }
+                Kind::Poly => {
+                    let mut ps: Vec<V2> = p.pts.clone();
+                    if !fwd {
+                        ps.reverse();
+                    }
+                    let n = ps.len();
+                    ps[0] = s;
+                    ps[n - 1] = e;
+                    for w in ps.windows(2) {
+                        let (f, t) = (self.p(to(w[0])), self.p(to(w[1])));
+                        if f != t {
+                            self.row("l", format!("line({f}, {t})"));
+                        }
+                    }
+                }
+                _ => {
+                    let (f, t) = (self.p(to(s)), self.p(to(e)));
+                    self.row("l", format!("line({f}, {t})"));
+                }
+            }
+        }
+    }
+}
+
+/// How far an extrude runs.
+enum Ext {
+    D(f64),
+    Sym(f64),
+    Two(f64, f64),
+    Thru,
+    ThruAll,
+    Next,
+    /// Walls slanted along `w` (scaled so a step of 1 along it is 1 along the travel): the
+    /// profile from `from` to `to` along it, a ruled loft between its two ends.
+    Along {
+        w: V3,
+        from: f64,
+        to: f64,
+    },
+    /// Through the part with walls slanted along `w` (both ways with `both`): `thru` or
+    /// `thru_all` along it.
+    AlongThru {
+        w: V3,
+        both: bool,
+    },
+}
+
+/// What a profile makes: an extrude (or cut) running along `travel`, or a revolve about an axis
+/// in the sketch's coordinates (a point and a direction), by an angle (none: a whole turn),
+/// symmetric about the sketch's plane or not.
+enum Make {
+    Extrude {
+        cut: bool,
+        ext: Ext,
+        travel: V3,
+    },
+    Revolve {
+        cut: bool,
+        at: V2,
+        dir: V2,
+        angle: Option<f64>,
+        sym: bool,
+    },
+}
+
+/// A turn of `p` about the axis through `o` along unit `k` by `a` radians (right-handed).
+fn turned(p: V3, o: V3, k: V3, a: f64) -> V3 {
+    let v = add(p, o, -1.0);
+    let (s, c) = (py::sin(a), py::cos(a));
+    let kv = py::cross(k, v);
+    let kd = dot(k, v);
+    let r = (
+        v.0 * c + kv.0 * s + k.0 * kd * (1.0 - c),
+        v.1 * c + kv.1 * s + k.1 * kd * (1.0 - c),
+        v.2 * c + kv.2 * s + k.2 * kd * (1.0 - c),
+    );
+    add(o, r, 1.0)
+}
+
 struct Tr<'d, 'a, 'i> {
     doc: &'d Doc<'a, 'i>,
     truth: HashMap<String, Stored>,
-    lines: Vec<String>,
+    /// The program's statements after the prelude, a feature (with its sketch and params) each.
+    blocks: Vec<String>,
+    /// Each feature's label: the ids its statements made, space apart.
     labels: HashMap<String, String>,
+    /// World points written as helper sketches' points, by their text.
+    points: HashMap<String, String>,
     state: State,
     bodies: usize,
+    /// The body the chain's features act on: the feature that made it.
+    body: Option<String>,
     approx: bool,
     tree: usize,
+    /// Features made, for fresh ids.
+    made: usize,
     chain_rest: Vec<String>,
 }
 
@@ -1056,7 +1217,93 @@ fn unsupported<T>(s: impl Into<String>) -> Result<T, Fail> {
     Err(Fail::Unsupported(s.into()))
 }
 
+/// Several ids as one value: a name, or a list of them.
+fn ids(labels: &str) -> String {
+    let v: Vec<&str> = labels.split(' ').filter(|s| !s.is_empty()).collect();
+    match v[..] {
+        [one] => one.into(),
+        _ => format!("[{}]", v.join(", ")),
+    }
+}
+
 impl Tr<'_, '_, '_> {
+    /// The program so far.
+    fn program(&self) -> String {
+        let mut s = String::from(PRELUDE);
+        for b in &self.blocks {
+            s += b;
+        }
+        s
+    }
+
+    /// A world point, as a helper sketch's point (`q3.p`), or the origin.
+    fn point(&mut self, p: V3) -> String {
+        let (x, y, z) = (num(p.0), num(p.1), num(p.2));
+        if [&x, &y, &z].iter().all(|t| *t == "0") {
+            return "ref.origin".into();
+        }
+        let key = format!("{x} {y} {z}");
+        if let Some(n) = self.points.get(&key) {
+            return format!("{n}.p");
+        }
+        let n = format!("q{}", self.points.len());
+        let mut b = format!("param {n}.q = ({x}, {y})\n");
+        let on = if z == "0" {
+            "ref".to_string()
+        } else {
+            b += &format!("param {n}.h = {z}\n");
+            "offset(ref, h)".to_string()
+        };
+        b += &format!("sketch {n}(on: {on}) {{\n  p = pt(q[0], q[1])\n}}\n");
+        self.blocks.push(b);
+        self.points.insert(key, n.clone());
+        format!("{n}.p")
+    }
+
+    /// A world direction: the axis from the origin through its tip.
+    fn dir(&mut self, v: V3) -> Result<String, Fail> {
+        let Some(u) = py::unit(v) else {
+            return bug("a zero direction");
+        };
+        // a long direction keeps its digits when its tip is written to ten decimals
+        Ok(format!("axis(ref.origin, {})", self.point(u)))
+    }
+
+    /// The plane through `o` facing `n`, as Forge places it: the world plane moved, or a plane
+    /// through the origin facing the direction, moved along it.
+    fn plane(&mut self, n: V3, o: V3) -> Result<Placed, Fail> {
+        let Some(u) = py::unit(n) else {
+            return bug("a zero normal");
+        };
+        let tip = (back(&num(u.0)), back(&num(u.1)), back(&num(u.2)));
+        let Some(z) = v3(tip).normalize() else {
+            return bug("a zero normal");
+        };
+        let dt = num(dot(o, (z.get().x, z.get().y, z.get().z)));
+        let dv = back(&dt);
+        let moved = dv != 0.0;
+        let (base, frame) = if tip.0 == 0.0 && tip.1 == 0.0 && tip.2 > 0.0 {
+            ("ref".to_string(), forge_math::Frame::WORLD)
+        } else {
+            let q = self.point(tip);
+            (
+                format!("plane(at: ref.origin, normal: axis(ref.origin, {q}))"),
+                forge_math::Frame::from_z(Point3::ORIGIN, z),
+            )
+        };
+        let frame = frame.with_origin(Point3::ORIGIN + z.get() * dv);
+        Ok(Placed {
+            on: if moved { format!("offset({base}, d)") } else { base },
+            d: moved.then_some(dt),
+            frame,
+        })
+    }
+
+    /// The id of a statement this feature makes: `t3`, then `t3x1`, `t3x2` for its others.
+    fn id(lab: &str, k: usize) -> String {
+        if k == 0 { lab.into() } else { format!("{lab}x{k}") }
+    }
+
     fn profile_ents(&mut self, sk: &str, fr: &Frame) -> Result<Vec<Ent>, Fail> {
         if self.doc.ty(sk) == Some("Sketcher::SketchObject") {
             return sketch_ents(self.doc, sk);
@@ -1125,17 +1372,9 @@ impl Tr<'_, '_, '_> {
         Ok(ents)
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn profile(
-        &mut self,
-        name: &str,
-        op: &str,
-        head: &str,
-        flip: bool,
-        frame_z: V3,
-        tail: &str,
-        sk: Option<&str>,
-    ) -> Result<Vec<String>, Fail> {
+    /// A sketch's closed regions, each a sketch and the feature it makes, labelled `lab` and on;
+    /// the ids made.
+    fn profile(&mut self, name: &str, lab: &str, make: Make, sk: Option<&str>) -> Result<Vec<String>, Fail> {
         let d = self.doc;
         let sk = match sk {
             Some(s) if !s.is_empty() => s.to_string(),
@@ -1163,30 +1402,172 @@ impl Tr<'_, '_, '_> {
         if regs.is_empty() {
             return Err(Fail::Unresolved("a sketch with no closed region".into()));
         }
-        let frame = format!("z {} x {} at {}", vtext(frame_z), vtext(fr.x), vtext(fr.o));
+        // the sketch's points in the world, and where a revolve's axis lies
+        let (mut world_of, mut normal): (Box<dyn Fn(V2) -> V3>, V3) =
+            (Box::new(move |q: V2| fr.world(q.0, q.1)), fr.n);
+        let mut axis = None;
+        if let Make::Revolve {
+            at, dir, angle, sym, ..
+        } = &make
+        {
+            let (o, k) = (fr.world(at.0, at.1), add(fr.world(dir.0, dir.1), fr.o, -1.0));
+            let Some(k) = py::unit(k) else {
+                return bug("a revolve about a zero axis");
+            };
+            if *sym {
+                // symmetric about the sketch's plane: the sketch turned back half the angle first
+                let half = -angle.unwrap_or(360.0) * py::PI / 360.0;
+                world_of = Box::new(move |q: V2| turned(fr.world(q.0, q.1), o, k, half));
+                normal = add(
+                    turned(add(fr.o, fr.n, 1.0), o, k, half),
+                    turned(fr.o, o, k, half),
+                    -1.0,
+                );
+            }
+            axis = Some((o, k));
+        }
+        let mut make = make;
+        if let Make::Extrude {
+            cut: true,
+            ext: Ext::Two(f, b),
+            travel,
+        } = make
+        {
+            // Forge's two-sided extent runs a cut's way only as lengths along the normal, which the
+            // kernel refuses: the same prism, cut from where its back end lies
+            world_of = Box::new(move |q: V2| add(fr.world(q.0, q.1), travel, -b));
+            make = Make::Extrude {
+                cut: true,
+                ext: Ext::D(f + b),
+                travel,
+            };
+        }
+        let (cut, travel) = match &make {
+            Make::Extrude { cut, travel, .. } => (*cut, *travel),
+            Make::Revolve { cut, .. } => (*cut, normal),
+        };
+        // an extrude runs along its sketch's normal, a cut against it
+        let n = if matches!(make, Make::Extrude { .. }) && cut {
+            neg(travel)
+        } else {
+            travel
+        };
+        let mut slant = None;
+        if let Make::Extrude {
+            ext: Ext::Along { w, from, to },
+            ..
+        } = make
+        {
+            let w0 = (w.0 * from, w.1 * from, w.2 * from);
+            world_of = Box::new(move |q: V2| add(fr.world(q.0, q.1), w0, 1.0));
+            slant = Some((w.0 * (to - from), w.1 * (to - from), w.2 * (to - from)));
+        }
+        let at = self.plane(n, world_of((0.0, 0.0)))?;
+        let along = match &make {
+            Make::Extrude {
+                ext: Ext::AlongThru { w, .. },
+                ..
+            } => Some(self.dir(*w)?),
+            _ => None,
+        };
+        let at2 = match slant {
+            Some(t) => Some(self.plane(n, add(world_of((0.0, 0.0)), t, 1.0))?),
+            None => None,
+        };
+        let turn = if dot(n, normal) < 0.0 { -1.0 } else { 1.0 };
         let mut out = vec![];
-        for prof in a.merged(&regs)? {
-            let loops: Vec<String> = prof.iter().map(|lp| loop_text(&a, lp, flip)).collect();
-            let mut this = op;
+        for (k, prof) in a.merged(&regs)?.into_iter().enumerate() {
+            let id = Self::id(lab, k);
+            let to = |q: V2| at.uv(world_of(q));
+            let mut s = Sk::default();
+            for lp in &prof {
+                s.lp(&a, lp, &to, turn);
+            }
+            if let Some((o, k)) = axis {
+                let (p, q) = (s.p(at.uv(o)), s.p(at.uv(add(o, k, 1.0))));
+                s.rows.push(format!("  ax = line({p}, {q}, construction: true)"));
+            }
+            let mut new = false;
             if self.bodies == 0 {
-                if op == "cut" {
+                if cut {
                     return unsupported("first feature cuts");
                 }
-                this = if self.tree > 0 { "new" } else { "" };
+                new = self.tree > 0;
                 self.bodies = 1;
+                self.body = Some(id.clone());
             }
-            let k = if tail.is_empty() { "extrude" } else { "revolve" };
-            let this = if this.is_empty() {
-                String::new()
-            } else {
-                format!("{this} ")
+            let skid = format!("{id}_sk");
+            let mut b = s.block(&skid, &at);
+            let mut params = vec![];
+            let mut opts = String::new();
+            let call = match &make {
+                Make::Extrude { ext, .. } => {
+                    let e = match ext {
+                        Ext::D(l) => {
+                            params.push(("d", num(*l)));
+                            "d".to_string()
+                        }
+                        Ext::Sym(l) => {
+                            params.push(("d", num(*l)));
+                            "sym(d)".into()
+                        }
+                        Ext::Two(f, r) => {
+                            params.extend([("d", num(*f)), ("back", num(*r))]);
+                            "two(d, back)".into()
+                        }
+                        Ext::Thru => "thru".into(),
+                        Ext::ThruAll => "thru_all".into(),
+                        Ext::Next => "next".into(),
+                        Ext::Along { .. } => String::new(),
+                        Ext::AlongThru { both, .. } => {
+                            if let Some(d) = &along {
+                                opts += &format!(", along: {d}");
+                            }
+                            if *both { "thru_all" } else { "thru" }.into()
+                        }
+                    };
+                    match (&at2, slant) {
+                        (Some(at2), Some(t)) => {
+                            // the same loops at the far end, a ruled loft between
+                            let to2 = |q: V2| at2.uv(add(world_of(q), t, 1.0));
+                            let mut s2 = Sk::default();
+                            for lp in &prof {
+                                s2.lp(&a, lp, &to2, turn);
+                            }
+                            b += &s2.block(&format!("{id}_end"), at2);
+                            if cut {
+                                opts += ", cut: true";
+                            }
+                            format!("loft([{skid}, {id}_end]")
+                        }
+                        _ => format!("{}({skid}, {e}", if cut { "cut" } else { "extrude" }),
+                    }
+                }
+                Make::Revolve { angle, .. } => {
+                    if let Some(t) = angle {
+                        params.push(("a", format!("{}deg", num(*t))));
+                        opts += ", angle: a";
+                    }
+                    if cut {
+                        opts += ", cut: true";
+                    }
+                    format!("revolve({skid}, axis: {skid}.ax")
+                }
             };
-            out.push(format!("{k} {this}{head} {frame} {tail}{}", loops.join(" ")));
+            if new {
+                opts += ", new: true";
+            }
+            for (k, v) in params {
+                b += &format!("param {id}.{k} = {v}\n");
+            }
+            b += &format!("{id} = {call}{opts})\n");
+            self.blocks.push(b);
+            out.push(id);
         }
         Ok(out)
     }
 
-    fn pad(&mut self, name: &str, cut: bool) -> Result<Vec<String>, Fail> {
+    fn pad(&mut self, name: &str, lab: &str, cut: bool) -> Result<Vec<String>, Fail> {
         let d = self.doc;
         for k in ["TaperAngle", "TaperAngle2", "Offset"] {
             if d.flt(name, k, 0.0)?.abs() > 1e-12 {
@@ -1217,7 +1598,6 @@ impl Tr<'_, '_, '_> {
         let t = d.integer(name, "Type", 0)?;
         let (mut l, mut l2) = (d.flt(name, "Length", 0.0)?, d.flt(name, "Length2", 0.0)?);
         let mid = d.boolean(name, "Midplane")?;
-        let mut along = String::new();
         if d.boolean(name, "UseCustomVector")? {
             // the direction is stored as used, a pocket's too: only Reversed turns it. Length runs
             // along it unless AlongSketchNormal
@@ -1237,32 +1617,53 @@ impl Tr<'_, '_, '_> {
                 (l, l2) = (l * c.abs(), l2 * c.abs());
             }
             if (c.abs() - 1.0).abs() > 1e-12 {
-                along = format!(" along {}", vfine(v));
+                // Forge's extrude runs square to its sketch: walls along a slant are a ruled loft
+                // between the profile and its copy moved along it, each end the length along the
+                // normal it would have had
+                let s = if dot(v, z) < 0.0 { -1.0 } else { 1.0 } / c.abs();
+                let w = (v.0 * s, v.1 * s, v.2 * s);
+                let (from, to) = match t {
+                    0 if mid => (-l / 2.0, l / 2.0),
+                    0 => (0.0, l),
+                    4 => (-l2, l),
+                    // a pocket through: literally through, its walls along the slant
+                    _ if cut => {
+                        let ext = Ext::AlongThru { w, both: mid };
+                        return self.profile(name, lab, Make::Extrude { cut, ext, travel: z }, None);
+                    }
+                    _ => {
+                        // through: past every edge of the part so far
+                        let src = self.program();
+                        let reach = self.state.reach(&src)? / c.abs() + 1.0;
+                        if mid { (-reach, reach) } else { (0.0, reach) }
+                    }
+                };
+                let ext = Ext::Along { w, from, to };
+                return self.profile(name, lab, Make::Extrude { cut, ext, travel: z }, None);
             }
         }
-        let mut head = match t {
-            0 if mid => format!("sym {}", num(l)),
-            0 => num(l),
-            4 => format!("two {} {}", num(l), num(l2)),
-            1 if cut && mid => "thru both".into(),
-            1 if cut => "thru".into(),
-            2 => "next".into(),
+        let ext = match t {
+            0 if mid => Ext::Sym(l),
+            0 => Ext::D(l),
+            4 => Ext::Two(l, l2),
+            1 if cut && mid => Ext::ThruAll,
+            1 if cut => Ext::Thru,
+            2 => Ext::Next,
             _ => return unsupported(format!("a pad or pocket of type {t}")),
         };
-        head += &along;
-        self.profile(name, if cut { "cut" } else { "add" }, &head, down, z, "", None)
+        self.profile(name, lab, Make::Extrude { cut, ext, travel: z }, None)
     }
 
-    fn axis_tail(&self, fr: &Frame, base: V3, ax: V3) -> Result<(f64, f64, f64, f64), Fail> {
+    fn axis_tail(&self, fr: &Frame, base: V3, ax: V3) -> Result<(V2, V2), Fail> {
         let (u, v, w) = fr.uvw(base);
         let (du, dv, dw) = (dot(ax, fr.x), dot(ax, fr.y), dot(ax, fr.n));
         if w.abs() > 1e-6 || dw.abs() > 1e-6 {
             return unsupported("a revolve axis out of the sketch's plane");
         }
-        Ok((u, v, du, dv))
+        Ok(((u, v), (du, dv)))
     }
 
-    fn revolve(&mut self, name: &str, cut: bool) -> Result<Vec<String>, Fail> {
+    fn revolve(&mut self, name: &str, lab: &str, cut: bool) -> Result<Vec<String>, Fail> {
         let d = self.doc;
         let (p, q) = (d.prop(name, "Base")?, d.prop(name, "Axis")?);
         let (Some(p), Some(q)) = (p, q) else {
@@ -1277,32 +1678,24 @@ impl Tr<'_, '_, '_> {
             return unsupported("a profile not from a sketch");
         }
         let fr = Frame::new(d.placement(&sk)?);
-        let (u, v, mut du, mut dv) = self.axis_tail(&fr, base, ax)?;
+        let (at, mut dir) = self.axis_tail(&fr, base, ax)?;
         if d.boolean(name, "Reversed")? {
-            (du, dv) = (-du, -dv);
+            dir = (-dir.0, -dir.1);
         }
         let ang = d.flt(name, "Angle", 360.0)?;
-        let head = if (ang - 360.0).abs() < 1e-9 {
-            String::new()
-        } else if d.boolean(name, "Midplane")? {
-            format!("sym {}", num(ang))
-        } else {
-            num(ang)
+        let whole = (ang - 360.0).abs() < 1e-9;
+        let make = Make::Revolve {
+            cut,
+            at,
+            dir,
+            angle: (!whole).then_some(ang),
+            sym: !whole && d.boolean(name, "Midplane")?,
         };
-        let tail = format!("axis {} {} {} {} ", num(u), num(v), num(du), num(dv));
-        self.profile(
-            name,
-            if cut { "cut" } else { "add" },
-            &head,
-            false,
-            fr.n,
-            &tail,
-            None,
-        )
+        self.profile(name, lab, make, None)
     }
 
     /// Part workbench: a sketch turned about Axis through Base.
-    fn part_revolve(&mut self, name: &str) -> Result<Vec<String>, Fail> {
+    fn part_revolve(&mut self, name: &str, lab: &str) -> Result<Vec<String>, Fail> {
         let d = self.doc;
         if !d.boolean(name, "Solid")? {
             return unsupported("a Part revolve that makes a shell");
@@ -1313,18 +1706,17 @@ impl Tr<'_, '_, '_> {
             return unsupported("a Part revolve of something not a sketch");
         }
         let fr = Frame::new(d.placement(&sk)?);
-        let (u, v, du, dv) = self.axis_tail(&fr, base, ax)?;
+        let (at, dir) = self.axis_tail(&fr, base, ax)?;
         let ang = d.flt(name, "Angle", 360.0)?;
-        let mut head = if (ang - 360.0).abs() < 1e-9 {
-            String::new()
-        } else {
-            num(ang)
+        let whole = (ang - 360.0).abs() < 1e-9;
+        let make = Make::Revolve {
+            cut: false,
+            at,
+            dir,
+            angle: (!whole).then_some(ang),
+            sym: !whole && d.boolean(name, "Symmetric")?,
         };
-        if d.boolean(name, "Symmetric")? && !head.is_empty() {
-            head = format!("sym {head}");
-        }
-        let tail = format!("axis {} {} {} {} ", num(u), num(v), num(du), num(dv));
-        self.profile(name, "add", &head, false, fr.n, &tail, Some(&sk))
+        self.profile(name, lab, make, Some(&sk))
     }
 
     /// Does a real feature follow this clone in the body being built? Those are in the body's own
@@ -1342,7 +1734,8 @@ impl Tr<'_, '_, '_> {
     }
 
     /// A Part workbench solid and what it is made of, as bodies and combines. Tools first, so the
-    /// base is the last body made and the lines after it act on that. Returns the result's label.
+    /// base is the last body made and the features after it act on that. Returns the result's
+    /// label.
     fn part_tree(&mut self, name: &str) -> Result<String, Fail> {
         let d = self.doc;
         let t = d.ty(name).unwrap_or("");
@@ -1373,8 +1766,13 @@ impl Tr<'_, '_, '_> {
                 _ => "add",
             };
             let base = labs.pop().expect("two or more");
-            self.lines
-                .push(format!("combine {word} {base} {}", labs.join(" ")));
+            let id = format!("join{}", self.made);
+            self.made += 1;
+            self.blocks.push(format!(
+                "{id} = combine({base}, tools: {}, op: \"{word}\")\n",
+                ids(&labs.join(" "))
+            ));
+            self.body = Some(base.clone());
             return Ok(base);
         }
         if t == "PartDesign::Body" || SOLID.contains(&t) && !t.starts_with("Part::") {
@@ -1382,23 +1780,28 @@ impl Tr<'_, '_, '_> {
             let sub = chain_of(d, name)?;
             self.tree += 1;
             self.bodies = 0;
-            let first = self.lines.len();
+            self.body = None;
             for n in &sub {
                 self.step(n)?;
             }
-            let Some(head) = self.lines.get(first) else {
-                return bug("a chain that made no line");
+            let Some(head) = self.body.clone() else {
+                return bug("a chain that made no body");
             };
             self.bodies = 1;
-            let w0 = head.split(' ').next().unwrap_or("");
-            if !w0.contains(':') {
-                return unsupported("a PartDesign shape in a Part tree with no label");
-            }
-            return Ok(head.split(':').next().unwrap_or("").into());
+            return Ok(head);
         }
-        let mut ls = match t {
-            "Part::Revolution" => self.part_revolve(name)?,
-            "Part::Box" | "Part::Cylinder" => self.part_solid(name, t)?,
+        self.tree += 1;
+        let lab = format!("p{}", self.tree);
+        let new = self.tree > 1;
+        let ls = match t {
+            "Part::Revolution" => {
+                // after the first, each its own body
+                if new {
+                    self.bodies = 0;
+                }
+                self.part_revolve(name, &lab)?
+            }
+            "Part::Box" | "Part::Cylinder" => self.part_solid(name, t, &lab, new)?,
             "Part::Sphere" => {
                 if (d.flt(name, "Angle1", -90.0)? + 90.0).abs() > 1e-9
                     || (d.flt(name, "Angle2", 90.0)? - 90.0).abs() > 1e-9
@@ -1407,13 +1810,14 @@ impl Tr<'_, '_, '_> {
                     return unsupported("a part of a sphere");
                 }
                 let fr = Frame::new(d.placement(name)?);
-                vec![format!(
-                    "ball {} z {} x {} at {}",
-                    num(d.flt(name, "Radius", 0.0)?),
-                    vtext(fr.n),
-                    vtext(fr.x),
-                    vtext(fr.o)
-                )]
+                let c = self.point(fr.o);
+                let opt = if new { ", new: true" } else { "" };
+                self.blocks.push(format!(
+                    "param {lab}.r = {}\n{lab} = ball({c}, r{opt})\n",
+                    num(d.flt(name, "Radius", 0.0)?)
+                ));
+                self.bodies = 1;
+                vec![lab.clone()]
             }
             _ => {
                 let t = d.ty(name).unwrap_or("None");
@@ -1423,42 +1827,61 @@ impl Tr<'_, '_, '_> {
         if ls.len() != 1 {
             return unsupported("a Part solid of several regions");
         }
-        self.tree += 1;
-        let lab = format!("p{}", self.tree);
-        if self.tree > 1 {
-            // after the first, each its own body
-            let (word, rest) = ls[0].split_once(' ').unwrap_or((&ls[0], ""));
-            let rest = rest.strip_prefix("add ").unwrap_or(rest);
-            ls = vec![format!("{word} new {rest}")];
-        }
-        self.lines.push(format!("{lab}: {}", ls[0]));
+        self.body = Some(lab.clone());
         Ok(lab)
     }
 
-    /// Part workbench primitives, on their placement.
-    fn part_solid(&mut self, name: &str, t: &str) -> Result<Vec<String>, Fail> {
+    /// A rectangle (`Length` by `Width`) or circle (`Radius`) on a placement, extruded `Height`
+    /// along its z: Part and PartDesign primitives.
+    fn box_or_cylinder(&mut self, name: &str, lab: &str, cut: bool, new: bool) -> Result<String, Fail> {
         let d = self.doc;
+        let t = d.ty(name).unwrap_or("");
         let fr = Frame::new(d.placement(name)?);
-        let frame = format!("z {} x {} at {}", vtext(fr.n), vtext(fr.x), vtext(fr.o));
-        self.bodies = 1;
-        let h = num(d.flt(name, "Height", 0.0)?);
-        if t == "Part::Box" {
-            return Ok(vec![format!(
-                "extrude {h} {frame} rect 0 0 {} {}",
-                num(d.flt(name, "Length", 0.0)?),
-                num(d.flt(name, "Width", 0.0)?)
-            )]);
+        let at = self.plane(if cut { neg(fr.n) } else { fr.n }, fr.o)?;
+        let mut s = Sk::default();
+        if t.ends_with("Box") {
+            let (l, w) = (d.flt(name, "Length", 0.0)?, d.flt(name, "Width", 0.0)?);
+            let c: Vec<String> = [(0.0, 0.0), (l, 0.0), (l, w), (0.0, w)]
+                .iter()
+                .map(|q| s.p(at.uv(fr.world(q.0, q.1))))
+                .collect();
+            for k in 0..4 {
+                s.row("l", format!("line({}, {})", c[k], c[(k + 1) % 4]));
+            }
+        } else {
+            let (c, r) = (s.p(at.uv(fr.o)), s.r(d.flt(name, "Radius", 0.0)?));
+            s.row("c", format!("circle({c}, {r})"));
         }
-        if (d.flt(name, "Angle", 360.0)? - 360.0).abs() > 1e-9 {
-            return unsupported("a part of a cylinder");
-        }
-        Ok(vec![format!(
-            "extrude {h} {frame} circle 0 0 {}",
-            num(d.flt(name, "Radius", 0.0)?)
-        )])
+        let skid = format!("{lab}_sk");
+        let mut b = s.block(&skid, &at);
+        b += &format!("param {lab}.d = {}\n", num(d.flt(name, "Height", 0.0)?));
+        let opt = if new { ", new: true" } else { "" };
+        b += &format!(
+            "{lab} = {}({skid}, d{opt})\n",
+            if cut { "cut" } else { "extrude" }
+        );
+        self.blocks.push(b);
+        Ok(lab.into())
     }
 
-    fn blend(&mut self, name: &str, line: String, all_edges: bool) -> Result<Vec<String>, Fail> {
+    /// Part workbench primitives, on their placement.
+    fn part_solid(&mut self, name: &str, t: &str, lab: &str, new: bool) -> Result<Vec<String>, Fail> {
+        let d = self.doc;
+        if t == "Part::Cylinder" && (d.flt(name, "Angle", 360.0)? - 360.0).abs() > 1e-9 {
+            return unsupported("a part of a cylinder");
+        }
+        self.bodies = 1;
+        Ok(vec![self.box_or_cylinder(name, lab, false, new)?])
+    }
+
+    fn blend(
+        &mut self,
+        name: &str,
+        lab: &str,
+        chamfer: bool,
+        size: f64,
+        all_edges: bool,
+    ) -> Result<Vec<String>, Fail> {
         let d = self.doc;
         let base = d.link(name, "Base")?;
         let mut subs = if all_edges {
@@ -1469,8 +1892,8 @@ impl Tr<'_, '_, '_> {
         if subs.is_empty() {
             subs = vec!["ALL".into()];
         }
-        let edges = self.state.edges(&self.lines)?;
-        let mut picked: BTreeMap<String, usize> = BTreeMap::new();
+        let edges = self.state.edges(&self.program())?;
+        let mut picked: BTreeMap<Name, usize> = BTreeMap::new();
         let mut bbox = None;
         for sub in &subs {
             let Some(data) = self.truth.get(&base).and_then(|s| s.subs.get(sub)) else {
@@ -1525,13 +1948,13 @@ impl Tr<'_, '_, '_> {
                         && s0 <= slack
                     {
                         // only a clear winner: a second edge as close would be a guess
-                        let close: HashSet<&str> = scored
+                        let close: HashSet<Name> = scored
                             .iter()
                             .filter(|x| x.0 <= s0 + 1e-9)
-                            .map(|x| edges[x.1].h.as_str())
+                            .map(|x| edges[x.1].h)
                             .collect();
                         hits = (0..edges.len())
-                            .filter(|&i| close.contains(edges[i].h.as_str()))
+                            .filter(|&i| close.contains(&edges[i].h))
                             .collect();
                     }
                 }
@@ -1540,7 +1963,7 @@ impl Tr<'_, '_, '_> {
                 }
                 for i in hits {
                     if edges[i].c != "smooth" {
-                        picked.insert(edges[i].h.clone(), i);
+                        picked.insert(edges[i].h, i);
                     }
                 }
             }
@@ -1550,8 +1973,32 @@ impl Tr<'_, '_, '_> {
         }
         // OpenCascade carries a blend along tangent edges
         along_tangents(&edges, &mut picked);
-        let hs: Vec<&str> = picked.keys().map(String::as_str).collect();
-        Ok(vec![format!("{line} {}", hs.join(" "))])
+        let want: BTreeSet<Name> = picked.keys().copied().collect();
+        // the features so far, any of which may have made an edge's face
+        let mut feats: Vec<String> = self
+            .labels
+            .values()
+            .flat_map(|l| l.split(' ').map(String::from))
+            .collect();
+        feats.sort();
+        feats.dedup();
+        let (sel, params) = self.state.select(&want, &feats)?;
+        let mut b = format!(
+            "param {lab}.{} = {}\n",
+            if chamfer { "d" } else { "r" },
+            num(size)
+        );
+        for (k, v) in params {
+            b += &format!("param {lab}.{k} = {}\n", num(v));
+        }
+        let (word, arg) = if chamfer {
+            ("chamfer", "d")
+        } else {
+            ("fillet", "r")
+        };
+        b += &format!("{lab} = {word}({sel}, {arg})\n");
+        self.blocks.push(b);
+        Ok(vec![lab.into()])
     }
 
     /// The base's stored solids' box, or zeros where it has none.
@@ -1593,17 +2040,18 @@ impl Tr<'_, '_, '_> {
         }
     }
 
-    fn transform(&self, name: &str, t: &str, src: &str) -> Result<String, Fail> {
+    /// A pattern of `src` (ids, space apart), labelled `lab`.
+    fn transform(&mut self, name: &str, t: &str, src: &str, lab: &str) -> Result<String, Fail> {
         let d = self.doc;
+        let of = ids(src);
         if t == "PartDesign::PolarPattern" {
             let (o, mut a) = self.axis_of(name, "Axis")?;
             if d.boolean(name, "Reversed")? {
                 a = neg(a);
             }
+            let (p, q) = (self.point(o), self.point(add(o, a, 1.0)));
             return Ok(format!(
-                "pattern {src} circ {} {} {} {}",
-                vtext(o),
-                vtext(a),
+                "param {lab}.n = count({})\nparam {lab}.a = {}deg\n{lab} = pattern(of: {of}, layout: circ(about: axis({p}, {q}), n: n, over: a))\n",
                 d.integer(name, "Occurrences", 0)?,
                 num(d.flt(name, "Angle", 360.0)?)
             ));
@@ -1615,7 +2063,11 @@ impl Tr<'_, '_, '_> {
             }
             let n = d.integer(name, "Occurrences", 0)?;
             let step = d.flt(name, "Length", 0.0)? / (n - 1).max(1) as f64;
-            return Ok(format!("pattern {src} lin {} {n} {}", vtext(a), num(step)));
+            let along = self.dir(a)?;
+            return Ok(format!(
+                "param {lab}.n = count({n})\nparam {lab}.step = {}\n{lab} = pattern(of: {of}, layout: lin(along: {along}, n: n, step: step))\n",
+                num(step)
+            ));
         }
         let (r, subs) = (d.link(name, "MirrorPlane")?, d.subs(name, "MirrorPlane")?);
         let fail = || Err(Fail::Unsupported("a pattern reference mirror".into()));
@@ -1648,12 +2100,15 @@ impl Tr<'_, '_, '_> {
             }
             t => return unsupported(format!("a mirror in {}", t.unwrap_or("nothing"))),
         };
-        Ok(format!("pattern {src} mirror z {} at {}", vtext(n), vtext(o)))
+        let (p, dn) = (self.point(o), self.dir(n)?);
+        Ok(format!(
+            "{lab} = pattern(of: {of}, layout: mirror(on: plane(at: {p}, normal: {dn})))\n"
+        ))
     }
 
     /// One hole at each of the sketch's circles, drilled against its normal; its seat from what the
     /// file stored.
-    fn hole(&self, name: &str) -> Result<Vec<String>, Fail> {
+    fn hole(&mut self, name: &str, lab: &str) -> Result<Vec<String>, Fail> {
         let d = self.doc;
         if d.boolean(name, "Tapered")?
             || d.boolean(name, "ModelActualThread")?
@@ -1674,78 +2129,81 @@ impl Tr<'_, '_, '_> {
         if ents.is_empty() || ents.iter().any(|e| !matches!(e.shape, Shape::Circle { .. })) {
             return unsupported("a hole on something other than circles");
         }
+        // drilled along z: against the normal of the plane its points sit on
         let z = if d.boolean(name, "Reversed")? {
             fr.n
         } else {
             neg(fr.n)
         };
         let t = d.integer(name, "DepthType", 0)?;
-        let mut ext = match t {
-            1 => "thru".to_string(),
-            0 => num(d.flt(name, "Depth", 0.0)?),
+        let mut params = vec![("d".to_string(), num(d.flt(name, "Diameter", 0.0)?))];
+        let mut args = vec!["d: d".to_string()];
+        match t {
+            1 => args.push("depth: thru".into()),
+            0 => {
+                params.push(("depth".into(), num(d.flt(name, "Depth", 0.0)?)));
+                args.push("depth: depth".into());
+            }
             _ => return unsupported("a hole up to a face"),
-        };
-        if t == 0 && d.integer(name, "DrillPoint", 0)? == 1 {
-            ext += &format!(" pt {}", num(d.flt(name, "DrillPointAngle", 0.0)?));
         }
-        let mut seat = String::new();
         if d.integer(name, "HoleCutType", 0)? != 0 {
-            let dia = num(d.flt(name, "HoleCutDiameter", 0.0)?);
-            seat = if d.flt(name, "HoleCutDepth", 0.0)? > 0.0 {
-                format!(" cb {dia} {}", num(d.flt(name, "HoleCutDepth", 0.0)?))
+            params.push(("seat_d".into(), num(d.flt(name, "HoleCutDiameter", 0.0)?)));
+            if d.flt(name, "HoleCutDepth", 0.0)? > 0.0 {
+                params.push(("seat_depth".into(), num(d.flt(name, "HoleCutDepth", 0.0)?)));
+                args.push("cbore: (seat_d, seat_depth)".into());
             } else {
-                format!(" cs {dia} {}", num(d.flt(name, "HoleCutCountersinkAngle", 0.0)?))
-            };
+                let a = d.flt(name, "HoleCutCountersinkAngle", 0.0)?;
+                params.push(("seat_a".into(), format!("{}deg", num(a))));
+                args.push("csink: (seat_d, seat_a)".into());
+            }
         }
-        let dia = num(d.flt(name, "Diameter", 0.0)?);
-        Ok(ents
-            .iter()
-            .map(|e| {
-                let Shape::Circle { center, .. } = e.shape else {
-                    unreachable!("circles only")
-                };
-                format!(
-                    "hole {dia} z {} x {} at {}{seat} {ext}",
-                    vtext(z),
-                    vtext(fr.x),
-                    vtext(fr.world(center.0, center.1))
-                )
-            })
-            .collect())
+        if t == 0 && d.integer(name, "DrillPoint", 0)? == 1 {
+            let a = d.flt(name, "DrillPointAngle", 0.0)?;
+            params.push(("point".into(), format!("{}deg", num(a))));
+            args.push("point: point".into());
+        }
+        let at = self.plane(neg(z), fr.o)?;
+        let mut s = Sk::default();
+        let mut pts = vec![];
+        for e in &ents {
+            let Shape::Circle { center, .. } = e.shape else {
+                unreachable!("circles only")
+            };
+            let q = s.p(at.uv(fr.world(center.0, center.1)));
+            pts.push(format!("{lab}_sk.{}", s.row("h", format!("pt({q}[0], {q}[1])"))));
+        }
+        let mut b = s.block(&format!("{lab}_sk"), &at);
+        for (k, v) in params {
+            b += &format!("param {lab}.{k} = {v}\n");
+        }
+        let at = if pts.len() == 1 {
+            pts[0].clone()
+        } else {
+            format!("[{}]", pts.join(", "))
+        };
+        b += &format!("{lab} = hole(at: {at}, {})\n", args.join(", "));
+        self.blocks.push(b);
+        Ok(vec![lab.into()])
     }
 
-    fn primitive(&mut self, name: &str, t: &str) -> Result<Vec<String>, Fail> {
+    fn primitive(&mut self, name: &str, lab: &str, t: &str) -> Result<Vec<String>, Fail> {
         let d = self.doc;
-        let fr = Frame::new(d.placement(name)?);
-        let frame = format!("z {} x {} at {}", vtext(fr.n), vtext(fr.x), vtext(fr.o));
         let cut = t.contains("Subtractive");
         if cut && self.bodies == 0 {
             return unsupported("first feature cuts");
         }
-        let op = match (self.bodies > 0, cut) {
-            (false, _) => "",
-            (true, true) => "cut ",
-            (true, false) => "add ",
-        };
-        self.bodies = 1;
-        let h = num(d.flt(name, "Height", 0.0)?);
-        if t.ends_with("Box") {
-            return Ok(vec![format!(
-                "extrude {op}{h} {frame} rect 0 0 {} {}",
-                num(d.flt(name, "Length", 0.0)?),
-                num(d.flt(name, "Width", 0.0)?)
-            )]);
-        }
-        if (d.flt(name, "Angle", 360.0)? - 360.0).abs() > 1e-9
-            || d.flt(name, "FirstAngle", 0.0)?.abs() > 1e-9
-            || d.flt(name, "SecondAngle", 0.0)?.abs() > 1e-9
+        if !t.ends_with("Box")
+            && ((d.flt(name, "Angle", 360.0)? - 360.0).abs() > 1e-9
+                || d.flt(name, "FirstAngle", 0.0)?.abs() > 1e-9
+                || d.flt(name, "SecondAngle", 0.0)?.abs() > 1e-9)
         {
             return unsupported("a part of a cylinder");
         }
-        Ok(vec![format!(
-            "extrude {op}{h} {frame} circle 0 0 {}",
-            num(d.flt(name, "Radius", 0.0)?)
-        )])
+        if self.bodies == 0 {
+            self.body = Some(lab.into());
+        }
+        self.bodies = 1;
+        Ok(vec![self.box_or_cylinder(name, lab, cut, false)?])
     }
 
     fn originals(&self, name: &str) -> Result<String, Fail> {
@@ -1777,12 +2235,15 @@ impl Tr<'_, '_, '_> {
         for name in chain {
             self.step(name)?;
         }
-        Ok(())
+        // the whole program, built: a body that stops says so
+        let src = self.program();
+        self.state.check(&src)
     }
 
     fn step(&mut self, name: &str) -> Result<(), Fail> {
         let d = self.doc;
         let t = d.ty(name).unwrap_or("").to_string();
+        let lab = format!("t{}", self.labels.len());
         if t == "PartDesign::FeatureBase" {
             // stands for its BaseFeature, which the chain has already built, moved by its own placement
             // (measured: a chain of clones composes them, and the base feature's own placement plays no part)
@@ -1795,43 +2256,58 @@ impl Tr<'_, '_, '_> {
             if self.after_moved(name)? {
                 return unsupported("features after a moved clone");
             }
-            let mut words = vec![];
+            let Some(body) = self.body.clone() else {
+                return bug("a clone of no body");
+            };
+            let id = format!("m{}", self.made);
+            self.made += 1;
+            let (mut ps, mut moves) = (String::new(), vec![]);
             if sn >= 1e-12 {
                 let ax = (q.0 / sn, q.1 / sn, q.2 / sn);
-                words.push(format!(
-                    "rot 0 0 0 {} {}",
-                    vtext(ax),
+                let tip = self.point(ax);
+                ps += &format!(
+                    "param {id}.a = {}deg\n",
                     num(py::degrees(2.0 * py::atan2(sn, q.3)))
-                ));
+                );
+                moves.push(format!("spin(about: axis(ref.origin, {tip}), by: a)"));
             }
             if moved {
-                words.push(format!("by {}", vtext(by)));
+                let along = self.dir(by)?;
+                ps += &format!("param {id}.d = {}\n", num(dot(by, by).sqrt()));
+                moves.push(format!("slide(along: {along}, by: d)"));
             }
-            self.lines.push(format!("movebody {}", words.join(" ")));
+            self.blocks.push(format!(
+                "{ps}{id} = movebody(of: {body}, moves: [{}])\n",
+                moves.join(", ")
+            ));
             return Ok(());
         }
         let mut root = String::new();
-        let mut ls = match t.as_str() {
+        let ls = match t.as_str() {
             _ if t.starts_with("Part::") => {
                 root = self.part_tree(name)?;
                 vec![]
             }
-            "PartDesign::Pad" | "PartDesign::Pocket" => self.pad(name, t.ends_with("Pocket"))?,
-            "PartDesign::Revolution" | "PartDesign::Groove" => self.revolve(name, t.ends_with("Groove"))?,
+            "PartDesign::Pad" | "PartDesign::Pocket" => self.pad(name, &lab, t.ends_with("Pocket"))?,
+            "PartDesign::Revolution" | "PartDesign::Groove" => {
+                self.revolve(name, &lab, t.ends_with("Groove"))?
+            }
             "PartDesign::Fillet" => {
-                let line = format!("fillet {}", num(d.flt(name, "Radius", 0.0)?));
-                self.blend(name, line, d.boolean(name, "UseAllEdges")?)?
+                let r = d.flt(name, "Radius", 0.0)?;
+                self.blend(name, &lab, false, r, d.boolean(name, "UseAllEdges")?)?
             }
             "PartDesign::Chamfer" => {
                 if d.integer(name, "ChamferType", 0)? != 0 {
                     return unsupported("an unequal chamfer");
                 }
-                let line = format!("chamfer {}", num(d.flt(name, "Size", 0.0)?));
-                self.blend(name, line, d.boolean(name, "UseAllEdges")?)?
+                let s = d.flt(name, "Size", 0.0)?;
+                self.blend(name, &lab, true, s, d.boolean(name, "UseAllEdges")?)?
             }
             _ if TRANSFORMS.contains(&t.as_str()) => {
                 let src = self.originals(name)?;
-                vec![self.transform(name, &t, &src)?]
+                let b = self.transform(name, &t, &src, &lab)?;
+                self.blocks.push(b);
+                vec![lab.clone()]
             }
             "PartDesign::MultiTransform" => {
                 let mut ls = vec![];
@@ -1842,50 +2318,39 @@ impl Tr<'_, '_, '_> {
                         let w = mt.map_or("None", last_word);
                         return unsupported(format!("a multi-transform with {w}"));
                     }
-                    let lab = format!("m{}x{k}", self.labels.len());
-                    ls.push(format!("{lab}: {}", self.transform(m, mt.unwrap_or(""), &src)?));
-                    src += &format!(" {lab}");
+                    let id = format!("m{}x{k}", self.labels.len());
+                    let b = self.transform(m, mt.unwrap_or(""), &src, &id)?;
+                    self.blocks.push(b);
+                    src += &format!(" {id}");
+                    ls.push(id);
                 }
                 ls
             }
-            "PartDesign::Hole" => self.hole(name)?,
+            "PartDesign::Hole" => self.hole(name, &lab)?,
             "PartDesign::AdditiveBox"
             | "PartDesign::SubtractiveBox"
             | "PartDesign::AdditiveCylinder"
-            | "PartDesign::SubtractiveCylinder" => self.primitive(name, &t)?,
+            | "PartDesign::SubtractiveCylinder" => self.primitive(name, &lab, &t)?,
             _ => return bug("a feature with no step"),
         };
         if t.starts_with("Part::") {
             self.labels.insert(name.into(), root);
             self.bodies = 1;
         } else if t == "PartDesign::MultiTransform" {
-            // already labelled, each its own
+            // each its own: the last is the whole
             let Some(l) = ls.last() else {
                 return bug("a multi-transform of nothing");
             };
-            let l = l.split(':').next().unwrap_or("").to_string();
-            self.labels.insert(name.into(), l);
+            self.labels.insert(name.into(), l.clone());
         } else {
-            // a feature of several lines (regions that do not touch): a pattern of it needs them all
-            let base = format!("t{}", self.labels.len());
-            let names: Vec<String> = (0..ls.len())
-                .map(|k| {
-                    if k == 0 {
-                        base.clone()
-                    } else {
-                        format!("{base}x{k}")
-                    }
-                })
-                .collect();
-            self.labels.insert(name.into(), names.join(" "));
-            ls = names.iter().zip(&ls).map(|(n, l)| format!("{n}: {l}")).collect();
+            // a feature of several statements (regions that do not touch): a pattern of it needs them all
+            self.labels.insert(name.into(), ls.join(" "));
         }
-        self.lines.extend(ls);
         Ok(())
     }
 }
 
-/// File names for each body's part file, `<stem>.<body>.fc`, safe for any names a file holds: only
+/// File names for each body's part file, `<stem>.<body>.fg`, safe for any names a file holds: only
 /// `[A-Za-z0-9_-]`, the rest `_`, and kept apart by a `-N` where two would meet.
 pub fn part_files(stem: &str, bodies: &[Body]) -> Vec<String> {
     let clean = |s: &str| -> String {
@@ -1907,11 +2372,11 @@ pub fn part_files(stem: &str, bodies: &[Body]) -> Vec<String> {
         .iter()
         .map(|b| {
             let base = format!("{stem}.{}", clean(&b.name));
-            let mut name = format!("{base}.fc");
+            let mut name = format!("{base}.fg");
             let mut n = 1;
             while !seen.insert(name.clone()) {
                 n += 1;
-                name = format!("{base}-{n}.fc");
+                name = format!("{base}-{n}.fg");
             }
             name
         })
@@ -2030,7 +2495,7 @@ fn one_body(doc: &Doc, b: &str) -> Body {
         name: b.into(),
         features: vec![],
         approx: false,
-        fc: None,
+        fg: None,
         fail: Some(Fail::Bug("a panic".into())),
     })
 }
@@ -2040,7 +2505,7 @@ fn body_of(doc: &Doc, b: &str) -> Body {
         name: b.into(),
         features: vec![],
         approx: false,
-        fc: None,
+        fg: None,
         fail: None,
     };
     let mut tr = None;
@@ -2089,12 +2554,15 @@ fn body_of(doc: &Doc, b: &str) -> Body {
         let t = tr.insert(Tr {
             doc,
             truth,
-            lines: vec![],
+            blocks: vec![],
             labels: HashMap::new(),
+            points: HashMap::new(),
             state: State::default(),
             bodies: 0,
+            body: None,
             approx: false,
             tree: 0,
+            made: 0,
             chain_rest: vec![],
         });
         t.run(&chain)
@@ -2103,7 +2571,14 @@ fn body_of(doc: &Doc, b: &str) -> Body {
     if let Some(t) = tr {
         out.approx = t.approx;
         if !matches!(r, Some(Fail::Unsupported(_) | Fail::Unresolved(_) | Fail::Bug(_))) {
-            out.fc = Some(t.lines.join("\n") + "\n");
+            let mut head = format!("# FreeCAD body {}: {}\n", out.name, out.features.join(", "));
+            if t.approx {
+                head += "# its splines read as fine polylines\n";
+            }
+            if let Some(Fail::Stop(why)) = &r {
+                head += &format!("# stops: {why}\n");
+            }
+            out.fg = Some(head + &t.program());
         }
     }
     out.fail = r;

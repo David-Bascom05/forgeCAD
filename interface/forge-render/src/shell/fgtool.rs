@@ -376,6 +376,17 @@ pub(super) fn choices_of(kind: &str) -> Vec<Choice> {
                 ("Full Round", "fullround"),
             ],
         )],
+        "chamfer" => vec![
+            c(
+                "Type",
+                &[
+                    ("Equal Distance", "chamfer"),
+                    ("Two Distances", "chamfer"),
+                    ("Distance and Angle", "chamfer"),
+                ],
+            ),
+            c("Corner", &[("Patch", "chamfer"), ("Point", "point")]),
+        ],
         "shell" => vec![c("Direction", &[("Inside", "shellin"), ("Outside", "shellout")])],
         "combine" => vec![c(
             "Operation",
@@ -549,12 +560,26 @@ pub(super) fn form_of(kind: &str, c: &dyn Fn(&str) -> &'static str) -> Option<Fo
             vec![],
             vec![],
         ),
-        "chamfer" => (
-            vec![slot("Edges", K::Edges)],
-            vec![param("d", "1", Dim::Length)],
-            vec![],
-            vec![],
-        ),
+        "chamfer" => match c("Type") {
+            "Two Distances" => (
+                vec![slot("Edges", K::Edges), slot("Face", K::Face)],
+                vec![param("d", "1", Dim::Length), param("d2", "2", Dim::Length)],
+                vec![],
+                vec![],
+            ),
+            "Distance and Angle" => (
+                vec![slot("Edges", K::Edges), slot("Face", K::Face)],
+                vec![param("d", "1", Dim::Length), param("ang", "45", Dim::Angle)],
+                vec![],
+                vec![],
+            ),
+            _ => (
+                vec![slot("Edges", K::Edges)],
+                vec![param("d", "1", Dim::Length)],
+                vec![],
+                vec![],
+            ),
+        },
         "shell" => (
             vec![maybe("Remove Faces", K::Faces)],
             vec![param("t", "2", Dim::Length)],
@@ -1201,7 +1226,19 @@ impl FgTool {
                 self.all("Face Set 1", " + ")?,
                 self.all("Face Set 2", " + ")?
             ),
-            "chamfer" => format!("{n} = chamfer({}, d)", self.all("Edges", " + ")?),
+            "chamfer" => {
+                let size = match self.choice("Type") {
+                    "Two Distances" => format!(", d2: d2, face: {}", self.one("Face")?),
+                    "Distance and Angle" => format!(", angle: ang, face: {}", self.one("Face")?),
+                    _ => String::new(),
+                };
+                let corner = if self.choice("Corner") == "Point" {
+                    ", corner: \"point\""
+                } else {
+                    ""
+                };
+                format!("{n} = chamfer({}, d{size}{corner})", self.all("Edges", " + ")?)
+            }
             "shell" => {
                 let open = self.the("Remove Faces");
                 let out = if self.choice("Direction") == "Outside" {

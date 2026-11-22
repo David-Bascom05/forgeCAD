@@ -1,0 +1,32 @@
+# on an oblique tube with a wall: external thread running off into a shoulder
+param plan.ax = 1
+sketch plan(on: xy) {
+  xax = line((0, 0), (ax, 0), construction: true)
+}
+# the tube's axis (0.6, 0, 0.8) through the origin, its sketches' x along (0.8, 0, -0.6)
+param front.n = (0.6, 0.8)
+param front.x = (0.8, -0.6)
+sketch front(on: rotate(plan, about: plan.xax, by: 90deg)) {
+  nt = pt(n[0], n[1])
+  xt = pt(x[0], x[1])
+}
+param tube.r = 15
+sketch tube(on: plane(at: plan.origin, normal: axis(plan.origin, front.nt), x: axis(plan.origin, front.xt))) {
+  c = circle((0, 0), r)
+}
+param t.l = 50
+t = extrude(tube, l)
+param shoulder.r = 22
+sketch shoulder(on: tube) {
+  c = circle((0, 0), r)
+}
+param s.t = 8
+s = extrude(shoulder, t)
+param bore.r = 11
+sketch bore(on: t.end) {
+  c = circle((0, 0), r)
+}
+param i.l = 50
+i = cut(bore, l)
+param th.length = 30
+th = thread(on: t.end, spec: "M30x1.5", length: length)

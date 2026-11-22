@@ -1,3 +1,0 @@
-# long fine: 200 turns outside
-rod: extrude 110 circle 0 0 10
-thread M20x0.5 -xy at 0 0 110 ext 100

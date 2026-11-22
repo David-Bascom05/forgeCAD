@@ -1,0 +1,42 @@
+# a cross hole through a thread, then an oblique one
+shared w = 30
+shared h = 40
+param plan.ax = 1
+param plan.ay = 1
+sketch plan(on: xy) {
+  outline = rect(center: (0, 0), size: (w, w))
+  yax = line((0, 0), (0, ay), construction: true)
+  xax = line((0, 0), (ax, 0), construction: true)
+}
+b = extrude(plan, h)
+sketch top(on: b.end) {
+  c = pt(0, 0)
+}
+param hole1.d = 10.106
+param hole1.major = 12
+param hole1.pitch = 1.75
+hole1 = hole(at: top.c, d: d, depth: thru, thread: (major, pitch))
+thread1 = thread(hole: hole1, length: "full")
+# across, on the plane x = 0
+param crossing.z = 20
+param crossing.r = 2.5
+sketch crossing(on: rotate(plan, about: plan.yax, by: 90deg)) {
+  c = circle((0, z), r)
+}
+param crossbore.d = 40
+crossbore = cut(crossing, sym(d))
+# oblique: a bore 30 deep along (0.6, 0, 0.8) from (-12, 0, 8), its circle's x along (0.8, 0, -0.6)
+param front.p0 = (-12, 8)
+param front.n = (0.6, 0.8)
+param front.x = (0.8, -0.6)
+sketch front(on: rotate(plan, about: plan.xax, by: 90deg)) {
+  o = pt(p0[0], p0[1])
+  nt = pt(p0[0] + n[0], p0[1] + n[1])
+  xt = pt(p0[0] + x[0], p0[1] + x[1])
+}
+param slant.r = 2
+sketch slant(on: plane(at: front.o, normal: axis(front.o, front.nt), x: axis(front.o, front.xt))) {
+  c = circle((0, 0), r)
+}
+param oblique.d = 30
+oblique = cut(slant, -d)

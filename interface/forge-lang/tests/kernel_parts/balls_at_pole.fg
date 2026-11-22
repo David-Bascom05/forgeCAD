@@ -1,0 +1,33 @@
+# Balls whose seams meet at a sphere's pole: once failed to mesh (ConstraintsIntersect).
+sketch s1(on: xy) {
+  r1 = rect(corner: (0, 0), size: (60, 40))
+}
+extrude1 = extrude(s1, 10, new: true)
+sketch d2(on: offset(xy, 10)) {
+  p = pt(28.3, 38.3)
+}
+sketch s3(on: plane(at: d2.p, normal: Y, x: X)) {
+  c = pt(0, 0)
+}
+ball1 = ball(s3.c, 5.9)
+sketch d4(on: offset(xy, 10)) {
+  p = pt(28.29, 32.44)
+}
+sketch s5(on: plane(at: d4.p, normal: Y, x: X)) {
+  c = pt(0, 0)
+}
+ball2 = ball(s5.c, 2.93)
+sketch d6(on: offset(xy, -1)) {
+  p = pt(28.29, 32.44)
+}
+sketch s7(on: plane(at: d6.p, normal: Z, x: X)) {
+  c1 = circle((0, 0), 1)
+}
+cut1 = cut(s7, -20)
+sketch d8(on: offset(xy, 10)) {
+  p = pt(31.3, 34.7)
+}
+sketch s9(on: plane(at: d8.p, normal: Y, x: X)) {
+  c = pt(0, 0)
+}
+ball3 = ball(s9.c, 3.9, cut: true)

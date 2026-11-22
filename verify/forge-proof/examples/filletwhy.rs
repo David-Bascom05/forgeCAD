@@ -1,6 +1,5 @@
-//! Why a part's fillet is refused: filletwhy FILE.fc. Takes the refused fillet to pieces: each edge
+//! Why a part's fillet is refused: filletwhy FILE.fg. Takes the refused fillet to pieces: each edge
 //! alone, then the smallest set of edges still refused, with the geometry round what it blames.
-use forge_agent::model::Model;
 use forge_geom::{Curve, CurveGeom, Surface, SurfaceGeom};
 use forge_model::Feature;
 use forge_ops::{FilletEdge, FilletError, fillet};
@@ -101,17 +100,21 @@ fn kind(e: &FilletError) -> String {
 fn main() {
     let file = std::env::args().nth(1).expect("a part file");
     let src = std::fs::read_to_string(&file).expect("readable");
-    let m = Model::new(&src);
-    let Some(f) = &m.error else {
+    let m = forge_lang::fuzz::build(&src);
+    let Some(f) = m.error() else {
         println!("built");
         return;
     };
-    println!("refused: line {}: {}", m.lines[f.at].no, f.msg);
-    let Some(Feature::Fillet { edges, .. }) = &m.refused else {
+    println!(
+        "refused: line {}: {}",
+        m.line_of(&src, f) + 1,
+        forge_lang::fuzz::message(f)
+    );
+    let Some(Feature::Fillet { edges, .. }) = m.refused() else {
         println!("not a fillet");
         return;
     };
-    let Some(body) = m.body().map(|b| if b.dead > 0 { b.compact() } else { b.clone() }) else {
+    let Some(body) = m.body().map(|b| if b.dead > 0 { b.compact() } else { b }) else {
         return;
     };
     let picks: Vec<FilletEdge> = edges

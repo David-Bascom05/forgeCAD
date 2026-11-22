@@ -1,8 +1,8 @@
-//! One part file's fate as one JSON line, for tools/find-parts (which runs each part in its own
-//! process, so a hang, an abort or a stack overflow costs one case).
-//! cargo run --release -p forge-proof --example judge -- FILE.fc | gen SEED LEN [KINDS]
-//! gen: a random history; each failure's kind, part, then the history's CPU time.
-use forge_agent::history::{Verdict, judge_model, run_kinds};
+//! One .fg part file's fate as one JSON line, for tools/find-parts (which runs each part in its
+//! own process, so a hang, an abort or a stack overflow costs one case).
+//! cargo run --release -p forge-proof --example judge -- FILE.fg | gen SEED LEN [KINDS]
+//! gen: a random program (forge_lang::fuzz); each failure's kind, part, then its CPU time.
+use forge_lang::fuzz::{Verdict, judge_built, run_kinds};
 use std::sync::Mutex;
 
 static WHERE: Mutex<String> = Mutex::new(String::new());
@@ -20,6 +20,29 @@ fn esc(s: &str) -> String {
         }
     }
     o
+}
+
+/// The part's box: its meshed triangles (a dome's top) with its lines' and circles' tight boxes.
+fn tight_box(b: &forge_topo::Body) -> Option<forge_math::Box3> {
+    use forge_math::Box3;
+    let b = b.compact();
+    let t = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        forge_mesh::tessellate(&b, &forge_mesh::Quality::default())
+    }))
+    .ok()?
+    .ok()?;
+    let mut bb = t
+        .positions
+        .iter()
+        .fold(Box3::EMPTY, |a, p| a.hull(&Box3::from_point(*p)));
+    for e in b.edge_ids() {
+        bb = match &b.edge(e).curve {
+            forge_geom::Curve::Line(_) => bb.hull(&b.edge_box(e)),
+            forge_geom::Curve::Circle(c) => bb.hull(&c.tight_box(b.edge(e).range)),
+            _ => bb,
+        };
+    }
+    Some(bb)
 }
 
 // utime + stime from /proc/self/stat, after the command's closing bracket
@@ -61,7 +84,7 @@ fn main() {
             *w = format!("{}:{}", l.file(), l.line());
         }
     }));
-    let (v, mut m) = judge_model(&src);
+    let (v, m) = judge_built(&src);
     let (word, sig) = match &v {
         Verdict::Ok => ("ok", String::new()),
         Verdict::Refused(s) => ("refused", s.clone()),
@@ -72,7 +95,7 @@ fn main() {
         esc(&sig),
         esc(&WHERE.lock().map(|w| w.clone()).unwrap_or_default())
     );
-    if let Some(m) = &mut m {
+    if let Some(m) = &m {
         let solids = m.solids_after(m.built());
         let mut vol = Some(0.0);
         let mut area = 0.0;
@@ -95,7 +118,7 @@ fn main() {
         }
         let multi = matches!(&v, Verdict::Fail(s) if s.starts_with("nary: the part is"));
         if (multi || matches!(v, Verdict::Ok))
-            && let Ok((_, _, b, _, _)) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| m.stats()))
+            && let Some(b) = m.body().and_then(|b| tight_box(&b))
         {
             let (x, y, z) = (b.x, b.y, b.z);
             o += &format!(
@@ -114,8 +137,12 @@ fn main() {
                 );
             }
         }
-        if let Some(f) = &m.error {
-            o += &format!(",\"line\":{},\"msg\":\"{}\"", f.at, esc(&f.msg));
+        if let Some(f) = m.error() {
+            o += &format!(
+                ",\"line\":{},\"msg\":\"{}\"",
+                m.line_of(&src, f),
+                esc(&forge_lang::fuzz::message(f))
+            );
         }
     }
     println!("{o},\"cpu\":{}}}", cpu());

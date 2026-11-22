@@ -1,12 +1,12 @@
-//! Is a ZeroThickness refusal true? Rebuilds the part up to the refused line and the line's tool on
-//! its own, then counts the pieces of the result's material on a small sphere about the reported
+//! Is a ZeroThickness refusal true? Rebuilds the part up to the refused feature and the feature's tool
+//! on its own, then counts the pieces of the result's material on a small sphere about the reported
 //! point (Fibonacci samples, joined when neighbours). Two or more pieces: material really meets
 //! itself there. One: the refusal is false (research/find-parts). Its two sectors meet at the poles of
 //! a line of contact, so the set is eroded by one neighbour first.
-//! cargo run --release -p forge-proof --example pinch -- FILE.fc ..
-use forge_agent::model::Model;
+//! cargo run --release -p forge-proof --example pinch -- FILE.fg ..
 use forge_bool::{Index, Where};
 use forge_math::{Point3, Vec3};
+use forge_model::{Combine, Feature, Part};
 
 // the three numbers after "at (" in a refusal, or after x: y: z: in a debug form
 fn point(s: &str) -> Option<Point3> {
@@ -71,37 +71,50 @@ fn pieces(at: Point3, r: f64, inside: &dyn Fn(Point3) -> bool) -> usize {
     (0..on.len()).filter(|&i| find(&mut group, i) == i).count()
 }
 
+/// A refused feature as a tool on its own (a new body), and how it was to combine; None for a
+/// feature with no tool of its own (a combine of bodies, a finishing op).
+fn alone(f: &Feature) -> Option<(Feature, &'static str)> {
+    let word = |op: Combine| match op {
+        Combine::Cut => "cut",
+        Combine::Keep => "keep",
+        _ => "add",
+    };
+    let mut t = f.clone();
+    let op = match &mut t {
+        Feature::Extrude { op, .. } | Feature::Revolve { op, .. } | Feature::Ball { op, .. } => {
+            std::mem::replace(op, Combine::New)
+        }
+        Feature::Sweep(s) => std::mem::replace(&mut s.op, Combine::New),
+        Feature::Coil(c) => std::mem::replace(&mut c.op, Combine::New),
+        Feature::Loft(l) => std::mem::replace(&mut l.op, Combine::New),
+        Feature::Text(x) => std::mem::replace(&mut x.op, Combine::New),
+        _ => return None,
+    };
+    Some((t, word(op)))
+}
+
 fn main() {
     for file in std::env::args().skip(1) {
         let src = std::fs::read_to_string(&file).expect("read");
-        let m = Model::new(&src);
-        let Some(err) = &m.error else {
+        let m = forge_lang::fuzz::build(&src);
+        let Some(err) = m.error() else {
             println!("{file} builds");
             continue;
         };
-        let Some(at) = point(&err.msg) else {
-            println!("{file} no point: {}", err.msg);
+        let msg = forge_lang::fuzz::message(err);
+        let Some(at) = point(&msg) else {
+            println!("{file} no point: {msg}");
             continue;
         };
-        let lines: Vec<&str> = src.lines().collect();
-        let line = lines[err.at];
-        let body = line.split_once(": ").map_or(line, |b| b.1);
-        let mut toks: Vec<&str> = body.split_whitespace().collect();
-        let combine = toks[0] == "combine";
-        let op = if !combine && ["add", "cut", "keep", "new"].contains(&toks[1]) {
-            toks.remove(1)
-        } else {
-            "add"
+        let refused = m.refused();
+        let combine = refused.is_some_and(|f| matches!(f, Feature::Body(_)));
+        let (tool, op) = match refused.and_then(alone) {
+            Some((t, op)) if !combine => (Some(t), op),
+            _ => (None, "add"),
         };
-        if toks[toks.len() - 2] == "in" {
-            toks.truncate(toks.len() - 2);
-        }
-        let tool = if combine {
-            None
-        } else {
-            Some(Model::new(&toks.join(" ")))
-        };
-        let tc = tool.as_ref().and_then(|t| t.body()).map(|b| b.compact());
+        let tc = tool
+            .and_then(|t| Part { features: vec![t] }.regenerate().ok())
+            .map(|b| b.compact());
         let ti = tc.as_ref().map(Index::new);
         let solids: Vec<_> = m
             .solids_after(m.built())

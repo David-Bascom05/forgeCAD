@@ -17,7 +17,7 @@ const USAGE: &str =
   [--size WxH] [--lod-px T] [--style realistic|shaded|shaded-edges|shaded-hidden|wireframe|wireframe-hidden|wireframe-visible|monochrome|illustration] [--no-ao] [--settings FILE.toml] [--section x|y|z] [--explode T] [--no-cache] [--shot FILE.ppm [--select X Y]..] [--yaw R --pitch R --dist X]
   An assembly .fg with --shot: [--explode T] [--view iso|front|back|left|right|top|bottom] [--trails] [--anim N]
   [--export FILE] [--levels] [--dims] [--drag-bench [--drag-parts A,B] [--ticks N]]
-PART: a bench part (default crank). --stress: all 15 bench parts placed N times. --moving N: N of
+PART: a bench part's Forge port (default crank). --stress: all 15 bench parts placed N times. --moving N: N of
 them swing on joints every frame. --hover: --bench also picks under a wandering pixel each frame. --bench: a fixed
 orbit, frame times on stdout, headless unless --window. --shot: one headless frame.
 
@@ -26,7 +26,8 @@ zooms at the cursor. Click selects, ctrl or shift + click adds; one or two selec
 measured. Home or F6 home, A fit all, F fit selection, Esc clear. View cube: click to go, drag to
 orbit. L the next visual style. O occlusion. S section x, y, z, off; ctrl + wheel moves it. E explode.
 
---dims lists the numbers a part has. --drag-bench: drags over every bench part, value change to frame, headless.";
+--dims lists the numbers a part has: its params. --drag-bench: sets a number of every bench part again and
+again, value change to frame, headless.";
 
 struct Args {
     part: String,
@@ -211,7 +212,7 @@ fn stage(a: &Args) -> Result<Stage, String> {
         });
     }
     let names: Vec<&str> = if a.stress > 0 {
-        forge_agent::bench::NAMES.to_vec()
+        forge_render::load::BENCH.to_vec()
     } else {
         vec![a.part.as_str()]
     };
@@ -487,8 +488,8 @@ fn run() -> Result<(), String> {
     if a.dims {
         // a closed pipe (`| head`) is no error
         let mut out = std::io::stdout().lock();
-        for d in forge_render::load::tool_part(&a.part)?.dims() {
-            if writeln!(out, "{} = {}", d.name, forge_agent::short(d.value)).is_err() {
+        for (name, value) in forge_render::dragbench::dims(&a.part)? {
+            if writeln!(out, "{name} = {value}").is_err() {
                 break;
             }
         }
