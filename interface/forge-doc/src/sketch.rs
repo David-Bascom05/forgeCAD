@@ -331,8 +331,13 @@ pub fn build_on<'n>(
     src: &Sources<'n>,
     was: Option<&Sketch>,
 ) -> R<Sketch> {
-    if let Some(s) = was.and_then(|w| values_only(plane, &rows, num, w)) {
-        return Ok(Sketch { rows, ..s });
+    if let Some(mut s) = was.and_then(|w| values_only(plane, &rows, num, w)) {
+        let f = FcRows {
+            rows,
+            ..fc(&s).clone()
+        };
+        s.note = forge_model::Note::new(f);
+        return Ok(s);
     }
     let mut b = B {
         s: forge_sketch::Sketch::new(plane),
@@ -418,13 +423,15 @@ pub fn build_on<'n>(
         plane,
         on: None,
         at: None,
-        rows,
         solved: b.s,
-        driven,
         names: b.names,
-        written,
-        dims,
-        driven_of,
+        note: forge_model::Note::new(FcRows {
+            rows,
+            driven,
+            written,
+            dims,
+            driven_of,
+        }),
     })
 }
 
@@ -432,7 +439,7 @@ pub fn build_on<'n>(
 /// dimensions set in place and solved from the coordinates as written, which is what reading
 /// the rows afresh gives. None when anything else changed, or it fails (the full read says why).
 fn values_only(plane: Frame, rows: &[Vec<String>], num: &Num, was: &Sketch) -> Option<Sketch> {
-    if was.plane != plane || was.rows.len() != rows.len() {
+    if was.plane != plane || fc(was).rows.len() != rows.len() {
         return None;
     }
     // every token but a dimension's value is a number, a name or a word, as before
@@ -442,7 +449,7 @@ fn values_only(plane: Frame, rows: &[Vec<String>], num: &Num, was: &Sketch) -> O
         "cw", "cons", "open", "spline", "bspline", "ellipse", "earc", "knots", "weights",
     ];
     let fixed = |t: &str| t.parse::<f64>().is_ok() || is_ref(t) || WORDS.contains(&t);
-    for (a, b) in rows.iter().zip(&was.rows) {
+    for (a, b) in rows.iter().zip(&fc(was).rows) {
         let dim = DIMENSIONS.contains(&a[0].as_str());
         let n = a.len() - dim as usize;
         if a.len() != b.len() || a[..n] != b[..n] || !a[..n].iter().all(|t| fixed(t)) {
@@ -450,8 +457,8 @@ fn values_only(plane: Frame, rows: &[Vec<String>], num: &Num, was: &Sketch) -> O
         }
     }
     let mut q = was.solved.clone();
-    q.set_params(&was.written).ok()?;
-    for &(k, c) in &was.dims {
+    q.set_params(&fc(was).written).ok()?;
+    for &(k, c) in &fc(was).dims {
         let row = &rows[k];
         let want = if row[0] == "ang" { Want::Angle } else { Want::Len };
         q.set_value(c, num(row.last()?, want).ok()?).ok()?;
@@ -469,24 +476,48 @@ fn values_only(plane: Frame, rows: &[Vec<String>], num: &Num, was: &Sketch) -> O
         pins: Vec::new(),
         flats: Vec::new(),
     };
-    let driven = was
+    let driven = fc(was)
         .driven
         .iter()
-        .zip(&was.driven_of)
+        .zip(&fc(was).driven_of)
         .map(|(d, (kw, es))| b.measure(kw, es).ok().map(|v| (d.0, v)))
         .collect::<Option<Vec<_>>>()?;
+    let w = fc(was);
     Some(Sketch {
         plane,
         on: None,
         at: None,
-        rows: Vec::new(),
         solved: b.s,
-        driven,
         names: b.names,
-        written: was.written.clone(),
-        dims: was.dims.clone(),
-        driven_of: was.driven_of.clone(),
+        note: forge_model::Note::new(FcRows {
+            rows: Vec::new(),
+            driven,
+            written: w.written.clone(),
+            dims: w.dims.clone(),
+            driven_of: w.driven_of.clone(),
+        }),
     })
+}
+
+/// What a sketch read from `.fc` rows keeps with it (its note): the rows as written, its driven
+/// dimensions' values, and what a re-read with only dimension values changed starts from.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct FcRows {
+    pub rows: Vec<Vec<String>>,
+    /// Each driven dimension (`ref dist l1`): its row and the value it measures (mm, or radians
+    /// for an angle).
+    pub driven: Vec<(usize, f64)>,
+    pub written: Vec<f64>,
+    pub dims: Vec<(usize, ConstraintId)>,
+    pub driven_of: Vec<(String, Vec<EntityId>)>,
+}
+
+/// A sketch's `.fc` rows and what they keep (none, for a sketch not read from rows).
+pub fn fc(s: &Sketch) -> &FcRows {
+    static NONE: std::sync::OnceLock<FcRows> = std::sync::OnceLock::new();
+    s.note
+        .get::<FcRows>()
+        .unwrap_or_else(|| NONE.get_or_init(FcRows::default))
 }
 
 /// The rows that dimension, and which take `ref`.
@@ -1404,7 +1435,7 @@ pub fn profile(s: &Sketch, through: Option<&str>) -> R<Profile> {
                 .ok_or_else(|| format!("{t} is not on the outside of a region"))?
         }
     };
-    let listed = ids_of_rows(&s.rows)?;
+    let listed = ids_of_rows(&fc(s).rows)?;
     for l in &mut p.loops {
         for g in &mut l.segments {
             // an arc dimensioned by a sketch made from a line has that radius exactly, not the one

@@ -457,14 +457,26 @@ fn drawing_tabs_through_its_dimensions_from_the_start_and_typing_goes_in_the_act
     step_some(&mut h);
     let m = h.gui.shell.sketch.as_ref().unwrap();
     assert!(
-        m.rows
-            .iter()
-            .any(|r| r.starts_with("hdist") && r.ends_with(" 25")),
+        m.rows.iter().any(|r| matches!(
+            r,
+            forge_render::shell::sketching::rows::Row::Dim(
+                forge_render::shell::sketching::rows::D::HDist,
+                _,
+                Some(v)
+            ) if v.num() == Some(25.0)
+        )),
         "{:?}",
         m.rows
     );
     assert!(
-        m.rows.iter().any(|r| r.starts_with("vdist") && r.ends_with(" 7")),
+        m.rows.iter().any(|r| matches!(
+            r,
+            forge_render::shell::sketching::rows::Row::Dim(
+                forge_render::shell::sketching::rows::D::VDist,
+                _,
+                Some(v)
+            ) if v.num() == Some(7.0)
+        )),
         "{:?}",
         m.rows
     );
@@ -628,8 +640,13 @@ fn a_constraint_tool_lights_what_it_would_pick_and_a_mark_lights_what_it_ties() 
     };
     sketch_on(&mut h, "xy");
     let m = h.gui.shell.sketch.as_mut().unwrap();
-    for r in ["line 0 0 40 0", "line 0 20 40 20", "par l1 l2"] {
-        assert!(m.add(r.into()), "{r}: {:?}", m.error);
+    use forge_render::shell::sketching::rows::{Pt, Ref, Row};
+    for r in [
+        Row::Line(Pt::at(0.0, 0.0), Pt::at(40.0, 0.0)),
+        Row::Line(Pt::at(0.0, 20.0), Pt::at(40.0, 20.0)),
+        Row::Par(Ref::to("l1"), Ref::to("l2")),
+    ] {
+        assert!(m.add(r.clone()), "{r}: {:?}", m.error);
     }
     for _ in 0..80 {
         h.step();
@@ -649,14 +666,11 @@ fn a_constraint_tool_lights_what_it_would_pick_and_a_mark_lights_what_it_ties() 
     let g = h
         .gui
         .shell
-        .place("sketch:glyph:par l1 l2")
+        .place("sketch:glyph:parallel(l1, l2)")
         .expect("the constraint's mark");
     h.move_to(g.center().x, g.center().y);
     step_some(&mut h);
-    assert_eq!(
-        h.gui.shell.sketch.as_ref().unwrap().glyph_over.as_deref(),
-        Some("par l1 l2")
-    );
+    assert_eq!(h.gui.shell.sketch.as_ref().unwrap().glyph_over, Some(2));
 }
 
 /// Words on the cube's faces toward the eye read left to right and upward.

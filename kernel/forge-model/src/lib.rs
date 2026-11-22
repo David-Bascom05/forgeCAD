@@ -42,7 +42,7 @@ use forge_ops::{
 use forge_topo::{Body, Name};
 pub use hole::{End, Head, Hole, HoleError, Thread};
 pub use import::Import;
-pub use params::{On, Param, Sketch, Unit};
+pub use params::{Note, On, Param, Record, Sketch, Unit};
 pub use pattern::{
     At, Layout, PatternError, Row, Source, body_motion, copy_sources, instance_name, placements,
 };

@@ -554,7 +554,8 @@ fn new_extrude_with_no_sketch_free_starts_one_and_a_sketch_is_picked_in_the_view
     point_at(&mut h, [20.0, 20.0, 20.0]);
     assert!(h.gui.shell.sketch.is_some(), "{}", h.gui.shell.status);
     let m = h.gui.shell.sketch.as_mut().unwrap();
-    assert!(m.add("circle 5 5 3".into()), "{:?}", m.error);
+    use forge_render::shell::sketching::rows::{Pt, Row, V};
+    assert!(m.add(Row::Circle(Pt::at(5.0, 5.0), V::N(3.0))), "{:?}", m.error);
     h.gui.shell.out.push(Action::FinishSketch);
     h.step();
     h.step();
@@ -656,7 +657,13 @@ sketch lines(on: base.end) {
         h.step();
     }
     let m = h.gui.shell.sketch.as_ref().expect("the sketch open");
-    assert!(!m.rows.iter().any(|r| r.starts_with("fix")), "{:?}", m.rows);
+    assert!(
+        !m.rows
+            .iter()
+            .any(|r| matches!(r, forge_render::shell::sketching::rows::Row::Fix(_))),
+        "{:?}",
+        m.rows
+    );
     for _ in 0..40 {
         h.step();
         std::thread::sleep(std::time::Duration::from_millis(10));

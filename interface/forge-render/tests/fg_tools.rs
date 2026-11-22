@@ -540,7 +540,11 @@ fn a_sketch_drawn_on_a_face_is_written_in_forge_and_extruded() {
     point_at(&mut h, [2.0, 20.0, 20.0]);
     point_at(&mut h, [8.0, 30.0, 20.0]);
     let rows = h.gui.shell.sketch.as_ref().unwrap().rows.clone();
-    assert!(rows.iter().any(|r| r.starts_with("rect")), "{rows:?}");
+    assert!(
+        rows.iter()
+            .any(|r| matches!(r, forge_render::shell::sketching::rows::Row::Rect(..))),
+        "{rows:?}"
+    );
     h.gui.shell.out.push(Action::FinishSketch);
     h.step();
     assert!(
@@ -578,7 +582,7 @@ fn a_sketch_drawn_on_a_face_is_written_in_forge_and_extruded() {
 
 #[test]
 fn project_geometry_takes_edges_and_faces_clicked_and_writes_forge_project() {
-    use forge_render::shell::sketching::{SkTool, rows};
+    use forge_render::shell::sketching::{SkTool, rows, rows::Row};
     let Some((mut h, _)) = open(PLAIN, "project") else {
         return;
     };
@@ -605,7 +609,7 @@ fn project_geometry_takes_edges_and_faces_clicked_and_writes_forge_project() {
         h.gui.shell.status
     );
     assert!(
-        m.rows[0].starts_with("project edge edges(between: "),
+        matches!(&m.rows[0], Row::Project { of, many: false, .. } if of.starts_with("edges(between: ")),
         "{:?}",
         m.rows
     );
@@ -616,7 +620,14 @@ fn project_geometry_takes_edges_and_faces_clicked_and_writes_forge_project() {
     point_at(&mut h, [30.0, 30.0, 20.0]);
     let m = h.gui.shell.sketch.as_ref().unwrap();
     assert_eq!(m.rows.len(), 2, "{:?} {:?}", m.rows, m.error);
-    assert_eq!(m.rows[1], "project edges base.end");
+    assert_eq!(
+        m.rows[1],
+        Row::Project {
+            of: "base.end".into(),
+            many: true,
+            approx: None
+        }
+    );
     assert!(m.error.is_none(), "{:?}", m.error);
     assert_eq!(rows::freedom(m.solved.as_ref().unwrap()).0, 0);
     point_at(&mut h, [30.0, 30.0, 20.0]);
@@ -647,7 +658,12 @@ fn project_geometry_takes_edges_and_faces_clicked_and_writes_forge_project() {
     h.gui.fg_edit_feature("sk1");
     let m = h.gui.shell.sketch.as_ref().expect("opened");
     assert!(m.error.is_none(), "{:?} {}", m.error, h.gui.shell.status);
-    assert_eq!(m.rows, ["project edge sk1_src1", "project edges sk1_src2"]);
+    let project = |of: &str, many: bool| Row::Project {
+        of: of.into(),
+        many,
+        approx: None,
+    };
+    assert_eq!(m.rows, [project("sk1_src1", false), project("sk1_src2", true)]);
     assert!(m.unchanged());
 }
 

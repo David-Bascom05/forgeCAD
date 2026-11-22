@@ -1,17 +1,18 @@
-//! The sketcher's working form: the rows its tools write (`line 0 0 20 0`, `rect X Y W H`,
-//! `hor l1`, `dist l1 20`, `project edge T`), built straight into a `forge_sketch::Sketch` and
-//! solved as the drawing changes, with the points, lines and regions the tools read back. The
-//! rows live only in the app while a sketch is open: `fgsketch` writes them as a Forge block and
-//! reads a block back into them. Values in a row are numbers, or Forge expressions read through
-//! the sketcher's `Num` (see `forge_value`).
+//! The sketcher's working form: a typed sketch, row after row (a line between two points, a
+//! rectangle, a horizontal constraint, a distance), built straight into a `forge_sketch::Sketch`
+//! and solved as the drawing changes, with the points, lines and regions the tools read back.
+//! Entities are named by their kind and count, as Forge names them (`l3` is the third line, `l3.a`
+//! its start, `c1` a circle, as a point its centre). The rows live only in the app while a sketch
+//! is open: `fgsketch` writes them as a Forge block and reads a block back into them. A value is a
+//! number, or Forge text (a param's name, an expression) read through the sketcher's `Num`.
 
 use forge_math::{Frame, Point2, dmath, tol};
-use forge_model::Sketch;
 use forge_ops::Profile;
 use forge_sketch::project::flat;
 pub use forge_sketch::project::{Flat, Source};
 use forge_sketch::{Constraint as C, ConstraintId, Entity, EntityId, ExtractError, SketchError, Status};
 use forge_topo::Name;
+use std::fmt;
 
 type R<T> = Result<T, String>;
 
@@ -24,8 +25,478 @@ pub enum Want {
     Count,
 }
 
-/// Reads a number token (a value or an expression) as the slot wants it.
+/// Reads a value's Forge text (a param's name, an expression) as the slot wants it.
 pub type Num<'a> = dyn Fn(&str, Want) -> R<f64> + 'a;
+
+/// A value in a row: a number, or Forge text read when the sketch is solved.
+#[derive(Clone, Debug, PartialEq)]
+pub enum V {
+    N(f64),
+    X(String),
+}
+
+impl V {
+    /// The value `text` writes: a number if it is one.
+    pub fn of(text: &str) -> V {
+        match text.trim().parse::<f64>() {
+            Ok(v) => V::N(v),
+            Err(_) => V::X(text.trim().to_string()),
+        }
+    }
+
+    pub fn num(&self) -> Option<f64> {
+        match self {
+            V::N(v) => Some(*v),
+            V::X(_) => None,
+        }
+    }
+
+    /// Its number as the slot wants it (degrees in the row, radians out).
+    fn read(&self, num: &Num, want: Want) -> R<f64> {
+        match self {
+            V::N(v) => Ok(match want {
+                Want::Angle => v * core::f64::consts::PI / 180.0,
+                _ => *v,
+            }),
+            V::X(t) => num(t, want),
+        }
+    }
+}
+
+impl From<f64> for V {
+    fn from(v: f64) -> V {
+        V::N(v)
+    }
+}
+
+impl fmt::Display for V {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            V::N(v) => write!(f, "{v}"),
+            V::X(t) => write!(f, "{t}"),
+        }
+    }
+}
+
+/// Which point of an entity a reference means, or the entity itself.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Part {
+    Whole,
+    /// A line's or arc's start (a spline's first point).
+    A,
+    /// Its end.
+    B,
+    /// A circle's, arc's or ellipse's centre.
+    C,
+    /// An ellipse's major axis end.
+    M,
+    /// A spline's k-th point.
+    K(usize),
+}
+
+/// An entity of the sketch by its name (`l3`, `c1`, `j2`, `o` the origin), or one of its points.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Ref {
+    pub base: String,
+    pub part: Part,
+}
+
+impl Ref {
+    pub fn to(base: &str) -> Ref {
+        Ref {
+            base: base.to_string(),
+            part: Part::Whole,
+        }
+    }
+    pub fn a(base: &str) -> Ref {
+        Ref {
+            base: base.to_string(),
+            part: Part::A,
+        }
+    }
+    pub fn b(base: &str) -> Ref {
+        Ref {
+            base: base.to_string(),
+            part: Part::B,
+        }
+    }
+    pub fn center(base: &str) -> Ref {
+        Ref {
+            base: base.to_string(),
+            part: Part::C,
+        }
+    }
+
+    /// The reference a name of the sketch's points or entities is (`l3`, `l3.a`, `s1.2`, `e1.m`).
+    pub fn name(t: &str) -> Ref {
+        let (base, part) = t.split_once('.').unwrap_or((t, ""));
+        let part = match part {
+            "" => Part::Whole,
+            "a" => Part::A,
+            "b" => Part::B,
+            "c" => Part::C,
+            "m" => Part::M,
+            k => k.parse().map_or(Part::Whole, Part::K),
+        };
+        Ref {
+            base: base.to_string(),
+            part,
+        }
+    }
+
+    /// A point of an entity rather than the entity.
+    pub fn is_point(&self) -> bool {
+        self.part != Part::Whole
+    }
+}
+
+impl fmt::Display for Ref {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match &self.part {
+            Part::Whole => write!(f, "{}", self.base),
+            Part::A => write!(f, "{}.a", self.base),
+            Part::B => write!(f, "{}.b", self.base),
+            Part::C => write!(f, "{}.c", self.base),
+            Part::M => write!(f, "{}.m", self.base),
+            Part::K(k) => write!(f, "{}.{k}", self.base),
+        }
+    }
+}
+
+/// A point a geometry row runs through: a free one there (where the solver starts), or one the
+/// sketch has.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Pt {
+    At(V, V),
+    R(Ref),
+}
+
+impl Pt {
+    pub fn at(x: f64, y: f64) -> Pt {
+        Pt::At(V::N(x), V::N(y))
+    }
+    pub fn of(name: &str) -> Pt {
+        Pt::R(Ref::name(name))
+    }
+    /// The sketch's point it is, if it is one.
+    pub fn named(&self) -> Option<&Ref> {
+        match self {
+            Pt::R(r) => Some(r),
+            Pt::At(..) => None,
+        }
+    }
+}
+
+impl fmt::Display for Pt {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Pt::At(x, y) => write!(f, "near({x}, {y})"),
+            Pt::R(r) => write!(f, "{r}"),
+        }
+    }
+}
+
+/// What a dimension sets.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum D {
+    /// A line's length, or between two points, or a point and a line.
+    Dist,
+    /// The second point's x less the first's.
+    HDist,
+    VDist,
+    Rad,
+    Dia,
+    /// From the first line to the second, counter-clockwise.
+    Ang,
+}
+
+impl D {
+    fn word(self) -> &'static str {
+        match self {
+            D::Dist => "distance",
+            D::HDist => "hdistance",
+            D::VDist => "vdistance",
+            D::Rad => "radius",
+            D::Dia => "diameter",
+            D::Ang => "angle",
+        }
+    }
+}
+
+/// One row of the sketch: geometry (named by its kind and count), a constraint or a dimension.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Row {
+    Pt(Pt),
+    Line(Pt, Pt),
+    /// Lines through the points in turn, back to the first unless open.
+    Poly(Vec<Pt>, bool),
+    /// Corner, width and height: four lines, level and plumb.
+    Rect(V, V, V, V),
+    Circle(Pt, V),
+    /// Centre, start, end; clockwise if so.
+    Arc(Pt, Pt, Pt, bool),
+    /// The cubic through the points; open if so.
+    Spline(Vec<Pt>, bool),
+    /// On control vertices of this degree; open if so.
+    BSpline(V, Vec<Pt>, bool),
+    /// Centre, an end of the major axis, the semi-minor axis.
+    Ellipse(Pt, Pt, V),
+    /// The part's geometry `of` names (Forge text) laid on the plane and held there: one curve
+    /// rows may name (`j1`), or `many` a face's boundary no row names; fitted within `approx`.
+    Project {
+        of: String,
+        many: bool,
+        approx: Option<V>,
+    },
+    /// The geometry of a row as construction: in no region.
+    Cons(Box<Row>),
+    Fix(Vec<Ref>),
+    Co(Ref, Ref),
+    Hor(Vec<Ref>),
+    Ver(Vec<Ref>),
+    Par(Ref, Ref),
+    Perp(Ref, Ref),
+    Tan(Ref, Ref),
+    Conc(Ref, Ref),
+    Colin(Ref, Ref),
+    Eq(Vec<Ref>),
+    Mid(Ref, Ref),
+    Sym(Ref, Ref, Ref),
+    /// A dimension on these, to this value; with none, driven: it shows what it measures.
+    Dim(D, Vec<Ref>, Option<V>),
+}
+
+impl Row {
+    /// The row without `Cons`.
+    pub fn plain(&self) -> &Row {
+        match self {
+            Row::Cons(r) => r.plain(),
+            r => r,
+        }
+    }
+
+    pub fn is_cons(&self) -> bool {
+        matches!(self, Row::Cons(_))
+    }
+
+    /// The row as construction geometry.
+    pub fn cons(self) -> Row {
+        match self {
+            r @ Row::Cons(_) => r,
+            r => Row::Cons(Box::new(r)),
+        }
+    }
+
+    /// The kinds of the names it makes, in order (a rect: four lines).
+    pub fn made(&self) -> Vec<char> {
+        match self {
+            Row::Pt(_) => vec!['p'],
+            Row::Line(..) => vec!['l'],
+            Row::Circle(..) => vec!['c'],
+            Row::Arc(..) => vec!['a'],
+            Row::Spline(..) | Row::BSpline(..) => vec!['s'],
+            Row::Ellipse(..) => vec!['e'],
+            Row::Rect(..) => vec!['l'; 4],
+            Row::Poly(pts, open) => vec!['l'; pts.len() - usize::from(*open)],
+            Row::Project { many: false, .. } => vec!['j'],
+            Row::Cons(r) => r.made(),
+            _ => vec![],
+        }
+    }
+
+    /// Its points, as written.
+    pub fn points(&self) -> Vec<&Pt> {
+        match self {
+            Row::Pt(p) => vec![p],
+            Row::Line(a, b) => vec![a, b],
+            Row::Circle(c, _) => vec![c],
+            Row::Arc(c, a, b, _) => vec![c, a, b],
+            Row::Ellipse(c, m, _) => vec![c, m],
+            Row::Poly(ps, _) | Row::Spline(ps, _) | Row::BSpline(_, ps, _) => ps.iter().collect(),
+            Row::Cons(r) => r.points(),
+            _ => vec![],
+        }
+    }
+
+    pub fn points_mut(&mut self) -> Vec<&mut Pt> {
+        match self {
+            Row::Pt(p) => vec![p],
+            Row::Line(a, b) => vec![a, b],
+            Row::Circle(c, _) => vec![c],
+            Row::Arc(c, a, b, _) => vec![c, a, b],
+            Row::Ellipse(c, m, _) => vec![c, m],
+            Row::Poly(ps, _) | Row::Spline(ps, _) | Row::BSpline(_, ps, _) => ps.iter_mut().collect(),
+            Row::Cons(r) => r.points_mut(),
+            _ => vec![],
+        }
+    }
+
+    /// Every reference it makes to the sketch's entities and points, in order.
+    pub fn refs(&self) -> Vec<&Ref> {
+        let mut out: Vec<&Ref> = self.points().into_iter().filter_map(Pt::named).collect();
+        match self {
+            Row::Fix(rs) | Row::Hor(rs) | Row::Ver(rs) | Row::Eq(rs) | Row::Dim(_, rs, _) => out.extend(rs),
+            Row::Co(a, b)
+            | Row::Par(a, b)
+            | Row::Perp(a, b)
+            | Row::Tan(a, b)
+            | Row::Conc(a, b)
+            | Row::Colin(a, b)
+            | Row::Mid(a, b) => out.extend([a, b]),
+            Row::Sym(a, b, c) => out.extend([a, b, c]),
+            _ => {}
+        }
+        out
+    }
+
+    pub fn refs_mut(&mut self) -> Vec<&mut Ref> {
+        match self {
+            Row::Fix(rs) | Row::Hor(rs) | Row::Ver(rs) | Row::Eq(rs) | Row::Dim(_, rs, _) => {
+                rs.iter_mut().collect()
+            }
+            Row::Co(a, b)
+            | Row::Par(a, b)
+            | Row::Perp(a, b)
+            | Row::Tan(a, b)
+            | Row::Conc(a, b)
+            | Row::Colin(a, b)
+            | Row::Mid(a, b) => vec![a, b],
+            Row::Sym(a, b, c) => vec![a, b, c],
+            r => r
+                .points_mut()
+                .into_iter()
+                .filter_map(|p| match p {
+                    Pt::R(r) => Some(r),
+                    Pt::At(..) => None,
+                })
+                .collect(),
+        }
+    }
+
+    /// Every value it writes, in order: its points' numbers, then its sizes.
+    pub fn values(&self) -> Vec<&V> {
+        fn pts<'a>(out: &mut Vec<&'a V>, ps: &[&'a Pt]) {
+            for p in ps {
+                if let Pt::At(x, y) = p {
+                    out.extend([x, y]);
+                }
+            }
+        }
+        let mut out: Vec<&V> = vec![];
+        match self {
+            Row::Rect(x, y, w, h) => out.extend([x, y, w, h]),
+            Row::Circle(c, r) => {
+                pts(&mut out, &[c]);
+                out.push(r);
+            }
+            Row::Ellipse(c, m, b) => {
+                pts(&mut out, &[c, m]);
+                out.push(b);
+            }
+            Row::BSpline(d, ps, _) => {
+                out.push(d);
+                pts(&mut out, &ps.iter().collect::<Vec<_>>());
+            }
+            Row::Project { approx, .. } => out.extend(approx),
+            Row::Dim(_, _, v) => out.extend(v),
+            Row::Cons(r) => return r.values(),
+            r => pts(&mut out, &r.points()),
+        }
+        out
+    }
+
+    pub fn values_mut(&mut self) -> Vec<&mut V> {
+        fn pts<'a>(out: &mut Vec<&'a mut V>, ps: Vec<&'a mut Pt>) {
+            for p in ps {
+                if let Pt::At(x, y) = p {
+                    out.extend([x, y]);
+                }
+            }
+        }
+        let mut out: Vec<&mut V> = vec![];
+        match self {
+            Row::Rect(x, y, w, h) => out.extend([x, y, w, h]),
+            Row::Circle(c, r) => {
+                pts(&mut out, vec![c]);
+                out.push(r);
+            }
+            Row::Ellipse(c, m, b) => {
+                pts(&mut out, vec![c, m]);
+                out.push(b);
+            }
+            Row::BSpline(d, ps, _) => {
+                out.push(d);
+                pts(&mut out, ps.iter_mut().collect());
+            }
+            Row::Project { approx, .. } => out.extend(approx),
+            Row::Dim(_, _, v) => out.extend(v),
+            Row::Cons(r) => return r.values_mut(),
+            r => pts(&mut out, r.points_mut()),
+        }
+        out
+    }
+
+    /// A dimension with a value: what it sets.
+    pub fn dim(&self) -> Option<(D, &[Ref], &V)> {
+        match self {
+            Row::Dim(d, rs, Some(v)) => Some((*d, rs, v)),
+            _ => None,
+        }
+    }
+
+    /// The same row in all but its dimension's value.
+    fn same_but_value(&self, o: &Row) -> bool {
+        match (self, o) {
+            (Row::Dim(a, x, Some(_)), Row::Dim(b, y, Some(_))) => a == b && x == y,
+            (a, b) => a == b,
+        }
+    }
+}
+
+fn list<T: fmt::Display>(xs: &[T]) -> String {
+    xs.iter().map(|x| x.to_string()).collect::<Vec<_>>().join(", ")
+}
+
+/// The Forge it reads as (names left to the block that writes it): what a message quotes.
+impl fmt::Display for Row {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let open = |o: bool| if o { ", closed: false" } else { "" };
+        match self {
+            Row::Pt(p) => write!(f, "pt({p})"),
+            Row::Line(a, b) => write!(f, "line({a}, {b})"),
+            Row::Poly(ps, o) => write!(f, "poly([{}]{})", list(ps), open(*o)),
+            Row::Rect(x, y, w, h) => write!(f, "rect(corner: ({x}, {y}), size: ({w}, {h}))"),
+            Row::Circle(c, r) => write!(f, "circle({c}, {r})"),
+            Row::Arc(c, a, b, cw) => write!(
+                f,
+                "arc(center: {c}, from: {a}, to: {b}{})",
+                if *cw { ", cw: true" } else { "" }
+            ),
+            Row::Spline(ps, o) => write!(f, "spline([{}]{})", list(ps), open(*o)),
+            Row::BSpline(d, ps, o) => write!(f, "spline([{}], degree: {d}, cv: true{})", list(ps), open(*o)),
+            Row::Ellipse(c, m, b) => write!(f, "ellipse(center: {c}, major: {m}, b: {b})"),
+            Row::Project { of, approx, .. } => match approx {
+                Some(t) => write!(f, "project({of}, approx: {t})"),
+                None => write!(f, "project({of})"),
+            },
+            Row::Cons(r) => write!(f, "{r} (construction)"),
+            Row::Fix(rs) => write!(f, "fix({})", list(rs)),
+            Row::Co(a, b) => write!(f, "coincident({a}, {b})"),
+            Row::Hor(rs) => write!(f, "horizontal({})", list(rs)),
+            Row::Ver(rs) => write!(f, "vertical({})", list(rs)),
+            Row::Par(a, b) => write!(f, "parallel({a}, {b})"),
+            Row::Perp(a, b) => write!(f, "perpendicular({a}, {b})"),
+            Row::Tan(a, b) => write!(f, "tangent({a}, {b})"),
+            Row::Conc(a, b) => write!(f, "concentric({a}, {b})"),
+            Row::Colin(a, b) => write!(f, "collinear({a}, {b})"),
+            Row::Eq(rs) => write!(f, "equal({})", list(rs)),
+            Row::Mid(a, b) => write!(f, "midpoint({a}, {b})"),
+            Row::Sym(a, b, c) => write!(f, "symmetric({a}, {b}, {c})"),
+            Row::Dim(d, rs, Some(v)) => write!(f, "{}({}, {v})", d.word(), list(rs)),
+            Row::Dim(d, rs, None) => write!(f, "{}({}) (driven)", d.word(), list(rs)),
+        }
+    }
+}
 
 /// What one reference of a `project` row gives: a piece of the part to lay flat, or (a sketch
 /// opened from its Forge block) the image the block solved to.
@@ -43,57 +514,54 @@ pub struct Refd {
     pub one: bool,
 }
 
-/// Resolves a `project` row's tokens after the word.
-pub type Sources<'a> = dyn Fn(&[String]) -> R<Vec<Refd>> + 'a;
+/// Resolves a `project` row's geometry, by what it names (Forge text).
+pub type Sources<'a> = dyn Fn(&str) -> R<Vec<Refd>> + 'a;
 
-/// A row's words: split at spaces outside brackets and quotes, so `edges(between: (a, b))` is one.
-pub fn tokens(text: &str) -> Vec<String> {
-    let mut toks: Vec<String> = Vec::new();
-    let mut start = None;
-    let mut depth = 0;
-    let (mut quoted, mut escaped) = (false, false);
-    for (k, c) in text.char_indices() {
-        match start {
-            Some(s) if c.is_whitespace() && depth == 0 && !quoted => {
-                toks.push(text[s..k].to_string());
-                start = None;
-            }
-            None if c.is_whitespace() => continue,
-            None => start = Some(k),
-            _ => {}
-        }
-        if quoted {
-            (quoted, escaped) = (escaped || c != '"', !escaped && c == '\\');
-        } else if c == '"' {
-            quoted = true;
-        } else {
-            depth = (depth + (c == '(') as i32 - (c == ')') as i32).max(0);
-        }
-    }
-    if let Some(s) = start {
-        toks.push(text[s..].to_string());
-    }
-    toks
+/// A sketch's rows solved: the geometry later tools read (`Deref`s to it), and what the next
+/// solve with only dimension values changed starts from.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Solved {
+    pub sketch: forge_model::Sketch,
+    pub rows: Vec<Row>,
+    /// Each driven dimension: its row and the value it measures (mm, or radians for an angle).
+    pub driven: Vec<(usize, f64)>,
+    /// The solver's parameters as written, each dimension row's constraint, each driven row's
+    /// entities.
+    written: Vec<f64>,
+    dims: Vec<(usize, ConstraintId)>,
+    driven_of: Vec<(D, Vec<EntityId>)>,
 }
 
-/// Builds a sketch's rows on `plane` and solves it from the coordinates as written.
-/// `was`, the sketch this line read as before, lends the solve every part of it that did
-/// not change.
-pub fn build(plane: Frame, rows: Vec<Vec<String>>, num: &Num, was: Option<&Sketch>) -> R<Sketch> {
-    let none = |_: &[String]| Err("this needs a part to project from".to_string());
+impl std::ops::Deref for Solved {
+    type Target = forge_model::Sketch;
+    fn deref(&self) -> &forge_model::Sketch {
+        &self.sketch
+    }
+}
+
+impl std::ops::DerefMut for Solved {
+    fn deref_mut(&mut self) -> &mut forge_model::Sketch {
+        &mut self.sketch
+    }
+}
+
+/// Builds the rows on `plane` and solves them from the coordinates as written. `was`, how they
+/// solved before, lends the solve every part of it that did not change.
+pub fn build(plane: Frame, rows: Vec<Row>, num: &Num, was: Option<&Solved>) -> R<Solved> {
+    let none = |_: &str| Err("this needs a part to project from".to_string());
     build_on(plane, rows, num, &none, was)
 }
 
 /// `build`, with what `project` rows name.
 pub fn build_on<'n>(
     plane: Frame,
-    rows: Vec<Vec<String>>,
+    rows: Vec<Row>,
     num: &Num<'n>,
     src: &Sources<'n>,
-    was: Option<&Sketch>,
-) -> R<Sketch> {
+    was: Option<&Solved>,
+) -> R<Solved> {
     if let Some(s) = was.and_then(|w| values_only(plane, &rows, num, w)) {
-        return Ok(Sketch { rows, ..s });
+        return Ok(Solved { rows, ..s });
     }
     let mut b = B {
         s: forge_sketch::Sketch::new(plane),
@@ -106,11 +574,10 @@ pub fn build_on<'n>(
         flats: Vec::new(),
     };
     for (k, row) in rows.iter().enumerate() {
-        b.row(k, row).map_err(|e| format!("`{}`: {e}", row.join(" ")))?;
+        b.row(k, row).map_err(|e| format!("`{row}`: {e}"))?;
     }
-    ids_of_rows(&rows)?;
     let written = b.s.params().to_vec();
-    if b.s.solve_after(was.map(|w| &w.solved)).status != Status::Solved {
+    if b.s.solve_after(was.map(|w| &w.sketch.solved)).status != Status::Solved {
         let a = b.s.analyze();
         let say = |ids: &[ConstraintId]| {
             let mut ks: Vec<usize> = ids
@@ -120,7 +587,7 @@ pub fn build_on<'n>(
             ks.sort_unstable();
             ks.dedup();
             ks.iter()
-                .map(|&k| format!("`{}`", rows[k].join(" ")))
+                .map(|&k| format!("`{}`", rows[k]))
                 .collect::<Vec<_>>()
                 .join(", ")
         };
@@ -142,16 +609,13 @@ pub fn build_on<'n>(
             .filter_map(|c| b.made.iter().find(|m| m.0 == *c).map(|m| m.1))
             .collect();
     if let Some(&k) = implied.first() {
-        let row = rows[k].join(" ");
-        let fix = if DIMENSIONS.contains(&rows[k][0].as_str()) {
-            let mut r = rows[k].clone();
-            r.pop();
-            format!(
-                "remove it, or make it driven (it then shows its value): `ref {}`",
-                r.join(" ")
-            )
-        } else {
-            "remove it".to_string()
+        let row = &rows[k];
+        let fix = match row {
+            Row::Dim(d, rs, Some(_)) => format!(
+                "remove it, or make it driven (it then shows its value): `{}`",
+                Row::Dim(*d, rs.clone(), None)
+            ),
+            _ => "remove it".to_string(),
         };
         return Err(format!(
             "`{row}` is implied by the rows above it (over-constrained): {fix}"
@@ -160,29 +624,26 @@ pub fn build_on<'n>(
     let driven = b
         .driven
         .iter()
-        .map(|(k, kw, es)| {
-            Ok((
-                *k,
-                b.measure(kw, es)
-                    .map_err(|e| format!("`{}`: {e}", rows[*k].join(" ")))?,
-            ))
-        })
+        .map(|(k, d, es)| Ok((*k, b.measure(*d, es).map_err(|e| format!("`{}`: {e}", rows[*k]))?)))
         .collect::<R<_>>()?;
     let dims = b
         .made
         .iter()
-        .filter(|m| DIMENSIONS.contains(&rows[m.1][0].as_str()))
+        .filter(|m| rows[m.1].dim().is_some())
         .map(|m| (m.1, m.0))
         .collect();
-    let driven_of = b.driven.iter().map(|d| (d.1.clone(), d.2.clone())).collect();
-    Ok(Sketch {
-        plane,
-        on: None,
-        at: None,
+    let driven_of = b.driven.iter().map(|d| (d.1, d.2.clone())).collect();
+    Ok(Solved {
+        sketch: forge_model::Sketch {
+            plane,
+            on: None,
+            at: None,
+            solved: b.s,
+            names: b.names,
+            note: Default::default(),
+        },
         rows,
-        solved: b.s,
         driven,
-        names: b.names,
         written,
         dims,
         driven_of,
@@ -192,32 +653,31 @@ pub fn build_on<'n>(
 /// `was` again with new dimension values, when nothing else in the rows changed: the
 /// dimensions set in place and solved from the coordinates as written, which is what reading
 /// the rows afresh gives. None when anything else changed, or it fails (the full read says why).
-fn values_only(plane: Frame, rows: &[Vec<String>], num: &Num, was: &Sketch) -> Option<Sketch> {
+fn values_only(plane: Frame, rows: &[Row], num: &Num, was: &Solved) -> Option<Solved> {
     if was.plane != plane || was.rows.len() != rows.len() {
         return None;
     }
-    // every token but a dimension's value is a number, a name or a word, as before
-    const WORDS: [&str; 35] = [
-        "ids", "pt", "line", "poly", "rect", "circle", "arc", "fix", "co", "hor", "ver", "par", "perp",
-        "tan", "eq", "conc", "colin", "mid", "sym", "dist", "hdist", "vdist", "rad", "dia", "ang", "ref",
-        "cw", "cons", "open", "spline", "bspline", "ellipse", "earc", "knots", "weights",
-    ];
-    let fixed = |t: &str| t.parse::<f64>().is_ok() || is_ref(t) || WORDS.contains(&t);
+    // every value but a dimension's is a number, as before; no part's geometry to read again
     for (a, b) in rows.iter().zip(&was.rows) {
-        let dim = DIMENSIONS.contains(&a[0].as_str());
-        let n = a.len() - dim as usize;
-        if a.len() != b.len() || a[..n] != b[..n] || !a[..n].iter().all(|t| fixed(t)) {
+        if !a.same_but_value(b) || matches!(a.plain(), Row::Project { .. }) {
+            return None;
+        }
+        let fixed = match a {
+            Row::Dim(_, _, Some(_)) => true,
+            r => r.values().iter().all(|v| v.num().is_some()),
+        };
+        if !fixed {
             return None;
         }
     }
-    let mut q = was.solved.clone();
+    let mut q = was.sketch.solved.clone();
     q.set_params(&was.written).ok()?;
     for &(k, c) in &was.dims {
-        let row = &rows[k];
-        let want = if row[0] == "ang" { Want::Angle } else { Want::Len };
-        q.set_value(c, num(row.last()?, want).ok()?).ok()?;
+        let (d, _, v) = rows[k].dim()?;
+        let want = if d == D::Ang { Want::Angle } else { Want::Len };
+        q.set_value(c, v.read(num, want).ok()?).ok()?;
     }
-    if q.solve_after(Some(&was.solved)).status != Status::Solved || !q.implied().is_empty() {
+    if q.solve_after(Some(&was.sketch.solved)).status != Status::Solved || !q.implied().is_empty() {
         return None;
     }
     let b = B {
@@ -234,24 +694,24 @@ fn values_only(plane: Frame, rows: &[Vec<String>], num: &Num, was: &Sketch) -> O
         .driven
         .iter()
         .zip(&was.driven_of)
-        .map(|(d, (kw, es))| b.measure(kw, es).ok().map(|v| (d.0, v)))
+        .map(|(d, (kw, es))| b.measure(*kw, es).ok().map(|v| (d.0, v)))
         .collect::<Option<Vec<_>>>()?;
-    Some(Sketch {
-        plane,
-        on: None,
-        at: None,
+    Some(Solved {
+        sketch: forge_model::Sketch {
+            plane,
+            on: None,
+            at: None,
+            solved: b.s,
+            names: b.names,
+            note: Default::default(),
+        },
         rows: Vec::new(),
-        solved: b.s,
         driven,
-        names: b.names,
         written: was.written.clone(),
         dims: was.dims.clone(),
         driven_of: was.driven_of.clone(),
     })
 }
-
-/// The rows that dimension, and which take `ref`.
-pub const DIMENSIONS: [&str; 6] = ["dist", "hdist", "vdist", "rad", "dia", "ang"];
 
 struct B<'a, 'n> {
     s: forge_sketch::Sketch,
@@ -259,7 +719,7 @@ struct B<'a, 'n> {
     /// Each constraint and the row that made it.
     made: Vec<(ConstraintId, usize)>,
     /// Each driven dimension: its row, kind and entities.
-    driven: Vec<(usize, String, Vec<EntityId>)>,
+    driven: Vec<(usize, D, Vec<EntityId>)>,
     num: &'a Num<'n>,
     src: &'a Sources<'n>,
     /// The projected points so far: where each is held.
@@ -268,22 +728,7 @@ struct B<'a, 'n> {
     flats: Vec<EntityId>,
 }
 
-/// Whether a token names a sketch entity or one of its points (`o p1 l2 a3.c c4`) rather
-/// than being a number.
-pub fn is_ref(t: &str) -> bool {
-    let base = t.split_once('.').map_or(t, |(b, p)| {
-        if ["a", "b", "c", "m"].contains(&p) || (b.starts_with('s') && p.bytes().all(|c| c.is_ascii_digit()))
-        {
-            b
-        } else {
-            ""
-        }
-    });
-    base == "o"
-        || base.len() > 1
-            && base.starts_with(['p', 'l', 'a', 'c', 's', 'e', 'j'])
-            && base[1..].bytes().all(|c| c.is_ascii_digit())
-}
+use forge_model::Sketch;
 
 fn bad(e: SketchError) -> String {
     match e {
@@ -436,23 +881,20 @@ impl B<'_, '_> {
         Ok(e)
     }
 
-    /// `project REF..`: each reference's geometry, held where it falls on the plane.
-    fn project(&mut self, k: usize, c: &Cur) -> R<()> {
-        if c.done() {
-            return Err("project needs an edge, face, vertex or work point".into());
-        }
-        // `approx TOL` at the end: what has no exact image is fitted within TOL, and says so
-        let mut toks = &c.t[c.k..];
-        let mut approx = None;
-        if toks.len() > 2 && toks[toks.len() - 2] == "approx" {
-            let t = (self.num)(&toks[toks.len() - 1], Want::Len)?;
-            if !(t >= 1e-6 && t.is_finite()) {
-                return Err("approx takes a tolerance of 0.000001 mm or more".into());
+    /// `project`: each reference's geometry, held where it falls on the plane.
+    fn project(&mut self, k: usize, of: &str, many: bool, approx: Option<&V>) -> R<()> {
+        // an `approx` tolerance: what has no exact image is fitted within it, and says so
+        let approx = match approx {
+            Some(v) => {
+                let t = v.read(self.num, Want::Len)?;
+                if !(t >= 1e-6 && t.is_finite()) {
+                    return Err("approx takes a tolerance of 0.000001 mm or more".into());
+                }
+                Some(t)
             }
-            approx = Some(t);
-            toks = &toks[..toks.len() - 2];
-        }
-        let refs = (self.src)(toks)?;
+            None => None,
+        };
+        let refs = (self.src)(of)?;
         for r in refs {
             for (n, s) in &r.sources {
                 let f = match s {
@@ -460,11 +902,11 @@ impl B<'_, '_> {
                     Src::Laid(f) => f.clone(),
                 };
                 let e = self.laid(k, f)?;
-                if r.one {
+                if r.one && !many {
                     self.name('j', e);
                 } else {
-                    // how many a face or selector gives can change: no row may name one, and its
-                    // faces take their names from the edge it came from
+                    // how many a face gives can change: no row may name one, and its curves take
+                    // their names from the edge each came from
                     self.names.push((hidden(*n), e));
                 }
             }
@@ -494,7 +936,7 @@ impl B<'_, '_> {
             return Ok(id);
         }
         let hint = if self.names.iter().any(|n| n.0.starts_with('#')) {
-            "; a face's or selector's curves can change in number, so rows can't name them: list the edges, `project @e.. @e..`"
+            "; a face's projected curves can change in number, so rows can't name them: project its edges one by one"
         } else {
             ""
         };
@@ -502,123 +944,81 @@ impl B<'_, '_> {
     }
 
     /// A point: `name.a|b|c`, a point's name, or a circle's or arc's (its centre).
-    fn point_ref(&mut self, t: &str) -> R<EntityId> {
-        let (base, part) = t.split_once('.').unwrap_or((t, ""));
-        let e = self.entity(base)?;
+    fn point_ref(&mut self, r: &Ref) -> R<EntityId> {
+        let e = self.entity(&r.base)?;
         let kind = self.s.entity(e).expect("named");
         if let Entity::Spline { .. } = kind {
             let pts = self.s.spline_points(e).expect("a spline");
-            return match part {
-                "a" => Ok(pts[0]),
-                "b" => Ok(pts[pts.len() - 1]),
-                n => n
-                    .parse::<usize>()
-                    .ok()
-                    .and_then(|i| pts.get(i).copied())
-                    .ok_or_else(|| {
-                        format!(
-                            "'{t}' is not a point of the spline ({} points, from 0)",
-                            pts.len()
-                        )
-                    }),
+            return match r.part {
+                Part::A => Ok(pts[0]),
+                Part::B => Ok(pts[pts.len() - 1]),
+                Part::K(i) => pts.get(i).copied().ok_or_else(|| {
+                    format!(
+                        "'{r}' is not a point of the spline ({} points, from 0)",
+                        pts.len()
+                    )
+                }),
+                _ => Err(format!("'{r}' is not a point")),
             };
         }
-        Ok(match (kind, part) {
-            (Entity::Point { .. }, "") => e,
-            (Entity::Ellipse { center, .. }, "" | "c") => center,
-            (Entity::Ellipse { major, .. }, "m") => major,
+        Ok(match (kind, &r.part) {
+            (Entity::Point { .. }, Part::Whole) => e,
+            (Entity::Ellipse { center, .. }, Part::Whole | Part::C) => center,
+            (Entity::Ellipse { major, .. }, Part::M) => major,
             (
                 Entity::Ellipse {
                     ends: Some((a, _, _)),
                     ..
                 },
-                "a",
+                Part::A,
             ) => a,
             (
                 Entity::Ellipse {
                     ends: Some((_, b, _)),
                     ..
                 },
-                "b",
+                Part::B,
             ) => b,
-            (Entity::Line { a, .. }, "a") | (Entity::Arc { start: a, .. }, "a") => a,
-            (Entity::Line { b, .. }, "b") | (Entity::Arc { end: b, .. }, "b") => b,
-            (Entity::Circle { center, .. } | Entity::Arc { center, .. }, "" | "c") => center,
-            _ => return Err(format!("'{t}' is not a point")),
+            (Entity::Line { a, .. }, Part::A) | (Entity::Arc { start: a, .. }, Part::A) => a,
+            (Entity::Line { b, .. }, Part::B) | (Entity::Arc { end: b, .. }, Part::B) => b,
+            (Entity::Circle { center, .. } | Entity::Arc { center, .. }, Part::Whole | Part::C) => center,
+            _ => return Err(format!("'{r}' is not a point")),
         })
     }
 
-    fn row(&mut self, k: usize, row: &[String]) -> R<()> {
-        let mut c = Cur { t: row, k: 1 };
-        let cons = row.last().is_some_and(|t| t == "cons");
-        if cons {
-            c.t = &row[..row.len() - 1];
-        }
+    fn row(&mut self, k: usize, row: &Row) -> R<()> {
         let made = self.names.len();
-        if row[0] == "ids" {
-            return ids_of_rows(std::slice::from_ref(&row.to_vec())).map(|_| ());
-        }
-        if row[0] == "ref" {
-            let kw = row.get(1).map_or("", |s| s.as_str());
-            if !DIMENSIONS.contains(&kw) {
-                return Err(format!("ref goes before a dimension ({})", DIMENSIONS.join(" ")));
-            }
-            c.k = 2;
-            let mut es = Vec::new();
-            while !c.done() {
-                es.push(self.any(&mut c)?);
-            }
-            let want = if matches!(kw, "dist" | "ang") {
-                1..=2
-            } else if kw == "rad" || kw == "dia" {
-                1..=1
-            } else {
-                2..=2
-            };
-            if !want.contains(&es.len()) {
-                return Err(format!(
-                    "ref {kw} names {} entities, no value",
-                    if want.start() == want.end() {
-                        want.start().to_string()
-                    } else {
-                        "1 or 2".into()
-                    }
-                ));
-            }
-            self.driven.push((k, kw.to_string(), es));
-            return Ok(());
-        }
-        match row[0].as_str() {
-            "pt" => {
-                let p = self.point(&mut c)?;
+        let (row, cons) = match row {
+            Row::Cons(r) => (r.plain(), true),
+            r => (r, false),
+        };
+        match row {
+            Row::Pt(p) => {
+                let p = self.point(p)?;
                 self.name('p', p);
             }
-            "line" => {
-                let (a, b) = (self.point(&mut c)?, self.point(&mut c)?);
+            Row::Line(a, b) => {
+                let (a, b) = (self.point(a)?, self.point(b)?);
                 let l = self.s.add_line(a, b).map_err(bad)?;
                 self.name('l', l);
             }
-            "poly" => {
-                let open = c.t.last().is_some_and(|t| t == "open");
-                if open {
-                    c.t = &c.t[..c.t.len() - 1];
-                }
+            Row::Poly(ps, open) => {
                 let mut pts = Vec::new();
-                while !c.done() {
-                    pts.push(self.point(&mut c)?);
+                for p in ps {
+                    pts.push(self.point(p)?);
                 }
                 if pts.len() < 2 {
                     return Err("poly needs two points or more".into());
                 }
-                let n = pts.len() - open as usize;
+                let n = pts.len() - *open as usize;
                 for i in 0..n {
                     let l = self.s.add_line(pts[i], pts[(i + 1) % pts.len()]).map_err(bad)?;
                     self.name('l', l);
                 }
             }
-            "rect" => {
-                let (x, y) = (self.len(&mut c)?, self.len(&mut c)?);
-                let (w, h) = (self.len(&mut c)?, self.len(&mut c)?);
+            Row::Rect(x, y, w, h) => {
+                let (x, y) = (self.len(x)?, self.len(y)?);
+                let (w, h) = (self.len(w)?, self.len(h)?);
                 let p = [(x, y), (x + w, y), (x + w, y + h), (x, y + h)]
                     .map(|(x, y)| self.s.add_point(Point2::new(x, y)));
                 let mut ls = [EntityId(0); 4];
@@ -631,73 +1031,56 @@ impl B<'_, '_> {
                 self.add(k, C::Vertical(ls[1]))?;
                 self.add(k, C::Vertical(ls[3]))?;
             }
-            "circle" => {
-                let center = self.point(&mut c)?;
-                let r = self.len(&mut c)?;
+            Row::Circle(c, r) => {
+                let center = self.point(c)?;
+                let r = self.len(r)?;
                 let e = self.s.add_circle(center, r).map_err(bad)?;
                 self.name('c', e);
             }
-            "project" => {
-                self.project(k, &c)?;
-                c.k = c.t.len();
-            }
-            "arc" => {
-                let (center, a, b) = (self.point(&mut c)?, self.point(&mut c)?, self.point(&mut c)?);
-                let ccw = !c.eat("cw");
-                let e = self.s.add_arc(center, a, b, ccw).map_err(bad)?;
+            Row::Project { of, many, approx } => self.project(k, of, *many, approx.as_ref())?,
+            Row::Arc(c, a, b, cw) => {
+                let (center, a, b) = (self.point(c)?, self.point(a)?, self.point(b)?);
+                let e = self.s.add_arc(center, a, b, !cw).map_err(bad)?;
                 self.name('a', e);
             }
-            "spline" | "bspline" => {
-                let degree = if row[0] == "bspline" {
-                    (self.num)(c.next()?, Want::Count)? as usize
-                } else {
-                    0
-                };
+            Row::Spline(ps, open) => {
                 let mut pts = Vec::new();
-                while !c.done() && !["open", "knots", "weights"].contains(&c.peek()) {
-                    pts.push(self.point(&mut c)?);
+                for p in ps {
+                    pts.push(self.point(p)?);
                 }
-                let (mut knots, mut weights) = (None, None);
-                while c.peek() == "knots" || c.peek() == "weights" {
-                    let weighted = c.next()? == "weights";
-                    let mut v = Vec::new();
-                    while !c.done() && !["open", "knots", "weights"].contains(&c.peek()) {
-                        v.push(self.len(&mut c)?);
-                    }
-                    *if weighted { &mut weights } else { &mut knots } = Some(v);
+                let closed = !open;
+                if pts.len() < 2 || (closed && pts.len() < 3) {
+                    return Err("spline needs two points, or three to close".into());
                 }
-                let closed = !c.eat("open");
-                let e = if row[0] == "spline" {
-                    if pts.len() < 2 || (closed && pts.len() < 3) {
-                        return Err("spline needs two points, or three to close".into());
-                    }
-                    self.s.add_spline(&pts, closed).map_err(bad)?
-                } else {
-                    self.s
-                        .add_bspline(degree, &pts, knots, weights, closed)
-                        .map_err(|e| format!("{}: bspline needs more points than its degree", bad(e)))?
-                };
+                let e = self.s.add_spline(&pts, closed).map_err(bad)?;
                 self.name('s', e);
             }
-            "ellipse" | "earc" => {
-                let (center, major) = (self.point(&mut c)?, self.point(&mut c)?);
-                let b = self.len(&mut c)?;
-                let e = if row[0] == "ellipse" {
-                    self.s.add_ellipse(center, major, b).map_err(bad)?
-                } else {
-                    let (s0, s1) = (self.point(&mut c)?, self.point(&mut c)?);
-                    let ccw = !c.eat("cw");
-                    self.s
-                        .add_ellipse_arc(center, major, b, s0, s1, ccw)
-                        .map_err(bad)?
-                };
+            Row::BSpline(d, ps, open) => {
+                let degree = d.read(self.num, Want::Count)? as usize;
+                let mut pts = Vec::new();
+                for p in ps {
+                    pts.push(self.point(p)?);
+                }
+                let e = self.s.add_bspline(degree, &pts, None, None, !open).map_err(|e| {
+                    format!(
+                        "{}: a spline on control vertices needs more points than its degree",
+                        bad(e)
+                    )
+                })?;
+                self.name('s', e);
+            }
+            Row::Ellipse(c, m, b) => {
+                let (center, major) = (self.point(c)?, self.point(m)?);
+                let b = self.len(b)?;
+                let e = self.s.add_ellipse(center, major, b).map_err(bad)?;
                 self.name('e', e);
             }
-            _ => {
+            Row::Cons(_) => unreachable!("taken off above"),
+            r => {
                 if cons {
-                    return Err("only geometry rows take `cons`".into());
+                    return Err("only geometry is construction".into());
                 }
-                return self.constraint(k, &mut c);
+                return self.constraint(k, r);
             }
         }
         if cons {
@@ -705,21 +1088,42 @@ impl B<'_, '_> {
                 self.s.set_construction(self.names[i].1, true).map_err(bad)?;
             }
         }
-        c.end()
+        Ok(())
     }
 
-    fn constraint(&mut self, k: usize, c: &mut Cur) -> R<()> {
-        let kw = c.t[0].as_str();
+    fn constraint(&mut self, k: usize, row: &Row) -> R<()> {
         let line = |s: &Self, e: EntityId| matches!(s.s.entity(e), Some(Entity::Line { .. }));
         let point = |s: &Self, e: EntityId| matches!(s.s.entity(e), Some(Entity::Point { .. }));
-        match kw {
-            "fix" => {
-                while !c.done() {
-                    let t = c.next()?;
-                    let e = if t.contains('.') {
-                        self.point_ref(t)?
+        match row {
+            Row::Dim(d, rs, None) => {
+                let mut es = Vec::new();
+                for r in rs {
+                    es.push(self.any(r)?);
+                }
+                let want = match d {
+                    D::Dist | D::Ang => 1..=2,
+                    D::Rad | D::Dia => 1..=1,
+                    _ => 2..=2,
+                };
+                if !want.contains(&es.len()) {
+                    return Err(format!(
+                        "a driven {} names {} entities",
+                        d.word(),
+                        if want.start() == want.end() {
+                            want.start().to_string()
+                        } else {
+                            "1 or 2".into()
+                        }
+                    ));
+                }
+                self.driven.push((k, *d, es));
+            }
+            Row::Fix(rs) => {
+                for r in rs {
+                    let e = if r.is_point() {
+                        self.point_ref(r)?
                     } else {
-                        self.entity(t)?
+                        self.entity(&r.base)?
                     };
                     let pts = match self.s.entity(e).expect("named") {
                         Entity::Point { .. } => vec![e],
@@ -748,31 +1152,34 @@ impl B<'_, '_> {
                     }
                 }
             }
-            "co" => {
-                let (a, b) = (self.any(c)?, self.any(c)?);
+            Row::Co(a, b) => {
+                let (a, b) = (self.any(a)?, self.any(b)?);
                 let (p, q) = if point(self, a) { (a, b) } else { (b, a) };
                 if !point(self, p) {
-                    return Err("co needs a point".into());
+                    return Err("coincident needs a point".into());
                 }
                 let con = match self.s.entity(q).expect("named") {
                     Entity::Point { .. } => C::Coincident(p, q),
                     Entity::Line { .. } => C::PointOnLine(p, q),
                     Entity::Ellipse { .. } => C::PointOnEllipse(p, q),
                     Entity::Spline { .. } => {
-                        return Err("co on a spline: name its point (s1.a, s1.b, s1.0, s1.1 ..)".into());
+                        return Err(
+                            "coincident on a spline: name its point (s1.a, s1.b, s1.0, s1.1 ..)".into(),
+                        );
                     }
                     _ => C::PointOnCircle(p, q),
                 };
                 self.add(k, con)?;
             }
-            "hor" | "ver" => {
+            Row::Hor(rs) | Row::Ver(rs) => {
+                let hor = matches!(row, Row::Hor(_));
                 let mut es = Vec::new();
-                while !c.done() {
-                    es.push(self.any(c)?);
+                for r in rs {
+                    es.push(self.any(r)?);
                 }
                 if es.len() == 2 && !es.iter().any(|&e| line(self, e)) {
                     let (p, q) = (self.as_point(es[0])?, self.as_point(es[1])?);
-                    let con = if kw == "hor" {
+                    let con = if hor {
                         C::VerticalDistance(p, q, 0.0)
                     } else {
                         C::HorizontalDistance(p, q, 0.0)
@@ -780,22 +1187,16 @@ impl B<'_, '_> {
                     return self.add(k, con);
                 }
                 if es.is_empty() {
-                    return Err(format!("{kw} needs lines, or two points"));
+                    return Err("horizontal and vertical need lines, or two points".into());
                 }
                 for e in es {
-                    self.add(
-                        k,
-                        if kw == "hor" {
-                            C::Horizontal(e)
-                        } else {
-                            C::Vertical(e)
-                        },
-                    )?;
+                    self.add(k, if hor { C::Horizontal(e) } else { C::Vertical(e) })?;
                 }
             }
-            "par" | "perp" | "tan" | "conc" => {
-                let (a, b) = (self.entity_tok(c)?, self.entity_tok(c)?);
-                if kw == "tan" {
+            Row::Par(a, b) | Row::Perp(a, b) | Row::Tan(a, b) | Row::Conc(a, b) => {
+                let (ra, rb) = (a, b);
+                let (a, b) = (self.entity_of(ra)?, self.entity_of(rb)?);
+                if let Row::Tan(..) = row {
                     let kind = |s: &Self, e: EntityId| s.s.entity(e).expect("named");
                     match (kind(self, a), kind(self, b)) {
                         (Entity::Spline { .. }, _) | (_, Entity::Spline { .. }) => {
@@ -805,12 +1206,12 @@ impl B<'_, '_> {
                                 (b, a)
                             };
                             if let Some(id) = self.s.tangent_spline(sp, other).map_err(|_| {
-                                "tan on a spline: a line or arc that ends at the spline's start or end"
+                                "tangent to a spline: a line or arc that ends at the spline's start or end"
                                     .to_string()
                             })? {
                                 self.made.push((id, k));
                             }
-                            return c.end();
+                            return Ok(());
                         }
                         (Entity::Ellipse { .. }, Entity::Line { .. })
                         | (Entity::Line { .. }, Entity::Ellipse { .. }) => {
@@ -821,117 +1222,128 @@ impl B<'_, '_> {
                             };
                             let ids = self.s.tangent_ellipse(l, e).map_err(bad)?;
                             self.made.extend(ids.map(|id| (id, k)));
-                            return c.end();
+                            return Ok(());
                         }
                         _ => {}
                     }
                 }
-                let con = match kw {
-                    "par" => C::Parallel(a, b),
-                    "perp" => C::Perpendicular(a, b),
-                    "tan" => C::Tangent(a, b),
+                let con = match row {
+                    Row::Par(..) => C::Parallel(a, b),
+                    Row::Perp(..) => C::Perpendicular(a, b),
+                    Row::Tan(..) => C::Tangent(a, b),
                     _ => C::Concentric(a, b),
                 };
                 self.add(k, con)?;
             }
-            "colin" => {
+            Row::Colin(a, b) => {
                 // parallel, and the second's start on the first
-                let (a, b) = (self.entity_tok(c)?, self.entity_tok(c)?);
+                let (a, b) = (self.entity_of(a)?, self.entity_of(b)?);
                 let Some(Entity::Line { a: start, .. }) = self.s.entity(b) else {
-                    return Err("colin takes two lines".into());
+                    return Err("collinear takes two lines".into());
                 };
                 if !line(self, a) {
-                    return Err("colin takes two lines".into());
+                    return Err("collinear takes two lines".into());
                 }
                 self.add(k, C::Parallel(a, b))?;
                 self.add(k, C::PointOnLine(start, a))?;
             }
-            "eq" => {
-                let a = self.entity_tok(c)?;
-                let mut n = 0;
-                while !c.done() {
-                    let b = self.entity_tok(c)?;
-                    self.add(k, C::Equal(a, b))?;
-                    n += 1;
+            Row::Eq(rs) => {
+                let Some((first, rest)) = rs.split_first() else {
+                    return Err("equal needs two entities or more".into());
+                };
+                let a = self.entity_of(first)?;
+                if rest.is_empty() {
+                    return Err("equal needs two entities or more".into());
                 }
-                if n == 0 {
-                    return Err("eq needs two entities or more".into());
+                for r in rest {
+                    let b = self.entity_of(r)?;
+                    self.add(k, C::Equal(a, b))?;
                 }
             }
-            "mid" => {
-                let p = self.point_tok(c)?;
-                let l = self.entity_tok(c)?;
+            Row::Mid(p, l) => {
+                let p = self.point_ref(p)?;
+                let l = self.entity_of(l)?;
                 self.add(k, C::Midpoint(p, l))?;
             }
-            "sym" => {
-                let (p, q) = (self.point_tok(c)?, self.point_tok(c)?);
-                let l = self.entity_tok(c)?;
+            Row::Sym(p, q, l) => {
+                let (p, q) = (self.point_ref(p)?, self.point_ref(q)?);
+                let l = self.entity_of(l)?;
                 self.add(k, C::Symmetric(p, q, l))?;
             }
-            "dist" => {
-                let a = self.any(c)?;
-                if is_ref(c.peek()) {
-                    let b = self.any(c)?;
-                    let d = self.len(c)?;
+            Row::Dim(D::Dist, rs, Some(v)) => match &rs[..] {
+                [a, b] => {
+                    let (a, b) = (self.any(a)?, self.any(b)?);
+                    let d = self.len(v)?;
                     let con = match (line(self, a), line(self, b)) {
                         (false, false) => C::Distance(self.as_point(a)?, self.as_point(b)?, d),
                         (true, false) => C::DistancePointLine(self.as_point(b)?, a, d),
                         (false, true) => C::DistancePointLine(self.as_point(a)?, b, d),
-                        _ => return Err("dist between two lines: use par and a point to line dist".into()),
+                        _ => {
+                            return Err(
+                                "a distance between two lines: make them parallel and dimension a point to a line"
+                                    .into(),
+                            );
+                        }
                     };
                     self.add(k, con)?;
-                } else {
+                }
+                [a] => {
+                    let a = self.any(a)?;
                     if !line(self, a) {
-                        return Err("dist with one entity needs a line".into());
+                        return Err("a distance on one entity needs a line".into());
                     }
-                    let d = self.len(c)?;
+                    let d = self.len(v)?;
                     self.add(k, C::Length(a, d))?;
                 }
-            }
-            "hdist" | "vdist" => {
-                let (p, q) = (self.point_tok(c)?, self.point_tok(c)?);
-                let d = self.len(c)?;
-                let con = if kw == "hdist" {
-                    C::HorizontalDistance(p, q, d)
+                _ => return Err("a distance is on a line, or between two".into()),
+            },
+            Row::Dim(d @ (D::HDist | D::VDist), rs, Some(v)) => {
+                let [p, q] = &rs[..] else {
+                    return Err("a horizontal or vertical distance is between two points".into());
+                };
+                let (p, q) = (self.point_ref(p)?, self.point_ref(q)?);
+                let x = self.len(v)?;
+                let con = if *d == D::HDist {
+                    C::HorizontalDistance(p, q, x)
                 } else {
-                    C::VerticalDistance(p, q, d)
+                    C::VerticalDistance(p, q, x)
                 };
                 self.add(k, con)?;
             }
-            "rad" | "dia" => {
-                let e = self.entity_tok(c)?;
-                let d = self.len(c)?;
+            Row::Dim(d @ (D::Rad | D::Dia), rs, Some(v)) => {
+                let [e] = &rs[..] else {
+                    return Err("a radius or diameter is of one circle, arc or ellipse".into());
+                };
+                let e = self.entity_of(e)?;
+                let x = self.len(v)?;
                 if matches!(self.s.entity(e), Some(Entity::Ellipse { .. })) {
-                    let d = if kw == "rad" { d } else { 0.5 * d };
-                    self.add(k, C::EllipseMinor(e, d))?;
-                    return c.end();
+                    let x = if *d == D::Rad { x } else { 0.5 * x };
+                    return self.add(k, C::EllipseMinor(e, x));
                 }
                 self.add(
                     k,
-                    if kw == "rad" {
-                        C::Radius(e, d)
+                    if *d == D::Rad {
+                        C::Radius(e, x)
                     } else {
-                        C::Diameter(e, d)
+                        C::Diameter(e, x)
                     },
                 )?;
             }
-            "ang" => {
-                let (a, b) = (self.entity_tok(c)?, self.entity_tok(c)?);
-                let t = (self.num)(c.next()?, Want::Angle)?;
+            Row::Dim(D::Ang, rs, Some(v)) => {
+                let [a, b] = &rs[..] else {
+                    return Err("an angle is between two lines".into());
+                };
+                let (a, b) = (self.entity_of(a)?, self.entity_of(b)?);
+                let t = v.read(self.num, Want::Angle)?;
                 self.add(k, C::Angle(a, b, t))?;
             }
-            _ => {
-                return Err(
-                    "unknown row (pt line poly rect circle arc project spline bspline ellipse earc | fix co hor ver par perp tan eq conc colin mid sym | dist hdist vdist rad dia ang)"
-                        .into(),
-                );
-            }
+            r => return Err(format!("`{r}` is no constraint")),
         }
-        c.end()
+        Ok(())
     }
 
     /// What a driven dimension measures on the solved sketch.
-    fn measure(&self, kw: &str, es: &[EntityId]) -> R<f64> {
+    fn measure(&self, kw: D, es: &[EntityId]) -> R<f64> {
         let q = &self.s;
         let pt = |e: EntityId| self.as_point(e).map(|p| q.point(p));
         let line = |e: EntityId| match q.entity(e) {
@@ -940,70 +1352,71 @@ impl B<'_, '_> {
         };
         let need_line = |e: EntityId| line(e).ok_or_else(|| "a line is needed".to_string());
         Ok(match (kw, es) {
-            ("dist", [l]) => {
+            (D::Dist, [l]) => {
                 let (a, b) = need_line(*l)?;
                 a.distance(b)
             }
-            ("dist", [x, y]) => match (line(*x), line(*y)) {
-                (None, None) => pt(*x)?.distance(pt(*y)?),
-                (Some((a, b)), None) | (None, Some((a, b))) => {
-                    let p = if line(*x).is_some() { pt(*y)? } else { pt(*x)? };
-                    ((b - a).cross(p - a) / a.distance(b)).abs()
+            (D::Dist, [x, y]) => {
+                match (line(*x), line(*y)) {
+                    (None, None) => pt(*x)?.distance(pt(*y)?),
+                    (Some((a, b)), None) | (None, Some((a, b))) => {
+                        let p = if line(*x).is_some() { pt(*y)? } else { pt(*x)? };
+                        ((b - a).cross(p - a) / a.distance(b)).abs()
+                    }
+                    _ => return Err(
+                        "a distance between two lines: make them parallel and dimension a point to a line"
+                            .into(),
+                    ),
                 }
-                _ => return Err("dist between two lines: use par and a point to line dist".into()),
-            },
-            ("hdist", [x, y]) => pt(*y)?.x - pt(*x)?.x,
-            ("vdist", [x, y]) => pt(*y)?.y - pt(*x)?.y,
-            ("rad" | "dia", [c]) if matches!(q.entity(*c), Some(Entity::Ellipse { .. })) => {
+            }
+            (D::HDist, [x, y]) => pt(*y)?.x - pt(*x)?.x,
+            (D::VDist, [x, y]) => pt(*y)?.y - pt(*x)?.y,
+            (D::Rad | D::Dia, [c]) if matches!(q.entity(*c), Some(Entity::Ellipse { .. })) => {
                 let Some(Entity::Ellipse { b, .. }) = q.entity(*c) else {
                     unreachable!("just matched")
                 };
-                q.params()[b] * if kw == "dia" { 2.0 } else { 1.0 }
+                q.params()[b] * if kw == D::Dia { 2.0 } else { 1.0 }
             }
-            ("rad" | "dia", [c]) => {
+            (D::Rad | D::Dia, [c]) => {
                 if !matches!(q.entity(*c), Some(Entity::Circle { .. } | Entity::Arc { .. })) {
-                    return Err("rad and dia need a circle or arc".into());
+                    return Err("a radius or diameter needs a circle or arc".into());
                 }
-                q.radius(*c) * if kw == "dia" { 2.0 } else { 1.0 }
+                q.radius(*c) * if kw == D::Dia { 2.0 } else { 1.0 }
             }
-            ("ang", [x, y]) => {
+            (D::Ang, [x, y]) => {
                 let ((a, b), (c, d)) = (need_line(*x)?, need_line(*y)?);
                 let (u, v) = (b - a, d - c);
                 dmath::atan2(u.cross(v), u.dot(v))
             }
-            _ => return Err(format!("ref {kw}: wrong entities")),
+            _ => return Err(format!("a driven {}: wrong entities", kw.word())),
         })
     }
 
-    /// A point named, or a new one at X Y.
-    fn point(&mut self, c: &mut Cur) -> R<EntityId> {
-        if is_ref(c.peek()) {
-            return self.point_tok(c);
+    /// A point named, or a new one there.
+    fn point(&mut self, p: &Pt) -> R<EntityId> {
+        match p {
+            Pt::R(r) => self.point_ref(r),
+            Pt::At(x, y) => {
+                let (x, y) = (self.len(x)?, self.len(y)?);
+                Ok(self.s.add_point(Point2::new(x, y)))
+            }
         }
-        let (x, y) = (self.len(c)?, self.len(c)?);
-        Ok(self.s.add_point(Point2::new(x, y)))
     }
 
-    fn point_tok(&mut self, c: &mut Cur) -> R<EntityId> {
-        let t = c.next()?;
-        self.point_ref(t)
-    }
-
-    fn entity_tok(&mut self, c: &mut Cur) -> R<EntityId> {
-        let t = c.next()?;
-        if t.contains('.') {
-            return Err(format!("'{t}' is a point; this needs a line, circle or arc"));
+    /// An entity, not a point of one.
+    fn entity_of(&mut self, r: &Ref) -> R<EntityId> {
+        if r.is_point() {
+            return Err(format!("'{r}' is a point; this needs a line, circle or arc"));
         }
-        self.entity(t)
+        self.entity(&r.base)
     }
 
     /// An entity, or a point of one (`l1.a`).
-    fn any(&mut self, c: &mut Cur) -> R<EntityId> {
-        let t = c.next()?;
-        if t.contains('.') {
-            self.point_ref(t)
+    fn any(&mut self, r: &Ref) -> R<EntityId> {
+        if r.is_point() {
+            self.point_ref(r)
         } else {
-            self.entity(t)
+            self.entity(&r.base)
         }
     }
 
@@ -1019,43 +1432,12 @@ impl B<'_, '_> {
         }
     }
 
-    fn len(&mut self, c: &mut Cur) -> R<f64> {
-        (self.num)(c.next()?, Want::Len)
+    fn len(&mut self, v: &V) -> R<f64> {
+        v.read(self.num, Want::Len)
     }
 }
 
-/// A cursor over a row's tokens.
-struct Cur<'a> {
-    t: &'a [String],
-    k: usize,
-}
-
-impl Cur<'_> {
-    fn peek(&self) -> &str {
-        self.t.get(self.k).map_or("", |s| s.as_str())
-    }
-    fn done(&self) -> bool {
-        self.k >= self.t.len()
-    }
-    fn next(&mut self) -> R<&str> {
-        let t = self.t.get(self.k).ok_or("the row ends too soon")?;
-        self.k += 1;
-        Ok(t)
-    }
-    fn eat(&mut self, w: &str) -> bool {
-        let hit = self.peek() == w;
-        self.k += hit as usize;
-        hit
-    }
-    fn end(&self) -> R<()> {
-        match self.t.get(self.k) {
-            Some(t) => Err(format!("unexpected '{t}'")),
-            None => Ok(()),
-        }
-    }
-}
-
-fn id_of(s: &Sketch, t: &str) -> R<EntityId> {
+fn id_of(s: &forge_model::Sketch, t: &str) -> R<EntityId> {
     s.names
         .iter()
         .find(|(n, _)| n == t)
@@ -1082,40 +1464,11 @@ fn stable(name: &str) -> u64 {
     n << 2 | k
 }
 
-/// Where unlisted entities' ids go in a sketch with an `ids` row: past any a position can be, so a
-/// line drawn later never takes a listed entity's id.
-const UNLISTED: u64 = 1 << 32;
-
-/// `ids NAME N ..`: these entities keep these segment ids, whatever else is added to the sketch.
-/// What a profile written inline had, when it became a sketch: its faces keep their names.
-fn ids_of_rows(rows: &[Vec<String>]) -> R<Vec<(String, u64)>> {
-    let mut out: Vec<(String, u64)> = Vec::new();
-    for row in rows.iter().filter(|r| r.first().is_some_and(|w| w == "ids")) {
-        for pair in row[1..].chunks(2) {
-            let [name, n] = pair else {
-                return Err("ids NAME N ..".into());
-            };
-            let n: u64 = n.parse().map_err(|_| format!("ids: '{n}' is not an id"))?;
-            if n >= UNLISTED {
-                return Err(format!("ids: {n} is too large"));
-            }
-            if out.iter().any(|o| o.0 == *name) {
-                return Err(format!("ids: {name} is listed twice"));
-            }
-            if out.iter().any(|o| o.1 == n) {
-                return Err(format!("ids: two entities have {n}"));
-            }
-            out.push((name.clone(), n));
-        }
-    }
-    Ok(out)
-}
-
 /// A profile segment's entity id, what a cut of a kinked or closed curve adds taken off (the
 /// piece number stays on the stable id, so piece 0 reads as the entity).
 const PIECE: u64 = 0xffff << 48;
 
-fn name_of(s: &Sketch, id: u64) -> &str {
+fn name_of(s: &forge_model::Sketch, id: u64) -> &str {
     s.names
         .iter()
         .find(|(_, e)| e.0 == id)
@@ -1123,7 +1476,7 @@ fn name_of(s: &Sketch, id: u64) -> &str {
 }
 
 /// The sketch's one region, or the one whose outside loop runs through `through`.
-pub fn profile(s: &Sketch, through: Option<&str>) -> R<Profile> {
+pub fn profile(s: &forge_model::Sketch, through: Option<&str>) -> R<Profile> {
     let ps = forge_sketch::profiles(&s.solved).map_err(|e| {
         let n = |id: EntityId| name_of(s, id.0).to_string();
         match e {
@@ -1143,7 +1496,7 @@ pub fn profile(s: &Sketch, through: Option<&str>) -> R<Profile> {
             let outs: Vec<&str> = ps
                 .iter()
                 .map(|p| match name_of(s, p.loops[0].segments[0].1 & !PIECE) {
-                    n if n.starts_with('#') => "(a face's curve: list its edges in `project` to name it)",
+                    n if n.starts_with('#') => "(a face's projected curve)",
                     n => n,
                 })
                 .collect();
@@ -1160,30 +1513,10 @@ pub fn profile(s: &Sketch, through: Option<&str>) -> R<Profile> {
                 .ok_or_else(|| format!("{t} is not on the outside of a region"))?
         }
     };
-    let listed = ids_of_rows(&s.rows)?;
     for l in &mut p.loops {
         for g in &mut l.segments {
-            // an arc dimensioned by a sketch made from a line has that radius exactly, not the one
-            // its rounded points give back
-            if !listed.is_empty()
-                && let forge_ops::Segment::Arc { radius, .. } = &mut g.0
-                && let Some(d) = s
-                    .solved
-                    .constraint_ids()
-                    .find_map(|c| match s.solved.constraint(c) {
-                        Some(C::Radius(e, d)) if e.0 == g.1 => Some(d),
-                        _ => None,
-                    })
-            {
-                *radius = d;
-            }
             let (piece, name) = (g.1 & PIECE, name_of(s, g.1 & !PIECE));
-            g.1 = piece
-                | match listed.iter().find(|o| o.0 == name) {
-                    Some(o) => o.1,
-                    None if listed.is_empty() => stable(name),
-                    None => stable(name) + UNLISTED,
-                };
+            g.1 = piece | stable(name);
         }
     }
     Ok(p)
@@ -1380,19 +1713,39 @@ pub fn freedom(s: &Sketch) -> (usize, Vec<String>) {
     (a.dof, loose)
 }
 
+/// Rows as the tests write them: values as Forge text, points and entities by name.
+#[cfg(test)]
+pub(crate) mod dsl {
+    use super::{Pt, Ref, V};
+
+    pub fn at(x: &str, y: &str) -> Pt {
+        Pt::At(V::of(x), V::of(y))
+    }
+
+    pub fn pn(name: &str) -> Pt {
+        Pt::of(name)
+    }
+
+    pub fn rf(name: &str) -> Ref {
+        Ref::name(name)
+    }
+
+    pub fn v(t: &str) -> V {
+        V::of(t)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use forge_geom::{Circle, Curve};
     use forge_math::{Interval, Point3};
 
-    fn built(rows: &[&str]) -> R<Sketch> {
-        let toks: Vec<Vec<String>> = rows.iter().map(|r| tokens(r)).collect();
-        let num = |t: &str, _: Want| t.parse::<f64>().map_err(|e| e.to_string());
-        build(Frame::default(), toks, &num, None)
+    fn num(t: &str, _: Want) -> R<f64> {
+        t.parse::<f64>().map_err(|e| e.to_string())
     }
 
-    fn seg_ids(s: &Sketch) -> Vec<u64> {
+    fn seg_ids(s: &Solved) -> Vec<u64> {
         let mut v: Vec<u64> = profile(s, None)
             .unwrap()
             .loops
@@ -1404,22 +1757,10 @@ mod tests {
     }
 
     #[test]
-    fn listed_entities_keep_their_ids_and_what_comes_later_can_never_take_one() {
-        let s = built(&["rect 0 0 10 10", "ids l1 0 l2 1 l3 2 l4 3"]).unwrap();
-        assert_eq!(seg_ids(&s), [0, 1, 2, 3]);
-        // a hole added later: its own id, nowhere near; the rest as they were
-        let s = built(&["rect 0 0 10 10", "ids l1 0 l2 1 l3 2 l4 3", "circle 5 5 1"]).unwrap();
-        let v = seg_ids(&s);
-        assert_eq!(&v[..4], [0, 1, 2, 3]);
-        assert!(v[4] >= UNLISTED, "{v:?}");
-        // l1's stable id is 4: listing someone else as 4 doesn't meet it
-        let s = built(&["rect 0 0 10 10", "ids l2 4", "circle 5 5 1"]).unwrap();
-        let v = seg_ids(&s);
-        let mut d = v.clone();
-        d.dedup();
-        assert_eq!(v.len(), d.len(), "{v:?}");
-        // without the row, nothing changes
-        assert_eq!(seg_ids(&built(&["rect 0 0 10 10"]).unwrap()), [4, 8, 12, 16]);
+    fn a_profiles_segments_carry_ids_from_their_entities_names() {
+        let rect = Row::Rect(V::N(0.0), V::N(0.0), V::N(10.0), V::N(10.0));
+        let s = build(Frame::default(), vec![rect], &num, None).unwrap();
+        assert_eq!(seg_ids(&s), [4, 8, 12, 16]);
     }
 
     fn edge(curve: Curve, range: Interval, start: Point3, end: Point3) -> Source {
@@ -1444,38 +1785,38 @@ mod tests {
             Point3::new(5.0 + 4e-6, 0.0, 0.0),
             Point3::new(5.0 * dmath::cos(1.5), 5.0 * dmath::sin(1.5), 0.0),
         );
-        let src = |_: &[String]| {
+        let src = |_: &str| {
             Ok(vec![Refd {
                 sources: vec![(Name::NONE, Src::Model(e.clone()))],
                 one: true,
             }])
         };
-        let num = |t: &str, _: Want| t.parse::<f64>().map_err(|e| e.to_string());
-        let s = build_on(
-            Frame::default(),
-            vec![vec!["project".into(), "edge".into(), "e".into()]],
-            &num,
-            &src,
-            None,
-        )
-        .unwrap();
+        let row = Row::Project {
+            of: "e".into(),
+            many: false,
+            approx: None,
+        };
+        let s = build_on(Frame::default(), vec![row], &num, &src, None).unwrap();
         assert_eq!(freedom(&s).0, 0);
     }
 
     #[test]
-    fn two_entities_cannot_share_an_id() {
-        assert!(
-            built(&["rect 0 0 10 10", "ids l1 0 l2 0"])
-                .unwrap_err()
-                .contains("two entities")
-        );
-        assert!(
-            built(&["rect 0 0 10 10", "ids l1 0", "ids l1 1"])
-                .unwrap_err()
-                .contains("twice")
-        );
-        assert!(built(&["rect 0 0 10 10", "ids l1 x"]).is_err());
-        assert!(built(&["rect 0 0 10 10", "ids l1"]).is_err());
-        assert!(built(&["rect 0 0 10 10", "ids l1 99999999999"]).is_err());
+    fn only_dimension_values_changed_solve_from_how_it_was() {
+        let rows = |w: f64| {
+            vec![
+                Row::Line(Pt::at(0.0, 0.0), Pt::at(10.0, 0.0)),
+                Row::Dim(D::Dist, vec![Ref::to("l1")], Some(V::N(w))),
+                Row::Dim(D::Dist, vec![Ref::a("l1"), Ref::b("l1")], None),
+            ]
+        };
+        let was = build(Frame::default(), rows(10.0), &num, None).unwrap();
+        let now = build(Frame::default(), rows(12.0), &num, Some(&was)).unwrap();
+        assert_eq!(now.rows, rows(12.0));
+        assert!((now.driven[0].1 - 12.0).abs() < 1e-9, "{:?}", now.driven);
+        // what a full read gives
+        let fresh = build(Frame::default(), rows(12.0), &num, None).unwrap();
+        let (a, b) = line(&now, "l1").unwrap();
+        let (c, d) = line(&fresh, "l1").unwrap();
+        assert!(a.distance(c) < 1e-9 && b.distance(d) < 1e-9);
     }
 }

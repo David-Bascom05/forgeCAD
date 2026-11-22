@@ -827,9 +827,9 @@ impl Session {
                     ),
                 });
                 let mut driven = Vec::new();
-                for &(k, v) in &s.driven {
-                    let row = s.rows[k].join(" ");
-                    let v = if s.rows[k][1] == "ang" {
+                for &(k, v) in &forge_doc::sketch::fc(s).driven {
+                    let row = forge_doc::sketch::fc(s).rows[k].join(" ");
+                    let v = if forge_doc::sketch::fc(s).rows[k][1] == "ang" {
                         v / forge_math::dmath::PI * 180.0
                     } else {
                         v

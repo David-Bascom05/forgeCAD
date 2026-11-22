@@ -567,18 +567,14 @@ impl Sk {
             plane: self.frame,
             on: None,
             at: None,
-            rows: vec![],
             solved: self.s.clone(),
-            driven: vec![],
             names: self
                 .ents
                 .iter()
                 .filter(|e| !e.1.starts_with('~'))
                 .map(|e| (e.1.clone(), e.0))
                 .collect(),
-            written: vec![],
-            dims: vec![],
-            driven_of: vec![],
+            note: Default::default(),
         }
     }
 }
