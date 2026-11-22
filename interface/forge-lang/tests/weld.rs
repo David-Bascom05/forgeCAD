@@ -117,7 +117,7 @@ arm = members(lay.o, section: \"SHS 40x40x3\")
     near(r.cut.length, 300.0, 1e-9, "length");
     near(
         r.cut.overall.unwrap(),
-        300.0 + 20.0 * (PI / 6.0).tan(),
+        300.0 + 20.0 / 3f64.sqrt(),
         1e-9,
         "overall",
     );
@@ -126,7 +126,7 @@ arm = members(lay.o, section: \"SHS 40x40x3\")
     // both members are cut alike, end for end: one row
     assert_eq!(r.members.len(), 2);
     let b = solids(src);
-    near(extent(&b[0], 0), 300.0 + 20.0 * (PI / 6.0).tan(), 1e-6, "body");
+    near(extent(&b[0], 0), 300.0 + 20.0 / 3f64.sqrt(), 1e-6, "body");
 }
 
 #[test]
@@ -329,6 +329,17 @@ cap0 = end_cap(bar[0], end: \"start\", t: 4)
 
 #[test]
 fn members_take_ordinary_features() {
+    // a hole sketched on a member's top face, through both its walls: 2 pi r^2 t taken away
+    let src = format!(
+        "{RECT}top = members(lay.r, section: \"SHS 40x40x3\")\nsketch hs(on: top[0].top) {{\n  p = pt(W / 2, 0)\n}}\nbolt = hole(at: hs.p, d: 8, depth: thru, bodies: top[0])\n"
+    );
+    let m = common::holds(&src);
+    near(
+        m.volume,
+        shs40x3() * 2000.0 - 2.0 * PI * 16.0 * 3.0,
+        1e-6,
+        "drilled",
+    );
     let src = format!(
         "{RECT}top = members(lay.r, section: \"SHS 40x40x3\")\nround = fillet(edges(of: top[0], crease: \"convex\"), 1)\nsketch hs(on: top[2].start) {{\n  c = circle((0, 0), 4)\n}}\n"
     );

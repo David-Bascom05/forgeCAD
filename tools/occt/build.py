@@ -1236,6 +1236,28 @@ def split_by(shape, s, keep, opts):
     return (minus() if keep != "plus" else None), (plus() if keep != "minus" else None)
 
 
+def member(f, opts):
+    """A weldment member: its section along a line (a prism) or an arc (a revolve), run on by
+    `reach` past each end, then each cut's half-space (where its z points) taken away."""
+    fc, pl = face(f)
+    r0, r1 = f["reach"]
+    p = f["path"]
+    if "line" in p:
+        z = pl.z
+        body = prism(translated(fc, [c * -r0 for c in z]), [c * (p["line"] + r0 + r1) for c in z])
+    else:
+        o, z, _, _ = revolve_frame(dict(f, axis=p["arc"]), pl)
+        # turned the way the path runs: where the profile plane's z points
+        if dot(cross(z, sub(pl.o, o)), pl.z) < 0:
+            z = [-c for c in z]
+        if r0:
+            fc = rotated(fc, o, z, -r0)
+        body = BRepPrimAPI_MakeRevol(fc, gp_Ax1(gp_Pnt(*o), gp_Dir(*z)), p["sweep"] + r0 + r1).Shape()
+    for c in f["cuts"]:
+        body, _ = split_by(body, {"s": "plane", "f": c}, "minus", opts)
+    return body
+
+
 def build(features, opts, trace=None):
     """The part the features make (its bodies as one compound when there are several);
     `trace(feature, part)` is called after each."""
@@ -1308,6 +1330,17 @@ def build(features, opts, trace=None):
                     bodies[t][1] = minus if minus is not None else plus
                     if f["keep"] == "both":
                         bodies.append([f["i"], plus])
+            elif k == "member":
+                tools = [(member(f, opts), "new")]
+            elif k == "trim":
+                # the member less each tool's part beyond the region's plane
+                t = find(f["member"])
+                body = bodies[t][1]
+                for tool in f["tools"]:
+                    shape = bodies[find(tool["body"])][1] if "body" in tool else member(tool["member"], opts)
+                    _, beyond = split_by(shape, {"s": "plane", "f": f["region"]}, "plus", opts)
+                    body = boolean(body, [beyond], "cut", opts)
+                bodies[t][1] = body
             elif k == "move":
                 on = picked_bodies(f)
                 if f["copy"]:

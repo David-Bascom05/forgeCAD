@@ -865,7 +865,9 @@ corner_plate(A, B, size: S, t: T, chamfer: C)
   `ArcTooTight` (an arc no larger than the section, or an end cut more than a quarter turn
   round it), `MembersOverlap` (an arc member curving into another: such pairs are intersected;
   straight members are kept apart by their cut planes by construction).
-- Anchors: `F[k].start`, `F[k].end`, a member's end faces (its cut planes' or the section's).
+- Anchors: `F[k].start`, `F[k].end`, a member's end faces (its cut planes' or the section's);
+  `F[k].top`, `.bottom`, `.left`, `.right`, the flat sides of its outline facing the section's +y,
+  -y, +x, -x (a plane to sketch a hole on: `sketch hs(on: top[0].top) { .. }`).
 - The cut list: `fg query F cutlist` (and `cutlist` in `fg run --json`): identical members on
   one row (section, cut length, overall length and the cuts at each end, either way round):
   `qty`, `members`, `length` (along the path between the end cuts), `overall` (long point to

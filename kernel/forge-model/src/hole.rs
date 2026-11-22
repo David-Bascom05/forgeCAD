@@ -320,6 +320,8 @@ fn adds(features: crate::History<'_>, i: usize) -> Vec<Box3> {
         Feature::Sweep(_) | Feature::Coil(_) | Feature::Loft(_) => {
             crate::swept::reach_of(features, i).into_iter().collect()
         }
+        // a weldment member: the box round its path, run on, grown by its section's reach
+        Feature::Member(m) => vec![crate::weld::reach_box(m)],
         Feature::Import(t) => t
             .body
             .iter()

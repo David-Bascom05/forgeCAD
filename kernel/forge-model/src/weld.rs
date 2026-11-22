@@ -122,6 +122,31 @@ pub fn uncut(m: &Member, i: usize, id: u64) -> Result<Body, RegenError> {
     }
 }
 
+/// A box holding the member whatever its cuts (they only take away): its path run on by its
+/// reach, grown by the farthest its section reaches from the path (for a through cut's size).
+pub fn reach_box(m: &Member) -> Box3 {
+    let mut rho: f64 = 0.0;
+    for (s, _) in m.profile.loops.iter().flat_map(|l| l.segments.iter()) {
+        let far = match *s {
+            forge_ops::Segment::Arc { center, radius, .. }
+            | forge_ops::Segment::Circle { center, radius, .. } => center.to_vec().length() + radius,
+            ref other => other.start().to_vec().length().max(other.end().to_vec().length()),
+        };
+        rho = rho.max(far);
+    }
+    let pl = m.profile.plane;
+    match m.path {
+        MemberPath::Line { length } => {
+            let z: Vec3 = pl.z().into();
+            Box3::from_points([pl.origin - z * m.reach[0], pl.origin + z * (length + m.reach[1])]).grow(rho)
+        }
+        MemberPath::Arc { axis, .. } => {
+            let c = pl.plane_point(axis.origin);
+            Box3::from_point(c).grow(c.distance(pl.origin) + rho)
+        }
+    }
+}
+
 fn bbox(b: &Body) -> Box3 {
     b.face_ids().fold(Box3::EMPTY, |acc, f| acc.hull(&b.face_box(f)))
 }

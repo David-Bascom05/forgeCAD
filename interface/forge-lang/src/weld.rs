@@ -808,24 +808,50 @@ fn members_of(ev: &Eval, v: &Value, span: Span) -> R<Vec<(usize, usize)>> {
     }
 }
 
-/// A member's role anchors: `start`, `end` (its end faces: the cuts', or the section's caps).
+/// A member's role anchors: `start`, `end` (its end faces: the cuts', or the section's caps);
+/// `top`, `bottom`, `left`, `right` (its outline's flat sides facing the section's +y, -y, -x,
+/// +x: up the layout's normal, down, to the path's right, to its left).
 pub fn member(ev: &mut Eval, f: &Feat, name: &str) -> Option<Value> {
-    if f.kind != "member" || !matches!(name, "start" | "end") {
+    if f.kind != "member" || !matches!(name, "start" | "end" | "top" | "bottom" | "left" | "right") {
         return None;
     }
     let (fi, k) = ev.welds.member(f.idx)?;
     let m = &ev.welds.frames[fi].members[k];
     let root = Name::feature(f.hid);
-    let s = usize::from(name == "end");
-    let first = if s == 0 { 0 } else { m.own[0] };
-    let mut names = vec![if s == 0 {
-        roles::start(root)
-    } else {
-        roles::end(root)
-    }];
-    names.extend((first..first + m.own[s]).map(|c| roles::start(Name::feature(cut_id(f.hid, c)))));
-    let role = if s == 0 { Role::Start } else { Role::End };
-    Some(role_set(ev, f, role, &names, None))
+    if matches!(name, "start" | "end") {
+        let s = usize::from(name == "end");
+        let first = if s == 0 { 0 } else { m.own[0] };
+        let mut names = vec![if s == 0 {
+            roles::start(root)
+        } else {
+            roles::end(root)
+        }];
+        names.extend((first..first + m.own[s]).map(|c| roles::start(Name::feature(cut_id(f.hid, c)))));
+        let role = if s == 0 { Role::Start } else { Role::End };
+        return Some(role_set(ev, f, role, &names, None));
+    }
+    // the outline's lines (segment ids from 1, as `kernel_member` numbers them) whose outward
+    // normal, (dy, -dx) round a counter-clockwise outline, is the side's
+    let want = match name {
+        "top" => (0.0, 1.0),
+        "bottom" => (0.0, -1.0),
+        "left" => (1.0, 0.0),
+        _ => (-1.0, 0.0),
+    };
+    let mut names = vec![];
+    for (i, seg) in m.spec.section.loops[0].iter().enumerate() {
+        if let forge_ops::Segment::Line { a, b } = *seg {
+            let d = b - a;
+            let l = d.length();
+            if l > 0.0 && (d.y / l - want.0).abs() < 1e-9 && (-d.x / l - want.1).abs() < 1e-9 {
+                let id = i as u64 + 1;
+                names.push(roles::side(root, id));
+                names.push(roles::revolve_side(root, id, 0));
+                names.push(roles::revolve_side(root, id, 1));
+            }
+        }
+    }
+    Some(role_set(ev, f, Role::Side, &names, None))
 }
 
 // ---- end trims -----------------------------------------------------------------------------
@@ -1120,7 +1146,7 @@ fn end_cap(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         }
         // where the plane crosses the path
         let along = (c.point - at).dot(z);
-        at = at + z * along;
+        at += z * along;
     }
     if !rec.copes[s].is_empty() || matches!(rec.spec.path, Path::Arc { .. }) && !rec.cuts[s].is_empty() {
         return Err(weld_err(WeldErr::CapOnSlantEnd {
