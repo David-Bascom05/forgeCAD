@@ -2,14 +2,16 @@
 //! laid on the sketch's plane and held there (fixed), read afresh on every run. Exact images
 //! (lines, circles, arcs, ellipses), or with `approx: TOL` a fitted spline for a general curve.
 
+mod flat;
+
 use crate::builtins::{Args, LEN, in_sketch, mk_ent, pending_name, positive};
 use crate::error::EntKind;
 use crate::eval::{Ent, Eval, R, Value};
 use crate::feat_error::FeatError;
 use crate::sketch::Sk;
 use crate::syntax::{Arg, Span};
+use flat::{Flat, Source, flat};
 use forge_agent::select;
-use forge_doc::sketch::{Flat, Source, flat};
 use forge_geom::Line;
 use forge_math::Point2;
 use forge_sketch::{Constraint, EntityId};
@@ -33,8 +35,7 @@ pub fn project(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     let mut made = vec![];
     for (k, s) in sources.iter().enumerate() {
         let f = flat(&plane, s, approx).map_err(|why| -> crate::error::Error {
-            if approx.is_none() && matches!(s, Source::Edge { .. }) && forge_doc::sketch::needs_fit(&plane, s)
-            {
+            if approx.is_none() && matches!(s, Source::Edge { .. }) && flat::needs_fit(&plane, s) {
                 FeatError::NeedsApprox { span: a.span("of") }.into()
             } else {
                 FeatError::NoImage {

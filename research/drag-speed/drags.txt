@@ -2,6 +2,6 @@ heatsink L
 frame reach
 manifold pitch
 gearbox W
-crank len
-volute core.166
-conrod bolt.4+tap.4
+crank al
+volute dyc
+conrod bolt.d+tap.d

@@ -29,11 +29,7 @@ fn names() -> Vec<String> {
 fn font_dir() -> std::path::PathBuf {
     let dir = std::env::temp_dir().join(format!("forge-benchparts-{}", std::process::id()));
     std::fs::create_dir_all(&dir).expect("temp dir");
-    std::fs::write(
-        dir.join(forge_agent::bench::FONT),
-        forge_agent::bench::font_bytes(),
-    )
-    .expect("font");
+    std::fs::write(dir.join(forge_lang::bench::FONT), forge_lang::bench::font_bytes()).expect("font");
     dir
 }
 
@@ -154,8 +150,8 @@ fn main() {
             }
         }
         "font" => std::fs::write(
-            std::path::Path::new(arg(1)).join(forge_agent::bench::FONT),
-            forge_agent::bench::font_bytes(),
+            std::path::Path::new(arg(1)).join(forge_lang::bench::FONT),
+            forge_lang::bench::font_bytes(),
         )
         .expect("write"),
         a => panic!("unknown command {a}"),

@@ -2,7 +2,8 @@
 //! dragged on the model, a browser row lighting its faces, suppression and the End of Part, the
 //! build's flags on the model, the dialogs' placings and axes, window selection, a sketch started
 //! for an extrude and picked in the view, undo kept with the file, literal sketch points held
-//! free, and the part's own unit. Each is driven as a person would, headless; each writes Forge.
+//! free, the part's own unit, and a part the check faults (tests/faulty). Each is driven as a
+//! person would, headless; each writes Forge.
 
 use forge_lang::error::Op;
 use forge_render::gui::{Gui, Headless};
@@ -704,4 +705,70 @@ fn a_parts_unit_is_kept_in_its_text_and_typed_numbers_take_it() {
     // reopened, it reads in its own unit
     let Some(h) = open_file(&f) else { return };
     assert_eq!(h.gui.shell.units, "in");
+}
+
+/// A part the kernel builds and the check faults, kept in tests/faulty.
+fn faulty(name: &str) -> String {
+    std::fs::read_to_string(format!("{}/tests/faulty/{name}", env!("CARGO_MANIFEST_DIR")))
+        .unwrap_or_else(|e| panic!("{name}: {e}"))
+}
+
+/// The check's problems of a part, by kind, and the features whose bodies have them.
+fn faults(text: &str) -> Vec<(&'static str, String)> {
+    let run = forge_lang::run(text, forge_lang::Options::default(), Default::default()).0;
+    assert!(run.errors.is_empty(), "it builds: {:?}", run.errors);
+    let m = run.measure.expect("measured");
+    m.invalid.into_iter().map(|i| (i.kind, i.body)).collect()
+}
+
+fn summary(h: &Headless) -> String {
+    h.gui.shell.fg.as_ref().unwrap().summary.clone()
+}
+
+#[test]
+fn a_part_the_check_faults_says_so_and_fixing_the_part_clears_it() {
+    // a part the kernel builds and the check doesn't pass: a fillet whose loops cross
+    let part = faulty("check-loops-cross.fg");
+    let found = faults(&part);
+    assert!(found.contains(&("LoopsCross", "block".to_string())), "{found:?}");
+    let Some((mut h, file)) = open(&part, "fault") else {
+        return;
+    };
+    assert!(
+        h.until(|g| g.shell.fg.as_ref().is_some_and(|p| p.summary.contains("INVALID"))),
+        "the check found nothing on a part known to fail it: {}",
+        summary(&h)
+    );
+    // the fillet taken out: the part is sound, and it says so by itself
+    assert!(h.menu_item("fg:row:corners", "fg:menu:delete:corners"));
+    settle(&mut h);
+    assert!(
+        h.until(|g| g.shell.fg.as_ref().is_some_and(|p| p.summary.contains(" valid"))),
+        "{}\n{}",
+        summary(&h),
+        std::fs::read_to_string(&file).unwrap()
+    );
+    assert!(faults(&src(&h)).is_empty());
+}
+
+#[test]
+fn a_part_with_an_edge_off_its_face_is_found_too() {
+    let part = faulty("check-edge-off-face.fg");
+    let found = faults(&part);
+    assert!(found.iter().any(|f| f.0 == "EdgeOffFace"), "{found:?}");
+    // its broken face has no mesh, so the view is never whole: wait on the build's word alone
+    let mut h = match Headless::new((1300.0, 1000.0), 1.0) {
+        Ok(h) => h,
+        Err(e) => {
+            eprintln!("skipped: {e}");
+            return;
+        }
+    };
+    h.step();
+    h.gui.open(file(&part, "edgeoff").to_str().unwrap());
+    assert!(
+        h.until(|g| g.shell.fg.as_ref().is_some_and(|p| p.summary.contains("INVALID"))),
+        "the check found nothing on a part known to fail it: {}",
+        summary(&h)
+    );
 }

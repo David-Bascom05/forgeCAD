@@ -341,7 +341,7 @@ impl Settings {
                 }
             }
         }
-        s.length = known(&forge_doc::units::DOC_LENGTHS, &get("units", "length")).unwrap_or("mm");
+        s.length = known(&forge_lang::units::DOC_LENGTHS, &get("units", "length")).unwrap_or("mm");
         s.angle = known(&ANGLES, &get("units", "angle")).unwrap_or("deg");
         s.decimals = get("units", "decimals").parse().unwrap_or(3).min(6);
         let secs = |k: &str, d: f32| {
@@ -1344,7 +1344,7 @@ fn tooltips(ui: &mut Ui, t: &Theme, s: &mut Settings, places: &mut Vec<(String, 
 fn units(ui: &mut Ui, t: &Theme, s: &mut Settings, _: &mut Window, places: &mut Vec<(String, Rect)>) {
     section(ui, t, "Units");
     row(ui, t, "Length", |ui| {
-        let items: Vec<(&str, bool)> = forge_doc::units::DOC_LENGTHS
+        let items: Vec<(&str, bool)> = forge_lang::units::DOC_LENGTHS
             .iter()
             .map(|u| (*u, s.length == *u))
             .collect();
@@ -1352,10 +1352,10 @@ fn units(ui: &mut Ui, t: &Theme, s: &mut Settings, _: &mut Window, places: &mut 
             ui,
             t,
             &items,
-            &|k| format!("settings:length:{}", forge_doc::units::DOC_LENGTHS[k]),
+            &|k| format!("settings:length:{}", forge_lang::units::DOC_LENGTHS[k]),
             places,
         ) {
-            s.length = forge_doc::units::DOC_LENGTHS[k];
+            s.length = forge_lang::units::DOC_LENGTHS[k];
         }
     });
     row(ui, t, "Angle", |ui| {
@@ -1388,7 +1388,7 @@ fn units(ui: &mut Ui, t: &Theme, s: &mut Settings, _: &mut Window, places: &mut 
     });
     // what a measurement reads as with these
     let d = s.decimals;
-    let len = 25.4 / forge_doc::units::compound(s.length).map_or(1.0, |(_, n, m)| m / n);
+    let len = 25.4 / forge_lang::units::compound(s.length).map_or(1.0, |(_, n, m)| m / n);
     let ang = if s.angle == "rad" {
         format!("{:.d$} rad", std::f64::consts::FRAC_PI_4)
     } else {

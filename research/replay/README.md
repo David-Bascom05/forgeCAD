@@ -8,9 +8,13 @@ the complex parts the realistic best is under 2x. Nothing here is used by shippe
 
 ```
 git apply research/replay/measure/probe.patch    # counters and research/rebuild's measure patch: never on main
-cp research/replay/measure/{dragplan,warmbits}.rs interface/forge-agent/examples/
+cp research/replay/measure/{dragplan,warmbits}.rs interface/forge-lang/examples/
 RUSTFLAGS="-Cforce-frame-pointers=yes -Cdebuginfo=line-tables-only" CARGO_TARGET_DIR=target/fp \
-  fbuild cargo build --release -p forge-agent --example dragplan --example warmbits
+  fbuild cargo build --release -p forge-lang --example dragplan --example warmbits
+# probe.patch was made against bf21c471, when drags ran on the retired .fc engine: its forge-bool
+# counters are what dragplan reads; its Model hunks (each line's cost) have no Forge counterpart,
+# and dragplan needs `cputime` as a dev-dependency of forge-lang in their place.
+# The drags are the Forge bench parts' params now (drags.txt): numbers taken before are .fc's.
 # from a scratch directory holding the scripts and drags.txt, for each `part number` line:
 dragplan part number 8 > steps-part.txt
 perf record -e instructions:u -c 200000 --call-graph fp -o d dragplan part number 16

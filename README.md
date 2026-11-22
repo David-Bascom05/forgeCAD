@@ -44,6 +44,7 @@ The repository is split by what a thing is:
 |---|---|
 | `forge-doc` | the document model behind part files, its ops and their binary form |
 | `forge-lang` | Forge (`.fg`), the part language: parts, sheet metal, assemblies, drawings; typed errors and edit ops, versions |
+| `forge-units` | the unit table (mm, in, deg, kg, ..) and a part's `# units` line; `forge_lang::units` writes typed values as Forge text |
 | `forge-agent` | selectors, handles, measuring, rendering, JSON, the live loop |
 | `forge-cli` | `forgecad build/check/query/measure/render/export/edit/help`, versions, `serve`, `mcp` (see AGENTS.md), `import` |
 | `forge-import` | FreeCAD `.FCStd` bodies as `.fg` parts |
