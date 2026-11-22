@@ -142,6 +142,28 @@ tol_a, ≤ 2·tol_a):
 
   Non-transitive coincidence is where the tolerance band lives (§3).
 
+### 1.5 `interior_point`'s probe (Coverage/Probe.lean, kernel-checked)
+
+`clear_step` (boolean.rs:6179–6207) and its fallback `probe` (6174) are modelled on a strip of width
+w, over ℚ. The steps are s_k = 2^(n−1−k)·u for k < n, where u is the last step ≥ 2·LINEAR. A probe is
+clear when the far side is at least a step away; with no clear step, the fallback default step is
+used.
+
+| theorem | statement |
+|---|---|
+| `fits_iff` | some step fits ⟺ 2·u ≤ w |
+| `kernelProbe_inside_iff` | the kernel's probe lands strictly inside the strip ⟺ 2·u ≤ w ∨ s_def < w |
+| `g3_edge` | at a half chord ≥ 5 (s₀ = 0.05, 12 steps, u = 0.05·2⁻¹¹), a strip w ≤ 0.05 wide gets its probe outside ⟺ w < 0.05·2⁻¹⁰ mm = 4.8828125·LINEAR (`g3_edge_linear`) |
+| `ProbeSpec` | **the specification for the fix-probe session's exact interior point**: strictly inside every strip of positive width |
+| `kernel_not_spec` | the kernel's probe violates `ProbeSpec`: a strip 2·LINEAR wide |
+| `midpoint_spec` | the midpoint meets `ProbeSpec` |
+
+G3 and G4 are this theorem with w = δ (G3) and w = (reach/2)·θ (G4).
+
+The Aeneas extraction of the code itself (tables for the steps, probes and clearances, as for
+`place_cuts`) is in `aeneas/clearstep`. It will carry the same edge as a theorem on the extracted
+function, so a change to `interior_point` can be proven against `ProbeSpec`.
+
 ## 2. The gaps
 
 | # | pattern | outcome | site | repro | real parts |
@@ -237,9 +259,8 @@ and CAREFUL never succeed.
 Each takes its distance or sign tests as tables, as `placecuts` does:
 
 1. `place_cuts`' clustering (4561–4620). **Done**, proven (§1.4).
-2. `clear_step` / `interior_point`'s step ladder (6150–6207): steps as indices k with step =
-   s₀·2⁻ᵏ, and "clear" and "inside the face" as tables. Proving "a probe exists iff the region is
-   ≥ 2·s₀·2⁻ᵏᵐᵃˣ wide" gives G3/G4's edge as a theorem on the code.
+2. `clear_step` / `interior_point`'s step ladder (6150–6207). **In progress**: §1.5 gives the
+   geometric model; `aeneas/clearstep` gives the extraction.
 3. `edge_split` (756–813): the sort, dedup and piece chain. Cut order and the vertex keys are
    given.
 4. The four-use count (1739–1749) and `keep_of` (6096).
