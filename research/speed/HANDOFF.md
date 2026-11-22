@@ -18,41 +18,67 @@ Out of scope for now:
 
 ## Where it stands
 
-The committed steps, all with gates passed and merged into claude/repo-review-mbdrlj:
-- The one-pass parser `syntax/fast.rs`, which falls back to the table parser. Also the lineage
-  map hashed by name.
-- Work features share the stage before them.
-- A sketch's freedom (UnderConstrained dof) is a check, so it is skipped under `checks: false`.
-- `forge_model::step_solids_plain`: the unwrapped history is kept, not re-cloned every step.
-- The reserved-word scan runs only when fast.rs refuses the text.
-- `examples/fgcount.rs`, the measuring harness.
+Committed steps, gates passed (see each commit message for its measurements):
+- Earlier, merged into claude/repo-review-mbdrlj: fast.rs (then with a fallback), the lineage
+  map by name, work features sharing the stage before, dof as a check, step_solids_plain,
+  the reserved-word scan only on refusal, fgcount.
+- Step 1a (9d293e7): params by name (`ParamIx`), shared key sets, the lexer's byte classes,
+  one name map for builtins and constants.
+- Step 1b (9ff5a92):
+  - fn bodies are an Rc;
+  - `or`'s operand fast path;
+  - lineage walks each solid's faces, with no joined, compacted copy;
+  - lineage origins are an inline `Origin`, not a Vec per face;
+  - `Body::face_box_unkept`, so lineage on a stage of several solids leaves the kernel's
+    cached boxes alone.
 
-HEAD is the commit `wip: step 1 (part a)`. It is not gated yet; it was built and measured in a
-scratch copy of the tree:
-- `ParamIx`: params looked up by name.
-- `values::Keys = BTreeSet<Arc<ParamKey>>` for driven numbers, reads and sketch params.
-- `ParamKey` compares by address first.
-- One name map for builtins and constants, with a fast None.
-- Lexer byte-class table, and `str::find` for comment ends.
+Committed, gates pending or partly run:
+- The standalone parser (fast.rs = Driver.lean's rdS/rdF; no fallback). See "fast.rs" below.
+- Step 1c:
+  - a work datum is worked out once;
+  - `forge_model::finished_suffices`: no copy of the unfinished body for a part-changing
+    feature;
+  - sketch regions are kept on the solve;
+  - built-in names are a compile-time table;
+  - plain numbers are lexed exactly.
 
-Measured effect: frame -2.7M, clamp -50k, insert -140k. Next for it: run the gates, then
-commit it as a real step.
+Uncommitted at the time of writing: step 1d:
+- the shadowing check borrows names instead of copying them;
+- call scopes are presized;
+- `values::Keys` is a sorted Vec, not a BTreeSet.
 
-Gates for every step: `research/speed/tools/gates.sh`. It runs:
-- fmt;
-- `cargo build --release --workspace --all-targets`;
-- `cargo clippy --workspace --all-targets -- -D warnings`;
-- every forge-lang and forge-model test binary;
-- bits;
-- the scoreboard (`reliability --baseline`): 0 worse;
-- `FUZZ_SEEDS=150` suite and n-ary;
-- forge-render `cargo test --release --no-fail-fast`.
+Gate notes:
+- forge-render's 4 chat/conversation tests need a GPU adapter. Install mesa-vulkan-drivers
+  (lavapipe) in a fresh container.
+- tools/speed/baseline-valgrind.txt predates the kernel merges. Some kernel-only seq/nary1
+  lines read +0.2-0.3% over it even at the base commit 6979fa5. Compare against the parent
+  commit's gate output, not the file.
+- A bench part's seq line is `run` minus `resolve`. When a step makes the language cheaper,
+  seq can rise with no kernel change:
+  - `run` keeps the same language work but its regen meets a different heap;
+  - on valve at 1b, realloc grew in place less often: +424k of copying;
+  - `run` itself was flat (+9k) while `resolve` fell 370k.
 
-forge-render has two timing-sensitive tests that fail under machine load:
-- `fg::a_warm_rebuild_in_the_app_is_milliseconds`;
-- `fg_gaps::a_part_with_an_edge_off_its_face_is_found_too`.
+## fast.rs (standalone)
 
-Rerun them alone before believing a failure.
+- One function per nonterminal of grammar.ll1. Each starts with `pick`:
+  - TABLE's rule, through a padded `Option<P>` table (`PICK`);
+  - else note the miss (FIRST, with fk if nullable; the stmtsrest/stmts flags) and take EMPTY;
+  - or stop.
+- `fk` is inherited. `after(P, i, fk)` reads `AFTER`, per-rule suffix FIRST/NULLABLE tables
+  worked out at compile time. Use a constant `P` at call sites so it folds.
+- Missed mode never shifts.
+- The five action checks sit where `enter`/`reduce` make them.
+- `reserved_tok` is said first on a refusal.
+- The operand fast path in `or` is guarded:
+  - the lookahead starts an atom;
+  - after the postfix chain it is in `TAILS_END`, the lookaheads on which every operator tail
+    takes its empty rule from TABLE.
+- tests/parse_diff.rs compares Debug of the whole answer with `parse_table`, errors included.
+  FG_DIFF_LONG=1 finds no mismatch, but stops at the missing Lean digest for its longer
+  corpora.
+- Not done: the Aeneas translation and its proof against `rdS`. The core avoids trait objects
+  and unsafe; it uses Box<Error>, Vec and String.
 
 ## Latest table
 

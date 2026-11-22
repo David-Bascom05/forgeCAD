@@ -11,7 +11,7 @@ use forge_math::{Frame, Point3, UnitVec3, Vec3};
 use forge_sketch::EntityId;
 use forge_topo::Name;
 use std::cell::RefCell;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::rc::Rc;
 
 /// How a rule is enforced: not at all, as a typed lint (a warning with fixes, never blocking),
@@ -488,7 +488,7 @@ impl<'s> Eval<'s> {
             ent_name: None,
             observed: BTreeSet::new(),
             calls: 0,
-            reads: BTreeSet::new(),
+            reads: values::Keys::new(),
             volumes: false,
             checks: true,
             poisoned: false,
@@ -684,17 +684,22 @@ impl<'s> Eval<'s> {
         }
         // hard: no local (a function's parameter or binding, a loop or comprehension variable, a
         // sketch's entity) has a top-level name
-        let mut top = crate::edit::bound(prog);
+        // (the names borrowed from the program, not copied)
+        let mut top: HashSet<&str> = HashSet::new();
+        crate::edit::bound_into(prog, &mut top);
         for s in prog {
             if let StmtKind::Param { owner, .. } = &s.kind {
-                top.extend(owner.first().map(|o| o.name.clone()));
+                top.extend(owner.first().map(|o| o.name.as_str()));
             }
         }
         let mut locals = vec![];
         locals_of(prog, true, &mut locals);
         for (name, span) in locals {
-            if top.contains(&name) {
-                self.errors.push(Error::ShadowsTopLevel { span, name });
+            if top.contains(name) {
+                self.errors.push(Error::ShadowsTopLevel {
+                    span,
+                    name: name.to_string(),
+                });
             }
         }
     }
@@ -2052,7 +2057,7 @@ impl<'s> Eval<'s> {
                 max: def.params.len(),
             });
         }
-        let mut scope = Scope::default();
+        let mut scope = Scope::with_capacity_and_hasher(def.params.len(), Default::default());
         for (k, a) in args.iter().enumerate() {
             let pname = match &a.name {
                 Some((n, nsp)) => {
@@ -2661,8 +2666,8 @@ pub fn unit_or_z(v: Vec3) -> UnitVec3 {
 
 /// The local names statements bind, with where: function parameters and bodies, loop and
 /// comprehension variables, a sketch's or path's names. A loop at top level binds top-level names.
-fn locals_of(stmts: &[Stmt], top: bool, out: &mut Vec<(String, Span)>) {
-    fn comp(e: &Expr, out: &mut Vec<(String, Span)>) {
+fn locals_of<'a>(stmts: &'a [Stmt], top: bool, out: &mut Vec<(&'a str, Span)>) {
+    fn comp<'a>(e: &'a Expr, out: &mut Vec<(&'a str, Span)>) {
         match &e.kind {
             ExprKind::Comp {
                 item,
@@ -2670,7 +2675,7 @@ fn locals_of(stmts: &[Stmt], top: bool, out: &mut Vec<(String, Span)>) {
                 iter,
                 cond,
             } => {
-                out.extend(vars.iter().map(|v| (v.clone(), e.span)));
+                out.extend(vars.iter().map(|v| (v.as_str(), e.span)));
                 comp(item, out);
                 comp(iter, out);
                 if let Some(c) = cond {
@@ -2700,7 +2705,7 @@ fn locals_of(stmts: &[Stmt], top: bool, out: &mut Vec<(String, Span)>) {
         match &s.kind {
             StmtKind::Assign { name, value } => {
                 if !top {
-                    out.push((name.clone(), s.span));
+                    out.push((name.as_str(), s.span));
                 }
                 comp(value, out);
             }
@@ -2715,13 +2720,13 @@ fn locals_of(stmts: &[Stmt], top: bool, out: &mut Vec<(String, Span)>) {
             } => {}
             StmtKind::Block { name, args, body, .. } => {
                 if !top {
-                    out.push((name.clone(), s.span));
+                    out.push((name.as_str(), s.span));
                 }
                 args.iter().for_each(|a| comp(&a.value, out));
                 locals_of(body, false, out);
             }
             StmtKind::For { vars, iter, body } => {
-                out.extend(vars.iter().map(|v| (v.clone(), s.span)));
+                out.extend(vars.iter().map(|v| (v.as_str(), s.span)));
                 comp(iter, out);
                 locals_of(body, top, out);
             }
@@ -2731,7 +2736,7 @@ fn locals_of(stmts: &[Stmt], top: bool, out: &mut Vec<(String, Span)>) {
                 locals_of(other.as_deref().unwrap_or(&[]), top, out);
             }
             StmtKind::Fn { params, body, .. } => {
-                out.extend(params.iter().map(|p| (p.name.clone(), s.span)));
+                out.extend(params.iter().map(|p| (p.name.as_str(), s.span)));
                 locals_of(body, false, out);
             }
             StmtKind::Expect { .. } => {}

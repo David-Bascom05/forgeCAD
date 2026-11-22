@@ -114,6 +114,26 @@ pub fn mentions(s: &Stmt) -> BTreeSet<String> {
     out
 }
 
+/// `bound`'s names, borrowed, into `out`.
+pub fn bound_into<'a>(stmts: &'a [Stmt], out: &mut std::collections::HashSet<&'a str>) {
+    for s in stmts {
+        match &s.kind {
+            StmtKind::Assign { name, .. }
+            | StmtKind::Block { name, .. }
+            | StmtKind::Shared { name, .. }
+            | StmtKind::Fn { name, .. } => {
+                out.insert(name);
+            }
+            StmtKind::For { body, .. } => bound_into(body, out),
+            StmtKind::If { then, other, .. } => {
+                bound_into(then, out);
+                bound_into(other.as_deref().unwrap_or(&[]), out);
+            }
+            _ => {}
+        }
+    }
+}
+
 /// The top-level names statements bind (a loop's body binds its names at top level too).
 pub fn bound(stmts: &[Stmt]) -> BTreeSet<String> {
     let mut out = BTreeSet::new();
