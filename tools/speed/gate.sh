@@ -21,6 +21,21 @@
 #                           the same kernel code, compiled without AVX.
 # Unset, perf is used when it counts instructions:u and callgrind otherwise. The callgrind gate
 # takes ~20 min on 4 busy cores. GATE_REPS=3 keeps the least of 3 counts, for a line near 0.5%.
+#
+# The callgrind counts are exact: the same binary gives the same count on every line, the bench
+# parts' too, from any checkout, at any load. Each counted run is made alike:
+#   - the binaries are copied to a fresh mktemp directory, a path of the same length every time
+#     (ld.so's work, and argv, grow with the path);
+#   - `env -i` with a fixed PATH and HOME (the environment is copied onto the stack);
+#   - tools/speed/fixedrandom.c preloaded: getrandom gives fixed bytes, so std's HashMap keys are
+#     the same every run (they move probe lengths, and with them the heap);
+#   - `taskset -c 0`: one CPU, so the kernel's thread pools (forge_math::par, the fillet's)
+#     run their items in order on one thread, and no thread's allocations interleave another's;
+#   - `setarch -R` (no address randomisation) and valgrind's --fair-sched=yes (threads that
+#     remain, the build's own, switch in a fixed order).
+# This needs cc, taskset and setarch (util-linux). GATE_EXACT=0 counts as before (each run in
+# the caller's environment, every core). The counts are not the bare runs': a baseline saved one
+# way is compared only with counts made the same way.
 set -e
 dir=$(dirname "$0")
 perf=${PERF:-perf}
@@ -42,15 +57,22 @@ case $counter in
     baseline="$dir/baseline-valgrind.txt"
     target="$target/callgrind"
     export RUSTFLAGS="-C target-cpu=x86-64-v2"
+    exact=${GATE_EXACT:-1}
     count1() {
-      valgrind --tool=callgrind --cache-sim=no --callgrind-out-file=/dev/null "$@" 2>&1 >/dev/null |
+      if [ "$exact" = 1 ]; then
+        env -i PATH=/usr/bin:/bin HOME=/tmp LD_PRELOAD="$bin/fixedrandom.so" taskset -c 0 setarch -R \
+          valgrind --fair-sched=yes --tool=callgrind --cache-sim=no --callgrind-out-file=/dev/null "$@"
+      else
+        valgrind --tool=callgrind --cache-sim=no --callgrind-out-file=/dev/null "$@"
+      fi 2>&1 >/dev/null |
         awk '/Collected :/{n=$NF}/Process terminating/{bad=1}END{if(!bad&&n!="")print n}'
     }
     ;;
   *) echo "GATE_COUNTER: perf or callgrind, not $counter" >&2; exit 64 ;;
 esac
-# the least of GATE_REPS counts (default 1): the bench parts' counts move by up to ~0.4% from run
-# to run (std HashMaps' random seeds, thread order), the synthetic parts' by a few instructions
+# the least of GATE_REPS counts (default 1): with GATE_EXACT=0 the bench parts' counts move by up
+# to ~0.4% from run to run (std HashMaps' random seeds, thread order, the heap), the synthetic
+# parts' by a few instructions; exact counts do not move, and one rep is enough
 count() {
   best=
   for _ in $(seq "${GATE_REPS:-1}"); do
@@ -65,6 +87,14 @@ export CARGO_TARGET_DIR="$target"
 cargo build -q --release -p forge-model --example regen1 --example bits
 cargo build -q --release -p forge-lang --example benchparts
 bin="$target/release/examples"
+if [ "$counter" = callgrind ] && [ "$exact" = 1 ]; then
+  # (the binaries at a path of one length whatever the checkout, and the fixed getrandom)
+  gatedir=$(mktemp -d /tmp/forge-gate.XXXXXX)
+  trap 'rm -rf "$gatedir"' EXIT
+  cp "$bin/regen1" "$bin/bits" "$bin/benchparts" "$gatedir/"
+  cc -O2 -shared -fPIC -o "$gatedir/fixedrandom.so" "$dir/fixedrandom.c"
+  bin=$gatedir
+fi
 now=$(mktemp)
 for p in torture plate shaft housing coplanar patterns mixed hole-grid tour upto upto-flat; do
   for m in seq nary1; do
