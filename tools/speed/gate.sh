@@ -147,8 +147,23 @@ if [ "$1" = --save ]; then
   exit 0
 fi
 status=0
-awk 'NR==FNR{b[$1" "$2]=$3;next}{k=$1" "$2; o=b[k]; d=(o>0&&$3!="FAIL")?($3-o)*100/o:0; f=($3=="FAIL"||d>0.5)?"  REGRESSED":""; if(f!="")bad=1
-  printf "%-9s %-6s %14s  base %14s  %+6.2f%%%s\n",$1,$2,$3,o,d,f}END{exit bad}' "${1:-$baseline}" "$now" || status=1
+# The rule, line by line:
+# - user-facing lines (a bench part's app, edit and cli: whole processes) and the synthetic
+#   parts' lines (regen1: the kernel alone, no language heap) must not exceed the baseline: with
+#   exact counts, by a single instruction; else by more than 0.5% (the noise of a bare run);
+# - a bench part's seq and nary1 lines (its regen call alone, on the heap its language run left)
+#   are diagnostic: flagged past 0.5%, and shown, but a change of the language moves them by the
+#   heap it leaves (realloc copies), not by kernel code. A change of kernel code shows them at
+#   or below the baseline too, or shows by profile that the difference is that alone.
+strict=0
+if [ "$counter" = callgrind ] && [ "$exact" = 1 ]; then strict=1; fi
+synthetic=" torture plate shaft housing coplanar patterns mixed hole-grid tour upto upto-flat "
+awk -v strict="$strict" -v syn="$synthetic" 'NR==FNR{b[$1" "$2]=$3;next}
+  {k=$1" "$2; o=b[k]; d=(o>0&&$3!="FAIL")?($3-o)*100/o:0
+   diag=(index(syn, " "$1" ")==0 && ($2=="seq"||$2=="nary1"))
+   over=diag ? d>0.5 : (strict ? (o>0&&$3!="FAIL"&&$3>o) : d>0.5)
+   f=($3=="FAIL"||over)?"  REGRESSED":(diag?"  (diagnostic)":""); if($3=="FAIL"||over)bad=1
+   printf "%-9s %-6s %14s  base %14s  %+6.2f%%%s\n",$1,$2,$3,o,d,f}END{exit bad}' "${1:-$baseline}" "$now" || status=1
 rm -f "$now"
 if bits | diff "$dir/bits.txt" - > /dev/null; then echo "bits: identical"; else
   echo "bits: CHANGED"; bits | diff "$dir/bits.txt" - | grep '^[<>]' || true; status=$((status | 2)); fi

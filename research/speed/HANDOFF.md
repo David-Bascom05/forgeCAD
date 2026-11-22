@@ -48,16 +48,37 @@ Uncommitted at the time of writing: step 1d:
 - `values::Keys` is a sorted Vec, not a BTreeSet.
 
 Gate notes:
+- The callgrind gate is exact (tools/speed/gate.sh, GATE_EXACT=1, the default): the same commit
+  gives the same count on every line from any checkout, under any load. How:
+  - binaries copied to a mktemp directory, with the bench parts beside them
+    (FORGE_BENCH_PARTS);
+  - `env -i`, runs started in `/`;
+  - tools/speed/fixedrandom.c preloaded, giving fixed HashMap seeds;
+  - `taskset -c $GATE_CPU`: one CPU, so the thread pools run in order;
+  - `setarch -R` and valgrind --fair-sched=yes;
+  - run_once does its masses inline when it has one thread.
+
+  Shown: at 12a7643, two checkouts side by side gave 97 of 97 lines identical. The baseline
+  must be saved in exact mode (`gate.sh --save`).
+- The rule, line by line (gate.sh says it too):
+  - **User-facing lines** (a bench part's app, edit, cli; whole processes) must be ≤ base, by a
+    single instruction in exact mode.
+  - **Kernel speed** is judged on the synthetic regen1 lines (the kernel alone, no language
+    heap). They must be ≤ base.
+  - **A bench part's seq and nary1 lines** count its `regen` call alone (--toggle-collect).
+    They are diagnostic: shown, held under 0.5%, not blocking.
+- Why the bench regen lines are diagnostic: they run on the heap the language left, so a
+  language change moves them through realloc copies (memcpy), not kernel code. At 12a7643
+  against 1b, heatsink seq was +189k, all of it memcpy.
+- A stack that changes kernel code must also show its bench regen lines ≤ base, or show by
+  profile that the difference is heap-state memcpy alone.
+- Tried and dropped: the regen on its own thread, for a fresh arena. It changes what the line
+  measures: manifold seq 159M -> 243M, through mmap-backed big blocks.
+- A clean fresh-process regen needs a Part serializer (none exists). Revisit with the boolean
+  rewrite.
 - forge-render's 4 chat/conversation tests need a GPU adapter. Install mesa-vulkan-drivers
   (lavapipe) in a fresh container.
-- tools/speed/baseline-valgrind.txt predates the kernel merges. Some kernel-only seq/nary1
-  lines read +0.2-0.3% over it even at the base commit 6979fa5. Compare against the parent
-  commit's gate output, not the file.
-- A bench part's seq line is `run` minus `resolve`. When a step makes the language cheaper,
-  seq can rise with no kernel change:
-  - `run` keeps the same language work but its regen meets a different heap;
-  - on valve at 1b, realloc grew in place less often: +424k of copying;
-  - `run` itself was flat (+9k) while `resolve` fell 370k.
+- tools/speed/baseline-valgrind.txt predates the exact gate; the master re-saves it on main.
 
 ## fast.rs (standalone)
 
