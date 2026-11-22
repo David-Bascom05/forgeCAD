@@ -174,6 +174,29 @@ kept, so a spur's piece is skipped both ways. Aeneas translates the extraction, 
 Not proven: that the tables encode the kernel's floats (argued in lib.rs), and the conversion from
 real widths to units (exact, because each 2·step is a whole number of units).
 
+### 1.6 The probe fix (Coverage/Inner.lean, kernel-checked)
+
+The fix is on branch claude/repo-review-mbdrlj-fix-probe, a3cc22d. Where no step clears, it replaces
+the stepping fallback on a plane with `planar_inner`, a point decided from the region's own boundary.
+A region still within LINEAR of its partner's boundary is decided by `beside_partner`. Both are
+transcribed over ℚ, statement by statement:
+
+| theorem | statement |
+|---|---|
+| `candidate_inside` | the midpoint of every scanline span (sorted crossings paired off) that lies off the crossings is inside the region by the even-odd rule, with the kernel's half-open crossing test |
+| `crossing_on_boundary` | every crossing point lies on its edge segment |
+| `planarInner_spec` | **ProbeSpec for the fix**: if `planar_inner` returns a point with clearance > 0 (clearance positive only off the boundary), the point is strictly inside the region: even-odd inside and on no edge. This holds for every region however narrow, where the stepping probe fails at 2·LINEAR (`Probe.kernel_not_spec`). |
+| `beside_exact` | in a cross-section across the partner's edge E (`here`, `there` the region's and partner's inward directions in the partner's plane, `n` the outward normal of the face beyond E, the other body the wedge of the two half-spaces, intersected at a convex E and united at a concave one): the code's decision equals the exact position of every point `t·here`, t > 0. `here = there` → On (on the partner); `here = −there` → In iff the point is interior to the other body, Out iff exterior. |
+
+The fix makes `beside_partner`'s call only for a region wider than LINEAR whose point is within
+LINEAR of the partner's boundary. The theorem holds wherever it decides; it returns no decision
+(`lean` 0, or `|cos| ≤ 0.5`) where the cross-section says nothing.
+
+Trusted:
+- the f64 evaluation of the same formulas;
+- the polygonising of curved pieces into chords within LINEAR/4;
+- that the clearance used is the distance to the region's boundary.
+
 ## 2. The gaps
 
 | # | pattern | outcome | site | repro | real parts |

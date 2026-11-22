@@ -3,3 +3,4 @@ import Coverage.Theorems
 import Coverage.Tilt
 import Coverage.Correct
 import Coverage.Probe
+import Coverage.Inner
