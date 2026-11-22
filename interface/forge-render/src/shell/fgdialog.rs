@@ -17,6 +17,7 @@ pub fn param_label(kind: &str, name: &str) -> &'static str {
     match name {
         "d" if kind == "hole" => "Diameter",
         "d" if kind == "chamfer" => "Distance",
+        "d2" if kind == "chamfer" => "Distance 2",
         "d" if matches!(kind, "plane" | "direct" | "offsetface" | "moveface") => "Offset",
         "d" => "Distance",
         "r" => "Radius",
