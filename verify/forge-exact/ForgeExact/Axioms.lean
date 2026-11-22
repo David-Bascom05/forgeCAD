@@ -3,6 +3,8 @@ import ForgeExact.Regular
 import ForgeExact.Flat
 import ForgeExact.SnapSym
 import ForgeExact.RefFacts
+import ForgeExact.DecideOnce.Ledger
+import ForgeExact.DecideOnce.Nef
 
 /-!
 # Only the standard axioms
@@ -47,3 +49,30 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeExact.Snap.rep_sym
   ForgeExact.RefFacts.step_keeps_sign
   ForgeExact.RefFacts.step_leaves_plane
+  ForgeExact.DecideOnce.cls_spec
+  ForgeExact.DecideOnce.head_eq
+  ForgeExact.DecideOnce.Table.get?_decideAll
+  ForgeExact.DecideOnce.Table.decideAll_once
+  ForgeExact.DecideOnce.Decisions.ask_build
+  ForgeExact.DecideOnce.Decisions.oneVertex_symm
+  ForgeExact.DecideOnce.Decisions.oneVertex_trans
+  ForgeExact.DecideOnce.Decisions.oneSurface_symm
+  ForgeExact.DecideOnce.Decisions.oneSurface_trans
+  ForgeExact.DecideOnce.Decisions.side_of_oneSurface
+  ForgeExact.DecideOnce.Decisions.onEdge_of_atVertex
+  ForgeExact.DecideOnce.Decisions.on_of_onEdge
+  ForgeExact.DecideOnce.Decisions.along_iff
+  ForgeExact.DecideOnce.sideIn_class
+  ForgeExact.DecideOnce.Ledger.memb_eq
+  ForgeExact.DecideOnce.Ledger.splitOk_of
+  ForgeExact.DecideOnce.Ledger.classifyOk_of
+  ForgeExact.DecideOnce.Ledger.unify_valid
+  ForgeExact.DecideOnce.Ledger.coverage
+  ForgeExact.DecideOnce.Ledger.no_retry
+  ForgeExact.DecideOnce.Exact.consistent
+  ForgeExact.DecideOnce.result_iff
+  ForgeExact.DecideOnce.correct
+  ForgeExact.DecideOnce.correct_ok
+  ForgeExact.DecideOnce.zeroThickness_iff
+  ForgeExact.DecideOnce.nef_compat
+  ForgeExact.DecideOnce.correct_bool
