@@ -162,6 +162,8 @@ pub enum Value {
     Feature(Rc<Feat>),
     Faces(Rc<Faces>),
     Edges(Rc<Vec<Name>>),
+    /// The part's vertices a `verts(..)` selection found, by name.
+    Verts(Rc<Vec<Name>>),
     Extent(ExtentV),
     /// Sheet metal: features, edges, unfolds, and shop data (`sheet.rs`).
     Sheet(Rc<crate::sheet::SheetVal>),
@@ -197,6 +199,7 @@ impl Value {
             Value::Feature(_) => Ty::Feature,
             Value::Faces(_) => Ty::Faces,
             Value::Edges(_) => Ty::Edges,
+            Value::Verts(_) => Ty::Verts,
             Value::Extent(_) => Ty::Extent,
             Value::Sheet(s) => s.ty(),
             Value::Wired(w) => w.ty(),
@@ -2480,6 +2483,18 @@ pub fn arith(op: BinOp, x: &Value, y: &Value, span: Span, sa: Span, sb: Span) ->
             }
             Ok(Value::Edges(Rc::new(v)))
         }
+        (Value::Verts(a), Value::Verts(b)) if op == BinOp::Add => {
+            let mut v = (**a).clone();
+            for n in b.iter() {
+                if !v.contains(n) {
+                    v.push(*n);
+                }
+            }
+            Ok(Value::Verts(Rc::new(v)))
+        }
+        (Value::Verts(a), Value::Verts(b)) if op == BinOp::Sub => Ok(Value::Verts(Rc::new(
+            a.iter().copied().filter(|n| !b.contains(n)).collect(),
+        ))),
         // the first set less what the second holds (`.fc` picked one of several by place)
         (Value::Faces(a), Value::Faces(b)) if op == BinOp::Sub => Ok(Value::Faces(Rc::new(Faces {
             names: a.names.iter().copied().filter(|n| !b.names.contains(n)).collect(),
