@@ -4,6 +4,7 @@ Copyright (c) 2026 ForgeCAD contributors. Released under the Mozilla Public Lice
 import Lean
 import FloatVerification.CrossSign
 import FloatVerification.Orient2d
+import FloatVerification.Window
 
 /-!
 # Only the standard axioms
@@ -28,3 +29,4 @@ elab "#standard_axioms " ids:ident* : command => do
   FloatVerification.cross_sign_of_fast FloatVerification.cross_sign_fast
   FloatVerification.shewchuk FloatVerification.orient2d_of_fast FloatVerification.orient2d_fast
   FloatVerification.finite_of_bound_slack
+  FloatVerification.grid_of_ge FloatVerification.round_grid FloatVerification.orient2d_window_grid

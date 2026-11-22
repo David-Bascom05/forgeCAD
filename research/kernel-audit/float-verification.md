@@ -116,6 +116,15 @@ fails the build otherwise.
    - a product underflows;
    - the fixed test does not pass.
 
+4. **The window implies the slow path's precondition** (`Window.lean`, `orient2d_window_grid`).
+   The kernel's precondition is checked by `debug_assert!` at every `two_product`: a product
+   has a zero factor or is a multiple of `2^-1074`, so its rounding error is representable.
+   - If every coordinate is 0 or at least `2^-480` in magnitude, each coordinate is a multiple
+     of `2^-532` (`grid_of_ge`).
+   - Rounding keeps a multiple of `2^g` on that grid (`round_grid`), so the rounded differences
+     are multiples of `2^-532` too.
+   - So the products of the rounded differences are multiples of `2^-1064 ≥ 2^-1074`.
+
 ## Which kernel functions are verified
 
 - The fast path of `forge_math::predicates::cross_sign`, for all finite inputs. `cross2` is the
