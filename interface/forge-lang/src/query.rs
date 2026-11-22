@@ -59,6 +59,8 @@ pub enum Query {
     },
     /// Whether each sheet unfolds to one flat blank, and what would stop it.
     Unfold,
+    /// The weldment's cut list: each group of identical members, and the plates.
+    Cutlist,
     /// Thin flat runs (a bracket's tabs, a sheet's walls) at most `t` thick, with their holes.
     Tabs {
         of: Option<String>,
@@ -74,7 +76,7 @@ pub struct Request {
 }
 
 pub const HELP: &str = "holes [of OCC] [d D] | section x|y|z=V [of OCC] | section at X Y Z normal NX NY NZ [of OCC] | \
-aligned [HOLE HOLE] [tol T] | gap FACE FACE | interference [OCC OCC] | frame SKETCH|PLANE [of OCC] | faces [of OCC] | tabs [of OCC] [t MAX] | unfold; \
+aligned [HOLE HOLE] [tol T] | gap FACE FACE | interference [OCC OCC] | frame SKETCH|PLANE [of OCC] | faces [of OCC] | tabs [of OCC] [t MAX] | unfold | cutlist; \
 any of them `in OCC` for that part's frame. In an assembly a name is OCC/NAME.";
 
 fn num(w: Option<&String>, what: &str) -> Result<f64, String> {
@@ -197,6 +199,7 @@ pub fn parse(text: &str) -> Result<Request, String> {
         },
         "faces" if rest.is_empty() => Query::Faces { of },
         "unfold" if rest.is_empty() => Query::Unfold,
+        "cutlist" if rest.is_empty() => Query::Cutlist,
         "tabs" if rest.is_empty() => Query::Tabs {
             of,
             t: thick.unwrap_or(10.0),
@@ -316,6 +319,9 @@ pub fn ask(src: &str, dir: Option<PathBuf>, root: Option<PathBuf>, text: &str) -
     };
     if req.q == Query::Unfold {
         return unfold(src, dir, root);
+    }
+    if req.q == Query::Cutlist {
+        return cutlist(src, dir, root);
     }
     match scene(src, dir, root, &req).and_then(|s| answer(&s, &req)) {
         Ok(a) => a,
@@ -1260,7 +1266,7 @@ fn answer(s: &Scene, req: &Request) -> Result<Answer, QueryError> {
             fields.push(("query", "faces".into()));
             fields.push(("faces", Json::Arr(list)));
         }
-        Query::Unfold => unreachable!("answered before the scene"),
+        Query::Unfold | Query::Cutlist => unreachable!("answered before the scene"),
         Query::Tabs { of, t } => {
             let mut list = Vec::new();
             for k in s.filter(of)? {
@@ -1420,6 +1426,55 @@ fn on_sheet(part: &Part, f: &Frame) -> Option<OnSheet> {
         }
     }
     best.map(|b| b.1)
+}
+
+/// The weldment's cut list (`weld.rs`): per group of identical members their section, quantity,
+/// cut length along the path, overall length, and the cut at each end; then the plates.
+fn cutlist(src: &str, dir: Option<PathBuf>, root: Option<PathBuf>) -> Answer {
+    let opts = Options {
+        dir,
+        root,
+        ..Options::default()
+    };
+    let (run, _) = crate::run(src, opts, Default::default());
+    if let Some(e) = run.errors.first() {
+        return Answer::err(qe(
+            "NotBuilt",
+            format!("the part did not build: {}: {}", e.kind(), e.text()),
+        ));
+    }
+    if run.welds.is_empty() {
+        return Answer::err(qe("NoMembers", "the part has no members"));
+    }
+    let rows = crate::weld::cutlist(&run.welds);
+    let mut text = String::new();
+    for r in &rows {
+        text.push_str(&r.text());
+        text.push('\n');
+    }
+    for p in &run.welds.plates {
+        text.push_str(&format!(
+            "plate {} ({}): t {}, area {} on {}\n",
+            p.id,
+            p.kind,
+            crate::values::fmt(p.t),
+            crate::values::fmt((p.area * 1000.0).round() / 1000.0),
+            p.on.join(", ")
+        ));
+    }
+    let Json::Obj(mut body) = crate::weld::json(&run.welds) else {
+        unreachable!("an object")
+    };
+    let mut f = vec![
+        ("ok".to_string(), Json::from(true)),
+        ("query".to_string(), "cutlist".into()),
+    ];
+    f.append(&mut body);
+    Answer {
+        ok: true,
+        text,
+        json: Json::Obj(f),
+    }
 }
 
 /// Each sheet's flat: unfolded to one blank or not, its size, and the warnings that stop it

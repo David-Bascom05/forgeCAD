@@ -797,6 +797,8 @@ pub enum Error {
     Sheet(Box<crate::sheet::SheetErr>),
     /// Thermoforming: the kernel's refusals and the language's own (`thermo.rs`).
     Thermo(Box<crate::thermo::ThermoErr>),
+    /// Weldments: the frame rule's refusals and the language's own (`weld.rs`).
+    Weld(Box<crate::weld::WeldErr>),
     /// A used file (`uses.rs`): missing, cyclic, misplaced, failing, or the target of an edit.
     Use(Box<crate::uses::UseErr>),
     // ---- shapes (sweep, coil, loft, shell, draft, offset, rib, face fillets, balls) ----
@@ -937,6 +939,7 @@ impl Error {
             | NotFinite { .. } => None,
             Sheet(e) => e.span(),
             Thermo(e) => e.span(),
+            Weld(e) => e.span(),
             Use(e) => e.span(),
             Props(e) => e.span(),
         }
@@ -1001,6 +1004,7 @@ impl Error {
             NotFinite { .. } => "NotFinite",
             Sheet(e) => e.kind(),
             Thermo(e) => e.kind(),
+            Weld(e) => e.kind(),
             Use(e) => e.kind(),
             Props(e) => e.kind(),
             NotWith { .. } => "NotWith",
@@ -1077,6 +1081,7 @@ impl Error {
             }],
             Sheet(e) => e.fixes(),
             Thermo(e) => e.fixes(),
+            Weld(e) => e.fixes(),
             Feat(e) => e.fixes(),
             Std(e) => e.fixes(),
             Asm(n) => n.fixes(),
@@ -1241,6 +1246,7 @@ impl Error {
             }
             Sheet(e) => e.text(),
             Thermo(e) => e.text(),
+            Weld(e) => e.text(),
             Use(e) => e.text(),
             Props(e) => e.text(),
             NotWith { func, arg, with, .. } => format!("{func}: {arg} does not apply with {with}"),
@@ -1374,6 +1380,7 @@ impl Error {
             ShadowsTopLevel { name, .. } => vec![("name", s(name))],
             Sheet(e) => e.data(),
             Thermo(e) => e.data(),
+            Weld(e) => e.data(),
             Use(e) => e.data(),
             Props(e) => e.data(),
             NotWith { func, arg, with, .. } => vec![("func", s(func)), ("arg", s(arg)), ("with", s(with))],

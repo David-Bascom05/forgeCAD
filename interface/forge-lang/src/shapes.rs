@@ -153,7 +153,7 @@ fn target(ev: &Eval, f: &Faces) -> Target {
 
 /// The sketch entities a path value names, in order: an entity, a loop (rect, poly, path ..), or
 /// a list of them (from any sketches: a path in 3D).
-fn path_ents(v: Value, span: Span, out: &mut Vec<(Rc<RefCell<Sk>>, EntityId)>) -> R<()> {
+pub(crate) fn path_ents(v: Value, span: Span, out: &mut Vec<(Rc<RefCell<Sk>>, EntityId)>) -> R<()> {
     match v {
         Value::List(xs) => {
             for x in xs.iter() {

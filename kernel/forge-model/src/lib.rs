@@ -25,6 +25,7 @@ pub mod torture;
 mod trace;
 mod upto;
 pub mod verify;
+pub mod weld;
 pub mod work;
 
 pub use bodies::{
@@ -188,6 +189,9 @@ pub enum Feature {
     Work(Work),
     /// A feature on chosen bodies, or one that combines, splits or moves bodies (bodies.rs).
     Body(Box<BodyFeature>),
+    /// A weldment member: a section along a line or an arc, cut at its ends, a body of its own
+    /// (weld.rs).
+    Member(Box<weld::Member>),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1011,6 +1015,7 @@ fn starts(f: &Feature) -> bool {
             | Feature::Ball { op: Combine::New, .. }
     ) || swept::op(f) == Some(Combine::New)
         || matches!(f, Feature::Import(t) if t.op == Combine::New)
+        || matches!(f, Feature::Member(_))
 }
 
 /// Whether a feature changes the part as a whole, rather than making tools to combine with it.
@@ -2067,6 +2072,7 @@ fn tools(features: History<'_>, i: usize, build: bool) -> Result<Vec<Tool>, Rege
         Feature::Thread(_) => thread::tools(features, i, build),
         Feature::Text(_) => text::tools(features, i),
         Feature::Import(_) => import::tools(features, i),
+        Feature::Member(m) => Ok(vec![weld::tool(m, i, features.id(i), build)?]),
         f => Ok(vec![tool(i, features.id(i), f, build)?]),
     }
 }
