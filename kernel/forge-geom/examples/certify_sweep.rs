@@ -65,6 +65,7 @@ fn main() {
     let n: usize = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(400);
     let seed: u64 = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(1);
     let mut rng = Rng::new(seed);
+    let bits = std::env::var("BITS").is_ok();
     let region = Box3::from_points([Point3::new(-8.0, -8.0, -8.0), Point3::new(8.0, 8.0, 8.0)]);
     // per pair: [march certified, march refused, closed form certified, closed form refused, closed form n/a]
     let mut tally: BTreeMap<String, [usize; 5]> = BTreeMap::new();
@@ -83,8 +84,21 @@ fn main() {
             let t1 = Instant::now();
             let c = certify(&a, &b, region, cs);
             t_cert += t1.elapsed().as_secs_f64();
+            // every outcome to the last bit, for comparing builds (native against wasm)
+            if bits {
+                let pts: Vec<_> = cs
+                    .iter()
+                    .flat_map(|c| c.pts.iter().map(|p| (p.x, p.y, p.z)))
+                    .collect();
+                println!("BITS {key} {c:?} {pts:?}");
+            }
             match c {
-                Ok(()) => e[0] += 1,
+                Ok(()) => {
+                    e[0] += 1;
+                    if let Ok(path) = std::env::var("DUMP") {
+                        dump(&path, &a, &b, cs);
+                    }
+                }
                 Err(r) => {
                     e[1] += 1;
                     *whys.entry(format!("march {key} {:?}", r.why)).or_default() += 1;
@@ -141,4 +155,39 @@ fn main() {
         println!("  {k}: {v}");
     }
     println!("march {t_march:.2} s, certificate {t_cert:.2} s");
+}
+
+/// One line per surface, one per chain, then a blank line: for tools/occt/certify_check.py.
+fn dump(path: &str, a: &Surface, b: &Surface, cs: &[IntCurve]) {
+    use std::io::Write;
+    let s = |s: &Surface| {
+        let (kind, f, r1, r2, r3) = match s {
+            Surface::Plane(p) => ("plane", p.frame, 0.0, 0.0, 0.0),
+            Surface::Sphere(p) => ("sphere", p.frame, p.radius, 0.0, 0.0),
+            Surface::Cylinder(p) => ("cylinder", p.frame, p.radius, 0.0, 0.0),
+            Surface::Cone(p) => ("cone", p.frame, p.radius, p.sin_a(), p.cos_a()),
+            Surface::Torus(p) => ("torus", p.frame, p.major, p.minor, 0.0),
+            Surface::Procedural(_) => unreachable!("analytic pairs only"),
+        };
+        let (o, x, z) = (f.origin, f.x().get(), f.z().get());
+        format!(
+            "S {kind} {:?} {:?} {:?} {:?} {:?} {:?} {:?} {:?} {:?} {r1:?} {r2:?} {r3:?}",
+            o.x, o.y, o.z, x.x, x.y, x.z, z.x, z.y, z.z
+        )
+    };
+    let mut f = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .expect("dump file");
+    writeln!(f, "{}\n{}", s(a), s(b)).expect("write");
+    for c in cs {
+        let pts: Vec<String> = c
+            .pts
+            .iter()
+            .map(|p| format!("{:?} {:?} {:?}", p.x, p.y, p.z))
+            .collect();
+        writeln!(f, "C {} {}", c.closed as u8, pts.join(" ")).expect("write");
+    }
+    writeln!(f).expect("write");
 }

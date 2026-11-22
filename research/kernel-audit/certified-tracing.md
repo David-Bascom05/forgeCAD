@@ -209,3 +209,46 @@ x ↦ x − C F(x) sends X into X, and it is a q-contraction, so it has exactly 
 C is invertible, because ‖I − CA‖ < 1 makes CA invertible. So fixed points are zeros. The interval
 side is that each IEEE op widened by one ulp encloses the real result. That follows from the
 IEEE754 model's `round` being within half an ulp. See `verify/krawczyk/`.
+
+## 6. Status and results (first milestone)
+
+Built: §3.1–3.5 for plane, sphere, cylinder, cone (one nappe) and ring/horn torus pairs, in
+`kernel/forge-geom/src/certify.rs` behind `certified_trace`. The Lean step lemma is proven
+(`verify/krawczyk`). Not built: §3.6 phase B (singular points, procedural surfaces).
+
+Two refinements came up while building it.
+- **Interval dependency in the pencil.** `(1 − S)t₀ + S t₁` is ~3 wide and made every Krawczyk test
+  fail. Writing it as `t₀ + S(t₁ − t₀)`, and the claim test as `n(s)·x − k(s)` with the box once,
+  fixed it.
+- **Claims trimmed to their neighbours.** A step's claim may not reach past half of the next step.
+  A Krawczyk proof over S holds for every sub-range of S, so the trimmed claims are still proven,
+  and only neighbouring claims meet. Without the trim, a short closing segment let claims two apart
+  overlap, which falsely flagged Twice.
+- **Lipschitz exclusion.** The kernel's own implicit (a 1-Lipschitz distance for every kind in
+  scope), evaluated in intervals at the box centre, clears boxes before the polynomial enclosure is
+  tried.
+
+**Random pairs** (`examples/certify_sweep`, 300 pairs, seed 1, region ±8). The march certified in
+every case but one, a cone–torus pair that ran past the box budget and was refused. meet.rs's
+closed forms certified in every case but one, the same cone–torus pair. So on every certified pair,
+the march and the closed form are both proven to be the whole intersection, each branch once.
+
+**Native = wasm.** On 150 pairs (seed 3), the chains and every certificate outcome, refusal boxes
+included, are bit-identical (`BITS=1`, wasm32-wasip1 under Node).
+
+**Scoreboard** (`reliability`, 985 parts):
+- off: 0 worse (978/985 good);
+- on: 967/985 good. The 9 worse are all singular configurations, which the certificate refuses by
+  design until phase B: `cylinder_cylinder/perpendicular_tangent_inside` ×3,
+  `plane_torus/standing_tangent_top_inside` Add/Cut, `cylinder_cone/apex_on_top_rim` Cut/Keep and
+  `cone_cone/perpendicular_apex_to_apex` Cut/Keep. The march's answer there may be right, but
+  nothing proves it.
+- `torus_torus/horn` and `cylinder_sphere/centre_on_rim` stay errors. The horn torus's centre is a
+  singular point. The plane–horn-torus pair through the axis refuses there (test
+  `a_horn_torus_is_refused_at_its_centre_not_traced_wrong`).
+
+**Cost.** Off: nothing compiled. The callgrind gate shows no REGRESSED line and the bits are
+identical. On: the scoreboard takes 5.7 s against 5.2 s. That is little, because analytic pairs
+reach `trace` only where meet.rs gives up. Per certified pair, the certificate costs about 40× the
+march, almost all of it in the exclusion walk's boxes near the curve (10⁵ boxes for 700 steps).
+The next thing to make faster: boxes aligned with each step's chord, instead of axis-aligned hulls.
