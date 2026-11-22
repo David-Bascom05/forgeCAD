@@ -1,0 +1,30 @@
+sketch S0(on: xy) {
+  o = rect(corner: (0, 0), size: (74.39, 86.74))
+}
+L0 = extrude(S0, 34.72)
+sketch H0(on: offset(xy, 17.36)) {
+  p0 = pt(20.67, 0.83)
+}
+sketch S1(on: plane(at: H0.p0, normal: -Y)) {
+  o = poly([(3.86, 1.37), (-0.78, 4.48), (-4.8, -1.37), (-0.35, -3.93)])
+}
+L1 = extrude(S1, next, flip: true)
+sketch H2(on: offset(xy, 0)) {
+  p0 = pt(0, 0)
+  p1 = pt(-100, -5)
+}
+L3 = pattern(of: L1, layout: lin(along: axis(H2.p0, H2.p1), n: 3, step: 24.43))
+sketch H4(on: offset(xy, 15.15)) {
+  p0 = pt(-25.99, 84.3)
+}
+sketch S5(on: plane(at: H4.p0, normal: Y)) {
+  o = poly([(-14.56, -9.7), near(14.56, -9.7), near(14.56, 9.7), near(-14.56, 9.7)])
+  horizontal(o[0])
+  vertical(o[1])
+  horizontal(o[2])
+  vertical(o[3])
+  distance(o[1], 19.4)
+  distance(o[0], 29.11)
+}
+L5 = cut(S5, 5.71)
+
