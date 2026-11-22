@@ -112,6 +112,8 @@ fn bits_of(r: &Result<Vec<Solid>, forge_model::RegenError>) -> u64 {
     h.finish()
 }
 
+/// (never inlined: the speed gate counts this call alone, `--toggle-collect=*benchparts::regen`)
+#[inline(never)]
 fn regen(part: &Part, ids: &[u64], mode: &str) -> Result<Vec<Solid>, forge_model::RegenError> {
     match mode {
         "seq" => part.regenerate_solids_ids(Some(ids)),

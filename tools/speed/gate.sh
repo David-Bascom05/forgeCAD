@@ -64,13 +64,15 @@ case $counter in
     target="$target/callgrind"
     export RUSTFLAGS="-C target-cpu=x86-64-v2"
     exact=${GATE_EXACT:-1}
+    # (valgrind options for one count: the bench parts' regen lines count one call)
+    vgonly=
     count1() {
       if [ "$exact" = 1 ]; then
         (cd / && env -i PATH=/usr/bin:/bin HOME=/tmp LD_PRELOAD="$bin/fixedrandom.so" \
           FORGE_BENCH_PARTS="$bin/parts" taskset -c "${GATE_CPU:-0}" setarch -R \
-          valgrind --fair-sched=yes --tool=callgrind --cache-sim=no --callgrind-out-file=/dev/null "$@")
+          valgrind --fair-sched=yes --tool=callgrind --cache-sim=no --callgrind-out-file=/dev/null $vgonly "$@")
       else
-        valgrind --tool=callgrind --cache-sim=no --callgrind-out-file=/dev/null "$@"
+        valgrind --tool=callgrind --cache-sim=no --callgrind-out-file=/dev/null $vgonly "$@"
       fi 2>&1 >/dev/null |
         awk '/Collected :/{n=$NF}/Process terminating/{bad=1}END{if(!bad&&n!="")print n}'
     }
@@ -112,9 +114,10 @@ for p in torture plate shaft housing coplanar patterns mixed hole-grid tour upto
   done
 done
 # the real parts (interface/forge-lang/parts/bench/*.fg): the kernel's regen of the features each
-# part's .fg run sends, by the ids it names them with: the instructions of building the part and
-# regenerating it, less those of building it alone (the language and the first build, uncounted)
-# and the language with them, whole: `app` the cold build as the app makes it (no checks), `edit`
+# part's .fg run sends, by the ids it names them with (`seq`, `nary1`): with callgrind, the
+# instructions of that regen call alone (--toggle-collect on benchparts' `regen`), so a kernel
+# line is not charged for the heap the language left; with perf, those of building the part and
+# regenerating it, less those of building it alone. And the language with them, whole: `app` the cold build as the app makes it (no checks), `edit`
 # that build and the rebuild after one dimension changed, `cli` the cold build with the CLI's
 # checks: what the .fg front end costs on top of the kernel, held from growing
 for p in gearbox volute crank valve heatsink quadarm conrod jack frame manifold bracket insert clamp hub guard; do
@@ -125,8 +128,14 @@ for p in gearbox volute crank valve heatsink quadarm conrod jack frame manifold 
     echo "$p $m ${n:-FAIL}" >> "$now"
   done
   for m in seq nary1; do
-    n=$(count "$bin/benchparts" run $p $m)
-    if [ -n "$n" ] && [ -n "$base" ]; then n=$((n - base)); else n=; fi
+    if [ "$counter" = callgrind ]; then
+      vgonly='--toggle-collect=*benchparts::regen'
+      n=$(count "$bin/benchparts" run $p $m)
+      vgonly=
+    else
+      n=$(count "$bin/benchparts" run $p $m)
+      if [ -n "$n" ] && [ -n "$base" ]; then n=$((n - base)); else n=; fi
+    fi
     echo "$p $m ${n:-FAIL}" >> "$now"
   done
 done
