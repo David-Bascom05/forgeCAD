@@ -159,6 +159,8 @@ impl Session {
             build,
             dir: path.parent().map(Path::to_path_buf),
             root: self.root.clone(),
+            // a refused round's or shell's size comes back with the largest that builds
+            fit_sizes: build,
             ..Options::default()
         };
         let (run, cache) = forge_lang::run(src, opts, cache);
@@ -698,7 +700,12 @@ impl Session {
         if !self.writable {
             return Err("this session does not write files (serve and mcp take --writable)".into());
         }
-        let ops = ops_of(a, params)?;
+        let step = undo_step(a, params);
+        let ops = if step.is_some() {
+            vec![]
+        } else {
+            ops_of(a, params)?
+        };
         let (p, src) = self.read(&a.file)?;
         let now = version(&src);
         if let Some(base) = a.base.as_deref().filter(|b| *b != now) {
@@ -724,10 +731,27 @@ impl Session {
                 png: None,
             });
         }
+        // the file's last edit taken back, or put back (its log beside it, `F.fg.log`)
+        if let Some(s) = step {
+            let text = forge_lang::undo::step(&p, s)?;
+            let _ = forge_lang::vtools::save(&p, &format!("{s:?}"), Some(&agent()));
+            let run = self.run_src(&p, &text, true);
+            let mut r = Self::report(&run, &text);
+            obj_push(
+                &mut r.json,
+                "applied",
+                Json::Arr(vec![Json::obj(vec![(
+                    "op",
+                    Json::obj(vec![("op", format!("{s:?}").into())]),
+                )])]),
+            );
+            r.text = format!("{s:?}\n{}", r.text);
+            return Ok(r);
+        }
         let mut text = src.clone();
         let mut done = Vec::new();
         for (k, op) in ops.iter().enumerate() {
-            match edit::apply_checked(&text, op) {
+            match edit::apply_checked_in(&text, op, p.parent().map(Path::to_path_buf)) {
                 Ok((next, reach)) => {
                     let mut j = Json::obj(vec![("op", op.json())]);
                     if let Some(r) = reach {
@@ -752,7 +776,8 @@ impl Session {
                 }
             }
         }
-        std::fs::write(&p, &text).map_err(|_| format!("{}: cannot write", a.file))?;
+        // logged, so `{"op":"Undo"}` takes it back
+        forge_lang::undo::write(&p, &src, &text).map_err(|_| format!("{}: cannot write", a.file))?;
         // an agent's edit is a save of its own, where the folder keeps history
         let kinds: Vec<String> = done
             .iter()
@@ -763,13 +788,35 @@ impl Session {
                     .map(String::from)
             })
             .collect();
-        let who = std::env::var("FORGECAD_AGENT").unwrap_or_else(|_| "agent".into());
-        let _ = forge_lang::vtools::save(&p, &kinds.join(", "), Some(&who));
+        let _ = forge_lang::vtools::save(&p, &kinds.join(", "), Some(&agent()));
         let run = self.run_src(&p, &text, true);
         let mut r = Self::report(&run, &text);
         obj_push(&mut r.json, "applied", Json::Arr(done));
         r.text = format!("applied {} ops\n{}", ops.len(), r.text);
         Ok(r)
+    }
+}
+
+fn agent() -> String {
+    std::env::var("FORGECAD_AGENT").unwrap_or_else(|_| "agent".into())
+}
+
+/// `{"op":"Undo"}` or `{"op":"Redo"}` as an edit's one op.
+fn undo_step(a: &Args, params: &Json) -> Option<forge_lang::undo::Step> {
+    let j = match (params.get("op"), params.get("ops"), &a.words[..]) {
+        (Some(Json::Str(t)), _, _) => Json::parse(t).ok()?,
+        (Some(o), _, _) => o.clone(),
+        (None, Some(Json::Arr(xs)), _) if xs.len() == 1 => match &xs[0] {
+            Json::Str(t) => Json::parse(t).ok()?,
+            o => o.clone(),
+        },
+        (None, None, [w]) => Json::parse(w).ok()?,
+        _ => return None,
+    };
+    match j.get("op").and_then(Json::str)? {
+        "Undo" => Some(forge_lang::undo::Step::Undo),
+        "Redo" => Some(forge_lang::undo::Step::Redo),
+        _ => None,
     }
 }
 

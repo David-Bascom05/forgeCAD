@@ -1153,6 +1153,12 @@ enum Ext {
         from: f64,
         to: f64,
     },
+    /// Through the part with walls slanted along `w` (both ways with `both`): `thru` or
+    /// `thru_all` along it.
+    AlongThru {
+        w: V3,
+        both: bool,
+    },
 }
 
 /// What a profile makes: an extrude (or cut) running along `travel`, or a revolve about an axis
@@ -1457,6 +1463,13 @@ impl Tr<'_, '_, '_> {
             slant = Some((w.0 * (to - from), w.1 * (to - from), w.2 * (to - from)));
         }
         let at = self.plane(n, world_of((0.0, 0.0)))?;
+        let along = match &make {
+            Make::Extrude {
+                ext: Ext::AlongThru { w, .. },
+                ..
+            } => Some(self.dir(*w)?),
+            _ => None,
+        };
         let at2 = match slant {
             Some(t) => Some(self.plane(n, add(world_of((0.0, 0.0)), t, 1.0))?),
             None => None,
@@ -1506,6 +1519,12 @@ impl Tr<'_, '_, '_> {
                         Ext::ThruAll => "thru_all".into(),
                         Ext::Next => "next".into(),
                         Ext::Along { .. } => String::new(),
+                        Ext::AlongThru { both, .. } => {
+                            if let Some(d) = &along {
+                                opts += &format!(", along: {d}");
+                            }
+                            if *both { "thru_all" } else { "thru" }.into()
+                        }
                     };
                     match (&at2, slant) {
                         (Some(at2), Some(t)) => {
@@ -1607,6 +1626,11 @@ impl Tr<'_, '_, '_> {
                     0 if mid => (-l / 2.0, l / 2.0),
                     0 => (0.0, l),
                     4 => (-l2, l),
+                    // a pocket through: literally through, its walls along the slant
+                    _ if cut => {
+                        let ext = Ext::AlongThru { w, both: mid };
+                        return self.profile(name, lab, Make::Extrude { cut, ext, travel: z }, None);
+                    }
                     _ => {
                         // through: past every edge of the part so far
                         let src = self.program();

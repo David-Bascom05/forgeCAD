@@ -525,6 +525,49 @@ fn query_measure_and_render_see_the_part_after_a_feature_and_select_by_feature()
 }
 
 #[test]
+fn a_round_too_big_comes_back_with_the_largest_that_builds_and_an_edit_undoes() {
+    let dir = scratch("fit");
+    let file = dir.join("plate.fg");
+    let big = format!("{PLATE}param round.r = 25\nround = fillet(edges(of: base.end), r)\n");
+    std::fs::write(&file, &big).unwrap();
+    let f = file.to_str().unwrap();
+    let mut m = Server::start("mcp", &dir);
+    let (err, r, _) = m.tool("build", vec![("file", f.into())]);
+    assert!(err, "{r}");
+    let e = arr(&r, "errors").into_iter().next().expect("refused");
+    let fix = arr(&e, "fixes")
+        .into_iter()
+        .next()
+        .unwrap_or_else(|| panic!("{e}"));
+    assert_eq!(s(&fix, "op"), "SetParam", "{fix}");
+    let v = fix
+        .get("value")
+        .and_then(|v| v.get("value"))
+        .and_then(Json::num)
+        .unwrap();
+    assert!(v > 0.0 && v < 25.0, "{fix}");
+    // the fix sent back builds
+    let (err, r, _) = m.tool("edit", vec![("file", f.into()), ("op", fix.clone())]);
+    assert!(!err, "{r}");
+    let fixed = std::fs::read_to_string(&file).unwrap();
+    assert_ne!(fixed, big);
+    // taken back, and put back again
+    let undo = Json::parse(r#"{"op":"Undo"}"#).unwrap();
+    let (err, r, _) = m.tool("edit", vec![("file", f.into()), ("op", undo)]);
+    assert!(err, "the round too big again: {r}");
+    assert_eq!(std::fs::read_to_string(&file).unwrap(), big);
+    let redo = Json::parse(r#"{"op":"Redo"}"#).unwrap();
+    let (err, r, _) = m.tool("edit", vec![("file", f.into()), ("op", redo.clone())]);
+    assert!(!err, "{r}");
+    assert_eq!(std::fs::read_to_string(&file).unwrap(), fixed);
+    // nothing left to redo: refused, nothing written
+    let (err, r, _) = m.tool("edit", vec![("file", f.into()), ("op", redo)]);
+    assert!(err && s(&r, "error").contains("redo"), "{r}");
+    assert_eq!(std::fs::read_to_string(&file).unwrap(), fixed);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn an_edit_against_a_version_the_file_has_moved_on_from_is_refused() {
     let dir = scratch("base");
     let file = dir.join("plate.fg");

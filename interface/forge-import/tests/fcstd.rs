@@ -431,6 +431,45 @@ fn a_pad_along_a_slant_is_a_ruled_loft_of_the_same_height() {
     assert_eq!((m.faces, m.edges), (6, 12), "{fg}");
 }
 
+/// A pocket through all along a slant: literally through (`thru` along the slant), not a loft
+/// as long as the part's box.
+#[test]
+fn a_pocket_through_all_along_a_slant_is_through() {
+    let sq = geo(&[
+        line((-5.0, -5.0), (5.0, -5.0), 0),
+        line((5.0, -5.0), (5.0, 5.0), 0),
+        line((5.0, 5.0), (-5.0, 5.0), 0),
+        line((-5.0, 5.0), (-5.0, -5.0), 0),
+    ]);
+    let d = doc(&[
+        body("Pocket", &["Sketch", "Pad", "Sketch001", "Pocket"]),
+        sketch("Sketch", place(0.0), rect()),
+        pad("Pad", "", "Sketch", 10.0, &[]),
+        sketch("Sketch001", place(10.0), sq),
+        (
+            "Pocket",
+            "PartDesign::Pocket",
+            vec![
+                ("BaseFeature", "<Link value=\"Pad\"/>".into()),
+                ("Profile", "<LinkSub value=\"Sketch001\"/>".into()),
+                ("Type", "<Integer value=\"1\"/>".into()),
+                ("UseCustomVector", "<Bool value=\"true\"/>".into()),
+                ("Direction", v(0.3, 0.0, -1.0)),
+                ("Shape", "<Part file=\"PocketShape.brp\"/>".into()),
+            ],
+        ),
+    ]);
+    let fg = only(&file(d));
+    assert!(fg.contains("cut(t1_sk, thru, along: "), "{fg}");
+    assert!(!fg.contains("loft("), "{fg}");
+    let m = built(&fg);
+    // a slanted square prism through 10: its volume the square's area times the height
+    near(m.volume, 24000.0 - 1000.0, "volume", &fg);
+    // the hole leans 0.3 in x for each 1 down: its middle 1.5 off the square's, at z = 5
+    near(m.centroid[0], -1000.0 * 1.5 / 23000.0, "centroid x", &fg);
+    near(m.centroid[2], 5.0, "centroid z", &fg);
+}
+
 #[test]
 fn a_revolve_symmetric_about_its_sketch_turns_half_each_way() {
     // a 10 square from x 10 to 20, turned 90 degrees about the sketch's y axis, half each side
