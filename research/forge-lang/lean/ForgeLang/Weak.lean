@@ -105,7 +105,17 @@ theorem weak : ∀ n, Weak n := by
         obtain ⟨⟨ta, la⟩, ha, ⟨tb, lb⟩, hb, h⟩ := h
         cases h
         simp [evalE, ih.e ha hs, ih.e hb hs]
+      | bin o a b =>
+        simp only [evalE, bind_ok] at h
+        obtain ⟨⟨ta, la⟩, ha, ⟨tb, lb⟩, hb, h⟩ := h
+        cases h
+        simp [evalE, ih.e ha hs, ih.e hb hs]
       | eq a b =>
+        simp only [evalE, bind_ok] at h
+        obtain ⟨⟨ta, la⟩, ha, ⟨tb, lb⟩, hb, h⟩ := h
+        cases h
+        simp [evalE, ih.e ha hs, ih.e hb hs]
+      | lt a b =>
         simp only [evalE, bind_ok] at h
         obtain ⟨⟨ta, la⟩, ha, ⟨tb, lb⟩, hb, h⟩ := h
         cases h
