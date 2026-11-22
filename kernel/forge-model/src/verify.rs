@@ -45,11 +45,15 @@ fn issues(found: &[Problem], body: &forge_topo::Body) -> Vec<Issue> {
 pub fn stage(old: &[Solid], new: &[Solid]) -> Vec<Issue> {
     let mut out = Vec::new();
     for s in new {
-        let found = match old.iter().find(|o| o.id == s.id) {
+        let found = || match old.iter().find(|o| o.id == s.id) {
             Some(o) if *o == *s => Vec::new(),
             Some(o) => check_against(&s.body, &o.body),
             None => check(&s.body),
         };
+        #[cfg(feature = "decisions")]
+        let found = forge_bool::decisions::checked(found);
+        #[cfg(not(feature = "decisions"))]
+        let found = found();
         // pieces a boolean split can share a name until they are joined: only a finished part must not
         if !found.is_empty() && found.iter().all(|p| matches!(p, Problem::DuplicateName { .. })) {
             let done = crate::finish(s.body.clone());

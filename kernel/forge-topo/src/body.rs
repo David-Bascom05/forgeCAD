@@ -52,6 +52,10 @@ pub struct Edge {
     pub bbox: Cached<Box3>,
 }
 
+/// A face's corners at a vertex it meets more than once: each coedge leaving the vertex with the
+/// arriving one that closes its corner (`Body::fans`).
+type Corners = (FaceId, Vec<(CoedgeId, CoedgeId)>);
+
 /// One use of an edge by a loop. `forward` means the loop walks the edge from
 /// start to end.
 #[derive(Clone, Debug, PartialEq)]
@@ -936,13 +940,55 @@ impl Body {
     }
 
     /// The fans of faces round a vertex that coedges `from` (all leaving it) lie in: from one
-    /// leaving it, back along its loop to the one arriving, then across to that one's partner,
-    /// which leaves it again. A closed 2-manifold has one fan at every vertex. `prev` caches each
-    /// coedge's predecessor in its loop (filled a loop at a time, as loops are reached).
+    /// leaving it, back to the one arriving that closes its corner of the face, then across to
+    /// that one's partner, which leaves it again. A closed 2-manifold has one fan at every vertex.
+    /// A face that meets the vertex once closes the corner with the coedge before in its loop; one
+    /// that meets it more than once (a hole's loop touching the outer loop there) has its corners
+    /// closed by the order its edges leave the vertex in (`corners`), its loops' order saying
+    /// nothing of which edges bound one corner. `prev` caches each coedge's predecessor in its loop
+    /// (filled a loop at a time, as loops are reached).
     pub fn fans(&self, from: &[CoedgeId], prev: &mut Vec<CoedgeId>) -> Vec<Vec<CoedgeId>> {
+        let fans = self.fans_by(from, prev, None);
+        if fans.len() < 2 {
+            return fans;
+        }
+        // (only where loop order leaves more than one fan: a face meeting the vertex twice)
+        let v = self.coedge_start(from[0]);
+        let mut closes = Vec::new();
+        for f in fans.iter().flatten().map(|&c| self.coedge_face(c)) {
+            if !closes
+                .iter()
+                .any(|x: &(FaceId, Vec<(CoedgeId, CoedgeId)>)| x.0 == f)
+            {
+                closes.push((f, self.corners(f, v)));
+            }
+        }
+        if closes.iter().all(|x| x.1.is_empty()) {
+            return fans;
+        }
+        self.fans_by(from, prev, Some(&closes))
+    }
+
+    fn fans_by(
+        &self,
+        from: &[CoedgeId],
+        prev: &mut Vec<CoedgeId>,
+        closes: Option<&[Corners]>,
+    ) -> Vec<Vec<CoedgeId>> {
         const NONE: CoedgeId = CoedgeId(u32::MAX);
         prev.resize(self.coedges.len(), NONE);
         let mut before = |c: CoedgeId| {
+            if let Some(closes) = closes {
+                let f = self.coedge_face(c);
+                if let Some(&(_, into)) = closes
+                    .iter()
+                    .filter(|x| x.0 == f)
+                    .flat_map(|x| x.1.iter())
+                    .find(|x| x.0 == c)
+                {
+                    return into;
+                }
+            }
             if prev[c.index()] == NONE {
                 let lp = self.lp(self.coedge(c).lp);
                 let n = lp.coedges().len();
@@ -973,23 +1019,65 @@ impl Body {
         fans
     }
 
-    /// Gives each fan past the first of those coedges `from` (all leaving vertex `v`) lie in a
-    /// vertex of its own at the same point: solids touching at a point stay manifold, as
-    /// Parasolid and ACIS keep them.
-    pub fn split_pinched(&mut self, v: VertexId, from: &[CoedgeId], prev: &mut Vec<CoedgeId>) {
-        for (k, fan) in self.fans(from, prev).iter().enumerate().skip(1) {
-            let old = self.vertices[v.index()].clone();
-            let nv = self.add_tolerant_vertex(old.point, old.tol, old.name.with(k as u64));
-            for &c in fan {
-                let (edge, forward) = (self.coedge(c).edge, self.coedge(c).forward);
-                let e = &mut self.edges[edge.index()];
-                if forward {
-                    e.start = nv;
-                } else {
-                    e.end = nv;
-                }
-            }
+    /// The corners of face `f` at vertex `v`, where it meets `v` more than once: each coedge
+    /// leaving `v` with the arriving one that closes its corner (empty where `f` meets `v` once, or
+    /// has no normal there). The face lies to the left of each leaving edge, seen from outside, so
+    /// a corner runs counterclockwise from a leaving edge to the next arriving one. Edges are
+    /// ordered as they stand a vertex tolerance out along each (to second order: a line and a circle
+    /// tangent to it leave in one direction and part by their curvature).
+    fn corners(&self, f: FaceId, v: VertexId) -> Vec<(CoedgeId, CoedgeId)> {
+        let at = self.vertex(v);
+        let uses: Vec<CoedgeId> = self
+            .face(f)
+            .loops
+            .iter()
+            .flat_map(|&l| self.lp(l).coedges())
+            .filter(|&c| self.coedge_start(c) == v || self.coedge_end(c) == v)
+            .collect();
+        if uses.iter().filter(|&&c| self.coedge_start(c) == v).count() < 2 {
+            return Vec::new();
         }
+        let surface = &self.face(f).surface;
+        let Some(n) = self.face_normal(f, surface.project(at.point)) else {
+            return Vec::new();
+        };
+        let e1 = n.any_perpendicular();
+        let e2 = n.cross(e1);
+        let reach = at.tol.max(forge_math::tol::LINEAR);
+        // the angle round n of the point `reach` out along the coedge's edge from v
+        let angle = |c: CoedgeId, leaving: bool| {
+            let co = self.coedge(c);
+            let edge = self.edge(co.edge);
+            // the edge's end at v: its start when the coedge leaves v forward or arrives backward
+            let at_start = leaving == co.forward;
+            let (t, sign) = if at_start {
+                (edge.range.lo, 1.0)
+            } else {
+                (edge.range.hi, -1.0)
+            };
+            let d = edge.curve.deriv(t);
+            let dt = sign * reach / d.d1.length().max(f64::MIN_POSITIVE);
+            let off = d.d1 * dt + d.d2 * (0.5 * dt * dt);
+            forge_math::dmath::atan2(e2.dot(off), e1.dot(off))
+        };
+        let arriving: Vec<(CoedgeId, f64)> = uses
+            .iter()
+            .filter(|&&c| self.coedge_end(c) == v)
+            .map(|&c| (c, angle(c, false)))
+            .collect();
+        let tau = forge_math::dmath::TAU;
+        uses.iter()
+            .filter(|&&c| self.coedge_start(c) == v)
+            .filter_map(|&c| {
+                let a = angle(c, true);
+                arriving
+                    .iter()
+                    .map(|&(x, b)| (x, (b - a).rem_euclid(tau)))
+                    .filter(|x| x.0 != c)
+                    .min_by(|x, y| x.1.total_cmp(&y.1))
+                    .map(|x| (c, x.0))
+            })
+            .collect()
     }
 
     /// The other use of the same edge.

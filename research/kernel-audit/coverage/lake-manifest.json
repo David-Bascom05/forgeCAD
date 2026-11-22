@@ -1,0 +1,14 @@
+{"version": "1.3.0",
+ "packagesDir": ".lake/packages",
+ "packages":
+ [{"type": "path",
+   "scope": "",
+   "name": "forgeexact",
+   "manifestFile": "lake-manifest.json",
+   "inherited": false,
+   "dir": "../../../verify/forge-exact",
+   "copy": false,
+   "configFile": "lakefile.toml"}],
+ "name": "coverage",
+ "lakeDir": ".lake",
+ "fixedToolchain": false}

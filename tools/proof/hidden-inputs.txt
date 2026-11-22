@@ -38,6 +38,12 @@ speed (lazy field or constant table)  @ forge-bool/src/classify.rs|lazy|info.dra
 speed (lazy field or constant table)  @ forge-bool/src/classify.rs|lazy|info.simple = std::sync::OnceLock::new();  x 2
 speed (lazy field or constant table)  @ forge-bool/src/classify.rs|lazy|simple: std::sync::OnceLock::new(),
 speed (lazy field or constant table)  @ forge-bool/src/classify.rs|lazy|simple: std::sync::OnceLock<Option<Simple>>,
+no-output (decision log, feature `decisions` only, off in every build: records and prints, never read by the boolean; STRICT panics as the log's assertion)  @ forge-bool/src/decisions.rs|env|if found > 0 && std::env::var_os("FORGE_DECISIONS_STRICT").is_some() && !std::thread::panicking() {
+no-output (decision log, feature `decisions` only, off in every build: records and prints, never read by the boolean; STRICT panics as the log's assertion)  @ forge-bool/src/decisions.rs|env|if std::env::var_os("FORGE_DECISIONS_TRACE").is_some() {
+no-output (decision log, feature `decisions` only, off in every build: records and prints, never read by the boolean; STRICT panics as the log's assertion)  @ forge-bool/src/decisions.rs|static|static INPUT: RefCell<(String, String)> = const { RefCell::new((String::new(), String::new())) };
+no-output (decision log, feature `decisions` only, off in every build: records and prints, never read by the boolean; STRICT panics as the log's assertion)  @ forge-bool/src/decisions.rs|static|static LEDGER: RefCell<Option<Ledger>> = const { RefCell::new(None) };
+no-output (decision log, feature `decisions` only, off in every build: records and prints, never read by the boolean; STRICT panics as the log's assertion)  @ forge-bool/src/decisions.rs|static|static STATS: Mutex<Option<Stats>> = Mutex::new(None);
+no-output (decision log, feature `decisions` only, off in every build: records and prints, never read by the boolean; STRICT panics as the log's assertion)  @ forge-bool/src/decisions.rs|thread_local|thread_local! {
 keyed (the imprint's mode is in forge_model::switches, part of the session's step key and its prefix reuse; kept_switches)  @ forge-bool/src/imprint.rs|atomic|static MODE: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(u8::MAX);
 no-output (work index, counter or stop flag)  @ forge-bool/src/imprint.rs|atomic|static TAKEN: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 keyed (the imprint's mode is in forge_model::switches, part of the session's step key and its prefix reuse; kept_switches)  @ forge-bool/src/imprint.rs|env|let m = match std::env::var("FORGE_IMPRINT").as_deref() {
@@ -106,7 +112,8 @@ no-output (stalls noted only inside intcurve::noting, the caller's restored on u
 no-output (stalls noted only inside intcurve::noting, the caller's restored on unwind; a_trace_that_panics_leaves_no_noting_behind)  @ forge-geom/src/intcurve.rs|thread_local|thread_local! {
 speed (lazy field: cold and warm give the same bits, intcurve.rs:303-314)  @ forge-geom/src/intersect.rs|lazy|let (asked, near) = (std::cell::OnceCell::new(), std::cell::Cell::new(Some(near)));
 no-output (a retry flag: set and cleared inside one boolean by boolean::Held, unwinding too; held_tests)  @ forge-geom/src/intersect.rs|static|pub static ABSORB_HAIR_ROOTS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
-no-output (ABSORB_HAIR_ROOTS, Held-scoped to one boolean)  @ forge-geom/src/intersect.rs|thread_local|thread_local! {
+no-output (decision log, feature `decisions` only, off in every build: records and prints, never read by the boolean; STRICT panics as the log's assertion)  @ forge-geom/src/intersect.rs|static|static LOG: RefCell<Option<Vec<Hair>>> = const { RefCell::new(None) };
+no-output (ABSORB_HAIR_ROOTS, Held-scoped to one boolean; hair_log::LOG, the decision log only)  @ forge-geom/src/intersect.rs|thread_local|thread_local! {  x 2
 no-output (test code)  @ forge-geom/src/meet_tests.rs|clock|let at = std::time::Instant::now();
 no-output (work index, counter or stop flag)  @ forge-geom/src/screw.rs|atomic|static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
 speed (cache answering a function of its own key)  @ forge-geom/src/screw.rs|static|static KEPT: [KeptSlot; KeptSeeds::SLOTS] = const {
@@ -274,6 +281,8 @@ no-output (test switch, off unless a test sets it)  @ forge-topo/src/check.rs|la
 no-output (test switch, off unless a test sets it)  @ forge-topo/src/check.rs|lazy|let fine = std::cell::OnceCell::new();
 no-output (test switch, off unless a test sets it)  @ forge-topo/src/check.rs|lazy|let signs: Vec<std::cell::OnceCell<Option<i64>>> = vec![std::cell::OnceCell::new(); body.shells.len()];
 no-output (test switch, off unless a test sets it)  @ forge-topo/src/check.rs|static|static BOTH: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+no-output (decision log, feature `decisions` only, off in every build: records and prints, never read by the boolean; STRICT panics as the log's assertion)  @ forge-topo/src/check.rs|static|static LOG: RefCell<Option<Vec<OnFace>>> = const { RefCell::new(None) };
+no-output (decision log, feature `decisions` only, off in every build: records and prints, never read by the boolean; STRICT panics as the log's assertion)  @ forge-topo/src/check.rs|thread_local|thread_local! {
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-topo/src/mass.rs|float|1e-6 * rel * size.powi(k)
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-topo/src/mass.rs|float|let floor: F = std::array::from_fn(|m| 1e-6 * rel * size.powi([3, 4, 4, 4, 5, 5, 5, 5, 5, 5, 2][m]));
 speed (lazy field or constant table)  @ forge-topo/src/mass.rs|lazy|static R: OnceLock<Kronrod> = OnceLock::new();  x 2

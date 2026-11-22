@@ -15,12 +15,21 @@ forge-bool = { path = "../../kernel/forge-bool" }
 forge-mesh = { path = "../../kernel/forge-mesh" }
 forge-model = { path = "../../kernel/forge-model" }
 
+[features]
+# the boolean's decision log, for examples/decisions
+decisions = ["forge-bool/decisions", "forge-model/decisions"]
+
 [dev-dependencies]
 # .fg part files (examples, tests); the selections' entity helpers (examples/topo)
 forge-lang = { path = "../../interface/forge-lang" }
 forge-agent = { path = "../../interface/forge-agent" }
 # examples/topo's selections by lineage (forge_import::state)
 forge-import = { path = "../../interface/forge-import" }
+
+# research/kernel-audit/decisions.md
+[[example]]
+name = "decisions"
+required-features = ["decisions"]
 
 [lints]
 workspace = true

@@ -355,7 +355,12 @@ pub struct Eval<'s> {
     scopes: Vec<Scope>,
     pub b: Builder,
     pub feats: Vec<FeatInfo>,
-    ids: HashMap<String, Span>,
+    /// Each id made so far and where: a second is DuplicateId. FNV like `Scope`; nothing
+    /// iterates it.
+    ids: HashMap<String, Span, std::hash::BuildHasherDefault<NameHasher>>,
+    /// Each kernel name (`history_id`) made so far, and the feature (in `feats`) that made it
+    /// first: two ids with one kernel name are refused (HistoryId.lean: `checked_distinct`).
+    hids: HashMap<u64, usize, std::hash::BuildHasherDefault<NameHasher>>,
     pub errors: Vec<Error>,
     pub warnings: Vec<Warning>,
     ctx: Ctx,
@@ -476,7 +481,8 @@ impl<'s> Eval<'s> {
             scopes: vec![Scope::default()],
             b: Builder::new(building, cache),
             feats: vec![],
-            ids: HashMap::new(),
+            ids: HashMap::default(),
+            hids: HashMap::default(),
             errors: vec![],
             warnings: vec![],
             ctx: Ctx::default(),
@@ -1983,7 +1989,12 @@ impl<'s> Eval<'s> {
                 match r {
                     Err(e)
                         if poisoned
-                            && !matches!(e, Error::UnnamedFeature { .. } | Error::DuplicateId { .. }) =>
+                            && !matches!(
+                                e,
+                                Error::UnnamedFeature { .. }
+                                    | Error::DuplicateId { .. }
+                                    | Error::HistoryIdClash { .. }
+                            ) =>
                     {
                         Ok(Value::Unresolved)
                     }
@@ -2151,15 +2162,17 @@ impl<'s> Eval<'s> {
                     index: self.id_keys(span)?,
                 });
                 let id = path_text(&path);
-                if let Some(first) = self.ids.get(&id) {
-                    return Err(Error::DuplicateId {
+                match self.ids.entry(id.clone()) {
+                    std::collections::hash_map::Entry::Occupied(first) => Err(Error::DuplicateId {
                         span,
                         id,
-                        first: *first,
-                    });
+                        first: *first.get(),
+                    }),
+                    std::collections::hash_map::Entry::Vacant(e) => {
+                        e.insert(span);
+                        Ok(id)
+                    }
                 }
-                self.ids.insert(id.clone(), span);
-                Ok(id)
             }
             other => {
                 self.ctx.pending = other;
@@ -2208,6 +2221,22 @@ impl<'s> Eval<'s> {
         hid: u64,
         push: impl FnOnce(&mut crate::build::Builder) -> R<usize>,
     ) -> R<(usize, u64)> {
+        // one kernel name, one id: another id hashing to it would name the same entities
+        match self.hids.entry(hid) {
+            std::collections::hash_map::Entry::Occupied(e) if self.feats[*e.get()].id != id => {
+                let first = &self.feats[*e.get()];
+                return Err(Error::HistoryIdClash {
+                    span,
+                    id: id.into(),
+                    other: first.id.clone(),
+                    first: first.span,
+                });
+            }
+            std::collections::hash_map::Entry::Occupied(_) => {}
+            std::collections::hash_map::Entry::Vacant(e) => {
+                e.insert(self.feats.len());
+            }
+        }
         let was_building = self.b.building;
         let r = push(&mut self.b);
         let idx = self.b.features.len() - 1;

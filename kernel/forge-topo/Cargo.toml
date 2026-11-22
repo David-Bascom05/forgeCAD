@@ -10,5 +10,10 @@ repository.workspace = true
 forge-math = { path = "../forge-math" }
 forge-geom = { path = "../forge-geom" }
 
+[features]
+# the boolean's decision log (forge-bool's `decisions`): check's edge-on-face answers recorded
+# where a collector asks (`check::face_log`)
+decisions = ["forge-geom/decisions"]
+
 [lints]
 workspace = true

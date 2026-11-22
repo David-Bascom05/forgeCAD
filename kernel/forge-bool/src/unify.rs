@@ -12,6 +12,8 @@ use forge_topo::{Body, CoedgeId, EdgeId, FaceId, LoopId};
 /// edges on one line or circle that meet at a vertex nothing else ends at. Removed entities stay
 /// as tombstones (counted in `Body::dead`) until `Body::compact`.
 pub fn unify(body: &mut Body) {
+    #[cfg(feature = "decisions")]
+    let _scope = crate::decisions::scope("unify", String::from("plain"));
     // each face's kind and a number one surface gives all its faces (a plane's distance from the
     // origin, a cylinder's radius), so most edges are passed over without reading their faces
     let keys: Vec<(u8, f64)> = body
@@ -254,16 +256,21 @@ fn rename_wholes(body: &mut Body, faces: &[(u32, u32)], edges: &[(u32, u32)]) {
 const SAME: f64 = 0.5 * tol::LINEAR;
 
 /// Whether live edge `e` lies between two faces on one surface, facing the same way (`keys` as
-/// `unify` makes them).
+/// `unify` makes them); or has one plane face on both sides: a slit, a spur or a bridge between
+/// two of its loops, which bounds nothing. (One face round a cylinder or cone on both sides is
+/// mostly its seam, which the face needs.)
 fn between_same(body: &Body, keys: &[(u8, f64)], e: EdgeId) -> bool {
     let x = body.edge(e);
     if !x.alive || x.coedges.len() != 2 {
         return false;
     }
     let (a, b) = (body.coedge_face(x.coedges[0]), body.coedge_face(x.coedges[1]));
+    if a == b {
+        return keys[a.index()].0 == 1 && !kept(body, x.name);
+    }
     let (ka, kb) = (keys[a.index()], keys[b.index()]);
     // (far looser than the test below: faces on one surface differ by tolerances here)
-    if a == b || ka.0 == 0 || ka.0 != kb.0 || (ka.1 - kb.1).abs() > 1e-3 {
+    if ka.0 == 0 || ka.0 != kb.0 || (ka.1 - kb.1).abs() > 1e-3 {
         return false;
     }
     let (fa, fb) = (body.face(a), body.face(b));
@@ -300,12 +307,47 @@ fn between_same(body: &Body, keys: &[(u8, f64)], e: EdgeId) -> bool {
         }
         _ => false,
     };
+    decided!(log_same(body, a, b, same));
     // unless a feature split the face there on purpose
-    same && !body
-        .joins
-        .kept
-        .iter()
-        .any(|&k| x.name == k || x.name.is_piece_of(k))
+    same && !kept(body, x.name)
+}
+
+/// Whether a feature split a face on purpose along the edge named `name`.
+fn kept(body: &Body, name: forge_topo::Name) -> bool {
+    body.joins.kept.iter().any(|&k| name == k || name.is_piece_of(k))
+}
+
+/// unify's answer for faces `a` and `b` of `body` (planes or cylinders near one surface), beside
+/// the boolean's own test of the same two surfaces (`ssi::coincident`).
+#[cfg(feature = "decisions")]
+fn log_same(body: &Body, a: FaceId, b: FaceId, same: bool) {
+    use crate::decisions::{self as d, BAND, Ent, Kind, Site};
+    let (fa, fb) = (body.face(a), body.face(b));
+    // (facing the same way is unify's own condition: the boolean's test is of the surfaces alone,
+    // so faces facing apart are left out)
+    let (gap, facing) = match (&fa.surface, &fb.surface) {
+        (Surface::Plane(p), Surface::Plane(q)) => (
+            p.frame.z().dot(q.frame.origin - p.frame.origin).abs(),
+            (p.frame.z().dot(q.frame.z()) > 0.0) == (fa.same_sense == fb.same_sense),
+        ),
+        (Surface::Cylinder(p), Surface::Cylinder(q)) => {
+            let off = q.frame.origin - p.frame.origin;
+            (
+                (p.radius - q.radius).abs().max(p.frame.z().cross(off).length()),
+                fa.same_sense == fb.same_sense,
+            )
+        }
+        _ => return,
+    };
+    if gap > BAND || !facing {
+        return;
+    }
+    let key = d::pair(Ent::f(body, a), Ent::f(body, b));
+    let site = Site::Named("unify: SAME (half LINEAR)");
+    d::decide(Kind::Coincident, key, None, None, same as u8, site, gap, SAME);
+    let yes = crate::ssi::coincident(&fa.surface, &fb.surface);
+    let site = Site::Named("unify: ssi::coincident (the boolean's test)");
+    d::decide(Kind::Coincident, key, None, None, yes as u8, site, gap, f64::NAN);
 }
 
 /// Whether the closed chain of edge uses `chain` goes round face `f`'s periodic surface.
@@ -448,7 +490,9 @@ fn remove_edge(body: &mut Body, w: &mut Work, e: EdgeId) -> Option<(FaceId, Face
         if j == i + 1 || (i == 0 && j == n - 1) {
             // walked there and straight back: a spur
             if n == 2 {
-                return None;
+                // a loop of the one edge there and back, inside the face: it bounds nothing and
+                // goes with the face's other such loops once every join is done
+                return Some((fa, fa));
             }
             cs.retain(|&c| c != ca && c != cb);
         } else {

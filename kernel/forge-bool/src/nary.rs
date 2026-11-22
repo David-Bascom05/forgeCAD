@@ -95,6 +95,11 @@ fn par_map<T: Send>(n: usize, threads: usize, per: usize, f: impl Fn(usize) -> T
 /// How far clear of a tool's boundary a point must be for its analytic solid to answer.
 const SHAPE_MARGIN: f64 = tol::LINEAR;
 
+/// How far past a cut's plane (in LINEAR) its outer side is tested for material, `inert`: from
+/// beyond the face's own box (grown LINEAR) and SHAPE_MARGIN, so nothing on the face's plane to
+/// within the tolerance is seen, out to 10.
+const OUTER_SIDE: (f64, f64) = (3.0, 10.0);
+
 /// The part of `range` along which `c` may come within any of `boxes` (None: nowhere): for a
 /// traced curve, the span of its chain segments (each within its chord and sag of its ends) that
 /// meet one; for any other curve, the whole range.
@@ -284,6 +289,46 @@ fn nary_reg() -> Option<usize> {
 }
 
 /// A cut of a new edge by a third tool's face.
+/// The n-ary place step's answers (step 3): each cut at its edge's ends or not, and every two cut
+/// points within four tolerances one vertex or two, both as the sweep's own test of the pair (one
+/// reach) and as its clusters (joined through others) say. `pts` and `tols`: the cuts', then the
+/// triple cuts' (on no edge of a tool).
+#[cfg(feature = "decisions")]
+fn log_place(tools: &[&Body], cuts: &[Cut], pts: &[Point3], tols: &[f64], cluster: &[usize]) {
+    use crate::boolean::log;
+    use crate::decisions::Ent;
+    let ent = |i: usize| {
+        cuts.get(i)
+            .and_then(|c| c.on.edge())
+            .map_or(Ent::NONE, |(sd, e)| Ent::e(tools[sd], e))
+    };
+    for c in cuts {
+        let Some((sd, e)) = c.on.edge() else { continue };
+        let edge = tools[sd].edge(e);
+        for v in [edge.start, edge.end] {
+            let lim = tools[sd].vertex(v).tol.max(c.tol);
+            log::at_vertex(tools[sd], v, c.point, lim, "n-ary place: a cut at its edge's end");
+        }
+    }
+    let widest = tols.iter().fold(tol::LINEAR, |a, &b| a.max(b));
+    let mut by_x: Vec<usize> = (0..pts.len()).collect();
+    by_x.sort_by(|&i, &j| pts[i].x.total_cmp(&pts[j].x));
+    for (n, &i) in by_x.iter().enumerate() {
+        for &j in &by_x[n + 1..] {
+            if pts[j].x - pts[i].x > 4.0 * widest {
+                break;
+            }
+            let reach = tols[i].max(tols[j]);
+            let dist = pts[i].distance(pts[j]);
+            if dist <= 4.0 * reach {
+                let (x, y) = ((ent(i), pts[i], tols[i]), (ent(j), pts[j], tols[j]));
+                log::same_place_at(x, y, dist <= reach, "n-ary place: one reach");
+                log::same_place_at(x, y, cluster[i] == cluster[j], "n-ary place: clusters");
+            }
+        }
+    }
+}
+
 struct SegCut {
     seg: usize,
     /// The tool whose face crosses it.
@@ -559,11 +604,16 @@ pub fn nary_with(
     root: Name,
 ) -> R<Body> {
     crate::boolean::UNDECIDED.with(|u| u.set(None));
-    let mut out = nary_body(tools, ops, shapes, batch, threads, root)?;
+    #[cfg(feature = "decisions")]
+    let scope = crate::decisions::scope("n-ary", String::from("plain"));
+    let body = nary_body(tools, ops, shapes, batch, threads, root);
+    #[cfg(feature = "decisions")]
+    scope.outcome(crate::decisions::Outcome::of(&body));
+    let out = body?;
     crate::boolean::undecided_touch(&out)?;
     crate::boolean::refuse_strays(&out, 0)?;
-    // pieces left touching at a point keep a vertex each: where walking round a vertex from one
-    // coedge leaving it (back along its loop, across to the partner) misses some of the others
+    // pieces left touching at a point pinch (boolean::pinched): where walking round a vertex from
+    // one coedge leaving it (back along its loop, across to the partner) misses some of the others
     let nv = out.vertices.len();
     let from = |x: &forge_topo::Edge, c: forge_topo::CoedgeId| {
         if out.coedges[c.index()].forward {
@@ -612,8 +662,10 @@ pub fn nary_with(
                 _ => break false,
             }
         };
-        if !one {
-            out.split_pinched(VertexId(v as u32), from, &mut prev);
+        if !one && out.fans(from, &mut prev).len() > 1 {
+            return Err(BoolError::ZeroThickness {
+                at: out.vertex(VertexId(v as u32)).point,
+            });
         }
     }
     Ok(out)
@@ -681,11 +733,25 @@ fn nary_body(
         }
         *inert_at[k][f.index()].get_or_init(|| {
             let b = &index[k].boxes()[f.index()];
-            let out = pl.frame.z().get() * (if face.same_sense { 10.0 } else { -10.0 } * tol::LINEAR);
+            // the outer side all the way from just past the tolerance to 10 LINEAR off the face,
+            // not one box out there: a tool ending between is a sliver the face bounds, its end
+            // a plane apart from the face's (as the sequential regen has it, planes_coincident),
+            // the sliver's sides crossing the face (lang/28)
+            let sign = if face.same_sense { 1.0 } else { -1.0 };
+            let (z, (from, to)) = (pl.frame.z().get(), OUTER_SIDE);
+            let (a, c) = (z * (sign * from * tol::LINEAR), z * (sign * to * tol::LINEAR));
+            // along each axis from the nearer shift to the farther (a and c lie the same way)
+            let span = |r: &forge_math::Interval, a: f64, c: f64| {
+                let (lo, hi) = if a < c { (a, c) } else { (c, a) };
+                forge_math::Interval {
+                    lo: r.lo + lo,
+                    hi: r.hi + hi,
+                }
+            };
             let off = forge_math::Box3 {
-                x: forge_math::Interval::new(b.x.lo + out.x, b.x.hi + out.x),
-                y: forge_math::Interval::new(b.y.lo + out.y, b.y.hi + out.y),
-                z: forge_math::Interval::new(b.z.lo + out.z, b.z.hi + out.z),
+                x: span(&b.x, a.x, c.x),
+                y: span(&b.y, a.y, c.y),
+                z: span(&b.z, a.z, c.z),
             };
             let near = b.grow(tol::LINEAR);
             let after = |t: Side| &holders[holders.partition_point(|&h| h <= t)..];
@@ -737,7 +803,13 @@ fn nary_body(
                         && index[t].bbox.contains(Point3::new(off.x.hi, off.y.hi, off.z.hi))
                         && after(t).iter().all(|&h| !index[h].bbox.overlaps(&off))
                         && (sh[t].box_in(&off, SHAPE_MARGIN)
-                            || sh[t].plane_in(pl.frame.origin + out, pl.frame.z().get(), reach, SHAPE_MARGIN))
+                            || sh[t].plane_in(
+                                pl.frame.origin + z * (sign * 0.5 * (from + to) * tol::LINEAR),
+                                pl.frame.z().get(),
+                                reach,
+                                // the plane mid-way, clear by half the band more: the whole band
+                                SHAPE_MARGIN + 0.5 * (to - from) * tol::LINEAR,
+                            ))
                 }))
                 && after(k).iter().all(|&t| !index[t].bbox.overlaps(&near))
         })
@@ -884,6 +956,14 @@ fn nary_body(
                     SurfaceSurface::NotAnalytic => ssi::searched(sa, sb, region),
                     r => r,
                 };
+                decided!(crate::boolean::log::coincident(
+                    a,
+                    fa,
+                    b,
+                    fb,
+                    matches!(found, SurfaceSurface::Coincident),
+                    "n-ary pair: closed_or_flush"
+                ));
                 if planes && !matches!(found, SurfaceSurface::Coincident) && (inert(i, fa) || inert(j, fb)) {
                     out.loose.push(((i, fa), (j, fb)));
                     continue;
@@ -973,6 +1053,7 @@ fn nary_body(
                         &mut out.cuts,
                         &mut out.segs,
                         &mut out.imprints,
+                        &mut out.touching,
                     )?;
                 }
                 if !whole || out.imprints.len() > imprints_before {
@@ -1430,6 +1511,7 @@ fn nary_body(
         }
         cluster.push(id_of_root[r]);
     }
+    decided!(log_place(tools, &cuts, &pts, &tols, &cluster));
     let mut olds: Vec<Vec<VKey>> = vec![Vec::new(); heads.len()];
     for (i, c) in cuts.iter().enumerate() {
         let Some((sd, e)) = c.on.edge() else { continue };

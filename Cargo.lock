@@ -78,6 +78,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-coverage"
+version = "0.1.0"
+dependencies = [
+ "forge-bool",
+ "forge-math",
+ "forge-mesh",
+ "forge-model",
+ "forge-ops",
+ "forge-topo",
+]
+
+[[package]]
 name = "forge-dirs"
 version = "0.1.0"
 
@@ -100,6 +112,20 @@ version = "0.1.0"
 dependencies = [
  "forge-font",
  "forge-math",
+]
+
+[[package]]
+name = "forge-exact-fuzz"
+version = "0.1.0"
+dependencies = [
+ "forge-bool",
+ "forge-geom",
+ "forge-lang",
+ "forge-math",
+ "forge-model",
+ "forge-ops",
+ "forge-proof",
+ "forge-topo",
 ]
 
 [[package]]

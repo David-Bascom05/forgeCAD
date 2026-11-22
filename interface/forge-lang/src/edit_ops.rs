@@ -340,22 +340,30 @@ pub fn free_name(prog: &[Stmt], base: &str) -> String {
         .expect("a free name")
 }
 
-/// `Respell {span, to}`: the name at `span` written `to` (an UnknownName's fix).
+/// `Respell {span, to}`: the name at `span` written `to` (an UnknownName's fix). The span is a
+/// read of a name, the whole token: a binder (`base` in `base = ..`) is refused, as Rename's,
+/// and so is a span inside a token (Respell.lean: `respell_refuses_binder`,
+/// `respell_refuses_inside`).
 pub fn apply_respell(src: &str, span: Span, to: &str) -> R<String> {
     let (lo, hi) = (span.lo as usize, span.hi as usize);
-    let at = src
-        .get(lo..hi)
-        .filter(|t| ident(t))
-        .ok_or(Error::EmptySelection { span })?;
     if !ident(to) || syntax::KEYWORDS.contains(&to) {
         return Err(Error::NameTaken { name: to.into() });
     }
-    let _ = at;
+    let prog = syntax::parse(src)?;
+    if !crate::edit::reads_at(&prog, span) {
+        return Err(Error::NotARead {
+            span,
+            text: src.get(lo..hi).unwrap_or_default().into(),
+        });
+    }
     Ok(format!("{}{to}{}", &src[..lo], &src[hi..]))
 }
 
-/// The nearest of `names` to `name`, two edits or fewer away (as .fc's `try:` found them).
+/// The nearest of `names` to `name`, two edits or fewer away (as .fc's `try:` found them). At
+/// equal distance a name the part binds (a param, a feature, a local, a function) comes before
+/// a built-in, then the alphabetically first: `tt` in a part with a param `t` is `t`, not `pt`.
 pub fn nearest<'a>(name: &str, names: impl Iterator<Item = &'a str>) -> Option<String> {
+    let builtin = |n: &str| crate::builtins::BUILTINS.contains(&n) || crate::shapes::NAMES.contains(&n);
     let dist = |a: &str, b: &str| {
         let (a, b): (Vec<char>, Vec<char>) = (a.chars().collect(), b.chars().collect());
         let mut row: Vec<usize> = (0..=b.len()).collect();
@@ -374,22 +382,41 @@ pub fn nearest<'a>(name: &str, names: impl Iterator<Item = &'a str>) -> Option<S
     };
     names
         .filter(|n| *n != name)
-        .map(|n| (dist(name, n), n))
-        .filter(|(d, _)| *d <= 2 && *d < name.chars().count())
+        .map(|n| (dist(name, n), builtin(n), n))
+        .filter(|(d, _, _)| *d <= 2 && *d < name.chars().count())
         .min()
-        .map(|(_, n)| n.to_string())
+        .map(|(_, _, n)| n.to_string())
 }
 
-/// The marker a suppressed line starts with: `#~ID ` (ID the feature `Suppress` named).
-fn suppress_tag(id: &str) -> String {
-    format!("#~{id} ")
+/// The marker a suppressed line starts with: `#~ID`, then `<` when Suppress put in the line
+/// break before it (the statement shared its line with one kept before it), `>` when it put in
+/// the one after it (with one kept after it), then a space (ID the feature `Suppress` named).
+fn suppress_tag(id: &str, before: bool, after: bool) -> String {
+    let b = if before { "<" } else { "" };
+    let a = if after { ">" } else { "" };
+    format!("#~{id}{b}{a} ")
+}
+
+/// A line `Suppress` tagged: its id, whether it put in the break before and after it, and the
+/// line as it was.
+fn tagged(line: &str) -> Option<(&str, bool, bool, &str)> {
+    let rest = line.strip_prefix("#~")?;
+    let n = rest.find(|c: char| !(c.is_alphanumeric() || c == '_'))?;
+    let (id, rest) = rest.split_at(n);
+    let (before, rest) = rest.strip_prefix('<').map_or((false, rest), |r| (true, r));
+    let (after, rest) = rest.strip_prefix('>').map_or((false, rest), |r| (true, r));
+    let rest = rest.strip_prefix(' ')?;
+    (!id.is_empty()).then_some((id, before, after, rest))
 }
 
 /// `Suppress {id}`: the statement making top-level feature `id`, its params, and every later
-/// statement reading what they bind (and their params), out of the build: each of their lines
-/// kept as a comment `#~ID LINE`, so `Unsuppress {id}` puts them back as they were.
+/// statement reading what they bind (and their params), out of the build: each kept as a comment
+/// `#~ID LINE`, so `Unsuppress {id}` puts them back as they were. Exactly those statements: one
+/// sharing a line with a statement kept goes on a line of its own, the break put in marked in
+/// its tag (`<` before it, `>` after it), and Unsuppress takes the break out again
+/// (Suppress.lean: `suppress_live`, `unsuppress_suppress`).
 pub fn apply_suppress(src: &str, prog: &[Stmt], id: &str) -> R<String> {
-    if src.lines().any(|l| l.starts_with(&suppress_tag(id))) {
+    if src.lines().any(|l| tagged(l).is_some_and(|t| t.0 == id)) {
         return Err(Error::NameTaken {
             name: format!("#~{id}"),
         });
@@ -412,20 +439,46 @@ pub fn apply_suppress(src: &str, prog: &[Stmt], id: &str) -> R<String> {
             out.insert(m);
         }
     }
-    let tag = suppress_tag(id);
-    let mut text = String::with_capacity(src.len() + out.len() * (tag.len() + 8));
+    let blank = |t: &str| t.bytes().all(|c| c == b' ' || c == b'\t');
+    let mut text = String::with_capacity(src.len() + out.len() * (id.len() + 8));
     let mut at = 0usize;
     for &m in &out {
         let s = &prog[m];
-        let lo = src[..s.full.lo as usize].rfind('\n').map_or(0, |n| n + 1);
-        let hi = s.full.hi as usize;
-        if lo < at {
+        // the statement and its separator (a `;`, or the line break)
+        let (slo, shi) = (s.full.lo as usize, s.full.hi as usize);
+        if slo < at {
             continue;
         }
+        // from its line's start (or the break put in after the last one taken out), unless a
+        // statement kept is before it on the line
+        let start = src[..slo].rfind('\n').map_or(0, |n| n + 1).max(at);
+        let before = !blank(&src[start..slo]);
+        let lo = if before { slo } else { start };
+        // to its line's end, unless a statement kept is after it on the line: then up to it
+        let hi = if src[..shi].ends_with('\n') {
+            shi
+        } else {
+            let eol = src[shi..].find('\n').map_or(src.len(), |n| shi + n + 1);
+            let semis = src[shi..eol].len() - src[shi..eol].trim_start_matches(';').len();
+            let rest = src[shi + semis..eol].trim();
+            if rest.is_empty() || rest.starts_with('#') {
+                eol
+            } else {
+                shi + semis
+            }
+        };
+        let after = !src[..hi].ends_with('\n') && hi < src.len();
         text.push_str(&src[at..lo]);
-        for line in src[lo..hi].split_inclusive('\n') {
-            text.push_str(&tag);
-            text.push_str(line);
+        if before {
+            text.push('\n');
+        }
+        let lines: Vec<&str> = src[lo..hi].split_inclusive('\n').collect();
+        for (i, l) in lines.iter().enumerate() {
+            text.push_str(&suppress_tag(id, before && i == 0, after && i + 1 == lines.len()));
+            text.push_str(l);
+        }
+        if after {
+            text.push('\n');
         }
         at = hi;
     }
@@ -433,14 +486,66 @@ pub fn apply_suppress(src: &str, prog: &[Stmt], id: &str) -> R<String> {
     Ok(text)
 }
 
-/// `Unsuppress {id}`: the lines `Suppress {id}` kept as comments put back as they were.
+/// `Unsuppress {id}`: the lines `Suppress {id}` kept as comments put back as they were, and the
+/// line breaks it put in taken out. A break next to another feature's suppressed line stays, its
+/// mark moved onto that line, for that feature's Unsuppress to take out.
 pub fn apply_unsuppress(src: &str, id: &str) -> R<String> {
-    let tag = suppress_tag(id);
-    if !src.lines().any(|l| l.starts_with(&tag)) {
+    let lines: Vec<&str> = src.split_inclusive('\n').collect();
+    if !lines.iter().any(|l| tagged(l).is_some_and(|t| t.0 == id)) {
         return Err(Error::UnknownFeature { id: id.into() });
     }
-    Ok(src
-        .split_inclusive('\n')
-        .map(|l| l.strip_prefix(tag.as_str()).unwrap_or(l))
-        .collect())
+    // another feature's suppressed line, its tag written again with a mark more
+    let other = |l: &str, before: bool, after: bool| {
+        tagged(l)
+            .filter(|t| t.0 != id)
+            .map(|(o, b, a, r)| format!("{}{r}", suppress_tag(o, b || before, a || after)))
+    };
+    let mut out: Vec<String> = Vec::with_capacity(lines.len());
+    // the line before ended in a break put in: this one joins it
+    let mut glue = false;
+    // the break before this line stays: its mark moves onto it
+    let mut mark = false;
+    for (i, &l) in lines.iter().enumerate() {
+        let l = match mark {
+            true => other(l, true, false).expect("another feature's suppressed line"),
+            false => l.to_string(),
+        };
+        mark = false;
+        let Some((_, before, after, rest)) = tagged(&l).filter(|t| t.0 == id) else {
+            match out.last_mut() {
+                Some(prev) if glue => prev.push_str(&l),
+                _ => out.push(l),
+            }
+            glue = false;
+            continue;
+        };
+        match out.last_mut() {
+            Some(prev) if before => match other(prev, false, true) {
+                Some(marked) => {
+                    *prev = marked;
+                    out.push(rest.to_string());
+                }
+                None => {
+                    if prev.ends_with('\n') {
+                        prev.pop();
+                    }
+                    prev.push_str(rest);
+                }
+            },
+            Some(prev) if glue => prev.push_str(rest),
+            _ => out.push(rest.to_string()),
+        }
+        glue = false;
+        if after {
+            if lines.get(i + 1).is_some_and(|n| other(n, false, false).is_some()) {
+                mark = true;
+            } else if let Some(last) = out.last_mut()
+                && last.ends_with('\n')
+            {
+                last.pop();
+                glue = true;
+            }
+        }
+    }
+    Ok(out.concat())
 }

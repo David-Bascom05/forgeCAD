@@ -1280,22 +1280,48 @@ fn nary_regen_on(
         Err(RegenError::Boolean {
             error: BoolError::Internal(_),
             ..
-        }) => one_at_a_time(features),
+        }) => fell_back("n-ary -> sequential: Internal", one_at_a_time(features)),
         Err(RegenError::Boolean {
             error: BoolError::Unsupported(u),
             ..
-        }) if matches!(*u, forge_bool::Unhandled::ProbeOnToolEdge { .. }) => one_at_a_time(features),
+        }) if matches!(*u, forge_bool::Unhandled::ProbeOnToolEdge { .. }) => {
+            fell_back("n-ary -> sequential: ProbeOnToolEdge", one_at_a_time(features))
+        }
         Err(e) if names_missing(&e) => {
             count_name_fallback();
-            one_at_a_time(features)
+            fell_back("n-ary -> sequential: names missing", one_at_a_time(features))
         }
         // (one at a time, a tool's knife edge can be blunted)
         Err(e) if lost_its_way(&e) && (0..features.len()).any(|i| blunted(features, i).is_some()) => {
-            one_at_a_time(features)
+            fell_back("n-ary -> sequential: knife edge", one_at_a_time(features))
         }
         r => r,
     };
     not_empty(r.map(unified)?, features.len() - 1)
+}
+
+/// A fallback of the n-ary regen to the sequential one, counted as a rung under the decision log.
+#[cfg(feature = "decisions")]
+fn fell_back(rung: &'static str, r: Result<Body, RegenError>) -> Result<Body, RegenError> {
+    use forge_bool::decisions::{Outcome, rung as tried};
+    tried(
+        rung,
+        match &r {
+            Ok(_) => Outcome::Ok,
+            Err(RegenError::Boolean {
+                error: BoolError::Internal(_),
+                ..
+            }) => Outcome::Internal,
+            Err(_) => Outcome::Other,
+        },
+    );
+    r
+}
+
+#[cfg(not(feature = "decisions"))]
+#[inline(always)]
+fn fell_back(_: &'static str, r: Result<Body, RegenError>) -> Result<Body, RegenError> {
+    r
 }
 
 /// `nary_regen`, its result not yet unified.
