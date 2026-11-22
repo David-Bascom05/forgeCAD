@@ -52,6 +52,10 @@ pub struct Edge {
     pub bbox: Cached<Box3>,
 }
 
+/// A face's corners at a vertex it meets more than once: each coedge leaving the vertex with the
+/// arriving one that closes its corner (`Body::fans`).
+type Corners = (FaceId, Vec<(CoedgeId, CoedgeId)>);
+
 /// One use of an edge by a loop. `forward` means the loop walks the edge from
 /// start to end.
 #[derive(Clone, Debug, PartialEq)]
@@ -949,7 +953,7 @@ impl Body {
         &self,
         from: &[CoedgeId],
         prev: &mut Vec<CoedgeId>,
-        closes: Option<&[(FaceId, Vec<(CoedgeId, CoedgeId)>)]>,
+        closes: Option<&[Corners]>,
     ) -> Vec<Vec<CoedgeId>> {
         const NONE: CoedgeId = CoedgeId(u32::MAX);
         prev.resize(self.coedges.len(), NONE);
