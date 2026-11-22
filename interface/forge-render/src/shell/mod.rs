@@ -24,8 +24,10 @@ pub mod dwgprops;
 pub mod fg;
 pub mod fgasm;
 pub mod fgdialog;
+pub mod fgdim;
 mod fgedit;
 pub mod fgsketch;
+pub mod fgsketch3d;
 pub mod fgtool;
 pub mod harness_look;
 pub mod harness_ui;
@@ -346,6 +348,8 @@ pub struct Shell {
     pub content: content::ContentCenter,
     /// A Forge (.fg) part is open: its browser and dialogs.
     pub fg: Option<fg::FgPanel>,
+    /// The selected feature's number on the model, on a Forge part (`fgdim.rs`).
+    pub fg_dim: Option<fgdim::FgDim>,
     /// The view's switches for parts and for assemblies: kept for the session, each kind its own.
     pub overlays: [Overlays; 2],
     pub file_menu: bool,
@@ -412,6 +416,7 @@ impl Default for Shell {
             side_px: None,
             content: Default::default(),
             fg: None,
+            fg_dim: None,
             overlays: [PART_OVERLAYS, ASM_OVERLAYS],
             file_menu: false,
             sheet: sheet::SheetUi::new(),
@@ -720,10 +725,15 @@ impl Shell {
         self.docs_and_status(ui, s, bottom);
         self.navbar(&ctx);
         self.window_ui(&ctx);
+        // a dialog holds its numbers while it's up; a sketch has its own
+        if self.fg.as_ref().is_some_and(|p| p.tool.is_none()) && self.sketch.is_none() {
+            self.fg_dim_ui(&ctx);
+        }
         self.thermo_probes(&ctx);
         self.thermo_ui(&ctx);
         self.harness_ui(&ctx);
         self.fg_dialog(&ctx);
+        self.fg_sketches_ui(&ctx);
         self.occ_dialog(&ctx);
         self.asm_windows(&ctx);
         self.inspect_ui(&ctx);

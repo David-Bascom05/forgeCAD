@@ -320,6 +320,10 @@ pub struct Eval<'s> {
     /// recorded, so a drawing's hidden-line pass sees the plain envelope.
     pub cosmetic_threads: bool,
     pub threads: Vec<crate::holes::Cosmetic>,
+    /// Rolled back (`Options::until`): the top-level name after whose statement nothing more is
+    /// built, and how many features were made by then once it is reached.
+    pub until: Option<String>,
+    pub rolled: Option<usize>,
     /// Where the files features read (fonts, imports) are found: the part file's directory.
     pub dir: Option<std::path::PathBuf>,
     /// An assembly document's instances, joints and checks (`asm.rs`); None in a part.
@@ -414,6 +418,8 @@ impl<'s> Eval<'s> {
             harness: None,
             cosmetic_threads: false,
             threads: vec![],
+            until: None,
+            rolled: None,
             dir: None,
             asm: None,
             root: None,
@@ -846,6 +852,14 @@ impl<'s> Eval<'s> {
                 {
                     self.scopes[0].insert(name.clone(), (Value::Unresolved, s.span));
                 }
+            }
+            // rolled back to here: what follows is evaluated, not built
+            if self.rolled.is_none()
+                && let StmtKind::Assign { name, .. } | StmtKind::Block { name, .. } = &s.kind
+                && self.until.as_deref() == Some(name.as_str())
+            {
+                self.rolled = Some(self.b.features.len());
+                self.b.building = false;
             }
         }
         // an error inside a loop is one error, however many times the loop ran into it

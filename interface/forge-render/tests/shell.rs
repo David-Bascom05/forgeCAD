@@ -95,10 +95,15 @@ fn tabs_change_the_ribbon_and_only_what_works_is_enabled() {
     h.click("tab:3D Model");
     h.step();
     h.step();
-    h.click("tool:Extrude");
+    h.click("tool:Fillet");
     step_some(&mut h);
     let tool = h.gui.shell.fg.as_ref().unwrap().tool.as_ref().map(|t| t.kind);
-    assert_eq!(tool, Some("extrude"));
+    assert_eq!(tool, Some("fillet"));
+    // Extrude with every sketch read already starts a sketch for its profile, as `.fc`'s did
+    h.gui.shell.fg.as_mut().unwrap().tool = None;
+    h.click("tool:Extrude");
+    step_some(&mut h);
+    assert!(h.gui.shell.sketch_pick, "{}", h.gui.shell.status);
 }
 
 #[test]

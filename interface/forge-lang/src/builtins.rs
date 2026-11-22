@@ -1822,7 +1822,31 @@ fn revolve(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     if a.poisoned() {
         return Ok(Value::Unresolved);
     }
-    let ax = ent_of(a.req("axis")?, a.span("axis"), EntKind::Line)?;
+    // an axis of the part or the origin (a work axis, `axis(P, Q)`, `E.axis`, X Y Z), not a line
+    // of the profile's sketch: where it lies in that sketch's plane
+    let axv = a.req("axis")?;
+    if !matches!(axv, Value::Ent(_)) {
+        let (o, d) = match axv {
+            Value::WorldDir(d) => (Point3::ORIGIN, crate::eval::unit_or_z(d)),
+            v => axis_of(ev, v, a.span("axis"))?,
+        };
+        let (sk, profile, _) = profile_of(ev, a.req("profile")?, a.span("profile"))?;
+        let (pa, pb) = {
+            let s = sk.borrow();
+            let (p, q) = (s.frame.point_to_local(o), s.frame.point_to_local(o + d.get()));
+            let off = p.z.abs().max(q.z.abs());
+            if off > 1e-6 {
+                return Err(Error::BadValue {
+                    span: a.span("axis"),
+                    what: "an axis out of the profile's plane (its distance)",
+                    value: off,
+                });
+            }
+            (Point2::new(p.x, p.y), Point2::new(q.x, q.y))
+        };
+        return revolve_on(ev, &a, id, span, sk, profile, (pa, pb));
+    }
+    let ax = ent_of(axv, a.span("axis"), EntKind::Line)?;
     let mut profiled = profile_of(ev, a.req("profile")?, a.span("profile"));
     // an axis drawn as a plain line (not construction) that is no side of the profile: the
     // profile without it (as .fc's `axis L`)
@@ -1849,6 +1873,19 @@ fn revolve(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         };
         (s.pos(a), s.pos(b))
     };
+    revolve_on(ev, &a, id, span, sk, profile, (pa, pb))
+}
+
+/// A revolve of `profile` (of sketch `sk`) about the line through `pa`, `pb` in its plane.
+fn revolve_on(
+    ev: &mut Eval,
+    a: &Args,
+    id: String,
+    span: Span,
+    sk: Rc<RefCell<Sk>>,
+    profile: forge_ops::Profile,
+    (pa, pb): (Point2, Point2),
+) -> R<Value> {
     let mut dims = vec![];
     let ang = |n: &Num, what: &'static str| num_of(Value::Num(n.clone()), ANG, a.span("angle"), what);
     // angle: A | sym(A) | two(A, B) | upto(FACES | WORKPLANE, offset: A)
@@ -1900,14 +1937,14 @@ fn revolve(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
             Turn::Angle(t.v)
         }
     };
-    let op = crate::shapes::combine(ev, &a, "revolve")?;
+    let op = crate::shapes::combine(ev, a, "revolve")?;
     let axis2 = Axis2 {
         origin: pa,
         dir: pb - pa,
     };
     let f = crate::bodies::wrap_in(
         ev,
-        &a,
+        a,
         Feature::Revolve {
             profile,
             axis: axis2,

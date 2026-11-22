@@ -16,6 +16,9 @@ use forge_lang::values::Dim;
 pub fn param_label(kind: &str, name: &str) -> &'static str {
     match name {
         "d" if kind == "hole" => "Diameter",
+        // a hole placed from two edges: how far in from each
+        "d1" if kind == "hole" => "Distance 1",
+        "d2" if kind == "hole" => "Distance 2",
         "d" if kind == "chamfer" => "Distance",
         "d2" if kind == "chamfer" => "Distance 2",
         "d" if matches!(kind, "plane" | "direct" | "offsetface" | "moveface") => "Offset",
@@ -263,8 +266,8 @@ fn choices_for(fg: &super::fg::FgPanel, kind: K) -> Vec<String> {
             K::Points => out.extend(sk.points.iter().cloned()),
             K::Point => out.extend(sk.points.iter().filter(|p| !p.ends_with(".points")).cloned()),
             K::Dir => out.extend(sk.lines.iter().map(|l| format!("{l}.dir"))),
-            K::Axis => out.extend(sk.lines.iter().cloned()),
-            K::Plane => out.push(sk.id.clone()),
+            K::Axis | K::RevAxis => out.extend(sk.lines.iter().cloned()),
+            K::Plane | K::UpTo => out.push(sk.id.clone()),
             _ => {}
         }
     }
@@ -273,7 +276,12 @@ fn choices_for(fg: &super::fg::FgPanel, kind: K) -> Vec<String> {
             out.extend(["xy", "xz", "yz"].map(String::from));
             out.extend(of_kind(&["workplane", "ucs"]));
         }
-        K::Axis => {
+        K::UpTo => out.extend(of_kind(&["workplane"])),
+        K::Axis | K::RevAxis => {
+            // a revolve turns about the origin's axes too
+            if kind == K::RevAxis {
+                out.extend(["X", "Y", "Z"].map(String::from));
+            }
             out.extend(of_kind(&["workaxis"]));
             out.extend(
                 of_kind(&["revolve", "hole", "coil", "extrude"])
