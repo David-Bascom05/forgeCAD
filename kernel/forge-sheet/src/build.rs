@@ -2987,15 +2987,28 @@ impl Strips<'_> {
                 if seen[l0][i0] || self.loops[l0].kinds[i0] != Kind::Side {
                     continue;
                 }
-                let mut out: Vec<Curve2> = Vec::new();
+                let mut out: Vec<FlatPiece> = Vec::new();
                 let (mut l, mut i) = (l0, i0);
                 while !seen[l][i] {
                     seen[l][i] = true;
                     let ld = &self.loops[l];
                     let by = &strip_dev[ld.strip];
-                    let (a, b) = (ld.bounds[i].start, ld.bounds[(i + 1) % ld.bounds.len()].start);
-                    if let Some(c) = developed(&ld.bounds[i].piece, a, b, by) {
-                        push_joined(&mut out, c);
+                    let bound = &ld.bounds[i];
+                    let (a, b) = (bound.start, ld.bounds[(i + 1) % ld.bounds.len()].start);
+                    if let Some(c) = developed(&bound.piece, a, b, by) {
+                        let spline = match bound.piece {
+                            Piece::Spline { ref s, t0, t1 } => Some((s, t0, t1, by)),
+                            _ => None,
+                        };
+                        let c = FlatPiece {
+                            id: bound.id,
+                            curve: c,
+                            spline,
+                        };
+                        match out.last().and_then(|last| joined(last, &c)) {
+                            Some(j) => *out.last_mut().expect("a last") = j,
+                            None => out.push(c),
+                        }
                     }
                     (l, i) = self.next(l, i).0;
                 }
@@ -3004,6 +3017,11 @@ impl Strips<'_> {
                 {
                     out[0] = c;
                     out.pop();
+                }
+                let mut out: Vec<Curve2> = out.into_iter().map(|c| c.curve).collect();
+                // a contour of one arc closes on itself: a whole turn, by topology
+                if let [Curve2::Arc { sweep, .. }] = &mut out[..] {
+                    *sweep = dmath::TAU.copysign(*sweep);
                 }
                 contours.push(out);
             }
@@ -3559,7 +3577,6 @@ impl Strips<'_> {
                 Interval::new(t0.min(t1), t0.max(t1)),
                 t1 > t0,
             )),
-            (Geo::Round { .. }, Piece::Line { .. }) if a.x == b.x => line(),
             (
                 Geo::Round {
                     axis,
@@ -3570,21 +3587,21 @@ impl Strips<'_> {
                     ba,
                 },
                 Piece::Line { .. },
-            ) => {
-                if a.y == b.y {
+            ) => match ZoneLine::of(a, b) {
+                ZoneLine::Along => line(),
+                ZoneLine::Across(y) => {
                     let (p0, p1) = (phi(a.x, rn, theta, ba), phi(b.x, rn, theta, ba));
                     Some((
                         Curve::Circle(Circle {
-                            frame: axis.with_origin(axis.point_to_world(Point3::new(0.0, 0.0, -sigma * a.y))),
+                            frame: axis.with_origin(axis.point_to_world(Point3::new(0.0, 0.0, -sigma * y))),
                             radius: rho0 + sigma * w,
                         }),
                         Interval::new(p0.min(p1), p0.max(p1)),
                         p1 > p0,
                     ))
-                } else {
-                    wrapped(axis, rho0 + sigma * w, rn, &ld.bounds[i].piece, a, b, sigma)
                 }
-            }
+                ZoneLine::Slant => wrapped(axis, rho0 + sigma * w, rn, &ld.bounds[i].piece, a, b, sigma),
+            },
             (
                 Geo::Round {
                     axis,
@@ -3641,9 +3658,14 @@ impl Strips<'_> {
                 frame: f.with_origin(f.point_to_world(Point3::new(c.x, c.y, 0.0))),
                 radius: r,
             })),
-            (Geo::Round { axis, .. }, Piece::Line { .. }) if a.y == b.y => {
-                let at = geo.point(a, self.t);
-                plane(axis.z().get(), at, up_at(a))
+            (Geo::Round { axis, .. }, Piece::Line { .. })
+                if matches!(ZoneLine::of(a, b), ZoneLine::Across(_)) =>
+            {
+                let ZoneLine::Across(y) = ZoneLine::of(a, b) else {
+                    unreachable!("matched")
+                };
+                let on = Point2::new(a.x, y);
+                plane(axis.z().get(), geo.point(on, self.t), up_at(on))
             }
             (
                 Geo::Round {
@@ -3654,7 +3676,7 @@ impl Strips<'_> {
                     ..
                 },
                 Piece::Line { .. } | Piece::Arc { .. } | Piece::Spline { .. },
-            ) if a.x != b.x || !matches!(piece, Piece::Line { .. }) => {
+            ) if !matches!(piece, Piece::Line { .. }) || ZoneLine::of(a, b) == ZoneLine::Slant => {
                 let flat = flat_in_bend(piece, a, b, sigma).ok_or_else(fail)?;
                 let wrap = |w: f64| {
                     Rail::Wrap(Wrap {
@@ -3912,44 +3934,101 @@ fn developed(p: &Piece, a: Point2, b: Point2, by: &Rigid) -> Option<Curve2> {
     })
 }
 
-/// Two pieces that continue one line or one circle, as one.
-fn joined(x: &Curve2, y: &Curve2) -> Option<Curve2> {
-    match (x, y) {
+/// How a line piece runs in a bend zone (u across the bend, y along its axis), decided once for
+/// its edges and its side face alike, by the one tolerance rule (research/kernel-audit/README.md
+/// §6.1): along the axis when its u is constant within LINEAR over it (a line, folded), across it
+/// when its y is (a circle round the axis, at the mean y: each end within half the gap of it,
+/// which the edges' LINEAR tolerance carries), else slanted (a wrapped line). Exact coordinates
+/// are not asked: a cut one rounding off square to the bend is square to it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum ZoneLine {
+    Along,
+    Across(f64),
+    Slant,
+}
+
+impl ZoneLine {
+    fn of(a: Point2, b: Point2) -> ZoneLine {
+        if (a.x - b.x).abs() <= TOL {
+            ZoneLine::Along
+        } else if (a.y - b.y).abs() <= TOL {
+            ZoneLine::Across(if a.y == b.y { a.y } else { 0.5 * (a.y + b.y) })
+        } else {
+            ZoneLine::Slant
+        }
+    }
+}
+
+/// A side piece on the flat: its source, its curve, and for a spline the source curve in its
+/// strip with the strip's motion, so pieces of one spline join on that one curve.
+struct FlatPiece<'a> {
+    id: u64,
+    curve: Curve2,
+    spline: Option<(&'a std::sync::Arc<Spline>, f64, f64, &'a Rigid)>,
+}
+
+/// Two pieces, consecutive on a contour, as one when they lie on one carrier. Decided once:
+/// pieces of one source (one `Bound::id`) are pieces of one curve by definition, with no test;
+/// pieces of different sources are one carrier only under the one tolerance rule (research/
+/// kernel-audit/README.md §6.1): lines, each piece's ends within LINEAR of the other's line, in
+/// one sense; arcs, centres and radii within LINEAR together, in one sense. Splines of different
+/// sources never join.
+fn joined<'a>(x: &FlatPiece<'a>, y: &FlatPiece<'a>) -> Option<FlatPiece<'a>> {
+    let id = x.id;
+    let curve = match (&x.curve, &y.curve) {
         (Curve2::Line { a, b }, Curve2::Line { a: b2, b: c }) => {
-            let (u, v) = (*b - *a, *c - *b2);
-            let same = u.cross(v).abs() <= 1e-12 * u.length() * v.length() && u.dot(v) > 0.0;
-            (same && b.distance(*b2) <= TOL).then_some(Curve2::Line { a: *a, b: *c })
+            let off = |p: Point2, q: Point2, r: Point2| {
+                forge_math::predicates::orient2d(p, q, r).abs() / p.distance(q)
+            };
+            let same = x.id == y.id
+                || ((*b - *a).dot(*c - *b2) > 0.0
+                    && [*b2, *c].iter().all(|&r| off(*a, *b, r) <= TOL)
+                    && [*a, *b].iter().all(|&r| off(*b2, *c, r) <= TOL));
+            same.then_some(Curve2::Line { a: *a, b: *c })?
         }
         (
             Curve2::Arc { c, r, start, sweep },
             Curve2::Arc {
                 c: c2,
                 r: r2,
-                start: s2,
                 sweep: w2,
+                ..
             },
         ) => {
-            let gap = dmath::sin(0.5 * (start + sweep - s2)).abs();
-            let same = c.distance(*c2) <= TOL && (r - r2).abs() <= TOL && sweep * w2 > 0.0 && gap <= 1e-12;
-            (same && (sweep + w2).abs() <= dmath::TAU * (1.0 + 1e-12)).then_some(Curve2::Arc {
+            let same = x.id == y.id || (sweep * w2 > 0.0 && c.distance(*c2) + (r - r2).abs() <= TOL);
+            same.then_some(Curve2::Arc {
                 c: *c,
                 r: *r,
                 start: *start,
                 sweep: sweep + w2,
-            })
+            })?
         }
-        _ => None,
-    }
-}
-
-fn push_joined(out: &mut Vec<Curve2>, c: Curve2) {
-    if let Some(last) = out.last()
-        && let Some(j) = joined(last, &c)
-    {
-        *out.last_mut().expect("a last") = j;
-        return;
-    }
-    out.push(c);
+        (Curve2::Spline { .. }, Curve2::Spline { .. }) if x.id == y.id => {
+            let ((s, t0, t1, by), (_, u0, u1, _)) = (x.spline?, y.spline?);
+            // one sense, the second further along it (a closed spline is not joined across its
+            // seam)
+            if (t1 > t0) != (u1 > u0) || (t1 > t0) != (u0 > t0) {
+                return None;
+            }
+            let piece = Piece::Spline {
+                s: s.clone(),
+                t0,
+                t1: u1,
+            };
+            let ends = x.curve.ends().0;
+            return Some(FlatPiece {
+                id,
+                curve: developed(&piece, ends, ends, by)?,
+                spline: Some((s, t0, u1, by)),
+            });
+        }
+        _ => return None,
+    };
+    Some(FlatPiece {
+        id,
+        curve,
+        spline: None,
+    })
 }
 
 fn own_stretch(s: &Spline, range: Interval) -> Option<Spline> {
