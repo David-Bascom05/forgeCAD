@@ -75,3 +75,13 @@ That is 8.78 million cases and **no mismatch**, with these inputs:
 An earlier run with a different operand mix, 5,283,584 cases, also had none. CI
 (`.github/workflows/ieee754.yml`) builds the package and the proofs, then runs about 270,000
 cases.
+
+## Part 2: the kernel's predicates
+
+See `research/kernel-audit/float-verification.md`. In brief:
+- the Aeneas translation of `cross_sign` and `orient2d`, from `kernel/forge-math/src/predicates.rs`,
+  runs on this model;
+- the fast path of `cross_sign` is proven right for every finite input;
+- the fast path of `orient2d` is proven right when nothing underflows, and is wrong otherwise
+  (counterexample included);
+- the exact paths are translated but not yet proven.

@@ -4,6 +4,7 @@ Copyright (c) 2026 ForgeCAD contributors. Released under the Mozilla Public Lice
 import Lean
 import IEEE754.Binary64
 import IEEE754.Compare
+import IEEE754.Computed
 
 /-!
 # Only the standard axioms
@@ -50,3 +51,5 @@ elab "#standard_axioms " ids:ident* : command => do
   IEEE754.FP.lt_iff IEEE754.FP.le_iff IEEE754.FP.eq_iff IEEE754.FP.zero_eq_zero
   -- encoding
   IEEE754.FP.ofBits_toBits IEEE754.FP.toBits_ofBits IEEE754.FP.toBits_lt IEEE754.F64.toBits_lt
+  -- error relative to the result
+  IEEE754.round_rel_err_res IEEE754.add_err_res IEEE754.sub_err_res IEEE754.mul_err_res

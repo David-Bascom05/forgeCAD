@@ -54,6 +54,7 @@ every theorem below and fails the build otherwise.
 | identities | for every datum, NaN and infinities included: `mul_one`, `one_mul`, `div_one`, `add_neg_zero` (`x + −0 = x`), `neg_zero_add`, `sub_zero`, `add_comm`, `mul_comm`, `fma_neg_zero` (`fma x y −0 = x·y`), `neg_neg`. Also `add_zero` (`x + +0 = x` unless `x = −0`) and `sub_self` (`x − x = +0` for finite `x`) |
 | comparisons | `lt_iff`, `le_iff`, `eq_iff` (the order of exact values on finite data), `zero_eq_zero` (`−0 == +0`), `nan_lt` … |
 | encoding | `ofBits_toBits` (every datum), `toBits_ofBits` (every non-NaN pattern below `2^width`), `toBits_lt` |
+| error relative to the result | `round_rel_err_res`: `|round r − r| ≤ 2^-prec · |round r|` outside the subnormal range; `add_err_res`, `sub_err_res` (always, for two finite data), `mul_err_res` (unless the product underflows), as forward error analyses use them; finiteness of operands of a finite result (`isFinite_of_add` …) |
 
 The rounding theorems are generic over the field. The arithmetic operations use them at `ℚ`, and
 `sqrt` uses them at `ℝ`.
