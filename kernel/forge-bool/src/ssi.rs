@@ -47,8 +47,7 @@ pub(crate) fn closed_or_flush(a: &Surface, b: &Surface, region: &Box3) -> Surfac
             matches!(cs[..], [(Curve::Ellipse(_), _)])
         }
         (Surface::Plane(p), Surface::Plane(q), SurfaceSurface::Curves(_)) => {
-            let d = p.normal_vec().dot(q.normal_vec());
-            d.abs() > 0.5 && !spread_apart(p, q, d, region)
+            p.normal_vec().dot(q.normal_vec()).abs() > 0.5
         }
         _ => false,
     };
@@ -59,15 +58,14 @@ pub(crate) fn closed_or_flush(a: &Surface, b: &Surface, region: &Box3) -> Surfac
 }
 
 /// Two planes (normals' dot `d`) that neither flush rule of `nearly_flush` can find flush over
-/// `region`, told cheaply, before it is asked: most planes it is asked about cross. The gap of the
-/// turned rule, q's distance at the projection onto p, is affine with gradient g = m - d n, so
-/// within LINEAR at every corner of the once-grown box it spreads S = sum |g_i| ext_i over
-/// `region` by at most 2 LINEAR + 2 LINEAR (|g_x| + |g_y| + |g_z|) <= (2 + 2 sqrt 3) LINEAR <
-/// 6 LINEAR (`region` reaches LINEAR past that box). The NEAR rule's gap
+/// `region`, told first and cheaply (no cross product or root): most planes it is asked about
+/// cross. The gap of the turned rule, q's distance at the projection onto p, is affine with
+/// gradient g = m - d n, so within LINEAR at every corner of the once-grown box it spreads
+/// S = sum |g_i| ext_i over `region` by at most 2 LINEAR + 2 LINEAR (|g_x| + |g_y| + |g_z|) <=
+/// (2 + 2 sqrt 3) LINEAR < 6 LINEAR (`region` reaches LINEAR past that box). The NEAR rule's gap
 /// p.sd - flip q.sd has gradient -flip g + (1 - |d|) n, and there 1 - |d| <= c^2 <= 1e-8, so
-/// within LINEAR at every corner S <= 2 LINEAR + 1e-8 sum ext_i. Past both, neither holds. Out of
-/// line: every pair of surfaces passes `closed_or_flush`, and few are planes this near parallel.
-#[inline(never)]
+/// within LINEAR at every corner S <= 2 LINEAR + 1e-8 sum ext_i. Past both, neither holds.
+#[inline]
 fn spread_apart(p: &Plane, q: &Plane, d: f64, region: &Box3) -> bool {
     let (n, m) = (p.normal_vec().get(), q.normal_vec().get());
     let g = m - n * d;
@@ -100,6 +98,9 @@ fn nearly_flush(a: &Surface, b: &Surface, region: &Box3) -> Option<SurfaceSurfac
         (Surface::Plane(p), Surface::Plane(q)) => {
             let (n, m) = (p.normal_vec(), q.normal_vec());
             let d = n.dot(m);
+            if spread_apart(p, q, d, region) {
+                return None;
+            }
             let flip = if d < 0.0 { -1.0 } else { 1.0 };
             let c = n.cross(m).length();
             if c <= tol::ANGULAR {
