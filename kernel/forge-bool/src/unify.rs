@@ -251,10 +251,6 @@ fn rename_wholes(body: &mut Body, faces: &[(u32, u32)], edges: &[(u32, u32)]) {
     apply(body, r, false);
 }
 
-/// How near two surfaces count as one. "On one surface" is not transitive: pieces each this near
-/// the next stay within a tolerance of the one a run of them keeps.
-const SAME: f64 = 0.5 * tol::LINEAR;
-
 /// Whether live edge `e` lies between two faces on one surface, facing the same way (`keys` as
 /// `unify` makes them); or has one plane face on both sides: a slit, a spur or a bridge between
 /// two of its loops, which bounds nothing. (One face round a cylinder or cone on both sides is
@@ -273,43 +269,36 @@ fn between_same(body: &Body, keys: &[(u8, f64)], e: EdgeId) -> bool {
     if ka.0 == 0 || ka.0 != kb.0 || (ka.1 - kb.1).abs() > 1e-3 {
         return false;
     }
-    let (fa, fb) = (body.face(a), body.face(b));
-    // on one surface, facing the same way: a plane's outward normal is its z or -z; a cylinder's
-    // natural normal points away from its axis whichever way its frame turns
-    let parallel = |u: forge_math::UnitVec3, v: forge_math::UnitVec3| {
-        let c = u.cross(v);
-        c.dot(c) <= tol::ANGULAR * tol::ANGULAR
-    };
-    let same = match (&fa.surface, &fb.surface) {
-        (Surface::Plane(p), Surface::Plane(q)) => {
-            parallel(p.frame.z(), q.frame.z())
-                && (p.frame.z().dot(q.frame.z()) > 0.0) == (fa.same_sense == fb.same_sense)
-                && p.frame.z().dot(q.frame.origin - p.frame.origin).abs() <= SAME
-        }
-        (Surface::Cylinder(p), Surface::Cylinder(q)) => {
-            let off = q.frame.origin - p.frame.origin;
-            fa.same_sense == fb.same_sense
-                && (p.radius - q.radius).abs() <= SAME
-                && parallel(p.frame.z(), q.frame.z())
-                && {
-                    let c = p.frame.z().cross(off);
-                    c.dot(c) <= SAME * SAME
-                }
-        }
+    let same = same_surface(body, a, b)
         // (not along a line from the apex: a whole cone there would have no seam)
-        (Surface::Cone(_), Surface::Cone(_)) => {
-            let s = &fa.surface;
-            fa.same_sense == fb.same_sense
-                && crate::ssi::coincident(s, &fb.surface)
-                && [x.start, x.end]
-                    .iter()
-                    .all(|&v| !s.singular(s.project(body.vertex(v).point)))
-        }
-        _ => false,
-    };
+        && (ka.0 != 3
+            || [x.start, x.end].iter().all(|&v| {
+                let s = &body.face(a).surface;
+                !s.singular(s.project(body.vertex(v).point))
+            }));
     decided!(log_same(body, a, b, same));
     // unless a feature split the face there on purpose
     same && !kept(body, x.name)
+}
+
+/// Whether faces `a` and `b` lie on one surface and face the same way: the boolean's own test of
+/// the two surfaces (`ssi::coincident`), so a contact the boolean read as one surface is one face
+/// here. "On one surface" is not transitive, so `remove_edge` asks it again of the faces an edge
+/// lies between when it goes, the merged one bearing the surface it keeps: every piece of a run
+/// joined is within the test of the surface the whole keeps, not only of its neighbour. A plane's outward normal is its z or -z; a cylinder's or cone's natural normal points
+/// away from its axis whichever way its frame turns.
+fn same_surface(body: &Body, a: FaceId, b: FaceId) -> bool {
+    let (fa, fb) = (body.face(a), body.face(b));
+    let facing = match (&fa.surface, &fb.surface) {
+        (Surface::Plane(p), Surface::Plane(q)) => {
+            (p.frame.z().dot(q.frame.z()) > 0.0) == (fa.same_sense == fb.same_sense)
+        }
+        (Surface::Cylinder(_), Surface::Cylinder(_)) | (Surface::Cone(_), Surface::Cone(_)) => {
+            fa.same_sense == fb.same_sense
+        }
+        _ => return false,
+    };
+    facing && crate::ssi::coincident(&fa.surface, &fb.surface)
 }
 
 /// Whether a feature split a face on purpose along the edge named `name`.
@@ -343,8 +332,8 @@ fn log_same(body: &Body, a: FaceId, b: FaceId, same: bool) {
         return;
     }
     let key = d::pair(Ent::f(body, a), Ent::f(body, b));
-    let site = Site::Named("unify: SAME (half LINEAR)");
-    d::decide(Kind::Coincident, key, None, None, same as u8, site, gap, SAME);
+    let site = Site::Named("unify: same_surface");
+    d::decide(Kind::Coincident, key, None, None, same as u8, site, gap, tol::LINEAR);
     let yes = crate::ssi::coincident(&fa.surface, &fb.surface);
     let site = Site::Named("unify: ssi::coincident (the boolean's test)");
     d::decide(Kind::Coincident, key, None, None, yes as u8, site, gap, f64::NAN);
@@ -510,6 +499,10 @@ fn remove_edge(body: &mut Body, w: &mut Work, e: EdgeId) -> Option<(FaceId, Face
         w.dropped.push(e);
         body.dead += 1;
         return Some((fa, fa));
+    }
+    // (asked again of the faces now on either side: one may be a merge, keeping one surface)
+    if !same_surface(body, fa, fb) {
+        return None;
     }
     let sb = w.get(body, lb).clone();
     let sa = w.get(body, la);
