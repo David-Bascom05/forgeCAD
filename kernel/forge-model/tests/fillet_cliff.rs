@@ -248,7 +248,9 @@ fn over_the_bottom() -> (Solid, Solid, f64) {
 }
 
 /// The volume a ball rolling in the corner adds: the solids' closing, on a grid of step 0.05,
-/// worked out apart from the kernel (to within about a half percent).
+/// worked out apart from the kernel (research/fillets closing-style: a point is added where no ball
+/// clear of the solids holds it). Points whose clear ball it nearly finds make it high by up to
+/// about half a percent.
 fn closing_added(case: &str) -> f64 {
     match case {
         "end" => CLOSING_END,
@@ -256,8 +258,8 @@ fn closing_added(case: &str) -> f64 {
     }
 }
 
-const CLOSING_END: f64 = 0.0;
-const CLOSING_BOTTOM: f64 = 0.0;
+const CLOSING_END: f64 = 135.94;
+const CLOSING_BOTTOM: f64 = 83.77;
 
 fn holds(case: &str, (body, pipe, r): (Solid, Solid, f64)) {
     let (before, after) = rounded(body, pipe, r, 0.0);

@@ -1292,20 +1292,29 @@ pub struct Pipe {
     near: Point3,
     /// `smooth`'s pipe, made on first use.
     smooth: OnceLock<Option<Surface>>,
+    /// Whether it rests on a surface of no thickness (`rail_side`), as it was made.
+    on_rail: bool,
+}
+
+/// Whether a surface is one of no thickness: a line's or circle's own, or a rim's tube.
+fn is_rail(s: &Surface) -> bool {
+    match s {
+        Surface::Cylinder(k) => k.radius == 0.0,
+        Surface::Torus(k) => k.minor == 0.0,
+        Surface::Procedural(p) => p.as_any().is_some_and(|x| x.is::<crate::tube::Tube>()),
+        _ => false,
+    }
 }
 
 impl Pipe {
     /// The surface of no thickness it rests on, if it does, and the point that says which side.
     fn rail_side(&self) -> Option<(&Surface, Point3)> {
-        let rail = |s: &Surface| match s {
-            Surface::Cylinder(k) => k.radius == 0.0,
-            Surface::Torus(k) => k.minor == 0.0,
-            Surface::Procedural(p) => p.as_any().is_some_and(|x| x.is::<crate::tube::Tube>()),
-            _ => false,
-        };
+        if !self.on_rail {
+            return None;
+        }
         [&self.first, &self.second]
             .into_iter()
-            .find(|s| rail(s))
+            .find(|s| is_rail(s))
             .map(|s| (s, self.near))
     }
 
@@ -1403,7 +1412,7 @@ impl Pipe {
             (p - d.p).dot(d.d1)
         };
         let step = 0.125 * RAIL_STEP;
-        // a closed spine half way round either way, an open one 128 steps
+        // a closed spine half way round either way, an open one 128 of its parameter
         let reach = self.spine.domain().period.map_or(64.0 * RAIL_STEP, |p| 0.5 * p);
         let n = (reach / step).ceil() as i32;
         let mut prev = [(from, along(from)); 2];
@@ -1442,6 +1451,7 @@ impl Pipe {
 
     /// Contact order is chosen so the natural normal points away from the spine.
     pub fn build(spine: Curve, a: Surface, b: Surface, da: f64, db: f64, near: Point3) -> Option<Proc> {
+        let on_rail = is_rail(&a) || is_rail(&b);
         let mut p = Pipe {
             spine,
             first: a,
@@ -1451,6 +1461,7 @@ impl Pipe {
             radius: da.abs(),
             near,
             smooth: OnceLock::new(),
+            on_rail,
         };
         let t = p.spine.closest(near, p.spine.full_range(1e6));
         let (_, e1, e2, _) = p.cross(t)?;
@@ -1706,6 +1717,7 @@ impl Procedural for Pipe {
                     radius: self.radius,
                     near: self.near,
                     smooth: OnceLock::new(),
+                    on_rail: self.on_rail,
                 }))))
             })
             .as_ref()
@@ -1819,6 +1831,7 @@ impl Procedural for Pipe {
             radius: self.radius,
             near: f.point_to_world(self.near),
             smooth: OnceLock::new(),
+            on_rail: self.on_rail,
         }))
     }
     fn uv_scale(&self) -> (f64, f64) {
