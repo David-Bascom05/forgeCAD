@@ -41,24 +41,24 @@ structure Consistent (L : Ledger) : Prop where
     ∀ φ ∈ L.facets, ∀ i, i < L.nb → (m φ.plus i ≠ m φ.minus i ↔ L.isPieceOf i φ = true)
 
 /-- A valid result body. -/
-structure Valid (L : Ledger) (rule : Rule) (b : Body) : Prop where
+structure Valid (L : Ledger) (kt : KeepTab) (b : Body) : Prop where
   nonempty : b.faces ≠ []
-  cover : ∀ c, c ∈ L.result rule ↔ ∃ F ∈ b.faces, c ∈ F.facets
+  cover : ∀ c, c ∈ L.result kt ↔ ∃ F ∈ b.faces, c ∈ F.facets
   disjoint : ∀ F ∈ b.faces, ∀ G ∈ b.faces, ∀ c, c ∈ F.facets → c ∈ G.facets → F = G
-  flat : ∀ F ∈ b.faces, ∀ c ∈ F.facets, c.zeroIdx = F.plane ∧ L.orient rule c = F.orient
-  oneSide : ∀ c ∈ L.result rule, L.keep rule c.plus ≠ L.keep rule c.minus
-  edgeManifold : ∀ e ∈ L.edges, (L.around rule e).length ≤ 2
-  vertexManifold : ∀ v ∈ L.verts, ∀ c ∈ L.around rule v, ∀ d ∈ L.around rule v,
-    Conn (L.fanRel v) (L.around rule v) c d
+  flat : ∀ F ∈ b.faces, ∀ c ∈ F.facets, c.zeroIdx = F.plane ∧ Ledger.orient kt c = F.orient
+  oneSide : ∀ c ∈ L.result kt, keepIn kt c.plus ≠ keepIn kt c.minus
+  edgeManifold : ∀ e ∈ L.edges, (L.around kt e).length ≤ 2
+  vertexManifold : ∀ v ∈ L.verts, ∀ c ∈ L.around kt v, ∀ d ∈ L.around kt v,
+    Conn (L.fanRel v) (L.around kt v) c d
   /-- names: faces in the order of their first facets, each named by that facet's input face -/
-  named : b.faces.map OutFace.origin = (L.heads rule).map L.origin ∧
-    (L.heads rule).Sublist (L.result rule)
+  named : b.faces.map OutFace.origin = (L.heads kt).map L.origin ∧
+    (L.heads kt).Sublist (L.result kt)
 
 /-- The stated condition of a `ZeroThickness` refusal. -/
-def ZeroThicknessAt (L : Ledger) (rule : Rule) (x : Cov) : Prop :=
-  (x ∈ L.edges ∧ 2 < (L.around rule x).length) ∨
-  (x ∈ L.verts ∧ ∃ c ∈ L.around rule x, ∃ d ∈ L.around rule x,
-    ¬Conn (L.fanRel x) (L.around rule x) c d)
+def ZeroThicknessAt (L : Ledger) (kt : KeepTab) (x : Cov) : Prop :=
+  (x ∈ L.edges ∧ 2 < (L.around kt x).length) ∨
+  (x ∈ L.verts ∧ ∃ c ∈ L.around kt x, ∃ d ∈ L.around kt x,
+    ¬Conn (L.fanRel x) (L.around kt x) c d)
 
 namespace Ledger
 
@@ -69,11 +69,11 @@ variable {L : Ledger}
 theorem facets_nodup (L : Ledger) : L.facets.Nodup := nodup_dedup _
 theorem topes_nodup (L : Ledger) : L.topes.Nodup := nodup_dedup _
 
-theorem result_nodup (L : Ledger) (rule : Rule) : (L.result rule).Nodup :=
+theorem result_nodup (L : Ledger) (kt : KeepTab) : (L.result kt).Nodup :=
   (facets_nodup L).filter _
 
-theorem around_nodup (L : Ledger) (rule : Rule) (x : Cov) : (L.around rule x).Nodup :=
-  (result_nodup L rule).filter _
+theorem around_nodup (L : Ledger) (kt : KeepTab) (x : Cov) : (L.around kt x).Nodup :=
+  (result_nodup L kt).filter _
 
 theorem mem_facets {φ : Cov} : φ ∈ L.facets ↔ ∃ f, (φ, f) ∈ L.pieces := by
   simp [facets, mem_dedup]
@@ -86,13 +86,20 @@ theorem minus_mem_topes {φ : Cov} (h : φ ∈ L.facets) : φ.minus ∈ L.topes 
   simp only [topes, mem_dedup, List.mem_flatMap]
   exact ⟨φ, h, by simp⟩
 
-theorem mem_result {rule : Rule} {φ : Cov} :
-    φ ∈ L.result rule ↔ φ ∈ L.facets ∧ L.keep rule φ.plus ≠ L.keep rule φ.minus := by
+theorem mem_result {kt : KeepTab} {φ : Cov} :
+    φ ∈ L.result kt ↔ φ ∈ L.facets ∧ keepIn kt φ.plus ≠ keepIn kt φ.minus := by
   simp [result]
 
-theorem mem_around {rule : Rule} {x φ : Cov} :
-    φ ∈ L.around rule x ↔ φ ∈ L.result rule ∧ Cov.le x φ = true := by
+theorem mem_around {kt : KeepTab} {x φ : Cov} :
+    φ ∈ L.around kt x ↔ φ ∈ L.result kt ∧ Cov.le x φ = true := by
   simp [around]
+
+/-- The keep table returns each side cell's keep. -/
+theorem keepIn_tab (L : Ledger) (rule : Rule) {T : Cov} (hT : T ∈ L.topes) :
+    keepIn (L.keepTab rule) T = L.keep rule T := by
+  unfold keepIn keepTab
+  rw [find?_pair (L.keep rule) T _ hT]
+  rfl
 
 /-! ## The flood is right -/
 
@@ -100,8 +107,8 @@ theorem mem_around {rule : Rule} {x φ : Cov} :
 theorem adj_keeps {m : Cov → Nat → Bool}
     (h2 : ∀ φ ∈ L.facets, ∀ i, i < L.nb → (m φ.plus i ≠ m φ.minus i ↔ L.isPieceOf i φ = true))
     {i : Nat} (hi : i < L.nb) {x y : Cov} (h : L.adj i x y = true) : m x i = m y i := by
-  simp only [adj, List.any_eq_true, Bool.and_eq_true, Bool.not_eq_true', Bool.or_eq_true,
-    beq_iff_eq] at h
+  simp only [adj, adjOf, crossings, List.any_map, List.any_filter, List.any_eq_true,
+    Bool.and_eq_true, Bool.not_eq_true', Bool.or_eq_true, beq_iff_eq, Function.comp_def] at h
   obtain ⟨φ, hφ, hnp, hxy⟩ := h
   have he : m φ.plus i = m φ.minus i := by
     apply Classical.byContradiction; intro hne
@@ -118,7 +125,8 @@ theorem memb_eq {m : Cov → Nat → Bool}
     {i : Nat} (hi : i < L.nb) {T : Cov} (hT : T ∈ L.topes) : L.memb i T = m T i := by
   obtain ⟨R, hR, hRm, hc⟩ := head_some (L.adj i) (topes_nodup L) hT
   unfold memb
-  rw [hR]
+  dsimp only
+  rw [show adjOf (L.crossings i) = L.adj i from rfl, hR]
   simp only
   rw [h1 R hRm i hi]
   exact (Conn.invariant (P := fun x => m x i = m T i) hc rfl
@@ -153,11 +161,11 @@ theorem classifyOk_of (h : Consistent L) : L.classifyOk = true := by
 
 /-- Past the two checks, the core is the touch rule and unify. -/
 theorem core_eq (h : Consistent L) (rule : Rule) :
-    core L rule = match L.edges.find? (L.badEdge rule) with
+    core L rule = match L.edges.find? (L.badEdge (L.keepTab rule)) with
       | some e => .refused (.zeroThickness e)
-      | none => match L.verts.find? (L.badVert rule) with
+      | none => match L.verts.find? (L.badVert (L.keepTab rule)) with
         | some v => .refused (.zeroThickness v)
-        | none => if L.result rule = [] then .empty else .ok (L.unify rule) := by
+        | none => if L.result (L.keepTab rule) = [] then .empty else .ok (L.unify (L.keepTab rule)) := by
   unfold core
   rw [splitOk_of h, classifyOk_of h]
   rfl
@@ -170,45 +178,44 @@ theorem fanRel_symm (L : Ledger) (v : Cov) : ∀ c d, L.fanRel v c d = L.fanRel 
   congr 1; funext e
   cases Cov.le v e <;> cases Cov.le e c <;> cases Cov.le e d <;> rfl
 
-theorem joinRel_symm (L : Ledger) (rule : Rule) : ∀ c d, L.joinRel rule c d = L.joinRel rule d c := by
+theorem joinRel_symm (L : Ledger) (kt : KeepTab) : ∀ c d, L.joinRel kt c d = L.joinRel kt d c := by
   intro c d
   simp only [joinRel]
   have e1 : (c.zeroIdx == d.zeroIdx) = (d.zeroIdx == c.zeroIdx) := by
     cases h : c.zeroIdx == d.zeroIdx <;> cases h' : d.zeroIdx == c.zeroIdx <;> simp_all
-  have e2 : (L.orient rule c == L.orient rule d) = (L.orient rule d == L.orient rule c) := by
-    cases h : L.orient rule c == L.orient rule d <;> cases h' : L.orient rule d == L.orient rule c <;>
+  have e2 : (Ledger.orient kt c == Ledger.orient kt d) = (Ledger.orient kt d == Ledger.orient kt c) := by
+    cases h : Ledger.orient kt c == Ledger.orient kt d <;> cases h' : Ledger.orient kt d == Ledger.orient kt c <;>
       simp_all
   rw [e1, e2]
-  have : (fun e => Cov.le e c && Cov.le e d && (L.around rule e).length == 2) =
-      (fun e => Cov.le e d && Cov.le e c && (L.around rule e).length == 2) := by
+  have : (fun e => Cov.le e c && Cov.le e d) = (fun e => Cov.le e d && Cov.le e c) := by
     funext e; cases Cov.le e c <;> cases Cov.le e d <;> rfl
   rw [this]
 
 /-! ## The body unify writes -/
 
-theorem mem_heads {rule : Rule} {h : Cov} :
-    h ∈ L.heads rule ↔ h ∈ L.result rule ∧ head (L.joinRel rule) (L.result rule) h = some h := by
+theorem mem_heads {kt : KeepTab} {h : Cov} :
+    h ∈ L.heads kt ↔ h ∈ L.result kt ∧ head (L.joinRel kt) (L.result kt) h = some h := by
   simp [heads]
 
-theorem mem_faceOf {rule : Rule} {h c : Cov} (hh : h ∈ L.result rule) :
-    c ∈ L.faceOf rule h ↔ c ∈ L.result rule ∧ Conn (L.joinRel rule) (L.result rule) h c := by
+theorem mem_faceOf {kt : KeepTab} {h c : Cov} (hh : h ∈ L.result kt) :
+    c ∈ L.faceOf kt h ↔ c ∈ L.result kt ∧ Conn (L.joinRel kt) (L.result kt) h c := by
   simp only [faceOf, List.mem_filter, List.contains_eq_mem, decide_eq_true_eq]
-  rw [cls_spec _ (result_nodup L rule) hh]
+  rw [cls_spec _ (result_nodup L kt) hh]
 
 /-- Every result facet is in the face of its class's head. -/
-theorem in_some_face {rule : Rule} {c : Cov} (hc : c ∈ L.result rule) :
-    ∃ h ∈ L.heads rule, c ∈ L.faceOf rule h := by
-  obtain ⟨h, hhd, hm, hconn⟩ := head_some (L.joinRel rule) (result_nodup L rule) hc
-  have hh : head (L.joinRel rule) (L.result rule) h = some h := by
-    rw [← head_eq (L.joinRel rule) (joinRel_symm L rule) (result_nodup L rule) hc hconn]; exact hhd
+theorem in_some_face {kt : KeepTab} {c : Cov} (hc : c ∈ L.result kt) :
+    ∃ h ∈ L.heads kt, c ∈ L.faceOf kt h := by
+  obtain ⟨h, hhd, hm, hconn⟩ := head_some (L.joinRel kt) (result_nodup L kt) hc
+  have hh : head (L.joinRel kt) (L.result kt) h = some h := by
+    rw [← head_eq (L.joinRel kt) (joinRel_symm L kt) (result_nodup L kt) hc hconn]; exact hhd
   refine ⟨h, mem_heads.mpr ⟨hm, hh⟩, (mem_faceOf hm).mpr ⟨hc, ?_⟩⟩
-  exact Conn.symm (joinRel_symm L rule) hc hconn
+  exact Conn.symm (joinRel_symm L kt) hc hconn
 
-theorem unify_valid {rule : Rule} (hne : L.result rule ≠ [])
-    (hE : L.edges.find? (L.badEdge rule) = none) (hV : L.verts.find? (L.badVert rule) = none) :
-    Valid L rule (L.unify rule) := by
-  have hnd := result_nodup L rule
-  have hsym := joinRel_symm L rule
+theorem unify_valid {kt : KeepTab} (hne : L.result kt ≠ [])
+    (hE : L.edges.find? (L.badEdge kt) = none) (hV : L.verts.find? (L.badVert kt) = none) :
+    Valid L kt (L.unify kt) := by
+  have hnd := result_nodup L kt
+  have hsym := joinRel_symm L kt
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · -- nonempty
     obtain ⟨c, hc⟩ := List.exists_mem_of_ne_nil _ hne
@@ -231,8 +238,8 @@ theorem unify_valid {rule : Rule} (hne : L.result rule ≠ [])
     have m2 := mem_heads.mp hh2
     have c1 := ((mem_faceOf m1.1).mp hc1).2
     have c2 := ((mem_faceOf m2.1).mp hc2).2
-    have e1 := head_eq (L.joinRel rule) hsym hnd m1.1 c1
-    have e2 := head_eq (L.joinRel rule) hsym hnd m2.1 c2
+    have e1 := head_eq (L.joinRel kt) hsym hnd m1.1 c1
+    have e2 := head_eq (L.joinRel kt) hsym hnd m2.1 c2
     rw [m1.2] at e1; rw [m2.2] at e2
     have : h1 = h2 := Option.some.inj (e1.trans e2.symm)
     subst this; rfl
@@ -241,7 +248,7 @@ theorem unify_valid {rule : Rule} (hne : L.result rule ≠ [])
     rintro F ⟨hd, hhd, rfl⟩ c hc
     have hm := mem_heads.mp hhd
     have hconn := ((mem_faceOf hm.1).mp hc).2
-    exact Conn.invariant (P := fun x => x.zeroIdx = hd.zeroIdx ∧ L.orient rule x = L.orient rule hd)
+    exact Conn.invariant (P := fun x => x.zeroIdx = hd.zeroIdx ∧ Ledger.orient kt x = Ledger.orient kt hd)
       hconn ⟨rfl, rfl⟩ fun x y hx _ hxy => by
         simp only [joinRel, Bool.and_eq_true, beq_iff_eq] at hxy
         exact ⟨hxy.1.1.symm.trans hx.1, hxy.1.2.symm.trans hx.2⟩
@@ -255,7 +262,7 @@ theorem unify_valid {rule : Rule} (hne : L.result rule ≠ [])
   · -- vertices: one fan
     intro v hv c hc d hd
     have hb := List.find?_eq_none.mp hV v hv
-    have hand := around_nodup L rule v
+    have hand := around_nodup L kt v
     have hfs := fanRel_symm L v
     unfold badVert at hb
     split at hb
@@ -280,23 +287,23 @@ theorem unify_valid {rule : Rule} (hne : L.result rule ≠ [])
 in `empty` (no result facet), in a valid body, or in a `ZeroThickness` refusal whose stated
 condition holds; never `SplitCrossed` nor `InconsistentClassification`. -/
 theorem coverage (h : Consistent L) (rule : Rule) :
-    (core L rule = .empty ∧ L.result rule = []) ∨
-    (∃ b, core L rule = .ok b ∧ Valid L rule b) ∨
-    (∃ x, core L rule = .refused (.zeroThickness x) ∧ ZeroThicknessAt L rule x) := by
+    (core L rule = .empty ∧ L.result (L.keepTab rule) = []) ∨
+    (∃ b, core L rule = .ok b ∧ Valid L (L.keepTab rule) b) ∨
+    (∃ x, core L rule = .refused (.zeroThickness x) ∧ ZeroThicknessAt L (L.keepTab rule) x) := by
   rw [core_eq h rule]
-  cases hE : L.edges.find? (L.badEdge rule) with
+  cases hE : L.edges.find? (L.badEdge (L.keepTab rule)) with
   | some e =>
     right; right
     refine ⟨e, rfl, Or.inl ⟨List.mem_of_find?_eq_some hE, ?_⟩⟩
     have := List.find?_some hE
     simpa [badEdge] using this
   | none =>
-    cases hV : L.verts.find? (L.badVert rule) with
+    cases hV : L.verts.find? (L.badVert (L.keepTab rule)) with
     | some v =>
       right; right
       refine ⟨v, rfl, Or.inr ⟨List.mem_of_find?_eq_some hV, ?_⟩⟩
       have hb := List.find?_some hV
-      have hand := around_nodup L rule v
+      have hand := around_nodup L (L.keepTab rule) v
       unfold badVert at hb
       split at hb
       · cases hb
@@ -309,7 +316,7 @@ theorem coverage (h : Consistent L) (rule : Rule) :
         simp [this] at hnot
     | none =>
       simp only
-      by_cases hr : L.result rule = []
+      by_cases hr : L.result (L.keepTab rule) = []
       · left; simp [hr]
       · right; left
         simp only [hr, ite_false]

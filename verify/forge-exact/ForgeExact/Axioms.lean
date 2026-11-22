@@ -5,6 +5,7 @@ import ForgeExact.SnapSym
 import ForgeExact.RefFacts
 import ForgeExact.DecideOnce.Ledger
 import ForgeExact.DecideOnce.Nef
+import ForgeExact.DecideOnce.Rungs
 
 /-!
 # Only the standard axioms
@@ -76,3 +77,7 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeExact.DecideOnce.zeroThickness_iff
   ForgeExact.DecideOnce.nef_compat
   ForgeExact.DecideOnce.correct_bool
+  ForgeExact.DecideOnce.Ledger.consistent_of_check
+  ForgeExact.DecideOnce.rung_covered
+  ForgeExact.DecideOnce.rung_exact
+  ForgeExact.DecideOnce.instances_covered

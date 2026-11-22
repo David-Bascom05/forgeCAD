@@ -98,6 +98,11 @@ structure Ledger where
 whole history). -/
 abbrev Rule := (Nat → Bool) → Bool
 
+/-- The keep of each side cell, decided once. -/
+abbrev KeepTab := List (Cov × Bool)
+
+def keepIn (kt : KeepTab) (T : Cov) : Bool := ((kt.find? fun e => e.1 == T).map Prod.snd).getD false
+
 namespace Ledger
 
 variable (L : Ledger)
@@ -124,14 +129,21 @@ def splitOk : Bool :=
 /-- The side cells of the pieces. -/
 def topes : List Cov := dedup (L.facets.flatMap fun φ => [φ.plus, φ.minus])
 
+/-- The side-cell pairs across the facets that are not pieces of body `i`: where being in `i`
+cannot change. -/
+def crossings (i : Nat) : List (Cov × Cov) :=
+  (L.facets.filter fun φ => !L.isPieceOf i φ).map fun φ => (φ.plus, φ.minus)
+
+def adjOf (cr : List (Cov × Cov)) (T U : Cov) : Bool :=
+  cr.any fun p => (p.1 == T && p.2 == U) || (p.1 == U && p.2 == T)
+
 /-- Two side cells on either side of a facet that is not a piece of body `i`. -/
-def adj (i : Nat) (T U : Cov) : Bool :=
-  L.facets.any fun φ => !L.isPieceOf i φ &&
-    ((φ.plus == T && φ.minus == U) || (φ.plus == U && φ.minus == T))
+def adj (i : Nat) : Cov → Cov → Bool := adjOf (L.crossings i)
 
 /-- Membership of a side cell in body `i`: the witness of its flood class's first member. -/
 def memb (i : Nat) (T : Cov) : Bool :=
-  match head (L.adj i) L.topes T with
+  let cr := L.crossings i
+  match head (adjOf cr) L.topes T with
   | some R => L.inside.contains (R, i)
   | none => false
 
@@ -144,37 +156,41 @@ def classifyOk : Bool :=
 
 def keep (rule : Rule) (T : Cov) : Bool := rule fun i => decide (i < L.nb) && L.memb i T
 
+/-- **Classified once**: each side cell's keep, in a table every later stage looks up. -/
+def keepTab (rule : Rule) : KeepTab := L.topes.map fun T => (T, L.keep rule T)
+
 /-- The result's facets: exactly one side kept. -/
-def result (rule : Rule) : List Cov :=
-  L.facets.filter fun φ => L.keep rule φ.plus != L.keep rule φ.minus
+def result (kt : KeepTab) : List Cov :=
+  L.facets.filter fun φ => keepIn kt φ.plus != keepIn kt φ.minus
 
 /-- Outward: toward the dropped side. -/
-def orient (rule : Rule) (φ : Cov) : Sgn := if L.keep rule φ.minus then .pos else .neg
+def orient (kt : KeepTab) (φ : Cov) : Sgn := if keepIn kt φ.minus then .pos else .neg
 
 /-! ### 6. The touch rule -/
 
 /-- The result facets round a cell. -/
-def around (rule : Rule) (x : Cov) : List Cov := (L.result rule).filter fun φ => Cov.le x φ
+def around (kt : KeepTab) (x : Cov) : List Cov := (L.result kt).filter fun φ => Cov.le x φ
 
 /-- More than two result facets round an edge. -/
-def badEdge (rule : Rule) (e : Cov) : Bool := decide (2 < (L.around rule e).length)
+def badEdge (kt : KeepTab) (e : Cov) : Bool := decide (2 < (L.around kt e).length)
 
 /-- Two result facets round `v` sharing an edge round `v`. -/
 def fanRel (v : Cov) (c d : Cov) : Bool :=
   L.edges.any fun e => Cov.le v e && Cov.le e c && Cov.le e d
 
 /-- More than one fan round a vertex: some result facet round it out of the first one's fan. -/
-def badVert (rule : Rule) (v : Cov) : Bool :=
-  match L.around rule v with
+def badVert (kt : KeepTab) (v : Cov) : Bool :=
+  match L.around kt v with
   | [] => false
-  | c :: _ => (L.around rule v).any fun d => !(cls (L.fanRel v) (L.around rule v) c).contains d
+  | c :: _ => (L.around kt v).any fun d => !(cls (L.fanRel v) (L.around kt v) c).contains d
 
 /-! ### 7. Unify: read by reference, write fresh -/
 
-/-- Two result facets of one carrier and sense, the only two round an edge they share. -/
-def joinRel (rule : Rule) (c d : Cov) : Bool :=
-  c.zeroIdx == d.zeroIdx && L.orient rule c == L.orient rule d &&
-    L.edges.any fun e => Cov.le e c && Cov.le e d && (L.around rule e).length == 2
+/-- Two result facets of one carrier and sense sharing an edge (past the touch kt, the only two
+round it). -/
+def joinRel (kt : KeepTab) (c d : Cov) : Bool :=
+  c.zeroIdx == d.zeroIdx && Ledger.orient kt c == Ledger.orient kt d &&
+    L.edges.any fun e => Cov.le e c && Cov.le e d
 
 /-- The input face a facet came from: the first in arena order. -/
 def origin (φ : Cov) : Nat := ((L.pieces.find? fun p => p.1 == φ).map Prod.snd).getD 0
@@ -189,12 +205,18 @@ structure OutFace where
   /-- the arena index of the input face its first facet came from: its name -/
   origin : Nat
 
+/-- An edge of the result: a straight run of edge cells between one pair of faces. -/
+structure OutEdge where
+  /-- its edge cells, in arena order -/
+  cells : List Cov
+  /-- the two faces it joins, by their first facets -/
+  faces : List Cov
+
 /-- The result body, written fresh. -/
 structure Body where
   faces : List OutFace
-  /-- the result's edges: the edge cells with two result facets round them -/
-  edges : List Cov
-  /-- the result's vertices -/
+  edges : List OutEdge
+  /-- the vertex cells where three or more faces meet -/
   verts : List Cov
 
 namespace Ledger
@@ -202,18 +224,37 @@ namespace Ledger
 variable (L : Ledger)
 
 /-- The first facet of each face, in the order of the result's facets. -/
-def heads (rule : Rule) : List Cov :=
-  (L.result rule).filter fun c => head (L.joinRel rule) (L.result rule) c == some c
+def heads (kt : KeepTab) : List Cov :=
+  (L.result kt).filter fun c => head (L.joinRel kt) (L.result kt) c == some c
 
-def faceOf (rule : Rule) (h : Cov) : List Cov :=
-  (L.result rule).filter fun d => (cls (L.joinRel rule) (L.result rule) h).contains d
+def faceOf (kt : KeepTab) (h : Cov) : List Cov :=
+  (L.result kt).filter fun d => (cls (L.joinRel kt) (L.result kt) h).contains d
 
-def unify (rule : Rule) : Body where
-  faces := (L.heads rule).map fun h =>
-    { facets := L.faceOf rule h, plane := h.zeroIdx, orient := L.orient rule h, origin := L.origin h }
-  edges := L.edges.filter fun e => (L.around rule e).length == 2 &&
-    (L.around rule e).any fun c => (L.around rule e).any fun d => !L.joinRel rule c d
-  verts := L.verts.filter fun v => !(L.around rule v).isEmpty
+/-- Two lists with the same members. -/
+def sameSet (a b : List Cov) : Bool := a.all (b.contains ·) && b.all (a.contains ·)
+
+/-- The faces round a cell, each named by its first facet (`key` names a result facet's face). -/
+def facesAt (kt : KeepTab) (key : Cov → Cov) (x : Cov) : List Cov := dedup ((L.around kt x).map key)
+
+/-- **Unify.** Reads the assembled facets (by reference) and writes a fresh body: faces are the
+classes of `joinRel`, listed by first facet; a vertex is a vertex cell where three or more faces
+meet; an edge is a class of edge cells between one pair of faces, joined through vertex cells that
+are not vertices (so a straight run between two faces is one edge, with no redundant vertex). -/
+def unify (kt : KeepTab) : Body :=
+  let hs := L.heads kt
+  let fk : List (Cov × Cov) := hs.flatMap fun h => (L.faceOf kt h).map fun c => (c, h)
+  let key := fun c => ((fk.find? fun e => e.1 == c).map Prod.snd).getD c
+  let fa : List (Cov × List Cov) := (L.edges ++ L.verts).map fun x => (x, L.facesAt kt key x)
+  let at_ := fun x => ((fa.find? fun e => e.1 == x).map Prod.snd).getD []
+  let outV := L.verts.filter fun v => decide (3 ≤ (at_ v).length)
+  let ecs := L.edges.filter fun e => (at_ e).length == 2
+  let erel := fun e₁ e₂ => sameSet (at_ e₁) (at_ e₂) &&
+    L.verts.any fun v => Cov.le v e₁ && Cov.le v e₂ && !outV.contains v
+  { faces := hs.map fun h =>
+      { facets := L.faceOf kt h, plane := h.zeroIdx, orient := Ledger.orient kt h, origin := L.origin h }
+    edges := (ecs.filter fun e => head erel ecs e == some e).map fun e =>
+      { cells := ecs.filter fun d => (cls erel ecs e).contains d, faces := at_ e }
+    verts := outV }
 
 end Ledger
 
@@ -234,10 +275,12 @@ inductive Outcome
 def core (L : Ledger) (rule : Rule) : Outcome :=
   if !L.splitOk then .refused .splitCrossed
   else if !L.classifyOk then .refused .inconsistentClassification
-  else match L.edges.find? (L.badEdge rule) with
+  else
+    let kt := L.keepTab rule
+    match L.edges.find? (L.badEdge kt) with
     | some e => .refused (.zeroThickness e)
-    | none => match L.verts.find? (L.badVert rule) with
+    | none => match L.verts.find? (L.badVert kt) with
       | some v => .refused (.zeroThickness v)
-      | none => if L.result rule = [] then .empty else .ok (L.unify rule)
+      | none => if L.result kt = [] then .empty else .ok (L.unify kt)
 
 end ForgeExact.DecideOnce

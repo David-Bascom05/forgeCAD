@@ -169,7 +169,8 @@ theorem cls_eq (r : α → α → Bool) (hr : ∀ x y, r x y = r y x) {xs : List
 
 /-- The name of `a`'s class: its first member in list order. -/
 def head (r : α → α → Bool) (xs : List α) (a : α) : Option α :=
-  xs.find? fun b => (cls r xs a).contains b
+  let c := cls r xs a
+  xs.find? fun b => c.contains b
 
 theorem find?_congr {p q : α → Bool} : ∀ {xs : List α}, (∀ x ∈ xs, p x = q x) →
     xs.find? p = xs.find? q
@@ -182,6 +183,7 @@ theorem find?_congr {p q : α → Bool} : ∀ {xs : List α}, (∀ x ∈ xs, p x
 theorem head_eq (r : α → α → Bool) (hr : ∀ x y, r x y = r y x) {xs : List α} (hxs : xs.Nodup)
     {a b : α} (ha : a ∈ xs) (hab : Conn r xs a b) : head r xs a = head r xs b := by
   unfold head
+  dsimp only
   apply find?_congr
   intro x _
   simp only [List.contains_eq_mem]
@@ -191,6 +193,7 @@ theorem head_eq (r : α → α → Bool) (hr : ∀ x y, r x y = r y x) {xs : Lis
 theorem head_some (r : α → α → Bool) {xs : List α} (hxs : xs.Nodup) {a : α} (ha : a ∈ xs) :
     ∃ h, head r xs a = some h ∧ h ∈ xs ∧ Conn r xs a h := by
   unfold head
+  dsimp only
   cases hf : xs.find? fun b => (cls r xs a).contains b with
   | none =>
     have := List.find?_eq_none.mp hf a ha
@@ -200,6 +203,18 @@ theorem head_some (r : α → α → Bool) {xs : List α} (hxs : xs.Nodup) {a : 
     have hp := List.find?_some hf
     simp only [List.contains_eq_mem, decide_eq_true_eq] at hp
     exact ⟨h, rfl, hm, (cls_spec r hxs ha h).mp hp⟩
+
+/-- Looking a key up in a table made by mapping its keys. -/
+theorem find?_pair {γ β : Type} [BEq γ] [LawfulBEq γ] (f : γ → β) (k : γ) :
+    ∀ (xs : List γ), k ∈ xs → ((xs.map fun x => (x, f x)).find? fun e => e.1 == k) = some (k, f k)
+  | [], h => nomatch h
+  | x :: xs, h => by
+    simp only [List.map_cons, List.find?_cons]
+    by_cases e : x = k
+    · subst e; simp
+    · have : (x == k) = false := by simp [e]
+      simp only [this]
+      exact find?_pair f k xs ((List.mem_cons.mp h).resolve_left (Ne.symm e))
 
 /-! ## Lists without repeats, kept in first-seen order -/
 

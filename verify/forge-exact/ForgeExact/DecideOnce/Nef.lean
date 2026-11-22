@@ -98,7 +98,7 @@ theorem combine_opRule {L : Ledger} (hnb : L.nb = 2) (o : Op) (A : Nat → Pred 
 the spec's `regBool`. -/
 theorem correct_bool {L : Ledger} {ps : List Plane} {A : Nat → Pred V3} (h : Exact L ps A)
     (hnb : L.nb = 2) (o : Op) :
-    (∀ φ, φ ∈ L.result (opRule o) ↔ XBoundary L ps A (opRule o) φ) ∧
+    (∀ φ, φ ∈ L.result (L.keepTab (opRule o)) ↔ XBoundary L ps A (opRule o) φ) ∧
     reg ((decomp h).kept fun T => xkeep L ps A (opRule o) T = true) = regBool o (A 0) (A 1) := by
   obtain ⟨h1, h2⟩ := correct h (opRule o)
   refine ⟨h1, ?_⟩

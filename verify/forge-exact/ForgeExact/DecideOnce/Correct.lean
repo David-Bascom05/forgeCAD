@@ -156,8 +156,8 @@ boolean. -/
 def XBoundary (L : Ledger) (ps : List Plane) (A : Nat → Pred V3) (rule : Rule) (φ : Cov) : Prop :=
   Realised ps φ ∧ φ.isFacet = true ∧ xkeep L ps A rule φ.plus ≠ xkeep L ps A rule φ.minus
 
-/-- The core keeps a side cell iff the exact boolean does. -/
-theorem keep_eq (h : Exact L ps A) (rule : Rule) {T : Cov} (hT : T ∈ L.topes) :
+/-- The flood's keep of a side cell is the exact boolean's. -/
+theorem keep_eq' (h : Exact L ps A) (rule : Rule) {T : Cov} (hT : T ∈ L.topes) :
     L.keep rule T = xkeep L ps A rule T := by
   have hc := h.consistent
   unfold keep xkeep
@@ -176,6 +176,11 @@ theorem keep_eq (h : Exact L ps A) (rule : Rule) {T : Cov} (hT : T ∈ L.topes) 
   · apply Bool.eq_iff_iff.mpr
     simp [hi]
 
+/-- The core keeps a side cell iff the exact boolean does. -/
+theorem keep_eq (h : Exact L ps A) (rule : Rule) {T : Cov} (hT : T ∈ L.topes) :
+    keepIn (L.keepTab rule) T = xkeep L ps A rule T := by
+  rw [keepIn_tab L rule hT]; exact keep_eq' h rule hT
+
 /-- A cell with a point has the carriers' length. -/
 theorem covCell_length : ∀ {ps : List Plane} {X : Cov} {x : V3}, covCell ps X x → X.length = ps.length
   | [], [], _, _ => rfl
@@ -186,7 +191,7 @@ theorem covCell_length : ∀ {ps : List Plane} {X : Cov} {x : V3}, covCell ps X 
 /-- **The result is the exact boundary.** A facet is in the core's result iff it is an exact
 boundary facet. -/
 theorem result_iff (h : Exact L ps A) (rule : Rule) (φ : Cov) :
-    φ ∈ L.result rule ↔ XBoundary L ps A rule φ := by
+    φ ∈ L.result (L.keepTab rule) ↔ XBoundary L ps A rule φ := by
   rw [mem_result]
   constructor
   · rintro ⟨hf, hk⟩
@@ -254,7 +259,7 @@ exact boundary facets, the facets between the cells the exact boolean keeps and 
 and the regularised union of those kept cells is the regularised boolean of the snapped solids
 (`reg_kept`). -/
 theorem correct (h : Exact L ps A) (rule : Rule) :
-    (∀ φ, φ ∈ L.result rule ↔ XBoundary L ps A rule φ) ∧
+    (∀ φ, φ ∈ L.result (L.keepTab rule) ↔ XBoundary L ps A rule φ) ∧
     reg ((decomp h).kept fun T => xkeep L ps A rule T = true) =
       reg (combine (ruleOp rule) (opnds L A)) :=
   ⟨result_iff h rule, reg_kept (decomp h) (ruleOp rule) _ fun T x hx => xkeep_iff h rule T x hx⟩
@@ -263,7 +268,7 @@ theorem correct (h : Exact L ps A) (rule : Rule) :
 faces partition exactly the exact boundary facets, and the cells those facets bound regularise to
 the regularised boolean. -/
 theorem correct_ok (h : Exact L ps A) (rule : Rule) {b : Body} (hb : core L rule = .ok b) :
-    Valid L rule b ∧
+    Valid L (L.keepTab rule) b ∧
     (∀ φ, (∃ F ∈ b.faces, φ ∈ F.facets) ↔ XBoundary L ps A rule φ) ∧
     reg ((decomp h).kept fun T => xkeep L ps A rule T = true) =
       reg (combine (ruleOp rule) (opnds L A)) := by
@@ -313,29 +318,29 @@ theorem three_iff {α : Type} [DecidableEq α] {l : List α} (hl : l.Nodup) :
     simp at this; omega
 
 theorem badEdge_iff (h : Exact L ps A) (rule : Rule) :
-    (∃ e ∈ L.edges, L.badEdge rule e = true) ↔
+    (∃ e ∈ L.edges, L.badEdge (L.keepTab rule) e = true) ↔
     ∃ E, Realised ps E ∧ IsEdge ps E ∧ ∃ a b c, a ≠ b ∧ a ≠ c ∧ b ≠ c ∧
       (XBoundary L ps A rule a ∧ Cov.le E a = true) ∧ (XBoundary L ps A rule b ∧ Cov.le E b = true) ∧
       (XBoundary L ps A rule c ∧ Cov.le E c = true) := by
-  have mem : ∀ e φ, φ ∈ L.around rule e ↔ XBoundary L ps A rule φ ∧ Cov.le e φ = true := by
+  have mem : ∀ e φ, φ ∈ L.around (L.keepTab rule) e ↔ XBoundary L ps A rule φ ∧ Cov.le e φ = true := by
     intro e φ; rw [mem_around, result_iff h rule]
   constructor
   · rintro ⟨e, he, hb⟩
     simp only [badEdge, decide_eq_true_eq] at hb
-    obtain ⟨a, ha, b, hb', c, hc, hab, hac, hbc⟩ := (three_iff (around_nodup L rule e)).mp hb
+    obtain ⟨a, ha, b, hb', c, hc, hab, hac, hbc⟩ := (three_iff (around_nodup L (L.keepTab rule) e)).mp hb
     obtain ⟨hr, hed, _⟩ := (h.edges e).mp he
     exact ⟨e, hr, hed, a, b, c, hab, hac, hbc, (mem e a).mp ha, (mem e b).mp hb', (mem e c).mp hc⟩
   · rintro ⟨E, hr, hed, a, b, c, hab, hac, hbc, ha, hb, hc⟩
     have haf := (mem_result.mp ((result_iff h rule a).mpr ha.1)).1
     refine ⟨E, (h.edges E).mpr ⟨hr, hed, a, haf, ha.2⟩, ?_⟩
     simp only [badEdge, decide_eq_true_eq]
-    exact (three_iff (around_nodup L rule E)).mpr
+    exact (three_iff (around_nodup L (L.keepTab rule) E)).mpr
       ⟨a, (mem E a).mpr ha, b, (mem E b).mpr hb, c, (mem E c).mpr hc, hab, hac, hbc⟩
 
-theorem badVert_iff (L : Ledger) (rule : Rule) (v : Cov) :
-    L.badVert rule v = true ↔ ∃ c ∈ L.around rule v, ∃ d ∈ L.around rule v,
-      ¬Conn (L.fanRel v) (L.around rule v) c d := by
-  have hand := around_nodup L rule v
+theorem badVert_iff (L : Ledger) (kt : KeepTab) (v : Cov) :
+    L.badVert kt v = true ↔ ∃ c ∈ L.around kt v, ∃ d ∈ L.around kt v,
+      ¬Conn (L.fanRel v) (L.around kt v) c d := by
+  have hand := around_nodup L kt v
   have hfs := fanRel_symm L v
   unfold badVert
   split
@@ -360,8 +365,8 @@ theorem badVert_iff (L : Ledger) (rule : Rule) (v : Cov) :
       exact hnot ((Conn.symm hfs h0 (hall' c hc)).trans (hall' d hd))
 
 /-- Fans by the ledger are fans by the geometry. -/
-theorem fan_iff (h : Exact L ps A) (rule : Rule) (v : Cov) {c d : Cov} (_hc : c ∈ L.around rule v) :
-    Conn (L.fanRel v) (L.around rule v) c d ↔ XFan L ps A rule v c d := by
+theorem fan_iff (h : Exact L ps A) (rule : Rule) (v : Cov) {c d : Cov} (_hc : c ∈ L.around (L.keepTab rule) v) :
+    Conn (L.fanRel v) (L.around (L.keepTab rule) v) c d ↔ XFan L ps A rule v c d := by
   constructor
   · intro hcd
     induction hcd with
@@ -377,51 +382,51 @@ theorem fan_iff (h : Exact L ps A) (rule : Rule) (v : Cov) {c d : Cov} (_hc : c 
     | refl => exact Conn.refl
     | step _ hb hvc hE ih =>
       obtain ⟨E, her, hed, hvE, hEb, hEc⟩ := hE
-      have hm : _ ∈ L.around rule v := (mem_around).mpr ⟨(result_iff h rule _).mpr hb, hvc⟩
+      have hm : _ ∈ L.around (L.keepTab rule) v := (mem_around).mpr ⟨(result_iff h rule _).mpr hb, hvc⟩
       have hf := (mem_result.mp ((result_iff h rule _).mpr hb)).1
       refine Conn.step ih hm ?_
       simp only [fanRel, List.any_eq_true, Bool.and_eq_true]
       exact ⟨E, (h.edges E).mpr ⟨her, hed, _, hf, hEc⟩, ⟨hvE, hEb⟩, hEc⟩
 
 theorem badVert_iff_x (h : Exact L ps A) (rule : Rule) :
-    (∃ v ∈ L.verts, L.badVert rule v = true) ↔
+    (∃ v ∈ L.verts, L.badVert (L.keepTab rule) v = true) ↔
     ∃ V, Realised ps V ∧ IsVert ps V ∧ ∃ a b,
       (XBoundary L ps A rule a ∧ Cov.le V a = true) ∧ (XBoundary L ps A rule b ∧ Cov.le V b = true) ∧
       ¬XFan L ps A rule V a b := by
-  have mem : ∀ e φ, φ ∈ L.around rule e ↔ XBoundary L ps A rule φ ∧ Cov.le e φ = true := by
+  have mem : ∀ e φ, φ ∈ L.around (L.keepTab rule) e ↔ XBoundary L ps A rule φ ∧ Cov.le e φ = true := by
     intro e φ; rw [mem_around, result_iff h rule]
   constructor
   · rintro ⟨v, hv, hb⟩
-    obtain ⟨c, hc, d, hd, hn⟩ := (badVert_iff L rule v).mp hb
+    obtain ⟨c, hc, d, hd, hn⟩ := (badVert_iff L (L.keepTab rule) v).mp hb
     obtain ⟨hr, hvx, _⟩ := (h.verts v).mp hv
     exact ⟨v, hr, hvx, c, d, (mem v c).mp hc, (mem v d).mp hd,
       fun hx => hn ((fan_iff h rule v hc).mpr hx)⟩
   · rintro ⟨V, hr, hvx, a, b, ha, hb, hn⟩
     have haf := (mem_result.mp ((result_iff h rule a).mpr ha.1)).1
     have hma := (mem V a).mpr ha
-    refine ⟨V, (h.verts V).mpr ⟨hr, hvx, a, haf, ha.2⟩, (badVert_iff L rule V).mpr
+    refine ⟨V, (h.verts V).mpr ⟨hr, hvx, a, haf, ha.2⟩, (badVert_iff L (L.keepTab rule) V).mpr
       ⟨a, hma, b, (mem V b).mpr hb, fun hc => hn ((fan_iff h rule V hma).mp hc)⟩⟩
 
 /-- The core refuses `ZeroThickness` exactly at a bad edge or vertex (for a consistent ledger). -/
 theorem refused_iff (h : Consistent L) (rule : Rule) :
     (∃ x, core L rule = .refused (.zeroThickness x)) ↔
-    (∃ e ∈ L.edges, L.badEdge rule e = true) ∨ (∃ v ∈ L.verts, L.badVert rule v = true) := by
+    (∃ e ∈ L.edges, L.badEdge (L.keepTab rule) e = true) ∨ (∃ v ∈ L.verts, L.badVert (L.keepTab rule) v = true) := by
   rw [core_eq h rule]
-  cases hE : L.edges.find? (L.badEdge rule) with
+  cases hE : L.edges.find? (L.badEdge (L.keepTab rule)) with
   | some e =>
     simp only
     exact ⟨fun _ => Or.inl ⟨e, List.mem_of_find?_eq_some hE, List.find?_some hE⟩,
       fun _ => ⟨e, rfl⟩⟩
   | none =>
-    have hn : ¬∃ e ∈ L.edges, L.badEdge rule e = true := fun ⟨e, he, hb⟩ => by
+    have hn : ¬∃ e ∈ L.edges, L.badEdge (L.keepTab rule) e = true := fun ⟨e, he, hb⟩ => by
       have := List.find?_eq_none.mp hE e he; simp_all
-    cases hV : L.verts.find? (L.badVert rule) with
+    cases hV : L.verts.find? (L.badVert (L.keepTab rule)) with
     | some v =>
       simp only
       exact ⟨fun _ => Or.inr ⟨v, List.mem_of_find?_eq_some hV, List.find?_some hV⟩,
         fun _ => ⟨v, rfl⟩⟩
     | none =>
-      have hn' : ¬∃ v ∈ L.verts, L.badVert rule v = true := fun ⟨v, hv, hb⟩ => by
+      have hn' : ¬∃ v ∈ L.verts, L.badVert (L.keepTab rule) v = true := fun ⟨v, hv, hb⟩ => by
         have := List.find?_eq_none.mp hV v hv; simp_all
       simp only
       constructor
