@@ -41,7 +41,12 @@ fn box_family_off_the_gaps_is_exact() {
             wrong.push(format!("{}: kernel {}, exact {}", p.label(), k.word(), e.word()));
         }
     }
-    assert!(wrong.is_empty(), "{} patterns: {:?}", wrong.len(), &wrong[..wrong.len().min(10)]);
+    assert!(
+        wrong.is_empty(),
+        "{} patterns: {:?}",
+        wrong.len(),
+        &wrong[..wrong.len().min(10)]
+    );
 }
 
 fn corner_touch(names: [&str; 3]) {

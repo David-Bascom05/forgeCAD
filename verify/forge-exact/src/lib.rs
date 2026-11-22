@@ -152,7 +152,10 @@ impl Outcome {
 }
 
 fn kind(d: String) -> String {
-    d.split(|c: char| !c.is_alphanumeric()).next().unwrap_or("").to_string()
+    d.split(|c: char| !c.is_alphanumeric())
+        .next()
+        .unwrap_or("")
+        .to_string()
 }
 
 /// The kernel on the pattern's realisation.
@@ -163,7 +166,9 @@ pub fn kernel(p: &Pattern, unit: f64) -> Outcome {
 
 /// `forge_bool::boolean` on two bodies, as an outcome.
 pub fn kernel_on(a: Body, b: Body, op: Op) -> Outcome {
-    let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || forge_bool::boolean(&a, &b, op, 3)));
+    let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
+        forge_bool::boolean(&a, &b, op, 3)
+    }));
     match r {
         Err(e) => Outcome::Panic(
             e.downcast_ref::<&str>()
@@ -217,7 +222,8 @@ pub fn exact_boxes(a: [[f64; 2]; 3], b: [[f64; 2]; 3], op: Op) -> Outcome {
         .collect();
     let n: Vec<i32> = coords.iter().map(|c| c.len() as i32 - 1).collect();
     let mid = |k: usize, i: i32| 0.5 * (coords[k][i as usize] + coords[k][i as usize + 1]);
-    let inside = |bx: &[[f64; 2]; 3], c: [i32; 3]| (0..3).all(|k| bx[k][0] < mid(k, c[k]) && mid(k, c[k]) < bx[k][1]);
+    let inside =
+        |bx: &[[f64; 2]; 3], c: [i32; 3]| (0..3).all(|k| bx[k][0] < mid(k, c[k]) && mid(k, c[k]) < bx[k][1]);
     let kept = |c: [i32; 3]| -> bool {
         if (0..3).any(|k| c[k] < 0 || c[k] >= n[k]) {
             return false;
@@ -247,7 +253,13 @@ pub fn exact_boxes(a: [[f64; 2]; 3], b: [[f64; 2]; 3], op: Op) -> Outcome {
     for i in 0..=n[0] {
         for j in 0..=n[1] {
             for k in 0..=n[2] {
-                let oct = |d: usize| kept([i - 1 + (d & 1) as i32, j - 1 + ((d >> 1) & 1) as i32, k - 1 + ((d >> 2) & 1) as i32]);
+                let oct = |d: usize| {
+                    kept([
+                        i - 1 + (d & 1) as i32,
+                        j - 1 + ((d >> 1) & 1) as i32,
+                        k - 1 + ((d >> 2) & 1) as i32,
+                    ])
+                };
                 if !manifold_octants(oct) {
                     return Outcome::ZeroThickness;
                 }

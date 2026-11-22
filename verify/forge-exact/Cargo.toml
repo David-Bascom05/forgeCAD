@@ -15,3 +15,7 @@ forge-mesh = { path = "../../kernel/forge-mesh" }
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+# examples/scoreboard_corner.rs: the scoreboard's corner-touch part on forge-model's regen paths
+forge-model = { path = "../../kernel/forge-model" }

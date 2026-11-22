@@ -181,7 +181,7 @@ meets/before/overlappedBy union	ok	ok
 meets/before/metBy union	ok	ok
 meets/before/after union	ok	ok
 meets/meets/before union	ok	ok
-meets/meets/meets union	invalid	zero-thickness
+meets/meets/meets union	pinched	zero-thickness
 meets/meets/overlaps union	zero-thickness	zero-thickness
 meets/meets/finishedBy union	zero-thickness	zero-thickness
 meets/meets/contains union	zero-thickness	zero-thickness
@@ -191,7 +191,7 @@ meets/meets/startedBy union	zero-thickness	zero-thickness
 meets/meets/during union	zero-thickness	zero-thickness
 meets/meets/finishes union	zero-thickness	zero-thickness
 meets/meets/overlappedBy union	zero-thickness	zero-thickness
-meets/meets/metBy union	invalid	zero-thickness
+meets/meets/metBy union	pinched	zero-thickness
 meets/meets/after union	ok	ok
 meets/overlaps/before union	ok	ok
 meets/overlaps/meets union	zero-thickness	zero-thickness
@@ -311,7 +311,7 @@ meets/overlappedBy/overlappedBy union	ok	ok
 meets/overlappedBy/metBy union	zero-thickness	zero-thickness
 meets/overlappedBy/after union	ok	ok
 meets/metBy/before union	ok	ok
-meets/metBy/meets union	invalid	zero-thickness
+meets/metBy/meets union	pinched	zero-thickness
 meets/metBy/overlaps union	zero-thickness	zero-thickness
 meets/metBy/finishedBy union	zero-thickness	zero-thickness
 meets/metBy/contains union	zero-thickness	zero-thickness
@@ -321,7 +321,7 @@ meets/metBy/startedBy union	zero-thickness	zero-thickness
 meets/metBy/during union	zero-thickness	zero-thickness
 meets/metBy/finishes union	zero-thickness	zero-thickness
 meets/metBy/overlappedBy union	zero-thickness	zero-thickness
-meets/metBy/metBy union	invalid	zero-thickness
+meets/metBy/metBy union	pinched	zero-thickness
 meets/metBy/after union	ok	ok
 meets/after/before union	ok	ok
 meets/after/meets union	ok	ok
@@ -1871,7 +1871,7 @@ metBy/before/overlappedBy union	ok	ok
 metBy/before/metBy union	ok	ok
 metBy/before/after union	ok	ok
 metBy/meets/before union	ok	ok
-metBy/meets/meets union	invalid	zero-thickness
+metBy/meets/meets union	pinched	zero-thickness
 metBy/meets/overlaps union	zero-thickness	zero-thickness
 metBy/meets/finishedBy union	zero-thickness	zero-thickness
 metBy/meets/contains union	zero-thickness	zero-thickness
@@ -1881,7 +1881,7 @@ metBy/meets/startedBy union	zero-thickness	zero-thickness
 metBy/meets/during union	zero-thickness	zero-thickness
 metBy/meets/finishes union	zero-thickness	zero-thickness
 metBy/meets/overlappedBy union	zero-thickness	zero-thickness
-metBy/meets/metBy union	invalid	zero-thickness
+metBy/meets/metBy union	pinched	zero-thickness
 metBy/meets/after union	ok	ok
 metBy/overlaps/before union	ok	ok
 metBy/overlaps/meets union	zero-thickness	zero-thickness
@@ -2001,7 +2001,7 @@ metBy/overlappedBy/overlappedBy union	ok	ok
 metBy/overlappedBy/metBy union	zero-thickness	zero-thickness
 metBy/overlappedBy/after union	ok	ok
 metBy/metBy/before union	ok	ok
-metBy/metBy/meets union	invalid	zero-thickness
+metBy/metBy/meets union	pinched	zero-thickness
 metBy/metBy/overlaps union	zero-thickness	zero-thickness
 metBy/metBy/finishedBy union	zero-thickness	zero-thickness
 metBy/metBy/contains union	zero-thickness	zero-thickness
@@ -2011,7 +2011,7 @@ metBy/metBy/startedBy union	zero-thickness	zero-thickness
 metBy/metBy/during union	zero-thickness	zero-thickness
 metBy/metBy/finishes union	zero-thickness	zero-thickness
 metBy/metBy/overlappedBy union	zero-thickness	zero-thickness
-metBy/metBy/metBy union	invalid	zero-thickness
+metBy/metBy/metBy union	pinched	zero-thickness
 metBy/metBy/after union	ok	ok
 metBy/after/before union	ok	ok
 metBy/after/meets union	ok	ok

@@ -109,6 +109,7 @@ dependencies = [
  "forge-bool",
  "forge-math",
  "forge-mesh",
+ "forge-model",
  "forge-ops",
  "forge-topo",
 ]

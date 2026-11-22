@@ -1,7 +1,7 @@
 #!/bin/bash
 # Aeneas toolchain trial: opam + OCaml 5.3 switch + aeneas deps; Rust nightly for charon; build both.
 set -x
-S=/tmp/claude-0/-home-user-forgeCAD/9792d215-acc8-574e-8e37-10903f387b80/scratchpad/aeneas
+S=${AENEAS_WORK:-/home/user/aeneasverif/work}
 mkdir -p $S/bin
 export OPAMROOT=$S/opamroot OPAMYES=1 OPAMCOLOR=never
 if [ ! -x $S/bin/opam ]; then

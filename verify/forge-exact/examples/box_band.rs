@@ -9,12 +9,20 @@ use forge_math::tol::LINEAR;
 fn main() {
     let deltas: Vec<f64> = {
         let d: Vec<f64> = std::env::args().skip(1).filter_map(|a| a.parse().ok()).collect();
-        if d.is_empty() { vec![-2.5, -1.5, -0.9, -0.5, 0.5, 0.9, 1.5, 2.5] } else { d }
+        if d.is_empty() {
+            vec![-2.5, -1.5, -0.9, -0.5, 0.5, 0.9, 1.5, 2.5]
+        } else {
+            d
+        }
     };
     let unit = 10.0;
     // BAND_AXES=02: move the coincident ends on these axes only (default all three)
     let axes: Vec<usize> = std::env::var("BAND_AXES")
-        .map(|s| s.chars().filter_map(|c| c.to_digit(10).map(|d| d as usize)).collect())
+        .map(|s| {
+            s.chars()
+                .filter_map(|c| c.to_digit(10).map(|d| d as usize))
+                .collect()
+        })
         .unwrap_or_else(|_| vec![0, 1, 2]);
     let mut tally = std::collections::BTreeMap::new();
     for &dl in &deltas {
@@ -45,8 +53,20 @@ fn main() {
                 || (matches!(got, Outcome::Ok(_)) && near_volume(&got, &[&coincident, &apart]));
             if !fine {
                 bad += 1;
-                *tally.entry((dl.to_bits(), got.word().split(' ').take(2).collect::<Vec<_>>().join(" "))).or_insert(0) += 1;
-                println!("{}\t{}\t{}\t{}\t{}", dl, p.label(), got.word(), coincident.word(), apart.word());
+                *tally
+                    .entry((
+                        dl.to_bits(),
+                        got.word().split(' ').take(2).collect::<Vec<_>>().join(" "),
+                    ))
+                    .or_insert(0) += 1;
+                println!(
+                    "{}\t{}\t{}\t{}\t{}",
+                    dl,
+                    p.label(),
+                    got.word(),
+                    coincident.word(),
+                    apart.word()
+                );
             }
         }
         eprintln!("delta {dl} LINEAR: {bad} of {runs} runs neither reading");
