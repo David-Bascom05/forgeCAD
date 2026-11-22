@@ -666,6 +666,7 @@ pub fn apply_set(src: &str, prog: &[Stmt], key: &str, text: Option<&str>) -> R<S
             return Err(Error::UnknownName {
                 span: Span::default(),
                 name: n,
+                near: None,
             });
         }
     }

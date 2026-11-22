@@ -687,7 +687,9 @@ fn body_feature(
             keep,
         } => {
             let t = find(solids, *target, i)?;
-            let mut body = solids[t].body.compact();
+            // both bodies finished parts: their arenas in order of name, so nothing the
+            // booleans make follows the order they were built in (docs/naming.md, Arena order)
+            let mut body = solids[t].body.clone().into_canonical();
             for (n, &id) in tools.iter().enumerate() {
                 if id == *target {
                     return Err(bad(BodyError::SameBody { id }));
@@ -697,7 +699,8 @@ fn body_feature(
                     renamed(&solids[k].body, |x| salted(x, "combine", me))
                 } else {
                     solids[k].body.clone()
-                };
+                }
+                .into_canonical();
                 body = boolean(&body, &tool, op_of(*op), bool_id(me, n as u64)).map_err(boolean_err(i))?;
             }
             solids[t].body = body;
