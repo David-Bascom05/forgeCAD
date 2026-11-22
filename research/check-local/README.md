@@ -71,14 +71,15 @@ and every probe is outside their box).
 
 ## How it is held to the Rust
 
-`interface/forge-agent/tests/check_local.rs`, in CI:
+`interface/forge-lang/tests/kernel_check_local.rs`, in CI:
 - Against itself and against the stage before a hole, one fault in any one face, edge, vertex or coedge: `check_against` gives exactly `check`'s answer, and
   every rule named has fired. A shell moved, loops moved over a rim likewise.
-- `check_against_both_ways(true)` runs both on every checked operation: the bench (`bench_parts.rs`), the random histories (`history.rs`) and `fuzz/corpus.txt`, panicking
+- `check_against_both_ways(true)` runs both on every checked operation: the bench (`bench_parts.rs`), the random programs (`fuzz.rs`) and the fuzz corpus, panicking
   if the old body fails or the answers differ.
 
 `mutate.py`, by hand from a scratch copy: loosens each comparison and each locality test in turn; the tests must fail. Regenerate the corpus with
-`python3 research/check-local/fuzz/gen.py DIR 0 60` and `cat DIR/*.fc`.
+`python3 research/check-local/fuzz/gen.py DIR 0 60` and `cat DIR/*.fg` (the parts are .fg; forge-lang keeps its copy as
+`interface/forge-lang/tests/kernel_parts/check_local_corpus.txt`).
 
 ## Cost (instructions:u)
 

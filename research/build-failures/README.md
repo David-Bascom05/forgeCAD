@@ -5,10 +5,10 @@ date as classes are fixed.
 
 ## How to rerun
 
-- History census: `cargo run --release -p forge-agent --example buildfail -- 0 100 12 OUT_DIR [all]`:
-  every feature kind's tries and refusals over random histories, every message counted, the
+- History census: `cargo run --release -p forge-lang --example buildfail -- 0 100 12 OUT_DIR [all]`:
+  every feature kind's tries and refusals over random .fg programs (forge_lang::fuzz), every message counted, the
   smallest history of each shrunk (`all`: every history as found, for OCCT).
-  `buildfail shrink F.fc` shrinks a part file's refusal.
+  `buildfail shrink F.fg` shrinks a part file's refusal.
 - A refused finishing feature's message says whether size is the reason: `; it builds up to radius
   R`, or `; no smaller radius builds either`. `Model` tries the feature smaller (`size_limit`).
 - OCCT on the refusals: `oracle dir:OUT_DIR > parts.json`, then `tools/occt/oracle.py parts.json`. A part file's

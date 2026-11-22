@@ -41,7 +41,7 @@ The face is carried on half a span past each end in s (same cubic) and up to 0.2
  4. Any guide whose path has an arc: transcendental in s (cos of a cubic). Line-only guides stay cubic.
 So the exact-algebra route (implicitization, resultants) only applies to classes 1 and 2.
 
-### The benchmark (repros/vf6.fc): volute (9 circle profiles) cut by core (10 circle profiles)
+### The benchmark (repros/vf6): volute (9 circle profiles) cut by core (10 circle profiles)
 Profiles 1..9 share the SAME frames and centres in both lofts; core radii = volute radii - 5 for the
 first 7, then 28.5 vs 33.5, 32 vs 37, and the core adds a 10th profile at y=125 (r=33).
 Each profile: frame x = (cos th, sin th, 0) radial, z tangent; so Y_k = frame y = (0,0,+-1) constant for all k
@@ -203,7 +203,7 @@ Next (loft-speed): prune trace seeds to the faces' own parameter domain (patch b
 Skinned evaluation (per-span polynomial form), then parametric marching in (u1,v1,u2,v2).
 
 ## Where the vf6 time goes, and a certified exclusion that removes it (novel-math, 2026-10-31)
-Measured (scratch log around intcurve::trace in forge-bool ssi.rs, release, vf6.fc 10.7 s):
+Measured (scratch log around intcurve::trace in forge-bool ssi.rs, release, vf6 10.7 s):
  - 393 traced pairs in the core cut take 9.9 s. 268 of them are Skinned x Skinned (8.6 s, median 30 ms,
    max 115 ms), plus 130 Skinned x plane/cylinder (1.3 s). perf: about 95% is in Skinned::solve, the
    nearest-point Newton behind implicit(), which the octree calls at every cell centre.
@@ -331,12 +331,12 @@ Scratch patch (research/loft-ssi/novel/wt, not committed): Skinned::ring() retur
 is an arc with one start and sweep and there are no guides (end slopes allowed). rings_disjoint() runs the
 Bezier-hull SAT on the two FACE domains, clipped to the region, needing a gap of more than tol::LINEAR, and
 ssi::surfaces_in returns Empty when it certifies. Release build:
-  vf6.fc        10.7 s -> 2.09 s (Skinned x Skinned traces 268 -> 0; what is left is 125 Skinned x plane/cyl
+  vf6           10.7 s -> 2.09 s (Skinned x Skinned traces 268 -> 0; what is left is 125 Skinned x plane/cyl
                 traces, 1.45 s). Valid. Same 46 faces. 122 edges / 77 verts instead of 144 / 99: the 22 extra
                 vertices in today's result are imprints where carried-on curves cross face edges (checked:
                 e.g. (110.845, 0, 28.956) sits on the volute's r=30 circle, 5 mm from the core).
                 Volume 695713.2 vs 695715.9 (approx, tessellation follows the edge splits).
-  vfx.fc        (novel/vfx.fc: vf6's two lofts, core raised 8 mm in z so the walls really cross; the top
+  vfx           (novel/vfx, now novel/vfx.fg: vf6's two lofts, core raised 8 mm in z so the walls really cross; the top
                 opens along two lips): today's build FAILS ("surface pair without a closed form": the tracer
                 returns None on a pair the certificate now removes). With the certificate: valid, 2.36 s,
                 26 real Skinned x Skinned crossings left at about 65 ms each (1.7 s).
@@ -361,8 +361,8 @@ Scratch (novel/wt, forge-geom skinned.rs bottom + forge-bool ssi.rs, env RING_ME
    subdivide to leaves, then Newton and march in the face's (s, a) chart on h = Q(S(s,a)) (2 unknowns, 1 equation).
 Instructions for the whole build (perf stat), release:
                      today        + certificate    + certificate + ring marchers
-   vf6.fc           101.7 G         17.4 G            5.1 G     (10.7 s -> 2.09 s -> 0.50 s)
-   vfx.fc            60.9 G FAIL    21.2 G            4.9 G     (fails  -> 2.36 s -> 0.45 s)
+   vf6              101.7 G         17.4 G            5.1 G     (10.7 s -> 2.09 s -> 0.50 s)
+   vfx               60.9 G FAIL    21.2 G            4.9 G     (fails  -> 2.36 s -> 0.45 s)
    per pair: ring x ring with real crossings, about 1 ms against 65 ms traced; ring x quadric, 125 pairs in
    11 ms against 1.45 s.
 All results valid (forgecad check). Curves agree with today's: total curve-edge length 3593.341 vs 3593.328
@@ -405,7 +405,7 @@ research/loft-ssi/novel/loft-speed.patch, against loft-speed 5a0b79f: kernel/for
 (exact rational Bezier hulls of span pieces; SAT for span x span; Bernstein sign test of Q(S) w^2 for span x
 quadric; seeds from the leaves; minimum-norm Newton and marching in the surfaces' own parameters), called in
 ssi::surfaces_in before the tracer, which remains the fallback. Instructions: vf6 3.65 -> 1.88 G, vfx 5.07 ->
-2.04 G, bench-parts/volute.fc 10.03 -> 5.79 G; the other bench parts are unchanged; part tests give the same
+2.04 G, the volute bench part 10.03 -> 5.79 G; the other bench parts are unchanged; part tests give the same
 pass/fail set. R17 now fails on 5a0b79f with or without it; its earlier pass came from stray vertices
 0.07-1.2 mm off the loft (see novel/README.md).
 Exact formula status: lean-derive proved F (j-free, symmetric form via L = plane1 cap plane2), bidegree
@@ -425,7 +425,7 @@ chart for lofts that share section planes; it is fine for certifying a pair and 
    6-decimal input precision (2.4e-7).
 
 ## 2026-10-31 loft-speed: landed on branch loft-speed (rebased on main 6b402b9)
-volute.fc (bench part, resolved), instructions:u seq / nary1:
+volute (bench part, resolved), instructions:u seq / nary1:
  real-parts 116.31G / 119.88G
  face-domain patch boxes in trace      25.50G / 28.59G
  per-span cubic form (Data::poly)      15.32G / 17.16G

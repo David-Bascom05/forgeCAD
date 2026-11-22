@@ -67,7 +67,7 @@ and `within` agrees with the value. Run once at 8000 points per spine.
 To rerun the counts: put a counter in `Pipe::implicit` and `implicit_gradient`, a phase in `trace` around the
 octree, the seed refine, `march` and `finish`, and tally each seed's outcome in `trace`'s seed loop.
 
-`fuzz/gen.py` and `fuzz/compare.py` (with `research/feature-costs/featcost.rs` in examples, old binary
+`fuzz/gen.py` and `fuzz/compare.py` (with `research/feature-costs/featcost.rs` in forge-lang's examples, old binary
 from a checkout of main): 200 random parts with traced-spine fillets cut through: every outcome the same as
 main's, including the failures (`gen.py DIR 0 200`, `compare.py OLD NEW DIR OUT`). Main fails 158 of the 200
 in its own right (53 at the fillet; 105 at a cut through it: "inconsistent classification", "hole outside

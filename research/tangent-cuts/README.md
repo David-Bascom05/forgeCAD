@@ -67,13 +67,16 @@ the final decision requires that midpoint to be inside that face.
 From the worktree root, through the shared resource limiter:
 
     fbuild cargo test -p forge-geom --lib intersect::tests
-    fbuild cargo test -p forge-agent --test build_failures
+    fbuild cargo test -p forge-lang --test kernel_build_failures
 
-To repeat the speed diagnosis, build `forge-agent --example benchparts --release`
-on the baseline and candidate in separate targets. Resolve the input once with
-`benchparts resolve jack .scratch/jack.fc`, then run:
+To repeat the speed diagnosis, build `featcost` (research/feature-costs: copied into
+`interface/forge-lang/examples`, `--release`) on the baseline and candidate in separate targets, then run
+it over prefixes of the jack's kernel features:
 
-    python3 research/tangent-cuts/bench.py BASE/target/release/examples/benchparts CANDIDATE/target/release/examples/benchparts .scratch/jack.fc .scratch/prefixes
+    python3 research/tangent-cuts/bench.py BASE/target/release/examples/featcost CANDIDATE/target/release/examples/featcost interface/forge-lang/parts/bench/jack.fg [--prefixes 10,12,13]
+
+(The counts below were taken on the retired part format's jack, its selectors resolved, prefix by
+line; the .fg jack's prefixes count kernel features, so the numbers line up only in total.)
 
 On 8bb1f9bb the whole jack took about 332.08M sequential instructions. The first
 port took 334.71M; geometry alone took 332.31M. The bounds and distance rejections

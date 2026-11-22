@@ -24,7 +24,7 @@ def main():
     os.makedirs(out, exist_ok=True)
     jobs = {}
     for run in a:
-        for f in sorted(glob.glob(os.path.join(run, "sigs", "*.src.fc"))):
+        for f in sorted(glob.glob(os.path.join(run, "sigs", "*.src.fg"))):
             with open(f) as h:
                 head = h.readline()[2:].rstrip("\n")
             if head.split(":")[0] in ("fail", "timeout", "crash", "oom") and "nary: the part is" not in head and head not in known:
@@ -38,7 +38,7 @@ def main():
         if fp.sig_of(r) != sig:
             return sig, run, None
         mini, probes = fp.shrink(src, sig, timeout=30)
-        with open(os.path.join(out, fp.sig_id(sig) + ".fc"), "w") as h:
+        with open(os.path.join(out, fp.sig_id(sig) + ".fg"), "w") as h:
             h.write(f"# {sig}\n# found by {os.path.basename(run)}, shrunk in {probes} probes\n{mini}")
         return sig, run, len(mini.splitlines())
 

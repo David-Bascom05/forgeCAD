@@ -2,13 +2,13 @@
 """Per-feature instructions:u by prefix difference, and mesh/mass/check per part.
 
 usage (from the checkout root, inside one fbuild scope):
-  measure.py BIN FCDIR OUT.tsv MODE [WORKERS] [FILTER]
+  measure.py BIN PARTDIR OUT.tsv MODE [WORKERS] [FILTER]
 MODE: seq | nary1 (prefixes), post (mesh, mass, check on each finished part).
-FCDIR holds the resolved bench parts; every other source comes from `featcost sources`.
+PARTDIR holds the .fg bench parts (interface/forge-lang/parts/bench); every other source comes from `featcost sources`.
 """
 import concurrent.futures as cf, glob, os, re, subprocess, sys
 
-bin_, fcdir, out, mode = sys.argv[1:5]
+bin_, partdir, out, mode = sys.argv[1:5]
 workers = int(sys.argv[5]) if len(sys.argv) > 5 else 4
 pat = re.compile(sys.argv[6]) if len(sys.argv) > 6 else None
 os.environ["FORGE_BATCH"] = "cpu"
@@ -29,7 +29,7 @@ def count(*args):
     return n, r.stdout.strip() if r.returncode == 0 else "crash"
 
 
-srcs = [("bench/" + os.path.basename(f)[:-3], f) for f in sorted(glob.glob(fcdir + "/*.fc"))]
+srcs = [("bench/" + os.path.basename(f)[:-3], f) for f in sorted(glob.glob(partdir + "/*.fg"))]
 srcs += [(s, s) for s in subprocess.run([bin_, "sources"], capture_output=True, text=True).stdout.split("\n") if s]
 if pat:
     srcs = [s for s in srcs if pat.search(s[0])]
