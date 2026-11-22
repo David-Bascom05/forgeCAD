@@ -1304,11 +1304,12 @@ f2 = revolve(r.c, axis: r.ax)
 }
 
 /// Seed 0 of the .fg program generator at 12 groups: its last statement, an outside M6 thread on a
-/// block moved and turned, takes the kernel about four minutes (237 s, release build) before it
-/// builds. Cut down to the block, the move and the thread it is quick but refused (a boolean's
-/// inconsistent classification). Left out of the generator's seeds until it is fast.
+/// block moved and turned, its axis all but square to the block's side. The groove's flat past the
+/// cylinder spans the whole pitch, and its carried-on surface's track reached the next turn's end
+/// to end: the side's plane met it in loops touching tip to tip, and the trace ran on from turn to
+/// turn (a chain of 114404 points, four minutes; cut down, a stretch run twice and the boolean's
+/// classification inconsistent). The tracks now stay clear of each other: valid, in seconds.
 #[test]
-#[ignore = "a thread on a moved body takes the kernel four minutes"]
 fn slow_thread_after_a_moved_body() {
     let t = std::time::Instant::now();
     let v = judge(
@@ -1414,6 +1415,40 @@ sketch H15(on: offset(xy, 1.32)) {
 L10 = thread(on: plane(at: H15.p0, normal: axis(H14.p0, H14.p1)), at: H15.p0, spec: "M6", length: 18.43)
 "#,
     );
-    assert!(!matches!(v, Verdict::Fail(_)), "{v:?}");
-    assert!(t.elapsed().as_secs() < 30, "{:.0} s", t.elapsed().as_secs_f64());
+    assert!(matches!(v, Verdict::Ok), "{v:?}");
+    assert!(t.elapsed().as_secs() < 60, "{:.0} s", t.elapsed().as_secs_f64());
+}
+
+/// `slow_thread_after_a_moved_body` cut down to the block, the move and the thread: refused (an
+/// inconsistent classification) while the trace ran on from turn to turn.
+#[test]
+fn thread_all_but_square_to_a_moved_side() {
+    builds_valid(
+        r#"sketch S0(on: xy) {
+  o = rect(corner: (0, 0), size: (72.78, 100.81))
+}
+L0 = extrude(S0, 15.69)
+sketch H10(on: offset(xy, -21.4)) {
+  p0 = pt(-15.8, -96.39999999999999)
+}
+sketch H11(on: offset(xy, 0)) {
+  p0 = pt(0, 0)
+}
+sketch H12(on: offset(xy, 11.99)) {
+  p0 = pt(32.25, 55.67)
+}
+sketch H13(on: offset(xy, 21.99)) {
+  p0 = pt(32.25, 55.67)
+}
+L9 = movebody(of: L0, moves: [slide(along: axis(H11.p0, H10.p0), by: 40.37587893780147), spin(about: axis(H12.p0, H13.p0), by: 56.88deg)])
+sketch H14(on: offset(xy, 0)) {
+  p0 = pt(0, 0)
+  p1 = pt(54.6, 83.8)
+}
+sketch H15(on: offset(xy, 1.32)) {
+  p0 = pt(87.92, 60.13)
+}
+L10 = thread(on: plane(at: H15.p0, normal: axis(H14.p0, H14.p1)), at: H15.p0, spec: "M6", length: 18.43)
+"#,
+    );
 }

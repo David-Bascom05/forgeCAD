@@ -238,18 +238,18 @@ impl Piece {
     }
 }
 
-/// A face's track: its section carried on `w` past each end, turned back to its left by a
+/// A face's track: its section carried on `e` past each end, turned back to its left by a
 /// semicircle of radius `w` at each end, and joined by the section offset `2 w` to its left. A
 /// closed curve, smooth (C1) all round, that follows the section closely.
-fn track(s: Section, w: f64) -> Vec<Section> {
+fn track(s: Section, w: f64, e: f64) -> Vec<Section> {
     let unit = |v: Vec2| v.normalize().unwrap_or(Vec2::X);
     let (p0, t0) = (s.at(0.0).0, unit(s.at(0.0).1));
     let (p1, t1) = (s.at(1.0).0, unit(s.at(1.0).1));
     let left = |t: Vec2| Vec2::new(-t.y, t.x);
     let (n0, n1) = (left(t0), left(t1));
-    let (q0, q1) = (p0 - t0 * w, p1 + t1 * w);
+    let (q0, q1) = (p0 - t0 * e, p1 + t1 * e);
     let (p0b, p1b) = (p0 + n0 * (2.0 * w), p1 + n1 * (2.0 * w));
-    let (q0b, q1b) = (p0b - t0 * w, q1 + n1 * (2.0 * w));
+    let (q0b, q1b) = (p0b - t0 * e, q1 + n1 * (2.0 * w));
     let angle = |v: Vec2| dmath::atan2(v.y, v.x);
     let back = match s {
         Section::Line { .. } => Section::Line { a: p1b, b: p0b },
@@ -401,11 +401,21 @@ impl Screw {
                     .min((sr.lo + drift(ue)) / 8.0)
                     .min(0.25 * gap)
                     .min(0.25 * inward);
-                let pieces: Vec<Piece> = track(sec, w).into_iter().map(Piece::new).collect();
-                let (mut rr, mut hh) = (Interval::EMPTY, Interval::EMPTY);
-                for p in &pieces {
-                    rr = rr.hull(&p.rr);
-                    hh = hh.hull(&p.hh);
+                let ring = |e: f64| {
+                    let pieces: Vec<Piece> = track(sec, w, e).into_iter().map(Piece::new).collect();
+                    let (mut rr, mut hh) = (Interval::EMPTY, Interval::EMPTY);
+                    for p in &pieces {
+                        rr = rr.hull(&p.rr);
+                        hh = hh.hull(&p.hh);
+                    }
+                    (pieces, rr, hh)
+                };
+                // a section as tall as the loop: carried on `w` its track's ends meet the next
+                // turn's, and the zero set would touch itself there (a trace could run on round
+                // the next turn); half that leaves them `w` apart
+                let (mut pieces, mut rr, mut hh) = ring(w);
+                if b != 0.0 && dmath::TAU * b.abs() - hh.width() < w {
+                    (pieces, rr, hh) = ring(0.5 * w);
                 }
                 Some(Screw {
                     m: Motion { frame, a, b },
@@ -1503,6 +1513,36 @@ mod tests {
                 let back = h.closest(d.p, range);
                 assert!(h.deriv(back).p.distance(d.p) < 1e-9, "{t} {back}");
             }
+        }
+    }
+
+    /// A thread's groove: the face across its whole height (the flat past the cylinder) has a
+    /// track that stays clear of the next turn's by its own end radius, so the carried-on surface
+    /// does not touch itself (a plane all but square to the axis then meets it in one loop a turn,
+    /// not in loops that touch end to end, which a trace ran on round from turn to turn).
+    #[test]
+    fn tracks_clear_the_next_turn() {
+        let (w, p) = (0.4736, 1.0);
+        let groove = [
+            Point2::new(2.4587, p / 8.0),
+            Point2::new(2.4587, -p / 8.0),
+            Point2::new(3.0625, -w),
+            Point2::new(4.0625, -w),
+            Point2::new(4.0625, w),
+            Point2::new(3.0625, w),
+        ];
+        let loop_: Vec<Section> = (0..6)
+            .map(|k| Section::Line {
+                a: groove[k],
+                b: groove[(k + 1) % 6],
+            })
+            .collect();
+        let b = p / dmath::TAU;
+        let faces = Screw::loop_faces(Frame::WORLD, &loop_, 0.0, b, Interval::new(0.0, 6.0 * dmath::TAU))
+            .expect("faces");
+        for s in &faces {
+            let clear = dmath::TAU * b - s.ring.hh.width();
+            assert!(clear >= 0.999 * s.feature(), "{clear} {}", s.feature());
         }
     }
 
