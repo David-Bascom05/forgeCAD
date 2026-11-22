@@ -38,8 +38,10 @@ Ops checked against the Lean equations of the second round (2026-11-22):
 - fit_sizes: the fix offered for a too-large fillet builds (`Fit.fit_builds`).
 - `tests/core_diff.rs` checks `build::history_id` against `HistoryId.historyId`, and the colliding
   pair `historyId_collides`.
-- Known findings: `suppress-line` (Suppress comments whole lines: `same_line_drops`) and
-  `respell-binder` (Respell renames a binder: `respell_binder_renames`).
+- Suppress of the second of two statements on one line takes out it alone, and Unsuppress gives
+  the text back (`suppress_live`, `unsuppress_suppress`); Respell at a binder's span or inside a
+  token is refused (`respell_binder_refused`, `respell_subtoken_refused`). Both were findings
+  (`suppress-line`, `respell-binder`), now fixed, and fail the check if they come back.
 
 ## Mapping
 

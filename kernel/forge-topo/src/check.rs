@@ -469,6 +469,15 @@ pub fn stray_edges_from(body: &Body, first: usize) -> Vec<Problem> {
             }
             let s = &body.face(f).surface;
             let worst = pts.iter().map(|&p| s.distance(p)).fold(0.0, f64::max);
+            #[cfg(feature = "decisions")]
+            face_log::record(
+                body,
+                e,
+                f,
+                worst,
+                edge.tol.max(tol::LINEAR),
+                "check: a stray edge, 256 points",
+            );
             if worst > edge.tol.max(tol::LINEAR) {
                 out.push(Problem::EdgeOffFace {
                     edge: e,
@@ -561,6 +570,15 @@ pub fn certify(body: &Body) -> Vec<Problem> {
         for f in faces {
             let s = &body.face(f).surface;
             let worst = pts.iter().map(|&p| s.distance(p)).fold(0.0, f64::max);
+            #[cfg(feature = "decisions")]
+            face_log::record(
+                body,
+                e,
+                f,
+                worst,
+                body.edge(e).tol.max(tol::LINEAR),
+                "certify: 256 points",
+            );
             let known = |p: &Problem| matches!(p, Problem::EdgeOffFace { edge, face, .. } if *edge == e && *face == f);
             if worst > body.edge(e).tol.max(tol::LINEAR) && !out.iter().any(known) {
                 out.push(Problem::EdgeOffFace {
@@ -716,6 +734,8 @@ pub fn edge_off_face(body: &Body, e: EdgeId, f: FaceId) -> Option<Problem> {
     if worst > band {
         worst = points.iter().map(|&p| s.distance(p)).fold(0.0, f64::max);
     }
+    #[cfg(feature = "decisions")]
+    face_log::record(body, e, f, worst, band, "check: edge_off_face, 16 points");
     (worst > band).then_some(Problem::EdgeOffFace {
         edge: e,
         face: f,
@@ -1148,4 +1168,74 @@ pub fn genus(body: &Body) -> i64 {
     let value = body.vertices.len() as i64 - body.edges.len() as i64 + 2 * body.faces.len() as i64
         - body.loops.len() as i64;
     body.shells.len() as i64 - value / 2
+}
+
+/// The decision log's view of check's edge-on-face answers (feature `decisions`): each edge's
+/// farthest sample from a face of its, against the edge's tolerance, at each site that asks.
+/// Recorded only inside `collect`, and only near the limit (within 100 LINEAR).
+#[cfg(feature = "decisions")]
+pub mod face_log {
+    use crate::body::{Body, EdgeId, FaceId};
+    use forge_math::tol;
+    use std::cell::RefCell;
+
+    /// One answer: the body's address, the edge, the face, on (1) or off (0), the farthest
+    /// sample's distance against the limit, and the site.
+    #[derive(Clone, Copy, Debug)]
+    pub struct OnFace {
+        pub body: usize,
+        pub edge: EdgeId,
+        pub face: FaceId,
+        pub answer: u8,
+        pub measure: f64,
+        pub limit: f64,
+        pub site: &'static str,
+    }
+
+    thread_local! {
+        static LOG: RefCell<Option<Vec<OnFace>>> = const { RefCell::new(None) };
+    }
+
+    struct Restore(Option<Vec<OnFace>>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            let outer = self.0.take();
+            LOG.with(|l| *l.borrow_mut() = outer);
+        }
+    }
+
+    /// `f`, with the answers it gave (a nested `collect` keeps its own).
+    pub fn collect<T>(f: impl FnOnce() -> T) -> (T, Vec<OnFace>) {
+        let restore = Restore(LOG.with(|l| l.borrow_mut().replace(Vec::new())));
+        let r = f();
+        let got = LOG.with(|l| l.borrow_mut().take()).unwrap_or_default();
+        drop(restore);
+        (r, got)
+    }
+
+    pub(crate) fn record(
+        body: &Body,
+        edge: EdgeId,
+        face: FaceId,
+        measure: f64,
+        limit: f64,
+        site: &'static str,
+    ) {
+        if measure > 100.0 * tol::LINEAR {
+            return;
+        }
+        LOG.with(|l| {
+            if let Some(v) = l.borrow_mut().as_mut() {
+                v.push(OnFace {
+                    body: body as *const Body as usize,
+                    edge,
+                    face,
+                    answer: (measure <= limit) as u8,
+                    measure,
+                    limit,
+                    site,
+                });
+            }
+        });
+    }
 }

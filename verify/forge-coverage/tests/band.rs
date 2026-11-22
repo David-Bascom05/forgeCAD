@@ -70,24 +70,19 @@ fn band_two_axes_edges() {
     );
 }
 
-// ---- band 2: one axis moved, |delta| in (LINEAR, 2 * 0.05 * 2^-11 / LINEAR = 4.8828125) at unit 10 ----
+// ---- band 2 (closed): one axis moved, |delta| in (LINEAR, 4.8828125 LINEAR] at unit 10 ----
 // B's face beside A's runs past A's end by delta: a sliver region delta wide on B's face. Coplanar
-// classification (`classify_specs`, boolean.rs:5888) probes it at `interior_point` (6150):
-// `clear_step` (6186-6201) starts at min(0.01 * half chord, 0.05) and halves while the step is at
-// least 2 LINEAR (6188); a probe must be a step clear of every other piece, so a sliver narrower
-// than twice the last step tried (0.05 * 2^-10 = 1/20480 mm at a half chord of 5 or more) has none,
-// and `probe` (6174) steps the default 0.05 across it onto A's face: OnOpposite instead of Out.
-// No decision is logged (the probe is not a tolerance decision): 527 of 527 failing runs at
-// 4 LINEAR show no contradiction. The edge scales with the region: at unit 1 (half chord 0.5) it is
-// 0.005 * 2^-6 = 7.8125 LINEAR.
+// classification (`classify_specs`) once probed it by stepping (`clear_step`, halving down to
+// 2 LINEAR, then a 0.05 step across the sliver onto A's face: OnOpposite instead of Out). Now a
+// region no step clears is given a point from its own boundary (`planar_inner`), and where that
+// point is still within a tolerance of A's edge, the region, wider than a tolerance, is on the side
+// of the imprinted edge it is bounded by (`side_of_partner`).
 #[test]
-#[ignore = "coverage gap: band 2 (one axis, 1.5 LINEAR sliver): interior_point/clear_step at boolean.rs:6186-6188 finds no probe, probe 6174 lands past the sliver (OnOpposite)"]
 fn band_one_axis_sliver_1_5() {
     assert_band(&pattern("equal", "meets", "equal", Op::Union), 10.0, 1.5, &[0]);
 }
 
 #[test]
-#[ignore = "coverage gap: band 2 (one axis, 4.8828 LINEAR sliver, the edge): interior_point/clear_step at boolean.rs:6186-6188"]
 fn band_one_axis_sliver_at_edge() {
     assert_band(&pattern("equal", "meets", "equal", Op::Union), 10.0, 4.8828, &[0]);
 }
@@ -95,27 +90,54 @@ fn band_one_axis_sliver_at_edge() {
 #[test]
 fn band_one_axis_edges() {
     let p = pattern("equal", "meets", "equal", Op::Union);
-    assert_band(&p, 10.0, 0.9, &[0]);
-    assert_band(&p, 10.0, 4.8829, &[0]);
-    assert_band(&p, 10.0, -4.8829, &[0]);
-    // the edge at unit 1 is 7.8125 LINEAR: the 0.05 cap gives way to 1% of a half chord of 0.5
-    assert_band(&p, 1.0, 7.82, &[0]);
-    let (got, fine) = band_run(&p, 1.0, 7.80, &[0]);
-    assert!(!fine, "band 2 at unit 1 changed: {}", got.word());
-    let (got, fine) = band_run(&p, 10.0, 4.8828, &[0]);
+    for delta in [0.9, 1.01, 1.5, 2.0, 3.0, 4.8828, 4.8829, -1.5, -4.8828, -4.8829] {
+        assert_band(&p, 10.0, delta, &[0]);
+    }
+    // the old edge at unit 1 was 7.8125 LINEAR
+    for delta in [1.01, 1.5, 3.0, 7.80, 7.82] {
+        assert_band(&p, 1.0, delta, &[0]);
+    }
+}
+
+/// Every pattern of the family, its coincident ends on one axis moved by deltas across the old
+/// band (both ways, each axis, units 1 and 10): every run a reading's answer.
+#[test]
+fn band_one_axis_sweep() {
+    let mut bad = Vec::new();
+    for unit in [1.0, 10.0] {
+        for axis in 0..3 {
+            for delta in [
+                1.05, 1.5, 1.95, 3.0, 4.8828, 7.8, -1.05, -1.5, -1.95, -3.0, -4.8828, -7.8,
+            ] {
+                for p in Pattern::all() {
+                    if band_boxes(&p, unit, delta, &[axis]).is_none() {
+                        continue;
+                    }
+                    let (got, fine) = band_run(&p, unit, delta, &[axis]);
+                    if !fine {
+                        bad.push(format!(
+                            "{} unit {unit} axis {axis} delta {delta}: {}",
+                            p.label(),
+                            got.word()
+                        ));
+                    }
+                }
+            }
+        }
+    }
     assert!(
-        !fine && matches!(got, Outcome::Invalid(_)),
-        "band 2 changed: {}",
-        got.word()
+        bad.is_empty(),
+        "{} runs neither reading:\n{}",
+        bad.len(),
+        bad.join("\n")
     );
 }
 
-// ---- band 3: a tilted face flush at its ends, 5 theta in (LINEAR, 2 * 4.8828125 LINEAR] ----
+// ---- band 3 (closed): a tilted face flush at its ends, 5 theta in (LINEAR, 2 * 4.8828125 LINEAR] ----
 // `cap_over`: B covers A's top, turned by theta about the top's middle line, B's sides flush with
-// A's. nearly_flush (ssi.rs:66-90) reads the top pair Coincident while every region corner is
-// within LINEAR (5 theta <= LINEAR); past that the planes cross, and the strip between the crossing
-// line and B's ends is again a sliver the probe cannot enter (the same clear_step floor: the edge
-// is at 5 theta = 1/10240 mm, twice band 2's).
+// A's. nearly_flush (ssi.rs) reads the top pair Coincident while every region corner is within
+// LINEAR (5 theta <= LINEAR); past that the planes cross, and the strip between the crossing line
+// and B's ends is a sliver the stepping probe could not enter: decided as band 2 now is.
 fn tilt_run(fam: &str, th: f64, op: Op) -> (Outcome, bool) {
     let ((ab, ap), (bb, bp)) = family(fam, th);
     let ((_, a0), (_, b0)) = family(fam, 0.0);
@@ -130,7 +152,6 @@ fn tilt_run(fam: &str, th: f64, op: Op) -> (Outcome, bool) {
 }
 
 #[test]
-#[ignore = "coverage gap: band 3 (tilt 5e-6, corners 2.5 LINEAR off): ZeroThickness after nearly_flush ssi.rs:85 lets go and clear_step boolean.rs:6188 cannot probe the strip"]
 fn tilt_cap_over_5e_6() {
     for op in [Op::Union, Op::Subtract, Op::Intersect] {
         let (got, fine) = tilt_run("cap_over", 5e-6, op);
@@ -138,15 +159,29 @@ fn tilt_cap_over_5e_6() {
     }
 }
 
+// Under 5 theta = 2 LINEAR (theta up to about 4e-6) B's end corners are within two tolerances of
+// A's top edges, and the intersection graph is already inconsistent before classification: a new
+// edge on A's side face ends on A's corner edge with no continuation on the next face (cap_over at
+// 2.4e-6: InconsistentClassification across that corner edge; cap and wall_flush: SplitCrossed),
+// the corner-within-tolerance site of band 1, not the probe.
+#[test]
+#[ignore = "coverage gap: band 1's corner site in the tilt (5 theta in (LINEAR, 2 LINEAR]): new edge ends on A's corner edge without continuing (SplitCrossed / InconsistentClassification)"]
+fn tilt_cap_over_corner_band() {
+    for op in [Op::Union, Op::Subtract, Op::Intersect] {
+        let (got, fine) = tilt_run("cap_over", 2.4e-6, op);
+        assert!(fine, "{op:?}: {}", got.word());
+    }
+}
+
 #[test]
 fn tilt_band_edges() {
     for op in [Op::Union, Op::Subtract, Op::Intersect] {
-        for th in [1.5e-6, 1.96e-5, 1e-4, 1e-3] {
+        for th in [
+            1.5e-6, 4e-6, 5e-6, 8e-6, 1e-5, 1.5e-5, 1.95e-5, 1.96e-5, 1e-4, 1e-3,
+        ] {
             let (got, fine) = tilt_run("cap_over", th, op);
             assert!(fine, "cap_over {op:?} at {th:e}: {}", got.word());
         }
-        let (got, fine) = tilt_run("cap_over", 1.95e-5, op);
-        assert!(!fine, "band 3 changed at 1.95e-5 {op:?}: {}", got.word());
     }
 }
 

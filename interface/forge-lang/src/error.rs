@@ -616,6 +616,20 @@ pub enum Error {
         id: String,
         first: Span,
     },
+    /// Two features whose ids the kernel names by one number (`build::history_id`): each would
+    /// select and round the other's entities as its own. `first` made `other`.
+    HistoryIdClash {
+        span: Span,
+        id: String,
+        other: String,
+        first: Span,
+    },
+    /// Respell at a span that is not exactly one read of a name: a binder (Rename's), a member,
+    /// or a part of a token.
+    NotARead {
+        span: Span,
+        text: String,
+    },
     IndexOut {
         span: Span,
         index: i64,
@@ -856,6 +870,8 @@ impl Error {
             | ShadowsBuiltin { span, .. }
             | ParamTwice { span, .. }
             | DuplicateId { span, .. }
+            | HistoryIdClash { span, .. }
+            | NotARead { span, .. }
             | IndexOut { span, .. }
             | ReturnOutsideFn { span }
             | WrongPlace { span, .. }
@@ -929,6 +945,8 @@ impl Error {
             ShadowsBuiltin { .. } => "ShadowsBuiltin",
             ParamTwice { .. } => "ParamTwice",
             DuplicateId { .. } => "DuplicateId",
+            HistoryIdClash { .. } => "HistoryIdClash",
+            NotARead { .. } => "NotARead",
             IndexOut { .. } => "IndexOut",
             ReturnOutsideFn { .. } => "ReturnOutsideFn",
             WrongPlace { .. } => "WrongPlace",
@@ -1123,6 +1141,12 @@ impl Error {
             }
             ParamTwice { param, .. } => format!("{param} is defined twice"),
             DuplicateId { id, .. } => format!("feature id {id} is made twice"),
+            HistoryIdClash { id, other, .. } => {
+                format!("features {other} and {id} have one kernel name (history id); rename one")
+            }
+            NotARead { text, .. } => {
+                format!("Respell takes a whole read of a name, not `{text}`; Rename renames a binder")
+            }
             IndexOut { index, len, .. } => format!("index {index} out of 0..{len}"),
             ReturnOutsideFn { .. } => "return outside a function".into(),
             WrongPlace {
@@ -1283,6 +1307,8 @@ impl Error {
             UnknownArg { func, arg, .. } => vec![("func", s(func)), ("arg", s(arg))],
             MissingArg { func, arg, .. } => vec![("func", s(func)), ("arg", s(arg))],
             DuplicateId { id, .. } | Build { id, .. } => vec![("id", s(id))],
+            HistoryIdClash { id, other, .. } => vec![("id", s(id)), ("other", s(other))],
+            NotARead { text, .. } => vec![("text", s(text))],
             NoFace { id, role, .. } | NotPlanar { id, role, .. } => {
                 vec![("id", s(id)), ("role", s(&format!("{role:?}")))]
             }
