@@ -57,7 +57,32 @@ cost up to +0.14% on the deterministic speed-gate lines.
      `orient2d_underflow_counterexample` (the fast filter no longer answers the wrong sign;
      it now gives 0).
 
-Gates: pending (the 5-run A/B speed gate and the debug-assertions survey are running; recorded in the next commit).
+**Does the precondition hold in practice?** I ran the release tests of forge-math, forge-geom,
+forge-bool and forge-model, and `FUZZ_SEEDS=150` of `examples/suite`, with every window check
+logging instead of asserting.
+- **The fuzz suite:** no violation, and 150/150 histories valid.
+- **The tests, outside forge-math's own deliberate out-of-window unit tests:**
+  - `certainly_in_circle` left its window 3,557 times (`spline.rs` 1,911, `edits.rs` 1,277,
+    `fillet_overflow.rs` 369);
+  - `orient2d`'s slow path left its window 12 times (`spline.rs`).
+- **The cause** is mesher uv coordinates that should be 0 but are numerical noise: `3.2e-167`,
+  `-5.9e-243`, `-1.4e-117`, and even the subnormal `-4.3e-322`, beside coordinates of 10 to 8700.
+  - With panicking asserts, `edits.rs::fuzz_edits` fails.
+  - The fast decisions on these inputs are still right: the differences are moderate, so no
+    product underflows.
+- **So the coordinate windows are sufficient but not necessary,** and in practice they are
+  violated. Restating the precondition, or snapping the noise at its source, is pending a
+  decision.
+
+Independent check (`check_exact.py`, 200,000 cases per range, on the final kernel):
+
+| scale | wrong signs |
+|---|---|
+| 2^-40 … 2^40, 2^-480 … 2^480 | 0 |
+| 2^505 … 2^515, 2^520 … 2^1000 (overflow: the NaN fallback) | 0 |
+| 2^-540 … 2^-520 (underflow, outside the windows: unchecked) | 369,358 |
+
+Gates: the 5-run A/B speed gate is running.
 
 ## What is proven
 

@@ -548,7 +548,7 @@ pub fn certainly_in_circle(a: Point2, b: Point2, c: Point2, d: Point2) -> bool {
     // the whole predicate's precondition (lifts multiply rounded products; see `triple`)
     debug_assert!(
         within(&[a.x, a.y, b.x, b.y, c.x, c.y, d.x, d.y], DEG4_LO, DEG4_HI),
-        "certainly_in_circle outside its window"
+        "certainly_in_circle outside its window: {a:?} {b:?} {c:?} {d:?}"
     );
     let (adx, ady) = (a.x - d.x, a.y - d.y);
     let (bdx, bdy) = (b.x - d.x, b.y - d.y);
@@ -572,7 +572,7 @@ pub fn incircle(a: Point2, b: Point2, c: Point2, d: Point2) -> f64 {
     // the whole predicate's precondition (lifts multiply rounded products; see `triple`)
     debug_assert!(
         within(&[a.x, a.y, b.x, b.y, c.x, c.y, d.x, d.y], DEG4_LO, DEG4_HI),
-        "incircle outside its window"
+        "incircle outside its window: {a:?} {b:?} {c:?} {d:?}"
     );
     let (adx, ady) = (a.x - d.x, a.y - d.y);
     let (bdx, bdy) = (b.x - d.x, b.y - d.y);
