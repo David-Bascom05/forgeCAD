@@ -339,6 +339,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-topo-check"
+version = "0.1.0"
+dependencies = [
+ "forge-geom",
+ "forge-math",
+ "forge-model",
+ "forge-ops",
+ "forge-topo",
+]
+
+[[package]]
 name = "forge-units"
 version = "0.1.0"
 
