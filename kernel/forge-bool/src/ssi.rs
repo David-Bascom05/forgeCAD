@@ -716,6 +716,13 @@ mod tests {
         assert!(forge_geom::intcurve::trace(&rod, &torus, region).is_none());
         let got = past_stalls(&rod, &torus, region, |_| true);
         assert!(past_stalls(&rod, &torus, region, |_| false).is_none());
+        // certified, the branches that stop at the stall are not the whole intersection: refused
+        #[cfg(feature = "certified_trace")]
+        {
+            assert!(got.is_none());
+            return;
+        }
+        #[allow(unreachable_code)]
         for (c, _) in got.expect("the branches off the touch") {
             let d = c.domain();
             for i in 0..=20 {
