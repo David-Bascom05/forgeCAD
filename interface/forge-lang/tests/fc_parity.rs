@@ -1,10 +1,8 @@
-//! Forms `.fc` had that Forge parts lacked: the same geometry written as a Forge part, held to
-//! the `.fc` part's solid (its volume, area, faces and edges as the retired engine built it,
-//! recorded below) and valid.
+//! Extents, selections, suppression and fixes, each a Forge part held to a recorded solid (its
+//! volume, area, faces and edges, below) and valid.
 mod common;
 
-/// The `.fc` parts built on the retired engine (`forge_agent::bench::model`), recorded: each
-/// one's text, then its volume, area, faces and edges.
+/// The recorded solids: each one's key text, then its volume, area, faces and edges.
 const RECORDED: &[(&str, f64, f64, usize, usize)] = &[
     (
         "base: extrude 20 rect 0 0 40 30\nother: extrude new 10 rect 60 0 20 20\nextrude cut 5 -xy at 0 0 20 circle 20 -15 4 in base\nextrude 3 at 0 0 20 circle 8 8 3 in base\nrevolve cut 90 axis x circle 20 10 4 in base\nball cut 3 at 32 22 20 in base\n",
@@ -127,16 +125,16 @@ const RECORDED: &[(&str, f64, f64, usize, usize)] = &[
     ),
 ];
 
-/// The Forge part and the `.fc` part (its text, recorded built) are one solid.
+/// The Forge part builds the solid recorded under `fc_src`.
 fn same(fg: &str, fc_src: &str) -> forge_lang::Measure {
     let m = common::holds(fg);
     let &(_, volume, area, faces, edges) = RECORDED
         .iter()
         .find(|r| r.0 == fc_src)
-        .unwrap_or_else(|| panic!("no recorded .fc build of {fc_src:?}"));
+        .unwrap_or_else(|| panic!("no recorded solid for {fc_src:?}"));
     let near = |x: f64, y: f64| (x - y).abs() <= 1e-7 * x.abs().max(y.abs()).max(1.0);
-    assert!(near(m.volume, volume), "volume fg {} fc {}", m.volume, volume);
-    assert!(near(m.area, area), "area fg {} fc {}", m.area, area);
+    assert!(near(m.volume, volume), "volume fg {} want {}", m.volume, volume);
+    assert!(near(m.area, area), "area fg {} want {}", m.area, area);
     assert_eq!(m.faces, faces, "faces");
     assert_eq!(m.edges, edges, "edges");
     m
@@ -323,7 +321,7 @@ fn sketch_horizontal_and_vertical_distances() {
     );
 }
 
-/// Selections .fc had: radius under or over a value, touching an entity, in a body, spline faces.
+/// Selections: radius under or over a value, touching an entity, in a body, spline faces.
 #[test]
 fn selections_by_radius_touching_and_body() {
     let src = format!(
@@ -358,7 +356,7 @@ fn selections_by_radius_touching_and_body() {
     );
 }
 
-/// `.fc`'s `suppress` and `unsuppress`: the feature and what reads it out of the build and back.
+/// Suppress and unsuppress: the feature and what reads it out of the build and back.
 #[test]
 fn suppress_and_unsuppress() {
     use forge_lang::edit::apply;
@@ -528,7 +526,7 @@ fn a_typo_respells_to_the_parts_name_before_a_builtin() {
     );
 }
 
-/// `.fc`'s `try:` for a misspelt name: the nearest name in reach, as a Respell fix.
+/// A misspelt name: the nearest name in reach, as a Respell fix.
 #[test]
 fn a_misspelt_name_is_respelt() {
     let src = format!("{BLOCK}sketch s(on: bsae.end) {{\n  c = circle((20, 15), 4)\n}}\n");
@@ -548,7 +546,7 @@ fn a_misspelt_name_is_respelt() {
     common::holds(&fixed);
 }
 
-/// `.fc`'s `try:` for a round too big for where it goes: the largest radius that builds, as a
+/// A round too big for where it goes: the largest radius that builds, as a
 /// SetParam fix on the param driving it (`Options::fit_sizes`).
 #[test]
 fn a_round_too_big_gets_the_largest_that_builds() {

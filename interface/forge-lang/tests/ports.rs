@@ -1,6 +1,5 @@
-//! The fair test's three parts, ported by hand from their originals in the retired format
-//! (fastcad-lab/k/fair/fc/{crank,bracket,manifold}): each builds, with the original's
-//! volume, face and edge counts, and no errors or lints.
+//! The fair test's three parts (parts/{crank,bracket,manifold}.fg): each builds, with its
+//! recorded volume, face and edge counts, and no errors or lints.
 
 use forge_lang::{Options, Run};
 
@@ -59,7 +58,7 @@ fn manifold_matches_its_fc_version() {
     parity("manifold", 687248.8, 209, 484);
 }
 
-// Bench parts against the volumes, faces and edges their originals (the retired format) built to.
+// Bench parts against their recorded volumes, faces and edges.
 
 #[test]
 fn bench_quadarm_matches_its_fc_version() {

@@ -1,4 +1,4 @@
-//! What the retired `.fc` document mode did in the app, done on a Forge (.fg) part: a number
+//! Document tools in the app on a Forge (.fg) part: a number
 //! dragged on the model, a browser row lighting its faces, suppression and the End of Part, the
 //! build's flags on the model, the dialogs' placings and axes, window selection, a sketch started
 //! for an extrude and picked in the view, undo kept with the file, literal sketch points held

@@ -1,5 +1,4 @@
 # Forged aluminium crank arm, 170 mm: square-taper spindle boss, 9/16" pedal boss.
-# Hand port of fastcad-lab/k/fair/fc/crank/model.fc.
 
 shared L = 170                 # spindle to pedal axis
 shared rs = 18                 # arm end radius round the spindle
