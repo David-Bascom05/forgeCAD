@@ -12,8 +12,9 @@
 //! 4. `exact_diffs` (a const-generic array with `iter_mut().zip`) is written for the four
 //!    differences `orient2d_exact` asks it for.
 //! 5. `Point2` is a local struct with the same fields.
-//! 6. The out-of-range fallback (`Big`, `cross_big`, `orient2d_big`) is the kernel's code
-//!    verbatim, in module `big`, which Aeneas keeps opaque.
+//! 6. The fallback for a NaN slow-path result (`Big`, `cross_big`, `orient2d_big`) is the
+//!    kernel's code verbatim, in module `big`, which Aeneas keeps opaque. `e.is_nan()` is
+//!    written `e.ne(&e)`. The kernel's `debug_assert!`s are left out (no effect in release).
 //!
 //! `tests` checks every function against the kernel's, bit for bit.
 
@@ -56,31 +57,7 @@ pub fn cross_bound() -> f64 {
 pub fn slack() -> f64 {
     f64::from_bits(16)
 }
-/// `DEG2_LO = 2^-480`
-#[inline]
-pub fn deg2_lo() -> f64 {
-    f64::from_bits((1023 - 480) << 52)
-}
-/// `DEG2_HI = 2^500`
-#[inline]
-pub fn deg2_hi() -> f64 {
-    f64::from_bits((1023 + 500) << 52)
-}
-
-/// `within`: the kernel's `v.iter().all(..)`, as a loop.
-pub fn within(v: &[f64], lo: f64, hi: f64) -> bool {
-    let mut i = 0;
-    while i < v.len() {
-        let x = v[i];
-        if !(x.eq(&zero()) || (x.abs().ge(&lo) && x.abs().le(&hi))) {
-            return false;
-        }
-        i += 1;
-    }
-    true
-}
-
-/// The kernel's exact integer fallback, verbatim. `gen.sh` keeps this module opaque
+/// The kernel's exact integer fallback for NaN results, verbatim. `gen.sh` keeps this module opaque
 /// (`charon --opaque fv_predicates::big`): Aeneas does not translate it, and the Lean side
 /// gives it no meaning (`FunsExternal.lean`), so no theorem can say anything about inputs
 /// that reach it.
@@ -312,12 +289,11 @@ pub fn cross_sign(a: f64, b: f64, c: f64, d: f64) -> f64 {
     if det.abs().gt(&cross_bound().mul(l.abs().add(r.abs()))) {
         return det;
     }
-    if !within(&[a, b, c, d], deg2_lo(), deg2_hi()) {
-        return big::cross_big(a, b, c, d);
-    }
     let mut h = [zero(); 4];
     let n = cross_exact(a, b, c, d, &mut h);
-    estimate(&h[..n])
+    let e = estimate(&h[..n]);
+    // the kernel's `e.is_nan()`
+    if e.ne(&e) { big::cross_big(a, b, c, d) } else { e }
 }
 
 /// Positive if a, b, c run counter-clockwise, negative if clockwise, zero if collinear.
@@ -334,9 +310,6 @@ pub fn orient2d(a: Point2, b: Point2, c: Point2) -> f64 {
 }
 
 pub fn orient2d_adapt(a: Point2, b: Point2, c: Point2, detsum: f64) -> f64 {
-    if !within(&[a.x, a.y, b.x, b.y, c.x, c.y], deg2_lo(), deg2_hi()) {
-        return big::orient2d_big(a, b, c);
-    }
     let acx = a.x.sub(c.x);
     let acy = a.y.sub(c.y);
     let bcx = b.x.sub(c.x);
@@ -347,7 +320,8 @@ pub fn orient2d_adapt(a: Point2, b: Point2, c: Point2, detsum: f64) -> f64 {
     if det.ge(&ccw_bound_b().mul(detsum)) || det.neg().ge(&ccw_bound_b().mul(detsum)) {
         return det;
     }
-    orient2d_exact(a, b, c)
+    let e = orient2d_exact(a, b, c);
+    if e.ne(&e) { big::orient2d_big(a, b, c) } else { e }
 }
 
 /// `exact_diffs` for the four differences of `orient2d_exact`.
@@ -537,9 +511,14 @@ mod tests {
             x: -4.608837897596252e-178,
             y: 0.0,
         };
-        // the exact determinant is positive; before the slack the filter answered -5e-324
-        assert!(orient2d(a, b, c) > 0.0);
+        // the exact determinant is positive. Before the slack the fast filter answered -5e-324.
+        // Now it does not decide, and the slow path, outside its window (the products
+        // underflow), gives 0: unchecked, as documented
+        assert!(orient2d(a, b, c) >= 0.0);
         let k = |p: Point2| forge_math::Point2::new(p.x, p.y);
-        assert!(k::orient2d(k(a), k(b), k(c)) > 0.0);
+        assert_eq!(
+            k::orient2d(k(a), k(b), k(c)).to_bits(),
+            orient2d(a, b, c).to_bits()
+        );
     }
 }

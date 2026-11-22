@@ -42,17 +42,16 @@ def F64.Insts.CoreCmpPartialEqF64.ne (a b : F64) : Result Bool := ok (!IEEE754.F
 def F64.Insts.CoreCmpPartialOrdF64.lt (a b : F64) : Result Bool := ok (IEEE754.FP.lt a b)
 /-- `<f64 as PartialOrd>::gt` -/
 def F64.Insts.CoreCmpPartialOrdF64.gt (a b : F64) : Result Bool := ok (IEEE754.FP.lt b a)
-/-- `<f64 as PartialOrd>::le` -/
-def F64.Insts.CoreCmpPartialOrdF64.le (a b : F64) : Result Bool := ok (IEEE754.FP.le a b)
 /-- `<f64 as PartialOrd>::ge` -/
 def F64.Insts.CoreCmpPartialOrdF64.ge (a b : F64) : Result Bool := ok (IEEE754.FP.le b a)
 /-- `<f64 as Clone>::clone` -/
 def F64.Insts.CoreCloneClone.clone (a : F64) : Result F64 := ok a
 
-/-! ## The out-of-range integer fallback: deliberately without meaning
+/-! ## The integer fallback for NaN results: deliberately without meaning
 
-`big::cross_big` and `big::orient2d_big` (the kernel's exact fixed-width integer evaluation for
-inputs outside the expansion window) are kept opaque, and here they *fail*. They are not
+`big::cross_big` and `big::orient2d_big` (the kernel's exact fixed-width integer evaluation,
+run when a slow-path result is NaN, i.e. a product overflowed) are kept opaque, and here they
+*fail*. They are not
 translated, so the Lean side gives them no semantics. A theorem whose computation reached them
 would be about a failing computation, so no theorem here can claim anything about those inputs.
 The theorems are about the fast paths. The fallback is tested instead: `predicates/` against

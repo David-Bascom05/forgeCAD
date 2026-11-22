@@ -14,76 +14,50 @@ Part 2 of the IEEE 754 work. Part 1 is the model, `verify/ieee754`, with
 ## The kernel fix (`kernel/forge-math/src/predicates.rs`)
 
 The findings below showed that Shewchuk's bounds, and the expansion arithmetic of the exact
-paths, assume no underflow and no overflow. The fix makes every predicate's sign exact for every
-finite input.
+paths, assume no underflow and no overflow. This is the fix as decided: option (1) of the
+discussion, after a first version that made every predicate exact for every finite input but
+cost up to +0.14% on the deterministic speed-gate lines.
 
-1. **Fast filters: an absolute slack in the bound.** A subnormal product has an absolute
-   rounding error, up to `2^-1075`, that no relative bound covers.
-   - `orient2d` and `dot3`: the bound becomes `BOUND · detsum + SLACK`, with
-     `SLACK = 16 · 2^-1074`. That is one add on the normal path and no comparison.
-   - `triple`, `incircle` and `certainly_in_circle` multiply a rounded product by another
-     rounded product, so an absolute error is multiplied by the other factor. Each factor of
-     their permanents gets `+ TINY` (`2^-1018`), and the bound gets `+ SLACK`. That is three
-     adds for `triple` and six for the in-circle tests, still no comparison.
-   - `cross_sign`'s filter needs nothing, being sound by monotonicity (proven).
-   - The slack changes no decision unless the bound is below about `2^-1017`, and it never
-     changes a returned value. The bits gates are identical (below).
-2. **Exact paths: a range check on the cold path.** The expansion arithmetic is exact when every
-   nonzero input lies in a window: `[2^-480, 2^500]` for the degree-2 predicates (`cross_sign`,
-   `orient2d`, `dot3`), `[2^-300, 2^330]` for `triple`, `[2^-210, 2^250]` for `incircle`.
-   - Inside the window, all inputs are multiples of `2^(lo−52)`, so every product of `deg` of
-     them is a multiple of `2^-1074`. Every rounding error is then representable, even when
-     subnormal, and nothing reaches `2^996` (Veltkamp's split) or overflows.
-   - Outside the window, the sign comes from exact fixed-width integer arithmetic (`Big<N>`, 68
-     to 136 limbs). A double is an integer times `2^-1074`, so each determinant is an integer
-     polynomial.
-   - The returned magnitude is an approximation clamped to `[2^-1074, f64::MAX]`, so it is
-     never 0 or infinite for a nonzero determinant.
-   - Rescaling by a power of two, as suggested, is not enough on its own. Coordinates spanning
-     more than the window can still decide the sign: `orient2d((1e300, 1e300), (2e300, 2e300),
-     (0, 1e-300))` is positive only because of the `1e-300`, and no single scaling keeps both
-     ends exact. The integer path covers every finite input. Inputs that are not finite give
-     NaN, as before.
-3. **Tests in predicates.rs:**
-   - `orient2d_underflow_counterexample`;
-   - `exact_paths_out_of_range`: the underflow and overflow cases from the findings, the
-     mixed-scale case above, `triple`, `dot3` and `incircle` at extreme scales;
-   - `lattice_at_every_scale`: near-degenerate integer configurations for `orient2d`,
-     `cross_sign`, `incircle`, `triple` and `dot3`, scaled by `2^k` for 24 scales from `2^-560`
-     to `2^900`, with exact signs from i128.
+1. **`orient2d` and `dot3` fast filters: an absolute slack.** `bound = BOUND · detsum + SLACK`,
+   with `SLACK = 16 · 2^-1074`: one add, no comparison.
+   - It covers the absolute rounding error, up to `2^-1075`, of a subnormal product, so a fast
+     decision is right for every finite input (`orient2d_fast`, proven).
+   - `cross_sign`'s filter needs nothing: it is sound by monotonicity (proven).
+   - The slack changes no decision unless the bound is below about `2^-1017`, and never a
+     returned value.
+2. **The window is each predicate's precondition, checked by `debug_assert!`.**
+   - **Windows.** The expansion arithmetic is exact when every nonzero input lies in the
+     predicate's window: `[2^-480, 2^500]` for `cross_sign`, `orient2d` and `dot3`,
+     `[2^-300, 2^330]` for `triple`, `[2^-210, 2^250]` for `incircle` and
+     `certainly_in_circle`.
+   - **Why exact.** Inside the window all inputs are multiples of `2^(lo−52)`. So every product
+     of `deg` of them is a multiple of `2^-1074`, and every rounding error is representable,
+     even when subnormal. Nothing reaches `2^996` (Veltkamp's split) or overflows.
+   - **Where the asserts are.** For the degree-2 predicates the assert is on the slow path only,
+     since a fast decision needs no window.
+   - **The amplified predicates.** `triple`, `incircle` and `certainly_in_circle` multiply
+     rounded products, which amplifies an absolute error. For them the window is the whole
+     predicate's precondition, asserted on entry. Inside it no product's rounding error is
+     absolute, so their original filters are sound without slack.
+   - **Release builds.** The asserts compile away, so outside the windows release builds are
+     unchecked, as before the fix. For example `cross_sign(1.4u, u, 1.3u, u)`, `u = 2^-537`,
+     still answers 0.
+3. **NaN fallback, cold path only.** A slow-path result that is NaN, because a product
+   overflowed, is recomputed exactly with fixed-width integers (`Big<N>`, 68 to 136 limbs). A
+   double is an integer times `2^-1074`, so each determinant is an integer polynomial. Overflow
+   now gives the exact sign, with magnitude clamped to `[2^-1074, f64::MAX]`, instead of NaN.
+   On the measured parts this check costs nothing (below).
+4. **Tests in predicates.rs:**
+   - `lattice_at_every_scale` and `degree2_at_window_edges`: near-degenerate integer
+     configurations for all five predicates. The scales run from `2^-210` to `2^228` (inside
+     every window), and from `2^-480` to `2^478` for the degree-2 ones. Exact signs come from
+     i128.
+   - Release-only, since outside the windows: `overflow_is_exact` (the overflow cases, including
+     the mixed-scale `orient2d((1e300, 1e300), (2e300, 2e300), (0, 1e-300)) > 0`), and
+     `orient2d_underflow_counterexample` (the fast filter no longer answers the wrong sign;
+     it now gives 0).
 
-   `check_exact.py`, independent Python rationals on the kernel's answers, gives:
-
-| scale | cases | wrong signs before | wrong signs after |
-|---|---|---|---|
-| 2^-40 … 2^40 | 200,000 | 0 | 0 |
-| 2^-480 … 2^480 | 200,000 | 0 | 0 |
-| 2^-540 … 2^-520 | 200,000 | 369,335 | 0 |
-| 2^-1000 … 2^-900 | 200,000 | — | 0 |
-| 2^505 … 2^515 | 200,000 | 67,546 | 0 |
-| 2^520 … 2^1000 | 200,000 | — | 0 |
-
-Gates, on the final code:
-- **Release tests:** forge-math, forge-geom, forge-bool and forge-model, 402 passed, 0 failed.
-- **Bits:** native and wasm32-wasip1 bits are identical.
-- **fmt and clippy:** clean.
-- **Speed (`GATE_COUNTER=callgrind GATE_REPS=3 tools/speed/gate.sh`):** bits identical and no
-  line REGRESSED (over 0.5%). Against a base run of the unmodified commit, with binaries at
-  equal-length paths (`/home/user/gateA`, `/home/user/gateB`), the lines are *not* all at or
-  below base:
-  - 79 of 98 are higher;
-  - the synthetic parts, which are deterministic, rise by +0.01% to +0.14% (coplanar nary1);
-  - the bench parts, which the gate says move by up to about 0.4% from run to run, rise by up
-    to +0.36% (bracket edit).
-
-  The cost is not the fast filters' extra add. Profiling plate puts it all in `split_face`,
-  which inlines `angle_cmp` → `cross_sign`. Collinear directions take `cross_sign`'s slow path
-  often, and the range check there, plus how the changed slow path compiles inline, costs about
-  95k instructions per regen. Moving the slow paths out of line halved it. Checking the range
-  after the expansion instead cost more (+0.35%).
-  - Getting every line to base would mean dropping the out-of-range fallback from `cross_sign`,
-    leaving `angle_cmp` exact only inside `[2^-480, 2^500]`.
-  - Or it would need a cheaper exactness test than four magnitude checks. I have not found one.
+Gates: pending (the 5-run A/B speed gate and the debug-assertions survey are running; recorded in the next commit).
 
 ## What is proven
 
@@ -128,10 +102,11 @@ proven: `matches_the_kernel` compares the two, bit for bit, on 2,000,000 random 
 near-degenerate inputs at scales from 2^-1000 to 2^1000, and they agree.
 
 The exact paths are translated (`cross_exact`, `sum_into`, `estimate`, `orient2d_adapt`,
-`orient2d_exact`, `cross_two`, `scale_into`), the range check too (`within`), and all are bound
-to the model. They are **not proven**. The integer fallback (`big::*`, verbatim from the kernel)
-is kept opaque and given no meaning in Lean: it is defined to fail, so no theorem can claim
-anything about the inputs that reach it. These paths are tested instead (the tables above).
+`orient2d_exact`, `cross_two`, `scale_into`) and bound to the model. They are **not proven**.
+Their theorem would be stated under the window hypothesis. The integer fallback for NaN results
+(`big::*`, verbatim from the kernel) is kept opaque and given no meaning in Lean: it is defined
+to fail, so no theorem can claim anything about the inputs that reach it. These paths are tested
+instead: the lattice tests, and `check_exact.py`.
 
 ## Findings about the kernel (fixed)
 
@@ -143,14 +118,16 @@ anything about the inputs that reach it. These paths are tested instead (the tab
   - The two rounded products are subnormal and straddle a rounding midpoint in the wrong order.
   - `bound` underflowed to 0, so the test passed.
   - The same flaw was in `dot3`, `triple`, `incircle` and `certainly_in_circle`.
-- **The exact paths answered 0 for nonzero determinants under underflow.** Examples:
+- **The exact paths answer 0 for nonzero determinants under underflow.** This is outside
+  the windows, so it is now a precondition violation, not fixed. Examples:
   - `cross_sign(1.4u, u, 1.3u, u)` with `u = 2^-537`;
   - `orient2d((3t, 5t), (5t, 8t), (0, 0))` with `t = 2^-540`.
 
   `two_product`'s error term is not representable when the product underflows.
 - **They answered NaN when a product overflowed.** For example
-  `cross_sign(1e300, 1e10, 1e300, 1e9)`. Callers read NaN as "collinear".
-- All of these are now fixed, and tested (above).
+  `cross_sign(1e300, 1e10, 1e300, 1e9)`. Callers read NaN as "collinear". This is now fixed by
+  the NaN fallback.
+- The fast-filter underflow (`orient2d`, `dot3`) is fixed for every finite input.
 
 ## What blocked, and what kernel/ would need
 
