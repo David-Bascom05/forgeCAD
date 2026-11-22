@@ -35,7 +35,7 @@ structure Rel where
   b1 : Nat
   deriving Repr, Inhabited, DecidableEq
 
-/-- Allen's relations of A to B, in the order `forge_exact::Rel::ALL` lists them. -/
+/-- Allen's relations of A to B, in the order `forge_coverage::Rel::ALL` lists them. -/
 def Rel.all : List Rel :=
   [⟨"before", 0, 1, 2, 3⟩, ⟨"meets", 0, 1, 1, 2⟩, ⟨"overlaps", 0, 2, 1, 3⟩,
    ⟨"finishedBy", 0, 2, 1, 2⟩, ⟨"contains", 0, 3, 1, 2⟩, ⟨"starts", 0, 1, 0, 2⟩,
@@ -66,7 +66,7 @@ def Pat.rel (p : Pat) : Nat → Rel | 0 => p.rx | 1 => p.ry | _ => p.rz
 
 def Pat.label (p : Pat) : String := s!"{p.rx.name}/{p.ry.name}/{p.rz.name} {p.op.name}"
 
-/-- Every pattern, in the order `forge_exact::Pattern::all` runs them. -/
+/-- Every pattern, in the order `forge_coverage::Pattern::all` runs them. -/
 def Pat.all : List Pat :=
   [Op.union, .subtract, .intersect].flatMap fun op =>
     Rel.all.flatMap fun x => Rel.all.flatMap fun y => Rel.all.map fun z => ⟨x, y, z, op⟩
@@ -491,7 +491,7 @@ def octant (v : V3) (d : Nat) : Option V3 :=
   | _, _, _ => none
 
 /-- The kept octants about each vertex and the others each face-connected: the boundary is a
-manifold there (the same test as `forge_exact::manifold_octants`). -/
+manifold there (the same test as `forge_coverage::manifold_octants`). -/
 def manifoldAt (k : V3 → Bool) (v : V3) : Bool :=
   let set := (List.range 8).map fun d => match octant v d with | some c => k c | none => false
   let conn := fun (want : Bool) =>

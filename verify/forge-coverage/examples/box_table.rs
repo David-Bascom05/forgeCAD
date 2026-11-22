@@ -1,7 +1,7 @@
 //! Every consistent sign pattern of the box-box family through the kernel, against the exact answer.
-//! cargo run --release -p forge-exact --example box_table -- [unit] [--all]
+//! cargo run --release -p forge-coverage --example box_table -- [unit] [--all]
 //! One line per pattern the kernel gets wrong (with --all, every pattern): label, kernel, exact.
-use forge_exact::{Pattern, exact, kernel};
+use forge_coverage::{Pattern, exact, kernel};
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();

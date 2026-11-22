@@ -2,8 +2,8 @@
 //! the kernel reads inconsistently, one minimal case a band, each `#[ignore]`d with its site while
 //! it fails, and the band's edges pinned by passing tests on both sides.
 use forge_bool::Op;
-use forge_exact::tilt::{family, reading};
-use forge_exact::{Outcome, Pattern, Rel, band_boxes, block, exact_boxes, kernel_on};
+use forge_coverage::tilt::{family, reading};
+use forge_coverage::{Outcome, Pattern, Rel, band_boxes, block, exact_boxes, kernel_on};
 
 fn pattern(x: &str, y: &str, z: &str, op: Op) -> Pattern {
     Pattern {

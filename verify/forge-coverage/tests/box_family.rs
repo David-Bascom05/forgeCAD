@@ -3,7 +3,7 @@
 //! The Lean model (research/kernel-audit/coverage/Coverage/Theorems.lean, `gaps`) lists the same
 //! eight gaps these tests mark.
 use forge_bool::Op;
-use forge_exact::{Outcome, Pattern, Rel, exact, kernel};
+use forge_coverage::{Outcome, Pattern, Rel, exact, kernel};
 
 const UNIT: f64 = 10.0;
 
@@ -61,7 +61,7 @@ fn corner_touch(names: [&str; 3]) {
 // `touches` (2048-2101), which finds nothing between two planes. The corner's two vertices merge in
 // `place_cuts` (4561-4644, an alias), `split_old_pinches` (631-653, from `general` 571) gives each fan
 // its own vertex again, and a pinched body that `check` accepts is returned.
-// The part: verify/forge-exact/parts/corner_touch.fg (the scoreboard's plane_plane/vertex_on_vertex/Add).
+// The part: verify/forge-coverage/parts/corner_touch.fg (the scoreboard's plane_plane/vertex_on_vertex/Add).
 macro_rules! gap {
     ($name:ident, $x:literal, $y:literal, $z:literal) => {
         #[test]

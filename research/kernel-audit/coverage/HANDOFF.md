@@ -56,7 +56,7 @@ stretch's middle sample adds one free sign (`sv`). It never matters (`sample_ine
     parts/corner_touch.fg` reports "valid".
 - **The real kernel agrees with the model pattern for pattern** on all 6591, including the gap set,
   at units 0.001, 1, 7.3, 10 and 1000 (`box_table`).
-- Tests: `cargo test --release -p forge-exact` passes 2 tests and ignores 8:
+- Tests: `cargo test --release -p forge-coverage` passes 2 tests and ignores 8:
   - `box_family_off_the_gaps_is_exact` pins the 6583;
   - `corner_touch_today_makes_a_pinched_body` pins today's behaviour;
   - the 8 `corner_touch_*` tests are `#[ignore = "coverage gap: … at boolean.rs:1724 …"]` and fail
@@ -105,11 +105,11 @@ lake build Coverage.Theorems           # ~20 min throttled: four native_decide e
 ```
 Rust (shared target dir saves disk):
 ```
-CARGO_TARGET_DIR=/home/user/forgeCAD/target cargo build --release -p forge-exact --examples
+CARGO_TARGET_DIR=/home/user/forgeCAD/target cargo build --release -p forge-coverage --examples
 target/release/examples/box_table 10 [--all]
 BAND_AXES=0 target/release/examples/box_band 0.9 1.5 4.8 4.9
 FORGE_DEBUG=1 target/release/examples/box_one equal/meets/equal union 1.5 0
-cargo test --release -p forge-exact [-- --ignored]
+cargo test --release -p forge-coverage [-- --ignored]
 ```
 Aeneas (clones at /home/user/aeneasverif/{aeneas@2e3d448, charon@b23c297}, shallow):
 - `aeneas/setup.sh` does three things:

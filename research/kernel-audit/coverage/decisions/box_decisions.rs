@@ -2,10 +2,10 @@
 //! claude/repo-review-mbdrlj-decisions): for each delta, every pattern with coincident ends moved
 //! as box_band moves them, and the decision pairs that disagree, tallied separately over the runs
 //! that fail (neither reading) and the runs that pass, plus the retry rungs each set reaches.
-//! cargo run --release -p forge-exact --features decisions --example box_decisions -- [delta ...]
+//! cargo run --release -p forge-coverage --features decisions --example box_decisions -- [delta ...]
 //! BAND_AXES as in box_band. ONE="x/y/z op" restricts to one pattern and prints each example.
 use forge_bool::decisions;
-use forge_exact::{Outcome, Pattern, block, exact, exact_boxes, kernel_on};
+use forge_coverage::{Outcome, Pattern, block, exact, exact_boxes, kernel_on};
 use forge_math::tol::LINEAR;
 use std::collections::BTreeMap;
 

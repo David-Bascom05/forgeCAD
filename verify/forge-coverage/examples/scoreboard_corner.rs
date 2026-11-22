@@ -1,7 +1,7 @@
 //! The reliability scoreboard's `plane_plane/vertex_on_vertex/Add` (invalid there) against the bare
 //! boolean on the same two boxes (valid): which step of forge-model's regen makes the difference.
-//! cargo run --release -p forge-exact --example scoreboard_corner [-- NAME]
-use forge_exact::{Outcome, block, kernel_on};
+//! cargo run --release -p forge-coverage --example scoreboard_corner [-- NAME]
+use forge_coverage::{Outcome, block, kernel_on};
 use forge_model::adversarial::{canonical, degenerate_parts};
 
 fn main() {
@@ -41,6 +41,6 @@ fn main() {
     let a = block([[-20.0, 20.0], [-20.0, 20.0], [-20.0, 0.0]], 1);
     let b = block([[20.0, 30.0], [20.0, 30.0], [0.0, 10.0]], 2);
     let got = kernel_on(a, b, forge_bool::Op::Union);
-    println!("bare boolean on forge-exact's blocks: {}", got.word());
+    println!("bare boolean on forge-coverage's blocks: {}", got.word());
     let _ = Outcome::Empty;
 }

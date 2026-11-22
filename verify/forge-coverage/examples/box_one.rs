@@ -1,7 +1,7 @@
 //! One pattern, B's ends coincident with A's moved by delta x LINEAR on the given axes.
-//! cargo run --release -p forge-exact --example box_one -- x/y/z op delta axes   (e.g. meets/overlaps/equal union 1.5 0)
+//! cargo run --release -p forge-coverage --example box_one -- x/y/z op delta axes   (e.g. meets/overlaps/equal union 1.5 0)
 use forge_bool::Op;
-use forge_exact::{Pattern, Rel, block, exact, exact_boxes, kernel_on};
+use forge_coverage::{Pattern, Rel, block, exact, exact_boxes, kernel_on};
 use forge_math::tol::LINEAR;
 
 fn main() {

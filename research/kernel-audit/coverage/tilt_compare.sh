@@ -1,8 +1,8 @@
 #!/bin/sh
-# The tilted-plane model (Coverage/Tilt.lean) against the kernel (verify/forge-exact tilt_sweep) on
+# The tilted-plane model (Coverage/Tilt.lean) against the kernel (verify/forge-coverage tilt_sweep) on
 # the angle grid results/tilt-grid.txt (whole numbers of 1e-13 rad): prints the (family, theta)
 # gaps only one side has. Run from this directory after `lake build tilt` and
-# `cargo build --release -p forge-exact --example tilt_sweep`.
+# `cargo build --release -p forge-coverage --example tilt_sweep`.
 set -e
 R=results
 U=$(cat $R/tilt-grid.txt)

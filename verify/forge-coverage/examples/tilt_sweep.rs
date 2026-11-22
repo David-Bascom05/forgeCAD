@@ -9,11 +9,11 @@
 //! family here is convex-convex) and the theta = 0 configuration taken exactly. A run passes when
 //! it is a valid body whose volume is within 1e-6 relative of a reading (1e-9 absolute), or Empty
 //! where a reading is (volume below 1e-9).
-//! cargo run --release -p forge-exact --example tilt_sweep -- [family ...]   (THETAS="1e-7 2e-7")
+//! cargo run --release -p forge-coverage --example tilt_sweep -- [family ...]   (THETAS="1e-7 2e-7")
 use forge_bool::Op;
-use forge_exact::Outcome;
-use forge_exact::kernel_on;
-use forge_exact::tilt::{FAMILIES, family, reading};
+use forge_coverage::Outcome;
+use forge_coverage::kernel_on;
+use forge_coverage::tilt::{FAMILIES, family, reading};
 
 fn fine(got: &Outcome, vols: &[f64]) -> bool {
     match got {
@@ -81,7 +81,7 @@ fn main() {
                     };
                     println!(
                         "FAIL\t{fam}\t{}\t{th:e}\t{w}\texact {:.9} flat {:.9}",
-                        forge_exact::op_name(op),
+                        forge_coverage::op_name(op),
                         vols[0],
                         vols[1]
                     );
@@ -90,7 +90,7 @@ fn main() {
             }
             eprintln!(
                 "{fam:>10} {:>9} {}",
-                forge_exact::op_name(op),
+                forge_coverage::op_name(op),
                 line.iter().collect::<String>()
             );
         }

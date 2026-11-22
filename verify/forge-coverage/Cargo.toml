@@ -1,5 +1,5 @@
 [package]
-name = "forge-exact"
+name = "forge-coverage"
 description = "The boolean's coverage: every consistent sign pattern of a flat-face family run through the kernel, against the exact answer"
 version.workspace = true
 edition.workspace = true

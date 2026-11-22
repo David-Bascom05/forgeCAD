@@ -20,7 +20,7 @@ NEAR is 10⁹, 1e-3 is 10¹⁰; a length L·θ is within LINEAR = 1e-5 mm when L
 step `clear_step` tries at a half chord of 5 or more is 0.05·2⁻¹¹ mm, so a strip whose width at
 the probe, (L/2)·θ, is under twice that (L·θ < 10¹²/1024 = 976 562 500) has no clear probe.
 
-**The families** (verify/forge-exact/src/tilt.rs) are convex pairs whose tilted face crosses the
+**The families** (verify/forge-coverage/src/tilt.rs) are convex pairs whose tilted face crosses the
 other body's face along a line at distance `reach` from the region's far corners. In those with
 `flush` sides, B's side faces lie on A's: the strip of B's side between the crossing line and A's
 edge is a region of width (reach/2)·θ at its probe.

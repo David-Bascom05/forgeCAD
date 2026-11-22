@@ -9,7 +9,7 @@ relaxedAutoImplicit = false
 [[lean_lib]]
 name = "Coverage"
 
-# prints the model's outcome for every pattern, for comparison with the kernel (verify/forge-exact)
+# prints the model's outcome for every pattern, for comparison with the kernel (verify/forge-coverage)
 [[lean_exe]]
 name = "coverage"
 root = "Main"

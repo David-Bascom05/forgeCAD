@@ -1,9 +1,9 @@
 //! The box-box family inside the tolerance band: every pattern with coincident ends, B's coincident
 //! ends moved by delta x LINEAR (the same delta on every axis), against the two exact readings.
-//! cargo run --release -p forge-exact --example box_band -- [delta ...]
+//! cargo run --release -p forge-coverage --example box_band -- [delta ...]
 //! A line per run whose outcome is neither reading's (or is not a valid body or a clean refusal).
 use forge_bool::Op;
-use forge_exact::{Outcome, Pattern, block, exact, kernel_on};
+use forge_coverage::{Outcome, Pattern, block, exact, kernel_on};
 use forge_math::tol::LINEAR;
 
 fn main() {
@@ -50,7 +50,7 @@ fn main() {
             let got = kernel_on(block(a, 1), block(b, 2), p.op);
             // the readings: the coincident pattern, and the boxes as they now are taken exactly
             let coincident = exact(&p, unit);
-            let apart = forge_exact::exact_boxes(a, b, p.op);
+            let apart = forge_coverage::exact_boxes(a, b, p.op);
             let fine = got.agrees(&coincident)
                 || got.agrees(&apart)
                 || (matches!(got, Outcome::Ok(_)) && near_volume(&got, &[&coincident, &apart]));
