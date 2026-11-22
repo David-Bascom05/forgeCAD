@@ -2196,6 +2196,346 @@ fn shell(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
 
 // ---- anchors ----------------------------------------------------------------------------
 
+/// `P[k]`: copy `k` of pattern `P` as the part stands (0 the original: the copied features'
+/// faces), or a hole's place `k` (in the order of its points). Copies are named from the
+/// pattern's id and their place, so `edges(of: P[2], ..)` names one copy's edges apart from the
+/// others' however alike they are.
+pub(crate) fn instance(ev: &mut Eval, f: &Rc<Feat>, k: i64, span: Span) -> R<Value> {
+    let wrong = || Error::WrongType {
+        span,
+        what: "indexing (a pattern's copies, a hole's places)",
+        want: Ty::List,
+        found: Ty::Feature,
+    };
+    if !matches!(f.kind, "pattern" | "hole") {
+        return Err(wrong());
+    }
+    if !ev.b.building || ev.b.built() <= f.idx {
+        return Ok(Value::Unresolved);
+    }
+    let hist = ev.b.history();
+    let (places, src) = match &ev.b.features[f.idx] {
+        Feature::Pattern { of, layout } => {
+            let n = forge_model::placements(hist, f.idx, layout).map_or(0, |p| p.len());
+            (n + 1, Some(of.clone()))
+        }
+        Feature::Hole(h) => (
+            match &h.places {
+                Some(forge_model::At::Sketch { at, .. }) => at.len().max(1),
+                _ => 1,
+            },
+            None,
+        ),
+        // a pattern or hole on other bodies (`bodies:`)
+        _ => return Err(wrong()),
+    };
+    let out = || Error::IndexOut {
+        span,
+        index: k,
+        len: places,
+    };
+    let k = usize::try_from(k).map_err(|_| out())?;
+    if k >= places {
+        return Err(out());
+    }
+    let n = ev.b.built();
+    let names: Vec<Name> = match (&src, k) {
+        // the original: what the copied features made
+        (Some(forge_model::Source::Features(src)), 0) => {
+            let origin = ev.b.origin(n);
+            let body = ev.b.body().expect("built");
+            body.face_ids()
+                .map(|g| body.face(g).name)
+                .filter(|m| origin.get(m).is_some_and(|o| src.iter().any(|s| o.contains(s))))
+                .collect()
+        }
+        (Some(forge_model::Source::Body), 0) => {
+            let origin = ev.b.origin(n);
+            let body = ev.b.body().expect("built");
+            body.face_ids()
+                .map(|g| body.face(g).name)
+                .filter(|m| origin.get(m).is_some_and(|o| o.iter().any(|&i| i < f.idx)))
+                .collect()
+        }
+        _ => {
+            let key = format!("instances {} {}", f.hid, ev.b.stages[f.idx].id);
+            let (fi, hid) = (f.idx, f.hid);
+            let before = f.idx.checked_sub(1).and_then(|j| ev.b.stages.get(j)).cloned();
+            let made = match ev.b.memo_kept::<Rc<Vec<Vec<Name>>>>(&key) {
+                Some(m) => m,
+                None => {
+                    let hist = ev.b.history();
+                    let m = Rc::new(instance_names(
+                        hist,
+                        fi,
+                        hid,
+                        src.as_ref(),
+                        places,
+                        before.as_deref(),
+                    ));
+                    ev.b.memo_keep(key, m.clone());
+                    m
+                }
+            };
+            let wholes: std::collections::HashSet<Name> =
+                made.get(k).into_iter().flatten().map(|m| m.whole()).collect();
+            let body = ev.b.body().expect("built");
+            let mut out: Vec<Name> = body
+                .face_ids()
+                .map(|g| body.face(g).name)
+                .filter(|m| wholes.contains(&m.whole()))
+                .collect();
+            // faces of the copy joined into one with others' (one plane across them)
+            for &(piece, whole) in &body.joins.aliases {
+                if wholes.contains(&piece.whole()) && !out.contains(&whole) {
+                    out.push(whole);
+                }
+            }
+            out.retain(|m| body.face_ids().any(|g| body.face(g).name == *m));
+            out
+        }
+    };
+    let body = ev.b.body().expect("built");
+    let ids: Vec<FaceId> = body
+        .face_ids()
+        .filter(|&g| names.contains(&body.face(g).name))
+        .collect();
+    let plane = match &ids[..] {
+        [one] => face_plane(body, *one),
+        _ => None,
+    };
+    Ok(Value::Faces(Rc::new(Faces {
+        names,
+        owner: format!("{}[{k}]", f.id),
+        role: Role::Faces,
+        plane,
+    })))
+}
+
+/// `P[k].NAME`: on a copy or a place, a member of the faces it holds (`edges`, `plane`, ..);
+/// else on a pattern's copy the copied feature's anchor (`anchor` of it) carried onto the copy
+/// (`pegs[2].end`, `pegs[2].side(c)`), and on a hole's place the hole's anchor at that place
+/// alone (`bolt[1].rim`).
+pub(crate) fn copy_anchor(
+    ev: &mut Eval,
+    pf: &Rc<Feat>,
+    k: i64,
+    name: &str,
+    span: Span,
+    anchor: &dyn Fn(&mut Eval, &Rc<Feat>) -> R<Value>,
+) -> R<Value> {
+    let inst = instance(ev, pf, k, span)?;
+    let Value::Faces(fs) = &inst else {
+        return Ok(inst);
+    };
+    if name == "faces" {
+        return Ok(inst);
+    }
+    if ["axis", "plane", "center", "normal", "edges"].contains(&name) {
+        return member(ev, inst, name, span);
+    }
+    let k = k as usize;
+    let fs = fs.clone();
+    let only = |ev: &mut Eval, v: Value| -> R<Value> {
+        let Some(body) = ev.b.body() else {
+            return Ok(Value::Unresolved);
+        };
+        Ok(match v {
+            Value::Faces(a) => Value::Faces(Rc::new(Faces {
+                names: a.names.iter().filter(|n| fs.names.contains(n)).copied().collect(),
+                owner: format!("{}[{k}]", pf.id),
+                role: a.role,
+                plane: a.plane,
+            })),
+            Value::Edges(es) => {
+                let ids: HashMap<Name, EdgeId> = body.edge_ids().map(|e| (body.edge(e).name, e)).collect();
+                Value::Edges(Rc::new(
+                    es.iter()
+                        .filter(|n| {
+                            ids.get(n).is_some_and(|&e| {
+                                select::faces_of_edge(body, e)
+                                    .iter()
+                                    .any(|&f| fs.names.contains(&body.face(f).name))
+                            })
+                        })
+                        .copied()
+                        .collect(),
+                ))
+            }
+            o => o,
+        })
+    };
+    if pf.kind == "hole" {
+        if name == "rim"
+            && let Some((o, d)) = pf.axis
+        {
+            return rim(ev, pf, o, d, span, Some(&fs.names));
+        }
+        let v = anchor(ev, pf)?;
+        return only(ev, v);
+    }
+    // the copied features' anchor: of each that has it (a side of an entity of its profile,
+    // one feature's; a role, every feature's that has one), together
+    let src = ev.copied.get(&pf.hid).cloned().unwrap_or_default();
+    let mut got: Option<(Vec<Name>, Role)> = None;
+    let mut first_err = None;
+    for s in &src {
+        match anchor(ev, s) {
+            Ok(Value::Faces(a)) => {
+                let g = got.get_or_insert_with(|| (vec![], a.role));
+                g.0.extend(a.names.iter().copied());
+            }
+            Ok(Value::Unresolved) => return Ok(Value::Unresolved),
+            Ok(o) if src.len() == 1 && k == 0 => return Ok(o),
+            Ok(o) => {
+                return Err(Error::WrongType {
+                    span,
+                    what: "an anchor on a pattern's copy (faces: edges as FACES.edges)",
+                    want: Ty::Faces,
+                    found: o.ty(),
+                });
+            }
+            Err(e) => {
+                first_err.get_or_insert(e);
+            }
+        }
+    }
+    let Some((names, role)) = got else {
+        return Err(first_err.unwrap_or(Error::UnknownMember {
+            span,
+            ty: Ty::Faces,
+            member: name.into(),
+        }));
+    };
+    let names = if k == 0 {
+        names
+    } else {
+        copy_names(ev, pf, k, &names)
+    };
+    let plane = ev.b.body().and_then(|body| {
+        let ids: Vec<FaceId> = body
+            .face_ids()
+            .filter(|&g| names.contains(&body.face(g).name))
+            .collect();
+        match ids[..] {
+            [one] => face_plane(body, one),
+            _ => None,
+        }
+    });
+    Ok(Value::Faces(Rc::new(Faces {
+        names,
+        owner: format!("{}[{k}]", pf.id),
+        role,
+        plane,
+    })))
+}
+
+/// The faces of pattern `pf`'s copy `k` (from 1) that are the copies of the faces `names` of
+/// the original: each named as the kernel names a copy (`forge_model::instance_name`), pieces and
+/// joins followed.
+fn copy_names(ev: &Eval, pf: &Feat, k: usize, names: &[Name]) -> Vec<Name> {
+    let Some(body) = ev.b.body() else {
+        return vec![];
+    };
+    let key = match &ev.b.features[pf.idx] {
+        Feature::Pattern {
+            layout: forge_model::Layout::Linear { first, .. },
+            ..
+        } => {
+            let rows = first.count.max(1);
+            [(k % rows) as u64, (k / rows) as u64]
+        }
+        _ => [k as u64, 0],
+    };
+    let mut from: std::collections::HashSet<Name> = names.iter().map(|n| n.whole()).collect();
+    for &(piece, whole) in &body.joins.aliases {
+        if names.contains(&whole) {
+            from.insert(piece.whole());
+        }
+    }
+    let to: std::collections::HashSet<Name> = from
+        .iter()
+        .map(|&n| forge_model::instance_name(pf.hid, key, n).whole())
+        .collect();
+    let mut out: Vec<Name> = body
+        .face_ids()
+        .map(|g| body.face(g).name)
+        .filter(|m| to.contains(&m.whole()))
+        .collect();
+    for &(piece, whole) in &body.joins.aliases {
+        if to.contains(&piece.whole())
+            && !out.contains(&whole)
+            && body.face_ids().any(|g| body.face(g).name == whole)
+        {
+            out.push(whole);
+        }
+    }
+    out
+}
+
+/// Each place's face names as the kernel names them (place 0 the original), from the tools it
+/// moves into place: a hole's places, or a pattern's copies of its features (each copy of the
+/// whole part named from the part before it, `before`).
+fn instance_names(
+    hist: forge_model::History<'_>,
+    i: usize,
+    hid: u64,
+    src: Option<&forge_model::Source>,
+    places: usize,
+    before: Option<&crate::build::Stage>,
+) -> Vec<Vec<Name>> {
+    let faces = |b: &Body| -> Vec<Name> { b.face_ids().map(|g| b.face(g).name).collect() };
+    match src {
+        Some(forge_model::Source::Body) => {
+            let names = before
+                .and_then(|b| b.work())
+                .map(|b| faces(&b))
+                .unwrap_or_default();
+            let Feature::Pattern { layout, .. } = &hist[i] else {
+                return vec![];
+            };
+            let rows = match layout {
+                forge_model::Layout::Linear { first, .. } => first.count.max(1),
+                _ => usize::MAX,
+            };
+            let mut out = vec![names.clone()];
+            for k in 1..places {
+                let key = if rows == usize::MAX {
+                    [k as u64, 0]
+                } else {
+                    [(k % rows) as u64, (k / rows) as u64]
+                };
+                out.push(
+                    names
+                        .iter()
+                        .map(|&m| forge_model::instance_name(hid, key, m))
+                        .collect(),
+                );
+            }
+            out
+        }
+        _ => {
+            let Ok(tools) = forge_model::feature_tools(hist, i) else {
+                return vec![];
+            };
+            let mut out: Vec<Vec<Name>> = match src {
+                // the copies alone, each the copied features' tools in turn
+                Some(_) => {
+                    let per = tools.len() / (places - 1).max(1);
+                    let mut o = vec![vec![]];
+                    for c in tools.chunks(per.max(1)) {
+                        o.push(c.iter().flat_map(|t| faces(&t.0)).collect());
+                    }
+                    o
+                }
+                None => tools.iter().map(|t| faces(&t.0)).collect(),
+            };
+            out.resize(places, vec![]);
+            out
+        }
+    }
+}
+
 pub(crate) fn face_plane(body: &Body, f: FaceId) -> Option<Frame> {
     let face = body.face(f);
     match &face.surface {
@@ -2354,7 +2694,7 @@ pub fn member(ev: &mut Eval, v: Value, name: &str, span: Span) -> R<Value> {
                 "edges" => Ok(feature_edges(ev, &[f.idx])),
                 "rim" if f.axis.is_some() => {
                     let (o, d) = f.axis.expect("checked");
-                    rim(ev, f, o, d, span)
+                    rim(ev, f, o, d, span, None)
                 }
                 _ => crate::wired::feature_member(ev, f, name, span).unwrap_or_else(|| Err(unknown(&v))),
             }
@@ -2718,14 +3058,18 @@ pub(crate) fn feature_edges(ev: &mut Eval, idx: &[usize]) -> Value {
 /// A hole's or bore's rim: the loop of edges nearest its mouth where its faces meet faces it did
 /// not make (any curve: a hole drilled into a blend has a mouth that is no circle). A mouth a
 /// later fillet rounded has only smooth edges there: chamfering it is the typed `MouthRounded`.
-fn rim(ev: &mut Eval, f: &Feat, o: Point3, d: UnitVec3, span: Span) -> R<Value> {
+/// `only`: the mouth among these faces of the feature's (one place of a hole: `bolt[1].rim`).
+fn rim(ev: &mut Eval, f: &Feat, o: Point3, d: UnitVec3, span: Span, only: Option<&[Name]>) -> R<Value> {
     if !ev.b.building || ev.b.built() <= f.idx {
         return Ok(Value::Unresolved);
     }
     let n = ev.b.built();
     let origin = ev.b.origin(n);
     let body = ev.b.body().expect("built");
-    let made = |x: FaceId| origin.get(&body.face(x).name).is_some_and(|o| o.contains(&f.idx));
+    let made = |x: FaceId| {
+        let n = body.face(x).name;
+        origin.get(&n).is_some_and(|o| o.contains(&f.idx)) && only.is_none_or(|ns| ns.contains(&n))
+    };
     // the boundary: one face the feature's, the other not
     let mut bound: Vec<(EdgeId, f64)> = vec![];
     for e in body.edge_ids() {
@@ -2830,11 +3174,17 @@ fn selection(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<V
     if a.poisoned() {
         return Ok(Value::Unresolved);
     }
+    // faces given (an anchor, a pattern's copy): the faces among them, or their edges
+    let mut given: Option<Vec<Name>> = None;
     let of: Option<Vec<Rc<Feat>>> = match a.opt("of") {
         None => None,
         Some(Value::Faces(fs)) if name == "edges" => {
             let v = member(ev, Value::Faces(fs), "edges", span)?;
             return filter_edges(ev, &a, v);
+        }
+        Some(Value::Faces(fs)) => {
+            given = Some(fs.names.clone());
+            None
         }
         Some(v) => Some(feats_of(v, a.span("of"))?),
     };
@@ -2909,6 +3259,9 @@ fn selection(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<V
         let mut fs: Vec<FaceId> = body.face_ids().collect();
         if let Some(of) = &of {
             fs.retain(|&f| made(f, of));
+        }
+        if let Some(g) = &given {
+            fs.retain(|&f| g.contains(&body.face(f).name));
         }
         if let Some(s) = shape {
             fs.retain(|&f| select::surface_kind(&body.face(f).surface) == s);

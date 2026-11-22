@@ -348,6 +348,9 @@ pub struct Eval<'s> {
     pub(crate) total: Rc<std::cell::Cell<(usize, usize)>>,
     /// How deep in calls this evaluation starts (a component's, its caller's depth).
     pub(crate) depth0: usize,
+    /// Each pattern's copied features, by its id in the history: what an anchor on one of its
+    /// copies (`pegs[2].end`) is carried from.
+    pub(crate) copied: HashMap<u64, Vec<Rc<Feat>>>,
 }
 
 #[derive(Clone)]
@@ -427,6 +430,7 @@ impl<'s> Eval<'s> {
             comp_path: String::new(),
             total: Default::default(),
             depth0: 0,
+            copied: HashMap::new(),
         }
     }
 
@@ -1631,6 +1635,9 @@ impl<'s> Eval<'s> {
                 if let Value::Asm(a) = &ov {
                     return crate::asm::index(a, iv.v.round() as i64, e.span);
                 }
+                if let Value::Feature(f) = &ov {
+                    return crate::builtins::instance(self, f, iv.v.round() as i64, e.span);
+                }
                 if let Value::Map(m) = &ov {
                     let k = iv.v.round() as i64;
                     return m
@@ -1738,7 +1745,33 @@ impl<'s> Eval<'s> {
         arith(op, &x, &y, span, a.span, b.span)
     }
 
+    /// `P[k]` where P is a pattern or a hole: P and k, for an anchor on that copy or place.
+    fn copy_of(&mut self, o: &Expr) -> R<Option<(Rc<Feat>, i64)>> {
+        let ExprKind::Index(p, i) = &o.kind else {
+            return Ok(None);
+        };
+        // a name: a lookup, so every other index (`plan.outline[0]`) costs nothing more
+        if !matches!(p.kind, ExprKind::Name(_)) {
+            return Ok(None);
+        }
+        let Value::Feature(pf) = self.expr(p)? else {
+            return Ok(None);
+        };
+        if !matches!(pf.kind, "pattern" | "hole") {
+            return Ok(None);
+        }
+        let k = self.num(i, "an index")?;
+        self.observe(&k);
+        Ok(Some((pf, k.v.round() as i64)))
+    }
+
     fn attr(&mut self, o: &Expr, name: &str, span: Span) -> R<Value> {
+        // an anchor on a pattern's copy or a hole's place: `pegs[2].end`, `bolt[1].rim`
+        if let Some((pf, k)) = self.copy_of(o)? {
+            return crate::builtins::copy_anchor(self, &pf, k, name, span, &|ev, f| {
+                crate::builtins::member(ev, Value::Feature(f.clone()), name, span)
+            });
+        }
         // a qualified param in a definition: an explicit link to another feature's param
         if self.ctx.in_param
             && let Some(path) = expr_path(o)
@@ -1780,6 +1813,29 @@ impl<'s> Eval<'s> {
         if let ExprKind::Attr(o, m) = &f.kind
             && m == "side"
         {
+            // on a pattern's copy: the copied feature's side carried onto it (`pegs[2].side(c)`)
+            if let Some((pf, k)) = self.copy_of(o)?
+                && let [a] = args
+            {
+                let Value::Ent(e) = self.expr(&a.value)? else {
+                    return Err(Error::WrongType {
+                        span: a.value.span,
+                        what: "side(entity)",
+                        want: Ty::Entity,
+                        found: Ty::Feature,
+                    });
+                };
+                return crate::builtins::copy_anchor(self, &pf, k, "side", span, &|ev, f| {
+                    if f.prof.is_none() {
+                        return Err(Error::UnknownMember {
+                            span,
+                            ty: Ty::Feature,
+                            member: "side".into(),
+                        });
+                    }
+                    crate::builtins::side(ev, f, &e, span)
+                });
+            }
             let ov = self.expr(o)?;
             if let Value::Feature(feat) = &ov
                 && feat.prof.is_some()

@@ -28,7 +28,8 @@ round = fillet(edges(of: boss, crease: "convex"), r)
 ```
 
 Select in the part's own text: `edges(of: boss, crease: "convex")`, `edges(between: (a, b))`,
-anchors like `base.end`, `base.side(plan.outline[2])`, `hole.bore`. Features: extrude cut revolve
+anchors like `base.end`, `base.side(plan.outline[2])`, `hole.bore`; one copy of a pattern or one
+place of a hole: `edges(of: bolts[1], crease: "convex")`. Features: extrude cut revolve
 sweep loft coil thread hole fillet chamfer shell draft rib pattern, bodies, sheet metal, components
 and assemblies (`help forge`).
 
@@ -36,18 +37,21 @@ Tools (CLI `forgecad TOOL F ..`, or MCP). Replies are typed JSON with `--json` o
 ```
 build F                     every feature's status and dims, then the part: volume, faces, valid
 check F                     the same, stopping before the kernel
-edit F 'OP'..               typed ops, all applied or none; replies with the build
+edit F 'OP'.. [--base V]    typed ops, all applied or none; replies with the build and the
+                            file's `version`; with --base V, refused (StaleBase) unless still at V
 diff A B [volume]           what B changed from A: features, params, faces by name, volume
 query F params|features|stat|check
-query F SEL                 @handles: `faces plane normal +z top`, `edges circle r=2.5`
+query F SEL [--at FEAT]     @handles: `faces plane normal +z top`, `edges of boss convex`;
+                            --at: the part as it stood after that feature (measure, render too)
 query F holes|aligned|interference|faces | section z=67 | gap A B | frame SKETCH
 measure F REF [REF] | mass | wall [exact]
 render F [VIEW] [--labels SEL] [--px N] [-o F.png]
 export F [ap214|ap242] [tol MM] [-o F.step] | dxf [SHEET] | dwg [SHEET]
 help forge
 ```
-SEL (`help selectors`): `faces|edges|verts`, then filters: plane cyl cone .. | line circle | convex
-concave | normal +z | along +x | r=3 | longer 5 | top bottom left right front back | near X Y Z.
+SEL: `faces|edges|verts`, then filters: plane cyl cone .. | line circle | convex concave |
+normal +z | along +x | r=3 | longer 5 | of FEAT | between FEAT FEAT | top bottom left right front
+back | near X Y Z.
 REF: `@handle` or `(selector)`.
 
 Ops, as a reply's `fixes` give them; send a fix back unchanged:
@@ -58,7 +62,9 @@ Ops, as a reply's `fixes` give them; send a fix back unchanged:
 {"op":"Rename","from":"round","to":"blend"}
 ```
 Also AddLocalParam, MakeShared, SplitInstance, DeleteFeature, ReplaceFeature, MoveFeature,
-LiftLiteral, SetProperty. A refusal is a typed error and nothing is written. Errors and lints
+LiftLiteral, SetProperty; `{"op":"Undo"}` and `{"op":"Redo"}` step through the file's edits. A
+refusal is a typed error and nothing is written; a round too big comes back with a SetParam fix to
+the largest that builds. Errors and lints
 carry spans and `fixes`; a loose number is a lint with a LiftLiteral fix.
 
 A `.fg` file is plain text: write a new part whole, then `build` it; hand edits are fine. An
