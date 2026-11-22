@@ -566,7 +566,6 @@ arch = extrude(s, 5)
 /// Half an ellipse closed by its major axis. The .fc part:
 ///   extrude 3 loop ell 0 0 6 2 0 0 180 line -6 0 6 0
 #[test]
-#[ignore = "gap: a Forge sketch has no elliptical arc (.fc loop `ell CX CY A B ROT START SWEEP`)"]
 fn half_an_ellipse() {
     let v = volume(
         "sketch s(on: xy) {
@@ -582,7 +581,6 @@ half = extrude(s, 3)
 /// A degree-1 B-spline on knots: a square 4 across, as one curve. The .fc part:
 ///   extrude 2 loop spline 1 0 0 4 0 4 4 0 4 0 0 knots 0 0 1 2 3 4 4
 #[test]
-#[ignore = "gap: a Forge spline takes no degree or knots (.fc `spline D P.. knots K..`); `cv: true` is cubic with four points or more"]
 fn a_degree_one_spline_on_knots() {
     let v = volume(
         "sketch s(on: xy) {
@@ -592,6 +590,154 @@ square = extrude(s, 2)
 ",
     );
     assert!((v - 32.0).abs() < 1e-9, "{v}");
+}
+
+/// Every free curve a .fc loop wrote, the same solid in Forge (each volume the .fc part's):
+///   extrude 2 loop spline 2 0 0 5 8 10 0 weights 1 3 1 line 10 0 0 0                       71.303242796
+///   extrude 2 loop spline 2 0 0 3 6 7 6 10 0 knots 0 0 0 1 3 3 3 weights 1 2 0.5 1 line 10 0 0 0   70.997473014
+///   extrude 2 loop thru 0 0 5 4 10 0 from 1 2 to 1 -2 line 10 0 0 0                          58.575207876
+///   extrude 2 loop thru 0 0 5 4 10 0 from 3 0 line 10 0 0 0                                  27.851074305
+///   extrude 3 loop ell 0 0 6 2 30 0 -180 line -5.196152422706632 -3 5.196152422706632 3      56.548667765
+///   extrude 5 rrect -20 -10 40 20 4                                                         3931.327412287
+/// each 4 faces and 6 edges but the rounded rectangle's 10 and 24.
+#[test]
+fn every_fc_loop_curve() {
+    let arch = |curve: &str| {
+        format!("sketch s(on: xy) {{\n  c = {curve}\n  l = line((10, 0), (0, 0))\n}}\narch = extrude(s, 2)\n")
+    };
+    let x = 5.196152422706632;
+    for (src, want, faces) in [
+        (
+            arch("spline([(0, 0), (5, 8), (10, 0)], degree: 2, weights: [1, 3, 1])"),
+            71.303242796,
+            4,
+        ),
+        (
+            arch(
+                "spline([(0, 0), (3, 6), (7, 6), (10, 0)], degree: 2, knots: [0, 0, 0, 1, 3, 3, 3], weights: [1, 2, 0.5, 1])",
+            ),
+            70.997473014,
+            4,
+        ),
+        (
+            arch("spline([(0, 0), (5, 4), (10, 0)], start_slope: (1, 2), end_slope: (1, -2))"),
+            58.575207876,
+            4,
+        ),
+        (
+            arch("spline([(0, 0), (5, 4), (10, 0)], start_slope: (3, 0))"),
+            27.851074305,
+            4,
+        ),
+        (
+            format!(
+                "sketch s(on: xy) {{
+  e = earc(center: (0, 0), major: ({x}, 3), b: 2, from: ({x}, 3), to: (-{x}, -3), cw: true)
+  l = line((-{x}, -3), ({x}, 3))
+}}
+half = extrude(s, 3)
+"
+            ),
+            56.548667765,
+            4,
+        ),
+        (
+            "sketch s(on: xy) {
+  h = hull(disc((-16, -6), 4), disc((16, -6), 4), disc((16, 6), 4), disc((-16, 6), 4))
+}
+e = extrude(s, 5)
+"
+            .to_string(),
+            3931.327412287,
+            10,
+        ),
+    ] {
+        let b = built(&src);
+        assert!(forge_topo::check(&b.body).is_empty(), "{src}");
+        let v = b.volume();
+        assert!((v - want).abs() < 1e-6 * want, "{src}: {v}, .fc {want}");
+        assert_eq!(b.body.compact().faces.len(), faces, "{src}");
+    }
+}
+
+/// A spline's degree, knots and weights are checked where they are written, each a typed error.
+#[test]
+fn spline_forms_refused() {
+    for (curve, kind) in [
+        (
+            "spline([(0, 0), (5, 8), (10, 0)], degree: 2, knots: [0, 0, 1, 1])",
+            "BadValue",
+        ),
+        (
+            "spline([(0, 0), (5, 8), (10, 0)], degree: 2, knots: [0, 0, 0, 2, 1, 1])",
+            "BadValue",
+        ),
+        ("spline([(0, 0), (5, 8), (10, 0)], degree: 3)", "BadValue"),
+        (
+            "spline([(0, 0), (5, 8), (10, 0)], weights: [1, 0, 1])",
+            "BadValue",
+        ),
+        ("spline([(0, 0), (5, 8), (10, 0)], weights: [1, 1])", "BadValue"),
+        (
+            "spline([(0, 0), (5, 8), (10, 0)], degree: 2, closed: true)",
+            "NotWith",
+        ),
+        (
+            "spline([(0, 0), (5, 8), (10, 0)], degree: 2, cv: false)",
+            "NotWith",
+        ),
+        (
+            "spline([(0, 0), (5, 8), (10, 0)], start_slope: (1, 0), cv: true)",
+            "NotWith",
+        ),
+        (
+            "spline([(0, 0), (5, 8), (10, 0)], start_slope: (1, 0), degree: 2)",
+            "NotWith",
+        ),
+        (
+            "spline([(0, 0), (5, 8), (10, 0)], start_slope: (0, 0))",
+            "BadValue",
+        ),
+    ] {
+        let src = format!(
+            "sketch s(on: xy) {{\n  c = {curve}\n  l = line((10, 0), (0, 0))\n}}\na = extrude(s, 2)\n"
+        );
+        let msg = common::refused(&src);
+        assert!(msg.contains(kind), "{curve}: {msg}");
+    }
+}
+
+/// Loops that cross are refused at the sketch (the .fc part
+/// `extrude 5 circle 0 0 40 circle 20 0 30` was the kernel's HoleOutside); loops that touch at a
+/// corner go on to the kernel, which says where the solid pinches (as the .fc part
+/// `extrude 5 rect 0 0 20 20 poly 10 0 15 10 5 10` did: ZeroThickness at (10, 0)).
+#[test]
+fn crossing_loops_refused_touching_judged() {
+    let msg = common::refused(
+        "sketch s(on: xy) {
+  c1 = circle((0, 0), 40)
+  c2 = circle((20, 0), 30)
+}
+e = extrude(s, 5)
+",
+    );
+    assert!(
+        msg.contains("SketchProfile") && msg.contains("self intersection"),
+        "{msg}"
+    );
+    let (run, _) = common::run(
+        "sketch s(on: xy) {
+  r = rect(corner: (0, 0), size: (20, 20))
+  t = poly([(10, 0), (15, 10), (5, 10)])
+}
+e = extrude(s, 5)
+",
+    );
+    let e = format!("{:?}", run.errors.first().expect("refused"));
+    assert!(
+        e.contains("ZeroThickness") && e.contains("x: 10.0, y: 0.0"),
+        "{e}"
+    );
 }
 
 /// Sketches solved before they are extruded: a spline's end held 40 along from its start, an

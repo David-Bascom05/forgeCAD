@@ -43,6 +43,7 @@ pub mod store;
 pub mod syntax;
 pub mod thermo;
 pub mod thermo_kept;
+pub mod tightbox;
 pub mod undo;
 pub mod uses;
 pub mod validity;
@@ -219,6 +220,8 @@ pub struct Measure {
     pub problems: usize,
     /// The check problems, typed, each on its body and the faces and edges it names.
     pub invalid: Vec<validity::Invalid>,
+    /// The part's box, tight (`tightbox`): its edges', and the meshed points of a face that
+    /// bulges past them.
     pub bbox: [f64; 6],
     /// The finished body's exact mass properties (unit density), when it was measured whole.
     pub mass: Option<forge_topo::mass::MassProps>,
@@ -463,8 +466,8 @@ fn run_once(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
     let t3 = Instant::now();
     let built_all = opts.build && ev.errors.is_empty() && ev.b.built() == ev.b.features.len();
     // the whole part's mass (its measure) and each solid's (its physical properties) worked out
-    // side by side, each as it is alone
-    let (whole_mass, solid_masses) = {
+    // side by side, each as it is alone, and the part's tight box beside them
+    let ((whole_mass, whole_box), solid_masses) = {
         let checks = built_all && opts.checks;
         let whole = (checks && ev.b.measured().is_none())
             .then(|| ev.b.body())
@@ -482,14 +485,16 @@ fn run_once(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
         let (w, e, o) = if forge_geom::budget::left() == u64::MAX {
             std::thread::scope(|s| {
                 let w = whole.map(|b| s.spawn(move || mass(b)));
+                let bx = whole.map(|b| s.spawn(move || tightbox::tight_box(b)));
                 let o: Vec<_> = owed.iter().map(|x| s.spawn(move || mass(&x.2).ok())).collect();
                 let e = each_mass();
-                (w.map(joined), e, o.into_iter().map(joined).collect::<Vec<_>>())
+                let w = (w.map(joined), bx.map(joined));
+                (w, e, o.into_iter().map(joined).collect::<Vec<_>>())
             })
         } else {
             // in the order they were asked for: the modelled parts' in the run, then the rest
             let o: Vec<_> = owed.iter().map(|x| mass(&x.2).ok()).collect();
-            let w = whole.map(mass);
+            let w = (whole.map(mass), whole.map(tightbox::tight_box));
             (w, each_mass(), o)
         };
         for ((i, key, _), m) in owed.into_iter().zip(o) {
@@ -504,7 +509,7 @@ fn run_once(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
         (false, _) => None,
         (true, Some(m)) => Some(m),
         (true, None) => {
-            let m = measure(&mut ev, whole_mass);
+            let m = measure(&mut ev, whole_mass, whole_box);
             if let Some(m) = &m {
                 ev.b.keep_measure(m.clone());
             }
@@ -686,10 +691,11 @@ fn joined<T>(h: std::thread::ScopedJoinHandle<'_, T>) -> T {
     h.join().unwrap_or_else(|p| std::panic::resume_unwind(p))
 }
 
-/// The finished part's measure; `mass`, its mass if worked out already.
+/// The finished part's measure; `mass` and `bbox`, its mass and box if worked out already.
 fn measure(
     ev: &mut Eval,
     mass: Option<Result<forge_topo::mass::MassProps, forge_topo::mass::MassError>>,
+    bbox: Option<forge_math::Box3>,
 ) -> Option<Measure> {
     let invalid = validity::problems(ev);
     let body = ev.b.body()?;
@@ -699,9 +705,7 @@ fn measure(
         None => forge_topo::mass::mass(body),
     }
     .ok()?;
-    let bb = body
-        .face_ids()
-        .fold(forge_math::Box3::EMPTY, |b, f| b.hull(&body.face_box(f)));
+    let bb = bbox.unwrap_or_else(|| tightbox::tight_box(body));
     Some(Measure {
         volume: m.volume,
         area: m.area,

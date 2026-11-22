@@ -554,7 +554,6 @@ extrude2 = extrude(s3, 10)
 ///   extrude 5 circle 0 0 40 circle 0 -30 10
 /// refused by the kernel as ZeroThickness at (0, -40, ..), on the line that made it.
 #[test]
-#[ignore = "gap: Forge refuses a sketch whose loops touch (SketchProfile: self intersection) before the kernel sees it; .fc handed it on and the kernel's refusal said where"]
 fn a_pinched_disc_says_where() {
     let e = refusal(
         r#"sketch s1(on: xy) {
@@ -574,7 +573,6 @@ extrude1 = extrude(s1, 5)
 ///   extrude 4 rect -60 -60 120 120 / the same cut                                       builds
 ///   extrude 4 rect -60 -60 120 120 / extrude add 6 at 0 0 4 circle 0 0 30 circle 0 -20 10   ZeroThickness
 #[test]
-#[ignore = "gap: Forge refuses a sketch whose loops touch (SketchProfile: self intersection); .fc let the kernel judge the result, which builds the cuts and refuses the boss"]
 fn a_touching_profile_is_judged_by_its_result() {
     let pi = forge_math::dmath::PI;
     let v = builds(
@@ -1242,10 +1240,12 @@ bore = hole(at: top.p, d: 8, depth: thru)
 }
 
 /// The box an arc in a tilted plane reports is the arc's own, not the bound of it: a sweep over a
-/// long arc read 0.85 too tall (volume and area right all along).
+/// long arc read 0.85 too tall, and the part's box (a hull of its faces' bounds) 12 too tall
+/// (volume and area right all along). `Measure.bbox` is tight: the edges' own boxes, and the
+/// meshed points of a face that bulges past them (a dome's top).
 #[test]
 fn the_box_of_a_tilted_arc_is_tight() {
-    let b = built(
+    let m = common::holds(
         r#"sketch sec(on: xz) {
   c = circle((0, 0), 10)
 }
@@ -1260,23 +1260,16 @@ sketch rail(on: yz) {
 }
 tube = sweep(sec.c, along: rail.route)
 "#,
-    )
-    .body
-    .compact();
-    // the part's box as the app reads it: the mesh's points (a dome's top) and its edges' own boxes
-    let mesh = tessellate(&b, &Quality::default()).expect("meshes");
-    let mut z = mesh.positions.iter().map(|p| p.z).fold(f64::MIN, f64::max);
-    for e in b.edge_ids() {
-        let hi = match &b.edge(e).curve {
-            forge_geom::Curve::Line(_) => b.edge_box(e).z.hi,
-            forge_geom::Curve::Circle(c) => c.tight_box(b.edge(e).range).z.hi,
-            _ => b.edge_points(e, 64).iter().map(|p| p.z).fold(f64::MIN, f64::max),
-        };
-        z = z.max(hi);
-    }
+    );
     // the second arc's centre, up its radius, and the profile's
     let top = -12.453333233923 + 30.0 + 10.0;
-    assert!((z - top).abs() < 0.03, "{z} vs {top}");
+    assert!((m.bbox[5] - top).abs() < 0.03, "{:?} vs {top}", m.bbox);
+    // the profile's circle, x from -10 to 10
+    assert!(
+        (m.bbox[0] + 10.0).abs() < 1e-6 && (m.bbox[3] - 10.0).abs() < 1e-6,
+        "{:?}",
+        m.bbox
+    );
 }
 
 /// Equal crossing holes, the second's wall tangent to the first's cap: the curve touches the cap's rim
@@ -1570,9 +1563,8 @@ round = fillet(edges(between: (b.start, b.side(s.r[1]))) + edges(between: (b.sta
 }
 
 /// To the next face backwards, as forwards with the frame flipped: a floor, a wall and a roof, and a
-/// block from mid air down to the floor or up to the roof. (Forge's add goes forwards only, so the
-/// block down is drawn on a flipped plane; the .fc `extrude next back xy at 0 0 25 ..` gave the
-/// same.)
+/// block from mid air down to the floor or up to the roof: down on a flipped plane, and on the
+/// plane facing up with `flip: true` (the .fc `extrude next back xy at 0 0 25 ..`), the same.
 #[test]
 fn to_next_backwards() {
     let full = 60.0 * 60.0 * 10.0 * 2.0 + 5.0 * 60.0 * 40.0;
@@ -1634,6 +1626,35 @@ extrude4 = extrude(s7, next)
 "#,
     );
     assert!((up - (full + 100.0 * 25.0)).abs() < 1e-3 * up, "{up}");
+    let back = builds(
+        r#"sketch s1(on: xy) {
+  r1 = rect(corner: (-30, -30), size: (60, 60))
+}
+extrude1 = extrude(s1, 10)
+sketch d2(on: offset(xy, 10)) {
+  p = pt(0, 0)
+}
+sketch s3(on: plane(at: d2.p, normal: Z, x: X)) {
+  r1 = rect(corner: (-30, -30), size: (5, 60))
+}
+extrude2 = extrude(s3, 50)
+sketch d4(on: offset(xy, 50)) {
+  p = pt(0, 0)
+}
+sketch s5(on: plane(at: d4.p, normal: Z, x: X)) {
+  r1 = rect(corner: (-30, -30), size: (60, 60))
+}
+extrude3 = extrude(s5, 10)
+sketch d6(on: offset(xy, 25)) {
+  p = pt(0, 0)
+}
+sketch s7(on: plane(at: d6.p, normal: Z, x: X)) {
+  r1 = rect(corner: (-5, -5), size: (10, 10))
+}
+extrude4 = extrude(s7, next, flip: true)
+"#,
+    );
+    assert!((back - flip).abs() < 1e-9 * flip, "{back} vs {flip}");
     // a cut from inside, backwards up to the floor's top
     let cut = builds(
         r#"sketch s1(on: xy) {
