@@ -49,6 +49,7 @@ pub mod undo;
 pub mod uses;
 pub mod validity;
 pub mod values;
+pub mod verts;
 pub mod vtools;
 pub mod wired;
 pub mod work;

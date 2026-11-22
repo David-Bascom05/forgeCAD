@@ -20,7 +20,7 @@ use forge_math::rng::Rng;
 use forge_math::{Box3, Point3, Vec3, dmath};
 use forge_mesh::{Quality, tessellate};
 use forge_model::{Feature, Part, Solid};
-use forge_topo::{Body, EdgeId, FaceId, Name};
+use forge_topo::{Body, EdgeId, FaceId, Name, VertexId};
 use std::collections::{BTreeMap, HashMap};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
@@ -616,6 +616,83 @@ impl G<'_> {
         }
         None
     }
+    /// The labels (by index) that made a face round vertex `v`.
+    fn makers_round(&self, v: VertexId) -> Vec<usize> {
+        let b = self.body;
+        let mut out: Vec<usize> = b
+            .edge_ids()
+            .filter(|&e| b.edge(e).start == v || b.edge(e).end == v)
+            .flat_map(|e| select::faces_of_edge(b, e))
+            .flat_map(|f| self.makers_of(f))
+            .collect();
+        out.sort_unstable();
+        out.dedup();
+        out
+    }
+    /// Vertices as `verts(of:, extreme:)` finds them.
+    fn verts_sel(&self, of: Option<usize>, extreme: Option<Vec3>) -> Vec<VertexId> {
+        let b = self.body;
+        let mut vs = select::verts(b);
+        if let Some(l) = of {
+            vs.retain(|&v| self.makers_round(v).contains(&l));
+        }
+        if let Some(d) = extreme {
+            let at = |v: VertexId| (b.vertex(v).point - Point3::ORIGIN).dot(d);
+            let top = vs.iter().map(|&v| at(v)).fold(f64::NEG_INFINITY, f64::max);
+            vs.retain(|&v| at(v) >= top - 1e-6 * top.abs().max(1.0));
+        }
+        vs
+    }
+    /// A selection that finds exactly vertex `v` (the kernel follows it through edits), if one
+    /// does.
+    fn sel_vert(&mut self, v: VertexId) -> Option<String> {
+        let b = self.body;
+        let mut ofs: Vec<Option<usize>> = vec![None];
+        ofs.extend(self.makers_round(v).into_iter().map(Some));
+        let mut tries = Vec::new();
+        for &of in &ofs {
+            for (d, dn) in DIRS {
+                tries.push((of, d, dn.to_string()));
+            }
+        }
+        let start = self.r.below(tries.len());
+        tries.rotate_left(start);
+        let write = |g: &Self, of: Option<usize>, dn: String| match of {
+            Some(l) => format!("verts(of: {}, extreme: {dn})", g.st.labels[l].name),
+            None => format!("verts(extreme: {dn})"),
+        };
+        for (of, d, dn) in tries {
+            if self.verts_sel(of, Some(d)) == [v] {
+                return Some(write(self, of, dn));
+            }
+        }
+        // no world axis singles it out: the way from the middle of its like out to it
+        for &of in &ofs {
+            let like = self.verts_sel(of, None);
+            let pts: Vec<Point3> = like.iter().map(|&x| b.vertex(x).point).collect();
+            let Some(d) = outward(&pts, b.vertex(v).point) else {
+                continue;
+            };
+            if self.verts_sel(of, Some(d)) == [v] {
+                let dn = self.dir(d);
+                return Some(write(self, of, dn));
+            }
+        }
+        None
+    }
+    /// A vertex of the part, as a selection the kernel follows (a helper point exactly on it
+    /// where no selection singles it out).
+    fn vert(&mut self) -> Option<String> {
+        let vs = select::verts(self.body);
+        let v = self.pick_named(&vs)?;
+        match self.sel_vert(v) {
+            Some(s) => Some(s),
+            None => {
+                let p = self.body.vertex(v).point;
+                Some(self.pt_exact(p))
+            }
+        }
+    }
     /// A selection over the whole part that finds between 1 and `most` edges.
     fn found_edges(&self, es: &[EdgeId], most: usize) -> bool {
         !es.is_empty() && es.len() <= most
@@ -704,17 +781,10 @@ impl G<'_> {
         None
     }
     /// An end for a solid travelling from `at` along `dir`: a work plane ahead (made here if
-    /// there is none), or a face of an earlier feature; and an offset past it.
-    /// (`faces`: a face only. TODO(.fg gap): a sweep or coil ends on no work plane in the
-    /// language, where the .fc generator ended them on planes: two thirds of its `upto` ends.)
-    fn upto(
-        &mut self,
-        at: Point3,
-        dir: Vec3,
-        out: &mut Vec<String>,
-        faces: bool,
-    ) -> Option<(String, String)> {
-        if faces || self.one_in(3) {
+    /// there is none), or (a third of the time) a face of an earlier feature; and an offset past
+    /// it.
+    fn upto(&mut self, at: Point3, dir: Vec3, out: &mut Vec<String>) -> Option<(String, String)> {
+        if self.one_in(3) {
             let ls = self.solids();
             let l = self.pick(&ls)?;
             let il = self.label_index(&l)?;
@@ -970,9 +1040,10 @@ fn extrude(g: &mut G) -> Option<Vec<String>> {
         1 => format!("two({}, {})", n(depth), n(g.range(0.5, 3.0))),
         // thru, thru back (the sketch turned over below), thru both
         2 | 3 if op == "cut" => ["thru", "thru back", "thru_all"][g.r.below(3)].to_string(),
-        4 => "next".to_string(),
+        // next, or next the other way (`flip`: the kernel's ToNext reversed)
+        4 => ["next", "next back"][g.r.below(2)].to_string(),
         5 | 6 => {
-            let (to, off) = g.upto(start, z, &mut out, false)?;
+            let (to, off) = g.upto(start, z, &mut out)?;
             if off.is_empty() {
                 format!("upto({to})")
             } else {
@@ -984,6 +1055,10 @@ fn extrude(g: &mut G) -> Option<Vec<String>> {
     // a cut runs against its sketch's normal; through the other way, the sketch turned over
     let back = ext == "thru back";
     let ext = if back { "thru".to_string() } else { ext };
+    let (ext, flip) = match ext.as_str() {
+        "next back" => ("next".to_string(), ", flip: true"),
+        _ => (ext, ""),
+    };
     let sz = if op == "cut" && !back { -z } else { z };
     let on = match g.planes().last() {
         Some(p) if g.one_in(8) => {
@@ -997,10 +1072,10 @@ fn extrude(g: &mut G) -> Option<Vec<String>> {
     let sk = format!("S{}", &l[1..]);
     out.push(sketch_block(&sk, &on, &g.loops(s)));
     let call = match op {
-        "cut" => format!("cut({sk}, {ext})"),
-        "keep" => format!("intersect({sk}, {ext})"),
-        "new" => format!("extrude({sk}, {ext}, new: true)"),
-        _ => format!("extrude({sk}, {ext})"),
+        "cut" => format!("cut({sk}, {ext}{flip})"),
+        "keep" => format!("intersect({sk}, {ext}{flip})"),
+        "new" => format!("extrude({sk}, {ext}, new: true{flip})"),
+        _ => format!("extrude({sk}, {ext}{flip})"),
     };
     out.push(format!("{l} = {call}"));
     g.made(&l, "extrude", true, op == "new");
@@ -1008,14 +1083,8 @@ fn extrude(g: &mut G) -> Option<Vec<String>> {
 }
 
 fn revolve(g: &mut G) -> Option<Vec<String>> {
-    // TODO(.fg gap): the language's revolve has no keep (intersect), no symmetric or two-sided
-    // turn and no turn up to a plane (`upto`), all of which the .fc generator drew (keep: 1 in 40
-    // of its revolves; sym, two and to a plane 1 in 8 each). Drawn here as an add and a plain
-    // angle until the language has them.
-    let op = match g.op() {
-        "cut" => "cut",
-        _ => "add",
-    };
+    let mut out = Vec::new();
+    let op = g.op();
     let (at, _) = g.spot();
     let rad = g.size(0.04, 0.2);
     let tube = rad * g.range(0.1, 0.5);
@@ -1059,17 +1128,35 @@ fn revolve(g: &mut G) -> Option<Vec<String>> {
         }
     };
     let turn = match g.r.below(8) {
-        0..=3 => format!(", angle: {}", deg(g.range(30.0, 300.0))),
+        0 => format!(", angle: {}", deg(g.range(30.0, 300.0))),
+        1 => format!(", angle: sym({})", deg(g.range(20.0, 150.0))),
+        2 => format!(
+            ", angle: two({}, {})",
+            deg(g.range(20.0, 150.0)),
+            deg(g.range(10.0, 90.0))
+        ),
+        3 => {
+            // a plane through the standing axis (the sketch's y), turned about it
+            let a = g.range(0.3, 2.8);
+            let (s, c) = dmath::sin_cos(a);
+            let w = g.label();
+            let pl = g.plane(at, Vec3::new(rd(-s), rd(c), 0.0), None);
+            out.push(format!("{w} = workplane(on: {pl})"));
+            g.made(&w, "workplane", false, false);
+            let off = if g.one_in(3) { ", 5deg" } else { "" };
+            format!(", angle: upto({w}{off})")
+        }
         _ => String::new(),
     };
     let lift = at.z + g.range(-tube, tube);
     let on = g.plane(Point3::new(at.x, at.y, lift), -Vec3::Y, Some(Vec3::X));
     let l = g.label();
     let sk = format!("S{}", &l[1..]);
-    let out = vec![
-        sketch_block(&sk, &on, &[prof, axis.to_string()]),
-        format!("{l} = revolve({sk}.o, axis: {sk}.ax{turn}{})", G::op_arg(op)),
-    ];
+    out.push(sketch_block(&sk, &on, &[prof, axis.to_string()]));
+    out.push(format!(
+        "{l} = revolve({sk}.o, axis: {sk}.ax{turn}{})",
+        G::op_arg(op)
+    ));
     g.made(&l, "revolve", true, false);
     Some(out)
 }
@@ -1116,12 +1203,7 @@ fn fillet(g: &mut G) -> Option<Vec<String>> {
         }
     }
     // a law's start, or a corner's setback, at a vertex of the part
-    let verts = select::verts(g.body);
-    let vert = |g: &mut G| -> Option<String> {
-        let v = g.pick_named(&verts)?;
-        let p = g.body.vertex(v).point;
-        Some(g.pt_exact(p))
-    };
+    let vert = |g: &mut G| g.vert();
     let mut opts = String::new();
     // (a law's start belongs to the one-group form; a group carries its own)
     if g.one_in(6)
@@ -1151,9 +1233,6 @@ fn fillet(g: &mut G) -> Option<Vec<String>> {
 }
 
 fn chamfer(g: &mut G) -> Option<Vec<String>> {
-    // TODO(.fg gap): the language's chamfer is one distance only; the .fc generator drew two
-    // distances and a distance and an angle, each measured on a face of the edge, a quarter of
-    // its chamfers each. Draw them once the language has those forms.
     // chamfers run along lines and circles
     let creases: Vec<_> = g
         .creases()
@@ -1162,8 +1241,22 @@ fn chamfer(g: &mut G) -> Option<Vec<String>> {
         .collect();
     let e = g.pick_named(&creases)?;
     let len = select::length(g.body, e);
-    let d = n((len * 0.3).min(g.bx.diagonal() * 0.04) * g.range(0.1, 1.0) + 0.01);
+    let d = |g: &mut G| n((len * 0.3).min(g.bx.diagonal() * 0.04) * g.range(0.1, 1.0) + 0.01);
     let mut sel = g.sel_edge(e, false)?;
+    let size = match g.r.below(4) {
+        k @ (0 | 1) => {
+            // the face the first distance is measured on: one of the edge's own
+            let fs = select::faces_of_edge(g.body, e);
+            let f = g.pick_named(&fs)?;
+            let face = g.sel_face(f, false, None)?;
+            if k == 0 {
+                format!("{}, d2: {}, face: {face}", d(g), d(g))
+            } else {
+                format!("{}, angle: {}, face: {face}", d(g), deg(g.range(20.0, 70.0)))
+            }
+        }
+        _ => d(g),
+    };
     if g.one_in(2)
         && let Some((more, _)) = g.edges(2)
     {
@@ -1173,7 +1266,7 @@ fn chamfer(g: &mut G) -> Option<Vec<String>> {
     }
     let l = g.label();
     g.made(&l, "chamfer", false, false);
-    Some(vec![format!("{l} = chamfer({sel}, {d})")])
+    Some(vec![format!("{l} = chamfer({sel}, {size})")])
 }
 
 fn shell(g: &mut G) -> Option<Vec<String>> {
@@ -1250,7 +1343,7 @@ fn hole(g: &mut G) -> Option<Vec<String>> {
         0 | 1 => ("thru".to_string(), true),
         2 => ("next".to_string(), false),
         3 => {
-            let (to, off) = g.upto(at, -nrm, &mut out, false)?;
+            let (to, off) = g.upto(at, -nrm, &mut out)?;
             let off = if off.is_empty() { off } else { format!(", {off}") };
             (format!("upto({to}{off})"), false)
         }
@@ -1419,7 +1512,7 @@ fn sweep(g: &mut G) -> Option<Vec<String>> {
     let ends = match g.r.below(4) {
         0 => format!(", extend: ({}, {})", n(g.range(0.0, 5.0)), n(g.range(0.0, 5.0))),
         1 => {
-            let (to, off) = g.upto(a + t * l1, t, &mut out, true)?;
+            let (to, off) = g.upto(a + t * l1, t, &mut out)?;
             if off.is_empty() {
                 format!(", upto: {to}")
             } else {
@@ -1482,7 +1575,7 @@ fn coil(g: &mut G) -> Option<Vec<String>> {
         2 => format!("pitch: {}, height: {}", n(pitch), n(pitch * turns)),
         _ => {
             let dir = if down { -Vec3::Z } else { Vec3::Z };
-            let (to, off) = g.upto(at, dir, &mut out, true)?;
+            let (to, off) = g.upto(at, dir, &mut out)?;
             let off = if off.is_empty() {
                 off
             } else {
@@ -1896,17 +1989,13 @@ fn move_faces(g: &mut G) -> Option<Vec<String>> {
     Some(vec![format!("{k} = move_faces(faces(of: {l}), {how})")])
 }
 
-/// A face, edge or vertex an earlier statement made: `all` faces, edges or a vertex (as a
-/// helper point exactly on it), `shape` its kind. TODO(.fg gap): the language references no
-/// vertex of the part (work features, fillet starts and setbacks, a pattern's points take a
-/// point); the .fc generator named vertices (`verts near ..`), followed by the kernel through
-/// edits. A helper sketch's point at the vertex stands in.
+/// A face, edge or vertex an earlier statement made: `all` faces, edges or a vertex (a
+/// `verts(..)` selection, the kernel following it through edits), `shape` its kind.
 fn made_ref(g: &mut G, all: &str, shape: &str) -> Option<String> {
     if all == "verts" {
         let vs = select::verts(g.body);
         let v = g.pick_named(&vs)?;
-        let p = g.body.vertex(v).point;
-        return Some(g.pt_exact(p));
+        return g.sel_vert(v);
     }
     let ls = g.solids();
     let l = g.pick(&ls)?;
@@ -1940,8 +2029,8 @@ fn workaxis(g: &mut G) -> Option<Vec<String>> {
 fn workpoint(g: &mut G) -> Option<Vec<String>> {
     let by = match g.r.below(3) {
         0 => format!("at: {}", made_ref(g, "verts", "")?),
-        // (a circle's centre is no reference the language follows: its edge's middle. TODO(.fg gap))
-        1 => format!("mid: {}", made_ref(g, "edges", "circle")?),
+        // a circle edge's centre
+        1 => format!("at: {}", made_ref(g, "edges", "circle")?),
         _ => format!("mid: {}", made_ref(g, "edges", "line")?),
     };
     let l = g.label();
