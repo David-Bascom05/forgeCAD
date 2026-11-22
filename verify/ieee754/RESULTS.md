@@ -81,7 +81,8 @@ cases.
 See `research/kernel-audit/float-verification.md`. In brief:
 - the Aeneas translation of `cross_sign` and `orient2d`, from `kernel/forge-math/src/predicates.rs`,
   runs on this model;
-- the fast path of `cross_sign` is proven right for every finite input;
-- the fast path of `orient2d` is proven right when nothing underflows, and is wrong otherwise
-  (counterexample included);
-- the exact paths are translated but not yet proven.
+- the fast paths of both are proven right for every finite input;
+- for `orient2d` that needed the fix this work made to the kernel: an absolute slack in the bound.
+  The underflow counterexample shows the old test was wrong;
+- the exact paths are translated but not yet proven;
+- the same work fixed the kernel's exact paths for out-of-range inputs.

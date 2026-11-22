@@ -12,7 +12,7 @@ trap 'rm -rf "$work"' EXIT
 (
   cd "$here/predicates"
   PATH=$C/bin:$HOME/.cargo/bin:$PATH RUSTUP_TOOLCHAIN=nightly-2026-09-17 CARGO_TARGET_DIR=$work/target \
-    charon cargo --preset=aeneas --dest-file "$work/fv_predicates.llbc"
+    charon cargo --preset=aeneas --opaque 'fv_predicates::big' --dest-file "$work/fv_predicates.llbc"
 )
 "$A/src/_build/default/main.exe" -backend lean -split-files "$work/fv_predicates.llbc" -dest "$work/out"
 # Aeneas writes Lean modules (`module`, `public import`); the IEEE 754 package is not one, and a

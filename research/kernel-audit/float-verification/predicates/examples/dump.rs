@@ -3,8 +3,8 @@
 //! cases fail the fast test and go through the kernel's adaptive and exact paths.
 //!
 //! `cargo run --release --example dump -- N SCALE_LO SCALE_HI`
-use forge_math::predicates::{cross_sign, orient2d};
 use forge_math::Point2;
+use forge_math::predicates::{cross_sign, orient2d};
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -18,7 +18,7 @@ fn main() {
         s ^= s << 17;
         s
     };
-    let mut unit = |next: &mut dyn FnMut() -> u64| (next() >> 11) as f64 / (1u64 << 53) as f64;
+    let unit = |next: &mut dyn FnMut() -> u64| (next() >> 11) as f64 / (1u64 << 53) as f64;
     for _ in 0..n {
         let scale = 2f64.powi(lo + (next() % (hi - lo + 1) as u64) as i32);
         let a = Point2::new((unit(&mut next) - 0.5) * scale, (unit(&mut next) - 0.5) * scale);
@@ -47,8 +47,18 @@ fn main() {
         let x = cross_sign(p, q, r, w);
         println!(
             "{:x} {:x} {:x} {:x} {:x} {:x} {:x} {:x} {:x} {:x} {:x} {:x}",
-            a.x.to_bits(), a.y.to_bits(), b.x.to_bits(), b.y.to_bits(), c.x.to_bits(), c.y.to_bits(),
-            o.to_bits(), p.to_bits(), q.to_bits(), r.to_bits(), w.to_bits(), x.to_bits()
+            a.x.to_bits(),
+            a.y.to_bits(),
+            b.x.to_bits(),
+            b.y.to_bits(),
+            c.x.to_bits(),
+            c.y.to_bits(),
+            o.to_bits(),
+            p.to_bits(),
+            q.to_bits(),
+            r.to_bits(),
+            w.to_bits(),
+            x.to_bits()
         );
     }
 }

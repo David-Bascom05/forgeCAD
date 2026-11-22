@@ -20,7 +20,7 @@ set_option maxRecDepth 2048
 namespace fv_predicates
 
 /-- [fv_predicates::Point2]
-    Source: 'src/lib.rs', lines 21:0-24:1
+    Source: 'src/lib.rs', lines 23:0-26:1
     Visibility: public -/
 structure Point2 where
   x : F64

@@ -12,6 +12,8 @@
 //! 4. `exact_diffs` (a const-generic array with `iter_mut().zip`) is written for the four
 //!    differences `orient2d_exact` asks it for.
 //! 5. `Point2` is a local struct with the same fields.
+//! 6. The out-of-range fallback (`Big`, `cross_big`, `orient2d_big`) is the kernel's code
+//!    verbatim, in module `big`, which Aeneas keeps opaque.
 //!
 //! `tests` checks every function against the kernel's, bit for bit.
 
@@ -47,6 +49,163 @@ pub fn ccw_bound_b() -> f64 {
 #[inline]
 pub fn cross_bound() -> f64 {
     f64::from_bits(0x3cb0000000000002)
+}
+
+/// `SLACK = 16 · 2^-1074`
+#[inline]
+pub fn slack() -> f64 {
+    f64::from_bits(16)
+}
+/// `DEG2_LO = 2^-480`
+#[inline]
+pub fn deg2_lo() -> f64 {
+    f64::from_bits((1023 - 480) << 52)
+}
+/// `DEG2_HI = 2^500`
+#[inline]
+pub fn deg2_hi() -> f64 {
+    f64::from_bits((1023 + 500) << 52)
+}
+
+/// `within`: the kernel's `v.iter().all(..)`, as a loop.
+pub fn within(v: &[f64], lo: f64, hi: f64) -> bool {
+    let mut i = 0;
+    while i < v.len() {
+        let x = v[i];
+        if !(x.eq(&zero()) || (x.abs().ge(&lo) && x.abs().le(&hi))) {
+            return false;
+        }
+        i += 1;
+    }
+    true
+}
+
+/// The kernel's exact integer fallback, verbatim. `gen.sh` keeps this module opaque
+/// (`charon --opaque fv_predicates::big`): Aeneas does not translate it, and the Lean side
+/// gives it no meaning (`FunsExternal.lean`), so no theorem can say anything about inputs
+/// that reach it.
+pub mod big {
+    use super::Point2;
+
+    /// Exact signed integers of `N` 64-bit limbs (two's complement, little-endian): the last resort
+    /// for inputs outside the expansion windows. `of(x)` is `x · 2^1074`, an integer for every finite
+    /// double (below 2^2099), so each determinant scaled by a power of 2^1074 is a polynomial in
+    /// these. `N` is chosen per predicate so the polynomial cannot overflow.
+    #[derive(Clone, Copy)]
+    struct Big<const N: usize>([u64; N]);
+
+    impl<const N: usize> Big<N> {
+        fn of(x: f64) -> Self {
+            let bits = x.to_bits();
+            let e = ((bits >> 52) & 0x7ff) as usize;
+            let f = bits & ((1 << 52) - 1);
+            // x = m · 2^(sh - 1074)
+            let (m, sh) = if e == 0 { (f, 0) } else { (f | (1 << 52), e - 1) };
+            let mut r = [0u64; N];
+            let (limb, bit) = (sh / 64, sh % 64);
+            r[limb] = m << bit;
+            if bit > 0 {
+                r[limb + 1] = m >> (64 - bit);
+            }
+            let v = Big(r);
+            if bits >> 63 == 1 { v.neg() } else { v }
+        }
+
+        fn neg(self) -> Self {
+            let mut r = [0u64; N];
+            let mut carry = 1u64;
+            for (o, &x) in r.iter_mut().zip(&self.0) {
+                let (s, c) = (!x).overflowing_add(carry);
+                *o = s;
+                carry = c as u64;
+            }
+            Big(r)
+        }
+
+        fn add(self, o: Self) -> Self {
+            let mut r = [0u64; N];
+            let mut carry = false;
+            for ((d, &x), &y) in r.iter_mut().zip(&self.0).zip(&o.0) {
+                let (s1, c1) = x.overflowing_add(y);
+                let (s2, c2) = s1.overflowing_add(carry as u64);
+                *d = s2;
+                carry = c1 || c2;
+            }
+            Big(r)
+        }
+
+        fn sub(self, o: Self) -> Self {
+            self.add(o.neg())
+        }
+
+        /// The product modulo 2^(64N): the signed product, when it fits.
+        fn mul(self, o: Self) -> Self {
+            let mut r = [0u64; N];
+            for i in 0..N {
+                if self.0[i] == 0 {
+                    continue;
+                }
+                let mut carry = 0u128;
+                for j in 0..N - i {
+                    let t = r[i + j] as u128 + self.0[i] as u128 * o.0[j] as u128 + carry;
+                    r[i + j] = t as u64;
+                    carry = t >> 64;
+                }
+            }
+            Big(r)
+        }
+
+        fn negative(&self) -> bool {
+            self.0[N - 1] >> 63 == 1
+        }
+
+        /// About `self · 2^-scale`, with the exact sign: never zero unless `self` is, never
+        /// infinite (clamped to the least subnormal and to `f64::MAX`).
+        fn to_f64(self, scale: i32) -> f64 {
+            let neg = self.negative();
+            let m = if neg { self.neg() } else { self };
+            let Some(k) = m.0.iter().rposition(|&l| l != 0) else {
+                return 0.0;
+            };
+            let lo = if k > 0 { m.0[k - 1] } else { 0 };
+            let mut v = m.0[k] as f64 * f64::from_bits((1023 + 64) << 52) + lo as f64;
+            let mut e = 64 * (k as i32 - 1) - scale;
+            while e > 0 && v.is_finite() {
+                let s = e.min(1000);
+                v *= f64::from_bits(((1023 + s) as u64) << 52);
+                e -= s;
+            }
+            while e < 0 && v != 0.0 {
+                let s = (-e).min(1000);
+                v *= f64::from_bits(((1023 - s) as u64) << 52);
+                e += s;
+            }
+            let v = v.clamp(f64::from_bits(1), f64::MAX);
+            if neg { -v } else { v }
+        }
+    }
+
+    /// The exact determinant `a*d - b*c`'s sign, for any finite inputs.
+    #[cold]
+    pub fn cross_big(a: f64, d: f64, b: f64, c: f64) -> f64 {
+        if ![a, b, c, d].iter().all(|x| x.is_finite()) {
+            return f64::NAN;
+        }
+        type B = Big<68>;
+        B::of(a).mul(B::of(d)).sub(B::of(b).mul(B::of(c))).to_f64(2148)
+    }
+
+    /// `orient2d` exactly, for any finite coordinates.
+    #[cold]
+    pub fn orient2d_big(a: Point2, b: Point2, c: Point2) -> f64 {
+        if ![a.x, a.y, b.x, b.y, c.x, c.y].iter().all(|x| x.is_finite()) {
+            return f64::NAN;
+        }
+        type B = Big<68>;
+        let (acx, acy) = (B::of(a.x).sub(B::of(c.x)), B::of(a.y).sub(B::of(c.y)));
+        let (bcx, bcy) = (B::of(b.x).sub(B::of(c.x)), B::of(b.y).sub(B::of(c.y)));
+        acx.mul(bcy).sub(acy.mul(bcx)).to_f64(2148)
+    }
 }
 
 pub fn two_sum(a: f64, b: f64) -> (f64, f64) {
@@ -153,6 +312,9 @@ pub fn cross_sign(a: f64, b: f64, c: f64, d: f64) -> f64 {
     if det.abs().gt(&cross_bound().mul(l.abs().add(r.abs()))) {
         return det;
     }
+    if !within(&[a, b, c, d], deg2_lo(), deg2_hi()) {
+        return big::cross_big(a, b, c, d);
+    }
     let mut h = [zero(); 4];
     let n = cross_exact(a, b, c, d, &mut h);
     estimate(&h[..n])
@@ -164,7 +326,7 @@ pub fn orient2d(a: Point2, b: Point2, c: Point2) -> f64 {
     let right = (a.y.sub(c.y)).mul(b.x.sub(c.x));
     let det = left.sub(right);
     let detsum = left.abs().add(right.abs());
-    let bound = ccw_bound().mul(detsum);
+    let bound = ccw_bound().mul(detsum).add(slack());
     if det.gt(&bound) || det.neg().gt(&bound) {
         return det;
     }
@@ -172,6 +334,9 @@ pub fn orient2d(a: Point2, b: Point2, c: Point2) -> f64 {
 }
 
 pub fn orient2d_adapt(a: Point2, b: Point2, c: Point2, detsum: f64) -> f64 {
+    if !within(&[a.x, a.y, b.x, b.y, c.x, c.y], deg2_lo(), deg2_hi()) {
+        return big::orient2d_big(a, b, c);
+    }
     let acx = a.x.sub(c.x);
     let acy = a.y.sub(c.y);
     let bcx = b.x.sub(c.x);
@@ -225,7 +390,11 @@ pub fn orient2d_exact(a: Point2, b: Point2, c: Point2) -> f64 {
 /// a - b as a two-component expansion (zero tail dropped).
 pub fn diff2(a: f64, b: f64) -> ([f64; 2], usize) {
     let (x, y) = two_diff(a, b);
-    if y.eq(&zero()) { ([x, zero()], 1) } else { ([y, x], 2) }
+    if y.eq(&zero()) {
+        ([x, zero()], 1)
+    } else {
+        ([y, x], 2)
+    }
 }
 
 /// `e * b` into `h` (needs 2 * e.len() slots). No allocation.
@@ -333,27 +502,44 @@ mod tests {
     #[test]
     fn matches_the_kernel() {
         let mut r = Rng(0x9e3779b97f4a7c15);
-        for _ in 0..2_000_000 {
-            let base = r.f(1.0);
+        for i in 0..2_000_000 {
+            // every scale, the extremes included (the integer fallback)
+            let base = r.f(1.0) * 2f64.powi((i % 41) as i32 * 50 - 1000);
             let (a, b, c, d) = (r.f(base), r.f(base), r.f(base), r.f(base));
-            assert!(same(cross_sign(a, b, c, d), k::cross_sign(a, b, c, d)), "cross_sign {a:e} {b:e} {c:e} {d:e}");
+            assert!(
+                same(cross_sign(a, b, c, d), k::cross_sign(a, b, c, d)),
+                "cross_sign {a:e} {b:e} {c:e} {d:e}"
+            );
             let (e, g) = (r.f(base), r.f(base));
             let p = |x: f64, y: f64| (Point2 { x, y }, forge_math::Point2::new(x, y));
             let (pa, ka) = p(a, b);
             let (pb, kb) = p(c, d);
             let (pc, kc) = p(e, g);
-            assert!(same(orient2d(pa, pb, pc), k::orient2d(ka, kb, kc)), "orient2d {a:e} {b:e} {c:e} {d:e} {e:e} {g:e}");
+            assert!(
+                same(orient2d(pa, pb, pc), k::orient2d(ka, kb, kc)),
+                "orient2d {a:e} {b:e} {c:e} {d:e} {e:e} {g:e}"
+            );
         }
     }
 
     #[test]
     fn orient2d_underflow_counterexample() {
         // the exact determinant is positive; the filter answers the least negative subnormal
-        let a = Point2 { x: 5.394455326111622e-162, y: 1.6245062719943995e-164 };
-        let b = Point2 { x: 1.3762009331530288e-157, y: 4.1443425003634566e-160 };
-        let c = Point2 { x: -4.608837897596252e-178, y: 0.0 };
-        assert_eq!(orient2d(a, b, c), -5e-324);
+        let a = Point2 {
+            x: 5.394455326111622e-162,
+            y: 1.6245062719943995e-164,
+        };
+        let b = Point2 {
+            x: 1.3762009331530288e-157,
+            y: 4.1443425003634566e-160,
+        };
+        let c = Point2 {
+            x: -4.608837897596252e-178,
+            y: 0.0,
+        };
+        // the exact determinant is positive; before the slack the filter answered -5e-324
+        assert!(orient2d(a, b, c) > 0.0);
         let k = |p: Point2| forge_math::Point2::new(p.x, p.y);
-        assert_eq!(k::orient2d(k(a), k(b), k(c)), -5e-324);
+        assert!(k::orient2d(k(a), k(b), k(c)) > 0.0);
     }
 }

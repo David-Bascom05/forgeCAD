@@ -95,6 +95,22 @@ theorem mul_err_res {x y : FP f} (hx : x.isFinite) (hy : y.isFinite) (hfin : (mu
   · rw [h, round_zero]; simp
   · exact round_rel_err_res_q hfin h
 
+/-- **Error of any finite rounding**: relative to the result, plus half the least subnormal
+(the absolute error a subnormal result can have). -/
+theorem round_err_abs {zs : Bool} {q : ℚ} (hfin : (round f zs q).isFinite) :
+    |(round f zs q).val - q| ≤ 2 ^ (-(f.prec : ℤ)) * |(round f zs q).val| + 2 ^ (f.qmin - 1) := by
+  have h0 : (0 : ℚ) ≤ 2 ^ (-(f.prec : ℤ)) * |(round f zs q).val| :=
+    mul_nonneg (two_zpow_pos _).le (abs_nonneg _)
+  have h1 : (0 : ℚ) ≤ 2 ^ (f.qmin - 1) := (two_zpow_pos _).le
+  rcases lt_or_ge |q| (2 ^ f.emin) with h | h
+  · linarith [(round_abs_err_q (f := f) (zs := zs) h).2]
+  · linarith [round_rel_err_res_q hfin h]
+
+/-- The error of a finite product of finite data, with no hypothesis. -/
+theorem mul_err_abs {x y : FP f} (hx : x.isFinite) (hy : y.isFinite) (hfin : (mul x y).isFinite) :
+    |(mul x y).val - x.val * y.val| ≤ 2 ^ (-(f.prec : ℤ)) * |(mul x y).val| + 2 ^ (f.qmin - 1) := by
+  rw [mul_eq_round hx hy] at hfin ⊢; exact round_err_abs hfin
+
 /-! ## Finiteness -/
 
 lemma isFinite_of_add {x y : FP f} (h : (add x y).isFinite) : x.isFinite ∧ y.isFinite := by
@@ -112,6 +128,12 @@ lemma isFinite_of_sub {x y : FP f} (h : (sub x y).isFinite) : x.isFinite ∧ y.i
 @[simp] lemma isNaN_abs (x : FP f) : x.abs.isNaN = x.isNaN := by cases x <;> rfl
 
 lemma val_abs_nonneg (x : FP f) : 0 ≤ x.abs.val := by rw [abs_val]; exact abs_nonneg _
+
+@[simp] lemma add_nan_left (y : FP f) : add nan y = nan := by cases y <;> rfl
+@[simp] lemma mul_nan_right (x : FP f) : mul x nan = nan := by cases x <;> rfl
+
+lemma add_inf_left {y : FP f} (hy : y.isFinite) (s : Bool) : add (inf s) y = inf s := by
+  cases y <;> simp_all [add, isFinite]
 
 /-- A datum is finite, infinite or NaN. -/
 lemma trichotomy (x : FP f) : x.isFinite ∨ (∃ s, x = .inf s) ∨ x = .nan := by

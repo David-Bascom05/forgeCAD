@@ -53,3 +53,4 @@ elab "#standard_axioms " ids:ident* : command => do
   IEEE754.FP.ofBits_toBits IEEE754.FP.toBits_ofBits IEEE754.FP.toBits_lt IEEE754.F64.toBits_lt
   -- error relative to the result
   IEEE754.round_rel_err_res IEEE754.add_err_res IEEE754.sub_err_res IEEE754.mul_err_res
+  IEEE754.round_err_abs IEEE754.mul_err_abs

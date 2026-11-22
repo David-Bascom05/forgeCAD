@@ -4,7 +4,7 @@ Copyright (c) 2026 ForgeCAD contributors. Released under the Mozilla Public Lice
 import FloatVerification.Orient2d
 
 /-!
-# `orient2d`'s fast path gives a wrong sign when the products underflow
+# Without `SLACK`, `orient2d`'s fast path gave a wrong sign when the products underflowed
 
 These points have coordinates near `1e-160`:
 
@@ -12,16 +12,16 @@ These points have coordinates near `1e-160`:
     b = (1.3762009331530288e-157, 4.1443425003634566e-160)
     c = (-4.608837897596252e-178, 0)
 
-The exact determinant is positive. The two rounded products are subnormal, and they straddle
-a rounding midpoint in the wrong order: `left` rounds down to `k·2^-1074` and `right` rounds up
-to `(k+1)·2^-1074`. So `det = -2^-1074`. Meanwhile `bound = CCW_BOUND · detsum` underflows to
-`0`, the test `-det > bound` passes, and `orient2d` answers `-5e-324`.
-`predicates/src/lib.rs` checks this against the kernel's own `orient2d`
-(`orient2d_underflow_counterexample`).
+The exact determinant is positive. The two rounded products are subnormal, and they straddle a
+rounding midpoint the wrong way round: `left` rounds down to `k·2^-1074` and `right` up to
+`(k+1)·2^-1074`, so `det = -2^-1074`. `CCW_BOUND · detsum` underflows to `0`. The kernel's test
+before the fix (`bound = CCW_BOUND · detsum`) passed, and `orient2d` answered `-5e-324`.
 
-The witness is checked by evaluation (`native_decide`, which trusts the compiler: the axiom
-`Lean.ofReduceBool`). It shows a hypothesis of `orient2d_fast` cannot be dropped, and nothing
-else depends on it. The no-underflow hypothesis `hP` fails here.
+`SLACK` makes the bound `16 · 2^-1074`, so the test fails and the exact path decides.
+`orient2d_fast` proves the test with `SLACK` sound for every finite input.
+
+These facts are checked by evaluation (`native_decide`, which trusts the compiler: the axiom
+`Lean.ofReduceBool`), and nothing else depends on them.
 -/
 
 namespace FloatVerification
@@ -35,21 +35,18 @@ def cexA : Point2 := ⟨FP.ofBits 2194214354537152162, FP.ofBits 215664316483995
 def cexB : Point2 := ⟨FP.ofBits 2260309221917857993, FP.ofBits 2222331156790808471⟩
 def cexC : Point2 := ⟨FP.ofBits 11177338095568441929, FP.ofBits 0⟩
 
-/-- The test passes, `det` is negative, and the exact determinant is positive. The product
-`D₁·D₂` is nonzero and below `2^-1022` (it underflows). -/
-theorem orient2d_cex_facts :
-    orientFast cexA cexB cexC = true ∧ (oDet cexA cexB cexC).val = -(2 ^ (-1074 : ℤ)) ∧
+/-- The test before the fix: `det > bound || -det > bound` with `bound = CCW_BOUND · detsum`. -/
+def orientFastOld (a b c : Point2) : Bool :=
+  FP.lt (oBound₀ a b c) (oDet a b c) || FP.lt (oBound₀ a b c) (oDet a b c).neg
+
+/-- The old test passed with `det < 0` though the exact determinant is positive, and the product
+`D₁·D₂` underflows. The fixed test does not pass. -/
+theorem orient2d_cex :
+    orientFastOld cexA cexB cexC = true ∧ (oDet cexA cexB cexC).val = -(2 ^ (-1074 : ℤ)) ∧
       0 < orientExact cexA cexB cexC ∧
       0 < |(sub cexA.x cexC.x).val * (sub cexB.y cexC.y).val| ∧
-      |(sub cexA.x cexC.x).val * (sub cexB.y cexC.y).val| < 2 ^ (-1022 : ℤ) := by
+      |(sub cexA.x cexC.x).val * (sub cexB.y cexC.y).val| < 2 ^ (-1022 : ℤ) ∧
+      orientFast cexA cexB cexC = false := by
   native_decide
-
-/-- **The fast path's sign is wrong here**: `orient2d` returns a negative value though the exact
-determinant is positive. -/
-theorem orient2d_wrong_sign :
-    ∃ v, orient2d cexA cexB cexC = ok v ∧ v.val < 0 ∧ 0 < orientExact cexA cexB cexC := by
-  obtain ⟨h, hv, hex, _⟩ := orient2d_cex_facts
-  refine ⟨_, orient2d_of_fast h, ?_, hex⟩
-  rw [hv]; norm_num
 
 end FloatVerification
