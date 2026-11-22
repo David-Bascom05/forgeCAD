@@ -14,7 +14,7 @@ forge-topo = { path = "../forge-topo" }
 [features]
 # the decision log (src/decisions.rs): every near-tolerance decision recorded under its entities,
 # contradictions within one boolean counted, and the retry ladder's rungs; off, nothing is compiled
-decisions = []
+decisions = ["forge-geom/decisions", "forge-topo/decisions"]
 
 [dev-dependencies]
 forge-ops = { path = "../forge-ops" }

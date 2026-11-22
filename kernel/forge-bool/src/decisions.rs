@@ -47,10 +47,13 @@ pub enum Kind {
     /// How a face pair's curve meets an edge's across-surface near a point: 0 touch, 1 crossing,
     /// 2 two crossings. Key: the two faces (unordered), the edge.
     Contact,
+    /// An edge lies on a face of its (within the edge's tolerance), as `check` samples it. Key: the
+    /// edge, the face, of the body checked.
+    EdgeOnFace,
 }
 
 impl Kind {
-    pub const ALL: [Kind; 7] = [
+    pub const ALL: [Kind; 8] = [
         Kind::OnEdge,
         Kind::AtVertex,
         Kind::OnSurface,
@@ -58,6 +61,7 @@ impl Kind {
         Kind::SamePlace,
         Kind::Coincident,
         Kind::Contact,
+        Kind::EdgeOnFace,
     ];
     pub fn name(self) -> &'static str {
         match self {
@@ -68,6 +72,7 @@ impl Kind {
             Kind::SamePlace => "two cuts one vertex",
             Kind::Coincident => "two faces one surface",
             Kind::Contact => "touch or crossing",
+            Kind::EdgeOnFace => "edge on face",
         }
     }
 }
@@ -106,6 +111,10 @@ impl Ent {
             tag: b'F',
             idx: f.0,
         }
+    }
+    /// An entity of the body at address `body`: tag b'V', b'E' or b'F'.
+    pub fn raw(body: usize, tag: u8, idx: u32) -> Ent {
+        Ent { body, tag, idx }
     }
     fn label(self) -> String {
         if self == Ent::NONE {
@@ -223,6 +232,28 @@ pub fn decide(
     if !open {
         with_stats(|s| s.unscoped += 1);
     }
+}
+
+/// `f` (a check of a result: forge-topo's), with its edge-on-face answers recorded under the
+/// edge and face of the body checked, in a "result check" ledger of its own (or the open plan's).
+pub fn checked<T>(f: impl FnOnce() -> T) -> T {
+    let _scope = scope("result check", String::from("plain"));
+    let (r, answers) = forge_topo::check::face_log::collect(f);
+    for a in &answers {
+        let key = key2(Ent::raw(a.body, b'E', a.edge.0), Ent::raw(a.body, b'F', a.face.0));
+        let site = Site::Named(a.site);
+        decide(
+            Kind::EdgeOnFace,
+            key,
+            None,
+            None,
+            a.answer,
+            site,
+            a.measure,
+            a.limit,
+        );
+    }
+    r
 }
 
 /// How a try ended.

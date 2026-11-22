@@ -469,7 +469,11 @@ pub fn boolean_into(target: &mut Body, b: &Body, op: Op, _feature: u64) -> R<()>
 /// closely at a traced curve that strays from its chain, is refused: it would not mesh.
 pub(crate) fn refuse_strays(body: &Body, first: usize) -> R<()> {
     use forge_topo::check::Problem;
-    for p in forge_topo::check::stray_edges_from(body, first) {
+    #[cfg(feature = "decisions")]
+    let strays = crate::decisions::checked(|| forge_topo::check::stray_edges_from(body, first));
+    #[cfg(not(feature = "decisions"))]
+    let strays = forge_topo::check::stray_edges_from(body, first);
+    for p in strays {
         if let Problem::EdgeOffFace { face, .. } | Problem::LoopsCross { face } = p {
             return Err(BoolError::lost(Lost::SplitCrossed {
                 face: FaceRef::of(body, face),
@@ -613,7 +617,11 @@ fn general(target: &mut Body, b: &Body, op: Op) -> R<()> {
     SCRATCH.with(|s| s.replace(scratch));
     undecided_touch(target)?;
     // what such a way made is not taken on trust: it is the case most likely to have gone wrong
-    if RETRIED.with(|r| r.get()) && !forge_topo::check(&target.compact()).is_empty() {
+    #[cfg(feature = "decisions")]
+    let valid = |b: &Body| crate::decisions::checked(|| forge_topo::check(b).is_empty());
+    #[cfg(not(feature = "decisions"))]
+    let valid = |b: &Body| forge_topo::check(b).is_empty();
+    if RETRIED.with(|r| r.get()) && !valid(&target.compact()) {
         decided!(crate::decisions::rung(
             "RETRIED result check",
             crate::decisions::Outcome::Internal
@@ -2517,7 +2525,21 @@ pub(crate) fn trim(
                     ));
                     CurveSurface::Hits(crossing_on_face(&curve, range, body, f, edge))
                 } else {
-                    curve_surface_in(&curve, range, &across, near)
+                    #[cfg(feature = "decisions")]
+                    let (found, hairs) = forge_geom::intersect::hair_log::collect(|| {
+                        curve_surface_in(&curve, range, &across, near)
+                    });
+                    #[cfg(feature = "decisions")]
+                    log::hairs(
+                        [(bodies[0], faces[0]), (bodies[1], faces[1])],
+                        body,
+                        e,
+                        (&curve, range, &across),
+                        &hairs,
+                    );
+                    #[cfg(not(feature = "decisions"))]
+                    let found = curve_surface_in(&curve, range, &across, near);
+                    found
                 };
                 decided!({
                     let sine = match (&curve, &edge.curve) {
@@ -6892,6 +6914,47 @@ pub(crate) mod log {
         );
     }
 
+    /// forge-geom's hair-root choices on the curve of a face pair against edge `e`'s surface
+    /// across: each turn one touch (ABSORB_HAIR_ROOTS) or the crossings beside it, beside what
+    /// `crossings_near` counts there.
+    pub(crate) fn hairs(
+        faces: [(&Body, FaceId); 2],
+        body: &Body,
+        e: EdgeId,
+        (curve, range, across): (&Curve, Interval, &Surface),
+        hairs: &[forge_geom::intersect::hair_log::Hair],
+    ) {
+        for h in hairs {
+            let key = d::pair_and(
+                Ent::f(faces[0].0, faces[0].1),
+                Ent::f(faces[1].0, faces[1].1),
+                Ent::e(body, e),
+            );
+            let site = Site::Named("curve_surface: hair roots (forge-geom)");
+            d::decide(
+                Kind::Contact,
+                key,
+                Some(h.point),
+                None,
+                h.answer,
+                site,
+                h.beside,
+                h.measure,
+            );
+            let hit = CurveHit {
+                t: curve.closest(h.point, range),
+                point: h.point,
+                contact: Contact::Touching,
+            };
+            let n = match crossings_near(curve, range, across, hit).len() {
+                0 => 0,
+                n if n % 2 == 1 => 1,
+                _ => 2,
+            };
+            contact(faces, body, e, h.point, n, "crossings_near");
+        }
+    }
+
     /// How far apart two boxes are (0 when they overlap).
     pub(crate) fn box_gap(a: &Box3, b: &Box3) -> f64 {
         let g = |x: Interval, y: Interval| (x.lo - y.hi).max(y.lo - x.hi).max(0.0);
@@ -6951,14 +7014,19 @@ pub(crate) mod log {
 
     /// Cuts `x` (on `ex`) and `y` (on `ey`) one vertex or two, as `site` decides.
     pub(crate) fn same_place(x: (&Cut, Ent), y: (&Cut, Ent), yes: bool, site: &'static str) {
-        let (a, b) = ((y.1, y.0.point), (x.1, x.0.point));
+        same_place_at((x.1, x.0.point, x.0.tol), (y.1, y.0.point, y.0.tol), yes, site);
+    }
+
+    /// Two cut points (on what each lies on, with its tolerance) one vertex or two, as `site` decides.
+    pub(crate) fn same_place_at(x: (Ent, Point3, f64), y: (Ent, Point3, f64), yes: bool, site: &'static str) {
+        let (a, b) = ((y.0, y.1), (x.0, x.1));
         let (lo, hi) = if (a.0, a.1.x, a.1.y, a.1.z) <= (b.0, b.1.x, b.1.y, b.1.z) {
             (a, b)
         } else {
             (b, a)
         };
-        let dist = x.0.point.distance(y.0.point);
-        let reach = x.0.tol.max(y.0.tol);
+        let dist = x.1.distance(y.1);
+        let reach = x.2.max(y.2);
         d::decide(
             Kind::SamePlace,
             d::key2(lo.0, hi.0),

@@ -62,7 +62,8 @@ fn font_dir() -> std::path::PathBuf {
 /// Did a run fail: an error, an invalid body, a finding, a panic.
 fn run(job: &Job, fonts: &std::path::Path) -> bool {
     let valid = |r: Result<forge_topo::Body, forge_model::RegenError>| {
-        r.is_ok_and(|b| forge_topo::check(&b).is_empty())
+        // (check's edge-on-face answers recorded, in a "result check" ledger)
+        r.is_ok_and(|b| forge_bool::decisions::checked(|| forge_topo::check(&b).is_empty()))
     };
     match job {
         Job::Regen(p, nary) => {
