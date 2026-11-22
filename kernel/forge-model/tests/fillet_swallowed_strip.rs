@@ -121,7 +121,7 @@ fn a_ball_resting_beyond_a_swallowed_band_rounds_the_whole_rim() {
     // the band beyond up to the tangency, and the ball's arc), 4.68723 mm2 about the axis,
     // worked out from the outline apart from the kernel: 1595.9049434 mm3
     let removed = volume(&before) - volume(&after);
-    assert!((removed - 1595.904_943_4).abs() < 1e-4, "{removed}");
+    assert!((removed - 1_595.904_943_4).abs() < 1e-4, "{removed}");
 }
 
 /// A square block with a round boss leaving its +x side aslant: the boss only just clears the side
