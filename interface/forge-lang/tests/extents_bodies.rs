@@ -88,3 +88,23 @@ fn face_edits_in_bodies() {
     ));
     assert!(r.contains("has no edge"), "{r}");
 }
+
+/// `.fc` `revolve to t ..`, t a sketch on a plane through the axis: a disc turned from xz up to
+/// yz, a quarter turn (2467.4011 mm3, 3 faces, 3 edges), and `off 10` 10deg on (2741.556778);
+/// t on xy, square to the axis, refused as .fc refused it (NotSquare).
+#[test]
+fn revolve_up_to_a_sketch_plane() {
+    let turn = |on: &str, angle: &str| {
+        format!(
+            "sketch t(on: {on}) {{\n  p = pt(0, 0)\n}}\nsketch s(on: xz) {{\n  c = circle((20, 0), 5)\n  ax = line((0, 0), (0, 10), construction: true)\n}}\nring = revolve(s.c, axis: s.ax, angle: {angle})\n"
+        )
+    };
+    let v = shape(&turn("yz", "upto(t)"));
+    assert!((v.0 - 2467.4011).abs() < 1e-4, "{v:?}");
+    assert_eq!((v.1, v.2, v.3), (3, 3, 1));
+    let v = shape(&turn("yz", "upto(t, 10deg)"));
+    assert!((v.0 - 2741.556778).abs() < 1e-4, "{v:?}");
+    let (r, _) = common::run(&turn("xy", "upto(t)"));
+    let e = format!("{:?}", r.errors);
+    assert!(e.contains("NotSquare"), "{e}");
+}

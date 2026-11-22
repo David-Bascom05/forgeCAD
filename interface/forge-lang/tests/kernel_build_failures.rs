@@ -685,7 +685,6 @@ gone = cut(sc, -10)
 ///   extrude cut 10 at 0 0 -1 rect -1 -1 12 12 in all       takes a whole, keeps b
 ///   extrude cut 10 at 0 0 -1 rect -1 -1 60 12 in all       takes both: refused
 #[test]
-#[ignore = "gap: a Forge cut acts on the last body only; it has no `bodies:` (.fc `extrude cut .. in all`)"]
 fn a_cut_in_every_body() {
     let src = "sketch sa(on: xy) {
   r = rect(corner: (0, 0), size: (10, 10))
@@ -701,6 +700,10 @@ sketch sc(on: offset(xy, -1)) {
 gone = cut(sc, -10, bodies: \"all\")
 ";
     assert!(refusal(src).contains("Empty"));
+    // the first cut alone: a goes whole, b stays
+    let one = src.replace("size: (60, 12)", "size: (12, 12)");
+    let v = mass(&one);
+    assert!((v - 800.0).abs() < 1e-6, "{v}");
 }
 
 /// A boss near a rod's end whose fillet runs off over the rim and back: the rim is split, the
@@ -927,10 +930,80 @@ ball2 = ball(s5.c, 3.6)
 ///   L17: offset -4.58 (faces near 209.64 238.28 19.73)
 ///   L19: hole 21.99 z 0 0 -1 at 162.07 252.77 37.23 34.89 pt 118 thread 26.39 3.5
 ///   L25: fullround (faces near 195.14 231.14 24) (faces near 204.84 236.72 19.73) (faces near 198.43 232.31 15.48)
+/// Its picks traced to what made them (`forgecad query .. of FEAT`): L3 rounds the block's
+/// bottom edges along the split face and along its far side, from their corner; L17 and L25
+/// take the piece of the block's right side the lump leaves alone (its side less the piece touching
+/// the lump), and the pieces of the top and bottom beside it.
 #[test]
-#[ignore = "gap: not yet written in Forge: its picks are by place (`near X Y Z`) after two body moves and a split, which Forge's selections (by role, never by place) name only once each face is traced to the feature that made it"]
 fn full_round_leaving_an_edge_off_its_face_is_refused() {
-    panic!("the .fc part above, to be written as a Forge part");
+    let src = r#"
+XZ = plane(at: xy.origin, normal: xz.normal, x: yz.normal)
+sketch plan(on: xy) {
+  r = rect(corner: (0, 0), size: (53.78, 114.36))
+}
+base = extrude(plan, 8.52)
+sketch c0(on: offset(xy, 6.25)) {
+  p = pt(37.9, 60.16)
+}
+sketch c1(on: offset(xy, 6.25 + 0.172)) {
+  p = pt(37.9 + 0.951, 60.16 + 0.258)
+}
+cutoff = split(by: plane(at: c0.p, normal: axis(c0.p, c1.p)), keep: "plus")
+sketch org(on: xy) {
+  p = pt(0, 0)
+}
+sketch m1(on: offset(xy, -10.61)) {
+  p = pt(35.98, 2.3)
+}
+sketch r0(on: offset(xy, 4.26)) {
+  p = pt(38.28, 57.24)
+}
+sketch r1(on: offset(xy, 5.26)) {
+  p = pt(38.28, 57.24)
+}
+moved = movebody(of: base, moves: [slide(along: axis(org.p, m1.p), by: sqrt(35.98 * 35.98 + 2.3 * 2.3 + 10.61 * 10.61)), spin(about: axis(r0.p, r1.p), by: 42.91deg)])
+foot = edges(between: (base.start, base.side(plan.r[2])))
+round = fillet(edges(between: (base.start, cutoff.faces)) + foot, vary(3.04, 2.35), from: foot.start)
+sketch m2(on: offset(xy, 26.09)) {
+  p = pt(158.74, 119.01)
+}
+moved2 = movebody(of: base, moves: [slide(along: axis(org.p, m2.p), by: sqrt(158.74 * 158.74 + 119.01 * 119.01 + 26.09 * 26.09))])
+sketch t0(on: offset(xy, 99.68)) {
+  p = pt(221.81, 208.74)
+}
+sketch sq(on: plane(at: t0.p, normal: -Z, x: -X)) {
+  o = hull(disc((-9.09, -9.09), 3.9), disc((9.09, -9.09), 3.9), disc((9.09, 9.09), 3.9), disc((-9.09, 9.09), 3.9))
+}
+sketch rail(on: offset(XZ, -208.74)) {
+  path route(start: (221.81, 99.68)) {
+    line(to: (221.81, 10.52))
+    tarc(to: (217.87114687126248, -4.179999999999987))
+    line(to: (186.24614687126248, -58.956106789365734))
+  }
+}
+groove = sweep(sq.o, along: rail.route, cut: true)
+sketch h0(on: offset(xy, 20.27)) {
+  p = pt(263.16, 180.65)
+}
+sketch h1(on: offset(xy, 20.27 + 0.217)) {
+  p = pt(263.16 + 0.826, 180.65 + 0.52)
+}
+sketch half(on: plane(at: h0.p, normal: axis(h0.p, h1.p))) {
+  l = line((-30.04, 0), (30.04, 0))
+  a = arc(center: (0, 0), from: (30.04, 0), to: (-30.04, 0))
+}
+lump = extrude(half, 78.13)
+lip = fillet(edges(of: groove, crease: "convex", shape: "circle"), 0.06)
+far = base.side(plan.r[1]) - faces(of: base, normal: base.side(plan.r[1]).normal, touching: lump.faces)
+back = offset_faces(far, -4.58)
+sketch dh(on: offset(xy, 37.23)) {
+  p = pt(162.07, 252.77)
+}
+bore = hole(at: dh.p, d: 21.99, depth: 34.89, point: 118deg, thread: (26.39, 3.5))
+end = fullround(side: faces(of: base, normal: Z, touching: far), middle: far, other: faces(of: base, normal: -Z, touching: far))
+"#;
+    let r = refusal(src);
+    assert!(r.contains("EdgeOffFace"), "{r}");
 }
 
 /// Rays past a lemon must not count the apple its quartic also holds: a point in a corner of the
@@ -1989,7 +2062,6 @@ bevel = chamfer(edges(of: b), 1)
 ///   extrude 10 rect 0 0 10 10
 ///   chamfer 1 corner point (edges)
 #[test]
-#[ignore = "gap: Forge's chamfer has no corner option (.fc `chamfer D corner point`); it always patches"]
 fn three_chamfers_at_a_corner_meet_at_a_point_when_asked() {
     let b = built(
         "sketch s(on: xy) {
