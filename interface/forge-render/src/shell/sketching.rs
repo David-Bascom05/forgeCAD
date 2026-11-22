@@ -998,8 +998,8 @@ impl SketchMode {
     /// What's typed, as a row writes it.
     fn file_of(&self, f: &Field) -> String {
         let is_param = |w: &str| self.params.iter().any(|p| p.0 == w);
-        let kind = super::panel::field_kind(f.label).unwrap_or(forge_doc::units::Kind::Length);
-        forge_doc::units::field_file(&f.text, kind, self.units, &is_param)
+        let kind = super::panel::field_kind(f.label).unwrap_or(forge_lang::units::Kind::Length);
+        forge_lang::units::field_file(&f.text, kind, self.units, &is_param)
     }
 
     fn next_name(&self, kind: char) -> usize {
@@ -2284,9 +2284,9 @@ impl Shell {
                     continue;
                 };
                 let Some(at_px) = pen.draw(what) else { continue };
-                let kind = super::panel::field_kind(f.label).unwrap_or(forge_doc::units::Kind::Length);
+                let kind = super::panel::field_kind(f.label).unwrap_or(forge_lang::units::Kind::Length);
                 if !f.locked {
-                    f.text = forge_doc::units::number_in(value, kind, units);
+                    f.text = forge_lang::units::number_in(value, kind, units);
                 }
                 let id = egui::Id::unique("sketch-field").with(k);
                 // never under the pointer, where it would take the next click
@@ -2374,11 +2374,11 @@ impl Shell {
                 if tool == SkTool::Dimension {
                     if let (Some((row, value)), Some(pos)) = (m.dimension_pick(at, reach), over) {
                         let kind = if row.0 == D::Ang {
-                            forge_doc::units::Kind::Angle
+                            forge_lang::units::Kind::Angle
                         } else {
-                            forge_doc::units::Kind::Length
+                            forge_lang::units::Kind::Length
                         };
-                        let shown = forge_doc::units::number_in(value, kind, m.units);
+                        let shown = forge_lang::units::number_in(value, kind, m.units);
                         m.asking = Some((row, pos, shown));
                     }
                 } else {
@@ -2393,20 +2393,20 @@ impl Shell {
         let middle = m.middle();
         let values_of = m.params.clone();
         let doc_unit = m.units;
-        let shown_value = |value: &V, kind: forge_doc::units::Kind| {
+        let shown_value = |value: &V, kind: forge_lang::units::Kind| {
             let text = &value.to_string();
-            if !forge_doc::units::is_bare(text)
+            if !forge_lang::units::is_bare(text)
                 && text.parse::<f64>().is_err()
                 && text.chars().any(|c| c.is_ascii_digit())
-                && forge_doc::units::to_person(text) != *text
+                && forge_lang::units::to_person(text) != *text
             {
-                return forge_doc::units::to_person(text);
+                return forge_lang::units::to_person(text);
             }
             match num_of(&values_of)(text, Want::Len) {
                 Ok(v) => format!(
                     "{} {}",
-                    forge_doc::units::number_in(v, kind, doc_unit),
-                    forge_doc::units::unit_of(kind, doc_unit)
+                    forge_lang::units::number_in(v, kind, doc_unit),
+                    forge_lang::units::unit_of(kind, doc_unit)
                 ),
                 Err(_) => text.to_string(),
             }
@@ -2430,13 +2430,13 @@ impl Shell {
                     let Some(pos) = pen.draw(*what) else { continue };
                     let text = match what {
                         Measure::Round(_, _, true) => {
-                            format!("\u{D8}{}", shown_value(value, forge_doc::units::Kind::Length))
+                            format!("\u{D8}{}", shown_value(value, forge_lang::units::Kind::Length))
                         }
                         Measure::Round(_, _, false) => {
-                            format!("R{}", shown_value(value, forge_doc::units::Kind::Length))
+                            format!("R{}", shown_value(value, forge_lang::units::Kind::Length))
                         }
-                        Measure::Sweep(..) => shown_value(value, forge_doc::units::Kind::Angle),
-                        _ => shown_value(value, forge_doc::units::Kind::Length),
+                        Measure::Sweep(..) => shown_value(value, forge_lang::units::Kind::Angle),
+                        _ => shown_value(value, forge_lang::units::Kind::Length),
                     };
                     let g = ui.fonts_mut(|f| f.layout_no_wrap(text, mono(12.0), t.ink));
                     let r = Rect::from_center_size(pos, g.size() + vec2(10.0, 6.0));
@@ -2487,12 +2487,12 @@ impl Shell {
                     self.places.push(("sketch:dim".to_string(), r));
                     if ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                         let kind = if row.0 == D::Ang {
-                            forge_doc::units::Kind::Angle
+                            forge_lang::units::Kind::Angle
                         } else {
-                            forge_doc::units::Kind::Length
+                            forge_lang::units::Kind::Length
                         };
                         let is_param = |w: &str| values_of.iter().any(|p| p.0 == w);
-                        let file = forge_doc::units::field_file(text, kind, doc_unit, &is_param);
+                        let file = forge_lang::units::field_file(text, kind, doc_unit, &is_param);
                         asked = Some(Row::Dim(row.0, row.1.clone(), Some(V::of(&file))));
                     }
                 });

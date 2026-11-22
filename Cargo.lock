@@ -9,7 +9,6 @@ dependencies = [
  "forge-asm",
  "forge-bool",
  "forge-dirs",
- "forge-doc",
  "forge-font",
  "forge-geom",
  "forge-math",
@@ -81,20 +80,6 @@ dependencies = [
 [[package]]
 name = "forge-dirs"
 version = "0.1.0"
-
-[[package]]
-name = "forge-doc"
-version = "0.1.0"
-dependencies = [
- "forge-font",
- "forge-geom",
- "forge-math",
- "forge-model",
- "forge-ops",
- "forge-sketch",
- "forge-topo",
- "forge-units",
-]
 
 [[package]]
 name = "forge-draw"

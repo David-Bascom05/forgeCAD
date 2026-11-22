@@ -1,5 +1,5 @@
 //! Named drags, step by step: dragplan PART NAME[+NAME] [steps] [swing]. Prints each step's Mi,
-//! the boolean's face pairs (probe.patch's counters), and what the run rebuilt and reused.
+//! the boolean's face pairs (from counters forge-bool doesn't carry; see the README), and what the run rebuilt and reused.
 //! PART is a Forge bench part (`parts/bench/PART.fg`), NAME its params (`L`, `bolt.cb`), each value
 //! a SetParam as a drag of its field writes it, each step `forge_lang::run` on the session's
 //! cache, the part's shape only. Copy to interface/forge-lang/examples/.
