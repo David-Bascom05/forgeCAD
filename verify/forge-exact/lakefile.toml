@@ -1,6 +1,6 @@
 name = "forgeexact"
 version = "0.1.0"
-defaultTargets = ["ForgeExact"]
+defaultTargets = ["ForgeExact", "forge-exact"]
 
 [leanOptions]
 relaxedAutoImplicit = false
@@ -11,3 +11,8 @@ autoImplicit = false
 # both and the compiled reference links nothing else.
 [[lean_lib]]
 name = "ForgeExact"
+
+# The reference's driver (ForgeExact/Ref/Input.lean gives its format).
+[[lean_exe]]
+name = "forge-exact"
+root = "Main"

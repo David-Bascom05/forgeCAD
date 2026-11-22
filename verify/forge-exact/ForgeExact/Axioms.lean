@@ -2,6 +2,7 @@ import Lean
 import ForgeExact.Regular
 import ForgeExact.Flat
 import ForgeExact.SnapSym
+import ForgeExact.RefFacts
 
 /-!
 # Only the standard axioms
@@ -44,3 +45,5 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeExact.Snap.snap_result
   ForgeExact.Snap.tolEq_sym
   ForgeExact.Snap.rep_sym
+  ForgeExact.RefFacts.step_keeps_sign
+  ForgeExact.RefFacts.step_leaves_plane

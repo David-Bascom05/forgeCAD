@@ -41,8 +41,10 @@ instance : HMul Rat V3 V3 := ⟨V3.smul⟩
 
 /-- A rational as a float, for reports only (never for a decision). -/
 def qf (q : Rat) : Float :=
-  let n := Float.ofInt q.num
-  let d := Float.ofNat q.den
+  -- both terms shifted down to about 60 bits of the denominator, so neither overflows
+  let k := q.den.log2 - min q.den.log2 60
+  let n := Float.ofInt (q.num / (2 ^ k : Nat))
+  let d := Float.ofNat (q.den / 2 ^ k)
   n / d
 
 /-- A plane `n · x = c`. -/

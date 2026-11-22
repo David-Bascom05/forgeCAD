@@ -3,4 +3,6 @@ import ForgeExact.Regular
 import ForgeExact.Flat
 import ForgeExact.Snap
 import ForgeExact.SnapSym
+import ForgeExact.RefFacts
+import ForgeExact.Ref.Input
 import ForgeExact.Axioms
