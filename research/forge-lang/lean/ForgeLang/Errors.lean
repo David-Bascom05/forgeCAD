@@ -54,7 +54,19 @@ theorem errStable : ∀ n, ErrStable n := by
         · simp [evalE, ih.e h hf hm]
         · simp [evalE, evalE_mono ha hm, ih.e h hf hm]
         · cases h
+      | bin o a b =>
+        simp only [evalE, bind_err] at h
+        rcases h with h | ⟨_, ha, h | ⟨_, hb, h⟩⟩
+        · simp [evalE, ih.e h hf hm]
+        · simp [evalE, evalE_mono ha hm, ih.e h hf hm]
+        · cases h
       | eq a b =>
+        simp only [evalE, bind_err] at h
+        rcases h with h | ⟨_, ha, h | ⟨_, hb, h⟩⟩
+        · simp [evalE, ih.e h hf hm]
+        · simp [evalE, evalE_mono ha hm, ih.e h hf hm]
+        · cases h
+      | lt a b =>
         simp only [evalE, bind_err] at h
         rcases h with h | ⟨_, ha, h | ⟨_, hb, h⟩⟩
         · simp [evalE, ih.e h hf hm]

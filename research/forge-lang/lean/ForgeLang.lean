@@ -43,3 +43,9 @@ import ForgeLang.OpMemo
 import ForgeLang.NestedOps
 import ForgeLang.NestedAll
 import ForgeLang.Fence
+import ForgeLang.Compare
+import ForgeLang.Undo
+import ForgeLang.Suppress
+import ForgeLang.Respell
+import ForgeLang.Fit
+import ForgeLang.HistoryId

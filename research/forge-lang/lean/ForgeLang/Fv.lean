@@ -16,7 +16,8 @@ mutual
 def fvE : Expr → List Name
   | .lit _ | .cst _ => []
   | .var x => [x]
-  | .add a b | .mul a b | .eq a b => fvE a ++ fvE b
+  | .add a b | .mul a b | .eq a b | .lt a b => fvE a ++ fvE b
+  | .bin _ a b => fvE a ++ fvE b
   | .ite c a b => fvE c ++ fvE a ++ fvE b
   | .sel es k => fvEs es ++ fvE k
   | .call _ a => fvE a
@@ -195,7 +196,13 @@ theorem indep : ∀ n, Indep n := by
         simp only [fvE] at ag
         have := lookupRef_agree (rel := rel) (ag x (by simp))
         simp only [evalE] at h ⊢; rw [← this]; exact h
-      | add a b | mul a b | eq a b =>
+      | add a b | mul a b | eq a b | lt a b =>
+        simp only [fvE] at ag
+        simp only [evalE, bind_ok] at h
+        obtain ⟨⟨ta, la⟩, ha, ⟨tb, lb⟩, hb, h⟩ := h
+        cases h
+        simp [evalE, ih.e ha (ag_l ag), ih.e hb (ag_r ag)]
+      | bin o a b =>
         simp only [fvE] at ag
         simp only [evalE, bind_ok] at h
         obtain ⟨⟨ta, la⟩, ha, ⟨tb, lb⟩, hb, h⟩ := h
