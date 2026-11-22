@@ -6,8 +6,8 @@
 //! ones are taken out, new rows are added as `block` writes them, in one ReplaceFeature.
 
 use super::super::fgtool::ToolError;
-use super::{Out, fmt, made};
-use forge_doc::text::tokens;
+use super::super::sketching::rows::{D, Flat, Part, Pt, Ref, Refd, Row, Src, V};
+use super::{Out, fmt};
 use forge_lang::error::{Literal, Op, ParamKey};
 use forge_lang::syntax::{self, Arg, Expr, ExprKind, Span, Stmt, StmtKind, Unit};
 use forge_lang::values::Dim;
@@ -44,7 +44,7 @@ struct RowOf {
     st: usize,
     /// Its statement's own row (the others are its fixes and dimensions).
     main: bool,
-    /// Each word's number's place in the file, where it has one.
+    /// Each of its values' place in the file (in `Row::values` order), where it has one.
     slots: Vec<Option<Slot>>,
 }
 
@@ -52,7 +52,7 @@ struct RowOf {
 #[derive(Clone, Debug)]
 pub struct Opened {
     pub id: String,
-    pub rows: Vec<String>,
+    pub rows: Vec<Row>,
     /// What the rows' dimension words read: the params the block sees, by bare name.
     pub params: Vec<(String, String)>,
     /// What the sketcher can't hold yet, named with its line: then it opens to be looked at only.
@@ -63,6 +63,8 @@ pub struct Opened {
     taken: HashSet<String>,
     /// How many params the block has of its own.
     own: usize,
+    /// What each `project` row's reference came to as the block solved it, by its words.
+    pub sources: HashMap<String, Result<Vec<Refd>, String>>,
 }
 
 struct Rd<'a> {
@@ -74,12 +76,13 @@ struct Rd<'a> {
     /// Forge's name of an entity (`l1`, `r[2]`) to the row's word.
     words: HashMap<String, String>,
     named: HashMap<char, usize>,
-    rows: Vec<String>,
+    rows: Vec<Row>,
     of: Vec<RowOf>,
+    sources: HashMap<String, Result<Vec<Refd>, String>>,
 }
 
 /// A point argument: where it is, and how it's written.
-enum Pt {
+enum PArg {
     Fixed(Option<Slot>, Option<Slot>),
     Free(Option<Slot>, Option<Slot>),
     Word(String),
@@ -145,11 +148,12 @@ impl Rd<'_> {
                 Some(fmt(v))
             }
             How::Driven(_) => {
+                // what it reads: the params that are numbers
                 let env = |name: &str| {
-                    let v = self.env.iter().find(|p| p.0 == name)?.1.parse::<f64>().ok()?;
-                    Some((v, forge_model::Unit::None))
+                    let v = &self.env.iter().find(|p| p.0 == name)?.1;
+                    v.parse::<f64>().is_ok().then(|| v.clone())
                 };
-                forge_doc::expr::eval(t, &env).ok()?;
+                super::super::sketching::value_of(t, &env).ok()?;
                 Some(format!("({t})"))
             }
         }
@@ -176,24 +180,24 @@ impl Rd<'_> {
         }
     }
 
-    fn point(&self, e: &Expr) -> Option<Pt> {
+    fn point(&self, e: &Expr) -> Option<PArg> {
         match &e.kind {
             // a point written as coordinates is Forge's fixed point, but the sketcher holds it
-            // as `.fc`'s rows did: where it is, free, so a constraint added (Parallel, Tangent)
-            // moves it and is written back in its numbers, never refused as over-constrained
+            // where it is, free, so a constraint added (Parallel, Tangent) moves it and is written
+            // back in its numbers, never refused as over-constrained
             ExprKind::Tuple(xs) if xs.len() == 2 => {
-                Some(Pt::Free(Some(self.slot(&xs[0])), Some(self.slot(&xs[1]))))
+                Some(PArg::Free(Some(self.slot(&xs[0])), Some(self.slot(&xs[1]))))
             }
             _ => match call(e) {
-                Some(("near", a)) if a.len() == 2 => Some(Pt::Free(
+                Some(("near", a)) if a.len() == 2 => Some(PArg::Free(
                     Some(self.slot(&a[0].value)),
                     Some(self.slot(&a[1].value)),
                 )),
-                Some(("pt", a)) if a.len() == 2 => Some(Pt::Fixed(
+                Some(("pt", a)) if a.len() == 2 => Some(PArg::Fixed(
                     Some(self.slot(&a[0].value)),
                     Some(self.slot(&a[1].value)),
                 )),
-                _ => self.word(e).map(Pt::Word),
+                _ => self.word(e).map(PArg::Word),
             },
         }
     }
@@ -203,16 +207,56 @@ impl Rd<'_> {
         (q.x, q.y)
     }
 
+    /// A projected entity as the block solved it: its image, to be held where it is.
+    fn laid(&self, id: EntityId) -> Option<Flat> {
+        let s = &self.view.s;
+        let p = |q: EntityId| s.point(q);
+        Some(match s.entity(id)? {
+            Entity::Point { .. } => Flat::Point(s.point(id)),
+            Entity::Line { a, b } => Flat::Line(p(a), p(b)),
+            Entity::Circle { center, .. } => Flat::Circle(p(center), s.radius(id)),
+            Entity::Arc {
+                center,
+                start,
+                end,
+                ccw,
+            } => Flat::Arc {
+                center: p(center),
+                start: p(start),
+                end: p(end),
+                ccw,
+            },
+            Entity::Ellipse {
+                center,
+                major,
+                b,
+                ends,
+            } => Flat::Ellipse {
+                center: p(center),
+                major: p(major),
+                b: s.params()[b],
+                ends: ends.map(|(x, y, ccw)| (p(x), p(y), ccw)),
+            },
+            Entity::Spline { .. } => {
+                let pts: Vec<_> = s.spline_points(id)?.iter().map(|&q| p(q)).collect();
+                let ends = s.spline_samples(id, 4);
+                let closed =
+                    ends.len() > 1 && ends[0].distance(ends[ends.len() - 1]) < 1e-12 && pts.len() > 2;
+                Flat::Spline(pts, closed)
+            }
+        })
+    }
+
     fn next(&mut self, kind: char) -> String {
         let c = self.named.entry(kind).or_default();
         *c += 1;
         format!("{kind}{c}")
     }
 
-    fn push(&mut self, st: usize, main: bool, words: Vec<(String, Option<Slot>)>) {
-        let (w, s): (Vec<String>, Vec<Option<Slot>>) = words.into_iter().unzip();
-        self.rows.push(w.join(" "));
-        self.of.push(RowOf { st, main, slots: s });
+    fn push(&mut self, st: usize, main: bool, row: Row, slots: Vec<Option<Slot>>) {
+        debug_assert_eq!(row.values().len(), slots.len(), "{row}");
+        self.rows.push(row);
+        self.of.push(RowOf { st, main, slots });
     }
 
     /// One statement's rows, or what about it the sketcher can't hold.
@@ -245,50 +289,57 @@ impl Rd<'_> {
             }
             id.clone().ok_or_else(|| format!("`{f}` the sketch didn't make"))
         };
-        let num = |v: f64| (fmt(v), None);
-        let w = |t: &str| (t.to_string(), None);
+        let num = |v: f64| V::of(&fmt(v));
         let unsupported = || Err(format!("a `{f}` reference the sketcher can't name"));
         let st = stmts.len();
         let mut ents = vec![];
-        let mut fixes: Vec<String> = vec![];
-        let mut dims: Vec<Vec<(String, Option<Slot>)>> = vec![];
-        let mut row: Vec<(String, Option<Slot>)> = vec![];
-        // a point's words in the row: its numbers (with their slots) or the word it shares
-        let put = |row: &mut Vec<(String, Option<Slot>)>,
-                   fixes: &mut Vec<String>,
-                   p: Option<Pt>,
+        let mut fixes: Vec<Ref> = vec![];
+        let mut dims: Vec<(Row, Vec<Option<Slot>>)> = vec![];
+        let mut slots: Vec<Option<Slot>> = vec![];
+        // a point in the row: its numbers (with their slots) or the sketch's point it shares
+        let put = |slots: &mut Vec<Option<Slot>>,
+                   fixes: &mut Vec<Ref>,
+                   p: Option<PArg>,
                    at: (f64, f64),
-                   me: String| {
-            match p {
-                Some(Pt::Word(w)) => row.push((w, None)),
-                Some(Pt::Fixed(x, y)) => {
-                    row.extend([(exact(at.0), x), (exact(at.1), y)]);
+                   me: Ref|
+         -> Option<Pt> {
+            let at = Pt::At(V::of(&exact(at.0)), V::of(&exact(at.1)));
+            match p? {
+                PArg::Word(w) => Some(Pt::of(&w)),
+                PArg::Fixed(x, y) => {
+                    slots.extend([x, y]);
                     fixes.push(me);
+                    Some(at)
                 }
-                Some(Pt::Free(x, y)) => row.extend([(exact(at.0), x), (exact(at.1), y)]),
-                None => return false,
+                PArg::Free(x, y) => {
+                    slots.extend([x, y]);
+                    Some(at)
+                }
             }
-            true
         };
-        match f {
+        let dim = |d: D, on: Vec<Ref>, v: Option<(String, Slot)>| match v {
+            Some((v, s)) => (Row::Dim(d, on, Some(V::of(&v))), vec![Some(s)]),
+            None => (Row::Dim(d, on, None), vec![]),
+        };
+        let row = match f {
             "pt" | "near" => {
                 let (e, _) = ent()?;
                 let n = self.next('p');
-                row.push(w("pt"));
-                let p = Pt::Free(
+                let p = PArg::Free(
                     Some(self.slot(&args[0].value)),
                     args.get(1).map(|a| self.slot(&a.value)),
                 );
                 let p = if f == "pt" {
                     match p {
-                        Pt::Free(x, y) => Pt::Fixed(x, y),
+                        PArg::Free(x, y) => PArg::Fixed(x, y),
                         p => p,
                     }
                 } else {
                     p
                 };
-                put(&mut row, &mut fixes, Some(p), self.at(e), n.clone());
+                let p = put(&mut slots, &mut fixes, Some(p), self.at(e), Ref::to(&n)).expect("a point");
                 ents.push((n, name.unwrap_or("").to_string()));
+                Row::Pt(p)
             }
             "line" => {
                 let (e, _) = ent()?;
@@ -296,18 +347,21 @@ impl Rd<'_> {
                     return unsupported();
                 };
                 let n = self.next('l');
-                row.push(w("line"));
                 let pa = arg(args, 0, "a").and_then(|x| self.point(x));
                 let pb = arg(args, 1, "b").and_then(|x| self.point(x));
-                if !put(&mut row, &mut fixes, pa, self.at(a), format!("{n}.a"))
-                    || !put(&mut row, &mut fixes, pb, self.at(b), format!("{n}.b"))
-                {
+                let (Some(pa), Some(pb)) = (
+                    put(&mut slots, &mut fixes, pa, self.at(a), Ref::a(&n)),
+                    put(&mut slots, &mut fixes, pb, self.at(b), Ref::b(&n)),
+                ) else {
                     return unsupported();
-                }
-                if arg(args, 9, "construction").is_some_and(|c| matches!(c.kind, ExprKind::Bool(true))) {
-                    row.push(w("cons"));
-                }
+                };
                 ents.push((n, name.unwrap_or("").to_string()));
+                let row = Row::Line(pa, pb);
+                if arg(args, 9, "construction").is_some_and(|c| matches!(c.kind, ExprKind::Bool(true))) {
+                    row.cons()
+                } else {
+                    row
+                }
             }
             "circle" => {
                 let (e, _) = ent()?;
@@ -315,20 +369,17 @@ impl Rd<'_> {
                     return unsupported();
                 };
                 let n = self.next('c');
-                row.push(w("circle"));
                 let pc = arg(args, 0, "center").and_then(|x| self.point(x));
-                if !put(&mut row, &mut fixes, pc, self.at(center), format!("{n}.c")) {
+                let Some(pc) = put(&mut slots, &mut fixes, pc, self.at(center), Ref::center(&n)) else {
                     return unsupported();
-                }
-                row.push(num(self.view.s.radius(e)));
+                };
+                slots.push(None);
                 if let Some(r) = arg(args, 1, "r") {
                     let s = self.slot(r);
-                    dims.push(match self.value(&s) {
-                        Some(v) => vec![w("rad"), w(&n), (v, Some(s))],
-                        None => vec![w("ref"), w("rad"), w(&n)],
-                    });
+                    dims.push(dim(D::Rad, vec![Ref::to(&n)], self.value(&s).map(|v| (v, s))));
                 }
                 ents.push((n, name.unwrap_or("").to_string()));
+                Row::Circle(pc, num(self.view.s.radius(e)))
             }
             "arc" => {
                 let (e, _) = ent()?;
@@ -342,17 +393,21 @@ impl Rd<'_> {
                     return unsupported();
                 };
                 let n = self.next('a');
-                row.push(w("arc"));
-                for (key, p, part) in [("center", center, "c"), ("from", start, "a"), ("to", end, "b")] {
+                let mut pts = vec![];
+                for (key, p, me) in [
+                    ("center", center, Ref::center(&n)),
+                    ("from", start, Ref::a(&n)),
+                    ("to", end, Ref::b(&n)),
+                ] {
                     let pp = arg(args, 9, key).and_then(|x| self.point(x));
-                    if !put(&mut row, &mut fixes, pp, self.at(p), format!("{n}.{part}")) {
+                    let Some(q) = put(&mut slots, &mut fixes, pp, self.at(p), me) else {
                         return unsupported();
-                    }
-                }
-                if !ccw {
-                    row.push(w("cw"));
+                    };
+                    pts.push(q);
                 }
                 ents.push((n, name.unwrap_or("").to_string()));
+                let [c, a, b]: [Pt; 3] = pts.try_into().expect("three");
+                Row::Arc(c, a, b, !ccw)
             }
             "rect" => {
                 let (_, segs) = ent()?;
@@ -377,27 +432,28 @@ impl Rd<'_> {
                     _ => None,
                 };
                 let (cx, cy) = pair(corner).map_or((None, None), |(x, y)| (Some(x), Some(y)));
-                row.extend([w("rect"), (exact(p0.0), cx), (exact(p0.1), cy)]);
-                row.extend([num(p1.0 - p0.0), num(p2.1 - p1.1)]);
-                fixes.push(format!("{}.a", ns[0]));
+                slots.extend([cx, cy, None, None]);
+                fixes.push(Ref::a(&ns[0]));
                 match pair(size).filter(|_| corner.is_some()) {
                     Some((sw, sh)) => {
-                        for (dim, l, s) in [("hdist", &ns[0], sw), ("vdist", &ns[1], sh)] {
-                            dims.push(match self.value(&s) {
-                                Some(v) => {
-                                    vec![w(dim), w(&format!("{l}.a")), w(&format!("{l}.b")), (v, Some(s))]
-                                }
-                                None => vec![w("ref"), w(dim), w(&format!("{l}.a")), w(&format!("{l}.b"))],
-                            });
+                        for (d, l, s) in [(D::HDist, &ns[0], sw), (D::VDist, &ns[1], sh)] {
+                            let on = vec![Ref::a(l), Ref::b(l)];
+                            dims.push(dim(d, on, self.value(&s).map(|v| (v, s))));
                         }
                     }
                     // by its centre, or sized otherwise: held where it is
-                    None => fixes.push(format!("{}.a", ns[2])),
+                    None => fixes.push(Ref::a(&ns[2])),
                 }
                 let base = name.unwrap_or("");
                 for (k, l) in ns.into_iter().enumerate() {
                     ents.push((l, format!("{base}[{k}]")));
                 }
+                Row::Rect(
+                    V::of(&exact(p0.0)),
+                    V::of(&exact(p0.1)),
+                    num(p1.0 - p0.0),
+                    num(p2.1 - p1.1),
+                )
             }
             "poly" | "spline" => {
                 let (e, segs) = ent()?;
@@ -432,35 +488,40 @@ impl Rd<'_> {
                 let sides = ps.len() - usize::from(!closed);
                 let sn = if f == "spline" { Some(self.next('s')) } else { None };
                 let cv = arg(args, 9, "cv").is_some_and(|c| matches!(c.kind, ExprKind::Bool(true)));
+                let degree = 3.min(ps.len().saturating_sub(1 + usize::from(closed))).max(1);
                 if cv {
-                    let degree = 3.min(ps.len().saturating_sub(1 + usize::from(closed))).max(1);
-                    row.extend([w("bspline"), w(&degree.to_string())]);
-                } else {
-                    row.push(w(f));
+                    slots.push(None);
                 }
+                let mut pts = vec![];
                 for (k, p) in ps.iter().enumerate() {
                     let me = match &sn {
-                        Some(s) => format!("{s}.{k}"),
-                        None if k < sides => format!("l{}.a", first + k),
-                        None => format!("l{}.b", first + k - 1),
+                        Some(s) => Ref {
+                            base: s.clone(),
+                            part: Part::K(k),
+                        },
+                        None if k < sides => Ref::a(&format!("l{}", first + k)),
+                        None => Ref::b(&format!("l{}", first + k - 1)),
                     };
                     let pp = self.point(p);
-                    if !put(&mut row, &mut fixes, pp, self.at(at[k]), me) {
+                    let Some(q) = put(&mut slots, &mut fixes, pp, self.at(at[k]), me) else {
                         return unsupported();
-                    }
-                }
-                if !closed {
-                    row.push(w("open"));
+                    };
+                    pts.push(q);
                 }
                 let base = name.unwrap_or("");
-                match sn {
-                    Some(s) => ents.push((s, base.to_string())),
+                match &sn {
+                    Some(s) => ents.push((s.clone(), base.to_string())),
                     None => {
                         for k in 0..sides {
                             let l = self.next('l');
                             ents.push((l, format!("{base}[{k}]")));
                         }
                     }
+                }
+                match (f, cv) {
+                    ("poly", _) => Row::Poly(pts, !closed),
+                    (_, true) => Row::BSpline(V::N(degree as f64), pts, !closed),
+                    _ => Row::Spline(pts, !closed),
                 }
             }
             "ellipse" => {
@@ -475,75 +536,126 @@ impl Rd<'_> {
                     return unsupported();
                 };
                 let n = self.next('e');
-                row.push(w("ellipse"));
-                for (key, p, part) in [("center", center, "c"), ("major", major, "m")] {
+                let mut pts = vec![];
+                for (key, p, me) in [
+                    ("center", center, Ref::center(&n)),
+                    (
+                        "major",
+                        major,
+                        Ref {
+                            base: n.clone(),
+                            part: Part::M,
+                        },
+                    ),
+                ] {
                     let pp = arg(args, 9, key).and_then(|x| self.point(x));
-                    if !put(&mut row, &mut fixes, pp, self.at(p), format!("{n}.{part}")) {
+                    let Some(q) = put(&mut slots, &mut fixes, pp, self.at(p), me) else {
                         return unsupported();
-                    }
+                    };
+                    pts.push(q);
                 }
-                row.push(num(self.view.s.params()[b]));
+                slots.push(None);
                 if let Some(bx) = arg(args, 9, "b") {
                     let s = self.slot(bx);
-                    dims.push(match self.value(&s) {
-                        Some(v) => vec![w("rad"), w(&n), (v, Some(s))],
-                        None => vec![w("ref"), w("rad"), w(&n)],
-                    });
+                    dims.push(dim(D::Rad, vec![Ref::to(&n)], self.value(&s).map(|v| (v, s))));
                 }
                 ents.push((n, name.unwrap_or("").to_string()));
+                let [c, m]: [Pt; 2] = pts.try_into().expect("two");
+                Row::Ellipse(c, m, num(self.view.s.params()[b]))
             }
             "tangent" | "coincident" | "horizontal" | "vertical" | "parallel" | "perpendicular" | "equal"
             | "midpoint" | "concentric" | "collinear" | "symmetric" | "fix" | "distance" | "radius"
             | "angle"
                 if name.is_none() =>
             {
-                let kw = match f {
-                    "tangent" => "tan",
-                    "coincident" => "co",
-                    "horizontal" => "hor",
-                    "vertical" => "ver",
-                    "parallel" => "par",
-                    "perpendicular" => "perp",
-                    "equal" => "eq",
-                    "midpoint" => "mid",
-                    "concentric" => "conc",
-                    "collinear" => "colin",
-                    "symmetric" => "sym",
-                    "fix" => "fix",
-                    "distance" => "dist",
-                    "radius" => "rad",
-                    _ => "ang",
-                };
                 let valued = matches!(f, "distance" | "radius" | "angle");
                 let n = args.len() - usize::from(valued);
                 let mut ws = vec![];
                 for a in &args[..n] {
                     match self.word(&a.value) {
-                        Some(x) => ws.push(w(&x)),
+                        Some(x) => ws.push(Ref::name(&x)),
                         None => return unsupported(),
                     }
                 }
                 if valued {
+                    let d = match f {
+                        "distance" => D::Dist,
+                        "radius" => D::Rad,
+                        _ => D::Ang,
+                    };
                     let s = self.slot(&args[n].value);
-                    match self.value(&s) {
-                        Some(v) => {
-                            row.push(w(kw));
-                            row.extend(ws);
-                            row.push((v, Some(s)));
-                        }
-                        None => {
-                            row.extend([w("ref"), w(kw)]);
-                            row.extend(ws);
-                        }
-                    }
+                    let (row, sl) = dim(d, ws, self.value(&s).map(|v| (v, s)));
+                    slots = sl;
+                    row
                 } else {
-                    row.push(w(kw));
-                    row.extend(ws);
+                    let two = |ws: &[Ref]| match ws {
+                        [a, b] => Some((a.clone(), b.clone())),
+                        _ => None,
+                    };
+                    let row = match f {
+                        "horizontal" => Some(Row::Hor(ws)),
+                        "vertical" => Some(Row::Ver(ws)),
+                        "fix" => Some(Row::Fix(ws)),
+                        "equal" => Some(Row::Eq(ws)),
+                        "symmetric" => match &ws[..] {
+                            [a, b, c] => Some(Row::Sym(a.clone(), b.clone(), c.clone())),
+                            _ => None,
+                        },
+                        "tangent" => two(&ws).map(|(a, b)| Row::Tan(a, b)),
+                        "coincident" => two(&ws).map(|(a, b)| Row::Co(a, b)),
+                        "parallel" => two(&ws).map(|(a, b)| Row::Par(a, b)),
+                        "perpendicular" => two(&ws).map(|(a, b)| Row::Perp(a, b)),
+                        "midpoint" => two(&ws).map(|(a, b)| Row::Mid(a, b)),
+                        "concentric" => two(&ws).map(|(a, b)| Row::Conc(a, b)),
+                        _ => two(&ws).map(|(a, b)| Row::Colin(a, b)),
+                    };
+                    let Some(row) = row else {
+                        return unsupported();
+                    };
+                    row
                 }
             }
-            "project" => return what("a `project`"),
+            "project" => {
+                let (e, segs) = ent()?;
+                let of = arg(args, 0, "of").ok_or_else(|| "a `project` of nothing".to_string())?;
+                let of_text = text(self.src, of.span).to_string();
+                let ids = if segs.is_empty() { vec![e] } else { segs };
+                let one = ids.len() == 1;
+                let laid = ids
+                    .iter()
+                    .map(|&id| self.laid(id))
+                    .collect::<Option<Vec<Flat>>>()
+                    .ok_or_else(|| "a `project` the sketcher can't hold".to_string())?;
+                let sources = laid
+                    .into_iter()
+                    .enumerate()
+                    .map(|(k, f)| (forge_topo::Name(k as u64 + 1), Src::Laid(f)))
+                    .collect();
+                self.sources
+                    .insert(of_text.clone(), Ok(vec![Refd { sources, one }]));
+                let approx = match arg(args, 1, "approx") {
+                    Some(a) => {
+                        let s = self.slot(a);
+                        let v = self
+                            .value(&s)
+                            .ok_or_else(|| "an `approx` the sketcher can't read".to_string())?;
+                        slots.push(Some(s));
+                        Some(V::of(&v))
+                    }
+                    None => None,
+                };
+                if one {
+                    let n = self.next('j');
+                    ents.push((n, name.unwrap_or("").to_string()));
+                }
+                Row::Project {
+                    of: of_text,
+                    many: !one,
+                    approx,
+                }
+            }
             f => return Err(format!("`{f}`")),
-        }
+        };
         stmts.push(St {
             span: s.span,
             name: name.map(str::to_string),
@@ -553,12 +665,12 @@ impl Rd<'_> {
             // a loop's sides are named by index; the loop itself has no single word
             self.words.insert(fg, named);
         }
-        self.push(st, true, row);
+        self.push(st, true, row, slots);
         for x in fixes {
-            self.push(st, false, vec![w("fix"), w(&x)]);
+            self.push(st, false, Row::Fix(vec![x]), vec![]);
         }
-        for d in dims {
-            self.push(st, false, d);
+        for (d, sl) in dims {
+            self.push(st, false, d, sl);
         }
         Ok(())
     }
@@ -611,8 +723,10 @@ pub fn open(src: &str, id: &str, dir: Option<std::path::PathBuf>) -> Result<Open
     let prog = syntax::parse(src).map_err(|e| no(e.text()))?;
     let (_, block) = find(&prog, id).ok_or_else(|| no(format!("{id} is not a sketch of this part")))?;
     let comp = component_of(&prog, id).map(|x| (x.0.to_string(), x.1));
+    // what it projects is read from the part, so the part is built for it
+    let projects = text(src, block.span).contains("project(");
     let opts = forge_lang::Options {
-        build: false,
+        build: projects,
         dir: dir.clone(),
         ..forge_lang::Options::default()
     };
@@ -697,6 +811,7 @@ pub fn open(src: &str, id: &str, dir: Option<std::path::PathBuf>) -> Result<Open
         named: HashMap::new(),
         rows: vec![],
         of: vec![],
+        sources: HashMap::new(),
     };
     let mut stmts = vec![];
     let mut read_only = None;
@@ -710,7 +825,7 @@ pub fn open(src: &str, id: &str, dir: Option<std::path::PathBuf>) -> Result<Open
             ));
         }
     }
-    let (rows, of) = (rd.rows, rd.of);
+    let (rows, of, sources) = (rd.rows, rd.of, rd.sources);
     let mut taken: HashSet<String> = forge_lang::edit::bound(&prog).into_iter().collect();
     taken.extend(forge_lang::edit::bound(body));
     taken.extend(params.keys().cloned());
@@ -733,28 +848,34 @@ pub fn open(src: &str, id: &str, dir: Option<std::path::PathBuf>) -> Result<Open
         of,
         taken,
         own: mine.len(),
+        sources,
     })
 }
 
-/// A row with its entity words read as Forge names, numbers as they are: what's compared.
-fn canon(row: &str, names: &HashMap<String, String>) -> Vec<String> {
-    tokens(row)
-        .into_iter()
-        .map(|t| {
-            let (base, part) = t.split_once('.').map_or((t.as_str(), ""), |(b, p)| (b, p));
-            match names.get(base) {
-                Some(n) if part.is_empty() => n.clone(),
-                Some(n) => format!("{n}.{part}"),
-                None => t.clone(),
-            }
-        })
-        .collect()
+/// A row with its entities named as Forge names them, numbers as they are: what's compared.
+fn canon(row: &Row, names: &HashMap<String, String>) -> Row {
+    let mut r = row.clone();
+    for x in r.refs_mut() {
+        if let Some(n) = names.get(&x.base) {
+            x.base = n.clone();
+        }
+    }
+    r
+}
+
+/// A row with its values left out: its shape.
+fn shape(row: &Row) -> Row {
+    let mut r = row.clone();
+    for v in r.values_mut() {
+        *v = V::X(String::new());
+    }
+    r
 }
 
 impl Opened {
     /// The row name to Forge name of every entity the rows make, row `k < kept.len()` being
     /// opened row `kept[k]`; new rows' entities have none yet.
-    fn names(&self, rows: &[String], kept: &[usize]) -> (HashMap<String, String>, Vec<Vec<String>>) {
+    fn names(&self, rows: &[Row], kept: &[usize]) -> (HashMap<String, String>, Vec<Vec<String>>) {
         let mut out = HashMap::new();
         let mut per = vec![];
         let mut named: HashMap<char, usize> = HashMap::new();
@@ -764,7 +885,7 @@ impl Opened {
                 Some(o) if o.main => self.stmts[o.st].ents.clone(),
                 _ => vec![],
             };
-            for (i, kind) in made(&tokens(r)).into_iter().enumerate() {
+            for (i, kind) in r.made().into_iter().enumerate() {
                 let c = named.entry(kind).or_default();
                 *c += 1;
                 if let Some(n) = ents.get(i).filter(|n| !n.is_empty()) {
@@ -779,7 +900,7 @@ impl Opened {
     /// The edit Finish makes: nothing when nothing changed; else the block put back in its place
     /// (kept statements as they were written, changed numbers where they're written, gone ones
     /// out, new rows added) and the params set. `kept[k]` is the opened row that row k is.
-    pub fn write_back(&self, rows: &[String], kept: &[usize]) -> Result<Vec<Op>, ToolError> {
+    pub fn write_back(&self, rows: &[Row], kept: &[usize]) -> Result<Vec<Op>, ToolError> {
         let opened = self
             .names(&self.rows, &(0..self.rows.len()).collect::<Vec<_>>())
             .0;
@@ -796,12 +917,14 @@ impl Opened {
                 continue;
             }
             let of = &self.of[o];
-            // the same words, only values changed: each is put back where it's written
-            let same = a.len() == b.len()
-                && a.iter()
-                    .zip(&b)
+            // the same row, only values changed: each is put back where it's written
+            let (va, vb) = (a.values(), b.values());
+            let same = shape(&a) == shape(&b)
+                && va
+                    .iter()
+                    .zip(&vb)
                     .enumerate()
-                    .all(|(i, (x, y))| x == y || of.slots[i].is_some());
+                    .all(|(i, (x, y))| x == y || of.slots.get(i).is_some_and(Option::is_some));
             if !same {
                 if of.main {
                     rewrite.push((k, of.st));
@@ -812,15 +935,18 @@ impl Opened {
                     why: format!("the change to `{r}` has no Forge form here; write it in the source"),
                 });
             }
-            for (i, (x, y)) in a.iter().zip(&b).enumerate() {
+            for (i, (x, y)) in va.iter().zip(&vb).enumerate() {
                 if x == y {
                     continue;
                 }
                 let s = of.slots[i].as_ref().expect("a slot");
-                let Ok(v) = y.parse::<f64>() else {
-                    let t = y.strip_prefix('(').and_then(|t| t.strip_suffix(')')).unwrap_or(y);
-                    splices.push((s.span, t.to_string()));
-                    continue;
+                let v = match y {
+                    V::N(v) => *v,
+                    V::X(y) => {
+                        let t = y.strip_prefix('(').and_then(|t| t.strip_suffix(')')).unwrap_or(y);
+                        splices.push((s.span, t.to_string()));
+                        continue;
+                    }
                 };
                 match &s.how {
                     How::Param(key, dim) => {
@@ -875,7 +1001,7 @@ impl Opened {
                 .map_or(src.len(), |n| s.hi as usize + n + 1);
             splices.push((Span::new(lo, hi), String::new()));
         }
-        if splices.is_empty() && fresh.is_empty() && o.params.is_empty() {
+        if splices.is_empty() && fresh.is_empty() && o.params.is_empty() && o.binds.is_empty() {
             return Ok(sets);
         }
         let prog = syntax::parse(src).map_err(|e| ToolError::NoForgeForm {
@@ -897,7 +1023,7 @@ impl Opened {
         splices.push((Span::new(close, close), rows_text));
         splices.push((
             Span::new(block.span.lo as usize, block.span.lo as usize),
-            o.params.concat(),
+            o.params.concat() + &o.binds.concat(),
         ));
         splices.sort_by_key(|s| (s.0.lo, s.0.hi));
         let mut text = String::new();
@@ -920,6 +1046,7 @@ impl Opened {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::shell::sketching::rows::dsl::*;
     use crate::shell::sketching::{SketchFor, SketchMode};
 
     fn mode(o: &Opened) -> SketchMode {
@@ -1015,7 +1142,15 @@ mod tests {
                 };
                 let m = mode(&o);
                 if let Some(e) = &m.error {
-                    bad.push(format!("{}: {name}: {e}\n{}", p.display(), o.rows.join("\n")));
+                    bad.push(format!(
+                        "{}: {name}: {e}\n{}",
+                        p.display(),
+                        o.rows
+                            .iter()
+                            .map(|r| r.to_string())
+                            .collect::<Vec<_>>()
+                            .join("\n")
+                    ));
                 }
                 match o.write_back(&m.rows, m.kept()) {
                     Ok(ops) if ops.is_empty() => {}
@@ -1042,11 +1177,15 @@ mod tests {
         let o = open(&src, "sk2", None).unwrap();
         assert_eq!(
             o.rows,
-            ["circle 0 0 12", "rad c1 r3", "pt 20 0"].map(String::from)
+            [
+                Row::Circle(at("0", "0"), v("12")),
+                Row::Dim(D::Rad, vec![rf("c1")], Some(v("r3"))),
+                Row::Pt(at("20", "0"))
+            ]
         );
         let mut rows = o.rows.clone();
-        rows[2] = "pt 25 -3".into();
-        rows[1] = "rad c1 14".into();
+        rows[2] = Row::Pt(at("25", "-3"));
+        rows[1] = Row::Dim(D::Rad, vec![rf("c1")], Some(v("14")));
         let kept: Vec<usize> = (0..rows.len()).collect();
         let ops = o.write_back(&rows, &kept).unwrap();
         let text: Vec<String> = ops.iter().map(|op| format!("{:?}", op.json())).collect();
@@ -1060,10 +1199,17 @@ mod tests {
         assert!(after.contains("param sk2.r3 = 14\n"), "{after}");
         // the rect's sides are its size params
         let o = open(&src, "sk1", None).unwrap();
-        let k = o.rows.iter().position(|r| r.starts_with("hdist")).unwrap();
-        assert_eq!(o.rows[k], "hdist l1.a l1.b w3");
+        let k = o
+            .rows
+            .iter()
+            .position(|r| matches!(r, Row::Dim(D::HDist, ..)))
+            .unwrap();
+        assert_eq!(
+            o.rows[k],
+            Row::Dim(D::HDist, vec![rf("l1.a"), rf("l1.b")], Some(v("w3")))
+        );
         let mut rows = o.rows.clone();
-        rows[k] = "hdist l1.a l1.b 90".into();
+        rows[k] = Row::Dim(D::HDist, vec![rf("l1.a"), rf("l1.b")], Some(v("90")));
         let ops = o.write_back(&rows, &(0..rows.len()).collect::<Vec<_>>()).unwrap();
         let after = apply(&src, &ops).unwrap();
         assert!(after.contains("param sk1.w3 = 90\n"), "{after}");
@@ -1076,10 +1222,15 @@ mod tests {
         let o = open(&src, "sk2", None).unwrap();
         let mut m = mode(&o);
         // a construction line: the sketch's profiles stay as the part reads them
-        assert!(m.add("line 30 5 40 5 cons".into()));
-        assert!(m.add("hor l1".into()));
-        assert!(m.add("co l1.a p2".into()) || m.error.is_some());
-        let rows: Vec<String> = m.rows.iter().filter(|r| !r.starts_with("co ")).cloned().collect();
+        assert!(m.add(Row::Line(at("30", "5"), at("40", "5")).cons()));
+        assert!(m.add(Row::Hor(vec![rf("l1")])));
+        assert!(m.add(Row::Co(rf("l1.a"), rf("p2"))) || m.error.is_some());
+        let rows: Vec<Row> = m
+            .rows
+            .iter()
+            .filter(|r| !matches!(r, Row::Co(..)))
+            .cloned()
+            .collect();
         let ops = o.write_back(&rows, m.kept()).unwrap();
         let [Op::ReplaceFeature { id, text }] = &ops[..] else {
             panic!("{ops:?}")
@@ -1131,16 +1282,16 @@ mod tests {
             "{:?}",
             o.read_only
         );
-        // its centre written as coordinates is held free, as `.fc` held it: no `fix` row
-        assert_eq!(o.rows[1], "rad c1 (d / 2)");
+        // its centre written as coordinates is held free: no `fix` row
+        assert_eq!(o.rows[1], Row::Dim(D::Rad, vec![rf("c1")], Some(v("(d / 2)"))));
         let m = mode(&o);
         assert!(m.error.is_none(), "{:?}", m.error);
         let mut rows = o.rows.clone();
-        rows[1] = "rad c1 6".into();
+        rows[1] = Row::Dim(D::Rad, vec![rf("c1")], Some(v("6")));
         let e = o.write_back(&rows, &[0, 1]).unwrap_err();
         assert_eq!(e.kind(), "Driven", "{}", e.text());
         // a typed expression is written as it is
-        rows[1] = "rad c1 (d / 4)".into();
+        rows[1] = Row::Dim(D::Rad, vec![rf("c1")], Some(v("(d / 4)")));
         let ops = o.write_back(&rows, &[0, 1]).unwrap();
         let after = apply(src, &ops).unwrap();
         assert!(after.contains("circle((0, 0), d / 4)"), "{after}");

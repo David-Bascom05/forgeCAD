@@ -10,8 +10,6 @@
 //!                                  kernel alone: seq | nary1 | naryN (the counted part)
 //!   benchparts bits                each part's exact result hashed, seq and nary 4
 //!   benchparts font DIR            the block font the parts' text uses, as DIR/block.ttf
-//!   benchparts vsfc [NAME]         each part's kernel result against its .fc part's: bits,
-//!                                  volume, faces and edges
 //!   benchparts check [NAME]        each part's features, faces, validity, closed mesh and times
 //!   benchparts nary FILE.fg        a part file's n-ary regen, ok or its error (for shrinking)
 //! (`run`'s instructions less `resolve`'s are the kernel's regen alone, as the .fc gate counted
@@ -36,11 +34,7 @@ fn names() -> Vec<String> {
 fn font_dir() -> std::path::PathBuf {
     let dir = std::env::temp_dir().join(format!("forge-benchparts-{}", std::process::id()));
     std::fs::create_dir_all(&dir).expect("temp dir");
-    std::fs::write(
-        dir.join(forge_agent::bench::FONT),
-        forge_agent::bench::font_bytes(),
-    )
-    .expect("font");
+    std::fs::write(dir.join(forge_lang::bench::FONT), forge_lang::bench::font_bytes()).expect("font");
     dir
 }
 
@@ -112,22 +106,6 @@ fn bits_of(r: &Result<Vec<Solid>, forge_model::RegenError>) -> u64 {
     h.finish()
 }
 
-/// A regen's volume, and its faces and edges finished (as a stage's view counts them).
-fn shape_of(r: &Result<Vec<Solid>, forge_model::RegenError>) -> (f64, (usize, usize)) {
-    let Ok(solids) = r else {
-        return (f64::NAN, (0, 0));
-    };
-    let mut v = 0.0;
-    let (mut f, mut e) = (0, 0);
-    for s in solids {
-        let b = forge_model::finish(s.body.clone());
-        v += forge_topo::mass::mass(&b).map_or(f64::NAN, |m| m.volume);
-        f += b.face_ids().count();
-        e += b.edge_ids().count();
-    }
-    (v, (f, e))
-}
-
 fn regen(part: &Part, ids: &[u64], mode: &str) -> Result<Vec<Solid>, forge_model::RegenError> {
     match mode {
         "seq" => part.regenerate_solids_ids(Some(ids)),
@@ -176,58 +154,6 @@ fn main() {
                     ("nary", regen(&part, &ids, "nary4")),
                 ] {
                     println!("{name} {path} {:016x}", bits_of(&r));
-                }
-            }
-        }
-        "regen" => {
-            // one sequential regen, for counting under `--toggle-collect=*regenerate_solids*`:
-            // fg (its ids), fgpos (its features under positional ids, as .fc names them), fc
-            let name = arg(1);
-            let r = match arg(2) {
-                "fg" => {
-                    let (part, ids) = bench(name);
-                    part.regenerate_solids_ids(Some(&ids))
-                }
-                "fgpos" => bench(name).0.regenerate_solids(),
-                _ => forge_agent::bench::part(name).regenerate_solids(),
-            };
-            println!("{name} {} {:016x} {:?}", arg(2), bits_of(&r), shape_of(&r));
-        }
-        "vsfc" => {
-            // each part's .fg kernel result against its .fc part's (tools/bench-parts), regenerated
-            // by the kernel alone: bits (as `bits` hashes them), volume, faces and edges
-            for name in names().iter().filter(|n| args.get(1).is_none_or(|a| a == *n)) {
-                let (part, ids) = bench(name);
-                let fc = forge_agent::bench::part(name);
-                // the features alike, and the .fg ones regenerated under the .fc part's ids
-                // (by position): equal bits there say the kernel features are the same
-                let alike = part
-                    .features
-                    .iter()
-                    .zip(&fc.features)
-                    .filter(|(a, b)| a == b)
-                    .count();
-                println!(
-                    "{name} features fg {} fc {} alike {alike}; fg under fc ids: seq {:016x}",
-                    part.features.len(),
-                    fc.features.len(),
-                    bits_of(&part.regenerate_solids())
-                );
-                for (path, g, c) in [
-                    ("seq", regen(&part, &ids, "seq"), fc.regenerate_solids()),
-                    ("nary", regen(&part, &ids, "nary4"), fc.regenerate_nary_solids(4)),
-                ] {
-                    let (gs, cs) = (shape_of(&g), shape_of(&c));
-                    println!(
-                        "{name} {path} fg {:016x} {gs:?} fc {:016x} {cs:?} {}",
-                        bits_of(&g),
-                        bits_of(&c),
-                        if (gs.0 - cs.0).abs() <= 1e-6 * cs.0.abs() && gs.1 == cs.1 {
-                            "same"
-                        } else {
-                            "DIFFERENT"
-                        }
-                    );
                 }
             }
         }
@@ -283,8 +209,8 @@ fn main() {
             }
         }
         "font" => std::fs::write(
-            std::path::Path::new(arg(1)).join(forge_agent::bench::FONT),
-            forge_agent::bench::font_bytes(),
+            std::path::Path::new(arg(1)).join(forge_lang::bench::FONT),
+            forge_lang::bench::font_bytes(),
         )
         .expect("write"),
         a => panic!("unknown command {a}"),

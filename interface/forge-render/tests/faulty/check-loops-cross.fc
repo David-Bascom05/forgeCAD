@@ -1,6 +1,0 @@
-extrude 16 z 0 0 1 x 1 0 0 at -35 -7 0 loop line 0 0 70 0 line 70 0 70 16 line 70 16 0 16 line 0 16 0 0
-extrude cut 16 z 0 1 0 x -1 0 0 at 34 -6 16 circle 2.5 0 2.5
-extrude cut 16 z 0 1 0 x -1 0 0 at 34 -6 16 circle 65.5 0 2.5
-extrude cut 16 z 0 1 0 x -1 0 0 at 22.5 -6 8 loop line 0 0 45 0 line 45 0 45 8 line 45 8 0 8 line 0 8 0 0
-extrude cut 16 z 0 0 1 x 1 0 0 at -20 -4 -8 circle 2.5 0 2.5
-fillet 4 @ea3d34e1a @ea94431d4 @eb7d4ac2d @ecfc149db

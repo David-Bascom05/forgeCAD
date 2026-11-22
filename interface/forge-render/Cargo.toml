@@ -26,7 +26,6 @@ wgpu = { version = "=30.0.1", default-features = false, features = ["std", "park
 winit = { version = "=0.30.13", default-features = false, features = ["rwh_06", "wayland", "wayland-dlopen", "x11"] }
 egui = { version = "=0.37.0", default-features = false }
 egui-wgpu = { version = "=0.37.0", default-features = false }
-forge-doc = { path = "../forge-doc" }
 forge-agent = { path = "../forge-agent" }
 forge-lang = { path = "../forge-lang" }
 forge-harness = { path = "../../kernel/forge-harness" }
@@ -38,6 +37,8 @@ forge-dwg = { path = "../../kernel/forge-dwg" }
 forge-math = { path = "../../kernel/forge-math" }
 forge-model = { path = "../../kernel/forge-model" }
 forge-sketch = { path = "../../kernel/forge-sketch" }
+# the sketcher's profiles (its regions' areas and loops)
+forge-ops = { path = "../../kernel/forge-ops" }
 forge-material = { path = "../../kernel/forge-material" }
 forge-thermo = { path = "../../kernel/forge-thermo" }
 # in the browser's tree already, through forge-lang: its plain math (a mass's principal axes)

@@ -1027,7 +1027,6 @@ version = "0.1.0"
 dependencies = [
  "forge-bool",
  "forge-dirs",
- "forge-doc",
  "forge-font",
  "forge-geom",
  "forge-math",
@@ -1067,19 +1066,6 @@ dependencies = [
 [[package]]
 name = "forge-dirs"
 version = "0.1.0"
-
-[[package]]
-name = "forge-doc"
-version = "0.1.0"
-dependencies = [
- "forge-font",
- "forge-geom",
- "forge-math",
- "forge-model",
- "forge-ops",
- "forge-sketch",
- "forge-topo",
-]
 
 [[package]]
 name = "forge-draw"
@@ -1157,7 +1143,6 @@ dependencies = [
  "forge-asm",
  "forge-bool",
  "forge-dirs",
- "forge-doc",
  "forge-draw",
  "forge-font",
  "forge-geom",
@@ -1174,6 +1159,7 @@ dependencies = [
  "forge-step",
  "forge-thermo",
  "forge-topo",
+ "forge-units",
 ]
 
 [[package]]
@@ -1232,7 +1218,6 @@ dependencies = [
  "egui-winit",
  "forge-agent",
  "forge-dirs",
- "forge-doc",
  "forge-draw",
  "forge-dwg",
  "forge-geom",
@@ -1244,6 +1229,7 @@ dependencies = [
  "forge-math",
  "forge-mesh",
  "forge-model",
+ "forge-ops",
  "forge-sheet",
  "forge-sketch",
  "forge-step",
@@ -1314,6 +1300,10 @@ dependencies = [
  "forge-geom",
  "forge-math",
 ]
+
+[[package]]
+name = "forge-units"
+version = "0.1.0"
 
 [[package]]
 name = "futures-core"

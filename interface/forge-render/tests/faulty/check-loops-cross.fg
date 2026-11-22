@@ -1,0 +1,23 @@
+# A part the kernel builds and the check does not pass: a block cut across its top and from
+# below, then its four upright corners rounded, which leaves a face whose loops cross.
+sketch plan(on: xy) {
+  outline = rect(corner: (-35, -7), size: (70, 16))
+}
+block = extrude(plan, 16)
+# a millimetre in from the front face, x along it from its left end, up the part
+sketch bores(on: offset(block.side(plan.outline[0]), -1)) {
+  a = circle((66.5, 16), 2.5)
+  b = circle((3.5, 16), 2.5)
+}
+left = cut(bores.a, 16)
+right = cut(bores.b, 16)
+sketch groove(on: offset(block.side(plan.outline[0]), -1)) {
+  r = rect(corner: (12.5, 8), size: (45, 8))
+}
+channel = cut(groove, 16)
+# from 8 below the bottom, up into the part
+sketch under(on: offset(block.start, 8)) {
+  c = circle((-17.5, 4), 2.5)
+}
+pocket = cut(under, 16)
+corners = fillet(edges(of: block, along: Z, longer: 10), 4)

@@ -213,7 +213,7 @@ fn revolved_by(pts: &[(f64, f64)], angle: f64, feature: u64) -> Body {
 
 /// A tube's end disc joined whole, cut by a bore ending on it and a seat flush with it in one
 /// n-ary boolean: the seat's circle, a chord's sag outside the bore's, is a hole of the ring
-/// round it, not of the bore (forgecad-gate/repros/nary-cut-into-joined-ring.fc).
+/// round it, not of the bore.
 #[test]
 fn seat_cut_into_a_joined_tube_end() {
     let tube = unified(revolved(

@@ -1653,7 +1653,7 @@ mod tests {
 
     /// A varying law round a ring (no free end) starts at the ring's lowest vertex and runs one way
     /// round, whatever order its edges are given in (a ring's start once came from the first edge
-    /// given, so the order .fc and .fg list a selection's edges in turned the law round).
+    /// given, so the order a selection listed its edges in turned the law round).
     #[test]
     fn law_round_a_ring_is_the_same_in_any_order() {
         let boxed = Part {

@@ -1,4 +1,4 @@
-//! Exact mass vs mesh timing per body (copy to interface/forge-agent/examples/ to run; see README).
+//! Exact mass vs mesh timing per body (copy to interface/forge-lang/examples/ to run; see README).
 //! masstime [names..]: gate and bench parts by default, `fillets` for the fillet corpus.
 //! MASSONLY=1 skips the mesh; COUNT=r regenerates, then makes r exact calls (MESH=1: meshes)
 //! for instruction counting; REGEN=1 times the regeneration instead.
@@ -7,6 +7,15 @@ use forge_model::{fillets, suite, torture};
 use forge_topo::Body;
 
 use std::time::Instant;
+
+/// A bench part's solids: the kernel features its Forge program makes (`parts/bench/NAME.fg`, the
+/// bench font beside it), regenerated alone.
+fn bench_part(name: &str) -> Result<Vec<forge_model::Solid>, forge_model::RegenError> {
+    let fonts = forge_lang::fuzz::font_dir();
+    std::fs::write(fonts.join(forge_lang::bench::FONT), forge_lang::bench::font_bytes()).expect("font");
+    let b = forge_lang::fuzz::build(forge_lang::bench::src(name).expect("a bench part"));
+    b.part().regenerate_solids_ids(Some(&b.ids))
+}
 
 fn main() {
     let mut names: Vec<String> = std::env::args().skip(1).collect();
@@ -21,8 +30,8 @@ fn main() {
     }
     for name in &names {
         let n = name.as_str();
-        let bodies: Vec<(String, Body)> = if forge_agent::bench::NAMES.contains(&n) {
-            match forge_agent::bench::part(n).regenerate_solids() {
+        let bodies: Vec<(String, Body)> = if forge_lang::bench::NAMES.contains(&n) {
+            match bench_part(n) {
                 Ok(s) => s.into_iter().enumerate().map(|(i, s)| (format!("{n}#{i}"), s.body)).collect(),
                 Err(e) => {
                     println!("{n:24} regen failed {e:?}");

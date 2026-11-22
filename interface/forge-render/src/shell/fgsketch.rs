@@ -1,6 +1,6 @@
 //! A sketch drawn with the app's sketch tools, written as a Forge sketch block. The tools write
-//! rows in the sketcher's row form (`line P P`, `rect X Y W H`, `dist l1 20`); this turns them into
-//! Forge's (`l1 = line(near(x1, y2), near(x3, y4))`, `distance(l1, d5)`): points drawn are free
+//! the sketcher's typed rows (`Row::Line`, `Row::Rect`, a `Row::Dim` distance); this writes each as
+//! Forge (`l1 = line(near(x1, y2), near(x3, y4))`, `distance(l1, d5)`): points drawn are free
 //! guesses (`near`), as in the drawing; every number (guess, size, dimension) is a param of the
 //! sketch. A row with no Forge form is refused, typed.
 
@@ -11,12 +11,14 @@ mod variants;
 pub use edit::{Opened, open};
 
 use super::fgtool::ToolError;
-use forge_doc::text::tokens;
+use super::sketching::rows::{D, Part, Pt, Ref, Row, V};
 use std::collections::{HashMap, HashSet};
 
 struct Out {
     name: String,
     params: Vec<String>,
+    /// What `project` rows read, bound above the block (a selection is no sketch row's to make).
+    binds: Vec<String>,
     rows: Vec<String>,
     /// What each row name (`l1`, `c2`, `p1`) is in Forge.
     names: HashMap<String, String>,
@@ -32,41 +34,15 @@ struct Out {
     rect_sides: HashMap<String, (usize, usize)>,
 }
 
-fn num(t: &str, row: &str) -> Result<f64, ToolError> {
-    t.parse::<f64>()
-        .ok()
-        .filter(|v| v.is_finite())
-        .ok_or(ToolError::BadNumber {
-            param: "sketch value",
-            text: format!("{t} (in `{row}`)"),
-        })
+fn num(v: &V, row: &Row) -> Result<f64, ToolError> {
+    v.num().filter(|v| v.is_finite()).ok_or(ToolError::BadNumber {
+        param: "sketch value",
+        text: format!("{v} (in `{row}`)"),
+    })
 }
 
 fn fmt(v: f64) -> String {
     super::fg::short(v)
-}
-
-/// The kinds of the row names a row makes, in order (`rect`: four lines).
-pub(super) fn made(t: &[String]) -> Vec<char> {
-    match t.first().map(String::as_str) {
-        Some("pt") => vec!['p'],
-        Some("line") => vec!['l'],
-        Some("circle") => vec!['c'],
-        Some("arc") => vec!['a'],
-        Some("spline" | "bspline") => vec!['s'],
-        Some("ellipse" | "earc") => vec!['e'],
-        Some("rect") => vec!['l'; 4],
-        Some("poly") => {
-            let open = t.last().is_some_and(|w| w == "open");
-            let (mut k, mut pts) = (1, 0);
-            while k < t.len() - usize::from(open) {
-                k += if t[k].parse::<f64>().is_ok() { 2 } else { 1 };
-                pts += 1;
-            }
-            vec!['l'; pts - usize::from(open)]
-        }
-        _ => vec![],
-    }
 }
 
 impl Out {
@@ -74,6 +50,7 @@ impl Out {
         Out {
             name: name.to_string(),
             params: vec![],
+            binds: vec![],
             rows: vec![],
             names: HashMap::new(),
             named: HashMap::new(),
@@ -96,6 +73,25 @@ impl Out {
         let n = format!("{base}{k}");
         self.taken.insert(n.clone());
         self.params.push(format!("param {}.{n} = {text}\n", self.name));
+        n
+    }
+
+    /// A name above the block for the part's geometry `text` (a name already is one).
+    fn bind(&mut self, text: &str) -> String {
+        let plain = text
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+            && text.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
+        if plain {
+            return text.to_string();
+        }
+        let n = (1..)
+            .map(|k| format!("{}_src{k}", self.name))
+            .find(|n| !self.taken.contains(n))
+            .expect("a free name");
+        self.taken.insert(n.clone());
+        self.binds.push(format!("{n} = {text}\n"));
         n
     }
 
@@ -131,53 +127,53 @@ impl Out {
         n
     }
 
-    /// A point: `X Y` (two tokens, a free point there) or a name; returns the text and how many
-    /// tokens it took.
-    fn point(&mut self, t: &[String], row: &str) -> Result<(String, usize), ToolError> {
-        let w = t.first().ok_or(no_form(row))?;
-        if let Ok(x) = w.parse::<f64>() {
-            let y = num(t.get(1).ok_or(no_form(row))?, row)?;
-            // where it was drawn: a guess the solver starts from, kept as params like any number
-            let (px, py) = (self.param("x", x), self.param("y", y));
-            return Ok((format!("near({px}, {py})"), 2));
+    /// A point: a free one (a guess the solver starts from, its numbers params) or the sketch's.
+    fn point(&mut self, p: &Pt, row: &Row) -> Result<String, ToolError> {
+        match p {
+            Pt::At(x, y) => {
+                let (x, y) = (num(x, row)?, num(y, row)?);
+                // where it was drawn: a guess the solver starts from, kept as params like any number
+                let (px, py) = (self.param("x", x), self.param("y", y));
+                Ok(format!("near({px}, {py})"))
+            }
+            Pt::R(r) => self.reference(r, true, row),
         }
-        Ok((self.reference(w, true, row)?, 1))
     }
 
     /// An entity or a point by its row name: `l1`, `l1.a`, `c1` (as a point: its centre), `o`.
-    fn reference(&self, w: &str, as_point: bool, row: &str) -> Result<String, ToolError> {
-        if w == "o" {
+    fn reference(&self, w: &Ref, as_point: bool, row: &Row) -> Result<String, ToolError> {
+        if w.base == "o" {
             return Ok("near(0, 0)".into());
         }
-        let (base, part) = match w.split_once('.') {
-            Some((b, p)) => (b, Some(p)),
-            None => (w, None),
-        };
+        let base = w.base.as_str();
         let e = self.names.get(base).ok_or(no_form(row))?;
-        Ok(match part {
-            Some("a") => format!("{e}.a"),
-            Some("b") => format!("{e}.b"),
-            Some("c") => format!("{e}.center"),
-            Some(_) => return Err(no_form(row)),
-            None if as_point && (base.starts_with('c') || base.starts_with('a')) => format!("{e}.center"),
-            None => e.clone(),
+        Ok(match w.part {
+            Part::A => format!("{e}.a"),
+            Part::B => format!("{e}.b"),
+            Part::C => format!("{e}.center"),
+            Part::M | Part::K(_) => return Err(no_form(row)),
+            Part::Whole if as_point && (base.starts_with('c') || base.starts_with('a')) => {
+                format!("{e}.center")
+            }
+            Part::Whole => e.clone(),
         })
     }
 
     /// A dimension's value: a number becomes a param, a name or expression is written as it is.
-    fn value(&mut self, base: &str, v: &str, row: &str, unit: &str) -> Result<String, ToolError> {
-        if v.parse::<f64>().is_ok() {
-            return Ok(self.param_in(base, &format!("{}{unit}", fmt(num(v, row)?))));
+    fn value(&mut self, base: &str, v: &V, unit: &str) -> String {
+        match v {
+            V::N(x) => self.param_in(base, &format!("{}{unit}", fmt(*x))),
+            V::X(t) => t
+                .strip_prefix('(')
+                .and_then(|x| x.strip_suffix(')'))
+                .unwrap_or(t)
+                .to_string(),
         }
-        Ok(v.strip_prefix('(')
-            .and_then(|x| x.strip_suffix(')'))
-            .unwrap_or(v)
-            .to_string())
     }
 
     /// Rows `from` on written as Forge rows (after `kept`, the Forge names of what each earlier
     /// row makes).
-    fn rows_from(&mut self, rows: &[String], from: usize, kept: &[Vec<String>]) -> Result<(), ToolError> {
+    fn rows_from(&mut self, rows: &[Row], from: usize, kept: &[Vec<String>]) -> Result<(), ToolError> {
         // a new rect's own width and height: the dimensions on its sides, else as drawn
         let mut held: HashMap<(usize, usize), f64> = HashMap::new();
         // a new circle's own radius (an ellipse's minor axis): a dimension on it, else as drawn
@@ -185,40 +181,37 @@ impl Out {
         let mut counts: HashMap<char, usize> = HashMap::new();
         let mut circles = vec![];
         for (k, r) in rows.iter().enumerate() {
-            let t = tokens(r);
-            let kinds = made(&t);
-            for (side, kind) in kinds.iter().enumerate() {
+            for (side, kind) in r.made().iter().enumerate() {
                 let c = counts.entry(*kind).or_default();
                 *c += 1;
-                if k >= from && t[0] == "rect" {
+                if k >= from && matches!(r, Row::Rect(..)) {
                     self.rect_sides.insert(format!("l{c}"), (k, side));
                 }
-                if k >= from && t[0] == "circle" {
+                if k >= from && matches!(r, Row::Circle(..)) {
                     circles.push(format!("c{c}"));
                 }
-                if k >= from && t[0] == "ellipse" {
+                if k >= from && matches!(r, Row::Ellipse(..)) {
                     circles.push(format!("e{c}"));
                 }
             }
-            match t.first().map(String::as_str) {
-                Some(w @ ("rad" | "dia")) => {
-                    if let (Some(c), Some(v)) = (t.get(1), t.get(2))
-                        && circles.contains(c)
+            match r {
+                Row::Dim(d @ (D::Rad | D::Dia), on, Some(v)) => {
+                    if let [c] = &on[..]
+                        && !c.is_point()
+                        && circles.contains(&c.base)
                     {
                         let v = num(v, r)?;
-                        radii.insert(c.clone(), if w == "dia" { v / 2.0 } else { v });
+                        radii.insert(c.base.clone(), if *d == D::Dia { v / 2.0 } else { v });
                     }
                 }
-                Some(w @ ("hdist" | "vdist")) => {
-                    let side = |p: &str| p.split_once('.').map(|x| x.0.to_string());
-                    if let (Some(a), Some(b), Some(v)) = (
-                        t.get(1).and_then(|x| side(x)),
-                        t.get(2).and_then(|x| side(x)),
-                        t.get(3),
-                    ) && a == b
-                        && let Some(&(rect, s)) = self.rect_sides.get(&a)
+                Row::Dim(d @ (D::HDist | D::VDist), on, Some(v)) => {
+                    if let [a, b] = &on[..]
+                        && a.is_point()
+                        && b.is_point()
+                        && a.base == b.base
+                        && let Some(&(rect, s)) = self.rect_sides.get(&a.base)
                     {
-                        let k = usize::from(w == "vdist" || s % 2 == 1);
+                        let k = usize::from(*d == D::VDist || s % 2 == 1);
                         held.insert((rect, k), num(v, r)?);
                     }
                 }
@@ -227,9 +220,8 @@ impl Out {
         }
         for (k, r) in rows.iter().enumerate() {
             if k < from {
-                let t = tokens(r);
                 let mut names = kept.get(k).into_iter().flatten();
-                for kind in made(&t) {
+                for kind in r.made() {
                     let f = self.row_next(kind);
                     if let Some(n) = names.next() {
                         self.names.insert(f, n.clone());
@@ -245,41 +237,32 @@ impl Out {
     fn row(
         &mut self,
         k: usize,
-        r: &str,
+        r: &Row,
         held: &HashMap<(usize, usize), f64>,
         radii: &HashMap<String, f64>,
     ) -> Result<(), ToolError> {
         let o = self;
-        let mut t = tokens(r);
         // a construction line is written as one; other construction geometry has no Forge form
-        let cons = t.last().is_some_and(|w| w == "cons");
-        if cons {
-            t.pop();
-        }
-        let Some((w, rest)) = t.split_first() else {
-            return Ok(());
-        };
-        if cons && w != "line" {
+        let cons = r.is_cons();
+        let row = r.plain();
+        if cons && !matches!(row, Row::Line(..)) {
             return Err(no_form(r));
         }
-        match w.as_str() {
-            "pt" => {
-                let (p, _) = o.point(rest, r)?;
+        let list = |ps: Vec<String>| ps.join(", ");
+        match row {
+            Row::Pt(p) => {
+                let p = o.point(p, r)?;
                 let n = o.entity('p');
                 o.rows.push(format!("{n} = {p}"));
             }
-            "line" => {
-                let (a, k) = o.point(rest, r)?;
-                let (b, _) = o.point(&rest[k..], r)?;
+            Row::Line(a, b) => {
+                let (a, b) = (o.point(a, r)?, o.point(b, r)?);
                 let n = o.entity('l');
                 let c = if cons { ", construction: true" } else { "" };
                 o.rows.push(format!("{n} = line({a}, {b}{c})"));
             }
-            "rect" => {
-                let v: Vec<f64> = rest.iter().map(|x| num(x, r)).collect::<Result<_, _>>()?;
-                let [x, y, w0, h0] = v[..] else {
-                    return Err(no_form(r));
-                };
+            Row::Rect(x, y, w0, h0) => {
+                let (x, y, w0, h0) = (num(x, r)?, num(y, r)?, num(w0, r)?, num(h0, r)?);
                 let w = held.get(&(k, 0)).copied().unwrap_or(w0);
                 let h = held.get(&(k, 1)).copied().unwrap_or(h0);
                 let (px, py) = (o.param("x", x), o.param("y", y));
@@ -292,57 +275,45 @@ impl Out {
                     o.names.insert(f, format!("{n}[{side}]"));
                 }
             }
-            "circle" => {
-                let (c, at) = o.point(rest, r)?;
+            Row::Circle(c, rad) => {
+                let c = o.point(c, r)?;
                 let f = format!("c{}", o.named.get(&'c').copied().unwrap_or(0) + 1);
                 let rr = match radii.get(&f) {
                     Some(&v) => v,
-                    None => num(rest.get(at).ok_or(no_form(r))?, r)?,
+                    None => num(rad, r)?,
                 };
                 let pr = o.param("r", rr);
                 let n = o.entity('c');
                 o.rows.push(format!("{n} = circle({c}, {pr})"));
             }
-            "arc" => {
-                let (c, k1) = o.point(rest, r)?;
-                let (s, k2) = o.point(&rest[k1..], r)?;
-                let (e, k3) = o.point(&rest[k1 + k2..], r)?;
-                let cw = rest.get(k1 + k2 + k3).is_some_and(|w| w == "cw");
+            Row::Arc(c, s, e, cw) => {
+                let (c, s, e) = (o.point(c, r)?, o.point(s, r)?, o.point(e, r)?);
                 let n = o.entity('a');
                 o.rows.push(format!(
                     "{n} = arc(center: {c}, from: {s}, to: {e}{})",
-                    if cw { ", cw: true" } else { "" }
+                    if *cw { ", cw: true" } else { "" }
                 ));
             }
-            "ellipse" => {
-                let (c, k1) = o.point(rest, r)?;
-                let (m, k2) = o.point(&rest[k1..], r)?;
+            Row::Ellipse(c, m, b) => {
+                let (c, m) = (o.point(c, r)?, o.point(m, r)?);
                 // its minor axis: a dimension on it, else as drawn
                 let f = format!("e{}", o.named.get(&'e').copied().unwrap_or(0) + 1);
                 let b = match radii.get(&f) {
                     Some(&v) => v,
-                    None => num(rest.get(k1 + k2).ok_or(no_form(r))?, r)?,
+                    None => num(b, r)?,
                 };
                 let pb = o.param("b", b);
                 let n = o.entity('e');
                 o.rows
                     .push(format!("{n} = ellipse(center: {c}, major: {m}, b: {pb})"));
             }
-            "spline" | "bspline" => {
-                let open = rest.last().is_some_and(|w| w == "open");
-                let pts = if open { &rest[..rest.len() - 1] } else { rest };
+            Row::Spline(pts, open) | Row::BSpline(_, pts, open) => {
                 // control vertices: Forge's are cubic, or as cubic as few points allow
-                let (pts, degree) = match w.as_str() {
-                    "bspline" => (&pts[1..], Some(num(pts.first().ok_or(no_form(r))?, r)?)),
-                    _ => (pts, None),
+                let degree = match row {
+                    Row::BSpline(d, ..) => Some(num(d, r)?),
+                    _ => None,
                 };
-                let mut ps = vec![];
-                let mut k = 0;
-                while k < pts.len() {
-                    let (p, used) = o.point(&pts[k..], r)?;
-                    ps.push(p);
-                    k += used;
-                }
+                let ps = pts.iter().map(|p| o.point(p, r)).collect::<Result<Vec<_>, _>>()?;
                 if let Some(d) = degree
                     && d != 3.0_f64.min(ps.len() as f64 - 1.0 - f64::from(u8::from(!open)))
                 {
@@ -351,107 +322,128 @@ impl Out {
                 let n = o.entity('s');
                 o.rows.push(format!(
                     "{n} = spline([{}], closed: {}{})",
-                    ps.join(", "),
-                    if open { "false" } else { "true" },
+                    list(ps),
+                    if *open { "false" } else { "true" },
                     if degree.is_some() { ", cv: true" } else { "" }
                 ));
             }
             // a fixed rect holds its own corners square and its sides' lengths
-            "hdist" | "vdist"
-                if rest
+            Row::Dim(D::HDist | D::VDist, on, Some(_))
+                if on
                     .first()
-                    .and_then(|x| x.split_once('.'))
-                    .is_some_and(|x| o.rect_sides.contains_key(x.0)) => {}
-            "co" | "par" | "perp" | "tan" | "eq" | "conc" | "colin" => {
-                let f = match w.as_str() {
-                    "co" => "coincident",
-                    "par" => "parallel",
-                    "perp" => "perpendicular",
-                    "tan" => "tangent",
-                    "conc" => "concentric",
-                    "colin" => "collinear",
-                    _ => "equal",
+                    .filter(|x| x.is_point())
+                    .is_some_and(|x| o.rect_sides.contains_key(&x.base)) => {}
+            Row::Co(a, b)
+            | Row::Par(a, b)
+            | Row::Perp(a, b)
+            | Row::Tan(a, b)
+            | Row::Conc(a, b)
+            | Row::Colin(a, b) => {
+                let f = match row {
+                    Row::Co(..) => "coincident",
+                    Row::Par(..) => "parallel",
+                    Row::Perp(..) => "perpendicular",
+                    Row::Tan(..) => "tangent",
+                    Row::Conc(..) => "concentric",
+                    _ => "collinear",
                 };
-                let point = w == "co";
-                let a = o.reference(rest.first().ok_or(no_form(r))?, point, r)?;
-                let b = o.reference(rest.get(1).ok_or(no_form(r))?, point, r)?;
+                let point = matches!(row, Row::Co(..));
+                let (a, b) = (o.reference(a, point, r)?, o.reference(b, point, r)?);
                 o.rows.push(format!("{f}({a}, {b})"));
             }
-            "hor" | "ver" | "fix" => {
-                let f = match w.as_str() {
-                    "hor" => "horizontal",
-                    "ver" => "vertical",
+            Row::Eq(es) => {
+                let [a, rest @ ..] = &es[..] else {
+                    return Err(no_form(r));
+                };
+                if rest.is_empty() {
+                    return Err(no_form(r));
+                }
+                let (a, b) = (o.reference(a, false, r)?, o.reference(&rest[0], false, r)?);
+                o.rows.push(format!("equal({a}, {b})"));
+            }
+            Row::Hor(es) | Row::Ver(es) | Row::Fix(es) => {
+                let f = match row {
+                    Row::Hor(_) => "horizontal",
+                    Row::Ver(_) => "vertical",
                     _ => "fix",
                 };
-                for e in rest {
-                    let x = o.reference(e, w == "fix", r)?;
+                let fix = matches!(row, Row::Fix(_));
+                for e in es {
+                    let x = o.reference(e, fix, r)?;
                     o.rows.push(format!("{f}({x})"));
                 }
             }
-            "sym" => {
-                let p = o.reference(rest.first().ok_or(no_form(r))?, true, r)?;
-                let q = o.reference(rest.get(1).ok_or(no_form(r))?, true, r)?;
-                let l = o.reference(rest.get(2).ok_or(no_form(r))?, false, r)?;
+            Row::Sym(p, q, l) => {
+                let (p, q) = (o.reference(p, true, r)?, o.reference(q, true, r)?);
+                let l = o.reference(l, false, r)?;
                 o.rows.push(format!("symmetric({p}, {q}, {l})"));
             }
-            "poly" => {
-                let open = rest.last().is_some_and(|w| w == "open");
-                let pts = if open { &rest[..rest.len() - 1] } else { rest };
-                let mut ps = vec![];
-                let mut k = 0;
-                while k < pts.len() {
-                    let (p, used) = o.point(&pts[k..], r)?;
-                    ps.push(p);
-                    k += used;
-                }
+            Row::Poly(pts, open) => {
+                let ps = pts.iter().map(|p| o.point(p, r)).collect::<Result<Vec<_>, _>>()?;
                 let n = o.fresh('o');
-                for side in 0..ps.len() - usize::from(open) {
+                for side in 0..ps.len() - usize::from(*open) {
                     let f = o.row_next('l');
                     o.names.insert(f, format!("{n}[{side}]"));
                 }
                 o.rows.push(format!(
                     "{n} = poly([{}], closed: {})",
-                    ps.join(", "),
-                    if open { "false" } else { "true" }
+                    list(ps),
+                    if *open { "false" } else { "true" }
                 ));
             }
-            "mid" => {
-                let p = o.reference(rest.first().ok_or(no_form(r))?, true, r)?;
-                let l = o.reference(rest.get(1).ok_or(no_form(r))?, false, r)?;
+            // the part's edges or a face's boundary, laid on the plane: read afresh each rebuild
+            Row::Project { of, many, approx } => {
+                let of = o.bind(of);
+                let tail = match approx {
+                    Some(v) => format!(", approx: {}", o.param("tol", num(v, r)?)),
+                    None => String::new(),
+                };
+                let n = if *many { o.fresh('j') } else { o.entity('j') };
+                o.rows.push(format!("{n} = project({of}{tail})"));
+            }
+            Row::Mid(p, l) => {
+                let p = o.reference(p, true, r)?;
+                let l = o.reference(l, false, r)?;
                 o.rows.push(format!("midpoint({p}, {l})"));
             }
-            "dist" => match rest {
-                [l, v] => {
+            Row::Dim(D::Dist, on, Some(v)) => match &on[..] {
+                [l] => {
                     let e = o.reference(l, false, r)?;
-                    let d = o.value("d", v, r, "")?;
+                    let d = o.value("d", v, "");
                     o.rows.push(format!("distance({e}, {d})"));
                 }
-                [a, b, v] => {
+                [a, b] => {
                     let (a, b) = (o.reference(a, true, r)?, o.reference(b, false, r)?);
-                    let d = o.value("d", v, r, "")?;
+                    let d = o.value("d", v, "");
                     o.rows.push(format!("distance({a}, {b}, {d})"));
                 }
                 _ => return Err(no_form(r)),
             },
             // a circle holds its own radius, an ellipse its minor axis
-            "rad" | "dia" if rest.first().is_some_and(|c| radii.contains_key(c)) => {}
-            "rad" | "dia" => {
-                let e = o.reference(rest.first().ok_or(no_form(r))?, false, r)?;
-                let v = rest.get(1).ok_or(no_form(r))?;
-                let v = match v.parse::<f64>() {
-                    Ok(x) if w == "dia" => (x / 2.0).to_string(),
-                    _ if w == "dia" => return Err(no_form(r)),
-                    _ => v.clone(),
+            Row::Dim(D::Rad | D::Dia, on, Some(_))
+                if on
+                    .first()
+                    .is_some_and(|c| !c.is_point() && radii.contains_key(&c.base)) => {}
+            Row::Dim(d @ (D::Rad | D::Dia), on, Some(v)) => {
+                let [c] = &on[..] else {
+                    return Err(no_form(r));
                 };
-                let d = o.value("r", &v, r, "")?;
-                o.rows.push(format!("radius({e}, {d})"));
+                let e = o.reference(c, false, r)?;
+                let v = match (d, v) {
+                    (D::Dia, V::N(x)) => V::N(x / 2.0),
+                    (D::Dia, V::X(_)) => return Err(no_form(r)),
+                    (_, v) => v.clone(),
+                };
+                let x = o.value("r", &v, "");
+                o.rows.push(format!("radius({e}, {x})"));
             }
-            "ang" => {
-                let a = o.reference(rest.first().ok_or(no_form(r))?, false, r)?;
-                let b = o.reference(rest.get(1).ok_or(no_form(r))?, false, r)?;
-                let v = rest.get(2).ok_or(no_form(r))?;
-                let n = o.value("ang", v, r, "deg")?;
-                o.rows.push(format!("angle({a}, {b}, {n})"));
+            Row::Dim(D::Ang, on, Some(v)) => {
+                let [a, b] = &on[..] else {
+                    return Err(no_form(r));
+                };
+                let (a, b) = (o.reference(a, false, r)?, o.reference(b, false, r)?);
+                let x = o.value("ang", v, "deg");
+                o.rows.push(format!("angle({a}, {b}, {x})"));
             }
             _ => return Err(no_form(r)),
         }
@@ -459,19 +451,30 @@ impl Out {
     }
 }
 
-fn no_form(row: &str) -> ToolError {
+fn no_form(row: &Row) -> ToolError {
     ToolError::NoForgeForm {
         tool: "sketch",
         why: format!("the row `{row}` has no Forge form here; write it in the source"),
     }
 }
 
+/// The rows Forge sketch statements (as a block holds them, on XY) read as.
+pub fn read(statements: &str) -> Result<Vec<Row>, ToolError> {
+    let src = format!("sketch drawn(on: xy) {{\n{statements}\n}}\n");
+    let o = open(&src, "drawn", None)?;
+    match o.read_only {
+        Some(why) => Err(ToolError::NoForgeForm { tool: "sketch", why }),
+        None => Ok(o.rows),
+    }
+}
+
 /// The Forge block for a sketch named `name` on `on` (an anchor, a sketch, or `xy`/`xz`/`yz`):
 /// its params, then the block.
-pub fn block(name: &str, on: &str, rows: &[String]) -> Result<String, ToolError> {
+pub fn block(name: &str, on: &str, rows: &[Row]) -> Result<String, ToolError> {
     let mut o = Out::new(name, HashSet::new());
     o.rows_from(rows, 0, &[])?;
     let mut out: String = o.params.concat();
+    out.push_str(&o.binds.concat());
     out.push_str(&format!("sketch {name}(on: {on}) {{\n"));
     for r in &o.rows {
         out.push_str(&format!("  {r}\n"));
@@ -483,6 +486,7 @@ pub fn block(name: &str, on: &str, rows: &[String]) -> Result<String, ToolError>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::shell::sketching::rows::dsl::*;
 
     fn check(src: &str) -> forge_lang::Run {
         let opts = forge_lang::Options {
@@ -494,17 +498,16 @@ mod tests {
 
     #[test]
     fn drawn_rows_become_a_forge_sketch_with_its_sizes_as_params() {
-        let rows: Vec<String> = [
-            "rect 0 0 40 30",
-            "hdist l1.a l1.b 42",
-            "circle 20 15 4",
-            "dia c1 10",
-            "line 50 0 60 10",
-            "hor l5",
-            "dist l5 12",
-            "pt 5 5",
+        let rows: Vec<Row> = [
+            Row::Rect(v("0"), v("0"), v("40"), v("30")),
+            Row::Dim(D::HDist, vec![rf("l1.a"), rf("l1.b")], Some(v("42"))),
+            Row::Circle(at("20", "15"), v("4")),
+            Row::Dim(D::Dia, vec![rf("c1")], Some(v("10"))),
+            Row::Line(at("50", "0"), at("60", "10")),
+            Row::Hor(vec![rf("l5")]),
+            Row::Dim(D::Dist, vec![rf("l5")], Some(v("12"))),
+            Row::Pt(at("5", "5")),
         ]
-        .map(String::from)
         .to_vec();
         let text = block("sk1", "xy", &rows).unwrap();
         assert!(text.contains("param sk1.w3 = 42\n"), "{text}");
@@ -526,30 +529,121 @@ mod tests {
             .collect();
         assert!(lints.is_empty(), "{text}\n{lints:?}");
         // a rect side is its loop's side
-        let t = block("sk1", "xy", &["rect 0 0 4 3".into(), "hor l2".into()]).unwrap();
+        let t = block(
+            "sk1",
+            "xy",
+            &[
+                Row::Rect(v("0"), v("0"), v("4"), v("3")),
+                Row::Hor(vec![rf("l2")]),
+            ],
+        )
+        .unwrap();
         assert!(t.contains("horizontal(r1[1])"), "{t}");
         // a row with no Forge form is refused, typed
-        let e = block("sk1", "xy", &["project @e12".into()]).unwrap_err();
+        let e = block("sk1", "xy", &[Row::Dim(D::Dist, vec![rf("l1")], None)]).unwrap_err();
         assert_eq!(e.kind(), "NoForgeForm");
     }
 
     #[test]
-    fn concentric_collinear_symmetric_and_construction_rows_become_forge() {
-        let rows: Vec<String> = [
-            "circle 0 0 10",
-            "circle 1 1 4",
-            "conc c1 c2",
-            "line 0 -20 0 20 cons",
-            "line 20 0 30 0",
-            "line -22 0 -31 1",
-            "sym l2.a l3.a l1",
-            "sym l2.b l3.b l1",
-            "line 40 0 50 0",
-            "colin l2 l4",
-            "poly 60 0 70 0 65 8",
-            "ellipse 100 0 110 0 4",
+    fn projected_edges_are_bound_above_the_block_and_open_again_as_they_were() {
+        use crate::shell::sketching::{SketchFor, SketchMode};
+        let part =
+            "sketch s(on: xy) {\n  r = rect(corner: (0, 0), size: (40, 30))\n}\nbase = extrude(s, 10)\n";
+        let rows: Vec<Row> = [
+            Row::Project {
+                of: "edges(between: (base.end, base.side(s.r[0])))".into(),
+                many: false,
+                approx: None,
+            },
+            Row::Line(pn("j1.b"), at("50", "20")),
+            Row::Project {
+                of: "base.start".into(),
+                many: true,
+                approx: None,
+            },
+            Row::Project {
+                of: "q".into(),
+                many: false,
+                approx: Some(v("0.002")),
+            },
         ]
-        .map(String::from)
+        .to_vec();
+        let text = block("sk1", "base.end", &rows[..3]).unwrap();
+        assert!(
+            text.contains(
+                "sk1_src1 = edges(between: (base.end, base.side(s.r[0])))\nsk1_src2 = base.start\nsketch sk1(on: base.end) {\n"
+            ),
+            "{text}"
+        );
+        assert!(text.contains("  j1 = project(sk1_src1)\n"), "{text}");
+        assert!(text.contains("  l1 = line(j1.b, near(x1, y2))\n"), "{text}");
+        // a face's several curves are a loop no row names
+        assert!(text.contains("  j2 = project(sk1_src2)\n"), "{text}");
+        let t4 = block("sk1", "base.end", &rows[3..]).unwrap();
+        assert!(t4.contains("param sk1.tol1 = 0.002\n"), "{t4}");
+        assert!(t4.contains("j1 = project(q, approx: tol1)"), "{t4}");
+        let src = format!("{part}{text}");
+        let (r, _) = forge_lang::run(&src, forge_lang::Options::default(), Default::default());
+        assert!(r.errors.is_empty(), "{src}\n{:?}", r.errors);
+        // opened again: the rows it was written from, what they project as the part has it
+        let o = edit::open(&src, "sk1", None).unwrap();
+        assert!(o.read_only.is_none(), "{:?}", o.read_only);
+        assert_eq!(
+            o.rows[0],
+            Row::Project {
+                of: "sk1_src1".into(),
+                many: false,
+                approx: None
+            },
+            "{:?}",
+            o.rows
+        );
+        assert_eq!(
+            o.rows[2],
+            Row::Project {
+                of: "sk1_src2".into(),
+                many: true,
+                approx: None
+            },
+            "{:?}",
+            o.rows
+        );
+        let mut m = SketchMode::new(
+            SketchFor::Forge("sk1".into()),
+            "base.end".into(),
+            forge_math::Frame::default(),
+            o.rows.clone(),
+        );
+        m.set_params(o.params.clone());
+        m.take_sources(o.sources.clone());
+        assert!(m.error.is_none(), "{:?}", m.error);
+        let s = m.solved.as_ref().unwrap();
+        let (a, b) = crate::shell::sketching::rows::line(s, "j1").unwrap();
+        assert!((a.distance(b) - 40.0).abs() < 1e-9, "{a:?} {b:?}");
+        assert!(o.write_back(&m.rows, m.kept()).unwrap().is_empty());
+        // a line added from the projected edge's end is written after it, by its Forge name
+        assert!(m.add(Row::Line(pn("j1.a"), at("0", "20"))), "{:?}", m.error);
+        let ops = o.write_back(&m.rows, m.kept()).unwrap();
+        let after = forge_lang::edit::apply_all_checked(&src, &ops).unwrap();
+        assert!(after.contains("= line(j1.a, near("), "{after}");
+    }
+
+    #[test]
+    fn concentric_collinear_symmetric_and_construction_rows_become_forge() {
+        let rows: Vec<Row> = [
+            Row::Circle(at("0", "0"), v("10")),
+            Row::Circle(at("1", "1"), v("4")),
+            Row::Conc(rf("c1"), rf("c2")),
+            Row::Line(at("0", "-20"), at("0", "20")).cons(),
+            Row::Line(at("20", "0"), at("30", "0")),
+            Row::Line(at("-22", "0"), at("-31", "1")),
+            Row::Sym(rf("l2.a"), rf("l3.a"), rf("l1")),
+            Row::Sym(rf("l2.b"), rf("l3.b"), rf("l1")),
+            Row::Line(at("40", "0"), at("50", "0")),
+            Row::Colin(rf("l2"), rf("l4")),
+            Row::Poly(vec![at("60", "0"), at("70", "0"), at("65", "8")], false),
+            Row::Ellipse(at("100", "0"), at("110", "0"), v("4")),
+        ]
         .to_vec();
         let text = block("sk3", "xy", &rows).unwrap();
         assert!(text.contains("concentric(c1, c2)"), "{text}");
@@ -564,19 +658,18 @@ mod tests {
 
     #[test]
     fn lines_arcs_splines_and_their_constraints_check() {
-        let rows: Vec<String> = [
-            "line 0 0 20 0",
-            "line 20 0 20 15",
-            "co l1.b l2.a",
-            "perp l1 l2",
-            "hor l1",
-            "arc 30 30 35 30 30 35",
-            "spline 40 0 45 5 50 0 open",
-            "pt 5 20",
-            "dist l1 20",
-            "ang l1 l2 90",
+        let rows: Vec<Row> = [
+            Row::Line(at("0", "0"), at("20", "0")),
+            Row::Line(at("20", "0"), at("20", "15")),
+            Row::Co(rf("l1.b"), rf("l2.a")),
+            Row::Perp(rf("l1"), rf("l2")),
+            Row::Hor(vec![rf("l1")]),
+            Row::Arc(at("30", "30"), at("35", "30"), at("30", "35"), false),
+            Row::Spline(vec![at("40", "0"), at("45", "5"), at("50", "0")], true),
+            Row::Pt(at("5", "20")),
+            Row::Dim(D::Dist, vec![rf("l1")], Some(v("20"))),
+            Row::Dim(D::Ang, vec![rf("l1"), rf("l2")], Some(v("90"))),
         ]
-        .map(String::from)
         .to_vec();
         let text = block("sk2", "xy", &rows).unwrap();
         assert!(text.contains("coincident(l1.b, l2.a)"), "{text}");

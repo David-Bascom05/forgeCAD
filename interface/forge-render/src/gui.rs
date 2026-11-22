@@ -7,7 +7,7 @@ use crate::nav::Nav;
 use crate::render::{self, Entity, Mark, Offscreen, Overlay, Renderer, part_info};
 use crate::scene::{Motion, Placement, Scene};
 use crate::shell::settings::KeyCmd;
-use crate::shell::sketching::{SketchFor, SketchMode};
+use crate::shell::sketching::{SkTool, SketchFor, SketchMode};
 use crate::shell::{Action, Shell};
 use crate::viewcube;
 use crate::viewer::now_ms;
@@ -552,6 +552,15 @@ impl Gui {
     /// A click in the view: what Forge names it, for the tool waiting, the sketch being started,
     /// Measure, or just shown.
     fn sync_selection(&mut self) {
+        // Project Geometry takes what's clicked on the part
+        if self
+            .shell
+            .sketch
+            .as_ref()
+            .is_some_and(|m| m.tool == Some(SkTool::Project))
+        {
+            return self.sketch_project_picks();
+        }
         // in a sketch only the sketch answers the pointer; the model's for what's looked at
         if self.shell.sketch.is_some() {
             self.shell.origin_hover = None;
@@ -690,7 +699,14 @@ impl Gui {
             WindowEvent::MouseInput {
                 button: MouseButton::Left,
                 ..
-            } if self.shell.sketch.as_ref().is_some_and(|m| m.tool.is_some()) => None,
+            } if self
+                .shell
+                .sketch
+                .as_ref()
+                .is_some_and(|m| m.tool.is_some_and(|t| t != SkTool::Project)) =>
+            {
+                None
+            }
             WindowEvent::MouseInput { state, .. } => match state {
                 ElementState::Pressed if self.over_view => {
                     self.captured = true;
@@ -1406,7 +1422,11 @@ impl Gui {
             }
             let behind = extra_behind;
             let marks = {
-                let quiet = self.shell.sketch.is_some();
+                let quiet = self
+                    .shell
+                    .sketch
+                    .as_ref()
+                    .is_some_and(|m| m.tool != Some(SkTool::Project));
                 // measuring: what's picked and what a click would pick, as Measure takes them
                 let mut m: Vec<Mark> = match measuring {
                     Some(ms) if self.shell.sketch.is_none() => ms,
@@ -2973,6 +2993,36 @@ impl Gui {
         self.shell.status = why;
     }
 
+    /// Clicks on the part with Project Geometry on: each edge or face picked (a click's one, or all
+    /// a window took) becomes a `project` row, by the anchor Forge names it by.
+    fn sketch_project_picks(&mut self) {
+        let Some(v) = &mut self.view else { return };
+        if v.nav.clicks == v.clicks && v.nav.selected == v.clicked {
+            return;
+        }
+        v.clicks = v.nav.clicks;
+        let picked: Vec<Entity> = v.nav.selected.iter().map(|x| x.1).collect();
+        v.nav.selected.clear();
+        v.clicked.clear();
+        v.dirty = true;
+        if picked.is_empty() {
+            return;
+        }
+        let body = self
+            .inspector
+            .data
+            .as_ref()
+            .and_then(|d| d.bodies.first().cloned());
+        let got =
+            crate::shell::sketching::project_picks(self.fg_anchors.as_deref(), body.as_deref(), &picked);
+        if let Some(m) = &mut self.shell.sketch
+            && !m.project(got)
+            && let Some(e) = &m.error
+        {
+            self.shell.status = e.clone();
+        }
+    }
+
     /// A click in the view on a Forge part: what Forge names it, for the tool waiting, the sketch
     /// being started, or just shown.
     fn fg_picks(&mut self, under: Option<crate::origin::Item>) {
@@ -3188,6 +3238,9 @@ impl Gui {
         );
         m.units = "mm";
         m.set_params(o.params.clone());
+        if !o.sources.is_empty() {
+            m.take_sources(o.sources.clone());
+        }
         self.shell.status = match &o.read_only {
             Some(why) => format!("{id} opens read-only: {why}"),
             None => format!("Editing {id}"),

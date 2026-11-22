@@ -6,12 +6,14 @@ the complex parts the realistic best is under 2x. Nothing here is used by shippe
 
 ## Rerun
 
+The numbers below were measured with a counters patch on a build from before the Forge move,
+which no longer applies; this study can't be rerun as it stood. `measure/dragplan.rs` and
+`measure/warmbits.rs` are kept as the record of what was measured. To measure again, add counters
+for the boolean's face pairs to forge-bool and give `dragplan` the `cputime` crate. Then copy both
+files to interface/forge-lang/examples/ and run, from a scratch directory holding the scripts and
+`drags.txt`, for each `part number` line:
+
 ```
-git apply research/replay/measure/probe.patch    # counters and research/rebuild's measure patch: never on main
-cp research/replay/measure/{dragplan,warmbits}.rs interface/forge-agent/examples/
-RUSTFLAGS="-Cforce-frame-pointers=yes -Cdebuginfo=line-tables-only" CARGO_TARGET_DIR=target/fp \
-  fbuild cargo build --release -p forge-agent --example dragplan --example warmbits
-# from a scratch directory holding the scripts and drags.txt, for each `part number` line:
 dragplan part number 8 > steps-part.txt
 perf record -e instructions:u -c 200000 --call-graph fp -o d dragplan part number 16
 perf script -i d -F comm,tid,ip,sym --no-inline | gzip > prof/part.txt.gz

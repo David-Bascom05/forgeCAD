@@ -21,7 +21,7 @@ def cat(s):
     if has('forge_ops::chamfer'): return 'chamfer_'+p
     if has('forge_model::swept::tool_of','forge_model::thread::tools','forge_ops::loft','forge_ops::sweep','forge_ops::skin'): return 'tool_P'
     if has('forge_model::tools','forge_model::tool','forge_ops::'): return 'tool_'+p
-    if has('forge_doc','Model>::rebuild::{closure','text::'): return 'parse'
+    if has('forge_lang::syntax','forge_lang::eval'): return 'parse'
     if has('forge_model::step','step_solids'): return 'stepother_'+p
     return 'modelother'
 def steps(part):

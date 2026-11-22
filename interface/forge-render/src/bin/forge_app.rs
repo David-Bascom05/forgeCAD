@@ -3,7 +3,7 @@
 use forge_render::gui::Headless;
 
 const USAGE: &str = "forge-app [PART | file.fg | file.dwg] [--size WxH] [--times]
-  [--shot FILE.ppm [--scale S] [--light] [--pastel] [--background floor|gradient|solid] [--settings FILE.toml] [--tab N] [--select NAME] [--click NAME].. [--rclick NAME].. [--wait] [--at X Y] [--sketch ROW;ROW..] [--edit NAME] [--draw TOOL X Y] [--view YAW PITCH] [--marking]]
+  [--shot FILE.ppm [--scale S] [--light] [--pastel] [--background floor|gradient|solid] [--settings FILE.toml] [--tab N] [--select NAME] [--click NAME].. [--rclick NAME].. [--wait] [--at X Y] [--sketch STATEMENT;STATEMENT..] [--edit NAME] [--draw TOOL X Y] [--view YAW PITCH] [--marking]]
   steps, in order: --click NAME --dclick NAME --rclick NAME --wait --type TEXT --key NAME (enter, escape, tab, backspace, or M, Ctrl+Z, F6...)
   --hover X Y (the view's pick there) --clickat X Y --drag X Y X2 Y2 --drag-hold X Y X2 Y2 (not let go) --snap FILE.ppm --save
   --viewnow YAW PITCH --home --zoom F (the camera's distance times F) --wheel X Y DY (scroll there) --new-drawing
@@ -794,12 +794,14 @@ fn run() -> Result<(), String> {
             std::thread::sleep(std::time::Duration::from_millis(10));
         }
     }
-    if let Some(rows) = &a.sketch {
-        // on the XY plane, with these rows
+    if let Some(text) = &a.sketch {
+        // on the XY plane, with these Forge sketch statements
+        let rows = forge_render::shell::fgsketch::read(&text.replace(';', "\n"))
+            .map_err(|e| format!("--sketch: {}", e.text()))?;
         xy_sketch(&mut h)?;
         if let Some(m) = &mut h.gui.shell.sketch {
-            for r in rows.split(';').filter(|r| !r.trim().is_empty()) {
-                m.add(r.trim().to_string());
+            for r in rows {
+                m.add(r);
             }
         }
         for _ in 0..40 {
