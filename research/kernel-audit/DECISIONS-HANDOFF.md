@@ -1,8 +1,8 @@
 # Decision log (kernel-audit phase 0): handoff
 
-State at this commit: WIP. The instrumentation, counters and runner are done, and the runner has
-been run once at full depth (decisions.md). Two gates are still open: the feature-off callgrind
-gate, and the release tests on the final tree.
+State at this commit: done. The instrumentation (including the sites the wip left out), the
+counters and the runner are in, the table in decisions.md is from this tree, and the gates below
+have passed.
 
 ## What is instrumented
 
@@ -40,11 +40,22 @@ Fact kinds and the sites that record them (in boolean.rs `mod log`, unless noted
 | two faces one surface | the sequential pair (`surfaces_in`); the n-ary pair (`closed_or_flush`); trim run-on's across-face `ssi::coincident`. A "no" is recorded only for planes nearly flush |
 | touch or crossing | trim: curve_surface's touching root against crossings_near's count |
 
-These sites are not instrumented:
-- forge-geom's hair roots inside intersect.rs (another crate);
-- forge-topo `check`'s EdgeOffFace, which runs on the result after the plan has closed;
-- unify's SAME;
-- the n-ary path's own place step and crossings_near site.
+Added after the wip (each behind the same feature; forge-geom and forge-topo have a `decisions`
+feature of their own, forwarded by forge-bool's, holding a thread-local collector that records
+only inside its `collect`):
+- forge-geom's hair roots (intersect.rs `hair_log`): a conic's turn with roots beside it, one touch
+  (ABSORB_HAIR_ROOTS) or the crossings, recorded as touch or crossing at trim's curve against the
+  edge's surface across (macro `with_hairs!`: off, the bare call), beside `crossings_near`'s count;
+- check's EdgeOffFace (check.rs `face_log`): edge_off_face (16 points), a stray edge (256),
+  certify (256), as "edge on face" under the checked body's edge and face, in a "result check"
+  ledger opened by `decisions::checked` (refuse_strays, the RETRIED check, verify::stage, the
+  runner's validity check);
+- unify's SAME, beside `ssi::coincident` on the same faces, in a "unify" ledger;
+- the n-ary place step: a cut at its edge's end; two cut points one vertex by one reach and by
+  the clusters.
+
+Not instrumented: the n-ary path's crossings_near site (`cut_by`), and forge-geom's hair roots at
+curve_surface calls other than trim's crossing one.
 
 Retry rungs are counted per try, with their outcome (ok, internal, other, unknown) and the input:
 - CAREFUL, ABSORB_HAIR_ROOTS, CHORDS, NO_RUN_ON, FENCES;
@@ -70,35 +81,30 @@ decisions land outside the plans (counted as unscoped: 39k).
 | gate | state |
 |---|---|
 | fmt | passed |
-| clippy `--workspace --all-targets -D warnings`, feature off | passed |
-| clippy on forge-bool, forge-model and forge-proof with the feature on | passed |
-| callgrind gate, feature off | NOT done. Started for the base (6979fa5c, `$SCR/base-src`, `CARGO_TARGET_DIR=$SCR/gB`) and for this tree (`$SCR/gA`, the same path length), and stopped while still building because the machine was at load 26 |
-| release tests (forge-bool, forge-model, forge-lang) | NOT done. A run with the feature on and FORGE_DECISIONS_TRACE was stopped before it finished |
+| clippy `--workspace --all-targets -D warnings`, feature off and on | passed |
+| release tests forge-bool, forge-model, forge-lang, forge-proof, feature off | 1082 passed, 0 failed |
+| the same, feature on, FORGE_DECISIONS_TRACE | 1082 passed, 0 failed |
+| hidden_inputs | the log's statics and env reads listed (no-output) |
+| callgrind gate, feature off, against the base at a same-length path | bits identical; no line over 0.5%; synthetic parts within 12 instructions (start-up), bench lines -0.31% to +0.39% around the base, within their run-to-run spread (heatsink nary1: 0.28% between two runs of one binary, +0.02% least to least; kernel functions net +1400 of 170M) |
 
-The clippy fixes in forge-ops that were needed at first came in from the branch instead (6979fa5c).
+The first gate run on this tree found trim 0.2% over the base (torture seq +24 571, heatsink seq
++0.65%): a `let` around trim's curve_surface_in call under `#[cfg(not(feature))]` compiled
+differently from the bare call. The wip commit alone was equal to the base (torture seq within 3
+instructions). `with_hairs!` expands to the bare call with the feature off; after it torture seq
+is within 1 instruction of the base.
 
-## Findings so far
+## Findings
 
-See decisions.md for the notes and the table. In short:
-
-1. Nearly all contradictions come from the near-coincident family:
-   - point on edge: trim's crossing `on_edge` says on, imprint's says off (2316 facts);
-   - vertex on surface: the coincident-pair implication against trim's edge-box test (2112) and
-     against its run-on end test (1157).
-
-   These are the six sites near-coincident.md names.
-2. A contradiction predicts a lost way.
-   - Sequential plans with a contradiction: 68% ended `Internal`.
-   - Plans without one: 0.02% did.
-   - 98.5% of `Internal` plans had a contradiction first.
-3. Two cuts one vertex (656 facts, across many families, no failures): trim dedup disagrees with
-   place_cuts and with trim's shallow pass.
-4. Retry rungs:
-   - FENCES and `bends` never fired.
-   - ABSORB_HAIR_ROOTS (301), CHORDS (301) and CAREFUL (2) never succeeded.
-   - NO_RUN_ON rescued one input (near_tolerance/20).
-   - The soonest to delete are FENCES, CAREFUL, CHORDS and ABSORB_HAIR_ROOTS, once the regression
-     tests and any Fusion/WHUCAD parts confirm this.
+See decisions.md. In short:
+1. Every retry rung (CAREFUL, ABSORB_HAIR_ROOTS, CHORDS, FENCES, the n-ary knife-edge fallback)
+   rescues a regression test, though on the corpus only NO_RUN_ON rescues anything. None can be
+   deleted on the corpus's evidence; those six tests are the decide-once rewrite's acceptance
+   tests.
+2. The near-coincident family holds 98.5% of the `Internal` plans' contradictions (unchanged).
+3. The hair-root choice disagrees with crossings_near on 4379 facts: double roots at a tangency
+   kept as two crossings, then deduped; no failure goes with them.
+4. unify's SAME (0.5 LINEAR) splits 20 face pairs the boolean calls coincident (near_tolerance).
+5. No disagreement in the n-ary place step (one reach vs clusters) or in check's edge on face.
 
 ## How to run
 
@@ -120,16 +126,9 @@ git worktree add --detach $SCR/base-src 6979fa5c
 GATE_COUNTER=callgrind GATE_REPS=3 CARGO_TARGET_DIR=$SCR/gA sh tools/speed/gate.sh > $SCR/gateA.txt
 ```
 
-## Next
+## Next (for the decide-once rewrite, the master's call)
 
-1. Run the callgrind gate on both trees. It should show bits identical, and no line of the change
-   above the base's count.
-2. Run the release tests for forge-bool, forge-model and forge-lang, with the feature off.
-3. Run the regression tests with FORGE_DECISIONS_TRACE, to see whether any test relies on a rung
-   succeeding (the Fusion/WHUCAD regressions in forge-lang tests/kernel_*). Add the result to
-   decisions.md.
-4. Optionally:
-   - give the `on_edge` sites names instead of line numbers;
-   - instrument forge-geom's hair roots (ABSORB) and check's EdgeOffFace;
-   - add the n-ary place step.
-5. Make the final signed commit without "wip", and report the headline findings.
+- One answer per fact for the near-coincident sites (decisions.md headline 2), then the rungs, each
+  only once its regression test passes without it.
+- The hair-root and crossings_near answers as one decision about a tangency.
+- unify's SAME at the boolean's threshold, or the boolean's at unify's.
