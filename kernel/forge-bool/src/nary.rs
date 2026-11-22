@@ -691,14 +691,21 @@ fn nary_body(
             // a plane apart from the face's (as the sequential regen has it, planes_coincident),
             // the sliver's sides crossing the face (lang/28)
             let sign = if face.same_sense { 1.0 } else { -1.0 };
-            let out = pl.frame.z().get() * (sign * tol::LINEAR);
-            let shifted = |d: f64| forge_math::Box3 {
-                x: forge_math::Interval::new(b.x.lo + d * out.x, b.x.hi + d * out.x),
-                y: forge_math::Interval::new(b.y.lo + d * out.y, b.y.hi + d * out.y),
-                z: forge_math::Interval::new(b.z.lo + d * out.z, b.z.hi + d * out.z),
+            let (z, (from, to)) = (pl.frame.z().get(), OUTER_SIDE);
+            let (a, c) = (z * (sign * from * tol::LINEAR), z * (sign * to * tol::LINEAR));
+            // along each axis from the nearer shift to the farther (a and c lie the same way)
+            let span = |r: &forge_math::Interval, a: f64, c: f64| {
+                let (lo, hi) = if a < c { (a, c) } else { (c, a) };
+                forge_math::Interval {
+                    lo: r.lo + lo,
+                    hi: r.hi + hi,
+                }
             };
-            let (from, to) = OUTER_SIDE;
-            let off = shifted(from).hull(&shifted(to));
+            let off = forge_math::Box3 {
+                x: span(&b.x, a.x, c.x),
+                y: span(&b.y, a.y, c.y),
+                z: span(&b.z, a.z, c.z),
+            };
             let near = b.grow(tol::LINEAR);
             let after = |t: Side| &holders[holders.partition_point(|&h| h <= t)..];
             // how far the face reaches from an axis
@@ -750,7 +757,7 @@ fn nary_body(
                         && after(t).iter().all(|&h| !index[h].bbox.overlaps(&off))
                         && (sh[t].box_in(&off, SHAPE_MARGIN)
                             || sh[t].plane_in(
-                                pl.frame.origin + out * (0.5 * (from + to)),
+                                pl.frame.origin + z * (sign * 0.5 * (from + to) * tol::LINEAR),
                                 pl.frame.z().get(),
                                 reach,
                                 // the plane mid-way, clear by half the band more: the whole band
