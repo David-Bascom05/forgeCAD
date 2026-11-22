@@ -1,5 +1,6 @@
 import Lean
 import ForgeExact.Regular
+import ForgeExact.Flat
 
 /-!
 # Only the standard axioms
@@ -27,3 +28,8 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeExact.reg_kept_sampled
   ForgeExact.reg_kept_bool
   ForgeExact.reg_reg
+  ForgeExact.Flat.wall_nowhereDense
+  ForgeExact.Flat.escape
+  ForgeExact.Flat.HForm.den_iff_onSigns
+  ForgeExact.Flat.flat_boolean
+  ForgeExact.Flat.flat_bool

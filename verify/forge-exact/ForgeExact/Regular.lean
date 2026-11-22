@@ -116,13 +116,12 @@ structure Decomposition {ι : Type v} (A : ι → Pred X) where
   κ : Type w
   /-- the cells, listed: there are finitely many -/
   cells : List κ
-  complete : ∀ c, c ∈ cells
   /-- the cells -/
   cell : κ → Pred X
   /-- the wall: for B-reps, the union of the carrier surfaces -/
   wall : Pred X
   wall_nowhereDense : NowhereDense wall
-  cover : ∀ x, ¬wall x → ∃ c, cell c x
+  cover : ∀ x, ¬wall x → ∃ c ∈ cells, cell c x
   compatible : ∀ c i, (cell c).Sub (A i) ∨ ∀ x, cell c x → ¬A i x
 
 variable {ι : Type v} {A : ι → Pred X}
@@ -144,7 +143,7 @@ theorem Decomposition.op_iff (D : Decomposition.{u, v, w} A) (op : (ι → Prop)
 
 /-- The union of the kept cells. -/
 def Decomposition.kept (D : Decomposition.{u, v, w} A) (keep : D.κ → Prop) : Pred X :=
-  fun x => ∃ c, keep c ∧ D.cell c x
+  fun x => ∃ c ∈ D.cells, keep c ∧ D.cell c x
 
 /-- Off the wall, the kept cells are exactly the boolean. -/
 theorem Decomposition.kept_sdiff_sub (D : Decomposition.{u, v, w} A)
@@ -154,10 +153,10 @@ theorem Decomposition.kept_sdiff_sub (D : Decomposition.{u, v, w} A)
   intro x hx
   apply Classical.byContradiction
   intro hw
-  rcases hx with ⟨⟨c, hc, hxc⟩, hC⟩ | ⟨hC, hK⟩
+  rcases hx with ⟨⟨c, _, hc, hxc⟩, hC⟩ | ⟨hC, hK⟩
   · exact hC ((hkeep c x hxc).mp hc)
-  · obtain ⟨c, hxc⟩ := D.cover x hw
-    exact hK ⟨c, (hkeep c x hxc).mpr hC, hxc⟩
+  · obtain ⟨c, hcs, hxc⟩ := D.cover x hw
+    exact hK ⟨c, hcs, (hkeep c x hxc).mpr hC, hxc⟩
 
 /-- **The first theorem.** For every decomposition compatible with the family and every pointwise
 boolean `op`, the regularised union of the kept cells is the regularised boolean. `keep` is any
