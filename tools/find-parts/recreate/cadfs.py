@@ -1045,9 +1045,15 @@ class Tr:
 
     def extrude(self, f):
         a, env = f["args"], f["env"]
-        for k in ("hasDraft", "hasSecondDirectionDraft"):
-            if a.get(k) is True:
-                raise Unsupported("draft on an extrude")
+        if a.get("hasSecondDirectionDraft") is True:
+            raise Unsupported("draft on an extrude's second direction")
+        taper = None
+        if a.get("hasDraft") is True:
+            # Forge's taper narrows the extrude for a positive angle, as Onshape's does with its pull direction flag set
+            # (every draft of the 1914-part sample has it: the other way is not measured). The value is in degrees here
+            if a.get("draftPullDirection") is not True:
+                raise Unsupported("draft on an extrude, pulled the other way")
+            taper = num(self.val(a["draftAngle"]))
         b = a.get("bodyType")
         if isinstance(b, tuple) and "SOLID" not in b[1]:
             raise Unsupported("a thin or surface extrude")
@@ -1115,7 +1121,12 @@ class Tr:
                 raise Unsupported("extrude bound " + bound)
             # lo, hi along the extrude's direction; records measure along the sketch normal
             self.solid[f["id"]] = {"kind": "extrude", "frame": fr, "lo": None if lo is None else lo * sgn, "hi": None if hi is None else hi * sgn}
-            self.emit_solid("extrude", op, {"ext": head}, frame, {fid: by[fid]}, opp, fid_out=f["id"])
+            make = {"ext": head}
+            if taper is not None:
+                if head[0] != "d" or second:
+                    raise Unsupported("draft on an extrude not to a depth")
+                make["taper"] = taper
+            self.emit_solid("extrude", op, make, frame, {fid: by[fid]}, opp, fid_out=f["id"])
 
     def revolve(self, f):
         a, env = f["args"], f["env"]
@@ -1214,77 +1225,10 @@ class Tr:
         return out
 
     def chain(self, pieces):
-        """Pieces joined end to end, turned to run one way; the closed flag. Unsupported if they branch or part."""
-        if len(pieces) == 1:
-            return pieces[:], is_ring(pieces[0])
-        left = pieces[1:]
-        run = [pieces[0]]
-        while left:
-            for i, p in enumerate(left):
-                if near3(run[-1].b, p.a):
-                    run.append(p)
-                elif near3(run[-1].b, p.b):
-                    run.append(p.rev())
-                elif near3(run[0].a, p.b):
-                    run.insert(0, p)
-                elif near3(run[0].a, p.a):
-                    run.insert(0, p.rev())
-                else:
-                    continue
-                del left[i]
-                break
-            else:
-                raise Unsupported("a path in separate pieces")
-        return run, near3(run[0].a, run[-1].b)
+        return chain_pieces(pieces)
 
     def path_from(self, run, closed, fr, near):
-        """Where the profile's plane crosses the path square to it: the path to sweep along from there, or two when
-        the crossing is inside the path. `near`, a point of the profile, picks among crossings."""
-        hits = []
-        for k, p in enumerate(run):
-            off = lambda q: dot(add(q, fr.o, -1), fr.n)
-            if p.c is None:
-                den = off(p.b) - off(p.a)
-                if abs(den) > 1e-12:
-                    t = -off(p.a) / den
-                    if -1e-9 <= t <= 1 + 1e-9:
-                        hits.append((k, min(max(t, 0.0), 1.0), add(p.a, add(p.b, p.a, -1), t), p.tangent(p.a)))
-                continue
-            r0 = add(p.a, p.c, -1)
-            at = lambda w: add(p.c, turned(r0, p.z, w))
-            n = 32
-            vals = [off(at(p.sweep * i / n)) for i in range(n + 1)]
-            if abs(dot(p.z, fr.n)) < 1e-6 and abs(off(p.c)) < 1e-4:
-                # the radius lies in the plane, twice a turn
-                th = math.atan2(-dot(r0, fr.n), dot(cross(p.z, r0), fr.n))
-                for w in (th + j * math.pi for j in range(-3, 4)):
-                    t = w / p.sweep
-                    if -1e-9 <= t <= 1 + 1e-9:
-                        q = at(w)
-                        hits.append((k, min(max(t, 0.0), 1.0), q, p.tangent(q)))
-            elif min(vals) < 0 < max(vals):
-                hits.append((k, 0.0, p.a, p.z))  # meets the plane, not square to it
-        square = [h for h in hits if math.sqrt(dot(cross(h[3], fr.n), cross(h[3], fr.n))) < 1e-6]
-        if not square:
-            raise Unsupported("a profile not square to its path" if hits else "a profile off its path")
-        k, t, _, _ = min(square, key=lambda h: math.dist(h[2], near))
-        p = run[k]
-        after = ([part(p, t, 1)] if t < 1 - 1e-9 else []) + run[k + 1:]
-        first = [part(p, t, 0)] if t > 1e-9 else []
-        if closed:
-            # a closed path has no cap to end on: both ways round from the profile, meeting at the far side
-            whole = after + run[:k] + first
-            half = sum(math.dist(x.a, x.b) if x.c is None else abs(x.sweep) * math.dist(x.a, x.c) for x in whole) / 2
-            out = []
-            for i, x in enumerate(whole):
-                l = math.dist(x.a, x.b) if x.c is None else abs(x.sweep) * math.dist(x.a, x.c)
-                if l >= half - 1e-9:
-                    out = whole[:i] + [part(x, half / l, 0)]
-                    tail = ([part(x, half / l, 1)] if half / l < 1 - 1e-9 else []) + whole[i + 1:]
-                    return [out, [y.rev() for y in reversed(tail)]]
-                half -= l
-        before = [x.rev() for x in reversed(run[:k] + first)]
-        return [x for x in (after, before) if x]
+        return path_from(run, closed, fr, near)
 
     def sweep(self, f):
         a, env = f["args"], f["env"]
@@ -1702,6 +1646,80 @@ class Tr:
                 getattr(self, f["op"])(f)
         if not self.lines:
             raise Unsupported("no solid feature")
+
+
+def chain_pieces(pieces):
+    """Pieces joined end to end, turned to run one way; the closed flag. Unsupported if they branch or part."""
+    if len(pieces) == 1:
+        return pieces[:], is_ring(pieces[0])
+    left = pieces[1:]
+    run = [pieces[0]]
+    while left:
+        for i, p in enumerate(left):
+            if near3(run[-1].b, p.a):
+                run.append(p)
+            elif near3(run[-1].b, p.b):
+                run.append(p.rev())
+            elif near3(run[0].a, p.b):
+                run.insert(0, p)
+            elif near3(run[0].a, p.a):
+                run.insert(0, p.rev())
+            else:
+                continue
+            del left[i]
+            break
+        else:
+            raise Unsupported("a path in separate pieces")
+    return run, near3(run[0].a, run[-1].b)
+
+def path_from(run, closed, fr, near):
+    """Where the profile's plane crosses the path square to it: the path to sweep along from there, or two when
+    the crossing is inside the path. `near`, a point of the profile, picks among crossings."""
+    hits = []
+    for k, p in enumerate(run):
+        off = lambda q: dot(add(q, fr.o, -1), fr.n)
+        if p.c is None:
+            den = off(p.b) - off(p.a)
+            if abs(den) > 1e-12:
+                t = -off(p.a) / den
+                if -1e-9 <= t <= 1 + 1e-9:
+                    hits.append((k, min(max(t, 0.0), 1.0), add(p.a, add(p.b, p.a, -1), t), p.tangent(p.a)))
+            continue
+        r0 = add(p.a, p.c, -1)
+        at = lambda w: add(p.c, turned(r0, p.z, w))
+        n = 32
+        vals = [off(at(p.sweep * i / n)) for i in range(n + 1)]
+        if abs(dot(p.z, fr.n)) < 1e-6 and abs(off(p.c)) < 1e-4:
+            # the radius lies in the plane, twice a turn
+            th = math.atan2(-dot(r0, fr.n), dot(cross(p.z, r0), fr.n))
+            for w in (th + j * math.pi for j in range(-3, 4)):
+                t = w / p.sweep
+                if -1e-9 <= t <= 1 + 1e-9:
+                    q = at(w)
+                    hits.append((k, min(max(t, 0.0), 1.0), q, p.tangent(q)))
+        elif min(vals) < 0 < max(vals):
+            hits.append((k, 0.0, p.a, p.z))  # meets the plane, not square to it
+    square = [h for h in hits if math.sqrt(dot(cross(h[3], fr.n), cross(h[3], fr.n))) < 1e-6]
+    if not square:
+        raise Unsupported("a profile not square to its path" if hits else "a profile off its path")
+    k, t, _, _ = min(square, key=lambda h: math.dist(h[2], near))
+    p = run[k]
+    after = ([part(p, t, 1)] if t < 1 - 1e-9 else []) + run[k + 1:]
+    first = [part(p, t, 0)] if t > 1e-9 else []
+    if closed:
+        # a closed path has no cap to end on: both ways round from the profile, meeting at the far side
+        whole = after + run[:k] + first
+        half = sum(math.dist(x.a, x.b) if x.c is None else abs(x.sweep) * math.dist(x.a, x.c) for x in whole) / 2
+        out = []
+        for i, x in enumerate(whole):
+            l = math.dist(x.a, x.b) if x.c is None else abs(x.sweep) * math.dist(x.a, x.c)
+            if l >= half - 1e-9:
+                out = whole[:i] + [part(x, half / l, 0)]
+                tail = ([part(x, half / l, 1)] if half / l < 1 - 1e-9 else []) + whole[i + 1:]
+                return [out, [y.rev() for y in reversed(tail)]]
+            half -= l
+    before = [x.rev() for x in reversed(run[:k] + first)]
+    return [x for x in (after, before) if x]
 
 
 def near3(a, b):
