@@ -58,6 +58,7 @@ impl Stage {
             let several = self.solids.len() > 1;
             let mut alone = (!several).then(|| forge_model::finish(self.solids[0].body.clone()));
             let each: &[Body] = if several { self.finished() } else { &[] };
+            all.reserve_appends(each.iter());
             for (k, s) in self.solids.iter().enumerate() {
                 let (f, e) = (all.faces.len() as u32, all.edges.len() as u32);
                 match alone.take() {
