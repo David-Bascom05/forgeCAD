@@ -67,7 +67,11 @@ fn place(a: usize, x: i64, u: i64, v: i64) -> D {
 
 fn face_cells(b: &BoxN, side: usize) -> Vec<D> {
     let a = side / 2;
-    let k = if side.is_multiple_of(2) { ax(b, a).0 } else { ax(b, a).1 };
+    let k = if side.is_multiple_of(2) {
+        ax(b, a).0
+    } else {
+        ax(b, a).1
+    };
     let o1 = (a + 1) % 3;
     let o2 = (a + 2) % 3;
     let (us, vs) = if o1 < o2 {
@@ -188,7 +192,12 @@ fn box_ledger(k: i64, boxes: &[BoxN]) -> Ledger {
                 let b = &boxes[f / 6];
                 let side = f % 6;
                 let a = side / 2;
-                (a as i64 * (k + 1) + if side.is_multiple_of(2) { ax(b, a).0 } else { ax(b, a).1 }) as u32
+                (a as i64 * (k + 1)
+                    + if side.is_multiple_of(2) {
+                        ax(b, a).0
+                    } else {
+                        ax(b, a).1
+                    }) as u32
             })
             .collect(),
         cells,

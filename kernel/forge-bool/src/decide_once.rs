@@ -446,7 +446,7 @@ struct Vx {
 type Poly = Vec<(u32, Pl)>;
 
 /// A plane a polygon's edge lies on: a class, or a wall of the working box.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 enum Pl {
     Class(u32),
     Wall(u8),
@@ -720,6 +720,8 @@ struct Built {
     ends: HashMap<u32, (u32, u32)>,
     /// per side cell: a facet it is a side of and which side
     side_of: HashMap<u32, (u32, i32)>,
+    /// cell ids by covector
+    by: HashMap<Vec<Sgn>, u32>,
 }
 
 /// A table of cells by covector.
@@ -896,7 +898,7 @@ fn build_ledger(bodies: &[&Body], fs: &[In], cls: &Classes, pts: &[HashMap<Verte
         nb,
         face_body: fs.iter().map(|f| BodyId(f.body as u32)).collect(),
         face_class: cls.of_face.clone(),
-        cells: tab.cells,
+        cells: tab.cells.clone(),
         pieces: pieces.iter().map(|&(f, c)| (CellId(c), CFace(f))).collect(),
         inside: Vec::new(),
         edges: edges.into_iter().map(CellId).collect(),
@@ -908,6 +910,7 @@ fn build_ledger(bodies: &[&Body], fs: &[In], cls: &Classes, pts: &[HashMap<Verte
         point,
         ends,
         side_of,
+        by: tab.by,
     }
 }
 
@@ -971,7 +974,13 @@ fn fill(bodies: &[&Body]) -> Result<Filled, Skip> {
     let (snapped, reps) = snap(&fs)?;
     let pts = vertices(bodies, &fs, &snapped)?;
     let cls = classes(&fs, &snapped, &reps);
+    decided!(log(bodies, &fs, &cls, &pts));
     let mut built = build_ledger(bodies, &fs, &cls, &pts);
+    // an operand whose own faces overlap (instances of a pattern in one body, say) is not a
+    // solid the ledger can describe: the old path takes it
+    if why_split(&built.ledger).is_some() {
+        return Err(Skip::Ambiguous("an operand's own faces overlap"));
+    }
     let ws = core::witnesses(&built.ledger);
     let mut inside = Vec::new();
     for (t, i) in ws {
@@ -990,6 +999,70 @@ fn fill(bodies: &[&Body]) -> Result<Filled, Skip> {
     Ok((fs, snapped, cls, pts, built))
 }
 
+/// Under the decision log: the facts the ledger decides that the old path's sites decide too, each
+/// recorded once, where it is decided: two faces one surface (one class), for every pair of faces of
+/// different bodies whose grown boxes meet and whose planes are within the band; and vertex on
+/// surface (on the face's class plane, exactly), for every vertex within the band of another body's
+/// face.
+#[cfg(feature = "decisions")]
+fn log(bodies: &[&Body], fs: &[In], cls: &Classes, pts: &[HashMap<VertexId, HPoint>]) {
+    use crate::decisions::{BAND, Ent, Kind, Site, decide, key2, pair};
+    let l = lin();
+    let grown = |f: &In, g: f64, p: [f64; 3]| (0..3).all(|k| f.lo[k] - g <= p[k] && p[k] <= f.hi[k] + g);
+    for (i, a) in fs.iter().enumerate() {
+        for (j, b) in fs.iter().enumerate().skip(i + 1) {
+            if a.body == b.body || region_extent(a, b, l).is_none() || plainly_apart(a, b, BAND / (2.0 * l)) {
+                continue;
+            }
+            let key = pair(Ent::f(bodies[a.body], a.face), Ent::f(bodies[b.body], b.face));
+            let one = cls.of_face[i] == cls.of_face[j];
+            decide(
+                Kind::Coincident,
+                key,
+                None,
+                None,
+                one as u8,
+                Site::Named("decide-once: surface table"),
+                f64::NAN,
+                l,
+            );
+        }
+    }
+    for (k, vs) in pts.iter().enumerate() {
+        let mut ids: Vec<_> = vs.keys().copied().collect();
+        ids.sort();
+        for v in ids {
+            let h = &vs[&v];
+            let p = h.to_f64();
+            for (j, f) in fs.iter().enumerate() {
+                if f.body == k || !grown(f, BAND, p) {
+                    continue;
+                }
+                let pl = &cls.planes[cls.of_face[j] as usize];
+                let pf = plane_f(pl);
+                let len = (pf.n[0] * pf.n[0] + pf.n[1] * pf.n[1] + pf.n[2] * pf.n[2]).sqrt();
+                let d = (pf.n[0] * p[0] + pf.n[1] * p[1] + pf.n[2] * p[2] - pf.c) / len;
+                if d.abs() > BAND {
+                    continue;
+                }
+                let on = pl.side(h) == 0;
+                let key = key2(Ent::v(bodies[k], v), Ent::f(bodies[f.body], f.face));
+                let at = Some(Point3::new(p[0], p[1], p[2]));
+                decide(
+                    Kind::OnSurface,
+                    key,
+                    at,
+                    None,
+                    on as u8,
+                    Site::Named("decide-once: side table"),
+                    d.abs(),
+                    l,
+                );
+            }
+        }
+    }
+}
+
 /// The ledger and the core's answer for a boolean of flat bodies (for tests and the comparison).
 pub fn decide(bodies: &[&Body], rule: &Rule) -> Result<Decided, Skip> {
     let (_, _, _, _, built) = fill(bodies)?;
@@ -1006,8 +1079,40 @@ pub fn boolean(a: &Body, b: &Body, op: Op) -> Result<Option<Body>, BoolError> {
     nary(&[a, b], &rule_of(op))
 }
 
+/// Every face a plane and every edge a line.
+pub fn flat(b: &Body) -> bool {
+    b.edge_ids().all(|e| matches!(b.edge(e).curve, Curve::Line(_)))
+        && b.face_ids()
+            .all(|f| matches!(b.face(f).surface, Surface::Plane(_)))
+}
+
+/// A history `((t0 op0 t1) op1 t2) ..` of flat tools as one call: its pointwise table.
+pub fn history(tools: &[&Body], ops: &[Op]) -> Result<Option<Body>, BoolError> {
+    if tools.len() > 16 || tools.len() != ops.len() + 1 || !tools.iter().all(|b| flat(b)) {
+        return Ok(None);
+    }
+    let nb = tools.len();
+    let table = (0..1usize << nb)
+        .map(|m| {
+            let mut r = m & 1 == 1;
+            for (i, op) in ops.iter().enumerate() {
+                let x = (m >> (i + 1)) & 1 == 1;
+                r = match op {
+                    Op::Union => r || x,
+                    Op::Subtract => r && !x,
+                    Op::Intersect => r && x,
+                };
+            }
+            r
+        })
+        .collect();
+    nary(tools, &Rule::Table(table))
+}
+
 /// Any number of flat bodies under one pointwise rule, in one call.
 pub fn nary(bodies: &[&Body], rule: &Rule) -> Result<Option<Body>, BoolError> {
+    #[cfg(feature = "decisions")]
+    let _scope = crate::decisions::scope("decide-once", String::from("plain"));
     let (fs, _snapped, cls, _pts, built) = match fill(bodies) {
         Ok(x) => x,
         Err(_) => return Ok(None),
@@ -1018,9 +1123,115 @@ pub fn nary(bodies: &[&Body], rule: &Rule) -> Result<Option<Body>, BoolError> {
         Outcome::Refused(Refusal::ZeroThickness(c)) => Err(BoolError::ZeroThickness {
             at: cell_point(&built, c.0),
         }),
-        Outcome::Refused(r) => panic!("the decide-once core refused {r:?}: its ledger is not consistent"),
-        Outcome::Ok(out) => Ok(write(bodies, &fs, &cls, &built, &out)),
+        Outcome::Refused(r) => panic!(
+            "the decide-once core refused {r:?}: its ledger is not consistent ({})",
+            why_split(&built.ledger).unwrap_or_default()
+        ),
+        Outcome::Ok(out) => {
+            // §6.1 step 3: a sub-LINEAR feature of the exact result is refused where it lies
+            if let Some(at) = sliver(&cls, &built, &out) {
+                return Err(BoolError::ZeroThickness { at });
+            }
+            Ok(write(bodies, &fs, &cls, &built, &out))
+        }
     }
+}
+
+/// Which of `splitOk`'s conditions a ledger breaks, in words (a bridge bug's report).
+fn why_split(l: &Ledger) -> Option<String> {
+    let mut seen: HashMap<(u32, u32), u32> = HashMap::new();
+    for &(c, f) in &l.pieces {
+        let x = &l.cells[c.0 as usize];
+        let zeros: Vec<usize> = (0..x.len()).filter(|&k| x[k] == Sgn::Zero).collect();
+        if zeros.len() != 1 {
+            return Some(format!(
+                "piece of face {} has zeros {zeros:?}, face class {}",
+                f.0, l.face_class[f.0 as usize]
+            ));
+        }
+        if zeros[0] as u32 != l.face_class[f.0 as usize] {
+            return Some(format!(
+                "piece of face {} on class {}, face class {}",
+                f.0, zeros[0], l.face_class[f.0 as usize]
+            ));
+        }
+        let b = l.face_body[f.0 as usize].0;
+        if let Some(&g) = seen.get(&(c.0, b))
+            && g != f.0
+        {
+            return Some(format!("facet {} inside faces {g} and {} of body {b}", c.0, f.0));
+        }
+        seen.insert((c.0, b), f.0);
+    }
+    None
+}
+
+/// §6.1 step 3 on the core's body: an edge shorter than LINEAR, or a vertex within LINEAR of a
+/// face it is not on (over the face's box), is a sub-LINEAR feature of the exact result. It is not
+/// collapsed: the boolean refuses there (ZeroThickness), the one answer besides a valid body.
+fn sliver(cls: &Classes, b: &Built, out: &core::Body) -> Option<Point3> {
+    let l = lin();
+    let pt = |v: u32| {
+        let p = b.point[&v].to_f64();
+        Point3::new(p[0], p[1], p[2])
+    };
+    for e in &out.edges {
+        let mut count: HashMap<u32, u32> = HashMap::new();
+        for c in &e.cells {
+            let (u, v) = b.ends[&c.0];
+            *count.entry(u).or_default() += 1;
+            *count.entry(v).or_default() += 1;
+        }
+        let ends: Vec<u32> = count.iter().filter(|(_, n)| **n == 1).map(|(v, _)| *v).collect();
+        if ends.len() == 2 && pt(ends[0]).distance(pt(ends[1])) < l {
+            let (p, q) = (pt(ends[0]), pt(ends[1]));
+            return Some(p + (q - p) * 0.5);
+        }
+    }
+    // each face's vertices and box
+    let verts: Vec<(u32, Point3)> = out.verts.iter().map(|v| (v.0, pt(v.0))).collect();
+    for f in &out.faces {
+        let mut on: HashMap<u32, ()> = HashMap::new();
+        let (mut lo, mut hi) = ([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]);
+        for c in &f.facets {
+            for &v in &b.facet[&c.0].poly {
+                on.insert(v, ());
+                let p = b.point[&v].to_f64();
+                for k in 0..3 {
+                    lo[k] = lo[k].min(p[k]);
+                    hi[k] = hi[k].max(p[k]);
+                }
+            }
+        }
+        let pf = plane_f(&cls.planes[f.plane as usize]);
+        let len = (pf.n[0] * pf.n[0] + pf.n[1] * pf.n[1] + pf.n[2] * pf.n[2]).sqrt();
+        for &(v, p) in &verts {
+            if on.contains_key(&v) {
+                continue;
+            }
+            let q = [p.x, p.y, p.z];
+            if (0..3).any(|k| q[k] < lo[k] - l || q[k] > hi[k] + l) {
+                continue;
+            }
+            let d = (pf.n[0] * q[0] + pf.n[1] * q[1] + pf.n[2] * q[2] - pf.c) / len;
+            if d.abs() < l && cls.planes[f.plane as usize].side(&b.point[&v]) != 0 {
+                return Some(p);
+            }
+        }
+    }
+    None
+}
+
+/// `name`, or a piece of it no entity of the body has yet.
+fn unique(used: &mut HashMap<Name, ()>, name: Name) -> Name {
+    let mut n = name;
+    let mut k = 0u64;
+    while used.contains_key(&n) {
+        k += 1;
+        n = name.piece(Name::NONE.with_name(name).with(k));
+    }
+    used.insert(n, ());
+    n
 }
 
 /// A point of a cell, for a refusal's locus.
@@ -1064,6 +1275,7 @@ fn write(bodies: &[&Body], fs: &[In], cls: &Classes, built: &Built, out: &core::
     }
     let mut seen_origin: HashMap<u32, u64> = HashMap::new();
     let mut fnames = Vec::new();
+    let mut used: HashMap<Name, ()> = HashMap::new();
     for f in &out.faces {
         let base = face_name(f.origin.0 as usize);
         let name = if per_origin[&f.origin.0] == 1 {
@@ -1071,9 +1283,9 @@ fn write(bodies: &[&Body], fs: &[In], cls: &Classes, built: &Built, out: &core::
         } else {
             let k = seen_origin.entry(f.origin.0).or_default();
             *k += 1;
-            base.piece(Name::NONE.with(*k))
+            base.piece(Name::NONE.with_name(base).with(*k))
         };
-        fnames.push(name);
+        fnames.push(unique(&mut used, name));
     }
     // which face each result facet is in
     let mut face_of: HashMap<u32, usize> = HashMap::new();
@@ -1161,7 +1373,7 @@ fn write(bodies: &[&Body], fs: &[In], cls: &Classes, built: &Built, out: &core::
     let mut shell_of: HashMap<usize, forge_topo::ShellId> = HashMap::new();
     // the edges, made when their first face's loops are
     let mut eid: Vec<Option<EdgeId>> = vec![None; out.edges.len()];
-    let mut edge_names: HashMap<Name, u64> = HashMap::new();
+    let mut edge_names: HashMap<Name, ()> = HashMap::new();
     for (fi, f) in out.faces.iter().enumerate() {
         let root = uf.find(fi);
         let shell = *shell_of.entry(root).or_insert_with(|| body.add_shell());
@@ -1235,13 +1447,7 @@ fn write(bodies: &[&Body], fs: &[In], cls: &Classes, built: &Built, out: &core::
                             .map(|h| fnames[face_of[&h.0]])
                             .collect();
                         let base = Name::NONE.with_str("decide-once edge").with_set(&names);
-                        let k = edge_names.entry(base).or_insert(0u64);
-                        *k += 1;
-                        let name = if *k == 1 {
-                            base
-                        } else {
-                            base.piece(Name::NONE.with(*k))
-                        };
+                        let name = unique(&mut edge_names, base);
                         let e = body.add_edge(
                             Curve::Line(line),
                             Interval::new(0.0, ps.distance(pt)),
@@ -1267,6 +1473,15 @@ fn write(bodies: &[&Body], fs: &[In], cls: &Classes, built: &Built, out: &core::
     for b in bodies {
         body.joins.extend(&b.joins);
     }
+    // an input face whose name no output face has went to the first face holding a piece of it
+    let mut named: HashMap<Name, ()> = fnames.iter().map(|&n| (n, ())).collect();
+    for &(c, g) in &l.pieces {
+        let Some(&fi) = face_of.get(&c.0) else { continue };
+        let n = face_name(g.0 as usize);
+        if named.insert(n, ()).is_none() {
+            body.joins.aliases.push((n, fnames[fi]));
+        }
+    }
     Some(body)
 }
 
@@ -1282,8 +1497,7 @@ fn run_end(ch: &[(u32, u32, u32)], fwd: bool) -> u32 {
 fn edge_cell(b: &Built, u: u32, v: u32) -> Option<u32> {
     let cu = &b.ledger.cells[u as usize];
     let cv = &b.ledger.cells[v as usize];
-    let j = join(&[cu, cv]);
-    b.ledger.cells.iter().position(|c| *c == j).map(|i| i as u32)
+    b.by.get(&join(&[cu, cv])).copied()
 }
 
 /// Projection axes of a face's plane, oriented so (s, t) is counter-clockwise about its outward

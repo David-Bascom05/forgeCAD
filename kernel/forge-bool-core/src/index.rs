@@ -25,15 +25,19 @@ impl Index {
     pub fn find(&self, cells: &[Vec<Sgn>], key: &[Sgn]) -> u32 {
         let mut lo = 0;
         let mut hi = self.order.len();
-        while lo < hi {
+        let mut at = NONE;
+        while at == NONE && lo < hi {
             let mid = lo + (hi - lo) / 2;
             let id = self.order[mid];
-            match cmp_cov(&cells[id as usize], key) {
-                std::cmp::Ordering::Less => lo = mid + 1,
-                std::cmp::Ordering::Greater => hi = mid,
-                std::cmp::Ordering::Equal => return id,
+            let o = cmp_cov(&cells[id as usize], key);
+            if o < 0 {
+                lo = mid + 1;
+            } else if o > 0 {
+                hi = mid;
+            } else {
+                at = id;
             }
         }
-        NONE
+        at
     }
 }

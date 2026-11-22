@@ -40,6 +40,8 @@ fn blocks_side_by_side_are_one_box() {
         block(10.0, 0.0, 5.0, 6.0, 4.0, 2),
     );
     let joined = boolean(&a, &b, Op::Union, 3).unwrap();
+    // (the decide-once path writes the union unified: one box at once)
+    #[cfg(not(feature = "decide_once"))]
     assert!(joined.face_ids().count() > 6);
     let pieces: Vec<_> = joined.face_ids().map(|f| joined.face(f).name).collect();
     let u = unified(joined);

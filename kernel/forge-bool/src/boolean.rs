@@ -441,6 +441,11 @@ pub(crate) enum Class {
 }
 
 pub fn boolean(a: &Body, b: &Body, op: Op, feature: u64) -> R<Body> {
+    // flat faces: the part read by reference and the result written fresh, with no copy first
+    #[cfg(feature = "decide_once")]
+    if let Some(r) = crate::decide_once::boolean(a, b, op)? {
+        return Ok(r);
+    }
     let mut out = a.clone();
     boolean_into(&mut out, b, op, feature)?;
     Ok(out.into_compact())
@@ -451,6 +456,11 @@ pub fn boolean(a: &Body, b: &Body, op: Op, feature: u64) -> R<Body> {
 /// as tombstones until `Body::compact`. Names do not depend on `_feature`: what the boolean makes
 /// is named by what meets there, as the n-ary boolean names it.
 pub fn boolean_into(target: &mut Body, b: &Body, op: Op, _feature: u64) -> R<()> {
+    #[cfg(feature = "decide_once")]
+    if let Some(r) = crate::decide_once::boolean(target, b, op)? {
+        *target = r;
+        return Ok(());
+    }
     // (uncompacted, so the faces a boolean leaves alone keep what was worked out of them, as the
     // target does from one boolean to the next: a face's drawing is the cost of the check)
     #[cfg(debug_assertions)]
@@ -556,6 +566,14 @@ fn survivors(a: &Body, b: &Body, op: Op, r: &Body) -> Option<String> {
 /// `boolean_into` with the tool as its entities (`forge_ops::extrude_unlinked`): the Body is
 /// built only if the general boolean has to run.
 pub fn boolean_unlinked(target: &mut Body, b: forge_topo::Unlinked, op: Op) -> R<()> {
+    #[cfg(feature = "decide_once")]
+    if crate::decide_once::flat(target) {
+        let tool = b.clone().into_body();
+        if let Some(r) = crate::decide_once::boolean(target, &tool, op)? {
+            *target = r;
+            return Ok(());
+        }
+    }
     if imprinted(target, &b, || std::borrow::Cow::Owned(b.clone().into_body()), op) {
         return Ok(());
     }

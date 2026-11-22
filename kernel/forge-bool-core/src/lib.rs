@@ -140,13 +140,10 @@ const ENUM_ZEROS: usize = 12;
 /// `Cov.zeroIdx`: the first zero, or the length if there is none.
 pub fn zero_idx(x: &[Sgn]) -> usize {
     let mut i = 0;
-    while i < x.len() {
-        if x[i] == Sgn::Zero {
-            return i;
-        }
+    while i < x.len() && x[i] != Sgn::Zero {
         i += 1;
     }
-    x.len()
+    i
 }
 
 /// `Cov.isFacet`: exactly one zero.
@@ -164,17 +161,13 @@ pub fn is_facet(x: &[Sgn]) -> bool {
 
 /// `Cov.le`: `x` is a face of `y`.
 pub fn le(x: &[Sgn], y: &[Sgn]) -> bool {
-    if x.len() != y.len() {
-        return false;
-    }
+    let mut ok = x.len() == y.len();
     let mut i = 0;
-    while i < x.len() {
-        if x[i] != Sgn::Zero && x[i] != y[i] {
-            return false;
-        }
+    while ok && i < x.len() {
+        ok = x[i] == Sgn::Zero || x[i] == y[i];
         i += 1;
     }
-    true
+    ok
 }
 
 /// `X.set i s` (unchanged past the end, as `List.set`).
@@ -199,50 +192,66 @@ fn zeros(x: &[Sgn]) -> Vec<usize> {
     z
 }
 
-/// The cells the core works over: the ledger's, and any side cell it lacked.
-struct Cells<'a> {
-    l: &'a Ledger,
+/// The cells the core adds to the ledger's: any side cell it lacked. Owned, and passed beside
+/// the ledger (no struct holds a borrow, for Aeneas).
+struct Ext {
     index: Index,
     extra: Vec<Vec<Sgn>>,
 }
 
-impl Cells<'_> {
-    fn cov(&self, id: u32) -> &[Sgn] {
-        let n = self.l.cells.len();
-        if (id as usize) < n {
-            &self.l.cells[id as usize]
-        } else {
-            &self.extra[id as usize - n]
-        }
+fn new_ext(l: &Ledger) -> Ext {
+    Ext {
+        index: Index::new(&l.cells),
+        extra: Vec::new(),
     }
+}
 
-    fn len(&self) -> usize {
-        self.l.cells.len() + self.extra.len()
+/// A cell's covector.
+fn cov<'a>(l: &'a Ledger, ext: &'a Ext, id: u32) -> &'a [Sgn] {
+    let n = l.cells.len();
+    if (id as usize) < n {
+        &l.cells[id as usize]
+    } else {
+        &ext.extra[id as usize - n]
     }
+}
 
-    fn find(&self, key: &[Sgn]) -> u32 {
-        let f = self.index.find(&self.l.cells, key);
-        if f != NONE {
-            return f;
-        }
-        let mut i = 0;
-        while i < self.extra.len() {
-            if self.extra[i].as_slice() == key {
-                return (self.l.cells.len() + i) as u32;
-            }
-            i += 1;
-        }
-        NONE
+fn ncells(l: &Ledger, ext: &Ext) -> usize {
+    l.cells.len() + ext.extra.len()
+}
+
+/// Two covectors equal.
+fn same_cov(a: &[Sgn], b: &[Sgn]) -> bool {
+    let mut same = a.len() == b.len();
+    let mut i = 0;
+    while same && i < a.len() {
+        same = a[i] == b[i];
+        i += 1;
     }
+    same
+}
 
-    /// The id of `key`, added if new.
-    fn intern(&mut self, key: Vec<Sgn>) -> u32 {
-        let f = self.find(&key);
-        if f != NONE {
-            return f;
+/// The id of a covector, or NONE.
+fn find(l: &Ledger, ext: &Ext, key: &[Sgn]) -> u32 {
+    let mut f = ext.index.find(&l.cells, key);
+    let mut i = 0;
+    while f == NONE && i < ext.extra.len() {
+        if same_cov(&ext.extra[i], key) {
+            f = (l.cells.len() + i) as u32;
         }
-        self.extra.push(key);
-        (self.len() - 1) as u32
+        i += 1;
+    }
+    f
+}
+
+/// The id of `key`, added if new.
+fn intern(l: &Ledger, ext: &mut Ext, key: Vec<Sgn>) -> u32 {
+    let f = find(l, ext, &key);
+    if f != NONE {
+        f
+    } else {
+        ext.extra.push(key);
+        (ncells(l, ext) - 1) as u32
     }
 }
 
@@ -283,43 +292,37 @@ struct Split {
 
 /// `splitOk`: every piece a facet of its face's class, in a body that exists, and no facet
 /// inside two faces of one body.
-fn split_ok(l: &Ledger, cells: &Cells) -> bool {
+fn split_ok(l: &Ledger, ext: &Ext) -> bool {
+    let mut ok = true;
     let mut triples: Vec<(u32, u32, u32)> = Vec::new();
     let mut k = 0;
-    while k < l.pieces.len() {
+    while ok && k < l.pieces.len() {
         let (c, f) = l.pieces[k];
-        if (c.0 as usize) >= cells.len() {
-            return false;
+        if (c.0 as usize) >= ncells(l, ext) {
+            ok = false;
+        } else {
+            let x = cov(l, ext, c.0);
+            let b = body_of(l, f);
+            ok = is_facet(x) && zero_idx(x) == cls_of(l, f) as usize && b < l.nb;
+            triples.push((c.0, b, f.0));
         }
-        let x = cells.cov(c.0);
-        if !is_facet(x) {
-            return false;
-        }
-        if zero_idx(x) != cls_of(l, f) as usize {
-            return false;
-        }
-        let b = body_of(l, f);
-        if b >= l.nb {
-            return false;
-        }
-        triples.push((c.0, b, f.0));
         k += 1;
     }
-    sort::sort_triples(&mut triples);
+    if ok {
+        sort::sort_triples(&mut triples);
+    }
     let mut k = 1;
-    while k < triples.len() {
+    while ok && k < triples.len() {
         let (c0, b0, f0) = triples[k - 1];
         let (c1, b1, f1) = triples[k];
-        if c0 == c1 && b0 == b1 && f0 != f1 {
-            return false;
-        }
+        ok = !(c0 == c1 && b0 == b1 && f0 != f1);
         k += 1;
     }
-    true
+    ok
 }
 
-fn split(l: &Ledger, cells: &mut Cells) -> Split {
-    let n = cells.len();
+fn split(l: &Ledger, ext: &mut Ext) -> Split {
+    let n = ncells(l, ext);
     let mut first_face = vec![NONE; n];
     let mut facets = Vec::new();
     let mut k = 0;
@@ -335,13 +338,13 @@ fn split(l: &Ledger, cells: &mut Cells) -> Split {
     let mut minus = Vec::new();
     let mut i = 0;
     while i < facets.len() {
-        let x = cells.cov(facets[i]).to_vec();
+        let x = cov(l, ext, facets[i]).to_vec();
         let z = zero_idx(&x);
-        plus.push(cells.intern(with_set(&x, z, Sgn::Pos)));
-        minus.push(cells.intern(with_set(&x, z, Sgn::Neg)));
+        plus.push(intern(l, ext, with_set(&x, z, Sgn::Pos)));
+        minus.push(intern(l, ext, with_set(&x, z, Sgn::Neg)));
         i += 1;
     }
-    let mut tope_pos = vec![NONE; cells.len()];
+    let mut tope_pos = vec![NONE; ncells(l, ext)];
     let mut topes = Vec::new();
     let mut i = 0;
     while i < facets.len() {
@@ -357,7 +360,7 @@ fn split(l: &Ledger, cells: &mut Cells) -> Split {
         }
         i += 1;
     }
-    let mut facet_pos = vec![NONE; cells.len()];
+    let mut facet_pos = vec![NONE; ncells(l, ext)];
     let mut i = 0;
     while i < facets.len() {
         facet_pos[facets[i] as usize] = i as u32;
@@ -405,40 +408,35 @@ fn flood(s: &Split, i: usize) -> Uf {
 /// ray before the core runs (`Ledger::inside` is read only at these). In body order, then tope
 /// order. The ledger's `inside` is not read.
 pub fn witnesses(l: &Ledger) -> Vec<(CellId, BodyId)> {
-    let mut cells = Cells {
-        l,
-        index: Index::new(&l.cells),
-        extra: Vec::new(),
-    };
+    let mut ext = new_ext(l);
     let mut out = Vec::new();
-    if !split_ok(l, &cells) {
-        return out;
-    }
-    let s = split(l, &mut cells);
-    let mut i = 0;
-    while i < l.nb as usize {
-        let mut uf = flood(&s, i);
-        let mut t = 0;
-        while t < s.topes.len() {
-            if uf.find(t) == t {
-                out.push((CellId(s.topes[t]), BodyId(i as u32)));
+    if split_ok(l, &ext) {
+        let s = split(l, &mut ext);
+        let mut i = 0;
+        while i < l.nb as usize {
+            let mut uf = flood(&s, i);
+            let mut t = 0;
+            while t < s.topes.len() {
+                if uf.find(t) == t {
+                    out.push((CellId(s.topes[t]), BodyId(i as u32)));
+                }
+                t += 1;
             }
-            t += 1;
+            i += 1;
         }
-        i += 1;
     }
     out
 }
 
 /// `memb i T` for every body and tope: `memb[i][t]`.
-fn membership(l: &Ledger, cells: &Cells, s: &Split) -> Vec<Vec<bool>> {
+fn membership(l: &Ledger, ext: &Ext, s: &Split) -> Vec<Vec<bool>> {
     let nb = l.nb as usize;
     // the witness answers, per body, by cell
-    let mut inside = vec![vec![false; cells.len()]; nb];
+    let mut inside = vec![vec![false; ncells(l, ext)]; nb];
     let mut k = 0;
     while k < l.inside.len() {
         let (c, b) = l.inside[k];
-        if (b.0 as usize) < nb && (c.0 as usize) < cells.len() {
+        if (b.0 as usize) < nb && (c.0 as usize) < ncells(l, ext) {
             inside[b.0 as usize][c.0 as usize] = true;
         }
         k += 1;
@@ -462,54 +460,34 @@ fn membership(l: &Ledger, cells: &Cells, s: &Split) -> Vec<Vec<bool>> {
 
 /// The rule at one membership vector.
 fn apply_rule(rule: &Rule, m: &[bool]) -> bool {
+    // the numbers of bodies in and out (the Lean's rules read `m i` past nb as false)
+    let mut ins = 0;
+    let mut i = 0;
+    while i < m.len() {
+        if m[i] {
+            ins += 1;
+        }
+        i += 1;
+    }
     match rule {
-        Rule::Union => {
-            let mut i = 0;
-            while i < m.len() {
-                if m[i] {
-                    return true;
-                }
-                i += 1;
-            }
-            false
-        }
-        Rule::Inter => {
-            let mut i = 0;
-            while i < m.len() {
-                if !m[i] {
-                    return false;
-                }
-                i += 1;
-            }
-            // (the Lean's rules read `m i` for i past nb as false)
-            !m.is_empty()
-        }
-        Rule::Diff => {
-            if m.is_empty() || !m[0] {
-                return false;
-            }
-            let mut i = 1;
-            while i < m.len() {
-                if m[i] {
-                    return false;
-                }
-                i += 1;
-            }
-            true
-        }
+        Rule::Union => ins > 0,
+        Rule::Inter => !m.is_empty() && ins == m.len(),
+        Rule::Diff => !m.is_empty() && m[0] && ins == 1,
         Rule::Table(t) => {
             let mut row: usize = 0;
+            let mut fits = true;
             let mut i = 0;
             while i < m.len() {
                 if m[i] {
                     if i >= usize::BITS as usize {
-                        return false;
+                        fits = false;
+                    } else {
+                        row |= 1usize << i;
                     }
-                    row |= 1usize << i;
                 }
                 i += 1;
             }
-            row < t.len() && t[row]
+            fits && row < t.len() && t[row]
         }
     }
 }
@@ -527,20 +505,26 @@ struct Assembled {
 /// `around x`: the positions in `result` of the result facets `φ` with `x ≤ φ`, in result order.
 /// Such a `φ` is `x` with one of its zeros kept and the others given a sign, so for few zeros these
 /// are enumerated and looked up; otherwise the result is scanned (the Lean's filter).
-fn around(cells: &Cells, a: &Assembled, x: u32) -> Vec<u32> {
-    let xc = cells.cov(x);
+fn around(l: &Ledger, ext: &Ext, a: &Assembled, x: u32) -> Vec<u32> {
+    let xc = cov(l, ext, x);
     let z = zeros(xc);
     let mut out = Vec::new();
     if z.len() > ENUM_ZEROS {
         let mut p = 0;
         while p < a.result.len() {
-            if le(xc, cells.cov(a.result[p])) {
+            if le(xc, cov(l, ext, a.result[p])) {
                 out.push(p as u32);
             }
             p += 1;
         }
-        return out;
+    } else {
+        around_enum(l, ext, a, xc, &z, &mut out);
     }
+    out
+}
+
+/// `around`'s enumeration: `x` (`xc`, zeros `z`) with one zero kept and the others signed.
+fn around_enum(l: &Ledger, ext: &Ext, a: &Assembled, xc: &[Sgn], z: &[usize], out: &mut Vec<u32>) {
     let mut buf = xc.to_vec();
     let k = z.len();
     let mut keep = 0;
@@ -559,7 +543,7 @@ fn around(cells: &Cells, a: &Assembled, x: u32) -> Vec<u32> {
                 }
                 j += 1;
             }
-            let id = cells.find(&buf);
+            let id = find(l, ext, &buf);
             if id != NONE && a.rpos[id as usize] != NONE {
                 out.push(a.rpos[id as usize]);
             }
@@ -567,14 +551,13 @@ fn around(cells: &Cells, a: &Assembled, x: u32) -> Vec<u32> {
         }
         keep += 1;
     }
-    sort::sort_u32(&mut out);
-    out
+    sort::sort_u32(out);
 }
 
 /// The cells `e` with `v ≤ e ≤ φ` other than `φ` itself: `φ` with a non-empty set of `v`'s other
 /// zeros zeroed (`z` is `v`'s zeros). Only those the ledger has are returned, by id.
-fn between(cells: &Cells, z: &[usize], phi: u32) -> Vec<u32> {
-    let pc = cells.cov(phi);
+fn between(l: &Ledger, ext: &Ext, z: &[usize], phi: u32) -> Vec<u32> {
+    let pc = cov(l, ext, phi);
     let zp = zero_idx(pc);
     let mut others = Vec::new();
     let mut j = 0;
@@ -599,7 +582,7 @@ fn between(cells: &Cells, z: &[usize], phi: u32) -> Vec<u32> {
             };
             j += 1;
         }
-        let id = cells.find(&buf);
+        let id = find(l, ext, &buf);
         if id != NONE {
             out.push(id);
         }
@@ -609,64 +592,74 @@ fn between(cells: &Cells, z: &[usize], phi: u32) -> Vec<u32> {
 }
 
 /// The edge cells `e` (of `is_edge`) with `v ≤ e ≤ φ`.
-fn edges_between(cells: &Cells, is_edge: &[bool], v: u32, z: &[usize], phi: u32) -> Vec<u32> {
+fn edges_between(l: &Ledger, ext: &Ext, is_edge: &[bool], v: u32, z: &[usize], phi: u32) -> Vec<u32> {
     let mut out = Vec::new();
     if z.len() > ENUM_ZEROS {
-        let vc = cells.cov(v);
-        let pc = cells.cov(phi);
+        let vc = cov(l, ext, v);
+        let pc = cov(l, ext, phi);
         let mut e = 0;
         while e < is_edge.len() {
-            if is_edge[e] && le(vc, cells.cov(e as u32)) && le(cells.cov(e as u32), pc) {
+            if is_edge[e] && le(vc, cov(l, ext, e as u32)) && le(cov(l, ext, e as u32), pc) {
                 out.push(e as u32);
             }
             e += 1;
         }
-        return out;
-    }
-    let bs = between(cells, z, phi);
-    let mut i = 0;
-    while i < bs.len() {
-        if is_edge[bs[i] as usize] {
-            out.push(bs[i]);
+    } else {
+        let bs = between(l, ext, z, phi);
+        let mut i = 0;
+        while i < bs.len() {
+            if is_edge[bs[i] as usize] {
+                out.push(bs[i]);
+            }
+            i += 1;
         }
-        i += 1;
-    }
-    // (`φ` itself, with nothing zeroed, is an edge cell only if the ledger says so)
-    if is_edge[phi as usize] {
-        out.push(phi);
+        // (`φ` itself, with nothing zeroed, is an edge cell only if the ledger says so)
+        if is_edge[phi as usize] {
+            out.push(phi);
+        }
     }
     out
 }
 
 /// **The core**: one pass, no retries (`ForgeExact.DecideOnce.core`).
 pub fn core(l: &Ledger, rule: &Rule) -> Outcome {
-    let mut cells = Cells {
-        l,
-        index: Index::new(&l.cells),
-        extra: Vec::new(),
-    };
+    let mut ext = new_ext(l);
     // 1–2. split and imprint
-    if !split_ok(l, &cells) {
-        return Outcome::Refused(Refusal::SplitCrossed);
+    if !split_ok(l, &ext) {
+        Outcome::Refused(Refusal::SplitCrossed)
+    } else {
+        let s = split(l, &mut ext);
+        classify_on(l, &ext, &s, rule)
     }
-    let s = split(l, &mut cells);
-    let cells = cells;
+}
+
+/// Stage 3's check, then 4–8.
+fn classify_on(l: &Ledger, ext: &Ext, s: &Split, rule: &Rule) -> Outcome {
     // 3. classify: flood plus witness
-    let memb = membership(l, &cells, &s);
+    let memb = membership(l, ext, s);
     let nb = l.nb as usize;
+    let mut ok = true;
     let mut k = 0;
-    while k < s.facets.len() {
+    while ok && k < s.facets.len() {
         let p = s.tope_pos[s.plus[k] as usize] as usize;
         let m = s.tope_pos[s.minus[k] as usize] as usize;
         let mut i = 0;
-        while i < nb {
-            if s.piece_of[k][i] && memb[i][p] == memb[i][m] {
-                return Outcome::Refused(Refusal::InconsistentClassification);
-            }
+        while ok && i < nb {
+            ok = !(s.piece_of[k][i] && memb[i][p] == memb[i][m]);
             i += 1;
         }
         k += 1;
     }
+    if !ok {
+        Outcome::Refused(Refusal::InconsistentClassification)
+    } else {
+        keep_on(l, ext, s, rule, &memb)
+    }
+}
+
+/// Stages 4–8.
+fn keep_on(l: &Ledger, ext: &Ext, s: &Split, rule: &Rule, memb: &[Vec<bool>]) -> Outcome {
+    let nb = l.nb as usize;
     // 4. keep, tabled once per tope
     let mut keep = Vec::new();
     let mut t = 0;
@@ -684,7 +677,7 @@ pub fn core(l: &Ledger, rule: &Rule) -> Outcome {
     let mut a = Assembled {
         result: Vec::new(),
         orient: Vec::new(),
-        rpos: vec![NONE; cells.len()],
+        rpos: vec![NONE; ncells(l, ext)],
     };
     let mut k = 0;
     while k < s.facets.len() {
@@ -697,9 +690,8 @@ pub fn core(l: &Ledger, rule: &Rule) -> Outcome {
         }
         k += 1;
     }
-    // 6. the touch rule: edges, then vertices
-    let mut is_edge = vec![false; cells.len()];
-    let mut around_e = Vec::new();
+    // 6. the touch rule: edges, then vertices; the first bad cell refused
+    let mut is_edge = vec![false; ncells(l, ext)];
     let mut k = 0;
     while k < l.edges.len() {
         let e = l.edges[k].0;
@@ -708,56 +700,57 @@ pub fn core(l: &Ledger, rule: &Rule) -> Outcome {
         }
         k += 1;
     }
+    let mut bad = NONE;
+    let mut around_e = Vec::new();
     let mut k = 0;
-    while k < l.edges.len() {
+    while bad == NONE && k < l.edges.len() {
         let e = l.edges[k].0;
-        let ar = around(&cells, &a, e);
+        let ar = around(l, ext, &a, e);
         if ar.len() > 2 {
-            return Outcome::Refused(Refusal::ZeroThickness(CellId(e)));
+            bad = e;
         }
         around_e.push(ar);
         k += 1;
     }
     let mut around_v = Vec::new();
     let mut k = 0;
-    while k < l.verts.len() {
+    while bad == NONE && k < l.verts.len() {
         let v = l.verts[k].0;
-        let ar = around(&cells, &a, v);
-        if bad_vert(&cells, &a, &is_edge, v, &ar) {
-            return Outcome::Refused(Refusal::ZeroThickness(CellId(v)));
+        let ar = around(l, ext, &a, v);
+        if bad_vert(l, ext, &a, &is_edge, v, &ar) {
+            bad = v;
         }
         around_v.push(ar);
         k += 1;
     }
-    // 7. empty
-    if a.result.is_empty() {
-        return Outcome::Empty;
+    if bad != NONE {
+        Outcome::Refused(Refusal::ZeroThickness(CellId(bad)))
+    } else if a.result.is_empty() {
+        // 7. empty
+        Outcome::Empty
+    } else {
+        // 8. unify
+        Outcome::Ok(unify(l, ext, s, &a, &is_edge, &around_e, &around_v))
     }
-    // 8. unify
-    Outcome::Ok(unify(l, &cells, &s, &a, &is_edge, &around_e, &around_v))
 }
 
 /// `badVert`: the result facets round `v` (`ar`) in more than one class of `fanRel v`.
-fn bad_vert(cells: &Cells, a: &Assembled, is_edge: &[bool], v: u32, ar: &[u32]) -> bool {
-    if ar.is_empty() {
-        return false;
-    }
-    let z = zeros(cells.cov(v));
+fn bad_vert(l: &Ledger, ext: &Ext, a: &Assembled, is_edge: &[bool], v: u32, ar: &[u32]) -> bool {
+    let z = zeros(cov(l, ext, v));
     let mut uf = Uf::new(ar.len());
     // the first fan member seen through each edge cell: (edge, local index)
     let mut seen: Vec<(u32, u32)> = Vec::new();
     let mut j = 0;
     while j < ar.len() {
         let phi = a.result[ar[j] as usize];
-        let es = edges_between(cells, is_edge, v, &z, phi);
+        let es = edges_between(l, ext, is_edge, v, &z, phi);
         let mut q = 0;
         while q < es.len() {
             let mut found = NONE;
             let mut r = 0;
-            while r < seen.len() {
+            while found == NONE && r < seen.len() {
                 if seen[r].0 == es[q] {
                     found = seen[r].1;
-                    break;
                 }
                 r += 1;
             }
@@ -770,14 +763,24 @@ fn bad_vert(cells: &Cells, a: &Assembled, is_edge: &[bool], v: u32, ar: &[u32]) 
         }
         j += 1;
     }
+    let mut bad = false;
     let mut j = 1;
-    while j < ar.len() {
-        if uf.find(j) != uf.find(0) {
-            return true;
-        }
+    while !bad && j < ar.len() {
+        bad = uf.find(j) != uf.find(0);
         j += 1;
     }
-    false
+    bad
+}
+
+/// `u32` in a list.
+fn has(xs: &[u32], x: u32) -> bool {
+    let mut found = false;
+    let mut i = 0;
+    while !found && i < xs.len() {
+        found = xs[i] == x;
+        i += 1;
+    }
+    found
 }
 
 /// `dedup (around x).map key`: the faces round a cell, as face numbers, in the order their facets
@@ -787,16 +790,7 @@ fn faces_at(face_of: &[u32], ar: &[u32]) -> Vec<u32> {
     let mut j = 0;
     while j < ar.len() {
         let f = face_of[ar[j] as usize];
-        let mut dup = false;
-        let mut q = 0;
-        while q < out.len() {
-            if out[q] == f {
-                dup = true;
-                break;
-            }
-            q += 1;
-        }
-        if !dup {
+        if !has(&out, f) {
             out.push(f);
         }
         j += 1;
@@ -806,27 +800,24 @@ fn faces_at(face_of: &[u32], ar: &[u32]) -> Vec<u32> {
 
 /// `sameSet` on two face lists.
 fn same_set(a: &[u32], b: &[u32]) -> bool {
+    let mut same = true;
     let mut i = 0;
-    while i < a.len() {
-        if !b.contains(&a[i]) {
-            return false;
-        }
+    while same && i < a.len() {
+        same = has(b, a[i]);
         i += 1;
     }
     let mut i = 0;
-    while i < b.len() {
-        if !a.contains(&b[i]) {
-            return false;
-        }
+    while same && i < b.len() {
+        same = has(a, b[i]);
         i += 1;
     }
-    true
+    same
 }
 
 /// **Unify** (`Ledger.unify`): reads the assembled facets by reference and writes a fresh body.
 fn unify(
     l: &Ledger,
-    cells: &Cells,
+    ext: &Ext,
     s: &Split,
     a: &Assembled,
     is_edge: &[bool],
@@ -844,7 +835,7 @@ fn unify(
             let mut q = p + 1;
             while q < ar.len() {
                 let (c, d) = (ar[p] as usize, ar[q] as usize);
-                if zero_idx(cells.cov(a.result[c])) == zero_idx(cells.cov(a.result[d]))
+                if zero_idx(cov(l, ext, a.result[c])) == zero_idx(cov(l, ext, a.result[d]))
                     && a.orient[c] == a.orient[d]
                 {
                     join.union(c, d);
@@ -868,7 +859,7 @@ fn unify(
             let ff = s.first_face[h as usize];
             faces.push(OutFace {
                 facets: Vec::new(),
-                plane: zero_idx(cells.cov(h)) as u32,
+                plane: zero_idx(cov(l, ext, h)) as u32,
                 orient: a.orient[p],
                 origin: FaceId(if ff == NONE { 0 } else { ff }),
             });
@@ -905,7 +896,7 @@ fn unify(
     }
     // edge cells between two faces, numbered in edge order
     let mut ecs: Vec<usize> = Vec::new();
-    let mut ec_pos = vec![NONE; cells.len()];
+    let mut ec_pos = vec![NONE; ncells(l, ext)];
     let mut k = 0;
     while k < l.edges.len() {
         if at_e[k].len() == 2 {
@@ -920,16 +911,16 @@ fn unify(
     while k < l.verts.len() {
         if !is_out_v[k] {
             let v = l.verts[k].0;
-            let z = zeros(cells.cov(v));
+            let z = zeros(cov(l, ext, v));
             let mut round: Vec<u32> = Vec::new();
             let ar = &around_v[k];
             let mut j = 0;
             while j < ar.len() {
-                let es = edges_between(cells, is_edge, v, &z, a.result[ar[j] as usize]);
+                let es = edges_between(l, ext, is_edge, v, &z, a.result[ar[j] as usize]);
                 let mut q = 0;
                 while q < es.len() {
                     let ep = ec_pos[es[q] as usize];
-                    if ep != NONE && !round.contains(&ep) {
+                    if ep != NONE && !has(&round, ep) {
                         round.push(ep);
                     }
                     q += 1;
