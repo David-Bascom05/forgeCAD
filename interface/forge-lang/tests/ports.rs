@@ -44,33 +44,33 @@ fn parity_bodies(name: &str, volume: f64, faces: usize, edges: usize, bodies: us
 }
 
 #[test]
-fn crank_matches_its_fc_version() {
+fn crank_matches_its_recorded_solid() {
     parity("crank", 107177.0, 65, 141);
 }
 
 #[test]
-fn bracket_matches_its_fc_version() {
+fn bracket_matches_its_recorded_solid() {
     parity("bracket", 183449.2, 137, 316);
 }
 
 #[test]
-fn manifold_matches_its_fc_version() {
+fn manifold_matches_its_recorded_solid() {
     parity("manifold", 687248.8, 209, 484);
 }
 
 // Bench parts against their recorded volumes, faces and edges.
 
 #[test]
-fn bench_quadarm_matches_its_fc_version() {
+fn bench_quadarm_matches_its_recorded_solid() {
     parity("bench/quadarm", 19376.0, 73, 167);
 }
 
 #[test]
-fn bench_volute_matches_its_fc_version() {
+fn bench_volute_matches_its_recorded_solid() {
     parity("bench/volute", 802514.1, 70, 165);
 }
 
 #[test]
-fn bench_manifold_matches_its_fc_version() {
+fn bench_manifold_matches_its_recorded_solid() {
     parity("bench/manifold", 884334.5, 78, 192);
 }

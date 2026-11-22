@@ -1507,16 +1507,16 @@ turned = movebody(of: base, moves: [spin(about: axis(pivot.p, pivot_up.p), by: -
 edge = chamfer(edges(between: (base.end, base.side(plan.outline[1])), longer: 20), 3.22, angle: 49.43deg, face: base.end)
 "#;
     // the solid recorded for this part (the bench font)
-    const FC_VOLUME: f64 = 265637.1116111694;
-    const FC_FACES: usize = 48;
+    const RECORDED_VOLUME: f64 = 265637.1116111694;
+    const RECORDED_FACES: usize = 48;
     let m = common::holds(fg);
     assert!(
-        (m.volume - FC_VOLUME).abs() <= 1e-7 * FC_VOLUME,
+        (m.volume - RECORDED_VOLUME).abs() <= 1e-7 * RECORDED_VOLUME,
         "{} {}",
         m.volume,
-        FC_VOLUME
+        RECORDED_VOLUME
     );
-    assert_eq!(m.faces, FC_FACES);
+    assert_eq!(m.faces, RECORDED_FACES);
     let (part, ids) = history(fg);
     let before = forge_model::nary_name_fallbacks();
     let nary = part

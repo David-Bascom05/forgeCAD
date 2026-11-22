@@ -595,7 +595,7 @@ square = extrude(s, 2)
 /// with a start tangent alone, a tilted half ellipse, and a rounded rectangle; each 4 faces and 6
 /// edges but the rounded rectangle's 10 and 24.
 #[test]
-fn every_fc_loop_curve() {
+fn every_free_loop_curve() {
     let arch = |curve: &str| {
         format!("sketch s(on: xy) {{\n  c = {curve}\n  l = line((10, 0), (0, 0))\n}}\narch = extrude(s, 2)\n")
     };

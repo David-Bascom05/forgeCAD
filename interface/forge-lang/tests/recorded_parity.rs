@@ -125,13 +125,13 @@ const RECORDED: &[(&str, f64, f64, usize, usize)] = &[
     ),
 ];
 
-/// The Forge part builds the solid recorded under `fc_src`.
-fn same(fg: &str, fc_src: &str) -> forge_lang::Measure {
+/// The Forge part builds the solid recorded under `key`.
+fn same(fg: &str, key: &str) -> forge_lang::Measure {
     let m = common::holds(fg);
     let &(_, volume, area, faces, edges) = RECORDED
         .iter()
-        .find(|r| r.0 == fc_src)
-        .unwrap_or_else(|| panic!("no recorded solid for {fc_src:?}"));
+        .find(|r| r.0 == key)
+        .unwrap_or_else(|| panic!("no recorded solid for {key:?}"));
     let near = |x: f64, y: f64| (x - y).abs() <= 1e-7 * x.abs().max(y.abs()).max(1.0);
     assert!(near(m.volume, volume), "volume fg {} want {}", m.volume, volume);
     assert!(near(m.area, area), "area fg {} want {}", m.area, area);
@@ -140,8 +140,9 @@ fn same(fg: &str, fc_src: &str) -> forge_lang::Measure {
     m
 }
 
-/// A block 40 x 30 x 20 on xy, its corner at the origin.
-const BLOCK_FC: &str = "base: extrude 20 rect 0 0 40 30\n";
+/// A block 40 x 30 x 20 on xy, its corner at the origin: its key in RECORDED (an opaque
+/// recorded string), then the block as a Forge part.
+const BLOCK_KEY: &str = "base: extrude 20 rect 0 0 40 30\n";
 const BLOCK: &str = r#"
 sketch plan(on: xy) {
   r = rect(corner: (0, 0), size: (40, 30))
@@ -155,7 +156,7 @@ fn chamfer_two_distances() {
         &format!(
             "{BLOCK}edge = chamfer(edges(between: (base.end, base.side(plan.r[0]))), 3, d2: 5, face: base.end)\n"
         ),
-        &format!("{BLOCK_FC}chamfer 3 5 face (faces normal +z) (edges near 20 0 20)\n"),
+        &format!("{BLOCK_KEY}chamfer 3 5 face (faces normal +z) (edges near 20 0 20)\n"),
     );
 }
 
@@ -165,7 +166,7 @@ fn chamfer_distance_angle() {
         &format!(
             "{BLOCK}edge = chamfer(edges(between: (base.end, base.side(plan.r[0]))), 3, angle: 30deg, face: base.end)\n"
         ),
-        &format!("{BLOCK_FC}chamfer 3 ang 30 face (faces normal +z) (edges near 20 0 20)\n"),
+        &format!("{BLOCK_KEY}chamfer 3 ang 30 face (faces normal +z) (edges near 20 0 20)\n"),
     );
 }
 
@@ -173,7 +174,7 @@ fn chamfer_distance_angle() {
 fn chamfer_corner_point() {
     same(
         &format!("{BLOCK}edge = chamfer(edges(of: base.end), 2, corner: \"point\")\n"),
-        &format!("{BLOCK_FC}chamfer 2 corner point (edges of base top)\n"),
+        &format!("{BLOCK_KEY}chamfer 2 corner point (edges of base top)\n"),
     );
 }
 
@@ -230,7 +231,7 @@ fn cut_two_sided() {
         &format!(
             "{BLOCK}sketch s(on: base.end) {{\n  c = circle((20, 15), 4)\n}}\npit = cut(s.c, two(4, 2))\n"
         ),
-        &format!("{BLOCK_FC}extrude cut two 2 4 at 0 0 20 circle 20 15 4\n"),
+        &format!("{BLOCK_KEY}extrude cut two 2 4 at 0 0 20 circle 20 15 4\n"),
     );
 }
 
@@ -248,7 +249,7 @@ fn revolve_keep() {
         &format!(
             "{BLOCK}sketch s(on: base.side(plan.r[0])) {{\n  c = circle((20, 10), 8)\n  ax = line((0, 0), (40, 0), construction: true)\n}}\nring = revolve(s.c, axis: s.ax, keep: true)\n"
         ),
-        &format!("{BLOCK_FC}revolve keep xz axis 0 0 1 0 circle 20 10 8\n"),
+        &format!("{BLOCK_KEY}revolve keep xz axis 0 0 1 0 circle 20 10 8\n"),
     );
 }
 
@@ -289,7 +290,7 @@ fn bodies_on_cut_and_extrude() {
             "{BLOCK}sketch p2(on: plan) {{\n  r = rect(corner: (60, 0), size: (20, 20))\n}}\nother = extrude(p2, 10, new: true)\nsketch s(on: base.end) {{\n  c = circle((20, 15), 4)\n  d = circle((8, 8), 3)\n}}\npit = cut(s.c, 5, bodies: base)\nboss = extrude(s.d, 3, bodies: base)\nsketch q(on: plan) {{\n  c = circle((20, 10), 4)\n  ax = line((0, 0), (40, 0), construction: true)\n}}\nring = revolve(q.c, axis: q.ax, angle: 90deg, cut: true, bodies: base)\nsketch bp(on: base.end) {{\n  p = pt(32, 22)\n}}\ndent = ball(bp.p, 3, cut: true, bodies: base)\n"
         ),
         &format!(
-            "{BLOCK_FC}other: extrude new 10 rect 60 0 20 20\nextrude cut 5 -xy at 0 0 20 circle 20 -15 4 in base\nextrude 3 at 0 0 20 circle 8 8 3 in base\nrevolve cut 90 axis x circle 20 10 4 in base\nball cut 3 at 32 22 20 in base\n"
+            "{BLOCK_KEY}other: extrude new 10 rect 60 0 20 20\nextrude cut 5 -xy at 0 0 20 circle 20 -15 4 in base\nextrude 3 at 0 0 20 circle 8 8 3 in base\nrevolve cut 90 axis x circle 20 10 4 in base\nball cut 3 at 32 22 20 in base\n"
         ),
     );
 }
@@ -301,14 +302,14 @@ fn extrude_flip_thru_and_next() {
         &format!(
             "{BLOCK}sketch s(on: plan) {{\n  c = circle((20, 15), 4)\n}}\nbore = cut(s.c, thru, flip: true)\n"
         ),
-        &format!("{BLOCK_FC}extrude cut thru circle 20 15 4\n"),
+        &format!("{BLOCK_KEY}extrude cut thru circle 20 15 4\n"),
     );
     // a post above the part, down to the face it meets first
     same(
         &format!(
             "{BLOCK}sketch s(on: offset(base.end, 10)) {{\n  c = circle((20, 15), 4)\n}}\npost = extrude(s.c, next, flip: true)\n"
         ),
-        &format!("{BLOCK_FC}extrude next back at 0 0 30 circle 20 15 4\n"),
+        &format!("{BLOCK_KEY}extrude next back at 0 0 30 circle 20 15 4\n"),
     );
 }
 
@@ -330,7 +331,7 @@ fn selections_by_radius_touching_and_body() {
     same(
         &src,
         &format!(
-            "{BLOCK_FC}holes: extrude cut 5 -xy at 0 0 20 circle 10 -10 2\nholes2: extrude cut 5 -xy at 0 0 20 circle 30 -15 5\nchamfer 0.5 (edges of holes holes2 circle r<3)\n"
+            "{BLOCK_KEY}holes: extrude cut 5 -xy at 0 0 20 circle 10 -10 2\nholes2: extrude cut 5 -xy at 0 0 20 circle 30 -15 5\nchamfer 0.5 (edges of holes holes2 circle r<3)\n"
         ),
     );
     let src = format!(
@@ -339,20 +340,20 @@ fn selections_by_radius_touching_and_body() {
     same(
         &src,
         &format!(
-            "{BLOCK_FC}holes: extrude cut 5 -xy at 0 0 20 circle 10 -10 2\nholes2: extrude cut 5 -xy at 0 0 20 circle 30 -15 5\nchamfer 0.5 (edges of holes holes2 circle r>3)\n"
+            "{BLOCK_KEY}holes: extrude cut 5 -xy at 0 0 20 circle 10 -10 2\nholes2: extrude cut 5 -xy at 0 0 20 circle 30 -15 5\nchamfer 0.5 (edges of holes holes2 circle r>3)\n"
         ),
     );
     // the top's edges: those touching the top face
     same(
         &format!("{BLOCK}rim = chamfer(edges(touching: base.end, along: X), 1)\n"),
-        &format!("{BLOCK_FC}chamfer 1 (edges along +x top)\n"),
+        &format!("{BLOCK_KEY}chamfer 1 (edges along +x top)\n"),
     );
     // two bodies: the second's top edges only
     same(
         &format!(
             "{BLOCK}sketch p2(on: plan) {{\n  r = rect(corner: (60, 0), size: (20, 20))\n}}\nother = extrude(p2, 10, new: true)\nrim = chamfer(edges(body: other, along: Z), 1)\n"
         ),
-        &format!("{BLOCK_FC}other: extrude new 10 rect 60 0 20 20\nchamfer 1 (edges along +z body other)\n"),
+        &format!("{BLOCK_KEY}other: extrude new 10 rect 60 0 20 20\nchamfer 1 (edges along +z body other)\n"),
     );
 }
 
