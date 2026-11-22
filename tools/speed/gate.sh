@@ -29,8 +29,10 @@
 #   - `env -i` with a fixed PATH and HOME (the environment is copied onto the stack);
 #   - tools/speed/fixedrandom.c preloaded: getrandom gives fixed bytes, so std's HashMap keys are
 #     the same every run (they move probe lengths, and with them the heap);
-#   - `taskset -c 0`: one CPU, so the kernel's thread pools (forge_math::par, the fillet's)
-#     run their items in order on one thread, and no thread's allocations interleave another's;
+#   - `taskset -c $GATE_CPU` (default 0): one CPU, so the kernel's thread pools
+#     (forge_math::par, the fillet's) run their items in order on one thread, and no thread's
+#     allocations interleave another's. Which CPU does not change a count: gates run side by
+#     side each take their own;
 #   - `setarch -R` (no address randomisation) and valgrind's --fair-sched=yes (threads that
 #     remain, the build's own, switch in a fixed order).
 # This needs cc, taskset and setarch (util-linux). GATE_EXACT=0 counts as before (each run in
@@ -60,7 +62,7 @@ case $counter in
     exact=${GATE_EXACT:-1}
     count1() {
       if [ "$exact" = 1 ]; then
-        env -i PATH=/usr/bin:/bin HOME=/tmp LD_PRELOAD="$bin/fixedrandom.so" taskset -c 0 setarch -R \
+        env -i PATH=/usr/bin:/bin HOME=/tmp LD_PRELOAD="$bin/fixedrandom.so" taskset -c "${GATE_CPU:-0}" setarch -R \
           valgrind --fair-sched=yes --tool=callgrind --cache-sim=no --callgrind-out-file=/dev/null "$@"
       else
         valgrind --tool=callgrind --cache-sim=no --callgrind-out-file=/dev/null "$@"
