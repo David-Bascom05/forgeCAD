@@ -91,11 +91,18 @@ pub const BUILTINS: &[&str] = &[
 
 /// A built-in function's name, this module's or another's (shapes).
 pub fn builtin(name: &str) -> Option<&'static str> {
-    BUILTINS
-        .iter()
-        .chain(crate::shapes::NAMES)
-        .find(|b| **b == name)
-        .copied()
+    // every name looked up or bound asks: a map, not a walk of the lists
+    type Names = HashMap<&'static str, &'static str, std::hash::BuildHasherDefault<crate::eval::NameHasher>>;
+    static ALL: std::sync::OnceLock<Names> = std::sync::OnceLock::new();
+    ALL.get_or_init(|| {
+        let mut m = Names::default();
+        for &b in BUILTINS.iter().chain(crate::shapes::NAMES) {
+            m.entry(b).or_insert(b);
+        }
+        m
+    })
+    .get(name)
+    .copied()
 }
 
 const MORE: [&str; 5] = ["axis", "sym", "two", "upto", "intersect"];
@@ -744,7 +751,7 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
                 v: dmath::atan2(y.v, x.v),
                 dim: Dim::Angle,
                 src: match src {
-                    Src::Driving(p) => Src::Driven([p].into()),
+                    Src::Driving(p) => Src::Driven(std::sync::Arc::new([(*p).clone()].into())),
                     s => s,
                 },
             }))
@@ -785,7 +792,7 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
                             dim: Dim::Length,
                             src: match &src {
                                 Src::Const => Src::Const,
-                                s => Src::Driven(s.params()),
+                                s => Src::Driven(std::sync::Arc::new(s.params())),
                             },
                         })
                     };
@@ -2707,7 +2714,7 @@ pub(crate) fn feature_local(ev: &mut Eval, id: &str, name: &str, span: Span) -> 
         Value::Num(n) => Value::Num(Num {
             v: n.v,
             dim: n.dim,
-            src: Src::Driving(ev.locals[k].key.clone()),
+            src: Src::driving(ev.locals[k].key.clone()),
         }),
         o => o.clone(),
     }))
@@ -3600,7 +3607,7 @@ fn lines(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Value
             let src = values::join_src(&s1, &s2);
             let src = match src {
                 Src::Const => Src::Const,
-                s => Src::Driven(s.params()),
+                s => Src::Driven(std::sync::Arc::new(s.params())),
             };
             let n = |v: f64| {
                 Value::Num(Num {

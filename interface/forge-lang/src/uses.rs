@@ -319,8 +319,10 @@ fn rekey(v: &Value, binding: &str) -> Value {
         Value::Num(n) => Value::Num(Num {
             src: match &n.src {
                 Src::Const => Src::Const,
-                Src::Driving(k) => Src::Driving(under(k)),
-                Src::Driven(ks) => Src::Driven(ks.iter().map(under).collect::<BTreeSet<_>>()),
+                Src::Driving(k) => Src::driving(under(k)),
+                Src::Driven(ks) => {
+                    Src::Driven(std::sync::Arc::new(ks.iter().map(under).collect::<BTreeSet<_>>()))
+                }
             },
             ..n.clone()
         }),

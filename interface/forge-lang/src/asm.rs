@@ -398,7 +398,7 @@ fn file_call(ev: &mut Eval, file: &str, key: &str, given: &[(String, Value, Stri
                         let literal = matches!(value.kind, ExprKind::Num(..));
                         match sub.expr(value) {
                             Ok(Value::Num(x)) if literal => Value::Num(Num {
-                                src: Src::Driving(ParamKey {
+                                src: Src::driving(ParamKey {
                                     owner: vec![Seg {
                                         name: stem.clone(),
                                         index: vec![],
@@ -4638,7 +4638,7 @@ pub fn finish(
                         for l in &d.links {
                             let LinkKind::Joint(kind) = l.kind else { continue };
                             for (f, n) in &l.drive {
-                                let driven = matches!(&n.src, Src::Driving(p) if p == key);
+                                let driven = matches!(&n.src, Src::Driving(p) if **p == *key);
                                 let Some(&(_, lo, hi)) = l.limits.iter().find(|x| x.0 == *f) else {
                                     continue;
                                 };
@@ -5407,7 +5407,7 @@ fn push_diag(ev: &mut Eval, names: &Names, dg: &fa::Diagnostic, d: &Doc) {
                 .find(|l| l.id == n)
                 .and_then(|l| l.drive.iter().find(|x| x.0 == *freedom))
                 .and_then(|x| match &x.1.src {
-                    Src::Driving(p) => Some(p.clone()),
+                    Src::Driving(p) => Some((**p).clone()),
                     _ => None,
                 });
             let to = fix.as_ref().map(|f| match f {
@@ -6131,6 +6131,7 @@ pub fn component_block(
                 ls
             },
             used: true,
+            read: Default::default(),
         });
     }
     let mut probe = sub_eval(ev, &def, &values, false, crate::build::Cache::default(), true);
@@ -6216,7 +6217,7 @@ fn call_inputs(ev: &mut Eval, def: &CompDef, args: &[Arg], span: Span) -> R<Inpu
                     || matches!(&p.value.kind, ExprKind::Neg(x) if matches!(x.kind, ExprKind::Num(..)));
                 let v = match v {
                     Value::Num(x) if literal => Value::Num(Num {
-                        src: Src::Driving(ParamKey {
+                        src: Src::driving(ParamKey {
                             owner: vec![Seg {
                                 name: def.name.clone(),
                                 index: vec![],

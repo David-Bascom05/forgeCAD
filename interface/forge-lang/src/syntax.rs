@@ -223,7 +223,9 @@ fn lex_into<const KEEP: bool>(
     la: &mut Vec<u8>,
 ) -> Result<Vec<Tok>, Error> {
     let b = src.as_bytes();
-    let mut out = Vec::new();
+    // about a token every four bytes in a part file: room for them all at once
+    let mut out = Vec::with_capacity(b.len() / 4 + 8);
+    la.reserve(b.len() / 4 + 8);
     let mut i = 0;
     let mut depth: i32 = 0;
     let mut keep = |kind: TriviaKind, lo: usize, hi: usize| {

@@ -220,6 +220,8 @@ pub struct ParamInfo {
     /// The params its definition reads: links, shown as relations.
     pub links: BTreeSet<ParamKey>,
     pub used: bool,
+    /// What a read of it gives (`driving`), made at the first.
+    pub(crate) read: std::cell::OnceCell<Value>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1111,6 +1113,7 @@ impl<'s> Eval<'s> {
                     value: v,
                     links,
                     used: false,
+                    read: Default::default(),
                 });
                 Ok(())
             }
@@ -1134,6 +1137,7 @@ impl<'s> Eval<'s> {
                     value: v,
                     links,
                     used: false,
+                    read: Default::default(),
                 });
                 Ok(())
             }
@@ -1386,7 +1390,8 @@ impl<'s> Eval<'s> {
             &mut self.locals[which.1]
         };
         p.used = true;
-        driving(&p.value, &p.key, span)
+        let p = &*p;
+        p.read.get_or_init(|| driving(&p.value, &p.key, span)).clone()
     }
 
     fn lookup(&mut self, name: &str, span: Span) -> R<Value> {
@@ -2359,7 +2364,7 @@ pub(crate) fn driving(v: &Value, key: &ParamKey, span: Span) -> Value {
             Value::Num(n) => Value::Num(Num {
                 v: n.v,
                 dim: n.dim,
-                src: Src::Driven([key.clone()].into()),
+                src: Src::Driven(std::sync::Arc::new([key.clone()].into())),
             }),
             Value::List(xs) => Value::List(Rc::new(xs.iter().map(|x| inner(x, key)).collect())),
             Value::Tuple(xs) => Value::Tuple(Rc::new(xs.iter().map(|x| inner(x, key)).collect())),
@@ -2371,7 +2376,7 @@ pub(crate) fn driving(v: &Value, key: &ParamKey, span: Span) -> Value {
         Value::Num(n) => Value::Num(Num {
             v: n.v,
             dim: n.dim,
-            src: Src::Driving(key.clone()),
+            src: Src::driving(key.clone()),
         }),
         o => inner(o, key),
     }

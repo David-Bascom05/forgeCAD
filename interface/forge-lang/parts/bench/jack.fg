@@ -1,6 +1,6 @@
 # Spring plunger knob (tools/bench-parts/jack.fc, hand port): a flanged screw whose shaft carries
-# a compression spring up to a knurled knob. The modeled M12 thread and the maker's mark (text)
-# wait on lane fg-holes; the knurl's circular pattern is a loop here.
+# a compression spring up to a knurled knob, an M12 thread down the shaft and the maker's mark
+# raised round the band; the knurl one groove patterned round, as the .fc part has it.
 
 shared rf = 22
 shared d = 12
@@ -28,7 +28,7 @@ shared turns = count(5)
 # the knob: a disc from 91 to 106, domed rk over it
 shared zk = 91
 shared hk = 15
-# the knurl: 36 grooves cut 9 up from 98, each a triangle across the knob's rim
+# the knurl: 36 grooves cut 9 up from 98, each a triangle across the knob's rim, one patterned
 shared nk = count(36)
 shared zn = 98
 shared dn = -9            # up from zn: a negative depth runs a cut along the normal
@@ -75,19 +75,17 @@ sketch knsk(on: section) {
   ax = line((0, 0), (0, tf), construction: true)
 }
 knob = revolve(knsk.o, axis: knsk.ax)
-kplane = offset(fl.plane, zn)
-for i in 0..nk {
-  sketch ksk(on: kplane) {
-    t = poly([(cos(i * (360deg / nk)) * (rk + kout) + sin(i * (360deg / nk)) * kw, sin(i * (360deg / nk)) * (rk + kout) - cos(i * (360deg / nk)) * kw),
-              (cos(i * (360deg / nk)) * (rk - kin), sin(i * (360deg / nk)) * (rk - kin)),
-              (cos(i * (360deg / nk)) * (rk + kout) - sin(i * (360deg / nk)) * kw, sin(i * (360deg / nk)) * (rk + kout) + cos(i * (360deg / nk)) * kw)])
-  }
-  knurl = cut(ksk, dn)
-}
 # the M12 screw thread, cut 36 down the shaft from the collar's underside, its start chamfered
 shared zt = 58
 shared lt = 36
 screw = thread(on: offset(fl.plane, zt), spec: "M12", length: lt, chamfer: true)
+# one groove across the rim, patterned round the knob's axis
+kplane = offset(fl.plane, zn)
+sketch ksk(on: kplane) {
+  t = poly([(rk + kout, 0 - kw), (rk - kin, 0), (rk + kout, kw)])
+}
+knurl = cut(ksk, dn)
+knurls = pattern(of: knurl, layout: circ(about: knob.axis, n: nk))
 # the maker's mark raised round the band, wrapped on the knob's rim
 shared zm = 92
 shared hm = 4

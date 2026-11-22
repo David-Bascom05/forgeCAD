@@ -64,20 +64,25 @@ impl Dim {
 
 /// Where a number came from. Driving and driven are disjoint: a number is exactly one param
 /// (an editable handle, edited by `SetParam` on it), or derived from params by an expression
-/// (no handle: edit its inputs), or a structural constant.
+/// (no handle: edit its inputs), or a structural constant. A driven number's params are shared
+/// (every number an expression makes from the same ones holds the one set).
 #[derive(Clone, Debug, PartialEq)]
 pub enum Src {
     Const,
-    Driving(ParamKey),
-    Driven(BTreeSet<ParamKey>),
+    Driving(std::sync::Arc<ParamKey>),
+    Driven(std::sync::Arc<BTreeSet<ParamKey>>),
 }
 
 impl Src {
+    /// The number param `key` is: its handle.
+    pub fn driving(key: ParamKey) -> Src {
+        Src::Driving(std::sync::Arc::new(key))
+    }
     pub fn params(&self) -> BTreeSet<ParamKey> {
         match self {
             Src::Const => BTreeSet::new(),
-            Src::Driving(p) => [p.clone()].into(),
-            Src::Driven(s) => s.clone(),
+            Src::Driving(p) => [(**p).clone()].into(),
+            Src::Driven(s) => (**s).clone(),
         }
     }
     /// Adds the params to `out`, copying only those it lacks.
@@ -98,21 +103,26 @@ impl Src {
         match (a, b) {
             (Src::Const, x) | (x, Src::Const) => Src::derived(x),
             (Src::Driving(p), Src::Driving(q)) if p == q => Src::derived(a),
-            (Src::Driven(s), Src::Driving(p)) | (Src::Driving(p), Src::Driven(s)) if s.contains(p) => {
+            (Src::Driven(s), Src::Driving(p)) | (Src::Driving(p), Src::Driven(s)) if s.contains(&**p) => {
                 Src::Driven(s.clone())
             }
             (Src::Driven(s), Src::Driven(t)) if s == t => Src::derived(a),
             _ => {
                 let mut s = a.params();
-                s.extend(b.params());
-                if s.is_empty() { Src::Const } else { Src::Driven(s) }
+                b.add_to(&mut s);
+                if s.is_empty() {
+                    Src::Const
+                } else {
+                    Src::Driven(s.into())
+                }
             }
         }
     }
-    fn derived(a: &Src) -> Src {
+    /// The params of `a` as a driven number's: no handle of its own.
+    pub fn derived(a: &Src) -> Src {
         match a {
             Src::Const => Src::Const,
-            Src::Driving(p) => Src::Driven([p.clone()].into()),
+            Src::Driving(p) => Src::Driven(std::sync::Arc::new([(**p).clone()].into())),
             Src::Driven(s) if s.is_empty() => Src::Const,
             Src::Driven(s) => Src::Driven(s.clone()),
         }

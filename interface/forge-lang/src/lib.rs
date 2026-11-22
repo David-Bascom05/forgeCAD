@@ -333,7 +333,7 @@ fn fit_sizes(src: &str, opts: &Options, run: &mut Run, mut cache: Cache) -> Cach
         let values::Src::Driving(key) = &d.num.src else {
             continue;
         };
-        let (id, key, top, dim) = (id.clone(), key.clone(), d.num.v, d.num.dim);
+        let (id, key, top, dim) = (id.clone(), (**key).clone(), d.num.v, d.num.dim);
         let builds = |v: f64, cache: Cache| -> (bool, Cache) {
             let op = error::Op::SetParam {
                 param: key.clone(),
