@@ -104,6 +104,7 @@ cargo test --workspace                              # native
 cargo test --workspace --target wasm32-wasip1       # wasm, run under Node's WASI
 cargo build --profile wasm --target wasm32-wasip1   # the browser build: fat LTO, simd128
 tools/speed/gate.sh                                 # native instruction counts and bits
+GATE_COUNTER=callgrind tools/speed/gate.sh          # the same under valgrind (VMs without perf counters)
 tools/speed/wasm.sh                                 # wasm instruction counts, ratio to native
 ```
 
