@@ -160,9 +160,19 @@ used.
 
 G3 and G4 are this theorem with w = δ (G3) and w = (reach/2)·θ (G4).
 
-The Aeneas extraction of the code itself (tables for the steps, probes and clearances, as for
-`place_cuts`) is in `aeneas/clearstep`. It will carry the same edge as a theorem on the extracted
-function, so a change to `interior_point` can be proven against `ProbeSpec`.
+**On the extracted code** (`aeneas/clearstep`, `aeneas/lean/Clearstep`; no sorry, no native_decide,
+standard axioms only). `interior_point`/`clear_step` are extracted float-free. Every float test is a
+table: `small`, `nsteps`, `probed`, `clear`, `fallback_ok`. The kernel's skip of a piece by index is
+kept, so a spur's piece is skipped both ways. Aeneas translates the extraction, and on it:
+- `interior_point_spec`: on sized tables, it returns ok, equal to a pure reference.
+- `first_clear_step`, `chosen_gets_step`: the step taken is the first step clear of every other
+  piece; the chosen half-edge gets one whenever some step is clear.
+- `strip_step_iff`, `strip_first_fit`, `strip_no_fit`, `g3_edge_code`: on a strip with 12 steps
+  (lengths in units of the last step), a step is taken iff w ≥ 2 units = 0.05·2⁻¹⁰ mm, and otherwise
+  the fallback runs.
+
+Not proven: that the tables encode the kernel's floats (argued in lib.rs), and the conversion from
+real widths to units (exact, because each 2·step is a whole number of units).
 
 ## 2. The gaps
 
@@ -259,8 +269,8 @@ and CAREFUL never succeed.
 Each takes its distance or sign tests as tables, as `placecuts` does:
 
 1. `place_cuts`' clustering (4561–4620). **Done**, proven (§1.4).
-2. `clear_step` / `interior_point`'s step ladder (6150–6207). **In progress**: §1.5 gives the
-   geometric model; `aeneas/clearstep` gives the extraction.
+2. `clear_step` / `interior_point`'s step ladder (6150–6207). **Done** (§1.5): the geometric
+   model and the extraction, each proven.
 3. `edge_split` (756–813): the sort, dedup and piece chain. Cut order and the vertex keys are
    given.
 4. The four-use count (1739–1749) and `keep_of` (6096).

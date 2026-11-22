@@ -341,9 +341,9 @@ theorem pick_spec (first : alloc.vec.Vec (Usize × Bool)) (small : alloc.vec.Vec
             step as ⟨j2, hj2⟩
             refine ⟨by omega, ?_, by omega⟩
             rw [hj2]
-        · simp only [ite_true, WP.spec_ok]
+        · simp only [ite_true, Std.uncurry, WP.spec_ok]
       · have hlt' : ¬ (j < first.len) := by scalar_tac
-        simp only [hlt', ite_false, WP.spec_ok]
+        simp only [hlt', ite_false, Std.uncurry, WP.spec_ok]
         rw [pickIn, if_neg (by rw [lv_len]; exact hlt)]
     · exact ⟨by simp, by simp⟩
 
@@ -380,21 +380,21 @@ def scanIn (cs : Nat × Bool → StepR) (L : List (List (Nat × Bool))) (h : Nat
   else out
 termination_by L.length - i
 
-theorem r2_match (o : Usize × Bool) (s : Step) :
+theorem r2_match (i : Usize) (b : Bool) (s : Step) :
     (match s with
       | Step.Fail => ok Res2.Fail
-      | Step.Found k => ok (Res2.Found o.1 o.2 k)
+      | Step.Found k => ok (Res2.Found i b k)
       | Step.Exhausted => ok Res2.Go : Result Res2) = ok (match s with
       | Step.Fail => Res2.Fail
-      | Step.Found k => Res2.Found o.1 o.2 k
+      | Step.Found k => Res2.Found i b k
       | Step.Exhausted => Res2.Go) := by
   cases s <;> rfl
 
-theorem r2_toR (o : Usize × Bool) (s : Step) :
+theorem r2_toR (i : Usize) (b : Bool) (s : Step) :
     (match s with
       | Step.Fail => Res2.Fail
-      | Step.Found k => Res2.Found o.1 o.2 k
-      | Step.Exhausted => Res2.Go).toR = r2of (o.1.val, o.2) s.toR := by
+      | Step.Found k => Res2.Found i b k
+      | Step.Exhausted => Res2.Go).toR = r2of (i.val, b) s.toR := by
   cases s <;> rfl
 
 theorem scan_one_spec (P : Nat) (loops : Loops) (small : alloc.vec.Vec Bool) (nsteps : alloc.vec.Vec Usize)
@@ -438,22 +438,28 @@ theorem scan_one_spec (P : Nat) (loops : Loops) (small : alloc.vec.Vec Bool) (ns
             rw [hj2]; simp [hg]
           · have hb2 : (b1 != h1) = true := by simp [hnb]
             simp only [hb2, ite_true]
+            simp only [Std.bind_assoc]
             apply WP.spec_bind (clear_step_spec P loops small nsteps probed clear fallback hS i1 hmem b1)
             intro s hs
-            rw [r2_match]; simp only [Std.bind_ok]
-            step as ⟨j2, hj2⟩
-            refine ⟨by omega, ?_, by omega⟩
-            rw [hj2, r2_toR, hs]; simp [hnb]
+            cases s
+            all_goals
+              simp only [Std.bind_ok]
+              step as ⟨j2, hj2⟩
+              refine ⟨by omega, ?_, by omega⟩
+              rw [hj2, ← hs]; simp [hnb, Step.toR, r2of, Res2.toR]
         · have hb : (i1 != h0) = true := by simp [hne]
           have hne' : i1.val ≠ h0.val := fun h => hne (by scalar_tac)
           simp only [hb, ite_true]
+          simp only [Std.bind_assoc]
           apply WP.spec_bind (clear_step_spec P loops small nsteps probed clear fallback hS i1 hmem b1)
           intro s hs
-          rw [r2_match]; simp only [Std.bind_ok]
-          step as ⟨j2, hj2⟩
-          refine ⟨by omega, ?_, by omega⟩
-          rw [hj2, r2_toR, hs]; simp [hne']
-      · simp only [hg, decide_false, Bool.false_eq_true, ite_false, WP.spec_ok]
+          cases s
+          all_goals
+            simp only [Std.bind_ok]
+            step as ⟨j2, hj2⟩
+            refine ⟨by omega, ?_, by omega⟩
+            rw [hj2, ← hs]; simp [hne', Step.toR, r2of, Res2.toR]
+      · simp [hg]
     · have hlt' : ¬ (j < l.len) := by scalar_tac
       simp only [hlt', ite_false, WP.spec_ok]
       rw [soIn, if_neg (by rw [lv_len]; exact hlt)]
@@ -487,10 +493,96 @@ theorem scan_spec (P : Nat) (loops : Loops) (small : alloc.vec.Vec Bool) (nsteps
         step as ⟨i2, hi2⟩
         refine ⟨by omega, ?_, by omega⟩
         rw [hi2, ho, LV_get loops i.val hlt]
-      · simp only [hg, decide_false, Bool.false_eq_true, ite_false, WP.spec_ok]
+      · simp [hg]
     · have hlt' : ¬ (i < loops.len) := by scalar_tac
       simp only [hlt', ite_false, WP.spec_ok]
       rw [scanIn, if_neg (by rw [LV_len]; exact hlt)]
   · exact ⟨by simp, by simp [Res2.toR]⟩
+
+/-! ## `interior_point` -/
+
+inductive ResR | none | step (p : Nat) (f : Bool) (k : Nat) | fallback (p : Nat) (f : Bool)
+  deriving DecidableEq, Repr
+
+def Res.toR : Res → ResR
+  | .NoPoint => .none
+  | .Step p f k => .step p.val f k.val
+  | .Fallback p f => .fallback p.val f
+
+/-- The reference: `interior_point` on the loops and the tables as functions. `cs o` is
+`clear_step` off half-edge `o`; `fbf p f` is the default probe's success. -/
+def ipRef (L : List (List (Nat × Bool))) (sm : Nat → Bool) (cs : Nat × Bool → StepR)
+    (fbf : Nat → Nat → Bool) : ResR :=
+  if L.length = 0 then .none
+  else if L[0]!.length = 0 then .none
+  else
+    let h := pickRef L[0]! sm
+    match cs h with
+    | .fail => .none
+    | .found k => .step h.1 h.2 k
+    | .exh =>
+      match scanIn cs L h .go 0 with
+      | .go => if fbf h.1 (fiN h.2) then .fallback h.1 h.2 else .none
+      | .fail => .none
+      | .found p f k => .step p f k
+
+/-- The tables of `interior_point`, as the reference reads them. -/
+def ipOf (loops : Loops) (small : alloc.vec.Vec Bool) (nsteps : alloc.vec.Vec Usize) (probed : T3)
+    (clear : T4) (fallback : alloc.vec.Vec (alloc.vec.Vec Bool)) : ResR :=
+  ipRef (LV loops) (sm small) (fun o => csRef (LV loops) nsteps probed clear o.1 o.2) (fb fallback)
+
+/-- **Refinement, no failure.** On sized tables `interior_point` returns ok (no index out of
+bounds, no overflow, no divergence), and its result is the reference's. -/
+theorem interior_point_spec (P : Nat) (loops : Loops) (small : alloc.vec.Vec Bool) (nsteps : alloc.vec.Vec Usize)
+    (probed : T3) (clear : T4) (fallback : alloc.vec.Vec (alloc.vec.Vec Bool))
+    (hS : Sized P loops small nsteps probed clear fallback) :
+    interior_point loops small nsteps probed clear fallback ⦃ r =>
+      r.toR = ipOf loops small nsteps probed clear fallback ⦄ := by
+  unfold interior_point ipOf ipRef
+  by_cases h0 : loops.val.length = 0
+  · have : loops.len = 0#usize := by scalar_tac
+    rw [if_pos this]; simp [LV_len, h0, Res.toR]
+  · have hne : ¬ loops.len = 0#usize := by scalar_tac
+    simp only [hne, ite_false, LV_len, h0]
+    rw [idx loops 0#usize (by simp; omega)]; simp only [Std.bind_ok]
+    have hz : (0#usize : Usize).val = 0 := by simp
+    rw [hz, LV_get loops 0 (by omega)]
+    have hmem0 := mem_LV loops 0 (by omega)
+    by_cases h1 : (loops.val[0]!).val.length = 0
+    · have : (loops.val[0]!).len = 0#usize := by scalar_tac
+      rw [if_pos this, WP.spec_ok]; simp only [Res.toR, lv_len, h1, ite_true]
+    · have hne1 : ¬ (loops.val[0]!).len = 0#usize := by scalar_tac
+      simp only [hne1, ite_false, lv_len, h1]
+      have hpl : ∀ o ∈ lv (loops.val[0]!), o.1 < P := hS.pieces _ hmem0
+      apply WP.spec_bind (pick_spec _ small P hS.hs hpl (by omega))
+      rintro ⟨i2, b⟩ hpk
+      simp only at hpk
+      have hmh : (i2.val, b) ∈ lv (loops.val[0]!) := by
+        rw [hpk]; exact pickRef_mem _ _ (by rw [lv_len]; omega)
+      have hi2 : i2.val < P := hpl _ hmh
+      simp only [Std.uncurry, ← hpk]
+      apply WP.spec_bind (clear_step_spec P loops small nsteps probed clear fallback hS i2 hi2 b)
+      intro st hst
+      try simp only at hst ⊢
+      rw [← hst]
+      cases st
+      · simp [Step.toR, Res.toR]
+      · simp [Step.toR, Res.toR]
+      · simp only [Step.toR, scan]
+        apply WP.spec_bind (scan_spec P loops small nsteps probed clear fallback hS i2 b)
+        intro r hr
+        rw [← hr]
+        cases r
+        · simp only [Res2.toR]
+          obtain ⟨hf1⟩ := And.intro (hS.hf2 i2.val hi2) True.intro
+          rw [idx fallback i2 (by have := hS.hf; omega)]; simp only [Std.bind_ok]
+          apply WP.spec_bind (fi_spec b)
+          intro fx hfx
+          rw [idx _ fx (by have := fiN_lt b; omega)]; simp only [Std.bind_ok]
+          have hfb : (fallback.val[i2.val]!.val[fx.val]!) = fb fallback i2 (fiN b) := by rw [hfx]; rfl
+          rw [hfb]
+          cases fb fallback i2 (fiN b) <;> simp [Res.toR]
+        · simp [Res2.toR, Res.toR]
+        · simp [Res2.toR, Res.toR]
 
 end clearstep
