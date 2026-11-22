@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
-"""CADFS (Onshape FeatureScript) to .fc. Symbolic queries are resolved against our own geometry: a query
+"""CADFS (Onshape FeatureScript) to .fg (Forge). Symbolic queries are resolved against our own geometry: a query
 becomes the curve or surface its entity must lie on (a carrier, from the sketches and extents above it), and
 it picks the edges and faces of the part as built so far whose samples lie on that carrier. A sketch's
-frame comes from the dataset's sketch record. Data stays outside the repo; run with python3 -I.
+frame comes from the dataset's sketch record. Each feature is a statement (fgw.St) written as Forge by fgw.Prog;
+the edges and faces a blend or shell picks are named by lineage (fgw, forge-proof's topo), never by position.
+Data stays outside the repo; run with python3 -I.
 
-  cadfs.py PROGRAM.txt SKETCH.json --topo EXE --out OUT.fc     prints the outcome as JSON
+  cadfs.py PROGRAM.txt SKETCH.json --topo EXE --out OUT.fg     prints the outcome as JSON
 
-status: "translated", or "untranslated" with why (an importer gap, a form .fc lacks, an unresolvable
-reference), or "stopped": the kernel itself stopped on a prefix, which OUT.fc then holds.
+status: "translated", or "untranslated" with why (an importer gap, a form Forge lacks, an unresolvable
+reference), or "stopped": the kernel itself stopped on a prefix, which OUT.fg then holds.
 """
 import json
 import math
 import os
-import resource
 import subprocess
 import sys
 import tempfile
@@ -20,6 +21,7 @@ import tempfile
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import fs
 import sketch2d
+from fgw import NoName, Prog, St, Stop, Topo, loop_segs
 from sketch2d import Arrangement, Unsupported, curve_dist, meets
 
 TOL = 2e-4  # mm: a sample this close lies on its carrier
@@ -87,10 +89,6 @@ def fine(x):
     return s if s not in ("", "-0") else "0"
 
 
-def vfine(v):
-    return " ".join(fine(x) for x in v)
-
-
 def turned(v, axis, ang):
     """v turned about a unit axis by ang radians."""
     c, s = math.cos(ang), math.sin(ang)
@@ -99,8 +97,14 @@ def turned(v, axis, ang):
     return tuple(v[i] * c + w[i] * s + axis[i] * k for i in range(3))
 
 
-def vtext(v):
-    return " ".join(num(x) for x in v)
+def vt(v):
+    """A vector's numbers as num writes them."""
+    return tuple(num(x) for x in v)
+
+
+def vf(v):
+    """A vector's numbers as fine writes them."""
+    return tuple(fine(x) for x in v)
 
 
 class Frame:
@@ -301,13 +305,21 @@ class WPiece:
             return WPiece(self.b, self.a, ent=self.ent)
         return WPiece(self.b, self.a, self.c, self.z, -self.sweep, self.ent)
 
-    def text(self):
+    def path(self):
+        """The piece as fgw's path piece: a line on a plane through it (x along it), or an arc on its circle's
+        plane (x to its start) from angle 0, counter-clockwise."""
         if self.c is None:
-            return f"line {vfine(self.a)} {vfine(self.b)}"
+            d = add(self.b, self.a, -1)
+            l = math.sqrt(dot(d, d))
+            u = tuple(x / l for x in d)
+            k = min(range(3), key=lambda i: abs(u[i]))
+            n = unit(cross(u, tuple(1.0 if i == k else 0.0 for i in range(3))))
+            return ("line", vf(self.a), vf(self.b), vf(u), vf(n), fine(l))
         r = add(self.a, self.c, -1)
         l = math.sqrt(dot(r, r))
         z = self.z if self.sweep > 0 else tuple(-x for x in self.z)
-        return f"arc z {vfine(z)} x {vfine(tuple(v / l for v in r))} at {vfine(self.c)} {fine(l)} 0 {fine(math.degrees(abs(self.sweep)))}"
+        sw = abs(self.sweep)
+        return ("arc", (vf(self.c), vf(z), vf(tuple(v / l for v in r))), fine(l), (fine(l * math.cos(sw)), fine(l * math.sin(sw))))
 
 
 class Tr:
@@ -318,7 +330,9 @@ class Tr:
         self.raw = raw
         self.topo_exe = topo
         self.topo = None
-        self.lines = []
+        self.lines = []  # fgw.St, one a statement
+        self.prog = Prog()
+        self.last = None
         self.notes = set()
         self.sk = {}  # sketch id: (Arrangement, Frame)
         self.solid = {}  # feature id: its extent record
@@ -347,24 +361,23 @@ class Tr:
     # the kernel at this point in the part
     def state(self):
         if self.topo is None:
-            def lim():
-                os.nice(19)
-                resource.setrlimit(resource.RLIMIT_AS, (3 << 30, 3 << 30))
-                resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
-                resource.setrlimit(resource.RLIMIT_CPU, (120, 121))
-            self.topo = subprocess.Popen([self.topo_exe], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, preexec_fn=lim, text=False)
-        src = ("\n".join(self.lines) + "\n").encode()
-        self.topo.stdin.write(b"%d\n" % len(src) + src)
-        self.topo.stdin.flush()
-        line = self.topo.stdout.readline()
-        if not line:
-            raise KernelStop("kernel process died (crash, memory or CPU limit)")
-        d = json.loads(line)
-        if "panic" in d:
-            raise KernelStop("kernel panic")
-        if d.get("err"):
-            raise KernelStop(d["err"])
-        return d
+            self.topo = Topo(self.topo_exe)
+        try:
+            self.last = self.topo.state(self.prog.text(self.lines))
+        except Stop as x:
+            raise KernelStop(str(x))
+        return self.last
+
+    def select(self, what, handles):
+        """A lineage selection of exactly these edges or faces (by their handles in the last state)."""
+        key = "n" if what == "edges" else "name"
+        by = {x["h"]: x[key] for x in self.last.get(what, [])}
+        try:
+            return self.topo.select(self.prog.text(self.lines), what, {by[h] for h in handles})
+        except Stop as x:
+            raise KernelStop(str(x))
+        except NoName as x:
+            raise Unresolved(str(x))
 
     def sketch(self, f):
         a = Arrangement(f["ents"])
@@ -953,49 +966,8 @@ class Tr:
             return set()
         return on or off
 
-    def loop_text(self, a, lp, flip):
-        f = (lambda p: (p[0], -p[1])) if flip else (lambda p: p)
-        if len(lp) == 1 and a.pieces[lp[0][0]].kind == "circle":
-            p = a.pieces[lp[0][0]]
-            c = f(p.c)
-            return f"circle {num(c[0])} {num(c[1])} {num(p.r)}"
-        parts = []
-        for i, fwd in lp:
-            p = a.pieces[i]
-            s, e = a.verts[p.va], a.verts[p.vb]
-            if not fwd:
-                s, e = e, s
-            s, e = f(s), f(e)
-            if p.kind == "arc":
-                _, d = p.sweep()
-                d = (d if fwd else -d) * (-1 if flip else 1)
-                c = f(p.c)
-                # refit through the shared ends
-                ch = math.dist(s, e)
-                r = p.r
-                if ch > 1e-9:
-                    r = max(r, ch / 2)
-                    h = math.sqrt(max(r * r - ch * ch / 4, 0.0))
-                    m = ((s[0] + e[0]) / 2, (s[1] + e[1]) / 2)
-                    n = ((e[1] - s[1]) / ch, (s[0] - e[0]) / ch)
-                    c1, c2 = (m[0] + h * n[0], m[1] + h * n[1]), (m[0] - h * n[0], m[1] - h * n[1])
-                    c = c1 if math.dist(c1, c) <= math.dist(c2, c) else c2
-                a0 = math.degrees(math.atan2(s[1] - c[1], s[0] - c[0]))
-                a1 = math.degrees(math.atan2(e[1] - c[1], e[0] - c[0]))
-                dg = a1 - a0
-                while d > 0 and dg <= 0:
-                    dg += 360
-                while d < 0 and dg >= 0:
-                    dg -= 360
-                parts.append(f"arc {num(c[0])} {num(c[1])} {num(r)} {a0:.10f} {dg:.10f}")
-            elif p.kind == "poly":
-                ps = [f(q) for q in (p.pts if fwd else p.pts[::-1])]
-                ps[0], ps[-1] = s, e
-                for u, v in zip(ps, ps[1:]):
-                    parts.append(f"line {num(u[0])} {num(u[1])} {num(v[0])} {num(v[1])}")
-            else:
-                parts.append(f"line {num(s[0])} {num(s[1])} {num(e[0])} {num(e[1])}")
-        return "loop " + " ".join(parts)
+    def loop_segs(self, a, lp, flip):
+        return loop_segs(a, lp, flip, num)
 
     def op_of(self, a):
         t = a.get("operationType")
@@ -1011,41 +983,43 @@ class Tr:
             this = "" if self.bodies == 0 else "new"
             self.names += 1
             self.current = f"b{self.names}"
-            label = self.current + ": "
+            label = self.current
             self.bodies += 1
         if fid_out is not None:
             self.solid[fid_out].setdefault("made", []).append((ents, self.current))
-        return label, this, " in all" if self.bodies > 1 and op in ("cut", "keep") else ""
+        return label, this, "all" if self.bodies > 1 and op in ("cut", "keep") else None
 
-    def emit_solid(self, kind, op, head, frame_text, by, flip, tail="", fid_out=None, after=""):
+    def emit_solid(self, kind, op, make, frame, by, flip, fid_out=None):
+        """Each region a statement of `kind` on `frame` (origin, normal, x), `make` its own fields."""
         for fid, regs in by.items():
             a = self.sk[fid][0]
             for pi, prof in enumerate(a.merged(sorted(set(regs)))):
-                loops = " ".join(self.loop_text(a, lp, flip) for lp in prof)
+                loops = [self.loop_segs(a, lp, flip) for lp in prof]
                 ents = {a.pieces[i].ent for lp in prof for i, _ in lp}
                 # a new body the same as one already made: the source's file holds one solid for such copies
-                same = (kind, head, frame_text, tail, loops, after)
+                same = repr((kind, sorted(make.items()), frame, loops))
                 if op == "new" and same in self.made:
                     self.current = self.made[same]
                     continue
                 # Onshape's add joins the bodies it meets and leaves the rest: a body of its own, then joined
-                text = f"{kind} {{}}{head} {frame_text} {tail}{loops}{after}"
-                joined = self.run_into(text) if op == "add" and self.bodies > 1 else []
+                st = St(kind, frame=frame, loops=loops, **make)
+                joined = self.run_into(st) if op == "add" and self.bodies > 1 else []
                 label, this, scope = self.solid_line("new" if op == "add" and self.bodies > 1 else op, ents, fid_out)
                 if label:
                     self.made[same] = self.current
-                self.lines.append(f"{label}{text.format(this + ' ' if this else '')}{scope}")
+                st.label, st.op, st.scope = label or None, this, scope
+                self.lines.append(st)
                 if op == "add" and label:
                     self.notes.add("multibody-join")
                 if joined:
-                    self.lines.append(f"combine add {self.current} " + " ".join(joined))
+                    self.lines.append(St("combine", word="add", target=self.current, tools=joined, keep=False))
                     self.alias.update((b, self.current) for b in joined)
                     self.bodies -= len(joined)
 
     def mass_of(self, lines):
-        """Volume and area of these lines as a part, summed over its bodies; None if they don't build."""
-        with tempfile.NamedTemporaryFile("w", suffix=".fc", delete=False) as t:
-            t.write("\n".join(lines) + "\n")
+        """Volume and area of these statements as a part, summed over its bodies; None if they don't build."""
+        with tempfile.NamedTemporaryFile("w", suffix=".fg", delete=False) as t:
+            t.write(Prog().text(lines))
         try:
             p = subprocess.run([os.path.join(os.path.dirname(self.topo_exe), "judge"), t.name], capture_output=True, text=True, timeout=300)
             j = json.loads(p.stdout)
@@ -1054,9 +1028,9 @@ class Tr:
         os.remove(t.name)
         return (j["vol"], j["area"]) if j.get("v") in ("ok", "fail") and "vol" in j and "area" in j and "combine" not in j.get("sig", "") else None
 
-    def run_into(self, text):
+    def run_into(self, st):
         """The live bodies a new solid meets, by what joining them takes away: shared volume or a shared face."""
-        new = f"zz: {text.format('new ')}"
+        new = St(st.kind, label="zz", op="new", **{k: v for k, v in st.__dict__.items() if k not in ("kind", "label", "op", "scope")})
         alone = self.mass_of(self.lines + [new])
         if alone is None:
             raise Unresolved("an add into several bodies that doesn't build alone")
@@ -1064,7 +1038,7 @@ class Tr:
         for b in (f"b{k + 1}" for k in range(self.names)):
             if b in self.alias:
                 continue
-            m = self.mass_of(self.lines + [new, f"combine add zz {b}"])
+            m = self.mass_of(self.lines + [new, St("combine", word="add", target="zz", tools=[b], keep=False)])
             if m is not None and (m[0] < alone[0] * (1 - 1e-9) or m[1] < alone[1] * (1 - 1e-9)):
                 out.append(b)
         return out
@@ -1095,7 +1069,7 @@ class Tr:
         for fid in by:
             fr = self.sk[fid][1]
             lo, hi = 0.0, None
-            frame = "z {} x {} at {}".format(vtext(fr.n if not opp else tuple(-x for x in fr.n)), vtext(fr.x), vtext(fr.o))
+            frame = (vt(fr.o), vt(fr.n if not opp else tuple(-x for x in fr.n)), vt(fr.x))
             sgn = -1.0 if opp else 1.0
             second = a.get("hasSecondDirection") is True
             if second and bound not in ("BLIND", "THROUGH_ALL"):
@@ -1108,23 +1082,23 @@ class Tr:
                     if sb != "BLIND":
                         raise Unsupported("second direction form")
                     d2 = self.val(a["secondDirectionDepth"])
-                    head, lo, hi = f"two {num(d)} {num(d2)}", -d2, d
+                    head, lo, hi = ("two", num(d), num(d2)), -d2, d
                     if opp == (a.get("secondDirectionOppositeDirection") is True):
                         # each flag turns its own direction about the normal: both one way, it runs between the two depths
                         lo, hi = min(d, d2), max(d, d2)
                         if hi - lo <= 1e-9:
                             raise Unresolved("an extrude between equal depths")
-                        head = num(hi - lo)
-                        frame = "z {} x {} at {}".format(vtext(fr.n if not opp else tuple(-x for x in fr.n)), vtext(fr.x), vtext(add(fr.o, fr.n, sgn * lo)))
+                        head = ("d", num(hi - lo))
+                        frame = (vt(add(fr.o, fr.n, sgn * lo)), vt(fr.n if not opp else tuple(-x for x in fr.n)), vt(fr.x))
                 else:
-                    head, hi = num(d), d
+                    head, hi = ("d", num(d)), d
             elif bound == "SYMMETRIC":
                 d = self.val(a["depth"])
-                head, lo, hi = f"sym {num(d)}", -d / 2, d / 2
+                head, lo, hi = ("sym", num(d)), -d / 2, d / 2
             elif bound == "THROUGH_ALL":
-                head, lo = ("thru both", None) if second else ("thru", 0.0)
+                head, lo = (("thru", "both"), None) if second else (("thru", "fwd"), 0.0)
             elif bound == "UP_TO_NEXT":
-                head = "next"
+                head = ("next", "fwd")
             elif bound == "UP_TO_SURFACE":
                 c = self.carrier(single(a.get("endBoundEntityFace"), env), env)
                 if not isinstance(c, OnPlane):
@@ -1136,12 +1110,12 @@ class Tr:
                 off = self.val(a.get("offsetDistance", 0.0)) if a.get("hasOffset") else 0.0
                 if w <= 0:
                     raise Unresolved("up to a face behind the sketch")
-                head, hi = num(w + off), w + off
+                head, hi = ("d", num(w + off)), w + off
             else:
                 raise Unsupported("extrude bound " + bound)
             # lo, hi along the extrude's direction; records measure along the sketch normal
             self.solid[f["id"]] = {"kind": "extrude", "frame": fr, "lo": None if lo is None else lo * sgn, "hi": None if hi is None else hi * sgn}
-            self.emit_solid("extrude", op, head, frame, {fid: by[fid]}, opp, fid_out=f["id"])
+            self.emit_solid("extrude", op, {"ext": head}, frame, {fid: by[fid]}, opp, fid_out=f["id"])
 
     def revolve(self, f):
         a, env = f["args"], f["env"]
@@ -1176,19 +1150,19 @@ class Tr:
         if opp:
             d2 = (-d2[0], -d2[1])
         if t == "FULL":
-            head = ""
+            turn = None
         elif t == "ONE_DIRECTION":
-            head = num(self.val(a["angle"]))
+            turn = ("a", num(self.val(a["angle"])))
         elif t == "SYMMETRIC":
-            head = "sym " + num(self.val(a["angle"]))
+            turn = ("sym", num(self.val(a["angle"])))
         elif t == "TWO_DIRECTIONS":
-            head = f"two {num(self.val(a['angle']))} {num(self.val(a['angleBack']))}"
+            turn = ("two", num(self.val(a["angle"])), num(self.val(a["angleBack"])))
         else:
             raise Unsupported("revolve type " + t)
         self.solid[f["id"]] = {"kind": "revolve", "frame": fr, "a2": (u0, v0), "d2": d2}
-        frame = f"z {vtext(fr.n)} x {vtext(fr.x)} at {vtext(fr.o)}"
-        tail = f"axis {num(u0)} {num(v0)} {num(d2[0])} {num(d2[1])} "
-        self.emit_solid("revolve", op, head, frame, by, False, tail, fid_out=f["id"])
+        frame = (vt(fr.o), vt(fr.n), vt(fr.x))
+        make = {"turn": turn, "axis": (num(u0), num(v0), num(d2[0]), num(d2[1]))}
+        self.emit_solid("revolve", op, make, frame, by, False, fid_out=f["id"])
 
     def wpieces(self, v, env):
         """A path's edges as world pieces, in no order: sketch entities, or edges of the part as built."""
@@ -1347,10 +1321,10 @@ class Tr:
             d = (dot(p.z, fr.x), dot(p.z, fr.y))
             rec = self.solid[f["id"]]
             rec["ring"] = (fr, (u, v), (d[0] / math.hypot(*d), d[1] / math.hypot(*d)))
-            loops = " ".join(self.loop_text(arr, lp, False) for lp in prof)
+            loops = [self.loop_segs(arr, lp, False) for lp in prof]
             ents = {arr.pieces[i].ent for lp in prof for i, _ in lp}
             label, this, scope = self.solid_line(op, ents, f["id"])
-            self.lines.append(f"{label}revolve {this + ' ' if this else ''}z {vfine(fr.n)} x {vfine(fr.x)} at {vfine(fr.o)} axis {fine(u)} {fine(v)} {fine(d[0])} {fine(d[1])} {loops}{scope}")
+            self.lines.append(St("revolve", label=label or None, op=this, scope=scope, frame=(vf(fr.o), vf(fr.n), vf(fr.x)), loops=loops, turn=None, axis=(fine(u), fine(v), fine(d[0]), fine(d[1]))))
             return
         paths = self.path_from(run, closed, fr, near)
         if len(paths) > 1 and op == "keep":
@@ -1363,13 +1337,13 @@ class Tr:
             y = unit(cross(z, fr.x))
             x = cross(y, z)
             o = add(fr.o, z, dot(add(path[0].a, fr.o, -1), z))
-            frame = f"z {vfine(z)} x {vfine(x)} at {vfine(o)}"
-            loops = " ".join(self.loop_text(arr, lp, False) for lp in prof)
+            frame = (vf(o), vf(z), vf(x))
+            loops = [self.loop_segs(arr, lp, False) for lp in prof]
             ents = {arr.pieces[i].ent for lp in prof for i, _ in lp}
             this_op = op if k == 0 else ("cut" if op == "cut" else "add")
             label, this, scope = self.solid_line(this_op, ents, f["id"] if k == 0 else None)
             self.solid[f["id"]]["legs"].append(legs_of(Frame.of(o, x, y, z), path))
-            self.lines.append(f"{label}sweep {this + ' ' if this else ''}{frame} {loops} path " + " ".join(p.text() for p in path) + scope)
+            self.lines.append(St("sweep", label=label or None, op=this, scope=scope, frame=frame, loops=loops, path=[p.path() for p in path]))
 
     def loft(self, f):
         a, env = f["args"], f["env"]
@@ -1386,10 +1360,12 @@ class Tr:
             raise Unsupported("a loft with a spine")
         cond = {"start": a.get("startCondition"), "end": a.get("endCondition")}
         ends = []
+        weights = {}
         for w, c in cond.items():
             c = c[1].split(".")[-1] if isinstance(c, tuple) else "DEFAULT"
             if c == "NORMAL_TO_PROFILE":
-                ends.append(f"{w} {num(self.val(a.get(w + 'Magnitude', 1.0)))}")
+                ends.append(w)
+                weights[w] = num(self.val(a.get(w + "Magnitude", 1.0)))
             elif c != "DEFAULT":
                 raise Unsupported("a loft end condition " + c)
         op = self.op_of(a)
@@ -1449,14 +1425,14 @@ class Tr:
             self.notes.add("loft-many")
         if ends:
             self.notes.add("loft-end")
-        words = ["profile " + section_text(s) for s in secs]
+        words = [section_of(s) for s in secs]
         for first, at in tips:
             self.notes.add("loft-point")
-            words.insert(0 if first else len(words), "point " + vfine(at))
+            words.insert(0 if first else len(words), ("point", vf(at)))
         ents = {e for s in secs for e in s["ents"]}
         self.solid[f["id"]] = {"kind": "loft", "secs": secs}
         label, this, scope = self.solid_line(op, ents, f["id"])
-        self.lines.append(f"{label}loft {this + ' ' if this else ''}smooth {' '.join(ends) + ' ' if ends else ''}" + " ".join(words) + scope)
+        self.lines.append(St("loft", label=label or None, op=this, scope=scope, secs=words, smooth=True, start=weights.get("start"), end=weights.get("end")))
 
     def loft_point(self, v, env):
         """The world point of a section that is a sketch's vertex, else None."""
@@ -1505,22 +1481,22 @@ class Tr:
         if a.get("isVariable") is True or "vertexSettings" in a or "crossSection" in a or "filletType" in a:
             raise Unsupported("a variable or conic fillet")
         hs = self.edges_for(qunion(a["entities"]), env, a.get("tangentPropagation") is True)
-        self.lines.append(f"fillet {num(self.val(a['radius']))} " + " ".join(hs))
+        self.lines.append(St("fillet", size=num(self.val(a["radius"])), sel=self.select("edges", hs)))
 
     def chamfer(self, f):
         a, env = f["args"], f["env"]
         if "chamferType" in a and not a["chamferType"][1].endswith("EQUAL_OFFSETS"):
             raise Unsupported("an unequal chamfer")
         hs = self.edges_for(qunion(a["entities"]), env, a.get("tangentPropagation") is True)
-        self.lines.append(f"chamfer {num(self.val(a['width']))} " + " ".join(hs))
+        self.lines.append(St("chamfer", size=num(self.val(a["width"])), sel=self.select("edges", hs)))
 
     def shell(self, f):
         a, env = f["args"], f["env"]
         if a.get("isHollow") is True:
             raise Unsupported("a hollow with no open face")
         hs = self.faces_for(qunion(a["entities"]), env)
-        out = " out" if a.get("oppositeDirection") is True else ""
-        self.lines.append(f"shell {num(self.val(a['thickness']))}{out} " + " ".join(hs))
+        out = a.get("oppositeDirection") is True
+        self.lines.append(St("shell", size=num(self.val(a["thickness"])), sel=self.select("faces", hs), out=out))
 
     def body_of(self, q0, env):
         """The label of the body a query names."""
@@ -1580,7 +1556,7 @@ class Tr:
         c = self.carrier(single(a["mirrorPlane"], env), env)
         if not isinstance(c, OnPlane):
             raise Unsupported("a mirror in a curved face")
-        self.lines.append(f"pattern body mirror z {vtext(c.n)} at {vtext(c.o)}")
+        self.lines.append(St("pattern", of="body", layout=("mirror", vt(c.n), vt(c.o))))
 
     def circularPattern(self, f):
         a, env = f["args"], f["env"]
@@ -1598,32 +1574,33 @@ class Tr:
             b = self.current
             for k in range(1, n):
                 self.names += 1
-                self.lines.append(f"b{self.names}: copybody rot {vtext(o)} {vtext(d)} {num(step * k)} in {b}")
+                self.lines.append(St("copybody", label=f"b{self.names}", of=b, moves=[("rot", vt(o), vt(d), num(step * k))]))
                 self.bodies += 1
             return
-        self.lines.append(f"pattern body circ {vtext(o)} {vtext(d)} {n} {num(ang)}{tail}")
+        self.lines.append(St("pattern", of="body", layout=("circ", vt(o), vt(d), str(n), num(ang), bool(tail))))
 
     def transform(self, f):
         a, env = f["args"], f["env"]
         t = a.get("transformType")
         if not (isinstance(t, tuple) and t[1].endswith("TRANSLATION_3D")):
             raise Unsupported("transform " + str(t[1] if isinstance(t, tuple) else t).split(".")[-1])
-        by = f"by {num(self.val(a['dx']))} {num(self.val(a['dy']))} {num(self.val(a['dz']))}"
+        by = (num(self.val(a["dx"])), num(self.val(a["dy"])), num(self.val(a["dz"])))
+        still = by == ("0", "0", "0")
         for q in qunion(a["entities"]):
             b = self.body_of(q, env)
             if a.get("makeCopy") is True:
-                if by == "by 0 0 0":  # a copy on itself is one solid in the source's file
+                if still:  # a copy on itself is one solid in the source's file
                     self.copies[(f["id"], "1", b)] = b
                     continue
                 self.names += 1
                 n = f"b{self.names}"
-                self.lines.append(f"{n}: copybody {by} in {b}")
+                self.lines.append(St("copybody", label=n, of=b, moves=[("by", by)]))
                 self.bodies += 1
                 q1 = self.deref(q, env)
                 self.copies[(f["id"], "1", b)] = n
                 self.current = n
-            else:
-                self.lines.append(f"movebody {by} in {b}")
+            elif not still:
+                self.lines.append(St("movebody", of=b, moves=[("by", by)]))
 
     def booleanBodies(self, f):
         a, env = f["args"], f["env"]
@@ -1632,12 +1609,12 @@ class Tr:
         if a.get("offset") is True:
             raise Unsupported("a boolean with offset")
         tools = [self.body_of(q, env) for q in qunion(a["tools"])]
-        keep = " keep" if a.get("keepTools") is True else ""
+        keep = a.get("keepTools") is True
         if t in ("UNION", "INTERSECTION"):
             if len(tools) < 2:
                 raise Unresolved("a boolean of one")
             word = "add" if t == "UNION" else "keep"
-            self.lines.append(f"combine {word} {tools[0]} " + " ".join(tools[1:]) + keep)
+            self.lines.append(St("combine", word=word, target=tools[0], tools=tools[1:], keep=keep))
             for b in tools[1:]:
                 if not keep:
                     self.alias[b] = tools[0]
@@ -1646,7 +1623,7 @@ class Tr:
         elif t == "SUBTRACTION":
             targets = [self.body_of(q, env) for q in qunion(a["targets"])]
             for g in targets:
-                self.lines.append(f"combine cut {g} " + " ".join(tools) + keep)
+                self.lines.append(St("combine", word="cut", target=g, tools=tools, keep=keep))
             if not keep:
                 self.bodies -= len(tools)
         else:
@@ -1657,15 +1634,16 @@ class Tr:
         style = a.get("style", ("name", "SIMPLE"))[1].split(".")[-1]
         end = a.get("endStyle", ("name", "BLIND"))[1].split(".")[-1]
         d = self.val(a["holeDiameter"])
-        seat = ""
+        seat = None
         if style == "C_BORE":
-            seat = f" cb {num(self.val(a['cBoreDiameter']))} {num(self.val(a['cBoreDepth']))}"
+            seat = ("cb", num(self.val(a["cBoreDiameter"])), num(self.val(a["cBoreDepth"])))
         elif style == "C_SINK":
-            seat = f" cs {num(self.val(a['cSinkDiameter']))} {num(self.val(a['cSinkAngle']))}"
+            seat = ("cs", num(self.val(a["cSinkDiameter"])), num(self.val(a["cSinkAngle"])))
+        pt = None
         if end == "THROUGH":
             ext = "thru"
         elif end == "BLIND":
-            ext = num(self.val(a["holeDepth"])) + " pt 118"
+            ext, pt = num(self.val(a["holeDepth"])), "118"
         elif end == "UP_TO_NEXT":
             ext = "next"
         else:
@@ -1692,7 +1670,7 @@ class Tr:
                 raise Unresolved("a hole's location")
             s = 1.0 if a.get("oppositeDirection") is True else -1.0
             z = tuple(s * x for x in fr.n)
-            self.lines.append(f"hole {num(d)} z {vtext(z)} x {vtext(fr.x)} at {vtext(fr.world(u, v))}{seat} {ext}")
+            self.lines.append(St("hole", d=num(d), frame=(vt(fr.world(u, v)), vt(z), vt(fr.x)), seat=seat, depth=ext, point=pt))
 
     def cPlane(self, f):
         a, env = f["args"], f["env"]
@@ -1990,21 +1968,27 @@ def split_circle(circ, other, fo, co, fc, cc):
     return out
 
 
-def section_text(sec):
+def section_of(sec):
+    """A loft section as fgw writes it: ("profile", frame, loops), its numbers as fine writes them."""
     fr = sec["fr"]
-    out = [f"z {vfine(fr.n)} x {vfine(fr.x)} at {vfine(fr.o)}"]
+    q = lambda p: (fine(p[0]), fine(p[1]))
+    loops = []
     for lp in sec["loops"]:
-        parts = []
+        out = []
         for s, e, c, d in lp:
             if isinstance(c, Thru):
-                parts.append(c.text())
+                closed = len(c.pts) > 3 and math.dist(c.pts[0], c.pts[-1]) <= 1e-9
+                if closed and (c.d0 is not None or c.d1 is not None):
+                    raise Unsupported("a closed fit spline with end derivatives")
+                length = sum(math.dist(p, r) for p, r in zip(c.pts, c.pts[1:]))
+                slope = lambda v: None if v is None else (fine(v[0] / length), fine(v[1] / length))
+                out.append(("spline", [q(p) for p in c.pts], slope(c.d0), slope(c.d1)))
             elif c is None:
-                parts.append(f"line {fine(s[0])} {fine(s[1])} {fine(e[0])} {fine(e[1])}")
+                out.append(("line", q(s), q(e)))
             else:
-                a0 = math.degrees(math.atan2(s[1] - c[1], s[0] - c[0]))
-                parts.append(f"arc {fine(c[0])} {fine(c[1])} {fine(math.dist(s, c))} {fine(a0)} {fine(math.degrees(d))}")
-        out.append("loop " + " ".join(parts))
-    return " ".join(out)
+                out.append(("arc", q(c), q(s), q(e), d > 0))
+        loops.append(out)
+    return ("profile", (vf(fr.o), vf(fr.n), vf(fr.x)), loops)
 
 
 def a_id(t, a):
@@ -2054,11 +2038,10 @@ def translate(text, raw, topo, out):
     if t is not None:
         r["notes"] = sorted(t.notes)
         if t.topo is not None:
-            t.topo.kill()
-            t.topo.wait()
+            t.topo.close()
         if r["status"] in ("translated", "stopped"):
             with open(out, "w") as f:
-                f.write("\n".join(t.lines) + "\n")
+                f.write(t.prog.text(t.lines))
     return r
 
 

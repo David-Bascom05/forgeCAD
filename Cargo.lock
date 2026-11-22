@@ -263,6 +263,7 @@ dependencies = [
  "forge-agent",
  "forge-bool",
  "forge-geom",
+ "forge-import",
  "forge-lang",
  "forge-math",
  "forge-mesh",

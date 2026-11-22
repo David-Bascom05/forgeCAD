@@ -540,6 +540,12 @@ fn pl3(px, py, pz, zx, zy, zz, ex, ey, ez) {
   e = at3(px + k * ex, py + k * ey, pz + k * ez)
   return plane(at: o, normal: axis(o, n), x: axis(o, e))
 }
+# a plane at p facing (zx, zy, zz), its x the one Forge picks for that normal
+fn pz3(px, py, pz, zx, zy, zz) {
+  o = at3(px, py, pz)
+  n = at3(px + k * zx, py + k * zy, pz + k * zz)
+  return plane(at: o, normal: axis(o, n))
+}
 # a tube: a circle r on plane pl, extruded d
 fn tube(pl, r, d) {
   sketch s(on: pl) {
@@ -569,8 +575,7 @@ tt = tube(ttpl, rtt, ttl)
 # the plane of u (the chord) and n, then straight on to its end. `m` 1 or -1: this side or the
 # mirrored one (its points' y and the plane's normal negated)
 fn stay(m, p0x, p0y, p0z, d, u, n, r, start, bs, bt, bc, bd, be, bf, blen, cut) {
-  prof = pl3(p0x + start * d.x, m * (p0y + start * d.y), p0z + start * d.z, d.x, m * d.y, d.z,
-             0 - d.z, 0, d.x)
+  prof = pz3(p0x + start * d.x, m * (p0y + start * d.y), p0z + start * d.z, d.x, m * d.y, d.z)
   rp = pl3(p0x, m * p0y, p0z, m * n.x, n.y, m * n.z, u.x, m * u.y, u.z)
   sketch rail(on: rp) {
     a = pt(start * cos(d.a), start * sin(d.a))
@@ -784,7 +789,7 @@ sketch port_m_sk(on: port_m_pl) {
 }
 port_m = hole(at: port_m_sk.p, d: port_d, depth: port_depth)
 ### frame/sdent=249.153011 | refused
-# vol 464687.40800030914 faces 183
+# vol 464687.408000555 faces 183
 # Road bicycle frame, 56 cm, as one part: hollow tubes mitred by the booleans, a tapered head
 # tube with headset seats, stays to flat dropouts with a derailleur hanger, bridges, bottle
 # bosses, a slotted seat clamp, cable ports. Hand port of the retired frame part. Every plane
@@ -940,6 +945,12 @@ fn pl3(px, py, pz, zx, zy, zz, ex, ey, ez) {
   e = at3(px + k * ex, py + k * ey, pz + k * ez)
   return plane(at: o, normal: axis(o, n), x: axis(o, e))
 }
+# a plane at p facing (zx, zy, zz), its x the one Forge picks for that normal
+fn pz3(px, py, pz, zx, zy, zz) {
+  o = at3(px, py, pz)
+  n = at3(px + k * zx, py + k * zy, pz + k * zz)
+  return plane(at: o, normal: axis(o, n))
+}
 # a tube: a circle r on plane pl, extruded d
 fn tube(pl, r, d) {
   sketch s(on: pl) {
@@ -969,8 +980,7 @@ tt = tube(ttpl, rtt, ttl)
 # the plane of u (the chord) and n, then straight on to its end. `m` 1 or -1: this side or the
 # mirrored one (its points' y and the plane's normal negated)
 fn stay(m, p0x, p0y, p0z, d, u, n, r, start, bs, bt, bc, bd, be, bf, blen, cut) {
-  prof = pl3(p0x + start * d.x, m * (p0y + start * d.y), p0z + start * d.z, d.x, m * d.y, d.z,
-             0 - d.z, 0, d.x)
+  prof = pz3(p0x + start * d.x, m * (p0y + start * d.y), p0z + start * d.z, d.x, m * d.y, d.z)
   rp = pl3(p0x, m * p0y, p0z, m * n.x, n.y, m * n.z, u.x, m * u.y, u.z)
   sketch rail(on: rp) {
     a = pt(start * cos(d.a), start * sin(d.a))
