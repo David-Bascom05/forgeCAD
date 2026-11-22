@@ -343,8 +343,13 @@ cell; face to face → one box, 6 / 12 / 8 (exact-comparison.md's "contact left 
    flips across it). Jordan–Brouwer again, plus the point-in-face decisions being right. This is
    the bridge's obligation (README §8.2): the predicate that fills `pieces` must be the exact one
    in the representative plane.
-3. **`witness`** (each witness answer is the solid's membership). The ray's obligation: exact
-   rational ray parity with the reference's perturbation (`Ref.crossesYZ`).
+3. ~~**`witness`**~~ **proven** for B-reps (`DecideOnce/Witness.lean`, `witness_of_samples`): if each
+   witness answer is the reference's ray parity (`Ref.Solid.contains`) at one point of its side
+   cell, every answer is the solid's membership in the cell (by `brep_compat`). The point is given by
+   `side_point`: from any point `m` of a piece (which `pieceReal` already asks the bridge for),
+   the step `m ± δ n_P` with `δ` under `stepBound` (every other carrier's slack at `m`) lies in the
+   piece's plus (minus) side cell. The bridge's remaining obligation here is only to evaluate the
+   reference's ray exactly at that point.
 4. **`edges`, `verts`** (the listed cells of dimension 1 and 0 round the pieces are exactly the
    arrangement's). The bridge enumerates them from the pieces; dimension is the exact rank of the
    zero classes' normals (`IsEdge`, `IsVert`).
@@ -395,3 +400,5 @@ What the theorems do not claim:
 | `DecideOnce/Rungs.lean` | the six rungs, `rung_covered`, `rung_exact`, `instances_covered`, the `#guard` checks |
 | `DecideOnce/BRep.lean` | `brep_compat`: `compat` for closed flat-faced B-reps |
 | `Jordan.lean` | Jordan–Brouwer for the reference's ray parity: `contains_const` |
+| `DecideOnce/Metric.lean` | §6.1 step 3: the metric ledger, `collapse`, `coreM`, `coverageM` |
+| `DecideOnce/Witness.lean` | the witness ray: `side_point`, `witness_of_samples` |

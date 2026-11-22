@@ -8,6 +8,7 @@ import ForgeExact.DecideOnce.Nef
 import ForgeExact.DecideOnce.Rungs
 import ForgeExact.Jordan
 import ForgeExact.DecideOnce.BRep
+import ForgeExact.DecideOnce.Witness
 
 /-!
 # Only the standard axioms
@@ -103,3 +104,5 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeExact.DecideOnce.Ledger.collapse_subset
   ForgeExact.DecideOnce.Ledger.coverageM
   ForgeExact.DecideOnce.correct_off_thin
+  ForgeExact.DecideOnce.side_point
+  ForgeExact.DecideOnce.witness_of_samples
