@@ -25,7 +25,10 @@ expect volume = 11966 +- 0.1%
 
 ## Lexical
 
-`#` starts a comment. Numbers: `12`, `0.5`, `1e3`, with a unit `mm` or `deg`. A minus sign
+`#` starts a comment. A comment line `# units in` (or `cm`, `m`, `ft`, `mm`) is the part's
+own unit for people: the app shows lengths and takes bare numbers typed in it, converting to mm as
+it writes them; the text's numbers stay mm and nothing builds from the line. `#~ID ` starts a line
+`Suppress {id}` took out of the build. Numbers: `12`, `0.5`, `1e3`, with a unit `mm` or `deg`. A minus sign
 directly before a digit, where no value precedes it, is part of the number (`-1`, `(-1, 2)`);
 `a -1` and `a - 1` subtract. Strings: `"M6"`. Names: letters, digits, `_`. Keywords: `shared param
 fn for in if else return expect and or not true false sketch path at component` (`at:` is still a keyword
@@ -203,7 +206,9 @@ intersect(PROFILE, extent)          keeps what lies inside
 revolve(PROFILE, axis: LINE, angle: A | sym(A) | two(A, B) | upto(FACES | WORKPLANE | SKETCH, offset: A),
         cut|keep|new: true, bodies: BODIES)   LINE: a line of the same sketch (construction
                                     or not; a plain line that is no side of the profile is
-                                    left out of it)
+                                    left out of it), or an AXIS lying in its plane: a work
+                                    axis, `axis(E.start, E.end)` of a straight edge, `F.axis`,
+                                    or the origin's `X`, `Y`, `Z` (else `BadValue`)
 hole(..), thread(..)                see Holes and threads
 fillet(EDGES, R, from: POINT, setbacks: [(POINT, d) | (POINT, EDGES, d)], only: false)
 fillet(groups: [(EDGES, R) | (EDGES, R, POINT), ..], setbacks: .., only: false)
@@ -236,8 +241,8 @@ extrude, cut or revolve act on those bodies, not the last made.
 ### Swept, wound and lofted shapes
 
 ```
-sweep(PROFILE, along: PATH, extend: (s, e) | upto: FACES, offset: d, cut|keep|new: true)
-coil(PROFILE, axis: LINE, pitch: p, turns: n, height: h, upto: FACES, offset: d, taper: A,
+sweep(PROFILE, along: PATH, extend: (s, e) | upto: FACES | WORKPLANE | SKETCH, offset: d, cut|keep|new: true)
+coil(PROFILE, axis: LINE, pitch: p, turns: n, height: h, upto: FACES | WORKPLANE | SKETCH, offset: d, taper: A,
      left: false, cut|keep|new: true)
 loft([PROFILE | POINT | dome(POINT, DIR, w), ..], smooth: false, start: w, end: w,
      align: false, seams: [POINT, ..], rails: [(CORNER, PATH), ..] | centre: PATH,
@@ -249,11 +254,11 @@ loft([PROFILE | POINT | dome(POINT, DIR, w), ..], smooth: false, start: w, end: 
   where the one before ends is `PathGap`. A sweep's path starts on the profile's plane, square
   to it, and is tangent-continuous (the kernel's `Kink`, `NotSquare` otherwise); the profile is
   carried square to it without twist (the kernel has no twist or frame option). `extend` runs it
-  straight on before the start and after the end; `upto` cuts it off at a face's surface,
-  `offset` on past it (one or the other: `NotWith`).
+  straight on before the start and after the end; `upto` cuts it off at a face's surface (or a
+  work plane, or a sketch's plane: an edit moving it moves the end), `offset` on past it (one or the other: `NotWith`).
 - coil: winds PROFILE about LINE (a line of the same sketch); any two of `pitch`, `turns`,
   `height` (all three, or `upto` with more than a pitch, is `NotWith`; fewer, `MissingArg`), or
-  `pitch` with `upto` (wound on to a face). `taper` widens it as it rises; `left` winds it
+  `pitch` with `upto` (wound on to a face, a work plane or a sketch's plane). `taper` widens it as it rises; `left` winds it
   left-handed.
 - loft: through the profiles in order, ruled, or `smooth` (a curvature-continuous blend, `start`
   and `end` the weights its walls leave the end profiles with, square to them). Profiles with
@@ -374,6 +379,10 @@ A pattern is one feature: copies of earlier features (`of:`) or of the whole par
 (`whole: true`), laid out by a layout value. The copies are named from the pattern's id and each
 copy's index, so changing a count keeps every surviving copy's names. The copies are the pattern's,
 not the copied feature's: `edges(of: peg)` is the original's alone, `of: [peg, pegs]` both.
+`P[k]` is copy k's faces (in the layout's order, rows first; `P[0]` the original), so an edge
+alike on every copy is named on one: `edges(of: pegs[2], crease: "convex")`,
+`edges(between: (pegs[2], base.end))`. A hole at several points indexes its places the same way
+(`bolt[1]`, in the order of its points).
 
 ```
 pattern(of: F | [F..], layout: LAYOUT, bodies: BODIES) | pattern(whole: true, layout: LAYOUT)
@@ -406,13 +415,14 @@ workplane(on: PLANE) | workplane(offset: FACE, d: d) | workplane(turn: PLANE, ab
   | workplane(mid: (PLANE, PLANE)) | workplane(normal_to: CURVE, at: P)
 workaxis(along: EDGE | CYL | CONE) | workaxis(through: (P, P)) | workaxis(meet: (PLANE, PLANE))
   | workaxis(normal_to: PLANE, at: P)
-workpoint(at: VERTEX | P) | workpoint(mid: EDGE) | workpoint(meet: (EDGE | AXIS, FACE | PLANE))
+workpoint(at: VERTEX | CIRCLE | P) | workpoint(mid: EDGE) | workpoint(meet: (EDGE | AXIS, FACE | PLANE))
 ucs(on: PLANE) | ucs(through: (ORIGIN, ON_X, IN_XY))
 ```
 
 References (P, FACE, EDGE, AXIS, PLANE above) are what the kernel can follow: work features, a
 sketch (its plane), a named sketch point (or a named line's end `l.a`, a circle's centre), one
-face (or the pieces of one surface) or one edge. A value worked out here (`mid(..)`, `plane(..)`)
+face (or the pieces of one surface), one edge, or one vertex of the part (`verts(..)`, see
+Selections; a POINT). `workpoint(at:)` on a circular edge (or a sphere) is its centre. A value worked out here (`mid(..)`, `plane(..)`)
 is `NotARef`; `workplane(on:)` takes any plane. A work plane is a PLANE (a sketch's, an `upto`
 end, a split); a work axis an AXIS; a work point a POINT. Members: `.plane .normal .origin`,
 `.axis .dir`, `.point`.
@@ -420,6 +430,8 @@ end, a split); a work axis an AXIS; a work point a POINT. Members: `.plane .norm
 ```
 bax = workaxis(along: faces(of: boss, shape: "cyl"))
 bp = workpoint(meet: (bax, l.side(lsk.outline[5])))
+corner = workpoint(at: verts(of: base.side(plan.outline[0]), between: (base.end, base.side(plan.outline[1]))))
+centre = workpoint(at: edges(of: boss, shape: "circle", crease: "convex"))
 ```
 
 ## Bodies
@@ -503,15 +515,26 @@ EDGES.center            of one edge: a circle's or arc's axis through its centre
 ```
 edges(of: F | [F..] | FACES, between: (A, B), crease: "concave"|"convex"|"smooth",
       shape: "line"|"circle"|"curve", along: DIR, r: R, longer: L, shorter: L, ..)
-faces(of: F | [F..], shape: "plane"|"cyl"|"cone"|"sphere"|"torus"|"blend"|"spline",
+faces(of: F | [F..] | FACES, shape: "plane"|"cyl"|"cone"|"sphere"|"torus"|"blend"|"spline",
       normal: DIR, r: R, ..)
       both also: r_below: R, r_above: R (radius under, over R), touching: FACES | EDGES (sharing
       an edge or a vertex with them), body: F | [F..] (in the bodies those features made)
+P[k]  H[k]                          a pattern's copy k (0 the original), a hole's place k: faces
 EDGES + EDGES
+verts(of: F | [F..] | FACES | EDGES, between: (A, B), body: F | [F..], extreme: DIR)
+VERTS + VERTS   VERTS - VERTS
 FACES + FACES                       one face set (a slab, an offset over several features' faces)
 FACES - FACES   EDGES - EDGES       the first set less the second's (one piece of a split face: its
                                     face less the pieces touching what split it off)
 ```
+
+`verts` finds the part's vertices: `of` a feature, those on a face it made (lineage, as for
+edges); `of` faces or edges, their corners and ends; `between: (A, B)` where faces of both meet;
+`body` in those bodies. One vertex is a reference the kernel follows through every edit above
+it (by its maker's own name for it, as `.fc`'s `(verts ..)`): a work feature's point, a fillet's
+`from` or setback corner, a place of `places(at:)` (each vertex of a set one place); where a
+plain point is wanted it is where the vertex is. Several where one is wanted is `NotOne`; a
+vertex no earlier solid feature made is `NoOwner`.
 
 An empty face set on a part built without an earlier failure is an empty selection
 (`EmptySelection` at a fillet or chamfer), never silently nothing. A cap (`E.start`, `E.end`) a

@@ -173,7 +173,7 @@ pub fn work(ev: &mut Eval, name: &'static str, args: &[crate::syntax::Arg], span
 /// (as the earlier feature whose own solid holds it, by its name there).
 pub fn to_ref(ev: &mut Eval, v: Value, span: Span) -> R<Ref> {
     // `check` builds nothing: a face or edge is not known yet
-    if !ev.b.building && matches!(v, Value::Faces(_) | Value::Edges(_)) {
+    if !ev.b.building && matches!(v, Value::Faces(_) | Value::Edges(_) | Value::Verts(_)) {
         return Ok(Ref {
             feature: 0,
             name: None,
@@ -216,6 +216,11 @@ pub fn to_ref(ev: &mut Eval, v: Value, span: Span) -> R<Ref> {
             }
             .into()),
         },
+        // a vertex of the part (`verts(..)`): the kernel finds it again in its maker's solid
+        Value::Verts(vs) => {
+            let v = crate::verts::one(&vs, span, "a vertex reference")?;
+            owner(ev, v, false, span)
+        }
         Value::Unresolved => Ok(Ref {
             feature: 0,
             name: None,
@@ -264,9 +269,10 @@ pub fn point_name(s: &crate::sketch::Sk, p: EntityId) -> Option<String> {
     None
 }
 
-/// The earlier feature whose own solid holds the part's face (or edge) `name`, and its name
-/// there: among the features the part's lineage says made it, one that has the very name, else
-/// one whose entity lies on the same surface (or curve).
+/// The earlier feature whose own solid holds the part's face (or edge, or vertex) `name`, and its
+/// name there: among the features the part's lineage says made it (a vertex: made a face round
+/// it), one that has the very name, else one whose entity lies on the same surface (or curve, or
+/// at the same point).
 pub fn owner(ev: &mut Eval, name: Name, face: bool, span: Span) -> R<Ref> {
     let n = ev.b.built();
     if !ev.b.building || n == 0 {
@@ -280,15 +286,27 @@ pub fn owner(ev: &mut Eval, name: Name, face: bool, span: Span) -> R<Ref> {
     let mut cands: Vec<usize> = vec![];
     let faces: Vec<Name> = if face {
         vec![name]
+    } else if let Some(e) = body.edge_by_name(name) {
+        select::faces_of_edge(&body, e)
+            .into_iter()
+            .map(|f| body.face(f).name)
+            .collect()
     } else {
-        body.edge_by_name(name)
-            .map(|e| {
-                select::faces_of_edge(&body, e)
-                    .into_iter()
-                    .map(|f| body.face(f).name)
-                    .collect()
-            })
-            .unwrap_or_default()
+        // a vertex: the faces of the edges ending at it
+        let mut fs: Vec<Name> = vec![];
+        for e in body.edge_ids() {
+            let edge = body.edge(e);
+            if body.vertex(edge.start).name != name && body.vertex(edge.end).name != name {
+                continue;
+            }
+            for f in select::faces_of_edge(&body, e) {
+                let n = body.face(f).name;
+                if !fs.contains(&n) {
+                    fs.push(n);
+                }
+            }
+        }
+        fs
     };
     for f in &faces {
         for &k in origin.get(f).into_iter().flatten() {

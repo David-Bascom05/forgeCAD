@@ -1513,19 +1513,18 @@ mark = text("DO", font: "block.ttf", size: 25.81, depth: 3.44, on: plane(at: at_
 turned = movebody(of: base, moves: [spin(about: axis(pivot.p, pivot_up.p), by: -23.29deg)])
 edge = chamfer(edges(between: (base.end, base.side(plan.outline[1])), longer: 20), 3.22, angle: 49.43deg, face: base.end)
 "#;
-    // the same solid as the .fc lines
+    // the same solid as the .fc lines built (recorded from the retired engine, the bench font)
+    let _ = fc;
+    const FC_VOLUME: f64 = 265637.1116111694;
+    const FC_FACES: usize = 48;
     let m = common::holds(fg);
-    let fcm = forge_agent::bench::model(fc);
-    assert!(fcm.error.is_none(), "fc: {:?}", fcm.error.map(|e| e.msg));
-    let fcb = fcm.body().expect("fc part");
-    let mp = forge_topo::mass::mass(fcb).expect("fc mass");
     assert!(
-        (m.volume - mp.volume).abs() <= 1e-7 * mp.volume,
+        (m.volume - FC_VOLUME).abs() <= 1e-7 * FC_VOLUME,
         "{} {}",
         m.volume,
-        mp.volume
+        FC_VOLUME
     );
-    assert_eq!(m.faces, fcb.face_ids().count());
+    assert_eq!(m.faces, FC_FACES);
     let (part, ids) = history(fg);
     let before = forge_model::nary_name_fallbacks();
     let nary = part

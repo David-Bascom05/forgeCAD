@@ -280,6 +280,14 @@ pub enum FgAct {
     EditFeature(String),
     /// Move a component to its own file, bring one in, or make bodies a component.
     Refactor(forge_lang::refactor::Refactor),
+    /// A number dragged on the model: these ops built in the file's place, the file kept.
+    DimPreview(Vec<Op>),
+    /// The number let go or typed: these ops applied, one undo step.
+    DimCommit(Vec<Op>),
+    /// The drag given up: the file's own part again.
+    DimCancel,
+    /// The end of part moved: builds stop after this statement (None: the whole part).
+    Rollback(Option<String>),
 }
 
 /// A sheet metal part: its id, its bends, and why it has no flat pattern if it hasn't.
@@ -361,6 +369,61 @@ pub struct FgPanel {
     pub issues_list: bool,
     /// Edit Occurrence: a placed component call's args.
     pub occ_edit: Option<super::occedit::OccEdit>,
+    /// The End of Part marker: builds stop after this statement (None: at the end).
+    pub rollback: Option<String>,
+}
+
+/// A statement `Suppress {id}` took out of the build, kept as comments: its id, the line it
+/// starts on, how many lines are under its tag, and its kind as its line writes it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Suppressed {
+    pub id: String,
+    pub line: usize,
+    pub lines: usize,
+    pub kind: String,
+}
+
+/// The statements a text holds suppressed (`#~ID LINE`), in order.
+pub fn suppressed(src: &str) -> Vec<Suppressed> {
+    let mut out: Vec<Suppressed> = Vec::new();
+    for (k, l) in src.lines().enumerate() {
+        let Some(rest) = l.strip_prefix("#~") else {
+            continue;
+        };
+        let Some((id, line)) = rest.split_once(' ') else {
+            continue;
+        };
+        let at = match out.iter().position(|x| x.id == id) {
+            Some(i) => i,
+            None => {
+                out.push(Suppressed {
+                    id: id.to_string(),
+                    line: k + 1,
+                    lines: 0,
+                    kind: String::new(),
+                });
+                out.len() - 1
+            }
+        };
+        out[at].lines += 1;
+        // the statement making it says its kind: `sketch id(`, or `id = call(`
+        let line = line.trim_start();
+        if out[at].kind.is_empty() {
+            if line.starts_with(&format!("sketch {id}(")) {
+                out[at].kind = "sketch".into();
+            } else if let Some(call) = line
+                .strip_prefix(id)
+                .and_then(|r| r.trim_start().strip_prefix('='))
+                .and_then(|r| r.trim_start().split('(').next())
+            {
+                out[at].kind = match call.trim() {
+                    "cut" | "intersect" => "extrude".into(),
+                    c => c.to_string(),
+                };
+            }
+        }
+    }
+    out
 }
 
 /// The tree of ids: `bolt[2]` under `bolt`, `lug.hub` under `lug`, in the order they were made.
@@ -494,19 +557,80 @@ pub fn op_label(op: &Op) -> String {
 
 /// A typed value: a number, its unit optional (`mm`, `deg`); else the param's own.
 pub fn parse_value(text: &str, dim: Dim) -> Option<Literal> {
+    parse_in(text, dim, "mm")
+}
+
+/// A typed value in a part shown in `doc` (`# units in`): a bare length is in it, a number may be a
+/// fraction (`1/8`), and any length or angle unit may follow it (`3 in`, `0.5rad`); what comes
+/// back is mm and degrees, as the text holds them.
+pub fn parse_in(text: &str, dim: Dim, doc: &str) -> Option<Literal> {
     let t = text.trim();
     let (num, unit) = match t.find(|c: char| c.is_ascii_alphabetic() || c == '°') {
         Some(k) => (t[..k].trim(), t[k..].trim()),
         None => (t, ""),
     };
-    let value: f64 = num.parse().ok().filter(|v: &f64| v.is_finite())?;
-    let dim = match unit {
-        "" => dim,
-        "mm" => Dim::Length,
-        "deg" | "°" => Dim::Angle,
-        _ => return None,
+    let num = num.trim_start_matches('(').trim_end_matches(')');
+    let value: f64 = match num.split_once('/') {
+        Some((a, b)) => a.trim().parse::<f64>().ok()? / b.trim().parse::<f64>().ok()?,
+        None => num.parse().ok()?,
     };
-    Some(Literal { value, dim })
+    if !value.is_finite() {
+        return None;
+    }
+    let scaled = |word: &str| {
+        let (d, top, bottom) = forge_doc::units::lookup(word)?;
+        let dim = match d {
+            forge_doc::units::LENGTH => Dim::Length,
+            forge_doc::units::ANGLE => Dim::Angle,
+            _ => return None,
+        };
+        Some(Literal {
+            value: value * top / bottom,
+            dim,
+        })
+    };
+    match unit {
+        "" if dim == Dim::Length => scaled(doc),
+        "" => Some(Literal { value, dim }),
+        "°" => scaled("deg"),
+        w => scaled(w),
+    }
+}
+
+/// The unit a part's text says it's shown in (`# units in`), if it says.
+pub fn units_of(src: &str) -> Option<&'static str> {
+    let says = src.lines().any(|l| {
+        l.trim()
+            .strip_prefix('#')
+            .is_some_and(|n| n.trim().starts_with(forge_doc::units::LINE))
+    });
+    says.then(|| forge_doc::units::of_text(src))
+}
+
+/// The text with its units line saying `unit`: the line there changed, else one put first.
+pub fn with_units(src: &str, unit: &str) -> String {
+    let line = format!("# {}{unit}", forge_doc::units::LINE);
+    let mut done = false;
+    let mut out: Vec<String> = src
+        .split_inclusive('\n')
+        .map(|l| {
+            let is = l
+                .trim()
+                .strip_prefix('#')
+                .is_some_and(|n| n.trim().starts_with(forge_doc::units::LINE));
+            if is && !done {
+                done = true;
+                let end = if l.ends_with('\n') { "\n" } else { "" };
+                format!("{line}{end}")
+            } else {
+                l.to_string()
+            }
+        })
+        .collect();
+    if !done {
+        out.insert(0, format!("{line}\n"));
+    }
+    out.concat()
 }
 
 fn unit(d: Dim) -> &'static str {
@@ -583,6 +707,126 @@ impl FgPanel {
             .map(|p| (segs.clone(), p.key.clone()))
             .collect()
     }
+}
+
+/// A suppressed statement's row: its icon and name greyed, struck through, and its menu's
+/// Unsuppress.
+fn suppressed_row(
+    ui: &mut Ui,
+    t: &super::theme::Theme,
+    w: f32,
+    sp: &Suppressed,
+    fg: &mut FgPanel,
+    menu_places: &mut Vec<(String, Rect)>,
+    places: &mut Vec<(String, Rect)>,
+) {
+    let (r, resp) = ui.allocate_exact_size(vec2(w, super::ROW_H), Sense::click());
+    if resp.hovered() {
+        ui.painter().rect_filled(r, 0.0, t.hover);
+    }
+    let ink = t.ink2.gamma_multiply(0.7);
+    let x = r.left() + 8.0;
+    icons::draw(
+        ui.painter(),
+        pos2(x + 12.0, r.top() + 5.0),
+        16.0,
+        panel::icon(&sp.kind),
+        1.5,
+        ink,
+    );
+    let g = ui.fonts_mut(|f| f.layout_no_wrap(sp.id.clone(), sans(13.0), ink));
+    let at = pos2(x + 34.0, r.center().y - g.size().y * 0.5);
+    let wide = g.size().x;
+    ui.painter().galley(at, g, ink);
+    ui.painter().line_segment(
+        [
+            pos2(at.x - 1.0, r.center().y),
+            pos2(at.x + wide + 1.0, r.center().y),
+        ],
+        Stroke::new(1.0, ink),
+    );
+    ui.painter().text(
+        pos2(r.right() - 10.0, r.center().y),
+        Align2::RIGHT_CENTER,
+        "suppressed",
+        sans(11.0),
+        ink,
+    );
+    let resp = resp.on_hover_text(format!(
+        "{} suppressed: {} line{} out of the build, kept as comments",
+        sp.id,
+        sp.lines,
+        if sp.lines == 1 { "" } else { "s" }
+    ));
+    places.push((format!("fg:suppressed:{}", sp.id), r));
+    let id = sp.id.clone();
+    if resp.double_clicked() {
+        fg.out.push(FgAct::Apply(Op::Unsuppress { id: id.clone() }));
+    }
+    resp.context_menu(|ui| {
+        let b = ui.button(egui::RichText::new("Unsuppress Features").font(sans(12.0)));
+        menu_places.push((format!("fg:menu:unsuppress:{id}"), b.rect));
+        if b.clicked() {
+            fg.out.push(FgAct::Apply(Op::Unsuppress { id: id.clone() }));
+            ui.close();
+        }
+    });
+}
+
+/// The End of Part row: a rule across the browser; its menu (or a double click) takes it to the
+/// end when it's rolled back.
+fn end_of_part_row(
+    ui: &mut Ui,
+    t: &super::theme::Theme,
+    w: f32,
+    fg: &mut FgPanel,
+    menu_places: &mut Vec<(String, Rect)>,
+    places: &mut Vec<(String, Rect)>,
+) {
+    let (r, resp) = ui.allocate_exact_size(vec2(w, super::ROW_H), Sense::click());
+    let rolled = fg.rollback.is_some();
+    let ink = if rolled { WARN } else { t.ink2 };
+    if resp.hovered() {
+        ui.painter().rect_filled(r, 0.0, t.hover);
+    }
+    icons::draw(
+        ui.painter(),
+        pos2(r.left() + 20.0, r.top() + 5.0),
+        16.0,
+        "end",
+        1.5,
+        ink,
+    );
+    ui.painter().text(
+        pos2(r.left() + 42.0, r.center().y),
+        Align2::LEFT_CENTER,
+        "End of Part",
+        medium(13.0),
+        ink,
+    );
+    ui.painter().line_segment(
+        [
+            pos2(r.left() + 140.0, r.center().y),
+            pos2(r.right() - 10.0, r.center().y),
+        ],
+        Stroke::new(1.0, ink.gamma_multiply(0.6)),
+    );
+    places.push(("fg:row:endofpart".into(), r));
+    if resp.double_clicked() && rolled {
+        fg.out.push(FgAct::Rollback(None));
+    }
+    resp.context_menu(|ui| {
+        if rolled {
+            let b = ui.button(egui::RichText::new("Move End of Part to End").font(sans(12.0)));
+            menu_places.push(("fg:menu:rollforward".into(), b.rect));
+            if b.clicked() {
+                fg.out.push(FgAct::Rollback(None));
+                ui.close();
+            }
+        } else {
+            ui.label(egui::RichText::new("At the end: every feature built").font(sans(12.0)));
+        }
+    });
 }
 
 impl Shell {
@@ -664,12 +908,52 @@ impl Shell {
                     }
                 }
                 let mut hidden: Option<String> = None;
+                // the statements suppressed, each at its place among the rows; the End of Part
+                // after the statement it's at (or last)
+                let sups = suppressed(&fg.source);
+                let mut sup_next = 0;
+                let mut past_rollback = false;
+                let mut eop_drawn = false;
+                let first_line = |fg: &FgPanel, key: &str| {
+                    fg.feats
+                        .iter()
+                        .filter(|f| {
+                            f.id == key
+                                || f.id.starts_with(&format!("{key}."))
+                                || f.id.starts_with(&format!("{key}["))
+                        })
+                        .map(|f| f.line)
+                        .min()
+                        .unwrap_or(usize::MAX)
+                };
                 for row in &rows {
+                    if row.depth == 0 {
+                        let line = first_line(&fg, &row.key);
+                        while sup_next < sups.len() && sups[sup_next].line < line {
+                            suppressed_row(
+                                ui,
+                                &t,
+                                area.width(),
+                                &sups[sup_next],
+                                &mut fg,
+                                &mut menu_places,
+                                &mut places,
+                            );
+                            sup_next += 1;
+                        }
+                        if past_rollback && !eop_drawn {
+                            end_of_part_row(ui, &t, area.width(), &mut fg, &mut menu_places, &mut places);
+                            eop_drawn = true;
+                        }
+                    }
                     if let Some(h) = &hidden {
                         if row.key.starts_with(h.as_str()) && row.key != *h {
                             continue;
                         }
                         hidden = None;
+                    }
+                    if fg.rollback.as_deref() == Some(row.key.as_str()) {
+                        past_rollback = true;
                     }
                     let (r, resp) = ui.allocate_exact_size(vec2(area.width(), super::ROW_H), Sense::click());
                     let on = fg.selected.as_deref() == Some(row.key.as_str());
@@ -815,6 +1099,15 @@ impl Shell {
                                 }));
                             }
                             ui.separator();
+                            if item(ui, "Suppress Features", "suppress") {
+                                fg.out.push(FgAct::Apply(Op::Suppress { id: key.clone() }));
+                            }
+                            // Inventor's End of Part dragged here: what follows isn't built
+                            if fg.rollback.as_deref() != Some(key.as_str())
+                                && item(ui, "Move End of Part Here", "rollback")
+                            {
+                                fg.out.push(FgAct::Rollback(Some(key.clone())));
+                            }
                             if item(ui, "Delete", "delete") {
                                 fg.out.push(FgAct::Apply(Op::DeleteFeature { id: key.clone() }));
                             }
@@ -853,6 +1146,12 @@ impl Shell {
                         hidden = Some(row.key.clone());
                     }
                 }
+                for sp in &sups[sup_next.min(sups.len())..] {
+                    suppressed_row(ui, &t, area.width(), sp, &mut fg, &mut menu_places, &mut places);
+                }
+                if !eop_drawn && !fg.feats.is_empty() {
+                    end_of_part_row(ui, &t, area.width(), &mut fg, &mut menu_places, &mut places);
+                }
             });
         if let Some(k) = toggle
             && !fg.collapsed.remove(&k)
@@ -888,11 +1187,15 @@ impl Shell {
                 .iter()
                 .find(|f| f.id == k)
                 .map_or("", |f| f.kind.as_str());
+            let made = |call: &str| work == "work" && fg.source.contains(&format!("{k} = {call}("));
             let pick = match kind {
-                SlotKind::Profile | SlotKind::Profiles | SlotKind::Plane if is_sketch => Ok(k.clone()),
-                SlotKind::Plane if work == "work" && fg.source.contains(&format!("{k} = workplane(")) => {
+                SlotKind::Profile | SlotKind::Profiles | SlotKind::Plane | SlotKind::UpTo if is_sketch => {
                     Ok(k.clone())
                 }
+                SlotKind::Plane | SlotKind::UpTo if made("workplane") => Ok(k.clone()),
+                // a sketch for a hole: every point it has
+                SlotKind::Points if is_sketch => Ok(format!("{k}.points")),
+                SlotKind::RevAxis if made("workaxis") => Ok(k.clone()),
                 SlotKind::Feature | SlotKind::Features if !is_sketch => Ok(k.clone()),
                 _ => Err(ToolError::WrongPick {
                     slot: tool.slots[tool.active].label,
@@ -941,6 +1244,7 @@ impl Shell {
         let mut out: Vec<FgAct> = Vec::new();
         let mut close = false;
         let w = (v.width() - 200.0).clamp(420.0, 760.0);
+        let units = self.units;
         let shown = egui::Window::new("Parameters")
             .id(egui::Id::unique("fg-params"))
             .title_bar(false)
@@ -986,7 +1290,7 @@ impl Shell {
                                 }
                                 ui.end_row();
                                 for p in &params {
-                                    Self::param_row(ui, &t, &mut fg, p, &mut out, places);
+                                    Self::param_row(ui, &t, &mut fg, p, units, &mut out, places);
                                     ui.end_row();
                                 }
                             });
@@ -1009,6 +1313,7 @@ impl Shell {
         t: &super::theme::Theme,
         fg: &mut FgPanel,
         p: &ParamRow,
+        units: &str,
         out: &mut Vec<FgAct>,
         places: &mut Vec<(String, Rect)>,
     ) {
@@ -1079,7 +1384,7 @@ impl Shell {
                 } else if enter || (resp.lost_focus() && !resp.has_focus()) {
                     let typed = text.clone();
                     fg.editing = None;
-                    match parse_value(&typed, dim) {
+                    match parse_in(&typed, dim, units) {
                         Some(v) if v.value == value && v.dim == dim => {}
                         Some(v) => out.push(FgAct::Apply(Op::SetParam {
                             param: p.key.clone(),
@@ -1094,7 +1399,13 @@ impl Shell {
                 );
                 places.push((format!("fg:param:{key}"), resp.rect));
                 if resp.clicked() {
-                    fg.editing = Some((p.key.clone(), short(value)));
+                    // a length shows in mm, as the file has it, in a part shown in another unit
+                    let shown = if dim == Dim::Length && units != "mm" {
+                        format!("{} mm", short(value))
+                    } else {
+                        short(value)
+                    };
+                    fg.editing = Some((p.key.clone(), shown));
                     fg.edit_fresh = true;
                 }
             }
@@ -1231,6 +1542,49 @@ impl Shell {
     }
 }
 
+/// Is `word` in `line` as a name of its own (not part of a longer one)?
+fn names(line: &str, word: &str) -> bool {
+    let id = |c: char| c.is_ascii_alphanumeric() || c == '_';
+    line.match_indices(word).any(|(k, _)| {
+        let before = line[..k].chars().next_back();
+        let after = line[k + word.len()..].chars().next();
+        // `base.side(..)` is a member, not the name
+        !before.is_some_and(|c| id(c) || c == '.') && !after.is_some_and(id)
+    })
+}
+
+/// The sketches nothing else in the text reads: what a new extrude can take.
+pub fn free_sketches(src: &str, sketches: &[forge_lang::anchors::SketchRefs]) -> Vec<String> {
+    let lines: Vec<&str> = src.lines().collect();
+    sketches
+        .iter()
+        .map(|s| s.id.as_str())
+        .filter(|id| !id.contains(['.', '[']))
+        .filter(|id| {
+            // its own block: from its head to the brace closing it, which are its
+            let head = format!("sketch {id}(");
+            let Some(lo) = lines.iter().position(|l| l.trim_start().starts_with(&head)) else {
+                return false;
+            };
+            let hi = (lo..lines.len())
+                .find(|&k| lines[k].starts_with('}'))
+                .unwrap_or(lo);
+            !lines
+                .iter()
+                .enumerate()
+                .filter(|(k, _)| *k < lo || *k > hi)
+                .any(|(_, l)| {
+                    let l = l.trim_start();
+                    // its own params are its, not readers of it
+                    let own =
+                        l.starts_with(&format!("param {id}.")) || l.starts_with(&format!("param {id}["));
+                    !l.starts_with('#') && !own && names(l, id)
+                })
+        })
+        .map(String::from)
+        .collect()
+}
+
 /// A Forge file is built and shown posed, as an assembly: it holds components or joints (an
 /// `assembly` first line is optional; a text that does not parse goes by that line). The browser
 /// asks it too.
@@ -1295,6 +1649,28 @@ mod tests {
     }
 
     #[test]
+    fn a_sketch_nothing_reads_is_free() {
+        let refs = |ids: &[&str]| -> Vec<forge_lang::anchors::SketchRefs> {
+            ids.iter()
+                .map(|i| forge_lang::anchors::SketchRefs {
+                    id: i.to_string(),
+                    ..Default::default()
+                })
+                .collect()
+        };
+        let src = "sketch plan(on: xy) {\n  r = rect(corner: (0, 0), size: (4, 4))\n}\nbase = extrude(plan, 2)\nparam top.r = 1\nsketch top(on: base.end) {\n  c = circle((1, 1), r)\n}\nsketch topper(on: base.end) {\n}\n";
+        assert_eq!(
+            free_sketches(src, &refs(&["plan", "top", "topper"])),
+            ["top", "topper"]
+        );
+        // a member of the same word reads no sketch
+        let src = format!(
+            "sketch side(on: xy) {{\n}}\n{src}e = extrude(top.c, 1)\ns = shell(1, open: e.side(top.c))\n"
+        );
+        assert_eq!(free_sketches(&src, &refs(&["side", "top"])), ["side"]);
+    }
+
+    #[test]
     fn a_typed_value_takes_the_params_dimension_or_its_own_unit() {
         assert_eq!(
             parse_value("12.5", Dim::Length),
@@ -1306,6 +1682,27 @@ mod tests {
         assert_eq!(parse_value("30deg", Dim::Length).map(|l| l.dim), Some(Dim::Angle));
         assert_eq!(parse_value("3", Dim::Count).map(|l| l.dim), Some(Dim::Count));
         assert_eq!(parse_value("x", Dim::Length), None);
-        assert_eq!(parse_value("3 in", Dim::Length), None);
+        assert_eq!(parse_value("3 in", Dim::Length).map(|l| l.value), Some(76.2));
+        assert_eq!(parse_in("1/8", Dim::Length, "in").map(|l| l.value), Some(3.175));
+        assert_eq!(parse_in("2 mm", Dim::Length, "in").map(|l| l.value), Some(2.0));
+        assert_eq!(
+            parse_in("30", Dim::Angle, "in").map(|l| (l.value, l.dim)),
+            Some((30.0, Dim::Angle))
+        );
+        assert_eq!(parse_value("3 lb", Dim::Length), None);
+    }
+
+    #[test]
+    fn a_parts_unit_is_one_line_of_its_text() {
+        let src = "shared t = 6\n";
+        assert_eq!(units_of(src), None);
+        let inch = with_units(src, "in");
+        assert_eq!(inch, "# units in\nshared t = 6\n");
+        assert_eq!(units_of(&inch), Some("in"));
+        assert_eq!(with_units(&inch, "cm"), "# units cm\nshared t = 6\n");
+        assert_eq!(with_units(&inch, "in"), inch);
+        // nothing it builds changes
+        let run = |t: &str| forge_lang::run(t, forge_lang::Options::default(), Default::default()).0;
+        assert!(run(&inch).errors.is_empty());
     }
 }

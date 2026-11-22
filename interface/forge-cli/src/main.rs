@@ -16,8 +16,8 @@ fn usage() -> ExitCode {
         "usage: forgecad [open [FILE | APP_ARGS...]]   (open the native app)\n       \
          forgecad agent list | send WINDOW MESSAGE | status WINDOW REQUEST\n       \
          forgecad update [INSTALL_ROOT]   (install latest main)\n       \
-         forgecad build|check|query|measure|render|export FILE.fg [ARGS] [--json] [--labels SEL] [--px N] [-o OUT]\n       \
-         forgecad edit FILE.fg 'OP'..   (typed ops, as a part's fixes give them; export F.fg dxf [SHEET])\n       \
+         forgecad build|check|query|measure|render|export FILE.fg [ARGS] [--json] [--labels SEL] [--px N] [--at FEAT] [-o OUT]\n       \
+         forgecad edit FILE.fg 'OP'.. [--base VERSION]   (typed ops, as a part's fixes give them; export F.fg dxf [SHEET])\n       \
          forgecad diff A.fg B.fg [volume]   (what B changed from A: features, params, faces, volume)\n       \
          forgecad help [forge | WORD]   (the .fg language, or its sections on WORD)\n       \
          forgecad versions F | history F [--all] | create_version F NAME [NOTES] | restore F v3|SAVE | compare F A B [--volume]\n       \
@@ -313,9 +313,11 @@ fn command(cmd: &str, argv: &[String]) -> ExitCode {
             "--json" => json = true,
             "--labels" => a.labels = it.next().cloned(),
             "--px" => a.px = it.next().and_then(|p| p.parse().ok()),
+            "--at" => a.at = it.next().cloned(),
+            "--base" => a.base = it.next().cloned(),
             "-o" => out = it.next().cloned(),
             w if w.starts_with("--") => {
-                eprintln!("unknown option {w} (--json --labels --px -o)");
+                eprintln!("unknown option {w} (--json --labels --px --at --base -o)");
                 return ExitCode::from(2);
             }
             _ => a.words.push(w.clone()),

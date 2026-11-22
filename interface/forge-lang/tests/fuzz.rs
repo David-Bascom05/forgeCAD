@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 
 const LEN: usize = 12;
 /// Seeds whose finished part the n-ary regen builds only through the sequential one.
-const RELY_ON_NAME_FALLBACK: &[u64] = &[27];
+const RELY_ON_NAME_FALLBACK: &[u64] = &[30];
 
 /// The feature calls of the language a generated program may make, by the maker that makes each
 /// (an import needs a file: its round trips are forge-step's and the language's own tests; sheet

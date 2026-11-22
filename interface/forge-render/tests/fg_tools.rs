@@ -147,6 +147,15 @@ fn button(h: &mut Headless, tool: &str) {
     h.step();
 }
 
+/// The tool on a sketch a feature reads already: the button would start a new sketch (as `.fc`'s
+/// did with no sketch free), so the tool is opened as Edit Feature's would be, on that sketch.
+fn reuse(h: &mut Headless, kind: &'static str) {
+    h.gui.fg_open_tool(kind);
+    assert!(h.gui.shell.fg.as_ref().is_some_and(|p| p.tool.is_some()));
+    h.step();
+    h.step();
+}
+
 fn choose(h: &mut Headless, slot: &str, text: &str) {
     // the selection row first, as a person points at it, then what it takes
     assert!(h.click(&format!("fg:tool:slot:{slot}")), "no slot {slot}");
@@ -359,7 +368,7 @@ fn extrude_cuts_a_sketch_loop_chosen() {
     let Some((mut h, _)) = open(BLOCK, "extrude") else {
         return;
     };
-    button(&mut h, "Extrude");
+    reuse(&mut h, "extrude");
     choose(&mut h, "Profile", "marks.sq");
     set(&mut h, "d", "5");
     assert!(h.click("fg:tool:choice:Output:Cut"));
@@ -378,7 +387,7 @@ fn revolve_turns_a_loop_about_one_of_its_sides() {
     let Some((mut h, _)) = open(BLOCK, "revolve") else {
         return;
     };
-    button(&mut h, "Revolve");
+    reuse(&mut h, "revolve");
     choose(&mut h, "Profile", "marks.sq");
     choose(&mut h, "Axis", "marks.sq[3]");
     let (src, run) = ok(&mut h, "revolve");

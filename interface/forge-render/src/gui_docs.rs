@@ -36,6 +36,8 @@ per_doc!(
         body_rows: Option<crate::scene::Rows>,
         inspector: gui_inspect::Inspector,
         fg_previewed: Option<String>,
+        fg_marks_was: (Vec<u32>, Vec<crate::render::FaceColour>),
+        fg_then: Option<&'static str>,
     ],
     app [
         ctx, egui, shell, device, queue, adapter, waker, captured, over_view, pointer_px,

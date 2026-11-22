@@ -22,13 +22,22 @@ const TOOLS: [Tool; 13] = [
         "query",
         "selector -> @handles; or stat, file, check, params, features; holes, section z=V, gap A B, ..",
         2,
-        &[("file", "path to a .fg part"), ("sel", "what to ask")],
+        &[
+            ("file", "path to a .fg part"),
+            ("sel", "what to ask"),
+            ("at", "a feature id: the part as it stood after it"),
+        ],
     ),
     (
         "measure",
         "mass, wall, or one or two refs",
         2,
-        &[("file", "path"), ("what", "mass|wall|ref"), ("to", "second ref")],
+        &[
+            ("file", "path"),
+            ("what", "mass|wall|ref"),
+            ("to", "second ref"),
+            ("at", "a feature id: the part as it stood after it"),
+        ],
     ),
     (
         "render",
@@ -39,6 +48,7 @@ const TOOLS: [Tool; 13] = [
             ("view", "iso front top right back left bottom"),
             ("labels", "selector to label"),
             ("px", "long side"),
+            ("at", "a feature id: the part as it stood after it"),
         ],
     ),
     (
@@ -52,6 +62,10 @@ const TOOLS: [Tool; 13] = [
                 "one op: {\"op\":\"SetParam\",\"param\":\"t\",\"value\":{\"value\":3,\"dim\":\"Length\"}}",
             ),
             ("ops", "several ops, in order"),
+            (
+                "base",
+                "the version a reply gave; refused (StaleBase) if the file has moved on",
+            ),
         ],
     ),
     (
@@ -133,6 +147,8 @@ fn args(p: &Json) -> Args {
     let mut a = Args {
         file: s("file").unwrap_or_default(),
         labels: s("labels"),
+        at: s("at"),
+        base: s("base"),
         px: p.get("px").and_then(Json::num).map(|n| n as usize),
         ..Args::default()
     };

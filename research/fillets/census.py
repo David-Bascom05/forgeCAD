@@ -28,7 +28,7 @@ jobs=[]
 for ds in ('whucad','freecad','cadfs'):
     run,res=load(ds)
     for fn in os.listdir(run+'/parts'):
-        if not fn.endswith('.fc'): continue
+        if not fn.endswith('.fg'): continue
         p=f'{run}/parts/{fn}'
         k=fn[:-3]
         s=open(p,errors='replace').read()

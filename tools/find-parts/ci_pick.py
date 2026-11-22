@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Picks the CI tier: greedy set cover of kernel branches per CPU-second over a sample of the
-generators' parts (no downloaded data), and writes tools/find-parts/ci-corpus.txt.
+generators' .fg parts (no downloaded data), and writes tools/find-parts/ci-corpus.txt.
 
   fbuild python3 tools/find-parts/ci_pick.py --exe COV_JUDGE [--seconds 6] [--sample 1500]
 """
@@ -33,7 +33,7 @@ def main():
     cands += pick(gens.sweep(literals=False), n // 2)
 
     # a text line depends on the font the harness finds: not the kernel's verdict
-    cands = [x for x in cands if "\ntext " not in x[1]]
+    cands = [x for x in cands if " = text(" not in x[1]]
 
     def one(x):
         return x[0], x[1], cover.run(exe, x[1], tmp)
@@ -65,7 +65,8 @@ def main():
     print(len(chosen), "chosen", f"{spent:.1f} instrumented cpu s, covers", bin(covered).count("1"), "of", bin(every).count("1"))
     with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "ci-corpus.txt"), "w") as f:
         for name, src, res, _ in sorted(chosen, key=lambda x: x[0]):
-            f.write(f"### {name} | {res['v']}\n{src if src.endswith(chr(10)) else src + chr(10)}")
+            # the judge's numbers when picked: what the part built to, as far as it built
+            f.write(f"### {name} | {res['v']}\n# vol {res.get('vol')} faces {res.get('faces')}\n{src if src.endswith(chr(10)) else src + chr(10)}")
 
 
 if __name__ == "__main__":

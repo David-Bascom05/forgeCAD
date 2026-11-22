@@ -1,29 +1,144 @@
-//! Forms `.fc` had that Forge parts lacked, each built both ways: the `.fc` line on the retired
-//! engine (`forge_agent::bench::model`) and the same geometry written as a Forge part, holding
-//! the two to one solid (volume, area, faces, edges) and the Forge part valid.
+//! Forms `.fc` had that Forge parts lacked: the same geometry written as a Forge part, held to
+//! the `.fc` part's solid (its volume, area, faces and edges as the retired engine built it,
+//! recorded below) and valid.
 mod common;
 
-/// The `.fc` part's finished body (all its bodies as one).
-fn fc(src: &str) -> forge_topo::Body {
-    let m = forge_agent::bench::model(src);
-    if let Some(e) = &m.error {
-        panic!("fc line {}: {}", m.lines[e.at].no, e.msg);
-    }
-    let b = m.body().expect("a part").clone();
-    assert!(forge_topo::check::check(&b).is_empty(), "fc invalid");
-    b
-}
+/// The `.fc` parts built on the retired engine (`forge_agent::bench::model`), recorded: each
+/// one's text, then its volume, area, faces and edges.
+const RECORDED: &[(&str, f64, f64, usize, usize)] = &[
+    (
+        "base: extrude 20 rect 0 0 40 30\nother: extrude new 10 rect 60 0 20 20\nextrude cut 5 -xy at 0 0 20 circle 20 -15 4 in base\nextrude 3 at 0 0 20 circle 8 8 3 in base\nrevolve cut 90 axis x circle 20 10 4 in base\nball cut 3 at 32 22 20 in base\n",
+        26987.378569507975,
+        7304.739918919216,
+        18,
+        35,
+    ),
+    (
+        "base: extrude 20 rect 0 0 40 30\nchamfer 2 corner point (edges of base top)\n",
+        23730.666666666664,
+        5029.3523804664965,
+        10,
+        20,
+    ),
+    (
+        "base: extrude 20 rect 0 0 40 30\nchamfer 3 ang 30 face (faces normal +z) (edges near 20 0 20)\n",
+        23896.076951545867,
+        5144.085879880048,
+        7,
+        15,
+    ),
+    (
+        "base: extrude 20 rect 0 0 40 30\nchamfer 3 5 face (faces normal +z) (edges near 20 0 20)\n",
+        23700.0,
+        5098.238075793812,
+        7,
+        15,
+    ),
+    (
+        "base: extrude 20 rect 0 0 40 30\nextrude cut two 2 4 at 0 0 20 circle 20 15 4\n",
+        23798.938070170254,
+        5300.530964914873,
+        8,
+        15,
+    ),
+    (
+        "extrude 20 along 1 0 1 rect 0 0 40 30\nextrude sym 10 along 1 0 1 at 0 0 20 circle 20 15 5\nextrude cut two 2 4 along 1 0 1 at 0 0 20 circle 8 8 3\nextrude cut thru along 1 0 1 circle 25 15 3\n",
+        24560.77428866578,
+        6014.321433980047,
+        13,
+        30,
+    ),
+    (
+        "base: extrude 20 rect 0 0 40 30\nextrude cut thru circle 20 15 4\n",
+        22994.69035085127,
+        5602.123859659494,
+        7,
+        15,
+    ),
+    (
+        "base: extrude 20 rect 0 0 40 30\nextrude next back at 0 0 30 circle 20 15 4\n",
+        24502.654824574365,
+        5451.3274122871835,
+        8,
+        15,
+    ),
+    (
+        "revolve 120 xz axis 0 0 0 1 circle 20 0 5\n",
+        3289.868133696452,
+        1473.0268861580705,
+        3,
+        3,
+    ),
+    (
+        "base: extrude 20 rect 0 0 40 30\nrevolve keep xz axis 0 0 1 0 circle 20 10 8\n",
+        3158.273408348594,
+        1191.692211746642,
+        3,
+        3,
+    ),
+    (
+        "revolve sym 90 xz axis 0 0 0 1 circle 20 0 5\n",
+        2467.401100272338,
+        1144.0400727884253,
+        3,
+        3,
+    ),
+    (
+        "revolve two 60 30 xz axis 0 0 0 1 circle 20 0 5\n",
+        2467.4011002723387,
+        1144.040072788425,
+        3,
+        3,
+    ),
+    (
+        "base: extrude 20 rect 0 0 40 30\nholes: extrude cut 5 -xy at 0 0 20 circle 10 -10 2\nholes2: extrude cut 5 -xy at 0 0 20 circle 30 -15 5\nchamfer 0.5 (edges of holes holes2 circle r<3)\n",
+        23544.20726584168,
+        5412.550276275201,
+        12,
+        22,
+    ),
+    (
+        "base: extrude 20 rect 0 0 40 30\nholes: extrude cut 5 -xy at 0 0 20 circle 10 -10 2\nholes2: extrude cut 5 -xy at 0 0 20 circle 30 -15 5\nchamfer 0.5 (edges of holes holes2 circle r>3)\n",
+        23544.207265841676,
+        5401.508462061073,
+        12,
+        22,
+    ),
+    (
+        "base: extrude 20 rect 0 0 40 30\nchamfer 1 (edges along +x top)\n",
+        23960.0,
+        5151.137084989847,
+        8,
+        18,
+    ),
+    (
+        "base: extrude 20 rect 0 0 40 30\nother: extrude new 10 rect 60 0 20 20\nchamfer 1 (edges along +z body other)\n",
+        27979.999999999996,
+        6772.568542494922,
+        16,
+        36,
+    ),
+    (
+        "base: extrude 10 rect 0 0 40 30 circle 15 10 4\n",
+        11497.345175425635,
+        3950.79644737231,
+        7,
+        15,
+    ),
+];
 
-/// The Forge part and the `.fc` part are one solid.
+/// The Forge part and the `.fc` part (its text, recorded built) are one solid.
 fn same(fg: &str, fc_src: &str) -> forge_lang::Measure {
     let m = common::holds(fg);
-    let b = fc(fc_src);
-    let f = forge_topo::mass::mass(&b).expect("fc mass");
+    let &(_, volume, area, faces, edges) = RECORDED
+        .iter()
+        .find(|r| r.0 == fc_src)
+        .unwrap_or_else(|| panic!("no recorded .fc build of {fc_src:?}"));
     let near = |x: f64, y: f64| (x - y).abs() <= 1e-7 * x.abs().max(y.abs()).max(1.0);
-    assert!(near(m.volume, f.volume), "volume fg {} fc {}", m.volume, f.volume);
-    assert!(near(m.area, f.area), "area fg {} fc {}", m.area, f.area);
-    assert_eq!(m.faces, b.face_ids().count(), "faces");
-    assert_eq!(m.edges, b.edge_ids().count(), "edges");
+    assert!(near(m.volume, volume), "volume fg {} fc {}", m.volume, volume);
+    assert!(near(m.area, area), "area fg {} fc {}", m.area, area);
+    assert_eq!(m.faces, faces, "faces");
+    assert_eq!(m.edges, edges, "edges");
     m
 }
 

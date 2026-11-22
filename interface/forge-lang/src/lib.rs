@@ -49,6 +49,7 @@ pub mod undo;
 pub mod uses;
 pub mod validity;
 pub mod values;
+pub mod verts;
 pub mod vtools;
 pub mod wired;
 pub mod work;
@@ -172,6 +173,10 @@ pub struct Options {
     /// A refused fillet, chamfer, shell or face fillet whose size a param drives: search for the
     /// largest value that builds, the error's fix (a few rebuilds from that feature on).
     pub fit_sizes: bool,
+    /// Rolled back: build only up to the top-level statement binding this name (a browser's end
+    /// of part marker); what follows is evaluated (its rows, its errors) but not built, and the
+    /// part is the one as it stood there.
+    pub until: Option<String>,
 }
 
 impl Default for Options {
@@ -194,6 +199,7 @@ impl Default for Options {
             asks: vec![],
             comp_anchors: false,
             fit_sizes: false,
+            until: None,
         }
     }
 }
@@ -382,6 +388,49 @@ fn fit_sizes(src: &str, opts: &Options, run: &mut Run, mut cache: Cache) -> Cach
     cache
 }
 
+/// Bodies' mass properties as one: volumes and areas summed, the centroid weighed by volume, each
+/// inertia moved to it (parallel axes), errors summed.
+fn sum_masses(ms: &[forge_topo::mass::MassProps]) -> forge_topo::mass::MassProps {
+    use forge_math::{Point3, Vec3};
+    let volume: f64 = ms.iter().map(|m| m.volume).sum();
+    let area: f64 = ms.iter().map(|m| m.area).sum();
+    let c = if volume != 0.0 {
+        ms.iter()
+            .fold(Vec3::ZERO, |a, m| a + (m.centroid - Point3::ORIGIN) * m.volume)
+            / volume
+    } else {
+        Vec3::ZERO
+    };
+    let centroid = Point3::ORIGIN + c;
+    let mut inertia = [[0.0; 3]; 3];
+    let mut err = [0.0; 4];
+    for m in ms {
+        let d = m.centroid - centroid;
+        let d = [d.x, d.y, d.z];
+        let dd = d[0] * d[0] + d[1] * d[1] + d[2] * d[2];
+        for i in 0..3 {
+            for j in 0..3 {
+                let shift = if i == j { dd - d[i] * d[j] } else { -d[i] * d[j] };
+                inertia[i][j] += m.inertia[i][j] + m.volume * shift;
+            }
+        }
+        for (e, x) in err.iter_mut().zip(m.err) {
+            *e += x;
+        }
+    }
+    let (principal, axes) = forge_topo::mass::eigen(inertia);
+    forge_topo::mass::MassProps {
+        volume,
+        area,
+        centroid,
+        inertia,
+        principal,
+        axes,
+        err,
+        faces: vec![],
+    }
+}
+
 fn run_once(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
     let t0 = Instant::now();
     let mut timings = Timings::default();
@@ -429,6 +478,7 @@ fn run_once(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
     ev.volumes = opts.volumes;
     ev.checks = opts.checks;
     ev.cosmetic_threads = opts.cosmetic_threads;
+    ev.until = opts.until.clone();
     ev.dir = opts.dir.clone();
     ev.root = fence_of(&opts);
     // any document may hold components and joints (an `assembly` first line is optional)
@@ -465,7 +515,9 @@ fn run_once(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
     timings.eval_ms = t2.elapsed().as_secs_f64() * 1e3;
     timings.kernel_ms = ev.b.kernel_ms;
     let t3 = Instant::now();
-    let built_all = opts.build && ev.errors.is_empty() && ev.b.built() == ev.b.features.len();
+    // rolled back: everything up to the marker built is all there is to build
+    let made = ev.rolled.unwrap_or(ev.b.features.len());
+    let built_all = opts.build && ev.errors.is_empty() && ev.b.built() == made;
     // the whole part's mass (its measure) and each solid's (its physical properties) worked out
     // side by side, each as it is alone, and the part's tight box beside them
     let ((whole_mass, whole_box), solid_masses) = {
@@ -477,6 +529,15 @@ fn run_once(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
             && !assembly
             && !(whole.is_some() && ev.b.stages.last().is_some_and(|st| st.solids.len() == 1));
         let solids = if each { props::solids(&ev) } else { vec![] };
+        // every solid's own mass is wanted anyway: the whole is their sum, not worked out again
+        // over the joined body (twice the integrals, where .fc did them once)
+        // (the joined body still gives the box)
+        let boxed = whole;
+        let whole = match whole {
+            Some(_) if each && solids.len() == ev.b.stages.last().map_or(0, |st| st.solids.len()) => None,
+            w => w,
+        };
+        let from_parts = each && whole.is_none() && checks && ev.b.measured().is_none();
         // a thermoform's modelled part too (`thermo.rs`)
         let owed = ev.masses_owed.take().unwrap_or_default();
         let mass = |b: &forge_topo::Body| forge_topo::mass::mass(b);
@@ -486,7 +547,7 @@ fn run_once(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
         let (w, e, o) = if forge_geom::budget::left() == u64::MAX {
             std::thread::scope(|s| {
                 let w = whole.map(|b| s.spawn(move || mass(b)));
-                let bx = whole.map(|b| s.spawn(move || tightbox::tight_box(b)));
+                let bx = boxed.map(|b| s.spawn(move || tightbox::tight_box(b)));
                 let o: Vec<_> = owed.iter().map(|x| s.spawn(move || mass(&x.2).ok())).collect();
                 let e = each_mass();
                 let w = (w.map(joined), bx.map(joined));
@@ -495,7 +556,7 @@ fn run_once(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
         } else {
             // in the order they were asked for: the modelled parts' in the run, then the rest
             let o: Vec<_> = owed.iter().map(|x| mass(&x.2).ok()).collect();
-            let w = (whole.map(mass), whole.map(tightbox::tight_box));
+            let w = (whole.map(mass), boxed.map(tightbox::tight_box));
             (w, each_mass(), o)
         };
         for ((i, key, _), m) in owed.into_iter().zip(o) {
@@ -504,7 +565,21 @@ fn run_once(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
             }
             ev.b.memo_keep(key, m);
         }
-        (w, e)
+        let (w, bx) = w;
+        let w = match (&e, from_parts) {
+            (Some(parts), true) => Some(
+                parts
+                    .iter()
+                    .map(|m| m.clone().ok_or(()))
+                    .collect::<Result<Vec<_>, ()>>()
+                    .map(|ms| sum_masses(&ms))
+                    .or_else(|()| ev.b.body().map_or(Err(()), |b| mass(b).map_err(|_| ()))),
+            )
+            .and_then(Result::ok)
+            .map(Ok),
+            _ => w,
+        };
+        ((w, bx), e)
     };
     let measure = match (built_all && opts.checks, ev.b.measured()) {
         (false, _) => None,

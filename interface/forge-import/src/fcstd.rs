@@ -1008,6 +1008,13 @@ impl Sk {
         format!("p[{i}]")
     }
 
+    /// A point with every digit (`p` writes ten decimals).
+    fn p_exact(&mut self, q: V2) -> String {
+        let z = |x: f64| if x == 0.0 { 0.0 } else { x };
+        self.pts.push(format!("({:?}, {:?})", z(q.0), z(q.1)));
+        format!("p[{}]", self.pts.len() - 1)
+    }
+
     fn r(&mut self, r: f64) -> String {
         let t = num(r);
         let i = match self.radii.iter().position(|x| *x == t) {
@@ -1081,7 +1088,29 @@ impl Sk {
                             c2
                         };
                     }
-                    let (c, f, t) = (self.p(to(c)), self.p(to(s)), self.p(to(e)));
+                    let (cq, f, t) = (to(c), self.p(to(s)), self.p(to(e)));
+                    // the ends as written: a centre rounded as they are can sit off their
+                    // bisector by more than the solver allows; then it is the exact centre
+                    // between the written ends, every digit written
+                    let r =
+                        |q: V2| -> V2 { (num(q.0).parse().unwrap_or(q.0), num(q.1).parse().unwrap_or(q.1)) };
+                    let (rs, re) = (r(to(s)), r(to(e)));
+                    let c = if (py::dist2(r(cq), rs) - py::dist2(r(cq), re)).abs() <= 1e-12 {
+                        self.p(cq)
+                    } else {
+                        let ch = py::dist2(rs, re);
+                        let rr = pmax(py::dist2(cq, rs), ch / 2.0);
+                        let h = pmax(rr * rr - ch * ch / 4.0, 0.0).sqrt();
+                        let m = ((rs.0 + re.0) / 2.0, (rs.1 + re.1) / 2.0);
+                        let n = ((re.1 - rs.1) / ch, (rs.0 - re.0) / ch);
+                        let (c1, c2) = ((m.0 + h * n.0, m.1 + h * n.1), (m.0 - h * n.0, m.1 - h * n.1));
+                        let x = if py::dist2(c1, cq) <= py::dist2(c2, cq) {
+                            c1
+                        } else {
+                            c2
+                        };
+                        self.p_exact(x)
+                    };
                     let cw = if d * turn < 0.0 { ", cw: true" } else { "" };
                     self.row("a", format!("arc(center: {c}, from: {f}, to: {t}{cw})"));
                 }
@@ -1123,6 +1152,12 @@ enum Ext {
         w: V3,
         from: f64,
         to: f64,
+    },
+    /// Through the part with walls slanted along `w` (both ways with `both`): `thru` or
+    /// `thru_all` along it.
+    AlongThru {
+        w: V3,
+        both: bool,
     },
 }
 
@@ -1428,6 +1463,13 @@ impl Tr<'_, '_, '_> {
             slant = Some((w.0 * (to - from), w.1 * (to - from), w.2 * (to - from)));
         }
         let at = self.plane(n, world_of((0.0, 0.0)))?;
+        let along = match &make {
+            Make::Extrude {
+                ext: Ext::AlongThru { w, .. },
+                ..
+            } => Some(self.dir(*w)?),
+            _ => None,
+        };
         let at2 = match slant {
             Some(t) => Some(self.plane(n, add(world_of((0.0, 0.0)), t, 1.0))?),
             None => None,
@@ -1477,6 +1519,12 @@ impl Tr<'_, '_, '_> {
                         Ext::ThruAll => "thru_all".into(),
                         Ext::Next => "next".into(),
                         Ext::Along { .. } => String::new(),
+                        Ext::AlongThru { both, .. } => {
+                            if let Some(d) = &along {
+                                opts += &format!(", along: {d}");
+                            }
+                            if *both { "thru_all" } else { "thru" }.into()
+                        }
                     };
                     match (&at2, slant) {
                         (Some(at2), Some(t)) => {
@@ -1578,6 +1626,11 @@ impl Tr<'_, '_, '_> {
                     0 if mid => (-l / 2.0, l / 2.0),
                     0 => (0.0, l),
                     4 => (-l2, l),
+                    // a pocket through: literally through, its walls along the slant
+                    _ if cut => {
+                        let ext = Ext::AlongThru { w, both: mid };
+                        return self.profile(name, lab, Make::Extrude { cut, ext, travel: z }, None);
+                    }
                     _ => {
                         // through: past every edge of the part so far
                         let src = self.program();

@@ -182,8 +182,11 @@ impl Rd<'_> {
 
     fn point(&self, e: &Expr) -> Option<Pt> {
         match &e.kind {
+            // a point written as coordinates is Forge's fixed point, but the sketcher holds it
+            // as `.fc`'s rows did: where it is, free, so a constraint added (Parallel, Tangent)
+            // moves it and is written back in its numbers, never refused as over-constrained
             ExprKind::Tuple(xs) if xs.len() == 2 => {
-                Some(Pt::Fixed(Some(self.slot(&xs[0])), Some(self.slot(&xs[1]))))
+                Some(Pt::Free(Some(self.slot(&xs[0])), Some(self.slot(&xs[1]))))
             }
             _ => match call(e) {
                 Some(("near", a)) if a.len() == 2 => Some(Pt::Free(
@@ -1210,16 +1213,17 @@ mod tests {
             "{:?}",
             o.read_only
         );
-        assert_eq!(o.rows[2], "rad c1 (d / 2)");
+        // its centre written as coordinates is held free, as `.fc` held it: no `fix` row
+        assert_eq!(o.rows[1], "rad c1 (d / 2)");
         let m = mode(&o);
         assert!(m.error.is_none(), "{:?}", m.error);
         let mut rows = o.rows.clone();
-        rows[2] = "rad c1 6".into();
-        let e = o.write_back(&rows, &[0, 1, 2]).unwrap_err();
+        rows[1] = "rad c1 6".into();
+        let e = o.write_back(&rows, &[0, 1]).unwrap_err();
         assert_eq!(e.kind(), "Driven", "{}", e.text());
         // a typed expression is written as it is
-        rows[2] = "rad c1 (d / 4)".into();
-        let ops = o.write_back(&rows, &[0, 1, 2]).unwrap();
+        rows[1] = "rad c1 (d / 4)".into();
+        let ops = o.write_back(&rows, &[0, 1]).unwrap();
         let after = apply(src, &ops).unwrap();
         assert!(after.contains("circle((0, 0), d / 4)"), "{after}");
     }

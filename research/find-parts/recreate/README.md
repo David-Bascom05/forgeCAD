@@ -5,6 +5,13 @@ Tools: `tools/find-parts/recreate/`. No dataset file, and no part derived from o
 `~/forgecad-data/<dataset>/`, and a regression test restates geometry in its own numbers. Nothing here is used by
 shipped code.
 
+Status: these importers (`cadfs.py`, `whucad.py`, `freecad.py` and their runners) still write the retired part
+format, and they no longer run: the judge and `topo` read `.fg` now. They name a blend's edges by `@handle` or by
+a point near them, and a `.fg` selection names edges only by what made them and how they lie, so moving them is a
+port of their reference resolution (to lineage selections, as `interface/forge-import` does for FreeCAD), not a
+change of syntax. FreeCAD documents are imported to `.fg` today by `forgecad import FILE.FCStd`. The numbers
+below were measured when they ran.
+
 ## What the numbers mean
 
 Reported separately for every dataset:

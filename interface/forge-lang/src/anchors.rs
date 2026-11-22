@@ -23,6 +23,55 @@ pub struct SketchRefs {
     pub points: Vec<String>,
     /// Other curves (arcs, splines): paths.
     pub curves: Vec<String>,
+    /// Where each named entity and loop segment (by its text) lies in the world, as a polyline
+    /// (a point: one place): what a UI draws of the sketch on the part and picks it by.
+    pub shapes: Vec<(String, Vec<[f64; 3]>)>,
+}
+
+/// An entity of a solved sketch as a polyline in the world: a point's one place, a line's ends,
+/// a curve sampled.
+fn polyline(sk: &crate::sketch::Sk, id: forge_sketch::EntityId) -> Vec<[f64; 3]> {
+    use forge_sketch::Entity as E;
+    let w = |p: forge_math::Point2| {
+        let q = sk.world(p);
+        [q.x, q.y, q.z]
+    };
+    let round = |c: forge_math::Point2, r: f64, from: f64, sweep: f64| {
+        let n = ((sweep.abs() / std::f64::consts::TAU) * 64.0).ceil().max(8.0) as usize;
+        (0..=n)
+            .map(|k| {
+                let t = from + sweep * k as f64 / n as f64;
+                let (sn, cs) = forge_math::dmath::sin_cos(t);
+                w(forge_math::Point2::new(c.x + r * cs, c.y + r * sn))
+            })
+            .collect()
+    };
+    match sk.s.entity(id) {
+        Some(E::Point { .. }) => vec![w(sk.s.point(id))],
+        Some(E::Line { a, b }) => vec![w(sk.s.point(a)), w(sk.s.point(b))],
+        Some(E::Circle { center, .. }) => {
+            round(sk.s.point(center), sk.s.radius(id), 0.0, std::f64::consts::TAU)
+        }
+        Some(E::Arc {
+            center,
+            start,
+            end,
+            ccw,
+        }) => {
+            let (c, a, b) = (sk.s.point(center), sk.s.point(start), sk.s.point(end));
+            let ang = |p: forge_math::Point2| forge_math::dmath::atan2(p.y - c.y, p.x - c.x);
+            let (t0, t1) = (ang(a), ang(b));
+            let mut sweep = t1 - t0;
+            if ccw && sweep <= 0.0 {
+                sweep += std::f64::consts::TAU;
+            } else if !ccw && sweep >= 0.0 {
+                sweep -= std::f64::consts::TAU;
+            }
+            round(c, sk.s.radius(id), t0, sweep)
+        }
+        Some(_) => sk.s.spline_samples(id, 48).into_iter().map(w).collect(),
+        None => vec![],
+    }
 }
 
 /// A sheet metal edge a flange can stand on: its text (`base.edge(plan.outline[1])`, `up.tip`)
@@ -49,6 +98,10 @@ pub struct Anchors {
     pub sheet_edges: Vec<SheetEdge>,
     /// The features (and loop instances) anchors were looked for on, by id text.
     pub features: Vec<String>,
+    /// The faces each role anchor of those features names on the finished part, by its text
+    /// (`boss.faces`, `boss.end`, `bolt.bore`): what a UI lights for a browser row, and where it
+    /// puts a feature's number.
+    pub role_faces: HashMap<String, Vec<Name>>,
 }
 
 /// The members a feature's faces are found by (each tried; one a kind lacks is skipped).
@@ -118,6 +171,13 @@ fn sketch_refs(id: &str, v: &Value) -> Option<SketchRefs> {
     for (name, val) in &sk.named {
         let Value::Ent(e) = val else { continue };
         let text = format!("{id}.{name}");
+        if e.loop_segs.is_empty() {
+            r.shapes.push((text.clone(), polyline(&sk, e.id)));
+        } else {
+            for (k, seg) in e.loop_segs.iter().enumerate() {
+                r.shapes.push((format!("{text}[{k}]"), polyline(&sk, *seg)));
+            }
+        }
         match e.kind {
             EntKind::Point => r.points.push(text),
             EntKind::Line => r.lines.push(text),
@@ -186,6 +246,7 @@ pub fn find(ev: &mut Eval, body: Option<&Body>) -> Anchors {
         }
         for t in texts {
             if let Some(names) = eval_text(ev, &t).as_ref().and_then(face_names) {
+                out.role_faces.insert(t.clone(), names.clone());
                 sets.push((t, names));
             }
         }

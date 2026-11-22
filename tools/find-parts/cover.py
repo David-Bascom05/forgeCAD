@@ -47,7 +47,7 @@ NONZERO = bytes([0] + [1] * 255)
 
 
 def run(exe, src, tmp, seen_lock=None):
-    with tempfile.NamedTemporaryFile("w", suffix=".fc", dir=tmp) as f:
+    with tempfile.NamedTemporaryFile("w", suffix=".fg", dir=tmp) as f:
         f.write(src)
         f.flush()
         prof = f.name + ".profraw"
@@ -127,7 +127,7 @@ def main():
     with open(os.path.join(out, "summary-cover.json"), "w") as f:
         json.dump(sm, f)
     for k, v in enumerate(corpus[-200:]):
-        with open(os.path.join(out, f"corpus{k}.fc"), "w") as f:
+        with open(os.path.join(out, f"corpus{k}.fg"), "w") as f:
             f.write("\n".join(v[0]) + "\n")
     if "--no-shrink" not in args:
         book.shrink_all()

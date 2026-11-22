@@ -86,15 +86,24 @@ only, apart from HistCAD's samples, so the rate says nothing yet about finishing
 
 Every method judges a part in its own process (`verify/forge-proof/examples/judge`): RAM capped, wall
 clock capped, so a hang or a stack overflow costs one case. A part ends ok, refused (a clear error),
-fail (a kernel bug by `history::classify`), wrong (built, disagrees with a known truth), timeout, crash
-or oom. A failure's signature is its verdict, the feature kind and its message with numbers and names
-blanked, plus the panic's source line; its root drops the feature kind. Each signature's first part is
-shrunk to a minimal `.fc` by dropping lines and selectors and plainer numbers (`fp.shrink`).
+fail (a kernel bug by `forge_lang::fuzz::classify`), wrong (built, disagrees with a known truth), timeout,
+crash or oom; unread (the language did not read it) is the generator's own bug. A failure's signature is its
+verdict, the feature kind and its message with numbers and names blanked, plus the panic's source line; its
+root drops the feature kind. Each signature's first part is shrunk to a minimal `.fg` by dropping statements,
+optional arguments and summed selections, and plainer numbers (`fp.shrink`).
 
-- `fuzz`: `history::run`, the baseline.
-- `swarm`: the same, each history drawing from a random third of the feature kinds (Groce et al., "Swarm
+Every part is a `.fg` program. The generators write placements as the kernel's frames would put them
+(`fgsrc.py`: sketches on offset world planes or `plane(at:, normal:, x:)` through helper points, holes and cuts
+facing the way the language drills and cuts) and pick edges and faces by lineage and shape, `extreme:` where a
+part is read by where things lie; the judge builds with the style rules that would flag those off. Ported from
+the retired part format, every generator's part builds to what its earlier form did (verdict, volume, faces)
+but where a refused statement is followed by more: the retired format stopped there, a `.fg` program goes on
+with what does not depend on it. The measurements below were taken on the earlier form.
+
+- `fuzz`: `forge_lang::fuzz::run`, the baseline.
+- `swarm`: the same, each program drawing from a random third of the feature kinds (Groce et al., "Swarm
   testing", ISSTA 2012).
-- `real`: Fusion 360 Gallery and DeepCAD timelines translated to `.fc` (`fusion.py`), judged, and checked
+- `real`: Fusion 360 Gallery and DeepCAD timelines translated to `.fg` (`fusion.py`), judged, and checked
   against the volume Fusion recorded (`realparts.py`).
 - `sweep`: each dimension of the bench parts across its range and onto values that make faces meet: equal to
   another dimension, their sum or difference, a hair off those (`gens.sweep`).
@@ -105,12 +114,14 @@ shrunk to a minimal `.fc` by dropping lines and selectors and plainer numbers (`
   draft surfaces and to what comes next.
 - `std`: flanges (ASME B16.5), bolts and nuts (ISO 4017), shafts with keyways and ring grooves (DIN 6885, 471),
   pillow blocks (6200 series), brackets, housings, enclosures, castings, involute gears, pulleys, manifolds.
-- `mutate`: real parts with one or two edits: a feature moved or dropped, an op changed, a selector swapped, a dimension
-  moved, a feature from another part spliced in, a finishing step added.
+- `mutate`: real parts with one or two edits: a statement moved or dropped, an op changed, a selection's word swapped, a
+  dimension moved, a statement from another part spliced in, a finishing step added.
 - `cover`: the same mutations steered by branch coverage. The judge is built with `-C instrument-coverage`; a run's raw
   profile is read directly, a part reaching a new branch joins the corpus, and parts holding rare branches get mutated
   most (FairFuzz, Lemieux and Sen, ASE 2018).
-- `histcad.py`: HistCAD's samples, whose fillets pick edges by 3D points. `occt_replay.py`: the translated parts through OCCT alone.
+- `histcad.py`: HistCAD's samples, extrudes and revolves; their fillets pick edges by 3D points, which a `.fg` selection
+  cannot say, so a sample with one is not translated. `occt_replay.py`: the translated parts through OCCT alone, from
+  the steps `fusion.py` keeps beside each part.
 - `augment`: a real part, then the finishing a person adds next, sized to it.
 - `noise`: a built part with its coordinates moved 3e-7 mm: it must build, to about the same volume. Real data carries this
   much float noise, and two silent wrong answers came from it. No truth needed.

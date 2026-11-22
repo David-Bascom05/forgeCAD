@@ -431,6 +431,45 @@ fn a_pad_along_a_slant_is_a_ruled_loft_of_the_same_height() {
     assert_eq!((m.faces, m.edges), (6, 12), "{fg}");
 }
 
+/// A pocket through all along a slant: literally through (`thru` along the slant), not a loft
+/// as long as the part's box.
+#[test]
+fn a_pocket_through_all_along_a_slant_is_through() {
+    let sq = geo(&[
+        line((-5.0, -5.0), (5.0, -5.0), 0),
+        line((5.0, -5.0), (5.0, 5.0), 0),
+        line((5.0, 5.0), (-5.0, 5.0), 0),
+        line((-5.0, 5.0), (-5.0, -5.0), 0),
+    ]);
+    let d = doc(&[
+        body("Pocket", &["Sketch", "Pad", "Sketch001", "Pocket"]),
+        sketch("Sketch", place(0.0), rect()),
+        pad("Pad", "", "Sketch", 10.0, &[]),
+        sketch("Sketch001", place(10.0), sq),
+        (
+            "Pocket",
+            "PartDesign::Pocket",
+            vec![
+                ("BaseFeature", "<Link value=\"Pad\"/>".into()),
+                ("Profile", "<LinkSub value=\"Sketch001\"/>".into()),
+                ("Type", "<Integer value=\"1\"/>".into()),
+                ("UseCustomVector", "<Bool value=\"true\"/>".into()),
+                ("Direction", v(0.3, 0.0, -1.0)),
+                ("Shape", "<Part file=\"PocketShape.brp\"/>".into()),
+            ],
+        ),
+    ]);
+    let fg = only(&file(d));
+    assert!(fg.contains("cut(t1_sk, thru, along: "), "{fg}");
+    assert!(!fg.contains("loft("), "{fg}");
+    let m = built(&fg);
+    // a slanted square prism through 10: its volume the square's area times the height
+    near(m.volume, 24000.0 - 1000.0, "volume", &fg);
+    // the hole leans 0.3 in x for each 1 down: its middle 1.5 off the square's, at z = 5
+    near(m.centroid[0], -1000.0 * 1.5 / 23000.0, "centroid x", &fg);
+    near(m.centroid[2], 5.0, "centroid z", &fg);
+}
+
 #[test]
 fn a_revolve_symmetric_about_its_sketch_turns_half_each_way() {
     // a 10 square from x 10 to 20, turned 90 degrees about the sketch's y axis, half each side
@@ -675,4 +714,91 @@ fn a_spline_of_absurd_multiplicity_is_a_clean_refusal() {
     let b = &translate(&file(d)).expect("reads")[0];
     assert_eq!(b.status(), "untranslated");
     assert!(b.fail.as_ref().is_some_and(|f| f.why().contains("knots")));
+}
+
+/// One straight edge from `a` to `b`, as a stored shape holds it.
+fn edge_brep(a: (f64, f64, f64), b: (f64, f64, f64)) -> String {
+    let d = (b.0 - a.0, b.1 - a.1, b.2 - a.2);
+    let l = (d.0 * d.0 + d.1 * d.1 + d.2 * d.2).sqrt();
+    let u = (d.0 / l, d.1 / l, d.2 / l);
+    format!(
+        "DBRep_DrawableShape\n\nCASCADE Topology V1, (c) Matra-Datavision\nLocations 0\nCurve2ds 0\nCurves 1\n1 {} {} {} {} {} {}\nPolygon3D 0\nPolygonOnTriangulations 0\nSurfaces 0\nTriangulations 0\n\nTShapes 3\nVe\n1e-07\n{} {} {}\n0 0\n\n0101101\n*\nVe\n1e-07\n{} {} {}\n0 0\n\n0101101\n*\nEd\n 1e-07 1 1 0\n1  1 0 0 {l}\n0\n\n0101000\n+3 0 -2 0 *\n\n+1 0\n",
+        a.0, a.1, a.2, u.0, u.1, u.2, a.0, a.1, a.2, b.0, b.1, b.2
+    )
+}
+
+/// Three square bosses, the second and third a linear pattern's copies; FreeCAD rounds the front
+/// top edge of the last copy alone. Twelve edges of the copies are alike in all but which copy
+/// and which side: the fillet names its edge on that copy, by the copied boss's own anchors.
+#[test]
+fn a_fillet_on_one_copy_of_a_pattern_names_that_copys_edge() {
+    let square = geo(&[
+        line((-25.0, -5.0), (-15.0, -5.0), 0),
+        line((-15.0, -5.0), (-15.0, 5.0), 0),
+        line((-15.0, 5.0), (-25.0, 5.0), 0),
+        line((-25.0, 5.0), (-25.0, -5.0), 0),
+    ]);
+    let d = doc(&[
+        body(
+            "Fillet",
+            &["Sketch", "Pad", "Sketch001", "Pad001", "LinearPattern", "Fillet"],
+        ),
+        sketch("Sketch", place(0.0), rect()),
+        pad("Pad", "", "Sketch", 10.0, &[]),
+        sketch("Sketch001", place(10.0), square),
+        pad("Pad001", "Pad", "Sketch001", 5.0, &[]),
+        (
+            "LinearPattern",
+            "PartDesign::LinearPattern",
+            vec![
+                ("BaseFeature", "<Link value=\"Pad001\"/>".into()),
+                (
+                    "Originals",
+                    "<LinkList count=\"1\"><Link value=\"Pad001\"/></LinkList>".into(),
+                ),
+                (
+                    "Direction",
+                    "<LinkSub value=\"Sketch001\"><Sub value=\"H_Axis\"/></LinkSub>".into(),
+                ),
+                ("Length", "<Float value=\"40\"/>".into()),
+                ("Occurrences", "<Integer value=\"3\"/>".into()),
+                ("Shape", "<Part file=\"PatternShape.brp\"/>".into()),
+            ],
+        ),
+        (
+            "Fillet",
+            "PartDesign::Fillet",
+            vec![
+                ("BaseFeature", "<Link value=\"LinearPattern\"/>".into()),
+                (
+                    "Base",
+                    "<LinkSub value=\"LinearPattern\"><Sub value=\"Edge1\"/></LinkSub>".into(),
+                ),
+                ("Radius", "<Float value=\"1\"/>".into()),
+                ("Shape", "<Part file=\"FilletShape.brp\"/>".into()),
+            ],
+        ),
+    ]);
+    let front = edge_brep((15.0, -5.0, 15.0), (25.0, -5.0, 15.0));
+    let data = zip(&[
+        ("Document.xml", d.as_str()),
+        ("PadShape.brp", EDGE),
+        ("PatternShape.brp", front.as_str()),
+        ("FilletShape.brp", EDGE),
+    ]);
+    let fg = only(&data);
+    assert!(fg.contains("t2[2]."), "{fg}");
+    let m = built(&fg);
+    near(
+        m.volume,
+        24000.0 + 3.0 * 500.0 - (1.0 - PI / 4.0) * 10.0,
+        "volume",
+        &fg,
+    );
+    // the rounding on the copy at x = 20, its front: off centre toward +x and +y
+    let plain = 24000.0 + 3.0 * 500.0;
+    let gone = (1.0 - PI / 4.0) * 10.0;
+    let want_x = (3.0 * 500.0 * 0.0 - gone * 20.0) / (plain - gone);
+    near(m.centroid[0], want_x, "centroid x", &fg);
+    assert!(m.centroid[1] > 0.0, "{fg}");
 }
