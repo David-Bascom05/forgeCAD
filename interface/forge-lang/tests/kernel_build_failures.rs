@@ -1565,9 +1565,8 @@ round = fillet(edges(between: (b.start, b.side(s.r[1]))) + edges(between: (b.sta
 }
 
 /// To the next face backwards, as forwards with the frame flipped: a floor, a wall and a roof, and a
-/// block from mid air down to the floor or up to the roof. (Forge's add goes forwards only, so the
-/// block down is drawn on a flipped plane; the .fc `extrude next back xy at 0 0 25 ..` gave the
-/// same.)
+/// block from mid air down to the floor or up to the roof: down on a flipped plane, and on the
+/// plane facing up with `flip: true` (the .fc `extrude next back xy at 0 0 25 ..`), the same.
 #[test]
 fn to_next_backwards() {
     let full = 60.0 * 60.0 * 10.0 * 2.0 + 5.0 * 60.0 * 40.0;
@@ -1629,6 +1628,35 @@ extrude4 = extrude(s7, next)
 "#,
     );
     assert!((up - (full + 100.0 * 25.0)).abs() < 1e-3 * up, "{up}");
+    let back = builds(
+        r#"sketch s1(on: xy) {
+  r1 = rect(corner: (-30, -30), size: (60, 60))
+}
+extrude1 = extrude(s1, 10)
+sketch d2(on: offset(xy, 10)) {
+  p = pt(0, 0)
+}
+sketch s3(on: plane(at: d2.p, normal: Z, x: X)) {
+  r1 = rect(corner: (-30, -30), size: (5, 60))
+}
+extrude2 = extrude(s3, 50)
+sketch d4(on: offset(xy, 50)) {
+  p = pt(0, 0)
+}
+sketch s5(on: plane(at: d4.p, normal: Z, x: X)) {
+  r1 = rect(corner: (-30, -30), size: (60, 60))
+}
+extrude3 = extrude(s5, 10)
+sketch d6(on: offset(xy, 25)) {
+  p = pt(0, 0)
+}
+sketch s7(on: plane(at: d6.p, normal: Z, x: X)) {
+  r1 = rect(corner: (-5, -5), size: (10, 10))
+}
+extrude4 = extrude(s7, next, flip: true)
+"#,
+    );
+    assert!((back - flip).abs() < 1e-9 * flip, "{back} vs {flip}");
     // a cut from inside, backwards up to the floor's top
     let cut = builds(
         r#"sketch s1(on: xy) {
