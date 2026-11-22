@@ -1,8 +1,12 @@
-//! The deep tier: every property over fuzz histories, the suite's parts and any part files given,
-//! each failure shrunk to a minimal history and written as a part file.
+//! The deep tier: every property over fuzz histories, the suite's parts and any .fg part files
+//! given, each failure shrunk to a minimal history and written as a Rust literal of its features
+//! (`forge_model::adversarial::literal`).
 //!
 //! cargo run --release -p forge-proof --example meta -- [seeds N] [count N] [only PROP,..]
-//!     [adv N] [family NAME,..] [out DIR] [known FILE] [FILE.fc..]
+//!     [adv N] [family NAME,..] [out DIR] [known FILE] [FILE.fg..]
+//! A part file's features are taken without the ids the language names them by (the properties
+//! regenerate parts without them): one that names a face or edge (a fillet, a face edit) is
+//! skipped, said so.
 //! adv: N seeds of each adversarial family, moved and mirrored only exactly (even seeds), since
 //! an inexact motion moves their coincidences apart.
 //! known: lines `property: kind` already filed; those are counted but not shrunk, and any other
@@ -35,7 +39,7 @@ fn main() {
         .map(|l| l.split("  #").next().unwrap_or("").trim().to_string())
         .filter(|l| !l.is_empty() && !l.starts_with('#'))
         .collect();
-    let files: Vec<&String> = args.iter().filter(|a| a.ends_with(".fc")).collect();
+    let files: Vec<&String> = args.iter().filter(|a| a.ends_with(".fg")).collect();
     std::panic::set_hook(Box::new(|_| {}));
 
     let mut parts: Vec<(String, Part)> = (0..seeds)
@@ -61,13 +65,24 @@ fn main() {
     }
     for f in &files {
         let src = std::fs::read_to_string(f).expect("read part file");
-        // selectors resolve against the part as built above them
-        let m = std::panic::catch_unwind(|| forge_agent::model::Model::new(&src));
+        // selections resolve against the part as built above them
+        let m = std::panic::catch_unwind(|| forge_lang::fuzz::build(&src));
         match m {
-            Ok(m) if m.error.is_none() => parts.push((f.to_string(), Part { features: m.features })),
+            Ok(m) if m.error().is_none() => {
+                let part = m.part();
+                if part.regenerate_solids().is_ok() {
+                    parts.push((f.to_string(), part));
+                } else {
+                    eprintln!("{f}: skipped: it names faces or edges by feature ids");
+                }
+            }
             Ok(m) => {
-                let e = m.error.expect("an error");
-                eprintln!("{f}: line {}: {}", e.at + 1, e.msg)
+                let e = m.error().expect("an error");
+                eprintln!(
+                    "{f}: line {}: {}",
+                    m.line_of(&src, e) + 1,
+                    forge_lang::fuzz::message(e)
+                )
             }
             Err(_) => eprintln!("{f}: panics"),
         }
@@ -131,8 +146,8 @@ fn main() {
         eprintln!("shrinking {prop}: {kind} from {from}");
         let small = props::shrink(name, part, f, *seed);
         let again = props::run(name, f, &small, *seed).unwrap_or_else(|| hit.clone());
-        let text = forge_doc::text::print(&small);
-        let w = props::witness(prop, &small, *seed).map(|w| forge_doc::text::print(&w));
+        let text = forge_model::adversarial::literal(&small);
+        let w = props::witness(prop, &small, *seed).map(|w| forge_model::adversarial::literal(&w));
         println!(
             "== {prop}: {kind}  ({hits} hits, first {from}, seed {seed}, {} -> {} features)\n   {}\n{}",
             part.features.len(),
@@ -159,12 +174,12 @@ fn main() {
                 .take(6)
                 .collect::<Vec<_>>()
                 .join("-");
-            let path = format!("{dir}/{slug}-s{seed}.fc");
-            let head = format!("# {prop} (seed {seed}): {kind}\n# {}\n", again.detail);
+            let path = format!("{dir}/{slug}-s{seed}.rs");
+            let head = format!("// {prop} (seed {seed}): {kind}\n// {}\n", again.detail);
             std::fs::write(&path, head + &text).expect("write repro");
             if let Some(w) = props::witness(prop, &small, *seed) {
-                let path = format!("{dir}/{slug}-s{seed}.b.fc");
-                std::fs::write(&path, forge_doc::text::print(&w)).expect("write repro");
+                let path = format!("{dir}/{slug}-s{seed}.b.rs");
+                std::fs::write(&path, forge_model::adversarial::literal(&w)).expect("write repro");
             }
         }
     }

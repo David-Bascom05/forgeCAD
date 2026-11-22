@@ -7,25 +7,27 @@
 set -e
 dir=$(dirname "$0")
 cargo build -q --release -p forge-model --example regen1 --example bits
-cargo build -q --release -p forge-agent --example benchparts
+cargo build -q --release -p forge-lang --example benchparts
 bin="${CARGO_TARGET_DIR:-$PWD/target}/release/examples"
 now=$(mktemp)
-fcs=$(mktemp -d)
 for p in torture plate shaft housing coplanar patterns mixed hole-grid tour upto upto-flat; do
   for m in seq nary1; do
     n=$(perf stat -x, -e instructions:u "$bin/regen1" $p $m 2>&1 >/dev/null | awk -F, '/instructions/{print $1}')
     echo "$p $m ${n:-FAIL}" >> "$now"
   done
 done
-# the real parts (tools/bench-parts): selectors resolved first, uncounted
+# the real parts (interface/forge-lang/parts/bench/*.fg): the kernel's regen of the features each
+# part's .fg run sends, by the ids it names them with: the instructions of building the part and
+# regenerating it, less those of building it alone (the language and the first build, uncounted)
+count() { perf stat -x, -e instructions:u "$@" 2>&1 >/dev/null | awk -F, '/instructions/{print $1}'; }
 for p in gearbox volute crank valve heatsink quadarm conrod jack frame manifold bracket insert clamp hub guard; do
-  "$bin/benchparts" resolve $p "$fcs/$p.fc"
+  base=$(count "$bin/benchparts" resolve $p)
   for m in seq nary1; do
-    n=$(perf stat -x, -e instructions:u "$bin/benchparts" run "$fcs/$p.fc" $m 2>&1 >/dev/null | awk -F, '/instructions/{print $1}')
+    n=$(count "$bin/benchparts" run $p $m)
+    if [ -n "$n" ] && [ -n "$base" ]; then n=$((n - base)); fi
     echo "$p $m ${n:-FAIL}" >> "$now"
   done
 done
-rm -rf "$fcs"
 bits() { "$bin/bits"; "$bin/benchparts" bits; }
 if [ "$1" = --save ]; then
   mv "$now" "$dir/baseline.txt"

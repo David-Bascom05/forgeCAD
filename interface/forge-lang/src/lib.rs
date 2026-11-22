@@ -21,6 +21,7 @@ pub mod explode;
 pub mod export;
 pub mod feat_error;
 pub mod fillets;
+pub mod fuzz;
 pub mod geomemo;
 pub mod harness;
 pub mod holes;

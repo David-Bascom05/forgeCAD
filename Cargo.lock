@@ -262,8 +262,8 @@ version = "0.1.0"
 dependencies = [
  "forge-agent",
  "forge-bool",
- "forge-doc",
  "forge-geom",
+ "forge-lang",
  "forge-math",
  "forge-mesh",
  "forge-model",

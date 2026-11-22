@@ -111,12 +111,46 @@ fn nudge_moves_every_vertex() {
 /// test the probe, a few ulps further off, passed beside.
 #[test]
 fn hole_a_tolerance_off_its_plane() {
-    let part = fc("extrude new 10 rect 0 0 60 40
-extrude cut 3 at 22 29 7 circle 0 0 3
-extrude cut 2.999995 at 11.59574686652088 22.93665566589452 6.999995 circle 0 0 3
-extrude cut 3 at 42 12 7 circle 0 0 3
-extrude cut 12 at 50 14 -1 rect 0 0 10 8
-");
+    let part = fg(r#"sketch h0(on: offset(xy, -1)) {
+  p0 = pt(50, 14)
+}
+sketch h1(on: offset(xy, 0)) {
+  p0 = pt(0, 0)
+}
+sketch h2(on: offset(xy, 6.999995)) {
+  p0 = pt(11.59574686652088, 22.93665566589452)
+}
+sketch h3(on: offset(xy, 7)) {
+  p0 = pt(22, 29)
+  p1 = pt(42, 12)
+}
+sketch s1(on: plane(at: h1.p0, normal: Z, x: X)) {
+  e1 = line((0, 0), (60, 0))
+  e2 = line((60, 0), (60, 40))
+  e3 = line((60, 40), (0, 40))
+  e4 = line((0, 40), (0, 0))
+}
+f1 = extrude(s1, 10)
+sketch s2(on: plane(at: h3.p0, normal: Z, x: X)) {
+  e1 = circle((0, 0), 3)
+}
+f2 = cut(s2, -3)
+sketch s3(on: plane(at: h2.p0, normal: Z, x: X)) {
+  e1 = circle((0, 0), 3)
+}
+f3 = cut(s3, -2.999995)
+sketch s4(on: plane(at: h3.p1, normal: Z, x: X)) {
+  e1 = circle((0, 0), 3)
+}
+f4 = cut(s4, -3)
+sketch s5(on: plane(at: h0.p0, normal: Z, x: X)) {
+  e1 = line((0, 0), (10, 0))
+  e2 = line((10, 0), (10, 8))
+  e3 = line((10, 8), (0, 8))
+  e4 = line((0, 8), (0, 0))
+}
+f5 = cut(s5, -12)
+"#);
     for seed in [404, 406, 408] {
         if let Some(hit) = props::ulp(&part, seed) {
             panic!("seed {seed}: {}: {}", hit.kind, hit.detail);
@@ -129,9 +163,24 @@ extrude cut 12 at 50 14 -1 rect 0 0 10 8
 /// later cuts after a local imprint appended a new outer loop last.
 #[test]
 fn outer_loop_first() {
-    let mut b = fc("extrude new 10 rect 0 0 60 40
-extrude cut 20 at 20 20 -5 circle 0 0 4
-")
+    let mut b = fg(r#"sketch h0(on: offset(xy, -5)) {
+  p0 = pt(20, 20)
+}
+sketch h1(on: offset(xy, 0)) {
+  p0 = pt(0, 0)
+}
+sketch s1(on: plane(at: h1.p0, normal: Z, x: X)) {
+  e1 = line((0, 0), (60, 0))
+  e2 = line((60, 0), (60, 40))
+  e3 = line((60, 40), (0, 40))
+  e4 = line((0, 40), (0, 0))
+}
+f1 = extrude(s1, 10)
+sketch s2(on: plane(at: h0.p0, normal: Z, x: X)) {
+  e1 = circle((0, 0), 4)
+}
+f2 = cut(s2, -20)
+"#)
     .regenerate()
     .expect("builds");
     assert!(forge_topo::check(&b).is_empty());
@@ -150,12 +199,37 @@ extrude cut 20 at 20 20 -5 circle 0 0 4
 /// The oracle is not vacuous: a part's tools against the body without its last cut disagree.
 #[test]
 fn membership_catches_a_missing_cut() {
-    let part = fc("extrude new 20 rect 0 0 100 100
-extrude cut 30 at 50 50 -5 circle 0 0 20
-");
-    let body = fc("extrude new 20 rect 0 0 100 100")
-        .regenerate()
-        .expect("builds");
+    let part = fg(r#"sketch h0(on: offset(xy, -5)) {
+  p0 = pt(50, 50)
+}
+sketch h1(on: offset(xy, 0)) {
+  p0 = pt(0, 0)
+}
+sketch s1(on: plane(at: h1.p0, normal: Z, x: X)) {
+  e1 = line((0, 0), (100, 0))
+  e2 = line((100, 0), (100, 100))
+  e3 = line((100, 100), (0, 100))
+  e4 = line((0, 100), (0, 0))
+}
+f1 = extrude(s1, 20)
+sketch s2(on: plane(at: h0.p0, normal: Z, x: X)) {
+  e1 = circle((0, 0), 20)
+}
+f2 = cut(s2, -30)
+"#);
+    let body = fg(r#"sketch h0(on: offset(xy, 0)) {
+  p0 = pt(0, 0)
+}
+sketch s1(on: plane(at: h0.p0, normal: Z, x: X)) {
+  e1 = line((0, 0), (100, 0))
+  e2 = line((100, 0), (100, 100))
+  e3 = line((100, 100), (0, 100))
+  e4 = line((0, 100), (0, 0))
+}
+f1 = extrude(s1, 20)
+"#)
+    .regenerate()
+    .expect("builds");
     assert!(props::membership_of(&part, &body, 1).is_some());
 }
 
@@ -279,18 +353,50 @@ fn certify_catches_a_pinched_vertex() {
     );
 }
 
-fn fc(src: &str) -> Part {
-    forge_doc::text::parse(src).expect("parses")
+/// A .fg part's kernel features. The parts here name no face or edge, so they regenerate the same
+/// without the ids the language names features by (the properties regenerate them without).
+fn fg(src: &str) -> Part {
+    let b = forge_lang::fuzz::build(src);
+    assert!(b.run.errors.is_empty(), "{src}: {:?}", b.run.errors);
+    b.part()
 }
 
 /// M1: the same part rotated by an inexact rotation gets one more vertex between the same two
-/// faces (forgecad-gate/repros/M1-redundant-vertex-under-rotation.fc).
+/// faces (forgecad-gate/repros/M1-redundant-vertex-under-rotation).
 #[test]
 #[ignore = "M1: booleans leave vertices between the same two faces, as rounding falls"]
 fn m1_rotation_keeps_topology() {
-    let part = fc("extrude new 17 rect 0 0 82 138
-extrude add 15.625457658136117 axes 0.6111332437811676 0.7772515422987627 -0.14965359447638588 -0.7694654469826927 0.6277120352052737 0.11790049515662869 0.18557770406283436 0.04310035791786255 0.9816838976483822 at 76.92553480349156 114.11085208111551 9.80044547195848 rrect -7.706843451315201 -3.8327248781946053 15.413686902630403 7.665449756389211 2.6191965533564114
-");
+    let part = fg(r#"sketch h0(on: offset(xy, 0)) {
+  p0 = pt(0, 0)
+}
+sketch h1(on: offset(xy, 10.782129369606862)) {
+  p0 = pt(77.1111125075544, 114.15395243903338)
+}
+sketch h2(on: offset(xy, 9.650791877482094)) {
+  p0 = pt(77.53666804727273, 114.88810362341427)
+}
+sketch h3(on: offset(xy, 9.80044547195848)) {
+  p0 = pt(76.92553480349156, 114.11085208111551)
+}
+sketch s1(on: plane(at: h0.p0, normal: Z, x: X)) {
+  e1 = line((0, 0), (82, 0))
+  e2 = line((82, 0), (82, 138))
+  e3 = line((82, 138), (0, 138))
+  e4 = line((0, 138), (0, 0))
+}
+f1 = extrude(s1, 17)
+sketch s2(on: plane(at: h3.p0, normal: axis(h3.p0, h1.p0), x: axis(h3.p0, h2.p0))) {
+  e1 = line((-5.087646897958789, -3.8327248781946053), (5.087646897958789, -3.8327248781946053))
+  e2 = arc(center: (5.087646897958789, -1.2135283248381938), from: (5.087646897958789, -3.8327248781946053), to: (7.706843451315201, -1.2135283248381938))
+  e3 = line((7.706843451315201, -1.2135283248381938), (7.706843451315201, 1.2135283248381938))
+  e4 = arc(center: (5.087646897958789, 1.2135283248381938), from: (7.706843451315201, 1.2135283248381938), to: (5.087646897958789, 3.8327248781946053))
+  e5 = line((5.087646897958789, 3.8327248781946053), (-5.087646897958789, 3.8327248781946053))
+  e6 = arc(center: (-5.087646897958789, 1.2135283248381938), from: (-5.087646897958789, 3.8327248781946053), to: (-7.706843451315201, 1.213528324838194))
+  e7 = line((-7.706843451315201, 1.2135283248381938), (-7.706843451315201, -1.2135283248381938))
+  e8 = arc(center: (-5.087646897958789, -1.2135283248381938), from: (-7.706843451315201, -1.2135283248381936), to: (-5.08764689795879, -3.8327248781946053))
+}
+f2 = extrude(s2, 15.625457658136117)
+"#);
     assert_eq!(props::rigid(&part, 1), None);
 }
 
@@ -298,26 +404,89 @@ extrude add 15.625457658136117 axes 0.6111332437811676 0.7772515422987627 -0.149
 #[test]
 #[ignore = "M3: feature by feature leaves the coplanar ends of a void unmerged"]
 fn m3_void_ends_seq_matches_nary() {
-    let part = fc("extrude new 80 rect 0 0 200 150
-extrude cut 13 yz at 6 28 45 circle 0 0 2
-extrude cut 9 yz at 6 26 45 circle 0 0 1
-");
+    let part = fg(r#"sketch h0(on: offset(xy, 0)) {
+  p0 = pt(0, 0)
+}
+sketch h1(on: offset(xy, 45)) {
+  p0 = pt(6, 28)
+  p1 = pt(6, 26)
+}
+sketch s1(on: plane(at: h0.p0, normal: Z, x: X)) {
+  e1 = line((0, 0), (200, 0))
+  e2 = line((200, 0), (200, 150))
+  e3 = line((200, 150), (0, 150))
+  e4 = line((0, 150), (0, 0))
+}
+f1 = extrude(s1, 80)
+sketch s2(on: plane(at: h1.p0, normal: X, x: Y)) {
+  e1 = circle((0, 0), 2)
+}
+f2 = cut(s2, -13)
+sketch s3(on: plane(at: h1.p1, normal: X, x: Y)) {
+  e1 = circle((0, 0), 1)
+}
+f3 = cut(s3, -9)
+"#);
     assert_eq!(props::backends(&part, 1), None);
 }
 
 /// M4: a part split by a cylinder into its difference and intersection, combined again.
 #[test]
 fn m4_split_halves_combine_valid() {
-    let part = fc("a: extrude new 20 rect 0 0 100 100
-ball cut 6 -xz at 36 58 22
-revolve add -xz at 41 71 20 circle 7 -1 2
-extrude cut 17 at 46 60 16 circle 0 0 8
-b: extrude new 20 rect 0 0 100 100
-ball cut 6 -xz at 36 58 22
-revolve add -xz at 41 71 20 circle 7 -1 2
-extrude keep 17 at 46 60 16 circle 0 0 8
-combine add a b
-");
+    let part = fg(r#"sketch h0(on: offset(xy, 0)) {
+  p0 = pt(0, 0)
+}
+sketch h1(on: offset(xy, 16)) {
+  p0 = pt(46, 60)
+}
+sketch h2(on: offset(xy, 20)) {
+  p0 = pt(41, 71)
+}
+sketch h3(on: offset(xy, 22)) {
+  p0 = pt(36, 58)
+}
+sketch s1(on: plane(at: h0.p0, normal: Z, x: X)) {
+  e1 = line((0, 0), (100, 0))
+  e2 = line((100, 0), (100, 100))
+  e3 = line((100, 100), (0, 100))
+  e4 = line((0, 100), (0, 0))
+}
+f1 = extrude(s1, 20)
+sketch s2(on: plane(at: h3.p0, normal: Y, x: X)) {
+  c = pt(0, 0)
+}
+f2 = ball(s2.c, 6, cut: true)
+sketch s3(on: plane(at: h2.p0, normal: Y, x: X)) {
+  e1 = circle((7, -1), 2)
+  ax = line((0, 0), (0, 1), construction: true)
+}
+f3 = revolve(s3, axis: s3.ax)
+sketch s4(on: plane(at: h1.p0, normal: Z, x: X)) {
+  e1 = circle((0, 0), 8)
+}
+f4 = cut(s4, -17)
+sketch s5(on: plane(at: h0.p0, normal: Z, x: X)) {
+  e1 = line((0, 0), (100, 0))
+  e2 = line((100, 0), (100, 100))
+  e3 = line((100, 100), (0, 100))
+  e4 = line((0, 100), (0, 0))
+}
+f5 = extrude(s5, 20, new: true)
+sketch s6(on: plane(at: h3.p0, normal: Y, x: X)) {
+  c = pt(0, 0)
+}
+f6 = ball(s6.c, 6, cut: true)
+sketch s7(on: plane(at: h2.p0, normal: Y, x: X)) {
+  e1 = circle((7, -1), 2)
+  ax = line((0, 0), (0, 1), construction: true)
+}
+f7 = revolve(s7, axis: s7.ax)
+sketch s8(on: plane(at: h1.p0, normal: Z, x: X)) {
+  e1 = circle((0, 0), 8)
+}
+f8 = intersect(s8, 17)
+f9 = combine(f1, tools: [f5], op: "add")
+"#);
     let body = props::build(&part).expect("builds");
     assert!(
         forge_topo::check(&body).is_empty(),
@@ -327,7 +496,7 @@ combine add a b
 }
 
 fn valid(src: &str) {
-    let body = props::build(&fc(src)).expect("builds");
+    let body = props::build(&fg(src)).expect("builds");
     assert!(
         forge_topo::check(&body).is_empty(),
         "{:?}",
@@ -339,15 +508,50 @@ fn valid(src: &str) {
 #[test]
 #[ignore = "M5: face split crossed itself"]
 fn m5_ball_on_edge_either_frame() {
-    valid("extrude new 20 at -20 -20 -20 rect 0 0 40 40\nball add 5 xz at 20 0 0");
+    valid(
+        r#"sketch h0(on: offset(xy, -20)) {
+  p0 = pt(-20, -20)
+}
+sketch h1(on: offset(xy, 0)) {
+  p0 = pt(20, 0)
+}
+sketch s1(on: plane(at: h0.p0, normal: Z, x: X)) {
+  e1 = line((0, 0), (40, 0))
+  e2 = line((40, 0), (40, 40))
+  e3 = line((40, 40), (0, 40))
+  e4 = line((0, 40), (0, 0))
+}
+f1 = extrude(s1, 20)
+sketch s2(on: plane(at: h1.p0, normal: -Y, x: X)) {
+  c = pt(0, 0)
+}
+f2 = ball(s2.c, 5)
+"#,
+    );
 }
 
 /// M6: n-ary leaves open edges where a pocket's mouth is 0.00001 above the top.
 #[test]
 #[ignore = "M6: n-ary open edges near tolerance"]
 fn m6_nary_near_tolerance_pocket() {
-    let part = fc("extrude new 10 rect 0 0 60 40
-extrude cut 3.00001 at 20.829744830901628 31.98774163479715 7.00001 circle 0 0 3");
+    let part = fg(r#"sketch h0(on: offset(xy, 0)) {
+  p0 = pt(0, 0)
+}
+sketch h1(on: offset(xy, 7.00001)) {
+  p0 = pt(20.829744830901628, 31.98774163479715)
+}
+sketch s1(on: plane(at: h0.p0, normal: Z, x: X)) {
+  e1 = line((0, 0), (60, 0))
+  e2 = line((60, 0), (60, 40))
+  e3 = line((60, 40), (0, 40))
+  e4 = line((0, 40), (0, 0))
+}
+f1 = extrude(s1, 10)
+sketch s2(on: plane(at: h1.p0, normal: Z, x: X)) {
+  e1 = circle((0, 0), 3)
+}
+f2 = cut(s2, -3.00001)
+"#);
     assert_eq!(props::backends(&part, 1), None);
 }
 
@@ -355,9 +559,46 @@ extrude cut 3.00001 at 20.829744830901628 31.98774163479715 7.00001 circle 0 0 3
 #[test]
 #[ignore = "M9: FaceWrongSide on a lens at the hole's seam"]
 fn m9_tilted_pad_over_hole() {
-    valid("extrude new 15 rect 0 0 120 60
-extrude cut 17 at 75 19 -1 circle 0 0 3
-extrude add 8.945478516509796 z -0.061633258296996694 0.2939571355937309 0.9538294102748273 x -0.08391472378619189 0.9507366012975499 -0.29842626239168546 at 89.69521759175012 13.908448595830624 3.4058649537841124 rrect -13.632567574771072 -10.946070359275362 27.265135149542143 21.892140718550724 7.854519259083712");
+    valid(
+        r#"sketch h0(on: offset(xy, -1)) {
+  p0 = pt(75, 19)
+}
+sketch h1(on: offset(xy, 0)) {
+  p0 = pt(0, 0)
+}
+sketch h2(on: offset(xy, 3.107438691392427)) {
+  p0 = pt(89.61130286796393, 14.859185197128173)
+}
+sketch h3(on: offset(xy, 3.4058649537841124)) {
+  p0 = pt(89.69521759175012, 13.908448595830624)
+}
+sketch h4(on: offset(xy, 4.35969436405894)) {
+  p0 = pt(89.63358433345313, 14.202405731424355)
+}
+sketch s1(on: plane(at: h1.p0, normal: Z, x: X)) {
+  e1 = line((0, 0), (120, 0))
+  e2 = line((120, 0), (120, 60))
+  e3 = line((120, 60), (0, 60))
+  e4 = line((0, 60), (0, 0))
+}
+f1 = extrude(s1, 15)
+sketch s2(on: plane(at: h0.p0, normal: Z, x: X)) {
+  e1 = circle((0, 0), 3)
+}
+f2 = cut(s2, -17)
+sketch s3(on: plane(at: h3.p0, normal: axis(h3.p0, h4.p0), x: axis(h3.p0, h2.p0))) {
+  e1 = line((-5.77804831568736, -10.946070359275362), (5.77804831568736, -10.946070359275362))
+  e2 = arc(center: (5.77804831568736, -3.0915511001916505), from: (5.778048315687361, -10.946070359275362), to: (13.632567574771072, -3.0915511001916505))
+  e3 = line((13.632567574771072, -3.0915511001916505), (13.632567574771072, 3.0915511001916505))
+  e4 = arc(center: (5.77804831568736, 3.0915511001916505), from: (13.632567574771072, 3.0915511001916505), to: (5.778048315687361, 10.946070359275362))
+  e5 = line((5.77804831568736, 10.946070359275362), (-5.77804831568736, 10.946070359275362))
+  e6 = arc(center: (-5.77804831568736, 3.0915511001916505), from: (-5.778048315687359, 10.946070359275362), to: (-13.632567574771072, 3.0915511001916514))
+  e7 = line((-13.632567574771072, 3.0915511001916505), (-13.632567574771072, -3.0915511001916505))
+  e8 = arc(center: (-5.77804831568736, -3.0915511001916505), from: (-13.632567574771072, -3.0915511001916496), to: (-5.778048315687362, -10.946070359275362))
+}
+f3 = extrude(s3, 8.945478516509796)
+"#,
+    );
 }
 
 /// A cone framed at its apex with a torus on its rim (degen_cone_torus 3, scaled 4 times): the
@@ -380,10 +621,41 @@ fn cone_framed_at_its_apex_scales() {
 /// so a point in the open hole counted one crossing short and came out Inside (fuzz68 at count 20).
 #[test]
 fn point_in_a_hole_whose_seam_a_torus_cuts_short() {
-    let part = fc("extrude new 39 rect 0 0 199 103
-extrude cut 35 z 0 0 1 x 0.9887155042247666 0.14980537942799493 0 at 166 88 -4 circle 0 0 4
-revolve add -xz at 167.8 97.4 11.1 circle 8.7 0 2.7
-extrude add 32 z 0 0 1 x -0.360994102557712 0.9325680982740896 0 at 162 93 7 circle 0 0 7");
+    let part = fg(r#"sketch h0(on: offset(xy, -4)) {
+  p0 = pt(166, 88)
+  p1 = pt(166.98871550422476, 88.14980537942799)
+}
+sketch h1(on: offset(xy, 0)) {
+  p0 = pt(0, 0)
+}
+sketch h2(on: offset(xy, 11.1)) {
+  p0 = pt(167.8, 97.4)
+}
+sketch h3(on: offset(xy, 7)) {
+  p0 = pt(162, 93)
+  p1 = pt(161.63900589744227, 93.93256809827409)
+}
+sketch s1(on: plane(at: h1.p0, normal: Z, x: X)) {
+  e1 = line((0, 0), (199, 0))
+  e2 = line((199, 0), (199, 103))
+  e3 = line((199, 103), (0, 103))
+  e4 = line((0, 103), (0, 0))
+}
+f1 = extrude(s1, 39)
+sketch s2(on: plane(at: h0.p0, normal: Z, x: axis(h0.p0, h0.p1))) {
+  e1 = circle((0, 0), 4)
+}
+f2 = cut(s2, -35)
+sketch s3(on: plane(at: h2.p0, normal: Y, x: X)) {
+  e1 = circle((8.7, 0), 2.7)
+  ax = line((0, 0), (0, 1), construction: true)
+}
+f3 = revolve(s3, axis: s3.ax)
+sketch s4(on: plane(at: h3.p0, normal: Z, x: axis(h3.p0, h3.p1))) {
+  e1 = circle((0, 0), 7)
+}
+f4 = extrude(s4, 32)
+"#);
     let body = part.regenerate().expect("builds").compact();
     let p = forge_math::Point3::new(167.46767621091539, 88.39294512605494, 2.2139809034473172);
     for body in [body, part.regenerate_nary(1).expect("n-ary").compact()] {
@@ -410,16 +682,87 @@ fn point_on_a_ball_near_its_pole() {
 /// which is dropped: the hole's rim was left open and the volume wrong (fuzz19 at count 60).
 #[test]
 fn a_hole_in_a_disc_inside_a_ring_goes_to_the_disc() {
-    let part = fc("extrude new 10.566712767523594 rect 0 0 70.72881866274645 103.24012644860403
-revolve cut -xz at 54.636499807943885 52.16417873140876 10.410305724956826 circle 8.351160778816524 0 2.7599878880234967
-extrude add 7.466192008905245 z 0 0 1 x 0.9988990041027803 -0.046912467452413 0 at 30.847639674790706 6.694448623656604 5.115359149262295 circle 0 0 2.9515512238302954
-extrude cut 6.096829815264994 z 0 0 1 x -0.4926911440690709 0.8702042499068308 0 at 30.777739606003802 25.146464930412808 10.224669555097256 circle 0 0 6.201177187633486
-extrude cut 6.878676428117549 axes -0.4943085947740702 0.8533443497235724 -0.16571793483910305 -0.8025304514424799 -0.5212422570478675 -0.29026088950317486 -0.334071680392118 -0.010484763349645184 0.9424893538377441 at 26.85612632367834 47.46664923991346 10.210897973462817 rect -3.105823834349979 -2.0705492228999858 6.211647668699958 4.099687461341972
-ball add 4.1911579125771 -xz at 58.404464415959175 98.776984432684 10.12006847653015
-ball add 5.307822009781472 -xz at 21.252169984522265 29.55297220289709 5.372937186750471
-extrude cut 4.281061686283083 z 0 0 1 x -0.4624780083869633 0.886630752770525 0 at 31.574209806131584 35.7199672865349 9.99707989128916 circle 0 0 3.6656106845435033
-revolve add -xz at 31.964188863899732 36.04360694203633 10.700248852150338 circle 5.2713150056640465 0 1.0039475779366047
-");
+    let part = fg(r#"sketch h0(on: offset(xy, 0)) {
+  p0 = pt(0, 0)
+}
+sketch h1(on: offset(xy, 10.045180038623714)) {
+  p0 = pt(26.36181772890427, 48.31999358963703)
+}
+sketch h2(on: offset(xy, 10.12006847653015)) {
+  p0 = pt(58.404464415959175, 98.776984432684)
+}
+sketch h3(on: offset(xy, 10.210897973462817)) {
+  p0 = pt(26.85612632367834, 47.46664923991346)
+}
+sketch h4(on: offset(xy, 10.224669555097256)) {
+  p0 = pt(30.777739606003802, 25.146464930412808)
+  p1 = pt(30.285048461934732, 26.01666918031964)
+}
+sketch h5(on: offset(xy, 10.410305724956826)) {
+  p0 = pt(54.636499807943885, 52.16417873140876)
+}
+sketch h6(on: offset(xy, 10.700248852150338)) {
+  p0 = pt(31.964188863899732, 36.04360694203633)
+}
+sketch h7(on: offset(xy, 11.15338732730056)) {
+  p0 = pt(26.52205464328622, 47.45616447656381)
+}
+sketch h8(on: offset(xy, 5.115359149262295)) {
+  p0 = pt(30.847639674790706, 6.694448623656604)
+  p1 = pt(31.846538678893488, 6.6475361562041915)
+}
+sketch h9(on: offset(xy, 5.372937186750471)) {
+  p0 = pt(21.252169984522265, 29.55297220289709)
+}
+sketch h10(on: offset(xy, 9.99707989128916)) {
+  p0 = pt(31.574209806131584, 35.7199672865349)
+  p1 = pt(31.11173179774462, 36.606598039305425)
+}
+sketch s1(on: plane(at: h0.p0, normal: Z, x: X)) {
+  e1 = line((0, 0), (70.72881866274645, 0))
+  e2 = line((70.72881866274645, 0), (70.72881866274645, 103.24012644860403))
+  e3 = line((70.72881866274645, 103.24012644860403), (0, 103.24012644860403))
+  e4 = line((0, 103.24012644860403), (0, 0))
+}
+f1 = extrude(s1, 10.566712767523594)
+sketch s2(on: plane(at: h5.p0, normal: Y, x: X)) {
+  e1 = circle((8.351160778816524, 0), 2.7599878880234967)
+  ax = line((0, 0), (0, 1), construction: true)
+}
+f2 = revolve(s2, axis: s2.ax, cut: true)
+sketch s3(on: plane(at: h8.p0, normal: Z, x: axis(h8.p0, h8.p1))) {
+  e1 = circle((0, 0), 2.9515512238302954)
+}
+f3 = extrude(s3, 7.466192008905245)
+sketch s4(on: plane(at: h4.p0, normal: Z, x: axis(h4.p0, h4.p1))) {
+  e1 = circle((0, 0), 6.201177187633486)
+}
+f4 = cut(s4, -6.096829815264994)
+sketch s5(on: plane(at: h3.p0, normal: axis(h3.p0, h7.p0), x: axis(h3.p0, h1.p0))) {
+  e1 = line((-3.105823834349979, -2.0705492228999858), (3.105823834349979, -2.0705492228999858))
+  e2 = line((3.105823834349979, -2.0705492228999858), (3.105823834349979, 2.0291382384419863))
+  e3 = line((3.105823834349979, 2.0291382384419863), (-3.105823834349979, 2.0291382384419863))
+  e4 = line((-3.105823834349979, 2.0291382384419863), (-3.105823834349979, -2.0705492228999858))
+}
+f5 = cut(s5, -6.878676428117549)
+sketch s6(on: plane(at: h2.p0, normal: Y, x: X)) {
+  c = pt(0, 0)
+}
+f6 = ball(s6.c, 4.1911579125771)
+sketch s7(on: plane(at: h9.p0, normal: Y, x: X)) {
+  c = pt(0, 0)
+}
+f7 = ball(s7.c, 5.307822009781472)
+sketch s8(on: plane(at: h10.p0, normal: Z, x: axis(h10.p0, h10.p1))) {
+  e1 = circle((0, 0), 3.6656106845435033)
+}
+f8 = cut(s8, -4.281061686283083)
+sketch s9(on: plane(at: h6.p0, normal: Y, x: X)) {
+  e1 = circle((5.2713150056640465, 0), 1.0039475779366047)
+  ax = line((0, 0), (0, 1), construction: true)
+}
+f9 = revolve(s9, axis: s9.ax)
+"#);
     for b in [part.regenerate(), part.regenerate_nary(1)] {
         let b = b.expect("builds");
         assert!(forge_topo::check(&b).is_empty(), "{:?}", forge_topo::check(&b));
@@ -443,24 +786,37 @@ fn every_feature_takes_effect_or_is_refused() {
 #[test]
 fn effect_catches_a_skipped_copy() {
     for op in ["cut", "add"] {
-        let whole = fc(&format!(
-            "extrude new 10 rect 0 0 100 40
-h: extrude {op} 5 at 10 20 8 circle 0 0 4
-pattern h lin 1 0 0 4 20"
-        ));
-        let short = fc(&format!(
-            "extrude new 10 rect 0 0 100 40
-h: extrude {op} 5 at 10 20 8 circle 0 0 4
-pattern h lin 1 0 0 3 20"
-        ));
+        // a cut runs against its sketch's normal: -5 is 5 up, as the add
+        let tool = if op == "cut" {
+            "cut(s, -5)"
+        } else {
+            "extrude(s, 5)"
+        };
+        let part = |n: usize| {
+            fg(&format!(
+                "sketch b(on: xy) {{
+  o = rect(corner: (0, 0), size: (100, 40))
+}}
+base = extrude(b, 10)
+sketch s(on: offset(xy, 8)) {{
+  c = circle((10, 20), 4)
+}}
+h = {tool}
+copies = pattern(of: h, layout: lin(along: X, n: {n}, step: 20))
+"
+            ))
+        };
+        let (whole, short) = (part(4), part(3));
+        // the pattern
+        let last = whole.features.len() - 1;
         let body = short.regenerate().expect("builds").compact();
         let mut r = forge_math::rng::Rng::new(5);
         assert!(
-            props::tools_held(&whole, 2, &body, false, &mut r).is_some(),
+            props::tools_held(&whole, last, &body, false, &mut r).is_some(),
             "{op}"
         );
         let all = whole.regenerate().expect("builds").compact();
-        assert_eq!(props::tools_held(&whole, 2, &all, false, &mut r), None, "{op}");
+        assert_eq!(props::tools_held(&whole, last, &all, false, &mut r), None, "{op}");
     }
 }
 
@@ -468,8 +824,50 @@ pattern h lin 1 0 0 3 20"
 #[test]
 fn effect_lets_a_cut_take_a_whole_body() {
     use forge_model::{BodyFeature, Combine, Feature, Pick};
-    let cut = fc("extrude new 10 rect 0 0 100 40\nextrude cut 5 at 10 20 8 circle 0 0 4").features[1].clone();
-    let add = fc("extrude new 10 rect 0 0 100 40\nextrude add 5 at 10 20 8 circle 0 0 4").features[1].clone();
+    let cut = fg(r#"sketch h0(on: offset(xy, 0)) {
+  p0 = pt(0, 0)
+}
+sketch h1(on: offset(xy, 8)) {
+  p0 = pt(10, 20)
+}
+sketch s1(on: plane(at: h0.p0, normal: Z, x: X)) {
+  e1 = line((0, 0), (100, 0))
+  e2 = line((100, 0), (100, 40))
+  e3 = line((100, 40), (0, 40))
+  e4 = line((0, 40), (0, 0))
+}
+f1 = extrude(s1, 10)
+sketch s2(on: plane(at: h1.p0, normal: Z, x: X)) {
+  e1 = circle((0, 0), 4)
+}
+f2 = cut(s2, -5)
+"#)
+    .features
+    .last()
+    .expect("a tool")
+    .clone();
+    let add = fg(r#"sketch h0(on: offset(xy, 0)) {
+  p0 = pt(0, 0)
+}
+sketch h1(on: offset(xy, 8)) {
+  p0 = pt(10, 20)
+}
+sketch s1(on: plane(at: h0.p0, normal: Z, x: X)) {
+  e1 = line((0, 0), (100, 0))
+  e2 = line((100, 0), (100, 40))
+  e3 = line((100, 40), (0, 40))
+  e4 = line((0, 40), (0, 0))
+}
+f1 = extrude(s1, 10)
+sketch s2(on: plane(at: h1.p0, normal: Z, x: X)) {
+  e1 = circle((0, 0), 4)
+}
+f2 = extrude(s2, 5)
+"#)
+    .features
+    .last()
+    .expect("a tool")
+    .clone();
     let on = |feature| {
         Feature::Body(Box::new(BodyFeature::In {
             bodies: Pick::All,
@@ -502,30 +900,125 @@ fn mass_agrees_with_the_mesh_on_a_curve_with_two_arms() {
     let parts = [
         (
             "two arms",
-            "arm: loft profile at 1.92387 2.39903 0 circle 0 0 20.2127 profile at 2.77072 2.03649 66.9086 circle 0 0 23.9307
-             extrude cut 76.9086 z 0 0 1 x 1 0 0 at 17.0662172828 19.6484941013 -5 circle 0 0 1.69944
-             extrude cut 213.949 z 0.986371786648 -0.164531755306 0 x 0 0 1 at -105.516428921 17.6006689353 11.8710917543 circle 0 0 5.42322
-             extrude cut 213.949 z -0.590787687949 0.806675132166 -0.0156569126432 x 0 -0.0194055372993 -0.999811694832 at 63.1990978722 -86.2935055498 19.826670494 circle 0 0 2.62392",
+            r#"sketch h0(on: offset(xy, -5)) {
+  p0 = pt(17.0662172828, 19.6484941013)
+}
+sketch h1(on: offset(xy, 0)) {
+  p0 = pt(1.92387, 2.39903)
+}
+sketch h2(on: offset(xy, 11.8710917543)) {
+  p0 = pt(-105.516428921, 17.6006689353)
+  p1 = pt(-104.53005713435162, 17.43613717999394)
+}
+sketch h3(on: offset(xy, 18.826858799168352)) {
+  p0 = pt(63.19909787219998, -86.31291108709927)
+}
+sketch h4(on: offset(xy, 19.811013581356804)) {
+  p0 = pt(62.6083101842512, -85.48683041763428)
+}
+sketch h5(on: offset(xy, 19.826670494)) {
+  p0 = pt(63.1990978722, -86.2935055498)
+}
+sketch h6(on: offset(xy, 66.9086)) {
+  p0 = pt(2.77072, 2.03649)
+}
+sketch s1_0(on: plane(at: h1.p0, normal: Z, x: X)) {
+  e1 = circle((0, 0), 20.2127)
+}
+sketch s1_1(on: plane(at: h6.p0, normal: Z, x: X)) {
+  e1 = circle((0, 0), 23.9307)
+}
+f1 = loft([s1_0, s1_1])
+sketch s2(on: plane(at: h0.p0, normal: Z, x: X)) {
+  e1 = circle((0, 0), 1.69944)
+}
+f2 = cut(s2, -76.9086)
+sketch s3(on: plane(at: h2.p0, normal: axis(h2.p0, h2.p1), x: Z)) {
+  e1 = circle((0, 0), 5.42322)
+}
+f3 = cut(s3, -213.949)
+sketch s4(on: plane(at: h5.p0, normal: axis(h5.p0, h4.p0), x: axis(h5.p0, h3.p0))) {
+  e1 = circle((0, 0), 2.62392)
+}
+f4 = cut(s4, -213.949)
+"#,
         ),
         (
             "no region",
-            "arm: loft profile at -2.76075 -0.743971 0 circle 0 0 5.58991 profile at 1.86503 0.567644 56.3615 circle 0 0 10.7266 profile at -1.45221 -2.28102 112.723 circle 0 0 12.0474
-             extrude cut 122.723 z 0 0 1 x 1 0 0 at -11.4885874662 -1.52046134588 -5 circle 0 0 2.05112
-             extrude cut 122.723 z 0 0 1 x 1 0 0 at 7.88027351596 8.6001202425 -5 circle 0 0 1.84516",
+            r#"sketch h0(on: offset(xy, -5)) {
+  p0 = pt(-11.4885874662, -1.52046134588)
+  p1 = pt(7.88027351596, 8.6001202425)
+}
+sketch h1(on: offset(xy, 0)) {
+  p0 = pt(-2.76075, -0.743971)
+}
+sketch h2(on: offset(xy, 112.723)) {
+  p0 = pt(-1.45221, -2.28102)
+}
+sketch h3(on: offset(xy, 56.3615)) {
+  p0 = pt(1.86503, 0.567644)
+}
+sketch s1_0(on: plane(at: h1.p0, normal: Z, x: X)) {
+  e1 = circle((0, 0), 5.58991)
+}
+sketch s1_1(on: plane(at: h3.p0, normal: Z, x: X)) {
+  e1 = circle((0, 0), 10.7266)
+}
+sketch s1_2(on: plane(at: h2.p0, normal: Z, x: X)) {
+  e1 = circle((0, 0), 12.0474)
+}
+f1 = loft([s1_0, s1_1, s1_2])
+sketch s2(on: plane(at: h0.p0, normal: Z, x: X)) {
+  e1 = circle((0, 0), 2.05112)
+}
+f2 = cut(s2, -122.723)
+sketch s3(on: plane(at: h0.p1, normal: Z, x: X)) {
+  e1 = circle((0, 0), 1.84516)
+}
+f3 = cut(s3, -122.723)
+"#,
         ),
         (
             "turn in a chain step",
-            "arm: loft profile at 1.71584 2.90262 0 circle 0 0 22.4298 profile at -0.877333 -0.276794 47.8258 circle 0 0 10.8143 profile at 2.41955 -0.408761 95.6516 circle 0 0 17.746
-             extrude cut 219.311 z 0.16714244831 -0.985932757328 0 x 0 0 1 at -18.3281298161 108.113191765 22.4474540782 circle 0 0 4.05556
-             extrude add 105.652 z 0 0 1 x 1 0 0 at 17.0008755596 5.12124836525 -5 circle 0 0 1.14856",
+            r#"sketch h0(on: offset(xy, -5)) {
+  p0 = pt(17.0008755596, 5.12124836525)
+}
+sketch h1(on: offset(xy, 0)) {
+  p0 = pt(1.71584, 2.90262)
+}
+sketch h2(on: offset(xy, 22.4474540782)) {
+  p0 = pt(-18.3281298161, 108.113191765)
+  p1 = pt(-18.160987367789954, 107.12725900767173)
+}
+sketch h3(on: offset(xy, 47.8258)) {
+  p0 = pt(-0.877333, -0.276794)
+}
+sketch h4(on: offset(xy, 95.6516)) {
+  p0 = pt(2.41955, -0.408761)
+}
+sketch s1_0(on: plane(at: h1.p0, normal: Z, x: X)) {
+  e1 = circle((0, 0), 22.4298)
+}
+sketch s1_1(on: plane(at: h3.p0, normal: Z, x: X)) {
+  e1 = circle((0, 0), 10.8143)
+}
+sketch s1_2(on: plane(at: h4.p0, normal: Z, x: X)) {
+  e1 = circle((0, 0), 17.746)
+}
+f1 = loft([s1_0, s1_1, s1_2])
+sketch s2(on: plane(at: h2.p0, normal: axis(h2.p0, h2.p1), x: Z)) {
+  e1 = circle((0, 0), 4.05556)
+}
+f2 = cut(s2, -219.311)
+sketch s3(on: plane(at: h0.p0, normal: Z, x: X)) {
+  e1 = circle((0, 0), 1.14856)
+}
+f3 = extrude(s3, 105.652)
+"#,
         ),
     ];
     for (name, src) in parts {
-        let lines: Vec<&str> = src.lines().map(str::trim).collect();
-        let m = forge_agent::model::Model::new(&lines.join("\n"));
-        let part = Part {
-            features: m.features.clone(),
-        };
+        let part = fg(src);
         assert!(part.regenerate().is_ok(), "{name} builds");
         assert!(
             props::mass_mesh(&part, 1).is_none(),
@@ -560,13 +1053,9 @@ fn every_fillet_holds_against_the_part_before_it() {
 fn the_ridge_check_tells_a_ball_on_a_ridge_from_one_on_a_true_rim() {
     use forge_proof::blends::ridges;
     let body = |src: &str| {
-        let m = forge_agent::model::Model::new(src);
-        assert!(
-            m.error.is_none(),
-            "{src}: {:?}",
-            m.error.as_ref().map(|f| f.msg.clone())
-        );
-        m.body().expect("a body").clone()
+        let b = forge_lang::fuzz::build(src);
+        assert!(b.run.errors.is_empty(), "{src}: {:?}", b.run.errors);
+        b.body().expect("a body")
     };
     // a ring of a shallow dome: wall, then short flats rising inward. An arc of radius 2 from the
     // wall ends on the first ridge, with the ball's centre under the top: the next flat runs into it
@@ -574,22 +1063,35 @@ fn the_ridge_check_tells_a_ball_on_a_ridge_from_one_on_a_true_rim() {
     let ridge = (31.26f64, 11.53f64);
     let cy = ridge.1 - (4.0f64 - (ridge.0 - (wx - 2.0)) * (ridge.0 - (wx - 2.0))).sqrt();
     let cx = wx - 2.0;
-    let rest = |from: (f64, f64)| {
+    // the outline turned round the sketch's y; its second segment the wall's top or the arc (the
+    // same entity name e2, so the faces after it keep their names), the rest from the ridge
+    let ring = |second: String, wall_top: f64| {
         format!(
-            "line {} {} 30 11.6 line 30 11.6 25 11.6 line 25 11.6 25 0 line 25 0 {wx} 0",
-            from.0, from.1
+            "sketch h0(on: offset(xy, 0)) {{
+  p0 = pt(0, 0)
+}}
+sketch s1(on: plane(at: h0.p0, normal: Z, x: X)) {{
+  e1 = line(({wx}, 0), ({wx}, {wall_top}))
+  e2 = {second}
+  e3 = line(({r0}, {r1}), (30, 11.6))
+  e4 = line((30, 11.6), (25, 11.6))
+  e5 = line((25, 11.6), (25, 0))
+  e6 = line((25, 0), ({wx}, 0))
+  ax = line((0, 0), (0, 1), construction: true)
+}}
+f1 = revolve(s1, axis: s1.ax)
+",
+            r0 = ridge.0,
+            r1 = ridge.1
         )
     };
-    let sharp = format!(
-        "revolve z 0 0 1 x 1 0 0 at 0 0 0 axis 0 0 0 1 loop line {wx} 0 {wx} {wy} line {wx} {wy} {} {} {}\n",
-        ridge.0,
-        ridge.1,
-        rest(ridge)
-    );
-    let a1 = forge_math::dmath::atan2(ridge.1 - cy, ridge.0 - cx).to_degrees();
-    let rounded = format!(
-        "revolve z 0 0 1 x 1 0 0 at 0 0 0 axis 0 0 0 1 loop line {wx} 0 {wx} {cy} arc {cx} {cy} 2 0 {a1} {}\n",
-        rest(ridge)
+    let sharp = ring(format!("line(({wx}, {wy}), ({}, {}))", ridge.0, ridge.1), wy);
+    let rounded = ring(
+        format!(
+            "arc(center: ({cx}, {cy}), from: ({wx}, {cy}), to: ({}, {}))",
+            ridge.0, ridge.1
+        ),
+        cy,
     );
     let (before, after) = (body(&sharp), body(&rounded));
     assert!(
@@ -597,9 +1099,12 @@ fn the_ridge_check_tells_a_ball_on_a_ridge_from_one_on_a_true_rim() {
         "a ridge the next flat covers"
     );
     // past the wall's far side: a plate 1 thick, ball 2, its far face falling away
-    let plate = body("b: extrude 20 rect 0 0 1 30\n");
-    let m = forge_agent::model::Model::new("b: extrude 20 rect 0 0 1 30\nfillet 2 (edges near 0 15 20)\n");
-    let rim = m.body().expect("a ball past the wall").clone();
+    let plate_src = "sketch s(on: xy) {\n  o = rect(corner: (0, 0), size: (1, 30))\n}\nb = extrude(s, 20)\n";
+    let plate = body(plate_src);
+    // the plate's top edge at x = 0
+    let rim = body(&format!(
+        "{plate_src}r = fillet(edges(of: b.end, along: Y, extreme: -X), 2)\n"
+    ));
     assert!(ridges(&plate, &rim).is_empty(), "a true rim");
 }
 
@@ -608,8 +1113,11 @@ fn the_blend_checks_fail_what_they_should() {
     use forge_math::Point3;
     use forge_ops::{FilletEdge, FilletOptions, Radius, fillet, fillet_with};
     use forge_proof::blends::Radii;
-    let m = forge_agent::model::Model::new("b: extrude 40 rect 0 0 100 80\n");
-    let before = m.body().expect("a block").clone();
+    let before = forge_lang::fuzz::build(
+        "sketch s(on: xy) {\n  o = rect(corner: (0, 0), size: (100, 80))\n}\nb = extrude(s, 40)\n",
+    )
+    .body()
+    .expect("a block");
     let edge = |p: Point3| {
         before
             .edge_ids()
