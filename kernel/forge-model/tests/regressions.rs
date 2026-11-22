@@ -3711,7 +3711,7 @@ fn equal_rods_crossing_end_pieces_at_free_vertices() {
                         })
                     ),
                     "{:?}",
-                    b.map(|b| volume(&b))
+                    b.map(|b| b.faces.len())
                 );
                 continue;
             }
