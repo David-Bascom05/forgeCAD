@@ -609,7 +609,11 @@ scattered tolerance code (2.1) should be one implementation of it.
 1. **Carriers first (dimension 2).** Two carriers S, T, of the same body or of different bodies,
    are *tolerance-equal* iff they are of one kind and their canonical parameters agree within the
    tolerance over the region R where their faces' boxes, grown by LINEAR, overlap:
-   - planes: max over R's corners of |dist(x, T)| for x on S ≤ LINEAR;
+   - planes: max over the corners of both faces' extent (the hull of their grown boxes) of
+     |dist(x, T)| for x on S ≤ LINEAR, R itself not empty. (Measured over R alone, the test merges
+     any two faces that meet at an edge: R is then a slab 2·LINEAR across round the edge, where
+     each plane is within LINEAR of the other. The reference first did this, and under it every
+     solid's faces fell into one class; see exact-comparison.md.)
    - cylinders and cones: the axis lines within LINEAR over R's extent along the axis, and the
      radius or half-angle within LINEAR at R's ends;
    - spheres and tori: centres, axes and radii likewise.
