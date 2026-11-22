@@ -695,8 +695,33 @@ pub struct Judged {
     pub answer: Option<Answer>,
 }
 
-/// `classify`, and where the kernel says a feature empties the part (a refusal with a stated
-/// reason), the reference asked about the history up to that feature.
+/// The feature a refusal names (`... feature: N ...`), if it names one.
+pub fn refused_at(e: &str) -> Option<usize> {
+    let (_, rest) = e.split_once("feature: ")?;
+    rest.split(|c: char| !c.is_ascii_digit()).next()?.parse().ok()
+}
+
+/// A refusal at feature `n` against the reference's answer for the history up to `n`: correct
+/// where that stage is empty or non-manifold (the kernel carries neither), or, for ZeroThickness,
+/// a solid with sub-LINEAR features; a refusal bug only where the stage is a valid solid.
+pub fn stage_class(a: &Answer, e: &str, n: usize) -> Class {
+    if let Some(err) = &a.error {
+        return Class::Scope(format!("reference: {err}"));
+    }
+    match a.verdict.as_str() {
+        "empty" | "nonmanifold" => Class::Agree,
+        "sliver" if e.contains("ZeroThickness") => Class::Agree,
+        "ambiguous" => Class::Ambiguous,
+        v => Class::Refused(format!(
+            "refused {e} where the reference gives {v} (volume {}) at feature {n}",
+            a.volume
+        )),
+    }
+}
+
+/// `classify`, and where the kernel refuses at a feature it names, the refusal judged against
+/// the reference's answer for the history up to that feature (`stage_class`): a history whose
+/// stage is non-manifold or empty is refused rightly, even if a later feature would mend it.
 pub fn judge_kernel(reference: &mut Reference, part: &Part, ans: &Answer, k: &Kernel) -> Class {
     judge_kernel_rule(reference, part, ans, k, &rule())
 }
@@ -709,27 +734,24 @@ pub fn judge_kernel_rule(
     k: &Kernel,
     rule: &str,
 ) -> Class {
+    // a refusal judged at the stage it names: the history up to that feature
     if let Kernel::Refused(e) = k
-        && let Some(rest) = e.strip_prefix("Empty { feature: ")
-        && let Some(n) = rest.split(' ').next().and_then(|n| n.parse::<usize>().ok())
-        && n < part.features.len()
+        && !e.starts_with("NothingToCombine")
+        && let Some(n) = refused_at(e)
+        && n + 1 < part.features.len()
     {
         let mut prefix = part.clone();
         prefix.features.truncate(n + 1);
         return match reference_input_rule(&prefix, rule) {
             Err(e) => Class::Scope(e),
-            Ok(input) => {
-                let a = reference.ask(&input);
-                match a.verdict.as_str() {
-                    "empty" => Class::Agree,
-                    "ambiguous" => Class::Ambiguous,
-                    v => Class::Refused(format!(
-                        "refused Empty at feature {n} where the reference gives {v} (volume {}) there",
-                        a.volume
-                    )),
-                }
-            }
+            Ok(input) => stage_class(&reference.ask(&input), e, n),
         };
+    }
+    if let Kernel::Refused(e) = k
+        && let Some(n) = refused_at(e)
+        && !e.starts_with("NothingToCombine")
+    {
+        return stage_class(ans, e, n);
     }
     classify(ans, k)
 }

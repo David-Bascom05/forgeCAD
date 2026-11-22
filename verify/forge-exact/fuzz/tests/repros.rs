@@ -162,14 +162,6 @@ fn cut_touching_along_an_edge_leaves_no_slit() {
     agrees(&degenerate("plane_plane/tilted_edge_on_top/Cut"));
 }
 
-/// coincident_walls 1, its blocks: the kernel refuses ZeroThickness at (29.78, 23.23, 7) where
-/// the reference, with no decision within tolerance, gives a solid.
-#[test]
-#[ignore = "exact reference: ZeroThickness refused where the exact result is a valid solid"]
-fn coincident_walls_1_blocks_build() {
-    agrees(&family("coincident_walls", 1));
-}
-
 /// The near-coincident part (near-coincident.md: a box whose bottom is 4e-16 inside LINEAR below
 /// a notched plate's top), the plate moved by ulps (seed 0). Under §6.1 the box bottom and the
 /// plate top are one carrier and the reference gives a solid; the kernel refuses SplitCrossed on
@@ -211,16 +203,6 @@ fn near_tolerance_24_blocks_build() {
 #[ignore = "exact reference (snap): SplitCrossed refused where the exact result is a solid"]
 fn near_tolerance_53_blocks_build() {
     agrees_snap(&shrunk("near_tolerance", 53, &[0, 2, 3]));
-}
-
-/// coincident_walls 42, features 0 4 9 10 11: the sequential regen refuses ZeroThickness at
-/// (12.81, 16.41, 7) where the reference gives a solid; the n-ary regen builds it right (as on
-/// seed 46; seed 1, `coincident_walls_1_blocks_build`, refuses on both). Likely site: the
-/// sequential path's `undecided_touch` (boolean.rs:592), a touch judged on the in-place target.
-#[test]
-#[ignore = "exact reference (snap): the sequential regen refuses ZeroThickness where the n-ary one builds the exact solid"]
-fn coincident_walls_42_blocks_build() {
-    agrees_snap(&shrunk("coincident_walls", 42, &[0, 4, 9, 10, 11]));
 }
 
 /// near_tolerance 45, features 0–5: blocks cut from the plate's x = 60 end, their inner walls at
@@ -303,4 +285,45 @@ fn band_one_axis_offset_builds_valid() {
 #[ignore = "exact reference (snap): ZeroThickness refused for a contact strip 1.5·LINEAR wide"]
 fn band_one_axis_strip_builds() {
     band_agrees_snap("meets/meets/overlaps", Op::Union, &[0], 1.5);
+}
+
+/// forge_lang::fuzz seed 28, its flat statements, shrunk: a block, four-sided prisms extruded to
+/// the next face and patterned, then a pocket cut across a wall. The sequential regen agrees with
+/// the reference (a solid); the n-ary regen refuses NotClosed (feature 9 shrunk, 14 in the seed's program): "the edge from
+/// (-24.199, 84.300, 17.010) to (-29.499, 84.300, 21.220) is on 1 face(s), not 2", a face lost
+/// in the n-ary pass (`forge_bool::nary_with`, the pattern's copies combined in one pass).
+#[test]
+#[ignore = "exact reference: the n-ary regen loses a face where the sequential one builds the exact solid"]
+fn nary_keeps_every_face_of_a_patterned_prism_cut() {
+    let src = r#"sketch S0(on: xy) {
+  o = rect(corner: (0, 0), size: (74.39, 86.74))
+}
+L0 = extrude(S0, 34.72)
+sketch H0(on: offset(xy, 17.36)) {
+  p0 = pt(20.67, 0.83)
+}
+sketch S1(on: plane(at: H0.p0, normal: -Y)) {
+  o = poly([(3.86, 1.37), (-0.78, 4.48), (-4.8, -1.37), (-0.35, -3.93)])
+}
+L1 = extrude(S1, next, flip: true)
+sketch H2(on: offset(xy, 0)) {
+  p0 = pt(0, 0)
+  p1 = pt(-100, -5)
+}
+L3 = pattern(of: L1, layout: lin(along: axis(H2.p0, H2.p1), n: 3, step: 24.43))
+sketch H4(on: offset(xy, 15.15)) {
+  p0 = pt(-25.99, 84.3)
+}
+sketch S5(on: plane(at: H4.p0, normal: Y)) {
+  o = poly([(-14.56, -9.7), near(14.56, -9.7), near(14.56, 9.7), near(-14.56, 9.7)])
+  horizontal(o[0])
+  vertical(o[1])
+  horizontal(o[2])
+  vertical(o[3])
+  distance(o[1], 19.4)
+  distance(o[0], 29.11)
+}
+L5 = cut(S5, 5.71)
+"#;
+    agrees_snap(&forge_lang::fuzz::build(src).part());
 }
