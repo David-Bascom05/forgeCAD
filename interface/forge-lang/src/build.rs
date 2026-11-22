@@ -15,6 +15,8 @@ use std::time::Instant;
 pub struct Stage {
     pub solids: Vec<Solid>,
     view: OnceCell<Body>,
+    /// Each solid finished (faces on one surface joined), when there are several.
+    finished: OnceCell<Vec<Body>>,
     spans: OnceCell<Vec<Span>>,
     /// Which stage this is, never another's: equal ids, the same stage (a kept one served again
     /// has its own).
@@ -35,6 +37,7 @@ impl Stage {
         Stage {
             solids,
             view: OnceCell::new(),
+            finished: OnceCell::new(),
             spans: OnceCell::new(),
             id: NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
         }
@@ -48,13 +51,16 @@ impl Stage {
         Some(self.view.get_or_init(|| {
             let mut all = Body::new();
             let mut spans = vec![];
-            for s in &self.solids {
-                let one = forge_model::finish(s.body.clone());
+            // one solid: finished into the view itself; several: each finished once, kept for
+            // what looks at them one by one (validity, each one's mass)
+            let several = self.solids.len() > 1;
+            let mut alone = (!several).then(|| forge_model::finish(self.solids[0].body.clone()));
+            let each: &[Body] = if several { self.finished() } else { &[] };
+            for (k, s) in self.solids.iter().enumerate() {
                 let (f, e) = (all.faces.len() as u32, all.edges.len() as u32);
-                if self.solids.len() == 1 {
-                    all = one;
-                } else {
-                    all.append(&one);
+                match alone.take() {
+                    Some(one) => all = one,
+                    None => all.append(&each[k]),
                 }
                 spans.push(Span {
                     solid: s.id,
@@ -71,6 +77,17 @@ impl Stage {
     pub fn spans(&self) -> &[Span] {
         let _ = self.view();
         self.spans.get().map_or(&[], |s| &s[..])
+    }
+
+    /// Each solid finished, in order: worked out once for the view and whatever looks at the
+    /// solids one by one.
+    pub fn finished(&self) -> &[Body] {
+        self.finished.get_or_init(|| {
+            self.solids
+                .iter()
+                .map(|s| forge_model::finish(s.body.clone()))
+                .collect()
+        })
     }
 
     /// The bodies as one, unfinished: the pieces each feature made, for lineage.

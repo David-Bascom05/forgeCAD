@@ -27,19 +27,23 @@ pub struct Invalid {
 /// The problems of each body on its own (bodies may touch or overlap; the joined view's skins
 /// then overlap without anything being wrong).
 pub fn problems(ev: &mut Eval) -> Vec<Invalid> {
-    let Some(solids) = ev.b.stages.last().map(|s| s.solids.clone()) else {
+    let Some(stage) = ev.b.stages.last().cloned() else {
         return vec![];
     };
+    let solids = &stage.solids;
     let mut out = vec![];
     if solids.len() > 1 {
-        for s in &solids {
-            let body = forge_model::finish(s.body.clone());
-            for p in check(&body) {
-                out.push(invalid(ev, Some(s.id), &body, &p));
+        for (s, body) in solids.iter().zip(stage.finished()) {
+            for p in check(body) {
+                out.push(invalid(ev, Some(s.id), body, &p));
             }
         }
-    } else if let Some(body) = ev.b.body().cloned() {
-        for p in check(&body) {
+    } else if let Some(problems) = ev.b.body().map(check)
+        && !problems.is_empty()
+    {
+        // the body copied only to describe what is wrong (`invalid` reads the run as well)
+        let body = ev.b.body().cloned().expect("checked above");
+        for p in problems {
             out.push(invalid(ev, solids.first().map(|s| s.id), &body, &p));
         }
     }

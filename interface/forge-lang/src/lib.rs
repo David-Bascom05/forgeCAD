@@ -377,6 +377,49 @@ fn fit_sizes(src: &str, opts: &Options, run: &mut Run, mut cache: Cache) -> Cach
     cache
 }
 
+/// Bodies' mass properties as one: volumes and areas summed, the centroid weighed by volume, each
+/// inertia moved to it (parallel axes), errors summed.
+fn sum_masses(ms: &[forge_topo::mass::MassProps]) -> forge_topo::mass::MassProps {
+    use forge_math::{Point3, Vec3};
+    let volume: f64 = ms.iter().map(|m| m.volume).sum();
+    let area: f64 = ms.iter().map(|m| m.area).sum();
+    let c = if volume != 0.0 {
+        ms.iter()
+            .fold(Vec3::ZERO, |a, m| a + (m.centroid - Point3::ORIGIN) * m.volume)
+            / volume
+    } else {
+        Vec3::ZERO
+    };
+    let centroid = Point3::ORIGIN + c;
+    let mut inertia = [[0.0; 3]; 3];
+    let mut err = [0.0; 4];
+    for m in ms {
+        let d = m.centroid - centroid;
+        let d = [d.x, d.y, d.z];
+        let dd = d[0] * d[0] + d[1] * d[1] + d[2] * d[2];
+        for i in 0..3 {
+            for j in 0..3 {
+                let shift = if i == j { dd - d[i] * d[j] } else { -d[i] * d[j] };
+                inertia[i][j] += m.inertia[i][j] + m.volume * shift;
+            }
+        }
+        for (e, x) in err.iter_mut().zip(m.err) {
+            *e += x;
+        }
+    }
+    let (principal, axes) = forge_topo::mass::eigen(inertia);
+    forge_topo::mass::MassProps {
+        volume,
+        area,
+        centroid,
+        inertia,
+        principal,
+        axes,
+        err,
+        faces: vec![],
+    }
+}
+
 fn run_once(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
     let t0 = Instant::now();
     let mut timings = Timings::default();
@@ -472,6 +515,13 @@ fn run_once(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
             && !assembly
             && !(whole.is_some() && ev.b.stages.last().is_some_and(|st| st.solids.len() == 1));
         let solids = if each { props::solids(&ev) } else { vec![] };
+        // every solid's own mass is wanted anyway: the whole is their sum, not worked out again
+        // over the joined body (twice the integrals, where .fc did them once)
+        let whole = match whole {
+            Some(_) if each && solids.len() == ev.b.stages.last().map_or(0, |st| st.solids.len()) => None,
+            w => w,
+        };
+        let from_parts = each && whole.is_none() && checks && ev.b.measured().is_none();
         // a thermoform's modelled part too (`thermo.rs`)
         let owed = ev.masses_owed.take().unwrap_or_default();
         let mass = |b: &forge_topo::Body| forge_topo::mass::mass(b);
@@ -497,6 +547,19 @@ fn run_once(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
             }
             ev.b.memo_keep(key, m);
         }
+        let w = match (&e, from_parts) {
+            (Some(parts), true) => Some(
+                parts
+                    .iter()
+                    .map(|m| m.clone().ok_or(()))
+                    .collect::<Result<Vec<_>, ()>>()
+                    .map(|ms| sum_masses(&ms))
+                    .or_else(|()| ev.b.body().map_or(Err(()), |b| mass(b).map_err(|_| ()))),
+            )
+            .and_then(Result::ok)
+            .map(Ok),
+            _ => w,
+        };
         (w, e)
     };
     let measure = match (built_all && opts.checks, ev.b.measured()) {
