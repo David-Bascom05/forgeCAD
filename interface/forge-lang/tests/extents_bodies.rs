@@ -108,3 +108,29 @@ fn revolve_up_to_a_sketch_plane() {
     let e = format!("{:?}", r.errors);
     assert!(e.contains("NotSquare"), "{e}");
 }
+
+/// `.fc`'s `revolve .. axis` took an origin axis, a work axis or a straight edge of the part:
+/// Forge's revolve takes each, where it lies in the profile's plane (a square 10 x 10, its near
+/// side 10 off the axis, a quarter turn: pi / 4 * (20^2 - 10^2) * 10).
+#[test]
+fn revolve_about_an_axis_of_the_part_or_the_origin() {
+    let quarter = std::f64::consts::PI / 4.0 * (400.0 - 100.0) * 10.0;
+    let prof = "sketch s(on: xz) {
+  r = rect(corner: (10, 0), size: (10, 10))
+}
+";
+    for (pre, axis) in [("", "Z"), ("", "axis(s.r[3].a, s.r[3].b)")] {
+        let src = format!("{prof}{pre}param r1.a = 90deg\nr1 = revolve(s.r, axis: {axis}, angle: a)\n");
+        let (v, ..) = shape(&src);
+        let want = if axis == "Z" {
+            quarter
+        } else {
+            std::f64::consts::PI / 4.0 * 100.0 * 10.0
+        };
+        assert!((v - want).abs() < 1e-6, "{axis}: {v} {want}");
+    }
+    // out of the profile's plane: refused, typed
+    let src = format!("{prof}r1 = revolve(s.r, axis: Y, angle: 90deg)\n");
+    let r = forge_lang::run(&src, forge_lang::Options::default(), Default::default()).0;
+    assert!(format!("{:?}", r.errors).contains("BadValue"), "{:?}", r.errors);
+}

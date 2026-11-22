@@ -1,9 +1,9 @@
 # What each feature costs
 
 The speed hunt's ranking: instructions:u per feature, by prefix difference, over the 15 bench
-parts (`tools/bench-parts`), the suite, torture, the fillet corpus, the finishing and edit parts.
-`table.txt` is the ranking; `seq.tsv` / `nary1.tsv` the raw per-feature counts, `post.tsv` mesh,
-mass and check per part. Measured at main ad33439.
+parts (then in the retired part format; now `interface/forge-lang/parts/bench`), the suite,
+torture, the fillet corpus, the finishing and edit parts. `table.txt` is the ranking; `seq.tsv` /
+`nary1.tsv` the raw per-feature counts, `post.tsv` mesh, mass and check per part. Measured at main ad33439.
 
 The cost of feature N is count(first N features) minus count(first N-1), so what a feature leaves
 for later (a face box computed on first use, say) is charged to the feature that first needs it:
@@ -33,20 +33,19 @@ coaxial 11.9%, helix x plane coaxial 5.2%, helix x cylinder coaxial 4.7%, helix 
 ## How to rerun
 
 ```
-cp research/feature-costs/featcost.rs interface/forge-agent/examples/      # not kept in examples
-fbuild cargo build --release -p forge-agent --example featcost
+cp research/feature-costs/featcost.rs interface/forge-lang/examples/      # not kept in examples
+fbuild cargo build --release -p forge-lang --example featcost
 B=$PWD/target/release/examples/featcost
-for n in $(ls tools/bench-parts/*.fc | xargs -n1 basename | sed 's/\.fc$//'); do
-  fbuild $B resolve $n $PWD/.scratch/fc/$n.fc; done
-fbuild python3 research/feature-costs/measure.py $B $PWD/.scratch/fc seq.tsv seq 4     # under a minute
-fbuild python3 research/feature-costs/measure.py $B $PWD/.scratch/fc post.tsv post 4
-fbuild python3 research/feature-costs/measure.py $B $PWD/.scratch/fc nary1.tsv nary1 4 '^(bench|suite|torture)'
+P=$PWD/interface/forge-lang/parts/bench                                  # the .fg bench parts, read as they are
+fbuild python3 research/feature-costs/measure.py $B $P seq.tsv seq 4
+fbuild python3 research/feature-costs/measure.py $B $P post.tsv post 4
+fbuild python3 research/feature-costs/measure.py $B $P nary1.tsv nary1 4 '^(bench|suite|torture)'
 python3 research/feature-costs/rank.py seq.tsv post.tsv > table.txt
 ```
 Function profile of one feature (N its index + 1), and whole parts, in a frame-pointer build:
 ```
 CARGO_TARGET_DIR=$PWD/target-prof RUSTFLAGS="-C force-frame-pointers=yes" \
-  CARGO_PROFILE_RELEASE_DEBUG=line-tables-only fbuild cargo build --release -p forge-agent --example featcost
-python3 research/feature-costs/prof.py .scratch/fc/frame.fc 127 seq 40
-python3 research/feature-costs/centres.py $PWD/target-prof/release/examples/featcost $PWD/.scratch/fc
+  CARGO_PROFILE_RELEASE_DEBUG=line-tables-only fbuild cargo build --release -p forge-lang --example featcost
+python3 research/feature-costs/prof.py interface/forge-lang/parts/bench/frame.fg N seq 40   # N: `featcost list`'s index + 1
+python3 research/feature-costs/centres.py $PWD/target-prof/release/examples/featcost $P
 ```

@@ -9,8 +9,8 @@ Everything here reruns from this folder (numpy only, no sympy needed):
     python3 py/fcheck.py       # F roots lifted in closed form land on both surfaces (1e-13..1e-9)
 
 `py/loft.py` rebuilds forge-geom's smooth loft (natural spline, chord knots, circles split into two half
-arcs) as c(s), X(s), Y(s) cubics per span, for the volute benchmark (`repros/vf6.fc`, at the time) and for `vfx.fg` (a `.fc` part then, ported
-with the same volume, faces and edges).
+arcs) as c(s), X(s), Y(s) cubics per span, for the volute benchmark (`repros/vf6`, a scratch part in the retired
+format at the time) and for `vfx.fg` (in that format then, ported with the same volume, faces and edges).
 
 The production form is `kernel/forge-geom/src/loftmeet.rs` (ideas 1-4, called from forge-bool's
 `ssi::surfaces_in` before the tracer, which stays the fallback). On loft-speed 5a0b79f, instructions per
@@ -18,12 +18,12 @@ build: vf6 3.65 G -> 1.88 G, vfx 5.07 G -> 2.04 G, the volute bench part 10.03 G
 other eight bench parts unchanged; bench_parts and real_part_failures pass and fail exactly as before.
 
 `ring-prototype.patch` is the first Rust prototype, as a diff against `real-parts` (5505efe). Apply it to a
-scratch worktree, build forge-cli in release, then (that commit reads `.fc` parts; today's tree has no
-vf6 part, and `forgecad build vfx.fg` builds the novel one):
+scratch worktree, build forge-cli in release, then (that commit reads only the retired part format, so VF6 is
+vf6 as it was written then; today's tree has no vf6 part, and `forgecad build vfx.fg` builds the novel one):
 
-    NO_RING=1   forgecad build vf6.fc   # today's path
-                forgecad build vf6.fc   # + certificate
-    RING_MEET=1 forgecad build vf6.fc   # + certificate + closed-form marching
+    NO_RING=1   forgecad build VF6   # today's path
+                forgecad build VF6   # + certificate
+    RING_MEET=1 forgecad build VF6   # + certificate + closed-form marching
     (SSI_LOG=1 logs each traced or marched pair with its time)
 
 ## The ideas, and what happened to each

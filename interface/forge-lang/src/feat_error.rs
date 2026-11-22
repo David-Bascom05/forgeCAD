@@ -164,7 +164,7 @@ impl FeatError {
             Unnamed { sketch, .. } => {
                 format!("an entity of sketch {sketch} with no name; name it to refer to it")
             }
-            NoOwner { .. } => "no earlier feature's own solid holds this face or edge".into(),
+            NoOwner { .. } => "no earlier feature's own solid holds this face, edge or vertex".into(),
             NotABody { id, .. } => format!("{id} makes no body"),
             NeedsApprox { .. } => {
                 "a general curve has no exact image in a sketch: give approx: (a tolerance) to fit a spline within it".into()

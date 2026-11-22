@@ -28,6 +28,8 @@ mod gui_asmdrag;
 pub mod gui_docs;
 #[path = "gui_explode.rs"]
 mod gui_explode;
+#[path = "gui_fgmarks.rs"]
+mod gui_fgmarks;
 #[path = "gui_inspect.rs"]
 pub mod gui_inspect;
 #[path = "gui_markup.rs"]
@@ -187,6 +189,11 @@ pub struct Gui {
     inspector: gui_inspect::Inspector,
     /// The open tool's statement last shown as a preview.
     fg_previewed: Option<String>,
+    /// A tool to open on the sketch being drawn once it's finished (New Extrude with no sketch
+    /// free to extrude starts one, as Inventor's does).
+    fg_then: Option<&'static str>,
+    /// The faces the browser lit and tinted when the view was last drawn.
+    fg_marks_was: (Vec<u32>, Vec<crate::render::FaceColour>),
     /// The documents open, in their tabs; which is in the window.
     docs: Vec<gui_docs::OpenDoc>,
     active: usize,
@@ -304,6 +311,8 @@ impl Gui {
             body_rows: None,
             inspector: Default::default(),
             fg_previewed: None,
+            fg_marks_was: Default::default(),
+            fg_then: None,
             docs: Vec::new(),
             active: 0,
             watch: Default::default(),
@@ -696,6 +705,7 @@ impl Gui {
             WindowEvent::MouseWheel { .. } if self.over_view => Some(event.clone()),
             _ => None,
         };
+        let mut window_edges = None;
         if let Some(e) = forward {
             if v.nav.event(&e) {
                 v.dirty = true;
@@ -725,15 +735,30 @@ impl Gui {
                 // only what can be seen: right to left what shows in it, left to right what shows
                 // in it and nowhere else
                 let crossing = b.0 < a.0;
-                let found: Vec<Entity> = v
+                let seen: Vec<Entity> = v
                     .renderer
                     .seen_in_box(&mut v.scene, &camera, lo, hi)
                     .into_iter()
-                    .filter(|(e, _, _)| matches!(e, Entity::Face(_)))
                     .filter(|(_, inside, outside)| *inside > 0 && (crossing || *outside == 0))
                     .map(|f| f.0)
                     .collect();
-                if v.nav.ctrl_held() {
+                // a tool's edges selection takes the window's edges, as Inventor's does
+                let (edges, found): (Vec<Entity>, Vec<Entity>) =
+                    seen.into_iter().partition(|e| matches!(e, Entity::Edge(_)));
+                let found: Vec<Entity> = found
+                    .into_iter()
+                    .filter(|e| matches!(e, Entity::Face(_)))
+                    .collect();
+                let takes_edges = self
+                    .shell
+                    .fg
+                    .as_ref()
+                    .and_then(|p| p.tool.as_ref())
+                    .and_then(|t| t.slots.get(t.active))
+                    .is_some_and(|s| s.kind == crate::shell::fgtool::SlotKind::Edges);
+                if takes_edges {
+                    window_edges = Some(edges);
+                } else if v.nav.ctrl_held() {
                     v.nav.selected.retain(|s| !found.contains(&s.1));
                 } else {
                     if !v.nav.shift_held() {
@@ -751,6 +776,9 @@ impl Gui {
                 self.shell.cube_menu = Some(egui::pos2(origin.x + at.0 / p, origin.y + at.1 / p));
                 self.shell.cube_menu_fresh = true;
             }
+        }
+        if let Some(e) = window_edges {
+            self.fg_window_edges(e);
         }
     }
 
@@ -935,7 +963,22 @@ impl Gui {
                         self.fg_text();
                         continue;
                     }
+                    // an extrude or revolve with no sketch free to take: a sketch first, then it
+                    Action::NewFeature(kind @ ("extrude" | "revolve"))
+                        if self.shell.fg.as_ref().is_some_and(|p| {
+                            !p.assembly && crate::shell::fg::free_sketches(&s.src, &p.sketches).is_empty()
+                        }) =>
+                    {
+                        self.fg_then = Some(kind);
+                        self.shell.sketch_pick = true;
+                        self.shell.status = format!(
+                            "{}: no sketch is free to take: pick a planar face or an origin plane to sketch its profile on",
+                            crate::shell::panel::kind_word(kind)
+                        );
+                        continue;
+                    }
                     Action::NewFeature(kind) => {
+                        self.fg_then = None;
                         self.fg_open_tool(kind);
                         continue;
                     }
@@ -961,6 +1004,22 @@ impl Gui {
                     }
                     Action::FinishSketch => {
                         self.fg_finish_sketch();
+                        continue;
+                    }
+                    // the part's own unit, kept in its text (`# units in`) as `.fc` kept it: one
+                    // undo step, nothing it builds changed
+                    Action::SetUnits(u) if !self.shell.fg.as_ref().is_some_and(|p| p.assembly) => {
+                        if s.set_units(u) {
+                            self.shell.status = format!("{} is shown in {u}: saved with it", self.shell.name);
+                        }
+                        self.shell.units = u;
+                        if let Some(m) = &mut self.shell.inspect.measure {
+                            m.unit = u;
+                        }
+                        if let Some(t) = self.shell.fg.as_mut().and_then(|p| p.tool.as_mut()) {
+                            t.set_units(u);
+                        }
+                        self.fg_text();
                         continue;
                     }
                     Action::Fg(c) => {
@@ -1188,6 +1247,7 @@ impl Gui {
         self.save_settings();
         self.inspect_tick();
         self.sheet_frame();
+        self.fg_hole_guess();
         self.fg_preview();
         if self.explode_tick() {
             animating = true;
@@ -1196,7 +1256,12 @@ impl Gui {
         times.ui = now_ms() - t0;
 
         self.ask_extras();
-        if self.extras_changed()
+        self.fg_dim_sync();
+        // a sketch for a tool to take, given up (Esc): no tool after the next one
+        if self.fg_then.is_some() && !self.shell.sketch_pick && self.shell.sketch.is_none() {
+            self.fg_then = None;
+        }
+        if (self.extras_changed() | self.fg_marks_changed())
             && let Some(v) = &mut self.view
         {
             v.dirty = true;
@@ -1356,12 +1421,27 @@ impl Gui {
                 if let (Some(p), Some(g)) = (self.shell.fg.as_ref(), self.fg_walls.first()) {
                     m.extend(crate::thermo_view::marks(&p.thermo, g));
                 }
+                // the browser's chosen row: the faces it made
+                m.extend(self.fg_marks_was.0.iter().map(|&f| Mark {
+                    placement: 0,
+                    entity: Entity::Face(f),
+                    selected: true,
+                    second: false,
+                }));
                 m
+            };
+            // the build's flags on the faces of what they're of; Compare's colours over them
+            let flagged;
+            let colours: &[crate::render::FaceColour] = if self.vers.colours.is_empty() {
+                flagged = self.fg_marks_was.1.clone();
+                &flagged
+            } else {
+                &self.vers.colours
             };
             let overlay = Overlay {
                 hud: None,
                 cube: Some((v.nav.cube_place(), v.nav.cube_hover)),
-                face_colours: &self.vers.colours,
+                face_colours: colours,
                 face_ghosts: &self.vers.ghosts,
                 marks: &marks,
                 world: &world,
@@ -1990,7 +2070,11 @@ impl Gui {
         match crate::fg::Session::open(path, Some(gpu), waker) {
             Ok(s) => {
                 let name = name_of(path);
-                self.shell.units = self.shell.settings.length;
+                // the part's own unit where its text says one, else the app's
+                self.shell.units = crate::shell::fg::units_of(&s.src).unwrap_or(self.shell.settings.length);
+                if let Some(m) = &mut self.shell.inspect.measure {
+                    m.unit = self.shell.units;
+                }
                 self.shell.fg = Some(crate::shell::fg::FgPanel {
                     file: name.clone(),
                     path: path.to_string(),
@@ -2426,6 +2510,43 @@ impl Gui {
                 | crate::shell::fg::FgAct::AsmSnaps(_)) => self.asm_act(a),
                 crate::shell::fg::FgAct::EditSketch(id) => self.fg_edit_sketch(&id),
                 crate::shell::fg::FgAct::EditFeature(id) => self.fg_edit_feature(&id),
+                crate::shell::fg::FgAct::DimPreview(ops) => {
+                    if let Some(s) = &mut self.fg {
+                        s.preview(Some(&ops));
+                    }
+                }
+                crate::shell::fg::FgAct::DimCancel => {
+                    if let Some(s) = &mut self.fg
+                        && s.previewing
+                    {
+                        s.preview(None);
+                    }
+                }
+                crate::shell::fg::FgAct::DimCommit(ops) => {
+                    let Some(s) = &mut self.fg else { continue };
+                    let label = ops.last().map(crate::shell::fg::op_label).unwrap_or_default();
+                    self.shell.status = match s.apply_all(ops) {
+                        Ok(()) => label,
+                        Err(e) => {
+                            if s.previewing {
+                                s.preview(None);
+                            }
+                            format!("{label} refused: {}: {}", e.kind(), e.text())
+                        }
+                    };
+                    self.fg_text();
+                }
+                crate::shell::fg::FgAct::Rollback(at) => {
+                    let Some(s) = &mut self.fg else { continue };
+                    s.set_until(at.clone());
+                    self.shell.status = match &at {
+                        Some(id) => format!("Rolled back to {id}: what follows is not built"),
+                        None => "End of Part at the end".into(),
+                    };
+                    if let Some(p) = &mut self.shell.fg {
+                        p.rollback = at;
+                    }
+                }
                 crate::shell::fg::FgAct::Refactor(r) => {
                     let Some(s) = &mut self.fg else { continue };
                     self.shell.status = match s.refactor(&r) {
@@ -2721,6 +2842,16 @@ impl Gui {
                         })
                 })
             {
+                // a rib finds its side by itself: refused on the one it started on, the other
+                // is tried once for its path before it's said
+                let path = t.slots.first().map(|x| x.picks.join(", ")).unwrap_or_default();
+                if t.kind == "rib" && t.side_tried.as_deref() != Some(path.as_str()) {
+                    t.side_tried = Some(path);
+                    if let Some(f) = t.flags.iter_mut().find(|f| f.0 == "flip") {
+                        f.1 = !f.1;
+                    }
+                    return;
+                }
                 t.note = Some(format!("{}: {}", i.kind, i.text));
                 s.preview(None);
             }
@@ -2779,6 +2910,7 @@ impl Gui {
         match crate::shell::fgtool::FgTool::new(kind, &taken) {
             Some(mut t) => {
                 crate::shell::fgdialog::offer_lists(&mut t, dir.as_deref());
+                t.set_units(self.shell.units);
                 p.tool = Some(t);
                 p.refused = None;
                 self.shell.status = format!("{}: pick what it takes", crate::shell::panel::kind_word(kind));
@@ -2823,6 +2955,7 @@ impl Gui {
         match crate::shell::fgtool::FgTool::edit(id, &p.source) {
             Ok(mut t) => {
                 crate::shell::fgdialog::offer_lists(&mut t, dir.as_deref());
+                t.set_units(self.shell.units);
                 self.shell.status = format!("Edit {}: {}", crate::shell::fgdialog::title(t.kind), t.prompt());
                 p.tool = Some(t);
                 p.refused = None;
@@ -2894,10 +3027,13 @@ impl Gui {
                 .ok_or(ToolError::NoStableName { what })
         };
         let origin = under.and_then(|i| match i {
-            Item::XyPlane => Some("xy"),
-            Item::XzPlane => Some("xz"),
-            Item::YzPlane => Some("yz"),
-            _ => None,
+            Item::XyPlane => Some(("origin plane", "xy")),
+            Item::XzPlane => Some(("origin plane", "xz")),
+            Item::YzPlane => Some(("origin plane", "yz")),
+            Item::XAxis => Some(("origin axis", "X")),
+            Item::YAxis => Some(("origin axis", "Y")),
+            Item::ZAxis => Some(("origin axis", "Z")),
+            Item::Center => None,
         });
         let (what, text, edge): (&'static str, Result<String, ToolError>, Option<u32>) = match (ent, posed) {
             // the posed view's pick, named through the model (its edges' indices are the model's
@@ -2911,7 +3047,7 @@ impl Gui {
                 Some(Entity::Edge(e)) => ("edge", named(a.as_ref().map(|a| &a.edges), e, "edge"), Some(e)),
                 Some(Entity::Vertex(_)) => ("vertex", Err(ToolError::NoStableName { what: "vertex" }), None),
                 None => match origin {
-                    Some(o) => ("origin plane", Ok(o.to_string()), None),
+                    Some((w, o)) => (w, Ok(o.to_string()), None),
                     None => return,
                 },
             },
@@ -2990,6 +3126,17 @@ impl Gui {
             (K::Dir, "face") => text.map(|t| format!("{t}.normal")),
             (K::Axis, "face") => text.map(|t| format!("{t}.axis")),
             (K::EdgeOrFace, "edge" | "face") => text,
+            // a revolve's axis: a cylinder's, a straight edge's line, or the origin's
+            (K::RevAxis, "face") => text.map(|t| format!("{t}.axis")),
+            (K::RevAxis, "edge") => match edge.map(|k| gui_fgmarks::straight(self.fg_folded.as_ref(), k)) {
+                Some(true) => text.map(|t| format!("axis({t}.start, {t}.end)")),
+                _ => Err(ToolError::WrongPick {
+                    slot: label,
+                    what: "curved edge",
+                }),
+            },
+            (K::RevAxis, "origin axis") => text,
+            (K::UpTo, "face" | "origin plane") => text,
             (K::SheetEdge, "edge") => {
                 let k = edge.expect("an edge") as usize;
                 a.as_ref()
@@ -3086,6 +3233,12 @@ impl Gui {
             Ok(()) => {
                 self.shell.status = format!("Edited {}", o.id);
                 self.fg_text();
+                if let Some(kind) = self.fg_then.take() {
+                    self.fg_open_tool(kind);
+                    if let Some(t) = self.shell.fg.as_mut().and_then(|p| p.tool.as_mut()) {
+                        t.take(Ok(o.id.clone()));
+                    }
+                }
             }
             Err(why) => {
                 self.shell.status = format!("Edit {} refused: {why}", o.id);
@@ -3124,8 +3277,15 @@ impl Gui {
                 let added = self
                     .fg_apply(forge_lang::error::Op::AddFeature { before: None, text })
                     .is_ok();
+                // a tool waiting for this sketch takes it
+                if added && let Some(kind) = self.fg_then.take() {
+                    self.fg_open_tool(kind);
+                    if let Some(t) = self.shell.fg.as_mut().and_then(|p| p.tool.as_mut()) {
+                        t.take(Ok(name.clone()));
+                    }
+                }
                 // text placed in the sketch goes on to Emboss, as Inventor's does
-                if added && let Some((at, words)) = m.more.texts.first().cloned() {
+                else if added && let Some((at, words)) = m.more.texts.first().cloned() {
                     self.fg_open_tool("emboss");
                     if let Some(t) = self.shell.fg.as_mut().and_then(|p| p.tool.as_mut()) {
                         t.slots[0].picks = vec![name.clone()];

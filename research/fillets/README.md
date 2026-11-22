@@ -4,7 +4,7 @@ Started 2026-10-31. Measured on real parts: CADFS Onshape 1-in-200 pilot; WHUCAD
 
 ## How to rerun
 
-- `verify/forge-proof/examples/filletcheck.rs FILE.fc`: a part's fate as one JSON line, every fillet
+- `verify/forge-proof/examples/filletcheck.rs FILE.fg`: a part's fate as one JSON line, every fillet
   audited against the part before it (`forge_proof::blends`).
 - `research/fillets/run.py EXE PARTS TRUTH SPLIT OUT`: every fillet part of a directory, against the STEP.
 - `research/fillets/report.py RESULTS TRUTH SPLIT`: a translated run's rate and refusals.

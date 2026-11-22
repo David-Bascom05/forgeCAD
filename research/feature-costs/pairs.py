@@ -4,7 +4,7 @@ rows=[l.rstrip('\n').split('\t') for l in open('.scratch/seq.tsv')]
 th=[(r[0][6:],int(r[1]),int(r[5])) for r in rows if r[0].startswith('bench/') and r[2].startswith('thread')]
 tot=collections.Counter()
 def rd(s,n):
-    e=subprocess.run([B,'run',f'.scratch/fc/{s}.fc',str(n),'seq'],capture_output=True,text=True).stderr
+    e=subprocess.run([B,'run',f'interface/forge-lang/parts/bench/{s}.fg',str(n),'seq'],capture_output=True,text=True).stderr
     d={}
     for l in e.splitlines():
         p=l.split('\t')

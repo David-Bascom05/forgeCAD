@@ -162,6 +162,8 @@ pub enum Value {
     Feature(Rc<Feat>),
     Faces(Rc<Faces>),
     Edges(Rc<Vec<Name>>),
+    /// The part's vertices a `verts(..)` selection found, by name.
+    Verts(Rc<Vec<Name>>),
     Extent(ExtentV),
     /// Sheet metal: features, edges, unfolds, and shop data (`sheet.rs`).
     Sheet(Rc<crate::sheet::SheetVal>),
@@ -197,6 +199,7 @@ impl Value {
             Value::Feature(_) => Ty::Feature,
             Value::Faces(_) => Ty::Faces,
             Value::Edges(_) => Ty::Edges,
+            Value::Verts(_) => Ty::Verts,
             Value::Extent(_) => Ty::Extent,
             Value::Sheet(s) => s.ty(),
             Value::Wired(w) => w.ty(),
@@ -346,6 +349,10 @@ pub struct Eval<'s> {
     /// recorded, so a drawing's hidden-line pass sees the plain envelope.
     pub cosmetic_threads: bool,
     pub threads: Vec<crate::holes::Cosmetic>,
+    /// Rolled back (`Options::until`): the top-level name after whose statement nothing more is
+    /// built, and how many features were made by then once it is reached.
+    pub until: Option<String>,
+    pub rolled: Option<usize>,
     /// Where the files features read (fonts, imports) are found: the part file's directory.
     pub dir: Option<std::path::PathBuf>,
     /// An assembly document's instances, joints and checks (`asm.rs`); None in a part.
@@ -443,6 +450,8 @@ impl<'s> Eval<'s> {
             harness: None,
             cosmetic_threads: false,
             threads: vec![],
+            until: None,
+            rolled: None,
             dir: None,
             asm: None,
             root: None,
@@ -876,6 +885,14 @@ impl<'s> Eval<'s> {
                 {
                     self.scopes[0].insert(name.clone(), (Value::Unresolved, s.span));
                 }
+            }
+            // rolled back to here: what follows is evaluated, not built
+            if self.rolled.is_none()
+                && let StmtKind::Assign { name, .. } | StmtKind::Block { name, .. } = &s.kind
+                && self.until.as_deref() == Some(name.as_str())
+            {
+                self.rolled = Some(self.b.features.len());
+                self.b.building = false;
             }
         }
         // an error inside a loop is one error, however many times the loop ran into it
@@ -2495,6 +2512,18 @@ pub fn arith(op: BinOp, x: &Value, y: &Value, span: Span, sa: Span, sb: Span) ->
             }
             Ok(Value::Edges(Rc::new(v)))
         }
+        (Value::Verts(a), Value::Verts(b)) if op == BinOp::Add => {
+            let mut v = (**a).clone();
+            for n in b.iter() {
+                if !v.contains(n) {
+                    v.push(*n);
+                }
+            }
+            Ok(Value::Verts(Rc::new(v)))
+        }
+        (Value::Verts(a), Value::Verts(b)) if op == BinOp::Sub => Ok(Value::Verts(Rc::new(
+            a.iter().copied().filter(|n| !b.contains(n)).collect(),
+        ))),
         // the first set less what the second holds (`.fc` picked one of several by place)
         (Value::Faces(a), Value::Faces(b)) if op == BinOp::Sub => Ok(Value::Faces(Rc::new(Faces {
             names: a.names.iter().copied().filter(|n| !b.names.contains(n)).collect(),

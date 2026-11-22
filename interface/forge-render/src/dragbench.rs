@@ -104,12 +104,20 @@ fn nums(part: &mut Part) -> Result<Vec<(String, Num)>, String> {
         .collect())
 }
 
-/// A part's numbers as `--dims` lists them: each param's name and its value as written.
+/// A part's numbers as `--dims` lists them: each param's name and its value as written, then each
+/// number written in a feature's call (as `.fc` listed an argument's): the feature's word for it
+/// where it reads one (`base.depth`), else where it's written (`base@6:22`), and `(literal)`.
 pub fn dims(name: &str) -> Result<Vec<(String, String)>, String> {
     let mut part = Part::open(name)?;
     let run = part.run(None)?;
-    let (_, params, _) = crate::fg::rows(&run, &part.src);
-    Ok(params
+    Ok(dims_of(&run, &part.src))
+}
+
+/// `dims` of a run of this text.
+pub fn dims_of(run: &forge_lang::Run, src: &str) -> Vec<(String, String)> {
+    use forge_lang::error::{Op, Scope};
+    let (feats, params, issues) = crate::fg::rows(run, src);
+    let mut out: Vec<(String, String)> = params
         .into_iter()
         .map(|p| {
             let value = match p.value {
@@ -118,7 +126,43 @@ pub fn dims(name: &str) -> Result<Vec<(String, String)>, String> {
             };
             (p.key.to_string(), value)
         })
-        .collect())
+        .collect();
+    for i in issues.iter().filter(|i| i.kind == "LooseLiteral") {
+        let Some(span) = i.fixes.iter().find_map(|op| match op {
+            Op::LiftLiteral { span, .. } => Some(*span),
+            _ => None,
+        }) else {
+            continue;
+        };
+        let Some(text) = src.get(span.lo as usize..span.hi as usize) else {
+            continue;
+        };
+        let owner = i.fixes.iter().find_map(|op| match op {
+            Op::LiftLiteral {
+                scope: Scope::Local(o),
+                ..
+            } => Some(forge_lang::error::path_text(o)),
+            _ => None,
+        });
+        let feat = i.feature.clone().or(owner).unwrap_or_default();
+        let v: Option<f64> = text.trim_end_matches(char::is_alphabetic).parse().ok();
+        // the feature's own word for the number, where one of its dimensions is it
+        let word = feats
+            .iter()
+            .find(|f| f.id == feat)
+            .and_then(|f| {
+                f.dims.iter().find(|d| {
+                    d.from == crate::shell::fg::From::Const && v.is_some_and(|v| (d.value - v).abs() < 1e-9)
+                })
+            })
+            .map(|d| d.what.replace(' ', "_"));
+        let name = match word {
+            Some(w) if !out.iter().any(|o| o.0 == format!("{feat}.{w}")) => format!("{feat}.{w}"),
+            _ => format!("{feat}@{}:{}", i.line, i.col),
+        };
+        out.push((name, format!("{text} (literal)")));
+    }
+    out
 }
 
 /// Whether a part still builds with this number moved both ways by the swing, and changes shape
@@ -405,5 +449,26 @@ mod tests {
         }
         let d = dims("bracket").unwrap();
         assert!(d.iter().any(|(name, _)| *name == got[0].1), "{d:?}");
+    }
+
+    #[test]
+    fn a_number_written_in_a_features_call_is_listed_with_the_params() {
+        let src = "shared L = 40\nsketch plan(on: xy) {\n  outline = rect(corner: (0, 0), size: (L, L))\n}\nbase = extrude(plan, 6)\n";
+        let run = forge_lang::run(src, forge_lang::Options::default(), Default::default()).0;
+        let d = dims_of(&run, src);
+        assert!(d.contains(&("L".to_string(), "40".to_string())), "{d:?}");
+        assert!(
+            d.contains(&("base.depth".to_string(), "6 (literal)".to_string())),
+            "{d:?}"
+        );
+        // one no feature's word names: where it's written
+        let src = src.replace("size: (L, L)", "size: (L, 30)");
+        let run = forge_lang::run(&src, forge_lang::Options::default(), Default::default()).0;
+        let d = dims_of(&run, &src);
+        assert!(
+            d.iter()
+                .any(|(n, v)| n.starts_with("plan@3:") && v == "30 (literal)"),
+            "{d:?}"
+        );
     }
 }

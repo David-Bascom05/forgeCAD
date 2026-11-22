@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Where whole-part regens go, by function, inclusive: perf call graphs of the bench parts in a
-frame-pointer build (see README). usage: centres.py BIN FCDIR [PARTS...]"""
+frame-pointer build (see README). usage: centres.py BIN PARTDIR [PARTS...]"""
 import collections, glob, os, re, subprocess, sys
 
-bin_, fcdir = sys.argv[1:3]
-names = sys.argv[3:] or [os.path.basename(f)[:-3] for f in sorted(glob.glob(fcdir + "/*.fc"))]
+bin_, partdir = sys.argv[1:3]
+names = sys.argv[3:] or [os.path.basename(f)[:-3] for f in sorted(glob.glob(partdir + "/*.fg"))]
 os.environ["FORGE_BATCH"] = "cpu"
 PERIOD = 500000
 data = f".scratch/centres-{os.getpid()}.data"
@@ -12,7 +12,7 @@ SKIP = re.compile(r"^(\[unknown|\{closure|fold|map|collect|from_iter|branch|par_
 total, incl = 0, collections.Counter()
 per = {}
 for n in names:
-    subprocess.run(["perf", "record", "-q", "-e", "instructions:u", "-c", str(PERIOD), "--call-graph", "fp", "-o", data, bin_, "run", f"{fcdir}/{n}.fc", "100000", "seq"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(["perf", "record", "-q", "-e", "instructions:u", "-c", str(PERIOD), "--call-graph", "fp", "-o", data, bin_, "run", f"{partdir}/{n}.fg", "100000", "seq"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     out = subprocess.run(["perf", "script", "-i", data, "-F", "ip,sym"], capture_output=True, text=True, errors="replace").stdout
     os.remove(data)
     c = collections.Counter()

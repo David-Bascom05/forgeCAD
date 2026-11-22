@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """A dataset's fillet parts in lots of 200 on a build: tally.py EXE PARTS_DIR TRUTH.jsonl OUT.jsonl [--jobs 3] [--kind fillet]
 
-Works over any directory of .fc parts (WHUCAD, CADFS, FreeCAD). OUT holds a line per part; a stopped run carries on.
+Works over any directory of .fg parts (WHUCAD, CADFS, FreeCAD). OUT holds a line per part; a stopped run carries on.
 Prints the table: match, off, refused by signature. Truth is any jsonl with id, vol, area; a part with
 none counts as built.
 """
@@ -48,7 +48,7 @@ def main():
             done[d["id"]] = d
     ids = []
     for f in sorted(os.listdir(a.parts)):
-        if f.endswith(".fc") and f[:-3] not in done:
+        if f.endswith(".fg") and f[:-3] not in done:
             src = open(os.path.join(a.parts, f), errors="replace").read()
             if any(w.split(":")[-1].split()[:1] == [a.kind] or w.startswith(a.kind) for w in src.splitlines()):
                 ids.append(f[:-3])
@@ -56,7 +56,7 @@ def main():
         for k in range(0, len(ids), 200):
             lot = ids[k:k + 200]
             with cf.ThreadPoolExecutor(a.jobs) as ex:
-                for i, r in zip(lot, ex.map(one, [(a.exe, os.path.join(a.parts, i + ".fc")) for i in lot])):
+                for i, r in zip(lot, ex.map(one, [(a.exe, os.path.join(a.parts, i + ".fg")) for i in lot])):
                     r["id"] = i
                     done[i] = r
                     o.write(json.dumps(r) + "\n")

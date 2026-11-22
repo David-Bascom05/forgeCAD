@@ -37,6 +37,9 @@ enum Work {
     Drive(u64, Vec<Drive>),
 }
 
+/// The browser's end of part, shared with the build thread: the statement builds stop after.
+type Until = Arc<std::sync::Mutex<Option<String>>>;
+
 /// A placement's rows from a pose: the frame's axes as columns, its origin last.
 pub fn rows_of(f: &forge_math::Frame) -> crate::scene::Rows {
     let (x, y, z, o) = (f.x().get(), f.y().get(), f.z().get(), f.origin);
@@ -190,6 +193,9 @@ pub struct AnchorView {
     /// the posed view is named through these (its faces are the model's).
     pub by_face: HashMap<forge_topo::Name, String>,
     pub by_edge: HashMap<forge_topo::Name, String>,
+    /// The faces (by index) of each feature's role anchors, by their text (`boss.faces`,
+    /// `boss.end`): what a browser row lights, and where its number's arrow stands.
+    pub role_faces: HashMap<String, Vec<u32>>,
 }
 
 /// An entity of the body `old` names, in the body `new` names: the one face or edge with the same
@@ -231,7 +237,26 @@ impl AnchorView {
             };
         };
         let edge_names: Vec<forge_topo::Name> = b.edge_ids().map(|e| b.edge(e).name).collect();
+        let face_names: Vec<forge_topo::Name> = b.face_ids().map(|f| b.face(f).name).collect();
+        let mut at: HashMap<forge_topo::Name, Vec<u32>> = HashMap::new();
+        for (k, n) in face_names.iter().enumerate() {
+            at.entry(*n).or_default().push(k as u32);
+        }
+        let role_faces = a
+            .role_faces
+            .iter()
+            .map(|(id, ns)| {
+                let mut ks: Vec<u32> = ns
+                    .iter()
+                    .flat_map(|n| at.get(n).into_iter().flatten().copied())
+                    .collect();
+                ks.sort_unstable();
+                ks.dedup();
+                (id.clone(), ks)
+            })
+            .collect();
         AnchorView {
+            role_faces,
             by_face: a.faces.clone(),
             by_edge: a.edges.clone(),
             faces: b
@@ -239,7 +264,7 @@ impl AnchorView {
                 .map(|f| a.faces.get(&b.face(f).name).cloned())
                 .collect(),
             edges: edge_names.iter().map(|n| a.edges.get(n).cloned()).collect(),
-            face_names: b.face_ids().map(|f| b.face(f).name).collect(),
+            face_names,
             edge_names: edge_names.clone(),
             sizes: a.sizes.clone(),
             planes: a.planes.clone(),
@@ -751,8 +776,9 @@ fn work(
     (jobs, gpus): (Receiver<Work>, Receiver<Gpu>),
     out: Sender<Msg>,
     mut gpu: Option<Gpu>,
-    // the host's: woken when a result is in, and told to stop when the document closes
-    (waker, stop): (Arc<dyn Fn() + Send + Sync>, Arc<AtomicBool>),
+    // the host's: woken when a result is in, told to stop when the document closes, and the
+    // browser's end of part (what a build stops after: `Options::until`)
+    (waker, stop, until): (Arc<dyn Fn() + Send + Sync>, Arc<AtomicBool>, Until),
 ) {
     // a thermoform's forming and simulated part go to disk behind the edit, not before it shows
     forge_lang::thermo_kept::write_behind(true);
@@ -836,6 +862,12 @@ fn work(
             continue;
         };
         let t = Instant::now();
+        let upto = until.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        // what the anchors were found for: the text, and where the part was rolled back to
+        let anchor_key = match &upto {
+            Some(u) => format!("{u}\u{0}{}", job.1),
+            None => job.1.clone(),
+        };
         if is_assembly(&job.1) {
             // the document's own model named too: picks in the posed view feed 3D Model's tools
             let want = anchored.as_deref() != Some(job.1.as_str());
@@ -917,6 +949,7 @@ fn work(
             let quick = Options {
                 checks: false,
                 dir: dir.clone(),
+                until: upto.clone(),
                 ..Options::default()
             };
             let (shape, c) = forge_lang::run(&job.1, quick, std::mem::take(&mut cache));
@@ -983,11 +1016,12 @@ fn work(
         loop {
             let t = if checks { Instant::now() } else { t };
             let opening = opening && !checks;
-            let want = anchored.as_deref() != Some(job.1.as_str());
+            let want = anchored.as_deref() != Some(anchor_key.as_str());
             let opts = Options {
                 anchors: want,
                 dir: dir.clone(),
                 checks,
+                until: upto.clone(),
                 ..Options::default()
             };
             let watch = forge_lang::deps::watch();
@@ -1000,7 +1034,7 @@ fn work(
                 .as_ref()
                 .map(|a| Arc::new(AnchorView::of(a, run.body.as_ref())));
             if anchors.is_some() {
-                anchored = Some(job.1.clone());
+                anchored = Some(anchor_key.clone());
             }
             cache = c;
             if stop.load(Ordering::SeqCst) {
@@ -1510,6 +1544,8 @@ pub struct Session {
     pub previewing: bool,
     /// Tells its build thread to stop: set when the document closes.
     stop: Arc<AtomicBool>,
+    /// The browser's end of part: the statement builds stop after (None: the whole part).
+    until: Until,
 }
 
 impl Drop for Session {
@@ -1537,11 +1573,13 @@ impl Session {
             .and_then(|p| std::path::Path::new(p).parent().map(|d| d.to_path_buf()));
         let stop = Arc::new(AtomicBool::new(false));
         let flag = stop.clone();
+        let until = Arc::new(std::sync::Mutex::new(None));
+        let upto = until.clone();
         let h = std::thread::Builder::new()
             .name("forge-fg".into())
             .spawn({
                 let (file, deps) = (path.clone(), deps.clone());
-                move || work(dir, file, deps, (rx, gpu_rx), tx, gpu, (waker, flag))
+                move || work(dir, file, deps, (rx, gpu_rx), tx, gpu, (waker, flag, upto))
             })
             .expect("a thread");
         {
@@ -1549,12 +1587,17 @@ impl Session {
             b.retain(|x| !x.2.is_finished());
             b.push((std::thread::current().id(), stop.clone(), h));
         }
+        // the undo depth kept with the file, when its log ends on what the file holds
+        let (undo, redo) = path
+            .as_deref()
+            .and_then(|p| forge_lang::undo::history(std::path::Path::new(p), &src))
+            .unwrap_or_default();
         let mut s = Session {
             path,
             saved: src.clone(),
             src,
-            undo: vec![],
-            redo: vec![],
+            undo,
+            redo,
             tags: vec![],
             jobs,
             gpus,
@@ -1574,6 +1617,7 @@ impl Session {
             changed: 0,
             previewing: false,
             stop,
+            until,
         };
         s.rebuild();
         s
@@ -1787,6 +1831,36 @@ impl Session {
         let path = self.path.as_ref().ok_or("no file to save to")?;
         std::fs::write(path, &self.src).map_err(|e| format!("{path}: {e}"))?;
         self.saved = self.src.clone();
+        // the undo depth kept with it (`F.fg.log`), as `.fc`'s op log kept it: for the next
+        // time it opens, and `fg edit F Undo`
+        forge_lang::undo::keep(std::path::Path::new(path), &self.undo, &self.src, &self.redo)
+            .map_err(|e| format!("{path}.log: {e}"))?;
         Ok(())
+    }
+
+    /// The part shown in `unit`, kept in its text (`# units in`): one undo step, false if it
+    /// already said so.
+    pub fn set_units(&mut self, unit: &str) -> bool {
+        let text = crate::shell::fg::with_units(&self.src, unit);
+        if text == self.src {
+            return false;
+        }
+        self.set_text(text);
+        true
+    }
+
+    /// How many steps Undo and Redo can take.
+    pub fn depth(&self) -> (usize, usize) {
+        (self.undo.len(), self.redo.len())
+    }
+
+    /// The end of part: builds stop after the statement binding `id` (None: the whole part).
+    pub fn set_until(&mut self, id: Option<String>) -> u64 {
+        *self.until.lock().unwrap_or_else(|e| e.into_inner()) = id;
+        self.rebuild()
+    }
+
+    pub fn until(&self) -> Option<String> {
+        self.until.lock().unwrap_or_else(|e| e.into_inner()).clone()
     }
 }

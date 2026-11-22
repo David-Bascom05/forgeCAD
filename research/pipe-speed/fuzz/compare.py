@@ -36,7 +36,7 @@ def one(f):
 c = collections.Counter()
 errs = collections.Counter()
 with cf.ThreadPoolExecutor(4) as pool:
-    for f, (ea, a), (eb, b) in pool.map(one, sorted(glob.glob(d + "/*.fc"))):
+    for f, (ea, a), (eb, b) in pool.map(one, sorted(glob.glob(d + "/*.fg"))):
         n = os.path.basename(f)
         c["parts"] += 1
         errs[ea.split(":")[0] if ea != "ok" else "ok"] += 1

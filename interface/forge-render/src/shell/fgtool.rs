@@ -43,13 +43,23 @@ pub enum SlotKind {
     Features,
     /// A sheet metal edge a flange stands on.
     SheetEdge,
+    /// A revolve's axis: a line of its sketch, a straight edge, a work axis, a cylinder's axis
+    /// or the origin's.
+    RevAxis,
+    /// Where an extent ends: faces of the part, a work plane or a sketch's plane.
+    UpTo,
 }
 
 impl SlotKind {
     pub fn many(self) -> bool {
         matches!(
             self,
-            SlotKind::Edges | SlotKind::Faces | SlotKind::Profiles | SlotKind::Path | SlotKind::Features
+            SlotKind::Edges
+                | SlotKind::Faces
+                | SlotKind::Profiles
+                | SlotKind::Path
+                | SlotKind::Features
+                | SlotKind::UpTo
         )
     }
 
@@ -66,6 +76,8 @@ impl SlotKind {
                 | SlotKind::Dir
                 | SlotKind::Axis
                 | SlotKind::SheetEdge
+                | SlotKind::RevAxis
+                | SlotKind::UpTo
         )
     }
 
@@ -73,7 +85,14 @@ impl SlotKind {
     pub fn from_tree(self) -> bool {
         matches!(
             self,
-            SlotKind::Feature | SlotKind::Features | SlotKind::Profile | SlotKind::Profiles | SlotKind::Plane
+            SlotKind::Feature
+                | SlotKind::Features
+                | SlotKind::Profile
+                | SlotKind::Profiles
+                | SlotKind::Plane
+                | SlotKind::Points
+                | SlotKind::RevAxis
+                | SlotKind::UpTo
         )
     }
 
@@ -97,6 +116,10 @@ impl SlotKind {
             SlotKind::Feature => "Select a feature or body in the browser",
             SlotKind::Features => "Select features or bodies in the browser",
             SlotKind::SheetEdge => "Select a sheet metal edge",
+            SlotKind::RevAxis => {
+                "Select a sketch line, a straight edge, a cylindrical face, a work axis or an origin axis"
+            }
+            SlotKind::UpTo => "Select the faces, a work plane or a sketch to end at",
         }
     }
 }
@@ -238,6 +261,14 @@ pub struct FgTool {
     pub again: bool,
     /// The statement it edits (Edit Feature), replaced in its place; none: a new one.
     pub edit: Option<String>,
+    /// The unit a bare length typed is in: the part's (`# units in`).
+    pub units: &'static str,
+    /// A hole placed from two edges: where on its face it is now, in the face plane's own
+    /// coordinates (the host works it out from the part): the sketch's starting guess, so the
+    /// solve lands on the face's side of each edge.
+    pub at_guess: Option<(f64, f64)>,
+    /// A rib's path its other side was tried for, by itself, after its preview was refused.
+    pub side_tried: Option<String>,
 }
 
 fn slot(label: &'static str, kind: SlotKind) -> Slot {
@@ -342,6 +373,14 @@ pub(super) fn choices_of(kind: &str) -> Vec<Choice> {
         "sweep" | "coil" | "loft" => vec![c("Output", OUTPUT)],
         "hole" => vec![
             c(
+                "Placement",
+                &[
+                    ("From Sketch", "sketch"),
+                    ("Linear", "distance"),
+                    ("Concentric", "concentric"),
+                ],
+            ),
+            c(
                 "Type",
                 &[
                     ("Simple", "hole"),
@@ -363,6 +402,7 @@ pub(super) fn choices_of(kind: &str) -> Vec<Choice> {
                     ("Distance", "distance"),
                     ("Through All", "thruall"),
                     ("To Next", "tonext"),
+                    ("To", "tosurface"),
                 ],
                 on: 1,
             },
@@ -467,7 +507,7 @@ pub(super) fn form_of(kind: &str, c: &dyn Fn(&str) -> &'static str) -> Option<Fo
             match c("Extents") {
                 "Distance" => params.extend([param("d", "10", Dim::Length), param("taper", "0", Dim::Angle)]),
                 "Symmetric" => params.push(param("d", "10", Dim::Length)),
-                "To" => slots.push(slot("To", K::Faces)),
+                "To" => slots.push(slot("To", K::UpTo)),
                 _ => {}
             }
             let flags = if c("Extents") == "Distance" {
@@ -478,7 +518,7 @@ pub(super) fn form_of(kind: &str, c: &dyn Fn(&str) -> &'static str) -> Option<Fo
             (slots, params, vec![], flags)
         }
         "revolve" => (
-            vec![slot("Profile", K::Profile), slot("Axis", K::Line)],
+            vec![slot("Profile", K::Profile), slot("Axis", K::RevAxis)],
             if c("Extents") == "Angle" {
                 vec![param("ang", "360", Dim::Angle)]
             } else {
@@ -519,7 +559,24 @@ pub(super) fn form_of(kind: &str, c: &dyn Fn(&str) -> &'static str) -> Option<Fo
             } else {
                 vec![("flip", false)]
             };
-            (vec![slot("Points", K::Points)], params, words, flags)
+            // where it goes: a sketch's points, a face measured from two of its edges, or round
+            // a circular edge
+            let mut slots = match c("Placement") {
+                "Linear" => {
+                    params.extend([param("d1", "10", Dim::Length), param("d2", "10", Dim::Length)]);
+                    vec![
+                        slot("Face", K::Face),
+                        slot("Edge 1", K::Edge),
+                        slot("Edge 2", K::Edge),
+                    ]
+                }
+                "Concentric" => vec![slot("Face", K::Face), slot("Edge", K::Edge)],
+                _ => vec![slot("Points", K::Points)],
+            };
+            if c("Termination") == "To" {
+                slots.push(slot("To", K::UpTo));
+            }
+            (slots, params, words, flags)
         }
         "fillet" => match c("Type") {
             "Variable" => (
@@ -886,7 +943,23 @@ impl FgTool {
             note: None,
             again: false,
             edit: None,
+            units: "mm",
+            at_guess: None,
+            side_tried: None,
         })
+    }
+
+    /// Its lengths typed in the part's unit: what it shows already (mm) says so.
+    pub fn set_units(&mut self, units: &'static str) {
+        self.units = units;
+        if units == "mm" {
+            return;
+        }
+        for p in &mut self.params {
+            if p.dim == Dim::Length && p.text.trim().parse::<f64>().is_ok() && p.expr.is_none() {
+                p.text = format!("{} mm", p.text.trim());
+            }
+        }
     }
 
     /// Its text as the op OK applies: a new statement at the end, or the edited one replaced.
@@ -1077,7 +1150,7 @@ impl FgTool {
                 out.push_str(&format!("param {}.{} = {}\n", self.name, p.name, p.text));
                 continue;
             }
-            let v = super::fg::parse_value(&p.text, p.dim)
+            let v = super::fg::parse_in(&p.text, p.dim, self.units)
                 .filter(|l| l.dim == p.dim)
                 .ok_or(ToolError::BadNumber {
                     param: p.name,
@@ -1098,7 +1171,7 @@ impl FgTool {
         if p.expr.as_deref() == Some(p.text.as_str()) {
             return Some(f64::NAN);
         }
-        super::fg::parse_value(&p.text, p.dim).map(|v| v.value)
+        super::fg::parse_in(&p.text, p.dim, self.units).map(|v| v.value)
     }
 
     /// The Forge text it adds: its params, then its statement.
@@ -1112,6 +1185,8 @@ impl FgTool {
         }
         let mut skip: Vec<&str> = vec![];
         let mut after = String::new();
+        // statements a form writes above its params and its own (a hole's placing sketch)
+        let mut before = String::new();
         let stmt = match self.kind {
             "extrude" => {
                 let output = self.choice("Output");
@@ -1154,12 +1229,65 @@ impl FgTool {
                 }
             ),
             "hole" => {
+                let to;
                 let depth = match self.choice("Termination") {
                     "Distance" => "depth",
                     "To Next" => "next",
+                    "To" => {
+                        to = format!("upto({})", self.all("To", " + ")?);
+                        to.as_str()
+                    }
                     _ => "thru",
                 };
-                let mut args = format!("at: {}", self.one("Points")?);
+                let mut args = match self.choice("Placement") {
+                    // a sketch on the face, its point held the distances from the two edges
+                    // projected onto it (each bound outside the sketch, as a sketch block reads
+                    // edges); the guess puts the solve on the face's side of each
+                    "Linear" => {
+                        skip.extend(["d1", "d2"]);
+                        let (face, e1, e2) = (self.one("Face")?, self.one("Edge 1")?, self.one("Edge 2")?);
+                        let lit = |v: f64| {
+                            Literal {
+                                value: v,
+                                dim: Dim::Length,
+                            }
+                            .text()
+                        };
+                        let d = |name: &'static str| -> Result<String, ToolError> {
+                            let p = self
+                                .params
+                                .iter()
+                                .find(|p| p.name == name)
+                                .expect("its own param");
+                            if p.expr.as_deref() == Some(p.text.as_str()) {
+                                return Ok(p.text.clone());
+                            }
+                            super::fg::parse_in(&p.text, p.dim, self.units)
+                                .filter(|l| l.dim == Dim::Length)
+                                .map(|l| lit(l.value))
+                                .ok_or(ToolError::BadNumber {
+                                    param: name,
+                                    text: p.text.clone(),
+                                })
+                        };
+                        let (d1, d2) = (d("d1")?, d("d2")?);
+                        let (gx, gy) = self
+                            .at_guess
+                            .unwrap_or((self.value("d2").unwrap_or(1.0), self.value("d1").unwrap_or(1.0)));
+                        let r = |v: f64| lit((v * 1e6).round() / 1e6);
+                        before = format!(
+                            "{n}_e1 = {e1}\n{n}_e2 = {e2}\nparam {n}_at.d1 = {d1}\nparam {n}_at.d2 = {d2}\n\
+                             param {n}_at.gx = {}\nparam {n}_at.gy = {}\nsketch {n}_at(on: {face}) {{\n  \
+                             e1 = project({n}_e1)\n  e2 = project({n}_e2)\n  p = near(gx, gy)\n  \
+                             distance(p, e1, d1)\n  distance(p, e2, d2)\n}}\n",
+                            r(gx),
+                            r(gy)
+                        );
+                        format!("at: {n}_at.p")
+                    }
+                    "Concentric" => format!("at: {}.center, on: {}", self.one("Edge")?, self.one("Face")?),
+                    _ => format!("at: {}", self.listed("Points")?),
+                };
                 match self.choice("Type") {
                     "Simple" => {
                         args.push_str(", d: d");
@@ -1548,7 +1676,7 @@ impl FgTool {
         if self.edit.is_some() {
             after.clear();
         }
-        Ok(format!("{}{stmt}\n{after}", self.param_lines(&skip)?))
+        Ok(format!("{before}{}{stmt}\n{after}", self.param_lines(&skip)?))
     }
 }
 

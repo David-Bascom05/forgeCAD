@@ -307,6 +307,7 @@ pub enum Ty {
     Feature,
     Faces,
     Edges,
+    Verts,
     Extent,
     Layout,
     Motion,
