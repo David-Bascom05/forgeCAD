@@ -186,7 +186,8 @@ fn to_edge(b: &Body, e: EdgeId, p: Point3) -> f64 {
 /// With `dump` (DUMP=DIR), a fillet with counted disagreements writes DIR/NAME.pts, one counted point
 /// a line (`x y z over|under before`, `before` 1 where `Index` puts it in the body before), and the
 /// bodies before and after as DIR/NAME.before.step and DIR/NAME.after.step, for a classifier other
-/// than forge-bool's `Index` (research/fillets/oracle/occt_body.py).
+/// than forge-bool's `Index` (research/fillets/oracle/occt_body.py). With DUMP_ALL set too, every
+/// judged fillet is written, its .pts empty where nothing was counted (for occt_refillet.py).
 fn judge(
     s: &Body,
     after: &Body,
@@ -344,7 +345,8 @@ fn judge(
             count(x, k, o, &mut at);
         }
     }
-    if let (Some(name), false) = (dump, dumped.is_empty()) {
+    let every = std::env::var_os("DUMP_ALL").is_some();
+    if let (Some(name), true) = (dump, every || !dumped.is_empty()) {
         let _ = std::fs::write(format!("{name}.pts"), dumped.join("\n") + "\n");
         for (b, w) in [(s, "before"), (after, "after")] {
             if let Ok(e) = forge_step::export(b, &forge_step::Options::default()) {

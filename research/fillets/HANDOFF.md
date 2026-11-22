@@ -94,11 +94,17 @@ moved; all 200 are now in research/fillets/oracle/pipe-labels.jsonl.
 
 The large `over` counts are material hanging past a rim (see p00080 below).
 
+**Superseded by research/fillets/census.md (2026-11-22):** OCCT's classifier overrules forge-bool's
+`Index` at every counted point of 14 of these parts, p00080 included, and of all 5 unsure. The pipe set
+ends at 161 right, 8 wrong, 31 refused.
+
 **FreeCAD set** (this session's run of the library: 547 translated bodies, 576 fillet features in
 the parts). A first label_body run got through 236 fillets, but it excused the wrong direction for
 **convex** rounds: it counted the opening's rounding of unpicked convex edges as kernel errors. The
 fix is in the committed code, checked on 0cda5e35.Body028 (now right) and 47000b9e.Pocket (one real
-disagreement). **The FreeCAD labels must be rerun: nothing from the first run stands.**
+disagreement). **The FreeCAD labels must be rerun: nothing from the first run stands.** Rerun in census.md: all 33
+wrongs, 47000b9e.Pocket's included, are the oracle demanding a ball wider than the wall; OCCT's own
+fillet equals ours.
 
 The 45 FreeCAD fillet refusals, by cause (filletwhy on each;
 research/fillets/oracle/freecad/refusals-by-cause.txt):
@@ -109,7 +115,7 @@ research/fillets/oracle/freecad/refusals-by-cause.txt):
 | the ball wider than a short or thin face | 7 |
 | a spring over a sharp rim (planes, cylinders) | 8 |
 
-**CADFS and WHUCAD were not labelled.** Their runs (~/forgecad-data/{cadfs,whucad}/runs/...,
+**CADFS and WHUCAD were not labelled** (since done: census.md; CADFS came from Hugging Face, no Onshape key). Their runs (~/forgecad-data/{cadfs,whucad}/runs/...,
 which census.py reads) are not on this machine. /home/user/datasets/CADFS is a blobless clone with
 no models, and CADFS needs Onshape access to fetch. The source-STEP comparison for CADFS (the
 coordinator's ask) is therefore still to do.
