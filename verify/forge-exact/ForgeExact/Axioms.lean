@@ -6,6 +6,8 @@ import ForgeExact.RefFacts
 import ForgeExact.DecideOnce.Ledger
 import ForgeExact.DecideOnce.Nef
 import ForgeExact.DecideOnce.Rungs
+import ForgeExact.Jordan
+import ForgeExact.DecideOnce.BRep
 
 /-!
 # Only the standard axioms
@@ -81,3 +83,14 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeExact.DecideOnce.rung_covered
   ForgeExact.DecideOnce.rung_exact
   ForgeExact.DecideOnce.instances_covered
+  ForgeExact.Jordan.Aff.sweep3
+  ForgeExact.Jordan.seg_identity
+  ForgeExact.Jordan.face_step
+  ForgeExact.Jordan.xor_even
+  ForgeExact.Jordan.move_rise
+  ForgeExact.Jordan.move_level
+  ForgeExact.Jordan.crosses_eq
+  ForgeExact.Jordan.pierced_eq
+  ForgeExact.Jordan.contains_eq
+  ForgeExact.Jordan.contains_const
+  ForgeExact.DecideOnce.brep_compat

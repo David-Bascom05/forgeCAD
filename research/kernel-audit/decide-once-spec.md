@@ -262,6 +262,10 @@ snapped geometry's (carriers `ps`, solids `A`); hypotheses listed in §6. Then:
   than one fan, defined from the geometry alone.
 - `nef_compat`: `compat` holds for solids given as half-space formulas (`Flat.HForm`, Nef
   polyhedra) whose planes are carriers in either sense, on every cell.
+- `brep_compat` (`DecideOnce/BRep.lean`): `compat` holds for solids given as the reference's
+  B-reps (faces with loops, membership by ray parity, `Ref.Solid.contains`) that are closed and
+  flat-faced, with every face plane a carrier up to a nonzero scale. It rests on
+  `Jordan.contains_const` (§6.1 below).
 
 **(d) The six rescues** (`Rungs.lean`). `rung_covered`, `rung_exact`: any instance, under every
 consistent reading of the fact its rung flipped, falls under (b) with no retry, and the exact
@@ -287,14 +291,29 @@ cell; face to face → one box, 6 / 12 / 8 (exact-comparison.md's "contact left 
 
 ## 6. Hypotheses: what is not proven, and why
 
-1. **`compat` for B-reps** (membership constant on each cell of the arrangement). Proven for
-   half-space formulas (`nef_compat`). For a B-rep given by faces and loops, classified by ray
-   parity, it is the Jordan–Brouwer property of a closed polyhedral surface: RefFacts' one
-   assumption. Not proven: it needs a proof that ray parity is invariant under moving the ray's
-   origin within a cell, i.e. the parity changes only when the origin crosses a face, which in turn
-   needs the closedness of the surface (each edge used by an even number of faces, consistently)
-   as a hypothesis and a general-position argument over the perturbed ray. Research-hard in core
-   Lean without a topology library; stated, not used anywhere else.
+1. ~~**`compat` for B-reps**~~ **proven** (`ForgeExact/Jordan.lean`, `contains_const`; used by
+   `brep_compat`). The reference's ray-parity membership of a B-rep whose loops lie in their face
+   planes (`FacesFlat`) and whose edges are each used an even number of times, either way round
+   (`Closed`), is the same at any two points strictly on one side of every face plane. This was
+   RefFacts' one assumption. The proof, with no topology and no listing of configurations:
+   - *perturbation* (`crosses_eq`, `pierced_eq`, `contains_eq`): the reference's simulation of
+     simplicity (the ray's origin moved by `(0, ε, ε²)`) is the exact count at `q + (0, δ, δ²)` for
+     every rational `δ` below an explicit bound (`bnd`: a quadratic's sign near 0 is its lowest
+     nonzero coefficient's, `small_pos`), and there every test is in general position;
+   - *one move* (`move_rise`, `move_level`, `move_x`): from `p + (0, δ, δ²)` to `q + (0, δ, δ²)`,
+     a single straight move, with no staircase. Per face (`face_step`), its pierce status changes
+     by the parity of its edges crossing the half-strip the ray sweeps along the move, and only
+     faces ahead of the move count (`ahead_of_over`). Per edge (`seg_identity`), the edge's
+     crossings of the two rays and of the move have the parity of its ends lying in the half-strip,
+     which cancels round each closed loop (`telescope`). Summed over the faces, each edge is counted
+     an even number of times (`xor_even`), so the parity does not change;
+   - *the sweep* (`Aff.sweep3`), the one local fact, along one edge: crossing the boundary of the
+     region where three affine functions are positive, at points where the other two are, has
+     the parity of the region holding at the two ends. Proven by cases on the three functions'
+     kinds (each positive, negative, rising or falling across [0, 1]), which hold for every
+     geometry.
+
+   `FacesFlat` and `Closed` are what the kernel's `check` certifies of the tools it hands over.
 2. **`boundary`, `complete`** (a facet is a piece of a face of body `i` iff body `i`'s membership
    flips across it). Jordan–Brouwer again, plus the point-in-face decisions being right. This is
    the bridge's obligation (README §8.2): the predicate that fills `pieces` must be the exact one
@@ -345,3 +364,5 @@ What the theorems do not claim:
 | `DecideOnce/Ledger.lean` | tables, `Fact`, `ask`, `ask_build`, closure laws, `sideIn_class`, `toCore` |
 | `DecideOnce/Boxes.lean` | box ledgers, `checkConsistent`, `consistent_of_check` |
 | `DecideOnce/Rungs.lean` | the six rungs, `rung_covered`, `rung_exact`, `instances_covered`, the `#guard` checks |
+| `DecideOnce/BRep.lean` | `brep_compat`: `compat` for closed flat-faced B-reps |
+| `Jordan.lean` | Jordan–Brouwer for the reference's ray parity: `contains_const` |

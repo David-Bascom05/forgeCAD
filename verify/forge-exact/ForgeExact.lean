@@ -8,4 +8,6 @@ import ForgeExact.Ref.Input
 import ForgeExact.DecideOnce.Ledger
 import ForgeExact.DecideOnce.Nef
 import ForgeExact.DecideOnce.Rungs
+import ForgeExact.Jordan
+import ForgeExact.DecideOnce.BRep
 import ForgeExact.Axioms
