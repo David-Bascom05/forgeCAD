@@ -76,8 +76,9 @@ pub const MAKERS: &[Maker] = makers![
     "text" 1 text,
 ];
 
-/// The seeds the tests run. (Not 0: its program has a thread that takes the kernel four minutes,
-/// kept as `kernel_history_repros::slow_thread_after_a_moved_body`.)
+/// The seeds the tests run. (Not 0: its last statement, a thread cut into a block of many faces,
+/// builds valid but its tracing takes the kernel seconds, and seed 0 alone adds half again to the
+/// run of all the others; kept as `kernel_history_repros::slow_thread_after_a_moved_body`.)
 pub const SEEDS: [u64; 34] = [
     1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28,
     29, 30, 31, 32, 33, 34,
