@@ -57,7 +57,7 @@ fn corner_touch(names: [&str; 3]) {
 
 // Two boxes meeting only at a corner, united: the union is not a manifold at the corner, so the
 // boolean must refuse with ZeroThickness there. No flat-face site decides a corner touch: the
-// four-use test (boolean.rs:1724-1737) sees edges only, and the touch test (1061-1094) is fed only by
+// four-use test (boolean.rs:1739-1749) sees edges only, and the touch test (1067-1108) is fed only by
 // `touches` (2048-2101), which finds nothing between two planes. The corner's two vertices merge in
 // `place_cuts` (4561-4644, an alias), `split_old_pinches` (631-653, from `general` 571) gives each fan
 // its own vertex again, and a pinched body that `check` accepts is returned.
@@ -67,7 +67,7 @@ macro_rules! gap {
         #[test]
         #[ignore = concat!(
             "coverage gap: ", $x, "/", $y, "/", $z,
-            " union (corner touch) at kernel/forge-bool/src/boolean.rs:1724 (no corner test beside the four-use edge test; touches 2048 empty for planes)"
+            " union (corner touch) at kernel/forge-bool/src/boolean.rs:1739 (no corner test beside the four-use edge test; touches 2048 empty for planes)"
         )]
         fn $name() {
             corner_touch([$x, $y, $z]);

@@ -1,0 +1,25 @@
+# Coverage gap G5 (research/kernel-audit/coverage.md section 2): a lid with the block's footprint, its
+# bottom drafted 0.1deg about its middle line and its ends drafted about the block's top, then the
+# block added under it. The lid's dipped corner sits 5 theta^2 = 1.52 LINEAR off the block's side.
+# The part is valid (1500.218 mm3). The kernel refused the block with ZeroThickness near
+# (10, 2.5, 9.9956) (G5a: imprint stretch samples, forge-bool boolean.rs, `imprint`), and at 0.05deg
+# with UntouchedOnOther (G5b: nearly_flush's NEAR cap, ssi.rs); both now decided by one rule each,
+# it builds at every draft from 0.0012deg up but a knife edge at d = LINEAR, 0.08099-0.08103deg
+# (verify/forge-coverage/tests/g5.rs).
+shared W = 10
+shared H = 10
+shared T = 5
+param bottom.a = 0.1deg
+param ends.a = -0.1deg
+sketch lidp(on: offset(xy, H)) {
+  r = rect(corner: (0, 0), size: (W, W))
+  m = pt(0, W / 2)
+}
+lid = extrude(lidp, T)
+half = plane(at: lidp.m, normal: lidp.r[1].dir, x: lidp.r[0].dir)
+bottom = draft(lid.start, angle: a, neutral: half)
+ends = draft(lid.side(lidp.r[0]), lid.side(lidp.r[2]), angle: a, neutral: lidp.plane)
+sketch foot(on: offset(lidp.plane, 0 - H)) {
+  s = rect(corner: (0, 0), size: (W, W))
+}
+block = extrude(foot, H)

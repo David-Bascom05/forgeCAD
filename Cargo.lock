@@ -82,6 +82,7 @@ name = "forge-coverage"
 version = "0.1.0"
 dependencies = [
  "forge-bool",
+ "forge-geom",
  "forge-math",
  "forge-mesh",
  "forge-model",
