@@ -568,11 +568,21 @@ fn remove_edge(body: &mut Body, w: &mut Work, e: EdgeId) -> Option<(FaceId, Face
         return None;
     }
     // the face with more loops holds the merge
-    let (keep, gone, lk, lg) = if body.face(fa).loops.len() >= body.face(fb).loops.len() {
+    let (mut keep, mut gone, mut lk, mut lg) = if body.face(fa).loops.len() >= body.face(fb).loops.len() {
         (fa, fb, la, lb)
     } else {
         (fb, fa, lb, la)
     };
+    // faces on surfaces one only to within tolerance: the one left keeps its own, so every
+    // edge of the other must lie on it as `check` asks (`edge_off_face`). The coincidence test
+    // bounds a cylinder's axis and radius apart, so two it passes can be further apart than
+    // either; and a run of faces each within it of the next is not within it of the one kept.
+    if body.face(fa).surface != body.face(fb).surface && !rests_on(body, w, gone, keep, &gone_edges) {
+        if !rests_on(body, w, keep, gone, &gone_edges) {
+            return None;
+        }
+        (keep, gone, lk, lg) = (gone, keep, lg, lk);
+    }
     for &d in &gone_edges {
         body.edges[d.index()].alive = false;
     }
@@ -600,6 +610,19 @@ fn remove_edge(body: &mut Body, w: &mut Work, e: EdgeId) -> Option<(FaceId, Face
     body.faces[gone.index()].alive = false;
     body.dead += 1;
     Some((keep, gone))
+}
+
+/// Whether every edge of face `from` (its loops as `w` holds them), but those in `skip`, lies on
+/// face `onto`'s surface as `check` asks of an edge on its face.
+fn rests_on(body: &Body, w: &mut Work, from: FaceId, onto: FaceId, skip: &[EdgeId]) -> bool {
+    let loops: Vec<u32> = body.face(from).loops.iter().map(|l| l.0).collect();
+    loops.into_iter().all(|l| {
+        let cs = w.get(body, l).clone();
+        cs.iter().all(|&c| {
+            let e = body.coedge(c).edge;
+            skip.contains(&e) || forge_topo::check::edge_off_face(body, e, onto).is_none()
+        })
+    })
 }
 
 /// Puts plane face `f`'s outer loop first (the boolean's local split relies on it).
