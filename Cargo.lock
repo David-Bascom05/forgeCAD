@@ -54,6 +54,7 @@ dependencies = [
 name = "forge-bool"
 version = "0.1.0"
 dependencies = [
+ "forge-bool-core",
  "forge-geom",
  "forge-math",
  "forge-mesh",
