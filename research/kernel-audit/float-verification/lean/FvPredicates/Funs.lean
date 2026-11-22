@@ -81,14 +81,8 @@ def ccw_bound_b : Result F64 := do
 def cross_bound : Result F64 := do
   core.f64.F64.from_bits 4372995238176751618#u64
 
-/-- [fv_predicates::slack]:
-    Source: 'src/lib.rs', lines 57:0-59:1
-    Visibility: public -/
-def slack : Result F64 := do
-  core.f64.F64.from_bits 16#u64
-
 /-- [fv_predicates::two_sum]:
-    Source: 'src/lib.rs', lines 188:0-193:1
+    Source: 'src/lib.rs', lines 183:0-188:1
     Visibility: public -/
 def two_sum (a : F64) (b : F64) : Result (F64 × F64) := do
   let x ← F64.Insts.CoreOpsArithAddF64F64.add a b
@@ -100,7 +94,7 @@ def two_sum (a : F64) (b : F64) : Result (F64 × F64) := do
   ok (x, fl2)
 
 /-- [fv_predicates::two_diff]:
-    Source: 'src/lib.rs', lines 195:0-200:1
+    Source: 'src/lib.rs', lines 190:0-195:1
     Visibility: public -/
 def two_diff (a : F64) (b : F64) : Result (F64 × F64) := do
   let x ← F64.Insts.CoreOpsArithSubF64F64.sub a b
@@ -112,7 +106,7 @@ def two_diff (a : F64) (b : F64) : Result (F64 × F64) := do
   ok (x, fl2)
 
 /-- [fv_predicates::split]:
-    Source: 'src/lib.rs', lines 202:0-206:1
+    Source: 'src/lib.rs', lines 197:0-201:1
     Visibility: public -/
 def split (a : F64) : Result (F64 × F64) := do
   let fl ← splitter
@@ -123,7 +117,7 @@ def split (a : F64) : Result (F64 × F64) := do
   ok (hi, fl2)
 
 /-- [fv_predicates::two_product]:
-    Source: 'src/lib.rs', lines 208:0-214:1
+    Source: 'src/lib.rs', lines 203:0-209:1
     Visibility: public -/
 def two_product (a : F64) (b : F64) : Result (F64 × F64) := do
   let x ← F64.Insts.CoreOpsArithMulF64F64.mul a b
@@ -140,7 +134,7 @@ def two_product (a : F64) (b : F64) : Result (F64 × F64) := do
   ok (x, fl6)
 
 /-- [fv_predicates::estimate]: loop body 0:
-    Source: 'src/lib.rs', lines 222:4-225:5
+    Source: 'src/lib.rs', lines 217:4-220:5
     Visibility: public -/
 @[rust_loop_body]
 def estimate_loop.body
@@ -157,7 +151,7 @@ def estimate_loop.body
   else ok (done sum)
 
 /-- [fv_predicates::estimate]: loop 0:
-    Source: 'src/lib.rs', lines 222:4-225:5
+    Source: 'src/lib.rs', lines 217:4-220:5
     Visibility: public -/
 @[rust_loop]
 def estimate_loop
@@ -167,7 +161,7 @@ def estimate_loop
     (sum, i)
 
 /-- [fv_predicates::estimate]:
-    Source: 'src/lib.rs', lines 217:0-231:1
+    Source: 'src/lib.rs', lines 212:0-226:1
     Visibility: public -/
 def estimate (e : Slice F64) : Result F64 := do
   let i := Slice.len e
@@ -194,7 +188,7 @@ def estimate (e : Slice F64) : Result F64 := do
   else ok top
 
 /-- [fv_predicates::sum_into]: loop body 0:
-    Source: 'src/lib.rs', lines 253:4-269:5
+    Source: 'src/lib.rs', lines 248:4-264:5
     Visibility: public -/
 @[rust_loop_body]
 def sum_into_loop.body
@@ -257,7 +251,7 @@ def sum_into_loop.body
   else ok (done (h, n, q))
 
 /-- [fv_predicates::sum_into]: loop 0:
-    Source: 'src/lib.rs', lines 253:4-269:5
+    Source: 'src/lib.rs', lines 248:4-264:5
     Visibility: public -/
 @[rust_loop]
 def sum_into_loop
@@ -272,7 +266,7 @@ def sum_into_loop
     (h, ei, fi, n, q, k)
 
 /-- [fv_predicates::sum_into]:
-    Source: 'src/lib.rs', lines 235:0-275:1
+    Source: 'src/lib.rs', lines 230:0-270:1
     Visibility: public -/
 def sum_into
   (e : Slice F64) (f : Slice F64) (h : Slice F64) :
@@ -335,7 +329,7 @@ def sum_into
       else ok (n, h1)
 
 /-- [fv_predicates::cross_exact]:
-    Source: 'src/lib.rs', lines 278:0-282:1
+    Source: 'src/lib.rs', lines 273:0-277:1
     Visibility: public -/
 def cross_exact
   (a : F64) (d : F64) (b : F64) (c : F64) (h : Array F64 4#usize) :
@@ -353,7 +347,7 @@ def cross_exact
   ok (i, h1)
 
 /-- [fv_predicates::cross_sign]:
-    Source: 'src/lib.rs', lines 285:0-297:1
+    Source: 'src/lib.rs', lines 280:0-292:1
     Visibility: public -/
 def cross_sign (a : F64) (b : F64) (c : F64) (d : F64) : Result F64 := do
   let l ← F64.Insts.CoreOpsArithMulF64F64.mul a b
@@ -382,7 +376,7 @@ def cross_sign (a : F64) (b : F64) (c : F64) (d : F64) : Result F64 := do
     else ok e
 
 /-- [fv_predicates::scale_into]: loop body 0:
-    Source: 'src/lib.rs', lines 387:4-402:5
+    Source: 'src/lib.rs', lines 382:4-397:5
     Visibility: public -/
 @[rust_loop_body]
 def scale_into_loop.body
@@ -421,7 +415,7 @@ def scale_into_loop.body
   else ok (done (h, n, q))
 
 /-- [fv_predicates::scale_into]: loop 0:
-    Source: 'src/lib.rs', lines 387:4-402:5
+    Source: 'src/lib.rs', lines 382:4-397:5
     Visibility: public -/
 @[rust_loop]
 def scale_into_loop
@@ -434,7 +428,7 @@ def scale_into_loop
     (h, n, q, i)
 
 /-- [fv_predicates::scale_into]:
-    Source: 'src/lib.rs', lines 375:0-408:1
+    Source: 'src/lib.rs', lines 370:0-403:1
     Visibility: public -/
 def scale_into
   (e : Slice F64) (b : F64) (h : Slice F64) :
@@ -470,7 +464,7 @@ def scale_into
       else ok (n1, h2)
 
 /-- [fv_predicates::mul_small]: loop body 0:
-    Source: 'src/lib.rs', lines 416:8-419:9
+    Source: 'src/lib.rs', lines 411:8-414:9
     Visibility: public -/
 @[rust_loop_body]
 def mul_small_loop.body
@@ -487,7 +481,7 @@ def mul_small_loop.body
   else ok (done h)
 
 /-- [fv_predicates::mul_small]: loop 0:
-    Source: 'src/lib.rs', lines 416:8-419:9
+    Source: 'src/lib.rs', lines 411:8-414:9
     Visibility: public -/
 @[rust_loop]
 def mul_small_loop
@@ -500,7 +494,7 @@ def mul_small_loop
     (h, i)
 
 /-- [fv_predicates::mul_small]:
-    Source: 'src/lib.rs', lines 410:0-424:1
+    Source: 'src/lib.rs', lines 405:0-419:1
     Visibility: public -/
 def mul_small
   (e : Slice F64) (f : Slice F64) (h : Array F64 8#usize) :
@@ -538,7 +532,7 @@ def mul_small
     ok (np1, h1)
 
 /-- [fv_predicates::cross_two]: loop body 0:
-    Source: 'src/lib.rs', lines 439:4-442:5
+    Source: 'src/lib.rs', lines 434:4-437:5
     Visibility: public -/
 @[rust_loop_body]
 def cross_two_loop.body
@@ -555,7 +549,7 @@ def cross_two_loop.body
   else ok (done q)
 
 /-- [fv_predicates::cross_two]: loop 0:
-    Source: 'src/lib.rs', lines 439:4-442:5
+    Source: 'src/lib.rs', lines 434:4-437:5
     Visibility: public -/
 @[rust_loop]
 def cross_two_loop
@@ -567,7 +561,7 @@ def cross_two_loop
     (q, i)
 
 /-- [fv_predicates::cross_two]:
-    Source: 'src/lib.rs', lines 427:0-444:1
+    Source: 'src/lib.rs', lines 422:0-439:1
     Visibility: public -/
 def cross_two
   (x1 : ((Array F64 2#usize) × Std.Usize))
@@ -610,7 +604,7 @@ def cross_two
   ok (i4, h1)
 
 /-- [fv_predicates::diff2]:
-    Source: 'src/lib.rs', lines 365:0-372:1
+    Source: 'src/lib.rs', lines 360:0-367:1
     Visibility: public -/
 def diff2 (a : F64) (b : F64) : Result ((Array F64 2#usize) × Std.Usize) := do
   let (x, y) ← two_diff a b
@@ -621,7 +615,7 @@ def diff2 (a : F64) (b : F64) : Result ((Array F64 2#usize) × Std.Usize) := do
   else ok (Array.make 2#usize [ y, x ], 2#usize)
 
 /-- [fv_predicates::exact_diffs4]:
-    Source: 'src/lib.rs', lines 328:0-346:1
+    Source: 'src/lib.rs', lines 323:0-341:1
     Visibility: public -/
 def exact_diffs4
   (a : Point2) (b : Point2) (c : Point2) :
@@ -650,7 +644,7 @@ def exact_diffs4
         else ok (some (Array.make 4#usize [ x0, x1, x2, x3 ]))
 
 /-- [fv_predicates::orient2d_exact]:
-    Source: 'src/lib.rs', lines 348:0-362:1
+    Source: 'src/lib.rs', lines 343:0-357:1
     Visibility: public -/
 def orient2d_exact (a : Point2) (b : Point2) (c : Point2) : Result F64 := do
   let o ← exact_diffs4 a b c
@@ -681,7 +675,7 @@ def orient2d_exact (a : Point2) (b : Point2) (c : Point2) : Result F64 := do
     estimate s
 
 /-- [fv_predicates::orient2d_adapt]:
-    Source: 'src/lib.rs', lines 312:0-325:1
+    Source: 'src/lib.rs', lines 307:0-320:1
     Visibility: public -/
 def orient2d_adapt
   (a : Point2) (b : Point2) (c : Point2) (detsum : F64) : Result F64 := do
@@ -715,7 +709,7 @@ def orient2d_adapt
       else ok e
 
 /-- [fv_predicates::orient2d]:
-    Source: 'src/lib.rs', lines 300:0-310:1
+    Source: 'src/lib.rs', lines 295:0-305:1
     Visibility: public -/
 def orient2d (a : Point2) (b : Point2) (c : Point2) : Result F64 := do
   let fl ← F64.Insts.CoreOpsArithSubF64F64.sub a.x c.x
@@ -729,15 +723,13 @@ def orient2d (a : Point2) (b : Point2) (c : Point2) : Result F64 := do
   let fl5 ← core.f64.F64.abs right
   let detsum ← F64.Insts.CoreOpsArithAddF64F64.add fl4 fl5
   let fl6 ← ccw_bound
-  let fl7 ← F64.Insts.CoreOpsArithMulF64F64.mul fl6 detsum
-  let fl8 ← slack
-  let bound ← F64.Insts.CoreOpsArithAddF64F64.add fl7 fl8
+  let bound ← F64.Insts.CoreOpsArithMulF64F64.mul fl6 detsum
   let b1 ← F64.Insts.CoreCmpPartialOrdF64.gt det bound
   if b1
   then ok det
   else
-    let fl9 ← F64.Insts.CoreOpsArithNegF64.neg det
-    let b2 ← F64.Insts.CoreCmpPartialOrdF64.gt fl9 bound
+    let fl7 ← F64.Insts.CoreOpsArithNegF64.neg det
+    let b2 ← F64.Insts.CoreCmpPartialOrdF64.gt fl7 bound
     if b2
     then ok det
     else orient2d_adapt a b c detsum

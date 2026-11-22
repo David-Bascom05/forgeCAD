@@ -28,5 +28,5 @@ elab "#standard_axioms " ids:ident* : command => do
 #standard_axioms
   FloatVerification.cross_sign_of_fast FloatVerification.cross_sign_fast
   FloatVerification.shewchuk FloatVerification.orient2d_of_fast FloatVerification.orient2d_fast
-  FloatVerification.finite_of_bound_slack
+  FloatVerification.mul_err_rel
   FloatVerification.grid_of_ge FloatVerification.round_grid FloatVerification.orient2d_window_grid

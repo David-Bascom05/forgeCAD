@@ -4,25 +4,25 @@ Copyright (c) 2026 ForgeCAD contributors. Released under the Mozilla Public Lice
 import FloatVerification.Basic
 
 /-!
-# `orient2d`'s fast path is right for every finite input
+# `orient2d`'s fast path gives the exact sign under the kernel's precondition
 
 `orient2d(a, b, c)` (kernel/forge-math/src/predicates.rs) works on the rounded differences
 `D₁ = a.x − c.x`, `D₂ = b.y − c.y`, `D₃ = a.y − c.y` and `D₄ = b.x − c.x`. It forms
-- `left = D₁·D₂`, `right = D₃·D₄` and `det = left − right`;
-- `detsum = |left| + |right|`;
-- `bound = CCW_BOUND · detsum + SLACK`, every step rounded, with `SLACK = 16 · 2^-1074`.
+`left = D₁·D₂`, `right = D₃·D₄`, `det = left − right`, `detsum = |left| + |right|` and
+`bound = CCW_BOUND · detsum`, every step rounded, and returns `det` when `det > bound` or
+`−det > bound`.
 
-It returns `det` when `det > bound` or `−det > bound`.
+`orient2d_fast` proves that whenever the test passes, the returned value is finite, nonzero and
+has the sign of the exact determinant of the input doubles. The hypothesis is the kernel's
+precondition, checked in its debug builds (`check_filter`): each of the three products is exact
+or normal, so its rounding error is relative. The core is `shewchuk` (over ℚ, with `η = 0`):
+Shewchuk's `(3 + 16ε)ε` covers the relative errors. Overflow needs no hypothesis: it fails the
+test.
 
-`orient2d_fast` proves that whenever that test passes, the returned value is finite, nonzero and
-has the sign of the exact determinant `(a.x − c.x)(b.y − c.y) − (a.y − c.y)(b.x − c.x)` of the
-input doubles. This holds for every finite input, with no hypothesis.
-- Shewchuk's `(3 + 16ε)ε` covers the relative rounding errors (`shewchuk`, over ℚ).
-- `SLACK` covers the absolute error, at most `2^-1075`, that each subnormal product (`left`,
-  `right`, the bound's product) can add.
-- Overflow fails the test.
-
-Without `SLACK` the test is unsound. `Counterexample.lean` has the inputs, near `1e-160`.
+`shewchuk` also covers absolute errors `η` with a slack of `32η` in the bound. The kernel
+carried that slack briefly; it cost one instruction per call, so it was dropped for the
+precondition. `Counterexample.lean` has the inputs, near `1e-160`, that break the precondition
+and get a wrong sign.
 -/
 
 namespace FloatVerification
@@ -178,10 +178,7 @@ def oDet (a b c : Point2) : F64 := sub (oLeft a b c) (oRight a b c)
 def oSum (a b c : Point2) : F64 := add (oLeft a b c).abs (oRight a b c).abs
 /-- `CCW_BOUND` -/
 def ccw : F64 := FP.ofBits 4375247037990436868
-/-- `SLACK` -/
-def slackF : F64 := FP.ofBits 16
-def oBound₀ (a b c : Point2) : F64 := mul ccw (oSum a b c)
-def oBound (a b c : Point2) : F64 := add (oBound₀ a b c) slackF
+def oBound (a b c : Point2) : F64 := mul ccw (oSum a b c)
 
 /-- The test of `orient2d`'s fast path: `det > bound || -det > bound`. -/
 def orientFast (a b c : Point2) : Bool :=
@@ -191,145 +188,91 @@ def orientFast (a b c : Point2) : Bool :=
 def orientExact (a b c : Point2) : ℚ :=
   (a.x.val - c.x.val) * (b.y.val - c.y.val) - (a.y.val - c.y.val) * (b.x.val - c.x.val)
 
-lemma slack_decode : slackF = .fin false 16 (-1074) (by decide) := by decide
-lemma slack_val : slackF.val = 32 * 2 ^ (-1075 : ℤ) := by
-  rw [slack_decode]
-  simp only [FP.val, FP.sgn, Bool.false_eq_true, ite_false]
-  rw [show (-1074 : ℤ) = -1075 + 1 by norm_num, zpow_add₀ two_ne_zero]; ring
+/-- The kernel's precondition on a product (`product_relative`): exact, or normal. -/
+def Relative (x y : F64) : Prop :=
+  (mul x y).val = x.val * y.val ∨ 2 ^ (-1022 : ℤ) ≤ |x.val * y.val|
+
+instance (x y : F64) : Decidable (Relative x y) := by unfold Relative; infer_instance
 
 lemma orient2d_of_fast {a b c : Point2} (h : orientFast a b c = true) :
     orient2d a b c = ok (oDet a b c) := by
   simp only [orient2d, F64.Insts.CoreOpsArithMulF64F64.mul, F64.Insts.CoreOpsArithSubF64F64.sub,
     F64.Insts.CoreOpsArithAddF64F64.add, F64.Insts.CoreOpsArithNegF64.neg, core.f64.F64.abs,
-    ccw_bound, slack, core.f64.F64.from_bits, F64.Insts.CoreCmpPartialOrdF64.gt, bind_ok]
-  simp only [orientFast, oDet, oBound, oBound₀, oSum, oLeft, oRight, ccw, slackF,
-    Bool.or_eq_true] at h
+    ccw_bound, core.f64.F64.from_bits, F64.Insts.CoreCmpPartialOrdF64.gt, bind_ok]
+  simp only [orientFast, oDet, oBound, oSum, oLeft, oRight, ccw, Bool.or_eq_true] at h
   rcases h with h | h
   · rw [if_pos (by exact h)]; rfl
-  · by_cases h' : FP.lt (add (mul (FP.ofBits 4375247037990436868) (add (mul (sub a.x c.x)
-        (sub b.y c.y)).abs (mul (sub a.y c.y) (sub b.x c.x)).abs)) (FP.ofBits 16))
+  · by_cases h' : FP.lt (mul (FP.ofBits 4375247037990436868) (add (mul (sub a.x c.x)
+        (sub b.y c.y)).abs (mul (sub a.y c.y) (sub b.x c.x)).abs))
         (sub (mul (sub a.x c.x) (sub b.y c.y)) (mul (sub a.y c.y) (sub b.x c.x))) = true
     · rw [if_pos (by exact h')]; rfl
     · rw [if_neg (by exact h'), if_pos (by exact h)]; rfl
 
 lemma prec_eps : (2 : ℚ) ^ (-(binary64.prec : ℤ)) = ε := rfl
-lemma qmin_eta : (2 : ℚ) ^ (binary64.qmin - 1) = 2 ^ (-1075 : ℤ) := by simp
 
-/-- If `c · (|l| + |r|) + A < X` holds for `c`, `A` finite and positive, then `l`, `r`, the sum,
-both bounds and `l - r` are finite. -/
-lemma finite_of_bound_slack {c A l r X : F64} (hc : c.isFinite) (hc0 : 0 < c.val)
-    (hA : A.isFinite) (hA0 : 0 < A.val)
-    (h : FP.lt (add (mul c (add l.abs r.abs)) A) X = true) :
-    l.isFinite ∧ r.isFinite ∧ (add l.abs r.abs).isFinite ∧ (mul c (add l.abs r.abs)).isFinite ∧
-      (add (mul c (add l.abs r.abs)) A).isFinite ∧ (sub l r).isFinite := by
-  obtain ⟨hB, _, hB', _⟩ := lt_cases h
-  set S := add l.abs r.abs
-  set B₀ := mul c S
-  -- `B₀` is finite: NaN and `+∞` would pass to `B`, and `-∞` cannot happen
-  have hB₀ : B₀.isFinite := by
-    rcases trichotomy B₀ with hm | ⟨s, hm⟩ | hm
-    · exact hm
-    · cases s
-      · exact absurd (by rw [hm]; exact add_inf_left hA false) hB'
-      · exfalso
-        rcases trichotomy S with hS | ⟨t, hS⟩ | hS
-        · have : B₀ = round binary64 (c.sign ^^ S.sign) (c.val * S.val) := mul_eq_round hc hS
-          rw [hm] at this
-          refine round_ne_neg_inf (mul_nonneg hc0.le ?_) this.symm
-          obtain ⟨hl, hr⟩ := isFinite_of_add hS
-          show 0 ≤ (add l.abs r.abs).val
-          rw [add_eq_round hl hr]
-          exact round_val_nonneg binary64 (add_nonneg (val_abs_nonneg l) (val_abs_nonneg r))
-        · cases t
-          · rw [show B₀ = mul c S from rfl, hS, (mul_pos_left_cases hc hc0).1 rfl] at hm; cases hm
-          · exact add_abs_ne_neg_inf l r hS
-        · rw [show B₀ = mul c S from rfl, hS, (mul_pos_left_cases hc hc0).2 rfl] at hm; cases hm
-    · rw [hm, add_nan_left] at hB; simp [isNaN] at hB
-  have hS : S.isFinite := (isFinite_of_mul hB₀).2
-  obtain ⟨hl, hr⟩ := isFinite_of_add hS
-  have hl' : l.isFinite := by simpa using hl
-  have hr' : r.isFinite := by simpa using hr
-  have hBf : (add B₀ A).isFinite := by
-    rcases trichotomy (add B₀ A) with hm | ⟨s, hm⟩ | hm
-    · exact hm
-    · cases s
-      · exact absurd hm hB'
-      · exfalso
-        rw [add_eq_round hB₀ hA] at hm
-        refine round_ne_neg_inf (add_nonneg ?_ hA0.le) hm
-        rw [show B₀ = mul c S from rfl, mul_eq_round hc hS]
-        apply round_val_nonneg binary64 (mul_nonneg hc0.le _)
-        show 0 ≤ (add l.abs r.abs).val
-        rw [add_eq_round hl hr]
-        exact round_val_nonneg binary64 (add_nonneg (val_abs_nonneg l) (val_abs_nonneg r))
-    · rw [hm] at hB; simp [isNaN] at hB
-  refine ⟨hl', hr', hS, hB₀, hBf, ?_⟩
-  by_contra hd
-  have := sum_abs_inf_of_sub_inf hl' hr' (Bool.eq_false_iff.mpr hd)
-  rw [show add l.abs r.abs = S from rfl, hS] at this; exact absurd this (by decide)
+/-- A product meeting the precondition has a relative rounding error. -/
+lemma mul_err_rel {x y : F64} (hx : x.isFinite) (hy : y.isFinite) (hm : (mul x y).isFinite)
+    (h : Relative x y) : |(mul x y).val - x.val * y.val| ≤ ε * |(mul x y).val| + 0 := by
+  rcases h with h | h
+  · rw [h, _root_.sub_self, abs_zero, _root_.add_zero]; exact mul_nonneg ε_pos.le (abs_nonneg _)
+  · rw [_root_.add_zero, ← prec_eps]; exact mul_err_res hx hy hm (Or.inr (by simpa using h))
 
-/-- **`orient2d`'s fast path gives the exact sign, for every finite input.** If the test
-passes, `orient2d` returns a finite nonzero value with the sign of the exact determinant. -/
+/-- **`orient2d`'s fast path gives the exact sign under the precondition.** For finite
+coordinates whose three products (`D₁·D₂`, `D₃·D₄`, `CCW_BOUND · detsum`) are exact or normal,
+if the test passes, `orient2d` returns a finite nonzero value with the sign of the exact
+determinant. -/
 theorem orient2d_fast (a b c : Point2)
     (hax : a.x.isFinite) (hay : a.y.isFinite) (hbx : b.x.isFinite) (hby : b.y.isFinite)
     (hcx : c.x.isFinite) (hcy : c.y.isFinite)
+    (hP : Relative (sub a.x c.x) (sub b.y c.y)) (hQ : Relative (sub a.y c.y) (sub b.x c.x))
+    (hB : Relative ccw (oSum a b c))
     (h : orientFast a b c = true) :
     ∃ v, orient2d a b c = ok v ∧ v.isFinite ∧ v.val ≠ 0 ∧
       (0 < v.val ↔ 0 < orientExact a b c) ∧ (v.val < 0 ↔ orientExact a b c < 0) := by
   refine ⟨_, orient2d_of_fast h, ?_⟩
   have hC : ccw.isFinite := by decide
   have hC0 : 0 < ccw.val := by rw [ccw, ccw_bound_val]; positivity
-  have hA : slackF.isFinite := by decide
-  have hA0 : 0 < slackF.val := by rw [slack_val]; positivity
   have hfin : ∀ X, FP.lt (oBound a b c) X = true →
       (oLeft a b c).isFinite ∧ (oRight a b c).isFinite ∧ (oSum a b c).isFinite ∧
-        (oBound₀ a b c).isFinite ∧ (oBound a b c).isFinite ∧ (oDet a b c).isFinite :=
-    fun X hX => finite_of_bound_slack hC hC0 hA hA0 hX
+        (oBound a b c).isFinite ∧ (oDet a b c).isFinite :=
+    fun X hX => finite_of_bound hC hC0 hX
   simp only [orientFast, Bool.or_eq_true] at h
-  obtain ⟨hL, hR, hS, hB₀, hB, hdet⟩ : (oLeft a b c).isFinite ∧ (oRight a b c).isFinite ∧
-      (oSum a b c).isFinite ∧ (oBound₀ a b c).isFinite ∧ (oBound a b c).isFinite ∧
-        (oDet a b c).isFinite := by
+  obtain ⟨hL, hR, hS, hBf, hdet⟩ : (oLeft a b c).isFinite ∧ (oRight a b c).isFinite ∧
+      (oSum a b c).isFinite ∧ (oBound a b c).isFinite ∧ (oDet a b c).isFinite := by
     rcases h with h | h
     · exact hfin _ h
     · exact hfin _ h
-  -- `bound < |det|`
   have htest : (oBound a b c).val < |(oDet a b c).val| := by
     rcases h with h | h
-    · exact lt_of_lt_of_le (lt_finite hB hdet h) (le_abs_self _)
-    · have := lt_finite hB (by simpa using hdet) h
+    · exact lt_of_lt_of_le (lt_finite hBf hdet h) (le_abs_self _)
+    · have := lt_finite hBf (by simpa using hdet) h
       rw [val_neg] at this
       exact lt_of_lt_of_le this (neg_le_abs _)
   obtain ⟨h1, h2⟩ := isFinite_of_mul hL
   obtain ⟨h3, h4⟩ := isFinite_of_mul hR
   have hLa : (oLeft a b c).abs.isFinite := by simpa using hL
   have hRa : (oRight a b c).abs.isFinite := by simpa using hR
-  -- the rounding error of each step
   have e₁ := sub_err_res hax hcx h1
   have e₂ := sub_err_res hby hcy h2
   have e₃ := sub_err_res hay hcy h3
   have e₄ := sub_err_res hbx hcx h4
-  have eL := mul_err_abs h1 h2 hL
-  have eR := mul_err_abs h3 h4 hR
+  have eL := mul_err_rel h1 h2 hL hP
+  have eR := mul_err_rel h3 h4 hR hQ
   have edet := sub_err_res hL hR hdet
   have eS := add_err_res hLa hRa hS
-  have eB₀ := mul_err_abs hC hS hB₀
-  have eB := add_err_res hB₀ hA hB
-  rw [prec_eps] at e₁ e₂ e₃ e₄ eL eR edet eS eB₀ eB
-  rw [qmin_eta] at eL eR eB₀
+  have eB₀ := mul_err_rel hC hS hBf hB
+  rw [prec_eps] at e₁ e₂ e₃ e₄ edet eS
   rw [abs_val, abs_val] at eS
-  rw [slack_val] at eB
   have hS0 : 0 ≤ (oSum a b c).val := by
     simp only [oSum]; rw [add_eq_round hLa hRa]
     exact round_val_nonneg binary64 (add_nonneg (val_abs_nonneg _) (val_abs_nonneg _))
-  have hB00 : 0 ≤ (oBound₀ a b c).val := by
-    simp only [oBound₀]; rw [mul_eq_round hC hS]
-    exact round_val_nonneg binary64 (mul_nonneg hC0.le hS0)
   have hB0 : 0 ≤ (oBound a b c).val := by
-    simp only [oBound]; rw [add_eq_round hB₀ hA]
-    exact round_val_nonneg binary64 (add_nonneg hB00 hA0.le)
+    simp only [oBound]; rw [mul_eq_round hC hS]
+    exact round_val_nonneg binary64 (mul_nonneg hC0.le hS0)
   rw [show ccw.val = (3 + 16 * ε) * ε from ccw_bound_val] at eB₀
-  have key := shewchuk (by positivity) e₁ e₂ e₃ e₄ eL eR edet hS0 eS hB00 eB₀ hB0 eB
-    (sub_sign hL hR) htest
+  have eB : |(oBound a b c).val - ((oBound a b c).val + 32 * 0)| ≤ ε * |(oBound a b c).val| := by
+    simp
+  have key := shewchuk le_rfl e₁ e₂ e₃ e₄ eL eR edet hS0 eS hB0 eB₀ hB0 eB (sub_sign hL hR) htest
   have hne : (oDet a b c).val ≠ 0 := by
     intro h0; rw [h0, abs_zero] at htest; linarith
   simp only [orientExact]

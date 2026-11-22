@@ -52,11 +52,6 @@ pub fn cross_bound() -> f64 {
     f64::from_bits(0x3cb0000000000002)
 }
 
-/// `SLACK = 16 · 2^-1074`
-#[inline]
-pub fn slack() -> f64 {
-    f64::from_bits(16)
-}
 /// The kernel's exact integer fallback for NaN results, verbatim. `gen.sh` keeps this module opaque
 /// (`charon --opaque fv_predicates::big`): Aeneas does not translate it, and the Lean side
 /// gives it no meaning (`FunsExternal.lean`), so no theorem can say anything about inputs
@@ -302,7 +297,7 @@ pub fn orient2d(a: Point2, b: Point2, c: Point2) -> f64 {
     let right = (a.y.sub(c.y)).mul(b.x.sub(c.x));
     let det = left.sub(right);
     let detsum = left.abs().add(right.abs());
-    let bound = ccw_bound().mul(detsum).add(slack());
+    let bound = ccw_bound().mul(detsum);
     if det.gt(&bound) || det.neg().gt(&bound) {
         return det;
     }
@@ -511,10 +506,9 @@ mod tests {
             x: -4.608837897596252e-178,
             y: 0.0,
         };
-        // the exact determinant is positive. Before the slack the fast filter answered -5e-324.
-        // Now it does not decide, and the slow path, outside its window (the products
-        // underflow), gives 0: unchecked, as documented
-        assert!(orient2d(a, b, c) >= 0.0);
+        // the exact determinant is positive, but the products underflow (the precondition
+        // fails) and the fast filter answers -5e-324, as the kernel does
+        assert_eq!(orient2d(a, b, c), -5e-324);
         let k = |p: Point2| forge_math::Point2::new(p.x, p.y);
         assert_eq!(
             k::orient2d(k(a), k(b), k(c)).to_bits(),

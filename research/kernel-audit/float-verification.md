@@ -80,22 +80,25 @@ Independent check (`check_exact.py`, 200,000 cases per range, on the final kerne
 | 2^505 … 2^515, 2^520 … 2^1000 (overflow: the NaN fallback) | 0 |
 | 2^-540 … 2^-520 (underflow, outside the windows: unchecked) | 369,358 |
 
-Gates, on the final code (`c9870b7` plus this commit):
+Gates, on the final code:
 - **Speed:** measured with the deterministic exact gate from `claude/repo-review-mbdrlj-speed`
-  (`GATE_EXACT=1`: fixed environment, fixed HashMap seeds, one CPU, run from `/`). The same
-  binary gives the same count, so an A/B difference is cost, not noise. Base is the unmodified
-  commit, on an equal-length path.
-  - All 22 deterministic synthetic lines are at or below base, the largest change −40,223
-    instructions.
-  - The 75 bench lines are within −0.009% to +0.034% (47 slightly above).
-  - Bits identical.
-  - Two release changes were needed to get there. The NaN check in `triple`'s slow path cost
-    33k instructions on patterns, so `triple` has no NaN fallback. The precondition checks are
-    in out-of-line `#[cfg(debug_assertions)]` functions, so release MIR doesn't see them.
-- **Release tests:** forge-math, forge-geom, forge-bool, forge-model and forge-mesh, 431 passed,
+  (`GATE_EXACT=1`), A/B against the unmodified commit at an equal-length path. **No line is
+  above base**: all 22 synthetic lines and all 75 bench lines are at or below base. Bits are
+  identical.
+  - Getting there took three release changes. `triple`'s slow-path NaN check cost 33k
+    instructions on patterns, so `triple` has no NaN fallback. The precondition checks went into
+    out-of-line `#[cfg(debug_assertions)]` functions.
+  - The largest bench lines above base were clamp (+4,271 app, +6,131 edit) and bracket. The
+    per-function diff of the regen alone (`--toggle-collect`) put clamp's +2,013 all in
+    `inside_polygon`, which is `orient2d`'s `SLACK` add, one instruction per call. So `orient2d`
+    and `dot3` no longer carry `SLACK`, and their filter products are part of the
+    debug-checked precondition (`check_filter`).
+- **Release tests:** forge-math, forge-geom, forge-bool, forge-model and forge-mesh, 430 passed,
   0 failed.
 - **Bits:** identical to `tools/speed/bits.txt`, and native = wasm32-wasip1.
 - **fmt and clippy:** clean.
+- **Survey** of the full precondition (filters, `two_product`), after the uv snap: 0 violations
+  in the release tests and in `FUZZ_SEEDS=150`.
 
 ## What is proven
 
@@ -112,22 +115,25 @@ fails the build otherwise.
      or is zero.
    - The test only has to exclude zero, NaN and overflow, and the proof shows it does. So
      `CROSS_BOUND` matters for speed, not soundness.
-2. **`orient2d_fast`, with no hypothesis.** Take any finite coordinates. If the fixed fast test
-   `det > bound || −det > bound` passes, with `bound = CCW_BOUND·detsum + SLACK`, then
-   `orient2d` returns `det`, finite, nonzero and with the sign of the exact determinant of the
-   input doubles.
+2. **`orient2d_fast`, under the kernel's precondition.** Take finite coordinates whose three
+   products (`D₁·D₂`, `D₃·D₄`, `CCW_BOUND·detsum`) are each exact or normal (`Relative`; the
+   kernel's debug check `check_filter`). If the fast test `det > bound || −det > bound`
+   passes, then `orient2d` returns `det`, finite, nonzero and with the sign of the exact
+   determinant of the input doubles.
    - The core is `shewchuk`, over ℚ. Each rounding error is relative to its computed value,
      plus `η = 2^-1075` for the three products, which may be subnormal. The errors come from the
      model's `sub_err_res`, `add_err_res` and `mul_err_abs`.
-   - Shewchuk's `(3 + 16ε)ε` absorbs the relative part, and `SLACK = 32η` absorbs the absolute
-     part. The constants are checked by `norm_num`.
-   - Overflow fails the test (`finite_of_bound_slack`).
-   - The fix is what removes the earlier no-underflow hypothesis.
-3. **The old test was unsound.** `orient2d_cex` evaluates the counterexample's three facts by
+   - Shewchuk's `(3 + 16ε)ε` absorbs the relative part. The constants are checked by `norm_num`.
+   - `shewchuk` also proves that a slack of `32η` would absorb absolute errors, at one
+     instruction per call. The speed rule ruled that out, so the theorem is applied with
+     `η = 0`.
+   - Overflow fails the test.
+3. **The precondition is needed.** `orient2d_cex` evaluates the counterexample's facts by
    `native_decide`, the one result that relies on the compiler, and nothing depends on it:
-   - the test without `SLACK` passes with `det < 0` though the exact determinant is positive;
-   - a product underflows;
-   - the fixed test does not pass.
+   - the test passes with `det < 0` though the exact determinant is positive;
+   - the product `D₁·D₂` is neither exact nor normal.
+
+   The kernel's debug check catches this input: `orient2d_underflow_counterexample_is_caught`.
 
 4. **The window implies the slow path's precondition** (`Window.lean`, `orient2d_window_grid`).
    The kernel's precondition is checked by `debug_assert!` at every `two_product`: a product

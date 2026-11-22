@@ -4,19 +4,23 @@
 //! Arithmetic and Fast Robust Geometric Predicates", 1997). The returned value
 //! has the correct sign; its magnitude is an approximation.
 //!
-//! Shewchuk's bounds and expansions assume no underflow and no overflow. Here:
-//! - `orient2d`'s and `dot3`'s filters carry an absolute slack (`SLACK`), which covers the
-//!   absolute error of a subnormal product, and `cross_sign`'s is sound by monotonicity: a fast
-//!   decision of these three is right for every finite input (proven for `orient2d` and
-//!   `cross_sign`, research/kernel-audit/float-verification.md). The slack changes no decision
-//!   unless the bound is below about 2^-1017. `triple` and the in-circle tests multiply rounded
-//!   products, so an absolute error is amplified: their filters rely on the precondition below;
-//! - the precondition for an exact answer is that no product a predicate forms underflows
-//!   inexactly (`product_exact`), checked in debug builds only, out of line: then the slow paths' expansions
-//!   are exact, and so are the in-circle tests' and `triple`'s filters, which have no slack. A
-//!   slow-path result of `cross_sign`, `orient2d`, `dot3` or `incircle` that comes out NaN (a
-//!   product overflowed) is recomputed exactly with fixed-width integers (`Big`); `triple`'s is
-//!   not (the check measurably slowed its frequent slow path).
+//! Shewchuk's bounds and expansions assume no underflow and no overflow. Here the precondition
+//! for an exact answer is that no product a predicate forms underflows inexactly, checked in
+//! debug builds only, out of line (`check_filter`, `check_triple`, `check_in_circle`,
+//! `check_two_product`):
+//! - for the fast filters, each product's rounding error is relative (`product_relative`):
+//!   then Shewchuk's bounds hold (proven for `orient2d`, research/kernel-audit/float-verification.md).
+//!   `cross_sign`'s filter needs nothing: it is sound for every finite input, by monotonicity
+//!   (proven);
+//! - for the slow paths, each `two_product` is exact (`product_exact`): then the expansions are
+//!   exact.
+//!
+//! Inputs within each predicate's window imply both (see `product_exact`). Real kernel inputs
+//! meet the precondition: forge-mesh snaps uv noise below 2^-200 to 0 (`Layout::put`), and a
+//! survey of the release tests and the fuzz suite found no violation. A slow-path result of
+//! `cross_sign`, `orient2d`, `dot3` or `incircle` that comes out NaN (a product overflowed) is
+//! recomputed exactly with fixed-width integers (`Big`); `triple`'s is not (the check
+//! measurably slowed its frequent slow path).
 
 use crate::{Point2, Vec2, Vec3};
 use std::cmp::Ordering;
@@ -30,9 +34,6 @@ const ICC_BOUND: f64 = (10.0 + 96.0 * EPS) * EPS;
 const CCW_BOUND_B: f64 = (2.0 + 12.0 * EPS) * EPS;
 const ICC_BOUND_B: f64 = (4.0 + 48.0 * EPS) * EPS;
 // derived and tested in research/predicate-bounds/
-/// Absolute slack on the fast filters' bounds: `16 · 2^-1074`, well above the absolute rounding
-/// error (at most `2^-1075` each) of the few subnormal products a filter can meet.
-const SLACK: f64 = f64::from_bits(16);
 /// The exponent of a nonzero finite double's lowest set bit: `x` is an odd multiple of
 /// `2^lsb(x)`.
 #[cfg(debug_assertions)]
@@ -62,10 +63,8 @@ fn product_exact(x: f64, y: f64) -> bool {
     x == 0.0 || y == 0.0 || !x.is_finite() || !y.is_finite() || lsb(x) + lsb(y) >= -1074
 }
 
-/// The filters' precondition, for `triple` and the in-circle tests (whose terms multiply
-/// rounded products, so an absolute error would be amplified): a product they form is normal,
-/// or exact (`product_exact`), so its rounding error is relative. (`orient2d`'s and `dot3`'s
-/// filters carry `SLACK` instead and need nothing; `cross_sign`'s is sound by monotonicity.)
+/// The filters' precondition: a product they form is normal, or exact (`product_exact`), so
+/// its rounding error is relative and the filter's bound covers it.
 #[cfg(debug_assertions)]
 fn product_relative(x: f64, y: f64) -> bool {
     (x * y).abs() >= f64::MIN_POSITIVE || product_exact(x, y)
@@ -78,6 +77,20 @@ fn product_relative(x: f64, y: f64) -> bool {
 #[inline(never)]
 fn check_two_product(a: f64, b: f64) {
     assert!(product_exact(a, b), "two_product inexact: {a:e} * {b:e}");
+}
+
+/// The precondition of `orient2d`'s and `dot3`'s filters: each product's rounding error is
+/// relative (the bound covers no absolute, subnormal error).
+#[cfg(debug_assertions)]
+#[cold]
+#[inline(never)]
+fn check_filter(name: &str, products: &[(f64, f64)]) {
+    for &(p, q) in products {
+        assert!(
+            product_relative(p, q),
+            "{name}: a product underflows: {p:e} * {q:e}"
+        );
+    }
 }
 
 /// The precondition of `triple`'s filter: its products' rounding errors are relative.
@@ -394,7 +407,16 @@ pub fn orient2d(a: Point2, b: Point2, c: Point2) -> f64 {
     let right = (a.y - c.y) * (b.x - c.x);
     let det = left - right;
     let detsum = left.abs() + right.abs();
-    let bound = CCW_BOUND * detsum + SLACK;
+    #[cfg(debug_assertions)]
+    check_filter(
+        "orient2d",
+        &[
+            (a.x - c.x, b.y - c.y),
+            (a.y - c.y, b.x - c.x),
+            (CCW_BOUND, detsum),
+        ],
+    );
+    let bound = CCW_BOUND * detsum;
     if det > bound || -det > bound {
         return det;
     }
@@ -502,7 +524,17 @@ pub fn cross2(u: Vec2, v: Vec2) -> f64 {
 pub fn dot3(u: Vec3, v: Vec3) -> f64 {
     let (x, y, z) = (u.x * v.x, u.y * v.y, u.z * v.z);
     let dot = x + y + z;
-    if dot.abs() > DOT3_BOUND * (x.abs() + y.abs() + z.abs()) + SLACK {
+    #[cfg(debug_assertions)]
+    check_filter(
+        "dot3",
+        &[
+            (u.x, v.x),
+            (u.y, v.y),
+            (u.z, v.z),
+            (DOT3_BOUND, x.abs() + y.abs() + z.abs()),
+        ],
+    );
+    if dot.abs() > DOT3_BOUND * (x.abs() + y.abs() + z.abs()) {
         return dot;
     }
     let (mut p, mut q) = ([0.0; 4], [0.0; 6]);
@@ -815,16 +847,18 @@ mod tests {
         v
     }
 
-    /// Outside the window (here the products underflow) the slow path is not exact, so this runs
-    /// in release only: the fast filter, before the slack, answered -5e-324 for a positive
-    /// determinant (research/kernel-audit/float-verification.md); now it does not decide.
+    /// The products underflow and straddle a rounding midpoint the wrong way round: the fast
+    /// filter answers -5e-324 for a positive determinant
+    /// (research/kernel-audit/float-verification.md). The input breaks the precondition, and
+    /// the debug check says so.
     #[test]
-    #[cfg(not(debug_assertions))]
-    fn orient2d_underflow_counterexample() {
+    #[cfg(debug_assertions)]
+    #[should_panic(expected = "orient2d: a product underflows")]
+    fn orient2d_underflow_counterexample_is_caught() {
         let a = Point2::new(5.394455326111622e-162, 1.6245062719943995e-164);
         let b = Point2::new(1.3762009331530288e-157, 4.1443425003634566e-160);
         let c = Point2::new(-4.608837897596252e-178, 0.0);
-        assert!(orient2d(a, b, c) >= 0.0);
+        orient2d(a, b, c);
     }
 
     /// Products that overflow: the expansions answer NaN, and the integer evaluation decides.
