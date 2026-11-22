@@ -265,6 +265,8 @@ fn holds(case: &str, (body, pipe, r): (Solid, Solid, f64)) {
     let (before, after) = rounded(body, pipe, r, 0.0);
     assert!(balls_hold(&before, &after, &[body, pipe], r) > 60);
     let added = volume(&after) - volume(&before);
+    // (the exact bits, to hold the native build to the wasm one: `-- --nocapture`)
+    eprintln!("{case} cliff volume bits {:016x}", volume(&after).to_bits());
     let want = closing_added(case);
     assert!(
         (added - want).abs() <= 0.01 * want,

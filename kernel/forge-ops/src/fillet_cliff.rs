@@ -32,9 +32,13 @@ pub(super) fn retry(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, fea
     if !edges.iter().any(closed) {
         return None;
     }
+    // what the caller asked, not the retry it had come to (fillet_with makes its own)
     let tried = FilletOptions {
         rims: true,
         cliff: true,
+        across: false,
+        seams: false,
+        walk: false,
         ..opts.clone()
     };
     // the seams left where they are where they are out of the way, then all moved where the
@@ -44,7 +48,7 @@ pub(super) fn retry(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, fea
             cliff_seams: all,
             ..tried.clone()
         };
-        fillet_picked(body, edges, &tried, feature)
+        fillet_with(body, edges, &tried, feature)
             .ok()
             .filter(|b| forge_topo::check(b).is_empty() && forge_topo::mass::mass(b).is_ok())
     })
@@ -476,4 +480,13 @@ pub(super) fn seams_at(body: &Body, f: FaceId, v: VertexId) -> Vec<EdgeId> {
     out.sort_unstable();
     out.dedup();
     out
+}
+
+/// Whether a body's counts pass `forge_topo::check`'s Euler rule (V - E + 2F - L even, and at
+/// most 2 a shell): what a round's caller asks of it before keeping it, at no cost. A body with
+/// tombstones is not judged here.
+pub(super) fn counts_sound(b: &Body) -> bool {
+    let value =
+        b.vertices.len() as i64 - b.edges.len() as i64 + 2 * b.faces.len() as i64 - b.loops.len() as i64;
+    b.dead > 0 || (value % 2 == 0 && value <= 2 * b.shells.len() as i64)
 }

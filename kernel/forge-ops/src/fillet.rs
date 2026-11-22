@@ -422,6 +422,11 @@ pub fn fillet_with(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, feat
         {
             fillet_cliff::retry(body, edges, opts, feature).map_or(got, Ok)
         }
+        // built, but its counts break the Euler rule (the caller refuses such a round): a closed
+        // round over a rim and back may stand resting on the rim instead
+        Ok(done) if !opts.cliff && opts.setbacks.is_empty() && !fillet_cliff::counts_sound(&done) => {
+            Ok(fillet_cliff::retry(body, edges, opts, feature).unwrap_or(done))
+        }
         got => got,
     }
 }
@@ -539,7 +544,8 @@ fn fillet_picked(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, featur
     let mut first = None;
     for _ in 0..4 {
         let on = work.as_ref().unwrap_or(body);
-        match fillet_on(on, edges, opts, feature) {
+        let notched = std::sync::atomic::AtomicBool::new(false);
+        match fillet_on_noting(on, edges, opts, feature, Some(&notched)) {
             // the edge split in two, ids before it standing, its middle lies between the pieces
             Err(FilletError::SplitFirst { edge, at }) => {
                 let mut b = if on.dead > 0 { on.compact() } else { on.clone() };
@@ -549,6 +555,12 @@ fn fillet_picked(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, featur
             Err(e) => {
                 first = Some(first.unwrap_or(e));
                 break;
+            }
+            // a closed round notched where its spring runs over a rim and back: the round
+            // resting on the rim there instead, where it stands (the closing's shape), from the
+            // body as it came (not with a rim a notch split first)
+            Ok(done) if !opts.cliff && notched.load(std::sync::atomic::Ordering::Relaxed) => {
+                return Ok(fillet_cliff::retry(body, edges, opts, feature).unwrap_or(done));
             }
             ok => return ok,
         }
@@ -823,7 +835,19 @@ fn move_seam(b: &mut Body, f: FaceId) -> Option<()> {
     Some(())
 }
 
+/// `fillet_on`, and whether a closed concave round's spring was notched over a rim and back,
+/// told by setting `notched_out`.
 fn fillet_on(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, feature: u64) -> R<Body> {
+    fillet_on_noting(body, edges, opts, feature, None)
+}
+
+fn fillet_on_noting(
+    body: &Body,
+    edges: &[FilletEdge],
+    opts: &FilletOptions,
+    feature: u64,
+    notched_out: Option<&std::sync::atomic::AtomicBool>,
+) -> R<Body> {
     if body.dead > 0 && (!opts.starts.is_empty() || !opts.setbacks.is_empty()) {
         // the options name this body's entities
         return Err(FilletError::NotAnEdge {
@@ -1008,18 +1032,21 @@ fn fillet_on(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, feature: u
                     .map(|u| (r.edge, u))
             })
             .collect();
-        if opts.cliff
-            && pass == 0
-            && fillet_cliff::split(
+        // a cliff's try is the cliff's: with none to cut, the round is the other tries' to make
+        if opts.cliff && pass == 0 {
+            if fillet_cliff::split(
                 opts.cliff_seams,
                 &mut body,
                 &by_edge,
                 &mut all,
                 &mut picks,
                 (&mut cliff_rims, &mut cliffed),
-            )?
-        {
-            continue;
+            )? {
+                continue;
+            }
+            return Err(FilletError::Overflow {
+                edge: edges.first().map_or(EdgeId(0), |f| f.edge),
+            });
         }
         if !cliffed.is_empty() {
             fillet_cliff::clear(&body, &by_edge, &cliffed)?;
@@ -1039,7 +1066,14 @@ fn fillet_on(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, feature: u
             b.pivots = pivots;
             b.opening = opts.walk;
             b.cliff_rims = cliff_rims;
-            return b.build();
+            let notched = b.notched.clone();
+            let built = b.build();
+            if let Some(out) = notched_out
+                && notched.load(std::sync::atomic::Ordering::Relaxed)
+            {
+                out.store(true, std::sync::atomic::Ordering::Relaxed);
+            }
+            return built;
         }
         for (e, u) in splits {
             let other = split_edge(&mut body, e, u);
@@ -2850,6 +2884,8 @@ struct Builder {
     /// Pieces of rims a closed round's ball rests on all along (`fillet_cliff`): its spring there
     /// takes the piece's place.
     cliff_rims: BTreeSet<EdgeId>,
+    /// Set where a closed concave round's spring was notched over a rim and back (`excursions`).
+    notched: Arc<std::sync::atomic::AtomicBool>,
     /// Walks may pass over short blends whose far vertices would otherwise close first.
     opening: bool,
     /// An edge whose blend ran out beside a tangent chain going on unpicked.
@@ -2919,6 +2955,7 @@ impl Builder {
             gone_blends: BTreeSet::new(),
             rim_sides: BTreeSet::new(),
             cliff_rims: BTreeSet::new(),
+            notched: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             opening: false,
             free_end: None,
             free_ends: false,
@@ -5990,7 +6027,13 @@ impl Builder {
                 } else if over.is_some() {
                     return Err(FilletError::Overflow { edge: e });
                 } else {
-                    self.excursions(i, side, Interval::new(t0, t1))?
+                    let trips = self.excursions(i, side, Interval::new(t0, t1))?;
+                    // a closed concave round's spring off over a rim and back: notched here,
+                    // which a cliff may round as the ball rolls
+                    if !trips.is_empty() && closed && !self.rolled[i].convex {
+                        self.notched.store(true, std::sync::atomic::Ordering::Relaxed);
+                    }
+                    trips
                 };
                 if let Some(list) = across {
                     // its stretches, turn about on the face and on the one across each seam
