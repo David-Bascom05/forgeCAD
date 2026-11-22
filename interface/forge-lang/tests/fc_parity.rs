@@ -377,6 +377,157 @@ fn suppress_and_unsuppress() {
     assert!(apply(&back, &Op::Unsuppress { id: "boss".into() }).is_err());
 }
 
+/// Suppress takes out exactly the statements it names, a line shared with ones kept split
+/// (Suppress.lean: `suppress_live`; it took the whole line, `same_line_drops`), and Unsuppress
+/// gives the text back byte for byte, whichever of two features sharing a line goes back first
+/// (`unsuppress_suppress`).
+#[test]
+fn suppress_takes_one_statement_of_a_line() {
+    use forge_lang::edit::apply;
+    use forge_lang::error::Op;
+    let sup = |id: &str| Op::Suppress { id: id.into() };
+    let unsup = |id: &str| Op::Unsuppress { id: id.into() };
+    let ids = |src: &str| -> Vec<String> { common::run(src).0.feats.iter().map(|f| f.id.clone()).collect() };
+    let src = format!(
+        "{BLOCK}a = extrude(plan, 2, new: true); b = extrude(plan, 3, new: true); c = extrude(plan, 4, new: true)  # three\nd = extrude(plan, 5, new: true);e = extrude(plan, 6, new: true)\n"
+    );
+    let all = ids(&src);
+    for one in ["a", "b", "c", "d", "e"] {
+        let out = apply(&src, &sup(one)).expect("suppressed");
+        let want: Vec<_> = all.iter().filter(|x| *x != one).cloned().collect();
+        assert_eq!(ids(&out), want, "{out}");
+        assert_eq!(apply(&out, &unsup(one)).expect("back"), src, "{out}");
+    }
+    // two of one line, put back in either order
+    for (x, y) in [
+        ("a", "b"),
+        ("b", "a"),
+        ("a", "c"),
+        ("c", "a"),
+        ("b", "c"),
+        ("d", "e"),
+        ("e", "d"),
+    ] {
+        let two = apply(&apply(&src, &sup(x)).expect("x"), &sup(y)).expect("y");
+        let want: Vec<_> = all.iter().filter(|i| *i != x && *i != y).cloned().collect();
+        assert_eq!(ids(&two), want, "{two}");
+        for (p, q) in [(x, y), (y, x)] {
+            let one = apply(&two, &unsup(p)).expect("p back");
+            let want: Vec<_> = all.iter().filter(|i| *i != q).cloned().collect();
+            assert_eq!(ids(&one), want, "{x} {y}, {p} first:\n{two}---\n{one}");
+            assert_eq!(
+                apply(&one, &unsup(q)).expect("q back"),
+                src,
+                "{x} {y}, {p} first:\n{one}"
+            );
+        }
+    }
+}
+
+/// Respell takes a read of a name, the whole token: a binder (Rename's) and a part of a token
+/// are refused (Respell.lean: `respell_refuses_binder`, `respell_refuses_inside`).
+#[test]
+fn respell_refuses_a_binder_and_a_part_of_a_token() {
+    use forge_lang::edit::apply;
+    use forge_lang::error::Op;
+    use forge_lang::syntax::Span;
+    let src = format!("{BLOCK}edge = chamfer(edges(of: base.end), 1)\n");
+    let at = |w: &str| src.find(w).expect("in the text") as u32;
+    let respell = |lo: u32, hi: u32, to: &str| {
+        apply(
+            &src,
+            &Op::Respell {
+                span: Span { lo, hi },
+                to: to.into(),
+            },
+        )
+    };
+    // `base` the binder, and `as` inside it
+    let b = at("base =");
+    assert_eq!(
+        respell(b, b + 4, "plate").expect_err("a binder").kind(),
+        "NotARead"
+    );
+    assert_eq!(
+        respell(b + 1, b + 3, "x").expect_err("inside a token").kind(),
+        "NotARead"
+    );
+    // a member and a keyword argument's name are not reads either
+    let r = at("base.end");
+    assert_eq!(
+        respell(r + 5, r + 8, "start").expect_err("a member").kind(),
+        "NotARead"
+    );
+    let o = at("of:");
+    assert_eq!(
+        respell(o, o + 2, "on").expect_err("an argument name").kind(),
+        "NotARead"
+    );
+    assert_eq!(
+        respell(r, r + 3, "bas").expect_err("part of a read").kind(),
+        "NotARead"
+    );
+    // the read itself
+    let out = respell(r, r + 4, "plan").expect("a read");
+    assert!(
+        out.contains("edges(of: plan.end)") && out.contains("base = extrude"),
+        "{out}"
+    );
+}
+
+/// Two features whose ids hash to one kernel name (HistoryId.lean: `historyId_collides`) are a
+/// typed error naming both, not a fillet that rounds the other's edges too
+/// (`checked_distinct`).
+#[test]
+fn a_history_id_clash_is_refused() {
+    let (a, b) = ("qolagjaapenjgkgca", "qpibohgembfgikgid");
+    assert_eq!(forge_lang::build::history_id(a), forge_lang::build::history_id(b));
+    let src = format!(
+        "{BLOCK}sketch s(on: base.end) {{\n  c = circle((20, 15), 4)\n}}\n{a} = extrude(s.c, 5)\n{b} = extrude(s.c, 3, new: true)\nround = fillet(edges(of: {a}, crease: \"convex\"), 1)\n"
+    );
+    let (r, _) = common::run(&src);
+    let e = r
+        .errors
+        .iter()
+        .find(|e| e.kind() == "HistoryIdClash")
+        .expect("refused");
+    let text = e.text();
+    assert!(text.contains(a) && text.contains(b), "{text}");
+    assert_eq!(
+        e.span().map(|s| &src[s.lo as usize..s.hi as usize]),
+        Some("extrude(s.c, 3, new: true)")
+    );
+    // other names: it builds
+    common::holds(&src.replace(a, "boss").replace(b, "post"));
+}
+
+/// The typo fix for a name: at equal distance a name of the part before a built-in (`tt` with a
+/// param `t` is `t`, not the built-in `pt`), then the alphabetically first.
+#[test]
+fn a_typo_respells_to_the_parts_name_before_a_builtin() {
+    let src = "shared t = 6\nsketch plan(on: xy) {\n  r = rect(corner: (0, 0), size: (40, 30))\n}\nbase = extrude(plan, tt)\n";
+    let (r, _) = common::run(src);
+    let e = r.errors.first().expect("refused");
+    let [fix @ forge_lang::error::Op::Respell { to, .. }] = &e.fixes()[..] else {
+        panic!("{e:?}")
+    };
+    assert_eq!(to, "t");
+    common::holds(&forge_lang::edit::apply(src, fix).expect("applies"));
+    // between two built-ins, or two names of the part, the alphabetically first
+    assert_eq!(
+        forge_lang::edit_ops::nearest("tt", ["t", "pt"].into_iter()).as_deref(),
+        Some("t")
+    );
+    assert_eq!(
+        forge_lang::edit_ops::nearest("tt", ["pt", "t"].into_iter()).as_deref(),
+        Some("t")
+    );
+    assert_eq!(
+        forge_lang::edit_ops::nearest("tt", ["tu", "ta"].into_iter()).as_deref(),
+        Some("ta")
+    );
+}
+
 /// `.fc`'s `try:` for a misspelt name: the nearest name in reach, as a Respell fix.
 #[test]
 fn a_misspelt_name_is_respelt() {

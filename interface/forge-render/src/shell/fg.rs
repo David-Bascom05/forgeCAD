@@ -393,6 +393,8 @@ pub fn suppressed(src: &str) -> Vec<Suppressed> {
         let Some((id, line)) = rest.split_once(' ') else {
             continue;
         };
+        // `#~ID<`, `#~ID>`: a statement Suppress put on a line of its own
+        let id = id.trim_end_matches(['<', '>']);
         let at = match out.iter().position(|x| x.id == id) {
             Some(i) => i,
             None => {
