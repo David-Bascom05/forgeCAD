@@ -155,6 +155,23 @@ pub(crate) fn strip(features: &[Feature]) -> (Cow<'_, [Feature]>, Vec<Option<&Pi
     (Cow::Owned(plain), picks)
 }
 
+/// `strip`'s picks alone: each feature's, or none when no feature is wrapped.
+fn picks_of(features: &[Feature]) -> Vec<Option<&Pick>> {
+    fn pick(f: &Feature) -> Option<&Pick> {
+        match f {
+            Feature::Body(b) => match &**b {
+                BodyFeature::In { bodies, .. } => Some(bodies),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+    if !features.iter().any(|f| pick(f).is_some()) {
+        return vec![];
+    }
+    features.iter().map(pick).collect()
+}
+
 /// The one body, or how many there are.
 pub(crate) fn one(mut solids: Vec<Solid>) -> Result<Body, RegenError> {
     match solids.len() {
@@ -199,7 +216,31 @@ pub fn step_solids_finished(
     solids: Vec<Solid>,
     finished: Option<&Body>,
 ) -> Result<Vec<Solid>, RegenError> {
-    let solids = step_unchecked(features, i, solids, finished)?;
+    step_solids_plain(features, None, i, solids, finished)
+}
+
+/// A feature as the steps read it: the one an `In` wraps, or itself.
+pub fn unwrapped(f: &Feature) -> Feature {
+    match f {
+        Feature::Body(b) => match &**b {
+            BodyFeature::In { feature, .. } => feature.clone(),
+            _ => f.clone(),
+        },
+        _ => f.clone(),
+    }
+}
+
+/// `step_solids_finished`, given `plain`: `unwrapped` of each of the first `i + 1` features,
+/// kept by a caller that steps through the history, so that a step need not unwrap every
+/// feature before it again.
+pub fn step_solids_plain(
+    features: History<'_>,
+    plain: Option<&[Feature]>,
+    i: usize,
+    solids: Vec<Solid>,
+    finished: Option<&Body>,
+) -> Result<Vec<Solid>, RegenError> {
+    let solids = step_unchecked(features, plain, i, solids, finished)?;
     let open = |s: &[Solid]| s.iter().find_map(|s| forge_topo::check::open_at(&s.body));
     let Some(what) = open(&solids) else {
         return Ok(solids);
@@ -220,6 +261,7 @@ pub fn step_solids_finished(
 
 fn step_unchecked(
     features: History<'_>,
+    given: Option<&[Feature]>,
     i: usize,
     mut solids: Vec<Solid>,
     finished: Option<&Body>,
@@ -251,7 +293,10 @@ fn step_unchecked(
         };
         return Ok(one.map(|body| Solid { id, body }).into_iter().collect());
     }
-    let (plain, picks) = strip(&upto);
+    let (plain, picks) = match given {
+        Some(p) => (Cow::Borrowed(&p[..=i]), picks_of(&upto)),
+        None => strip(&upto),
+    };
     let plain = upto.on(&plain);
     let tried = match crate::blunted(plain, i) {
         None => apply_once(plain, &picks, i, solids),
