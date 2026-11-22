@@ -531,15 +531,20 @@ impl IntCurve {
 /// Seeds already lying on a traced branch are skipped. None if the surfaces
 /// are tangent somewhere the tracing needs to pass.
 pub fn trace(a: &Surface, b: &Surface, region: Box3) -> Option<Vec<IntCurve>> {
+    #[cfg(feature = "certified_trace")]
+    return crate::certify::traced(a, b, region);
+    #[cfg(not(feature = "certified_trace"))]
+    trace_marched(a, b, region, 1.0)
+}
+
+/// `trace`'s march, uncertified, its cells and steps `scale` times the usual.
+pub fn trace_marched(a: &Surface, b: &Surface, region: Box3, scale: f64) -> Option<Vec<IntCurve>> {
     let size = region.diagonal().max(1e-6);
     let feature = |s: &Surface| match s {
         Surface::Procedural(p) => p.feature(),
         _ => f64::INFINITY,
     };
-    let leaf = (size / 64.0)
-        .min(feature(a))
-        .min(feature(b))
-        .max(10.0 * tol::LINEAR);
+    let leaf = ((size / 64.0).min(feature(a)).min(feature(b)) * scale).max(10.0 * tol::LINEAR);
     let step = leaf * 0.5;
     let mut seeds: Vec<Point3> = Vec::new();
     // cells are cubes, each held as its circumscribed sphere: the root is the cube on the
