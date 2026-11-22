@@ -1,0 +1,15 @@
+name = "coverage"
+version = "0.1.0"
+defaultTargets = ["Coverage", "coverage"]
+
+[leanOptions]
+relaxedAutoImplicit = false
+
+# the model of the kernel's flat-face boolean, the exact answer, and the coverage theorems (core Lean only)
+[[lean_lib]]
+name = "Coverage"
+
+# prints the model's outcome for every pattern, for comparison with the kernel (verify/forge-exact)
+[[lean_exe]]
+name = "coverage"
+root = "Main"

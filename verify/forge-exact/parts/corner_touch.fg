@@ -1,0 +1,14 @@
+# Coverage gap meets/meets/meets union (research/kernel-audit/coverage.md): two boxes meeting at one
+# corner. The union is not a manifold there and should be refused (ZeroThickness at (20, 20, 20));
+# today `build` reports a valid body.
+shared S = 40
+shared H = 20
+shared s = 10
+sketch plan(on: xy) {
+  outline = rect(corner: (-S / 2, -S / 2), size: (S, S))
+}
+base = extrude(plan, H)
+sketch top(on: base.end) {
+  sq = rect(corner: (S / 2, S / 2), size: (s, s))
+}
+tool = extrude(top.sq, s)

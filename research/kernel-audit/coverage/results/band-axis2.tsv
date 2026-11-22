@@ -1,0 +1,1883 @@
+0.9	meets/meets/meets union	ok 2000	zero-thickness	zero-thickness
+0.9	meets/meets/metBy union	ok 2000	zero-thickness	zero-thickness
+0.9	meets/metBy/meets union	ok 2000	zero-thickness	zero-thickness
+0.9	meets/metBy/metBy union	ok 2000	zero-thickness	zero-thickness
+0.9	metBy/meets/meets union	ok 2000	zero-thickness	zero-thickness
+0.9	metBy/meets/metBy union	ok 2000	zero-thickness	zero-thickness
+0.9	metBy/metBy/meets union	ok 2000	zero-thickness	zero-thickness
+0.9	metBy/metBy/metBy union	ok 2000	zero-thickness	zero-thickness
+1.5	meets/finishedBy/finishedBy union	invalid EdgeUses	ok 5000	ok 5000
+1.5	meets/finishedBy/starts union	invalid EdgeUses	ok 4000	ok 4000
+1.5	meets/finishedBy/equal union	invalid EdgeUses	ok 3000	ok 3000
+1.5	meets/finishedBy/startedBy union	invalid EdgeUses	ok 5000	ok 5000
+1.5	meets/finishedBy/finishes union	invalid EdgeUses	ok 4000	ok 4000
+1.5	meets/contains/finishedBy union	invalid EdgeUses	ok 7000	ok 7000
+1.5	meets/contains/starts union	invalid EdgeUses	ok 5000	ok 5000
+1.5	meets/contains/equal union	invalid EdgeUses	ok 4000	ok 4000
+1.5	meets/contains/startedBy union	invalid EdgeUses	ok 7000	ok 7000
+1.5	meets/contains/finishes union	invalid EdgeUses	ok 5000	ok 5000
+1.5	meets/equal/finishedBy union	invalid EdgeUses	ok 3000	ok 3000
+1.5	meets/equal/starts union	invalid EdgeUses	ok 3000	ok 3000
+1.5	meets/equal/equal union	invalid EdgeUses	ok 2000	ok 2000
+1.5	meets/equal/startedBy union	invalid EdgeUses	ok 3000	ok 3000
+1.5	meets/equal/finishes union	invalid EdgeUses	ok 3000	ok 3000
+1.5	meets/startedBy/finishedBy union	invalid EdgeUses	ok 5000	ok 5000
+1.5	meets/startedBy/starts union	invalid EdgeUses	ok 4000	ok 4000
+1.5	meets/startedBy/equal union	invalid EdgeUses	ok 3000	ok 3000
+1.5	meets/startedBy/startedBy union	invalid EdgeUses	ok 5000	ok 5000
+1.5	meets/startedBy/finishes union	invalid EdgeUses	ok 4000	ok 4000
+1.5	overlaps/finishedBy/meets union	zero-thickness	ok 6000	ok 6000
+1.5	overlaps/finishedBy/metBy union	zero-thickness	ok 6000	ok 6000
+1.5	overlaps/starts/meets union	zero-thickness	ok 6000	ok 6000
+1.5	overlaps/starts/metBy union	zero-thickness	ok 6000	ok 6000
+1.5	overlaps/equal/meets union	zero-thickness	ok 4000	ok 4000
+1.5	overlaps/equal/metBy union	zero-thickness	ok 4000	ok 4000
+1.5	overlaps/startedBy/meets union	zero-thickness	ok 6000	ok 6000
+1.5	overlaps/startedBy/metBy union	zero-thickness	ok 6000	ok 6000
+1.5	overlaps/finishes/meets union	zero-thickness	ok 6000	ok 6000
+1.5	overlaps/finishes/metBy union	zero-thickness	ok 6000	ok 6000
+1.5	finishedBy/meets/finishedBy union	invalid EdgeUses	ok 5000	ok 5000
+1.5	finishedBy/meets/starts union	invalid EdgeUses	ok 4000	ok 4000
+1.5	finishedBy/meets/equal union	invalid EdgeUses	ok 3000	ok 3000
+1.5	finishedBy/meets/startedBy union	invalid EdgeUses	ok 5000	ok 5000
+1.5	finishedBy/meets/finishes union	invalid EdgeUses	ok 4000	ok 4000
+1.5	finishedBy/overlaps/meets union	zero-thickness	ok 6000	ok 6000
+1.5	finishedBy/overlaps/metBy union	zero-thickness	ok 6000	ok 6000
+1.5	finishedBy/finishedBy/meets union	zero-thickness	ok 5000	ok 5000
+1.5	finishedBy/finishedBy/finishedBy union	invalid EdgeUses	ok 8000	ok 8000
+1.5	finishedBy/finishedBy/starts union	invalid EdgeUses	ok 5000	ok 5000
+1.5	finishedBy/finishedBy/equal union	invalid EdgeUses	ok 4000	ok 4000
+1.5	finishedBy/finishedBy/startedBy union	invalid EdgeUses	ok 8000	ok 8000
+1.5	finishedBy/finishedBy/finishes union	invalid EdgeUses	ok 5000	ok 5000
+1.5	finishedBy/finishedBy/metBy union	zero-thickness	ok 5000	ok 5000
+1.5	finishedBy/contains/meets union	zero-thickness	ok 7000	ok 7000
+1.5	finishedBy/contains/finishedBy union	invalid EdgeUses	ok 12000	ok 12000
+1.5	finishedBy/contains/starts union	invalid EdgeUses	ok 7000	ok 7000
+1.5	finishedBy/contains/equal union	invalid EdgeUses	ok 6000	ok 6000
+1.5	finishedBy/contains/startedBy union	invalid EdgeUses	ok 12000	ok 12000
+1.5	finishedBy/contains/finishes union	invalid EdgeUses	ok 7000	ok 7000
+1.5	finishedBy/contains/metBy union	zero-thickness	ok 7000	ok 7000
+1.5	finishedBy/starts/meets union	zero-thickness	ok 4000	ok 4000
+1.5	finishedBy/starts/finishedBy union	invalid EdgeUses	ok 5000	ok 5000
+1.5	finishedBy/starts/starts union	invalid EdgeUses	ok 5000	ok 5000
+1.5	finishedBy/starts/equal union	invalid EdgeUses	ok 3000	ok 3000
+1.5	finishedBy/starts/startedBy union	invalid EdgeUses	ok 5000	ok 5000
+1.5	finishedBy/starts/finishes union	invalid EdgeUses	ok 5000	ok 5000
+1.5	finishedBy/starts/metBy union	zero-thickness	ok 4000	ok 4000
+1.5	finishedBy/equal/meets union	zero-thickness	ok 3000	ok 3000
+1.5	finishedBy/equal/finishedBy union	invalid EdgeUses	ok 4000	ok 4000
+1.5	finishedBy/equal/starts union	invalid EdgeUses	ok 3000	ok 3000
+1.5	finishedBy/equal/equal union	invalid EdgeUses	ok 2000	ok 2000
+1.5	finishedBy/equal/startedBy union	invalid EdgeUses	ok 4000	ok 4000
+1.5	finishedBy/equal/finishes union	invalid EdgeUses	ok 3000	ok 3000
+1.5	finishedBy/equal/metBy union	zero-thickness	ok 3000	ok 3000
+1.5	finishedBy/startedBy/meets union	zero-thickness	ok 5000	ok 5000
+1.5	finishedBy/startedBy/finishedBy union	invalid EdgeUses	ok 8000	ok 8000
+1.5	finishedBy/startedBy/starts union	invalid EdgeUses	ok 5000	ok 5000
+1.5	finishedBy/startedBy/equal union	invalid EdgeUses	ok 4000	ok 4000
+1.5	finishedBy/startedBy/startedBy union	invalid EdgeUses	ok 8000	ok 8000
+1.5	finishedBy/startedBy/finishes union	invalid EdgeUses	ok 5000	ok 5000
+1.5	finishedBy/startedBy/metBy union	zero-thickness	ok 5000	ok 5000
+1.5	finishedBy/during/meets union	zero-thickness	ok 5000	ok 5000
+1.5	finishedBy/during/metBy union	zero-thickness	ok 5000	ok 5000
+1.5	finishedBy/finishes/meets union	zero-thickness	ok 4000	ok 4000
+1.5	finishedBy/finishes/finishedBy union	invalid EdgeUses	ok 5000	ok 5000
+1.5	finishedBy/finishes/starts union	invalid EdgeUses	ok 5000	ok 5000
+1.5	finishedBy/finishes/equal union	invalid EdgeUses	ok 3000	ok 3000
+1.5	finishedBy/finishes/startedBy union	invalid EdgeUses	ok 5000	ok 5000
+1.5	finishedBy/finishes/finishes union	invalid EdgeUses	ok 5000	ok 5000
+1.5	finishedBy/finishes/metBy union	zero-thickness	ok 4000	ok 4000
+1.5	finishedBy/overlappedBy/meets union	zero-thickness	ok 6000	ok 6000
+1.5	finishedBy/overlappedBy/metBy union	zero-thickness	ok 6000	ok 6000
+1.5	finishedBy/metBy/finishedBy union	invalid EdgeUses	ok 5000	ok 5000
+1.5	finishedBy/metBy/starts union	invalid EdgeUses	ok 4000	ok 4000
+1.5	finishedBy/metBy/equal union	invalid EdgeUses	ok 3000	ok 3000
+1.5	finishedBy/metBy/startedBy union	invalid EdgeUses	ok 5000	ok 5000
+1.5	finishedBy/metBy/finishes union	invalid EdgeUses	ok 4000	ok 4000
+1.5	contains/meets/finishedBy union	invalid EdgeUses	ok 7000	ok 7000
+1.5	contains/meets/starts union	invalid EdgeUses	ok 5000	ok 5000
+1.5	contains/meets/equal union	invalid EdgeUses	ok 4000	ok 4000
+1.5	contains/meets/startedBy union	invalid EdgeUses	ok 7000	ok 7000
+1.5	contains/meets/finishes union	invalid EdgeUses	ok 5000	ok 5000
+1.5	contains/finishedBy/meets union	zero-thickness	ok 7000	ok 7000
+1.5	contains/finishedBy/finishedBy union	invalid EdgeUses	ok 12000	ok 12000
+1.5	contains/finishedBy/starts union	invalid EdgeUses	ok 7000	ok 7000
+1.5	contains/finishedBy/equal union	invalid EdgeUses	ok 6000	ok 6000
+1.5	contains/finishedBy/startedBy union	invalid EdgeUses	ok 12000	ok 12000
+1.5	contains/finishedBy/finishes union	invalid EdgeUses	ok 7000	ok 7000
+1.5	contains/finishedBy/metBy union	zero-thickness	ok 7000	ok 7000
+1.5	contains/starts/meets union	zero-thickness	ok 5000	ok 5000
+1.5	contains/starts/finishedBy union	invalid EdgeUses	ok 7000	ok 7000
+1.5	contains/starts/starts union	invalid EdgeUses	ok 6000	ok 6000
+1.5	contains/starts/equal union	invalid EdgeUses	ok 4000	ok 4000
+1.5	contains/starts/startedBy union	invalid EdgeUses	ok 7000	ok 7000
+1.5	contains/starts/finishes union	invalid EdgeUses	ok 6000	ok 6000
+1.5	contains/starts/metBy union	zero-thickness	ok 5000	ok 5000
+1.5	contains/equal/meets union	zero-thickness	ok 4000	ok 4000
+1.5	contains/equal/finishedBy union	invalid EdgeUses	ok 6000	ok 6000
+1.5	contains/equal/starts union	invalid EdgeUses	ok 4000	ok 4000
+1.5	contains/equal/equal union	invalid EdgeUses	ok 3000	ok 3000
+1.5	contains/equal/startedBy union	invalid EdgeUses	ok 6000	ok 6000
+1.5	contains/equal/finishes union	invalid EdgeUses	ok 4000	ok 4000
+1.5	contains/equal/metBy union	zero-thickness	ok 4000	ok 4000
+1.5	contains/startedBy/meets union	zero-thickness	ok 7000	ok 7000
+1.5	contains/startedBy/finishedBy union	invalid EdgeUses	ok 12000	ok 12000
+1.5	contains/startedBy/starts union	invalid EdgeUses	ok 7000	ok 7000
+1.5	contains/startedBy/equal union	invalid EdgeUses	ok 6000	ok 6000
+1.5	contains/startedBy/startedBy union	invalid EdgeUses	ok 12000	ok 12000
+1.5	contains/startedBy/finishes union	invalid EdgeUses	ok 7000	ok 7000
+1.5	contains/startedBy/metBy union	zero-thickness	ok 7000	ok 7000
+1.5	contains/finishes/meets union	zero-thickness	ok 5000	ok 5000
+1.5	contains/finishes/finishedBy union	invalid EdgeUses	ok 7000	ok 7000
+1.5	contains/finishes/starts union	invalid EdgeUses	ok 6000	ok 6000
+1.5	contains/finishes/equal union	invalid EdgeUses	ok 4000	ok 4000
+1.5	contains/finishes/startedBy union	invalid EdgeUses	ok 7000	ok 7000
+1.5	contains/finishes/finishes union	invalid EdgeUses	ok 6000	ok 6000
+1.5	contains/finishes/metBy union	zero-thickness	ok 5000	ok 5000
+1.5	contains/metBy/finishedBy union	invalid EdgeUses	ok 7000	ok 7000
+1.5	contains/metBy/starts union	invalid EdgeUses	ok 5000	ok 5000
+1.5	contains/metBy/equal union	invalid EdgeUses	ok 4000	ok 4000
+1.5	contains/metBy/startedBy union	invalid EdgeUses	ok 7000	ok 7000
+1.5	contains/metBy/finishes union	invalid EdgeUses	ok 5000	ok 5000
+1.5	starts/overlaps/meets union	zero-thickness	ok 6000	ok 6000
+1.5	starts/overlaps/metBy union	zero-thickness	ok 6000	ok 6000
+1.5	starts/finishedBy/meets union	zero-thickness	ok 4000	ok 4000
+1.5	starts/finishedBy/finishedBy union	invalid EdgeUses	ok 5000	ok 5000
+1.5	starts/finishedBy/starts union	invalid EdgeUses	ok 5000	ok 5000
+1.5	starts/finishedBy/equal union	invalid EdgeUses	ok 3000	ok 3000
+1.5	starts/finishedBy/startedBy union	invalid EdgeUses	ok 5000	ok 5000
+1.5	starts/finishedBy/finishes union	invalid EdgeUses	ok 5000	ok 5000
+1.5	starts/finishedBy/metBy union	zero-thickness	ok 4000	ok 4000
+1.5	starts/contains/meets union	zero-thickness	ok 5000	ok 5000
+1.5	starts/contains/finishedBy union	invalid EdgeUses	ok 7000	ok 7000
+1.5	starts/contains/starts union	invalid EdgeUses	ok 6000	ok 6000
+1.5	starts/contains/equal union	invalid EdgeUses	ok 4000	ok 4000
+1.5	starts/contains/startedBy union	invalid EdgeUses	ok 7000	ok 7000
+1.5	starts/contains/finishes union	invalid EdgeUses	ok 6000	ok 6000
+1.5	starts/contains/metBy union	zero-thickness	ok 5000	ok 5000
+1.5	starts/starts/meets union	zero-thickness	ok 5000	ok 5000
+1.5	starts/starts/metBy union	zero-thickness	ok 5000	ok 5000
+1.5	starts/equal/meets union	zero-thickness	ok 3000	ok 3000
+1.5	starts/equal/finishedBy union	invalid EdgeUses	ok 3000	ok 3000
+1.5	starts/equal/starts union	invalid EdgeUses	ok 4000	ok 4000
+1.5	starts/equal/equal union	invalid EdgeUses	ok 2000	ok 2000
+1.5	starts/equal/startedBy union	invalid EdgeUses	ok 3000	ok 3000
+1.5	starts/equal/finishes union	invalid EdgeUses	ok 4000	ok 4000
+1.5	starts/equal/metBy union	zero-thickness	ok 3000	ok 3000
+1.5	starts/startedBy/meets union	zero-thickness	ok 4000	ok 4000
+1.5	starts/startedBy/finishedBy union	invalid EdgeUses	ok 5000	ok 5000
+1.5	starts/startedBy/starts union	invalid EdgeUses	ok 5000	ok 5000
+1.5	starts/startedBy/equal union	invalid EdgeUses	ok 3000	ok 3000
+1.5	starts/startedBy/startedBy union	invalid EdgeUses	ok 5000	ok 5000
+1.5	starts/startedBy/finishes union	invalid EdgeUses	ok 5000	ok 5000
+1.5	starts/startedBy/metBy union	zero-thickness	ok 4000	ok 4000
+1.5	starts/during/meets union	zero-thickness	ok 7000	ok 7000
+1.5	starts/during/metBy union	zero-thickness	ok 7000	ok 7000
+1.5	starts/finishes/meets union	zero-thickness	ok 5000	ok 5000
+1.5	starts/finishes/metBy union	zero-thickness	ok 5000	ok 5000
+1.5	starts/overlappedBy/meets union	zero-thickness	ok 6000	ok 6000
+1.5	starts/overlappedBy/metBy union	zero-thickness	ok 6000	ok 6000
+1.5	equal/meets/finishedBy union	invalid EdgeUses	ok 3000	ok 3000
+1.5	equal/meets/starts union	invalid EdgeUses	ok 3000	ok 3000
+1.5	equal/meets/equal union	invalid EdgeUses	ok 2000	ok 2000
+1.5	equal/meets/startedBy union	invalid EdgeUses	ok 3000	ok 3000
+1.5	equal/meets/finishes union	invalid EdgeUses	ok 3000	ok 3000
+1.5	equal/overlaps/meets union	zero-thickness	ok 4000	ok 4000
+1.5	equal/overlaps/metBy union	zero-thickness	ok 4000	ok 4000
+1.5	equal/finishedBy/meets union	zero-thickness	ok 3000	ok 3000
+1.5	equal/finishedBy/finishedBy union	invalid EdgeUses	ok 4000	ok 4000
+1.5	equal/finishedBy/starts union	invalid EdgeUses	ok 3000	ok 3000
+1.5	equal/finishedBy/equal union	invalid EdgeUses	ok 2000	ok 2000
+1.5	equal/finishedBy/startedBy union	invalid EdgeUses	ok 4000	ok 4000
+1.5	equal/finishedBy/finishes union	invalid EdgeUses	ok 3000	ok 3000
+1.5	equal/finishedBy/metBy union	zero-thickness	ok 3000	ok 3000
+1.5	equal/contains/meets union	zero-thickness	ok 4000	ok 4000
+1.5	equal/contains/finishedBy union	invalid EdgeUses	ok 6000	ok 6000
+1.5	equal/contains/starts union	invalid EdgeUses	ok 4000	ok 4000
+1.5	equal/contains/equal union	invalid EdgeUses	ok 3000	ok 3000
+1.5	equal/contains/startedBy union	invalid EdgeUses	ok 6000	ok 6000
+1.5	equal/contains/finishes union	invalid EdgeUses	ok 4000	ok 4000
+1.5	equal/contains/metBy union	zero-thickness	ok 4000	ok 4000
+1.5	equal/starts/meets union	zero-thickness	ok 3000	ok 3000
+1.5	equal/starts/finishedBy union	invalid EdgeUses	ok 3000	ok 3000
+1.5	equal/starts/starts union	invalid EdgeUses	ok 4000	ok 4000
+1.5	equal/starts/equal union	invalid EdgeUses	ok 2000	ok 2000
+1.5	equal/starts/startedBy union	invalid EdgeUses	ok 3000	ok 3000
+1.5	equal/starts/finishes union	invalid EdgeUses	ok 4000	ok 4000
+1.5	equal/starts/metBy union	zero-thickness	ok 3000	ok 3000
+1.5	equal/equal/meets union	zero-thickness	ok 2000	ok 2000
+1.5	equal/equal/finishedBy union	invalid EdgeUses	ok 2000	ok 2000
+1.5	equal/equal/starts union	invalid EdgeUses	ok 2000	ok 2000
+1.5	equal/equal/equal union	invalid EdgeUses	ok 1000	ok 1000
+1.5	equal/equal/startedBy union	invalid EdgeUses	ok 2000	ok 2000
+1.5	equal/equal/finishes union	invalid EdgeUses	ok 2000	ok 2000
+1.5	equal/equal/metBy union	zero-thickness	ok 2000	ok 2000
+1.5	equal/startedBy/meets union	zero-thickness	ok 3000	ok 3000
+1.5	equal/startedBy/finishedBy union	invalid EdgeUses	ok 4000	ok 4000
+1.5	equal/startedBy/starts union	invalid EdgeUses	ok 3000	ok 3000
+1.5	equal/startedBy/equal union	invalid EdgeUses	ok 2000	ok 2000
+1.5	equal/startedBy/startedBy union	invalid EdgeUses	ok 4000	ok 4000
+1.5	equal/startedBy/finishes union	invalid EdgeUses	ok 3000	ok 3000
+1.5	equal/startedBy/metBy union	zero-thickness	ok 3000	ok 3000
+1.5	equal/during/meets union	zero-thickness	ok 4000	ok 4000
+1.5	equal/during/metBy union	zero-thickness	ok 4000	ok 4000
+1.5	equal/finishes/meets union	zero-thickness	ok 3000	ok 3000
+1.5	equal/finishes/finishedBy union	invalid EdgeUses	ok 3000	ok 3000
+1.5	equal/finishes/starts union	invalid EdgeUses	ok 4000	ok 4000
+1.5	equal/finishes/equal union	invalid EdgeUses	ok 2000	ok 2000
+1.5	equal/finishes/startedBy union	invalid EdgeUses	ok 3000	ok 3000
+1.5	equal/finishes/finishes union	invalid EdgeUses	ok 4000	ok 4000
+1.5	equal/finishes/metBy union	zero-thickness	ok 3000	ok 3000
+1.5	equal/overlappedBy/meets union	zero-thickness	ok 4000	ok 4000
+1.5	equal/overlappedBy/metBy union	zero-thickness	ok 4000	ok 4000
+1.5	equal/metBy/finishedBy union	invalid EdgeUses	ok 3000	ok 3000
+1.5	equal/metBy/starts union	invalid EdgeUses	ok 3000	ok 3000
+1.5	equal/metBy/equal union	invalid EdgeUses	ok 2000	ok 2000
+1.5	equal/metBy/startedBy union	invalid EdgeUses	ok 3000	ok 3000
+1.5	equal/metBy/finishes union	invalid EdgeUses	ok 3000	ok 3000
+1.5	startedBy/meets/finishedBy union	invalid EdgeUses	ok 5000	ok 5000
+1.5	startedBy/meets/starts union	invalid EdgeUses	ok 4000	ok 4000
+1.5	startedBy/meets/equal union	invalid EdgeUses	ok 3000	ok 3000
+1.5	startedBy/meets/startedBy union	invalid EdgeUses	ok 5000	ok 5000
+1.5	startedBy/meets/finishes union	invalid EdgeUses	ok 4000	ok 4000
+1.5	startedBy/overlaps/meets union	zero-thickness	ok 6000	ok 6000
+1.5	startedBy/overlaps/metBy union	zero-thickness	ok 6000	ok 6000
+1.5	startedBy/finishedBy/meets union	zero-thickness	ok 5000	ok 5000
+1.5	startedBy/finishedBy/finishedBy union	invalid EdgeUses	ok 8000	ok 8000
+1.5	startedBy/finishedBy/starts union	invalid EdgeUses	ok 5000	ok 5000
+1.5	startedBy/finishedBy/equal union	invalid EdgeUses	ok 4000	ok 4000
+1.5	startedBy/finishedBy/startedBy union	invalid EdgeUses	ok 8000	ok 8000
+1.5	startedBy/finishedBy/finishes union	invalid EdgeUses	ok 5000	ok 5000
+1.5	startedBy/finishedBy/metBy union	zero-thickness	ok 5000	ok 5000
+1.5	startedBy/contains/meets union	zero-thickness	ok 7000	ok 7000
+1.5	startedBy/contains/finishedBy union	invalid EdgeUses	ok 12000	ok 12000
+1.5	startedBy/contains/starts union	invalid EdgeUses	ok 7000	ok 7000
+1.5	startedBy/contains/equal union	invalid EdgeUses	ok 6000	ok 6000
+1.5	startedBy/contains/startedBy union	invalid EdgeUses	ok 12000	ok 12000
+1.5	startedBy/contains/finishes union	invalid EdgeUses	ok 7000	ok 7000
+1.5	startedBy/contains/metBy union	zero-thickness	ok 7000	ok 7000
+1.5	startedBy/starts/meets union	zero-thickness	ok 4000	ok 4000
+1.5	startedBy/starts/finishedBy union	invalid EdgeUses	ok 5000	ok 5000
+1.5	startedBy/starts/starts union	invalid EdgeUses	ok 5000	ok 5000
+1.5	startedBy/starts/equal union	invalid EdgeUses	ok 3000	ok 3000
+1.5	startedBy/starts/startedBy union	invalid EdgeUses	ok 5000	ok 5000
+1.5	startedBy/starts/finishes union	invalid EdgeUses	ok 5000	ok 5000
+1.5	startedBy/starts/metBy union	zero-thickness	ok 4000	ok 4000
+1.5	startedBy/equal/meets union	zero-thickness	ok 3000	ok 3000
+1.5	startedBy/equal/finishedBy union	invalid EdgeUses	ok 4000	ok 4000
+1.5	startedBy/equal/starts union	invalid EdgeUses	ok 3000	ok 3000
+1.5	startedBy/equal/equal union	invalid EdgeUses	ok 2000	ok 2000
+1.5	startedBy/equal/startedBy union	invalid EdgeUses	ok 4000	ok 4000
+1.5	startedBy/equal/finishes union	invalid EdgeUses	ok 3000	ok 3000
+1.5	startedBy/equal/metBy union	zero-thickness	ok 3000	ok 3000
+1.5	startedBy/startedBy/meets union	zero-thickness	ok 5000	ok 5000
+1.5	startedBy/startedBy/finishedBy union	invalid EdgeUses	ok 8000	ok 8000
+1.5	startedBy/startedBy/starts union	invalid EdgeUses	ok 5000	ok 5000
+1.5	startedBy/startedBy/equal union	invalid EdgeUses	ok 4000	ok 4000
+1.5	startedBy/startedBy/startedBy union	invalid EdgeUses	ok 8000	ok 8000
+1.5	startedBy/startedBy/finishes union	invalid EdgeUses	ok 5000	ok 5000
+1.5	startedBy/startedBy/metBy union	zero-thickness	ok 5000	ok 5000
+1.5	startedBy/during/meets union	zero-thickness	ok 5000	ok 5000
+1.5	startedBy/during/metBy union	zero-thickness	ok 5000	ok 5000
+1.5	startedBy/finishes/meets union	zero-thickness	ok 4000	ok 4000
+1.5	startedBy/finishes/finishedBy union	invalid EdgeUses	ok 5000	ok 5000
+1.5	startedBy/finishes/starts union	invalid EdgeUses	ok 5000	ok 5000
+1.5	startedBy/finishes/equal union	invalid EdgeUses	ok 3000	ok 3000
+1.5	startedBy/finishes/startedBy union	invalid EdgeUses	ok 5000	ok 5000
+1.5	startedBy/finishes/finishes union	invalid EdgeUses	ok 5000	ok 5000
+1.5	startedBy/finishes/metBy union	zero-thickness	ok 4000	ok 4000
+1.5	startedBy/overlappedBy/meets union	zero-thickness	ok 6000	ok 6000
+1.5	startedBy/overlappedBy/metBy union	zero-thickness	ok 6000	ok 6000
+1.5	startedBy/metBy/finishedBy union	invalid EdgeUses	ok 5000	ok 5000
+1.5	startedBy/metBy/starts union	invalid EdgeUses	ok 4000	ok 4000
+1.5	startedBy/metBy/equal union	invalid EdgeUses	ok 3000	ok 3000
+1.5	startedBy/metBy/startedBy union	invalid EdgeUses	ok 5000	ok 5000
+1.5	startedBy/metBy/finishes union	invalid EdgeUses	ok 4000	ok 4000
+1.5	during/finishedBy/meets union	zero-thickness	ok 5000	ok 5000
+1.5	during/finishedBy/metBy union	zero-thickness	ok 5000	ok 5000
+1.5	during/starts/meets union	zero-thickness	ok 7000	ok 7000
+1.5	during/starts/metBy union	zero-thickness	ok 7000	ok 7000
+1.5	during/equal/meets union	zero-thickness	ok 4000	ok 4000
+1.5	during/equal/metBy union	zero-thickness	ok 4000	ok 4000
+1.5	during/startedBy/meets union	zero-thickness	ok 5000	ok 5000
+1.5	during/startedBy/metBy union	zero-thickness	ok 5000	ok 5000
+1.5	during/finishes/meets union	zero-thickness	ok 7000	ok 7000
+1.5	during/finishes/metBy union	zero-thickness	ok 7000	ok 7000
+1.5	finishes/overlaps/meets union	zero-thickness	ok 6000	ok 6000
+1.5	finishes/overlaps/metBy union	zero-thickness	ok 6000	ok 6000
+1.5	finishes/finishedBy/meets union	zero-thickness	ok 4000	ok 4000
+1.5	finishes/finishedBy/finishedBy union	invalid EdgeUses	ok 5000	ok 5000
+1.5	finishes/finishedBy/starts union	invalid EdgeUses	ok 5000	ok 5000
+1.5	finishes/finishedBy/equal union	invalid EdgeUses	ok 3000	ok 3000
+1.5	finishes/finishedBy/startedBy union	invalid EdgeUses	ok 5000	ok 5000
+1.5	finishes/finishedBy/finishes union	invalid EdgeUses	ok 5000	ok 5000
+1.5	finishes/finishedBy/metBy union	zero-thickness	ok 4000	ok 4000
+1.5	finishes/contains/meets union	zero-thickness	ok 5000	ok 5000
+1.5	finishes/contains/finishedBy union	invalid EdgeUses	ok 7000	ok 7000
+1.5	finishes/contains/starts union	invalid EdgeUses	ok 6000	ok 6000
+1.5	finishes/contains/equal union	invalid EdgeUses	ok 4000	ok 4000
+1.5	finishes/contains/startedBy union	invalid EdgeUses	ok 7000	ok 7000
+1.5	finishes/contains/finishes union	invalid EdgeUses	ok 6000	ok 6000
+1.5	finishes/contains/metBy union	zero-thickness	ok 5000	ok 5000
+1.5	finishes/starts/meets union	zero-thickness	ok 5000	ok 5000
+1.5	finishes/starts/metBy union	zero-thickness	ok 5000	ok 5000
+1.5	finishes/equal/meets union	zero-thickness	ok 3000	ok 3000
+1.5	finishes/equal/finishedBy union	invalid EdgeUses	ok 3000	ok 3000
+1.5	finishes/equal/starts union	invalid EdgeUses	ok 4000	ok 4000
+1.5	finishes/equal/equal union	invalid EdgeUses	ok 2000	ok 2000
+1.5	finishes/equal/startedBy union	invalid EdgeUses	ok 3000	ok 3000
+1.5	finishes/equal/finishes union	invalid EdgeUses	ok 4000	ok 4000
+1.5	finishes/equal/metBy union	zero-thickness	ok 3000	ok 3000
+1.5	finishes/startedBy/meets union	zero-thickness	ok 4000	ok 4000
+1.5	finishes/startedBy/finishedBy union	invalid EdgeUses	ok 5000	ok 5000
+1.5	finishes/startedBy/starts union	invalid EdgeUses	ok 5000	ok 5000
+1.5	finishes/startedBy/equal union	invalid EdgeUses	ok 3000	ok 3000
+1.5	finishes/startedBy/startedBy union	invalid EdgeUses	ok 5000	ok 5000
+1.5	finishes/startedBy/finishes union	invalid EdgeUses	ok 5000	ok 5000
+1.5	finishes/startedBy/metBy union	zero-thickness	ok 4000	ok 4000
+1.5	finishes/during/meets union	zero-thickness	ok 7000	ok 7000
+1.5	finishes/during/metBy union	zero-thickness	ok 7000	ok 7000
+1.5	finishes/finishes/meets union	zero-thickness	ok 5000	ok 5000
+1.5	finishes/finishes/metBy union	zero-thickness	ok 5000	ok 5000
+1.5	finishes/overlappedBy/meets union	zero-thickness	ok 6000	ok 6000
+1.5	finishes/overlappedBy/metBy union	zero-thickness	ok 6000	ok 6000
+1.5	overlappedBy/finishedBy/meets union	zero-thickness	ok 6000	ok 6000
+1.5	overlappedBy/finishedBy/metBy union	zero-thickness	ok 6000	ok 6000
+1.5	overlappedBy/starts/meets union	zero-thickness	ok 6000	ok 6000
+1.5	overlappedBy/starts/metBy union	zero-thickness	ok 6000	ok 6000
+1.5	overlappedBy/equal/meets union	zero-thickness	ok 4000	ok 4000
+1.5	overlappedBy/equal/metBy union	zero-thickness	ok 4000	ok 4000
+1.5	overlappedBy/startedBy/meets union	zero-thickness	ok 6000	ok 6000
+1.5	overlappedBy/startedBy/metBy union	zero-thickness	ok 6000	ok 6000
+1.5	overlappedBy/finishes/meets union	zero-thickness	ok 6000	ok 6000
+1.5	overlappedBy/finishes/metBy union	zero-thickness	ok 6000	ok 6000
+1.5	metBy/finishedBy/finishedBy union	invalid EdgeUses	ok 5000	ok 5000
+1.5	metBy/finishedBy/starts union	invalid EdgeUses	ok 4000	ok 4000
+1.5	metBy/finishedBy/equal union	invalid EdgeUses	ok 3000	ok 3000
+1.5	metBy/finishedBy/startedBy union	invalid EdgeUses	ok 5000	ok 5000
+1.5	metBy/finishedBy/finishes union	invalid EdgeUses	ok 4000	ok 4000
+1.5	metBy/contains/finishedBy union	invalid EdgeUses	ok 7000	ok 7000
+1.5	metBy/contains/starts union	invalid EdgeUses	ok 5000	ok 5000
+1.5	metBy/contains/equal union	invalid EdgeUses	ok 4000	ok 4000
+1.5	metBy/contains/startedBy union	invalid EdgeUses	ok 7000	ok 7000
+1.5	metBy/contains/finishes union	invalid EdgeUses	ok 5000	ok 5000
+1.5	metBy/equal/finishedBy union	invalid EdgeUses	ok 3000	ok 3000
+1.5	metBy/equal/starts union	invalid EdgeUses	ok 3000	ok 3000
+1.5	metBy/equal/equal union	invalid EdgeUses	ok 2000	ok 2000
+1.5	metBy/equal/startedBy union	invalid EdgeUses	ok 3000	ok 3000
+1.5	metBy/equal/finishes union	invalid EdgeUses	ok 3000	ok 3000
+1.5	metBy/startedBy/finishedBy union	invalid EdgeUses	ok 5000	ok 5000
+1.5	metBy/startedBy/starts union	invalid EdgeUses	ok 4000	ok 4000
+1.5	metBy/startedBy/equal union	invalid EdgeUses	ok 3000	ok 3000
+1.5	metBy/startedBy/startedBy union	invalid EdgeUses	ok 5000	ok 5000
+1.5	metBy/startedBy/finishes union	invalid EdgeUses	ok 4000	ok 4000
+1.5	overlaps/finishedBy/meets subtract	zero-thickness	ok 4000	ok 4000
+1.5	overlaps/finishedBy/metBy subtract	zero-thickness	ok 4000	ok 4000
+1.5	overlaps/starts/meets subtract	zero-thickness	ok 2000	ok 2000
+1.5	overlaps/starts/metBy subtract	zero-thickness	ok 2000	ok 2000
+1.5	overlaps/equal/meets subtract	zero-thickness	ok 2000	ok 2000
+1.5	overlaps/equal/metBy subtract	zero-thickness	ok 2000	ok 2000
+1.5	overlaps/startedBy/meets subtract	zero-thickness	ok 4000	ok 4000
+1.5	overlaps/startedBy/metBy subtract	zero-thickness	ok 4000	ok 4000
+1.5	overlaps/finishes/meets subtract	zero-thickness	ok 2000	ok 2000
+1.5	overlaps/finishes/metBy subtract	zero-thickness	ok 2000	ok 2000
+1.5	finishedBy/overlaps/meets subtract	zero-thickness	ok 4000	ok 4000
+1.5	finishedBy/overlaps/metBy subtract	zero-thickness	ok 4000	ok 4000
+1.5	finishedBy/finishedBy/meets subtract	zero-thickness	ok 4000	ok 4000
+1.5	finishedBy/finishedBy/metBy subtract	zero-thickness	ok 4000	ok 4000
+1.5	finishedBy/contains/meets subtract	zero-thickness	ok 6000	ok 6000
+1.5	finishedBy/contains/metBy subtract	zero-thickness	ok 6000	ok 6000
+1.5	finishedBy/starts/meets subtract	zero-thickness	ok 2000	ok 2000
+1.5	finishedBy/starts/metBy subtract	zero-thickness	ok 2000	ok 2000
+1.5	finishedBy/equal/meets subtract	zero-thickness	ok 2000	ok 2000
+1.5	finishedBy/equal/metBy subtract	zero-thickness	ok 2000	ok 2000
+1.5	finishedBy/startedBy/meets subtract	zero-thickness	ok 4000	ok 4000
+1.5	finishedBy/startedBy/metBy subtract	zero-thickness	ok 4000	ok 4000
+1.5	finishedBy/during/meets subtract	zero-thickness	ok 2000	ok 2000
+1.5	finishedBy/during/metBy subtract	zero-thickness	ok 2000	ok 2000
+1.5	finishedBy/finishes/meets subtract	zero-thickness	ok 2000	ok 2000
+1.5	finishedBy/finishes/metBy subtract	zero-thickness	ok 2000	ok 2000
+1.5	finishedBy/overlappedBy/meets subtract	zero-thickness	ok 4000	ok 4000
+1.5	finishedBy/overlappedBy/metBy subtract	zero-thickness	ok 4000	ok 4000
+1.5	contains/finishedBy/meets subtract	zero-thickness	ok 6000	ok 6000
+1.5	contains/finishedBy/metBy subtract	zero-thickness	ok 6000	ok 6000
+1.5	contains/starts/meets subtract	zero-thickness	ok 3000	ok 3000
+1.5	contains/starts/metBy subtract	zero-thickness	ok 3000	ok 3000
+1.5	contains/equal/meets subtract	zero-thickness	ok 3000	ok 3000
+1.5	contains/equal/metBy subtract	zero-thickness	ok 3000	ok 3000
+1.5	contains/startedBy/meets subtract	zero-thickness	ok 6000	ok 6000
+1.5	contains/startedBy/metBy subtract	zero-thickness	ok 6000	ok 6000
+1.5	contains/finishes/meets subtract	zero-thickness	ok 3000	ok 3000
+1.5	contains/finishes/metBy subtract	zero-thickness	ok 3000	ok 3000
+1.5	starts/overlaps/meets subtract	zero-thickness	ok 2000	ok 2000
+1.5	starts/overlaps/metBy subtract	zero-thickness	ok 2000	ok 2000
+1.5	starts/finishedBy/meets subtract	zero-thickness	ok 2000	ok 2000
+1.5	starts/finishedBy/metBy subtract	zero-thickness	ok 2000	ok 2000
+1.5	starts/contains/meets subtract	zero-thickness	ok 3000	ok 3000
+1.5	starts/contains/metBy subtract	zero-thickness	ok 3000	ok 3000
+1.5	starts/starts/meets subtract	zero-thickness	ok 1000	ok 1000
+1.5	starts/starts/metBy subtract	zero-thickness	ok 1000	ok 1000
+1.5	starts/equal/meets subtract	zero-thickness	ok 1000	ok 1000
+1.5	starts/equal/metBy subtract	zero-thickness	ok 1000	ok 1000
+1.5	starts/startedBy/meets subtract	zero-thickness	ok 2000	ok 2000
+1.5	starts/startedBy/metBy subtract	zero-thickness	ok 2000	ok 2000
+1.5	starts/during/meets subtract	zero-thickness	ok 1000	ok 1000
+1.5	starts/during/metBy subtract	zero-thickness	ok 1000	ok 1000
+1.5	starts/finishes/meets subtract	zero-thickness	ok 1000	ok 1000
+1.5	starts/finishes/metBy subtract	zero-thickness	ok 1000	ok 1000
+1.5	starts/overlappedBy/meets subtract	zero-thickness	ok 2000	ok 2000
+1.5	starts/overlappedBy/metBy subtract	zero-thickness	ok 2000	ok 2000
+1.5	equal/overlaps/meets subtract	zero-thickness	ok 2000	ok 2000
+1.5	equal/overlaps/metBy subtract	zero-thickness	ok 2000	ok 2000
+1.5	equal/finishedBy/meets subtract	zero-thickness	ok 2000	ok 2000
+1.5	equal/finishedBy/metBy subtract	zero-thickness	ok 2000	ok 2000
+1.5	equal/contains/meets subtract	zero-thickness	ok 3000	ok 3000
+1.5	equal/contains/metBy subtract	zero-thickness	ok 3000	ok 3000
+1.5	equal/starts/meets subtract	zero-thickness	ok 1000	ok 1000
+1.5	equal/starts/metBy subtract	zero-thickness	ok 1000	ok 1000
+1.5	equal/equal/meets subtract	zero-thickness	ok 1000	ok 1000
+1.5	equal/equal/metBy subtract	zero-thickness	ok 1000	ok 1000
+1.5	equal/startedBy/meets subtract	zero-thickness	ok 2000	ok 2000
+1.5	equal/startedBy/metBy subtract	zero-thickness	ok 2000	ok 2000
+1.5	equal/during/meets subtract	zero-thickness	ok 1000	ok 1000
+1.5	equal/during/metBy subtract	zero-thickness	ok 1000	ok 1000
+1.5	equal/finishes/meets subtract	zero-thickness	ok 1000	ok 1000
+1.5	equal/finishes/metBy subtract	zero-thickness	ok 1000	ok 1000
+1.5	equal/overlappedBy/meets subtract	zero-thickness	ok 2000	ok 2000
+1.5	equal/overlappedBy/metBy subtract	zero-thickness	ok 2000	ok 2000
+1.5	startedBy/overlaps/meets subtract	zero-thickness	ok 4000	ok 4000
+1.5	startedBy/overlaps/metBy subtract	zero-thickness	ok 4000	ok 4000
+1.5	startedBy/finishedBy/meets subtract	zero-thickness	ok 4000	ok 4000
+1.5	startedBy/finishedBy/metBy subtract	zero-thickness	ok 4000	ok 4000
+1.5	startedBy/contains/meets subtract	zero-thickness	ok 6000	ok 6000
+1.5	startedBy/contains/metBy subtract	zero-thickness	ok 6000	ok 6000
+1.5	startedBy/starts/meets subtract	zero-thickness	ok 2000	ok 2000
+1.5	startedBy/starts/metBy subtract	zero-thickness	ok 2000	ok 2000
+1.5	startedBy/equal/meets subtract	zero-thickness	ok 2000	ok 2000
+1.5	startedBy/equal/metBy subtract	zero-thickness	ok 2000	ok 2000
+1.5	startedBy/startedBy/meets subtract	zero-thickness	ok 4000	ok 4000
+1.5	startedBy/startedBy/metBy subtract	zero-thickness	ok 4000	ok 4000
+1.5	startedBy/during/meets subtract	zero-thickness	ok 2000	ok 2000
+1.5	startedBy/during/metBy subtract	zero-thickness	ok 2000	ok 2000
+1.5	startedBy/finishes/meets subtract	zero-thickness	ok 2000	ok 2000
+1.5	startedBy/finishes/metBy subtract	zero-thickness	ok 2000	ok 2000
+1.5	startedBy/overlappedBy/meets subtract	zero-thickness	ok 4000	ok 4000
+1.5	startedBy/overlappedBy/metBy subtract	zero-thickness	ok 4000	ok 4000
+1.5	during/finishedBy/meets subtract	zero-thickness	ok 2000	ok 2000
+1.5	during/finishedBy/metBy subtract	zero-thickness	ok 2000	ok 2000
+1.5	during/starts/meets subtract	zero-thickness	ok 1000	ok 1000
+1.5	during/starts/metBy subtract	zero-thickness	ok 1000	ok 1000
+1.5	during/equal/meets subtract	zero-thickness	ok 1000	ok 1000
+1.5	during/equal/metBy subtract	zero-thickness	ok 1000	ok 1000
+1.5	during/startedBy/meets subtract	zero-thickness	ok 2000	ok 2000
+1.5	during/startedBy/metBy subtract	zero-thickness	ok 2000	ok 2000
+1.5	during/finishes/meets subtract	zero-thickness	ok 1000	ok 1000
+1.5	during/finishes/metBy subtract	zero-thickness	ok 1000	ok 1000
+1.5	finishes/overlaps/meets subtract	zero-thickness	ok 2000	ok 2000
+1.5	finishes/overlaps/metBy subtract	zero-thickness	ok 2000	ok 2000
+1.5	finishes/finishedBy/meets subtract	zero-thickness	ok 2000	ok 2000
+1.5	finishes/finishedBy/metBy subtract	zero-thickness	ok 2000	ok 2000
+1.5	finishes/contains/meets subtract	zero-thickness	ok 3000	ok 3000
+1.5	finishes/contains/metBy subtract	zero-thickness	ok 3000	ok 3000
+1.5	finishes/starts/meets subtract	zero-thickness	ok 1000	ok 1000
+1.5	finishes/starts/metBy subtract	zero-thickness	ok 1000	ok 1000
+1.5	finishes/equal/meets subtract	zero-thickness	ok 1000	ok 1000
+1.5	finishes/equal/metBy subtract	zero-thickness	ok 1000	ok 1000
+1.5	finishes/startedBy/meets subtract	zero-thickness	ok 2000	ok 2000
+1.5	finishes/startedBy/metBy subtract	zero-thickness	ok 2000	ok 2000
+1.5	finishes/during/meets subtract	zero-thickness	ok 1000	ok 1000
+1.5	finishes/during/metBy subtract	zero-thickness	ok 1000	ok 1000
+1.5	finishes/finishes/meets subtract	zero-thickness	ok 1000	ok 1000
+1.5	finishes/finishes/metBy subtract	zero-thickness	ok 1000	ok 1000
+1.5	finishes/overlappedBy/meets subtract	zero-thickness	ok 2000	ok 2000
+1.5	finishes/overlappedBy/metBy subtract	zero-thickness	ok 2000	ok 2000
+1.5	overlappedBy/finishedBy/meets subtract	zero-thickness	ok 4000	ok 4000
+1.5	overlappedBy/finishedBy/metBy subtract	zero-thickness	ok 4000	ok 4000
+1.5	overlappedBy/starts/meets subtract	zero-thickness	ok 2000	ok 2000
+1.5	overlappedBy/starts/metBy subtract	zero-thickness	ok 2000	ok 2000
+1.5	overlappedBy/equal/meets subtract	zero-thickness	ok 2000	ok 2000
+1.5	overlappedBy/equal/metBy subtract	zero-thickness	ok 2000	ok 2000
+1.5	overlappedBy/startedBy/meets subtract	zero-thickness	ok 4000	ok 4000
+1.5	overlappedBy/startedBy/metBy subtract	zero-thickness	ok 4000	ok 4000
+1.5	overlappedBy/finishes/meets subtract	zero-thickness	ok 2000	ok 2000
+1.5	overlappedBy/finishes/metBy subtract	zero-thickness	ok 2000	ok 2000
+1.5	overlaps/finishedBy/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	overlaps/finishedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	overlaps/starts/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	overlaps/starts/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	overlaps/equal/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	overlaps/equal/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	overlaps/startedBy/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	overlaps/startedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	overlaps/finishes/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	overlaps/finishes/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	finishedBy/overlaps/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	finishedBy/overlaps/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	finishedBy/finishedBy/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	finishedBy/finishedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	finishedBy/contains/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	finishedBy/contains/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	finishedBy/starts/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	finishedBy/starts/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	finishedBy/equal/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	finishedBy/equal/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	finishedBy/startedBy/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	finishedBy/startedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	finishedBy/during/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	finishedBy/during/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	finishedBy/finishes/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	finishedBy/finishes/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	finishedBy/overlappedBy/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	finishedBy/overlappedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	contains/finishedBy/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	contains/finishedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	contains/starts/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	contains/starts/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	contains/equal/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	contains/equal/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	contains/startedBy/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	contains/startedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	contains/finishes/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	contains/finishes/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	starts/overlaps/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	starts/overlaps/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	starts/finishedBy/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	starts/finishedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	starts/contains/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	starts/contains/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	starts/starts/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	starts/starts/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	starts/equal/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	starts/equal/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	starts/startedBy/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	starts/startedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	starts/during/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	starts/during/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	starts/finishes/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	starts/finishes/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	starts/overlappedBy/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	starts/overlappedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	equal/overlaps/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	equal/overlaps/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	equal/finishedBy/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	equal/finishedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	equal/contains/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	equal/contains/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	equal/starts/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	equal/starts/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	equal/equal/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	equal/equal/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	equal/startedBy/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	equal/startedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	equal/during/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	equal/during/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	equal/finishes/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	equal/finishes/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	equal/overlappedBy/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	equal/overlappedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	startedBy/overlaps/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	startedBy/overlaps/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	startedBy/finishedBy/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	startedBy/finishedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	startedBy/contains/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	startedBy/contains/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	startedBy/starts/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	startedBy/starts/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	startedBy/equal/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	startedBy/equal/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	startedBy/startedBy/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	startedBy/startedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	startedBy/during/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	startedBy/during/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	startedBy/finishes/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	startedBy/finishes/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	startedBy/overlappedBy/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	startedBy/overlappedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	during/finishedBy/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	during/finishedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	during/starts/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	during/starts/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	during/equal/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	during/equal/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	during/startedBy/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	during/startedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	during/finishes/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	during/finishes/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	finishes/overlaps/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	finishes/overlaps/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	finishes/finishedBy/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	finishes/finishedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	finishes/contains/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	finishes/contains/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	finishes/starts/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	finishes/starts/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	finishes/equal/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	finishes/equal/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	finishes/startedBy/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	finishes/startedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	finishes/during/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	finishes/during/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	finishes/finishes/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	finishes/finishes/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	finishes/overlappedBy/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	finishes/overlappedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	overlappedBy/finishedBy/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	overlappedBy/finishedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	overlappedBy/starts/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	overlappedBy/starts/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	overlappedBy/equal/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	overlappedBy/equal/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	overlappedBy/startedBy/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	overlappedBy/startedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+1.5	overlappedBy/finishes/meets intersect	invalid EdgeUses	empty	ok 0
+1.5	overlappedBy/finishes/metBy intersect	invalid EdgeUses	empty	ok 0
+2	meets/finishedBy/finishedBy union	invalid EdgeUses	ok 5000	ok 5000
+2	meets/finishedBy/starts union	invalid EdgeUses	ok 4000	ok 4000
+2	meets/finishedBy/equal union	invalid EdgeUses	ok 3000	ok 3000
+2	meets/finishedBy/startedBy union	invalid EdgeUses	ok 5000	ok 5000
+2	meets/finishedBy/finishes union	invalid EdgeUses	ok 4000	ok 4000
+2	meets/contains/finishedBy union	invalid EdgeUses	ok 7000	ok 7000
+2	meets/contains/starts union	invalid EdgeUses	ok 5000	ok 5000
+2	meets/contains/equal union	invalid EdgeUses	ok 4000	ok 4000
+2	meets/contains/startedBy union	invalid EdgeUses	ok 7000	ok 7000
+2	meets/contains/finishes union	invalid EdgeUses	ok 5000	ok 5000
+2	meets/equal/finishedBy union	invalid EdgeUses	ok 3000	ok 3000
+2	meets/equal/starts union	invalid EdgeUses	ok 3000	ok 3000
+2	meets/equal/equal union	invalid EdgeUses	ok 2000	ok 2000
+2	meets/equal/startedBy union	invalid EdgeUses	ok 3000	ok 3000
+2	meets/equal/finishes union	invalid EdgeUses	ok 3000	ok 3000
+2	meets/startedBy/finishedBy union	invalid EdgeUses	ok 5000	ok 5000
+2	meets/startedBy/starts union	invalid EdgeUses	ok 4000	ok 4000
+2	meets/startedBy/equal union	invalid EdgeUses	ok 3000	ok 3000
+2	meets/startedBy/startedBy union	invalid EdgeUses	ok 5000	ok 5000
+2	meets/startedBy/finishes union	invalid EdgeUses	ok 4000	ok 4000
+2	overlaps/finishedBy/meets union	zero-thickness	ok 6000	ok 6000
+2	overlaps/finishedBy/metBy union	zero-thickness	ok 6000	ok 6000
+2	overlaps/starts/meets union	zero-thickness	ok 6000	ok 6000
+2	overlaps/starts/metBy union	zero-thickness	ok 6000	ok 6000
+2	overlaps/equal/meets union	zero-thickness	ok 4000	ok 4000
+2	overlaps/equal/metBy union	zero-thickness	ok 4000	ok 4000
+2	overlaps/startedBy/meets union	zero-thickness	ok 6000	ok 6000
+2	overlaps/startedBy/metBy union	zero-thickness	ok 6000	ok 6000
+2	overlaps/finishes/meets union	zero-thickness	ok 6000	ok 6000
+2	overlaps/finishes/metBy union	zero-thickness	ok 6000	ok 6000
+2	finishedBy/meets/finishedBy union	invalid EdgeUses	ok 5000	ok 5000
+2	finishedBy/meets/starts union	invalid EdgeUses	ok 4000	ok 4000
+2	finishedBy/meets/equal union	invalid EdgeUses	ok 3000	ok 3000
+2	finishedBy/meets/startedBy union	invalid EdgeUses	ok 5000	ok 5000
+2	finishedBy/meets/finishes union	invalid EdgeUses	ok 4000	ok 4000
+2	finishedBy/overlaps/meets union	zero-thickness	ok 6000	ok 6000
+2	finishedBy/overlaps/metBy union	zero-thickness	ok 6000	ok 6000
+2	finishedBy/finishedBy/meets union	zero-thickness	ok 5000	ok 5000
+2	finishedBy/finishedBy/finishedBy union	invalid EdgeUses	ok 8000	ok 8000
+2	finishedBy/finishedBy/starts union	invalid EdgeUses	ok 5000	ok 5000
+2	finishedBy/finishedBy/equal union	invalid EdgeUses	ok 4000	ok 4000
+2	finishedBy/finishedBy/startedBy union	invalid EdgeUses	ok 8000	ok 8000
+2	finishedBy/finishedBy/finishes union	invalid EdgeUses	ok 5000	ok 5000
+2	finishedBy/finishedBy/metBy union	zero-thickness	ok 5000	ok 5000
+2	finishedBy/contains/meets union	zero-thickness	ok 7000	ok 7000
+2	finishedBy/contains/finishedBy union	invalid EdgeUses	ok 12000	ok 12000
+2	finishedBy/contains/starts union	invalid EdgeUses	ok 7000	ok 7000
+2	finishedBy/contains/equal union	invalid EdgeUses	ok 6000	ok 6000
+2	finishedBy/contains/startedBy union	invalid EdgeUses	ok 12000	ok 12000
+2	finishedBy/contains/finishes union	invalid EdgeUses	ok 7000	ok 7000
+2	finishedBy/contains/metBy union	zero-thickness	ok 7000	ok 7000
+2	finishedBy/starts/meets union	zero-thickness	ok 4000	ok 4000
+2	finishedBy/starts/finishedBy union	invalid EdgeUses	ok 5000	ok 5000
+2	finishedBy/starts/starts union	invalid EdgeUses	ok 5000	ok 5000
+2	finishedBy/starts/equal union	invalid EdgeUses	ok 3000	ok 3000
+2	finishedBy/starts/startedBy union	invalid EdgeUses	ok 5000	ok 5000
+2	finishedBy/starts/finishes union	invalid EdgeUses	ok 5000	ok 5000
+2	finishedBy/starts/metBy union	zero-thickness	ok 4000	ok 4000
+2	finishedBy/equal/meets union	zero-thickness	ok 3000	ok 3000
+2	finishedBy/equal/finishedBy union	invalid EdgeUses	ok 4000	ok 4000
+2	finishedBy/equal/starts union	invalid EdgeUses	ok 3000	ok 3000
+2	finishedBy/equal/equal union	invalid EdgeUses	ok 2000	ok 2000
+2	finishedBy/equal/startedBy union	invalid EdgeUses	ok 4000	ok 4000
+2	finishedBy/equal/finishes union	invalid EdgeUses	ok 3000	ok 3000
+2	finishedBy/equal/metBy union	zero-thickness	ok 3000	ok 3000
+2	finishedBy/startedBy/meets union	zero-thickness	ok 5000	ok 5000
+2	finishedBy/startedBy/finishedBy union	invalid EdgeUses	ok 8000	ok 8000
+2	finishedBy/startedBy/starts union	invalid EdgeUses	ok 5000	ok 5000
+2	finishedBy/startedBy/equal union	invalid EdgeUses	ok 4000	ok 4000
+2	finishedBy/startedBy/startedBy union	invalid EdgeUses	ok 8000	ok 8000
+2	finishedBy/startedBy/finishes union	invalid EdgeUses	ok 5000	ok 5000
+2	finishedBy/startedBy/metBy union	zero-thickness	ok 5000	ok 5000
+2	finishedBy/during/meets union	zero-thickness	ok 5000	ok 5000
+2	finishedBy/during/metBy union	zero-thickness	ok 5000	ok 5000
+2	finishedBy/finishes/meets union	zero-thickness	ok 4000	ok 4000
+2	finishedBy/finishes/finishedBy union	invalid EdgeUses	ok 5000	ok 5000
+2	finishedBy/finishes/starts union	invalid EdgeUses	ok 5000	ok 5000
+2	finishedBy/finishes/equal union	invalid EdgeUses	ok 3000	ok 3000
+2	finishedBy/finishes/startedBy union	invalid EdgeUses	ok 5000	ok 5000
+2	finishedBy/finishes/finishes union	invalid EdgeUses	ok 5000	ok 5000
+2	finishedBy/finishes/metBy union	zero-thickness	ok 4000	ok 4000
+2	finishedBy/overlappedBy/meets union	zero-thickness	ok 6000	ok 6000
+2	finishedBy/overlappedBy/metBy union	zero-thickness	ok 6000	ok 6000
+2	finishedBy/metBy/finishedBy union	invalid EdgeUses	ok 5000	ok 5000
+2	finishedBy/metBy/starts union	invalid EdgeUses	ok 4000	ok 4000
+2	finishedBy/metBy/equal union	invalid EdgeUses	ok 3000	ok 3000
+2	finishedBy/metBy/startedBy union	invalid EdgeUses	ok 5000	ok 5000
+2	finishedBy/metBy/finishes union	invalid EdgeUses	ok 4000	ok 4000
+2	contains/meets/finishedBy union	invalid EdgeUses	ok 7000	ok 7000
+2	contains/meets/starts union	invalid EdgeUses	ok 5000	ok 5000
+2	contains/meets/equal union	invalid EdgeUses	ok 4000	ok 4000
+2	contains/meets/startedBy union	invalid EdgeUses	ok 7000	ok 7000
+2	contains/meets/finishes union	invalid EdgeUses	ok 5000	ok 5000
+2	contains/finishedBy/meets union	zero-thickness	ok 7000	ok 7000
+2	contains/finishedBy/finishedBy union	invalid EdgeUses	ok 12000	ok 12000
+2	contains/finishedBy/starts union	invalid EdgeUses	ok 7000	ok 7000
+2	contains/finishedBy/equal union	invalid EdgeUses	ok 6000	ok 6000
+2	contains/finishedBy/startedBy union	invalid EdgeUses	ok 12000	ok 12000
+2	contains/finishedBy/finishes union	invalid EdgeUses	ok 7000	ok 7000
+2	contains/finishedBy/metBy union	zero-thickness	ok 7000	ok 7000
+2	contains/starts/meets union	zero-thickness	ok 5000	ok 5000
+2	contains/starts/finishedBy union	invalid EdgeUses	ok 7000	ok 7000
+2	contains/starts/starts union	invalid EdgeUses	ok 6000	ok 6000
+2	contains/starts/equal union	invalid EdgeUses	ok 4000	ok 4000
+2	contains/starts/startedBy union	invalid EdgeUses	ok 7000	ok 7000
+2	contains/starts/finishes union	invalid EdgeUses	ok 6000	ok 6000
+2	contains/starts/metBy union	zero-thickness	ok 5000	ok 5000
+2	contains/equal/meets union	zero-thickness	ok 4000	ok 4000
+2	contains/equal/finishedBy union	invalid EdgeUses	ok 6000	ok 6000
+2	contains/equal/starts union	invalid EdgeUses	ok 4000	ok 4000
+2	contains/equal/equal union	invalid EdgeUses	ok 3000	ok 3000
+2	contains/equal/startedBy union	invalid EdgeUses	ok 6000	ok 6000
+2	contains/equal/finishes union	invalid EdgeUses	ok 4000	ok 4000
+2	contains/equal/metBy union	zero-thickness	ok 4000	ok 4000
+2	contains/startedBy/meets union	zero-thickness	ok 7000	ok 7000
+2	contains/startedBy/finishedBy union	invalid EdgeUses	ok 12000	ok 12000
+2	contains/startedBy/starts union	invalid EdgeUses	ok 7000	ok 7000
+2	contains/startedBy/equal union	invalid EdgeUses	ok 6000	ok 6000
+2	contains/startedBy/startedBy union	invalid EdgeUses	ok 12000	ok 12000
+2	contains/startedBy/finishes union	invalid EdgeUses	ok 7000	ok 7000
+2	contains/startedBy/metBy union	zero-thickness	ok 7000	ok 7000
+2	contains/finishes/meets union	zero-thickness	ok 5000	ok 5000
+2	contains/finishes/finishedBy union	invalid EdgeUses	ok 7000	ok 7000
+2	contains/finishes/starts union	invalid EdgeUses	ok 6000	ok 6000
+2	contains/finishes/equal union	invalid EdgeUses	ok 4000	ok 4000
+2	contains/finishes/startedBy union	invalid EdgeUses	ok 7000	ok 7000
+2	contains/finishes/finishes union	invalid EdgeUses	ok 6000	ok 6000
+2	contains/finishes/metBy union	zero-thickness	ok 5000	ok 5000
+2	contains/metBy/finishedBy union	invalid EdgeUses	ok 7000	ok 7000
+2	contains/metBy/starts union	invalid EdgeUses	ok 5000	ok 5000
+2	contains/metBy/equal union	invalid EdgeUses	ok 4000	ok 4000
+2	contains/metBy/startedBy union	invalid EdgeUses	ok 7000	ok 7000
+2	contains/metBy/finishes union	invalid EdgeUses	ok 5000	ok 5000
+2	starts/overlaps/meets union	zero-thickness	ok 6000	ok 6000
+2	starts/overlaps/metBy union	zero-thickness	ok 6000	ok 6000
+2	starts/finishedBy/meets union	zero-thickness	ok 4000	ok 4000
+2	starts/finishedBy/finishedBy union	invalid EdgeUses	ok 5000	ok 5000
+2	starts/finishedBy/starts union	invalid EdgeUses	ok 5000	ok 5000
+2	starts/finishedBy/equal union	invalid EdgeUses	ok 3000	ok 3000
+2	starts/finishedBy/startedBy union	invalid EdgeUses	ok 5000	ok 5000
+2	starts/finishedBy/finishes union	invalid EdgeUses	ok 5000	ok 5000
+2	starts/finishedBy/metBy union	zero-thickness	ok 4000	ok 4000
+2	starts/contains/meets union	zero-thickness	ok 5000	ok 5000
+2	starts/contains/finishedBy union	invalid EdgeUses	ok 7000	ok 7000
+2	starts/contains/starts union	invalid EdgeUses	ok 6000	ok 6000
+2	starts/contains/equal union	invalid EdgeUses	ok 4000	ok 4000
+2	starts/contains/startedBy union	invalid EdgeUses	ok 7000	ok 7000
+2	starts/contains/finishes union	invalid EdgeUses	ok 6000	ok 6000
+2	starts/contains/metBy union	zero-thickness	ok 5000	ok 5000
+2	starts/starts/meets union	zero-thickness	ok 5000	ok 5000
+2	starts/starts/metBy union	zero-thickness	ok 5000	ok 5000
+2	starts/equal/meets union	zero-thickness	ok 3000	ok 3000
+2	starts/equal/finishedBy union	invalid EdgeUses	ok 3000	ok 3000
+2	starts/equal/starts union	invalid EdgeUses	ok 4000	ok 4000
+2	starts/equal/equal union	invalid EdgeUses	ok 2000	ok 2000
+2	starts/equal/startedBy union	invalid EdgeUses	ok 3000	ok 3000
+2	starts/equal/finishes union	invalid EdgeUses	ok 4000	ok 4000
+2	starts/equal/metBy union	zero-thickness	ok 3000	ok 3000
+2	starts/startedBy/meets union	zero-thickness	ok 4000	ok 4000
+2	starts/startedBy/finishedBy union	invalid EdgeUses	ok 5000	ok 5000
+2	starts/startedBy/starts union	invalid EdgeUses	ok 5000	ok 5000
+2	starts/startedBy/equal union	invalid EdgeUses	ok 3000	ok 3000
+2	starts/startedBy/startedBy union	invalid EdgeUses	ok 5000	ok 5000
+2	starts/startedBy/finishes union	invalid EdgeUses	ok 5000	ok 5000
+2	starts/startedBy/metBy union	zero-thickness	ok 4000	ok 4000
+2	starts/during/meets union	zero-thickness	ok 7000	ok 7000
+2	starts/during/metBy union	zero-thickness	ok 7000	ok 7000
+2	starts/finishes/meets union	zero-thickness	ok 5000	ok 5000
+2	starts/finishes/metBy union	zero-thickness	ok 5000	ok 5000
+2	starts/overlappedBy/meets union	zero-thickness	ok 6000	ok 6000
+2	starts/overlappedBy/metBy union	zero-thickness	ok 6000	ok 6000
+2	equal/meets/finishedBy union	invalid EdgeUses	ok 3000	ok 3000
+2	equal/meets/starts union	invalid EdgeUses	ok 3000	ok 3000
+2	equal/meets/equal union	invalid EdgeUses	ok 2000	ok 2000
+2	equal/meets/startedBy union	invalid EdgeUses	ok 3000	ok 3000
+2	equal/meets/finishes union	invalid EdgeUses	ok 3000	ok 3000
+2	equal/overlaps/meets union	zero-thickness	ok 4000	ok 4000
+2	equal/overlaps/metBy union	zero-thickness	ok 4000	ok 4000
+2	equal/finishedBy/meets union	zero-thickness	ok 3000	ok 3000
+2	equal/finishedBy/finishedBy union	invalid EdgeUses	ok 4000	ok 4000
+2	equal/finishedBy/starts union	invalid EdgeUses	ok 3000	ok 3000
+2	equal/finishedBy/equal union	invalid EdgeUses	ok 2000	ok 2000
+2	equal/finishedBy/startedBy union	invalid EdgeUses	ok 4000	ok 4000
+2	equal/finishedBy/finishes union	invalid EdgeUses	ok 3000	ok 3000
+2	equal/finishedBy/metBy union	zero-thickness	ok 3000	ok 3000
+2	equal/contains/meets union	zero-thickness	ok 4000	ok 4000
+2	equal/contains/finishedBy union	invalid EdgeUses	ok 6000	ok 6000
+2	equal/contains/starts union	invalid EdgeUses	ok 4000	ok 4000
+2	equal/contains/equal union	invalid EdgeUses	ok 3000	ok 3000
+2	equal/contains/startedBy union	invalid EdgeUses	ok 6000	ok 6000
+2	equal/contains/finishes union	invalid EdgeUses	ok 4000	ok 4000
+2	equal/contains/metBy union	zero-thickness	ok 4000	ok 4000
+2	equal/starts/meets union	zero-thickness	ok 3000	ok 3000
+2	equal/starts/finishedBy union	invalid EdgeUses	ok 3000	ok 3000
+2	equal/starts/starts union	invalid EdgeUses	ok 4000	ok 4000
+2	equal/starts/equal union	invalid EdgeUses	ok 2000	ok 2000
+2	equal/starts/startedBy union	invalid EdgeUses	ok 3000	ok 3000
+2	equal/starts/finishes union	invalid EdgeUses	ok 4000	ok 4000
+2	equal/starts/metBy union	zero-thickness	ok 3000	ok 3000
+2	equal/equal/meets union	zero-thickness	ok 2000	ok 2000
+2	equal/equal/finishedBy union	invalid EdgeUses	ok 2000	ok 2000
+2	equal/equal/starts union	invalid EdgeUses	ok 2000	ok 2000
+2	equal/equal/equal union	invalid EdgeUses	ok 1000	ok 1000
+2	equal/equal/startedBy union	invalid EdgeUses	ok 2000	ok 2000
+2	equal/equal/finishes union	invalid EdgeUses	ok 2000	ok 2000
+2	equal/equal/metBy union	zero-thickness	ok 2000	ok 2000
+2	equal/startedBy/meets union	zero-thickness	ok 3000	ok 3000
+2	equal/startedBy/finishedBy union	invalid EdgeUses	ok 4000	ok 4000
+2	equal/startedBy/starts union	invalid EdgeUses	ok 3000	ok 3000
+2	equal/startedBy/equal union	invalid EdgeUses	ok 2000	ok 2000
+2	equal/startedBy/startedBy union	invalid EdgeUses	ok 4000	ok 4000
+2	equal/startedBy/finishes union	invalid EdgeUses	ok 3000	ok 3000
+2	equal/startedBy/metBy union	zero-thickness	ok 3000	ok 3000
+2	equal/during/meets union	zero-thickness	ok 4000	ok 4000
+2	equal/during/metBy union	zero-thickness	ok 4000	ok 4000
+2	equal/finishes/meets union	zero-thickness	ok 3000	ok 3000
+2	equal/finishes/finishedBy union	invalid EdgeUses	ok 3000	ok 3000
+2	equal/finishes/starts union	invalid EdgeUses	ok 4000	ok 4000
+2	equal/finishes/equal union	invalid EdgeUses	ok 2000	ok 2000
+2	equal/finishes/startedBy union	invalid EdgeUses	ok 3000	ok 3000
+2	equal/finishes/finishes union	invalid EdgeUses	ok 4000	ok 4000
+2	equal/finishes/metBy union	zero-thickness	ok 3000	ok 3000
+2	equal/overlappedBy/meets union	zero-thickness	ok 4000	ok 4000
+2	equal/overlappedBy/metBy union	zero-thickness	ok 4000	ok 4000
+2	equal/metBy/finishedBy union	invalid EdgeUses	ok 3000	ok 3000
+2	equal/metBy/starts union	invalid EdgeUses	ok 3000	ok 3000
+2	equal/metBy/equal union	invalid EdgeUses	ok 2000	ok 2000
+2	equal/metBy/startedBy union	invalid EdgeUses	ok 3000	ok 3000
+2	equal/metBy/finishes union	invalid EdgeUses	ok 3000	ok 3000
+2	startedBy/meets/finishedBy union	invalid EdgeUses	ok 5000	ok 5000
+2	startedBy/meets/starts union	invalid EdgeUses	ok 4000	ok 4000
+2	startedBy/meets/equal union	invalid EdgeUses	ok 3000	ok 3000
+2	startedBy/meets/startedBy union	invalid EdgeUses	ok 5000	ok 5000
+2	startedBy/meets/finishes union	invalid EdgeUses	ok 4000	ok 4000
+2	startedBy/overlaps/meets union	zero-thickness	ok 6000	ok 6000
+2	startedBy/overlaps/metBy union	zero-thickness	ok 6000	ok 6000
+2	startedBy/finishedBy/meets union	zero-thickness	ok 5000	ok 5000
+2	startedBy/finishedBy/finishedBy union	invalid EdgeUses	ok 8000	ok 8000
+2	startedBy/finishedBy/starts union	invalid EdgeUses	ok 5000	ok 5000
+2	startedBy/finishedBy/equal union	invalid EdgeUses	ok 4000	ok 4000
+2	startedBy/finishedBy/startedBy union	invalid EdgeUses	ok 8000	ok 8000
+2	startedBy/finishedBy/finishes union	invalid EdgeUses	ok 5000	ok 5000
+2	startedBy/finishedBy/metBy union	zero-thickness	ok 5000	ok 5000
+2	startedBy/contains/meets union	zero-thickness	ok 7000	ok 7000
+2	startedBy/contains/finishedBy union	invalid EdgeUses	ok 12000	ok 12000
+2	startedBy/contains/starts union	invalid EdgeUses	ok 7000	ok 7000
+2	startedBy/contains/equal union	invalid EdgeUses	ok 6000	ok 6000
+2	startedBy/contains/startedBy union	invalid EdgeUses	ok 12000	ok 12000
+2	startedBy/contains/finishes union	invalid EdgeUses	ok 7000	ok 7000
+2	startedBy/contains/metBy union	zero-thickness	ok 7000	ok 7000
+2	startedBy/starts/meets union	zero-thickness	ok 4000	ok 4000
+2	startedBy/starts/finishedBy union	invalid EdgeUses	ok 5000	ok 5000
+2	startedBy/starts/starts union	invalid EdgeUses	ok 5000	ok 5000
+2	startedBy/starts/equal union	invalid EdgeUses	ok 3000	ok 3000
+2	startedBy/starts/startedBy union	invalid EdgeUses	ok 5000	ok 5000
+2	startedBy/starts/finishes union	invalid EdgeUses	ok 5000	ok 5000
+2	startedBy/starts/metBy union	zero-thickness	ok 4000	ok 4000
+2	startedBy/equal/meets union	zero-thickness	ok 3000	ok 3000
+2	startedBy/equal/finishedBy union	invalid EdgeUses	ok 4000	ok 4000
+2	startedBy/equal/starts union	invalid EdgeUses	ok 3000	ok 3000
+2	startedBy/equal/equal union	invalid EdgeUses	ok 2000	ok 2000
+2	startedBy/equal/startedBy union	invalid EdgeUses	ok 4000	ok 4000
+2	startedBy/equal/finishes union	invalid EdgeUses	ok 3000	ok 3000
+2	startedBy/equal/metBy union	zero-thickness	ok 3000	ok 3000
+2	startedBy/startedBy/meets union	zero-thickness	ok 5000	ok 5000
+2	startedBy/startedBy/finishedBy union	invalid EdgeUses	ok 8000	ok 8000
+2	startedBy/startedBy/starts union	invalid EdgeUses	ok 5000	ok 5000
+2	startedBy/startedBy/equal union	invalid EdgeUses	ok 4000	ok 4000
+2	startedBy/startedBy/startedBy union	invalid EdgeUses	ok 8000	ok 8000
+2	startedBy/startedBy/finishes union	invalid EdgeUses	ok 5000	ok 5000
+2	startedBy/startedBy/metBy union	zero-thickness	ok 5000	ok 5000
+2	startedBy/during/meets union	zero-thickness	ok 5000	ok 5000
+2	startedBy/during/metBy union	zero-thickness	ok 5000	ok 5000
+2	startedBy/finishes/meets union	zero-thickness	ok 4000	ok 4000
+2	startedBy/finishes/finishedBy union	invalid EdgeUses	ok 5000	ok 5000
+2	startedBy/finishes/starts union	invalid EdgeUses	ok 5000	ok 5000
+2	startedBy/finishes/equal union	invalid EdgeUses	ok 3000	ok 3000
+2	startedBy/finishes/startedBy union	invalid EdgeUses	ok 5000	ok 5000
+2	startedBy/finishes/finishes union	invalid EdgeUses	ok 5000	ok 5000
+2	startedBy/finishes/metBy union	zero-thickness	ok 4000	ok 4000
+2	startedBy/overlappedBy/meets union	zero-thickness	ok 6000	ok 6000
+2	startedBy/overlappedBy/metBy union	zero-thickness	ok 6000	ok 6000
+2	startedBy/metBy/finishedBy union	invalid EdgeUses	ok 5000	ok 5000
+2	startedBy/metBy/starts union	invalid EdgeUses	ok 4000	ok 4000
+2	startedBy/metBy/equal union	invalid EdgeUses	ok 3000	ok 3000
+2	startedBy/metBy/startedBy union	invalid EdgeUses	ok 5000	ok 5000
+2	startedBy/metBy/finishes union	invalid EdgeUses	ok 4000	ok 4000
+2	during/finishedBy/meets union	zero-thickness	ok 5000	ok 5000
+2	during/finishedBy/metBy union	zero-thickness	ok 5000	ok 5000
+2	during/starts/meets union	zero-thickness	ok 7000	ok 7000
+2	during/starts/metBy union	zero-thickness	ok 7000	ok 7000
+2	during/equal/meets union	zero-thickness	ok 4000	ok 4000
+2	during/equal/metBy union	zero-thickness	ok 4000	ok 4000
+2	during/startedBy/meets union	zero-thickness	ok 5000	ok 5000
+2	during/startedBy/metBy union	zero-thickness	ok 5000	ok 5000
+2	during/finishes/meets union	zero-thickness	ok 7000	ok 7000
+2	during/finishes/metBy union	zero-thickness	ok 7000	ok 7000
+2	finishes/overlaps/meets union	zero-thickness	ok 6000	ok 6000
+2	finishes/overlaps/metBy union	zero-thickness	ok 6000	ok 6000
+2	finishes/finishedBy/meets union	zero-thickness	ok 4000	ok 4000
+2	finishes/finishedBy/finishedBy union	invalid EdgeUses	ok 5000	ok 5000
+2	finishes/finishedBy/starts union	invalid EdgeUses	ok 5000	ok 5000
+2	finishes/finishedBy/equal union	invalid EdgeUses	ok 3000	ok 3000
+2	finishes/finishedBy/startedBy union	invalid EdgeUses	ok 5000	ok 5000
+2	finishes/finishedBy/finishes union	invalid EdgeUses	ok 5000	ok 5000
+2	finishes/finishedBy/metBy union	zero-thickness	ok 4000	ok 4000
+2	finishes/contains/meets union	zero-thickness	ok 5000	ok 5000
+2	finishes/contains/finishedBy union	invalid EdgeUses	ok 7000	ok 7000
+2	finishes/contains/starts union	invalid EdgeUses	ok 6000	ok 6000
+2	finishes/contains/equal union	invalid EdgeUses	ok 4000	ok 4000
+2	finishes/contains/startedBy union	invalid EdgeUses	ok 7000	ok 7000
+2	finishes/contains/finishes union	invalid EdgeUses	ok 6000	ok 6000
+2	finishes/contains/metBy union	zero-thickness	ok 5000	ok 5000
+2	finishes/starts/meets union	zero-thickness	ok 5000	ok 5000
+2	finishes/starts/metBy union	zero-thickness	ok 5000	ok 5000
+2	finishes/equal/meets union	zero-thickness	ok 3000	ok 3000
+2	finishes/equal/finishedBy union	invalid EdgeUses	ok 3000	ok 3000
+2	finishes/equal/starts union	invalid EdgeUses	ok 4000	ok 4000
+2	finishes/equal/equal union	invalid EdgeUses	ok 2000	ok 2000
+2	finishes/equal/startedBy union	invalid EdgeUses	ok 3000	ok 3000
+2	finishes/equal/finishes union	invalid EdgeUses	ok 4000	ok 4000
+2	finishes/equal/metBy union	zero-thickness	ok 3000	ok 3000
+2	finishes/startedBy/meets union	zero-thickness	ok 4000	ok 4000
+2	finishes/startedBy/finishedBy union	invalid EdgeUses	ok 5000	ok 5000
+2	finishes/startedBy/starts union	invalid EdgeUses	ok 5000	ok 5000
+2	finishes/startedBy/equal union	invalid EdgeUses	ok 3000	ok 3000
+2	finishes/startedBy/startedBy union	invalid EdgeUses	ok 5000	ok 5000
+2	finishes/startedBy/finishes union	invalid EdgeUses	ok 5000	ok 5000
+2	finishes/startedBy/metBy union	zero-thickness	ok 4000	ok 4000
+2	finishes/during/meets union	zero-thickness	ok 7000	ok 7000
+2	finishes/during/metBy union	zero-thickness	ok 7000	ok 7000
+2	finishes/finishes/meets union	zero-thickness	ok 5000	ok 5000
+2	finishes/finishes/metBy union	zero-thickness	ok 5000	ok 5000
+2	finishes/overlappedBy/meets union	zero-thickness	ok 6000	ok 6000
+2	finishes/overlappedBy/metBy union	zero-thickness	ok 6000	ok 6000
+2	overlappedBy/finishedBy/meets union	zero-thickness	ok 6000	ok 6000
+2	overlappedBy/finishedBy/metBy union	zero-thickness	ok 6000	ok 6000
+2	overlappedBy/starts/meets union	zero-thickness	ok 6000	ok 6000
+2	overlappedBy/starts/metBy union	zero-thickness	ok 6000	ok 6000
+2	overlappedBy/equal/meets union	zero-thickness	ok 4000	ok 4000
+2	overlappedBy/equal/metBy union	zero-thickness	ok 4000	ok 4000
+2	overlappedBy/startedBy/meets union	zero-thickness	ok 6000	ok 6000
+2	overlappedBy/startedBy/metBy union	zero-thickness	ok 6000	ok 6000
+2	overlappedBy/finishes/meets union	zero-thickness	ok 6000	ok 6000
+2	overlappedBy/finishes/metBy union	zero-thickness	ok 6000	ok 6000
+2	metBy/finishedBy/finishedBy union	invalid EdgeUses	ok 5000	ok 5000
+2	metBy/finishedBy/starts union	invalid EdgeUses	ok 4000	ok 4000
+2	metBy/finishedBy/equal union	invalid EdgeUses	ok 3000	ok 3000
+2	metBy/finishedBy/startedBy union	invalid EdgeUses	ok 5000	ok 5000
+2	metBy/finishedBy/finishes union	invalid EdgeUses	ok 4000	ok 4000
+2	metBy/contains/finishedBy union	invalid EdgeUses	ok 7000	ok 7000
+2	metBy/contains/starts union	invalid EdgeUses	ok 5000	ok 5000
+2	metBy/contains/equal union	invalid EdgeUses	ok 4000	ok 4000
+2	metBy/contains/startedBy union	invalid EdgeUses	ok 7000	ok 7000
+2	metBy/contains/finishes union	invalid EdgeUses	ok 5000	ok 5000
+2	metBy/equal/finishedBy union	invalid EdgeUses	ok 3000	ok 3000
+2	metBy/equal/starts union	invalid EdgeUses	ok 3000	ok 3000
+2	metBy/equal/equal union	invalid EdgeUses	ok 2000	ok 2000
+2	metBy/equal/startedBy union	invalid EdgeUses	ok 3000	ok 3000
+2	metBy/equal/finishes union	invalid EdgeUses	ok 3000	ok 3000
+2	metBy/startedBy/finishedBy union	invalid EdgeUses	ok 5000	ok 5000
+2	metBy/startedBy/starts union	invalid EdgeUses	ok 4000	ok 4000
+2	metBy/startedBy/equal union	invalid EdgeUses	ok 3000	ok 3000
+2	metBy/startedBy/startedBy union	invalid EdgeUses	ok 5000	ok 5000
+2	metBy/startedBy/finishes union	invalid EdgeUses	ok 4000	ok 4000
+2	overlaps/finishedBy/meets subtract	zero-thickness	ok 4000	ok 4000
+2	overlaps/finishedBy/metBy subtract	zero-thickness	ok 4000	ok 4000
+2	overlaps/starts/meets subtract	zero-thickness	ok 2000	ok 2000
+2	overlaps/starts/metBy subtract	zero-thickness	ok 2000	ok 2000
+2	overlaps/equal/meets subtract	zero-thickness	ok 2000	ok 2000
+2	overlaps/equal/metBy subtract	zero-thickness	ok 2000	ok 2000
+2	overlaps/startedBy/meets subtract	zero-thickness	ok 4000	ok 4000
+2	overlaps/startedBy/metBy subtract	zero-thickness	ok 4000	ok 4000
+2	overlaps/finishes/meets subtract	zero-thickness	ok 2000	ok 2000
+2	overlaps/finishes/metBy subtract	zero-thickness	ok 2000	ok 2000
+2	finishedBy/overlaps/meets subtract	zero-thickness	ok 4000	ok 4000
+2	finishedBy/overlaps/metBy subtract	zero-thickness	ok 4000	ok 4000
+2	finishedBy/finishedBy/meets subtract	zero-thickness	ok 4000	ok 4000
+2	finishedBy/finishedBy/metBy subtract	zero-thickness	ok 4000	ok 4000
+2	finishedBy/contains/meets subtract	zero-thickness	ok 6000	ok 6000
+2	finishedBy/contains/metBy subtract	zero-thickness	ok 6000	ok 6000
+2	finishedBy/starts/meets subtract	zero-thickness	ok 2000	ok 2000
+2	finishedBy/starts/metBy subtract	zero-thickness	ok 2000	ok 2000
+2	finishedBy/equal/meets subtract	zero-thickness	ok 2000	ok 2000
+2	finishedBy/equal/metBy subtract	zero-thickness	ok 2000	ok 2000
+2	finishedBy/startedBy/meets subtract	zero-thickness	ok 4000	ok 4000
+2	finishedBy/startedBy/metBy subtract	zero-thickness	ok 4000	ok 4000
+2	finishedBy/during/meets subtract	zero-thickness	ok 2000	ok 2000
+2	finishedBy/during/metBy subtract	zero-thickness	ok 2000	ok 2000
+2	finishedBy/finishes/meets subtract	zero-thickness	ok 2000	ok 2000
+2	finishedBy/finishes/metBy subtract	zero-thickness	ok 2000	ok 2000
+2	finishedBy/overlappedBy/meets subtract	zero-thickness	ok 4000	ok 4000
+2	finishedBy/overlappedBy/metBy subtract	zero-thickness	ok 4000	ok 4000
+2	contains/finishedBy/meets subtract	zero-thickness	ok 6000	ok 6000
+2	contains/finishedBy/metBy subtract	zero-thickness	ok 6000	ok 6000
+2	contains/starts/meets subtract	zero-thickness	ok 3000	ok 3000
+2	contains/starts/metBy subtract	zero-thickness	ok 3000	ok 3000
+2	contains/equal/meets subtract	zero-thickness	ok 3000	ok 3000
+2	contains/equal/metBy subtract	zero-thickness	ok 3000	ok 3000
+2	contains/startedBy/meets subtract	zero-thickness	ok 6000	ok 6000
+2	contains/startedBy/metBy subtract	zero-thickness	ok 6000	ok 6000
+2	contains/finishes/meets subtract	zero-thickness	ok 3000	ok 3000
+2	contains/finishes/metBy subtract	zero-thickness	ok 3000	ok 3000
+2	starts/overlaps/meets subtract	zero-thickness	ok 2000	ok 2000
+2	starts/overlaps/metBy subtract	zero-thickness	ok 2000	ok 2000
+2	starts/finishedBy/meets subtract	zero-thickness	ok 2000	ok 2000
+2	starts/finishedBy/metBy subtract	zero-thickness	ok 2000	ok 2000
+2	starts/contains/meets subtract	zero-thickness	ok 3000	ok 3000
+2	starts/contains/metBy subtract	zero-thickness	ok 3000	ok 3000
+2	starts/starts/meets subtract	zero-thickness	ok 1000	ok 1000
+2	starts/starts/metBy subtract	zero-thickness	ok 1000	ok 1000
+2	starts/equal/meets subtract	zero-thickness	ok 1000	ok 1000
+2	starts/equal/metBy subtract	zero-thickness	ok 1000	ok 1000
+2	starts/startedBy/meets subtract	zero-thickness	ok 2000	ok 2000
+2	starts/startedBy/metBy subtract	zero-thickness	ok 2000	ok 2000
+2	starts/during/meets subtract	zero-thickness	ok 1000	ok 1000
+2	starts/during/metBy subtract	zero-thickness	ok 1000	ok 1000
+2	starts/finishes/meets subtract	zero-thickness	ok 1000	ok 1000
+2	starts/finishes/metBy subtract	zero-thickness	ok 1000	ok 1000
+2	starts/overlappedBy/meets subtract	zero-thickness	ok 2000	ok 2000
+2	starts/overlappedBy/metBy subtract	zero-thickness	ok 2000	ok 2000
+2	equal/overlaps/meets subtract	zero-thickness	ok 2000	ok 2000
+2	equal/overlaps/metBy subtract	zero-thickness	ok 2000	ok 2000
+2	equal/finishedBy/meets subtract	zero-thickness	ok 2000	ok 2000
+2	equal/finishedBy/metBy subtract	zero-thickness	ok 2000	ok 2000
+2	equal/contains/meets subtract	zero-thickness	ok 3000	ok 3000
+2	equal/contains/metBy subtract	zero-thickness	ok 3000	ok 3000
+2	equal/starts/meets subtract	zero-thickness	ok 1000	ok 1000
+2	equal/starts/metBy subtract	zero-thickness	ok 1000	ok 1000
+2	equal/equal/meets subtract	zero-thickness	ok 1000	ok 1000
+2	equal/equal/metBy subtract	zero-thickness	ok 1000	ok 1000
+2	equal/startedBy/meets subtract	zero-thickness	ok 2000	ok 2000
+2	equal/startedBy/metBy subtract	zero-thickness	ok 2000	ok 2000
+2	equal/during/meets subtract	zero-thickness	ok 1000	ok 1000
+2	equal/during/metBy subtract	zero-thickness	ok 1000	ok 1000
+2	equal/finishes/meets subtract	zero-thickness	ok 1000	ok 1000
+2	equal/finishes/metBy subtract	zero-thickness	ok 1000	ok 1000
+2	equal/overlappedBy/meets subtract	zero-thickness	ok 2000	ok 2000
+2	equal/overlappedBy/metBy subtract	zero-thickness	ok 2000	ok 2000
+2	startedBy/overlaps/meets subtract	zero-thickness	ok 4000	ok 4000
+2	startedBy/overlaps/metBy subtract	zero-thickness	ok 4000	ok 4000
+2	startedBy/finishedBy/meets subtract	zero-thickness	ok 4000	ok 4000
+2	startedBy/finishedBy/metBy subtract	zero-thickness	ok 4000	ok 4000
+2	startedBy/contains/meets subtract	zero-thickness	ok 6000	ok 6000
+2	startedBy/contains/metBy subtract	zero-thickness	ok 6000	ok 6000
+2	startedBy/starts/meets subtract	zero-thickness	ok 2000	ok 2000
+2	startedBy/starts/metBy subtract	zero-thickness	ok 2000	ok 2000
+2	startedBy/equal/meets subtract	zero-thickness	ok 2000	ok 2000
+2	startedBy/equal/metBy subtract	zero-thickness	ok 2000	ok 2000
+2	startedBy/startedBy/meets subtract	zero-thickness	ok 4000	ok 4000
+2	startedBy/startedBy/metBy subtract	zero-thickness	ok 4000	ok 4000
+2	startedBy/during/meets subtract	zero-thickness	ok 2000	ok 2000
+2	startedBy/during/metBy subtract	zero-thickness	ok 2000	ok 2000
+2	startedBy/finishes/meets subtract	zero-thickness	ok 2000	ok 2000
+2	startedBy/finishes/metBy subtract	zero-thickness	ok 2000	ok 2000
+2	startedBy/overlappedBy/meets subtract	zero-thickness	ok 4000	ok 4000
+2	startedBy/overlappedBy/metBy subtract	zero-thickness	ok 4000	ok 4000
+2	during/finishedBy/meets subtract	zero-thickness	ok 2000	ok 2000
+2	during/finishedBy/metBy subtract	zero-thickness	ok 2000	ok 2000
+2	during/starts/meets subtract	zero-thickness	ok 1000	ok 1000
+2	during/starts/metBy subtract	zero-thickness	ok 1000	ok 1000
+2	during/equal/meets subtract	zero-thickness	ok 1000	ok 1000
+2	during/equal/metBy subtract	zero-thickness	ok 1000	ok 1000
+2	during/startedBy/meets subtract	zero-thickness	ok 2000	ok 2000
+2	during/startedBy/metBy subtract	zero-thickness	ok 2000	ok 2000
+2	during/finishes/meets subtract	zero-thickness	ok 1000	ok 1000
+2	during/finishes/metBy subtract	zero-thickness	ok 1000	ok 1000
+2	finishes/overlaps/meets subtract	zero-thickness	ok 2000	ok 2000
+2	finishes/overlaps/metBy subtract	zero-thickness	ok 2000	ok 2000
+2	finishes/finishedBy/meets subtract	zero-thickness	ok 2000	ok 2000
+2	finishes/finishedBy/metBy subtract	zero-thickness	ok 2000	ok 2000
+2	finishes/contains/meets subtract	zero-thickness	ok 3000	ok 3000
+2	finishes/contains/metBy subtract	zero-thickness	ok 3000	ok 3000
+2	finishes/starts/meets subtract	zero-thickness	ok 1000	ok 1000
+2	finishes/starts/metBy subtract	zero-thickness	ok 1000	ok 1000
+2	finishes/equal/meets subtract	zero-thickness	ok 1000	ok 1000
+2	finishes/equal/metBy subtract	zero-thickness	ok 1000	ok 1000
+2	finishes/startedBy/meets subtract	zero-thickness	ok 2000	ok 2000
+2	finishes/startedBy/metBy subtract	zero-thickness	ok 2000	ok 2000
+2	finishes/during/meets subtract	zero-thickness	ok 1000	ok 1000
+2	finishes/during/metBy subtract	zero-thickness	ok 1000	ok 1000
+2	finishes/finishes/meets subtract	zero-thickness	ok 1000	ok 1000
+2	finishes/finishes/metBy subtract	zero-thickness	ok 1000	ok 1000
+2	finishes/overlappedBy/meets subtract	zero-thickness	ok 2000	ok 2000
+2	finishes/overlappedBy/metBy subtract	zero-thickness	ok 2000	ok 2000
+2	overlappedBy/finishedBy/meets subtract	zero-thickness	ok 4000	ok 4000
+2	overlappedBy/finishedBy/metBy subtract	zero-thickness	ok 4000	ok 4000
+2	overlappedBy/starts/meets subtract	zero-thickness	ok 2000	ok 2000
+2	overlappedBy/starts/metBy subtract	zero-thickness	ok 2000	ok 2000
+2	overlappedBy/equal/meets subtract	zero-thickness	ok 2000	ok 2000
+2	overlappedBy/equal/metBy subtract	zero-thickness	ok 2000	ok 2000
+2	overlappedBy/startedBy/meets subtract	zero-thickness	ok 4000	ok 4000
+2	overlappedBy/startedBy/metBy subtract	zero-thickness	ok 4000	ok 4000
+2	overlappedBy/finishes/meets subtract	zero-thickness	ok 2000	ok 2000
+2	overlappedBy/finishes/metBy subtract	zero-thickness	ok 2000	ok 2000
+2	overlaps/finishedBy/meets intersect	invalid EdgeUses	empty	ok 0
+2	overlaps/finishedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+2	overlaps/starts/meets intersect	invalid EdgeUses	empty	ok 0
+2	overlaps/starts/metBy intersect	invalid EdgeUses	empty	ok 0
+2	overlaps/equal/meets intersect	invalid EdgeUses	empty	ok 0
+2	overlaps/equal/metBy intersect	invalid EdgeUses	empty	ok 0
+2	overlaps/startedBy/meets intersect	invalid EdgeUses	empty	ok 0
+2	overlaps/startedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+2	overlaps/finishes/meets intersect	invalid EdgeUses	empty	ok 0
+2	overlaps/finishes/metBy intersect	invalid EdgeUses	empty	ok 0
+2	finishedBy/overlaps/meets intersect	invalid EdgeUses	empty	ok 0
+2	finishedBy/overlaps/metBy intersect	invalid EdgeUses	empty	ok 0
+2	finishedBy/finishedBy/meets intersect	invalid EdgeUses	empty	ok 0
+2	finishedBy/finishedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+2	finishedBy/contains/meets intersect	invalid EdgeUses	empty	ok 0
+2	finishedBy/contains/metBy intersect	invalid EdgeUses	empty	ok 0
+2	finishedBy/starts/meets intersect	invalid EdgeUses	empty	ok 0
+2	finishedBy/starts/metBy intersect	invalid EdgeUses	empty	ok 0
+2	finishedBy/equal/meets intersect	invalid EdgeUses	empty	ok 0
+2	finishedBy/equal/metBy intersect	invalid EdgeUses	empty	ok 0
+2	finishedBy/startedBy/meets intersect	invalid EdgeUses	empty	ok 0
+2	finishedBy/startedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+2	finishedBy/during/meets intersect	invalid EdgeUses	empty	ok 0
+2	finishedBy/during/metBy intersect	invalid EdgeUses	empty	ok 0
+2	finishedBy/finishes/meets intersect	invalid EdgeUses	empty	ok 0
+2	finishedBy/finishes/metBy intersect	invalid EdgeUses	empty	ok 0
+2	finishedBy/overlappedBy/meets intersect	invalid EdgeUses	empty	ok 0
+2	finishedBy/overlappedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+2	contains/finishedBy/meets intersect	invalid EdgeUses	empty	ok 0
+2	contains/finishedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+2	contains/starts/meets intersect	invalid EdgeUses	empty	ok 0
+2	contains/starts/metBy intersect	invalid EdgeUses	empty	ok 0
+2	contains/equal/meets intersect	invalid EdgeUses	empty	ok 0
+2	contains/equal/metBy intersect	invalid EdgeUses	empty	ok 0
+2	contains/startedBy/meets intersect	invalid EdgeUses	empty	ok 0
+2	contains/startedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+2	contains/finishes/meets intersect	invalid EdgeUses	empty	ok 0
+2	contains/finishes/metBy intersect	invalid EdgeUses	empty	ok 0
+2	starts/overlaps/meets intersect	invalid EdgeUses	empty	ok 0
+2	starts/overlaps/metBy intersect	invalid EdgeUses	empty	ok 0
+2	starts/finishedBy/meets intersect	invalid EdgeUses	empty	ok 0
+2	starts/finishedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+2	starts/contains/meets intersect	invalid EdgeUses	empty	ok 0
+2	starts/contains/metBy intersect	invalid EdgeUses	empty	ok 0
+2	starts/starts/meets intersect	invalid EdgeUses	empty	ok 0
+2	starts/starts/metBy intersect	invalid EdgeUses	empty	ok 0
+2	starts/equal/meets intersect	invalid EdgeUses	empty	ok 0
+2	starts/equal/metBy intersect	invalid EdgeUses	empty	ok 0
+2	starts/startedBy/meets intersect	invalid EdgeUses	empty	ok 0
+2	starts/startedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+2	starts/during/meets intersect	invalid EdgeUses	empty	ok 0
+2	starts/during/metBy intersect	invalid EdgeUses	empty	ok 0
+2	starts/finishes/meets intersect	invalid EdgeUses	empty	ok 0
+2	starts/finishes/metBy intersect	invalid EdgeUses	empty	ok 0
+2	starts/overlappedBy/meets intersect	invalid EdgeUses	empty	ok 0
+2	starts/overlappedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+2	equal/overlaps/meets intersect	invalid EdgeUses	empty	ok 0
+2	equal/overlaps/metBy intersect	invalid EdgeUses	empty	ok 0
+2	equal/finishedBy/meets intersect	invalid EdgeUses	empty	ok 0
+2	equal/finishedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+2	equal/contains/meets intersect	invalid EdgeUses	empty	ok 0
+2	equal/contains/metBy intersect	invalid EdgeUses	empty	ok 0
+2	equal/starts/meets intersect	invalid EdgeUses	empty	ok 0
+2	equal/starts/metBy intersect	invalid EdgeUses	empty	ok 0
+2	equal/equal/meets intersect	invalid EdgeUses	empty	ok 0
+2	equal/equal/metBy intersect	invalid EdgeUses	empty	ok 0
+2	equal/startedBy/meets intersect	invalid EdgeUses	empty	ok 0
+2	equal/startedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+2	equal/during/meets intersect	invalid EdgeUses	empty	ok 0
+2	equal/during/metBy intersect	invalid EdgeUses	empty	ok 0
+2	equal/finishes/meets intersect	invalid EdgeUses	empty	ok 0
+2	equal/finishes/metBy intersect	invalid EdgeUses	empty	ok 0
+2	equal/overlappedBy/meets intersect	invalid EdgeUses	empty	ok 0
+2	equal/overlappedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+2	startedBy/overlaps/meets intersect	invalid EdgeUses	empty	ok 0
+2	startedBy/overlaps/metBy intersect	invalid EdgeUses	empty	ok 0
+2	startedBy/finishedBy/meets intersect	invalid EdgeUses	empty	ok 0
+2	startedBy/finishedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+2	startedBy/contains/meets intersect	invalid EdgeUses	empty	ok 0
+2	startedBy/contains/metBy intersect	invalid EdgeUses	empty	ok 0
+2	startedBy/starts/meets intersect	invalid EdgeUses	empty	ok 0
+2	startedBy/starts/metBy intersect	invalid EdgeUses	empty	ok 0
+2	startedBy/equal/meets intersect	invalid EdgeUses	empty	ok 0
+2	startedBy/equal/metBy intersect	invalid EdgeUses	empty	ok 0
+2	startedBy/startedBy/meets intersect	invalid EdgeUses	empty	ok 0
+2	startedBy/startedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+2	startedBy/during/meets intersect	invalid EdgeUses	empty	ok 0
+2	startedBy/during/metBy intersect	invalid EdgeUses	empty	ok 0
+2	startedBy/finishes/meets intersect	invalid EdgeUses	empty	ok 0
+2	startedBy/finishes/metBy intersect	invalid EdgeUses	empty	ok 0
+2	startedBy/overlappedBy/meets intersect	invalid EdgeUses	empty	ok 0
+2	startedBy/overlappedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+2	during/finishedBy/meets intersect	invalid EdgeUses	empty	ok 0
+2	during/finishedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+2	during/starts/meets intersect	invalid EdgeUses	empty	ok 0
+2	during/starts/metBy intersect	invalid EdgeUses	empty	ok 0
+2	during/equal/meets intersect	invalid EdgeUses	empty	ok 0
+2	during/equal/metBy intersect	invalid EdgeUses	empty	ok 0
+2	during/startedBy/meets intersect	invalid EdgeUses	empty	ok 0
+2	during/startedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+2	during/finishes/meets intersect	invalid EdgeUses	empty	ok 0
+2	during/finishes/metBy intersect	invalid EdgeUses	empty	ok 0
+2	finishes/overlaps/meets intersect	invalid EdgeUses	empty	ok 0
+2	finishes/overlaps/metBy intersect	invalid EdgeUses	empty	ok 0
+2	finishes/finishedBy/meets intersect	invalid EdgeUses	empty	ok 0
+2	finishes/finishedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+2	finishes/contains/meets intersect	invalid EdgeUses	empty	ok 0
+2	finishes/contains/metBy intersect	invalid EdgeUses	empty	ok 0
+2	finishes/starts/meets intersect	invalid EdgeUses	empty	ok 0
+2	finishes/starts/metBy intersect	invalid EdgeUses	empty	ok 0
+2	finishes/equal/meets intersect	invalid EdgeUses	empty	ok 0
+2	finishes/equal/metBy intersect	invalid EdgeUses	empty	ok 0
+2	finishes/startedBy/meets intersect	invalid EdgeUses	empty	ok 0
+2	finishes/startedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+2	finishes/during/meets intersect	invalid EdgeUses	empty	ok 0
+2	finishes/during/metBy intersect	invalid EdgeUses	empty	ok 0
+2	finishes/finishes/meets intersect	invalid EdgeUses	empty	ok 0
+2	finishes/finishes/metBy intersect	invalid EdgeUses	empty	ok 0
+2	finishes/overlappedBy/meets intersect	invalid EdgeUses	empty	ok 0
+2	finishes/overlappedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+2	overlappedBy/finishedBy/meets intersect	invalid EdgeUses	empty	ok 0
+2	overlappedBy/finishedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+2	overlappedBy/starts/meets intersect	invalid EdgeUses	empty	ok 0
+2	overlappedBy/starts/metBy intersect	invalid EdgeUses	empty	ok 0
+2	overlappedBy/equal/meets intersect	invalid EdgeUses	empty	ok 0
+2	overlappedBy/equal/metBy intersect	invalid EdgeUses	empty	ok 0
+2	overlappedBy/startedBy/meets intersect	invalid EdgeUses	empty	ok 0
+2	overlappedBy/startedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+2	overlappedBy/finishes/meets intersect	invalid EdgeUses	empty	ok 0
+2	overlappedBy/finishes/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	meets/finishedBy/finishedBy union	invalid EdgeUses	ok 5000	ok 5000
+2.5	meets/finishedBy/starts union	invalid EdgeUses	ok 4000	ok 4000
+2.5	meets/finishedBy/equal union	invalid EdgeUses	ok 3000	ok 3000
+2.5	meets/finishedBy/startedBy union	invalid EdgeUses	ok 5000	ok 5000
+2.5	meets/finishedBy/finishes union	invalid EdgeUses	ok 4000	ok 4000
+2.5	meets/contains/finishedBy union	invalid EdgeUses	ok 7000	ok 7000
+2.5	meets/contains/starts union	invalid EdgeUses	ok 5000	ok 5000
+2.5	meets/contains/equal union	invalid EdgeUses	ok 4000	ok 4000
+2.5	meets/contains/startedBy union	invalid EdgeUses	ok 7000	ok 7000
+2.5	meets/contains/finishes union	invalid EdgeUses	ok 5000	ok 5000
+2.5	meets/equal/finishedBy union	invalid EdgeUses	ok 3000	ok 3000
+2.5	meets/equal/starts union	invalid EdgeUses	ok 3000	ok 3000
+2.5	meets/equal/equal union	invalid EdgeUses	ok 2000	ok 2000
+2.5	meets/equal/startedBy union	invalid EdgeUses	ok 3000	ok 3000
+2.5	meets/equal/finishes union	invalid EdgeUses	ok 3000	ok 3000
+2.5	meets/startedBy/finishedBy union	invalid EdgeUses	ok 5000	ok 5000
+2.5	meets/startedBy/starts union	invalid EdgeUses	ok 4000	ok 4000
+2.5	meets/startedBy/equal union	invalid EdgeUses	ok 3000	ok 3000
+2.5	meets/startedBy/startedBy union	invalid EdgeUses	ok 5000	ok 5000
+2.5	meets/startedBy/finishes union	invalid EdgeUses	ok 4000	ok 4000
+2.5	overlaps/finishedBy/meets union	zero-thickness	ok 6000	ok 6000
+2.5	overlaps/finishedBy/metBy union	zero-thickness	ok 6000	ok 6000
+2.5	overlaps/starts/meets union	zero-thickness	ok 6000	ok 6000
+2.5	overlaps/starts/metBy union	zero-thickness	ok 6000	ok 6000
+2.5	overlaps/equal/meets union	zero-thickness	ok 4000	ok 4000
+2.5	overlaps/equal/metBy union	zero-thickness	ok 4000	ok 4000
+2.5	overlaps/startedBy/meets union	zero-thickness	ok 6000	ok 6000
+2.5	overlaps/startedBy/metBy union	zero-thickness	ok 6000	ok 6000
+2.5	overlaps/finishes/meets union	zero-thickness	ok 6000	ok 6000
+2.5	overlaps/finishes/metBy union	zero-thickness	ok 6000	ok 6000
+2.5	finishedBy/meets/finishedBy union	invalid EdgeUses	ok 5000	ok 5000
+2.5	finishedBy/meets/starts union	invalid EdgeUses	ok 4000	ok 4000
+2.5	finishedBy/meets/equal union	invalid EdgeUses	ok 3000	ok 3000
+2.5	finishedBy/meets/startedBy union	invalid EdgeUses	ok 5000	ok 5000
+2.5	finishedBy/meets/finishes union	invalid EdgeUses	ok 4000	ok 4000
+2.5	finishedBy/overlaps/meets union	zero-thickness	ok 6000	ok 6000
+2.5	finishedBy/overlaps/metBy union	zero-thickness	ok 6000	ok 6000
+2.5	finishedBy/finishedBy/meets union	zero-thickness	ok 5000	ok 5000
+2.5	finishedBy/finishedBy/finishedBy union	invalid EdgeUses	ok 8000	ok 8000
+2.5	finishedBy/finishedBy/starts union	invalid EdgeUses	ok 5000	ok 5000
+2.5	finishedBy/finishedBy/equal union	invalid EdgeUses	ok 4000	ok 4000
+2.5	finishedBy/finishedBy/startedBy union	invalid EdgeUses	ok 8000	ok 8000
+2.5	finishedBy/finishedBy/finishes union	invalid EdgeUses	ok 5000	ok 5000
+2.5	finishedBy/finishedBy/metBy union	zero-thickness	ok 5000	ok 5000
+2.5	finishedBy/contains/meets union	zero-thickness	ok 7000	ok 7000
+2.5	finishedBy/contains/finishedBy union	invalid EdgeUses	ok 12000	ok 12000
+2.5	finishedBy/contains/starts union	invalid EdgeUses	ok 7000	ok 7000
+2.5	finishedBy/contains/equal union	invalid EdgeUses	ok 6000	ok 6000
+2.5	finishedBy/contains/startedBy union	invalid EdgeUses	ok 12000	ok 12000
+2.5	finishedBy/contains/finishes union	invalid EdgeUses	ok 7000	ok 7000
+2.5	finishedBy/contains/metBy union	zero-thickness	ok 7000	ok 7000
+2.5	finishedBy/starts/meets union	zero-thickness	ok 4000	ok 4000
+2.5	finishedBy/starts/finishedBy union	invalid EdgeUses	ok 5000	ok 5000
+2.5	finishedBy/starts/starts union	invalid EdgeUses	ok 5000	ok 5000
+2.5	finishedBy/starts/equal union	invalid EdgeUses	ok 3000	ok 3000
+2.5	finishedBy/starts/startedBy union	invalid EdgeUses	ok 5000	ok 5000
+2.5	finishedBy/starts/finishes union	invalid EdgeUses	ok 5000	ok 5000
+2.5	finishedBy/starts/metBy union	zero-thickness	ok 4000	ok 4000
+2.5	finishedBy/equal/meets union	zero-thickness	ok 3000	ok 3000
+2.5	finishedBy/equal/finishedBy union	invalid EdgeUses	ok 4000	ok 4000
+2.5	finishedBy/equal/starts union	invalid EdgeUses	ok 3000	ok 3000
+2.5	finishedBy/equal/equal union	invalid EdgeUses	ok 2000	ok 2000
+2.5	finishedBy/equal/startedBy union	invalid EdgeUses	ok 4000	ok 4000
+2.5	finishedBy/equal/finishes union	invalid EdgeUses	ok 3000	ok 3000
+2.5	finishedBy/equal/metBy union	zero-thickness	ok 3000	ok 3000
+2.5	finishedBy/startedBy/meets union	zero-thickness	ok 5000	ok 5000
+2.5	finishedBy/startedBy/finishedBy union	invalid EdgeUses	ok 8000	ok 8000
+2.5	finishedBy/startedBy/starts union	invalid EdgeUses	ok 5000	ok 5000
+2.5	finishedBy/startedBy/equal union	invalid EdgeUses	ok 4000	ok 4000
+2.5	finishedBy/startedBy/startedBy union	invalid EdgeUses	ok 8000	ok 8000
+2.5	finishedBy/startedBy/finishes union	invalid EdgeUses	ok 5000	ok 5000
+2.5	finishedBy/startedBy/metBy union	zero-thickness	ok 5000	ok 5000
+2.5	finishedBy/during/meets union	zero-thickness	ok 5000	ok 5000
+2.5	finishedBy/during/metBy union	zero-thickness	ok 5000	ok 5000
+2.5	finishedBy/finishes/meets union	zero-thickness	ok 4000	ok 4000
+2.5	finishedBy/finishes/finishedBy union	invalid EdgeUses	ok 5000	ok 5000
+2.5	finishedBy/finishes/starts union	invalid EdgeUses	ok 5000	ok 5000
+2.5	finishedBy/finishes/equal union	invalid EdgeUses	ok 3000	ok 3000
+2.5	finishedBy/finishes/startedBy union	invalid EdgeUses	ok 5000	ok 5000
+2.5	finishedBy/finishes/finishes union	invalid EdgeUses	ok 5000	ok 5000
+2.5	finishedBy/finishes/metBy union	zero-thickness	ok 4000	ok 4000
+2.5	finishedBy/overlappedBy/meets union	zero-thickness	ok 6000	ok 6000
+2.5	finishedBy/overlappedBy/metBy union	zero-thickness	ok 6000	ok 6000
+2.5	finishedBy/metBy/finishedBy union	invalid EdgeUses	ok 5000	ok 5000
+2.5	finishedBy/metBy/starts union	invalid EdgeUses	ok 4000	ok 4000
+2.5	finishedBy/metBy/equal union	invalid EdgeUses	ok 3000	ok 3000
+2.5	finishedBy/metBy/startedBy union	invalid EdgeUses	ok 5000	ok 5000
+2.5	finishedBy/metBy/finishes union	invalid EdgeUses	ok 4000	ok 4000
+2.5	contains/meets/finishedBy union	invalid EdgeUses	ok 7000	ok 7000
+2.5	contains/meets/starts union	invalid EdgeUses	ok 5000	ok 5000
+2.5	contains/meets/equal union	invalid EdgeUses	ok 4000	ok 4000
+2.5	contains/meets/startedBy union	invalid EdgeUses	ok 7000	ok 7000
+2.5	contains/meets/finishes union	invalid EdgeUses	ok 5000	ok 5000
+2.5	contains/finishedBy/meets union	zero-thickness	ok 7000	ok 7000
+2.5	contains/finishedBy/finishedBy union	invalid EdgeUses	ok 12000	ok 12000
+2.5	contains/finishedBy/starts union	invalid EdgeUses	ok 7000	ok 7000
+2.5	contains/finishedBy/equal union	invalid EdgeUses	ok 6000	ok 6000
+2.5	contains/finishedBy/startedBy union	invalid EdgeUses	ok 12000	ok 12000
+2.5	contains/finishedBy/finishes union	invalid EdgeUses	ok 7000	ok 7000
+2.5	contains/finishedBy/metBy union	zero-thickness	ok 7000	ok 7000
+2.5	contains/starts/meets union	zero-thickness	ok 5000	ok 5000
+2.5	contains/starts/finishedBy union	invalid EdgeUses	ok 7000	ok 7000
+2.5	contains/starts/starts union	invalid EdgeUses	ok 6000	ok 6000
+2.5	contains/starts/equal union	invalid EdgeUses	ok 4000	ok 4000
+2.5	contains/starts/startedBy union	invalid EdgeUses	ok 7000	ok 7000
+2.5	contains/starts/finishes union	invalid EdgeUses	ok 6000	ok 6000
+2.5	contains/starts/metBy union	zero-thickness	ok 5000	ok 5000
+2.5	contains/equal/meets union	zero-thickness	ok 4000	ok 4000
+2.5	contains/equal/finishedBy union	invalid EdgeUses	ok 6000	ok 6000
+2.5	contains/equal/starts union	invalid EdgeUses	ok 4000	ok 4000
+2.5	contains/equal/equal union	invalid EdgeUses	ok 3000	ok 3000
+2.5	contains/equal/startedBy union	invalid EdgeUses	ok 6000	ok 6000
+2.5	contains/equal/finishes union	invalid EdgeUses	ok 4000	ok 4000
+2.5	contains/equal/metBy union	zero-thickness	ok 4000	ok 4000
+2.5	contains/startedBy/meets union	zero-thickness	ok 7000	ok 7000
+2.5	contains/startedBy/finishedBy union	invalid EdgeUses	ok 12000	ok 12000
+2.5	contains/startedBy/starts union	invalid EdgeUses	ok 7000	ok 7000
+2.5	contains/startedBy/equal union	invalid EdgeUses	ok 6000	ok 6000
+2.5	contains/startedBy/startedBy union	invalid EdgeUses	ok 12000	ok 12000
+2.5	contains/startedBy/finishes union	invalid EdgeUses	ok 7000	ok 7000
+2.5	contains/startedBy/metBy union	zero-thickness	ok 7000	ok 7000
+2.5	contains/finishes/meets union	zero-thickness	ok 5000	ok 5000
+2.5	contains/finishes/finishedBy union	invalid EdgeUses	ok 7000	ok 7000
+2.5	contains/finishes/starts union	invalid EdgeUses	ok 6000	ok 6000
+2.5	contains/finishes/equal union	invalid EdgeUses	ok 4000	ok 4000
+2.5	contains/finishes/startedBy union	invalid EdgeUses	ok 7000	ok 7000
+2.5	contains/finishes/finishes union	invalid EdgeUses	ok 6000	ok 6000
+2.5	contains/finishes/metBy union	zero-thickness	ok 5000	ok 5000
+2.5	contains/metBy/finishedBy union	invalid EdgeUses	ok 7000	ok 7000
+2.5	contains/metBy/starts union	invalid EdgeUses	ok 5000	ok 5000
+2.5	contains/metBy/equal union	invalid EdgeUses	ok 4000	ok 4000
+2.5	contains/metBy/startedBy union	invalid EdgeUses	ok 7000	ok 7000
+2.5	contains/metBy/finishes union	invalid EdgeUses	ok 5000	ok 5000
+2.5	starts/overlaps/meets union	zero-thickness	ok 6000	ok 6000
+2.5	starts/overlaps/metBy union	zero-thickness	ok 6000	ok 6000
+2.5	starts/finishedBy/meets union	zero-thickness	ok 4000	ok 4000
+2.5	starts/finishedBy/finishedBy union	invalid EdgeUses	ok 5000	ok 5000
+2.5	starts/finishedBy/starts union	invalid EdgeUses	ok 5000	ok 5000
+2.5	starts/finishedBy/equal union	invalid EdgeUses	ok 3000	ok 3000
+2.5	starts/finishedBy/startedBy union	invalid EdgeUses	ok 5000	ok 5000
+2.5	starts/finishedBy/finishes union	invalid EdgeUses	ok 5000	ok 5000
+2.5	starts/finishedBy/metBy union	zero-thickness	ok 4000	ok 4000
+2.5	starts/contains/meets union	zero-thickness	ok 5000	ok 5000
+2.5	starts/contains/finishedBy union	invalid EdgeUses	ok 7000	ok 7000
+2.5	starts/contains/starts union	invalid EdgeUses	ok 6000	ok 6000
+2.5	starts/contains/equal union	invalid EdgeUses	ok 4000	ok 4000
+2.5	starts/contains/startedBy union	invalid EdgeUses	ok 7000	ok 7000
+2.5	starts/contains/finishes union	invalid EdgeUses	ok 6000	ok 6000
+2.5	starts/contains/metBy union	zero-thickness	ok 5000	ok 5000
+2.5	starts/starts/meets union	zero-thickness	ok 5000	ok 5000
+2.5	starts/starts/metBy union	zero-thickness	ok 5000	ok 5000
+2.5	starts/equal/meets union	zero-thickness	ok 3000	ok 3000
+2.5	starts/equal/finishedBy union	invalid EdgeUses	ok 3000	ok 3000
+2.5	starts/equal/starts union	invalid EdgeUses	ok 4000	ok 4000
+2.5	starts/equal/equal union	invalid EdgeUses	ok 2000	ok 2000
+2.5	starts/equal/startedBy union	invalid EdgeUses	ok 3000	ok 3000
+2.5	starts/equal/finishes union	invalid EdgeUses	ok 4000	ok 4000
+2.5	starts/equal/metBy union	zero-thickness	ok 3000	ok 3000
+2.5	starts/startedBy/meets union	zero-thickness	ok 4000	ok 4000
+2.5	starts/startedBy/finishedBy union	invalid EdgeUses	ok 5000	ok 5000
+2.5	starts/startedBy/starts union	invalid EdgeUses	ok 5000	ok 5000
+2.5	starts/startedBy/equal union	invalid EdgeUses	ok 3000	ok 3000
+2.5	starts/startedBy/startedBy union	invalid EdgeUses	ok 5000	ok 5000
+2.5	starts/startedBy/finishes union	invalid EdgeUses	ok 5000	ok 5000
+2.5	starts/startedBy/metBy union	zero-thickness	ok 4000	ok 4000
+2.5	starts/during/meets union	zero-thickness	ok 7000	ok 7000
+2.5	starts/during/metBy union	zero-thickness	ok 7000	ok 7000
+2.5	starts/finishes/meets union	zero-thickness	ok 5000	ok 5000
+2.5	starts/finishes/metBy union	zero-thickness	ok 5000	ok 5000
+2.5	starts/overlappedBy/meets union	zero-thickness	ok 6000	ok 6000
+2.5	starts/overlappedBy/metBy union	zero-thickness	ok 6000	ok 6000
+2.5	equal/meets/finishedBy union	invalid EdgeUses	ok 3000	ok 3000
+2.5	equal/meets/starts union	invalid EdgeUses	ok 3000	ok 3000
+2.5	equal/meets/equal union	invalid EdgeUses	ok 2000	ok 2000
+2.5	equal/meets/startedBy union	invalid EdgeUses	ok 3000	ok 3000
+2.5	equal/meets/finishes union	invalid EdgeUses	ok 3000	ok 3000
+2.5	equal/overlaps/meets union	zero-thickness	ok 4000	ok 4000
+2.5	equal/overlaps/metBy union	zero-thickness	ok 4000	ok 4000
+2.5	equal/finishedBy/meets union	zero-thickness	ok 3000	ok 3000
+2.5	equal/finishedBy/finishedBy union	invalid EdgeUses	ok 4000	ok 4000
+2.5	equal/finishedBy/starts union	invalid EdgeUses	ok 3000	ok 3000
+2.5	equal/finishedBy/equal union	invalid EdgeUses	ok 2000	ok 2000
+2.5	equal/finishedBy/startedBy union	invalid EdgeUses	ok 4000	ok 4000
+2.5	equal/finishedBy/finishes union	invalid EdgeUses	ok 3000	ok 3000
+2.5	equal/finishedBy/metBy union	zero-thickness	ok 3000	ok 3000
+2.5	equal/contains/meets union	zero-thickness	ok 4000	ok 4000
+2.5	equal/contains/finishedBy union	invalid EdgeUses	ok 6000	ok 6000
+2.5	equal/contains/starts union	invalid EdgeUses	ok 4000	ok 4000
+2.5	equal/contains/equal union	invalid EdgeUses	ok 3000	ok 3000
+2.5	equal/contains/startedBy union	invalid EdgeUses	ok 6000	ok 6000
+2.5	equal/contains/finishes union	invalid EdgeUses	ok 4000	ok 4000
+2.5	equal/contains/metBy union	zero-thickness	ok 4000	ok 4000
+2.5	equal/starts/meets union	zero-thickness	ok 3000	ok 3000
+2.5	equal/starts/finishedBy union	invalid EdgeUses	ok 3000	ok 3000
+2.5	equal/starts/starts union	invalid EdgeUses	ok 4000	ok 4000
+2.5	equal/starts/equal union	invalid EdgeUses	ok 2000	ok 2000
+2.5	equal/starts/startedBy union	invalid EdgeUses	ok 3000	ok 3000
+2.5	equal/starts/finishes union	invalid EdgeUses	ok 4000	ok 4000
+2.5	equal/starts/metBy union	zero-thickness	ok 3000	ok 3000
+2.5	equal/equal/meets union	zero-thickness	ok 2000	ok 2000
+2.5	equal/equal/finishedBy union	invalid EdgeUses	ok 2000	ok 2000
+2.5	equal/equal/starts union	invalid EdgeUses	ok 2000	ok 2000
+2.5	equal/equal/equal union	invalid EdgeUses	ok 1000	ok 1000
+2.5	equal/equal/startedBy union	invalid EdgeUses	ok 2000	ok 2000
+2.5	equal/equal/finishes union	invalid EdgeUses	ok 2000	ok 2000
+2.5	equal/equal/metBy union	zero-thickness	ok 2000	ok 2000
+2.5	equal/startedBy/meets union	zero-thickness	ok 3000	ok 3000
+2.5	equal/startedBy/finishedBy union	invalid EdgeUses	ok 4000	ok 4000
+2.5	equal/startedBy/starts union	invalid EdgeUses	ok 3000	ok 3000
+2.5	equal/startedBy/equal union	invalid EdgeUses	ok 2000	ok 2000
+2.5	equal/startedBy/startedBy union	invalid EdgeUses	ok 4000	ok 4000
+2.5	equal/startedBy/finishes union	invalid EdgeUses	ok 3000	ok 3000
+2.5	equal/startedBy/metBy union	zero-thickness	ok 3000	ok 3000
+2.5	equal/during/meets union	zero-thickness	ok 4000	ok 4000
+2.5	equal/during/metBy union	zero-thickness	ok 4000	ok 4000
+2.5	equal/finishes/meets union	zero-thickness	ok 3000	ok 3000
+2.5	equal/finishes/finishedBy union	invalid EdgeUses	ok 3000	ok 3000
+2.5	equal/finishes/starts union	invalid EdgeUses	ok 4000	ok 4000
+2.5	equal/finishes/equal union	invalid EdgeUses	ok 2000	ok 2000
+2.5	equal/finishes/startedBy union	invalid EdgeUses	ok 3000	ok 3000
+2.5	equal/finishes/finishes union	invalid EdgeUses	ok 4000	ok 4000
+2.5	equal/finishes/metBy union	zero-thickness	ok 3000	ok 3000
+2.5	equal/overlappedBy/meets union	zero-thickness	ok 4000	ok 4000
+2.5	equal/overlappedBy/metBy union	zero-thickness	ok 4000	ok 4000
+2.5	equal/metBy/finishedBy union	invalid EdgeUses	ok 3000	ok 3000
+2.5	equal/metBy/starts union	invalid EdgeUses	ok 3000	ok 3000
+2.5	equal/metBy/equal union	invalid EdgeUses	ok 2000	ok 2000
+2.5	equal/metBy/startedBy union	invalid EdgeUses	ok 3000	ok 3000
+2.5	equal/metBy/finishes union	invalid EdgeUses	ok 3000	ok 3000
+2.5	startedBy/meets/finishedBy union	invalid EdgeUses	ok 5000	ok 5000
+2.5	startedBy/meets/starts union	invalid EdgeUses	ok 4000	ok 4000
+2.5	startedBy/meets/equal union	invalid EdgeUses	ok 3000	ok 3000
+2.5	startedBy/meets/startedBy union	invalid EdgeUses	ok 5000	ok 5000
+2.5	startedBy/meets/finishes union	invalid EdgeUses	ok 4000	ok 4000
+2.5	startedBy/overlaps/meets union	zero-thickness	ok 6000	ok 6000
+2.5	startedBy/overlaps/metBy union	zero-thickness	ok 6000	ok 6000
+2.5	startedBy/finishedBy/meets union	zero-thickness	ok 5000	ok 5000
+2.5	startedBy/finishedBy/finishedBy union	invalid EdgeUses	ok 8000	ok 8000
+2.5	startedBy/finishedBy/starts union	invalid EdgeUses	ok 5000	ok 5000
+2.5	startedBy/finishedBy/equal union	invalid EdgeUses	ok 4000	ok 4000
+2.5	startedBy/finishedBy/startedBy union	invalid EdgeUses	ok 8000	ok 8000
+2.5	startedBy/finishedBy/finishes union	invalid EdgeUses	ok 5000	ok 5000
+2.5	startedBy/finishedBy/metBy union	zero-thickness	ok 5000	ok 5000
+2.5	startedBy/contains/meets union	zero-thickness	ok 7000	ok 7000
+2.5	startedBy/contains/finishedBy union	invalid EdgeUses	ok 12000	ok 12000
+2.5	startedBy/contains/starts union	invalid EdgeUses	ok 7000	ok 7000
+2.5	startedBy/contains/equal union	invalid EdgeUses	ok 6000	ok 6000
+2.5	startedBy/contains/startedBy union	invalid EdgeUses	ok 12000	ok 12000
+2.5	startedBy/contains/finishes union	invalid EdgeUses	ok 7000	ok 7000
+2.5	startedBy/contains/metBy union	zero-thickness	ok 7000	ok 7000
+2.5	startedBy/starts/meets union	zero-thickness	ok 4000	ok 4000
+2.5	startedBy/starts/finishedBy union	invalid EdgeUses	ok 5000	ok 5000
+2.5	startedBy/starts/starts union	invalid EdgeUses	ok 5000	ok 5000
+2.5	startedBy/starts/equal union	invalid EdgeUses	ok 3000	ok 3000
+2.5	startedBy/starts/startedBy union	invalid EdgeUses	ok 5000	ok 5000
+2.5	startedBy/starts/finishes union	invalid EdgeUses	ok 5000	ok 5000
+2.5	startedBy/starts/metBy union	zero-thickness	ok 4000	ok 4000
+2.5	startedBy/equal/meets union	zero-thickness	ok 3000	ok 3000
+2.5	startedBy/equal/finishedBy union	invalid EdgeUses	ok 4000	ok 4000
+2.5	startedBy/equal/starts union	invalid EdgeUses	ok 3000	ok 3000
+2.5	startedBy/equal/equal union	invalid EdgeUses	ok 2000	ok 2000
+2.5	startedBy/equal/startedBy union	invalid EdgeUses	ok 4000	ok 4000
+2.5	startedBy/equal/finishes union	invalid EdgeUses	ok 3000	ok 3000
+2.5	startedBy/equal/metBy union	zero-thickness	ok 3000	ok 3000
+2.5	startedBy/startedBy/meets union	zero-thickness	ok 5000	ok 5000
+2.5	startedBy/startedBy/finishedBy union	invalid EdgeUses	ok 8000	ok 8000
+2.5	startedBy/startedBy/starts union	invalid EdgeUses	ok 5000	ok 5000
+2.5	startedBy/startedBy/equal union	invalid EdgeUses	ok 4000	ok 4000
+2.5	startedBy/startedBy/startedBy union	invalid EdgeUses	ok 8000	ok 8000
+2.5	startedBy/startedBy/finishes union	invalid EdgeUses	ok 5000	ok 5000
+2.5	startedBy/startedBy/metBy union	zero-thickness	ok 5000	ok 5000
+2.5	startedBy/during/meets union	zero-thickness	ok 5000	ok 5000
+2.5	startedBy/during/metBy union	zero-thickness	ok 5000	ok 5000
+2.5	startedBy/finishes/meets union	zero-thickness	ok 4000	ok 4000
+2.5	startedBy/finishes/finishedBy union	invalid EdgeUses	ok 5000	ok 5000
+2.5	startedBy/finishes/starts union	invalid EdgeUses	ok 5000	ok 5000
+2.5	startedBy/finishes/equal union	invalid EdgeUses	ok 3000	ok 3000
+2.5	startedBy/finishes/startedBy union	invalid EdgeUses	ok 5000	ok 5000
+2.5	startedBy/finishes/finishes union	invalid EdgeUses	ok 5000	ok 5000
+2.5	startedBy/finishes/metBy union	zero-thickness	ok 4000	ok 4000
+2.5	startedBy/overlappedBy/meets union	zero-thickness	ok 6000	ok 6000
+2.5	startedBy/overlappedBy/metBy union	zero-thickness	ok 6000	ok 6000
+2.5	startedBy/metBy/finishedBy union	invalid EdgeUses	ok 5000	ok 5000
+2.5	startedBy/metBy/starts union	invalid EdgeUses	ok 4000	ok 4000
+2.5	startedBy/metBy/equal union	invalid EdgeUses	ok 3000	ok 3000
+2.5	startedBy/metBy/startedBy union	invalid EdgeUses	ok 5000	ok 5000
+2.5	startedBy/metBy/finishes union	invalid EdgeUses	ok 4000	ok 4000
+2.5	during/finishedBy/meets union	zero-thickness	ok 5000	ok 5000
+2.5	during/finishedBy/metBy union	zero-thickness	ok 5000	ok 5000
+2.5	during/starts/meets union	zero-thickness	ok 7000	ok 7000
+2.5	during/starts/metBy union	zero-thickness	ok 7000	ok 7000
+2.5	during/equal/meets union	zero-thickness	ok 4000	ok 4000
+2.5	during/equal/metBy union	zero-thickness	ok 4000	ok 4000
+2.5	during/startedBy/meets union	zero-thickness	ok 5000	ok 5000
+2.5	during/startedBy/metBy union	zero-thickness	ok 5000	ok 5000
+2.5	during/finishes/meets union	zero-thickness	ok 7000	ok 7000
+2.5	during/finishes/metBy union	zero-thickness	ok 7000	ok 7000
+2.5	finishes/overlaps/meets union	zero-thickness	ok 6000	ok 6000
+2.5	finishes/overlaps/metBy union	zero-thickness	ok 6000	ok 6000
+2.5	finishes/finishedBy/meets union	zero-thickness	ok 4000	ok 4000
+2.5	finishes/finishedBy/finishedBy union	invalid EdgeUses	ok 5000	ok 5000
+2.5	finishes/finishedBy/starts union	invalid EdgeUses	ok 5000	ok 5000
+2.5	finishes/finishedBy/equal union	invalid EdgeUses	ok 3000	ok 3000
+2.5	finishes/finishedBy/startedBy union	invalid EdgeUses	ok 5000	ok 5000
+2.5	finishes/finishedBy/finishes union	invalid EdgeUses	ok 5000	ok 5000
+2.5	finishes/finishedBy/metBy union	zero-thickness	ok 4000	ok 4000
+2.5	finishes/contains/meets union	zero-thickness	ok 5000	ok 5000
+2.5	finishes/contains/finishedBy union	invalid EdgeUses	ok 7000	ok 7000
+2.5	finishes/contains/starts union	invalid EdgeUses	ok 6000	ok 6000
+2.5	finishes/contains/equal union	invalid EdgeUses	ok 4000	ok 4000
+2.5	finishes/contains/startedBy union	invalid EdgeUses	ok 7000	ok 7000
+2.5	finishes/contains/finishes union	invalid EdgeUses	ok 6000	ok 6000
+2.5	finishes/contains/metBy union	zero-thickness	ok 5000	ok 5000
+2.5	finishes/starts/meets union	zero-thickness	ok 5000	ok 5000
+2.5	finishes/starts/metBy union	zero-thickness	ok 5000	ok 5000
+2.5	finishes/equal/meets union	zero-thickness	ok 3000	ok 3000
+2.5	finishes/equal/finishedBy union	invalid EdgeUses	ok 3000	ok 3000
+2.5	finishes/equal/starts union	invalid EdgeUses	ok 4000	ok 4000
+2.5	finishes/equal/equal union	invalid EdgeUses	ok 2000	ok 2000
+2.5	finishes/equal/startedBy union	invalid EdgeUses	ok 3000	ok 3000
+2.5	finishes/equal/finishes union	invalid EdgeUses	ok 4000	ok 4000
+2.5	finishes/equal/metBy union	zero-thickness	ok 3000	ok 3000
+2.5	finishes/startedBy/meets union	zero-thickness	ok 4000	ok 4000
+2.5	finishes/startedBy/finishedBy union	invalid EdgeUses	ok 5000	ok 5000
+2.5	finishes/startedBy/starts union	invalid EdgeUses	ok 5000	ok 5000
+2.5	finishes/startedBy/equal union	invalid EdgeUses	ok 3000	ok 3000
+2.5	finishes/startedBy/startedBy union	invalid EdgeUses	ok 5000	ok 5000
+2.5	finishes/startedBy/finishes union	invalid EdgeUses	ok 5000	ok 5000
+2.5	finishes/startedBy/metBy union	zero-thickness	ok 4000	ok 4000
+2.5	finishes/during/meets union	zero-thickness	ok 7000	ok 7000
+2.5	finishes/during/metBy union	zero-thickness	ok 7000	ok 7000
+2.5	finishes/finishes/meets union	zero-thickness	ok 5000	ok 5000
+2.5	finishes/finishes/metBy union	zero-thickness	ok 5000	ok 5000
+2.5	finishes/overlappedBy/meets union	zero-thickness	ok 6000	ok 6000
+2.5	finishes/overlappedBy/metBy union	zero-thickness	ok 6000	ok 6000
+2.5	overlappedBy/finishedBy/meets union	zero-thickness	ok 6000	ok 6000
+2.5	overlappedBy/finishedBy/metBy union	zero-thickness	ok 6000	ok 6000
+2.5	overlappedBy/starts/meets union	zero-thickness	ok 6000	ok 6000
+2.5	overlappedBy/starts/metBy union	zero-thickness	ok 6000	ok 6000
+2.5	overlappedBy/equal/meets union	zero-thickness	ok 4000	ok 4000
+2.5	overlappedBy/equal/metBy union	zero-thickness	ok 4000	ok 4000
+2.5	overlappedBy/startedBy/meets union	zero-thickness	ok 6000	ok 6000
+2.5	overlappedBy/startedBy/metBy union	zero-thickness	ok 6000	ok 6000
+2.5	overlappedBy/finishes/meets union	zero-thickness	ok 6000	ok 6000
+2.5	overlappedBy/finishes/metBy union	zero-thickness	ok 6000	ok 6000
+2.5	metBy/finishedBy/finishedBy union	invalid EdgeUses	ok 5000	ok 5000
+2.5	metBy/finishedBy/starts union	invalid EdgeUses	ok 4000	ok 4000
+2.5	metBy/finishedBy/equal union	invalid EdgeUses	ok 3000	ok 3000
+2.5	metBy/finishedBy/startedBy union	invalid EdgeUses	ok 5000	ok 5000
+2.5	metBy/finishedBy/finishes union	invalid EdgeUses	ok 4000	ok 4000
+2.5	metBy/contains/finishedBy union	invalid EdgeUses	ok 7000	ok 7000
+2.5	metBy/contains/starts union	invalid EdgeUses	ok 5000	ok 5000
+2.5	metBy/contains/equal union	invalid EdgeUses	ok 4000	ok 4000
+2.5	metBy/contains/startedBy union	invalid EdgeUses	ok 7000	ok 7000
+2.5	metBy/contains/finishes union	invalid EdgeUses	ok 5000	ok 5000
+2.5	metBy/equal/finishedBy union	invalid EdgeUses	ok 3000	ok 3000
+2.5	metBy/equal/starts union	invalid EdgeUses	ok 3000	ok 3000
+2.5	metBy/equal/equal union	invalid EdgeUses	ok 2000	ok 2000
+2.5	metBy/equal/startedBy union	invalid EdgeUses	ok 3000	ok 3000
+2.5	metBy/equal/finishes union	invalid EdgeUses	ok 3000	ok 3000
+2.5	metBy/startedBy/finishedBy union	invalid EdgeUses	ok 5000	ok 5000
+2.5	metBy/startedBy/starts union	invalid EdgeUses	ok 4000	ok 4000
+2.5	metBy/startedBy/equal union	invalid EdgeUses	ok 3000	ok 3000
+2.5	metBy/startedBy/startedBy union	invalid EdgeUses	ok 5000	ok 5000
+2.5	metBy/startedBy/finishes union	invalid EdgeUses	ok 4000	ok 4000
+2.5	overlaps/finishedBy/meets subtract	zero-thickness	ok 4000	ok 4000
+2.5	overlaps/finishedBy/metBy subtract	zero-thickness	ok 4000	ok 4000
+2.5	overlaps/starts/meets subtract	zero-thickness	ok 2000	ok 2000
+2.5	overlaps/starts/metBy subtract	zero-thickness	ok 2000	ok 2000
+2.5	overlaps/equal/meets subtract	zero-thickness	ok 2000	ok 2000
+2.5	overlaps/equal/metBy subtract	zero-thickness	ok 2000	ok 2000
+2.5	overlaps/startedBy/meets subtract	zero-thickness	ok 4000	ok 4000
+2.5	overlaps/startedBy/metBy subtract	zero-thickness	ok 4000	ok 4000
+2.5	overlaps/finishes/meets subtract	zero-thickness	ok 2000	ok 2000
+2.5	overlaps/finishes/metBy subtract	zero-thickness	ok 2000	ok 2000
+2.5	finishedBy/overlaps/meets subtract	zero-thickness	ok 4000	ok 4000
+2.5	finishedBy/overlaps/metBy subtract	zero-thickness	ok 4000	ok 4000
+2.5	finishedBy/finishedBy/meets subtract	zero-thickness	ok 4000	ok 4000
+2.5	finishedBy/finishedBy/metBy subtract	zero-thickness	ok 4000	ok 4000
+2.5	finishedBy/contains/meets subtract	zero-thickness	ok 6000	ok 6000
+2.5	finishedBy/contains/metBy subtract	zero-thickness	ok 6000	ok 6000
+2.5	finishedBy/starts/meets subtract	zero-thickness	ok 2000	ok 2000
+2.5	finishedBy/starts/metBy subtract	zero-thickness	ok 2000	ok 2000
+2.5	finishedBy/equal/meets subtract	zero-thickness	ok 2000	ok 2000
+2.5	finishedBy/equal/metBy subtract	zero-thickness	ok 2000	ok 2000
+2.5	finishedBy/startedBy/meets subtract	zero-thickness	ok 4000	ok 4000
+2.5	finishedBy/startedBy/metBy subtract	zero-thickness	ok 4000	ok 4000
+2.5	finishedBy/during/meets subtract	zero-thickness	ok 2000	ok 2000
+2.5	finishedBy/during/metBy subtract	zero-thickness	ok 2000	ok 2000
+2.5	finishedBy/finishes/meets subtract	zero-thickness	ok 2000	ok 2000
+2.5	finishedBy/finishes/metBy subtract	zero-thickness	ok 2000	ok 2000
+2.5	finishedBy/overlappedBy/meets subtract	zero-thickness	ok 4000	ok 4000
+2.5	finishedBy/overlappedBy/metBy subtract	zero-thickness	ok 4000	ok 4000
+2.5	contains/finishedBy/meets subtract	zero-thickness	ok 6000	ok 6000
+2.5	contains/finishedBy/metBy subtract	zero-thickness	ok 6000	ok 6000
+2.5	contains/starts/meets subtract	zero-thickness	ok 3000	ok 3000
+2.5	contains/starts/metBy subtract	zero-thickness	ok 3000	ok 3000
+2.5	contains/equal/meets subtract	zero-thickness	ok 3000	ok 3000
+2.5	contains/equal/metBy subtract	zero-thickness	ok 3000	ok 3000
+2.5	contains/startedBy/meets subtract	zero-thickness	ok 6000	ok 6000
+2.5	contains/startedBy/metBy subtract	zero-thickness	ok 6000	ok 6000
+2.5	contains/finishes/meets subtract	zero-thickness	ok 3000	ok 3000
+2.5	contains/finishes/metBy subtract	zero-thickness	ok 3000	ok 3000
+2.5	starts/overlaps/meets subtract	zero-thickness	ok 2000	ok 2000
+2.5	starts/overlaps/metBy subtract	zero-thickness	ok 2000	ok 2000
+2.5	starts/finishedBy/meets subtract	zero-thickness	ok 2000	ok 2000
+2.5	starts/finishedBy/metBy subtract	zero-thickness	ok 2000	ok 2000
+2.5	starts/contains/meets subtract	zero-thickness	ok 3000	ok 3000
+2.5	starts/contains/metBy subtract	zero-thickness	ok 3000	ok 3000
+2.5	starts/starts/meets subtract	zero-thickness	ok 1000	ok 1000
+2.5	starts/starts/metBy subtract	zero-thickness	ok 1000	ok 1000
+2.5	starts/equal/meets subtract	zero-thickness	ok 1000	ok 1000
+2.5	starts/equal/metBy subtract	zero-thickness	ok 1000	ok 1000
+2.5	starts/startedBy/meets subtract	zero-thickness	ok 2000	ok 2000
+2.5	starts/startedBy/metBy subtract	zero-thickness	ok 2000	ok 2000
+2.5	starts/during/meets subtract	zero-thickness	ok 1000	ok 1000
+2.5	starts/during/metBy subtract	zero-thickness	ok 1000	ok 1000
+2.5	starts/finishes/meets subtract	zero-thickness	ok 1000	ok 1000
+2.5	starts/finishes/metBy subtract	zero-thickness	ok 1000	ok 1000
+2.5	starts/overlappedBy/meets subtract	zero-thickness	ok 2000	ok 2000
+2.5	starts/overlappedBy/metBy subtract	zero-thickness	ok 2000	ok 2000
+2.5	equal/overlaps/meets subtract	zero-thickness	ok 2000	ok 2000
+2.5	equal/overlaps/metBy subtract	zero-thickness	ok 2000	ok 2000
+2.5	equal/finishedBy/meets subtract	zero-thickness	ok 2000	ok 2000
+2.5	equal/finishedBy/metBy subtract	zero-thickness	ok 2000	ok 2000
+2.5	equal/contains/meets subtract	zero-thickness	ok 3000	ok 3000
+2.5	equal/contains/metBy subtract	zero-thickness	ok 3000	ok 3000
+2.5	equal/starts/meets subtract	zero-thickness	ok 1000	ok 1000
+2.5	equal/starts/metBy subtract	zero-thickness	ok 1000	ok 1000
+2.5	equal/equal/meets subtract	zero-thickness	ok 1000	ok 1000
+2.5	equal/equal/metBy subtract	zero-thickness	ok 1000	ok 1000
+2.5	equal/startedBy/meets subtract	zero-thickness	ok 2000	ok 2000
+2.5	equal/startedBy/metBy subtract	zero-thickness	ok 2000	ok 2000
+2.5	equal/during/meets subtract	zero-thickness	ok 1000	ok 1000
+2.5	equal/during/metBy subtract	zero-thickness	ok 1000	ok 1000
+2.5	equal/finishes/meets subtract	zero-thickness	ok 1000	ok 1000
+2.5	equal/finishes/metBy subtract	zero-thickness	ok 1000	ok 1000
+2.5	equal/overlappedBy/meets subtract	zero-thickness	ok 2000	ok 2000
+2.5	equal/overlappedBy/metBy subtract	zero-thickness	ok 2000	ok 2000
+2.5	startedBy/overlaps/meets subtract	zero-thickness	ok 4000	ok 4000
+2.5	startedBy/overlaps/metBy subtract	zero-thickness	ok 4000	ok 4000
+2.5	startedBy/finishedBy/meets subtract	zero-thickness	ok 4000	ok 4000
+2.5	startedBy/finishedBy/metBy subtract	zero-thickness	ok 4000	ok 4000
+2.5	startedBy/contains/meets subtract	zero-thickness	ok 6000	ok 6000
+2.5	startedBy/contains/metBy subtract	zero-thickness	ok 6000	ok 6000
+2.5	startedBy/starts/meets subtract	zero-thickness	ok 2000	ok 2000
+2.5	startedBy/starts/metBy subtract	zero-thickness	ok 2000	ok 2000
+2.5	startedBy/equal/meets subtract	zero-thickness	ok 2000	ok 2000
+2.5	startedBy/equal/metBy subtract	zero-thickness	ok 2000	ok 2000
+2.5	startedBy/startedBy/meets subtract	zero-thickness	ok 4000	ok 4000
+2.5	startedBy/startedBy/metBy subtract	zero-thickness	ok 4000	ok 4000
+2.5	startedBy/during/meets subtract	zero-thickness	ok 2000	ok 2000
+2.5	startedBy/during/metBy subtract	zero-thickness	ok 2000	ok 2000
+2.5	startedBy/finishes/meets subtract	zero-thickness	ok 2000	ok 2000
+2.5	startedBy/finishes/metBy subtract	zero-thickness	ok 2000	ok 2000
+2.5	startedBy/overlappedBy/meets subtract	zero-thickness	ok 4000	ok 4000
+2.5	startedBy/overlappedBy/metBy subtract	zero-thickness	ok 4000	ok 4000
+2.5	during/finishedBy/meets subtract	zero-thickness	ok 2000	ok 2000
+2.5	during/finishedBy/metBy subtract	zero-thickness	ok 2000	ok 2000
+2.5	during/starts/meets subtract	zero-thickness	ok 1000	ok 1000
+2.5	during/starts/metBy subtract	zero-thickness	ok 1000	ok 1000
+2.5	during/equal/meets subtract	zero-thickness	ok 1000	ok 1000
+2.5	during/equal/metBy subtract	zero-thickness	ok 1000	ok 1000
+2.5	during/startedBy/meets subtract	zero-thickness	ok 2000	ok 2000
+2.5	during/startedBy/metBy subtract	zero-thickness	ok 2000	ok 2000
+2.5	during/finishes/meets subtract	zero-thickness	ok 1000	ok 1000
+2.5	during/finishes/metBy subtract	zero-thickness	ok 1000	ok 1000
+2.5	finishes/overlaps/meets subtract	zero-thickness	ok 2000	ok 2000
+2.5	finishes/overlaps/metBy subtract	zero-thickness	ok 2000	ok 2000
+2.5	finishes/finishedBy/meets subtract	zero-thickness	ok 2000	ok 2000
+2.5	finishes/finishedBy/metBy subtract	zero-thickness	ok 2000	ok 2000
+2.5	finishes/contains/meets subtract	zero-thickness	ok 3000	ok 3000
+2.5	finishes/contains/metBy subtract	zero-thickness	ok 3000	ok 3000
+2.5	finishes/starts/meets subtract	zero-thickness	ok 1000	ok 1000
+2.5	finishes/starts/metBy subtract	zero-thickness	ok 1000	ok 1000
+2.5	finishes/equal/meets subtract	zero-thickness	ok 1000	ok 1000
+2.5	finishes/equal/metBy subtract	zero-thickness	ok 1000	ok 1000
+2.5	finishes/startedBy/meets subtract	zero-thickness	ok 2000	ok 2000
+2.5	finishes/startedBy/metBy subtract	zero-thickness	ok 2000	ok 2000
+2.5	finishes/during/meets subtract	zero-thickness	ok 1000	ok 1000
+2.5	finishes/during/metBy subtract	zero-thickness	ok 1000	ok 1000
+2.5	finishes/finishes/meets subtract	zero-thickness	ok 1000	ok 1000
+2.5	finishes/finishes/metBy subtract	zero-thickness	ok 1000	ok 1000
+2.5	finishes/overlappedBy/meets subtract	zero-thickness	ok 2000	ok 2000
+2.5	finishes/overlappedBy/metBy subtract	zero-thickness	ok 2000	ok 2000
+2.5	overlappedBy/finishedBy/meets subtract	zero-thickness	ok 4000	ok 4000
+2.5	overlappedBy/finishedBy/metBy subtract	zero-thickness	ok 4000	ok 4000
+2.5	overlappedBy/starts/meets subtract	zero-thickness	ok 2000	ok 2000
+2.5	overlappedBy/starts/metBy subtract	zero-thickness	ok 2000	ok 2000
+2.5	overlappedBy/equal/meets subtract	zero-thickness	ok 2000	ok 2000
+2.5	overlappedBy/equal/metBy subtract	zero-thickness	ok 2000	ok 2000
+2.5	overlappedBy/startedBy/meets subtract	zero-thickness	ok 4000	ok 4000
+2.5	overlappedBy/startedBy/metBy subtract	zero-thickness	ok 4000	ok 4000
+2.5	overlappedBy/finishes/meets subtract	zero-thickness	ok 2000	ok 2000
+2.5	overlappedBy/finishes/metBy subtract	zero-thickness	ok 2000	ok 2000
+2.5	overlaps/finishedBy/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	overlaps/finishedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	overlaps/starts/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	overlaps/starts/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	overlaps/equal/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	overlaps/equal/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	overlaps/startedBy/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	overlaps/startedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	overlaps/finishes/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	overlaps/finishes/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	finishedBy/overlaps/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	finishedBy/overlaps/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	finishedBy/finishedBy/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	finishedBy/finishedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	finishedBy/contains/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	finishedBy/contains/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	finishedBy/starts/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	finishedBy/starts/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	finishedBy/equal/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	finishedBy/equal/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	finishedBy/startedBy/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	finishedBy/startedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	finishedBy/during/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	finishedBy/during/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	finishedBy/finishes/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	finishedBy/finishes/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	finishedBy/overlappedBy/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	finishedBy/overlappedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	contains/finishedBy/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	contains/finishedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	contains/starts/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	contains/starts/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	contains/equal/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	contains/equal/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	contains/startedBy/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	contains/startedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	contains/finishes/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	contains/finishes/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	starts/overlaps/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	starts/overlaps/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	starts/finishedBy/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	starts/finishedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	starts/contains/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	starts/contains/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	starts/starts/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	starts/starts/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	starts/equal/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	starts/equal/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	starts/startedBy/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	starts/startedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	starts/during/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	starts/during/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	starts/finishes/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	starts/finishes/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	starts/overlappedBy/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	starts/overlappedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	equal/overlaps/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	equal/overlaps/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	equal/finishedBy/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	equal/finishedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	equal/contains/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	equal/contains/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	equal/starts/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	equal/starts/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	equal/equal/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	equal/equal/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	equal/startedBy/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	equal/startedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	equal/during/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	equal/during/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	equal/finishes/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	equal/finishes/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	equal/overlappedBy/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	equal/overlappedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	startedBy/overlaps/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	startedBy/overlaps/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	startedBy/finishedBy/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	startedBy/finishedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	startedBy/contains/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	startedBy/contains/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	startedBy/starts/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	startedBy/starts/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	startedBy/equal/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	startedBy/equal/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	startedBy/startedBy/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	startedBy/startedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	startedBy/during/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	startedBy/during/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	startedBy/finishes/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	startedBy/finishes/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	startedBy/overlappedBy/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	startedBy/overlappedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	during/finishedBy/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	during/finishedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	during/starts/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	during/starts/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	during/equal/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	during/equal/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	during/startedBy/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	during/startedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	during/finishes/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	during/finishes/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	finishes/overlaps/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	finishes/overlaps/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	finishes/finishedBy/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	finishes/finishedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	finishes/contains/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	finishes/contains/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	finishes/starts/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	finishes/starts/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	finishes/equal/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	finishes/equal/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	finishes/startedBy/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	finishes/startedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	finishes/during/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	finishes/during/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	finishes/finishes/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	finishes/finishes/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	finishes/overlappedBy/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	finishes/overlappedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	overlappedBy/finishedBy/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	overlappedBy/finishedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	overlappedBy/starts/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	overlappedBy/starts/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	overlappedBy/equal/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	overlappedBy/equal/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	overlappedBy/startedBy/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	overlappedBy/startedBy/metBy intersect	invalid EdgeUses	empty	ok 0
+2.5	overlappedBy/finishes/meets intersect	invalid EdgeUses	empty	ok 0
+2.5	overlappedBy/finishes/metBy intersect	invalid EdgeUses	empty	ok 0

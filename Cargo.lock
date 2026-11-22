@@ -103,6 +103,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-exact"
+version = "0.1.0"
+dependencies = [
+ "forge-bool",
+ "forge-math",
+ "forge-mesh",
+ "forge-ops",
+ "forge-topo",
+]
+
+[[package]]
 name = "forge-font"
 version = "0.1.0"
 dependencies = [
