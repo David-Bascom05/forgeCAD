@@ -157,8 +157,8 @@ pub struct Options {
     /// An assembly: write its structure as STEP under this product name (`fg run --step`).
     pub step: Option<String>,
     /// A part's measures, expects and physical properties, a thermoform's wall simulation and
-    /// the features that changed nothing (`Warning::NoEffect`); off, a UI shows the shape first
-    /// and runs them after.
+    /// the features that changed nothing (`Warning::NoEffect`) and a sketch's freedom left
+    /// (`Warning::UnderConstrained`); off, a UI shows the shape first and runs them after.
     pub checks: bool,
     /// Threads on an axis not modelled but recorded (`Run::threads`), as a drawing draws them.
     pub cosmetic_threads: bool,

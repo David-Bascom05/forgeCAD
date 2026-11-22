@@ -44,7 +44,9 @@ pub struct Solved {
     out: Sketch,
     status: forge_sketch::Status,
     residual: f64,
-    dof: usize,
+    /// The freedom left: worked out only for a run with checks (its rank costs more than the
+    /// solve), then kept for the runs after.
+    dof: std::cell::Cell<Option<usize>>,
     conflicting: Vec<ConstraintId>,
 }
 
@@ -473,8 +475,9 @@ impl Sk {
     /// Solves; conflicting rows are an error, freedom left is reported. `was` is this sketch's
     /// solve in the run before: taken as it is when the sketch is bit for bit what it solved
     /// then (an edit elsewhere), so only a sketch that changed is solved again. What it solved
-    /// comes back with the outcome, for the next run.
-    pub fn finish(&mut self, was: Option<Rc<Solved>>) -> (Rc<Solved>, R<()>) {
+    /// comes back with the outcome, for the next run. The freedom left (`dof`, an
+    /// UnderConstrained warning) is a check: without `checks` it is left 0 and not worked out.
+    pub fn finish(&mut self, was: Option<Rc<Solved>>, checks: bool) -> (Rc<Solved>, R<()>) {
         let done = match was {
             Some(w) if w.input.same_bits(&self.s) => {
                 self.s = w.out.clone();
@@ -485,17 +488,26 @@ impl Sk {
                 let rep = self.s.solve();
                 // freedom and conflicts only: the per-entity ranks `analyze` also works out cost
                 // more than the solve, and nothing here reads them
-                let (dof, conflicting) = self.s.freedom();
+                let (dof, conflicting) = if checks {
+                    let (dof, c) = self.s.freedom();
+                    (Some(dof), c)
+                } else {
+                    (None, self.s.conflicting())
+                };
                 Rc::new(Solved {
                     input,
                     out: self.s.clone(),
                     status: rep.status,
                     residual: rep.max_residual,
-                    dof,
+                    dof: std::cell::Cell::new(dof),
                     conflicting,
                 })
             }
         };
+        // a solve kept from a run without checks: its freedom now (`out` is the sketch solved)
+        if checks && done.dof.get().is_none() {
+            done.dof.set(Some(done.out.freedom().0));
+        }
         let r = self.outcome(&done);
         (done, r)
     }
@@ -520,7 +532,7 @@ impl Sk {
                 residual: done.residual,
             });
         }
-        self.dof = done.dof;
+        self.dof = done.dof.get().unwrap_or(0);
         self.solved = true;
         Ok(())
     }

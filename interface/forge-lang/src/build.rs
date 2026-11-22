@@ -2,7 +2,7 @@
 //! anchors and selections read the part as it stands. Stages are kept, and a session reuses
 //! the stages of a run whose features (and ids) are the same up to that point.
 
-use forge_model::{Feature, History, RegenError, Solid, step_solids_finished};
+use forge_model::{Feature, History, RegenError, Solid, step_solids_plain};
 use forge_topo::{Body, FaceId, Name};
 use std::any::Any;
 use std::cell::OnceCell;
@@ -366,6 +366,9 @@ pub struct Builder {
     /// Whether a step built here (a sheet) holds bodies the kernel's history cannot step: then
     /// features that make nothing pass the bodies on as they are.
     hosted: bool,
+    /// `forge_model::unwrapped` of each feature so far, once one is wrapped (`In`): handed to
+    /// each step, which would otherwise unwrap the whole history again.
+    plain: Vec<Feature>,
     pub kernel_ms: f64,
     pub rebuilt: usize,
     pub reused: usize,
@@ -393,6 +396,7 @@ impl Builder {
             cache,
             reuse: true,
             hosted: false,
+            plain: vec![],
             kernel_ms: 0.0,
             rebuilt: 0,
             reused: 0,
@@ -572,14 +576,38 @@ impl Builder {
             self.keep(keyable, id);
             return Ok(i);
         }
+        // a work plane, axis or point makes nothing either: the kernel only checks it can be
+        // placed (`forge_model::work::datum`) and hands the part on. Placed, the stage before is
+        // this one's; not placed, the kernel's step says why as before.
+        if let Feature::Work(_) = &self.features[i]
+            && forge_model::work::datum(History::new(&self.features, Some(&self.ids)), i).is_ok()
+        {
+            let st = match self.stages.last() {
+                Some(last) => last.clone(),
+                None => Rc::new(Stage::new(vec![])),
+            };
+            self.rebuilt += 1;
+            self.stages.push(st);
+            self.keep(keyable, id);
+            return Ok(i);
+        }
         let last = self.stages.last();
         let before = last.map(|s| s.solids.clone()).unwrap_or_default();
         // the part as a selection saw it (its one solid finished), for a feature that finishes
         // it again to work on it
         let finished = last.and_then(|s| s.finished_alone());
         let t = Instant::now();
+        let wrapped =
+            |f: &Feature| matches!(f, Feature::Body(b) if matches!(**b, forge_model::BodyFeature::In { .. }));
+        if !self.plain.is_empty() || self.features.iter().any(wrapped) {
+            while self.plain.len() < self.features.len() {
+                let f = forge_model::unwrapped(&self.features[self.plain.len()]);
+                self.plain.push(f);
+            }
+        }
         let history = History::new(&self.features, Some(&self.ids));
-        let r = step_solids_finished(history, i, before, finished);
+        let plain = (!self.plain.is_empty()).then_some(&self.plain[..]);
+        let r = step_solids_plain(history, plain, i, before, finished);
         self.kernel_ms += t.elapsed().as_secs_f64() * 1e3;
         self.rebuilt += 1;
         match r {

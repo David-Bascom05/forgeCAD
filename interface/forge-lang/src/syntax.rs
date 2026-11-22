@@ -1819,13 +1819,9 @@ fn reserved_in(toks: &[Tok]) -> Option<Error> {
 pub fn parse(src: &str) -> R<Vec<Stmt>> {
     let mut la = Vec::new();
     let toks = lex_into::<false>(src, &mut Vec::new(), &mut la)?;
-    if RESERVED
-        .iter()
-        .any(|w| toks.iter().any(|t| t.kind == TokKind::Kw(w)))
-        && let Some(e) = reserved_in(&toks)
-    {
-        return Err(e);
-    }
+    // (a text the one-pass parser takes has no reserved word as a name: it takes `at` only as
+    // an argument's key and an expect's clause, which `name_uses` passes over; one it refuses
+    // goes to `parse_table`, which looks for them first)
     if let Some(stmts) = fast::parse(toks) {
         return Ok(stmts);
     }
