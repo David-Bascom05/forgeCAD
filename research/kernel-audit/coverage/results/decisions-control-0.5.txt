@@ -1,0 +1,6 @@
+NO-CONTRADICTION	0.5	meets/meets/meets union	ok 2000
+NO-CONTRADICTION	0.5	meets/meets/metBy union	ok 2000
+NO-CONTRADICTION	0.5	meets/metBy/meets union	ok 2000
+NO-CONTRADICTION	0.5	meets/metBy/metBy union	ok 2000
+NO-CONTRADICTION	0.5	metBy/meets/meets union	ok 2000
+== delta 0.5 axes [0]: 8 of 3549 fail; 8 failing runs with no contradiction; 0 passing runs with one

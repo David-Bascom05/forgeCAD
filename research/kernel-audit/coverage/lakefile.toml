@@ -1,0 +1,25 @@
+name = "coverage"
+version = "0.1.0"
+defaultTargets = ["Coverage", "coverage"]
+
+[leanOptions]
+relaxedAutoImplicit = false
+
+# the model of the kernel's flat-face boolean, the exact answer, and the coverage theorems (core Lean only)
+[[lean_lib]]
+name = "Coverage"
+
+# prints the model's outcome for every pattern, for comparison with the kernel (verify/forge-coverage)
+[[lean_exe]]
+name = "coverage"
+root = "Main"
+
+# the tilted-plane model's predicted gaps on a grid of angles (Coverage/Tilt.lean)
+[[lean_exe]]
+name = "tilt"
+root = "TiltMain"
+
+# the exact spec (verify/forge-exact): Coverage/Correct.lean states the model against its regBool
+[[require]]
+name = "forgeexact"
+path = "../../../verify/forge-exact"

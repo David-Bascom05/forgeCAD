@@ -1,0 +1,92 @@
+== delta 0.85 axes [0, 1]: 1323 of 5187 fail; 0 failing runs with no contradiction; 294 passing runs with one
+pass	270	point at vertex	on_edge <- boolean.rs:4346  vs  place_cuts: a cut at its edge's end
+		e.g. meets/finishedBy/meets union -> zero-thickness | meets/finishedBy/meets union 0.85 [sequential; plain] V5 (9.999992, 20.000008, 10.000000): `on_edge <- boolean.rs:4346` says 0 (1.202e-5 vs 1.000e-5), `place_cuts: a cut at its edge's end` says 1 (8.500e-6 vs 1.000e-5)
+pass	270	point at vertex	on_edge <- boolean.rs:4346  vs  share_cuts: a cut at an end
+		e.g. meets/finishedBy/meets union -> zero-thickness | meets/finishedBy/meets union 0.85 [sequential; plain] V5 (9.999992, 20.000008, 10.000000): `on_edge <- boolean.rs:4346` says 0 (1.202e-5 vs 1.000e-5), `share_cuts: a cut at an end` says 1 (8.500e-6 vs 1.000e-5)
+pass	132	point at vertex	place_cuts: a cut at its edge's end  vs  place_cuts: a cut at its edge's end
+		e.g. meets/meets/meets union -> ok 2000 | meets/meets/meets union 0.85 [sequential; plain] V5 (10.000000, 9.999992, 10.000000): `place_cuts: a cut at its edge's end` says 1 (8.500e-6 vs 1.000e-5), `place_cuts: a cut at its edge's end` says 0 (1.202e-5 vs 1.000e-5)
+pass	132	point at vertex	place_cuts: a cut at its edge's end  vs  share_cuts: a cut at an end
+		e.g. meets/meets/meets union -> ok 2000 | meets/meets/meets union 0.85 [sequential; plain] V5 (9.999992, 9.999992, 10.000000): `place_cuts: a cut at its edge's end` says 0 (1.202e-5 vs 1.000e-5), `share_cuts: a cut at an end` says 1 (8.500e-6 vs 1.000e-5)
+pass	132	point at vertex	share_cuts: a cut at an end  vs  share_cuts: a cut at an end
+		e.g. meets/meets/meets union -> ok 2000 | meets/meets/meets union 0.85 [sequential; plain] V5 (10.000000, 9.999992, 10.000000): `share_cuts: a cut at an end` says 1 (8.500e-6 vs 1.000e-5), `share_cuts: a cut at an end` says 0 (1.202e-5 vs 1.000e-5)
+pass	246	point on edge	coincide: an edge's end on the other  vs  on_edge <- boolean.rs:2717
+		e.g. meets/finishedBy/meets union -> zero-thickness | meets/finishedBy/meets union 0.85 [sequential; plain] E7 (9.999992, 20.000008, 10.000000): `coincide: an edge's end on the other` says 0 (1.202e-5 vs 1.000e-5), `on_edge <- boolean.rs:2717` says 1 (8.500e-6 vs 1.000e-5)
+pass	78	point on edge	coincide: an edge's end on the other  vs  on_edge <- boolean.rs:3210
+		e.g. meets/finishedBy/meets union -> zero-thickness | meets/finishedBy/meets union 0.85 [sequential; plain] E7 (9.999992, 20.000008, 10.000000): `coincide: an edge's end on the other` says 0 (1.202e-5 vs 1.000e-5), `on_edge <- boolean.rs:3210` says 1 (0.000e0 vs 1.000e-5)
+pass	114	point on edge	coincide: an edge's end on the other  vs  on_edge <- boolean.rs:3211
+		e.g. meets/startedBy/meets union -> zero-thickness | meets/startedBy/meets union 0.85 [sequential; plain] E7 (9.999992, -0.000008, 10.000000): `coincide: an edge's end on the other` says 0 (1.202e-5 vs 1.000e-5), `on_edge <- boolean.rs:3211` says 1 (0.000e0 vs 1.000e-5)
+pass	246	point on edge	coincide: an edge's end on the other  vs  on_edge <- boolean.rs:4346
+		e.g. meets/finishedBy/meets union -> zero-thickness | meets/finishedBy/meets union 0.85 [sequential; plain] E7 (9.999992, 20.000008, 10.000000): `coincide: an edge's end on the other` says 0 (1.202e-5 vs 1.000e-5), `on_edge <- boolean.rs:4346` says 1 (8.500e-6 vs 1.000e-5)
+pass	246	point on edge	coincide: an edge's end on the other  vs  point_in_face: nearest edge
+		e.g. meets/finishedBy/metBy union -> zero-thickness | meets/finishedBy/metBy union 0.85 [sequential; plain] E6 (9.999992, 20.000008, 10.000000): `coincide: an edge's end on the other` says 0 (1.202e-5 vs 1.000e-5), `point_in_face: nearest edge` says 1 (9.503e-6 vs 1.000e-5)
+pass	246	point on edge	on_edge <- boolean.rs:2717  vs  on_edge <- boolean.rs:4346
+		e.g. meets/finishedBy/meets union -> zero-thickness | meets/finishedBy/meets union 0.85 [sequential; plain] E7 (10.000000, 20.000008, 10.000000): `on_edge <- boolean.rs:2717` says 1 (8.500e-6 vs 1.000e-5), `on_edge <- boolean.rs:4346` says 0 (1.202e-5 vs 1.000e-5)
+pass	78	point on edge	on_edge <- boolean.rs:3210  vs  on_edge <- boolean.rs:4346
+		e.g. meets/finishedBy/meets union -> zero-thickness | meets/finishedBy/meets union 0.85 [sequential; plain] E7 (10.000000, 20.000000, 10.000000): `on_edge <- boolean.rs:3210` says 1 (0.000e0 vs 1.000e-5), `on_edge <- boolean.rs:4346` says 0 (1.202e-5 vs 1.000e-5)
+pass	114	point on edge	on_edge <- boolean.rs:3211  vs  on_edge <- boolean.rs:4346
+		e.g. meets/startedBy/meets union -> zero-thickness | meets/startedBy/meets union 0.85 [sequential; plain] E7 (10.000000, 0.000000, 10.000000): `on_edge <- boolean.rs:3211` says 1 (0.000e0 vs 1.000e-5), `on_edge <- boolean.rs:4346` says 0 (1.202e-5 vs 1.000e-5)
+pass	246	point on edge	on_edge <- boolean.rs:4346  vs  on_edge <- boolean.rs:4346
+		e.g. meets/finishedBy/meets union -> zero-thickness | meets/finishedBy/meets union 0.85 [sequential; plain] E7 (10.000000, 20.000008, 10.000000): `on_edge <- boolean.rs:4346` says 1 (8.500e-6 vs 1.000e-5), `on_edge <- boolean.rs:4346` says 0 (1.202e-5 vs 1.000e-5)
+pass	246	point on edge	on_edge <- boolean.rs:4346  vs  point_in_face: nearest edge
+		e.g. meets/finishedBy/metBy union -> zero-thickness | meets/finishedBy/metBy union 0.85 [sequential; plain] E6 (9.999992, 20.000008, 10.000000): `on_edge <- boolean.rs:4346` says 0 (1.202e-5 vs 1.000e-5), `point_in_face: nearest edge` says 1 (9.503e-6 vs 1.000e-5)
+pass	294	two cuts one vertex	place_cuts: clusters and chains  vs  trim: a curve's cuts deduplicated
+		e.g. meets/meets/meets union -> ok 2000 | meets/meets/meets union 0.85 [sequential; plain] E2 E0 (9.999992, 10.000000, 10.000000) (9.999992, 9.999992, 10.000000): `place_cuts: clusters and chains` says 1 (8.500e-6 vs 1.000e-5), `trim: a curve's cuts deduplicated` says 0 (1.202e-5 vs 1.000e-5)
+pass	159	two cuts one vertex	trim: a curve's cuts deduplicated  vs  trim: a curve's cuts deduplicated
+		e.g. meets/meets/meets union -> ok 2000 | meets/meets/meets union 0.85 [sequential; plain] E2 E10 (10.000000, 10.000000, 10.000000) (9.999992, 9.999992, 10.000000): `trim: a curve's cuts deduplicated` says 0 (1.202e-5 vs 1.000e-5), `trim: a curve's cuts deduplicated` says 1 (8.500e-6 vs 1.000e-5)
+FAIL	1080	point at vertex	on_edge <- boolean.rs:4346  vs  place_cuts: a cut at its edge's end
+		e.g. meets/finishedBy/overlaps union -> internal SplitCrossed | meets/finishedBy/overlaps union 0.85 [sequential; plain] V5 (9.999992, 20.000008, 20.000000): `on_edge <- boolean.rs:4346` says 0 (1.202e-5 vs 1.000e-5), `place_cuts: a cut at its edge's end` says 1 (8.500e-6 vs 1.000e-5)
+FAIL	855	point at vertex	on_edge <- boolean.rs:4346  vs  share_cuts: a cut at an end
+		e.g. meets/finishedBy/overlaps union -> internal SplitCrossed | meets/finishedBy/overlaps union 0.85 [sequential; plain] V5 (9.999992, 20.000008, 20.000000): `on_edge <- boolean.rs:4346` says 0 (1.202e-5 vs 1.000e-5), `share_cuts: a cut at an end` says 1 (8.500e-6 vs 1.000e-5)
+FAIL	1176	point at vertex	on_edge <- boolean.rs:4692  vs  place_cuts: a cut at its edge's end
+		e.g. meets/meets/overlaps union -> internal SplitCrossed | meets/meets/overlaps union 0.85 [sequential; plain] V5 (9.999992, 9.999992, 20.000000): `on_edge <- boolean.rs:4692` says 0 (1.202e-5 vs 1.000e-5), `place_cuts: a cut at its edge's end` says 1 (8.500e-6 vs 1.000e-5)
+FAIL	951	point at vertex	on_edge <- boolean.rs:4692  vs  share_cuts: a cut at an end
+		e.g. meets/meets/overlaps union -> internal SplitCrossed | meets/meets/overlaps union 0.85 [sequential; plain] V5 (9.999992, 9.999992, 20.000000): `on_edge <- boolean.rs:4692` says 0 (1.202e-5 vs 1.000e-5), `share_cuts: a cut at an end` says 1 (8.500e-6 vs 1.000e-5)
+FAIL	1023	point at vertex	place_cuts: a cut at its edge's end  vs  place_cuts: a cut at its edge's end
+		e.g. meets/meets/overlaps union -> internal SplitCrossed | meets/meets/overlaps union 0.85 [sequential; plain] V5 (10.000000, 9.999992, 20.000000): `place_cuts: a cut at its edge's end` says 1 (8.500e-6 vs 1.000e-5), `place_cuts: a cut at its edge's end` says 0 (1.202e-5 vs 1.000e-5)
+FAIL	1248	point at vertex	place_cuts: a cut at its edge's end  vs  share_cuts: a cut at an end
+		e.g. meets/meets/overlaps union -> internal SplitCrossed | meets/meets/overlaps union 0.85 [sequential; plain] V5 (10.000000, 9.999992, 20.000000): `place_cuts: a cut at its edge's end` says 1 (8.500e-6 vs 1.000e-5), `share_cuts: a cut at an end` says 0 (1.202e-5 vs 1.000e-5)
+FAIL	1023	point at vertex	share_cuts: a cut at an end  vs  share_cuts: a cut at an end
+		e.g. meets/meets/overlaps union -> internal SplitCrossed | meets/meets/overlaps union 0.85 [sequential; plain] V5 (9.999992, 9.999992, 20.000000): `share_cuts: a cut at an end` says 0 (1.202e-5 vs 1.000e-5), `share_cuts: a cut at an end` says 1 (8.500e-6 vs 1.000e-5)
+FAIL	615	point on edge	coincide: an edge's end on the other  vs  on_edge <- boolean.rs:2717
+		e.g. meets/finishedBy/finishedBy union -> internal SplitCrossed | meets/finishedBy/finishedBy union 0.85 [sequential; plain] E7 (9.999992, 20.000008, 20.000000): `coincide: an edge's end on the other` says 0 (1.202e-5 vs 1.000e-5), `on_edge <- boolean.rs:2717` says 1 (8.500e-6 vs 1.000e-5)
+FAIL	207	point on edge	coincide: an edge's end on the other  vs  on_edge <- boolean.rs:3210
+		e.g. meets/finishedBy/finishedBy union -> internal SplitCrossed | meets/finishedBy/finishedBy union 0.85 [sequential; plain] E7 (9.999992, 20.000008, 20.000000): `coincide: an edge's end on the other` says 0 (1.202e-5 vs 1.000e-5), `on_edge <- boolean.rs:3210` says 1 (8.500e-6 vs 1.000e-5)
+FAIL	285	point on edge	coincide: an edge's end on the other  vs  on_edge <- boolean.rs:3211
+		e.g. meets/startedBy/finishedBy union -> internal SplitCrossed | meets/startedBy/finishedBy union 0.85 [sequential; plain] E7 (9.999992, -0.000008, 20.000000): `coincide: an edge's end on the other` says 0 (1.202e-5 vs 1.000e-5), `on_edge <- boolean.rs:3211` says 1 (0.000e0 vs 1.000e-5)
+FAIL	615	point on edge	coincide: an edge's end on the other  vs  on_edge <- boolean.rs:4346
+		e.g. meets/finishedBy/finishedBy union -> internal SplitCrossed | meets/finishedBy/finishedBy union 0.85 [sequential; plain] E7 (9.999992, 20.000008, 20.000000): `coincide: an edge's end on the other` says 0 (1.202e-5 vs 1.000e-5), `on_edge <- boolean.rs:4346` says 1 (8.500e-6 vs 1.000e-5)
+FAIL	627	point on edge	coincide: an edge's end on the other  vs  point_in_face: nearest edge
+		e.g. meets/finishedBy/starts union -> internal SplitCrossed | meets/finishedBy/starts union 0.85 [sequential; plain] E6 (9.999992, 20.000008, 0.000000): `coincide: an edge's end on the other` says 0 (1.202e-5 vs 1.000e-5), `point_in_face: nearest edge` says 1 (4.250e-6 vs 1.000e-5)
+FAIL	984	point on edge	on_edge <- boolean.rs:2717  vs  on_edge <- boolean.rs:4346
+		e.g. meets/finishedBy/overlaps union -> internal SplitCrossed | meets/finishedBy/overlaps union 0.85 [sequential; plain] E7 (10.000000, 20.000008, 20.000000): `on_edge <- boolean.rs:2717` says 1 (8.500e-6 vs 1.000e-5), `on_edge <- boolean.rs:4346` says 0 (1.202e-5 vs 1.000e-5)
+FAIL	450	point on edge	on_edge <- boolean.rs:2717  vs  point_in_face: nearest edge
+		e.g. meets/finishedBy/finishes union -> internal SplitCrossed | meets/finishedBy/finishes union 0.85 [sequential; plain] E6 (10.000000, 20.000008, 10.000000): `on_edge <- boolean.rs:2717` says 1 (8.500e-6 vs 1.000e-5), `point_in_face: nearest edge` says 0 (1.202e-5 vs 1.000e-5)
+FAIL	384	point on edge	on_edge <- boolean.rs:3197  vs  point_in_face: nearest edge
+		e.g. meets/meets/starts union -> internal SplitCrossed | meets/meets/starts union 0.85 [sequential; plain] E2 (10.000000, 9.999992, 5.000000): `on_edge <- boolean.rs:3197` says 1 (8.500e-6 vs 1.000e-5), `point_in_face: nearest edge` says 0 (1.202e-5 vs 1.000e-5)
+FAIL	657	point on edge	on_edge <- boolean.rs:3209  vs  point_in_face: nearest edge
+		e.g. meets/meets/overlaps union -> internal SplitCrossed | meets/meets/overlaps union 0.85 [sequential; plain] E2 (10.000000, 9.999992, 15.000000): `on_edge <- boolean.rs:3209` says 1 (8.500e-6 vs 1.000e-5), `point_in_face: nearest edge` says 0 (1.202e-5 vs 1.000e-5)
+FAIL	243	point on edge	on_edge <- boolean.rs:3210  vs  on_edge <- boolean.rs:4346
+		e.g. meets/finishedBy/finishedBy union -> internal SplitCrossed | meets/finishedBy/finishedBy union 0.85 [sequential; plain] E7 (10.000000, 20.000008, 20.000000): `on_edge <- boolean.rs:3210` says 1 (8.500e-6 vs 1.000e-5), `on_edge <- boolean.rs:4346` says 0 (1.202e-5 vs 1.000e-5)
+FAIL	174	point on edge	on_edge <- boolean.rs:3210  vs  on_edge <- boolean.rs:4692
+		e.g. meets/meets/overlaps union -> internal SplitCrossed | meets/meets/overlaps union 0.85 [sequential; plain] E2 (10.000000, 9.999992, 20.000000): `on_edge <- boolean.rs:3210` says 1 (8.500e-6 vs 1.000e-5), `on_edge <- boolean.rs:4692` says 0 (1.202e-5 vs 1.000e-5)
+FAIL	60	point on edge	on_edge <- boolean.rs:3210  vs  point_in_face: nearest edge
+		e.g. starts/starts/overlaps union -> internal SplitCrossed | starts/starts/overlaps union 0.85 [sequential; plain] E0 (-0.000008, 0.000000, 20.000000): `on_edge <- boolean.rs:3210` says 1 (8.500e-6 vs 1.000e-5), `point_in_face: nearest edge` says 0 (1.202e-5 vs 1.000e-5)
+FAIL	393	point on edge	on_edge <- boolean.rs:3211  vs  on_edge <- boolean.rs:4346
+		e.g. meets/startedBy/finishedBy union -> internal SplitCrossed | meets/startedBy/finishedBy union 0.85 [sequential; plain] E7 (10.000000, 0.000000, 20.000000): `on_edge <- boolean.rs:3211` says 1 (0.000e0 vs 1.000e-5), `on_edge <- boolean.rs:4346` says 0 (1.202e-5 vs 1.000e-5)
+FAIL	222	point on edge	on_edge <- boolean.rs:3211  vs  on_edge <- boolean.rs:4692
+		e.g. meets/meets/finishes union -> internal SplitCrossed | meets/meets/finishes union 0.85 [sequential; plain] E2 (10.000000, 9.999992, 10.000000): `on_edge <- boolean.rs:3211` says 1 (8.500e-6 vs 1.000e-5), `on_edge <- boolean.rs:4692` says 0 (1.202e-5 vs 1.000e-5)
+FAIL	189	point on edge	on_edge <- boolean.rs:3211  vs  point_in_face: nearest edge
+		e.g. meets/finishedBy/overlaps union -> internal SplitCrossed | meets/finishedBy/overlaps union 0.85 [sequential; plain] E2 (10.000000, 20.000008, 20.000000): `on_edge <- boolean.rs:3211` says 1 (8.500e-6 vs 1.000e-5), `point_in_face: nearest edge` says 0 (1.202e-5 vs 1.000e-5)
+FAIL	615	point on edge	on_edge <- boolean.rs:4346  vs  on_edge <- boolean.rs:4346
+		e.g. meets/finishedBy/finishedBy union -> internal SplitCrossed | meets/finishedBy/finishedBy union 0.85 [sequential; plain] E7 (10.000000, 20.000008, 20.000000): `on_edge <- boolean.rs:4346` says 1 (8.500e-6 vs 1.000e-5), `on_edge <- boolean.rs:4346` says 0 (1.202e-5 vs 1.000e-5)
+FAIL	852	point on edge	on_edge <- boolean.rs:4346  vs  point_in_face: nearest edge
+		e.g. meets/finishedBy/starts union -> internal SplitCrossed | meets/finishedBy/starts union 0.85 [sequential; plain] E6 (9.999992, 20.000008, 0.000000): `on_edge <- boolean.rs:4346` says 0 (1.202e-5 vs 1.000e-5), `point_in_face: nearest edge` says 1 (4.250e-6 vs 1.000e-5)
+FAIL	1323	point on edge	point_in_face: nearest edge  vs  point_in_face: nearest edge
+		e.g. meets/meets/overlaps union -> internal SplitCrossed | meets/meets/overlaps union 0.85 [sequential; plain] E2 (10.000000, 9.999992, 15.000000): `point_in_face: nearest edge` says 1 (8.500e-6 vs 1.000e-5), `point_in_face: nearest edge` says 0 (1.202e-5 vs 1.000e-5)
+FAIL	1323	two cuts one vertex	place_cuts: clusters and chains  vs  trim: a curve's cuts deduplicated
+		e.g. meets/meets/overlaps union -> internal SplitCrossed | meets/meets/overlaps union 0.85 [sequential; plain] E2 E10 (9.999992, 10.000000, 10.000000) (9.999992, 9.999992, 10.000000): `place_cuts: clusters and chains` says 1 (8.500e-6 vs 1.000e-5), `trim: a curve's cuts deduplicated` says 0 (1.202e-5 vs 1.000e-5)
+FAIL	1266	two cuts one vertex	trim: a curve's cuts deduplicated  vs  trim: a curve's cuts deduplicated
+		e.g. meets/meets/overlaps union -> internal SplitCrossed | meets/meets/overlaps union 0.85 [sequential; plain] E2 E10 (10.000000, 10.000000, 10.000000) (9.999992, 9.999992, 10.000000): `trim: a curve's cuts deduplicated` says 0 (1.202e-5 vs 1.000e-5), `trim: a curve's cuts deduplicated` says 1 (8.500e-6 vs 1.000e-5)
+FAIL	rung ABSORB_HAIR_ROOTS: ok 0 internal 1323 other 0 unknown 0
+FAIL	rung CHORDS: ok 0 internal 1323 other 0 unknown 0
+FAIL	rung NO_RUN_ON: ok 0 internal 1323 other 0 unknown 0
