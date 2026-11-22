@@ -13,3 +13,8 @@ name = "Coverage"
 [[lean_exe]]
 name = "coverage"
 root = "Main"
+
+# the tilted-plane model's predicted gaps on a grid of angles (Coverage/Tilt.lean)
+[[lean_exe]]
+name = "tilt"
+root = "TiltMain"
