@@ -21,6 +21,17 @@ pub(super) struct Cliff {
 /// `fillet_with`'s last try, every other refused: with closed rounds rolled over rims and back.
 /// The round, where it builds and is valid.
 pub(super) fn retry(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, feature: u64) -> Option<Body> {
+    // only a closed concave edge's round goes over a rim and back here: none picked, nothing to try
+    // (a refusal the overlapping rounds take up costs no more for it)
+    let closed = |f: &FilletEdge| {
+        f.edge.index() < body.edges.len()
+            && body.edge(f.edge).alive
+            && body.edge(f.edge).start == body.edge(f.edge).end
+            && fillet_kind(body, f.edge) == Some(false)
+    };
+    if !edges.iter().any(closed) {
+        return None;
+    }
     let tried = FilletOptions {
         rims: true,
         cliff: true,
